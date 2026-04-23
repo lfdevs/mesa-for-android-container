@@ -890,6 +890,7 @@ void brw_NOP(struct brw_codegen *p)
 void brw_SYNC(struct brw_codegen *p, enum tgl_sync_function func)
 {
    brw_eu_inst *insn = next_insn(p, BRW_OPCODE_SYNC);
+   brw_eu_inst_set_saturate(p->devinfo, insn, 0);
    brw_eu_inst_set_cond_modifier(p->devinfo, insn, func);
 }
 

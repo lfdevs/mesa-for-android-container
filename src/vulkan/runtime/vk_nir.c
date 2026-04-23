@@ -149,15 +149,13 @@ vk_spirv_to_nir(struct vk_device *device,
    spirv_options_local.buffer_descriptor_alignment =
       device->physical->properties.bufferDescriptorAlignment;
 
-   uint32_t num_spec_entries = 0;
-   struct nir_spirv_specialization *spec_entries =
-      vk_spec_info_to_nir_spirv(spec_info, &num_spec_entries);
+   struct nir_spirv_specialization *spec =
+      vk_spec_info_to_nir_spirv(spec_info);
 
    nir_shader *nir = spirv_to_nir(spirv_data, spirv_size_B / 4,
-                                  spec_entries, num_spec_entries,
-                                  stage, entrypoint_name,
+                                  spec, stage, entrypoint_name,
                                   &spirv_options_local, nir_options);
-   free(spec_entries);
+   vtn_free_specialization(spec);
 
    if (nir == NULL)
       return NULL;

@@ -23,7 +23,7 @@ static inline unsigned cp_dma_max_byte_count(struct si_context *sctx)
 {
    unsigned max =
       sctx->gfx_level >= GFX11 ? 32767 :
-      sctx->gfx_level >= GFX9 ? S_415_BYTE_COUNT_GFX9(~0u) : S_415_BYTE_COUNT_GFX6(~0u);
+      sctx->gfx_level >= GFX9 ? S_506_BYTE_COUNT(~0u) : S_415_BYTE_COUNT(~0u);
 
    /* make it aligned for optimal performance */
    return max & ~(SI_CPDMA_ALIGNMENT - 1);
@@ -49,26 +49,26 @@ static void si_emit_cp_dma(struct si_context *sctx, struct radeon_cmdbuf *cs, ui
    }
 
    if (sctx->gfx_level >= GFX9)
-      command |= S_415_BYTE_COUNT_GFX9(size);
+      command |= S_506_BYTE_COUNT(size);
    else
-      command |= S_415_BYTE_COUNT_GFX6(size);
+      command |= S_415_BYTE_COUNT(size);
 
-   /* Sync flags. */
-   if (flags & CP_DMA_SYNC)
-      header |= S_411_CP_SYNC(1);
+   /* Sync flags. Only present for PFP/ME. MEC always sync. */
+   if ((flags & CP_DMA_SYNC) && sctx->is_gfx_queue)
+      header |= S_501_CP_SYNC(1);
 
    if (flags & CP_DMA_RAW_WAIT)
-      command |= S_415_RAW_WAIT(1);
+      command |= S_506_RAW_WAIT(1);
 
    /* Src and dst flags. */
    /* GFX12: TC_L2 means MALL, which should always be set. */
    if (sctx->screen->info.cp_dma_use_L2 || sctx->gfx_level == GFX12)
-      header |= S_501_DST_SEL(V_501_DST_ADDR_TC_L2);
+      header |= S_501_DST_SEL(V_501_DST_ADDR_USING_L2);
 
    if (flags & CP_DMA_CLEAR) {
-      header |= S_411_SRC_SEL(V_411_DATA);
+      header |= S_501_SRC_SEL(V_501_DATA);
    } else if (sctx->screen->info.cp_dma_use_L2 || sctx->gfx_level == GFX12) {
-      header |= S_501_SRC_SEL(V_501_SRC_ADDR_TC_L2);
+      header |= S_501_SRC_SEL(V_501_SRC_ADDR_USING_L2);
    }
 
    radeon_begin(cs);
@@ -82,7 +82,7 @@ static void si_emit_cp_dma(struct si_context *sctx, struct radeon_cmdbuf *cs, ui
       radeon_emit(dst_va >> 32); /* DST_ADDR_HI [31:0] */
       radeon_emit(command);
    } else {
-      header |= S_411_SRC_ADDR_HI(src_va >> 32);
+      header |= S_412_SRC_ADDR_HI(src_va >> 32);
 
       radeon_emit(PKT3(PKT3_CP_DMA, 4, 0));
       radeon_emit(src_va);                  /* SRC_ADDR_LO [31:0] */
@@ -313,8 +313,8 @@ void si_cp_write_data(struct si_context *sctx, struct si_resource *buf, unsigned
    assert(offset % 4 == 0);
    assert(size % 4 == 0);
 
-   if (sctx->gfx_level == GFX6 && dst_sel == V_370_MEM)
-      dst_sel = V_370_MEM_GRBM;
+   if (sctx->gfx_level == GFX6 && dst_sel == V_371_MEMORY)
+      dst_sel = V_371_MEM_GRBM;
 
    radeon_add_to_buffer_list(sctx, cs, buf, RADEON_USAGE_WRITE | RADEON_PRIO_CP_DMA);
    uint64_t va = buf->gpu_address + offset;

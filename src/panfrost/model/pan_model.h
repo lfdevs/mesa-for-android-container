@@ -22,8 +22,6 @@ struct pan_tiler_features {
    unsigned max_levels;
 };
 
-#define MIDGARD_PRODUCT_ID(x) (((x) & BITFIELD_RANGE(16, 16)) >> 16)
-
 #define PAN_ARCH_MAJOR(x)    (((x) & BITFIELD_RANGE(28, 4)) >> 28)
 #define PAN_ARCH_MINOR(x)    (((x) & BITFIELD_RANGE(24, 4)) >> 24)
 #define PAN_ARCH_REV(x)      (((x) & BITFIELD_RANGE(20, 4)) >> 20)
@@ -32,6 +30,17 @@ struct pan_tiler_features {
 #define PAN_VERSION_MAJOR(x)  (((x) & BITFIELD_RANGE(12, 4)) >> 12)
 #define PAN_VERSION_MINOR(x)  (((x) & BITFIELD_RANGE(4, 8)) >> 4)
 #define PAN_VERSION_STATUS(x) ((x) & BITFIELD_RANGE(0, 4))
+
+/* GPU product id for Midgard */
+#define MIDGARD_PROD_ID(x) (((x) & BITFIELD_RANGE(16, 16)) >> 16)
+
+/* GPU product id since Bifrost. Assume 8 bits per field which ensures the
+ * prod_id is always greater than Midgard's. */
+#define PAN_PROD_ID(arch_major, arch_minor, prod_major)                        \
+   (((arch_major) << 16) | ((arch_minor) << 8) | (prod_major))
+
+/* GPU revision (rXpY) */
+#define PAN_REV(ver_major, ver_minor) (((ver_major) << 8) | ((ver_minor)))
 
 struct pan_model {
    /* GPU product ID */
@@ -88,7 +97,7 @@ const struct pan_model *pan_get_model(uint64_t gpu_id, uint32_t gpu_variant);
 static inline unsigned
 pan_arch(uint64_t gpu_id)
 {
-   switch (MIDGARD_PRODUCT_ID(gpu_id)) {
+   switch (MIDGARD_PROD_ID(gpu_id)) {
    case 0x600:
    case 0x620:
    case 0x720:
@@ -102,6 +111,22 @@ pan_arch(uint64_t gpu_id)
    default:
       return PAN_ARCH_MAJOR(gpu_id);
    }
+}
+
+static inline uint32_t
+pan_prod_id(uint64_t gpu_id)
+{
+   unsigned arch = pan_arch(gpu_id);
+   if (arch < 6)
+      return MIDGARD_PROD_ID(gpu_id);
+   return PAN_PROD_ID(PAN_ARCH_MAJOR(gpu_id), PAN_ARCH_MINOR(gpu_id),
+                      PAN_PRODUCT_MAJOR(gpu_id));
+}
+
+static inline uint32_t
+pan_rev(uint64_t gpu_id)
+{
+   return PAN_REV(PAN_VERSION_MAJOR(gpu_id), PAN_VERSION_MINOR(gpu_id));
 }
 
 #endif

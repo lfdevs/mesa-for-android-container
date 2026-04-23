@@ -283,7 +283,6 @@ zink-radv-vangogh-valve:
     CI_TRON_TIMEOUT__BOOT_CYCLE__MINUTES: 30
     CI_TRON_TIMEOUT__OVERALL__MINUTES: 30
     FDO_CI_CONCURRENT: 6
-    RADV_EXPERIMENTAL: hic
 
 zink-radv-vangogh-traces:
   extends:
@@ -307,7 +306,6 @@ zink-radv-navi31-valve:
     HWCI_START_WESTON: 1
     GPU_VERSION: zink-radv-navi31
     CI_TRON_TIMEOUT__OVERALL__MINUTES: 10
-    RADV_EXPERIMENTAL: hic
 
 zink-radv-cezanne:
   extends:
@@ -333,7 +331,6 @@ zink-radv-gfx1201-valve:
     HWCI_START_WESTON: 1
     GPU_VERSION: zink-radv-gfx1201
     CI_TRON_TIMEOUT__OVERALL__MINUTES: 10
-    RADV_EXPERIMENTAL: hic
 
 zink-radv-gfx1201-traces:
   extends:

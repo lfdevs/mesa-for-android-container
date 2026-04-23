@@ -162,24 +162,6 @@ radv_vcn_write_memory(struct radv_cmd_buffer *cmd_buffer, uint64_t va, unsigned 
    radv_vcn_sq_tail(cs, &sq);
 }
 
-static void
-radv_vcn_sq_start(struct radv_cmd_buffer *cmd_buffer)
-{
-   struct radv_device *device = radv_cmd_buffer_device(cmd_buffer);
-   struct radv_cmd_stream *cs = cmd_buffer->cs;
-
-   radeon_check_space(device->ws, cs->b, 512);
-   radv_vcn_sq_header(cs, &cmd_buffer->video.sq, RADEON_VCN_ENGINE_TYPE_DECODE);
-   rvcn_decode_ib_package_t *ib_header = (rvcn_decode_ib_package_t *)&(cs->b->buf[cs->b->cdw]);
-   ib_header->package_size = sizeof(struct rvcn_decode_buffer_s) + sizeof(struct rvcn_decode_ib_package_s);
-   cs->b->cdw++;
-   ib_header->package_type = (RDECODE_IB_PARAM_DECODE_BUFFER);
-   cs->b->cdw++;
-   cmd_buffer->video.decode_buffer = (rvcn_decode_buffer_t *)&(cs->b->buf[cs->b->cdw]);
-   cs->b->cdw += sizeof(struct rvcn_decode_buffer_s) / 4;
-   memset(cmd_buffer->video.decode_buffer, 0, sizeof(struct rvcn_decode_buffer_s));
-}
-
 void
 radv_init_physical_device_decoder(struct radv_physical_device *pdev)
 {

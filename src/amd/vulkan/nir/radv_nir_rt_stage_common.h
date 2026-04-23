@@ -159,5 +159,7 @@ struct radv_nir_rt_traversal_result radv_build_traversal(struct radv_device *dev
                                                          struct radv_nir_rt_traversal_params *params,
                                                          struct radv_ray_tracing_stage_info *info);
 
-void radv_build_rt_prolog(struct radv_device *device, struct radv_shader_stage *stage);
+void radv_build_rt_prolog(struct radv_device *device, struct radv_shader_stage *stage, bool uses_descriptor_heap,
+                          struct radv_shader_debug_info *debug);
+
 #endif // MESA_RADV_NIR_RT_STAGE_COMMON_H

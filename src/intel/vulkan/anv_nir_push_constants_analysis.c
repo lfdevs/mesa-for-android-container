@@ -24,6 +24,7 @@ set_score(uint8_t set)
     */
    switch (set) {
    case ANV_DESCRIPTOR_SET_DESCRIPTORS: return 3;
+   case ANV_DESCRIPTOR_SET_PUSH_POINTER: return 3;
    default:                             UNREACHABLE("unexpected push set");
    }
 }
@@ -69,6 +70,7 @@ cmp_push_range_entry(const void *va, const void *vb)
 
 enum push_block_type {
    PUSH_BLOCK_TYPE_UBO = 1,
+   PUSH_BLOCK_TYPE_POINTER = 2,
 };
 
 struct push_block_key
@@ -158,6 +160,107 @@ maybe_add_pushable_ubo(struct push_analysis_state *state,
    info->uses[offset]++;
 }
 
+/* Chase a pattern like this :
+ *
+ *     con 32x2    %2 = @load_push_constant (%1 (0x20)) (base=0, range=64, align_mul=256, align_offset=32)
+ *     con 64      %3 = pack_64_2x32_split %2.x, %2.y
+ *     con 64      %4 = load_const (0x000000000000000c = 12)
+ *     con 64      %5 = iadd %4 (0xc), %3
+ *     con 32      %6 = @load_global_constant (%5) (access=readonly|reorderable, align_mul=4, align_offset=0)
+ */
+bool
+anv_nir_is_pushable_pointer(nir_intrinsic_instr *intrin,
+                            uint32_t *out_push_offset,
+                            uint32_t *out_load_offset)
+{
+   assert(intrin->intrinsic == nir_intrinsic_load_global_constant);
+
+   if (!(nir_intrinsic_access(intrin) & ACCESS_NON_WRITEABLE))
+      return false;
+
+   if (nir_intrinsic_align_mul(intrin) < 32)
+      return false;
+
+   nir_scalar val = { intrin->src[0].ssa, 0 };
+
+   /* Extract constant offset if any */
+   *out_load_offset = 0;
+   nir_alu_instr *alu;
+   if (nir_scalar_is_alu(val) &&
+       (alu = nir_def_as_alu(val.def))->op == nir_op_iadd) {
+      for (unsigned i = 0; i < 2; ++i) {
+         nir_scalar add_src = { alu->src[i].src.ssa, alu->src[i].swizzle[val.comp] };
+         if (nir_scalar_is_const(add_src)) {
+            *out_load_offset = nir_scalar_as_uint(add_src);
+         } else if (val.def == intrin->src[0].ssa) {
+            /* This is the non constant part of the iadd, if the other source
+             * is constant, we'll gather the value in the previous if block,
+             * otherwise we'll give up on this in the next else block.
+             */
+            val = add_src;
+         } else {
+            return false;
+         }
+      }
+   }
+
+   /* Unwrap packing
+    *
+    * TODO: consider swizzle
+    */
+   if (nir_scalar_is_alu(val)) {
+      nir_alu_instr *pack_alu = nir_def_as_alu(val.def);
+      if (pack_alu->op != nir_op_pack_64_2x32_split)
+         return false;
+
+      val = (nir_scalar){ pack_alu->src[0].src.ssa, pack_alu->src[0].swizzle[0] };
+   }
+
+   if (!nir_scalar_is_intrinsic(val))
+      return false;
+
+   nir_intrinsic_instr *push_intrin = nir_def_as_intrinsic(val.def);
+   if (push_intrin->intrinsic != nir_intrinsic_load_push_constant)
+      return false;
+
+   if (!nir_src_is_const(push_intrin->src[0]))
+      return false;
+
+   *out_push_offset = nir_intrinsic_base(push_intrin) +
+                      nir_src_as_uint(push_intrin->src[0]);
+    return true;
+}
+
+static void
+add_pushable_pointer(struct push_analysis_state *state,
+                     nir_intrinsic_instr *intrin,
+                     uint32_t push_byte_offset,
+                     uint32_t load_byte_offset)
+{
+   const int offset = load_byte_offset / state->devinfo->grf_size;
+
+   /* Avoid shifting by larger than the width of our bitfield, as this
+    * is undefined in C.  Even if we require multiple bits to represent
+    * the entire value, it's OK to record a partial value - the backend
+    * is capable of falling back to pull loads for later components of
+    * vectors, as it has to shrink ranges for other reasons anyway.
+    */
+   if (offset >= 64)
+      return;
+
+   const unsigned num_components =
+      nir_def_last_component_read(&intrin->def) + 1;
+   const int bytes = num_components * (intrin->def.bit_size / 8);
+   const int start = ROUND_DOWN_TO(load_byte_offset, state->devinfo->grf_size);
+   const int end = align(load_byte_offset + bytes, state->devinfo->grf_size);
+   const int chunks = (end - start) / state->devinfo->grf_size;
+
+   struct push_block_info *info =
+      get_block_info(state, PUSH_BLOCK_TYPE_POINTER, push_byte_offset);
+   info->offsets |= ((1ull << chunks) - 1) << offset;
+   info->uses[offset]++;
+}
+
 static void
 analyze_pushable_block(struct push_analysis_state *state, nir_block *block)
 {
@@ -172,6 +275,13 @@ analyze_pushable_block(struct push_analysis_state *state, nir_block *block)
              nir_src_is_const(intrin->src[1]))
             maybe_add_pushable_ubo(state, intrin);
          break;
+
+     case nir_intrinsic_load_global_constant: {
+        uint32_t push_offset, load_offset;
+        if (anv_nir_is_pushable_pointer(intrin, &push_offset, &load_offset))
+           add_pushable_pointer(state, intrin, push_offset, load_offset);
+        break;
+     }
 
      default:
          break;
@@ -259,12 +369,17 @@ anv_nir_analyze_push_constants_ranges(nir_shader *nir,
          struct push_range_entry *entry =
             util_dynarray_grow(&ranges, struct push_range_entry, 1);
 
-         assert(info->key.index < push_map->block_count);
-         const struct anv_pipeline_binding *binding =
-            &push_map->block_to_descriptor[info->key.index];
-         entry->range.set = binding->set;
-         entry->range.index = binding->index;
-         entry->range.dynamic_offset_index = binding->dynamic_offset_index;
+         if (info->key.type == PUSH_BLOCK_TYPE_UBO) {
+            assert(info->key.index < push_map->block_count);
+            const struct anv_pipeline_binding *binding =
+               &push_map->block_to_descriptor[info->key.index];
+            entry->range.set = binding->set;
+            entry->range.index = binding->index;
+            entry->range.dynamic_offset_index = binding->dynamic_offset_index;
+         } else {
+            entry->range.set = ANV_DESCRIPTOR_SET_PUSH_POINTER;
+            entry->range.index = info->key.index;
+         }
          entry->range.start = first_bit;
          /* first_hole is one beyond the end, so we don't need to add 1 */
          entry->range.length = first_hole - first_bit;

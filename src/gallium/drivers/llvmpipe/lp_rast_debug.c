@@ -324,8 +324,8 @@ debug_triangle(int tilex, int tiley,
    while (plane_mask) {
       plane[nr_planes] = tri_plane[u_bit_scan(&plane_mask)];
       plane[nr_planes].c = (plane[nr_planes].c +
-                            IMUL64(plane[nr_planes].dcdy, tiley) -
-                            IMUL64(plane[nr_planes].dcdx, tilex));
+                            IMUL64_FIXED(plane[nr_planes].dcdy, tiley) -
+                            IMUL64_FIXED(plane[nr_planes].dcdx, tilex));
       nr_planes++;
    }
 
@@ -340,12 +340,12 @@ debug_triangle(int tilex, int tiley,
 
       out:
          for (i = 0; i < nr_planes; i++)
-            plane[i].c -= plane[i].dcdx;
+            plane[i].c -= TO_FIXED64(plane[i].dcdx);
       }
 
       for (i = 0; i < nr_planes; i++) {
-         plane[i].c += IMUL64(plane[i].dcdx, TILE_SIZE);
-         plane[i].c += plane[i].dcdy;
+         plane[i].c += IMUL64_FIXED(plane[i].dcdx, TILE_SIZE);
+         plane[i].c += TO_FIXED64(plane[i].dcdy);
       }
    }
    return count;

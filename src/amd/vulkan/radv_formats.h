@@ -29,6 +29,8 @@ radv_format_to_pipe_format(VkFormat vkformat)
    case VK_FORMAT_R10X6G10X6_UNORM_2PACK16:
    case VK_FORMAT_R12X4G12X4_UNORM_2PACK16:
       return PIPE_FORMAT_R16G16_UNORM;
+   case VK_FORMAT_R10X6G10X6B10X6A10X6_UNORM_4PACK16:
+      return PIPE_FORMAT_NONE;
    default:
       return vk_format_to_pipe_format(vkformat);
    }

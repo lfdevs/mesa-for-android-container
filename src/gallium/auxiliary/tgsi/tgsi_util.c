@@ -196,8 +196,6 @@ tgsi_util_get_src_usage_mask(enum tgsi_opcode opcode,
       break;
 
    case TGSI_OPCODE_TEX:
-   case TGSI_OPCODE_TEX_LZ:
-   case TGSI_OPCODE_TXF_LZ:
    case TGSI_OPCODE_TXF:
    case TGSI_OPCODE_TXB:
    case TGSI_OPCODE_TXL:

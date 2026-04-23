@@ -21,11 +21,61 @@ bool pan_will_dump_shaders(unsigned arch);
 bool pan_want_debug_info(unsigned arch);
 
 const nir_shader_compiler_options *
-pan_get_nir_shader_compiler_options(unsigned arch);
+pan_get_nir_shader_compiler_options(unsigned arch, bool merge_wg);
 
+/* Inputs to the backend compiler */
+struct pan_compile_inputs {
+   uint64_t gpu_id;
+   uint32_t gpu_variant;
+   bool is_blend, is_blit;
+   bool no_idvs;
+   uint32_t view_mask;
+
+   nir_variable_mode robust_modes;
+   /* Whether or not descriptor accesses should add additional robustness
+    * checks. */
+   bool robust_descriptors;
+
+   /* Mask of UBOs that may be moved to push constants */
+   uint32_t pushable_ubos;
+
+   /* Varying layout in memory, if known */
+   const struct pan_varying_layout *varying_layout;
+
+   /* Optimizations as nir_opt_varyings can erase all flat types to float, when
+    * this field is false, varying types are inferred from their usage.
+    */
+   bool trust_varying_flat_highp_types;
+
+   /* Settings to move constants into the FAU. */
+   struct {
+      uint32_t *values;
+      /* In multiples of 32bit. */
+      uint32_t max_amount;
+      /* In multiples of 32bit. */
+      uint32_t offset;
+   } fau_consts;
+};
+
+/* Every panfrost compilation pipeline should adhere to:
+ * 1. Driver-specific early lowering + pan_optimize_nir() (optional)
+ * 2. pan_preprocess_nir()
+ * 3. Descriptor lowering
+ * 4. pan_postprocess_nir()
+ * 5. Inline sysvals
+ * 5. pan_shader_compile()
+ * ONLY SYSVAL LOWERING is allowed between postprocess and shader_compile.
+ * Driver-specific lowerings should be either BEFORE preprocess or BETWEEN
+ * preprocess and postprocess.  Any code except sysval inlining put after
+ * postprocess WILL BE NAKed.
+ */
 void pan_preprocess_nir(nir_shader *nir, uint64_t gpu_id);
 void pan_optimize_nir(nir_shader *nir, uint64_t gpu_id);
 void pan_postprocess_nir(nir_shader *nir, uint64_t gpu_id);
+
+void pan_shader_compile(nir_shader *nir, struct pan_compile_inputs *inputs,
+                        struct util_dynarray *binary,
+                        struct pan_shader_info *info);
 
 #define PAN_PRINTF_BUFFER_SIZE 16384
 
@@ -102,39 +152,6 @@ struct pan_ubo_push {
 
 unsigned pan_lookup_pushed_ubo(struct pan_ubo_push *push, unsigned ubo,
                                unsigned offs);
-
-struct pan_compile_inputs {
-   uint64_t gpu_id;
-   uint32_t gpu_variant;
-   bool is_blend, is_blit;
-   bool no_idvs;
-   uint32_t view_mask;
-
-   nir_variable_mode robust_modes;
-   /* Whether or not descriptor accesses should add additional robustness
-    * checks. */
-   bool robust_descriptors;
-
-   /* Mask of UBOs that may be moved to push constants */
-   uint32_t pushable_ubos;
-
-   /* Varying layout in memory, if known */
-   const struct pan_varying_layout *varying_layout;
-
-   /* Optimizations as nir_opt_varyings can erase all flat types to float, when
-    * this field is false, varying types are inferred from their usage.
-    */
-   bool trust_varying_flat_highp_types;
-
-   /* Settings to move constants into the FAU. */
-   struct {
-      uint32_t *values;
-      /* In multiples of 32bit. */
-      uint32_t max_amount;
-      /* In multiples of 32bit. */
-      uint32_t offset;
-   } fau_consts;
-};
 
 enum pan_varying_section {
    PAN_VARYING_SECTION_POSITION,
@@ -483,10 +500,6 @@ struct pan_shader_info {
 
 void pan_shader_update_info(struct pan_shader_info *info, nir_shader *s,
                             const struct pan_compile_inputs *inputs);
-
-void pan_shader_compile(nir_shader *nir, struct pan_compile_inputs *inputs,
-                        struct util_dynarray *binary,
-                        struct pan_shader_info *info);
 
 uint16_t pan_to_bytemask(unsigned bytes, unsigned mask);
 

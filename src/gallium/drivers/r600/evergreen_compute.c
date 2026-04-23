@@ -321,7 +321,7 @@ static void compute_emit_cs(struct r600_context *rctx,
 	}
 
 	bool need_buf_const = current->shader.uses_tex_buffers ||
-		current->shader.has_txq_cube_array_z_comp;
+		current->shader.has_resinfo_via_uniform;
 
 	if (info->indirect) {
 		struct r600_resource *indirect_resource = r600_as_resource(info->indirect);
@@ -346,7 +346,7 @@ static void compute_emit_cs(struct r600_context *rctx,
 	r600_need_cs_space(rctx, 0, true, global_atomic_count);
 
 	if (need_buf_const) {
-		eg_setup_buffer_constants(rctx, MESA_SHADER_COMPUTE);
+		rctx->setup_buffer_constants(rctx, MESA_SHADER_COMPUTE);
 	}
 	r600_update_driver_const_buffers(rctx, true);
 

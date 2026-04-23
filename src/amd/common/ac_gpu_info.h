@@ -89,6 +89,8 @@ extern "C" {
 
 struct amdgpu_gpu_info;
 struct drm_amdgpu_info_device;
+struct drm_amdgpu_memory_info;
+struct drm_amdgpu_info_hw_ip;
 
 struct amd_ip_info {
    uint8_t ver_major;
@@ -243,7 +245,6 @@ struct radeon_info {
    uint32_t chip_rev; /* 0 = A0, 1 = A1, etc. */
 
    /* Flags. */
-   bool family_overridden; /* AMD_FORCE_FAMILY was used, skip command submission */
    bool has_graphics; /* false if the chip is compute-only */
    bool has_clear_state;
    bool has_distributed_tess;
@@ -374,7 +375,6 @@ struct radeon_info {
    bool has_timeline_syncobj;
    bool has_fence_to_handle;
    bool has_vm_always_valid;
-   bool has_bo_metadata;
    bool has_eqaa_surface_allocator;
    /* Sparse bindings and basic sparse features (2D image, etc.) */
    bool has_sparse;
@@ -487,7 +487,19 @@ enum ac_query_gpu_info_result {
 
 enum ac_query_gpu_info_result ac_query_gpu_info(int fd, void *dev_p, struct radeon_info *info,
                                                 bool require_pci_bus_info);
-void ac_fill_compiler_info(struct radeon_info *info, struct drm_amdgpu_info_device *device_info);
+void ac_fill_compiler_info(struct radeon_info *info, const struct drm_amdgpu_info_device *device_info);
+void ac_fill_tiling_info(struct radeon_info *info, const struct amdgpu_gpu_info *amdinfo);
+void ac_fill_memory_info(struct radeon_info *info, const struct drm_amdgpu_info_device *device_info,
+                         const struct drm_amdgpu_memory_info *meminfo);
+bool
+ac_fill_hw_ip_info(struct radeon_info *info, const struct drm_amdgpu_info_device *device_info,
+                   unsigned ip_type, const struct drm_amdgpu_info_hw_ip *ip_info);
+bool
+ac_identify_chip(struct radeon_info *info, const struct drm_amdgpu_info_device *device_info);
+void ac_fill_bug_info(struct radeon_info *info);
+void ac_fill_feature_info(struct radeon_info *info, const struct drm_amdgpu_info_device *device_info);
+void ac_fill_hw_info(struct radeon_info *info, const struct drm_amdgpu_info_device *device_info);
+void ac_fill_tess_info(struct radeon_info *info);
 
 void ac_compute_driver_uuid(char *uuid, size_t size);
 

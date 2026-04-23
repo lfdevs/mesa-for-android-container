@@ -26,56 +26,55 @@
 #define VG(x) ((void)0)
 #endif
 
+#undef MESA_LOG_TAG
 #define MESA_LOG_TAG "TU"
 
+#include "fd6_hw.h"
+#include "perfcntrs/freedreno_perfcntr.h"
+
+#include <vulkan/vk_icd.h>
+#include <vulkan/vulkan.h>
+
 #include "c11/threads.h"
-#include "util/rounding.h"
 #include "util/bitscan.h"
 #include "util/detect_os.h"
 #include "util/list.h"
 #include "util/log.h"
 #include "util/macros.h"
 #include "util/perf/cpu_trace.h"
+#include "util/perf/u_trace.h"
+#include "util/rounding.h"
 #include "util/sparse_array.h"
 #include "util/u_atomic.h"
 #include "util/u_dynarray.h"
 #include "util/xmlconfig.h"
-#include "util/perf/u_trace.h"
 #include "vk_alloc.h"
-#include "vk_debug_report.h"
-#include "vk_device.h"
-#include "vk_dispatch_table.h"
-#include "vk_extensions.h"
-#include "vk_instance.h"
-#include "vk_log.h"
-#include "vk_physical_device.h"
-#include "vk_pipeline_cache.h"
-#include "wsi_common.h"
-
-#include "ir3/ir3_compiler.h"
-#include "ir3/ir3_shader.h"
-
-#include "fd6_hw.h"
-#include "fdl/freedreno_layout.h"
-#include "common/freedreno_dev_info.h"
-#include "common/freedreno_common.h"
-#include "perfcntrs/freedreno_perfcntr.h"
-
-#include <vulkan/vk_icd.h>
-#include <vulkan/vulkan.h>
-
-#include "tu_entrypoints.h"
-
-#include "vk_format.h"
-#include "vk_image.h"
 #include "vk_command_buffer.h"
 #include "vk_command_pool.h"
 #include "vk_common_entrypoints.h"
-#include "vk_queue.h"
-#include "vk_object.h"
-#include "vk_sync.h"
+#include "vk_debug_report.h"
+#include "vk_device.h"
+#include "vk_dispatch_table.h"
 #include "vk_drm_syncobj.h"
+#include "vk_extensions.h"
+#include "vk_format.h"
+#include "vk_image.h"
+#include "vk_instance.h"
+#include "vk_log.h"
+#include "vk_object.h"
+#include "vk_physical_device.h"
+#include "vk_pipeline_cache.h"
+#include "vk_queue.h"
+#include "vk_sync.h"
 #include "vk_sync_timeline.h"
+#include "wsi_common.h"
+
+#include "common/freedreno_common.h"
+#include "common/freedreno_dev_info.h"
+#include "fdl/freedreno_layout.h"
+#include "ir3/ir3_compiler.h"
+#include "ir3/ir3_shader.h"
+#include "tu_entrypoints.h"
 
 #define MAX_VBS 32
 #define MAX_VERTEX_ATTRIBS 32
@@ -105,7 +104,7 @@
 #define SAMPLE_LOCATION_MAX 0.9375f
 
 #define TU_MAX_DRM_DEVICES 8
-#define MAX_VIEWS 16
+#define MAX_VIEWS 6
 #define MAX_HW_SCALED_VIEWS 6
 #define MAX_BIND_POINTS 2 /* compute + graphics */
 /* match the latest Qualcomm driver which is also a hw limit on later gens */

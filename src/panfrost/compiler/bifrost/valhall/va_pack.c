@@ -325,6 +325,25 @@ va_pack_widen(const bi_instr *I, enum bi_swizzle swz, enum va_size size)
       default:
          invalid_instruction(I, "32-bit widen");
       }
+   } else if (size == VA_SIZE_64) {
+      switch (swz) {
+      case BI_SWIZZLE_H01:
+         return VA_SWIZZLES_64_BIT_NONE;
+      case BI_SWIZZLE_H0:
+         return VA_SWIZZLES_64_BIT_H0;
+      case BI_SWIZZLE_H1:
+         return VA_SWIZZLES_64_BIT_H1;
+      case BI_SWIZZLE_B0:
+         return VA_SWIZZLES_64_BIT_B0;
+      case BI_SWIZZLE_B1:
+         return VA_SWIZZLES_64_BIT_B1;
+      case BI_SWIZZLE_B2:
+         return VA_SWIZZLES_64_BIT_B2;
+      case BI_SWIZZLE_B3:
+         return VA_SWIZZLES_64_BIT_B3;
+      default:
+         invalid_instruction(I, "64-bit widen");
+      }
    } else {
       invalid_instruction(I, "type size for widen");
    }

@@ -614,6 +614,7 @@ clone_loop(clone_state *state, struct exec_list *cf_list, const nir_loop *loop)
    nir_loop *nloop = nir_loop_create(state->ns);
    nloop->control = loop->control;
    nloop->partially_unrolled = loop->partially_unrolled;
+   nloop->do_while = loop->do_while;
 
    nir_cf_node_insert_end(cf_list, &nloop->cf_node);
 

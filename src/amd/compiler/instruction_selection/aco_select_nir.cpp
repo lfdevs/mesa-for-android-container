@@ -735,11 +735,12 @@ visit_jump(isel_context* ctx, nir_jump_instr* instr)
 {
    end_empty_exec_skip(ctx);
 
-   switch (instr->type) {
-   case nir_jump_break: emit_loop_break(ctx); break;
-   case nir_jump_continue: emit_loop_continue(ctx); break;
-   default: isel_err(&instr->instr, "Unknown NIR jump instr"); abort();
+   if (instr->type != nir_jump_break) {
+      isel_err(&instr->instr, "Unknown NIR jump instr");
+      abort();
    }
+
+   emit_loop_break(ctx);
 }
 
 void
@@ -753,7 +754,7 @@ visit_call(isel_context* ctx, nir_call_instr* instr)
    param_assignment_hints hints;
 
    if (nir_abi == ACO_NIR_CALL_ABI_AHIT_ISEC)
-      hints = get_ahit_isec_param_hints(ctx->callee_info);
+      hints = get_ahit_isec_param_hints(ctx->callee_info, ctx->program->info.descriptor_heap);
 
    ABI abi = nir_abi_to_aco(instr->callee->driver_attributes);
 
@@ -1389,7 +1390,8 @@ select_program_rt(isel_context& ctx, unsigned shader_count, struct nir_shader* c
          callee_info traversal_info = get_callee_info(
             ctx.program->gfx_level, ctx.program->wave_size, rtTraversalABI,
             traversal_function->num_params, traversal_function->params, NULL, limit);
-         callee_hints = get_ahit_isec_param_hints(traversal_info);
+         callee_hints =
+            get_ahit_isec_param_hints(traversal_info, ctx.program->info.descriptor_heap);
       }
 
       /* TODO: callable abi? */

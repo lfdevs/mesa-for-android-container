@@ -9,14 +9,14 @@
 
 #include "tu_queue.h"
 
+#include "vk_util.h"
+
 #include "tu_buffer.h"
 #include "tu_cmd_buffer.h"
+#include "tu_device.h"
 #include "tu_dynamic_rendering.h"
 #include "tu_image.h"
 #include "tu_knl.h"
-#include "tu_device.h"
-
-#include "vk_util.h"
 
 static int
 tu_get_submitqueue_priority(const struct tu_physical_device *pdevice,

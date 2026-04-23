@@ -256,9 +256,7 @@ elk_schedule_node::set_latency_gfx7(const struct elk_isa_info *isa)
    case ELK_SHADER_OPCODE_TEX:
    case ELK_SHADER_OPCODE_TXD:
    case ELK_SHADER_OPCODE_TXF:
-   case ELK_SHADER_OPCODE_TXF_LZ:
    case ELK_SHADER_OPCODE_TXL:
-   case ELK_SHADER_OPCODE_TXL_LZ:
       /* 18 cycles:
        * mov(8)  g115<1>F   0F                         { align1 WE_normal 1Q };
        * mov(8)  g114<1>F   0F                         { align1 WE_normal 1Q };

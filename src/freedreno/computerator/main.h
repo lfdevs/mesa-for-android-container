@@ -13,8 +13,7 @@
 #include "drm/freedreno_drmif.h"
 #include "drm/freedreno_ringbuffer.h"
 
-#include "adreno_common.xml.h"
-#include "adreno_pm4.xml.h"
+#include "common/fd_hw_common.h"
 
 #include "ir3/ir3_assembler.h"
 

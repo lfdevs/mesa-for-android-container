@@ -131,7 +131,8 @@ reverse_prefetch(struct prefetch_state *s, int lvl)
  * matches CP_IBn_BASE.
  */
 static struct ib *
-scan_cmdstream(struct prefetch_state *s, int lvl, uint32_t *dwords, uint32_t sizedwords)
+scan_cmdstream(struct prefetch_state *s, int lvl, const uint32_t *dwords,
+               uint32_t sizedwords)
 {
    int dwords_left = sizedwords;
    uint32_t count = 0; /* dword count including packet header */
@@ -173,7 +174,7 @@ next_pkt:
 }
 
 void
-handle_prefetch(uint32_t *dwords, uint32_t sizedwords)
+handle_prefetch(const uint32_t *dwords, uint32_t sizedwords)
 {
    struct prefetch_state rb_state = {};
 

@@ -406,22 +406,12 @@ copy_global_to_uniform(nir_shader *nir, struct ir3_ubo_analysis_state *state)
       }
 
       unsigned size = (range->end - range->start);
-      for (unsigned offset = 0; offset < size; offset += 16) {
+      /* ldg.k can copy at most 256 vec4s. */
+      for (unsigned offset = 0; offset < size; offset += 256 * 16) {
          unsigned const_offset = range->offset / 4 + offset / 4;
-         if (const_offset < 256) {
-            nir_copy_global_to_uniform_ir3(b, base,
-                                           .base = start + offset,
-                                           .range_base = const_offset,
-                                           .range = 1);
-         } else {
-            /* It seems that the a1.x format doesn't work, so we need to
-             * decompose the ldg.k into ldg + stc.
-             */
-            nir_def *load =
-               nir_load_global_ir3(b, 4, 32, base,
-                                   nir_imm_int(b, (start + offset) / 4));
-            nir_store_const_ir3(b, load, .base = const_offset);
-         }
+         nir_copy_global_to_uniform_ir3(
+            b, base, .base = start + offset, .range_base = const_offset,
+            .range = MIN2(256, (size - offset) / 16));
       }
    }
 
@@ -523,6 +513,14 @@ assign_offsets(struct ir3_ubo_analysis_state *state, unsigned start,
    state->size = offset;
 }
 
+static uint32_t
+const_align_vec4(struct ir3_compiler *compiler)
+{
+   return compiler->info->props.load_shader_consts_via_preamble
+             ? 1
+             : compiler->const_upload_unit;
+}
+
 /* Lowering to ldg to ldg.k + const uses the same infrastructure as lowering UBO
  * loads, but must be done separately because the analysis and transform must be
  * done in the same pass and we cannot reuse the main variant analysis for the
@@ -536,6 +534,8 @@ ir3_nir_lower_const_global_loads(nir_shader *nir, struct ir3_shader_variant *v)
 
    if (ir3_shader_debug & IR3_DBG_NOUBOOPT)
       return false;
+
+   uint32_t align_vec4 = const_align_vec4(compiler);
 
    unsigned max_upload;
    uint32_t global_offset = 0;
@@ -561,7 +561,7 @@ ir3_nir_lower_const_global_loads(nir_shader *nir, struct ir3_shader_variant *v)
                if (instr_is_load_const(instr) &&
                    ir3_def_is_rematerializable_for_preamble(nir_instr_as_intrinsic(instr)->src[0].ssa, NULL))
                   gather_ubo_ranges(nir, nir_instr_as_intrinsic(instr), &state,
-                                    compiler->const_upload_unit,
+                                    align_vec4,
                                     &upload_remaining);
             }
          }
@@ -587,7 +587,7 @@ ir3_nir_lower_const_global_loads(nir_shader *nir, struct ir3_shader_variant *v)
                      continue;
                   progress |= lower_ubo_load_to_uniform(
                      nir_instr_as_intrinsic(instr), &builder, &state, NULL,
-                     compiler->const_upload_unit);
+                     align_vec4);
                }
             }
 
@@ -618,9 +618,7 @@ ir3_nir_analyze_ubo_ranges(nir_shader *nir, struct ir3_shader_variant *v)
                               ptrs_vec4, 1);
    }
 
-   uint32_t align_vec4 = compiler->info->props.load_shader_consts_via_preamble
-                            ? 1
-                            : compiler->const_upload_unit;
+   uint32_t align_vec4 = const_align_vec4(compiler);
 
    /* Limit our uploads to the amount of constant buffer space available in
     * the hardware, minus what the shader compiler may need for various
@@ -645,7 +643,7 @@ ir3_nir_analyze_ubo_ranges(nir_shader *nir, struct ir3_shader_variant *v)
             nir_foreach_instr (instr, block) {
                if (instr_is_load_ubo(instr))
                   gather_ubo_ranges(nir, nir_instr_as_intrinsic(instr), state,
-                                    compiler->const_upload_unit,
+                                    align_vec4,
                                     &upload_remaining);
             }
          }
@@ -672,6 +670,8 @@ ir3_nir_lower_ubo_loads(nir_shader *nir, struct ir3_shader_variant *v)
    const struct ir3_const_state *const_state = ir3_const_state(v);
    const struct ir3_ubo_analysis_state *state = &const_state->ubo_state;
 
+   uint32_t align_vec4 = const_align_vec4(compiler);
+
    int num_ubos = 0;
    bool progress = false;
    bool has_preamble = false;
@@ -690,7 +690,7 @@ ir3_nir_lower_ubo_loads(nir_shader *nir, struct ir3_shader_variant *v)
                   continue;
                progress |= lower_ubo_load_to_uniform(
                   nir_instr_as_intrinsic(instr), &builder, state, &num_ubos,
-                  compiler->const_upload_unit);
+                  align_vec4);
             }
          }
 

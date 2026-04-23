@@ -1462,8 +1462,12 @@ panvk_per_arch(gpu_queue_check_status)(struct vk_queue *vk_queue)
    for (uint32_t i = 0; i < PANVK_SUBQUEUE_COUNT; i++) {
       panvk_priv_mem_readback(queue->subqueues[i].context, 0,
                               struct panvk_cs_subqueue_context, subq_ctx) {
-         if (subq_ctx->last_error != 0)
+         if (subq_ctx->last_error != 0) {
+            /* Check printf buffer one more time before exiting */
+            u_printf_with_ctx(stdout, &dev->printf.ctx);
+
             return vk_queue_set_lost(&queue->vk, "CS_FAULT");
+         }
       }
    }
 
@@ -1471,6 +1475,9 @@ panvk_per_arch(gpu_queue_check_status)(struct vk_queue *vk_queue)
                             &state);
    if (!ret && !state.state)
       return VK_SUCCESS;
+
+   /* Check printf buffer one more time before exiting */
+   u_printf_with_ctx(stdout, &dev->printf.ctx);
 
    vk_queue_set_lost(&queue->vk,
                      "group state: err=%d, state=0x%x, fatal_queues=0x%x", ret,

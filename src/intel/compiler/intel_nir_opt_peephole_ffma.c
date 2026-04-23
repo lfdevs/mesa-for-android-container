@@ -50,13 +50,13 @@ get_mul_for_src(nir_alu_src *src, unsigned num_components,
    nir_alu_instr *alu = nir_src_as_alu(src->src);
 
    /* We want to bail if any of the other ALU operations involved is labeled
-    * exact.  One reason for this is that, while the value that is changing is
+    * no-contract. One reason for this is that, while the value that is changing is
     * actually the result of the add and not the multiply, the intention of
-    * the user when they specify an exact multiply is that they want *that*
+    * the user when they specify an no-contract multiply is that they want *that*
     * value and what they don't care about is the add.  Another reason is that
     * SPIR-V explicitly requires this behaviour.
     */
-   if (!alu || nir_alu_instr_is_exact(alu))
+   if (!alu || nir_alu_instr_no_contract(alu))
       return NULL;
 
    switch (alu->op) {
@@ -142,7 +142,7 @@ intel_nir_opt_peephole_ffma_instr(nir_builder *b,
    if (add->op != nir_op_fadd)
       return false;
 
-   if (nir_alu_instr_is_exact(add))
+   if (nir_alu_instr_no_contract(add))
       return false;
 
 

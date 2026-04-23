@@ -9,19 +9,19 @@
 
 #include "tu_image.h"
 
-#include "fdl/fd6_format_table.h"
-#include "common/freedreno_lrz.h"
+#include "drm-uapi/drm_fourcc.h"
 
-#include "util/u_debug.h"
 #include "util/format/u_format.h"
+#include "util/u_debug.h"
 #include "vk_android.h"
 #include "vk_debug_utils.h"
 #include "vk_util.h"
-#include "drm-uapi/drm_fourcc.h"
+#include "vk_ycbcr_conversion.h"
 #include "vulkan/vulkan_core.h"
 
+#include "common/freedreno_lrz.h"
+#include "fdl/fd6_format_table.h"
 #include "fdl/freedreno_layout.h"
-
 #include "tu_buffer.h"
 #include "tu_cs.h"
 #include "tu_descriptor_set.h"
@@ -413,6 +413,10 @@ ubwc_possible(struct tu_device *device,
        (format == VK_FORMAT_D24_UNORM_S8_UINT ||
         format == VK_FORMAT_X8_D24_UNORM_PACK32) &&
        samples > VK_SAMPLE_COUNT_1_BIT) {
+      return false;
+   }
+
+   if (format == VK_FORMAT_R64_UINT || format == VK_FORMAT_R64_SINT) {
       return false;
    }
 

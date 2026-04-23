@@ -2,4 +2,14 @@ dEQP-GLES2.functional.fragment_ops.interaction.basic_shader.94
 dEQP-GLES2.functional.texture.specification.basic_copyteximage2d.cube_rgb
 dEQP-GLES2.functional.texture.specification.basic_texsubimage2d.rgba16f_cube
 
-dEQP-GLES2.functional.fragment_ops.interaction.basic_shader.94
+spec@glsl-1.10@execution@fs-frontfacing-ternary-neg-1.0-1.0
+spec@glsl-1.10@execution@fs-frontfacing-ternary-vec4-neg-1.0-1.0
+spec@glsl-1.20@execution@glsl-fs-frontfacing-not
+
+shaders@glsl-max-varyings >max_varying_components
+shaders@glsl-max-varyings
+
+spec@!opengl 1.2@tex3d-maxsize
+
+glx@glx-buffer-age
+glx@glx-multithread-clearbuffer

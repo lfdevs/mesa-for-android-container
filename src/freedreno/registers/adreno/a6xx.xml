@@ -10,6 +10,7 @@ xsi:schemaLocation="https://gitlab.freedesktop.org/freedreno/ rules-fd.xsd">
 <import file="adreno/a8xx_enums.xml"/>
 <import file="adreno/a6xx_perfcntrs.xml"/>
 <import file="adreno/a7xx_perfcntrs.xml"/>
+<import file="adreno/a8xx_perfcntrs.xml"/>
 <import file="adreno/a6xx_descriptors.xml"/>
 <import file="adreno/a8xx_descriptors.xml"/>
 
@@ -3519,11 +3520,11 @@ by a particular renderpass/blit.
 		<bitfield name="REGID_TESSY" low="24" high="31" type="a3xx_regid"/>
 	</reg32>
 	<reg32 offset="0xa004" name="VFD_CNTL_4" usage="draw">
-		<bitfield name="UNK0" low="0" high="7" type="a3xx_regid"/>
+		<bitfield name="REGID_DSVIEWID" low="0" high="7" type="a3xx_regid"/>
 	</reg32>
 	<reg32 offset="0xa005" name="VFD_CNTL_5" usage="draw">
 		<bitfield name="REGID_GSHEADER" low="0" high="7" type="a3xx_regid"/>
-		<bitfield name="UNK8" low="8" high="15" type="a3xx_regid"/>
+		<bitfield name="REGID_GSVIEWID" low="8" high="15" type="a3xx_regid"/>
 	</reg32>
 	<reg32 offset="0xa006" name="VFD_CNTL_6" usage="draw">
 		<!--

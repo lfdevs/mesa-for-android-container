@@ -35,6 +35,14 @@
 #include "lp_perf.h"
 #include "lp_rast_priv.h"
 
+#if DETECT_ARCH_SSE
+#include <emmintrin.h>
+#include "util/u_sse.h"
+#elif defined(_ARCH_PWR8) && UTIL_ARCH_LITTLE_ENDIAN
+#include <altivec.h>
+#include "util/u_pwr8.h"
+#endif
+
 /**
  * Shade all pixels in a 4x4 block.
  */
@@ -45,7 +53,6 @@ block_full_4(struct lp_rasterizer_task *task,
 {
    lp_rast_shade_quads_all(task, &tri->inputs, x, y);
 }
-
 
 /**
  * Shade all pixels in a 16x16 block.
@@ -60,49 +67,6 @@ block_full_16(struct lp_rasterizer_task *task,
    for (unsigned iy = 0; iy < 16; iy += 4)
       for (unsigned ix = 0; ix < 16; ix += 4)
          block_full_4(task, tri, x + ix, y + iy);
-}
-
-static inline unsigned
-build_mask_linear(int32_t c, int32_t dcdx, int32_t dcdy)
-{
-   unsigned mask = 0;
-
-   int32_t c0 = c;
-   int32_t c1 = c0 + dcdy;
-   int32_t c2 = c1 + dcdy;
-   int32_t c3 = c2 + dcdy;
-
-   mask |= ((c0 + 0 * dcdx) >> 31) & (1 << 0);
-   mask |= ((c0 + 1 * dcdx) >> 31) & (1 << 1);
-   mask |= ((c0 + 2 * dcdx) >> 31) & (1 << 2);
-   mask |= ((c0 + 3 * dcdx) >> 31) & (1 << 3);
-   mask |= ((c1 + 0 * dcdx) >> 31) & (1 << 4);
-   mask |= ((c1 + 1 * dcdx) >> 31) & (1 << 5);
-   mask |= ((c1 + 2 * dcdx) >> 31) & (1 << 6);
-   mask |= ((c1 + 3 * dcdx) >> 31) & (1 << 7);
-   mask |= ((c2 + 0 * dcdx) >> 31) & (1 << 8);
-   mask |= ((c2 + 1 * dcdx) >> 31) & (1 << 9);
-   mask |= ((c2 + 2 * dcdx) >> 31) & (1 << 10);
-   mask |= ((c2 + 3 * dcdx) >> 31) & (1 << 11);
-   mask |= ((c3 + 0 * dcdx) >> 31) & (1 << 12);
-   mask |= ((c3 + 1 * dcdx) >> 31) & (1 << 13);
-   mask |= ((c3 + 2 * dcdx) >> 31) & (1 << 14);
-   mask |= ((c3 + 3 * dcdx) >> 31) & (1 << 15);
-
-   return mask;
-}
-
-
-UNUSED static inline void
-build_masks(int32_t c,
-            int32_t cdiff,
-            int32_t dcdx,
-            int32_t dcdy,
-            unsigned *outmask,
-            unsigned *partmask)
-{
-   *outmask |= build_mask_linear(c, dcdx, dcdy);
-   *partmask |= build_mask_linear(c + cdiff, dcdx, dcdy);
 }
 
 void
@@ -161,12 +125,10 @@ lp_rast_triangle_ms_4_16(struct lp_rasterizer_task *task,
 
 #if DETECT_ARCH_SSE
 
-#include <emmintrin.h>
-#include "util/u_sse.h"
-
+#define HAS_BUILD_MASKS_32_SIMD 1
 
 static inline void
-build_masks_sse(int c,
+build_masks_32(int c,
                 int cdiff,
                 int dcdx,
                 int dcdy,
@@ -212,7 +174,7 @@ build_masks_sse(int c,
 
 
 static inline unsigned
-build_mask_linear_sse(int c, int dcdx, int dcdy)
+build_mask_linear_32(int c, int dcdx, int dcdy)
 {
    __m128i cstep0 = _mm_setr_epi32(c, c+dcdx, c+dcdx*2, c+dcdx*3);
    __m128i xdcdy = _mm_set1_epi32(dcdy);
@@ -237,56 +199,7 @@ build_mask_linear_sse(int c, int dcdx, int dcdy)
    return _mm_movemask_epi8(result);
 }
 
-static inline unsigned
-sign_bits4(const __m128i *cstep, int cdiff)
-{
-
-   /* Adjust the step values
-    */
-   __m128i cio4 = _mm_set1_epi32(cdiff);
-   __m128i cstep0 = _mm_add_epi32(cstep[0], cio4);
-   __m128i cstep1 = _mm_add_epi32(cstep[1], cio4);
-   __m128i cstep2 = _mm_add_epi32(cstep[2], cio4);
-   __m128i cstep3 = _mm_add_epi32(cstep[3], cio4);
-
-   /* Pack down to epi8
-    */
-   __m128i cstep01 = _mm_packs_epi32(cstep0, cstep1);
-   __m128i cstep23 = _mm_packs_epi32(cstep2, cstep3);
-   __m128i result = _mm_packs_epi16(cstep01, cstep23);
-
-   /* Extract the sign bits
-    */
-   return _mm_movemask_epi8(result);
-}
-
-#define COLUMN0 ((1<<0)|(1<<4)|(1<<8) |(1<<12))
-#define COLUMN1 ((1<<1)|(1<<5)|(1<<9) |(1<<13))
-#define COLUMN2 ((1<<2)|(1<<6)|(1<<10)|(1<<14))
-#define COLUMN3 ((1<<3)|(1<<7)|(1<<11)|(1<<15))
-
-#define ROW0 ((1<<0) |(1<<1) |(1<<2) |(1<<3))
-#define ROW1 ((1<<4) |(1<<5) |(1<<6) |(1<<7))
-#define ROW2 ((1<<8) |(1<<9) |(1<<10)|(1<<11))
-#define ROW3 ((1<<12)|(1<<13)|(1<<14)|(1<<15))
-
-#define STAMP_SIZE 4
-static unsigned bottom_mask_tab[STAMP_SIZE] = {
-   ROW3,
-   ROW3 | ROW2,
-   ROW3 | ROW2 | ROW1,
-   ROW3 | ROW2 | ROW1 | ROW0,
-};
-
-static unsigned right_mask_tab[STAMP_SIZE] = {
-   COLUMN3,
-   COLUMN3 | COLUMN2,
-   COLUMN3 | COLUMN2 | COLUMN1,
-   COLUMN3 | COLUMN2 | COLUMN1 | COLUMN0,
-};
-
-
-#define NR_PLANES 3
+#define HAS_RAST_TRIANGLE_3_16_SIMD 1
 
 void
 lp_rast_triangle_32_3_16(struct lp_rasterizer_task *task,
@@ -328,13 +241,17 @@ lp_rast_triangle_32_3_16(struct lp_rasterizer_task *task,
     */
    dcdx = _mm_sub_epi32(zero, dcdx);
 
-   c = _mm_add_epi32(c, mm_mullo_epi32(dcdx, _mm_set1_epi32(x)));
-   c = _mm_add_epi32(c, mm_mullo_epi32(dcdy, _mm_set1_epi32(y)));
+   /* c, dcdx, dcdy are in fixed point, x and y are integers. */
+   c = _mm_add_epi32(c, mm_mullo_epi32(dcdx, _mm_set1_epi32(x << FIXED_ORDER)));
+   c = _mm_add_epi32(c, mm_mullo_epi32(dcdy, _mm_set1_epi32(y << FIXED_ORDER)));
    rej4 = _mm_slli_epi32(rej4, 2);
 
    /* Adjust so we can just check the sign bit (< 0 comparison), instead of having to do a less efficient <= 0 comparison */
    c = _mm_sub_epi32(c, _mm_set1_epi32(1));
    rej4 = _mm_add_epi32(rej4, _mm_set1_epi32(1));
+
+   /* We can do the rest with integers */
+   c = _mm_srai_epi32(c, FIXED_ORDER);
 
    dcdx2 = _mm_add_epi32(dcdx, dcdx);
    dcdx3 = _mm_add_epi32(dcdx2, dcdx);
@@ -400,6 +317,8 @@ lp_rast_triangle_32_3_16(struct lp_rasterizer_task *task,
                                0xffff & ~out[i].mask);
 }
 
+#define HAS_RAST_TRIANGLE_3_4_SIMD 1
+
 void
 lp_rast_triangle_32_3_4(struct lp_rasterizer_task *task,
                         const union lp_rast_cmd_arg arg)
@@ -430,11 +349,15 @@ lp_rast_triangle_32_3_4(struct lp_rasterizer_task *task,
     */
    dcdx = _mm_sub_epi32(zero, dcdx);
 
-   c = _mm_add_epi32(c, mm_mullo_epi32(dcdx, _mm_set1_epi32(x)));
-   c = _mm_add_epi32(c, mm_mullo_epi32(dcdy, _mm_set1_epi32(y)));
+   /* c, dcdx, dcdy are in fixed point, x and y are integers. */
+   c = _mm_add_epi32(c, mm_mullo_epi32(dcdx, _mm_set1_epi32(x << FIXED_ORDER)));
+   c = _mm_add_epi32(c, mm_mullo_epi32(dcdy, _mm_set1_epi32(y << FIXED_ORDER)));
 
    /* Adjust so we can just check the sign bit (< 0 comparison), instead of having to do a less efficient <= 0 comparison */
    c = _mm_sub_epi32(c, _mm_set1_epi32(1));
+
+   /* We can do the rest with integers */
+   c = _mm_srai_epi32(c, FIXED_ORDER);
 
    dcdx2 = _mm_add_epi32(dcdx, dcdx);
    dcdx3 = _mm_add_epi32(dcdx2, dcdx);
@@ -482,17 +405,63 @@ lp_rast_triangle_32_3_4(struct lp_rasterizer_task *task,
    }
 }
 
-#undef NR_PLANES
+/* Defined in lp_rast_tri_tmp.h */
+#define HAS_RAST_TRIANGLE_4_16_SIMD 1
 
-#else
+static inline unsigned
+sign_bits4(const __m128i *cstep, int cdiff)
+{
 
-#if defined(_ARCH_PWR8) && UTIL_ARCH_LITTLE_ENDIAN
+   /* Adjust the step values
+    */
+   __m128i cio4 = _mm_set1_epi32(cdiff);
+   __m128i cstep0 = _mm_add_epi32(cstep[0], cio4);
+   __m128i cstep1 = _mm_add_epi32(cstep[1], cio4);
+   __m128i cstep2 = _mm_add_epi32(cstep[2], cio4);
+   __m128i cstep3 = _mm_add_epi32(cstep[3], cio4);
 
-#include <altivec.h>
-#include "util/u_pwr8.h"
+   /* Pack down to epi8
+    */
+   __m128i cstep01 = _mm_packs_epi32(cstep0, cstep1);
+   __m128i cstep23 = _mm_packs_epi32(cstep2, cstep3);
+   __m128i result = _mm_packs_epi16(cstep01, cstep23);
+
+   /* Extract the sign bits
+    */
+   return _mm_movemask_epi8(result);
+}
+
+#define COLUMN0 ((1<<0)|(1<<4)|(1<<8) |(1<<12))
+#define COLUMN1 ((1<<1)|(1<<5)|(1<<9) |(1<<13))
+#define COLUMN2 ((1<<2)|(1<<6)|(1<<10)|(1<<14))
+#define COLUMN3 ((1<<3)|(1<<7)|(1<<11)|(1<<15))
+
+#define ROW0 ((1<<0) |(1<<1) |(1<<2) |(1<<3))
+#define ROW1 ((1<<4) |(1<<5) |(1<<6) |(1<<7))
+#define ROW2 ((1<<8) |(1<<9) |(1<<10)|(1<<11))
+#define ROW3 ((1<<12)|(1<<13)|(1<<14)|(1<<15))
+
+#define STAMP_SIZE 4
+static unsigned bottom_mask_tab[STAMP_SIZE] = {
+   ROW3,
+   ROW3 | ROW2,
+   ROW3 | ROW2 | ROW1,
+   ROW3 | ROW2 | ROW1 | ROW0,
+};
+
+static unsigned right_mask_tab[STAMP_SIZE] = {
+   COLUMN3,
+   COLUMN3 | COLUMN2,
+   COLUMN3 | COLUMN2 | COLUMN1,
+   COLUMN3 | COLUMN2 | COLUMN1 | COLUMN0,
+};
+
+#elif defined(_ARCH_PWR8) && UTIL_ARCH_LITTLE_ENDIAN
+
+#define HAS_BUILD_MASKS_32_SIMD 1
 
 static inline void
-build_masks_ppc(int c,
+build_masks_32(int c,
                 int cdiff,
                 int dcdx,
                 int dcdy,
@@ -537,7 +506,7 @@ build_masks_ppc(int c,
 }
 
 static inline unsigned
-build_mask_linear_ppc(int c, int dcdx, int dcdy)
+build_mask_linear_32(int c, int dcdx, int dcdy)
 {
    __m128i cstep0 = vec_setr_epi32(c, c+dcdx, c+dcdx*2, c+dcdx*3);
    __m128i xdcdy = (__m128i) vec_splats(dcdy);
@@ -569,7 +538,7 @@ lp_plane_to_m128i(const struct lp_rast_plane *plane)
                          (int32_t)plane->dcdy, (int32_t)plane->eo);
 }
 
-#define NR_PLANES 3
+#define HAS_RAST_TRIANGLE_3_16_SIMD 1
 
 void
 lp_rast_triangle_32_3_16(struct lp_rasterizer_task *task,
@@ -622,8 +591,9 @@ lp_rast_triangle_32_3_16(struct lp_rasterizer_task *task,
     */
    dcdx = vec_sub_epi32(zero, dcdx);
 
-   c = vec_add_epi32(c, vec_mullo_epi32(dcdx, (__m128i) vec_splats(x)));
-   c = vec_add_epi32(c, vec_mullo_epi32(dcdy, (__m128i) vec_splats(y)));
+   /* c, dcdx, dcdy are in fixed point, x and y are integers. */
+   c = vec_add_epi32(c, vec_mullo_epi32(dcdx, (__m128i)vec_splats(x << FIXED_ORDER)));
+   c = vec_add_epi32(c, vec_mullo_epi32(dcdy, (__m128i)vec_splats(y << FIXED_ORDER)));
    rej4 = vec_slli_epi32(rej4, 2);
 
    /*
@@ -632,6 +602,9 @@ lp_rast_triangle_32_3_16(struct lp_rasterizer_task *task,
     */
    c = vec_sub_epi32(c, (__m128i) vec_splats((unsigned int) 1));
    rej4 = vec_add_epi32(rej4, (__m128i) vec_splats((unsigned int) 1));
+
+   /* We can do the rest with integers */
+   c = vec_srai_epi32(c, FIXED_ORDER);
 
    dcdx2 = vec_add_epi32(dcdx, dcdx);
    dcdx3 = vec_add_epi32(dcdx2, dcdx);
@@ -699,8 +672,97 @@ lp_rast_triangle_32_3_16(struct lp_rasterizer_task *task,
 
 #undef NR_PLANES
 
-#else
+#endif
 
+#if !HAS_BUILD_MASKS_SIMD
+static inline unsigned
+build_mask_linear(int64_t c, int32_t dcdx, int32_t dcdy)
+{
+   unsigned mask = 0;
+
+   int64_t c0 = c;
+   int64_t c1 = c0 + dcdy;
+   int64_t c2 = c1 + dcdy;
+   int64_t c3 = c2 + dcdy;
+
+   mask |= ((c0 + 0 * dcdx) >> 63) & (1 << 0);
+   mask |= ((c0 + 1 * dcdx) >> 63) & (1 << 1);
+   mask |= ((c0 + 2 * dcdx) >> 63) & (1 << 2);
+   mask |= ((c0 + 3 * dcdx) >> 63) & (1 << 3);
+   mask |= ((c1 + 0 * dcdx) >> 63) & (1 << 4);
+   mask |= ((c1 + 1 * dcdx) >> 63) & (1 << 5);
+   mask |= ((c1 + 2 * dcdx) >> 63) & (1 << 6);
+   mask |= ((c1 + 3 * dcdx) >> 63) & (1 << 7);
+   mask |= ((c2 + 0 * dcdx) >> 63) & (1 << 8);
+   mask |= ((c2 + 1 * dcdx) >> 63) & (1 << 9);
+   mask |= ((c2 + 2 * dcdx) >> 63) & (1 << 10);
+   mask |= ((c2 + 3 * dcdx) >> 63) & (1 << 11);
+   mask |= ((c3 + 0 * dcdx) >> 63) & (1 << 12);
+   mask |= ((c3 + 1 * dcdx) >> 63) & (1 << 13);
+   mask |= ((c3 + 2 * dcdx) >> 63) & (1 << 14);
+   mask |= ((c3 + 3 * dcdx) >> 63) & (1 << 15);
+
+   return mask;
+}
+
+static inline void
+build_masks(int64_t c,
+            int32_t cdiff,
+            int32_t dcdx,
+            int32_t dcdy,
+            unsigned *outmask,
+            unsigned *partmask)
+{
+   *outmask |= build_mask_linear(c, dcdx, dcdy);
+   *partmask |= build_mask_linear(c + cdiff, dcdx, dcdy);
+}
+#endif
+
+#if !HAS_BUILD_MASKS_32_SIMD
+static inline unsigned
+build_mask_linear_32(int32_t c, int32_t dcdx, int32_t dcdy)
+{
+   unsigned mask = 0;
+
+   int32_t c0 = c;
+   int32_t c1 = c0 + dcdy;
+   int32_t c2 = c1 + dcdy;
+   int32_t c3 = c2 + dcdy;
+
+   mask |= ((c0 + 0 * dcdx) >> 31) & (1 << 0);
+   mask |= ((c0 + 1 * dcdx) >> 31) & (1 << 1);
+   mask |= ((c0 + 2 * dcdx) >> 31) & (1 << 2);
+   mask |= ((c0 + 3 * dcdx) >> 31) & (1 << 3);
+   mask |= ((c1 + 0 * dcdx) >> 31) & (1 << 4);
+   mask |= ((c1 + 1 * dcdx) >> 31) & (1 << 5);
+   mask |= ((c1 + 2 * dcdx) >> 31) & (1 << 6);
+   mask |= ((c1 + 3 * dcdx) >> 31) & (1 << 7);
+   mask |= ((c2 + 0 * dcdx) >> 31) & (1 << 8);
+   mask |= ((c2 + 1 * dcdx) >> 31) & (1 << 9);
+   mask |= ((c2 + 2 * dcdx) >> 31) & (1 << 10);
+   mask |= ((c2 + 3 * dcdx) >> 31) & (1 << 11);
+   mask |= ((c3 + 0 * dcdx) >> 31) & (1 << 12);
+   mask |= ((c3 + 1 * dcdx) >> 31) & (1 << 13);
+   mask |= ((c3 + 2 * dcdx) >> 31) & (1 << 14);
+   mask |= ((c3 + 3 * dcdx) >> 31) & (1 << 15);
+
+   return mask;
+}
+
+static inline void
+build_masks_32(int32_t c,
+            int32_t cdiff,
+            int32_t dcdx,
+            int32_t dcdy,
+            unsigned *outmask,
+            unsigned *partmask)
+{
+   *outmask |= build_mask_linear_32(c, dcdx, dcdy);
+   *partmask |= build_mask_linear_32(c + cdiff, dcdx, dcdy);
+}
+#endif
+
+#if !HAS_RAST_TRIANGLE_3_16_SIMD
 void
 lp_rast_triangle_32_3_16(struct lp_rasterizer_task *task,
                          const union lp_rast_cmd_arg arg)
@@ -710,9 +772,9 @@ lp_rast_triangle_32_3_16(struct lp_rasterizer_task *task,
    arg2.triangle.plane_mask = (1<<3)-1;
    lp_rast_triangle_32_3(task, arg2);
 }
+#endif
 
-#endif /* _ARCH_PWR8 && UTIL_ARCH_LITTLE_ENDIAN */
-
+#if !HAS_RAST_TRIANGLE_4_16_SIMD
 void
 lp_rast_triangle_32_4_16(struct lp_rasterizer_task *task,
                          const union lp_rast_cmd_arg arg)
@@ -722,25 +784,15 @@ lp_rast_triangle_32_4_16(struct lp_rasterizer_task *task,
    arg2.triangle.plane_mask = (1<<4)-1;
    lp_rast_triangle_32_4(task, arg2);
 }
+#endif
 
+#if !HAS_RAST_TRIANGLE_3_4_SIMD
 void
 lp_rast_triangle_32_3_4(struct lp_rasterizer_task *task,
                       const union lp_rast_cmd_arg arg)
 {
    lp_rast_triangle_32_3_16(task, arg);
 }
-
-#endif
-
-#if DETECT_ARCH_SSE
-#define BUILD_MASKS(c, cdiff, dcdx, dcdy, omask, pmask) build_masks_sse((int)c, (int)cdiff, dcdx, dcdy, omask, pmask)
-#define BUILD_MASK_LINEAR(c, dcdx, dcdy) build_mask_linear_sse((int)c, dcdx, dcdy)
-#elif (defined(_ARCH_PWR8) && UTIL_ARCH_LITTLE_ENDIAN)
-#define BUILD_MASKS(c, cdiff, dcdx, dcdy, omask, pmask) build_masks_ppc((int)c, (int)cdiff, dcdx, dcdy, omask, pmask)
-#define BUILD_MASK_LINEAR(c, dcdx, dcdy) build_mask_linear_ppc((int)c, dcdx, dcdy)
-#else
-#define BUILD_MASKS(c, cdiff, dcdx, dcdy, omask, pmask) build_masks(c, cdiff, dcdx, dcdy, omask, pmask)
-#define BUILD_MASK_LINEAR(c, dcdx, dcdy) build_mask_linear(c, dcdx, dcdy)
 #endif
 
 #define RASTER_64 1
@@ -755,13 +807,10 @@ lp_rast_triangle_32_3_4(struct lp_rasterizer_task *task,
 
 #define TAG(x) x##_3
 #define NR_PLANES 3
-/*#define TRI_4 lp_rast_triangle_3_4*/
-/*#define TRI_16 lp_rast_triangle_3_16*/
 #include "lp_rast_tri_tmp.h"
 
 #define TAG(x) x##_4
 #define NR_PLANES 4
-/*#define TRI_16 lp_rast_triangle_4_16*/
 #include "lp_rast_tri_tmp.h"
 
 #define TAG(x) x##_5
@@ -792,8 +841,6 @@ lp_rast_triangle_32_3_4(struct lp_rasterizer_task *task,
 
 #define TAG(x) x##_32_3
 #define NR_PLANES 3
-/*#define TRI_4 lp_rast_triangle_3_4*/
-/*#define TRI_16 lp_rast_triangle_3_16*/
 #include "lp_rast_tri_tmp.h"
 
 #define TAG(x) x##_32_4
@@ -832,13 +879,10 @@ lp_rast_triangle_32_3_4(struct lp_rasterizer_task *task,
 
 #define TAG(x) x##_ms_3
 #define NR_PLANES 3
-/*#define TRI_4 lp_rast_triangle_3_4*/
-/*#define TRI_16 lp_rast_triangle_3_16*/
 #include "lp_rast_tri_tmp.h"
 
 #define TAG(x) x##_ms_4
 #define NR_PLANES 4
-/*#define TRI_16 lp_rast_triangle_4_16*/
 #include "lp_rast_tri_tmp.h"
 
 #define TAG(x) x##_ms_5

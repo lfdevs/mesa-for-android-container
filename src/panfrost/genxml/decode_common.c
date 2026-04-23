@@ -493,7 +493,7 @@ pandecode_shader_disassemble(struct pandecode_context *ctx, uint64_t shader_ptr,
    pandecode_log_cont(ctx, "\nShader %p (GPU VA %" PRIx64 ") sz %" PRId64 "\n",
                       code, shader_ptr, sz);
 
-   bool verbose = pan_arch(gpu_id) >= 6 && pan_arch(gpu_id) < 9;
+   bool verbose = pan_arch(gpu_id) >= 6;
    pan_disassemble(ctx->dump_stream, code, sz, gpu_id, verbose);
 
    pandecode_log_cont(ctx, "\n\n");

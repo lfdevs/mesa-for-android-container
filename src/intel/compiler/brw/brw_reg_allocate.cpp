@@ -879,7 +879,7 @@ brw_reg_alloc::emit_unspill(const brw_builder &bld,
          unspill_inst->offset = spill_offset;
          unspill_inst->use_transpose = use_transpose;
          unspill_inst->size_written =
-            lsc_msg_dest_len(devinfo, LSC_DATA_SIZE_D32, bld.dispatch_width()) * REG_SIZE;
+            brw_lsc_msg_dest_len(devinfo, LSC_DATA_SIZE_D32, bld.dispatch_width()) * REG_SIZE;
          assert(unspill_inst->size_written == (reg_size * REG_SIZE));
 
          _mesa_set_add(spill_insts, unspill_inst);

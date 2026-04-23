@@ -107,8 +107,8 @@ static void si_sqtt_start(struct si_context *sctx, struct radeon_cmdbuf *cs)
    switch (ip_type) {
       case AMD_IP_GFX:
          radeon_emit(PKT3(PKT3_CONTEXT_CONTROL, 1, 0));
-         radeon_emit(S_28_1_UPDATE_LOAD_ENABLES(1));
-         radeon_emit(S_28_2_UPDATE_SHADOW_ENABLES(1));
+         radeon_emit(S_281_UPDATE_LOAD_ENABLES(1));
+         radeon_emit(S_282_UPDATE_SHADOW_ENABLES(1));
          break;
       case AMD_IP_COMPUTE:
          radeon_emit(PKT3(PKT3_NOP, 0, 0));
@@ -160,8 +160,8 @@ static void si_sqtt_stop(struct si_context *sctx, struct radeon_cmdbuf *cs)
    switch (ip_type) {
       case AMD_IP_GFX:
          radeon_emit(PKT3(PKT3_CONTEXT_CONTROL, 1, 0));
-         radeon_emit(S_28_1_UPDATE_LOAD_ENABLES(1));
-         radeon_emit(S_28_2_UPDATE_SHADOW_ENABLES(1));
+         radeon_emit(S_281_UPDATE_LOAD_ENABLES(1));
+         radeon_emit(S_282_UPDATE_SHADOW_ENABLES(1));
          break;
       case AMD_IP_COMPUTE:
          radeon_emit(PKT3(PKT3_NOP, 0, 0));

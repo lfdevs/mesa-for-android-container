@@ -15,10 +15,10 @@
 #include "tu_cs.h"
 #include "tu_descriptor_set.h"
 #include "tu_device.h"
+#include "tu_image.h"
 #include "tu_lrz.h"
 #include "tu_pass.h"
 #include "tu_pipeline.h"
-#include "tu_image.h"
 #include "tu_tile_config.h"
 
 enum tu_draw_state_group_id

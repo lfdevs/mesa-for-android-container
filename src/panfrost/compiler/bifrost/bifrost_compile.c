@@ -546,7 +546,7 @@ bi_emit_lea_attr(bi_builder *b, nir_intrinsic_instr *intr)
 
    if (b->shader->arch < 9 && b->shader->idvs == BI_IDVS_POSITION) {
       /* Bifrost position shaders have a fast path */
-      assert(nir_src_as_uint(intr->src[0]) == 0);
+      assert(nir_src_is_zero(intr->src[0]));
       assert(src_fmt == nir_type_float32);
       unsigned regfmt = BI_REGISTER_FORMAT_F32;
       unsigned identity = (b->shader->arch == 6) ? 0x688 : 0;
@@ -2274,25 +2274,34 @@ bi_emit_intrinsic(bi_builder *b, nir_intrinsic_instr *instr)
 static void
 bi_emit_load_const(bi_builder *b, nir_load_const_instr *instr)
 {
-   /* Accumulate all the channels of the constant, as if we did an
-    * implicit SEL over them */
-   uint64_t acc = 0;
+   const unsigned sz = instr->def.bit_size;
+   const unsigned comps = instr->def.num_components;
+   bi_index temp[BI_MAX_VEC];
 
-   for (unsigned i = 0; i < instr->def.num_components; ++i) {
-      uint64_t v =
-         nir_const_value_as_uint(instr->value[i], instr->def.bit_size);
-      acc |= (v << (i * instr->def.bit_size));
-   }
-
-   if (instr->def.bit_size <= 32) {
-      bi_mov_i32_to(b, bi_get_index(instr->def.index), bi_imm_u32(acc));
+   if (sz == 64) {
+      for (unsigned i = 0; i < comps; ++i) {
+         uint64_t v = nir_const_value_as_uint(instr->value[i], 64);
+         temp[i * 2 + 0] = bi_mov_i32(b, bi_imm_u32(v));
+         temp[i * 2 + 1] = bi_mov_i32(b, bi_imm_u32(v >> 32));
+      }
+      bi_emit_collect_to(b, bi_get_index(instr->def.index), temp, comps * 2);
    } else {
-      uint32_t imm_2x32[2] = { acc & 0xffffffff, (acc >> 32) & 0xffffffff };
-      bi_index temp[2] = { bi_temp(b->shader), bi_temp(b->shader) };
-      bi_mov_i32_to(b, temp[0], bi_imm_u32(imm_2x32[0]));
-      bi_mov_i32_to(b, temp[1], bi_imm_u32(imm_2x32[1]));
+      assert(sz == 8 || sz == 16 || sz == 32);
+      const unsigned comps_per_word = 32 / sz;
+      const unsigned words = DIV_ROUND_UP(comps, comps_per_word);
+      for (unsigned w = 0; w < words; w++) {
+         uint32_t acc = 0;
+         for (unsigned i = 0; i < comps_per_word; i++) {
+            unsigned c = w * comps_per_word + i;
+            if (c >= comps)
+               break;
 
-      bi_emit_collect_to(b, bi_get_index(instr->def.index), temp, 2);
+            uint32_t v = nir_const_value_as_uint(instr->value[c], sz);
+            acc |= v << (i * sz);
+         }
+         temp[w] = bi_mov_i32(b, bi_imm_u32(acc));
+      }
+      bi_emit_collect_to(b, bi_get_index(instr->def.index), temp, words);
    }
 }
 
@@ -2300,6 +2309,15 @@ static bi_index
 bi_alu_src_index(bi_builder *b, nir_alu_src src, unsigned comps)
 {
    unsigned bitsize = nir_src_bit_size(src.src);
+
+   if (b->shader->arch >= 9 && bitsize == 64) {
+      /* For Valhall, 64-bit instructions only encode one register but will read
+       * the adjacent register that comes right after as well. Therefore we
+       * don't need to extract a single register here.
+       */
+      assert(comps == 1);
+      return bi_src_index(&src.src);
+   }
 
    /* the bi_index carries the 32-bit (word) offset separate from the
     * subword swizzle, first handle the offset */
@@ -3027,25 +3045,42 @@ bi_emit_alu(bi_builder *b, nir_alu_instr *instr)
 
    case nir_op_extract_u8:
    case nir_op_extract_i8: {
-      assert(comps == 1 && "should be scalarized");
-      assert((src_sz == 16 || src_sz == 32) && "should be lowered");
-      unsigned byte = nir_alu_src_as_uint(instr->src[1]);
+      if (sz == 32) {
+         assert(comps == 1 && "should be scalarized");
+         unsigned byte = nir_alu_src_as_uint(instr->src[1]);
+         if (instr->op == nir_op_extract_i8)
+            bi_s8_to_s32_to(b, dst, bi_byte(s0, byte));
+         else
+            bi_u8_to_u32_to(b, dst, bi_byte(s0, byte));
+      } else if (sz == 16) {
+         assert(comps <= 2);
+         const unsigned byte_x = nir_alu_src_comp_as_uint(instr->src[1], 0);
+         const unsigned byte_y = comps == 1 ? byte_x :
+                                 nir_alu_src_comp_as_uint(instr->src[1], 1);
+         assert(byte_x < 2 && byte_y < 2);
 
-      if (s0.swizzle == BI_SWIZZLE_H11) {
-         assert(byte < 2);
-         byte += 2;
-      } else if (s0.swizzle != BI_SWIZZLE_H01) {
-         assert(s0.swizzle == BI_SWIZZLE_H00);
+         /* Construct the swizzle for the select.  We know it's valid because
+          * it's guaranteed to be a BXXYY swizzle, even when composed with
+          * s0.swizzle.
+          */
+         enum bi_swizzle swizzle = BI_SWIZZLE_H01;
+         const unsigned bytes[4] = { byte_x, byte_x, 2 + byte_y, 2 + byte_y };
+         bool valid = bi_swizzle_from_byte_channels(bytes, &swizzle);
+         assert(valid);
+
+         valid = bi_try_compose_swizzles(&swizzle, swizzle, s0.swizzle);
+         assert(valid);
+
+         bi_index src = s0;
+         src.swizzle = swizzle;
+
+         if (instr->op == nir_op_extract_i8)
+            bi_v2s8_to_v2s16_to(b, dst, src);
+         else
+            bi_v2u8_to_v2u16_to(b, dst, src);
+      } else {
+         UNREACHABLE("should be lowered");
       }
-
-      assert(byte < 4);
-
-      s0.swizzle = BI_SWIZZLE_H01;
-
-      if (instr->op == nir_op_extract_i8)
-         bi_s8_to_s32_to(b, dst, bi_byte(s0, byte));
-      else
-         bi_u8_to_u32_to(b, dst, bi_byte(s0, byte));
       break;
    }
 
@@ -3347,7 +3382,14 @@ bi_emit_alu(bi_builder *b, nir_alu_instr *instr)
       break;
 
    case nir_op_iadd:
-      bi_iadd_to(b, nir_type_int, sz, dst, s0, s1, false);
+      if (sz == 64) {
+         assert(b->shader->arch >= 9);
+         bi_shaddx_s64_to(b, dst, s0, s1, 0);
+         bi_index dsts[4] = {bi_null(), bi_null(), bi_null(), bi_null()};
+         bi_emit_split_i32(b, dsts, dst, 2);
+         bi_cache_collect(b, dst, dsts, 2);
+      } else
+         bi_iadd_to(b, nir_type_int, sz, dst, s0, s1, false);
       break;
 
    case nir_op_iadd_sat:
@@ -3641,8 +3683,7 @@ bi_emit_texc_offset_ms_index(bi_builder *b, nir_tex_instr *instr)
    bi_index dest = bi_zero();
 
    int offs_idx = nir_tex_instr_src_index(instr, nir_tex_src_offset);
-   if (offs_idx >= 0 && (!nir_src_is_const(instr->src[offs_idx].src) ||
-                         nir_src_as_uint(instr->src[offs_idx].src) != 0)) {
+   if (offs_idx >= 0 && !nir_src_is_zero(instr->src[offs_idx].src)) {
       unsigned nr = nir_src_num_components(instr->src[offs_idx].src);
       bi_index idx = bi_src_index(&instr->src[offs_idx].src);
       dest = bi_mkvec_v4i8(
@@ -3653,8 +3694,7 @@ bi_emit_texc_offset_ms_index(bi_builder *b, nir_tex_instr *instr)
    }
 
    int ms_idx = nir_tex_instr_src_index(instr, nir_tex_src_ms_index);
-   if (ms_idx >= 0 && (!nir_src_is_const(instr->src[ms_idx].src) ||
-                       nir_src_as_uint(instr->src[ms_idx].src) != 0)) {
+   if (ms_idx >= 0 && !nir_src_is_zero(instr->src[ms_idx].src)) {
       dest = bi_lshift_or_i32(b, bi_src_index(&instr->src[ms_idx].src), dest,
                               bi_imm_u8(24));
    }
@@ -3678,8 +3718,7 @@ bi_emit_valhall_offsets(bi_builder *b, nir_tex_instr *instr)
    int lod_idx = nir_tex_instr_src_index(instr, nir_tex_src_lod);
 
    /* Components 0-2: offsets */
-   if (offs_idx >= 0 && (!nir_src_is_const(instr->src[offs_idx].src) ||
-                         nir_src_as_uint(instr->src[offs_idx].src) != 0)) {
+   if (offs_idx >= 0 && !nir_src_is_zero(instr->src[offs_idx].src)) {
       unsigned nr = nir_src_num_components(instr->src[offs_idx].src);
       bi_index idx = bi_src_index(&instr->src[offs_idx].src);
 
@@ -3698,16 +3737,13 @@ bi_emit_valhall_offsets(bi_builder *b, nir_tex_instr *instr)
    }
 
    /* Component 2: multisample index */
-   if (ms_idx >= 0 && (!nir_src_is_const(instr->src[ms_idx].src) ||
-                       nir_src_as_uint(instr->src[ms_idx].src) != 0)) {
+   if (ms_idx >= 0 && !nir_src_is_zero(instr->src[ms_idx].src)) {
       bi_index ms = bi_src_index(&instr->src[ms_idx].src);
       dest = bi_mkvec_v2i16(b, bi_half(dest, false), bi_half(ms, false));
    }
 
    /* Component 3: 8-bit LOD */
-   if (lod_idx >= 0 &&
-       (!nir_src_is_const(instr->src[lod_idx].src) ||
-        nir_src_as_uint(instr->src[lod_idx].src) != 0) &&
+   if (lod_idx >= 0 && !nir_src_is_zero(instr->src[lod_idx].src) &&
        nir_tex_instr_src_type(instr, lod_idx) != nir_type_float) {
       dest = bi_lshift_or_i32(b, bi_src_index(&instr->src[lod_idx].src), dest,
                               bi_imm_u8(24));
@@ -3916,8 +3952,7 @@ bi_emit_texc(bi_builder *b, nir_tex_instr *instr)
 
       case nir_tex_src_lod:
          if (desc.op == BIFROST_TEX_OP_TEX &&
-             nir_src_is_const(instr->src[i].src) &&
-             nir_src_as_uint(instr->src[i].src) == 0) {
+             nir_src_is_zero(instr->src[i].src)) {
             desc.lod_or_fetch = BIFROST_LOD_MODE_ZERO;
          } else if (desc.op == BIFROST_TEX_OP_TEX) {
             assert(base == nir_type_float);
@@ -4210,8 +4245,7 @@ bi_emit_tex_valhall(bi_builder *b, nir_tex_instr *instr)
       }
 
       case nir_tex_src_lod:
-         if (nir_src_is_const(instr->src[i].src) &&
-             nir_src_as_uint(instr->src[i].src) == 0) {
+         if (nir_src_is_zero(instr->src[i].src)) {
             lod_mode = BI_VA_LOD_MODE_ZERO_LOD;
          } else if (has_lod_mode) {
             lod_mode = BI_VA_LOD_MODE_EXPLICIT;
@@ -4519,7 +4553,7 @@ bi_is_simple_tex(nir_tex_instr *instr)
       return true;
 
    nir_src lod = instr->src[lod_idx].src;
-   return nir_src_is_const(lod) && nir_src_as_uint(lod) == 0;
+   return nir_src_is_zero(lod);
 }
 
 static void
@@ -5248,10 +5282,6 @@ bi_compile_variant_nir(nir_shader *nir,
          NIR_PASS(progress, nir, nir_opt_dead_cf);
          NIR_PASS(progress, nir, nir_opt_cse);
       }
-
-      /* opt_cse can vectorize load_const, we need to lower this to scalar */
-      NIR_PASS(progress, nir, nir_lower_load_const_to_scalar);
-      NIR_PASS(progress, nir, nir_opt_dce);
    }
 
    /* If nothing is pushed, all UBOs need to be uploaded */

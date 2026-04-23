@@ -9,7 +9,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-uint64_t gpuaddr(void *hostptr);
+uint64_t gpuaddr(const void *hostptr);
 uint64_t gpubaseaddr(uint64_t gpuaddr);
 void *hostptr(uint64_t gpuaddr);
 unsigned hostlen(uint64_t gpuaddr);

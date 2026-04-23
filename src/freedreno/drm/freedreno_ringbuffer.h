@@ -13,8 +13,7 @@
 #include "util/u_atomic.h"
 #include "util/u_debug.h"
 
-#include "adreno_common.xml.h"
-#include "adreno_pm4.xml.h"
+#include "common/fd_hw_common.h"
 #include "freedreno_drmif.h"
 #include "freedreno_pm4.h"
 

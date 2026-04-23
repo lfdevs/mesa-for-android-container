@@ -3,6 +3,7 @@
 
 import sys
 from bifrost_isa import *
+from functools import reduce
 from mako.template import Template
 
 # Consider pseudo instructions when getting the modifier list
@@ -62,10 +63,59 @@ def map_modifier(body, prefix, mod, domain, target):
 
         return "{}_table[{}]".format(prefix, mod)
 
+SRC_SWIZZLE_BUCKETS = [
+    set(['h00', 'h0', 'b0101']),
+    set(['h01', 'none', 'b0123']), # Identity
+    set(['h10', 'b2301']),
+    set(['h11', 'h1', 'b2323']),
+    set(['b0000', 'b00', 'b0']),
+    set(['b1111', 'b11', 'b1']),
+    set(['b2222', 'b22', 'b2']),
+    set(['b3333', 'b33', 'b3']),
+    set(['b0011', 'b01']),
+    set(['b2233', 'b23']),
+    set(['b1032']),
+    set(['b3210']),
+    set(['b0022', 'b02']),
+    set(['b1100', 'b10']),
+    set(['b2200', 'b20']),
+    set(['b3300', 'b30']),
+    set(['b2211', 'b21']),
+    set(['b3311', 'b31']),
+    set(['b1122', 'b12']),
+    set(['b3322', 'b32']),
+    set(['b0033', 'b03']),
+    set(['b1133', 'b13']),
+]
+
+DST_SWIZZLE_BUCKETS = [
+    set(['h0',]),
+    set(['none', 'w0']), # Identity
+    set([]),
+    set(['h1']),
+    set(['b0']),
+    set(['b1']),
+    set(['b2']),
+    set(['b3']),
+]
+
+ALL_SRC_SWIZZLES = reduce(lambda x, y: x | y, SRC_SWIZZLE_BUCKETS)
+ALL_DST_SWIZZLES = reduce(lambda x, y: x | y, DST_SWIZZLE_BUCKETS)
+
 def pick_from_bucket(opts, bucket):
     intersection = set(opts) & bucket
     assert(len(intersection) <= 1)
     return intersection.pop() if len(intersection) == 1 else None
+
+def src_swizzle_to_mod_map(opts):
+    for opt in opts:
+        assert opt == 'reserved' or opt in ALL_SRC_SWIZZLES, opt
+    return [pick_from_bucket(opts, bucket) for bucket in SRC_SWIZZLE_BUCKETS]
+
+def dst_swizzle_to_mod_map(opts):
+    for opt in opts:
+        assert opt in ['reserved', 'd0'] or opt in ALL_DST_SWIZZLES, opt
+    return [pick_from_bucket(opts, bucket) for bucket in DST_SWIZZLE_BUCKETS]
 
 def pack_modifier(mod, width, default, opts, body, pack_exprs):
     # Destructure the modifier name
@@ -77,28 +127,12 @@ def pack_modifier(mod, width, default, opts, body, pack_exprs):
     lists = modifier_lists[raw]
 
     # Swizzles need to be packed "specially"
-    SWIZZLE_BUCKETS = [
-            set(['h00', 'h0', 'b0101']),
-            set(['h01', 'none', 'b0123', 'w0']), # Identity
-            set(['h10', 'b2301']),
-            set(['h11', 'h1', 'b2323']),
-            set(['b0000', 'b00', 'b0']),
-            set(['b1111', 'b11', 'b1']),
-            set(['b2222', 'b22', 'b2']),
-            set(['b3333', 'b33', 'b3']),
-            set(['b0011', 'b01']),
-            set(['b2233', 'b23']),
-            set(['b1032']),
-            set(['b3210']),
-            set(['b0022', 'b02'])
-    ]
-
     if raw in SWIZZLES:
         # Construct a list
-        lists = [pick_from_bucket(opts, bucket) for bucket in SWIZZLE_BUCKETS]
+        lists = src_swizzle_to_mod_map(opts)
         ir_value = "src[{}].swizzle".format(arg)
     elif raw == "lane_dest":
-        lists = [pick_from_bucket(opts, bucket) for bucket in SWIZZLE_BUCKETS]
+        lists = dst_swizzle_to_mod_map(opts)
         ir_value = "dest->swizzle"
     elif raw in ["abs", "sign"]:
         ir_value = "src[{}].abs".format(arg)
@@ -287,6 +321,11 @@ def pack_variant(opname, states):
     return variant_template.render(name = opname_to_c(opname), states = zip(pack_exprs, state_body, state_conds), common_body = common_body, single_state = (len(states) == 1), srcs = 4)
 
 print(COPYRIGHT + '#include "compiler.h"')
+
+for i, bucket in enumerate(SRC_SWIZZLE_BUCKETS):
+    for swz in bucket:
+        bi_swz = 'BI_SWIZZLE_' + swz.upper()
+        print(f'static_assert({bi_swz} == {i}, "Swizzle sanity");')
 
 packs = [pack_variant(e, instructions[e]) for e in instructions]
 for p in packs:

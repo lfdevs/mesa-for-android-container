@@ -11,7 +11,7 @@
 
 #include "freedreno_util.h"
 
-#include "a2xx.xml.h"
+#include "fd2_hw.h"
 
 struct surface_format {
 /* If enum is a signed type, 0x7f is out of range. Cast it to avoid warnings. */

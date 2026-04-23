@@ -1,9 +1,2 @@
-# Catch all the line-related flakes we see on navi10
-dEQP-VK.pipeline.*.line_stipple_disable
-dEQP-VK.pipeline.*.topology_line
-
-dEQP-VK.pipeline.fast_linked_library.depth.nocolor.format.d16_unorm_s8_uint_separate_layouts.compare_ops.line_list_less_greater_or_equal_less_greater
-
-dEQP-VK.query_pool.statistics_query.host_query_reset.geometry_shader_(invocations|primitives).secondary.(32|64)bits_.*
-
-dEQP-VK.binding_model.descriptor_buffer.sparse_residency_buffer.capture_replay.compute_comp_combined_image_sampler_custom_border_color
+dEQP-VK.pipeline.monolithic.image.suballocation.sampling_type.separate.view_type.1d_array.format.r8g8b8a8_srgb.count_8.size.512x1_array_of_6
+dEQP-VK.pipeline.shader_object_unlinked_spirv.stencil.format.d32_sfloat_s8_uint_separate_layouts.states.fail_wrap.pass_repl.dfail_incc.comp_not_equal.any

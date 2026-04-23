@@ -102,7 +102,7 @@ compile_shader(const char *filename, mesa_shader_stage shader_stage, struct shad
 
    shader->nir = spirv_to_nir(
       (const uint32_t *)file_contents, word_count, NULL,
-      0, (mesa_shader_stage)shader_stage, shader->entry_point,
+      (mesa_shader_stage)shader_stage, shader->entry_point,
       spirv_opts, &nir_options);
    free(file_contents);
    if (!shader->nir) {

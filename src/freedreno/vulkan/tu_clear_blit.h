@@ -10,7 +10,13 @@
 #ifndef TU_CLEAR_BLIT_H
 #define TU_CLEAR_BLIT_H
 
-#include "tu_common.h"
+#include <stdint.h>
+
+#include "vulkan/vulkan_core.h"
+
+#include "common/fd_hw_common.h"
+
+struct tu_rect2d_float;
 
 void tu_init_clear_blit_shaders(struct tu_device *dev);
 

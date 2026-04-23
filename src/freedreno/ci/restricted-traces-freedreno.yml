@@ -66,10 +66,6 @@ traces:
   ShadowWarrior/ShadowWarrior-f3952-v2.trace:
     freedreno-a618:
       label: [skip, flakes]
-  Anna/Anna-f692-v2.trace:
-    freedreno-a618:
-      label: [skip, broken]
-      text: 15s and 0 frames rendered
   Cradle/cradle-f3000-v2.trace:
     freedreno-a618:
       label: [unsupported]
@@ -84,10 +80,6 @@ traces:
       label: [skip, slow]
   alien-isolation/AlienIsolation.bin.1-trim--k-f2000-v20201203-v2.trace:
     freedreno-a618:
-      label: [fail]
-  plague-inc-evolved/PlagueIncEvolved-trim--f1200-v20201203-v2.trace:
-    freedreno-a618:
-      checksum: 2f60f3514e1717e26b03ed3b685a0ad8
       label: [fail]
   slime-rancher/SlimeRancher-trim--f970-v20201203-v2.trace:
     freedreno-a618:

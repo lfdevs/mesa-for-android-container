@@ -287,6 +287,10 @@ kk_DestroyDevice(VkDevice _device, const VkAllocationCallbacks *pAllocator)
    kk_query_table_finish(dev, &dev->occlusion_queries);
    kk_destroy_sampler_heap(dev, &dev->samplers);
 
+   /* Geometry heap */
+   if (dev->heap)
+      kk_destroy_bo(dev, dev->heap);
+
    /* Release the residency set last once all BOs are released. */
    mtl_release(dev->residency_set.handle);
    simple_mtx_destroy(&dev->residency_set.mutex);

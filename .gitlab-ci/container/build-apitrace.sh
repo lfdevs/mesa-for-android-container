@@ -9,7 +9,7 @@ set -uex
 
 section_start apitrace "Building apitrace"
 
-APITRACE_VERSION="45a005875d348b055d5b88dca285c109dee90457"
+APITRACE_VERSION="18cfd388ac47a9e00978b34d6c20341f3e2cdb56"
 
 git clone https://github.com/apitrace/apitrace.git --single-branch --no-checkout /apitrace
 pushd /apitrace

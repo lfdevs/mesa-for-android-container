@@ -131,6 +131,30 @@ vk_device_memory_report_init(struct vk_device *device,
    return VK_SUCCESS;
 }
 
+static VkPipelineRobustnessBufferBehaviorEXT
+vk_device_default_robust_buffer_behavior(const struct vk_device *device)
+{
+   if (device->enabled_features.robustBufferAccess2) {
+      return VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_ROBUST_BUFFER_ACCESS_2_EXT;
+   } else if (device->enabled_features.robustBufferAccess) {
+      return VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_ROBUST_BUFFER_ACCESS_EXT;
+   } else {
+      return VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_DISABLED_EXT;
+   }
+}
+
+static VkPipelineRobustnessImageBehaviorEXT
+vk_device_default_robust_image_behavior(const struct vk_device *device)
+{
+   if (device->enabled_features.robustImageAccess2) {
+      return VK_PIPELINE_ROBUSTNESS_IMAGE_BEHAVIOR_ROBUST_IMAGE_ACCESS_2_EXT;
+   } else if (device->enabled_features.robustImageAccess) {
+      return VK_PIPELINE_ROBUSTNESS_IMAGE_BEHAVIOR_ROBUST_IMAGE_ACCESS_EXT;
+   } else {
+      return VK_PIPELINE_ROBUSTNESS_IMAGE_BEHAVIOR_DISABLED_EXT;
+   }
+}
+
 VkResult
 vk_device_init(struct vk_device *device,
                struct vk_physical_device *physical_device,
@@ -270,6 +294,15 @@ vk_device_init(struct vk_device *device,
    result = vk_device_memory_report_init(device, pCreateInfo);
    if (result != VK_SUCCESS)
       return result;
+
+   device->robustness_state = (struct vk_pipeline_robustness_state) {
+      .uniform_buffers = vk_device_default_robust_buffer_behavior(device),
+      .storage_buffers = vk_device_default_robust_buffer_behavior(device),
+      .vertex_inputs = vk_device_default_robust_buffer_behavior(device),
+      .images = vk_device_default_robust_image_behavior(device),
+      .null_uniform_buffer_descriptor = device->enabled_features.nullDescriptor,
+      .null_storage_buffer_descriptor = device->enabled_features.nullDescriptor,
+   };
 
    device->disable_lto = false;
 

@@ -804,29 +804,6 @@ used.
             & src0.y \times src1.y
       \end{aligned}
 
-.. opcode:: TEX_LZ - Texture Lookup With LOD = 0
-
-   This is the same as TXL with LOD = 0. Like every texture opcode, it obeys
-   pipe_sampler_view::u.tex.first_level and pipe_sampler_state::min_lod.
-   There is no way to override those two in shaders.
-
-   .. math::
-
-      coord.x = src0.x
-
-      coord.y = src0.y
-
-      coord.z = src0.z
-
-      coord.w = none
-
-      lod = 0
-
-      unit = src1
-
-      dst = texture\_sample(unit, coord, lod)
-
-
 .. opcode:: TXL - Texture Lookup With explicit LOD
 
    for cube map array textures, the explicit LOD value

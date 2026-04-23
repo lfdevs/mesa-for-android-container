@@ -2869,14 +2869,15 @@ crocus_create_fs_state(struct pipe_context *ctx,
            BITFIELD64_BIT(FRAG_RESULT_SAMPLE_MASK));
 
       bool can_rearrange_varyings =
-         screen->devinfo.ver > 6 && util_bitcount64(info->inputs_read & ELK_FS_VARYING_INPUT_MASK) <= 16;
+         screen->devinfo.ver > 5 && util_bitcount64(info->inputs_read & ELK_FS_VARYING_INPUT_MASK) <= 16;
 
       const struct intel_device_info *devinfo = &screen->devinfo;
       struct elk_fs_prog_key key = {
          KEY_INIT(),
          .nr_color_regions = util_bitcount(color_outputs),
          .coherent_fb_fetch = false,
-         .ignore_sample_mask_out = screen->devinfo.ver < 6 ? 1 : 0,
+         .multisample_fbo = (info->outputs_written & BITFIELD64_BIT(FRAG_RESULT_SAMPLE_MASK)) ? ELK_ALWAYS : ELK_NEVER,
+         .ignore_sample_mask_out = !key.multisample_fbo,
          .input_slots_valid =
          can_rearrange_varyings ? 0 : info->inputs_read | VARYING_BIT_POS,
       };

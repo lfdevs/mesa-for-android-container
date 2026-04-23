@@ -56,6 +56,16 @@ r300-rv410-deqp-piglit:
     CI_TRON_DUT_SETUP_TAGS: radeon:codename:RV410
     HWCI_START_WESTON: 1
 
+r300-rv380-piglit:
+  extends:
+    - .ondracka-rv380
+    - .test-piglit
+  variables:
+    DEQP_SUITE: r300-piglit
+    GPU_VERSION: r300-rv380
+    PIGLIT_PLATFORM: gbm
+    HWCI_START_WESTON: 1
+
 r300-rs740-deqp-piglit:
   extends:
     - .ci-tron-x86_64-test-gl-manual  # use debian-build-x86_64 rather than debian-x86_64

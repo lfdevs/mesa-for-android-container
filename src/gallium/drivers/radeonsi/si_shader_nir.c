@@ -111,16 +111,11 @@ void si_finalize_nir(struct pipe_screen *screen, struct nir_shader *nir,
                      bool optimize)
 {
    struct si_screen *sscreen = (struct si_screen *)screen;
-   nir_variable_mode recompute_io_bases = 0;
 
    if (nir->info.io_lowered) {
       nir_foreach_variable_with_modes(var, nir, nir_var_shader_in | nir_var_shader_out) {
          UNREACHABLE("no IO variables should be present with lowered IO");
       }
-
-      /* Not all places recompute FS input bases, but we need them to be up to date. */
-      if (nir->info.stage == MESA_SHADER_FRAGMENT)
-         recompute_io_bases = nir_var_shader_in | nir_var_shader_out;
    } else {
       /* This always recomputes FS output bases. */
       nir_lower_io_passes(nir, false);
@@ -146,9 +141,6 @@ void si_finalize_nir(struct pipe_screen *screen, struct nir_shader *nir,
 
    NIR_PASS_ASSERT_NO_PROGRESS(nir, nir_opt_intrinsics);
    NIR_PASS_ASSERT_NO_PROGRESS(nir, nir_lower_system_values);
-
-   if (recompute_io_bases)
-      NIR_PASS(_, nir, nir_recompute_io_bases, recompute_io_bases);
 
    /* Remove uniforms because those should have been lowered to UBOs already. */
    nir_foreach_variable_with_modes_safe(var, nir, nir_var_uniform) {

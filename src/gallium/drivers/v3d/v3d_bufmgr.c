@@ -537,6 +537,7 @@ v3d_bo_map(struct v3d_bo *bo)
                 mesa_loge("BO wait for map failed");
                 abort();
         }
+        VG(VALGRIND_MAKE_MEM_DEFINED(map, bo->size));
 
         return map;
 }

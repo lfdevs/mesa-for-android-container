@@ -512,12 +512,12 @@ int main()
    struct u_vector test_entries;
    u_vector_init_pow2(&test_entries, 64, sizeof(struct test_entry));
 
-   for (unsigned i = 0; i < ARRAY_SIZE(ac_fake_hw_db); ++i) {
+   for (unsigned i = 0; i < ARRAY_SIZE(ac_surface_fake_devices); ++i) {
       struct radeon_info info = { .drm_major = 0 };
 
-      get_radeon_info(&info, &ac_fake_hw_db[i]);
+      get_radeon_info(&info, &ac_surface_fake_devices[i]);
 
-      run_modifier_test(&test_entries, ac_fake_hw_db[i].name, &info);
+      run_modifier_test(&test_entries, ac_surface_fake_devices[i].name, &info);
    }
 
    qsort(u_vector_tail(&test_entries),

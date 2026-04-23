@@ -98,6 +98,9 @@ ir3_get_type_for_image_intrinsic(const nir_intrinsic_instr *instr)
 {
    const nir_intrinsic_info *info = &nir_intrinsic_infos[instr->intrinsic];
    int bit_size = info->has_dest ? instr->def.bit_size : nir_src_bit_size(instr->src[3]);
+   assert(bit_size != 64 ||
+          instr->intrinsic == nir_intrinsic_bindless_image_atomic ||
+          instr->intrinsic == nir_intrinsic_bindless_image_atomic_swap);
 
    nir_alu_type type = nir_type_uint;
    switch (instr->intrinsic) {
@@ -132,10 +135,13 @@ ir3_get_type_for_image_intrinsic(const nir_intrinsic_instr *instr)
 
    switch (type) {
    case nir_type_uint:
-      return bit_size == 16 ? TYPE_U16 : TYPE_U32;
+      return (bit_size == 16 ? TYPE_U16
+                             : (bit_size == 32 ? TYPE_U32 : TYPE_ATOMIC_U64));
    case nir_type_int:
+      assert(bit_size != 64);
       return bit_size == 16 ? TYPE_S16 : TYPE_S32;
    case nir_type_float:
+      assert(bit_size != 64);
       return bit_size == 16 ? TYPE_F16 : TYPE_F32;
    default:
       UNREACHABLE("bad type");

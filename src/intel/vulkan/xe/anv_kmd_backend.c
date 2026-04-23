@@ -38,7 +38,7 @@ is_slab_parent_memory_mapped_placeable(struct anv_device *device,
 {
    if ((alloc_flags & ANV_BO_ALLOC_SLAB_PARENT) == false)
       return false;
-   if (device->physical->instance->debug & ANV_DEBUG_NO_SLAB)
+   if (ANV_DEBUG(NO_SLAB))
       return false;
    if (!device->vk.enabled_features.memoryMapPlaced)
       return false;

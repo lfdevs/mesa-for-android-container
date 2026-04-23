@@ -805,8 +805,19 @@ fcntl(int fd, int cmd, ...)
 
    int ret = real_fcntl(fd, cmd, arg);
 
-   if (shim_fd && (cmd == F_DUPFD || cmd == F_DUPFD_CLOEXEC))
-      drm_shim_fd_register(ret, shim_fd);
+   if (cmd == F_DUPFD || cmd == F_DUPFD_CLOEXEC) {
+      if (shim_fd) {
+         drm_shim_fd_register(ret, shim_fd);
+      } else {
+         /* x11_dri3_open / xcb_dri3_open_reply_fds will end up here. */
+         drmVersionPtr ver = drmGetVersion(fd);
+         if (ver) {
+            drm_shim_fd_register(fd, NULL);
+            drm_shim_fd_register(ret, drm_shim_fd_lookup(fd));
+            drmFree(ver);
+         }
+      }
+   }
 
    return ret;
 }

@@ -923,6 +923,30 @@ nir_deref_instr_fixup_child_types(nir_deref_instr *parent)
 }
 
 static bool
+opt_propagate_undef_cast(nir_builder *b, nir_deref_instr *deref)
+{
+   if (deref->deref_type != nir_deref_type_struct &&
+       deref->deref_type != nir_deref_type_array &&
+       deref->deref_type != nir_deref_type_cast &&
+       deref->deref_type != nir_deref_type_ptr_as_array)
+      return false;
+
+   /* If we chase an deref originating from an undef pointer, propagate the undef through
+    * the chain.
+    */
+   nir_deref_instr *parent = nir_def_as_deref_or_null(deref->parent.ssa);
+   if (!parent || parent->deref_type != nir_deref_type_cast ||
+       !nir_src_is_undef(parent->parent))
+      return false;
+
+   b->cursor = nir_before_instr(&deref->instr);
+   nir_deref_instr *new_deref = nir_build_deref_cast(b, parent->parent.ssa, deref->modes,
+                                                     deref->type, 0);
+   nir_def_replace(&deref->def, &new_deref->def);
+   return true;
+}
+
+static bool
 opt_alu_of_cast(nir_alu_instr *alu)
 {
    bool progress = false;
@@ -1407,6 +1431,34 @@ opt_store_vec_deref(nir_builder *b, nir_intrinsic_instr *store)
 }
 
 static bool
+opt_load_undef_deref(nir_builder *b, nir_intrinsic_instr *load)
+{
+   nir_deref_instr *parent = nir_def_as_deref_or_null(load->src[0].ssa);
+
+   if (!parent || parent->deref_type != nir_deref_type_cast ||
+       !nir_src_is_undef(parent->parent))
+      return false;
+
+   b->cursor = nir_before_instr(&load->instr);
+   nir_def *undef = nir_undef(b, load->def.num_components, load->def.bit_size);
+   nir_def_replace(&load->def, undef);
+   return true;
+}
+
+static bool
+opt_store_undef_deref(nir_builder *b, nir_intrinsic_instr *store)
+{
+   nir_deref_instr *parent = nir_def_as_deref_or_null(store->src[0].ssa);
+
+   if (!parent || parent->deref_type != nir_deref_type_cast ||
+       !nir_src_is_undef(parent->parent))
+      return false;
+
+   nir_instr_remove(&store->instr);
+   return true;
+}
+
+static bool
 opt_known_deref_mode_is(nir_builder *b, nir_intrinsic_instr *intrin)
 {
    nir_variable_mode modes = nir_intrinsic_memory_modes(intrin);
@@ -1454,6 +1506,11 @@ nir_opt_deref_impl(nir_function_impl *impl)
             if (opt_restrict_deref_modes(deref))
                progress = true;
 
+            if (opt_propagate_undef_cast(&b, deref)) {
+               progress = true;
+               break;
+            }
+
             switch (deref->deref_type) {
             case nir_deref_type_ptr_as_array:
                if (opt_deref_ptr_as_array(&b, deref))
@@ -1478,10 +1535,14 @@ nir_opt_deref_impl(nir_function_impl *impl)
             case nir_intrinsic_load_deref:
                if (opt_load_vec_deref(&b, intrin))
                   progress = true;
+               if (opt_load_undef_deref(&b, intrin))
+                  progress = true;
                break;
 
             case nir_intrinsic_store_deref:
                if (opt_store_vec_deref(&b, intrin))
+                  progress = true;
+               if (opt_store_undef_deref(&b, intrin))
                   progress = true;
                break;
 

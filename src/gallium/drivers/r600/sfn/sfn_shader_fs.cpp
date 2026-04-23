@@ -19,7 +19,7 @@ namespace r600 {
 using std::string;
 
 FragmentShader::FragmentShader(const r600_shader_key& key):
-    Shader("FS", key.ps.first_atomic_counter),
+    Shader("FS"),
     m_dual_source_blend(key.ps.dual_source_blend),
     m_max_color_exports(MAX2(key.ps.nr_cbufs, 1)),
     m_pos_input(127, false),

@@ -6,8 +6,6 @@
 #ifndef TU_AUTOTUNE_H
 #define TU_AUTOTUNE_H
 
-#include "tu_common.h"
-
 #include <atomic>
 #include <deque>
 #include <memory>
@@ -244,7 +242,6 @@ struct tu_autotune {
    std::mutex rp_latency_mutex; /* Protects rp_latency_tracking */
    uint64_t last_latency_cleanup_ts = 0;
 
-   const fd_perfcntr_group *cp_group;
    uint32_t preemption_latency_selector_reg;
    uint32_t preemption_latency_selector;
    uint32_t preemption_latency_counter_reg_lo;
@@ -357,7 +354,8 @@ struct tu_autotune {
    void init_reset_rp_hash_draw_state();
    void emit_reset_rp_hash_draw_state(struct tu_cmd_buffer *cmd, struct tu_cs *cs) const;
 
-   void emit_preempt_latency_tracking_setup(struct tu_cmd_buffer *cmd, struct tu_cs *cs);
+   /* Returns if preemption latency tracking is enabled for this CB. */
+   bool emit_preempt_latency_tracking_setup(struct tu_cmd_buffer *cmd, struct tu_cs *cs);
    /* Returns the RP hash only when preemption latency tracking is enabled. */
    rp_key_opt emit_preempt_latency_tracking_rp_hash(struct tu_cmd_buffer *cmd);
 };

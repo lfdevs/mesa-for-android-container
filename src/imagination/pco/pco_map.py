@@ -2689,6 +2689,75 @@ group_map(O_IMUL32,
    ]
 )
 
+group_map(O_UADD_CARRY,
+   hdr=(I_IGRP_HDR_MAIN, [
+      ('oporg', 'p0_p1_p2'),
+      ('olchk', OM_OLCHK),
+      ('w1p', ('!pco_ref_is_null', DEST(1))),
+      ('w0p', ('!pco_ref_is_null', DEST(0))),
+      ('cc', OM_EXEC_CND),
+      ('end', OM_END),
+      ('atom', OM_ATOM),
+      ('rpt', OM_RPT)
+   ]),
+   enc_ops=[
+      ('0', O_ADD64_32, ['ft0', 'fte'], [SRC(0), 'pco_zero', SRC(1), '_'], [(OM_S, False)]),
+      ('1', O_MBYP, ['ft1'], ['pco_one']),
+      ('2_tst', O_TST, ['ftt', '_'], ['is1', '_'], [(OM_TST_OP_MAIN, 'gzero'), (OM_TST_TYPE_MAIN, 'u32')]),
+      ('2_pck', O_PCK, ['ft2'], ['_'], [(OM_PCK_FMT, 'zero')]),
+      ('2_mov', O_MOVC, [DEST(0), DEST(1)], ['ftt', 'ft0', 'is4', 'ft1', 'is5'])
+   ],
+   srcs=[
+      ('s[0]', ('0', SRC(0)), 's0'),
+      ('s[1]', ('0', SRC(1)), 's1'),
+      ('s[2]', ('0', SRC(2)), 's2'),
+      ('s[3]', ('1', SRC(0)), 's3'),
+   ],
+   iss=[
+      ('is[0]', 's3'),
+      ('is[1]', 'fte'),
+      ('is[4]', 'ft0'),
+      ('is[5]', 'ft2'),
+   ],
+   dests=[
+      ('w[0]', ('2_mov', DEST(0)), 'w0'),
+      ('w[1]', ('2_mov', DEST(1)), 'w1'),
+   ]
+)
+
+group_map(O_UADD_SAT,
+   hdr=(I_IGRP_HDR_MAIN, [
+      ('oporg', 'p0_p1_p2'),
+      ('olchk', OM_OLCHK),
+      ('w1p', False),
+      ('w0p', True),
+      ('cc', OM_EXEC_CND),
+      ('end', OM_END),
+      ('atom', OM_ATOM),
+      ('rpt', OM_RPT)
+   ]),
+   enc_ops=[
+      ('0', O_ADD64_32, ['ft0', 'fte'], [SRC(0), 'pco_zero', SRC(1), '_']),
+      ('1', O_MBYP, ['ft1'], [SRC(2)]),
+      ('2_tst', O_TST, ['ftt', '_'], ['is1', '_'], [(OM_TST_OP_MAIN, 'gzero'), (OM_TST_TYPE_MAIN, 'u32'), (OM_PHASE2END, True)]),
+      ('2_mov', O_MOVC, [DEST(0), '_'], ['ftt', 'ft1', 'is4', '_', '_'])
+   ],
+   srcs=[
+      ('s[0]', ('0', SRC(0)), 's0'),
+      ('s[1]', ('0', SRC(1)), 's1'),
+      ('s[2]', ('0', SRC(2)), 's2'),
+      ('s[3]', ('1', SRC(0)), 's3'),
+   ],
+   iss=[
+      ('is[0]', 's3'),
+      ('is[1]', 'fte'),
+      ('is[4]', 'ft0'),
+   ],
+   dests=[
+      ('w[0]', ('2_mov', DEST(0)), 'w0'),
+   ]
+)
+
 group_map(O_TSTZ,
    hdr=(I_IGRP_HDR_MAIN, [
       ('oporg', 'p0_p2'),

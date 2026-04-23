@@ -24,14 +24,12 @@
 #include "ac_sqtt.h"
 #include "ac_spm.h"
 #include "si_perfetto.h"
-#ifndef HAVE_GFX_COMPUTE
-#define __U_STUB__
-#endif
-#include "u_stub.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+#include "util/u_stub_gfx_compute.h"
 
 #undef  MESA_LOG_TAG
 #define MESA_LOG_TAG "radeonsi"
@@ -1392,10 +1390,10 @@ void si_blitter_end(struct si_context *sctx);
 void si_init_blit_functions(struct si_context *sctx);
 void gfx6_decompress_textures(struct si_context *sctx, unsigned shader_mask);
 void gfx11_decompress_textures(struct si_context *sctx, unsigned shader_mask);
-PROC void si_decompress_subresource(struct pipe_context *ctx, struct pipe_resource *tex, unsigned planes,
+MESAPROC void si_decompress_subresource(struct pipe_context *ctx, struct pipe_resource *tex, unsigned planes,
                                     unsigned level, unsigned first_layer, unsigned last_layer,
                                     bool need_fmask_expand) TAILV;
-PROC void si_resource_copy_region(struct pipe_context *ctx, struct pipe_resource *dst,
+MESAPROC void si_resource_copy_region(struct pipe_context *ctx, struct pipe_resource *dst,
                                   unsigned dst_level, unsigned dstx, unsigned dsty, unsigned dstz,
                                   struct pipe_resource *src, unsigned src_level,
                                   const struct pipe_box *src_box) TAILV;
@@ -1403,9 +1401,9 @@ void si_gfx_copy_image(struct si_context *sctx, struct pipe_resource *dst,
                        unsigned dst_level, unsigned dstx, unsigned dsty, unsigned dstz,
                        struct pipe_resource *src, unsigned src_level,
                        const struct pipe_box *src_box);
-PROC void si_decompress_dcc(struct si_context *sctx, struct si_texture *tex) TAILV;
+MESAPROC void si_decompress_dcc(struct si_context *sctx, struct si_texture *tex) TAILV;
 void si_flush_implicit_resources(struct si_context *sctx);
-PROC void si_gfx_blit(struct pipe_context *ctx, const struct pipe_blit_info *info) TAILV;
+MESAPROC void si_gfx_blit(struct pipe_context *ctx, const struct pipe_blit_info *info) TAILV;
 
 /* si_nir_optim.c */
 bool si_nir_is_output_const_if_tex_is_const(struct nir_shader *shader, float *in, float *out, int *texunit);
@@ -1487,43 +1485,43 @@ bool si_setup_compute_scratch_buffer(struct si_screen *screen,
 void si_destroy_compute(struct si_compute *program);
 
 /* si_compute_blit.c */
-PROC bool si_should_blit_clamp_to_edge(const struct pipe_blit_info *info, unsigned coord_mask) TAILB;
-PROC void si_launch_grid_internal_ssbos(struct si_context *sctx, struct pipe_grid_info *info,
+MESAPROC bool si_should_blit_clamp_to_edge(const struct pipe_blit_info *info, unsigned coord_mask) TAILB;
+MESAPROC void si_launch_grid_internal_ssbos(struct si_context *sctx, struct pipe_grid_info *info,
                                         void *shader, unsigned num_buffers,
                                         const struct pipe_shader_buffer *buffers,
                                         unsigned writeable_bitmask, bool render_condition_enable) TAILV;
-PROC bool si_compute_clear_copy_buffer(struct si_context *sctx, struct pipe_resource *dst,
+MESAPROC bool si_compute_clear_copy_buffer(struct si_context *sctx, struct pipe_resource *dst,
                                        unsigned dst_offset, struct pipe_resource *src,
                                        unsigned src_offset, unsigned size,
                                        const uint32_t *clear_value, unsigned clear_value_size,
                                        unsigned dwords_per_thread, bool render_condition_enable,
                                        bool fail_if_slow) TAILB;
-PROC void si_compute_clear_buffer_rmw(struct si_context *sctx, struct pipe_resource *dst,
+MESAPROC void si_compute_clear_buffer_rmw(struct si_context *sctx, struct pipe_resource *dst,
                                       unsigned dst_offset, unsigned size, uint32_t clear_value,
                                       uint32_t writebitmask, bool render_condition_enable) TAILV;
-PROC void si_compute_shorten_ubyte_buffer(struct si_context *sctx, struct pipe_resource *dst, struct pipe_resource *src,
+MESAPROC void si_compute_shorten_ubyte_buffer(struct si_context *sctx, struct pipe_resource *dst, struct pipe_resource *src,
                                           uint64_t dst_offset, uint64_t src_offset, unsigned size,
                                           bool render_condition_enable) TAILV;
-PROC void si_compute_clear_image_dcc_single(struct si_context *sctx, struct si_texture *tex,
+MESAPROC void si_compute_clear_image_dcc_single(struct si_context *sctx, struct si_texture *tex,
                                             unsigned level, enum pipe_format format,
                                             const union pipe_color_union *color,
                                             bool render_condition_enable) TAILV;
-PROC void si_retile_dcc(struct si_context *sctx, struct si_texture *tex) TAILV;
-PROC void gfx9_clear_dcc_msaa(struct si_context *sctx, struct pipe_resource *res, uint32_t clear_value,
+MESAPROC void si_retile_dcc(struct si_context *sctx, struct si_texture *tex) TAILV;
+MESAPROC void gfx9_clear_dcc_msaa(struct si_context *sctx, struct pipe_resource *res, uint32_t clear_value,
                               bool render_condition_enable) TAILV;
-PROC void si_compute_expand_fmask(struct pipe_context *ctx, struct pipe_resource *tex) TAILV;
-PROC bool si_compute_clear_image(struct si_context *sctx, struct pipe_resource *tex,
+MESAPROC void si_compute_expand_fmask(struct pipe_context *ctx, struct pipe_resource *tex) TAILV;
+MESAPROC bool si_compute_clear_image(struct si_context *sctx, struct pipe_resource *tex,
                                  enum pipe_format format, unsigned level, const struct pipe_box *box,
                                  const union pipe_color_union *color, bool render_condition_enable,
                                  bool fail_if_slow) TAILB;
-PROC bool si_compute_copy_image(struct si_context *sctx, struct pipe_resource *dst, unsigned dst_level,
+MESAPROC bool si_compute_copy_image(struct si_context *sctx, struct pipe_resource *dst, unsigned dst_level,
                                 struct pipe_resource *src, unsigned src_level, unsigned dstx,
                                 unsigned dsty, unsigned dstz, const struct pipe_box *src_box,
                                 bool fail_if_slow) TAILB;
-PROC bool si_compute_blit(struct si_context *sctx, const struct pipe_blit_info *info,
+MESAPROC bool si_compute_blit(struct si_context *sctx, const struct pipe_blit_info *info,
                           const union pipe_color_union *clear_color, unsigned dst_access,
                           unsigned src_access, bool fail_if_slow) TAILB;
-PROC void si_init_compute_blit_functions(struct si_context *sctx) TAILV;
+MESAPROC void si_init_compute_blit_functions(struct si_context *sctx) TAILV;
 
 /* si_cp_dma.c */
 void si_cp_dma_wait_for_idle(struct si_context *sctx, struct radeon_cmdbuf *cs);
@@ -1540,7 +1538,7 @@ void si_cp_copy_data(struct si_context *sctx, struct radeon_cmdbuf *cs, unsigned
                      struct si_resource *src, unsigned src_offset);
 
 /* si_cp_reg_shadowing.c */
-PROC bool si_init_cp_reg_shadowing(struct si_context *sctx) TAILBT;
+MESAPROC bool si_init_cp_reg_shadowing(struct si_context *sctx) TAILBT;
 
 /* si_cp_utils.c */
 void si_cp_release_mem_pws(struct si_context *sctx, struct radeon_cmdbuf *cs,
@@ -1566,11 +1564,11 @@ void si_check_vm_faults(struct si_context *sctx, struct radeon_saved_cs *saved);
 void si_print_current_ib(struct si_context *sctx, FILE *f);
 
 /* si_debug_gfx_compute.c */
-PROC bool si_replace_shader(unsigned num, struct si_shader_binary *binary) TAILB;
-PROC void si_dump_annotated_shaders(struct si_context *sctx, FILE *f) TAILV;
-PROC void si_log_draw_state(struct si_context *sctx, struct u_log_context *log) TAILV;
-PROC void si_gather_context_rolls(struct si_context *sctx) TAILV;
-PROC void si_log_compute_state(struct si_context *sctx, struct u_log_context *log) TAILV;
+MESAPROC bool si_replace_shader(unsigned num, struct si_shader_binary *binary) TAILB;
+MESAPROC void si_dump_annotated_shaders(struct si_context *sctx, FILE *f) TAILV;
+MESAPROC void si_log_draw_state(struct si_context *sctx, struct u_log_context *log) TAILV;
+MESAPROC void si_gather_context_rolls(struct si_context *sctx) TAILV;
+MESAPROC void si_log_compute_state(struct si_context *sctx, struct u_log_context *log) TAILV;
 
 /* si_fence.c */
 void si_cp_release_mem(struct si_context *ctx, struct radeon_cmdbuf *cs, unsigned event,
@@ -1613,7 +1611,7 @@ unsigned si_end_counter(struct si_screen *sscreen, unsigned type, uint64_t begin
 /* si_compute.c */
 void *si_create_compute_state_for_nir(struct pipe_context *ctx, nir_shader *nir,
                                       enum mesa_shader_stage stage);
-PROC void si_init_compute_functions(struct si_context *sctx) TAILV;
+MESAPROC void si_init_compute_functions(struct si_context *sctx) TAILV;
 
 /* si_pipe.c */
 struct ac_llvm_compiler *si_create_llvm_compiler(struct si_screen *sscreen);
@@ -1641,7 +1639,7 @@ void si_resume_queries(struct si_context *sctx);
 
 /* si_shaderlib_nir.c */
 
-PROC void *si_create_shader_state(struct si_context *sctx, struct nir_shader *nir) TAILPTR;
+MESAPROC void *si_create_shader_state(struct si_context *sctx, struct nir_shader *nir) TAILPTR;
 void *si_create_dcc_retile_cs(struct si_context *sctx, const struct radeon_surf *surf);
 void *gfx9_create_clear_dcc_msaa_cs(struct si_context *sctx, struct si_texture *tex);
 void *si_create_passthrough_tcs(struct si_context *sctx);
@@ -1651,22 +1649,22 @@ void *si_get_blitter_vs(struct si_context *sctx, enum blitter_attrib_type type,
 void *si_create_ubyte_to_ushort_compute_shader(struct si_context *sctx);
 void *si_create_clear_buffer_rmw_cs(struct si_context *sctx);
 void *si_create_fmask_expand_cs(struct si_context *sctx, unsigned num_samples, bool is_array);
-PROC void *si_create_query_result_cs(struct si_context *sctx) TAILPTR;
-PROC void *gfx11_create_sh_query_result_cs(struct si_context *sctx) TAILPTR;
+MESAPROC void *si_create_query_result_cs(struct si_context *sctx) TAILPTR;
+MESAPROC void *gfx11_create_sh_query_result_cs(struct si_context *sctx) TAILPTR;
 
 /* gfx11_query.c */
 void si_gfx11_init_query(struct si_context *sctx);
 void si_gfx11_destroy_query(struct si_context *sctx);
 
 /* si_test_image_copy_region.c */
-PROC void si_test_image_copy_region(struct si_screen *sscreen) TAILV;
-PROC void si_test_blit(struct si_screen *sscreen, unsigned test_flags) TAILV;
+MESAPROC void si_test_image_copy_region(struct si_screen *sscreen) TAILV;
+MESAPROC void si_test_blit(struct si_screen *sscreen, unsigned test_flags) TAILV;
 
 /* si_test_dma_perf.c */
-PROC void si_test_dma_perf(struct si_screen *sscreen) TAILV;
-PROC void si_test_mem_perf(struct si_screen *sscreen) TAILV;
-PROC void si_test_clear_buffer(struct si_screen *sscreen) TAILV;
-PROC void si_test_copy_buffer(struct si_screen *sscreen) TAILV;
+MESAPROC void si_test_dma_perf(struct si_screen *sscreen) TAILV;
+MESAPROC void si_test_mem_perf(struct si_screen *sscreen) TAILV;
+MESAPROC void si_test_clear_buffer(struct si_screen *sscreen) TAILV;
+MESAPROC void si_test_copy_buffer(struct si_screen *sscreen) TAILV;
 
 /* si_state_viewport.c */
 void si_update_vs_viewport_state(struct si_context *ctx);
@@ -1708,24 +1706,24 @@ void
 si_write_event_with_dims_marker(struct si_context* sctx, struct radeon_cmdbuf *rcs,
                                 enum rgp_sqtt_marker_event_type api_type,
                                 uint32_t x, uint32_t y, uint32_t z);
-PROC void
+MESAPROC void
 si_write_user_event(struct si_context* sctx, struct radeon_cmdbuf *rcs,
                     enum rgp_sqtt_marker_user_event_type type,
                     const char *str, int len) TAILV;
-PROC void
+MESAPROC void
 si_sqtt_describe_barrier_start(struct si_context* sctx, struct radeon_cmdbuf *rcs) TAILV;
-PROC void
+MESAPROC void
 si_sqtt_describe_barrier_end(struct si_context* sctx, struct radeon_cmdbuf *rcs, unsigned flags) TAILV;
-PROC bool si_init_sqtt(struct si_context *sctx) TAILB;
-PROC void si_destroy_sqtt(struct si_context *sctx) TAILV;
-PROC void si_handle_sqtt(struct si_context *sctx, struct radeon_cmdbuf *rcs) TAILV;
+MESAPROC bool si_init_sqtt(struct si_context *sctx) TAILB;
+MESAPROC void si_destroy_sqtt(struct si_context *sctx) TAILV;
+MESAPROC void si_handle_sqtt(struct si_context *sctx, struct radeon_cmdbuf *rcs) TAILV;
 
 /* si_mesh_shader.c */
-PROC void si_init_task_mesh_shader_functions(struct si_context *sctx) TAILV;
+MESAPROC void si_init_task_mesh_shader_functions(struct si_context *sctx) TAILV;
 
 /* si_nir_mediump.c */
-PROC void si_nir_lower_mediump_io_default(nir_shader *nir) TAILV;
-PROC void si_nir_lower_mediump_io_option(nir_shader *nir) TAILV;
+MESAPROC void si_nir_lower_mediump_io_default(nir_shader *nir) TAILV;
+MESAPROC void si_nir_lower_mediump_io_option(nir_shader *nir) TAILV;
 
 /*
  * common helpers

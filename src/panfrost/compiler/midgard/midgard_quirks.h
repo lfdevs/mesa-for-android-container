@@ -57,7 +57,7 @@
 static inline unsigned
 midgard_get_quirks(uint64_t gpu_id)
 {
-   switch (MIDGARD_PRODUCT_ID(gpu_id)) {
+   switch (pan_prod_id(gpu_id)) {
    case 0x600:
       return MIDGARD_OLD_BLEND | MIDGARD_BROKEN_BLEND_LOADS |
              MIDGARD_BROKEN_LOD | MIDGARD_NO_UPPER_ALU | MIDGARD_NO_OOO |

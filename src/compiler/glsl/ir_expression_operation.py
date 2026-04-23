@@ -568,6 +568,8 @@ ir_expression_operation = [
    operation("sin", 1, source_types=(float_type,), c_expression="sinf({src0})"),
    operation("cos", 1, source_types=(float_type,), c_expression="cosf({src0})"),
    operation("atan", 1, source_types=(float_type,), c_expression="atan({src0})"),
+   operation("acos", 1, source_types=(float_type,), c_expression="acosf({src0})"),
+   operation("asin", 1, source_types=(float_type,), c_expression="asinf({src0})"),
 
    # Partial derivatives.
    operation("dFdx", 1, source_types=(float_type,), c_expression="0.0f"),

@@ -137,7 +137,8 @@ radv_write_image_descriptor(unsigned *dst, unsigned size, VkDescriptorType descr
 }
 
 static ALWAYS_INLINE void
-radv_write_image_descriptor_ycbcr(struct radv_device *device, unsigned *dst, const VkDescriptorImageInfo *image_info)
+radv_write_image_descriptor_ycbcr(struct radv_device *device, unsigned *dst, const VkDescriptorImageInfo *image_info,
+                                  bool use_combined_image_sampler)
 {
    const struct radv_physical_device *pdev = radv_device_physical(device);
    struct radv_image_view *iview = NULL;
@@ -151,7 +152,9 @@ radv_write_image_descriptor_ycbcr(struct radv_device *device, unsigned *dst, con
    }
 
    const uint32_t plane_count = vk_format_get_plane_count(iview->vk.format);
-   const uint32_t stride = radv_get_combined_image_sampler_desc_size(pdev) / 4;
+   const uint32_t desc_size = use_combined_image_sampler ? radv_get_combined_image_sampler_desc_size(pdev)
+                                                         : radv_get_sampled_image_desc_size(pdev);
+   const uint32_t stride = desc_size / 4;
 
    for (uint32_t i = 0; i < plane_count; i++) {
       memcpy(dst, iview->descriptor.plane_descriptors[i], 32);

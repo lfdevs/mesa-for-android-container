@@ -134,3 +134,8 @@ vkd3d-test_clear_render_target_view_extreme_values,Fail
 
 # Autotune regression
 vkd3d-test_multisample_resolve_formats,Fail
+
+# test_sampler_feedback_implicit_lod_aniso:3429:Test 19: Test failed: Mip 1, expected 0, got 1.
+# Enabled by EXT_shader_image_atomic_int64:
+# https://github.com/HansKristian-Work/vkd3d-proton/blob/master/docs/sampler_feedback.md
+vkd3d-test_sampler_feedback_implicit_lod_aniso,Fail

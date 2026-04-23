@@ -249,6 +249,25 @@ layout_init(unsigned arch, const struct pan_image_props *props,
    return true;
 }
 
+TEST(Layout, LargeImage)
+{
+   struct pan_image_props p = {
+      .modifier = DRM_FORMAT_MOD_LINEAR,
+      .format = PIPE_FORMAT_R8G8B8A8_UNORM,
+      .extent_px = {
+         .width = 65536,
+         .height = 65536,
+         .depth = 1,
+      },
+      .nr_samples = 1,
+      .dim = MALI_TEXTURE_DIMENSION_2D,
+      .nr_slices = 1,
+   };
+   struct pan_image_layout l = {};
+
+   ASSERT_TRUE(layout_init(0, &p, 0, NULL, &l));
+}
+
 /* dEQP-GLES3.functional.texture.format.compressed.etc1_2d_pot */
 TEST(Layout, ImplicitLayoutInterleavedETC2)
 {

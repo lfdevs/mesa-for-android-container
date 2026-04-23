@@ -2626,7 +2626,7 @@
     <src widen="true">B</src>
   </group>
 
-  <group name="SHADDX" title="Shift, extend, and 64-bit add" dests="1" unused="true" unit="CVT">
+  <group name="SHADDX" title="Shift, extend, and 64-bit add" dests="1" unit="CVT">
     <desc>
       Sign or zero extend B to 64-bits, left-shift by `shift`, and add the
       64-bit value A. These instructions accelerate address arithmetic, but may

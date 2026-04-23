@@ -383,7 +383,7 @@ emit_intrinsic_atomic_image(struct ir3_context *ctx, nir_intrinsic_instr *intr)
     * destination in RA (i.e. must be allocated to the same vec2/vec3
     * register) and then immediately extract the first component.
     */
-   dummy = create_immed(b, 0);
+   dummy = intr->def.bit_size == 64 ? ir3_64b_immed(b, 0) : create_immed(b, 0);
    src0 = ir3_create_collect(b, coords, ncoords);
 
    if (op == nir_atomic_op_cmpxchg) {
@@ -394,7 +394,7 @@ emit_intrinsic_atomic_image(struct ir3_context *ctx, nir_intrinsic_instr *intr)
    }
 
    atomic = emit_atomic(b, op, ibo, src0, src1);
-   atomic->cat6.iim_val = 1;
+   atomic->cat6.iim_val = intr->def.bit_size == 64 ? 2 : 1;
    atomic->cat6.d = ncoords;
    atomic->cat6.type = ir3_get_type_for_image_intrinsic(intr);
    atomic->cat6.typed = true;
@@ -408,9 +408,7 @@ emit_intrinsic_atomic_image(struct ir3_context *ctx, nir_intrinsic_instr *intr)
    atomic->dsts[0]->wrmask = src1->dsts[0]->wrmask;
    ir3_reg_tie(atomic->dsts[0], atomic->srcs[2]);
    ir3_handle_nonuniform(atomic, intr);
-   struct ir3_instruction *split;
-   ir3_split_dest(b, &split, atomic, 0, 1);
-   return split;
+   return ir3_split_off_scalar(b, atomic, intr->def.bit_size);
 }
 
 static void

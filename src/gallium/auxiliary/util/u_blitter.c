@@ -153,7 +153,6 @@ struct blitter_context_priv
    bool has_stream_out;
    bool has_stencil_export;
    bool has_texture_multisample;
-   bool has_tex_lz;
    bool has_txf_txq;
    bool has_sample_shading;
    bool cube_as_2darray;
@@ -218,7 +217,6 @@ struct blitter_context *util_blitter_create(struct pipe_context *pipe)
    ctx->has_texture_multisample =
       pipe->screen->caps.texture_multisample;
 
-   ctx->has_tex_lz = pipe->screen->caps.tgsi_tex_txf_lz;
    ctx->has_txf_txq = pipe->screen->caps.glsl_feature_level >= 130;
    ctx->has_sample_shading = pipe->screen->caps.sample_shading;
    ctx->cube_as_2darray = pipe->screen->caps.sampler_view_target;
@@ -1062,7 +1060,6 @@ static void *blitter_get_fs_texfetch_col(struct blitter_context_priv *ctx,
          assert(!ctx->cached_all_shaders);
          *shader = util_make_fragment_tex_shader(pipe, tgsi_tex,
                                                  stype, dtype,
-                                                 ctx->has_tex_lz,
                                                  use_txf,
                                                  ctx->use_persp);
       }
@@ -1149,7 +1146,7 @@ void *blitter_get_fs_texfetch_depth(struct blitter_context_priv *ctx,
          assert(!ctx->cached_all_shaders);
          tgsi_tex = util_pipe_tex_to_tgsi_tex(target, 0);
          *shader = util_make_fs_blit_zs(pipe, PIPE_MASK_Z, tgsi_tex,
-                                        ctx->has_tex_lz, use_txf,
+                                        use_txf,
                                         ctx->use_persp);
       }
 
@@ -1198,7 +1195,7 @@ void *blitter_get_fs_texfetch_depthstencil(struct blitter_context_priv *ctx,
          assert(!ctx->cached_all_shaders);
          tgsi_tex = util_pipe_tex_to_tgsi_tex(target, 0);
          *shader = util_make_fs_blit_zs(pipe, PIPE_MASK_ZS, tgsi_tex,
-                                        ctx->has_tex_lz, use_txf,
+                                        use_txf,
                                         ctx->use_persp);
       }
 
@@ -1247,7 +1244,7 @@ void *blitter_get_fs_texfetch_stencil(struct blitter_context_priv *ctx,
          assert(!ctx->cached_all_shaders);
          tgsi_tex = util_pipe_tex_to_tgsi_tex(target, 0);
          *shader = util_make_fs_blit_zs(pipe, PIPE_MASK_S, tgsi_tex,
-                                        ctx->has_tex_lz, use_txf,
+                                        use_txf,
                                         ctx->use_persp);
       }
 

@@ -401,168 +401,11 @@ anv_device_finish_descriptors_view(struct anv_device *device)
                        device->descriptor_view_state);
 }
 
-VkResult anv_CreateDevice(
-    VkPhysicalDevice                            physicalDevice,
-    const VkDeviceCreateInfo*                   pCreateInfo,
-    const VkAllocationCallbacks*                pAllocator,
-    VkDevice*                                   pDevice)
+static VkResult
+anv_device_init_vma_heaps(struct anv_device *device)
 {
-   anv_wait_for_attach();
-   ANV_FROM_HANDLE(anv_physical_device, physical_device, physicalDevice);
-   VkResult result;
-   struct anv_device *device;
-   bool device_has_compute_queue = false;
-
-   assert(pCreateInfo->sType == VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO);
-
-   /* Check requested queues and fail if we are requested to create any
-    * queues with flags we don't support.
-    */
-   for (uint32_t i = 0; i < pCreateInfo->queueCreateInfoCount; i++) {
-      if (pCreateInfo->pQueueCreateInfos[i].flags & ~(VK_DEVICE_QUEUE_CREATE_PROTECTED_BIT |
-                                                      VK_DEVICE_QUEUE_CREATE_INTERNALLY_SYNCHRONIZED_BIT_KHR))
-         return vk_error(physical_device, VK_ERROR_INITIALIZATION_FAILED);
-
-      const struct anv_queue_family *family =
-         &physical_device->queue.families[pCreateInfo->pQueueCreateInfos[i].queueFamilyIndex];
-      device_has_compute_queue |= family->engine_class == INTEL_ENGINE_CLASS_COMPUTE;
-   }
-
-   device = vk_zalloc2(&physical_device->instance->vk.alloc, pAllocator,
-                       sizeof(*device), 8,
-                       VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
-   if (!device)
-      return vk_error(physical_device, VK_ERROR_OUT_OF_HOST_MEMORY);
-
-   struct vk_device_dispatch_table dispatch_table;
-
-   bool override_initial_entrypoints = true;
-   if (physical_device->instance->vk.app_info.app_name &&
-       !strcmp(physical_device->instance->vk.app_info.app_name, "HITMAN3.exe")) {
-      vk_device_dispatch_table_from_entrypoints(&dispatch_table,
-                                                &anv_hitman3_device_entrypoints,
-                                                true);
-      override_initial_entrypoints = false;
-   }
-   if (physical_device->info.ver < 12 &&
-       physical_device->instance->vk.app_info.app_name &&
-       !strcmp(physical_device->instance->vk.app_info.app_name, "DOOM 64")) {
-      vk_device_dispatch_table_from_entrypoints(&dispatch_table,
-                                                &anv_doom64_device_entrypoints,
-                                                true);
-      override_initial_entrypoints = false;
-   }
-
-   if (physical_device->info.ver < 12 &&
-       physical_device->instance->vk.app_info.app_name &&
-       !strcmp(physical_device->instance->vk.app_info.app_name, "GeeXLab")) {
-      vk_device_dispatch_table_from_entrypoints(&dispatch_table,
-                                                &anv_furmark_device_entrypoints,
-                                                true);
-      override_initial_entrypoints = false;
-   }
-#if DETECT_OS_ANDROID
-   vk_device_dispatch_table_from_entrypoints(&dispatch_table,
-                                             &anv_android_device_entrypoints,
-                                             true);
-   override_initial_entrypoints = false;
-#endif
-   if (physical_device->instance->vk.trace_mode & VK_TRACE_MODE_RMV) {
-      vk_device_dispatch_table_from_entrypoints(&dispatch_table,
-                                                &anv_rmv_device_entrypoints,
-                                                true);
-      override_initial_entrypoints = false;
-   }
-   vk_device_dispatch_table_from_entrypoints(&dispatch_table,
-      anv_genX(&physical_device->info, device_entrypoints),
-      override_initial_entrypoints);
-   vk_device_dispatch_table_from_entrypoints(&dispatch_table,
-      &anv_device_entrypoints, false);
-   vk_device_dispatch_table_from_entrypoints(&dispatch_table,
-      &wsi_device_entrypoints, false);
-
-
-   result = vk_device_init(&device->vk, &physical_device->vk,
-                           &dispatch_table, pCreateInfo, pAllocator);
-   if (result != VK_SUCCESS)
-      goto fail_alloc;
-
-   device->vk.shader_ops = &anv_device_shader_ops;
-
-   if (INTEL_DEBUG(DEBUG_BATCH) || INTEL_DEBUG(DEBUG_BATCH_STATS)) {
-      for (unsigned i = 0; i < physical_device->queue.family_count; i++) {
-         struct intel_batch_decode_ctx *decoder = &device->decoder[i];
-
-         const unsigned decode_flags = INTEL_BATCH_DECODE_DEFAULT_FLAGS;
-
-         intel_batch_decode_ctx_init_brw(decoder,
-                                         &physical_device->compiler->isa,
-                                         &physical_device->info,
-                                         stderr, decode_flags, NULL,
-                                         decode_get_bo, NULL, device);
-         intel_batch_stats_reset(decoder);
-
-         decoder->engine = physical_device->queue.families[i].engine_class;
-         decoder->dynamic_base = physical_device->va.dynamic_state_pool.addr;
-         decoder->surface_base = physical_device->va.internal_surface_state_pool.addr;
-         decoder->instruction_base = physical_device->va.shader_heap.addr;
-      }
-   }
-
-   anv_device_set_physical(device, physical_device);
-   device->kmd_backend = anv_kmd_backend_get(device->info->kmd_type);
-
-   /* XXX(chadv): Can we dup() physicalDevice->fd here? */
-   device->fd = open(physical_device->path, O_RDWR | O_CLOEXEC);
-   if (device->fd == -1) {
-      result = vk_error(device, VK_ERROR_INITIALIZATION_FAILED);
-      goto fail_device;
-   }
-
-   if (intel_virtio_init_fd(device->fd) < 0) {
-      result = VK_ERROR_INCOMPATIBLE_DRIVER;
-      goto fail_fd;
-   }
-
-   switch (device->info->kmd_type) {
-   case INTEL_KMD_TYPE_I915:
-      device->vk.check_status = anv_i915_device_check_status;
-      break;
-   case INTEL_KMD_TYPE_XE:
-      device->vk.check_status = anv_xe_device_check_status;
-      break;
-   default:
-      UNREACHABLE("Missing");
-   }
-
-   device->vk.copy_sync_payloads = vk_drm_syncobj_copy_payloads;
-   device->vk.command_buffer_ops = &anv_cmd_buffer_ops;
-
-   if (physical_device->info.is_virtio)
-      device->vk.sync = intel_virtio_sync_provider(device->fd);
-   else
-      vk_device_set_drm_fd(&device->vk, device->fd);
-
-   uint32_t num_queues = 0;
-   for (uint32_t i = 0; i < pCreateInfo->queueCreateInfoCount; i++)
-      num_queues += pCreateInfo->pQueueCreateInfos[i].queueCount;
-
-   result = anv_device_setup_context_or_vm(device, pCreateInfo, num_queues);
-   if (result != VK_SUCCESS)
-      goto fail_fd;
-
-   device->queues =
-      vk_zalloc(&device->vk.alloc, num_queues * sizeof(*device->queues), 8,
-                VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
-   if (device->queues == NULL) {
-      result = vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
-      goto fail_context_id;
-   }
-
-   if (pthread_mutex_init(&device->vma_mutex, NULL) != 0) {
-      result = vk_error(device, VK_ERROR_INITIALIZATION_FAILED);
-      goto fail_queues_alloc;
-   }
+   if (pthread_mutex_init(&device->vma_mutex, NULL) != 0)
+      return vk_error(device, VK_ERROR_INITIALIZATION_FAILED);
 
    /* keep the page with address zero out of the allocator */
    util_vma_heap_init(&device->vma_lo,
@@ -593,30 +436,24 @@ VkResult anv_CreateDevice(
                       device->physical->va.trtt.addr,
                       device->physical->va.trtt.size);
 
-   list_inithead(&device->memory_objects);
-   list_inithead(&device->image_private_objects);
+   return VK_SUCCESS;
+}
 
-   if (pthread_mutex_init(&device->mutex, NULL) != 0) {
-      result = vk_error(device, VK_ERROR_INITIALIZATION_FAILED);
-      goto fail_vmas;
-   }
+static void
+anv_device_finish_vma_heaps(struct anv_device *device)
+{
+   util_vma_heap_finish(&device->vma_trtt);
+   util_vma_heap_finish(&device->vma_dynamic_visible);
+   util_vma_heap_finish(&device->vma_desc);
+   util_vma_heap_finish(&device->vma_hi);
+   util_vma_heap_finish(&device->vma_lo);
+   pthread_mutex_destroy(&device->vma_mutex);
+}
 
-   if (physical_device->instance->vk.trace_mode & VK_TRACE_MODE_RMV)
-      anv_memory_trace_init(device);
-
-   result = anv_bo_cache_init(&device->bo_cache, device);
-   if (result != VK_SUCCESS)
-      goto fail_mutex;
-
-   if (!anv_slab_bo_init(device))
-      goto fail_cache;
-
-   anv_bo_pool_init(&device->batch_bo_pool, device, "batch",
-                    ANV_BO_ALLOC_BATCH_BUFFER_FLAGS);
-   if (device->vk.enabled_extensions.KHR_acceleration_structure) {
-      anv_bo_pool_init(&device->bvh_bo_pool, device, "bvh build",
-                       0 /* alloc_flags */);
-   }
+static VkResult
+anv_state_pools_init(struct anv_device *device)
+{
+   VkResult result;
 
    /* Because scratch is also relative to General State Base Address, we leave
     * the base address 0 and start the pool memory at an offset.  This way we
@@ -780,7 +617,254 @@ VkResult anv_CreateDevice(
                                    });
       if (result != VK_SUCCESS)
          goto fail_push_descriptor_buffer_pool;
+   }
 
+   return result;
+
+fail_push_descriptor_buffer_pool:
+   if (device->vk.enabled_extensions.EXT_descriptor_buffer &&
+       device->info->verx10 >= 125)
+      anv_state_pool_finish(&device->push_descriptor_buffer_pool);
+fail_indirect_push_descriptor_pool:
+   if (device->physical->indirect_descriptors)
+      anv_state_pool_finish(&device->indirect_push_descriptor_pool);
+fail_binding_table_pool:
+   anv_state_pool_finish(&device->binding_table_pool);
+fail_bindless_surface_state_pool:
+   if (device->physical->indirect_descriptors)
+      anv_state_pool_finish(&device->bindless_surface_state_pool);
+fail_internal_surface_state_pool:
+   anv_state_pool_finish(&device->internal_surface_state_pool);
+fail_scratch_surface_state_pool:
+   if (device->info->verx10 >= 125)
+      anv_state_pool_finish(&device->scratch_surface_state_pool);
+fail_shader_vma_heap:
+      anv_shader_heap_finish(&device->shader_heap);
+fail_custom_border_color_pool:
+   anv_state_reserved_array_pool_finish(&device->custom_border_colors);
+fail_dynamic_state_pool:
+   anv_state_pool_finish(&device->dynamic_state_pool);
+fail_general_state_pool:
+   anv_state_pool_finish(&device->general_state_pool);
+fail_batch_bo_pool:
+   return result;
+}
+
+static void
+anv_state_pools_finish(struct anv_device *device)
+{
+   anv_state_reserved_array_pool_finish(&device->custom_border_colors);
+   if (device->info->has_aux_map)
+      anv_state_pool_finish(&device->aux_tt_pool);
+   if (device->vk.enabled_extensions.EXT_descriptor_buffer &&
+       device->info->verx10 >= 125)
+      anv_state_pool_finish(&device->push_descriptor_buffer_pool);
+   if (device->physical->indirect_descriptors)
+      anv_state_pool_finish(&device->indirect_push_descriptor_pool);
+   anv_state_pool_finish(&device->binding_table_pool);
+   if (device->info->verx10 >= 125)
+      anv_state_pool_finish(&device->scratch_surface_state_pool);
+   anv_state_pool_finish(&device->internal_surface_state_pool);
+   if (device->physical->indirect_descriptors)
+      anv_state_pool_finish(&device->bindless_surface_state_pool);
+
+   anv_shader_heap_finish(&device->shader_heap);
+   anv_state_pool_finish(&device->dynamic_state_pool);
+   anv_state_pool_finish(&device->general_state_pool);
+}
+
+VkResult anv_CreateDevice(
+    VkPhysicalDevice                            physicalDevice,
+    const VkDeviceCreateInfo*                   pCreateInfo,
+    const VkAllocationCallbacks*                pAllocator,
+    VkDevice*                                   pDevice)
+{
+   anv_wait_for_attach();
+   ANV_FROM_HANDLE(anv_physical_device, physical_device, physicalDevice);
+   VkResult result;
+   struct anv_device *device;
+   bool device_has_compute_queue = false;
+
+   assert(pCreateInfo->sType == VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO);
+
+   /* Check requested queues and fail if we are requested to create any
+    * queues with flags we don't support.
+    */
+   for (uint32_t i = 0; i < pCreateInfo->queueCreateInfoCount; i++) {
+      if (pCreateInfo->pQueueCreateInfos[i].flags & ~(VK_DEVICE_QUEUE_CREATE_PROTECTED_BIT |
+                                                      VK_DEVICE_QUEUE_CREATE_INTERNALLY_SYNCHRONIZED_BIT_KHR))
+         return vk_error(physical_device, VK_ERROR_INITIALIZATION_FAILED);
+
+      const struct anv_queue_family *family =
+         &physical_device->queue.families[pCreateInfo->pQueueCreateInfos[i].queueFamilyIndex];
+      device_has_compute_queue |= family->engine_class == INTEL_ENGINE_CLASS_COMPUTE;
+   }
+
+   device = vk_zalloc2(&physical_device->instance->vk.alloc, pAllocator,
+                       sizeof(*device), 8,
+                       VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
+   if (!device)
+      return vk_error(physical_device, VK_ERROR_OUT_OF_HOST_MEMORY);
+
+   struct vk_device_dispatch_table dispatch_table;
+
+   bool override_initial_entrypoints = true;
+   if (physical_device->instance->vk.app_info.app_name &&
+       !strcmp(physical_device->instance->vk.app_info.app_name, "HITMAN3.exe")) {
+      vk_device_dispatch_table_from_entrypoints(&dispatch_table,
+                                                &anv_hitman3_device_entrypoints,
+                                                true);
+      override_initial_entrypoints = false;
+   }
+   if (physical_device->info.ver < 12 &&
+       physical_device->instance->vk.app_info.app_name &&
+       !strcmp(physical_device->instance->vk.app_info.app_name, "DOOM 64")) {
+      vk_device_dispatch_table_from_entrypoints(&dispatch_table,
+                                                &anv_doom64_device_entrypoints,
+                                                true);
+      override_initial_entrypoints = false;
+   }
+
+   if (physical_device->info.ver < 12 &&
+       physical_device->instance->vk.app_info.app_name &&
+       !strcmp(physical_device->instance->vk.app_info.app_name, "GeeXLab")) {
+      vk_device_dispatch_table_from_entrypoints(&dispatch_table,
+                                                &anv_furmark_device_entrypoints,
+                                                true);
+      override_initial_entrypoints = false;
+   }
+#if DETECT_OS_ANDROID
+   vk_device_dispatch_table_from_entrypoints(&dispatch_table,
+                                             &anv_android_device_entrypoints,
+                                             true);
+   override_initial_entrypoints = false;
+#endif
+   if (physical_device->instance->vk.trace_mode & VK_TRACE_MODE_RMV) {
+      vk_device_dispatch_table_from_entrypoints(&dispatch_table,
+                                                &anv_rmv_device_entrypoints,
+                                                true);
+      override_initial_entrypoints = false;
+   }
+   vk_device_dispatch_table_from_entrypoints(&dispatch_table,
+      anv_genX(&physical_device->info, device_entrypoints),
+      override_initial_entrypoints);
+   vk_device_dispatch_table_from_entrypoints(&dispatch_table,
+      &anv_device_entrypoints, false);
+   vk_device_dispatch_table_from_entrypoints(&dispatch_table,
+      &wsi_device_entrypoints, false);
+
+
+   result = vk_device_init(&device->vk, &physical_device->vk,
+                           &dispatch_table, pCreateInfo, pAllocator);
+   if (result != VK_SUCCESS)
+      goto fail_alloc;
+
+   device->vk.shader_ops = &anv_device_shader_ops;
+
+   if (INTEL_DEBUG(DEBUG_BATCH) || INTEL_DEBUG(DEBUG_BATCH_STATS)) {
+      for (unsigned i = 0; i < physical_device->queue.family_count; i++) {
+         struct intel_batch_decode_ctx *decoder = &device->decoder[i];
+
+         const unsigned decode_flags = INTEL_BATCH_DECODE_DEFAULT_FLAGS;
+
+         intel_batch_decode_ctx_init_brw(decoder,
+                                         &physical_device->compiler->isa,
+                                         &physical_device->info,
+                                         stderr, decode_flags, NULL,
+                                         decode_get_bo, NULL, device);
+         intel_batch_stats_reset(decoder);
+
+         decoder->engine = physical_device->queue.families[i].engine_class;
+         decoder->dynamic_base = physical_device->va.dynamic_state_pool.addr;
+         decoder->surface_base = physical_device->va.internal_surface_state_pool.addr;
+         decoder->instruction_base = physical_device->va.shader_heap.addr;
+      }
+   }
+
+   anv_device_set_physical(device, physical_device);
+   device->kmd_backend = anv_kmd_backend_get(device->info->kmd_type);
+
+   /* XXX(chadv): Can we dup() physicalDevice->fd here? */
+   device->fd = open(physical_device->path, O_RDWR | O_CLOEXEC);
+   if (device->fd == -1) {
+      result = vk_error(device, VK_ERROR_INITIALIZATION_FAILED);
+      goto fail_device;
+   }
+
+   if (intel_virtio_init_fd(device->fd) < 0) {
+      result = VK_ERROR_INCOMPATIBLE_DRIVER;
+      goto fail_fd;
+   }
+
+   switch (device->info->kmd_type) {
+   case INTEL_KMD_TYPE_I915:
+      device->vk.check_status = anv_i915_device_check_status;
+      break;
+   case INTEL_KMD_TYPE_XE:
+      device->vk.check_status = anv_xe_device_check_status;
+      break;
+   default:
+      UNREACHABLE("Missing");
+   }
+
+   device->vk.copy_sync_payloads = vk_drm_syncobj_copy_payloads;
+   device->vk.command_buffer_ops = &anv_cmd_buffer_ops;
+
+   if (physical_device->info.is_virtio)
+      device->vk.sync = intel_virtio_sync_provider(device->fd);
+   else
+      vk_device_set_drm_fd(&device->vk, device->fd);
+
+   uint32_t num_queues = 0;
+   for (uint32_t i = 0; i < pCreateInfo->queueCreateInfoCount; i++)
+      num_queues += pCreateInfo->pQueueCreateInfos[i].queueCount;
+
+   result = anv_device_setup_context_or_vm(device, pCreateInfo, num_queues);
+   if (result != VK_SUCCESS)
+      goto fail_fd;
+
+   device->queues =
+      vk_zalloc(&device->vk.alloc, num_queues * sizeof(*device->queues), 8,
+                VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
+   if (device->queues == NULL) {
+      result = vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
+      goto fail_context_id;
+   }
+
+   result = anv_device_init_vma_heaps(device);
+   if (result != VK_SUCCESS)
+      goto fail_queues_alloc;
+
+   list_inithead(&device->memory_objects);
+   list_inithead(&device->image_private_objects);
+
+   if (pthread_mutex_init(&device->mutex, NULL) != 0) {
+      result = vk_error(device, VK_ERROR_INITIALIZATION_FAILED);
+      goto fail_vmas;
+   }
+
+   if (physical_device->instance->vk.trace_mode & VK_TRACE_MODE_RMV)
+      anv_memory_trace_init(device);
+
+   result = anv_bo_cache_init(&device->bo_cache, device);
+   if (result != VK_SUCCESS)
+      goto fail_mutex;
+
+   if (!anv_slab_bo_init(device))
+      goto fail_cache;
+
+   anv_bo_pool_init(&device->batch_bo_pool, device, "batch",
+                    ANV_BO_ALLOC_BATCH_BUFFER_FLAGS);
+   if (device->vk.enabled_extensions.KHR_acceleration_structure) {
+      anv_bo_pool_init(&device->bvh_bo_pool, device, "bvh build",
+                       0 /* alloc_flags */);
+   }
+
+   result = anv_state_pools_init(device);
+   if (result != VK_SUCCESS)
+      goto fail_batch_bo_pool;
+
+   if (device->info->has_aux_map) {
       device->aux_map_ctx = intel_aux_map_init(device, &aux_map_allocator,
                                                &physical_device->info);
       if (!device->aux_map_ctx)
@@ -998,7 +1082,7 @@ VkResult anv_CreateDevice(
    if (!device->info->has_64bit_float)
       anv_load_fp64_shader(device);
 
-   if (INTEL_DEBUG(DEBUG_SHADER_PRINT)) {
+   if (anv_needs_printf_buffer()) {
       result = anv_device_print_init(device);
       if (result != VK_SUCCESS)
          goto fail_internal_cache;
@@ -1140,7 +1224,7 @@ VkResult anv_CreateDevice(
                                    device->companion_rcs_cmd_pool, NULL);
    }
  fail_print:
-   if (INTEL_DEBUG(DEBUG_SHADER_PRINT))
+   if (anv_needs_printf_buffer())
       anv_device_print_fini(device);
  fail_internal_cache:
    vk_pipeline_cache_destroy(device->internal_cache, NULL);
@@ -1181,33 +1265,7 @@ VkResult anv_CreateDevice(
       device->aux_map_ctx = NULL;
    }
  fail_aux_tt_pool:
-   if (device->info->has_aux_map)
-      anv_state_pool_finish(&device->aux_tt_pool);
- fail_push_descriptor_buffer_pool:
-   if (device->vk.enabled_extensions.EXT_descriptor_buffer &&
-       device->info->verx10 >= 125)
-      anv_state_pool_finish(&device->push_descriptor_buffer_pool);
- fail_indirect_push_descriptor_pool:
-   if (device->physical->indirect_descriptors)
-      anv_state_pool_finish(&device->indirect_push_descriptor_pool);
- fail_binding_table_pool:
-   anv_state_pool_finish(&device->binding_table_pool);
- fail_bindless_surface_state_pool:
-   if (device->physical->indirect_descriptors)
-      anv_state_pool_finish(&device->bindless_surface_state_pool);
- fail_internal_surface_state_pool:
-   anv_state_pool_finish(&device->internal_surface_state_pool);
- fail_scratch_surface_state_pool:
-   if (device->info->verx10 >= 125)
-      anv_state_pool_finish(&device->scratch_surface_state_pool);
- fail_shader_vma_heap:
-      anv_shader_heap_finish(&device->shader_heap);
- fail_custom_border_color_pool:
-   anv_state_reserved_array_pool_finish(&device->custom_border_colors);
- fail_dynamic_state_pool:
-   anv_state_pool_finish(&device->dynamic_state_pool);
- fail_general_state_pool:
-   anv_state_pool_finish(&device->general_state_pool);
+   anv_state_pools_finish(device);
  fail_batch_bo_pool:
    if (device->vk.enabled_extensions.KHR_acceleration_structure)
       anv_bo_pool_finish(&device->bvh_bo_pool);
@@ -1218,12 +1276,7 @@ VkResult anv_CreateDevice(
  fail_mutex:
    pthread_mutex_destroy(&device->mutex);
  fail_vmas:
-   util_vma_heap_finish(&device->vma_trtt);
-   util_vma_heap_finish(&device->vma_dynamic_visible);
-   util_vma_heap_finish(&device->vma_desc);
-   util_vma_heap_finish(&device->vma_hi);
-   util_vma_heap_finish(&device->vma_lo);
-   pthread_mutex_destroy(&device->vma_mutex);
+   anv_device_finish_vma_heaps(device);
  fail_queues_alloc:
    vk_free(&device->vk.alloc, device->queues);
  fail_context_id:
@@ -1277,7 +1330,7 @@ void anv_DestroyDevice(
 
    anv_device_finish_descriptors_view(device);
 
-   if (INTEL_DEBUG(DEBUG_SHADER_PRINT))
+   if (anv_needs_printf_buffer())
       anv_device_print_fini(device);
 
    vk_pipeline_cache_destroy(device->internal_cache, NULL);
@@ -1295,7 +1348,6 @@ void anv_DestroyDevice(
                                    device->companion_rcs_cmd_pool, NULL);
    }
 
-   anv_state_reserved_array_pool_finish(&device->custom_border_colors);
 #ifdef HAVE_VALGRIND
    /* We only need to free these to prevent valgrind errors.  The backing
     * BO will go away in a couple of lines so we don't actually leak.
@@ -1347,23 +1399,8 @@ void anv_DestroyDevice(
    if (device->info->has_aux_map) {
       intel_aux_map_finish(device->aux_map_ctx);
       device->aux_map_ctx = NULL;
-      anv_state_pool_finish(&device->aux_tt_pool);
    }
-   if (device->vk.enabled_extensions.EXT_descriptor_buffer &&
-       device->info->verx10 >= 125)
-      anv_state_pool_finish(&device->push_descriptor_buffer_pool);
-   if (device->physical->indirect_descriptors)
-      anv_state_pool_finish(&device->indirect_push_descriptor_pool);
-   anv_state_pool_finish(&device->binding_table_pool);
-   if (device->info->verx10 >= 125)
-      anv_state_pool_finish(&device->scratch_surface_state_pool);
-   anv_state_pool_finish(&device->internal_surface_state_pool);
-   if (device->physical->indirect_descriptors)
-      anv_state_pool_finish(&device->bindless_surface_state_pool);
-
-   anv_shader_heap_finish(&device->shader_heap);
-   anv_state_pool_finish(&device->dynamic_state_pool);
-   anv_state_pool_finish(&device->general_state_pool);
+   anv_state_pools_finish(device);
 
    if (device->vk.enabled_extensions.KHR_acceleration_structure)
       anv_bo_pool_finish(&device->bvh_bo_pool);
@@ -1372,12 +1409,7 @@ void anv_DestroyDevice(
    anv_slab_bo_deinit(device);
    anv_bo_cache_finish(&device->bo_cache);
 
-   util_vma_heap_finish(&device->vma_trtt);
-   util_vma_heap_finish(&device->vma_dynamic_visible);
-   util_vma_heap_finish(&device->vma_desc);
-   util_vma_heap_finish(&device->vma_hi);
-   util_vma_heap_finish(&device->vma_lo);
-   pthread_mutex_destroy(&device->vma_mutex);
+   anv_device_finish_vma_heaps(device);
 
    pthread_mutex_destroy(&device->mutex);
 

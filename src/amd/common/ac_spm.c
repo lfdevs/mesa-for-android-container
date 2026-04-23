@@ -678,6 +678,7 @@ bool ac_init_spm(const struct radeon_info *info,
       break;
    case GFX11:
    case GFX11_5:
+   case GFX11_7:
       create_info_count = ARRAY_SIZE(gfx11_spm_counters);
       create_info = gfx11_spm_counters;
       break;
@@ -794,9 +795,9 @@ bool ac_init_spm(const struct radeon_info *info,
    /* Configure the sample interval to default to 4096 clk. */
    spm->sample_interval = 4096;
 
-   /* On GFX11-11.5, the data size written by the hw is in units of segment. */
+   /* On GFX11-11.7, the data size written by the hw is in units of segment. */
    spm->ptr_granularity =
-      (info->gfx_level == GFX11 || info->gfx_level == GFX11_5) ? 32 : 1;
+      (info->gfx_level >= GFX11 && info->gfx_level < GFX12) ? 32 : 1;
 
    return true;
 }
@@ -1812,10 +1813,10 @@ ac_emit_spm_muxsel(struct ac_cmdbuf *cs, enum amd_gfx_level gfx_level,
 
          /* Write the muxsel line configuration with MUXSEL_DATA. */
          ac_cmdbuf_emit(PKT3(PKT3_WRITE_DATA, 2 + AC_SPM_MUXSEL_LINE_SIZE, 0));
-         ac_cmdbuf_emit(S_370_DST_SEL(V_370_MEM_MAPPED_REGISTER) |
-                        S_370_WR_CONFIRM(1) |
-                        S_370_ENGINE_SEL(V_370_ME) |
-                        S_370_WR_ONE_ADDR(1));
+         ac_cmdbuf_emit(S_371_DST_SEL(V_371_MEM_MAPPED_REGISTER) |
+                        S_371_WR_CONFIRM(V_371_WAIT_FOR_WRITE_CONFIRMATION) |
+                        S_371_ENGINE_SEL(V_371_MICRO_ENGINE) |
+                        S_371_ADDR_INCR(V_371_DO_NOT_INCREMENT_ADDRESS));
          ac_cmdbuf_emit(rlc_muxsel_data >> 2);
          ac_cmdbuf_emit(0);
          ac_cmdbuf_emit_array(data, AC_SPM_MUXSEL_LINE_SIZE);

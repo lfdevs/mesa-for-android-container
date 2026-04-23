@@ -429,7 +429,7 @@ valid_header(uint32_t pkt)
  * looks for "IB" type packets and logs the target cmdstream buffers.
  */
 static void
-parse_ibs(uint32_t *dwords, uint32_t sizedwords)
+parse_ibs(const uint32_t *dwords, uint32_t sizedwords)
 {
    int dwords_left = sizedwords;
    uint32_t count = 0; /* dword count including packet header */

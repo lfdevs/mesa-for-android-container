@@ -1,0 +1,3 @@
+# https://gerrit.khronos.org/c/vk-gl-cts/+/19859
+dEQP-VK.wsi.xcb.maintenance1.present_modes.*
+dEQP-VK.wsi.xcb.maintenance1.present_fence.*

@@ -293,7 +293,6 @@ llvmpipe_init_screen_caps(struct pipe_screen *screen)
    caps->max_texture_gather_components = 4;
    caps->vs_window_space_position = true;
    caps->fs_fine_derivative = true;
-   caps->tgsi_tex_txf_lz = true;
    caps->sampler_view_target = true;
    caps->fake_sw_msaa = false;
    caps->texture_query_lod = true;

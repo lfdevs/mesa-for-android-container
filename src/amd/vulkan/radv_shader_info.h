@@ -117,13 +117,13 @@ struct radv_shader_info {
    bool merged_shader_compiled_separately : 1; /* GFX9+ */
    bool force_indirect_descriptors : 1;
    bool ngg_wave_id_en : 1;
+   bool descriptor_heap : 1;
 
    struct {
       uint64_t tcs_inputs_via_temp;
       uint64_t tcs_inputs_via_lds;
       uint32_t vb_desc_usage_mask;
       uint32_t input_slot_usage_mask;
-      uint32_t num_outputs; /* For NGG streamout only */
       uint8_t num_linked_outputs;
       uint8_t num_attributes;
       bool needs_draw_id : 1;
@@ -150,7 +150,6 @@ struct radv_shader_info {
    } gs;
    struct {
       uint32_t tcs_vertices_out;
-      uint32_t num_outputs;            /* For NGG streamout only */
       uint8_t num_linked_inputs;       /* Number of reserved per-vertex input slots in VRAM. */
       uint8_t num_linked_patch_inputs; /* Number of reserved per-patch input slots in VRAM. */
       uint8_t num_linked_outputs;

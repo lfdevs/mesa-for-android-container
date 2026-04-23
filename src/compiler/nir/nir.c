@@ -2583,6 +2583,10 @@ nir_intrinsic_from_system_value(gl_system_value val)
       return nir_intrinsic_load_warp_id_arm;
    case SYSTEM_VALUE_WARP_MAX_ID_ARM:
       return nir_intrinsic_load_warp_max_id_arm;
+   case SYSTEM_VALUE_COLOR0_AMD:
+      return nir_intrinsic_load_color0_amd;
+   case SYSTEM_VALUE_COLOR1_AMD:
+      return nir_intrinsic_load_color1_amd;
    default:
       return nir_num_intrinsics;
    }
@@ -2769,6 +2773,10 @@ nir_system_value_from_intrinsic(nir_intrinsic_op intrin)
       return SYSTEM_VALUE_WARP_ID_ARM;
    case nir_intrinsic_load_warp_max_id_arm:
       return SYSTEM_VALUE_WARP_MAX_ID_ARM;
+   case nir_intrinsic_load_color0_amd:
+      return SYSTEM_VALUE_COLOR0_AMD;
+   case nir_intrinsic_load_color1_amd:
+      return SYSTEM_VALUE_COLOR1_AMD;
    default:
       return SYSTEM_VALUE_MAX;
    }
@@ -3428,6 +3436,7 @@ nir_tex_instr_need_sampler(const nir_tex_instr *instr)
    case nir_texop_fragment_mask_fetch_amd:
    case nir_texop_fragment_fetch_amd:
    case nir_texop_resinfo_intel:
+   case nir_texop_sparse_residency_txf_intel:
       return false;
    default:
       return true;
@@ -3475,6 +3484,8 @@ nir_tex_instr_result_size(const nir_tex_instr *instr)
    case nir_texop_fragment_mask_fetch_amd:
    case nir_texop_image_min_lod_agx:
    case nir_texop_has_custom_border_color_agx:
+   case nir_texop_sparse_residency_intel:
+   case nir_texop_sparse_residency_txf_intel:
       return 1;
 
    case nir_texop_descriptor_amd:
@@ -3526,6 +3537,8 @@ nir_tex_instr_is_query(const nir_tex_instr *instr)
    case nir_texop_tex_type_nv:
    case nir_texop_sample_pos_nv:
    case nir_texop_resinfo_intel:
+   case nir_texop_sparse_residency_intel:
+   case nir_texop_sparse_residency_txf_intel:
       return true;
    case nir_texop_tex:
    case nir_texop_txb:

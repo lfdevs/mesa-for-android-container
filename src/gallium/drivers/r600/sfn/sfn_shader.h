@@ -219,7 +219,7 @@ public:
       sh_uses_images,
       sh_uses_tex_buffer,
       sh_writes_memory,
-      sh_txs_cube_array_comp,
+      sh_resinfo_via_uniform,
       sh_indirect_atomic,
       sh_mem_barrier,
       sh_legacy_math_rules,
@@ -273,7 +273,7 @@ protected:
 
    std::bitset<es_last> m_sv_values;
 
-   Shader(const char *type_id, unsigned atomic_base);
+   Shader(const char *type_id);
 
    const ShaderInput& input(int base) const;
 
@@ -317,6 +317,7 @@ private:
    bool emit_local_load(nir_intrinsic_instr *instr);
    bool emit_load_tcs_param_base(nir_intrinsic_instr *instr, int offset);
    bool emit_get_lds_info_uint(nir_intrinsic_instr *instr, int offset);
+   bool emit_get_lds_info_uint2(nir_intrinsic_instr *instr, int offset);
    bool emit_group_barrier(nir_intrinsic_instr *intr);
    bool emit_shader_clock(nir_intrinsic_instr *instr);
    bool emit_wait_ack();
@@ -356,7 +357,6 @@ private:
    std::vector<r600_shader_atomic, Allocator<r600_shader_atomic>> m_atomics;
 
    uint32_t m_nhwatomic{0};
-   uint32_t m_atomic_base{0};
    uint32_t m_next_hwatomic_loc{0};
    std::unordered_map<int, int,
                       std::hash<int>,  std::equal_to<int>,

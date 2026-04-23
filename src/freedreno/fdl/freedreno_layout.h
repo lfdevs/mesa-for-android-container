@@ -476,7 +476,7 @@ uint32_t fdl6_get_bank_shift(const struct fdl_ubwc_config *config);
 ENDC;
 
 #ifdef __cplusplus
-#include "adreno_common.xml.h"
+#include "common/fd_hw_common.h"
 template <chip CHIP>
 void
 fdl6_view_init(struct fdl6_view *view, const struct fdl_layout **layouts,

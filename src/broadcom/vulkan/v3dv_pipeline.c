@@ -2465,7 +2465,7 @@ pipeline_compile_graphics(struct v3dv_pipeline *pipeline,
             vk_find_struct_const(sinfo->pNext, SHADER_MODULE_CREATE_INFO);
       }
 
-      vk_pipeline_robustness_state_fill(&device->vk, &p_stage->robustness,
+      vk_pipeline_robustness_state_fill(&device->vk.robustness_state, &p_stage->robustness,
                                         pCreateInfo->pNext, sinfo->pNext);
 
       vk_pipeline_hash_shader_stage(pipeline->flags,
@@ -2516,7 +2516,7 @@ pipeline_compile_graphics(struct v3dv_pipeline *pipeline,
       p_stage->module = NULL;
       p_stage->module_info = NULL;
       p_stage->nir = b.shader;
-      vk_pipeline_robustness_state_fill(&device->vk, &p_stage->robustness,
+      vk_pipeline_robustness_state_fill(&device->vk.robustness_state, &p_stage->robustness,
                                         NULL, NULL);
       pipeline_compute_blake3_from_nir(p_stage);
       p_stage->program_id =
@@ -3179,7 +3179,7 @@ pipeline_compile_compute(struct v3dv_pipeline *pipeline,
          vk_find_struct_const(sinfo->pNext, SHADER_MODULE_CREATE_INFO);
    }
 
-   vk_pipeline_robustness_state_fill(&device->vk, &p_stage->robustness,
+   vk_pipeline_robustness_state_fill(&device->vk.robustness_state, &p_stage->robustness,
                                      info->pNext, sinfo->pNext);
 
    vk_pipeline_hash_shader_stage(pipeline->flags,

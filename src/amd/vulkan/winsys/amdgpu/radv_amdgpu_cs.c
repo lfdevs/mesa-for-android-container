@@ -411,7 +411,7 @@ radv_amdgpu_cs_grow(struct ac_cmdbuf *_cs, size_t min_size)
 
    uint64_t ib_size = MAX2(min_size * 4 + 16, cs->base.max_dw * 4 * 2);
 
-   ib_size = align(MIN2(ib_size, ~C_3F2_IB_SIZE), ib_alignment);
+   ib_size = align(MIN2(ib_size, ~C_3F3_IB_SIZE), ib_alignment);
 
    VkResult result = radv_amdgpu_cs_bo_create(cs, ib_size);
 
@@ -437,7 +437,7 @@ radv_amdgpu_cs_grow(struct ac_cmdbuf *_cs, size_t min_size)
       cs->base.buf[cs->base.cdw - 4] = PKT3(PKT3_INDIRECT_BUFFER, 2, 0);
       cs->base.buf[cs->base.cdw - 3] = radv_amdgpu_winsys_bo(cs->ib_buffer)->base.va;
       cs->base.buf[cs->base.cdw - 2] = radv_amdgpu_winsys_bo(cs->ib_buffer)->base.va >> 32;
-      cs->base.buf[cs->base.cdw - 1] = S_3F2_CHAIN(1) | S_3F2_VALID(1);
+      cs->base.buf[cs->base.cdw - 1] = S_3F3_CHAIN(1) | S_3F3_VALID(1);
 
       cs->ib_size_ptr = cs->base.buf + cs->base.cdw - 1;
    }
@@ -490,7 +490,7 @@ radv_amdgpu_cs_finalize(struct ac_cmdbuf *_cs)
       /* Emit 4 dwords of NOP, these will be replaced by the chaining INDIRECT_BUFFER. */
       radv_amdgpu_cs_emit_nops(cs, 4);
 
-      assert(cs->base.cdw <= ~C_3F2_IB_SIZE);
+      assert(cs->base.cdw <= ~C_3F3_IB_SIZE);
       *cs->ib_size_ptr |= cs->base.cdw;
    } else {
       radv_amdgpu_winsys_cs_pad(_cs, 0);
@@ -498,7 +498,7 @@ radv_amdgpu_cs_finalize(struct ac_cmdbuf *_cs)
 
    /* Append the current (last) IB to the array of IB buffers. */
    radv_amdgpu_cs_add_ib_buffer(cs, cs->ib_buffer, cs->ib_buffer->va,
-                                cs->chain_ib ? G_3F2_IB_SIZE(*cs->ib_size_ptr) : cs->base.cdw);
+                                cs->chain_ib ? G_3F3_IB_SIZE(*cs->ib_size_ptr) : cs->base.cdw);
 
    /* Prevent freeing this BO twice. */
    cs->ib_buffer = NULL;
@@ -587,7 +587,7 @@ radv_amdgpu_cs_chain(struct ac_cmdbuf *cs, struct ac_cmdbuf *next_cs, bool pre_e
    cs->buf[cs->cdw - 4] = PKT3(PKT3_INDIRECT_BUFFER, 2, 0);
    cs->buf[cs->cdw - 3] = next_acs->ib.ib_mc_address;
    cs->buf[cs->cdw - 2] = next_acs->ib.ib_mc_address >> 32;
-   cs->buf[cs->cdw - 1] = S_3F2_CHAIN(1) | S_3F2_VALID(1) | S_3F2_PRE_ENA(pre_ena) | next_acs->ib.size;
+   cs->buf[cs->cdw - 1] = S_3F3_CHAIN(1) | S_3F3_VALID(1) | S_3F3_PRE_ENA(pre_ena) | next_acs->ib.size;
 
    return true;
 }
@@ -752,7 +752,7 @@ radv_amdgpu_cs_execute_ib(struct ac_cmdbuf *_cs, struct radeon_winsys_bo *bo, ui
       return;
 
    assert(ib_va && ib_va % cs->ws->info.ip[cs->hw_ip].ib_alignment == 0);
-   assert(cs->hw_ip == AMD_IP_GFX && cdw <= ~C_3F2_IB_SIZE);
+   assert(cs->hw_ip == AMD_IP_GFX && cdw <= ~C_3F3_IB_SIZE);
 
    ac_emit_cp_indirect_buffer(&cs->base, ib_va, cdw, 0, predicate);
 }
@@ -772,17 +772,18 @@ radv_amdgpu_cs_chain_dgc_ib(struct ac_cmdbuf *_cs, uint64_t va, uint32_t cdw, ui
       cs->ws->base.cs_execute_ib(_cs, NULL, va, cdw, predicate);
    } else {
       assert(va && va % cs->ws->info.ip[cs->hw_ip].ib_alignment == 0);
-      assert(cdw <= ~C_3F2_IB_SIZE);
+      assert(cdw <= ~C_3F3_IB_SIZE);
 
       /* Emit a WRITE_DATA packet to patch the DGC CS. */
       const uint32_t chain_data[] = {
          PKT3(PKT3_INDIRECT_BUFFER, 2, 0),
          0,
          0,
-         S_3F2_CHAIN(1) | S_3F2_VALID(1),
+         S_3F3_CHAIN(1) | S_3F3_VALID(1),
       };
 
-      ac_emit_cp_write_data(&cs->base, V_370_ME, V_370_MEM, trailer_va, ARRAY_SIZE(chain_data), chain_data, false);
+      ac_emit_cp_write_data(&cs->base, V_371_MICRO_ENGINE, V_371_MEMORY, trailer_va, ARRAY_SIZE(chain_data), chain_data,
+                            false);
 
       /* Keep pointers for patching later. */
       uint64_t *ib_va_ptr = (uint64_t *)(cs->base.buf + cs->base.cdw - 3);
@@ -790,7 +791,7 @@ radv_amdgpu_cs_chain_dgc_ib(struct ac_cmdbuf *_cs, uint64_t va, uint32_t cdw, ui
 
       /* Writeback L2 because CP isn't coherent with L2 on GFX6-8. */
       if (cs->ws->info.gfx_level == GFX8) {
-         ac_emit_cp_acquire_mem(&cs->base, GFX8, AMD_IP_COMPUTE, V_580_CP_ME,
+         ac_emit_cp_acquire_mem(&cs->base, GFX8, AMD_IP_COMPUTE, V_581A_MICRO_ENGINE,
                                 S_0301F0_TC_WB_ACTION_ENA(1) | S_0301F0_TC_NC_ACTION_ENA(1));
       }
 
@@ -801,7 +802,7 @@ radv_amdgpu_cs_chain_dgc_ib(struct ac_cmdbuf *_cs, uint64_t va, uint32_t cdw, ui
       _cs->buf[_cs->cdw - 4] = PKT3(PKT3_INDIRECT_BUFFER, 2, 0);
       _cs->buf[_cs->cdw - 3] = va;
       _cs->buf[_cs->cdw - 2] = va >> 32;
-      _cs->buf[_cs->cdw - 1] = S_3F2_CHAIN(1) | S_3F2_VALID(1) | cdw;
+      _cs->buf[_cs->cdw - 1] = S_3F3_CHAIN(1) | S_3F3_VALID(1) | cdw;
 
       /* Allocate a new CS BO with initial size. */
       const uint64_t ib_size = radv_amdgpu_cs_get_initial_size(cs->ws, cs->hw_ip);

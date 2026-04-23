@@ -77,6 +77,8 @@ bi_count_read_registers(const bi_instr *ins, unsigned s)
       return ins->sr_count_2; /* Dual source blending */
    else if (s == 0 && ins->op == BI_OPCODE_SPLIT_I32)
       return ins->nr_dests;
+   else if (ins->op == BI_OPCODE_SHADDX_S64 || ins->op == BI_OPCODE_SHADDX_U64)
+      return 2;
    else
       return 1;
 }
@@ -123,7 +125,9 @@ bi_count_write_registers(const bi_instr *ins, unsigned d)
       default:
          return bi_count_staging_registers(ins);
       }
-   } else if (ins->op == BI_OPCODE_SEG_ADD_I64) {
+   } else if (ins->op == BI_OPCODE_SEG_ADD_I64 ||
+              ins->op == BI_OPCODE_SHADDX_S64 ||
+              ins->op == BI_OPCODE_SHADDX_U64) {
       return 2;
    } else if (ins->op == BI_OPCODE_TEXC_DUAL && d == 1) {
       return ins->sr_count_2;

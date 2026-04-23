@@ -10,7 +10,12 @@
 #ifndef TU_FORMATS_H
 #define TU_FORMATS_H
 
-#include "tu_common.h"
+#include <stdbool.h>
+
+#include "util/format/u_format.h"
+#include "vulkan/vulkan_core.h"
+
+#include "common/fd6_hw.h"
 
 struct tu_native_format
 {

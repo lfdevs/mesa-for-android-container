@@ -25,6 +25,7 @@
 #define TU_BVH_BUILD_HELPERS_H
 
 #include "vk_build_helpers.h"
+
 #include "tu_bvh.h"
 
 TYPE(tu_accel_struct_header, 8);

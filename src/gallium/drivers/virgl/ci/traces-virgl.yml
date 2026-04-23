@@ -109,7 +109,7 @@ traces:
       label: [crash]
   godot/Material Testers.x86_64_2020.04.08_13.38_frame799.rdc:
     gl-virgl:
-      checksum: 7ba4f0c52a719d94b805653d31ce22d7
+      checksum: 465410a06d966b377bc8c41e52b21b0f
   ror/ror-default.trace:
     gl-virgl:
       label: [crash]

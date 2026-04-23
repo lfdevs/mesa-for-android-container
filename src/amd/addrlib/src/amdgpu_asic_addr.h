@@ -1,7 +1,7 @@
 /*
 ************************************************************************************************************************
 *
-*  Copyright (C) 2017-2024 Advanced Micro Devices, Inc. All rights reserved.
+*  Copyright (C) 2017-2026 Advanced Micro Devices, Inc. All rights reserved.
 *  SPDX-License-Identifier: MIT
 *
 ***********************************************************************************************************************/
@@ -29,6 +29,7 @@
 #define FAMILY_NV3     0x91 //# 145 / Navi: 3x
 #define FAMILY_STX     0x96
 #define FAMILY_PHX     0x94 //# 148 / Phoenix
+#define FAMILY_GFX1170 0x9A
 #define FAMILY_RMB     0x92 //# 146 / Rembrandt
 #define FAMILY_RPL     0x95 //# 149 / Raphael
 #define FAMILY_MDN     0x97 //# 151 / Mendocino
@@ -109,6 +110,7 @@
 #define AMDGPU_PHOENIX2_RANGE      0x80, 0xC0 //# 128 <= x < 192
 #define AMDGPU_HAWK_POINT1_RANGE   0xC0, 0xF0 //# 192 <= x < 240
 #define AMDGPU_HAWK_POINT2_RANGE   0xF0, 0xFF //# 240 <= x < 255
+#define AMDGPU_GFX1170_RANGE        0x01, 0x40 //# 1 <= x < 64
 
 #define AMDGPU_REMBRANDT_RANGE  0x01, 0xFF //# 01 <= x < 255
 #define AMDGPU_RAPHAEL_RANGE    0x01, 0xFF //# 1 <= x < max
@@ -189,6 +191,7 @@
 #define ASICREV_IS_PHOENIX2(r)         ASICREV_IS(r, PHOENIX2)
 #define ASICREV_IS_HAWK_POINT1(r)      ASICREV_IS(r, HAWK_POINT1)
 #define ASICREV_IS_HAWK_POINT2(r)      ASICREV_IS(r, HAWK_POINT2)
+#define ASICREV_IS_GFX1170(r)         ASICREV_IS(r, GFX1170)
 
 #define ASICREV_IS_REMBRANDT(r)        ASICREV_IS(r, REMBRANDT)
 #define ASICREV_IS_RAPHAEL(r)          ASICREV_IS(r, RAPHAEL)

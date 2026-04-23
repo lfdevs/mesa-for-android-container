@@ -221,7 +221,7 @@ dce_cf_list(struct exec_list *cf_list, BITSET_WORD *defs_live,
    return progress;
 }
 
-static bool
+bool
 nir_opt_dce_impl(nir_function_impl *impl)
 {
    assert(impl->structured);

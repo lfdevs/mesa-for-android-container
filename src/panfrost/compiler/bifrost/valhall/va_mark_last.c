@@ -178,7 +178,9 @@ va_mark_last(bi_context *ctx)
             if (s >= 3)
                break;
 
-            if (va_src_info(I->op, s).size == VA_SIZE_64) {
+            /* Only need to unmark split registers. */
+            if (va_src_info(I->op, s).size == VA_SIZE_64 &&
+                bi_count_read_registers(I, s) == 1) {
                bool both_discard = I->src[s].discard && I->src[s + 1].discard;
 
                I->src[s + 0].discard = both_discard;

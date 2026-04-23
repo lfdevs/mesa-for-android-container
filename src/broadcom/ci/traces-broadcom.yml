@@ -322,14 +322,6 @@ traces:
       label: [skip, flakes]
       checksum: b8d8ceb748ea9900b1414ef54eec732e
 
-  thedarkmod/thedarkmod.trace:
-    broadcom-rpi4:
-      label: [unsupported]
-      text: needs GL 3.3
-    broadcom-rpi5:
-      label: [unsupported]
-      text: needs GL 3.3
-
   unvanquished/unvanquished-lowest.trace:
     broadcom-rpi4:
       label: [unsupported]

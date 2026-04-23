@@ -8,6 +8,7 @@
 #include "si_shader_internal.h"
 #include "si_shader_llvm.h"
 #include "sid.h"
+#include "nir.h"
 
 static LLVMValueRef si_build_fs_interp(struct si_shader_context *ctx, unsigned attr_index,
                                        unsigned chan, LLVMValueRef prim_mask, LLVMValueRef i,
@@ -346,12 +347,10 @@ static void si_export_mrt_color(struct si_shader_context *ctx, LLVMValueRef *col
  *
  * The alpha-ref SGPR is returned via its original location.
  */
-void si_llvm_ps_build_end(struct si_shader_context *ctx)
+void si_llvm_ps_build_end(struct si_shader_context *ctx, const nir_shader *nir)
 {
-   struct si_shader *shader = ctx->shader;
-   struct si_shader_info *info = &shader->selector->info;
    LLVMBuilderRef builder = ctx->ac.builder;
-   unsigned i, j, vgpr;
+   unsigned j, vgpr;
 
    LLVMValueRef color[8][4] = {};
    uint8_t color_output_mask = 0, is_16bit_mask = 0;
@@ -359,8 +358,8 @@ void si_llvm_ps_build_end(struct si_shader_context *ctx)
    LLVMValueRef ret;
 
    /* Read the output values. */
-   for (i = 0; i < info->num_outputs; i++) {
-      unsigned semantic = info->output_semantic[i];
+   u_foreach_bit(semantic, (uint32_t)nir->info.outputs_written) {
+      unsigned i = ac_nir_get_io_driver_location(nir, semantic, false);
 
       switch (semantic) {
       case FRAG_RESULT_DEPTH:
@@ -373,7 +372,7 @@ void si_llvm_ps_build_end(struct si_shader_context *ctx)
          samplemask = LLVMBuildLoad2(builder, ctx->ac.f32, ctx->abi.outputs[4 * i + 0], "");
          break;
       default:
-         if (semantic >= FRAG_RESULT_DATA0) {
+         if (semantic == FRAG_RESULT_COLOR || semantic >= FRAG_RESULT_DATA0) {
             int index = mesa_frag_result_get_color_index(semantic);
 
             for (j = 0; j < 4; j++) {

@@ -10,14 +10,6 @@ traces:
     gl-zink-anv-tgl:
       checksum: 3bb7b70d76d084acc367f78aeac2bff1
 
-  Anna/Anna-f692-v2.trace:
-    gl-zink-anv-adl:
-      label: [skip]
-      text: "trace contains no swapbuffers, so no frames recorded"
-    gl-zink-anv-tgl:
-      label: [skip]
-      text: "trace contains no swapbuffers, so no frames recorded"
-
   Antichamber/antichamber-f240-v2.trace:
     gl-zink-anv-adl:
       checksum: 55e105b22656add7d16efac2bcad82f5
@@ -205,14 +197,6 @@ traces:
       text: "looks good but checksum keeps changing"
     gl-zink-anv-tgl:
       checksum: 1275d8817716bb2aa65ee5e21737d9f1
-
-  plague-inc-evolved/PlagueIncEvolved-trim--f1200-v20201203-v2.trace:
-    gl-zink-anv-adl:
-      label: [skip]
-      text: "renders black in CI, freedreno CI has unspecified trouble with it too"
-    gl-zink-anv-tgl:
-      label: [skip]
-      text: "renders black in CI, freedreno CI has unspecified trouble with it too"
 
   slime-rancher/SlimeRancher-trim--f970-v20201203-v2.trace:
     gl-zink-anv-adl:

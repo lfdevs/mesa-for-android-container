@@ -213,7 +213,8 @@ public:
 
    std::vector<aco_ptr<Instruction>> *instructions;
    std::vector<aco_ptr<Instruction>>::iterator it;
-   bool is_precise = false;
+   bool is_no_contract = false;
+   bool is_no_reassoc = false;
    bool is_sz_preserve = false;
    bool is_inf_preserve = false;
    bool is_nan_preserve = false;
@@ -225,7 +226,8 @@ public:
 
    Builder precise() const {
       Builder res = *this;
-      res.is_precise = true;
+      res.is_no_contract = true;
+      res.is_no_reassoc = true;
       return res;
    };
 
@@ -639,7 +641,8 @@ formats = [(f if len(f) == 5 else f + ('',)) for f in formats]
       Instruction* instr = create_instruction(opcode, (Format)(${'|'.join('(int)Format::%s' % f.name for f in formats)}), num_ops, ${num_definitions});
         % for i in range(num_definitions):
             instr->definitions[${i}] = def${i};
-            instr->definitions[${i}].setPrecise(is_precise);
+            instr->definitions[${i}].setNoContract(is_no_contract);
+            instr->definitions[${i}].setNoReassoc(is_no_reassoc);
             instr->definitions[${i}].setSZPreserve(is_sz_preserve);
             instr->definitions[${i}].setInfPreserve(is_inf_preserve);
             instr->definitions[${i}].setNaNPreserve(is_nan_preserve);

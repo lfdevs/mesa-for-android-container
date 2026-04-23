@@ -11,6 +11,8 @@
 #include "sfn_shader.h"
 #include "sfn_valuefactory.h"
 
+#define R600_SHADER_BUFFER_INFO_SEL (512 + R600_BUFFER_INFO_OFFSET / 16)
+
 namespace r600 {
 
 class TexInstr : public InstrWithVectorResult {

@@ -3201,6 +3201,28 @@ static pco_instr *trans_alu(trans_ctx *tctx, nir_alu_instr *alu)
       instr = pco_iadd32(&tctx->b, dest, src[0], src[1], pco_ref_null());
       break;
 
+   /* TODO: PCO pass to combine u{add,sub}{carry,borrow}s with the same srcs. */
+   case nir_op_uadd_carry:
+      instr = pco_uadd_carry(&tctx->b, pco_ref_null(), dest, src[0], src[1]);
+      break;
+
+   case nir_op_usub_borrow:
+      instr = pco_uadd_carry(&tctx->b,
+                             pco_ref_null(),
+                             dest,
+                             pco_ref_neg(src[1]),
+                             src[0]);
+      break;
+
+   case nir_op_uadd_sat:
+      instr = pco_uadd_sat(&tctx->b, dest, src[0], src[1], pco_u32max);
+      break;
+
+   case nir_op_usub_sat:
+      instr =
+         pco_uadd_sat(&tctx->b, dest, pco_ref_neg(src[1]), src[0], pco_zero);
+      break;
+
    case nir_op_uadd64_32: {
       pco_ref dest_comps[2] = {
          [0] = pco_ref_new_ssa32(tctx->func),

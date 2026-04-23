@@ -74,6 +74,11 @@ v3dX(start_binning)(struct v3d_context *v3d, struct v3d_job *job)
 
                 config.log2_tile_width = log2_tile_size(job->tile_desc.width);
                 config.log2_tile_height = log2_tile_size(job->tile_desc.height);
+
+                config.tile_allocation_initial_block_size =
+                        V3D_TILE_ALLOC_INITIAL_BLOCK_SIZE_ENUM;
+                config.tile_allocation_block_size =
+                        V3D_TILE_ALLOC_OVERFLOW_BLOCK_SIZE_ENUM;
         }
 #endif
 
@@ -88,6 +93,11 @@ v3dX(start_binning)(struct v3d_context *v3d, struct v3d_job *job)
                 config.double_buffer_in_non_ms_mode = job->double_buffer;
 
                 config.maximum_bpp_of_all_render_targets = job->internal_bpp;
+
+                config.tile_allocation_initial_block_size =
+                        V3D_TILE_ALLOC_INITIAL_BLOCK_SIZE_ENUM;
+                config.tile_allocation_block_size =
+                        V3D_TILE_ALLOC_OVERFLOW_BLOCK_SIZE_ENUM;
         }
 #endif
 

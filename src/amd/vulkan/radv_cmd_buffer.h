@@ -253,6 +253,9 @@ struct radv_descriptor_state {
    uint64_t descriptor_buffers[MAX_SETS];
    bool need_indirect_descriptors;
    uint64_t indirect_descriptor_sets_va;
+
+   uint8_t dirty_heaps;
+   uint8_t valid_heaps;
 };
 
 struct radv_push_constant_state {
@@ -290,6 +293,7 @@ struct radv_meta_saved_descriptor_state {
    struct radv_descriptor_set *old_descriptor_set0;
    bool old_descriptor_set0_valid;
    uint64_t old_descriptor_buffer0;
+   uint8_t old_descriptor_heaps_dirty;
 };
 
 struct radv_meta_saved_state {
@@ -525,6 +529,7 @@ struct radv_cmd_buffer {
    struct radv_push_constant_state push_constant_state[MAX_BIND_POINTS];
 
    uint64_t descriptor_buffers[MAX_SETS];
+   uint64_t descriptor_heaps[RADV_MAX_HEAPS];
 
    struct radv_cmd_buffer_upload upload;
 

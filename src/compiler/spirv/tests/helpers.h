@@ -44,7 +44,7 @@ protected:
 
    void get_nir(size_t num_words, const uint32_t *words, mesa_shader_stage stage = MESA_SHADER_COMPUTE)
    {
-      shader = spirv_to_nir(words, num_words, NULL, 0,
+      shader = spirv_to_nir(words, num_words, NULL,
                             stage, "main", &spirv_options, &nir_options);
    }
 

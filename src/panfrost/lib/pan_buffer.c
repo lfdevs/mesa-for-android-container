@@ -29,10 +29,19 @@ GENX(pan_buffer_texture_emit)(const struct pan_buffer_view *bview,
       .raw = false,
    };
 
+   uint64_t buffer_size = bview->width_el * stride;
+
    pan_pack(out, BUFFER, cfg) {
       cfg.type = MALI_DESCRIPTOR_TYPE_BUFFER;
       cfg.buffer_type = MALI_BUFFER_TYPE_STRUCTURE;
-      cfg.size = bview->width_el * stride;
+
+#if PAN_ARCH >= 11
+      cfg.size = buffer_size & BITFIELD_MASK(32);
+      cfg.size_hi = buffer_size >> 32;
+#else
+      cfg.size = buffer_size;
+#endif
+
       cfg.address = bview->base;
       cfg.stride = stride;
       cfg.conversion = conv;

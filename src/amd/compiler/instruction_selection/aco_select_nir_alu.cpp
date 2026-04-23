@@ -18,7 +18,8 @@ static Builder
 create_alu_builder(isel_context* ctx, nir_alu_instr* instr)
 {
    Builder bld(ctx->program, ctx->block);
-   bld.is_precise = nir_alu_instr_is_exact(instr);
+   bld.is_no_contract = nir_alu_instr_no_contract(instr);
+   bld.is_no_reassoc = nir_alu_instr_no_reassoc(instr);
    bld.is_sz_preserve = nir_alu_instr_is_signed_zero_preserve(instr);
    bld.is_inf_preserve = nir_alu_instr_is_inf_preserve(instr);
    bld.is_nan_preserve = nir_alu_instr_is_nan_preserve(instr);

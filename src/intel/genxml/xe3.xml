@@ -313,6 +313,46 @@
       <value name="512" value="2" />
       <value name="1024" value="3" />
     </field>
+    <field name="Dynamic stack management mechanism MISS PENALTY" dword="1" bits="11:9" type="uint" prefix="MISS_PENALTY">
+      <value name="128" value="7" />
+      <value name="64" value="6" />
+      <value name="32" value="5" />
+      <value name="16" value="4" />
+      <value name="8" value="3" />
+      <value name="4" value="2" />
+      <value name="2" value="1" />
+      <value name="1" value="0" />
+    </field>
+    <field name="Dynamic stack management mechanism HIT REWARD" dword="1" bits="14:12" type="uint" prefix="HIT_REWARD">
+      <value name="128" value="7" />
+      <value name="64" value="6" />
+      <value name="32" value="5" />
+      <value name="16" value="4" />
+      <value name="8" value="3" />
+      <value name="4" value="2" />
+      <value name="2" value="1" />
+      <value name="1" value="0" />
+    </field>
+    <field name="Dynamic stack management mechanism SCALING FACTOR" dword="1" bits="17:15" type="uint" prefix="SCALING_FACTOR">
+      <value name="128" value="7" />
+      <value name="64" value="6" />
+      <value name="32" value="5" />
+      <value name="16" value="4" />
+      <value name="8" value="3" />
+      <value name="4" value="2" />
+      <value name="2" value="1" />
+      <value name="1" value="0" />
+    </field>
+    <field name="Dynamic stack management mechanism REDUCTION CAP" dword="1" bits="20:18" type="uint" prefix="REDUCTION_CAP">
+      <value name="1024" value="7" />
+      <value name="896" value="6" />
+      <value name="768" value="5" />
+      <value name="640" value="4" />
+      <value name="512" value="3" />
+      <value name="384" value="2" />
+      <value name="256" value="1" />
+      <value name="128" value="0" />
+    </field>
     <field name="RT Mem Structures 64b Mode Enable" dword="1" bits="30:30" type="bool" />
     <field name="BTD Mid thread preemption" dword="1" bits="31:31" type="bool" />
     <field name="Per DSS Memory Backed Buffer Size" dword="2" bits="2:0" type="uint" default="6">
@@ -741,6 +781,31 @@
     <field name="User Clip Distance Clip Test Enable Bitmask" dword="8" bits="15:8" type="uint" />
     <field name="Vertex URB Entry Output Length" dword="8" bits="20:16" type="uint" />
     <field name="Vertex URB Entry Output Read Offset" dword="8" bits="26:21" type="uint" />
+  </instruction>
+  <instruction name="CFE_STATE" bias="2" length="6" engine="render|compute">
+    <field name="DWord Length" dword="0" bits="7:0" type="uint" default="4" />
+    <field name="CFE SubOpcode Variant" dword="0" bits="17:16" type="uint" default="0" />
+    <field name="CFE SubOpcode" dword="0" bits="23:18" type="uint" default="0" />
+    <field name="Compute Command Opcode" dword="0" bits="26:24" type="uint" default="2" />
+    <field name="Pipeline" dword="0" bits="28:27" type="uint" default="2" />
+    <field name="Command Type" dword="0" bits="31:29" type="uint" default="3" />
+    <field name="Scratch Space Buffer" dword="1" bits="31:10" type="uint" />
+    <field name="Stack ID Control" dword="3" bits="1:0" type="uint">
+      <value name="StackIDs 2048" value="0" />
+      <value name="StackIDs 1024" value="1" />
+      <value name="StackIDs 512" value="2" />
+      <value name="StackIDs 256" value="3" />
+    </field>
+    <field name="Dynamic Stack ID Control" dword="3" bits="2:2" type="bool" />
+    <field name="Compute Dispatch All walker Enable" dword="3" bits="12:12" type="bool" />
+    <field name="Single Slice Dispatch CCS Mode" dword="3" bits="13:13" type="bool" />
+    <field name="Over Dispatch Control" dword="3" bits="15:14" type="uint">
+      <value name="Over Dispatch None" value="0" />
+      <value name="Over Dispatch Low" value="1" />
+      <value name="Over Dispatch Normal" value="2" />
+      <value name="Over Dispatch High" value="3" />
+    </field>
+    <field name="Maximum Number of Threads" dword="3" bits="31:16" type="uint" />
   </instruction>
   <instruction name="STATE_COMPUTE_MODE" bias="2" length="3" engine="render|compute">
     <field name="DWord Length" dword="0" bits="7:0" type="uint" default="1" />

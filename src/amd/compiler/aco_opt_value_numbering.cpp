@@ -399,8 +399,10 @@ process_block(vn_ctx& ctx, Block& block)
                assert(instr->definitions[i].regClass() == orig_instr->definitions[i].regClass());
                assert(instr->definitions[i].isTemp());
                ctx.renames[instr->definitions[i].tempId()] = orig_instr->definitions[i].getTemp();
-               if (instr->definitions[i].isPrecise())
-                  orig_instr->definitions[i].setPrecise(true);
+               if (instr->definitions[i].isNoContract())
+                  orig_instr->definitions[i].setNoContract(true);
+               if (instr->definitions[i].isNoReassoc())
+                  orig_instr->definitions[i].setNoReassoc(true);
                if (instr->definitions[i].isSZPreserve())
                   orig_instr->definitions[i].setSZPreserve(true);
                if (instr->definitions[i].isInfPreserve())
@@ -474,8 +476,7 @@ value_numbering(Program* program)
       if (block.kind & block_kind_merge) {
          ctx.exec_id--;
       } else if (block.kind & block_kind_loop_exit) {
-         ctx.exec_id -= program->blocks[loop_headers.back()].linear_preds.size();
-         ctx.exec_id -= block.linear_preds.size();
+         ctx.exec_id -= (block.linear_preds.size() + 1);
          loop_headers.pop_back();
       }
 
@@ -491,7 +492,7 @@ value_numbering(Program* program)
 
       /* increment exec_id when entering nested control flow */
       if (block.kind & block_kind_branch || block.kind & block_kind_loop_preheader ||
-          block.kind & block_kind_break || block.kind & block_kind_continue)
+          block.kind & block_kind_break)
          ctx.exec_id++;
    }
 

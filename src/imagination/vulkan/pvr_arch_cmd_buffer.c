@@ -2414,8 +2414,8 @@ VkResult pvr_arch_cmd_buffer_end_sub_cmd(struct pvr_cmd_buffer *cmd_buffer)
          assert(gfx_sub_cmd->query_pool);
 
          if (secondary_cont) {
-            util_dynarray_append_dynarray(&state->query_indices,
-                                          &gfx_sub_cmd->sec_query_indices);
+            util_dynarray_append_dynarray(&gfx_sub_cmd->sec_query_indices,
+                                          &state->query_indices);
          } else {
             const void *data = util_dynarray_begin(&state->query_indices);
 
@@ -9068,6 +9068,9 @@ pvr_execute_graphics_cmd_buffer(struct pvr_cmd_buffer *cmd_buffer,
             sec_sub_cmd->gfx.job.disable_compute_overlap;
       }
 
+      primary_sub_cmd->gfx.job.get_vis_results |=
+         sec_sub_cmd->gfx.job.get_vis_results;
+
       primary_sub_cmd->gfx.max_tiles_in_flight =
          MIN2(primary_sub_cmd->gfx.max_tiles_in_flight,
               sec_sub_cmd->gfx.max_tiles_in_flight);
@@ -9813,11 +9816,11 @@ VkResult PVR_PER_ARCH(EndCommandBuffer)(VkCommandBuffer commandBuffer)
    /* TODO: We should be freeing all the resources, allocated for recording,
     * here.
     */
-   util_dynarray_fini(&state->query_indices);
-
    result = pvr_arch_cmd_buffer_end_sub_cmd(cmd_buffer);
    if (result != VK_SUCCESS)
       pvr_cmd_buffer_set_error_unwarned(cmd_buffer, result);
+
+   util_dynarray_fini(&state->query_indices);
 
    return vk_command_buffer_end(&cmd_buffer->vk);
 }

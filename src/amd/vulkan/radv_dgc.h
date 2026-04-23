@@ -47,6 +47,8 @@ struct radv_indirect_execution_set {
 
    uint32_t compute_scratch_size_per_wave;
    uint32_t compute_scratch_waves;
+
+   bool descriptor_heap;
 };
 
 VK_DEFINE_NONDISP_HANDLE_CASTS(radv_indirect_execution_set, base, VkIndirectExecutionSetEXT,

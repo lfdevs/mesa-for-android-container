@@ -571,7 +571,8 @@ emit_render_layer(struct v3d_job *job, uint32_t layer)
          * core's tile list here.
          */
         uint32_t tile_alloc_offset =
-                layer * job->tile_desc.draw_x * job->tile_desc.draw_y * 64;
+                layer * job->tile_desc.draw_x * job->tile_desc.draw_y *
+                V3D_TILE_ALLOC_INITIAL_BLOCK_SIZE;
         cl_emit(&job->rcl, MULTICORE_RENDERING_TILE_LIST_SET_BASE, list) {
                 list.address = cl_address(job->tile_alloc, tile_alloc_offset);
         }
@@ -927,7 +928,7 @@ v3dX(emit_rcl)(struct v3d_job *job)
         cl_emit(&job->rcl, TILE_LIST_INITIAL_BLOCK_SIZE, init) {
                 init.use_auto_chained_tile_lists = true;
                 init.size_of_first_block_in_chained_tile_lists =
-                        TILE_ALLOCATION_BLOCK_SIZE_64B;
+                        V3D_TILE_ALLOC_INITIAL_BLOCK_SIZE_ENUM;
         }
 
         /* ARB_framebuffer_no_attachments allows rendering to happen even when

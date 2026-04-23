@@ -133,14 +133,6 @@ bi_vectorize_filter(const nir_instr *instr, const void *data)
    case nir_op_ishl:
    case nir_op_ishr:
    case nir_op_ushr:
-   case nir_op_b2f16:
-   case nir_op_f2i16:
-   case nir_op_f2u16:
-   case nir_op_f2i8:
-   case nir_op_f2u8:
-   case nir_op_f2fmp:
-   case nir_op_extract_u8:
-   case nir_op_extract_i8:
    case nir_op_extract_u16:
    case nir_op_extract_i16:
    case nir_op_insert_u16:
@@ -161,9 +153,9 @@ bi_vectorize_filter(const nir_instr *instr, const void *data)
       break;
    }
 
-   const uint8_t bit_size = nir_alu_instr_is_comparison(alu)
-                            ? nir_src_bit_size(alu->src[0].src)
-                            : alu->def.bit_size;
+   const uint8_t bit_size =
+      MAX2(alu->def.bit_size, nir_src_bit_size(alu->src[0].src));
+
    if (bit_size == 1)
       return 0;
    else
@@ -348,9 +340,6 @@ bi_optimize_nir(nir_shader *nir, uint64_t gpu_id,
       NIR_PASS(_, nir, nir_opt_dce);
       NIR_PASS(_, nir, nir_opt_cse);
    }
-
-   NIR_PASS(_, nir, nir_lower_load_const_to_scalar);
-   NIR_PASS(_, nir, nir_opt_dce);
 
    /* Backend scheduler is purely local, so do some global optimizations
     * to reduce register pressure. */
@@ -575,6 +564,61 @@ bi_lower_subgroups(nir_builder *b, nir_intrinsic_instr *intr, void *data)
    return true;
 }
 
+/* Workgroups may be merged if the structure of the workgroup is not software
+ * visible. This is true if neither shared memory nor BARRIER instructions nor
+ * subgroups are used. The hardware may be able to optimize compute shaders
+ * that set this flag.
+ *
+ * From the vulkan spec version 1.4.317 section 9.25.8:
+ *
+ *    "For shaders that have defined workgroups, each invocation in a subgroup
+ *     must be in the same local workgroup."
+ */
+bool
+valhall_can_merge_workgroups(nir_shader *nir)
+{
+   if (nir->info.shared_size != 0)
+      return false;
+
+   nir_foreach_function_impl(impl, nir) {
+      nir_foreach_block(block, impl) {
+         nir_foreach_instr(instr, block) {
+            if (instr->type != nir_instr_type_intrinsic)
+               continue;
+
+            /* We only emit BARRIER instructions for workgroup execution
+             * barriers. For subgroup execution barriers, the only consequence
+             * of merging workgroups is that the scope may be larger, which is
+             * allowed. */
+            nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
+            if (intrin->intrinsic == nir_intrinsic_barrier &&
+                nir_intrinsic_execution_scope(intrin) == SCOPE_WORKGROUP)
+               return false;
+
+            /* This is in nir->info.uses_wide_subgroups, but we don't want to
+             * force an extra nir_gather_shader_info call. */
+            if (nir_intrinsic_has_semantic(intrin, NIR_INTRINSIC_SUBGROUP))
+               return false;
+
+            /* load_subgroup_invocation allows observing merged workgroups
+             * because the first thread in the workgroup may have a nonzero
+             * subgroup invocation and so on. We don't have to care about
+             * load_subgroup_id, because we implement it by dividing the local
+             * invocation id, so it doesn't care what the actual subgroup
+             * layout is in hw.
+             *
+             * Note that these intrinsics do not have NIR_INTRINSIC_SUBGROUP
+             * because they do not perform any communication with other
+             * subgroup threads. */
+            if (intrin->intrinsic == nir_intrinsic_load_subgroup_invocation)
+               return false;
+         }
+      }
+   }
+
+   return true;
+}
+
 static bool
 bi_lower_load_output(nir_builder *b, nir_intrinsic_instr *intr,
                      UNUSED void *data)
@@ -670,6 +714,9 @@ mem_access_size_align_cb(nir_intrinsic_op intrin, uint8_t bytes,
    };
 }
 
+static void bi_lower_texture_nir(nir_shader *nir, uint64_t gpu_id);
+static void bi_lower_texture_late_nir(nir_shader *nir, uint64_t gpu_id);
+
 void
 bifrost_postprocess_nir(nir_shader *nir, uint64_t gpu_id)
 {
@@ -683,7 +730,7 @@ bifrost_postprocess_nir(nir_shader *nir, uint64_t gpu_id)
    NIR_PASS(_, nir, nir_opt_sink, move_all);
    NIR_PASS(_, nir, nir_opt_move, move_all);
 
-   bifrost_lower_texture_nir(nir, gpu_id);
+   bi_lower_texture_nir(nir, gpu_id);
 
    if (nir->info.stage == MESA_SHADER_FRAGMENT) {
       NIR_PASS(_, nir, pan_nir_lower_noperspective_fs);
@@ -772,10 +819,12 @@ bifrost_postprocess_nir(nir_shader *nir, uint64_t gpu_id)
    NIR_PASS(_, nir, nir_lower_alu);
    NIR_PASS(_, nir, nir_lower_frag_coord_to_pixel_coord);
    NIR_PASS(_, nir, pan_nir_lower_var_special_pan);
+
+   bi_lower_texture_late_nir(nir, gpu_id);
 }
 
-void
-bifrost_lower_texture_nir(nir_shader *nir, uint64_t gpu_id)
+static void
+bi_lower_texture_nir(nir_shader *nir, uint64_t gpu_id)
 {
    NIR_PASS(_, nir, nir_lower_image_atomics_to_global, NULL, NULL);
 
@@ -920,8 +969,13 @@ pan_nir_lower_buf_image_access(nir_shader *shader, unsigned arch)
                                      nir_metadata_control_flow, &arch);
 }
 
-void
-bifrost_lower_texture_late_nir(nir_shader *nir, uint64_t gpu_id)
+/* This must be called after any lowering of resource indices
+ * (panfrost_nir_lower_res_indices / panvk_per_arch(nir_lower_descriptors))
+ * and lowering of attribute indices (pan_nir_lower_image_index /
+ * pan_nir_lower_texel_buffer_fetch_index)
+ */
+static void
+bi_lower_texture_late_nir(nir_shader *nir, uint64_t gpu_id)
 {
    NIR_PASS(_, nir, pan_nir_lower_texel_buffer_fetch, pan_arch(gpu_id));
    NIR_PASS(_, nir, pan_nir_lower_buf_image_access, pan_arch(gpu_id));
@@ -1039,18 +1093,8 @@ bifrost_compile_shader_nir(nir_shader *nir,
     * fragment shader of something that isn't written by the vertex shader.
     * In that case, we just return zero.
     */
-   if (pan_arch(inputs->gpu_id) >= 9 && inputs->varying_layout) {
+   if (pan_arch(inputs->gpu_id) >= 9 && inputs->varying_layout)
       NIR_PASS(_, nir, pan_nir_resize_varying_io, inputs->varying_layout);
-
-      /* pan_nir_resize_varying_io may generate vector conversions which we
-       * need to clean up so the back-end doesn't see them.
-       */
-      uint64_t gpu_id = inputs->gpu_id;
-      NIR_PASS(_, nir, nir_lower_alu_width, bi_vectorize_filter, &gpu_id);
-      NIR_PASS(_, nir, nir_lower_load_const_to_scalar);
-      NIR_PASS(_, nir, nir_opt_copy_prop);
-      NIR_PASS(_, nir, nir_opt_dce);
-   }
 
    if (nir->info.stage == MESA_SHADER_VERTEX) {
       info->vs.idvs = bi_should_idvs(nir, inputs);
@@ -1079,16 +1123,15 @@ bifrost_compile_shader_nir(nir_shader *nir,
 
    bi_optimize_nir(nir, inputs->gpu_id, inputs->robust_modes);
 
-   {
-      bool scalar_phis_pass = false;
-      uint64_t gpu_id = inputs->gpu_id;
-      NIR_PASS(scalar_phis_pass, nir, nir_lower_phis_to_scalar,
-               bi_vectorize_filter, &gpu_id);
-      if (scalar_phis_pass) {
-         NIR_PASS(_, nir, nir_opt_copy_prop);
-         NIR_PASS(_, nir, nir_opt_dce);
-      }
-   }
+   /* Lower constants to scalar but then immediately fold so we get minimum-
+    * width vectors instead of scalars
+    */
+   NIR_PASS(_, nir, nir_lower_load_const_to_scalar);
+   NIR_PASS(_, nir, nir_opt_constant_folding);
+   uint64_t gpu_id = inputs->gpu_id;
+   NIR_PASS(_, nir, nir_lower_phis_to_scalar, bi_vectorize_filter, &gpu_id);
+   NIR_PASS(_, nir, nir_opt_copy_prop);
+   NIR_PASS(_, nir, nir_opt_dce);
 
    info->tls_size = nir->scratch_size;
    info->stage = nir->info.stage;
@@ -1119,17 +1162,6 @@ bifrost_compile_shader_nir(nir_shader *nir,
       }
    } else {
       bi_compile_variant(nir, inputs, binary, info, BI_IDVS_NONE);
-   }
-
-   if (mesa_shader_stage_is_compute(nir->info.stage)) {
-      /* Workgroups may be merged if the structure of the workgroup is
-       * not software visible. This is true if neither shared memory
-       * nor barriers are used. The hardware may be able to optimize
-       * compute shaders that set this flag.
-       */
-      info->cs.allow_merging_workgroups = (nir->info.shared_size == 0) &&
-                                          !nir->info.uses_control_barrier &&
-                                          !nir->info.uses_memory_barrier;
    }
 
    info->ubo_mask &= (1 << nir->info.num_ubos) - 1;

@@ -869,7 +869,7 @@ alu_opt_info_is_valid(opt_ctx& ctx, alu_opt_info& info)
             return false;
          break;
       case aco_opcode::v_mad_f32:
-         if (ctx.program->dev.fused_mad_mix && info.defs[0].isPrecise())
+         if (ctx.program->dev.fused_mad_mix && info.defs[0].isNoContract())
             return false;
          break;
       default: return false;
@@ -1180,6 +1180,12 @@ alu_opt_info_is_valid(opt_ctx& ctx, alu_opt_info& info)
             lmask[2] = true;
             info.opcode = aco_opcode::s_fmaak_f32;
          }
+      } else if ((info.opcode == aco_opcode::s_bitset0_b32 ||
+                  info.opcode == aco_opcode::s_bitset1_b32 ||
+                  info.opcode == aco_opcode::s_bitset0_b64 ||
+                  info.opcode == aco_opcode::s_bitset1_b64) &&
+                 !smask[1]) {
+         return false;
       }
 
       if ((info.opcode == aco_opcode::s_fmac_f16 || info.opcode == aco_opcode::s_fmac_f32) &&
@@ -3464,8 +3470,10 @@ match_and_apply_patterns(opt_ctx& ctx, alu_opt_info& info,
 
          new_info.opcode = pattern.res_opcode;
 
-         if (op_instr.defs[0].isPrecise())
-            new_info.defs[0].setPrecise(true);
+         if (op_instr.defs[0].isNoContract())
+            new_info.defs[0].setNoContract(true);
+         if (op_instr.defs[0].isNoReassoc())
+            new_info.defs[0].setNoReassoc(true);
          if (op_instr.defs[0].isNaNPreserve())
             new_info.defs[0].setNaNPreserve(true);
          if (op_instr.defs[0].isInfPreserve())
@@ -3999,7 +4007,7 @@ apply_output(opt_ctx& ctx, aco_ptr<Instruction>& instr)
 bool
 create_fma_cb(opt_ctx& ctx, alu_opt_info& info)
 {
-   if (!info.defs[0].isPrecise())
+   if (!info.defs[0].isNoContract())
       return true;
 
    aco_type type = instr_info.alu_opcode_infos[(int)info.opcode].def_types[0];
@@ -4066,14 +4074,14 @@ can_reassoc_omod(opt_ctx& ctx, const alu_opt_info& info, unsigned bit_size)
    bool no_signed_zero =
       info.opcode == aco_opcode::v_mul_legacy_f32 || !info.defs[0].isSZPreserve();
 
-   return no_signed_zero && !info.omod && !info.defs[0].isPrecise() && denorm == fp_denorm_flush;
+   return no_signed_zero && !info.omod && !info.defs[0].isNoReassoc() && denorm == fp_denorm_flush;
 }
 
 template <bool is_rcp>
 bool
 reassoc_omod_cb(opt_ctx& ctx, alu_opt_info& info)
 {
-   if (info.defs[0].isPrecise())
+   if (info.defs[0].isNoReassoc())
       return false;
 
    aco_type type = instr_info.alu_opcode_infos[(int)info.opcode].def_types[0];

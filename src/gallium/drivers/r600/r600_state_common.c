@@ -174,6 +174,7 @@ static void r600_bind_blend_state_internal(struct r600_context *rctx,
 	bool update_cb = false;
 
 	rctx->alpha_to_one = blend->alpha_to_one;
+	rctx->alpha_to_one_and_coverage = blend->alpha_to_one_and_coverage;
 	rctx->dual_src_blend = blend->dual_src_blend;
 
 	if (!blend_disable) {
@@ -422,6 +423,11 @@ static void r600_sampler_view_destroy(struct pipe_context *ctx,
 	if (view->tex_resource->gpu_address &&
 	    view->tex_resource->b.b.target == PIPE_BUFFER)
 		list_delinit(&view->list);
+
+	if (unlikely(view->replace_resource)) {
+		struct r600_context *rctx = (struct r600_context *)ctx;
+		r600_texture_destroy(&rctx->screen->b.b, view->replace_resource);
+	}
 
 	pipe_resource_reference(&state->texture, NULL);
 	FREE(view);
@@ -739,38 +745,6 @@ static void r600_update_compressed_colortex_mask(struct r600_samplerview_state *
 	}
 }
 
-static int r600_get_hw_atomic_count(const struct pipe_context *ctx,
-				    mesa_shader_stage shader)
-{
-	const struct r600_context *rctx = (struct r600_context *)ctx;
-	int value = 0;
-	switch (shader) {
-	case MESA_SHADER_FRAGMENT:
-	case MESA_SHADER_COMPUTE:
-	default:
-		break;
-	case MESA_SHADER_VERTEX:
-		value = rctx->ps_shader->info.file_count[TGSI_FILE_HW_ATOMIC];
-		break;
-	case MESA_SHADER_GEOMETRY:
-		value = rctx->ps_shader->info.file_count[TGSI_FILE_HW_ATOMIC] +
-			rctx->vs_shader->info.file_count[TGSI_FILE_HW_ATOMIC];
-		break;
-	case MESA_SHADER_TESS_EVAL:
-		value = rctx->ps_shader->info.file_count[TGSI_FILE_HW_ATOMIC] +
-			rctx->vs_shader->info.file_count[TGSI_FILE_HW_ATOMIC] +
-			(rctx->gs_shader ? rctx->gs_shader->info.file_count[TGSI_FILE_HW_ATOMIC] : 0);
-		break;
-	case MESA_SHADER_TESS_CTRL:
-		value = rctx->ps_shader->info.file_count[TGSI_FILE_HW_ATOMIC] +
-			rctx->vs_shader->info.file_count[TGSI_FILE_HW_ATOMIC] +
-			(rctx->gs_shader ? rctx->gs_shader->info.file_count[TGSI_FILE_HW_ATOMIC] : 0) +
-			rctx->tes_shader->info.file_count[TGSI_FILE_HW_ATOMIC];
-		break;
-	}
-	return value;
-}
-
 static void r600_update_compressed_colortex_mask_images(struct r600_image_state *images)
 {
 	uint32_t mask = images->enabled_mask;
@@ -808,21 +782,19 @@ static inline void r600_shader_selector_key(const struct pipe_context *ctx,
 		if (rctx->ps_shader->current->shader.gs_prim_id_input && !rctx->gs_shader) {
 			key->vs.as_gs_a = true;
 		}
-		key->vs.first_atomic_counter = r600_get_hw_atomic_count(ctx, MESA_SHADER_VERTEX);
 		break;
 	}
 	case MESA_SHADER_GEOMETRY:
-		key->gs.first_atomic_counter = r600_get_hw_atomic_count(ctx, MESA_SHADER_GEOMETRY);
 		key->gs.tri_strip_adj_fix = rctx->gs_tri_strip_adj_fix;
 		break;
 	case MESA_SHADER_FRAGMENT: {
 		if (rctx->ps_shader->info.images_declared)
 			key->ps.image_size_const_offset = util_last_bit(rctx->samplers[MESA_SHADER_FRAGMENT].views.enabled_mask);
-		key->ps.first_atomic_counter = r600_get_hw_atomic_count(ctx, MESA_SHADER_FRAGMENT);
 		key->ps.color_two_side = rctx->rasterizer && rctx->rasterizer->two_side;
 		key->ps.alpha_to_one = rctx->alpha_to_one &&
 				      rctx->rasterizer && rctx->rasterizer->multisample_enable &&
 				      !rctx->cb_state.cb0_is_integer;
+		key->ps.alpha_to_one_and_coverage = key->ps.alpha_to_one && rctx->alpha_to_one_and_coverage;
 		key->ps.nr_cbufs = rctx->framebuffer.state.nr_cbufs;
                 key->ps.apply_sample_id_mask = (rctx->ps_iter_samples > 1) || !rctx->rasterizer->multisample_enable;
 		/* Dual-source blending only makes sense with nr_cbufs == 1. */
@@ -834,11 +806,9 @@ static inline void r600_shader_selector_key(const struct pipe_context *ctx,
 	}
 	case MESA_SHADER_TESS_EVAL:
 		key->tes.as_es = (rctx->gs_shader != NULL);
-		key->tes.first_atomic_counter = r600_get_hw_atomic_count(ctx, MESA_SHADER_TESS_EVAL);
 		break;
 	case MESA_SHADER_TESS_CTRL:
 		key->tcs.prim_mode = rctx->tes_shader->info.properties[TGSI_PROPERTY_TES_PRIM_MODE];
-		key->tcs.first_atomic_counter = r600_get_hw_atomic_count(ctx, MESA_SHADER_TESS_CTRL);
 		break;
 	case MESA_SHADER_COMPUTE:
 		break;
@@ -1429,7 +1399,7 @@ static void *r600_alloc_buf_consts(struct r600_context *rctx, int shader_type,
  * We use a 6th constant to store the txq buffer size in
  * we use 7th slot for number of cube layers in a cube map array.
  */
-static void r600_setup_buffer_constants(struct r600_context *rctx, int shader_type)
+void r600_setup_buffer_constants(struct r600_context *rctx, int shader_type)
 {
 	struct r600_textures_info *samplers = &rctx->samplers[shader_type];
 	int bits;
@@ -1477,10 +1447,10 @@ static void r600_setup_buffer_constants(struct r600_context *rctx, int shader_ty
 
 }
 
-/* On evergreen we store one value
+/* On palm to aruba we store one value
  * 1. number of cube layers in a cube map array.
  */
-void eg_setup_buffer_constants(struct r600_context *rctx, int shader_type)
+void r600_palm_to_aruba_setup_buffer_constants(struct r600_context *rctx, int shader_type)
 {
 	struct r600_textures_info *samplers = &rctx->samplers[shader_type];
 	struct r600_image_state *images = NULL;
@@ -1527,6 +1497,84 @@ void eg_setup_buffer_constants(struct r600_context *rctx, int shader_type)
 				uint32_t offset = (base_offset / 4) + i;
 				constants[offset] = (G_038014_LAST_ARRAY(images->views[idx].resource_words[5]) -
 						     G_038014_BASE_ARRAY(images->views[idx].resource_words[5]) + 1) / 6;
+			}
+		}
+	}
+}
+
+
+/* On cedar to hemlock we store two values using the same location
+ * 1. number of cube layers in a cube map array.
+ * 2. buffer size
+ */
+void r600_cedar_to_hemlock_setup_buffer_constants(struct r600_context *rctx, int shader_type)
+{
+	struct r600_textures_info *const samplers = &rctx->samplers[shader_type];
+	struct r600_image_state *images = NULL;
+	struct r600_image_state *buffers = NULL;
+
+	if (shader_type == MESA_SHADER_FRAGMENT) {
+		images = &rctx->fragment_images;
+		buffers = &rctx->fragment_buffers;
+	} else if (shader_type == MESA_SHADER_COMPUTE) {
+		images = &rctx->compute_images;
+		buffers = &rctx->compute_buffers;
+	}
+
+	if (!samplers->views.dirty_buffer_constants &&
+	    !(images && images->dirty_buffer_constants) &&
+	    !(buffers && buffers->dirty_buffer_constants))
+		return;
+
+	if (images)
+		images->dirty_buffer_constants = false;
+	if (buffers)
+		buffers->dirty_buffer_constants = false;
+	samplers->views.dirty_buffer_constants = false;
+
+	const unsigned sview_bits = util_last_bit(samplers->views.enabled_mask);
+	unsigned bits = sview_bits;
+	if (images)
+		bits += util_last_bit(images->enabled_mask);
+	const unsigned img_bits = bits;
+	if (buffers)
+		bits += util_last_bit(buffers->enabled_mask);
+
+	const uint32_t array_size = bits * sizeof(uint32_t);
+	uint32_t base_offset;
+	uint32_t *const constants = r600_alloc_buf_consts(rctx, shader_type, array_size,
+							  &base_offset);
+
+	for (unsigned i = 0; i < sview_bits; i++) {
+		if (samplers->views.enabled_mask & (1 << i)) {
+			uint32_t offset = (base_offset / 4) + i;
+			if (samplers->views.views[i]->tex_resource->b.b.target == PIPE_BUFFER) {
+				constants[offset] = samplers->views.views[i]->tex_resource_words[4];
+			} else {
+				constants[offset] = samplers->views.views[i]->base.texture->array_size / 6;
+			}
+		}
+	}
+	if (images) {
+		for (unsigned i = sview_bits; i < img_bits; i++) {
+			int idx = i - sview_bits;
+			if (images->enabled_mask & (1 << idx)) {
+				uint32_t offset = (base_offset / 4) + i;
+				if (images->views[idx].base.resource->target == PIPE_BUFFER) {
+					constants[offset] = images->views[idx].resource_words[4];
+				} else {
+					constants[offset] = (G_038014_LAST_ARRAY(images->views[idx].resource_words[5]) -
+							     G_038014_BASE_ARRAY(images->views[idx].resource_words[5]) + 1) / 6;
+				}
+			}
+		}
+	}
+	if (buffers) {
+		for (unsigned i = img_bits; i < bits; i++) {
+			int idx = i - img_bits;
+			if (buffers->enabled_mask & (1 << idx)) {
+				uint32_t offset = (base_offset / 4) + i;
+				constants[offset] = buffers->views[idx].resource_words[4];
 			}
 		}
 	}
@@ -1992,47 +2040,38 @@ static bool r600_update_derived_state(struct r600_context *rctx)
 	/* on R600 we stuff masks + txq info into one constant buffer */
 	/* on evergreen we only need a txq info one */
 	if (rctx->ps_shader) {
-		need_buf_const = rctx->ps_shader->current->shader.uses_tex_buffers || rctx->ps_shader->current->shader.has_txq_cube_array_z_comp;
+		need_buf_const = rctx->ps_shader->current->shader.uses_tex_buffers || rctx->ps_shader->current->shader.has_resinfo_via_uniform;
 		if (need_buf_const) {
-			if (rctx->b.gfx_level < EVERGREEN)
-				r600_setup_buffer_constants(rctx, MESA_SHADER_FRAGMENT);
-			else
-				eg_setup_buffer_constants(rctx, MESA_SHADER_FRAGMENT);
+			rctx->setup_buffer_constants(rctx, MESA_SHADER_FRAGMENT);
 		}
 	}
 
 	if (rctx->vs_shader) {
-		need_buf_const = rctx->vs_shader->current->shader.uses_tex_buffers || rctx->vs_shader->current->shader.has_txq_cube_array_z_comp;
+		need_buf_const = rctx->vs_shader->current->shader.uses_tex_buffers || rctx->vs_shader->current->shader.has_resinfo_via_uniform;
 		if (need_buf_const) {
-			if (rctx->b.gfx_level < EVERGREEN)
-				r600_setup_buffer_constants(rctx, MESA_SHADER_VERTEX);
-			else
-				eg_setup_buffer_constants(rctx, MESA_SHADER_VERTEX);
+			rctx->setup_buffer_constants(rctx, MESA_SHADER_VERTEX);
 		}
 	}
 
 	if (rctx->gs_shader) {
-		need_buf_const = rctx->gs_shader->current->shader.uses_tex_buffers || rctx->gs_shader->current->shader.has_txq_cube_array_z_comp;
+		need_buf_const = rctx->gs_shader->current->shader.uses_tex_buffers || rctx->gs_shader->current->shader.has_resinfo_via_uniform;
 		if (need_buf_const) {
-			if (rctx->b.gfx_level < EVERGREEN)
-				r600_setup_buffer_constants(rctx, MESA_SHADER_GEOMETRY);
-			else
-				eg_setup_buffer_constants(rctx, MESA_SHADER_GEOMETRY);
+			rctx->setup_buffer_constants(rctx, MESA_SHADER_GEOMETRY);
 		}
 	}
 
 	if (rctx->tes_shader) {
 		assert(rctx->b.gfx_level >= EVERGREEN);
 		need_buf_const = rctx->tes_shader->current->shader.uses_tex_buffers ||
-				 rctx->tes_shader->current->shader.has_txq_cube_array_z_comp;
+				 rctx->tes_shader->current->shader.has_resinfo_via_uniform;
 		if (need_buf_const) {
-			eg_setup_buffer_constants(rctx, MESA_SHADER_TESS_EVAL);
+			rctx->setup_buffer_constants(rctx, MESA_SHADER_TESS_EVAL);
 		}
 		if (rctx->tcs_shader) {
 			need_buf_const = rctx->tcs_shader->current->shader.uses_tex_buffers ||
-					 rctx->tcs_shader->current->shader.has_txq_cube_array_z_comp;
+					 rctx->tcs_shader->current->shader.has_resinfo_via_uniform;
 			if (need_buf_const) {
-				eg_setup_buffer_constants(rctx, MESA_SHADER_TESS_CTRL);
+				rctx->setup_buffer_constants(rctx, MESA_SHADER_TESS_CTRL);
 			}
 		}
 	}
@@ -2135,7 +2174,8 @@ r600_draw_parameters(struct r600_context *rctx,
 		     const bool is_mapped,
 		     const uint8_t **indirect_ptr,
 		     unsigned *num_patches,
-		     unsigned *cs_space)
+		     unsigned *cs_space,
+		     const uint32_t primitiveid_modulo)
 {
 	const bool draw_parameters_enabled =
 		rctx->vs_shader->current->shader.vs_draw_parameters_enabled;
@@ -2180,7 +2220,7 @@ r600_draw_parameters(struct r600_context *rctx,
 		*cs_space += R600_DRAW_PARAMETERS_DRAW_INDIRECT_CS * indirect->draw_count;
 	}
 
-	evergreen_setup_tess_constants(rctx, info, num_patches, draw_parameters_enabled);
+	evergreen_setup_tess_constants(rctx, info, num_patches, draw_parameters_enabled, primitiveid_modulo);
 
 	return unlikely(indirect) ?
 		indirect->draw_count :
@@ -2694,7 +2734,10 @@ static void r600_draw_vbo(struct pipe_context *ctx, const struct pipe_draw_info 
 						       false,
 						       &indirect_ptr,
 						       &num_patches,
-						       &cs_space);
+						       &cs_space,
+						       unlikely(info->instance_count > 1 && rctx->patch_vertices) ?
+						       draws[0].count / rctx->patch_vertices :
+						       ~0);
 		r600_indirect_parameters_init(rctx,
 					      cs,
 					      indirect,
@@ -2954,7 +2997,8 @@ static void r600_draw_vbo(struct pipe_context *ctx, const struct pipe_draw_info 
 				     true,
 				     &indirect_ptr,
 				     &num_patches,
-				     &cs_space);
+				     &cs_space,
+				     ~0);
 
 		assert(radeon_check_cs(rctx, cs) || true);
 

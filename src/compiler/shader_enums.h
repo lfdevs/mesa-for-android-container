@@ -376,6 +376,7 @@ typedef enum
 
    VARYING_SLOT_GS_HEADER_IR3 = VARYING_SLOT_BOUNDING_BOX0, /* VS/TES output and GS input */
    VARYING_SLOT_GS_VERTEX_FLAGS_IR3 = VARYING_SLOT_BOUNDING_BOX1, /* GS output */
+   VARYING_SLOT_PARAM_GEN_AMD = VARYING_SLOT_BOUNDING_BOX0, /* Only appears as FS input. */
 
    VARYING_SLOT_VAR0 = 32, /* First generic varying slot */
    /* the remaining are simply for the benefit of gl_varying_slot_name()
@@ -968,6 +969,9 @@ typedef enum
    SYSTEM_VALUE_CORE_MAX_ID_ARM,
    SYSTEM_VALUE_WARP_ID_ARM,
    SYSTEM_VALUE_WARP_MAX_ID_ARM,
+
+   SYSTEM_VALUE_COLOR0_AMD,
+   SYSTEM_VALUE_COLOR1_AMD,
 
    SYSTEM_VALUE_MAX             /**< Number of values */
 } gl_system_value;

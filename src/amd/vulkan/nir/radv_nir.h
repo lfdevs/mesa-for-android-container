@@ -27,8 +27,7 @@ struct radv_graphics_state_key;
 struct radv_ps_epilog_key;
 struct radv_debug_nir;
 
-bool radv_nir_apply_pipeline_layout(nir_shader *shader, struct radv_device *device,
-                                    const struct radv_shader_stage *stage);
+bool radv_nir_lower_descriptors(nir_shader *shader, struct radv_device *device, const struct radv_shader_stage *stage);
 
 bool radv_nir_lower_abi(nir_shader *shader, enum amd_gfx_level gfx_level, const struct radv_shader_stage *stage,
                         const struct radv_graphics_state_key *gfx_state, uint32_t address32_hi);
@@ -58,17 +57,11 @@ bool radv_nir_lower_intrinsics_early(nir_shader *nir, bool lower_view_index_to_z
 
 bool radv_nir_lower_view_index(nir_shader *nir);
 
-bool radv_nir_lower_viewport_to_zero(nir_shader *nir);
-
 bool radv_nir_export_multiview(nir_shader *nir);
-
-void radv_nir_lower_io_vars_to_scalar(nir_shader *nir, nir_variable_mode mask);
 
 unsigned radv_map_io_driver_location(unsigned semantic);
 
-bool radv_recompute_fs_input_bases(nir_shader *nir);
-
-void radv_nir_lower_io(struct radv_device *device, nir_shader *nir);
+void radv_nir_lower_io(nir_shader *nir);
 
 bool radv_nir_lower_io_to_mem(struct radv_device *device, struct radv_shader_stage *stage);
 

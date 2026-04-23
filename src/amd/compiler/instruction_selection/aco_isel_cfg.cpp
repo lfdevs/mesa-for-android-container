@@ -32,67 +32,37 @@ add_edge(unsigned pred_idx, Block* succ)
    add_linear_edge(pred_idx, succ);
 }
 
-static void
-emit_loop_jump(isel_context* ctx, bool is_break)
+void
+emit_loop_break(isel_context* ctx)
 {
    Builder bld(ctx->program, ctx->block);
    Block* logical_target;
    append_logical_end(ctx);
    unsigned idx = ctx->block->index;
 
-   if (is_break) {
-      logical_target = &ctx->loop_stack.back().loop_exit;
-      add_logical_edge(idx, logical_target);
-      ctx->block->kind |= block_kind_break;
+   logical_target = &ctx->loop_stack.back().loop_exit;
+   add_logical_edge(idx, logical_target);
+   ctx->block->kind |= block_kind_break;
 
-      if (!ctx->cf_info.parent_if.is_divergent &&
-          !ctx->cf_info.parent_loop.has_divergent_continue) {
-         /* uniform break - directly jump out of the loop */
-         ctx->block->kind |= block_kind_uniform;
-         ctx->cf_info.has_branch = true;
-         bld.branch(aco_opcode::p_branch);
-         add_linear_edge(idx, logical_target);
-         return;
-      }
-      ctx->cf_info.has_divergent_branch = true;
-      ctx->cf_info.parent_loop.has_divergent_break = true;
-
-      if (!ctx->cf_info.exec.potentially_empty_break)
-         ctx->cf_info.exec.potentially_empty_break = true;
-   } else {
-      logical_target = &ctx->program->blocks[ctx->loop_stack.back().header_idx];
-      add_logical_edge(idx, logical_target);
-      ctx->block->kind |= block_kind_continue;
-
-      if (!ctx->cf_info.parent_if.is_divergent) {
-         /* uniform continue - directly jump to the loop header */
-         assert(!ctx->cf_info.exec.potentially_empty_continue &&
-                !ctx->cf_info.exec.potentially_empty_discard);
-         ctx->block->kind |= block_kind_uniform;
-         ctx->cf_info.has_branch = true;
-         bld.branch(aco_opcode::p_branch);
-         add_linear_edge(idx, logical_target);
-         return;
-      }
-
-      ctx->cf_info.has_divergent_branch = true;
-
-      /* for potential uniform breaks after this continue,
-         we must ensure that they are handled correctly */
-      ctx->cf_info.parent_loop.has_divergent_continue = true;
-
-      if (!ctx->cf_info.exec.potentially_empty_continue)
-         ctx->cf_info.exec.potentially_empty_continue = true;
+   if (!ctx->cf_info.parent_if.is_divergent) {
+      /* uniform break - directly jump out of the loop */
+      ctx->block->kind |= block_kind_uniform;
+      ctx->cf_info.has_branch = true;
+      bld.branch(aco_opcode::p_branch);
+      add_linear_edge(idx, logical_target);
+      return;
    }
+   ctx->cf_info.has_divergent_branch = true;
+   ctx->cf_info.parent_loop.has_divergent_break = true;
+
+   if (!ctx->cf_info.exec.potentially_empty_break)
+      ctx->cf_info.exec.potentially_empty_break = true;
 
    /* remove critical edges from linear CFG */
    bld.branch(aco_opcode::p_branch);
    Block* break_block = ctx->program->create_and_insert_block();
    break_block->kind |= block_kind_uniform;
    add_linear_edge(idx, break_block);
-   /* the loop_header pointer might be invalidated by this point */
-   if (!is_break)
-      logical_target = &ctx->program->blocks[ctx->loop_stack.back().header_idx];
    add_linear_edge(break_block->index, logical_target);
    bld.reset(break_block);
    bld.branch(aco_opcode::p_branch);
@@ -108,11 +78,8 @@ update_exec_info(isel_context* ctx)
    if (!ctx->cf_info.in_divergent_cf)
       ctx->cf_info.exec.potentially_empty_discard = false;
 
-   if (!ctx->cf_info.parent_if.is_divergent && !ctx->cf_info.parent_loop.has_divergent_continue)
-      ctx->cf_info.exec.potentially_empty_break = false;
-
    if (!ctx->cf_info.parent_if.is_divergent)
-      ctx->cf_info.exec.potentially_empty_continue = false;
+      ctx->cf_info.exec.potentially_empty_break = false;
 }
 
 void
@@ -138,7 +105,7 @@ begin_loop(isel_context* ctx)
 
    lc.cf_info_old = ctx->cf_info;
    lc.header_idx = loop_header->index;
-   ctx->cf_info.parent_loop = {false, false};
+   ctx->cf_info.parent_loop.has_divergent_break = false;
    ctx->cf_info.parent_if.is_divergent = false;
    ctx->loop_stack.push_back(std::move(lc));
 
@@ -162,7 +129,7 @@ end_loop(isel_context* ctx)
    if (!ctx->cf_info.has_branch) {
       Builder bld(ctx->program, ctx->block);
 
-      ctx->block->kind |= (block_kind_continue | block_kind_uniform);
+      ctx->block->kind |= block_kind_uniform;
       if (!ctx->cf_info.has_divergent_branch) {
          append_logical_end(ctx);
          add_edge(ctx->block->index, &header);
@@ -189,18 +156,6 @@ end_loop(isel_context* ctx)
    update_exec_info(ctx);
 
    ctx->loop_stack.pop_back();
-}
-
-void
-emit_loop_break(isel_context* ctx)
-{
-   emit_loop_jump(ctx, true);
-}
-
-void
-emit_loop_continue(isel_context* ctx)
-{
-   emit_loop_jump(ctx, false);
 }
 
 void
@@ -304,8 +259,6 @@ end_uniform_if(isel_context* ctx, bool logical_else)
    assert(!ctx->cf_info.has_divergent_branch);
    ctx->cf_info.has_branch = false;
    ctx->cf_info.had_divergent_discard |= ic.cf_info_old.had_divergent_discard;
-   ctx->cf_info.parent_loop.has_divergent_continue |=
-      ic.cf_info_old.parent_loop.has_divergent_continue;
    ctx->cf_info.parent_loop.has_divergent_break |= ic.cf_info_old.parent_loop.has_divergent_break;
    ctx->cf_info.in_divergent_cf |= ic.cf_info_old.in_divergent_cf;
    ctx->cf_info.exec.combine(ic.cf_info_old.exec);
@@ -461,9 +414,8 @@ end_divergent_if(isel_context* ctx)
    ctx->cf_info.has_divergent_branch = false;
    ctx->cf_info.parent_if = ic.cf_info_old.parent_if;
    ctx->cf_info.had_divergent_discard |= ic.cf_info_old.had_divergent_discard;
-   ctx->cf_info.in_divergent_cf = ic.cf_info_old.in_divergent_cf ||
-                                  ctx->cf_info.parent_loop.has_divergent_break ||
-                                  ctx->cf_info.parent_loop.has_divergent_continue;
+   ctx->cf_info.in_divergent_cf =
+      ic.cf_info_old.in_divergent_cf || ctx->cf_info.parent_loop.has_divergent_break;
    ctx->cf_info.exec.combine(ic.cf_info_old.exec);
    update_exec_info(ctx);
    ctx->if_stack.pop_back();

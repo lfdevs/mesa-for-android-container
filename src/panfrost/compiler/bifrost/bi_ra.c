@@ -8,6 +8,7 @@
 #include "bi_builder.h"
 #include "compiler.h"
 #include "nodearray.h"
+#include "valhall.h"
 
 struct lcra_state {
    unsigned node_count;
@@ -379,6 +380,9 @@ bi_mark_interference(bi_block *block, struct lcra_state *l, uint8_t *live,
       if (aligned_sr) {
          bi_foreach_ssa_src(ins, s) {
             if (bi_count_read_registers(ins, s) >= 2)
+               l->affinity[ins->src[s].value] &= EVEN_BITS_MASK;
+            else if (s < valhall_opcodes[ins->op].nr_srcs &&
+                     va_src_info(ins->op, s).size > VA_SIZE_32)
                l->affinity[ins->src[s].value] &= EVEN_BITS_MASK;
          }
       }

@@ -903,6 +903,34 @@ panvk_get_sample_counts(unsigned arch, unsigned max_tib_size,
    return sample_counts;
 }
 
+/* Plane descriptors have limits to how large resources they can encode, both
+ * for the buffer size and for the slice-strides.
+ *
+ * The only mandates we have from the Vulkan spec to limit resource sizes,
+ * is to use the maxImageDimension* limits, or through maxResourceSize.
+ * Limiting using maxImageDimension* has application compatibility problems,
+ * so let's use maxResourceSize.
+ *
+ * Unfortunately, this means we have to limit the *entire* resource to the
+ * limit, rather than just a single image plane.
+ */
+
+VkDeviceSize
+panvk_get_max_resource_size(const struct panvk_physical_device *device)
+{
+   const unsigned arch = pan_arch(device->kmod.dev->props.gpu_id);
+   unsigned max_desc_size = u_uintN_max(arch < 11 ? 32 : 48);
+   return MIN2(max_desc_size, device->memory.max_supported_va);
+}
+
+VkDeviceSize
+panvk_get_max_buffer_size(const struct panvk_physical_device *device)
+{
+   const unsigned arch = pan_arch(device->kmod.dev->props.gpu_id);
+   unsigned max_desc_size = u_uintN_max(arch < 11 ? 32 : 48);
+   return MIN2(max_desc_size, device->memory.max_supported_va);
+}
+
 static VkFormatFeatureFlags2
 get_image_format_sample_counts(struct panvk_physical_device *physical_device,
                                VkFormat format)
@@ -1020,56 +1048,6 @@ panvk_GetPhysicalDeviceFormatProperties2(VkPhysicalDevice physicalDevice,
       /* We always resolve in a separate command instead of in HW atm. */
       subpass_resolve_perf->optimal = VK_FALSE;
    }
-}
-
-#define MAX_IMAGE_SIZE_PX (1 << 16)
-
-static VkExtent3D
-get_max_2d_image_size(struct panvk_physical_device *phys_dev, VkFormat format)
-{
-   const unsigned arch = pan_arch(phys_dev->kmod.dev->props.gpu_id);
-   const uint64_t max_img_size_B =
-      arch <= 10 ? u_uintN_max(32) : u_uintN_max(48);
-   const enum pipe_format pfmt = vk_format_to_pipe_format(format);
-   const uint32_t fmt_blksize = util_format_get_blocksize(pfmt);
-   /* Evenly split blocks across all axis. */
-   const uint32_t max_size_el = floor(sqrt(max_img_size_B / fmt_blksize));
-   const VkExtent3D ret = {
-      .width = MIN2(max_size_el * util_format_get_blockwidth(pfmt),
-                    MAX_IMAGE_SIZE_PX),
-      .height = MIN2(max_size_el * util_format_get_blockheight(pfmt),
-                     MAX_IMAGE_SIZE_PX),
-      .depth = 1,
-   };
-
-   assert(ret.width >= phys_dev->vk.properties.maxImageDimension2D);
-   assert(ret.height >= phys_dev->vk.properties.maxImageDimension2D);
-   return ret;
-}
-
-static VkExtent3D
-get_max_3d_image_size(struct panvk_physical_device *phys_dev, VkFormat format)
-{
-   const unsigned arch = pan_arch(phys_dev->kmod.dev->props.gpu_id);
-   const uint64_t max_img_size_B =
-      arch <= 10 ? u_uintN_max(32) : u_uintN_max(48);
-   enum pipe_format pfmt = vk_format_to_pipe_format(format);
-   uint32_t fmt_blksize = util_format_get_blocksize(pfmt);
-   /* Evenly split blocks across each axis. */
-   const uint32_t max_size_el = floor(cbrt(max_img_size_B / fmt_blksize));
-   const VkExtent3D ret = {
-      .width = MIN2(max_size_el * util_format_get_blockwidth(pfmt),
-                    MAX_IMAGE_SIZE_PX),
-      .height = MIN2(max_size_el * util_format_get_blockheight(pfmt),
-                     MAX_IMAGE_SIZE_PX),
-      .depth = MIN2(max_size_el * util_format_get_blockdepth(pfmt),
-                    MAX_IMAGE_SIZE_PX),
-   };
-
-   assert(ret.width >= phys_dev->vk.properties.maxImageDimension3D);
-   assert(ret.height >= phys_dev->vk.properties.maxImageDimension3D);
-   assert(ret.depth >= phys_dev->vk.properties.maxImageDimension3D);
-   return ret;
 }
 
 static VkResult
@@ -1214,13 +1192,17 @@ get_image_format_properties(struct panvk_physical_device *physical_device,
       maxArraySize = 1 << 16;
       break;
    case VK_IMAGE_TYPE_2D:
-      maxExtent = get_max_2d_image_size(physical_device, info->format);
-      maxMipLevels = util_logbase2(maxExtent.width) + 1;
+      maxExtent.width = 1 << 16;
+      maxExtent.height = 1 << 16;
+      maxExtent.depth = 1;
+      maxMipLevels = 17; /* log2(maxWidth) + 1 */
       maxArraySize = 1 << 16;
       break;
    case VK_IMAGE_TYPE_3D:
-      maxExtent = get_max_3d_image_size(physical_device, info->format);
-      maxMipLevels = util_logbase2(maxExtent.width) + 1;
+      maxExtent.width = 1 << 16;
+      maxExtent.height = 1 << 16;
+      maxExtent.depth = 1 << 16;
+      maxMipLevels = 17; /* log2(maxWidth) + 1 */
       maxArraySize = 1;
       break;
    default:
@@ -1291,14 +1273,7 @@ get_image_format_properties(struct panvk_physical_device *physical_device,
       .maxMipLevels = maxMipLevels,
       .maxArrayLayers = maxArraySize,
       .sampleCounts = sampleCounts,
-
-      /* We need to limit images to 32-bit range, because the maximum
-       * slice-stride is 32-bit wide, meaning that if we allocate an image
-       * with the maximum width and height, we end up overflowing it.
-       *
-       * We get around this by simply limiting the maximum resource size.
-       */
-      .maxResourceSize = UINT32_MAX,
+      .maxResourceSize = panvk_get_max_resource_size(physical_device),
    };
 
    if (p_feature_flags)

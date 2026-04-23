@@ -13,7 +13,7 @@
 
 #include "freedreno_util.h"
 
-#include "a5xx.xml.h"
+#include "fd5_hw.h"
 
 void fd5_screen_init(struct pipe_screen *pscreen);
 

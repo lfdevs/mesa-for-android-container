@@ -422,8 +422,6 @@ Capability about the features and limits of the driver/GPU.
 * ``pipe_caps.doubles``: Whether double precision floating-point operations
   are supported.
 * ``pipe_caps.int64``: Whether 64-bit integer operations are supported.
-* ``pipe_caps.tgsi_tex_txf_lz``: Whether TEX_LZ and TXF_LZ opcodes are
-  supported.
 * ``pipe_caps.shader_clock``: Whether the CLOCK opcode is supported.
 * ``pipe_caps.polygon_mode_fill_rectangle``: Whether the
   PIPE_POLYGON_MODE_FILL_RECTANGLE mode is supported for

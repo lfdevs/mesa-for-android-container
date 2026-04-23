@@ -60,16 +60,25 @@ struct cmd_bin;
  *  FIXED_TYPE_WIDTH, any larger and we could overflow a
  *  FIXED_TYPE_WIDTH_-bit int.
  */
-#define MAX_FIXED_LENGTH (1 << (((FIXED_TYPE_WIDTH/2) - 1) - FIXED_ORDER))
+#define MAX_FIXED_LENGTH (1 << (FIXED_TYPE_WIDTH / 2 - 1 - FIXED_ORDER))
 
-#define MAX_FIXED_LENGTH32 (1 << (((32/2) - 1) - FIXED_ORDER))
+#define MAX_FIXED_LENGTH32_BLOCK (1 << (32 / 2 - 1 - FIXED_ORDER))
+/* Maximum length of an edge supported by build_mask_linear_32,
+ * empirically determined.
+ */
+#define MAX_FIXED_LENGTH32_TILE (1 << 16)
 
 /* Rasterizer output size going to jit fs, width/height */
 #define LP_RASTER_BLOCK_SIZE 4
 
 #define LP_MAX_ACTIVE_BINNED_QUERIES 64
 
+#define TO_FIXED64(a) (((int64_t)a) << FIXED_ORDER)
+
+/* 64bit wide multiplication of 2 ints */
 #define IMUL64(a, b) (((int64_t)(a)) * ((int64_t)(b)))
+/* 64bit wide multiplication of 2 ints, returned as fixed point */
+#define IMUL64_FIXED(a, b) IMUL64(TO_FIXED64(a), b)
 
 struct lp_rasterizer_task;
 
@@ -131,7 +140,7 @@ struct lp_rast_plane {
    int32_t dcdy;
 
    /* one-pixel sized trivial reject offsets for each plane */
-   uint32_t eo;
+   int32_t eo;
    /*
     * We rely on this struct being 64bit aligned (ideally it would be 128bit
     * but that's quite the waste) and therefore on 32bit we need padding

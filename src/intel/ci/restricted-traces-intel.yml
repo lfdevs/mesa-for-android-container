@@ -13,7 +13,7 @@ traces:
       checksum: e038ef82470fff7b94cf958fa869d130
   angle/libangle_restricted_traces_candy_crush_soda_saga.so:
     vk-anv-adl:
-      checksum: dcfc2dbc1e383d10b86a9c3a52452aa8
+      checksum: dc5d96a70af6165d88f882b96fb73e73
   angle/libangle_restricted_traces_free_fire.so:
     vk-anv-adl:
       checksum: 1a9f03ed30ee254842afe7ab7792a493
@@ -28,7 +28,7 @@ traces:
       checksum: ae8371870059d87d475da217a453acfc
   angle/libangle_restricted_traces_pubg_mobile_battle_royale.so:
     vk-anv-adl:
-      checksum: b1970da0e8d29498078e53d2b6bbff71
+      checksum: 692350e4315d58f2644f5901b954fa15
   angle/libangle_restricted_traces_temple_run_300.so:
     vk-anv-adl:
       checksum: 72610fdadbfb7d99aa5de13d78598ff2

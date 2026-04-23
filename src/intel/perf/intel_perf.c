@@ -45,6 +45,7 @@
 
 #include "dev/intel_debug.h"
 #include "dev/intel_device_info.h"
+#include "util/log.h"
 #include "dev/virtio/intel_virtio.h"
 
 #include "perf/i915/intel_perf.h"
@@ -201,13 +202,13 @@ enumerate_sysfs_metrics(struct intel_perf_config *perf,
 
    len = snprintf(buf, sizeof(buf), "%s/metrics", perf->sysfs_dev_dir);
    if (len < 0 || len >= sizeof(buf)) {
-      DBG("Failed to concatenate path to sysfs metrics/ directory\n");
+      mesa_logw("intel_perf: failed to concatenate path to sysfs metrics/ directory\n");
       return;
    }
 
    metricsdir = opendir(buf);
    if (!metricsdir) {
-      DBG("Failed to open %s: %m\n", buf);
+      mesa_logw("intel_perf: failed to open OA metrics directory %s: %m\n", buf);
       return;
    }
 

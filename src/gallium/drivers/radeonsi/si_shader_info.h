@@ -30,6 +30,9 @@ struct si_shader_info {
       uint8_t num_images;
       uint32_t textures_used;
 
+      uint64_t outputs_written;
+      uint16_t outputs_written_16bit;
+
       unsigned task_payload_size;
       uint16_t workgroup_size[3];
       bool workgroup_size_variable:1;
@@ -90,10 +93,6 @@ struct si_shader_info {
    uint32_t options; /* bitmask of SI_PROFILE_* */
 
    uint8_t num_inputs;
-   uint8_t num_outputs;
-   uint8_t input_semantic[PIPE_MAX_SHADER_INPUTS];
-   uint8_t output_semantic[PIPE_MAX_SHADER_OUTPUTS];
-
    uint8_t num_vs_inputs;
    uint8_t num_vbos_in_user_sgprs;
    uint16_t enabled_streamout_buffer_mask;

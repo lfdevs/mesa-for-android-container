@@ -216,18 +216,9 @@ clear_with_quad(struct gl_context *ctx, unsigned clear_buffers)
 	  x1, y1);
    */
 
-   cso_save_state(cso, (CSO_BIT_BLEND |
-                        CSO_BIT_STENCIL_REF |
-                        CSO_BIT_DEPTH_STENCIL_ALPHA |
-                        CSO_BIT_RASTERIZER |
-                        CSO_BIT_SAMPLE_MASK |
-                        CSO_BIT_MIN_SAMPLES |
-                        CSO_BIT_VIEWPORT |
-                        CSO_BIT_STREAM_OUTPUTS |
-                        CSO_BIT_VERTEX_ELEMENTS |
-                        (st->active_queries ? CSO_BIT_PAUSE_QUERIES : 0) |
-                        CSO_BIT_MESH_SHADER |
-                        CSO_BITS_VERTEX_PIPE_SHADERS));
+   /* Save only states that have no st_atom — they can't be re-derived. */
+   cso_save_state(cso, (CSO_BIT_STREAM_OUTPUTS |
+                        (st->active_queries ? CSO_BIT_PAUSE_QUERIES : 0)));
 
    /* blend state: RGBA masking */
    {
@@ -324,10 +315,27 @@ clear_with_quad(struct gl_context *ctx, unsigned clear_buffers)
 
    pipe_resource_release(cso->pipe, releasebuf);
 
-   /* Restore pipe state */
+   /* Restore atomless states via CSO. */
    cso_restore_state(cso, 0);
-   ctx->Array.NewVertexElements = true;
-   ST_SET_STATE2(ctx->NewDriverState, ST_NEW_VERTEX_ARRAYS, ST_NEW_FS_CONSTANTS);
+
+   /* Invalidate all states this meta-op modified. The atoms will
+    * re-derive them from GL state before the next draw.
+    */
+   st_context_invalidate_state(st,
+                               ST_INVALIDATE_BLEND |
+                               ST_INVALIDATE_DSA |
+                               ST_INVALIDATE_RASTERIZER |
+                               ST_INVALIDATE_SAMPLE_MASK |
+                               ST_INVALIDATE_SAMPLE_SHADING |
+                               ST_INVALIDATE_VIEWPORT |
+                               ST_INVALIDATE_VERTEX_BUFFERS |
+                               ST_INVALIDATE_FS_CONSTBUF0 |
+                               ST_INVALIDATE_VS_STATE |
+                               ST_INVALIDATE_FS_STATE |
+                               ST_INVALIDATE_GS_STATE |
+                               ST_INVALIDATE_TCS_STATE |
+                               ST_INVALIDATE_TES_STATE |
+                               ST_INVALIDATE_MESH_STATE);
 }
 
 

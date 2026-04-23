@@ -134,12 +134,11 @@ ShaderInput::set_uses_interpolate_at_centroid()
 
 int64_t Shader::s_next_shader_id = 1;
 
-Shader::Shader(const char *type_id, unsigned atomic_base):
+Shader::Shader(const char *type_id):
     m_current_block(nullptr),
     m_type_id(type_id),
     m_chip_class(ISA_CC_R600),
     m_next_block(0),
-    m_atomic_base(atomic_base),
     m_shader_id(s_next_shader_id++)
 {
    m_instr_factory = new InstrFactory();
@@ -587,7 +586,7 @@ Shader::scan_uniforms(nir_variable *uniform)
       r600_shader_atomic atom = {0};
 
       atom.resource_id = uniform->data.binding;
-      atom.hw_idx = m_atomic_base + m_next_hwatomic_loc;
+      atom.hw_idx = m_next_hwatomic_loc;
 
       atom.start = uniform->data.offset >> 2;
       atom.count = natomics;
@@ -931,6 +930,10 @@ Shader::process_intrinsic(nir_intrinsic_instr *intr)
    case nir_intrinsic_load_draw_id:
       return emit_get_lds_info_uint(intr,
                                     offsetof(struct r600_lds_constant_buffer, draw_id));
+   case nir_intrinsic_load_primitive_id_modulo_r600:
+      return emit_get_lds_info_uint2(intr,
+                                     offsetof(struct r600_lds_constant_buffer,
+                                              primitiveid_modulo));
    case nir_intrinsic_barrier:
       return emit_barrier(intr);
    case nir_intrinsic_shared_atomic:
@@ -1546,6 +1549,25 @@ Shader::emit_get_lds_info_uint(nir_intrinsic_instr *instr, int offset)
 }
 
 bool
+Shader::emit_get_lds_info_uint2(nir_intrinsic_instr *instr, int offset)
+{
+   auto src = value_factory().temp_register();
+   emit_instruction(new AluInstr(op1_mov, src, value_factory().zero(), AluInstr::write));
+
+   auto dest = value_factory().dest_vec4(instr->def, pin_group);
+   auto fetch = new LoadFromBuffer(dest,
+                                   {0, 1, 7, 7},
+                                   src,
+                                   offset,
+                                   R600_LDS_INFO_CONST_BUFFER,
+                                   nullptr,
+                                   fmt_32_32);
+   emit_instruction(fetch);
+
+   return true;
+}
+
+bool
 Shader::emit_shader_clock(nir_intrinsic_instr *instr)
 {
    auto& vf = value_factory();
@@ -1803,7 +1825,6 @@ Shader::get_shader_info(r600_shader *sh_info)
    }
 
    sh_info->nhwatomic = m_nhwatomic;
-   sh_info->atomic_base = m_atomic_base;
    sh_info->nhwatomic_ranges = m_atomics.size();
    for (unsigned i = 0; i < m_atomics.size(); ++i)
       sh_info->atomics[i] = m_atomics[i];
@@ -1822,7 +1843,7 @@ Shader::get_shader_info(r600_shader *sh_info)
    sh_info->uses_images = m_flags.test(sh_uses_images);
    sh_info->uses_atomics = m_flags.test(sh_uses_atomics);
    sh_info->disable_sb = m_flags.test(sh_disble_sb);
-   sh_info->has_txq_cube_array_z_comp = m_flags.test(sh_txs_cube_array_comp);
+   sh_info->has_resinfo_via_uniform = m_flags.test(sh_resinfo_via_uniform);
    sh_info->indirect_files = m_indirect_files;
    do_get_shader_info(sh_info);
 }

@@ -1020,7 +1020,8 @@ ac_cmdbuf_flush_vgt_streamout(struct ac_cmdbuf *cs, enum amd_gfx_level gfx_level
       reg_strmout_cntl = R_0300FC_CP_STRMOUT_CNTL;
 
       ac_cmdbuf_emit(PKT3(PKT3_WRITE_DATA, 3, 0));
-      ac_cmdbuf_emit(S_370_DST_SEL(V_370_MEM_MAPPED_REGISTER) | S_370_ENGINE_SEL(V_370_ME));
+      ac_cmdbuf_emit(S_371_DST_SEL(V_371_MEM_MAPPED_REGISTER) |
+                     S_371_ENGINE_SEL(V_371_MICRO_ENGINE));
       ac_cmdbuf_emit(R_0300FC_CP_STRMOUT_CNTL >> 2);
       ac_cmdbuf_emit(0);
       ac_cmdbuf_emit(0);

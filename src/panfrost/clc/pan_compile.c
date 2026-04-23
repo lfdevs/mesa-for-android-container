@@ -99,8 +99,8 @@ compile(void *memctx, const uint32_t *spirv, size_t spirv_size, unsigned arch)
    const nir_shader_compiler_options *nir_options = get_compiler_options(arch);
 
    nir_shader *nir =
-      spirv_to_nir(spirv, spirv_size / 4, NULL, 0, MESA_SHADER_KERNEL,
-                   "library", &spirv_options, nir_options);
+      spirv_to_nir(spirv, spirv_size / 4, NULL, MESA_SHADER_KERNEL, "library",
+                   &spirv_options, nir_options);
    nir_validate_shader(nir, "after spirv_to_nir");
    nir_validate_ssa_dominance(nir, "after spirv_to_nir");
    ralloc_steal(memctx, nir);
@@ -420,9 +420,6 @@ main(int argc, const char **argv)
                   glsl_get_cl_type_size_align);
 
          pan_preprocess_nir(s, inputs.gpu_id);
-         pan_nir_lower_texture_early(s, inputs.gpu_id);
-         pan_postprocess_nir(s, inputs.gpu_id);
-         pan_nir_lower_texture_late(s, inputs.gpu_id);
 
          NIR_PASS(_, s, nir_opt_deref);
          NIR_PASS(_, s, nir_lower_vars_to_ssa);
@@ -430,6 +427,8 @@ main(int argc, const char **argv)
                   nir_var_shader_temp | nir_var_function_temp |
                      nir_var_mem_shared | nir_var_mem_global,
                   nir_address_format_62bit_generic);
+
+         pan_postprocess_nir(s, inputs.gpu_id);
 
          NIR_PASS(_, s, nir_shader_intrinsics_pass, lower_sysvals,
                   nir_metadata_control_flow, NULL);
@@ -439,6 +438,11 @@ main(int argc, const char **argv)
          struct util_dynarray shader_binary;
          struct pan_shader_info shader_info = {0};
          shader_binary = UTIL_DYNARRAY_INIT;
+
+         if (target_arch >= 9)
+            shader_info.cs.allow_merging_workgroups =
+               valhall_can_merge_workgroups(s);
+
          pan_shader_compile(clone, &inputs, &shader_binary, &shader_info);
 
          assert(shader_info.push.count * 4 <=

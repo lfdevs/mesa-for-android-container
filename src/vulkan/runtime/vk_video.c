@@ -3375,6 +3375,9 @@ vk_video_is_profile_supported(const VkVideoProfileInfoKHR *video_profile)
    case VK_VIDEO_CODEC_OPERATION_DECODE_H264_BIT_KHR: {
       const struct VkVideoDecodeH264ProfileInfoKHR *h264_profile =
          vk_find_struct_const(video_profile->pNext, VIDEO_DECODE_H264_PROFILE_INFO_KHR);
+      if (h264_profile->stdProfileIdc == STD_VIDEO_H264_PROFILE_IDC_BASELINE &&
+          h264_profile->pictureLayout != VK_VIDEO_DECODE_H264_PICTURE_LAYOUT_PROGRESSIVE_KHR)
+         return VK_ERROR_VIDEO_PICTURE_LAYOUT_NOT_SUPPORTED_KHR;
       return is_h264_profile_supported(video_profile, h264_profile->stdProfileIdc);
    }
    case VK_VIDEO_CODEC_OPERATION_DECODE_H265_BIT_KHR: {

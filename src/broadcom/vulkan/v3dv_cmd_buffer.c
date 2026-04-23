@@ -456,27 +456,14 @@ v3dv_job_allocate_tile_state(struct v3dv_job *job)
    const uint32_t layers =
       job->allocate_tile_state_for_all_layers ? tiling->layers : 1;
 
-   /* The PTB will request the tile alloc initial size per tile at start
-    * of tile binning.
-    */
-   uint32_t tile_alloc_size = 64 * layers *
-                              tiling->draw_tiles_x *
-                              tiling->draw_tiles_y;
-
-   /* The PTB allocates in aligned 4k chunks after the initial setup. */
-   tile_alloc_size = align(tile_alloc_size, 4096);
-
-   /* Include the first two chunk allocations that the PTB does so that
-    * we definitely clear the OOM condition before triggering one (the HW
-    * won't trigger OOM during the first allocations).
-    */
-   tile_alloc_size += 8192;
-
-   /* For performance, allocate some extra initial memory after the PTB's
-    * minimal allocations, so that we hopefully don't have to block the
-    * GPU on the kernel handling an OOM signal.
-    */
-   tile_alloc_size += 512 * 1024;
+   uint32_t tile_alloc_size, tile_state_size;
+   v3d_tile_alloc_sizes(layers,
+                        tiling->draw_tiles_x,
+                        tiling->draw_tiles_y,
+                        job->draw_count,
+                        job->device->devinfo.page_size,
+                        &tile_alloc_size,
+                        &tile_state_size);
 
    job->tile_alloc = v3dv_bo_alloc(job->device, tile_alloc_size,
                                    "tile_alloc", true);
@@ -487,11 +474,6 @@ v3dv_job_allocate_tile_state(struct v3dv_job *job)
 
    v3dv_job_add_bo_unchecked(job, job->tile_alloc);
 
-   const uint32_t tsda_per_tile_size = 256;
-   const uint32_t tile_state_size = layers *
-                                    tiling->draw_tiles_x *
-                                    tiling->draw_tiles_y *
-                                    tsda_per_tile_size;
    job->tile_state = v3dv_bo_alloc(job->device, tile_state_size, "TSDA", true);
    if (!job->tile_state) {
       v3dv_flag_oom(NULL, job);
@@ -508,7 +490,6 @@ v3dv_job_start_frame(struct v3dv_job *job,
                      uint32_t height,
                      uint32_t layers,
                      bool allocate_tile_state_for_all_layers,
-                     bool allocate_tile_state_now,
                      uint32_t render_target_count,
                      uint8_t max_internal_bpp,
                      uint8_t total_color_bpp,
@@ -528,14 +509,6 @@ v3dv_job_start_frame(struct v3dv_job *job,
    v3dv_return_if_oom(NULL, job);
 
    job->allocate_tile_state_for_all_layers = allocate_tile_state_for_all_layers;
-
-   /* For subpass jobs we postpone tile state allocation until we are finishing
-    * the job and have made a decision about double-buffer.
-    */
-   if (allocate_tile_state_now) {
-      if (!v3dv_job_allocate_tile_state(job))
-         return;
-   }
 
    v3d_X((&job->device->devinfo), job_emit_binning_prolog)(job, tiling,
       allocate_tile_state_for_all_layers ? tiling->layers : 1);
@@ -1803,7 +1776,7 @@ cmd_buffer_subpass_create_job(struct v3dv_cmd_buffer *cmd_buffer,
                            width,
                            height,
                            layers,
-                           true, false,
+                           true,
                            subpass->color_count,
                            max_internal_bpp,
                            total_color_bpp,
@@ -2794,7 +2767,7 @@ cmd_buffer_restart_job_for_msaa_if_needed(struct v3dv_cmd_buffer *cmd_buffer)
                         old_job->frame_tiling.width,
                         old_job->frame_tiling.height,
                         old_job->frame_tiling.layers,
-                        true, false,
+                        true,
                         old_job->frame_tiling.render_target_count,
                         old_job->frame_tiling.internal_bpp,
                         old_job->frame_tiling.total_color_bpp,

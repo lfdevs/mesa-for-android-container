@@ -163,7 +163,7 @@ pktname(unsigned opc)
 }
 
 static uint32_t
-decompile_shader(const char *name, uint32_t regbase, uint32_t *dwords,
+decompile_shader(const char *name, uint32_t regbase, const uint32_t *dwords,
                  int level, bool in_reg_bunch)
 {
    uint64_t gpuaddr = ((uint64_t)dwords[1] << 32) | dwords[0];
@@ -218,7 +218,7 @@ decompile_shader(const char *name, uint32_t regbase, uint32_t *dwords,
 
 static struct {
    uint32_t regbase;
-   uint32_t (*fxn)(const char *name, uint32_t regbase, uint32_t *dwords,
+   uint32_t (*fxn)(const char *name, uint32_t regbase, const uint32_t *dwords,
                    int level, bool in_reg_bunch);
 } reg_a6xx[] = {
    {REG_A6XX_SP_VS_BASE, decompile_shader},
@@ -232,7 +232,8 @@ static struct {
 }, *type0_reg;
 
 static uint32_t
-decompile_register(uint32_t regbase, uint32_t *dwords, uint16_t cnt, int level)
+decompile_register(uint32_t regbase, const uint32_t *dwords, uint16_t cnt,
+                   int level)
 {
    struct rnndecaddrinfo *info = rnn_reginfo(rnn, regbase);
 
@@ -286,8 +287,8 @@ decompile_register(uint32_t regbase, uint32_t *dwords, uint16_t cnt, int level)
 }
 
 static uint32_t
-decompile_register_reg_bunch(uint32_t regbase, uint32_t *dwords, uint16_t cnt,
-                             bool as_reg_bunch, int level)
+decompile_register_reg_bunch(uint32_t regbase, const uint32_t *dwords,
+                             uint16_t cnt, bool as_reg_bunch, int level)
 {
    struct rnndecaddrinfo *info = rnn_reginfo(rnn, regbase);
    uint64_t value = dwords[0];
@@ -342,8 +343,8 @@ reg_is_64b(uint32_t regbase)
 }
 
 static uint32_t
-decompile_bunch_register(uint32_t *dw, uint32_t dwords_left, bool no_reg_bunch,
-                         int level)
+decompile_bunch_register(const uint32_t *dw, uint32_t dwords_left,
+                         bool no_reg_bunch, int level)
 {
    if (dwords_left < 2)
       return dwords_left;
@@ -363,8 +364,8 @@ decompile_bunch_register(uint32_t *dw, uint32_t dwords_left, bool no_reg_bunch,
 }
 
 static void
-decompile_registers(uint32_t regbase, uint32_t *dwords, uint32_t sizedwords,
-                    int level)
+decompile_registers(uint32_t regbase, const uint32_t *dwords,
+                    uint32_t sizedwords, int level)
 {
    if (!sizedwords)
       return;
@@ -379,7 +380,7 @@ decompile_registers(uint32_t regbase, uint32_t *dwords, uint32_t sizedwords,
 }
 
 static void
-decompile_domain(uint32_t pkt, uint32_t *dwords, uint32_t sizedwords,
+decompile_domain(uint32_t pkt, const uint32_t *dwords, uint32_t sizedwords,
                  const char *dom_name, const char *packet_name, int level)
 {
    struct rnndomain *dom;
@@ -435,7 +436,8 @@ decompile_domain(uint32_t pkt, uint32_t *dwords, uint32_t sizedwords,
 }
 
 static void
-decompile_commands(uint32_t *dwords, uint32_t sizedwords, int level, uint32_t *cond_count)
+decompile_commands(const uint32_t *dwords, uint32_t sizedwords, int level,
+                   uint32_t *cond_count)
 {
    int dwords_left = sizedwords;
    uint32_t count = 0; /* dword count including packet header */
@@ -488,7 +490,7 @@ decompile_commands(uint32_t *dwords, uint32_t sizedwords, int level, uint32_t *c
                }
             }
          } else if (val == CP_CONTEXT_REG_BUNCH || val == CP_NON_CONTEXT_REG_BUNCH) {
-            uint32_t *dw = dwords + 1;
+            const uint32_t *dw = dwords + 1;
             uint32_t cnt = count - 1;
 
             if (val == CP_NON_CONTEXT_REG_BUNCH) {

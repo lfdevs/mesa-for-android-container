@@ -430,6 +430,11 @@ enum intel_perf_features {
    INTEL_PERF_FEATURE_HOLD_PREEMPTION = (1 << 0),
    INTEL_PERF_FEATURE_GLOBAL_SSEU = (1 << 1),
    INTEL_PERF_FEATURE_METRIC_SYNC = (1 << 2),
+   /* OA metrics are supported by the kernel but access is blocked by system
+    * policy (observation_paranoid on xe, perf_stream_paranoid on i915).
+    * Set when the sysctl exists but the process lacks the required privilege.
+    */
+   INTEL_PERF_FEATURE_OA_BLOCKED_BY_POLICY = (1 << 3),
 };
 
 struct intel_perf_config {

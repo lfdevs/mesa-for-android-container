@@ -558,6 +558,8 @@ struct ac_surface_copy_region {
 
    uint64_t mem_row_pitch;
    uint64_t mem_slice_pitch;
+
+   bool is_stencil_only;
 };
 
 bool ac_surface_copy_mem_to_surface(struct ac_addrlib *addrlib, const struct radeon_info *info,

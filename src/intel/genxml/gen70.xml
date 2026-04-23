@@ -2896,6 +2896,15 @@
     <field name="Invalid page table entry data" dword="0" bits="6:6" type="bool" />
     <field name="Invalid GTT page table entry" dword="0" bits="7:7" type="bool" />
   </register>
+  <register name="GPGPU_DISPATCHDIMX" length="1" num="0x2500">
+    <field name="Dispatch Dimension X" dword="0" bits="31:0" type="uint" />
+  </register>
+  <register name="GPGPU_DISPATCHDIMY" length="1" num="0x2504">
+    <field name="Dispatch Dimension Y" dword="0" bits="31:0" type="uint" />
+  </register>
+  <register name="GPGPU_DISPATCHDIMZ" length="1" num="0x2508">
+    <field name="Dispatch Dimension Z" dword="0" bits="31:0" type="uint" />
+  </register>
   <register name="GS_INVOCATION_COUNT" length="2" num="0x2328">
     <field name="GS Invocation Count Report" dword="0" bits="63:0" type="uint" />
   </register>

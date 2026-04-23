@@ -199,14 +199,159 @@ vn_ResetQueryPool(VkDevice device,
 }
 
 static VkResult
-vn_get_query_pool_feedback(struct vn_query_pool *pool,
+vn_get_query_pool_results(VkDevice device,
+                          VkQueryPool queryPool,
+                          uint32_t firstQuery,
+                          uint32_t queryCount,
+                          void *pData,
+                          VkDeviceSize stride,
+                          VkQueryResultFlags flags)
+{
+   struct vn_device *dev = vn_device_from_handle(device);
+   struct vn_query_pool *pool = vn_query_pool_from_handle(queryPool);
+   const VkAllocationCallbacks *alloc = &pool->allocator;
+   VkResult result;
+
+   const size_t result_width = flags & VK_QUERY_RESULT_64_BIT ? 8 : 4;
+   const size_t result_size = pool->result_array_size * result_width;
+   const bool result_always_written =
+      flags & (VK_QUERY_RESULT_WAIT_BIT | VK_QUERY_RESULT_PARTIAL_BIT);
+
+   VkQueryResultFlags packed_flags = flags;
+   size_t packed_stride = result_size;
+   if (!result_always_written)
+      packed_flags |= VK_QUERY_RESULT_WITH_AVAILABILITY_BIT;
+   if (packed_flags & VK_QUERY_RESULT_WITH_AVAILABILITY_BIT)
+      packed_stride += result_width;
+
+   const size_t packed_size = packed_stride * queryCount;
+   void *packed_data;
+   if (result_always_written && packed_stride == stride) {
+      packed_data = pData;
+   } else {
+      packed_data = vk_alloc(alloc, packed_size, VN_DEFAULT_ALIGN,
+                             VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
+      if (!packed_data)
+         return VK_ERROR_OUT_OF_HOST_MEMORY;
+   }
+   result = vn_call_vkGetQueryPoolResults(
+      dev->primary_ring, device, queryPool, firstQuery, queryCount,
+      packed_size, packed_data, packed_stride, packed_flags);
+
+   if (packed_data == pData)
+      return result;
+
+   const size_t copy_size =
+      result_size +
+      (flags & VK_QUERY_RESULT_WITH_AVAILABILITY_BIT ? result_width : 0);
+   const void *src = packed_data;
+   void *dst = pData;
+   if (result == VK_SUCCESS) {
+      for (uint32_t i = 0; i < queryCount; i++) {
+         memcpy(dst, src, copy_size);
+         src += packed_stride;
+         dst += stride;
+      }
+   } else if (result == VK_NOT_READY) {
+      assert(!result_always_written &&
+             (packed_flags & VK_QUERY_RESULT_WITH_AVAILABILITY_BIT));
+      if (flags & VK_QUERY_RESULT_64_BIT) {
+         for (uint32_t i = 0; i < queryCount; i++) {
+            const bool avail = *(const uint64_t *)(src + result_size);
+            if (avail)
+               memcpy(dst, src, copy_size);
+            else if (flags & VK_QUERY_RESULT_WITH_AVAILABILITY_BIT)
+               *(uint64_t *)(dst + result_size) = 0;
+
+            src += packed_stride;
+            dst += stride;
+         }
+      } else {
+         for (uint32_t i = 0; i < queryCount; i++) {
+            const bool avail = *(const uint32_t *)(src + result_size);
+            if (avail)
+               memcpy(dst, src, copy_size);
+            else if (flags & VK_QUERY_RESULT_WITH_AVAILABILITY_BIT)
+               *(uint32_t *)(dst + result_size) = 0;
+
+            src += packed_stride;
+            dst += stride;
+         }
+      }
+   }
+
+   vk_free(alloc, packed_data);
+   return result;
+}
+
+static bool
+vn_query_feedback_wait_ready(struct vn_device *dev,
+                             struct vn_query_pool *pool,
+                             uint32_t first_query,
+                             uint32_t query_count)
+{
+   VN_TRACE_FUNC();
+
+   /* Feedback results are always 64 bit and include availability bit
+    * (also 64 bit)
+    */
+   const uint32_t step = pool->result_array_size + 1;
+   const uint64_t *avail = (uint64_t *)pool->fb_buf->data +
+                           first_query * step + pool->result_array_size;
+
+   struct vn_relax_state relax_state =
+      vn_relax_init(dev->instance, VN_RELAX_REASON_QUERY);
+   for (uint32_t i = 0, j = 0; i < query_count; i++, j += step) {
+      while (!avail[j]) {
+         vn_relax(&relax_state);
+
+         /* Wait until warn order is reached. */
+         if (vn_relax_warn(&relax_state)) {
+            vn_relax_fini(&relax_state);
+            return false;
+         }
+      }
+   }
+   vn_relax_fini(&relax_state);
+   return true;
+}
+
+static VkResult
+vn_get_query_pool_feedback(VkDevice device,
+                           VkQueryPool queryPool,
                            uint32_t firstQuery,
                            uint32_t queryCount,
                            void *pData,
                            VkDeviceSize stride,
                            VkQueryResultFlags flags)
 {
+   struct vn_device *dev = vn_device_from_handle(device);
+   struct vn_query_pool *pool = vn_query_pool_from_handle(queryPool);
    VkResult result = VK_SUCCESS;
+
+   /* If wait bit is set, wait poll until query is ready */
+   if (flags & VK_QUERY_RESULT_WAIT_BIT) {
+      /* vn_query_feedback_wait_ready waits for a warn order */
+      if (!vn_query_feedback_wait_ready(dev, pool, firstQuery, queryCount)) {
+         /* Emit synchronous call to catch renderer device lost */
+         result = vn_get_query_pool_results(device, queryPool, firstQuery,
+                                            queryCount, pData, stride, flags);
+         if (result == VK_ERROR_DEVICE_LOST) {
+            vn_log(dev->instance, "aborting on qfb device lost");
+            abort();
+         }
+         if (result != VK_SUCCESS)
+            return result;
+
+         /* Re-check qfb availability bits */
+         if (!vn_query_feedback_wait_ready(dev, pool, firstQuery,
+                                           queryCount)) {
+            vn_log(dev->instance, "ERROR: qfb must be available now");
+            return VK_ERROR_UNKNOWN;
+         }
+      }
+   }
+
    /* Feedback results are always 64 bit and include availability bit
     * (also 64 bit)
     */
@@ -274,31 +419,6 @@ vn_get_query_pool_feedback(struct vn_query_pool *pool,
    return result;
 }
 
-static void
-vn_query_feedback_wait_ready(struct vn_device *dev,
-                             struct vn_query_pool *pool,
-                             uint32_t first_query,
-                             uint32_t query_count)
-{
-   VN_TRACE_FUNC();
-
-   /* Feedback results are always 64 bit and include availability bit
-    * (also 64 bit)
-    */
-   const uint32_t step = pool->result_array_size + 1;
-   const uint64_t *avail = (uint64_t *)pool->fb_buf->data +
-                           first_query * step + pool->result_array_size;
-
-   struct vn_relax_state relax_state =
-      vn_relax_init(dev->instance, VN_RELAX_REASON_QUERY);
-   for (uint32_t i = 0, j = 0; i < query_count; i++, j += step) {
-      while (!avail[j]) {
-         vn_relax(&relax_state);
-      }
-   }
-   vn_relax_fini(&relax_state);
-}
-
 VKAPI_ATTR VkResult VKAPI_CALL
 vn_GetQueryPoolResults(VkDevice device,
                        VkQueryPool queryPool,
@@ -311,91 +431,19 @@ vn_GetQueryPoolResults(VkDevice device,
 {
    struct vn_device *dev = vn_device_from_handle(device);
    struct vn_query_pool *pool = vn_query_pool_from_handle(queryPool);
-   const VkAllocationCallbacks *alloc = &pool->allocator;
    VkResult result;
-
-   const size_t result_width = flags & VK_QUERY_RESULT_64_BIT ? 8 : 4;
-   const size_t result_size = pool->result_array_size * result_width;
-   const bool result_always_written =
-      flags & (VK_QUERY_RESULT_WAIT_BIT | VK_QUERY_RESULT_PARTIAL_BIT);
 
    /* Get results from feedback buffers
     * Not possible for VK_QUERY_RESULT_PARTIAL_BIT
     */
    if (pool->fb_buf) {
-      /* If wait bit is set, wait poll until query is ready */
-      if (flags & VK_QUERY_RESULT_WAIT_BIT)
-         vn_query_feedback_wait_ready(dev, pool, firstQuery, queryCount);
-
-      result = vn_get_query_pool_feedback(pool, firstQuery, queryCount, pData,
-                                          stride, flags);
-      return vn_result(dev->instance, result);
-   }
-
-   VkQueryResultFlags packed_flags = flags;
-   size_t packed_stride = result_size;
-   if (!result_always_written)
-      packed_flags |= VK_QUERY_RESULT_WITH_AVAILABILITY_BIT;
-   if (packed_flags & VK_QUERY_RESULT_WITH_AVAILABILITY_BIT)
-      packed_stride += result_width;
-
-   const size_t packed_size = packed_stride * queryCount;
-   void *packed_data;
-   if (result_always_written && packed_stride == stride) {
-      packed_data = pData;
+      result = vn_get_query_pool_feedback(device, queryPool, firstQuery,
+                                          queryCount, pData, stride, flags);
    } else {
-      packed_data = vk_alloc(alloc, packed_size, VN_DEFAULT_ALIGN,
-                             VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
-      if (!packed_data)
-         return vn_error(dev->instance, VK_ERROR_OUT_OF_HOST_MEMORY);
-   }
-   result = vn_call_vkGetQueryPoolResults(
-      dev->primary_ring, device, queryPool, firstQuery, queryCount,
-      packed_size, packed_data, packed_stride, packed_flags);
-
-   if (packed_data == pData)
-      return vn_result(dev->instance, result);
-
-   const size_t copy_size =
-      result_size +
-      (flags & VK_QUERY_RESULT_WITH_AVAILABILITY_BIT ? result_width : 0);
-   const void *src = packed_data;
-   void *dst = pData;
-   if (result == VK_SUCCESS) {
-      for (uint32_t i = 0; i < queryCount; i++) {
-         memcpy(dst, src, copy_size);
-         src += packed_stride;
-         dst += stride;
-      }
-   } else if (result == VK_NOT_READY) {
-      assert(!result_always_written &&
-             (packed_flags & VK_QUERY_RESULT_WITH_AVAILABILITY_BIT));
-      if (flags & VK_QUERY_RESULT_64_BIT) {
-         for (uint32_t i = 0; i < queryCount; i++) {
-            const bool avail = *(const uint64_t *)(src + result_size);
-            if (avail)
-               memcpy(dst, src, copy_size);
-            else if (flags & VK_QUERY_RESULT_WITH_AVAILABILITY_BIT)
-               *(uint64_t *)(dst + result_size) = 0;
-
-            src += packed_stride;
-            dst += stride;
-         }
-      } else {
-         for (uint32_t i = 0; i < queryCount; i++) {
-            const bool avail = *(const uint32_t *)(src + result_size);
-            if (avail)
-               memcpy(dst, src, copy_size);
-            else if (flags & VK_QUERY_RESULT_WITH_AVAILABILITY_BIT)
-               *(uint32_t *)(dst + result_size) = 0;
-
-            src += packed_stride;
-            dst += stride;
-         }
-      }
+      result = vn_get_query_pool_results(device, queryPool, firstQuery,
+                                         queryCount, pData, stride, flags);
    }
 
-   vk_free(alloc, packed_data);
    return vn_result(dev->instance, result);
 }
 

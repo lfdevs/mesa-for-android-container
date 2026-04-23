@@ -12,12 +12,7 @@
 
 /**
  * We use layered rendering to implement multiview, which means we need to map
- * view_index to gl_Layer. The code generates a load from the layer_id sysval,
- * but since we don't have a way to get at this information from the fragment
- * shader, we also need to lower this to the gl_Layer varying.  This pass
- * lowers both to a varying load from the LAYER slot, before lowering io, so
- * that nir_assign_var_locations() will give the LAYER varying the correct
- * driver_location.
+ * view_index to gl_Layer in the fragment shader.
  */
 static bool
 pass(nir_builder *b, nir_intrinsic_instr *intr, void *_)

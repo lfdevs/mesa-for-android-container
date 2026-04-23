@@ -15,7 +15,7 @@ bool
 radv_use_bvh_stack_rtn(const struct radv_physical_device *pdevice)
 {
    /* gfx12 requires using the bvh4 ds_bvh_stack_rtn differently - enable hw stack instrs on gfx12 only with bvh8 */
-   return (pdevice->info.gfx_level == GFX11 || pdevice->info.gfx_level == GFX11_5 || pdevice->cache_key.bvh8) &&
+   return ((pdevice->info.gfx_level >= GFX11 && pdevice->info.gfx_level < GFX12) || pdevice->cache_key.bvh8) &&
           !pdevice->cache_key.emulate_rt;
 }
 

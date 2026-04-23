@@ -36,11 +36,6 @@ export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}:$INSTALL/lib/"
 ARCH=$(uname -m)
 export VK_DRIVER_FILES="$INSTALL/share/vulkan/icd.d/${VK_DRIVER}_icd.$ARCH.json"
 
-# Set environment for Wine.
-export WINEDEBUG="-all"
-export WINEPREFIX="/vkd3d-proton-wine64"
-export WINEESYNC=1
-
 if [ -f "$INSTALL/$GPU_VERSION-vkd3d-skips.txt" ]; then
   mapfile -t skips < <(grep -vE '^#|^$' "$INSTALL/$GPU_VERSION-vkd3d-skips.txt")
   VKD3D_TEST_EXCLUDE=$(comma_separated "${skips[@]}")

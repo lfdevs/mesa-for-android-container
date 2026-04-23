@@ -626,7 +626,6 @@ static bool do_winsys_init(struct radeon_drm_winsys *ws)
                                      ws->accel_working2 < 3);
    ws->info.has_cp_dma = true;
    ws->info.tcc_cache_line_size = 64; /* TC L2 line size on GCN */
-   ws->info.has_bo_metadata = false;
    ws->info.has_eqaa_surface_allocator = false;
    ws->info.has_sparse = false;
    ws->info.max_alignment = 1024*1024;

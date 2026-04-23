@@ -7415,8 +7415,10 @@ ast_iteration_statement::hir(ir_exec_list *instructions,
          state->symbols->pop_scope();
    }
 
-   if (mode == ast_do_while)
+   if (mode == ast_do_while) {
       condition_to_hir(&stmt->continue_instructions, state);
+      stmt->do_while = true;
+   }
 
    if (mode != ast_do_while)
       state->symbols->pop_scope();

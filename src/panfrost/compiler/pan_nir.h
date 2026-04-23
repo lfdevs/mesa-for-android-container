@@ -72,9 +72,6 @@ bool pan_nir_lower_image_index(nir_shader *shader,
 bool pan_nir_lower_texel_buffer_fetch_index(nir_shader *shader,
                                             unsigned attrib_offset);
 
-void pan_nir_lower_texture_early(nir_shader *nir, uint64_t gpu_id);
-void pan_nir_lower_texture_late(nir_shader *nir, uint64_t gpu_id);
-
 nir_alu_type
 pan_unpacked_type_for_format(const struct util_format_description *desc);
 

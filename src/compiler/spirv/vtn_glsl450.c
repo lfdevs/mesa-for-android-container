@@ -120,73 +120,6 @@ matrix_inverse(struct vtn_builder *b, struct vtn_ssa_value *src)
    return val;
 }
 
-/**
- * Approximate asin(x) by the piecewise formula:
- * for |x| < 0.5, asin~(x) = x * (1 + x²(pS0 + x²(pS1 + x²*pS2)) / (1 + x²*qS1))
- * for |x| ≥ 0.5, asin~(x) = sign(x) * (π/2 - sqrt(1 - |x|) * (π/2 + |x|(π/4 - 1 + |x|(p0 + |x|p1))))
- *
- * The latter is correct to first order at x=0 and x=±1 regardless of the p
- * coefficients but can be made second-order correct at both ends by selecting
- * the fit coefficients appropriately.  Different p coefficients can be used
- * in the asin and acos implementation to minimize some relative error metric
- * in each case.
- */
-static nir_def *
-build_asin(nir_builder *b, nir_def *x, float p0, float p1, bool piecewise)
-{
-   if (x->bit_size == 16) {
-      /* The polynomial approximation isn't precise enough to meet half-float
-       * precision requirements. Alternatively, we could implement this using
-       * the formula:
-       *
-       * asin(x) = atan2(x, sqrt(1 - x*x))
-       *
-       * But that is very expensive, so instead we just do the polynomial
-       * approximation in 32-bit math and then we convert the result back to
-       * 16-bit.
-       */
-      nir_def *result =
-         nir_f2f16(b, build_asin(b, nir_f2f32(b, x), p0, p1, piecewise));
-
-      return result;
-   }
-   nir_def *one = nir_imm_floatN_t(b, 1.0f, x->bit_size);
-   nir_def *half = nir_imm_floatN_t(b, 0.5f, x->bit_size);
-   nir_def *abs_x = nir_fabs(b, x);
-
-   nir_def *p0_plus_xp1 = nir_ffma_imm12(b, abs_x, p1, p0);
-
-   nir_def *expr_tail =
-      nir_ffma_imm2(b, abs_x,
-                       nir_ffma_imm2(b, abs_x, p0_plus_xp1, M_PI_4f - 1.0f),
-                       M_PI_2f);
-
-   nir_def *result0 = nir_fmul(b, nir_fsign(b, x),
-                      nir_a_minus_bc(b, nir_imm_floatN_t(b, M_PI_2f, x->bit_size),
-                                        nir_fsqrt(b, nir_fsub(b, one, abs_x)),
-                                        expr_tail));
-   if (piecewise) {
-      /* approximation for |x| < 0.5 */
-      const float pS0 =  1.6666586697e-01f;
-      const float pS1 = -4.2743422091e-02f;
-      const float pS2 = -8.6563630030e-03f;
-      const float qS1 = -7.0662963390e-01f;
-
-      nir_def *x2 = nir_fmul(b, x, x);
-      nir_def *p = nir_fmul(b,
-                                x2,
-                                nir_ffma_imm2(b, x2,
-                                                 nir_ffma_imm12(b, x2, pS2, pS1),
-                                                 pS0));
-
-      nir_def *q = nir_ffma_imm1(b, x2, qS1, one);
-      nir_def *result1 = nir_ffma(b, x, nir_fdiv(b, p, q), x);
-      return nir_bcsel(b, nir_flt(b, abs_x, half), result1, result0);
-   } else {
-      return result0;
-   }
-}
-
 static nir_op
 vtn_nir_alu_op_for_spirv_glsl_opcode(struct vtn_builder *b,
                                      enum GLSLstd450 opcode,
@@ -567,13 +500,11 @@ handle_glsl450_alu(struct vtn_builder *b, enum GLSLstd450 entrypoint,
    }
 
    case GLSLstd450Asin:
-      dest->def = build_asin(nb, src[0], 0.086566724, -0.03102955, true);
+      dest->def = nir_asin(nb, src[0]);
       break;
 
    case GLSLstd450Acos:
-      dest->def =
-         nir_fsub_imm(nb, M_PI_2f,
-                          build_asin(nb, src[0], 0.08132463, -0.02363318, false));
+      dest->def = nir_acos(nb, src[0]);
       break;
 
    case GLSLstd450Atan:

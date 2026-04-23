@@ -812,9 +812,7 @@ namespace {
       case ELK_FS_OPCODE_TXB:
       case ELK_SHADER_OPCODE_TXD:
       case ELK_SHADER_OPCODE_TXF:
-      case ELK_SHADER_OPCODE_TXF_LZ:
       case ELK_SHADER_OPCODE_TXL:
-      case ELK_SHADER_OPCODE_TXL_LZ:
       case ELK_SHADER_OPCODE_TXF_CMS:
       case ELK_SHADER_OPCODE_TXF_CMS_W:
       case ELK_SHADER_OPCODE_TXF_UMS:

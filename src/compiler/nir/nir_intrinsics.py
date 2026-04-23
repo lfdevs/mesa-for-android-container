@@ -383,6 +383,10 @@ index("bool", "explicit_coord")
 index("bool", "src_is_reg")
 index("bool", "dst_is_reg")
 
+# For an Intel render target store, whether this signals end-of-thread. Must be
+# the last instruction.
+index("bool", "eot")
+
 # The index of the format string used by a printf. (u_printf_info element of the shader)
 index("unsigned", "fmt_idx")
 # for NV coop matrix - num of matrix in load 1/2/4
@@ -981,6 +985,7 @@ system_value("pixel_coord", 2, bit_sizes=[16])
 # requires interpolation.
 system_value("frag_coord_z", 1)
 system_value("frag_coord_w", 1)
+system_value("frag_coord_w_rcp", 1)
 system_value("point_coord", 2)
 system_value("line_coord", 1)
 system_value("front_face", 1, bit_sizes=[1, 32])
@@ -1862,6 +1867,10 @@ intrinsic("load_local_shared_r600", src_comp=[0], dest_comp=0, indices = [], fla
 store("local_shared_r600", [1], [WRITE_MASK])
 store("tf_r600", [])
 
+# r600 primitive_id
+system_value("primitive_id_raw_r600", 1)
+system_value("primitive_id_modulo_r600", 2)
+
 # these two definitions are aimed at r600 indirect per_vertex_input accesses
 intrinsic("r600_indirect_vertex_at_index", dest_comp=1, src_comp=[1], flags=[CAN_ELIMINATE, CAN_REORDER])
 load("r600_per_vertex_input", [1], [BASE, RANGE, COMPONENT, DEST_TYPE, IO_SEMANTICS], [CAN_ELIMINATE, CAN_REORDER])
@@ -2102,6 +2111,8 @@ system_value("resume_shader_address_amd", 1, bit_sizes=[64], indices=[CALL_IDX])
 
 # Ray Tracing Traversal inputs
 system_value("rt_descriptors_amd", 1)
+system_value("rt_heap_resource_amd", 1)
+system_value("rt_heap_sampler_amd", 1)
 system_value("rt_dynamic_descriptors_amd", 1)
 system_value("rt_push_constants_amd", 1)
 system_value("sbt_offset_amd", 1)
@@ -2592,6 +2603,9 @@ system_value("fs_start_intel", 2, bit_sizes=[32])
 system_value("fs_z_c_intel", 2, bit_sizes=[32])
 system_value("fs_z_c0_intel", 1, bit_sizes=[32])
 
+# Lower 16-bit has pixel X coord, upper 16-bit has pixel Y coord
+system_value("pixel_coord_intel", 1, bit_sizes=[32])
+
 # Read the attribute thread payload at a given byte offset
 # src[] = { offset }
 load("attribute_payload_intel", [1], flags=[CAN_ELIMINATE, CAN_REORDER])
@@ -2612,6 +2626,14 @@ system_value("indirect_address_intel", 1)
 # Load a relocatable 32-bit value
 intrinsic("load_reloc_const_intel", dest_comp=1, bit_sizes=[32],
           indices=[PARAM_IDX, BASE], flags=[CAN_ELIMINATE, CAN_REORDER])
+
+# Write a render target
+# src[] = { payload, 2x32 descriptor, predicate }
+intrinsic("store_render_target_intel", [-1, 2, 1], indices=[EOT], bit_sizes=[32])
+
+# Shuffle with an offset in bytes instead of a lane index.
+# src[] = { payload, lane offset in bytes }
+intrinsic("shuffle_intel", src_comp=[1, 1], dest_comp=0, bit_sizes=src0, flags=SUBGROUP_FLAGS)
 
 # 1 component 32bit surface index that can be used for bindless or BTI heaps
 #
@@ -2659,6 +2681,13 @@ store("ssbo_block_intel", [-1, 1], [ACCESS, ALIGN_MUL, ALIGN_OFFSET])
 
 # src[] = { value, offset }.
 store("shared_block_intel", [1], [BASE, ALIGN_MUL, ALIGN_OFFSET])
+
+# These offsets are into per-subgroup scratch memory, rather than the per-lane
+# offsets the standard NIR intrinsics use.
+# src[] = { offset }.
+load("scratch_intel", [1], [ACCESS], [CAN_ELIMINATE])
+# src[] = { value, offset }.
+store("scratch_intel", [1], [])
 
 # src[] = { address }.
 load("global_constant_uniform_block_intel", [1],

@@ -1460,7 +1460,7 @@ typedef enum {
    /**
     * Operation is associative mathematically (as real numbers), but not
     * associative with floating-point math. This can be treated as associative
-    * iff the operation's exact bit is not set.
+    * iff the operation's nir_fp_no_reassoc bit is not set.
     */
    NIR_OP_IS_INEXACT_ASSOCIATIVE = (1 << 3),
 } nir_op_algebraic_property;
@@ -1533,7 +1533,7 @@ nir_op_is_selection(nir_op op)
    return (nir_op_infos[op].algebraic_properties & NIR_OP_IS_SELECTION) != 0;
 }
 
-#define NIR_FP_MATH_CONTROL_BIT_COUNT 4
+#define NIR_FP_MATH_CONTROL_BIT_COUNT 6
 /**
  * Floating point fast math control.
  *
@@ -1559,6 +1559,23 @@ typedef enum {
     */
    nir_fp_preserve_nan = BITFIELD_BIT(2),
 
+   /* If not set, allow all optimizations that result in a value closer
+    * to the infinitely precise result than the original pattern.
+    * One common example here is fma fusing.
+    */
+   nir_fp_no_contract = BITFIELD_BIT(3),
+
+   /* If not set, allow to treat opcodes with NIR_OP_IS_INEXACT_ASSOCIATIVE
+    * as associative.
+    */
+   nir_fp_no_reassoc = BITFIELD_BIT(4),
+
+   /* If not set, allow any optimization that would be valid for real numbers.
+    *
+    * Must be set if nir_fp_no_contract or nir_fp_no_reassoc are set.
+    */
+   nir_fp_no_transform = BITFIELD_BIT(5),
+
    /** Indicates that this ALU instruction generates an exact value
     *
     * This is kind of a mixture of GLSL "precise" and "invariant" and not
@@ -1567,8 +1584,13 @@ typedef enum {
     * it must ensure that the resulting value is bit-for-bit identical to the
     * original, with the exception of undefindness allowed by other
     * nir_fp_math_control bits and NaN patterns.
+    *
+    * The sub bits allow more fine grained control over the kind of inexact
+    * optimizations allowed.
     */
-   nir_fp_exact = BITFIELD_BIT(3),
+   nir_fp_exact = nir_fp_no_contract |
+                  nir_fp_no_reassoc |
+                  nir_fp_no_transform,
 
    nir_fp_preserve_sz_inf_nan = nir_fp_preserve_signed_zero |
                                 nir_fp_preserve_inf |
@@ -1643,6 +1665,24 @@ static inline bool
 nir_alu_instr_is_exact(const nir_alu_instr *alu)
 {
    return alu->fp_math_ctrl & nir_fp_exact;
+}
+
+static inline bool
+nir_alu_instr_no_contract(const nir_alu_instr *alu)
+{
+   return alu->fp_math_ctrl & nir_fp_no_contract;
+}
+
+static inline bool
+nir_alu_instr_no_reassoc(const nir_alu_instr *alu)
+{
+   return alu->fp_math_ctrl & nir_fp_no_reassoc;
+}
+
+static inline bool
+nir_alu_instr_no_transform(const nir_alu_instr *alu)
+{
+   return alu->fp_math_ctrl & nir_fp_no_transform;
 }
 
 static inline unsigned
@@ -2517,6 +2557,11 @@ typedef enum nir_texop {
    nir_texop_block_match_ssd_qcom,
    /** txs in .xyz and query_levels in .w */
    nir_texop_resinfo_intel,
+
+   /** Returns red data and a sparse residency code for sampling ops */
+   nir_texop_sparse_residency_intel,
+   /** Returns red data and a sparse residency code for texel fetches */
+   nir_texop_sparse_residency_txf_intel,
 } nir_texop;
 
 /** Represents a texture instruction */
@@ -3102,6 +3147,20 @@ NIR_DEFINE_SRC_AS_CONST(double, float)
 
 #undef NIR_DEFINE_SRC_AS_CONST
 
+static inline bool
+nir_src_is_zero(nir_src src)
+{
+   if (!nir_src_is_const(src))
+      return false;
+
+   for (unsigned i = 0; i < nir_src_num_components(src); i++) {
+      if (nir_src_comp_as_uint(src, i) != 0)
+         return false;
+   }
+
+   return true;
+}
+
 static inline nir_const_value
 nir_scalar_as_const_value(nir_scalar s)
 {
@@ -3124,6 +3183,12 @@ NIR_DEFINE_SCALAR_AS_CONST(bool, bool)
 NIR_DEFINE_SCALAR_AS_CONST(double, float)
 
 #undef NIR_DEFINE_SCALAR_AS_CONST
+
+static inline bool
+nir_scalar_is_zero(nir_scalar s)
+{
+   return nir_scalar_is_const(s) && nir_scalar_as_uint(s) == 0;
+}
 
 static inline nir_op
 nir_scalar_alu_op(nir_scalar s)
@@ -3194,6 +3259,13 @@ static inline uint64_t
 nir_alu_src_as_uint(nir_alu_src src)
 {
    nir_scalar scalar = nir_get_scalar(src.src.ssa, src.swizzle[0]);
+   return nir_scalar_as_uint(scalar);
+}
+
+static inline uint64_t
+nir_alu_src_comp_as_uint(nir_alu_src src, unsigned comp)
+{
+   nir_scalar scalar = nir_scalar_resolved(src.src.ssa, src.swizzle[comp]);
    return nir_scalar_as_uint(scalar);
 }
 
@@ -3602,6 +3674,7 @@ typedef struct nir_loop {
    nir_loop_info *info;
    nir_loop_control control;
    bool partially_unrolled;
+   bool do_while;
 
    /**
     * Whether some loop-active invocations might take a different control-flow path:
@@ -5386,7 +5459,6 @@ bool nir_remove_unused_io_vars(nir_shader *shader, nir_variable_mode mode,
                                uint64_t *used_by_other_stage_patches);
 void nir_compact_varyings(nir_shader *producer, nir_shader *consumer,
                           bool default_to_smooth_interp);
-void nir_link_xfb_varyings(nir_shader *producer, nir_shader *consumer);
 bool nir_link_opt_varyings(nir_shader *producer, nir_shader *consumer);
 void nir_link_varying_precision(nir_shader *producer, nir_shader *consumer);
 nir_variable *nir_clone_uniform_variable(nir_shader *nir,
@@ -6627,6 +6699,7 @@ bool nir_opt_copy_prop_vars(nir_shader *shader);
 
 bool nir_opt_cse(nir_shader *shader);
 
+bool nir_opt_dce_impl(nir_function_impl *impl);
 bool nir_opt_dce(nir_shader *shader);
 
 bool nir_opt_dead_cf(nir_shader *shader);

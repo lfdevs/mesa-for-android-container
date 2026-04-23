@@ -482,7 +482,7 @@ class Expression(Value):
             exclude.add("nir_fp_exact")
 
         if self.contract:
-            exclude.add("nir_fp_exact")
+            exclude.add("nir_fp_no_contract")
 
         if self.nsz:
             exclude.add("nir_fp_preserve_signed_zero")

@@ -203,7 +203,11 @@ accumulate_subresult_cpu(struct d3d12_context *ctx, struct d3d12_query *q_parent
    unsigned access = PIPE_MAP_READ;
    void *results;
 
-   access |= PIPE_MAP_UNSYNCHRONIZED;
+   /* When called from tc_get_query_result on the app thread (flushed query),
+    * the driver thread may be running concurrently. Use PIPE_MAP_THREAD_SAFE
+    * to avoid slab allocator races on transfer_pool.
+    */
+   access |= PIPE_MAP_UNSYNCHRONIZED | PIPE_MAP_THREAD_SAFE;
 
    results = pipe_buffer_map_range(&ctx->base, q->buffer, q->buffer_offset,
                                    q->num_queries * q->query_size,

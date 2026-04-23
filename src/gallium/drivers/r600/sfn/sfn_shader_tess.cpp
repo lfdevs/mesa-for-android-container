@@ -16,7 +16,7 @@ namespace r600 {
 using std::string;
 
 TCSShader::TCSShader(const r600_shader_key& key):
-    Shader("TCS", key.tcs.first_atomic_counter),
+    Shader("TCS"),
     m_tcs_prim_mode(key.tcs.prim_mode)
 {
 }
@@ -30,7 +30,7 @@ TCSShader::do_scan_instruction(nir_instr *instr)
    nir_intrinsic_instr *ii = nir_instr_as_intrinsic(instr);
 
    switch (ii->intrinsic) {
-   case nir_intrinsic_load_primitive_id:
+   case nir_intrinsic_load_primitive_id_raw_r600:
       m_sv_values.set(es_primitive_id);
       break;
    case nir_intrinsic_load_invocation_id:
@@ -80,7 +80,7 @@ TCSShader::process_stage_intrinsic(nir_intrinsic_instr *instr)
       return emit_simple_mov(instr->def, 0, m_rel_patch_id);
    case nir_intrinsic_load_invocation_id:
       return emit_simple_mov(instr->def, 0, m_invocation_id);
-   case nir_intrinsic_load_primitive_id:
+   case nir_intrinsic_load_primitive_id_raw_r600:
       return emit_simple_mov(instr->def, 0, m_primitive_id);
    case nir_intrinsic_load_tcs_tess_factor_base_r600:
       return emit_simple_mov(instr->def, 0, m_tess_factor_base);
@@ -137,7 +137,7 @@ TCSShader::do_print_properties(std::ostream& os) const
 TESShader::TESShader(const pipe_stream_output_info *so_info,
                      const r600_shader *gs_shader,
                      const r600_shader_key& key):
-    VertexStageShader("TES", key.tes.first_atomic_counter),
+    VertexStageShader("TES"),
     m_vs_as_gs_a(key.vs.as_gs_a)
 {
    if (key.tes.as_es)
@@ -158,7 +158,7 @@ TESShader::do_scan_instruction(nir_instr *instr)
    case nir_intrinsic_load_tess_coord_xy:
       m_sv_values.set(es_tess_coord);
       break;
-   case nir_intrinsic_load_primitive_id:
+   case nir_intrinsic_load_primitive_id_raw_r600:
       m_sv_values.set(es_primitive_id);
       break;
    case nir_intrinsic_load_tcs_rel_patch_id_r600:
@@ -208,7 +208,7 @@ TESShader::process_stage_intrinsic(nir_intrinsic_instr *intr)
    case nir_intrinsic_load_tess_coord_xy:
       return emit_simple_mov(intr->def, 0, m_tess_coord[0], pin_none) &&
              emit_simple_mov(intr->def, 1, m_tess_coord[1], pin_none);
-   case nir_intrinsic_load_primitive_id:
+   case nir_intrinsic_load_primitive_id_raw_r600:
       return emit_simple_mov(intr->def, 0, m_primitive_id);
    case nir_intrinsic_load_tcs_rel_patch_id_r600:
       return emit_simple_mov(intr->def, 0, m_rel_patch_id);

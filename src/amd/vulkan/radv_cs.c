@@ -45,43 +45,43 @@ gfx10_cs_emit_cache_flush(struct radv_cmd_stream *cs, enum amd_gfx_level gfx_lev
    assert(!(flush_bits & (RADV_CMD_FLAG_VGT_STREAMOUT_SYNC)));
 
    if (flush_bits & RADV_CMD_FLAG_INV_ICACHE) {
-      gcr_cntl |= S_586_GLI_INV(V_586_GLI_ALL);
+      gcr_cntl |= S_587_GLI_INV(V_587_GLI_ALL);
 
       *sqtt_flush_bits |= RGP_FLUSH_INVAL_ICACHE;
    }
    if (flush_bits & RADV_CMD_FLAG_INV_SCACHE) {
-      gcr_cntl |= S_586_GLK_INV(1);
+      gcr_cntl |= S_587_GLK_INV(1);
 
       *sqtt_flush_bits |= RGP_FLUSH_INVAL_SMEM_L0;
    }
    if (flush_bits & RADV_CMD_FLAG_INV_VCACHE) {
-      gcr_cntl |= S_586_GLV_INV(1);
+      gcr_cntl |= S_587_GLV_INV(1);
 
       *sqtt_flush_bits |= RGP_FLUSH_INVAL_VMEM_L0;
    }
    if (flush_bits & (RADV_CMD_FLAG_INV_SCACHE | RADV_CMD_FLAG_INV_VCACHE) && gfx_level < GFX12) {
-      gcr_cntl |= S_586_GL1_INV(1);
+      gcr_cntl |= S_587_GL1_INV(1);
 
       *sqtt_flush_bits |= RGP_FLUSH_INVAL_L1;
    }
 
    if (flush_bits & RADV_CMD_FLAG_INV_L2) {
       /* Writeback and invalidate everything in L2. */
-      gcr_cntl |= S_586_GL2_INV(1) | S_586_GL2_WB(1);
+      gcr_cntl |= S_587_GL2_INV(1) | S_587_GL2_WB(1);
 
       *sqtt_flush_bits |= RGP_FLUSH_INVAL_L2;
    } else if (flush_bits & RADV_CMD_FLAG_WB_L2) {
       /* Writeback but do not invalidate.
        * GLM doesn't support WB alone. If WB is set, INV must be set too.
        */
-      gcr_cntl |= S_586_GL2_WB(1);
+      gcr_cntl |= S_587_GL2_WB(1);
 
       *sqtt_flush_bits |= RGP_FLUSH_FLUSH_L2;
    }
 
    if (gfx_level < GFX12 &&
        (flush_bits & (RADV_CMD_FLAG_INV_L2 | RADV_CMD_FLAG_WB_L2 | RADV_CMD_FLAG_INV_L2_METADATA))) {
-      gcr_cntl |= S_586_GLM_INV(1) | S_586_GLM_WB(1);
+      gcr_cntl |= S_587_GLM_INV(1) | S_587_GLM_WB(1);
    }
 
    if (flush_bits & (RADV_CMD_FLAG_FLUSH_AND_INV_CB | RADV_CMD_FLAG_FLUSH_AND_INV_DB)) {
@@ -107,7 +107,7 @@ gfx10_cs_emit_cache_flush(struct radv_cmd_stream *cs, enum amd_gfx_level gfx_lev
       }
 
       /* First flush CB/DB, then L1/L2. */
-      gcr_cntl |= S_586_SEQ(V_586_SEQ_FORWARD);
+      gcr_cntl |= S_587_SEQ(V_587_SEQ_FORWARD);
 
       if ((flush_bits & (RADV_CMD_FLAG_FLUSH_AND_INV_CB | RADV_CMD_FLAG_FLUSH_AND_INV_DB)) ==
           (RADV_CMD_FLAG_FLUSH_AND_INV_CB | RADV_CMD_FLAG_FLUSH_AND_INV_DB)) {
@@ -153,13 +153,13 @@ gfx10_cs_emit_cache_flush(struct radv_cmd_stream *cs, enum amd_gfx_level gfx_lev
          /* Send an event that flushes caches. */
          ac_emit_cp_release_mem_pws(cs->b, gfx_level, cs->hw_ip, cb_db_event, gcr_cntl);
 
-         gcr_cntl &= C_586_GLK_WB & C_586_GLK_INV & C_586_GLV_INV & C_586_GL2_INV & C_586_GL2_WB; /* keep SEQ */
+         gcr_cntl &= C_587_GLK_WB & C_587_GLK_INV & C_587_GLV_INV & C_587_GL2_INV & C_587_GL2_WB; /* keep SEQ */
 
          if (gfx_level < GFX12)
-            gcr_cntl &= C_586_GLM_WB & C_586_GLM_INV & C_586_GL1_INV;
+            gcr_cntl &= C_587_GLM_WB & C_587_GLM_INV & C_587_GL1_INV;
 
          /* Wait for the event and invalidate remaining caches if needed. */
-         ac_emit_cp_acquire_mem_pws(cs->b, gfx_level, cs->hw_ip, cb_db_event, V_580_CP_PFP, 0, gcr_cntl);
+         ac_emit_cp_acquire_mem_pws(cs->b, gfx_level, cs->hw_ip, cb_db_event, V_581B_CP_PFP, 0, gcr_cntl);
 
          gcr_cntl = 0; /* all done */
       } else {
@@ -172,27 +172,27 @@ gfx10_cs_emit_cache_flush(struct radv_cmd_stream *cs, enum amd_gfx_level gfx_lev
           * implied).
           */
          /* Get GCR_CNTL fields, because the encoding is different in RELEASE_MEM. */
-         unsigned glm_wb = G_586_GLM_WB(gcr_cntl);
-         unsigned glm_inv = G_586_GLM_INV(gcr_cntl);
-         unsigned glv_inv = G_586_GLV_INV(gcr_cntl);
-         unsigned gl1_inv = G_586_GL1_INV(gcr_cntl);
-         assert(G_586_GL2_US(gcr_cntl) == 0);
-         assert(G_586_GL2_RANGE(gcr_cntl) == 0);
-         assert(G_586_GL2_DISCARD(gcr_cntl) == 0);
-         unsigned gl2_inv = G_586_GL2_INV(gcr_cntl);
-         unsigned gl2_wb = G_586_GL2_WB(gcr_cntl);
-         unsigned gcr_seq = G_586_SEQ(gcr_cntl);
+         unsigned glm_wb = G_587_GLM_WB(gcr_cntl);
+         unsigned glm_inv = G_587_GLM_INV(gcr_cntl);
+         unsigned glv_inv = G_587_GLV_INV(gcr_cntl);
+         unsigned gl1_inv = G_587_GL1_INV(gcr_cntl);
+         assert(G_587_GL2_US(gcr_cntl) == 0);
+         assert(G_587_GL2_RANGE(gcr_cntl) == 0);
+         assert(G_587_GL2_DISCARD(gcr_cntl) == 0);
+         unsigned gl2_inv = G_587_GL2_INV(gcr_cntl);
+         unsigned gl2_wb = G_587_GL2_WB(gcr_cntl);
+         unsigned gcr_seq = G_587_SEQ(gcr_cntl);
 
          gcr_cntl &=
-            C_586_GLM_WB & C_586_GLM_INV & C_586_GLV_INV & C_586_GL1_INV & C_586_GL2_INV & C_586_GL2_WB; /* keep SEQ */
+            C_587_GLM_WB & C_587_GLM_INV & C_587_GLV_INV & C_587_GL1_INV & C_587_GL2_INV & C_587_GL2_WB; /* keep SEQ */
 
          assert(flush_cnt);
          (*flush_cnt)++;
 
          radv_cs_emit_write_event_eop(
             cs, gfx_level, cb_db_event,
-            S_490_GLM_WB(glm_wb) | S_490_GLM_INV(glm_inv) | S_490_GLV_INV(glv_inv) | S_490_GL1_INV(gl1_inv) |
-               S_490_GL2_INV(gl2_inv) | S_490_GL2_WB(gl2_wb) | S_490_SEQ(gcr_seq),
+            S_491_GLM_WB(glm_wb) | S_491_GLM_INV(glm_inv) | S_491_GLV_INV(glv_inv) | S_491_GL1_INV(gl1_inv) |
+               S_491_GL2_INV(gl2_inv) | S_491_GL2_WB(gl2_wb) | S_491_SEQ(gcr_seq),
             EOP_DST_SEL_MEM, EOP_INT_SEL_SEND_DATA_AFTER_WR_CONFIRM, EOP_DATA_SEL_VALUE_32BIT, flush_va, *flush_cnt, 0);
 
          radv_cp_wait_mem(cs, WAIT_REG_MEM_EQUAL, flush_va, *flush_cnt, 0xffffffff);
@@ -207,8 +207,8 @@ gfx10_cs_emit_cache_flush(struct radv_cmd_stream *cs, enum amd_gfx_level gfx_lev
    }
 
    /* Ignore fields that only modify the behavior of other fields. */
-   if (gcr_cntl & C_586_GL2_RANGE & C_586_SEQ & (gfx_level >= GFX12 ? ~0 : C_586_GL1_RANGE)) {
-      ac_emit_cp_acquire_mem(cs->b, gfx_level, cs->hw_ip, V_580_CP_PFP, gcr_cntl);
+   if (gcr_cntl & C_587_GL2_RANGE & C_587_SEQ & (gfx_level >= GFX12 ? ~0 : C_587_GL1_RANGE)) {
+      ac_emit_cp_acquire_mem(cs->b, gfx_level, cs->hw_ip, V_581A_PREFETCH_PARSER, gcr_cntl);
    } else if ((cb_db_event || (flush_bits & (RADV_CMD_FLAG_VS_PARTIAL_FLUSH | RADV_CMD_FLAG_PS_PARTIAL_FLUSH |
                                              RADV_CMD_FLAG_CS_PARTIAL_FLUSH))) &&
               !is_mec) {
@@ -392,7 +392,7 @@ radv_cs_emit_cache_flush(struct radeon_winsys *ws, struct radv_cmd_stream *cs, e
    }
 
    if ((flush_bits & RADV_CMD_FLAG_INV_L2) || (gfx_level <= GFX7 && (flush_bits & RADV_CMD_FLAG_WB_L2))) {
-      ac_emit_cp_acquire_mem(cs->b, gfx_level, cs->hw_ip, V_580_CP_PFP,
+      ac_emit_cp_acquire_mem(cs->b, gfx_level, cs->hw_ip, V_581A_PREFETCH_PARSER,
                              cp_coher_cntl | S_0085F0_TC_ACTION_ENA(1) | S_0085F0_TCL1_ACTION_ENA(1) |
                                 S_0301F0_TC_WB_ACTION_ENA(gfx_level >= GFX8));
       cp_coher_cntl = 0;
@@ -406,14 +406,15 @@ radv_cs_emit_cache_flush(struct radeon_winsys *ws, struct radv_cmd_stream *cs, e
           *
           * WB doesn't work without NC.
           */
-         ac_emit_cp_acquire_mem(cs->b, gfx_level, cs->hw_ip, V_580_CP_PFP,
+         ac_emit_cp_acquire_mem(cs->b, gfx_level, cs->hw_ip, V_581A_PREFETCH_PARSER,
                                 cp_coher_cntl | S_0301F0_TC_WB_ACTION_ENA(1) | S_0301F0_TC_NC_ACTION_ENA(1));
          cp_coher_cntl = 0;
 
          *sqtt_flush_bits |= RGP_FLUSH_FLUSH_L2 | RGP_FLUSH_INVAL_VMEM_L0;
       }
       if (flush_bits & RADV_CMD_FLAG_INV_VCACHE) {
-         ac_emit_cp_acquire_mem(cs->b, gfx_level, cs->hw_ip, V_580_CP_PFP, cp_coher_cntl | S_0085F0_TCL1_ACTION_ENA(1));
+         ac_emit_cp_acquire_mem(cs->b, gfx_level, cs->hw_ip, V_581A_PREFETCH_PARSER,
+                                cp_coher_cntl | S_0085F0_TCL1_ACTION_ENA(1));
          cp_coher_cntl = 0;
 
          *sqtt_flush_bits |= RGP_FLUSH_INVAL_VMEM_L0;
@@ -424,7 +425,7 @@ radv_cs_emit_cache_flush(struct radeon_winsys *ws, struct radv_cmd_stream *cs, e
     * Therefore, it should be last. Done in PFP.
     */
    if (cp_coher_cntl)
-      ac_emit_cp_acquire_mem(cs->b, gfx_level, cs->hw_ip, V_580_CP_PFP, cp_coher_cntl);
+      ac_emit_cp_acquire_mem(cs->b, gfx_level, cs->hw_ip, V_581A_PREFETCH_PARSER, cp_coher_cntl);
 
    radeon_begin(cs);
 

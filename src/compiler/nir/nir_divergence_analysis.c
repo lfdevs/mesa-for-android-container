@@ -823,6 +823,7 @@ visit_intrinsic(nir_intrinsic_instr *instr, struct divergence_state *state)
    }
 
    case nir_intrinsic_shuffle:
+   case nir_intrinsic_shuffle_intel:
       is_divergent = src_divergent(instr->src[0], state) &&
                      src_divergent(instr->src[1], state);
       break;
@@ -868,9 +869,11 @@ visit_intrinsic(nir_intrinsic_instr *instr, struct divergence_state *state)
    case nir_intrinsic_load_frag_coord:
    case nir_intrinsic_load_frag_coord_z:
    case nir_intrinsic_load_frag_coord_w:
+   case nir_intrinsic_load_frag_coord_w_rcp:
    case nir_intrinsic_load_frag_coord_unscaled_ir3:
    case nir_intrinsic_load_frag_coord_gmem_ir3:
    case nir_intrinsic_load_pixel_coord:
+   case nir_intrinsic_load_pixel_coord_intel:
    case nir_intrinsic_load_fully_covered:
    case nir_intrinsic_load_sample_pos:
    case nir_intrinsic_load_sample_pos_or_center:
@@ -892,6 +895,7 @@ visit_intrinsic(nir_intrinsic_instr *instr, struct divergence_state *state)
    case nir_intrinsic_is_helper_invocation:
    case nir_intrinsic_load_scratch:
    case nir_intrinsic_load_scratch_nv:
+   case nir_intrinsic_load_scratch_intel:
    case nir_intrinsic_deref_atomic:
    case nir_intrinsic_deref_atomic_swap:
    case nir_intrinsic_ssbo_atomic:
@@ -1072,6 +1076,10 @@ visit_tex(nir_tex_instr *instr, struct divergence_state *state)
 {
    if (instr->def.divergent)
       return false;
+
+   if (instr->op == nir_texop_sparse_residency_intel ||
+       instr->op == nir_texop_sparse_residency_txf_intel)
+      return true;
 
    bool is_divergent = false;
 

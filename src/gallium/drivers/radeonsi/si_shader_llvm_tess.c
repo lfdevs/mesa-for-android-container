@@ -8,31 +8,37 @@
 #include "si_shader_internal.h"
 #include "si_shader_llvm.h"
 #include "sid.h"
+#include "nir.h"
 
-static LLVMValueRef si_nir_load_tcs_varyings(struct ac_shader_abi *abi, LLVMTypeRef type,
-                                             unsigned driver_location, unsigned component,
-                                             unsigned num_components)
+static LLVMValueRef si_nir_load_tcs_varyings(struct ac_shader_abi *abi, unsigned num_components,
+                                             unsigned bit_size, gl_varying_slot slot,
+                                             unsigned component, bool high_16bits)
 {
    struct si_shader_context *ctx = si_shader_context_from_abi(abi);
-   struct si_shader_info *info = &ctx->shader->selector->info;
 
    assert(ctx->shader->key.ge.opt.same_patch_vertices);
+   assert(bit_size == 16 || bit_size == 32);
 
-   uint8_t semantic = info->input_semantic[driver_location];
    /* Load the TCS input from a VGPR. */
    unsigned func_param = ctx->args->ac.tcs_rel_ids.arg_index + 1 +
-      si_shader_io_get_unique_index(semantic) * 4;
+                         si_shader_io_get_unique_index(slot) * 4;
+   LLVMValueRef *value = alloca(sizeof(LLVMValueRef) * num_components);
 
-   LLVMValueRef value[4];
-   for (unsigned i = component; i < component + num_components; i++) {
-      value[i] = LLVMGetParam(ctx->main_fn.value, func_param + i);
-      value[i] = LLVMBuildBitCast(ctx->ac.builder, value[i], type, "");
+   for (unsigned i = 0; i < num_components; i++) {
+      value[i] = LLVMGetParam(ctx->main_fn.value, func_param + component + i);
+
+      if (bit_size == 16) {
+         /* Extract low or high 16 bits from the value. */
+         value[i] = LLVMBuildBitCast(ctx->ac.builder, value[i], ctx->ac.v2i16, "");
+         value[i] = LLVMBuildExtractElement(ctx->ac.builder, value[i],
+                                            LLVMConstInt(ctx->ac.i32, high_16bits, 0), "");
+      }
    }
 
-   return ac_build_gather_values(&ctx->ac, value + component, num_components);
+   return ac_build_gather_values(&ctx->ac, value, num_components);
 }
 
-void si_llvm_ls_build_end(struct si_shader_context *ctx)
+void si_llvm_ls_build_end(struct si_shader_context *ctx, const nir_shader *nir)
 {
    struct si_shader *shader = ctx->shader;
    bool same_thread_count = shader->key.ge.opt.same_patch_vertices;
@@ -75,12 +81,14 @@ void si_llvm_ls_build_end(struct si_shader_context *ctx)
 
       struct si_shader_info *info = &shader->selector->info;
 
-      for (unsigned i = 0; i < info->num_outputs; i++) {
-         unsigned semantic = info->output_semantic[i];
+      u_foreach_bit64_two_masks(semantic, nir->info.outputs_written,
+                                VARYING_SLOT_VAR0_16BIT, nir->info.outputs_written_16bit) {
          int param = si_shader_io_get_unique_index(semantic);
 
          if (!(info->ls_es_outputs_written & BITFIELD64_BIT(param)))
             continue;
+
+         unsigned i = ac_nir_get_io_driver_location(nir, semantic, false);
 
          for (unsigned chan = 0; chan < 4; chan++) {
             if (!ctx->abi.outputs[4 * i + chan])

@@ -47,6 +47,7 @@ struct radv_physical_device_cache_key {
    uint32_t disable_shrink_image_store : 1;
    uint32_t disable_sinking_load_input_fs : 1;
    uint32_t disable_trunc_coord : 1;
+   uint32_t enable_mrt_output_nan_fixup : 1;
    uint32_t emulate_rt : 1;
    uint32_t bvh8 : 1;
    uint32_t ge_wave32 : 1;
@@ -67,7 +68,7 @@ struct radv_physical_device_cache_key {
    uint32_t mitigate_smem_oob : 1;
    uint32_t rt_cps : 1;
 
-   uint32_t reserved : 6;
+   uint32_t reserved : 5;
 };
 
 enum radv_video_enc_hw_ver {

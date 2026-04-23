@@ -181,7 +181,8 @@ struct nak_nir_tex_flags {
    bool has_z_cmpr:1;
    bool is_sparse:1;
    bool nodep:1;
-   uint32_t pad:22;
+   bool scalar:1;
+   uint32_t pad:21;
 };
 PRAGMA_DIAGNOSTIC_POP
 static_assert(sizeof(struct nak_nir_tex_flags) == 4,
@@ -342,6 +343,16 @@ enum nak_fs_out {
 };
 
 #define NAK_FS_OUT_COLOR(n) (NAK_FS_OUT_COLOR0 + (n) * 16)
+
+static inline const struct nak_constant_offset_info*
+nak_const_offsets(const struct nak_compiler* nak, bool is_graphics)
+{
+   if (nak->sm >= 75 && is_graphics) {
+      return &nak_const_offsets_turing_graphics;
+   } else {
+      return &nak_const_offsets_base;
+   }
+}
 
 bool nak_nir_rematerialize_load_const(nir_shader *nir);
 bool nak_nir_mark_lcssa_invariants(nir_shader *nir);

@@ -333,7 +333,6 @@ iris_init_screen_caps(struct iris_screen *screen)
    caps->polygon_offset_clamp = true;
    caps->query_so_overflow = true;
    caps->query_buffer_object = true;
-   caps->tgsi_tex_txf_lz = true;
    caps->texture_query_samples = true;
    caps->shader_clock = true;
    caps->shader_ballot = true;
@@ -494,10 +493,12 @@ iris_init_screen_caps(struct iris_screen *screen)
       caps->shader_subgroup_size = 32;
       caps->shader_subgroup_supported_stages = BITFIELD_MASK(MESA_SHADER_STAGES);
       caps->shader_subgroup_supported_features =
-         devinfo->has_64bit_float ? BITFIELD_MASK(PIPE_SHADER_SUBGROUP_NUM_FEATURES)
+         devinfo->has_64bit_float ? PIPE_SHADER_SUBGROUP_FEATURE_MASK
                                   : (PIPE_SHADER_SUBGROUP_FEATURE_BASIC |
                                      PIPE_SHADER_SUBGROUP_FEATURE_VOTE |
                                      PIPE_SHADER_SUBGROUP_FEATURE_BALLOT |
+                                     PIPE_SHADER_SUBGROUP_FEATURE_ROTATE |
+                                     PIPE_SHADER_SUBGROUP_FEATURE_ROTATE_CLUSTERED |
                                      PIPE_SHADER_SUBGROUP_FEATURE_SHUFFLE |
                                      PIPE_SHADER_SUBGROUP_FEATURE_SHUFFLE_RELATIVE |
                                      PIPE_SHADER_SUBGROUP_FEATURE_QUAD);

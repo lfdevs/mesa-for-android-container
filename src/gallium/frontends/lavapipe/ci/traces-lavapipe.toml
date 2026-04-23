@@ -1,0 +1,40 @@
+[traces_db]
+download_url = "https://s3.freedesktop.org/mesa-tracie-public/"
+
+[[traces]]
+path = "unigine/sanctuary-d3d9.trace-dxgi"
+# This trace is not trimmed to a single frame, so it takes too long to render.
+
+[[traces]]
+path = "unigine/tropics-d3d9.trace-dxgi"
+# This trace is not trimmed to a single frame, so it takes too long to render.
+
+# Note that all the unigine/heaven traces crash when using --loops=
+[[traces]]
+path = "unigine/heaven-scene1-low-d3d9.trace-dxgi"
+nonloopable = true
+devices = { lvp = { checksum = "555efa5bcc89a638ed58df874aa13d0727bc7e798bfd9b42b2aa1854e3447688" } }
+
+[[traces]]
+path = "unigine/heaven-scene1-low-d3d11.trace-dxgi"
+nonloopable = true
+devices = { lvp = { checksum = "677a16bd71e309d6de1669c23dff262392da52252e4728b819e887dfedabec89" } }
+
+[[traces]]
+path = "unigine/heaven-scene1-ultra-d3d11.trace-dxgi"
+nonloopable = true
+devices = { lvp = { checksum = "348c4c0edefb518a373fd971c64d359730731367133413ab91beebaac273ee71" } }
+
+[[traces]]
+path = "unigine/heaven-scene12-low-d3d9.trace-dxgi"
+nonloopable = true
+devices = { lvp = { checksum = "9f6586cd18b7add22d8d17b283b03e0e669b5cbcb3199d2cc655f5dde0d753df" } }
+
+[[traces]]
+path = "unigine/heaven-scene12-ultra-d3d11.trace-dxgi"
+nonloopable = true
+devices = { lvp = { checksum = "95c5d1f7d1fae05f5e535f445f6f5b2b4b6efa9cafb717edfb38acbf4cb97134" } }
+
+[[traces]]
+path = "./LunarG-VulkanSamples/amd/polaris10/Hologram:-w:640:-h:480.gfxr"
+devices = { lvp = { checksum = "bb58e7dda75590080b338911de972168933155c6efa9fab8b088d139b4d3ae6e" } }

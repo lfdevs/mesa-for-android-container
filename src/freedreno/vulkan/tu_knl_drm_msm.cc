@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: MIT
  */
 
-#include "tu_knl.h"
+#include "drm-uapi/msm_drm.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -12,22 +12,21 @@
 #include <sys/mman.h>
 #include <xf86drm.h>
 
-#include "vk_util.h"
-
-#include "drm-uapi/msm_drm.h"
-#include "util/u_debug.h"
-#include "util/u_process.h"
 #include "util/hash_table.h"
 #include "util/libsync.h"
+#include "util/u_debug.h"
+#include "util/u_process.h"
+#include "vk_util.h"
 
+#include "common/redump.h"
 #include "tu_cmd_buffer.h"
 #include "tu_cs.h"
 #include "tu_device.h"
 #include "tu_dynamic_rendering.h"
+#include "tu_knl.h"
 #include "tu_knl_drm.h"
 #include "tu_queue.h"
 #include "tu_rmv.h"
-#include "redump.h"
 
 static int
 tu_drm_get_param(int fd, uint32_t param, uint64_t *value)
@@ -1667,6 +1666,8 @@ tu_knl_drm_msm_load(struct tu_instance *instance,
    device->has_sparse_prr = tu_drm_get_prr(device);
 
    device->has_preemption = tu_drm_has_preemption(device);
+
+   device->is_perf_cntr_selectable = true;
 
    /* Even if kernel is new enough, the GPU itself may not support it. */
    device->has_cached_coherent_memory =

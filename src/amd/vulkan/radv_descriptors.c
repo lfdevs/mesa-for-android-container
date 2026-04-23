@@ -113,7 +113,7 @@ radv_GetDescriptorEXT(VkDevice _device, const VkDescriptorGetInfoEXT *pDescripto
          VK_FROM_HANDLE(radv_sampler, sampler, pDescriptorInfo->data.pCombinedImageSampler->sampler);
 
          if (sampler->vk.ycbcr_conversion) {
-            radv_write_image_descriptor_ycbcr(device, pDescriptor, pDescriptorInfo->data.pCombinedImageSampler);
+            radv_write_image_descriptor_ycbcr(device, pDescriptor, pDescriptorInfo->data.pCombinedImageSampler, true);
          } else {
             radv_write_image_descriptor(pDescriptor, radv_get_sampled_image_desc_size(pdev), pDescriptorInfo->type,
                                         pDescriptorInfo->data.pCombinedImageSampler);
@@ -170,4 +170,105 @@ radv_GetDescriptorEXT(VkDevice _device, const VkDescriptorGetInfoEXT *pDescripto
    default:
       UNREACHABLE("invalid descriptor type");
    }
+}
+
+/* VK_EXT_descriptor_heap */
+VKAPI_ATTR VkResult VKAPI_CALL
+radv_WriteSamplerDescriptorsEXT(VkDevice _device, uint32_t samplerCount, const VkSamplerCreateInfo *pSamplers,
+                                const VkHostAddressRangeEXT *pDescriptors)
+{
+   VK_FROM_HANDLE(radv_device, device, _device);
+
+   for (uint32_t i = 0; i < samplerCount; i++) {
+      const VkHostAddressRangeEXT *host_addr_range = &pDescriptors[i];
+      struct radv_sampler sampler;
+
+      radv_sampler_init(device, &sampler, &pSamplers[i]);
+
+      radv_write_sampler_descriptor(host_addr_range->address, radv_sampler_to_handle(&sampler));
+
+      radv_sampler_finish(device, &sampler);
+   }
+
+   return VK_SUCCESS;
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL
+radv_WriteResourceDescriptorsEXT(VkDevice _device, uint32_t resourceCount,
+                                 const VkResourceDescriptorInfoEXT *pResources,
+                                 const VkHostAddressRangeEXT *pDescriptors)
+{
+   VK_FROM_HANDLE(radv_device, device, _device);
+   const struct radv_physical_device *pdev = radv_device_physical(device);
+
+   for (uint32_t i = 0; i < resourceCount; i++) {
+      const VkResourceDescriptorInfoEXT *resource = &pResources[i];
+      const VkHostAddressRangeEXT *host_addr_range = &pDescriptors[i];
+
+      switch (resource->type) {
+      case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
+      case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
+      case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE: {
+         const VkImageDescriptorInfoEXT *desc_info = resource->data.pImage;
+         const uint32_t size = resource->type == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE
+                                  ? RADV_STORAGE_IMAGE_DESC_SIZE
+                                  : radv_get_sampled_image_desc_size(pdev);
+
+         if (desc_info) {
+            struct radv_image_view iview;
+
+            radv_image_view_init(&iview, device, desc_info->pView,
+                                 &(struct radv_image_view_extra_create_info){.from_client = true});
+
+            const VkDescriptorImageInfo desc_image_info = {
+               .imageView = radv_image_view_to_handle(&iview),
+               .imageLayout = desc_info->layout,
+            };
+
+            const VkSamplerYcbcrConversionInfo *ycbcr_conversion =
+               vk_find_struct_const(desc_info->pView->pNext, SAMPLER_YCBCR_CONVERSION_INFO);
+            if (ycbcr_conversion) {
+               radv_write_image_descriptor_ycbcr(device, host_addr_range->address, &desc_image_info, false);
+            } else {
+               radv_write_image_descriptor(host_addr_range->address, size, resource->type, &desc_image_info);
+            }
+
+            radv_image_view_finish(&iview);
+         } else {
+            memset(host_addr_range->address, 0, size);
+         }
+         break;
+      }
+      case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
+      case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER: {
+         const VkDeviceAddressRangeEXT *addr_range = resource->data.pAddressRange;
+
+         radv_write_buffer_descriptor(device, host_addr_range->address, addr_range ? addr_range->address : 0,
+                                      addr_range ? addr_range->size : 0);
+         break;
+      }
+      case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:
+      case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER: {
+         const VkTexelBufferDescriptorInfoEXT *desc_info = resource->data.pTexelBuffer;
+
+         if (desc_info && desc_info->addressRange.address) {
+            radv_make_texel_buffer_descriptor(device, desc_info->addressRange.address, desc_info->format,
+                                              desc_info->addressRange.size, host_addr_range->address);
+         } else {
+            memset(host_addr_range->address, 0, RADV_BUFFER_DESC_SIZE);
+         }
+         break;
+      }
+      case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR: {
+         const VkDeviceAddressRangeEXT *addr_range = resource->data.pAddressRange;
+
+         radv_write_accel_struct_descriptor(device, host_addr_range->address, addr_range ? addr_range->address : 0);
+         break;
+      }
+      default:
+         UNREACHABLE("invalid descriptor type");
+      }
+   }
+
+   return VK_SUCCESS;
 }

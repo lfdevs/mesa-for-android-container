@@ -33,15 +33,16 @@
  */
 
 static void
-lower_is_sparse_texels_resident(nir_builder *b, nir_intrinsic_instr *intrin)
+lower_is_sparse_texels_resident(nir_builder *b, nir_intrinsic_instr *intr,
+                                bool jay)
 {
-   b->cursor = nir_instr_remove(&intrin->instr);
+   b->cursor = nir_after_instr(&intr->instr);
 
-   nir_def_rewrite_uses(
-      &intrin->def,
-      nir_i2b(b, nir_iand(b, intrin->src[0].ssa,
-                              nir_ishl(b, nir_imm_int(b, 1),
-                                          nir_load_subgroup_invocation(b)))));
+   nir_def_replace(&intr->def,
+      jay ? nir_inverse_ballot(b, intr->src[0].ssa)
+          : nir_i2b(b, nir_iand(b, intr->src[0].ssa,
+                                nir_ishl(b, nir_imm_int(b, 1),
+                                         nir_load_subgroup_invocation(b)))));
 }
 
 static void
@@ -55,7 +56,7 @@ lower_sparse_residency_code_and(nir_builder *b, nir_intrinsic_instr *intrin)
 }
 
 static void
-lower_sparse_image_load(nir_builder *b, nir_intrinsic_instr *intrin)
+lower_sparse_image_load(nir_builder *b, nir_intrinsic_instr *intrin, bool jay)
 {
    b->cursor = nir_instr_remove(&intrin->instr);
 
@@ -105,37 +106,62 @@ lower_sparse_image_load(nir_builder *b, nir_intrinsic_instr *intrin)
    }
 
    nir_def *txf =
-      nir_txf(b, coord,
-              .texture_offset = bindless ? NULL : intrin->src[0].ssa,
-              .texture_handle = bindless ? intrin->src[0].ssa : NULL,
-              .dim = nir_intrinsic_image_dim(intrin),
-              .dest_type = nir_type_float32, /* dest is unused */
-              .is_array = array, .is_sparse = true);
+      nir_build_tex(b,
+                    jay ? nir_texop_sparse_residency_txf_intel : nir_texop_txf,
+                    coord,
+                    .texture_offset = bindless ? NULL : intrin->src[0].ssa,
+                    .texture_handle = bindless ? intrin->src[0].ssa : NULL,
+                    .dim = nir_intrinsic_image_dim(intrin),
+                    .dest_type = nir_type_float32, /* dest is unused */
+                    .is_array = array, .is_sparse = true);
 
-   dests[intrin->num_components - 1] = nir_channel(b, txf, 4);
+   dests[intrin->num_components - 1] =
+      nir_channel(b, txf, txf->num_components - 1);
 
    nir_def_rewrite_uses(
       &intrin->def,
       nir_vec(b, dests, intrin->num_components));
 }
 
-static void
-split_tex_residency(nir_builder *b, nir_tex_instr *tex, int compare_idx)
+static bool
+split_tex_residency(nir_builder *b, nir_tex_instr *tex, bool jay)
 {
+   int compare_idx = nir_tex_instr_src_index(tex, nir_tex_src_comparator);
+
+   if (!jay && compare_idx == -1)
+      return false;
+
    b->cursor = nir_after_instr(&tex->instr);
 
    /* Clone the original instruction */
-   nir_tex_instr *sparse_tex = nir_instr_as_tex(nir_instr_clone(b->shader, &tex->instr));
-   nir_def_init(&sparse_tex->instr, &sparse_tex->def,
-                tex->def.num_components, tex->def.bit_size);
+   nir_tex_instr *sparse_tex =
+      nir_instr_as_tex(nir_instr_clone(b->shader, &tex->instr));
+   nir_def_init(&sparse_tex->instr, &sparse_tex->def, 2, tex->def.bit_size);
    nir_builder_instr_insert(b, &sparse_tex->instr);
+
+   if (jay) {
+      sparse_tex->op = tex->op == nir_texop_txf ?
+                       nir_texop_sparse_residency_txf_intel :
+                       nir_texop_sparse_residency_intel;
+   }
 
    /* txl/txb/tex and tg4 both access the same pixels for residency checking
     * purposes, but using the former for residency-only queries lets us mask
     * out unwanted color components, using fewer registers.
     */
-   if (sparse_tex->op == nir_texop_tg4) {
-      if (nir_tex_instr_src_index(sparse_tex, nir_tex_src_bias) >= 0)
+   if (tex->op == nir_texop_tg4) {
+      if (!sparse_tex->is_gather_implicit_lod) {
+         /* Add explicit LOD 0 */
+         nir_builder bb = nir_builder_at(nir_after_instr(&tex->instr));
+         nir_tex_instr_add_src(sparse_tex, nir_tex_src_lod,
+                               nir_imm_int(&bb, 0));
+      } else {
+         assert(nir_tex_instr_src_index(sparse_tex, nir_tex_src_lod) == -1);
+      }
+
+      if (jay)
+         ;
+      else if (nir_tex_instr_src_index(sparse_tex, nir_tex_src_bias) >= 0)
          sparse_tex->op = nir_texop_txb;
       else if (sparse_tex->is_gather_implicit_lod)
          sparse_tex->op = nir_texop_tex;
@@ -158,27 +184,30 @@ split_tex_residency(nir_builder *b, nir_tex_instr *tex, int compare_idx)
    for (unsigned i = 0; i < tex->def.num_components; i++)
       new_comps[i] = nir_channel(b, &tex->def, i);
    new_comps[tex->def.num_components] =
-      nir_channel(b, &sparse_tex->def, tex->def.num_components);
+      nir_channel(b, &sparse_tex->def, sparse_tex->def.num_components - 1);
 
-   nir_def *new_vec = nir_vec(b, new_comps, sparse_tex->def.num_components);
+   nir_def *new_vec = nir_vec(b, new_comps, tex->def.num_components + 1);
 
    nir_def_rewrite_uses_after(&tex->def, new_vec);
+   return true;
 }
 
 static bool
 lower_sparse_intrinsics(nir_builder *b, nir_instr *instr, void *cb_data)
 {
+   const bool jay = (uintptr_t) cb_data;
+
    switch (instr->type) {
    case nir_instr_type_intrinsic: {
       nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
       switch (intrin->intrinsic) {
       case nir_intrinsic_image_sparse_load:
       case nir_intrinsic_bindless_image_sparse_load:
-         lower_sparse_image_load(b, intrin);
+         lower_sparse_image_load(b, intrin, jay);
          return true;
 
       case nir_intrinsic_is_sparse_texels_resident:
-         lower_is_sparse_texels_resident(b, intrin);
+         lower_is_sparse_texels_resident(b, intrin, jay);
          return true;
 
       case nir_intrinsic_sparse_residency_code_and:
@@ -192,12 +221,7 @@ lower_sparse_intrinsics(nir_builder *b, nir_instr *instr, void *cb_data)
 
    case nir_instr_type_tex: {
       nir_tex_instr *tex = nir_instr_as_tex(instr);
-      int comp_idx = nir_tex_instr_src_index(tex, nir_tex_src_comparator);
-      if (comp_idx != -1 && tex->is_sparse) {
-         split_tex_residency(b, tex, comp_idx);
-         return true;
-      }
-      return false;
+      return tex->is_sparse && split_tex_residency(b, tex, jay);
    }
 
    default:
@@ -206,9 +230,9 @@ lower_sparse_intrinsics(nir_builder *b, nir_instr *instr, void *cb_data)
 }
 
 bool
-intel_nir_lower_sparse_intrinsics(nir_shader *nir)
+intel_nir_lower_sparse_intrinsics(nir_shader *nir, bool jay)
 {
    return nir_shader_instructions_pass(nir, lower_sparse_intrinsics,
                                        nir_metadata_control_flow,
-                                       NULL);
+                                       (void *)(uintptr_t)jay);
 }

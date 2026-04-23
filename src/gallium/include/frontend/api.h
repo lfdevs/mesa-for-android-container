@@ -99,6 +99,20 @@ enum st_attachment_type {
 #define ST_INVALIDATE_VS_CONSTBUF0        (1 << 2)
 #define ST_INVALIDATE_VERTEX_BUFFERS      (1 << 3)
 #define ST_INVALIDATE_FB_STATE            (1 << 4)
+#define ST_INVALIDATE_VIEWPORT            (1 << 5)
+#define ST_INVALIDATE_VS_STATE            (1 << 6)
+#define ST_INVALIDATE_GS_STATE            (1 << 7)
+#define ST_INVALIDATE_TCS_STATE           (1 << 8)
+#define ST_INVALIDATE_TES_STATE           (1 << 9)
+#define ST_INVALIDATE_MESH_STATE          (1 << 10)
+#define ST_INVALIDATE_RASTERIZER          (1 << 11)
+#define ST_INVALIDATE_FS_SAMPLERS         (1 << 12)
+#define ST_INVALIDATE_FS_STATE            (1 << 13)
+#define ST_INVALIDATE_BLEND               (1 << 14)
+#define ST_INVALIDATE_DSA                 (1 << 15)
+#define ST_INVALIDATE_SAMPLE_MASK         (1 << 16)
+#define ST_INVALIDATE_SAMPLE_SHADING      (1 << 17)
+#define ST_INVALIDATE_FS_IMAGES           (1 << 18)
 
 /**
  * Value to pipe_frontend_streen::get_param function.

@@ -17,25 +17,6 @@
 #define RENCODE_FW_INTERFACE_MAJOR_VERSION         1
 #define RENCODE_FW_INTERFACE_MINOR_VERSION         20
 
-static void radeon_enc_op_preset(struct radeon_encoder *enc)
-{
-   uint32_t preset_mode;
-
-   if (enc->enc_pic.quality_modes.preset_mode == RENCODE_PRESET_MODE_SPEED &&
-         (!enc->enc_pic.hevc_deblock.disable_sao &&
-         (u_reduce_video_profile(enc->base.profile) == PIPE_VIDEO_FORMAT_HEVC)))
-      preset_mode = RENCODE_IB_OP_SET_BALANCE_ENCODING_MODE;
-   else if (enc->enc_pic.quality_modes.preset_mode == RENCODE_PRESET_MODE_QUALITY)
-      preset_mode = RENCODE_IB_OP_SET_QUALITY_ENCODING_MODE;
-   else if (enc->enc_pic.quality_modes.preset_mode == RENCODE_PRESET_MODE_BALANCE)
-      preset_mode = RENCODE_IB_OP_SET_BALANCE_ENCODING_MODE;
-   else
-      preset_mode = RENCODE_IB_OP_SET_SPEED_ENCODING_MODE;
-
-   RADEON_ENC_BEGIN(preset_mode);
-   RADEON_ENC_END();
-}
-
 static void radeon_enc_quality_params(struct radeon_encoder *enc)
 {
    RADEON_ENC_BEGIN(enc->cmd.quality_params);
@@ -150,7 +131,6 @@ void radeon_enc_2_0_init(struct radeon_encoder *enc)
    enc->input_format = radeon_enc_input_format;
    enc->output_format = radeon_enc_output_format;
    enc->ctx = radeon_enc_ctx;
-   enc->op_preset = radeon_enc_op_preset;
    enc->quality_params = radeon_enc_quality_params;
 
    if (u_reduce_video_profile(enc->base.profile) == PIPE_VIDEO_FORMAT_HEVC) {

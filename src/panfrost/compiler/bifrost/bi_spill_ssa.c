@@ -1398,56 +1398,50 @@ min_algorithm(struct spill_ctx *ctx)
 void
 bi_record_sizes(bi_context *ctx, uint32_t *sizes)
 {
-   bi_foreach_instr_global(ctx, I) {
-      if (I->nr_dests == 0 || I->dest[0].type != BI_INDEX_NORMAL)
-         continue;
-      unsigned idx = I->dest[0].value;
-      bi_foreach_ssa_dest(I, d) {
-         idx = I->dest[d].value;
-         assert(sizes[idx] == 0 && "SSA broken");
-         switch (I->op) {
-         case BI_OPCODE_PHI:
-         case BI_OPCODE_MEMMOV:
-            break;
-         default:
-            sizes[idx] = bi_count_write_registers(I, d);
-            break;
-         }
-      }
-   }
+   memset(sizes, 0, ctx->ssa_alloc);
 
-   /* now that we know the rest of the sizes, find the sizes for PHI nodes */
-   bi_foreach_block(ctx, block) {
-      bi_foreach_phi_in_block(block, I) {
-         if (I->dest[0].type != BI_INDEX_NORMAL)
+   bool progress = true;
+
+   while (progress) {
+      progress = false;
+
+      bi_foreach_instr_global(ctx, I) {
+         if (I->nr_dests == 0 || I->dest[0].type != BI_INDEX_NORMAL)
             continue;
-         unsigned idx = I->dest[0].value;
-         sizes[idx] = 1;
-         bi_foreach_ssa_src(I, s) {
-            sizes[idx] = MAX2(sizes[idx], sizes[I->src[s].value]);
+
+         bi_foreach_ssa_dest(I, d) {
+            const uint32_t old_size = sizes[I->dest[d].value];
+            uint32_t new_size = old_size;
+
+            switch (I->op) {
+            case BI_OPCODE_PHI:
+            case BI_OPCODE_MEMMOV:
+               /* Output size determined by the inputs. */
+               bi_foreach_src(I, s) {
+                  switch (I->src[s].type) {
+                  case BI_INDEX_NORMAL:
+                     new_size = MAX2(new_size, sizes[I->src[s].value]);
+                     break;
+                  case BI_INDEX_CONSTANT:
+                  case BI_INDEX_FAU:
+                     new_size = 1;
+                     break;
+                  default:
+                     UNREACHABLE("invalid index type for size calculation\n");
+                  }
+               }
+               break;
+            default:
+               /* Output size independent of the inputs. */
+               new_size = bi_count_write_registers(I, d);
+               break;
+            }
+
+            /* Need to continue if there was a change or the dst is not yet
+             * defined. */
+            progress |= new_size == 0 || old_size != new_size;
+            sizes[I->dest[d].value] = new_size;
          }
-      }
-   }
-
-   /* After we know PHI sizes, determine MEMMOV sizes. */
-
-   bi_foreach_instr_global(ctx, I) {
-      if (I->op != BI_OPCODE_MEMMOV || I->dest[0].type != BI_INDEX_NORMAL)
-         continue;
-
-      if (I->dest[0].memory) {
-         assert(!I->src[0].memory);
-         sizes[I->dest[0].value] = sizes[I->src[0].value];
-      }
-   }
-
-   bi_foreach_instr_global(ctx, I) {
-      if (I->op != BI_OPCODE_MEMMOV || I->dest[0].type != BI_INDEX_NORMAL)
-         continue;
-
-      if (!I->dest[0].memory) {
-         assert(I->src[0].memory);
-         sizes[I->dest[0].value] = sizes[I->src[0].value];
       }
    }
 }

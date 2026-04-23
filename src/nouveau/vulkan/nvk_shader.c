@@ -34,12 +34,26 @@
 #include "nv_push_clc397.h"
 #include "nv_push_clc797.h"
 
-const struct nak_constant_offset_info nak_const_offsets = {
+const struct nak_constant_offset_info nak_const_offsets_base = {
    .sample_info_cb = 0,
    .sample_locations_offset = nvk_root_descriptor_offset(draw.sample_locations),
    .sample_masks_offset = nvk_root_descriptor_offset(draw.sample_masks),
+   .printf_cb = 0,
    .printf_buffer_offset = nvk_root_descriptor_offset(printf_buffer_addr),
 };
+
+const struct nak_constant_offset_info nak_const_offsets_turing_graphics = {
+   .sample_info_cb = NVK_HW_ROOT_TABLE_FIRST_CB +
+                     nvk_hw_root_table_index(draw.sample_locations),
+   .sample_locations_offset = nvk_hw_root_table_offset(draw.sample_locations),
+   .sample_masks_offset = nvk_hw_root_table_offset(draw.sample_masks),
+   .printf_cb = NVK_HW_ROOT_TABLE_FIRST_CB +
+                nvk_hw_root_table_index(printf_buffer_addr),
+   .printf_buffer_offset = nvk_hw_root_table_offset(printf_buffer_addr),
+};
+static_assert(nvk_hw_root_table_index(draw.sample_locations) ==
+              nvk_hw_root_table_index(draw.sample_masks),
+              "Sample info is in same root table");
 
 static void
 shared_var_info(const struct glsl_type *type, unsigned *size, unsigned *align)

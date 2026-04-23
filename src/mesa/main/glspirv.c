@@ -249,14 +249,14 @@ _mesa_spirv_to_nir(struct gl_context *ctx,
    const char *entry_point_name = spirv_data->SpirVEntryPoint;
    assert(entry_point_name);
 
-   struct nir_spirv_specialization *spec_entries =
-      calloc(sizeof(*spec_entries),
-             spirv_data->NumSpecializationConstants);
+   struct nir_spirv_specialization *spec =
+      vtn_alloc_specialization(spirv_data->NumSpecializationConstants);
 
    for (unsigned i = 0; i < spirv_data->NumSpecializationConstants; ++i) {
-      spec_entries[i].id = spirv_data->SpecializationConstantsIndex[i];
-      spec_entries[i].value.u32 = spirv_data->SpecializationConstantsValue[i];
-      spec_entries[i].defined_on_module = false;
+      vtn_add_specialization_entry(spec, i, spirv_data->SpecializationConstantsIndex[i],
+                                   sizeof(uint32_t),
+                                   &spirv_data->SpecializationConstantsValue[i],
+                                   false);
    }
 
    struct spirv_capabilities spirv_caps;
@@ -281,11 +281,11 @@ _mesa_spirv_to_nir(struct gl_context *ctx,
    nir_shader *nir =
       spirv_to_nir((const uint32_t *) &spirv_module->Binary[0],
                    spirv_module->Length / 4,
-                   spec_entries, spirv_data->NumSpecializationConstants,
+                   spec,
                    stage, entry_point_name,
                    &spirv_options,
                    options);
-   free(spec_entries);
+   vtn_free_specialization(spec);
 
    assert(nir);
    assert(nir->info.stage == stage);
@@ -350,7 +350,6 @@ _mesa_SpecializeShaderARB(GLuint shader,
 {
    GET_CURRENT_CONTEXT(ctx);
    struct gl_shader *sh;
-   struct nir_spirv_specialization *spec_entries = NULL;
 
    if (!ctx->Extensions.ARB_gl_spirv) {
       _mesa_error(ctx, GL_INVALID_OPERATION, "glSpecializeShaderARB");
@@ -396,19 +395,18 @@ _mesa_SpecializeShaderARB(GLuint shader,
     * parsing the module. However, flagging them during specialization is okay,
     * since it makes no difference in terms of application-visible state.
     */
-   spec_entries = calloc(sizeof(*spec_entries), numSpecializationConstants);
+   struct nir_spirv_specialization *spec =
+      vtn_alloc_specialization(numSpecializationConstants);
 
    for (unsigned i = 0; i < numSpecializationConstants; ++i) {
-      spec_entries[i].id = pConstantIndex[i];
-      spec_entries[i].value.u32 = pConstantValue[i];
-      spec_entries[i].defined_on_module = false;
+      vtn_add_specialization_entry(spec, i, pConstantIndex[i], sizeof(uint32_t),
+                                   &pConstantValue[i], false);
    }
 
    enum spirv_verify_result r = spirv_verify_gl_specialization_constants(
       (uint32_t *)&spirv_data->SpirVModule->Binary[0],
       spirv_data->SpirVModule->Length / 4,
-      spec_entries, numSpecializationConstants,
-      sh->Stage, pEntryPoint);
+      spec, sh->Stage, pEntryPoint);
 
    switch (r) {
    case SPIRV_VERIFY_OK:
@@ -425,10 +423,11 @@ _mesa_SpecializeShaderARB(GLuint shader,
       goto end;
    case SPIRV_VERIFY_UNKNOWN_SPEC_INDEX:
       for (unsigned i = 0; i < numSpecializationConstants; ++i) {
-         if (spec_entries[i].defined_on_module == false) {
+         const struct nir_spirv_specialization_entry *entry = &spec->entries[i];
+         if (entry->defined_on_module == false) {
             _mesa_error(ctx, GL_INVALID_VALUE,
                         "glSpecializeShaderARB(constant \"%i\" does not exist "
-                        "in shader)", spec_entries[i].id);
+                        "in shader)", entry->id);
             break;
          }
       }
@@ -456,5 +455,5 @@ _mesa_SpecializeShaderARB(GLuint shader,
    }
 
  end:
-   free(spec_entries);
+   vtn_free_specialization(spec);
 }

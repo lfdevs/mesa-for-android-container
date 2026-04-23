@@ -5,9 +5,11 @@
 
 #include "tu_shader.h"
 
+#include <initializer_list>
+
+#include "nir/nir_xfb_info.h"
 #include "spirv/nir_spirv.h"
 #include "util/mesa-blake3.h"
-#include "nir/nir_xfb_info.h"
 #include "vk_nir.h"
 #include "vk_nir_convert_ycbcr.h"
 #include "vk_pipeline.h"
@@ -15,15 +17,13 @@
 
 #include "ir3/ir3_compiler.h"
 #include "ir3/ir3_nir.h"
-
-#include "tu_device.h"
 #include "tu_descriptor_set.h"
+#include "tu_device.h"
 #include "tu_lrz.h"
 #include "tu_pipeline.h"
 #include "tu_rmv.h"
+#include "tu_sampler.h"
 #include "tu_subsampled_image.h"
-
-#include <initializer_list>
 
 static void
 init_ir3_nir_options(struct ir3_shader_nir_options *options,
@@ -69,9 +69,7 @@ tu_spirv_to_nir_library(struct tu_device *dev,
    spirv_to_nir_options spirv_options = tu_spirv_options;
    spirv_options.create_library = true;
 
-   nir_shader *nir =
-      spirv_to_nir(words, word_count, NULL, 0, MESA_SHADER_COMPUTE,
-                   "main", &spirv_options, nir_options);
+   nir_shader *nir = spirv_to_nir(words, word_count, NULL, MESA_SHADER_COMPUTE, "main", &spirv_options, nir_options);
 
    NIR_PASS(_, nir, nir_lower_system_values);
 
@@ -1576,7 +1574,8 @@ tu_xs_get_immediates_packet_size_dwords(const struct ir3_shader_variant *xs)
    const struct ir3_const_state *const_state = ir3_const_state(xs);
    uint32_t base = const_state->allocs.max_const_offset_vec4;
    const struct ir3_imm_const_state *imm_state = &xs->imm_state;
-   int32_t size = DIV_ROUND_UP(imm_state->count, 4);
+   int32_t size = xs->compiler->info->props.load_shader_consts_via_preamble ?
+      0 : DIV_ROUND_UP(imm_state->count, 4);
 
    /* truncate size to avoid writing constants that shader
     * does not use:
@@ -2443,13 +2442,15 @@ tu6_emit_ds(struct tu_cs *cs,
          regid(63, 0);
    const uint32_t ds_primitiveid_regid =
          ir3_find_sysval_regid(ds, SYSTEM_VALUE_PRIMITIVE_ID);
+   const uint32_t viewid_regid =
+         ir3_find_sysval_regid(ds, SYSTEM_VALUE_VIEW_INDEX);
 
    tu_cs_emit_pkt4(cs, REG_A6XX_VFD_CNTL_3, 2);
    tu_cs_emit(cs, A6XX_VFD_CNTL_3_REGID_DSRELPATCHID(ds_rel_patch_regid) |
                   A6XX_VFD_CNTL_3_REGID_TESSX(tess_coord_x_regid) |
                   A6XX_VFD_CNTL_3_REGID_TESSY(tess_coord_y_regid) |
                   A6XX_VFD_CNTL_3_REGID_DSPRIMID(ds_primitiveid_regid));
-   tu_cs_emit(cs, 0x000000fc); /* VFD_CNTL_4 */
+   tu_cs_emit(cs, A6XX_VFD_CNTL_4_REGID_DSVIEWID(viewid_regid)); /* VFD_CNTL_4 */
 }
 TU_GENX(tu6_emit_ds);
 
@@ -2474,10 +2475,12 @@ tu6_emit_gs(struct tu_cs *cs,
 {
    const uint32_t gsheader_regid =
          ir3_find_sysval_regid(gs, SYSTEM_VALUE_GS_HEADER_IR3);
+   const uint32_t viewid_regid =
+         ir3_find_sysval_regid(gs, SYSTEM_VALUE_VIEW_INDEX);
 
    tu_cs_emit_pkt4(cs, REG_A6XX_VFD_CNTL_5, 1);
    tu_cs_emit(cs, A6XX_VFD_CNTL_5_REGID_GSHEADER(gsheader_regid) |
-                  0xfc00);
+                  A6XX_VFD_CNTL_5_REGID_GSVIEWID(viewid_regid));
 
    if (gs) {
       uint32_t vertices_out, invocations;
@@ -2934,6 +2937,7 @@ void
 tu_lower_nir(struct tu_device *dev,
              nir_shader *nir,
              const struct tu_shader_key *key,
+             const struct ir3_shader_key *ir3_key,
              struct tu_shader_info *info)
 {
    const nir_opt_access_options access_options = {
@@ -2999,9 +3003,13 @@ tu_lower_nir(struct tu_device *dev,
     */
    ir3_nir_lower_io_vars_to_temporaries(nir);
 
-   if (nir->info.stage == MESA_SHADER_VERTEX && key->multiview_mask) {
-      tu_nir_lower_multiview(nir, key->multiview_mask, dev);
-   }
+   bool is_last_stage =
+    (nir->info.stage == MESA_SHADER_VERTEX && !ir3_key->has_gs && !ir3_key->tessellation);
+
+   if (nir->info.stage == MESA_SHADER_VERTEX && key->multiview_mask)
+      tu_nir_lower_multiview(nir, key->multiview_mask, dev, is_last_stage);
+   if (nir->info.stage == MESA_SHADER_GEOMETRY)
+      nir->info.view_mask = key->multiview_mask;
 
    if (!key->multiview_mask)
       tu_nir_lower_view_to_zero(nir);
@@ -3347,7 +3355,7 @@ tu_compile_shaders(struct tu_device *device,
 
       int64_t stage_start = os_time_get_nano();
 
-      tu_lower_nir(device, nir[stage], &keys[stage], &info[stage]);
+      tu_lower_nir(device, nir[stage], &keys[stage], &ir3_key, &info[stage]);
 
       stage_feedbacks[stage].duration += os_time_get_nano() - stage_start;
    }

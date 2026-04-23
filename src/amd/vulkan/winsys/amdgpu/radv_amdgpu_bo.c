@@ -909,6 +909,8 @@ radv_amdgpu_bo_get_flags_from_fd(struct radeon_winsys *_ws, int fd, enum radeon_
       *flags |= RADEON_FLAG_NO_INTERPROCESS_SHARING | RADEON_FLAG_PREFER_LOCAL_BO;
    if (info.alloc_flags & AMDGPU_GEM_CREATE_VRAM_CLEARED)
       *flags |= RADEON_FLAG_ZERO_VRAM;
+   if (info.alloc_flags & AMDGPU_GEM_CREATE_DISCARDABLE)
+      *flags |= RADEON_FLAG_DISCARDABLE;
    if (info.alloc_flags & AMDGPU_GEM_CREATE_GFX12_DCC)
       *flags |= RADEON_FLAG_GFX12_ALLOW_DCC;
    return true;

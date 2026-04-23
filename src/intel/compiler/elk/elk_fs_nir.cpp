@@ -527,6 +527,9 @@ optimize_frontfacing_ternary(nir_to_elk_state &ntb,
    const intel_device_info *devinfo = ntb.devinfo;
    elk_fs_visitor &s = ntb.s;
 
+   if (instr->def.bit_size != 32)
+      return false;
+
    nir_intrinsic_instr *src0 = nir_src_as_intrinsic(instr->src[0].src);
    if (src0 == NULL || src0->intrinsic != nir_intrinsic_load_front_face)
       return false;

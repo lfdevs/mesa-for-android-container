@@ -22,20 +22,16 @@
  * IN THE SOFTWARE.
  */
 
-#include "tu_buffer.h"
-#include "tu_device.h"
-#include "tu_cmd_buffer.h"
-
-#include "vk_acceleration_structure.h"
 #include "tu_acceleration_structure.h"
+
 #include "radix_sort/radix_sort_u64.h"
-
-
-#include "common/freedreno_gpu_event.h"
-
 #include "util/u_hexdump.h"
+#include "vk_acceleration_structure.h"
 
 #include "bvh/tu_build_interface.h"
+#include "tu_buffer.h"
+#include "tu_cmd_buffer.h"
+#include "tu_device.h"
 
 static const uint32_t encode_spv[] = {
 #include "bvh/encode.spv.h"

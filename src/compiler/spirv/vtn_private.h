@@ -651,8 +651,7 @@ struct vtn_builder {
     */
    struct set *vars_used_indirectly;
 
-   unsigned num_specializations;
-   struct nir_spirv_specialization *specializations;
+   struct nir_spirv_specialization *specialization;
 
    unsigned value_id_bound;
    struct vtn_value *values;

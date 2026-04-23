@@ -300,6 +300,52 @@ ForEachMacros:
   - foreach_bo
   - foreach_bo_safe
 
+# intel
+  - jay_foreach_ssa_file
+  - jay_foreach_function
+  - jay_foreach_block
+  - jay_foreach_block_safe
+  - jay_foreach_block_rev
+  - jay_foreach_block_from
+  - jay_foreach_block_from_rev
+  - jay_foreach_dst
+  - jay_foreach_dst_index
+  - jay_foreach_inst_in_block
+  - jay_foreach_inst_in_block_rev
+  - jay_foreach_inst_in_block_safe
+  - jay_foreach_inst_in_block_safe_rev
+  - jay_foreach_inst_in_block_from
+  - jay_foreach_inst_in_block_from_rev
+  - jay_foreach_inst_in_shader
+  - jay_foreach_inst_in_shader_rev
+  - jay_foreach_inst_in_shader_safe
+  - jay_foreach_inst_in_shader_safe_rev
+  - jay_foreach_inst_in_func
+  - jay_foreach_inst_in_func_rev
+  - jay_foreach_inst_in_func_safe
+  - jay_foreach_inst_in_func_safe_rev
+  - jay_foreach_successor
+  - jay_foreach_predecessor
+  - jay_foreach_comp
+  - jay_foreach_comp_rev
+  - jay_foreach_src
+  - jay_foreach_src_rev
+  - jay_foreach_ssa_src
+  - jay_foreach_ssa_src_rev
+  - jay_foreach_ssa_src_comp
+  - jay_foreach_index
+  - jay_foreach_index_rev
+  - jay_foreach_src_index
+  - jay_foreach_src_index_rev
+  - jay_repair_foreach_phi
+  - jay_foreach_phi_src_in_block
+  - jay_foreach_phi_dst_in_block
+  - jay_foreach_preload
+  - jay_foreach_killed
+  - jay_foreach_ra_src
+  - jay_foreach_ra_file
+  - jay_foreach_pipe
+
 # Disable clang formatting by default. Drivers that use clang-format
 # inherit from this .clang-format file and re-enable formatting:
 #

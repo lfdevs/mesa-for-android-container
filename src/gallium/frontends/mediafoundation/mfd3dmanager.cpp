@@ -92,6 +92,11 @@ CMFD3DManager::Shutdown( bool bReleaseDeviceManager )
       m_spReconstructedPictureBufferPool.Reset();
    }
 
+   // Release scheduler registrations before closing the device handle
+   m_ContextPriorityMgr.m_registeredQueues.clear();
+   m_ContextPriorityMgr.m_spSchedulerClient.Reset();
+   m_ContextPriorityMgr.m_hDevice = NULL;
+
    if( m_spDeviceManager != nullptr )
    {
       if( m_hDevice != NULL )
@@ -277,7 +282,7 @@ CMFD3DManager::UpdateGPUFeatureFlags()
           m_deviceDriverVersion.part4 >= 9002 )
       {
          m_gpuFeatureFlags.m_bH264SendUnwrappedPOC = true;
-         MFE_INFO( "[dx12 hmft 0x%p] D3DManager: GPUFeature m_bH264SendUnwrappedPOC is set to true\n", m_logId );
+         MFE_INFO( "[dx12 hmft 0x%p] D3DManager: GPUFeature m_bH264SendUnwrappedPOC is set to true", m_logId );
       }
    }
    */
@@ -287,27 +292,38 @@ int
 MFTRegisterWorkQueue( struct d3d12_context_queue_priority_manager *manager, ID3D12CommandQueue *queue )
 {
    mft_context_queue_priority_manager *mft_mgr = (mft_context_queue_priority_manager *) manager;
-   mtx_lock( &mft_mgr->m_lock );
-
-   ComPtr<IUnknown> queue_unknown;
-   if( !queue ||
-       FAILED( queue->QueryInterface( IID_PPV_ARGS( &queue_unknown ) ) ) )
+   if( !queue )
    {
-      mtx_unlock( &mft_mgr->m_lock );
       return -1;
    }
 
-   // Only register the queue if not already registered
-   auto it = std::find( mft_mgr->m_registeredQueues.begin(), mft_mgr->m_registeredQueues.end(), queue );
-   if( it == mft_mgr->m_registeredQueues.end() )
+   mtx_lock( &mft_mgr->m_lock );
+
+   if( mft_mgr->m_spSchedulerClient )
    {
-      //
-      // Register the queue_unknown with the MFT.
-      //
+      if( mft_mgr->m_registeredQueues.find( queue ) == mft_mgr->m_registeredQueues.end() )
+      {
+         HRESULT hr = S_OK;
+         ComPtr<IMFDXGISchedulerRegistration> spRegistration;
 
-      mft_mgr->m_registeredQueues.push_back( queue );
+         hr = mft_mgr->m_spSchedulerClient->RegisterObject( mft_mgr->m_hDevice, queue, &spRegistration );
+         if( FAILED( hr ) )
+         {
+            MFE_ERROR( "[dx12 hmft 0x%p] D3DManager: RegisterObject failed for Queue 0x%p", mft_mgr->m_logId, queue );
+            mtx_unlock( &mft_mgr->m_lock );
+            return -1;
+         }
+         MFE_INFO( "[dx12 hmft 0x%p] D3DManager: RegisterObject succeeded for Queue 0x%p, spRegistration 0x%p",
+                   mft_mgr->m_logId,
+                   queue,
+                   spRegistration.Get() );
+         mft_mgr->m_registeredQueues[queue] = spRegistration;
+      }
    }
-
+   else
+   {
+      MFE_INFO( "[dx12 hmft 0x%p] D3DManager: m_spSchedulerClient is not supported -> no opt", mft_mgr->m_logId );
+   }
    mtx_unlock( &mft_mgr->m_lock );
    return 0;
 }
@@ -316,24 +332,47 @@ int
 MFTUnregisterWorkQueue( struct d3d12_context_queue_priority_manager *manager, ID3D12CommandQueue *queue )
 {
    mft_context_queue_priority_manager *mft_mgr = (mft_context_queue_priority_manager *) manager;
-   mtx_lock( &mft_mgr->m_lock );
-
-   ComPtr<IUnknown> queue_unknown;
-   if( !queue ||
-       FAILED( queue->QueryInterface( IID_PPV_ARGS( &queue_unknown ) ) ) )
+   if( !queue )
    {
-      mtx_unlock( &mft_mgr->m_lock );
       return -1;
    }
 
-   //
-   // Unregister the queue_unknown with the MFT.
-   //
+   mtx_lock( &mft_mgr->m_lock );
+   if( mft_mgr->m_spSchedulerClient )
+   {
+      auto item = mft_mgr->m_registeredQueues.find( queue );
+      if( item != mft_mgr->m_registeredQueues.end() )
+      {
+         MFE_INFO( "[dx12 hmft 0x%p] D3DManager: Releases spRegistration for Queue 0x%p, spRegistration 0x%p",
+                   mft_mgr->m_logId,
+                   queue,
+                   item->second.Get() );
 
-   auto it = std::find( mft_mgr->m_registeredQueues.begin(), mft_mgr->m_registeredQueues.end(), queue );
-   if( it != mft_mgr->m_registeredQueues.end() )
-      mft_mgr->m_registeredQueues.erase( it );
+#if MESA_DEBUG
+         {
+            uint32_t global_priority, local_priority;
+            mft_mgr->base.get_queue_priority( &mft_mgr->base, queue, &global_priority, &local_priority );
+            debug_printf( "[dx12 hmft 0x%p] D3DManager: ending queue = 0x%p, local_priority = %d, global_priority = %d\n",
+                          mft_mgr->m_logId,
+                          queue,
+                          local_priority,
+                          global_priority );
+         }
+#endif
 
+         mft_mgr->m_registeredQueues.erase( item );
+      }
+      else
+      {
+         MFE_WARNING( "[dx12 hmft 0x%p] D3DManager: Queue 0x%p is unexpectedly not found in m_registeredQueues",
+                      mft_mgr->m_logId,
+                      queue );
+      }
+   }
+   else
+   {
+      MFE_INFO( "[dx12 hmft 0x%p] D3DManager: m_spSchedulerClient is not supported -> no opt", mft_mgr->m_logId );
+   }
    mtx_unlock( &mft_mgr->m_lock );
    return 0;
 }
@@ -372,8 +411,17 @@ CMFD3DManager::xOnSetD3DManager( ULONG_PTR ulParam )
    {
       CHECKBOOL_GOTO( thrd_success == mtx_init( &m_ContextPriorityMgr.m_lock, mtx_plain ), MF_E_DXGI_DEVICE_NOT_INITIALIZED, done );
 
+      m_ContextPriorityMgr.m_logId = m_logId;
       m_ContextPriorityMgr.base.register_work_queue = MFTRegisterWorkQueue;
       m_ContextPriorityMgr.base.unregister_work_queue = MFTUnregisterWorkQueue;
+
+      // Query for scheduler client to register driver work queues with the MF scheduler
+      ComPtr<IMFDXGISchedulerClient> spScheduler;
+      if( SUCCEEDED( m_spDeviceManager->GetVideoService( m_hDevice, IID_PPV_ARGS( &spScheduler ) ) ) )
+      {
+         m_ContextPriorityMgr.m_spSchedulerClient = spScheduler;
+         m_ContextPriorityMgr.m_hDevice = m_hDevice;
+      }
 
       CHECKBOOL_GOTO( m_ScreenInteropInfo.set_context_queue_priority_manager( m_pPipeContext, &m_ContextPriorityMgr.base ) == 0,
                       MF_E_DXGI_DEVICE_NOT_INITIALIZED,

@@ -1,7 +1,7 @@
 /*
 ************************************************************************************************************************
 *
-*  Copyright (C) 2007-2024 Advanced Micro Devices, Inc. All rights reserved.
+*  Copyright (C) 2007-2026 Advanced Micro Devices, Inc. All rights reserved.
 *  SPDX-License-Identifier: MIT
 *
 ***********************************************************************************************************************/
@@ -360,7 +360,7 @@ static inline UINT_32 BitMaskScanForward(
 {
     ADDR_ASSERT(mask > 0);
     unsigned long out = 0;
-#if (defined(_WIN64) && defined(_M_X64)) || (defined(_WIN32) && defined(_M_IX64))
+#if ((defined(_WIN64) && defined(_M_X64)) || (defined(_WIN32) && defined(_M_IX64))) && !defined(_M_ARM64EC)
     out = ::_tzcnt_u32(mask);
 #elif (defined(_WIN32) || defined(_WIN64))
     ::_BitScanForward(&out, mask);
@@ -434,6 +434,22 @@ static inline UINT_64 IsPow2(
 {
     ADDR_ASSERT(dim > 0);
     return !(dim & (dim - 1));
+}
+
+/**
+****************************************************************************************************
+*   RoundUpToMultiple
+*
+*   @brief
+*       Rounds up the specified integer to the nearest multiple of the specified alignment value.
+****************************************************************************************************
+*/
+template <typename T>
+constexpr T RoundUpToMultiple(
+    T operand,   ///< Value to be aligned.
+    T alignment) ///< Alignment desired.
+{
+    return (((operand + (alignment - 1)) / alignment) * alignment);
 }
 
 /**
@@ -645,6 +661,25 @@ static inline UINT_32 Log2(
     UINT_32 x)      ///< [in] the value should calculate log based 2
 {
     return (x != 0) ? (31 ^ BitMaskScanReverse(x)) : 0;
+}
+
+/**
+****************************************************************************************************
+*   ConstexprLog2
+*
+*   @brief
+*       Compute log of base 2 no matter the target is power of 2 or not. Returns 0 if 0.
+****************************************************************************************************
+*/
+static constexpr inline UINT_32 ConstexprLog2(
+    UINT_32 x)      ///< [in] the value should calculate log based 2
+{
+    UINT_32 out = 0;
+    while (x >>= 1)
+    {
+        out++;
+    }
+    return out;
 }
 
 /**

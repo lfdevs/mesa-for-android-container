@@ -138,6 +138,12 @@ lower_txl_txf_array_or_cube(nir_builder *b, nir_tex_instr *tex)
    int min_lod_idx = nir_tex_instr_src_index(tex, nir_tex_src_min_lod);
    assert(lod_idx >= 0 || bias_idx >= 0);
 
+   /* Check if sample_lz or sample_c_lz could handle this */
+   if (unlikely(lod_idx >= 0 && bias_idx < 0 && min_lod_idx < 0 &&
+                nir_src_is_const(tex->src[lod_idx].src) &&
+                nir_src_as_uint(tex->src[lod_idx].src) == 0))
+      return false;
+
    nir_def *size = nir_i2f32(b, nir_get_texture_size(b, tex));
    nir_def *lod = (lod_idx >= 0) ? tex->src[lod_idx].src.ssa
                                      : nir_get_texture_lod(b, tex);
@@ -147,6 +153,10 @@ lower_txl_txf_array_or_cube(nir_builder *b, nir_tex_instr *tex)
 
    if (min_lod_idx >= 0)
       lod = nir_fmax(b, lod, tex->src[min_lod_idx].src.ssa);
+
+   if (unlikely(tex->sampler_dim == GLSL_SAMPLER_DIM_2D && tex->is_shadow &&
+                tex->is_array))
+      lod = nir_fadd(b, lod, nir_imm_float(b, -1.0));
 
    /* max lod? */
 

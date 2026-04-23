@@ -463,11 +463,11 @@ static void ac_parse_packet3(FILE *f, uint32_t header, struct ac_ib_parser *ib,
       break;
    case PKT3_CP_DMA:
       /* GFX6 */
-      ac_dump_reg(f, ib->gfx_level, ib->family, R_410_CP_DMA_WORD0, ac_ib_get(ib), ~0);
-      ac_dump_reg(f, ib->gfx_level, ib->family, R_411_CP_DMA_WORD1, ac_ib_get(ib), ~0);
-      ac_dump_reg(f, ib->gfx_level, ib->family, R_412_CP_DMA_WORD2, ac_ib_get(ib), ~0);
-      ac_dump_reg(f, ib->gfx_level, ib->family, R_413_CP_DMA_WORD3, ac_ib_get(ib), ~0);
-      ac_dump_reg(f, ib->gfx_level, ib->family, R_415_COMMAND, ac_ib_get(ib), ~0);
+      ac_dump_reg(f, ib->gfx_level, ib->family, R_411_CP_DMA_WORD0, ac_ib_get(ib), ~0);
+      ac_dump_reg(f, ib->gfx_level, ib->family, R_412_CP_DMA_WORD1, ac_ib_get(ib), ~0);
+      ac_dump_reg(f, ib->gfx_level, ib->family, R_413_CP_DMA_WORD2, ac_ib_get(ib), ~0);
+      ac_dump_reg(f, ib->gfx_level, ib->family, R_414_CP_DMA_WORD3, ac_ib_get(ib), ~0);
+      ac_dump_reg(f, ib->gfx_level, ib->family, R_415_CP_DMA_COMMAND, ac_ib_get(ib), ~0);
       break;
    case PKT3_DMA_DATA: {
       if (ib->gfx_level >= GFX9) {
@@ -482,29 +482,29 @@ static void ac_parse_packet3(FILE *f, uint32_t header, struct ac_ib_parser *ib,
       uint64_t dst_addr = ac_ib_get64(ib);
 
       uint32_t command = ac_ib_get(ib);
-      uint32_t size = G_415_BYTE_COUNT_GFX6(command);
+      uint32_t size = G_415_BYTE_COUNT(command);
 
       uint32_t src_sel = G_501_SRC_SEL(header);
       bool src_mem = (src_sel == V_501_SRC_ADDR && G_415_SAS(command) == V_415_MEMORY) ||
-                      src_sel == V_411_SRC_ADDR_TC_L2;
+                      src_sel == V_501_SRC_ADDR_USING_L2;
 
       uint32_t dst_sel = G_501_DST_SEL(header);
       bool dst_mem = (dst_sel == V_501_DST_ADDR && G_415_DAS(command) == V_415_MEMORY) ||
-                      dst_sel == V_411_DST_ADDR_TC_L2;
+                      dst_sel == V_501_DST_ADDR_USING_L2;
 
       print_addr(ib, "SRC_ADDR", src_addr, src_mem ? size : AC_ADDR_SIZE_NOT_MEMORY);
       print_addr(ib, "DST_ADDR", dst_addr, dst_mem ? size : AC_ADDR_SIZE_NOT_MEMORY);
-      ac_dump_reg(f, ib->gfx_level, ib->family, R_415_COMMAND, command, ~0);
+      ac_dump_reg(f, ib->gfx_level, ib->family, R_415_CP_DMA_COMMAND, command, ~0);
       break;
    }
    case PKT3_INDIRECT_BUFFER_SI:
    case PKT3_INDIRECT_BUFFER: {
       uint32_t base_lo_dw = ac_ib_get(ib);
-      ac_dump_reg(f, ib->gfx_level, ib->family, R_3F0_IB_BASE_LO, base_lo_dw, ~0);
+      ac_dump_reg(f, ib->gfx_level, ib->family, R_3F1_IB_BASE_LO, base_lo_dw, ~0);
       uint32_t base_hi_dw = ac_ib_get(ib);
-      ac_dump_reg(f, ib->gfx_level, ib->family, R_3F1_IB_BASE_HI, base_hi_dw, ~0);
+      ac_dump_reg(f, ib->gfx_level, ib->family, R_3F2_IB_BASE_HI, base_hi_dw, ~0);
       uint32_t control_dw = ac_ib_get(ib);
-      ac_dump_reg(f, ib->gfx_level, ib->family, R_3F2_IB_CONTROL, control_dw, ~0);
+      ac_dump_reg(f, ib->gfx_level, ib->family, R_3F3_IB_CONTROL, control_dw, ~0);
 
       if (!ib->addr_callback)
          break;
@@ -516,9 +516,9 @@ static void ac_parse_packet3(FILE *f, uint32_t header, struct ac_ib_parser *ib,
       if (!data)
          break;
 
-      if (G_3F2_CHAIN(control_dw)) {
+      if (G_3F3_CHAIN(control_dw)) {
          ib->ib = data;
-         ib->num_dw = G_3F2_IB_SIZE(control_dw);
+         ib->num_dw = G_3F3_IB_SIZE(control_dw);
          ib->cur_dw = 0;
          return;
       }
@@ -526,7 +526,7 @@ static void ac_parse_packet3(FILE *f, uint32_t header, struct ac_ib_parser *ib,
       struct ac_ib_parser ib_recurse;
       memcpy(&ib_recurse, ib, sizeof(ib_recurse));
       ib_recurse.ib = data;
-      ib_recurse.num_dw = G_3F2_IB_SIZE(control_dw);
+      ib_recurse.num_dw = G_3F3_IB_SIZE(control_dw);
       ib_recurse.cur_dw = 0;
       if (ib_recurse.trace_id_count) {
          if (*current_trace_id == *ib->trace_ids) {
@@ -1379,18 +1379,18 @@ static void print_vcn_reconstructed_picture(FILE *f, struct ac_ib_parser *ib, bo
 
    if (ib->vcn_version >= VCN_5_0_0) {
       if (valid) {
-         print_vcn_addr(f, ib, "%s luma", prefix);
+         print_vcn_addr(f, ib, true, "%s luma", prefix);
          uint32_t luma_pitch = ac_ib_get(ib);
          fprintf(f, "%s luma pitch = %u\n", prefix, luma_pitch);
-         print_vcn_addr(f, ib, "%s chroma", prefix);
+         print_vcn_addr(f, ib, true, "%s chroma", prefix);
          uint32_t chroma_pitch = ac_ib_get(ib);
          fprintf(f, "%s chroma pitch = %u\n", prefix, chroma_pitch);
-         print_vcn_addr(f, ib, "%s chroma V", prefix);
+         print_vcn_addr(f, ib, true, "%s chroma V", prefix);
          uint32_t chroma_v_pitch = ac_ib_get(ib);
          fprintf(f, "%s chroma V pitch = %u\n", prefix, chroma_v_pitch);
          uint32_t swizzle = ac_ib_get(ib);
          fprintf(f, "%s swizzle mode = %u\n", prefix, swizzle);
-         print_vcn_addr(f, ib, "%s frame context buffer", prefix);
+         print_vcn_addr(f, ib, true, "%s frame context buffer", prefix);
          uint32_t frame_context_offset = ac_ib_get(ib);
          fprintf(f, "%s AV1 cdf frame context offset / colloc buffer offset = %u\n", prefix, frame_context_offset);
          uint32_t cdef_offset = ac_ib_get(ib);

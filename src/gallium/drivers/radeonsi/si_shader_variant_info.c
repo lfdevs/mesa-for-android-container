@@ -184,7 +184,7 @@ void si_get_shader_variant_info(struct si_shader *shader,
                   shader->info.uses_vmem_load_other = true;
                } else if (nir->info.stage == MESA_SHADER_FRAGMENT) {
                   nir_io_semantics sem = nir_intrinsic_io_semantics(intr);
-                  unsigned index = nir_intrinsic_base(intr);
+                  unsigned index = ac_nir_get_io_driver_location(nir, sem.location, true);
                   assert(sem.num_slots == 1);
 
                   shader->info.num_ps_inputs = MAX2(shader->info.num_ps_inputs, index + 1);
@@ -204,13 +204,21 @@ void si_get_shader_variant_info(struct si_shader *shader,
                break;
             }
             case nir_intrinsic_load_color0_amd:
-               assert(!shader->is_monolithic);
-               shader->info.ps_colors_read |= nir_def_components_read(&intr->def);
+            case nir_intrinsic_load_color1_amd: {
+               assert(!shader->is_monolithic && nir->info.stage == MESA_SHADER_FRAGMENT);
+               unsigned col_index = intr->intrinsic == nir_intrinsic_load_color1_amd;
+               shader->info.ps_colors_read |= nir_def_components_read(&intr->def) << (col_index * 4);
+
+               gl_varying_slot location = VARYING_SLOT_COL0 + col_index;
+               unsigned index = ac_nir_get_io_driver_location(nir, location, true);
+               unsigned interp = shader->selector->info.color_interpolate[col_index];
+
+               shader->info.num_ps_inputs = MAX2(shader->info.num_ps_inputs, index + 1);
+               shader->info.ps_inputs[index].semantic = location;
+               shader->info.ps_inputs[index].interpolate =
+                  interp == INTERP_MODE_NONE ? INTERP_MODE_COLOR : interp;
                break;
-            case nir_intrinsic_load_color1_amd:
-               assert(!shader->is_monolithic);
-               shader->info.ps_colors_read |= nir_def_components_read(&intr->def) << 4;
-               break;
+            }
             case nir_intrinsic_load_ubo:
                if (intr->src[1].ssa->divergent)
                   shader->info.uses_vmem_load_other = true;
@@ -333,28 +341,19 @@ void si_get_shader_variant_info(struct si_shader *shader,
    }
 
    if (nir->info.stage == MESA_SHADER_FRAGMENT) {
-      /* Add both front and back color inputs. */
+      /* Add back color inputs. */
       if (!shader->is_monolithic) {
          unsigned index = shader->info.num_ps_inputs;
 
-         for (unsigned back = 0; back < 2; back++) {
-            for (unsigned i = 0; i < 2; i++) {
-               if ((shader->info.ps_colors_read >> (i * 4)) & 0xf) {
-                  assert(index < ARRAY_SIZE(shader->info.ps_inputs));
-                  shader->info.ps_inputs[index].semantic =
-                     (back ? VARYING_SLOT_BFC0 : VARYING_SLOT_COL0) + i;
+         for (unsigned i = 0; i < 2; i++) {
+            if ((shader->info.ps_colors_read >> (i * 4)) & 0xf) {
+               assert(index < ARRAY_SIZE(shader->info.ps_inputs));
+               shader->info.ps_inputs[index].semantic = VARYING_SLOT_BFC0 + i;
 
-                  enum glsl_interp_mode mode = shader->selector->info.color_interpolate[i];
-                  shader->info.ps_inputs[index].interpolate =
-                     mode == INTERP_MODE_NONE ? INTERP_MODE_COLOR : mode;
-                  index++;
-
-                  /* Back-face colors don't increment num_ps_inputs. si_emit_spi_map will use
-                   * back-face colors conditionally only when needed.
-                   */
-                  if (!back)
-                     shader->info.num_ps_inputs++;
-               }
+               enum glsl_interp_mode mode = shader->selector->info.color_interpolate[i];
+               shader->info.ps_inputs[index].interpolate =
+                  mode == INTERP_MODE_NONE ? INTERP_MODE_COLOR : mode;
+               index++;
             }
          }
       }

@@ -35,9 +35,10 @@ kk_CreateBuffer(VkDevice device, const VkBufferCreateInfo *pCreateInfo,
                 const VkAllocationCallbacks *pAllocator, VkBuffer *pBuffer)
 {
    VK_FROM_HANDLE(kk_device, dev, device);
+   struct kk_physical_device *pdev = kk_device_physical(dev);
    struct kk_buffer *buffer;
 
-   if (pCreateInfo->size > KK_MAX_BUFFER_SIZE)
+   if (pCreateInfo->size > pdev->info.max_buffer_size)
       return vk_error(dev, VK_ERROR_OUT_OF_DEVICE_MEMORY);
 
    buffer =

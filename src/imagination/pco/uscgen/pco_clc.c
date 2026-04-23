@@ -166,7 +166,6 @@ spv_to_nir(void *mem_ctx, uint32_t *spirv_map, unsigned spirv_len)
    nir_shader *nir = spirv_to_nir(spirv_map,
                                   spirv_len / 4,
                                   NULL,
-                                  0,
                                   MESA_SHADER_KERNEL,
                                   "library",
                                   &precomp_spirv_options,

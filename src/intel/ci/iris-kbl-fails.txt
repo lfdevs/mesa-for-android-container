@@ -104,3 +104,7 @@ glx@glx-multithread-buffer-busy-tracking-bug,Fail
 #   Current serial number in output stream:  1181
 glx@glx-visuals-depth -pixmap,Fail
 glx@glx-visuals-stencil -pixmap,Fail
+
+# uprev Piglit in Mesa
+spec@khr_shader_subgroup@execution@bitonic_sort,Fail
+

@@ -162,14 +162,14 @@ enum state_src_t {
 static void load_all_groups(int level);
 static void disable_all_groups(void);
 
-static void dump_tex_samp(uint32_t *texsamp, enum state_src_t src, int num_unit,
-                          int level);
-static void dump_tex_const(uint32_t *texsamp, int num_unit, int level);
+static void dump_tex_samp(const uint32_t *texsamp, enum state_src_t src,
+                          int num_unit, int level);
+static void dump_tex_const(const uint32_t *texsamp, int num_unit, int level);
 
 static struct shader_stats shader_stats[MESA_SHADER_STAGES];
 
 static void
-decode_shader_ir3(uint32_t *dwords, uint32_t sizedwords, int level,
+decode_shader_ir3(const uint32_t *dwords, uint32_t sizedwords, int level,
                   enum mesa_shader_stage stage)
 {
    try_disasm_a3xx_stat(dwords, sizedwords, level, stdout,
@@ -188,7 +188,7 @@ get_shader_stats(enum mesa_shader_stage stage)
 }
 
 static bool
-highlight_addr(uint32_t *hostaddr)
+highlight_addr(const uint32_t *hostaddr)
 {
    if (!options->ibs[ib].base && (ib != 0 || !options->rb_host_base))
       return false;
@@ -229,7 +229,7 @@ highlight_addr(uint32_t *hostaddr)
 }
 
 static void
-dump_hex(uint32_t *dwords, uint32_t sizedwords, int level)
+dump_hex(const uint32_t *dwords, uint32_t sizedwords, int level)
 {
    int i, j;
    int lastzero = 1;
@@ -283,7 +283,7 @@ dump_hex(uint32_t *dwords, uint32_t sizedwords, int level)
 }
 
 static void
-dump_float(float *dwords, uint32_t sizedwords, int level)
+dump_float(const float *dwords, uint32_t sizedwords, int level)
 {
    int i;
    for (i = 0; i < sizedwords; i++) {
@@ -443,7 +443,7 @@ reg_dump_gpuaddr64(const char *name, uint64_t qword, int level)
 }
 
 static void
-dump_shader(const char *ext, void *buf, int bufsz)
+dump_shader(const char *ext, const void *buf, int bufsz)
 {
    if (options->dump_shaders) {
       static int n = 0;
@@ -1157,7 +1157,7 @@ is_banked_reg(uint32_t regbase)
 }
 
 static void
-dump_registers(uint32_t regbase, uint32_t *dwords, uint32_t sizedwords,
+dump_registers(uint32_t regbase, const uint32_t *dwords, uint32_t sizedwords,
                int level)
 {
    struct regacc r = regacc(NULL);
@@ -1181,7 +1181,8 @@ dump_registers(uint32_t regbase, uint32_t *dwords, uint32_t sizedwords,
 }
 
 static void
-dump_domain(uint32_t *dwords, uint32_t sizedwords, int level, const char *name)
+dump_domain(const uint32_t *dwords, uint32_t sizedwords, int level,
+            const char *name)
 {
    struct rnndomain *dom;
    int i;
@@ -1229,7 +1230,7 @@ dump_domain(uint32_t *dwords, uint32_t sizedwords, int level, const char *name)
 }
 
 static void
-cp_resource_list(uint32_t *dwords, uint32_t sizedwords, int level)
+cp_resource_list(const uint32_t *dwords, uint32_t sizedwords, int level)
 {
    uint32_t bv_resource_count = *dwords++;
 
@@ -1431,7 +1432,7 @@ do_query(const char *primtype, uint32_t num_indices)
 }
 
 static void
-cp_im_loadi(uint32_t *dwords, uint32_t sizedwords, int level)
+cp_im_loadi(const uint32_t *dwords, uint32_t sizedwords, int level)
 {
    uint32_t start = dwords[1] >> 16;
    uint32_t size = dwords[1] & 0xffff;
@@ -1465,7 +1466,7 @@ cp_im_loadi(uint32_t *dwords, uint32_t sizedwords, int level)
 }
 
 static void
-cp_wide_reg_write(uint32_t *dwords, uint32_t sizedwords, int level)
+cp_wide_reg_write(const uint32_t *dwords, uint32_t sizedwords, int level)
 {
    uint32_t reg = dwords[0] & 0xffff;
    struct regacc r = regacc(NULL);
@@ -1502,7 +1503,7 @@ enum state_t {
  */
 
 static void
-a3xx_get_state_type(uint32_t *dwords, mesa_shader_stage *stage,
+a3xx_get_state_type(const uint32_t *dwords, mesa_shader_stage *stage,
                     enum state_t *state, enum state_src_t *src)
 {
    unsigned state_block_id = (dwords[0] >> 19) & 0x7;
@@ -1623,7 +1624,7 @@ _get_state_type(unsigned state_block_id, unsigned state_type,
 }
 
 static void
-a4xx_get_state_type(uint32_t *dwords, mesa_shader_stage *stage,
+a4xx_get_state_type(const uint32_t *dwords, mesa_shader_stage *stage,
                     enum state_t *state, enum state_src_t *src)
 {
    unsigned state_block_id = (dwords[0] >> 18) & 0xf;
@@ -1633,7 +1634,7 @@ a4xx_get_state_type(uint32_t *dwords, mesa_shader_stage *stage,
 }
 
 static void
-a6xx_get_state_type(uint32_t *dwords, mesa_shader_stage *stage,
+a6xx_get_state_type(const uint32_t *dwords, mesa_shader_stage *stage,
                     enum state_t *state, enum state_src_t *src)
 {
    unsigned state_block_id = (dwords[0] >> 18) & 0xf;
@@ -1643,7 +1644,8 @@ a6xx_get_state_type(uint32_t *dwords, mesa_shader_stage *stage,
 }
 
 static void
-dump_tex_samp(uint32_t *texsamp, enum state_src_t src, int num_unit, int level)
+dump_tex_samp(const uint32_t *texsamp, enum state_src_t src, int num_unit,
+              int level)
 {
    for (int i = 0; i < num_unit; i++) {
       /* work-around to reduce noise for opencl blob which always
@@ -1679,7 +1681,7 @@ dump_tex_samp(uint32_t *texsamp, enum state_src_t src, int num_unit, int level)
 /* base=0 for bindful, N+1 for bindless .baseN
  */
 static bool
-show_descriptor(uint32_t *desc, int sizedwords, int base, int idx,
+show_descriptor(const uint32_t *desc, int sizedwords, int base, int idx,
                 const char *domain, const char *type)
 {
    if (options->dump_all_bindless)
@@ -1708,8 +1710,8 @@ show_descriptor(uint32_t *desc, int sizedwords, int base, int idx,
 }
 
 static void
-dump_tex_descriptor_type(uint32_t *texmemobj, int base, int idx, int level,
-                         const char *domain, const char *type)
+dump_tex_descriptor_type(const uint32_t *texmemobj, int base, int idx,
+                         int level, const char *domain, const char *type)
 {
    if (!show_descriptor(texmemobj, 16, base, idx, domain, type))
       return;
@@ -1721,7 +1723,8 @@ dump_tex_descriptor_type(uint32_t *texmemobj, int base, int idx, int level,
 }
 
 static void
-dump_tex_descriptor(uint32_t *texmemobj, int base, int idx, int level, const char *domain)
+dump_tex_descriptor(const uint32_t *texmemobj, int base, int idx, int level,
+                    const char *domain)
 {
    dump_tex_descriptor_type(texmemobj, base, idx, level, domain, "DESC_SINGLE_PLANE");
    dump_tex_descriptor_type(texmemobj, base, idx, level, domain, "DESC_MULTI_PLANE");
@@ -1732,7 +1735,7 @@ dump_tex_descriptor(uint32_t *texmemobj, int base, int idx, int level, const cha
 }
 
 static void
-dump_tex_const(uint32_t *texconst, int num_unit, int level)
+dump_tex_const(const uint32_t *texconst, int num_unit, int level)
 {
    for (int i = 0; i < num_unit; i++) {
       /* work-around to reduce noise for opencl blob which always
@@ -1859,14 +1862,14 @@ dump_bindless_descriptors(bool is_compute, int level)
 }
 
 static void
-cp_load_state(uint32_t *dwords, uint32_t sizedwords, int level)
+cp_load_state(const uint32_t *dwords, uint32_t sizedwords, int level)
 {
    mesa_shader_stage stage;
    enum state_t state;
    enum state_src_t src;
    uint32_t num_unit = (dwords[0] >> 22) & 0x1ff;
    uint64_t ext_src_addr;
-   void *contents;
+   const void *contents;
    int i;
 
    if (quiet(2) && !options->script)
@@ -1973,7 +1976,7 @@ cp_load_state(uint32_t *dwords, uint32_t sizedwords, int level)
       break;
    }
    case TEX_MIPADDR: {
-      uint32_t *addrs = contents;
+      const uint32_t *addrs = contents;
 
       if (quiet(2))
          return;
@@ -2095,7 +2098,7 @@ cp_load_state(uint32_t *dwords, uint32_t sizedwords, int level)
 }
 
 static void
-cp_set_bin(uint32_t *dwords, uint32_t sizedwords, int level)
+cp_set_bin(const uint32_t *dwords, uint32_t sizedwords, int level)
 {
    bin_x1 = dwords[1] & 0xffff;
    bin_y1 = dwords[1] >> 16;
@@ -2104,7 +2107,7 @@ cp_set_bin(uint32_t *dwords, uint32_t sizedwords, int level)
 }
 
 static void
-dump_a2xx_tex_const(uint32_t *dwords, uint32_t sizedwords, uint32_t val,
+dump_a2xx_tex_const(const uint32_t *dwords, uint32_t sizedwords, uint32_t val,
                     int level)
 {
    uint32_t w, h, p;
@@ -2174,8 +2177,8 @@ dump_a2xx_tex_const(uint32_t *dwords, uint32_t sizedwords, uint32_t val,
 }
 
 static void
-dump_a2xx_shader_const(uint32_t *dwords, uint32_t sizedwords, uint32_t val,
-                       int level)
+dump_a2xx_shader_const(const uint32_t *dwords, uint32_t sizedwords,
+                       uint32_t val, int level)
 {
    int i;
    printf("%sset shader const %04x\n", levels[level], val);
@@ -2202,7 +2205,7 @@ dump_a2xx_shader_const(uint32_t *dwords, uint32_t sizedwords, uint32_t val,
 }
 
 static void
-cp_set_const(uint32_t *dwords, uint32_t sizedwords, int level)
+cp_set_const(const uint32_t *dwords, uint32_t sizedwords, int level)
 {
    uint32_t val = dwords[0] & 0xffff;
    switch ((dwords[0] >> 16) & 0xf) {
@@ -2254,7 +2257,7 @@ cp_set_const(uint32_t *dwords, uint32_t sizedwords, int level)
 static void dump_register_summary(int level, const char *usage);
 
 static void
-cp_event_write(uint32_t *dwords, uint32_t sizedwords, int level)
+cp_event_write(const uint32_t *dwords, uint32_t sizedwords, int level)
 {
    const char *name = rnn_enumname(rnn, "vgt_event_type", dwords[0] & 0xff);
    printl(2, "%sevent %s\n", levels[level], name);
@@ -2343,7 +2346,7 @@ dump_register_summary(int level, const char *usage)
 }
 
 static uint32_t
-draw_indx_common(uint32_t *dwords, int level)
+draw_indx_common(const uint32_t *dwords, int level)
 {
    uint32_t prim_type = dwords[1] & 0x1f;
    uint32_t source_select = (dwords[1] >> 6) & 0x3;
@@ -2368,7 +2371,7 @@ draw_indx_common(uint32_t *dwords, int level)
 }
 
 static void
-cp_draw_indx(uint32_t *dwords, uint32_t sizedwords, int level)
+cp_draw_indx(const uint32_t *dwords, uint32_t sizedwords, int level)
 {
    uint32_t num_indices = draw_indx_common(dwords, level);
 
@@ -2414,12 +2417,12 @@ cp_draw_indx(uint32_t *dwords, uint32_t sizedwords, int level)
 }
 
 static void
-cp_draw_indx_2(uint32_t *dwords, uint32_t sizedwords, int level)
+cp_draw_indx_2(const uint32_t *dwords, uint32_t sizedwords, int level)
 {
    uint32_t num_indices = draw_indx_common(dwords, level);
    enum pc_di_index_size size =
       ((dwords[1] >> 11) & 1) | ((dwords[1] >> 12) & 2);
-   void *ptr = &dwords[3];
+   const void *ptr = &dwords[3];
    int sz = 0;
 
    assert(!is_64b());
@@ -2429,17 +2432,17 @@ cp_draw_indx_2(uint32_t *dwords, uint32_t sizedwords, int level)
       int i;
       printf("%sidxs:         ", levels[level]);
       if (size == INDEX_SIZE_8_BIT) {
-         uint8_t *idx = ptr;
+         const uint8_t *idx = ptr;
          for (i = 0; i < num_indices; i++)
             printf(" %u", idx[i]);
          sz = num_indices;
       } else if (size == INDEX_SIZE_16_BIT) {
-         uint16_t *idx = ptr;
+         const uint16_t *idx = ptr;
          for (i = 0; i < num_indices; i++)
             printf(" %u", idx[i]);
          sz = num_indices * 2;
       } else if (size == INDEX_SIZE_32_BIT) {
-         uint32_t *idx = ptr;
+         const uint32_t *idx = ptr;
          for (i = 0; i < num_indices; i++)
             printf(" %u", idx[i]);
          sz = num_indices * 4;
@@ -2456,7 +2459,7 @@ cp_draw_indx_2(uint32_t *dwords, uint32_t sizedwords, int level)
 }
 
 static void
-cp_draw_indx_offset(uint32_t *dwords, uint32_t sizedwords, int level)
+cp_draw_indx_offset(const uint32_t *dwords, uint32_t sizedwords, int level)
 {
    uint32_t num_indices = dwords[2];
    uint32_t prim_type = dwords[0] & 0x1f;
@@ -2472,7 +2475,7 @@ cp_draw_indx_offset(uint32_t *dwords, uint32_t sizedwords, int level)
 }
 
 static void
-cp_draw_indx_indirect(uint32_t *dwords, uint32_t sizedwords, int level)
+cp_draw_indx_indirect(const uint32_t *dwords, uint32_t sizedwords, int level)
 {
    uint32_t prim_type = dwords[0] & 0x1f;
    uint64_t addr;
@@ -2497,7 +2500,7 @@ cp_draw_indx_indirect(uint32_t *dwords, uint32_t sizedwords, int level)
 }
 
 static void
-cp_draw_indirect(uint32_t *dwords, uint32_t sizedwords, int level)
+cp_draw_indirect(const uint32_t *dwords, uint32_t sizedwords, int level)
 {
    uint32_t prim_type = dwords[0] & 0x1f;
    uint64_t addr;
@@ -2513,7 +2516,7 @@ cp_draw_indirect(uint32_t *dwords, uint32_t sizedwords, int level)
 }
 
 static void
-cp_draw_indirect_multi(uint32_t *dwords, uint32_t sizedwords, int level)
+cp_draw_indirect_multi(const uint32_t *dwords, uint32_t sizedwords, int level)
 {
    uint32_t prim_type = dwords[0] & 0x1f;
    uint32_t count = dwords[2];
@@ -2573,7 +2576,7 @@ cp_draw_indirect_multi(uint32_t *dwords, uint32_t sizedwords, int level)
 }
 
 static void
-cp_draw_auto(uint32_t *dwords, uint32_t sizedwords, int level)
+cp_draw_auto(const uint32_t *dwords, uint32_t sizedwords, int level)
 {
    uint32_t prim_type = dwords[0] & 0x1f;
 
@@ -2585,14 +2588,14 @@ cp_draw_auto(uint32_t *dwords, uint32_t sizedwords, int level)
 }
 
 static void
-cp_run_cl(uint32_t *dwords, uint32_t sizedwords, int level)
+cp_run_cl(const uint32_t *dwords, uint32_t sizedwords, int level)
 {
    do_query("COMPUTE", 1);
    dump_register_summary(level, "compute");
 }
 
 static void
-print_nop_tail_string(uint32_t *dwords, uint32_t sizedwords)
+print_nop_tail_string(const uint32_t *dwords, uint32_t sizedwords)
 {
    const char *buf = (void *)dwords;
    for (int i = 0; i < 4 * sizedwords; i++) {
@@ -2604,7 +2607,7 @@ print_nop_tail_string(uint32_t *dwords, uint32_t sizedwords)
 }
 
 static void
-cp_nop(uint32_t *dwords, uint32_t sizedwords, int level)
+cp_nop(const uint32_t *dwords, uint32_t sizedwords, int level)
 {
    if (quiet(3))
       return;
@@ -2644,9 +2647,9 @@ cp_nop(uint32_t *dwords, uint32_t sizedwords, int level)
    printf("\n");
 }
 
-uint32_t *
-parse_cp_indirect(uint32_t *dwords, uint32_t sizedwords,
-                  uint64_t *ibaddr, uint32_t *ibsize)
+const uint32_t *
+parse_cp_indirect(const uint32_t *dwords, uint32_t sizedwords, uint64_t *ibaddr,
+                  uint32_t *ibsize)
 {
    if (is_64b()) {
       assert(sizedwords == 3);
@@ -2668,7 +2671,7 @@ parse_cp_indirect(uint32_t *dwords, uint32_t sizedwords,
 }
 
 static void
-cp_indirect(uint32_t *dwords, uint32_t sizedwords, int level)
+cp_indirect(const uint32_t *dwords, uint32_t sizedwords, int level)
 {
    /* traverse indirect buffers */
    uint64_t ibaddr;
@@ -2721,7 +2724,7 @@ cp_indirect(uint32_t *dwords, uint32_t sizedwords, int level)
 }
 
 static void
-cp_start_bin(uint32_t *dwords, uint32_t sizedwords, int level)
+cp_start_bin(const uint32_t *dwords, uint32_t sizedwords, int level)
 {
    uint64_t ibaddr;
    uint32_t ibsize;
@@ -2766,7 +2769,8 @@ cp_start_bin(uint32_t *dwords, uint32_t sizedwords, int level)
 }
 
 static void
-cp_fixed_stride_draw_table(uint32_t *dwords, uint32_t sizedwords, int level)
+cp_fixed_stride_draw_table(const uint32_t *dwords, uint32_t sizedwords,
+                           int level)
 {
    uint64_t ibaddr;
    uint32_t ibsize;
@@ -2806,13 +2810,13 @@ cp_fixed_stride_draw_table(uint32_t *dwords, uint32_t sizedwords, int level)
 }
 
 static void
-cp_wfi(uint32_t *dwords, uint32_t sizedwords, int level)
+cp_wfi(const uint32_t *dwords, uint32_t sizedwords, int level)
 {
    needs_wfi = false;
 }
 
 static void
-cp_mem_write(uint32_t *dwords, uint32_t sizedwords, int level)
+cp_mem_write(const uint32_t *dwords, uint32_t sizedwords, int level)
 {
    struct rnndomain *domain = rnn_finddomain(rnn->db, "CP_MEM_WRITE");
    internal_packet(dwords, sizedwords, rnn, domain);
@@ -2835,7 +2839,7 @@ cp_mem_write(uint32_t *dwords, uint32_t sizedwords, int level)
 }
 
 static void
-cp_rmw(uint32_t *dwords, uint32_t sizedwords, int level)
+cp_rmw(const uint32_t *dwords, uint32_t sizedwords, int level)
 {
    struct rnndomain *domain;
    const char *str;
@@ -2851,7 +2855,7 @@ cp_rmw(uint32_t *dwords, uint32_t sizedwords, int level)
 }
 
 static void
-cp_reg_mem(uint32_t *dwords, uint32_t sizedwords, int level)
+cp_reg_mem(const uint32_t *dwords, uint32_t sizedwords, int level)
 {
    uint32_t val = dwords[0] & 0xffff;
    printl(3, "%sbase register: %s\n", levels[level], regname(val, 1));
@@ -2956,7 +2960,7 @@ load_all_groups(int level)
 }
 
 static void
-cp_set_draw_state(uint32_t *dwords, uint32_t sizedwords, int level)
+cp_set_draw_state(const uint32_t *dwords, uint32_t sizedwords, int level)
 {
    uint32_t i;
 
@@ -3005,14 +3009,14 @@ cp_set_draw_state(uint32_t *dwords, uint32_t sizedwords, int level)
 }
 
 static void
-cp_set_mode(uint32_t *dwords, uint32_t sizedwords, int level)
+cp_set_mode(const uint32_t *dwords, uint32_t sizedwords, int level)
 {
    draw_mode = dwords[0];
 }
 
 /* execute compute shader */
 static void
-cp_exec_cs(uint32_t *dwords, uint32_t sizedwords, int level)
+cp_exec_cs(const uint32_t *dwords, uint32_t sizedwords, int level)
 {
    do_query("compute", 0);
    print_mode(level);
@@ -3021,7 +3025,7 @@ cp_exec_cs(uint32_t *dwords, uint32_t sizedwords, int level)
 }
 
 static void
-cp_exec_cs_indirect(uint32_t *dwords, uint32_t sizedwords, int level)
+cp_exec_cs_indirect(const uint32_t *dwords, uint32_t sizedwords, int level)
 {
    uint64_t addr;
 
@@ -3041,7 +3045,7 @@ cp_exec_cs_indirect(uint32_t *dwords, uint32_t sizedwords, int level)
 }
 
 static void
-cp_set_marker(uint32_t *dwords, uint32_t sizedwords, int level)
+cp_set_marker(const uint32_t *dwords, uint32_t sizedwords, int level)
 {
    uint32_t val = dwords[0] & 0xf;
    const char *mode = rnn_enumname(rnn, "a6xx_marker", val);
@@ -3065,14 +3069,14 @@ cp_set_marker(uint32_t *dwords, uint32_t sizedwords, int level)
 }
 
 static void
-cp_set_thread_control(uint32_t *dwords, uint32_t sizedwords, int level)
+cp_set_thread_control(const uint32_t *dwords, uint32_t sizedwords, int level)
 {
    uint32_t val = dwords[0] & 0x3;
    thread = rnn_enumname(rnn, "cp_thread", val);
 }
 
 static void
-cp_set_render_mode(uint32_t *dwords, uint32_t sizedwords, int level)
+cp_set_render_mode(const uint32_t *dwords, uint32_t sizedwords, int level)
 {
    uint64_t addr;
    uint32_t *ptr, len;
@@ -3139,7 +3143,7 @@ cp_set_render_mode(uint32_t *dwords, uint32_t sizedwords, int level)
 }
 
 static void
-cp_compute_checkpoint(uint32_t *dwords, uint32_t sizedwords, int level)
+cp_compute_checkpoint(const uint32_t *dwords, uint32_t sizedwords, int level)
 {
    uint64_t addr;
    uint32_t *ptr, len;
@@ -3173,7 +3177,7 @@ cp_compute_checkpoint(uint32_t *dwords, uint32_t sizedwords, int level)
 }
 
 static void
-cp_blit(uint32_t *dwords, uint32_t sizedwords, int level)
+cp_blit(const uint32_t *dwords, uint32_t sizedwords, int level)
 {
    do_query(rnn_enumname(rnn, "cp_blit_cmd", dwords[0]), 0);
    print_mode(level);
@@ -3181,7 +3185,7 @@ cp_blit(uint32_t *dwords, uint32_t sizedwords, int level)
 }
 
 static void
-cp_context_reg_bunch(uint32_t *dwords, uint32_t sizedwords, int level)
+cp_context_reg_bunch(const uint32_t *dwords, uint32_t sizedwords, int level)
 {
    struct regacc r = regacc(NULL);
 
@@ -3193,7 +3197,7 @@ cp_context_reg_bunch(uint32_t *dwords, uint32_t sizedwords, int level)
 }
 
 static void
-cp_non_context_reg_bunch(uint32_t *dwords, uint32_t sizedwords, int level)
+cp_non_context_reg_bunch(const uint32_t *dwords, uint32_t sizedwords, int level)
 {
    dwords += 2;
    sizedwords -= 2;
@@ -3201,7 +3205,7 @@ cp_non_context_reg_bunch(uint32_t *dwords, uint32_t sizedwords, int level)
 }
 
 static void
-cp_reg_write(uint32_t *dwords, uint32_t sizedwords, int level)
+cp_reg_write(const uint32_t *dwords, uint32_t sizedwords, int level)
 {
    uint32_t reg = dwords[1] & 0xffff;
 
@@ -3212,7 +3216,7 @@ cp_reg_write(uint32_t *dwords, uint32_t sizedwords, int level)
 }
 
 static void
-cp_set_amble(uint32_t *dwords, uint32_t sizedwords, int level)
+cp_set_amble(const uint32_t *dwords, uint32_t sizedwords, int level)
 {
    uint64_t addr;
    uint32_t size = dwords[2] & 0xffff;
@@ -3231,13 +3235,14 @@ cp_set_amble(uint32_t *dwords, uint32_t sizedwords, int level)
 }
 
 static void
-cp_skip_ib2_enable_global(uint32_t *dwords, uint32_t sizedwords, int level)
+cp_skip_ib2_enable_global(const uint32_t *dwords, uint32_t sizedwords,
+                          int level)
 {
    skip_ib2_enable_global = dwords[0];
 }
 
 static void
-cp_skip_ib2_enable_local(uint32_t *dwords, uint32_t sizedwords, int level)
+cp_skip_ib2_enable_local(const uint32_t *dwords, uint32_t sizedwords, int level)
 {
    skip_ib2_enable_local = dwords[0];
 }
@@ -3245,7 +3250,7 @@ cp_skip_ib2_enable_local(uint32_t *dwords, uint32_t sizedwords, int level)
 #define CP(x, fxn, ...) { "CP_" #x, fxn, ##__VA_ARGS__ }
 static const struct type3_op {
    const char *name;
-   void (*fxn)(uint32_t *dwords, uint32_t sizedwords, int level);
+   void (*fxn)(const uint32_t *dwords, uint32_t sizedwords, int level);
    struct {
       bool load_all_groups;
    } options;
@@ -3311,7 +3316,7 @@ static const struct type3_op {
 };
 
 static void
-noop_fxn(uint32_t *dwords, uint32_t sizedwords, int level)
+noop_fxn(const uint32_t *dwords, uint32_t sizedwords, int level)
 {
 }
 
@@ -3334,7 +3339,7 @@ get_type3_op(unsigned opc)
 }
 
 void
-dump_commands(uint32_t *dwords, uint32_t sizedwords, int level)
+dump_commands(const uint32_t *dwords, uint32_t sizedwords, int level)
 {
    int dwords_left = sizedwords;
    uint32_t count = 0; /* dword count including packet header */

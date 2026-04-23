@@ -218,7 +218,7 @@ static void si_fine_fence_set(struct si_context *ctx, struct si_fine_fence *fine
    if (flags & PIPE_FLUSH_TOP_OF_PIPE) {
       uint32_t value = 0x80000000;
 
-      si_cp_write_data(ctx, fine->buf, fine->offset, 4, V_370_MEM, V_370_PFP, &value);
+      si_cp_write_data(ctx, fine->buf, fine->offset, 4, V_371_MEMORY, V_371_PREFETCH_PARSER, &value);
    } else if (flags & PIPE_FLUSH_BOTTOM_OF_PIPE) {
       uint64_t fence_va = fine->buf->gpu_address + fine->offset;
 

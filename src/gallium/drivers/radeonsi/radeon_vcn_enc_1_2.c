@@ -871,7 +871,9 @@ static void radeon_enc_op_preset(struct radeon_encoder *enc)
 {
    uint32_t preset_mode;
 
-   if (enc->enc_pic.quality_modes.preset_mode == RENCODE_PRESET_MODE_QUALITY)
+   if (enc->enc_pic.quality_modes.preset_mode == RENCODE_PRESET_MODE_HIGH_QUALITY)
+      preset_mode = RENCODE_IB_OP_SET_HIGH_QUALITY_ENCODING_MODE;
+   else if (enc->enc_pic.quality_modes.preset_mode == RENCODE_PRESET_MODE_QUALITY)
       preset_mode = RENCODE_IB_OP_SET_QUALITY_ENCODING_MODE;
    else if (enc->enc_pic.quality_modes.preset_mode == RENCODE_PRESET_MODE_BALANCE)
       preset_mode = RENCODE_IB_OP_SET_BALANCE_ENCODING_MODE;

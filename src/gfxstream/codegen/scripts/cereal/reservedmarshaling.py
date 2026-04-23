@@ -548,26 +548,24 @@ class VulkanReservedMarshalingCodegen(VulkanTypeIterator):
         lenAccessGuard = self.lenAccessorGuard(vulkanType)
 
         if self.direction == "write":
+            self.cgen.beginBlock()
+
+            self.cgen.stmt("uint32_t c = 0")
             if lenAccess is not None:
-                self.cgen.beginBlock()
-
-                self.cgen.stmt("uint32_t c = 0")
-                if lenAccessGuard is not None:
-                    self.cgen.beginIf(lenAccessGuard)
+                self.cgen.beginIf(lenAccessGuard)
                 self.cgen.stmt("c = %s" % (lenAccess))
-                if lenAccessGuard is not None:
-                    self.cgen.endIf()
-                self.genMemcpyAndIncr(self.ptrVar, "(uint32_t*)" ,"&c", "sizeof(uint32_t)", toBe = True, actualSize = 4)
-
-                self.cgen.beginFor("uint32_t i = 0", "i < c", "++i")
-                self.cgen.stmt("uint32_t l = %s ? strlen(%s[i]): 0" % (access, access))
-                self.genMemcpyAndIncr(self.ptrVar, "(uint32_t*)" ,"&l", "sizeof(uint32_t)", toBe = True, actualSize = 4)
-                self.cgen.beginIf("l")
-                self.genMemcpyAndIncr(self.ptrVar, "(char*)", "(%s[i])" % access, "l")
                 self.cgen.endIf()
-                self.cgen.endFor()
 
-                self.cgen.endBlock()
+            self.genMemcpyAndIncr(self.ptrVar, "(uint32_t*)" ,"&c", "sizeof(uint32_t)", toBe = True, actualSize = 4)
+            self.cgen.beginFor("uint32_t i = 0", "i < c", "++i")
+            self.cgen.stmt("uint32_t l = %s ? strlen(%s[i]): 0" % (access, access))
+            self.genMemcpyAndIncr(self.ptrVar, "(uint32_t*)" ,"&l", "sizeof(uint32_t)", toBe = True, actualSize = 4)
+            self.cgen.beginIf("l")
+            self.genMemcpyAndIncr(self.ptrVar, "(char*)", "(%s[i])" % access, "l")
+            self.cgen.endIf()
+            self.cgen.endFor()
+
+            self.cgen.endBlock()
         else:
             castExpr = \
                 self.makeCastExpr( \

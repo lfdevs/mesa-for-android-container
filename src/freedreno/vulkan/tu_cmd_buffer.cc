@@ -14,6 +14,9 @@
 #include "vk_render_pass.h"
 #include "vk_util.h"
 
+#include "common/freedreno_gpu_event.h"
+#include "common/freedreno_lrz.h"
+#include "common/freedreno_vrs.h"
 #include "tu_autotune.h"
 #include "tu_buffer.h"
 #include "tu_clear_blit.h"
@@ -21,13 +24,9 @@
 #include "tu_event.h"
 #include "tu_image.h"
 #include "tu_knl.h"
+#include "tu_subsampled_image.h"
 #include "tu_tile_config.h"
 #include "tu_tracepoints.h"
-#include "tu_subsampled_image.h"
-
-#include "common/freedreno_gpu_event.h"
-#include "common/freedreno_lrz.h"
-#include "common/freedreno_vrs.h"
 
 enum tu_cmd_buffer_status {
    TU_CMD_BUFFER_STATUS_IDLE = 0,
@@ -2436,7 +2435,7 @@ tu_init_hw(struct tu_cmd_buffer *cmd, struct tu_cs *cs)
       tu7_set_thread_br_patchpoint(cmd, cs, false);
    }
 
-   dev->autotune->emit_preempt_latency_tracking_setup(cmd, cs);
+   bool track_preempt_latency = dev->autotune->emit_preempt_latency_tracking_setup(cmd, cs);
 
    tu_cs_emit_pkt7(cs, CP_SET_AMBLE, 3);
    tu_cs_emit_qw(cs, cmd->device->bin_preamble_entry.bo->iova +
@@ -2462,7 +2461,7 @@ tu_init_hw(struct tu_cmd_buffer *cmd, struct tu_cs *cs)
                             (1u << TU_PREDICATE_VTX_STATS_NOT_RUNNING));
    }
 
-   if (dev->switch_back_amble_entry.size > 0) {
+   if (dev->switch_back_amble_entry.size > 0 && track_preempt_latency) {
       tu_cs_emit_pkt7(cs, CP_SET_AMBLE, 3);
       tu_cs_emit_qw(cs, dev->switch_back_amble_entry.bo->iova + dev->switch_back_amble_entry.offset);
       tu_cs_emit(cs, CP_SET_AMBLE_2_DWORDS(dev->switch_back_amble_entry.size / sizeof(uint32_t)) |
@@ -2473,7 +2472,7 @@ tu_init_hw(struct tu_cmd_buffer *cmd, struct tu_cs *cs)
       tu_cs_emit(cs, CP_SET_AMBLE_2_TYPE(PREAMBLE_AMBLE_TYPE));
    }
    
-   if (dev->switch_away_amble_entry.size > 0) {
+   if (dev->switch_away_amble_entry.size > 0 && track_preempt_latency) {
       tu_cs_emit_pkt7(cs, CP_SET_AMBLE, 3);
       tu_cs_emit_qw(cs, dev->switch_away_amble_entry.bo->iova + dev->switch_away_amble_entry.offset);
       tu_cs_emit(cs, CP_SET_AMBLE_2_DWORDS(dev->switch_away_amble_entry.size / sizeof(uint32_t)) |
@@ -6026,6 +6025,7 @@ vk2tu_dst_stage(struct tu_device *dev,
    return stage;
 }
 
+template <chip CHIP>
 static void
 tu_flush_for_stage(struct tu_cache_state *cache,
                    enum tu_stage src_stage, enum tu_stage dst_stage)
@@ -6041,8 +6041,20 @@ tu_flush_for_stage(struct tu_cache_state *cache,
       cache->flush_bits |= TU_CMD_FLAG_WAIT_FOR_IDLE;
       if (dst_stage <= TU_STAGE_BV) {
          cache->flush_bits |= TU_CMD_FLAG_WAIT_FOR_BR;
-         if (dst_stage == TU_STAGE_BV_CP)
-            cache->pending_flush_bits |= TU_CMD_FLAG_WAIT_FOR_ME;
+
+         /* Extending on the comment in vk2tu_single_stage(), up to a8xx,
+          * indirect opcodes rely on an implicit wait before reading indirect
+          * parameters, which can help avoid emitting CP_WAIT_FOR_ME. Exception
+          * to this are devices with bugged firmware that enable indirect_draw_wfm_quirk.
+          * a8xx removes this implicit wait, so CP_WAIT_FOR_ME should be emitted
+          * without delay, which also matches proprietary driver.
+          */
+         if (dst_stage == TU_STAGE_BV_CP) {
+            if (CHIP >= A8XX)
+               cache->flush_bits |= TU_CMD_FLAG_WAIT_FOR_ME;
+            else
+               cache->pending_flush_bits |= TU_CMD_FLAG_WAIT_FOR_ME;
+         }
       }
    }
 }
@@ -6427,6 +6439,7 @@ tu_CmdExecuteCommands(VkCommandBuffer commandBuffer,
    }
 }
 
+template <chip CHIP>
 static void
 tu_subpass_barrier(struct tu_cmd_buffer *cmd_buffer,
                    const struct tu_subpass_barrier *barrier,
@@ -6459,7 +6472,7 @@ tu_subpass_barrier(struct tu_cmd_buffer *cmd_buffer,
 
    enum tu_stage src_stage = vk2tu_src_stage(cmd_buffer->device, src_stage_vk);
    enum tu_stage dst_stage = vk2tu_dst_stage(cmd_buffer->device, dst_stage_vk);
-   tu_flush_for_stage(cache, src_stage, dst_stage);
+   tu_flush_for_stage<CHIP>(cache, src_stage, dst_stage);
 }
 
 template <chip CHIP>
@@ -6907,7 +6920,7 @@ tu_CmdBeginRenderPass2(VkCommandBuffer commandBuffer,
     * gets called. However deferred flushes could have to happen later as part
     * of the subpass.
     */
-   tu_subpass_barrier(cmd, &pass->subpasses[0].start_barrier, true);
+   tu_subpass_barrier<CHIP>(cmd, &pass->subpasses[0].start_barrier, true);
    cmd->state.renderpass_cache.pending_flush_bits =
       cmd->state.cache.pending_flush_bits;
    cmd->state.renderpass_cache.flush_bits = 0;
@@ -7298,7 +7311,7 @@ tu_CmdNextSubpass2(VkCommandBuffer commandBuffer,
       tu_cond_exec_end(cs);
 
    /* Handle dependencies for the next subpass */
-   tu_subpass_barrier(cmd, &cmd->state.subpass->start_barrier, false);
+   tu_subpass_barrier<CHIP>(cmd, &cmd->state.subpass->start_barrier, false);
 
    if (cmd->state.subpass->feedback_invalidate) {
       cmd->state.renderpass_cache.flush_bits |=
@@ -9521,7 +9534,7 @@ tu_CmdEndRenderPass2(VkCommandBuffer commandBuffer,
 
    cmd_buffer->state.cache.pending_flush_bits |=
       cmd_buffer->state.renderpass_cache.pending_flush_bits;
-   tu_subpass_barrier(cmd_buffer, &cmd_buffer->state.pass->end_barrier, true);
+   TU_CALLX(cmd_buffer->device, tu_subpass_barrier)(cmd_buffer, &cmd_buffer->state.pass->end_barrier, true);
 
    vk_free(&cmd_buffer->vk.pool->alloc, cmd_buffer->state.attachments);
 
@@ -9797,7 +9810,7 @@ tu_barrier(struct tu_cmd_buffer *cmd,
 
    enum tu_stage src_stage = vk2tu_src_stage(cmd->device, srcStage);
    enum tu_stage dst_stage = vk2tu_dst_stage(cmd->device, dstStage);
-   tu_flush_for_stage(cache, src_stage, dst_stage);
+   TU_CALLX(cmd->device, tu_flush_for_stage)(cache, src_stage, dst_stage);
 }
 
 VKAPI_ATTR void VKAPI_CALL

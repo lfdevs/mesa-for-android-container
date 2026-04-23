@@ -785,7 +785,7 @@ static void si_emit_task_wait_packets(struct si_context *sctx)
    if (sctx->task_wait_count == sctx->last_task_wait_count)
       return;
 
-   si_cp_write_data(sctx, sctx->task_wait_buf, 0, 4, V_370_MEM, V_370_ME,
+   si_cp_write_data(sctx, sctx->task_wait_buf, 0, 4, V_371_MEMORY, V_371_MICRO_ENGINE,
                     &sctx->task_wait_count);
 
    si_cp_wait_mem(sctx, sctx->gfx_cs.gang_cs, sctx->task_wait_buf->gpu_address,

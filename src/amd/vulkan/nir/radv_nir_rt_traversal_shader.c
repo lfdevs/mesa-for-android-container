@@ -834,6 +834,8 @@ handle_candidate_triangle(nir_builder *b, struct radv_triangle_intersection *int
                           const struct radv_ray_traversal_args *args, const struct radv_ray_flags *ray_flags)
 {
    struct traversal_data *data = args->data;
+   const bool uses_descriptor_heap =
+      data->pipeline->base.base.create_flags & VK_PIPELINE_CREATE_2_DESCRIPTOR_HEAP_BIT_EXT;
 
    nir_def *geometry_id = nir_iand_imm(b, intersection->base.geometry_id_and_flags, 0xfffffff);
    nir_def *sbt_idx =
@@ -925,8 +927,13 @@ handle_candidate_triangle(nir_builder *b, struct radv_triangle_intersection *int
          nir_def **params = rzalloc_array_size(b->shader, sizeof(nir_def *), param_count);
          params[RT_ARG_LAUNCH_ID] = nir_load_ray_launch_id(b);
          params[RT_ARG_LAUNCH_SIZE] = nir_load_ray_launch_size(b);
-         params[RT_ARG_DESCRIPTORS] = nir_load_rt_descriptors_amd(b);
-         params[RT_ARG_DYNAMIC_DESCRIPTORS] = nir_load_rt_dynamic_descriptors_amd(b);
+         if (uses_descriptor_heap) {
+            params[RT_ARG_HEAP_RESOURCE] = nir_load_rt_heap_resource_amd(b);
+            params[RT_ARG_HEAP_SAMPLER] = nir_load_rt_heap_sampler_amd(b);
+         } else {
+            params[RT_ARG_DESCRIPTORS] = nir_load_rt_descriptors_amd(b);
+            params[RT_ARG_DYNAMIC_DESCRIPTORS] = nir_load_rt_dynamic_descriptors_amd(b);
+         }
          params[RT_ARG_PUSH_CONSTANTS] = nir_load_rt_push_constants_amd(b);
          params[RT_ARG_SBT_DESCRIPTORS] = nir_load_sbt_base_amd(b);
          params[AHIT_ISEC_ARG_SHADER_RECORD_PTR] = sbt_data.shader_record_ptr;
@@ -988,6 +995,8 @@ handle_candidate_aabb(nir_builder *b, struct radv_leaf_intersection *intersectio
                       const struct radv_ray_traversal_args *args)
 {
    struct traversal_data *data = args->data;
+   const bool uses_descriptor_heap =
+      data->pipeline->base.base.create_flags & VK_PIPELINE_CREATE_2_DESCRIPTOR_HEAP_BIT_EXT;
 
    nir_def *geometry_id = nir_iand_imm(b, intersection->geometry_id_and_flags, 0xfffffff);
    nir_def *sbt_idx =
@@ -1075,8 +1084,13 @@ handle_candidate_aabb(nir_builder *b, struct radv_leaf_intersection *intersectio
       nir_def **params = rzalloc_array_size(b->shader, sizeof(nir_def *), param_count);
       params[RT_ARG_LAUNCH_ID] = nir_load_ray_launch_id(b);
       params[RT_ARG_LAUNCH_SIZE] = nir_load_ray_launch_size(b);
-      params[RT_ARG_DESCRIPTORS] = nir_load_rt_descriptors_amd(b);
-      params[RT_ARG_DYNAMIC_DESCRIPTORS] = nir_load_rt_dynamic_descriptors_amd(b);
+      if (uses_descriptor_heap) {
+         params[RT_ARG_HEAP_RESOURCE] = nir_load_rt_heap_resource_amd(b);
+         params[RT_ARG_HEAP_SAMPLER] = nir_load_rt_heap_sampler_amd(b);
+      } else {
+         params[RT_ARG_DESCRIPTORS] = nir_load_rt_descriptors_amd(b);
+         params[RT_ARG_DYNAMIC_DESCRIPTORS] = nir_load_rt_dynamic_descriptors_amd(b);
+      }
       params[RT_ARG_PUSH_CONSTANTS] = nir_load_rt_push_constants_amd(b);
       params[RT_ARG_SBT_DESCRIPTORS] = nir_load_sbt_base_amd(b);
       params[AHIT_ISEC_ARG_SHADER_RECORD_PTR] = sbt_data.shader_record_ptr;
@@ -1137,6 +1151,7 @@ struct radv_nir_rt_traversal_result
 radv_build_traversal(struct radv_device *device, struct radv_ray_tracing_pipeline *pipeline, nir_builder *b,
                      struct radv_nir_rt_traversal_params *params, struct radv_ray_tracing_stage_info *info)
 {
+   const bool uses_descriptor_heap = pipeline->base.base.create_flags & VK_PIPELINE_CREATE_2_DESCRIPTOR_HEAP_BIT_EXT;
    const struct radv_physical_device *pdev = radv_device_physical(device);
    nir_variable *barycentrics =
       nir_variable_create(b->shader, nir_var_ray_hit_attrib, glsl_vector_type(GLSL_TYPE_FLOAT, 2), "barycentrics");
@@ -1153,7 +1168,7 @@ radv_build_traversal(struct radv_device *device, struct radv_ray_tracing_pipelin
    if (!params->preprocess_ahit_isec) {
       nir_function *ahit_isec_func = nir_function_create(b->shader, "ahit_isec_func");
       radv_nir_init_rt_function_params(ahit_isec_func, MESA_SHADER_ANY_HIT, params->payload_size,
-                                       params->hit_attrib_size);
+                                       params->hit_attrib_size, uses_descriptor_heap);
       data.ahit_isec_func = ahit_isec_func;
    }
 

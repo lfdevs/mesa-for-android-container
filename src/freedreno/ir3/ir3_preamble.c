@@ -47,6 +47,5 @@ ir3_imm_const_to_preamble(struct ir3 *ir, struct ir3_shader_variant *so)
       ir3_store_const(so, &build, src, dst);
    }
 
-   imms->count = 0;
    return true;
 }

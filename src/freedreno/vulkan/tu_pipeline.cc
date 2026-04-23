@@ -9,26 +9,25 @@
 
 #include "tu_pipeline.h"
 
-#include "common/freedreno_guardband.h"
-
-#include "ir3/ir3_nir.h"
 #include "nir/nir.h"
 #include "nir/nir_builder.h"
 #include "nir/nir_serialize.h"
 #include "spirv/nir_spirv.h"
-#include "util/u_debug.h"
 #include "util/mesa-blake3.h"
 #include "util/shader_stats.h"
+#include "util/u_debug.h"
 #include "vk_nir.h"
 #include "vk_pipeline.h"
 #include "vk_render_pass.h"
 #include "vk_util.h"
 
+#include "common/freedreno_guardband.h"
+#include "ir3/ir3_nir.h"
 #include "tu_cmd_buffer.h"
 #include "tu_cs.h"
 #include "tu_device.h"
-#include "tu_knl.h"
 #include "tu_formats.h"
+#include "tu_knl.h"
 #include "tu_lrz.h"
 #include "tu_pass.h"
 #include "tu_rmv.h"
@@ -1304,7 +1303,7 @@ tu6_emit_geom_tess_consts(struct tu_cs *cs,
 
    if (gs && !hs) {
       tu6_emit_vs_params(cs, ir3_const_state(vs), vs->constlen,
-                         vs->output_size, gs->gs.vertices_in);
+                         vs->output_size, gs->gs.vertices_in * vs->view_count);
    }
 
    if (hs) {
@@ -1312,9 +1311,9 @@ tu6_emit_geom_tess_consts(struct tu_cs *cs,
       tu_get_tess_iova<CHIP>(dev, &tess_factor_iova, &tess_param_iova);
 
       uint32_t ds_params[8] = {
-         gs ? ds->output_size * gs->gs.vertices_in * 4 : 0,  /* ds primitive stride */
-         ds->output_size * 4,                                /* ds vertex stride */
-         hs->output_size,                                    /* hs vertex stride (dwords) */
+         gs ? ds->output_size * ds->view_count * gs->gs.vertices_in * 4 : 0,  /* ds primitive stride */
+         ds->output_size * 4,                                                 /* ds vertex stride */
+         hs->output_size,                                                     /* hs vertex stride (dwords) */
          hs->tess.tcs_vertices_out,
          tess_param_iova,
          tess_param_iova >> 32,
@@ -1330,8 +1329,8 @@ tu6_emit_geom_tess_consts(struct tu_cs *cs,
    if (gs) {
       const struct ir3_shader_variant *prev = ds ? ds : vs;
       uint32_t gs_params[4] = {
-         prev->output_size * gs->gs.vertices_in * 4,  /* gs primitive stride */
-         prev->output_size * 4,                 /* gs vertex stride */
+         prev->output_size * prev->view_count * gs->gs.vertices_in * 4,  /* gs primitive stride */
+         prev->output_size * 4,                                          /* gs vertex stride */
          0,
          0,
       };
@@ -1796,8 +1795,7 @@ tu_pipeline_builder_compile_shaders(struct tu_pipeline_builder *builder,
 
       if (stage_infos[stage]) {
          struct vk_pipeline_robustness_state rs;
-         vk_pipeline_robustness_state_fill(&builder->device->vk, &rs,
-                                           builder->create_info->pNext,
+         vk_pipeline_robustness_state_fill(&builder->device->vk.robustness_state, &rs, builder->create_info->pNext,
                                            stage_infos[stage]->pNext);
          tu_shader_key_robustness(&keys[stage], &rs);
          if (builder->create_flags & VK_PIPELINE_CREATE_2_VIEW_INDEX_FROM_DEVICE_INDEX_BIT_KHR)
@@ -1887,8 +1885,12 @@ tu_pipeline_builder_compile_shaders(struct tu_pipeline_builder *builder,
 
    if (builder->state &
        VK_GRAPHICS_PIPELINE_LIBRARY_PRE_RASTERIZATION_SHADERS_BIT_EXT) {
-      keys[MESA_SHADER_VERTEX].multiview_mask =
-         builder->graphics_state.mv->view_mask;
+      for (int i = MESA_SHADER_VERTEX; i <= MESA_SHADER_GEOMETRY; i++) {
+         if (nir[i] || stage_infos[i]) {
+            keys[i].multiview_mask =
+               builder->graphics_state.mv->view_mask;
+         }
+      }
 
       mesa_shader_stage last_pre_rast_stage = MESA_SHADER_VERTEX;
       for (int i = MESA_SHADER_GEOMETRY; i >= MESA_SHADER_VERTEX; i--) {
@@ -4926,9 +4928,7 @@ tu_compute_pipeline_create(VkDevice device,
                                dev);
 
    struct vk_pipeline_robustness_state rs;
-   vk_pipeline_robustness_state_fill(&dev->vk, &rs,
-                                     pCreateInfo->pNext,
-                                     stage_info->pNext);
+   vk_pipeline_robustness_state_fill(&dev->vk.robustness_state, &rs, pCreateInfo->pNext, stage_info->pNext);
    tu_shader_key_robustness(&key, &rs);
 
    void *pipeline_mem_ctx = ralloc_context(NULL);
@@ -4972,7 +4972,7 @@ tu_compute_pipeline_create(VkDevice device,
          nir_shader_as_str(nir, pipeline->base.executables_mem_ctx) : NULL;
 
       struct tu_shader_info info = {};
-      tu_lower_nir(dev, nir, &key, &info);
+      tu_lower_nir(dev, nir, &key, &ir3_key, &info);
       result = tu_shader_create(dev, &shader, nir, &key, &info, &ir3_key,
                                 pipeline_blake3, sizeof(pipeline_blake3), layout,
                                 executable_info);

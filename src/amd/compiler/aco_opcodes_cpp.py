@@ -48,6 +48,11 @@ extern const aco::Info instr_info = {
    },
    {
       % for name in opcode_names:
+      ${instructions[name].op.gfx11_7},
+      % endfor
+   },
+   {
+      % for name in opcode_names:
       ${instructions[name].op.gfx12},
       % endfor
    },

@@ -89,6 +89,8 @@ bool dxil_nir_kill_undefined_varyings(nir_shader *shader, uint64_t prev_stage_wr
                                       uint32_t prev_stage_patch_written_mask, const BITSET_WORD *prev_stage_frac_output_mask);
 bool dxil_nir_kill_unused_outputs(nir_shader *shader, uint64_t next_stage_read_mask,
                                   uint32_t next_stage_patch_read_mask, const BITSET_WORD *next_stage_frac_input_mask);
+void dxil_nir_propagate_interp_to_outputs(nir_shader *prev_stage_nir,
+                                          const nir_shader *fs_nir);
 
 #ifdef __cplusplus
 }

@@ -135,9 +135,9 @@ lower_load_input_attachment(nir_builder *b, nir_intrinsic_instr *intrin, void *s
    case nir_intrinsic_load_input_attachment_coord: {
       b->cursor = nir_before_instr(&intrin->instr);
 
-      nir_def *pos = nir_f2i32(b, nir_load_frag_coord(b));
+      nir_def *pos = nir_load_frag_coord(b);
       nir_def *layer = nir_load_layer_id(b);
-      nir_def *coord = nir_vec3(b, nir_channel(b, pos, 0), nir_channel(b, pos, 1), layer);
+      nir_def *coord = nir_vec3(b, nir_f2i32(b, nir_channel(b, pos, 0)), nir_f2i32(b, nir_channel(b, pos, 1)), layer);
 
       nir_def_replace(&intrin->def, coord);
       return true;

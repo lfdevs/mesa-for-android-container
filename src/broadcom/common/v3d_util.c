@@ -22,7 +22,9 @@
  */
 
 #include "v3d_util.h"
+#include "v3d_limits.h"
 #include "util/macros.h"
+#include "util/u_math.h"
 
 /* Choose a number of workgroups per supergroup that maximizes
  * lane occupancy. We can pack up to 16 workgroups into a supergroup.
@@ -264,6 +266,50 @@ v3d_internal_bpp_words(uint32_t internal_bpp)
         default:
                 UNREACHABLE("Unsupported internal BPP");
         }
+}
+
+void
+v3d_tile_alloc_sizes(uint32_t layers,
+                     uint32_t tiles_x,
+                     uint32_t tiles_y,
+                     uint32_t draws,
+                     uint32_t page_size,
+                     uint32_t *tile_alloc_size,
+                     uint32_t *tile_state_size)
+{
+   assert(layers > 0);
+   /* The PTB will request the tile alloc initial size per tile at start
+    * of tile binning. The size must match the initial block size
+    * configured in the TILE_BINNING_MODE_CFG packet.
+    */
+   uint32_t tiles_size =
+      layers * tiles_x * tiles_y * V3D_TILE_ALLOC_INITIAL_BLOCK_SIZE;
+
+   /* The PTB allocates in aligned 4k chunks after the initial setup. */
+   uint32_t alloc_size = align(tiles_size, 4096);
+
+   /* Include the first two chunk allocations that the PTB does so that
+    * we definitely clear the OOM condition before triggering one (the HW
+    * won't trigger OOM during the first allocations).
+    */
+   alloc_size += 8192;
+
+   /* Pre-allocate a continuation pool so the GPU rarely has to stall
+    * waiting for the kernel OOM handler. Each draw call writes per-tile
+    * BCL state (primitives, uniforms, shader records) whose size scales
+    * with both the number of tiles and the number of draws. Use the
+    * product (tiles_size * draws) / 2 as an estimate, capped at 512 KB
+    * to avoid over-allocating on high draw-count scenes. Align the
+    * total to page_size.
+    * The formula assumes the initial block size of 128B, so if it is
+    * changed it needs to be adjusted.
+    */
+   STATIC_ASSERT(V3D_TILE_ALLOC_INITIAL_BLOCK_SIZE == 128);
+   alloc_size += MIN2((tiles_size * draws) / 2, 512 * 1024);
+   alloc_size = align(alloc_size, page_size);
+
+   *tile_alloc_size = alloc_size;
+   *tile_state_size = layers * tiles_x * tiles_y * 256;
 }
 
 uint32_t

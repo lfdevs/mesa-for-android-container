@@ -439,11 +439,10 @@ genX(simple_shader_alloc_push)(struct anv_simple_shader *state, uint32_t size)
       s = anv_state_stream_alloc(state->dynamic_state_stream,
                                  size, ANV_UBO_ALIGNMENT);
    } else {
-#if GFX_VERx10 >= 125
-      s = anv_state_stream_alloc(state->general_state_stream, align(size, 64), 64);
-#else
-      s = anv_state_stream_alloc(state->dynamic_state_stream, size, 64);
-#endif
+      s = anv_state_stream_alloc(GFX_VERx10 >= 125 ?
+                                 state->general_state_stream :
+                                 state->dynamic_state_stream,
+                                 align(size, 64), 64);
    }
 
    if (s.map == NULL)

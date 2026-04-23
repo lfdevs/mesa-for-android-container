@@ -257,7 +257,8 @@ radv_nir_return_param_from_type(nir_parameter *param, const glsl_type *type, boo
 }
 
 void
-radv_build_rt_prolog(struct radv_device *device, struct radv_shader_stage *stage)
+radv_build_rt_prolog(struct radv_device *device, struct radv_shader_stage *stage, bool uses_descriptor_heap,
+                     struct radv_shader_debug_info *debug)
 {
    const struct radv_physical_device *pdev = radv_device_physical(device);
 
@@ -268,6 +269,7 @@ radv_build_rt_prolog(struct radv_device *device, struct radv_shader_stage *stage
    stage->info.loads_push_constants = true;
    stage->info.loads_dynamic_offsets = true;
    stage->info.force_indirect_descriptors = true;
+   stage->info.descriptor_heap = uses_descriptor_heap;
    stage->info.wave_size = pdev->rt_wave_size;
    stage->info.workgroup_size = stage->info.wave_size;
    stage->info.user_data_0 = R_00B900_COMPUTE_USER_DATA_0;
@@ -279,7 +281,7 @@ radv_build_rt_prolog(struct radv_device *device, struct radv_shader_stage *stage
    for (unsigned i = 0; i < 3; i++)
       stage->info.cs.uses_block_id[i] = true;
 
-   radv_declare_shader_args(device, NULL, &stage->info, MESA_SHADER_COMPUTE, MESA_SHADER_NONE, &stage->args);
+   radv_declare_shader_args(device, NULL, &stage->info, MESA_SHADER_COMPUTE, MESA_SHADER_NONE, &stage->args, debug);
    stage->info.user_sgprs_locs = stage->args.user_sgprs_locs;
 
    b.shader->info.workgroup_size[0] = pdev->rt_wave_size;
@@ -288,11 +290,18 @@ radv_build_rt_prolog(struct radv_device *device, struct radv_shader_stage *stage
    b.shader->info.min_subgroup_size = pdev->rt_wave_size;
 
    nir_function *raygen_function = nir_function_create(b.shader, "raygen_func");
-   radv_nir_init_rt_function_params(raygen_function, MESA_SHADER_RAYGEN, 0, 0);
+   radv_nir_init_rt_function_params(raygen_function, MESA_SHADER_RAYGEN, 0, 0, uses_descriptor_heap);
 
-   nir_def *descriptors = ac_nir_load_arg(&b, &stage->args.ac, stage->args.descriptors[0]);
+   nir_def *descriptors, *dynamic_descriptors, *heap_resource, *heap_sampler;
+   if (uses_descriptor_heap) {
+      heap_resource = ac_nir_load_arg(&b, &stage->args.ac, stage->args.descriptors[RADV_HEAP_RESOURCE]);
+      heap_sampler = ac_nir_load_arg(&b, &stage->args.ac, stage->args.descriptors[RADV_HEAP_SAMPLER]);
+   } else {
+      descriptors = ac_nir_load_arg(&b, &stage->args.ac, stage->args.descriptors[0]);
+      dynamic_descriptors = ac_nir_load_arg(&b, &stage->args.ac, stage->args.ac.dynamic_descriptors);
+   }
+
    nir_def *push_constants = ac_nir_load_arg(&b, &stage->args.ac, stage->args.ac.push_constants);
-   nir_def *dynamic_descriptors = ac_nir_load_arg(&b, &stage->args.ac, stage->args.ac.dynamic_descriptors);
    nir_def *sbt_desc = nir_pack_64_2x32(&b, ac_nir_load_arg(&b, &stage->args.ac, stage->args.ac.rt.sbt_descriptors));
    nir_def *launch_size_addr = nir_pack_64_2x32(&b, ac_nir_load_arg(&b, &stage->args.ac, stage->args.ac.rt.launch_size_addr));
    nir_def *traversal_addr =
@@ -399,8 +408,13 @@ radv_build_rt_prolog(struct radv_device *device, struct radv_shader_stage *stage
    nir_def *params[RAYGEN_ARG_COUNT];
    params[RT_ARG_LAUNCH_ID] = nir_vec3(&b, id_x, id_y, wg_ids[2]);
    params[RT_ARG_LAUNCH_SIZE] = launch_sizes;
-   params[RT_ARG_DESCRIPTORS] = descriptors;
-   params[RT_ARG_DYNAMIC_DESCRIPTORS] = dynamic_descriptors;
+   if (uses_descriptor_heap) {
+      params[RT_ARG_HEAP_RESOURCE] = heap_resource;
+      params[RT_ARG_HEAP_SAMPLER] = heap_sampler;
+   } else {
+      params[RT_ARG_DESCRIPTORS] = descriptors;
+      params[RT_ARG_DYNAMIC_DESCRIPTORS] = dynamic_descriptors;
+   }
    params[RT_ARG_PUSH_CONSTANTS] = push_constants;
    params[RT_ARG_SBT_DESCRIPTORS] = sbt_desc;
    params[RAYGEN_ARG_SHADER_RECORD_PTR] = shader_record_ptr;

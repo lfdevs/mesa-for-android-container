@@ -829,15 +829,12 @@ lower_sampler_logical_send_gfx7(const fs_builder &bld, elk_fs_inst *inst, elk_op
       bld.MOV(sources[length++], elk_imm_ud(0));
       break;
    case ELK_SHADER_OPCODE_TXF:
-   case ELK_SHADER_OPCODE_TXF_LZ:
       /* Unfortunately, the parameters for LD are intermixed: u, lod, v, r. */
       sources[length] = retype(sources[length], payload_signed_type);
       bld.MOV(sources[length++], coordinate);
 
-      if (op != ELK_SHADER_OPCODE_TXF_LZ) {
-         sources[length] = retype(sources[length], payload_signed_type);
-         bld.MOV(sources[length++], lod);
-      }
+      sources[length] = retype(sources[length], payload_signed_type);
+      bld.MOV(sources[length++], lod);
 
       for (unsigned i = 1; i < coord_components; i++) {
          sources[length] = retype(sources[length], payload_signed_type);

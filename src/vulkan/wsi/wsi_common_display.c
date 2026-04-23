@@ -691,6 +691,7 @@ wsi_display_alloc_connector(struct wsi_display *wsi,
    connector->active = false;
    connector->imported = imported;
    list_inithead(&connector->display_modes);
+   list_addtail(&connector->list, &wsi->connectors);
 
    return connector;
 }
@@ -718,14 +719,6 @@ wsi_display_get_connector(struct wsi_device *wsi_device,
    if (drm_fd < 0)
       return NULL;
 
-   /* We set this flag because this is the common entrypoint before we start
-    * using atomic capabilities -- it's a simple bool setting in the kernel to
-    * make the properties we start querying be available, and re-setting it is
-    * harmless.  Otherwise, we'd need to push it up to all the entrypoints that
-    * a drm FD comes thorugh.
-    */
-   drmSetClientCap(drm_fd, DRM_CLIENT_CAP_ATOMIC, 1);
-
    drmModeConnectorPtr drm_connector =
       drmModeGetConnector(drm_fd, connector_id);
 
@@ -741,7 +734,6 @@ wsi_display_get_connector(struct wsi_device *wsi_device,
          drmModeFreeConnector(drm_connector);
          return NULL;
       }
-      list_addtail(&connector->list, &wsi->connectors);
    }
 
    if (!find_connector_properties(connector, drm_connector, drm_fd)) {
@@ -4036,7 +4028,6 @@ wsi_display_get_randr_output(struct wsi_device *wsi_device,
          if (!connector) {
             return NULL;
          }
-         list_addtail(&connector->list, &wsi->connectors);
       }
       connector->output = output;
    }
@@ -4199,6 +4190,22 @@ wsi_AcquireXlibDisplayEXT(VkPhysicalDevice physicalDevice,
       return VK_ERROR_INITIALIZATION_FAILED;
 
    drmSetClientCap(fd, DRM_CLIENT_CAP_ATOMIC, 1);
+
+   drmModeConnectorPtr drm_connector =
+      drmModeGetConnector(fd, connector->id);
+
+   if (!drm_connector) {
+      close(fd);
+      return VK_ERROR_INITIALIZATION_FAILED;
+   }
+
+   bool success = find_connector_properties(connector, drm_connector, fd);
+   drmModeFreeConnector(drm_connector);
+   if (!success) {
+      close(fd);
+      return VK_ERROR_INITIALIZATION_FAILED;
+   }
+
    wsi->fd = fd;
 #endif
 
@@ -4537,6 +4544,8 @@ wsi_GetDrmDisplayEXT(VkPhysicalDevice physicalDevice,
       *pDisplay = VK_NULL_HANDLE;
       return VK_ERROR_UNKNOWN;
    }
+
+   drmSetClientCap(drmFd, DRM_CLIENT_CAP_ATOMIC, 1);
 
    struct wsi_display_connector *connector =
       wsi_display_get_connector(wsi_device, drmFd, connectorId);

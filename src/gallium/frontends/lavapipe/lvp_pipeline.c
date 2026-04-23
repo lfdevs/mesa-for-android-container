@@ -553,7 +553,7 @@ lvp_spirv_to_nir(struct lvp_pipeline *pipeline, const void *pipeline_pNext,
          lvp_lower_exec_graph(pipeline, *out_nir);
 
       struct vk_pipeline_robustness_state robustness;
-      vk_pipeline_robustness_state_fill(&device->vk, &robustness, pipeline_pNext, sinfo->pNext);
+      vk_pipeline_robustness_state_fill(&device->vk.robustness_state, &robustness, pipeline_pNext, sinfo->pNext);
 
       lvp_shader_lower(device, *out_nir, pipeline->layout, &robustness);
    }

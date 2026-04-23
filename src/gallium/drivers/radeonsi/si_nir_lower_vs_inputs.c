@@ -89,7 +89,7 @@ get_vertex_index_for_all_inputs(nir_shader *nir, struct lower_vs_inputs_state *s
          si_nir_load_internal_binding(sel->screen, b, s->args, SI_VS_CONST_INSTANCE_DIVISORS, 4);
    }
 
-   for (int i = 0; i < sel->info.num_inputs; i++)
+   for (int i = 0; i < sel->info.num_vs_inputs; i++)
       s->vertex_index[i] = get_vertex_index(b, i, s);
 }
 
@@ -589,7 +589,7 @@ si_nir_lower_vs_inputs(nir_shader *nir, struct si_shader *shader, struct si_shad
    const struct si_shader_selector *sel = shader->selector;
 
    /* no inputs to lower */
-   if (!sel->info.num_inputs)
+   if (!sel->info.num_vs_inputs && !nir->info.vs.blit_sgprs_amd)
       return false;
 
    struct lower_vs_inputs_state state = {

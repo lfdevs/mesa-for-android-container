@@ -82,7 +82,8 @@ dpb_buffer_manager::dpb_buffer_manager( void *logId,
                                                 PIPE_VIDEO_ENTRYPOINT_ENCODE,
                                                 PIPE_VIDEO_CAP_ENC_READABLE_RECONSTRUCTED_PICTURE ) != 0 )
    {
-      m_template.bind = PIPE_BIND_SHARED;   // Indicate we want shared resource capabilities
+      m_template.bind = PIPE_BIND_SHARED |       // Indicate we want shared resource capabilities
+                        PIPE_BIND_RENDER_TARGET; // This is also required for opening shared resources in D3D11
    }
 
    for( auto &entry : m_pool )

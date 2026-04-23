@@ -334,6 +334,14 @@ r300_translate_vertex_data_type(enum pipe_format format) {
         return R300_INVALID_FORMAT;
     }
 
+#if UTIL_ARCH_BIG_ENDIAN
+    /* On big-endian, the VAP has only a global swap mode, not per-attribute
+     * endian control. Keep TCL vertex attributes at 32-bit.
+     */
+    if (desc->channel[i].size < 32)
+        return R300_INVALID_FORMAT;
+#endif
+
     switch (desc->channel[i].type) {
         /* Half-floats, floats, doubles */
         case UTIL_FORMAT_TYPE_FLOAT:

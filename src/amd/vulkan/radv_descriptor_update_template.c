@@ -160,7 +160,7 @@ radv_update_descriptor_set_with_template_impl(struct radv_device *device, struct
             break;
          case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER: {
             if (templ->entry[i].has_ycbcr_sampler) {
-               radv_write_image_descriptor_ycbcr(device, pDst, (struct VkDescriptorImageInfo *)pSrc);
+               radv_write_image_descriptor_ycbcr(device, pDst, (struct VkDescriptorImageInfo *)pSrc, true);
             } else {
                radv_write_combined_image_sampler_descriptor(device, pDst, templ->entry[i].descriptor_type,
                                                             (struct VkDescriptorImageInfo *)pSrc,

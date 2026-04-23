@@ -473,7 +473,7 @@ BEGIN_TEST(isel.cf.unreachable_break.uniform_continue)
       //! BB5
       //! /* logical preds: BB4, / linear preds: BB4, / kind: uniform, break, */
       //>> BB6
-      //! /* logical preds: BB4, / linear preds: BB4, / kind: uniform, continue, */
+      //! /* logical preds: BB4, / linear preds: BB4, / kind: uniform, */
       val0 = nir_imm_zero(nb, 1, 32);
       val1 = nir_load_local_invocation_id(nb);
 
@@ -712,7 +712,7 @@ BEGIN_TEST(isel.cf.unreachable_loop_exit)
       //! BB2
       //! /* logical preds: BB1, / linear preds: BB1, / kind: uniform, break, */
       //>> BB3
-      //! /* logical preds: BB1, / linear preds: BB1, / kind: uniform, continue, */
+      //! /* logical preds: BB1, / linear preds: BB1, / kind: uniform, */
       nir_unit_test_uniform_input(nb, 1, 32, .base=0);
       nir_jump(nb, nir_jump_continue);
    }
@@ -748,7 +748,7 @@ BEGIN_TEST(isel.cf.divergent_if_branch_use)
       {
          /* The contents of this branch is moved to the merge block. */
          //>> BB6
-         //! /* logical preds: BB1, / linear preds: BB4, BB5, / kind: uniform, continue, merge, */
+         //! /* logical preds: BB1, / linear preds: BB4, BB5, / kind: uniform, merge, */
          //! p_logical_start
          //! s1: %val = p_unit_test 0
          val = nir_unit_test_uniform_input(nb, 1, 32, .base=0);
@@ -838,7 +838,7 @@ BEGIN_TEST(isel.cf.uniform_if_branch_use)
       nir_unit_test_output(nb, val, .base=1);
 
       //>> BB15
-      //! /* logical preds: BB2, BB13, / linear preds: BB13, BB14, / kind: uniform, continue, merge, */
+      //! /* logical preds: BB2, BB13, / linear preds: BB13, BB14, / kind: uniform, merge, */
    }
    nir_pop_loop(nb, loop);
 
@@ -894,7 +894,7 @@ BEGIN_TEST(isel.cf.hidden_continue)
       nir_push_if(nb, nir_unit_test_divergent_input(nb, 1, 1, .base = 4));
       {
          //>> BB6
-         //! /* logical preds: BB1, / linear preds: BB4, BB5, / kind: uniform, continue, merge, */
+         //! /* logical preds: BB1, / linear preds: BB4, BB5, / kind: uniform, merge, */
          //! p_logical_start
          //! s1: %cont = p_unit_test 1
          nir_def* cont = nir_unit_test_uniform_input(nb, 1, 32, .base = 1);
@@ -1016,7 +1016,7 @@ BEGIN_TEST(isel.cf.divergent_if_phi.break)
       /* As the ELSE gets omitted, the logical predecessor dominates both linear predecessors. */
 
       //>> BB6
-      //! /* logical preds: BB1, / linear preds: BB4, BB5, / kind: uniform, continue, merge, */
+      //! /* logical preds: BB1, / linear preds: BB4, BB5, / kind: uniform, merge, */
       //! s1: %phi = p_linear_phi %val, %val
       nir_phi_instr* phi = nir_phi_instr_create(nb->shader);
       nir_phi_instr_add_src(phi, nir_if_last_else_block(nif), val);
@@ -1258,7 +1258,7 @@ BEGIN_TEST(isel.cf.empty_exec.loop_break)
       }
       nir_pop_if(nb, NULL);
       //>> BB15
-      //! /* logical preds: BB10, BB13, / linear preds: BB13, BB14, / kind: uniform, continue, merge, */
+      //! /* logical preds: BB10, BB13, / linear preds: BB13, BB14, / kind: uniform, merge, */
       //! p_logical_start
 
       //! p_unit_test 4, %_
@@ -1353,7 +1353,7 @@ BEGIN_TEST(isel.cf.empty_exec.loop_continue)
       //>> p_unit_test 4, %_
       nir_unit_test_output(nb, nir_undef(nb, 1, 32), .base = 4);
       //>> BB21
-      //! /* logical preds: BB16, BB19, / linear preds: BB19, BB20, / kind: uniform, continue, merge, */
+      //! /* logical preds: BB16, BB19, / linear preds: BB19, BB20, / kind: uniform, merge, */
    }
    nir_pop_loop(nb, loop);
    //>> BB22
@@ -1431,7 +1431,7 @@ BEGIN_TEST(isel.cf.empty_exec.loop_continue_then_break)
       nir_unit_test_output(nb, nir_undef(nb, 1, 32), .base = 4);
 
       //>> BB15
-      //! /* logical preds: BB2, BB13, / linear preds: BB13, BB14, / kind: uniform, continue, merge, */
+      //! /* logical preds: BB2, BB13, / linear preds: BB13, BB14, / kind: uniform, merge, */
    }
    nir_pop_loop(nb, loop);
    //>> BB16
@@ -1567,7 +1567,7 @@ BEGIN_TEST(isel.cf.empty_exec.terminate_then_loop)
          nir_break_if(nb, nir_imm_false(nb));
 
          //>> BB5
-         //! /* logical preds: BB3, / linear preds: BB3, / kind: uniform, continue, */
+         //! /* logical preds: BB3, / linear preds: BB3, / kind: uniform, */
          //>> p_unit_test 2, %1
          nir_unit_test_output(nb, nir_undef(nb, 1, 32), .base = 2);
       }

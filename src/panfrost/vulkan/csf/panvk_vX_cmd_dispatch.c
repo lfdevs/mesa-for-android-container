@@ -222,7 +222,7 @@ cmd_dispatch(struct panvk_cmd_buffer *cmdbuf, struct panvk_dispatch_info *info)
          cfg.workgroup_size_x = cs->cs.local_size.x;
          cfg.workgroup_size_y = cs->cs.local_size.y;
          cfg.workgroup_size_z = cs->cs.local_size.z;
-         cfg.allow_merging_workgroups = false;
+         cfg.allow_merging_workgroups = cs->info.cs.allow_merging_workgroups;
       }
       cs_move32_to(b, cs_sr_reg32(b, COMPUTE, WG_SIZE),
                    wg_size.opaque[0]);

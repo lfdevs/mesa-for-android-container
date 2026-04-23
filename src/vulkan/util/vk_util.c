@@ -84,63 +84,34 @@ vk_warn_non_conformant_implementation(const char *driver_name)
 }
 
 struct nir_spirv_specialization*
-vk_spec_info_to_nir_spirv(const VkSpecializationInfo *spec_info,
-                          uint32_t *out_num_spec_entries)
+vk_spec_info_to_nir_spirv(const VkSpecializationInfo *vk_spec_info)
 {
-   if (spec_info == NULL || spec_info->mapEntryCount == 0)
+   if (vk_spec_info == NULL || vk_spec_info->mapEntryCount == 0)
       return NULL;
 
-   uint32_t num_spec_entries = spec_info->mapEntryCount;
-   struct nir_spirv_specialization *spec_entries =
-      calloc(num_spec_entries, sizeof(*spec_entries));
+   struct nir_spirv_specialization *spec =
+      vtn_alloc_specialization(vk_spec_info->mapEntryCount);
+   if (!spec)
+      return NULL;
 
-   for (uint32_t i = 0; i < num_spec_entries; i++) {
-      VkSpecializationMapEntry entry = spec_info->pMapEntries[i];
-      const void *data = (uint8_t *)spec_info->pData + entry.offset;
-      assert((uint8_t *)data + entry.size <=
-             (uint8_t *)spec_info->pData + spec_info->dataSize);
+   for (uint32_t i = 0; i < vk_spec_info->mapEntryCount; i++) {
+      VkSpecializationMapEntry vk_entry = vk_spec_info->pMapEntries[i];
+      const void *vk_data = (uint8_t *)vk_spec_info->pData + vk_entry.offset;
 
-      spec_entries[i].id = spec_info->pMapEntries[i].constantID;
-      switch (entry.size) {
-      case 8:
-         memcpy(&spec_entries[i].value.u64, data, entry.size);
-         break;
-      case 4:
-         memcpy(&spec_entries[i].value.u32, data, entry.size);
-         break;
-      case 2:
-         memcpy(&spec_entries[i].value.u16, data, entry.size);
-         break;
-      case 1:
-         memcpy(&spec_entries[i].value.u8, data, entry.size);
-         break;
-      case 0:
-      default:
-         /* The Vulkan spec says:
-          *
-          *    "For a constantID specialization constant declared in a
-          *    shader, size must match the byte size of the constantID. If
-          *    the specialization constant is of type boolean, size must be
-          *    the byte size of VkBool32."
-          *
-          * Therefore, since only scalars can be decorated as
-          * specialization constants, we can assume that if it doesn't have
-          * a size of 1, 2, 4, or 8, any use in a shader would be invalid
-          * usage.  The spec further says:
-          *
-          *    "If a constantID value is not a specialization constant ID
-          *    used in the shader, that map entry does not affect the
-          *    behavior of the pipeline."
-          *
-          * so we should ignore any invalid specialization constants rather
-          * than crash or error out when we see one.
-          */
-         break;
-      }
+      assert((uint8_t *)vk_data + vk_entry.size <=
+             (uint8_t *)vk_spec_info->pData + vk_spec_info->dataSize);
+
+      if (!vtn_add_specialization_entry(spec, i,
+                                        vk_spec_info->pMapEntries[i].constantID,
+                                        vk_entry.size, vk_data, false))
+         goto fail;
    }
 
-   *out_num_spec_entries = num_spec_entries;
-   return spec_entries;
+   return spec;
+
+fail:
+   vtn_free_specialization(spec);
+   return NULL;
 }
 
 enum mesa_prim

@@ -696,33 +696,38 @@ st_create_context_priv(struct gl_context *ctx, struct pipe_context *pipe,
 
    ctx->Const.TESPositionAlwaysPrecise = options->vs_position_always_precise;
 
+   /* GLES 2/3 doesn't expose alpha test, user clip planes, or two-sided
+    * color, so those lowers shouldn't disable the one-variant fast path.
+    */
+   const bool is_gles2 = _mesa_is_gles2(ctx);
+
    /* Set which shader types can be compiled at link time. */
    st->shader_has_one_variant[MESA_SHADER_VERTEX] =
          st->has_shareable_shaders &&
          !st->clamp_vert_color_in_shader &&
          !st->lower_point_size &&
-         !st->lower_ucp;
+         (is_gles2 || !st->lower_ucp);
 
    st->shader_has_one_variant[MESA_SHADER_FRAGMENT] =
          st->has_shareable_shaders &&
          !st->lower_flatshade &&
-         !st->lower_alpha_test &&
+         (is_gles2 || !st->lower_alpha_test) &&
          !st->clamp_frag_color_in_shader &&
          !st->force_persample_in_shader &&
-         !st->lower_two_sided_color;
+         (is_gles2 || !st->lower_two_sided_color);
 
    st->shader_has_one_variant[MESA_SHADER_TESS_CTRL] = st->has_shareable_shaders;
    st->shader_has_one_variant[MESA_SHADER_TESS_EVAL] =
          st->has_shareable_shaders &&
          !st->clamp_vert_color_in_shader &&
          !st->lower_point_size &&
-         !st->lower_ucp;
+         (is_gles2 || !st->lower_ucp);
 
    st->shader_has_one_variant[MESA_SHADER_GEOMETRY] =
          st->has_shareable_shaders &&
          !st->clamp_vert_color_in_shader &&
          !st->lower_point_size &&
-         !st->lower_ucp;
+         (is_gles2 || !st->lower_ucp);
    st->shader_has_one_variant[MESA_SHADER_COMPUTE] = st->has_shareable_shaders;
 
    if (!st->pipe->set_context_param || !util_thread_scheduler_enabled())

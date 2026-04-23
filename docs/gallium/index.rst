@@ -15,7 +15,6 @@ Contents:
    context
    cso
    buffermapping
-   postprocess
    glossary
 
 Indices and tables

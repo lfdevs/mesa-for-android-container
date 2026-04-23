@@ -437,7 +437,7 @@ radv_update_memory_cp(struct radv_cmd_buffer *cmd_buffer, uint64_t va, const voi
    radv_emit_cache_flush(cmd_buffer);
    radeon_check_space(device->ws, cs->b, words + 4);
 
-   ac_emit_cp_write_data(cs->b, V_370_ME, mec ? V_370_MEM : V_370_MEM_GRBM, va, words, data, false);
+   ac_emit_cp_write_data(cs->b, V_371_MICRO_ENGINE, mec ? V_371_MEMORY : V_371_MEM_GRBM, va, words, data, false);
 
    if (radv_device_fault_detection_enabled(device))
       radv_cmd_buffer_trace_emit(cmd_buffer);

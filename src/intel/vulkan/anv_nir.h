@@ -125,6 +125,8 @@ struct anv_nir_push_layout_info {
 
 bool anv_nir_shrink_push_constant_ranges(nir_shader *nir);
 
+bool anv_nir_realign_cbv(nir_shader *shader);
+
 bool anv_nir_compute_push_layout(nir_shader *nir,
                                  const struct anv_physical_device *pdevice,
                                  enum brw_robustness_flags robust_flags,
@@ -197,6 +199,10 @@ anv_nir_get_ubo_binding_push_block(nir_src src)
 
    return nir_intrinsic_resource_block_intel(intrin);
 }
+
+bool anv_nir_is_pushable_pointer(nir_intrinsic_instr *intrin,
+                                 uint32_t *out_push_offset,
+                                 uint32_t *out_load_offset);
 
 void anv_nir_analyze_push_constants_ranges(nir_shader *nir,
                                            const struct intel_device_info *devinfo,

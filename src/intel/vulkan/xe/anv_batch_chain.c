@@ -145,8 +145,11 @@ xe_exec_ioctl_impl(struct anv_queue *queue, struct drm_xe_exec *exec,
    struct anv_device *device = queue->device;
 
    int ret = xe_gem_exec_ioctl(device->fd, device->info, exec);
-   if (ret)
+   if (ret) {
+      if (anv_needs_printf_buffer())
+         vk_check_printf_status(&device->vk, &device->printf);
       return vk_queue_set_lost(&queue->vk, "%s(%d) failed: %m", func, line);
+   }
 
    return VK_SUCCESS;
 }

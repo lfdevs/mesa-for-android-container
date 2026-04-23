@@ -34,22 +34,26 @@ pan_want_debug_info(unsigned arch)
 }
 
 const nir_shader_compiler_options *
-pan_get_nir_shader_compiler_options(unsigned arch)
+pan_get_nir_shader_compiler_options(unsigned arch, bool merge_wg)
 {
    switch (arch) {
    case 4:
    case 5:
+      assert(!merge_wg);
       return &midgard_nir_options;
    case 6:
    case 7:
+      assert(!merge_wg);
       return &bifrost_nir_options_v6;
    case 9:
    case 10:
-      return &bifrost_nir_options_v9;
+      return merge_wg ? &bifrost_nir_options_v9_merge_wg :
+                        &bifrost_nir_options_v9;
    case 11:
    case 12:
    case 13:
-      return &bifrost_nir_options_v11;
+      return merge_wg ? &bifrost_nir_options_v11_merge_wg :
+                        &bifrost_nir_options_v11;
    default:
       assert(!"Unsupported arch");
       return NULL;
@@ -63,6 +67,20 @@ pan_preprocess_nir(nir_shader *nir, uint64_t gpu_id)
       bifrost_preprocess_nir(nir, gpu_id);
    else
       midgard_preprocess_nir(nir, gpu_id);
+
+   /* Lower textures early */
+   nir_lower_tex_options lower_tex_options = {
+      .lower_txs_lod = true,
+      .lower_txp = ~0,
+      .lower_tg4_offsets = true,
+      .lower_tg4_broadcom_swizzle = true,
+      .lower_txd = pan_arch(gpu_id) < 6,
+      .lower_txd_cube_map = true,
+      .lower_invalid_implicit_lod = true,
+      .lower_index_to_offset = pan_arch(gpu_id) >= 6,
+   };
+
+   NIR_PASS(_, nir, nir_lower_tex, &lower_tex_options);
 }
 
 void
@@ -79,34 +97,6 @@ pan_postprocess_nir(nir_shader *nir, uint64_t gpu_id)
       bifrost_postprocess_nir(nir, gpu_id);
    else
       midgard_postprocess_nir(nir, gpu_id);
-}
-
-void
-pan_nir_lower_texture_early(nir_shader *nir, uint64_t gpu_id)
-{
-   nir_lower_tex_options lower_tex_options = {
-      .lower_txs_lod = true,
-      .lower_txp = ~0,
-      .lower_tg4_offsets = true,
-      .lower_tg4_broadcom_swizzle = true,
-      .lower_txd = pan_arch(gpu_id) < 6,
-      .lower_txd_cube_map = true,
-      .lower_invalid_implicit_lod = true,
-      .lower_index_to_offset = pan_arch(gpu_id) >= 6,
-   };
-
-   NIR_PASS(_, nir, nir_lower_tex, &lower_tex_options);
-}
-
-void
-pan_nir_lower_texture_late(nir_shader *nir, uint64_t gpu_id)
-{
-   /* This must be called after any lowering of resource indices
-    * (panfrost_nir_lower_res_indices / panvk_per_arch(nir_lower_descriptors))
-    * and lowering of attribute indices (pan_nir_lower_image_index /
-    * pan_nir_lower_texel_buffer_fetch_index)  */
-   if (pan_arch(gpu_id) >= 6)
-      bifrost_lower_texture_late_nir(nir, gpu_id);
 }
 
 /** Converts a per-component mask to a byte mask */

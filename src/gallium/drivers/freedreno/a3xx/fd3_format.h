@@ -10,7 +10,7 @@
 #include "util/format/u_format.h"
 #include "freedreno_util.h"
 
-#include "a3xx.xml.h"
+#include "fd3_hw.h"
 
 enum a3xx_vtx_fmt fd3_pipe2vtx(enum pipe_format format);
 enum a3xx_tex_fmt fd3_pipe2tex(enum pipe_format format);

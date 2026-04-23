@@ -28,6 +28,8 @@ uint64_t mtl_device_get_peer_group_id(mtl_device *dev);
 uint32_t mtl_device_get_peer_index(mtl_device *dev);
 uint64_t mtl_device_get_registry_id(mtl_device *dev);
 struct mtl_size mtl_device_max_threads_per_threadgroup(mtl_device *dev);
+uint32_t mtl_device_max_threadgroup_memory_length(mtl_device *dev);
+uint64_t mtl_device_max_buffer_length(mtl_device *dev);
 
 /* Timestamp query */
 uint64_t mtl_device_get_gpu_timestamp(mtl_device *dev);

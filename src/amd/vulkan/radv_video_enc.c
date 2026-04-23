@@ -175,6 +175,22 @@ radv_vcn_per_frame_frac(uint32_t bitrate, uint32_t den, uint32_t num)
 }
 
 static void
+radv_enc_rc_layer_init_default(rvcn_enc_rate_ctl_layer_init_t *layer_init)
+{
+   uint32_t frame_rate_num = 30;
+   uint32_t frame_rate_den = 1;
+
+   layer_init[0].frame_rate_den = frame_rate_den;
+   layer_init[0].frame_rate_num = frame_rate_num;
+   layer_init[0].vbv_buffer_size = 20000000;
+   layer_init[0].target_bit_rate = 16000;
+   layer_init[0].peak_bit_rate = 32000;
+   layer_init[0].avg_target_bits_per_picture = radv_vcn_per_frame_integer(16000, frame_rate_den, frame_rate_num);
+   layer_init[0].peak_bits_per_picture_integer = radv_vcn_per_frame_integer(32000, frame_rate_den, frame_rate_num);
+   layer_init[0].peak_bits_per_picture_fractional = radv_vcn_per_frame_frac(32000, frame_rate_den, frame_rate_num);
+}
+
+static void
 radv_enc_set_emulation_prevention(struct radv_cmd_buffer *cmd_buffer, bool set)
 {
    struct radv_enc_state *enc = &cmd_buffer->video.enc;
@@ -3104,22 +3120,10 @@ radv_video_enc_control_video_coding(struct radv_cmd_buffer *cmd_buffer, const Vk
    rvcn_enc_rate_ctl_per_picture_t rc_per_pic[RADV_ENC_MAX_RATE_LAYER];
 
    if (control_info->flags & VK_VIDEO_CODING_CONTROL_RESET_BIT_KHR) {
-      uint32_t frame_rate_num = 30;
-      uint32_t frame_rate_den = 1;
-
       cmd_buffer->video.enc.rate_control_mode = VK_VIDEO_ENCODE_RATE_CONTROL_MODE_DEFAULT_KHR;
       cmd_buffer->video.enc.rate_control_num_layers = 1;
       radv_enc_rc_per_pic_default(vid, &rc_per_pic[0]);
-      rc_layer_init[0].frame_rate_den = frame_rate_den;
-      rc_layer_init[0].frame_rate_num = frame_rate_num;
-      rc_layer_init[0].vbv_buffer_size = 20000000;
-      rc_layer_init[0].target_bit_rate = 16000;
-      rc_layer_init[0].peak_bit_rate = 32000;
-      rc_layer_init[0].avg_target_bits_per_picture = radv_vcn_per_frame_integer(16000, frame_rate_den, frame_rate_num);
-      rc_layer_init[0].peak_bits_per_picture_integer =
-         radv_vcn_per_frame_integer(32000, frame_rate_den, frame_rate_num);
-      rc_layer_init[0].peak_bits_per_picture_fractional =
-         radv_vcn_per_frame_frac(32000, frame_rate_den, frame_rate_num);
+      radv_enc_rc_layer_init_default(&rc_layer_init[0]);
 
       session_init = true;
       rate_control_init = true;
@@ -3139,7 +3143,11 @@ radv_video_enc_control_video_coding(struct radv_cmd_buffer *cmd_buffer, const Vk
 
       cmd_buffer->video.enc.rate_control_mode = rate_control->rateControlMode;
 
-      if (rate_control->rateControlMode != VK_VIDEO_ENCODE_RATE_CONTROL_MODE_DEFAULT_KHR) {
+      if (rate_control->rateControlMode == VK_VIDEO_ENCODE_RATE_CONTROL_MODE_DEFAULT_KHR) {
+         cmd_buffer->video.enc.rate_control_num_layers = 1;
+         radv_enc_rc_per_pic_default(vid, &rc_per_pic[0]);
+         radv_enc_rc_layer_init_default(&rc_layer_init[0]);
+      } else {
          if (h264_rate_control)
             cmd_buffer->video.enc.rate_control_num_layers = MAX2(1, h264_rate_control->temporalLayerCount);
          else if (h265_rate_control)

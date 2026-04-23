@@ -78,72 +78,6 @@ has_noperspective_load(nir_function_impl *impl)
    return false;
 }
 
-/**
- * Returns a bitfield of VS outputs where it is known at compile-time that
- * noperspective interpolation may be used at runtime. Similar to the
- * noperspective_varyings_pan sysval, this bitfield only covers user varyings
- * (starting at VARYING_SLOT_VAR0).
- *
- * Precomputed because struct outputs may be split into multiple store_output
- * intrinsics. If any struct members are integers, then the whole struct
- * cannot be noperspective.
- */
-static uint32_t
-get_maybe_noperspective_outputs(nir_function_impl *impl)
-{
-   uint32_t used_outputs = 0;
-   uint32_t integer_outputs = 0;
-
-   /* nir_lower_io_vars_to_temporaries ensures all stores are in the exit block */
-   nir_block *block = nir_impl_last_block(impl);
-   nir_foreach_instr_safe(instr, block) {
-      if (instr->type != nir_instr_type_intrinsic)
-         continue;
-      nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
-
-      if (intrin->intrinsic != nir_intrinsic_store_output)
-         continue;
-
-      nir_io_semantics sem = nir_intrinsic_io_semantics(intrin);
-      if (sem.location < VARYING_SLOT_VAR0)
-         continue;
-
-      uint32_t location_bit = BITFIELD_BIT(sem.location - VARYING_SLOT_VAR0);
-      used_outputs |= location_bit;
-
-      nir_alu_type type = nir_intrinsic_src_type(intrin);
-      nir_alu_type base_type = nir_alu_type_get_base_type(type);
-
-      if (base_type == nir_type_int ||
-          base_type == nir_type_uint ||
-          base_type == nir_type_bool)
-         integer_outputs |= location_bit;
-   }
-
-   /* From the Vulkan 1.1.301 spec:
-    *
-    *    "Output attributes of integer or unsigned integer type must always be
-    *    flat shaded."
-    *
-    * From the OpenGL 4.6 spec:
-    *
-    *    "Implementations need not support interpolation of output values of
-    *    integer or unsigned integer type, as all such attributes must be flat
-    *    shaded."
-    *
-    * So we can assume varyings that contain integers are never noperspective.
-    */
-   return used_outputs & ~integer_outputs;
-}
-
-static bool
-is_maybe_noperspective_output(unsigned location,
-                              uint32_t maybe_noperspective_outputs)
-{
-   return location >= VARYING_SLOT_VAR0 &&
-      maybe_noperspective_outputs & BITFIELD_BIT(location - VARYING_SLOT_VAR0);
-}
-
 static nir_def *
 is_noperspective_output(nir_builder *b, unsigned location,
                         nir_def *noperspective_outputs)
@@ -156,7 +90,6 @@ is_noperspective_output(nir_builder *b, unsigned location,
 
 struct lower_noperspective_vs_state {
    nir_def *pos_w;
-   uint32_t maybe_noperspective_outputs;
    nir_def *noperspective_outputs;
 };
 
@@ -173,8 +106,8 @@ lower_noperspective_vs(nir_builder *b, nir_intrinsic_instr *intrin,
       return false;
    nir_io_semantics sem = nir_intrinsic_io_semantics(intrin);
 
-   if (!is_maybe_noperspective_output(sem.location,
-                                      state->maybe_noperspective_outputs))
+   /* Only generic varyings can be noperspective */
+   if (sem.location < VARYING_SLOT_VAR0)
       return false;
 
    b->cursor = nir_before_instr(&intrin->instr);
@@ -251,13 +184,12 @@ pan_nir_lower_noperspective_vs(nir_shader *shader)
 
    nir_function_impl *impl = nir_shader_get_entrypoint(shader);
 
-   uint32_t maybe_noperspective_outputs = get_maybe_noperspective_outputs(impl);
-   if (!maybe_noperspective_outputs)
-      return false;
-
    nir_intrinsic_instr *pos_store = find_pos_store(impl);
-   assert(pos_store);
-   assert(nir_intrinsic_write_mask(pos_store) & BITFIELD_BIT(3));
+   /* gl_Position may be written, it can also be left undefined */
+   bool has_pos_w =
+      pos_store && !!(nir_intrinsic_write_mask(pos_store) & BITFIELD_BIT(3));
+   if (!has_pos_w)
+      return false;
 
    nir_builder b = nir_builder_at(nir_after_instr(&pos_store->instr));
 
@@ -271,7 +203,6 @@ pan_nir_lower_noperspective_vs(nir_shader *shader)
    nir_def *noperspective_outputs = nir_load_noperspective_varyings_pan(&b);
    struct lower_noperspective_vs_state state = {
       .pos_w = pos_w,
-      .maybe_noperspective_outputs = maybe_noperspective_outputs,
       .noperspective_outputs = noperspective_outputs,
    };
    nir_shader_intrinsics_pass(shader, lower_noperspective_vs,

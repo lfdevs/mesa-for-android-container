@@ -105,11 +105,6 @@ traces:
   pathfinder/demo-v2.trace:
     crocus-hsw:
       checksum: d9b33f0a2efe17c21b7933242afd9ec7
-  thedarkmod/thedarkmod-v2.trace:
-    crocus-g41:
-      label: [unsupported]
-    crocus-hsw:
-      label: [skip, flakes]
   supertuxkart/supertuxkart-mansion-egl-gles-v2.trace:
     crocus-hsw:
       checksum: c59dc93744d2dfcf172aa3f26ce2a62e

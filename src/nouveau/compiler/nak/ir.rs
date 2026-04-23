@@ -1158,6 +1158,24 @@ impl Src {
         }
     }
 
+    #[allow(dead_code)]
+    pub fn is_gpr_reg(&self) -> bool {
+        match &self.src_ref {
+            SrcRef::SSA(ssa) => ssa.file() == RegFile::GPR,
+            SrcRef::Reg(reg) => reg.file() == RegFile::GPR,
+            _ => false,
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn is_ugpr_reg(&self) -> bool {
+        match &self.src_ref {
+            SrcRef::SSA(ssa) => ssa.file() == RegFile::UGPR,
+            SrcRef::Reg(reg) => reg.file() == RegFile::UGPR,
+            _ => false,
+        }
+    }
+
     pub fn is_predicate(&self) -> bool {
         self.src_ref.is_predicate()
     }
@@ -1315,6 +1333,16 @@ pub enum SrcType {
 
 impl SrcType {
     const DEFAULT: SrcType = SrcType::GPR;
+
+    pub fn is_fp16(&self) -> bool {
+        matches!(self, Self::F16 | Self::F16v2)
+    }
+
+    /// Checks if consuming a value has the same semantics in regards to ftz
+    /// and modifiers. E.g. F16v2 and F16 would return true here.
+    pub fn eq_ftz_mod(&self, other: Self) -> bool {
+        *self == other || (self.is_fp16() && other.is_fp16())
+    }
 }
 
 pub type SrcTypeList = AttrList<SrcType>;
@@ -5438,6 +5466,7 @@ pub struct OpTex {
     pub mem_eviction_priority: MemEvictionPriority,
     pub nodep: bool,
     pub channel_mask: ChannelMask,
+    pub scalar: bool,
 }
 
 impl DisplayOp for OpTex {
@@ -5451,6 +5480,9 @@ impl DisplayOp for OpTex {
             write!(f, ".dc")?;
         }
         write!(f, "{}", self.mem_eviction_priority)?;
+        if self.scalar {
+            write!(f, ".scr")?;
+        }
         if self.nodep {
             write!(f, ".nodep")?;
         }
@@ -5478,6 +5510,7 @@ pub struct OpTld {
     pub mem_eviction_priority: MemEvictionPriority,
     pub nodep: bool,
     pub channel_mask: ChannelMask,
+    pub scalar: bool,
 }
 
 impl DisplayOp for OpTld {
@@ -5487,6 +5520,9 @@ impl DisplayOp for OpTld {
             write!(f, ".ms")?;
         }
         write!(f, "{}", self.mem_eviction_priority)?;
+        if self.scalar {
+            write!(f, ".scr")?;
+        }
         if self.nodep {
             write!(f, ".nodep")?;
         }
@@ -5514,6 +5550,7 @@ pub struct OpTld4 {
     pub mem_eviction_priority: MemEvictionPriority,
     pub nodep: bool,
     pub channel_mask: ChannelMask,
+    pub scalar: bool,
 }
 
 impl DisplayOp for OpTld4 {
@@ -5523,6 +5560,9 @@ impl DisplayOp for OpTld4 {
             write!(f, ".dc")?;
         }
         write!(f, "{}", self.mem_eviction_priority)?;
+        if self.scalar {
+            write!(f, ".scr")?;
+        }
         if self.nodep {
             write!(f, ".nodep")?;
         }
@@ -8970,6 +9010,144 @@ impl Instr {
             write!(f, "@{} ", self.pred)?;
         }
         Ok(())
+    }
+
+    pub fn ftz(&self) -> bool {
+        match &self.op {
+            Op::F2F(op) => op.ftz,
+            Op::F2I(op) => op.ftz,
+            Op::FAdd(op) => op.ftz,
+            Op::FFma(op) => op.ftz,
+            Op::FMnMx(op) => op.ftz,
+            Op::FMul(op) => op.ftz,
+            Op::FRnd(op) => op.ftz,
+            Op::FSet(op) => op.ftz,
+            Op::FSetP(op) => op.ftz,
+            Op::FSwz(op) => op.ftz,
+            Op::FSwzAdd(op) => op.ftz,
+            Op::HAdd2(op) => op.ftz,
+            Op::HFma2(op) => op.ftz,
+            Op::HMnMx2(op) => op.ftz,
+            Op::HMul2(op) => op.ftz,
+            Op::HSet2(op) => op.ftz,
+            Op::HSetP2(op) => op.ftz,
+            Op::MuFu(op) => {
+                op.op_type == FloatType::F32 && op.op != MuFuOp::Tanh
+            }
+
+            Op::Rro(_)
+            | Op::DAdd(_)
+            | Op::DFma(_)
+            | Op::DMnMx(_)
+            | Op::DMul(_)
+            | Op::DSetP(_)
+            | Op::Imma(_)
+            | Op::Hmma(_)
+            | Op::Ldsm(_)
+            | Op::BMsk(_)
+            | Op::BRev(_)
+            | Op::Bfe(_)
+            | Op::Flo(_)
+            | Op::IAbs(_)
+            | Op::IAdd2(_)
+            | Op::IAdd2X(_)
+            | Op::IAdd3(_)
+            | Op::IAdd3X(_)
+            | Op::IDp4(_)
+            | Op::IMad(_)
+            | Op::IMad64(_)
+            | Op::IMul(_)
+            | Op::IMnMx(_)
+            | Op::ISetP(_)
+            | Op::Lea(_)
+            | Op::LeaX(_)
+            | Op::Lop2(_)
+            | Op::Lop3(_)
+            | Op::PopC(_)
+            | Op::Shf(_)
+            | Op::Shl(_)
+            | Op::Shr(_)
+            | Op::F2FP(_)
+            | Op::I2F(_)
+            | Op::I2I(_)
+            | Op::Mov(_)
+            | Op::Movm(_)
+            | Op::Prmt(_)
+            | Op::Sel(_)
+            | Op::Sgxt(_)
+            | Op::Shfl(_)
+            | Op::PLop3(_)
+            | Op::PSetP(_)
+            | Op::R2UR(_)
+            | Op::Redux(_)
+            | Op::Tex(_)
+            | Op::Tld(_)
+            | Op::Tld4(_)
+            | Op::Tmml(_)
+            | Op::Txd(_)
+            | Op::Txq(_)
+            | Op::SuLd(_)
+            | Op::SuSt(_)
+            | Op::SuAtom(_)
+            | Op::SuClamp(_)
+            | Op::SuBfm(_)
+            | Op::SuEau(_)
+            | Op::IMadSp(_)
+            | Op::SuLdGa(_)
+            | Op::SuStGa(_)
+            | Op::Ld(_)
+            | Op::Ldc(_)
+            | Op::LdSharedLock(_)
+            | Op::St(_)
+            | Op::StSCheckUnlock(_)
+            | Op::Atom(_)
+            | Op::AL2P(_)
+            | Op::ALd(_)
+            | Op::ASt(_)
+            | Op::Ipa(_)
+            | Op::LdTram(_)
+            | Op::CCtl(_)
+            | Op::MemBar(_)
+            | Op::BClear(_)
+            | Op::BMov(_)
+            | Op::Break(_)
+            | Op::BSSy(_)
+            | Op::BSync(_)
+            | Op::Bra(_)
+            | Op::SSy(_)
+            | Op::Sync(_)
+            | Op::Brk(_)
+            | Op::PBk(_)
+            | Op::Cont(_)
+            | Op::PCnt(_)
+            | Op::Exit(_)
+            | Op::WarpSync(_)
+            | Op::Bar(_)
+            | Op::TexDepBar(_)
+            | Op::CS2R(_)
+            | Op::Isberd(_)
+            | Op::Isbewr(_)
+            | Op::ViLd(_)
+            | Op::Kill(_)
+            | Op::Nop(_)
+            | Op::PixLd(_)
+            | Op::S2R(_)
+            | Op::Vote(_)
+            | Op::Match(_)
+            | Op::Undef(_)
+            | Op::SrcBar(_)
+            | Op::PhiSrcs(_)
+            | Op::PhiDsts(_)
+            | Op::Copy(_)
+            | Op::Pin(_)
+            | Op::Unpin(_)
+            | Op::Swap(_)
+            | Op::ParCopy(_)
+            | Op::RegOut(_)
+            | Op::Out(_)
+            | Op::OutFinal(_)
+            | Op::Annotate(_) => false,
+        }
     }
 }
 

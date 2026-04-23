@@ -169,6 +169,12 @@ struct spill_ctx {
       return next_spill_id++;
    }
 
+   std::pair<int, float> get_score(Temp var, RegisterDemand spills_needed)
+   {
+      int wasted = MAX2((int)var.size() - spills_needed[var.type()], 0);
+      return {-wasted, ssa_infos[var.id()].score()};
+   }
+
    uint32_t next_spill_id = 0;
 };
 
@@ -206,6 +212,12 @@ gather_ssa_use_info(spill_ctx& ctx)
 
       instruction_idx += block.instructions.size();
    }
+}
+
+RegType
+get_spill_regtype(RegisterDemand demand)
+{
+   return demand.vgpr > 0 ? RegType::vgpr : RegType::sgpr;
 }
 
 bool
@@ -345,7 +357,6 @@ init_live_in_vars(spill_ctx& ctx, Block* block, unsigned block_idx)
          /* keep live-through variables spilled */
          ctx.spills_entry[block_idx][spilled.first] = spilled.second;
          spilled_registers += spilled.first;
-         loop_demand -= spilled.first;
       }
       if (!ctx.loop.empty()) {
          /* If this is a nested loop, keep variables from the outer loop spilled. */
@@ -356,25 +367,19 @@ init_live_in_vars(spill_ctx& ctx, Block* block, unsigned block_idx)
             if (live_in.count(spilled.first.id()) &&
                 ctx.spills_entry[block_idx].insert(spilled).second) {
                spilled_registers += spilled.first;
-               loop_demand -= spilled.first;
             }
          }
       }
 
-      /* select more live-through variables and constants */
-      RegType type = RegType::vgpr;
-      while (loop_demand.exceeds(ctx.target_pressure) ||
-             loop_call_spills.exceeds(spilled_registers)) {
-         /* if VGPR demand is low enough, select SGPRs */
-         if (type == RegType::vgpr && loop_demand.vgpr <= ctx.target_pressure.vgpr &&
-             loop_call_spills.vgpr <= spilled_registers.vgpr)
-            type = RegType::sgpr;
-         /* if SGPR demand is low enough, break */
-         if (type == RegType::sgpr && loop_demand.sgpr <= ctx.target_pressure.sgpr &&
-             loop_call_spills.sgpr <= spilled_registers.sgpr)
-            break;
+      loop_demand -= spilled_registers;
+      loop_call_spills -= spilled_registers;
 
-         float score = 0.0;
+      /* select more live-through variables and constants */
+      RegisterDemand spills_needed = loop_demand - ctx.target_pressure;
+      spills_needed.update(loop_call_spills);
+      while (!spills_needed.empty()) {
+         RegType type = get_spill_regtype(spills_needed);
+         std::pair<int, float> score{INT_MIN, 0.0};
          unsigned remat = 0;
          Temp to_spill;
          for (unsigned t : live_in) {
@@ -384,24 +389,23 @@ init_live_in_vars(spill_ctx& ctx, Block* block, unsigned block_idx)
                continue;
 
             unsigned can_remat = ctx.remat.count(var);
-            if (can_remat > remat || (can_remat == remat && ctx.ssa_infos[t].score() > score)) {
+            std::pair<int, float> var_score = ctx.get_score(var, spills_needed);
+            if (can_remat > remat || (can_remat == remat && var_score > score)) {
                to_spill = var;
-               score = ctx.ssa_infos[t].score();
+               score = var_score;
                remat = can_remat;
             }
          }
 
-         /* select SGPRs or break */
-         if (score == 0.0) {
-            if (type == RegType::sgpr)
-               break;
-            type = RegType::sgpr;
+         if (score.second == 0.0) {
+            spills_needed[type] = 0;
             continue;
          }
 
          ctx.add_to_spills(to_spill, ctx.spills_entry[block_idx]);
          spilled_registers += to_spill;
          loop_demand -= to_spill;
+         spills_needed -= to_spill;
       }
 
       /* create new loop_info */
@@ -415,26 +419,28 @@ init_live_in_vars(spill_ctx& ctx, Block* block, unsigned block_idx)
       /* if reg pressure is too high at beginning of loop, add variables with furthest use */
       reg_pressure -= spilled_registers;
 
-      while (reg_pressure.exceeds(ctx.target_pressure)) {
-         float score = 0;
+      spills_needed = reg_pressure - ctx.target_pressure;
+      while (!spills_needed.empty()) {
+         std::pair<int, float> score{INT_MIN, 0.0};
          Temp to_spill = Temp();
-         type = reg_pressure.vgpr > ctx.target_pressure.vgpr ? RegType::vgpr : RegType::sgpr;
+         RegType type = get_spill_regtype(spills_needed);
          for (aco_ptr<Instruction>& phi : block->instructions) {
             if (!is_phi(phi))
                break;
             if (!phi->definitions[0].isTemp() || phi->definitions[0].isKill())
                continue;
             Temp var = phi->definitions[0].getTemp();
+            std::pair<int, float> var_score = ctx.get_score(var, spills_needed);
             if (var.type() == type && !ctx.spills_entry[block_idx].count(var) &&
-                ctx.ssa_infos[var.id()].score() > score && is_spillable(ctx, var)) {
+                var_score > score && is_spillable(ctx, var)) {
                to_spill = var;
-               score = ctx.ssa_infos[var.id()].score();
+               score = var_score;
             }
          }
          assert(to_spill != Temp());
          ctx.add_to_spills(to_spill, ctx.spills_entry[block_idx]);
          spilled_registers += to_spill;
-         reg_pressure -= to_spill;
+         spills_needed -= to_spill;
       }
 
       return spilled_registers;
@@ -550,21 +556,23 @@ init_live_in_vars(spill_ctx& ctx, Block* block, unsigned block_idx)
    RegisterDemand reg_pressure = block->live_in_demand;
    reg_pressure -= spilled_registers;
 
-   while (reg_pressure.exceeds(ctx.target_pressure)) {
+   RegisterDemand spills_needed = reg_pressure - ctx.target_pressure;
+   while (!spills_needed.empty()) {
       assert(!partial_spills.empty());
       std::map<Temp, bool>::iterator it = partial_spills.begin();
       Temp to_spill = Temp();
       bool is_partial_spill = false;
-      float score = 0.0;
-      RegType type = reg_pressure.vgpr > ctx.target_pressure.vgpr ? RegType::vgpr : RegType::sgpr;
+      std::pair<int, float> score{INT_MIN, 0.0};
+      RegType type = get_spill_regtype(spills_needed);
 
       while (it != partial_spills.end()) {
          assert(!ctx.spills_entry[block_idx].count(it->first));
 
+         std::pair<int, float> var_score = ctx.get_score(it->first, spills_needed);
          if (it->first.type() == type && is_spillable(ctx, it->first) &&
              ((it->second && !is_partial_spill) ||
-              (it->second == is_partial_spill && ctx.ssa_infos[it->first.id()].score() > score))) {
-            score = ctx.ssa_infos[it->first.id()].score();
+              (it->second == is_partial_spill && var_score > score))) {
+            score = var_score;
             to_spill = it->first;
             is_partial_spill = it->second;
          }
@@ -574,7 +582,7 @@ init_live_in_vars(spill_ctx& ctx, Block* block, unsigned block_idx)
       ctx.add_to_spills(to_spill, ctx.spills_entry[block_idx]);
       partial_spills.erase(to_spill);
       spilled_registers += to_spill;
-      reg_pressure -= to_spill;
+      spills_needed -= to_spill;
    }
 
    return spilled_registers;
@@ -970,7 +978,7 @@ process_block(spill_ctx& ctx, unsigned block_idx, Block* block, RegisterDemand s
 
          /* if reg pressure is too high, spill variable with furthest next use */
          while (true) {
-            bool needs_spill = (new_demand - spilled_registers).exceeds(ctx.target_pressure);
+            RegisterDemand spills_needed = new_demand - ctx.target_pressure;
             if (instr->isCall()) {
                RegisterDemand call_preserved_limit = instr->call().callee_preserved_limit;
 
@@ -980,10 +988,10 @@ process_block(spill_ctx& ctx, unsigned block_idx, Block* block, RegisterDemand s
                call_preserved_limit.vgpr =
                   MAX2(call_preserved_limit.vgpr - (int16_t)ctx.extra_vgprs, 0);
 
-               needs_spill |= (instr->call().caller_preserved_demand - spilled_registers)
-                                 .exceeds(call_preserved_limit);
+               spills_needed.update(instr->call().caller_preserved_demand - call_preserved_limit);
             }
-            if (!needs_spill)
+            spills_needed -= spilled_registers;
+            if (spills_needed.empty())
                break;
 
             float score = 0.0;
@@ -994,17 +1002,7 @@ process_block(spill_ctx& ctx, unsigned block_idx, Block* block, RegisterDemand s
             unsigned do_rematerialize = 0;
             unsigned avoid_respill = 0;
 
-            RegType type = RegType::sgpr;
-            bool spill_vgpr = new_demand.vgpr - spilled_registers.vgpr > ctx.target_pressure.vgpr;
-            if (instr->isCall()) {
-               RegisterDemand call_preserved_limit = instr->call().callee_preserved_limit;
-               call_preserved_limit.vgpr =
-                  MAX2(call_preserved_limit.vgpr - (int16_t)ctx.extra_vgprs, 0);
-               spill_vgpr |= instr->call().caller_preserved_demand.vgpr - spilled_registers.vgpr >
-                             call_preserved_limit.vgpr;
-            }
-            if (spill_vgpr)
-               type = RegType::vgpr;
+            RegType type = get_spill_regtype(spills_needed);
 
             for (unsigned t : ctx.program->live.live_in[block_idx]) {
                RegClass rc = ctx.program->temp_rc[t];

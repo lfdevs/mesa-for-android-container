@@ -800,7 +800,8 @@ brw_get_sampler_opcode_from_tex(const struct intel_device_info *devinfo,
       tex->op == nir_texop_txf ||
       tex->op == nir_texop_txf_ms ||
       tex->op == nir_texop_txf_ms_fb ||
-      tex->op == nir_texop_txf_ms_mcs_intel;
+      tex->op == nir_texop_txf_ms_mcs_intel ||
+      tex->op == nir_texop_sparse_residency_txf_intel;
 
    const bool is_gather = tex->op == nir_texop_tg4;
 

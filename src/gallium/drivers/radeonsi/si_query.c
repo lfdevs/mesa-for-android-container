@@ -844,7 +844,7 @@ static void si_query_hw_do_emit_start(struct si_context *sctx, struct si_query_h
          /* Clear the emulated counter end value. We don't clear start because it's unused. */
          va += si_query_pipestat_end_dw_offset(sctx->screen, query->index) * 4;
 
-         ac_emit_cp_write_data_imm(&cs->current, V_370_PFP, va, 0);
+         ac_emit_cp_write_data_imm(&cs->current, V_371_PREFETCH_PARSER, va, 0);
 
          sctx->num_pipeline_stat_emulated_queries++;
       } else {
@@ -1083,7 +1083,7 @@ static void si_emit_query_predication(struct si_context *ctx, unsigned index)
       struct gfx11_sh_query *gfx10_query = (struct gfx11_sh_query *)query;
       struct gfx11_sh_query_buffer *qbuf, *first, *last;
 
-      op = S_20_1_PRED_OP(PREDICATION_OP_PRIMCOUNT);
+      op = S_201_PRED_OP(PREDICATION_OP_PRIMCOUNT);
 
       /* if true then invert, see GL_ARB_conditional_render_inverted */
       if (!invert)
@@ -1131,17 +1131,17 @@ static void si_emit_query_predication(struct si_context *ctx, unsigned index)
       struct si_query_buffer *qbuf;
 
       if (query->workaround_buf) {
-         op = S_20_1_PRED_OP(PREDICATION_OP_BOOL64);
+         op = S_201_PRED_OP(PREDICATION_OP_BOOL64);
       } else {
          switch (query->b.type) {
          case PIPE_QUERY_OCCLUSION_COUNTER:
          case PIPE_QUERY_OCCLUSION_PREDICATE:
          case PIPE_QUERY_OCCLUSION_PREDICATE_CONSERVATIVE:
-            op = S_20_1_PRED_OP(PREDICATION_OP_ZPASS);
+            op = S_201_PRED_OP(PREDICATION_OP_ZPASS);
             break;
          case PIPE_QUERY_SO_OVERFLOW_PREDICATE:
          case PIPE_QUERY_SO_OVERFLOW_ANY_PREDICATE:
-            op = S_20_1_PRED_OP(PREDICATION_OP_PRIMCOUNT);
+            op = S_201_PRED_OP(PREDICATION_OP_PRIMCOUNT);
             invert = !invert;
             break;
          default:

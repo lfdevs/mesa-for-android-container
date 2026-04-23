@@ -6,7 +6,7 @@
 #ifndef __FREEDRENO_LRZ_H__
 #define __FREEDRENO_LRZ_H__
 
-#include "adreno_common.xml.h"
+#include "fd_hw_common.h"
 #include "freedreno_common.h"
 
 enum fd_lrz_gpu_dir : uint8_t {

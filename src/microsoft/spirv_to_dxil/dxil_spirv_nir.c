@@ -804,6 +804,8 @@ dxil_spirv_nir_link(nir_shader *nir, nir_shader *prev_stage_nir,
             NIR_PASS(_, nir, dxil_spirv_compute_pntc);
             metadata->requires_runtime_data = true;
          }
+
+         dxil_nir_propagate_interp_to_outputs(prev_stage_nir, nir);
       }
 
       NIR_PASS(_, nir, dxil_nir_kill_undefined_varyings, prev_stage_nir->info.outputs_written, prev_stage_nir->info.patch_outputs_written, NULL);

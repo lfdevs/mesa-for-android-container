@@ -2310,13 +2310,17 @@ emit_alu(struct ntv_context *ctx, nir_alu_instr *alu)
       if (!nir_alu_instr_is_nan_preserve(alu))
          fp_mode |= SpvFPFastMathModeNotNaNMask;
 
-      if (!nir_alu_instr_is_exact(alu)) {
-         fp_mode |=
-            SpvFPFastMathModeAllowRecipMask |
-            SpvFPFastMathModeAllowContractMask |
-            SpvFPFastMathModeAllowReassocMask |
-            SpvFPFastMathModeAllowTransformMask;
-      }
+      if (!nir_alu_instr_no_contract(alu))
+         fp_mode |= SpvFPFastMathModeAllowContractMask;
+
+      if (!nir_alu_instr_no_reassoc(alu))
+         fp_mode |= SpvFPFastMathModeAllowReassocMask;
+
+      if (!nir_alu_instr_no_transform(alu))
+         fp_mode |= SpvFPFastMathModeAllowTransformMask;
+
+      /* Vulkan always allows rcp anyway. */
+      fp_mode |= SpvFPFastMathModeAllowRecipMask;
 
       if (fp_mode != default_fp_mode)
          spirv_builder_emit_fp_fast_math_mode(&ctx->builder, result, fp_mode);

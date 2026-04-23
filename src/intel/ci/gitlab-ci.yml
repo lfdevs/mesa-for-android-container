@@ -28,6 +28,9 @@ anv-adl-vk:
   variables:
     DEQP_SUITE: anv-adl
     FDO_CI_CONCURRENT: 6  # We get OOMkills if we go too wide since VKCTS 1.4.4.0
+    # Xe regression in 6.19
+    # https://gitlab.freedesktop.org/drm/xe/kernel/-/issues/7584
+    KERNEL_TAG: "v6.17-mesa-ddf6"
   parallel: 4
 
 anv-adl-vk-full:

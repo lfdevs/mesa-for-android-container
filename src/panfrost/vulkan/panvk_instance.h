@@ -33,7 +33,7 @@ enum panvk_debug_flags {
    PANVK_DEBUG_NO_USER_MMAP_SYNC = 1 << 15,
    PANVK_DEBUG_COHERENT_BEFORE_CACHED = 1 << 16,
    PANVK_DEBUG_NO_EXTENDED_VA_RANGE = 1 << 17,
-   PANVK_DEBUG_HSR_PREPASS = 1 << 17,
+   PANVK_DEBUG_HSR_PREPASS = 1 << 18,
 };
 
 extern uint64_t panvk_debug;

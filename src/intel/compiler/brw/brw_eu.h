@@ -982,7 +982,7 @@ lsc_op_num_data_values(unsigned _op)
 }
 
 static inline unsigned
-lsc_op_to_legacy_atomic(unsigned _op)
+brw_lsc_op_to_legacy_atomic(unsigned _op)
 {
    enum lsc_opcode op = (enum lsc_opcode) _op;
 
@@ -1191,16 +1191,16 @@ lsc_msg_desc_cache_ctrl(UNUSED const struct intel_device_info *devinfo,
 }
 
 static inline unsigned
-lsc_msg_dest_len(const struct intel_device_info *devinfo,
-                 enum lsc_data_size data_sz, unsigned n)
+brw_lsc_msg_dest_len(const struct intel_device_info *devinfo,
+                     enum lsc_data_size data_sz, unsigned n)
 {
    return DIV_ROUND_UP(lsc_data_size_bytes(data_sz) * n,
                        reg_unit(devinfo) * REG_SIZE) * reg_unit(devinfo);
 }
 
 static inline unsigned
-lsc_msg_addr_len(const struct intel_device_info *devinfo,
-                 enum lsc_addr_size addr_sz, unsigned n)
+brw_lsc_msg_addr_len(const struct intel_device_info *devinfo,
+                     enum lsc_addr_size addr_sz, unsigned n)
 {
    return DIV_ROUND_UP(lsc_addr_size_bytes(addr_sz) * n,
                        reg_unit(devinfo) * REG_SIZE) * reg_unit(devinfo);

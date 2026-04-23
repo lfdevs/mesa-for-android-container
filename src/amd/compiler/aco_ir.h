@@ -944,8 +944,9 @@ private:
 class Definition final {
 public:
    constexpr Definition()
-       : temp(Temp(0, s1)), reg_(0), isFixed_(0), isPrecolored_(0), isKill_(0), isPrecise_(0),
-         isInfPreserve_(0), isNaNPreserve_(0), isSZPreserve_(0), isNUW_(0), isNoCSE_(0)
+       : temp(Temp(0, s1)), reg_(0), isFixed_(0), isPrecolored_(0), isKill_(0), isNoContract_(0),
+         isNoReassoc_(0), isInfPreserve_(0), isNaNPreserve_(0), isSZPreserve_(0), isNUW_(0),
+         isNoCSE_(0)
    {}
    explicit Definition(Temp tmp) noexcept : temp(tmp) {}
    explicit Definition(PhysReg reg, RegClass type) noexcept : temp(Temp(0, type)) { setFixed(reg); }
@@ -988,9 +989,13 @@ public:
 
    constexpr bool isKill() const noexcept { return isKill_; }
 
-   constexpr void setPrecise(bool precise) noexcept { isPrecise_ = precise; }
+   constexpr void setNoContract(bool no_contract) noexcept { isNoContract_ = no_contract; }
 
-   constexpr bool isPrecise() const noexcept { return isPrecise_; }
+   constexpr bool isNoContract() const noexcept { return isNoContract_; }
+
+   constexpr void setNoReassoc(bool no_reassoc) noexcept { isNoReassoc_ = no_reassoc; }
+
+   constexpr bool isNoReassoc() const noexcept { return isNoReassoc_; }
 
    constexpr void setInfPreserve(bool inf_preserve) noexcept { isInfPreserve_ = inf_preserve; }
 
@@ -1021,7 +1026,8 @@ private:
          uint8_t isFixed_ : 1;
          uint8_t isPrecolored_ : 1;
          uint8_t isKill_ : 1;
-         uint8_t isPrecise_ : 1;
+         uint8_t isNoContract_ : 1;
+         uint8_t isNoReassoc_ : 1;
          uint8_t isInfPreserve_ : 1;
          uint8_t isNaNPreserve_ : 1;
          uint8_t isSZPreserve_ : 1;
@@ -1036,13 +1042,7 @@ private:
 struct RegisterDemand {
    constexpr RegisterDemand() = default;
    constexpr RegisterDemand(const int16_t v, const int16_t s) noexcept : vgpr{v}, sgpr{s} {}
-   constexpr RegisterDemand(Temp t) noexcept
-   {
-      if (t.regClass().type() == RegType::sgpr)
-         sgpr = t.size();
-      else
-         vgpr = t.size();
-   }
+   constexpr RegisterDemand(Temp t) noexcept { (*this)[t.type()] = t.size(); }
    int16_t vgpr = 0;
    int16_t sgpr = 0;
 
@@ -1059,6 +1059,18 @@ struct RegisterDemand {
    constexpr bool exceeds(const RegisterDemand other) const noexcept
    {
       return vgpr > other.vgpr || sgpr > other.sgpr;
+   }
+
+   constexpr bool empty() const noexcept { return !exceeds(RegisterDemand()); }
+
+   constexpr const int16_t& operator[](RegType type) const noexcept
+   {
+      return type == RegType::vgpr ? vgpr : sgpr;
+   }
+
+   constexpr int16_t& operator[](RegType type) noexcept
+   {
+      return type == RegType::vgpr ? vgpr : sgpr;
    }
 
    constexpr RegisterDemand operator+(const Temp t) const noexcept
@@ -1095,19 +1107,13 @@ struct RegisterDemand {
 
    constexpr RegisterDemand& operator+=(const Temp t) noexcept
    {
-      if (t.type() == RegType::sgpr)
-         sgpr += t.size();
-      else
-         vgpr += t.size();
+      (*this)[t.type()] += t.size();
       return *this;
    }
 
    constexpr RegisterDemand& operator-=(const Temp t) noexcept
    {
-      if (t.type() == RegType::sgpr)
-         sgpr -= t.size();
-      else
-         vgpr -= t.size();
+      (*this)[t.type()] -= t.size();
       return *this;
    }
 
@@ -2134,7 +2140,7 @@ enum block_kind {
    block_kind_loop_preheader = 1 << 2,
    block_kind_loop_header = 1 << 3,
    block_kind_loop_exit = 1 << 4,
-   block_kind_continue = 1 << 5,
+   block_kind_loop_latch = 1 << 5,
    block_kind_break = 1 << 6,
    block_kind_branch = 1 << 7,
    block_kind_merge = 1 << 8,
@@ -2145,7 +2151,6 @@ enum block_kind {
    block_kind_export_end = 1 << 13,
    block_kind_end_with_regs = 1 << 14,
    block_kind_contains_call = 1 << 15,
-   block_kind_loop_latch = 1 << 16,
 };
 
 /* CFG */
@@ -2621,6 +2626,7 @@ typedef struct {
    const int16_t opcode_gfx9[static_cast<int>(aco_opcode::num_opcodes)];
    const int16_t opcode_gfx10[static_cast<int>(aco_opcode::num_opcodes)];
    const int16_t opcode_gfx11[static_cast<int>(aco_opcode::num_opcodes)];
+   const int16_t opcode_gfx11_7[static_cast<int>(aco_opcode::num_opcodes)];
    const int16_t opcode_gfx12[static_cast<int>(aco_opcode::num_opcodes)];
    const std::bitset<static_cast<int>(aco_opcode::num_opcodes)> is_atomic;
    const char* name[static_cast<int>(aco_opcode::num_opcodes)];

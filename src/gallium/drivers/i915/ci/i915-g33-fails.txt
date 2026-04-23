@@ -29,10 +29,15 @@ dEQP-GLES2.functional.shaders.loops.for_constant_iterations.101_iterations_fragm
 dEQP-GLES2.functional.shaders.loops.for_constant_iterations.mixed_break_continue_fragment,Fail
 
 dEQP-GLES2.functional.shaders.random.all_features.fragment.5,Fail
+dEQP-GLES2.functional.shaders.random.all_features.fragment.22,Fail
+dEQP-GLES2.functional.shaders.random.all_features.fragment.32,Fail
+dEQP-GLES2.functional.shaders.random.all_features.fragment.79,Fail
 dEQP-GLES2.functional.shaders.random.all_features.fragment.93,Fail
 dEQP-GLES2.functional.shaders.random.all_features.fragment.97,Fail
 dEQP-GLES2.functional.shaders.random.trigonometric.fragment.15,Fail
+dEQP-GLES2.functional.shaders.random.trigonometric.fragment.26,Fail
 dEQP-GLES2.functional.shaders.random.trigonometric.fragment.45,Fail
+dEQP-GLES2.functional.shaders.random.trigonometric.fragment.81,Fail
 
 # Need to port the DP3 trick for all_equal from st_glsl_to_tgsi.
 dEQP-GLES2.functional.shaders.struct.uniform.equal_fragment,Fail

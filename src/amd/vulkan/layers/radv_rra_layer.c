@@ -374,7 +374,16 @@ rra_QueueSubmit2KHR(VkQueue _queue, uint32_t submitCount, const VkSubmitInfo2 *p
    struct radv_device *device = radv_queue_device(queue);
 
    VkResult result = device->layer_dispatch.rra.QueueSubmit2KHR(_queue, submitCount, pSubmits, _fence);
-   if (result != VK_SUCCESS || !device->rra_trace.triggered)
+   if (result != VK_SUCCESS)
+      return result;
+
+   if (radv_bvh_stats_file()) {
+      result = radv_dump_bvh_stats(_queue);
+      if (result != VK_SUCCESS)
+         return result;
+   }
+
+   if (!device->rra_trace.triggered)
       return result;
 
    uint32_t total_trace_count = 0;

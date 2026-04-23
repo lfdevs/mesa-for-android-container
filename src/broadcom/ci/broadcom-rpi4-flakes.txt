@@ -175,3 +175,4 @@ glx@glx-visuals-stencil
 spec@!opengl 1.1@depthstencil-default_fb-drawpixels-float-and-ushort samples=2
 
 dEQP-VK.glsl.operator.unary_operator.post_decrement_result.highp_uvec4_vertex
+dEQP-VK.image.format_reinterpret.1d.r8g8b8a8_sint_b10g11r11_ufloat_pack32

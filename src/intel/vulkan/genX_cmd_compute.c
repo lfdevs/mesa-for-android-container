@@ -71,6 +71,10 @@ genX(cmd_buffer_ensure_cfe_state)(struct anv_cmd_buffer *cmd_buffer,
       }
 #endif
 
+#if GFX_VER >= 30
+      cfe.DynamicStackIDControl = true;
+#endif
+
       cfe.OverDispatchControl = 2; /* 50% overdispatch */
    }
 
@@ -299,10 +303,6 @@ anv_cmd_buffer_push_driver_values(struct anv_cmd_buffer *cmd_buffer,
 #undef UPDATE_PUSH
 }
 
-#define GPGPU_DISPATCHDIMX 0x2500
-#define GPGPU_DISPATCHDIMY 0x2504
-#define GPGPU_DISPATCHDIMZ 0x2508
-
 static void
 compute_load_indirect_params(struct anv_cmd_buffer *cmd_buffer,
                              const struct anv_address indirect_addr,
@@ -331,9 +331,9 @@ compute_load_indirect_params(struct anv_cmd_buffer *cmd_buffer,
    struct mi_value size_y = mi_mem32(anv_address_add(indirect_addr, 4));
    struct mi_value size_z = mi_mem32(anv_address_add(indirect_addr, 8));
 
-   mi_store(&b, mi_reg32(GPGPU_DISPATCHDIMX), size_x);
-   mi_store(&b, mi_reg32(GPGPU_DISPATCHDIMY), size_y);
-   mi_store(&b, mi_reg32(GPGPU_DISPATCHDIMZ), size_z);
+   mi_store(&b, mi_reg32(GENX(GPGPU_DISPATCHDIMX_num)), size_x);
+   mi_store(&b, mi_reg32(GENX(GPGPU_DISPATCHDIMY_num)), size_y);
+   mi_store(&b, mi_reg32(GENX(GPGPU_DISPATCHDIMZ_num)), size_z);
 }
 
 static void
@@ -347,9 +347,9 @@ compute_store_indirect_params(struct anv_cmd_buffer *cmd_buffer,
    struct mi_value size_y = mi_mem32(anv_address_add(indirect_addr, 4));
    struct mi_value size_z = mi_mem32(anv_address_add(indirect_addr, 8));
 
-   mi_store(&b, size_x, mi_reg32(GPGPU_DISPATCHDIMX));
-   mi_store(&b, size_y, mi_reg32(GPGPU_DISPATCHDIMY));
-   mi_store(&b, size_z, mi_reg32(GPGPU_DISPATCHDIMZ));
+   mi_store(&b, size_x, mi_reg32(GENX(GPGPU_DISPATCHDIMX_num)));
+   mi_store(&b, size_y, mi_reg32(GENX(GPGPU_DISPATCHDIMY_num)));
+   mi_store(&b, size_z, mi_reg32(GENX(GPGPU_DISPATCHDIMZ_num)));
 }
 
 
@@ -437,7 +437,7 @@ fill_inline_param(uint8_t param_value,
 }
 
 static inline void
-fill_inline_params(struct GENX(COMPUTE_WALKER_BODY) *body,
+fill_inline_params(uint32_t *compute_walker_inline_data,
                    const struct anv_cmd_compute_state *comp_state,
                    uint64_t push_addr64,
                    uint32_t base_wg[3],
@@ -450,7 +450,7 @@ fill_inline_params(struct GENX(COMPUTE_WALKER_BODY) *body,
       &comp_state->shader->bind_map;
 
    for (uint32_t i = 0; i < bind_map->inline_dwords_count; i++) {
-      body->InlineData[i] = fill_inline_param(
+      compute_walker_inline_data[i] = fill_inline_param(
          bind_map->inline_dwords[i], push_data, push_addr64,
          base_wg, num_wg, unaligned_x_offset);
    }
@@ -521,7 +521,7 @@ emit_indirect_compute_walker(struct anv_cmd_buffer *cmd_buffer,
       indirect_addr64 & 0xffffffff,
       indirect_addr64 >> 32,
    };
-   fill_inline_params(&body, comp_state, push_addr64,
+   fill_inline_params(body.InlineData, comp_state, push_addr64,
                       (uint32_t[]) {0, 0, 0},
                       num_workgroup_data, 0);
 
@@ -583,7 +583,7 @@ emit_compute_walker(struct anv_cmd_buffer *cmd_buffer,
       },
    };
 
-   fill_inline_params(&body, comp_state, push_addr64,
+   fill_inline_params(body.InlineData, comp_state, push_addr64,
                       base_wg, num_workgroup_data,
                       unaligned_invocations_x);
 
@@ -647,11 +647,10 @@ emit_cs_walker(struct anv_cmd_buffer *cmd_buffer,
                bool is_unaligned_size_x, uint32_t unaligned_invocations_x)
 {
    struct anv_device *device = cmd_buffer->device;
-   struct anv_instance *instance = device->physical->instance;
    bool is_indirect = !anv_address_is_null(indirect_addr);
 
    struct mi_builder b;
-   if (unlikely(instance->debug & ANV_DEBUG_SHADER_HASH)) {
+   if (ANV_DEBUG(SHADER_HASH)) {
       mi_builder_init(&b, device->info, &cmd_buffer->batch);
       mi_builder_set_mocs(&b, isl_mocs(&device->isl_dev, 0, false));
       mi_store(&b, mi_mem32(device->workaround_address),
@@ -895,7 +894,8 @@ genX(cmd_buffer_ray_query_globals)(struct anv_cmd_buffer *cmd_buffer)
             .bo = device->ray_query_bo[idx],
             .offset = (i + 1) * (device->ray_query_bo[idx]->size / 2),
          },
-         .AsyncRTStackSize = BRW_RT_SIZEOF_RAY_QUERY / 64,
+         .AsyncRTStackSize =
+            cmd_buffer->state.rt.scratch.layout.ray_stack_stride / 64,
          .NumDSSRTStacks = stack_ids_per_dss,
          .MaxBVHLevels = BRW_RT_MAX_BVH_LEVELS,
          .Flags = RT_DEPTH_TEST_LESS_EQUAL,
@@ -1129,6 +1129,28 @@ cmd_buffer_emit_rt_dispatch_globals_indirect(struct anv_cmd_buffer *cmd_buffer,
    return rtdg_state;
 }
 
+static uint8_t
+get_stack_id_reduction_cap(uint32_t stack_ids)
+{
+   /* Bspec 57497: Dynamic stack management mechanism - REDUCTION_CAP
+    * bitfield states:
+    *
+    *    This value must always be smaller than value given by
+    *    CFE_STATE.Stack_ID_Control.
+    */
+#if GFX_VER >= 30
+   switch (stack_ids) {
+   case 2048: return REDUCTION_CAP_1024;
+   case 1024: return REDUCTION_CAP_512;
+   case 512:  return REDUCTION_CAP_256;
+   case 256:  return REDUCTION_CAP_128;
+   default:   UNREACHABLE("Invalid stack_ids value");
+   }
+#endif
+
+   return 0;
+}
+
 static void
 cmd_buffer_trace_rays(struct anv_cmd_buffer *cmd_buffer,
                       struct trace_params *params)
@@ -1248,9 +1270,9 @@ cmd_buffer_trace_rays(struct anv_cmd_buffer *cmd_buffer,
                                             local_size_log2[i]);
       }
 
-      mi_store(&b, mi_reg32(GPGPU_DISPATCHDIMX), launch_size[0]);
-      mi_store(&b, mi_reg32(GPGPU_DISPATCHDIMY), launch_size[1]);
-      mi_store(&b, mi_reg32(GPGPU_DISPATCHDIMZ), launch_size[2]);
+      mi_store(&b, mi_reg32(GENX(GPGPU_DISPATCHDIMX_num)), launch_size[0]);
+      mi_store(&b, mi_reg32(GENX(GPGPU_DISPATCHDIMY_num)), launch_size[1]);
+      mi_store(&b, mi_reg32(GENX(GPGPU_DISPATCHDIMZ_num)), launch_size[2]);
 
    } else {
       calc_local_trace_size(local_size_log2, params->launch_size);
@@ -1313,6 +1335,11 @@ cmd_buffer_trace_rays(struct anv_cmd_buffer *cmd_buffer,
 #endif
 #if GFX_VER >= 30
       btd.RTMemStructures64bModeEnable = true;
+      btd.DynamicstackmanagementmechanismMISSPENALTY = MISS_PENALTY_16;
+      btd.DynamicstackmanagementmechanismHITREWARD = HIT_REWARD_1;
+      btd.DynamicstackmanagementmechanismSCALINGFACTOR = SCALING_FACTOR_4;
+      btd.DynamicstackmanagementmechanismREDUCTIONCAP =
+         get_stack_id_reduction_cap(cmd_buffer->device->physical->instance->stack_ids);
 #endif
    }
 

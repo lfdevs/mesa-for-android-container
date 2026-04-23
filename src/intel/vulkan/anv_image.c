@@ -261,8 +261,12 @@ anv_image_choose_isl_surf_usage(struct anv_physical_device *device,
        */
       if (devinfo->verx10 == 125 &&
           vk_usage & (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
-                      VK_IMAGE_USAGE_STORAGE_BIT))
+                      VK_IMAGE_USAGE_STORAGE_BIT)) {
+         anv_perf_warn(VK_LOG_OBJS(&device->vk.base),
+                       "Disabling aux: fragment shading rate attachment "
+                       "with color attachment/storage usage");
          isl_usage |= ISL_SURF_USAGE_DISABLE_AUX_BIT;
+      }
    }
 
    if (vk_create_flags & VK_IMAGE_CREATE_SPARSE_BINDING_BIT)
@@ -277,8 +281,12 @@ anv_image_choose_isl_surf_usage(struct anv_physical_device *device,
    /* We disable aux surfaces for host read/write images so that we can update
     * the main surface without caring about the auxiliary surface.
     */
-   if (vk_usage & VK_IMAGE_USAGE_HOST_TRANSFER_BIT_EXT)
+   if (vk_usage & VK_IMAGE_USAGE_HOST_TRANSFER_BIT_EXT) {
+      anv_perf_warn(VK_LOG_OBJS(&device->vk.base),
+                    "Disabling aux: "
+                    "VK_IMAGE_USAGE_HOST_TRANSFER_BIT_EXT is set");
       isl_usage |= ISL_SURF_USAGE_DISABLE_AUX_BIT;
+   }
 
    if (vk_create_flags & VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT)
       isl_usage |= ISL_SURF_USAGE_CUBE_BIT;
@@ -323,8 +331,12 @@ anv_image_choose_isl_surf_usage(struct anv_physical_device *device,
       isl_usage |= ISL_SURF_USAGE_RENDER_TARGET_BIT;
    }
 
-   if (comp_flags & VK_IMAGE_COMPRESSION_DISABLED_EXT)
+   if (comp_flags & VK_IMAGE_COMPRESSION_DISABLED_EXT) {
+      anv_perf_warn(VK_LOG_OBJS(&device->vk.base),
+                    "Disabling aux: "
+                    "image compression disabled via create flags");
       isl_usage |= ISL_SURF_USAGE_DISABLE_AUX_BIT;
+   }
 
    /* We only need software detiling for 64bit atomics and we need to disable
     * AUX for software detiling, but we don't support sparseImageInt64Atomics,
@@ -339,6 +351,9 @@ anv_image_choose_isl_surf_usage(struct anv_physical_device *device,
         ((vk_create_flags & VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT) &&
          vk_format_get_blocksizebits(vk_format) == 64 &&
          format_list_has_64bit_format(format_list_info)))) {
+      anv_perf_warn(VK_LOG_OBJS(&device->vk.base),
+                    "Disabling aux: 64-bit storage image requires "
+                    "software detiling");
       isl_usage |= ISL_SURF_USAGE_DISABLE_AUX_BIT |
                    ISL_SURF_USAGE_SOFTWARE_DETILING;
    }
@@ -734,8 +749,12 @@ add_aux_surface_if_supported(struct anv_device *device,
    /* The aux surface must not be already added. */
    assert(!anv_surface_is_valid(&image->planes[plane].aux_surface));
 
-   if (main_surf->usage & ISL_SURF_USAGE_DISABLE_AUX_BIT)
+   if (main_surf->usage & ISL_SURF_USAGE_DISABLE_AUX_BIT) {
+      anv_perf_warn(VK_LOG_OBJS(&device->vk.base),
+                    "Skipping aux surface creation: "
+                    "ISL_SURF_USAGE_DISABLE_AUX_BIT is set");
       return VK_SUCCESS;
+   }
 
    uint32_t binding;
    if (image->vk.drm_format_mod == DRM_FORMAT_MOD_INVALID ||
@@ -753,10 +772,17 @@ add_aux_surface_if_supported(struct anv_device *device,
 
       ok = isl_surf_get_hiz_surf(&device->isl_dev, main_surf,
                                  &image->planes[plane].aux_surface.isl);
-      if (!ok)
+      if (!ok) {
+         anv_perf_warn(VK_LOG_OBJS(&device->vk.base),
+                       "Skipping aux surface creation: "
+                       "isl_surf_get_hiz_surf failed");
          return VK_SUCCESS;
+      }
 
       if (!isl_surf_supports_ccs(&device->isl_dev, main_surf)) {
+         anv_perf_warn(VK_LOG_OBJS(&device->vk.base),
+                       "Depth surface does not support CCS, "
+                       "falling back to HIZ without compression");
          image->planes[plane].aux_usage = ISL_AUX_USAGE_HIZ;
       } else if (want_hiz_wt_for_image(device->info, image)) {
          assert(device->info->ver >= 12);
@@ -787,8 +813,12 @@ add_aux_surface_if_supported(struct anv_device *device,
                                               plane);
       }
    } else if (main_surf->usage & (ISL_SURF_USAGE_STENCIL_BIT | ISL_SURF_USAGE_CPB_BIT)) {
-      if (!isl_surf_supports_ccs(&device->isl_dev, main_surf))
+      if (!isl_surf_supports_ccs(&device->isl_dev, main_surf)) {
+         anv_perf_warn(VK_LOG_OBJS(&device->vk.base),
+                       "Skipping aux surface creation: "
+                       "stencil/cpb surface does not support CCS");
          return VK_SUCCESS;
+      }
 
       image->planes[plane].aux_usage = ISL_AUX_USAGE_STC_CCS;
 
@@ -809,8 +839,12 @@ add_aux_surface_if_supported(struct anv_device *device,
                                     &image->planes[plane].aux_surface.isl,
                                     stride);
       }
-      if (!ok)
+      if (!ok) {
+         anv_perf_warn(VK_LOG_OBJS(&device->vk.base),
+                       "Skipping aux surface creation: "
+                       "color surface does not support CCS");
          return VK_SUCCESS;
+      }
 
       /* Choose aux usage. */
       if (device->info->verx10 == 125 && !device->physical->disable_fcv) {
@@ -863,12 +897,19 @@ add_aux_surface_if_supported(struct anv_device *device,
       assert(!(image->vk.usage & VK_IMAGE_USAGE_STORAGE_BIT));
       ok = isl_surf_get_mcs_surf(&device->isl_dev, main_surf,
                                  &image->planes[plane].aux_surface.isl);
-      if (!ok)
+      if (!ok) {
+         anv_perf_warn(VK_LOG_OBJS(&device->vk.base),
+                       "Skipping aux surface creation: "
+                       "isl_surf_get_mcs_surf failed for MSAA color");
          return VK_SUCCESS;
+      }
 
       if (isl_surf_supports_ccs(&device->isl_dev, main_surf)) {
          image->planes[plane].aux_usage = ISL_AUX_USAGE_MCS_CCS;
       } else {
+         anv_perf_warn(VK_LOG_OBJS(&device->vk.base),
+                       "MSAA color surface does not support CCS, "
+                       "falling back to MCS without compression");
          image->planes[plane].aux_usage = ISL_AUX_USAGE_MCS;
       }
 
@@ -1587,6 +1628,9 @@ choose_drm_format_mod(const struct anv_physical_device *device,
          /* When aux is disabled, we simply cannot choose a modifier with
           * compression.
           */
+         anv_perf_warn(VK_LOG_OBJS(&device->vk.base),
+                       "Skipping aux-capable DRM modifier: "
+                       "DISABLE_AUX_BIT is set");
          continue;
       }
       uint32_t score = isl_drm_modifier_get_score(&device->info, modifiers[i]);
@@ -1866,8 +1910,12 @@ anv_image_init(struct anv_device *device, struct anv_image *image,
 
    /* Disable aux if image supports export without modifiers. */
    if (image->vk.external_handle_types != 0 &&
-       image->vk.tiling != VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT)
+       image->vk.tiling != VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT) {
+      anv_perf_warn(VK_LOG_OBJS(&image->vk.base),
+                    "Disabling aux: "
+                    "external image without DRM modifier");
       isl_extra_usage_flags |= ISL_SURF_USAGE_DISABLE_AUX_BIT;
+   }
 
    if (device->queue_count > 1) {
       /* Notify ISL that the app may access this image from different engines.
@@ -1886,19 +1934,28 @@ anv_image_init(struct anv_device *device, struct anv_image *image,
        * restriction on the cache not being coherent between engines.
        */
       if (image->vk.sharing_mode == VK_SHARING_MODE_CONCURRENT &&
-          device->info->ver < 20)
+          device->info->ver < 20) {
+         anv_perf_warn(VK_LOG_OBJS(&image->vk.base),
+                       "Disabling aux: concurrent sharing mode");
          isl_extra_usage_flags |= ISL_SURF_USAGE_DISABLE_AUX_BIT;
+      }
    }
 
    /* Aux is pointless if it will never be used as an attachment. */
    if (vk_format_is_depth_or_stencil(image->vk.format) &&
-       !(image->vk.usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT))
+       !(image->vk.usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)) {
+      anv_perf_warn(VK_LOG_OBJS(&image->vk.base),
+                    "Disabling aux: "
+                    "depth/stencil image without attachment usage");
       isl_extra_usage_flags |= ISL_SURF_USAGE_DISABLE_AUX_BIT;
+   }
 
    /* TODO: Adjust blorp for multi-LOD HiZ surface on Gen9. */
    if (vk_format_has_depth(image->vk.format) &&
        image->vk.mip_levels > 1 && device->info->ver == 9) {
-      anv_perf_warn(VK_LOG_OBJS(&image->vk.base), "Enable multi-LOD HiZ");
+      anv_perf_warn(VK_LOG_OBJS(&image->vk.base),
+                    "Disabling aux: "
+                    "gen9 multi-LOD depth unsupported");
       isl_extra_usage_flags |= ISL_SURF_USAGE_DISABLE_AUX_BIT;
    }
 
@@ -1913,6 +1970,9 @@ anv_image_init(struct anv_device *device, struct anv_image *image,
           * format. (Putting the clear state a page/4096bytes further fixes
           * the issue).
           */
+         anv_perf_warn(VK_LOG_OBJS(&image->vk.base),
+                       "Disabling aux: "
+                       "multiplanar color workaround");
          isl_extra_usage_flags |= ISL_SURF_USAGE_DISABLE_AUX_BIT;
       }
 
@@ -1926,6 +1986,9 @@ anv_image_init(struct anv_device *device, struct anv_image *image,
           * all aliasing here, there's no need to further analyze if the image
           * needs a private binding.
           */
+         anv_perf_warn(VK_LOG_OBJS(&image->vk.base),
+                       "Disabling aux: "
+                       "aliased image not from WSI");
          isl_extra_usage_flags |= ISL_SURF_USAGE_DISABLE_AUX_BIT;
       }
 
@@ -1938,14 +2001,20 @@ anv_image_init(struct anv_device *device, struct anv_image *image,
           * surfaces on gfx12+. If we can't support it, we should configure
           * the main surface without aux support.
           */
+         anv_perf_warn(VK_LOG_OBJS(&image->vk.base),
+                       "Disabling aux: CCS_E incompatible format");
          isl_extra_usage_flags |= ISL_SURF_USAGE_DISABLE_AUX_BIT;
       }
 
       /* Workaround to disable XE2 CCS modifiers from drirc. */
       if (device->info->ver >= 20 &&
           image->vk.tiling == VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT &&
-          device->physical->instance->disable_xe2_drm_ccs_modifiers)
+          device->physical->instance->disable_xe2_drm_ccs_modifiers) {
+         anv_perf_warn(VK_LOG_OBJS(&image->vk.base),
+                       "Disabling aux: "
+                       "drirc disable_xe2_drm_ccs_modifiers");
          isl_extra_usage_flags |= ISL_SURF_USAGE_DISABLE_AUX_BIT;
+      }
    }
 
    /* Fill out the list of view formats. */
@@ -2027,6 +2096,9 @@ anv_image_init(struct anv_device *device, struct anv_image *image,
        */
       if (device->info->ver >= 12 &&
           !isl_drm_modifier_has_aux(image->vk.drm_format_mod)) {
+         anv_perf_warn(VK_LOG_OBJS(&image->vk.base),
+                       "Disabling aux: "
+                       "chosen DRM modifier has no aux");
          isl_extra_usage_flags |= ISL_SURF_USAGE_DISABLE_AUX_BIT;
       }
    }
@@ -3924,12 +3996,19 @@ anv_can_fast_clear_color(const struct anv_cmd_buffer *cmd_buffer,
                          struct isl_swizzle view_swizzle,
                          union isl_color_value clear_color)
 {
-   if (INTEL_DEBUG(DEBUG_NO_FAST_CLEAR))
+   if (INTEL_DEBUG(DEBUG_NO_FAST_CLEAR)) {
+      anv_perf_warn(VK_LOG_OBJS(&image->vk.base),
+                    "DEBUG_NO_FAST_CLEAR. Slow clearing.");
       return false;
+   }
 
    /* We only have fast-clears implemented for the render engine. */
-   if (cmd_buffer->queue_family->engine_class != INTEL_ENGINE_CLASS_RENDER)
+   if (cmd_buffer->queue_family->engine_class != INTEL_ENGINE_CLASS_RENDER) {
+      anv_perf_warn(VK_LOG_OBJS(&image->vk.base),
+                    "queue engine class unsupported for fast clear. "
+                    "Slow clearing.");
       return false;
+   }
 
    /* Start by getting the fast clear type.  We use the first subpass
     * layout here because we don't want to fast-clear if the first subpass
@@ -3941,6 +4020,8 @@ anv_can_fast_clear_color(const struct anv_cmd_buffer *cmd_buffer,
                                     cmd_buffer->queue_family->queueFlags);
    switch (fast_clear_type) {
    case ANV_FAST_CLEAR_NONE:
+      anv_perf_warn(VK_LOG_OBJS(&image->vk.base),
+                    "layout does not support fast clear. Slow clearing.");
       return false;
    case ANV_FAST_CLEAR_DEFAULT_VALUE: {
       uint32_t view_pixel[4] = {};
@@ -3967,8 +4048,12 @@ anv_can_fast_clear_color(const struct anv_cmd_buffer *cmd_buffer,
    if (clear_rect->rect.offset.x != 0 ||
        clear_rect->rect.offset.y != 0 ||
        clear_rect->rect.extent.width != image->vk.extent.width ||
-       clear_rect->rect.extent.height != image->vk.extent.height)
+       clear_rect->rect.extent.height != image->vk.extent.height) {
+      anv_perf_warn(VK_LOG_OBJS(&image->vk.base),
+                    "partial clear rect unsupported for fast clear. "
+                    "Slow clearing.");
       return false;
+    }
 
    /* When a CLEAR state is possible for an aux-usage, guarantee that there is
     * only one clear color at any given time. The heuristic chosen is tuned to
@@ -4003,8 +4088,12 @@ anv_can_fast_clear_color(const struct anv_cmd_buffer *cmd_buffer,
    if (intel_needs_workaround(cmd_buffer->device->info, 18020603990)) {
       if (isl_format_get_layout(anv_surf->isl.format)->bpb <= 32 &&
           anv_surf->isl.logical_level0_px.w <= 256 &&
-          anv_surf->isl.logical_level0_px.h <= 256)
+          anv_surf->isl.logical_level0_px.h <= 256) {
+         anv_perf_warn(VK_LOG_OBJS(&image->vk.base),
+                       "Wa_18020603990: small 32bpp surface. "
+                       "Slow clearing.");
          return false;
+      }
    }
 
    /* BSpec 46969 (r45602) tells us that we get no fast-clears for 3D:
@@ -4041,6 +4130,8 @@ anv_can_fast_clear_color(const struct anv_cmd_buffer *cmd_buffer,
    if (intel_needs_workaround(cmd_buffer->device->info, 16021232440) &&
        (image->vk.extent.height == 16 * 1024 ||
         image->vk.extent.width == 16 * 1024)) {
+      anv_perf_warn(VK_LOG_OBJS(&image->vk.base),
+                    "Wa_16021232440: 16k dimension. Slow clearing.");
       return false;
    }
 
@@ -4059,8 +4150,11 @@ anv_can_hiz_clear_image(struct anv_cmd_buffer *cmd_buffer,
    const struct anv_device *device = cmd_buffer->device;
    const VkQueueFlagBits queue_flags = cmd_buffer->queue_family->queueFlags;
 
-   if (INTEL_DEBUG(DEBUG_NO_FAST_CLEAR))
+   if (INTEL_DEBUG(DEBUG_NO_FAST_CLEAR)) {
+      anv_perf_warn(VK_LOG_OBJS(&image->vk.base),
+                    "DEBUG_NO_FAST_CLEAR. Slow depth clearing.");
       return false;
+   }
 
    const enum isl_aux_usage clear_aux_usage =
       anv_layout_to_aux_usage(device->info, image,
@@ -4083,8 +4177,12 @@ anv_can_hiz_clear_image(struct anv_cmd_buffer *cmd_buffer,
     * is set on DG2 and MTL.
     */
    if (clear_aux_usage == ISL_AUX_USAGE_HIZ_CCS_WT &&
-       image->vk.samples > 1 && device->info->ver < 20)
+       image->vk.samples > 1 && device->info->ver < 20) {
+      anv_perf_warn(VK_LOG_OBJS(&image->vk.base),
+                  "HiZ CCS WT + MSAA unsupported before Xe2. "
+                  "Slow depth clearing.");
       return false;
+      }
 
    /* If we're just clearing stencil, we can always HiZ clear */
    if (!(clear_aspects & VK_IMAGE_ASPECT_DEPTH_BIT))
@@ -4094,8 +4192,12 @@ anv_can_hiz_clear_image(struct anv_cmd_buffer *cmd_buffer,
       anv_image_aspect_to_plane(image, VK_IMAGE_ASPECT_DEPTH_BIT);
    const struct isl_surf *surf = &image->planes[plane].primary_surface.isl;
 
-   if (!isl_aux_usage_has_fast_clears(clear_aux_usage))
+   if (!isl_aux_usage_has_fast_clears(clear_aux_usage)) {
+      anv_perf_warn(VK_LOG_OBJS(&image->vk.base),
+                    "aux usage does not support fast depth clear. "
+                    "Slow clearing.");
       return false;
+   }
 
    if (isl_aux_usage_has_ccs(clear_aux_usage)) {
       /* From the TGL PRM, Vol 9, "Compressed Depth Buffers" (under the
@@ -4114,6 +4216,9 @@ anv_can_hiz_clear_image(struct anv_cmd_buffer *cmd_buffer,
           u_minify(image->vk.extent.width, level) ||
           render_area.extent.height !=
           u_minify(image->vk.extent.height, level)) {
+          anv_perf_warn(VK_LOG_OBJS(&image->vk.base),
+                        "partial depth clear rect unsupported for "
+                        "fast clear. Slow clearing.");
          return false;
       }
 
@@ -4129,13 +4234,19 @@ anv_can_hiz_clear_image(struct anv_cmd_buffer *cmd_buffer,
           level >= 1 &&
           (image->vk.extent.width % 32 != 0 ||
            surf->image_alignment_el.h % 8 != 0)) {
+         anv_perf_warn(VK_LOG_OBJS(&image->vk.base),
+                       "upper-LOD HiZ CCS WT alignment unsupported. "
+                       "Slow depth clearing.");
          return false;
       }
    }
 
    if (device->info->ver <= 12 &&
-       depth_clear_value != anv_image_hiz_clear_value(image).f32[0])
-     return false;
+       depth_clear_value != anv_image_hiz_clear_value(image).f32[0]) {
+      anv_perf_warn(VK_LOG_OBJS(&image->vk.base),
+                    "depth clear value mismatch. Slow depth clearing.");
+      return false;
+   }
 
    /* If we got here, then we can fast clear */
    return true;

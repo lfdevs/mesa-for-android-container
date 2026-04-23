@@ -76,11 +76,19 @@ impl SM70Encoder<'_> {
         self.set_field(range, reg.base_idx());
     }
 
-    fn set_ureg(&mut self, range: Range<usize>, reg: RegRef) {
+    fn set_ureg(&mut self, start: usize, reg: RegRef) {
+        // Before SM100 UGPRs encode in 6 bits and there are instructions using
+        // the two bits that follow.
+        let ureg_size = if self.sm >= 100 { 8 } else { 6 };
+
         assert!(self.sm >= 73);
-        assert!(range.len() == 8);
         assert!(reg.file() == RegFile::UGPR);
         assert!(reg.base_idx() <= self.ugpr_max());
+        let range = Range {
+            start: start,
+            end: start + ureg_size,
+        };
+
         self.set_field(range, reg.base_idx());
     }
 
@@ -100,11 +108,11 @@ impl SM70Encoder<'_> {
         }
     }
 
-    fn set_ureg_src(&mut self, range: Range<usize>, src: &Src) {
+    fn set_ureg_src(&mut self, start: usize, src: &Src) {
         assert!(src.src_mod.is_none());
         match src.src_ref {
-            SrcRef::Zero => self.set_ureg(range, self.zero_reg(RegFile::UGPR)),
-            SrcRef::Reg(reg) => self.set_ureg(range, reg),
+            SrcRef::Zero => self.set_ureg(start, self.zero_reg(RegFile::UGPR)),
+            SrcRef::Reg(reg) => self.set_ureg(start, reg),
             _ => panic!("Not a register"),
         }
     }
@@ -236,8 +244,8 @@ impl SM70Encoder<'_> {
 
     fn set_udst(&mut self, dst: &Dst) {
         match dst {
-            Dst::None => self.set_ureg(16..24, self.zero_reg(RegFile::UGPR)),
-            Dst::Reg(reg) => self.set_ureg(16..24, *reg),
+            Dst::None => self.set_ureg(16, self.zero_reg(RegFile::UGPR)),
+            Dst::Reg(reg) => self.set_ureg(16, *reg),
             _ => panic!("Not a register"),
         }
     }
@@ -463,7 +471,7 @@ impl SM70Encoder<'_> {
     ) {
         match file {
             RegFile::GPR => self.set_reg(range, reg.reg),
-            RegFile::UGPR => self.set_ureg(range, reg.reg),
+            RegFile::UGPR => self.set_ureg(range.start, reg.reg),
             _ => panic!("Invalid ALU src register file"),
         }
 
@@ -518,7 +526,7 @@ impl SM70Encoder<'_> {
     }
 
     fn encode_alu_ureg(&mut self, reg: &ALURegRef, src_type: SM70SrcType) {
-        self.set_ureg(32..40, reg.reg);
+        self.set_ureg(32, reg.reg);
         self.set_bit(62, reg.abs);
         self.set_bit(63, reg.neg);
 
@@ -2610,10 +2618,11 @@ impl SM70Op for OpTex {
         e.set_reg_src(24..32, &self.srcs[0]);
         e.set_reg_src(32..40, &self.srcs[1]);
         if e.sm >= 100 {
-            e.set_ureg_src(40..48, &Src::ZERO); // handle
-            e.set_ureg_src(48..56, &Src::ZERO); // offset
+            e.set_ureg_src(40, &Src::ZERO); // handle
+            e.set_ureg_src(48, &Src::ZERO); // offset
         }
 
+        e.set_bit(60, self.scalar);
         e.set_tex_dim(61..64, self.dim);
         e.set_tex_channel_mask(72..76, self.channel_mask);
         if e.sm >= 100 {
@@ -2678,8 +2687,8 @@ impl SM70Op for OpTld {
         e.set_reg_src(24..32, &self.srcs[0]);
         e.set_reg_src(32..40, &self.srcs[1]);
         if e.sm >= 100 {
-            e.set_ureg_src(40..48, &Src::ZERO); // handle
-            e.set_ureg_src(48..56, &Src::ZERO); // offset
+            e.set_ureg_src(40, &Src::ZERO); // handle
+            e.set_ureg_src(48, &Src::ZERO); // offset
         }
 
         if e.sm >= 100 {
@@ -2694,6 +2703,7 @@ impl SM70Op for OpTld {
         } else {
             e.set_bit(76, self.offset_mode == TexOffsetMode::AddOffI);
         }
+        e.set_bit(60, self.scalar);
         e.set_tex_dim(61..64, self.dim);
         e.set_tex_channel_mask(72..76, self.channel_mask);
 
@@ -2753,10 +2763,11 @@ impl SM70Op for OpTld4 {
         e.set_reg_src(24..32, &self.srcs[0]);
         e.set_reg_src(32..40, &self.srcs[1]);
         if e.sm >= 100 {
-            e.set_ureg_src(40..48, &Src::ZERO); // handle
-            e.set_ureg_src(48..56, &Src::ZERO); // offset
+            e.set_ureg_src(40, &Src::ZERO); // handle
+            e.set_ureg_src(48, &Src::ZERO); // offset
         }
 
+        e.set_bit(60, self.scalar);
         e.set_tex_dim(61..64, self.dim);
         e.set_tex_channel_mask(72..76, self.channel_mask);
         e.set_field(
@@ -2806,7 +2817,7 @@ impl SM70Op for OpTmml {
         e.set_reg_src(24..32, &self.srcs[0]);
         e.set_reg_src(32..40, &self.srcs[1]);
         if e.sm >= 100 {
-            e.set_ureg_src(40..48, &Src::ZERO); // handle
+            e.set_ureg_src(40, &Src::ZERO); // handle
         }
 
         e.set_tex_dim(61..64, self.dim);
@@ -2857,8 +2868,8 @@ impl SM70Op for OpTxd {
         e.set_reg_src(24..32, &self.srcs[0]);
         e.set_reg_src(32..40, &self.srcs[1]);
         if e.sm >= 100 {
-            e.set_ureg_src(40..48, &Src::ZERO); // handle
-            e.set_ureg_src(48..56, &Src::ZERO); // offset
+            e.set_ureg_src(40, &Src::ZERO); // handle
+            e.set_ureg_src(48, &Src::ZERO); // offset
         }
 
         if e.sm >= 100 {
@@ -2911,7 +2922,7 @@ impl SM70Op for OpTxq {
 
         e.set_reg_src(24..32, &self.src);
         if e.sm >= 100 {
-            e.set_ureg_src(40..48, &Src::ZERO); // handle
+            e.set_ureg_src(40, &Src::ZERO); // handle
         }
 
         e.set_field(
@@ -3040,7 +3051,7 @@ impl SM70Op for OpSuLd {
         e.set_reg_src(64..72, &self.handle);
         e.set_pred_dst(81..84, &self.fault);
         if e.sm >= 120 {
-            e.set_ureg_src(48..56, &Src::ZERO); // handle
+            e.set_ureg_src(48, &Src::ZERO); // handle
         }
 
         e.set_image_dim(61..64, self.image_dim);
@@ -3072,7 +3083,7 @@ impl SM70Op for OpSuSt {
         e.set_reg_src(32..40, &self.data);
         e.set_reg_src(64..72, &self.handle);
         if e.sm >= 120 {
-            e.set_ureg_src(48..56, &Src::ZERO); // handle
+            e.set_ureg_src(48, &Src::ZERO); // handle
         }
 
         e.set_image_dim(61..64, self.image_dim);
@@ -3106,7 +3117,7 @@ impl SM70Op for OpSuAtom {
         e.set_reg_src(64..72, &self.handle);
         e.set_pred_dst(81..84, &self.fault);
         if e.sm >= 120 {
-            e.set_ureg_src(48..56, &Src::ZERO); // handle
+            e.set_ureg_src(48, &Src::ZERO); // handle
         }
 
         e.set_image_dim(61..64, self.image_dim);
@@ -3190,7 +3201,7 @@ impl SM70Op for OpLdc {
                     if e.sm >= 100 {
                         e.set_opcode(0x7ac);
                         e.set_bit(91, true);
-                        e.set_ureg_src(24..32, &self.offset);
+                        e.set_ureg_src(24, &self.offset);
                     } else {
                         e.set_opcode(0xab9);
                         e.set_bit(91, false);
@@ -3226,11 +3237,11 @@ impl SM70Op for OpLdc {
                     e.set_udst(&self.dst);
 
                     if e.sm >= 120 {
-                        e.set_ureg_src(64..72, &self.offset);
+                        e.set_ureg_src(64, &self.offset);
                     } else if e.sm >= 100 {
                         // Blackwell A adds the source but it has to be zero
                         assert!(self.offset.is_zero());
-                        e.set_ureg_src(64..72, &self.offset);
+                        e.set_ureg_src(64, &self.offset);
                     } else {
                         assert!(self.offset.is_zero());
                     }
@@ -3241,7 +3252,7 @@ impl SM70Op for OpLdc {
                     e.set_reg_src(64..72, &self.offset);
                 }
 
-                e.set_ureg(24..32, handle);
+                e.set_ureg(24, handle);
                 assert!(self.mode == LdcMode::Indexed);
                 e.set_bit(91, true); // Bindless
             }
@@ -3569,7 +3580,7 @@ impl SM70Op for OpLdTram {
     fn encode(&self, e: &mut SM70Encoder<'_>) {
         e.set_opcode(0x3ad);
         e.set_dst(&self.dst);
-        e.set_ureg(24..32, e.zero_reg(RegFile::UGPR));
+        e.set_ureg(24, e.zero_reg(RegFile::UGPR));
 
         assert!(self.addr % 4 == 0);
         e.set_field(64..72, self.addr >> 2);

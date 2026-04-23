@@ -459,6 +459,8 @@ gl_system_value_name(gl_system_value sysval)
      ENUM(SYSTEM_VALUE_CORE_MAX_ID_ARM),
      ENUM(SYSTEM_VALUE_WARP_ID_ARM),
      ENUM(SYSTEM_VALUE_WARP_MAX_ID_ARM),
+     ENUM(SYSTEM_VALUE_COLOR0_AMD),
+     ENUM(SYSTEM_VALUE_COLOR1_AMD),
    };
    STATIC_ASSERT(ARRAY_SIZE(names) == SYSTEM_VALUE_MAX);
    return NAME(sysval);

@@ -24,12 +24,12 @@ from u_trace import TracepointArgStruct as ArgStruct
 from u_trace import utrace_generate
 from u_trace import utrace_generate_perfetto_utils
 
-Header('vk_enum_to_str.h', scope=HeaderScope.SOURCE|HeaderScope.PERFETTO)
-Header('vk_format.h')
-Header('util/mesa-blake3.h')
+Header('common/freedreno_lrz.h')
 Header('tu_cmd_buffer.h', scope=HeaderScope.SOURCE)
 Header('tu_device.h', scope=HeaderScope.SOURCE)
-Header('common/freedreno_lrz.h')
+Header('util/mesa-blake3.h')
+Header('vk_enum_to_str.h', scope=HeaderScope.SOURCE|HeaderScope.PERFETTO)
+Header('vk_format.h')
 Header('vulkan/vulkan_core.h', scope=HeaderScope.SOURCE|HeaderScope.PERFETTO)
 
 # we can't use tu_common.h because it includes ir3 headers which are not
@@ -54,8 +54,12 @@ command_buffer_struct = Arg(type='VkCommandBuffer', name='command_buffer_handle'
 def begin_end_tp(name, args=[], tp_struct=None, tp_print=None,
                  end_args=[], end_tp_struct=None, end_tp_print=None,
                  tp_default_enabled=True, marker_tp=True,
-                 queue_tp=True):
+                 queue_tp=True, toggle_name=None):
     global tu_default_tps
+
+    if not toggle_name:
+        toggle_name = name
+
     if tp_default_enabled:
         tu_default_tps.append(name)
 
@@ -176,12 +180,66 @@ begin_end_tp('sysmem_resolve',
 
 begin_end_tp('custom_resolve')
 
-begin_end_tp('blit',
+begin_end_tp('blit_image',
+    toggle_name='clear_blit',
     # TODO: add source megapixels count and target megapixels count arguments
     args=[Arg(type='uint8_t',        var='uses_3d_blit', c_format='%u'),
           Arg(type='enum VkFormat',  var='src_format',   c_format='%s', to_prim_type='vk_format_description({})->short_name'),
           Arg(type='enum VkFormat',  var='dst_format',   c_format='%s', to_prim_type='vk_format_description({})->short_name'),
           Arg(type='uint8_t',        var='layers',       c_format='%u')])
+
+begin_end_tp('clear_color_image',
+    toggle_name='clear_blit',
+    args=[Arg(type='enum VkFormat',  var='format',  c_format='%s', to_prim_type='vk_format_description({})->short_name')])
+
+begin_end_tp('clear_depth_stencil_image',
+    toggle_name='clear_blit',
+    args=[Arg(type='enum VkFormat',  var='format',  c_format='%s', to_prim_type='vk_format_description({})->short_name')])
+
+begin_end_tp('copy_buffer_to_image',
+    toggle_name='clear_blit',
+    args=[Arg(type='enum VkFormat',  var='format',  c_format='%s', to_prim_type='vk_format_description({})->short_name')])
+
+begin_end_tp('copy_image_to_buffer',
+    toggle_name='clear_blit',
+    args=[Arg(type='enum VkFormat',  var='format',  c_format='%s', to_prim_type='vk_format_description({})->short_name')])
+
+begin_end_tp('copy_image',
+    toggle_name='clear_blit',
+    args=[Arg(type='enum VkFormat',  var='src_format',  c_format='%s', to_prim_type='vk_format_description({})->short_name'),
+          Arg(type='enum VkFormat',  var='dst_format',  c_format='%s', to_prim_type='vk_format_description({})->short_name')])
+
+begin_end_tp('resolve_image',
+    toggle_name='clear_blit',
+    args=[Arg(type='enum VkFormat',  var='src_format',  c_format='%s', to_prim_type='vk_format_description({})->short_name'),
+          Arg(type='enum VkFormat',  var='dst_format',  c_format='%s', to_prim_type='vk_format_description({})->short_name')])
+
+begin_end_tp('fill_buffer',
+    toggle_name='clear_blit',
+    end_args=[Arg(type='uint32_t',  var='size',  c_format='%u'),
+              Arg(type='bool',      var='unaligned',  c_format='%s', to_prim_type='({} ? "true" : "false")')])
+
+begin_end_tp('copy_buffer',
+    toggle_name='clear_blit',
+    end_args=[Arg(type='uint32_t',  var='size',  c_format='%u'),
+              Arg(type='bool',      var='unaligned',  c_format='%s', to_prim_type='({} ? "true" : "false")')])
+
+begin_end_tp('update_buffer',
+    toggle_name='clear_blit',
+    end_args=[Arg(type='uint32_t',  var='size',  c_format='%u'),
+              Arg(type='bool',      var='unaligned',  c_format='%s', to_prim_type='({} ? "true" : "false")')])
+
+begin_end_tp('slow_clear_lrz',
+    toggle_name='clear_blit',
+    args=[Arg(type='enum VkFormat',  var='img_format', c_format='%s', to_prim_type='vk_format_description({})->short_name'),
+          Arg(type='uint16_t',       var='img_width',  c_format='%u'),
+          Arg(type='uint16_t',       var='img_height', c_format='%u')])
+
+begin_end_tp('disable_lrz',
+    toggle_name='clear_blit',
+    args=[Arg(type='enum VkFormat',  var='img_format', c_format='%s', to_prim_type='vk_format_description({})->short_name'),
+          Arg(type='uint16_t',       var='img_width',  c_format='%u'),
+          Arg(type='uint16_t',       var='img_height', c_format='%u')])
 
 begin_end_tp('compute',
     args=[Arg(type='uint8_t',  var='indirect',       c_format='%u'),

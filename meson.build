@@ -115,6 +115,7 @@ with_vulkan_anti_lag_layer = get_option('vulkan-layers').contains('anti-lag')
 with_tools = get_option('tools')
 if with_tools.contains('all')
   with_tools = [
+    'amd',
     'asahi',
     'dlclose-skip',
     'drm-shim',
@@ -443,6 +444,15 @@ if _codecs.contains('all')
 elif _codecs.contains('all_free')
   _codecs += free_codecs
 endif
+
+with_video_encode = false
+foreach c : _codecs
+  if c.contains('enc')
+    with_video_encode = true
+    break
+  endif
+endforeach
+
 foreach c : all_codecs
    pre_args += '-DVIDEO_CODEC_@0@=@1@'.format(c.to_upper(), _codecs.contains(c).to_int())
 endforeach
@@ -737,7 +747,6 @@ _va_drivers = [
 ]
 
 allow_fallback_for_libva = get_option('allow-fallback-for').contains('libva')
-fallback_libva_options = []
 _va = get_option('gallium-va') \
   .require(_va_drivers.contains(true),
            error_message : 'VA state tracker requires at least one of the following gallium drivers: r600, radeonsi, nouveau, d3d12 (with option gallium-d3d12-video), virgl.')
@@ -745,8 +754,8 @@ _dep_va_name = host_machine.system() == 'windows' ? 'libva-win32' : 'libva'
 dep_va = dependency(
   _dep_va_name, version : '>= 1.8.0',
   required : _va,
-  allow_fallback: allow_fallback_for_libva,
-  default_options: fallback_libva_options
+  allow_fallback : allow_fallback_for_libva,
+  default_options : [ 'c_std=none' ]
 )
 if dep_va.found()
   dep_va_headers = dep_va.partial_dependency(compile_args : true, includes : true)
@@ -938,6 +947,7 @@ with_llvm = with_llvm \
 
 with_poly = [
   with_gallium_asahi, with_asahi_vk, with_tools.contains('asahi'),
+  with_kosmickrisp_vk,
 ].contains(true)
 
 dep_clc = null_dep
@@ -2528,6 +2538,7 @@ if with_any_vk
   video_apis += 'vulkan'
 endif
 video_summary += {'APIs': video_apis.length() != 0 ? video_apis : false}
+video_summary += {'Encoding': with_video_encode}
 summary(video_summary, section: 'Video', bool_yn: true, list_sep: ' ')
 
 llvm_summary = {'Required': with_llvm}

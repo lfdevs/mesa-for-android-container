@@ -162,6 +162,8 @@ vk_hash_descriptor_heap_mappings(
 struct heap_mapping_ctx {
    const VkShaderDescriptorSetAndBindingMappingInfoEXT *info;
 
+   const vk_nir_lower_descriptor_heaps_options *options;
+
    /* Map from vk_sampler_state to indices */
    struct hash_table *sampler_idx_map;
 };
@@ -242,14 +244,32 @@ unpack_combined_image_sampler(nir_builder *b, nir_def *combined,
       return nir_ubitfield_extract_imm(b, combined, 0, 20);
 }
 
+static bool
+is_mapping_implicitly_non_uniform(struct heap_mapping_ctx *ctx,
+                                  const VkDescriptorSetAndBindingMappingEXT *mapping,
+                                  nir_def *index)
+{
+   /* Non-arrayed resources backed by HEAP_WITH_SHADER_RECORD_INDEX can be
+    * implicitly non-uniform: different lanes in a subgroup may have different
+    * shader record indices (and thus different heap entries) with no
+    * descriptor indexing in the shader to annotate it.
+    */
+   return mapping->source == VK_DESCRIPTOR_MAPPING_SOURCE_HEAP_WITH_SHADER_RECORD_INDEX_EXT &&
+          index == NULL && ctx->options && ctx->options->lower_shader_record_index_to_non_uniform;
+}
+
 static nir_def *
 vk_build_descriptor_heap_offset(nir_builder *b,
+                                struct heap_mapping_ctx *ctx,
                                 const VkDescriptorSetAndBindingMappingEXT *mapping,
                                 nir_resource_type resource_type,
                                 uint32_t binding, nir_def *index,
-                                bool is_sampler)
+                                bool is_sampler, bool *non_uniform_out)
 {
    assert(util_is_power_of_two_nonzero(resource_type));
+
+   if (non_uniform_out != NULL)
+      *non_uniform_out = is_mapping_implicitly_non_uniform(ctx, mapping, index);
 
    if (index == NULL)
       index = nir_imm_int(b, 0);
@@ -601,7 +621,8 @@ build_buffer_addr_for_deref(nir_builder *b, nir_def *root_addr,
 /* The cursor is not where you left it when this function returns. */
 static nir_def *
 build_deref_heap_offset(nir_builder *b, nir_deref_instr *deref,
-                        bool is_sampler, struct heap_mapping_ctx *ctx)
+                        bool is_sampler, struct heap_mapping_ctx *ctx,
+                        bool *non_uniform_out)
 {
    uint32_t set, binding;
    nir_resource_type resource_type;
@@ -619,11 +640,9 @@ build_deref_heap_offset(nir_builder *b, nir_deref_instr *deref,
 
       b->cursor = nir_before_instr(&deref->instr);
 
-      if (index == NULL)
-         index = nir_imm_int(b, 0);
-
-      return vk_build_descriptor_heap_offset(b, mapping, resource_type,
-                                             binding, index, is_sampler);
+      return vk_build_descriptor_heap_offset(b, ctx, mapping, resource_type,
+                                             binding, index, is_sampler,
+                                             non_uniform_out);
    } else {
       nir_deref_instr *root_cast = deref_get_root_cast(deref);
       if (root_cast == NULL)
@@ -671,10 +690,13 @@ lower_heaps_tex(nir_builder *b, nir_tex_instr *tex,
    assert(texture != NULL);
 
    {
-      nir_def *heap_offset = build_deref_heap_offset(b, texture, false, ctx);
+      bool texture_non_uniform = false;
+      nir_def *heap_offset = build_deref_heap_offset(b, texture, false, ctx,
+                                                     &texture_non_uniform);
       if (heap_offset != NULL) {
          nir_src_rewrite(&tex->src[texture_src_idx].src, heap_offset);
          tex->src[texture_src_idx].src_type = nir_tex_src_texture_heap_offset;
+         tex->texture_non_uniform |= texture_non_uniform;
          progress = true;
       }
    }
@@ -689,10 +711,13 @@ lower_heaps_tex(nir_builder *b, nir_tex_instr *tex,
       const VkSamplerCreateInfo *embedded_sampler =
          get_deref_embedded_sampler(sampler, ctx);
       if (embedded_sampler == NULL) {
-         nir_def *heap_offset = build_deref_heap_offset(b, sampler, true, ctx);
+         bool sampler_non_uniform = false;
+         nir_def *heap_offset = build_deref_heap_offset(b, sampler, true, ctx,
+                                                        &sampler_non_uniform);
          if (heap_offset != NULL) {
             nir_src_rewrite(&tex->src[sampler_src_idx].src, heap_offset);
             tex->src[sampler_src_idx].src_type = nir_tex_src_sampler_heap_offset;
+            tex->sampler_non_uniform |= sampler_non_uniform;
             progress = true;
          }
       } else {
@@ -719,7 +744,9 @@ lower_heaps_image(nir_builder *b, nir_intrinsic_instr *intrin,
                   struct heap_mapping_ctx *ctx, bool deref)
 {
    nir_deref_instr *image = nir_src_as_deref(intrin->src[0]);
-   nir_def *heap_offset = build_deref_heap_offset(b, image, false, ctx);
+   bool is_non_uniform = false;
+   nir_def *heap_offset = build_deref_heap_offset(b, image, false, ctx,
+                                                  &is_non_uniform);
    if (heap_offset == NULL)
       return false;
 
@@ -727,6 +754,11 @@ lower_heaps_image(nir_builder *b, nir_intrinsic_instr *intrin,
       nir_rewrite_image_intrinsic(intrin, heap_offset, nir_image_intrinsic_type_heap);
    } else {
       nir_src_rewrite(&intrin->src[0], heap_offset);
+   }
+
+   if (is_non_uniform) {
+      nir_intrinsic_set_access(intrin,
+                               nir_intrinsic_access(intrin) | ACCESS_NON_UNIFORM);
    }
 
    return true;
@@ -790,9 +822,10 @@ try_lower_heaps_deref_access(nir_builder *b, nir_intrinsic_instr *intrin,
 
       b->cursor = nir_before_instr(&desc_load->instr);
       nir_def *heap_offset =
-         vk_build_descriptor_heap_offset(b, mapping, resource_type, binding,
+         vk_build_descriptor_heap_offset(b, ctx, mapping, resource_type, binding,
                                          NULL /* index */,
-                                         false /* is_sampler */);
+                                         false /* is_sampler */,
+                                         NULL /* non_uniform_out */);
 
       /* This moves the cursor */
       heap_offset = build_buffer_addr_for_deref(b, heap_offset, deref,
@@ -922,8 +955,9 @@ lower_heaps_load_descriptor(nir_builder *b, nir_intrinsic_instr *desc_load,
 
       /* Everything else is an offset */
       nir_def *heap_offset =
-         vk_build_descriptor_heap_offset(b, mapping, resource_type, binding,
-                                         index, false /* is_sampler */);
+         vk_build_descriptor_heap_offset(b, ctx, mapping, resource_type, binding,
+                                         index, false /* is_sampler */,
+                                         NULL /* non_uniform_out */);
       nir_def *desc = nir_load_heap_descriptor(b, desc_load->def.num_components,
                                                desc_load->def.bit_size,
                                                heap_offset,
@@ -1001,10 +1035,12 @@ bool
 vk_nir_lower_descriptor_heaps(
    nir_shader *nir,
    const VkShaderDescriptorSetAndBindingMappingInfoEXT *mapping,
+   const vk_nir_lower_descriptor_heaps_options *options,
    struct vk_sampler_state_array *embedded_samplers_out)
 {
    struct heap_mapping_ctx ctx = {
       .info = mapping,
+      .options = options,
       .sampler_idx_map = _mesa_hash_table_create(NULL, hash_sampler,
                                                  samplers_equal),
    };

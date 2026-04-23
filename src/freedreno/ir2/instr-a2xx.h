@@ -8,10 +8,7 @@
 
 #define PACKED __attribute__((__packed__))
 
-#include "util/u_math.h"
-#include "adreno_common.xml.h"
-#include "adreno_pm4.xml.h"
-#include "a2xx.xml.h"
+#include "fd2_hw.h"
 
 /*
  * ALU instructions:

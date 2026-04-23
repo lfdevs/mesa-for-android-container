@@ -309,9 +309,9 @@ blorp_exec_on_render(struct blorp_batch *batch,
     * key.
     */
 #if INTEL_WA_14024015672_GFX_VER
-   genX(cmd_buffer_rhwo_wa_14024015672)(cmd_buffer, params->num_samples > 1);
+   if (blorp_uses_bti_rt_writes(batch, params))
+      genX(cmd_buffer_rhwo_wa_14024015672)(cmd_buffer, params->num_samples > 1);
 #endif
-
 
 #if GFX_VER >= 11
    /* The PIPE_CONTROL command description says:

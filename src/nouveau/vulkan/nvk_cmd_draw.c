@@ -30,6 +30,7 @@
 #include "nv_push_clc197.h"
 #include "nv_push_clc397.h"
 #include "nv_push_clc597.h"
+#include "nv_push_clc797.h"
 #include "nv_push_clcb97.h"
 #include "nv_push_clcd97.h"
 #include "clc7c0.h"
@@ -511,6 +512,32 @@ nvk_push_draw_state_init(struct nvk_queue *queue, struct nv_push *p)
    P_IMMD(p, NV9097, SET_CT_MRT_ENABLE, V_TRUE);
 
    if (pdev->info.cls_eng3d >= TURING_A) {
+      P_MTHD(p, NVC597, SET_ROOT_TABLE_VISIBILITY(0));
+      for (int i = 0; i < 8; i++) {
+         P_NVC597_SET_ROOT_TABLE_VISIBILITY(p, i, {
+            .binding_group0_enable = 0x3,
+            .binding_group1_enable = 0x3,
+            .binding_group2_enable = 0x3,
+            .binding_group3_enable = 0x3,
+            .binding_group4_enable = 0x3,
+         });
+      }
+
+      for (int i = 0; i < 8; i++) {
+         P_1INC(p, NVC597, SET_ROOT_TABLE_SELECTOR);
+         P_NVC597_SET_ROOT_TABLE_SELECTOR(p, {
+            .root_table = i,
+            .offset = 0,
+         });
+         for (uint32_t dw = 0; dw < 64; dw++)
+            P_INLINE_DATA(p, 0);
+      }
+   }
+
+   if (pdev->info.cls_eng3d >= AMPERE_B)
+      P_IMMD(p, NVC797, SET_ROOT_TABLE_PREFETCH, 0x3f);
+
+   if (pdev->info.cls_eng3d >= TURING_A) {
       /* I don't know what these values actually mean.  I just copied them
        * from the way the blob sets up the hardware.
        */
@@ -689,16 +716,45 @@ nvk_cmd_flush_gfx_root_desc(struct nvk_cmd_buffer *cmd,
                             struct nvk_descriptor_state *desc,
                             size_t offset, size_t size)
 {
+   const struct nvk_device *dev = nvk_cmd_buffer_device(cmd);
+   const struct nvk_physical_device *pdev = nvk_device_physical(dev);
+
    const uint32_t start_dw = offset / 4;
    const uint32_t end_dw = DIV_ROUND_UP(offset + size, 4);
-   const uint32_t len_dw = end_dw - start_dw;
-
-   struct nv_push *p = nvk_cmd_buffer_push(cmd, 2 + len_dw);
-   P_1INC(p, NV9097, LOAD_CONSTANT_BUFFER_OFFSET);
-   P_NV9097_LOAD_CONSTANT_BUFFER_OFFSET(p, start_dw * 4);
-
    const uint32_t *root_dw = (uint32_t *)desc->root;
-   P_INLINE_ARRAY(p, &root_dw[start_dw], len_dw);
+
+   if (nvk_use_hw_root_table(&pdev->info, true)) {
+      const uint32_t TABLE_SIZE_DW = NVK_HW_ROOT_TABLE_SIZE / sizeof(uint32_t);
+      const uint32_t start_table = start_dw / TABLE_SIZE_DW;
+      const uint32_t end_table = DIV_ROUND_UP(end_dw, TABLE_SIZE_DW);
+      for (uint32_t table = start_table; table < end_table; table++) {
+         const uint32_t start_dw_table =
+            (table == start_table)
+               ? (start_dw - table * TABLE_SIZE_DW)
+               : 0;
+         const uint32_t end_dw_table =
+            (table == end_table - 1)
+               ? (end_dw - table * TABLE_SIZE_DW)
+               : TABLE_SIZE_DW;
+         const uint32_t len_dw_table = end_dw_table - start_dw_table;
+
+         struct nv_push *p = nvk_cmd_buffer_push(cmd, 2 + len_dw_table);
+         P_1INC(p, NVC597, SET_ROOT_TABLE_SELECTOR);
+         P_NVC597_SET_ROOT_TABLE_SELECTOR(p, {
+            .root_table = table,
+            .offset = start_dw_table * 4,
+         });
+         P_INLINE_ARRAY(p, &root_dw[start_dw_table + table * TABLE_SIZE_DW], len_dw_table);
+      }
+   } else {
+      const uint32_t len_dw = end_dw - start_dw;
+
+      struct nv_push *p = nvk_cmd_buffer_push(cmd, 2 + len_dw);
+      P_1INC(p, NV9097, LOAD_CONSTANT_BUFFER_OFFSET);
+      P_NV9097_LOAD_CONSTANT_BUFFER_OFFSET(p, start_dw * 4);
+
+      P_INLINE_ARRAY(p, &root_dw[start_dw], len_dw);
+   }
 }
 
 void
@@ -3241,6 +3297,14 @@ nvk_mme_anti_alias_samples(uint32_t samples)
    return nvk_mme_val_mask(samples_log2 << 4, 0x00f0);
 }
 
+static void
+emit_anti_alias_mask(struct mme_builder *b, struct mme_value mask)
+{
+   if (nvk_use_hw_root_table(b->devinfo, true))
+      mme_mthd(b, NVC597_LOAD_ROOT_TABLE);
+   mme_emit(b, mask);
+}
+
 void
 nvk_mme_set_anti_alias(struct mme_builder *b)
 {
@@ -3303,9 +3367,20 @@ nvk_mme_set_anti_alias(struct mme_builder *b)
        */
       STATIC_ASSERT(sizeof(struct nak_sample_mask) == 2);
 
-      mme_mthd(b, NV9097_LOAD_CONSTANT_BUFFER_OFFSET);
-      mme_emit(b, mme_imm(nvk_root_descriptor_offset(draw.sample_masks)));
-      mme_mthd(b, NV9097_LOAD_CONSTANT_BUFFER(0));
+      if (nvk_use_hw_root_table(b->devinfo, true)) {
+         uint32_t root_table_selector;
+         V_NVC597_SET_ROOT_TABLE_SELECTOR(root_table_selector, {
+            .root_table = nvk_hw_root_table_index(draw.sample_masks),
+            .offset = nvk_hw_root_table_offset(draw.sample_masks),
+         });
+
+         mme_mthd(b, NVC597_SET_ROOT_TABLE_SELECTOR);
+         mme_emit(b, mme_imm(root_table_selector));
+      } else {
+         mme_mthd(b, NV9097_LOAD_CONSTANT_BUFFER_OFFSET);
+         mme_emit(b, mme_imm(nvk_root_descriptor_offset(draw.sample_masks)));
+         mme_mthd(b, NV9097_LOAD_CONSTANT_BUFFER(0));
+      }
 
       /* Annoyingly, we have to pack these in pairs */
 
@@ -3318,7 +3393,7 @@ nvk_mme_set_anti_alias(struct mme_builder *b)
          for (uint32_t i = 0; i < NVK_MAX_SAMPLES; i += 2) {
             uint32_t mask0 = 1 << i;
             uint32_t mask1 = 1 << (i + 1);
-            mme_emit(b, mme_imm(mask0 | (mask1 << 16)));
+            emit_anti_alias_mask(b, mme_imm(mask0 | (mask1 << 16)));
          }
       }
 
@@ -3326,14 +3401,14 @@ nvk_mme_set_anti_alias(struct mme_builder *b)
          mme_if(b, ieq, passes_log2, mme_zero()) {
             /* It's a single pass so we can use 0xffff */
             for (uint32_t i = 0; i < NVK_MAX_SAMPLES / 2; i++)
-               mme_emit(b, mme_imm(~0));
+               emit_anti_alias_mask(b, mme_imm(~0));
          }
 
          mme_if(b, ieq, passes_log2, mme_imm(1)) {
             for (uint32_t i = 0; i < NVK_MAX_SAMPLES / 2; i++) {
                struct mme_value mask =
                   nvk_mme_load_scratch_arr(b, SAMPLE_MASKS_2PASS_0, i);
-               mme_emit(b, mask);
+               emit_anti_alias_mask(b, mask);
                mme_free_reg(b, mask);
             }
          }
@@ -3342,12 +3417,63 @@ nvk_mme_set_anti_alias(struct mme_builder *b)
             for (uint32_t i = 0; i < NVK_MAX_SAMPLES / 2; i++) {
                struct mme_value mask =
                   nvk_mme_load_scratch_arr(b, SAMPLE_MASKS_4PASS_0, i);
-               mme_emit(b, mask);
+               emit_anti_alias_mask(b, mask);
                mme_free_reg(b, mask);
             }
          }
       }
    }
+}
+
+static void
+nvk_mme_set_anti_alias_test_check(
+   const struct nv_device_info *devinfo,
+   const struct nvk_mme_test_case *test,
+   const struct nvk_mme_mthd_data *results)
+{
+   const uint32_t expected_table[][7] = {
+      {0xffff0000, 0x0, 0x1, 0x020001, 0x080004, 0x200010, 0x800040},
+      {0xffff0002, 0x2, 0x1, 0x020001, 0x080004, 0x200010, 0x800040},
+      {0x00f00030, 0x31, 0x14, 0x030003, 0x0c000c, 0x300030, 0xc000c0},
+      {0x000f0002, 0x32, 0x12, 0x0f000f, 0x0f000f, 0xf000f0, 0xf000f0},
+   };
+   const uint32_t* expected = NULL;
+   for (int i = 0; i < ARRAY_SIZE(expected_table); i++) {
+      if (expected_table[i][0] == test->params[0]) {
+         expected = expected_table[i];
+         break;
+      }
+   }
+   assert(expected != NULL);
+
+   assert(results[0].mthd == NVK_SET_MME_SCRATCH(ANTI_ALIAS));
+   assert(results[0].data == expected[1]);
+
+   assert(results[1].mthd == NV9097_SET_HYBRID_ANTI_ALIAS_CONTROL);
+   assert(results[1].data == expected[2]);
+
+   if (nvk_use_hw_root_table(devinfo, true)) {
+      uint32_t root_table_selector;
+      V_NVC597_SET_ROOT_TABLE_SELECTOR(root_table_selector, {
+         .root_table = nvk_hw_root_table_index(draw.sample_masks),
+         .offset = nvk_hw_root_table_offset(draw.sample_masks),
+      });
+      assert(results[2].mthd == NVC597_SET_ROOT_TABLE_SELECTOR);
+      assert(results[2].data == root_table_selector);
+   } else {
+      assert(results[2].mthd == NV9097_LOAD_CONSTANT_BUFFER_OFFSET);
+      assert(results[2].data == nvk_root_descriptor_offset(draw.sample_masks));
+   }
+
+   for (int i = 0; i < 4; i++) {
+      if (nvk_use_hw_root_table(devinfo, true))
+         assert(results[3 + i].mthd == NVC597_LOAD_ROOT_TABLE);
+      else
+         assert(results[3 + i].mthd == NV9097_LOAD_CONSTANT_BUFFER(i));
+      assert(results[3 + i].data == expected[3 + i]);
+   }
+
+   assert(results[7].mthd == 0);
 }
 
 const struct nvk_mme_test_case nvk_mme_set_anti_alias_tests[] = {{
@@ -3367,17 +3493,7 @@ const struct nvk_mme_test_case nvk_mme_set_anti_alias_tests[] = {{
       { }
    },
    .params = (uint32_t[]) { 0xffff0000 },
-   .expected = (struct nvk_mme_mthd_data[]) {
-      { NVK_SET_MME_SCRATCH(ANTI_ALIAS), 0 },
-      { NV9097_SET_HYBRID_ANTI_ALIAS_CONTROL, 0x1 },
-      { NV9097_LOAD_CONSTANT_BUFFER_OFFSET,
-        nvk_root_descriptor_offset(draw.sample_masks) },
-      { NV9097_LOAD_CONSTANT_BUFFER(0), 0x020001 },
-      { NV9097_LOAD_CONSTANT_BUFFER(1), 0x080004 },
-      { NV9097_LOAD_CONSTANT_BUFFER(2), 0x200010 },
-      { NV9097_LOAD_CONSTANT_BUFFER(3), 0x800040 },
-      { }
-   },
+   .check = nvk_mme_set_anti_alias_test_check,
 }, {
    /* Single sample, minSampleShading = 0.25 */
    .init = (struct nvk_mme_mthd_data[]) {
@@ -3385,17 +3501,7 @@ const struct nvk_mme_test_case nvk_mme_set_anti_alias_tests[] = {{
       { }
    },
    .params = (uint32_t[]) { 0xffff0002 },
-   .expected = (struct nvk_mme_mthd_data[]) {
-      { NVK_SET_MME_SCRATCH(ANTI_ALIAS), 0x2 },
-      { NV9097_SET_HYBRID_ANTI_ALIAS_CONTROL, 0x1 },
-      { NV9097_LOAD_CONSTANT_BUFFER_OFFSET,
-        nvk_root_descriptor_offset(draw.sample_masks) },
-      { NV9097_LOAD_CONSTANT_BUFFER(0), 0x020001 },
-      { NV9097_LOAD_CONSTANT_BUFFER(1), 0x080004 },
-      { NV9097_LOAD_CONSTANT_BUFFER(2), 0x200010 },
-      { NV9097_LOAD_CONSTANT_BUFFER(3), 0x800040 },
-      { }
-   },
+   .check = nvk_mme_set_anti_alias_test_check,
 }, {
    /* 8 samples, minSampleShading = 0.5 */
    .init = (struct nvk_mme_mthd_data[]) {
@@ -3407,17 +3513,7 @@ const struct nvk_mme_test_case nvk_mme_set_anti_alias_tests[] = {{
       { }
    },
    .params = (uint32_t[]) { 0x00f00030 },
-   .expected = (struct nvk_mme_mthd_data[]) {
-      { NVK_SET_MME_SCRATCH(ANTI_ALIAS), 0x31 },
-      { NV9097_SET_HYBRID_ANTI_ALIAS_CONTROL, 0x14 },
-      { NV9097_LOAD_CONSTANT_BUFFER_OFFSET,
-        nvk_root_descriptor_offset(draw.sample_masks) },
-      { NV9097_LOAD_CONSTANT_BUFFER(0), 0x030003 },
-      { NV9097_LOAD_CONSTANT_BUFFER(1), 0x0c000c },
-      { NV9097_LOAD_CONSTANT_BUFFER(2), 0x300030 },
-      { NV9097_LOAD_CONSTANT_BUFFER(3), 0xc000c0 },
-      { }
-   },
+   .check = nvk_mme_set_anti_alias_test_check,
 }, {
    /* 8 samples, minSampleShading = 0.25 */
    .init = (struct nvk_mme_mthd_data[]) {
@@ -3429,17 +3525,7 @@ const struct nvk_mme_test_case nvk_mme_set_anti_alias_tests[] = {{
       { }
    },
    .params = (uint32_t[]) { 0x000f0002 },
-   .expected = (struct nvk_mme_mthd_data[]) {
-      { NVK_SET_MME_SCRATCH(ANTI_ALIAS), 0x32 },
-      { NV9097_SET_HYBRID_ANTI_ALIAS_CONTROL, 0x12 },
-      { NV9097_LOAD_CONSTANT_BUFFER_OFFSET,
-        nvk_root_descriptor_offset(draw.sample_masks) },
-      { NV9097_LOAD_CONSTANT_BUFFER(0), 0x0f000f },
-      { NV9097_LOAD_CONSTANT_BUFFER(1), 0x0f000f },
-      { NV9097_LOAD_CONSTANT_BUFFER(2), 0xf000f0 },
-      { NV9097_LOAD_CONSTANT_BUFFER(3), 0xf000f0 },
-      { }
-   },
+   .check = nvk_mme_set_anti_alias_test_check,
 }, {}};
 
 static VkSampleLocationEXT
@@ -4423,10 +4509,23 @@ nvk_mme_set_cb0_mthd(struct mme_builder *b,
          mme_mthd(b, mthd);
          mme_emit(b, val);
 
-         mme_mthd(b, NV9097_LOAD_CONSTANT_BUFFER_OFFSET);
-         mme_emit(b, mme_imm(cb0_offset));
-         mme_mthd(b, NV9097_LOAD_CONSTANT_BUFFER(0));
-         mme_emit(b, val);
+         if (nvk_use_hw_root_table(b->devinfo, true)) {
+            uint32_t root_table_selector;
+            V_NVC597_SET_ROOT_TABLE_SELECTOR(root_table_selector,{
+               .root_table = cb0_offset / NVK_HW_ROOT_TABLE_SIZE,
+               .offset = cb0_offset % NVK_HW_ROOT_TABLE_SIZE,
+            });
+
+            mme_mthd(b, NVC597_SET_ROOT_TABLE_SELECTOR);
+            mme_emit(b, mme_imm(root_table_selector));
+            mme_mthd(b, NVC597_LOAD_ROOT_TABLE);
+            mme_emit(b, val);
+         } else {
+            mme_mthd(b, NV9097_LOAD_CONSTANT_BUFFER_OFFSET);
+            mme_emit(b, mme_imm(cb0_offset));
+            mme_mthd(b, NV9097_LOAD_CONSTANT_BUFFER(0));
+            mme_emit(b, val);
+         }
       }
       mme_free_reg(b, old);
    } else {

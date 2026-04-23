@@ -7,12 +7,13 @@
 #ifndef TU_KNL_DRM_H
 #define TU_KNL_DRM_H
 
-#include "tu_knl.h"
 #include "drm-uapi/msm_drm.h"
 
+#include "util/timespec.h"
+#include "util/u_dynarray.h"
 #include "vk_util.h"
 
-#include "util/timespec.h"
+#include "tu_knl.h"
 
 VkResult tu_allocate_userspace_iova(struct tu_device *dev,
                                     uint64_t size,

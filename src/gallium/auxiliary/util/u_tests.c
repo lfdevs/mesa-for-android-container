@@ -400,7 +400,7 @@ null_sampler_view(struct pipe_context *ctx, unsigned tgsi_tex_target)
    fs = util_make_fragment_tex_shader(ctx, tgsi_tex_target,
                                       TGSI_RETURN_TYPE_FLOAT,
                                       TGSI_RETURN_TYPE_FLOAT,
-                                      false, false, false);
+                                      false, false);
    cso_set_fragment_shader_handle(cso, fs);
 
    /* Vertex shader. */

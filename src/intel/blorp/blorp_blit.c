@@ -3327,7 +3327,7 @@ blorp_copy(struct blorp_batch *batch,
    uint32_t dst_height = src_height;
    if (isl_format_is_yuv(src_fmtl->format) !=
        isl_format_is_yuv(dst_fmtl->format))
-      dst_width *= src_fmtl->bpb / dst_fmtl->bpb;
+      dst_width = src_width * src_fmtl->bpb / dst_fmtl->bpb;
 
    int max_fmt_scale_src = get_max_format_scale(isl_dev, &params.src, src_x,
                                                 src_width, src_height);

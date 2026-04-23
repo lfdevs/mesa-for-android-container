@@ -1,0 +1,5 @@
+# https://gitlab.freedesktop.org/mesa/mesa/-/issues/15116
+dEQP-VK.wsi.xlib.maintenance1.present_modes.*
+dEQP-VK.wsi.xlib.maintenance1.present_fence.fifo.*
+# VK-GL-CTS issue: 6255 fixed in vulkan-cts-1.4.5.1
+dEQP-VK.wsi.wayland.incremental_present.scale_none.fifo.identity.opaque.incremental_present

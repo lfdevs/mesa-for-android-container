@@ -16,6 +16,9 @@ struct state {
       unsigned stride;
    } map;
 
+   uint32_t view_mask;
+   unsigned view_count;
+
    nir_def *header;
 
    nir_variable *vertex_count_var;
@@ -122,7 +125,8 @@ shader_io_get_unique_index(gl_varying_slot slot)
 
 static nir_def *
 build_local_offset(nir_builder *b, struct state *state, nir_def *vertex,
-                   uint32_t location, uint32_t comp, nir_def *offset)
+                   nir_def *view, uint32_t location, uint32_t comp,
+                   nir_def *offset)
 {
    nir_def *primitive_stride = nir_load_vs_primitive_stride_ir3(b);
    nir_def *primitive_offset =
@@ -146,6 +150,9 @@ build_local_offset(nir_builder *b, struct state *state, nir_def *vertex,
    default:
       UNREACHABLE("bad shader stage");
    }
+
+   if (state->view_count > 1)
+      vertex = nir_iadd(b, nir_imul_imm(b, vertex, state->view_count), view);
 
    nir_def *vertex_offset = nir_imul24(b, vertex, vertex_stride);
 
@@ -249,10 +256,17 @@ lower_block_to_explicit_output(nir_block *block, nir_builder *b,
          continue;
 
       nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
+      nir_def *view = NULL;
 
       switch (intr->intrinsic) {
+      case nir_intrinsic_store_per_view_output:
+         view = intr->src[1].ssa;
+         FALLTHROUGH;
       case nir_intrinsic_store_output: {
          // src[] = { value, offset }.
+         nir_def *intr_offset = intr->intrinsic ==
+            nir_intrinsic_store_per_view_output ? intr->src[2].ssa :
+            intr->src[1].ssa;
 
          /* nir_lower_io_vars_to_temporaries replaces all access to output
           * variables with temp variables and then emits a nir_copy_var at
@@ -266,8 +280,9 @@ lower_block_to_explicit_output(nir_block *block, nir_builder *b,
 
          nir_def *vertex_id = build_vertex_id(b, state);
          nir_def *offset = build_local_offset(
-            b, state, vertex_id, nir_intrinsic_io_semantics(intr).location,
-            nir_intrinsic_component(intr), intr->src[1].ssa);
+            b, state, vertex_id, view,
+            nir_intrinsic_io_semantics(intr).location,
+            nir_intrinsic_component(intr), intr_offset);
 
          nir_store_shared_ir3(b, intr->src[0].ssa, offset);
          progress = true;
@@ -295,6 +310,9 @@ ir3_nir_lower_to_explicit_output(nir_shader *shader,
 {
    struct state state = {};
 
+   state.view_mask = shader->info.view_mask;
+   state.view_count = MAX2(1, util_bitcount(shader->info.view_mask));
+
    build_primitive_map(shader, &state.map);
    memcpy(v->output_loc, state.map.loc, sizeof(v->output_loc));
 
@@ -314,6 +332,7 @@ ir3_nir_lower_to_explicit_output(nir_shader *shader,
       progress |= lower_block_to_explicit_output(block, &b, &state);
 
    v->output_size = state.map.stride;
+   v->view_count = state.view_count;
    return nir_progress(progress, impl, nir_metadata_control_flow);
 }
 
@@ -335,9 +354,29 @@ lower_block_to_explicit_input(nir_block *block, nir_builder *b,
 
          b->cursor = nir_before_instr(&intr->instr);
 
+         nir_def *view = NULL;
+         if (state->view_count > 1) {
+            view = nir_load_view_index(b);
+            /* nir_lower_multiview tightly packs the outputs, skipping over
+             * inactive views. This means we need to compute the tightly packed
+             * index from the original view_index if the view mask is not
+             * contiguous (i.e. not a power of two minus one):
+             *
+             * mask = (1u << view) - 1
+             * packed_view = bitcount(mask & view_mask)
+             */
+            if (!util_is_power_of_two_or_zero(state->view_mask + 1)) {
+               nir_def *mask =
+                  nir_iadd_imm(b, nir_ishl(b, nir_imm_int(b, 1), view), -1);
+               view =
+                  nir_bit_count(b, nir_iand_imm(b, mask, state->view_mask));
+            }
+         }
+
          nir_def *offset = build_local_offset(
             b, state,
             intr->src[0].ssa, // this is typically gl_InvocationID
+            view,
             nir_intrinsic_io_semantics(intr).location,
             nir_intrinsic_component(intr), intr->src[1].ssa);
 
@@ -369,6 +408,9 @@ ir3_nir_lower_to_explicit_input(nir_shader *shader,
                                 struct ir3_shader_variant *v)
 {
    struct state state = {};
+
+   state.view_mask = shader->info.view_mask;
+   state.view_count = MAX2(1, util_bitcount(shader->info.view_mask));
 
    /* when using stl/ldl (instead of stlw/ldlw) for linking VS and HS,
     * HS uses a different primitive id, which starts at bit 16 in the header

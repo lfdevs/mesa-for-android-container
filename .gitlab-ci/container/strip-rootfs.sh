@@ -113,7 +113,6 @@ directories=(
   /usr/lib/*/libdb-5.3.so # libdb-5.3.so that is only used by this pam module ^
   /usr/lib/*/libnss_hesiod* # remove NSS support for nis, nisplus and hesiod
   /usr/lib/*/libnss_nis*
-  /usr/lib/*/wine # don't need Wine's implementation, using Proton instead
   /usr/local/bin/mold
   /usr/local/bin/bindgen
   /usr/local/bin/cargo*

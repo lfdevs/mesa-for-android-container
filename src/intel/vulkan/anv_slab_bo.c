@@ -340,7 +340,7 @@ anv_slab_bo_init(struct anv_device *device)
    unsigned num_slab_orders_per_allocator = (max_slab_order - min_slab_order) /
                                             num_slab_allocator;
 
-   if (unlikely(device->physical->instance->debug & ANV_DEBUG_NO_SLAB))
+   if (ANV_DEBUG(NO_SLAB))
       return true;
 
    /* feature requirement */

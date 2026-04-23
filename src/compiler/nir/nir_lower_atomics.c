@@ -67,6 +67,15 @@ build_atomic(nir_builder *b, nir_intrinsic_instr *intr)
       load = nir_load_global(b, 1, intr->def.bit_size, intr->src[0].ssa,
                              .access = ACCESS_ATOMIC | ACCESS_COHERENT);
       break;
+   case nir_intrinsic_bindless_image_atomic:
+      load = nir_bindless_image_load(
+         b, 1, intr->def.bit_size, intr->src[0].ssa, intr->src[1].ssa,
+         nir_imm_zero(b, 1, 32), intr->src[2].ssa,
+         .access = ACCESS_ATOMIC | ACCESS_COHERENT,
+         .format = nir_intrinsic_format(intr),
+         .image_dim = nir_intrinsic_image_dim(intr),
+         .image_array = nir_intrinsic_image_array(intr));
+      break;
    default:
       UNREACHABLE("unsupported atomic type");
    }
@@ -104,6 +113,15 @@ build_atomic(nir_builder *b, nir_intrinsic_instr *intr)
                                        before, expected,
                                        .atomic_op = nir_atomic_op_cmpxchg);
          break;
+      case nir_intrinsic_bindless_image_atomic:
+         xchg = nir_bindless_image_atomic_swap(
+            b, intr->def.bit_size, intr->src[0].ssa, intr->src[1].ssa,
+            intr->src[2].ssa, before, expected,
+            .atomic_op = nir_atomic_op_cmpxchg,
+            .format = nir_intrinsic_format(intr),
+            .image_dim = nir_intrinsic_image_dim(intr),
+            .image_array = nir_intrinsic_image_array(intr));
+         break;
       default:
          UNREACHABLE("unsupported atomic type");
       }
@@ -124,7 +142,8 @@ lower_atomics(struct nir_builder *b, nir_intrinsic_instr *intr,
 
    if (intr->intrinsic != nir_intrinsic_ssbo_atomic &&
        intr->intrinsic != nir_intrinsic_shared_atomic &&
-       intr->intrinsic != nir_intrinsic_global_atomic)
+       intr->intrinsic != nir_intrinsic_global_atomic &&
+       intr->intrinsic != nir_intrinsic_bindless_image_atomic)
       return false;
    if (supported_cb(&intr->instr, NULL))
       return false;

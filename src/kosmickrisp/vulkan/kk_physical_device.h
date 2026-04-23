@@ -38,6 +38,8 @@ struct kk_memory_heap {
 struct kk_device_info {
    uint32_t max_workgroup_count[3];
    uint32_t max_workgroup_invocations;
+   uint32_t max_compute_shared_memory_size;
+   uint64_t max_buffer_size;
 };
 
 struct kk_physical_device {

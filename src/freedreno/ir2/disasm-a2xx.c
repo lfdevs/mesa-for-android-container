@@ -209,7 +209,7 @@ struct {
 };
 
 static int
-disasm_alu(uint32_t *dwords, uint32_t alu_off, int level, int sync,
+disasm_alu(const uint32_t *dwords, uint32_t alu_off, int level, int sync,
            mesa_shader_stage type)
 {
    instr_alu_t *alu = (instr_alu_t *)dwords;
@@ -454,7 +454,7 @@ struct {
 };
 
 static int
-disasm_fetch(uint32_t *dwords, uint32_t alu_off, int level, int sync)
+disasm_fetch(const uint32_t *dwords, uint32_t alu_off, int level, int sync)
 {
    instr_fetch_t *fetch = (instr_fetch_t *)dwords;
 
@@ -600,7 +600,8 @@ print_cf(instr_cf_t *cf, int level)
  */
 
 int
-disasm_a2xx(uint32_t *dwords, int sizedwords, int level, mesa_shader_stage type)
+disasm_a2xx(const uint32_t *dwords, int sizedwords, int level,
+            mesa_shader_stage type)
 {
    instr_cf_t *cfs = (instr_cf_t *)dwords;
    int idx, max_idx;

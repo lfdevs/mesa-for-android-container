@@ -310,7 +310,6 @@ dEQP-VK.api.device_init.create_device_global_priority_query_khr.basic,Fail
 # New failures with VKCTS 1.4.4.0
 dEQP-VK.binding_model.unused_invalid_descriptor.write.invalid.combined_image_sampler,Crash
 dEQP-VK.binding_model.unused_invalid_descriptor.write.invalid.sampled_image,Crash
-dEQP-VK.info.device_mandatory_features,Fail
 dEQP-VK.pipeline.fast_linked_library.vertex_input.misc.unbound_input,Crash
 dEQP-VK.pipeline.fast_linked_library.vertex_input.misc.unbound_input_dynamic,Crash
 dEQP-VK.pipeline.monolithic.vertex_input.misc.unbound_input,Crash

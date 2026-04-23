@@ -127,6 +127,8 @@ enum radeon_family
    CHIP_STRIX_HALO,     /* Ryzen AI MAX */
    CHIP_KRACKAN1,       /* Ryzen AI 330-350 */
    CHIP_GFX1153,
+   /* GFX11.7 */
+   CHIP_GFX1170,
    /* GFX12 (RDNA 4) */
    CHIP_GFX1200,        /* Radeon 9060 */
    CHIP_GFX1201,        /* Radeon 9070 */
@@ -151,6 +153,7 @@ enum amd_gfx_level
    GFX10_3,
    GFX11,
    GFX11_5,
+   GFX11_7,
    GFX12,
 
    NUM_GFX_VERSIONS,

@@ -8,13 +8,13 @@
 #include <errno.h>
 #include <stdarg.h>
 
-#include "common/freedreno_rd_output.h"
-#include "util/u_math.h"
-#include "util/timespec.h"
-#include "util/os_file_notify.h"
 #include "util/os_file.h"
+#include "util/os_file_notify.h"
+#include "util/timespec.h"
+#include "util/u_math.h"
 #include "vk_enum_to_str.h"
 
+#include "common/freedreno_rd_output.h"
 #include "tu_device.h"
 #include "tu_pass.h"
 

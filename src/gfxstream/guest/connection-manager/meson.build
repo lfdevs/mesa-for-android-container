@@ -6,9 +6,14 @@ inc_connection_manager = include_directories('.')
 files_libconnection_manager = files(
     'GfxStreamConnection.cpp',
     'GfxStreamConnectionManager.cpp',
-    'QemuPipeStreamStub.cpp',
     'VirtioGpuPipeStream.cpp',
 )
+
+if with_platform_android
+  files_libconnection_manager += files('QemuPipeStream.cpp')
+else
+  files_libconnection_manager += files('QemuPipeStreamStub.cpp')
+endif
 
 libconnection_manager = static_library(
     'connection_manager',

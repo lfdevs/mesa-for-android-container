@@ -1,7 +1,7 @@
 /*
 ************************************************************************************************************************
 *
-*  Copyright (C) 2007-2024 Advanced Micro Devices, Inc. All rights reserved.
+*  Copyright (C) 2007-2026 Advanced Micro Devices, Inc. All rights reserved.
 *  SPDX-License-Identifier: MIT
 *
 ***********************************************************************************************************************/
@@ -24,7 +24,7 @@ extern "C"
 #endif
 
 #define ADDRLIB_VERSION_MAJOR 10
-#define ADDRLIB_VERSION_MINOR 1
+#define ADDRLIB_VERSION_MINOR 6
 #define ADDRLIB_MAKE_VERSION(major, minor) ((major << 16) | minor)
 #define ADDRLIB_VERSION                    ADDRLIB_MAKE_VERSION(ADDRLIB_VERSION_MAJOR, ADDRLIB_VERSION_MINOR)
 
@@ -106,6 +106,11 @@ typedef struct _ADDR_EXTENT3D
 *     AddrComputeFmaskInfo()
 *     AddrComputeFmaskAddrFromCoord()
 *     AddrComputeFmaskCoordFromAddr()
+*
+* /////////////////////////////////////////////////////////////////////////////////////////////////
+* //                                   Format properties functions
+* /////////////////////////////////////////////////////////////////////////////////////////////////
+*     AddrFormatProperties()
 *
 **/
 /**
@@ -452,6 +457,49 @@ ADDR_E_RETURNCODE ADDR_API AddrCreate(
 ADDR_E_RETURNCODE ADDR_API AddrDestroy(
     ADDR_HANDLE hLib);
 
+/**
+****************************************************************************************************
+* ADDR_FORMAT_PROPERTIES_IN
+*
+*   @brief
+*       Input structure to the AddrFormatProperties routine.
+*
+****************************************************************************************************
+*/
+typedef struct _ADDR_FORMAT_PROPERTIES_IN {
+    UINT_32     size;     ///< Size of this structure in bytes
+    AddrFormat  format;   ///< If format is set to valid one, bpp/width/height
+                          ///  might be overwritten
+} ADDR_FORMAT_PROPERTIES_IN;
+
+/**
+****************************************************************************************************
+* ADDR_FORMAT_PROPERTIES_OUT
+*
+*   @brief
+*       Output structure from the AddrFormatProperties routine.
+*
+****************************************************************************************************
+*/
+typedef struct _ADDR_FORMAT_PROPERTIES_OUT {
+    UINT_32        size;     ///< Size of this structure in bytes
+    UINT_32        bpp;      ///< Bits per pixel as laid out in memory (eg. 128bpp for BC7)
+    ADDR_EXTENT2D  expand;   ///< Dimensions of one macro pixel block
+} ADDR_FORMAT_PROPERTIES_OUT;
+
+/**
+****************************************************************************************************
+*   AddrFormatProperties
+*
+*   @brief
+*       Gets a list of format properties
+*
+****************************************************************************************************
+*/
+ADDR_E_RETURNCODE ADDR_API AddrFormatProperties(
+    ADDR_HANDLE                       hLib,
+    const ADDR_FORMAT_PROPERTIES_IN*  in,
+    ADDR_FORMAT_PROPERTIES_OUT*       pOut);
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 //                                    Surface functions
@@ -2463,6 +2511,7 @@ typedef union _ADDR2_SURFACE_FLAGS
         UINT_32 rotated           :  1; ///< This resource is rotated and displayable
         UINT_32 needEquation      :  1; ///< This resource needs equation to be generated if possible
         UINT_32 opt4space         :  1; ///< This resource should be optimized for space
+        UINT_32 computeMaxSize    :  1; ///< This resource should select the largest swizzle possible
         UINT_32 minimizeAlign     :  1; ///< This resource should use minimum alignment
         UINT_32 noMetadata        :  1; ///< This resource has no metadata
         UINT_32 metaRbUnaligned   :  1; ///< This resource has rb unaligned metadata
@@ -2470,7 +2519,7 @@ typedef union _ADDR2_SURFACE_FLAGS
         UINT_32 view3dAs2dArray   :  1; ///< This resource is a 3D resource viewed as 2D array
         UINT_32 allowExtEquation  :  1; ///< If unset, only legacy DX eqs are allowed (2 XORs)
         UINT_32 requireMetadata   :  1; ///< This resource must support metadata
-        UINT_32 reserved          : 11; ///< Reserved bits
+        UINT_32 reserved          : 10; ///< Reserved bits
     };
 
     UINT_32 value;
@@ -2668,6 +2717,31 @@ ADDR_E_RETURNCODE ADDR_API Addr2ComputeSurfaceAddrFromCoord(
 
 /**
 ****************************************************************************************************
+*   ADDR_COPY_FLAGS
+*
+*   @brief
+*       Options controlling image copy functions.
+****************************************************************************************************
+*/
+typedef union _ADDR_COPY_FLAGS {
+    struct
+    {
+        UINT_32 blockMemcpy  : 1; ///< Memory layout is pre-swizzled and stored block-by-block.
+                                  ///  For regions in the miptail, this uses hybrid memcpy.
+                                  ///  Regions must cover full width/height of the subresource.
+        UINT_32 hybridMemcpy : 1; ///< Memory layout is partially pre-swizzled and stored
+                                  ///  microblock-by-microblock. Data in this format is agnostic to
+                                  ///  chip harvesting and block size. Regions will be padded out
+                                  ///  to microblock boundaries for alignment.
+                                  ///  Mutually exclusive with 'blockMemcpy'.
+        UINT_32 reserved    : 30; ///< Reserved bits
+    };
+
+    UINT_32 value;
+} ADDR_COPY_FLAGS;
+
+/**
+****************************************************************************************************
 *   ADDR2_COPY_MEMSURFACE_REGION
 *
 *   @brief
@@ -2718,6 +2792,7 @@ typedef struct _ADDR2_COPY_MEMSURFACE_INPUT
                                          ///   - copyDims.depth == 1
                                          ///   - all copy regions target the same mip
                                          ///   - all copy regions target the same slice/depth
+    ADDR_COPY_FLAGS     copyFlags;       ///< Controls how the copy is performed.
 } ADDR2_COPY_MEMSURFACE_INPUT;
 
 /**
@@ -4008,30 +4083,34 @@ typedef union _ADDR2_SWMODE_SET
 */
 typedef struct _ADDR2_GET_PREFERRED_SURF_SETTING_INPUT
 {
-    UINT_32               size;              ///< Size of this structure in bytes
+    UINT_32               size;                   ///< Size of this structure in bytes
 
-    ADDR2_SURFACE_FLAGS   flags;             ///< Surface flags
-    AddrResourceType      resourceType;      ///< Surface type
-    AddrFormat            format;            ///< Surface format
-    AddrResrouceLocation  resourceLoction;   ///< Surface heap choice
-    ADDR2_BLOCK_SET       forbiddenBlock;    ///< Client can use it to disable some block setting
-                                             ///< such as linear for DXTn, tiled for YUV
-    ADDR2_SWTYPE_SET      preferredSwSet;    ///< Client can use it to specify sw type(s) wanted
-    BOOL_32               noXor;             ///< Do not use xor mode for this resource
-    UINT_32               bpp;               ///< bits per pixel
-    UINT_32               width;             ///< Width (of mip0), in pixels
-    UINT_32               height;            ///< Height (of mip0), in pixels
-    UINT_32               numSlices;         ///< Number surface slice/depth (of mip0),
-    UINT_32               numMipLevels;      ///< Total mipmap levels.
-    UINT_32               numSamples;        ///< Number of samples
-    UINT_32               numFrags;          ///< Number of fragments, leave it zero or the same as
-                                             ///  number of samples for normal AA; Set it to the
-                                             ///  number of fragments for EQAA
-    UINT_32               maxAlign;          ///< maximum base/size alignment requested by client
-    UINT_32               minSizeAlign;      ///< memory allocated for surface in client driver will
-                                             ///  be padded to multiple of this value (in bytes)
-    DOUBLE                memoryBudget;      ///< Memory consumption ratio based on minimum possible
-                                             ///  size.
+    ADDR2_SURFACE_FLAGS   flags;                  ///< Surface flags
+    AddrResourceType      resourceType;           ///< Surface type
+    AddrFormat            format;                 ///< Surface format
+    AddrResrouceLocation  resourceLoction;        ///< Surface heap choice
+    ADDR2_BLOCK_SET       forbiddenBlock;         ///< Client can use it to disable some block setting
+                                                  ///< such as linear for DXTn, tiled for YUV
+    ADDR2_SWTYPE_SET      preferredSwSet;         ///< Client can use it to specify sw type(s) wanted
+    BOOL_32               noXor;                  ///< Do not use xor mode for this resource
+    UINT_32               bpp;                    ///< bits per pixel
+    UINT_32               width;                  ///< Width (of mip0), in pixels
+    UINT_32               height;                 ///< Height (of mip0), in pixels
+    UINT_32               numSlices;              ///< Number surface slice/depth (of mip0),
+    UINT_32               numMipLevels;           ///< Total mipmap levels.
+    UINT_32               numSamples;             ///< Number of samples
+    UINT_32               numFrags;               ///< Number of fragments, leave it zero or the same as
+                                                  ///  number of samples for normal AA; Set it to the
+                                                  ///  number of fragments for EQAA
+    UINT_32               maxAlign;               ///< maximum base/size alignment requested by client
+    UINT_32               minSizeAlign;           ///< memory allocated for surface in client driver will
+                                                  ///  be padded to multiple of this value (in bytes)
+    DOUBLE                memoryBudget;           ///< Memory consumption ratio based on minimum possible
+                                                  ///  size.
+    bool                  useBlockBasedHeuristic; ///< Use the block-based heuristic for swizzle mode selection.
+                                                  ///  The heuristic has the property of image size predictably
+                                                  ///  with image extents, which is needed for Vulkan. It ignores
+                                                  ///  minSizeAlign, maxAlign and memoryBudget options
 } ADDR2_GET_PREFERRED_SURF_SETTING_INPUT;
 
 /**
@@ -4488,6 +4567,7 @@ typedef struct _ADDR3_COPY_MEMSURFACE_INPUT
                                          ///   - copyDims.depth == 1
                                          ///   - all copy regions target the same mip
                                          ///   - all copy regions target the same slice/depth
+    ADDR_COPY_FLAGS     copyFlags;       ///< Controls how the copy is performed.
 } ADDR3_COPY_MEMSURFACE_INPUT;
 
 /**

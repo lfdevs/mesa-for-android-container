@@ -368,7 +368,7 @@ nir_load_libclc_shader(unsigned ptr_bit_size,
 
    assert(clc.size % SPIRV_WORD_SIZE == 0);
    nir_shader *nir = spirv_to_nir(clc.data, clc.size / SPIRV_WORD_SIZE,
-                                  NULL, 0, MESA_SHADER_KERNEL, NULL,
+                                  NULL, MESA_SHADER_KERNEL, NULL,
                                   &spirv_lib_options, nir_options);
    nir_validate_shader(nir, "after nir_load_clc_shader");
 

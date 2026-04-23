@@ -505,6 +505,9 @@ spec@!opengl 1.1@depthstencil-default_fb-drawpixels-32f_24_8_rev samples=6,Fail
 spec@arb_es2_compatibility@texwrap formats bordercolor-swizzled,Fail
 spec@arb_es2_compatibility@texwrap formats bordercolor-swizzled@GL_RGB565- swizzled- border color only,Fail
 spec@arb_framebuffer_object@execution@msaa-alpha-to-coverage_alpha-to-one_write-z,Fail
+spec@arb_shader_image_load_store@max-size@image2DMS max size test/8x16384x8x1,Fail
+spec@arb_shader_image_load_store@max-size@image2DMS max size test/8x8x16384x1,Fail
+spec@arb_shader_image_load_store@max-size@image2DMSArray max size test/8x8x8x2048,Fail
 spec@arb_tessellation_shader@execution@built-in-functions@tcs-equal-vec2-vec2,Crash
 spec@arb_tessellation_shader@execution@built-in-functions@tcs-max-float-float,Crash
 spec@arb_tessellation_shader@execution@built-in-functions@tcs-op-eq-float-float-using-if,Crash
@@ -549,6 +552,12 @@ spec@ext_packed_float@texwrap formats bordercolor,Fail
 spec@ext_packed_float@texwrap formats bordercolor-swizzled,Fail
 spec@ext_packed_float@texwrap formats bordercolor-swizzled@GL_R11F_G11F_B10F- swizzled- border color only,Fail
 spec@ext_packed_float@texwrap formats bordercolor@GL_R11F_G11F_B10F- border color only,Fail
+spec@arb_tessellation_shader@execution@built-in-functions@tcs-op-eq-float-float,Crash
+spec@arb_tessellation_shader@execution@built-in-functions@tcs-op-eq-mat2-mat2,Crash
+spec@arb_tessellation_shader@execution@built-in-functions@tcs-op-eq-vec3-vec3-using-if,Crash
+spec@arb_tessellation_shader@execution@built-in-functions@tcs-op-ne-mat2-mat2,Crash
+spec@arb_tessellation_shader@execution@built-in-functions@tcs-op-ne-vec3-vec3,Crash
+spec@arb_tessellation_shader@execution@built-in-functions@tcs-op-ne-vec4-vec4-using-if,Crash
 spec@ext_texture_compression_s3tc@texwrap formats bordercolor,Fail
 spec@ext_texture_compression_s3tc@texwrap formats bordercolor@GL_COMPRESSED_RGBA_S3TC_DXT1_EXT- border color only,Fail
 spec@ext_texture_compression_s3tc@texwrap formats bordercolor@GL_COMPRESSED_RGBA_S3TC_DXT3_EXT- border color only,Fail

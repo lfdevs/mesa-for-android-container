@@ -196,8 +196,6 @@ dri_create_context(struct dri_screen *screen,
    ctx->st->frontend_context = (void *) ctx;
 
    if (ctx->st->cso_context) {
-      ctx->pp = pp_init(ctx->st->pipe, screen->pp_enabled, ctx->st->cso_context,
-                        ctx->st, st_context_invalidate_state);
       ctx->hud = hud_create(ctx->st->cso_context,
                             share_ctx ? share_ctx->hud : NULL,
                             ctx->st, st_context_invalidate_state);
@@ -259,9 +257,6 @@ dri_destroy_context(struct dri_context *ctx)
    if (ctx->hud) {
       hud_destroy(ctx->hud, ctx->st->cso_context);
    }
-
-   if (ctx->pp)
-      pp_free(ctx->pp);
 
    /* No particular reason to wait for command completion before
     * destroying a context, but we flush the context here
@@ -343,11 +338,6 @@ dri_make_current(struct dri_context *ctx,
    }
 
    st_api_make_current(ctx->st, &draw->base, &read->base);
-
-   /* This is ok to call here. If they are already init, it's a no-op. */
-   if (ctx->pp && draw->textures[ST_ATTACHMENT_BACK_LEFT])
-      pp_init_fbos(ctx->pp, draw->textures[ST_ATTACHMENT_BACK_LEFT]->width0,
-                   draw->textures[ST_ATTACHMENT_BACK_LEFT]->height0);
 
    return GL_TRUE;
 }

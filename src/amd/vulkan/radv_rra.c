@@ -489,6 +489,10 @@ radv_rra_trace_init(struct radv_device *device)
 
    device->rra_trace.ray_history = UTIL_DYNARRAY_INIT;
 
+   /* BVH stats dumping does not need ray history. */
+   if (!(radv_physical_device_instance(pdev)->vk.trace_mode & RADV_TRACE_MODE_RRA))
+      return VK_SUCCESS;
+
    device->rra_trace.ray_history_buffer_size = debug_get_num_option("RADV_RRA_TRACE_HISTORY_SIZE", 100 * 1024 * 1024);
    if (device->rra_trace.ray_history_buffer_size <
        sizeof(struct radv_ray_history_header) + sizeof(struct radv_packed_end_trace_token))
@@ -625,6 +629,9 @@ radv_rra_trace_finish(VkDevice vk_device, struct radv_rra_trace_data *data)
    simple_mtx_destroy(&data->data_mtx);
    _mesa_hash_table_destroy(data->accel_structs, NULL);
    _mesa_hash_table_u64_destroy(data->accel_struct_vas);
+
+   if (data->stats_file)
+      fclose(data->stats_file);
 }
 
 void
@@ -1296,5 +1303,170 @@ cleanup:
    free(ray_history_sizes);
    free(ray_history_offsets);
    free(accel_struct_offsets);
+   return result;
+}
+
+static void
+dump_bvh_stats(struct radv_device *device, struct vk_acceleration_structure *accel_struct,
+               struct radv_rra_accel_struct_data *accel_struct_data, uint8_t *data, struct hash_table_u64 *blas_sah,
+               bool tlas_pass)
+{
+   const struct radv_physical_device *pdev = radv_device_physical(device);
+   const struct radv_instance *instance = radv_physical_device_instance(pdev);
+
+   struct radv_accel_struct_header *header = (struct radv_accel_struct_header *)data;
+
+   bool is_tlas = header->instance_count > 0;
+   if (is_tlas != tlas_pass)
+      return;
+
+   /* convert root node id to offset */
+   uint32_t src_root_offset = (RADV_BVH_ROOT_NODE & ~7) << 3;
+
+   if (rra_validate_header(accel_struct_data, header)) {
+      return;
+   }
+   if (radv_use_bvh8(pdev)) {
+      if (rra_validate_node_gfx12(device->rra_trace.accel_struct_vas, data + header->bvh_offset,
+                                  data + header->bvh_offset + src_root_offset, header->geometry_count,
+                                  accel_struct_data->size, !is_tlas, 0)) {
+         return;
+      }
+   } else {
+      if (rra_validate_node_gfx10_3(device->rra_trace.accel_struct_vas, data + header->bvh_offset,
+                                    data + header->bvh_offset + src_root_offset, header->geometry_count,
+                                    accel_struct_data->size, !is_tlas, 0)) {
+         return;
+      }
+   }
+
+   if (!device->rra_trace.stats_file) {
+      device->rra_trace.stats_file = fopen(radv_bvh_stats_file(), "w");
+      fprintf(device->rra_trace.stats_file, "app,name,type,allocated_size,compacted_size");
+      if (radv_use_bvh8(pdev)) {
+         fprintf(device->rra_trace.stats_file, ",max_depth,box_node_count,primitive_node_count,instance_node_count");
+      } else {
+         fprintf(device->rra_trace.stats_file, ",max_depth,box16_node_count,box32_node_count,triangle_node_count,"
+                                               "instance_node_count,procedural_node_count");
+      }
+      fprintf(device->rra_trace.stats_file, ",sah,scene_sah\n");
+   }
+
+   fprintf(device->rra_trace.stats_file, "\"%s\",%s,%s,%" PRIu64 ",%" PRIu64, instance->vk.app_info.app_name,
+           vk_object_base_name(&accel_struct->base), is_tlas ? "tlas" : "blas", accel_struct_data->size,
+           header->compacted_size);
+
+   float extent[3] = {
+      header->aabb.max.x - header->aabb.min.x,
+      header->aabb.max.y - header->aabb.min.y,
+      header->aabb.max.z - header->aabb.min.z,
+   };
+   float surface_area = 2 * (extent[0] * extent[1] + extent[0] * extent[2] + extent[1] * extent[2]);
+
+   float sah;
+   float instance_sah;
+   if (radv_use_bvh8(pdev)) {
+      struct radv_bvh_stats_gfx12 stats = {0};
+      radv_gather_bvh_stats_gfx12(data + header->bvh_offset, RADV_BVH_ROOT_NODE, 1, surface_area, blas_sah, &stats);
+      sah = stats.sah;
+      instance_sah = stats.instance_sah;
+      fprintf(device->rra_trace.stats_file, ",%u,%u,%u,%u", stats.max_depth, stats.box_node_count,
+              stats.primitive_node_count, stats.instance_node_count);
+   } else {
+      struct radv_bvh_stats_gfx10_3 stats = {0};
+      radv_gather_bvh_stats_gfx10_3(data + header->bvh_offset, RADV_BVH_ROOT_NODE, 1, surface_area, blas_sah, &stats);
+      sah = stats.sah;
+      instance_sah = stats.instance_sah;
+      fprintf(device->rra_trace.stats_file, ",%u,%u,%u,%u,%u,%u", stats.max_depth, stats.box16_node_count,
+              stats.box32_node_count, stats.triangle_node_count, stats.instance_node_count,
+              stats.procedural_node_count);
+   }
+
+   fprintf(device->rra_trace.stats_file, ",%u", (uint32_t)(sah / surface_area * 1000000));
+
+   if (is_tlas) {
+      fprintf(device->rra_trace.stats_file, ",%u\n", (uint32_t)((sah + instance_sah) / surface_area * 1000000));
+   } else {
+      fprintf(device->rra_trace.stats_file, ",0\n");
+
+      float *sah_ptr = ralloc(blas_sah, float);
+      *sah_ptr = sah / surface_area;
+      _mesa_hash_table_u64_insert(blas_sah, vk_acceleration_structure_get_va(accel_struct), sah_ptr);
+   }
+
+   fflush(device->rra_trace.stats_file);
+}
+
+VkResult
+radv_dump_bvh_stats(VkQueue vk_queue)
+{
+   VK_FROM_HANDLE(radv_queue, queue, vk_queue);
+   struct radv_device *device = radv_queue_device(queue);
+   VkDevice vk_device = radv_device_to_handle(device);
+
+   VkResult result = vk_common_DeviceWaitIdle(vk_device);
+   if (result != VK_SUCCESS)
+      return result;
+
+   struct hash_entry **hash_entries = NULL;
+   struct hash_table_u64 *blas_sah = NULL;
+
+   uint32_t struct_count = _mesa_hash_table_num_entries(device->rra_trace.accel_structs);
+
+   hash_entries = malloc(sizeof(*hash_entries) * struct_count);
+   if (!hash_entries) {
+      result = VK_ERROR_OUT_OF_HOST_MEMORY;
+      goto cleanup;
+   }
+
+   struct hash_entry *last_entry = NULL;
+   for (unsigned i = 0; (last_entry = _mesa_hash_table_next_entry(device->rra_trace.accel_structs, last_entry)); ++i)
+      hash_entries[i] = last_entry;
+
+   qsort(hash_entries, struct_count, sizeof(*hash_entries), accel_struct_entry_cmp);
+
+   struct rra_copy_context copy_ctx = {
+      .device = vk_device,
+      .queue = vk_queue,
+      .entries = hash_entries,
+      .family_index = queue->vk.queue_family_index,
+      .min_size = device->rra_trace.ray_history_buffer_size,
+   };
+
+   result = rra_copy_context_init(&copy_ctx);
+   if (result != VK_SUCCESS)
+      goto cleanup;
+
+   blas_sah = _mesa_hash_table_u64_create(NULL);
+
+   for (unsigned i = 0; i < struct_count; i++) {
+      void *mapped_data = rra_map_accel_struct_data(&copy_ctx, i);
+      if (!mapped_data)
+         continue;
+
+      dump_bvh_stats(device, (void *)hash_entries[i]->key, hash_entries[i]->data, mapped_data, blas_sah, false);
+
+      rra_unmap_accel_struct_data(&copy_ctx, i);
+   }
+
+   for (unsigned i = 0; i < struct_count; i++) {
+      if (_mesa_hash_table_u64_search(blas_sah, vk_acceleration_structure_get_va(hash_entries[i]->key)))
+         continue;
+
+      void *mapped_data = rra_map_accel_struct_data(&copy_ctx, i);
+      if (!mapped_data)
+         continue;
+
+      dump_bvh_stats(device, (void *)hash_entries[i]->key, hash_entries[i]->data, mapped_data, blas_sah, true);
+
+      rra_unmap_accel_struct_data(&copy_ctx, i);
+   }
+
+   rra_copy_context_finish(&copy_ctx);
+
+   result = VK_SUCCESS;
+cleanup:
+   _mesa_hash_table_u64_destroy(blas_sah);
+   free(hash_entries);
    return result;
 }

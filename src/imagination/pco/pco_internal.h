@@ -3164,8 +3164,9 @@ static inline bool pco_should_skip_pass(const char *pass)
 /** Integer 31. */
 #define pco_31 pco_ref_hwreg(31, PCO_REG_CLASS_CONST)
 
-/** Integer -1/true/0xffffffff. */
+/** Integer -1/true/0xffffffff/u32max. */
 #define pco_true pco_ref_hwreg(143, PCO_REG_CLASS_CONST)
+#define pco_u32max pco_true
 
 /** Float 1. */
 #define pco_fone pco_ref_hwreg(64, PCO_REG_CLASS_CONST)

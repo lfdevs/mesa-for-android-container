@@ -1623,44 +1623,44 @@ lp_setup_add_scissor_planes(const struct u_rect *scissor,
     */
    if (s_planes[0]) {
       int x0 = scissor->x0;
-      plane_s->dcdx = ~0U << 8;
+      plane_s->dcdx = ~0U;
       plane_s->dcdy = 0;
-      plane_s->c = x0 << 8;
+      plane_s->c = TO_FIXED64(x0);
       plane_s->c = -plane_s->c; /* flip sign */
       /*
        * we need x0 to be exactly on plane edge, adjust by 1 since
        * this is an inclusive edge.
        */
       plane_s->c += 1;
-      plane_s->eo = 1 << 8;
+      plane_s->eo = 1;
       plane_s++;
    }
    if (s_planes[1]) {
       int x1 = scissor->x1 + 1;
-      plane_s->dcdx = 1 << 8;
+      plane_s->dcdx = 1;
       plane_s->dcdy = 0;
-      plane_s->c = x1 << 8;
+      plane_s->c = TO_FIXED64(x1);
       /*
        * no c adjustment, this edge should be exclusive.
        */
-      plane_s->eo = 0 << 8;
+      plane_s->eo = 0;
       plane_s++;
    }
    if (s_planes[2]) {
       int y0 = scissor->y0;
       plane_s->dcdx = 0;
-      plane_s->dcdy = 1 << 8;
-      plane_s->c = y0 << 8;
+      plane_s->dcdy = 1;
+      plane_s->c = TO_FIXED64(y0);
       plane_s->c = -plane_s->c; /* flip sign */
       plane_s->c += 1;
-      plane_s->eo = 1 << 8;
+      plane_s->eo = 1;
       plane_s++;
    }
    if (s_planes[3]) {
       int y1 = scissor->y1 + 1;
       plane_s->dcdx = 0;
-      plane_s->dcdy = ~0U << 8;
-      plane_s->c = y1 << 8;
+      plane_s->dcdy = ~0U;
+      plane_s->c = TO_FIXED64(y1);
       plane_s->eo = 0;
       plane_s++;
    }

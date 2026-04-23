@@ -2876,3 +2876,33 @@ dxil_nir_kill_unused_outputs(nir_shader *shader, uint64_t next_stage_read_mask, 
    progress |= nir_remove_dead_variables(shader, nir_var_shader_out, &options);
    return progress;
 }
+
+void
+dxil_nir_propagate_interp_to_outputs(nir_shader *prev_stage_nir,
+                                     const nir_shader *fs_nir)
+{
+   /* Work around a bug in some D3D12 drivers where the interpolation mode on
+    * outputs of the previous shader stage must match the interpolation mode on
+    * the corresponding fragment shader inputs. Back-propagate interpolation
+    * qualifiers (interpolation, centroid, sample) from FS inputs to the
+    * previous stage's outputs.
+    */
+   assert(fs_nir->info.stage == MESA_SHADER_FRAGMENT);
+
+   nir_foreach_variable_with_modes(fs_input, fs_nir, nir_var_shader_in) {
+      unsigned loc = fs_input->data.location;
+
+      /* Skip system values - only propagate for user varyings */
+      if (loc < VARYING_SLOT_VAR0)
+         continue;
+
+      nir_foreach_variable_with_modes(prev_output, prev_stage_nir,
+                                      nir_var_shader_out) {
+         if (prev_output->data.location == loc) {
+            prev_output->data.interpolation = fs_input->data.interpolation;
+            prev_output->data.centroid = fs_input->data.centroid;
+            prev_output->data.sample = fs_input->data.sample;
+         }
+      }
+   }
+}

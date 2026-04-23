@@ -31,7 +31,6 @@ bi_swizzle_as_str(enum bi_swizzle swz)
         case BI_SWIZZLE_B3322: return ".b3322";
         case BI_SWIZZLE_B0033: return ".b0033";
         case BI_SWIZZLE_B1133: return ".b1133";
-        case BI_SWIZZLE_B1123: return ".b1123";
         }
 
         UNREACHABLE("Invalid swizzle");

@@ -146,6 +146,14 @@ nir_opt_generate_bfi_instr(nir_builder *b,
 
    b->cursor = nir_before_instr(&alu->instr);
 
+   /* Optimize with the rule bitfield_select(a, b, b) = b. We do this ourselves
+    * since we run late after nir_opt_algebraic.
+    */
+   if (alu->def.num_components == 1 && nir_scalar_equal(insert[0], base[0])) {
+      nir_def_replace(&alu->def, nir_mov_scalar(b, insert[0]));
+      return true;
+   }
+
    nir_def *mask_vec = nir_build_imm(b, alu->def.num_components, alu->def.bit_size, mask_cvals);
    nir_def *insert_vec = nir_vec_scalars(b, insert, alu->def.num_components);
    nir_def *base_vec = nir_vec_scalars(b, base, alu->def.num_components);

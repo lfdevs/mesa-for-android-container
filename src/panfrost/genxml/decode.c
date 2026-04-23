@@ -561,7 +561,7 @@ GENX(pandecode_fau)(struct pandecode_context *ctx, uint64_t addr,
 
    fprintf(ctx->dump_stream, "%s @%" PRIx64 ":\n", name, addr);
    for (unsigned i = 0; i < count; ++i) {
-      fprintf(ctx->dump_stream, "  %08X %08X\n", raw[2 * i], raw[2 * i + 1]);
+      fprintf(ctx->dump_stream, "u%d  %08X %08X\n", i, raw[2 * i], raw[2 * i + 1]);
    }
    fprintf(ctx->dump_stream, "\n");
 }

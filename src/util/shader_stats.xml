@@ -172,6 +172,12 @@
          <stat name="GRF registers">
             Number of GRF registers required by the shader.
          </stat>
+         <stat name="Push constant ranges">
+            Number of push constants ranges provided to the shader.
+         </stat>
+         <stat name="Push constant registers">
+            Number of GRF registers in the payload registers dedicated to constants.
+         </stat>
          <stat name="Max dispatch width" more="better">
             Largest SIMD dispatch width.
          </stat>

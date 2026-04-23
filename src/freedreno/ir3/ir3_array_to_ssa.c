@@ -212,8 +212,10 @@ ir3_array_to_ssa(struct ir3 *ir)
 
    foreach_block (block, &ir->block_list) {
       foreach_instr (instr, &block->instr_list) {
-         if (instr->opc == OPC_META_PHI)
+         if (instr->opc == OPC_META_PHI) {
+            instr->data = NULL;
             continue;
+         }
 
          foreach_dst (reg, instr) {
             if ((reg->flags & IR3_REG_ARRAY) && !reg->tied) {
@@ -236,10 +238,13 @@ ir3_array_to_ssa(struct ir3 *ir)
 
    foreach_block (block, &ir->block_list) {
       foreach_instr_safe (instr, &block->instr_list) {
-         if (instr->opc == OPC_META_PHI)
+         if (instr->opc == OPC_META_PHI) {
+            if (!(instr->dsts[0]->flags & IR3_REG_ARRAY))
+               continue;
             remove_trivial_phi(instr);
-         else
+         } else {
             break;
+         }
       }
    }
 

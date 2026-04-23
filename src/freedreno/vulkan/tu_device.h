@@ -12,9 +12,15 @@
 
 #include "tu_common.h"
 
+#include "radix_sort/radix_sort_vk.h"
+#include "util/rwlock.h"
+#include "util/u_vector.h"
+#include "util/vma.h"
 #include "vk_device_memory.h"
 #include "vk_meta.h"
 
+#include "common/fd6_gmem_cache.h"
+#include "common/freedreno_rd_output.h"
 #include "tu_autotune.h"
 #include "tu_cs.h"
 #include "tu_pass.h"
@@ -22,14 +28,6 @@
 #include "tu_queue.h"
 #include "tu_suballoc.h"
 #include "tu_util.h"
-
-#include "radix_sort/radix_sort_vk.h"
-
-#include "common/freedreno_rd_output.h"
-#include "common/fd6_gmem_cache.h"
-#include "util/vma.h"
-#include "util/u_vector.h"
-#include "util/rwlock.h"
 
 /* queue types */
 #define TU_QUEUE_GENERAL 0
@@ -141,6 +139,9 @@ struct tu_physical_device
    struct fdl_ubwc_config ubwc_config;
 
    bool has_preemption;
+
+   /* Whether performance counter selector registers can be written by userspace CSes. */
+   bool is_perf_cntr_selectable;
 
    struct {
       uint32_t non_lazy_type_count;
@@ -333,7 +334,6 @@ struct tu_pvtmem_bo {
 };
 
 struct tu_virtio_device;
-struct tu_queue;
 
 struct tu_device
 {

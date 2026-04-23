@@ -139,7 +139,7 @@ if with_gfx_compute
     'si_test_image_copy_region.c',
   )
 
-  foreach ver : ['6', '7', '8', '9', '10', '103', '11', '115', '12']
+  foreach ver : ['6', '7', '8', '9', '10', '103', '11', '115', '117', '12']
     radeonsi_gfx_libs += static_library(
       'radeonsi_gfx@0@'.format(ver),
       ['si_state_draw.cpp'],

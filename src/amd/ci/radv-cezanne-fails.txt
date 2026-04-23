@@ -1,2 +1,0 @@
-# https://gitlab.khronos.org/Tracker/vk-gl-cts/-/issues/6256
-dEQP-VK.sparse_resources.shader_intrinsics.2d_array_sparse_read.r10x6_unorm_pack16.11_37_3_nontemporal,Crash

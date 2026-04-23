@@ -1449,6 +1449,49 @@ brw_generator::generate_code(const brw_shader &s,
       stats->grf_registers = devinfo->ver >= 30 ? s.grf_used : 0;
       stats->scheduler_mode = shader_stats.scheduler_mode;
 
+      switch (stage) {
+      case MESA_SHADER_VERTEX:
+      case MESA_SHADER_TESS_CTRL:
+      case MESA_SHADER_TESS_EVAL:
+      case MESA_SHADER_GEOMETRY:
+      case MESA_SHADER_FRAGMENT:
+         stats->push_constant_ranges = 0;
+         stats->push_constant_registers = 0;
+         for (uint32_t i = 0; i < 4; i++) {
+            stats->push_constant_ranges += prog_data->push_sizes[i] != 0;
+            stats->push_constant_registers +=
+               DIV_ROUND_UP(prog_data->push_sizes[i], reg_unit(devinfo) * REG_SIZE);
+         }
+         break;
+
+      case MESA_SHADER_COMPUTE:
+      case MESA_SHADER_KERNEL:
+         /* Pre Gfx12.5, there is only one push constant buffer for compute
+          * shaders, post Gfx12.5 the shader has to pull the constant data.
+          */
+         stats->push_constant_ranges =
+            devinfo->verx10 < 125 ? (prog_data->push_sizes[0] != 0) : 0;
+         stats->push_constant_registers =
+            devinfo->verx10 < 125 ?
+            DIV_ROUND_UP(prog_data->push_sizes[0], reg_unit(devinfo) * REG_SIZE) : 0;
+         break;
+
+      case MESA_SHADER_MESH:
+      case MESA_SHADER_TASK:
+      case MESA_SHADER_RAYGEN:
+      case MESA_SHADER_ANY_HIT:
+      case MESA_SHADER_CLOSEST_HIT:
+      case MESA_SHADER_MISS:
+      case MESA_SHADER_INTERSECTION:
+      case MESA_SHADER_CALLABLE:
+         stats->push_constant_ranges = 0;
+         stats->push_constant_registers = 0;
+         break;
+
+      default:
+         UNREACHABLE("invalid stage");
+      }
+
       /* Report the max dispatch width only on the smallest SIMD variant.
        *
        * XXX: SIMD8 is not the smallest on Xe2. This logic should be adjusted.

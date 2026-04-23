@@ -10,10 +10,14 @@
 #ifndef TU_DRM_H
 #define TU_DRM_H
 
-#include "tu_common.h"
-#include "tu_queue.h"
+#include <stddef.h>
+#include <stdint.h>
+
+#include "util/u_atomic.h"
+#include "vulkan/vulkan_core.h"
 
 struct tu_u_trace_syncobj;
+struct tu_queue;
 struct vdrm_bo;
 
 enum tu_bo_alloc_flags {

@@ -345,6 +345,7 @@ struct fd_dev_info {
       bool has_event_write_sample_count;
 
       bool has_64b_ssbo_atomics;
+      bool has_64b_image_atomics;
 
       /* Blob executes a special compute dispatch at the start of each
        * command buffers. We copy this dispatch as is.

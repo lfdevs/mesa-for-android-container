@@ -80,25 +80,17 @@ struct exec_info {
     * parent_loop.has_divergent_continue==false. */
    bool potentially_empty_break = false;
 
-   /* Set to false when leaving the loop, or if parent_if.is_divergent==false. */
-   bool potentially_empty_continue = false;
-
    void combine(struct exec_info& other)
    {
       potentially_empty_discard |= other.potentially_empty_discard;
       potentially_empty_break |= other.potentially_empty_break;
-      potentially_empty_continue |= other.potentially_empty_continue;
    }
 
-   bool empty() const noexcept
-   {
-      return potentially_empty_discard || potentially_empty_break || potentially_empty_continue;
-   }
+   bool empty() const noexcept { return potentially_empty_discard || potentially_empty_break; }
 };
 
 struct cf_context {
    struct {
-      bool has_divergent_continue = false;
       bool has_divergent_break = false;
    } parent_loop;
    struct {
@@ -259,7 +251,6 @@ isel_context setup_isel_context(Program* program, unsigned shader_count,
 
 /* aco_isel_cfg.cpp */
 void emit_loop_break(isel_context* ctx);
-void emit_loop_continue(isel_context* ctx);
 void begin_loop(isel_context* ctx);
 void end_loop(isel_context* ctx);
 void begin_uniform_if_then(isel_context* ctx, Temp cond);
@@ -315,7 +306,8 @@ void finish_program(isel_context* ctx);
 
 ABI nir_abi_to_aco(unsigned nir_abi_mask);
 
-param_assignment_hints get_ahit_isec_param_hints(const struct callee_info& traversal_info);
+param_assignment_hints get_ahit_isec_param_hints(const struct callee_info& traversal_info,
+                                                 bool uses_descriptor_heap);
 
 struct callee_info get_callee_info(amd_gfx_level gfx_level, unsigned wave_size, const ABI& abi,
                                    unsigned param_count, const nir_parameter* parameters,

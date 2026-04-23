@@ -181,6 +181,7 @@ radv-tahiti-vkcts-full:
   timeout: 1h
   variables:
     CI_TRON_TIMEOUT__OVERALL__MINUTES: 50
+    RADV_EXPERIMENTAL: heap
 
 radv-hawaii-vkcts-full:
   extends:
@@ -190,6 +191,7 @@ radv-hawaii-vkcts-full:
   timeout: 1h
   variables:
     CI_TRON_TIMEOUT__OVERALL__MINUTES: 50
+    RADV_EXPERIMENTAL: heap
 
 radv-polaris10-vkcts-full:
   extends:
@@ -201,7 +203,7 @@ radv-polaris10-vkcts-full:
     CI_TRON_TIMEOUT__BOOT_CYCLE__RETRIES: 4
     CI_TRON_TIMEOUT__BOOT_CYCLE__MINUTES: 70
     CI_TRON_TIMEOUT__OVERALL__MINUTES: 90
-    RADV_EXPERIMENTAL: video_decode,video_encode
+    RADV_EXPERIMENTAL: video_decode,video_encode,heap
     radv_enable_float16_gfx8: true
 
 radv-vega10-vkcts-full:
@@ -212,7 +214,7 @@ radv-vega10-vkcts-full:
   timeout: 1h 15m
   variables:
     CI_TRON_TIMEOUT__OVERALL__MINUTES: 70
-    RADV_EXPERIMENTAL: transfer_queue,video_decode,video_encode
+    RADV_EXPERIMENTAL: transfer_queue,video_decode,video_encode,heap
 
 radv-renoir-vkcts-full:
   extends:
@@ -222,8 +224,7 @@ radv-renoir-vkcts-full:
   timeout: 2h 15m
   variables:
     CI_TRON_TIMEOUT__OVERALL__MINUTES: 130
-    RADV_EXPERIMENTAL: transfer_queue
-    FDO_CI_CONCURRENT: 12  # HACK: Reduce the memory pressure
+    RADV_EXPERIMENTAL: transfer_queue,heap
 
 radv-navi10-vkcts-full:
   parallel: 2
@@ -232,7 +233,7 @@ radv-navi10-vkcts-full:
     - .navi10-test-valve-kws
     - .radv-valve-manual-rules
   variables:
-    RADV_EXPERIMENTAL: transfer_queue,hic
+    RADV_EXPERIMENTAL: transfer_queue,hic,heap
 
 radv-navi21-vkcts:
   timeout: 35m
@@ -243,7 +244,7 @@ radv-navi21-vkcts:
     - .radv-valve-rules
   variables:
     CI_TRON_TIMEOUT__OVERALL__MINUTES: 30
-    RADV_EXPERIMENTAL: transfer_queue,hic
+    RADV_EXPERIMENTAL: transfer_queue,heap
 
 radv-navi21-vkcts-full:
   timeout: 50m
@@ -253,7 +254,7 @@ radv-navi21-vkcts-full:
     - .radv-valve-manual-rules
   variables:
     CI_TRON_TIMEOUT__OVERALL__MINUTES: 45
-    RADV_EXPERIMENTAL: transfer_queue,hic
+    RADV_EXPERIMENTAL: transfer_queue,heap
 
 radv-vangogh-vkcts-full:
   parallel: 2
@@ -263,7 +264,7 @@ radv-vangogh-vkcts-full:
     - .radv-valve-manual-rules
   timeout: 90m
   variables:
-    RADV_EXPERIMENTAL: transfer_queue,hic
+    RADV_EXPERIMENTAL: transfer_queue,heap
     CI_TRON_TIMEOUT__OVERALL__MINUTES: 89
 
 radeonsi-vangogh-glcts:
@@ -297,7 +298,7 @@ radv-raphael-vkcts-full:
   timeout: 45m
   variables:
     CI_TRON_TIMEOUT__OVERALL__MINUTES: 40
-    RADV_EXPERIMENTAL: transfer_queue,hic
+    RADV_EXPERIMENTAL: transfer_queue,heap
 
 radv-navi31-vkcts:
   timeout: 25m
@@ -308,7 +309,7 @@ radv-navi31-vkcts:
     - .radv-valve-rules
   variables:
     RADV_DEBUG: nomeshshader # Disable mesh shaders until task shaders stop hanging
-    RADV_EXPERIMENTAL: transfer_queue,hic
+    RADV_EXPERIMENTAL: transfer_queue,heap
     CI_TRON_TIMEOUT__OVERALL__MINUTES: 20
 
 radv-navi31-vkcts-full:
@@ -318,7 +319,7 @@ radv-navi31-vkcts-full:
     - .navi31-test-valve
     - .radv-valve-manual-rules
   variables:
-    RADV_EXPERIMENTAL: transfer_queue,hic
+    RADV_EXPERIMENTAL: transfer_queue,heap
     CI_TRON_TIMEOUT__OVERALL__MINUTES: 25
 
 radv-gfx1201-vkcts:
@@ -331,7 +332,7 @@ radv-gfx1201-vkcts:
   variables:
     # TODO: Verify that task shaders don't hang.
     RADV_DEBUG: nomeshshader
-    RADV_EXPERIMENTAL: transfer_queue,hic
+    RADV_EXPERIMENTAL: transfer_queue,heap
     CI_TRON_TIMEOUT__OVERALL__MINUTES: 20
 
 radv-gfx1201-vkcts-full:
@@ -341,7 +342,7 @@ radv-gfx1201-vkcts-full:
     - .gfx1201-test-valve
     - .radv-valve-manual-rules
   variables:
-    RADV_EXPERIMENTAL: transfer_queue,hic
+    RADV_EXPERIMENTAL: transfer_queue,heap
     CI_TRON_TIMEOUT__OVERALL__MINUTES: 30
 
 radv-gfx1201-fluster:

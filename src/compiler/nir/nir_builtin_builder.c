@@ -28,6 +28,13 @@
 #include "nir_builder.h"
 #include "nir_builtin_builder.h"
 
+#ifndef M_PIf
+#define M_PIf   ((float) M_PI)
+#endif
+#ifndef M_PI_2f
+#define M_PI_2f ((float) M_PI_2)
+#endif
+
 nir_def *
 nir_cross3(nir_builder *b, nir_def *x, nir_def *y)
 {
@@ -157,6 +164,81 @@ nir_upsample(nir_builder *b, nir_def *hi, nir_def *lo)
    }
 
    return nir_vec(b, res, lo->num_components);
+}
+
+/**
+ * Approximate asin(x) by formula 4.45 from Abramowitz & Stegun, "Handbook
+ * of Mathematical Functions":
+ *
+ * asin~(x) = (π/2 - sqrt(1 - |x|) * ( a0 + a1 * |x| + a2 * |x|^2 + a3 * |x|^3 )
+ *
+ * where a0 = 1.5707288 a1 = -0.2121144 a2 = 0.0742610 a3 = -0.0187203
+ *
+ * This has a very small absolute error, but the relative error can become
+ * large when |x| is small. For small |x| the Taylor series makes a good
+ * approximation, so when the relative error matters (i.e. for asin rather
+ * than acos) we do a piecewise approximation with the Taylor series for
+ * |x| < 0.21502245 and formula 4.45 elsewhere. The crossover point is
+ * the value in [0.1, 0.7071] where the two approximations are equal.
+ */
+static nir_def *
+build_asin(nir_builder *b, nir_def *x, bool piecewise)
+{
+   if (x->bit_size == 16) {
+      /* The polynomial approximation may not be precise enough to meet half-float
+       * precision requirements. Alternatively, we could implement this using
+       * the formula:
+       *
+       * asin(x) = atan2(x, sqrt(1 - x*x))
+       *
+       * But that is very expensive, so instead we just do the polynomial
+       * approximation in 32-bit math and then we convert the result back to
+       * 16-bit.
+       */
+      return nir_f2f16(b, build_asin(b, nir_f2f32(b, x), piecewise));
+   }
+   nir_def *abs_x = nir_fabs(b, x);
+
+   nir_def *p0_plus_xp1 = nir_ffma_imm12(b, abs_x, -0.0187293, 0.0742610);
+
+   nir_def *expr_tail =
+      nir_ffma_imm2(b, abs_x,
+                       nir_ffma_imm2(b, abs_x, p0_plus_xp1, -0.2121144),
+                       1.5707288);
+
+   nir_def *result0 = nir_fmul(b, nir_fsign(b, x),
+                      nir_a_minus_bc(b, nir_imm_floatN_t(b, M_PI_2f, x->bit_size),
+                                        nir_fsqrt(b,
+                                                  nir_fsub_imm(b, 1.0, abs_x)),
+                                        expr_tail));
+   if (piecewise) {
+      /* use taylor approximation for |x| < 0.21502245 */
+
+      nir_def *x2 = nir_fmul(b, x, x);
+      nir_def *result1 = nir_fmul(b,
+                                  x,
+                                  nir_ffma_imm12(b, x2, (1.0/6.0), 1.0));
+      return nir_bcsel(b,
+                       nir_flt_imm(b, abs_x, 0.21502245),
+                       result1,
+                       result0);
+   } else {
+      return result0;
+   }
+}
+
+nir_def *
+nir_asin(nir_builder *b, nir_def *x)
+{
+   /* use piecewise approximation to keep low relative error near 0 */
+   return build_asin(b, x, true);
+}
+
+nir_def *
+nir_acos(nir_builder *b, nir_def *x)
+{
+   /* piecewise approximation not needed to keep low relative error */
+   return nir_fsub_imm(b, M_PI_2f, build_asin(b, x, false));
 }
 
 nir_def *

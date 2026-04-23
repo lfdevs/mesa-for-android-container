@@ -66,6 +66,7 @@ spec@!opengl 1.0@rasterpos
 spec@!opengl es 3.0@gles-3.0-transform-feedback-uniform-buffer-object
 
 # uprev Piglit in Mesa
+glx@glx_arb_sync_control@swapbuffersmsc-return
 spec@arb_texture_multisample@arb_texture_multisample-dsa-texelfetch
 shaders@glsl-bug-110796
 

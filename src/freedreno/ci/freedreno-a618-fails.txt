@@ -200,6 +200,7 @@ spec@glsl-4.00@execution@built-in-functions@fs-op-div-dmat4-dmat4,Fail
 glx@glx-swap-pixmap-bad,Fail
 spec@!opengl 1.0@rasterpos@glsl_vs_ssbo,Fail
 spec@arb_occlusion_query@occlusion_query_order,Fail
+spec@arb_gpu_shader_fp64@execution@fs-indirect-temp-double-src,Crash
 spec@glsl-1.30@execution@fs-uint-to-float-of-extract-int16,Fail
 spec@glsl-1.30@execution@fs-uint-to-float-of-extract-int8,Fail
 spec@khr_texture_compression_astc@miptree-gles srgb-fp,Fail
@@ -511,3 +512,8 @@ dEQP-VK.fragment_operations.early_fragment.sample_count_early_fragment_tests_dep
 dEQP-VK.fragment_operations.early_fragment.sample_count_early_fragment_tests_depth_samples_2_maintenance5,Fail
 dEQP-VK.fragment_operations.early_fragment.sample_count_early_fragment_tests_depth_samples_4,Fail
 dEQP-VK.fragment_operations.early_fragment.sample_count_early_fragment_tests_depth_samples_4_maintenance5,Fail
+
+# Autotune regression
+angle-dEQP-GLES3.functional.fbo.msaa.2_samples.rg8,Fail
+angle-dEQP-GLES3.functional.fbo.msaa.4_samples.rg8,Fail
+

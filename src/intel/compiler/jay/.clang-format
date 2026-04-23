@@ -1,0 +1,31 @@
+BasedOnStyle: InheritParentConfig
+DisableFormat: false
+
+AlignConsecutiveBitFields: Consecutive
+BitFieldColonSpacing: None
+
+AlignAfterOpenBracket: Align
+AlignConsecutiveMacros:
+  Enabled: true
+  AcrossComments: true
+AlignArrayOfStructures: Left
+
+ColumnLimit: 80
+
+BreakStringLiterals: false
+SpaceBeforeParens: ControlStatementsExceptControlMacros
+SpaceAfterCStyleCast: true
+BinPackParameters: OnePerLine
+AllowAllArgumentsOnNextLine: false
+PenaltyBreakBeforeFirstCallParameter: 100
+ReferenceAlignment: Middle
+
+BreakBeforeBinaryOperators: None
+PenaltyBreakAssignment: 0
+
+SpacesInContainerLiterals: true
+Cpp11BracedListStyle: false
+
+AlignOperands: Align
+BreakBinaryOperations: RespectPrecedence
+BreakBeforeTernaryOperators: false

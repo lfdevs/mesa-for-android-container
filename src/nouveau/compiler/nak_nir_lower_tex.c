@@ -125,6 +125,68 @@ remap_sampler_dim(enum glsl_sampler_dim dim)
 }
 
 static bool
+texop_supports_scalar(nir_tex_instr *tex, const struct nak_compiler *nak)
+{
+   if (nak->sm < 70)
+      return false;
+
+   switch (tex->op) {
+   case nir_texop_tex:
+   case nir_texop_tg4:
+   case nir_texop_txb:
+   case nir_texop_txf:
+   case nir_texop_txf_ms:
+   case nir_texop_txl:
+      return true;
+   default:
+      return false;
+   }
+}
+
+static bool
+try_scalarize_tex(nir_tex_instr *tex, const struct nak_compiler *nak,
+                  nir_def **src0, unsigned *src0_comps,
+                  nir_def **src1, unsigned *src1_comps)
+{
+   if (!texop_supports_scalar(tex, nak))
+      return false;
+
+   /* for SM70+ we simply rebalance the sources if there are 4 or less
+    * TODO: it might be worth to rebalance 3 + 1 or 1 + 3 combinations,
+    *       but so far this seems to be a net negative.
+    */
+   if (nak->sm >= 70 && *src1_comps == 0) {
+      assert(*src0_comps <= 4);
+      switch (*src0_comps) {
+      case 4:
+         src1[0] = src0[2];
+         src1[1] = src0[3];
+         *src0_comps = 2;
+         *src1_comps = 2;
+         return true;
+      case 3:
+         src1[0] = src0[2];
+         *src0_comps = 2;
+         *src1_comps = 1;
+         return true;
+      case 2:
+         src1[0] = src0[1];
+         *src0_comps = 1;
+         *src1_comps = 1;
+         return true;
+      case 1:
+         /* Nothing to do */
+         return true;
+      default:
+         UNREACHABLE("unexpected src0 comps");
+         return false;
+      }
+   }
+
+   return false;
+}
+
+static bool
 lower_tex(nir_builder *b, nir_tex_instr *tex, const struct nak_compiler *nak)
 {
    b->cursor = nir_before_instr(&tex->instr);
@@ -257,6 +319,7 @@ lower_tex(nir_builder *b, nir_tex_instr *tex, const struct nak_compiler *nak)
    a[a##_comps++] = val; \
 } while(0)
 
+   bool scalar = false;
    if (nak->sm >= 50) {
       nir_def *src0[4] = { NULL, };
       nir_def *src1[4] = { NULL, };
@@ -298,8 +361,6 @@ lower_tex(nir_builder *b, nir_tex_instr *tex, const struct nak_compiler *nak)
 
          if (tex_h != NULL)
             PUSH(src1, tex_h);
-         if (ms_idx != NULL)
-            PUSH(src1, ms_idx);
          if (lod != NULL)
             PUSH(src1, lod);
          if (offset_mode == NAK_NIR_OFFSET_MODE_AOFFI) {
@@ -310,7 +371,11 @@ lower_tex(nir_builder *b, nir_tex_instr *tex, const struct nak_compiler *nak)
          }
          if (z_cmpr != NULL)
             PUSH(src1, z_cmpr);
+         if (ms_idx != NULL)
+            PUSH(src1, ms_idx);
       }
+
+      scalar = try_scalarize_tex(tex, nak, src0, &src0_comps, src1, &src1_comps);
 
       nir_tex_instr_add_src(tex, nir_tex_src_backend1,
                             nir_vec(b, src0, src0_comps));
@@ -387,6 +452,7 @@ lower_tex(nir_builder *b, nir_tex_instr *tex, const struct nak_compiler *nak)
       .has_z_cmpr = tex->is_shadow,
       .is_sparse = tex->is_sparse,
       .nodep = tex->skip_helpers,
+      .scalar = scalar,
    };
    STATIC_ASSERT(sizeof(flags) == sizeof(tex->backend_flags));
    memcpy(&tex->backend_flags, &flags, sizeof(flags));

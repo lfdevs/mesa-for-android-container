@@ -488,7 +488,16 @@ print_fp_math_ctrl(unsigned fp_math_ctrl, print_state *state)
    FILE *fp = state->fp;
 
    if (fp_math_ctrl & nir_fp_exact) {
-      fprintf(fp, "exact");
+      if ((fp_math_ctrl & nir_fp_exact) == nir_fp_exact) {
+         fprintf(fp, "exact");
+      } else if (fp_math_ctrl & nir_fp_no_contract) {
+         fprintf(fp, "no-contract");
+      } else if (fp_math_ctrl & nir_fp_no_reassoc) {
+         fprintf(fp, "no-reassoc");
+      } else if (fp_math_ctrl & nir_fp_no_transform) {
+         fprintf(fp, "no-transform");
+      }
+
       if (fp_math_ctrl & ~nir_fp_exact)
          fprintf(fp, ", ");
    }
@@ -1995,6 +2004,12 @@ print_tex_instr(nir_tex_instr *instr, print_state *state)
       break;
    case nir_texop_resinfo_intel:
       fprintf(fp, "resinfo_intel ");
+      break;
+   case nir_texop_sparse_residency_intel:
+      fprintf(fp, "sparse_residency_intel ");
+      break;
+   case nir_texop_sparse_residency_txf_intel:
+      fprintf(fp, "sparse_residency_txf_intel ");
       break;
    default:
       UNREACHABLE("Invalid texture operation");

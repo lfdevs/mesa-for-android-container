@@ -79,7 +79,7 @@ fail_instr(struct v3d_qpu_validate_state *state, const char *msg)
 static bool
 in_branch_delay_slots(struct v3d_qpu_validate_state *state)
 {
-        return (state->ip - state->last_branch_ip) < 3;
+        return (state->ip - state->last_branch_ip) < 4;
 }
 
 static bool
@@ -128,11 +128,28 @@ qpu_validate_inst(struct v3d_qpu_validate_state *state, struct qinst *qinst)
                 fail_instr(state, "Implicit branch MSF read after TLB Z write");
         }
 
-        if (inst->type != V3D_QPU_INSTR_TYPE_ALU)
+        if (inst->type == V3D_QPU_INSTR_TYPE_BRANCH) {
+                if (in_branch_delay_slots(state))
+                        fail_instr(state, "branch in a branch delay slot.");
+                if (in_thrsw_delay_slots(state))
+                        fail_instr(state, "branch in a THRSW delay slot.");
+                state->last_branch_ip = state->ip;
                 return;
+        }
 
-        if (inst->alu.mul.op == V3D_QPU_M_MULTOP)
-            state->rtop_valid = true;
+        assert(inst->type == V3D_QPU_INSTR_TYPE_ALU);
+
+        if (inst->alu.mul.op == V3D_QPU_M_MULTOP) {
+            /* On unconditional branches qpu_set_branch_targets() can fill the
+             * delay slots with a copy of the first instructions of the
+             * successor block. As the qpu validator is sequential it would
+             * detect a non real hazard when the MULTOP was copied but the
+             * UMUL24 wasn't. So we disable the hazard detection mechanism in
+             * this case.
+             */
+            if (!in_branch_delay_slots(state))
+                state->rtop_valid = true;
+        }
 
         if (inst->alu.mul.op == V3D_QPU_M_UMUL24) {
             if (state->rtop_hazard)
@@ -380,14 +397,6 @@ qpu_validate_inst(struct v3d_qpu_validate_state *state, struct qinst *qinst)
         if (state->rtop_valid && state->ip == state->last_thrsw_ip + 2) {
                 state->rtop_hazard = true;
                 state->rtop_valid = false;
-        }
-
-        if (inst->type == V3D_QPU_INSTR_TYPE_BRANCH) {
-                if (in_branch_delay_slots(state))
-                        fail_instr(state, "branch in a branch delay slot.");
-                if (in_thrsw_delay_slots(state))
-                        fail_instr(state, "branch in a THRSW delay slot.");
-                state->last_branch_ip = state->ip;
         }
 }
 

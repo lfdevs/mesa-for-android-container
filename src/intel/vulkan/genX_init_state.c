@@ -1322,30 +1322,16 @@ static const uint32_t vk_to_intel_sampler_reduction_mode[] = {
    [VK_SAMPLER_REDUCTION_MODE_MAX]              = MAXIMUM,
 };
 
-VkResult genX(CreateSampler)(
-    VkDevice                                    _device,
-    const VkSamplerCreateInfo*                  pCreateInfo,
-    const VkAllocationCallbacks*                pAllocator,
-    VkSampler*                                  pSampler)
+static VkResult
+border_color_load(struct anv_device *device,
+                  struct anv_sampler *sampler,
+                  const VkSamplerCreateInfo* pCreateInfo,
+                  uint32_t *ret_border_color_offset)
 {
-   ANV_FROM_HANDLE(anv_device, device, _device);
-   struct anv_sampler *sampler;
-
-   sampler = vk_sampler_create(&device->vk, pCreateInfo,
-                               pAllocator, sizeof(*sampler));
-   if (!sampler)
-      return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
-
-   const struct vk_format_ycbcr_info *ycbcr_info =
-      sampler->vk.format != VK_FORMAT_UNDEFINED ?
-      vk_format_get_ycbcr_info(sampler->vk.format) : NULL;
-   assert((ycbcr_info == NULL) == (sampler->vk.ycbcr_conversion == NULL));
-
-   sampler->n_planes = ycbcr_info ? ycbcr_info->n_planes : 1;
-
    uint32_t border_color_stride = 64;
    uint32_t border_color_offset;
    void *border_color_ptr;
+
    if (sampler->vk.border_color <= VK_BORDER_COLOR_INT_OPAQUE_WHITE) {
       border_color_offset = device->border_colors.offset +
                             pCreateInfo->borderColor *
@@ -1397,6 +1383,36 @@ VkResult genX(CreateSampler)(
 
       memcpy(border_color_ptr, color.u32, sizeof(color));
    }
+
+   *ret_border_color_offset = border_color_offset;
+   return VK_SUCCESS;
+}
+
+VkResult genX(CreateSampler)(
+    VkDevice                                    _device,
+    const VkSamplerCreateInfo*                  pCreateInfo,
+    const VkAllocationCallbacks*                pAllocator,
+    VkSampler*                                  pSampler)
+{
+   ANV_FROM_HANDLE(anv_device, device, _device);
+   struct anv_sampler *sampler;
+
+   sampler = vk_sampler_create(&device->vk, pCreateInfo,
+                               pAllocator, sizeof(*sampler));
+   if (!sampler)
+      return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
+
+   const struct vk_format_ycbcr_info *ycbcr_info =
+      sampler->vk.format != VK_FORMAT_UNDEFINED ?
+      vk_format_get_ycbcr_info(sampler->vk.format) : NULL;
+   assert((ycbcr_info == NULL) == (sampler->vk.ycbcr_conversion == NULL));
+
+   sampler->n_planes = ycbcr_info ? ycbcr_info->n_planes : 1;
+
+   uint32_t border_color_offset = 0;
+   VkResult result = border_color_load(device, sampler, pCreateInfo, &border_color_offset);
+   if (result != VK_SUCCESS)
+      return result;
 
    const bool seamless_cube =
       !(pCreateInfo->flags & VK_SAMPLER_CREATE_NON_SEAMLESS_CUBE_MAP_BIT_EXT);

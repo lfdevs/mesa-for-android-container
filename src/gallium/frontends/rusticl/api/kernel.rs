@@ -115,6 +115,16 @@ unsafe impl CLInfoObj<cl_kernel_work_group_info, cl_device_id> for cl_kernel {
 
         match *q {
             CL_KERNEL_COMPILE_WORK_GROUP_SIZE => v.write::<[usize; 3]>(kernel.work_group_size()),
+            CL_KERNEL_GLOBAL_WORK_SIZE => {
+                // If device is not a custom device and kernel is not a built-in kernel
+                // clGetKernelWorkGroupInfo returns the error CL_INVALID_VALUE.
+                if dev.device_type & CL_DEVICE_TYPE_CUSTOM == 0 {
+                    return Err(CL_INVALID_VALUE);
+                }
+
+                // We don't have any enqueue limits.
+                v.write::<[usize; 3]>([usize::MAX; 3])
+            }
             CL_KERNEL_LOCAL_MEM_SIZE => v.write::<cl_ulong>(kernel.local_mem_size(dev)),
             CL_KERNEL_PREFERRED_WORK_GROUP_SIZE_MULTIPLE => {
                 v.write::<usize>(kernel.preferred_simd_size(dev))

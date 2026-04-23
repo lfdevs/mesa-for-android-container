@@ -726,6 +726,7 @@ gather_intrinsic_info(nir_intrinsic_instr *instr, nir_shader *shader)
    case nir_intrinsic_load_pixel_coord:
    case nir_intrinsic_load_frag_coord_z:
    case nir_intrinsic_load_frag_coord_w:
+   case nir_intrinsic_load_frag_coord_w_rcp:
    case nir_intrinsic_load_frag_shading_rate:
    case nir_intrinsic_load_fully_covered:
    case nir_intrinsic_load_point_coord:
@@ -780,6 +781,8 @@ gather_intrinsic_info(nir_intrinsic_instr *instr, nir_shader *shader)
    case nir_intrinsic_load_tcs_header_ir3:
    case nir_intrinsic_load_ray_triangle_vertex_positions:
    case nir_intrinsic_load_layer_id:
+   case nir_intrinsic_load_color0_amd:
+   case nir_intrinsic_load_color1_amd:
       BITSET_SET(shader->info.system_values_read,
                  nir_system_value_from_intrinsic(instr->intrinsic));
       break;
@@ -1093,8 +1096,6 @@ nir_shader_gather_info(nir_shader *shader, nir_function_impl *entrypoint)
    shader->info.per_primitive_inputs = 0;
    shader->info.per_primitive_outputs = 0;
    shader->info.per_view_outputs = 0;
-   shader->info.linear_varyings = 0;
-   shader->info.perspective_varyings = 0;
 
    shader->info.uses_resource_info_query = false;
 
@@ -1112,6 +1113,8 @@ nir_shader_gather_info(nir_shader *shader, nir_function_impl *entrypoint)
 
       /* By definition the fragment shader knows, unless we fail to gather. */
       shader->info.known_interpolation_qualifiers = true;
+      shader->info.linear_varyings = 0;
+      shader->info.perspective_varyings = 0;
    }
    if (shader->info.stage == MESA_SHADER_TESS_CTRL) {
       shader->info.tess.tcs_same_invocation_inputs_read = 0;

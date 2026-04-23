@@ -1452,7 +1452,7 @@ elk_postprocess_nir(nir_shader *nir, const struct elk_compiler *compiler,
 
    UNUSED bool progress; /* Written by OPT */
 
-   OPT(intel_nir_lower_sparse_intrinsics);
+   OPT(intel_nir_lower_sparse_intrinsics, false);
 
    OPT(nir_lower_bit_size, lower_bit_size_callback, (void *)compiler);
 

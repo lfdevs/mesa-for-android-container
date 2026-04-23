@@ -181,6 +181,7 @@ static struct pipe_context *r600_create_context(struct pipe_screen *screen,
 					   rctx->b.family == CHIP_RV710);
 
 		rctx->b.r600_pre_eg_cbzs = CALLOC_STRUCT(r600_pre_eg_cbzs);
+		rctx->setup_buffer_constants = r600_setup_buffer_constants;
 		break;
 	case EVERGREEN:
 	case CAYMAN:
@@ -201,6 +202,9 @@ static struct pipe_context *r600_create_context(struct pipe_screen *screen,
 
 		rctx->append_fence = pipe_buffer_create(rctx->b.b.screen, PIPE_BIND_CUSTOM,
 							 PIPE_USAGE_DEFAULT, 32);
+		rctx->setup_buffer_constants = rctx->b.family >= CHIP_PALM ?
+		                               r600_palm_to_aruba_setup_buffer_constants :
+		                               r600_cedar_to_hemlock_setup_buffer_constants;
 		break;
 	default:
 		R600_ERR("Unsupported gfx level %d.\n", rctx->b.gfx_level);
@@ -446,7 +450,8 @@ static void r600_init_screen_caps(struct r600_screen *rscreen)
 	caps->surface_reinterpret_blocks = true;
 	caps->compressed_surface_reinterpret_blocks_layered = true;
 	caps->query_memory_info = true;
-	caps->query_so_overflow = family >= CHIP_CEDAR;
+	caps->query_so_overflow =
+	caps->texture_shadow_lod = family >= CHIP_CEDAR;
 	caps->framebuffer_no_attachment = true;
 	caps->legacy_math_rules = true;
 	caps->can_bind_const_buffer_as_vertex = true;

@@ -1287,6 +1287,12 @@ intrinsic_to_msl(struct nir_to_msl_ctx *ctx, nir_intrinsic_instr *instr)
       ctx->indentlevel--;
       P_IND(ctx, "}\n");
       break;
+   /* This is only used by OpenCL shaders (because poly uses printf_abort even
+    * if we don't expose printf, need to actually fix this or implement printf
+    * in KK). Kinda hacked, but need to get things going. TODO_KOSMICKRISP */
+   case nir_intrinsic_printf_abort:
+      P_IND(ctx, "return;\n");
+      break;
    case nir_intrinsic_load_shared:
       assert(nir_intrinsic_base(instr) == 0);
       P(ctx, "*(threadgroup %s*)&shared_data[",

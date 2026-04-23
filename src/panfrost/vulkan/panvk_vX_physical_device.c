@@ -95,7 +95,7 @@ panvk_per_arch(get_physical_device_extensions)(
       .KHR_sampler_mirror_clamp_to_edge = true,
       .KHR_sampler_ycbcr_conversion = true,
       .KHR_separate_depth_stencil_layouts = true,
-      .KHR_shader_clock = true,
+      .KHR_shader_clock = device->kmod.dev->props.gpu_can_query_timestamp,
       .KHR_shader_draw_parameters = true,
       .KHR_shader_expect_assume = true,
       .KHR_shader_float_controls = true,
@@ -187,6 +187,7 @@ panvk_per_arch(get_physical_device_extensions)(
       .EXT_primitive_topology_list_restart = true,
       .EXT_provoking_vertex = true,
       .EXT_queue_family_foreign = true,
+      .EXT_rgba10x6_formats = PAN_ARCH >= 11,
       .EXT_robustness2 = PAN_ARCH >= 10,
       .EXT_sampler_filter_minmax = PAN_ARCH >= 10,
       .EXT_scalar_block_layout = true,
@@ -198,6 +199,7 @@ panvk_per_arch(get_physical_device_extensions)(
       .EXT_shader_stencil_export = true,
       .EXT_shader_subgroup_ballot = true,
       .EXT_shader_subgroup_vote = true,
+      .EXT_shader_uniform_buffer_unsized_array = true,
       .EXT_subgroup_size_control = has_vk1_1,
 #ifdef PANVK_USE_WSI_PLATFORM
       .EXT_swapchain_maintenance1 = true,
@@ -220,7 +222,7 @@ panvk_per_arch(get_physical_device_extensions)(
 
       .VALVE_mutable_descriptor_type = PAN_ARCH >= 9,
 
-      .ARM_shader_core_builtins = true,
+      .ARM_shader_core_builtins = PAN_ARCH >= 9,
       .ARM_shader_core_properties = has_vk1_1,
       .ARM_scheduling_controls = PAN_ARCH >= 10,
    };
@@ -573,6 +575,9 @@ panvk_per_arch(get_physical_device_features)(
       /* VK_EXT_shader_replicated_composites */
       .shaderReplicatedComposites = true,
 
+      /* VK_EXT_shader_uniform_buffer_unsized_array */
+      .shaderUniformBufferUnsizedArray = true,
+
       /* VK_EXT_shader_atomic_float */
       .shaderBufferFloat32Atomics = true,
       .shaderBufferFloat32AtomicAdd = false,
@@ -589,6 +594,9 @@ panvk_per_arch(get_physical_device_features)(
 
       /* VK_EXT_texel_buffer_alignment */
       .texelBufferAlignment = true,
+
+      /* VK_EXT_rgba10x6_formats */
+      .formatRgba10x6WithoutYCbCrSampler = PAN_ARCH >= 11,
 
       /* VK_EXT_ycbcr_2plane_444_formats */
       .ycbcr2plane444Formats = PAN_ARCH >= 10,
@@ -727,27 +735,13 @@ panvk_per_arch(get_physical_device_properties)(
       .deviceType = VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU,
 
       /* Vulkan 1.0 limits */
-      /* Maximum texture dimension is 2^16, but we're limited by the
-       * size/surface-stride fields. The size/surface_stride field is 32-bit
-       * on v10-, so let's take that as a reference for now.
-       * The following limits are chosen so we don't overflow these
-       * size/surface_stride fields. We choose them so they are a power-of-two,
-       * except for 2D/Cube dimensions where taking a power-of-two would be
-       * too limiting, so we pick power-of-two-minus-one, which makes things
-       * fit exactly in our 32-bit budget.
-       *
-       * TODO: increase the limit on v11+ once we have all the necessary bits
-       * patched to handle the size/stride field extension.
-       */
+      /* Maximum texture dimension is 2^16. */
       .maxImageDimension1D = (1 << 16),
-      .maxImageDimension2D = PAN_ARCH <= 10 ? (1 << 14) - 1 : (1 << 16),
-      .maxImageDimension3D = PAN_ARCH <= 10 ? (1 << 9) : (1 << 14),
-      .maxImageDimensionCube = PAN_ARCH <= 10 ? (1 << 14) - 1 : (1 << 16),
+      .maxImageDimension2D = (1 << 16),
+      .maxImageDimension3D = (1 << 16),
+      .maxImageDimensionCube = (1 << 16),
       .maxImageArrayLayers = (1 << 16),
-      /* Pre-v11 is limited to 2^27 elements of 16 byte formats due to
-         size fields of 32 bits. */
-      .maxTexelBufferElements =
-         PAN_ARCH >= 11 ? PANVK_MAX_BUFFER_SIZE : (1 << 27),
+      .maxTexelBufferElements = UINT64_C(1) << (util_logbase2(panvk_get_max_buffer_size(device) / 16)),
       /* Each uniform entry is 16-byte and the number of entries is encoded in a
        * 12-bit field, with the minus(1) modifier, which gives 2^20.
        */
@@ -1089,7 +1083,7 @@ panvk_per_arch(get_physical_device_properties)(
       .storageTexelBufferOffsetSingleTexelAlignment = true,
       .uniformTexelBufferOffsetAlignmentBytes = 4,
       .uniformTexelBufferOffsetSingleTexelAlignment = true,
-      .maxBufferSize = PANVK_MAX_BUFFER_SIZE,
+      .maxBufferSize = panvk_get_max_buffer_size(device),
 
       /* Vulkan 1.4 properties */
       .lineSubPixelPrecisionBits = 8,
@@ -1255,6 +1249,7 @@ panvk_per_arch(get_physical_device_properties)(
 
       /*  Vulkan 1.2 */
       VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
+      VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL,
       VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL,
       VK_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL,
 

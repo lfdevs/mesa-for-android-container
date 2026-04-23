@@ -365,6 +365,7 @@ static int si_init_surface(struct si_screen *sscreen, struct radeon_surf *surfac
 
          case GFX11:
          case GFX11_5:
+         case GFX11_7:
             break;
 
          default:

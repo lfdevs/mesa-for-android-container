@@ -299,6 +299,8 @@ validate_alu_instr(nir_alu_instr *instr, validate_state *state)
    validate_def(&instr->def, state);
 
    validate_assert(state, (instr->fp_math_ctrl & ~nir_op_infos[instr->op].valid_fp_math_ctrl) == 0);
+   validate_assert(state, nir_alu_instr_no_transform(instr) || !nir_alu_instr_no_contract(instr));
+   validate_assert(state, nir_alu_instr_no_transform(instr) || !nir_alu_instr_no_reassoc(instr));
 }
 
 static void
@@ -1040,7 +1042,9 @@ validate_tex_instr(nir_tex_instr *instr, validate_state *state)
 
       case nir_tex_src_ddx:
       case nir_tex_src_ddy:
-         validate_assert(state, instr->op == nir_texop_txd);
+         validate_assert(state,
+                         instr->op == nir_texop_txd ||
+                            instr->op == nir_texop_sparse_residency_intel);
          break;
 
       case nir_tex_src_texture_deref:

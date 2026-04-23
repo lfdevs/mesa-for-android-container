@@ -462,6 +462,7 @@ static const struct test {
 
    INSTR_6XX(c0160010_00b001a1, "ldg.k.u32 c[16], g[r48.x+208], 1"),
    INSTR_6XX(c0160188_00b01261, "ldg.k.u32 c[a1.x+136], g[r48.x+2352], 1"),
+   INSTR_6XX(c0160010_3d3001a1, "ldg.k.u32 c[16], g[r48.x+208], r15.y"),
 
    /* Atomic: */
 #if 0

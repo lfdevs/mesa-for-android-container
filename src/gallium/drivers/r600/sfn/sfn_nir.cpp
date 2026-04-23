@@ -737,6 +737,47 @@ r600_finalize_nir_common(nir_shader *nir, enum amd_gfx_level gfx_level)
       ;
 }
 
+static bool
+r600_lower_primitive_id_pass(nir_builder *b,
+                             nir_intrinsic_instr *intrin,
+                             UNUSED void *cb_data)
+{
+   if (intrin->intrinsic != nir_intrinsic_load_primitive_id)
+      return false;
+
+   b->cursor = nir_instr_remove(&intrin->instr);
+
+   assert(offsetof(struct r600_lds_constant_buffer, primitiveid_inverse) -
+             offsetof(struct r600_lds_constant_buffer, primitiveid_modulo) ==
+          sizeof(uint32_t));
+
+   nir_def *const primitive_id_raw = nir_load_primitive_id_raw_r600(b);
+   nir_def *const primitive_id_vec2 = nir_load_primitive_id_modulo_r600(b);
+   nir_def *const primitive_id_modulo = nir_channel(b, primitive_id_vec2, 0);
+   nir_def *const primitive_id_inverse = nir_channel(b, primitive_id_vec2, 1);
+
+   /* This transformation is equivalent to:
+    * nir_umod(b, primitive_id_raw, primitive_id_modulo); */
+   nir_def_rewrite_uses(
+      &intrin->def,
+      nir_isub(b,
+               primitive_id_raw,
+               nir_imul(b,
+                        nir_umul_high(b, primitive_id_raw, primitive_id_inverse),
+                        primitive_id_modulo)));
+
+   return true;
+}
+
+static bool
+r600_lower_primitive_id(nir_shader *nir)
+{
+   return nir_shader_intrinsics_pass(nir,
+                                     r600_lower_primitive_id_pass,
+                                     nir_metadata_control_flow,
+                                     nullptr);
+}
+
 DEBUG_GET_ONCE_NUM_OPTION(skip_opt_start, "R600_SFN_SKIP_OPT_START", -1);
 DEBUG_GET_ONCE_NUM_OPTION(skip_opt_end, "R600_SFN_SKIP_OPT_END", -1);
 DEBUG_GET_ONCE_NUM_OPTION(skip_ra_start, "R600_SFN_SKIP_RA_START", -1);
@@ -766,6 +807,12 @@ r600_lower_and_optimize_nir(nir_shader *sh,
       NIR_PASS(_, sh, nir_remove_dead_variables, nir_var_shader_out, 0);
       r600::sort_fsoutput(sh);
    }
+
+   if (sh->info.stage == MESA_SHADER_TESS_CTRL ||
+       sh->info.stage == MESA_SHADER_TESS_EVAL) {
+      NIR_PASS(_, sh, r600_lower_primitive_id);
+   }
+
    nir_variable_mode io_modes = nir_var_uniform | nir_var_shader_in | nir_var_shader_out;
 
    NIR_PASS(_, sh, nir_opt_combine_stores, nir_var_shader_out);

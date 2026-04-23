@@ -615,7 +615,7 @@ radv_emit_ge_rings(struct radv_device *device, struct radv_cmd_stream *cs, struc
    ac_emit_cp_release_mem_pws(cs->b, pdev->info.gfx_level, AMD_IP_GFX, V_028A90_BOTTOM_OF_PIPE_TS, 0);
 
    /* Wait for the PWS counter. */
-   ac_emit_cp_acquire_mem_pws(cs->b, pdev->info.gfx_level, AMD_IP_GFX, V_028A90_BOTTOM_OF_PIPE_TS, V_580_CP_ME, 0, 0);
+   ac_emit_cp_acquire_mem_pws(cs->b, pdev->info.gfx_level, AMD_IP_GFX, V_028A90_BOTTOM_OF_PIPE_TS, V_581B_CP_ME, 0, 0);
 
    ac_emit_cp_gfx11_ge_rings(cs->b, &pdev->info, va, pdev->gfx12_hiz_wa == RADV_GFX12_HIZ_WA_PARTIAL);
 }
@@ -686,8 +686,8 @@ radv_emit_graphics(struct radv_device *device, struct radv_cmd_stream *cs)
 
    if (!device->uses_shadow_regs) {
       ac_pm4_cmd_add(pm4, PKT3(PKT3_CONTEXT_CONTROL, 1, 0));
-      ac_pm4_cmd_add(pm4, S_28_1_UPDATE_LOAD_ENABLES(1));
-      ac_pm4_cmd_add(pm4, S_28_2_UPDATE_SHADOW_ENABLES(1));
+      ac_pm4_cmd_add(pm4, S_281_UPDATE_LOAD_ENABLES(1));
+      ac_pm4_cmd_add(pm4, S_282_UPDATE_SHADOW_ENABLES(1));
 
       if (has_clear_state) {
          ac_pm4_cmd_add(pm4, PKT3(PKT3_CLEAR_STATE, 0, 0));
@@ -1415,8 +1415,8 @@ radv_create_gang_wait_preambles_postambles(struct radv_queue *queue)
     * meant to be executed on multiple compute engines at the same time.
     */
    radv_cp_wait_mem(ace_pre_cs, WAIT_REG_MEM_GREATER_OR_EQUAL, ace_wait_va, 1, 0xffffffff);
-   radv_cs_write_data(device, ace_pre_cs, V_370_ME, ace_wait_va, 1, &zero, false);
-   radv_cs_write_data(device, leader_pre_cs, V_370_ME, ace_wait_va, 1, &one, false);
+   radv_cs_write_data(device, ace_pre_cs, V_371_MICRO_ENGINE, ace_wait_va, 1, &zero, false);
+   radv_cs_write_data(device, leader_pre_cs, V_371_MICRO_ENGINE, ace_wait_va, 1, &one, false);
    /* Create postambles for gang submission.
     * This ensures that the gang leader waits for the whole gang,
     * which is necessary because the kernel signals the userspace fence
@@ -1424,7 +1424,7 @@ radv_create_gang_wait_preambles_postambles(struct radv_queue *queue)
     * same command buffers could be submitted again while still being executed.
     */
    radv_cp_wait_mem(leader_post_cs, WAIT_REG_MEM_GREATER_OR_EQUAL, leader_wait_va, 1, 0xffffffff);
-   radv_cs_write_data(device, leader_post_cs, V_370_ME, leader_wait_va, 1, &zero, false);
+   radv_cs_write_data(device, leader_post_cs, V_371_MICRO_ENGINE, leader_wait_va, 1, &zero, false);
    radv_cs_emit_write_event_eop(ace_post_cs, pdev->info.gfx_level, V_028A90_BOTTOM_OF_PIPE_TS, 0, EOP_DST_SEL_MEM,
                                 EOP_INT_SEL_SEND_DATA_AFTER_WR_CONFIRM, EOP_DATA_SEL_VALUE_32BIT, leader_wait_va, 1, 0);
 
@@ -1536,7 +1536,7 @@ radv_create_perf_counter_lock_cs(struct radv_device *device, unsigned pass, bool
    if (!unlock) {
       uint64_t mutex_va = radv_buffer_get_va(device->perf_counter_bo) + PERF_CTR_BO_LOCK_OFFSET;
 
-      ac_emit_cp_atomic_mem(cs->b, V_1E_1_GL2_OP_ATOMIC_CMPSWAP_32, V_1E_1_LOOP_UNTIL_COMPARE_SATISFIED, mutex_va, 1, 0);
+      ac_emit_cp_atomic_mem(cs->b, V_1E1_GL2_OP_ATOMIC_CMPSWAP_32, V_1E1_LOOP_UNTIL_COMPARE_SATISFIED, mutex_va, 1, 0);
    }
 
    uint64_t va = radv_buffer_get_va(device->perf_counter_bo) + PERF_CTR_BO_PASS_OFFSET;

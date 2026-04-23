@@ -11,11 +11,11 @@ IncludeBlocks: Regroup
 IncludeCategories:
   - Regex:           '^"tu_common.h"$'
     Priority:        0
-  - Regex:           '^"(drm/|ir3/|tu_)'
+  - Regex:           '^"(bvh/|common/|drm/|fdl/|ir3/|tu_)'
     Priority:        4
-  - Regex:           '^"(c11/|compiler/|main/|nir/|spirv/|util/|vk_|wsi_)'
+  - Regex:           '^"(c11/|compiler/|main/|nir/|spirv/|radix_sort/|util/|vk_|vulkan/|wsi_)'
     Priority:        3
-  - Regex:           '^<(vulkan/)'
+  - Regex:           '^<'
     Priority:        2
   - Regex:           '.*'
     Priority:        1

@@ -602,6 +602,8 @@ anv_get_image_format_features2(const struct intel_device_info *devinfo,
       base_plane_format = anv_get_format_plane(devinfo, vk_format, 0,
                                                VK_IMAGE_TILING_LINEAR);
    }
+   if (base_plane_format.isl_format == ISL_FORMAT_UNSUPPORTED)
+      return 0;
 
    enum isl_format base_isl_format = base_plane_format.isl_format;
 

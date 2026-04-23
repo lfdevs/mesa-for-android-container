@@ -1809,13 +1809,11 @@ blorp_exec_compute(struct blorp_batch *batch, const struct blorp_params *params)
          [BLORP_INLINE_PARAM_THREAD_GROUP_ID_Z_DIMENSION / 4 + 0] = params->num_layers,
       },
 
-#if GFX_VERx10 >= 125
       .GenerateLocalID                = cs_prog_data->generate_local_id != 0,
       .EmitLocal                      = cs_prog_data->generate_local_id,
       .WalkOrder                      = cs_prog_data->walk_order,
       .TileLayout = cs_prog_data->walk_order == INTEL_WALK_ORDER_YXZ ?
                     TileY32bpe : Linear,
-#endif
 #if GFX_VER >= 30
       /* HSD 14016252163 */
       .DispatchWalkOrder = cs_prog_data->uses_sampler ? MortonWalk : LinearWalk,
@@ -1849,7 +1847,7 @@ blorp_exec_compute(struct blorp_batch *batch, const struct blorp_params *params)
    blorp_emit(batch, GENX(COMPUTE_WALKER), cw) {
       cw.body = body;
    }
-#else
+#else /* GFX_VERx10 >= 125 */
 
    /* The MEDIA_VFE_STATE documentation for Gfx8+ says:
     *
@@ -1930,7 +1928,7 @@ blorp_exec_compute(struct blorp_batch *batch, const struct blorp_params *params)
       ggw.BottomExecutionMask          = 0xffffffff;
    }
 
-#endif
+#endif /* GFX_VERx10 >= 125 */
 
    blorp_measure_end(batch, params);
 }

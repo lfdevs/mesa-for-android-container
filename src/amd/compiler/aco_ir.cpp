@@ -1528,6 +1528,11 @@ get_tied_defs(Instruction* instr)
       /* VADDR starts at 3. */
       ops.push_back(3 + 4);
       ops.push_back(3 + 7);
+   } else if (instr->opcode == aco_opcode::s_bitset0_b32 ||
+              instr->opcode == aco_opcode::s_bitset1_b32 ||
+              instr->opcode == aco_opcode::s_bitset0_b64 ||
+              instr->opcode == aco_opcode::s_bitset1_b64) {
+      ops.push_back(1);
    }
    return ops;
 }

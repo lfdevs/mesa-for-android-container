@@ -40,7 +40,7 @@
     FDO_DISTRIBUTION_EXEC: 'bash .gitlab-ci/container/container_job_trampoline.sh "${CI_JOB_NAME}"'
     # no need to pull the whole repo to build the container image
     GIT_STRATEGY: none
-    CI_BUILD_COMPONENTS: "$CI_BUILD_COMPONENTS_ANDROID_CTS $CI_BUILD_COMPONENTS_ANGLE $CI_BUILD_COMPONENTS_CROSVM $CI_BUILD_COMPONENTS_FLUSTER $CI_BUILD_COMPONENTS_PIGLIT $CI_BUILD_COMPONENTS_VKD3D_PROTON"
+    CI_BUILD_COMPONENTS: "$CI_BUILD_COMPONENTS_ANDROID_CTS $CI_BUILD_COMPONENTS_ANGLE $CI_BUILD_COMPONENTS_CROSVM $CI_BUILD_COMPONENTS_FLUSTER $CI_BUILD_COMPONENTS_PIGLIT $CI_BUILD_COMPONENTS_VKD3D_PROTON $CI_BUILD_COMPONENTS_WINE"
 
 .container-builds-angle:
   variables:
@@ -66,6 +66,11 @@
   variables:
     VKD3D_PROTON_TAG: "${CONDITIONAL_BUILD_VKD3D_PROTON_TAG}"
     CI_BUILD_COMPONENTS_VKD3D_PROTON: vkd3d-proton
+
+.container-builds-wine:
+  variables:
+    WINE_TAG: "${CONDITIONAL_BUILD_WINE_TAG}"
+    CI_BUILD_COMPONENTS_WINE: wine
 
 .container-builds-android-cts:
   variables:
@@ -98,6 +103,7 @@
   extends:
     - .container-builds-piglit
     - .container-builds-vkd3d-proton
+    - .container-builds-wine
 
 # Export the container rootfs and upload it to S3
 .export-container:

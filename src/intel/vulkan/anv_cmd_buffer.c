@@ -947,6 +947,8 @@ void anv_CmdBindIndexBuffer2KHR(
       cmd_buffer->state.gfx.dirty |= ANV_CMD_DIRTY_INDEX_TYPE;
    }
 
+   vk_cmd_set_index_buffer_type(&cmd_buffer->vk, indexType);
+
    uint64_t index_addr = buffer ?
       anv_address_physical(anv_address_add(buffer->address, offset)) : 0;
    uint32_t index_size = buffer ? vk_buffer_range(&buffer->vk, offset, size) : 0;

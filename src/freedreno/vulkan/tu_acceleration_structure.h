@@ -6,7 +6,10 @@
 #ifndef TU_ACCELERATION_STRUCT_H
 #define TU_ACCELERATION_STRUCT_H
 
-#include "tu_common.h"
+#include "vk_acceleration_structure.h"
+#include "vulkan/vulkan_core.h"
+
+struct tu_device;
 
 VkResult tu_init_null_accel_struct(struct tu_device *device);
 

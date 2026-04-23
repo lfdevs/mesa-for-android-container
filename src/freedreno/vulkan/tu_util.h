@@ -9,16 +9,15 @@
 #ifndef TU_UTIL_H
 #define TU_UTIL_H
 
-#include <atomic>
-
 #include "tu_common.h"
 
-#include "util/macros.h"
-#include "util/u_math.h"
+#include <atomic>
+
+#include "compiler/shader_enums.h"
 #include "util/format/u_format_pack.h"
 #include "util/format/u_format_zs.h"
-#include "compiler/shader_enums.h"
-
+#include "util/macros.h"
+#include "util/u_math.h"
 #include "vk_util.h"
 
 /*

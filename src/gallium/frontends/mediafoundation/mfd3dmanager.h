@@ -45,6 +45,7 @@
 #include <c11/threads.h>
 #include <wrl/client.h>
 #include <wrl/implements.h>
+#include <unordered_map>
 
 #include "macros.h"
 
@@ -52,6 +53,54 @@
 
 // Use the Windows SDK dxcore include (e.g directx/dxcore uses DirectX-Headers)
 #include <dxcore.h>
+
+// Forward declare experimental MF DXGI Scheduler interfaces (not yet in all SDK versions)
+#ifndef __IMFDXGISchedulerRegistration_INTERFACE_DEFINED__
+#define __IMFDXGISchedulerRegistration_INTERFACE_DEFINED__
+
+typedef enum MF_DXGI_SCHEDULING_PRIORITY
+{
+   MF_DXGI_SCHEDULING_PRIORITY_IDLE = 0,
+   MF_DXGI_SCHEDULING_PRIORITY_DEFAULT = 0x1,
+   MF_DXGI_SCHEDULING_PRIORITY_HIGH = 0x2
+} MF_DXGI_SCHEDULING_PRIORITY;
+
+/* interface IMFDXGISchedulerRegistration */
+/* [uuid][local][object] */
+
+EXTERN_C const IID IID_IMFDXGISchedulerRegistration;
+
+MIDL_INTERFACE( "396ACD9A-C9EF-41e5-8009-6735C0528875" )
+IMFDXGISchedulerRegistration : public IUnknown
+{
+ public:
+   virtual HRESULT STDMETHODCALLTYPE GetPriority(
+      /* [annotation][out] */
+      _Out_ MF_DXGI_SCHEDULING_PRIORITY * priority ) = 0;
+
+   virtual HRESULT STDMETHODCALLTYPE SetPriority(
+      /* [in] */ MF_DXGI_SCHEDULING_PRIORITY priority ) = 0;
+};
+
+/* interface IMFDXGISchedulerClient */
+/* [uuid][local][object] */
+
+EXTERN_C const IID IID_IMFDXGISchedulerClient;
+
+MIDL_INTERFACE( "DF681668-70EC-457B-9AA3-CAA60910A710" )
+IMFDXGISchedulerClient : public IUnknown
+{
+ public:
+   virtual HRESULT STDMETHODCALLTYPE RegisterObject(
+      /* [annotation][in] */
+      _In_ HANDLE hDevice,
+      /* [annotation][in] */
+      _In_ IUnknown * pObject,
+      /* [annotation][out] */
+      _COM_Outptr_ IMFDXGISchedulerRegistration * *ppRegistration ) = 0;
+};
+#endif
+// end: Forward declare experimental MF DXGI Scheduler interfaces (not yet in all SDK versions)
 
 using namespace Microsoft::WRL;
 using Microsoft::WRL::ComPtr;
@@ -73,8 +122,11 @@ typedef union
 struct mft_context_queue_priority_manager
 {
    struct d3d12_context_queue_priority_manager base;
-   std::vector<ID3D12CommandQueue *> m_registeredQueues;
+   std::unordered_map<ID3D12CommandQueue *, ComPtr<IMFDXGISchedulerRegistration>> m_registeredQueues;
+   ComPtr<IMFDXGISchedulerClient> m_spSchedulerClient;
+   HANDLE m_hDevice = NULL;
    mtx_t m_lock;
+   const void *m_logId = {};
 };
 
 class CMFD3DManager

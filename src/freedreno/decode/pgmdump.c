@@ -393,7 +393,7 @@ dump_short_summary(struct state *state, int nconsts,
 }
 
 static void
-dump_raw_shader(uint32_t *dwords, uint32_t sizedwords, int n, char *ext)
+dump_raw_shader(const uint32_t *dwords, uint32_t sizedwords, int n, char *ext)
 {
    static char filename[256];
    int fd;

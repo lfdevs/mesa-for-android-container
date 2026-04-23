@@ -688,7 +688,7 @@ panvk_CreateImage(VkDevice device, const VkImageCreateInfo *pCreateInfo,
     *    If the size of the resultant image would exceed maxResourceSize, then
     *    vkCreateImage must fail and return VK_ERROR_OUT_OF_DEVICE_MEMORY.
     */
-   if (size > UINT32_MAX) {
+   if (size > panvk_get_max_resource_size(phys_dev)) {
       result = panvk_error(device, VK_ERROR_OUT_OF_DEVICE_MEMORY);
       goto err_destroy_image;
    }

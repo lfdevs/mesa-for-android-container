@@ -274,6 +274,7 @@ static const struct vk_device_extension_table lvp_device_extensions_supported = 
    .EXT_post_depth_coverage               = true,
    .EXT_private_data                      = true,
    .EXT_primitives_generated_query        = true,
+   .EXT_primitive_restart_index           = true,
    .EXT_primitive_topology_list_restart   = true,
    .EXT_rasterization_order_attachment_access = true,
    .EXT_queue_family_foreign              = true,
@@ -690,6 +691,9 @@ lvp_get_features(const struct lvp_physical_device *pdevice,
       /* VK_EXT_custom_border_color */
       .customBorderColors = true,
       .customBorderColorWithoutFormat = true,
+
+      /* VK_EXT_primitive_restart_index */
+      .primitiveRestartIndex = true,
 
       /* VK_EXT_color_write_enable */
       .colorWriteEnable = true,

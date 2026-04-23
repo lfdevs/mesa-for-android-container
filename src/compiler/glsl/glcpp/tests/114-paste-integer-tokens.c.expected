@@ -1,7 +1,7 @@
 
 
 
-4. HTTP code for Not Found: 404
-5. Hexadecimal for 20560: 5050
-6: Zip code for Nortonville, KS: 66060
-7. James Bond, as a number: 007
+4. HTTP code for Not Found: __LINE____FILE____LINE__
+5. Hexadecimal for 20560: __LINE____FILE____LINE____FILE__
+6: Zip code for Nortonville, KS: __LINE____LINE____FILE____LINE____FILE__
+7. James Bond, as a number: __FILE____FILE____LINE__

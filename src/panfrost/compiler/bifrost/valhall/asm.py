@@ -76,14 +76,31 @@ def parse_int(s, minimum, maximum):
     return number
 
 def encode_source(op, fau):
-    if op[0] == 'r':
+    # Reg tuple
+    if op[0] == '[' and op[-1:] == ']':
+        # Remove brackets and split on ":"
+        unpacked = op[1:-1].split(":")
+        die_if(len(unpacked) != 2, 'Invalid tuple')
+        die_if(unpacked[0][0] != 'r', 'Invalid tuple')
+        die_if(unpacked[1][0] != 'r', 'Invalid tuple')
+        if (unpacked[0][-1:] == '^'):
+            val0 = parse_int(unpacked[0][1:-1], 0, 63)
+            val1 = parse_int(unpacked[1][1:-1], 0, 63)
+            die_if(val1 != val0 + 1, 'Invalid tuple value')
+            return val0 | 0x40
+        else:
+            val0 = parse_int(unpacked[0][1:], 0, 63)
+            val1 = parse_int(unpacked[1][1:], 0, 63)
+            die_if(val1 != val0 + 1, 'Invalid tuple value')
+            return val0
+    elif op[0] == 'r':
         if (op[-1:] == '^'):
             return parse_int(op[1:-1], 0, 63) | 0x40
         return parse_int(op[1:], 0, 63)
     elif op[0] == 'u':
         val = parse_int(op[1:], 0, 127)
-        fau.set_page(val >> 6)
-        return (val & 0x3F) | 0x80
+        fau.set_page(val >> 5)
+        return ((val & 0x1F) << 1) | 0x80
     elif op[0] == 'i':
         return int(op[3:]) | 0xC0
     elif op.startswith('0x'):
@@ -105,10 +122,27 @@ def encode_source(op, fau):
 
 
 def encode_dest(op):
-    die_if(op[0] != 'r', f"Expected register destination {op}")
+    # Reg tuple
+    if op[0] == '[' and op[-1:] == ']':
+        # Remove brackets and split on ":"
+        unpacked = op[1:-1].split(":")
+        die_if(len(unpacked) != 2, 'Invalid tuple')
+        die_if(unpacked[0][0] != 'r', 'Invalid tuple')
+        die_if(unpacked[1][0] != 'r', 'Invalid tuple')
 
-    parts = op.split(".")
-    reg = parts[0]
+        parts = unpacked[0].split(".")
+        reg = parts[0]
+        value = parse_int(reg[1:], 0, 63)
+
+        parts1 = unpacked[1].split(".")
+        reg1 = parts1[0]
+        val1 = parse_int(reg1[1:], 0, 63)
+        die_if(val1 != value + 1, 'Invalid tuple value')
+    else:
+        die_if(op[0] != 'r', f"Expected register destination {op}")
+        parts = op.split(".")
+        reg = parts[0]
+        value = parse_int(reg[1:], 0, 63)
 
     # Default to writing in full
     wrmask = 0x3
@@ -120,7 +154,7 @@ def encode_dest(op):
         die_if(mask not in WMASKS, "Expected a write mask")
         wrmask = 1 << WMASKS.index(mask)
 
-    return parse_int(reg[1:], 0, 63) | (wrmask << 6)
+    return value | (wrmask << 6)
 
 def parse_asm(line):
     global LINE
@@ -207,7 +241,9 @@ def parse_asm(line):
         encoded_src = encode_source(parts[0], fau)
 
         # Require a word selection for special FAU values
-        needs_word_select = ((encoded_src >> 5) == 0b111)
+        may_have_word_select = ((encoded_src >> 5) == 0b111)
+        # or for regular FAU values
+        may_have_word_select |= ((encoded_src >> 6) == 0b10)
 
         # Has a swizzle been applied yet?
         swizzled = False
@@ -261,13 +297,13 @@ def parse_asm(line):
                 val = enums['lanes_8_bit'].bare_values.index(mod)
                 encoded |= (val << src.offset['widen'])
             elif mod in ['w0', 'w1']:
-                # Chck for special
-                die_if(not needs_word_select, 'Unexpected word select')
+                # Check whether we may have word select
+                die_if(not may_have_word_select, 'Unexpected word select')
 
                 if mod == 'w1':
                     encoded_src |= 0x1
 
-                needs_word_select = False
+                may_have_word_select = False
             else:
                 die(f"Unknown modifier {mod}")
 

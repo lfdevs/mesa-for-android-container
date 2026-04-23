@@ -33,7 +33,7 @@ bool intel_nir_lower_patch_vertices_in(nir_shader *shader,
 bool intel_nir_lower_patch_vertices_tes(nir_shader *shader);
 
 bool intel_nir_lower_shading_rate_output(nir_shader *nir);
-bool intel_nir_lower_sparse_intrinsics(nir_shader *nir);
+bool intel_nir_lower_sparse_intrinsics(nir_shader *nir, bool jay);
 
 bool intel_nir_opt_peephole_ffma(nir_shader *shader);
 bool intel_nir_opt_peephole_imul32x16(nir_shader *shader);

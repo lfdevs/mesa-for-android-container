@@ -277,7 +277,7 @@ a660-vk:
     - .lava-arm64-test-vk
     - .collabora-turnip-rules
     - .lava-sm8350-hdk:arm64
-  parallel: 5
+  parallel: 3
   variables:
     DEQP_SUITE: freedreno-a660-vk
     FLAKES_CHANNEL: "#freedreno-ci"
@@ -291,6 +291,19 @@ a660-vk-full:
   variables:
     DEQP_SUITE: freedreno-a660-vk-full
     DEQP_FRACTION: 1
+
+a660-vk-traces-restricted:
+  extends:
+    - .lava-arm64-test-vk
+    - .collabora-turnip-restricted-rules
+    - .lava-sm8350-hdk:arm64
+    - .traces-test
+    - .test-wine
+  variables:
+    REPLAY_CONFIG: traces-freedreno-restricted.toml
+    ANGLE_TRACE_FILES_TAG: "2025-03-28"
+    HWCI_START_WESTON: 1
+  allow_failure: true
 
 a750-angle:
   extends:
@@ -330,3 +343,24 @@ a750-vk:
   variables:
     CI_TRON_TIMEOUT__OVERALL__MINUTES: 16
     DEQP_SUITE: freedreno-a750-vk
+
+# A750 VK traces are disabled because they time out -- we have a lot of:
+# [  465.720843] adreno 3d00000.gpu: CP | protected mode error | WRITE | addr=0x0000930A | status=0x0060930A
+# [  465.982685] adreno 3d00000.gpu: [drm:a6xx_irq] *ERROR* gpu fault ring 0 fence ffffff25 status 00800005 rb 0072/009e ib1 0000000101655000/0043 ib2 0000000100404900/0000
+# [  465.998171] msm_dpu ae01000.display-controller: [drm:recover_worker] *ERROR* 67.5.20.1: hangcheck recover!
+# [  466.008147] msm_dpu ae01000.display-controller: [drm:recover_worker] *ERROR* 67.5.20.1: offending task: weston (weston --config=/install/common/weston.ini --socket=wayland-0 --log /builds/anholt/mesa/results/weston.log --logger-scopes=log,xwm-wm-x11 --renderer=gl)
+# and maybe that's the problem -- let's try this (and rebalance core VK coverage) once we figure it out.
+.a750-vk-restricted-traces:
+  extends:
+    - .ci-tron-arm64-test-vk
+    - .a750-kws
+    - .valve-turnip-restricted-rules
+    - .traces-test
+    - .test-wine
+  timeout: 20m
+  variables:
+    MESA_LOADER_DRIVER_OVERRIDE: "zink"
+    CI_TRON_TIMEOUT__OVERALL__MINUTES: 16
+    REPLAY_CONFIG: traces-freedreno-restricted.toml
+    HWCI_START_WESTON: 1
+  allow_failure: true
