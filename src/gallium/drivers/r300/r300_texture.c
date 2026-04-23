@@ -25,10 +25,10 @@
  * The swizzles must be set exactly like their non-swapped counterparts,
  * because byte-swapping is what reverses the component order, not swizzling.
  *
- * This function returns the format that must be used to program CB and TX
- * swizzles.
+ * This function returns the format that must be used to handle component order
+ * for r300 byte-swapped array formats.
  */
-static enum pipe_format r300_unbyteswap_array_format(enum pipe_format format)
+enum pipe_format r300_unbyteswap_array_format(enum pipe_format format)
 {
     /* FIXME: Disabled on little endian because of a reported regression:
      * https://bugs.freedesktop.org/show_bug.cgi?id=98869 */

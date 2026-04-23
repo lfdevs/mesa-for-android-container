@@ -12,7 +12,6 @@ spec@glsl-1.50@execution@primitive-id-no-gs-quad-strip,Fail
 spec@glsl-1.50@execution@primitive-id-no-gs-quads,Fail
 spec@glsl-1.50@execution@primitive-id-no-gs-point,Fail
 spec@glsl-1.50@execution@variable-indexing@gs-output-array-vec4-index-wr,Crash
-shaders@ssa@fs-if-def-else-break,Fail
 
 # These tests use a TCS output variable only as temporary storage. Since the output
 # is unused by the TES, we remove it.

@@ -249,9 +249,6 @@ drisw_swap_buffers_with_damage(struct dri_drawable *drawable, int nrects, const 
    if (ptex) {
       struct pipe_fence_handle *fence = NULL;
 
-      if (ctx->pp)
-         pp_run(ctx->pp, ptex, ptex, drawable->textures[ST_ATTACHMENT_DEPTH_STENCIL]);
-
       if (ctx->hud)
          hud_run(ctx->hud, ctx->st->cso_context, ptex);
 
@@ -301,8 +298,6 @@ drisw_copy_sub_buffer(struct dri_drawable *drawable, int x, int y,
       _mesa_glthread_finish(ctx->st->ctx);
 
       struct pipe_fence_handle *fence = NULL;
-      if (ctx->pp && drawable->textures[ST_ATTACHMENT_DEPTH_STENCIL])
-         pp_run(ctx->pp, ptex, ptex, drawable->textures[ST_ATTACHMENT_DEPTH_STENCIL]);
 
       st_context_flush(ctx->st, ST_FLUSH_FRONT, &fence, NULL, NULL);
 

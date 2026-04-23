@@ -27,9 +27,16 @@ static void radeon_vcn_enc_quality_modes(struct radeon_encoder *enc,
                                     ? RENCODE_PRESET_MODE_HIGH_QUALITY
                                     : in->preset_mode;
 
-   if (u_reduce_video_profile(enc->base.profile) != PIPE_VIDEO_FORMAT_AV1 &&
+   if (sscreen->info.vcn_ip_version < VCN_4_0_0 &&
        p->preset_mode == RENCODE_PRESET_MODE_HIGH_QUALITY)
       p->preset_mode = RENCODE_PRESET_MODE_QUALITY;
+
+   if (sscreen->info.vcn_ip_version >= VCN_2_0_0 &&
+       sscreen->info.vcn_ip_version < VCN_5_0_0 &&
+       p->preset_mode == RENCODE_PRESET_MODE_SPEED &&
+       !enc->enc_pic.hevc_deblock.disable_sao &&
+       u_reduce_video_profile(enc->base.profile) == PIPE_VIDEO_FORMAT_HEVC)
+      p->preset_mode = RENCODE_PRESET_MODE_BALANCE;
 
    if (enc->first_frame) {
       p->pre_encode_mode = in->pre_encode_mode ? RENCODE_PREENCODE_MODE_4X

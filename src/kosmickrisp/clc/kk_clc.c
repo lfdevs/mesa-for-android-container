@@ -32,7 +32,7 @@ static const struct spirv_to_nir_options spirv_options = {
    .temp_addr_format = nir_address_format_62bit_generic,
    .constant_addr_format = nir_address_format_64bit_global,
    .create_library = true,
-   .printf = true,
+   .printf = false, /* TODO_KOSMICKRISP Enable */
 };
 
 /* Standard optimization loop */
@@ -83,8 +83,8 @@ compile(void *memctx, const uint32_t *spirv, size_t spirv_size)
 
    assert(spirv_size % 4 == 0);
    nir_shader *nir =
-      spirv_to_nir(spirv, spirv_size / 4, NULL, 0, MESA_SHADER_KERNEL,
-                   "library", &spirv_options, nir_options);
+      spirv_to_nir(spirv, spirv_size / 4, NULL, MESA_SHADER_KERNEL, "library",
+                   &spirv_options, nir_options);
    nir_validate_shader(nir, "after spirv_to_nir");
    ralloc_steal(memctx, nir);
 

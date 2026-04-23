@@ -1204,9 +1204,10 @@ void ntq_add_pending_tmu_flush(struct v3d_compile *c, nir_def *def,
 void ntq_flush_tmu(struct v3d_compile *c);
 void vir_emit_thrsw(struct v3d_compile *c);
 
-void vir_dump(struct v3d_compile *c);
-void vir_dump_inst(struct v3d_compile *c, struct qinst *inst);
-void vir_dump_uniform(enum quniform_contents contents, uint32_t data);
+void vir_dumpi(struct v3d_compile *c);
+void vir_dumpe(struct v3d_compile *c);
+char *vir_dump_inst(struct v3d_compile *c, struct qinst *inst);
+char *vir_dump_uniform(enum quniform_contents contents, uint32_t data);
 
 void vir_validate(struct v3d_compile *c);
 
@@ -1635,5 +1636,14 @@ v3d_double_buffer_score_ok(struct v3d_double_buffer_score *score)
 #define vir_for_each_inst_inorder_safe(inst, c)                         \
         vir_for_each_block(_block, c)                                   \
                 vir_for_each_inst_safe(inst, _block)
+
+#define LOG_INST_OPT(_message, _c, _inst)                                 \
+        for (char *before_inst = debug ? vir_dump_inst(_c, _inst) : NULL, \
+                  *_once = (char *)1;                                     \
+             _once;                                                       \
+             _once = debug ? (mesa_logd(_message ": \"%s\" to \"%s\"",    \
+                                        before_inst,                      \
+                                        vir_dump_inst(_c, _inst)), NULL)  \
+                           : NULL)
 
 #endif /* V3D_COMPILER_H */

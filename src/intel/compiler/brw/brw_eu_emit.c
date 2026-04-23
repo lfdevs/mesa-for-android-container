@@ -589,7 +589,8 @@ brw_alu3(struct brw_codegen *p, unsigned opcode, struct brw_reg dest,
 
    if (brw_eu_inst_access_mode(devinfo, inst) == BRW_ALIGN_1) {
       assert(dest.file == FIXED_GRF ||
-             brw_reg_is_arf(dest, BRW_ARF_ACCUMULATOR));
+             brw_reg_is_arf(dest, BRW_ARF_ACCUMULATOR) ||
+             brw_reg_is_arf(dest, BRW_ARF_NULL));
 
       brw_eu_inst_set_3src_a1_dst_reg_file(devinfo, inst, phys_file(dest));
       brw_eu_inst_set_3src_dst_reg_nr(devinfo, inst, phys_nr(devinfo, dest));
@@ -842,6 +843,7 @@ ALU1(RNDE)
 ALU1(RNDU)
 ALU1(RNDZ)
 ALU2(MAC)
+ALU2(MACL)
 ALU2(MACH)
 ALU1(LZD)
 ALU2(DP4)
@@ -888,6 +890,7 @@ void brw_NOP(struct brw_codegen *p)
 void brw_SYNC(struct brw_codegen *p, enum tgl_sync_function func)
 {
    brw_eu_inst *insn = next_insn(p, BRW_OPCODE_SYNC);
+   brw_eu_inst_set_saturate(p->devinfo, insn, 0);
    brw_eu_inst_set_cond_modifier(p->devinfo, insn, func);
 }
 

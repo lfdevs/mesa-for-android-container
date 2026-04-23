@@ -325,6 +325,25 @@ va_pack_widen(const bi_instr *I, enum bi_swizzle swz, enum va_size size)
       default:
          invalid_instruction(I, "32-bit widen");
       }
+   } else if (size == VA_SIZE_64) {
+      switch (swz) {
+      case BI_SWIZZLE_H01:
+         return VA_SWIZZLES_64_BIT_NONE;
+      case BI_SWIZZLE_H0:
+         return VA_SWIZZLES_64_BIT_H0;
+      case BI_SWIZZLE_H1:
+         return VA_SWIZZLES_64_BIT_H1;
+      case BI_SWIZZLE_B0:
+         return VA_SWIZZLES_64_BIT_B0;
+      case BI_SWIZZLE_B1:
+         return VA_SWIZZLES_64_BIT_B1;
+      case BI_SWIZZLE_B2:
+         return VA_SWIZZLES_64_BIT_B2;
+      case BI_SWIZZLE_B3:
+         return VA_SWIZZLES_64_BIT_B3;
+      default:
+         invalid_instruction(I, "64-bit widen");
+      }
    } else {
       invalid_instruction(I, "type size for widen");
    }
@@ -1155,8 +1174,10 @@ va_lower_blend(bi_context *ctx)
 
       unsigned prolog_length = 2 * 8;
 
-      /* By ABI, r48 is the link register shared with blend shaders */
-      assert(bi_is_equiv(I->dest[0], bi_register(48)));
+      /* By ABI, the preload blend link register is shared with blend
+       * shaders */
+      assert(bi_is_equiv(I->dest[0], bi_register(bi_preload_reg(
+                                        BI_PRELOAD_BLEND_LINK, ctx->arch))));
 
       if (I->flow == VA_FLOW_END)
          bi_iadd_imm_i32_to(&b, I->dest[0], va_zero_lut(), 0);

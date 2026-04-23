@@ -6,6 +6,7 @@
 #include <assert.h>
 #include "common/v3d_device_info.h"
 #include "common/v3d_util.h"
+#include "util/log.h"
 #include "util/ralloc.h"
 #include "v3d_perfcntrs.h"
 
@@ -43,7 +44,7 @@ v3d_perfcntrs_init(const struct v3d_device_info *devinfo, int fd)
 
         perfcounters->perfcnt = rzalloc_array(perfcounters, struct v3d_perfcntr_desc *, perfcounters->max_perfcnt);
         if (!perfcounters->perfcnt) {
-                fprintf(stderr, "Error allocating performance counters names");
+                mesa_loge("Error allocating performance counters names");
                 v3d_perfcntrs_fini(perfcounters);
                 return NULL;
         }

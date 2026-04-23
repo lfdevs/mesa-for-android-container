@@ -273,6 +273,7 @@ struct vn_relax_state {
    uint32_t iter;
    const struct vn_relax_profile profile;
    const char *reason_str;
+   bool warn;
 };
 
 /* TLS ring
@@ -429,6 +430,12 @@ vn_relax(struct vn_relax_state *state);
 
 void
 vn_relax_fini(struct vn_relax_state *state);
+
+static inline bool
+vn_relax_warn(struct vn_relax_state *state)
+{
+   return state->warn;
+}
 
 static_assert(sizeof(vn_object_id) >= sizeof(uintptr_t), "");
 

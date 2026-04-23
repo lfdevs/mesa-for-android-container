@@ -488,7 +488,16 @@ print_fp_math_ctrl(unsigned fp_math_ctrl, print_state *state)
    FILE *fp = state->fp;
 
    if (fp_math_ctrl & nir_fp_exact) {
-      fprintf(fp, "exact");
+      if ((fp_math_ctrl & nir_fp_exact) == nir_fp_exact) {
+         fprintf(fp, "exact");
+      } else if (fp_math_ctrl & nir_fp_no_contract) {
+         fprintf(fp, "no-contract");
+      } else if (fp_math_ctrl & nir_fp_no_reassoc) {
+         fprintf(fp, "no-reassoc");
+      } else if (fp_math_ctrl & nir_fp_no_transform) {
+         fprintf(fp, "no-transform");
+      }
+
       if (fp_math_ctrl & ~nir_fp_exact)
          fprintf(fp, ", ");
    }
@@ -813,6 +822,10 @@ get_variable_mode_str(nir_variable_mode mode, bool want_local_global_mode)
       return "node_payload";
    case nir_var_mem_node_payload_in:
       return "node_payload_in";
+   case nir_var_resource_heap:
+      return "resource_heap";
+   case nir_var_sampler_heap:
+      return "sampler_heap";
    default:
       if (mode && (mode & nir_var_mem_generic) == mode)
          return "generic";
@@ -1992,6 +2005,12 @@ print_tex_instr(nir_tex_instr *instr, print_state *state)
    case nir_texop_resinfo_intel:
       fprintf(fp, "resinfo_intel ");
       break;
+   case nir_texop_sparse_residency_intel:
+      fprintf(fp, "sparse_residency_intel ");
+      break;
+   case nir_texop_sparse_residency_txf_intel:
+      fprintf(fp, "sparse_residency_txf_intel ");
+      break;
    default:
       UNREACHABLE("Invalid texture operation");
       break;
@@ -2282,7 +2301,7 @@ print_phi_instr(nir_phi_instr *instr, print_state *state)
    nir_block **preds =
       state->preds ? state->preds : nir_block_get_predecessors_sorted(instr->instr.block, NULL);
 
-   for (unsigned i = 0; i < instr->instr.block->predecessors.entries; i++) {
+   for (unsigned i = 0; i < nir_block_num_preds(instr->instr.block); i++) {
       nir_phi_src *src = nir_phi_get_src_from_block(instr, preds[i]);
       if (i != 0)
          fprintf(fp, ", ");
@@ -2421,7 +2440,7 @@ static void
 print_block_preds(nir_block *block, print_state *state)
 {
    FILE *fp = state->fp;
-   for (unsigned i = 0; i < block->predecessors.entries; i++) {
+   for (unsigned i = 0; i < nir_block_num_preds(block); i++) {
       fprintf(fp, " b%u", state->preds[i]->index);
    }
 }

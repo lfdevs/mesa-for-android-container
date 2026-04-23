@@ -1,7 +1,7 @@
 /*
 ************************************************************************************************************************
 *
-*  Copyright (C) 2022-2024 Advanced Micro Devices, Inc. All rights reserved.
+*  Copyright (C) 2022-2026 Advanced Micro Devices, Inc. All rights reserved.
 *  SPDX-License-Identifier: MIT
 *
 ***********************************************************************************************************************/
@@ -44,7 +44,6 @@ struct ADDR3_COORD
 struct ADDR3_COMPUTE_SURFACE_INFO_PARAMS_INPUT
 {
     const ADDR3_COMPUTE_SURFACE_INFO_INPUT* pSurfInfo;
-    void*                                   pvAddrParams;
 };
 
 /**
@@ -155,13 +154,15 @@ protected:
     Lib();  // Constructor is protected
     Lib(const Client* pClient);
 
-    UINT_32 m_pipesLog2;                ///< Number of pipe per shader engine Log2
-    UINT_32 m_pipeInterleaveLog2;       ///< Log2 of pipe interleave bytes
-
     SwizzleModeFlags m_swizzleModeTable[ADDR3_MAX_TYPE];  ///< Swizzle mode table
 
     // Number of unique MSAA sample rates (1/2/4/8)
     static const UINT_32 MaxNumMsaaRates     = 4;
+
+    //# These fields exist in the GB_ADDR_CONFIG register; however, the HW does not care about them.
+    //# The HW acts as if the log2(pipes)==5 and log2(pi) == 8, always.
+    static const UINT_32  NumPipesLog2       = 5;
+    static const UINT_32  PipeInterleaveLog2 = 8;
 
     // Number of equation entries in the table
     UINT_32              m_numEquations;

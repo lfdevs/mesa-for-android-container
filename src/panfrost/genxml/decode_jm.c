@@ -238,7 +238,7 @@ pandecode_uniforms(struct pandecode_context *ctx, uint64_t uniforms,
 
 void
 GENX(pandecode_dcd)(struct pandecode_context *ctx, const struct MALI_DRAW *p,
-                    enum mali_job_type job_type, unsigned gpu_id)
+                    enum mali_job_type job_type, uint64_t gpu_id)
 {
 #if PAN_ARCH >= 5
    struct pandecode_fbd fbd_info = {.rt_count = 1};
@@ -385,7 +385,7 @@ GENX(pandecode_dcd)(struct pandecode_context *ctx, const struct MALI_DRAW *p,
 static void
 pandecode_vertex_compute_geometry_job(struct pandecode_context *ctx,
                                       const struct MALI_JOB_HEADER *h,
-                                      uint64_t job, unsigned gpu_id)
+                                      uint64_t job, uint64_t gpu_id)
 {
    struct mali_compute_job_packed *PANDECODE_PTR_VAR(ctx, p, job);
    pan_section_unpack(p, COMPUTE_JOB, DRAW, draw);
@@ -422,7 +422,7 @@ pandecode_cache_flush_job(struct pandecode_context *ctx, uint64_t job)
 static void
 pandecode_tiler_job(struct pandecode_context *ctx,
                     const struct MALI_JOB_HEADER *h, uint64_t job,
-                    unsigned gpu_id)
+                    uint64_t gpu_id)
 {
    struct mali_tiler_job_packed *PANDECODE_PTR_VAR(ctx, p, job);
    pan_section_unpack(p, TILER_JOB, DRAW, draw);
@@ -441,7 +441,7 @@ pandecode_tiler_job(struct pandecode_context *ctx,
 
 #if PAN_ARCH >= 6
    pan_section_unpack(p, TILER_JOB, TILER, tiler_ptr);
-   GENX(pandecode_tiler)(ctx, tiler_ptr.address, gpu_id);
+   GENX(pandecode_tiler)(ctx, tiler_ptr.address);
 
 #if PAN_ARCH >= 9
    DUMP_SECTION(ctx, TILER_JOB, INSTANCE_COUNT, p, "Instance count:\n");
@@ -459,7 +459,7 @@ pandecode_tiler_job(struct pandecode_context *ctx,
 
 static void
 pandecode_fragment_job(struct pandecode_context *ctx, uint64_t job,
-                       unsigned gpu_id)
+                       uint64_t gpu_id)
 {
    struct mali_fragment_job_packed *PANDECODE_PTR_VAR(ctx, p, job);
    pan_section_unpack(p, FRAGMENT_JOB, PAYLOAD, s);
@@ -497,7 +497,7 @@ pandecode_fragment_job(struct pandecode_context *ctx, uint64_t job,
 static void
 pandecode_indexed_vertex_job(struct pandecode_context *ctx,
                              const struct MALI_JOB_HEADER *h, uint64_t job,
-                             unsigned gpu_id)
+                             uint64_t gpu_id)
 {
    struct mali_indexed_vertex_job_packed *PANDECODE_PTR_VAR(ctx, p, job);
 
@@ -518,7 +518,7 @@ pandecode_indexed_vertex_job(struct pandecode_context *ctx,
    pan_section_unpack(p, INDEXED_VERTEX_JOB, TILER, tiler_ptr);
    pandecode_log(ctx, "Tiler Job Payload:\n");
    ctx->indent++;
-   GENX(pandecode_tiler)(ctx, tiler_ptr.address, gpu_id);
+   GENX(pandecode_tiler)(ctx, tiler_ptr.address);
    ctx->indent--;
 
    pandecode_invocation(ctx,
@@ -535,7 +535,7 @@ pandecode_indexed_vertex_job(struct pandecode_context *ctx,
 #if PAN_ARCH == 9
 static void
 pandecode_malloc_vertex_job(struct pandecode_context *ctx, uint64_t job,
-                            unsigned gpu_id)
+                            uint64_t gpu_id)
 {
    struct mali_malloc_vertex_job_packed *PANDECODE_PTR_VAR(ctx, p, job);
 
@@ -553,7 +553,7 @@ pandecode_malloc_vertex_job(struct pandecode_context *ctx, uint64_t job,
    pandecode_log(ctx, "Tiler Job Payload:\n");
    ctx->indent++;
    if (tiler_ptr.address)
-      GENX(pandecode_tiler)(ctx, tiler_ptr.address, gpu_id);
+      GENX(pandecode_tiler)(ctx, tiler_ptr.address);
    else
       pandecode_log(ctx, "<omitted>\n");
    ctx->indent--;
@@ -568,7 +568,7 @@ pandecode_malloc_vertex_job(struct pandecode_context *ctx, uint64_t job,
 
 static void
 pandecode_compute_job(struct pandecode_context *ctx, uint64_t job,
-                      unsigned gpu_id)
+                      uint64_t gpu_id)
 {
    struct mali_compute_job_packed *PANDECODE_PTR_VAR(ctx, p, job);
    pan_section_unpack(p, COMPUTE_JOB, PAYLOAD, payload);
@@ -584,7 +584,7 @@ pandecode_compute_job(struct pandecode_context *ctx, uint64_t job,
  */
 void
 GENX(pandecode_jc)(struct pandecode_context *ctx, uint64_t jc_gpu_va,
-                   unsigned gpu_id)
+                   uint64_t gpu_id)
 {
    pandecode_dump_file_open(ctx);
 

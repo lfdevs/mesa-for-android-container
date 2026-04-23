@@ -46,8 +46,8 @@ kperfmon_destroy(struct v3d_context *v3d, struct v3d_perfmon_state *perfmon)
         destroyreq.id = perfmon->kperfmon_id;
         int ret = v3d_ioctl(v3d->fd, DRM_IOCTL_V3D_PERFMON_DESTROY, &destroyreq);
         if (ret != 0)
-                fprintf(stderr, "failed to destroy perfmon %d: %s\n",
-                        perfmon->kperfmon_id, strerror(errno));
+                mesa_loge("Failed to destroy perfmon %d: %s",
+                          perfmon->kperfmon_id, strerror(errno));
 }
 
 static void
@@ -58,7 +58,7 @@ v3d_destroy_query_perfcnt(struct v3d_context *v3d, struct v3d_query *query)
         assert(pquery->perfmon);
 
         if (v3d->active_perfmon == pquery->perfmon) {
-                fprintf(stderr, "Query is active; end query before destroying\n");
+                mesa_loge("Query is active; end query before destroying");
                 return;
         }
         if (pquery->perfmon->kperfmon_id)
@@ -78,9 +78,8 @@ v3d_begin_query_perfcnt(struct v3d_context *v3d, struct v3d_query *query)
 
         /* Only one perfmon can be activated per context */
         if (v3d->active_perfmon) {
-                fprintf(stderr,
-                        "Another query is already active; "
-                        "finish it before starting a new one\n");
+                mesa_loge("Another query is already active; "
+                          "finish it before starting a new one");
                 return false;
         }
 
@@ -119,7 +118,7 @@ v3d_end_query_perfcnt(struct v3d_context *v3d, struct v3d_query *query)
         assert(pquery->perfmon);
 
         if (v3d->active_perfmon != pquery->perfmon) {
-                fprintf(stderr, "This query is not active\n");
+                mesa_loge("This query is not active");
                 return false;
         }
 
@@ -135,7 +134,7 @@ v3d_end_query_perfcnt(struct v3d_context *v3d, struct v3d_query *query)
                 int fd = -1;
                 drmSyncobjExportSyncFile(v3d->fd, v3d->out_sync, &fd);
                 if (fd == -1) {
-                        fprintf(stderr, "export failed\n");
+                        mesa_loge("Export failed");
                         v3d->active_perfmon->last_job_fence = NULL;
                 } else {
                         v3d->active_perfmon->last_job_fence =
@@ -168,7 +167,7 @@ v3d_get_query_result_perfcnt(struct v3d_context *v3d, struct v3d_query *query,
                 req.values_ptr = (uintptr_t)pquery->perfmon->values;
                 ret = v3d_ioctl(v3d->fd, DRM_IOCTL_V3D_PERFMON_GET_VALUES, &req);
                 if (ret != 0) {
-                        fprintf(stderr, "Can't request perfmon counters values\n");
+                        mesa_loge("Can't request perfmon counters values");
                         return false;
                 }
         }
@@ -201,7 +200,7 @@ v3d_create_batch_query_pipe(struct v3d_context *v3d, unsigned num_queries,
         for (i = 0; i < num_queries; i++) {
                 if (query_types[i] < PIPE_QUERY_DRIVER_SPECIFIC ||
                     query_types[i] >= PIPE_QUERY_DRIVER_SPECIFIC + max_perfcnt) {
-                        fprintf(stderr, "Invalid query type\n");
+                        mesa_loge("Invalid query type");
                         return NULL;
                 }
         }

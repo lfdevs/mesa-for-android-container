@@ -1,7 +1,7 @@
 /*
 ************************************************************************************************************************
 *
-*  Copyright (C) 2007-2024 Advanced Micro Devices, Inc. All rights reserved.
+*  Copyright (C) 2007-2026 Advanced Micro Devices, Inc. All rights reserved.
 *  SPDX-License-Identifier: MIT
 *
 ***********************************************************************************************************************/
@@ -81,6 +81,34 @@ ADDR_E_RETURNCODE ADDR_API AddrDestroy(
     return returnCode;
 }
 
+/**
+****************************************************************************************************
+*   AddrFormatProperties
+*
+*   @brief
+*       Retreives properties of the specified format.
+*
+****************************************************************************************************
+*/
+ADDR_E_RETURNCODE ADDR_API AddrFormatProperties(
+    ADDR_HANDLE                       hLib,
+    const ADDR_FORMAT_PROPERTIES_IN&  in,
+    ADDR_FORMAT_PROPERTIES_OUT*       pOut)
+{
+    ADDR_E_RETURNCODE  retCode = ADDR_INVALIDPARAMS;
+
+    if (hLib)
+    {
+        Lib* pLib = Lib::GetLib(hLib);
+
+        if (pLib != NULL)
+        {
+            retCode = pLib->GetFormatProperties(in, pOut);
+        }
+    }
+
+    return retCode;
+}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 //                                    Surface functions

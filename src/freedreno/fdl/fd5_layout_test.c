@@ -3,12 +3,9 @@
  * SPDX-License-Identifier: MIT
  */
 
+#include "common/fd5_hw.h"
 #include "freedreno_layout.h"
 #include "fd_layout_test.h"
-#include "adreno_common.xml.h"
-#include "util/half_float.h"
-#include "util/u_math.h"
-#include "a5xx.xml.h"
 
 #include <stdio.h>
 

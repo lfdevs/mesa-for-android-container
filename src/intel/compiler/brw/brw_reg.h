@@ -1424,7 +1424,8 @@ reg_space(const brw_reg &r)
 static inline unsigned
 reg_offset(const brw_reg &r)
 {
-   return (r.file == ADDRESS || r.file == VGRF || r.file == IMM || r.file == ATTR ? 0 : r.nr) *
+   return (r.file == ADDRESS || r.file == VGRF || r.file == IMM ||
+           r.file == ATTR || brw_reg_is_arf(r, BRW_ARF_ACCUMULATOR) ? 0 : r.nr) *
           (r.file == UNIFORM ? 4 : REG_SIZE) + r.offset +
           (r.file == ADDRESS || r.file == ARF || r.file == FIXED_GRF ? r.subnr : 0);
 }

@@ -421,7 +421,7 @@ struct vc4_depth_stencil_alpha_state {
 
 #define perf_debug(...) do {                            \
         if (VC4_DBG(PERF))                            \
-                fprintf(stderr, __VA_ARGS__);           \
+                mesa_logd(__VA_ARGS__);           \
         if (unlikely(vc4->base.debug.debug_message))         \
                 util_debug_message(&vc4->base.debug, PERF_INFO, __VA_ARGS__); \
 } while (0)

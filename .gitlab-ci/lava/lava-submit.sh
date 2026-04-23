@@ -48,6 +48,8 @@ tail -f results/lava.log &
 set -x
 
 # List of optional overlays
+# NOTE: If you encounter "Attempted path traversal in tar file at /dev/ttyS1",
+# that is an indication that one of your rootfs and overlays contain a duplicate file.
 LAVA_EXTRA_OVERLAYS=()
 if [ -n "${LAVA_FIRMWARE:-}" ]; then
     for fw in $LAVA_FIRMWARE; do
@@ -82,7 +84,7 @@ fi
 if [ -n "${FLUSTER_TAG:-}" ]; then
 	LAVA_EXTRA_OVERLAYS+=(
 		- append-overlay
-		  --name=vkd3d-proton
+		  --name=fluster
 		  --url="$(fdo_find_s3_path "${DATA_STORAGE_PATH}/fluster/${FLUSTER_TAG}/vectors.tar.zst")"
 		  --path="/"
 		  --format=tar
@@ -94,6 +96,16 @@ if [ -n "${VKD3D_PROTON_TAG:-}" ]; then
 		- append-overlay
 		  --name=vkd3d-proton
 		  --url="$(fdo_find_s3_path "${DATA_STORAGE_PATH}/vkd3d-proton/${VKD3D_PROTON_TAG}/${MESA_IMAGE_PATH}/vkd3d-proton.tar.zst")"
+		  --path="/"
+		  --format=tar
+		  --compression=zstd
+	)
+fi
+if [ -n "${WINE_TAG:-}" ]; then
+	LAVA_EXTRA_OVERLAYS+=(
+		- append-overlay
+		  --name=wine
+		  --url="$(fdo_find_s3_path "${DATA_STORAGE_PATH}/wine/${DEBIAN_TEST_VK_TAG}-${WINE_TAG}/${MESA_IMAGE_PATH}/wine.tar.zst")"
 		  --path="/"
 		  --format=tar
 		  --compression=zstd

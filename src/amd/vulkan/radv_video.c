@@ -162,24 +162,6 @@ radv_vcn_write_memory(struct radv_cmd_buffer *cmd_buffer, uint64_t va, unsigned 
    radv_vcn_sq_tail(cs, &sq);
 }
 
-static void
-radv_vcn_sq_start(struct radv_cmd_buffer *cmd_buffer)
-{
-   struct radv_device *device = radv_cmd_buffer_device(cmd_buffer);
-   struct radv_cmd_stream *cs = cmd_buffer->cs;
-
-   radeon_check_space(device->ws, cs->b, 512);
-   radv_vcn_sq_header(cs, &cmd_buffer->video.sq, RADEON_VCN_ENGINE_TYPE_DECODE);
-   rvcn_decode_ib_package_t *ib_header = (rvcn_decode_ib_package_t *)&(cs->b->buf[cs->b->cdw]);
-   ib_header->package_size = sizeof(struct rvcn_decode_buffer_s) + sizeof(struct rvcn_decode_ib_package_s);
-   cs->b->cdw++;
-   ib_header->package_type = (RDECODE_IB_PARAM_DECODE_BUFFER);
-   cs->b->cdw++;
-   cmd_buffer->video.decode_buffer = (rvcn_decode_buffer_t *)&(cs->b->buf[cs->b->cdw]);
-   cs->b->cdw += sizeof(struct rvcn_decode_buffer_s) / 4;
-   memset(cmd_buffer->video.decode_buffer, 0, sizeof(struct rvcn_decode_buffer_s));
-}
-
 void
 radv_init_physical_device_decoder(struct radv_physical_device *pdev)
 {
@@ -354,38 +336,10 @@ radv_CreateVideoSessionKHR(VkDevice _device, const VkVideoSessionCreateInfoKHR *
    case VK_VIDEO_CODEC_OPERATION_ENCODE_H264_BIT_KHR:
       vid->encode = true;
       vid->enc_standard = RENCODE_ENCODE_STANDARD_H264;
-      switch (vid->vk.enc_usage.tuning_mode) {
-      case VK_VIDEO_ENCODE_TUNING_MODE_DEFAULT_KHR:
-      default:
-         vid->enc_preset_mode = RENCODE_PRESET_MODE_BALANCE;
-         break;
-      case VK_VIDEO_ENCODE_TUNING_MODE_LOW_LATENCY_KHR:
-      case VK_VIDEO_ENCODE_TUNING_MODE_ULTRA_LOW_LATENCY_KHR:
-         vid->enc_preset_mode = RENCODE_PRESET_MODE_SPEED;
-         break;
-      case VK_VIDEO_ENCODE_TUNING_MODE_HIGH_QUALITY_KHR:
-      case VK_VIDEO_ENCODE_TUNING_MODE_LOSSLESS_KHR:
-         vid->enc_preset_mode = RENCODE_PRESET_MODE_QUALITY;
-         break;
-      }
       break;
    case VK_VIDEO_CODEC_OPERATION_ENCODE_H265_BIT_KHR:
       vid->encode = true;
       vid->enc_standard = RENCODE_ENCODE_STANDARD_HEVC;
-      switch (vid->vk.enc_usage.tuning_mode) {
-      case VK_VIDEO_ENCODE_TUNING_MODE_DEFAULT_KHR:
-      default:
-         vid->enc_preset_mode = RENCODE_PRESET_MODE_BALANCE;
-         break;
-      case VK_VIDEO_ENCODE_TUNING_MODE_LOW_LATENCY_KHR:
-      case VK_VIDEO_ENCODE_TUNING_MODE_ULTRA_LOW_LATENCY_KHR:
-         vid->enc_preset_mode = RENCODE_PRESET_MODE_SPEED;
-         break;
-      case VK_VIDEO_ENCODE_TUNING_MODE_HIGH_QUALITY_KHR:
-      case VK_VIDEO_ENCODE_TUNING_MODE_LOSSLESS_KHR:
-         vid->enc_preset_mode = RENCODE_PRESET_MODE_QUALITY;
-         break;
-      }
       break;
    case VK_VIDEO_CODEC_OPERATION_ENCODE_AV1_BIT_KHR:
       vid->encode = true;
@@ -393,20 +347,6 @@ radv_CreateVideoSessionKHR(VkDevice _device, const VkVideoSessionCreateInfoKHR *
       if (pdev->info.vcn_ip_version == VCN_4_0_2 || pdev->info.vcn_ip_version == VCN_4_0_5 ||
           pdev->info.vcn_ip_version == VCN_4_0_6) {
          vid->enc_wa_flags = 1;
-      }
-      switch (vid->vk.enc_usage.tuning_mode) {
-      case VK_VIDEO_ENCODE_TUNING_MODE_DEFAULT_KHR:
-      default:
-         vid->enc_preset_mode = RENCODE_PRESET_MODE_BALANCE;
-         break;
-      case VK_VIDEO_ENCODE_TUNING_MODE_LOW_LATENCY_KHR:
-      case VK_VIDEO_ENCODE_TUNING_MODE_ULTRA_LOW_LATENCY_KHR:
-         vid->enc_preset_mode = RENCODE_PRESET_MODE_SPEED;
-         break;
-      case VK_VIDEO_ENCODE_TUNING_MODE_HIGH_QUALITY_KHR:
-      case VK_VIDEO_ENCODE_TUNING_MODE_LOSSLESS_KHR:
-         vid->enc_preset_mode = RENCODE_PRESET_MODE_QUALITY;
-         break;
       }
       break;
    default:
@@ -751,7 +691,7 @@ radv_GetPhysicalDeviceVideoCapabilitiesKHR(VkPhysicalDevice physicalDevice, cons
                                       VK_VIDEO_ENCODE_RATE_CONTROL_MODE_VBR_BIT_KHR;
          enc_caps->maxRateControlLayers = RADV_ENC_MAX_RATE_LAYER;
          enc_caps->maxBitrate = 1000000000;
-         enc_caps->maxQualityLevels = 2;
+         enc_caps->maxQualityLevels = pdev->enc_hw_ver >= RADV_VIDEO_ENC_HW_4 ? 4 : 3;
          enc_caps->encodeInputPictureGranularity = pCapabilities->pictureAccessGranularity;
          enc_caps->supportedEncodeFeedbackFlags = VK_VIDEO_ENCODE_FEEDBACK_BITSTREAM_BUFFER_OFFSET_BIT_KHR |
                                                   VK_VIDEO_ENCODE_FEEDBACK_BITSTREAM_BYTES_WRITTEN_BIT_KHR;

@@ -439,11 +439,10 @@ genX(simple_shader_alloc_push)(struct anv_simple_shader *state, uint32_t size)
       s = anv_state_stream_alloc(state->dynamic_state_stream,
                                  size, ANV_UBO_ALIGNMENT);
    } else {
-#if GFX_VERx10 >= 125
-      s = anv_state_stream_alloc(state->general_state_stream, align(size, 64), 64);
-#else
-      s = anv_state_stream_alloc(state->dynamic_state_stream, size, 64);
-#endif
+      s = anv_state_stream_alloc(GFX_VERx10 >= 125 ?
+                                 state->general_state_stream :
+                                 state->dynamic_state_stream,
+                                 align(size, 64), 64);
    }
 
    if (s.map == NULL)
@@ -505,6 +504,8 @@ genX(emit_simple_shader_dispatch)(struct anv_simple_shader *state,
       vertices[3] = x0; vertices[4] = y1; vertices[5] = z; /* v1 */
       vertices[6] = x0; vertices[7] = y0; vertices[8] = z; /* v2 */
 
+      struct anv_address vs_data_address =
+         anv_state_pool_state_address(&device->dynamic_state_pool, vs_data_state);
       uint32_t *dw = anv_batch_emitn(batch,
                                      1 + GENX(VERTEX_BUFFER_STATE_length),
                                      GENX(3DSTATE_VERTEX_BUFFERS));
@@ -512,10 +513,7 @@ genX(emit_simple_shader_dispatch)(struct anv_simple_shader *state,
                                      &(struct GENX(VERTEX_BUFFER_STATE)) {
                                         .VertexBufferIndex     = 0,
                                         .AddressModifyEnable   = true,
-                                        .BufferStartingAddress = (struct anv_address) {
-                                           .bo = device->dynamic_state_pool.block_pool.bo,
-                                           .offset = vs_data_state.offset,
-                                        },
+                                        .BufferStartingAddress = vs_data_address,
                                         .BufferPitch           = 3 * sizeof(float),
                                         .BufferSize            = 9 * sizeof(float),
                                         .MOCS                  = anv_mocs(device, NULL, 0),

@@ -23,7 +23,7 @@ set -x
 # - the GL release produces `glcts`, and
 # - the GLES release produces `deqp-gles*` and `deqp-egl`
 
-DEQP_MAIN_COMMIT=4d3bedc74e2258c483cf968753207cff84d9e4fc
+DEQP_MAIN_COMMIT=634a3fc62d82c34de68c3b1add25e6b7f5777524
 DEQP_VK_VERSION=1.4.4.2
 DEQP_GL_VERSION=4.6.8.0
 DEQP_GLES_VERSION=3.2.14.0

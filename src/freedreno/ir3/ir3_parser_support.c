@@ -252,6 +252,7 @@ add_const(unsigned reg, unsigned c0, unsigned c1, unsigned c2, unsigned c3)
       for (unsigned i = imm_state->size; i < idx * 4; i++)
          imm_state->values[i] = 0xd0d0d0d0;
       imm_state->size = imm_state->count = idx * 4 + 4;
+      variant->constlen = MAX2(variant->constlen, imm_state->size / 4);
    }
    imm_state->values[idx * 4 + 0] = c0;
    imm_state->values[idx * 4 + 1] = c1;

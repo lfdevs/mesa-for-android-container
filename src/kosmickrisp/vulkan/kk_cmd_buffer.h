@@ -17,6 +17,8 @@
 
 #include "kosmickrisp/bridge/mtl_types.h"
 
+#include "kosmickrisp/libkk/kk_query.h"
+
 #include "util/u_dynarray.h"
 
 #include "vk_command_buffer.h"
@@ -136,9 +138,6 @@ struct kk_graphics_state {
    struct {
       struct kk_addr_range addr_range[KK_MAX_VBUFS];
       mtl_buffer *handles[KK_MAX_VBUFS];
-      /* Required to understand maximum size of index buffer if primitive is
-       * triangle fans */
-      uint32_t max_vertices;
    } vb;
 
    /* Needed by vk_command_buffer::dynamic_graphics_state */
@@ -168,6 +167,9 @@ struct kk_cmd_buffer {
 
    /* Owned large BOs */
    struct util_dynarray large_bos;
+
+   /* Does the command buffer use the geometry heap? */
+   bool uses_heap;
 };
 
 VK_DEFINE_HANDLE_CASTS(kk_cmd_buffer, vk.base, VkCommandBuffer,
@@ -211,6 +213,11 @@ kk_cmd_buffer_dirty_all_gfx(struct kk_cmd_buffer *cmd)
    cmd->state.dirty_shaders = ~0u;
    cmd->state.gfx.dirty = ~0u;
    cmd->state.gfx.descriptors.root_dirty = true;
+
+   /* We just flushed out the heap use. If we want to use it again, we'll need
+    * to queue a free for it again.
+    */
+   cmd->uses_heap = false;
 }
 
 void kk_cmd_release_dynamic_ds_state(struct kk_cmd_buffer *cmd);
@@ -252,7 +259,6 @@ void kk_dispatch_precomp(struct kk_cmd_buffer *cmd, struct mtl_size grid,
 
 #define MESA_DISPATCH_PRECOMP kk_dispatch_precomp
 
-void kk_cmd_write(struct kk_cmd_buffer *cmd, mtl_buffer *buffer, uint64_t addr,
-                  uint64_t value);
+void kk_cmd_write(struct kk_cmd_buffer *cmd, struct libkk_imm_write write);
 
 #endif

@@ -115,6 +115,10 @@ struct panvk_rendering_state {
        * to a draw. */
       uint64_t last;
    } oq;
+
+   struct {
+      uint64_t fbds[3];
+   } ir;
 #endif
 };
 

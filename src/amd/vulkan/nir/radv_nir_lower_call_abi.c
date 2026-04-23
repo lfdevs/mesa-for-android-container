@@ -167,9 +167,8 @@ gather_tail_call_instrs_block(nir_function *caller, const struct nir_block *bloc
       _mesa_set_add(tail_calls, instr);
    }
 
-   set_foreach (&block->predecessors, pred) {
-      gather_tail_call_instrs_block(caller, pred->key, tail_calls);
-   }
+   nir_foreach_pred (pred, block)
+      gather_tail_call_instrs_block(caller, pred, tail_calls);
 }
 
 struct lower_param_info {

@@ -26,14 +26,18 @@ lower_split_src(bi_context *ctx, bi_instr *I, unsigned s, bi_instr** lut)
       return;
    }
 
-   /* Check if the source regs are already coming from a split. */
-   bi_index* src_a = &I->src[s];
-   bi_index* src_b = &I->src[s + 1];
+   /* Check if the source regs are already coming from a split/collect pair. */
+   bi_index *src_a = &I->src[s];
+   bi_index *src_b = &I->src[s + 1];
    if (bi_is_ssa(*src_a) && bi_is_ssa(*src_b)) {
-      bi_instr* src_ins_a = lut[src_a->value];
-      bi_instr* src_ins_b = lut[src_b->value];
-      if (src_ins_a->op == BI_OPCODE_SPLIT_I32 && src_ins_a == src_ins_b)
-         return;
+      bi_instr *src_ins_a = lut[src_a->value];
+      bi_instr *src_ins_b = lut[src_b->value];
+      if (src_ins_a->op == BI_OPCODE_SPLIT_I32 && src_ins_a == src_ins_b) {
+         bi_index split_src = src_ins_a->src[0];
+         if (!bi_is_ssa(split_src) ||
+             lut[split_src.value]->op == BI_OPCODE_COLLECT_I32)
+            return;
+      }
    }
 
    /* Allocate temporary before the instruction */
@@ -76,7 +80,9 @@ va_lower_split_64bit(bi_context *ctx)
 
          struct va_src_info info = va_src_info(I->op, s);
 
-         if (info.size == VA_SIZE_64)
+         /* Only split if the instruction expects 64-bit inputs as two separate
+          * sources. */
+         if (info.size == VA_SIZE_64 && bi_count_read_registers(I, s) == 1)
             lower_split_src(ctx, I, s, lut);
       }
    }

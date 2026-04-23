@@ -412,11 +412,10 @@ shader_module_compile_to_nir(struct v3dv_device *device,
    }
 
    if (V3D_DBG(NIR) || v3d_debug_flag_for_shader_stage(gl_stage)) {
-      fprintf(stderr, "NIR after vk_pipeline_shader_stage_to_nir: %s prog %d NIR:\n",
-              broadcom_shader_stage_name(stage->stage),
-              stage->program_id);
-      nir_print_shader(nir, stderr);
-      fprintf(stderr, "\n");
+      mesa_logi("NIR after vk_pipeline_shader_stage_to_nir: %s prog %d NIR:",
+                broadcom_shader_stage_name(stage->stage),
+                stage->program_id);
+      nir_log_shaderi(nir);
    }
 
    preprocess_nir(nir);
@@ -1483,13 +1482,13 @@ upload_assembly(struct v3dv_pipeline *pipeline)
    struct v3dv_bo *bo = v3dv_bo_alloc(pipeline->device, total_size,
                                       "pipeline shader assembly", true);
    if (!bo) {
-      mesa_loge("failed to allocate memory for shader\n");
+      mesa_loge("Failed to allocate memory for shader");
       return false;
    }
 
    bool ok = v3dv_bo_map(pipeline->device, bo, total_size);
    if (!ok) {
-      mesa_loge("failed to map source shader buffer\n");
+      mesa_loge("Failed to map source shader buffer");
       return false;
    }
 
@@ -1685,11 +1684,10 @@ pipeline_compile_shader_variant(struct v3dv_pipeline_stage *p_stage,
    mesa_shader_stage gl_stage = broadcom_shader_stage_to_gl(p_stage->stage);
 
    if (V3D_DBG(NIR) || v3d_debug_flag_for_shader_stage(gl_stage)) {
-      fprintf(stderr, "Just before v3d_compile: %s prog %d NIR:\n",
-              broadcom_shader_stage_name(p_stage->stage),
-              p_stage->program_id);
-      nir_print_shader(p_stage->nir, stderr);
-      fprintf(stderr, "\n");
+      mesa_logi("Just before v3d_compile: %s prog %d NIR:",
+                broadcom_shader_stage_name(p_stage->stage),
+                p_stage->program_id);
+      nir_log_shaderi(p_stage->nir);
    }
 
    uint64_t *qpu_insts;
@@ -1707,7 +1705,7 @@ pipeline_compile_shader_variant(struct v3dv_pipeline_stage *p_stage,
    struct v3dv_shader_variant *variant = NULL;
 
    if (!qpu_insts) {
-      mesa_loge("Failed to compile %s prog %d NIR to VIR\n",
+      mesa_loge("Failed to compile %s prog %d NIR to VIR",
                 broadcom_shader_stage_name(p_stage->stage),
                 p_stage->program_id);
       *out_vk_result = VK_ERROR_UNKNOWN;
@@ -2467,7 +2465,7 @@ pipeline_compile_graphics(struct v3dv_pipeline *pipeline,
             vk_find_struct_const(sinfo->pNext, SHADER_MODULE_CREATE_INFO);
       }
 
-      vk_pipeline_robustness_state_fill(&device->vk, &p_stage->robustness,
+      vk_pipeline_robustness_state_fill(&device->vk.robustness_state, &p_stage->robustness,
                                         pCreateInfo->pNext, sinfo->pNext);
 
       vk_pipeline_hash_shader_stage(pipeline->flags,
@@ -2518,7 +2516,7 @@ pipeline_compile_graphics(struct v3dv_pipeline *pipeline,
       p_stage->module = NULL;
       p_stage->module_info = NULL;
       p_stage->nir = b.shader;
-      vk_pipeline_robustness_state_fill(&device->vk, &p_stage->robustness,
+      vk_pipeline_robustness_state_fill(&device->vk.robustness_state, &p_stage->robustness,
                                         NULL, NULL);
       pipeline_compute_blake3_from_nir(p_stage);
       p_stage->program_id =
@@ -3181,7 +3179,7 @@ pipeline_compile_compute(struct v3dv_pipeline *pipeline,
          vk_find_struct_const(sinfo->pNext, SHADER_MODULE_CREATE_INFO);
    }
 
-   vk_pipeline_robustness_state_fill(&device->vk, &p_stage->robustness,
+   vk_pipeline_robustness_state_fill(&device->vk.robustness_state, &p_stage->robustness,
                                      info->pNext, sinfo->pNext);
 
    vk_pipeline_hash_shader_stage(pipeline->flags,

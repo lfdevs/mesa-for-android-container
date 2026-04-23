@@ -15,6 +15,7 @@
 #include "compiler/brw/brw_nir.h"
 #include "compiler/brw/brw_nir_rt.h"
 #include "compiler/intel_nir.h"
+#include "compiler/jay/jay.h"
 
 #include "git_sha1.h"
 
@@ -185,6 +186,9 @@ anv_shader_init_uuid(struct anv_physical_device *device)
    const bool btp_bti_rcc = device->rt_change_needs_flush;
    _mesa_blake3_update(&ctx, &btp_bti_rcc, sizeof(btp_bti_rcc));
 
+   const bool cbv_push_buffer = device->instance->promote_cbv_to_push_buffers;
+   _mesa_blake3_update(&ctx, &cbv_push_buffer, sizeof(cbv_push_buffer));
+
    uint8_t blake3[BLAKE3_KEY_LEN];
    _mesa_blake3_final(&ctx, blake3);
    memcpy(device->shader_binary_uuid, blake3, sizeof(device->shader_binary_uuid));
@@ -218,7 +222,7 @@ anv_shader_get_spirv_options(struct vk_physical_device *device,
       .phys_ssbo_addr_format = nir_address_format_64bit_global,
       .push_const_addr_format = nir_address_format_logical,
 
-      .printf = INTEL_DEBUG(DEBUG_SHADER_PRINT),
+      .printf = ANV_DEBUG(SHADER_PRINT),
 
       /* TODO: Consider changing this to an address format that has the NULL
        * pointer equals to 0.  That might be a better format to play nice
@@ -269,7 +273,7 @@ anv_shader_preprocess_nir(struct vk_physical_device *device,
    NIR_PASS(_, nir, nir_opt_barrier_modes);
    NIR_PASS(_, nir, nir_opt_acquire_release_barriers, SCOPE_QUEUE_FAMILY);
 
-   if (INTEL_DEBUG(DEBUG_SHADER_PRINT)) {
+   if (ANV_DEBUG(SHADER_PRINT)) {
       const nir_lower_printf_options printf_opts = {
          .ptr_bit_size = 64,
          .hash_format_strings = true,
@@ -833,6 +837,7 @@ anv_shader_compile_vs(struct anv_device *device,
                       char **error_str)
 {
    const struct brw_compiler *compiler = device->physical->compiler;
+   const struct intel_device_info *devinfo = compiler->devinfo;
    nir_shader *nir = shader_data->info->nir;
 
    shader_data->num_stats = 1;
@@ -850,7 +855,17 @@ anv_shader_compile_vs(struct anv_device *device,
       .prog_data = &shader_data->prog_data.vs,
    };
 
-   shader_data->code = (void *)brw_compile_vs(compiler, &params);
+   if (intel_use_jay(devinfo, nir->info.stage)) {
+      struct jay_shader_bin *bin =
+         jay_compile(devinfo, mem_ctx, nir,
+                     (union brw_any_prog_data *) params.prog_data,
+                     (union brw_any_prog_key *) params.key);
+
+      shader_data->code = (void *) bin->kernel;
+   } else {
+      shader_data->code = (void *) brw_compile_vs(compiler, &params);
+   }
+
    *error_str = params.base.error_str;
 }
 
@@ -1040,6 +1055,7 @@ anv_shader_compile_fs(struct anv_device *device,
                       char **error_str)
 {
    const struct brw_compiler *compiler = device->physical->compiler;
+   const struct intel_device_info *devinfo = compiler->devinfo;
    nir_shader *nir = shader_data->info->nir;
 
    /* When using Primitive Replication for multiview, each view gets its own
@@ -1072,7 +1088,17 @@ anv_shader_compile_fs(struct anv_device *device,
       .max_polygons = UCHAR_MAX,
    };
 
-   shader_data->code = (void *)brw_compile_fs(compiler, &params);
+   if (intel_use_jay(devinfo, nir->info.stage)) {
+      struct jay_shader_bin *bin =
+         jay_compile(devinfo, mem_ctx, nir,
+                     (union brw_any_prog_data *) params.prog_data,
+                     (union brw_any_prog_key *) params.key);
+
+      shader_data->code = (void *) bin->kernel;
+   } else {
+      shader_data->code = (void *) brw_compile_fs(compiler, &params);
+   }
+
    *error_str = params.base.error_str;
 
    shader_data->num_stats = (uint32_t)!!shader_data->prog_data.fs.dispatch_multi +
@@ -1101,6 +1127,7 @@ anv_shader_compile_cs(struct anv_device *device,
                       char **error_str)
 {
    const struct brw_compiler *compiler = device->physical->compiler;
+   const struct intel_device_info *devinfo = compiler->devinfo;
    nir_shader *nir = shader_data->info->nir;
 
    shader_data->num_stats = 1;
@@ -1118,7 +1145,21 @@ anv_shader_compile_cs(struct anv_device *device,
       .prog_data = &shader_data->prog_data.cs,
    };
 
-   shader_data->code = (void *)brw_compile_cs(compiler, &params);
+   if (intel_use_jay(devinfo, nir->info.stage)) {
+      struct jay_shader_bin *bin = jay_compile(devinfo, mem_ctx, nir,
+                             (union brw_any_prog_data*)params.prog_data,
+                             (union brw_any_prog_key*)params.key);
+
+       shader_data->code = (void*)bin->kernel;
+       shader_data->stats[0] = bin->stats;
+
+       params.prog_data->local_size[0] = nir->info.workgroup_size[0];
+       params.prog_data->local_size[1] = nir->info.workgroup_size[1];
+       params.prog_data->local_size[2] = nir->info.workgroup_size[2];
+   } else {
+       shader_data->code = (void*)brw_compile_cs(compiler, &params);
+   }
+
    *error_str = params.base.error_str;
 }
 
@@ -1434,7 +1475,16 @@ anv_shader_lower_nir(struct anv_device *device,
       NIR_PASS(_, nir, nir_opt_dce);
       NIR_PASS(inlined, nir, nir_inline_functions);
       nir_remove_non_entrypoints(nir);
+
       if (inlined) {
+         /* Some shader_temp vars may have remained multi-function before
+          * cmat lowering/inlining.  Now that everything was inlined,
+          * they may be lowered to locals.
+          */
+         bool lowered_globals = false;
+         NIR_PASS(lowered_globals, nir, nir_lower_global_vars_to_local);
+         if (lowered_globals)
+            NIR_PASS(_, nir, nir_split_struct_vars, nir_var_function_temp);
          NIR_PASS(_, nir, nir_opt_copy_prop_vars);
          NIR_PASS(_, nir, nir_opt_copy_prop);
       }
@@ -1446,6 +1496,8 @@ anv_shader_lower_nir(struct anv_device *device,
    }
 
    nir_shader_gather_info(nir, nir_shader_get_entrypoint(nir));
+
+   NIR_PASS(_, nir, nir_lower_memory_model);
 
    /* Apply lowering for 64bit atomics pre-Xe2 */
    const bool lower_64bit_atomics = devinfo->ver < 20;
@@ -1481,10 +1533,23 @@ anv_shader_lower_nir(struct anv_device *device,
                pdevice->isl_dev.shader_tiling);
    }
 
-   NIR_PASS(_, nir, nir_lower_explicit_io, nir_var_mem_global,
-            nir_address_format_64bit_global);
+   /* Lower push constants variables prior to global realignment for CBV
+    * resources, it makes identifying a 64bit pointer from the push constants
+    * easier.
+    */
    NIR_PASS(_, nir, nir_lower_explicit_io, nir_var_mem_push_const,
             nir_address_format_32bit_offset);
+
+   /* Realign pointers to CBV on stages that can promote to push buffers. */
+   if (pdevice->instance->promote_cbv_to_push_buffers &&
+       nir->info.stage <= MESA_SHADER_FRAGMENT) {
+      /* Cleanup for the analysis, we don't want any ALU */
+      cleanup_nir(nir);
+      NIR_PASS(_, nir, anv_nir_realign_cbv);
+   }
+
+   NIR_PASS(_, nir, nir_lower_explicit_io, nir_var_mem_global,
+            nir_address_format_64bit_global);
 
    NIR_PASS(_, nir, brw_nir_lower_ray_queries, &pdevice->info);
 

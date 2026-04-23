@@ -200,6 +200,7 @@ spec@glsl-4.00@execution@built-in-functions@fs-op-div-dmat4-dmat4,Fail
 glx@glx-swap-pixmap-bad,Fail
 spec@!opengl 1.0@rasterpos@glsl_vs_ssbo,Fail
 spec@arb_occlusion_query@occlusion_query_order,Fail
+spec@arb_gpu_shader_fp64@execution@fs-indirect-temp-double-src,Crash
 spec@glsl-1.30@execution@fs-uint-to-float-of-extract-int16,Fail
 spec@glsl-1.30@execution@fs-uint-to-float-of-extract-int8,Fail
 spec@khr_texture_compression_astc@miptree-gles srgb-fp,Fail
@@ -503,3 +504,16 @@ angle-dEQP-GLES2.functional.shaders.algorithm.rgb_to_hsl_vertex,Fail
 # ../src/freedreno/vulkan/tu_image.cc:512: VkResult tu_image_update_layout(struct tu_device *, struct tu_image *, uint64_t, const VkSubresourceLayout *) [CHIP = A6XX]: assertion "!image->force_linear_tile" failed
 ahb-dEQP-VK.api.external.memory.android_hardware_buffer.ahb_format_properties.image_formats.r8g8b8a8_unorm,Crash
 ahb-dEQP-VK.api.external.memory.android_hardware_buffer.ahb_format_properties_2.image_formats.r8g8b8a8_unorm,Crash
+
+# Early-fragment multisample autotune regressions
+dEQP-VK.fragment_operations.early_fragment.sample_count_early_fragment_tests_depth_alpha_to_coverage_samples_2_maintenance5,Fail
+dEQP-VK.fragment_operations.early_fragment.sample_count_early_fragment_tests_depth_alpha_to_coverage_samples_4_maintenance5,Fail
+dEQP-VK.fragment_operations.early_fragment.sample_count_early_fragment_tests_depth_samples_2,Fail
+dEQP-VK.fragment_operations.early_fragment.sample_count_early_fragment_tests_depth_samples_2_maintenance5,Fail
+dEQP-VK.fragment_operations.early_fragment.sample_count_early_fragment_tests_depth_samples_4,Fail
+dEQP-VK.fragment_operations.early_fragment.sample_count_early_fragment_tests_depth_samples_4_maintenance5,Fail
+
+# Autotune regression
+angle-dEQP-GLES3.functional.fbo.msaa.2_samples.rg8,Fail
+angle-dEQP-GLES3.functional.fbo.msaa.4_samples.rg8,Fail
+

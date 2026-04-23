@@ -324,6 +324,7 @@ def gfx_level_to_str(cl):
         "gfx10_3",
         "gfx11",
         "gfx11_5",
+        "gfx11_7",
         "gfx12",
     ]
     if 8 <= cl and cl < 8 + len(supported):

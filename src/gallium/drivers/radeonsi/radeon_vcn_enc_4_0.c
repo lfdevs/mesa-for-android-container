@@ -37,27 +37,6 @@ static void radeon_enc_sq_destroy(struct radeon_encoder *enc)
    rvcn_sq_tail(&enc->cs, &enc->sq);
 }
 
-static void radeon_enc_op_preset(struct radeon_encoder *enc)
-{
-   uint32_t preset_mode;
-
-   if (enc->enc_pic.quality_modes.preset_mode == RENCODE_PRESET_MODE_SPEED &&
-         (!enc->enc_pic.hevc_deblock.disable_sao &&
-         (u_reduce_video_profile(enc->base.profile) == PIPE_VIDEO_FORMAT_HEVC)))
-      preset_mode = RENCODE_IB_OP_SET_BALANCE_ENCODING_MODE;
-   else if (enc->enc_pic.quality_modes.preset_mode == RENCODE_PRESET_MODE_QUALITY)
-      preset_mode = RENCODE_IB_OP_SET_QUALITY_ENCODING_MODE;
-   else if (enc->enc_pic.quality_modes.preset_mode == RENCODE_PRESET_MODE_HIGH_QUALITY)
-      preset_mode = RENCODE_IB_OP_SET_HIGH_QUALITY_ENCODING_MODE;
-   else if (enc->enc_pic.quality_modes.preset_mode == RENCODE_PRESET_MODE_BALANCE)
-      preset_mode = RENCODE_IB_OP_SET_BALANCE_ENCODING_MODE;
-   else
-      preset_mode = RENCODE_IB_OP_SET_SPEED_ENCODING_MODE;
-
-   RADEON_ENC_BEGIN(preset_mode);
-   RADEON_ENC_END();
-}
-
 static void radeon_enc_session_init(struct radeon_encoder *enc)
 {
    enc->enc_pic.session_init.slice_output_enabled = 0;
@@ -533,7 +512,6 @@ void radeon_enc_4_0_init(struct radeon_encoder *enc)
    enc->begin = radeon_enc_sq_begin;
    enc->encode = radeon_enc_sq_encode;
    enc->destroy = radeon_enc_sq_destroy;
-   enc->op_preset = radeon_enc_op_preset;
 
    if (u_reduce_video_profile(enc->base.profile) == PIPE_VIDEO_FORMAT_AV1) {
       /* begin function need to set these functions to dummy */

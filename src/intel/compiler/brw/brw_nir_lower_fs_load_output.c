@@ -36,10 +36,11 @@ brw_nir_lower_fs_load_output_instr(nir_builder *b,
     * images.
     */
    nir_def *size = nir_txs(b, .dim = GLSL_SAMPLER_DIM_3D, .texture_index = target);
+   nir_def *pixel_coords = nir_load_pixel_coord(b);
 
    nir_def *coords[3] = {
-      nir_f2u32(b, nir_channel(b, nir_load_frag_coord(b), 0)),
-      nir_f2u32(b, nir_channel(b, nir_load_frag_coord(b), 1)),
+      nir_u2u32(b, nir_channel(b, pixel_coords, 0)),
+      nir_u2u32(b, nir_channel(b, pixel_coords, 1)),
       nir_load_layer_id(b),
    };
 

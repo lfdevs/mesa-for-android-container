@@ -874,8 +874,7 @@ XMesaVisual XMesaCreateVisual( Display *display,
       v->stvis.color_format = PIPE_FORMAT_NONE;
 
    if (v->stvis.color_format == PIPE_FORMAT_NONE) {
-      free(v->visinfo);
-      free(v);
+      XMesaDestroyVisual(v);
       return NULL;
    }
 

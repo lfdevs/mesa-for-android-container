@@ -873,7 +873,6 @@ ac_set_tracked_regs_to_clear_state(struct ac_tracked_regs *tracked_regs,
    tracked_regs->reg_value[AC_TRACKED_DB_STENCIL_CONTROL] = 0;
    tracked_regs->reg_value[AC_TRACKED_DB_DEPTH_BOUNDS_MIN] = 0;
    tracked_regs->reg_value[AC_TRACKED_DB_DEPTH_BOUNDS_MAX] = 0;
-   tracked_regs->reg_value[AC_TRACKED_DB_VRS_OVERRIDE_CNTL] = 0;
    tracked_regs->reg_value[AC_TRACKED_DB_ALPHA_TO_MASK] = 0;
 
    if (info->gfx_level >= GFX9) {
@@ -986,7 +985,7 @@ ac_set_tracked_regs_to_clear_state(struct ac_tracked_regs *tracked_regs,
    tracked_regs->reg_value[AC_TRACKED_CB_DCC_CONTROL] = 0;
    tracked_regs->reg_value[AC_TRACKED_CB_COLOR_CONTROL] = 0;
 
-   tracked_regs->reg_value[AC_TRACKED_PA_SC_VRS_OVERRIDE_CNTL] = 0;
+   tracked_regs->reg_value[AC_TRACKED_DB_PA_SC_VRS_OVERRIDE_CNTL] = 0;
 
    /* Set all cleared context registers to saved. */
    BITSET_SET_COUNT(tracked_regs->reg_saved_mask, 0, AC_NUM_TRACKED_CONTEXT_REGS);
@@ -1021,7 +1020,8 @@ ac_cmdbuf_flush_vgt_streamout(struct ac_cmdbuf *cs, enum amd_gfx_level gfx_level
       reg_strmout_cntl = R_0300FC_CP_STRMOUT_CNTL;
 
       ac_cmdbuf_emit(PKT3(PKT3_WRITE_DATA, 3, 0));
-      ac_cmdbuf_emit(S_370_DST_SEL(V_370_MEM_MAPPED_REGISTER) | S_370_ENGINE_SEL(V_370_ME));
+      ac_cmdbuf_emit(S_371_DST_SEL(V_371_MEM_MAPPED_REGISTER) |
+                     S_371_ENGINE_SEL(V_371_MICRO_ENGINE));
       ac_cmdbuf_emit(R_0300FC_CP_STRMOUT_CNTL >> 2);
       ac_cmdbuf_emit(0);
       ac_cmdbuf_emit(0);

@@ -4655,10 +4655,6 @@ void genX(CmdDispatchBase)(
                            0);
 }
 
-#define GPGPU_DISPATCHDIMX 0x2500
-#define GPGPU_DISPATCHDIMY 0x2504
-#define GPGPU_DISPATCHDIMZ 0x2508
-
 void genX(CmdDispatchIndirect)(
     VkCommandBuffer                             commandBuffer,
     VkBuffer                                    _buffer,
@@ -4704,9 +4700,9 @@ void genX(CmdDispatchIndirect)(
    struct mi_value size_y = mi_mem32(anv_address_add(addr, 4));
    struct mi_value size_z = mi_mem32(anv_address_add(addr, 8));
 
-   mi_store(&b, mi_reg32(GPGPU_DISPATCHDIMX), size_x);
-   mi_store(&b, mi_reg32(GPGPU_DISPATCHDIMY), size_y);
-   mi_store(&b, mi_reg32(GPGPU_DISPATCHDIMZ), size_z);
+   mi_store(&b, mi_reg32(GENX(GPGPU_DISPATCHDIMX_num)), size_x);
+   mi_store(&b, mi_reg32(GENX(GPGPU_DISPATCHDIMY_num)), size_y);
+   mi_store(&b, mi_reg32(GENX(GPGPU_DISPATCHDIMZ_num)), size_z);
 
 #if GFX_VER <= 7
    /* predicate = (compute_dispatch_indirect_x_size == 0); */

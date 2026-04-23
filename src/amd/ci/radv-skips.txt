@@ -6,8 +6,14 @@
 # investigated.
 dEQP-VK.api.command_buffers.many_indirect_disps_on_secondary
 
+# Those cases seem to usually timeout.
+dEQP-VK.synchronization2.internally_synchronized_queues.*wsi*
+
 # These tests are expected to hang on GFX10+. I have a pending fix.
 dEQP-VK.sparse_resources.buffer.misc.null_address_read*
 
 # These tests require PCIe atomics, causing random hangs
 dEQP-VK.video.synchronization.*.basic.event.*
+
+# These tests hang when running in parallel (border color on compute queues).
+dEQP-VK.pipeline.*.sampler.*_compute

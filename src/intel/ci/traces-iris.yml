@@ -557,7 +557,7 @@ traces:
       checksum: 85b4f3279fde206dace85ffd727057ea
     gl-intel-kbl:
       label: [no-perf]
-      checksum: efab5903f88f7f34e7c948cfcfb54cd9
+      checksum: 46555aa91e3f9b3f12f93a28b4ff069b
     gl-intel-whl:
       label: [no-perf]
       checksum: 6a0e17d98eca33e80810b6158e998aa1
@@ -569,19 +569,19 @@ traces:
       checksum: 85b4f3279fde206dace85ffd727057ea
   blender/blender-demo-ellie_pose.trace:
     gl-intel-apl:
-      checksum: 7d0da76cdf72ff785a1ecc6d4e404e0c
+      checksum: 61d144ac9cd8cbba11b19bb1174855bc
     gl-intel-glx:
-      checksum: 7d0da76cdf72ff785a1ecc6d4e404e0c
+      checksum: 61d144ac9cd8cbba11b19bb1174855bc
     gl-intel-amly:
-      checksum: 7d0da76cdf72ff785a1ecc6d4e404e0c
+      checksum: 61d144ac9cd8cbba11b19bb1174855bc
     gl-intel-kbl:
-      checksum: 7d0da76cdf72ff785a1ecc6d4e404e0c
+      checksum: 61d144ac9cd8cbba11b19bb1174855bc
     gl-intel-whl:
-      checksum: 7d0da76cdf72ff785a1ecc6d4e404e0c
+      checksum: 61d144ac9cd8cbba11b19bb1174855bc
     gl-intel-cml:
-      checksum: 7d0da76cdf72ff785a1ecc6d4e404e0c
+      checksum: 61d144ac9cd8cbba11b19bb1174855bc
     gl-intel-adl:
-      checksum: 7d0da76cdf72ff785a1ecc6d4e404e0c
+      checksum: 61d144ac9cd8cbba11b19bb1174855bc
   unvanquished/unvanquished-lowest.trace:
     gl-intel-apl:
       checksum: 884096b6dd40e2f500d0837501287fac

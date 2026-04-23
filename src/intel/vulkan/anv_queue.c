@@ -95,7 +95,7 @@ anv_queue_init(struct anv_device *device, struct anv_queue *queue,
     * submission feature, shader-print feature, or BVH dump.
     */
    if (INTEL_DEBUG(DEBUG_SYNC) ||
-       INTEL_DEBUG(DEBUG_SHADER_PRINT) ||
+       ANV_DEBUG(SHADER_PRINT) ||
        INTEL_DEBUG_BVH_ANY) {
       result = vk_sync_create(&device->vk,
                               &device->physical->sync_syncobj_type,

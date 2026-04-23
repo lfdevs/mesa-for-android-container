@@ -105,6 +105,7 @@ kk_reset_cmd_buffer(struct vk_command_buffer *vk_cmd_buffer,
    kk_cmd_release_resources(dev, cmd);
 
    memset(&cmd->state, 0, sizeof(cmd->state));
+   cmd->uses_heap = false;
 }
 
 const struct vk_command_buffer_ops kk_cmd_buffer_ops = {
@@ -447,11 +448,9 @@ kk_dispatch_precomp(struct kk_cmd_buffer *cmd, struct mtl_size grid,
 }
 
 void
-kk_cmd_write(struct kk_cmd_buffer *cmd, mtl_buffer *buffer, uint64_t addr,
-             uint64_t value)
+kk_cmd_write(struct kk_cmd_buffer *cmd, struct libkk_imm_write write)
 {
-   util_dynarray_append(&cmd->encoder->imm_writes, addr);
-   util_dynarray_append(&cmd->encoder->imm_writes, value);
+   util_dynarray_append(&cmd->encoder->imm_writes, write);
 }
 
 VKAPI_ATTR void VKAPI_CALL

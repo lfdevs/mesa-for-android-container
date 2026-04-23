@@ -192,7 +192,6 @@ save_glx_visual( Display *dpy, XVisualInfo *vinfo,
    GLboolean ximageFlag = GL_TRUE;
    XMesaVisual xmvis;
    GLint i;
-   GLboolean comparePointers;
 
    if (!rgbFlag)
       return NULL;
@@ -221,13 +220,6 @@ save_glx_visual( Display *dpy, XVisualInfo *vinfo,
    if (stencil_size > 0 && depth_size > 0)
       depth_size = 24;
 
-   /* Comparing IDs uses less memory but sometimes fails. */
-   /* XXX revisit this after 3.0 is finished. */
-   if (os_get_option("MESA_GLX_VISUAL_HACK"))
-      comparePointers = GL_TRUE;
-   else
-      comparePointers = GL_FALSE;
-
    /* Force the visual to have an alpha channel */
    if (rgbFlag && os_get_option("MESA_GLX_FORCE_ALPHA"))
       alphaFlag = GL_TRUE;
@@ -247,9 +239,8 @@ save_glx_visual( Display *dpy, XVisualInfo *vinfo,
           && (v->mesa_visual.accumGreenBits >= accumGreenSize || accumGreenSize == 0)
           && (v->mesa_visual.accumBlueBits >= accumBlueSize || accumBlueSize == 0)
           && (v->mesa_visual.accumAlphaBits >= accumAlphaSize || accumAlphaSize == 0)) {
-         /* now either compare XVisualInfo pointers or visual IDs */
-         if ((!comparePointers && v->visinfo->visualid == vinfo->visualid)
-             || (comparePointers && v->vishandle == vinfo)) {
+         /* now compare visual IDs */
+         if (v->visinfo->visualid == vinfo->visualid) {
             return v;
          }
       }
@@ -264,10 +255,6 @@ save_glx_visual( Display *dpy, XVisualInfo *vinfo,
                               accumBlueSize, accumAlphaSize, num_samples, level,
                               GLX_NONE_EXT );
    if (xmvis) {
-      /* Save a copy of the pointer now so we can find this visual again
-       * if we need to search for it in find_glx_visual().
-       */
-      xmvis->vishandle = vinfo;
       /* Allocate more space for additional visual */
       VisualTable = realloc(VisualTable, sizeof(XMesaVisual) * (NumVisuals + 1));
       /* add xmvis to the list */
@@ -371,13 +358,6 @@ find_glx_visual( Display *dpy, XVisualInfo *vinfo )
    for (i=0;i<NumVisuals;i++) {
       if (VisualTable[i]->display==dpy
           && VisualTable[i]->visinfo->visualid == vinfo->visualid) {
-         return VisualTable[i];
-      }
-   }
-
-   /* if that fails, try to match pointers */
-   for (i=0;i<NumVisuals;i++) {
-      if (VisualTable[i]->display==dpy && VisualTable[i]->vishandle==vinfo) {
          return VisualTable[i];
       }
    }
@@ -602,10 +582,11 @@ destroy_visuals_on_display(Display *dpy)
       if (VisualTable[i]->display == dpy) {
          /* remove this visual */
          int j;
-         free(VisualTable[i]);
+         XMesaDestroyVisual(VisualTable[i]);
          for (j = i; j < NumVisuals - 1; j++)
             VisualTable[j] = VisualTable[j + 1];
          NumVisuals--;
+         i--;
       }
    }
 }
@@ -1082,6 +1063,7 @@ choose_visual( Display *dpy, int screen, const int *list, GLboolean fbConfig )
                                accumRedSize, accumGreenSize,
                                accumBlueSize, accumAlphaSize, level, numAux,
                                num_samples );
+      free(vis);
    }
 
    return xmvis;
@@ -1098,12 +1080,11 @@ glXChooseVisual( Display *dpy, int screen, int *list )
 
    xmvis = choose_visual(dpy, screen, list, GL_FALSE);
    if (xmvis) {
-      /* create a new vishandle - the cached one may be stale */
-      xmvis->vishandle = malloc(sizeof(XVisualInfo));
-      if (xmvis->vishandle) {
-         memcpy(xmvis->vishandle, xmvis->visinfo, sizeof(XVisualInfo));
+      XVisualInfo* visinfo = malloc(sizeof(XVisualInfo));
+      if (visinfo) {
+         memcpy(visinfo, xmvis->visinfo, sizeof(XVisualInfo));
       }
-      return xmvis->vishandle;
+      return visinfo;
    }
    else
       return NULL;
@@ -1224,6 +1205,8 @@ glXMakeContextCurrent( Display *dpy, GLXDrawable draw,
 
       /* Now make current! */
       if (XMesaMakeCurrent2(xmctx, drawBuffer, readBuffer)) {
+         if (current && current != ctx)
+            current->currentDpy = NULL;
          ctx->currentDpy = dpy;
          ctx->currentDrawable = draw;
          ctx->currentReadable = read;
@@ -1236,6 +1219,8 @@ glXMakeContextCurrent( Display *dpy, GLXDrawable draw,
    }
    else if (!ctx && !draw && !read) {
       /* release current context w/out assigning new one. */
+      if (current)
+         current->currentDpy = NULL;
       XMesaMakeCurrent2( NULL, NULL, NULL );
       SetCurrentContext(NULL);
       return True;
@@ -1863,16 +1848,11 @@ glXGetVisualFromFBConfig( Display *dpy, GLXFBConfig config )
 {
    if (dpy && config) {
       XMesaVisual xmvis = (XMesaVisual) config;
-#if 0
-      return xmvis->vishandle;
-#else
-      /* create a new vishandle - the cached one may be stale */
-      xmvis->vishandle = malloc(sizeof(XVisualInfo));
-      if (xmvis->vishandle) {
-         memcpy(xmvis->vishandle, xmvis->visinfo, sizeof(XVisualInfo));
+      XVisualInfo* visinfo = malloc(sizeof(XVisualInfo));
+      if (visinfo) {
+         memcpy(visinfo, xmvis->visinfo, sizeof(XVisualInfo));
       }
-      return xmvis->vishandle;
-#endif
+      return visinfo;
    }
    else {
       return NULL;

@@ -2192,6 +2192,15 @@
   channels: [UN8]
   swizzles: [X, 0, 0, 1]
 
+# 10-bit channels stored in 16-bit containers (upper 10 bits used,
+# lower 6 bits are padding).
+- name: X6R10X6G10X6B10X6A10_UNORM
+  layout: other
+  colorspace: RGB
+  block: {width: 1, height: 1, depth: 1}
+  channels: [UN16, UN16, UN16, UN16]
+  swizzles: [X, Y, Z, W]
+
 # Formats for plane 0/plane 1 of P010
 - name: X6R10_UNORM
   layout: plain

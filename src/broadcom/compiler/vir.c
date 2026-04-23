@@ -2216,7 +2216,7 @@ uint64_t *v3d_compile(const struct v3d_compiler *compiler,
 
                         if (ret >= 0) {
                                 if (V3D_DBG(PERF))
-                                        fprintf(stderr, "%s\n", debug_msg);
+                                        mesa_logi("%s", debug_msg);
 
                                 c->debug_output(debug_msg, c->debug_output_data);
                                 free(debug_msg);
@@ -2267,7 +2267,7 @@ uint64_t *v3d_compile(const struct v3d_compiler *compiler,
                                                    c->program_id, c->variant_id,
                                                    c->spills, c->fills);
                                 if (ret >= 0) {
-                                        fprintf(stderr, "%s\n", debug_msg);
+                                        mesa_logi("%s", debug_msg);
                                         c->debug_output(debug_msg, c->debug_output_data);
                                         free(debug_msg);
                                 }
@@ -2297,7 +2297,7 @@ uint64_t *v3d_compile(const struct v3d_compiler *compiler,
                                    vir_get_stage_name(c),
                                    c->program_id, c->variant_id,
                                    c->spills, c->fills);
-                fprintf(stderr, "%s\n", debug_msg);
+                mesa_logi("%s", debug_msg);
 
                 if (ret >= 0) {
                         c->debug_output(debug_msg, c->debug_output_data);
@@ -2306,9 +2306,8 @@ uint64_t *v3d_compile(const struct v3d_compiler *compiler,
         }
 
         if (c->compilation_result != V3D_COMPILATION_SUCCEEDED) {
-                fprintf(stderr, "Failed to compile %s prog %d/%d "
-                        "with any strategy.\n",
-                        vir_get_stage_name(c), c->program_id, c->variant_id);
+                mesa_loge("Failed to compile %s prog %d/%d with any strategy",
+                          vir_get_stage_name(c), c->program_id, c->variant_id);
 
                 vir_compile_destroy(c);
                 return NULL;
@@ -2326,7 +2325,7 @@ uint64_t *v3d_compile(const struct v3d_compiler *compiler,
         int ret = v3d_shaderdb_dump(c, &shaderdb);
         if (ret >= 0) {
                 if (V3D_DBG(SHADERDB))
-                        fprintf(stderr, "SHADER-DB-%s - %s\n", s->info.name, shaderdb);
+                        mesa_logi("SHADER-DB-%s - %s", s->info.name, shaderdb);
 
                 c->debug_output(shaderdb, c->debug_output_data);
                 free(shaderdb);
@@ -2514,9 +2513,8 @@ vir_uniform(struct v3d_compile *c,
                 if (stage_progress) {                                   \
                         progress = true;                                \
                         if (print_opt_debug) {                          \
-                                fprintf(stderr,                         \
-                                        "VIR opt pass %2d: %s progress\n", \
-                                        pass, #func);                   \
+                                mesa_logd("VIR opt pass %2d: %s progress\n", \
+                                          pass, #func);                 \
                         }                                               \
                         /*XXX vir_validate(c);*/                        \
                 }                                                       \

@@ -223,6 +223,18 @@
     LAVA_CMDLINE: "i915.force_probe=!46b3 xe.force_probe=46b3"
     INTEL_XE_IGNORE_EXPERIMENTAL_WARNING: 1
 
+# Status: https://lava.collabora.dev/scheduler/device_type/asus-CX3402CVA-brya
+.lava-asus-CX3402CVA-brya:x86_64:
+  variables:
+    DEVICE_TYPE: asus-CX3402CVA-brya
+    FARM: collabora
+    FDO_CI_CONCURRENT: 13
+    GPU_VERSION: anv-rpl
+    HWCI_KERNEL_MODULES: xe
+    RUNNER_TAG: mesa-ci-x86-64-lava-asus-CX3402CVA-brya
+    LAVA_CMDLINE: "i915.force_probe=!a7a1 xe.force_probe=a7a1"
+    INTEL_XE_IGNORE_EXPERIMENTAL_WARNING: 1
+
 # Status: https://lava.collabora.dev/scheduler/device_type/acer-chromebox-cxi5-brask
 .lava-acer-chromebox-cxi5-brask:x86_64:
   variables:

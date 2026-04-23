@@ -194,7 +194,7 @@ pvr_clear_vdm_state_get_size_in_dw(const struct pvr_device_info *const dev_info,
       pvr_cmd_length(VDMCTRL_INDEX_LIST2);
 
    const bool needs_instance_count =
-      !PVR_HAS_FEATURE(dev_info, gs_rta_support) && layer_count > 1;
+      PVR_HAS_FEATURE(dev_info, gs_rta_support) && layer_count > 1;
 
    if (needs_instance_count)
       size_in_dw += pvr_cmd_length(VDMCTRL_INDEX_LIST3);

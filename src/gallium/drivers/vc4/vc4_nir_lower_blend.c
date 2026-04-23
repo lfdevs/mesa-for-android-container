@@ -121,7 +121,7 @@ vc4_blend_channel_f(nir_builder *b,
         case PIPE_BLENDFACTOR_INV_SRC1_COLOR:
         case PIPE_BLENDFACTOR_INV_SRC1_ALPHA:
                 /* Unsupported. */
-                fprintf(stderr, "Unknown blend factor %d\n", factor);
+                mesa_loge("Unknown blend factor %d", factor);
                 return nir_imm_float(b, 1.0);
         }
 }
@@ -190,7 +190,7 @@ vc4_blend_channel_i(nir_builder *b,
         case PIPE_BLENDFACTOR_INV_SRC1_COLOR:
         case PIPE_BLENDFACTOR_INV_SRC1_ALPHA:
                 /* Unsupported. */
-                fprintf(stderr, "Unknown blend factor %d\n", factor);
+                mesa_loge("Unknown blend factor %d", factor);
                 return nir_imm_int(b, ~0);
         }
 }
@@ -213,7 +213,7 @@ vc4_blend_func_f(nir_builder *b, nir_def *src, nir_def *dst,
 
         default:
                 /* Unsupported. */
-                fprintf(stderr, "Unknown blend func %d\n", func);
+                mesa_loge("Unknown blend func %d", func);
                 return src;
 
         }
@@ -237,7 +237,7 @@ vc4_blend_func_i(nir_builder *b, nir_def *src, nir_def *dst,
 
         default:
                 /* Unsupported. */
-                fprintf(stderr, "Unknown blend func %d\n", func);
+                mesa_loge("Unknown blend func %d", func);
                 return src;
 
         }
@@ -403,7 +403,7 @@ vc4_logicop(nir_builder *b, int logicop_func,
         case PIPE_LOGICOP_SET:
                 return nir_imm_int(b, ~0);
         default:
-                fprintf(stderr, "Unknown logic op %d\n", logicop_func);
+                mesa_loge("Unknown logic op %d", logicop_func);
                 FALLTHROUGH;
         case PIPE_LOGICOP_COPY:
                 return src;

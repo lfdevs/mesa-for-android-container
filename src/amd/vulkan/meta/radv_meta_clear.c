@@ -1909,9 +1909,6 @@ radv_CmdClearAttachments(VkCommandBuffer commandBuffer, uint32_t attachmentCount
 
    radv_meta_begin(cmd_buffer);
 
-   /* FINISHME: We can do better than this dumb loop. It thrashes too much
-    * state.
-    */
    for (uint32_t a = 0; a < attachmentCount; ++a) {
       for (uint32_t r = 0; r < rectCount; ++r) {
          emit_clear(cmd_buffer, &pAttachments[a], &pRects[r], &pre_flush, &post_flush,

@@ -1149,14 +1149,18 @@ add_candidate_immediate(struct table *table, brw_inst *inst, unsigned ip,
    }
 
    /* It is safe to change the type of the operands of a select instruction
-    * that has no conditional modifier, no source modifiers, and no saturate
-    * modifer.
+    * that has no conditional modifier, no source modifiers, no saturate
+    * modifier, and no accumulators are used. The types of accumulator accesses
+    * cannot be arbitrarily changed.
     */
    if (inst->opcode == BRW_OPCODE_SEL &&
        inst->conditional_mod == BRW_CONDITIONAL_NONE &&
        !inst->src[0].negate && !inst->src[0].abs &&
        !inst->src[1].negate && !inst->src[1].abs &&
-       !inst->saturate) {
+       !inst->saturate &&
+       !inst->src[0].is_accumulator() &&
+       !inst->src[1].is_accumulator() &&
+       !inst->dst.is_accumulator()) {
       v->type = either_type;
    }
 }

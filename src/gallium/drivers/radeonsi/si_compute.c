@@ -233,8 +233,10 @@ static void si_set_global_binding(struct pipe_context *ctx, unsigned first, unsi
    for (i = 0; i < n; i++) {
       uint64_t va;
       uint32_t offset;
+      struct si_resource *res = si_resource(resources[i]);
       pipe_resource_reference(&sctx->global_buffers[first + i], resources[i]);
-      va = si_resource(resources[i])->gpu_address;
+      util_range_add(&res->b.b, &res->valid_buffer_range, 0, res->b.b.width0);
+      va = res->gpu_address;
       offset = util_le32_to_cpu(*handles[i]);
       va += offset;
       va = util_cpu_to_le64(va);
@@ -925,6 +927,7 @@ static void si_launch_grid(struct pipe_context *ctx, const struct pipe_grid_info
       if (!buffer) {
          continue;
       }
+      util_range_add(&buffer->b.b, &buffer->valid_buffer_range, 0, buffer->b.b.width0);
       radeon_add_to_buffer_list(sctx, &sctx->gfx_cs, buffer,
                                 RADEON_USAGE_READWRITE | RADEON_PRIO_SHADER_RW_BUFFER);
    }

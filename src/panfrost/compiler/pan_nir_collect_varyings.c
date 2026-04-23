@@ -292,7 +292,8 @@ hw_varying_slot(unsigned arch, mesa_shader_stage stage, gl_varying_slot slot)
 
 void
 pan_varying_collect_formats(struct pan_varying_layout *layout, nir_shader *nir,
-                            unsigned gpu_id, bool trust_varying_flat_highp_types,
+                            uint64_t gpu_id,
+                            bool trust_varying_flat_highp_types,
                             bool lower_mediump)
 {
    assert(nir->info.stage == MESA_SHADER_VERTEX ||
@@ -362,7 +363,7 @@ pan_varying_collect_formats(struct pan_varying_layout *layout, nir_shader *nir,
 
 void
 pan_build_varying_layout_compact(struct pan_varying_layout *layout,
-                                 nir_shader *nir, unsigned gpu_id)
+                                 nir_shader *nir, uint64_t gpu_id)
 {
    pan_varying_layout_require_format(layout);
 

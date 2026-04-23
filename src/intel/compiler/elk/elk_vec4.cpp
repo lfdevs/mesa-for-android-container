@@ -276,13 +276,11 @@ vec4_instruction::can_do_writemask(const struct intel_device_info *devinfo)
    case ELK_FS_OPCODE_TXB:
    case ELK_SHADER_OPCODE_TXD:
    case ELK_SHADER_OPCODE_TXF:
-   case ELK_SHADER_OPCODE_TXF_LZ:
    case ELK_SHADER_OPCODE_TXF_CMS:
    case ELK_SHADER_OPCODE_TXF_CMS_W:
    case ELK_SHADER_OPCODE_TXF_UMS:
    case ELK_SHADER_OPCODE_TXF_MCS:
    case ELK_SHADER_OPCODE_TXL:
-   case ELK_SHADER_OPCODE_TXL_LZ:
    case ELK_SHADER_OPCODE_TXS:
    case ELK_SHADER_OPCODE_LOD:
    case ELK_SHADER_OPCODE_TG4:

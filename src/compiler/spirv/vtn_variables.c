@@ -56,6 +56,10 @@ ptr_decoration_cb(struct vtn_builder *b, struct vtn_value *val, int member,
    default:
       break;
    }
+
+   if (b->enabled_capabilities.DescriptorHeapEXT &&
+       dec->decoration != SpvDecorationUniform)
+      ptr->access |= ACCESS_NON_UNIFORM;
 }
 
 struct access_align {
@@ -81,6 +85,10 @@ access_align_cb(struct vtn_builder *b, struct vtn_value *val, int member,
    default:
       break;
    }
+
+   if (b->enabled_capabilities.DescriptorHeapEXT &&
+       dec->decoration != SpvDecorationUniform)
+      aa->access |= ACCESS_NON_UNIFORM;
 }
 
 static struct vtn_pointer*
@@ -1320,12 +1328,10 @@ vtn_get_builtin_location(struct vtn_builder *b,
       break;
 
    case SpvBuiltInSamplerHeapEXT:
-      *location = SYSTEM_VALUE_SAMPLER_HEAP_PTR;
-      set_mode_system_value(b, mode);
+      *mode = nir_var_sampler_heap;
       break;
    case SpvBuiltInResourceHeapEXT:
-      *location = SYSTEM_VALUE_RESOURCE_HEAP_PTR;
-      set_mode_system_value(b, mode);
+      *mode = nir_var_resource_heap;
       break;
 
    default:
@@ -2890,7 +2896,7 @@ vtn_handle_variables(struct vtn_builder *b, SpvOp opcode,
          }
 
          /* Workaround for https://gitlab.freedesktop.org/mesa/mesa/-/issues/3406 */
-         if (vtn_has_decoration(b, link_val, SpvDecorationNonUniformEXT))
+         if (vtn_value_is_non_uniform(b, link_val))
             access |= ACCESS_NON_UNIFORM;
 
          idx++;

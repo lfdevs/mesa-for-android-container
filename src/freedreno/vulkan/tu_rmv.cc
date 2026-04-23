@@ -5,16 +5,16 @@
 
 #include "tu_rmv.h"
 
+#include <cstdio>
+
 #include "tu_buffer.h"
 #include "tu_cmd_buffer.h"
 #include "tu_cs.h"
 #include "tu_device.h"
 #include "tu_event.h"
 #include "tu_image.h"
-#include "tu_queue.h"
 #include "tu_query_pool.h"
-
-#include <cstdio>
+#include "tu_queue.h"
 
 static VkResult
 capture_trace(VkQueue _queue)

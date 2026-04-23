@@ -428,7 +428,7 @@ radv_image_view_make_descriptor(struct radv_image_view *iview, struct radv_devic
 
       /* Video decode target uses custom height alignment. */
       if (image->vk.usage & VK_IMAGE_USAGE_VIDEO_DECODE_DST_BIT_KHR) {
-         offset += first_layer * image->planes[plane_id].surface.u.legacy.level[0].slice_size_dw * 4;
+         offset += first_layer * (uint64_t)image->planes[plane_id].surface.u.legacy.level[0].slice_size_dw * 4;
          first_layer = 0;
       }
    }

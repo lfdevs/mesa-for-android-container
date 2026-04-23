@@ -82,6 +82,7 @@ static void print_token(FILE *file, int type, YYSTYPE value)
 %token <tok> T_A_TEX
 %token <tok> T_A_PVTMEM
 %token <tok> T_A_LOCALMEM
+%token <tok> T_A_CONSTLEN
 %token <tok> T_A_EARLYPREAMBLE
 %token <tok> T_A_FULLNOPSTART
 %token <tok> T_A_FULLNOPEND
@@ -508,6 +509,7 @@ header:            localsize_header
 |                  pvtmem_header
 |                  localmem_header
 |                  earlypreamble_header
+|                  constlen_header
 
 const_val:         T_FLOAT   { $$ = fui($1); }
 |                  T_INT     { $$ = $1;      }
@@ -586,6 +588,8 @@ pvtmem_header: T_A_PVTMEM const_val { variant->pvtmem_size = $2; }
 localmem_header: T_A_LOCALMEM const_val { variant->shared_size = $2; }
 
 earlypreamble_header: T_A_EARLYPREAMBLE { variant->early_preamble = 1; }
+
+constlen_header: T_A_CONSTLEN const_val { variant->constlen = $2; }
 
 /* Stubs for now */
 in_header:         T_A_IN '(' T_REGISTER ')' T_IDENTIFIER '(' T_IDENTIFIER '=' integer ')' { }
@@ -996,6 +1000,9 @@ cat6_dst_offset:   offset    { instr->cat6.dst_offset = $1; }
 
 cat6_immed:        integer   { instr->cat6.iim_val = $1; }
 
+cat6_immed_or_gpr: immediate
+|                  src_gpr
+
 cat6_src_shift: '<' '<' integer {$$ = $3;}
 |                               {$$ = 0;}
 
@@ -1032,7 +1039,7 @@ cat6_a6xx_global_address:
 
 cat6_load:         T_OP_LDG   { new_instr(OPC_LDG); }   cat6_type dst_reg ',' 'g' '[' src cat6_offset ']' ',' immediate
 |                  T_OP_LDG_A { new_instr(OPC_LDG_A); } cat6_type dst_reg ',' 'g' '[' cat6_a6xx_global_address ']' ',' immediate
-|                  T_OP_LDG_K { new_instr(OPC_LDG_K); } cat6_type 'c' '[' const_dst ']' ',' 'g' '[' src cat6_offset ']' ',' immediate
+|                  T_OP_LDG_K { new_instr(OPC_LDG_K); } cat6_type 'c' '[' const_dst ']' ',' 'g' '[' src cat6_offset ']' ',' cat6_immed_or_gpr
 |                  T_OP_LDP   { new_instr(OPC_LDP); }   cat6_type dst_reg ',' 'p' '[' src cat6_offset ']' ',' immediate
 |                  T_OP_LDL   { new_instr(OPC_LDL); }   cat6_type dst_reg ',' 'l' '[' src cat6_offset ']' ',' immediate
 |                  T_OP_LDLW  { new_instr(OPC_LDLW); }  cat6_type dst_reg ',' 'l' '[' src cat6_offset ']' ',' immediate

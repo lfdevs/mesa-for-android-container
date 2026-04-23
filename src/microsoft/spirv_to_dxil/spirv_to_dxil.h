@@ -64,7 +64,6 @@ typedef union {
    uint64_t u64;
 } dxil_spirv_const_value;
 
-// Copy of nir_spirv_specialization
 struct dxil_spirv_specialization {
    uint32_t id;
    dxil_spirv_const_value value;

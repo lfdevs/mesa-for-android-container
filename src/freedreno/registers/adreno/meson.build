@@ -14,6 +14,7 @@ xml_reg_files = [
   'a7xx_perfcntrs.xml',
   'a8xx_enums.xml',
   'a8xx_descriptors.xml',
+  'a8xx_perfcntrs.xml',
 ]
 
 xml_files = xml_reg_files

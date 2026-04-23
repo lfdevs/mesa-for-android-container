@@ -357,3 +357,78 @@ rra_transcode_node_gfx10_3(struct rra_transcoding_context *ctx, uint32_t parent_
 
    return dst_id;
 }
+
+void
+radv_gather_bvh_stats_gfx10_3(const uint8_t *bvh, uint32_t node_id, uint32_t depth, float p,
+                              struct hash_table_u64 *blas_sah, struct radv_bvh_stats_gfx10_3 *stats)
+{
+   uint32_t node_type = node_id & 7;
+   const void *node = bvh + ((node_id & (~7u)) << 3);
+
+   stats->max_depth = MAX2(stats->max_depth, depth);
+
+   switch (node_type) {
+   case radv_bvh_node_box16: {
+      stats->sah += 1.0 * p;
+      stats->box16_node_count++;
+
+      const struct radv_bvh_box16_node *box16 = node;
+      for (uint32_t i = 0; i < 4; i++) {
+         if (box16->children[i] != 0xffffffff) {
+            float extent[3] = {
+               _mesa_half_to_float(box16->coords[i].max_x) - _mesa_half_to_float(box16->coords[i].min_x),
+               _mesa_half_to_float(box16->coords[i].max_y) - _mesa_half_to_float(box16->coords[i].min_y),
+               _mesa_half_to_float(box16->coords[i].max_z) - _mesa_half_to_float(box16->coords[i].min_z),
+            };
+            float surface_area = 2 * (extent[0] * extent[1] + extent[0] * extent[2] + extent[1] * extent[2]);
+            radv_gather_bvh_stats_gfx10_3(bvh, box16->children[i], depth + 1, surface_area, blas_sah, stats);
+         }
+      }
+
+      break;
+   }
+   case radv_bvh_node_box32: {
+      stats->sah += 1.5 * p;
+      stats->box32_node_count++;
+
+      const struct radv_bvh_box32_node *box32 = node;
+      for (uint32_t i = 0; i < 4; i++) {
+         if (box32->children[i] != 0xffffffff) {
+            float extent[3] = {
+               box32->coords[i].max.x - box32->coords[i].min.x,
+               box32->coords[i].max.y - box32->coords[i].min.y,
+               box32->coords[i].max.z - box32->coords[i].min.z,
+            };
+            float surface_area = 2 * (extent[0] * extent[1] + extent[0] * extent[2] + extent[1] * extent[2]);
+            radv_gather_bvh_stats_gfx10_3(bvh, box32->children[i], depth + 1, surface_area, blas_sah, stats);
+         }
+      }
+
+      break;
+   }
+   case radv_bvh_node_instance: {
+      stats->sah += 2.0 * p;
+      stats->instance_node_count++;
+
+      const struct radv_bvh_instance_node *instance = node;
+      uint64_t blas_va = radv_node_to_addr(instance->bvh_ptr) - instance->bvh_offset;
+      float *sah = _mesa_hash_table_u64_search(blas_sah, blas_va);
+      if (sah)
+         stats->instance_sah += *sah * p;
+      else
+         fprintf(stderr, "radv: Could not find SAH for BLAS at address 0x%" PRIx64 "\n", blas_va);
+
+      break;
+   }
+   case radv_bvh_node_triangle:
+      stats->sah += 2.0 * p;
+      stats->triangle_node_count++;
+      break;
+   case radv_bvh_node_aabb:
+      stats->sah += 4.0 * p;
+      stats->procedural_node_count++;
+      break;
+   default:
+      break;
+   }
+}

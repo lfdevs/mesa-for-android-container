@@ -302,7 +302,8 @@ ir3_emit_immediates(const struct ir3_shader_variant *v,
 {
    const struct ir3_const_state *const_state = ir3_const_state(v);
    uint32_t base = const_state->allocs.max_const_offset_vec4;
-   int size = DIV_ROUND_UP(v->imm_state.count, 4);
+   int size = v->compiler->info->props.load_shader_consts_via_preamble ? 0 :
+      DIV_ROUND_UP(v->imm_state.count, 4);
 
    /* truncate size to avoid writing constants that shader
     * does not use:

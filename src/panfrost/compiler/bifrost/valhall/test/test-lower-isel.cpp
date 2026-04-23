@@ -32,24 +32,6 @@ class LowerIsel : public testing::Test {
    bi_index reg, x, y, z;
 };
 
-TEST_F(LowerIsel, 8BitSwizzles)
-{
-   for (unsigned i = 0; i < 4; ++i) {
-      CASE(bi_swz_v4i8_to(b, reg, bi_byte(reg, i)),
-           bi_iadd_v4u8_to(b, reg, bi_byte(reg, i), bi_zero(), false));
-   }
-}
-
-TEST_F(LowerIsel, 16BitSwizzles)
-{
-   for (unsigned i = 0; i < 2; ++i) {
-      for (unsigned j = 0; j < 2; ++j) {
-         CASE(bi_swz_v2i16_to(b, reg, bi_swz_16(reg, i, j)),
-              bi_iadd_v2u16_to(b, reg, bi_swz_16(reg, i, j), bi_zero(), false));
-      }
-   }
-}
-
 TEST_F(LowerIsel, JumpsLoweredToBranches)
 {
    bi_block block = {};

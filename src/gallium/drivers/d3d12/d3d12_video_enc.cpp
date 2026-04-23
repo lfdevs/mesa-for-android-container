@@ -292,13 +292,17 @@ d3d12_video_encoder_destroy(struct pipe_video_codec *codec)
    struct d3d12_context* ctx = d3d12_context(pD3D12Enc->base.context);
    if (ctx->priority_manager)
    {
-      if (ctx->priority_manager->unregister_work_queue(ctx->priority_manager, pD3D12Enc->m_spEncodeCommandQueue.Get()) != 0)
+      // Command queues may be NULL when destroy is called from a failed creation path before initialization reached
+      // the point of registering the command queues, so check for nullptr before trying to unregister from priority manager
+      if (pD3D12Enc->m_spEncodeCommandQueue &&
+          ctx->priority_manager->unregister_work_queue(ctx->priority_manager, pD3D12Enc->m_spEncodeCommandQueue.Get()) != 0)
       {
          debug_printf("D3D12: Failed to unregister command queue with frontend priority manager\n");
          assert(false);
       }
 
-      if (ctx->priority_manager->unregister_work_queue(ctx->priority_manager, pD3D12Enc->m_spResolveCommandQueue.Get()) != 0)
+      if (pD3D12Enc->m_spResolveCommandQueue &&
+          ctx->priority_manager->unregister_work_queue(ctx->priority_manager, pD3D12Enc->m_spResolveCommandQueue.Get()) != 0)
       {
          debug_printf("D3D12: Failed to unregister command queue with frontend priority manager\n");
          assert(false);

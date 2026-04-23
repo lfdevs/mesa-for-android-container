@@ -36,6 +36,84 @@ brw_workaround_emit_dummy_mov_instruction(brw_shader &s)
    return true;
 }
 
+/* Wa_18035690555
+ *
+ * Issue 1: If we have mul <-> mac or macl <-> mach and src1 is
+ * the same in current and previous inst, we need to insert a
+ * dummy mov in between.
+ *
+ * Other conditions listed in the issue for mul <-> mac case:
+ *    "prev instruction src1 has regioning/scalar" (not flat)
+ *    "current instruction src1 is flat and shares the same src1 as prev"
+ *
+ * Issue 2: prev inst is non-mul or non-macl and src1 is
+ * the same in current and previous inst, we need to insert a
+ * dummy mov in between.
+ */
+bool
+brw_workaround_emit_dummy_mov_mulmac(brw_shader &s)
+{
+   if (!intel_needs_workaround(s.devinfo, 18035690555))
+      return false;
+
+#define IS_MUL_CLASS(x) \
+   (x->opcode == BRW_OPCODE_MUL || x->opcode == BRW_OPCODE_MAC)
+#define IS_MACL_CLASS(x) \
+   (x->opcode == BRW_OPCODE_MACH || x->opcode == BRW_OPCODE_MACL)
+
+#define IS_FLAT(x, i) (x->dst.subnr == x->src[i].subnr && \
+                       x->src[i].is_contiguous())
+
+   brw_inst *prev_inst = NULL;
+   bool progress = false;
+   foreach_block_and_inst_safe (block, brw_inst, inst, s.cfg) {
+      if (!prev_inst ||
+          (inferred_exec_pipe(s.devinfo, inst) !=
+          inferred_exec_pipe(s.devinfo, prev_inst))) {
+         prev_inst = inst;
+         continue;
+      }
+
+      bool emit_mov = false;
+
+      /* Issue 1 */
+      if (((IS_MUL_CLASS(inst) && IS_MUL_CLASS(prev_inst)) ||
+           (IS_MACL_CLASS(inst) && IS_MACL_CLASS(prev_inst))) &&
+          (IS_FLAT(inst, 1) && !IS_FLAT(prev_inst, 1)) &&
+          (phys_nr(s.devinfo, inst->src[1]) ==
+          phys_nr(s.devinfo, prev_inst->src[1]))) {
+         emit_mov = true;
+      }
+
+      /* Issue 2 */
+      else if ((!IS_MUL_CLASS(prev_inst) && !IS_MACL_CLASS(prev_inst)) &&
+               (IS_MACL_CLASS(inst) && IS_FLAT(inst, 1)) &&
+               (prev_inst->sources && phys_nr(s.devinfo, inst->src[1]) ==
+                phys_nr(s.devinfo, prev_inst->src[1]))) {
+         emit_mov = true;
+      }
+
+      /* Insert dummy mov between prev and current inst. */
+      if (emit_mov) {
+         const brw_builder ubld = brw_builder(inst).exec_all().group(8, 0);
+         ubld.MOV(ubld.null_reg_ud(), brw_imm_ud(0u));
+         progress = true;
+      }
+
+      prev_inst = inst;
+   }
+
+   if (progress) {
+      s.invalidate_analysis(BRW_DEPENDENCY_INSTRUCTIONS |
+                            BRW_DEPENDENCY_VARIABLES);
+   }
+#undef IS_FLAT
+#undef IS_MUL_CLASS
+#undef IS_MACL_CLASS
+
+   return progress;
+}
+
 static bool
 needs_dummy_fence(const intel_device_info *devinfo, const brw_inst *inst)
 {

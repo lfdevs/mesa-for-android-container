@@ -2568,7 +2568,7 @@ clamp_layer_output(nir_shader *vs, nir_shader *fs, unsigned *next_location)
       nir_builder b;
       nir_function_impl *impl = nir_shader_get_entrypoint(vs);
       b = nir_builder_at(nir_after_impl(impl));
-      assert(impl->end_block->predecessors.entries == 1);
+      assert(nir_block_num_preds(impl->end_block) == 1);
       clamp_layer_output_emit(&b, var);
       nir_progress(true, impl, nir_metadata_control_flow);
    }
@@ -3522,8 +3522,7 @@ zink_shader_spirv_compile(struct zink_screen *screen, struct zink_shader *zs, st
          .push_const_addr_format = nir_address_format_logical,
          .shared_addr_format = nir_address_format_32bit_offset,
       };
-      uint32_t num_spec_entries = 0;
-      struct nir_spirv_specialization *spec_entries = NULL;
+      struct nir_spirv_specialization *spec = NULL;
       VkSpecializationInfo sinfo = {0};
       VkSpecializationMapEntry me[3];
       uint32_t size[3] = {1,1,1};
@@ -3538,14 +3537,14 @@ zink_shader_spirv_compile(struct zink_screen *screen, struct zink_shader *zs, st
             me[i].constantID = ids[i];
             me[i].offset = i * sizeof(uint32_t);
          }
-         spec_entries = vk_spec_info_to_nir_spirv(&sinfo, &num_spec_entries);
+         spec = vk_spec_info_to_nir_spirv(&sinfo);
       }
       nir_shader *nir = spirv_to_nir(spirv->words, spirv->num_words,
-                         spec_entries, num_spec_entries,
-                         clamp_stage(&zs->info), "main", &spirv_options, &screen->nir_options);
+                         spec, clamp_stage(&zs->info), "main", &spirv_options,
+                         &screen->nir_options);
       assert(nir);
       ralloc_free(nir);
-      free(spec_entries);
+      vtn_free_specialization(spec);
    }
 #endif
 

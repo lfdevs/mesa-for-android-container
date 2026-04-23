@@ -114,6 +114,7 @@ struct aco_shader_info {
    unsigned workgroup_size;
    unsigned lds_size;
    bool merged_shader_compiled_separately; /* GFX9+ */
+   bool descriptor_heap;
    struct ac_arg next_stage_pc;
    struct ac_arg epilog_pc; /* Vulkan only */
    struct {

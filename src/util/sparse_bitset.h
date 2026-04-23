@@ -77,6 +77,19 @@ u_sparse_bitset_init(struct u_sparse_bitset *s, unsigned capacity,
    }
 }
 
+static inline void
+u_sparse_bitset_clear_all(struct u_sparse_bitset *s)
+{
+   if (_u_sparse_bitset_is_small(s)) {
+      memset(s->vals, 0, BITSET_BYTES(s->capacity));
+   } else {
+      rb_tree_foreach_safe(struct u_sparse_bitset_node, node, &s->tree, node) {
+         rb_tree_remove(&s->tree, &node->node);
+         ralloc_free(node);
+      }
+   }
+}
+
 static inline int
 _u_sparse_bitset_node_comparator(const struct rb_node *a, unsigned offset_b)
 {

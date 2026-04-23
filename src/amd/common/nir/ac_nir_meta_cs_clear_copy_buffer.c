@@ -490,6 +490,7 @@ ac_prepare_cs_clear_copy_buffer(const struct ac_cs_clear_copy_buffer_options *op
       case GFX10_3:
       case GFX11:
       case GFX11_5:
+      case GFX11_7:
          /* Optimal for Navi31, Navi21, Navi10. */
          break;
 

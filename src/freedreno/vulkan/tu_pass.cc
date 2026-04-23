@@ -9,8 +9,8 @@
 
 #include "tu_pass.h"
 
-#include "vk_util.h"
 #include "vk_render_pass.h"
+#include "vk_util.h"
 
 #include "tu_cmd_buffer.h"
 #include "tu_device.h"
@@ -547,27 +547,6 @@ tu_render_pass_disable_fdm(struct tu_device *dev, struct tu_render_pass *pass)
    }
 
    return false;
-}
-
-static void
-tu_render_pass_calc_hash(struct tu_render_pass *pass)
-{
-   #define HASH(hash, data) XXH64(&(data), sizeof(data), hash)
-
-   uint64_t hash = HASH(0, pass->attachment_count);
-   hash = XXH64(pass->attachments,
-         pass->attachment_count * sizeof(pass->attachments[0]), hash);
-   hash = HASH(hash, pass->subpass_count);
-   for (unsigned i = 0; i < pass->subpass_count; i++) {
-      hash = HASH(hash, pass->subpasses[i].samples);
-      hash = HASH(hash, pass->subpasses[i].input_count);
-      hash = HASH(hash, pass->subpasses[i].color_count);
-      hash = HASH(hash, pass->subpasses[i].resolve_count);
-   }
-
-   pass->autotune_hash = hash;
-
-   #undef HASH
 }
 
 static void
@@ -1354,7 +1333,6 @@ tu_CreateRenderPass2(VkDevice _device,
    tu_render_pass_gmem_config(pass, device->physical_device);
    tu_render_pass_bandwidth_config(pass);
    tu_render_pass_calc_views(pass);
-   tu_render_pass_calc_hash(pass);
 
    for (unsigned i = 0; i < pCreateInfo->dependencyCount; ++i) {
       tu_render_pass_add_subpass_dep(pass, &pCreateInfo->pDependencies[i]);
@@ -1834,7 +1812,6 @@ tu_setup_dynamic_render_pass(struct tu_cmd_buffer *cmd_buffer,
    tu_render_pass_gmem_config(pass, device->physical_device);
    tu_render_pass_bandwidth_config(pass);
    tu_render_pass_calc_views(pass);
-   tu_render_pass_calc_hash(pass);
 }
 
 void

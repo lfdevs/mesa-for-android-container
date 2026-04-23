@@ -171,8 +171,7 @@ nir_live_defs_impl(nir_function_impl *impl)
        * changed, add the predecessor to the work list so that we ensure
        * that the new information is used.
        */
-      set_foreach(&block->predecessors, entry) {
-         nir_block *pred = (nir_block *)entry->key;
+      nir_foreach_pred(pred, block) {
          if (propagate_across_edge(pred, block, &state))
             nir_block_worklist_push_tail(&state.worklist, pred);
       }

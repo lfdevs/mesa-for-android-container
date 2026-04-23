@@ -29,6 +29,7 @@ static const driOptionDescription anv_dri_options[] = {
       DRI_CONF_ANV_FP64_WORKAROUND_ENABLED(false)
       DRI_CONF_ANV_GENERATED_INDIRECT_THRESHOLD(4)
       DRI_CONF_ANV_GENERATED_INDIRECT_RING_THRESHOLD(100)
+      DRI_CONF_ANV_PROMOTE_CBV_TO_PUSH_BUFFERS(false)
       DRI_CONF_ANV_STATE_CACHE_PERF_FIX(false)
       DRI_CONF_NO_16BIT(false)
       DRI_CONF_INTEL_BINDING_TABLE_BLOCK_SIZE(BINDING_TABLE_POOL_DEFAULT_BLOCK_SIZE,
@@ -102,8 +103,17 @@ static const struct debug_control debug_control[] = {
    { "shader-hash",  ANV_DEBUG_SHADER_HASH},
    { "no-slab",      ANV_DEBUG_NO_SLAB},
    { "desc-dirty",   ANV_DEBUG_DESCRIPTOR_DIRTY},
+   { "shader-print", ANV_DEBUG_SHADER_PRINT},
    { NULL,    0 }
 };
+
+enum anv_debug anv_debug;
+
+static void
+process_anv_debug_variable_once(void)
+{
+   anv_debug = parse_debug_string(os_get_option("ANV_DEBUG"), debug_control);
+}
 
 VkResult anv_EnumerateInstanceVersion(
     uint32_t*                                   pApiVersion)
@@ -189,6 +199,8 @@ anv_init_dri_options(struct anv_instance *instance)
        driQueryOptionb(&instance->dri_options, "anv_sample_mask_out_opengl_behaviour");
     instance->force_filter_addr_rounding =
        driQueryOptionb(&instance->dri_options, "anv_force_filter_addr_rounding");
+    instance->promote_cbv_to_push_buffers =
+       driQueryOptionb(&instance->dri_options, "anv_promote_cbv_to_push_buffers");
     instance->state_cache_perf_fix =
        driQueryOptionb(&instance->dri_options, "anv_state_cache_perf_fix");
     instance->lower_depth_range_rate =
@@ -327,8 +339,9 @@ VkResult anv_CreateInstance(
 
    anv_init_dri_options(instance);
 
-   instance->debug = parse_debug_string(os_get_option("ANV_DEBUG"),
-                                        debug_control);
+   static once_flag process_anv_debug_variable_flag = ONCE_FLAG_INIT;
+   call_once(&process_anv_debug_variable_flag,
+             process_anv_debug_variable_once);
 
    process_intel_debug_variable();
    instance->vk.enable_debug_logging = INTEL_DEBUG(DEBUG_PERF);

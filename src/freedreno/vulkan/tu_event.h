@@ -10,7 +10,9 @@
 #ifndef TU_EVENT_H
 #define TU_EVENT_H
 
-#include "tu_common.h"
+#include "vk_object.h"
+#include "vulkan/vulkan_core.h"
+
 #include "tu_suballoc.h"
 
 struct tu_event

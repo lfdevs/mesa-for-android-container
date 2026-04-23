@@ -76,6 +76,7 @@ get_family(enum amd_gfx_level gfx_level, enum radeon_family family)
       case GFX10_3: return CHIP_NAVI21;
       case GFX11: return CHIP_NAVI31;
       case GFX11_5: return CHIP_STRIX_HALO;
+      case GFX11_7: return CHIP_GFX1170;
       case GFX12: return CHIP_GFX1201;
       default: return CHIP_UNKNOWN;
       }

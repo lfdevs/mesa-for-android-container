@@ -97,6 +97,10 @@ struct kk_device {
 
    struct vk_meta_device meta;
 
+   /* Geomtry heap */
+   struct kk_bo *heap;
+   util_once_flag heap_init_once;
+
    uint64_t disabled_workarounds;
    bool gpu_capture_enabled;
 };

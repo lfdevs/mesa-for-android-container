@@ -220,12 +220,21 @@ TODO rename UAV src to "UAV" so disasm_field_cb can find it easily?
 <bitset name="ldg.k" extends="#instruction-cat6-a3xx">
 	<doc>
 		LoaD Global Constants
+
+		DST: offset into the const file as an immediate or value in a1.x.
+		The a1.x+offset form is not supported (i.e., the offset is ignored).
+
+		LOAD_SIZE: load size in units of vec4. Note that LOAD_SIZE_IM makes
+		the blob disassembler select between interpreting LOAD_SIZE as either
+		an immediate or a GPR. However, using a GPR does not work and the bits
+		are still interpreted as an immediate. We follow the blob here for
+		consistency.
 	</doc>
 
 	<gen min="600"/>
 
 	<display>
-		{SY}{JP}{NAME}.{TYPE} c[{DST}], g[{SRC1}{OFF}], {SIZE}
+		{SY}{JP}{NAME}.{TYPE} c[{DST}], g[{SRC1}{OFF}], {LOAD_SIZE}
 	</display>
 
 	<pattern pos="0"           >1</pattern>
@@ -234,8 +243,10 @@ TODO rename UAV src to "UAV" so disasm_field_cb can find it easily?
 		<param name="SRC1_CONST" as="SRC_CONST"/>
 	</field>
 	<pattern pos="22"          >0</pattern>
-	<field   low="23" high="26" name="SIZE" type="uint"/>
-	<pattern low="27" high="31">00xxx</pattern>
+	<field pos="23" name="LOAD_SIZE_IM" type="bool" />
+	<field   low="24" high="31" name="LOAD_SIZE" type="#cat6-src-load-size">
+		<param name="LOAD_SIZE_IM"/>
+	</field>
 	<field   low="32" high="40" name="DST" type="#const-dst"/>
 	<pattern low="41" high="48">xxxxxxxx</pattern>
 	<pattern pos="52"          >1</pattern>
@@ -243,12 +254,14 @@ TODO rename UAV src to "UAV" so disasm_field_cb can find it easily?
 	<pattern low="54" high="58">00000</pattern>  <!-- OPC -->
 
 	<derived name="SRC1_CONST" expr="#false" type="bool"/>
+	<derived name="LOAD_SIZE" expr="#cat6-load-size" type="uint"/>
 
 	<encode>
 		<map name="DST">src</map>
 		<map name="SRC1">src->srcs[1]</map>
 		<map name="OFF">extract_reg_uim(src->srcs[2])</map>
-		<map name="SIZE">extract_reg_uim(src->srcs[3])</map>
+		<map name="LOAD_SIZE">src->srcs[3]</map>
+		<map name="LOAD_SIZE_IM">!!(src->srcs[3]->flags &amp; IR3_REG_IMMED)</map>
 	</encode>
 </bitset>
 
@@ -1583,6 +1596,30 @@ TODO rename UAV src to "UAV" so disasm_field_cb can find it easily?
 		<map name="GPR">src->num >> 2</map>
 		<map name="SWIZ">src->num &amp; 0x3</map>
 		<map name="IMMED">extract_reg_iim(src)</map>
+	</encode>
+</bitset>
+
+<bitset name="#cat6-src-load-size" size="8">
+	<doc>
+		Load size source value that can be either immed or gpr
+	</doc>
+	<override>
+		<expr>{LOAD_SIZE_IM}</expr>
+		<display>
+			{LOAD_SIZE}
+		</display>
+		<field name="LOAD_SIZE_MINUS_ONE" low="0" high="7" type="uint"/>
+		<derived name="LOAD_SIZE" expr="#cat6-load-size" type="uint"/>
+	</override>
+	<display>
+		r{GPR}.{SWIZ}
+	</display>
+	<field name="SWIZ" low="0" high="1" type="#swiz"/>
+	<field name="GPR" low="2"  high="7" type="uint"/>
+	<encode type="struct ir3_register *">
+		<map name="GPR">src->num >> 2</map>
+		<map name="SWIZ">src->num &amp; 0x3</map>
+		<map name="LOAD_SIZE_MINUS_ONE">extract_reg_uim(src) - 1</map>
 	</encode>
 </bitset>
 

@@ -21,6 +21,7 @@
  * IN THE SOFTWARE.
  */
 
+#include "util/log.h"
 #include "util/u_math.h"
 #include "util/u_prim.h"
 #include "util/macros.h"
@@ -30,8 +31,8 @@
 #include "broadcom/cle/v3d_decoder.h"
 #include "broadcom/clif/clif_dump.h"
 
-void
-vc4_dump_cl(void *cl, uint32_t size, bool is_render)
+static void
+vc4_dump_cl(struct log_stream *stream, void *cl, uint32_t size, bool is_render)
 {
         struct v3d_device_info devinfo = {
                 /* While the driver supports V3D 2.1 and 2.6, we haven't split
@@ -42,7 +43,7 @@ vc4_dump_cl(void *cl, uint32_t size, bool is_render)
         };
         struct v3d_spec *spec = v3d_spec_load(&devinfo);
 
-        struct clif_dump *clif = clif_dump_init(&devinfo, stderr, true, false);
+        struct clif_dump *clif = clif_dump_init(&devinfo, stream, true, false);
 
         uint32_t offset = 0, hw_offset = 0;
         uint8_t *p = cl;
@@ -53,15 +54,15 @@ vc4_dump_cl(void *cl, uint32_t size, bool is_render)
                 uint32_t length;
 
                 if (inst == NULL) {
-                        fprintf(stderr, "0x%08x 0x%08x: Unknown packet 0x%02x (%d)!\n",
-                                offset, hw_offset, header, header);
+                        mesa_log_stream_printf(stream, "0x%08x 0x%08x: Unknown packet 0x%02x (%d)!\n",
+                                               offset, hw_offset, header, header);
                         return;
                 }
 
                 length = v3d_group_get_length(inst);
 
-                fprintf(stderr, "0x%08x 0x%08x: 0x%02x %s\n",
-                        offset, hw_offset, header, v3d_group_get_name(inst));
+                mesa_log_stream_printf(stream, "0x%08x 0x%08x: 0x%02x %s\n",
+                                       offset, hw_offset, header, v3d_group_get_name(inst));
 
                 v3d_print_group(clif, inst, offset, p);
 
@@ -82,3 +83,18 @@ vc4_dump_cl(void *cl, uint32_t size, bool is_render)
         clif_dump_destroy(clif);
 }
 
+void
+vc4_dump_cli(void *cl, uint32_t size, bool is_render)
+{
+        struct log_stream *stream = mesa_log_streami();
+        vc4_dump_cl(stream, cl, size, is_render);
+        mesa_log_stream_destroy(stream);
+}
+
+void
+vc4_dump_cle(void *cl, uint32_t size, bool is_render)
+{
+        struct log_stream *stream = mesa_log_streame();
+        vc4_dump_cl(stream, cl, size, is_render);
+        mesa_log_stream_destroy(stream);
+}

@@ -1220,6 +1220,14 @@ vtn_emit_branch(struct vtn_builder *b, const struct vtn_block *block,
       struct vtn_construct *loop = block->parent->innermost_loop;
       vtn_assert(loop);
       vtn_emit_break_for_construct(b, block, loop);
+
+      /* If this is a conditional back-edge, flag this loop as do-while loop.
+       * The same applies to single-block loops.
+       */
+      if (block->parent->type == vtn_construct_type_continue ||
+          vtn_is_single_block_loop(loop)) {
+         loop->nloop->do_while = true;
+      }
       break;
    }
 

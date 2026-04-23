@@ -29,6 +29,8 @@
 #include "vk_meta.h"
 #include "vk_object.h"
 #include "radix_sort/radix_sort_vk.h"
+#include "radix_sort/common/vk/barrier.h"
+#include "radix_sort/shaders/push.h"
 
 #include "bvh/vk_bvh.h"
 
@@ -128,8 +130,23 @@ struct vk_acceleration_structure_build_state {
    const VkAccelerationStructureBuildGeometryInfoKHR *build_info;
    const VkAccelerationStructureBuildRangeInfoKHR *build_range_infos;
    uint32_t leaf_node_count;
+   uint32_t internal_node_count;
    struct vk_scratch_layout scratch;
    struct vk_build_config config;
+
+   /* Internal state of vk_acceleration_structure.c */
+   uint32_t build_flags;
+
+   uint32_t scratch_offset;
+
+   /* Radix sort state */
+   uint32_t scatter_blocks;
+   uint32_t count_ru_scatter;
+   uint32_t histo_blocks;
+   uint32_t count_ru_histo;
+   struct rs_push_scatter push_scatter;
+
+   uint32_t last_encode_pass;
 };
 
 struct vk_acceleration_structure_build_ops {
@@ -147,9 +164,9 @@ struct vk_acceleration_structure_build_ops {
    VkResult (*encode_prepare[MAX_ENCODE_PASSES])(VkCommandBuffer cmd_buffer, const struct vk_acceleration_structure_build_state *state);
    void (*encode_as[MAX_ENCODE_PASSES])(VkCommandBuffer cmd_buffer, const struct vk_acceleration_structure_build_state *state);
 
-   void (*init_update_scratch)(VkCommandBuffer cmd_buffer, const struct vk_acceleration_structure_build_state *state);
+   void (*init_update_scratch)(VkCommandBuffer cmd_buffer, const struct vk_acceleration_structure_build_state *states, uint32_t build_count);
    void (*update_prepare[MAX_ENCODE_PASSES])(VkCommandBuffer cmd_buffer, const struct vk_acceleration_structure_build_state *state,
-                                                   bool flushed_cp_after_init_update_scratch, bool flushed_compute_after_init_update_scratch);
+                                             bool flushed_cp_after_init_update_scratch, bool flushed_compute_after_init_update_scratch);
    void (*update_as[MAX_ENCODE_PASSES])(VkCommandBuffer cmd_buffer, const struct vk_acceleration_structure_build_state *state);
 
    const uint32_t *leaf_spirv_override;

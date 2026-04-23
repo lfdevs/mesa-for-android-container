@@ -15,7 +15,7 @@
 
 #include "util/os_file.h"
 
-unsigned gpu_id = 0x72120000;
+uint64_t gpu_id = 0x72120000;
 int verbose = 0;
 
 #define BI_FOURCC(ch0, ch1, ch2, ch3)                                          \

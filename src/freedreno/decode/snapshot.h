@@ -330,7 +330,7 @@ static FILE *snapshot;
 static uint64_t ptbase = 0x43210000;  /* We don't always have a real ttbr0, so fake it */
 
 static inline void
-snapshot_write(void *data, size_t sz)
+snapshot_write(const void *data, size_t sz)
 {
    fwrite(data, sz, 1, snapshot);
 }
@@ -559,12 +559,12 @@ snapshot_gpu_object(uint64_t gpuaddr, uint32_t size, uint32_t *buf)
 
 static struct {
    struct snapshot_ib_v2 ib;
-   uint32_t *dwords;
+   const uint32_t *dwords;
 } ibs[512];
 static unsigned nibs;
 
 static inline void
-snapshot_ib(uint64_t gpuaddr, uint32_t *dwords, uint32_t sizedwords)
+snapshot_ib(uint64_t gpuaddr, const uint32_t *dwords, uint32_t sizedwords)
 {
    int idx;
 

@@ -8,11 +8,12 @@
  * Copyright © 2015 Intel Corporation
  */
 
-#include "tu_cmd_buffer.h"
 #include "tu_tile_config.h"
-#include "tu_subsampled_image.h"
 
 #include "util/u_worklist.h"
+
+#include "tu_cmd_buffer.h"
+#include "tu_subsampled_image.h"
 
 static void
 tu_calc_frag_area(struct tu_cmd_buffer *cmd,

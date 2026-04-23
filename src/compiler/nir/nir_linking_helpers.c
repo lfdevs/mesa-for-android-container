@@ -952,39 +952,6 @@ nir_compact_varyings(nir_shader *producer, nir_shader *consumer,
                       default_to_smooth_interp);
 }
 
-/*
- * Mark XFB varyings as always_active_io in the consumer so the linking opts
- * don't touch them.
- */
-void
-nir_link_xfb_varyings(nir_shader *producer, nir_shader *consumer)
-{
-   nir_variable *input_vars[MAX_VARYING][4] = { 0 };
-
-   nir_foreach_shader_in_variable(var, consumer) {
-      if (var->data.location >= VARYING_SLOT_VAR0 &&
-          var->data.location - VARYING_SLOT_VAR0 < MAX_VARYING) {
-
-         unsigned location = var->data.location - VARYING_SLOT_VAR0;
-         input_vars[location][var->data.location_frac] = var;
-      }
-   }
-
-   nir_foreach_shader_out_variable(var, producer) {
-      if (var->data.location >= VARYING_SLOT_VAR0 &&
-          var->data.location - VARYING_SLOT_VAR0 < MAX_VARYING) {
-
-         if (!var->data.always_active_io)
-            continue;
-
-         unsigned location = var->data.location - VARYING_SLOT_VAR0;
-         if (input_vars[location][var->data.location_frac]) {
-            input_vars[location][var->data.location_frac]->data.always_active_io = true;
-         }
-      }
-   }
-}
-
 static bool
 does_varying_match(nir_variable *out_var, nir_variable *in_var)
 {

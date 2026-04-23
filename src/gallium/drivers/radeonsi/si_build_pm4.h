@@ -397,7 +397,7 @@
 
 #define radeon_emit_alt_hiz_packets() do { \
    radeon_emit(PKT3(PKT3_RELEASE_MEM, 6, 0)); \
-   radeon_emit(S_490_EVENT_TYPE(V_028A90_BOTTOM_OF_PIPE_TS) | S_490_EVENT_INDEX(5)); \
+   radeon_emit(S_491_EVENT_TYPE(V_028A90_BOTTOM_OF_PIPE_TS) | S_491_EVENT_INDEX(5)); \
    radeon_emit(0); /* DST_SEL, INT_SEL = no write confirm, DATA_SEL = no data */ \
    radeon_emit(0); /* ADDRESS_LO */ \
    radeon_emit(0); /* ADDRESS_HI */ \

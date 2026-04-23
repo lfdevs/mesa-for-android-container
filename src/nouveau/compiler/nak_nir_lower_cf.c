@@ -238,9 +238,7 @@ block_is_merge(const nir_block *block)
       return false;
 
    unsigned num_preds = 0;
-   set_foreach(&block->predecessors, entry) {
-      const nir_block *pred = entry->key;
-
+   nir_foreach_pred(pred, block) {
       /* We don't care about unreachable blocks */
       if (pred->imm_dom == NULL)
          continue;
@@ -443,6 +441,14 @@ lower_cf_func(nir_function *func)
 
    /* We use this in block_is_merge() */
    nir_metadata_require(old_impl, nir_metadata_dominance | nir_metadata_divergence);
+
+   /* We get rid of single source phis, because they would be converted to phis
+    * with undef after lowering regs to SSA.
+    */
+   nir_foreach_block(block, old_impl) {
+      if (nir_block_num_preds(block) <= 1)
+         nir_remove_single_src_phis_block(block);
+   }
 
    /* First, we temporarily get rid of SSA.  This will make all our block
     * motion way easier.  Ask the pass to place reg writes directly in the

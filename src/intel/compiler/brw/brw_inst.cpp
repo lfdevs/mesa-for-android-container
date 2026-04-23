@@ -562,7 +562,7 @@ brw_inst::size_read(const struct intel_device_info *devinfo, int arg) const
 
    case SHADER_OPCODE_LSC_FILL:
       if (arg == FILL_SRC_PAYLOAD1) {
-         return lsc_msg_addr_len(devinfo, LSC_ADDR_SIZE_A32,
+         return brw_lsc_msg_addr_len(devinfo, LSC_ADDR_SIZE_A32,
                                  as_scratch()->use_transpose ? 1 : exec_size) *
                 REG_SIZE;
       }
@@ -572,7 +572,7 @@ brw_inst::size_read(const struct intel_device_info *devinfo, int arg) const
       if (arg == SPILL_SRC_PAYLOAD1) {
          assert(!as_scratch()->use_transpose);
 
-         return lsc_msg_addr_len(devinfo, LSC_ADDR_SIZE_A32, exec_size) *
+         return brw_lsc_msg_addr_len(devinfo, LSC_ADDR_SIZE_A32, exec_size) *
                 REG_SIZE;
       } else if (arg == SPILL_SRC_PAYLOAD2) {
          return src[arg].component_size(exec_size);

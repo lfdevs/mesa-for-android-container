@@ -33,4 +33,11 @@ struct pipe_video_buffer *si_video_buffer_create_with_modifiers(struct pipe_cont
 struct pipe_video_codec *si_video_codec_create(struct pipe_context *context,
                                                const struct pipe_video_codec *templ);
 
+int si_video_get_param(struct pipe_screen *screen, enum pipe_video_profile profile,
+                       enum pipe_video_entrypoint entrypoint, enum pipe_video_cap param);
+
+bool si_vid_is_format_supported(struct pipe_screen *screen, enum pipe_format format,
+                                enum pipe_video_profile profile,
+                                enum pipe_video_entrypoint entrypoint);
+
 #endif

@@ -69,7 +69,7 @@ gather_load_fs_input_info(const nir_shader *nir, const nir_intrinsic_instr *intr
 {
    const nir_io_semantics io_sem = nir_intrinsic_io_semantics(intrin);
    const unsigned location = io_sem.location;
-   const unsigned mapped_location = nir_intrinsic_base(intrin);
+   const unsigned mapped_location = ac_nir_get_io_driver_location(nir, io_sem.location, true);
    const unsigned attrib_count = io_sem.num_slots;
    const unsigned component = nir_intrinsic_component(intrin);
 
@@ -570,12 +570,8 @@ gather_shader_info_vs(struct radv_device *device, const nir_shader *nir,
       info->esgs_itemsize = radv_compute_esgs_itemsize(pdev->info.gfx_level, info->vs.num_linked_outputs);
    }
 
-   if (info->is_ngg) {
-      info->vs.num_outputs = nir->num_outputs;
-
-      if (info->next_stage == MESA_SHADER_FRAGMENT || info->next_stage == MESA_SHADER_NONE) {
-         gather_shader_info_ngg_query(device, info);
-      }
+   if (info->is_ngg && (info->next_stage == MESA_SHADER_FRAGMENT || info->next_stage == MESA_SHADER_NONE)) {
+      gather_shader_info_ngg_query(device, info);
    }
 }
 
@@ -636,12 +632,8 @@ gather_shader_info_tes(struct radv_device *device, const nir_shader *nir, struct
       info->esgs_itemsize = radv_compute_esgs_itemsize(pdev->info.gfx_level, info->tes.num_linked_outputs);
    }
 
-   if (info->is_ngg) {
-      info->tes.num_outputs = nir->num_outputs;
-
-      if (info->next_stage == MESA_SHADER_FRAGMENT || info->next_stage == MESA_SHADER_NONE) {
-         gather_shader_info_ngg_query(device, info);
-      }
+   if (info->is_ngg && (info->next_stage == MESA_SHADER_FRAGMENT || info->next_stage == MESA_SHADER_NONE)) {
+      gather_shader_info_ngg_query(device, info);
    }
 }
 
@@ -1084,6 +1076,7 @@ radv_nir_shader_info_pass(struct radv_device *device, const struct nir_shader *n
    info->user_data_0 = radv_get_user_data_0(pdev->info.gfx_level, info);
    info->merged_shader_compiled_separately = radv_is_merged_shader_compiled_separately(pdev->info.gfx_level, info);
    info->force_indirect_descriptors = info->merged_shader_compiled_separately || stage_key->indirect_bindable;
+   info->descriptor_heap = stage_key->descriptor_heap;
 
    switch (nir->info.stage) {
    case MESA_SHADER_COMPUTE:

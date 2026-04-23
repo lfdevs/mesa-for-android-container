@@ -594,7 +594,7 @@ ac_sqtt_copy_info_regs(const struct radeon_info *info, struct ac_pm4_state *pm4,
       uint32_t init_wptr_value = shifted_data_va & 0x1fffffff;
 
       ac_pm4_cmd_add(pm4, PKT3(PKT3_ATOMIC_MEM, 7, 0));
-      ac_pm4_cmd_add(pm4, S_1E_1_ATOMIC(V_1E_1_GL2_OP_ATOMIC_SUB_RTN_32));
+      ac_pm4_cmd_add(pm4, S_1E1_ATOMIC(V_1E1_GL2_OP_ATOMIC_SUB_RTN_32));
       ac_pm4_cmd_add(pm4, info_va);         /* addr lo */
       ac_pm4_cmd_add(pm4, info_va >> 32);   /* addr hi */
       ac_pm4_cmd_add(pm4, init_wptr_value); /* data lo */

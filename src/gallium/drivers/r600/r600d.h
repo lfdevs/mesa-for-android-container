@@ -850,6 +850,9 @@
 #define   S_02880C_KILL_ENABLE(x)                      (((unsigned)(x) & 0x1) << 6)
 #define   G_02880C_KILL_ENABLE(x)                      (((x) >> 6) & 0x1)
 #define   C_02880C_KILL_ENABLE                         0xFFFFFFBF
+#define   S_02880C_COVERAGE_TO_MASK_ENABLE(x)          (((unsigned)(x) & 0x1) << 7)
+#define   G_02880C_COVERAGE_TO_MASK_ENABLE(x)          (((x) >> 7) & 0x1)
+#define   C_02880C_COVERAGE_TO_MASK_ENABLE             0xFFFFFF7F
 #define   S_02880C_MASK_EXPORT_ENABLE(x)               (((unsigned)(x) & 0x1) << 8)
 #define   G_02880C_MASK_EXPORT_ENABLE(x)               (((x) >> 8) & 0x1)
 #define   C_02880C_MASK_EXPORT_ENABLE                  0xFFFFFEFF

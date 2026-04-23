@@ -293,7 +293,7 @@ process_waddr_deps(struct schedule_state *state, struct schedule_node *n,
                         break;
 
                 default:
-                        fprintf(stderr, "Unknown waddr %d\n", waddr);
+                        mesa_loge("Unknown waddr %d", waddr);
                         abort();
                 }
         }
@@ -1779,9 +1779,9 @@ static void
 dump_state(const struct v3d_device_info *devinfo, struct dag *dag)
 {
         list_for_each_entry(struct schedule_node, n, &dag->heads, dag.link) {
-                fprintf(stderr, "         t=%4d: ", n->unblocked_time);
-                v3d_qpu_dump(devinfo, &n->inst->qpu);
-                fprintf(stderr, "\n");
+                const char *str = v3d_qpu_decode(devinfo, &n->inst->qpu);
+                mesa_logd("         t=%4d: %s", n->unblocked_time, str);
+                ralloc_free((void *)str);
 
                 util_dynarray_foreach(&n->dag.edges, struct dag_edge, edge) {
                         struct schedule_node *child =
@@ -1789,11 +1789,12 @@ dump_state(const struct v3d_device_info *devinfo, struct dag *dag)
                         if (!child)
                                 continue;
 
-                        fprintf(stderr, "                 - ");
-                        v3d_qpu_dump(devinfo, &child->inst->qpu);
-                        fprintf(stderr, " (%d parents, %c)\n",
-                                child->dag.parent_count,
-                                edge->data ? 'w' : 'r');
+                        const char *str = v3d_qpu_decode(devinfo, &child->inst->qpu);
+                        mesa_logd("                 - %s (%d parents, %c)",
+                                  str,
+                                  child->dag.parent_count,
+                                  edge->data ? 'w' : 'r');
+                        ralloc_free((void *)str);
                 }
         }
 }
@@ -2734,12 +2735,12 @@ schedule_instructions(struct v3d_compile *c,
                 struct v3d_qpu_instr *inst = &qinst->qpu;
 
                 if (debug) {
-                        fprintf(stderr, "t=%4d: current list:\n",
-                                time);
+                        mesa_logd("t=%4d: current list:",
+                                  time);
                         dump_state(devinfo, scoreboard->dag);
-                        fprintf(stderr, "t=%4d: chose:   ", time);
-                        v3d_qpu_dump(devinfo, inst);
-                        fprintf(stderr, "\n");
+                        const char *str = v3d_qpu_decode(devinfo, inst);
+                        mesa_logd("t=%4d: chose:   %s", time, str);
+                        ralloc_free((void *)str);
                 }
 
                 /* We can't mark_instruction_scheduled() the chosen inst until
@@ -2773,13 +2774,14 @@ schedule_instructions(struct v3d_compile *c,
                                         merge->inst->ldtmu_count;
 
                                 if (debug) {
-                                        fprintf(stderr, "t=%4d: merging: ",
-                                                time);
-                                        v3d_qpu_dump(devinfo, &merge->inst->qpu);
-                                        fprintf(stderr, "\n");
-                                        fprintf(stderr, "         result: ");
-                                        v3d_qpu_dump(devinfo, inst);
-                                        fprintf(stderr, "\n");
+                                        const char *strmerge = v3d_qpu_decode(devinfo, &merge->inst->qpu);
+                                        const char *strinst = v3d_qpu_decode(devinfo, inst);
+                                        mesa_logd("t=%4d: merging \"%s\" result to \"%s\"",
+                                                  time,
+                                                  strmerge,
+                                                  strinst);
+                                        ralloc_free((void *)strmerge);
+                                        ralloc_free((void *)strinst);
                                 }
 
                                 if (scoreboard->fixup_ldvary) {
@@ -2818,7 +2820,7 @@ schedule_instructions(struct v3d_compile *c,
                 }
 
                 if (debug) {
-                        fprintf(stderr, "\n");
+                        mesa_logd("\n");
                 }
 
                 /* Now that we've scheduled a new instruction, some of its
@@ -3025,16 +3027,16 @@ v3d_qpu_schedule_instructions(struct v3d_compile *c)
         scoreboard.last_implicit_rf0_write_tick = - 10;
 
         if (debug) {
-                fprintf(stderr, "Pre-schedule instructions\n");
+                mesa_logd("Pre-schedule instructions");
                 vir_for_each_block(block, c) {
-                        fprintf(stderr, "BLOCK %d\n", block->index);
+                        mesa_logd("BLOCK %d\n", block->index);
                         list_for_each_entry(struct qinst, qinst,
                                             &block->instructions, link) {
-                                v3d_qpu_dump(devinfo, &qinst->qpu);
-                                fprintf(stderr, "\n");
+                                const char *str = v3d_qpu_decode(devinfo, &qinst->qpu);
+                                mesa_logd("%s", str);
+                                ralloc_free((void *)str);
                         }
                 }
-                fprintf(stderr, "\n");
         }
 
         uint32_t cycles = 0;

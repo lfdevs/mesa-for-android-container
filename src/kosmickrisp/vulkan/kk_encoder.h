@@ -66,6 +66,7 @@ struct kk_encoder {
    /* Track what values pre_gfx must wait/signal before starting the encoding */
    uint64_t wait_value_pre_gfx;
    uint64_t signal_value_pre_gfx;
+   uint64_t last_signaled_value_pre_gfx;
 
    /* uint64_t pairs with first being the address, second being the value to
     * write */

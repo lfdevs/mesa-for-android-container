@@ -98,7 +98,7 @@ vk_pipeline_hash_shader_stage(VkPipelineCreateFlags2KHR pipeline_flags,
                               unsigned char *stage_blake3);
 
 void
-vk_pipeline_robustness_state_fill(const struct vk_device *device,
+vk_pipeline_robustness_state_fill(const struct vk_pipeline_robustness_state *device_robustness_state,
                                   struct vk_pipeline_robustness_state *rs,
                                   const void *pipeline_pNext,
                                   const void *shader_stage_pNext);

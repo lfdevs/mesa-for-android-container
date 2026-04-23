@@ -199,6 +199,7 @@ lp_rast_tri_tab[MAX_PLANES+1] = {
    LP_RAST_OP_TRIANGLE_8
 };
 
+
 static unsigned
 lp_rast_32_tri_tab[MAX_PLANES+1] = {
    0,               /* should be impossible */
@@ -331,10 +332,9 @@ do_triangle_ccw(struct lp_setup_context *setup,
 
    int max_szorig = ((bbox.x1 - (bbox.x0 & ~3)) |
                      (bbox.y1 - (bbox.y0 & ~3)));
-   bool use_32bits = max_szorig <= MAX_FIXED_LENGTH32;
 #if defined(_ARCH_PWR8) && UTIL_ARCH_LITTLE_ENDIAN
-   bool pwr8_limit_check = (bbox.x1 - bbox.x0) <= MAX_FIXED_LENGTH32 &&
-      (bbox.y1 - bbox.y0) <= MAX_FIXED_LENGTH32;
+   bool pwr8_limit_check = (bbox.x1 - bbox.x0) <= MAX_FIXED_LENGTH32_BLOCK &&
+      (bbox.y1 - bbox.y0) <= MAX_FIXED_LENGTH32_BLOCK;
 #endif
 
    /* Can safely discard negative regions, but need to keep hold of
@@ -530,11 +530,6 @@ do_triangle_ccw(struct lp_setup_context *setup,
        * c = _mm_sub_epi32(c, c_dec);
        */
 
-      /* Scale up to match c:
-       */
-      dcdx = _mm_slli_epi32(dcdx, FIXED_ORDER);
-      dcdy = _mm_slli_epi32(dcdy, FIXED_ORDER);
-
       /*
        * Calculate trivial reject values:
        * Note eo cannot overflow even if dcdx/dcdy would already have
@@ -574,8 +569,8 @@ do_triangle_ccw(struct lp_setup_context *setup,
     * XXX this code is effectively disabled for all practical purposes,
     * as the allowed fb size is tiny if FIXED_ORDER is 8.
     */
-   if (setup->fb.width <= MAX_FIXED_LENGTH32 &&
-       setup->fb.height <= MAX_FIXED_LENGTH32 &&
+   if (setup->fb.width <= MAX_FIXED_LENGTH32_BLOCK &&
+       setup->fb.height <= MAX_FIXED_LENGTH32_BLOCK &&
        pwr8_limit_check) {
       unsigned int bottom_edge;
       __m128i vertx, verty;
@@ -633,11 +628,6 @@ do_triangle_ccw(struct lp_setup_context *setup,
                         vec_mullo_epi32(dcdy, verty));
 
       c = vec_add_epi32(c, c_inc);
-
-      /* Scale up to match c:
-       */
-      dcdx = vec_slli_epi32(dcdx, FIXED_ORDER);
-      dcdy = vec_slli_epi32(dcdy, FIXED_ORDER);
 
       /* Calculate trivial reject values:
        */
@@ -701,13 +691,6 @@ do_triangle_ccw(struct lp_setup_context *setup,
             }
          }
 
-         /* Scale up to match c:
-          */
-         assert((plane[i].dcdx << FIXED_ORDER) >> FIXED_ORDER == plane[i].dcdx);
-         assert((plane[i].dcdy << FIXED_ORDER) >> FIXED_ORDER == plane[i].dcdy);
-         plane[i].dcdx <<= FIXED_ORDER;
-         plane[i].dcdy <<= FIXED_ORDER;
-
          /* find trivial reject offsets for each edge for a single-pixel
           * sized block.  These will be scaled up at each recursive level to
           * match the active blocksize.  Scaling in this way works best if
@@ -743,7 +726,7 @@ do_triangle_ccw(struct lp_setup_context *setup,
       lp_setup_add_scissor_planes(scissor, &plane[3], s_planes);
    }
 
-   return lp_setup_bin_triangle(setup, tri, use_32bits,
+   return lp_setup_bin_triangle(setup, tri, max_szorig,
                                 check_opaque(setup, v0, v1, v2),
                                 &bbox, nr_planes, viewport_index);
 }
@@ -779,7 +762,7 @@ floor_pot(uint32_t n)
 bool
 lp_setup_bin_triangle(struct lp_setup_context *setup,
                       struct lp_rast_triangle *tri,
-                      bool use_32bits,
+                      int max_szorig,
                       bool opaque,
                       const struct u_rect *bbox,
                       int nr_planes,
@@ -787,6 +770,9 @@ lp_setup_bin_triangle(struct lp_setup_context *setup,
 {
    struct lp_scene *scene = setup->scene;
    unsigned cmd;
+
+   const bool use_32bits_block = max_szorig <= MAX_FIXED_LENGTH32_BLOCK;
+   const bool use_32bits_tile = max_szorig <= MAX_FIXED_LENGTH32_TILE;
 
    /* What is the largest power-of-two boundary this triangle crosses:
     */
@@ -836,7 +822,7 @@ lp_setup_bin_triangle(struct lp_setup_context *setup,
             if (setup->multisample)
                cmd = LP_RAST_OP_MS_TRIANGLE_3_4;
             else
-               cmd = use_32bits ? LP_RAST_OP_TRIANGLE_32_3_4 : LP_RAST_OP_TRIANGLE_3_4;
+               cmd = use_32bits_block ? LP_RAST_OP_TRIANGLE_32_3_4 : LP_RAST_OP_TRIANGLE_3_4;
             return lp_scene_bin_cmd_with_state(scene, ix0, iy0,
                                                setup->fs.stored, cmd,
                                                lp_rast_arg_triangle_contained(tri, px, py));
@@ -860,7 +846,7 @@ lp_setup_bin_triangle(struct lp_setup_context *setup,
             if (setup->multisample)
                cmd = LP_RAST_OP_MS_TRIANGLE_3_16;
             else
-               cmd = use_32bits ? LP_RAST_OP_TRIANGLE_32_3_16 : LP_RAST_OP_TRIANGLE_3_16;
+               cmd = use_32bits_block ? LP_RAST_OP_TRIANGLE_32_3_16 : LP_RAST_OP_TRIANGLE_3_16;
             return lp_scene_bin_cmd_with_state(scene, ix0, iy0,
                                                setup->fs.stored, cmd,
                                                lp_rast_arg_triangle_contained(tri, px, py));
@@ -875,7 +861,7 @@ lp_setup_bin_triangle(struct lp_setup_context *setup,
          if (setup->multisample)
             cmd = LP_RAST_OP_MS_TRIANGLE_4_16;
          else
-            cmd = use_32bits ? LP_RAST_OP_TRIANGLE_32_4_16 : LP_RAST_OP_TRIANGLE_4_16;
+            cmd = use_32bits_block ? LP_RAST_OP_TRIANGLE_32_4_16 : LP_RAST_OP_TRIANGLE_4_16;
          return lp_scene_bin_cmd_with_state(scene, ix0, iy0,
                                             setup->fs.stored, cmd,
                                             lp_rast_arg_triangle_contained(tri, px, py));
@@ -886,7 +872,7 @@ lp_setup_bin_triangle(struct lp_setup_context *setup,
       if (setup->multisample)
          cmd = lp_rast_ms_tri_tab[nr_planes];
       else
-         cmd = use_32bits ? lp_rast_32_tri_tab[nr_planes] : lp_rast_tri_tab[nr_planes];
+         cmd = use_32bits_tile ? lp_rast_32_tri_tab[nr_planes] : lp_rast_tri_tab[nr_planes];
       return lp_scene_bin_cmd_with_state(scene, ix0, iy0, setup->fs.stored,
                                          cmd,
                                          lp_rast_arg_triangle(tri,
@@ -907,16 +893,16 @@ lp_setup_bin_triangle(struct lp_setup_context *setup,
 
       for (int i = 0; i < nr_planes; i++) {
          c[i] = (plane[i].c +
-                 IMUL64(plane[i].dcdy, iy0) * TILE_SIZE -
-                 IMUL64(plane[i].dcdx, ix0) * TILE_SIZE);
+                 IMUL64_FIXED(plane[i].dcdy, iy0) * TILE_SIZE -
+                 IMUL64_FIXED(plane[i].dcdx, ix0) * TILE_SIZE);
 
-         ei[i] = (plane[i].dcdy -
-                  plane[i].dcdx -
-                  (int64_t)plane[i].eo) << TILE_ORDER;
+         ei[i] = (TO_FIXED64(plane[i].dcdy) -
+                  TO_FIXED64(plane[i].dcdx) -
+                  TO_FIXED64(plane[i].eo)) << TILE_ORDER;
 
-         eo[i] = (int64_t)plane[i].eo << TILE_ORDER;
-         xstep[i] = -(((int64_t)plane[i].dcdx) << TILE_ORDER);
-         ystep[i] = ((int64_t)plane[i].dcdy) << TILE_ORDER;
+         eo[i] = TO_FIXED64(plane[i].eo) << TILE_ORDER;
+         xstep[i] = -(TO_FIXED64(plane[i].dcdx) << TILE_ORDER);
+         ystep[i] = TO_FIXED64(plane[i].dcdy) << TILE_ORDER;
       }
 
       tri->inputs.is_blit = lp_setup_is_blit(setup, &tri->inputs);
@@ -958,7 +944,7 @@ lp_setup_bin_triangle(struct lp_setup_context *setup,
                if (setup->multisample)
                   cmd = lp_rast_ms_tri_tab[count];
                else
-                  cmd = use_32bits ? lp_rast_32_tri_tab[count] : lp_rast_tri_tab[count];
+                  cmd = use_32bits_tile ? lp_rast_32_tri_tab[count] : lp_rast_tri_tab[count];
                if (!lp_scene_bin_cmd_with_state(scene, x, y,
                                                 setup->fs.stored, cmd,
                                                 lp_rast_arg_triangle(tri, partial)))

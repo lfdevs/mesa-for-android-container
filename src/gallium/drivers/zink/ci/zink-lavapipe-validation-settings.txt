@@ -1,6 +1,6 @@
 # Please include a comment with the log message and a testcase triggering each
 # VUID at the bottom of the file.
-khronos_validation.message_id_filter = VUID-VkPhysicalDeviceProperties2-pNext-pNext,VUID-VkDeviceCreateInfo-pNext-pNext,VUID-RuntimeSpirv-Location-06272,VUID-vkCmdDrawMultiEXT-None-02699,VUID-RuntimeSpirv-OpEntryPoint-08743,VUID-vkCmdPipelineBarrier2-shaderTileImageColorReadAccess-08718,VUID-VkGraphicsPipelineCreateInfo-flags-06482,VUID-vkCmdPipelineBarrier2-None-08719,VUID-vkCmdDrawMultiEXT-rasterizationSamples-07474,VUID-vkDestroyDevice-device-05137,VUID-VkRectLayerKHR-offset-04864,VUID-vkAcquireNextImageKHR-semaphore-01779,VUID-vkQueueSubmit-pSignalSemaphores-00067,VUID-VkImageMemoryBarrier2-srcAccessMask-07454,VUID-vkCmdDrawMultiIndexedEXT-None-10909,VUID-VkDescriptorGetInfoEXT-type-12223,VUID-vkCmdDrawMultiEXT-dynamicRenderingUnusedAttachments-08911,VUID-vkCmdBlitImage-srcImageLayout-00221,VUID-VkRenderingAttachmentInfo-None-12256,VUID-vkCmdBeginRendering-pRenderingInfo-09592,VUID-vkCmdCopyImage-srcImageLayout-00128
+khronos_validation.message_id_filter = VUID-VkPhysicalDeviceProperties2-pNext-pNext,VUID-VkDeviceCreateInfo-pNext-pNext,VUID-RuntimeSpirv-Location-06272,VUID-vkCmdDrawMultiEXT-None-02699,VUID-RuntimeSpirv-OpEntryPoint-08743,VUID-vkCmdPipelineBarrier2-shaderTileImageColorReadAccess-08718,VUID-VkGraphicsPipelineCreateInfo-flags-06482,VUID-vkCmdPipelineBarrier2-None-08719,VUID-vkCmdDrawMultiEXT-rasterizationSamples-07474,VUID-vkDestroyDevice-device-05137,VUID-VkRectLayerKHR-offset-04864,VUID-vkAcquireNextImageKHR-semaphore-01779,VUID-vkQueueSubmit-pSignalSemaphores-00067,VUID-VkImageMemoryBarrier2-srcAccessMask-07454,VUID-vkCmdDrawMultiIndexedEXT-None-10909,VUID-VkDescriptorGetInfoEXT-type-12223,VUID-vkCmdDrawMultiEXT-dynamicRenderingUnusedAttachments-08911,VUID-vkCmdBlitImage-srcImageLayout-00221,VUID-VkRenderingAttachmentInfo-None-12256,VUID-vkCmdBeginRendering-pRenderingInfo-09592,VUID-vkCmdCopyImage-srcImageLayout-00128,VUID-vkDestroySwapchainKHR-swapchain-01282
 khronos_validation.report_flags = error
 khronos_validation.debug_action = VK_DBG_LAYER_ACTION_LOG_MSG,VK_DBG_LAYER_ACTION_BREAK
 VK_LAYER_ENABLES=VK_VALIDATION_FEATURE_ENABLE_DEBUG_PRINTF_EXT
@@ -158,3 +158,9 @@ khronos_validation.log_filename = stdout
 # Objects: 2
 #     [0] VkCommandBuffer 0x564a48f23550[zink cmdbuf]
 #     [1] VkImage 0x96dd00000096dd
+
+# dEQP-EGL.functional.swap_buffers_with_damage.resize_before_swap.buffer_age_render
+#
+# Validation Error: [ VUID-vkDestroySwapchainKHR-swapchain-01282 ] | MessageID = 0xc5b0dad2
+# vkDestroySwapchainKHR(): can't be called on VkSwapchainKHR 0x1250000000125 that is currently in use by VkSwapchainKHR 0x1250000000125.
+# The Vulkan spec states: All uses of presentable images acquired from swapchain must have completed execution (https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-vkDestroySwapchainKHR-swapchain-01282)

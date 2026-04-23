@@ -158,7 +158,7 @@ void si_flush_gfx_cs(struct si_context *ctx, unsigned flags, struct pipe_fence_h
    /* If we use s_sendmsg to set tess factors to all 0 or all 1 instead of writing to the tess
     * factor buffer, we need this at the end of command buffers:
     */
-   if ((ctx->gfx_level == GFX11 || ctx->gfx_level == GFX11_5) && ctx->has_tessellation) {
+   if ((ctx->gfx_level >= GFX11 && ctx->gfx_level < GFX12) && ctx->has_tessellation) {
       radeon_begin(cs);
       radeon_event_write(V_028A90_SQ_NON_EVENT);
       radeon_end();
@@ -573,7 +573,7 @@ void si_trace_emit(struct si_context *sctx)
    struct radeon_cmdbuf *cs = &sctx->gfx_cs;
    uint32_t trace_id = ++sctx->current_saved_cs->trace_id;
 
-   si_cp_write_data(sctx, sctx->current_saved_cs->trace_buf, 0, 4, V_370_MEM, V_370_ME, &trace_id);
+   si_cp_write_data(sctx, sctx->current_saved_cs->trace_buf, 0, 4, V_371_MEMORY, V_371_MICRO_ENGINE, &trace_id);
 
    ac_emit_cp_nop(&cs->current, AC_ENCODE_TRACE_POINT(trace_id));
 

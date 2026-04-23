@@ -902,7 +902,7 @@ param_hint_map(param_assignment_hints& hints, const struct callee_info& traversa
 }
 
 param_assignment_hints
-get_ahit_isec_param_hints(const struct callee_info& traversal_info)
+get_ahit_isec_param_hints(const struct callee_info& traversal_info, bool uses_descriptor_heap)
 {
    param_assignment_hints hints;
    hints.stack_pointer_affinity = traversal_info.stack_ptr;
@@ -914,8 +914,13 @@ get_ahit_isec_param_hints(const struct callee_info& traversal_info)
 
    param_hint_map(hints, traversal_info, RT_ARG_LAUNCH_ID, RT_ARG_LAUNCH_ID);
    param_hint_map(hints, traversal_info, RT_ARG_LAUNCH_SIZE, RT_ARG_LAUNCH_SIZE);
-   param_hint_map(hints, traversal_info, RT_ARG_DESCRIPTORS, RT_ARG_DESCRIPTORS);
-   param_hint_map(hints, traversal_info, RT_ARG_DYNAMIC_DESCRIPTORS, RT_ARG_DYNAMIC_DESCRIPTORS);
+   if (uses_descriptor_heap) {
+      param_hint_map(hints, traversal_info, RT_ARG_HEAP_RESOURCE, RT_ARG_HEAP_RESOURCE);
+      param_hint_map(hints, traversal_info, RT_ARG_HEAP_SAMPLER, RT_ARG_HEAP_SAMPLER);
+   } else {
+      param_hint_map(hints, traversal_info, RT_ARG_DESCRIPTORS, RT_ARG_DESCRIPTORS);
+      param_hint_map(hints, traversal_info, RT_ARG_DYNAMIC_DESCRIPTORS, RT_ARG_DYNAMIC_DESCRIPTORS);
+   }
    param_hint_map(hints, traversal_info, RT_ARG_PUSH_CONSTANTS, RT_ARG_PUSH_CONSTANTS);
    param_hint_map(hints, traversal_info, RT_ARG_SBT_DESCRIPTORS, RT_ARG_SBT_DESCRIPTORS);
    param_hint_map(hints, traversal_info, AHIT_ISEC_ARG_SHADER_RECORD_PTR,

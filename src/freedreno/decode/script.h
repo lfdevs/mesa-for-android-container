@@ -37,17 +37,17 @@ __attribute__((weak))
 void script_draw(const char *primtype, uint32_t nindx);
 
 __attribute__((weak))
-void script_packet(uint32_t *dwords, uint32_t sizedwords,
+void script_packet(const uint32_t *dwords, uint32_t sizedwords,
                    struct rnn *rnn,
                    struct rnndomain *dom);
 
 __attribute__((weak))
-const char * internal_packet(uint32_t *dwords, uint32_t sizedwords,
+const char * internal_packet(const uint32_t *dwords, uint32_t sizedwords,
                              struct rnn *rnn,
                              struct rnndomain *dom);
 
 __attribute__((weak))
-bool script_show_descriptor(uint32_t *dwords,
+bool script_show_descriptor(const uint32_t *dwords,
                             uint32_t sizedwords,
                             int base, int idx,
                             const char *type,

@@ -663,12 +663,14 @@ spirv_to_gl_access_qualifier(struct vtn_builder *b,
 
 static nir_deref_instr *
 vtn_get_image(struct vtn_builder *b, uint32_t value_id,
-              enum gl_access_qualifier *access)
+              enum gl_access_qualifier *access, unsigned *image_format)
 {
    struct vtn_type *type = vtn_get_value_type(b, value_id);
    vtn_assert(type->base_type == vtn_base_type_image);
    if (access)
       *access |= spirv_to_gl_access_qualifier(b, type->access_qualifier);
+   if (image_format)
+      *image_format = type->image_format;
    nir_variable_mode mode = glsl_type_is_image(type->glsl_image) ?
                             nir_var_image : nir_var_uniform;
    return nir_build_deref_cast(&b->nb, vtn_get_nir_ssa(b, value_id),
@@ -1932,9 +1934,14 @@ validate_image_type_for_sampled_image(struct vtn_builder *b,
                dim == GLSL_SAMPLER_DIM_SUBPASS_MS,
                "%s must not have a Dim of SubpassData.", operand);
 
-   vtn_fail_if(dim == GLSL_SAMPLER_DIM_BUF && b->version >= 0x10600,
-               "Starting with SPIR-V 1.6, %s must not have a Dim of Buffer.",
+   /* While this is invalid, the glslang used by hangover's arm64 DXVK build
+    * (used in our CI) does hit this path for the builtin YUV conversion
+    * shaders.
+    */
+   if (dim == GLSL_SAMPLER_DIM_BUF && b->version >= 0x10600) {
+      vtn_warn("Starting with SPIR-V 1.6, %s must not have a Dim of Buffer.",
                operand);
+   }
 }
 
 static void
@@ -2544,10 +2551,15 @@ spec_constant_decoration_cb(struct vtn_builder *b, UNUSED struct vtn_value *val,
    if (dec->decoration != SpvDecorationSpecId)
       return;
 
-   nir_const_value *value = data;
-   for (unsigned i = 0; i < b->num_specializations; i++) {
-      if (b->specializations[i].id == dec->operands[0]) {
-         *value = b->specializations[i].value;
+   if (!b->specialization)
+      return;
+
+   for (unsigned i = 0; i < b->specialization->num_entries; i++) {
+      const struct nir_spirv_specialization_entry *entry =
+         &b->specialization->entries[i];
+
+      if (entry->id == dec->operands[0] && entry->size > 0) {
+         memcpy(data, entry->data, entry->size);
          return;
       }
    }
@@ -3462,7 +3474,7 @@ vtn_handle_texture(struct vtn_builder *b, SpvOp opcode,
 {
    if (opcode == SpvOpSampledImage) {
       struct vtn_sampled_image si = {
-         .image = vtn_get_image(b, w[3], NULL),
+         .image = vtn_get_image(b, w[3], NULL, NULL),
          .sampler = vtn_get_sampler(b, w[4]),
       };
 
@@ -3471,8 +3483,8 @@ vtn_handle_texture(struct vtn_builder *b, SpvOp opcode,
          "Type of Image operand of OpSampledImage");
 
       enum gl_access_qualifier access = 0;
-      if (vtn_has_decoration(b, vtn_untyped_value(b, w[3]), SpvDecorationNonUniformEXT) ||
-          vtn_has_decoration(b, vtn_untyped_value(b, w[4]), SpvDecorationNonUniformEXT))
+      if (vtn_value_is_non_uniform(b, vtn_untyped_value(b, w[3])) ||
+          vtn_value_is_non_uniform(b, vtn_untyped_value(b, w[4])))
          access |= ACCESS_NON_UNIFORM;
 
       vtn_push_sampled_image(b, w[2], si, access & ACCESS_NON_UNIFORM);
@@ -3481,7 +3493,7 @@ vtn_handle_texture(struct vtn_builder *b, SpvOp opcode,
       struct vtn_sampled_image si = vtn_get_sampled_image(b, w[3]);
 
       enum gl_access_qualifier access = 0;
-      if (vtn_has_decoration(b, vtn_untyped_value(b, w[3]), SpvDecorationNonUniformEXT))
+      if (vtn_value_is_non_uniform(b, vtn_untyped_value(b, w[3])))
          access |= ACCESS_NON_UNIFORM;
 
       vtn_push_image(b, w[2], si.image, access & ACCESS_NON_UNIFORM);
@@ -3499,7 +3511,7 @@ vtn_handle_texture(struct vtn_builder *b, SpvOp opcode,
       image = si.image;
       sampler = si.sampler;
    } else {
-      image = vtn_get_image(b, w[3], NULL);
+      image = vtn_get_image(b, w[3], NULL, NULL);
    }
 
    const enum glsl_sampler_dim sampler_dim = glsl_get_sampler_dim(image->type);
@@ -3718,7 +3730,9 @@ vtn_handle_texture(struct vtn_builder *b, SpvOp opcode,
       vtn_fail("unexpected nir_texop_*_nv");
       break;
    case nir_texop_resinfo_intel:
-      vtn_fail("unexpected nir_texop_resinfo_intel");
+   case nir_texop_sparse_residency_intel:
+   case nir_texop_sparse_residency_txf_intel:
+      vtn_fail("unexpected internal tex op");
       break;
    }
 
@@ -4013,7 +4027,7 @@ vtn_handle_texture(struct vtn_builder *b, SpvOp opcode,
     * can assume it doesn't exist.
     */
    enum gl_access_qualifier access = 0;
-   if (vtn_has_decoration(b, sampled_val, SpvDecorationNonUniformEXT))
+   if (vtn_value_is_non_uniform(b, sampled_val))
       access |= ACCESS_NON_UNIFORM;
 
    if (operands & SpvImageOperandsNontemporalMask)
@@ -4203,6 +4217,7 @@ vtn_handle_image(struct vtn_builder *b, SpvOp opcode,
 {
    /* Just get this one out of the way */
    if (opcode == SpvOpImageTexelPointer) {
+      struct vtn_type *type = vtn_get_value_type(b, w[3]);
       struct vtn_value *val =
          vtn_push_value(b, w[2], vtn_value_type_image_pointer);
       val->image = vtn_alloc(b, struct vtn_image_pointer);
@@ -4211,6 +4226,21 @@ vtn_handle_image(struct vtn_builder *b, SpvOp opcode,
       val->image->coord = get_image_coord(b, w[4]);
       val->image->sample = vtn_get_nir_ssa(b, w[5]);
       val->image->lod = nir_imm_int(&b->nb, 0);
+      val->image->format = type->image_format;
+      return;
+   } else if (opcode == SpvOpUntypedImageTexelPointerEXT) {
+      struct vtn_type *type = vtn_get_value_type(b, w[3]);
+      struct vtn_value *val =
+         vtn_push_value(b, w[2], vtn_value_type_image_pointer);
+      val->image = vtn_alloc(b, struct vtn_image_pointer);
+
+      val->image->image = nir_build_deref_cast(&b->nb, vtn_get_nir_ssa(b, w[4]),
+                                               nir_var_image,
+                                               type->glsl_image, 0);
+      val->image->coord = get_image_coord(b, w[5]);
+      val->image->sample = vtn_get_nir_ssa(b, w[6]);
+      val->image->lod = nir_imm_int(&b->nb, 0);
+      val->image->format = type->image_format;
       return;
    }
 
@@ -4220,6 +4250,7 @@ vtn_handle_image(struct vtn_builder *b, SpvOp opcode,
    SpvImageOperandsMask operands = SpvImageOperandsMaskNone;
 
    enum gl_access_qualifier access = 0;
+   unsigned image_format = 0;
 
    struct vtn_value *res_val;
    switch (opcode) {
@@ -4260,7 +4291,8 @@ vtn_handle_image(struct vtn_builder *b, SpvOp opcode,
 
    case SpvOpImageQuerySizeLod:
       res_val = vtn_untyped_value(b, w[3]);
-      image.image = vtn_get_image(b, w[3], &access);
+      image.image = vtn_get_image(b, w[3], &access, &image_format);
+      image.format = image_format;
       image.coord = NULL;
       image.sample = NULL;
       image.lod = vtn_ssa_value(b, w[4])->def;
@@ -4272,7 +4304,8 @@ vtn_handle_image(struct vtn_builder *b, SpvOp opcode,
    case SpvOpImageQuerySamples:
    case SpvOpImageQuerySize:
       res_val = vtn_untyped_value(b, w[3]);
-      image.image = vtn_get_image(b, w[3], &access);
+      image.image = vtn_get_image(b, w[3], &access, &image_format);
+      image.format = image_format;
       image.coord = NULL;
       image.sample = NULL;
       image.lod = NULL;
@@ -4281,7 +4314,8 @@ vtn_handle_image(struct vtn_builder *b, SpvOp opcode,
    case SpvOpImageRead:
    case SpvOpImageSparseRead: {
       res_val = vtn_untyped_value(b, w[3]);
-      image.image = vtn_get_image(b, w[3], &access);
+      image.image = vtn_get_image(b, w[3], &access, &image_format);
+      image.format = image_format;
       image.coord = get_image_coord(b, w[4]);
 
       operands = count > 5 ? w[5] : SpvImageOperandsMaskNone;
@@ -4321,7 +4355,8 @@ vtn_handle_image(struct vtn_builder *b, SpvOp opcode,
 
    case SpvOpImageWrite: {
       res_val = vtn_untyped_value(b, w[1]);
-      image.image = vtn_get_image(b, w[1], &access);
+      image.image = vtn_get_image(b, w[1], &access, &image_format);
+      image.format = image_format;
       image.coord = get_image_coord(b, w[2]);
 
       /* texel = w[3] */
@@ -4365,40 +4400,46 @@ vtn_handle_image(struct vtn_builder *b, SpvOp opcode,
       vtn_fail_with_opcode("Invalid image opcode", opcode);
    }
 
+   nir_deref_instr *deref = nir_def_as_deref(&image.image->def);
+   nir_variable *var = nir_deref_instr_get_variable(deref);
+   bool heap = var && (var->data.mode == nir_var_resource_heap ||
+                       var->data.mode == nir_var_sampler_heap);
+
    if (semantics & SpvMemorySemanticsVolatileMask)
       access |= ACCESS_VOLATILE;
 
    nir_intrinsic_op op;
    switch (opcode) {
-#define OP(S, N) case SpvOp##S: op = nir_intrinsic_image_deref_##N; break;
-   OP(ImageQuerySize,            size)
-   OP(ImageQuerySizeLod,         size)
-   OP(ImageRead,                 load)
-   OP(ImageSparseRead,           sparse_load)
-   OP(ImageWrite,                store)
-   OP(AtomicLoad,                load)
-   OP(AtomicStore,               store)
-   OP(AtomicExchange,            atomic)
-   OP(AtomicCompareExchange,     atomic_swap)
-   OP(AtomicCompareExchangeWeak, atomic_swap)
-   OP(AtomicIIncrement,          atomic)
-   OP(AtomicIDecrement,          atomic)
-   OP(AtomicIAdd,                atomic)
-   OP(AtomicISub,                atomic)
-   OP(AtomicSMin,                atomic)
-   OP(AtomicUMin,                atomic)
-   OP(AtomicSMax,                atomic)
-   OP(AtomicUMax,                atomic)
-   OP(AtomicAnd,                 atomic)
-   OP(AtomicOr,                  atomic)
-   OP(AtomicXor,                 atomic)
-   OP(AtomicFAddEXT,             atomic)
-   OP(AtomicFMinEXT,             atomic)
-   OP(AtomicFMaxEXT,             atomic)
-   OP(ImageQueryFormat,          format)
-   OP(ImageQueryLevels,          levels)
-   OP(ImageQueryOrder,           order)
-   OP(ImageQuerySamples,         samples)
+#define OP(S, N, heap) case SpvOp##S: op = heap ? nir_intrinsic_image_heap_##N \
+                                                : nir_intrinsic_image_deref_##N; break;
+   OP(ImageQuerySize,            size,          heap)
+   OP(ImageQuerySizeLod,         size,          heap)
+   OP(ImageRead,                 load,          heap)
+   OP(ImageSparseRead,           sparse_load,   heap)
+   OP(ImageWrite,                store,         heap)
+   OP(AtomicLoad,                load,          heap)
+   OP(AtomicStore,               store,         heap)
+   OP(AtomicExchange,            atomic,        heap)
+   OP(AtomicCompareExchange,     atomic_swap,   heap)
+   OP(AtomicCompareExchangeWeak, atomic_swap,   heap)
+   OP(AtomicIIncrement,          atomic,        heap)
+   OP(AtomicIDecrement,          atomic,        heap)
+   OP(AtomicIAdd,                atomic,        heap)
+   OP(AtomicISub,                atomic,        heap)
+   OP(AtomicSMin,                atomic,        heap)
+   OP(AtomicUMin,                atomic,        heap)
+   OP(AtomicSMax,                atomic,        heap)
+   OP(AtomicUMax,                atomic,        heap)
+   OP(AtomicAnd,                 atomic,        heap)
+   OP(AtomicOr,                  atomic,        heap)
+   OP(AtomicXor,                 atomic,        heap)
+   OP(AtomicFAddEXT,             atomic,        heap)
+   OP(AtomicFMinEXT,             atomic,        heap)
+   OP(AtomicFMaxEXT,             atomic,        heap)
+   OP(ImageQueryFormat,          format,        heap)
+   OP(ImageQueryLevels,          levels,        heap)
+   OP(ImageQueryOrder,           order,         heap)
+   OP(ImageQuerySamples,         samples,       heap)
 #undef OP
    default:
       vtn_fail_with_opcode("Invalid image opcode", opcode);
@@ -4412,6 +4453,7 @@ vtn_handle_image(struct vtn_builder *b, SpvOp opcode,
    nir_intrinsic_set_image_dim(intrin, glsl_get_sampler_dim(image.image->type));
    nir_intrinsic_set_image_array(intrin,
       glsl_sampler_type_is_array(image.image->type));
+   nir_intrinsic_set_format(intrin, image.format);
 
    switch (opcode) {
    case SpvOpImageQueryLevels:
@@ -4443,7 +4485,7 @@ vtn_handle_image(struct vtn_builder *b, SpvOp opcode,
     * chains to find the NonUniform decoration.  It's either right there or we
     * can assume it doesn't exist.
     */
-   if (vtn_has_decoration(b, res_val, SpvDecorationNonUniformEXT))
+   if (vtn_value_is_non_uniform(b, res_val))
       access |= ACCESS_NON_UNIFORM;
    nir_intrinsic_set_access(intrin, access);
 
@@ -4475,7 +4517,8 @@ vtn_handle_image(struct vtn_builder *b, SpvOp opcode,
       const uint32_t value_id = opcode == SpvOpAtomicStore ? w[4] : w[3];
       struct vtn_ssa_value *value = vtn_ssa_value(b, value_id);
       /* nir_intrinsic_image_deref_store always takes a vec4 value */
-      assert(op == nir_intrinsic_image_deref_store);
+      assert(op == nir_intrinsic_image_deref_store ||
+             op == nir_intrinsic_image_heap_store);
       intrin->num_components = 4;
       intrin->src[3] = nir_src_for_ssa(nir_pad_vec4(&b->nb, value->def));
       /* Only OpImageWrite can support a lod parameter if
@@ -6009,13 +6052,19 @@ vtn_handle_execution_mode_id(struct vtn_builder *b, struct vtn_value *entry_poin
       if (!fp_math_ctrl)
          vtn_fail("Unkown float type for FPFastMathDefault");
 
-      SpvFPFastMathModeMask can_fast_math =
-         SpvFPFastMathModeAllowRecipMask |
-         SpvFPFastMathModeAllowContractMask |
-         SpvFPFastMathModeAllowReassocMask |
-         SpvFPFastMathModeAllowTransformMask;
-      if ((flags & can_fast_math) != can_fast_math)
-         *fp_math_ctrl |= nir_fp_exact;
+      if (!(flags & SpvFPFastMathModeAllowContractMask))
+         *fp_math_ctrl |= nir_fp_no_contract;
+
+      if (!(flags & SpvFPFastMathModeAllowReassocMask))
+         *fp_math_ctrl |= nir_fp_no_reassoc;
+
+      if (!(flags & SpvFPFastMathModeAllowTransformMask))
+         *fp_math_ctrl |= nir_fp_no_transform;
+
+      /* XXX maybe SpvFPFastMathModeAllowRecipMask
+       * should do something for CL?
+       * It's always allowed for VK/GL.
+       */
 
       if (!(flags & SpvFPFastMathModeNotNaNMask))
          *fp_math_ctrl |= nir_fp_preserve_nan;
@@ -6745,6 +6794,7 @@ vtn_handle_body_instruction(struct vtn_builder *b, SpvOp opcode,
    case SpvOpImageSparseRead:
    case SpvOpImageWrite:
    case SpvOpImageTexelPointer:
+   case SpvOpUntypedImageTexelPointerEXT:
    case SpvOpImageQueryFormat:
    case SpvOpImageQueryOrder:
       vtn_handle_image(b, opcode, w, count);
@@ -7441,7 +7491,7 @@ can_remove(nir_variable *var, void *data)
 
 nir_shader *
 spirv_to_nir(const uint32_t *words, size_t word_count,
-             struct nir_spirv_specialization *spec, unsigned num_spec,
+             struct nir_spirv_specialization *spec,
              mesa_shader_stage stage, const char *entry_point_name,
              const struct spirv_to_nir_options *options,
              const nir_shader_compiler_options *nir_options)
@@ -7534,8 +7584,7 @@ spirv_to_nir(const uint32_t *words, size_t word_count,
       ralloc_free(b->shader);
       ralloc_free(b);
       nir_shader* result = spirv_to_nir(replacement_words, replacement_size / sizeof(uint32_t),
-                                        spec, num_spec,
-                                        stage, entry_point_name, options,
+                                        spec, stage, entry_point_name, options,
                                         nir_options);
 
       free((void *)replacement_words);
@@ -7596,8 +7645,7 @@ spirv_to_nir(const uint32_t *words, size_t word_count,
       vtn_foreach_execution_mode(b, b->entry_point,
                                  vtn_handle_execution_mode, NULL);
 
-   b->specializations = spec;
-   b->num_specializations = num_spec;
+   b->specialization = spec;
 
    /* Handle all variable, type, and constant instructions */
    words = vtn_foreach_instruction(b, words, word_end,
@@ -7868,4 +7916,62 @@ vtn_dump_values(struct vtn_builder *b, FILE *f)
       vtn_print_value(b, val, f);
    }
    fprintf(f, "===\n");
+}
+
+struct nir_spirv_specialization *
+vtn_alloc_specialization(uint32_t num_entries)
+{
+   struct nir_spirv_specialization *spec;
+
+   spec = calloc(1, sizeof(*spec));
+   if (!spec)
+      return NULL;
+
+   spec->entries = calloc(num_entries, sizeof(*spec->entries));
+   if (!spec->entries) {
+      free(spec);
+      return NULL;
+   }
+
+   spec->num_entries = num_entries;
+   return spec;
+}
+
+bool
+vtn_add_specialization_entry(struct nir_spirv_specialization *spec, uint32_t slot,
+                             uint32_t entry_id, uint32_t entry_size,
+                             const void *entry_data, bool defined_on_module)
+{
+   struct nir_spirv_specialization_entry *entry = &spec->entries[slot];
+
+   assert(!entry->data);
+
+   entry->id = entry_id;
+   entry->size = entry_size;
+   entry->defined_on_module = defined_on_module;
+
+   if (entry_size > 0) {
+      entry->data = malloc(entry_size);
+      if (!entry->data)
+         return false;
+
+      memcpy(entry->data, entry_data, entry_size);
+   }
+
+   return true;
+}
+
+void
+vtn_free_specialization(struct nir_spirv_specialization *spec)
+{
+   if (!spec)
+      return;
+
+   for (uint32_t i = 0; i < spec->num_entries; i++) {
+      struct nir_spirv_specialization_entry *entry = &spec->entries[i];
+      free(entry->data);
+   }
+
+   free(spec->entries);
+   free(spec);
 }

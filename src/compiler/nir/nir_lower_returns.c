@@ -163,7 +163,7 @@ lower_returns_in_if(nir_if *if_stmt, struct lower_returns_state *state)
 static bool
 lower_returns_in_block(nir_block *block, struct lower_returns_state *state)
 {
-   if (block->predecessors.entries == 0 &&
+   if (nir_block_num_preds(block) == 0 &&
        block != nir_start_block(state->builder.impl)) {
       /* This block is unreachable.  Delete it and everything after it. */
       nir_cf_list list;

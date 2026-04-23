@@ -77,6 +77,7 @@ api@clcompileprogram,Fail
 api@clgetcommandqueueinfo,Fail
 api@clgetextensionfunctionaddressforplatform,Fail
 api@clgetkernelarginfo,Fail
+api@clgetmemobjectinfo,Fail
 api@cllinkprogram,Fail
 program@bitcoin: phatk kernel,Crash
 program@build@vector-data-types,Fail

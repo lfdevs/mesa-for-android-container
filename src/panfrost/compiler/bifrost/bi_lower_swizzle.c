@@ -95,6 +95,15 @@ va_op_swizzles(enum bi_opcode op, unsigned src)
    return swizzles;
 }
 
+bool
+bi_op_supports_swizzle(enum bi_opcode op, unsigned src,
+                       enum bi_swizzle swizzle, unsigned arch)
+{
+   uint32_t supported_swizzles = arch >= 9 ?
+      va_op_swizzles(op, src) : bi_op_swizzles[op][src];
+   return supported_swizzles & BITFIELD_BIT(swizzle);
+}
+
 static void
 lower_swizzle(bi_context *ctx, bi_instr *ins, unsigned src)
 {
@@ -112,9 +121,7 @@ lower_swizzle(bi_context *ctx, bi_instr *ins, unsigned src)
       return;
    }
 
-   uint32_t supported_swizzles = pan_arch(ctx->inputs->gpu_id) >= 9 ?
-      va_op_swizzles(ins->op, src) : bi_op_swizzles[ins->op][src];
-   if (supported_swizzles & (1 << ins->src[src].swizzle))
+   if (bi_op_supports_swizzle(ins->op, src, ins->src[src].swizzle, ctx->arch))
       return;
 
    /* First, try to apply a given swizzle to a constant to clear the
@@ -141,15 +148,11 @@ lower_swizzle(bi_context *ctx, bi_instr *ins, unsigned src)
    /* Lower it away */
    bi_builder b = bi_init_builder(ctx, bi_before_instr(ins));
 
-   bool is_8 = (bi_get_opcode_props(ins)->size == BI_SIZE_8) ||
-               (bi_get_opcode_props(ins)->size == BI_SIZE_32 &&
-                ins->src[src].swizzle >= BI_SWIZZLE_B0000);
-
    bi_index orig = ins->src[src];
    bi_index stripped = bi_replace_index(bi_null(), orig);
    stripped.swizzle = ins->src[src].swizzle;
 
-   bi_index swz = is_8 ? bi_swz_v4i8(&b, stripped) : bi_swz_v2i16(&b, stripped);
+   bi_index swz = bi_swz_v4i8(&b, stripped);
 
    bi_replace_src(ins, src, swz);
    ins->src[src].swizzle = BI_SWIZZLE_H01;
@@ -221,6 +224,13 @@ void
 bi_lower_swizzle(bi_context *ctx)
 {
    bi_foreach_instr_global_safe(ctx, ins) {
+      /* bi_lower_mkvec_swz takes care of these and can handle any swizzle */
+      if (ins->op == BI_OPCODE_MKVEC_V2I16 ||
+          ins->op == BI_OPCODE_MKVEC_V4I8 ||
+          ins->op == BI_OPCODE_SWZ_V2I16 ||
+          ins->op == BI_OPCODE_SWZ_V4I8)
+         continue;
+
       bi_foreach_src(ins, s) {
          if (bi_is_null(ins->src[s]))
             continue;

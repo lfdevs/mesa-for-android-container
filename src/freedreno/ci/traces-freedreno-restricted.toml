@@ -1,0 +1,795 @@
+[traces_db]
+download_url = "https://s3.freedesktop.org/mesa-tracie-private/"
+
+[[traces]]
+path = "angle/angle_trace_tests/among_us"
+[traces.devices]
+freedreno-a660 = { checksum = "b3a711b88161fc7a02fa2eaf06f06c5953f2c71c191bf2d2827ac1777c11c949" }
+
+[[traces]]
+path = "angle/angle_trace_tests/asphalt_9"
+[traces.devices]
+freedreno-a660 = { checksum = "b39a406b1abd514d9d571dc84166e6806b5d34532d328c9727b27e7c88190437" }
+
+[[traces]]
+path = "angle/angle_trace_tests/brawl_starts"
+[traces.devices]
+freedreno-a660 = { checksum = "e5020fcd5c57507918cca3c92a0a054f2449ea4616e4db4c793ee7cf134d50ae" }
+
+[[traces]]
+path = "angle/angle_trace_tests/candy_crush_soda_saga"
+[traces.devices]
+freedreno-a660 = { checksum = "7d730c79a98526c13a1fa3c9ac9b3b5f489241671190ab6246a67f4026bde1e3" }
+
+[[traces]]
+path = "angle/angle_trace_tests/free_fire"
+[traces.devices]
+freedreno-a660 = { checksum = "5fa4558a9cf231f91a90ac7cfb377c51731820440d688de354cd2bf8230b227f" }
+
+[[traces]]
+path = "angle/angle_trace_tests/google_maps"
+[traces.devices]
+freedreno-a660 = { checksum = "e66d4c5c7a278e1c0eb36f0359c88c87398a263faf20bbc3300914b246d348cf" }
+
+[[traces]]
+path = "angle/angle_trace_tests/minetest"
+[traces.devices]
+freedreno-a660 = { checksum = "58508f3cc242b9cbc228481ca9b2a8bc9761c037b53f0e3c3e88c292575addfd" }
+
+[[traces]]
+path = "angle/angle_trace_tests/mobile_legends"
+[traces.devices]
+freedreno-a660 = { checksum = "0edcd91ca6ac74124b077701b494becf054e5f3ec3803417f04276e7ff725630" }
+
+[[traces]]
+path = "angle/angle_trace_tests/pubg_mobile_battle_royale"
+[traces.devices]
+freedreno-a660 = { checksum = "2ee6d64c931869d7d83c5507d73ebcac877d7c6bbc2099f63d029a27dbc172f4" }
+
+[[traces]]
+path = "angle/angle_trace_tests/temple_run_300"
+[traces.devices]
+freedreno-a660 = { checksum = "bca714a9fd303e85d81f9c0766902309834c65eff57a3b1b717dade96cb3c40c" }
+
+[[traces]]
+path = "steam-d3d8/AIMRace_unknown_dx8_unknown_unknown_none.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "0903364b606b0fb1e29d5e25ea06cbe775498f2a73f4ac52938949b04c8fc000" }
+freedreno-a750 = { checksum = "0903364b606b0fb1e29d5e25ea06cbe775498f2a73f4ac52938949b04c8fc000" }
+
+# steam-d3d8/AlienShooter_unkown_dx8_unknown_unknown_none.trace times out, and has warnings from DXVK:
+#   warn:  D3D9DeviceEx::SetRenderState: Unhandled render state 26
+#   warn:  D3D8Device::CaptureStateBlock: Invalid token: 2
+#   warn:  D3D8Device::ApplyStateBlock: Invalid token: 2
+
+[[traces]]
+path = "steam-d3d8/AN2_unknown_dx8_unknown_unknown_none.trace"
+[traces.devices]
+# a660: error during device setup: 1 @0 IDirect3D9::CreateDevice(this =
+#  0x193d588, Adapter = D3DADAPTER_DEFAULT, DeviceType = D3DDEVTYPE_HAL,
+#  hFocusWindow = 0x3006a, BehaviorFlags = D3DCREATE_PUREDEVICE |
+#  D3DCREATE_HARDWARE_VERTEXPROCESSING, pPresentationParameters =
+#  &{BackBufferWidth = 1920, BackBufferHeight = 1080, BackBufferFormat =
+#  D3DFMT_X8R8G8B8, BackBufferCount = 1, MultiSampleType =
+#  D3DMULTISAMPLE_NONMASKABLE, MultiSampleQuality = 3, SwapEffect =
+#  D3DSWAPEFFECT_DISCARD, hDeviceWindow = 0x3006a, Windowed = FALSE,
+#  EnableAutoDepthStencil = TRUE, AutoDepthStencilFormat = D3DFMT_D16, Flags =
+#  0x0, FullScreen_RefreshRateInHz = 0, PresentationInterval =
+#  D3DPRESENT_INTERVAL_ONE}, ppReturnedDeviceInterface = &0x197af00) = D3D_OK
+freedreno-a750 = { checksum = "4a74817ec7271b26251a1f0a678cae95b6e3cf140b1bf7b0e882256e740683aa" }
+
+[[traces]]
+path = "steam-d3d8/AnotherWorld_unkown_dx8_unknown_unknown_none.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "8fc7a8cbef4b2ce0111379933464ad88146c77da5723ff55c8fe4e15358d3029" }
+freedreno-a750 = { checksum = "8fc7a8cbef4b2ce0111379933464ad88146c77da5723ff55c8fe4e15358d3029" }
+
+[[traces]]
+path = "steam-d3d8/Chessmaster_unkown_dx8_unknown_unknown_none.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "5f798df48c830b8f670c6bb4fc97f1e129feae853793b5f5171cdb71b84ccf57" }
+freedreno-a750 = { checksum = "5f798df48c830b8f670c6bb4fc97f1e129feae853793b5f5171cdb71b84ccf57" }
+
+[[traces]]
+path = "steam-d3d8/Dredd_unkown_dx8_unknown_unknown_none.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "35a85ea37f051cdbe1bf059166d3e6aa641b8a57665cd2827915e15af6846b46" }
+freedreno-a750 = { checksum = "35a85ea37f051cdbe1bf059166d3e6aa641b8a57665cd2827915e15af6846b46" }
+
+[[traces]]
+path = "steam-d3d8/DukeForever_unkown_dx8_unknown_unknown_none.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "067d1c63de23f7ec364ffbe0fd83b5514b3c91069b12138c218e8114688b62e9" }
+freedreno-a750 = { checksum = "067d1c63de23f7ec364ffbe0fd83b5514b3c91069b12138c218e8114688b62e9" }
+
+[[traces]]
+path = "steam-d3d8/DX2Main_unknown_dx8_unknown_unknown_none.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "b1d391d2ba3cdfff99ade0f377f7079bc8d2b7f258d7cdf76110b1776766bec9" }
+freedreno-a750 = { checksum = "b1d391d2ba3cdfff99ade0f377f7079bc8d2b7f258d7cdf76110b1776766bec9" }
+
+[[traces]]
+path = "steam-d3d8/fforce_unkown_dx8_unknown_unknown_none.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "0119c742041ee1ede84b94ad2151b71eb2b5b16ad881aeacf487c73bc90cfb4f" }
+freedreno-a750 = { checksum = "0119c742041ee1ede84b94ad2151b71eb2b5b16ad881aeacf487c73bc90cfb4f" }
+
+[[traces]]
+path = "steam-d3d8/freelancer_unknown_dx8_unknown_unknown_none.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "b423253132223061a68f28fce7c73f38595e2737905ea56041402396042af749" }
+freedreno-a750 = { checksum = "b423253132223061a68f28fce7c73f38595e2737905ea56041402396042af749" }
+
+[[traces]]
+path = "steam-d3d8/freelancer_unkown_dx8_unknown_unknown_none.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "0ac1dda82a0257edf76ab754282d3f68ea03e8a7d57a8f72dd72557c2267b927" }
+freedreno-a750 = { checksum = "0ac1dda82a0257edf76ab754282d3f68ea03e8a7d57a8f72dd72557c2267b927" }
+
+[[traces]]
+path = "steam-d3d8/GameBlitzkrieg_unknown_dx8_unknown_unknown_none.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "2682b36681d56cd14be2bb40510ee07ad23a8e1b1779e4ee910b4b8f8db8ae81" }
+freedreno-a750 = { checksum = "2682b36681d56cd14be2bb40510ee07ad23a8e1b1779e4ee910b4b8f8db8ae81" }
+
+[[traces]]
+path = "steam-d3d8/GameDesertLaw_unkown_dx8_unknown_unknown_none.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "86ea73b6bef0efb8cc491f8315505a257a8df40c2944820b50fdde02eb3a7453" }
+freedreno-a750 = { checksum = "86ea73b6bef0efb8cc491f8315505a257a8df40c2944820b50fdde02eb3a7453" }
+
+[[traces]]
+path = "steam-d3d8/GameHegemonia_unkown_dx8_unknown_unknown_none.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "7c612c9f54230bdc3dbf7091543ff23db047873482fcb2a074efeb14188f6c3b" }
+freedreno-a750 = { checksum = "7c612c9f54230bdc3dbf7091543ff23db047873482fcb2a074efeb14188f6c3b" }
+
+[[traces]]
+path = "steam-d3d8/GameLOTR3_unkown_dx8_unknown_unknown_none.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "7e2cef46914e036bbb337f2a12f54731a6d5dc403c0092358d7feceff5f26885" }
+freedreno-a750 = { checksum = "7e2cef46914e036bbb337f2a12f54731a6d5dc403c0092358d7feceff5f26885" }
+
+[[traces]]
+path = "steam-d3d8/GameSL_unknown_dx8_unknown_unknown_none.trace"
+nonloopable = true
+[traces.devices]
+freedreno-a660 = { checksum = "b3a1cbb3ac05e3a2d949b8c4bf69ec58be2fb7495a7895aeaeb0f63272d46de7" }
+freedreno-a750 = { checksum = "b3a1cbb3ac05e3a2d949b8c4bf69ec58be2fb7495a7895aeaeb0f63272d46de7" }
+
+[[traces]]
+path = "steam-d3d8/GameSyberia2_unknown_dx8_unknown_unknown_none.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "9f1e7e019a7deba96d54dfe0d7263bd9670b666851e211f840efbfe60c37139c" }
+freedreno-a750 = { checksum = "9f1e7e019a7deba96d54dfe0d7263bd9670b666851e211f840efbfe60c37139c" }
+
+[[traces]]
+path = "steam-d3d8/GhostRecon_unkown_dx8_unknown_unknown_none.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "1145f3562f406935504d69cba4988a55204aebe3ef8d02683968d35f4612016f" }
+freedreno-a750 = { checksum = "1145f3562f406935504d69cba4988a55204aebe3ef8d02683968d35f4612016f" }
+
+[[traces]]
+path = "steam-d3d8/Hgma_unkown_dx8_unknown_unknown_none.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "4ea81050817ec93c11d236b4e41da130ba41854a66a77c5f109b021f1674cf65" }
+freedreno-a750 = { checksum = "4ea81050817ec93c11d236b4e41da130ba41854a66a77c5f109b021f1674cf65" }
+
+[[traces]]
+path = "steam-d3d8/HitmanContracts_unknown_dx8_unknown_unknown_none.trace"
+nonloopable = true
+[traces.devices]
+freedreno-a660 = { checksum = "4881e457239cf97c5beb529ecfe4d6e828cc374d1c86cac6936533536141b60f" }
+freedreno-a750 = { checksum = "4881e457239cf97c5beb529ecfe4d6e828cc374d1c86cac6936533536141b60f" }
+
+[[traces]]
+path = "steam-d3d8/hod3pc_unkown_dx8_unknown_unknown_none.trace"
+[traces.devices]
+# a660: vc-win64\bin\d3dretrace.exe:
+#  ../src/freedreno/vulkan/tu_clear_blit.cc:553: void r2d_setup(tu_cmd_buffer*,
+#  tu_cs*, pipe_format, pipe_format, VkImageAspectFlags, unsigned int, bool,
+#  bool, VkSampleCountFlagBits, VkSampleCountFlagBits) [with chip CHIP = A6XX;
+#  VkImageAspectFlags = unsigned int; VkSampleCountFlagBits =
+#  VkSampleCountFlagBits]: Assertion `dst_samples == VK_SAMPLE_COUNT_1_BIT'
+#  failed.
+freedreno-a750 = { checksum = "4a74817ec7271b26251a1f0a678cae95b6e3cf140b1bf7b0e882256e740683aa" }
+
+[[traces]]
+path = "steam-d3d8/IC_unkown_dx8_unknown_unknown_none.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "d4cc5232d269a7c64091582fef4b65f707c80be3a88ec7cf043e05eef5f1a304" }
+freedreno-a750 = { checksum = "d4cc5232d269a7c64091582fef4b65f707c80be3a88ec7cf043e05eef5f1a304" }
+
+[[traces]]
+path = "steam-d3d8/il2fb_unknown_dx8_unknown_unknown_none.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "1f85adc9a548018f56e1cdbe19ec4379ec185bf329332374e22b828ca68a5a13" }
+freedreno-a750 = { checksum = "1f85adc9a548018f56e1cdbe19ec4379ec185bf329332374e22b828ca68a5a13" }
+
+[[traces]]
+path = "steam-d3d8/Player_unknown_dx8_unknown_unknown_none.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "dfe6330f68d824e16985e5ade2212683de1b04849795de487b95a7255b0b81de" }
+freedreno-a750 = { checksum = "dfe6330f68d824e16985e5ade2212683de1b04849795de487b95a7255b0b81de" }
+
+[[traces]]
+path = "steam-d3d8/prism3d_unknown_dx8_unknown_unknown_none.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "411365d46dccdbcd3ac2002672c3b2f071cfbd3d73681ac9ec19a583dcc7bc2d" }
+freedreno-a750 = { checksum = "411365d46dccdbcd3ac2002672c3b2f071cfbd3d73681ac9ec19a583dcc7bc2d" }
+
+[[traces]]
+path = "steam-d3d8/re_unkown_dx8_unknown_unknown_none.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "7878781d00755c90978c912786639c660019799a626856a2d375b975e77d515f" }
+freedreno-a750 = { checksum = "7878781d00755c90978c912786639c660019799a626856a2d375b975e77d515f" }
+
+[[traces]]
+path = "steam-d3d8/RF_unkown_dx8_unknown_unknown_none.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "5c41778d5b582db03e0eea6c7e71fa497c1c777f86251a167d53f430a4a6553b" }
+freedreno-a750 = { checksum = "5c41778d5b582db03e0eea6c7e71fa497c1c777f86251a167d53f430a4a6553b" }
+
+[[traces]]
+path = "steam-d3d8/ROTK_unkown_dx8_unknown_unknown_none.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "0fc1bce27f09ad245e1b13522e6f59783f18cb5a3a8e369cb78a7223ff75f8e6" }
+freedreno-a750 = { checksum = "0fc1bce27f09ad245e1b13522e6f59783f18cb5a3a8e369cb78a7223ff75f8e6" }
+
+[[traces]]
+path = "steam-d3d8/RT3_unkown_dx8_unknown_unknown_none.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "5d7715b623a9b4e3dea0190a62e23c0551eb5362ca42ae78f11a5f55e277297d" }
+freedreno-a750 = { checksum = "5d7715b623a9b4e3dea0190a62e23c0551eb5362ca42ae78f11a5f55e277297d" }
+
+[[traces]]
+path = "steam-d3d8/sr2_unknown_dx8_unknown_unknown_none.trace"
+nonloopable = true
+[traces.devices]
+freedreno-a660 = { checksum = "2383da75f686113ea09190e93764b99b1e4f25b7a070fed474a7f738672b9147" }
+freedreno-a750 = { checksum = "2383da75f686113ea09190e93764b99b1e4f25b7a070fed474a7f738672b9147" }
+
+[[traces]]
+path = "steam-d3d8/T3Main_unknown_dx8_unknown_unknown_none.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "c6c0ea3f5b03b1994addf4e5cae85376249a75b865127d81f91fedc016fcaf7c" }
+freedreno-a750 = { checksum = "c6c0ea3f5b03b1994addf4e5cae85376249a75b865127d81f91fedc016fcaf7c" }
+
+[[traces]]
+path = "steam-d3d8/TexasHoldEm_unknown_dx8_unknown_unknown_none.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "6e166c58bd4afa3d5a59f29168f8386c7686a228285f0a338ac19531cfc9fd5d" }
+freedreno-a750 = { checksum = "6e166c58bd4afa3d5a59f29168f8386c7686a228285f0a338ac19531cfc9fd5d" }
+
+[[traces]]
+path = "steam-d3d9/ActOfWarHighTreason_unknown_dx9_unknown_unknown_none.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "fa6a15a19945d2f601798c1b48e20601f88984a8e480ee282e59b0f5a59359e6" }
+freedreno-a750 = { checksum = "fa6a15a19945d2f601798c1b48e20601f88984a8e480ee282e59b0f5a59359e6" }
+
+# steam-d3d9/Act Of War_unknown_dx9_unknown_unknown_none.trace: Crashes Xwayland:
+#   (EE) Backtrace:
+#   (EE) 0: /usr/local/bin/Xwayland (0xaaaadd8e0000+0x1ed7e4) [0xaaaaddacd7e4]
+#   [...]
+#   (EE) Segmentation fault at address 0xa0
+
+[[traces]]
+path = "steam-d3d9/AoW3_unknown_dx9_unknown_unknown_none.trace"
+nonloopable = true
+[traces.devices]
+freedreno-a660 = { checksum = "d30d6c84ff6189745056c1195be7230f977cb76861583d850b31f184842f2b54" }
+freedreno-a750 = { checksum = "d30d6c84ff6189745056c1195be7230f977cb76861583d850b31f184842f2b54" }
+
+[[traces]]
+path = "steam-d3d9/AP_unknown_dx9_unknown_unknown_none.trace"
+nonloopable = true
+[traces.devices]
+freedreno-a660 = { checksum = "b0d50c24d01d2eb681ee0d740a5857631c20f1ebd9bf9c84dde9b9f33d661766" }
+freedreno-a750 = { checksum = "b0d50c24d01d2eb681ee0d740a5857631c20f1ebd9bf9c84dde9b9f33d661766" }
+
+[[traces]]
+path = "steam-d3d9/Aqua_unknown_dx9_unknown_unknown_none.trace"
+[traces.devices]
+# a660: intermittent crash?  no useful backtrace.
+freedreno-a750 = { checksum = "575ab35cd580a379b9611640821e0a7fdd9fc7dee47218333c65aa3a8e98755c" }
+
+[[traces]]
+path = "steam-d3d9/Battlefront_unknown_dx9_unknown_unknown_none.trace"
+[traces.devices]
+# a660: error during device setup: 1 @0 IDirect3D9::CreateDevice(this =
+#  0x2b9dee0, Adapter = D3DADAPTER_DEFAULT, DeviceType = D3DDEVTYPE_HAL,
+#  hFocusWindow = 0x3006a, BehaviorFlags = D3DCREATE_HARDWARE_VERTEXPROCESSING,
+#  pPresentationParameters = &{BackBufferWidth = 1920, BackBufferHeight = 1080,
+#  BackBufferFormat = D3DFMT_A8R8G8B8, BackBufferCount = 1, MultiSampleType =
+#  D3DMULTISAMPLE_NONMASKABLE, MultiSampleQuality = 3, SwapEffect =
+#  D3DSWAPEFFECT_DISCARD, hDeviceWindow = 0x3006a, Windowed = TRUE,
+#  EnableAutoDepthStencil = TRUE, AutoDepthStencilFormat = D3DFMT_D24S8, Flags =
+#  0x0, FullScreen_RefreshRateInHz = 0, PresentationInterval =
+#  D3DPRESENT_INTERVAL_IMMEDIATE}, ppReturnedDeviceInterface = &0x2be78c0) =
+#  D3D_OK"
+freedreno-a750 = { checksum = "4a74817ec7271b26251a1f0a678cae95b6e3cf140b1bf7b0e882256e740683aa" }
+
+[[traces]]
+path = "steam-d3d9/Brawlhalla_unknown_dx9_unknown_unknown_none.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "a56e988eb129108c25470c5e082214ff3830c1256fe5f1a95922a52bc26559bf" }
+freedreno-a750 = { checksum = "a56e988eb129108c25470c5e082214ff3830c1256fe5f1a95922a52bc26559bf" }
+
+# steam-d3d9/Call of Duty 2_unknown_dx9_unknown_unknown_none.trace: flaky rendering, apitrace reports:
+#  warning: passing high address 0x22770000 as uintptr_t
+#  6183: warning: dest buffer overflow of 8388608 bytes
+
+# steam-d3d9/Call of Duty 4_unknown_dx9_unknown_unknown_none.trace: pitch mismatch, needs apitrace work.
+
+[[traces]]
+path = "steam-d3d9/ColdWarAssault_unknown_dx9_unknown_unknown_none.trace"
+nonloopable = true
+[traces.devices]
+freedreno-a660 = { checksum = "5a95847bbf10a142d14e6515faef1a7ee5ddb46231d781178535e4a7dbbc8451" }
+freedreno-a750 = { checksum = "5a95847bbf10a142d14e6515faef1a7ee5ddb46231d781178535e4a7dbbc8451" }
+
+[[traces]]
+path = "steam-d3d9/CommandandConquer3KanesWrath_unknown_dx9_unknown_unknown_none.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "17f4fd9c188b502562b96c576caf7bb238f9fbf041bd0c78cc71bdd57187f56d" }
+freedreno-a750 = { checksum = "17f4fd9c188b502562b96c576caf7bb238f9fbf041bd0c78cc71bdd57187f56d" }
+
+# steam-d3d9/deadspace3_unknown_dx9_unknown_unknown_none.trace: flaky rendering, non-visible changes.
+# Needs debugging -- may have become unstable around 2026-04.
+
+[[traces]]
+path = "steam-d3d9/demonstone_unknown_dx9_unknown_unknown_none.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "08dfe65985bbdd1ffbc905168e5f957daa21d8e4b27459dea0dcec3a626037e6" }
+freedreno-a750 = { checksum = "08dfe65985bbdd1ffbc905168e5f957daa21d8e4b27459dea0dcec3a626037e6" }
+
+[[traces]]
+path = "steam-d3d9/drakensang_unknown_dx9_unknown_unknown_none.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "f8996e121166b85c6a6ee00feba4a7153f941949a27bc796d1879e0d52d0e5bb" }
+freedreno-a750 = { checksum = "f22a2eb78183a3cbcd436c678e8f778779ca67e20a05cef713ea7b8ce2df495a" }
+
+[[traces]]
+path = "steam-d3d9/Dreamfall_unknown_dx9_unknown_unknown_none.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "3671f16255a14a1278d06fe0814585ee9373d0adda9b3108fa8b3d534e22b35e" }
+freedreno-a750 = { checksum = "3671f16255a14a1278d06fe0814585ee9373d0adda9b3108fa8b3d534e22b35e" }
+
+[[traces]]
+path = "steam-d3d9/EE3_unknown_dx9_unknown_unknown_none.trace"
+nonloopable = true
+[traces.devices]
+freedreno-a660 = { checksum = "9d99662f33e646166ccec2cfa7565657f431f7ddec622740d733b9c1657804d5" }
+freedreno-a750 = { checksum = "9d99662f33e646166ccec2cfa7565657f431f7ddec622740d733b9c1657804d5" }
+
+[[traces]]
+path = "steam-d3d9/eqgame_unknown_dx9_unknown_unknown_none.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "732d4bca8fd0ae1e58e61d083fa95157bc661c2499343302b1fd6cf76d3db6b3" }
+freedreno-a750 = { checksum = "732d4bca8fd0ae1e58e61d083fa95157bc661c2499343302b1fd6cf76d3db6b3" }
+
+[[traces]]
+path = "steam-d3d9/FalloutNewVegas_unknown_dx9_DocMitchell_low_720p.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "5f775c0e032ba0f63a027c4ca8102cbb5503af461ef0328a2713eb8ae0de8cd4" }
+freedreno-a750 = { checksum = "5f775c0e032ba0f63a027c4ca8102cbb5503af461ef0328a2713eb8ae0de8cd4" }
+
+[[traces]]
+path = "steam-d3d9/FalloutNewVegas_unknown_dx9_DocMitchell_medium_720p.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "e3b9228d48a0971ac7e945a0a8aeaa3770f255252c505b315e4ae5e1b4c038fe" }
+freedreno-a750 = { checksum = "e3b9228d48a0971ac7e945a0a8aeaa3770f255252c505b315e4ae5e1b4c038fe" }
+
+[[traces]]
+path = "steam-d3d9/FalloutNewVegas_unknown_dx9_DocMitchell_ultra_720p.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "73d3efdd6c98bb18d40c6648fc86654b902497b08c9991f1ed9aa9410fd2e564" }
+freedreno-a750 = { checksum = "73d3efdd6c98bb18d40c6648fc86654b902497b08c9991f1ed9aa9410fd2e564" }
+
+[[traces]]
+path = "steam-d3d9/FalloutNewVegas_unknown_dx9_unknown_unknown_none.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "67073a8b127eef1050a2d62726bdc17e5b59664ca381be32a4b431b232eb1088" }
+freedreno-a750 = { checksum = "67073a8b127eef1050a2d62726bdc17e5b59664ca381be32a4b431b232eb1088" }
+
+[[traces]]
+path = "steam-d3d9/FalloutNewVegas_unknown_dx9_YesMan_low_1080p.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "5b56ece2455b50b9e214eb2d11fa5269133900c41f34aba15c2225736e099965" }
+freedreno-a750 = { checksum = "5b56ece2455b50b9e214eb2d11fa5269133900c41f34aba15c2225736e099965" }
+
+[[traces]]
+path = "steam-d3d9/FalloutNewVegas_unknown_dx9_YesMan_medium_1080p.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "79910528443efa8b3ed124cf522e4dc931f0660e5b22014017212f69efafa4ba" }
+freedreno-a750 = { checksum = "79910528443efa8b3ed124cf522e4dc931f0660e5b22014017212f69efafa4ba" }
+
+[[traces]]
+path = "steam-d3d9/FalloutNewVegas_unknown_dx9_YesMan_ultra_1080p.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "01d16890782a2507ca5d0b1266f198bb824c724873c4ebd82e6f58e23e1d3854" }
+freedreno-a750 = { checksum = "01d16890782a2507ca5d0b1266f198bb824c724873c4ebd82e6f58e23e1d3854" }
+
+[[traces]]
+path = "steam-d3d9/FarCry2_unknown_dx9_unknown_unknown_none.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "8a61a44965e1b9693b21b3795993025562e00839f2828142390409f3e61ce346" }
+freedreno-a750 = { checksum = "c13b2e86c10aec3de6a2878ea68bcde36428b90eee872b1c44bd674bdeda299b" }
+
+[[traces]]
+path = "steam-d3d9/Flatout-2_unknown_dx9_unknown_unknown_none.trace"
+nonloopable = true
+[traces.devices]
+freedreno-a660 = { checksum = "a1a91d54e95f2ed3ea17f26a09dd5b2a6fae33c6be0519b57df5fdc0af778662" }
+freedreno-a750 = { checksum = "a1a91d54e95f2ed3ea17f26a09dd5b2a6fae33c6be0519b57df5fdc0af778662" }
+
+[[traces]]
+path = "steam-d3d9/Flatout_unknown_dx9_unknown_unknown_none.trace"
+nonloopable = true
+[traces.devices]
+freedreno-a660 = { checksum = "e8a7637edb80f67f56c9e3c20215556445f7041bbdd377af8e1fc2244a7e568b" }
+freedreno-a750 = { checksum = "e8a7637edb80f67f56c9e3c20215556445f7041bbdd377af8e1fc2244a7e568b" }
+
+[[traces]]
+path = "steam-d3d9/FrozenSynapse2_unknown_dx9_Skirmish_none_720p.trace"
+nonloopable = true
+[traces.devices]
+freedreno-a660 = { checksum = "244ddbbf6b8356cbd2955ea750f77b592a7c93a8cc838d657651b4337ecad0df" }
+freedreno-a750 = { checksum = "244ddbbf6b8356cbd2955ea750f77b592a7c93a8cc838d657651b4337ecad0df" }
+
+[[traces]]
+path = "steam-d3d9/fruitninja_unknown_dx9_unknown_unknown_none.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "8e49bc0308d047924cbf0fd3c1381b471c7dc7948af098d9cd7ca7c3596a8126" }
+freedreno-a750 = { checksum = "8e49bc0308d047924cbf0fd3c1381b471c7dc7948af098d9cd7ca7c3596a8126" }
+
+[[traces]]
+path = "steam-d3d9/globalops_unknown_dx9_unknown_unknown_none.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "11a0d0130032ee5bec005274f007d85d52caed702e204d32239fd37b2d6dd54c" }
+freedreno-a750 = { checksum = "11a0d0130032ee5bec005274f007d85d52caed702e204d32239fd37b2d6dd54c" }
+
+[[traces]]
+path = "steam-d3d9/GRID_unknown_dx9_unknown_unknown_none.trace"
+nonloopable = true
+[traces.devices]
+freedreno-a660 = { checksum = "d0a80965958955a3ac77e10c13daa1819a1683722b601b91c4d50f07dd28429a" }
+freedreno-a750 = { checksum = "d0a80965958955a3ac77e10c13daa1819a1683722b601b91c4d50f07dd28429a" }
+
+[[traces]]
+path = "steam-d3d9/guild2_unknown_dx9_unknown_unknown_none.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "cf0bbe179b08062bbc8bbf441c0b51eed586313b330904b9184076299ef84d28" }
+freedreno-a750 = { checksum = "cf0bbe179b08062bbc8bbf441c0b51eed586313b330904b9184076299ef84d28" }
+
+[[traces]]
+path = "steam-d3d9/gun_unknown_dx9_unknown_unknown_none.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "ec5b47ac393bd4fef511067f00fbb899f03b401e910c3a5e872d3f7b7991466f" }
+freedreno-a750 = { checksum = "ec5b47ac393bd4fef511067f00fbb899f03b401e910c3a5e872d3f7b7991466f" }
+
+[[traces]]
+path = "steam-d3d9/HatinTimeGame_unknown_dx9_unknown_unknown_none.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "c1ddd6581c7ebb0e73efa17b136d86253f5ea8e0ee6c712cb9841cbccd906d02" }
+freedreno-a750 = { checksum = "c1ddd6581c7ebb0e73efa17b136d86253f5ea8e0ee6c712cb9841cbccd906d02" }
+
+[[traces]]
+path = "steam-d3d9/HoverAce_unknown_dx9_unknown_unknown_none.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "5ebe53c975acb9b4659203571f9121da42478efae11ece9adf98dbc5007f5700" }
+freedreno-a750 = { checksum = "5ebe53c975acb9b4659203571f9121da42478efae11ece9adf98dbc5007f5700" }
+
+[[traces]]
+path = "steam-d3d9/igi2_unknown_dx9_unknown_unknown_none.trace"
+nonloopable = true
+[traces.devices]
+freedreno-a660 = { checksum = "d8c5dfdd13dbbbca695f4b248a270ecf93aa1f2469aa4652f30ad6e9ea7f3f76" }
+freedreno-a750 = { checksum = "d8c5dfdd13dbbbca695f4b248a270ecf93aa1f2469aa4652f30ad6e9ea7f3f76" }
+
+[[traces]]
+path = "steam-d3d9/iw3sp_unknown_dx9_unknown_unknown_none.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "833406d912d0f6f999d71dcc9bece6ad56e98365e4c88973e734b5ad0576d050" }
+freedreno-a750 = { checksum = "833406d912d0f6f999d71dcc9bece6ad56e98365e4c88973e734b5ad0576d050" }
+
+[[traces]]
+path = "steam-d3d9/joar_unknown_dx9_unknown_unknown_none.trace"
+nonloopable = true
+[traces.devices]
+freedreno-a660 = { checksum = "c2a8d2d714545808b0006f3079f1bffb784083a06d583dadcf78d1f4eec57caa" }
+freedreno-a750 = { checksum = "c2a8d2d714545808b0006f3079f1bffb784083a06d583dadcf78d1f4eec57caa" }
+
+# steam-d3d9/KbWoTn_unknown_dx9_unknown_unknown_none.trace: intermittent lost
+# geometry with no debug opts or gmem?  With sysmem, the rendering is flaky
+# between runs (but stable during the --loop replay) but not in a visible way.
+
+[[traces]]
+path = "steam-d3d9/KoAReckoning_unknown_dx9_unknown_unknown_none.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "cf25aae7ef02da66152c9312e46478c176c684fe8bab74a686e86d26e6c6abe2" }
+freedreno-a750 = { checksum = "cf25aae7ef02da66152c9312e46478c176c684fe8bab74a686e86d26e6c6abe2" }
+
+[[traces]]
+path = "steam-d3d9/kof13_unknown_dx9_unknown_unknown_none.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "e41cb8638bcf540fa22dcc8b1cd68f1fb24a37ce0d21f42bcf2e1674a8031a34" }
+freedreno-a750 = { checksum = "e41cb8638bcf540fa22dcc8b1cd68f1fb24a37ce0d21f42bcf2e1674a8031a34" }
+
+[[traces]]
+path = "steam-d3d9/lol-launcher_unknown_dx9_unknown_unknown_none.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "250613edf5790a134db0744b0a3bda8d5e24caa37fa555985a7405d006dfc311" }
+freedreno-a750 = { checksum = "250613edf5790a134db0744b0a3bda8d5e24caa37fa555985a7405d006dfc311" }
+
+[[traces]]
+path = "steam-d3d9/MadTrack_unknown_dx9_Bob'sLeg_high_720p.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "6cd6212538ee74dffb07044457c327ea3265bf5c2086a260213402b9019a225e" }
+freedreno-a750 = { checksum = "6cd6212538ee74dffb07044457c327ea3265bf5c2086a260213402b9019a225e" }
+
+[[traces]]
+path = "steam-d3d9/MadTrack_unknown_dx9_Bob'sLeg_low_720p.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "1f78202f7ebf0567d249a2560efd7d9780c6a64208600b5248944d566e1907b7" }
+freedreno-a750 = { checksum = "1f78202f7ebf0567d249a2560efd7d9780c6a64208600b5248944d566e1907b7" }
+
+[[traces]]
+path = "steam-d3d9/MadTrack_unknown_dx9_Bob'sLeg_medium_720p.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "d0037d54ed14b291af02d09e69fa33bd4b7ccadc5feba6ffa1aefd6929b0ce40" }
+freedreno-a750 = { checksum = "d0037d54ed14b291af02d09e69fa33bd4b7ccadc5feba6ffa1aefd6929b0ce40" }
+
+[[traces]]
+path = "steam-d3d9/MadTrack_unknown_dx9_TrainingDay_high_1080p.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "33771c1a84c625a9e125b304fa847432b45fa1d4b19112b74e87f3776305b378" }
+freedreno-a750 = { checksum = "33771c1a84c625a9e125b304fa847432b45fa1d4b19112b74e87f3776305b378" }
+
+[[traces]]
+path = "steam-d3d9/MadTrack_unknown_dx9_TrainingDay_low_1080p.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "32d299da056138ce3b60d07ea0e27eedb078eabb8e9bcdee2d20c11508add553" }
+freedreno-a750 = { checksum = "32d299da056138ce3b60d07ea0e27eedb078eabb8e9bcdee2d20c11508add553" }
+
+[[traces]]
+path = "steam-d3d9/MadTrack_unknown_dx9_TrainingDay_medium_1080p.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "6a44911a16df2310d4d2207a08f6c15f99dd9879c9c4096767311f917ae03e0b" }
+freedreno-a750 = { checksum = "6a44911a16df2310d4d2207a08f6c15f99dd9879c9c4096767311f917ae03e0b" }
+
+[[traces]]
+path = "steam-d3d9/MasterOfOrion_unknown_dx9_unknown_unknown_none.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "3b418d97d0e5213f4acc19fa083cca9475fd1afd49d323dcadb94cb965b7e55f" }
+freedreno-a750 = { checksum = "3b418d97d0e5213f4acc19fa083cca9475fd1afd49d323dcadb94cb965b7e55f" }
+
+[[traces]]
+path = "steam-d3d9/MirrorsEdge_unknown_dx9_unknown_unknown_none.trace"
+nonloopable = true
+[traces.devices]
+freedreno-a660 = { checksum = "66854c4c188d6c31b7eee767785096313295a09a8ca3c71eae819d50dec38bd9" }
+freedreno-a750 = { checksum = "66854c4c188d6c31b7eee767785096313295a09a8ca3c71eae819d50dec38bd9" }
+
+[[traces]]
+path = "steam-d3d9/Oblivion_unknown_dx9_unknown_unknown_none2.trace"
+nonloopable = true
+[traces.devices]
+freedreno-a660 = { checksum = "a329851d66e946d5b5eeffca4d81e3984a421dd6dab97b50a177a9a420ede165" }
+freedreno-a750 = { checksum = "a329851d66e946d5b5eeffca4d81e3984a421dd6dab97b50a177a9a420ede165" }
+
+[[traces]]
+path = "steam-d3d9/Oblivion_unknown_dx9_unknown_unknown_none.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "91c89b3293bb0d08c92552808a41de44ef0b4c97922c6f12cc61297fa3065f50" }
+freedreno-a750 = { checksum = "91c89b3293bb0d08c92552808a41de44ef0b4c97922c6f12cc61297fa3065f50" }
+
+[[traces]]
+path = "steam-d3d9/PANZERS_unknown_dx9_unknown_unknown_none.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "a28182b470cd243e8fb3b8838589fcb3e0b291edee297b4eb4e118c32a2646dd" }
+freedreno-a750 = { checksum = "a28182b470cd243e8fb3b8838589fcb3e0b291edee297b4eb4e118c32a2646dd" }
+
+[[traces]]
+path = "steam-d3d9/Payday2_unknown_dx9_AlaskanDeal_ultra-approx_720p.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "3f6cf9fd7c50c9832524b296dff053e620230ff8c5bc39bd06db4bc6c5bf9c84" }
+freedreno-a750 = { checksum = "3f6cf9fd7c50c9832524b296dff053e620230ff8c5bc39bd06db4bc6c5bf9c84" }
+
+[[traces]]
+path = "steam-d3d9/Payday2_unknown_dx9_PanicRoom_low-approx_720p.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "7622c66d2f974dd7b7bbf32cb082aa3684866fea29c2c387cf58c111d6f718c0" }
+freedreno-a750 = { checksum = "7622c66d2f974dd7b7bbf32cb082aa3684866fea29c2c387cf58c111d6f718c0" }
+
+[[traces]]
+path = "steam-d3d9/Payday2_unknown_dx9_PrisonNightmare_low-approx_720p.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "239cb1099dcc4e14b2ae4addf8c9cb7750266117de1ecb951bdfa616ff97aa0f" }
+freedreno-a750 = { checksum = "239cb1099dcc4e14b2ae4addf8c9cb7750266117de1ecb951bdfa616ff97aa0f" }
+
+[[traces]]
+path = "steam-d3d9/Payday2_unknown_dx9_SafeHouse_ultra-approx_1080p.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "926a91e0cca7c97ca93832c3b7bba119dff970963f50855a165cdb087ca7bf5f" }
+freedreno-a750 = { checksum = "926a91e0cca7c97ca93832c3b7bba119dff970963f50855a165cdb087ca7bf5f" }
+
+[[traces]]
+path = "steam-d3d9/Payday2_unknown_dx9_WhiteHouse_low-approx_1080p.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "0ef158e5ec0e502533b3ec482648152667c9d29dc1f38053a7d7fdbb60031704" }
+freedreno-a750 = { checksum = "0ef158e5ec0e502533b3ec482648152667c9d29dc1f38053a7d7fdbb60031704" }
+
+[[traces]]
+path = "steam-d3d9/Payday2_unknown_dx9_WhiteHouse_medium-approx_1080p.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "57514c74a64cd8c5e2c0b6c3a2e4321a54fa681a48d7b36cd190bd707af788c6" }
+freedreno-a750 = { checksum = "57514c74a64cd8c5e2c0b6c3a2e4321a54fa681a48d7b36cd190bd707af788c6" }
+
+[[traces]]
+path = "steam-d3d9/PirateHunter_unknown_dx9_Beginning_high_720p.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "f8a5999a92b7a6835abee1af45201491a96c0448e41ce85821b629d2b133f693" }
+freedreno-a750 = { checksum = "f8a5999a92b7a6835abee1af45201491a96c0448e41ce85821b629d2b133f693" }
+
+[[traces]]
+path = "steam-d3d9/PirateHunter_unknown_dx9_Beginning_low_720p.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "23ec1e4f5e0022680a396614851e2fd8d2d9501092de9f17465023850e3f2ce7" }
+freedreno-a750 = { checksum = "23ec1e4f5e0022680a396614851e2fd8d2d9501092de9f17465023850e3f2ce7" }
+
+[[traces]]
+path = "steam-d3d9/PirateHunter_unknown_dx9_Beginning_medium_720p.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "7694e7cb456264e3b399da5953108b209d52e4b2f854cc99b11c037913778550" }
+freedreno-a750 = { checksum = "7694e7cb456264e3b399da5953108b209d52e4b2f854cc99b11c037913778550" }
+
+[[traces]]
+path = "steam-d3d9/PirateHunter_unknown_dx9_Cutscene_high_1080p.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "20749c4b3b227a3872efd351220cd1925b1550a575e4ea5aa97676e2dfc339ec" }
+freedreno-a750 = { checksum = "20749c4b3b227a3872efd351220cd1925b1550a575e4ea5aa97676e2dfc339ec" }
+
+[[traces]]
+path = "steam-d3d9/PirateHunter_unknown_dx9_Cutscene_low_1080p.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "e69c8030a682640130bf8799f8cf6481e86e199b5f58928dd251538945abe849" }
+freedreno-a750 = { checksum = "e69c8030a682640130bf8799f8cf6481e86e199b5f58928dd251538945abe849" }
+
+[[traces]]
+path = "steam-d3d9/PirateHunter_unknown_dx9_Cutscene_medium_1080p.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "31c322a1932280c81090e11a22472cccca753d3317e0f487f9eb0da56aa5105f" }
+freedreno-a750 = { checksum = "31c322a1932280c81090e11a22472cccca753d3317e0f487f9eb0da56aa5105f" }
+
+[[traces]]
+path = "steam-d3d9/pirates_unknown_dx9_unknown_unknown_none.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "37115eedf7f57a3fd3db57c0cb383e04eb3c7d306beb5064158c567404786e8e" }
+freedreno-a750 = { checksum = "37115eedf7f57a3fd3db57c0cb383e04eb3c7d306beb5064158c567404786e8e" }
+
+[[traces]]
+path = "steam-d3d9/POP_unknown_dx9_unknown_unknown_none.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "675e0e2e28c053b87184fb1afa9aca8eb392a52c11b3f73901c027e40d994d62" }
+freedreno-a750 = { checksum = "675e0e2e28c053b87184fb1afa9aca8eb392a52c11b3f73901c027e40d994d62" }
+
+[[traces]]
+path = "steam-d3d9/psychonauts_unknown_dx9_unknown_unknown_none.trace"
+nonloopable = true
+[traces.devices]
+freedreno-a660 = { checksum = "cef6784067d4159c5442574e7547808c927aade4b4bfb4d3369bb3417527a756" }
+freedreno-a750 = { checksum = "cfbe62e3f4a359f692a0218d752f1187366e50de5335cabf9a13b9f887c62a7b" }
+
+[[traces]]
+path = "steam-d3d9/ResidentEvil6_unknown_dx9_unknown_unknown_none.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "ad598592879ad4a8d68be0b6f7c70c03dc250c34dd27f2aa4b4f6280b4d41331" }
+freedreno-a750 = { checksum = "ad598592879ad4a8d68be0b6f7c70c03dc250c34dd27f2aa4b4f6280b4d41331" }
+
+[[traces]]
+path = "steam-d3d9/Silence_unknown_dx9_Cutscene_high_1080p.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "0cd12018c94082411e6e0a0d6e7ccaae34e4c6d4a44a31420cedb4129caa091c" }
+freedreno-a750 = { checksum = "0cd12018c94082411e6e0a0d6e7ccaae34e4c6d4a44a31420cedb4129caa091c" }
+
+[[traces]]
+path = "steam-d3d9/Silence_unknown_dx9_Cutscene_low_1080p.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "7dcdf1206915af5d9567cb7026ed40dc352a6b1528f471cc23a07990e5090bf7" }
+freedreno-a750 = { checksum = "7dcdf1206915af5d9567cb7026ed40dc352a6b1528f471cc23a07990e5090bf7" }
+
+[[traces]]
+path = "steam-d3d9/Silence_unknown_dx9_Cutscene_medium_1080p.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "71b513a7dd34770e56750749bfde664eac64cf8600c55f3a416d796e05f47572" }
+freedreno-a750 = { checksum = "71b513a7dd34770e56750749bfde664eac64cf8600c55f3a416d796e05f47572" }
+
+[[traces]]
+path = "steam-d3d9/Speed2_unknown_dx9_unknown_unknown_none.trace"
+[traces.devices]
+# a660: error during device setup: 1 @0 IDirect3D9::CreateDevice(this =
+#   0xf04550, Adapter = D3DADAPTER_DEFAULT, DeviceType = D3DDEVTYPE_HAL,
+#   hFocusWindow = 0x3007a, BehaviorFlags = D3DCREATE_PUREDEVICE |
+#   D3DCREATE_HARDWARE_VERTEXPROCESSING, pPresentationParameters =
+#   &{BackBufferWidth = 1280, BackBufferHeight = 1024, BackBufferFormat =
+#   D3DFMT_A8R8G8B8, BackBufferCount = 1, MultiSampleType =
+#   D3DMULTISAMPLE_NONMASKABLE, MultiSampleQuality = 3, SwapEffect =
+#   D3DSWAPEFFECT_DISCARD, hDeviceWindow = 0x3007a, Windowed = FALSE,
+#   EnableAutoDepthStencil = TRUE, AutoDepthStencilFormat = D3DFMT_D24S8, Flags
+#   = 0x0, FullScreen_RefreshRateInHz = 0, PresentationInterval =
+#   D3DPRESENT_INTERVAL_IMMEDIATE}, ppReturnedDeviceInterface = &0xf33c00) =
+#   D3D_OK"
+freedreno-a750 = { checksum = "4a74817ec7271b26251a1f0a678cae95b6e3cf140b1bf7b0e882256e740683aa" }
+
+# steam-d3d9/SpiderMan_unknown_dx9_unknown_unknown_none.trace: intermittent lost
+# geometry with no debug opts or gmem.  With sysmem, the rendering is flaky
+# between runs (but stable during the --loop replay) but not in a visible way.
+
+[[traces]]
+path = "steam-d3d9/starcraft2_unknown_dx9_unknown_unknown_none.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "43dfeef2a17b9bb31eb96c817d8f53137708ac8777e38b3eec49ac13cc9e8842" }
+freedreno-a750 = { checksum = "43dfeef2a17b9bb31eb96c817d8f53137708ac8777e38b3eec49ac13cc9e8842" }
+
+# steam-d3d9/Star Wars Empire At War_unknown_dx9_unknown_unknown_none.trace: Crashes Xwayland:
+#   (EE) Backtrace:
+#   (EE) 0: /usr/local/bin/Xwayland (0xaaaadd8e0000+0x1ed7e4) [0xaaaaddacd7e4]
+#   [...]
+#   (EE) Segmentation fault at address 0xa0
+
+[[traces]]
+path = "steam-d3d9/stdr_unknown_dx9_unknown_unknown_none.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "fe7affbb971632ab4519f77bd031d3a1a6fba6145c3d063e46ca0500a9fb9c57" }
+freedreno-a750 = { checksum = "fe7affbb971632ab4519f77bd031d3a1a6fba6145c3d063e46ca0500a9fb9c57" }
+
+[[traces]]
+path = "steam-d3d9/SuperMeatBoy_unknown_dx9_unknown_unknown_none.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "d016496ae3d21a2427efc40f7af87bdc4b676f9538443dc311eb4fe0d5a8fdee" }
+freedreno-a750 = { checksum = "d016496ae3d21a2427efc40f7af87bdc4b676f9538443dc311eb4fe0d5a8fdee" }
+
+[[traces]]
+path = "steam-d3d9/SupremeCommander_unknown_dx9_unknown_unknown_none.trace"
+nonloopable = true
+[traces.devices]
+freedreno-a660 = { checksum = "6277006b14ef7ba8dfcdcd35fa0ace83d34ce46e5903aaac041a16d47f64b1b3" }
+freedreno-a750 = { checksum = "6277006b14ef7ba8dfcdcd35fa0ace83d34ce46e5903aaac041a16d47f64b1b3" }
+
+[[traces]]
+path = "steam-d3d9/SWAT4_unknown_dx9_unknown_unknown_none.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "ad4fa227ff0e422e5a453c24dbf0bfb5f1a6371afd1cd3425d8a4b8f2465bf53" }
+freedreno-a750 = { checksum = "ad4fa227ff0e422e5a453c24dbf0bfb5f1a6371afd1cd3425d8a4b8f2465bf53" }
+
+[[traces]]
+path = "steam-d3d9/TFT_unknown_dx9_unknown_unknown_none.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "79e75752d9a0367ea26ac722952cf3005f15809888cdd11a414aba32af5ae303" }
+freedreno-a750 = { checksum = "3f725b121801e399006f09bd4efff759d8a605983689945191f3a15ac85d8f52" }
+
+[[traces]]
+path = "steam-d3d9/TheLastRemnantbenchmark_unknown_dx9_unknown_unknown_none.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "9290858b7c2960939d64ae1dee323aa42a6d07ec1221092a419819d2303104f5" }
+freedreno-a750 = { checksum = "9290858b7c2960939d64ae1dee323aa42a6d07ec1221092a419819d2303104f5" }
+
+[[traces]]
+path = "steam-d3d9/TheSlormancer_unknown_dx9_unknown_unknown_none.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "fe500930ba70924e138a3ada99a7b665d9f0616741214c38a287b53d9ef44ff5" }
+freedreno-a750 = { checksum = "fe500930ba70924e138a3ada99a7b665d9f0616741214c38a287b53d9ef44ff5" }
+
+[[traces]]
+path = "steam-d3d9/TimeShift_unknown_dx9_unknown_unknown_none.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "7955d326b4d4d7fb53448687ff944618140e82aa5be54aad1ab5a33fd391712c" }
+freedreno-a750 = { checksum = "7955d326b4d4d7fb53448687ff944618140e82aa5be54aad1ab5a33fd391712c" }
+
+[[traces]]
+path = "steam-d3d9/WarofTheRing_unknown_dx9_unknown_unknown_none.trace"
+[traces.devices]
+freedreno-a660 = { checksum = "7f4ccdc57c47d4dc6cddb00223e96410b19493cef900db946ee8b80b27a06bf0" }
+freedreno-a750 = { checksum = "7f4ccdc57c47d4dc6cddb00223e96410b19493cef900db946ee8b80b27a06bf0" }
+

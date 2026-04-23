@@ -75,8 +75,6 @@ section_start prepare_rootfs "Preparing rootfs components"
 
 set -ex
 
-date +'%F %T'
-
 # Clear out any previous run's artifacts.
 rm -rf results/
 mkdir -p results
@@ -85,8 +83,6 @@ mkdir -p results
 # state, since it's volume-mounted on the host.
 rsync -a --delete $BM_ROOTFS/ /nfs/
 
-date +'%F %T'
-
 # If BM_BOOTFS is an URL, download it
 if echo $BM_BOOTFS | grep -q http; then
   curl -L --retry 4 -f --retry-all-errors --retry-delay 60 \
@@ -94,16 +90,12 @@ if echo $BM_BOOTFS | grep -q http; then
   BM_BOOTFS=/tmp/bootfs.tar
 fi
 
-date +'%F %T'
-
 # If BM_BOOTFS is a file, assume it is a tarball and uncompress it
 if [ -f "${BM_BOOTFS}" ]; then
   mkdir -p /tmp/bootfs
   tar xf $BM_BOOTFS -C /tmp/bootfs
   BM_BOOTFS=/tmp/bootfs
 fi
-
-date +'%F %T'
 
 # Install kernel modules (it could be either in /lib/modules or
 # /usr/lib/modules, but we want to install in the latter)
@@ -115,8 +107,6 @@ else
 fi
 
 
-date +'%F %T'
-
 # Install kernel image + bootloader files
 if [ -z "$BM_BOOTFS" ]; then
   mv "${BM_KERNEL}" "${BM_DTB}.dtb" /tftp/
@@ -124,12 +114,8 @@ else  # BM_BOOTFS
   rsync -aL --delete $BM_BOOTFS/boot/ /tftp/
 fi
 
-date +'%F %T'
-
 # Create the rootfs in the NFS directory
 . $BM/rootfs-setup.sh /nfs
-
-date +'%F %T'
 
 echo "$BM_CMDLINE" > /tftp/cmdline.txt
 
@@ -180,13 +166,10 @@ python3 $CI_INSTALL/custom_logger.py ${STRUCTURED_LOG_FILE} --close-dut-job
 python3 $CI_INSTALL/custom_logger.py ${STRUCTURED_LOG_FILE} --close
 set -e
 
-date +'%F %T'
-
 # Bring artifacts back from the NFS dir to the build dir where gitlab-runner
 # will look for them.
 cp -Rp /nfs/results/. results/
 
-date +'%F %T'
 section_end dut_cleanup
 
 exit $ret

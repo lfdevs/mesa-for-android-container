@@ -521,16 +521,6 @@ traces:
     zink-a618:
       label: [crash]
 
-  thedarkmod/thedarkmod.trace:
-    freedreno-a306:
-      label: [unsupported]
-    freedreno-a530:
-      label: [unsupported]
-    freedreno-a618:
-      label: [skip, broken, slow]
-    zink-a618:
-      label: [skip]
-
   jvgs/jvgs-d27fb67-v2.trace:
     freedreno-a306:
       checksum: d44fdd0c4f5afe5ce7697b7c67dff6a0

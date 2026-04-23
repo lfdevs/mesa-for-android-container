@@ -88,14 +88,13 @@ v3d_fence_wait(struct v3d_screen *screen,
 
         ret = drmSyncobjCreate(screen->fd, 0, &syncobj);
         if (ret) {
-                fprintf(stderr, "Failed to create syncobj to wait on: %d\n",
-                        ret);
+                mesa_loge("Failed to create syncobj to wait on: %d", ret);
                 return false;
         }
 
         ret = drmSyncobjImportSyncFile(screen->fd, syncobj, fence->fd);
         if (ret) {
-                fprintf(stderr, "Failed to import fence to syncobj: %d\n", ret);
+                mesa_loge("Failed to import fence to syncobj: %d", ret);
                 return false;
         }
 

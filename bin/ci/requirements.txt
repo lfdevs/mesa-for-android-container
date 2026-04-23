@@ -11,3 +11,4 @@ rich==14.1.*
 ruamel.yaml.clib==0.2.*
 ruamel.yaml==0.17.*
 tabulate==0.9.*
+tomledit==1.*

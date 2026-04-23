@@ -56,6 +56,7 @@ radv_shader_destroy(struct vk_device *_device, struct vk_pipeline_cache_object *
    free(shader->dbg.nir_string);
    free(shader->dbg.disasm_string);
    free(shader->dbg.ir_string);
+   free(shader->dbg.args_string);
    free(shader->dbg.statistics);
    free(shader->dbg.debug_info);
 
@@ -69,7 +70,7 @@ radv_shader_deserialize(struct radv_device *device, const void *key_data, size_t
    const struct radv_shader_binary *binary = blob_read_bytes(blob, sizeof(struct radv_shader_binary));
 
    struct radv_shader *shader;
-   radv_shader_create_uncached(device, binary, false, NULL, &shader);
+   radv_shader_create_uncached(device, binary, false, NULL, NULL, &shader);
    if (!shader)
       return NULL;
 
@@ -166,12 +167,7 @@ radv_shader_create(struct radv_device *device, struct vk_pipeline_cache *cache, 
 {
    if (radv_is_cache_disabled(device, cache) || skip_cache || (dbg && dbg->dump_shader)) {
       struct radv_shader *shader;
-      radv_shader_create_uncached(device, binary, false, NULL, &shader);
-      if (dbg) {
-         struct amd_stats *stats = shader->dbg.statistics;
-         shader->dbg = *dbg;
-         shader->dbg.statistics = stats;
-      }
+      radv_shader_create_uncached(device, binary, false, NULL, dbg, &shader);
       return shader;
    }
 

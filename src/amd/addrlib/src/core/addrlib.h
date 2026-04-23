@@ -1,7 +1,7 @@
 /*
 ************************************************************************************************************************
 *
-*  Copyright (C) 2007-2024 Advanced Micro Devices, Inc. All rights reserved.
+*  Copyright (C) 2007-2026 Advanced Micro Devices, Inc. All rights reserved.
 *  SPDX-License-Identifier: MIT
 *
 ***********************************************************************************************************************/
@@ -300,6 +300,10 @@ public:
         delete this;
     }
 
+    ADDR_E_RETURNCODE GetFormatProperties(
+        const ADDR_FORMAT_PROPERTIES_IN&  in,
+        ADDR_FORMAT_PROPERTIES_OUT*       pOut) const;
+
     static Lib* GetLib(ADDR_HANDLE hLib);
     
     /// Returns which version of addrlib functions should be used.
@@ -333,6 +337,10 @@ public:
 
     UINT_32 GetBpe(AddrFormat format) const;
 
+    void GetSwizzleModePreferenceRatio(
+        const ADDR2_GET_PREFERRED_SURF_SETTING_INPUT* pIn,
+        UINT_32*                                      pOutRatioLo,
+        UINT_32*                                      pOutRatioHi) const;
 
     static UINT_32 ComputeOffsetFromSwizzlePattern(
         const UINT_64* pPattern,

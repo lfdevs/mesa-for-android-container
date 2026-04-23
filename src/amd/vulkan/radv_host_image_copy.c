@@ -10,8 +10,14 @@
 #include "radv_physical_device.h"
 
 static uint32_t
-radv_get_texel_scale(VkFormat format)
+radv_get_texel_scale(VkFormat format, const VkImageSubresourceLayers *subresource)
 {
+   if (subresource->aspectMask == VK_IMAGE_ASPECT_STENCIL_BIT) {
+      format = vk_format_stencil_only(format);
+   } else if (subresource->aspectMask == VK_IMAGE_ASPECT_DEPTH_BIT) {
+      format = vk_format_depth_only(format);
+   }
+
    return vk_format_get_blocksize(format);
 }
 
@@ -22,7 +28,7 @@ radv_get_surface_copy_region(struct radv_device *device, const struct radv_image
                              VkExtent3D image_extent)
 {
    const void *surf_ptr = image->bindings[0].host_ptr;
-   const uint32_t texel_scale = radv_get_texel_scale(image->vk.format);
+   const uint32_t texel_scale = radv_get_texel_scale(image->vk.format, subresource);
    const VkOffset3D img_offset_el = vk_image_offset_to_elements(&image->vk, image_offset);
    const VkExtent3D img_extent_el = vk_image_extent_to_elements(&image->vk, image_extent);
    const uint32_t mem_row_pitch = memory_row_length ? memory_row_length : img_extent_el.width;
@@ -48,6 +54,7 @@ radv_get_surface_copy_region(struct radv_device *device, const struct radv_image
       .num_layers = vk_image_subresource_layer_count(&image->vk, subresource),
       .mem_row_pitch = mem_row_pitch * texel_scale,
       .mem_slice_pitch = mem_slice_pitch * texel_scale,
+      .is_stencil_only = subresource->aspectMask == VK_IMAGE_ASPECT_STENCIL_BIT,
    };
 
    return surf_copy_region;
@@ -117,56 +124,63 @@ radv_CopyImageToImageEXT(VkDevice _device, const VkCopyImageToImageInfo *pCopyIm
       VK_FROM_HANDLE(radv_image, src_image, pCopyImageToImageInfo->srcImage);
       void *host_ptr;
 
-      /* TODO: Avoid using a staging buffer for the copy. */
-      host_ptr = malloc(src_image->size);
-      if (!host_ptr)
-         return VK_ERROR_OUT_OF_HOST_MEMORY;
+      VkImageSubresourceLayers src_subresource = copy->srcSubresource;
+      VkImageSubresourceLayers dst_subresource = copy->dstSubresource;
+      u_foreach_bit (b, copy->srcSubresource.aspectMask) {
+         src_subresource.aspectMask = BITFIELD_BIT(b);
+         dst_subresource.aspectMask = BITFIELD_BIT(b);
 
-      const VkCopyImageToMemoryInfo image_to_memory = {
-         .sType = VK_STRUCTURE_TYPE_COPY_IMAGE_TO_MEMORY_INFO,
-         .flags = pCopyImageToImageInfo->flags,
-         .srcImage = pCopyImageToImageInfo->srcImage,
-         .srcImageLayout = pCopyImageToImageInfo->srcImageLayout,
-         .regionCount = 1,
-         .pRegions =
-            &(VkImageToMemoryCopy){
-               .sType = VK_STRUCTURE_TYPE_IMAGE_TO_MEMORY_COPY,
-               .pHostPointer = host_ptr,
-               .memoryRowLength = 0,
-               .memoryImageHeight = 0,
-               .imageSubresource = copy->srcSubresource,
-               .imageOffset = copy->srcOffset,
-               .imageExtent = copy->extent,
-            },
-      };
+         /* TODO: Avoid using a staging buffer for the copy. */
+         host_ptr = malloc(src_image->size);
+         if (!host_ptr)
+            return VK_ERROR_OUT_OF_HOST_MEMORY;
 
-      result = radv_CopyImageToMemoryEXT(_device, &image_to_memory);
-      if (result == VK_SUCCESS) {
-         const VkCopyMemoryToImageInfo memory_to_image = {
-            .sType = VK_STRUCTURE_TYPE_COPY_MEMORY_TO_IMAGE_INFO,
+         const VkCopyImageToMemoryInfo image_to_memory = {
+            .sType = VK_STRUCTURE_TYPE_COPY_IMAGE_TO_MEMORY_INFO,
             .flags = pCopyImageToImageInfo->flags,
-            .dstImage = pCopyImageToImageInfo->dstImage,
-            .dstImageLayout = pCopyImageToImageInfo->dstImageLayout,
+            .srcImage = pCopyImageToImageInfo->srcImage,
+            .srcImageLayout = pCopyImageToImageInfo->srcImageLayout,
             .regionCount = 1,
             .pRegions =
-               &(VkMemoryToImageCopy){
-                  .sType = VK_STRUCTURE_TYPE_MEMORY_TO_IMAGE_COPY,
+               &(VkImageToMemoryCopy){
+                  .sType = VK_STRUCTURE_TYPE_IMAGE_TO_MEMORY_COPY,
                   .pHostPointer = host_ptr,
                   .memoryRowLength = 0,
                   .memoryImageHeight = 0,
-                  .imageSubresource = copy->dstSubresource,
-                  .imageOffset = copy->dstOffset,
+                  .imageSubresource = src_subresource,
+                  .imageOffset = copy->srcOffset,
                   .imageExtent = copy->extent,
                },
          };
 
-         result = radv_CopyMemoryToImageEXT(_device, &memory_to_image);
+         result = radv_CopyImageToMemoryEXT(_device, &image_to_memory);
+         if (result == VK_SUCCESS) {
+            const VkCopyMemoryToImageInfo memory_to_image = {
+               .sType = VK_STRUCTURE_TYPE_COPY_MEMORY_TO_IMAGE_INFO,
+               .flags = pCopyImageToImageInfo->flags,
+               .dstImage = pCopyImageToImageInfo->dstImage,
+               .dstImageLayout = pCopyImageToImageInfo->dstImageLayout,
+               .regionCount = 1,
+               .pRegions =
+                  &(VkMemoryToImageCopy){
+                     .sType = VK_STRUCTURE_TYPE_MEMORY_TO_IMAGE_COPY,
+                     .pHostPointer = host_ptr,
+                     .memoryRowLength = 0,
+                     .memoryImageHeight = 0,
+                     .imageSubresource = dst_subresource,
+                     .imageOffset = copy->dstOffset,
+                     .imageExtent = copy->extent,
+                  },
+            };
+
+            result = radv_CopyMemoryToImageEXT(_device, &memory_to_image);
+         }
+
+         free(host_ptr);
+
+         if (result != VK_SUCCESS)
+            return result;
       }
-
-      free(host_ptr);
-
-      if (result != VK_SUCCESS)
-         return result;
    }
 
    return VK_SUCCESS;

@@ -417,11 +417,11 @@ v3d_write_uniforms(struct v3d_context *v3d, struct v3d_job *job,
                 }
 #if 0
                 uint32_t written_val = *((uint32_t *)uniforms - 1);
-                fprintf(stderr, "shader %p[%d]: 0x%08x / 0x%08x (%f) ",
-                        shader, i, __gen_address_offset(&uniform_stream) + i * 4,
-                        written_val, uif(written_val));
-                vir_dump_uniform(uinfo->contents[i], data);
-                fprintf(stderr, "\n");
+                char *str = vir_dump_uniform(uinfo->contents[i], data);
+                mesa_logd("shader %p[%d]: 0x%08x / 0x%08x (%f) %s",
+                          shader, i, __gen_address_offset(&uniform_stream) + i * 4,
+                          written_val, uif(written_val), str);
+                ralloc_free(str);
 #endif
         }
 

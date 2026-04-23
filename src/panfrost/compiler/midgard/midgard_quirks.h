@@ -6,6 +6,8 @@
 #ifndef __MDG_QUIRKS_H
 #define __MDG_QUIRKS_H
 
+#include "panfrost/model/pan_model.h"
+
 /* Model-specific quirks requiring compiler workarounds/etc. Quirks
  * may be errata requiring a workaround, or features. We're trying to be
  * quirk-positive here; quirky is the best! */
@@ -53,9 +55,9 @@
 #define MIDGARD_NO_AUTO32 (1 << 6)
 
 static inline unsigned
-midgard_get_quirks(unsigned gpu_id)
+midgard_get_quirks(uint64_t gpu_id)
 {
-   switch (gpu_id >> 16) {
+   switch (pan_prod_id(gpu_id)) {
    case 0x600:
       return MIDGARD_OLD_BLEND | MIDGARD_BROKEN_BLEND_LOADS |
              MIDGARD_BROKEN_LOD | MIDGARD_NO_UPPER_ALU | MIDGARD_NO_OOO |

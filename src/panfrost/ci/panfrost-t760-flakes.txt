@@ -16,9 +16,11 @@ dEQP-GLES3.functional.multisample.fbo_max_samples.constancy_sample_coverage_inve
 dEQP-GLES3.functional.multisample.fbo_max_samples.proportionality_alpha_to_coverage
 dEQP-GLES3.functional.multisample.fbo_max_samples.stencil
 dEQP-GLES31.functional.fbo.no_attachments.maximums.all
+dEQP-GLES31.functional.fbo.no_attachments.maximums.size
 dEQP-GLES31.functional.texture.multisample.samples_10..*
 dEQP-GLES31.functional.texture.multisample.samples_12..*
 dEQP-GLES31.functional.texture.multisample.samples_13..*
 dEQP-GLES31.functional.texture.multisample.samples_16..*
 dEQP-GLES3.functional.draw_buffers_indexed.random.max_implementation_draw_buffers.14
 dEQP-GLES3.functional.draw_buffers_indexed.random.max_implementation_draw_buffers.15
+dEQP-GLES3.functional.draw_buffers_indexed.random.max_implementation_draw_buffers.2

@@ -302,27 +302,27 @@ TEST_F(ValhallPacking, StoreMemoryAccess)
 TEST_F(ValhallPacking, Convert16To32)
 {
    CASE(bi_u16_to_u32_to(b, bi_register(2),
-                         bi_discard(bi_swz_16(bi_register(55), false, false))),
+                         bi_discard(bi_half(bi_register(55), false))),
         0x0090c20000140077);
 
    CASE(bi_u16_to_u32_to(b, bi_register(2),
-                         bi_discard(bi_swz_16(bi_register(55), true, false))),
+                         bi_discard(bi_half(bi_register(55), true))),
         0x0090c20010140077);
 
    CASE(bi_u16_to_f32_to(b, bi_register(2),
-                         bi_discard(bi_swz_16(bi_register(55), false, false))),
+                         bi_discard(bi_half(bi_register(55), false))),
         0x0090c20000150077);
 
    CASE(bi_u16_to_f32_to(b, bi_register(2),
-                         bi_discard(bi_swz_16(bi_register(55), true, false))),
+                         bi_discard(bi_half(bi_register(55), true))),
         0x0090c20010150077);
 
    CASE(bi_s16_to_s32_to(b, bi_register(2),
-                         bi_discard(bi_swz_16(bi_register(55), false, false))),
+                         bi_discard(bi_half(bi_register(55), false))),
         0x0090c20000040077);
 
    CASE(bi_s16_to_s32_to(b, bi_register(2),
-                         bi_discard(bi_swz_16(bi_register(55), true, false))),
+                         bi_discard(bi_half(bi_register(55), true))),
         0x0090c20010040077);
 }
 

@@ -38,6 +38,7 @@
 
 #include "util/u_thread.h"
 #include "util/list.h"
+#include "lp_state_cs.h"
 
 #include "lp_limits.h"
 

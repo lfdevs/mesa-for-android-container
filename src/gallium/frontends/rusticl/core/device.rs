@@ -999,11 +999,19 @@ impl DeviceBase {
 
     pub fn global_mem_size(&self) -> cl_ulong {
         if let Some(memory_info) = self.screen.query_memory_info() {
-            let memory: cl_ulong = if memory_info.total_device_memory != 0 {
-                memory_info.total_device_memory.into()
+            let device_memory: cl_ulong = memory_info.total_device_memory.into();
+            let staging_memory: cl_ulong = memory_info.total_staging_memory.into();
+
+            // In case some driver doesn't set uma correctly.
+            let memory = if device_memory == 0 {
+                staging_memory
+            } else if self.unified_memory() {
+                // For UMA devices we expose both.
+                staging_memory + device_memory
             } else {
-                memory_info.total_staging_memory.into()
+                device_memory
             };
+
             memory * 1024
         } else {
             self.screen.compute_caps().max_global_size

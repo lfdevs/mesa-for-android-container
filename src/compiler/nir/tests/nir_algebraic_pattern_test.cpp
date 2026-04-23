@@ -237,11 +237,14 @@ nir_algebraic_pattern_test::skip_test(nir_alu_instr *alu, uint32_t bit_size,
                                       nir_const_value tmp, int32_t src_index)
 {
    /* Always pass the test for signed zero/nan/inf sources if they are not preserved. */
-   if (bit_size >= 16) {
+   const nir_op_info *info = &nir_op_infos[alu->op];
+   nir_alu_type type = src_index >= 0 ? info->input_types[src_index] : info->output_type;
+   if (bit_size >= 16 && nir_alu_type_get_base_type(type) == nir_type_float) {
       double val = nir_const_value_as_float(tmp, bit_size);
-      if ((!exact || !(fp_math_ctrl & nir_fp_preserve_nan)) && isnan(val))
+      unsigned ctrl = fp_math_ctrl | ~info->valid_fp_math_ctrl;
+      if ((!exact || !(ctrl & nir_fp_preserve_nan)) && isnan(val))
          return true;
-      if ((!exact || !(fp_math_ctrl & nir_fp_preserve_inf)) && isinf(val))
+      if ((!exact || !(ctrl & nir_fp_preserve_inf)) && isinf(val))
          return true;
    }
 

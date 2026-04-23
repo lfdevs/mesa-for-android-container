@@ -41,6 +41,60 @@
 #include "brw_builder.h"
 #include "brw_cfg.h"
 
+/**
+ * Return the RegDist pipeline that will execute an instruction, or
+ * TGL_PIPE_NONE if the instruction is out-of-order and doesn't use the
+ * RegDist synchronization mechanism.
+ */
+tgl_pipe
+inferred_exec_pipe(const struct intel_device_info *devinfo, const brw_inst *inst)
+{
+   const brw_reg_type t = get_exec_type(inst);
+   const bool is_dword_multiply = brw_type_is_int(t) &&
+      ((inst->opcode == BRW_OPCODE_MUL &&
+        MIN2(brw_type_size_bytes(inst->src[0].type),
+             brw_type_size_bytes(inst->src[1].type)) >= 4) ||
+       (inst->opcode == BRW_OPCODE_MAD &&
+        MIN2(brw_type_size_bytes(inst->src[1].type),
+             brw_type_size_bytes(inst->src[2].type)) >= 4));
+
+   if (is_unordered(devinfo, inst))
+      return TGL_PIPE_NONE;
+   else if (devinfo->verx10 < 125)
+      return TGL_PIPE_FLOAT;
+   else if (devinfo->ver >= 30 &&
+            inst->exec_size == 1 &&
+            brw_reg_is_arf(inst->dst, BRW_ARF_SCALAR) &&
+            inst->src[0].file == IMM) {
+      /* Scalar pipe has a very narrow usage.  See Bspec 56701 (r60146),
+       * in the SWSB description entry.
+       */
+      return TGL_PIPE_SCALAR;
+   } else if (inst->is_math() && devinfo->ver >= 20)
+      return TGL_PIPE_MATH;
+   else if (inst->opcode == SHADER_OPCODE_MOV_INDIRECT ||
+            inst->opcode == SHADER_OPCODE_BROADCAST ||
+            inst->opcode == SHADER_OPCODE_SHUFFLE)
+      return TGL_PIPE_INT;
+   else if (inst->opcode == FS_OPCODE_PACK_HALF_2x16_SPLIT)
+      return TGL_PIPE_FLOAT;
+   else if (devinfo->ver >= 20 &&
+            brw_type_size_bytes(inst->dst.type) >= 8 &&
+            brw_type_is_float(inst->dst.type)) {
+      assert(devinfo->has_64bit_float);
+      return TGL_PIPE_LONG;
+   } else if (devinfo->ver < 20 &&
+              (brw_type_size_bytes(inst->dst.type) >= 8 ||
+               brw_type_size_bytes(t) >= 8 || is_dword_multiply)) {
+      assert(devinfo->has_64bit_float || devinfo->has_64bit_int ||
+             devinfo->has_integer_dword_mul);
+      return TGL_PIPE_LONG;
+   } else if (brw_type_is_float_or_bfloat(inst->dst.type))
+      return TGL_PIPE_FLOAT;
+   else
+      return TGL_PIPE_INT;
+}
+
 namespace {
    /**
     * In-order instruction accounting.
@@ -88,60 +142,6 @@ namespace {
       } else {
          return TGL_PIPE_FLOAT;
       }
-   }
-
-   /**
-    * Return the RegDist pipeline that will execute an instruction, or
-    * TGL_PIPE_NONE if the instruction is out-of-order and doesn't use the
-    * RegDist synchronization mechanism.
-    */
-   tgl_pipe
-   inferred_exec_pipe(const struct intel_device_info *devinfo, const brw_inst *inst)
-   {
-      const brw_reg_type t = get_exec_type(inst);
-      const bool is_dword_multiply = brw_type_is_int(t) &&
-         ((inst->opcode == BRW_OPCODE_MUL &&
-           MIN2(brw_type_size_bytes(inst->src[0].type),
-                brw_type_size_bytes(inst->src[1].type)) >= 4) ||
-          (inst->opcode == BRW_OPCODE_MAD &&
-           MIN2(brw_type_size_bytes(inst->src[1].type),
-                brw_type_size_bytes(inst->src[2].type)) >= 4));
-
-      if (is_unordered(devinfo, inst))
-         return TGL_PIPE_NONE;
-      else if (devinfo->verx10 < 125)
-         return TGL_PIPE_FLOAT;
-      else if (devinfo->ver >= 30 &&
-               inst->exec_size == 1 &&
-               brw_reg_is_arf(inst->dst, BRW_ARF_SCALAR) &&
-               inst->src[0].file == IMM) {
-         /* Scalar pipe has a very narrow usage.  See Bspec 56701 (r60146),
-          * in the SWSB description entry.
-          */
-         return TGL_PIPE_SCALAR;
-      } else if (inst->is_math() && devinfo->ver >= 20)
-         return TGL_PIPE_MATH;
-      else if (inst->opcode == SHADER_OPCODE_MOV_INDIRECT ||
-               inst->opcode == SHADER_OPCODE_BROADCAST ||
-               inst->opcode == SHADER_OPCODE_SHUFFLE)
-         return TGL_PIPE_INT;
-      else if (inst->opcode == FS_OPCODE_PACK_HALF_2x16_SPLIT)
-         return TGL_PIPE_FLOAT;
-      else if (devinfo->ver >= 20 &&
-               brw_type_size_bytes(inst->dst.type) >= 8 &&
-               brw_type_is_float(inst->dst.type)) {
-         assert(devinfo->has_64bit_float);
-         return TGL_PIPE_LONG;
-      } else if (devinfo->ver < 20 &&
-                 (brw_type_size_bytes(inst->dst.type) >= 8 ||
-                  brw_type_size_bytes(t) >= 8 || is_dword_multiply)) {
-         assert(devinfo->has_64bit_float || devinfo->has_64bit_int ||
-                devinfo->has_integer_dword_mul);
-         return TGL_PIPE_LONG;
-      } else if (brw_type_is_float_or_bfloat(inst->dst.type))
-         return TGL_PIPE_FLOAT;
-      else
-         return TGL_PIPE_INT;
    }
 
    /**

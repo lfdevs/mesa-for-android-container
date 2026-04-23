@@ -148,6 +148,8 @@ i915_oa_metrics_available(struct intel_perf_config *perf, int fd, bool use_regis
 
          if (paranoid == 0 || geteuid() == 0)
             i915_perf_oa_available = true;
+         else
+            perf->features_supported |= INTEL_PERF_FEATURE_OA_BLOCKED_BY_POLICY;
       }
    }
 

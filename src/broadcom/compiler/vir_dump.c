@@ -23,9 +23,10 @@
 
 #include "broadcom/common/v3d_device_info.h"
 #include "v3d_compiler.h"
+#include "util/log.h"
 
-/* Prints a human-readable description of the uniform reference. */
-void
+/* Returns a human-readable description of the uniform reference. */
+char *
 vir_dump_uniform(enum quniform_contents contents,
                  uint32_t data)
 {
@@ -41,130 +42,131 @@ vir_dump_uniform(enum quniform_contents contents,
 
         switch (contents) {
         case QUNIFORM_CONSTANT:
-                fprintf(stderr, "0x%08x / %f", data, uif(data));
+                return ralloc_asprintf(NULL, "0x%08x / %f", data, uif(data));
                 break;
 
         case QUNIFORM_UNIFORM:
-                fprintf(stderr, "push[%d]", data);
+                return ralloc_asprintf(NULL, "push[%d]", data);
                 break;
 
         case QUNIFORM_TEXTURE_CONFIG_P1:
-                fprintf(stderr, "tex[%d].p1", data);
+                return ralloc_asprintf(NULL, "tex[%d].p1", data);
                 break;
 
         case QUNIFORM_TMU_CONFIG_P0:
-                fprintf(stderr, "tex[%d].p0 | 0x%x",
-                        v3d_unit_data_get_unit(data),
-                        v3d_unit_data_get_offset(data));
+                return ralloc_asprintf(NULL, "tex[%d].p0 | 0x%x",
+                                       v3d_unit_data_get_unit(data),
+                                       v3d_unit_data_get_offset(data));
                 break;
 
         case QUNIFORM_TMU_CONFIG_P1:
-                fprintf(stderr, "tex[%d].p1 | 0x%x",
-                        v3d_unit_data_get_unit(data),
-                        v3d_unit_data_get_offset(data));
+                return ralloc_asprintf(NULL, "tex[%d].p1 | 0x%x",
+                                       v3d_unit_data_get_unit(data),
+                                       v3d_unit_data_get_offset(data));
                 break;
 
         case QUNIFORM_IMAGE_TMU_CONFIG_P0:
-                fprintf(stderr, "img[%d].p0 | 0x%x",
-                        v3d_unit_data_get_unit(data),
-                        v3d_unit_data_get_offset(data));
+                return ralloc_asprintf(NULL, "img[%d].p0 | 0x%x",
+                                       v3d_unit_data_get_unit(data),
+                                       v3d_unit_data_get_offset(data));
                 break;
 
         case QUNIFORM_TEXTURE_WIDTH:
-                fprintf(stderr, "tex[%d].width", data);
+                return ralloc_asprintf(NULL, "tex[%d].width", data);
                 break;
         case QUNIFORM_TEXTURE_HEIGHT:
-                fprintf(stderr, "tex[%d].height", data);
+                return ralloc_asprintf(NULL, "tex[%d].height", data);
                 break;
         case QUNIFORM_TEXTURE_DEPTH:
-                fprintf(stderr, "tex[%d].depth", data);
+                return ralloc_asprintf(NULL, "tex[%d].depth", data);
                 break;
         case QUNIFORM_TEXTURE_ARRAY_SIZE:
-                fprintf(stderr, "tex[%d].array_size", data);
+                return ralloc_asprintf(NULL, "tex[%d].array_size", data);
                 break;
         case QUNIFORM_TEXTURE_LEVELS:
-                fprintf(stderr, "tex[%d].levels", data);
+                return ralloc_asprintf(NULL, "tex[%d].levels", data);
                 break;
 
         case QUNIFORM_IMAGE_WIDTH:
-                fprintf(stderr, "img[%d].width", data);
+                return ralloc_asprintf(NULL, "img[%d].width", data);
                 break;
         case QUNIFORM_IMAGE_HEIGHT:
-                fprintf(stderr, "img[%d].height", data);
+                return ralloc_asprintf(NULL, "img[%d].height", data);
                 break;
         case QUNIFORM_IMAGE_DEPTH:
-                fprintf(stderr, "img[%d].depth", data);
+                return ralloc_asprintf(NULL, "img[%d].depth", data);
                 break;
         case QUNIFORM_IMAGE_ARRAY_SIZE:
-                fprintf(stderr, "img[%d].array_size", data);
+                return ralloc_asprintf(NULL, "img[%d].array_size", data);
                 break;
 
         case QUNIFORM_SPILL_OFFSET:
-                fprintf(stderr, "spill_offset");
+                return ralloc_asprintf(NULL, "spill_offset");
                 break;
 
         case QUNIFORM_SPILL_SIZE_PER_THREAD:
-                fprintf(stderr, "spill_size_per_thread");
+                return ralloc_asprintf(NULL, "spill_size_per_thread");
                 break;
 
         case QUNIFORM_UBO_ADDR:
-                fprintf(stderr, "ubo[%d]+0x%x",
-                        v3d_unit_data_get_unit(data),
-                        v3d_unit_data_get_offset(data));
+                return ralloc_asprintf(NULL, "ubo[%d]+0x%x",
+                                       v3d_unit_data_get_unit(data),
+                                       v3d_unit_data_get_offset(data));
                 break;
 
         case QUNIFORM_SSBO_OFFSET:
-                fprintf(stderr, "ssbo[%d]", data);
+                return ralloc_asprintf(NULL, "ssbo[%d]", data);
                 break;
 
         case QUNIFORM_GET_SSBO_SIZE:
-                fprintf(stderr, "ssbo_size[%d]", data);
+                return ralloc_asprintf(NULL, "ssbo_size[%d]", data);
                 break;
 
         case QUNIFORM_GET_UBO_SIZE:
-                fprintf(stderr, "ubo_size[%d]", data);
+                return ralloc_asprintf(NULL, "ubo_size[%d]", data);
                 break;
 
         case QUNIFORM_NUM_WORK_GROUPS:
-                fprintf(stderr, "num_wg.%c", data < 3 ? "xyz"[data] : '?');
+                return ralloc_asprintf(NULL, "num_wg.%c", data < 3 ? "xyz"[data] : '?');
                 break;
 
         default:
                 if (quniform_contents_is_texture_p0(contents)) {
-                        fprintf(stderr, "tex[%d].p0: 0x%08x",
-                                contents - QUNIFORM_TEXTURE_CONFIG_P0_0,
-                                data);
+                        return ralloc_asprintf(NULL, "tex[%d].p0: 0x%08x",
+                                               contents - QUNIFORM_TEXTURE_CONFIG_P0_0,
+                                               data);
                 } else if (contents < ARRAY_SIZE(quniform_names) &&
                            quniform_names[contents]) {
-                        fprintf(stderr, "%s",
-                                quniform_names[contents]);
+                        return ralloc_asprintf(NULL, "%s",
+                                               quniform_names[contents]);
                 } else {
-                        fprintf(stderr, "%d / 0x%08x", contents, data);
+                        return ralloc_asprintf(NULL, "%d / 0x%08x", contents, data);
                 }
         }
 }
 
-static void
-vir_print_reg(struct v3d_compile *c, const struct qinst *inst,
-              struct qreg reg)
+static char *
+vir_dump_reg(struct v3d_compile *c, const struct qinst *inst,
+             struct qreg reg)
 {
         switch (reg.file) {
 
         case QFILE_NULL:
-                fprintf(stderr, "null");
+                return ralloc_asprintf(c, "null");
                 break;
 
         case QFILE_LOAD_IMM:
-                fprintf(stderr, "0x%08x (%f)", reg.index, uif(reg.index));
+                return ralloc_asprintf(c, "0x%08x (%f)",
+                                       reg.index, uif(reg.index));
                 break;
 
         case QFILE_REG:
-                fprintf(stderr, "rf%d", reg.index);
+                return ralloc_asprintf(c, "rf%d", reg.index);
                 break;
 
         case QFILE_MAGIC:
-                fprintf(stderr, "%s",
-                        v3d_qpu_magic_waddr_name(c->devinfo, reg.index));
+                return ralloc_asprintf(c, "%s",
+                                       v3d_qpu_magic_waddr_name(c->devinfo, reg.index));
                 break;
 
         case QFILE_SMALL_IMM: {
@@ -176,169 +178,194 @@ vir_print_reg(struct v3d_compile *c, const struct qinst *inst,
 
                 int8_t *p = (int8_t *)&inst->qpu.raddr_b;
                 if (*p >= -16 && *p <= 15)
-                        fprintf(stderr, "%d", unpacked);
+                        return ralloc_asprintf(c, "%d", unpacked);
                 else
-                        fprintf(stderr, "%f", uif(unpacked));
+                        return ralloc_asprintf(c, "%f", uif(unpacked));
                 break;
         }
 
         case QFILE_TEMP:
-                fprintf(stderr, "t%d", reg.index);
+                return ralloc_asprintf(c, "t%d", reg.index);
                 break;
         }
+
+        return ralloc_strdup(c, "");
 }
 
-static void
+static char *
 vir_dump_sig_addr(const struct v3d_device_info *devinfo,
                   const struct v3d_qpu_instr *instr)
 {
         if (!instr->sig_magic)
-                fprintf(stderr, ".rf%d", instr->sig_addr);
+                return ralloc_asprintf(NULL, "rf%d", instr->sig_addr);
         else {
                 const char *name =
                          v3d_qpu_magic_waddr_name(devinfo, instr->sig_addr);
                 if (name)
-                        fprintf(stderr, ".%s", name);
+                        return ralloc_asprintf(NULL, "%s", name);
                 else
-                        fprintf(stderr, ".UNKNOWN%d", instr->sig_addr);
+                        return ralloc_asprintf(NULL, "UNKNOWN%d", instr->sig_addr);
         }
 }
 
-static void
+static char *
 vir_dump_sig(struct v3d_compile *c, struct qinst *inst)
 {
         struct v3d_qpu_sig *sig = &inst->qpu.sig;
+        char *dump_sig = ralloc_strdup(c, "");
+        char *dump_sig_addr = NULL;
+
+        if (sig->ldvary || sig->ldtmu || sig->ldtlb ||
+            sig->ldtlbu || sig->ldunifrf || sig->ldunifarf)
+                dump_sig_addr = vir_dump_sig_addr(c->devinfo, &inst->qpu);
 
         if (sig->thrsw)
-                fprintf(stderr, "; thrsw");
+                ralloc_asprintf_append(&dump_sig, "; thrsw");
         if (sig->ldvary) {
-                fprintf(stderr, "; ldvary");
-                vir_dump_sig_addr(c->devinfo, &inst->qpu);
+                ralloc_asprintf_append(&dump_sig, "; ldvary.%s",
+                                       dump_sig_addr);
         }
         if (sig->ldvpm)
-                fprintf(stderr, "; ldvpm");
+                ralloc_asprintf_append(&dump_sig, "; ldvpm");
         if (sig->ldtmu) {
-                fprintf(stderr, "; ldtmu");
-                vir_dump_sig_addr(c->devinfo, &inst->qpu);
+                ralloc_asprintf_append(&dump_sig, "; ldtmu.%s",
+                                       dump_sig_addr);
         }
         if (sig->ldtlb) {
-                fprintf(stderr, "; ldtlb");
-                vir_dump_sig_addr(c->devinfo, &inst->qpu);
+                ralloc_asprintf_append(&dump_sig, "; ldtlb.%s",
+                                       dump_sig_addr);
         }
         if (sig->ldtlbu) {
-                fprintf(stderr, "; ldtlbu");
-                vir_dump_sig_addr(c->devinfo, &inst->qpu);
+                ralloc_asprintf_append(&dump_sig, "; ldtlbu.%s",
+                                       dump_sig_addr);
         }
         if (sig->ldunif)
-                fprintf(stderr, "; ldunif");
+                ralloc_asprintf_append(&dump_sig, "; ldunif");
         if (sig->ldunifrf) {
-                fprintf(stderr, "; ldunifrf");
-                vir_dump_sig_addr(c->devinfo, &inst->qpu);
+                ralloc_asprintf_append(&dump_sig, "; ldunifrf.%s",
+                                       dump_sig_addr);
         }
         if (sig->ldunifa)
-                fprintf(stderr, "; ldunifa");
+                ralloc_asprintf_append(&dump_sig, "; ldunifa");
         if (sig->ldunifarf) {
-                fprintf(stderr, "; ldunifarf");
-                vir_dump_sig_addr(c->devinfo, &inst->qpu);
+                ralloc_asprintf_append(&dump_sig, "; ldunifarf.%s",
+                                       dump_sig_addr);
         }
         if (sig->wrtmuc)
-                fprintf(stderr, "; wrtmuc");
+                ralloc_asprintf_append(&dump_sig, "; wrtmuc");
+
+        if (dump_sig_addr)
+                ralloc_free(dump_sig_addr);
+
+        return dump_sig;
 }
 
-static void
+static char *
 vir_dump_alu(struct v3d_compile *c, struct qinst *inst)
 {
         struct v3d_qpu_instr *instr = &inst->qpu;
         int nsrc = vir_get_nsrc(inst);
         enum v3d_qpu_input_unpack unpack[2];
+        char *dump_alu;
+        char *dump_reg;
 
         if (inst->qpu.alu.add.op != V3D_QPU_A_NOP) {
-                fprintf(stderr, "%s", v3d_qpu_add_op_name(instr->alu.add.op));
-                fprintf(stderr, "%s", v3d_qpu_cond_name(instr->flags.ac));
-                fprintf(stderr, "%s", v3d_qpu_pf_name(instr->flags.apf));
-                fprintf(stderr, "%s", v3d_qpu_uf_name(instr->flags.auf));
-                fprintf(stderr, " ");
-
-                vir_print_reg(c, inst, inst->dst);
-                fprintf(stderr, "%s", v3d_qpu_pack_name(instr->alu.add.output_pack));
+                dump_reg = vir_dump_reg(c, inst, inst->dst);
+                dump_alu =
+                        ralloc_asprintf(c, "%s%s%s%s %s%s",
+                                        v3d_qpu_add_op_name(instr->alu.add.op),
+                                        v3d_qpu_cond_name(instr->flags.ac),
+                                        v3d_qpu_pf_name(instr->flags.apf),
+                                        v3d_qpu_uf_name(instr->flags.auf),
+                                        dump_reg,
+                                        v3d_qpu_pack_name(instr->alu.add.output_pack));
 
                 unpack[0] = instr->alu.add.a.unpack;
                 unpack[1] = instr->alu.add.b.unpack;
         } else {
-                fprintf(stderr, "%s", v3d_qpu_mul_op_name(instr->alu.mul.op));
-                fprintf(stderr, "%s", v3d_qpu_cond_name(instr->flags.mc));
-                fprintf(stderr, "%s", v3d_qpu_pf_name(instr->flags.mpf));
-                fprintf(stderr, "%s", v3d_qpu_uf_name(instr->flags.muf));
-                fprintf(stderr, " ");
-
-                vir_print_reg(c, inst, inst->dst);
-                fprintf(stderr, "%s", v3d_qpu_pack_name(instr->alu.mul.output_pack));
+                dump_reg = vir_dump_reg(c, inst, inst->dst);
+                dump_alu =
+                        ralloc_asprintf(c, "%s%s%s%s %s%s",
+                                        v3d_qpu_mul_op_name(instr->alu.mul.op),
+                                        v3d_qpu_cond_name(instr->flags.mc),
+                                        v3d_qpu_pf_name(instr->flags.mpf),
+                                        v3d_qpu_uf_name(instr->flags.muf),
+                                        dump_reg,
+                                        v3d_qpu_pack_name(instr->alu.mul.output_pack));
 
                 unpack[0] = instr->alu.mul.a.unpack;
                 unpack[1] = instr->alu.mul.b.unpack;
         }
 
         for (int i = 0; i < nsrc; i++) {
-                fprintf(stderr, ", ");
-                vir_print_reg(c, inst, inst->src[i]);
-                fprintf(stderr, "%s", v3d_qpu_unpack_name(unpack[i]));
+                dump_reg = vir_dump_reg(c, inst, inst->src[i]);
+                ralloc_asprintf_append(&dump_alu, ", %s%s",
+                                       dump_reg,
+                                       v3d_qpu_unpack_name(unpack[i]));
         }
 
-        vir_dump_sig(c, inst);
+        char *dump_sig = vir_dump_sig(c, inst);
+        ralloc_asprintf_append(&dump_alu, "%s", dump_sig);
+
+        return dump_alu;
 }
 
-void
+char *
 vir_dump_inst(struct v3d_compile *c, struct qinst *inst)
 {
         struct v3d_qpu_instr *instr = &inst->qpu;
+        char *dump_inst = NULL;
 
         switch (inst->qpu.type) {
         case V3D_QPU_INSTR_TYPE_ALU:
-                vir_dump_alu(c, inst);
+                dump_inst = vir_dump_alu(c, inst);
                 break;
         case V3D_QPU_INSTR_TYPE_BRANCH:
-                fprintf(stderr, "b");
-                if (instr->branch.ub)
-                        fprintf(stderr, "u");
-
-                fprintf(stderr, "%s",
-                        v3d_qpu_branch_cond_name(instr->branch.cond));
-                fprintf(stderr, "%s", v3d_qpu_msfign_name(instr->branch.msfign));
+                dump_inst =
+                        ralloc_asprintf(c, "b%s%s%s",
+                                        instr->branch.ub ? "u" : "",
+                                        v3d_qpu_branch_cond_name(instr->branch.cond),
+                                        v3d_qpu_msfign_name(instr->branch.msfign));
 
                 switch (instr->branch.bdi) {
                 case V3D_QPU_BRANCH_DEST_ABS:
-                        fprintf(stderr, "  zero_addr+0x%08x", instr->branch.offset);
+                        ralloc_asprintf_append(&dump_inst,
+                                               "  zero_addr+0x%08x",
+                                               instr->branch.offset);
                         break;
 
                 case V3D_QPU_BRANCH_DEST_REL:
-                        fprintf(stderr, "  %d", instr->branch.offset);
+                        ralloc_asprintf_append(&dump_inst, "  %d",
+                                               instr->branch.offset);
                         break;
 
                 case V3D_QPU_BRANCH_DEST_LINK_REG:
-                        fprintf(stderr, "  lri");
+                        ralloc_asprintf_append(&dump_inst, "  lri");
                         break;
 
                 case V3D_QPU_BRANCH_DEST_REGFILE:
-                        fprintf(stderr, "  rf%d", instr->branch.raddr_a);
+                        ralloc_asprintf_append(&dump_inst, "  rf%d",
+                                               instr->branch.raddr_a);
                         break;
                 }
 
                 if (instr->branch.ub) {
                         switch (instr->branch.bdu) {
                         case V3D_QPU_BRANCH_DEST_ABS:
-                                fprintf(stderr, ", a:unif");
+                                ralloc_asprintf_append(&dump_inst, ", a:unif");
                                 break;
 
                         case V3D_QPU_BRANCH_DEST_REL:
-                                fprintf(stderr, ", r:unif");
+                                ralloc_asprintf_append(&dump_inst, ", r:unif");
                                 break;
 
                         case V3D_QPU_BRANCH_DEST_LINK_REG:
-                                fprintf(stderr, ", lri");
+                                ralloc_asprintf_append(&dump_inst, ", lri");
                                 break;
 
                         case V3D_QPU_BRANCH_DEST_REGFILE:
-                                fprintf(stderr, ", rf%d", instr->branch.raddr_a);
+                                ralloc_asprintf_append(&dump_inst, ", rf%d",
+                                                       instr->branch.raddr_a);
                                 break;
                         }
                 }
@@ -346,21 +373,23 @@ vir_dump_inst(struct v3d_compile *c, struct qinst *inst)
         }
 
         if (vir_has_uniform(inst)) {
-                fprintf(stderr, " (");
-                vir_dump_uniform(c->uniform_contents[inst->uniform],
-                                 c->uniform_data[inst->uniform]);
-                fprintf(stderr, ")");
+                char *dump_uniform = vir_dump_uniform(c->uniform_contents[inst->uniform],
+                                                      c->uniform_data[inst->uniform]);
+                ralloc_asprintf_append(&dump_inst, " (%s)", dump_uniform);
+                ralloc_free(dump_uniform);
         }
+
+        return dump_inst;
 }
 
-void
-vir_dump(struct v3d_compile *c)
+static void
+vir_dump(struct log_stream *stream, struct v3d_compile *c)
 {
         int ip = 0;
         int pressure = 0;
 
         vir_for_each_block(block, c) {
-                fprintf(stderr, "BLOCK %d:\n", block->index);
+                mesa_log_stream_printf(stream, "BLOCK %d:\n", block->index);
                 vir_for_each_inst(inst, block) {
                         if (c->live_intervals_valid) {
                                 for (int i = 0; i < c->num_temps; i++) {
@@ -368,7 +397,7 @@ vir_dump(struct v3d_compile *c)
                                                 pressure++;
                                 }
 
-                                fprintf(stderr, "P%4d ", pressure);
+                                mesa_log_stream_printf(stream, "P%4d ", pressure);
 
                                 bool first = true;
 
@@ -379,18 +408,18 @@ vir_dump(struct v3d_compile *c)
                                         if (first) {
                                                 first = false;
                                         } else {
-                                                fprintf(stderr, ", ");
+                                                mesa_log_stream_printf(stream, ", ");
                                         }
                                         if (BITSET_TEST(c->spillable, i))
-                                                fprintf(stderr, "S%4d", i);
+                                                mesa_log_stream_printf(stream, "S%4d", i);
                                         else
-                                                fprintf(stderr, "U%4d", i);
+                                                mesa_log_stream_printf(stream, "U%4d", i);
                                 }
 
                                 if (first)
-                                        fprintf(stderr, "      ");
+                                        mesa_log_stream_printf(stream, "      ");
                                 else
-                                        fprintf(stderr, " ");
+                                        mesa_log_stream_printf(stream, " ");
                         }
 
                         if (c->live_intervals_valid) {
@@ -403,29 +432,46 @@ vir_dump(struct v3d_compile *c)
                                         if (first) {
                                                 first = false;
                                         } else {
-                                                fprintf(stderr, ", ");
+                                                mesa_log_stream_printf(stream, ", ");
                                         }
-                                        fprintf(stderr, "E%4d", i);
+                                        mesa_log_stream_printf(stream, "E%4d", i);
                                         pressure--;
                                 }
 
                                 if (first)
-                                        fprintf(stderr, "      ");
+                                        mesa_log_stream_printf(stream, "      ");
                                 else
-                                        fprintf(stderr, " ");
+                                        mesa_log_stream_printf(stream, " ");
                         }
 
-                        vir_dump_inst(c, inst);
-                        fprintf(stderr, "\n");
+                        char *dump_inst = vir_dump_inst(c, inst);
+                        mesa_log_stream_printf(stream, "%s\n", dump_inst);
                         ip++;
                 }
                 if (block->successors[1]) {
-                        fprintf(stderr, "-> BLOCK %d, %d\n",
-                                block->successors[0]->index,
-                                block->successors[1]->index);
+                        mesa_log_stream_printf(stream, "-> BLOCK %d, %d\n",
+                                               block->successors[0]->index,
+                                               block->successors[1]->index);
                 } else if (block->successors[0]) {
-                        fprintf(stderr, "-> BLOCK %d\n",
-                                block->successors[0]->index);
+                        mesa_log_stream_printf(stream, "-> BLOCK %d\n",
+                                               block->successors[0]->index);
                 }
         }
+        mesa_log_stream_printf(stream, "\n");
+}
+
+void
+vir_dumpi(struct v3d_compile *c)
+{
+        struct log_stream *stream = mesa_log_streami();
+        vir_dump(stream, c);
+        mesa_log_stream_destroy(stream);
+}
+
+void
+vir_dumpe(struct v3d_compile *c)
+{
+        struct log_stream *stream = mesa_log_streame();
+        vir_dump(stream, c);
+        mesa_log_stream_destroy(stream);
 }

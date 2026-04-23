@@ -113,7 +113,7 @@ v3d_render_blit(struct pipe_context *ctx, struct pipe_blit_info *info)
                 };
                 tiled = ctx->screen->resource_create(ctx->screen, &tmpl);
                 if (!tiled) {
-                        fprintf(stderr, "Failed to create tiled blit temp\n");
+                        mesa_loge("Failed to create tiled blit temp");
                         return;
                 }
                 ctx->resource_copy_region(ctx,
@@ -126,9 +126,9 @@ v3d_render_blit(struct pipe_context *ctx, struct pipe_blit_info *info)
         }
 
         if (!util_blitter_is_blit_supported(v3d->blitter, info)) {
-                fprintf(stderr, "blit unsupported %s -> %s\n",
-                    util_format_short_name(info->src.format),
-                    util_format_short_name(info->dst.format));
+                mesa_loge("Blit unsupported %s -> %s",
+                          util_format_short_name(info->src.format),
+                          util_format_short_name(info->dst.format));
                 return;
         }
 

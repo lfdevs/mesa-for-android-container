@@ -600,7 +600,6 @@ try_setup_line(struct lp_setup_context *setup,
 
    int max_szorig = ((bbox.x1 - (bbox.x0 & ~3)) |
                      (bbox.y1 - (bbox.y0 & ~3)));
-   bool use_32bits = max_szorig <= MAX_FIXED_LENGTH32;
    bboxpos = bbox;
 
    /* Can safely discard negative regions:
@@ -696,9 +695,6 @@ try_setup_line(struct lp_setup_context *setup,
          }
       }
 
-      plane[i].dcdx *= FIXED_ONE;
-      plane[i].dcdy *= FIXED_ONE;
-
       /* find trivial reject offsets for each edge for a single-pixel
        * sized block.  These will be scaled up at each recursive level to
        * match the active blocksize.  Scaling in this way works best if
@@ -713,7 +709,7 @@ try_setup_line(struct lp_setup_context *setup,
       lp_setup_add_scissor_planes(scissor, &plane[4], s_planes);
    }
 
-   return lp_setup_bin_triangle(setup, line, use_32bits, false,
+   return lp_setup_bin_triangle(setup, line, max_szorig, false,
                                 &bboxpos, nr_planes, viewport_index);
 }
 

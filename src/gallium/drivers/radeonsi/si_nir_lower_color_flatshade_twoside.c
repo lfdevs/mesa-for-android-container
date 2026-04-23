@@ -21,9 +21,16 @@ static nir_def *load_input(nir_builder *b, nir_intrinsic_instr *orig,
    }
 }
 
+typedef struct {
+   struct si_shader *shader;
+   bool front_color_removed[2];
+   bool back_color_added[2];
+} lower_color_state;
+
 static bool lower_flatshade_twoside(nir_builder *b, nir_intrinsic_instr *intr, void *data)
 {
-   struct si_shader *shader = (struct si_shader *)data;
+   lower_color_state *state = (lower_color_state *)data;
+   struct si_shader *shader = state->shader;
 
    if (intr->intrinsic != nir_intrinsic_load_input &&
        intr->intrinsic != nir_intrinsic_load_interpolated_input)
@@ -62,6 +69,8 @@ static bool lower_flatshade_twoside(nir_builder *b, nir_intrinsic_instr *intr, v
             sem.location = VARYING_SLOT_BFC0 + i;
             nir_intrinsic_set_io_semantics(intr, sem);
             progress = true;
+            state->front_color_removed[i] = true;
+            state->back_color_added[i] = true;
          } else if (shader->key.ps.opt.force_front_face_input == 0) {
             /* The front face flag is non-constant. Load the back color too and select between them. */
             b->cursor = nir_after_instr(&intr->instr);
@@ -69,6 +78,7 @@ static bool lower_flatshade_twoside(nir_builder *b, nir_intrinsic_instr *intr, v
                                      load_input(b, intr, VARYING_SLOT_BFC0 + i, true));
             nir_def_rewrite_uses_after_instr(&intr->def, def, nir_def_instr(def));
             progress = true;
+            state->back_color_added[i] = true;
          }
       }
    } else {
@@ -92,6 +102,8 @@ static bool lower_flatshade_twoside(nir_builder *b, nir_intrinsic_instr *intr, v
             sem.location = VARYING_SLOT_BFC0 + i;
             nir_intrinsic_set_io_semantics(intr, sem);
             progress = true;
+            state->front_color_removed[i] = true;
+            state->back_color_added[i] = true;
          } else if (shader->key.ps.opt.force_front_face_input == 0) {
             /* The front face flag is non-constant. Load the back color too and select between them. */
             b->cursor = nir_after_instr(&intr->instr);
@@ -99,6 +111,7 @@ static bool lower_flatshade_twoside(nir_builder *b, nir_intrinsic_instr *intr, v
                                      load_input(b, intr, VARYING_SLOT_BFC0 + i, false));
             nir_def_rewrite_uses_after_instr(&intr->def, def, nir_def_instr(def));
             progress = true;
+            state->back_color_added[i] = true;
          }
       }
    }
@@ -108,6 +121,22 @@ static bool lower_flatshade_twoside(nir_builder *b, nir_intrinsic_instr *intr, v
 
 bool si_nir_lower_color_flatshade_twoside(nir_shader *nir, struct si_shader *shader)
 {
-   return nir_shader_intrinsics_pass(nir, lower_flatshade_twoside,
-                                     nir_metadata_control_flow, shader);
+   lower_color_state state = {.shader = shader};
+
+   bool progress = nir_shader_intrinsics_pass(nir, lower_flatshade_twoside,
+                                              nir_metadata_control_flow, &state);
+
+   for (unsigned i = 0; i < 2; i++) {
+      if (state.front_color_removed[i] && nir->info.inputs_read & (VARYING_BIT_COL0 << i)) {
+         nir->info.inputs_read &= ~(VARYING_BIT_COL0 << i);
+         nir->num_inputs--;
+      }
+
+      if (state.back_color_added[i] && !(nir->info.inputs_read & (VARYING_BIT_BFC0 << i))) {
+         nir->info.inputs_read |= VARYING_BIT_BFC0 << i;
+         nir->num_inputs++;
+      }
+   }
+
+   return progress;
 }

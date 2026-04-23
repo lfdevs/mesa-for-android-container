@@ -54,16 +54,17 @@ struct shader_stats {
    uint16_t instrs_per_cat[8];
 };
 
-int disasm_a2xx(uint32_t *dwords, int sizedwords, int level,
+int disasm_a2xx(const uint32_t *dwords, int sizedwords, int level,
                 mesa_shader_stage type);
-int disasm_a3xx(uint32_t *dwords, int sizedwords, int level, FILE *out,
+int disasm_a3xx(const uint32_t *dwords, int sizedwords, int level, FILE *out,
                 unsigned gpu_id);
-int disasm_a3xx_stat(uint32_t *dwords, int sizedwords, int level, FILE *out,
-                     unsigned gpu_id, struct shader_stats *stats);
-int try_disasm_a3xx(uint32_t *dwords, int sizedwords, int level, FILE *out,
-                    unsigned gpu_id);
-int try_disasm_a3xx_stat(uint32_t *dwords, int sizedwords, int level, FILE *out,
-                         unsigned gpu_id, struct shader_stats *stats);
+int disasm_a3xx_stat(const uint32_t *dwords, int sizedwords, int level,
+                     FILE *out, unsigned gpu_id, struct shader_stats *stats);
+int try_disasm_a3xx(const uint32_t *dwords, int sizedwords, int level,
+                    FILE *out, unsigned gpu_id);
+int try_disasm_a3xx_stat(const uint32_t *dwords, int sizedwords, int level,
+                         FILE *out, unsigned gpu_id,
+                         struct shader_stats *stats);
 
 void disasm_a2xx_set_debug(enum debug_t debug);
 void disasm_a3xx_set_debug(enum debug_t debug);

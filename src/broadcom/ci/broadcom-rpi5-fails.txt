@@ -207,9 +207,11 @@ spec@nv_image_formats@compiler@declaration-disallow-rgba16-unorm-3d.frag,Fail
 spec@nv_image_formats@compiler@declaration-disallow-rgba16-unorm-3d.vert,Fail
 spec@nv_image_formats@compiler@declaration-disallow-rgba16-unorm-cube.frag,Fail
 spec@nv_image_formats@compiler@declaration-disallow-rgba16-unorm-cube.vert,Fail
-spec@nv_read_depth@read_depth_gles3,Fail
 spec@oes_point_sprite@arb_point_sprite-checkerboard_gles1,Fail
 spec@oes_shader_io_blocks@compiler@layout-location-aliasing.vert,Fail
+
+# https://gitlab.freedesktop.org/mesa/piglit/-/merge_requests/1109
+spec@nv_read_depth@read_depth_gles3,Fail
 
 # A sub-case involving polygon stipple fails because driver doesn't implement
 # stipple

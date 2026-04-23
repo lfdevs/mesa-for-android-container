@@ -31,6 +31,7 @@
 #include "util/bitset.h"
 #include "util/macros.h"
 #include "compiler/shader_enums.h"
+#include "intel_debug.h"
 #include "intel_kmd.h"
 
 #include "intel/dev/intel_wa.h"
@@ -203,10 +204,10 @@ bool intel_device_info_compute_system_memory(struct intel_device_info *devinfo, 
 #ifdef GFX_VERx10
 #define intel_needs_workaround(devinfo, id)         \
    (INTEL_WA_ ## id ## _GFX_VER &&                              \
-    BITSET_TEST(devinfo->workarounds, INTEL_WA_##id))
+    BITSET_TEST((devinfo)->workarounds, INTEL_WA_##id))
 #else
 #define intel_needs_workaround(devinfo, id) \
-   BITSET_TEST(devinfo->workarounds, INTEL_WA_##id)
+   BITSET_TEST((devinfo)->workarounds, INTEL_WA_##id)
 #endif
 
 enum intel_wa_steppings intel_device_info_wa_stepping(struct intel_device_info *devinfo);

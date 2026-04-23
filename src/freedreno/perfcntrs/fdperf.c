@@ -49,6 +49,7 @@ struct counter_group {
       const struct fd_perfcntr_counter *counter;
       uint16_t select_val;
       bool is_gpufreq_counter;
+      bool is_invalid; /* If the selector got overwritten by another value. */
    } counter[MAX_CNTR_PER_GROUP];
 
    /* name of currently selected counters (for UI): */
@@ -270,6 +271,12 @@ select_counter(struct counter_group *group, int ctr, int countable_val)
    }
 }
 
+static uint32_t load_counter_selector(struct counter_group *group, int ctr)
+{
+   const struct fd_perfcntr_counter *counter = group->counter[ctr].counter;
+   return *((uint32_t *) (dev.io + counter->select_reg * 4));
+}
+
 static uint64_t load_counter_value(struct counter_group *group, int ctr)
 {
    /* We can read the counter register value as an uint64_t, as long as the
@@ -294,6 +301,16 @@ resample_counter(struct counter_group *group, int ctr, uint64_t sample_time)
    group->sample_time_delta[ctr] = delta(previous_sample_time, sample_time);
 }
 
+static void
+check_counter_invalid(struct counter_group *group, int ctr)
+{
+   if (group->counter[ctr].is_gpufreq_counter)
+      return;
+
+   uint32_t hw_selector = load_counter_selector(group, ctr);
+   group->counter[ctr].is_invalid = (hw_selector != group->counter[ctr].select_val);
+}
+
 /* sample all the counters: */
 static void
 resample(void)
@@ -310,6 +327,7 @@ resample(void)
       struct counter_group *group = &dev.groups[i];
       for (unsigned j = 0; j < group->group->num_counters; j++) {
          resample_counter(group, j, current_time);
+         check_counter_invalid(group, j);
       }
    }
 }
@@ -321,6 +339,7 @@ resample(void)
 #define COLOR_GROUP_HEADER 1
 #define COLOR_FOOTER       2
 #define COLOR_INVERSE      3
+#define COLOR_ERROR        4
 
 static int w, h;
 static int ctr_width;
@@ -354,7 +373,8 @@ redraw_group_header(WINDOW *win, int row, const char *name)
 }
 
 static void
-redraw_counter_label(WINDOW *win, int row, const char *name, bool selected)
+redraw_counter_label(WINDOW *win, int row, const char *name, bool selected,
+                     bool is_invalid)
 {
    int n = strlen(name);
    assert(n <= ctr_width);
@@ -363,9 +383,13 @@ redraw_counter_label(WINDOW *win, int row, const char *name, bool selected)
    wmove(win, row, ctr_width - n);
    if (selected)
       wattron(win, COLOR_PAIR(COLOR_INVERSE));
+   else if (is_invalid)
+      wattron(win, COLOR_PAIR(COLOR_ERROR) | A_BOLD);
    waddstr(win, name);
    if (selected)
       wattroff(win, COLOR_PAIR(COLOR_INVERSE));
+   else if (is_invalid)
+      wattroff(win, COLOR_PAIR(COLOR_ERROR) | A_BOLD);
    waddstr(win, ": ");
 }
 
@@ -403,14 +427,19 @@ redraw_counter_value_cycles(WINDOW *win, float val)
 }
 
 static void
-redraw_counter_value(WINDOW *win, int row, struct counter_group *group, int ctr)
+redraw_counter_value(WINDOW *win, int row, struct counter_group *group, int ctr,
+                     bool is_invalid)
 {
    char str[32];
    int n = snprintf(str, sizeof(str), "%" PRIu64 " ", group->value_delta[ctr]);
 
    whline(win, ' ', 24 - n);
    wmove(win, row, getcurx(win) + 24 - n);
+   if (is_invalid)
+      wattron(win, COLOR_PAIR(COLOR_ERROR) | A_BOLD);
    waddstr(win, str);
+   if (is_invalid)
+      wattroff(win, COLOR_PAIR(COLOR_ERROR) | A_BOLD);
 
    /* quick hack, if the label has "CYCLE" in the name, it is
     * probably a cycle counter ;-)
@@ -425,8 +454,9 @@ redraw_counter_value(WINDOW *win, int row, struct counter_group *group, int ctr)
     * units the counter is counting for, ie. if a320 has 2x
     * shader as a306 we might need to scale the result..
     */
-   if (strstr(group->label[ctr], "CYCLE") ||
-       strstr(group->label[ctr], "BUSY") || strstr(group->label[ctr], "IDLE")) {
+   if (!is_invalid && (strstr(group->label[ctr], "CYCLE") ||
+                       strstr(group->label[ctr], "BUSY") ||
+                       strstr(group->label[ctr], "IDLE"))) {
       float cycles_val = (float) group->value_delta[ctr] * 1000000.0 /
                          (float) group->sample_time_delta[ctr];
       redraw_counter_value_cycles(win, cycles_val);
@@ -439,14 +469,15 @@ static void
 redraw_counter(WINDOW *win, int row, struct counter_group *group, int ctr,
                bool selected)
 {
-   redraw_counter_label(win, row, group->label[ctr], selected);
-   redraw_counter_value(win, row, group, ctr);
+   bool is_invalid = group->counter[ctr].is_invalid;
+   redraw_counter_label(win, row, group->label[ctr], selected, is_invalid);
+   redraw_counter_value(win, row, group, ctr, is_invalid);
 }
 
 static void
 redraw_gpufreq_counter(WINDOW *win, int row)
 {
-   redraw_counter_label(win, row, "Freq (MHz)", false);
+   redraw_counter_label(win, row, "Freq (MHz)", false, false);
 
    struct counter_group *group = &dev.groups[0];
    float freq_val = (float) group->value_delta[0] / (float) group->sample_time_delta[0];
@@ -672,6 +703,7 @@ main_ui(void)
    init_pair(COLOR_GROUP_HEADER, COLOR_WHITE, COLOR_GREEN);
    init_pair(COLOR_FOOTER, COLOR_WHITE, COLOR_BLUE);
    init_pair(COLOR_INVERSE, COLOR_BLACK, COLOR_WHITE);
+   init_pair(COLOR_ERROR, COLOR_RED, COLOR_BLACK);
 
    while (true) {
       switch (wgetch(mainwin)) {
@@ -734,21 +766,27 @@ dump_counters(void)
          float val = (float) group->value_delta[j] * 1000000.0 /
                      (float) group->sample_time_delta[j];
 
+         bool is_invalid = group->counter[j].is_invalid;
+
          int n = printf("%s: ", label) - 2;
          while (n++ < ctr_width)
             fputc(' ', stdout);
 
-         n = printf("%" PRIu64, group->value_delta[j]);
-         while (n++ < 24)
-            fputc(' ', stdout);
-
-         if (strstr(label, "CYCLE") ||
-             strstr(label, "BUSY") ||
-             strstr(label, "IDLE")) {
-            val = val / dev.max_freq * 100.0f;
-            printf(" %.2f%%\n", val);
+         if (is_invalid) {
+            printf("[invalid]\n");
          } else {
-            printf("\n");
+            n = printf("%" PRIu64, group->value_delta[j]);
+            while (n++ < 24)
+               fputc(' ', stdout);
+
+            if (strstr(label, "CYCLE") ||
+                strstr(label, "BUSY") ||
+                strstr(label, "IDLE")) {
+               val = val / dev.max_freq * 100.0f;
+               printf(" %.2f%%\n", val);
+            } else {
+               printf("\n");
+            }
          }
       }
    }

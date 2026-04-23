@@ -15,12 +15,12 @@ bool si_init_cp_reg_shadowing(struct si_context *sctx)
       return false;
 
    if (sctx->uses_userq_reg_shadowing) {
-      /* In case of GFX11_5, shadow_va passed in ac_drm_create_userqueue() is not used by the
+      /* In case of GFX11.5-11.7, shadow_va passed in ac_drm_create_userqueue() is not used by the
        * firmware. Instead need to initialize the register shadowing addresses using LOAD_* packets.
        * Also the LOAD_* packets and enabling register shadowing in CONTEXT_CONTROL packet has to
        * be submitted for every job.
        */
-      if (sctx->gfx_level == GFX11_5) {
+      if (sctx->gfx_level == GFX11_5 || sctx->gfx_level == GFX11_7) {
          struct ac_pm4_state *shadowing_pm4 = ac_pm4_create_sized(&sctx->screen->info, false, 1024,
                                                                  sctx->is_gfx_queue);
          if (!shadowing_pm4) {
@@ -29,13 +29,13 @@ bool si_init_cp_reg_shadowing(struct si_context *sctx)
          }
 
          ac_pm4_cmd_add(shadowing_pm4, PKT3(PKT3_CONTEXT_CONTROL, 1, 0));
-         ac_pm4_cmd_add(shadowing_pm4, S_28_1_UPDATE_LOAD_ENABLES(1) |
-                        S_28_1_LOAD_PER_CONTEXT_STATE(1) | S_28_1_LOAD_CS_SH_REGS(1) |
-                        S_28_1_LOAD_GFX_SH_REGS(1) | S_28_1_LOAD_GLOBAL_UCONFIG(1));
-         ac_pm4_cmd_add(shadowing_pm4, S_28_2_UPDATE_SHADOW_ENABLES(1) |
-                        S_28_2_SHADOW_PER_CONTEXT_STATE(1) | S_28_2_SHADOW_CS_SH_REGS(1) |
-                        S_28_2_SHADOW_GFX_SH_REGS(1) | S_28_2_SHADOW_GLOBAL_UCONFIG(1) |
-                        S_28_2_SHADOW_GLOBAL_CONFIG(1));
+         ac_pm4_cmd_add(shadowing_pm4, S_281_UPDATE_LOAD_ENABLES(1) |
+                        S_281_LOAD_PER_CONTEXT_STATE(1) | S_281_LOAD_CS_SH_REGS(1) |
+                        S_281_LOAD_GFX_SH_REGS(1) | S_281_LOAD_GLOBAL_UCONFIG(1));
+         ac_pm4_cmd_add(shadowing_pm4, S_282_UPDATE_SHADOW_ENABLES(1) |
+                        S_282_SHADOW_PER_CONTEXT_STATE(1) | S_282_SHADOW_CS_SH_REGS(1) |
+                        S_282_SHADOW_GFX_SH_REGS(1) | S_282_SHADOW_GLOBAL_UCONFIG(1) |
+                        S_282_SHADOW_GLOBAL_CONFIG(1));
 
          for (unsigned i = 0; i < SI_NUM_REG_RANGES; i++)
             ac_build_load_reg(&sctx->screen->info, shadowing_pm4, i,

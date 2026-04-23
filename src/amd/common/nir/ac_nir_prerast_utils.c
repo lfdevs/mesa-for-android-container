@@ -1131,8 +1131,10 @@ ac_nir_ngg_build_streamout_buffer_info(nir_builder *b,
          nir_def *overflow = nir_ilt(b, buffer_size, buffer_offset);
 
          any_overflow = nir_ior(b, any_overflow, overflow);
+         nir_def *new_buffer_offset = nir_iadd(b, buffer_offset,
+                                               workgroup_buffer_sizes[buffer]);
          overflow_amount[buffer] = nir_imax(b, nir_imm_int(b, 0),
-                                            nir_isub(b, buffer_offset, buffer_size));
+                                            nir_isub(b, new_buffer_offset, buffer_size));
 
          unsigned stream = info->buffer_to_stream[buffer];
          /* when previous workgroup overflow, we can't emit any primitive */

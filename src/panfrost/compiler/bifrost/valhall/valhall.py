@@ -125,9 +125,10 @@ class Source:
             self.mask['combine'] = bitmask(3)
 
 class Dest:
-    def __init__(self, name = ""):
+    def __init__(self, size, name = ""):
         self.name = name
         self.start = 40
+        self.size = size
         self.offset = {}
         self.mask = {}
 
@@ -292,11 +293,11 @@ def build_instr(el, overrides = {}):
         else:
             i = i + 1
 
-    dests = [Dest(dest.text or '') for dest in el.findall('dest')]
+    dests = [Dest(int(tsize), dest.text or '') for dest in el.findall('dest')]
 
     # Get implicit ones
     sources = sources + ([Source(i, int(tsize)) for i in range(int(el.attrib.get('srcs', 0)))])
-    dests = dests + ([Dest()] * int(el.attrib.get('dests', 0)))
+    dests = dests + ([Dest(int(tsize))] * int(el.attrib.get('dests', 0)))
 
     # Get staging registers
     staging = [build_staging(i, el) for i, el in enumerate(el.findall('sr'))]

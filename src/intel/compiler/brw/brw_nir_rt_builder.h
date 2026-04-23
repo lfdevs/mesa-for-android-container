@@ -562,22 +562,6 @@ brw_nir_memcpy_global(nir_builder *b,
    }
 }
 
-static inline void
-brw_nir_memclear_global(nir_builder *b,
-                        nir_def *dst_addr, uint32_t dst_align,
-                        uint32_t size)
-{
-   /* We're going to copy in 16B chunks */
-   assert(size % 16 == 0);
-   dst_align = MIN2(dst_align, 16);
-
-   nir_def *zero = nir_imm_ivec4(b, 0, 0, 0, 0);
-   for (unsigned offset = 0; offset < size; offset += 16) {
-      brw_nir_rt_store(b, nir_iadd_imm(b, dst_addr, offset), dst_align,
-                       zero, 0xf /* write_mask */);
-   }
-}
-
 static inline nir_def *
 brw_nir_rt_query_done(nir_builder *b, nir_def *stack_addr,
                       const struct intel_device_info *devinfo)

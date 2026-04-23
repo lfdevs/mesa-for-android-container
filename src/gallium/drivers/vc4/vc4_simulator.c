@@ -273,16 +273,15 @@ vc4_create_simulator_bo(int fd, int handle, unsigned size)
                 int ret = vc4_gem_mmap(fd, handle, &mmap_offset);
 
                 if (ret) {
-                        fprintf(stderr, "Failed to get MMAP offset: %d\n",
-                                errno);
+                        mesa_loge("Failed to get MMAP offset: %d", errno);
                         abort();
                 }
                 sim_bo->gem_vaddr = mmap(NULL, obj->base.size,
                                          PROT_READ | PROT_WRITE, MAP_SHARED,
                                          fd, mmap_offset);
                 if (sim_bo->gem_vaddr == MAP_FAILED) {
-                        fprintf(stderr, "mmap of bo %d (offset 0x%016llx, size %d) failed\n",
-                                handle, (long long)mmap_offset, (int)obj->base.size);
+                        mesa_loge("mmap of bo %d (offset 0x%016llx, size %d) failed",
+                                  handle, (long long)mmap_offset, (int)obj->base.size);
                         abort();
                 }
         }
@@ -404,8 +403,7 @@ vc4_dump_to_file(struct vc4_exec_info *exec)
         asprintf(&filename, "vc4-dri-%d.dump", dumpno++);
         FILE *f = fopen(filename, "w+");
         if (!f) {
-                fprintf(stderr, "Couldn't open %s: %s", filename,
-                        strerror(errno));
+                mesa_loge("Couldn't open %s: %s", filename, strerror(errno));
                 return;
         }
 
@@ -486,9 +484,9 @@ vc4_simulator_submit_cl_ioctl(int fd, struct drm_vc4_submit_cl *args)
                 return ret;
 
         if (VC4_DBG(CL)) {
-                fprintf(stderr, "RCL:\n");
-                vc4_dump_cl(sim_state.mem + exec.ct1ca,
-                            exec.ct1ea - exec.ct1ca, true);
+                mesa_logi("RCL:");
+                vc4_dump_cli(sim_state.mem + exec.ct1ca,
+                             exec.ct1ea - exec.ct1ca, true);
         }
 
         vc4_dump_to_file(&exec);
@@ -496,21 +494,19 @@ vc4_simulator_submit_cl_ioctl(int fd, struct drm_vc4_submit_cl *args)
         if (exec.ct0ca != exec.ct0ea) {
                 int bfc = simpenrose_do_binning(exec.ct0ca, exec.ct0ea);
                 if (bfc != 1) {
-                        fprintf(stderr, "Binning returned %d flushes, should be 1.\n",
-                                bfc);
-                        fprintf(stderr, "Relocated binning command list:\n");
-                        vc4_dump_cl(sim_state.mem + exec.ct0ca,
-                                    exec.ct0ea - exec.ct0ca, false);
+                        mesa_loge("Binning returned %d flushes, should be 1.", bfc);
+                        mesa_loge("Relocated binning command list:");
+                        vc4_dump_cle(sim_state.mem + exec.ct0ca,
+                                     exec.ct0ea - exec.ct0ca, false);
                         abort();
                 }
         }
         int rfc = simpenrose_do_rendering(exec.ct1ca, exec.ct1ea);
         if (rfc != 1) {
-                fprintf(stderr, "Rendering returned %d frames, should be 1.\n",
-                        rfc);
-                fprintf(stderr, "Relocated render command list:\n");
-                vc4_dump_cl(sim_state.mem + exec.ct1ca,
-                            exec.ct1ea - exec.ct1ca, true);
+                mesa_loge("Rendering returned %d frames, should be 1.", rfc);
+                mesa_loge("Relocated render command list:");
+                vc4_dump_cle(sim_state.mem + exec.ct1ca,
+                             exec.ct1ea - exec.ct1ca, true);
                 abort();
         }
 
@@ -658,8 +654,8 @@ vc4_simulator_get_param_ioctl(int fd, struct drm_vc4_get_param *args)
                 return 0;
 
         default:
-                fprintf(stderr, "Unknown DRM_IOCTL_VC4_GET_PARAM(%lld)\n",
-                        (long long)args->param);
+                mesa_loge("Unknown DRM_IOCTL_VC4_GET_PARAM(%lld)",
+                          (long long)args->param);
                 abort();
         };
 }
@@ -708,7 +704,7 @@ vc4_simulator_ioctl(int fd, unsigned long request, void *args)
         case DRM_IOCTL_GEM_FLINK:
                 return drmIoctl(fd, request, args);
         default:
-                fprintf(stderr, "Unknown ioctl 0x%08x\n", (int)request);
+                mesa_loge("Unknown ioctl 0x%08x", (int)request);
                 abort();
         }
 }

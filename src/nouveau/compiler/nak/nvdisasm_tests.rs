@@ -324,7 +324,7 @@ pub fn test_ld_st_atom() {
                         MemSpace::Shared => MemEvictionPriority::Normal,
                         MemSpace::Local => MemEvictionPriority::Normal,
                     };
-                    if space != MemSpace::Shared
+                    if (space != MemSpace::Shared || sm < 75)
                         && addr_stride != OffsetStride::X1
                     {
                         continue;
@@ -485,37 +485,14 @@ pub fn test_texture() {
 
     for &sm in sm_list() {
         let mut c = DisasmCheck::new();
-        for lod_mode in lod_modes {
-            if lod_mode == TexLodMode::BiasClamp && sm >= 100 {
-                continue;
-            }
+        for scalar in [false, true] {
+            let scr = if scalar { ".scr" } else { "" };
+            for lod_mode in lod_modes {
+                if lod_mode == TexLodMode::BiasClamp && sm >= 100 {
+                    continue;
+                }
 
-            let instr = OpTex {
-                dsts: [Dst::Reg(r0), Dst::Reg(r2)],
-                fault: Dst::Reg(p0),
-
-                tex: TexRef::Bindless,
-
-                srcs: [SrcRef::Reg(r1).into(), SrcRef::Reg(r3).into()],
-
-                dim: TexDim::_2D,
-                lod_mode,
-                deriv_mode: TexDerivMode::Auto,
-                z_cmpr: false,
-                offset_mode: TexOffsetMode::None,
-                mem_eviction_priority: MemEvictionPriority::First,
-                nodep: true,
-                channel_mask: ChannelMask::for_comps(3),
-            };
-            c.push(
-                instr,
-                format!(
-                    "tex.b{lod_mode}.ef.nodep p0, r2, r0, r1, r3, 2d, 0x7;"
-                ),
-            );
-
-            if lod_mode.is_explicit_lod() {
-                let instr = OpTld {
+                let instr = OpTex {
                     dsts: [Dst::Reg(r0), Dst::Reg(r2)],
                     fault: Dst::Reg(p0),
 
@@ -524,49 +501,78 @@ pub fn test_texture() {
                     srcs: [SrcRef::Reg(r1).into(), SrcRef::Reg(r3).into()],
 
                     dim: TexDim::_2D,
-                    is_ms: false,
                     lod_mode,
+                    deriv_mode: TexDerivMode::Auto,
+                    z_cmpr: false,
                     offset_mode: TexOffsetMode::None,
                     mem_eviction_priority: MemEvictionPriority::First,
                     nodep: true,
                     channel_mask: ChannelMask::for_comps(3),
+                    scalar: scalar,
                 };
                 c.push(
                     instr,
                     format!(
-                        "tld.b{lod_mode}.ef.nodep p0, r2, r0, r1, r3, 2d, 0x7;"
+                        "tex{scr}.b{lod_mode}.ef.nodep p0, r2, r0, r1, r3, 2d, 0x7;"
                     ),
                 );
+
+                if lod_mode.is_explicit_lod() {
+                    let instr = OpTld {
+                        dsts: [Dst::Reg(r0), Dst::Reg(r2)],
+                        fault: Dst::Reg(p0),
+
+                        tex: TexRef::Bindless,
+
+                        srcs: [SrcRef::Reg(r1).into(), SrcRef::Reg(r3).into()],
+
+                        dim: TexDim::_2D,
+                        is_ms: false,
+                        lod_mode,
+                        offset_mode: TexOffsetMode::None,
+                        mem_eviction_priority: MemEvictionPriority::First,
+                        nodep: true,
+                        channel_mask: ChannelMask::for_comps(3),
+                        scalar: scalar,
+                    };
+                    c.push(
+                        instr,
+                        format!(
+                            "tld{scr}.b{lod_mode}.ef.nodep p0, r2, r0, r1, r3, 2d, 0x7;"
+                        ),
+                    );
+                }
             }
-        }
 
-        for offset_mode in tld4_offset_modes {
-            let offset_mode_str = if offset_mode == TexOffsetMode::None {
-                String::new()
-            } else {
-                format!("{offset_mode}")
-            };
+            for offset_mode in tld4_offset_modes {
+                let offset_mode_str = if offset_mode == TexOffsetMode::None {
+                    String::new()
+                } else {
+                    format!("{offset_mode}")
+                };
 
-            let instr = OpTld4 {
-                dsts: [Dst::Reg(r0), Dst::Reg(r2)],
-                fault: Dst::Reg(p0),
+                let instr = OpTld4 {
+                    dsts: [Dst::Reg(r0), Dst::Reg(r2)],
+                    fault: Dst::Reg(p0),
 
-                tex: TexRef::Bindless,
+                    tex: TexRef::Bindless,
 
-                srcs: [SrcRef::Reg(r1).into(), SrcRef::Reg(r3).into()],
+                    srcs: [SrcRef::Reg(r1).into(), SrcRef::Reg(r3).into()],
 
-                dim: TexDim::_2D,
-                comp: 1,
-                offset_mode,
-                z_cmpr: false,
-                mem_eviction_priority: MemEvictionPriority::First,
-                nodep: true,
-                channel_mask: ChannelMask::for_comps(3),
-            };
-            c.push(
-                instr,
-                format!("tld4.g.b{offset_mode_str}.ef.nodep p0, r2, r0, r1, r3, 2d, 0x7;"),
-            );
+                    dim: TexDim::_2D,
+                    comp: 1,
+                    offset_mode,
+                    z_cmpr: false,
+                    mem_eviction_priority: MemEvictionPriority::First,
+                    nodep: true,
+                    channel_mask: ChannelMask::for_comps(3),
+                    scalar: scalar,
+                };
+                c.push(
+                    instr,
+                    format!("tld4{scr}.g.b{offset_mode_str}.ef.nodep p0, r2, r0, r1, r3, 2d, 0x7;"),
+                );
+            }
         }
 
         let instr = OpTmml {
@@ -1003,6 +1009,44 @@ pub fn test_isbewr() {
                         c.push(instr, disasm);
                     }
                 }
+            }
+        }
+
+        c.check(sm);
+    }
+}
+
+#[test]
+pub fn test_mufu() {
+    let r2 = RegRef::new(RegFile::GPR, 2, 1);
+    let r3 = RegRef::new(RegFile::GPR, 3, 1);
+
+    use MuFuOp::*;
+    let ops = [Cos, Sin, Exp2, Log2, Rcp, Rsq, Rcp64H, Rsq64H, Sqrt, Tanh];
+    let op_types = [(FloatType::F32, ""), (FloatType::F16, ".f16")];
+
+    for &sm in sm_list() {
+        let mut c = DisasmCheck::new();
+
+        for op in ops {
+            for (op_type, op_type_str) in op_types {
+                match (op, op_type) {
+                    (Rcp64H | Rsq64H, FloatType::F16) => continue,
+                    _ => (),
+                }
+                let instr = OpMuFu {
+                    dst: Dst::Reg(r2),
+                    src: SrcRef::Reg(r3).into(),
+                    op,
+                    op_type,
+                };
+                let op_str = match op {
+                    Exp2 => ".ex2".into(),
+                    Log2 => ".lg2".into(),
+                    _ => format!(".{op}"),
+                };
+                let disasm = format!("mufu{op_str}{op_type_str} r2, r3;");
+                c.push(instr, disasm);
             }
         }
 

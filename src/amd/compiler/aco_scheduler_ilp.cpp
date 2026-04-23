@@ -304,9 +304,9 @@ bool
 are_src_banks_compatible(enum amd_gfx_level gfx_level, const VOPDInfo& a, const VOPDInfo& b,
                          bool swap)
 {
-   if (gfx_level >= GFX12 && a.op == aco_opcode::v_dual_mov_b32 &&
+   if (gfx_level >= GFX11_7 && a.op == aco_opcode::v_dual_mov_b32 &&
        b.op == aco_opcode::v_dual_mov_b32) {
-      /* On GFX12+, OPY uses src2 if both OPX and OPY are v_dual_mov_b32, so there are no
+      /* On GFX11.7+, OPY uses src2 if both OPX and OPY are v_dual_mov_b32, so there are no
        * compatibility issues. */
       return true;
    }

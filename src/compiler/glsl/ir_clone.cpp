@@ -144,6 +144,8 @@ ir_loop::clone(linear_ctx *linalloc, struct hash_table *ht) const
       new_loop->continue_instructions.push_tail(ir->clone(linalloc, ht));
    }
 
+   new_loop->do_while = this->do_while;
+
    return new_loop;
 }
 

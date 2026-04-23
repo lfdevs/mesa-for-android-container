@@ -13,7 +13,9 @@
 #include "kk_encoder.h"
 #include "kk_entrypoints.h"
 
-#define KK_EVENT_MEM_SIZE sizeof(uint64_t)
+#define KK_EVENT_MEM_SIZE sizeof(VkResult)
+
+static_assert(sizeof(uint32_t) == KK_EVENT_MEM_SIZE, "Events are 32 bits");
 
 VKAPI_ATTR VkResult VKAPI_CALL
 kk_CreateEvent(VkDevice device, const VkEventCreateInfo *pCreateInfo,
@@ -94,7 +96,7 @@ kk_CmdSetEvent2(VkCommandBuffer commandBuffer, VkEvent _event,
 {
    VK_FROM_HANDLE(kk_event, event, _event);
    VK_FROM_HANDLE(kk_cmd_buffer, cmd, commandBuffer);
-   kk_cmd_write(cmd, event->bo->map, event->addr, VK_EVENT_SET);
+   kk_cmd_write(cmd, (struct libkk_imm_write){event->addr, VK_EVENT_SET});
 
    /* Can only be called from outside of a render pass, which means we can
     * directly upload the writes. */
@@ -107,7 +109,7 @@ kk_CmdResetEvent2(VkCommandBuffer commandBuffer, VkEvent _event,
 {
    VK_FROM_HANDLE(kk_event, event, _event);
    VK_FROM_HANDLE(kk_cmd_buffer, cmd, commandBuffer);
-   kk_cmd_write(cmd, event->bo->map, event->addr, VK_EVENT_RESET);
+   kk_cmd_write(cmd, (struct libkk_imm_write){event->addr, VK_EVENT_RESET});
 
    /* Can only be called from outside of a render pass, which means we can
     * directly upload the writes. */

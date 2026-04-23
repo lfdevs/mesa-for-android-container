@@ -357,7 +357,7 @@ enum tgsi_opcode {
    TGSI_OPCODE_SLT                = 14,
    TGSI_OPCODE_SGE                = 15,
    TGSI_OPCODE_MAD                = 16,
-   TGSI_OPCODE_TEX_LZ             = 17,
+   /* gap */
    TGSI_OPCODE_LRP                = 18,
    TGSI_OPCODE_FMA                = 19,
    TGSI_OPCODE_SQRT               = 20,
@@ -365,7 +365,7 @@ enum tgsi_opcode {
    TGSI_OPCODE_F2U64              = 22,
    TGSI_OPCODE_F2I64              = 23,
    TGSI_OPCODE_FRC                = 24,
-   TGSI_OPCODE_TXF_LZ             = 25,
+   /* gap */
    TGSI_OPCODE_FLR                = 26,
    TGSI_OPCODE_ROUND              = 27,
    TGSI_OPCODE_EX2                = 28,

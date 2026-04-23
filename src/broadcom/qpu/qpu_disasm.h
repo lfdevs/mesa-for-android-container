@@ -33,7 +33,4 @@ const char *v3d_qpu_decode(const struct v3d_device_info *devinfo, const
 
 const char *v3d_qpu_disasm(const struct v3d_device_info *devinfo, uint64_t inst);
 
-void v3d_qpu_dump(const struct v3d_device_info *devinfo, const
-                  struct v3d_qpu_instr *instr);
-
 #endif /* QPU_DISASM_H */

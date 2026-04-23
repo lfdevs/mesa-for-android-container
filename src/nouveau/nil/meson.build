@@ -93,9 +93,20 @@ if with_tests and get_option('b_sanitize') == 'none'
     'nil',
     _libnil,
     suite : ['nouveau'],
-    # This is needed to ensure we link against glibc
-    # See also https://gitlab.freedesktop.org/mesa/mesa/-/issues/11632
-    rust_args: ['-C', 'default-linker-libraries'],
+    # This is needed to ensure we link against glibc.
+    # The --no-as-needed/-lm/--as-needed workaround forces the linker to
+    # keep libm for sqrtf in libmesa_util.a. This is needed because rustc
+    # places default libraries (-lm) before static archives in the link
+    # command, and Coverity's cov-build strips rustc's -fuse-ld=lld,
+    # falling back to ld.bfd which has strict left-to-right link order.
+    # Remove this workaround once rustc resolves link ordering of
+    # native libraries (https://github.com/rust-lang/rust/issues/154975).
+    rust_args: [
+      '-C', 'default-linker-libraries',
+      '-C', 'link-arg=-Wl,--no-as-needed',
+      '-C', 'link-arg=-lm',
+      '-C', 'link-arg=-Wl,--as-needed',
+    ],
   )
 endif
 

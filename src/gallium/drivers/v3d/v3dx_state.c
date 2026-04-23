@@ -418,18 +418,16 @@ v3d_vertex_state_create(struct pipe_context *pctx, unsigned num_elements,
                                         attr.type = ATTRIBUTE_BYTE;
                                         break;
                                 default:
-                                        fprintf(stderr,
-                                                "format %s unsupported\n",
-                                                desc->name);
+                                        mesa_loge("format %s unsupported",
+                                                  desc->name);
                                         attr.type = ATTRIBUTE_BYTE;
                                         abort();
                                 }
                                 break;
 
                         default:
-                                fprintf(stderr,
-                                        "format %s unsupported\n",
-                                        desc->name);
+                                mesa_loge("format %s unsupported",
+                                          desc->name);
                                 abort();
                         }
                 }

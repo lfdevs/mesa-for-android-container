@@ -28,6 +28,7 @@ enum panvk_subqueue_id {
 struct panvk_tiler_heap {
    uint32_t chunk_size;
    struct panvk_priv_mem desc;
+   struct panvk_priv_mem oom_fbd;
    struct {
       uint32_t handle;
       uint64_t dev_addr;

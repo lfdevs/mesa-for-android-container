@@ -232,9 +232,13 @@ if [ "$DEBIAN_ARCH" != "armhf" ]; then
   . .gitlab-ci/container/build-crosvm.sh
 fi
 
-############### Build dEQP runner
+############### Build dEQP runner and gpu-trace-perf
 
 . .gitlab-ci/container/build-deqp-runner.sh
+
+############### Build gpu-trace-perf
+
+. .gitlab-ci/container/build-gpu-trace-perf.sh
 
 ############### Build apitrace
 

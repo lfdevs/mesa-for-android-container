@@ -44,6 +44,9 @@
       DRM_FORMAT_MOD_ARM_AFBC(AFBC_FORMAT_MOD_BLOCK_SIZE_16x16 |               \
                               AFBC_FORMAT_MOD_SPARSE),                         \
                                                                                \
+      DRM_FORMAT_MOD_ARM_AFBC(AFBC_FORMAT_MOD_BLOCK_SIZE_16x16 |               \
+                              AFBC_FORMAT_MOD_SPARSE | AFBC_FORMAT_MOD_SPLIT), \
+                                                                               \
       DRM_FORMAT_MOD_ARM_INTERLEAVED_64K,                                      \
       DRM_FORMAT_MOD_ARM_16X16_BLOCK_U_INTERLEAVED,                            \
       DRM_FORMAT_MOD_LINEAR,                                                   \

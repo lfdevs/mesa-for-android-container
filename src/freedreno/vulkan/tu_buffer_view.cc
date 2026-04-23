@@ -7,7 +7,6 @@
 
 #include "tu_buffer.h"
 #include "tu_device.h"
-#include "tu_formats.h"
 
 template <chip CHIP>
 VKAPI_ATTR VkResult VKAPI_CALL

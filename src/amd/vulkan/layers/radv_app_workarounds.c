@@ -110,11 +110,11 @@ strange_brigade_CmdPipelineBarrier2(VkCommandBuffer commandBuffer, const VkDepen
       VkImageMemoryBarrier2 *barrier = (VkImageMemoryBarrier2 *)&pDependencyInfo->pImageMemoryBarriers[i];
 
       if (barrier->newLayout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR &&
-          barrier->srcAccessMask == VK_ACCESS_COLOR_ATTACHMENT_READ_BIT) {
+          barrier->srcAccessMask == VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT) {
          /* This game has a broken barrier right before present that causes rendering issues. Fix it
           * by modifying the src access mask.
           */
-         barrier->srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+         barrier->srcAccessMask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
          break;
       }
    }

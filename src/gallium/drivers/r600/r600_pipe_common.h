@@ -847,6 +847,13 @@ void *r600_texture_transfer_map(struct pipe_context *ctx,
 			       struct pipe_transfer **ptransfer);
 void r600_texture_transfer_unmap(struct pipe_context *ctx,
 				struct pipe_transfer* transfer);
+void r600_copy_region_with_blit(struct pipe_context *pipe,
+				struct pipe_resource *dst,
+				unsigned dst_level,
+				unsigned dstx, unsigned dsty, unsigned dstz,
+				struct pipe_resource *src,
+				unsigned src_level,
+				const struct pipe_box *src_box);
 
 /* r600_viewport.c */
 void evergreen_apply_scissor_bug_workaround(struct r600_common_context *rctx,

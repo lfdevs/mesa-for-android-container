@@ -505,7 +505,8 @@
                 "VK_EXT_primitives_generated_query": 1,
                 "VK_EXT_color_write_enable": 1,
                 "VK_EXT_extended_dynamic_state3": 1,
-                "VK_EXT_descriptor_buffer": 1
+                "VK_EXT_descriptor_buffer": 1,
+                "VK_EXT_primitive_restart_index": 1
             },
             "features": {
                 "VkPhysicalDevicePrimitivesGeneratedQueryFeaturesEXT": {
@@ -525,6 +526,9 @@
                 },
                 "VkPhysicalDeviceDescriptorBufferFeaturesEXT": {
                     "descriptorBuffer": true
+                },
+                "VkPhysicalDevicePrimitiveRestartIndexFeaturesEXT": {
+                    "primitiveRestartIndex": true
                 }
             }
         },

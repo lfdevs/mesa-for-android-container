@@ -80,10 +80,10 @@ vc4_bo_dump_stats(struct vc4_screen *screen)
 {
         struct vc4_bo_cache *cache = &screen->bo_cache;
 
-        fprintf(stderr, "  BOs allocated:   %d\n", screen->bo_count);
-        fprintf(stderr, "  BOs size:        %dkb\n", screen->bo_size / 1024);
-        fprintf(stderr, "  BOs cached:      %d\n", cache->bo_count);
-        fprintf(stderr, "  BOs cached size: %dkb\n", cache->bo_size / 1024);
+        mesa_logd("  BOs allocated:   %d", screen->bo_count);
+        mesa_logd("  BOs size:        %dkb", screen->bo_size / 1024);
+        mesa_logd("  BOs cached:      %d", cache->bo_count);
+        mesa_logd("  BOs cached size: %dkb", cache->bo_size / 1024);
 
         if (!list_is_empty(&cache->time_list)) {
                 struct vc4_bo *first = list_entry(cache->time_list.next,
@@ -93,15 +93,12 @@ vc4_bo_dump_stats(struct vc4_screen *screen)
                                                  struct vc4_bo,
                                                  time_list);
 
-                fprintf(stderr, "  oldest cache time: %ld\n",
-                        (long)first->free_time);
-                fprintf(stderr, "  newest cache time: %ld\n",
-                        (long)last->free_time);
+                mesa_logd("  oldest cache time: %ld", (long)first->free_time);
+                mesa_logd("  newest cache time: %ld", (long)last->free_time);
 
                 struct timespec time;
                 clock_gettime(CLOCK_MONOTONIC, &time);
-                fprintf(stderr, "  now:               %jd\n",
-                        (intmax_t)time.tv_sec);
+                mesa_logd("  now:               %jd", (intmax_t)time.tv_sec);
         }
 }
 
@@ -164,16 +161,16 @@ vc4_bo_free(struct vc4_bo *bo)
         c.handle = bo->handle;
         int ret = vc4_ioctl(screen->fd, DRM_IOCTL_GEM_CLOSE, &c);
         if (ret != 0)
-                fprintf(stderr, "close object %d: %s\n", bo->handle, strerror(errno));
+                mesa_loge("Close object %d: %s", bo->handle, strerror(errno));
 
         screen->bo_count--;
         screen->bo_size -= bo->size;
 
         if (dump_stats) {
-                fprintf(stderr, "Freed %s%s%dkb:\n",
-                        bo->name ? bo->name : "",
-                        bo->name ? " " : "",
-                        bo->size / 1024);
+                mesa_logd("Freed %s%s%dkb:",
+                          bo->name ? bo->name : "",
+                          bo->name ? " " : "",
+                          bo->size / 1024);
                 vc4_bo_dump_stats(screen);
         }
 
@@ -234,8 +231,8 @@ vc4_bo_alloc(struct vc4_screen *screen, uint32_t size, const char *name)
         bo = vc4_bo_from_cache(screen, size, name);
         if (bo) {
                 if (dump_stats) {
-                        fprintf(stderr, "Allocated %s %dkb from cache:\n",
-                                name, size / 1024);
+                        mesa_logd("Allocated %s %dkb from cache:",
+                                  name, size / 1024);
                         vc4_bo_dump_stats(screen);
                 }
                 return bo;
@@ -273,7 +270,7 @@ vc4_bo_alloc(struct vc4_screen *screen, uint32_t size, const char *name)
         screen->bo_count++;
         screen->bo_size += bo->size;
         if (dump_stats) {
-                fprintf(stderr, "Allocated %s %dkb:\n", name, size / 1024);
+                mesa_logd("Allocated %s %dkb:", name, size / 1024);
                 vc4_bo_dump_stats(screen);
         }
 
@@ -303,7 +300,7 @@ free_stale_bos(struct vc4_screen *screen, time_t time)
         list_for_each_entry_safe(struct vc4_bo, bo, &cache->time_list,
                                  time_list) {
                 if (dump_stats && !freed_any) {
-                        fprintf(stderr, "Freeing stale BOs:\n");
+                        mesa_logd("Freeing stale BOs:");
                         vc4_bo_dump_stats(screen);
                         freed_any = true;
                 }
@@ -318,7 +315,7 @@ free_stale_bos(struct vc4_screen *screen, time_t time)
         }
 
         if (dump_stats && freed_any) {
-                fprintf(stderr, "Freed stale BOs:\n");
+                mesa_logd("Freed stale BOs:");
                 vc4_bo_dump_stats(screen);
         }
 }
@@ -370,7 +367,7 @@ vc4_bo_last_unreference_locked_timed(struct vc4_bo *bo, time_t time)
         cache->bo_count++;
         cache->bo_size += bo->size;
         if (dump_stats) {
-                fprintf(stderr, "Freed %s %dkb to cache:\n",
+                mesa_logd("Freed %s %dkb to cache:",
                         bo->name, bo->size / 1024);
                 vc4_bo_dump_stats(screen);
         }
@@ -429,8 +426,8 @@ vc4_bo_open_name(struct vc4_screen *screen, uint32_t name)
 
         int ret = vc4_ioctl(screen->fd, DRM_IOCTL_GEM_OPEN, &o);
         if (ret) {
-                fprintf(stderr, "Failed to open bo %d: %s\n",
-                        name, strerror(errno));
+                mesa_loge("Failed to open bo %d: %s",
+                          name, strerror(errno));
                 mtx_unlock(&screen->bo_handles_mutex);
                 return NULL;
         }
@@ -448,7 +445,7 @@ vc4_bo_open_dmabuf(struct vc4_screen *screen, int fd)
         int ret = drmPrimeFDToHandle(screen->fd, fd, &handle);
         int size;
         if (ret) {
-                fprintf(stderr, "Failed to get vc4 handle for dmabuf %d\n", fd);
+                mesa_loge("Failed to get vc4 handle for dmabuf %d", fd);
                 mtx_unlock(&screen->bo_handles_mutex);
                 return NULL;
         }
@@ -456,7 +453,7 @@ vc4_bo_open_dmabuf(struct vc4_screen *screen, int fd)
         /* Determine the size of the bo we were handed. */
         size = lseek(fd, 0, SEEK_END);
         if (size == -1) {
-                fprintf(stderr, "Couldn't get size of dmabuf fd %d.\n", fd);
+                mesa_loge("Couldn't get size of dmabuf fd %d.", fd);
                 mtx_unlock(&screen->bo_handles_mutex);
                 return NULL;
         }
@@ -471,8 +468,8 @@ vc4_bo_get_dmabuf(struct vc4_bo *bo)
         int ret = drmPrimeHandleToFD(bo->screen->fd, bo->handle,
                                      DRM_CLOEXEC | DRM_RDWR, &fd);
         if (ret != 0) {
-                fprintf(stderr, "Failed to export gem bo %d to dmabuf\n",
-                        bo->handle);
+                mesa_loge("Failed to export gem bo %d to dmabuf",
+                          bo->handle);
                 return -1;
         }
 
@@ -510,14 +507,14 @@ vc4_bo_alloc_shader(struct vc4_screen *screen, const void *data, uint32_t size)
         bo->handle = create.handle;
 
         if (ret != 0) {
-                fprintf(stderr, "create shader ioctl failure\n");
+                mesa_loge("Create shader ioctl failure");
                 abort();
         }
 
         screen->bo_count++;
         screen->bo_size += bo->size;
         if (dump_stats) {
-                fprintf(stderr, "Allocated shader %dkb:\n", bo->size / 1024);
+                mesa_logd("Allocated shader %dkb:", bo->size / 1024);
                 vc4_bo_dump_stats(screen);
         }
 
@@ -532,8 +529,8 @@ vc4_bo_flink(struct vc4_bo *bo, uint32_t *name)
         };
         int ret = vc4_ioctl(bo->screen->fd, DRM_IOCTL_GEM_FLINK, &flink);
         if (ret) {
-                fprintf(stderr, "Failed to flink bo %d: %s\n",
-                        bo->handle, strerror(errno));
+                mesa_loge("Failed to flink bo %d: %s",
+                          bo->handle, strerror(errno));
                 free(bo);
                 return false;
         }
@@ -567,15 +564,15 @@ vc4_wait_seqno(struct vc4_screen *screen, uint64_t seqno, uint64_t timeout_ns,
 
         if (VC4_DBG(PERF) && timeout_ns && reason) {
                 if (vc4_wait_seqno_ioctl(screen->fd, seqno, 0) == -ETIME) {
-                        fprintf(stderr, "Blocking on seqno %lld for %s\n",
-                                (long long)seqno, reason);
+                        mesa_logd("Blocking on seqno %lld for %s",
+                                  (long long)seqno, reason);
                 }
         }
 
         int ret = vc4_wait_seqno_ioctl(screen->fd, seqno, timeout_ns);
         if (ret) {
                 if (ret != -ETIME) {
-                        fprintf(stderr, "wait failed: %d\n", ret);
+                        mesa_loge("wait failed: %d", ret);
                         abort();
                 }
 
@@ -609,15 +606,15 @@ vc4_bo_wait(struct vc4_bo *bo, uint64_t timeout_ns, const char *reason)
 
         if (VC4_DBG(PERF) && timeout_ns && reason) {
                 if (vc4_wait_bo_ioctl(screen->fd, bo->handle, 0) == -ETIME) {
-                        fprintf(stderr, "Blocking on %s BO for %s\n",
-                                bo->name, reason);
+                        mesa_logd("Blocking on %s BO for %s",
+                                  bo->name, reason);
                 }
         }
 
         int ret = vc4_wait_bo_ioctl(screen->fd, bo->handle, timeout_ns);
         if (ret) {
                 if (ret != -ETIME) {
-                        fprintf(stderr, "wait failed: %d\n", ret);
+                        mesa_loge("wait failed: %d", ret);
                         abort();
                 }
 
@@ -642,15 +639,15 @@ vc4_bo_map_unsynchronized(struct vc4_bo *bo)
         ret = vc4_ioctl(bo->screen->fd, DRM_IOCTL_VC4_MMAP_BO, &map);
         offset = map.offset;
         if (ret != 0) {
-                fprintf(stderr, "map ioctl failure\n");
+                mesa_loge("map ioctl failure");
                 abort();
         }
 
         bo->map = mmap(NULL, bo->size, PROT_READ | PROT_WRITE, MAP_SHARED,
                        bo->screen->fd, offset);
         if (bo->map == MAP_FAILED) {
-                fprintf(stderr, "mmap of bo %d (offset 0x%016llx, size %d) failed\n",
-                        bo->handle, (long long)offset, bo->size);
+                mesa_loge("mmap of bo %d (offset 0x%016llx, size %d) failed",
+                          bo->handle, (long long)offset, bo->size);
                 abort();
         }
         VG(VALGRIND_MALLOCLIKE_BLOCK(bo->map, bo->size, 0, false));
@@ -665,7 +662,7 @@ vc4_bo_map(struct vc4_bo *bo)
 
         bool ok = vc4_bo_wait(bo, OS_TIMEOUT_INFINITE, "bo map");
         if (!ok) {
-                fprintf(stderr, "BO wait for map failed\n");
+                mesa_loge("BO wait for map failed");
                 abort();
         }
 
@@ -681,7 +678,7 @@ vc4_bufmgr_destroy(struct pipe_screen *pscreen)
         vc4_bo_cache_free_all(cache);
 
         if (dump_stats) {
-                fprintf(stderr, "BO stats after screen destroy:\n");
+                mesa_logd("BO stats after screen destroy:");
                 vc4_bo_dump_stats(screen);
         }
 }

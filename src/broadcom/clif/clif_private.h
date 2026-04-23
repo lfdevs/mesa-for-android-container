@@ -27,6 +27,7 @@
 #include <stdint.h>
 #include <stdarg.h>
 #include "util/list.h"
+#include "util/log.h"
 
 struct clif_bo {
         const char *name;
@@ -38,7 +39,7 @@ struct clif_bo {
 
 struct clif_dump {
         const struct v3d_device_info *devinfo;
-        FILE *out;
+        struct log_stream *stream;
 
         struct v3d_spec *spec;
 
@@ -101,26 +102,18 @@ bool v3d71_clif_dump_packet(struct clif_dump *clif, uint32_t offset,
                             const uint8_t *cl, uint32_t *size, bool reloc_mode);
 
 static inline void
-out(struct clif_dump *clif, const char *fmt, ...)
-{
-        va_list args;
-
-        va_start(args, fmt);
-        vfprintf(clif->out, fmt, args);
-        va_end(args);
-}
-
-static inline void
 out_address(struct clif_dump *clif, uint32_t addr)
 {
         struct clif_bo *bo = clif_lookup_bo(clif, addr);
         if (bo) {
-                out(clif, "[%s+0x%08x] /* 0x%08x */",
-                    bo->name, addr - bo->offset, addr);
+                mesa_log_stream_printf(clif->stream,
+                                       "[%s+0x%08x] /* 0x%08x */",
+                                       bo->name, addr - bo->offset, addr);
         } else if (addr) {
-                out(clif, "/* XXX: BO unknown */ 0x%08x", addr);
+                mesa_log_stream_printf(clif->stream,
+                                       "/* XXX: BO unknown */ 0x%08x", addr);
         } else {
-                out(clif, "[null]");
+                mesa_log_stream_printf(clif->stream, "[null]");
         }
 }
 

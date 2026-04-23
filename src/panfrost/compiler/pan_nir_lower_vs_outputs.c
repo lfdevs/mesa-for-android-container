@@ -258,7 +258,7 @@ gather_vs_outputs(struct nir_builder *b,
 }
 
 bool
-pan_nir_lower_vs_outputs(nir_shader *shader, unsigned gpu_id,
+pan_nir_lower_vs_outputs(nir_shader *shader, uint64_t gpu_id,
                          const struct pan_varying_layout *varying_layout,
                          bool has_idvs, bool *needs_extended_fifo)
 {

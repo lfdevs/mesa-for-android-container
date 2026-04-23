@@ -46,9 +46,12 @@ gfxstream_guest_args += '-DVK_GRAPHICS_VERSION_1_4'
 gfxstream_guest_args += '-DVK_COMPUTE_VERSION_1_4'
 
 if with_gfxstream_emulated_android
-  gfxstream_guest_args += '-DEND2END_TESTS'
+    gfxstream_guest_args += '-DEND2END_TESTS'
 endif
 
+if with_platform_android
+    gfxstream_guest_args += '-DGFXSTREAM_ENABLE_GUEST_GOLDFISH'
+endif
 
 #====================================#
 #   Standard deps                    #

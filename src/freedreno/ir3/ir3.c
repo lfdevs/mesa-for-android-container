@@ -72,14 +72,10 @@ collect_reg_info(struct ir3_shader_variant *v,
                  struct ir3_instruction *instr, struct ir3_register *reg,
                  struct ir3_info *info)
 {
-   if (reg->flags & IR3_REG_IMMED) {
+   if (reg->flags & (IR3_REG_IMMED | IR3_REG_CONST)) {
       /* nothing to do */
       return;
    }
-
-   /* Shared consts don't need to be included into constlen. */
-   if (is_shared_consts(v->compiler, ir3_const_state(v), reg))
-      return;
 
    unsigned components;
    int16_t max;
@@ -92,9 +88,7 @@ collect_reg_info(struct ir3_shader_variant *v,
       max = (reg->num + components - 1);
    }
 
-   if (reg->flags & IR3_REG_CONST) {
-      info->max_const = MAX2(info->max_const, max >> 2);
-   } else if (max < regid(48, 0)) {
+   if (max < regid(48, 0)) {
       if (reg->flags & IR3_REG_HALF) {
          if (v->mergedregs) {
             /* starting w/ a6xx, half regs conflict with full regs: */
@@ -329,7 +323,6 @@ ir3_collect_info(struct ir3_shader_variant *v)
    memset(info, 0, sizeof(*info));
    info->max_reg = -1;
    info->max_half_reg = -1;
-   info->max_const = -1;
    info->multi_dword_ldp_stp = false;
 
    uint32_t instr_count = 0;
@@ -1331,10 +1324,6 @@ ir3_store_const(struct ir3_shader_variant *so, struct ir3_builder *build,
       stc->flags |= IR3_INSTR_A1EN;
    }
 
-   /* The assembler isn't aware of what value a1.x has, so make sure that
-    * constlen includes the stc here.
-    */
-   so->constlen = MAX2(so->constlen, DIV_ROUND_UP(dst + components, 4));
    struct ir3_block *block = ir3_cursor_current_block(build->cursor);
    array_insert(block, block->keeps, stc);
    return stc;
@@ -1884,11 +1873,13 @@ ir3_valid_flags(struct ir3_instruction *instr, unsigned n, unsigned flags)
          /* disallow immediates in anything but the SSBO slot argument for
           * cat6 instructions:
           */
-         if (is_global_a3xx_atomic(instr->opc) && (n != 0))
+         if ((is_global_a3xx_atomic(instr->opc) ||
+              is_bindless_atomic(instr->opc)) &&
+             (n != 0)) {
             return false;
+         }
 
-         if (is_local_atomic(instr->opc) || is_global_a6xx_atomic(instr->opc) ||
-             is_bindless_atomic(instr->opc))
+         if (is_local_atomic(instr->opc) || is_global_a6xx_atomic(instr->opc))
             return false;
 
          if (instr->opc == OPC_STG && (n == 2))

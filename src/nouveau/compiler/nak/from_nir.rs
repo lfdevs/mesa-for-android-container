@@ -1950,6 +1950,7 @@ impl<'a> ShaderFromNir<'a> {
                 assert!(lod_mode == TexLodMode::Auto);
                 assert!(offset_mode != TexOffsetMode::PerPx);
                 assert!(!flags.has_z_cmpr());
+                assert!(!flags.scalar());
                 b.push_op(OpTxd {
                     dsts: dsts,
                     fault: fault.into(),
@@ -1964,6 +1965,7 @@ impl<'a> ShaderFromNir<'a> {
             } else if tex.op == nir_texop_lod {
                 assert!(lod_mode == TexLodMode::Auto);
                 assert!(offset_mode == TexOffsetMode::None);
+                assert!(!flags.scalar());
                 b.push_op(OpTmml {
                     dsts: dsts,
                     tex: tex_ref,
@@ -1987,6 +1989,7 @@ impl<'a> ShaderFromNir<'a> {
                     mem_eviction_priority: MemEvictionPriority::Normal,
                     nodep: flags.nodep(),
                     channel_mask,
+                    scalar: flags.scalar(),
                 });
             } else if tex.op == nir_texop_tg4 {
                 b.push_op(OpTld4 {
@@ -2001,6 +2004,7 @@ impl<'a> ShaderFromNir<'a> {
                     mem_eviction_priority: MemEvictionPriority::Normal,
                     nodep: flags.nodep(),
                     channel_mask,
+                    scalar: flags.scalar(),
                 });
             } else {
                 assert!(offset_mode != TexOffsetMode::PerPx);
@@ -2017,6 +2021,7 @@ impl<'a> ShaderFromNir<'a> {
                     mem_eviction_priority: MemEvictionPriority::Normal,
                     nodep: flags.nodep(),
                     channel_mask,
+                    scalar: flags.scalar(),
                 });
             }
         }

@@ -409,12 +409,3 @@ v3d_qpu_disasm(const struct v3d_device_info *devinfo, uint64_t inst)
 
         return v3d_qpu_decode(devinfo, &instr);
 }
-
-void
-v3d_qpu_dump(const struct v3d_device_info *devinfo,
-             const struct v3d_qpu_instr *instr)
-{
-        const char *decoded = v3d_qpu_decode(devinfo, instr);
-        fprintf(stderr, "%s", decoded);
-        ralloc_free((char *)decoded);
-}

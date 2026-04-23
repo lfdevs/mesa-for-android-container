@@ -1855,7 +1855,7 @@
       </opcode>
     </ins>
 
-    <src swizzle="true" size="16">Value to convert</src>
+    <src lane="28" size="16">Value to convert</src>
   </group>
 
   <group name="CONVERT" title="Float-to-int data conversions" dests="1" unused="true" unit="CVT">
@@ -1892,6 +1892,12 @@
         <op val="0x1E" start="16" mask="0x1F"/> <!-- opcode2 -->
       </opcode>
     </ins>
+    <roundmode/>
+    <src swizzle="true" absneg="true" size="16">Value to convert</src>
+  </group>
+
+  <group name="CONVERT" title="16-bit float to 32-bit int data conversions" dests="1" unused="true" unit="CVT">
+    <desc>Performs the given data conversion.</desc>
     <!-- Removed on v11 -->
     <ins name="F16_TO_S32">
       <opcode>
@@ -1907,7 +1913,7 @@
       </opcode>
     </ins>
     <roundmode/>
-    <src swizzle="true" absneg="true" size="16">Value to convert</src>
+    <src lane="28" size="16" absneg="true">Value to convert</src>
   </group>
 
   <ins name="F16_TO_F32" title="16-bit float to 32-bit float conversion" dests="1" unused="true" unit="CVT">
@@ -2620,7 +2626,7 @@
     <src widen="true">B</src>
   </group>
 
-  <group name="SHADDX" title="Shift, extend, and 64-bit add" dests="1" unused="true" unit="CVT">
+  <group name="SHADDX" title="Shift, extend, and 64-bit add" dests="1" unit="CVT">
     <desc>
       Sign or zero extend B to 64-bits, left-shift by `shift`, and add the
       64-bit value A. These instructions accelerate address arithmetic, but may

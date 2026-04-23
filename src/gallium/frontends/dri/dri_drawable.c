@@ -392,18 +392,6 @@ dri_pipe_blit(struct pipe_context *pipe,
    pipe->blit(pipe, &blit);
 }
 
-static void
-dri_postprocessing(struct dri_context *ctx,
-                   struct dri_drawable *drawable,
-                   enum st_attachment_type att)
-{
-   struct pipe_resource *src = drawable->textures[att];
-   struct pipe_resource *zsbuf = drawable->textures[ST_ATTACHMENT_DEPTH_STENCIL];
-
-   if (ctx->pp && src)
-      pp_run(ctx->pp, src, src, zsbuf);
-}
-
 struct notify_before_flush_cb_args {
    struct dri_context *ctx;
    struct dri_drawable *drawable;
@@ -442,8 +430,6 @@ notify_before_flush_cb(void* _args)
 
       /* FRONT_LEFT is resolved in drawable->flush_frontbuffer. */
    }
-
-   dri_postprocessing(args->ctx, args->drawable, ST_ATTACHMENT_BACK_LEFT);
 
    if (pipe->invalidate_resource &&
        (args->flags & __DRI2_FLUSH_INVALIDATE_ANCILLARY)) {

@@ -1,3 +1,5 @@
+# Tiny mismatch in the bottom right of the image.
+# Fails on ADL and TGL but passes on RPL
 dEQP-VK.drm_format_modifiers.export_import.b10g11r11_ufloat_pack32,Fail
 
 # New crash with Xe KMD

@@ -53,8 +53,7 @@ brw_nir_lower_shader_returns(nir_shader *shader)
 
    nir_builder b = nir_builder_create(impl);
 
-   set_foreach(&impl->end_block->predecessors, block_entry) {
-      struct nir_block *block = (void *)block_entry->key;
+   nir_foreach_pred(block, impl->end_block) {
       b.cursor = nir_after_block_before_jump(block);
 
       switch (shader->info.stage) {
@@ -63,7 +62,7 @@ brw_nir_lower_shader_returns(nir_shader *shader)
           * it ends, we retire the bindless stack ID and no further shaders
           * will be executed.
           */
-         assert(impl->end_block->predecessors.entries == 1);
+         assert(nir_block_num_preds(impl->end_block) == 1);
          brw_nir_btd_retire(&b);
          break;
 
@@ -86,7 +85,7 @@ brw_nir_lower_shader_returns(nir_shader *shader)
           * action at the end.  They simply return back to the previous shader
           * in the call stack.
           */
-         assert(impl->end_block->predecessors.entries == 1);
+         assert(nir_block_num_preds(impl->end_block) == 1);
          brw_nir_btd_return(&b);
          break;
 

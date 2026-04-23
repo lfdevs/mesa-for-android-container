@@ -116,9 +116,9 @@ v3d_disk_cache_retrieve(struct v3d_context *v3d,
         if (V3D_DBG(CACHE)) {
                 char blake3[BLAKE3_HEX_LEN];
                 _mesa_blake3_format(blake3, cache_key);
-                fprintf(stderr, "[v3d on-disk cache] %s %s\n",
-                        buffer ? "hit" : "miss",
-                        blake3);
+                mesa_logd("[v3d on-disk cache] %s %s",
+                          buffer ? "hit" : "miss",
+                          blake3);
         }
 
         if (!buffer)
@@ -199,7 +199,7 @@ v3d_disk_cache_store(struct v3d_context *v3d,
         if (V3D_DBG(CACHE)) {
                 char blake3[BLAKE3_HEX_LEN];
                 _mesa_blake3_format(blake3, cache_key);
-                fprintf(stderr, "[v3d on-disk cache] storing %s\n", blake3);
+                mesa_logd("[v3d on-disk cache] storing %s", blake3);
         }
 
         struct blob blob;

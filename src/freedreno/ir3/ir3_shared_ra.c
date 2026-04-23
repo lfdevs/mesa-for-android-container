@@ -569,7 +569,7 @@ try_demote_instruction(struct ra_ctx *ctx, struct ir3_instruction *instr)
          struct ra_interval *src0_interval =
             (instr->srcs[0]->flags & IR3_REG_SSA) ? ra_interval_get(ctx, instr->srcs[0]->def) : NULL;
          struct ra_interval *src1_interval =
-            (instr->srcs[0]->flags & IR3_REG_SSA) ? ra_interval_get(ctx, instr->srcs[0]->def) : NULL;
+            (instr->srcs[1]->flags & IR3_REG_SSA) ? ra_interval_get(ctx, instr->srcs[1]->def) : NULL;
          if (!(src0_interval && src0_interval->spill_def) &&
              !(src1_interval && src1_interval->spill_def) &&
              !(instr->srcs[0]->flags & IR3_REG_IMMED) &&

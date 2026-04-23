@@ -5,6 +5,7 @@
 
 #include "brw_nir.h"
 #include "compiler/nir/nir_builder.h"
+#include "dev/intel_debug.h"
 
 struct lower_intrinsics_state {
    nir_shader *nir;
@@ -323,7 +324,8 @@ brw_nir_lower_cs_intrinsics(nir_shader *nir,
        nir->info.derivative_group != DERIVATIVE_GROUP_QUADS &&
        !nir->info.workgroup_size_variable &&
        util_is_power_of_two_nonzero(nir->info.workgroup_size[0]) &&
-       util_is_power_of_two_nonzero(nir->info.workgroup_size[1])) {
+       util_is_power_of_two_nonzero(nir->info.workgroup_size[1]) &&
+       !intel_use_jay(devinfo, nir->info.stage)) {
 
       state.hw_generated_local_id = true;
 

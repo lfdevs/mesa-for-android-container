@@ -187,6 +187,7 @@ enum ENUM_PACKED opcode {
    BRW_OPCODE_RNDE,
    BRW_OPCODE_RNDZ,
    BRW_OPCODE_MAC,
+   BRW_OPCODE_MACL,
    BRW_OPCODE_MACH,
    BRW_OPCODE_LZD,
    BRW_OPCODE_FBH,
@@ -943,7 +944,9 @@ struct tgl_swsb {
    enum tgl_pipe pipe : 3;
    unsigned sbid : 5;
    enum tgl_sbid_mode mode : 3;
-};
+   unsigned pad : 2;
+} PACKED;
+static_assert(sizeof(struct tgl_swsb) == 2, "packed");
 
 /**
  * Construct a scheduling annotation with a single RegDist dependency.  This

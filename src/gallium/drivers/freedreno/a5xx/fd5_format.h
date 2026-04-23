@@ -11,7 +11,7 @@
 
 #include "freedreno_util.h"
 
-#include "a5xx.xml.h"
+#include "fd5_hw.h"
 
 enum a5xx_vtx_fmt fd5_pipe2vtx(enum pipe_format format);
 enum a5xx_tex_fmt fd5_pipe2tex(enum pipe_format format);

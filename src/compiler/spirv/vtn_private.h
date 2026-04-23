@@ -544,6 +544,7 @@ vtn_translate_scope(struct vtn_builder *b, SpvScope scope);
 
 struct vtn_image_pointer {
    nir_deref_instr *image;
+   unsigned format;
    nir_def *coord;
    nir_def *sample;
    nir_def *lod;
@@ -650,8 +651,7 @@ struct vtn_builder {
     */
    struct set *vars_used_indirectly;
 
-   unsigned num_specializations;
-   struct nir_spirv_specialization *specializations;
+   struct nir_spirv_specialization *specialization;
 
    unsigned value_id_bound;
    struct vtn_value *values;
@@ -1090,5 +1090,18 @@ nir_deref_instr *vtn_create_cmat_temporary(struct vtn_builder *b,
                                            const struct glsl_type *t, const char *name);
 
 mesa_shader_stage vtn_stage_for_execution_model(SpvExecutionModel model);
+
+static inline bool
+vtn_value_is_non_uniform(struct vtn_builder *b, struct vtn_value *value)
+{
+   if (vtn_has_decoration(b, value, SpvDecorationNonUniformEXT))
+      return true;
+
+   if (b->enabled_capabilities.DescriptorHeapEXT &&
+       !vtn_has_decoration(b, value, SpvDecorationUniform))
+      return true;
+
+   return false;
+}
 
 #endif /* _VTN_PRIVATE_H_ */

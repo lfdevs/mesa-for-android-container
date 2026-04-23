@@ -3,9 +3,9 @@
  * SPDX-License-Identifier: MIT
  */
 
-#include <stdint.h>
-
 #include "tu_common.h"
+
+#include <stdint.h>
 
 /* Describe the format used for subsampled image metadata. This is attached to
  * subsampled images, via a separate UBO descriptor after the image

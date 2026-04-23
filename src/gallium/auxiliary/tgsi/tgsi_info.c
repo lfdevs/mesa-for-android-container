@@ -248,7 +248,6 @@ tgsi_opcode_infer_src_type(enum tgsi_opcode opcode, unsigned src_idx)
    switch (opcode) {
    case TGSI_OPCODE_UIF:
    case TGSI_OPCODE_TXF:
-   case TGSI_OPCODE_TXF_LZ:
    case TGSI_OPCODE_U2F:
    case TGSI_OPCODE_U2D:
    case TGSI_OPCODE_UADD:

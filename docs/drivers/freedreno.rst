@@ -670,3 +670,77 @@ are supported at the moment: ``nir``, ``nobin``, ``sysmem``, ``gmem``, ``forcebi
 Some of these options will behave differently when toggled at runtime, for example:
 ``nolrz`` will still result in LRZ allocation which would not happen if the option
 was set in the environment variable.
+
+Autotune
+^^^^^^^^
+
+Turnip supports dynamically selecting between SYSMEM and GMEM rendering with the
+autotune system, the behavior of which can be controlled with the following
+environment variables:
+
+.. envvar:: TU_AUTOTUNE_ALGO
+
+  Selects the algorithm used for autotuning. Supported values are:
+
+  ``bandwidth``
+    Estimates the bandwidth usage of rendering in SYSMEM and GMEM modes, and chooses
+    the one with lower estimated bandwidth. This is the default algorithm.
+
+  ``profiled``
+    Dynamically profiles the RP timings in SYSMEM and GMEM modes, and uses that to
+    move a probability distribution towards the optimal choice over time. This
+    algorithm tends to be far more accurate than the bandwidth algorithm at choosing
+    the optimal rendering mode but may result in larger FPS variance due to being
+    based on a probability distribution with random sampling.
+
+  ``profiled_imm``
+    Similar to ``profiled``, but only profiles the first few instances of a RP
+    and then sticks to the chosen mode for subsequent instances. This is meant
+    for single-frame traces run multiple times in a CI where this algorithm can
+    immediately chose the optimal rendering mode for each RP.
+
+  ``prefer_sysmem``/``prefer_gmem``
+    Always chooses SYSMEM/GMEM rendering. This is useful for games that work
+    better in one mode over the other due to their rendering patterns, setting
+    this is better than using ``TU_DEBUG=sysmem``/``TU_DEBUG=gmem`` when done
+    for performance reasons, since these still allow the other mode to be used
+    in some high-confidence cases as well as letting ``TU_AUTOTUNE_FLAGS`` still
+    be applied.
+
+  The algorithm can be set via the driconf option ``tu_autotune_algorithm`` as well.
+
+.. envvar:: TU_AUTOTUNE_FLAGS
+
+  Modifies the behavior of the selected algorithm. Supported flags are:
+
+  ``big_gmem``
+    Always chooses GMEM rendering if the amount of draw calls in the render pass
+    is greater than a certain threshold. Larger RPs generally benefit more from
+    GMEM rendering due to less overhead from tiling. This tends to lead to worse
+    performance in most cases, so it's only useful for testing.
+
+  ``tune_small``
+    Enables tuning for small render passes (those with a small number of draw
+    calls). By default, small RPs always use SYSMEM mode as they generally don't
+    benefit from GMEM rendering due to the overhead of tiling.
+
+  ``preempt_optimize``
+    Tries to keep non-preemptible time in the render pass is below a certain
+    threshold. This is useful for systems with GPU-based compositors where long
+    non-preemptible times can lead to missed frame deadlines, causing noticeable
+    stuttering. This flag will reduce the performance of the render pass in order
+    to improve overall system responsiveness, it should not be used unless the
+    rest of the system is affected by preemption delays.
+    
+    This is done by measuring the time between a preemption request and preemption
+    actually occurring, if it is above a threshold we force those RPs to use GMEM
+    rendering, where non-preemptible times are driven by tile size which we
+    progressively reduce until the non-preemptible time is below the threshold.
+
+    It should be noted that this will occupy the last two CP performance counters
+    which may interfere with other profiling tools (such as `fdperf`).
+
+  Multiple flags can be combined by separating them with commas, e.g.
+  ``TU_AUTOTUNE_FLAGS=big_gmem,tune_small``.
+
+  If no flags are specified, the default behavior is used.

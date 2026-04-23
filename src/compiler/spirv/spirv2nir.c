@@ -270,7 +270,7 @@ int main(int argc, char **argv)
    if (entry_point.stage == MESA_SHADER_KERNEL)
       spirv_opts.environment = NIR_SPIRV_OPENCL;
 
-   nir_shader *nir = spirv_to_nir(map, word_count, NULL, 0,
+   nir_shader *nir = spirv_to_nir(map, word_count, NULL,
                                   entry_point.stage, entry_point.name,
                                   &spirv_opts, &nir_opts);
 

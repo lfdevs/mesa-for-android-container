@@ -85,7 +85,7 @@ void print_shader_info(FILE *f , int id, struct r600_shader *shader)
    PRINT_UINT_MEMBER(vs_out_layer);
    PRINT_UINT_MEMBER(vs_out_viewport);
    PRINT_UINT_MEMBER(vs_out_edgeflag);
-   PRINT_UINT_MEMBER(has_txq_cube_array_z_comp);
+   PRINT_UINT_MEMBER(has_resinfo_via_uniform);
    PRINT_UINT_MEMBER(uses_tex_buffers);
    PRINT_UINT_MEMBER(gs_prim_id_input);
    PRINT_UINT_MEMBER(gs_tri_strip_adj_fix);
@@ -121,7 +121,6 @@ void print_shader_info(FILE *f , int id, struct r600_shader *shader)
    PRINT_UINT_MEMBER(uses_atomics);
    PRINT_UINT_MEMBER(uses_images);
    PRINT_UINT_MEMBER(uses_helper_invocation);
-   PRINT_UINT_MEMBER(atomic_base);
    PRINT_UINT_MEMBER(rat_base);
    PRINT_UINT_MEMBER(image_size_const_offset);
 

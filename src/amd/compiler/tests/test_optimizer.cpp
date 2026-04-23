@@ -474,19 +474,19 @@ BEGIN_TEST(optimize.clamp)
 
       /* correct NaN behaviour with precise */
       if (cfg.min == aco_opcode::v_min_f16 || cfg.min == aco_opcode::v_min_f32) {
-         //~f(16|32)! v1: %res7 = @med3 @ub, @lb, %a
-         //~f(16|32)! p_unit_test 7, %res7
+         //~.*f(16|32)! v1: (NaNPreserve)%res7 = @med3 @ub, @lb, %a
+         //~.*f(16|32)! p_unit_test 7, %res7
          Builder::Result max = bld.vop2(cfg.max, bld.def(v1), cfg.lb, inputs[0]);
-         max.def(0).setPrecise(true);
+         max.def(0).setNaNPreserve(true);
          Builder::Result min = bld.vop2(cfg.min, bld.def(v1), cfg.ub, max);
-         max.def(0).setPrecise(true);
+         min.def(0).setNaNPreserve(true);
          writeout(7, min);
 
-         //~f(16|32)! v1: (precise)%res8_tmp = @min @ub, %a
-         //~f(16|32)! v1: %res8 = @max @lb, %res8_tmp
-         //~f(16|32)! p_unit_test 8, %res8
+         //~.*f(16|32)! v1: (NaNPreserve)%res8_tmp = @min @ub, %a
+         //~.*f(16|32)! v1: %res8 = @max @lb, %res8_tmp
+         //~.*f(16|32)! p_unit_test 8, %res8
          min = bld.vop2(cfg.min, bld.def(v1), cfg.ub, inputs[0]);
-         min.def(0).setPrecise(true);
+         min.def(0).setNaNPreserve(true);
          writeout(8, bld.vop2(cfg.max, bld.def(v1), cfg.lb, min));
       }
 

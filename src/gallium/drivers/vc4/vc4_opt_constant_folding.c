@@ -33,28 +33,6 @@
 
 static bool debug;
 
-static void
-dump_from(struct vc4_compile *c, struct qinst *inst)
-{
-        if (!debug)
-                return;
-
-        fprintf(stderr, "optimizing: ");
-        qir_dump_inst(c, inst);
-        fprintf(stderr, "\n");
-}
-
-static void
-dump_to(struct vc4_compile *c, struct qinst *inst)
-{
-        if (!debug)
-                return;
-
-        fprintf(stderr, "to: ");
-        qir_dump_inst(c, inst);
-        fprintf(stderr, "\n");
-}
-
 static bool
 constant_fold(struct vc4_compile *c, struct qinst *inst)
 {
@@ -88,14 +66,13 @@ constant_fold(struct vc4_compile *c, struct qinst *inst)
                 return false;
         }
 
-        dump_from(c, inst);
+        LOG_INST_OPT("Optimizing", c, inst) {
+                inst->src[0] = qir_uniform_ui(c, result);
+                for (int i = 1; i < nsrc; i++)
+                        inst->src[i] = c->undef;
+                inst->op = QOP_MOV;
+        }
 
-        inst->src[0] = qir_uniform_ui(c, result);
-        for (int i = 1; i < nsrc; i++)
-                inst->src[i] = c->undef;
-        inst->op = QOP_MOV;
-
-        dump_to(c, inst);
         return true;
 }
 

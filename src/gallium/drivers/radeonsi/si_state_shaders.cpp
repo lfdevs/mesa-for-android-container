@@ -2322,7 +2322,7 @@ void si_vs_key_update_inputs(struct si_context *sctx)
    key->ge.mono.instance_divisor_is_fetched = elts->instance_divisor_is_fetched;
    key->ge.opt.prefer_mono = elts->instance_divisor_is_fetched;
 
-   unsigned count_mask = (1 << vs->info.num_inputs) - 1;
+   unsigned count_mask = (1 << vs->info.num_vs_inputs) - 1;
    unsigned fix = elts->fix_fetch_always & count_mask;
    unsigned opencode = elts->fix_fetch_opencode & count_mask;
 
@@ -4982,7 +4982,7 @@ static void si_emit_spi_ge_ring_state(struct si_context *sctx, unsigned index)
        * in memory.
        */
       si_cp_release_acquire_mem_pws(sctx, &sctx->gfx_cs, V_028A90_BOTTOM_OF_PIPE_TS, 0,
-                                    V_580_CP_ME, 0);
+                                    V_581B_CP_ME, 0);
 
       uint64_t attr_address = sctx->ws->cs_is_secure(&sctx->gfx_cs) ?
          sscreen->attribute_pos_prim_ring_tmz->gpu_address :

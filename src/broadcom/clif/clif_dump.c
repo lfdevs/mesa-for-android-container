@@ -52,12 +52,12 @@ clif_dump_add_address_to_worklist(struct clif_dump *clif,
 
 struct clif_dump *
 clif_dump_init(const struct v3d_device_info *devinfo,
-               FILE *out, bool pretty, bool nobin)
+               struct log_stream *stream, bool pretty, bool nobin)
 {
         struct clif_dump *clif = rzalloc(NULL, struct clif_dump);
 
         clif->devinfo = devinfo;
-        clif->out = out;
+        clif->stream = stream;
         clif->spec = v3d_spec_load(devinfo);
         clif->pretty = pretty;
         clif->nobin = nobin;
@@ -124,8 +124,9 @@ clif_dump_cl(struct clif_dump *clif, uint32_t start, uint32_t end,
 {
         struct clif_bo *bo = clif_lookup_bo(clif, start);
         if (!bo) {
-                out(clif, "Failed to look up address 0x%08x\n",
-                    start);
+                mesa_log_stream_printf(clif->stream,
+                                       "Failed to look up address 0x%08x\n",
+                                       start);
                 return 0;
         }
 
@@ -136,14 +137,17 @@ clif_dump_cl(struct clif_dump *clif, uint32_t start, uint32_t end,
          */
         void *end_vaddr = NULL;
         if (end && !clif_lookup_vaddr(clif, end, &end_vaddr)) {
-                out(clif, "Failed to look up address 0x%08x\n",
-                    end);
+                mesa_log_stream_printf(clif->stream,
+                                       "Failed to look up address 0x%08x\n",
+                                       end);
                 return 0;
         }
 
-        if (!reloc_mode)
-                out(clif, "@format ctrllist  /* [%s+0x%08x] */\n",
-                    bo->name, start - bo->offset);
+        if (!reloc_mode) {
+                mesa_log_stream_printf(clif->stream,
+                                       "@format ctrllist  /* [%s+0x%08x] */\n",
+                                       bo->name, start - bo->offset);
+        }
 
         uint32_t size;
         uint8_t *cl = start_vaddr;
@@ -179,18 +183,18 @@ clif_dump_gl_shader_state_record(struct clif_dump *clif,
                 struct v3d_group *gs_state = v3d_spec_find_struct(clif->spec,
                                                                   "Geometry Shader State Record");
                 assert(gs_state);
-                out(clif, "@format shadrec_gl_geom\n");
+                mesa_log_stream_printf(clif->stream, "@format shadrec_gl_geom\n");
                 v3d_print_group(clif, gs_state, 0, vaddr + offset);
                 offset += v3d_group_get_length(gs_state);
                 /* Extra pad when geometry/tessellation shader is present */
                 offset += 20;
         }
-        out(clif, "@format shadrec_gl_main\n");
+        mesa_log_stream_printf(clif->stream, "@format shadrec_gl_main\n");
         v3d_print_group(clif, state, 0, vaddr + offset);
         offset += v3d_group_get_length(state);
 
         for (int i = 0; i < reloc->shader_state.num_attrs; i++) {
-                out(clif, "@format shadrec_gl_attr /* %d */\n", i);
+                mesa_log_stream_printf(clif->stream, "@format shadrec_gl_attr /* %d */\n", i);
                 v3d_print_group(clif, attr, 0, vaddr + offset);
                 offset += v3d_group_get_length(attr);
         }
@@ -205,8 +209,9 @@ clif_process_worklist(struct clif_dump *clif)
                                  &clif->worklist, link) {
                 void *vaddr;
                 if (!clif_lookup_vaddr(clif, reloc->addr, &vaddr)) {
-                        out(clif, "Failed to look up address 0x%08x\n",
-                            reloc->addr);
+                        mesa_log_stream_printf(clif->stream,
+                                               "Failed to look up address 0x%08x\n",
+                                               reloc->addr);
                         continue;
                 }
 
@@ -242,9 +247,10 @@ clif_dump_if_blank(struct clif_dump *clif, struct clif_bo *bo,
                         return false;
         }
 
-        out(clif, "\n");
-        out(clif, "@format blank %d /* [%s+0x%08x..0x%08x] */\n", end - start,
-            bo->name, start, end - 1);
+        mesa_log_stream_printf(clif->stream,
+                               "\n@format blank %d /* [%s+0x%08x..0x%08x] */\n",
+                               end - start,
+                               bo->name, start, end - 1);
         return true;
 }
 
@@ -264,8 +270,9 @@ clif_dump_binary(struct clif_dump *clif, struct clif_bo *bo,
         if (clif_dump_if_blank(clif, bo, start, end))
                 return;
 
-        out(clif, "@format binary /* [%s+0x%08x] */\n",
-            bo->name, start);
+        mesa_log_stream_printf(clif->stream,
+                               "@format binary /* [%s+0x%08x] */\n",
+                               bo->name, start);
 
         uint32_t offset = start;
         int dumped_in_line = 0;
@@ -274,20 +281,22 @@ clif_dump_binary(struct clif_dump *clif, struct clif_bo *bo,
                         return;
 
                 if (end - offset >= 4) {
-                        out(clif, "0x%08x ", *(uint32_t *)(bo->vaddr + offset));
+                        mesa_log_stream_printf(clif->stream, "0x%08x ",
+                                               *(uint32_t *)(bo->vaddr + offset));
                         offset += 4;
                 } else {
-                        out(clif, "0x%02x ", *(uint8_t *)(bo->vaddr + offset));
+                        mesa_log_stream_printf(clif->stream, "0x%02x ",
+                                               *(uint8_t *)(bo->vaddr + offset));
                         offset++;
                 }
 
                 if (++dumped_in_line == 8) {
-                        out(clif, "\n");
+                        mesa_log_stream_printf(clif->stream, "\n");
                         dumped_in_line = 0;
                 }
         }
         if (dumped_in_line)
-                out(clif, "\n");
+                mesa_log_stream_printf(clif->stream, "\n");
 }
 
 /* Walks the list of relocations, dumping each buffer's contents (using our
@@ -319,8 +328,9 @@ clif_dump_buffers(struct clif_dump *clif)
                 struct clif_bo *new_bo = clif_lookup_bo(clif, reloc->addr);
 
                 if (!new_bo) {
-                        out(clif, "Failed to look up address 0x%08x\n",
-                            reloc->addr);
+                        mesa_log_stream_printf(clif->stream,
+                                               "Failed to look up address 0x%08x\n",
+                                               reloc->addr);
                         continue;
                 }
 
@@ -332,8 +342,9 @@ clif_dump_buffers(struct clif_dump *clif)
                                                  bo->size);
                         }
 
-                        out(clif, "\n");
-                        out(clif, "@buffer %s\n", new_bo->name);
+                        mesa_log_stream_printf(clif->stream,
+                                               "\n@buffer %s\n",
+                                               new_bo->name);
                         bo = new_bo;
                         offset = 0;
                         bo->dumped = true;
@@ -348,7 +359,7 @@ clif_dump_buffers(struct clif_dump *clif)
                 case reloc_cl:
                         offset = clif_dump_cl(clif, reloc->addr, reloc->cl.end,
                                               false);
-                        out(clif, "\n");
+                        mesa_log_stream_printf(clif->stream, "\n");
                         break;
 
                 case reloc_gl_shader_state:
@@ -365,7 +376,7 @@ clif_dump_buffers(struct clif_dump *clif)
                                               false);
                         break;
                 }
-                out(clif, "\n");
+                mesa_log_stream_printf(clif->stream, "\n");
         }
 
         if (bo) {
@@ -377,9 +388,9 @@ clif_dump_buffers(struct clif_dump *clif)
                 bo = &clif->bo[i];
                 if (bo->dumped)
                         continue;
-                out(clif, "@buffer %s\n", bo->name);
+                mesa_log_stream_printf(clif->stream, "@buffer %s\n", bo->name);
                 clif_dump_binary(clif, bo, 0, bo->size);
-                out(clif, "\n");
+                mesa_log_stream_printf(clif->stream, "\n");
         }
 }
 
@@ -411,7 +422,9 @@ clif_dump(struct clif_dump *clif, const struct drm_v3d_submit_cl *submit)
          * referencing it, so emit them all now.
          */
         for (int i = 0; i < clif->bo_count; i++) {
-                out(clif, "@createbuf_aligned 4096 %s\n", clif->bo[i].name);
+                mesa_log_stream_printf(clif->stream,
+                                       "@createbuf_aligned 4096 %s\n",
+                                       clif->bo[i].name);
         }
 
         /* Walk the worklist figuring out the locations of structs based on
@@ -424,25 +437,25 @@ clif_dump(struct clif_dump *clif, const struct drm_v3d_submit_cl *submit)
          */
         clif_dump_buffers(clif);
 
-        out(clif, "@add_bin 0\n  ");
+        mesa_log_stream_printf(clif->stream, "@add_bin 0\n  ");
         out_address(clif, submit->bcl_start);
-        out(clif, "\n  ");
+        mesa_log_stream_printf(clif->stream, "\n  ");
         out_address(clif, submit->bcl_end);
-        out(clif, "\n  ");
+        mesa_log_stream_printf(clif->stream, "\n  ");
         out_address(clif, submit->qma);
-        out(clif, "\n  %d\n  ", submit->qms);
+        mesa_log_stream_printf(clif->stream, "\n  %d\n  ", submit->qms);
         out_address(clif, submit->qts);
-        out(clif, "\n");
-        out(clif, "@wait_bin_all_cores\n");
+        mesa_log_stream_printf(clif->stream, "\n");
+        mesa_log_stream_printf(clif->stream, "@wait_bin_all_cores\n");
 
-        out(clif, "@add_render 0\n  ");
+        mesa_log_stream_printf(clif->stream, "@add_render 0\n  ");
         out_address(clif, submit->rcl_start);
-        out(clif, "\n  ");
+        mesa_log_stream_printf(clif->stream, "\n  ");
         out_address(clif, submit->rcl_end);
-        out(clif, "\n  ");
+        mesa_log_stream_printf(clif->stream, "\n  ");
         out_address(clif, submit->qma);
-        out(clif, "\n");
-        out(clif, "@wait_render_all_cores\n");
+        mesa_log_stream_printf(clif->stream, "\n");
+        mesa_log_stream_printf(clif->stream, "@wait_render_all_cores\n");
 }
 
 void

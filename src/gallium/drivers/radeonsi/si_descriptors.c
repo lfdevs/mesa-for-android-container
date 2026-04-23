@@ -1819,8 +1819,8 @@ static void si_upload_bindless_descriptor(struct si_context *sctx, unsigned desc
    data = desc->list + desc_slot_offset;
    va = desc->gpu_address + desc_slot_offset * 4;
 
-   si_cp_write_data(sctx, desc->buffer, va - desc->buffer->gpu_address, num_dwords * 4, V_370_TC_L2,
-                    V_370_ME, data);
+   si_cp_write_data(sctx, desc->buffer, va - desc->buffer->gpu_address, num_dwords * 4, V_371_TC_L2,
+                    V_371_MICRO_ENGINE, data);
 }
 
 static void si_upload_bindless_descriptors(struct si_context *sctx)

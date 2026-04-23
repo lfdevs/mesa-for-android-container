@@ -1124,7 +1124,7 @@ ac_set_mutable_ds_surface_fields(const struct radeon_info *info, const struct ac
       log_num_samples = G_028040_NUM_SAMPLES(ds->db_z_info);
    }
 
-   bool z_allow_expclear = info->gfx_level <= GFX11_5 &&
+   bool z_allow_expclear = info->gfx_level <= GFX11_7 &&
                            G_028038_ALLOW_EXPCLEAR(ds->db_z_info);
 
    const uint32_t max_zplanes =

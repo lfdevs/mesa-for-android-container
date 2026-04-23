@@ -30,9 +30,10 @@
 void
 v3dX(job_emit_noop)(struct v3dv_job *job)
 {
-   v3dv_job_start_frame(job, 1, 1, 1, true, true, 1,
-                        V3D_INTERNAL_BPP_32, 4, false);
+   v3dv_job_start_frame(job, 1, 1, 1, true, 1, V3D_INTERNAL_BPP_32, 4, false);
    v3dX(job_emit_binning_flush)(job);
+   if (!v3dv_job_allocate_tile_state(job))
+      return;
 
    struct v3dv_cl *rcl = &job->rcl;
    v3dv_cl_ensure_space_with_branch(rcl, 200 + 1 * 256 *
@@ -76,7 +77,7 @@ v3dX(job_emit_noop)(struct v3dv_job *job)
    cl_emit(rcl, TILE_LIST_INITIAL_BLOCK_SIZE, init) {
       init.use_auto_chained_tile_lists = true;
       init.size_of_first_block_in_chained_tile_lists =
-         TILE_ALLOCATION_BLOCK_SIZE_64B;
+         V3D_TILE_ALLOC_INITIAL_BLOCK_SIZE_ENUM;
    }
 
    cl_emit(rcl, MULTICORE_RENDERING_TILE_LIST_SET_BASE, list) {

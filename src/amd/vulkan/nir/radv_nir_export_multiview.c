@@ -10,77 +10,53 @@
 #include "nir_builder.h"
 #include "radv_nir.h"
 
-static nir_variable *
-find_layer_out_var(nir_shader *nir)
+static void
+export_multiview(nir_builder *b)
 {
-   nir_variable *var = nir_find_variable_with_location(nir, nir_var_shader_out, VARYING_SLOT_LAYER);
-   if (var != NULL)
-      return var;
+   nir_io_semantics io_sem = {
+      .location = VARYING_SLOT_LAYER,
+      .num_slots = 1,
+      .no_varying = true,
+   };
 
-   var = nir_variable_create(nir, nir_var_shader_out, glsl_int_type(), "layer id");
-   var->data.location = VARYING_SLOT_LAYER;
-   var->data.interpolation = INTERP_MODE_NONE;
+   nir_store_output(b, nir_load_view_index(b), nir_imm_int(b, 0), .component = 0, .src_type = nir_type_int32,
+                    .io_semantics = io_sem);
 
-   return var;
+   b->shader->info.outputs_written |= VARYING_BIT_LAYER;
+}
+
+static bool
+export_multiview_per_emit(nir_builder *b, nir_intrinsic_instr *intr, void *unused)
+{
+   if (intr->intrinsic != nir_intrinsic_emit_vertex_with_counter)
+      return false;
+
+   b->cursor = nir_before_instr(&intr->instr);
+   export_multiview(b);
+   return true;
 }
 
 bool
 radv_nir_export_multiview(nir_shader *nir)
 {
-   nir_function_impl *impl = nir_shader_get_entrypoint(nir);
-   bool progress = false;
-
-   nir_builder b = nir_builder_create(impl);
-
    /* This pass is not suitable for mesh shaders, because it can't know the mapping between API mesh
     * shader invocations and output primitives. Needs to be handled in ac_nir_lower_ngg.
     */
    assert(nir->info.stage == MESA_SHADER_VERTEX || nir->info.stage == MESA_SHADER_TESS_EVAL ||
           nir->info.stage == MESA_SHADER_GEOMETRY);
 
-   /* Iterate in reverse order since there should be only one deref store to POS after
-    * lower_io_to_temporaries for vertex shaders and inject the layer there. For geometry shaders,
-    * the layer is injected right before every emit_vertex_with_counter.
-    */
-   nir_variable *layer = NULL;
-   nir_foreach_block_reverse (block, impl) {
-      nir_foreach_instr_reverse (instr, block) {
-         if (instr->type != nir_instr_type_intrinsic)
-            continue;
+   /* The shader shouldn't write gl_Layer itself. */
+   assert(!(nir->info.outputs_written & VARYING_BIT_LAYER));
 
-         if (nir->info.stage == MESA_SHADER_GEOMETRY) {
-            nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
-            if (intr->intrinsic != nir_intrinsic_emit_vertex_with_counter)
-               continue;
+   if (nir->info.stage == MESA_SHADER_GEOMETRY) {
+      /* For geometry shaders, the layer is injected right before every emit_vertex_with_counter. */
+      return nir_shader_intrinsics_pass(nir, export_multiview_per_emit, nir_metadata_control_flow, NULL);
+   } else {
+      nir_function_impl *impl = nir_shader_get_entrypoint(nir);
 
-            b.cursor = nir_before_instr(instr);
-         } else {
-            nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
-            if (intr->intrinsic != nir_intrinsic_store_deref)
-               continue;
+      nir_builder b = nir_builder_at(nir_after_impl(impl));
+      export_multiview(&b);
 
-            nir_variable *var = nir_intrinsic_get_var(intr, 0);
-            if (var->data.mode != nir_var_shader_out || var->data.location != VARYING_SLOT_POS)
-               continue;
-
-            b.cursor = nir_after_instr(instr);
-         }
-
-         if (!layer)
-            layer = find_layer_out_var(nir);
-
-         nir_store_var(&b, layer, nir_load_view_index(&b), 1);
-
-         /* Update outputs_written to reflect that the pass added a new output. */
-         nir->info.outputs_written |= VARYING_BIT_LAYER;
-
-         progress = true;
-         if (nir->info.stage == MESA_SHADER_VERTEX)
-            break;
-      }
-      if (nir->info.stage == MESA_SHADER_VERTEX && progress)
-         break;
+      return nir_progress(true, impl, nir_metadata_control_flow);
    }
-
-   return nir_progress(progress, impl, nir_metadata_control_flow);
 }

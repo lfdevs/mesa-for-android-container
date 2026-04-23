@@ -12,7 +12,6 @@
 #include "util/format/u_formats.h"
 #include "util/compiler.h"
 #include "pipe/p_screen.h"
-#include "postprocess/filters.h"
 
 #include "frontend/api.h"
 
@@ -73,10 +72,6 @@ struct hgl_context
 {
 	struct hgl_display* display;
 	struct st_context* st;
-
-	// Post processing
-	struct pp_queue_t* postProcess;
-	unsigned int postProcessEnable[PP_FILTERS];
 };
 
 // hgl framebuffer

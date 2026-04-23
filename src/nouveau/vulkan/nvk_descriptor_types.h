@@ -114,6 +114,7 @@ union nvk_buffer_descriptor {
    struct nvk_buffer_address addr;
    struct nvk_bindless_cbuf cbuf;
    struct nvk_bindless_cbuf_2 cbuf2;
+   uint32_t values[4];
 };
 
 static inline bool

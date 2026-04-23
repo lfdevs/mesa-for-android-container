@@ -6,7 +6,8 @@
  * Kernel interface layer for turnip running on virtio_gpu (aka virtgpu)
  */
 
-#include "tu_knl.h"
+#include "drm-uapi/msm_drm.h"
+#include "drm-uapi/virtgpu_drm.h"
 
 #include <errno.h>
 #include <fcntl.h>
@@ -14,24 +15,26 @@
 #include <sys/mman.h>
 #include <xf86drm.h>
 
-#include "vk_util.h"
-
-#include "drm-uapi/msm_drm.h"
-#include "drm-uapi/virtgpu_drm.h"
-#include "util/u_debug.h"
 #include "util/hash_table.h"
 #include "util/libsync.h"
+#include "util/u_debug.h"
 #include "util/u_process.h"
+#include "vk_util.h"
 
 #include "tu_cmd_buffer.h"
 #include "tu_cs.h"
 #include "tu_device.h"
 #include "tu_dynamic_rendering.h"
+#include "tu_knl.h"
 #include "tu_knl_drm.h"
 #include "tu_queue.h"
 
+/* NOLINTBEGIN */
+/* clang-format off */
 #include "vdrm.h"
 #include "msm_proto.h"
+/* clang-format on */
+/* NOLINTEND */
 
 struct tu_userspace_fence_cmd {
    uint32_t pkt[4];    /* first 4 dwords of packet */
@@ -1339,6 +1342,7 @@ tu_knl_drm_virtio_load(struct tu_instance *instance,
    device->has_set_iova   = true;
    device->has_lazy_bos   = true;
    device->has_preemption = has_preemption;
+   device->is_perf_cntr_selectable = true;
    device->uche_trap_base = uche_trap_base;
 
    device->ubwc_config.bank_swizzle_levels = bank_swizzle_levels;

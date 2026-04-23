@@ -151,7 +151,7 @@ csf_oom_handler_init(struct panfrost_context *ctx)
 
       /* Run the fragment job and wait */
       cs_select_endpoint_sb(&b, 3);
-      cs_run_fragment(&b, MALI_TILE_RENDER_ORDER_Z_ORDER, false);
+      cs_run_fragment(&b, false, MALI_TILE_RENDER_ORDER_Z_ORDER);
       cs_wait_slot(&b, 3);
 
       /* Increment counter */
@@ -877,7 +877,7 @@ GENX(csf_emit_fragment_job)(struct panfrost_batch *batch,
    }
 
    /* Run the fragment job and wait */
-   cs_run_fragment(b, MALI_TILE_RENDER_ORDER_Z_ORDER, false);
+   cs_run_fragment(b, false, MALI_TILE_RENDER_ORDER_Z_ORDER);
    cs_wait_slot(b, 2);
 
    /* Gather freed heap chunks and add them to the heap context free list

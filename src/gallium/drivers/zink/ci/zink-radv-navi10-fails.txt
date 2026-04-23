@@ -8,15 +8,3 @@ spec@egl_mesa_configless_context@basic,Fail
 # https://gitlab.freedesktop.org/mesa/mesa/-/issues/12495
 spec@arb_framebuffer_object@execution@msaa-alpha-to-coverage_alpha-to-one,Fail
 spec@arb_framebuffer_object@execution@msaa-alpha-to-coverage_alpha-to-one_write-z,Fail
-
-# New failures with ES CTS 3.2.13.0
-dEQP-GLES31.functional.copy_image.compressed.viewclass_eac_r11.r11_eac_signed_r11_eac.texture2d_to_texture2d,Fail
-dEQP-GLES31.functional.copy_image.compressed.viewclass_eac_r11.signed_r11_eac_r11_eac.texture2d_to_texture2d,Fail
-dEQP-GLES31.functional.copy_image.compressed.viewclass_eac_rg11.rg11_eac_signed_rg11_eac.texture2d_to_texture2d,Fail
-dEQP-GLES31.functional.copy_image.compressed.viewclass_eac_rg11.signed_rg11_eac_rg11_eac.texture2d_to_texture2d,Fail
-dEQP-GLES31.functional.copy_image.compressed.viewclass_etc2_eac_rgba.rgba8_etc2_eac_srgb8_alpha8_etc2_eac.texture2d_to_texture2d,Fail
-dEQP-GLES31.functional.copy_image.compressed.viewclass_etc2_eac_rgba.srgb8_alpha8_etc2_eac_rgba8_etc2_eac.texture2d_to_texture2d,Fail
-dEQP-GLES31.functional.copy_image.compressed.viewclass_etc2_rgb.rgb8_etc2_srgb8_etc2.texture2d_to_texture2d,Fail
-dEQP-GLES31.functional.copy_image.compressed.viewclass_etc2_rgb.srgb8_etc2_rgb8_etc2.texture2d_to_texture2d,Fail
-dEQP-GLES31.functional.copy_image.compressed.viewclass_etc2_rgba.rgb8_punchthrough_alpha1_etc2_srgb8_punchthrough_alpha1_etc2.texture2d_to_texture2d,Fail
-dEQP-GLES31.functional.copy_image.compressed.viewclass_etc2_rgba.srgb8_punchthrough_alpha1_etc2_rgb8_punchthrough_alpha1_etc2.texture2d_to_texture2d,Fail

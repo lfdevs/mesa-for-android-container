@@ -32,16 +32,19 @@
 static void
 vc4_dump_program(struct vc4_compile *c)
 {
-        fprintf(stderr, "%s prog %d/%d QPU:\n",
-                qir_get_stage_name(c->stage),
-                c->program_id, c->variant_id);
+        struct log_stream *stream = mesa_log_streami();
+
+        mesa_log_stream_printf(stream, "%s prog %d/%d QPU:\n",
+                               qir_get_stage_name(c->stage),
+                               c->program_id, c->variant_id);
 
         for (int i = 0; i < c->qpu_inst_count; i++) {
-                fprintf(stderr, "0x%016"PRIx64" ", c->qpu_insts[i]);
-                vc4_qpu_disasm(&c->qpu_insts[i], 1);
-                fprintf(stderr, "\n");
+                mesa_log_stream_printf(stream, "0x%016"PRIx64" ", c->qpu_insts[i]);
+                vc4_qpu_disasm(stream, &c->qpu_insts[i], 1);
+                mesa_log_stream_printf(stream, "\n");
         }
-        fprintf(stderr, "\n");
+        mesa_log_stream_printf(stream, "\n");
+        mesa_log_stream_destroy(stream);
 }
 
 static void
@@ -246,9 +249,8 @@ vc4_generate_code_block(struct vc4_compile *c,
 
         qir_for_each_inst(qinst, block) {
 #if 0
-                fprintf(stderr, "translating qinst to qpu: ");
-                qir_dump_inst(qinst);
-                fprintf(stderr, "\n");
+                char *dump_inst = qir_dump_inst(qinst);
+                mesa_logi(, "Translating qinst to qpu: %s", dump_inst);
 #endif
 
                 static const struct {

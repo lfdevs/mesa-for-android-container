@@ -5350,8 +5350,15 @@
       <opt>b1111</opt>
       <opt>b2222</opt>
       <opt>b3333</opt>
+      <!--
+        The docs claim that b0101 and b2323 are also supported but they don't
+        appear to work.  Instead, they seem to be b0011 and b2233 swizzles in
+        practice.  Instead of emitting shaders that violate the HW docs, we
+        simply don't claim support for these swizzles.  These swizzles aren't
+        that useful anyway.
       <opt>b0101</opt>
       <opt>b2323</opt>
+      -->
     </mod>
     <encoding mask="0xffec0" exact="0xbc400">
       <and>
@@ -5376,6 +5383,7 @@
         <eq left="lanes1" right="#b3333"/>
       </derived>
     </encoding>
+    <!--
     <encoding mask="0xffcc0" exact="0xbe840">
       <and>
         <eq left="lanes0" right="#b0123"/>
@@ -5389,6 +5397,7 @@
         <eq left="lanes1" right="#b2323"/>
       </derived>
     </encoding>
+    -->
   </ins>
 
   <ins name="IADD.v4u8" unit="add">
@@ -5404,8 +5413,15 @@
       <opt>b1111</opt>
       <opt>b2222</opt>
       <opt>b3333</opt>
+      <!--
+        The docs claim that b0101 and b2323 are also supported but they don't
+        appear to work.  Instead, they seem to be b0011 and b2233 swizzles in
+        practice.  Instead of emitting shaders that violate the HW docs, we
+        simply don't claim support for these swizzles.  These swizzles aren't
+        that useful anyway.
       <opt>b0101</opt>
       <opt>b2323</opt>
+      -->
     </mod>
     <encoding mask="0xffe40" exact="0xbc400">
       <and>
@@ -5438,6 +5454,7 @@
         <eq left="lanes1" right="#b3333"/>
       </derived>
     </encoding>
+    <!--
     <encoding mask="0xffc40" exact="0xbe840">
       <and>
         <eq left="lanes0" right="#b0123"/>
@@ -5455,6 +5472,7 @@
         <eq left="lanes1" right="#b2323"/>
       </derived>
     </encoding>
+    -->
   </ins>
 
   <ins name="ICMP.i32" mask="0xffb80" exact="0x7b300" unit="add">
@@ -6075,8 +6093,15 @@
       <opt>b1111</opt>
       <opt>b2222</opt>
       <opt>b3333</opt>
+      <!--
+        The docs claim that b0101 and b2323 are also supported but they don't
+        appear to work.  Instead, they seem to be b0011 and b2233 swizzles in
+        practice.  Instead of emitting shaders that violate the HW docs, we
+        simply don't claim support for these swizzles.  These swizzles aren't
+        that useful anyway.
       <opt>b0101</opt>
       <opt>b2323</opt>
+      -->
     </mod>
     <encoding mask="0xffec0" exact="0xbd400">
       <and>
@@ -6101,6 +6126,7 @@
         <eq left="lanes1" right="#b3333"/>
       </derived>
     </encoding>
+    <!--
     <encoding mask="0xffcc0" exact="0xbf840">
       <and>
         <eq left="lanes0" right="#b0123"/>
@@ -6114,6 +6140,7 @@
         <eq left="lanes1" right="#b2323"/>
       </derived>
     </encoding>
+    -->
   </ins>
 
   <ins name="ISUB.v4u8" unit="add">
@@ -6129,8 +6156,15 @@
       <opt>b1111</opt>
       <opt>b2222</opt>
       <opt>b3333</opt>
+      <!--
+        The docs claim that b0101 and b2323 are also supported but they don't
+        appear to work.  Instead, they seem to be b0011 and b2233 swizzles in
+        practice.  Instead of emitting shaders that violate the HW docs, we
+        simply don't claim support for these swizzles.  These swizzles aren't
+        that useful anyway.
       <opt>b0101</opt>
       <opt>b2323</opt>
+      -->
     </mod>
     <encoding mask="0xffe40" exact="0xbd400">
       <and>
@@ -6163,6 +6197,7 @@
         <eq left="lanes1" right="#b3333"/>
       </derived>
     </encoding>
+    <!--
     <encoding mask="0xffc40" exact="0xbf840">
       <and>
         <eq left="lanes0" right="#b0123"/>
@@ -6180,6 +6215,7 @@
         <eq left="lanes1" right="#b2323"/>
       </derived>
     </encoding>
+    -->
   </ins>
 
   <ins name="JUMP" mask="0xffe3f" exact="0x6fe34" last="true" dests="0" unit="add">

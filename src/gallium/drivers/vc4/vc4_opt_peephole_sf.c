@@ -32,28 +32,6 @@
 
 static bool debug;
 
-static void
-dump_from(struct vc4_compile *c, struct qinst *inst, const char *type)
-{
-        if (!debug)
-                return;
-
-        fprintf(stderr, "optimizing %s: ", type);
-        qir_dump_inst(c, inst);
-        fprintf(stderr, "\n");
-}
-
-static void
-dump_to(struct vc4_compile *c, struct qinst *inst)
-{
-        if (!debug)
-                return;
-
-        fprintf(stderr, "to: ");
-        qir_dump_inst(c, inst);
-        fprintf(stderr, "\n");
-}
-
 static bool
 inst_srcs_updated(struct qinst *inst, struct qinst *writer)
 {
@@ -125,18 +103,18 @@ qir_opt_peephole_sf_block(struct vc4_compile *c, struct qblock *block)
                         if (!sf_live) {
                                 /* Our instruction's SF isn't read, so drop it.
                                  */
-                                dump_from(c, inst, "dead SF");
-                                inst->sf = false;
-                                dump_to(c, inst);
+                                LOG_INST_OPT("Optimizing dead SF", c, inst) {
+                                        inst->sf = false;
+                                }
                                 progress = true;
                         } else if (last_sf &&
                                    inst_result_equals(last_sf, inst)) {
                                 /* The last_sf sets up same value as inst, so
                                  * just drop the later one.
                                  */
-                                dump_from(c, last_sf, "repeated SF");
-                                last_sf->sf = false;
-                                dump_to(c, last_sf);
+                                LOG_INST_OPT("Optimizing repeated SF", c, last_sf) {
+                                        last_sf->sf = false;
+                                }
                                 progress = true;
                                 last_sf = inst;
                         } else {

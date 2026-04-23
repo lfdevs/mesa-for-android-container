@@ -100,6 +100,9 @@ is_vmem_or_lds_load(nir_def *def, unsigned depth, unsigned begin, unsigned end)
       case nir_intrinsic_bindless_image_load:
       case nir_intrinsic_bindless_image_sparse_load:
       case nir_intrinsic_bindless_image_fragment_mask_load_amd:
+      case nir_intrinsic_image_heap_load:
+      case nir_intrinsic_image_heap_sparse_load:
+      case nir_intrinsic_image_heap_fragment_mask_load_amd:
       case nir_intrinsic_load_buffer_amd:
       case nir_intrinsic_load_typed_buffer_amd:
       case nir_intrinsic_ssbo_atomic:
@@ -112,6 +115,8 @@ is_vmem_or_lds_load(nir_def *def, unsigned depth, unsigned begin, unsigned end)
       case nir_intrinsic_shared_atomic_swap:
       case nir_intrinsic_bindless_image_atomic:
       case nir_intrinsic_bindless_image_atomic_swap:
+      case nir_intrinsic_image_heap_atomic:
+      case nir_intrinsic_image_heap_atomic_swap:
          return is_vmem_lds;
       default:
          return is_other;

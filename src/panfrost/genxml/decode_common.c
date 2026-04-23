@@ -352,7 +352,7 @@ pandecode_dump_mappings(struct pandecode_context *ctx)
 
 void
 pandecode_abort_on_fault(struct pandecode_context *ctx, uint64_t jc_gpu_va,
-                         unsigned gpu_id)
+                         uint64_t gpu_id)
 {
    simple_mtx_lock(&ctx->lock);
 
@@ -380,7 +380,7 @@ pandecode_abort_on_fault(struct pandecode_context *ctx, uint64_t jc_gpu_va,
 }
 
 void
-pandecode_jc(struct pandecode_context *ctx, uint64_t jc_gpu_va, unsigned gpu_id)
+pandecode_jc(struct pandecode_context *ctx, uint64_t jc_gpu_va, uint64_t gpu_id)
 {
    simple_mtx_lock(&ctx->lock);
 
@@ -409,7 +409,7 @@ pandecode_jc(struct pandecode_context *ctx, uint64_t jc_gpu_va, unsigned gpu_id)
 
 void
 pandecode_interpret_cs(struct pandecode_context *ctx, uint64_t queue_gpu_va,
-                       uint32_t size, unsigned gpu_id, uint32_t *regs)
+                       uint32_t size, uint64_t gpu_id, uint32_t *regs)
 {
    simple_mtx_lock(&ctx->lock);
 
@@ -432,19 +432,19 @@ pandecode_interpret_cs(struct pandecode_context *ctx, uint64_t queue_gpu_va,
 
 void
 pandecode_cs_binary(struct pandecode_context *ctx, uint64_t bin_gpu_va,
-                   uint32_t size, unsigned gpu_id)
+                    uint32_t size, uint64_t gpu_id)
 {
    simple_mtx_lock(&ctx->lock);
 
    switch (pan_arch(gpu_id)) {
    case 10:
-      pandecode_cs_binary_v10(ctx, bin_gpu_va, size, gpu_id);
+      pandecode_cs_binary_v10(ctx, bin_gpu_va, size);
       break;
    case 12:
-      pandecode_cs_binary_v12(ctx, bin_gpu_va, size, gpu_id);
+      pandecode_cs_binary_v12(ctx, bin_gpu_va, size);
       break;
    case 13:
-      pandecode_cs_binary_v13(ctx, bin_gpu_va, size, gpu_id);
+      pandecode_cs_binary_v13(ctx, bin_gpu_va, size);
       break;
    default:
       UNREACHABLE("Unsupported architecture");
@@ -455,7 +455,7 @@ pandecode_cs_binary(struct pandecode_context *ctx, uint64_t bin_gpu_va,
 
 void
 pandecode_cs_trace(struct pandecode_context *ctx, uint64_t trace_gpu_va,
-                   uint32_t size, unsigned gpu_id)
+                   uint32_t size, uint64_t gpu_id)
 {
    simple_mtx_lock(&ctx->lock);
 
@@ -478,7 +478,7 @@ pandecode_cs_trace(struct pandecode_context *ctx, uint64_t trace_gpu_va,
 
 void
 pandecode_shader_disassemble(struct pandecode_context *ctx, uint64_t shader_ptr,
-                             unsigned gpu_id)
+                             uint64_t gpu_id)
 {
    uint8_t *PANDECODE_PTR_VAR(ctx, code, shader_ptr);
 
@@ -493,7 +493,7 @@ pandecode_shader_disassemble(struct pandecode_context *ctx, uint64_t shader_ptr,
    pandecode_log_cont(ctx, "\nShader %p (GPU VA %" PRIx64 ") sz %" PRId64 "\n",
                       code, shader_ptr, sz);
 
-   bool verbose = pan_arch(gpu_id) >= 6 && pan_arch(gpu_id) < 9;
+   bool verbose = pan_arch(gpu_id) >= 6;
    pan_disassemble(ctx->dump_stream, code, sz, gpu_id, verbose);
 
    pandecode_log_cont(ctx, "\n\n");

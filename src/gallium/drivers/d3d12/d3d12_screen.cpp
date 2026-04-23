@@ -337,7 +337,6 @@ d3d12_init_screen_caps(struct d3d12_screen *screen)
    caps->seamless_cube_map = true;
    caps->texture_query_lod = true;
    caps->vs_instanceid = true;
-   caps->tgsi_tex_txf_lz = true;
    caps->occlusion_query = true;
    caps->viewport_transform_lowered = true;
    caps->psiz_clamped = true;

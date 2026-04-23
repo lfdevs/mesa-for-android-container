@@ -670,6 +670,7 @@ ac_prepare_compute_blit(const struct ac_cs_blit_options *options,
 
          case GFX11:
          case GFX11_5:
+         case GFX11_7:
             /* Verified on Navi31. */
             if (is_resolve) {
                if (!((blit->dst.surf->bpe <= 2 && src_samples == 2) ||

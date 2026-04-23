@@ -195,6 +195,7 @@ brw_compiler_create(void *mem_ctx, const struct intel_device_info *devinfo)
          nir_divergence_single_prim_per_subgroup;
 
    for (int i = 0; i < MESA_ALL_SHADER_STAGES; i++) {
+      bool jay = intel_use_jay(compiler->devinfo, i);
       struct nir_shader_compiler_options *stage_options =
          &compiler->nir_options[i];
       *stage_options = compiler->nir_options[0];
@@ -202,6 +203,8 @@ brw_compiler_create(void *mem_ctx, const struct intel_device_info *devinfo)
       stage_options->unify_interfaces = i < MESA_SHADER_FRAGMENT;
 
       stage_options->force_indirect_unrolling |= brw_nir_no_indirect_mask(i);
+      stage_options->has_find_msb_rev = jay;
+      stage_options->lower_ifind_msb = jay;
    }
 
    /* Build a list of storage format compatible in component bit size &
@@ -270,6 +273,11 @@ brw_get_compiler_config_value(const struct brw_compiler *compiler)
 
    u_foreach_bit64(bit, mask)
       insert_u64_bit(&config, (intel_simd & (1ULL << bit)) != 0);
+
+   for (unsigned i = 0; i < MESA_VULKAN_SHADER_STAGES; i++) {
+      insert_u64_bit(&config, intel_use_jay(compiler->devinfo, i) != 0);
+      bits++;
+   }
 
    mask = 3;
    bits += util_bitcount64(mask);

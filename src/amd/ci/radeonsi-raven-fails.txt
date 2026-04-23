@@ -46,7 +46,6 @@ api@clgetdeviceinfo,Fail
 api@clgetextensionfunctionaddressforplatform,Fail
 api@clgetkernelarginfo,Fail
 api@cllinkprogram,Fail
-custom@r600 create release buffer bug,Fail
 program@build@vector-data-types,Fail
 program@execute@builtin@builtin-float-nextafter-1.0.generated,Fail
 program@execute@builtin@builtin-float-nextafter-1.0.generated@nextafter float1,Fail

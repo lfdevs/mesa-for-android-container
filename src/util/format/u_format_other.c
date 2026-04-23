@@ -352,3 +352,98 @@ util_format_r8g8bx_snorm_fetch_rgba(void *restrict in_dst, const uint8_t *restri
    dst[2] = r8g8bx_derive(r, g) * (1.0f/0xff); /* b */
    dst[3] = 1.0f; /* a */
 }
+
+/*
+ * PIPE_FORMAT_X6R10X6G10X6B10X6A10_UNORM
+ *
+ * 4 x 16-bit words, each with a 10-bit unorm value in the upper bits [15:6]
+ * and 6 padding bits in the lower bits [5:0].
+ */
+
+void
+util_format_x6r10x6g10x6b10x6a10_unorm_unpack_rgba_float(void *restrict dst_row,
+                                        const uint8_t *restrict src_row,
+                                        unsigned width)
+{
+   float *dst = dst_row;
+   const uint16_t *src = (const uint16_t *)src_row;
+   for (unsigned x = 0; x < width; x += 1) {
+      dst[0] = (src[0] >> 6) * (1.0f / 0x3ff); /* r */
+      dst[1] = (src[1] >> 6) * (1.0f / 0x3ff); /* g */
+      dst[2] = (src[2] >> 6) * (1.0f / 0x3ff); /* b */
+      dst[3] = (src[3] >> 6) * (1.0f / 0x3ff); /* a */
+      src += 4;
+      dst += 4;
+   }
+}
+
+void
+util_format_x6r10x6g10x6b10x6a10_unorm_pack_rgba_float(uint8_t *restrict dst_row, unsigned dst_stride,
+                                      const float *restrict src_row, unsigned src_stride,
+                                      unsigned width, unsigned height)
+{
+   for (unsigned y = 0; y < height; y += 1) {
+      const float *src = src_row;
+      uint16_t *dst = (uint16_t *)dst_row;
+      for (unsigned x = 0; x < width; x += 1) {
+         dst[0] = (uint16_t)(CLAMP(src[0], 0.0f, 1.0f) * 0x3ff + 0.5f) << 6; /* r */
+         dst[1] = (uint16_t)(CLAMP(src[1], 0.0f, 1.0f) * 0x3ff + 0.5f) << 6; /* g */
+         dst[2] = (uint16_t)(CLAMP(src[2], 0.0f, 1.0f) * 0x3ff + 0.5f) << 6; /* b */
+         dst[3] = (uint16_t)(CLAMP(src[3], 0.0f, 1.0f) * 0x3ff + 0.5f) << 6; /* a */
+         src += 4;
+         dst += 4;
+      }
+      dst_row += dst_stride;
+      src_row += src_stride/sizeof(*src_row);
+   }
+}
+
+void
+util_format_x6r10x6g10x6b10x6a10_unorm_fetch_rgba(void *restrict in_dst, const uint8_t *restrict src,
+                                       UNUSED unsigned i, UNUSED unsigned j)
+{
+   float *dst = in_dst;
+   const uint16_t *s = (const uint16_t *)src;
+   dst[0] = (s[0] >> 6) * (1.0f / 0x3ff); /* r */
+   dst[1] = (s[1] >> 6) * (1.0f / 0x3ff); /* g */
+   dst[2] = (s[2] >> 6) * (1.0f / 0x3ff); /* b */
+   dst[3] = (s[3] >> 6) * (1.0f / 0x3ff); /* a */
+}
+
+void
+util_format_x6r10x6g10x6b10x6a10_unorm_unpack_rgba_8unorm(uint8_t *restrict dst_row,
+                                         const uint8_t *restrict src_row,
+                                         unsigned width)
+{
+   uint8_t *dst = dst_row;
+   const uint16_t *src = (const uint16_t *)src_row;
+   for (unsigned x = 0; x < width; x += 1) {
+      dst[0] = (uint8_t)((src[0] >> 6) * 0xff / 0x3ff); /* r */
+      dst[1] = (uint8_t)((src[1] >> 6) * 0xff / 0x3ff); /* g */
+      dst[2] = (uint8_t)((src[2] >> 6) * 0xff / 0x3ff); /* b */
+      dst[3] = (uint8_t)((src[3] >> 6) * 0xff / 0x3ff); /* a */
+      src += 4;
+      dst += 4;
+   }
+}
+
+void
+util_format_x6r10x6g10x6b10x6a10_unorm_pack_rgba_8unorm(uint8_t *restrict dst_row, unsigned dst_stride,
+                                       const uint8_t *restrict src_row, unsigned src_stride,
+                                       unsigned width, unsigned height)
+{
+   for (unsigned y = 0; y < height; y += 1) {
+      const uint8_t *src = src_row;
+      uint16_t *dst = (uint16_t *)dst_row;
+      for (unsigned x = 0; x < width; x += 1) {
+         dst[0] = (uint16_t)(src[0] * 0x3ff / 0xff) << 6;
+         dst[1] = (uint16_t)(src[1] * 0x3ff / 0xff) << 6;
+         dst[2] = (uint16_t)(src[2] * 0x3ff / 0xff) << 6;
+         dst[3] = (uint16_t)(src[3] * 0x3ff / 0xff) << 6;
+         src += 4;
+         dst += 4;
+      }
+      dst_row += dst_stride;
+      src_row += src_stride/sizeof(*src_row);
+   }
+}

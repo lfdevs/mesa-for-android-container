@@ -11,9 +11,10 @@
 #define TU_SHADER_H
 
 #include "tu_common.h"
+
 #include "tu_cs.h"
-#include "tu_suballoc.h"
 #include "tu_descriptor_set.h"
+#include "tu_suballoc.h"
 
 struct tu_inline_ubo
 {
@@ -146,7 +147,8 @@ void
 tu_destroy_softfloat(struct tu_device *device);
 
 bool
-tu_nir_lower_multiview(nir_shader *nir, uint32_t mask, struct tu_device *dev);
+tu_nir_lower_multiview(nir_shader *nir, uint32_t mask, struct tu_device *dev,
+                       bool last_stage);
 
 bool
 tu_nir_lower_ray_queries(nir_shader *nir);
@@ -202,6 +204,7 @@ void
 tu_lower_nir(struct tu_device *dev,
              nir_shader *nir,
              const struct tu_shader_key *key,
+             const struct ir3_shader_key *ir3_key,
              struct tu_shader_info *info);
 
 VkResult

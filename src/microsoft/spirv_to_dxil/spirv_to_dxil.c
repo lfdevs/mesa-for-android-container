@@ -71,10 +71,20 @@ spirv_to_dxil(const uint32_t *words, size_t word_count,
    // have been already converted to zero-base.
    nir_options.lower_base_vertex = conf->first_vertex_and_base_instance_mode != DXIL_SPIRV_SYSVAL_TYPE_ZERO;
 
-   nir_shader *nir = spirv_to_nir(
-      words, word_count, (struct nir_spirv_specialization *)specializations,
-      num_specializations, (mesa_shader_stage)stage, entry_point_name,
-      spirv_opts, &nir_options);
+   struct nir_spirv_specialization *spec = NULL;
+   if (specializations && num_specializations > 0) {
+      spec = vtn_alloc_specialization(num_specializations);
+
+      for (unsigned i = 0; i < num_specializations; i++) {
+         vtn_add_specialization_entry(spec, i, specializations[i].id,
+                                      sizeof(specializations[i].value),
+                                      &specializations[i].value, false);
+      }
+   }
+   nir_shader *nir = spirv_to_nir(words, word_count, spec,
+                                  (mesa_shader_stage)stage, entry_point_name,
+                                  spirv_opts, &nir_options);
+   vtn_free_specialization(spec);
    if (!nir) {
       glsl_type_singleton_decref();
       return false;

@@ -52,7 +52,8 @@ struct spill_preserved_ctx {
             DIV_ROUND_UP(program_->config->scratch_bytes_per_wave, program_->wave_size)),
          next_preserved_lane(0)
    {
-      program->callee_abi.preservedRegisters(abi_preserved_regs);
+      if (program->is_callee)
+         program->callee_abi.preservedRegisters(abi_preserved_regs);
       dom_info.resize(program->blocks.size(), {-1u, -1u});
    }
 };

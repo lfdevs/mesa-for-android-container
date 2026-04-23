@@ -671,7 +671,7 @@ radv_begin_pipeline_stat_query(struct radv_cmd_buffer *cmd_buffer, struct radv_q
          radeon_check_space(device->ws, ace_cs->b, 11);
 
          gfx10_copy_shader_query_ace(cmd_buffer, RADV_SHADER_QUERY_TS_INVOCATION_OFFSET, va + task_invoc_offset);
-         ac_emit_cp_write_data_imm(ace_cs->b, V_370_ME, va + task_invoc_offset + 4, 0x80000000);
+         ac_emit_cp_write_data_imm(ace_cs->b, V_371_MICRO_ENGINE, va + task_invoc_offset + 4, 0x80000000);
 
          /* Record that the command buffer needs GDS. */
          cmd_buffer->gds_needed = true;
@@ -745,7 +745,7 @@ radv_end_pipeline_stat_query(struct radv_cmd_buffer *cmd_buffer, struct radv_que
          radeon_check_space(device->ws, ace_cs->b, 11);
 
          gfx10_copy_shader_query_ace(cmd_buffer, RADV_SHADER_QUERY_TS_INVOCATION_OFFSET, va + task_invoc_offset);
-         ac_emit_cp_write_data_imm(ace_cs->b, V_370_ME, va + task_invoc_offset + 4, 0x80000000);
+         ac_emit_cp_write_data_imm(ace_cs->b, V_371_MICRO_ENGINE, va + task_invoc_offset + 4, 0x80000000);
 
          cmd_buffer->state.active_pipeline_ace_queries--;
 
@@ -970,11 +970,11 @@ radv_begin_tfb_query(struct radv_cmd_buffer *cmd_buffer, uint64_t va, uint32_t i
    if (pdev->use_ngg_streamout) {
       /* generated prim counter */
       gfx10_copy_shader_query_gfx(cmd_buffer, false, RADV_SHADER_QUERY_PRIM_GEN_OFFSET(index), va);
-      ac_emit_cp_write_data_imm(cs->b, V_370_ME, va + 4, 0x80000000);
+      ac_emit_cp_write_data_imm(cs->b, V_371_MICRO_ENGINE, va + 4, 0x80000000);
 
       /* written prim counter */
       gfx10_copy_shader_query_gfx(cmd_buffer, false, RADV_SHADER_QUERY_PRIM_XFB_OFFSET(index), va + 8);
-      ac_emit_cp_write_data_imm(cs->b, V_370_ME, va + 12, 0x80000000);
+      ac_emit_cp_write_data_imm(cs->b, V_371_MICRO_ENGINE, va + 12, 0x80000000);
 
       if (!cmd_buffer->state.active_emulated_prims_xfb_queries)
          cmd_buffer->state.dirty |= RADV_CMD_DIRTY_SHADER_QUERY;
@@ -999,11 +999,11 @@ radv_end_tfb_query(struct radv_cmd_buffer *cmd_buffer, uint64_t va, uint32_t ind
    if (pdev->use_ngg_streamout) {
       /* generated prim counter */
       gfx10_copy_shader_query_gfx(cmd_buffer, false, RADV_SHADER_QUERY_PRIM_GEN_OFFSET(index), va + 16);
-      ac_emit_cp_write_data_imm(cs->b, V_370_ME, va + 20, 0x80000000);
+      ac_emit_cp_write_data_imm(cs->b, V_371_MICRO_ENGINE, va + 20, 0x80000000);
 
       /* written prim counter */
       gfx10_copy_shader_query_gfx(cmd_buffer, false, RADV_SHADER_QUERY_PRIM_XFB_OFFSET(index), va + 24);
-      ac_emit_cp_write_data_imm(cs->b, V_370_ME, va + 28, 0x80000000);
+      ac_emit_cp_write_data_imm(cs->b, V_371_MICRO_ENGINE, va + 28, 0x80000000);
 
       cmd_buffer->state.active_emulated_prims_xfb_queries--;
 
@@ -1339,7 +1339,7 @@ radv_begin_pg_query(struct radv_cmd_buffer *cmd_buffer, struct radv_query_pool *
    if (pdev->info.gfx_level >= GFX11) {
       /* On GFX11+, primitives generated query are always emulated. */
       gfx10_copy_shader_query_gfx(cmd_buffer, false, RADV_SHADER_QUERY_PRIM_GEN_OFFSET(index), va);
-      ac_emit_cp_write_data_imm(cs->b, V_370_ME, va + 4, 0x80000000);
+      ac_emit_cp_write_data_imm(cs->b, V_371_MICRO_ENGINE, va + 4, 0x80000000);
 
       if (!cmd_buffer->state.active_emulated_prims_gen_queries)
          cmd_buffer->state.dirty |= RADV_CMD_DIRTY_SHADER_QUERY;
@@ -1363,7 +1363,7 @@ radv_begin_pg_query(struct radv_cmd_buffer *cmd_buffer, struct radv_query_pool *
       if (pool->uses_emulated_queries) {
          /* generated prim counter */
          gfx10_copy_shader_query_gfx(cmd_buffer, true, RADV_SHADER_QUERY_PRIM_GEN_OFFSET(index), va + 32);
-         ac_emit_cp_write_data_imm(cs->b, V_370_ME, va + 36, 0x80000000);
+         ac_emit_cp_write_data_imm(cs->b, V_371_MICRO_ENGINE, va + 36, 0x80000000);
 
          /* Record that the command buffer needs GDS. */
          cmd_buffer->gds_needed = true;
@@ -1388,7 +1388,7 @@ radv_end_pg_query(struct radv_cmd_buffer *cmd_buffer, struct radv_query_pool *po
    if (pdev->info.gfx_level >= GFX11) {
       /* On GFX11+, primitives generated query are always emulated. */
       gfx10_copy_shader_query_gfx(cmd_buffer, false, RADV_SHADER_QUERY_PRIM_GEN_OFFSET(index), va + 16);
-      ac_emit_cp_write_data_imm(cs->b, V_370_ME, va + 20, 0x80000000);
+      ac_emit_cp_write_data_imm(cs->b, V_371_MICRO_ENGINE, va + 20, 0x80000000);
 
       cmd_buffer->state.active_emulated_prims_gen_queries--;
 
@@ -1412,7 +1412,7 @@ radv_end_pg_query(struct radv_cmd_buffer *cmd_buffer, struct radv_query_pool *po
       if (pool->uses_emulated_queries) {
          /* generated prim counter */
          gfx10_copy_shader_query_gfx(cmd_buffer, true, RADV_SHADER_QUERY_PRIM_GEN_OFFSET(index), va + 40);
-         ac_emit_cp_write_data_imm(cs->b, V_370_ME, va + 44, 0x80000000);
+         ac_emit_cp_write_data_imm(cs->b, V_371_MICRO_ENGINE, va + 44, 0x80000000);
 
          cmd_buffer->state.active_emulated_prims_gen_queries--;
 
@@ -1590,7 +1590,7 @@ radv_begin_ms_prim_query(struct radv_cmd_buffer *cmd_buffer, uint64_t va)
       radv_emit_event_write(&pdev->info, cs, RADV_EVENT_WRITE_PIPELINE_STAT, va);
    } else {
       gfx10_copy_shader_query_gfx(cmd_buffer, true, RADV_SHADER_QUERY_MS_PRIM_GEN_OFFSET, va);
-      ac_emit_cp_write_data_imm(cs->b, V_370_ME, va + 4, 0x80000000);
+      ac_emit_cp_write_data_imm(cs->b, V_371_MICRO_ENGINE, va + 4, 0x80000000);
 
       /* Record that the command buffer needs GDS. */
       cmd_buffer->gds_needed = true;
@@ -1627,7 +1627,7 @@ radv_end_ms_prim_query(struct radv_cmd_buffer *cmd_buffer, uint64_t va, uint64_t
                                    cmd_buffer->gfx9_eop_bug_va);
    } else {
       gfx10_copy_shader_query_gfx(cmd_buffer, true, RADV_SHADER_QUERY_MS_PRIM_GEN_OFFSET, va + 8);
-      ac_emit_cp_write_data_imm(cs->b, V_370_ME, va + 12, 0x80000000);
+      ac_emit_cp_write_data_imm(cs->b, V_371_MICRO_ENGINE, va + 12, 0x80000000);
 
       cmd_buffer->state.active_emulated_prims_gen_queries--;
 

@@ -288,6 +288,16 @@ static bool lower_resinfo(nir_builder *b, nir_instr *instr, void *data)
                                                   .image_array = is_array);
          break;
 
+      case nir_intrinsic_image_heap_size:
+      case nir_intrinsic_image_heap_samples:
+         dim = nir_intrinsic_image_dim(intr);
+         is_array = nir_intrinsic_image_array(intr);
+         desc = nir_image_heap_descriptor_amd(b, dim == GLSL_SAMPLER_DIM_BUF ? 4 : 8,
+                                              32, intr->src[0].ssa,
+                                              .image_dim = dim,
+                                              .image_array = is_array);
+         break;
+
       default:
          return false;
       }
@@ -296,12 +306,14 @@ static bool lower_resinfo(nir_builder *b, nir_instr *instr, void *data)
       case nir_intrinsic_image_size:
       case nir_intrinsic_image_deref_size:
       case nir_intrinsic_bindless_image_size:
+      case nir_intrinsic_image_heap_size:
          result = lower_query_size(b, desc, NULL, dim, is_array, gfx_level);
          break;
 
       case nir_intrinsic_image_samples:
       case nir_intrinsic_image_deref_samples:
       case nir_intrinsic_bindless_image_samples:
+      case nir_intrinsic_image_heap_samples:
          result = query_samples(b, desc, dim, gfx_level);
          break;
 
@@ -325,6 +337,7 @@ static bool lower_resinfo(nir_builder *b, nir_instr *instr, void *data)
             switch (tex->src[i].src_type) {
             case nir_tex_src_texture_deref:
             case nir_tex_src_texture_handle:
+            case nir_tex_src_texture_heap_offset:
                new_tex = nir_tex_instr_create(b->shader, 1);
                new_tex->op = nir_texop_descriptor_amd;
                new_tex->sampler_dim = tex->sampler_dim;

@@ -108,10 +108,11 @@ class HandleMapCodegen(VulkanTypeIterator):
         accessLhs = self.exprAccessor(vulkanType)
         lenAccess = self.lenAccessor(vulkanType)
 
-        self.cgen.stmt("%s->mapHandles_%s(%s%s, %s)" % \
-            (self.handlemapVarName, vulkanType.typeName,
-             self.makeCastExpr(vulkanType.getForAddressAccess().getForNonConstAccess()),
-             accessLhs, lenAccess))
+        if lenAccess is not None:
+            self.cgen.stmt("%s->mapHandles_%s(%s%s, %s)" % \
+                (self.handlemapVarName, vulkanType.typeName,
+                 self.makeCastExpr(vulkanType.getForAddressAccess().getForNonConstAccess()),
+                 accessLhs, lenAccess))
 
     def onStructExtension(self, vulkanType):
         access = self.exprAccessor(vulkanType)

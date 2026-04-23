@@ -1,7 +1,7 @@
 /*
 ************************************************************************************************************************
 *
-*  Copyright (C) 2022-2024 Advanced Micro Devices, Inc. All rights reserved.
+*  Copyright (C) 2022-2026 Advanced Micro Devices, Inc. All rights reserved.
 *  SPDX-License-Identifier: MIT
 *
 ***********************************************************************************************************************/
@@ -147,10 +147,6 @@ private:
     static const UINT_32 MaxImageDim  = 32768; // Max image size is 32k
     static const UINT_32 MaxMipLevels = 16;
 
-    virtual ADDR_E_RETURNCODE HwlComputePipeBankXor(
-        const ADDR3_COMPUTE_PIPEBANKXOR_INPUT* pIn,
-        ADDR3_COMPUTE_PIPEBANKXOR_OUTPUT*      pOut) const override;
-
     virtual BOOL_32 HwlInitGlobalParams(const ADDR_CREATE_INPUT* pCreateIn) override;
 
     virtual ADDR_E_RETURNCODE HwlComputeStereoInfo(
@@ -171,8 +167,6 @@ private:
         const ADDR3_COPY_MEMSURFACE_INPUT*  pIn,
         const ADDR3_COPY_MEMSURFACE_REGION* pRegions,
         UINT_32                             regionCount) const override;
-
-    UINT_32           m_numSwizzleBits;
 
     // Initialize equation table
     VOID InitEquationTable();

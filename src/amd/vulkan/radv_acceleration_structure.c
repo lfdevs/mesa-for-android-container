@@ -185,7 +185,6 @@ radv_get_update_scratch_layout(struct radv_device *device, const struct vk_accel
                                struct update_scratch_layout *scratch)
 {
    const struct radv_physical_device *pdev = radv_device_physical(device);
-   uint32_t internal_count = MAX2(state->leaf_node_count, 2) - 1;
    uint32_t offset = 0;
 
    memset(scratch, 0, sizeof(*scratch));
@@ -195,11 +194,11 @@ radv_get_update_scratch_layout(struct radv_device *device, const struct vk_accel
       offset += sizeof(struct vk_bvh_geometry_data) * state->build_info->geometryCount;
 
       scratch->bounds_offsets = offset;
-      offset += sizeof(vk_aabb) * internal_count;
+      offset += sizeof(vk_aabb) * state->internal_node_count;
    }
 
    scratch->internal_ready_count_offset = offset;
-   offset += sizeof(uint32_t) * internal_count;
+   offset += sizeof(uint32_t) * state->internal_node_count;
 
    scratch->size = offset;
 }
@@ -509,11 +508,9 @@ radv_encode_as_gfx12(VkCommandBuffer commandBuffer, const struct vk_acceleration
    };
    radv_bvh_build_set_args(commandBuffer, &args, sizeof(args));
 
-   uint32_t internal_count = MAX2(state->leaf_node_count, 2) - 1;
-
    struct radv_dispatch_info dispatch = {
       .ordered = true,
-      .blocks = {DIV_ROUND_UP(internal_count * 8, 64), 1, 1},
+      .blocks = {DIV_ROUND_UP(state->internal_node_count * 8, 64), 1, 1},
    };
 
    radv_compute_dispatch(cmd_buffer, &dispatch);
@@ -736,46 +733,64 @@ radv_init_geometry_infos(VkCommandBuffer commandBuffer, const struct vk_accelera
 }
 
 static void
-radv_init_update_scratch(VkCommandBuffer commandBuffer, const struct vk_acceleration_structure_build_state *state)
+radv_init_update_scratch(VkCommandBuffer commandBuffer, const struct vk_acceleration_structure_build_state *states,
+                         uint32_t build_count)
 {
    VK_FROM_HANDLE(radv_cmd_buffer, cmd_buffer, commandBuffer);
    struct radv_device *device = radv_cmd_buffer_device(cmd_buffer);
    const struct radv_physical_device *pdev = radv_device_physical(device);
 
-   uint64_t scratch = state->build_info->scratchData.deviceAddress;
+   for (uint32_t i = 0; i < build_count; i++) {
+      const struct vk_acceleration_structure_build_state *state = &states[i];
+      if (state->config.internal_type != VK_INTERNAL_BUILD_TYPE_UPDATE)
+         continue;
 
-   struct update_scratch_layout layout;
-   radv_get_update_scratch_layout(device, state, &layout);
+      uint64_t scratch = state->build_info->scratchData.deviceAddress;
 
-   /* Prepare ready counts for internal nodes */
-   radv_fill_memory(cmd_buffer, scratch + layout.internal_ready_count_offset,
-                    layout.size - layout.internal_ready_count_offset, 0x0, VK_ADDRESS_COPY_DEVICE_LOCAL_BIT_KHR);
+      struct update_scratch_layout layout;
+      radv_get_update_scratch_layout(device, state, &layout);
 
-   /* geometryCount == 1 passes the data as push constant. */
-   if (radv_use_bvh8(pdev) && !(state->config.update_key[1] & RADV_BUILD_FLAG_UPDATE_SINGLE_GEOMETRY)) {
-      uint32_t data_size = sizeof(struct vk_bvh_geometry_data) * state->build_info->geometryCount;
-      struct vk_bvh_geometry_data *data = malloc(data_size);
-      if (!data) {
-         vk_command_buffer_set_error(&cmd_buffer->vk, VK_ERROR_OUT_OF_HOST_MEMORY);
-         return;
+      /* Prepare ready counts for internal nodes */
+      radv_fill_memory(cmd_buffer, scratch + layout.internal_ready_count_offset,
+                       layout.size - layout.internal_ready_count_offset, 0x0, VK_ADDRESS_COPY_DEVICE_LOCAL_BIT_KHR);
+   }
+
+   for (uint32_t i = 0; i < build_count; i++) {
+      const struct vk_acceleration_structure_build_state *state = &states[i];
+      if (state->config.internal_type != VK_INTERNAL_BUILD_TYPE_UPDATE)
+         continue;
+
+      /* geometryCount == 1 passes the data as push constant. */
+      if (radv_use_bvh8(pdev) && !(state->config.update_key[1] & RADV_BUILD_FLAG_UPDATE_SINGLE_GEOMETRY)) {
+         uint64_t scratch = state->build_info->scratchData.deviceAddress;
+
+         struct update_scratch_layout layout;
+         radv_get_update_scratch_layout(device, state, &layout);
+
+         uint32_t data_size = sizeof(struct vk_bvh_geometry_data) * state->build_info->geometryCount;
+         struct vk_bvh_geometry_data *data = malloc(data_size);
+         if (!data) {
+            vk_command_buffer_set_error(&cmd_buffer->vk, VK_ERROR_OUT_OF_HOST_MEMORY);
+            return;
+         }
+
+         uint32_t first_id = 0;
+         for (uint32_t j = 0; j < state->build_info->geometryCount; j++) {
+            const VkAccelerationStructureGeometryKHR *geom =
+               state->build_info->pGeometries ? &state->build_info->pGeometries[j] : state->build_info->ppGeometries[j];
+
+            const VkAccelerationStructureBuildRangeInfoKHR *build_range_info = &state->build_range_infos[j];
+
+            data[j] = vk_fill_geometry_data(state->build_info->type, first_id, j, geom, build_range_info);
+
+            first_id += build_range_info->primitiveCount;
+         }
+
+         radv_update_memory(cmd_buffer, scratch + layout.geometry_data_offset, data_size, data,
+                            VK_ADDRESS_COPY_DEVICE_LOCAL_BIT_KHR);
+
+         free(data);
       }
-
-      uint32_t first_id = 0;
-      for (uint32_t i = 0; i < state->build_info->geometryCount; i++) {
-         const VkAccelerationStructureGeometryKHR *geom =
-            state->build_info->pGeometries ? &state->build_info->pGeometries[i] : state->build_info->ppGeometries[i];
-
-         const VkAccelerationStructureBuildRangeInfoKHR *build_range_info = &state->build_range_infos[i];
-
-         data[i] = vk_fill_geometry_data(state->build_info->type, first_id, i, geom, build_range_info);
-
-         first_id += build_range_info->primitiveCount;
-      }
-
-      radv_update_memory(cmd_buffer, scratch + layout.geometry_data_offset, data_size, data,
-                         VK_ADDRESS_COPY_DEVICE_LOCAL_BIT_KHR);
-
-      free(data);
    }
 }
 

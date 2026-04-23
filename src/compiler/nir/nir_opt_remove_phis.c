@@ -189,7 +189,7 @@ nir_opt_remove_phis(nir_shader *shader)
 bool
 nir_remove_single_src_phis_block(nir_block *block)
 {
-   assert(block->predecessors.entries <= 1);
+   assert(nir_block_num_preds(block) <= 1);
    bool progress = false;
    nir_foreach_phi_safe(phi, block) {
       nir_def *def = NULL;

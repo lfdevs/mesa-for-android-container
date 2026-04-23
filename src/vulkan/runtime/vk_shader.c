@@ -283,7 +283,7 @@ vk_shader_to_nir(struct vk_device *device,
 
    bool heaps_progress = false;
    NIR_PASS(heaps_progress, nir, vk_nir_lower_descriptor_heaps,
-            desc_map, embedded_samplers_out);
+            desc_map, NULL, embedded_samplers_out);
    if (heaps_progress) {
       NIR_PASS(_, nir, nir_remove_dead_variables,
                nir_var_uniform | nir_var_image, NULL);
@@ -619,7 +619,7 @@ vk_common_CreateShadersEXT(VkDevice _device,
                .idx = i,
             };
          } else {
-            struct vk_sampler_state_array embedded_samplers = {};
+            struct vk_sampler_state_array embedded_samplers = {0};
             nir_shader *nir = vk_shader_to_nir(device, vk_info,
                                                &vk_robustness_disabled,
                                                &embedded_samplers);

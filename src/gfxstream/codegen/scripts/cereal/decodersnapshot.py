@@ -357,15 +357,6 @@ def api_special_implementation_vkResetCommandBuffer(api, cgen):
     cgen.stmt("std::lock_guard<std::mutex> lock(mReconstructionMutex)")
     cgen.stmt("mReconstruction.removeDescendantsOfHandle((uint64_t)(uintptr_t)commandBuffer)")
 
-def api_special_implementation_vkQueueFlushCommandsGOOGLE(api, cgen):
-    api_special_implementation_common(api, cgen, "Tag_VkCmdOp")
-    cgen.stmt("mReconstruction.removeDescendantsOfHandle((uint64_t)(uintptr_t)commandBuffer)")
-    cgen.stmt("mReconstruction.addHandleDependency((const uint64_t*)(&handle), 1, (uint64_t)(uintptr_t)commandBuffer)")
-
-    cgen.line("// Track that `handle` depends on previously tracked dependencies (e.g. the handle for this `vkQueueFlushCommandsGOOGLE()` call depends on the `VkPipeline` handle from `vkCmdBindPipeline()`).")
-    cgen.stmt("mReconstruction.addHandleDependenciesForApiCallDependencies(apiCallHandle, handle)")
-
-
 def api_special_implementation_vkBindBufferMemory(api, cgen):
     api_special_implementation_common(api, cgen, "Tag_VkBindMemory")
     cgen.stmt("mReconstruction.addHandleDependency( (const uint64_t*)(&handle), 1, (uint64_t)(uintptr_t)unboxed_to_boxed_non_dispatchable_VkDeviceMemory(memory))")
@@ -390,7 +381,6 @@ apiSpecialImplementation = {
     "vkBindImageMemory2KHR": api_special_implementation_vkBindImageMemory2,
     "vkMapMemoryIntoAddressSpaceGOOGLE": api_special_implementation_vkMapMemoryIntoAddressSpaceGOOGLE,
     "vkGetBlobGOOGLE": api_special_implementation_vkMapMemoryIntoAddressSpaceGOOGLE,
-    "vkQueueFlushCommandsGOOGLE": api_special_implementation_vkQueueFlushCommandsGOOGLE,
     "vkResetCommandBuffer": api_special_implementation_vkResetCommandBuffer,
     "vkResetCommandPool": api_special_implementation_vkResetCommandPool,
     "vkCmdBindVertexBuffers": api_special_implementation_vkCmdBindVertexBuffers,

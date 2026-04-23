@@ -21,9 +21,9 @@ ac_emit_cp_indirect_buffer(struct ac_cmdbuf *cs, uint64_t va, uint32_t cdw,
    uint32_t dword2_flags = 0;
 
    if (flags & AC_CP_INDIRECT_BUFFER_CHAIN)
-      dword2_flags |= S_3F2_CHAIN(1);
+      dword2_flags |= S_3F3_CHAIN(1);
    if (flags & AC_CP_INDIRECT_BUFFER_VALID)
-      dword2_flags |= S_3F2_VALID(1);
+      dword2_flags |= S_3F3_VALID(1);
 
    ac_cmdbuf_begin(cs);
    ac_cmdbuf_emit(PKT3(PKT3_INDIRECT_BUFFER, 2, predicate));
@@ -60,9 +60,9 @@ ac_emit_cp_write_data_head(struct ac_cmdbuf *cs, uint32_t engine_sel,
 {
    ac_cmdbuf_begin(cs);
    ac_cmdbuf_emit(PKT3(PKT3_WRITE_DATA, 2 + size, predicate));
-   ac_cmdbuf_emit(S_370_DST_SEL(dst_sel) |
-                  S_370_WR_CONFIRM(1) |
-                  S_370_ENGINE_SEL(engine_sel));
+   ac_cmdbuf_emit(S_371_DST_SEL(dst_sel) |
+                  S_371_WR_CONFIRM(1) |
+                  S_371_ENGINE_SEL(engine_sel));
    ac_cmdbuf_emit(va);
    ac_cmdbuf_emit(va >> 32);
    ac_cmdbuf_end();
@@ -83,7 +83,7 @@ void
 ac_emit_cp_write_data_imm(struct ac_cmdbuf *cs, unsigned engine_sel,
                           uint64_t va, uint32_t value)
 {
-   ac_emit_cp_write_data(cs, engine_sel, V_370_MEM, va, 1, &value, false);
+   ac_emit_cp_write_data(cs, engine_sel, V_371_MEMORY, va, 1, &value, false);
 }
 
 void
@@ -155,23 +155,23 @@ ac_emit_cp_acquire_mem_pws(struct ac_cmdbuf *cs, ASSERTED enum amd_gfx_level gfx
    const bool ts = is_ts_event(event_type);
    const bool ps_done = event_type == V_028A90_PS_DONE;
    const bool cs_done = event_type == V_028A90_CS_DONE;
-   const uint32_t counter_sel = ts ? V_580_TS_SELECT : ps_done ? V_580_PS_SELECT : V_580_CS_SELECT;
+   const uint32_t counter_sel = ts ? V_581B_TS_SELECT : ps_done ? V_581B_PS_SELECT : V_581B_CS_SELECT;
 
    assert((int)ts + (int)cs_done + (int)ps_done == 1);
-   assert(!gcr_cntl || stage_sel == V_580_CP_PFP || stage_sel == V_580_CP_ME);
-   assert(stage_sel != V_580_PRE_COLOR);
+   assert(!gcr_cntl || stage_sel == V_581B_CP_PFP || stage_sel == V_581B_CP_ME);
+   assert(stage_sel != V_581B_PRE_COLOR);
 
    ac_cmdbuf_begin(cs);
    ac_cmdbuf_emit(PKT3(PKT3_ACQUIRE_MEM, 6, 0));
-   ac_cmdbuf_emit(S_580_PWS_STAGE_SEL(stage_sel) |
-                  S_580_PWS_COUNTER_SEL(counter_sel) |
-                  S_580_PWS_ENA2(1) |
-                  S_580_PWS_COUNT(count));
+   ac_cmdbuf_emit(S_581B_PWS_STAGE_SEL(stage_sel) |
+                  S_581B_PWS_COUNTER_SEL(counter_sel) |
+                  S_581B_PWS_ENA2(1) |
+                  S_581B_PWS_COUNT(count));
    ac_cmdbuf_emit(0xffffffff); /* GCR_SIZE */
    ac_cmdbuf_emit(0x01ffffff); /* GCR_SIZE_HI */
    ac_cmdbuf_emit(0);          /* GCR_BASE_LO */
    ac_cmdbuf_emit(0);          /* GCR_BASE_HI */
-   ac_cmdbuf_emit(S_585_PWS_ENA(1));
+   ac_cmdbuf_emit(S_586B_PWS_ENA(1));
    ac_cmdbuf_emit(gcr_cntl); /* GCR_CNTL (this has no effect if PWS_STAGE_SEL isn't PFP or ME) */
    ac_cmdbuf_end();
 }
@@ -196,34 +196,34 @@ ac_emit_cp_release_mem_pws(struct ac_cmdbuf *cs, ASSERTED enum amd_gfx_level gfx
                                               event_type != V_028A90_CS_DONE));
 
    /* Extract GCR_CNTL fields because the encoding is different in RELEASE_MEM. */
-   assert(G_586_GLI_INV(gcr_cntl) == 0);
-   assert(gfx_level >= GFX12 || G_586_GL1_RANGE(gcr_cntl) == 0);
-   const uint32_t glm_wb = G_586_GLM_WB(gcr_cntl);
-   const uint32_t glm_inv = G_586_GLM_INV(gcr_cntl);
-   const uint32_t glk_wb = G_586_GLK_WB(gcr_cntl);
-   const uint32_t glk_inv = G_586_GLK_INV(gcr_cntl);
-   const uint32_t glv_inv = G_586_GLV_INV(gcr_cntl);
-   const uint32_t gl1_inv = G_586_GL1_INV(gcr_cntl);
-   assert(G_586_GL2_US(gcr_cntl) == 0);
-   assert(G_586_GL2_RANGE(gcr_cntl) == 0);
-   assert(G_586_GL2_DISCARD(gcr_cntl) == 0);
-   const uint32_t gl2_inv = G_586_GL2_INV(gcr_cntl);
-   const uint32_t gl2_wb = G_586_GL2_WB(gcr_cntl);
-   const uint32_t gcr_seq = G_586_SEQ(gcr_cntl);
+   assert(G_587_GLI_INV(gcr_cntl) == 0);
+   assert(gfx_level >= GFX12 || G_587_GL1_RANGE(gcr_cntl) == 0);
+   const uint32_t glm_wb = G_587_GLM_WB(gcr_cntl);
+   const uint32_t glm_inv = G_587_GLM_INV(gcr_cntl);
+   const uint32_t glk_wb = G_587_GLK_WB(gcr_cntl);
+   const uint32_t glk_inv = G_587_GLK_INV(gcr_cntl);
+   const uint32_t glv_inv = G_587_GLV_INV(gcr_cntl);
+   const uint32_t gl1_inv = G_587_GL1_INV(gcr_cntl);
+   assert(G_587_GL2_US(gcr_cntl) == 0);
+   assert(G_587_GL2_RANGE(gcr_cntl) == 0);
+   assert(G_587_GL2_DISCARD(gcr_cntl) == 0);
+   const uint32_t gl2_inv = G_587_GL2_INV(gcr_cntl);
+   const uint32_t gl2_wb = G_587_GL2_WB(gcr_cntl);
+   const uint32_t gcr_seq = G_587_SEQ(gcr_cntl);
    const bool ts = is_ts_event(event_type);
 
    ac_cmdbuf_begin(cs);
    ac_cmdbuf_emit(PKT3(PKT3_RELEASE_MEM, 6, 0));
-   ac_cmdbuf_emit(S_490_EVENT_TYPE(event_type) |
-                   S_490_EVENT_INDEX(ts ? 5 : 6) |
-                   (gfx_level >= GFX12 ? 0 : S_490_GLM_WB(glm_wb) | S_490_GLM_INV(glm_inv) | S_490_GL1_INV(gl1_inv)) |
-                   S_490_GLV_INV(glv_inv) |
-                   S_490_GL2_INV(gl2_inv) |
-                   S_490_GL2_WB(gl2_wb) |
-                   S_490_SEQ(gcr_seq) |
-                   S_490_GLK_WB(glk_wb) |
-                   S_490_GLK_INV(glk_inv) |
-                   S_490_PWS_ENABLE(1));
+   ac_cmdbuf_emit(S_491_EVENT_TYPE(event_type) |
+                   S_491_EVENT_INDEX(ts ? 5 : 6) |
+                   (gfx_level >= GFX12 ? 0 : S_491_GLM_WB(glm_wb) | S_491_GLM_INV(glm_inv) | S_491_GL1_INV(gl1_inv)) |
+                   S_491_GLV_INV(glv_inv) |
+                   S_491_GL2_INV(gl2_inv) |
+                   S_491_GL2_WB(gl2_wb) |
+                   S_491_SEQ(gcr_seq) |
+                   S_491_GLK_WB(glk_wb) |
+                   S_491_GLK_INV(glk_inv) |
+                   S_491_PWS_ENABLE(1));
    ac_cmdbuf_emit(0); /* DST_SEL, INT_SEL, DATA_SEL */
    ac_cmdbuf_emit(0); /* ADDRESS_LO */
    ac_cmdbuf_emit(0); /* ADDRESS_HI */
@@ -403,20 +403,24 @@ ac_emit_cp_acquire_mem(struct ac_cmdbuf *cs, enum amd_gfx_level gfx_level,
                        enum amd_ip_type ip_type, uint32_t engine,
                        uint32_t gcr_cntl)
 {
-   assert(engine == V_580_CP_PFP || engine == V_580_CP_ME);
+   assert(ip_type != AMD_IP_GFX ||
+          (engine == V_581A_PREFETCH_PARSER || engine == V_581A_MICRO_ENGINE));
    assert(gcr_cntl);
 
    ac_cmdbuf_begin(cs);
 
    if (gfx_level >= GFX10) {
       /* ACQUIRE_MEM in PFP is implemented as ACQUIRE_MEM in ME + PFP_SYNC_ME. */
-      const uint32_t engine_flag = engine == V_580_CP_ME ? BITFIELD_BIT(31) : 0;
+      const uint32_t engine_flag =
+         ip_type == AMD_IP_GFX ? S_581A_ENGINE_SEL(engine) : 0;
+      const uint32_t coher_size_hi =
+         gfx_level >= GFX11 && ip_type == AMD_IP_GFX ? 0xffffff : 0xff;
 
       /* Flush caches. This doesn't wait for idle. */
       ac_cmdbuf_emit(PKT3(PKT3_ACQUIRE_MEM, 6, 0));
       ac_cmdbuf_emit(engine_flag);   /* which engine to use */
       ac_cmdbuf_emit(0xffffffff);    /* CP_COHER_SIZE */
-      ac_cmdbuf_emit(0x01ffffff);    /* CP_COHER_SIZE_HI */
+      ac_cmdbuf_emit(coher_size_hi); /* CP_COHER_SIZE_HI */
       ac_cmdbuf_emit(0);             /* CP_COHER_BASE */
       ac_cmdbuf_emit(0);             /* CP_COHER_BASE_HI */
       ac_cmdbuf_emit(0x0000000A);    /* POLL_INTERVAL */
@@ -429,7 +433,7 @@ ac_emit_cp_acquire_mem(struct ac_cmdbuf *cs, enum amd_gfx_level gfx_level,
          ac_cmdbuf_emit(PKT3(PKT3_ACQUIRE_MEM, 5, 0) | PKT3_SHADER_TYPE_S(is_mec));
          ac_cmdbuf_emit(gcr_cntl);      /* CP_COHER_CNTL */
          ac_cmdbuf_emit(0xffffffff);    /* CP_COHER_SIZE */
-         ac_cmdbuf_emit(0xffffff);      /* CP_COHER_SIZE_HI */
+         ac_cmdbuf_emit(0x000000ff);    /* CP_COHER_SIZE_HI */
          ac_cmdbuf_emit(0);             /* CP_COHER_BASE */
          ac_cmdbuf_emit(0);             /* CP_COHER_BASE_HI */
          ac_cmdbuf_emit(0x0000000A);    /* POLL_INTERVAL */
@@ -543,8 +547,8 @@ ac_emit_cp_atomic_mem(struct ac_cmdbuf *cs, uint32_t atomic_op,
 {
    ac_cmdbuf_begin(cs);
    ac_cmdbuf_emit(PKT3(PKT3_ATOMIC_MEM, 7, 0));
-   ac_cmdbuf_emit(S_1E_1_ATOMIC(atomic_op) |
-                  S_1E_1_COMMAND(atomic_cmd));
+   ac_cmdbuf_emit(S_1E1_ATOMIC(atomic_op) |
+                  S_1E1_COMMAND(atomic_cmd));
    ac_cmdbuf_emit(va);                    /* addr lo */
    ac_cmdbuf_emit(va >> 32);              /* addr hi */
    ac_cmdbuf_emit(data);                  /* data lo */

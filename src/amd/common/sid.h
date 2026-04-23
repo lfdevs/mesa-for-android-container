@@ -45,16 +45,16 @@
 #define PKT3_ATOMIC_MEM                            0x1E
 #define PKT3_OCCLUSION_QUERY                       0x1F /* GFX7+ */
 #define PKT3_SET_PREDICATION                       0x20
-#define   PREDICATION_DRAW_NOT_VISIBLE                S_20_1_PRED_BOOL(V_20_1_DRAW_IF_NOT_VISIBLE_OR_OVERFLOW)
-#define   PREDICATION_DRAW_VISIBLE                    S_20_1_PRED_BOOL(V_20_1_DRAW_IF_VISIBLE_OR_NO_OVERFLOW)
-#define   PREDICATION_HINT_WAIT                       S_20_1_HINT(V_20_1_WAIT_UNTIL_FINAL_ZPASS_WRITTEN)
-#define   PREDICATION_HINT_NOWAIT_DRAW                S_20_1_HINT(V_20_1_DRAW_IF_NOT_FINAL_ZPASS_WRITTEN)
-#define     PREDICATION_OP_CLEAR                      V_20_1_CLEAR_PREDICATE
-#define     PREDICATION_OP_ZPASS                      V_20_1_SET_ZPASS_PREDICATE
-#define     PREDICATION_OP_PRIMCOUNT                  V_20_1_SET_PRIMCOUNT_PREDICATE
-#define     PREDICATION_OP_BOOL64                     V_20_1_DX12
-#define     PREDICATION_OP_BOOL32                     V_20_1_VULKAN
-#define   PREDICATION_CONTINUE                        S_20_1_CONTINUE_BIT(V_20_1_CONTINUE_SET_PREDICATION)
+#define   PREDICATION_DRAW_NOT_VISIBLE                S_201_PRED_BOOL(V_201_DRAW_IF_NOT_VISIBLE_OR_OVERFLOW)
+#define   PREDICATION_DRAW_VISIBLE                    S_201_PRED_BOOL(V_201_DRAW_IF_VISIBLE_OR_NO_OVERFLOW)
+#define   PREDICATION_HINT_WAIT                       S_201_HINT(V_201_WAIT_UNTIL_FINAL_ZPASS_WRITTEN)
+#define   PREDICATION_HINT_NOWAIT_DRAW                S_201_HINT(V_201_DRAW_IF_NOT_FINAL_ZPASS_WRITTEN)
+#define     PREDICATION_OP_CLEAR                      V_201_CLEAR_PREDICATE
+#define     PREDICATION_OP_ZPASS                      V_201_SET_ZPASS_PREDICATE
+#define     PREDICATION_OP_PRIMCOUNT                  V_201_SET_PRIMCOUNT_PREDICATE
+#define     PREDICATION_OP_BOOL64                     V_201_DX12
+#define     PREDICATION_OP_BOOL32                     V_201_VULKAN
+#define   PREDICATION_CONTINUE                        S_201_CONTINUE_BIT(V_201_CONTINUE_SET_PREDICATION)
 #define PKT3_COND_EXEC                             0x22
 #define PKT3_PRED_EXEC                             0x23
 #define PKT3_DRAW_INDIRECT                         0x24
@@ -126,7 +126,7 @@
 #define PKT3_ME_INITIALIZE                         0x44 /* GFX6 only */
 #define PKT3_COND_WRITE                            0x45
 #define PKT3_EVENT_WRITE                           0x46
-#define   EVENT_TYPE(x)                               S_46_1_EVENT_TYPE(x)
+#define   EVENT_TYPE(x)                               S_461_EVENT_TYPE(x)
 /* 0 - any non-TS event
  * 1 - ZPASS_DONE
  * 2 - SAMPLE_PIPELINESTAT
@@ -134,7 +134,7 @@
  * 4 - *S_PARTIAL_FLUSH
  * 5 - TS events
  */
-#define   EVENT_INDEX(x)                              S_46_1_EVENT_INDEX(x)
+#define   EVENT_INDEX(x)                              S_461_EVENT_INDEX(x)
 #define   PIXEL_PIPE_STATE_CNTL_COUNTER_ID(x)         ((x) << 3)
 #define   PIXEL_PIPE_STATE_CNTL_STRIDE(x)             ((x) << 9)
 /* 0 - 32 bits

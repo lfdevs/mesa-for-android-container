@@ -156,12 +156,6 @@ ir3_shader_assemble(struct ir3_shader_variant *v)
       memcpy(&bin[info->constant_data_offset / 4], v->constant_data,
              v->constant_data_size);
 
-   /* NOTE: if relative addressing is used, we set constlen in
-    * the compiler (to worst-case value) since we don't know in
-    * the assembler what the max addr reg value can be:
-    */
-   v->constlen = MAX2(v->constlen, info->max_const + 1);
-
    const struct ir3_const_state *const_state = ir3_const_state(v);
    if (ir3_const_can_upload(&const_state->allocs, IR3_CONST_ALLOC_DRIVER_PARAMS,
                             v->constlen) ||

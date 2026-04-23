@@ -88,6 +88,13 @@
     - !reference [.collabora-farm-rules, rules]
     - !reference [.turnip-rules, rules]
 
+.collabora-turnip-restricted-rules:
+  stage: freedreno
+  rules:
+    - !reference [.test, rules]
+    - !reference [.restricted-rules, rules]
+    - !reference [.collabora-turnip-rules, rules]
+
 .collabora-turnip-manual-rules:
   stage: freedreno-nightly
   extends: .no-auto-retry
@@ -126,6 +133,13 @@
     - !reference [.test, rules]
     - !reference [.valve-farm-rules, rules]
     - !reference [.turnip-rules, rules]
+
+.valve-turnip-restricted-rules:
+  stage: freedreno
+  rules:
+    - !reference [.test, rules]
+    - !reference [.restricted-rules, rules]
+    - !reference [.valve-turnip-rules, rules]
 
 .valve-turnip-manual-rules:
   stage: freedreno-nightly
@@ -218,24 +232,6 @@
     GPU_VERSION: freedreno-a618
     KERNEL_IMAGE_TYPE: ""
     RUNNER_TAG: mesa-ci-x86-64-lava-sc7180-trogdor-kingoftown
-    DRIVER_NAME: freedreno-a6xx
-    VK_DRIVER: freedreno
-    LAVA_FIRMWARE: qcom-lava
-
-# Status: https://lava.collabora.dev/scheduler/device_type/sc7180-trogdor-lazor-limozeen
-.lava-sc7180-trogdor-lazor-limozeen:arm64:
-  variables:
-    BOOT_METHOD: depthcharge
-    DEVICE_TYPE: sc7180-trogdor-lazor-limozeen
-    DTB: sc7180-trogdor-lazor-limozeen-nots-r5
-    FDO_CI_CONCURRENT: 8
-    # Increase the hangcheck timer for our spilling tests which bump up against
-    # the .5s default.
-    FREEDRENO_HANGCHECK_MS: 2000
-    FARM: collabora
-    GPU_VERSION: freedreno-a618
-    KERNEL_IMAGE_TYPE: ""
-    RUNNER_TAG: mesa-ci-x86-64-lava-sc7180-trogdor-lazor-limozeen
     DRIVER_NAME: freedreno-a6xx
     VK_DRIVER: freedreno
     LAVA_FIRMWARE: qcom-lava

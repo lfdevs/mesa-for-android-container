@@ -181,9 +181,7 @@ dce_cf_list(struct exec_list *cf_list, BITSET_WORD *defs_live,
          /* Fast path if the loop has no continues: we can remove instructions
           * as we mark the others live.
           */
-         struct set *predecessors = &nir_loop_first_block(loop)->predecessors;
-         if (predecessors->entries == 1 &&
-             _mesa_set_next_entry(predecessors, NULL)->key == inner_state.preheader) {
+         if (!nir_loop_has_back_edge(loop)) {
             progress |= dce_cf_list(&loop->body, defs_live, parent_loop, dead_instrs);
             break;
          }
@@ -223,7 +221,7 @@ dce_cf_list(struct exec_list *cf_list, BITSET_WORD *defs_live,
    return progress;
 }
 
-static bool
+bool
 nir_opt_dce_impl(nir_function_impl *impl)
 {
    assert(impl->structured);

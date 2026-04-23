@@ -4829,14 +4829,16 @@ VkResult ResourceTracker::on_vkResetFences(void* context, VkResult, VkDevice dev
         auto& info = it->second;
         if (!info.external) continue;
 
-#if GFXSTREAM_ENABLE_GUEST_GOLDFISH
         if (info.syncFd && *info.syncFd >= 0) {
             MESA_TRACE_SCOPE("%s: resetting fence. make fd -1\n", __func__);
+
+#if GFXSTREAM_ENABLE_GUEST_GOLDFISH
             goldfish_sync_signal(*info.syncFd);
+#endif
+
             mSyncHelper->close(*info.syncFd);
         }
         info.syncFd.reset();
-#endif
     }
 
     return res;
@@ -4873,13 +4875,15 @@ VkResult ResourceTracker::on_vkImportFenceFdKHR(void* context, VkResult, VkDevic
 
     auto& info = it->second;
 
-#if GFXSTREAM_ENABLE_GUEST_GOLDFISH
     if (info.syncFd && *info.syncFd >= 0) {
         MESA_TRACE_SCOPE("%s: previous sync fd exists, close it\n", __func__);
+
+#if GFXSTREAM_ENABLE_GUEST_GOLDFISH
         goldfish_sync_signal(*info.syncFd);
+#endif
+
         mSyncHelper->close(*info.syncFd);
     }
-#endif
 
     if (pImportFenceFdInfo->fd < 0) {
         MESA_TRACE_SCOPE("%s: import -1, set to -1 and exit\n", __func__);

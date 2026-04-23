@@ -91,11 +91,13 @@ static bool
 lower_ssbo_intrin(nir_builder *b, nir_intrinsic_instr *intrin)
 {
    b->cursor = nir_before_instr(&intrin->instr);
+   bool is_store = intrin->intrinsic == nir_intrinsic_store_ssbo;
+   nir_src *handle = &intrin->src[is_store ? 1 : 0];
 
-   nir_def *new_offset = nir_ior_imm(b, intrin->src[0].ssa,
+   nir_def *new_handle = nir_ior_imm(b, handle->ssa,
                                      pan_res_handle(PAN_TABLE_SSBO, 0));
 
-   nir_src_rewrite(&intrin->src[0], new_offset);
+   nir_src_rewrite(handle, new_handle);
 
    return true;
 }
@@ -107,7 +109,8 @@ lower_intrinsic(nir_builder *b, nir_intrinsic_instr *intrin,
    switch (intrin->intrinsic) {
    case nir_intrinsic_image_load:
    case nir_intrinsic_image_store:
-   case nir_intrinsic_image_texel_address:
+   case nir_intrinsic_image_atomic:
+   case nir_intrinsic_image_atomic_swap:
       return lower_image_intrin(b, intrin);
    case nir_intrinsic_load_input:
    case nir_intrinsic_load_interpolated_input:
@@ -115,7 +118,9 @@ lower_intrinsic(nir_builder *b, nir_intrinsic_instr *intrin,
    case nir_intrinsic_load_ubo:
       return lower_load_ubo_intrin(b, intrin);
    case nir_intrinsic_load_ssbo:
-   case nir_intrinsic_load_ssbo_address:
+   case nir_intrinsic_store_ssbo:
+   case nir_intrinsic_ssbo_atomic:
+   case nir_intrinsic_ssbo_atomic_swap:
       return lower_ssbo_intrin(b, intrin);
    default:
       return false;

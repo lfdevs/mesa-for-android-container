@@ -1,7 +1,7 @@
 /*
 ************************************************************************************************************************
 *
-*  Copyright (C) 2007-2024 Advanced Micro Devices, Inc. All rights reserved.
+*  Copyright (C) 2007-2026 Advanced Micro Devices, Inc. All rights reserved.
 *  SPDX-License-Identifier: MIT
 *
 ***********************************************************************************************************************/
@@ -2473,7 +2473,7 @@ UINT_64 Lib::HwlComputeXmaskAddrFromCoord(
     //
     macroTileIndexX = x / macroTileWidth;
     macroTileIndexY = y / macroTileHeight;
-    macroTileOffset = ((macroTileIndexY * macroTilesPerRow) + macroTileIndexX) * macroTileBytes;
+    macroTileOffset = (static_cast<UINT_64>(macroTileIndexY * macroTilesPerRow) + macroTileIndexX) * macroTileBytes;
 
     //
     // Compute the pixel offset within the macro tile.
@@ -2675,7 +2675,7 @@ VOID Lib::ComputeSurfaceCoordFromAddrMicroTiled(
     //
     sliceBits = static_cast<UINT_64>(pitch) * height * microTileThickness * bpp * numSamples;
 
-    rowBits   = (pitch / MicroTileWidth) * microTileBits;
+    rowBits   = static_cast<UINT_64>(pitch / MicroTileWidth) * microTileBits;
 
     //
     // Extract the slice index.
@@ -3559,11 +3559,11 @@ BOOL_32 Lib::DegradeTo1D(
     if (degrade == FALSE)
     {
         // Only check width and height as slices are aligned to thickness
-        UINT_64 unalignedSize = width * height;
+        UINT_64 unalignedSize = static_cast<UINT_64>(width) * height;
 
         UINT_32 alignedPitch = PowTwoAlign(width, macroTilePitchAlign);
         UINT_32 alignedHeight = PowTwoAlign(height, macroTileHeightAlign);
-        UINT_64 alignedSize = alignedPitch * alignedHeight;
+        UINT_64 alignedSize = static_cast<UINT_64>(alignedPitch) * alignedHeight;
 
         // alignedSize > 1.5 * unalignedSize
         if (2 * alignedSize > 3 * unalignedSize)

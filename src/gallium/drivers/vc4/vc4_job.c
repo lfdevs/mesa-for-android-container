@@ -411,8 +411,8 @@ vc4_job_submit(struct vc4_context *vc4, struct vc4_job *job)
         }
 
         if (VC4_DBG(CL)) {
-                fprintf(stderr, "BCL:\n");
-                vc4_dump_cl(job->bcl.base, cl_offset(&job->bcl), false);
+                mesa_logi("BCL:");
+                vc4_dump_cli(job->bcl.base, cl_offset(&job->bcl), false);
         }
 
         if (cl_offset(&job->bcl) > 0) {
@@ -520,12 +520,10 @@ vc4_job_submit(struct vc4_context *vc4, struct vc4_job *job)
                 int ret;
 
                 ret = vc4_ioctl(vc4->fd, DRM_IOCTL_VC4_SUBMIT_CL, &submit);
-                static bool warned = false;
-                if (ret && !warned) {
-                        fprintf(stderr, "Draw call returned %s.  "
-                                        "Expect corruption.\n", strerror(errno));
-                        warned = true;
-                } else if (!ret) {
+                if (ret) {
+                        mesa_logw_once("Draw call returned %s.  "
+                                       "Expect corruption.", strerror(errno));
+                } else {
                         vc4->last_emit_seqno = submit.seqno;
                         if (job->perfmon)
                                 job->perfmon->last_seqno = submit.seqno;
@@ -537,14 +535,14 @@ vc4_job_submit(struct vc4_context *vc4, struct vc4_job *job)
                                     vc4->last_emit_seqno - 5,
                                     OS_TIMEOUT_INFINITE,
                                     "job throttling")) {
-                        fprintf(stderr, "Job throttling failed\n");
+                        mesa_loge("Job throttling failed");
                 }
         }
 
         if (VC4_DBG(ALWAYS_SYNC)) {
                 if (!vc4_wait_seqno(vc4->screen, vc4->last_emit_seqno,
                                     OS_TIMEOUT_INFINITE, "sync")) {
-                        fprintf(stderr, "Wait failed.\n");
+                        mesa_loge("Wait failed");
                         abort();
                 }
         }

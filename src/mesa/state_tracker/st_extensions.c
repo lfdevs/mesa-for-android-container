@@ -639,7 +639,8 @@ void st_init_limits(struct pipe_screen *screen,
    c->ShaderSubgroupSupportedStages =
       mesa_to_gl_stages(screen->caps.shader_subgroup_supported_stages);
    c->ShaderSubgroupSupportedFeatures =
-      screen->caps.shader_subgroup_supported_features;
+      screen->caps.shader_subgroup_supported_features &
+         BITFIELD_MASK(PIPE_SHADER_SUBGROUP_NUM_FEATURES);
    c->ShaderSubgroupQuadAllStages =
       screen->caps.shader_subgroup_quad_all_stages;
 }

@@ -814,7 +814,7 @@ disasm_instr_cb(void *d, unsigned n, void *instr)
 }
 
 int
-disasm_a3xx_stat(uint32_t *dwords, int sizedwords, int level, FILE *out,
+disasm_a3xx_stat(const uint32_t *dwords, int sizedwords, int level, FILE *out,
                  unsigned gpu_id, struct shader_stats *stats)
 {
    struct isa_decode_options decode_options = {
@@ -839,7 +839,7 @@ disasm_a3xx_stat(uint32_t *dwords, int sizedwords, int level, FILE *out,
 
    decode_options.cbdata = &ctx;
 
-   ir3_isa_disasm(dwords, sizedwords * 4, out, &decode_options);
+   ir3_isa_disasm((void *)dwords, sizedwords * 4, out, &decode_options);
 
    disasm_handle_last(&ctx);
 
@@ -881,7 +881,7 @@ ir3_assert_handler(const char *expr, const char *file, int line,
    } while (0)
 
 int
-disasm_a3xx(uint32_t *dwords, int sizedwords, int level, FILE *out,
+disasm_a3xx(const uint32_t *dwords, int sizedwords, int level, FILE *out,
             unsigned gpu_id)
 {
    struct shader_stats stats;
@@ -889,7 +889,7 @@ disasm_a3xx(uint32_t *dwords, int sizedwords, int level, FILE *out,
 }
 
 int
-try_disasm_a3xx(uint32_t *dwords, int sizedwords, int level, FILE *out,
+try_disasm_a3xx(const uint32_t *dwords, int sizedwords, int level, FILE *out,
                 unsigned gpu_id)
 {
    struct shader_stats stats;
@@ -897,8 +897,8 @@ try_disasm_a3xx(uint32_t *dwords, int sizedwords, int level, FILE *out,
 }
 
 int
-try_disasm_a3xx_stat(uint32_t *dwords, int sizedwords, int level, FILE *out,
-                     unsigned gpu_id, struct shader_stats *stats)
+try_disasm_a3xx_stat(const uint32_t *dwords, int sizedwords, int level,
+                     FILE *out, unsigned gpu_id, struct shader_stats *stats)
 {
    int ret = -1;
    TRY(ret = disasm_a3xx_stat(dwords, sizedwords, level, out, gpu_id, stats));

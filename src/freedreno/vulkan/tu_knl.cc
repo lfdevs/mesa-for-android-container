@@ -18,16 +18,14 @@
 
 #include <sys/mman.h>
 
-#include "vk_debug_utils.h"
-
 #include "util/cache_ops.h"
 #include "util/libdrm.h"
+#include "vk_debug_utils.h"
 
 #include "tu_device.h"
 #include "tu_knl.h"
 #include "tu_queue.h"
 #include "tu_rmv.h"
-
 
 VkResult
 tu_bo_init_new_explicit_iova(struct tu_device *dev,

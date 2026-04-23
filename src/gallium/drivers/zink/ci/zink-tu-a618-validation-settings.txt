@@ -1,6 +1,6 @@
 # Please include a comment with the log message and a testcase triggering each
 # VUID at the bottom of the file.
-khronos_validation.message_id_filter = VUID-VkPhysicalDeviceProperties2-pNext-pNext,VUID-VkDeviceCreateInfo-pNext-pNext,VUID-vkDestroyDevice-device-05137,UNASSIGNED-Draw-primitiveTopologyPatchListRestart,VUID-vkQueueSubmit-pSignalSemaphores-00067,VUID-VkImageMemoryBarrier2-srcAccessMask-07454,UNASSIGNED-Threading-MultipleThreads-Read,VUID-vkAcquireNextImageKHR-semaphore-01779,VUID-VkSwapchainCreateInfoKHR-imageFormat-01273,VUID-VkRectLayerKHR-offset-04864,UNASSIGNED-Threading-MultipleThreads-Write,VUID-vkCmdDrawMultiIndexedEXT-None-10909,VUID-VkRenderingAttachmentInfo-None-12256,VUID-VkDescriptorGetInfoEXT-type-12223
+khronos_validation.message_id_filter = VUID-VkPhysicalDeviceProperties2-pNext-pNext,VUID-VkDeviceCreateInfo-pNext-pNext,VUID-vkDestroyDevice-device-05137,UNASSIGNED-Draw-primitiveTopologyPatchListRestart,VUID-vkQueueSubmit-pSignalSemaphores-00067,VUID-VkImageMemoryBarrier2-srcAccessMask-07454,UNASSIGNED-Threading-MultipleThreads-Read,VUID-vkAcquireNextImageKHR-semaphore-01779,VUID-VkSwapchainCreateInfoKHR-imageFormat-01273,VUID-VkRectLayerKHR-offset-04864,UNASSIGNED-Threading-MultipleThreads-Write,VUID-vkCmdDrawMultiIndexedEXT-None-10909,VUID-VkRenderingAttachmentInfo-None-12256,VUID-VkDescriptorGetInfoEXT-type-12223,VUID-vkDestroySwapchainKHR-swapchain-01282
 khronos_validation.report_flags = error
 khronos_validation.debug_action = VK_DBG_LAYER_ACTION_LOG_MSG,VK_DBG_LAYER_ACTION_BREAK
 VK_LAYER_ENABLES=VK_VALIDATION_FEATURE_ENABLE_DEBUG_PRINTF_EXT
@@ -107,3 +107,9 @@ khronos_validation.log_filename = stdout
 # The Vulkan spec states: If type is VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, pStorageTexelBuffer is not NULL and pStorageTexelBuffer->address is not zero, pStorageTexelBuffer->address must be a device address allocated to the application from a buffer created with the VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT usage flag set (https://docs.vulkan.org/spec/latest/chapters/descriptorsets.html#VUID-VkDescriptorGetInfoEXT-type-12223)
 # Objects: 1
 #    [0] VkBuffer 0x24630000002463
+
+# dEQP-EGL.functional.swap_buffers_with_damage.resize_before_swap.buffer_age_render
+#
+# Validation Error: [ VUID-vkDestroySwapchainKHR-swapchain-01282 ] | MessageID = 0xc5b0dad2
+# vkDestroySwapchainKHR(): can't be called on VkSwapchainKHR 0x1250000000125 that is currently in use by VkSwapchainKHR 0x1250000000125.
+# The Vulkan spec states: All uses of presentable images acquired from swapchain must have completed execution (https://docs.vulkan.org/spec/latest/chapters/VK_KHR_surface/wsi.html#VUID-vkDestroySwapchainKHR-swapchain-01282)

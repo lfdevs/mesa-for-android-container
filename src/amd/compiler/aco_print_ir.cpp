@@ -148,8 +148,15 @@ print_definition(const Definition* definition, FILE* output, unsigned flags)
 {
    if (!(flags & print_no_ssa))
       print_reg_class(definition->regClass(), output);
-   if (definition->isPrecise())
-      fprintf(output, "(precise)");
+
+   if (definition->isNoContract() || definition->isNoReassoc()) {
+      if (!definition->isNoContract())
+         fprintf(output, "(no-reassoc)");
+      else if (!definition->isNoReassoc())
+         fprintf(output, "(no-contract)");
+      else
+         fprintf(output, "(precise)");
+   }
    if (definition->isInfPreserve() || definition->isNaNPreserve() || definition->isSZPreserve()) {
       fprintf(output, "(");
       if (definition->isSZPreserve())
@@ -840,8 +847,6 @@ print_block_kind(uint32_t kind, FILE* output)
       fprintf(output, "loop-latch, ");
    if (kind & block_kind_loop_exit)
       fprintf(output, "loop-exit, ");
-   if (kind & block_kind_continue)
-      fprintf(output, "continue, ");
    if (kind & block_kind_break)
       fprintf(output, "break, ");
    if (kind & block_kind_branch)

@@ -67,7 +67,7 @@ RegisterDemand get_temp_reg_changes(Instruction* instr)
    }
 
    for (Operand op : instr->operands) {
-      if (op.isFirstKillBeforeDef() || op.isCopyKill())
+      if (op.isFirstKillBeforeDef() || (op.isCopyKill() && !op.isLateKill()))
          available_def_space -= op.getTemp();
       else if (op.isClobbered() && !op.isKill())
          available_def_space -= op.getTemp();

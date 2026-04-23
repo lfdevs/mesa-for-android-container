@@ -1710,7 +1710,7 @@ FreedrenoDriver::Countable::collect() const
    d->state[id].value = *reg;
 }
 
-/* Resolve the countable and assign next counter from it's group: */
+/* Resolve the countable and assign the next counter from its group. */
 void
 FreedrenoDriver::Countable::resolve() const
 {
@@ -1726,12 +1726,15 @@ FreedrenoDriver::Countable::resolve() const
 
          d->state[id].countable = c;
 
-         /* Assign a counter from the same group: */
+         /* Assign counters from high to low to reduce conflicts with UMD-owned
+          * slots. */
          assert(d->assigned_counters[i] < g->num_counters);
-         d->state[id].counter = &g->counters[d->assigned_counters[i]++];
+         unsigned counter_index =
+            (g->num_counters - 1) - d->assigned_counters[i]++;
+         d->state[id].counter = &g->counters[counter_index];
 
-         std::cout << "Countable: " << name << ", group=" << g->name <<
-               ", counter=" << d->assigned_counters[i] - 1 << "\n";
+         std::cout << "Countable: " << name << ", group=" << g->name
+                   << ", counter=" << counter_index << "\n";
 
          return;
       }

@@ -434,10 +434,10 @@ try_setup_point(struct lp_setup_context *setup,
          bbox.y1 = bbox.y0 + int_width - 1;
       }
 
-      x[0] = (bbox.x0 - 1) << 8;
-      x[1] = (bbox.x1 + 1) << 8;
-      y[0] = (bbox.y0 - 1) << 8;
-      y[1] = (bbox.y1 + 1) << 8;
+      x[0] = (bbox.x0 - 1) << FIXED_ORDER;
+      x[1] = (bbox.x1 + 1) << FIXED_ORDER;
+      y[0] = (bbox.y0 - 1) << FIXED_ORDER;
+      y[1] = (bbox.y1 + 1) << FIXED_ORDER;
    }
 
    if (0) {
@@ -513,24 +513,24 @@ try_setup_point(struct lp_setup_context *setup,
 
       plane = GET_PLANES(point);
 
-      plane[0].dcdx = ~0U << 8;
+      plane[0].dcdx = ~0U;
       plane[0].dcdy = 0;
-      plane[0].c = -MAX2(x[0], bbox.x0 << 8);
-      plane[0].eo = 1 << 8;
+      plane[0].c = -MAX2(x[0], bbox.x0 << FIXED_ORDER);
+      plane[0].eo = 1;
 
-      plane[1].dcdx = 1 << 8;
+      plane[1].dcdx = 1;
       plane[1].dcdy = 0;
-      plane[1].c = MIN2(x[1], (bbox.x1 + 1) << 8);
+      plane[1].c = MIN2(x[1], (bbox.x1 + 1) << FIXED_ORDER);
       plane[1].eo = 0;
 
       plane[2].dcdx = 0;
-      plane[2].dcdy = 1 << 8;
-      plane[2].c = -MAX2(y[0], (bbox.y0 << 8) - adj);
-      plane[2].eo = 1 << 8;
+      plane[2].dcdy = 1;
+      plane[2].c = -MAX2(y[0], (bbox.y0 << FIXED_ORDER) - adj);
+      plane[2].eo = 1;
 
       plane[3].dcdx = 0;
-      plane[3].dcdy = ~0U << 8;
-      plane[3].c = MIN2(y[1], (bbox.y1 + 1) << 8);
+      plane[3].dcdy = ~0U;
+      plane[3].c = MIN2(y[1], (bbox.y1 + 1) << FIXED_ORDER);
       plane[3].eo = 0;
 
       if (!setup->legacy_points) {
@@ -544,9 +544,7 @@ try_setup_point(struct lp_setup_context *setup,
 
       int max_szorig = ((bbox.x1 - (bbox.x0 & ~3)) |
                         (bbox.y1 - (bbox.y0 & ~3)));
-      bool use_32bits = max_szorig <= MAX_FIXED_LENGTH32;
-
-      return lp_setup_bin_triangle(setup, point, use_32bits,
+      return lp_setup_bin_triangle(setup, point, max_szorig,
                                    setup->fs.current.variant->opaque,
                                    &bbox, nr_planes, viewport_index);
 

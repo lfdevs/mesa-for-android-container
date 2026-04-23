@@ -23,6 +23,8 @@ unsigned r300_get_swizzle_combined(const unsigned char *swizzle_format,
                                    const unsigned char *swizzle_view,
                                    bool dxtc_swizzle);
 
+enum pipe_format r300_unbyteswap_array_format(enum pipe_format format);
+
 uint32_t r300_translate_texformat(enum pipe_format format,
                                   const unsigned char *swizzle_view,
                                   bool is_r500,

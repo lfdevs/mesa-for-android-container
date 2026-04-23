@@ -29,6 +29,7 @@
 
 #include <stdint.h>
 #include "util/box.h"
+#include "util/log.h"
 #include "v3d_tiling.h"
 #include "broadcom/common/v3d_cpu_tiling.h"
 
@@ -233,9 +234,9 @@ v3d_move_pixels_unaligned(void *gpu, uint32_t gpu_stride,
                                                                  box->y + y);
 
                         if (false) {
-                                fprintf(stderr, "%3d,%3d -> %d\n",
-                                        box->x + x, box->y + y,
-                                        pixel_offset);
+                                mesa_logd("%3d,%3d -> %d\n",
+                                          box->x + x, box->y + y,
+                                          pixel_offset);
                         }
 
                         if (is_load) {

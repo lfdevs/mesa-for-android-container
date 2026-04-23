@@ -36,6 +36,24 @@
 
 struct lp_compute_shader_variant;
 
+struct lp_cs_job_info {
+   unsigned grid_size[3];
+   unsigned iter_size[3];
+   unsigned grid_base[3];
+   unsigned block_size[3];
+   unsigned req_local_mem;
+   unsigned work_dim;
+   unsigned draw_id;
+   bool zero_initialize_shared_memory;
+   bool use_iters;
+   struct lp_cs_exec *current;
+   struct vertex_header *io;
+   size_t io_stride;
+   void *payload;
+   size_t payload_stride;
+};
+
+
 struct lp_compute_shader_variant_key
 {
    unsigned nr_samplers:8;
@@ -100,6 +118,9 @@ struct lp_compute_shader_variant
    struct lp_cs_variant_list_item list_item_global, list_item_local;
 
    struct lp_compute_shader *shader;
+
+   /* shader stage as declared in the shader (i.e. can be kernel) */
+   mesa_shader_stage stage;
 
    /* For debugging/profiling purposes */
    unsigned no;

@@ -19,6 +19,8 @@
 #include "kosmickrisp/bridge/mtl_bridge.h"
 #include "kosmickrisp/bridge/vk_to_mtl_map.h"
 
+#include "poly/geometry.h"
+
 #include "vulkan/util/vk_format.h"
 
 static void
@@ -766,7 +768,6 @@ kk_flush_dynamic_state(struct kk_cmd_buffer *cmd)
        IS_DIRTY(VI_BINDING_STRIDES) || gfx->dirty & KK_DIRTY_VB) {
       struct kk_shader *vs = cmd->state.shaders[MESA_SHADER_VERTEX];
       unsigned slot = 0;
-      cmd->state.gfx.vb.max_vertices = 0u;
       u_foreach_bit(i, vs->info.vs.attribs_read) {
          if (dyn->vi->attributes_valid & BITFIELD_BIT(i)) {
             struct vk_vertex_attribute_state attr = dyn->vi->attributes[i];
@@ -778,10 +779,6 @@ kk_flush_dynamic_state(struct kk_cmd_buffer *cmd)
                &desc->root.draw.attrib_base[slot]);
             desc->root.draw.buffer_strides[attr.binding] =
                dyn->vi_binding_strides[attr.binding];
-
-            cmd->state.gfx.vb.max_vertices =
-               MAX2(vb.range / dyn->vi_binding_strides[attr.binding],
-                    cmd->state.gfx.vb.max_vertices);
          }
          slot++;
       }
@@ -843,12 +840,52 @@ struct kk_draw_data {
    bool restart;
 };
 
+static void
+kk_init_heap(const void *data)
+{
+   struct kk_cmd_buffer *cmd = (struct kk_cmd_buffer *)data;
+   struct kk_device *dev = kk_cmd_buffer_device(cmd);
+
+   size_t size = 128 * 1024 * 1024;
+   kk_alloc_bo(dev, &dev->vk.base, size, 0, &dev->heap);
+
+   struct poly_heap *map = (struct poly_heap *)dev->heap->cpu;
+
+   /* TODO_KOSMICKRISP Self-contained until we have rodata at the device. */
+   *map = (struct poly_heap){
+      .base = dev->heap->gpu + sizeof(struct poly_heap),
+      .size = size - sizeof(struct poly_heap),
+   };
+}
+
+static uint64_t
+kk_heap(struct kk_cmd_buffer *cmd)
+{
+   struct kk_device *dev = kk_cmd_buffer_device(cmd);
+
+   util_call_once_data(&dev->heap_init_once, kk_init_heap, cmd);
+
+   /* We need to free all allocations after each command buffer execution */
+   if (!cmd->uses_heap) {
+      uint64_t addr = dev->heap->gpu;
+
+      /* Zeroing the allocated index frees everything */
+      kk_cmd_write(cmd, (struct libkk_imm_write){
+                           addr + offsetof(struct poly_heap, bottom), 0});
+
+      cmd->uses_heap = true;
+   }
+
+   return dev->heap->gpu;
+}
+
 /* Unrolling will always be done through indirect rendering, so if this is
  * called from non-indirect calls, we will fake it. */
 static struct kk_draw_data
 kk_unroll_geometry(struct kk_cmd_buffer *cmd, struct kk_draw_data data,
                    bool promote_index_type)
 {
+   struct kk_device *dev = kk_cmd_buffer_device(cmd);
    if (!data.indirect) {
       if (data.indexed) {
          VkDrawIndexedIndirectCommand draw = {
@@ -875,38 +912,24 @@ kk_unroll_geometry(struct kk_cmd_buffer *cmd, struct kk_draw_data data,
       }
    }
 
-   uint32_t el_count = cmd->state.gfx.vb.max_vertices;
-   if (data.indexed) {
-      el_count =
-         (mtl_buffer_get_length(data.index_buffer) - data.index_buffer_offset) /
-         data.index_size;
-   }
+   struct kk_bo *out_draw =
+      kk_cmd_allocate_buffer(cmd, sizeof(VkDrawIndexedIndirectCommand), 4u);
 
-   uint32_t decomposed_index_count =
-      u_decomposed_prims_for_vertices(data.prim, el_count) *
-      mesa_vertices_per_prim(data.prim);
-   uint32_t el_size_B = 4u;
-   uint32_t index_buffer_size_B = decomposed_index_count * el_size_B;
-   uint32_t buffer_size_B =
-      sizeof(VkDrawIndexedIndirectCommand) + index_buffer_size_B;
-   struct kk_bo *index_buffer =
-      kk_cmd_allocate_buffer(cmd, buffer_size_B, el_size_B);
-
-   if (!index_buffer)
+   if (!out_draw)
       return data;
 
    struct libkk_unroll_geometry_and_restart_args info = {
       .index_buffer = mtl_buffer_get_gpu_address(data.index_buffer) +
                       data.index_buffer_offset,
-      .out_ptr = index_buffer->gpu + sizeof(VkDrawIndexedIndirectCommand),
+      .heap = kk_heap(cmd),
       .in_draw = mtl_buffer_get_gpu_address(data.indirect_buffer) +
                  data.indirect_buffer_offset,
-      .out_draw = index_buffer->gpu,
+      .out_draw = out_draw->gpu,
       .restart_index =
          promote_index_type ? UINT32_MAX : cmd->state.gfx.index.restart,
       .index_buffer_size_el = data.index_buffer_range_B,
       .in_el_size_B = data.index_size,
-      .out_el_size_B = el_size_B,
+      .out_el_size_B = 4u,
       .flatshade_first = true,
       .mode = data.prim,
    };
@@ -914,14 +937,15 @@ kk_unroll_geometry(struct kk_cmd_buffer *cmd, struct kk_draw_data data,
    struct mtl_size grid = {1, 1, 1};
    libkk_unroll_geometry_and_restart_struct(cmd, grid, true, info);
 
-   data.indirect_buffer = index_buffer->map;
-   data.index_buffer = index_buffer->map;
-   data.index_buffer_offset = sizeof(VkDrawIndexedIndirectCommand);
+   data.indirect_buffer = out_draw->map;
+   data.index_buffer = dev->heap->map;
+   /* TODO_KOSMICKRISP Self-contained until we have rodata at the device. */
+   data.index_buffer_offset = sizeof(struct poly_heap);
    data.indirect_buffer_offset = 0u;
-   data.index_buffer_range_B = index_buffer_size_B;
+   data.index_buffer_range_B = dev->heap->size_B - sizeof(struct poly_heap);
    data.first_index = 0u;
    data.prim = u_decomposed_prim(data.prim);
-   data.index_size = el_size_B;
+   data.index_size = 4u;
    data.indirect = true;
    data.indexed = true;
    data.restart = false;

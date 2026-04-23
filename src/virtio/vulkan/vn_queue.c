@@ -1733,11 +1733,13 @@ vn_ResetFences(VkDevice device, uint32_t fenceCount, const VkFence *pFences)
    return VK_SUCCESS;
 }
 
-VKAPI_ATTR VkResult VKAPI_CALL
-vn_GetFenceStatus(VkDevice device, VkFence _fence)
+static VkResult
+vn_get_fence_status(VkDevice dev_handle,
+                    VkFence fence_handle,
+                    struct vn_relax_state *relax_state)
 {
-   struct vn_device *dev = vn_device_from_handle(device);
-   struct vn_fence *fence = vn_fence_from_handle(_fence);
+   struct vn_device *dev = vn_device_from_handle(dev_handle);
+   struct vn_fence *fence = vn_fence_from_handle(fence_handle);
    struct vn_sync_payload *payload = fence->payload;
 
    VkResult result;
@@ -1756,11 +1758,28 @@ vn_GetFenceStatus(VkDevice device, VkFence _fence)
              * longer sees any fence status checks and falsely believes the
              * caller does not sync.
              */
-            vn_async_vkWaitForFences(dev->primary_ring, device, 1, &_fence,
-                                     VK_TRUE, UINT64_MAX);
+            vn_async_vkWaitForFences(dev->primary_ring, dev_handle, 1,
+                                     &fence_handle, VK_TRUE, UINT64_MAX);
+         } else if (relax_state && vn_relax_warn(relax_state)) {
+            /* Upon vn_relax warn order, emit a synchronous vkGetFenceStatus
+             * to catch renderer device lost. Meanwhile, validate consistency
+             * against ffb status if the fence is signaled.
+             */
+            result = vn_call_vkGetFenceStatus(dev->primary_ring, dev_handle,
+                                              fence_handle);
+            if (result == VK_ERROR_DEVICE_LOST) {
+               vn_log(dev->instance, "aborting on ffb device lost");
+               abort();
+            }
+            if (result == VK_SUCCESS &&
+                vn_feedback_get_status(fence->feedback.slot) != VK_SUCCESS) {
+               vn_log(dev->instance, "ERROR: ffb must be signaled now");
+               result = VK_ERROR_UNKNOWN;
+            }
          }
       } else {
-         result = vn_call_vkGetFenceStatus(dev->primary_ring, device, _fence);
+         result = vn_call_vkGetFenceStatus(dev->primary_ring, dev_handle,
+                                           fence_handle);
       }
       break;
    case VN_SYNC_TYPE_IMPORTED_SYNC_FD:
@@ -1774,16 +1793,25 @@ vn_GetFenceStatus(VkDevice device, VkFence _fence)
       break;
    }
 
+   return result;
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL
+vn_GetFenceStatus(VkDevice device, VkFence fence)
+{
+   struct vn_device *dev = vn_device_from_handle(device);
+   VkResult result = vn_get_fence_status(device, fence, NULL);
    return vn_result(dev->instance, result);
 }
 
 static VkResult
 vn_find_first_signaled_fence(VkDevice device,
                              const VkFence *fences,
-                             uint32_t count)
+                             uint32_t count,
+                             struct vn_relax_state *relax_state)
 {
    for (uint32_t i = 0; i < count; i++) {
-      VkResult result = vn_GetFenceStatus(device, fences[i]);
+      VkResult result = vn_get_fence_status(device, fences[i], relax_state);
       if (result == VK_SUCCESS || result < 0)
          return result;
    }
@@ -1791,11 +1819,14 @@ vn_find_first_signaled_fence(VkDevice device,
 }
 
 static VkResult
-vn_remove_signaled_fences(VkDevice device, VkFence *fences, uint32_t *count)
+vn_remove_signaled_fences(VkDevice device,
+                          VkFence *fences,
+                          uint32_t *count,
+                          struct vn_relax_state *relax_state)
 {
    uint32_t cur = 0;
    for (uint32_t i = 0; i < *count; i++) {
-      VkResult result = vn_GetFenceStatus(device, fences[i]);
+      VkResult result = vn_get_fence_status(device, fences[i], relax_state);
       if (result != VK_SUCCESS) {
          if (result < 0)
             return result;
@@ -1848,7 +1879,8 @@ vn_WaitForFences(VkDevice device,
       struct vn_relax_state relax_state =
          vn_relax_init(dev->instance, VN_RELAX_REASON_FENCE);
       while (result == VK_NOT_READY) {
-         result = vn_remove_signaled_fences(device, fences, &fenceCount);
+         result = vn_remove_signaled_fences(device, fences, &fenceCount,
+                                            &relax_state);
          result =
             vn_update_sync_result(dev, result, abs_timeout, &relax_state);
       }
@@ -1859,7 +1891,8 @@ vn_WaitForFences(VkDevice device,
       struct vn_relax_state relax_state =
          vn_relax_init(dev->instance, VN_RELAX_REASON_FENCE);
       while (result == VK_NOT_READY) {
-         result = vn_find_first_signaled_fence(device, pFences, fenceCount);
+         result = vn_find_first_signaled_fence(device, pFences, fenceCount,
+                                               &relax_state);
          result =
             vn_update_sync_result(dev, result, abs_timeout, &relax_state);
       }
@@ -2195,14 +2228,16 @@ vn_DestroySemaphore(VkDevice device,
    vk_free(alloc, sem);
 }
 
-VKAPI_ATTR VkResult VKAPI_CALL
-vn_GetSemaphoreCounterValue(VkDevice device,
-                            VkSemaphore semaphore,
-                            uint64_t *pValue)
+static VkResult
+vn_get_semaphore_counter_value(VkDevice dev_handle,
+                               VkSemaphore sem_handle,
+                               struct vn_relax_state *relax_state,
+                               uint64_t *out_value)
 {
-   struct vn_device *dev = vn_device_from_handle(device);
-   struct vn_semaphore *sem = vn_semaphore_from_handle(semaphore);
+   struct vn_device *dev = vn_device_from_handle(dev_handle);
+   struct vn_semaphore *sem = vn_semaphore_from_handle(sem_handle);
    ASSERTED struct vn_sync_payload *payload = sem->payload;
+   bool check_device_lost = false;
 
    assert(payload->type == VN_SYNC_TYPE_DEVICE_ONLY);
 
@@ -2236,11 +2271,11 @@ vn_GetSemaphoreCounterValue(VkDevice device,
             .pNext = NULL,
             .flags = 0,
             .semaphoreCount = 1,
-            .pSemaphores = &semaphore,
+            .pSemaphores = &sem_handle,
             .pValues = &counter,
          };
 
-         vn_async_vkWaitSemaphores(dev->primary_ring, device, &wait_info,
+         vn_async_vkWaitSemaphores(dev->primary_ring, dev_handle, &wait_info,
                                    UINT64_MAX);
 
          /* search pending cmds for already signaled values */
@@ -2261,6 +2296,9 @@ vn_GetSemaphoreCounterValue(VkDevice device,
          simple_mtx_unlock(&sem->feedback.cmd_mtx);
 
          sem->feedback.signaled_counter = counter;
+      } else if (relax_state && vn_relax_warn(relax_state)) {
+         /* upon vn_relax warn order and when sfb doesn't progress */
+         check_device_lost = true;
       }
 
       /* vn_SignalSemaphore writes the sfb signaled_counter without updating
@@ -2269,10 +2307,25 @@ vn_GetSemaphoreCounterValue(VkDevice device,
       counter = MAX2(counter, sem->feedback.signaled_counter);
       simple_mtx_unlock(&sem->feedback.counter_mtx);
 
-      *pValue = counter;
+      if (check_device_lost) {
+         /* Emit a synchronous vkGetSemaphoreCounterValue to catch renderer
+          * device lost without tangling with sfb internals.
+          */
+         uint64_t tmp;
+         VkResult result = vn_call_vkGetSemaphoreCounterValue(
+            dev->primary_ring, dev_handle, sem_handle, &tmp);
+         if (result == VK_ERROR_DEVICE_LOST) {
+            vn_log(dev->instance, "aborting on sfb device lost");
+            abort();
+         }
+         if (result != VK_SUCCESS)
+            return result;
+      }
+
+      *out_value = counter;
    } else {
       VkResult result = vn_call_vkGetSemaphoreCounterValue(
-         dev->primary_ring, device, semaphore, pValue);
+         dev->primary_ring, dev_handle, sem_handle, out_value);
       if (result != VK_SUCCESS)
          return result;
 
@@ -2284,9 +2337,9 @@ vn_GetSemaphoreCounterValue(VkDevice device,
           * won't go backwards. e.g. multiple threads querying when suspended
           */
          simple_mtx_lock(&sem->feedback.counter_mtx);
-         if (*pValue >= sem->feedback.suspended_counter) {
-            vn_feedback_set_counter(sem->feedback.slot, *pValue);
-            sem->feedback.suspended_counter = *pValue;
+         if (*out_value >= sem->feedback.suspended_counter) {
+            vn_feedback_set_counter(sem->feedback.slot, *out_value);
+            sem->feedback.suspended_counter = *out_value;
             sem->feedback.pollable = true;
          }
          simple_mtx_unlock(&sem->feedback.counter_mtx);
@@ -2294,6 +2347,17 @@ vn_GetSemaphoreCounterValue(VkDevice device,
    }
 
    return VK_SUCCESS;
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL
+vn_GetSemaphoreCounterValue(VkDevice device,
+                            VkSemaphore semaphore,
+                            uint64_t *pValue)
+{
+   struct vn_device *dev = vn_device_from_handle(device);
+   VkResult result =
+      vn_get_semaphore_counter_value(device, semaphore, NULL, pValue);
+   return vn_result(dev->instance, result);
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL
@@ -2330,12 +2394,13 @@ static VkResult
 vn_find_first_signaled_semaphore(VkDevice device,
                                  const VkSemaphore *semaphores,
                                  const uint64_t *values,
-                                 uint32_t count)
+                                 uint32_t count,
+                                 struct vn_relax_state *relax_state)
 {
    for (uint32_t i = 0; i < count; i++) {
       uint64_t val = 0;
-      VkResult result =
-         vn_GetSemaphoreCounterValue(device, semaphores[i], &val);
+      VkResult result = vn_get_semaphore_counter_value(device, semaphores[i],
+                                                       relax_state, &val);
       if (result != VK_SUCCESS || val >= values[i])
          return result;
    }
@@ -2346,13 +2411,14 @@ static VkResult
 vn_remove_signaled_semaphores(VkDevice device,
                               VkSemaphore *semaphores,
                               uint64_t *values,
-                              uint32_t *count)
+                              uint32_t *count,
+                              struct vn_relax_state *relax_state)
 {
    uint32_t cur = 0;
    for (uint32_t i = 0; i < *count; i++) {
       uint64_t val = 0;
-      VkResult result =
-         vn_GetSemaphoreCounterValue(device, semaphores[i], &val);
+      VkResult result = vn_get_semaphore_counter_value(device, semaphores[i],
+                                                       relax_state, &val);
       if (result != VK_SUCCESS)
          return result;
       if (val < values[i])
@@ -2384,8 +2450,8 @@ vn_WaitSemaphores(VkDevice device,
       struct vn_relax_state relax_state =
          vn_relax_init(dev->instance, VN_RELAX_REASON_SEMAPHORE);
       while (result == VK_NOT_READY) {
-         result = vn_remove_signaled_semaphores(device, semaphores, values,
-                                                &semaphore_count);
+         result = vn_remove_signaled_semaphores(
+            device, semaphores, values, &semaphore_count, &relax_state);
          result =
             vn_update_sync_result(dev, result, abs_timeout, &relax_state);
       }
@@ -2399,7 +2465,7 @@ vn_WaitSemaphores(VkDevice device,
       while (result == VK_NOT_READY) {
          result = vn_find_first_signaled_semaphore(
             device, pWaitInfo->pSemaphores, pWaitInfo->pValues,
-            pWaitInfo->semaphoreCount);
+            pWaitInfo->semaphoreCount, &relax_state);
          result =
             vn_update_sync_result(dev, result, abs_timeout, &relax_state);
       }

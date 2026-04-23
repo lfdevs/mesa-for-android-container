@@ -1427,7 +1427,7 @@ RADV driver environment variables
    a comma-separated list of named flags, which do various things:
 
    ``llvm``
-      enable LLVM compiler backend
+      enable LLVM compiler backend. Only available in debug builds.
    ``allbos``
       force all allocated buffers to be referenced in submissions
    ``bo_history``
@@ -1612,8 +1612,10 @@ RADV driver environment variables
    ``emulate_rt``
       forces ray-tracing to be emulated in software on GFX10_3+ and enables
       rt extensions with older hardware.
+   ``heap``
+      enable experimental implementation of VK_EXT_descriptor_heap
    ``hic``
-      enable experimental implementation of VK_EXT_host_image_copy (GFX10+)
+      enable experimental implementation of VK_EXT_host_image_copy on GFX10
    ``sparse``
       enable experimental sparse binding and sparse residency on GPUs where we don't support it by default (pre Polaris)
    ``transfer_queue``

@@ -204,13 +204,8 @@ setup_render_state(struct gl_context *ctx,
       COPY_4V(ctx->Current.Attrib[VERT_ATTRIB_COLOR0], colorSave);
    }
 
-   cso_save_state(cso, (CSO_BIT_RASTERIZER |
-                        CSO_BIT_FRAGMENT_SAMPLERS |
-                        CSO_BIT_VIEWPORT |
-                        CSO_BIT_STREAM_OUTPUTS |
-                        CSO_BIT_VERTEX_ELEMENTS |
-                        CSO_BIT_MESH_SHADER |
-                        CSO_BITS_VERTEX_PIPE_SHADERS));
+   /* Save only states that have no st_atom — they can't be re-derived. */
+   cso_save_state(cso, CSO_BIT_STREAM_OUTPUTS);
 
 
    /* rasterizer state: just scissor */
@@ -281,14 +276,26 @@ restore_render_state(struct gl_context *ctx)
    struct st_context *st = st_context(ctx);
    struct cso_context *cso = st->cso_context;
 
-   /* Unbind all because st/mesa won't do it if the current shader doesn't
-    * use them.
+   /* Unbind sampler views that were bound directly on the pipe.
+    * Restore atomless states (stream outputs) via CSO.
     */
    cso_restore_state(cso, CSO_UNBIND_FS_SAMPLERVIEWS);
    st->state.num_sampler_views[MESA_SHADER_FRAGMENT] = 0;
 
-   ctx->Array.NewVertexElements = true;
-   ST_SET_STATE2(ctx->NewDriverState, ST_NEW_VERTEX_ARRAYS, ST_NEW_FS_SAMPLER_VIEWS);
+   /* Invalidate all states this meta-op modified. The atoms will
+    * re-derive them from GL state before the next draw.
+    */
+   st_context_invalidate_state(st,
+                               ST_INVALIDATE_RASTERIZER |
+                               ST_INVALIDATE_FS_SAMPLERS |
+                               ST_INVALIDATE_VIEWPORT |
+                               ST_INVALIDATE_VERTEX_BUFFERS |
+                               ST_INVALIDATE_VS_STATE |
+                               ST_INVALIDATE_FS_STATE |
+                               ST_INVALIDATE_GS_STATE |
+                               ST_INVALIDATE_TCS_STATE |
+                               ST_INVALIDATE_TES_STATE |
+                               ST_INVALIDATE_MESH_STATE);
 }
 
 

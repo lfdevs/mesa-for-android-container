@@ -422,15 +422,15 @@ vc4_get_chip_info(struct vc4_screen *screen)
                         screen->v3d_ver = 21;
                         return true;
                 } else {
-                        fprintf(stderr, "Couldn't get V3D IDENT0: %s\n",
-                                strerror(errno));
+                        mesa_loge("Couldn't get V3D IDENT0: %s",
+                                  strerror(errno));
                         return false;
                 }
         }
         ret = vc4_ioctl(screen->fd, DRM_IOCTL_VC4_GET_PARAM, &ident1);
         if (ret != 0) {
-                fprintf(stderr, "Couldn't get V3D IDENT1: %s\n",
-                        strerror(errno));
+                mesa_loge("Couldn't get V3D IDENT1: %s",
+                          strerror(errno));
                 return false;
         }
 
@@ -439,10 +439,9 @@ vc4_get_chip_info(struct vc4_screen *screen)
         screen->v3d_ver = major * 10 + minor;
 
         if (screen->v3d_ver != 21 && screen->v3d_ver != 26) {
-                fprintf(stderr,
-                        "V3D %d.%d not supported by this version of Mesa.\n",
-                        screen->v3d_ver / 10,
-                        screen->v3d_ver % 10);
+                mesa_loge("V3D %d.%d not supported by this version of Mesa.",
+                          screen->v3d_ver / 10,
+                          screen->v3d_ver % 10);
                 return false;
         }
 

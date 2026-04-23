@@ -14,15 +14,42 @@ is_u2u64(nir_scalar scalar)
    return nir_scalar_is_alu(scalar) && nir_scalar_alu_op(scalar) == nir_op_u2u64;
 }
 
+typedef struct {
+   nir_shader *shader;
+   struct hash_table *range_ht;
+} lower_state;
+
+static bool
+is_nuw(lower_state *state, nir_scalar scalar)
+{
+   assert(scalar.def->bit_size == 32);
+   nir_alu_instr *alu = nir_def_as_alu(scalar.def);
+   if (alu->no_unsigned_wrap)
+      return true;
+
+   if (!state->range_ht)
+      state->range_ht = _mesa_pointer_hash_table_create(NULL);
+
+   nir_scalar src0 = nir_scalar_chase_alu_src(scalar, 0);
+   nir_scalar src1 = nir_scalar_chase_alu_src(scalar, 1);
+   uint32_t ub0 = nir_unsigned_upper_bound(state->shader, state->range_ht, src0);
+   uint32_t ub1 = nir_unsigned_upper_bound(state->shader, state->range_ht, src1);
+   if ((UINT32_MAX - ub0) < ub1)
+      return false;
+
+   alu->no_unsigned_wrap = true;
+   return true;
+}
+
 static nir_def *
-try_extract_additions(nir_builder *b, nir_scalar scalar, uint64_t *out_const,
+try_extract_additions(lower_state *state, nir_builder *b, nir_scalar scalar, uint64_t *out_const,
                       nir_def **out_offset, bool require_nuw)
 {
    if (!nir_scalar_is_alu(scalar) || nir_scalar_alu_op(scalar) != nir_op_iadd)
       return NULL;
 
    nir_alu_instr *alu = nir_def_as_alu(scalar.def);
-   if (require_nuw && !alu->no_unsigned_wrap)
+   if (require_nuw && !is_nuw(state, scalar))
       return NULL;
 
    nir_scalar src0 = nir_scalar_chase_alu_src(scalar, 0);
@@ -38,19 +65,19 @@ try_extract_additions(nir_builder *b, nir_scalar scalar, uint64_t *out_const,
             continue;
 
          *out_offset = nir_mov_scalar(b, offset_scalar);
-         nir_def *replace_offset = try_extract_additions(b, offset_scalar, out_const, out_offset, true);
+         nir_def *replace_offset = try_extract_additions(state, b, offset_scalar, out_const, out_offset, true);
          *out_offset = replace_offset ? replace_offset : *out_offset;
       } else {
          continue;
       }
 
       nir_def *replace_src =
-         try_extract_additions(b, i == 1 ? src0 : src1, out_const, out_offset, require_nuw);
+         try_extract_additions(state, b, i == 1 ? src0 : src1, out_const, out_offset, require_nuw);
       return replace_src ? replace_src : nir_ssa_for_alu_src(b, alu, 1 - i);
    }
 
-   nir_def *replace_src0 = try_extract_additions(b, src0, out_const, out_offset, require_nuw);
-   nir_def *replace_src1 = try_extract_additions(b, src1, out_const, out_offset, require_nuw);
+   nir_def *replace_src0 = try_extract_additions(state, b, src0, out_const, out_offset, require_nuw);
+   nir_def *replace_src1 = try_extract_additions(state, b, src1, out_const, out_offset, require_nuw);
    if (!replace_src0 && !replace_src1)
       return NULL;
 
@@ -60,7 +87,7 @@ try_extract_additions(nir_builder *b, nir_scalar scalar, uint64_t *out_const,
 }
 
 static bool
-process_instr(nir_builder *b, nir_intrinsic_instr *intrin, void *_)
+process_instr(nir_builder *b, nir_intrinsic_instr *intrin, void *state)
 {
    nir_intrinsic_op op;
    unsigned access = 0;
@@ -92,7 +119,7 @@ process_instr(nir_builder *b, nir_intrinsic_instr *intrin, void *_)
    nir_def *offset = NULL;
    nir_scalar src = {addr_src->ssa, 0};
    b->cursor = nir_after_def(addr_src->ssa);
-   nir_def *addr = try_extract_additions(b, src, &off_const, &offset, false);
+   nir_def *addr = try_extract_additions(state, b, src, &off_const, &offset, false);
    addr = addr ? addr : addr_src->ssa;
 
    b->cursor = nir_before_instr(&intrin->instr);
@@ -139,6 +166,11 @@ process_instr(nir_builder *b, nir_intrinsic_instr *intrin, void *_)
 bool
 ac_nir_lower_global_access(nir_shader *shader)
 {
-   return nir_shader_intrinsics_pass(shader, process_instr,
-                                       nir_metadata_control_flow, NULL);
+   lower_state state;
+   state.shader = shader;
+   state.range_ht = NULL;
+   bool progress = nir_shader_intrinsics_pass(shader, process_instr,
+                                              nir_metadata_control_flow, &state);
+   _mesa_hash_table_destroy(state.range_ht, NULL);
+   return progress;
 }

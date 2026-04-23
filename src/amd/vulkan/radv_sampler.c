@@ -132,15 +132,25 @@ radv_tex_filter_mode(VkSamplerReductionMode mode)
 }
 
 static uint32_t
-radv_get_max_anisotropy(struct radv_device *device, const VkSamplerCreateInfo *pCreateInfo)
+radv_get_max_anisotropy(const struct radv_device *device, const struct vk_sampler_state *sampler_state)
 {
    if (device->force_aniso >= 0)
       return device->force_aniso;
 
-   if (pCreateInfo->anisotropyEnable && pCreateInfo->maxAnisotropy > 1.0f)
-      return (uint32_t)pCreateInfo->maxAnisotropy;
+   if (sampler_state->anisotropy_enable && sampler_state->max_anisotropy > 1.0f)
+      return (uint32_t)sampler_state->max_anisotropy;
 
    return 0;
+}
+
+static VkBorderColor
+radv_get_border_color(const struct vk_sampler_state *sampler_state)
+{
+   const bool uses_border_color = sampler_state->address_mode_u == VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER ||
+                                  sampler_state->address_mode_v == VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER ||
+                                  sampler_state->address_mode_w == VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+
+   return uses_border_color ? sampler_state->border_color : VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK;
 }
 
 static VkResult
@@ -188,77 +198,94 @@ radv_unregister_border_color(struct radv_device *device, uint32_t index)
    mtx_unlock(&device->border_color_data.mutex);
 }
 
-VkResult
-radv_sampler_init(struct radv_device *device, struct radv_sampler *sampler, const VkSamplerCreateInfo *pCreateInfo)
+void
+radv_make_sampler_descriptor(const struct radv_device *device, const struct vk_sampler_state *sampler_state,
+                             uint32_t *desc)
 {
    const struct radv_physical_device *pdev = radv_device_physical(device);
    const struct radv_instance *instance = radv_physical_device_instance(pdev);
-
-   vk_sampler_init(&device->vk, &sampler->vk, pCreateInfo);
-
-   uint32_t max_aniso = radv_get_max_anisotropy(device, pCreateInfo);
-   uint32_t max_aniso_ratio = radv_tex_aniso_filter(max_aniso);
-   unsigned filter_mode = radv_tex_filter_mode(sampler->vk.reduction_mode);
+   const uint32_t max_aniso = radv_get_max_anisotropy(device, sampler_state);
+   const uint32_t max_aniso_ratio = radv_tex_aniso_filter(max_aniso);
+   const unsigned filter_mode = radv_tex_filter_mode(sampler_state->reduction_mode);
    unsigned depth_compare_func = V_008F30_SQ_TEX_DEPTH_COMPARE_NEVER;
-   bool trunc_coord = ((pCreateInfo->minFilter == VK_FILTER_NEAREST && pCreateInfo->magFilter == VK_FILTER_NEAREST) ||
-                       pdev->info.compiler_info.conformant_trunc_coord) &&
-                      !instance->drirc.debug.disable_trunc_coord;
-   bool uses_border_color = pCreateInfo->addressModeU == VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER ||
-                            pCreateInfo->addressModeV == VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER ||
-                            pCreateInfo->addressModeW == VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
-   VkBorderColor border_color = uses_border_color ? pCreateInfo->borderColor : VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK;
-   uint32_t border_color_ptr;
-   bool disable_cube_wrap = pCreateInfo->flags & VK_SAMPLER_CREATE_NON_SEAMLESS_CUBE_MAP_BIT_EXT;
+   const bool trunc_coord =
+      ((sampler_state->min_filter == VK_FILTER_NEAREST && sampler_state->mag_filter == VK_FILTER_NEAREST) ||
+       pdev->info.compiler_info.conformant_trunc_coord) &&
+      !instance->drirc.debug.disable_trunc_coord;
+   const VkBorderColor border_color = radv_get_border_color(sampler_state);
+   const bool disable_cube_wrap = sampler_state->flags & VK_SAMPLER_CREATE_NON_SEAMLESS_CUBE_MAP_BIT_EXT;
 
-   if (pCreateInfo->compareEnable)
-      depth_compare_func = radv_tex_compare(pCreateInfo->compareOp);
-
-   sampler->border_color_index = RADV_BORDER_COLOR_COUNT;
-
-   if (vk_border_color_is_custom(border_color)) {
-      uint32_t border_color_index = RADV_BORDER_COLOR_COUNT;
-      bool request_index = false;
-      VkResult result;
-
-      const VkOpaqueCaptureDescriptorDataCreateInfoEXT *opaque_info =
-         vk_find_struct_const(pCreateInfo->pNext, OPAQUE_CAPTURE_DESCRIPTOR_DATA_CREATE_INFO_EXT);
-      if (opaque_info) {
-         request_index = true;
-         border_color_index = *((const uint32_t *)opaque_info->opaqueCaptureDescriptorData);
-      }
-
-      result = radv_register_border_color(device, sampler->vk.border_color_value, request_index, &border_color_index);
-      if (result != VK_SUCCESS)
-         return result;
-
-      sampler->border_color_index = border_color_index;
-   }
+   if (sampler_state->compare_enable)
+      depth_compare_func = radv_tex_compare(sampler_state->compare_op);
 
    /* If we don't have a custom color, set the ptr to 0 */
-   border_color_ptr = sampler->border_color_index != RADV_BORDER_COLOR_COUNT ? sampler->border_color_index : 0;
+   const uint32_t border_color_ptr =
+      sampler_state->border_color_index != MESA_VK_MAX_CUSTOM_BORDER_COLOR ? sampler_state->border_color_index : 0;
 
    struct ac_sampler_state ac_state = {
-      .address_mode_u = radv_tex_wrap(pCreateInfo->addressModeU),
-      .address_mode_v = radv_tex_wrap(pCreateInfo->addressModeV),
-      .address_mode_w = radv_tex_wrap(pCreateInfo->addressModeW),
+      .address_mode_u = radv_tex_wrap(sampler_state->address_mode_u),
+      .address_mode_v = radv_tex_wrap(sampler_state->address_mode_v),
+      .address_mode_w = radv_tex_wrap(sampler_state->address_mode_w),
       .max_aniso_ratio = max_aniso_ratio,
       .depth_compare_func = depth_compare_func,
-      .unnormalized_coords = pCreateInfo->unnormalizedCoordinates ? 1 : 0,
+      .unnormalized_coords = sampler_state->unnormalized_coordinates ? 1 : 0,
       .cube_wrap = !disable_cube_wrap,
       .trunc_coord = trunc_coord,
       .filter_mode = filter_mode,
-      .mag_filter = radv_tex_filter(pCreateInfo->magFilter, max_aniso),
-      .min_filter = radv_tex_filter(pCreateInfo->minFilter, max_aniso),
-      .mip_filter = radv_tex_mipfilter(pCreateInfo->mipmapMode),
-      .min_lod = pCreateInfo->minLod,
-      .max_lod = pCreateInfo->maxLod,
-      .lod_bias = pCreateInfo->mipLodBias,
+      .mag_filter = radv_tex_filter(sampler_state->mag_filter, max_aniso),
+      .min_filter = radv_tex_filter(sampler_state->min_filter, max_aniso),
+      .mip_filter = radv_tex_mipfilter(sampler_state->mipmap_mode),
+      .min_lod = sampler_state->min_lod,
+      .max_lod = sampler_state->max_lod,
+      .lod_bias = sampler_state->mip_lod_bias,
       .aniso_single_level = !instance->drirc.debug.disable_aniso_single_level,
       .border_color_type = radv_tex_bordercolor(border_color),
       .border_color_ptr = border_color_ptr,
    };
 
-   ac_build_sampler_descriptor(pdev->info.gfx_level, &ac_state, sampler->state);
+   ac_build_sampler_descriptor(pdev->info.gfx_level, &ac_state, desc);
+}
+
+VkResult
+radv_sampler_init(struct radv_device *device, struct radv_sampler *sampler, const VkSamplerCreateInfo *pCreateInfo)
+{
+   vk_sampler_init(&device->vk, &sampler->vk, pCreateInfo);
+
+   sampler->border_color_index = RADV_BORDER_COLOR_COUNT;
+   sampler->border_color_index_from_user = false;
+
+   struct vk_sampler_state sampler_state;
+   vk_sampler_state_init(&sampler_state, pCreateInfo);
+
+   /* Check whether a custom border color must be registered. */
+   const VkBorderColor border_color = radv_get_border_color(&sampler_state);
+
+   if (vk_border_color_is_custom(border_color)) {
+      if (sampler_state.border_color_index != MESA_VK_MAX_CUSTOM_BORDER_COLOR) {
+         sampler->border_color_index_from_user = true;
+      } else {
+         uint32_t border_color_index = RADV_BORDER_COLOR_COUNT;
+         bool request_index = false;
+         VkResult result;
+
+         const VkOpaqueCaptureDescriptorDataCreateInfoEXT *opaque_info =
+            vk_find_struct_const(pCreateInfo->pNext, OPAQUE_CAPTURE_DESCRIPTOR_DATA_CREATE_INFO_EXT);
+         if (opaque_info) {
+            request_index = true;
+            border_color_index = *((const uint32_t *)opaque_info->opaqueCaptureDescriptorData);
+         }
+
+         result =
+            radv_register_border_color(device, sampler->vk.border_color_value, request_index, &border_color_index);
+         if (result != VK_SUCCESS)
+            return result;
+
+         sampler->border_color_index = border_color_index;
+         sampler_state.border_color_index = border_color_index;
+      }
+   }
+
+   radv_make_sampler_descriptor(device, &sampler_state, sampler->state);
 
    return VK_SUCCESS;
 }
@@ -273,7 +300,7 @@ radv_destroy_sampler(struct radv_device *device, const VkAllocationCallbacks *pA
 void
 radv_sampler_finish(struct radv_device *device, struct radv_sampler *sampler)
 {
-   if (sampler->border_color_index != RADV_BORDER_COLOR_COUNT)
+   if (sampler->border_color_index != RADV_BORDER_COLOR_COUNT && !sampler->border_color_index_from_user)
       radv_unregister_border_color(device, sampler->border_color_index);
 
    vk_sampler_finish(&sampler->vk);
@@ -322,4 +349,21 @@ radv_GetSamplerOpaqueCaptureDescriptorDataEXT(VkDevice _device, const VkSamplerC
 
    *(uint32_t *)pData = sampler->border_color_index;
    return VK_SUCCESS;
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL
+radv_RegisterCustomBorderColorEXT(VkDevice _device, const VkSamplerCustomBorderColorCreateInfoEXT *pBorderColor,
+                                  VkBool32 requestIndex, uint32_t *pIndex)
+{
+   VK_FROM_HANDLE(radv_device, device, _device);
+
+   return radv_register_border_color(device, pBorderColor->customBorderColor, requestIndex, pIndex);
+}
+
+VKAPI_ATTR void VKAPI_CALL
+radv_UnregisterCustomBorderColorEXT(VkDevice _device, uint32_t index)
+{
+   VK_FROM_HANDLE(radv_device, device, _device);
+
+   radv_unregister_border_color(device, index);
 }

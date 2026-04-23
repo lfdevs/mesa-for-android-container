@@ -88,8 +88,8 @@ compile(void *memctx, const uint32_t *spirv, size_t spirv_size)
 
    assert(spirv_size % 4 == 0);
    nir_shader *nir =
-      spirv_to_nir(spirv, spirv_size / 4, NULL, 0, MESA_SHADER_KERNEL,
-                   "library", &spirv_options, nir_options);
+      spirv_to_nir(spirv, spirv_size / 4, NULL, MESA_SHADER_KERNEL, "library",
+                   &spirv_options, nir_options);
    nir_validate_shader(nir, "after spirv_to_nir");
    ralloc_steal(memctx, nir);
 

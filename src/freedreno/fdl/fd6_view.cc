@@ -237,6 +237,11 @@ fdl6_view_init(struct fdl6_view *view, const struct fdl_layout **layouts,
          storage_format = FMT6_8_8_8_8_UNORM;
    }
 
+   if (args->format == PIPE_FORMAT_R64_SINT ||
+       args->format == PIPE_FORMAT_R64_UINT) {
+      storage_format = FMT6_32_32_UINT;
+   }
+
    view->format = args->format;
 
    memset(view->descriptor, 0, sizeof(view->descriptor));
@@ -467,32 +472,9 @@ fdl6_view_init(struct fdl6_view *view, const struct fdl_layout **layouts,
    view->layer_size = layer_size;
    view->ubwc_layer_size = layout->ubwc_layer_size;
 
-   enum a6xx_format color_format =
-      fd6_color_format(args->format, (enum a6xx_tile_mode)layout->tile_mode);
-
-   /* Don't set fields that are only used for attachments/blit dest if COLOR
-    * is unsupported.
-    */
-   if (color_format == FMT6_NONE)
-      return;
-
    enum a3xx_color_swap color_swap =
       fd6_color_swap(args->format, (enum a6xx_tile_mode)layout->tile_mode,
                      layout->is_mutable);
-   enum a6xx_format blit_format = color_format;
-
-   if (is_d24s8)
-      color_format = FMT6_Z24_UNORM_S8_UINT_AS_R8G8B8A8;
-
-   if (color_format == FMT6_Z24_UNORM_S8_UINT_AS_R8G8B8A8 && !ubwc_enabled)
-      color_format = FMT6_8_8_8_8_UNORM;
-
-   /* We don't need FMT6_Z24_UNORM_S8_UINT_AS_R8G8B8A8 / FMT6_8_8_8_8_UNORM
-    * for event blits.  FMT6_Z24_UNORM_S8_UINT_AS_R8G8B8A8 also does not
-    * support fast clears and is slower.
-    */
-   if (is_d24s8 || blit_format == FMT6_Z24_UNORM_S8_UINT_AS_R8G8B8A8)
-      blit_format = FMT6_Z24_UNORM_S8_UINT;
 
    memset(view->storage_descriptor, 0, sizeof(view->storage_descriptor));
 
@@ -524,6 +506,30 @@ fdl6_view_init(struct fdl6_view *view, const struct fdl_layout **layouts,
                       A8XX_TEX_MEMOBJ_3_SWAP(swap) |
                       fdl6_texswiz<CHIP>(args, has_z24uint_s8uint);
    }
+
+   enum a6xx_format color_format =
+      fd6_color_format(args->format, (enum a6xx_tile_mode)layout->tile_mode);
+
+   /* Don't set fields that are only used for attachments/blit dest if COLOR
+    * is unsupported.
+    */
+   if (color_format == FMT6_NONE)
+      return;
+
+   enum a6xx_format blit_format = color_format;
+
+   if (is_d24s8)
+      color_format = FMT6_Z24_UNORM_S8_UINT_AS_R8G8B8A8;
+
+   if (color_format == FMT6_Z24_UNORM_S8_UINT_AS_R8G8B8A8 && !ubwc_enabled)
+      color_format = FMT6_8_8_8_8_UNORM;
+
+   /* We don't need FMT6_Z24_UNORM_S8_UINT_AS_R8G8B8A8 / FMT6_8_8_8_8_UNORM
+    * for event blits.  FMT6_Z24_UNORM_S8_UINT_AS_R8G8B8A8 also does not
+    * support fast clears and is slower.
+    */
+   if (is_d24s8 || blit_format == FMT6_Z24_UNORM_S8_UINT_AS_R8G8B8A8)
+      blit_format = FMT6_Z24_UNORM_S8_UINT;
 
    view->width = width;
    view->height = height;
@@ -573,9 +579,15 @@ fdl6_buffer_view_init(uint32_t *descriptor, enum pipe_format format,
    unsigned elem_size = util_format_get_blocksize(format);
    unsigned elements = size / elem_size;
 
+   enum pipe_format buffer_format = format;
+   if (buffer_format == PIPE_FORMAT_R64_SINT ||
+       buffer_format == PIPE_FORMAT_R64_UINT) {
+      buffer_format = PIPE_FORMAT_R32G32_UINT;
+   }
+
    struct fdl_view_args args = {
       .swiz = {swiz[0], swiz[1], swiz[2], swiz[3]},
-      .format = format,
+      .format = buffer_format,
    };
 
    memset(descriptor, 0, 4 * FDL6_TEX_CONST_DWORDS);
@@ -586,10 +598,10 @@ fdl6_buffer_view_init(uint32_t *descriptor, enum pipe_format format,
 
       descriptor[0] =
          A6XX_TEX_MEMOBJ_0_TILE_MODE(TILE6_LINEAR) |
-         A6XX_TEX_MEMOBJ_0_SWAP(fd6_texture_swap(format, TILE6_LINEAR, false)) |
-         A6XX_TEX_MEMOBJ_0_FMT(fd6_texture_format(format, TILE6_LINEAR, false)) |
+         A6XX_TEX_MEMOBJ_0_SWAP(fd6_texture_swap(buffer_format, TILE6_LINEAR, false)) |
+         A6XX_TEX_MEMOBJ_0_FMT(fd6_texture_format(buffer_format, TILE6_LINEAR, false)) |
          A6XX_TEX_MEMOBJ_0_MIPLVLS(0) | fdl6_texswiz<CHIP>(&args, false) |
-         COND(util_format_is_srgb(format), A6XX_TEX_MEMOBJ_0_SRGB);
+         COND(util_format_is_srgb(buffer_format), A6XX_TEX_MEMOBJ_0_SRGB);
       descriptor[1] = A6XX_TEX_MEMOBJ_1_WIDTH(elements & ((1 << 15) - 1)) |
                      A6XX_TEX_MEMOBJ_1_HEIGHT(elements >> 15);
       descriptor[2] = A6XX_TEX_MEMOBJ_2_STRUCTSIZETEXELS(struct_size_texels) |
@@ -605,11 +617,11 @@ fdl6_buffer_view_init(uint32_t *descriptor, enum pipe_format format,
       descriptor[2] = A8XX_TEX_MEMOBJ_2_WIDTH(elements & ((1 << 15) - 1)) |
                       A8XX_TEX_MEMOBJ_2_HEIGHT(elements >> 15) |
                       A8XX_TEX_MEMOBJ_2_SAMPLES(MSAA_ONE);
-      descriptor[3] = A8XX_TEX_MEMOBJ_3_FMT(fd6_texture_format(format, TILE6_LINEAR, false)) |
-                      A8XX_TEX_MEMOBJ_3_SWAP(fd6_texture_swap(format, TILE6_LINEAR, false)) |
+      descriptor[3] = A8XX_TEX_MEMOBJ_3_FMT(fd6_texture_format(buffer_format, TILE6_LINEAR, false)) |
+                      A8XX_TEX_MEMOBJ_3_SWAP(fd6_texture_swap(buffer_format, TILE6_LINEAR, false)) |
                       fdl6_texswiz<CHIP>(&args, false);
       descriptor[4] = A8XX_TEX_MEMOBJ_4_TILE_MODE(TILE6_LINEAR) |
-                      COND(util_format_is_srgb(format), A8XX_TEX_MEMOBJ_4_SRGB);
+                      COND(util_format_is_srgb(buffer_format), A8XX_TEX_MEMOBJ_4_SRGB);
    }
 }
 FD_GENX(fdl6_buffer_view_init);

@@ -19,6 +19,10 @@ dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_out_of_bounds_min_revers
 dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_out_of_bounds_min_reverse_src_y,Fail
 dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_out_of_bounds_mag,Fail
 
+# Autotune regression
+dEQP-GLES3.functional.multisample.fbo_4_samples.stencil,Fail
+dEQP-GLES3.functional.multisample.fbo_max_samples.stencil,Fail
+
 # EGL
 # Usual Zink failures
 wayland-dEQP-EGL.functional.resize.surface_size.grow,Fail

@@ -59,6 +59,10 @@ v3dX(job_emit_enable_double_buffer)(struct v3dv_job *job)
    };
    config.width_in_pixels = tiling->width;
    config.height_in_pixels = tiling->height;
+   config.tile_allocation_initial_block_size =
+      V3D_TILE_ALLOC_INITIAL_BLOCK_SIZE_ENUM;
+   config.tile_allocation_block_size =
+      V3D_TILE_ALLOC_OVERFLOW_BLOCK_SIZE_ENUM;
 #if V3D_VERSION == 42
    config.number_of_render_targets = MAX2(tiling->render_target_count, 1);
    config.multisample_mode_4x = tiling->msaa;
@@ -91,6 +95,10 @@ v3dX(job_emit_binning_prolog)(struct v3dv_job *job,
    cl_emit(&job->bcl, TILE_BINNING_MODE_CFG, config) {
       config.width_in_pixels = tiling->width;
       config.height_in_pixels = tiling->height;
+      config.tile_allocation_initial_block_size =
+         V3D_TILE_ALLOC_INITIAL_BLOCK_SIZE_ENUM;
+      config.tile_allocation_block_size =
+         V3D_TILE_ALLOC_OVERFLOW_BLOCK_SIZE_ENUM;
 #if V3D_VERSION == 42
       config.number_of_render_targets = MAX2(tiling->render_target_count, 1);
       config.multisample_mode_4x = tiling->msaa;
@@ -752,7 +760,8 @@ cmd_buffer_emit_render_pass_layer_rcl(struct v3dv_cmd_buffer *cmd_buffer,
     */
    const struct v3dv_frame_tiling *tiling = &job->frame_tiling;
    const uint32_t tile_alloc_offset =
-      64 * layer * tiling->draw_tiles_x * tiling->draw_tiles_y;
+      V3D_TILE_ALLOC_INITIAL_BLOCK_SIZE *
+      layer * tiling->draw_tiles_x * tiling->draw_tiles_y;
    cl_emit(rcl, MULTICORE_RENDERING_TILE_LIST_SET_BASE, list) {
       list.address = v3dv_cl_address(job->tile_alloc, tile_alloc_offset);
    }
@@ -1227,7 +1236,7 @@ v3dX(cmd_buffer_emit_render_pass_rcl)(struct v3dv_cmd_buffer *cmd_buffer)
    cl_emit(rcl, TILE_LIST_INITIAL_BLOCK_SIZE, init) {
       init.use_auto_chained_tile_lists = true;
       init.size_of_first_block_in_chained_tile_lists =
-         TILE_ALLOCATION_BLOCK_SIZE_64B;
+         V3D_TILE_ALLOC_INITIAL_BLOCK_SIZE_ENUM;
    }
 
    cl_emit(rcl, MULTICORE_RENDERING_SUPERTILE_CFG, config) {

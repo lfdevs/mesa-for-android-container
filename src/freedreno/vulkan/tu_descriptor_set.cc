@@ -19,21 +19,19 @@
 
 #include "tu_descriptor_set.h"
 
-#include <fcntl.h>
-
 #include "util/mesa-blake3.h"
+#include "vk_acceleration_structure.h"
 #include "vk_descriptors.h"
 #include "vk_util.h"
-#include "vk_acceleration_structure.h"
 
+#include "bvh/tu_bvh.h"
 #include "tu_buffer.h"
 #include "tu_buffer_view.h"
 #include "tu_device.h"
 #include "tu_image.h"
-#include "tu_formats.h"
 #include "tu_rmv.h"
+#include "tu_sampler.h"
 #include "tu_subsampled_image.h"
-#include "bvh/tu_build_interface.h"
 
 static inline uint8_t *
 pool_base(struct tu_descriptor_pool *pool)

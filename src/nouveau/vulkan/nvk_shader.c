@@ -34,12 +34,26 @@
 #include "nv_push_clc397.h"
 #include "nv_push_clc797.h"
 
-const struct nak_constant_offset_info nak_const_offsets = {
+const struct nak_constant_offset_info nak_const_offsets_base = {
    .sample_info_cb = 0,
    .sample_locations_offset = nvk_root_descriptor_offset(draw.sample_locations),
    .sample_masks_offset = nvk_root_descriptor_offset(draw.sample_masks),
+   .printf_cb = 0,
    .printf_buffer_offset = nvk_root_descriptor_offset(printf_buffer_addr),
 };
+
+const struct nak_constant_offset_info nak_const_offsets_turing_graphics = {
+   .sample_info_cb = NVK_HW_ROOT_TABLE_FIRST_CB +
+                     nvk_hw_root_table_index(draw.sample_locations),
+   .sample_locations_offset = nvk_hw_root_table_offset(draw.sample_locations),
+   .sample_masks_offset = nvk_hw_root_table_offset(draw.sample_masks),
+   .printf_cb = NVK_HW_ROOT_TABLE_FIRST_CB +
+                nvk_hw_root_table_index(printf_buffer_addr),
+   .printf_buffer_offset = nvk_hw_root_table_offset(printf_buffer_addr),
+};
+static_assert(nvk_hw_root_table_index(draw.sample_locations) ==
+              nvk_hw_root_table_index(draw.sample_masks),
+              "Sample info is in same root table");
 
 static void
 shared_var_info(const struct glsl_type *type, unsigned *size, unsigned *align)
@@ -540,23 +554,35 @@ nvk_compile_nir(struct nvk_device *dev, nir_shader *nir,
    return VK_SUCCESS;
 }
 
-static VkResult
-nvk_shader_upload(struct nvk_device *dev, struct nvk_shader *shader)
+static uint32_t
+nvk_shader_get_hdr_size(struct nvk_device *dev, struct nvk_shader *shader)
+{
+   if (shader->info.stage == MESA_SHADER_COMPUTE)
+      return 0;
+
+   const struct nvk_physical_device *pdev = nvk_device_physical(dev);
+   return pdev->info.cls_eng3d >= TURING_A ? TU102_SHADER_HEADER_SIZE
+                                           : GF100_SHADER_HEADER_SIZE;
+}
+
+static uint32_t
+nvk_shader_get_shader_alignment(struct nvk_device *dev)
 {
    const struct nvk_physical_device *pdev = nvk_device_physical(dev);
-
-   uint32_t hdr_size = 0;
-   if (shader->info.stage != MESA_SHADER_COMPUTE) {
-      if (pdev->info.cls_eng3d >= TURING_A)
-         hdr_size = TU102_SHADER_HEADER_SIZE;
-      else
-         hdr_size = GF100_SHADER_HEADER_SIZE;
-   }
 
    /* Fermi   needs 0x40 alignment
     * Kepler+ needs the first instruction to be 0x80 aligned, so we waste 0x30 bytes
     */
-   int alignment = pdev->info.cls_eng3d >= KEPLER_A ? 0x80 : 0x40;
+   return pdev->info.cls_eng3d >= KEPLER_A ? 0x80 : 0x40;
+}
+
+static uint32_t
+nvk_shader_get_shader_size(struct nvk_device *dev, struct nvk_shader *shader,
+                           uint32_t *out_hdr_offset, uint32_t *out_code_offset)
+{
+   const struct nvk_physical_device *pdev = nvk_device_physical(dev);
+   const uint32_t hdr_size = nvk_shader_get_hdr_size(dev, shader);
+   const uint32_t alignment = nvk_shader_get_shader_alignment(dev);
 
    uint32_t total_size = 0;
    if (pdev->info.cls_eng3d >= KEPLER_A &&
@@ -568,12 +594,33 @@ nvk_shader_upload(struct nvk_device *dev, struct nvk_shader *shader)
       total_size = alignment - hdr_size;
    }
 
-   const uint32_t hdr_offset = total_size;
+   if (out_hdr_offset)
+      *out_hdr_offset = total_size;
+
    total_size += hdr_size;
 
-   const uint32_t code_offset = total_size;
-   assert(code_offset % alignment == 0);
+   if (out_code_offset) {
+      *out_code_offset = total_size;
+      assert(*out_code_offset % alignment == 0);
+   }
+
    total_size += shader->code_size;
+
+   return total_size;
+}
+
+static VkResult
+nvk_shader_upload(struct nvk_device *dev, struct nvk_shader *shader)
+{
+   const struct nvk_physical_device *pdev = nvk_device_physical(dev);
+
+   const uint32_t hdr_size = nvk_shader_get_hdr_size(dev, shader);
+   uint32_t hdr_offset;
+   uint32_t code_offset;
+
+   uint32_t total_size = nvk_shader_get_shader_size(dev, shader, &hdr_offset,
+                                                    &code_offset);
+   uint32_t alignment = nvk_shader_get_shader_alignment(dev);
 
    uint32_t data_offset = 0;
    if (shader->data_size > 0) {
@@ -646,7 +693,7 @@ nvk_max_shader_push_dw(const struct nvk_physical_device *pdev,
    if (stage == MESA_SHADER_COMPUTE)
       return 0;
 
-   uint16_t max_dw_count = 8;
+   uint16_t max_dw_count = 9;
 
    if (stage == MESA_SHADER_TESS_CTRL || stage == MESA_SHADER_TESS_EVAL)
       max_dw_count += 2;
@@ -686,12 +733,23 @@ nvk_shader_fill_push(struct nvk_device *dev,
       .type    = type,
    });
 
-   max_dw_count += 3;
+   max_dw_count += 4;
    uint64_t addr = shader->hdr_addr;
    if (pdev->info.cls_eng3d >= VOLTA_A) {
       P_MTHD(p, NVC397, SET_PIPELINE_PROGRAM_ADDRESS_A(idx));
       P_NVC397_SET_PIPELINE_PROGRAM_ADDRESS_A(p, idx, addr >> 32);
       P_NVC397_SET_PIPELINE_PROGRAM_ADDRESS_B(p, idx, addr);
+
+      /* On Ampere B and later, we can be prefetched for up to 127 blocks of a
+       * shader. */
+      if (pdev->info.cls_eng3d >= AMPERE_B) {
+         uint32_t shader_size =
+            nvk_shader_get_shader_size(dev, shader, NULL, NULL);
+         uint32_t shader_prefetch_size_in_blocks =
+            MIN2(DIV_ROUND_UP(shader_size, 256), 127);
+         P_NVC797_SET_PIPELINE_PROGRAM_PREFETCH(p, idx,
+                                                shader_prefetch_size_in_blocks);
+      }
    } else {
       assert(addr < 0xffffffff);
       P_IMMD(p, NV9097, SET_PIPELINE_PROGRAM(idx), addr);

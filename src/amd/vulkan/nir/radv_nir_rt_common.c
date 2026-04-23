@@ -15,7 +15,7 @@ bool
 radv_use_bvh_stack_rtn(const struct radv_physical_device *pdevice)
 {
    /* gfx12 requires using the bvh4 ds_bvh_stack_rtn differently - enable hw stack instrs on gfx12 only with bvh8 */
-   return (pdevice->info.gfx_level == GFX11 || pdevice->info.gfx_level == GFX11_5 || pdevice->cache_key.bvh8) &&
+   return ((pdevice->info.gfx_level >= GFX11 && pdevice->info.gfx_level < GFX12) || pdevice->cache_key.bvh8) &&
           !pdevice->cache_key.emulate_rt;
 }
 
@@ -560,15 +560,12 @@ create_bvh_descriptor(nir_builder *b, const struct radv_physical_device *pdev, s
       /* Enable pointer flags on GFX11+ */
       dword3 |= BITFIELD_BIT(119 - 96);
 
-      /* Instead of the default box sorting (closest point), use largest for terminate_on_first_hit rays and midpoint
-       * for closest hit; this makes it more likely that the ray traversal will visit fewer nodes. */
+      /* Instead of the default box sorting (closest point), use largest for terminate_on_first_hit rays;
+       * this makes it more likely that the ray traversal will visit fewer nodes. */
       const uint32_t box_sort_largest = 1;
-      const uint32_t box_sort_midpoint = 2;
 
-      /* Only use largest/midpoint sorting when all invocations have the same ray flags, otherwise
+      /* Only use largest sorting when all invocations have the same ray flags, otherwise
        * fall back to the default closest point. */
-      dword1 = nir_bcsel(b, nir_vote_any(b, 1, ray_flags->terminate_on_first_hit), dword1,
-                         nir_imm_int(b, (box_sort_midpoint << 21) | sort_triangles_first | box_sort_enable));
       dword1 = nir_bcsel(b, nir_vote_all(b, 1, ray_flags->terminate_on_first_hit),
                          nir_imm_int(b, (box_sort_largest << 21) | sort_triangles_first | box_sort_enable), dword1);
    }

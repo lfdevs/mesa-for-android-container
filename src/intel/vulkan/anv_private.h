@@ -250,11 +250,6 @@ get_max_vbs(const struct intel_device_info *devinfo) {
 #define ANV_GRAPHICS_SHADER_STAGE_COUNT (MESA_SHADER_MESH + 1)
 #define ANV_RT_SHADER_STAGE_COUNT       (MESA_SHADER_CALLABLE - MESA_SHADER_RAYGEN + 1)
 
-/* Defines where various values are defined in the inline parameter register.
- */
-#define ANV_INLINE_PARAM_PUSH_ADDRESS_OFFSET (0)
-#define ANV_INLINE_PARAM_MESH_PROVOKING_VERTEX (8)
-
 /* RENDER_SURFACE_STATE is a bit smaller (48b) but since it is aligned to 64
  * and we can't put anything else there we use 64b.
  */
@@ -1044,6 +1039,7 @@ VkResult anv_reloc_list_append(struct anv_reloc_list *list,
 
 /* Shaders */
 
+#define ANV_DESCRIPTOR_SET_PUSH_POINTER       (UINT8_MAX - 5)
 #define ANV_DESCRIPTOR_SET_PER_PRIM_PADDING   (UINT8_MAX - 4)
 #define ANV_DESCRIPTOR_SET_NULL               (UINT8_MAX - 3)
 #define ANV_DESCRIPTOR_SET_PUSH_CONSTANTS     (UINT8_MAX - 2)
@@ -1423,6 +1419,12 @@ struct anv_shader {
    uint32_t *cmd_data;
 };
 
+uint32_t anv_shader_get_scratch_surf(struct anv_batch *batch,
+                                     struct anv_device *device,
+                                     mesa_shader_stage stage,
+                                     uint32_t total_scratch,
+                                     bool protected);
+
 extern struct vk_device_shader_ops anv_device_shader_ops;
 
 void anv_write_rt_shader_group(struct vk_device *vk_device,
@@ -1793,15 +1795,23 @@ enum anv_debug {
    ANV_DEBUG_SHADER_HASH       = BITFIELD_BIT(7),
    ANV_DEBUG_NO_SLAB           = BITFIELD_BIT(8),
    ANV_DEBUG_DESCRIPTOR_DIRTY  = BITFIELD_BIT(9),
+   ANV_DEBUG_SHADER_PRINT      = BITFIELD_BIT(10),
 };
+
+extern enum anv_debug anv_debug;
+
+#define ANV_DEBUG(name) unlikely(anv_debug & ANV_DEBUG_##name)
+
+static inline bool anv_needs_printf_buffer(void)
+{
+   return ANV_DEBUG(SHADER_PRINT);
+}
 
 struct anv_instance {
     struct vk_instance                          vk;
 
     struct driOptionCache                       dri_options;
     struct driOptionCache                       available_dri_options;
-
-    enum anv_debug                              debug;
 
     int                                         mesh_conv_prim_attrs_to_vert_attrs;
     bool                                        enable_tbimr;
@@ -1810,6 +1820,7 @@ struct anv_instance {
     bool                                        external_memory_implicit_sync;
     bool                                        force_guc_low_latency;
     bool                                        emulate_read_without_format;
+    bool                                        promote_cbv_to_push_buffers;
 
     /**
      * Workarounds for game bugs.
@@ -5110,7 +5121,12 @@ static inline bool
 anv_cmd_buffer_is_compute_queue(const struct anv_cmd_buffer *cmd_buffer)
 {
    struct anv_queue_family *queue_family = cmd_buffer->queue_family;
-   return queue_family->engine_class == INTEL_ENGINE_CLASS_COMPUTE;
+   /* Either it's a RCS engine masquerading as a compute queue, or it's an
+    * actual CCS.
+    */
+   return ((queue_family->queueFlags & VK_QUEUE_GRAPHICS_BIT) == 0 &&
+           queue_family->engine_class == INTEL_ENGINE_CLASS_RENDER) ||
+          queue_family->engine_class == INTEL_ENGINE_CLASS_COMPUTE;
 }
 
 static inline bool
@@ -6929,8 +6945,7 @@ anv_cmd_buffer_dirty_descriptors(struct anv_cmd_buffer* cmd_buffer,
                                  const char* reason)
 {
    cmd_buffer->state.descriptors_dirty |= stages;
-   if (unlikely(cmd_buffer->device->physical->instance->debug &
-                ANV_DEBUG_DESCRIPTOR_DIRTY))
+   if (ANV_DEBUG(DESCRIPTOR_DIRTY))
       anv_cmd_buffer_descriptor_buffer_debug(cmd_buffer, stages, reason);
 }
 

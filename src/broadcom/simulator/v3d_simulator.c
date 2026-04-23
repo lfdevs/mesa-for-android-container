@@ -56,6 +56,7 @@
 #include "util/u_dynarray.h"
 #include "util/u_memory.h"
 #include "util/u_mm.h"
+#include "util/log.h"
 #include "util/u_math.h"
 
 #include <xf86drm.h>
@@ -301,7 +302,7 @@ v3d_create_simulator_bo_for_gem(int fd, int handle, unsigned size)
         }
         }
         if (ret) {
-                fprintf(stderr, "Failed to get MMAP offset: %d\n", ret);
+                mesa_loge("Failed to get MMAP offset: %d", ret);
                 abort();
         }
 
@@ -309,8 +310,8 @@ v3d_create_simulator_bo_for_gem(int fd, int handle, unsigned size)
                                  PROT_READ | PROT_WRITE, MAP_SHARED,
                                  fd, sim_bo->mmap_offset);
         if (sim_bo->gem_vaddr == MAP_FAILED) {
-                fprintf(stderr, "mmap of bo %d (offset 0x%016llx, size %d) failed\n",
-                        handle, (long long)sim_bo->mmap_offset, sim_bo->size);
+                mesa_loge("mmap of bo %d (offset 0x%016llx, size %d) failed",
+                          handle, (long long)sim_bo->mmap_offset, sim_bo->size);
                 abort();
         }
 
@@ -398,8 +399,7 @@ v3d_simulator_copy_out_handle(struct v3d_simulator_file *file, int handle)
         uint32_t sentinel;
         v3d_hw_read_mem(sim_state.v3d, &sentinel, sim_bo->sim_addr + sim_bo->size, sizeof(sentinel));
         if (sentinel != BO_SENTINEL) {
-                fprintf(stderr, "Buffer overflow in handle %d\n",
-                        handle);
+                mesa_loge("Buffer overflow in handle %d", handle);
         }
 }
 
@@ -994,7 +994,7 @@ v3d_simulator_submit_cpu_ioctl(int fd, struct drm_v3d_submit_cpu *args)
 			v3d_copy_performance_query(fd, ext, args);
 			break;
 		default:
-			fprintf(stderr, "Unknown CPU job 0x%08x\n", (int)ext->id);
+			mesa_loge("Unknown CPU job 0x%08x", (int)ext->id);
 			break;
 		}
 
@@ -1143,7 +1143,7 @@ v3d_simulator_ioctl(int fd, unsigned long request, void *args)
         case DRM_IOCTL_GEM_FLINK:
                 return drmIoctl(fd, request, args);
         default:
-                fprintf(stderr, "Unknown ioctl 0x%08x\n", (int)request);
+                mesa_loge("Unknown ioctl 0x%08x", (int)request);
                 abort();
         }
 }

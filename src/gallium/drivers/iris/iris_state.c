@@ -9050,10 +9050,6 @@ iris_load_indirect_location(struct iris_context *ice,
                             struct iris_batch *batch,
                             const struct pipe_grid_info *grid)
 {
-#define GPGPU_DISPATCHDIMX 0x2500
-#define GPGPU_DISPATCHDIMY 0x2504
-#define GPGPU_DISPATCHDIMZ 0x2508
-
    assert(grid->indirect);
 
    struct iris_state_ref *grid_size = &ice->state.grid_size;
@@ -9063,9 +9059,9 @@ iris_load_indirect_location(struct iris_context *ice,
    struct mi_value size_x = mi_mem32(ro_bo(bo, grid_size->offset + 0));
    struct mi_value size_y = mi_mem32(ro_bo(bo, grid_size->offset + 4));
    struct mi_value size_z = mi_mem32(ro_bo(bo, grid_size->offset + 8));
-   mi_store(&b, mi_reg32(GPGPU_DISPATCHDIMX), size_x);
-   mi_store(&b, mi_reg32(GPGPU_DISPATCHDIMY), size_y);
-   mi_store(&b, mi_reg32(GPGPU_DISPATCHDIMZ), size_z);
+   mi_store(&b, mi_reg32(GENX(GPGPU_DISPATCHDIMX_num)), size_x);
+   mi_store(&b, mi_reg32(GENX(GPGPU_DISPATCHDIMY_num)), size_y);
+   mi_store(&b, mi_reg32(GENX(GPGPU_DISPATCHDIMZ_num)), size_z);
 }
 
 static bool iris_emit_indirect_dispatch_supported(const struct intel_device_info *devinfo)

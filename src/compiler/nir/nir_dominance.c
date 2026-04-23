@@ -73,9 +73,7 @@ static bool
 calc_dominance(nir_block *block)
 {
    nir_block *new_idom = NULL;
-   set_foreach(&block->predecessors, entry) {
-      nir_block *pred = (nir_block *)entry->key;
-
+   nir_foreach_pred(pred, block) {
       if (pred->imm_dom) {
          if (new_idom)
             new_idom = intersect(pred, new_idom);
@@ -95,10 +93,8 @@ calc_dominance(nir_block *block)
 static bool
 calc_dom_frontier(nir_block *block)
 {
-   if (block->predecessors.entries > 1) {
-      set_foreach(&block->predecessors, entry) {
-         nir_block *runner = (nir_block *)entry->key;
-
+   if (nir_block_num_preds(block) > 1) {
+      nir_foreach_pred(runner, block) {
          /* Skip unreachable predecessors */
          if (runner->imm_dom == NULL)
             continue;

@@ -201,15 +201,16 @@ lower_tex_coords(nir_builder *b, nir_tex_instr *tex, nir_def **coords,
 
 static void
 replace_with_formatted_load_buffer_amd(nir_builder *b, nir_def *old_def, nir_deref_instr *deref,
-                                       nir_def *handle, nir_def *vindex, unsigned access,
-                                       nir_variable_mode mode, unsigned backend_flags,
-                                       nir_alu_type dest_type)
+                                       nir_def *handle, nir_def *heap_offset, nir_def *vindex,
+                                       unsigned access, nir_variable_mode mode,
+                                       unsigned backend_flags, nir_alu_type dest_type)
 {
    nir_def *zero = nir_imm_int(b, 0);
 
    nir_def *desc = nir_build_tex(b, nir_texop_descriptor_amd,
                                  .texture_deref = deref,
                                  .texture_handle = handle,
+                                 .texture_heap_offset = heap_offset,
                                  .dim = GLSL_SAMPLER_DIM_BUF,
                                  .dest_type = nir_type_uint32,
                                  .can_speculate = access & ACCESS_CAN_SPECULATE,
@@ -338,6 +339,7 @@ lower_tex(nir_builder *b, nir_tex_instr *tex, const ac_nir_lower_image_tex_optio
       nir_deref_instr *deref = NULL;
       nir_def *handle = NULL;
       nir_def *vindex = NULL;
+      nir_def *heap_offset = NULL;
 
       for (unsigned i = 0; i < tex->num_srcs; i++) {
          switch (tex->src[i].src_type) {
@@ -353,12 +355,15 @@ lower_tex(nir_builder *b, nir_tex_instr *tex, const ac_nir_lower_image_tex_optio
          case nir_tex_src_offset:
          case nir_tex_src_texture_offset:
             UNREACHABLE("unexpected tex src for buffer loads");
+         case nir_tex_src_texture_heap_offset:
+            heap_offset = tex->src[i].src.ssa;
+            break;
          default:
             break;
          }
       }
 
-      replace_with_formatted_load_buffer_amd(b, &tex->def, deref, handle, vindex,
+      replace_with_formatted_load_buffer_amd(b, &tex->def, deref, handle, heap_offset, vindex,
                                              ACCESS_RESTRICT | ACCESS_NON_WRITEABLE |
                                              ACCESS_CAN_REORDER |
                                              (tex->can_speculate ? ACCESS_CAN_SPECULATE : 0) |
@@ -396,24 +401,31 @@ lower_image(nir_builder *b, nir_intrinsic_instr *intr, const ac_nir_lower_image_
        (intr->intrinsic == nir_intrinsic_image_deref_load ||
         intr->intrinsic == nir_intrinsic_image_deref_sparse_load ||
         intr->intrinsic == nir_intrinsic_bindless_image_load ||
-        intr->intrinsic == nir_intrinsic_bindless_image_sparse_load)) {
+        intr->intrinsic == nir_intrinsic_bindless_image_sparse_load ||
+        intr->intrinsic == nir_intrinsic_image_heap_load ||
+        intr->intrinsic == nir_intrinsic_image_heap_sparse_load)) {
       b->cursor = nir_before_instr(&intr->instr);
 
       nir_deref_instr *deref = NULL;
       nir_def *handle = NULL;
+      nir_def *heap_offset = NULL;
 
       if (intr->intrinsic == nir_intrinsic_image_deref_load ||
           intr->intrinsic == nir_intrinsic_image_deref_sparse_load)
          deref = nir_instr_as_deref(nir_def_instr(intr->src[0].ssa));
+      else if (intr->intrinsic == nir_intrinsic_image_heap_load ||
+               intr->intrinsic == nir_intrinsic_image_heap_sparse_load)
+         heap_offset = intr->src[0].ssa;
       else
          handle = intr->src[0].ssa;
 
       bool is_sparse = intr->intrinsic == nir_intrinsic_image_deref_sparse_load ||
-                       intr->intrinsic == nir_intrinsic_bindless_image_sparse_load;
+                       intr->intrinsic == nir_intrinsic_bindless_image_sparse_load ||
+                       intr->intrinsic == nir_intrinsic_image_heap_sparse_load;
       unsigned access = nir_intrinsic_access(intr) | (is_sparse ? ACCESS_SPARSE : 0);
       nir_def *vindex = nir_channel(b, intr->src[1].ssa, 0);
 
-      replace_with_formatted_load_buffer_amd(b, &intr->def, deref, handle, vindex, access,
+      replace_with_formatted_load_buffer_amd(b, &intr->def, deref, handle, heap_offset, vindex, access,
                                              nir_var_image, AC_NIR_TEX_BACKEND_FLAG_IS_IMAGE,
                                              nir_intrinsic_dest_type(intr));
       return true;

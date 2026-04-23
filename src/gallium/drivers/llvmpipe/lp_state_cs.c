@@ -61,23 +61,6 @@ static unsigned cs_no = 0;
 static unsigned task_no = 0;
 static unsigned mesh_no = 0;
 
-struct lp_cs_job_info {
-   unsigned grid_size[3];
-   unsigned iter_size[3];
-   unsigned grid_base[3];
-   unsigned block_size[3];
-   unsigned req_local_mem;
-   unsigned work_dim;
-   unsigned draw_id;
-   bool zero_initialize_shared_memory;
-   bool use_iters;
-   struct lp_cs_exec *current;
-   struct vertex_header *io;
-   size_t io_stride;
-   void *payload;
-   size_t payload_stride;
-};
-
 enum {
    CS_ARG_CONTEXT,
    CS_ARG_RESOURCES,
@@ -1322,8 +1305,10 @@ generate_variant(struct llvmpipe_context *lp,
 
    lp_jit_init_cs_types(variant);
 
+   struct nir_shader *nir = shader->base.ir.nir;
+   variant->stage = nir->info.stage;
+
    if (sh_type == MESA_SHADER_MESH) {
-      struct nir_shader *nir = shader->base.ir.nir;
       int per_prim_count = util_bitcount64(nir->info.per_primitive_outputs);
       int out_count = util_bitcount64(nir->info.outputs_written);
       int per_vert_count = out_count - per_prim_count;

@@ -813,11 +813,11 @@ anv_get_color_format_features(const struct anv_physical_device *physical_device,
 
    if (anv_format->flags & ANV_FORMAT_FLAG_CAN_VIDEO &&
          !(create_flags & VK_IMAGE_CREATE_DISJOINT_BIT)) {
-      flags |= (physical_device->instance->debug & ANV_DEBUG_VIDEO_DECODE) ?
+      flags |= ANV_DEBUG(VIDEO_DECODE) ?
                   VK_FORMAT_FEATURE_2_VIDEO_DECODE_OUTPUT_BIT_KHR |
                   VK_FORMAT_FEATURE_2_VIDEO_DECODE_DPB_BIT_KHR : 0;
 
-      flags |= (physical_device->instance->debug & ANV_DEBUG_VIDEO_ENCODE) ?
+      flags |= ANV_DEBUG(VIDEO_ENCODE) ?
                   VK_FORMAT_FEATURE_2_VIDEO_ENCODE_INPUT_BIT_KHR |
                   VK_FORMAT_FEATURE_2_VIDEO_ENCODE_DPB_BIT_KHR : 0;
    }

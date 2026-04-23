@@ -84,13 +84,16 @@ typedef enum {
    nir_var_function_out          = (1 << 18),
    nir_var_function_inout        = (1 << 19),
 
+   nir_var_resource_heap         = (1 << 20),
+   nir_var_sampler_heap          = (1 << 21),
+
    /* Generic modes intentionally come last. See encode_dref_modes() in
     * nir_serialize.c for more details.
     */
-   nir_var_shader_temp           = (1 << 20),
-   nir_var_function_temp         = (1 << 21),
-   nir_var_mem_shared            = (1 << 22),
-   nir_var_mem_global            = (1 << 23),
+   nir_var_shader_temp           = (1 << 22),
+   nir_var_function_temp         = (1 << 23),
+   nir_var_mem_shared            = (1 << 24),
+   nir_var_mem_global            = (1 << 25),
 
    nir_var_mem_generic           = (nir_var_shader_temp |
                                     nir_var_function_temp |
@@ -114,7 +117,7 @@ typedef enum {
                                nir_var_mem_pixel_local_out |
                                nir_var_mem_pixel_local_inout,
 
-   nir_num_variable_modes        = 24,
+   nir_num_variable_modes        = 26,
    nir_var_all                   = (1 << nir_num_variable_modes) - 1,
 } nir_variable_mode;
 MESA_DEFINE_CPP_ENUM_BITFIELD_OPERATORS(nir_variable_mode)

@@ -55,7 +55,6 @@ struct radv_video_session {
 
    uint32_t enc_standard;
    uint32_t enc_wa_flags;
-   uint32_t enc_preset_mode;
 };
 
 /**

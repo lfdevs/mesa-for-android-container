@@ -14,6 +14,7 @@
 #include <lauxlib.h>
 #include <lua.h>
 #include <lualib.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -50,7 +51,7 @@ struct rnndec {
 
    /* for pm4 packet decoding: */
    uint32_t sizedwords;
-   uint32_t *dwords;
+   const uint32_t *dwords;
 };
 
 static inline struct rnndec *
@@ -74,13 +75,17 @@ rnn_val(struct rnn *rnn, uint32_t regbase)
    }
 }
 
-/* does not return */
-static void
-error(const char *fmt)
-{
-   fprintf(stderr, fmt, lua_tostring(L, -1));
-   exit(1);
-}
+/**
+ * Error printing macro.
+ *
+ * Prints an error message and exits (this does not return). There should be
+ * a string on the Lua stack for this macro to work.
+ */
+#define error(_l, fmt, ...)                                                    \
+   do {                                                                        \
+      fprintf(stderr, fmt ": %s\n", ##__VA_ARGS__, lua_tostring(_l, -1));      \
+      exit(1);                                                                 \
+   } while (false)
 
 /*
  * An enum type that can be used as string or number:
@@ -539,7 +544,7 @@ static const struct luaL_Reg l_meta_rnn_dom[] = {
 };
 
 static int
-l_rnn_dom(lua_State *L, uint32_t *dwords, uint32_t sizedwords,
+l_rnn_dom(lua_State *L, const uint32_t *dwords, uint32_t sizedwords,
           struct rnn *rnn, struct rnndomain *dom)
 {
    struct rnndec *rnndec = lua_newuserdata(L, sizeof(*rnndec));
@@ -572,7 +577,7 @@ l_rnn_meta_shaderstat_index(lua_State *L)
    struct rnndomain *dom = rnn_finddomain(rnn->db, "ir3_shader_stats");
 
    if (!dom)
-      error("No domain: ir3_shader_stats");
+      error(L, "No domain: ir3_shader_stats");
 
    if (!strcmp(name, "vs")) {
       stage = MESA_SHADER_VERTEX;
@@ -861,11 +866,11 @@ script_load(const char *file)
 
    ret = luaL_loadfile(L, file);
    if (ret)
-      error("%s\n");
+      error(L, "Loading file");
 
    ret = lua_pcall(L, 0, LUA_MULTRET, 0);
    if (ret)
-      error("%s\n");
+      error(L, "pcall on file load");
 
    return 0;
 }
@@ -884,28 +889,20 @@ internal_lua_pkt_handler_load(void)
    openlib(iL, "priv", l_priv);
 
    ret = luaL_loadstring(iL, cffdump_pkt_handler_lua_src);
-   if (ret) {
-      fprintf(stderr, "%s\n", lua_tostring(iL, -1));
-      exit(1);
-   }
+   if (ret)
+      error(iL, "loadstring(cffdump_pkt_handler_lua_src)");
 
    ret = lua_pcall(iL, 0, LUA_MULTRET, 0);
-   if (ret) {
-      fprintf(stderr, "%s\n", lua_tostring(iL, -1));
-      exit(1);
-   }
+   if (ret)
+      error(iL, "pcall on loadstring(cffdump_pkt_handler_lua_src)");
 
    ret = luaL_loadstring(iL, cffdump_desc_handler_lua_src);
-   if (ret) {
-      fprintf(stderr, "%s\n", lua_tostring(iL, -1));
-      exit(1);
-   }
+   if (ret)
+      error(iL, "loadstring(cffdump_desc_handler_lua_src)");
 
    ret = lua_pcall(iL, 0, LUA_MULTRET, 0);
-   if (ret) {
-      fprintf(stderr, "%s\n", lua_tostring(iL, -1));
-      exit(1);
-   }
+   if (ret)
+      error(iL, "pcall on loadstring(cffdump_desc_handler_lua_src)");
 }
 
 void
@@ -928,10 +925,12 @@ internal_lua_pkt_handler_init_rnn(struct rnn *rnn)
 void
 script_start_cmdstream(const char *name)
 {
+   const char *func_name = "start_cmdstream";
+
    if (!L)
       return;
 
-   lua_getglobal(L, "start_cmdstream");
+   lua_getglobal(L, func_name);
 
    /* if no handler just ignore it: */
    if (!lua_isfunction(L, -1)) {
@@ -943,7 +942,7 @@ script_start_cmdstream(const char *name)
 
    /* do the call (1 arguments, 0 result) */
    if (lua_pcall(L, 1, 0, 0) != 0)
-      error("error running function `f': %s\n");
+      error(L, "error running function `%s'", func_name);
 }
 
 /* called at each DRAW_INDX, calls script drawidx fxn to process
@@ -952,10 +951,12 @@ script_start_cmdstream(const char *name)
 void
 script_draw(const char *primtype, uint32_t nindx)
 {
+   const char *func_name = "draw";
+
    if (!L)
       return;
 
-   lua_getglobal(L, "draw");
+   lua_getglobal(L, func_name);
 
    /* if no handler just ignore it: */
    if (!lua_isfunction(L, -1)) {
@@ -968,7 +969,7 @@ script_draw(const char *primtype, uint32_t nindx)
 
    /* do the call (2 arguments, 0 result) */
    if (lua_pcall(L, 2, 0, 0) != 0)
-      error("error running function `f': %s\n");
+      error(L, "error running function `%s'", func_name);
 }
 
 /*
@@ -976,7 +977,7 @@ script_draw(const char *primtype, uint32_t nindx)
  */
 
 static bool
-setup_call(lua_State *state, uint32_t *dwords, uint32_t sizedwords,
+setup_call(lua_State *state, const uint32_t *dwords, uint32_t sizedwords,
            const char *name, struct rnn *rnn, struct rnndomain *dom)
 {
    if (!state)
@@ -998,8 +999,8 @@ setup_call(lua_State *state, uint32_t *dwords, uint32_t sizedwords,
 /* called to general pm4 packet decoding, such as texture/sampler state
  */
 static bool
-handle_packet_setup(lua_State *state, uint32_t *dwords, uint32_t sizedwords,
-                    struct rnn *rnn, struct rnndomain *dom)
+handle_packet_setup(lua_State *state, const uint32_t *dwords,
+                    uint32_t sizedwords, struct rnn *rnn, struct rnndomain *dom)
 {
    if (!setup_call(state, dwords, sizedwords, dom->name, rnn, dom))
       return false;
@@ -1010,7 +1011,7 @@ handle_packet_setup(lua_State *state, uint32_t *dwords, uint32_t sizedwords,
 }
 
 void
-script_packet(uint32_t *dwords, uint32_t sizedwords, struct rnn *rnn,
+script_packet(const uint32_t *dwords, uint32_t sizedwords, struct rnn *rnn,
               struct rnndomain *dom)
 {
    bool ret;
@@ -1020,11 +1021,11 @@ script_packet(uint32_t *dwords, uint32_t sizedwords, struct rnn *rnn,
       return;
 
    if (lua_pcall(L, 2, 0, 0) != 0)
-      error("error running function `f': %s\n");
+      error(L, "error running packet function (%s)", __func__);
 }
 
 const char *
-internal_packet(uint32_t *dwords, uint32_t sizedwords, struct rnn *rnn,
+internal_packet(const uint32_t *dwords, uint32_t sizedwords, struct rnn *rnn,
                 struct rnndomain *dom)
 {
    bool ret;
@@ -1034,11 +1035,8 @@ internal_packet(uint32_t *dwords, uint32_t sizedwords, struct rnn *rnn,
       return NULL;
 
    /* 2 args, 1 result */
-   if (lua_pcall(iL, 2, 1, 0) != 0) {
-      fprintf(stderr, "error running function `f': %s\n",
-              lua_tostring(iL, -1));
-      exit(1);
-   }
+   if (lua_pcall(iL, 2, 1, 0) != 0)
+      error(iL, "error running packet function (%s)", __func__);
 
    char *str;
    asprintf(&str, "%s", lua_tostring(iL, -1));
@@ -1048,7 +1046,7 @@ internal_packet(uint32_t *dwords, uint32_t sizedwords, struct rnn *rnn,
 }
 
 bool
-script_show_descriptor(uint32_t *dwords,
+script_show_descriptor(const uint32_t *dwords,
                        uint32_t sizedwords,
                        int base, int idx,
                        const char *type,
@@ -1056,8 +1054,10 @@ script_show_descriptor(uint32_t *dwords,
                        struct rnn *rnn,
                        struct rnndomain *dom)
 {
+   const char *func_name = "show_descriptor";
+
    /* If we cannot call handler, fall back to showing all descriptor variants: */
-   if (!setup_call(iL, dwords, sizedwords, "show_descriptor", rnn, dom))
+   if (!setup_call(iL, dwords, sizedwords, func_name, rnn, dom))
       return true;
 
    struct rnnenum *e = rnn_enumelem(rnn, "desctype");
@@ -1072,11 +1072,8 @@ script_show_descriptor(uint32_t *dwords,
    lua_pushinteger(iL, idx);
 
    /* 5 args, 1 result */
-   if (lua_pcall(iL, 5, 1, 0) != 0) {
-      fprintf(stderr, "error running function `f': %s\n",
-              lua_tostring(iL, -1));
-      exit(1);
-   }
+   if (lua_pcall(iL, 5, 1, 0) != 0)
+      error(iL, "error running function `%s'", func_name);
 
    bool ret = lua_toboolean(iL, -1);
    lua_pop(iL, 1);
@@ -1101,7 +1098,7 @@ simple_call(const char *name)
 
    /* do the call (0 arguments, 0 result) */
    if (lua_pcall(L, 0, 0, 0) != 0)
-      error("error running function `f': %s\n");
+      error(L, "error running function `%s'", name);
 }
 
 /* called at end of each cmdstream file: */

@@ -73,14 +73,13 @@ util_make_fragment_tex_shader(struct pipe_context *pipe,
                               enum tgsi_texture_type tex_target,
                               enum tgsi_return_type stype,
                               enum tgsi_return_type dtype,
-                              bool load_level_zero,
                               bool use_txf,
                               bool use_persp);
 
 extern void *
 util_make_fs_blit_zs(struct pipe_context *pipe, unsigned zs_mask,
                      enum tgsi_texture_type tex_target,
-                     bool load_level_zero, bool use_txf, bool use_persp);
+                     bool use_txf, bool use_persp);
 
 extern void *
 util_make_fragment_passthrough_shader(struct pipe_context *pipe,

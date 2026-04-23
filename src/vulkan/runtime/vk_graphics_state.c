@@ -52,6 +52,7 @@ get_dynamic_state_groups(BITSET_WORD *dynamic,
    if (groups & MESA_VK_GRAPHICS_STATE_INPUT_ASSEMBLY_BIT) {
       BITSET_SET(dynamic, MESA_VK_DYNAMIC_IA_PRIMITIVE_TOPOLOGY);
       BITSET_SET(dynamic, MESA_VK_DYNAMIC_IA_PRIMITIVE_RESTART_ENABLE);
+      BITSET_SET(dynamic, MESA_VK_DYNAMIC_IA_PRIMITIVE_RESTART_INDEX);
    }
 
    if (groups & MESA_VK_GRAPHICS_STATE_TESSELLATION_BIT) {
@@ -1293,6 +1294,7 @@ vk_render_pass_state_init(struct vk_render_pass_state *rp,
    *rp = (struct vk_render_pass_state) {
       .depth_attachment_format = VK_FORMAT_UNDEFINED,
       .stencil_attachment_format = VK_FORMAT_UNDEFINED,
+      .attachments = MESA_VK_RP_ATTACHMENT_INFO_INVALID,
    };
 
    if (info->renderPass != VK_NULL_HANDLE && driver_rp != NULL) {
@@ -1328,7 +1330,6 @@ vk_render_pass_state_init(struct vk_render_pass_state *rp,
     */
    if (info->renderPass == VK_NULL_HANDLE &&
        !(lib & VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_OUTPUT_INTERFACE_BIT_EXT)) {
-      rp->attachments = MESA_VK_RP_ATTACHMENT_INFO_INVALID;
       return;
    }
 
@@ -1361,6 +1362,8 @@ vk_render_pass_state_init(struct vk_render_pass_state *rp,
 
       rp->depth_stencil_attachment_samples = asc_info->depthStencilAttachmentSamples;
    }
+
+   rp->attachments = 0;
 
    for (uint32_t i = 0; i < r_info->colorAttachmentCount; i++) {
       if (rp->color_attachment_formats[i] != VK_FORMAT_UNDEFINED)
@@ -2478,6 +2481,20 @@ vk_cmd_set_vertex_binding_strides2(struct vk_command_buffer *cmd,
    }
 }
 
+void
+vk_cmd_set_index_buffer_type(struct vk_command_buffer *cmd,
+                             VkIndexType index_type)
+{
+   struct vk_dynamic_graphics_state *dyn = &cmd->dynamic_graphics_state;
+
+   /* From the Vulkan 1.4.348 spec, vkCmdSetPrimitiveRestartIndexEXT():
+    *
+    *    "Binding an index buffer invalidates the custom index value."
+    */
+   SET_DYN_VALUE(dyn, IA_PRIMITIVE_RESTART_INDEX,
+                 ia.primitive_restart_index, vk_index_to_restart(index_type));
+}
+
 VKAPI_ATTR void VKAPI_CALL
 vk_common_CmdSetPrimitiveTopology(VkCommandBuffer commandBuffer,
                                   VkPrimitiveTopology primitiveTopology)
@@ -2498,6 +2515,17 @@ vk_common_CmdSetPrimitiveRestartEnable(VkCommandBuffer commandBuffer,
 
    SET_DYN_BOOL(dyn, IA_PRIMITIVE_RESTART_ENABLE,
                 ia.primitive_restart_enable, primitiveRestartEnable);
+}
+
+VKAPI_ATTR void VKAPI_CALL
+vk_common_CmdSetPrimitiveRestartIndexEXT(VkCommandBuffer commandBuffer,
+                                         uint32_t primitiveRestartIndex)
+{
+   VK_FROM_HANDLE(vk_command_buffer, cmd, commandBuffer);
+   struct vk_dynamic_graphics_state *dyn = &cmd->dynamic_graphics_state;
+
+   SET_DYN_VALUE(dyn, IA_PRIMITIVE_RESTART_INDEX,
+                 ia.primitive_restart_index, primitiveRestartIndex);
 }
 
 VKAPI_ATTR void VKAPI_CALL

@@ -46,7 +46,7 @@ struct queue_ctx {
    } call_stack[MAX_CALL_STACK_DEPTH + 1]; /* +1 for exception handler */
    uint8_t call_stack_depth;
 
-   unsigned gpu_id;
+   uint64_t gpu_id;
 };
 
 static void
@@ -789,7 +789,7 @@ pandecode_run_tiling(struct pandecode_context *ctx, FILE *fp,
    if (tiler_flags.index_type)
       pandecode_log(ctx, "Index array size: %u\n", cs_get_u32(qctx, 39));
 
-   GENX(pandecode_tiler)(ctx, cs_get_u64(qctx, 40), qctx->gpu_id);
+   GENX(pandecode_tiler)(ctx, cs_get_u64(qctx, 40));
 
    DUMP_CL(ctx, SCISSOR, &qctx->regs[42], "Scissor\n");
    pandecode_log(ctx, "Low depth clamp: %f\n", uif(cs_get_u32(qctx, 44)));
@@ -902,7 +902,7 @@ pandecode_run_idvs2(struct pandecode_context *ctx, FILE *fp,
    pandecode_log(ctx, "Vertex offset: %u\n", vertex_offset);
    pandecode_log(ctx, "Instance offset: %u\n", instance_offset);
 
-   GENX(pandecode_tiler)(ctx, tilder_descriptor_pointer, qctx->gpu_id);
+   GENX(pandecode_tiler)(ctx, tilder_descriptor_pointer);
 
    /* If this is true, then the scissor is actually a pointer to an
     * array of boxes; bottom 56 bits are the pointer and top 8 are
@@ -1062,8 +1062,7 @@ pandecode_run_idvs(struct pandecode_context *ctx, FILE *fp,
       pandecode_log(ctx, "Index array size: %u\n",
                     cs_get_u32(qctx, MALI_IDVS_SR_INDEX_BUFFER_SIZE));
 
-   GENX(pandecode_tiler)(ctx, cs_get_u64(qctx, MALI_IDVS_SR_TILER_CTX),
-                         qctx->gpu_id);
+   GENX(pandecode_tiler)(ctx, cs_get_u64(qctx, MALI_IDVS_SR_TILER_CTX));
 
    DUMP_CL(ctx, SCISSOR, &qctx->regs[MALI_IDVS_SR_SCISSOR_BOX], "Scissor\n");
    pandecode_log(ctx, "Low depth clamp: %f\n",
@@ -1134,7 +1133,7 @@ pandecode_run_fullscreen(struct pandecode_context *ctx, FILE *fp,
    pan_unpack(&tiler_flags_packed, PRIMITIVE_FLAGS, tiler_flags);
    DUMP_UNPACKED(ctx, PRIMITIVE_FLAGS, tiler_flags, "Primitive flags\n");
 
-   GENX(pandecode_tiler)(ctx, cs_get_u64(qctx, 40), qctx->gpu_id);
+   GENX(pandecode_tiler)(ctx, cs_get_u64(qctx, 40));
 
    DUMP_CL(ctx, SCISSOR, &qctx->regs[42], "Scissor\n");
 
@@ -1669,7 +1668,7 @@ no_interpret:
 
 void
 GENX(pandecode_interpret_cs)(struct pandecode_context *ctx, uint64_t queue,
-                             uint32_t size, unsigned gpu_id, uint32_t *regs)
+                             uint32_t size, uint64_t gpu_id, uint32_t *regs)
 {
    pandecode_dump_file_open(ctx);
 
@@ -2451,7 +2450,7 @@ print_cs_binary(struct pandecode_context *ctx, uint64_t bin,
 
 void
 GENX(pandecode_cs_binary)(struct pandecode_context *ctx, uint64_t bin,
-                          uint32_t bin_size, unsigned gpu_id)
+                          uint32_t bin_size)
 {
    if (!bin_size)
       return;
@@ -2478,7 +2477,7 @@ GENX(pandecode_cs_binary)(struct pandecode_context *ctx, uint64_t bin,
 
 void
 GENX(pandecode_cs_trace)(struct pandecode_context *ctx, uint64_t trace,
-                         uint32_t trace_size, unsigned gpu_id)
+                         uint32_t trace_size, uint64_t gpu_id)
 {
    pandecode_dump_file_open(ctx);
 

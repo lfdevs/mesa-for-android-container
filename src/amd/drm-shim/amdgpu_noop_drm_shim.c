@@ -6,7 +6,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
-#include "amdgpu_devices.h"
+#include "common/amdgpu_devices.h"
 #include "common/amd_family.h"
 #include "drm-shim/amdgpu_noop_drm_shim.h"
 #include "drm-shim/drm_shim.h"

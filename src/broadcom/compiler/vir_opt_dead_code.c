@@ -43,9 +43,8 @@ static void
 dce(struct v3d_compile *c, struct qinst *inst)
 {
         if (debug) {
-                fprintf(stderr, "Removing: ");
-                vir_dump_inst(c, inst);
-                fprintf(stderr, "\n");
+                char *dump_inst = vir_dump_inst(c, inst);
+                mesa_logd("Removing: \"%s\"", dump_inst);
         }
         assert(!v3d_qpu_writes_flags(&inst->qpu));
         vir_remove_instruction(c, inst);
@@ -65,10 +64,8 @@ static void
 vir_dce_flags(struct v3d_compile *c, struct qinst *inst)
 {
         if (debug) {
-                fprintf(stderr,
-                        "Removing flags write from: ");
-                vir_dump_inst(c, inst);
-                fprintf(stderr, "\n");
+                char *dump_inst = vir_dump_inst(c, inst);
+                mesa_logd("Removing flags write from: \"%s\"", dump_inst);
         }
 
         assert(inst->qpu.type == V3D_QPU_INSTR_TYPE_ALU);
@@ -248,10 +245,8 @@ vir_opt_dead_code(struct v3d_compile *c)
                                 if (inst->dst.file == QFILE_TEMP &&
                                     can_write_to_null(c, inst)) {
                                         if (debug) {
-                                                fprintf(stderr,
-                                                        "Removing dst from: ");
-                                                vir_dump_inst(c, inst);
-                                                fprintf(stderr, "\n");
+                                                char *dump_inst = vir_dump_inst(c, inst);
+                                                mesa_logd("Removing dst from: \"%s\"", dump_inst);
                                         }
                                         c->defs[inst->dst.index] = NULL;
                                         inst->dst.file = QFILE_NULL;

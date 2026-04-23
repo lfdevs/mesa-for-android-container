@@ -2276,6 +2276,11 @@
                                 "bits": "31",
                                 "bits_str": "31",
                                 "bits_int": 1
+                            },
+                            "disable_wr_confirm": {
+                                "bits": "31",
+                                "bits_str": "31",
+                                "bits_int": 1
                             }
                         }
                     }
@@ -8584,6 +8589,11 @@
                                 "bits": "31",
                                 "bits_str": "31",
                                 "bits_int": 1
+                            },
+                            "disable_wr_confirm": {
+                                "bits": "31",
+                                "bits_str": "31",
+                                "bits_int": 1
                             }
                         }
                     }
@@ -13551,6 +13561,11 @@
                                 "bits_int": 1
                             },
                             "dis_wc": {
+                                "bits": "31",
+                                "bits_str": "31",
+                                "bits_int": 1
+                            },
+                            "disable_wr_confirm": {
                                 "bits": "31",
                                 "bits_str": "31",
                                 "bits_int": 1

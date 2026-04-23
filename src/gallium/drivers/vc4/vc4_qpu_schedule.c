@@ -175,7 +175,7 @@ process_raddr_deps(struct schedule_state *state, struct schedule_node *n,
                         else
                                 add_read_dep(state, state->last_rb[raddr], n);
                 } else {
-                        fprintf(stderr, "unknown raddr %d\n", raddr);
+                        mesa_loge("unknown raddr %d", raddr);
                         abort();
                 }
                 break;
@@ -292,7 +292,7 @@ process_waddr_deps(struct schedule_state *state, struct schedule_node *n,
                         break;
 
                 default:
-                        fprintf(stderr, "Unknown waddr %d\n", waddr);
+                        mesa_loge("Unknown waddr %d", waddr);
                         abort();
                 }
         }
@@ -405,7 +405,7 @@ calculate_deps(struct schedule_state *state, struct schedule_node *n)
         case QPU_SIG_COVERAGE_LOAD:
         case QPU_SIG_COLOR_LOAD_END:
         case QPU_SIG_ALPHA_MASK_LOAD:
-                fprintf(stderr, "Unhandled signal bits %d\n", sig);
+                mesa_loge("Unhandled signal bits %d", sig);
                 abort();
         }
 
@@ -690,9 +690,8 @@ static void
 dump_state(struct dag *dag)
 {
         list_for_each_entry(struct schedule_node, n, &dag->heads, dag.link) {
-                fprintf(stderr, "         t=%4d: ", n->unblocked_time);
-                vc4_qpu_disasm(&n->inst->inst, 1);
-                fprintf(stderr, "\n");
+                mesa_logi("         t=%4d: ", n->unblocked_time);
+                vc4_qpu_disasmi(&n->inst->inst, 1);
 
                 util_dynarray_foreach(&n->dag.edges, struct dag_edge, edge) {
                         struct schedule_node *child =
@@ -700,11 +699,11 @@ dump_state(struct dag *dag)
                         if (!child)
                                 continue;
 
-                        fprintf(stderr, "                 - ");
-                        vc4_qpu_disasm(&child->inst->inst, 1);
-                        fprintf(stderr, " (%d parents, %c)\n",
-                                child->dag.parent_count,
-                                edge->data ? 'w' : 'r');
+                        mesa_logi("                 - ");
+                        vc4_qpu_disasmi(&child->inst->inst, 1);
+                        mesa_logi(" (%d parents, %c)\n",
+                                  child->dag.parent_count,
+                                  edge->data ? 'w' : 'r');
                 }
         }
 }
@@ -891,12 +890,11 @@ schedule_instructions(struct vc4_compile *c,
                 uint64_t inst = chosen ? chosen->inst->inst : qpu_NOP();
 
                 if (debug) {
-                        fprintf(stderr, "t=%4d: current list:\n",
-                                time);
+                        mesa_logi("t=%4d: current list:\n",
+                                  time);
                         dump_state(scoreboard->dag);
-                        fprintf(stderr, "t=%4d: chose: ", time);
-                        vc4_qpu_disasm(&inst, 1);
-                        fprintf(stderr, "\n");
+                        mesa_logi("t=%4d: chose: ", time);
+                        vc4_qpu_disasmi(&inst, 1);
                 }
 
                 /* Schedule this instruction onto the QPU list. Also try to
@@ -929,19 +927,13 @@ schedule_instructions(struct vc4_compile *c,
                                 }
 
                                 if (debug) {
-                                        fprintf(stderr, "t=%4d: merging: ",
-                                                time);
-                                        vc4_qpu_disasm(&merge->inst->inst, 1);
-                                        fprintf(stderr, "\n");
-                                        fprintf(stderr, "            resulting in: ");
-                                        vc4_qpu_disasm(&inst, 1);
-                                        fprintf(stderr, "\n");
+                                        mesa_logi("t=%4d: merging: ",
+                                                  time);
+                                        vc4_qpu_disasmi(&merge->inst->inst, 1);
+                                        mesa_logi("            resulting in: ");
+                                        vc4_qpu_disasmi(&inst, 1);
                                 }
                         }
-                }
-
-                if (debug) {
-                        fprintf(stderr, "\n");
                 }
 
                 /* Now that we've scheduled a new instruction, some of its
@@ -1096,16 +1088,14 @@ qpu_schedule_instructions(struct vc4_compile *c)
         scoreboard.last_uniforms_reset_tick = -10;
 
         if (debug) {
-                fprintf(stderr, "Pre-schedule instructions\n");
+                mesa_logi("Pre-schedule instructions\n");
                 qir_for_each_block(block, c) {
-                        fprintf(stderr, "BLOCK %d\n", block->index);
+                        mesa_logi("BLOCK %d\n", block->index);
                         list_for_each_entry(struct queued_qpu_inst, q,
                                             &block->qpu_inst_list, link) {
-                                vc4_qpu_disasm(&q->inst, 1);
-                                fprintf(stderr, "\n");
+                                vc4_qpu_disasmi(&q->inst, 1);
                         }
                 }
-                fprintf(stderr, "\n");
         }
 
         uint32_t cycles = 0;
@@ -1128,9 +1118,8 @@ qpu_schedule_instructions(struct vc4_compile *c)
         assert(next_uniform == c->num_uniforms);
 
         if (debug) {
-                fprintf(stderr, "Post-schedule instructions\n");
-                vc4_qpu_disasm(c->qpu_insts, c->qpu_inst_count);
-                fprintf(stderr, "\n");
+                mesa_logi("Post-schedule instructions\n");
+                vc4_qpu_disasmi(c->qpu_insts, c->qpu_inst_count);
         }
 
         return cycles;

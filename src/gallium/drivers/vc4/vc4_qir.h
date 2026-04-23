@@ -553,8 +553,9 @@ bool qir_writes_r4(struct qinst *inst);
 struct qreg qir_follow_movs(struct vc4_compile *c, struct qreg reg);
 uint8_t qir_channels_written(struct qinst *inst);
 
-void qir_dump(struct vc4_compile *c);
-void qir_dump_inst(struct vc4_compile *c, struct qinst *inst);
+void qir_dumpi(struct vc4_compile *c);
+void qir_dumpe(struct vc4_compile *c);
+char *qir_dump_inst(struct vc4_compile *c, struct qinst *inst);
 char *qir_describe_uniform(enum quniform_contents contents, uint32_t data,
                            const uint32_t *uniforms);
 const char *qir_get_stage_name(enum qstage stage);
@@ -849,5 +850,14 @@ qir_BRANCH(struct vc4_compile *c, uint8_t cond)
 #define qir_for_each_inst_inorder(inst, c)                              \
         qir_for_each_block(_block, c)                                   \
                 qir_for_each_inst_safe(inst, _block)
+
+#define LOG_INST_OPT(_message, _c, _inst)                                 \
+        for (char *before_inst = debug ? qir_dump_inst(_c, _inst) : NULL, \
+                  *_once = (char *)1;                                     \
+             _once;                                                       \
+             _once = debug ? (mesa_logd(_message ": \"%s\" to \"%s\"",    \
+                                        before_inst,                      \
+                                        qir_dump_inst(_c, _inst)), NULL)  \
+                           : NULL)
 
 #endif /* VC4_QIR_H */

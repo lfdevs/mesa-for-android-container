@@ -551,13 +551,12 @@ class VulkanReservedMarshalingCodegen(VulkanTypeIterator):
             self.cgen.beginBlock()
 
             self.cgen.stmt("uint32_t c = 0")
-            if lenAccessGuard is not None:
+            if lenAccess is not None:
                 self.cgen.beginIf(lenAccessGuard)
-            self.cgen.stmt("c = %s" % (lenAccess))
-            if lenAccessGuard is not None:
+                self.cgen.stmt("c = %s" % (lenAccess))
                 self.cgen.endIf()
-            self.genMemcpyAndIncr(self.ptrVar, "(uint32_t*)" ,"&c", "sizeof(uint32_t)", toBe = True, actualSize = 4)
 
+            self.genMemcpyAndIncr(self.ptrVar, "(uint32_t*)" ,"&c", "sizeof(uint32_t)", toBe = True, actualSize = 4)
             self.cgen.beginFor("uint32_t i = 0", "i < c", "++i")
             self.cgen.stmt("uint32_t l = %s ? strlen(%s[i]): 0" % (access, access))
             self.genMemcpyAndIncr(self.ptrVar, "(uint32_t*)" ,"&l", "sizeof(uint32_t)", toBe = True, actualSize = 4)
@@ -578,8 +577,9 @@ class VulkanReservedMarshalingCodegen(VulkanTypeIterator):
     def onStaticArr(self, vulkanType):
         access = self.exprValueAccessor(vulkanType)
         lenAccess = self.lenAccessor(vulkanType)
-        finalLenExpr = "%s * %s" % (lenAccess, self.cgen.sizeofExpr(vulkanType))
-        self.genStreamCall(vulkanType, access, finalLenExpr)
+        if lenAccess is not None:
+            finalLenExpr = "%s * %s" % (lenAccess, self.cgen.sizeofExpr(vulkanType))
+            self.genStreamCall(vulkanType, access, finalLenExpr)
 
     # Old version VkEncoder may have some sType values conflict with VkDecoder
     # of new versions. For host decoder, it should not carry the incorrect old

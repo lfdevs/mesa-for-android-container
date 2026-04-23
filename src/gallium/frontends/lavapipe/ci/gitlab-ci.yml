@@ -55,16 +55,23 @@ lavapipe-vkd3d:
     GPU_VERSION: lvp
   script: install/vkd3d-runner.sh
 
-# Disabled due to only running a single trace which was using old Wine.
-.lavapipe-traces:
-  timeout: 15m
+lavapipe-traces:
   variables:
-    PIGLIT_TRACES_FILE: traces-lavapipe.yml
-    PIGLIT_REPLAY_DEVICE_NAME: "vk-lvp"
+    REPLAY_CONFIG: traces-lavapipe.toml
+    GPU_VERSION: lvp
   extends:
-    - .piglit-traces-test
+    - .test-vkd3d-proton
+    - .traces-test
+    - .test-wine
     - .lavapipe-test
-    - .lavapipe-manual-rules
+    - .lavapipe-rules
+  script: |
+    export LD_LIBRARY_PATH="$CI_PROJECT_DIR/install/lib"
+    export LIBGL_DRIVERS_PATH="$CI_PROJECT_DIR/install/lib/dri"
+    section_start weston "weston: prepare"
+    . "$CI_PROJECT_DIR/install/common/weston.sh"
+    section_end weston
+    $HWCI_TEST_SCRIPT
 
 android-angle-lavapipe:
   variables:

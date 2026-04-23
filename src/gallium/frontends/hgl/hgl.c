@@ -288,10 +288,6 @@ hgl_create_context(struct hgl_display *display, struct st_visual* visual, struct
 
 	struct st_context *stContext = (struct st_context*)context->st;
 
-	// Init Gallium3D Post Processing
-	// TODO: no pp filters are enabled yet through postProcessEnable
-	context->postProcess = pp_init(stContext->pipe, context->postProcessEnable, stContext->cso_context, stContext, (void*)st_context_invalidate_state);
-
 	return context;
 }
 
@@ -303,9 +299,6 @@ hgl_destroy_context(struct hgl_context* context)
 		st_context_flush(context->st, 0, NULL, NULL, NULL);
 		st_destroy_context(context->st);
 	}
-
-	if (context->postProcess)
-		pp_free(context->postProcess);
 
 	FREE(context);
 }

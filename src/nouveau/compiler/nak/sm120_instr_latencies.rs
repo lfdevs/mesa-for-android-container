@@ -250,6 +250,13 @@ fn op_ureg_latency(
 
         Op::IMad64(_) => coupled,
         Op::ISetP(_) => coupled,
+        Op::ALd(_)
+        | Op::ASt(_)
+        | Op::Ld(_)
+        | Op::Ldsm(_)
+        | Op::St(_)
+        | Op::Atom(_) => decoupled,
+        Op::SuLd(_) | Op::SuSt(_) | Op::SuAtom(_) => decoupled,
         Op::Ldc(_) => {
             if uniform_op {
                 ToUr

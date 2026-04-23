@@ -171,14 +171,16 @@ void *si_create_clear_buffer_rmw_cs(struct si_context *sctx)
 void *si_create_passthrough_tcs(struct si_context *sctx)
 {
    unsigned locations[PIPE_MAX_SHADER_OUTPUTS];
-
+   unsigned num_outputs = 0;
    struct si_shader_info *info = &sctx->shader.vs.cso->info;
-   for (unsigned i = 0; i < info->num_outputs; i++) {
-      locations[i] = info->output_semantic[i];
+
+   u_foreach_bit64_two_masks(slot, info->base.outputs_written,
+                             VARYING_SLOT_VAR0_16BIT, info->base.outputs_written_16bit) {
+      locations[num_outputs++] = slot;
    }
 
    nir_shader *tcs = nir_create_passthrough_tcs_impl(sctx->screen->nir_options, locations,
-                                                     info->num_outputs, sctx->patch_vertices);
+                                                     num_outputs, sctx->patch_vertices);
    NIR_PASS(_, tcs, nir_lower_system_values);
 
    return si_create_shader_state(sctx, tcs);

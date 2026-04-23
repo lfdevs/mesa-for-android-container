@@ -157,7 +157,7 @@ resource_state_if_promoted(D3D12_RESOURCE_STATES desired_state,
                            bool simultaneous_access,
                            const d3d12_subresource_state *current_state)
 {
-   static constexpr D3D12_RESOURCE_STATES promotable_states =
+   static const D3D12_RESOURCE_STATES promotable_states =
       D3D12_RESOURCE_STATE_ALL_SHADER_RESOURCE | D3D12_RESOURCE_STATE_COPY_SOURCE | D3D12_RESOURCE_STATE_COPY_DEST;
 
    if (simultaneous_access || (desired_state & ~promotable_states) == D3D12_RESOURCE_STATE_COMMON) {

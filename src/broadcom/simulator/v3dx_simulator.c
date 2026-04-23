@@ -40,6 +40,7 @@
 
 #include "common/v3d_performance_counters.h"
 
+#include "util/log.h"
 #include "util/macros.h"
 #include "util/bitscan.h"
 #include "drm-uapi/v3d_drm.h"
@@ -301,8 +302,7 @@ v3dX(simulator_get_param_ioctl)(struct v3d_hw *v3d,
                 return 0;
         }
 
-        fprintf(stderr, "Unknown DRM_IOCTL_V3D_GET_PARAM(%lld)\n",
-                (long long)args->value);
+        mesa_loge("Unknown DRM_IOCTL_V3D_GET_PARAM(%lld)", (long long)args->value);
         abort();
 }
 
@@ -358,12 +358,9 @@ v3d_isr_core(struct v3d_hw *v3d,
 
 #if V3D_VERSION <= 42
         if (core_status & V3D_CTL_0_INT_STS_INT_GMPV_SET) {
-                fprintf(stderr, "GMP violation at 0x%08x\n",
-                        V3D_READ(V3D_GMP_VIO_ADDR));
+                mesa_loge("GMP violation at 0x%08x", V3D_READ(V3D_GMP_VIO_ADDR));
         } else {
-                fprintf(stderr,
-                        "Unexpected ISR with core status 0x%08x\n",
-                        core_status);
+                mesa_loge("Unexpected ISR with core status 0x%08x", core_status);
         }
         abort();
 #endif
@@ -415,11 +412,11 @@ handle_mmu_interruptions(struct v3d_hw *v3d,
          * like restoring the MMU ctrl bits
          */
 
-        fprintf(stderr, "MMU error from client %s (%d) at 0x%llx%s%s%s\n",
-                client, axi_id, (long long) vio_addr,
-                wrv ? ", write violation" : "",
-                pti ? ", pte invalid" : "",
-                cap ? ", cap exceeded" : "");
+        mesa_loge("MMU error from client %s (%d) at 0x%llx%s%s%s",
+                  client, axi_id, (long long) vio_addr,
+                  wrv ? ", write violation" : "",
+                  pti ? ", pte invalid" : "",
+                  cap ? ", cap exceeded" : "");
 
         abort();
 }
@@ -445,12 +442,9 @@ v3d_isr_hub(struct v3d_hw *v3d)
 
 #if V3D_VERSION == 71
         if (hub_status & V3D_HUB_CTL_INT_STS_INT_GMPV_SET) {
-                fprintf(stderr, "GMP violation at 0x%08x\n",
-                        V3D_READ(V3D_GMP_VIO_ADDR));
+                mesa_loge("GMP violation at 0x%08x", V3D_READ(V3D_GMP_VIO_ADDR));
         } else {
-                fprintf(stderr,
-                        "Unexpected ISR with status 0x%08x\n",
-                        hub_status);
+                mesa_loge("Unexpected ISR with status 0x%08x", hub_status);
         }
         abort();
 #endif

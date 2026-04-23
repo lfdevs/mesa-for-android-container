@@ -88,9 +88,6 @@ extern uint32_t v3d_mesa_debug;
 #ifndef ALOGW
 #define ALOGW LOGW
 #endif
-#define dbg_printf(...)	ALOGW(__VA_ARGS__)
-#else
-#define dbg_printf(...)	fprintf(stderr, __VA_ARGS__)
 #endif /* HAVE_ANDROID_PLATFORM */
 
 extern bool v3d_debug_flag_for_shader_stage(mesa_shader_stage stage);

@@ -409,7 +409,7 @@ nir_lower_clip_vs(nir_shader *shader, unsigned ucp_enables, bool use_vars,
     * if there is a good way to sanity check this, but for now the
     * users of this pass don't support sub-routines.
     */
-   assert(impl->end_block->predecessors.entries == 1);
+   assert(nir_block_num_preds(impl->end_block) == 1);
    b.cursor = nir_after_impl(impl);
 
    struct lower_clip_state state = { NULL };

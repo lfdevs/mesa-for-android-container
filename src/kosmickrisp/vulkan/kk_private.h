@@ -37,8 +37,6 @@
 #define KK_MAX_OCCLUSION_QUERIES       (32768)
 
 #define KK_SPARSE_ADDR_SPACE_SIZE (1ull << 39)
-#define KK_MAX_BUFFER_SIZE        (1ull << 31)
-#define KK_MAX_SHARED_SIZE        (32 * 1024)
 
 /* Max size of a bound cbuf */
 #define KK_MAX_CBUF_SIZE (1u << 16)

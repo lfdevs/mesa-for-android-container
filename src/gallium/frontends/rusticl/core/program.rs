@@ -96,7 +96,7 @@ impl_cl_type_trait!(cl_program, Program, CL_INVALID_PROGRAM);
 pub struct ProgramBuild {
     pub builds_by_device: HashMap<&'static Device, DeviceProgramBuild>,
     pub kernel_info: HashMap<String, Arc<KernelInfo>>,
-    spec_constants: HashMap<u32, nir_const_value>,
+    spec_constants: HashMap<u32, Vec<u8>>,
     kernels: Vec<String>,
 }
 
@@ -138,7 +138,7 @@ impl ProgramBuild {
                 }
 
                 let build_result =
-                    convert_spirv_to_nir(build, kernel_name, &args, &self.spec_constants, dev);
+                    convert_spirv_to_nir(build, kernel_name, &args, &mut self.spec_constants, dev);
                 kernel_info_set.insert(build_result.kernel_info);
 
                 self.builds_by_device.get_mut(dev).unwrap().kernels.insert(
@@ -194,7 +194,7 @@ impl DeviceProgramBuild {
         &self,
         cache: Option<&DiskCacheBorrowed>,
         name: &str,
-        spec_constants: &HashMap<u32, nir_const_value>,
+        spec_constants: &HashMap<u32, Vec<u8>>,
     ) -> Option<cache_key> {
         if let Some(cache) = cache {
             assert_eq!(self.status, CL_BUILD_SUCCESS as cl_build_status);
@@ -205,10 +205,7 @@ impl DeviceProgramBuild {
 
             for (k, v) in spec_constants {
                 bin.extend_from_slice(&k.to_ne_bytes());
-                unsafe {
-                    // SAFETY: we fully initialize this union
-                    bin.extend_from_slice(&v.u64_.to_ne_bytes());
-                }
+                bin.extend_from_slice(v);
             }
 
             Some(cache.gen_key(&bin))
@@ -225,18 +222,24 @@ impl DeviceProgramBuild {
         &self,
         kernel: &str,
         device: &Device,
-        spec_constants: &HashMap<u32, nir_const_value>,
+        spec_constants: &mut HashMap<u32, Vec<u8>>,
     ) -> NirShader {
         assert_eq!(self.status, CL_BUILD_SUCCESS as cl_build_status);
 
         let mut spec_constants: Vec<_> = spec_constants
-            .iter()
-            .map(|(&id, &value)| nir_spirv_specialization {
+            .iter_mut()
+            .map(|(&id, value)| nir_spirv_specialization_entry {
                 id: id,
-                value: value,
+                size: value.len() as u32,
+                data: value.as_mut_ptr(),
                 defined_on_module: true,
             })
             .collect();
+
+        let mut spec_constants = nir_spirv_specialization {
+            num_entries: spec_constants.len() as u32,
+            entries: spec_constants.as_mut_ptr(),
+        };
 
         let mut log = Platform::dbg().program.then(Vec::new);
         let nir = self.spirv.as_ref().unwrap().to_nir(
@@ -912,17 +915,7 @@ impl Program {
 
     pub fn set_spec_constant(&self, spec_id: u32, data: &[u8]) {
         let mut lock = self.build_info();
-        let mut val = nir_const_value::default();
-
-        match data.len() {
-            1 => val.u8_ = u8::from_ne_bytes(data.try_into().unwrap()),
-            2 => val.u16_ = u16::from_ne_bytes(data.try_into().unwrap()),
-            4 => val.u32_ = u32::from_ne_bytes(data.try_into().unwrap()),
-            8 => val.u64_ = u64::from_ne_bytes(data.try_into().unwrap()),
-            _ => unreachable!("Spec constant with invalid size!"),
-        };
-
-        lock.spec_constants.insert(spec_id, val);
+        lock.spec_constants.insert(spec_id, data.to_owned());
     }
 }
 

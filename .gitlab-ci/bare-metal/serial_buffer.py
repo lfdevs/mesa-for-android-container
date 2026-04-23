@@ -22,7 +22,6 @@
 # IN THE SOFTWARE.
 
 import argparse
-from datetime import datetime, UTC
 import queue
 import serial
 import threading
@@ -30,7 +29,7 @@ import time
 
 
 class SerialBuffer:
-    def __init__(self, dev, filename, prefix, timeout=None, line_queue=None):
+    def __init__(self, dev, filename, timeout=None, line_queue=None):
         self.filename = filename
         self.dev = dev
 
@@ -49,7 +48,6 @@ class SerialBuffer:
             self.line_queue = line_queue
         else:
             self.line_queue = queue.Queue()
-        self.prefix = prefix
         self.timeout = timeout
         self.sentinel = object()
         self.closing = False
@@ -88,7 +86,7 @@ class SerialBuffer:
                     break
                 self.byte_queue.put(b)
             except Exception as err:
-                print(self.prefix + str(err))
+                print(str(err))
                 break
         self.byte_queue.put(self.sentinel)
 
@@ -130,10 +128,7 @@ class SerialBuffer:
                 if b == b'\n'[0]:
                     line = line.decode(errors="replace")
 
-                    ts = datetime.now(tz=UTC)
-                    ts_str = f"{ts.hour:02}:{ts.minute:02}:{ts.second:02}.{int(ts.microsecond / 1000):03}"
-                    print("{endc}{time}{prefix}{line}".format(
-                        time=ts_str, prefix=self.prefix, line=line, endc='\033[0m'), flush=True, end='')
+                    print("{endc}{line}".format(line=line, endc='\033[0m'), flush=True, end='')
 
                     self.line_queue.put(line)
                     line = bytearray()
@@ -170,12 +165,10 @@ def main():
     parser.add_argument('--dev', type=str, help='Serial device')
     parser.add_argument('--file', type=str,
                         help='Filename for serial output', required=True)
-    parser.add_argument('--prefix', type=str,
-                        help='Prefix for logging serial to stdout', nargs='?')
 
     args = parser.parse_args()
 
-    ser = SerialBuffer(args.dev, args.file, args.prefix or "")
+    ser = SerialBuffer(args.dev, args.file)
     for line in ser.lines():
         # We're just using this as a logger, so eat the produced lines and drop
         # them

@@ -216,7 +216,26 @@ brw_rt_compute_scratch_layout(struct brw_rt_scratch_layout *layout,
    assert(size % 64 == 0); /* Cache-line aligned */
    assert(size < UINT32_MAX);
    layout->ray_stack_start = size;
-   layout->ray_stack_stride = BRW_RT_ASYNC_STACK_STRIDE;
+
+   /* Wa_14021821874, Wa_14018813551, Wa_14026600921:
+    *
+    *    StackIDControlOverride_RTGlobals = 0 (i.e. 2k)
+    *    SetStackSizePerRay  = 64  (64*64B)
+    *    DisableRTGlobalsKnownValues = 1
+    *
+    * StackSizePerRay is the RTDispatchGlobals::AsyncStackSize and
+    * DisableRTGlobalsKnownValues is to interpret how many Max BVH levels we
+    * need to use. It's not relevant to Vulkan, since we have just 2 fixed BVH
+    * levels.
+    */
+   if (intel_needs_workaround(devinfo, 14021821874) ||
+       intel_needs_workaround(devinfo, 14018813551) ||
+       intel_needs_workaround(devinfo, 14026600921)) {
+      layout->ray_stack_stride = 64 * 64;
+   } else {
+      layout->ray_stack_stride = BRW_RT_ASYNC_STACK_STRIDE;
+   }
+
    size += num_stack_ids * layout->ray_stack_stride;
 
    /* Finally, we place the SW stacks for the individual ray-tracing shader
@@ -266,9 +285,14 @@ brw_rt_ray_queries_stack_ids_per_dss(const struct intel_device_info *devinfo)
 
    /* Wa_14021821874, Wa_14018813551, Wa_14026600921:
     *
-    * "StackIDControlOverride_RTGlobals = 0 (i.e. 2k)". We
-    * already set stack size per ray to 64 in brw_nir_lower_rt_intrinsics
-    * as the workaround also requires.
+    *    StackIDControlOverride_RTGlobals = 0 (i.e. 2k)
+    *    SetStackSizePerRay  = 64  (64*64B)
+    *    DisableRTGlobalsKnownValues = 1
+    *
+    * StackSizePerRay is the RTDispatchGlobals::AsyncStackSize and
+    * DisableRTGlobalsKnownValues is to interpret how many Max BVH levels we
+    * need to use. It's not relevant to Vulkan, since we have just 2 fixed BVH
+    * levels.
     */
    if (intel_needs_workaround(devinfo, 14021821874) ||
        intel_needs_workaround(devinfo, 14018813551) ||

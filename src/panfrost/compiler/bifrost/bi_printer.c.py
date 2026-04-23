@@ -1,4 +1,5 @@
 # Copyright (C) 2020 Collabora, Ltd.
+# Copyright (C) 2026 Arm Ltd.
 # SPDX-License-Identifier: MIT
 
 TEMPLATE = """#include <stdio.h>
@@ -30,7 +31,6 @@ bi_swizzle_as_str(enum bi_swizzle swz)
         case BI_SWIZZLE_B3322: return ".b3322";
         case BI_SWIZZLE_B0033: return ".b0033";
         case BI_SWIZZLE_B1133: return ".b1133";
-        case BI_SWIZZLE_B1123: return ".b1123";
         }
 
         UNREACHABLE("Invalid swizzle");
@@ -65,13 +65,8 @@ bir_passthrough_name(unsigned idx)
 }
 
 static void
-bi_print_index(FILE *fp, bi_index index)
+bi_print_index(FILE *fp, bi_index index, unsigned nr_regs)
 {
-    if (index.discard)
-        fputs("^", fp);
-    if (index.kill_ssa)
-        fputs("!", fp);
-
     if (bi_is_null(index))
         fprintf(fp, "_");
     else if (index.type == BI_INDEX_CONSTANT)
@@ -84,12 +79,18 @@ bi_print_index(FILE *fp, bi_index index)
         fprintf(fp, "%s", bir_fau_name(index.value));
     else if (index.type == BI_INDEX_PASS)
         fprintf(fp, "%s", bir_passthrough_name(index.value));
-    else if (index.type == BI_INDEX_REGISTER)
-        fprintf(fp, "%s%u", index.memory ? "m" : "r", index.value);
-    else if (index.type == BI_INDEX_NORMAL)
-        fprintf(fp, "%s%u", index.memory ? "m" : "", index.value);
+    else if (index.type == BI_INDEX_REGISTER) {
+        for (int i = 0; i < nr_regs; i++) {
+            if (i > 0) fputs(":", fp);
+            fprintf(fp, "%s%u", index.memory ? "m" : "r", index.value + i);
+        }
+    } else if (index.type == BI_INDEX_NORMAL)
+        fprintf(fp, "%%%s%u", index.memory ? "m" : "", index.value);
     else
         UNREACHABLE("Invalid index");
+
+    if (index.discard || index.kill_ssa)
+        fputs("^", fp);
 
     if (index.offset)
         fprintf(fp, "[%u]", index.offset);
@@ -153,12 +154,38 @@ bi_${mod}_as_str(enum bi_${mod} ${mod})
 void
 bi_print_instr_impl(const bi_instr *I, FILE *fp)
 {
-    fputs("   ", fp);
+    char buf[128];
+    size_t len = 0;
+    unsigned indent = 8;
+
+    /* Print destination width in SSA-form. For SPLIT, only print one width as
+     * it is assumed all destinations will have the same width.
+     */
+    bi_foreach_ssa_dest(I, d) {
+        if (I->op == BI_OPCODE_SPLIT_I32 && d > 0)
+            continue;
+        if (len > 0)
+            len += snprintf(buf + len, sizeof(buf) - len, ",");
+
+        unsigned nr_regs = bi_count_write_registers(I, d);
+        if (nr_regs > 1)
+            len += snprintf(buf + len, sizeof(buf) - len, "32x%u", nr_regs);
+        else if (nr_regs == 1)
+            len += snprintf(buf + len, sizeof(buf) - len, "32");
+    }
+
+    if (len > 0)
+        fputs(buf, fp);
+    if (len >= indent)
+        fputc(' ', fp);
+    else
+        fprintf(fp, "%*s", (int)(indent - len), "");
 
     bi_foreach_dest(I, d) {
         if (d > 0) fprintf(fp, ", ");
 
-        bi_print_index(fp, I->dest[d]);
+        unsigned nr_regs = bi_count_write_registers(I, d);
+        bi_print_index(fp, I->dest[d], nr_regs);
     }
 
     if (I->nr_dests > 0)
@@ -179,7 +206,8 @@ bi_print_instr_impl(const bi_instr *I, FILE *fp)
             else
                 fputs(" ", fp);
 
-            bi_print_index(fp, I->src[i]);
+            unsigned nr_regs = bi_count_read_registers(I, i);
+            bi_print_index(fp, I->src[i], nr_regs);
         }
     }
 
@@ -196,7 +224,7 @@ bi_print_instr_impl(const bi_instr *I, FILE *fp)
     % if src > 0:
         fputs(", ", fp);
     % endif
-        bi_print_index(fp, I->src[${src}]);
+        bi_print_index(fp, I->src[${src}], bi_count_read_registers(I, ${src}));
         ${print_source_modifiers([m for m in ops[opcode]["modifiers"] if m[-1] == str(src)], src, modifiers)}
     % endfor
     % for imm in ops[opcode]["immediates"]:

@@ -1790,6 +1790,11 @@ agx_shader_initialize(struct agx_device *dev, struct agx_uncompiled_shader *so,
             nir_lower_io_lower_64bit_to_32 |
                nir_lower_io_use_interpolated_input_intrinsics);
 
+   /* Regather shader info after nir_lower_io. This recalculates interpolation
+    * qualifiers which got lost when mesa/st lowered I/O back to vars.
+    */
+   nir_shader_gather_info(nir, nir_shader_get_entrypoint(nir));
+
    if (nir->info.stage == MESA_SHADER_FRAGMENT) {
       so->info.uses_fbfetch = nir->info.fs.uses_fbfetch_output;
       so->info.inputs_linear_shaded = nir->info.linear_varyings;

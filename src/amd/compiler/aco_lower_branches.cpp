@@ -379,6 +379,10 @@ can_remove_branch(branch_ctx& ctx, Block& block, Pseudo_branch_instruction* bran
       if (uniform_branch && !ctx.program->blocks[i].instructions.empty())
          return false;
 
+      /* Don't enter loops with empty exec mask. */
+      if (ctx.program->blocks[i].loop_nest_depth > block.loop_nest_depth)
+         return false;
+
       for (aco_ptr<Instruction>& instr : ctx.program->blocks[i].instructions) {
          if (instr->isSOPP()) {
             /* Discard early exits and loop breaks and continues should work fine with
@@ -388,11 +392,10 @@ can_remove_branch(branch_ctx& ctx, Block& block, Pseudo_branch_instruction* bran
                 instr->opcode == aco_opcode::s_cbranch_scc1 ||
                 instr->opcode == aco_opcode::s_cbranch_execz ||
                 instr->opcode == aco_opcode::s_cbranch_execnz) {
-               bool is_break_continue =
-                  ctx.program->blocks[i].kind & (block_kind_break | block_kind_continue);
+               bool is_break = ctx.program->blocks[i].kind & block_kind_break;
                bool discard_early_exit =
                   ctx.program->blocks[instr->salu().imm].kind & block_kind_discard_early_exit;
-               if (is_break_continue || discard_early_exit) {
+               if (is_break || discard_early_exit) {
                   /* If the branch target is the same, we can be sure that it will be taken. */
                   if (instr->salu().imm == target)
                      return true;
@@ -564,7 +567,8 @@ try_rotate_latch_block(branch_ctx& ctx, Block& header)
    if (!(header.kind & block_kind_loop_latch))
       return;
 
-   assert(header.linear_preds.size() > 1);
+   /* After jump-threading, the loop header might have more than 2 predecessors. */
+   assert(header.linear_preds.size() >= 2);
    Block& block = ctx.program->blocks[header.linear_preds.back()];
 
    if (block.instructions.empty() || block.instructions.back()->opcode != aco_opcode::s_branch)
@@ -595,7 +599,8 @@ try_rotate_latch_block(branch_ctx& ctx, Block& header)
          continue;
       } else if (pred.linear_succs[0] == block.index) {
          /* Check if there is a fall-through path for the jump target. */
-         if (block.index > pred.linear_succs[1] || (pred.linear_succs[1] & block_kind_loop_latch))
+         if (block.index > pred.linear_succs[1] ||
+             (ctx.program->blocks[pred.linear_succs[1]].kind & block_kind_loop_latch))
             return;
 
          for (unsigned j = block.index + 1; j < pred.linear_succs[1]; j++) {

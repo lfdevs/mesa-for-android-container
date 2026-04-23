@@ -204,6 +204,12 @@ get_push_range_address(struct anv_cmd_buffer *cmd_buffer,
    case ANV_DESCRIPTOR_SET_PER_PRIM_PADDING:
       return cmd_buffer->device->workaround_address;
 
+   case ANV_DESCRIPTOR_SET_PUSH_POINTER: {
+      uint64_t address =  *((uint64_t *)&gfx_state->base.push_constants.client_data[range->index]);
+      assert(address % ANV_UBO_ALIGNMENT == 0);
+      return anv_address_from_u64(address);
+   }
+
    default: {
       assert(range->set < MAX_SETS);
       struct anv_descriptor_set *set =
@@ -274,6 +280,7 @@ get_push_range_bound_size(struct anv_cmd_buffer *cmd_buffer,
    case ANV_DESCRIPTOR_SET_NULL:
    case ANV_DESCRIPTOR_SET_PUSH_CONSTANTS:
    case ANV_DESCRIPTOR_SET_PER_PRIM_PADDING:
+   case ANV_DESCRIPTOR_SET_PUSH_POINTER:
       return (range->start + range->length) * 32;
 
    default: {
@@ -1079,13 +1086,13 @@ cmd_buffer_pre_draw_wa(struct anv_cmd_buffer *cmd_buffer)
    UNUSED struct anv_gfx_dynamic_state *hw_state = &gfx->dyn_state;
 
    struct mi_builder b;
-   if (unlikely(instance->debug & ANV_DEBUG_SHADER_HASH)) {
+   if (ANV_DEBUG(SHADER_HASH)) {
       mi_builder_init(&b, device->info, &cmd_buffer->batch);
       mi_builder_set_mocs(&b, isl_mocs(&device->isl_dev, 0, false));
    }
 
 #define DEBUG_SHADER_HASH(stage) do {                                   \
-      if (unlikely(instance->debug & ANV_DEBUG_SHADER_HASH)) {          \
+      if (ANV_DEBUG(SHADER_HASH)) {                                     \
          mi_store(&b,                                                   \
                   mi_mem32(device->workaround_address),                 \
                   mi_imm(gfx->shaders[stage]->prog_data->source_hash)); \

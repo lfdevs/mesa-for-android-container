@@ -63,7 +63,9 @@ v3dX(clif_dump_packet)(struct clif_dump *clif, uint32_t offset,
 {
         struct v3d_group *inst = v3d_spec_find_instruction(clif->spec, cl);
         if (!inst) {
-                out(clif, "0x%08x: Unknown packet %d!\n", offset, *cl);
+                mesa_log_stream_printf(clif->stream,
+                                       "0x%08x: Unknown packet %d!\n",
+                                       offset, *cl);
                 return false;
         }
 
@@ -71,7 +73,7 @@ v3dX(clif_dump_packet)(struct clif_dump *clif, uint32_t offset,
 
         if (!reloc_mode) {
                 char *name = clif_name(v3d_group_get_name(inst));
-                out(clif, "%s\n", name);
+                mesa_log_stream_printf(clif->stream, "%s\n", name);
                 free(name);
                 v3d_print_group(clif, inst, 0, cl);
         }
@@ -141,7 +143,7 @@ v3dX(clif_dump_packet)(struct clif_dump *clif, uint32_t offset,
                         *size += v3d_group_get_length(spec);
                 }
                 if (!reloc_mode)
-                        out(clif, "@format ctrllist\n");
+                        mesa_log_stream_printf(clif->stream, "@format ctrllist\n");
                 break;
         }
 #else /* V3D_VERSION < 40 */

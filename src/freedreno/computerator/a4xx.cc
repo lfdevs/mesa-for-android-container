@@ -25,12 +25,8 @@
 
 #include "util/u_math.h"
 #include "util/u_queue.h"
-#include "util/half_float.h"
 
-#include "adreno_pm4.xml.h"
-#include "adreno_common.xml.h"
-#include "a4xx.xml.h"
-
+#include "common/fd4_hw.h"
 #include "ir3_asm.h"
 #include "main.h"
 

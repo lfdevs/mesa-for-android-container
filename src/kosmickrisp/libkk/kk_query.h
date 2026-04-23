@@ -12,8 +12,8 @@
 #include "compiler/libcl/libcl.h"
 
 struct libkk_imm_write {
-   DEVICE(uint64_t) address;
-   uint64_t value;
+   DEVICE(uint32_t) address;
+   uint32_t value;
 };
 
 #define LIBKK_QUERY_UNAVAILABLE (uint64_t)((int64_t)-1)

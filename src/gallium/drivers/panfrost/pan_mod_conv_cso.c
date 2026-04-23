@@ -183,8 +183,10 @@ panfrost_create_afbc_size_shader(struct panfrost_screen *screen,
    unsigned align = key->afbc.align;
    struct panfrost_device *dev = pan_device(&screen->base);
 
+   const nir_shader_compiler_options *compiler_options =
+      pan_get_nir_shader_compiler_options(dev->arch, false);
    nir_builder b = nir_builder_init_simple_shader(
-      MESA_SHADER_COMPUTE, pan_get_nir_shader_compiler_options(dev->arch),
+      MESA_SHADER_COMPUTE, compiler_options,
       "panfrost_afbc_size(uncompressed_size=%u, align=%u)",
       key->afbc.uncompressed_size, align);
 
@@ -220,9 +222,10 @@ panfrost_create_afbc_pack_shader(struct panfrost_screen *screen,
 {
    unsigned align = key->afbc.align;
    struct panfrost_device *dev = pan_device(&screen->base);
+   const nir_shader_compiler_options *compiler_options =
+      pan_get_nir_shader_compiler_options(dev->arch, false);
    nir_builder b = nir_builder_init_simple_shader(
-      MESA_SHADER_COMPUTE, pan_get_nir_shader_compiler_options(dev->arch),
-      "panfrost_afbc_pack");
+      MESA_SHADER_COMPUTE, compiler_options, "panfrost_afbc_pack");
 
    panfrost_afbc_add_info_ubo(pack, b);
 
@@ -265,9 +268,10 @@ panfrost_create_mtk_tiled_detile_shader(
 {
    const struct panfrost_device *device = &screen->dev;
    bool tint_yuv = (device->debug & PAN_DBG_YUV) != 0;
+   const nir_shader_compiler_options *compiler_options =
+      pan_get_nir_shader_compiler_options(device->arch, false);
    nir_builder b = nir_builder_init_simple_shader(
-      MESA_SHADER_COMPUTE, pan_get_nir_shader_compiler_options(device->arch),
-      "panfrost_mtk_detile");
+      MESA_SHADER_COMPUTE, compiler_options, "panfrost_mtk_detile");
    b.shader->info.workgroup_size[0] = 4;
    b.shader->info.workgroup_size[1] = 16;
    b.shader->info.workgroup_size[2] = 1;

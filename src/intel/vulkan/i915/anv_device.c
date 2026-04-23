@@ -379,7 +379,7 @@ anv_i915_device_check_status(struct vk_device *vk_device)
    }
 
  done:
-   if (INTEL_DEBUG(DEBUG_SHADER_PRINT)) {
+   if (anv_needs_printf_buffer()) {
       VkResult print_result =
          vk_check_printf_status(vk_device, &device->printf);
       /* Report the device error if there is one, only report the printf error

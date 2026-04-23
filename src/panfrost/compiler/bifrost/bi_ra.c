@@ -8,6 +8,7 @@
 #include "bi_builder.h"
 #include "compiler.h"
 #include "nodearray.h"
+#include "valhall.h"
 
 struct lcra_state {
    unsigned node_count;
@@ -321,8 +322,9 @@ bi_make_affinity(uint64_t clobber, unsigned count, bool split_file)
 static void
 bi_mark_interference(bi_block *block, struct lcra_state *l, uint8_t *live,
                      uint64_t preload_live, unsigned node_count, bool is_blend,
-                     bool split_file, bool aligned_sr)
+                     bool split_file, unsigned arch)
 {
+   bool aligned_sr = arch >= 9;
    bi_foreach_instr_in_block_rev(block, ins) {
       /* Mark all registers live after the instruction as
        * interfering with the destination */
@@ -379,12 +381,17 @@ bi_mark_interference(bi_block *block, struct lcra_state *l, uint8_t *live,
          bi_foreach_ssa_src(ins, s) {
             if (bi_count_read_registers(ins, s) >= 2)
                l->affinity[ins->src[s].value] &= EVEN_BITS_MASK;
+            else if (s < valhall_opcodes[ins->op].nr_srcs &&
+                     va_src_info(ins->op, s).size > VA_SIZE_32)
+               l->affinity[ins->src[s].value] &= EVEN_BITS_MASK;
          }
       }
 
       if (!is_blend && ins->op == BI_OPCODE_BLEND) {
-         /* Blend shaders might clobber r0-r15, r48. */
-         uint64_t clobber = BITFIELD64_MASK(16) | BITFIELD64_BIT(48);
+         /* Blend shaders might clobber r0-r15, blend link reg. */
+         uint64_t clobber =
+            BITFIELD64_MASK(16) |
+            BITFIELD64_BIT(bi_preload_reg(BI_PRELOAD_BLEND_LINK, arch));
 
          for (unsigned i = 0; i < node_count; ++i) {
             if (live[i])
@@ -410,7 +417,7 @@ bi_compute_interference(bi_context *ctx, struct lcra_state *l, bool full_regs)
       uint8_t *live = mem_dup(blk->live_out, ctx->ssa_alloc);
 
       bi_mark_interference(blk, l, live, blk->reg_live_out, ctx->ssa_alloc,
-                           ctx->inputs->is_blend, !full_regs, ctx->arch >= 9);
+                           ctx->inputs->is_blend, !full_regs, ctx->arch);
 
       free(live);
    }
@@ -438,36 +445,43 @@ bi_allocate_registers(bi_context *ctx, bool *success, bool full_regs)
       bi_foreach_dest(ins, d)
          l->affinity[ins->dest[d].value] = default_affinity;
 
-      /* Blend shaders expect the src colour to be in r0-r3 */
+      /* Blend shaders expect the src colour to be in blend_src0_c0
+       * through c3 */
       if (ins->op == BI_OPCODE_BLEND && !ctx->inputs->is_blend) {
          assert(bi_is_ssa(ins->src[0]));
-         l->solutions[ins->src[0].value] = 0;
+         l->solutions[ins->src[0].value] =
+            bi_preload_reg(BI_PRELOAD_BLEND_SRC0_C0, ctx->arch);
 
-         /* Dual source blend input in r4-r7 */
+         /* Dual source blend input in blend_src1_c0 through c3 */
          if (bi_is_ssa(ins->src[4]))
-            l->solutions[ins->src[4].value] = 4;
+            l->solutions[ins->src[4].value] =
+               bi_preload_reg(BI_PRELOAD_BLEND_SRC1_C0, ctx->arch);
 
-         /* Writes to R48 */
+         /* Writes to blend link */
          if (!bi_is_null(ins->dest[0]))
-            l->solutions[ins->dest[0].value] = 48;
+            l->solutions[ins->dest[0].value] =
+               bi_preload_reg(BI_PRELOAD_BLEND_LINK, ctx->arch);
       }
 
-      /* Coverage mask writes stay in R60 */
+      /* Coverage mask writes stay in the cumulative coverage reg */
       if ((ins->op == BI_OPCODE_ATEST || ins->op == BI_OPCODE_ZS_EMIT) &&
           !bi_is_null(ins->dest[0])) {
-         l->solutions[ins->dest[0].value] = 60;
+         l->solutions[ins->dest[0].value] =
+            bi_preload_reg(BI_PRELOAD_CUMULATIVE_COVERAGE, ctx->arch);
       }
 
       /* Experimentally, it seems coverage masks inputs to ATEST must
-       * be in R60. Otherwise coverage mask writes do not work with
-       * early-ZS with pixel-frequency-shading (this combination of
-       * settings is legal if depth/stencil writes are disabled).
-       * Allowing a FAU index also seems to work on Valhall, at least.
+       * be in the cumulative coverage reg. Otherwise coverage mask
+       * writes do not work with early-ZS with pixel-frequency-shading
+       * (this combination of settings is legal if depth/stencil
+       * writes are disabled). Allowing a FAU index also seems to
+       * work on Valhall, at least.
        */
       if (ins->op == BI_OPCODE_ATEST) {
          assert(bi_is_ssa(ins->src[0]) || ins->src[0].type == BI_INDEX_FAU);
          if (bi_is_ssa(ins->src[0]))
-            l->solutions[ins->src[0].value] = 60;
+            l->solutions[ins->src[0].value] =
+               bi_preload_reg(BI_PRELOAD_CUMULATIVE_COVERAGE, ctx->arch);
       }
    }
 
@@ -492,8 +506,10 @@ bi_allocate_registers(bi_context *ctx, bool *success, bool full_regs)
 
       if (ctx->inputs->is_blend) {
          /* We're allowed to coalesce the moves to these */
-         affinity |= BITFIELD64_BIT(48);
-         affinity |= BITFIELD64_BIT(60);
+         affinity |=
+            BITFIELD64_BIT(bi_preload_reg(BI_PRELOAD_BLEND_LINK, ctx->arch));
+         affinity |= BITFIELD64_BIT(
+            bi_preload_reg(BI_PRELOAD_CUMULATIVE_COVERAGE, ctx->arch));
       }
 
       /* Try to coalesce */
@@ -595,14 +611,15 @@ bi_choose_spill_node(bi_context *ctx, struct lcra_state *l)
    bi_foreach_instr_global(ctx, ins) {
       bi_foreach_dest(ins, d) {
          /* Don't allow spilling coverage mask writes because the
-          * register preload logic assumes it will stay in R60.
-          * This could be optimized.
+          * register preload logic assumes it will stay in the
+          * cumulative coverage reg. This could be optimized.
           */
          if (ins->no_spill || ins->op == BI_OPCODE_ATEST ||
              ins->op == BI_OPCODE_ZS_EMIT ||
              (ins->op == BI_OPCODE_MOV_I32 &&
               ins->src[0].type == BI_INDEX_REGISTER &&
-              ins->src[0].value == 60)) {
+              ins->src[0].value ==
+                 bi_preload_reg(BI_PRELOAD_CUMULATIVE_COVERAGE, ctx->arch))) {
             BITSET_SET(no_spill, ins->dest[d].value);
          }
       }
@@ -919,13 +936,12 @@ bi_coalesce_tied(bi_context *ctx)
       bi_builder b = bi_init_builder(ctx, bi_before_instr(I));
       unsigned n = bi_count_read_registers(I, 0);
 
+      bi_index dst = I->dest[0], src = I->src[0];
+      assert(dst.offset == 0);
       for (unsigned i = 0; i < n; ++i) {
-         bi_index dst = I->dest[0], src = I->src[0];
-
-         assert(dst.offset == 0 && src.offset == 0);
-         dst.offset = src.offset = i;
-
          bi_mov_i32_to(&b, dst, src);
+         dst.offset++;
+         src.offset++;
       }
 
       bi_replace_src(I, 0, I->dest[0]);

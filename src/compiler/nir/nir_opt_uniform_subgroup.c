@@ -107,7 +107,7 @@ ballot_bit_count(nir_builder *b, nir_def *ballot)
 {
    return ballot->num_components == 1
              ? nir_bit_count(b, ballot)
-             : nir_ballot_bit_count_reduce(b, ballot);
+             : nir_ballot_bit_count_reduce(b, nir_pad_vec4(b, ballot));
 }
 
 static nir_def *

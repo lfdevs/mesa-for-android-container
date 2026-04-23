@@ -218,25 +218,14 @@ try_copy_prop(struct v3d_compile *c, struct qinst *inst, struct qinst **movs)
                         }
                 }
 
-                if (debug) {
-                        fprintf(stderr, "Copy propagate: ");
-                        vir_dump_inst(c, inst);
-                        fprintf(stderr, "\n");
+                LOG_INST_OPT("Copy propagate", c, inst) {
+                        inst->src[i] = mov->src[0];
+                        if (vir_has_unpack(mov, 0)) {
+                                enum v3d_qpu_input_unpack unpack = mov->qpu.alu.mul.a.unpack;
+
+                                vir_set_unpack(inst, i, unpack);
+                        }
                 }
-
-                inst->src[i] = mov->src[0];
-                if (vir_has_unpack(mov, 0)) {
-                        enum v3d_qpu_input_unpack unpack = mov->qpu.alu.mul.a.unpack;
-
-                        vir_set_unpack(inst, i, unpack);
-                }
-
-                if (debug) {
-                        fprintf(stderr, "to: ");
-                        vir_dump_inst(c, inst);
-                        fprintf(stderr, "\n");
-                }
-
                 progress = true;
         }
 

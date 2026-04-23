@@ -124,9 +124,9 @@ static void si_dec_fill_surface(struct si_video_dec *vid, struct pipe_resource *
    struct si_screen *sscreen = (struct si_screen *)vid->screen;
    struct si_texture *tex = (struct si_texture *)res;
 
-   surf->format = tex->multi_plane_format;
+   surf->format = tex->num_planes > 1 ? tex->multi_plane_format : res->format;
    surf->size += tex->buffer.buf->size;
-   surf->num_planes = util_format_get_num_planes(tex->multi_plane_format);
+   surf->num_planes = util_format_get_num_planes(surf->format);
 
    for (uint32_t i = 0; i < surf->num_planes; i++) {
       assert(tex);

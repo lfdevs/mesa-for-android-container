@@ -356,7 +356,7 @@ lower_vec816_alu(const nir_instr *instr, const void *cb_data)
 }
 
 void
-midgard_preprocess_nir(nir_shader *nir, UNUSED unsigned gpu_id)
+midgard_preprocess_nir(nir_shader *nir, UNUSED uint64_t gpu_id)
 {
    /* Ensure that halt are translated to returns and get ride of them */
    NIR_PASS(_, nir, nir_lower_halt_to_return);
@@ -381,7 +381,7 @@ midgard_preprocess_nir(nir_shader *nir, UNUSED unsigned gpu_id)
 }
 
 void
-midgard_postprocess_nir(nir_shader *nir, UNUSED unsigned gpu_id)
+midgard_postprocess_nir(nir_shader *nir, UNUSED uint64_t gpu_id)
 {
    midgard_lower_texture_nir(nir, gpu_id);
 
@@ -424,7 +424,8 @@ midgard_postprocess_nir(nir_shader *nir, UNUSED unsigned gpu_id)
    NIR_PASS(_, nir, nir_lower_var_copies);
 }
 
-void midgard_lower_texture_nir(nir_shader *nir, unsigned gpu_id)
+void
+midgard_lower_texture_nir(nir_shader *nir, uint64_t gpu_id)
 {
    NIR_PASS(_, nir, nir_lower_image_atomics_to_global, NULL, NULL);
 

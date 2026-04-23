@@ -91,7 +91,7 @@ public:
              m_boxedHandleCreateMapping(m_state),
              m_boxedHandleUnwrapMapping(m_state),
              m_prevSeqno(std::nullopt),
-             m_queueSubmitWithCommandsEnabled(m_state->getFeatures().VulkanQueueSubmitWithCommands.enabled),
+             m_queueSubmitWithCommandsEnabled(m_state->getFeatures().VulkanQueueSubmitWithCommands.enabled()),
              m_snapshotsEnabled(m_state->snapshotsEnabled()) {}
     %s* stream() { return &m_vkStream; }
     VulkanMemReadingStream* readStream() { return &m_vkMemReadingStream; }

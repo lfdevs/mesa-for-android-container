@@ -1177,6 +1177,9 @@ select_shader_variant(struct d3d12_selection_context *sel_ctx, d3d12_shader_sele
 
    /* Remove not-read outputs and re-sort */
    if (next) {
+      if (next->stage == MESA_SHADER_FRAGMENT)
+         dxil_nir_propagate_interp_to_outputs(new_nir_variant, next->initial);
+
       NIR_PASS(_, new_nir_variant, dxil_nir_kill_unused_outputs, key.next_varying_inputs,
                  next->initial->info.patch_inputs_read, key.next_varying_frac_inputs);
       dxil_reassign_driver_locations(new_nir_variant, nir_var_shader_out, key.next_varying_inputs,

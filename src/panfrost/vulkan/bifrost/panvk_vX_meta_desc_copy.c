@@ -332,7 +332,7 @@ panvk_meta_desc_copy_rsd(struct panvk_device *dev)
    nir_builder b = nir_builder_init_simple_shader(
       MESA_SHADER_COMPUTE,
       pan_get_nir_shader_compiler_options(
-         pan_arch(phys_dev->kmod.dev->props.gpu_id)),
+         pan_arch(phys_dev->kmod.dev->props.gpu_id), false),
       "%s", "desc_copy");
 
    /* We actually customize that at execution time to issue the

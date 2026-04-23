@@ -28,10 +28,18 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 uint64_t
 rand_xorshift128plus(uint64_t seed[2]);
 
 void
 s_rand_xorshift128plus(uint64_t seed[2], bool randomised_seed);
+
+#ifdef __cplusplus
+} /* end of extern "C" */
+#endif
 
 #endif /* RAND_XOR_H */

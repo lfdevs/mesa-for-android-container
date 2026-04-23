@@ -94,6 +94,8 @@ void radv_pipeline_stage_init(VkPipelineCreateFlags2 pipeline_flags, const VkPip
 void radv_shader_layout_init(const struct radv_pipeline_layout *pipeline_layout, mesa_shader_stage stage,
                              struct radv_shader_layout *layout);
 
+void radv_pipeline_stage_finish(struct radv_shader_stage *stage);
+
 void radv_postprocess_nir(struct radv_device *device, const struct radv_graphics_state_key *gfx_state,
                           struct radv_shader_stage *stage);
 
@@ -102,6 +104,9 @@ bool radv_shader_should_clear_lds(const struct radv_device *device, const nir_sh
 VkPipelineShaderStageCreateInfo *radv_copy_shader_stage_create_info(struct radv_device *device, uint32_t stageCount,
                                                                     const VkPipelineShaderStageCreateInfo *pStages,
                                                                     void *mem_ctx);
+
+VkShaderDescriptorSetAndBindingMappingInfoEXT *
+radv_copy_descriptor_heap_mapping_info(const VkShaderDescriptorSetAndBindingMappingInfoEXT *mapping, void *mem_ctx);
 
 void radv_pipeline_hash(const struct radv_device *device, const struct radv_pipeline_layout *pipeline_layout,
                         blake3_hasher *ctx);

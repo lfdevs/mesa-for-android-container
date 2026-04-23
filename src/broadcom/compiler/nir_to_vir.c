@@ -117,7 +117,7 @@ resize_qreg_array(struct v3d_compile *c,
         *size = MAX2(*size * 2, decl_size);
         *regs = reralloc(c, *regs, struct qreg, *size);
         if (!*regs) {
-                fprintf(stderr, "Malloc failure\n");
+                mesa_loge("Malloc failure");
                 abort();
         }
 
@@ -138,7 +138,7 @@ resize_interp_array(struct v3d_compile *c,
         *size = MAX2(*size * 2, decl_size);
         *regs = reralloc(c, *regs, struct v3d_interp_input, *size);
         if (!*regs) {
-                fprintf(stderr, "Malloc failure\n");
+                mesa_loge("Malloc failure");
                 abort();
         }
 
@@ -1830,9 +1830,8 @@ ntq_emit_alu(struct v3d_compile *c, nir_alu_instr *instr)
                 break;
 
         default:
-                fprintf(stderr, "unknown NIR ALU inst: ");
-                nir_print_instr(&instr->instr, stderr);
-                fprintf(stderr, "\n");
+                mesa_loge("Unknown NIR ALU inst: %s",
+                          nir_instr_as_str(&instr->instr, NULL));
                 abort();
         }
 
@@ -4137,9 +4136,8 @@ ntq_emit_intrinsic(struct v3d_compile *c, nir_intrinsic_instr *instr)
                 break;
 
         default:
-                fprintf(stderr, "Unknown intrinsic: ");
-                nir_print_instr(&instr->instr, stderr);
-                fprintf(stderr, "\n");
+                mesa_loge("Unknown intrinsic: %s",
+                          nir_instr_as_str(&instr->instr, NULL));
                 abort();
         }
 }
@@ -4505,9 +4503,8 @@ ntq_emit_instr(struct v3d_compile *c, nir_instr *instr)
                 break;
 
         default:
-                fprintf(stderr, "Unknown NIR instr type: ");
-                nir_print_instr(instr, stderr);
-                fprintf(stderr, "\n");
+                mesa_loge("Unknown NIR instr type: %s",
+                          nir_instr_as_str(instr, NULL));
                 abort();
         }
 }
@@ -4640,7 +4637,7 @@ ntq_emit_loop(struct v3d_compile *c, nir_loop *loop)
 static void
 ntq_emit_function(struct v3d_compile *c, nir_function_impl *func)
 {
-        fprintf(stderr, "FUNCTIONS not handled.\n");
+        mesa_loge("FUNCTIONS not handled.");
         abort();
 }
 
@@ -4666,7 +4663,7 @@ ntq_emit_cf_list(struct v3d_compile *c, struct exec_list *list)
                         break;
 
                 default:
-                        fprintf(stderr, "Unknown NIR node type\n");
+                        mesa_loge("Unknown NIR node type");
                         abort();
                 }
         }
@@ -4974,10 +4971,10 @@ v3d_nir_to_vir(struct v3d_compile *c)
 {
         if (V3D_DBG(NIR) ||
             v3d_debug_flag_for_shader_stage(c->s->info.stage)) {
-                fprintf(stderr, "%s prog %d/%d NIR:\n",
-                        vir_get_stage_name(c),
-                        c->program_id, c->variant_id);
-                nir_print_shader(c->s, stderr);
+                mesa_logi("%s prog %d/%d NIR:",
+                          vir_get_stage_name(c),
+                          c->program_id, c->variant_id);
+                nir_log_shaderi(c->s);
         }
 
         nir_to_vir(c);
@@ -5009,11 +5006,10 @@ v3d_nir_to_vir(struct v3d_compile *c)
 
         if (V3D_DBG(VIR) ||
             v3d_debug_flag_for_shader_stage(c->s->info.stage)) {
-                fprintf(stderr, "%s prog %d/%d pre-opt VIR:\n",
-                        vir_get_stage_name(c),
-                        c->program_id, c->variant_id);
-                vir_dump(c);
-                fprintf(stderr, "\n");
+                mesa_logi("%s prog %d/%d pre-opt VIR:",
+                          vir_get_stage_name(c),
+                          c->program_id, c->variant_id);
+                vir_dumpi(c);
         }
 
         vir_optimize(c);
@@ -5032,11 +5028,10 @@ v3d_nir_to_vir(struct v3d_compile *c)
 
         if (V3D_DBG(VIR) ||
             v3d_debug_flag_for_shader_stage(c->s->info.stage)) {
-                fprintf(stderr, "%s prog %d/%d VIR:\n",
-                        vir_get_stage_name(c),
-                        c->program_id, c->variant_id);
-                vir_dump(c);
-                fprintf(stderr, "\n");
+                mesa_logi("%s prog %d/%d VIR:",
+                          vir_get_stage_name(c),
+                          c->program_id, c->variant_id);
+                vir_dumpi(c);
         }
 
         /* Attempt to allocate registers for the temporaries.  If we fail,
@@ -5053,19 +5048,18 @@ v3d_nir_to_vir(struct v3d_compile *c)
 
                 if (c->threads <= MAX2(c->min_threads_for_reg_alloc, min_threads)) {
                         if (V3D_DBG(PERF) || V3D_DBG(RA)) {
-                                fprintf(stderr,
-                                        "Failed to register allocate %s "
-                                        "prog %d/%d at %d threads.\n",
-                                        vir_get_stage_name(c),
-                                        c->program_id, c->variant_id, c->threads);
+                                mesa_logi("Failed to register allocate %s "
+                                          "prog %d/%d at %d threads.",
+                                          vir_get_stage_name(c),
+                                          c->program_id, c->variant_id, c->threads);
                         }
                         if (V3D_DBG(RA)) {
-                                vir_dump(c);
+                                vir_dumpi(c);
 
                                 char *shaderdb;
                                 int ret = v3d_shaderdb_dump(c, &shaderdb);
                                 if (ret > 0) {
-                                        fprintf(stderr, "%s\n", shaderdb);
+                                        mesa_logi("%s", shaderdb);
                                         free(shaderdb);
                                 }
 
@@ -5092,11 +5086,10 @@ v3d_nir_to_vir(struct v3d_compile *c)
         if (c->spills &&
             (V3D_DBG(VIR) ||
              v3d_debug_flag_for_shader_stage(c->s->info.stage))) {
-                fprintf(stderr, "%s prog %d/%d spilled VIR:\n",
-                        vir_get_stage_name(c),
-                        c->program_id, c->variant_id);
-                vir_dump(c);
-                fprintf(stderr, "\n");
+                mesa_logi("%s prog %d/%d spilled VIR:",
+                          vir_get_stage_name(c),
+                          c->program_id, c->variant_id);
+                vir_dumpi(c);
         }
 
         v3d_vir_to_qpu(c, temp_registers);

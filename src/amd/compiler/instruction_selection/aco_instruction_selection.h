@@ -80,27 +80,17 @@ struct exec_info {
     * parent_loop.has_divergent_continue==false. */
    bool potentially_empty_break = false;
 
-   /* Set to false when leaving the loop, or if parent_if.is_divergent==false. */
-   bool potentially_empty_continue = false;
-
    void combine(struct exec_info& other)
    {
       potentially_empty_discard |= other.potentially_empty_discard;
       potentially_empty_break |= other.potentially_empty_break;
-      potentially_empty_continue |= other.potentially_empty_continue;
    }
 
-   bool empty() const noexcept
-   {
-      return potentially_empty_discard || potentially_empty_break || potentially_empty_continue;
-   }
+   bool empty() const noexcept { return potentially_empty_discard || potentially_empty_break; }
 };
 
 struct cf_context {
    struct {
-      unsigned header_idx = 0;
-      Block* exit = NULL;
-      bool has_divergent_continue = false;
       bool has_divergent_break = false;
    } parent_loop;
    struct {
@@ -127,8 +117,21 @@ struct if_context {
 
 struct loop_context {
    Block loop_exit;
+   unsigned header_idx = 0;
 
    cf_context cf_info_old;
+};
+
+enum cf_traversal_phase {
+   CF_TRAVERSAL_PHASE_ENTER,
+   CF_TRAVERSAL_PHASE_IN_ELSE,
+   CF_TRAVERSAL_PHASE_LEAVE
+};
+
+struct cf_traversal_state {
+   nir_cf_node* node;
+   enum cf_traversal_phase phase;
+   bool saved_skipping_empty_exec;
 };
 
 struct isel_context {
@@ -145,7 +148,10 @@ struct isel_context {
 
    cf_context cf_info;
    bool skipping_empty_exec = false;
-   if_context empty_exec_skip;
+
+   std::vector<cf_traversal_state> traversal_stack;
+   std::vector<if_context> if_stack;
+   std::vector<loop_context> loop_stack;
 
    /* NIR range analysis. */
    struct hash_table* range_ht;
@@ -245,17 +251,16 @@ isel_context setup_isel_context(Program* program, unsigned shader_count,
 
 /* aco_isel_cfg.cpp */
 void emit_loop_break(isel_context* ctx);
-void emit_loop_continue(isel_context* ctx);
-void begin_loop(isel_context* ctx, loop_context* lc);
-void end_loop(isel_context* ctx, loop_context* lc);
-void begin_uniform_if_then(isel_context* ctx, if_context* ic, Temp cond);
-void begin_uniform_if_else(isel_context* ctx, if_context* ic, bool logical_else = true);
-void end_uniform_if(isel_context* ctx, if_context* ic, bool logical_else = true);
-void begin_divergent_if_then(isel_context* ctx, if_context* ic, Temp cond,
+void begin_loop(isel_context* ctx);
+void end_loop(isel_context* ctx);
+void begin_uniform_if_then(isel_context* ctx, Temp cond);
+void begin_uniform_if_else(isel_context* ctx, bool logical_else = true);
+void end_uniform_if(isel_context* ctx, bool logical_else = true);
+void begin_divergent_if_then(isel_context* ctx, Temp cond,
                              nir_selection_control sel_ctrl = nir_selection_control_none);
-void begin_divergent_if_else(isel_context* ctx, if_context* ic,
+void begin_divergent_if_else(isel_context* ctx,
                              nir_selection_control sel_ctrl = nir_selection_control_none);
-void end_divergent_if(isel_context* ctx, if_context* ic);
+void end_divergent_if(isel_context* ctx);
 void begin_empty_exec_skip(isel_context* ctx, nir_instr* after_instr, nir_block* block);
 void end_empty_exec_skip(isel_context* ctx);
 
@@ -301,7 +306,8 @@ void finish_program(isel_context* ctx);
 
 ABI nir_abi_to_aco(unsigned nir_abi_mask);
 
-param_assignment_hints get_ahit_isec_param_hints(const struct callee_info& traversal_info);
+param_assignment_hints get_ahit_isec_param_hints(const struct callee_info& traversal_info,
+                                                 bool uses_descriptor_heap);
 
 struct callee_info get_callee_info(amd_gfx_level gfx_level, unsigned wave_size, const ABI& abi,
                                    unsigned param_count, const nir_parameter* parameters,

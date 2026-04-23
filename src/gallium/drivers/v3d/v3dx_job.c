@@ -80,6 +80,10 @@ v3dX(job_emit_enable_double_buffer)(struct v3d_job *job)
 
         config.width_in_pixels = job->draw_width;
         config.height_in_pixels = job->draw_height;
+        config.tile_allocation_initial_block_size =
+                V3D_TILE_ALLOC_INITIAL_BLOCK_SIZE_ENUM;
+        config.tile_allocation_block_size =
+                V3D_TILE_ALLOC_OVERFLOW_BLOCK_SIZE_ENUM;
 #if V3D_VERSION == 42
         config.number_of_render_targets = MAX2(job->nr_cbufs, 1);
         config.multisample_mode_4x = job->msaa;

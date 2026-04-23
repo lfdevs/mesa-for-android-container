@@ -1026,7 +1026,12 @@ nvk_image_init(struct nvk_device *dev,
       }
    }
 
-   if ((image->vk.aspects & VK_IMAGE_ASPECT_DEPTH_BIT) &&
+   /* Disable zcull save/restore regions until
+    * https://gitlab.freedesktop.org/mesa/mesa/-/work_items/15221
+    * is fixed.
+    */
+   if (false &&
+       (image->vk.aspects & VK_IMAGE_ASPECT_DEPTH_BIT) &&
        image->vk.image_type != VK_IMAGE_TYPE_3D &&
        image->vk.tiling == VK_IMAGE_TILING_OPTIMAL &&
        pdev->info.has_zcull_info) {

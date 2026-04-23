@@ -54,6 +54,7 @@ uint8_t ir3_nir_vectorize_filter(const nir_instr *instr, const void *data);
 bool ir3_nir_lower_64b_undef(nir_shader *shader);
 bool ir3_nir_lower_64b_global(nir_shader *shader);
 bool ir3_nir_lower_64b_regs(nir_shader *shader);
+bool ir3_nir_lower_64b_image(nir_shader *shader);
 
 nir_mem_access_size_align ir3_mem_access_size_align(
    nir_intrinsic_op intrin, uint8_t bytes, uint8_t bit_size, uint32_t align,

@@ -30,7 +30,9 @@
 
 #include "util/u_thread.h"
 #include "util/u_memory.h"
+#include "util/u_math.h"
 #include "lp_cs_tpool.h"
+#include "compiler/shader_enums.h"
 
 static int
 lp_cs_tpool_worker(void *data)
@@ -40,6 +42,9 @@ lp_cs_tpool_worker(void *data)
 
    memset(&lmem, 0, sizeof(lmem));
    mtx_lock(&pool->m);
+
+   unsigned fpstate = util_fpstate_get();
+   bool flush_denorms = false;
 
    while (!pool->shutdown) {
       struct lp_cs_tpool_task *task;
@@ -70,6 +75,17 @@ lp_cs_tpool_worker(void *data)
          list_del(&task->list);
 
       mtx_unlock(&pool->m);
+
+      struct lp_cs_job_info *job_info = task->data;
+      if ((job_info->current->variant->stage == MESA_SHADER_KERNEL) == flush_denorms) {
+         if (flush_denorms) {
+            util_fpstate_set(fpstate);
+            flush_denorms = false;
+         } else {
+            util_fpstate_set_denorms_to_zero(fpstate);
+            flush_denorms = true;
+         }
+      }
       for (unsigned i = 0; i < iter_per_thread; i++)
          task->work(task->data, this_iter + i, &lmem);
 
@@ -135,11 +151,25 @@ lp_cs_tpool_queue_task(struct lp_cs_tpool *pool,
    if (pool->num_threads == 0) {
       struct lp_cs_local_mem lmem;
 
+      struct lp_cs_job_info *job_info = data;
+      
+      unsigned fpstate = 0;
+      bool flush_denorms = false;
+      if (job_info->current->variant->stage != MESA_SHADER_KERNEL) {
+         fpstate = util_fpstate_get();
+         util_fpstate_set_denorms_to_zero(fpstate);
+         flush_denorms = true;
+      }
+
       memset(&lmem, 0, sizeof(lmem));
       for (unsigned t = 0; t < num_iters; t++) {
          work(data, t, &lmem);
       }
       FREE(lmem.local_mem_ptr);
+
+      if (flush_denorms) {
+         util_fpstate_set(fpstate);
+      }
       return NULL;
    }
    task = CALLOC_STRUCT(lp_cs_tpool_task);

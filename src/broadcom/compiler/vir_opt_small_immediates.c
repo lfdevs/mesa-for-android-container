@@ -115,23 +115,15 @@ vir_opt_small_immediates(struct v3d_compile *c)
                         if (!v3d_qpu_sig_pack(c->devinfo, &new_sig, &sig_packed))
                                 continue;
 
-                        if (debug) {
-                                fprintf(stderr, "opt_small_immediate() from: ");
-                                vir_dump_inst(c, inst);
-                                fprintf(stderr, "\n");
-                        }
-                        inst->qpu.sig.small_imm_a = new_sig.small_imm_a;
-                        inst->qpu.sig.small_imm_b = new_sig.small_imm_b;
-                        inst->qpu.sig.small_imm_c = new_sig.small_imm_c;
-                        inst->qpu.sig.small_imm_d = new_sig.small_imm_d;
-                        inst->qpu.raddr_b = packed;
+                        LOG_INST_OPT("opt_small_immediate()", c, inst) {
+                                inst->qpu.sig.small_imm_a = new_sig.small_imm_a;
+                                inst->qpu.sig.small_imm_b = new_sig.small_imm_b;
+                                inst->qpu.sig.small_imm_c = new_sig.small_imm_c;
+                                inst->qpu.sig.small_imm_d = new_sig.small_imm_d;
+                                inst->qpu.raddr_b = packed;
 
-                        inst->src[i].file = QFILE_SMALL_IMM;
-                        inst->src[i].index = imm;
-                        if (debug) {
-                                fprintf(stderr, "to: ");
-                                vir_dump_inst(c, inst);
-                                fprintf(stderr, "\n");
+                                inst->src[i].file = QFILE_SMALL_IMM;
+                                inst->src[i].index = imm;
                         }
                         progress = true;
                         break;

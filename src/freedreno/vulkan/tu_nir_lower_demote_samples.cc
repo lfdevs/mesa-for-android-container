@@ -3,8 +3,9 @@
  * SPDX-License-Identifier: MIT
  */
 
-#include "tu_shader.h"
 #include "nir/nir_builder.h"
+
+#include "tu_shader.h"
 
 /* Lower demote_samples to a write to gl_SampleMask. Take into account
  * existing writes to gl_SampleMask.

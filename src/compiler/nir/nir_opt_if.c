@@ -42,11 +42,11 @@ find_continue_block(nir_loop *loop)
    nir_block *prev_block =
       nir_cf_node_as_block(nir_cf_node_prev(&loop->cf_node));
 
-   assert(header_block->predecessors.entries == 2);
+   assert(nir_block_num_preds(header_block) == 2);
 
-   set_foreach(&header_block->predecessors, pred_entry) {
-      if (pred_entry->key != prev_block)
-         return (nir_block *)pred_entry->key;
+   nir_foreach_pred(pred, header_block) {
+      if (pred != prev_block)
+         return pred;
    }
 
    UNREACHABLE("Continue block not found!");
@@ -143,13 +143,13 @@ opt_peel_loop_initial_if(nir_loop *loop)
       nir_cf_node_as_block(nir_cf_node_prev(&loop->cf_node));
 
    /* It would be insane if this were not true */
-   assert(_mesa_set_search(&header_block->predecessors, prev_block));
+   assert(nir_block_has_pred(header_block, prev_block));
 
    /* The loop must have exactly one continue block which could be a block
     * ending in a continue instruction or the "natural" continue from the
     * last block in the loop back to the top.
     */
-   if (header_block->predecessors.entries != 2)
+   if (nir_block_num_preds(header_block) != 2)
       return false;
 
    nir_cf_node *if_node = nir_cf_node_next(&header_block->cf_node);
@@ -375,13 +375,13 @@ opt_split_alu_of_phi(nir_builder *b, nir_loop *loop, nir_opt_if_options options)
       nir_cf_node_as_block(nir_cf_node_prev(&loop->cf_node));
 
    /* It would be insane if this were not true */
-   assert(_mesa_set_search(&header_block->predecessors, prev_block));
+   assert(nir_block_has_pred(header_block, prev_block));
 
    /* The loop must have exactly one continue block which could be a block
     * ending in a continue instruction or the "natural" continue from the
     * last block in the loop back to the top.
     */
-   if (header_block->predecessors.entries != 2)
+   if (nir_block_num_preds(header_block) != 2)
       return false;
 
    nir_block *continue_block = find_continue_block(loop);
@@ -611,13 +611,13 @@ opt_simplify_bcsel_of_phi(nir_builder *b, nir_loop *loop)
       nir_cf_node_as_block(nir_cf_node_prev(&loop->cf_node));
 
    /* It would be insane if this were not true */
-   assert(_mesa_set_search(&header_block->predecessors, prev_block));
+   assert(nir_block_has_pred(header_block, prev_block));
 
    /* The loop must have exactly one continue block which could be a block
     * ending in a continue instruction or the "natural" continue from the
     * last block in the loop back to the top.
     */
-   if (header_block->predecessors.entries != 2)
+   if (nir_block_num_preds(header_block) != 2)
       return false;
 
    /* We can move any bcsel that can guaranteed to execut on every iteration
@@ -694,11 +694,20 @@ opt_simplify_bcsel_of_phi(nir_builder *b, nir_loop *loop)
    return progress;
 }
 
+/* Checks whether the block is empty except for load_const instructions. */
 static bool
-is_block_empty(nir_block *block)
+is_block_empty_or_constant(nir_block *block)
 {
-   return nir_cf_node_is_last(&block->cf_node) &&
-          exec_list_is_empty(&block->instr_list);
+   if (!nir_cf_node_is_last(&block->cf_node))
+      return false;
+
+   nir_foreach_instr(instr, block) {
+      if (instr->type != nir_instr_type_load_const &&
+          instr->type != nir_instr_type_undef)
+         return false;
+   }
+
+   return true;
 }
 
 /* Walk all the phis in the block immediately following the if statement and
@@ -744,8 +753,8 @@ static bool
 opt_if_simplification(nir_builder *b, nir_if *nif)
 {
    /* Only simplify if the then block is empty and the else block is not. */
-   if (!is_block_empty(nir_if_first_then_block(nif)) ||
-       is_block_empty(nir_if_first_else_block(nif)))
+   if (!is_block_empty_or_constant(nir_if_first_then_block(nif)) ||
+       is_block_empty_or_constant(nir_if_first_else_block(nif)))
       return false;
 
    /* Insert the inverted instruction and rewrite the condition. */
@@ -770,8 +779,13 @@ opt_if_simplification(nir_builder *b, nir_if *nif)
    rewrite_phi_predecessor_blocks(nif, then_block, else_block, else_block,
                                   then_block);
 
-   /* Finally, move the else block to the then block. */
+   /* Move potential load_const before the if. */
    nir_cf_list tmp;
+   nir_cf_extract(&tmp, nir_before_cf_list(&nif->then_list),
+                  nir_after_cf_list(&nif->then_list));
+   nir_cf_reinsert(&tmp, nir_before_cf_node(&nif->cf_node));
+
+   /* Finally, move the else block to the then block. */
    nir_cf_extract(&tmp, nir_before_cf_list(&nif->else_list),
                   nir_after_cf_list(&nif->else_list));
    nir_cf_reinsert(&tmp, nir_before_cf_list(&nif->then_list));

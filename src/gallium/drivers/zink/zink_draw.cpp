@@ -778,6 +778,8 @@ zink_draw(struct pipe_context *pctx,
       VKCTX(CmdSetPrimitiveRestartEnable)(bs->cmdbuf, dinfo->primitive_restart);
       ctx->primitive_restart = dinfo->primitive_restart;
    }
+   if (dinfo->primitive_restart && screen->info.have_EXT_primitive_restart_index)
+      VKCTX(CmdSetPrimitiveRestartIndexEXT)(bs->cmdbuf, dinfo->restart_index);
 
    if (zink_program_has_descriptors(&ctx->curr_program->base) && (BATCH_CHANGED || ctx->dd.push_state_changed[0] || ctx->dd.state_changed[0] || pipeline_changed))
       zink_descriptors_update(ctx, ZINK_PIPELINE_GFX);

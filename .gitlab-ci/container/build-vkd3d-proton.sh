@@ -15,13 +15,7 @@ VKD3D_PROTON_COMMIT="a83811bf228ec4e7fc09727388521c725126d868"
 
 VKD3D_PROTON_DST_DIR="/vkd3d-proton-tests"
 VKD3D_PROTON_SRC_DIR="/vkd3d-proton-src"
-VKD3D_PROTON_WINE_DIR="/vkd3d-proton-wine64"
 VKD3D_PROTON_S3_ARTIFACT="vkd3d-proton.tar.zst"
-
-if [ ! -d "$VKD3D_PROTON_WINE_DIR" ]; then
-  echo "Fatal: Directory '$VKD3D_PROTON_WINE_DIR' does not exist. Aborting."
-  exit 1
-fi
 
 mkdir -p "$VKD3D_PROTON_SRC_DIR"
 pushd "$VKD3D_PROTON_SRC_DIR"
@@ -54,7 +48,7 @@ if FOUND_ARTIFACT_URL="$(find_s3_project_artifact "${ARTIFACT_PATH}")"; then
   echo "Found vkd3d-proton at: ${FOUND_ARTIFACT_URL}, skipping upload"
 else
   echo "Uploaded vkd3d-proton not found, reuploading..."
-  tar --zstd -cf "$VKD3D_PROTON_S3_ARTIFACT" -C / "${VKD3D_PROTON_DST_DIR#/}" "${VKD3D_PROTON_WINE_DIR#/}"
+  tar --zstd -cf "$VKD3D_PROTON_S3_ARTIFACT" -C / "${VKD3D_PROTON_DST_DIR#/}"
   ci-fairy s3cp --token-file "${S3_JWT_FILE}" "$VKD3D_PROTON_S3_ARTIFACT" \
     "https://${S3_BASE_PATH}/${CI_PROJECT_PATH}/${ARTIFACT_PATH}"
   rm "$VKD3D_PROTON_S3_ARTIFACT"

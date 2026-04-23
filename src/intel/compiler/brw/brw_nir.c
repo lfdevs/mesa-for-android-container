@@ -3,14 +3,91 @@
  * SPDX-License-Identifier: MIT
  */
 
-#include "intel_nir.h"
 #include "brw_nir.h"
 #include "brw_private.h"
 #include "brw_sampler.h"
 #include "compiler/glsl_types.h"
 #include "compiler/nir/nir_builder.h"
 #include "dev/intel_debug.h"
+#include "dev/intel_device_info.h"
 #include "util/sparse_bitset.h"
+#include "intel_nir.h"
+#include "nir.h"
+#include "nir_builder_opcodes.h"
+#include "nir_intrinsics.h"
+#include "nir_intrinsics_indices.h"
+#include "shader_enums.h"
+
+/*
+ * Intel scratch swizzling can be described with the formula:
+ *
+ *    (SIMD width * round_down(offset_B, stride_B)) +
+ *    (lane * stride_B) +
+ *    (offset_B % stride_B)
+ */
+static nir_def *
+swizzle_scratch(nir_builder *b,
+                nir_def *offset_B,
+                unsigned stride_B,
+                unsigned align_B)
+{
+   struct shader_info *info = &b->shader->info;
+
+   assert(util_is_power_of_two_nonzero(stride_B));
+   assert(util_is_power_of_two_nonzero(align_B));
+
+   nir_def *trailing_B = NULL;
+   if (align_B < stride_B) {
+      trailing_B = nir_umod_imm(b, offset_B, stride_B);
+      offset_B = nir_iand_imm(b, offset_B, ~(stride_B - 1));
+   }
+
+   nir_def *simd_width = info->min_subgroup_size == info->max_subgroup_size ?
+                         nir_imm_int(b, info->max_subgroup_size) :
+                         nir_load_simd_width_intel(b);
+
+   nir_def *simd_offs_B = nir_imul(b, simd_width, offset_B);
+
+   nir_def *lane = nir_load_subgroup_invocation(b);
+   nir_def *lane_offs_B = nir_imul_imm(b, lane, stride_B);
+   nir_def *swizzled_B = nir_iadd(b, simd_offs_B, lane_offs_B);
+
+   return trailing_B ? nir_iadd(b, swizzled_B, trailing_B) : swizzled_B;
+}
+
+static bool
+lower_scratch(nir_builder *b, nir_intrinsic_instr *intr, void *data)
+{
+   b->cursor = nir_before_instr(&intr->instr);
+   b->constant_fold_alu = true;
+
+   unsigned stride = 4 /* TODO */;
+
+   if (intr->intrinsic == nir_intrinsic_load_scratch) {
+      nir_def *val =
+         nir_load_scratch_intel(b, intr->def.num_components, intr->def.bit_size,
+                                swizzle_scratch(b, intr->src[0].ssa, stride,
+                                                nir_intrinsic_align(intr)),
+                                .access = nir_intrinsic_access(intr));
+      nir_def_replace(&intr->def, val);
+   } else if (intr->intrinsic == nir_intrinsic_store_scratch) {
+      nir_store_scratch_intel(b, intr->src[0].ssa,
+                              swizzle_scratch(b, intr->src[1].ssa, stride,
+                                              nir_intrinsic_align(intr)));
+      nir_instr_remove(&intr->instr);
+   } else {
+      return false;
+   }
+
+   return true;
+}
+
+static bool
+intel_nir_lower_scratch(nir_shader *nir)
+{
+   return nir_shader_intrinsics_pass(nir, lower_scratch,
+                                     nir_metadata_control_flow, NULL);
+}
 
 /**
  * Returns the minimum number of vec4 elements needed to pack a type.
@@ -942,6 +1019,73 @@ brw_nir_opt_vectorize_urb(brw_pass_tracker *pt)
    BRW_NIR_PASS(nir_opt_load_store_vectorize, &options);
 }
 
+static bool
+lower_16bit_io_instr(nir_builder *b, nir_intrinsic_instr *intrin, void *data)
+{
+   const nir_variable_mode *mode = data;
+
+   switch (intrin->intrinsic) {
+   case nir_intrinsic_load_input:
+   case nir_intrinsic_load_interpolated_input:
+   case nir_intrinsic_load_per_primitive_input:
+   case nir_intrinsic_load_per_primitive_output:
+   case nir_intrinsic_load_per_vertex_input:
+   case nir_intrinsic_load_per_vertex_output: {
+      if ((*mode & nir_var_shader_in) == 0)
+         return false;
+
+      nir_alu_type type = nir_intrinsic_dest_type(intrin);
+      unsigned bit_size = intrin->def.bit_size;
+      if (bit_size != 16)
+         return false;
+
+      b->cursor = nir_after_instr(&intrin->instr);
+      intrin->def.bit_size = 32;
+      nir_intrinsic_set_dest_type(intrin,
+                                  nir_alu_type_get_base_type(type) | 32);
+
+      nir_def *new_val =
+         (type & nir_type_float) ? nir_f2fN(b, &intrin->def, bit_size) :
+         (type & nir_type_int)   ? nir_i2iN(b, &intrin->def, bit_size) :
+         nir_u2uN(b, &intrin->def, bit_size);
+      nir_def_rewrite_uses_after(&intrin->def, new_val);
+      return true;
+   }
+   case nir_intrinsic_store_output:
+   case nir_intrinsic_store_per_primitive_output:
+   case nir_intrinsic_store_per_vertex_output: {
+      if ((*mode & nir_var_shader_out) == 0)
+         return false;
+
+      nir_src *src = nir_get_io_data_src(intrin);
+      if (src->ssa->bit_size != 16)
+         return false;
+
+      b->cursor = nir_before_instr(&intrin->instr);
+      nir_alu_type type = nir_intrinsic_src_type(intrin);
+      nir_intrinsic_set_src_type(
+         intrin,
+         nir_alu_type_get_base_type(type) | 32);
+      nir_def *new_val =
+         (type & nir_type_float) ? nir_f2f32(b, src->ssa) :
+         (type & nir_type_int)   ? nir_i2i32(b, src->ssa) :
+         nir_u2u32(b, src->ssa);
+      nir_src_rewrite(src, new_val);
+      return true;
+   }
+   default:
+      return false;
+   }
+}
+
+static bool
+brw_nir_lower_16bit_io(nir_shader *nir, nir_variable_mode mode)
+{
+   return nir_shader_intrinsics_pass(nir, lower_16bit_io_instr,
+                                     nir_metadata_control_flow,
+                                     &mode);
+}
+
 void
 brw_nir_lower_vs_inputs(nir_shader *nir)
 {
@@ -955,6 +1099,8 @@ brw_nir_lower_vs_inputs(nir_shader *nir)
     */
    NIR_PASS(_, nir, nir_lower_io, nir_var_shader_in, type_size_vec4,
             nir_lower_io_lower_64bit_to_32_new);
+
+   NIR_PASS(_, nir, brw_nir_lower_16bit_io, nir_var_shader_in);
 
    /* Fold constant offset srcs for IO. */
    NIR_PASS(_, nir, nir_opt_constant_folding);
@@ -1094,6 +1240,8 @@ brw_nir_lower_gs_inputs(nir_shader *nir,
    NIR_PASS(_, nir, nir_lower_io, nir_var_shader_in, type_size_vec4,
             nir_lower_io_lower_64bit_to_32);
 
+   NIR_PASS(_, nir, brw_nir_lower_16bit_io, nir_var_shader_in);
+
    /* Fold constant offset srcs for IO. */
    NIR_PASS(_, nir, nir_opt_constant_folding);
 
@@ -1138,6 +1286,8 @@ brw_nir_lower_tes_inputs(nir_shader *nir,
 
    NIR_PASS(_, nir, nir_lower_io, nir_var_shader_in, type_size_vec4,
             nir_lower_io_lower_64bit_to_32);
+
+   NIR_PASS(_, nir, brw_nir_lower_16bit_io, nir_var_shader_in);
 
    /* Run nir_opt_constant_folding to allow update base/io_semantic::location
     * for the remapping pass to look into the VUE mapping.
@@ -1366,6 +1516,9 @@ brw_nir_lower_fs_inputs(nir_shader *nir,
             nir_var_shader_in, type_size_vec4,
             nir_lower_io_lower_64bit_to_32 |
             nir_lower_io_use_interpolated_input_intrinsics);
+
+   NIR_PASS(_, nir, brw_nir_lower_16bit_io, nir_var_shader_in);
+
    if (devinfo->ver >= 11)
       NIR_PASS(_, nir, nir_lower_interpolation, ~0);
 
@@ -1407,6 +1560,8 @@ brw_nir_lower_vue_outputs(nir_shader *nir)
 {
    NIR_PASS(_, nir, nir_lower_io, nir_var_shader_out, type_size_vec4,
             nir_lower_io_lower_64bit_to_32);
+
+   NIR_PASS(_, nir, brw_nir_lower_16bit_io, nir_var_shader_out);
 }
 
 void
@@ -1417,6 +1572,8 @@ brw_nir_lower_tcs_inputs(nir_shader *nir,
    /* Inputs are stored in vec4 slots, so use type_size_vec4(). */
    NIR_PASS(_, nir, nir_lower_io, nir_var_shader_in, type_size_vec4,
             nir_lower_io_lower_64bit_to_32);
+
+   NIR_PASS(_, nir, brw_nir_lower_16bit_io, nir_var_shader_in);
 
    /* Fold constant offset srcs for IO. */
    NIR_PASS(_, nir, nir_opt_constant_folding);
@@ -1441,6 +1598,8 @@ brw_nir_lower_tcs_outputs(nir_shader *nir,
    NIR_PASS(_, nir, nir_lower_io, nir_var_shader_out, type_size_vec4,
             nir_lower_io_lower_64bit_to_32);
 
+   NIR_PASS(_, nir, brw_nir_lower_16bit_io, nir_var_shader_out);
+
    /* Run nir_opt_constant_folding to allow update base/io_semantic::location
     * for the remapping pass to look into the VUE mapping.
     */
@@ -1458,6 +1617,16 @@ brw_nir_lower_tcs_outputs(nir_shader *nir,
 }
 
 void
+brw_nir_lower_mesh_outputs(nir_shader *nir,
+                           const struct brw_mue_map *map)
+{
+   NIR_PASS(_, nir, nir_lower_io, nir_var_shader_out,
+            type_size_vec4, nir_lower_io_lower_64bit_to_32);
+
+   NIR_PASS(_, nir, brw_nir_lower_16bit_io, nir_var_shader_out);
+}
+
+void
 brw_nir_lower_fs_outputs(nir_shader *nir)
 {
    nir_foreach_shader_out_variable(var, nir) {
@@ -1467,6 +1636,7 @@ brw_nir_lower_fs_outputs(nir_shader *nir)
    }
 
    NIR_PASS(_, nir, nir_lower_io, nir_var_shader_out, type_size_vec4, 0);
+   NIR_PASS(_, nir, brw_nir_lower_16bit_io, nir_var_shader_out);
    nir->info.disable_output_offset_src_constant_folding = true;
 }
 
@@ -1646,6 +1816,9 @@ lower_bit_size_callback(const nir_instr *instr, void *data)
       switch (alu->op) {
       case nir_op_bitfield_reverse:
          return alu->def.bit_size != 32 ? 32 : 0;
+      case nir_op_umul_high:
+      case nir_op_imul_high:
+         return alu->def.bit_size < 32 ? 32 : 0;
       case nir_op_idiv:
       case nir_op_imod:
       case nir_op_irem:
@@ -1886,6 +2059,8 @@ brw_preprocess_nir(const struct brw_compiler *compiler, nir_shader *nir,
    };
    OPT(nir_lower_compute_system_values, &lower_csv_options);
 
+   bool jay = intel_use_jay(devinfo, nir->info.stage);
+
    const nir_lower_subgroups_options subgroups_options = {
       .subgroup_size = brw_nir_api_subgroup_size(nir, 0),
       .ballot_bit_size = 32,
@@ -1893,9 +2068,19 @@ brw_preprocess_nir(const struct brw_compiler *compiler, nir_shader *nir,
       .lower_to_scalar = true,
       .lower_relative_shuffle = true,
       .lower_quad_broadcast_dynamic = true,
-      .lower_elect = true,
-      .lower_inverse_ballot = true,
+      .lower_elect = !jay,
+      .lower_inverse_ballot = !jay,
       .lower_rotate_to_shuffle = true,
+      .lower_subgroup_masks = jay,
+      /* TODO: Optimize reduces. Or don't. I'm not your Mom. */
+      .lower_reduce = jay,
+      .lower_vote = jay,
+      .lower_vote_feq = jay,
+      .lower_vote_ieq = jay,
+      /* TODO: jay supports quad broadcast and should(?) do swaphorizontal */
+      .lower_quad = jay,
+      .lower_quad_vote = jay,
+      .lower_vote_bool_eq = jay,
    };
    OPT(nir_lower_subgroups, &subgroups_options);
 
@@ -2324,6 +2509,12 @@ get_mem_access_size_align(nir_intrinsic_op intrin, uint8_t bytes,
       if (bytes == 3)
          bytes = is_load ? 4 : 2;
 
+      /* Ensure we split into aligned pieces. We cannot blindly turn an i8vec4
+       * into i32 due to the alignment requirements. It might be possible to
+       * relax this later, though.
+       */
+      bytes = MIN2(bytes, align);
+
       if (is_scratch) {
          /* The way scratch address swizzling works in the back-end, it
           * happens at a DWORD granularity so we can't have a single load
@@ -2340,7 +2531,7 @@ get_mem_access_size_align(nir_intrinsic_op intrin, uint8_t bytes,
       return (nir_mem_access_size_align) {
          .bit_size = bytes * 8,
          .num_components = 1,
-         .align = 1,
+         .align = MIN2(align, 4),
          .shift = nir_mem_access_shift_method_scalar,
       };
    } else {
@@ -2350,7 +2541,7 @@ get_mem_access_size_align(nir_intrinsic_op intrin, uint8_t bytes,
        * two 32bit single vector access since it supports direct 64bit data
        * operation.
        */
-      if (devinfo->has_lsc && align == 8 && bit_size == 64) {
+      if (devinfo->has_lsc && align == 8 && bit_size == 64 && !is_scratch) {
          return (nir_mem_access_size_align) {
             .bit_size = bit_size,
             .num_components = bytes / 8,
@@ -2430,6 +2621,7 @@ brw_vectorize_lower_mem_access(brw_pass_tracker *pt)
       .modes = nir_var_mem_ubo | nir_var_mem_ssbo |
                nir_var_mem_global | nir_var_mem_shared |
                nir_var_mem_task_payload,
+      .round_up_components = lsc_urb_round_up_components,
       .callback = brw_nir_should_vectorize_mem,
       .robust_modes = (nir_variable_mode)0,
    };
@@ -2477,6 +2669,7 @@ brw_vectorize_lower_mem_access(brw_pass_tracker *pt)
 
    nir_lower_mem_access_bit_sizes_options mem_access_options = {
       .modes = nir_var_mem_ssbo |
+               nir_var_mem_ubo |
                nir_var_mem_constant |
                nir_var_mem_task_payload |
                nir_var_shader_temp |
@@ -2492,6 +2685,10 @@ brw_vectorize_lower_mem_access(brw_pass_tracker *pt)
    OPT(nir_opt_dce);
    OPT(nir_opt_algebraic);
    OPT(nir_opt_cse);
+
+   if (pt->nir->scratch_size) {
+      OPT(intel_nir_lower_scratch);
+   }
 
    /* Do this after the vectorization & brw_nir_rebase_const_offset_ubo_loads
     * so that we maximize the offset put into the messages.
@@ -2708,7 +2905,10 @@ brw_postprocess_nir_opts(brw_pass_tracker *pt)
       OPT(nir_lower_tex, &tex_options);
 
    OPT(brw_nir_lower_mcs_fetch, devinfo);
-   OPT(intel_nir_lower_sparse_intrinsics);
+
+   bool jay = intel_use_jay(devinfo, nir->info.stage);
+
+   OPT(intel_nir_lower_sparse_intrinsics, jay);
 
    /* Any constants leftover should be folded so we have constant textures */
    OPT(nir_opt_constant_folding);
@@ -2803,7 +3003,6 @@ brw_postprocess_nir_opts(brw_pass_tracker *pt)
    if (OPT(intel_nir_opt_peephole_ffma))
       OPT(nir_opt_shrink_vectors, false);
 
-   OPT(intel_nir_opt_peephole_imul32x16);
    OPT(nir_opt_generate_bfi);
    OPT(nir_opt_reassociate_bfi);
 
@@ -2852,7 +3051,8 @@ brw_postprocess_nir_opts(brw_pass_tracker *pt)
       .lower_subgroup_masks = true,
    };
 
-   if (OPT(nir_opt_uniform_atomics, false))
+   if (!intel_use_jay(devinfo, pt->nir->info.stage) &&
+       OPT(nir_opt_uniform_atomics, false))
       OPT(nir_lower_subgroups, &subgroups_options);
 
    if (pt->key->divergent_atomics_flags)
@@ -2922,6 +3122,11 @@ brw_postprocess_nir_out_of_ssa(brw_pass_tracker *pt,
                                bool debug_enabled)
 {
    nir_shader *nir = pt->nir;
+
+   /* Run this late - it interferes with algebraic opts after applying the SIMD
+    * width key if we have expressions like `(x * simd width) * 4.
+    */
+   OPT(intel_nir_opt_peephole_imul32x16);
 
    /* Run fsign lowering again after the last time brw_nir_optimize is called.
     * As is the case with conversion lowering (below), brw_nir_optimize can
@@ -3038,6 +3243,22 @@ brw_nir_apply_key(brw_pass_tracker *pt,
 
    pt->progress = false;
 
+   /* VS/TCS/TES/GS always run at a fixed SIMD width, which is what our
+    * max_subgroup_size parameter represents.  Compute/Mesh can run at
+    * different sizes, but we clone the NIR for each SIMD width, and pass
+    * our chosen width here as max_subgroup_size.
+    *
+    * For fragment shaders, we may dispatch at multiple SIMD widths,
+    * and use a single copy of the NIR for all sizes, so we can't lower
+    * the actual width at this point.
+    */
+   if (nir->info.stage != MESA_SHADER_FRAGMENT) {
+      nir->info.min_subgroup_size = max_subgroup_size;
+      nir->info.max_subgroup_size = max_subgroup_size;
+
+      OPT(brw_nir_lower_simd);
+   }
+
    const nir_lower_subgroups_options subgroups_options = {
       .subgroup_size = get_subgroup_size(&nir->info, max_subgroup_size),
       .ballot_bit_size = 32,
@@ -3119,6 +3340,7 @@ lsc_op_for_nir_intrinsic(const nir_intrinsic_instr *intrin)
    case nir_intrinsic_load_ssbo_uniform_block_intel:
    case nir_intrinsic_load_ubo_uniform_block_intel:
    case nir_intrinsic_load_scratch:
+   case nir_intrinsic_load_scratch_intel:
    case nir_intrinsic_load_shader_indirect_data_intel:
       return LSC_OP_LOAD;
 
@@ -3129,7 +3351,7 @@ lsc_op_for_nir_intrinsic(const nir_intrinsic_instr *intrin)
    case nir_intrinsic_store_global_block_intel:
    case nir_intrinsic_store_shared_block_intel:
    case nir_intrinsic_store_ssbo_block_intel:
-   case nir_intrinsic_store_scratch:
+   case nir_intrinsic_store_scratch_intel:
       return LSC_OP_STORE;
 
    case nir_intrinsic_image_load:
@@ -3426,22 +3648,22 @@ filter_simd(const nir_instr *instr, UNUSED const void *options)
 static nir_def *
 lower_simd(nir_builder *b, nir_instr *instr, void *options)
 {
-   uintptr_t simd_width = (uintptr_t)options;
+   unsigned simd_width = b->shader->info.max_subgroup_size;
+   assert(b->shader->info.min_subgroup_size == simd_width);
 
    switch (nir_instr_as_intrinsic(instr)->intrinsic) {
    case nir_intrinsic_load_simd_width_intel:
       return nir_imm_int(b, simd_width);
 
    case nir_intrinsic_load_subgroup_id:
+      assert(mesa_shader_stage_uses_workgroup(b->shader->info.stage));
+
       /* If the whole workgroup fits in one thread, we can lower subgroup_id
        * to a constant zero.
        */
-      if (!b->shader->info.workgroup_size_variable) {
-         unsigned local_workgroup_size = b->shader->info.workgroup_size[0] *
-                                         b->shader->info.workgroup_size[1] *
-                                         b->shader->info.workgroup_size[2];
-         if (local_workgroup_size <= simd_width)
-            return nir_imm_int(b, 0);
+      if (!b->shader->info.workgroup_size_variable &&
+          nir_static_workgroup_size(b->shader) <= simd_width) {
+         return nir_imm_int(b, 0);
       }
       return NULL;
 
@@ -3451,10 +3673,10 @@ lower_simd(nir_builder *b, nir_instr *instr, void *options)
 }
 
 bool
-brw_nir_lower_simd(nir_shader *nir, unsigned dispatch_width)
+brw_nir_lower_simd(nir_shader *nir)
 {
-   return nir_shader_lower_instructions(nir, filter_simd, lower_simd,
-                                 (void *)(uintptr_t)dispatch_width);
+   return nir->info.min_subgroup_size == nir->info.max_subgroup_size &&
+          nir_shader_lower_instructions(nir, filter_simd, lower_simd, NULL);
 }
 
 nir_variable *

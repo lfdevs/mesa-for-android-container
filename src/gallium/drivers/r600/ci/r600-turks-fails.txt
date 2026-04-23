@@ -27,7 +27,6 @@ KHR-GLES31.core.shader_storage_buffer_object.advanced-readWrite-case1-cs,Fail
 KHR-GLES31.core.tessellation_shader.single.max_patch_vertices,Crash
 
 KHR-GLES31.core.tessellation_shader.tessellation_shader_tessellation.TCS_TES,Fail
-KHR-GLES31.core.tessellation_shader.tessellation_shader_tessellation.gl_InvocationID_PatchVerticesIn_PrimitiveID,Fail
 KHR-GLES31.core.tessellation_shader.tessellation_shader_tessellation.max_in_out_attributes,Fail
 
 KHR-GLES31.core.texture_border_clamp.Texture2DArrayR32I,Fail
@@ -784,9 +783,6 @@ spec@arb_tessellation_shader@arb_tessellation_shader-tes-gs-max-output -small -s
 
 spec@arb_tessellation_shader@execution@fs-primitiveid-instanced,Fail
 spec@arb_tessellation_shader@execution@gs-primitiveid-instanced,Fail
-spec@arb_tessellation_shader@execution@tcs-primitiveid-instanced,Fail
-spec@arb_tessellation_shader@execution@tes-no-tcs-primitiveid-instanced,Fail
-spec@arb_tessellation_shader@execution@tes-primitiveid-instanced,Fail
 
 spec@arb_tessellation_shader@execution@trivial-tess-gs_no-gs-inputs,Fail
 

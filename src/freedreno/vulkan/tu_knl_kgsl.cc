@@ -3,33 +3,31 @@
  * SPDX-License-Identifier: MIT
  */
 
-#include "tu_knl.h"
-
 #include <errno.h>
 #include <fcntl.h>
+#include <linux/dma-heap.h>
 #include <poll.h>
 #include <stdint.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
-#include <linux/dma-heap.h>
 
 #define __user
-#include "msm_kgsl.h"
 #include "ion/ion.h"
 #include "ion/ion_4.19.h"
+#include "msm_kgsl.h"
 
-#include "vk_util.h"
-
+#include "util/libsync.h"
 #include "util/os_file.h"
+#include "util/timespec.h"
 #include "util/u_debug.h"
 #include "util/u_vector.h"
-#include "util/libsync.h"
-#include "util/timespec.h"
+#include "vk_util.h"
 
 #include "tu_cmd_buffer.h"
 #include "tu_cs.h"
 #include "tu_device.h"
 #include "tu_dynamic_rendering.h"
+#include "tu_knl.h"
 #include "tu_queue.h"
 #include "tu_rmv.h"
 
@@ -1869,6 +1867,9 @@ tu_knl_kgsl_load(struct tu_instance *instance, int fd)
 
    /* preemption is always supported on kgsl */
    device->has_preemption = true;
+
+   /* KGSL doesn't allow writing the perf counter selector as the expectation is to use the uAPI provided for this. */
+   device->is_perf_cntr_selectable = false;
 
    device->ubwc_config.highest_bank_bit = highest_bank_bit;
 

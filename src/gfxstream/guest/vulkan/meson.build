@@ -1,7 +1,13 @@
 # Copyright 2022 Android Open Source Project
 # SPDX-License-Identifier: MIT
 
-subdir('stubs')
+if with_platform_android
+    dep_gfxstream_stubs = null_dep
+else
+    subdir('stubs')
+endif
+
+gfxstream_deps += dep_gfxstream_stubs
 
 files_lib_vulkan_gfxstream = files(
     'gfxstream_vk_cmd.cpp',
@@ -35,7 +41,6 @@ lib_vulkan_gfxstream = shared_library(
         inc_vulkan_headers,
         inc_guest_iostream,
         inc_vulkan_enc,
-        inc_gfxstream_vk_stubs,
         inc_goldfish_address_space,
         inc_include,
         inc_src,
@@ -44,7 +49,6 @@ lib_vulkan_gfxstream = shared_library(
         inc_connection_manager,
     ],
     link_with: [
-        libgfxstream_vk_stubs,
         libvulkan_wsi,
         libplatform_virtgpu,
         libconnection_manager,

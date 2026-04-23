@@ -610,7 +610,7 @@ radv_update_descriptor_sets_impl(struct radv_device *device, struct radv_cmd_buf
             break;
          case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER: {
             if (binding_layout->has_ycbcr_sampler) {
-               radv_write_image_descriptor_ycbcr(device, ptr, writeset->pImageInfo + j);
+               radv_write_image_descriptor_ycbcr(device, ptr, writeset->pImageInfo + j, true);
             } else {
                radv_write_combined_image_sampler_descriptor(device, ptr, writeset->descriptorType,
                                                             writeset->pImageInfo + j,

@@ -31,6 +31,7 @@
 #include <math.h>
 #include "util/half_float.h"
 #include "util/macros.h"
+#include "util/ralloc.h"
 #include "util/u_math.h"
 #include "util/u_printf.h"
 #include "util/u_qsort.h"
@@ -259,6 +260,8 @@ nir_shader_add_variable(nir_shader *shader, nir_variable *var)
    case nir_var_mem_pixel_local_in:
    case nir_var_mem_pixel_local_out:
    case nir_var_mem_pixel_local_inout:
+   case nir_var_resource_heap:
+   case nir_var_sampler_heap:
       break;
 
    default:
@@ -713,7 +716,7 @@ nir_function_impl_create_bare(nir_shader *shader)
    exec_list_push_tail(&impl->body, &start_block->cf_node.node);
 
    start_block->successors[0] = end_block;
-   _mesa_set_add(&end_block->predecessors, start_block);
+   nir_block_add_pred(end_block, start_block);
    return impl;
 }
 
@@ -727,6 +730,13 @@ nir_function_impl_create(nir_function *function)
    return impl;
 }
 
+static void
+nir_block_destructor(void *block_)
+{
+   nir_block *block = block_;
+   util_dynarray_fini(&block->predecessors);
+}
+
 nir_block *
 nir_block_create(nir_shader *shader)
 {
@@ -735,11 +745,14 @@ nir_block_create(nir_shader *shader)
    cf_init(&block->cf_node, nir_cf_node_block);
 
    block->successors[0] = block->successors[1] = NULL;
-   _mesa_pointer_set_init(&block->predecessors, block);
+   util_dynarray_init_from_stack(
+      &block->predecessors, block->_preds_storage, sizeof(block->_preds_storage));
    block->imm_dom = NULL;
    _mesa_pointer_set_init(&block->dom_frontier, block);
 
    exec_list_make_empty(&block->instr_list);
+
+   ralloc_set_destructor(block, &nir_block_destructor);
 
    return block;
 }
@@ -789,7 +802,7 @@ nir_loop_create(nir_shader *shader)
    body->cf_node.parent = &loop->cf_node;
 
    body->successors[0] = body;
-   _mesa_set_add(&body->predecessors, body);
+   nir_block_add_pred(body, body);
 
    exec_list_make_empty(&loop->continue_list);
 
@@ -2149,16 +2162,14 @@ compare_block_index(const void *p1, const void *p2)
 nir_block **
 nir_block_get_predecessors_sorted(const nir_block *block, void *mem_ctx)
 {
-   nir_block **preds =
-      ralloc_array(mem_ctx, nir_block *, block->predecessors.entries);
+   unsigned count = nir_block_num_preds(block);
+   nir_block **preds = ralloc_array(mem_ctx, nir_block *, count);
 
    unsigned i = 0;
-   set_foreach(&block->predecessors, entry)
-      preds[i++] = (nir_block *)entry->key;
-   assert(i == block->predecessors.entries);
+   nir_foreach_pred(pred, block)
+      preds[i++] = pred;
 
-   qsort(preds, block->predecessors.entries, sizeof(nir_block *),
-         compare_block_index);
+   qsort(preds, count, sizeof(nir_block *), compare_block_index);
 
    return preds;
 }
@@ -2572,10 +2583,10 @@ nir_intrinsic_from_system_value(gl_system_value val)
       return nir_intrinsic_load_warp_id_arm;
    case SYSTEM_VALUE_WARP_MAX_ID_ARM:
       return nir_intrinsic_load_warp_max_id_arm;
-   case SYSTEM_VALUE_SAMPLER_HEAP_PTR:
-      return nir_intrinsic_load_sampler_heap_ptr;
-   case SYSTEM_VALUE_RESOURCE_HEAP_PTR:
-      return nir_intrinsic_load_resource_heap_ptr;
+   case SYSTEM_VALUE_COLOR0_AMD:
+      return nir_intrinsic_load_color0_amd;
+   case SYSTEM_VALUE_COLOR1_AMD:
+      return nir_intrinsic_load_color1_amd;
    default:
       return nir_num_intrinsics;
    }
@@ -2762,10 +2773,10 @@ nir_system_value_from_intrinsic(nir_intrinsic_op intrin)
       return SYSTEM_VALUE_WARP_ID_ARM;
    case nir_intrinsic_load_warp_max_id_arm:
       return SYSTEM_VALUE_WARP_MAX_ID_ARM;
-   case nir_intrinsic_load_sampler_heap_ptr:
-      return SYSTEM_VALUE_SAMPLER_HEAP_PTR;
-   case nir_intrinsic_load_resource_heap_ptr:
-      return SYSTEM_VALUE_RESOURCE_HEAP_PTR;
+   case nir_intrinsic_load_color0_amd:
+      return SYSTEM_VALUE_COLOR0_AMD;
+   case nir_intrinsic_load_color1_amd:
+      return SYSTEM_VALUE_COLOR1_AMD;
    default:
       return SYSTEM_VALUE_MAX;
    }
@@ -2821,6 +2832,7 @@ nir_rewrite_image_intrinsic(nir_intrinsic_instr *intrin, nir_def *src,
    case nir_intrinsic_image_deref_##op:                         \
    case nir_intrinsic_image_##op:                               \
    case nir_intrinsic_bindless_image_##op:                      \
+   case nir_intrinsic_image_heap_##op:                          \
       switch (type) {                                           \
       case nir_image_intrinsic_type_default:                    \
          intrin->intrinsic = nir_intrinsic_image_##op;          \
@@ -3424,6 +3436,7 @@ nir_tex_instr_need_sampler(const nir_tex_instr *instr)
    case nir_texop_fragment_mask_fetch_amd:
    case nir_texop_fragment_fetch_amd:
    case nir_texop_resinfo_intel:
+   case nir_texop_sparse_residency_txf_intel:
       return false;
    default:
       return true;
@@ -3471,6 +3484,8 @@ nir_tex_instr_result_size(const nir_tex_instr *instr)
    case nir_texop_fragment_mask_fetch_amd:
    case nir_texop_image_min_lod_agx:
    case nir_texop_has_custom_border_color_agx:
+   case nir_texop_sparse_residency_intel:
+   case nir_texop_sparse_residency_txf_intel:
       return 1;
 
    case nir_texop_descriptor_amd:
@@ -3522,6 +3537,8 @@ nir_tex_instr_is_query(const nir_tex_instr *instr)
    case nir_texop_tex_type_nv:
    case nir_texop_sample_pos_nv:
    case nir_texop_resinfo_intel:
+   case nir_texop_sparse_residency_intel:
+   case nir_texop_sparse_residency_txf_intel:
       return true;
    case nir_texop_tex:
    case nir_texop_txb:
@@ -3911,6 +3928,18 @@ nir_block_contains_work(nir_block *block)
    }
 
    return false;
+}
+
+bool
+nir_loop_has_back_edge(nir_loop *loop)
+{
+   nir_block *header = nir_loop_first_block(loop);
+   nir_block *preheader = nir_cf_node_as_block(nir_cf_node_prev(&loop->cf_node));
+   /* We also check whether the preheader is a predecessor of the header in
+    * case there is a jump right before the loop. Usually nir_opt_dead_cf will
+    * remove this, but we might call this function before that pass. */
+   bool has_preheader = nir_block_has_pred(header, preheader);
+   return nir_block_num_preds(header) - has_preheader > 0;
 }
 
 nir_op

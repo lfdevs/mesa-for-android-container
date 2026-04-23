@@ -141,7 +141,7 @@ sanitize_cf_list(nir_function_impl* impl, struct exec_list* cf_list)
           * from the loop header are live. Handle this without complicating the ACO IR by creating a
           * dummy break.
           */
-         if (nir_cf_node_cf_tree_next(&loop->cf_node)->predecessors.entries == 0) {
+         if (nir_block_num_preds(nir_cf_node_cf_tree_next(&loop->cf_node)) == 0) {
             nir_builder b = nir_builder_create(impl);
             b.cursor = nir_after_block_before_jump(nir_loop_last_block(loop));
 

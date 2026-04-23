@@ -10,7 +10,12 @@
 #ifndef TU_DYNAMIC_RENDERING_H
 #define TU_DYNAMIC_RENDERING_H
 
-#include "tu_common.h"
+#include <stdint.h>
+
+#include "vulkan/vulkan_core.h"
+
+struct tu_device;
+struct tu_cmd_buffer;
 
 VkResult tu_init_dynamic_rendering(struct tu_device *dev);
 

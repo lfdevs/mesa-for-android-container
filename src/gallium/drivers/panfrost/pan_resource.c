@@ -85,6 +85,12 @@ panfrost_clear_render_target(struct pipe_context *pipe,
                                     height);
 }
 
+static uint64_t
+panfrost_max_res_size_b(unsigned arch)
+{
+   return u_uintN_max(arch < 11 ? 32 : 48);
+}
+
 static bool
 panfrost_resource_init_image(
    struct pipe_screen *screen, struct panfrost_resource *rsc,
@@ -111,21 +117,31 @@ panfrost_resource_init_image(
 
    /* The rest of the resource planes will be initialized when we hit the first
     * plane. */
-   if (plane_idx > 0 || format_plane_count == 1)
+   if (plane_idx > 0)
       return true;
 
-   plane_idx = 1;
-   for (struct panfrost_resource *plane = pan_resource(rsc->base.next);
-        plane && plane_idx < ARRAY_SIZE(rsc->image.planes);
-        plane = pan_resource(plane->base.next))
-      rsc->image.planes[plane_idx++] = &plane->plane;
+   if (format_plane_count > 1) {
+      plane_idx = 1;
+      for (struct panfrost_resource *plane = pan_resource(rsc->base.next);
+         plane && plane_idx < ARRAY_SIZE(rsc->image.planes);
+         plane = pan_resource(plane->base.next))
+         rsc->image.planes[plane_idx++] = &plane->plane;
 
-   assert(plane_idx == util_format_get_num_planes(iprops->format));
+      assert(plane_idx == util_format_get_num_planes(iprops->format));
 
-   for (struct panfrost_resource *plane = pan_resource(rsc->base.next);
-        plane; plane = pan_resource(plane->base.next)) {
-      memcpy(plane->image.planes, rsc->image.planes, sizeof(plane->image.planes));
+      for (struct panfrost_resource *plane = pan_resource(rsc->base.next);
+         plane; plane = pan_resource(plane->base.next)) {
+         memcpy(plane->image.planes, rsc->image.planes, sizeof(plane->image.planes));
+      }
    }
+
+   /* validate layout */
+   uint64_t res_size = 0;
+   for (uint32_t i = 0; i < util_format_get_num_planes(iprops->format); i++)
+      res_size += rsc->image.planes[i]->layout.data_size_B;
+
+   if (res_size > panfrost_max_res_size_b(dev->arch))
+      return false;
 
    return true;
 }

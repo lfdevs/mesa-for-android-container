@@ -85,7 +85,7 @@ struct r600_shader {
 	bool			vs_out_layer;
 	bool			vs_out_viewport;
 	bool			vs_out_edgeflag;
-	bool			has_txq_cube_array_z_comp;
+	bool			has_resinfo_via_uniform;
 	bool			uses_tex_buffers;
 	bool                 gs_prim_id_input;
 	bool                 gs_tri_strip_adj_fix;
@@ -112,7 +112,6 @@ struct r600_shader {
 	bool			uses_images;
 	bool			uses_helper_invocation;
 	bool			uses_interpolate_at_sample;
-	uint8_t                 atomic_base;
 	uint8_t			rat_base;
 	uint8_t                 image_size_const_offset;
         bool			disable_sb;
@@ -122,29 +121,25 @@ struct r600_shader {
 union r600_shader_key {
 	struct {
 		unsigned	nr_cbufs:4;
-		unsigned        first_atomic_counter:4;
 		unsigned        image_size_const_offset:5;
 		unsigned	color_two_side:1;
 		unsigned	alpha_to_one:1;
+		unsigned	alpha_to_one_and_coverage:1;
 		unsigned        apply_sample_id_mask:1;
 		unsigned        dual_source_blend:1;
 	} ps;
 	struct {
-		unsigned        first_atomic_counter:4;
 		unsigned	as_es:1; /* export shader */
 		unsigned	as_ls:1; /* local shader */
 		unsigned	as_gs_a:1;
 	} vs;
 	struct {
-		unsigned        first_atomic_counter:4;
 		unsigned	as_es:1;
 	} tes;
 	struct {
-		unsigned        first_atomic_counter:4;
 		unsigned	prim_mode:3;
 	} tcs;
 	struct {
-		unsigned        first_atomic_counter:4;
 		unsigned        tri_strip_adj_fix:1;
 	} gs;
 };

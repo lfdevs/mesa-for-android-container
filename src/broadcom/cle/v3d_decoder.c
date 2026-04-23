@@ -36,6 +36,7 @@
 #include <inttypes.h>
 #include <zlib.h>
 
+#include <util/log.h>
 #include <util/macros.h>
 #include <util/ralloc.h>
 #include <util/u_debug.h>
@@ -67,6 +68,7 @@ struct location {
 struct parser_context {
         XML_Parser parser;
         const struct v3d_device_info *devinfo;
+        struct log_stream *stream;
         int foo;
         struct location loc;
 
@@ -139,25 +141,11 @@ v3d_spec_find_enum(struct v3d_spec *spec, const char *name)
 
 #ifdef WITH_LIBEXPAT
 
-static void __attribute__((noreturn))
-fail(struct location *loc, const char *msg, ...)
-{
-        va_list ap;
-
-        va_start(ap, msg);
-        fprintf(stderr, "%s:%d: error: ",
-                loc->filename, loc->line_number);
-        vfprintf(stderr, msg, ap);
-        fprintf(stderr, "\n");
-        va_end(ap);
-        exit(EXIT_FAILURE);
-}
-
 static void *
 fail_on_null(void *p)
 {
         if (p == NULL) {
-                fprintf(stderr, "aubinator: out of memory\n");
+                mesa_loge("aubinator: out of memory");
                 exit(EXIT_FAILURE);
         }
 
@@ -301,8 +289,14 @@ string_to_type(struct parser_context *ctx, const char *s)
                 return (struct v3d_type) { .kind = V3D_TYPE_ENUM, .v3d_enum = e };
         else if (strcmp(s, "mbo") == 0)
                 return (struct v3d_type) { .kind = V3D_TYPE_MBO };
-        else
-                fail(&ctx->loc, "invalid type: %s", s);
+        else {
+                mesa_log_stream_printf(ctx->stream,
+                                       "%s:%d: error: %s",
+                                       ctx->loc.filename,
+                                       ctx->loc.line_number,
+                                       s);
+                exit(EXIT_FAILURE);
+        }
 }
 
 static struct v3d_field *
@@ -443,8 +437,13 @@ start_element(void *data, const char *element_name, const char **atts)
                 goto skip;
 
         if (strcmp(element_name, "vcxml") == 0) {
-                if (ver == NULL)
-                        fail(&ctx->loc, "no ver given");
+                if (ver == NULL) {
+                        mesa_log_stream_printf(ctx->stream,
+                                               "%s:%d: error: no ver given",
+                                               ctx->loc.filename,
+                                               ctx->loc.line_number);
+                        exit(EXIT_FAILURE);
+                }
 
                 /* Make sure that we picked an XML that matched our version.
                  */
@@ -452,8 +451,14 @@ start_element(void *data, const char *element_name, const char **atts)
 
                 int major, minor;
                 int n = sscanf(ver, "%d.%d", &major, &minor);
-                if (n == 0)
-                        fail(&ctx->loc, "invalid ver given: %s", ver);
+                if (n == 0) {
+                        mesa_log_stream_printf(ctx->stream,
+                                               "%s:%d: error: invalid ver given: %s",
+                                               ctx->loc.filename,
+                                               ctx->loc.line_number,
+                                               ver);
+                        exit(EXIT_FAILURE);
+                }
                 if (n == 1)
                         minor = 0;
 
@@ -624,7 +629,10 @@ static uint32_t zlib_inflate(const void *compressed_data,
 struct v3d_spec *
 v3d_spec_load(const struct v3d_device_info *devinfo)
 {
-        struct v3d_spec *spec = calloc(1, sizeof(struct v3d_spec));
+        static struct v3d_spec *spec = NULL;
+        if (spec)
+                return spec;
+        spec = calloc(1, sizeof(struct v3d_spec));
         if (!spec)
                 return NULL;
 
@@ -648,7 +656,7 @@ v3d_spec_load(const struct v3d_device_info *devinfo)
         }
 
         if (text_length == 0) {
-                fprintf(stderr, "unable to find gen (%u) data\n", devinfo->ver);
+                mesa_loge("Unable to find gen (%u) data", devinfo->ver);
                 free(spec);
                 return NULL;
         }
@@ -658,7 +666,7 @@ v3d_spec_load(const struct v3d_device_info *devinfo)
         ctx.devinfo = devinfo;
         XML_SetUserData(ctx.parser, &ctx);
         if (ctx.parser == NULL) {
-                fprintf(stderr, "failed to create parser\n");
+                mesa_loge("Failed to create parser");
                 free(spec);
                 return NULL;
         }
@@ -678,12 +686,11 @@ v3d_spec_load(const struct v3d_device_info *devinfo)
         memcpy(buf, &text_data[text_offset], text_length);
 
         if (XML_ParseBuffer(ctx.parser, text_length, true) == 0) {
-                fprintf(stderr,
-                        "Error parsing XML at line %ld col %ld byte %ld/%u: %s\n",
-                        XML_GetCurrentLineNumber(ctx.parser),
-                        XML_GetCurrentColumnNumber(ctx.parser),
-                        XML_GetCurrentByteIndex(ctx.parser), text_length,
-                        XML_ErrorString(XML_GetErrorCode(ctx.parser)));
+                mesa_loge("Error parsing XML at line %ld col %ld byte %ld/%u: %s",
+                          XML_GetCurrentLineNumber(ctx.parser),
+                          XML_GetCurrentColumnNumber(ctx.parser),
+                          XML_GetCurrentByteIndex(ctx.parser), text_length,
+                          XML_ErrorString(XML_GetErrorCode(ctx.parser)));
                 XML_ParserFree(ctx.parser);
                 free(text_data);
                 free(spec);
@@ -978,11 +985,11 @@ v3d_print_group(struct clif_dump *clif, struct v3d_group *group,
                         continue;
 
                 if (clif->pretty) {
-                        fprintf(clif->out, "    %s: %s\n",
-                                iter.name, iter.value);
+                        mesa_log_stream_printf(clif->stream, "    %s: %s\n",
+                                               iter.name, iter.value);
                 } else {
-                        fprintf(clif->out, "  /* %30s: */ %s\n",
-                                iter.name, iter.value);
+                        mesa_log_stream_printf(clif->stream, "  /* %30s: */ %s\n",
+                                               iter.name, iter.value);
                 }
                 if (iter.struct_desc) {
                         uint64_t struct_offset = offset + iter.offset;

@@ -351,8 +351,8 @@ vc4_write_uniforms(struct vc4_context *vc4, struct vc4_compiled_shader *shader,
                                                           uinfo->data[i],
                                                           gallium_uniforms);
 
-                        fprintf(stderr, "%p/%d: 0x%08x %s\n",
-                                shader, i, written_val, desc);
+                        mesa_logd("%p/%d: 0x%08x %s",
+                                  shader, i, written_val, desc);
 
                         ralloc_free(desc);
                 }

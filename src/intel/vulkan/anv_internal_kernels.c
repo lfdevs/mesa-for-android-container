@@ -173,7 +173,7 @@ compile_shader(struct anv_device *device,
       prog_data.base.push_sizes[0] = align(prog_data.base.push_sizes[0], REG_SIZE);
       program = brw_compile_fs(compiler, &params);
 
-      if (!INTEL_DEBUG(DEBUG_SHADER_PRINT)) {
+      if (!ANV_DEBUG(SHADER_PRINT)) {
          unsigned stat_idx = 0;
          if (prog_data.fs.dispatch_8) {
             check_sends(&stats[stat_idx++], sends_count_expectation);
@@ -204,7 +204,7 @@ compile_shader(struct anv_device *device,
       };
       program = brw_compile_cs(compiler, &params);
 
-      if (!INTEL_DEBUG(DEBUG_SHADER_PRINT)) {
+      if (!ANV_DEBUG(SHADER_PRINT)) {
          check_sends(&stats, sends_count_expectation);
       }
    }

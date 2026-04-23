@@ -44,17 +44,19 @@ traces:
       checksum: 58e2d6ea105ca2735b05ce06709691fb
       text: Clear color for the background can be black or grey
     zink-radv-gfx1201:
-      checksum: c65527b7db55687e3c2741c0286b70e2
+      label: [skip, flakes]
+      checksum: 9c55251c2979a107ba852719d7e41889
+      text: Clear color for the background can be black or grey
 
   blender/blender-demo-ellie_pose.trace:
     gl-zink-anv-adl:
-      checksum: ca8df31308386674816c0e801f220565
+      checksum: ddae9bcbff102e46739454eaa09772c0
     gl-zink-anv-tgl:
-      checksum: ca8df31308386674816c0e801f220565
+      checksum: ddae9bcbff102e46739454eaa09772c0
     zink-radv-vangogh:
-      checksum: 4670acc17f40e2d20ecf355a64b5612e
+      checksum: c6a14ab73815748450f4feaf50fa9f2e
     zink-radv-gfx1201:
-      checksum: 4670acc17f40e2d20ecf355a64b5612e
+      checksum: c6a14ab73815748450f4feaf50fa9f2e
 
   glxgears/glxgears-2-v2.trace:
     gl-zink-anv-adl:
@@ -97,9 +99,9 @@ traces:
       checksum: dbe1de4e2e812413f173ea6c423117ff
       text: "'egl_platform.cpp( 227) - Error   - Couldn't find a suitable EGL config' -- revisit when we can turn on X11?"
     zink-radv-vangogh:
-      checksum: 0615d3d7598d0088393bfc8fa24f73c8
+      checksum: 65e86206d1ba3ed8365f8b95dc9e9e71
     zink-radv-gfx1201:
-      checksum: 07f0e057eeea449544e16c7ff65e965f
+      checksum: f22ee8433dd7b689c46816d576bf3c12
 
   gputest/pixmark-julia-fp32-v2.trace:
     gl-zink-anv-adl:
@@ -279,6 +281,9 @@ traces:
     gl-zink-anv-adl:
       checksum: 558c3d2b1b7acc782b3908c579ce0ce8
     gl-zink-anv-tgl:
+      # The rendered image has a smaller resolution this looks like a
+      # window system issue in zink
+      label: [skip, broken]
       checksum: 558c3d2b1b7acc782b3908c579ce0ce8
     zink-radv-vangogh:
       checksum: e673334ff967e1998c0a445e11066998
@@ -289,6 +294,8 @@ traces:
     gl-zink-anv-adl:
       checksum: 1706229fca06c1d7946ebc94e3b0a66d
     gl-zink-anv-tgl:
+      # Flaky, looks like a window system issue in zink
+      label: [skip, broken]
       checksum: 1706229fca06c1d7946ebc94e3b0a66d
     zink-radv-vangogh:
       checksum: 8b8a99c7828481fd6a126192ee4a4594

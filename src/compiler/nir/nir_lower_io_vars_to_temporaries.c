@@ -137,8 +137,7 @@ emit_output_copies_impl(struct lower_io_state *state, nir_function_impl *impl)
       /* For all other shader types, we need to do the copies right before
        * the jumps to the end block.
        */
-      set_foreach(&impl->end_block->predecessors, block_entry) {
-         struct nir_block *block = (void *)block_entry->key;
+      nir_foreach_pred(block, impl->end_block) {
          b.cursor = nir_after_block_before_jump(block);
          emit_copies(&b, &state->new_outputs, &state->old_outputs, 0);
       }

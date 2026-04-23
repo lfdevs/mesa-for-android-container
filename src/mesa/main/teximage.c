@@ -2380,9 +2380,13 @@ copytexture_error_check( struct gl_context *ctx, GLuint dimensions,
                      "glCopyTexImage%dD(invalid readbuffer)", dimensions);
          return GL_TRUE;
       }
-
+      /**
+       * From the GL_EXT_multisampled_render_to_texture spec:
+       * Operations are allowed when the extension is supported.
+       */
       if (!ctx->st_opts->allow_multisampled_copyteximage &&
-          ctx->ReadBuffer->Visual.samples > 0) {
+          ctx->ReadBuffer->Visual.samples > 0 &&
+          !_mesa_has_rtt_samples(ctx->ReadBuffer)) {
          _mesa_error(ctx, GL_INVALID_OPERATION,
                      "glCopyTexImage%dD(multisample FBO)", dimensions);
          return GL_TRUE;

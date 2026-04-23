@@ -763,8 +763,13 @@ sched_block(struct ir3_postsched_ctx *ctx, struct ir3_block *block)
 
    sched_dag_destroy(ctx);
 
-   if (terminator)
+   if (terminator) {
+      terminator->flags |= ir3_required_sync_flags(
+         &bd->legalize_state, ctx->v->compiler, terminator);
+      ir3_update_legalize_state(&bd->legalize_state, ctx->v->compiler,
+                                terminator);
       list_addtail(&terminator->node, &block->instr_list);
+   }
 }
 
 static bool

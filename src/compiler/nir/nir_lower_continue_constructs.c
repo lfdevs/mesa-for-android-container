@@ -208,7 +208,7 @@ simplify_loop(nir_loop *loop)
       nir_instr_remove(nir_block_last_instr(last));
 
    /* If the loop has only the trivial continue, there is nothing to do. */
-   if (!nir_block_ends_in_jump(last) && cont->predecessors.entries == 1)
+   if (!nir_block_ends_in_jump(last) && nir_block_num_preds(cont) == 1)
       return;
 
    struct loop_simplify_state state;
@@ -240,7 +240,7 @@ lower_loop_continue_block(nir_builder *b, nir_loop *loop)
    nir_cf_list extracted;
    nir_cf_list_extract(&extracted, &loop->continue_list);
 
-   if (nir_loop_first_continue_block(loop)->predecessors.entries == 0) {
+   if (nir_block_num_preds(nir_loop_first_continue_block(loop)) == 0) {
       /* This loop doesn't continue at all. Delete the continue construct. */
       nir_cf_delete(&extracted);
    } else {

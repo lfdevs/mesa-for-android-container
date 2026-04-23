@@ -1006,8 +1006,7 @@ place_phi_read(nir_builder *b, nir_def *reg,
    if (_mesa_set_search(visited_blocks, block) == NULL) {
       /* Try to go up the single-successor tree */
       bool all_single_successors = true;
-      set_foreach(&block->predecessors, entry) {
-         nir_block *pred = (nir_block *)entry->key;
+      nir_foreach_pred(pred, block) {
          if (pred->successors[0] && pred->successors[1]) {
             all_single_successors = false;
             break;
@@ -1022,9 +1021,8 @@ place_phi_read(nir_builder *b, nir_def *reg,
           */
          _mesa_set_add(visited_blocks, block);
 
-         set_foreach(&block->predecessors, entry) {
-            place_phi_read(b, reg, def, (nir_block *)entry->key, visited_blocks);
-         }
+         nir_foreach_pred(pred, block)
+            place_phi_read(b, reg, def, pred, visited_blocks);
          return;
       }
    }

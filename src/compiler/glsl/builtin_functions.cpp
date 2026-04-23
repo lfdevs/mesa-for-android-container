@@ -1209,8 +1209,6 @@ private:
    ir_swizzle *matrix_elt(ir_variable *var, int col, int row);
    ir_dereference_record *record_ref(ir_variable *var, const char *field);
 
-   ir_expression *asin_expr(ir_variable *x, float p0, float p1);
-
    /**
     * Call function \param f with parameters specified as the linked
     * list \param params of \c ir_variable objects.  \param ret should
@@ -6507,6 +6505,8 @@ builtin_builder::_degrees(builtin_available_predicate avail,
 
 UNOPA(sin, ir_unop_sin)
 UNOPA(cos, ir_unop_cos)
+UNOPA(asin, ir_unop_asin)
+UNOPA(acos, ir_unop_acos)
 
 ir_function_signature *
 builtin_builder::_tan(builtin_available_predicate avail,
@@ -6516,20 +6516,6 @@ builtin_builder::_tan(builtin_available_predicate avail,
    MAKE_SIG(type, avail, 1, theta);
    body.emit(ret(div(sin(theta), cos(theta))));
    return sig;
-}
-
-ir_expression *
-builtin_builder::asin_expr(ir_variable *x, float p0, float p1)
-{
-   return mul(sign(x),
-              sub(IMM_FP(x->type, M_PI_2f),
-                  mul(sqrt(sub(IMM_FP(x->type, 1.0f), abs(x))),
-                      add(IMM_FP(x->type, M_PI_2f),
-                          mul(abs(x),
-                              add(IMM_FP(x->type, (M_PI_4f - 1.0f)),
-                                  mul(abs(x),
-                                      add(IMM_FP(x->type, p0),
-                                          mul(abs(x), IMM_FP(x->type, p1))))))))));
 }
 
 /**
@@ -6566,30 +6552,6 @@ builtin_builder::call(ir_function *f, ir_variable *ret, ir_exec_list params)
       (glsl_type_is_void(sig->return_type) ? NULL : var_ref(ret));
 
    return new(linalloc) ir_call(sig, deref, &actual_params);
-}
-
-ir_function_signature *
-builtin_builder::_asin(builtin_available_predicate avail,
-                       const glsl_type *type)
-{
-   ir_variable *x = in_var(type, "x");
-   MAKE_SIG(type, avail, 1, x);
-
-   body.emit(ret(asin_expr(x, 0.086566724f, -0.03102955f)));
-
-   return sig;
-}
-
-ir_function_signature *
-builtin_builder::_acos(builtin_available_predicate avail,
-                       const glsl_type *type)
-{
-   ir_variable *x = in_var(type, "x");
-   MAKE_SIG(type, avail, 1, x);
-
-   body.emit(ret(sub(IMM_FP(type, M_PI_2f), asin_expr(x, 0.08132463f, -0.02363318f))));
-
-   return sig;
 }
 
 ir_function_signature *

@@ -1723,7 +1723,7 @@ update_vf_restart(struct anv_gfx_dynamic_state *hw_state,
                   const struct anv_cmd_graphics_state *gfx)
 {
    SET(VF, vf.IndexedDrawCutIndexEnable, dyn->ia.primitive_restart_enable);
-   SET(VF, vf.CutIndex, vk_index_to_restart(gfx->index_type));
+   SET(VF, vf.CutIndex, dyn->ia.primitive_restart_index);
 }
 
 ALWAYS_INLINE static void
@@ -2461,7 +2461,8 @@ cmd_buffer_flush_gfx_runtime_state(struct anv_gfx_dynamic_state *hw_state,
       update_line_stipple(hw_state, dyn);
 
    if ((gfx->dirty & ANV_CMD_DIRTY_INDEX_TYPE) ||
-       BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_IA_PRIMITIVE_RESTART_ENABLE))
+       BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_IA_PRIMITIVE_RESTART_ENABLE) ||
+       BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_IA_PRIMITIVE_RESTART_INDEX))
       update_vf_restart(hw_state, dyn, gfx);
 
    if ((gfx->dirty & ANV_CMD_DIRTY_INDEX_BUFFER) ||
@@ -3605,7 +3606,6 @@ cmd_buffer_gfx_state_emission(struct anv_cmd_buffer *cmd_buffer)
 {
    struct anv_batch *batch = &cmd_buffer->batch;
    struct anv_device *device = cmd_buffer->device;
-   struct anv_instance *instance = device->physical->instance;
    struct anv_cmd_graphics_state *gfx = &cmd_buffer->state.gfx;
    const struct vk_dynamic_graphics_state *dyn =
       &cmd_buffer->vk.dynamic_graphics_state;
@@ -3615,7 +3615,7 @@ cmd_buffer_gfx_state_emission(struct anv_cmd_buffer *cmd_buffer)
 
 #define DEBUG_SHADER_HASH(stage) do {                                   \
       if (unlikely(                                                     \
-             (instance->debug & ANV_DEBUG_SHADER_HASH) &&               \
+             ANV_DEBUG(SHADER_HASH) &&                                  \
              anv_gfx_has_stage(gfx, stage))) {                          \
          mi_store(&b,                                                   \
                   mi_mem32(device->workaround_address),                 \
@@ -3624,7 +3624,7 @@ cmd_buffer_gfx_state_emission(struct anv_cmd_buffer *cmd_buffer)
    } while (0)
 
    struct mi_builder b;
-   if (unlikely(instance->debug & ANV_DEBUG_SHADER_HASH)) {
+   if (ANV_DEBUG(SHADER_HASH)) {
       mi_builder_init(&b, device->info, &cmd_buffer->batch);
       mi_builder_set_mocs(&b, isl_mocs(&device->isl_dev, 0, false));
    }

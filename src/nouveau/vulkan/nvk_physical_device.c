@@ -852,7 +852,7 @@ nvk_get_device_properties(const struct nvk_instance *instance,
       .maxFragmentInputComponents = 128,
       .maxFragmentOutputAttachments = NVK_MAX_RTS,
       .maxFragmentDualSrcAttachments = 1,
-      .maxFragmentCombinedOutputResources = 16,
+      .maxFragmentCombinedOutputResources = NVK_MAX_RTS + NVK_MAX_DESCRIPTORS,
       /* Nvidia limits this to 48kB for consistency reasons, we could lift the
        * limit if we wanted to.
        */

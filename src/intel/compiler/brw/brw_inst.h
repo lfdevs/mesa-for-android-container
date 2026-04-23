@@ -513,6 +513,11 @@ bool is_coalescing_payload(const struct brw_shader &s, const brw_inst *inst);
 
 bool has_bank_conflict(const struct brw_isa_info *isa, const brw_inst *inst);
 
+/* Helper from brw_lower_scoreboard.cpp. */
+tgl_pipe
+inferred_exec_pipe(const struct intel_device_info *devinfo,
+                   const brw_inst *inst);
+
 /* Return the subset of flag registers that an instruction could
  * potentially read or write based on the execution controls and flag
  * subregister number of the instruction.

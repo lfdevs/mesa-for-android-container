@@ -1806,7 +1806,7 @@ print_texture_word(disassemble_context *ctx, FILE *fp, const uint32_t *word,
 }
 
 void
-disassemble_midgard(FILE *fp, const void *code, size_t size, unsigned gpu_id,
+disassemble_midgard(FILE *fp, const void *code, size_t size, uint64_t gpu_id,
                     bool verbose)
 {
    const uint32_t *words = (const uint32_t *)code;

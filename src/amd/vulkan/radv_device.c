@@ -716,7 +716,7 @@ radv_device_init_tools(struct radv_device *device)
    if (result != VK_SUCCESS)
       return result;
 
-   if ((instance->vk.trace_mode & RADV_TRACE_MODE_RRA) && radv_enable_rt(pdev)) {
+   if (radv_bvh_dumping_enabled(instance) && radv_enable_rt(pdev)) {
       result = radv_rra_trace_init(device);
       if (result != VK_SUCCESS)
          return result;
@@ -808,7 +808,7 @@ init_dispatch_tables(struct radv_device *device, struct radv_physical_device *pd
    if (instance->vk.trace_mode & RADV_TRACE_MODE_RGP)
       add_entrypoints(&b, &sqtt_device_entrypoints, RADV_RGP_DISPATCH_TABLE);
 
-   if ((instance->vk.trace_mode & RADV_TRACE_MODE_RRA) && radv_enable_rt(pdev))
+   if (radv_bvh_dumping_enabled(instance) && radv_enable_rt(pdev))
       add_entrypoints(&b, &rra_device_entrypoints, RADV_RRA_DISPATCH_TABLE);
 
 #ifndef _WIN32
@@ -1247,12 +1247,6 @@ radv_CreateDevice(VkPhysicalDevice physicalDevice, const VkDeviceCreateInfo *pCr
 
    /* PKT3_LOAD_SH_REG_INDEX is supported on GFX8+, but it hangs with compute queues until GFX10.3. */
    device->load_grid_size_from_user_sgpr = pdev->info.gfx_level >= GFX10_3;
-
-   /* If this is a NULL device, we are done here. */
-   if (pdev->info.family_overridden) {
-      *pDevice = radv_device_to_handle(device);
-      return VK_SUCCESS;
-   }
 
    device->ws = pdev->ws;
    device->vk.sync = device->ws->get_sync_provider(device->ws);

@@ -304,8 +304,8 @@ va_propagate_replicate_wide(bi_context *ctx, bi_instr **lut, bi_instr *I)
       /* If we have a MKVEC.v2i8 and current instruction only replicate, we
        * should propagate */
       if (src_ins->op == BI_OPCODE_MKVEC_V2I8 &&
-          bi_swizzle_replicates_8(src->swizzle) &&
-          bi_swizzle_to_byte_channels(src->swizzle, tmp)) {
+          bi_swizzle_replicates_8(src->swizzle)) {
+         bi_swizzle_to_byte_channels(src->swizzle, tmp);
          unsigned byte_idx = *tmp;
 
          /* In case of the top 16-bit, src2 contains the value we want without

@@ -25,17 +25,16 @@ import argparse
 import os
 import re
 import sys
-import threading
 
 from custom_logger import CustomLogger
 from serial_buffer import SerialBuffer
+
 
 class PoERun:
     def __init__(self, args, boot_timeout, test_timeout, logger):
         self.powerup = args.powerup
         self.powerdown = args.powerdown
-        self.ser = SerialBuffer(
-            args.dev, "results/serial-output.txt", ": ")
+        self.ser = SerialBuffer(args.dev, "results/serial-output.txt")
         self.boot_timeout = boot_timeout
         self.test_timeout = test_timeout
         self.logger = logger

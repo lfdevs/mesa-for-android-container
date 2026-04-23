@@ -57,6 +57,7 @@ radv_aco_convert_shader_info(struct aco_shader_info *aco_info, const struct radv
    ASSIGN_FIELD(vs.has_prolog);
    ASSIGN_FIELD(ps.num_inputs);
    ASSIGN_FIELD(cs.uses_full_subgroups);
+   ASSIGN_FIELD(descriptor_heap);
    aco_info->vs.any_tcs_inputs_via_lds = radv->vs.tcs_inputs_via_lds != 0;
    /* S2 must not be modified for correct hang recovery when NGG_WAVE_ID_EN=1. */
    aco_info->vs.preserve_s2 = ngg_wave_id_en && gfx_level < GFX12;

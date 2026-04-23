@@ -128,6 +128,18 @@ protected:
       brw_init_isa_info(&compiler->isa, devinfo);
    }
 
+   void
+   set_gfx_platform(const char *name)
+   {
+      int pci_id = intel_device_name_to_pci_device_id(name);
+      assert(pci_id > 0);
+
+      intel_get_device_info_from_pci_id(pci_id, devinfo);
+      assert(devinfo->ver > 0);
+
+      brw_init_isa_info(&compiler->isa, devinfo);
+   }
+
    brw_builder
    make_shader(mesa_shader_stage stage = MESA_SHADER_FRAGMENT,
                unsigned dispatch_width = 0)

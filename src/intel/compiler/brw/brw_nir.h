@@ -232,6 +232,8 @@ void brw_nir_lower_tcs_outputs(nir_shader *nir,
                                const struct intel_device_info *devinfo,
                                const struct intel_vue_map *vue,
                                enum tess_primitive_mode tes_primitive_mode);
+void brw_nir_lower_mesh_outputs(nir_shader *nir,
+                                const struct brw_mue_map *map);
 void brw_nir_lower_fs_outputs(nir_shader *nir);
 bool brw_nir_lower_fs_load_output(nir_shader *shader,
                                   const struct brw_fs_prog_key *key);
@@ -275,7 +277,7 @@ bool brw_nir_lower_mem_access_bit_sizes(nir_shader *shader,
                                         const struct
                                         intel_device_info *devinfo);
 
-bool brw_nir_lower_simd(nir_shader *nir, unsigned dispatch_width);
+bool brw_nir_lower_simd(nir_shader *nir);
 
 void brw_postprocess_nir_opts(struct brw_pass_tracker *pt);
 

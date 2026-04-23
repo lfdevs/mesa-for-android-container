@@ -12,5 +12,5 @@ A(r, s)
 B(r, s)
 C(r)s
 A(a, b)
-//B(a, b) // not working yet; gcc and clang give `ab`, we give `xaxb`
+B(a, b)
 C(a)b

@@ -458,8 +458,9 @@ void
 radv_nir_lower_rt_abi_monolithic(nir_shader *shader, struct radv_device *device,
                                  struct radv_ray_tracing_pipeline *pipeline)
 {
+   const bool uses_descriptor_heap = pipeline->base.base.create_flags & VK_PIPELINE_CREATE_2_DESCRIPTOR_HEAP_BIT_EXT;
    nir_function_impl *impl = nir_shader_get_entrypoint(shader);
-   radv_nir_init_rt_function_params(impl->function, MESA_SHADER_RAYGEN, 0, 0);
+   radv_nir_init_rt_function_params(impl->function, MESA_SHADER_RAYGEN, 0, 0, uses_descriptor_heap);
 
    nir_builder b = nir_builder_at(nir_before_impl(impl));
 

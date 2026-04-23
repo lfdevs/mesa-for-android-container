@@ -1468,6 +1468,8 @@ public:
    ir_exec_list body_instructions;
    /** List of ir_instruction that make up the continue construct. */
    ir_exec_list continue_instructions;
+   /** Whether the loop is in do-while form. */
+   bool do_while;
 };
 
 

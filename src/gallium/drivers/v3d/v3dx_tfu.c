@@ -200,7 +200,7 @@ v3dX(tfu)(struct pipe_context *pctx,
 
         int ret = v3d_ioctl(screen->fd, DRM_IOCTL_V3D_SUBMIT_TFU, &tfu);
         if (ret != 0) {
-                fprintf(stderr, "Failed to submit TFU job: %d\n", ret);
+                mesa_loge("Failed to submit TFU job: %d", ret);
                 return false;
         }
         if (V3D_DBG(SYNC)) {

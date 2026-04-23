@@ -1222,6 +1222,7 @@ emit_intrinsic_copy_ubo_to_uniform(struct ir3_context *ctx,
    struct ir3_instruction *idx =
       ir3_get_src_shared(ctx, &intr->src[0], use_shared)[0];
    struct ir3_instruction *ldc = ir3_LDC_K(b, idx, 0, offset, 0);
+   ldc->cat6.dst_offset = base;
    ldc->cat6.iim_val = size;
    ldc->barrier_class = ldc->barrier_conflict = IR3_BARRIER_CONST_W;
 
@@ -1230,12 +1231,6 @@ emit_intrinsic_copy_ubo_to_uniform(struct ir3_context *ctx,
       ctx->so->bindless_ubo = true;
 
    ir3_instr_set_address(ldc, addr1);
-
-   /* The assembler isn't aware of what value a1.x has, so make sure that
-    * constlen includes the ldc.k here.
-    */
-   ctx->so->constlen =
-      MAX2(ctx->so->constlen, DIV_ROUND_UP(base + size * 4, 4));
 
    array_insert(ctx->block, ctx->block->keeps, ldc);
 }
@@ -1249,16 +1244,17 @@ emit_intrinsic_copy_global_to_uniform(struct ir3_context *ctx,
    unsigned size = nir_intrinsic_range(intr);
    unsigned dst = nir_intrinsic_range_base(intr);
    unsigned addr_offset = nir_intrinsic_base(intr);
-   unsigned dst_lo = dst & 0xff;
-   unsigned dst_hi = dst >> 8;
 
    struct ir3_instruction *a1 = NULL;
-   if (dst_hi)
-      a1 = ir3_create_addr1(&ctx->build, dst_hi << 8);
+   unsigned dst_imm = dst;
+   if (dst > 256) {
+      a1 = ir3_create_addr1(&ctx->build, dst);
+      dst_imm = 0;
+   }
 
    struct ir3_instruction *addr =
-      ir3_collect(b, ir3_get_src(ctx, &intr->src[0])[0]);
-   struct ir3_instruction *ldg = ir3_LDG_K(b, create_immed(b, dst_lo), 0, addr, 0, 
+      ir3_collect(b, ir3_get_src_shared(ctx, &intr->src[0], true)[0]);
+   struct ir3_instruction *ldg = ir3_LDG_K(b, create_immed(b, dst_imm), 0, addr, 0, 
                                            create_immed(b, addr_offset), 0,
                                            create_immed(b, size), 0);
    ldg->barrier_class = ldg->barrier_conflict = IR3_BARRIER_CONST_W;
@@ -1268,12 +1264,6 @@ emit_intrinsic_copy_global_to_uniform(struct ir3_context *ctx,
       ir3_instr_set_address(ldg, a1);
       ldg->flags |= IR3_INSTR_A1EN;
    }
-
-   /* The assembler isn't aware of what value a1.x has, so make sure that
-    * constlen includes the ldg.k here.
-    */
-   ctx->so->constlen =
-      MAX2(ctx->so->constlen, DIV_ROUND_UP(dst + size * 4, 4));
 
    array_insert(ctx->block, ctx->block->keeps, ldg);
 }
@@ -1302,15 +1292,6 @@ emit_intrinsic_load_ubo(struct ir3_context *ctx, nir_intrinsic_instr *intr,
                                         ir3_get_addr0(ctx, src0, ptrsz));
       base_hi = create_uniform_indirect(b, ubo + 1, TYPE_U32,
                                         ir3_get_addr0(ctx, src0, ptrsz));
-
-      /* NOTE: since relative addressing is used, make sure constlen is
-       * at least big enough to cover all the UBO addresses, since the
-       * assembler won't know what the max address reg is.
-       */
-      ctx->so->constlen = MAX2(
-         ctx->so->constlen,
-         const_state->allocs.consts[IR3_CONST_ALLOC_UBO_PTRS].offset_vec4 +
-            (ctx->s->info.num_ubos * ptrsz));
    }
 
    /* note: on 32bit gpu's base_hi is ignored and DCE'd */
@@ -1794,7 +1775,7 @@ emit_intrinsic_load_image(struct ir3_context *ctx, nir_intrinsic_instr *intr,
          coords[i] = src0[i];
    }
 
-   sam = emit_sam(ctx, OPC_ISAM, info, type, 0b1111,
+   sam = emit_sam(ctx, OPC_ISAM, info, type, MASK(intr->num_components),
                   ir3_create_collect(b, coords, ncoords), NULL);
 
    ir3_handle_nonuniform(sam, intr);
@@ -1802,7 +1783,7 @@ emit_intrinsic_load_image(struct ir3_context *ctx, nir_intrinsic_instr *intr,
    sam->barrier_class = IR3_BARRIER_IMAGE_R;
    sam->barrier_conflict = IR3_BARRIER_IMAGE_W;
 
-   ir3_split_dest(b, dst, sam, 0, 4);
+   ir3_split_dest(b, dst, sam, 0, intr->num_components);
 
    if (intr->intrinsic == nir_intrinsic_image_sparse_load ||
        intr->intrinsic == nir_intrinsic_bindless_image_sparse_load) {
@@ -2872,8 +2853,6 @@ emit_intrinsic(struct ir3_context *ctx, nir_intrinsic_instr *intr)
             if (ctx->compiler->info->props.has_scalar_alu && !intr->def.divergent)
                dst[i]->dsts[0]->flags |= IR3_REG_SHARED;
          }
-
-         ctx->has_relative_load_const_ir3 = true;
       }
       break;
 
@@ -3253,10 +3232,6 @@ emit_intrinsic(struct ir3_context *ctx, nir_intrinsic_instr *intr)
             dst[i] = create_driver_param_indirect(ctx, param + i,
                                                   ir3_get_addr0(ctx, view, 8));
          }
-         ctx->so->constlen =
-            MAX2(ctx->so->constlen,
-                 const_state->allocs.consts[IR3_CONST_ALLOC_DRIVER_PARAMS].offset_vec4 +
-                    param / 4 + nir_intrinsic_range(intr) * 2);
       }
       break;
    }
@@ -3502,11 +3477,6 @@ emit_intrinsic(struct ir3_context *ctx, nir_intrinsic_instr *intr)
       load->push_consts.dst_base = nir_src_as_uint(intr->src[0]);
       load->push_consts.src_base = nir_intrinsic_base(intr);
       load->push_consts.src_size = nir_intrinsic_range(intr);
-
-      ctx->so->constlen =
-         MAX2(ctx->so->constlen,
-              DIV_ROUND_UP(
-                 load->push_consts.dst_base + load->push_consts.src_size, 4));
       break;
    }
    case nir_intrinsic_prefetch_sam_ir3: {
@@ -4842,14 +4812,13 @@ has_nontrivial_continue(nir_loop *nloop)
     * is more than one backedge from inside the loop (so more than 2 total
     * edges) then one must be a nontrivial continue.
     */
-   if (nstart->predecessors.entries > 2)
+   if (nir_block_num_preds(nstart) > 2)
       return true;
 
    /* Check whether the one backedge is a nontrivial continue. This can happen
     * if the loop ends with a break.
     */
-   set_foreach (&nstart->predecessors, entry) {
-      nir_block *pred = (nir_block*)entry->key;
+   nir_foreach_pred (pred, nstart) {
       if (pred == nir_loop_last_block(nloop) ||
           pred == nir_cf_node_as_block(nir_cf_node_prev(&nloop->cf_node)))
          continue;
@@ -5555,6 +5524,8 @@ emit_instructions(struct ir3_context *ctx)
             create_sysval_input(ctx, SYSTEM_VALUE_GS_HEADER_IR3, 0x1);
          ctx->primitive_id =
             create_sysval_input(ctx, SYSTEM_VALUE_PRIMITIVE_ID, 0x1);
+         ctx->view_index =
+            create_sysval_input(ctx, SYSTEM_VALUE_VIEW_INDEX, 0x1);
       }
       break;
    case MESA_SHADER_TESS_CTRL:
@@ -5873,6 +5844,18 @@ ir3_compile_shader_nir(struct ir3_compiler *compiler,
          outputs_count++;
       }
 
+      if (so->type == MESA_SHADER_VERTEX && ctx->view_index) {
+         unsigned n = so->outputs_count++;
+         so->outputs[n].slot = VARYING_SLOT_VIEW_INDEX;
+
+         struct ir3_instruction *out =
+            ir3_collect(&ctx->build, ctx->view_index);
+         outputs[outputs_count] = out;
+         outidxs[outputs_count] = n;
+         regids[outputs_count] = regid(0, 2);
+         outputs_count++;
+      }
+
       if (so->type == MESA_SHADER_VERTEX && ctx->rel_patch_id) {
          unsigned n = so->outputs_count++;
          so->outputs[n].slot = VARYING_SLOT_REL_PATCH_ID_IR3;
@@ -6107,6 +6090,8 @@ ir3_compile_shader_nir(struct ir3_compiler *compiler,
       ctx->gs_header->dsts[0]->num = regid(0, 0);
       if (ctx->primitive_id)
          ctx->primitive_id->dsts[0]->num = regid(0, 1);
+      if (ctx->view_index)
+         ctx->view_index->dsts[0]->num = regid(0, 2);
    } else if (so->num_sampler_prefetch) {
       assert(so->type == MESA_SHADER_FRAGMENT);
       int idx = 0;
@@ -6237,26 +6222,7 @@ ir3_compile_shader_nir(struct ir3_compiler *compiler,
 
    ctx->so->sample_shading = ctx->s->info.fs.uses_sample_shading;
 
-   if (ctx->has_relative_load_const_ir3) {
-      /* NOTE: if relative addressing is used, we set
-       * constlen in the compiler (to worst-case value)
-       * since we don't know in the assembler what the max
-       * addr reg value can be:
-       */
-      const struct ir3_const_state *const_state = ir3_const_state(ctx->so);
-      const enum ir3_const_alloc_type rel_const_srcs[] = {
-         IR3_CONST_ALLOC_INLINE_UNIFORM_ADDRS, IR3_CONST_ALLOC_UBO_RANGES,
-         IR3_CONST_ALLOC_PREAMBLE, IR3_CONST_ALLOC_GLOBAL};
-      for (int i = 0; i < ARRAY_SIZE(rel_const_srcs); i++) {
-         const struct ir3_const_allocation *const_alloc =
-            &const_state->allocs.consts[rel_const_srcs[i]];
-         if (const_alloc->size_vec4 > 0) {
-            ctx->so->constlen =
-               MAX2(ctx->so->constlen,
-                    const_alloc->offset_vec4 + const_alloc->size_vec4);
-         }
-      }
-   }
+   so->constlen = ir3_constlen(so);
 
    if (ctx->so->type == MESA_SHADER_FRAGMENT &&
        compiler->info->props.fs_must_have_non_zero_constlen_quirk) {

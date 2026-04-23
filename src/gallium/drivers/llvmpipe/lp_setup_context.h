@@ -296,7 +296,7 @@ lp_setup_analyse_triangles(struct lp_setup_context *setup,
 bool
 lp_setup_bin_triangle(struct lp_setup_context *setup,
                       struct lp_rast_triangle *tri,
-                      bool use_32bits,
+                      int max_szorig,
                       bool opaque,
                       const struct u_rect *bbox,
                       int nr_planes,

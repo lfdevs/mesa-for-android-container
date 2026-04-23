@@ -269,7 +269,6 @@ nv50_init_screen_caps(struct nv50_screen *screen)
    caps->cull_distance = true;
    caps->shader_array_components = true;
    caps->legacy_math_rules = true;
-   caps->tgsi_tex_txf_lz = true;
    caps->shader_clock = true;
    caps->can_bind_const_buffer_as_vertex = true;
    caps->clear_scissored = true;

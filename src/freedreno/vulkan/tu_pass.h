@@ -22,6 +22,8 @@ enum tu_gmem_layout
    TU_GMEM_LAYOUT_COUNT,
 };
 
+constexpr uint32_t TU_GMEM_LAYOUT_DIVISOR_MAX = 6; /* 1x (no divisor), 2 (1/2), 3 (1/3) */
+
 struct tu_subpass_barrier {
    VkPipelineStageFlags2 src_stage_mask;
    VkPipelineStageFlags2 dst_stage_mask;

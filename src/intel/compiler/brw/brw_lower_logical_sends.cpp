@@ -107,7 +107,7 @@ lower_urb_read_logical_send_xe2(const brw_builder &bld, brw_urb_inst *urb)
                              LSC_CACHE(devinfo, LOAD, L1UC_L3UC));
 
 
-   send->mlen = lsc_msg_addr_len(devinfo, LSC_ADDR_SIZE_A32, send->exec_size);
+   send->mlen = brw_lsc_msg_addr_len(devinfo, LSC_ADDR_SIZE_A32, send->exec_size);
    send->ex_mlen = 0;
    send->header_size = 0;
    send->has_side_effects = true;
@@ -238,7 +238,7 @@ lower_urb_write_logical_send_xe2(const brw_builder &bld, brw_urb_inst *urb)
 
    setup_lsc_surface_descriptors(bld, send, send->desc, brw_reg(), offset);
 
-   send->mlen = lsc_msg_addr_len(devinfo, LSC_ADDR_SIZE_A32, send->exec_size);
+   send->mlen = brw_lsc_msg_addr_len(devinfo, LSC_ADDR_SIZE_A32, send->exec_size);
    send->ex_mlen = ex_mlen;
    send->header_size = 0;
    send->has_side_effects = true;
@@ -777,7 +777,7 @@ lower_sampler_logical_send(const brw_builder &bld, brw_tex_inst *tex)
       sampler_bindless || is_high_sampler(devinfo, sampler) ||
       tex->residency;
 
-   unsigned header_size = needs_header ? reg_unit(devinfo) : 0, length = 0;
+   unsigned header_size = 0, length = 0;
    brw_reg sources[1 + MAX_SAMPLER_MESSAGE_SIZE];
 
    for (unsigned i = 0; i < ARRAY_SIZE(sources); i++)
@@ -1339,7 +1339,7 @@ lower_lsc_memory_logical_send(const brw_builder &bld, brw_mem_inst *mem)
    setup_lsc_surface_descriptors(bld, send, send->desc, binding, base_offset);
 
 
-   send->mlen = lsc_msg_addr_len(devinfo, addr_size,
+   send->mlen = brw_lsc_msg_addr_len(devinfo, addr_size,
                                  send->exec_size * coord_components);
    send->ex_mlen = ex_mlen;
    send->header_size = 0;
@@ -1425,9 +1425,9 @@ lower_hdc_memory_logical_send(const brw_builder &bld, brw_mem_inst *mem)
       8 * lsc_data_size_bytes(data_size);
 
    const bool byte_scattered =
-      data_bit_size < 32 || (alignment != 0 && alignment < 4);
-   const bool dword_scattered = !byte_scattered && mode == MEMORY_MODE_SCRATCH;
-   const bool surface_access = !byte_scattered && !dword_scattered && !block;
+      data_bit_size < 32 || (alignment != 0 && alignment < 4) ||
+      mode == MEMORY_MODE_SCRATCH;
+   const bool surface_access = !byte_scattered && !block;
 
    /* SLM block reads must use the 16B-aligned OWord Block Read messages,
     * as the unaligned message doesn't exist for SLM.
@@ -1537,7 +1537,7 @@ lower_hdc_memory_logical_send(const brw_builder &bld, brw_mem_inst *mem)
 
       if (lsc_opcode_is_atomic(op)) {
          desc = brw_dp_typed_atomic_desc(devinfo, mem->exec_size, mem->group,
-                                         lsc_op_to_legacy_atomic(op),
+                                         brw_lsc_op_to_legacy_atomic(op),
                                          has_dest);
       } else {
          desc = brw_dp_typed_surface_rw_desc(devinfo, mem->exec_size,
@@ -1550,12 +1550,11 @@ lower_hdc_memory_logical_send(const brw_builder &bld, brw_mem_inst *mem)
       desc = brw_dp_oword_block_rw_desc(devinfo, false, components, !has_dest);
    } else if (addr_size == LSC_ADDR_SIZE_A64) {
       assert(binding_type == LSC_ADDR_SURFTYPE_FLAT);
-      assert(!dword_scattered);
 
       sfid = BRW_SFID_HDC1;
 
       if (lsc_opcode_is_atomic(op)) {
-         unsigned aop = lsc_op_to_legacy_atomic(op);
+         unsigned aop = brw_lsc_op_to_legacy_atomic(op);
          if (lsc_opcode_is_atomic_float(op)) {
             desc = brw_dp_a64_untyped_atomic_float_desc(devinfo, mem->exec_size,
                                                         data_bit_size, aop,
@@ -1581,7 +1580,7 @@ lower_hdc_memory_logical_send(const brw_builder &bld, brw_mem_inst *mem)
       sfid = surface_access ? BRW_SFID_HDC1 : BRW_SFID_HDC0;
 
       if (lsc_opcode_is_atomic(op)) {
-         unsigned aop = lsc_op_to_legacy_atomic(op);
+         unsigned aop = brw_lsc_op_to_legacy_atomic(op);
          if (lsc_opcode_is_atomic_float(op)) {
             desc = brw_dp_untyped_atomic_float_desc(devinfo, mem->exec_size,
                                                     aop, has_dest);
@@ -1595,9 +1594,6 @@ lower_hdc_memory_logical_send(const brw_builder &bld, brw_mem_inst *mem)
       } else if (byte_scattered) {
          desc = brw_dp_byte_scattered_rw_desc(devinfo, mem->exec_size,
                                               data_bit_size, !has_dest);
-      } else if (dword_scattered) {
-         desc = brw_dp_dword_scattered_rw_desc(devinfo, mem->exec_size,
-                                               !has_dest);
       } else {
          desc = brw_dp_untyped_surface_rw_desc(devinfo, mem->exec_size,
                                                components, !has_dest);
@@ -1706,7 +1702,7 @@ lower_lsc_varying_pull_constant_logical_send(const brw_builder &bld,
                    alignment >= 4 ? 4 : 1 /* num_channels */,
                    false /* transpose */,
                    LSC_CACHE(devinfo, LOAD, L1STATE_L3MOCS));
-   send->mlen = lsc_msg_addr_len(devinfo, LSC_ADDR_SIZE_A32, send->exec_size);
+   send->mlen = brw_lsc_msg_addr_len(devinfo, LSC_ADDR_SIZE_A32, send->exec_size);
 
    setup_lsc_surface_descriptors(bld, send, send->desc, binding, 0);
 
@@ -2419,8 +2415,7 @@ brw_lower_uniform_pull_constant_loads(brw_shader &s)
                                    send->size_written / 4,
                                    true /* transpose */,
                                    LSC_CACHE(devinfo, LOAD, L1STATE_L3MOCS));
-
-         send->mlen = lsc_msg_addr_len(devinfo, LSC_ADDR_SIZE_A32, 1);
+         send->mlen = brw_lsc_msg_addr_len(devinfo, LSC_ADDR_SIZE_A32, 1);
          send->ex_mlen = 0;
          send->header_size = 0;
          send->has_side_effects = false;

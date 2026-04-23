@@ -992,6 +992,7 @@ nir_get_io_offset_src_number(const nir_intrinsic_instr *instr)
    case nir_intrinsic_load_global_nv:
    case nir_intrinsic_load_scratch:
    case nir_intrinsic_load_scratch_nv:
+   case nir_intrinsic_load_scratch_intel:
    case nir_intrinsic_load_fs_input_interp_deltas:
    case nir_intrinsic_shared_atomic:
    case nir_intrinsic_shared_atomic_nv:
@@ -1043,6 +1044,7 @@ nir_get_io_offset_src_number(const nir_intrinsic_instr *instr)
    case nir_intrinsic_store_urb_lsc_intel:
    case nir_intrinsic_store_scratch:
    case nir_intrinsic_store_scratch_nv:
+   case nir_intrinsic_store_scratch_intel:
    case nir_intrinsic_ssbo_atomic:
    case nir_intrinsic_ssbo_atomic_swap:
    case nir_intrinsic_ldc_nv:
@@ -1189,6 +1191,7 @@ nir_get_io_data_src_number(const nir_intrinsic_instr *intr)
    case nir_intrinsic_store_global_nv:
    case nir_intrinsic_store_scratch:
    case nir_intrinsic_store_scratch_nv:
+   case nir_intrinsic_store_scratch_intel:
    case nir_intrinsic_store_raw_output_pan:
    case nir_intrinsic_store_combined_output_pan:
    case nir_intrinsic_store_tile_pan:

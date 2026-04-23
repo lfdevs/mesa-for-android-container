@@ -395,6 +395,7 @@
   <enum name="Mipmap Mode">
     <value name="Nearest" value="0"/>
     <value name="None" value="1"/>
+    <value name="Performance Trilinear" value="2"/>
     <value name="Trilinear" value="3"/>
   </enum>
 

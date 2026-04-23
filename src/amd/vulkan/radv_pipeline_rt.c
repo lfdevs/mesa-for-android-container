@@ -25,7 +25,10 @@
 #include "radv_pipeline_layout.h"
 #include "radv_pipeline_rt.h"
 
+#include "nir/radv_nir_rt_stage_common.h"
+#include "aco_interface.h"
 #include "aco_nir_call_attribs.h"
+#include "radv_aco_shader_info.h"
 #include "radv_rmv.h"
 #include "radv_shader.h"
 
@@ -402,7 +405,7 @@ radv_rt_nir_to_asm(struct radv_device *device, struct radv_ray_tracing_pipeline 
                              &stage->info);
 
    /* Declare shader arguments. */
-   radv_declare_shader_args(device, NULL, &stage->info, stage->stage, MESA_SHADER_NONE, &stage->args);
+   radv_declare_shader_args(device, NULL, &stage->info, stage->stage, MESA_SHADER_NONE, &stage->args, debug);
 
    stage->info.user_sgprs_locs = stage->args.user_sgprs_locs;
    stage->info.inline_push_constant_mask = stage->args.ac.inline_push_const_mask;
@@ -534,18 +537,17 @@ radv_rt_compile_nir(struct radv_device *device, struct vk_pipeline_cache *cache,
                      !radv_is_traversal_shader(stage->nir);
 
    struct radv_shader_binary *binary;
-   struct radv_shader_debug_info debug = {};
+   struct radv_shader_debug_info debug = {0};
    radv_rt_nir_to_asm(device, pipeline, mode, stage, payload_size, hit_attrib_size, stage_info, traversal_stage_info,
                       has_position_fetch, &binary, &debug);
 
    struct radv_shader *shader;
    if (replay_block || replayable) {
-      VkResult result = radv_shader_create_uncached(device, binary, replayable, replay_block, &shader);
+      VkResult result = radv_shader_create_uncached(device, binary, replayable, replay_block, &debug, &shader);
       if (result != VK_SUCCESS) {
          free(binary);
          return result;
       }
-      shader->dbg = debug;
    } else {
       shader = radv_shader_create(device, cache, binary, skip_shaders_cache, &debug);
    }
@@ -948,7 +950,7 @@ radv_rt_compile_shaders(struct radv_device *device, struct vk_pipeline_cache *ca
 
 cleanup:
    for (uint32_t i = 0; i < pCreateInfo->stageCount; i++)
-      ralloc_free(stages[i].nir);
+      radv_pipeline_stage_finish(&stages[i]);
    free(stages);
    return result;
 }
@@ -1041,19 +1043,41 @@ postprocess_rt_config(struct ac_shader_config *config, const struct radeon_info 
 static void
 compile_rt_prolog(struct radv_device *device, struct radv_ray_tracing_pipeline *pipeline)
 {
+   const bool uses_descriptor_heap = pipeline->base.base.create_flags & VK_PIPELINE_CREATE_2_DESCRIPTOR_HEAP_BIT_EXT;
    const struct radv_physical_device *pdev = radv_device_physical(device);
-   struct nir_function raygen_stub = {0};
    uint32_t push_constant_size = 0;
 
-   /* Create a dummy function signature for raygen shaders in order to pass parameter info to the prolog */
-   radv_nir_init_rt_function_params(&raygen_stub, MESA_SHADER_RAYGEN, 0, 0);
-   radv_nir_lower_callee_signature(&raygen_stub);
-   pipeline->prolog = radv_create_rt_prolog(device, raygen_stub.num_params, raygen_stub.params);
+   struct radv_shader_stage prolog_stage = {0};
+   struct radv_shader_debug_info debug = {0};
+   radv_build_rt_prolog(device, &prolog_stage, uses_descriptor_heap, &debug);
+   prolog_stage.nir->options = &pdev->nir_options[MESA_SHADER_COMPUTE];
+   radv_optimize_nir(prolog_stage.nir, false);
+   radv_postprocess_nir(device, NULL, &prolog_stage);
+
+   NIR_PASS(_, prolog_stage.nir, radv_nir_lower_call_abi, prolog_stage.info.wave_size);
+   NIR_PASS(_, prolog_stage.nir, nir_lower_global_vars_to_local);
+   NIR_PASS(_, prolog_stage.nir, nir_lower_vars_to_ssa);
+   NIR_PASS(_, prolog_stage.nir, nir_opt_copy_prop);
+   NIR_PASS(_, prolog_stage.nir, nir_opt_remove_phis);
+
+   pipeline->prolog = radv_compile_rt_prolog(device, &prolog_stage, &debug);
+
+   bool has_traversal = !!pipeline->base.base.shaders[MESA_SHADER_INTERSECTION];
 
    /* create combined config */
    struct ac_shader_config *config = &pipeline->prolog->config;
    for (unsigned i = 0; i < pipeline->stage_count; i++) {
       const struct radv_shader *shader = pipeline->stages[i].shader;
+
+      /* !has_traversal means the pipeline is completely monolithic and will never call any
+       * shaders (except for the raygen shader, which contains the entire RT pipeline).
+       * Ignore all shaders except for the raygen shader - they may appear in the stages array due to pipeline library
+       * imports, but they will never be called.
+       */
+      if (!has_traversal) {
+         if (pipeline->stages[i].stage != MESA_SHADER_RAYGEN)
+            continue;
+      }
 
       if (!shader)
          continue;
@@ -1066,7 +1090,7 @@ compile_rt_prolog(struct radv_device *device, struct radv_ray_tracing_pipeline *
    for (unsigned i = 0; i < pipeline->group_count; i++) {
       const struct radv_shader *shader = pipeline->groups[i].ahit_isec_shader;
 
-      if (!shader)
+      if (!shader || !has_traversal)
          continue;
 
       combine_config(config, &shader->config);
@@ -1074,7 +1098,7 @@ compile_rt_prolog(struct radv_device *device, struct radv_ray_tracing_pipeline *
       push_constant_size = MAX2(push_constant_size, shader->info.push_constant_size);
    }
 
-   if (pipeline->base.base.shaders[MESA_SHADER_INTERSECTION]) {
+   if (has_traversal) {
       const struct radv_shader *traversal_shader = pipeline->base.base.shaders[MESA_SHADER_INTERSECTION];
 
       combine_config(config, &traversal_shader->config);

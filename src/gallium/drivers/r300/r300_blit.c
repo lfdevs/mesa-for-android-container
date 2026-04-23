@@ -10,6 +10,7 @@
 
 #include "util/format/u_format.h"
 #include "util/half_float.h"
+#include "util/u_math.h"
 #include "util/u_pack_color.h"
 #include "util/u_surface.h"
 
@@ -108,12 +109,19 @@ static uint32_t r300_depth_clear_cb_value(enum pipe_format format,
                                           const float* rgba)
 {
     union util_color uc;
+
+    format = r300_unbyteswap_array_format(format);
+
     util_pack_color(rgba, format, &uc);
 
-    if (util_format_get_blocksizebits(format) == 32)
-        return uc.ui[0];
-    else
-        return uc.us | (uc.us << 16);
+    if (util_format_get_blocksizebits(format) == 32) {
+        /* CBZB clears reuse ZB_DEPTHCLEARVALUE, which expects the 32-bit
+         * payload in little-endian byte order.
+         */
+        return util_cpu_to_le32(uc.ui[0]);
+    }
+
+    return uc.us | (uc.us << 16);
 }
 
 static bool r300_cbzb_clear_allowed(struct r300_context *r300,

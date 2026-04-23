@@ -37,10 +37,10 @@ layout(push_constant) uniform CONSTS {
  * dEQP-VK.ray_tracing_pipeline.acceleration_structures.header_bottom_address.*
  * is doing.
  *
- * Therefore, if the application updates the handles, we need to replace
- * the old handles in anv_instance_leaf with the new one. To access
+ * Therefore, if the application updates the handles, we need to replace the
+ * old handles in anv_instance_leaf with the new one. To access
  * anv_instance_leaf without traversing the TLAS, pointers to these
- * anv_instance_leaf are stored right after anv_accel_struct_header,
+ * anv_instance_leaf are stored at instance_leaves_offset in BVH layout,
  * allowing us to know where they are in the TLAS instantly.
  *
  * Although, the fact that the application can swap/replace new handles
@@ -52,7 +52,7 @@ main(void)
 {
    uint32_t global_id = gl_GlobalInvocationID.x;
    uint32_t lanes = gl_NumWorkGroups.x * 128;
-   uint32_t increment = lanes * 8;
+   uint32_t increment = lanes * 16;
 
    uint64_t copy_src_addr = args.src_addr;
    uint64_t copy_dst_addr = args.dst_addr;
@@ -99,27 +99,33 @@ main(void)
    }
 
    uint64_t size = DEREF(header).compacted_size;
-   for (uint64_t offset = global_id * 8; offset < size; offset += increment) {
-      /* copy 8 bytes per iteration */
-      DEREF(REF(uint64_t)(copy_dst_addr + offset)) =
-         DEREF(REF(uint64_t)(copy_src_addr + offset));
+   for (uint64_t offset = global_id * 16; offset < size; offset += increment) {
+      DEREF(REF(uvec4)(copy_dst_addr + offset)) =
+         DEREF(REF(uvec4)(copy_src_addr + offset));
 
       /* Do the adjustment inline in the same invocation that copies the data so that we don't have
        * to synchronize.
        */
-      if (offset < instance_end && offset >= instance_offset &&
-          (offset - instance_offset) % SIZEOF(uint64_t) == 0) {
-         uint64_t idx = (offset - instance_offset) / SIZEOF(uint64_t);
+      for (int i = 0; i < 2; i++) {
+         uint64_t sub_offset = offset + i * 8;
 
+         /* Check if access to instance leave addresses are bounds. */
+         if (sub_offset < instance_offset || sub_offset >= instance_end)
+            continue;
+
+         if ((sub_offset - instance_offset) % SIZEOF(uint64_t) != 0)
+            continue;
+
+         uint64_t idx = (sub_offset - instance_offset) / SIZEOF(uint64_t);
          if (args.mode == ANV_COPY_MODE_SERIALIZE) {
             /* Indirectly access the anv_instance_leaf, and store the blas_ptrs after ser_header */
-            uint64_t instance_leaf_addr = DEREF(REF(uint64_t)(copy_src_addr + offset));
+            uint64_t instance_leaf_addr = DEREF(REF(uint64_t)(copy_src_addr + sub_offset));
             REF(anv_instance_leaf) instance_leaf = REF(anv_instance_leaf)(instance_leaf_addr);
             uint64_t blas_ptr = DEREF(instance_leaf).part1.bvh_ptr;
             DEREF(INDEX(uint64_t, instance_base, idx)) = blas_ptr;
          } else { /* ANV_COPY_MODE_DESERIALIZE */
             /* Indirectly access the anv_instance_leaf, and replace the bvh_ptr with the ones after ser_header */
-            uint64_t instance_leaf_addr = DEREF(REF(uint64_t)(copy_dst_addr + offset));
+            uint64_t instance_leaf_addr = DEREF(REF(uint64_t)(copy_dst_addr + sub_offset));
             REF(anv_instance_leaf) instance_leaf = REF(anv_instance_leaf)(instance_leaf_addr);
             uint64_t blas_ptr = DEREF(INDEX(uint64_t, instance_base, idx));
             DEREF(instance_leaf).part1.bvh_ptr = blas_ptr;

@@ -3,15 +3,13 @@
  * SPDX-License-Identifier: MIT
  */
 
-#include "tu_shader.h"
+#include "compiler/spirv/spirv.h"
+#include "nir/nir_builder.h"
+#include "nir/nir_control_flow.h"
+#include "nir/nir_deref.h"
 
 #include "bvh/tu_build_interface.h"
-
-#include "compiler/spirv/spirv.h"
-
-#include "nir_builder.h"
-#include "nir_control_flow.h"
-#include "nir_deref.h"
+#include "tu_shader.h"
 
 enum rq_intersection_var_index {
    rq_intersection_primitive_id,

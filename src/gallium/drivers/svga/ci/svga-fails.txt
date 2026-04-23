@@ -1093,13 +1093,10 @@ spec@arb_sample_shading@samplemask 8@1.000000 partition,Fail
 spec@arb_sample_shading@samplemask 8@noms fix,Fail
 spec@arb_sample_shading@samplemask 8@sample fix,Fail
 spec@arb_sample_shading@samplemask 8@sample partition,Fail
-spec@arb_tessellation_shader@execution@tcs-input@tcs-input-ivec4_2,Fail
-spec@arb_tessellation_shader@execution@tcs-input@tcs-input-mat4x3,Fail
-spec@arb_tessellation_shader@execution@tcs-input@tcs-input-uvec4,Fail
 spec@arb_texture_view@tex-view,Fail
 spec@egl_chromium_sync_control@conformance,Fail
 spec@egl_chromium_sync_control@conformance@eglGetSyncValuesCHROMIUM_msc_and_sbc_test,Fail
 spec@ext_texture_integer@fbo-integer-attachments,Fail
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-tex-modifier,Fail
-spec@glsl-1.50@execution@geometry@max-input-components,Fail
-spec@glsl-1.50@execution@interface-vs-named-to-gs-array,Fail
+spec@arb_tessellation_shader@execution@tcs-input@tcs-input-ivec4,Fail
+spec@arb_tessellation_shader@execution@tcs-input@tcs-input-mat4x2_2,Fail

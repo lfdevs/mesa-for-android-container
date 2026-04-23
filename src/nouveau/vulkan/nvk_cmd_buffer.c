@@ -841,7 +841,7 @@ nvk_bind_descriptor_sets(struct nvk_cmd_buffer *cmd,
    struct nvk_device *dev = nvk_cmd_buffer_device(cmd);
    const struct nvk_physical_device *pdev = nvk_device_physical(dev);
 
-   union nvk_buffer_descriptor dynamic_buffers[NVK_MAX_DYNAMIC_BUFFERS];
+   uint32_t dynamic_buffers[4][NVK_MAX_DYNAMIC_BUFFERS];
    uint8_t set_dynamic_buffer_start[NVK_MAX_SETS];
 
    /* Read off the current dynamic buffer start array so we can use it to
@@ -910,7 +910,8 @@ nvk_bind_descriptor_sets(struct nvk_cmd_buffer *cmd,
                } else {
                   db.addr.base_addr += offset;
                }
-               dynamic_buffers[dyn_buffer_end + j] = db;
+               for (int k = 0; k < 4; k++)
+                  dynamic_buffers[k][dyn_buffer_end + j] = db.values[k];
             }
             next_dyn_offset += set->layout->vk.dynamic_descriptor_count;
          }
@@ -923,9 +924,10 @@ nvk_bind_descriptor_sets(struct nvk_cmd_buffer *cmd,
    assert(dyn_buffer_end <= NVK_MAX_DYNAMIC_BUFFERS);
    assert(next_dyn_offset <= info->dynamicOffsetCount);
 
-   nvk_descriptor_state_set_root_array(cmd, desc, dynamic_buffers,
-                                       dyn_buffer_start, dyn_buffer_end - dyn_buffer_start,
-                                       &dynamic_buffers[dyn_buffer_start]);
+   for (int i = 0; i < 4; i++)
+      nvk_descriptor_state_set_root_array(cmd, desc, dynamic_buffers[i],
+                                          dyn_buffer_start, dyn_buffer_end - dyn_buffer_start,
+                                          &dynamic_buffers[i][dyn_buffer_start]);
 
    /* We need to at least sync everything from first_set to NVK_MAX_SETS.
     * However, we only save anything if firstSet >= 4 so we may as well sync
@@ -1225,7 +1227,8 @@ nvk_cmd_buffer_get_cbuf_addr(struct nvk_cmd_buffer *cmd,
          desc, set_dynamic_buffer_start[cbuf->desc_set], &dyn_idx);
       dyn_idx += cbuf->dynamic_idx;
       union nvk_buffer_descriptor ubo_desc;
-      nvk_descriptor_state_get_root(desc, dynamic_buffers[dyn_idx], &ubo_desc);
+      for (int i = 0; i < 4; i++)
+         nvk_descriptor_state_get_root(desc, dynamic_buffers[i][dyn_idx], &ubo_desc.values[i]);
       *addr_out = nvk_ubo_descriptor_addr(pdev, ubo_desc);
       return true;
    }

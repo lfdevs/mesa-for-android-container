@@ -46,6 +46,7 @@ for f in \
   .gitlab-ci/piglit \
   .gitlab-ci/fossils.yml \
   .gitlab-ci/fossils \
+  .gitlab-ci/gpu-trace-replay.sh \
   .gitlab-ci/crosvm-init.sh \
   .gitlab-ci/*.txt \
   .gitlab-ci/report-flakes.py \

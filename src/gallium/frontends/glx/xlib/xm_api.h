@@ -291,7 +291,6 @@ struct xmesa_visual {
    int screen, visualID, visualType;
    Display *display;	/* The X11 display */
    XVisualInfo * visinfo;	/* X's visual info (pointer to private copy) */
-   XVisualInfo *vishandle;	/* Only used in fakeglx.c */
    GLint BitsPerPixel;		/* True bits per pixel for XImages */
 
    GLboolean ximage_flag;	/* Use XImage for back buffer (not pixmap)? */

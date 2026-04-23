@@ -19,7 +19,7 @@ DERIVE_HASH_TABLE(pan_blend_shader_key);
 
 void
 pan_blend_shader_cache_init(struct pan_blend_shader_cache *cache,
-                            unsigned gpu_id, uint32_t gpu_variant,
+                            uint64_t gpu_id, uint32_t gpu_variant,
                             struct pan_pool *bin_pool)
 {
    cache->gpu_id = gpu_id;
@@ -105,15 +105,16 @@ GENX(pan_blend_get_shader_locked)(struct pan_blend_shader_cache *cache,
 
    struct pan_shader_info info;
    pan_preprocess_nir(nir, inputs.gpu_id);
-   pan_postprocess_nir(nir, inputs.gpu_id);
 
 #if PAN_ARCH < 6
    enum pipe_format rt_formats[8] = {0};
    rt_formats[rt] = GENX(pan_blend_shader_fmt)(key.format);
    NIR_PASS(_, nir, pan_nir_lower_framebuffer, rt_formats,
             pan_raw_format_mask_midgard(rt_formats), MAX2(key.nr_samples, 1),
-            (cache->gpu_id >> 16) < 0x700);
+            pan_prod_id(cache->gpu_id) < 0x700);
 #endif
+
+   pan_postprocess_nir(nir, inputs.gpu_id);
 
    struct util_dynarray binary;
    binary = UTIL_DYNARRAY_INIT;

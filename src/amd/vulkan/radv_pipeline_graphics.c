@@ -1164,82 +1164,6 @@ radv_should_export_multiview(const struct radv_shader_stage *stage, const struct
 }
 
 static void
-radv_remove_point_size(const struct radv_graphics_state_key *gfx_state, nir_shader *producer, nir_shader *consumer)
-{
-   if ((consumer->info.inputs_read & VARYING_BIT_PSIZ) || !(producer->info.outputs_written & VARYING_BIT_PSIZ))
-      return;
-
-   /* Do not remove PSIZ if the shader uses XFB because it might be stored. */
-   if (producer->xfb_info)
-      return;
-
-   /* Do not remove PSIZ if the rasterization primitive uses points. */
-   if (consumer->info.stage == MESA_SHADER_FRAGMENT &&
-       ((producer->info.stage == MESA_SHADER_TESS_EVAL && producer->info.tess.point_mode) ||
-        (producer->info.stage == MESA_SHADER_GEOMETRY && producer->info.gs.output_primitive == MESA_PRIM_POINTS) ||
-        (producer->info.stage == MESA_SHADER_MESH && producer->info.mesh.primitive_type == MESA_PRIM_POINTS)))
-      return;
-
-   nir_variable *var = nir_find_variable_with_location(producer, nir_var_shader_out, VARYING_SLOT_PSIZ);
-   assert(var);
-
-   /* Change PSIZ to a global variable which allows it to be DCE'd. */
-   var->data.location = 0;
-   var->data.mode = nir_var_shader_temp;
-
-   producer->info.outputs_written &= ~VARYING_BIT_PSIZ;
-   NIR_PASS(_, producer, nir_fixup_deref_modes);
-   NIR_PASS(_, producer, nir_remove_dead_variables, nir_var_shader_temp, NULL);
-   NIR_PASS(_, producer, nir_opt_dce);
-}
-
-static void
-radv_remove_color_exports(const struct radv_graphics_state_key *gfx_state, nir_shader *nir)
-{
-   uint8_t color_remap[MAX_RTS];
-   bool fixup_derefs = false;
-
-   /* Do not remove color exports when a PS epilog is used because the format isn't known and the color write mask can
-    * be dynamic. */
-   if (gfx_state->ps.has_epilog)
-      return;
-
-   /* Shader output locations to color attachment mappings. */
-   memset(color_remap, MESA_VK_ATTACHMENT_UNUSED, sizeof(color_remap));
-   for (uint32_t i = 0; i < MAX_RTS; i++) {
-      if (gfx_state->ps.epilog.color_map[i] != MESA_VK_ATTACHMENT_UNUSED)
-         color_remap[gfx_state->ps.epilog.color_map[i]] = i;
-   }
-
-   nir_foreach_shader_out_variable (var, nir) {
-      int idx = var->data.location;
-      idx -= FRAG_RESULT_DATA0;
-
-      if (idx < 0)
-         continue;
-
-      const uint8_t cb_idx = color_remap[idx];
-      unsigned col_format = cb_idx == MESA_VK_ATTACHMENT_UNUSED
-                               ? V_028714_SPI_SHADER_ZERO
-                               : (gfx_state->ps.epilog.spi_shader_col_format >> (4 * cb_idx)) & 0xf;
-
-      if (col_format == V_028714_SPI_SHADER_ZERO) {
-         /* Remove the color export if it's unused or in presence of holes. */
-         nir->info.outputs_written &= ~BITFIELD64_BIT(var->data.location);
-         var->data.location = 0;
-         var->data.mode = nir_var_shader_temp;
-         fixup_derefs = true;
-      }
-   }
-
-   if (fixup_derefs) {
-      NIR_PASS(_, nir, nir_fixup_deref_modes);
-      NIR_PASS(_, nir, nir_remove_dead_variables, nir_var_shader_temp, NULL);
-      NIR_PASS(_, nir, nir_opt_dce);
-   }
-}
-
-static void
 merge_tess_info(struct shader_info *tes_info, struct shader_info *tcs_info)
 {
    /* The Vulkan 1.0.38 spec, section 21.1 Tessellator says:
@@ -1279,69 +1203,6 @@ merge_tess_info(struct shader_info *tes_info, struct shader_info *tcs_info)
    tcs_info->tess._primitive_mode = tes_info->tess._primitive_mode;
 }
 
-static void
-radv_link_shaders(const struct radv_device *device, struct radv_shader_stage *producer_stage,
-                  struct radv_shader_stage *consumer_stage, const struct radv_graphics_state_key *gfx_state)
-{
-   const struct radv_physical_device *pdev = radv_device_physical(device);
-   const enum amd_gfx_level gfx_level = pdev->info.gfx_level;
-   nir_shader *producer = producer_stage->nir;
-   nir_shader *consumer = consumer_stage->nir;
-
-   if (consumer->info.stage == MESA_SHADER_FRAGMENT) {
-      /* Lower the viewport index to zero when the last vertex stage doesn't export it. */
-      if ((consumer->info.inputs_read & VARYING_BIT_VIEWPORT) &&
-          !(producer->info.outputs_written & VARYING_BIT_VIEWPORT)) {
-         NIR_PASS(_, consumer, radv_nir_lower_viewport_to_zero);
-      }
-   }
-
-   if (producer_stage->key.optimisations_disabled || consumer_stage->key.optimisations_disabled)
-      return;
-
-   if (consumer->info.stage == MESA_SHADER_FRAGMENT && producer->info.has_transform_feedback_varyings) {
-      nir_link_xfb_varyings(producer, consumer);
-   }
-
-   unsigned array_deref_of_vec_options =
-      nir_lower_direct_array_deref_of_vec_load | nir_lower_indirect_array_deref_of_vec_load |
-      nir_lower_direct_array_deref_of_vec_store | nir_lower_indirect_array_deref_of_vec_store;
-
-   NIR_PASS(_, producer, nir_lower_array_deref_of_vec, nir_var_shader_out, NULL, array_deref_of_vec_options);
-   NIR_PASS(_, consumer, nir_lower_array_deref_of_vec, nir_var_shader_in, NULL, array_deref_of_vec_options);
-
-   nir_lower_io_array_vars_to_elements(producer, consumer);
-   nir_validate_shader(producer, "after nir_lower_io_arrays_to_elements");
-   nir_validate_shader(consumer, "after nir_lower_io_arrays_to_elements");
-
-   radv_nir_lower_io_vars_to_scalar(producer, nir_var_shader_out);
-   radv_nir_lower_io_vars_to_scalar(consumer, nir_var_shader_in);
-
-   /* Remove PSIZ from shaders when it's not needed.
-    * This is typically produced by translation layers like Zink or D9VK.
-    */
-   if (gfx_state->enable_remove_point_size)
-      radv_remove_point_size(gfx_state, producer, consumer);
-
-   NIR_PASS(_, producer, nir_remove_dead_variables, nir_var_shader_out, NULL);
-   NIR_PASS(_, consumer, nir_remove_dead_variables, nir_var_shader_in, NULL);
-
-   const bool has_geom_or_tess =
-      consumer->info.stage == MESA_SHADER_GEOMETRY || consumer->info.stage == MESA_SHADER_TESS_CTRL;
-   const bool merged_gs = consumer->info.stage == MESA_SHADER_GEOMETRY && gfx_level >= GFX9;
-
-   if (producer->info.stage == MESA_SHADER_TESS_CTRL || producer->info.stage == MESA_SHADER_MESH ||
-       (producer->info.stage == MESA_SHADER_VERTEX && has_geom_or_tess) ||
-       (producer->info.stage == MESA_SHADER_TESS_EVAL && merged_gs)) {
-      NIR_PASS(_, producer, nir_opt_vectorize_io_vars, nir_var_shader_out);
-   }
-
-   if (consumer->info.stage == MESA_SHADER_GEOMETRY || consumer->info.stage == MESA_SHADER_TESS_CTRL ||
-       consumer->info.stage == MESA_SHADER_TESS_EVAL) {
-      NIR_PASS(_, consumer, nir_opt_vectorize_io_vars, nir_var_shader_in);
-   }
-}
-
 static const mesa_shader_stage graphics_shader_order[] = {
    MESA_SHADER_VERTEX,   MESA_SHADER_TESS_CTRL, MESA_SHADER_TESS_EVAL, MESA_SHADER_GEOMETRY,
 
@@ -1349,126 +1210,6 @@ static const mesa_shader_stage graphics_shader_order[] = {
 
    MESA_SHADER_FRAGMENT,
 };
-
-static void
-radv_link_vs(const struct radv_device *device, struct radv_shader_stage *vs_stage, struct radv_shader_stage *next_stage,
-             const struct radv_graphics_state_key *gfx_state)
-{
-   assert(vs_stage->nir->info.stage == MESA_SHADER_VERTEX);
-
-   if (radv_should_export_multiview(vs_stage, gfx_state)) {
-      NIR_PASS(_, vs_stage->nir, radv_nir_export_multiview);
-   }
-
-   if (next_stage) {
-      assert(next_stage->nir->info.stage == MESA_SHADER_TESS_CTRL ||
-             next_stage->nir->info.stage == MESA_SHADER_GEOMETRY ||
-             next_stage->nir->info.stage == MESA_SHADER_FRAGMENT);
-
-      radv_link_shaders(device, vs_stage, next_stage, gfx_state);
-   }
-}
-
-static void
-radv_link_tcs(const struct radv_device *device, struct radv_shader_stage *tcs_stage,
-              struct radv_shader_stage *tes_stage, const struct radv_graphics_state_key *gfx_state)
-{
-   if (!tes_stage)
-      return;
-
-   assert(tcs_stage->nir->info.stage == MESA_SHADER_TESS_CTRL);
-   assert(tes_stage->nir->info.stage == MESA_SHADER_TESS_EVAL);
-
-   radv_link_shaders(device, tcs_stage, tes_stage, gfx_state);
-
-   /* Copy TCS info into the TES info */
-   merge_tess_info(&tes_stage->nir->info, &tcs_stage->nir->info);
-}
-
-static void
-radv_link_tes(const struct radv_device *device, struct radv_shader_stage *tes_stage,
-              struct radv_shader_stage *next_stage, const struct radv_graphics_state_key *gfx_state)
-{
-   assert(tes_stage->nir->info.stage == MESA_SHADER_TESS_EVAL);
-
-   if (radv_should_export_multiview(tes_stage, gfx_state)) {
-      NIR_PASS(_, tes_stage->nir, radv_nir_export_multiview);
-   }
-
-   if (next_stage) {
-      assert(next_stage->nir->info.stage == MESA_SHADER_GEOMETRY ||
-             next_stage->nir->info.stage == MESA_SHADER_FRAGMENT);
-
-      radv_link_shaders(device, tes_stage, next_stage, gfx_state);
-   }
-}
-
-static void
-radv_link_gs(const struct radv_device *device, struct radv_shader_stage *gs_stage, struct radv_shader_stage *fs_stage,
-             const struct radv_graphics_state_key *gfx_state)
-{
-   assert(gs_stage->nir->info.stage == MESA_SHADER_GEOMETRY);
-
-   if (radv_should_export_multiview(gs_stage, gfx_state)) {
-      NIR_PASS(_, gs_stage->nir, radv_nir_export_multiview);
-   }
-
-   if (fs_stage) {
-      assert(fs_stage->nir->info.stage == MESA_SHADER_FRAGMENT);
-
-      radv_link_shaders(device, gs_stage, fs_stage, gfx_state);
-   }
-}
-
-static void
-radv_link_task(const struct radv_device *device, struct radv_shader_stage *task_stage,
-               struct radv_shader_stage *mesh_stage, const struct radv_graphics_state_key *gfx_state)
-{
-   assert(task_stage->nir->info.stage == MESA_SHADER_TASK);
-
-   if (mesh_stage) {
-      assert(mesh_stage->nir->info.stage == MESA_SHADER_MESH);
-
-      /* Linking task and mesh shaders shouldn't do anything for now but keep it for consistency. */
-      radv_link_shaders(device, task_stage, mesh_stage, gfx_state);
-   }
-}
-
-static void
-radv_link_mesh(const struct radv_device *device, struct radv_shader_stage *mesh_stage,
-               struct radv_shader_stage *fs_stage, const struct radv_graphics_state_key *gfx_state)
-{
-   assert(mesh_stage->nir->info.stage == MESA_SHADER_MESH);
-
-   if (fs_stage) {
-      assert(fs_stage->nir->info.stage == MESA_SHADER_FRAGMENT);
-
-      nir_foreach_shader_in_variable (var, fs_stage->nir) {
-         /* These variables are per-primitive when used with a mesh shader. */
-         if (var->data.location == VARYING_SLOT_PRIMITIVE_ID || var->data.location == VARYING_SLOT_VIEWPORT ||
-             var->data.location == VARYING_SLOT_LAYER) {
-            var->data.per_primitive = true;
-         }
-      }
-
-      radv_link_shaders(device, mesh_stage, fs_stage, gfx_state);
-   }
-
-   /* Lower mesh shader draw ID to zero prevent app bugs from triggering undefined behaviour. */
-   if (mesh_stage->info.ms.has_task && BITSET_TEST(mesh_stage->nir->info.system_values_read, SYSTEM_VALUE_DRAW_ID))
-      radv_nir_lower_draw_id_to_zero(mesh_stage->nir);
-}
-
-static void
-radv_link_fs(struct radv_shader_stage *fs_stage, const struct radv_graphics_state_key *gfx_state)
-{
-   assert(fs_stage->nir->info.stage == MESA_SHADER_FRAGMENT);
-
-   /* Lower the view index to map on the layer. */
-   NIR_PASS(_, fs_stage->nir, radv_nir_lower_view_index);
-
-   radv_remove_color_exports(gfx_state, fs_stage->nir);
-}
 
 static bool
 radv_pipeline_needs_noop_fs(struct radv_graphics_pipeline *pipeline, const struct radv_graphics_state_key *gfx_state)
@@ -1483,47 +1224,6 @@ radv_pipeline_needs_noop_fs(struct radv_graphics_pipeline *pipeline, const struc
       return true;
 
    return false;
-}
-
-static void
-radv_graphics_shaders_link(const struct radv_device *device, const struct radv_graphics_state_key *gfx_state,
-                           struct radv_shader_stage *stages)
-{
-   /* Walk backwards to link */
-   struct radv_shader_stage *next_stage = NULL;
-   for (int i = ARRAY_SIZE(graphics_shader_order) - 1; i >= 0; i--) {
-      mesa_shader_stage s = graphics_shader_order[i];
-      if (!stages[s].nir)
-         continue;
-
-      switch (s) {
-      case MESA_SHADER_VERTEX:
-         radv_link_vs(device, &stages[s], next_stage, gfx_state);
-         break;
-      case MESA_SHADER_TESS_CTRL:
-         radv_link_tcs(device, &stages[s], next_stage, gfx_state);
-         break;
-      case MESA_SHADER_TESS_EVAL:
-         radv_link_tes(device, &stages[s], next_stage, gfx_state);
-         break;
-      case MESA_SHADER_GEOMETRY:
-         radv_link_gs(device, &stages[s], next_stage, gfx_state);
-         break;
-      case MESA_SHADER_TASK:
-         radv_link_task(device, &stages[s], next_stage, gfx_state);
-         break;
-      case MESA_SHADER_MESH:
-         radv_link_mesh(device, &stages[s], next_stage, gfx_state);
-         break;
-      case MESA_SHADER_FRAGMENT:
-         radv_link_fs(&stages[s], gfx_state);
-         break;
-      default:
-         UNREACHABLE("Invalid graphics shader stage");
-      }
-
-      next_stage = &stages[s];
-   }
 }
 
 static void
@@ -1640,20 +1340,6 @@ radv_graphics_shaders_link_varyings(struct radv_shader_stage *stages, enum amd_g
 
       /* Update load/store alignments because inter-stage code motion may move instructions used to deduce this info. */
       NIR_PASS(_, shader, nir_opt_load_store_update_alignments);
-
-      /* Scalarize all I/O, because nir_opt_varyings and nir_opt_vectorize_io expect all I/O to be scalarized. */
-      nir_variable_mode sca_mode = nir_var_shader_in;
-      bool sca_progress = false;
-      if (s != MESA_SHADER_FRAGMENT)
-         sca_mode |= nir_var_shader_out;
-
-      NIR_PASS(sca_progress, shader, nir_lower_io_to_scalar, sca_mode, NULL, NULL);
-
-      if (sca_progress) {
-         /* Eliminate useless vec->mov copies resulting from scalarization. */
-         NIR_PASS(_, shader, nir_opt_copy_prop);
-         NIR_PASS(_, shader, nir_opt_constant_folding);
-      }
    }
 
    int highest_changed_producer = -1;
@@ -1758,10 +1444,6 @@ radv_graphics_shaders_link_varyings(struct radv_shader_stage *stages, enum amd_g
        */
       nir_shader_gather_info(shader, nir_shader_get_entrypoint(shader));
 
-      /* Recompute intrinsic bases of PS inputs in order to remove gaps. */
-      if (s == MESA_SHADER_FRAGMENT)
-         radv_recompute_fs_input_bases(shader);
-
       /* Recreate XFB info from intrinsics (nir_opt_varyings may have changed it). */
       if (shader->xfb_info) {
          nir_gather_xfb_info_from_intrinsics(shader);
@@ -1785,7 +1467,6 @@ struct radv_ps_epilog_key
 radv_generate_ps_epilog_key(const struct radv_device *device, const struct radv_ps_epilog_state *state)
 {
    const struct radv_physical_device *pdev = radv_device_physical(device);
-   const struct radv_instance *instance = radv_physical_device_instance(pdev);
    unsigned col_format = 0, is_int8 = 0, is_int10 = 0, is_float32 = 0, z_format = 0, no_signed_zero = 0;
    struct radv_ps_epilog_key key;
 
@@ -1851,7 +1532,7 @@ radv_generate_ps_epilog_key(const struct radv_device *device, const struct radv_
    key.spi_shader_col_format = col_format;
    key.color_is_int8 = pdev->info.compiler_info.has_cb_lt16bit_int_clamp_bug ? is_int8 : 0;
    key.color_is_int10 = pdev->info.compiler_info.has_cb_lt16bit_int_clamp_bug ? is_int10 : 0;
-   key.enable_mrt_output_nan_fixup = instance->drirc.debug.enable_mrt_output_nan_fixup ? is_float32 : 0;
+   key.enable_mrt_output_nan_fixup = pdev->cache_key.enable_mrt_output_nan_fixup ? is_float32 : 0;
    key.no_signed_zero = no_signed_zero;
    key.colors_written = state->colors_written;
    key.mrt0_is_dual_src = state->mrt0_is_dual_src && key.colors_needed & 0xf;
@@ -2319,14 +2000,15 @@ radv_fill_shader_info(struct radv_device *device, const enum radv_pipeline_type 
 
 static void
 radv_declare_pipeline_args(struct radv_device *device, struct radv_shader_stage *stages,
-                           const struct radv_graphics_state_key *gfx_state, VkShaderStageFlagBits active_nir_stages)
+                           const struct radv_graphics_state_key *gfx_state, VkShaderStageFlagBits active_nir_stages,
+                           struct radv_shader_debug_info *debug)
 {
    const struct radv_physical_device *pdev = radv_device_physical(device);
    enum amd_gfx_level gfx_level = pdev->info.gfx_level;
 
    if (gfx_level >= GFX9 && stages[MESA_SHADER_TESS_CTRL].nir) {
       radv_declare_shader_args(device, gfx_state, &stages[MESA_SHADER_TESS_CTRL].info, MESA_SHADER_TESS_CTRL,
-                               MESA_SHADER_VERTEX, &stages[MESA_SHADER_TESS_CTRL].args);
+                               MESA_SHADER_VERTEX, &stages[MESA_SHADER_TESS_CTRL].args, &debug[MESA_SHADER_TESS_CTRL]);
       stages[MESA_SHADER_TESS_CTRL].info.user_sgprs_locs = stages[MESA_SHADER_TESS_CTRL].args.user_sgprs_locs;
       stages[MESA_SHADER_TESS_CTRL].info.inline_push_constant_mask =
          stages[MESA_SHADER_TESS_CTRL].args.ac.inline_push_const_mask;
@@ -2343,7 +2025,7 @@ radv_declare_pipeline_args(struct radv_device *device, struct radv_shader_stage 
    if (gfx_level >= GFX9 && stages[MESA_SHADER_GEOMETRY].nir) {
       mesa_shader_stage pre_stage = stages[MESA_SHADER_TESS_EVAL].nir ? MESA_SHADER_TESS_EVAL : MESA_SHADER_VERTEX;
       radv_declare_shader_args(device, gfx_state, &stages[MESA_SHADER_GEOMETRY].info, MESA_SHADER_GEOMETRY, pre_stage,
-                               &stages[MESA_SHADER_GEOMETRY].args);
+                               &stages[MESA_SHADER_GEOMETRY].args, &debug[MESA_SHADER_GEOMETRY]);
       stages[MESA_SHADER_GEOMETRY].info.user_sgprs_locs = stages[MESA_SHADER_GEOMETRY].args.user_sgprs_locs;
       stages[MESA_SHADER_GEOMETRY].info.inline_push_constant_mask =
          stages[MESA_SHADER_GEOMETRY].args.ac.inline_push_const_mask;
@@ -2356,7 +2038,7 @@ radv_declare_pipeline_args(struct radv_device *device, struct radv_shader_stage 
    }
 
    u_foreach_bit (i, active_nir_stages) {
-      radv_declare_shader_args(device, gfx_state, &stages[i].info, i, MESA_SHADER_NONE, &stages[i].args);
+      radv_declare_shader_args(device, gfx_state, &stages[i].info, i, MESA_SHADER_NONE, &stages[i].args, &debug[i]);
       stages[i].info.user_sgprs_locs = stages[i].args.user_sgprs_locs;
       stages[i].info.inline_push_constant_mask = stages[i].args.ac.inline_push_const_mask;
    }
@@ -2396,7 +2078,7 @@ radv_create_gs_copy_shader(struct radv_device *device, struct vk_pipeline_cache 
    gs_copy_stage.info.type = RADV_SHADER_TYPE_GS_COPY;
 
    radv_declare_shader_args(device, gfx_state, &gs_copy_stage.info, MESA_SHADER_VERTEX, MESA_SHADER_NONE,
-                            &gs_copy_stage.args);
+                            &gs_copy_stage.args, gs_copy_debug);
    gs_copy_stage.info.user_sgprs_locs = gs_copy_stage.args.user_sgprs_locs;
    gs_copy_stage.info.inline_push_constant_mask = gs_copy_stage.args.ac.inline_push_const_mask;
 
@@ -2815,7 +2497,10 @@ radv_graphics_shaders_compile(struct radv_device *device, struct vk_pipeline_cac
       NIR_PASS(_, stages[MESA_SHADER_GEOMETRY].nir, nir_lower_vars_to_ssa);
    }
 
-   radv_graphics_shaders_link(device, gfx_state, stages);
+   if (stages[MESA_SHADER_TESS_CTRL].nir && stages[MESA_SHADER_TESS_EVAL].nir) {
+      /* Copy TCS info into the TES info */
+      merge_tess_info(&stages[MESA_SHADER_TESS_EVAL].nir->info, &stages[MESA_SHADER_TESS_CTRL].nir->info);
+   }
 
    if (stages[MESA_SHADER_FRAGMENT].nir) {
       unsigned vgt_outprim_type = radv_get_vgt_outprim_type(stages, gfx_state);
@@ -2842,62 +2527,100 @@ radv_graphics_shaders_compile(struct radv_device *device, struct vk_pipeline_cac
    radv_foreach_stage (i, active_nir_stages) {
       int64_t stage_start = os_time_get_nano();
 
-      radv_optimize_nir(stages[i].nir, stages[i].key.optimisations_disabled);
+      if (i == MESA_SHADER_FRAGMENT && stages[MESA_SHADER_MESH].nir) {
+         nir_foreach_shader_in_variable (var, stages[i].nir) {
+            /* These variables are implicitly per-primitive when used with mesh->fragment stages
+             * and this can't be determined with only the FS.
+             * nir_opt_varyings relies on inputs and outputs agreeing on per-primitive.
+             */
+            if (var->data.location == VARYING_SLOT_PRIMITIVE_ID || var->data.location == VARYING_SLOT_VIEWPORT ||
+                var->data.location == VARYING_SLOT_LAYER) {
+               var->data.per_primitive = true;
+            }
+         }
+      }
 
-      radv_nir_lower_io(device, stages[i].nir);
+      radv_nir_lower_io(stages[i].nir);
+
+      if (!stages[i].key.optimisations_disabled) {
+         /* Scalarize all I/O, because nir_opt_varyings and nir_opt_vectorize_io expect all I/O to be scalarized. */
+         NIR_PASS(_, stages[i].nir, nir_lower_io_to_scalar, nir_var_shader_in | nir_var_shader_out, NULL, NULL);
+
+         /* Eliminate useless vec->mov copies resulting from scalarization. */
+         NIR_PASS(_, stages[i].nir, nir_opt_copy_prop);
+         NIR_PASS(_, stages[i].nir, nir_opt_constant_folding);
+      }
 
       stages[i].feedback.duration += os_time_get_nano() - stage_start;
    }
 
    if (stages[MESA_SHADER_FRAGMENT].nir) {
-      bool update_info = false;
       if (gfx_state->dynamic_line_rast_mode)
-         NIR_PASS(update_info, stages[MESA_SHADER_FRAGMENT].nir, nir_lower_poly_line_smooth,
-                  RADV_NUM_SMOOTH_AA_SAMPLES);
+         NIR_PASS(_, stages[MESA_SHADER_FRAGMENT].nir, nir_lower_poly_line_smooth, RADV_NUM_SMOOTH_AA_SAMPLES);
 
       if (!gfx_state->ps.has_epilog) {
-         NIR_PASS(update_info, stages[MESA_SHADER_FRAGMENT].nir, radv_nir_remap_color_attachment, gfx_state);
+         NIR_PASS(_, stages[MESA_SHADER_FRAGMENT].nir, radv_nir_remap_color_attachment, gfx_state);
 
-         /* Lower FS outputs to scalar to allow dce. */
-         NIR_PASS(_, stages[MESA_SHADER_FRAGMENT].nir, nir_lower_io_to_scalar, nir_var_shader_out, NULL, NULL);
+         NIR_PASS(_, stages[MESA_SHADER_FRAGMENT].nir, radv_nir_trim_fs_color_exports, &gfx_state->ps.epilog);
 
-         NIR_PASS(update_info, stages[MESA_SHADER_FRAGMENT].nir, radv_nir_trim_fs_color_exports, &gfx_state->ps.epilog);
-
-         NIR_PASS(update_info, stages[MESA_SHADER_FRAGMENT].nir, nir_opt_copy_prop);
-         NIR_PASS(update_info, stages[MESA_SHADER_FRAGMENT].nir, nir_opt_dce);
-         NIR_PASS(update_info, stages[MESA_SHADER_FRAGMENT].nir, nir_opt_dead_cf);
+         NIR_PASS(_, stages[MESA_SHADER_FRAGMENT].nir, nir_opt_copy_prop);
+         NIR_PASS(_, stages[MESA_SHADER_FRAGMENT].nir, nir_opt_dce);
+         NIR_PASS(_, stages[MESA_SHADER_FRAGMENT].nir, nir_opt_dead_cf);
       }
 
-      NIR_PASS(update_info, stages[MESA_SHADER_FRAGMENT].nir, radv_nir_lower_fs_input_attachment);
+      NIR_PASS(_, stages[MESA_SHADER_FRAGMENT].nir, radv_nir_lower_fs_input_attachment);
 
-      NIR_PASS(update_info, stages[MESA_SHADER_FRAGMENT].nir, nir_opt_frag_coord_to_pixel_coord);
-      if (update_info)
-         nir_shader_gather_info(stages[MESA_SHADER_FRAGMENT].nir,
-                                nir_shader_get_entrypoint(stages[MESA_SHADER_FRAGMENT].nir));
+      NIR_PASS(_, stages[MESA_SHADER_FRAGMENT].nir, nir_opt_cse);
+      NIR_PASS(_, stages[MESA_SHADER_FRAGMENT].nir, nir_opt_copy_prop);
+      NIR_PASS(_, stages[MESA_SHADER_FRAGMENT].nir, nir_opt_dce);
+      NIR_PASS(_, stages[MESA_SHADER_FRAGMENT].nir, nir_opt_frag_coord_to_pixel_coord);
+
+      /* Lower the view index to map on the layer. */
+      NIR_PASS(_, stages[MESA_SHADER_FRAGMENT].nir, radv_nir_lower_view_index);
    }
 
-   /* Remove all varyings when the fragment shader is a noop. */
-   if (noop_fs) {
-      radv_foreach_stage (i, active_nir_stages) {
-         if (!radv_is_last_vgt_stage(&stages[i]))
-            continue;
+   radv_foreach_stage (i, active_nir_stages) {
+      if (!radv_is_last_vgt_stage(&stages[i]))
+         continue;
 
-         bool progress = false;
+      /* Lower mesh shader draw ID to zero prevent app bugs from triggering undefined behaviour. */
+      if (i == MESA_SHADER_MESH && stages[i].info.ms.has_task &&
+          BITSET_TEST(stages[i].nir->info.system_values_read, SYSTEM_VALUE_DRAW_ID))
+         radv_nir_lower_draw_id_to_zero(stages[i].nir);
 
-         /* Remove all output varyings. */
-         NIR_PASS(progress, stages[i].nir, nir_remove_outputs, MESA_SHADER_FRAGMENT, ~0ull, 0);
+      if (i != MESA_SHADER_MESH && radv_should_export_multiview(&stages[i], gfx_state))
+         NIR_PASS(_, stages[i].nir, radv_nir_export_multiview);
 
-         if (progress) {
-            /* Remove dead code resulting from removed output varyings. */
-            do {
-               progress = false;
-               NIR_PASS(progress, stages[i].nir, nir_opt_dce);
-               NIR_PASS(progress, stages[i].nir, nir_opt_dead_cf);
-            } while (progress);
-         }
+      uint64_t remove_as_varying = 0;
+      uint64_t remove_as_sysval = 0;
 
-         break;
+      /* Remove all varyings when the fragment shader is a noop. */
+      if (noop_fs)
+         remove_as_varying |= ~0ull;
+
+      /* Remove PSIZ from shaders when it's not needed.
+       * This is typically produced by translation layers like Zink or d3d9 DXVK.
+       */
+      if (gfx_state->enable_remove_point_size && (i != MESA_SHADER_TESS_EVAL || !stages[i].nir->info.tess.point_mode) &&
+          (i != MESA_SHADER_GEOMETRY || stages[i].nir->info.gs.output_primitive != MESA_PRIM_POINTS) &&
+          (i != MESA_SHADER_MESH || stages[i].nir->info.mesh.primitive_type != MESA_PRIM_POINTS)) {
+         remove_as_varying |= VARYING_BIT_PSIZ;
+         remove_as_sysval |= VARYING_BIT_PSIZ;
       }
+
+      if (!remove_as_varying && !remove_as_sysval)
+         continue;
+
+      NIR_PASS(_, stages[i].nir, nir_remove_outputs, MESA_SHADER_FRAGMENT, remove_as_varying, remove_as_sysval);
+      break;
+   }
+
+   radv_foreach_stage (i, active_nir_stages) {
+      int64_t stage_start = os_time_get_nano();
+
+      radv_optimize_nir(stages[i].nir, stages[i].key.optimisations_disabled);
+
+      stages[i].feedback.duration += os_time_get_nano() - stage_start;
    }
 
    /* Optimize varyings on lowered shader I/O (more efficient than optimizing I/O derefs). */
@@ -2921,7 +2644,7 @@ radv_graphics_shaders_compile(struct radv_device *device, struct vk_pipeline_cac
 
    radv_fill_shader_info(device, RADV_PIPELINE_GRAPHICS, gfx_state, stages, active_nir_stages);
 
-   radv_declare_pipeline_args(device, stages, gfx_state, active_nir_stages);
+   radv_declare_pipeline_args(device, stages, gfx_state, active_nir_stages, debug);
 
    radv_foreach_stage (i, active_nir_stages) {
       int64_t stage_start = os_time_get_nano();
@@ -2989,7 +2712,7 @@ radv_graphics_pipeline_state_finish(struct radv_device *device, struct radv_grap
 
    if (gfx_state->stages) {
       for (uint32_t i = 0; i < MESA_VULKAN_SHADER_STAGES; i++)
-         ralloc_free(gfx_state->stages[i].nir);
+         radv_pipeline_stage_finish(&gfx_state->stages[i]);
 
       ralloc_free(gfx_state->stages[MESA_SHADER_GEOMETRY].gs_copy_shader);
 
@@ -3052,7 +2775,7 @@ radv_generate_graphics_pipeline_state(struct radv_device *device, const VkGraphi
    if (gfx_state->compilation_required) {
       gfx_state->key = radv_generate_graphics_pipeline_key(device, pCreateInfo, &gfx_state->vk, needed_lib_flags);
 
-      gfx_state->stages = malloc(sizeof(struct radv_shader_stage) * MESA_VULKAN_SHADER_STAGES);
+      gfx_state->stages = calloc(MESA_VULKAN_SHADER_STAGES, sizeof(struct radv_shader_stage));
       if (!gfx_state->stages) {
          result = VK_ERROR_OUT_OF_HOST_MEMORY;
          goto fail;
@@ -3060,9 +2783,6 @@ radv_generate_graphics_pipeline_state(struct radv_device *device, const VkGraphi
 
       for (unsigned i = 0; i < MESA_VULKAN_SHADER_STAGES; i++) {
          gfx_state->stages[i].stage = MESA_SHADER_NONE;
-         gfx_state->stages[i].nir = NULL;
-         gfx_state->stages[i].gs_copy_shader = NULL;
-         gfx_state->stages[i].spirv.size = 0;
          gfx_state->stages[i].next_stage = MESA_SHADER_NONE;
       }
 
@@ -3196,8 +2916,8 @@ radv_graphics_pipeline_compile(struct radv_graphics_pipeline *pipeline, const Vk
 
    const bool noop_fs = radv_pipeline_needs_noop_fs(pipeline, &gfx_state->key.gfx_state);
 
-   struct radv_shader_debug_info debug[MESA_VULKAN_SHADER_STAGES] = {};
-   struct radv_shader_debug_info gs_copy_debug = {};
+   struct radv_shader_debug_info debug[MESA_VULKAN_SHADER_STAGES] = {0};
+   struct radv_shader_debug_info gs_copy_debug = {0};
    radv_graphics_shaders_compile(device, cache, stages, &gfx_state->key.gfx_state, keep_executable_info,
                                  keep_statistic_info, pipeline->base.is_internal, retained_shaders, noop_fs, debug,
                                  binaries, &gs_copy_debug, &gs_copy_binary);

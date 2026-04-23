@@ -546,8 +546,6 @@ static void si_nir_assign_param_offsets(nir_shader *nir, struct si_shader *shade
          if (nir_slot_is_varying(sem.location, MESA_SHADER_FRAGMENT) && !sem.no_varying &&
              (sem.gs_streams & 0x3) == 0 &&
              temp_info->vs_output_param_offset[sem.location] == AC_EXP_PARAM_UNDEFINED) {
-            /* The semantic and the base should be the same as in si_shader_info. */
-            assert(sem.location == sel->info.output_semantic[nir_intrinsic_base(intr)]);
             /* It must not be remapped (duplicated). */
             assert(slot_remap[sem.location] == -1);
 
@@ -1321,12 +1319,6 @@ static void get_nir_shaders(struct si_shader *shader, struct si_linked_shaders *
 
    /* TODO: run linking optimizations here if we have LS+HS or ES+GS */
 
-   /* Remove holes after removed PS inputs by renumbering them. Holes can only occur with
-    * monolithic PS.
-    */
-   if (shader->selector->stage == MESA_SHADER_FRAGMENT && shader->is_monolithic)
-      NIR_PASS(_, linked->consumer.nir, nir_recompute_io_bases, nir_var_shader_in);
-
    for (unsigned i = 0; i < SI_NUM_LINKED_SHADERS; i++) {
       if (linked->shader[i].nir) {
          si_get_shader_variant_info(shader, &linked->shader[i].temp_info, linked->shader[i].nir);
@@ -1491,13 +1483,17 @@ bool si_compile_shader(struct si_screen *sscreen, struct ac_llvm_compiler *compi
        !shader->key.ge.as_ls && !shader->key.ge.as_es) {
       uint8_t *vs_output_param_offset = linked.consumer.temp_info.vs_output_param_offset;
 
-      /* We must use the original shader info before the removal of duplicated shader outputs. */
-      /* VS and TES should also set primitive ID output if it's used. */
-      unsigned num_outputs_with_prim_id = sel->info.num_outputs +
-                                          shader->key.ge.mono.u.vs_export_prim_id;
+      /* We must use the original shader info before the removal of duplicated shader outputs.
+       * If any output is eliminated by shader variants, it will set DEFAULT_VAL.
+       *
+       * VS and TES must set VARYING_BIT_PRIMITIVE_ID if they export it.
+       */
+      uint64_t outputs_written = sel->info.base.outputs_written |
+                                 (shader->key.ge.mono.u.vs_export_prim_id ?
+                                     VARYING_BIT_PRIMITIVE_ID : 0);
 
-      for (unsigned i = 0; i < num_outputs_with_prim_id; i++) {
-         unsigned semantic = sel->info.output_semantic[i];
+      u_foreach_bit64_two_masks(semantic, outputs_written,
+                                VARYING_SLOT_VAR0_16BIT, sel->info.base.outputs_written_16bit) {
          unsigned offset = vs_output_param_offset[semantic];
          unsigned ps_input_cntl;
 

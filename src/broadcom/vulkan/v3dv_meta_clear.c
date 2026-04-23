@@ -138,9 +138,8 @@ clear_image_tlb(struct v3dv_cmd_buffer *cmd_buffer,
       if (!job)
          return true;
 
-      v3dv_job_start_frame(job, width, height, max_layer,
-                           false, true, 1, internal_bpp,
-                           4 * v3d_internal_bpp_words(internal_bpp),
+      v3dv_job_start_frame(job, width, height, max_layer, false, 1,
+                           internal_bpp, 4 * v3d_internal_bpp_words(internal_bpp),
                            image->vk.samples > VK_SAMPLE_COUNT_1_BIT);
 
       struct v3dv_meta_framebuffer framebuffer;
@@ -149,6 +148,8 @@ clear_image_tlb(struct v3dv_cmd_buffer *cmd_buffer,
                                                  &job->frame_tiling);
 
       v3d_X((&job->device->devinfo), job_emit_binning_flush)(job);
+      if (!v3dv_job_allocate_tile_state(job))
+         return true;
 
       /* If this triggers it is an application bug: the spec requires
        * that any aspects to clear are present in the image.

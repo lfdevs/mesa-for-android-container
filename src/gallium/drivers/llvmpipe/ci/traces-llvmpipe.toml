@@ -1,0 +1,240 @@
+[traces_db]
+download_url = "https://s3.freedesktop.org/mesa-tracie-public/"
+
+# 0ad: 60s timeout
+
+[[traces]]
+path = "bgfx/01-cubes.rdc"
+devices = { llvmpipe = { checksum = "e695d7c64e60a17c14c3126c09517d7f4bf81aa1463079f405c351c7f89b49f1" } }
+
+[[traces]]
+path = "bgfx/02-metaballs.rdc"
+devices = { llvmpipe = { checksum = "29ea163b02e1ff5ab953f8db7a2788217081d2d11ec56d68181d9eb7b9441645" } }
+
+[[traces]]
+path = "bgfx/03-raymarch.rdc"
+devices = { llvmpipe = { checksum = "9fcedebc4ec7cdc77376b1f006c9c86755c980325ff8251b1ba8b48dab8ba446" } }
+
+[[traces]]
+path = "bgfx/04-mesh.rdc"
+devices = { llvmpipe = { checksum = "473929254cd947b960c9d8fda26dbaaa34a3d23aec3caeb38389925b367b0c02" } }
+
+[[traces]]
+path = "bgfx/05-instancing.rdc"
+devices = { llvmpipe = { checksum = "3c288b5749d21059f05ad061f6430287ac12e3561869223aa83eb0b20def5683" } }
+
+[[traces]]
+path = "bgfx/06-bump.rdc"
+devices = { llvmpipe = { checksum = "121d05a972f61b65952bdcdb060af6ce45b4f69da7a66027762099a0741178e2" } }
+
+[[traces]]
+path = "bgfx/07-callback.rdc"
+devices = { llvmpipe = { checksum = "fefa0dc5f53ad8c73e4133641c97cd52246b147f54b6bb385922e301461f948d" } }
+
+[[traces]]
+path = "bgfx/09-hdr.rdc"
+devices = { llvmpipe = { checksum = "01a652a0aa4fdea09ef6930d53179f8e6d68136df344798108c850fbbaa59700" } }
+
+[[traces]]
+path = "bgfx/10-font.rdc"
+devices = { llvmpipe = { checksum = "014ebfd5b9dcc5212457d6207a30ede7c2664d60ddfc863c87b82883c5385bfc" } }
+
+[[traces]]
+path = "bgfx/11-fontsdf.rdc"
+devices = { llvmpipe = { checksum = "6b9cb345cf1b92ec6169c61ff13b9b0c2cfd824868a4b443e394bd05fbeddef4" } }
+
+[[traces]]
+path = "bgfx/12-lod.rdc"
+devices = { llvmpipe = { checksum = "857b0eb4e7486f05f76f351f7706afe06abec4775686d98b4b1cbe627e251098" } }
+
+[[traces]]
+path = "bgfx/13-stencil.rdc"
+devices = { llvmpipe = { checksum = "1b6ccbacc3bb585b1ee17c039ad4f4c97cec90d15220f4155e4df9ec0fc89bd7" } }
+
+[[traces]]
+path = "bgfx/14-shadowvolumes.rdc"
+devices = { llvmpipe = { checksum = "126f31705ac623d6f1a9e78c89d949ce5e11f29620e65d6b58ad3d8bea2da9a8" } }
+
+[[traces]]
+path = "bgfx/15-shadowmaps-simple.rdc"
+devices = { llvmpipe = { checksum = "d1a030b855416908231405e4843010e27fc6fd5bfa0083e1b8651e5ca0805e4c" } }
+
+[[traces]]
+path = "bgfx/16-shadowmaps.rdc"
+devices = { llvmpipe = { checksum = "e1ad72d1cd637f7eb10dd8062da5e4d2504b7aaff42d3dafb2278665199ef11a" } }
+
+[[traces]]
+path = "bgfx/18-ibl.rdc"
+devices = { llvmpipe = { checksum = "abc79df2699886ea79ca5b9c180cd8094cef0e3894f974105db2718b30e00f12" } }
+
+[[traces]]
+path = "bgfx/19-oit.rdc"
+devices = { llvmpipe = { checksum = "3043a995c3a0d09964bfce87fc7e088d381b4dfbbe3df7f51113904b10f5059e" } }
+
+[[traces]]
+path = "bgfx/20-nanosvg.rdc"
+devices = { llvmpipe = { checksum = "1ee05b8709fe458c09bf81816206ac65f371ff2c92ede63ee3589a045a3dcae8" } }
+
+[[traces]]
+path = "bgfx/23-vectordisplay.rdc"
+devices = { llvmpipe = { checksum = "42f32c987576e9b914842ecc1924276da65a4d83926c7a85b589c35bbb3c0b03" } }
+
+[[traces]]
+path = "bgfx/26-occlusion.rdc"
+devices = { llvmpipe = { checksum = "86d0f3aa228b87c2c445e634c2e99428211101556608c82eb4b98be64ad2f0ad" } }
+
+[[traces]]
+path = "bgfx/28-wireframe.rdc"
+devices = { llvmpipe = { checksum = "da9951fa03e3dbba6c9e3d585161fbf0f2c7af13d4d0fd9df40fc89a6b7f1734" } }
+
+[[traces]]
+path = "bgfx/29-debugdraw.rdc"
+devices = { llvmpipe = { checksum = "abb32149b7b48d4cb79fe8bd98d8eccf203d816d673b1c458d829f27124eaab2" } }
+
+[[traces]]
+path = "bgfx/31-rsm.rdc"
+devices = { llvmpipe = { checksum = "23682e466062756ad3e12018da66c4f8c90e2859efb8fb9e217102f16015457a" } }
+
+[[traces]]
+path = "bgfx/32-particles.rdc"
+devices = { llvmpipe = { checksum = "c4d7ebc853e71a1acc63ce772fdb26e50f6cc5f8299613b8e515f55526bac25e" } }
+
+[[traces]]
+path = "bgfx/33-pom.rdc"
+devices = { llvmpipe = { checksum = "1ab480869bb428adf2440f92f164aa830439fc9e846056f3abbdc09e8460b053" } }
+
+[[traces]]
+path = "bgfx/34-mvs.rdc"
+devices = { llvmpipe = { checksum = "94f1ed204c64bf0ab97439d93a413e66dd14db0686a97cf1c3db8b6d37df8361" } }
+
+[[traces]]
+path = "bgfx/35-dynamic.rdc"
+devices = { llvmpipe = { checksum = "fa161734c0e1908266f6761a603c1b333861520e73a1a6a027860f35277b12c1" } }
+
+[[traces]]
+path = "bgfx/36-sky.rdc"
+devices = { llvmpipe = { checksum = "672ac3d87243505450257487e2bfbf74adfce4208175d3919af699d275c5120a" } }
+
+[[traces]]
+path = "bgfx/37-gpudrivenrendering.rdc"
+devices = { llvmpipe = { checksum = "508f2052a6ff7f10e0e7997c822e1547cbe205e95177ecdcd0021b46989c44d6" } }
+
+[[traces]]
+path = "bgfx/38-bloom.rdc"
+devices = { llvmpipe = { checksum = "0672008b71d82832bb0df7f074cb970895c1748599d4a7a6c4ec3701f8aa598c" } }
+
+[[traces]]
+path = "bgfx/39-assao.rdc"
+devices = { llvmpipe = { checksum = "190eab6b9b68609fd831d38ec12c5807da7338e17779c3d0cbf784376cae25cd" } }
+
+[[traces]]
+path = "bgfx/40-svt.rdc"
+devices = { llvmpipe = { checksum = "44864bc7327d522269730b417c44703b1d23b09341c10322d2e59cdc88adc9b8" } }
+
+# blender/blender-demo-cube_diorama.trace: not loopable, and all the setup time for flake checking pushes us over 60s.
+# blender/blender-demo-ellie_pose.trace: flaky rendering, even non-looped: sometimes a dialog is rendered on top and sometimes not.
+
+# freedoom is GL 4.6
+
+[[traces]]
+path = "glxgears/glxgears-2-v2.trace"
+devices = { llvmpipe = { checksum = "bab025069d7e1f559dc5b5f6a304272323cb8a9312c05f523097dddde4d09a10" } }
+
+# godot-thrive looks uninteresting
+# godot-tps-gles3-high.trace is too slow (70s)
+
+[[traces]]
+path = "gputest/furmark-v2.trace"
+devices = { llvmpipe = { checksum = "3b9bda909593ad4e31eaacd76c343ab105c5a793f6d6314b1213983e71f0cc19" } }
+
+[[traces]]
+path = "gputest/triangle-v2.trace"
+devices = { llvmpipe = { checksum = "83fd0393efbab758382d87e13d75fa55a31059fb4f835cc3a766cfc68bf3bc90" } }
+
+[[traces]]
+path = "humus/Portals-v2.trace"
+devices = { llvmpipe = { checksum = "0b179d1754f3311ee8c86677c40c5b7d46bd6901a92db65a87e0d443fe61b038" } }
+
+[[traces]]
+path = "jvgs/jvgs-d27fb67-v2.trace"
+devices = { llvmpipe = { checksum = "a941ea07bdcfb11328a39b2f0a940269460d2d06f6cf2466196f02b3a06c5ac0" } }
+
+# libgdx/shattered-pixel-dungeon-default.trace replays incorrectly
+
+[[traces]]
+path = "minetest/minetest-high-v3.trace"
+devices = { llvmpipe = { checksum = "6f5b3f7159563f8006adef16c6afa052801fe7d0b6503c0265d7a060d0bf2b18" } }
+
+# nheko/nheko-colors.trace: 380784 glXMakeContextCurrent() during the trace's teardown fails
+
+[[traces]]
+path = "neverball/neverball-v2.trace"
+nonloopable = true
+devices = { llvmpipe = { checksum = "66d56cb8ce7f27c14c4ef671b600378b6f66f223853d24ec1c58d44ee4714850" } }
+
+[[traces]]
+path = "pathfinder/demo-v2.trace"
+devices = { llvmpipe = { checksum = "0bb93fcc49580fd320dab47533b16a31677f1dd40a4ce932ea0b8028041ad071" } }
+
+[[traces]]
+path = "paraview/pv-manyspheres-v2.trace"
+devices = { llvmpipe = { checksum = "55f338fdccf5552b1aa8b786a3114ab782b6c10419070fd186e32748cc4f48eb" } }
+
+[[traces]]
+path = "paraview/pv-waveletcontour-v2.trace"
+devices = { llvmpipe = { checksum = "284343277c251975acc8a190057058c4a32a1e376586f8cb4d085cf0dc39c4c5" } }
+
+[[traces]]
+path = "paraview/pv-waveletvolume-v2.trace"
+devices = { llvmpipe = { checksum = "cf96261229546c12becdaffc38d013bd1293f6be0602da7c14e6223223f7c6c0" } }
+
+[[traces]]
+path = "pathfinder/canvas_moire-v2.trace"
+devices = { llvmpipe = { checksum = "b5e568c686b1bf50052546807d794110d5131b8c2fa48a4fe482e1d57e046bb3" } }
+
+[[traces]]
+path = "pathfinder/canvas_text_v2-v2.trace"
+devices = { llvmpipe = { checksum = "f0b75a40185b778e533c4a0d31ee151b98adb5d7ea387bc5db3851258289de8e" } }
+
+# pioneer/pioneer.trace: apitrace generates GL errors trying to capture the snapshot from a multisample FBO.
+
+[[traces]]
+path = "ror/ror-default.trace"
+devices = { llvmpipe = { checksum = "87a11302455eaeba643795aec9f410d5bb7e01465d356aa86972b990a6cf5af0" } }
+
+[[traces]]
+path = "supertuxkart/supertuxkart-antediluvian-abyss.rdc"
+devices = { llvmpipe = { checksum = "7e6955f1a1d016c7c0628660e3204b25f147c54ca80d8a28a6eb1482025c5f7f" } }
+
+[[traces]]
+path = "supertuxkart/supertuxkart-mansion-egl-gles-v2.trace"
+devices = { llvmpipe = { checksum = "c1745df637c0e8a52842f17a7761d7c49a95b1952ba630df8daac7f3261cf9c8" } }
+
+[[traces]]
+path = "supertuxkart/supertuxkart-menu.rdc"
+devices = { llvmpipe = { checksum = "e1ae4dc9376d2fceb2a8d740529638697193f3ad855b660239ac8405baa58007" } }
+
+[[traces]]
+path = "supertuxkart/supertuxkart-ravenbridge-mansion.rdc"
+devices = { llvmpipe = { checksum = "e24faa84c7be25876719f3ff48e2c65642ce243ab93659f620e279d1981c8dcf" } }
+
+# unvanquished/unvanquished-lowest.trace: Requires GL 4.6, and doesn't render correctly even with version override
+# unvanquished/unvanquished-ultra.trace: Requires GL 4.6, and doesn't render correctly even with version override
+
+# valve/counterstrike-source-v2.trace: 20s
+
+[[traces]]
+path = "valve/counterstrike-v2.trace"
+devices = { llvmpipe = { checksum = "b3f44f2dbbbaebe12e4fc60eb12b51effaaa36aaf42df21ddcddc3ae97629f05" } }
+
+[[traces]]
+path = "valve/portal-2-v2.trace"
+devices = { llvmpipe = { checksum = "dd13112c3325f5c46976e0f74981b363a6fd6e92e03916c3d0d4007aa535c82b" } }
+
+[[traces]]
+path = "warzone2100/warzone2100-default.trace"
+devices = { llvmpipe = { checksum = "caa0390b7efefa36073a24c46b51e2dd841907dc82e56e2e6d0dc1b1a68e192c" } }
+
+[[traces]]
+path = "xonotic/xonotic-keybench-high-v2.trace"
+devices = { llvmpipe = { checksum = "573c72d2bb4281a76ab2e9946fc6b9fac684000899a3901091e9bb896290d48e" } }

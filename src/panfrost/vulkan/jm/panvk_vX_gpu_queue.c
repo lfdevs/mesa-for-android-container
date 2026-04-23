@@ -393,8 +393,11 @@ panvk_per_arch(QueueWaitIdle)(VkQueue _queue)
    /* we need to use vk_common_QueueWaitIdle if we ever go threaded */
    assert(queue->vk.submit.mode != VK_QUEUE_SUBMIT_MODE_THREADED);
 
-   if (vk_device_is_lost(&dev->vk))
+   if (vk_device_is_lost(&dev->vk)) {
+      /* Check printf buffer one more time before exiting */
+      u_printf_with_ctx(stdout, &dev->printf.ctx);
       return VK_ERROR_DEVICE_LOST;
+   }
 
    ASSERTED int ret = drmSyncobjWait(dev->drm_fd, &queue->sync, 1,
                                      INT64_MAX, DRM_SYNCOBJ_WAIT_FLAGS_WAIT_ALL,

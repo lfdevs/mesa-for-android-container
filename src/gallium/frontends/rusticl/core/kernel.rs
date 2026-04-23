@@ -1225,7 +1225,7 @@ pub(super) fn convert_spirv_to_nir(
     build: &DeviceProgramBuild,
     name: &str,
     args: &[spirv::SPIRVKernelArg],
-    spec_constants: &HashMap<u32, nir_const_value>,
+    spec_constants: &mut HashMap<u32, Vec<u8>>,
     dev: &'static Device,
 ) -> SPIRVToNirResult {
     let cache = dev.screen().shader_cache();

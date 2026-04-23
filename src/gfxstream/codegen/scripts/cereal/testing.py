@@ -205,40 +205,41 @@ class VulkanEqualityCodegen(VulkanTypeIterator):
             vulkanType,
             "Mismatch in string array pointer nullness")
 
-        equalLenExpr = self.makeEqualExpr(lenAccessLhs, lenAccessRhs)
+        if lenAccessLhs is not None and lenAccessRhs is not None:
+            equalLenExpr = self.makeEqualExpr(lenAccessLhs, lenAccessRhs)
 
-        self.compareWithConsequence( \
-            equalLenExpr,
-            vulkanType, "Lengths not equal in string array")
+            self.compareWithConsequence( \
+                equalLenExpr,
+                vulkanType, "Lengths not equal in string array")
 
-        self.compareWithConsequence( \
-            equalLenExpr,
-            vulkanType, "Lengths not equal in string array")
+            self.compareWithConsequence( \
+                equalLenExpr,
+                vulkanType, "Lengths not equal in string array")
 
-        self.cgen.beginIf("%s && %s" % (equalLenExpr, bothNotNullExpr))
+            self.cgen.beginIf("%s && %s" % (equalLenExpr, bothNotNullExpr))
 
-        loopVar = "i"
-        accessLhs = "*(%s + %s)" % (accessLhs, loopVar)
-        accessRhs = "*(%s + %s)" % (accessRhs, loopVar)
-        forInit = "uint32_t %s = 0" % loopVar
-        forCond = "%s < (uint32_t)%s" % (loopVar, lenAccessLhs)
-        forIncr = "++%s" % loopVar
+            loopVar = "i"
+            accessLhs = "*(%s + %s)" % (accessLhs, loopVar)
+            accessRhs = "*(%s + %s)" % (accessRhs, loopVar)
+            forInit = "uint32_t %s = 0" % loopVar
+            forCond = "%s < (uint32_t)%s" % (loopVar, lenAccessLhs)
+            forIncr = "++%s" % loopVar
 
-        if lenAccessGuardLhs is not None:
-            self.cgen.beginIf(lenAccessGuardLhs)
+            if lenAccessGuardLhs is not None:
+                self.cgen.beginIf(lenAccessGuardLhs)
 
-        self.cgen.beginFor(forInit, forCond, forIncr)
+            self.cgen.beginFor(forInit, forCond, forIncr)
 
-        self.compareWithConsequence(
-            self.makeEqualStringExpr(accessLhs, accessRhs),
-            vulkanType, "Unequal string in string array")
+            self.compareWithConsequence(
+                self.makeEqualStringExpr(accessLhs, accessRhs),
+                vulkanType, "Unequal string in string array")
 
-        self.cgen.endFor()
+            self.cgen.endFor()
 
-        if lenAccessGuardLhs is not None:
+            if lenAccessGuardLhs is not None:
+                self.cgen.endIf()
+
             self.cgen.endIf()
-
-        self.cgen.endIf()
 
     def onStaticArr(self, vulkanType):
         accessLhs = self.exprAccessorLhs(vulkanType)
@@ -246,12 +247,13 @@ class VulkanEqualityCodegen(VulkanTypeIterator):
 
         lenAccessLhs = self.lenAccessorLhs(vulkanType)
 
-        finalLenExpr = "%s * %s" % (lenAccessLhs,
-                                    self.cgen.sizeofExpr(vulkanType))
+        if lenAccessLhs is not None:
+            finalLenExpr = "%s * %s" % (lenAccessLhs,
+                                        self.cgen.sizeofExpr(vulkanType))
 
-        self.compareWithConsequence(
-            self.makeEqualBufExpr(accessLhs, accessRhs, finalLenExpr),
-            vulkanType, "Unequal static array")
+            self.compareWithConsequence(
+                self.makeEqualBufExpr(accessLhs, accessRhs, finalLenExpr),
+                vulkanType, "Unequal static array")
 
     def onStructExtension(self, vulkanType):
         lhs = self.exprAccessorLhs(vulkanType)

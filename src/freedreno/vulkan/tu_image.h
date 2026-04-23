@@ -11,8 +11,8 @@
 #define TU_IMAGE_H
 
 #include "tu_common.h"
-#include "fdl/freedreno_lrz_layout.h"
 
+#include "fdl/freedreno_lrz_layout.h"
 #include "tu_knl.h"
 
 #define TU_MAX_PLANE_COUNT 3

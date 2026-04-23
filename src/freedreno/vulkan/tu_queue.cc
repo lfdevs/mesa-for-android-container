@@ -9,14 +9,14 @@
 
 #include "tu_queue.h"
 
+#include "vk_util.h"
+
 #include "tu_buffer.h"
 #include "tu_cmd_buffer.h"
+#include "tu_device.h"
 #include "tu_dynamic_rendering.h"
 #include "tu_image.h"
 #include "tu_knl.h"
-#include "tu_device.h"
-
-#include "vk_util.h"
 
 static int
 tu_get_submitqueue_priority(const struct tu_physical_device *pdevice,
@@ -418,6 +418,7 @@ queue_submit(struct vk_queue *_queue, struct vk_queue_submit *vk_submit)
    struct tu_device *device = queue->device;
    bool u_trace_enabled = u_trace_should_process(&queue->device->trace_context);
    struct util_dynarray dump_cmds;
+   struct tu_cs *autotune_cs = NULL;
 
    if (vk_submit->buffer_bind_count ||
        vk_submit->image_bind_count ||
@@ -495,9 +496,8 @@ queue_submit(struct vk_queue *_queue, struct vk_queue_submit *vk_submit)
       }
    }
 
-   if (tu_autotune_submit_requires_fence(cmd_buffers, cmdbuf_count)) {
-      struct tu_cs *autotune_cs = tu_autotune_on_submit(
-         device, &device->autotune, cmd_buffers, cmdbuf_count);
+   autotune_cs = device->autotune->on_submit(cmd_buffers, cmdbuf_count);
+   if (autotune_cs) {
       submit_add_entries(device, submit, &dump_cmds, autotune_cs->entries,
                          autotune_cs->entry_count);
    }
@@ -607,17 +607,10 @@ VkResult
 tu_queue_init(struct tu_device *device,
               struct tu_queue *queue,
               enum tu_queue_type type,
+              const VkQueueGlobalPriorityKHR global_priority,
               int idx,
               const VkDeviceQueueCreateInfo *create_info)
 {
-   const VkDeviceQueueGlobalPriorityCreateInfoKHR *priority_info =
-      vk_find_struct_const(create_info->pNext,
-            DEVICE_QUEUE_GLOBAL_PRIORITY_CREATE_INFO_KHR);
-   const VkQueueGlobalPriorityKHR global_priority = priority_info ?
-      priority_info->globalPriority :
-      (TU_DEBUG(HIPRIO) ? VK_QUEUE_GLOBAL_PRIORITY_HIGH_KHR :
-       VK_QUEUE_GLOBAL_PRIORITY_MEDIUM_KHR);
-
    const int priority = tu_get_submitqueue_priority(
          device->physical_device, global_priority, type,
          device->vk.enabled_features.globalPriorityQuery);

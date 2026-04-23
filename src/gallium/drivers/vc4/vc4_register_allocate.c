@@ -416,8 +416,8 @@ vc4_register_allocate(struct vc4_context *vc4, struct vc4_compile *c)
                                 return NULL;
                         }
 
-                        fprintf(stderr, "temp %d: bad class bits: 0x%x\n",
-                                i, class_bits[i]);
+                        mesa_loge("temp %d: bad class bits: 0x%x",
+                                  i, class_bits[i]);
                         abort();
                         break;
                 }
@@ -437,8 +437,8 @@ vc4_register_allocate(struct vc4_context *vc4, struct vc4_compile *c)
         bool ok = ra_allocate(g);
         if (!ok) {
                 if (!c->fs_threaded) {
-                        fprintf(stderr, "Failed to register allocate:\n");
-                        qir_dump(c);
+                        mesa_loge("Failed to register allocate:");
+                        qir_dumpe(c);
                 }
 
                 c->failed = true;

@@ -2481,7 +2481,6 @@ generate_unswizzled_blend(struct gallivm_state *gallivm,
 
    const bool is_1d = variant->key.resource_1d;
    const unsigned num_fullblock_fs = is_1d ? 2 * num_fs : num_fs;
-   LLVMValueRef fpstate = NULL;
 
    LLVMTypeRef fs_vec_type = lp_build_vec_type(gallivm, fs_type);
 
@@ -2489,23 +2488,6 @@ generate_unswizzled_blend(struct gallivm_state *gallivm,
    struct lp_type row_type, dst_type;
    lp_blend_type_from_format_desc(out_format_desc, &row_type);
    lp_mem_type_from_format_desc(out_format_desc, &dst_type);
-
-   /*
-    * Technically this code should go into lp_build_smallfloat_to_float
-    * and lp_build_float_to_smallfloat but due to the
-    * http://llvm.org/bugs/show_bug.cgi?id=6393
-    * llvm reorders the mxcsr intrinsics in a way that breaks the code.
-    * So the ordering is important here and there shouldn't be any
-    * llvm ir instrunctions in this function before
-    * this, otherwise half-float format conversions won't work
-    * (again due to llvm bug #6393).
-    */
-   if (have_smallfloat_format(dst_type, out_format)) {
-      /* We need to make sure that denorms are ok for half float
-         conversions */
-      fpstate = lp_build_fpstate_get(gallivm);
-      lp_build_fpstate_set_denorms_zero(gallivm, false);
-   }
 
    struct lp_type mask_type = lp_int32_vec4_type();
    mask_type.length = fs_type.length;
@@ -3128,10 +3110,6 @@ generate_unswizzled_blend(struct gallivm_state *gallivm,
 
    if (do_branch) {
       lp_build_mask_end(&mask_ctx);
-   }
-
-   if (fpstate) {
-      lp_build_fpstate_set(gallivm, fpstate);
    }
 }
 

@@ -176,8 +176,8 @@ void create_shader(test_state *state, nir_shader_compiler_options *options)
    if (st->gfx_level != GFX11) {
       if (st->gfx_level >= GFX12)
          _mesa_string_buffer_printf(state->result, "gfx%u,", st->gfx_level - GFX12 + 12);
-      else if (st->gfx_level == GFX11_5)
-         _mesa_string_buffer_append(state->result, "gfx11.5,");
+      else if (st->gfx_level >= GFX11_5)
+         _mesa_string_buffer_printf(state->result, "gfx11.%u,", (st->gfx_level > GFX11_5 ? 7u : 5u));
       else if (st->gfx_level >= GFX11)
          _mesa_string_buffer_printf(state->result, "gfx%u,", st->gfx_level - GFX11 + 11);
       else if (st->gfx_level == GFX10_3)

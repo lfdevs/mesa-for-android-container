@@ -731,7 +731,7 @@ zink_init_screen_caps(struct zink_screen *screen)
    caps->texrect = false;
    caps->multi_draw_indirect_partial_stride = false;
    caps->anisotropic_filter = screen->info.feats.features.samplerAnisotropy;
-   caps->emulate_nonfixed_primitive_restart = true;
+   caps->emulate_nonfixed_primitive_restart = !screen->info.have_EXT_primitive_restart_index;
    {
       uint32_t modes = BITFIELD_BIT(MESA_PRIM_LINE_STRIP) |
          BITFIELD_BIT(MESA_PRIM_TRIANGLE_STRIP) |

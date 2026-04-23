@@ -27,6 +27,7 @@
 #include <sys/ioctl.h>
 #include "drm-uapi/vc4_drm.h"
 #include "drm-shim/drm_shim.h"
+#include "util/log.h"
 
 bool drm_shim_driver_prefers_first_render_node = true;
 
@@ -109,7 +110,7 @@ vc4_ioctl_get_param(int fd, unsigned long request, void *arg)
                 return 0;
         }
 
-        fprintf(stderr, "Unknown DRM_IOCTL_VC4_GET_PARAM %d\n", gp->param);
+        mesa_loge("Unknown DRM_IOCTL_VC4_GET_PARAM %d", gp->param);
         return -1;
 }
 

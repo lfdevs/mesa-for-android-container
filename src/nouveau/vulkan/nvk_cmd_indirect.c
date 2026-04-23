@@ -22,6 +22,7 @@
 #include "nv_push_cl906f.h"
 #include "nv_push_cla0c0.h"
 #include "nv_push_clb1c0.h"
+#include "nv_push_clc597.h"
 #include "nv_push_clc6c0.h"
 #include "nv_push_clc7c0.h"
 #include "nv_push_clc86f.h"
@@ -499,7 +500,37 @@ build_gfx_set_exec(nir_builder *b, struct nvk_nir_push *p, nir_def *token_addr,
 }
 
 static void
+build_push_write_push_const(nir_builder *b, struct nvk_nir_push *p,
+                            const struct nvk_physical_device *pdev,
+                            const VkPushConstantRange *pc_range)
+{
+   assert(pc_range->offset % 4 == 0);
+   assert(pc_range->size % 4 == 0);
+   const uint32_t dw_count = pc_range->size / 4;
+
+   assert(!(pc_range->stageFlags & VK_SHADER_STAGE_COMPUTE_BIT));
+   if (nvk_use_hw_root_table(&pdev->info, true)) {
+      const uint32_t table = nvk_hw_root_table_index(push);
+      static_assert(nvk_hw_root_table_offset(push) == 0,
+                    "Push constants are aligned");
+
+      uint32_t root_table_selector;
+      V_NVC597_SET_ROOT_TABLE_SELECTOR(root_table_selector,{
+         .root_table = table,
+         .offset = pc_range->offset,
+      });
+      nvk_nir_P_1INC(b, p, NVC597, SET_ROOT_TABLE_SELECTOR, 1 + dw_count);
+      nvk_nir_push_dw(b, p, nir_imm_int(b, root_table_selector));
+   } else {
+      nvk_nir_P_1INC(b, p, NV9097, LOAD_CONSTANT_BUFFER_OFFSET, 1 + dw_count);
+      nvk_nir_push_dw(b, p, nir_imm_int(b,
+         nvk_root_descriptor_offset(push) + pc_range->offset));
+   }
+}
+
+static void
 build_push_gfx_const(nir_builder *b, struct nvk_nir_push *p, nir_def *token_addr,
+                     const struct nvk_physical_device *pdev,
                      const VkIndirectCommandsPushConstantTokenEXT *token)
 {
    const VkPushConstantRange *pc_range = &token->updateRange;
@@ -507,13 +538,10 @@ build_push_gfx_const(nir_builder *b, struct nvk_nir_push *p, nir_def *token_addr
    // TODO: Compute
    assert(!(pc_range->stageFlags & VK_SHADER_STAGE_COMPUTE_BIT));
 
-   assert(pc_range->offset % 4 == 0);
    assert(pc_range->size % 4 == 0);
    const uint32_t dw_count = pc_range->size / 4;
 
-   nvk_nir_P_1INC(b, p, NV9097, LOAD_CONSTANT_BUFFER_OFFSET, 1 + dw_count);
-   nvk_nir_push_dw(b, p, nir_imm_int(b,
-      nvk_root_descriptor_offset(push) + pc_range->offset));
+   build_push_write_push_const(b, p, pdev, pc_range);
    for (uint32_t i = 0; i < dw_count; i++)
       nvk_nir_push_dw(b, p, load_global_dw(b, token_addr, i));
 }
@@ -521,18 +549,16 @@ build_push_gfx_const(nir_builder *b, struct nvk_nir_push *p, nir_def *token_addr
 static void
 build_push_gfx_seq_idx(nir_builder *b, struct nvk_nir_push *p,
                        nir_def *token_addr, nir_def *seq_idx,
+                       const struct nvk_physical_device *pdev,
                        const VkIndirectCommandsPushConstantTokenEXT *token)
 {
    const VkPushConstantRange *pc_range = &token->updateRange;
 
    // TODO: Compute
    assert(!(pc_range->stageFlags & VK_SHADER_STAGE_COMPUTE_BIT));
-
-   assert(pc_range->offset % 4 == 0);
    assert(pc_range->size == 4);
-   nvk_nir_P_1INC(b, p, NV9097, LOAD_CONSTANT_BUFFER_OFFSET, 2);
-   nvk_nir_push_dw(b, p, nir_imm_int(b,
-      nvk_root_descriptor_offset(push) + pc_range->offset));
+
+   build_push_write_push_const(b, p, pdev, pc_range);
    nvk_nir_push_dw(b, p, seq_idx);
 }
 
@@ -663,11 +689,12 @@ build_process_gfx_cmd_seq(nir_builder *b, struct nvk_nir_push *p,
          break;
 
       case VK_INDIRECT_COMMANDS_TOKEN_TYPE_PUSH_CONSTANT_EXT:
-         build_push_gfx_const(b, p, token_addr, token->data.pPushConstant);
+         build_push_gfx_const(b, p, token_addr, pdev,
+                              token->data.pPushConstant);
          break;
 
       case VK_INDIRECT_COMMANDS_TOKEN_TYPE_SEQUENCE_INDEX_EXT:
-         build_push_gfx_seq_idx(b, p, token_addr, seq_idx,
+         build_push_gfx_seq_idx(b, p, token_addr, seq_idx, pdev,
                                 token->data.pPushConstant);
          break;
 

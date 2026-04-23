@@ -705,6 +705,12 @@ ROUND_DOWN_TO(uint64_t value, uint32_t alignment)
    return ((value) & ~(uint64_t)(alignment - 1));
 }
 
+static inline uint64_t
+ROUND_DOWN_TO_NPOT(uint64_t value, uint32_t alignment)
+{
+   return value - (value % alignment);
+}
+
 /**
  * Align a value, only works pot alignemnts.
  */

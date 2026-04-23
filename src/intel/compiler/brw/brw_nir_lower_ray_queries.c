@@ -212,6 +212,24 @@ spill_query(nir_builder *b,
 
 
 static void
+handle_terminate_on_first_hit(nir_builder *b, nir_def *stack_addr,
+                              struct lowering_state *state)
+{
+   struct brw_nir_rt_mem_ray_defs world_ray_in = {};
+   brw_nir_rt_load_mem_ray_from_addr(b, &world_ray_in, stack_addr,
+                                     BRW_RT_BVH_LEVEL_WORLD,
+                                     state->devinfo);
+   nir_def *terminate =
+      nir_test_mask(b, nir_u2u32(b, world_ray_in.ray_flags),
+                    BRW_RT_RAY_FLAG_TERMINATE_ON_FIRST_HIT);
+   nir_push_if(b, terminate);
+   {
+      brw_nir_rt_query_mark_done(b, stack_addr);
+   }
+   nir_pop_if(b, NULL);
+}
+
+static void
 lower_ray_query_intrinsic(nir_builder *b,
                           nir_intrinsic_instr *intrin,
                           struct lowering_state *state)
@@ -337,6 +355,7 @@ lower_ray_query_intrinsic(nir_builder *b,
                               NULL, NULL,
                               nir_imm_int(b, GEN_RT_TRACE_RAY_COMMIT),
                               nir_imm_int(b, BRW_RT_BVH_LEVEL_OBJECT));
+      handle_terminate_on_first_hit(b, stack_addr, state);
       break;
    }
 
@@ -346,6 +365,7 @@ lower_ray_query_intrinsic(nir_builder *b,
                               NULL, NULL,
                               nir_imm_int(b, GEN_RT_TRACE_RAY_COMMIT),
                               nir_imm_int(b, BRW_RT_BVH_LEVEL_OBJECT));
+      handle_terminate_on_first_hit(b, stack_addr, state);
       break;
    }
 

@@ -53,10 +53,10 @@ v3d_bo_dump_stats(struct v3d_screen *screen)
                 cache_size += bo->size;
         }
 
-        fprintf(stderr, "  BOs allocated:   %d\n", screen->bo_count);
-        fprintf(stderr, "  BOs size:        %dkb\n", screen->bo_size / 1024);
-        fprintf(stderr, "  BOs cached:      %d\n", cache_count);
-        fprintf(stderr, "  BOs cached size: %dkb\n", cache_size / 1024);
+        mesa_logd("  BOs allocated:   %d", screen->bo_count);
+        mesa_logd("  BOs size:        %dkb", screen->bo_size / 1024);
+        mesa_logd("  BOs cached:      %d", cache_count);
+        mesa_logd("  BOs cached size: %dkb", cache_size / 1024);
 
         if (!list_is_empty(&cache->time_list)) {
                 struct v3d_bo *first = list_first_entry(&cache->time_list,
@@ -66,15 +66,12 @@ v3d_bo_dump_stats(struct v3d_screen *screen)
                                                       struct v3d_bo,
                                                       time_list);
 
-                fprintf(stderr, "  oldest cache time: %ld\n",
-                        (long)first->free_time);
-                fprintf(stderr, "  newest cache time: %ld\n",
-                        (long)last->free_time);
+                mesa_logd("  oldest cache time: %ld", (long)first->free_time);
+                mesa_logd("  newest cache time: %ld", (long)last->free_time);
 
                 struct timespec time;
                 clock_gettime(CLOCK_MONOTONIC, &time);
-                fprintf(stderr, "  now:               %jd\n",
-                        (intmax_t)time.tv_sec);
+                mesa_logd("  now:               %jd", (intmax_t)time.tv_sec);
         }
 }
 
@@ -133,8 +130,7 @@ v3d_bo_alloc(struct v3d_screen *screen, uint32_t size, const char *name)
         bo = v3d_bo_from_cache(screen, size, name);
         if (bo) {
                 if (dump_stats) {
-                        fprintf(stderr, "Allocated %s %dkb from cache:\n",
-                                name, size / 1024);
+                        mesa_logd("Allocated %s %dkb from cache:", name, size / 1024);
                         v3d_bo_dump_stats(screen);
                 }
                 return bo;
@@ -164,7 +160,7 @@ v3d_bo_alloc(struct v3d_screen *screen, uint32_t size, const char *name)
                         goto retry;
                 }
 
-                mesa_loge("Failed to allocate device memory for BO\n");
+                mesa_loge("Failed to allocate device memory for BO");
                 free(bo);
                 return NULL;
         }
@@ -175,7 +171,7 @@ v3d_bo_alloc(struct v3d_screen *screen, uint32_t size, const char *name)
         screen->bo_count++;
         screen->bo_size += bo->size;
         if (dump_stats) {
-                fprintf(stderr, "Allocated %s %dkb:\n", name, size / 1024);
+                mesa_logd("Allocated %s %dkb:", name, size / 1024);
                 v3d_bo_dump_stats(screen);
         }
 
@@ -217,16 +213,16 @@ v3d_bo_free(struct v3d_bo *bo)
         c.handle = bo->handle;
         int ret = v3d_ioctl(screen->fd, DRM_IOCTL_GEM_CLOSE, &c);
         if (ret != 0)
-                fprintf(stderr, "close object %d: %s\n", bo->handle, strerror(errno));
+                mesa_loge("close object %d: %s", bo->handle, strerror(errno));
 
         screen->bo_count--;
         screen->bo_size -= bo->size;
 
         if (dump_stats) {
-                fprintf(stderr, "Freed %s%s%dkb:\n",
-                        bo->name ? bo->name : "",
-                        bo->name ? " " : "",
-                        bo->size / 1024);
+                mesa_logd("Freed %s%s%dkb:",
+                          bo->name ? bo->name : "",
+                          bo->name ? " " : "",
+                          bo->size / 1024);
                 v3d_bo_dump_stats(screen);
         }
 
@@ -244,7 +240,7 @@ free_stale_bos(struct v3d_screen *screen, time_t time)
                 /* If it's more than a second old, free it. */
                 if (time - bo->free_time > 2) {
                         if (dump_stats && !freed_any) {
-                                fprintf(stderr, "Freeing stale BOs:\n");
+                                mesa_logd("Freeing stale BOs:");
                                 v3d_bo_dump_stats(screen);
                                 freed_any = true;
                         }
@@ -256,7 +252,7 @@ free_stale_bos(struct v3d_screen *screen, time_t time)
         }
 
         if (dump_stats && freed_any) {
-                fprintf(stderr, "Freed stale BOs:\n");
+                mesa_logd("Freed stale BOs:");
                 v3d_bo_dump_stats(screen);
         }
 }
@@ -315,8 +311,7 @@ v3d_bo_last_unreference_locked_timed(struct v3d_bo *bo, time_t time)
         list_addtail(&bo->size_list, &cache->size_list[page_index]);
         list_addtail(&bo->time_list, &cache->time_list);
         if (dump_stats) {
-                fprintf(stderr, "Freed %s %dkb to cache:\n",
-                        bo->name, bo->size / 1024);
+                mesa_logd("Freed %s %dkb to cache:", bo->name, bo->size / 1024);
                 v3d_bo_dump_stats(screen);
         }
         bo->name = NULL;
@@ -360,8 +355,7 @@ v3d_bo_open_handle(struct v3d_screen *screen,
         };
         int ret = v3d_ioctl(screen->fd, DRM_IOCTL_V3D_GET_BO_OFFSET, &get);
         if (ret) {
-                fprintf(stderr, "Failed to get BO offset: %s\n",
-                        strerror(errno));
+                mesa_loge("Failed to get BO offset: %s", strerror(errno));
                 free(bo->map);
                 free(bo);
                 bo = NULL;
@@ -390,8 +384,7 @@ v3d_bo_open_name(struct v3d_screen *screen, uint32_t name)
 
         int ret = v3d_ioctl(screen->fd, DRM_IOCTL_GEM_OPEN, &o);
         if (ret) {
-                fprintf(stderr, "Failed to open bo %d: %s\n",
-                        name, strerror(errno));
+                mesa_loge("Failed to open bo %d: %s", name, strerror(errno));
                 mtx_unlock(&screen->bo_handles_mutex);
                 return NULL;
         }
@@ -409,7 +402,7 @@ v3d_bo_open_dmabuf(struct v3d_screen *screen, int fd)
         int ret = drmPrimeFDToHandle(screen->fd, fd, &handle);
         int size;
         if (ret) {
-                fprintf(stderr, "Failed to get v3d handle for dmabuf %d\n", fd);
+                mesa_loge("Failed to get v3d handle for dmabuf %d", fd);
                 mtx_unlock(&screen->bo_handles_mutex);
                 return NULL;
         }
@@ -417,7 +410,7 @@ v3d_bo_open_dmabuf(struct v3d_screen *screen, int fd)
         /* Determine the size of the bo we were handed. */
         size = lseek(fd, 0, SEEK_END);
         if (size == -1) {
-                fprintf(stderr, "Couldn't get size of dmabuf fd %d.\n", fd);
+                mesa_loge("Couldn't get size of dmabuf fd %d.", fd);
                 mtx_unlock(&screen->bo_handles_mutex);
                 return NULL;
         }
@@ -432,8 +425,7 @@ v3d_bo_get_dmabuf(struct v3d_bo *bo)
         int ret = drmPrimeHandleToFD(bo->screen->fd, bo->handle,
                                      DRM_CLOEXEC | DRM_RDWR, &fd);
         if (ret != 0) {
-                fprintf(stderr, "Failed to export gem bo %d to dmabuf\n",
-                        bo->handle);
+                mesa_loge("Failed to export gem bo %d to dmabuf", bo->handle);
                 return -1;
         }
 
@@ -453,8 +445,7 @@ v3d_bo_flink(struct v3d_bo *bo, uint32_t *name)
         };
         int ret = v3d_ioctl(bo->screen->fd, DRM_IOCTL_GEM_FLINK, &flink);
         if (ret) {
-                fprintf(stderr, "Failed to flink bo %d: %s\n",
-                        bo->handle, strerror(errno));
+                mesa_loge("Failed to flink bo %d: %s", bo->handle, strerror(errno));
                 free(bo);
                 return false;
         }
@@ -488,15 +479,14 @@ v3d_bo_wait(struct v3d_bo *bo, uint64_t timeout_ns, const char *reason)
 
         if (V3D_DBG(PERF) && timeout_ns && reason) {
                 if (v3d_wait_bo_ioctl(screen->fd, bo->handle, 0) == -ETIME) {
-                        fprintf(stderr, "Blocking on %s BO for %s\n",
-                                bo->name, reason);
+                        mesa_logw("Blocking on %s BO for %s", bo->name, reason);
                 }
         }
 
         int ret = v3d_wait_bo_ioctl(screen->fd, bo->handle, timeout_ns);
         if (ret) {
                 if (ret != -ETIME) {
-                        fprintf(stderr, "wait failed: %d\n", ret);
+                        mesa_loge("wait failed: %d", ret);
                         abort();
                 }
 
@@ -521,15 +511,15 @@ v3d_bo_map_unsynchronized(struct v3d_bo *bo)
         ret = v3d_ioctl(bo->screen->fd, DRM_IOCTL_V3D_MMAP_BO, &map);
         offset = map.offset;
         if (ret != 0) {
-                fprintf(stderr, "map ioctl failure\n");
+                mesa_loge("map ioctl failure");
                 abort();
         }
 
         bo->map = mmap(NULL, bo->size, PROT_READ | PROT_WRITE, MAP_SHARED,
                        bo->screen->fd, offset);
         if (bo->map == MAP_FAILED) {
-                fprintf(stderr, "mmap of bo %d (offset 0x%016llx, size %d) failed\n",
-                        bo->handle, (long long)offset, bo->size);
+                mesa_loge("mmap of bo %d (offset 0x%016llx, size %d) failed",
+                          bo->handle, (long long)offset, bo->size);
                 abort();
         }
         VG(VALGRIND_MALLOCLIKE_BLOCK(bo->map, bo->size, 0, false));
@@ -544,9 +534,10 @@ v3d_bo_map(struct v3d_bo *bo)
 
         bool ok = v3d_bo_wait(bo, OS_TIMEOUT_INFINITE, "bo map");
         if (!ok) {
-                fprintf(stderr, "BO wait for map failed\n");
+                mesa_loge("BO wait for map failed");
                 abort();
         }
+        VG(VALGRIND_MAKE_MEM_DEFINED(map, bo->size));
 
         return map;
 }
@@ -560,7 +551,7 @@ v3d_bufmgr_destroy(struct pipe_screen *pscreen)
         v3d_bo_cache_free_all(cache);
 
         if (dump_stats) {
-                fprintf(stderr, "BO stats after screen destroy:\n");
+                mesa_logd("BO stats after screen destroy:");
                 v3d_bo_dump_stats(screen);
         }
 }

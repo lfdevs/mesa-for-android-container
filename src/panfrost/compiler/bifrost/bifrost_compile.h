@@ -62,22 +62,22 @@ bifrost_precompiled_kernel_prepare_push_uniforms(
           user_data_size);
 }
 
-void bifrost_preprocess_nir(nir_shader *nir, unsigned gpu_id);
-void bifrost_optimize_nir(nir_shader *nir, unsigned gpu_id);
-void bifrost_postprocess_nir(nir_shader *nir, unsigned gpu_id);
-void bifrost_lower_texture_nir(nir_shader *nir, unsigned gpu_id);
-void bifrost_lower_texture_late_nir(nir_shader *nir, unsigned gpu_id);
+void bifrost_preprocess_nir(nir_shader *nir, uint64_t gpu_id);
+void bifrost_optimize_nir(nir_shader *nir, uint64_t gpu_id);
+void bifrost_postprocess_nir(nir_shader *nir, uint64_t gpu_id);
 
 void bifrost_compile_shader_nir(nir_shader *nir,
                                 const struct pan_compile_inputs *inputs,
                                 struct util_dynarray *binary,
                                 struct pan_shader_info *info);
 
+bool valhall_can_merge_workgroups(nir_shader *nir);
+
 #define VALHAL_EX_FIFO_VARYING_BITS \
    (VARYING_BIT_PSIZ | VARYING_BIT_LAYER | VARYING_BIT_PRIMITIVE_ID)
 
-#define DEFINE_OPTIONS(arch)                                                   \
-   static const nir_shader_compiler_options bifrost_nir_options_v##arch = {    \
+#define DEFINE_OPTIONS(name, arch, merge_workgroups)                           \
+   static const nir_shader_compiler_options name = {                           \
       .lower_scmp = true,                                                      \
       .lower_flrp16 = true,                                                    \
       .lower_flrp32 = true,                                                    \
@@ -114,7 +114,7 @@ void bifrost_compile_shader_nir(nir_shader *nir,
                                                                                \
       .lower_doubles_options =                                                 \
          nir_lower_dmod, /* TODO: Don't lower supported 64-bit operations */   \
-      .lower_int64_options = ~0, /* TODO: Use IMULD on v7 */                   \
+      .lower_int64_options = arch >= 9 ? ~(nir_lower_iadd64) : ~0,             \
       .lower_mul_high = true,                                                  \
       .lower_fisnormal = true,                                                 \
       .lower_uadd_carry = true,                                                \
@@ -147,10 +147,17 @@ void bifrost_compile_shader_nir(nir_shader *nir,
       .has_udot_4x8_sat = arch >= 9,                                           \
       .has_sdot_4x8 = arch >= 9,                                               \
       .has_sdot_4x8_sat = arch >= 9,                                           \
+                                                                               \
+      .divergence_analysis_options = merge_workgroups ?                        \
+         (nir_divergence_across_subgroups |                                    \
+          nir_divergence_multiple_workgroup_per_compute_subgroup)              \
+         : 0,                                                                  \
    };
 
-DEFINE_OPTIONS(6);
-DEFINE_OPTIONS(9);
-DEFINE_OPTIONS(11);
+DEFINE_OPTIONS(bifrost_nir_options_v6, 6, false);
+DEFINE_OPTIONS(bifrost_nir_options_v9, 9, false);
+DEFINE_OPTIONS(bifrost_nir_options_v9_merge_wg, 9, true);
+DEFINE_OPTIONS(bifrost_nir_options_v11, 11, false);
+DEFINE_OPTIONS(bifrost_nir_options_v11_merge_wg, 11, true);
 
 #endif

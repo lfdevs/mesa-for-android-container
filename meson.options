@@ -550,9 +550,9 @@ option(
   'tools',
   type : 'array',
   value : [],
-  choices : ['drm-shim', 'etnaviv', 'freedreno', 'glsl', 'intel', 'intel-ui',
-             'nir', 'nouveau', 'lima', 'panfrost', 'asahi', 'imagination',
-             'zink', 'all', 'dlclose-skip'],
+  choices : ['amd', 'asahi', 'dlclose-skip', 'drm-shim', 'etnaviv', 'freedreno',  
+             'glsl', 'imagination', 'intel', 'intel-ui', 'lima', 'nir', 'nouveau',
+             'panfrost', 'zink', 'all'],
   description : 'List of tools to build. (Note: `intel-ui` selects `intel`)',
 )
 

@@ -1930,6 +1930,7 @@ _glcpp_parser_expand_function(glcpp_parser_t *parser, token_node_t *node,
    /* Perform argument substitution on the replacement list. */
    substituted = _token_list_create(parser);
 
+   bool prev_paste_token = false;
    for (node = macro->replacements->head; node; node = node->next) {
       if (node->token->type == IDENTIFIER &&
           _string_list_contains(macro->parameters, node->token->value.str,
@@ -1941,7 +1942,26 @@ _glcpp_parser_expand_function(glcpp_parser_t *parser, token_node_t *node,
          if (argument->head) {
             token_list_t *expanded_argument;
             expanded_argument = _token_list_copy(parser, argument);
-            _glcpp_parser_expand_token_list(parser, expanded_argument, mode);
+
+            /* From the C99 spec Section 10.3.1 (Argument substitution):
+             *    "After the arguments for the invocation of a function-like
+             *    macro have been identified, argument substitution takes
+             *    place. A parameter in the replacement list, unless preceded
+             *    by a # or ## preprocessing token or followed by a ##
+             *    preprocessing token (see below), is replaced by the
+             *    corresponding argument after all macros contained therein
+             *    have been expanded."
+             */
+
+            /* Look ahead for a PASTE token, skipping space. */
+            token_node_t *next_non_space = node->next;
+            while (next_non_space && next_non_space->token->type == SPACE)
+               next_non_space = next_non_space->next;
+
+            if (!prev_paste_token &&
+                (!next_non_space || next_non_space->token->type != PASTE))
+               _glcpp_parser_expand_token_list(parser, expanded_argument, mode);
+
             _token_list_append_list(substituted, expanded_argument);
          } else {
             token_t *new_token;
@@ -1953,13 +1973,13 @@ _glcpp_parser_expand_function(glcpp_parser_t *parser, token_node_t *node,
       } else {
          _token_list_append(parser, substituted, node->token);
       }
+
+      if (node->token->type != SPACE)
+         prev_paste_token = node->token->type == PASTE;
    }
 
-   /* After argument substitution, and before further expansion
-    * below, implement token pasting. */
-
+   /* Implement token pasting. */
    _token_list_trim_trailing_space(substituted);
-
    _glcpp_parser_apply_pastes(parser, substituted);
 
    return substituted;

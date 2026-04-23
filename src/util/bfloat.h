@@ -63,7 +63,7 @@ static inline float
 _mesa_bfloat16_bits_to_float(uint16_t bf)
 {
    union fi x;
-   x.ui = bf << 16;
+   x.ui = (uint32_t)bf << 16;
 
    return x.f;
 }

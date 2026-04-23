@@ -98,6 +98,15 @@ log2_tile_size(uint32_t size)
         }
 }
 
+void
+v3d_tile_alloc_sizes(uint32_t layers,
+                     uint32_t tiles_x,
+                     uint32_t tiles_y,
+                     uint32_t draws,
+                     uint32_t page_size,
+                     uint32_t *tile_alloc_size,
+                     uint32_t *tile_state_size);
+
 uint32_t
 v3d_compute_rt_row_row_stride_128_bits(uint32_t tile_width,
                                        uint32_t bpp);

@@ -19,6 +19,7 @@ struct radv_sampler {
    struct vk_sampler vk;
    uint32_t state[4];
    uint32_t border_color_index;
+   bool border_color_index_from_user;
 };
 
 VK_DEFINE_NONDISP_HANDLE_CASTS(radv_sampler, vk.base, VkSampler, VK_OBJECT_TYPE_SAMPLER)
@@ -26,5 +27,8 @@ VK_DEFINE_NONDISP_HANDLE_CASTS(radv_sampler, vk.base, VkSampler, VK_OBJECT_TYPE_
 VkResult radv_sampler_init(struct radv_device *device, struct radv_sampler *sampler,
                            const VkSamplerCreateInfo *pCreateInfo);
 void radv_sampler_finish(struct radv_device *device, struct radv_sampler *sampler);
+
+void radv_make_sampler_descriptor(const struct radv_device *device, const struct vk_sampler_state *sampler_state,
+                                  uint32_t *desc);
 
 #endif /* RADV_SAMPLER_H */

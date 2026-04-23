@@ -206,7 +206,7 @@ get_frame_shader(struct panvk_device *dev,
       goto out;
 
    const struct nir_shader_compiler_options *nir_options =
-      pan_get_nir_shader_compiler_options(PAN_ARCH);
+      pan_get_nir_shader_compiler_options(PAN_ARCH, false);
    nir_shader *nir = GENX(pan_get_fb_shader)(&key->key, nir_options);
 
    NIR_PASS(_, nir, nir_shader_instructions_pass, lower_instr,
@@ -221,9 +221,7 @@ get_frame_shader(struct panvk_device *dev,
    };
 
    pan_preprocess_nir(nir, inputs.gpu_id);
-   pan_nir_lower_texture_early(nir, inputs.gpu_id);
    pan_postprocess_nir(nir, inputs.gpu_id);
-   pan_nir_lower_texture_late(nir, inputs.gpu_id);
 
    VkResult result = panvk_per_arch(create_internal_shader)(
       dev, nir, &inputs, &shader);
@@ -830,9 +828,10 @@ cmd_preload_zs_attachments(struct panvk_cmd_buffer *cmdbuf,
    struct panvk_device *dev = to_panvk_device(cmdbuf->vk.base.device);
    struct panvk_physical_device *pdev =
       to_panvk_physical_device(dev->vk.physical);
-   unsigned gpu_prod_id = pdev->kmod.dev->props.gpu_id >> 16;
+   unsigned arch_major = PAN_ARCH_MAJOR(pdev->kmod.dev->props.gpu_id);
+   unsigned arch_minor = PAN_ARCH_MINOR(pdev->kmod.dev->props.gpu_id);
 
-   if (gpu_prod_id >= 0x7200)
+   if (arch_major > 7 || (arch_major == 7 && arch_minor >= 2))
       fs->modes[dcd_idx] = MALI_PRE_POST_FRAME_SHADER_MODE_EARLY_ZS_ALWAYS;
    else if (always_load(load, &key))
       fs->modes[dcd_idx] = MALI_PRE_POST_FRAME_SHADER_MODE_ALWAYS;

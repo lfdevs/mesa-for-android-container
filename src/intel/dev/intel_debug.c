@@ -34,6 +34,7 @@
 #include <string.h>
 
 #include "dev/intel_debug.h"
+#include "dev/intel_device_info.h"
 #include "util/macros.h"
 #include "util/u_debug.h"
 #include "util/u_math.h"
@@ -302,6 +303,31 @@ process_intel_debug_variable_once(void)
    BITSET_CLEAR(intel_debug, DEBUG_NO32);
 }
 
+static const struct debug_named_value use_jay_options[] = {
+   { "vs", BITFIELD_BIT(MESA_SHADER_VERTEX),   "Use jay for vertex shaders"   },
+   { "fs", BITFIELD_BIT(MESA_SHADER_FRAGMENT), "Use jay for fragment shaders" },
+   { "cs", BITFIELD_BIT(MESA_SHADER_COMPUTE),  "Use jay for compute shaders"  },
+   DEBUG_NAMED_VALUE_END
+};
+
+DEBUG_GET_ONCE_FLAGS_OPTION(use_jay, "INTEL_JAY", use_jay_options, 0);
+static int use_jay = 0;
+
+bool
+intel_use_jay(const struct intel_device_info *devinfo, mesa_shader_stage stage)
+{
+   if (stage == MESA_SHADER_KERNEL)
+      stage = MESA_SHADER_COMPUTE;
+
+   return devinfo->ver == 20 && (use_jay & BITFIELD_BIT(stage));
+}
+
+bool
+intel_use_jay_any_stage(const struct intel_device_info *devinfo)
+{
+   return devinfo->ver == 20 && use_jay;
+}
+
 void
 process_intel_debug_variable(void)
 {
@@ -309,4 +335,6 @@ process_intel_debug_variable(void)
 
    call_once(&process_intel_debug_variable_flag,
              process_intel_debug_variable_once);
+
+   use_jay = debug_get_option_use_jay();
 }

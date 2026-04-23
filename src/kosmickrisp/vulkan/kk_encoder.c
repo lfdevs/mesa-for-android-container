@@ -66,12 +66,10 @@ kk_encoder_start_render(struct kk_cmd_buffer *cmd,
        * like triangle fans. For this, we signal the value pre_gfx will wait on,
        * and we wait on the value pre_gfx will signal once completed.
        */
-      encoder->signal_value_pre_gfx = encoder->event_value;
-      mtl_encode_signal_event(encoder->main.cmd_buffer, encoder->event,
-                              ++encoder->event_value);
       encoder->wait_value_pre_gfx = encoder->event_value;
       mtl_encode_wait_for_event(encoder->main.cmd_buffer, encoder->event,
                                 ++encoder->event_value);
+      encoder->signal_value_pre_gfx = encoder->event_value;
 
       encoder->main.encoder = mtl_new_render_command_encoder_with_descriptor(
          encoder->main.cmd_buffer, descriptor);
@@ -116,9 +114,12 @@ kk_encoder_end(struct kk_cmd_buffer *cmd)
    upload_queue_writes(cmd);
    kk_encoder_signal_fence_and_end(cmd);
 
-   /* Let remaining render encoders run without waiting since we are done */
-   mtl_encode_signal_event(cmd->encoder->pre_gfx.cmd_buffer,
-                           cmd->encoder->event, cmd->encoder->event_value);
+   struct kk_encoder *encoder = cmd->encoder;
+   if (encoder->last_signaled_value_pre_gfx != encoder->signal_value_pre_gfx) {
+      mtl_encode_signal_event(encoder->pre_gfx.cmd_buffer, encoder->event,
+                              encoder->signal_value_pre_gfx);
+      encoder->last_signaled_value_pre_gfx = encoder->signal_value_pre_gfx;
+   }
 }
 
 struct kk_imm_write_push {
@@ -135,15 +136,18 @@ upload_queue_writes(struct kk_cmd_buffer *cmd)
        enc->copy_query_pool_result_infos.size == 0u)
       return;
 
-   uint32_t count = util_dynarray_num_elements(&enc->imm_writes, uint64_t) / 2u;
+   uint32_t count =
+      util_dynarray_num_elements(&enc->imm_writes, struct libkk_imm_write);
    if (count != 0) {
-      struct kk_bo *bo = kk_cmd_allocate_buffer(cmd, enc->imm_writes.size, 8u);
+      uint64_t addr =
+         kk_pool_upload(cmd, enc->imm_writes.data, enc->imm_writes.size,
+                        sizeof(struct libkk_imm_write))
+            .gpu;
       /* kk_cmd_allocate_buffer sets the cmd buffer error so we can just exit */
-      if (!bo)
+      if (!addr)
          return;
-      memcpy(bo->cpu, enc->imm_writes.data, enc->imm_writes.size);
       struct mtl_size grid = {count, 1, 1};
-      libkk_write_u64(cmd, grid, false, bo->gpu);
+      libkk_write_u32_array(cmd, grid, false, addr);
       enc->imm_writes.size = 0u;
    }
 
@@ -214,12 +218,19 @@ kk_encoder_signal_fence_and_end(struct kk_cmd_buffer *cmd)
 
       /* We can start rendering once all pre-graphics work is done */
       mtl_encode_signal_event(encoder->pre_gfx.cmd_buffer, encoder->event,
-                              encoder->event_value);
+                              encoder->signal_value_pre_gfx);
+      encoder->last_signaled_value_pre_gfx = encoder->signal_value_pre_gfx;
    }
 
    if (encoder->main.last_used != KK_ENC_NONE) {
+      /* kk_encoder_internal_end_encoding will change this value to NONE */
+      enum kk_encoder_type last = encoder->main.last_used;
       kk_encoder_signal_fence(encoder);
       kk_encoder_internal_end_encoding(&encoder->main);
+      if (last == KK_ENC_RENDER) {
+         mtl_encode_signal_event(encoder->main.cmd_buffer, encoder->event,
+                                 ++encoder->event_value);
+      }
    }
 
    if (cmd->drawable) {
@@ -331,8 +342,13 @@ kk_encoder_pre_gfx_encoder(struct kk_cmd_buffer *cmd)
    struct kk_encoder *encoder = cmd->encoder;
    if (!encoder->pre_gfx.encoder) {
       /* Fast-forward all previous render encoders and wait for the last one */
-      mtl_encode_signal_event(encoder->pre_gfx.cmd_buffer, encoder->event,
-                              encoder->signal_value_pre_gfx);
+      uint32_t last_signaled = (encoder->wait_value_pre_gfx - 1u);
+      if (encoder->wait_value_pre_gfx != 0u &&
+          encoder->last_signaled_value_pre_gfx != last_signaled) {
+         mtl_encode_signal_event(encoder->pre_gfx.cmd_buffer, encoder->event,
+                                 last_signaled);
+         encoder->last_signaled_value_pre_gfx = last_signaled;
+      }
       mtl_encode_wait_for_event(encoder->pre_gfx.cmd_buffer, encoder->event,
                                 encoder->wait_value_pre_gfx);
       encoder->pre_gfx.encoder =

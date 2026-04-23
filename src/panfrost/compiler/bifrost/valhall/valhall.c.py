@@ -34,8 +34,6 @@ SKIP = set([
         "ISUB.u64",
         "ISUB.s64",
         "IMULD.u64",
-        "SHADDX.u64",
-        "SHADDX.s64",
         "IMULD.u64",
         "LSHIFT_AND.i64",
         "RSHIFT_AND.i64",

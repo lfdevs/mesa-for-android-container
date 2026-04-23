@@ -203,7 +203,7 @@ static void
 ureg_load_tex(struct ureg_program *ureg, struct ureg_dst out,
               struct ureg_src coord, struct ureg_src sampler,
               enum tgsi_texture_type tex_target,
-              bool load_level_zero, bool use_txf)
+              bool use_txf)
 {
    if (use_txf) {
       struct ureg_dst temp = ureg_DECL_temporary(ureg);
@@ -224,15 +224,9 @@ ureg_load_tex(struct ureg_program *ureg, struct ureg_dst out,
       ureg_TRUNC(ureg, ureg_writemask(temp, wrmask), ureg_src(temp));
       ureg_F2I(ureg, temp, ureg_src(temp));
 
-      if (load_level_zero)
-         ureg_TXF_LZ(ureg, out, tex_target, ureg_src(temp), sampler);
-      else
-         ureg_TXF(ureg, out, tex_target, ureg_src(temp), sampler);
+      ureg_TXF(ureg, out, tex_target, ureg_src(temp), sampler);
    } else {
-      if (load_level_zero)
-         ureg_TEX_LZ(ureg, out, tex_target, coord, sampler);
-      else
-         ureg_TEX(ureg, out, tex_target, coord, sampler);
+      ureg_TEX(ureg, out, tex_target, coord, sampler);
    }
 }
 
@@ -250,7 +244,6 @@ util_make_fragment_tex_shader(struct pipe_context *pipe,
                               enum tgsi_texture_type tex_target,
                               enum tgsi_return_type stype,
                               enum tgsi_return_type dtype,
-                              bool load_level_zero,
                               bool use_txf,
                               bool use_persp)
 {
@@ -287,7 +280,7 @@ util_make_fragment_tex_shader(struct pipe_context *pipe,
                tex_target, tex, sampler);
    else
       ureg_load_tex(ureg, ureg_writemask(temp, TGSI_WRITEMASK_XYZW), tex, sampler,
-                    tex_target, load_level_zero, use_txf);
+                    tex_target, use_txf);
 
    if (stype != dtype) {
       if (stype == TGSI_RETURN_TYPE_SINT) {
@@ -316,7 +309,7 @@ util_make_fragment_tex_shader(struct pipe_context *pipe,
 void *
 util_make_fs_blit_zs(struct pipe_context *pipe, unsigned zs_mask,
                      enum tgsi_texture_type tex_target,
-                     bool load_level_zero, bool use_txf, bool use_persp)
+                     bool use_txf, bool use_persp)
 {
    struct ureg_program *ureg;
    struct ureg_src depth_sampler, stencil_sampler, coord;
@@ -340,7 +333,7 @@ util_make_fs_blit_zs(struct pipe_context *pipe, unsigned zs_mask,
                              TGSI_RETURN_TYPE_FLOAT);
 
       ureg_load_tex(ureg, ureg_writemask(tmp, TGSI_WRITEMASK_X), coord,
-                    depth_sampler, tex_target, load_level_zero, use_txf);
+                    depth_sampler, tex_target, use_txf);
 
       depth = ureg_DECL_output(ureg, TGSI_SEMANTIC_POSITION, 0);
       ureg_MOV(ureg, ureg_writemask(depth, TGSI_WRITEMASK_Z),
@@ -356,7 +349,7 @@ util_make_fs_blit_zs(struct pipe_context *pipe, unsigned zs_mask,
                              TGSI_RETURN_TYPE_UINT);
 
       ureg_load_tex(ureg, ureg_writemask(tmp, TGSI_WRITEMASK_X), coord,
-                    stencil_sampler, tex_target, load_level_zero, use_txf);
+                    stencil_sampler, tex_target, use_txf);
 
       stencil = ureg_DECL_output(ureg, TGSI_SEMANTIC_STENCIL, 0);
       ureg_MOV(ureg, ureg_writemask(stencil, TGSI_WRITEMASK_Y),
@@ -1032,7 +1025,7 @@ util_make_fs_pack_color_zs(struct pipe_context *pipe,
 
       depth = ureg_DECL_temporary(ureg);
       depth_x = ureg_writemask(depth, TGSI_WRITEMASK_X);
-      ureg_load_tex(ureg, depth_x, coord, depth_sampler, tex_target, true, true);
+      ureg_load_tex(ureg, depth_x, coord, depth_sampler, tex_target, true);
 
       /* Pack to Z24. */
       if (is_z24) {
@@ -1062,7 +1055,7 @@ util_make_fs_pack_color_zs(struct pipe_context *pipe,
 
          stencil = ureg_writemask(ureg_DECL_temporary(ureg), TGSI_WRITEMASK_X);
          ureg_load_tex(ureg, stencil, coord, stencil_sampler, tex_target,
-                       true, true);
+                       true);
 
          /* Pack stencil into depth. */
          if (is_z24) {
@@ -1092,7 +1085,7 @@ util_make_fs_pack_color_zs(struct pipe_context *pipe,
                              TGSI_RETURN_TYPE_UINT);
 
       color = ureg_DECL_temporary(ureg);
-      ureg_load_tex(ureg, color, coord, color_sampler, tex_target, true, true);
+      ureg_load_tex(ureg, color, coord, color_sampler, tex_target, true);
 
       depth = ureg_writemask(ureg_DECL_temporary(ureg), TGSI_WRITEMASK_X);
       stencil = ureg_writemask(ureg_DECL_temporary(ureg), TGSI_WRITEMASK_X);
@@ -1280,7 +1273,7 @@ util_make_fs_stencil_blit(struct pipe_context *pipe, bool msaa_src, bool has_txq
          "UADD TEMP[1].xy, TEMP[1], IMM[0].yyyy\n" /* width - 1, height - 1 */
          "IMIN TEMP[0].xy, TEMP[0], TEMP[1]\n"
          /* Texel fetch. */
-         "TXF_LZ TEMP[0].x, TEMP[0], SAMP[0], %s\n"
+         "TXF TEMP[0].x, TEMP[0], SAMP[0], %s\n"
          "AND TEMP[0].x, TEMP[0], CONST[0][0]\n"
          "USNE TEMP[0].x, TEMP[0], CONST[0][0]\n"
          "U2F TEMP[0].x, TEMP[0]\n"
@@ -1307,7 +1300,7 @@ util_make_fs_stencil_blit(struct pipe_context *pipe, bool msaa_src, bool has_txq
          "F2I TEMP[0], TEMP[0]\n"
          "IMAX TEMP[0].xy, TEMP[0], IMM[0].xxxx\n"
          /* Texel fetch. */
-         "TXF_LZ TEMP[0].x, TEMP[0], SAMP[0], %s\n"
+         "TXF TEMP[0].x, TEMP[0], SAMP[0], %s\n"
          "AND TEMP[0].x, TEMP[0], CONST[0][0]\n"
          "USNE TEMP[0].x, TEMP[0], CONST[0][0]\n"
          "U2F TEMP[0].x, TEMP[0]\n"
@@ -1337,7 +1330,7 @@ util_make_fs_clear_color(struct pipe_context *pipe,
       "FRAG\n"
       "PROPERTY FS_COLOR0_WRITES_ALL_CBUFS %u\n"
       "DCL OUT[0], COLOR[0]\n"
-      "DCL CONST[0][0]\n"
+      "%s"
       "IMM[0] INT32 {0, 0, 0, 0}\n"
 
       "MOV OUT[0], %s\n"
@@ -1346,6 +1339,7 @@ util_make_fs_clear_color(struct pipe_context *pipe,
 
    snprintf(text, ARRAY_SIZE(text), text_templ,
             write_all_cbufs,
+            use_const_buf ? "DCL CONST[0][0]\n" : "",
             use_const_buf ? "CONST[0][0]" : "IMM[0]");
 
    struct tgsi_token tokens[1000];

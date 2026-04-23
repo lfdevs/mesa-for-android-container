@@ -39,19 +39,19 @@ void pandecode_inject_free(struct pandecode_context *ctx, uint64_t gpu_va,
                            unsigned sz);
 
 void pandecode_jc(struct pandecode_context *ctx, uint64_t jc_gpu_va,
-                  unsigned gpu_id);
+                  uint64_t gpu_id);
 
 void pandecode_interpret_cs(struct pandecode_context *ctx,
                             uint64_t queue_gpu_va, uint32_t size,
-                            unsigned gpu_id, uint32_t *regs);
+                            uint64_t gpu_id, uint32_t *regs);
 
 void pandecode_cs_binary(struct pandecode_context *ctx, uint64_t binary_gpu_va,
-                         uint32_t size, unsigned gpu_id);
+                         uint32_t size, uint64_t gpu_id);
 
 void pandecode_cs_trace(struct pandecode_context *ctx, uint64_t trace_gpu_va,
-                        uint32_t size, unsigned gpu_id);
+                        uint32_t size, uint64_t gpu_id);
 
 void pandecode_abort_on_fault(struct pandecode_context *ctx, uint64_t jc_gpu_va,
-                              unsigned gpu_id);
+                              uint64_t gpu_id);
 
 #endif /* __MMAP_TRACE_H__ */

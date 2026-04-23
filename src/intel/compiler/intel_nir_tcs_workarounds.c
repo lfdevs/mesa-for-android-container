@@ -101,12 +101,12 @@ intel_nir_apply_tcs_quads_workaround(nir_shader *nir)
     * the end block.  We want to process the original set, so to be safe,
     * save it off to an array first.
     */
-   const unsigned num_end_preds = impl->end_block->predecessors.entries;
+   const unsigned num_end_preds = nir_block_num_preds(impl->end_block);
    nir_block *end_preds[num_end_preds];
    unsigned i = 0;
 
-   set_foreach(&impl->end_block->predecessors, entry) {
-      end_preds[i++] = (nir_block *) entry->key;
+   nir_foreach_pred(pred, impl->end_block) {
+      end_preds[i++] = pred;
    }
 
    for (i = 0; i < num_end_preds; i++) {

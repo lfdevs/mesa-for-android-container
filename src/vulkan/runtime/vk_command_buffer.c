@@ -613,7 +613,7 @@ vk_common_CmdBeginTransformFeedbackEXT(
 
    STACK_ARRAY(VkBindTransformFeedbackBuffer2InfoEXT, buffers, counterBufferCount);
 
-   for (uint32_t b = 0; b < counterBufferCount; b++) {
+   for (uint32_t b = 0; pCounterBuffers && b < counterBufferCount; b++) {
       VK_FROM_HANDLE(vk_buffer, buffer, pCounterBuffers[b]);
 
       buffers[b] = (VkBindTransformFeedbackBuffer2InfoEXT) {
@@ -629,7 +629,7 @@ vk_common_CmdBeginTransformFeedbackEXT(
       &cmd_buffer->base.device->dispatch_table;
    disp->CmdBeginTransformFeedback2EXT(
       commandBuffer, firstCounterBuffer, counterBufferCount,
-      counterBufferCount > 0 ? buffers : NULL);
+      counterBufferCount > 0 && pCounterBuffers ? buffers : NULL);
 
    STACK_ARRAY_FINISH(buffers);
 }
@@ -646,7 +646,7 @@ vk_common_CmdEndTransformFeedbackEXT(
 
    STACK_ARRAY(VkBindTransformFeedbackBuffer2InfoEXT, buffers, counterBufferCount);
 
-   for (uint32_t b = 0; b < counterBufferCount; b++) {
+   for (uint32_t b = 0; pCounterBuffers && b < counterBufferCount; b++) {
       VK_FROM_HANDLE(vk_buffer, buffer, pCounterBuffers[b]);
 
       buffers[b] = (VkBindTransformFeedbackBuffer2InfoEXT) {
@@ -662,7 +662,7 @@ vk_common_CmdEndTransformFeedbackEXT(
       &cmd_buffer->base.device->dispatch_table;
    disp->CmdEndTransformFeedback2EXT(
       commandBuffer, firstCounterBuffer, counterBufferCount,
-      counterBufferCount > 0 ? buffers : NULL);
+      counterBufferCount > 0 && pCounterBuffers ? buffers : NULL);
 
    STACK_ARRAY_FINISH(buffers);
 }

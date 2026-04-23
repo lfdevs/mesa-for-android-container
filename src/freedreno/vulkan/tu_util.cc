@@ -8,13 +8,13 @@
 #include <errno.h>
 #include <stdarg.h>
 
-#include "common/freedreno_rd_output.h"
-#include "util/u_math.h"
-#include "util/timespec.h"
-#include "util/os_file_notify.h"
 #include "util/os_file.h"
+#include "util/os_file_notify.h"
+#include "util/timespec.h"
+#include "util/u_math.h"
 #include "vk_enum_to_str.h"
 
+#include "common/freedreno_rd_output.h"
 #include "tu_device.h"
 #include "tu_pass.h"
 
@@ -366,6 +366,51 @@ is_hw_binning_possible(const struct tu_vsc_config *vsc)
 }
 
 static void
+tu_tiling_config_divide_tile(const struct tu_device *dev,
+                             const struct tu_render_pass *pass,
+                             const struct tu_framebuffer *fb,
+                             const struct tu_tiling_config *tiling,
+                             struct tu_tiling_config *new_tiling,
+                             uint32_t divisor)
+{
+   assert(divisor > 0);
+
+   *new_tiling = *tiling;
+   if (divisor == 1 || !tiling->possible || tiling->tile0.width == ~0) {
+      /* If the divisor is 1, or if the tiling is not possible, or if the
+       * tiling is invalid, just return the original tiling. */
+      return;
+   }
+
+   /* Get the hardware-specified alignment values. */
+   const uint32_t tile_align_w = pass->tile_align_w;
+   const uint32_t tile_align_h = dev->physical_device->info->tile_align_h;
+
+   /* Divide the current tile dimensions by the divisor. */
+   uint32_t new_tile_width = tiling->tile0.width / divisor;
+   uint32_t new_tile_height = tiling->tile0.height / divisor;
+
+   /* Clamp to the minimum alignment if necessary and align down. */
+   if (new_tile_width < tile_align_w)
+      new_tile_width = tile_align_w;
+   else
+      new_tile_width = ROUND_DOWN_TO_NPOT(new_tile_width, tile_align_w);
+
+   if (new_tile_height < tile_align_h)
+      new_tile_height = tile_align_h;
+   else
+      new_tile_height = ROUND_DOWN_TO_NPOT(new_tile_height, tile_align_h);
+
+   new_tiling->tile0.width = new_tile_width;
+   new_tiling->tile0.height = new_tile_height;
+
+   /* Recalculate the tile count from the framebuffer dimensions to ensure
+    * full coverage. */
+   new_tiling->vsc.tile_count.width = DIV_ROUND_UP(fb->width, new_tile_width);
+   new_tiling->vsc.tile_count.height = DIV_ROUND_UP(fb->height, new_tile_height);
+}
+
+static void
 tu_tiling_config_update_pipe_layout(struct tu_vsc_config *vsc,
                                     const struct tu_device *dev,
                                     bool fdm)
@@ -460,22 +505,18 @@ tu_tiling_config_update_pipes(struct tu_vsc_config *vsc,
 static void
 tu_tiling_config_update_binning(struct tu_vsc_config *vsc, const struct tu_device *device)
 {
-   if (vsc->binning_possible) {
-      vsc->binning = (vsc->tile_count.width * vsc->tile_count.height) > 2;
+   vsc->binning_useful = (vsc->tile_count.width * vsc->tile_count.height) > 2;
 
-      if (TU_DEBUG(FORCEBIN))
-         vsc->binning = true;
-      if (TU_DEBUG(NOBIN))
-         vsc->binning = false;
-   } else {
-      vsc->binning = false;
-   }
+   if (TU_DEBUG(FORCEBIN))
+      vsc->binning_useful = true;
+   if (TU_DEBUG(NOBIN))
+      vsc->binning_useful = false;
 }
 
 void
-tu_framebuffer_tiling_config(struct tu_framebuffer *fb,
-                             const struct tu_device *device,
-                             const struct tu_render_pass *pass)
+tu_framebuffer_init_tiling_config(struct tu_framebuffer *fb,
+                                  const struct tu_device *device,
+                                  const struct tu_render_pass *pass)
 {
    for (int gmem_layout = 0; gmem_layout < TU_GMEM_LAYOUT_COUNT; gmem_layout++) {
       struct tu_tiling_config *tiling = &fb->tiling[gmem_layout];
@@ -499,6 +540,49 @@ tu_framebuffer_tiling_config(struct tu_framebuffer *fb,
          tu_tiling_config_update_binning(fdm_offset_vsc, device);
       }
    }
+
+   fb->initd_divisor = 1;
+}
+
+const struct tu_tiling_config *
+tu_framebuffer_get_tiling_config(struct tu_framebuffer *fb,
+                                 const struct tu_device *device,
+                                 const struct tu_render_pass *pass,
+                                 int gmem_layout,
+                                 uint32_t divisor)
+{
+   assert(divisor >= 1 && divisor <= TU_GMEM_LAYOUT_DIVISOR_MAX);
+   assert(divisor == 1 || !pass->has_fdm); /* For FDM, it's expected that FDM alone will be sufficient to
+                                              appropriately size the tiles for the framebuffer.*/
+   struct tu_tiling_config *tiling = &fb->tiling[(TU_GMEM_LAYOUT_COUNT * (divisor - 1)) + gmem_layout];
+
+   if (divisor > fb->initd_divisor) {
+      const struct tu_tiling_config *base_tiling =
+         tu_framebuffer_get_tiling_config(fb, device, pass, gmem_layout, divisor - 1);
+      tu_tiling_config_divide_tile(device, pass, fb, base_tiling, tiling, divisor);
+
+      struct tu_vsc_config *vsc = &tiling->vsc;
+      if (tiling->possible) {
+         tu_tiling_config_update_pipe_layout(vsc, device, false);
+         tu_tiling_config_update_pipes(vsc, device);
+         tu_tiling_config_update_binning(vsc, device);
+
+         struct tu_vsc_config *fdm_offset_vsc = &tiling->fdm_offset_vsc;
+         fdm_offset_vsc->tile_count = (VkExtent2D) { ~1, ~1 };
+      }
+
+      if (!tiling->possible ||                               /* If tiling is no longer possible, this is pointless. */
+          (vsc->binning_useful && !vsc->binning_possible) || /* Dividing further without HW binning is a bad idea.  */
+          (vsc->tile_count.width * vsc->tile_count.height > 100) /* 100 tiles are too many, even with HW binning.   */
+      ) {
+         /* Revert to the previous level's tiling configuration. */
+         *tiling = *base_tiling;
+      }
+
+      fb->initd_divisor = divisor;
+   }
+
+   return tiling;
 }
 
 void

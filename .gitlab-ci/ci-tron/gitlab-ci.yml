@@ -3,7 +3,7 @@
   extends:
     - .ci-tron-b2c-job-v1
   variables:
-    GIT_STRATEGY: empty
+    GIT_STRATEGY: none
     B2C_VERSION: v0.9.17  # Linux 6.16.3
 
     CI_TRON_PATTERN__JOB_SUCCESS__REGEX: 'hwci: mesa: exit_code: 0\r$'

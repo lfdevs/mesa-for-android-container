@@ -444,7 +444,7 @@ vc4_get_stage_tex(struct vc4_context *vc4, mesa_shader_stage shader)
                 return &vc4->verttex;
                 break;
         default:
-                fprintf(stderr, "Unknown shader target %d\n", shader);
+                mesa_loge("Unknown shader target %d", shader);
                 abort();
         }
 }
@@ -463,7 +463,7 @@ static uint32_t translate_wrap(uint32_t p_wrap, bool using_nearest)
         case PIPE_TEX_WRAP_CLAMP:
                 return (using_nearest ? 1 : 3);
         default:
-                fprintf(stderr, "Unknown wrap mode %d\n", p_wrap);
+                mesa_loge("Unknown wrap mode %d", p_wrap);
                 assert(!"not reached");
                 return 0;
         }

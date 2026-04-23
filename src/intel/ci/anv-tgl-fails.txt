@@ -1,4 +1,5 @@
 # Tiny mismatch in the bottom right of the image.
+# Fails on ADL and TGL but passes on RPL
 dEQP-VK.drm_format_modifiers.export_import.b10g11r11_ufloat_pack32,Fail
 
 # This is a bug of CTS: https://gitlab.khronos.org/Tracker/vk-gl-cts/issues/6033

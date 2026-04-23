@@ -507,15 +507,20 @@ radv_nir_lower_rt_io_cps(nir_shader *nir)
 }
 
 static void
-init_cps_function(nir_function *function, bool has_position_fetch)
+init_cps_function(nir_function *function, bool has_position_fetch, bool uses_descriptor_heap)
 {
    function->num_params = has_position_fetch ? CPS_ARG_COUNT : CPS_ARG_COUNT - 1;
    function->params = rzalloc_array_size(function->shader, sizeof(nir_parameter), function->num_params);
 
    radv_nir_param_from_type(function->params + RT_ARG_LAUNCH_ID, glsl_vector_type(GLSL_TYPE_UINT, 3), false, 0);
    radv_nir_param_from_type(function->params + RT_ARG_LAUNCH_SIZE, glsl_vector_type(GLSL_TYPE_UINT, 3), true, 0);
-   radv_nir_param_from_type(function->params + RT_ARG_DESCRIPTORS, glsl_uint_type(), true, 0);
-   radv_nir_param_from_type(function->params + RT_ARG_DYNAMIC_DESCRIPTORS, glsl_uint_type(), true, 0);
+   if (uses_descriptor_heap) {
+      radv_nir_param_from_type(function->params + RT_ARG_HEAP_RESOURCE, glsl_uint_type(), true, 0);
+      radv_nir_param_from_type(function->params + RT_ARG_HEAP_SAMPLER, glsl_uint_type(), true, 0);
+   } else {
+      radv_nir_param_from_type(function->params + RT_ARG_DESCRIPTORS, glsl_uint_type(), true, 0);
+      radv_nir_param_from_type(function->params + RT_ARG_DYNAMIC_DESCRIPTORS, glsl_uint_type(), true, 0);
+   }
    radv_nir_param_from_type(function->params + RT_ARG_PUSH_CONSTANTS, glsl_uint_type(), true, 0);
    radv_nir_param_from_type(function->params + RT_ARG_SBT_DESCRIPTORS, glsl_uint64_t_type(), true, 0);
    radv_nir_param_from_type(function->params + RAYGEN_ARG_TRAVERSAL_ADDR, glsl_uint64_t_type(), true, 0);
@@ -552,15 +557,16 @@ radv_nir_lower_rt_abi_cps(nir_shader *shader, const struct radv_shader_info *inf
                           struct radv_device *device, struct radv_ray_tracing_pipeline *pipeline,
                           bool has_position_fetch, const struct radv_ray_tracing_stage_info *traversal_info)
 {
+   const bool uses_descriptor_heap = pipeline->base.base.create_flags & VK_PIPELINE_CREATE_2_DESCRIPTOR_HEAP_BIT_EXT;
    nir_function_impl *impl = nir_shader_get_entrypoint(shader);
 
    /* The first raygen shader gets called by the prolog with the standard raygen signature. Only shaders called by the
     * first shader can use the CPS function signature.
     */
    if (shader->info.stage != MESA_SHADER_RAYGEN || resume_shader)
-      init_cps_function(impl->function, has_position_fetch);
+      init_cps_function(impl->function, has_position_fetch, uses_descriptor_heap);
    else
-      radv_nir_init_rt_function_params(impl->function, MESA_SHADER_RAYGEN, 0, 0);
+      radv_nir_init_rt_function_params(impl->function, MESA_SHADER_RAYGEN, 0, 0, uses_descriptor_heap);
 
    if (traversal_info) {
       unsigned idx;
@@ -624,14 +630,19 @@ radv_nir_lower_rt_abi_cps(nir_shader *shader, const struct radv_shader_info *inf
    /* tail-call next shader */
    nir_def *shader_addr = nir_load_var(&b, vars.shader_addr);
    nir_function *continuation_func = nir_function_create(shader, "continuation_func");
-   init_cps_function(continuation_func, has_position_fetch);
+   init_cps_function(continuation_func, has_position_fetch, uses_descriptor_heap);
 
    unsigned param_count = continuation_func->num_params;
    nir_def **next_args = rzalloc_array_size(b.shader, sizeof(nir_def *), param_count);
    next_args[RT_ARG_LAUNCH_ID] = nir_load_param(&b, RT_ARG_LAUNCH_ID);
    next_args[RT_ARG_LAUNCH_SIZE] = nir_load_param(&b, RT_ARG_LAUNCH_SIZE);
-   next_args[RT_ARG_DESCRIPTORS] = nir_load_param(&b, RT_ARG_DESCRIPTORS);
-   next_args[RT_ARG_DYNAMIC_DESCRIPTORS] = nir_load_param(&b, RT_ARG_DYNAMIC_DESCRIPTORS);
+   if (uses_descriptor_heap) {
+      next_args[RT_ARG_HEAP_RESOURCE] = nir_load_param(&b, RT_ARG_HEAP_RESOURCE);
+      next_args[RT_ARG_HEAP_SAMPLER] = nir_load_param(&b, RT_ARG_HEAP_SAMPLER);
+   } else {
+      next_args[RT_ARG_DESCRIPTORS] = nir_load_param(&b, RT_ARG_DESCRIPTORS);
+      next_args[RT_ARG_DYNAMIC_DESCRIPTORS] = nir_load_param(&b, RT_ARG_DYNAMIC_DESCRIPTORS);
+   }
    next_args[RT_ARG_PUSH_CONSTANTS] = nir_load_param(&b, RT_ARG_PUSH_CONSTANTS);
    next_args[RT_ARG_SBT_DESCRIPTORS] = nir_load_param(&b, RT_ARG_SBT_DESCRIPTORS);
    next_args[RAYGEN_ARG_TRAVERSAL_ADDR] = nir_load_var(&b, vars.traversal_addr);

@@ -18,8 +18,6 @@
 namespace aco {
 namespace {
 
-void visit_cf_list(struct isel_context* ctx, struct exec_list* list);
-
 void
 visit_load_const(isel_context* ctx, nir_load_const_instr* instr)
 {
@@ -737,11 +735,12 @@ visit_jump(isel_context* ctx, nir_jump_instr* instr)
 {
    end_empty_exec_skip(ctx);
 
-   switch (instr->type) {
-   case nir_jump_break: emit_loop_break(ctx); break;
-   case nir_jump_continue: emit_loop_continue(ctx); break;
-   default: isel_err(&instr->instr, "Unknown NIR jump instr"); abort();
+   if (instr->type != nir_jump_break) {
+      isel_err(&instr->instr, "Unknown NIR jump instr");
+      abort();
    }
+
+   emit_loop_break(ctx);
 }
 
 void
@@ -755,7 +754,7 @@ visit_call(isel_context* ctx, nir_call_instr* instr)
    param_assignment_hints hints;
 
    if (nir_abi == ACO_NIR_CALL_ABI_AHIT_ISEC)
-      hints = get_ahit_isec_param_hints(ctx->callee_info);
+      hints = get_ahit_isec_param_hints(ctx->callee_info, ctx->program->info.descriptor_heap);
 
    ABI abi = nir_abi_to_aco(instr->callee->driver_attributes);
 
@@ -780,7 +779,7 @@ visit_call(isel_context* ctx, nir_call_instr* instr)
     */
 
    Temp stack_ptr, param_stack_ptr;
-   if (info.stack_ptr.is_reg && ctx->program->gfx_level >= GFX9) {
+   if (ctx->program->is_callee && ctx->program->gfx_level >= GFX9) {
       param_stack_ptr = bld.pseudo(aco_opcode::p_callee_stack_ptr, bld.def(s1), bld.def(s1, scc),
                                    Operand::c32(info.scratch_param_size),
                                    Operand(ctx->callee_info.stack_ptr.def.getTemp()));
@@ -814,7 +813,7 @@ visit_call(isel_context* ctx, nir_call_instr* instr)
    if (ctx->program->gfx_level >= GFX9) {
       call_instr->operands[0] = Operand(stack_ptr, info.stack_ptr.def.physReg());
    } else {
-      call_instr->operands[0] = Operand(load_scratch_resource(ctx->program, bld, -1u, false));
+      call_instr->operands[0] = Operand(load_scratch_resource(ctx->program, bld, ctx->program->private_segment_buffers.size() - 1, true));
       call_instr->operands[0].setPrecolored(info.stack_ptr.def.physReg());
    }
 
@@ -900,6 +899,44 @@ visit_debug_info(isel_context* ctx, nir_instr_debug_info* instr_info)
 }
 
 void
+push_cf_list(isel_context* ctx, struct exec_list* l)
+{
+   if (nir_cf_list_is_empty_block(l))
+      return;
+
+   nir_cf_node* node = exec_node_data_head(nir_cf_node, l, node);
+
+   cf_traversal_state state;
+   state.phase = CF_TRAVERSAL_PHASE_ENTER;
+   state.node = node;
+   state.saved_skipping_empty_exec = ctx->skipping_empty_exec;
+   ctx->skipping_empty_exec = false;
+
+   ctx->traversal_stack.push_back(std::move(state));
+}
+
+void
+pop_cf_list(isel_context* ctx)
+{
+   end_empty_exec_skip(ctx);
+   cf_traversal_state& head = ctx->traversal_stack.back();
+   ctx->skipping_empty_exec = head.saved_skipping_empty_exec;
+   ctx->traversal_stack.pop_back();
+}
+
+void
+advance_cf_list(isel_context* ctx, nir_cf_node* node)
+{
+   if (!nir_cf_node_is_last(node)) {
+      cf_traversal_state& head = ctx->traversal_stack.back();
+      head.node = nir_cf_node_next(node);
+      head.phase = CF_TRAVERSAL_PHASE_ENTER;
+   } else {
+      pop_cf_list(ctx);
+   }
+}
+
+void
 visit_block(isel_context* ctx, nir_block* block)
 {
    if (ctx->block->kind & block_kind_top_level) {
@@ -935,126 +972,137 @@ visit_block(isel_context* ctx, nir_block* block)
       default: isel_err(instr, "Unknown NIR instr type");
       }
    }
+
+   advance_cf_list(ctx, (nir_cf_node*)block);
 }
 
 void
-visit_loop(isel_context* ctx, nir_loop* loop)
+visit_loop(isel_context* ctx, nir_loop* loop, cf_traversal_phase phase)
 {
-   assert(!nir_loop_has_continue_construct(loop));
-   loop_context lc;
-   begin_loop(ctx, &lc);
-   ctx->cf_info.parent_loop.has_divergent_break =
-      loop->divergent_break && nir_loop_first_block(loop)->predecessors.entries > 1;
-   ctx->cf_info.in_divergent_cf |= ctx->cf_info.parent_loop.has_divergent_break;
+   if (phase == CF_TRAVERSAL_PHASE_ENTER) {
+      assert(!nir_loop_has_continue_construct(loop));
 
-   visit_cf_list(ctx, &loop->body);
+      begin_loop(ctx);
 
-   end_loop(ctx, &lc);
+      ctx->cf_info.parent_loop.has_divergent_break =
+         loop->divergent_break && nir_block_num_preds(nir_loop_first_block(loop)) > 1;
+      ctx->cf_info.in_divergent_cf |= ctx->cf_info.parent_loop.has_divergent_break;
+
+      ctx->traversal_stack.back().phase = CF_TRAVERSAL_PHASE_LEAVE;
+      push_cf_list(ctx, &loop->body);
+      return; /* Return to driver to process body */
+   } else if (phase == CF_TRAVERSAL_PHASE_LEAVE) {
+      end_loop(ctx);
+
+      advance_cf_list(ctx, (nir_cf_node*)loop);
+   }
 }
 
+/**
+ * Uniform conditionals are represented in the following way*) :
+ *
+ * The linear and logical CFG:
+ *                        BB_IF
+ *                        /    \
+ *       BB_THEN (logical)      BB_ELSE (logical)
+ *                        \    /
+ *                        BB_ENDIF
+ *
+ * *) Exceptions may be due to break and continue statements within loops
+ *    If a break/continue happens within uniform control flow, it branches
+ *    to the loop exit/entry block. Otherwise, it branches to the next
+ *    merge block.
+ *
+ * To maintain a logical and linear CFG without critical edges,
+ * non-uniform conditionals are represented in the following way*) :
+ *
+ * The linear CFG:
+ *                        BB_IF
+ *                        /    \
+ *       BB_THEN (logical)      BB_THEN (linear)
+ *                        \    /
+ *                        BB_INVERT (linear)
+ *                        /    \
+ *       BB_ELSE (logical)      BB_ELSE (linear)
+ *                        \    /
+ *                        BB_ENDIF
+ *
+ * The logical CFG:
+ *                        BB_IF
+ *                        /    \
+ *       BB_THEN (logical)      BB_ELSE (logical)
+ *                        \    /
+ *                        BB_ENDIF
+ *
+ *
+ * Exceptions may be due to break and continue statements within loops:
+ *
+ * The linear CFG:
+ *                        BB_IF
+ *                        /    \
+ *       BB_THEN (logical)      \
+ *           /    \              \
+ *    BB_JUMP    BB_CONTINUE    BB_ELSE     (all linear)
+ *                        \      /
+ *                        BB_ENDIF
+ **/
 void
-visit_if(isel_context* ctx, nir_if* if_stmt)
+visit_if(isel_context* ctx, nir_if* if_stmt, cf_traversal_phase phase)
 {
-   Temp cond = get_ssa_temp(ctx, if_stmt->condition.ssa);
-   Builder bld(ctx->program, ctx->block);
-   aco_ptr<Instruction> branch;
-   if_context ic;
+   if (phase == CF_TRAVERSAL_PHASE_ENTER) {
+      Temp cond = get_ssa_temp(ctx, if_stmt->condition.ssa);
 
-   if (!nir_src_is_divergent(&if_stmt->condition)) { /* uniform condition */
-      /**
-       * Uniform conditionals are represented in the following way*) :
-       *
-       * The linear and logical CFG:
-       *                        BB_IF
-       *                        /    \
-       *       BB_THEN (logical)      BB_ELSE (logical)
-       *                        \    /
-       *                        BB_ENDIF
-       *
-       * *) Exceptions may be due to break and continue statements within loops
-       *    If a break/continue happens within uniform control flow, it branches
-       *    to the loop exit/entry block. Otherwise, it branches to the next
-       *    merge block.
-       **/
+      if (!nir_src_is_divergent(&if_stmt->condition)) {
+         assert(cond.regClass() == ctx->program->lane_mask);
+         cond = bool_to_scalar_condition(ctx, cond);
+         begin_uniform_if_then(ctx, cond);
+      } else {
+         begin_divergent_if_then(ctx, cond, if_stmt->control);
+      }
+      ctx->traversal_stack.back().phase = CF_TRAVERSAL_PHASE_IN_ELSE;
+      push_cf_list(ctx, &if_stmt->then_list);
+      return; /* Return to driver to process then_list */
+   }
 
-      assert(cond.regClass() == ctx->program->lane_mask);
-      cond = bool_to_scalar_condition(ctx, cond);
+   if (phase == CF_TRAVERSAL_PHASE_IN_ELSE) {
+      if (!nir_src_is_divergent(&if_stmt->condition)) {
+         begin_uniform_if_else(ctx);
+      } else {
+         begin_divergent_if_else(ctx, if_stmt->control);
+      }
 
-      begin_uniform_if_then(ctx, &ic, cond);
-      visit_cf_list(ctx, &if_stmt->then_list);
+      ctx->traversal_stack.back().phase = CF_TRAVERSAL_PHASE_LEAVE;
+      push_cf_list(ctx, &if_stmt->else_list);
+      return; /* Return to driver to process else_list */
+   }
 
-      begin_uniform_if_else(ctx, &ic);
-      visit_cf_list(ctx, &if_stmt->else_list);
+   if (phase == CF_TRAVERSAL_PHASE_LEAVE) {
+      if (!nir_src_is_divergent(&if_stmt->condition)) {
+         end_uniform_if(ctx);
+      } else {
+         end_divergent_if(ctx);
+      }
 
-      end_uniform_if(ctx, &ic);
-   } else { /* non-uniform condition */
-      /**
-       * To maintain a logical and linear CFG without critical edges,
-       * non-uniform conditionals are represented in the following way*) :
-       *
-       * The linear CFG:
-       *                        BB_IF
-       *                        /    \
-       *       BB_THEN (logical)      BB_THEN (linear)
-       *                        \    /
-       *                        BB_INVERT (linear)
-       *                        /    \
-       *       BB_ELSE (logical)      BB_ELSE (linear)
-       *                        \    /
-       *                        BB_ENDIF
-       *
-       * The logical CFG:
-       *                        BB_IF
-       *                        /    \
-       *       BB_THEN (logical)      BB_ELSE (logical)
-       *                        \    /
-       *                        BB_ENDIF
-       *
-       *
-       * Exceptions may be due to break and continue statements within loops:
-       *
-       * The linear CFG:
-       *                        BB_IF
-       *                        /    \
-       *       BB_THEN (logical)      \
-       *           /    \              \
-       *    BB_JUMP    BB_CONTINUE    BB_ELSE     (all linear)
-       *                        \      /
-       *                        BB_ENDIF
-       **/
-
-      begin_divergent_if_then(ctx, &ic, cond, if_stmt->control);
-      visit_cf_list(ctx, &if_stmt->then_list);
-
-      begin_divergent_if_else(ctx, &ic, if_stmt->control);
-      visit_cf_list(ctx, &if_stmt->else_list);
-
-      end_divergent_if(ctx, &ic);
+      advance_cf_list(ctx, (nir_cf_node*)if_stmt);
    }
 }
 
 void
-visit_cf_list(isel_context* ctx, struct exec_list* list)
+visit_function_impl(isel_context* ctx, struct nir_function_impl* impl)
 {
-   if (nir_cf_list_is_empty_block(list))
-      return;
+   push_cf_list(ctx, &impl->body);
 
-   bool skipping_empty_exec_old = ctx->skipping_empty_exec;
-   if_context empty_exec_skip_old = std::move(ctx->empty_exec_skip);
-   ctx->skipping_empty_exec = false;
+   while (!ctx->traversal_stack.empty()) {
+      nir_cf_node* node = ctx->traversal_stack.back().node;
+      cf_traversal_phase phase = ctx->traversal_stack.back().phase;
 
-   foreach_list_typed (nir_cf_node, node, node, list) {
       switch (node->type) {
       case nir_cf_node_block: visit_block(ctx, nir_cf_node_as_block(node)); break;
-      case nir_cf_node_if: visit_if(ctx, nir_cf_node_as_if(node)); break;
-      case nir_cf_node_loop: visit_loop(ctx, nir_cf_node_as_loop(node)); break;
+      case nir_cf_node_if: visit_if(ctx, nir_cf_node_as_if(node), phase); break;
+      case nir_cf_node_loop: visit_loop(ctx, nir_cf_node_as_loop(node), phase); break;
       default: UNREACHABLE("unimplemented cf list type");
       }
    }
-
-   end_empty_exec_skip(ctx);
-   ctx->skipping_empty_exec = skipping_empty_exec_old;
-   ctx->empty_exec_skip = std::move(empty_exec_skip_old);
 }
 
 void
@@ -1342,7 +1390,8 @@ select_program_rt(isel_context& ctx, unsigned shader_count, struct nir_shader* c
          callee_info traversal_info = get_callee_info(
             ctx.program->gfx_level, ctx.program->wave_size, rtTraversalABI,
             traversal_function->num_params, traversal_function->params, NULL, limit);
-         callee_hints = get_ahit_isec_param_hints(traversal_info);
+         callee_hints =
+            get_ahit_isec_param_hints(traversal_info, ctx.program->info.descriptor_heap);
       }
 
       /* TODO: callable abi? */
@@ -1357,7 +1406,7 @@ select_program_rt(isel_context& ctx, unsigned shader_count, struct nir_shader* c
 
       append_logical_start(ctx.block);
       split_arguments(&ctx, startpgm);
-      visit_cf_list(&ctx, &impl->body);
+      visit_function_impl(&ctx, impl);
       /* This block doesn't need a p_reload_preserved, we add it manually after p_return */
       append_logical_end(&ctx, false);
       ctx.block->kind |= block_kind_uniform;
@@ -1432,8 +1481,8 @@ create_end_for_merged_shader(isel_context* ctx)
 
 void
 select_shader(isel_context& ctx, nir_shader* nir, const bool need_startpgm, const bool need_endpgm,
-              const bool need_barrier, if_context* ic_merged_wave_info,
-              const bool check_merged_wave_info, const bool endif_merged_wave_info)
+              const bool need_barrier, const bool check_merged_wave_info,
+              const bool endif_merged_wave_info)
 {
    init_context(&ctx, nir);
    setup_fp_mode(&ctx, nir);
@@ -1465,7 +1514,7 @@ select_shader(isel_context& ctx, nir_shader* nir, const bool need_startpgm, cons
       const unsigned i =
          nir->info.stage == MESA_SHADER_VERTEX || nir->info.stage == MESA_SHADER_TESS_EVAL ? 0 : 1;
       const Temp cond = merged_wave_info_to_mask(&ctx, i);
-      begin_divergent_if_then(&ctx, ic_merged_wave_info, cond);
+      begin_divergent_if_then(&ctx, cond);
    }
 
    if (need_barrier) {
@@ -1480,7 +1529,7 @@ select_shader(isel_context& ctx, nir_shader* nir, const bool need_startpgm, cons
    }
 
    nir_function_impl* func = nir_shader_get_entrypoint(nir);
-   visit_cf_list(&ctx, &func->body);
+   visit_function_impl(&ctx, func);
 
    if (ctx.program->info.ps.has_epilog) {
       if (ctx.stage == fragment_fs) {
@@ -1495,8 +1544,8 @@ select_shader(isel_context& ctx, nir_shader* nir, const bool need_startpgm, cons
    }
 
    if (endif_merged_wave_info) {
-      begin_divergent_if_else(&ctx, ic_merged_wave_info);
-      end_divergent_if(&ctx, ic_merged_wave_info);
+      begin_divergent_if_else(&ctx);
+      end_divergent_if(&ctx);
    }
 
    bool is_first_stage_of_merged_shader = false;
@@ -1532,7 +1581,6 @@ select_shader(isel_context& ctx, nir_shader* nir, const bool need_startpgm, cons
 void
 select_program_merged(isel_context& ctx, const unsigned shader_count, nir_shader* const* shaders)
 {
-   if_context ic_merged_wave_info;
    const bool ngg_gs = ctx.stage.hw == AC_HW_NEXT_GEN_GEOMETRY_SHADER && ctx.stage.has(SWStage::GS);
    const bool hs = ctx.stage.hw == AC_HW_HULL_SHADER;
 
@@ -1566,8 +1614,8 @@ select_program_merged(isel_context& ctx, const unsigned shader_count, nir_shader
       /* A barrier is usually needed at the beginning of the second shader, with exceptions. */
       const bool need_barrier = i != 0 && !ngg_gs && !tcs_skip_barrier;
 
-      select_shader(ctx, nir, need_startpgm, need_endpgm, need_barrier, &ic_merged_wave_info,
-                    check_merged_wave_info, endif_merged_wave_info);
+      select_shader(ctx, nir, need_startpgm, need_endpgm, need_barrier, check_merged_wave_info,
+                    endif_merged_wave_info);
 
       if (i == 0 && ctx.stage == vertex_tess_control_hs && ctx.tcs_in_out_eq) {
          /* Special handling when TCS input and output patch size is the same.
@@ -1597,7 +1645,6 @@ select_program(Program* program, unsigned shader_count, struct nir_shader* const
       select_program_merged(ctx, shader_count, shaders);
    } else {
       bool need_barrier = false, check_merged_wave_info = false, endif_merged_wave_info = false;
-      if_context ic_merged_wave_info;
 
       /* Handle separate compilation of VS+TCS and {VS,TES}+GS on GFX9+. */
       if (ctx.program->info.merged_shader_compiled_separately) {
@@ -1614,8 +1661,8 @@ select_program(Program* program, unsigned shader_count, struct nir_shader* const
          }
       }
 
-      select_shader(ctx, shaders[0], true, true, need_barrier, &ic_merged_wave_info,
-                    check_merged_wave_info, endif_merged_wave_info);
+      select_shader(ctx, shaders[0], true, true, need_barrier, check_merged_wave_info,
+                    endif_merged_wave_info);
    }
 }
 

@@ -6,6 +6,7 @@
 #ifndef FD6_PACK_H
 #define FD6_PACK_H
 
+#include <stdbool.h>
 #include <stdint.h>
 
 #include "fd6_hw.h"

@@ -68,13 +68,13 @@ get_buffer(uint64_t gpuaddr)
 }
 
 static int
-buffer_contains_hostptr(struct buffer *buf, void *hostptr)
+buffer_contains_hostptr(struct buffer *buf, const void *hostptr)
 {
    return (buf->hostptr <= hostptr) && (hostptr < (buf->hostptr + buf->len));
 }
 
 uint64_t
-gpuaddr(void *hostptr)
+gpuaddr(const void *hostptr)
 {
    rb_tree_foreach (struct buffer, buf, &buffers, node) {
       if (buffer_contains_hostptr(buf, hostptr))

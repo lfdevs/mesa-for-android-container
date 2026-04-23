@@ -172,8 +172,8 @@ main(int argc, char **argv)
       fprintf(stderr, "Couldn't guess shader stage from %s\n", argv[1]);
       return 4;
    }
-   nir_shader *shader = spirv_to_nir(words, nwords, NULL, 0, stage, "main",
-                                     &options, &nir_options);
+   nir_shader *shader =
+      spirv_to_nir(words, nwords, NULL, stage, "main", &options, &nir_options);
    if (!shader) {
       fprintf(stderr, "Compilation failed!\n");
       return 3;

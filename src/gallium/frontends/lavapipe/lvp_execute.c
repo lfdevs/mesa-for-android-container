@@ -2718,9 +2718,6 @@ static void handle_draw_indexed(struct vk_cmd_queue_entry *cmd,
    state->info.start_instance = cmd->u.draw_indexed.first_instance;
    state->info.instance_count = cmd->u.draw_indexed.instance_count;
 
-   if (state->info.primitive_restart)
-      state->info.restart_index = util_prim_restart_index_from_size(state->info.index_size);
-
    draw.count = MIN2(cmd->u.draw_indexed.index_count, state->index_buffer_size / state->index_size);
    draw.index_bias = cmd->u.draw_indexed.vertex_offset;
    /* TODO: avoid calculating multiple times if cmdbuf is submitted again */
@@ -2746,9 +2743,6 @@ static void handle_draw_multi_indexed(struct vk_cmd_queue_entry *cmd,
    state->info.instance_count = cmd->u.draw_multi_indexed_ext.instance_count;
    if (cmd->u.draw_multi_indexed_ext.draw_count > 1)
       state->info.increment_draw_id = true;
-
-   if (state->info.primitive_restart)
-      state->info.restart_index = util_prim_restart_index_from_size(state->info.index_size);
 
    unsigned size = cmd->u.draw_multi_indexed_ext.draw_count * sizeof(struct pipe_draw_start_count_bias);
    memcpy(draws, cmd->u.draw_multi_indexed_ext.index_info, size);
@@ -2785,8 +2779,6 @@ static void handle_draw_indirect(struct vk_cmd_queue_entry *cmd,
       state->info.index_size = state->index_size;
       state->info.index.resource = state->index_buffer;
       state->info.max_index = ~0U;
-      if (state->info.primitive_restart)
-         state->info.restart_index = util_prim_restart_index_from_size(state->info.index_size);
       if (state->index_offset || state->index_buffer_size != UINT32_MAX) {
          struct pipe_transfer *xfer;
          uint8_t *mem = pipe_buffer_map(state->pctx, state->index_buffer, 0, &xfer);
@@ -2812,6 +2804,7 @@ static void handle_index_buffer(struct vk_cmd_queue_entry *cmd,
    struct vk_cmd_bind_index_buffer *ib = &cmd->u.bind_index_buffer;
    state->index_size = vk_index_type_to_bytes(ib->index_type);
    state->index_buffer_size = UINT32_MAX;
+   state->info.restart_index = util_prim_restart_index_from_size(state->index_size);
 
    if (ib->buffer) {
       state->index_offset = ib->offset;
@@ -2840,6 +2833,7 @@ static void handle_index_buffer2(struct vk_cmd_queue_entry *cmd,
       state->index_offset = 0;
       state->index_buffer = state->device->zero_buffer;
    }
+   state->info.restart_index = util_prim_restart_index_from_size(state->index_size);
 
    state->ib_dirty = true;
 }
@@ -3709,6 +3703,12 @@ static void handle_set_primitive_restart_enable(struct vk_cmd_queue_entry *cmd,
                                                 struct rendering_state *state)
 {
    state->info.primitive_restart = cmd->u.set_primitive_restart_enable.primitive_restart_enable;
+}
+
+static void handle_set_primitive_restart_index(struct vk_cmd_queue_entry *cmd,
+                                                struct rendering_state *state)
+{
+   state->info.restart_index = cmd->u.set_primitive_restart_index_ext.primitive_restart_index;
 }
 
 static void handle_set_rasterizer_discard_enable(struct vk_cmd_queue_entry *cmd,
@@ -5060,11 +5060,13 @@ void lvp_add_enqueue_cmd_entrypoints(struct vk_device_dispatch_table *disp)
    ENQUEUE_CMD(CmdTraceRaysKHR)
 
    ENQUEUE_CMD(CmdSetDepthBias2EXT)
+   ENQUEUE_CMD(CmdSetPrimitiveRestartIndexEXT)
 
    ENQUEUE_CMD(CmdSetSampleLocationsEnableEXT)
    ENQUEUE_CMD(CmdSetSampleLocationsEXT)
 
    ENQUEUE_CMD(CmdSetColorBlendAdvancedEXT)
+
 #undef ENQUEUE_CMD
 }
 
@@ -5489,6 +5491,9 @@ static void lvp_execute_cmd_buffer(struct list_head *cmds,
          break;
       case VK_CMD_SET_COLOR_BLEND_ADVANCED_EXT:
          handle_set_color_blend_advanced(cmd, state);
+         break;
+      case VK_CMD_SET_PRIMITIVE_RESTART_INDEX_EXT:
+         handle_set_primitive_restart_index(cmd, state);
          break;
       default:
          fprintf(stderr, "Unsupported command %s\n", vk_cmd_queue_type_names[cmd->type]);

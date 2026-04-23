@@ -45,7 +45,7 @@ struct panfrost_dump_object_header_ho {
    union {
       struct pan_reg_hdr_ho {
          uint64_t jc;
-         uint32_t gpu_id;
+         uint64_t gpu_id;
          uint32_t major;
          uint32_t minor;
          uint64_t nbos;
@@ -93,7 +93,7 @@ read_header(FILE *fp, struct panfrost_dump_object_header_ho *pdoh)
    switch (pdoh->type) {
    case PANFROSTDUMP_BUF_REG:
       pdoh->reghdr.jc = le64toh(doh_le.reghdr.jc);
-      pdoh->reghdr.gpu_id = le32toh(doh_le.reghdr.gpu_id);
+      pdoh->reghdr.gpu_id = le64toh(doh_le.reghdr.gpu_id);
       pdoh->reghdr.major = le32toh(doh_le.reghdr.major);
       pdoh->reghdr.minor = le32toh(doh_le.reghdr.minor);
       pdoh->reghdr.nbos = le64toh(doh_le.reghdr.nbos);
@@ -195,7 +195,7 @@ main(int argc, char *argv[])
    struct panfrost_dump_object_header_ho doh;
    bool print_addr = false;
    bool print_reg = false;
-   uint32_t gpu_id = 0;
+   uint64_t gpu_id = 0;
    uint64_t jc = 0;
    size_t nbytes;
    int i, j, k, c;
@@ -269,7 +269,7 @@ main(int argc, char *argv[])
          return EXIT_FAILURE;
       }
 
-      printf("JC: %" PRIX64 ", GPU_ID: %" PRIX32 "\n", jc, gpu_id);
+      printf("JC: %" PRIX64 ", GPU_ID: %" PRIX64 "\n", jc, gpu_id);
 
       if (print_reg) {
          puts("GPU registers:");

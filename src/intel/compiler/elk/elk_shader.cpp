@@ -198,14 +198,10 @@ elk_instruction_name(const struct elk_isa_info *isa, enum elk_opcode op)
       return "txf";
    case ELK_SHADER_OPCODE_TXF_LOGICAL:
       return "txf_logical";
-   case ELK_SHADER_OPCODE_TXF_LZ:
-      return "txf_lz";
    case ELK_SHADER_OPCODE_TXL:
       return "txl";
    case ELK_SHADER_OPCODE_TXL_LOGICAL:
       return "txl_logical";
-   case ELK_SHADER_OPCODE_TXL_LZ:
-      return "txl_lz";
    case ELK_SHADER_OPCODE_TXS:
       return "txs";
    case ELK_SHADER_OPCODE_TXS_LOGICAL:

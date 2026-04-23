@@ -253,7 +253,7 @@ static void ac_ib_gather_context_rolls(struct ac_context_roll_ctx *ctx, uint32_t
          break;
 
       case PKT3_ACQUIRE_MEM:
-         if (G_580_PWS_ENA2(ib[cur_dw])) {
+         if (G_581B_PWS_ENA2(ib[cur_dw])) {
             ac_record_wait_idle(ctx);
          } else {
             ac_roll_context(ctx);
@@ -266,7 +266,7 @@ static void ac_ib_gather_context_rolls(struct ac_context_roll_ctx *ctx, uint32_t
          break;
 
       case PKT3_EVENT_WRITE:
-         if (G_490_EVENT_TYPE(ib[cur_dw]) == V_028A90_PS_PARTIAL_FLUSH)
+         if (G_491_EVENT_TYPE(ib[cur_dw]) == V_028A90_PS_PARTIAL_FLUSH)
             ac_record_wait_idle(ctx);
          break;
 

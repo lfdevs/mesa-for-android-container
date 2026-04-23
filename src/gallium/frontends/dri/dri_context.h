@@ -75,7 +75,6 @@ struct dri_context
 
    /* gallium */
    struct st_context *st;
-   struct pp_queue_t *pp;
    struct hud_context *hud;
 };
 

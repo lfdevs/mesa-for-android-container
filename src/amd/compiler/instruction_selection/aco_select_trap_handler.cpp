@@ -143,8 +143,7 @@ dump_vgprs_to_mem(isel_context* ctx, Builder& bld, Operand rsrc)
                Operand(PhysReg{1}, s1) /* SRC0 mode */);
    }
 
-   loop_context lc;
-   begin_loop(ctx, &lc);
+   begin_loop(ctx);
    {
       bld.reset(ctx->block);
 
@@ -170,14 +169,13 @@ dump_vgprs_to_mem(isel_context* ctx, Builder& bld, Operand rsrc)
       const Temp cond = bld.sopc(aco_opcode::s_cmp_ge_u32, bld.def(s1, scc), Operand(soffset, s1),
                                  Operand(num_vgprs, s1));
 
-      if_context loop_break;
-      begin_uniform_if_then(ctx, &loop_break, cond);
+      begin_uniform_if_then(ctx, cond);
       {
          emit_loop_break(ctx);
       }
-      end_uniform_if(ctx, &loop_break);
+      end_uniform_if(ctx);
    }
-   end_loop(ctx, &lc);
+   end_loop(ctx);
    bld.reset(ctx->block);
 
    if (ctx->program->gfx_level < GFX10) {
@@ -211,8 +209,7 @@ dump_lds_to_mem(isel_context* ctx, Builder& bld, Operand rsrc)
    Temp lds_size_non_zero =
       bld.sopc(aco_opcode::s_cmp_lg_i32, bld.def(s1, scc), Operand(lds_size, s1), Operand::c32(0));
 
-   if_context ic;
-   begin_uniform_if_then(ctx, &ic, lds_size_non_zero);
+   begin_uniform_if_then(ctx, lds_size_non_zero);
    {
       bld.reset(ctx->block);
 
@@ -240,8 +237,7 @@ dump_lds_to_mem(isel_context* ctx, Builder& bld, Operand rsrc)
 
       Operand m = load_lds_size_m0(bld);
 
-      loop_context lc;
-      begin_loop(ctx, &lc);
+      begin_loop(ctx);
       {
          bld.reset(ctx->block);
 
@@ -267,18 +263,17 @@ dump_lds_to_mem(isel_context* ctx, Builder& bld, Operand rsrc)
          const Temp cond = bld.sopc(aco_opcode::s_cmp_ge_u32, bld.def(s1, scc),
                                     Operand(soffset, s1), Operand(lds_size, s1));
 
-         if_context loop_break;
-         begin_uniform_if_then(ctx, &loop_break, cond);
+         begin_uniform_if_then(ctx, cond);
          {
             emit_loop_break(ctx);
          }
-         end_uniform_if(ctx, &loop_break);
+         end_uniform_if(ctx);
       }
-      end_loop(ctx, &lc);
+      end_loop(ctx);
       bld.reset(ctx->block);
    }
-   begin_uniform_if_else(ctx, &ic);
-   end_uniform_if(ctx, &ic);
+   begin_uniform_if_else(ctx);
+   end_uniform_if(ctx);
    bld.reset(ctx->block);
 
    disable_thread_indexing(ctx, rsrc);

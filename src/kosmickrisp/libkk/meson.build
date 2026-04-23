@@ -16,6 +16,7 @@ libkk_spv = custom_target(
     libkk_shader_files, '--',
     '-I' + join_paths(meson.project_source_root(), 'include'),
     '-I' + join_paths(meson.project_source_root(), 'src/compiler/libcl'),
+    '-I' + join_paths(meson.project_source_root(), 'src/poly/cl'),
     '-I' + join_paths(meson.current_source_dir(), '.'),
     '-I' + join_paths(meson.current_source_dir(), '../../'),
     '-I' + join_paths(meson.current_source_dir(), 'shaders'),
@@ -45,7 +46,8 @@ libkk_shaders = custom_target(
 libkk_shaders_lib = static_library(
   'libkk_shaders',
   sources : [libkk_shaders],
-  dependencies : [idep_mesautil],
+  link_with : [libpoly_nir],
+  dependencies : [idep_nir, idep_mesautil, idep_libpoly],
 )
 
 idep_libkk_shaders_h = declare_dependency(

@@ -397,16 +397,14 @@ handle_fp_fast_math(struct vtn_builder *b, UNUSED struct vtn_value *val,
    if (dec->decoration != SpvDecorationFPFastMathMode)
       return;
 
-   SpvFPFastMathModeMask can_fast_math =
-      SpvFPFastMathModeAllowRecipMask |
-      SpvFPFastMathModeAllowContractMask |
-      SpvFPFastMathModeAllowReassocMask |
-      SpvFPFastMathModeAllowTransformMask;
-
    /* Decoration overrides defaults. */
    b->nb.fp_math_ctrl = 0;
-   if ((dec->operands[0] & can_fast_math) != can_fast_math)
-      b->nb.fp_math_ctrl |= nir_fp_exact;
+   if (!(dec->operands[0] & SpvFPFastMathModeAllowContractMask))
+      b->nb.fp_math_ctrl |= nir_fp_no_contract;
+   if (!(dec->operands[0] & SpvFPFastMathModeAllowReassocMask))
+      b->nb.fp_math_ctrl |= nir_fp_no_reassoc;
+   if (!(dec->operands[0] & SpvFPFastMathModeAllowTransformMask))
+      b->nb.fp_math_ctrl |= nir_fp_no_transform;
    if (!(dec->operands[0] & SpvFPFastMathModeNSZMask))
       b->nb.fp_math_ctrl |= nir_fp_preserve_signed_zero;
    if (!(dec->operands[0] & SpvFPFastMathModeNotNaNMask))

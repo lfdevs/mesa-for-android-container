@@ -194,7 +194,7 @@ radv_cs_write_data_head(const struct radv_device *device, struct radv_cmd_stream
    const unsigned cdw_end = radeon_check_space(device->ws, cs->b, 4 + count);
 
    if (cs->hw_ip == AMD_IP_COMPUTE || cs->hw_ip == AMD_IP_GFX) {
-      ac_emit_cp_write_data_head(cs->b, engine_sel, V_370_MEM, va, count, predicating);
+      ac_emit_cp_write_data_head(cs->b, engine_sel, V_371_MEMORY, va, count, predicating);
    } else if (cs->hw_ip == AMD_IP_SDMA) {
       ac_emit_sdma_write_data_head(cs->b, va, count);
    } else {

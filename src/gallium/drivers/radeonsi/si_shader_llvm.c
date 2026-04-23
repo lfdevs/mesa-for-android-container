@@ -554,7 +554,7 @@ static bool si_llvm_translate_nir(struct si_shader_context *ctx, struct si_shade
    switch (ctx->stage) {
    case MESA_SHADER_VERTEX:
       if (shader->key.ge.as_ls)
-         si_llvm_ls_build_end(ctx);
+         si_llvm_ls_build_end(ctx, nir);
       else if (shader->key.ge.as_es)
          si_llvm_es_build_end(ctx);
       break;
@@ -571,7 +571,7 @@ static bool si_llvm_translate_nir(struct si_shader_context *ctx, struct si_shade
 
    case MESA_SHADER_FRAGMENT:
       if (!shader->is_monolithic)
-         si_llvm_ps_build_end(ctx);
+         si_llvm_ps_build_end(ctx, nir);
       break;
 
    default:

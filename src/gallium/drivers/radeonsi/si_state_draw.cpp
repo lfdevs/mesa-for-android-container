@@ -33,6 +33,8 @@
 #define GFX(name) name##GFX11
 #elif (GFX_VER == 115)
 #define GFX(name) name##GFX11_5
+#elif (GFX_VER == 117)
+#define GFX(name) name##GFX11_7
 #elif (GFX_VER == 12)
 #define GFX(name) name##GFX12
 #else
@@ -432,6 +434,8 @@ bool si_update_shaders_for_mesh(struct si_context *sctx, struct si_shader *old_v
       return si_update_shaders_shared_by_vertex_and_mesh_pipe<GFX11, TESS_OFF, GS_OFF, MS_ON, NGG_ON>(sctx, old_vs, new_vs);
    case GFX11_5:
       return si_update_shaders_shared_by_vertex_and_mesh_pipe<GFX11_5, TESS_OFF, GS_OFF, MS_ON, NGG_ON>(sctx, old_vs, new_vs);
+   case GFX11_7:
+      return si_update_shaders_shared_by_vertex_and_mesh_pipe<GFX11_7, TESS_OFF, GS_OFF, MS_ON, NGG_ON>(sctx, old_vs, new_vs);
    case GFX12:
       return si_update_shaders_shared_by_vertex_and_mesh_pipe<GFX12, TESS_OFF, GS_OFF, MS_ON, NGG_ON>(sctx, old_vs, new_vs);
    default:
@@ -643,18 +647,18 @@ static void si_cp_dma_prefetch_inline(struct radeon_cmdbuf *cs, uint64_t address
     */
    assert(size % SI_CPDMA_ALIGNMENT == 0);
    assert(address % SI_CPDMA_ALIGNMENT == 0);
-   assert(size < S_415_BYTE_COUNT_GFX6(~0u));
+   assert(size < S_415_BYTE_COUNT(~0u));
    assert(address || size == 0);
 
-   uint32_t header = S_411_SRC_SEL(V_411_SRC_ADDR_TC_L2);
-   uint32_t command = S_415_BYTE_COUNT_GFX6(size);
+   uint32_t header = S_501_SRC_SEL(V_501_SRC_ADDR_USING_L2);
+   uint32_t command = S_415_BYTE_COUNT(size);
 
    if (GFX_VERSION >= GFX9) {
-      command |= S_415_DISABLE_WR_CONFIRM_GFX9(1);
-      header |= S_411_DST_SEL(V_411_NOWHERE);
+      command |= S_506_DISABLE_WR_CONFIRM(1);
+      header |= S_501_DST_SEL(V_501_DST_NOWHERE);
    } else {
-      command |= S_415_DISABLE_WR_CONFIRM_GFX6(1);
-      header |= S_411_DST_SEL(V_411_DST_ADDR_TC_L2);
+      command |= S_415_DISABLE_WR_CONFIRM(1);
+      header |= S_501_DST_SEL(V_501_DST_ADDR_USING_L2);
    }
 
    radeon_begin(cs);
@@ -697,6 +701,9 @@ void si_cp_dma_prefetch(struct radeon_cmdbuf *cs,
       break;
    case GFX11_5:
       si_cp_dma_prefetch_inline<GFX11_5>(cs, address, size);
+      break;
+   case GFX11_7:
+      si_cp_dma_prefetch_inline<GFX11_7>(cs, address, size);
       break;
    case GFX12:
       si_cp_dma_prefetch_inline<GFX12>(cs, address, size);
@@ -1097,6 +1104,9 @@ void si_emit_rasterizer_prim_state_for_mesh(struct si_context *sctx)
       break;
    case GFX11_5:
       si_emit_rasterizer_prim_state<GFX11_5, GS_OFF, NGG_ON>(sctx);
+      break;
+   case GFX11_7:
+      si_emit_rasterizer_prim_state<GFX11_7, GS_OFF, NGG_ON>(sctx);
       break;
    case GFX12:
       si_emit_rasterizer_prim_state<GFX12, GS_OFF, NGG_ON>(sctx);
@@ -1610,8 +1620,8 @@ static void si_emit_draw_packets(struct si_context *sctx, const struct pipe_draw
          radeon_emit((sh_base_reg + SI_SGPR_BASE_VERTEX * 4 - SI_SH_REG_OFFSET) >> 2);
          radeon_emit((sh_base_reg + SI_SGPR_START_INSTANCE * 4 - SI_SH_REG_OFFSET) >> 2);
          radeon_emit(((sh_base_reg + SI_SGPR_DRAWID * 4 - SI_SH_REG_OFFSET) >> 2) |
-                     S_2C_4_DRAW_INDEX_ENABLE(sctx->vs_uses_draw_id) |
-                     S_2C_4_COUNT_INDIRECT_ENABLE(!!indirect->indirect_draw_count));
+                     S_2C4_DRAW_INDEX_ENABLE(sctx->vs_uses_draw_id) |
+                     S_2C4_COUNT_INDIRECT_ENABLE(!!indirect->indirect_draw_count));
          radeon_emit(indirect->draw_count);
          radeon_emit(count_va);
          radeon_emit(count_va >> 32);
@@ -1816,7 +1826,7 @@ static void si_emit_draw_packets(struct si_context *sctx, const struct pipe_draw
             }
          }
       } else {
-         if ((GFX_VERSION == GFX11_5 || GFX_VERSION == GFX12) && !IS_DRAW_VERTEX_STATE &&
+         if ((GFX_VERSION >= GFX11_5 && GFX_VERSION <= GFX12) && !IS_DRAW_VERTEX_STATE &&
              indirect && indirect->count_from_stream_output) {
             /* DrawTransformFeedback requires 3 SQ_NON_EVENTs after the packet. */
             assert(num_draws == 1);
@@ -1932,6 +1942,9 @@ void si_set_vertex_buffer_descriptor(struct si_screen *sscreen, struct si_vertex
       break;
    case GFX11_5:
       si_set_vb_descriptor<GFX11_5>(velems, vb, element_index, out);
+      break;
+   case GFX11_7:
+      si_set_vb_descriptor<GFX11_7>(velems, vb, element_index, out);
       break;
    case GFX12:
       si_set_vb_descriptor<GFX12>(velems, vb, element_index, out);

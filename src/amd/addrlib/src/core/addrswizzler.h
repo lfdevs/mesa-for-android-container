@@ -1,7 +1,8 @@
 /*
 ************************************************************************************************************************
 *
-*  Copyright (C) 2024 Advanced Micro Devices, Inc.  All rights reserved.
+*  Copyright (C) 2024-2026 Advanced Micro Devices, Inc.  All rights reserved.
+*  SPDX-License-Identifier: MIT
 *
 ***********************************************************************************************************************/
 /**
@@ -26,10 +27,13 @@ typedef void (*UnalignedCopyMemImgFunc)(
     void*               pImgBlockSliceStart,  // Block corresponding to beginning of slice
     void*               pBuf,                 // Pointer to data starting from the copy origin.
     size_t              bufStrideY,           // Stride of each row in pBuf
+    size_t              bufStrideZ,           // Stride of each slice in pBuf
     UINT_32             imageBlocksY,         // Width of the image slice, in blocks.
-    ADDR_COORD2D        origin,               // Absolute origin, in elements
-    ADDR_EXTENT2D       extent,               // Size to copy, in elements
-    UINT_32             sliceXor,             // Includes pipeBankXor and z XOR
+    UINT_32             imageBlocksZ,         // Depth pitch of the image slice, in blocks.
+    ADDR_COORD3D        origin,               // Absolute origin, in elements
+    ADDR_EXTENT3D       extent,               // Size to copy, in elements
+    UINT_32             pipeBankXor,          // Final value to XOR into the address
+    BOOL_32             isInMipTail,          // True if this is in the mip tail.
     const LutAddresser& addresser);
 
 // This class calculates and holds up to four lookup tables (x/y/z/s) which can be used to cheaply calculate the
@@ -60,9 +64,20 @@ public:
 
     // Get the block size
     UINT_32  GetBlockBits() const { return m_blockBits; }
+    UINT_32  GetBlockX() const { return m_blockSize.width; }
+    UINT_32  GetBlockY() const { return m_blockSize.height; }
+    UINT_32  GetBlockZ() const { return m_blockSize.depth; }
     UINT_32  GetBlockXBits() const { return Log2(m_blockSize.width); }
     UINT_32  GetBlockYBits() const { return Log2(m_blockSize.height); }
     UINT_32  GetBlockZBits() const { return Log2(m_blockSize.depth); }
+
+    // Get the microblock size
+    UINT_32  GetMicroBlockX() const { return m_microBlockSize.width; }
+    UINT_32  GetMicroBlockY() const { return m_microBlockSize.height; }
+    UINT_32  GetMicroBlockZ() const { return m_microBlockSize.depth; }
+
+    // Get other image props
+    UINT_32  GetBpeLog2() const { return m_bpeLog2; }
 
     // "Fast single channel" functions to get the part that each channel contributes to be XORd together.
     UINT_32  GetAddressX(UINT_32  x) const { return m_pXLut[x & m_xLutMask];}
@@ -71,8 +86,11 @@ public:
     UINT_32  GetAddressS(UINT_32  s) const { return m_pSLut[s & m_sLutMask];}
 
     // Get a function that can copy a single 2D slice of an image with this swizzle.
-    UnalignedCopyMemImgFunc GetCopyMemImgFunc() const;
-    UnalignedCopyMemImgFunc GetCopyImgMemFunc() const;
+    UnalignedCopyMemImgFunc GetCopyMemImgFunc(ADDR_COPY_FLAGS flags) const;
+    UnalignedCopyMemImgFunc GetCopyImgMemFunc(ADDR_COPY_FLAGS flags) const;
+
+    void DoCopyMemImgPostFlushes(ADDR_COPY_FLAGS flags) const;
+    void DoCopyImgMemPreFlushes(ADDR_COPY_FLAGS flags) const;
 private:
     // Calculate general properties of the swizzle equations
     void InitSwizzleProps();
@@ -99,6 +117,9 @@ private:
 
     // The block size
     ADDR_EXTENT3D m_blockSize;
+    
+    // The microblock size
+    ADDR_EXTENT3D m_microBlockSize;
 
     // Number of 'x' bits at the bottom of the equation. Must be a pow2 and at least 1.
     // This will be used as a simple optimization to batch together operations on adjacent x pixels.

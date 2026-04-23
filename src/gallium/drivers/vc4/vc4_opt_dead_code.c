@@ -43,9 +43,8 @@ static void
 dce(struct vc4_compile *c, struct qinst *inst)
 {
         if (debug) {
-                fprintf(stderr, "Removing: ");
-                qir_dump_inst(c, inst);
-                fprintf(stderr, "\n");
+                char *dump_inst = qir_dump_inst(c, inst);
+                mesa_logd("Removing: \"%s\"", dump_inst);
         }
         assert(!inst->sf);
         qir_remove_instruction(c, inst);
@@ -117,10 +116,9 @@ qir_opt_dead_code(struct vc4_compile *c)
                                  */
                                 if (inst->dst.file == QFILE_TEMP) {
                                         if (debug) {
-                                                fprintf(stderr,
-                                                        "Removing dst from: ");
-                                                qir_dump_inst(c, inst);
-                                                fprintf(stderr, "\n");
+                                                char *dump_inst = qir_dump_inst(c, inst);
+                                                mesa_logd("Removing dst from: \"%s\"",
+                                                          dump_inst);
                                         }
                                         c->defs[inst->dst.index] = NULL;
                                         inst->dst.file = QFILE_NULL;

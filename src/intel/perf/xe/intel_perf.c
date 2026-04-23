@@ -131,6 +131,8 @@ xe_oa_metrics_available(struct intel_perf_config *perf, int fd, bool use_registe
       read_file_uint64("/proc/sys/dev/xe/observation_paranoid", &paranoid);
       if (paranoid == 0 || geteuid() == 0)
          perf_oa_available = true;
+      else
+         perf->features_supported |= INTEL_PERF_FEATURE_OA_BLOCKED_BY_POLICY;
    }
 
    if (!perf_oa_available)

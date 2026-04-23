@@ -83,3 +83,5 @@ glx@glx_arb_create_context@null attribute list
 
 # New flakes with GL CTS 4.6.7.0
 KHR-GL46.transform_feedback2.transform_feedback2_states
+
+dEQP-GLES3.functional.occlusion_query.conservative_depth_clear_stencil_write_stencil_clear

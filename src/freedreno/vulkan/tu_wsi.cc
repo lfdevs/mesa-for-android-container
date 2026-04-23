@@ -8,9 +8,10 @@
 
 #include "tu_wsi.h"
 
+#include "drm-uapi/drm_fourcc.h"
+
 #include "vk_util.h"
 #include "wsi_common_drm.h"
-#include "drm-uapi/drm_fourcc.h"
 
 #include "tu_device.h"
 

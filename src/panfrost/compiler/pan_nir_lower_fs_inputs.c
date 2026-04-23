@@ -106,7 +106,7 @@ lower_fs_input_load(struct nir_builder *b,
 }
 
 bool
-pan_nir_lower_fs_inputs(nir_shader *shader, unsigned gpu_id,
+pan_nir_lower_fs_inputs(nir_shader *shader, uint64_t gpu_id,
                         const struct pan_varying_layout *varying_layout,
                         struct pan_shader_info *info)
 {

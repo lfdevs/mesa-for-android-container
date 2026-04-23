@@ -145,6 +145,9 @@ radv_pipeline_get_shader_key(const struct radv_device *device, const VkPipelineS
    if (flags & VK_PIPELINE_CREATE_2_INDIRECT_BINDABLE_BIT_EXT)
       key.indirect_bindable = 1;
 
+   if (flags & VK_PIPELINE_CREATE_2_DESCRIPTOR_HEAP_BIT_EXT)
+      key.descriptor_heap = 1;
+
    if (stage->stage & RADV_GRAPHICS_STAGE_BITS) {
       key.version = instance->drirc.misc.override_graphics_shader_version;
    } else if (stage->stage & RADV_RT_STAGE_BITS) {
@@ -154,7 +157,7 @@ radv_pipeline_get_shader_key(const struct radv_device *device, const VkPipelineS
       key.version = instance->drirc.misc.override_compute_shader_version;
    }
 
-   vk_pipeline_robustness_state_fill(&device->vk, &rs, pNext, stage->pNext);
+   vk_pipeline_robustness_state_fill(&device->vk.robustness_state, &rs, pNext, stage->pNext);
 
    radv_set_stage_key_robustness(&rs, s, &key);
 
@@ -216,15 +219,29 @@ radv_pipeline_stage_init(VkPipelineCreateFlags2 pipeline_flags, const VkPipeline
       out_stage->spirv.size = minfo->codeSize;
    }
 
+   const VkShaderDescriptorSetAndBindingMappingInfoEXT *mapping =
+      vk_find_struct_const(sinfo->pNext, SHADER_DESCRIPTOR_SET_AND_BINDING_MAPPING_INFO_EXT);
+   out_stage->layout.mapping = mapping;
+
    radv_shader_layout_init(pipeline_layout, out_stage->stage, &out_stage->layout);
 
    vk_pipeline_hash_shader_stage(pipeline_flags, sinfo, NULL, out_stage->shader_blake3);
 }
 
 void
+radv_pipeline_stage_finish(struct radv_shader_stage *stage)
+{
+   ralloc_free(stage->nir);
+   vk_sampler_state_array_finish(&stage->layout.embedded_samplers);
+}
+
+void
 radv_shader_layout_init(const struct radv_pipeline_layout *pipeline_layout, mesa_shader_stage stage,
                         struct radv_shader_layout *layout)
 {
+   if (!pipeline_layout)
+      return;
+
    layout->num_sets = pipeline_layout->num_sets;
    for (unsigned i = 0; i < pipeline_layout->num_sets; i++) {
       layout->set[i].layout = pipeline_layout->set[i].layout;
@@ -348,7 +365,7 @@ radv_postprocess_nir(struct radv_device *device, const struct radv_graphics_stat
    if (stage->nir->info.uses_resource_info_query)
       NIR_PASS(_, stage->nir, ac_nir_lower_resinfo, gfx_level);
 
-   /* Ensure split load_push_constant still have constant offsets, for radv_nir_apply_pipeline_layout. */
+   /* Ensure split load_push_constant still have constant offsets, for radv_nir_lower_descriptors. */
    if (constant_fold_for_push_const && stage->args.ac.inline_push_const_mask)
       NIR_PASS(_, stage->nir, nir_opt_constant_folding);
 
@@ -361,7 +378,7 @@ radv_postprocess_nir(struct radv_device *device, const struct radv_graphics_stat
    /* This has to be done after nir_opt_algebraic for best descriptor vectorization, but also before
     * NGG culling.
     */
-   NIR_PASS(_, stage->nir, radv_nir_apply_pipeline_layout, device, stage);
+   NIR_PASS(_, stage->nir, radv_nir_lower_descriptors, device, stage);
 
    NIR_PASS(_, stage->nir, nir_lower_alu_width, ac_nir_opt_vectorize_cb, &gfx_level);
 
@@ -581,8 +598,10 @@ radv_postprocess_nir(struct radv_device *device, const struct radv_graphics_stat
       bool run_copy_prop = false;
       NIR_PASS(run_copy_prop, stage->nir, nir_opt_16bit_tex_image, &opt_16bit_options);
 
-      /* Optimizing 16bit texture/image dests leaves scalar moves that stops
-       * nir_opt_vectorize from vectorzing the alu uses of them.
+      /* Optimizing 16bit texture/image dests leaves scalar moves that need to be removed
+       * before the next alu nir_lower_alu_width, otherwise we might end up with invalid swizzles
+       * in the backend.
+       * It also allows nir_opt_vectorize to make more progress.
        */
       if (run_copy_prop) {
          NIR_PASS(_, stage->nir, nir_opt_copy_prop);
@@ -1061,6 +1080,28 @@ vk_shader_module_finish(void *_module)
    vk_object_base_finish(&module->base);
 }
 
+VkShaderDescriptorSetAndBindingMappingInfoEXT *
+radv_copy_descriptor_heap_mapping_info(const VkShaderDescriptorSetAndBindingMappingInfoEXT *mapping, void *mem_ctx)
+{
+   VkShaderDescriptorSetAndBindingMappingInfoEXT *new_mapping =
+      ralloc(mem_ctx, VkShaderDescriptorSetAndBindingMappingInfoEXT);
+   if (!new_mapping)
+      return NULL;
+
+   new_mapping->sType = mapping->sType;
+   new_mapping->pNext = NULL;
+   new_mapping->mappingCount = mapping->mappingCount;
+
+   const uint32_t mappings_size = sizeof(VkDescriptorSetAndBindingMappingEXT) * mapping->mappingCount;
+   new_mapping->pMappings = ralloc_size(mem_ctx, mappings_size);
+   if (!new_mapping->pMappings)
+      return NULL;
+
+   memcpy((void *)new_mapping->pMappings, mapping->pMappings, mappings_size);
+
+   return new_mapping;
+}
+
 VkPipelineShaderStageCreateInfo *
 radv_copy_shader_stage_create_info(struct radv_device *device, uint32_t stageCount,
                                    const VkPipelineShaderStageCreateInfo *pStages, void *mem_ctx)
@@ -1130,6 +1171,17 @@ radv_copy_shader_stage_create_info(struct radv_device *device, uint32_t stageCou
          if (!new_stages[i].pName)
             return NULL;
          new_stages[i].pNext = NULL;
+      }
+
+      const VkShaderDescriptorSetAndBindingMappingInfoEXT *mapping =
+         vk_find_struct_const(pStages[i].pNext, SHADER_DESCRIPTOR_SET_AND_BINDING_MAPPING_INFO_EXT);
+      if (mapping) {
+         VkShaderDescriptorSetAndBindingMappingInfoEXT *copied_mapping =
+            radv_copy_descriptor_heap_mapping_info(mapping, mem_ctx);
+         if (!copied_mapping)
+            return NULL;
+
+         new_stages[i].pNext = copied_mapping;
       }
    }
 

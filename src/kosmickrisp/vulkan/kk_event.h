@@ -19,7 +19,7 @@ struct kk_event {
    struct kk_bo *bo;
 
    uint64_t addr;
-   uint64_t *status;
+   VkResult *status;
 };
 
 VK_DEFINE_NONDISP_HANDLE_CASTS(kk_event, base, VkEvent, VK_OBJECT_TYPE_EVENT)

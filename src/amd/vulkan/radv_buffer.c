@@ -183,8 +183,9 @@ radv_get_buffer_memory_requirements(struct radv_device *device, VkDeviceSize siz
    /* Force 32-bit address-space for descriptor buffers usage because they are passed to shaders
     * through 32-bit pointers.
     */
-   if (usage & (VK_BUFFER_USAGE_2_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT |
-                VK_BUFFER_USAGE_2_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT | VK_BUFFER_USAGE_2_PREPROCESS_BUFFER_BIT_EXT))
+   if (usage &
+       (VK_BUFFER_USAGE_2_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT | VK_BUFFER_USAGE_2_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT |
+        VK_BUFFER_USAGE_2_PREPROCESS_BUFFER_BIT_EXT | VK_BUFFER_USAGE_2_DESCRIPTOR_HEAP_BIT_EXT))
       pMemoryRequirements->memoryRequirements.memoryTypeBits = pdev->memory_types_32bit;
 
    if (flags & VK_BUFFER_CREATE_SPARSE_BINDING_BIT) {

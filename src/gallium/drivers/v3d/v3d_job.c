@@ -496,9 +496,9 @@ v3d_clif_dump(struct v3d_context *v3d, struct v3d_job *job)
               V3D_DBG(CL_NO_BIN) ||
               V3D_DBG(CLIF)))
                 return;
-
+        struct log_stream *stream = mesa_log_streami();
         struct clif_dump *clif = clif_dump_init(&v3d->screen->devinfo,
-                                                stderr,
+                                                stream,
                                                 V3D_DBG(CL) ||
                                                 V3D_DBG(CL_NO_BIN),
                                                 V3D_DBG(CL_NO_BIN));
@@ -517,6 +517,7 @@ v3d_clif_dump(struct v3d_context *v3d, struct v3d_job *job)
         clif_dump(clif, &job->submit);
 
         clif_dump_destroy(clif);
+        mesa_log_stream_destroy(stream);
 }
 
 static void
@@ -553,36 +554,18 @@ alloc_tile_state(struct v3d_job *job)
 {
         assert(!job->tile_alloc && !job->tile_state);
 
-        /* The PTB will request the tile alloc initial size per tile at start
-         * of tile binning.
-         */
-        uint32_t tile_alloc_size =
-                MAX2(job->num_layers, 1) * job->tile_desc.draw_x *
-                job->tile_desc.draw_y * 64;
-
-        /* The PTB allocates in aligned 4k chunks after the initial setup. */
-        tile_alloc_size = align(tile_alloc_size, 4096);
-
-        /* Include the first two chunk allocations that the PTB does so that
-         * we definitely clear the OOM condition before triggering one (the HW
-         * won't trigger OOM during the first allocations).
-         */
-        tile_alloc_size += 8192;
-
-        /* For performance, allocate some extra initial memory after the PTB's
-         * minimal allocations, so that we hopefully don't have to block the
-         * GPU on the kernel handling an OOM signal.
-         */
-        tile_alloc_size += 512 * 1024;
+        uint32_t tile_alloc_size, tile_state_size;
+        v3d_tile_alloc_sizes(MAX2(job->num_layers, 1),
+                             job->tile_desc.draw_x,
+                             job->tile_desc.draw_y,
+                             job->draw_calls_queued,
+                             job->v3d->screen->devinfo.page_size,
+                             &tile_alloc_size,
+                             &tile_state_size);
 
         job->tile_alloc = v3d_bo_alloc(job->v3d->screen, tile_alloc_size,
                                        "tile_alloc");
-        uint32_t tsda_per_tile_size = 256;
-        job->tile_state = v3d_bo_alloc(job->v3d->screen,
-                                       MAX2(job->num_layers, 1) *
-                                       job->tile_desc.draw_y *
-                                       job->tile_desc.draw_x *
-                                       tsda_per_tile_size,
+        job->tile_state = v3d_bo_alloc(job->v3d->screen, tile_state_size,
                                        "TSDA");
 }
 
@@ -673,7 +656,7 @@ v3d_job_submit(struct v3d_context *v3d, struct v3d_job *job)
                 /* pipe_caps.native_fence */
                 if (drmSyncobjImportSyncFile(v3d->fd, v3d->in_syncobj,
                                              v3d->in_fence_fd)) {
-                   fprintf(stderr, "Failed to import native fence.\n");
+                   mesa_loge("Failed to import native fence.");
                 } else {
                    job->submit.in_sync_bcl = v3d->in_syncobj;
                 }
@@ -728,12 +711,10 @@ v3d_job_submit(struct v3d_context *v3d, struct v3d_job *job)
         if (!V3D_DBG(NORAST)) {
                 int ret;
                 ret = v3d_ioctl(v3d->fd, DRM_IOCTL_V3D_SUBMIT_CL, &job->submit);
-                static bool warned = false;
-                if (ret && !warned) {
-                        fprintf(stderr, "Draw call returned %s.  "
-                                        "Expect corruption.\n", strerror(errno));
-                        warned = true;
-                } else if (!ret) {
+                if (ret) {
+                        mesa_loge_once("Draw call returned %s.  Expect corruption.",
+                                       strerror(errno));
+                } else {
                         if (v3d->active_perfmon)
                                 v3d->active_perfmon->job_submitted = true;
                         if (V3D_DBG(SYNC)) {

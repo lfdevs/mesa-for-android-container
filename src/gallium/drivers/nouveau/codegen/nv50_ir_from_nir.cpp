@@ -1578,7 +1578,7 @@ Converter::visit(nir_cf_node *node)
 bool
 Converter::visit(nir_block *block)
 {
-   if (!block->predecessors.entries && exec_list_is_empty(&block->instr_list))
+   if (!nir_block_num_preds(block) && exec_list_is_empty(&block->instr_list))
       return true;
 
    BasicBlock *bb = convert(block);

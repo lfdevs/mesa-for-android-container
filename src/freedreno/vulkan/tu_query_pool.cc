@@ -12,18 +12,16 @@
 
 #include "nir/nir_builder.h"
 #include "util/os_time.h"
-
 #include "vk_acceleration_structure.h"
 #include "vk_util.h"
 
-#include "tu_buffer.h"
 #include "bvh/tu_build_interface.h"
+#include "common/freedreno_gpu_event.h"
+#include "tu_buffer.h"
 #include "tu_cmd_buffer.h"
 #include "tu_cs.h"
 #include "tu_device.h"
 #include "tu_rmv.h"
-
-#include "common/freedreno_gpu_event.h"
 
 #define NSEC_PER_SEC 1000000000ull
 #define WAIT_TIMEOUT 5
@@ -251,6 +249,21 @@ perfcntr_index(const struct fd_perfcntr_group *group, uint32_t group_count,
    assert(i < group_count);
 }
 
+static uint32_t
+perfcntr_reserved_counters(const struct fd_perfcntr_group *group)
+{
+   /* Keep raw perf queries off the CP slots reserved by autotune latency optimization.
+    * TODO: We need to do this in a more robust way.
+    */
+   return strcmp(group->name, "CP") == 0 ? 2 : 0;
+}
+
+static uint32_t
+perfcntr_available_counters(const struct fd_perfcntr_group *group)
+{
+   return group->num_counters - MIN2(group->num_counters, perfcntr_reserved_counters(group));
+}
+
 static int
 compare_perfcntr_pass(const void *a, const void *b)
 {
@@ -362,15 +375,26 @@ tu_CreateQueryPool(VkDevice _device,
          perf_query->data[i].cid = cid;
          perf_query->data[i].app_idx = i;
 
+         const struct fd_perfcntr_group *group = &perf_query->perf_group[gid];
+         uint32_t reserved_counters = perfcntr_reserved_counters(group);
+         uint32_t available_counters = perfcntr_available_counters(group);
+
+         if (available_counters == 0) {
+            vk_query_pool_destroy(&device->vk, pAllocator, &pool->vk);
+            return vk_errorf(device, VK_ERROR_FEATURE_NOT_PRESENT, "No raw perf counters available in group %s",
+                             group->name);
+         }
+
          /* When a counter register is over the capacity(num_counters),
           * reset it for next pass.
           */
-         if (regs[gid] < perf_query->perf_group[gid].num_counters) {
-            perf_query->data[i].cntr_reg = regs[gid]++;
+         if (regs[gid] < available_counters) {
+            perf_query->data[i].cntr_reg = reserved_counters + regs[gid]++;
             perf_query->data[i].pass = pass[gid];
          } else {
             perf_query->data[i].pass = ++pass[gid];
-            perf_query->data[i].cntr_reg = regs[gid] = 0;
+            perf_query->data[i].cntr_reg = reserved_counters;
+            regs[gid] = 0;
             regs[gid]++;
          }
       }
@@ -2301,7 +2325,11 @@ tu_GetPhysicalDeviceQueueFamilyPerformanceQueryPassesKHR(
       }
 
       for (uint32_t i = 0; i < group_count; i++) {
-         n_passes = DIV_ROUND_UP(counters_requested[i], group[i].num_counters);
+         uint32_t available_counters = perfcntr_available_counters(&group[i]);
+         if (available_counters == 0)
+            continue;
+
+         n_passes = DIV_ROUND_UP(counters_requested[i], available_counters);
          *pNumPasses = MAX2(*pNumPasses, n_passes);
       }
    } else {

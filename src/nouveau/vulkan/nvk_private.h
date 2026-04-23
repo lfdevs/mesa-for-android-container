@@ -42,6 +42,10 @@
 #define NVK_MAX_IMAGE_PLANES 3
 #define NVK_MAX_SAMPLER_PLANES 2
 
+#define NVK_HW_ROOT_TABLE_SIZE 256
+#define NVK_HW_ROOT_TABLE_FIRST_CB 24
+#define NVK_HW_ROOT_TABLE_COUNT 8
+
 /* Device Generated Commands */
 #define NVK_DGC_ALIGN 0x100
 

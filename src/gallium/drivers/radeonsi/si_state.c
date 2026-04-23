@@ -1832,7 +1832,7 @@ static void si_emit_db_render_state(struct si_context *sctx, unsigned index)
          S_028010_DECOMPRESS_Z_ON_FLUSH(sctx->framebuffer.nr_samples >= 4) |
          S_028010_CENTROID_COMPUTATION_MODE(sctx->gfx_level >= GFX10_3 ? 1 : 0);
 
-   if (sctx->gfx_level <= GFX11_5) {
+   if (sctx->gfx_level <= GFX11_7) {
       db_render_override2 |=
          S_028010_DISABLE_ZMASK_EXPCLEAR_OPTIMIZATION(sctx->db_depth_disable_expclear) |
          S_028010_DISABLE_SMEM_EXPCLEAR_OPTIMIZATION(sctx->db_stencil_disable_expclear);
@@ -2408,7 +2408,7 @@ static void si_init_depth_surface(struct si_context *sctx)
       .num_samples = tex->buffer.b.b.nr_samples,
       .first_layer = sctx->framebuffer.state.zsbuf.first_layer,
       .last_layer = sctx->framebuffer.state.zsbuf.last_layer,
-      .allow_expclear = sctx->gfx_level <= GFX11_5,
+      .allow_expclear = sctx->gfx_level <= GFX11_7,
       .htile_enabled = sctx->gfx_level < GFX12 && si_htile_enabled(tex, level, PIPE_MASK_ZS),
       .htile_stencil_disabled = tex->htile_stencil_disabled,
    };
@@ -3210,7 +3210,6 @@ static void gfx12_emit_framebuffer_state(struct si_context *sctx, unsigned index
                             S_028044_FORMAT(V_028044_STENCIL_INVALID)|
                             S_028044_TILE_STENCIL_DISABLE(1));
       gfx12_set_context_reg(R_028B94_PA_SC_HIZ_INFO, S_028B94_SURFACE_ENABLE(0));
-      gfx12_set_context_reg(R_028B98_PA_SC_HIS_INFO, S_028B98_SURFACE_ENABLE(0));
    }
 
    /* Framebuffer dimensions. */
@@ -4868,8 +4867,8 @@ static bool gfx6_init_gfx_preamble_state(struct si_context *sctx)
 
    if (sctx->is_gfx_queue && !sctx->uses_kernelq_reg_shadowing) {
       ac_pm4_cmd_add(&pm4->base, PKT3(PKT3_CONTEXT_CONTROL, 1, 0));
-      ac_pm4_cmd_add(&pm4->base, S_28_1_UPDATE_LOAD_ENABLES(1));
-      ac_pm4_cmd_add(&pm4->base, S_28_2_UPDATE_SHADOW_ENABLES(1));
+      ac_pm4_cmd_add(&pm4->base, S_281_UPDATE_LOAD_ENABLES(1));
+      ac_pm4_cmd_add(&pm4->base, S_282_UPDATE_SHADOW_ENABLES(1));
 
       if (sscreen->dpbb_allowed) {
          ac_pm4_cmd_add(&pm4->base, PKT3(PKT3_EVENT_WRITE, 0, 0));
@@ -4953,22 +4952,22 @@ static bool gfx10_init_gfx_preamble_state(struct si_context *sctx)
    }
 
    if (sctx->uses_userq_reg_shadowing) {
-      /* In case of GFX11_5, CONTEXT_CONTROL packet is added in si_init_cp_reg_shaodwing()
+      /* In case of GFX11.5-11.7, CONTEXT_CONTROL packet is added in si_init_cp_reg_shaodwing()
        * function.
        */
-      if (sctx->gfx_level != GFX11_5) {
+      if (sctx->gfx_level < GFX11_5 || sctx->gfx_level > GFX11_7) {
          ac_pm4_cmd_add(&pm4->base, PKT3(PKT3_CONTEXT_CONTROL, 1, 0));
-         ac_pm4_cmd_add(&pm4->base, S_28_1_UPDATE_LOAD_ENABLES(1) | S_28_1_LOAD_PER_CONTEXT_STATE(1) |
-                           S_28_1_LOAD_CS_SH_REGS(1) | S_28_1_LOAD_GFX_SH_REGS(1) |
-                           S_28_1_LOAD_GLOBAL_UCONFIG(1));
-         ac_pm4_cmd_add(&pm4->base, S_28_2_UPDATE_SHADOW_ENABLES(1) | S_28_2_SHADOW_PER_CONTEXT_STATE(1) |
-                           S_28_2_SHADOW_CS_SH_REGS(1) | S_28_2_SHADOW_GFX_SH_REGS(1) |
-                           S_28_2_SHADOW_GLOBAL_UCONFIG(1) | S_28_2_SHADOW_GLOBAL_CONFIG(1));
+         ac_pm4_cmd_add(&pm4->base, S_281_UPDATE_LOAD_ENABLES(1) | S_281_LOAD_PER_CONTEXT_STATE(1) |
+                           S_281_LOAD_CS_SH_REGS(1) | S_281_LOAD_GFX_SH_REGS(1) |
+                           S_281_LOAD_GLOBAL_UCONFIG(1));
+         ac_pm4_cmd_add(&pm4->base, S_282_UPDATE_SHADOW_ENABLES(1) | S_282_SHADOW_PER_CONTEXT_STATE(1) |
+                           S_282_SHADOW_CS_SH_REGS(1) | S_282_SHADOW_GFX_SH_REGS(1) |
+                           S_282_SHADOW_GLOBAL_UCONFIG(1) | S_282_SHADOW_GLOBAL_CONFIG(1));
       }
    } else if (sctx->is_gfx_queue && !sctx->uses_kernelq_reg_shadowing) {
       ac_pm4_cmd_add(&pm4->base, PKT3(PKT3_CONTEXT_CONTROL, 1, 0));
-      ac_pm4_cmd_add(&pm4->base, S_28_1_UPDATE_LOAD_ENABLES(1));
-      ac_pm4_cmd_add(&pm4->base, S_28_2_UPDATE_SHADOW_ENABLES(1));
+      ac_pm4_cmd_add(&pm4->base, S_281_UPDATE_LOAD_ENABLES(1));
+      ac_pm4_cmd_add(&pm4->base, S_282_UPDATE_SHADOW_ENABLES(1));
 
       if (sscreen->dpbb_allowed) {
          ac_pm4_cmd_add(&pm4->base, PKT3(PKT3_EVENT_WRITE, 0, 0));
@@ -5039,16 +5038,16 @@ static bool gfx12_init_gfx_preamble_state(struct si_context *sctx)
 
    if (sctx->uses_userq_reg_shadowing) {
       ac_pm4_cmd_add(&pm4->base, PKT3(PKT3_CONTEXT_CONTROL, 1, 0));
-      ac_pm4_cmd_add(&pm4->base, S_28_1_UPDATE_LOAD_ENABLES(1) | S_28_1_LOAD_PER_CONTEXT_STATE(1) |
-                        S_28_1_LOAD_CS_SH_REGS(1) | S_28_1_LOAD_GFX_SH_REGS(1) |
-                        S_28_1_LOAD_GLOBAL_UCONFIG(1));
-      ac_pm4_cmd_add(&pm4->base, S_28_2_UPDATE_SHADOW_ENABLES(1) | S_28_2_SHADOW_PER_CONTEXT_STATE(1) |
-                        S_28_2_SHADOW_CS_SH_REGS(1) | S_28_2_SHADOW_GFX_SH_REGS(1) |
-                        S_28_2_SHADOW_GLOBAL_UCONFIG(1) | S_28_2_SHADOW_GLOBAL_CONFIG(1));
+      ac_pm4_cmd_add(&pm4->base, S_281_UPDATE_LOAD_ENABLES(1) | S_281_LOAD_PER_CONTEXT_STATE(1) |
+                        S_281_LOAD_CS_SH_REGS(1) | S_281_LOAD_GFX_SH_REGS(1) |
+                        S_281_LOAD_GLOBAL_UCONFIG(1));
+      ac_pm4_cmd_add(&pm4->base, S_282_UPDATE_SHADOW_ENABLES(1) | S_282_SHADOW_PER_CONTEXT_STATE(1) |
+                        S_282_SHADOW_CS_SH_REGS(1) | S_282_SHADOW_GFX_SH_REGS(1) |
+                        S_282_SHADOW_GLOBAL_UCONFIG(1) | S_282_SHADOW_GLOBAL_CONFIG(1));
    } else if (sctx->is_gfx_queue && !sctx->uses_kernelq_reg_shadowing) {
       ac_pm4_cmd_add(&pm4->base, PKT3(PKT3_CONTEXT_CONTROL, 1, 0));
-      ac_pm4_cmd_add(&pm4->base, S_28_1_UPDATE_LOAD_ENABLES(1));
-      ac_pm4_cmd_add(&pm4->base, S_28_2_UPDATE_SHADOW_ENABLES(1));
+      ac_pm4_cmd_add(&pm4->base, S_281_UPDATE_LOAD_ENABLES(1));
+      ac_pm4_cmd_add(&pm4->base, S_282_UPDATE_SHADOW_ENABLES(1));
    }
 
    if (sctx->is_gfx_queue && sscreen->dpbb_allowed && !sctx->uses_userq_reg_shadowing) {

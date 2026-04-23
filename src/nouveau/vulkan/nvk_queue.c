@@ -331,7 +331,7 @@ nvk_queue_init_context_state(struct nvk_queue *queue)
    const struct nvk_physical_device *pdev = nvk_device_physical(dev);
    VkResult result;
 
-   uint32_t push_data[4096];
+   uint32_t push_data[4096 + 1024];
    struct nv_push push;
    nv_push_init(&push, push_data, ARRAY_SIZE(push_data),
                 nvk_queue_subchannels_from_engines(queue->engines));
@@ -431,12 +431,6 @@ nvk_queue_create(struct nvk_device *dev,
                                    &queue->draw_cb0);
       if (result != VK_SUCCESS)
          goto fail_exec_ctx;
-
-      result = nvk_upload_queue_fill(dev, &dev->upload,
-                                     queue->draw_cb0->va->addr, 0,
-                                     queue->draw_cb0->size_B);
-      if (result != VK_SUCCESS)
-         goto fail_draw_cb0;
    }
 
    if (queue_family->queue_flags & VK_QUEUE_SPARSE_BINDING_BIT) {

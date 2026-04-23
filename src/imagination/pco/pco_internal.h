@@ -1781,10 +1781,11 @@ bool pco_const_imms(pco_shader *shader);
 bool pco_bool(pco_shader *shader);
 bool pco_cf(pco_shader *shader);
 bool pco_dce(pco_shader *shader);
+bool pco_post_ra_legalize(pco_shader *shader);
+bool pco_pre_ra_legalize(pco_shader *shader);
 bool pco_end(pco_shader *shader);
 bool pco_group_instrs(pco_shader *shader);
 bool pco_index(pco_shader *shader, bool skip_ssa);
-bool pco_legalize(pco_shader *shader);
 bool pco_opt_comp_only_vecs(pco_shader *shader);
 bool pco_nir_compute_instance_check(nir_shader *shader);
 bool pco_nir_link_clip_cull_vars(nir_shader *producer, nir_shader *consumer);
@@ -3163,8 +3164,9 @@ static inline bool pco_should_skip_pass(const char *pass)
 /** Integer 31. */
 #define pco_31 pco_ref_hwreg(31, PCO_REG_CLASS_CONST)
 
-/** Integer -1/true/0xffffffff. */
+/** Integer -1/true/0xffffffff/u32max. */
 #define pco_true pco_ref_hwreg(143, PCO_REG_CLASS_CONST)
+#define pco_u32max pco_true
 
 /** Float 1. */
 #define pco_fone pco_ref_hwreg(64, PCO_REG_CLASS_CONST)

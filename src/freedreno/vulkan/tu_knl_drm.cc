@@ -4,11 +4,12 @@
  * SPDX-License-Identifier: MIT
  */
 
+#include "tu_knl_drm.h"
+
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <xf86drm.h>
 
-#include "tu_knl_drm.h"
 #include "tu_device.h"
 #include "tu_queue.h"
 #include "tu_rmv.h"

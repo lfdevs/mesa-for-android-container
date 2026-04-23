@@ -6,7 +6,7 @@
 #ifndef __FREEDRENO_GPU_EVENT_H__
 #define __FREEDRENO_GPU_EVENT_H__
 
-#include "adreno_pm4.xml.h"
+#include "fd_hw_common.h"
 #include "freedreno_common.h"
 
 /* On terminology:

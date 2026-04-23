@@ -521,7 +521,7 @@ fn nvb097_fill_image_view_desc(
 
     th.set_field(clb097::TEXHEAD_BL_S_R_G_B_CONVERSION, view.format.is_srgb());
 
-    set_enum!(th, clb097, TEXHEAD_BL_SECTOR_PROMOTION, PROMOTE_TO_2_V);
+    set_enum!(th, clb097, TEXHEAD_BL_SECTOR_PROMOTION, NO_PROMOTION);
     set_enum!(th, clb097, TEXHEAD_BL_BORDER_SIZE, BORDER_SAMPLER_COLOR);
 
     // In the sampler, the two options for FLOAT_COORD_NORMALIZATION are:
@@ -703,7 +703,7 @@ fn nvcb97_fill_image_view_desc(
         view.format.is_srgb(),
     );
 
-    set_enum!(th, clcb97, TEXHEAD_V2_BL_SECTOR_PROMOTION, PROMOTE_TO_2_V);
+    set_enum!(th, clcb97, TEXHEAD_V2_BL_SECTOR_PROMOTION, NO_PROMOTION);
     set_enum!(th, clcb97, TEXHEAD_V2_BL_BORDER_SOURCE, BORDER_COLOR);
 
     // In the sampler, the two options for FLOAT_COORD_NORMALIZATION are:
@@ -802,7 +802,7 @@ fn nvb097_nil_fill_buffer_desc(
     set_enum!(th, clb097, TEXHEAD_1D_TEXTURE_TYPE, ONE_D_BUFFER);
 
     // TODO: Do we need this?
-    set_enum!(th, clb097, TEXHEAD_1D_SECTOR_PROMOTION, PROMOTE_TO_2_V);
+    set_enum!(th, clb097, TEXHEAD_1D_SECTOR_PROMOTION, NO_PROMOTION);
 }
 
 fn nvcb97_nil_fill_buffer_desc(
@@ -833,7 +833,7 @@ fn nvcb97_nil_fill_buffer_desc(
     th.set_field(clcb97::TEXHEAD_V2_1DRT_WIDTH_MINUS_ONE, num_elements - 1);
 
     // TODO: Do we need this?
-    set_enum!(th, clcb97, TEXHEAD_1D_SECTOR_PROMOTION, PROMOTE_TO_2_V);
+    set_enum!(th, clcb97, TEXHEAD_1D_SECTOR_PROMOTION, NO_PROMOTION);
 }
 
 pub const ZERO_SWIZZLE: [nil_rs_bindings::pipe_swizzle; 4] = [

@@ -67,9 +67,15 @@ vk_sampler_state_array_finish(struct vk_sampler_state_array *arr)
    free(arr->samplers);
 }
 
+typedef struct vk_nir_lower_descriptor_heaps_options {
+   /* Whether to lower non-arrayed resources backed by SRI to non-uniform. */
+   bool lower_shader_record_index_to_non_uniform : 1;
+} vk_nir_lower_descriptor_heaps_options;
+
 bool vk_nir_lower_descriptor_heaps(
    nir_shader *nir,
    const VkShaderDescriptorSetAndBindingMappingInfoEXT *mapping,
+   const vk_nir_lower_descriptor_heaps_options *options,
    struct vk_sampler_state_array *embedded_samplers_out);
 
 #endif

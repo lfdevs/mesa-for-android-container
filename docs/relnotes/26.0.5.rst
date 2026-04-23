@@ -1,0 +1,178 @@
+Mesa 26.0.5 Release Notes / 2026-04-15
+======================================
+
+Mesa 26.0.5 is a bug fix release which fixes bugs found since the 26.0.4 release.
+
+Mesa 26.0.5 implements the OpenGL 4.6 API, but the version reported by
+glGetString(GL_VERSION) or glGetIntegerv(GL_MAJOR_VERSION) /
+glGetIntegerv(GL_MINOR_VERSION) depends on the particular driver being used.
+Some drivers don't support all the features required in OpenGL 4.6. OpenGL
+4.6 is **only** available if requested at context creation.
+Compatibility contexts may report a lower version depending on each driver.
+
+Mesa 26.0.5 implements the Vulkan 1.4 API, but the version reported by
+the apiVersion property of the VkPhysicalDeviceProperties struct
+depends on the particular driver being used.
+
+SHA checksums
+-------------
+
+::
+
+    SHA256: d229c9937d9a25ca0a8958c59f425174563d300ec42acbea2dbe84a055023368  mesa-26.0.5.tar.xz
+    SHA512: 8aa03a46269b2443be15cbd516d523af78fdd35e5273f5346b9142d2d21e245f6d5fd47e7e90176b0444ea967540eaa7c62d217f599ca5a216ef83244ee97d5c  mesa-26.0.5.tar.xz
+
+
+New features
+------------
+
+- None
+
+
+Bug fixes
+---------
+
+- Is maxFragmentCombinedOutputResources=16 in Honeykrisp reflects an actual HW limit?
+- Mesa LLVMpipe Memory Leak
+
+
+Changes
+-------
+
+Ahmed Hesham (1):
+
+- rusticl: fix flag validation when creating an image
+
+Daniel Schürmann (1):
+
+- aco/lower_branches: Don't remove branches which jump over loops
+
+David Rosca (1):
+
+- radeonsi: Set multi plane format also for imported textures
+
+Eric Engestrom (4):
+
+- docs: add sha sum for 26.0.4
+- .pick_status.json: Update to 7e163fb79377c0fdf6d4e99ca4775fa7e1a4299e
+- .pick_status.json: Mark 9ff879441f91a8296891e2e13264a7a015a11a7d as denominated
+- .pick_status.json: Mark 4b3bd6b0b54d998a31356bf049911004683ea64f as denominated
+
+Eric Guo (1):
+
+- panfrost: disable round_to_nearest_even for NEAREST samplers
+
+Faith Ekstrand (6):
+
+- pan/bi: Support more swizzle aliases in the bifrost pack code
+- pan/bi: Delete a few instruction encodings
+- pan/bi/ra: Allow offsets on tied sources
+- pan/bi: Use bi_half() for texture MS indices
+- pan/bi: Add BI_SWIZZLE_NONE
+- pan/bi: Support all the swizzles in the packer
+
+Georg Lehmann (2):
+
+- nir/opt_load_skip_helpers: don't skip helpers for store_scratch data
+- aco/optimizer: do not try to create 3 byte constant operands
+
+Ian Romanick (2):
+
+- brw/const: Don't allow type changes when accumulators are involved
+- brw: brw_reg::nr for an accumulator is not part of the offset
+
+Icenowy Zheng (2):
+
+- pvr: fix pvr_clear_vdm_state_get_size_in_dw() inverted feature condition
+- pvr: set has_usc_alu_roundingmode_rne for all B-series Rogue cores
+
+Janne Grunau (1):
+
+- hk: Increase maxFragmentCombinedOutputResources to HK_MAX_DESCRIPTORS
+
+Job Noorman (4):
+
+- nir/opt_varyings: fix alu def cloning
+- nir/gather_info: clear interpolation qualifiers before gathering
+- ir3: fix handle_partial_const with vectorized src
+- nir/opt_uniform_subgroup: fix ballot_bit_count components
+
+Karol Herbst (4):
+
+- radeonsi: set valid_buffer_range for CL buffers
+- radeonsi: properly report unified memory on APUs
+- rusticl/kernel: implement CL_KERNEL_GLOBAL_WORK_SIZE for custom devices
+- rusticl/device: Fix reporting of global memory on mixed memory devices
+
+Konstantin Seurer (1):
+
+- radv/bvh: Prefer selecting quads as the first pair of a HW node
+
+Lionel Landwerlin (3):
+
+- anv: don't relocate memory from blob
+- brw: don't support frontfacing ternary optimization on != 32bit
+- elk: don't support frontfacing ternary optimization on != 32bit
+
+Marc Alcala Prieto (1):
+
+- pan/cs: Fix cs_run_fragment() calls with swapped arguments
+
+Mary Guillemard (2):
+
+- nvk: Adjust maxFragmentCombinedOutputResources to match max descriptors limit
+- hk: Add HK_MAX_RTS to maxFragmentCombinedOutputResources
+
+Mixie (1):
+
+- xlib: clear currentDpy when releasing the current context
+
+Natalie Vock (1):
+
+- radv/rt: Don't enable midpoint sorting
+
+Olivia Lee (1):
+
+- panfrost: don't try to emit varying shader stats on v12+
+
+Pavel Ondračka (2):
+
+- st/bitmap: release the temporary bitmap sampler view
+- gallium/u_blitter: remove unused CONST declaration when using IMM
+
+Rhys Perry (3):
+
+- util: fix UBSan error with _mesa_bfloat16_bits_to_float
+- ir3/array_to_ssa: skip remove_trivial_phi for non-array phis
+- ir3/ra: fix copy-paste error
+
+Samuel Pitoiset (3):
+
+- spirv: fix OpUntypedVariableKHR with optional data type parameter
+- radv/meta: fix computing extent for image->image with both compressed formats
+- vulkan: mark RP attachments as invalid when no rendering create info
+
+Timothy Arceri (1):
+
+- radeonsi: add Gun Godz workaround
+
+Valentine Burley (2):
+
+- zink/ci: Move zink-tu-a618 to sc7180-trogdor-kingoftown
+- ci/freedreno: Move remaining lazor a618 jobs, retire device type
+
+Vinson Lee (1):
+
+- d3d12: Fix MinGW cross-build error in resource_state_if_promoted
+
+Wujian Sun (1):
+
+- mesa: Fix inconsistent multisampled CopyTexImage checks
+
+Xianzhong Li (1):
+
+- panfrost: Fix GEM handle refcount leak in panfrost_bo_import
+
+Yuxuan Shui (1):
+
+- wsi/display: initialize Xlib display connector property IDs in all cases

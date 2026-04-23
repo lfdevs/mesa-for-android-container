@@ -338,8 +338,7 @@ mesa_to_vk_shader_stage(mesa_shader_stage mesa_stage)
 struct nir_spirv_specialization;
 
 struct nir_spirv_specialization*
-vk_spec_info_to_nir_spirv(const VkSpecializationInfo *spec_info,
-                          uint32_t *out_num_spec_entries);
+vk_spec_info_to_nir_spirv(const VkSpecializationInfo *vk_spec_info);
 
 static inline uint8_t
 vk_index_type_to_bytes(VkIndexType type)

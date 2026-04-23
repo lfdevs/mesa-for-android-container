@@ -12,6 +12,8 @@
 
 #include <stdio.h>
 #include <errno.h>
+#include "compiler/jay/jay.h"
+#include "dev/intel_device_info.h"
 #include "pipe/p_defines.h"
 #include "pipe/p_state.h"
 #include "pipe/p_context.h"
@@ -1926,7 +1928,17 @@ iris_compile_vs(struct iris_screen *screen,
          .prog_data = brw_prog_data,
       };
 
-      program = brw_compile_vs(screen->brw, &params);
+      if (intel_use_jay(devinfo, nir->info.stage)) {
+         struct jay_shader_bin *bin =
+            jay_compile(devinfo, mem_ctx, nir,
+                        (union brw_any_prog_data *) brw_prog_data,
+                        (union brw_any_prog_key *) &brw_key);
+
+         program = bin->kernel;
+      } else {
+         program = brw_compile_vs(screen->brw, &params);
+      }
+
       error = params.base.error_str;
       if (program) {
          iris_debug_recompile(dbg, ish, key);
@@ -2774,7 +2786,6 @@ iris_compile_fs(struct iris_screen *screen,
       brw_apply_ubo_ranges(screen, nir, ubo_ranges, &brw_prog_data->base);
 
       struct brw_fs_prog_key brw_key = iris_to_brw_fs_key(screen, key);
-
       struct brw_compile_fs_params params = {
          .base = {
             .mem_ctx = mem_ctx,
@@ -2791,7 +2802,17 @@ iris_compile_fs(struct iris_screen *screen,
          .vue_map = vue_map,
       };
 
-      program = brw_compile_fs(screen->brw, &params);
+      if (intel_use_jay(devinfo, nir->info.stage)) {
+         struct jay_shader_bin *bin =
+            jay_compile(devinfo, mem_ctx, nir,
+                        (union brw_any_prog_data *) brw_prog_data,
+                        (union brw_any_prog_key *) &brw_key);
+
+         program = bin->kernel;
+      } else {
+         program = brw_compile_fs(screen->brw, &params);
+      }
+
       error = params.base.error_str;
       if (program) {
          iris_debug_recompile(dbg, ish, key);
@@ -3141,7 +3162,17 @@ iris_compile_cs(struct iris_screen *screen,
          .prog_data = brw_prog_data,
       };
 
-      program = brw_compile_cs(screen->brw, &params);
+      if (intel_use_jay(devinfo, nir->info.stage)) {
+         struct jay_shader_bin *bin =
+            jay_compile(devinfo, mem_ctx, nir,
+                        (union brw_any_prog_data *) brw_prog_data,
+                        (union brw_any_prog_key *) &brw_key);
+
+         program = bin->kernel;
+      } else {
+         program = brw_compile_cs(screen->brw, &params);
+      }
+
       error = params.base.error_str;
       if (program) {
          iris_debug_recompile(dbg, ish, key);

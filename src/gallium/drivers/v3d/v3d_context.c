@@ -69,7 +69,7 @@ v3d_pipe_flush(struct pipe_context *pctx, struct pipe_fence_handle **fence,
                  */
                 drmSyncobjExportSyncFile(v3d->fd, v3d->out_sync, &fd);
                 if (fd == -1) {
-                        fprintf(stderr, "export failed\n");
+                        mesa_loge("Export failed");
                         *fence = NULL;
                         return;
                 }

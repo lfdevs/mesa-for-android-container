@@ -36,8 +36,8 @@
 
 struct vc4_exec_info;
 
-#define DRM_INFO(...) fprintf(stderr, __VA_ARGS__)
-#define DRM_ERROR(...) fprintf(stderr, __VA_ARGS__)
+#define DRM_INFO(...) mesa_logi(__VA_ARGS__)
+#define DRM_ERROR(...) mesa_loge(__VA_ARGS__)
 #define kmalloc(size, arg) malloc(size)
 #define kcalloc(size, count, arg) calloc(size, count)
 #define kfree(ptr) free(ptr)

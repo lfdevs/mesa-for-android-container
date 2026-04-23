@@ -315,14 +315,14 @@ static inline bool is_processed(nir_intrinsic_instr *intr)
    return nir_alu_type_get_base_type(type) == nir_type_invalid;
 }
 
-static nir_def *lower_pfo_store(nir_builder *b,
-                                nir_intrinsic_instr *intr,
-                                struct pfo_state *state)
+static bool lower_pfo_store(nir_builder *b,
+                            nir_intrinsic_instr *intr,
+                            struct pfo_state *state)
 {
    /* Skip stores we've already processed. */
    if (is_processed(intr)) {
       util_dynarray_append(&state->stores, intr);
-      return NULL;
+      return false;
    }
 
    nir_def *input = intr->src[0].ssa;
@@ -341,8 +341,10 @@ static nir_def *lower_pfo_store(nir_builder *b,
    b->cursor = nir_before_instr(&intr->instr);
 
    enum pipe_format format = state->fs->output_formats[location];
-   if (format == PIPE_FORMAT_NONE)
-      return NIR_LOWER_INSTR_PROGRESS_REPLACE;
+   if (format == PIPE_FORMAT_NONE) {
+      nir_instr_remove(&intr->instr);
+      return true;
+   }
 
    format = to_pbe_format(b, format, &input);
 
@@ -369,17 +371,18 @@ static nir_def *lower_pfo_store(nir_builder *b,
    assert(var);
    var->type = glsl_uvec_type(output->num_components);
 
-   return NIR_LOWER_INSTR_PROGRESS_REPLACE;
+   nir_instr_remove(&intr->instr);
+   return true;
 }
 
-static nir_def *lower_pfo_load(nir_builder *b,
-                               nir_intrinsic_instr *intr,
-                               struct pfo_state *state)
+static bool lower_pfo_load(nir_builder *b,
+                           nir_intrinsic_instr *intr,
+                           struct pfo_state *state)
 {
    /* Skip loads we've already processed. */
    if (is_processed(intr)) {
       util_dynarray_append(&state->loads, intr);
-      return NULL;
+      return false;
    }
 
    unsigned base = nir_intrinsic_base(intr);
@@ -400,75 +403,55 @@ static nir_def *lower_pfo_load(nir_builder *b,
       format = state->fs->output_formats[location];
    }
 
+   nir_def *repl;
    if (format == PIPE_FORMAT_NONE)
-      return nir_undef(b, intr->def.num_components, intr->def.bit_size);
+      repl = nir_undef(b, intr->def.num_components, intr->def.bit_size);
+   else {
+      format = to_pbe_format(b, format, NULL);
 
-   format = to_pbe_format(b, format, NULL);
+      nir_def *packed_comps[4];
+      for (unsigned c = 0; c < ARRAY_SIZE(packed_comps); ++c) {
+         packed_comps[c] = nir_load_output(b,
+                                           1,
+                                           32,
+                                           offset->ssa,
+                                           .base = base,
+                                           .component = c,
+                                           .dest_type = nir_type_invalid | 32,
+                                           .io_semantics = io_semantics);
 
-   nir_def *packed_comps[4];
-   for (unsigned c = 0; c < ARRAY_SIZE(packed_comps); ++c) {
-      packed_comps[c] = nir_load_output(b,
-                                        1,
-                                        32,
-                                        offset->ssa,
-                                        .base = base,
-                                        .component = c,
-                                        .dest_type = nir_type_invalid | 32,
-                                        .io_semantics = io_semantics);
+         nir_intrinsic_instr *load = nir_def_as_intrinsic(packed_comps[c]);
 
-      nir_intrinsic_instr *load =
-         nir_def_as_intrinsic(packed_comps[c]);
+         util_dynarray_append(&state->loads, load);
+      }
 
-      util_dynarray_append(&state->loads, load);
+      nir_alu_type dest_type = nir_intrinsic_dest_type(intr);
+      repl = unpack_from_format(b,
+                                packed_comps,
+                                dest_type,
+                                format,
+                                intr->def.num_components);
    }
 
-   nir_alu_type dest_type = nir_intrinsic_dest_type(intr);
-   return unpack_from_format(b,
-                             packed_comps,
-                             dest_type,
-                             format,
-                             intr->def.num_components);
-}
+   nir_def_rewrite_uses(&intr->def, repl);
+   nir_instr_remove(&intr->instr);
 
-/**
- * \brief Filters PFO-related instructions.
- *
- * \param[in] instr NIR instruction.
- * \param[in] cb_data User callback data.
- * \return True if the instruction matches the filter.
- */
-static bool is_pfo(const nir_instr *instr, UNUSED const void *cb_data)
-{
-   if (instr->type != nir_instr_type_intrinsic)
-      return false;
-
-   nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
-   switch (intr->intrinsic) {
-   case nir_intrinsic_store_output:
-   case nir_intrinsic_load_output:
-   case nir_intrinsic_demote:
-   case nir_intrinsic_demote_if:
-      return true;
-
-   default:
-      break;
-   }
-
-   return false;
+   return true;
 }
 
 /**
  * \brief Lowers a PFO-related instruction.
  *
  * \param[in] b NIR builder.
- * \param[in] instr NIR instruction.
+ * \param[in] intr NIR intrinsic instruction.
  * \param[in] cb_data User callback data.
- * \return The replacement/lowered def.
+ * \return True if progress was made.
  */
-static nir_def *lower_pfo(nir_builder *b, nir_instr *instr, void *cb_data)
+static bool lower_pfo(nir_builder *b, nir_intrinsic_instr *intr, void *cb_data)
 {
    struct pfo_state *state = cb_data;
-   nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
+
+   b->cursor = nir_before_instr(&intr->instr);
 
    switch (intr->intrinsic) {
    case nir_intrinsic_store_output: {
@@ -480,7 +463,8 @@ static nir_def *lower_pfo(nir_builder *b, nir_instr *instr, void *cb_data)
          assert(!state->depth_feedback_src);
          state->depth_feedback_src = nir_fsat(b, intr->src[0].ssa);
 
-         return NIR_LOWER_INSTR_PROGRESS_REPLACE;
+         nir_instr_remove(&intr->instr);
+         return true;
       }
 
       if (sem.location == FRAG_RESULT_SAMPLE_MASK) {
@@ -497,7 +481,8 @@ static nir_def *lower_pfo(nir_builder *b, nir_instr *instr, void *cb_data)
          val = nir_ior(b, val, cond);
          state->last_discard_store =
             nir_build_store_reg(b, val, state->discard_cond_reg);
-         return NIR_LOWER_INSTR_PROGRESS_REPLACE;
+         nir_instr_remove(&intr->instr);
+         return true;
       }
 
       UNREACHABLE("");
@@ -510,7 +495,8 @@ static nir_def *lower_pfo(nir_builder *b, nir_instr *instr, void *cb_data)
       state->has_discards = true;
       state->last_discard_store =
          nir_build_store_reg(b, nir_imm_true(b), state->discard_cond_reg);
-      return NIR_LOWER_INSTR_PROGRESS_REPLACE;
+      nir_instr_remove(&intr->instr);
+      return true;
 
    case nir_intrinsic_demote_if: {
       state->has_discards = true;
@@ -518,7 +504,8 @@ static nir_def *lower_pfo(nir_builder *b, nir_instr *instr, void *cb_data)
       val = nir_ior(b, val, intr->src[0].ssa);
       state->last_discard_store =
          nir_build_store_reg(b, val, state->discard_cond_reg);
-      return NIR_LOWER_INSTR_PROGRESS_REPLACE;
+      nir_instr_remove(&intr->instr);
+      return true;
    }
 
    default:
@@ -668,20 +655,6 @@ static bool z_replicate(nir_shader *shader, struct pfo_state *state)
    return true;
 }
 
-static bool is_frag_color_out(const nir_instr *instr,
-                              UNUSED const void *cb_data)
-{
-   if (instr->type != nir_instr_type_intrinsic)
-      return false;
-
-   nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
-   if (intr->intrinsic != nir_intrinsic_store_output)
-      return false;
-
-   gl_frag_result location = nir_intrinsic_io_semantics(intr).location;
-   return location >= FRAG_RESULT_DATA0 && location < FRAG_RESULT_MAX;
-}
-
 static bool lower_demote_samples(nir_builder *b,
                                  nir_intrinsic_instr *intr,
                                  UNUSED void *cb_data)
@@ -725,10 +698,16 @@ bool pco_nir_lower_alpha_to_coverage(nir_shader *shader)
    return true;
 }
 
-static nir_def *
-lower_alpha_to_one(nir_builder *b, nir_instr *instr, UNUSED void *cb_data)
+static bool lower_alpha_to_one(nir_builder *b,
+                               nir_intrinsic_instr *intr,
+                               UNUSED void *cb_data)
 {
-   nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
+   if (intr->intrinsic != nir_intrinsic_store_output)
+      return false;
+
+   gl_frag_result location = nir_intrinsic_io_semantics(intr).location;
+   if (!(location >= FRAG_RESULT_DATA0 && location < FRAG_RESULT_MAX))
+      return false;
 
    nir_src *input_src = &intr->src[0];
    nir_def *input = input_src->ssa;
@@ -737,7 +716,7 @@ lower_alpha_to_one(nir_builder *b, nir_instr *instr, UNUSED void *cb_data)
 
    /* Skip color write that don't include alpha. */
    if (input->num_components != 4)
-      return NULL;
+      return false;
 
    b->cursor = nir_before_instr(&intr->instr);
 
@@ -754,7 +733,7 @@ lower_alpha_to_one(nir_builder *b, nir_instr *instr, UNUSED void *cb_data)
 
    nir_src_rewrite(input_src, nir_vector_insert_imm(b, input, alpha, 3));
 
-   return NIR_LOWER_INSTR_PROGRESS;
+   return true;
 }
 
 static bool is_load_sample_mask(const nir_instr *instr,
@@ -767,23 +746,33 @@ static bool is_load_sample_mask(const nir_instr *instr,
    return intr->intrinsic == nir_intrinsic_load_sample_mask_in;
 }
 
-static nir_def *
-lower_load_sample_mask(nir_builder *b, nir_instr *instr, UNUSED void *cb_data)
+static bool lower_load_sample_mask(nir_builder *b,
+                                   nir_intrinsic_instr *intr,
+                                   UNUSED void *cb_data)
 {
-   b->cursor = nir_before_instr(instr);
+   if (intr->intrinsic != nir_intrinsic_load_sample_mask_in)
+      return false;
+
+   b->cursor = nir_before_instr(&intr->instr);
 
    nir_def *smp_msk =
       nir_ubitfield_extract_imm(b, nir_load_fs_meta_pco(b), 9, 16);
-
    smp_msk = nir_iand(b, smp_msk, nir_load_savmsk_vm_pco(b));
-
-   return smp_msk;
+   nir_def_rewrite_uses(&intr->def, smp_msk);
+   nir_instr_remove(&intr->instr);
+   return true;
 }
 
-static nir_def *
-lower_color_write_enable(nir_builder *b, nir_instr *instr, UNUSED void *cb_data)
+static bool lower_color_write_enable(nir_builder *b,
+                                     nir_intrinsic_instr *intr,
+                                     UNUSED void *cb_data)
 {
-   nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
+   if (intr->intrinsic != nir_intrinsic_store_output)
+      return false;
+
+   gl_frag_result location = nir_intrinsic_io_semantics(intr).location;
+   if (!(location >= FRAG_RESULT_DATA0 && location < FRAG_RESULT_MAX))
+      return false;
 
    nir_src *input_src = &intr->src[0];
    nir_def *input = input_src->ssa;
@@ -819,7 +808,7 @@ lower_color_write_enable(nir_builder *b, nir_instr *instr, UNUSED void *cb_data)
    nir_src_rewrite(input_src,
                    nir_bcsel(b, color_write_enabled, input, prev_input));
 
-   return NIR_LOWER_INSTR_PROGRESS;
+   return true;
 }
 
 /**
@@ -853,28 +842,32 @@ bool pco_nir_pfo(nir_shader *shader, pco_fs_data *fs)
     * the stores
     */
    if (!shader->info.internal) {
-      progress |= nir_shader_lower_instructions(shader,
-                                                is_frag_color_out,
-                                                lower_alpha_to_one,
-                                                &state);
+      progress |= nir_shader_intrinsics_pass(shader,
+                                             lower_alpha_to_one,
+                                             nir_metadata_control_flow,
+                                             &state);
    }
 
-   if (fs->meta_present.color_write_enable)
-      progress |= nir_shader_lower_instructions(shader,
-                                                is_frag_color_out,
-                                                lower_color_write_enable,
-                                                NULL);
+   if (fs->meta_present.color_write_enable) {
+      progress |= nir_shader_intrinsics_pass(shader,
+                                             lower_color_write_enable,
+                                             nir_metadata_control_flow,
+                                             NULL);
+   }
 
-   progress |= nir_shader_lower_instructions(shader, is_pfo, lower_pfo, &state);
+   progress |= nir_shader_intrinsics_pass(shader,
+                                          lower_pfo,
+                                          nir_metadata_control_flow,
+                                          &state);
    progress |= lower_isp_fb(&b, &state);
 
    progress |= sink_outputs(shader, &state);
    progress |= z_replicate(shader, &state);
 
-   progress |= nir_shader_lower_instructions(shader,
-                                             is_load_sample_mask,
-                                             lower_load_sample_mask,
-                                             NULL);
+   progress |= nir_shader_intrinsics_pass(shader,
+                                          lower_load_sample_mask,
+                                          nir_metadata_control_flow,
+                                          NULL);
 
    util_dynarray_fini(&state.stores);
    util_dynarray_fini(&state.loads);
@@ -882,42 +875,33 @@ bool pco_nir_pfo(nir_shader *shader, pco_fs_data *fs)
    return progress;
 }
 
-static nir_def *lower_pvi(nir_builder *b, nir_instr *instr, void *cb_data)
+static bool lower_pvi(nir_builder *b, nir_intrinsic_instr *intr, void *cb_data)
 {
-   nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
    struct pvi_state *state = cb_data;
 
-   unsigned start_comp = nir_intrinsic_component(intr);
-   unsigned num_comps = intr->def.num_components;
-
-   ASSERTED nir_src *offset = &intr->src[0];
-   assert(nir_src_as_uint(*offset) == 0);
-
-   struct nir_io_semantics io_semantics = nir_intrinsic_io_semantics(intr);
-   gl_vert_attrib location = io_semantics.location;
-   nir_def *attrib = state->attribs[location - VERT_ATTRIB_GENERIC0];
-   assert(attrib);
-
-   b->cursor = nir_before_instr(&intr->instr);
-   return nir_channels(b, attrib, BITFIELD_RANGE(start_comp, num_comps));
-}
-
-static bool is_pvi(const nir_instr *instr, const void *cb_data)
-{
-   if (instr->type != nir_instr_type_intrinsic)
-      return false;
-
-   nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
    if (intr->intrinsic != nir_intrinsic_load_input)
       return false;
 
    if (is_processed(intr))
       return false;
 
+   unsigned start_comp = nir_intrinsic_component(intr);
+   unsigned num_comps = intr->def.num_components;
+
    ASSERTED gl_vert_attrib location = nir_intrinsic_io_semantics(intr).location;
    assert(location >= VERT_ATTRIB_GENERIC0 &&
           location <= VERT_ATTRIB_GENERIC15);
 
+   ASSERTED nir_src *offset = &intr->src[0];
+   assert(nir_src_as_uint(*offset) == 0);
+
+   nir_def *attrib = state->attribs[location - VERT_ATTRIB_GENERIC0];
+   assert(attrib);
+
+   b->cursor = nir_before_instr(&intr->instr);
+   attrib = nir_channels(b, attrib, BITFIELD_RANGE(start_comp, num_comps));
+   nir_def_rewrite_uses(&intr->def, attrib);
+   nir_instr_remove(&intr->instr);
    return true;
 }
 
@@ -999,7 +983,10 @@ bool pco_nir_pvi(nir_shader *shader, pco_vs_data *vs)
          unpack_from_format(&b, packed_comps, base_type, format, 4);
    }
 
-   nir_shader_lower_instructions(shader, is_pvi, lower_pvi, &state);
+   nir_shader_intrinsics_pass(shader,
+                              lower_pvi,
+                              nir_metadata_control_flow,
+                              &state);
 
    return true;
 }
@@ -1074,24 +1061,7 @@ bool pco_nir_point_size(nir_shader *shader)
    return true;
 }
 
-static bool is_fs_intr(const nir_instr *instr, UNUSED const void *cb_data)
-{
-   if (instr->type != nir_instr_type_intrinsic)
-      return false;
-
-   nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
-   switch (intr->intrinsic) {
-   case nir_intrinsic_load_front_face:
-      return true;
-
-   default:
-      break;
-   }
-
-   return false;
-}
-
-static nir_def *lower_front_face(nir_builder *b, nir_intrinsic_instr *intr)
+static bool lower_front_face(nir_builder *b, nir_intrinsic_instr *intr)
 {
    nir_def *face_ccw = nir_load_face_ccw_pco(b);
    nir_def *front_face = nir_ieq_imm(b, face_ccw, 0);
@@ -1103,32 +1073,35 @@ static nir_def *lower_front_face(nir_builder *b, nir_intrinsic_instr *intr)
       [PCO_FRONT_FACE_OP_TRUE] = nir_imm_true(b),
    };
 
-   return nir_select_from_ssa_def_array(b,
-                                        ff_elems,
-                                        ARRAY_SIZE(ff_elems),
-                                        ff_op);
+   nir_def *ff_selected =
+      nir_select_from_ssa_def_array(b, ff_elems, ARRAY_SIZE(ff_elems), ff_op);
+   nir_def_rewrite_uses(&intr->def, ff_selected);
+   nir_instr_remove(&intr->instr);
+   return true;
 }
 
-static nir_def *
-lower_fs_intr(nir_builder *b, nir_instr *instr, UNUSED void *cb_data)
+static bool
+lower_fs_intr(nir_builder *b, nir_intrinsic_instr *intr, UNUSED void *cb_data)
 {
-   nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
    switch (intr->intrinsic) {
    case nir_intrinsic_load_front_face:
+      b->cursor = nir_before_instr(&intr->instr);
       return lower_front_face(b, intr);
-
    default:
       break;
    }
 
-   UNREACHABLE("");
+   return false;
 }
 
 bool pco_nir_lower_fs_intrinsics(nir_shader *shader)
 {
    assert(shader->info.stage == MESA_SHADER_FRAGMENT);
 
-   return nir_shader_lower_instructions(shader, is_fs_intr, lower_fs_intr, NULL);
+   return nir_shader_intrinsics_pass(shader,
+                                     lower_fs_intr,
+                                     nir_metadata_control_flow,
+                                     NULL);
 }
 
 static bool
@@ -1232,13 +1205,9 @@ clone_clip_cull_stores(nir_builder *b, nir_intrinsic_instr *intr, void *data)
    return true;
 }
 
-static bool is_clip_cull_load(const nir_instr *instr,
-                              UNUSED const void *cb_data)
+static bool
+swap_clip_cull_load(nir_builder *b, nir_intrinsic_instr *intr, void *cb_data)
 {
-   if (instr->type != nir_instr_type_intrinsic)
-      return false;
-
-   nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
    if (intr->intrinsic != nir_intrinsic_load_deref)
       return false;
 
@@ -1248,16 +1217,11 @@ static bool is_clip_cull_load(const nir_instr *instr,
 
    nir_variable *var = nir_deref_instr_get_variable(deref);
 
-   return var->data.location == VARYING_SLOT_CLIP_DIST0 ||
-          var->data.location == VARYING_SLOT_CLIP_DIST1;
-}
+   if (var->data.location != VARYING_SLOT_CLIP_DIST0 &&
+       var->data.location != VARYING_SLOT_CLIP_DIST1)
+      return false;
 
-static nir_def *
-swap_clip_cull_load(nir_builder *b, nir_instr *instr, void *cb_data)
-{
-   nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
-   nir_deref_instr *deref = nir_src_as_deref(intr->src[0]);
-   nir_variable *var = nir_deref_instr_get_variable(deref);
+   b->cursor = nir_before_instr(&intr->instr);
 
    unsigned var_index = var->data.location - VARYING_SLOT_CLIP_DIST0;
    nir_def *index =
@@ -1265,7 +1229,10 @@ swap_clip_cull_load(nir_builder *b, nir_instr *instr, void *cb_data)
    index = nir_iadd_imm(b, index, var_index * 4);
 
    nir_variable *clone_var = cb_data;
-   return nir_load_array_var(b, clone_var, index);
+   nir_def *loaded_clone_var = nir_load_array_var(b, clone_var, index);
+   nir_def_rewrite_uses(&intr->def, loaded_clone_var);
+   nir_instr_remove(&intr->instr);
+   return true;
 }
 
 bool pco_nir_link_clip_cull_vars(nir_shader *producer, nir_shader *consumer)
@@ -1304,10 +1271,10 @@ bool pco_nir_link_clip_cull_vars(nir_shader *producer, nir_shader *consumer)
       nir_variable_create(consumer, nir_var_shader_in, clone_var_type, NULL);
    clone_var->data.location = clone_slot;
 
-   nir_shader_lower_instructions(consumer,
-                                 is_clip_cull_load,
-                                 swap_clip_cull_load,
-                                 clone_var);
+   nir_shader_intrinsics_pass(consumer,
+                              swap_clip_cull_load,
+                              nir_metadata_control_flow,
+                              clone_var);
 
    return true;
 }

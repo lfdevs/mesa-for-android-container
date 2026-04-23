@@ -190,8 +190,6 @@ brw_compile_cs(const struct brw_compiler *compiler,
       BRW_NIR_SNAPSHOT("first");
       brw_nir_apply_key(pt, &key->base, dispatch_width);
 
-      BRW_NIR_PASS(brw_nir_lower_simd, dispatch_width);
-
       brw_nir_optimize(pt);
       /* brw_nir_optimize undoes late lowerings. */
       BRW_NIR_PASS(nir_opt_algebraic_late);

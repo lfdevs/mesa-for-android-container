@@ -1,7 +1,7 @@
 /*
 ************************************************************************************************************************
 *
-*  Copyright (C) 2007-2024 Advanced Micro Devices, Inc. All rights reserved.
+*  Copyright (C) 2007-2026 Advanced Micro Devices, Inc. All rights reserved.
 *  SPDX-License-Identifier: MIT
 *
 ***********************************************************************************************************************/
@@ -36,7 +36,8 @@ struct Gfx11ChipSettings
     {
         UINT_32 isStrix             :  1;
         UINT_32 isPhoenix           :  1;
-        UINT_32 reserved1           : 30;
+        UINT_32 isGfx1170           :  1;
+        UINT_32 reserved1           : 29;
 
         // Misc configuration bits
         UINT_32 reserved2           : 32;

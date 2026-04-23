@@ -42,11 +42,6 @@ void aco_compile_shader(const struct aco_compiler_options* options,
                         struct nir_shader* const* shaders, const struct ac_shader_args* args,
                         aco_callback* build_binary, void** binary);
 
-void aco_compile_rt_prolog(const struct aco_compiler_options* options,
-                           const struct aco_shader_info* info, const struct ac_shader_args* in_args,
-                           const struct ac_arg* descriptors, unsigned raygen_param_count,
-                           nir_parameter* raygen_params, aco_callback* build_prolog, void** binary);
-
 void aco_compile_vs_prolog(const struct aco_compiler_options* options,
                            const struct aco_shader_info* info,
                            const struct aco_vs_prolog_info* prolog_info,

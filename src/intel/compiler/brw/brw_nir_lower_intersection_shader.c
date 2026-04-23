@@ -153,9 +153,8 @@ brw_nir_lower_intersection_shader(nir_shader *intersection,
       nir_local_variable_create(impl, glsl_bool_type(), "ray_commit");
    nir_store_var(b, commit, nir_imm_false(b), 0x1);
 
-   assert(impl->end_block->predecessors.entries == 1);
-   set_foreach(&impl->end_block->predecessors, block_entry) {
-      struct nir_block *block = (void *)block_entry->key;
+   assert(nir_block_num_preds(impl->end_block) == 1);
+   nir_foreach_pred(block, impl->end_block) {
       b->cursor = nir_after_block_before_jump(block);
       nir_push_if(b, nir_load_var(b, commit));
       {

@@ -236,7 +236,6 @@ nv30_init_screen_caps(struct nv30_screen *screen)
    caps->legacy_math_rules = false;
    caps->doubles = false;
    caps->int64 = false;
-   caps->tgsi_tex_txf_lz = false;
    caps->shader_clock = false;
    caps->polygon_mode_fill_rectangle = false;
    caps->sparse_buffer_page_size = 0;

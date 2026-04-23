@@ -202,35 +202,11 @@ static void gather_io_instrinsic(const nir_shader *nir, struct si_shader_info *i
       }
    }
 
-   if (nir->info.stage == MESA_SHADER_FRAGMENT && !is_input) {
-      /* Never use FRAG_RESULT_COLOR directly. */
-      if (semantic == FRAG_RESULT_COLOR)
-         semantic = FRAG_RESULT_DATA0;
-   }
-
-   unsigned driver_location = nir_intrinsic_base(intr);
    unsigned num_slots = indirect ? nir_intrinsic_io_semantics(intr).num_slots : 1;
 
-   if (is_input) {
-      assert(driver_location + num_slots <= ARRAY_SIZE(info->input_semantic));
-
-      for (unsigned i = 0; i < num_slots; i++) {
-         unsigned loc = driver_location + i;
-
-         /* No 2 inputs can use the same driver location. */
-         assert((info->input_semantic[loc] == semantic + i ||
-                 info->input_semantic[loc] == NUM_TOTAL_VARYING_SLOTS) &&
-                "nir_recompute_io_bases wasn't called");
-
-         info->input_semantic[loc] = semantic + i;
-
-         if (mask)
-            info->num_inputs = MAX2(info->num_inputs, loc + 1);
-      }
-   } else {
+   if (!is_input) {
       /* Outputs. */
       for (unsigned i = 0; i < num_slots; i++) {
-         unsigned loc = driver_location + i;
          unsigned slot_semantic = semantic + i;
 
          /* Call the translation functions to validate the semantic (call assertions in them). */
@@ -253,13 +229,6 @@ static void gather_io_instrinsic(const nir_shader *nir, struct si_shader_info *i
             }
          }
 
-         /* No 2 outputs can use the same driver location. */
-         assert((info->output_semantic[loc] == slot_semantic ||
-                 info->output_semantic[loc] == NUM_TOTAL_VARYING_SLOTS) &&
-                "nir_recompute_io_bases wasn't called");
-
-         info->output_semantic[loc] = slot_semantic;
-
          if (!is_output_load && mask) {
             /* Output stores. */
             unsigned gs_streams = (uint32_t)nir_intrinsic_io_semantics(intr).gs_streams <<
@@ -273,7 +242,6 @@ static void gather_io_instrinsic(const nir_shader *nir, struct si_shader_info *i
             }
 
             info->gs_writes_stream0 |= writes_stream0;
-            info->num_outputs = MAX2(info->num_outputs, loc + 1);
 
             switch (nir->info.stage) {
             case MESA_SHADER_TESS_CTRL:
@@ -517,6 +485,8 @@ void si_nir_gather_info(struct si_screen *sscreen, struct nir_shader *nir,
    info->base.num_ubos = nir->info.num_ubos;
    info->base.num_ssbos = nir->info.num_ssbos;
    info->base.num_images = nir->info.num_images;
+   info->base.outputs_written = nir->info.outputs_written;
+   info->base.outputs_written_16bit = nir->info.outputs_written_16bit;
    info->base.textures_used = nir->info.textures_used[0];
 
    info->base.task_payload_size = nir->info.task_payload_size;
@@ -587,14 +557,6 @@ void si_nir_gather_info(struct si_screen *sscreen, struct nir_shader *nir,
          break;
       }
    }
-
-   /* Initialize all IO slots to an invalid value. We use this to prevent 2 different
-    * inputs/outputs from using the same IO slot.
-    */
-   for (unsigned i = 0; i < ARRAY_SIZE(info->input_semantic); i++)
-      info->input_semantic[i] = NUM_TOTAL_VARYING_SLOTS;
-   for (unsigned i = 0; i < ARRAY_SIZE(info->output_semantic); i++)
-      info->output_semantic[i] = NUM_TOTAL_VARYING_SLOTS;
 
    if (nir->info.stage == MESA_SHADER_FRAGMENT) {
       /* Both flat and non-flat can occur with nir_io_mix_convergent_flat_with_interpolated,
@@ -673,14 +635,6 @@ void si_nir_gather_info(struct si_screen *sscreen, struct nir_shader *nir,
          gather_instruction(nir, info, instr);
    }
 
-   if (nir->info.stage == MESA_SHADER_VERTEX || nir->info.stage == MESA_SHADER_TESS_EVAL) {
-      /* Add the PrimitiveID output, but don't increment num_outputs.
-       * The driver inserts PrimitiveID only when it's used by the pixel shader,
-       * and si_emit_spi_map uses this unconditionally when such a pixel shader is used.
-       */
-      info->output_semantic[info->num_outputs] = VARYING_SLOT_PRIMITIVE_ID;
-   }
-
    if (nir->info.stage == MESA_SHADER_FRAGMENT) {
       info->output_z_equals_input_z &= !info->output_z_is_not_input_z;
       info->allow_flat_shading = !(info->uses_sysval_persp_center || info->uses_sysval_persp_centroid ||
@@ -695,28 +649,14 @@ void si_nir_gather_info(struct si_screen *sscreen, struct nir_shader *nir,
                                    BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_SAMPLE_POS) ||
                                    BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_SAMPLE_MASK_IN) ||
                                    BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_HELPER_INVOCATION));
-
-      /* Add back color inputs. */
-      unsigned num_inputs_with_colors = info->num_inputs;
-      for (unsigned i = 0; i < 2; i++) {
-         if ((info->colors_read >> (i * 4)) & 0xf) {
-            unsigned index = num_inputs_with_colors;
-
-            info->input_semantic[index] = VARYING_SLOT_BFC0 + i;
-            num_inputs_with_colors++;
-
-            /* Back-face colors don't increment num_inputs. si_emit_spi_map will use
-             * back-face colors conditionally only when they are needed.
-             */
-         }
-      }
    }
 
+   info->num_inputs = nir->num_inputs;
    info->has_divergent_loop = nir_has_divergent_loop(nir);
 
    if (nir->info.stage == MESA_SHADER_VERTEX) {
-      info->num_vs_inputs =
-         nir->info.stage == MESA_SHADER_VERTEX && !nir->info.vs.blit_sgprs_amd ? info->num_inputs : 0;
+      info->num_vs_inputs = nir->info.stage == MESA_SHADER_VERTEX && !nir->info.vs.blit_sgprs_amd ?
+                               nir->num_inputs : 0;
       unsigned num_vbos_in_sgprs = si_num_vbos_in_user_sgprs_inline(sscreen->info.gfx_level);
       info->num_vbos_in_user_sgprs = MIN2(info->num_vs_inputs, num_vbos_in_sgprs);
    }
@@ -754,21 +694,9 @@ void si_nir_gather_info(struct si_screen *sscreen, struct nir_shader *nir,
                             nir->info.clip_distance_array_size ||
                             nir->info.cull_distance_array_size;
 
-   /* There should be no holes in slots except VS inputs. */
-   if (nir->info.stage != MESA_SHADER_VERTEX) {
-      for (unsigned i = 0; i < info->num_inputs; i++)
-         assert(info->input_semantic[i] != NUM_TOTAL_VARYING_SLOTS &&
-                "nir_recompute_io_bases wasn't called");
-   }
-   for (unsigned i = 0; i < info->num_outputs; i++) {
-      assert(info->output_semantic[i] != NUM_TOTAL_VARYING_SLOTS &&
-             "nir_recompute_io_bases wasn't called");
-   }
-
    if (nir->info.stage == MESA_SHADER_FRAGMENT) {
-      for (unsigned i = 0; i < info->num_inputs; i++) {
-         unsigned semantic = info->input_semantic[i];
-
+      u_foreach_bit64_two_masks(semantic, nir->info.inputs_read,
+                                VARYING_SLOT_VAR0_16BIT, nir->info.inputs_read_16bit) {
          if ((semantic <= VARYING_SLOT_VAR31 || semantic >= VARYING_SLOT_VAR0_16BIT) &&
              semantic != VARYING_SLOT_PNTC) {
             info->inputs_read |= 1ull << si_shader_io_get_unique_index(semantic);
@@ -779,15 +707,10 @@ void si_nir_gather_info(struct si_screen *sscreen, struct nir_shader *nir,
          if (info->colors_written & (1 << i))
             info->colors_written_4bit |= 0xf << (4 * i);
 
-      for (unsigned i = 0; i < info->num_inputs; i++) {
-         /* If any FS input is POS (0), the input slot is unused, which should never happen. */
-         assert(info->input_semantic[i] != VARYING_SLOT_POS);
-
-         if (info->input_semantic[i] == VARYING_SLOT_COL0)
-            info->color_attr_index[0] = i;
-         else if (info->input_semantic[i] == VARYING_SLOT_COL1)
-            info->color_attr_index[1] = i;
-      }
+      if (nir->info.inputs_read & VARYING_BIT_COL0)
+         info->color_attr_index[0] = ac_nir_get_io_driver_location(nir, VARYING_SLOT_COL0, true);
+      if (nir->info.inputs_read & VARYING_BIT_COL1)
+         info->color_attr_index[1] = ac_nir_get_io_driver_location(nir, VARYING_SLOT_COL1, true);
    }
 
    switch (nir->info.stage) {
@@ -806,7 +729,7 @@ void si_nir_gather_info(struct si_screen *sscreen, struct nir_shader *nir,
                                 sscreen->info.gfx_level <= GFX10_3 &&
                                 (nir->info.gs.invocations * nir->info.gs.vertices_out > 256 ||
                                  nir->info.gs.invocations * nir->info.gs.vertices_out *
-                                 (info->num_outputs * 4 + 1) > 6500 /* max dw per GS primitive */);
+                                 (nir->num_outputs * 4 + 1) > 6500 /* max dw per GS primitive */);
       break;
 
    case MESA_SHADER_VERTEX:

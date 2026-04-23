@@ -71,4 +71,20 @@
 
 #define V3D_MAX_VERTEX_ATTRIB_DIVISOR 0xffff
 
+/* Tile allocation block sizes for the PTB, as enum values matching
+ * the TILE_BINNING_MODE_CFG / TILE_LIST_INITIAL_BLOCK_SIZE packets.
+ * The byte size is 64 << enum_value (0 = 64B, 1 = 128B, 2 = 256B).
+ *
+ * Using 128B initial blocks avoids tile overflow for simple draws
+ * (a single draw emits ~88 bytes of state per tile).  64B continuation
+ * blocks reduce internal fragmentation in the tile allocation pool.
+ */
+#define V3D_TILE_ALLOC_INITIAL_BLOCK_SIZE  128
+#define V3D_TILE_ALLOC_OVERFLOW_BLOCK_SIZE  64
+
+#define V3D_TILE_ALLOC_INITIAL_BLOCK_SIZE_ENUM \
+        (V3D_TILE_ALLOC_INITIAL_BLOCK_SIZE >> 7)
+#define V3D_TILE_ALLOC_OVERFLOW_BLOCK_SIZE_ENUM \
+        (V3D_TILE_ALLOC_OVERFLOW_BLOCK_SIZE >> 7)
+
 #endif /* V3D_LIMITS_H */

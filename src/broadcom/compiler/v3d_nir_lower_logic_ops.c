@@ -89,7 +89,7 @@ v3d_logicop(nir_builder *b, int logicop_func,
         case PIPE_LOGICOP_SET:
                 return nir_imm_int(b, ~0);
         default:
-                fprintf(stderr, "Unknown logic op %d\n", logicop_func);
+                mesa_loge("Unknown logic op %d", logicop_func);
                 FALLTHROUGH;
         case PIPE_LOGICOP_COPY:
                 return src;
@@ -102,7 +102,7 @@ v3d_nir_get_swizzled_channel(nir_builder *b, nir_def **srcs, int swiz)
         switch (swiz) {
         default:
         case PIPE_SWIZZLE_NONE:
-                fprintf(stderr, "warning: unknown swizzle\n");
+                mesa_loge("Unknown swizzle");
                 FALLTHROUGH;
         case PIPE_SWIZZLE_0:
                 return nir_imm_float(b, 0.0);

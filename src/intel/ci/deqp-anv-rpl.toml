@@ -1,0 +1,55 @@
+# Basic test set
+[[deqp]]
+deqp = "/deqp-vk/external/vulkancts/modules/vulkan/deqp-vk"
+caselists = ["/deqp-vk/mustpass/vk-main.txt"]
+renderer_check = "RPL-U"
+tests_per_group = 5000
+
+# Rerun query tests with shader query optimizations (14443 tests)
+[[deqp]]
+deqp = "/deqp-vk/external/vulkancts/modules/vulkan/deqp-vk"
+caselists = ["/deqp-vk/mustpass/vk-main.txt"]
+renderer_check = "RPL-U"
+include = ["dEQP-VK.query_pool.*"]
+prefix = "shaderquery-"
+tests_per_group = 5000
+[deqp.env]
+  query_clear_with_blorp_threshold = "0"
+  query_copy_with_shader_threshold = "0"
+
+# Rerun indirect tests with in-place generation shader optimizations
+# (3814 tests)
+[[deqp]]
+deqp = "/deqp-vk/external/vulkancts/modules/vulkan/deqp-vk"
+caselists = ["/deqp-vk/mustpass/vk-main.txt"]
+renderer_check = "RPL-U"
+include = ["dEQP-VK.draw.*indirect*"]
+prefix = "indirectgen-inplace-"
+tests_per_group = 5000
+[deqp.env]
+  generated_indirect_threshold = "0"
+
+# Rerun indirect tests with ring-buffer generation shader optimizations
+# (3814 tests)
+[[deqp]]
+deqp = "/deqp-vk/external/vulkancts/modules/vulkan/deqp-vk"
+caselists = ["/deqp-vk/mustpass/vk-main.txt"]
+renderer_check = "RPL-U"
+include = ["dEQP-VK.draw.*indirect*"]
+prefix = "indirectgen-inring-"
+tests_per_group = 5000
+[deqp.env]
+  generated_indirect_threshold = "0"
+  generated_indirect_ring_threshold = "0"
+
+# Rerun load/store without format tests with emulation support (2352
+# tests)
+[[deqp]]
+deqp = "/deqp-vk/external/vulkancts/modules/vulkan/deqp-vk"
+caselists = ["/deqp-vk/mustpass/vk-main.txt"]
+renderer_check = "RPL-U"
+include = ["dEQP-VK.image.load_store.without_format*"]
+prefix = "without-format-emulation-"
+tests_per_group = 5000
+[deqp.env]
+  anv_emulate_read_without_format = "true"

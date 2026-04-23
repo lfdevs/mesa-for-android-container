@@ -381,6 +381,7 @@ bool brw_workaround_emit_dummy_mov_instruction(brw_shader &s);
 bool brw_workaround_memory_fence_before_eot(brw_shader &s);
 bool brw_workaround_nomask_control_flow(brw_shader &s);
 bool brw_workaround_source_arf_before_eot(brw_shader &s);
+bool brw_workaround_emit_dummy_mov_mulmac(brw_shader &s);
 
 /* Helpers. */
 unsigned brw_get_lowered_simd_width(const brw_shader *shader,

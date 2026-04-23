@@ -254,6 +254,10 @@ init_texture(struct d3d12_screen *screen,
    if (templ->bind & PIPE_BIND_RENDER_TARGET)
       desc.Flags |= D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
 
+   // This is expected from D3D11 openers for D3D12 created shareable resources
+   if (templ->bind & PIPE_BIND_SHARED)
+      desc.Flags |= D3D12_RESOURCE_FLAG_ALLOW_SIMULTANEOUS_ACCESS;
+
    if (templ->bind & PIPE_BIND_DEPTH_STENCIL) {
       desc.Flags |= D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
 
@@ -513,7 +517,8 @@ d3d12_resource_create_or_place(struct d3d12_screen *screen,
    init_valid_range(res);
    threaded_resource_init(&res->base.b,
       templ->usage == PIPE_USAGE_DEFAULT &&
-      templ->target == PIPE_BUFFER);
+      templ->target == PIPE_BUFFER &&
+      templ->width0 < 0x1000);
 
    memset(&res->bind_counts, 0, sizeof(d3d12_resource::bind_counts));
 
@@ -1781,9 +1786,15 @@ d3d12_transfer_map(struct pipe_context *pctx,
    if (usage & PIPE_MAP_DIRECTLY || !res->bo)
       return NULL;
 
-   slab_child_pool* transfer_pool = (usage & TC_TRANSFER_MAP_THREADED_UNSYNC) ?
-      &ctx->transfer_pool_unsync : &ctx->transfer_pool;
-   struct d3d12_transfer *trans = (struct d3d12_transfer *)slab_zalloc(transfer_pool);
+   slab_child_pool* transfer_pool = NULL;
+   struct d3d12_transfer *trans;
+   if (usage & PIPE_MAP_THREAD_SAFE) {
+      trans = (struct d3d12_transfer *)CALLOC_STRUCT(d3d12_transfer);
+   } else {
+      transfer_pool = (usage & TC_TRANSFER_MAP_THREADED_UNSYNC) ?
+         &ctx->transfer_pool_unsync : &ctx->transfer_pool;
+      trans = (struct d3d12_transfer *)slab_zalloc(transfer_pool);
+   }
    struct pipe_transfer *ptrans = &trans->base.b;
    if (!trans)
       return NULL;
@@ -1809,7 +1820,10 @@ d3d12_transfer_map(struct pipe_context *pctx,
 
       range = linear_range(box, ptrans->stride, ptrans->layer_stride);
       if (!synchronize(ctx, res, usage, &range)) {
-         slab_free(transfer_pool, trans);
+         if (usage & PIPE_MAP_THREAD_SAFE)
+            FREE(trans);
+         else
+            slab_free(transfer_pool, trans);
          return NULL;
       }
       ptr = d3d12_bo_map(res->bo, &range);
@@ -1933,7 +1947,10 @@ d3d12_transfer_map(struct pipe_context *pctx,
                                               staging_usage,
                                               staging_res_size);
       if (!trans->staging_res) {
-         slab_free(transfer_pool, trans);
+         if (usage & PIPE_MAP_THREAD_SAFE)
+            FREE(trans);
+         else
+            slab_free(transfer_pool, trans);
          return NULL;
       }
 
@@ -2061,7 +2078,15 @@ d3d12_transfer_unmap(struct pipe_context *pctx,
    }
 
    pipe_resource_reference(&ptrans->resource, NULL);
-   slab_free(&d3d12_context(pctx)->transfer_pool, ptrans);
+   if (ptrans->usage & PIPE_MAP_THREAD_SAFE) {
+      FREE(ptrans);
+   } else {
+      /* transfer_unmap is always called from the driver thread, so we use
+       * transfer_pool, not transfer_pool_unsync.  Freeing an object into a
+       * different pool is allowed, however.
+       */
+      slab_free(&d3d12_context(pctx)->transfer_pool, ptrans);
+   }
 }
 
 void

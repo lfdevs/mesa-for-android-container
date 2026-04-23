@@ -78,6 +78,23 @@ bool IntelDriver::init_perfcnt()
 
    perf = std::make_unique<IntelPerf>(drm_device.fd);
 
+   if (perf->cfg->features_supported & INTEL_PERF_FEATURE_OA_BLOCKED_BY_POLICY) {
+      PPS_LOG_ERROR("OA metrics access blocked by system policy "
+                    "(gpu=%d, driver=%s): "
+                    "Check kernel paranoid settings or run as root.",
+                    drm_device.gpu_num,
+                    drm_device.name.c_str());
+      return false;
+   }
+
+   if (perf->cfg->n_queries == 0) {
+      PPS_LOG_ERROR("No OA queries available for this device "
+                    "(gpu=%d, driver=%s)",
+                    drm_device.gpu_num,
+                    drm_device.name.c_str());
+      return false;
+   }
+
    const char *metric_set_name = os_get_option("INTEL_PERFETTO_METRIC_SET");
 
    struct intel_perf_query_info *default_query = nullptr;

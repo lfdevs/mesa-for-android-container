@@ -107,7 +107,9 @@ panvk_CreateBuffer(VkDevice _device, const VkBufferCreateInfo *pCreateInfo,
    if (buffer == NULL)
       return panvk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
 
-   if (buffer->vk.size > PANVK_MAX_BUFFER_SIZE) {
+   struct panvk_physical_device *phys_dev =
+      to_panvk_physical_device(device->vk.physical);
+   if (buffer->vk.size > panvk_get_max_buffer_size(phys_dev)) {
       result = panvk_error(device, VK_ERROR_OUT_OF_DEVICE_MEMORY);
       goto err_destroy_buffer;
    }

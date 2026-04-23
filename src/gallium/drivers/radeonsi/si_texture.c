@@ -365,6 +365,7 @@ static int si_init_surface(struct si_screen *sscreen, struct radeon_surf *surfac
 
          case GFX11:
          case GFX11_5:
+         case GFX11_7:
             break;
 
          default:
@@ -1928,6 +1929,7 @@ static struct pipe_resource *si_texture_from_handle(struct pipe_screen *screen,
 {
    struct si_screen *sscreen = (struct si_screen *)screen;
    struct pb_buffer_lean *buf = NULL;
+   unsigned format_num_planes = util_format_get_num_planes(whandle->format);
 
    buf = sscreen->ws->buffer_from_handle(sscreen->ws, whandle,
                                          sscreen->info.max_alignment,
@@ -1938,7 +1940,7 @@ static struct pipe_resource *si_texture_from_handle(struct pipe_screen *screen,
    if (templ->target == PIPE_BUFFER)
       return si_buffer_from_winsys_buffer(screen, templ, buf, 0, true);
 
-   if (whandle->plane >= util_format_get_num_planes(whandle->format)) {
+   if (whandle->plane >= format_num_planes) {
       struct si_auxiliary_texture *tex = CALLOC_STRUCT_CL(si_auxiliary_texture);
       if (!tex)
          return NULL;
@@ -1953,8 +1955,17 @@ static struct pipe_resource *si_texture_from_handle(struct pipe_screen *screen,
       return &tex->b.b;
    }
 
-   return si_texture_from_winsys_buffer(sscreen, templ, buf, whandle->stride, whandle->offset,
-                                        whandle->modifier, usage, true, true);
+   struct pipe_resource *texture =
+      si_texture_from_winsys_buffer(sscreen, templ, buf, whandle->stride, whandle->offset,
+                                    whandle->modifier, usage, true, true);
+
+   if (texture && whandle->plane == 0 && format_num_planes >= 2) {
+      struct si_texture *tex = (struct si_texture *)texture;
+
+      tex->multi_plane_format = whandle->format;
+   }
+
+   return texture;
 }
 
 bool si_init_flushed_depth_texture(struct pipe_context *ctx, struct pipe_resource *texture)

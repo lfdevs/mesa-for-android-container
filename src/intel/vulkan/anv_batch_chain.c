@@ -1079,7 +1079,7 @@ anv_cmd_buffer_end_batch_buffer(struct anv_cmd_buffer *cmd_buffer)
        * actual ExecuteCommands implementation.
        */
       const uint32_t length = cmd_buffer->batch.next - cmd_buffer->batch.start;
-      if (!(cmd_buffer->device->physical->instance->debug & ANV_DEBUG_NO_SECONDARY_CALL)) {
+      if (!ANV_DEBUG(NO_SECONDARY_CALL)) {
          cmd_buffer->exec_mode = ANV_CMD_BUFFER_EXEC_MODE_CALL_AND_RETURN;
 
          void *jump_addr =

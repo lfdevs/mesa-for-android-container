@@ -3,23 +3,18 @@
  * SPDX-License-Identifier: MIT
  */
 
+#include "tu_perfetto.h"
+
 #include <perfetto.h>
 
-#include "tu_perfetto.h"
-#include "tu_buffer.h"
-#include "tu_device.h"
-#include "tu_queue.h"
-#include "tu_image.h"
-
-#include "util/hash_table.h"
-#include "util/perf/u_perfetto.h"
 #include "util/perf/u_perfetto_renderpass.h"
 
-#include "tu_cmd_buffer.h"
+#include "tu_buffer.h"
+#include "tu_device.h"
+#include "tu_image.h"
+#include "tu_queue.h"
 #include "tu_tracepoints.h"
 #include "tu_tracepoints_perfetto.h"
-#include "vk_object.h"
-#include "vk_util.h"
 
 /* we can't include tu_knl.h and tu_device.h */
 
@@ -83,6 +78,17 @@ enum tu_stage_id {
    GMEM_STORE_STAGE_ID,
    SYSMEM_RESOLVE_STAGE_ID,
    CUSTOM_RESOLVE_STAGE_ID,
+   CLEAR_COLOR_IMAGE_STAGE_ID,
+   CLEAR_DEPTH_STENCIL_IMAGE_STAGE_ID,
+   COPY_BUFFER_TO_IMAGE_STAGE_ID,
+   COPY_IMAGE_TO_BUFFER_STAGE_ID,
+   COPY_IMAGE_STAGE_ID,
+   RESOLVE_IMAGE_STAGE_ID,
+   FILL_BUFFER_STAGE_ID,
+   COPY_BUFFER_STAGE_ID,
+   UPDATE_BUFFER_STAGE_ID,
+   SLOW_CLEAR_LRZ_STAGE_ID,
+   DISABLE_LRZ_STAGE_ID,
    // TODO add the rest from fd_stage_id
 };
 
@@ -119,6 +125,17 @@ static const struct {
    [GMEM_STORE_STAGE_ID]     = { "GMEM Store", "Per tile GMEM to system memory store" },
    [SYSMEM_RESOLVE_STAGE_ID] = { "SysMem Resolve", "System memory MSAA resolve" },
    [CUSTOM_RESOLVE_STAGE_ID] = { "Custom Resolve", "Custom resolve via shader" },
+   [CLEAR_COLOR_IMAGE_STAGE_ID] = { "Clear Color Image", "" },
+   [CLEAR_DEPTH_STENCIL_IMAGE_STAGE_ID] = { "Clear Depth Stencil Image", "" },
+   [COPY_BUFFER_TO_IMAGE_STAGE_ID] = { "Copy Buffer to Image", "" },
+   [COPY_IMAGE_TO_BUFFER_STAGE_ID] = { "Copy Image to Buffer", "" },
+   [COPY_IMAGE_STAGE_ID] = { "Copy Image", "" },
+   [RESOLVE_IMAGE_STAGE_ID] = { "Resolve Image", "" },
+   [FILL_BUFFER_STAGE_ID] = { "Fill Buffer", "" },
+   [COPY_BUFFER_STAGE_ID] = { "Copy Buffer", "" },
+   [UPDATE_BUFFER_STAGE_ID] = { "Update Buffer", "" },
+   [SLOW_CLEAR_LRZ_STAGE_ID] = { "Slow Clear LRZ", "Perform slow clear of LRZ for this image, should be avoided" },
+   [DISABLE_LRZ_STAGE_ID] = { "Disable LRZ", "Disable LRZ for this image, should be avoided" },
    // TODO add the rest
 };
 
@@ -596,7 +613,6 @@ CREATE_EVENT_CALLBACK(concurrent_binning_ib, CONCURRENT_BINNING_STAGE_ID)
 CREATE_EVENT_CALLBACK(concurrent_binning_barrier, CONCURRENT_BINNING_BARRIER_STAGE_ID)
 CREATE_EVENT_CALLBACK(draw_ib_gmem, GMEM_STAGE_ID)
 CREATE_EVENT_CALLBACK(draw_ib_sysmem, BYPASS_STAGE_ID)
-CREATE_EVENT_CALLBACK(blit, BLIT_STAGE_ID)
 CREATE_EVENT_CALLBACK(draw, DRAW_STAGE_ID)
 CREATE_EVENT_CALLBACK(compute, COMPUTE_STAGE_ID)
 CREATE_EVENT_CALLBACK(compute_indirect, COMPUTE_STAGE_ID)
@@ -608,6 +624,18 @@ CREATE_EVENT_CALLBACK(gmem_load, GMEM_LOAD_STAGE_ID)
 CREATE_EVENT_CALLBACK(gmem_store, GMEM_STORE_STAGE_ID)
 CREATE_EVENT_CALLBACK(sysmem_resolve, SYSMEM_RESOLVE_STAGE_ID)
 CREATE_EVENT_CALLBACK(custom_resolve, CUSTOM_RESOLVE_STAGE_ID)
+CREATE_EVENT_CALLBACK(blit_image, BLIT_STAGE_ID)
+CREATE_EVENT_CALLBACK(clear_color_image, CLEAR_COLOR_IMAGE_STAGE_ID)
+CREATE_EVENT_CALLBACK(clear_depth_stencil_image, CLEAR_DEPTH_STENCIL_IMAGE_STAGE_ID)
+CREATE_EVENT_CALLBACK(copy_buffer_to_image, COPY_BUFFER_TO_IMAGE_STAGE_ID)
+CREATE_EVENT_CALLBACK(copy_image, COPY_IMAGE_STAGE_ID)
+CREATE_EVENT_CALLBACK(copy_image_to_buffer, COPY_IMAGE_TO_BUFFER_STAGE_ID)
+CREATE_EVENT_CALLBACK(fill_buffer, FILL_BUFFER_STAGE_ID)
+CREATE_EVENT_CALLBACK(copy_buffer, COPY_BUFFER_STAGE_ID)
+CREATE_EVENT_CALLBACK(update_buffer, UPDATE_BUFFER_STAGE_ID)
+CREATE_EVENT_CALLBACK(resolve_image, RESOLVE_IMAGE_STAGE_ID)
+CREATE_EVENT_CALLBACK(slow_clear_lrz, SLOW_CLEAR_LRZ_STAGE_ID)
+CREATE_EVENT_CALLBACK(disable_lrz, DISABLE_LRZ_STAGE_ID)
 
 void
 tu_perfetto_start_cmd_buffer_annotation(

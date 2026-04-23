@@ -370,25 +370,27 @@ class VulkanCountingCodegen(VulkanTypeIterator):
         lenAccessGuard = self.lenAccessorGuard(vulkanType)
 
         self.genCount("sizeof(uint32_t)")
-        if lenAccessGuard is not None:
-            self.cgen.beginIf(lenAccessGuard)
-        self.cgen.beginFor("uint32_t i = 0", "i < %s" % lenAccess, "++i")
-        self.genCount("sizeof(uint32_t) + (%s[i] ? strlen(%s[i]) : 0)" % (access, access))
-        self.cgen.endFor()
-        if lenAccessGuard is not None:
-            self.cgen.endIf()
+        if lenAccess is not None:
+            if lenAccessGuard is not None:
+                self.cgen.beginIf(lenAccessGuard)
+            self.cgen.beginFor("uint32_t i = 0", "i < %s" % lenAccess, "++i")
+            self.genCount("sizeof(uint32_t) + (%s[i] ? strlen(%s[i]) : 0)" % (access, access))
+            self.cgen.endFor()
+            if lenAccessGuard is not None:
+                self.cgen.endIf()
 
     def onStaticArr(self, vulkanType):
         access = self.exprValueAccessor(vulkanType)
         lenAccess = self.lenAccessor(vulkanType)
         lenAccessGuard = self.lenAccessorGuard(vulkanType)
 
-        if lenAccessGuard is not None:
-            self.cgen.beginIf(lenAccessGuard)
-        finalLenExpr = "%s * %s" % (lenAccess, self.cgen.sizeofExpr(vulkanType))
-        if lenAccessGuard is not None:
-            self.cgen.endIf()
-        self.genCount(finalLenExpr)
+        if lenAccess is not None:
+            if lenAccessGuard is not None:
+                self.cgen.beginIf(lenAccessGuard)
+            finalLenExpr = "%s * %s" % (lenAccess, self.cgen.sizeofExpr(vulkanType))
+            if lenAccessGuard is not None:
+                self.cgen.endIf()
+            self.genCount(finalLenExpr)
 
     def onStructExtension(self, vulkanType):
         sTypeParam = copy(vulkanType)

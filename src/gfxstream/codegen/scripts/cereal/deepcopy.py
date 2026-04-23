@@ -155,16 +155,17 @@ class DeepcopyCodegen(VulkanTypeIterator):
         lenAccessLhs = self.lenAccessorLhs(vulkanType)
 
         self.cgen.stmt("%s = nullptr" % accessRhs)
-        self.cgen.beginIf("%s && %s" % (accessLhs, lenAccessLhs))
+        if lenAccessLhs is not None:
+            self.cgen.beginIf("%s && %s" % (accessLhs, lenAccessLhs))
 
-        self.cgen.stmt( \
-            "%s = %s->strDupArray(%s, %s)" % \
-            (accessRhs,
-             self.poolVarName,
-             accessLhs,
-             lenAccessLhs))
+            self.cgen.stmt( \
+                "%s = %s->strDupArray(%s, %s)" % \
+                (accessRhs,
+                 self.poolVarName,
+                 accessLhs,
+                 lenAccessLhs))
 
-        self.cgen.endIf()
+            self.cgen.endIf()
 
     def onStaticArr(self, vulkanType):
         accessLhs = self.exprAccessorValueLhs(vulkanType)

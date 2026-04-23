@@ -87,6 +87,7 @@ public:
    ConditionalJumpTracker m_jump_tracker;
    CallStack m_callstack;
    bool ps_alpha_to_one;
+   bool ps_alpha_to_one_and_coverage;
    /* End initialized in constructor */
 
    std::set<uint32_t> m_nliterals_in_group;
@@ -132,6 +133,7 @@ AssamblerVisitor::AssamblerVisitor(r600_shader *sh, const r600_shader_key& key,
     m_bc(&sh->bc),
     m_callstack(sh->bc),
     ps_alpha_to_one(key.ps.alpha_to_one),
+    ps_alpha_to_one_and_coverage(key.ps.alpha_to_one_and_coverage),
     m_legacy_math_rules(legacy_math_rules)
 {
    if (m_shader->processor_type == MESA_SHADER_FRAGMENT)
@@ -531,6 +533,31 @@ void
 AssamblerVisitor::visit(const ExportInstr& exi)
 {
    const auto& value = exi.value();
+
+   if (unlikely(ps_alpha_to_one_and_coverage && exi.export_type() == ExportInstr::pixel &&
+                exi.location() == 0)) {
+      r600_bytecode_output output;
+      memset(&output, 0, sizeof(output));
+
+      output.gpr = value.sel();
+      output.elem_size = 3;
+      output.swizzle_x = 7;
+      output.swizzle_y = 7;
+      output.swizzle_z = 7;
+      output.swizzle_w = value[3]->chan();
+      output.array_base = 61;
+      output.burst_count = 1;
+      output.op = CF_OP_EXPORT;
+      output.type = exi.export_type();
+
+      int r = 0;
+      if ((r = r600_bytecode_add_output(m_bc, &output))) {
+         R600_ASM_ERR("Error adding export at location %d : err: %d\n",
+                      output.array_base,
+                      r);
+         m_result = false;
+      }
+   }
 
    r600_bytecode_output output;
    memset(&output, 0, sizeof(output));

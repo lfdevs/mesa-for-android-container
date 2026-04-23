@@ -12,7 +12,7 @@ only interact with varyings (commonly shortened to "VAR").
 
 
 Hardware descriptors
-====================
+--------------------
 
 Before Valhall there were two types of hardware descriptors:
 
@@ -22,7 +22,7 @@ Before Valhall there were two types of hardware descriptors:
   contains: pointer, size and stride
 
 Midgard (v5)
-============
+------------
 Attributes are loaded/stored using ``LD_ATTR``/``ST_ATTR``, those query the
 attribute descriptors and buffer descriptors to find the real global memory
 offset before loading/storing.
@@ -37,7 +37,7 @@ this is only supported between int-int or float-float operations.
 
 
 Bifrost (v6)
-============
+------------
 Changes:
 
 - ``ST_ATTR`` is replaced by ``LEA_ATTR`` and ``ST_CVT`` pairs.
@@ -51,7 +51,7 @@ Changes:
   by ``LD_VAR_FLAT``.
 
 Valhall (v9)
-============
+------------
 Valhall introduced layout-specific instructions, ``LEA_BUF`` and ``LD_VAR_BUF``,
 those do not use ``AttributeDescriptor`` but read ``BufferDescriptor`` directly.
 These new instructions bake the offset and in-memory format of the attribute
@@ -72,7 +72,7 @@ with ``LEA_BUF`` (instead of ``LEA_ATTR``), and never emit varying
 ``AttributeDescriptor`` for VS.
 
 Challenges
-==========
+----------
 Theoretically, the output types from the VS and input types from the FS should
 always agree.  In practice we cannot trust the varyings types given to us,
 here are some challenging examples:

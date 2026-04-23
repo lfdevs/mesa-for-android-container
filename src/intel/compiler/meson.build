@@ -35,6 +35,7 @@ brw_device_sha1_gen_src = custom_target('brw_device_sha1_gen.c',
                                         command : [prog_python, '@INPUT0@', '--out', '@OUTPUT@'])
 
 subdir('brw')
+subdir('jay')
 
 if with_intel_elk
   subdir('elk')

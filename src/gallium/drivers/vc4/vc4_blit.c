@@ -129,13 +129,13 @@ vc4_tile_blit(struct pipe_context *pctx, struct pipe_blit_info *info)
                 return;
 
         if (false) {
-                fprintf(stderr, "RCL blit from %d,%d to %d,%d (%d,%d)\n",
-                        info->src.box.x,
-                        info->src.box.y,
-                        info->dst.box.x,
-                        info->dst.box.y,
-                        info->dst.box.width,
-                        info->dst.box.height);
+                mesa_logd("RCL blit from %d,%d to %d,%d (%d,%d)",
+                          info->src.box.x,
+                          info->src.box.y,
+                          info->dst.box.x,
+                          info->dst.box.y,
+                          info->dst.box.width,
+                          info->dst.box.height);
         }
 
         struct pipe_surface dst_surf;
@@ -434,9 +434,9 @@ vc4_render_blit(struct pipe_context *ctx, struct pipe_blit_info *info)
                 return;
 
         if (!util_blitter_is_blit_supported(vc4->blitter, info)) {
-                fprintf(stderr, "blit unsupported %s -> %s\n",
-                    util_format_short_name(info->src.resource->format),
-                    util_format_short_name(info->dst.resource->format));
+                mesa_logw("blit unsupported %s -> %s",
+                          util_format_short_name(info->src.resource->format),
+                          util_format_short_name(info->dst.resource->format));
                 return;
         }
 
@@ -544,5 +544,5 @@ vc4_blit(struct pipe_context *pctx, const struct pipe_blit_info *blit_info)
         vc4_render_blit(pctx, &info);
 
         if (info.mask)
-                fprintf(stderr, "Unsupported blit\n");
+                mesa_loge("Unsupported blit");
 }

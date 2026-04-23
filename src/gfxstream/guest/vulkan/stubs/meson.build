@@ -15,3 +15,8 @@ libgfxstream_vk_stubs = static_library(
         inc_src,
     ],
 )
+
+dep_gfxstream_stubs = declare_dependency(
+    include_directories: [inc_gfxstream_vk_stubs],
+    link_with: [libgfxstream_vk_stubs],
+)

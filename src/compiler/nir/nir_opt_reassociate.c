@@ -203,7 +203,7 @@ can_reassociate(nir_alu_instr *alu)
 
    return (props & NIR_OP_IS_2SRC_COMMUTATIVE) &&
           ((props & NIR_OP_IS_ASSOCIATIVE) ||
-           (!nir_alu_instr_is_exact(alu) && (props & NIR_OP_IS_INEXACT_ASSOCIATIVE)));
+           (!nir_alu_instr_no_reassoc(alu) && (props & NIR_OP_IS_INEXACT_ASSOCIATIVE)));
 }
 
 /*

@@ -1,7 +1,7 @@
 /*
 ************************************************************************************************************************
 *
-*  Copyright (C) 2007-2024 Advanced Micro Devices, Inc. All rights reserved.
+*  Copyright (C) 2007-2026 Advanced Micro Devices, Inc. All rights reserved.
 *  SPDX-License-Identifier: MIT
 *
 ***********************************************************************************************************************/
@@ -207,7 +207,7 @@ ADDR_E_RETURNCODE Lib::ComputeSurfaceInfo(
             // Overwrite these parameters if we have a valid format
         }
 
-        if (localIn.bpp != 0)
+        if (localIn.bpp >= 8)
         {
             localIn.width  = Max(localIn.width, 1u);
             localIn.height = Max(localIn.height, 1u);
@@ -444,8 +444,8 @@ ADDR_E_RETURNCODE Lib::CopyLinearSurface(
             void* pMipBase = VoidPtrInc(pIn->pMappedSurface,
                                         (pIn->singleSubres ? 0 : mipInfo[pCurRegion->mipId].offset));
 
-            const size_t lineSizeBytes = (localIn.bpp >> 3) * pCurRegion->copyDims.width;
-            const size_t lineImgPitchBytes = (localIn.bpp >> 3) * mipInfo[pCurRegion->mipId].pitch;
+            const size_t lineSizeBytes = (static_cast<size_t>(localIn.bpp) >> 3) * pCurRegion->copyDims.width;
+            const size_t lineImgPitchBytes = (static_cast<size_t>(localIn.bpp) >> 3) * mipInfo[pCurRegion->mipId].pitch;
 
             for (UINT_32 sliceIdx = 0; sliceIdx < pCurRegion->copyDims.depth; sliceIdx++)
             {
@@ -502,6 +502,11 @@ ADDR_E_RETURNCODE Lib::CopyMemToSurface(
     {
         if (pIn->size  != sizeof(ADDR2_COPY_MEMSURFACE_INPUT))
         {
+            returnCode = ADDR_INVALIDPARAMS;
+        }
+        else if (pIn->copyFlags.blockMemcpy && pIn->copyFlags.hybridMemcpy)
+        {
+            // Invalid to specify conflicting copy modes.
             returnCode = ADDR_INVALIDPARAMS;
         }
         else
@@ -571,6 +576,11 @@ ADDR_E_RETURNCODE Lib::CopySurfaceToMem(
     {
         if (pIn->size  != sizeof(ADDR2_COPY_MEMSURFACE_INPUT))
         {
+            returnCode = ADDR_INVALIDPARAMS;
+        }
+        else if (pIn->copyFlags.blockMemcpy && pIn->copyFlags.hybridMemcpy)
+        {
+            // Invalid to specify conflicting copy modes.
             returnCode = ADDR_INVALIDPARAMS;
         }
         else
@@ -1424,7 +1434,7 @@ ADDR_E_RETURNCODE Lib::ComputeSurfaceAddrFromCoordLinear(
         {
             pOut->addr        = (localOut.sliceSize * pIn->slice) +
                                 mipInfo[pIn->mipId].offset +
-                                (pIn->y * mipInfo[pIn->mipId].pitch + pIn->x) * (pIn->bpp >> 3);
+                                (static_cast<size_t>(pIn->y) * mipInfo[pIn->mipId].pitch + pIn->x) * (pIn->bpp >> 3);
             pOut->bitPosition = 0;
         }
         else

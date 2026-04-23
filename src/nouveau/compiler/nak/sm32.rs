@@ -2503,7 +2503,7 @@ fn legalize_ext_instr(op: &mut impl SrcsAsSlice, _b: &mut LegalizeBuilder) {
                 panic!("ALU srcs must be legalized explicitly");
             }
             SrcType::Pred => {
-                panic!("Predicates must be legalized explicitly");
+                assert!(src_is_reg(src, RegFile::Pred));
             }
             SrcType::Carry => {
                 panic!("Carry values must be legalized explicitly");

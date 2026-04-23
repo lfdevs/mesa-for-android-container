@@ -14,6 +14,10 @@ dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_out_of_bounds_min_revers
 dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_out_of_bounds_min_reverse_src_x,Fail
 dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_out_of_bounds_min_reverse_src_y,Fail
 
+# Autotune regression
+dEQP-GLES3.functional.multisample.fbo_4_samples.stencil,Fail
+dEQP-GLES3.functional.multisample.fbo_max_samples.stencil,Fail
+
 GTF-GL46.gtf30.GL3Tests.sgis_texture_lod.sgis_texture_lod_basic_lod_selection,Fail
 
 KHR-Single-GL46.arrays_of_arrays_gl.SubroutineFunctionCalls2,Crash

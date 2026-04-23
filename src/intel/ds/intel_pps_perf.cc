@@ -8,7 +8,10 @@
 #include "intel_pps_perf.h"
 
 #include <math.h>
+#include <stdio.h>
 #include <sys/ioctl.h>
+#include <sys/stat.h>
+#include <unistd.h>
 #include <util/ralloc.h>
 #include <utility>
 

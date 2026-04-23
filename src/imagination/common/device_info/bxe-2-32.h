@@ -51,6 +51,7 @@ static const struct pvr_device_features pvr_device_features_36_V_52_182 = {
    .has_tpu_image_state_v2 = true,
    .has_tpu_parallel_instances = true,
    .has_unified_store_depth = true,
+   .has_usc_alu_roundingmode_rne = true,
    .has_usc_f16sop_u8 = true,
    .has_usc_itrsmp = true,
    .has_usc_itrsmp_enhanced = true,

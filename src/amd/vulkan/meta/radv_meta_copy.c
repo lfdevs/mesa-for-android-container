@@ -340,9 +340,9 @@ radv_CmdCopyBufferToImage2(VkCommandBuffer commandBuffer, const VkCopyBufferToIm
    if (radv_is_format_emulated(pdev, dst_image->vk.format) && cmd_buffer->qf != RADV_QUEUE_TRANSFER) {
       cmd_buffer->state.flush_bits |= RADV_CMD_FLAG_CS_PARTIAL_FLUSH | RADV_CMD_FLAG_PS_PARTIAL_FLUSH |
                                       radv_src_access_flush(cmd_buffer, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
-                                                            VK_ACCESS_TRANSFER_WRITE_BIT, 0, dst_image, NULL) |
+                                                            VK_ACCESS_2_TRANSFER_WRITE_BIT, 0, dst_image, NULL) |
                                       radv_dst_access_flush(cmd_buffer, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
-                                                            VK_ACCESS_TRANSFER_READ_BIT, 0, dst_image, NULL);
+                                                            VK_ACCESS_2_TRANSFER_READ_BIT, 0, dst_image, NULL);
 
       const enum util_format_layout format_layout = radv_format_description(dst_image->vk.format)->layout;
       for (unsigned r = 0; r < pCopyBufferToImageInfo->regionCount; r++) {
@@ -835,14 +835,21 @@ radv_CmdCopyImage2(VkCommandBuffer commandBuffer, const VkCopyImageInfo2 *pCopyI
    if (radv_is_format_emulated(pdev, dst_image->vk.format) && cmd_buffer->qf != RADV_QUEUE_TRANSFER) {
       cmd_buffer->state.flush_bits |= RADV_CMD_FLAG_CS_PARTIAL_FLUSH | RADV_CMD_FLAG_PS_PARTIAL_FLUSH |
                                       radv_src_access_flush(cmd_buffer, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
-                                                            VK_ACCESS_TRANSFER_WRITE_BIT, 0, dst_image, NULL) |
+                                                            VK_ACCESS_2_TRANSFER_WRITE_BIT, 0, dst_image, NULL) |
                                       radv_dst_access_flush(cmd_buffer, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
-                                                            VK_ACCESS_TRANSFER_READ_BIT, 0, dst_image, NULL);
+                                                            VK_ACCESS_2_TRANSFER_READ_BIT, 0, dst_image, NULL);
 
       const enum util_format_layout format_layout = radv_format_description(dst_image->vk.format)->layout;
       for (unsigned r = 0; r < pCopyImageInfo->regionCount; r++) {
          VkExtent3D dst_extent = pCopyImageInfo->pRegions[r].extent;
-         if (src_image->vk.format != dst_image->vk.format) {
+
+         /* The Vulken spec 1.4.347 says:
+          *
+          * "VUID-VkCopyImageInfo2-srcImage-09247
+          *  If the VkFormat of each of srcImage and dstImage is a compressed image format, the
+          *  formats must have the same texel block extent"
+          */
+         if (vk_format_is_compressed(src_image->vk.format) != vk_format_is_compressed(dst_image->vk.format)) {
             dst_extent.width = dst_extent.width / vk_format_get_blockwidth(src_image->vk.format) *
                                vk_format_get_blockwidth(dst_image->vk.format);
             dst_extent.height = dst_extent.height / vk_format_get_blockheight(src_image->vk.format) *

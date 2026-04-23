@@ -10,11 +10,13 @@
 #ifndef TU_BUFFER_H
 #define TU_BUFFER_H
 
-#include "tu_common.h"
-
-#include "tu_knl.h"
+#include <stdint.h>
 
 #include "vk_buffer.h"
+#include "vk_object.h"
+#include "vulkan/vulkan_core.h"
+
+#include "tu_knl.h"
 
 struct tu_buffer
 {
