@@ -1754,10 +1754,7 @@ tu_kgsl_get_raytracing(int fd)
 VkResult
 tu_knl_kgsl_load(struct tu_instance *instance, int fd)
 {
-   if (instance->vk.enabled_extensions.KHR_display) {
-      return vk_errorf(instance, VK_ERROR_INITIALIZATION_FAILED,
-                       "I can't KHR_display");
-   }
+
 
    struct tu_physical_device *device = (struct tu_physical_device *)
       vk_zalloc(&instance->vk.alloc, sizeof(*device), 8,
