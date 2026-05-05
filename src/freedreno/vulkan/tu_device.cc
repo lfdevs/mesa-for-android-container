@@ -2864,6 +2864,9 @@ tu_CreateDevice(VkPhysicalDevice physicalDevice,
       vk_device_dispatch_table_from_entrypoints(
          &dispatch_table, &tu_device_entrypoints_a8xx, false);
    }
+   
+   /* HACK: disable concurrent binning for now */
+   tu_env.debug |= TU_DEBUG_NO_CONCURRENT_BINNING;
 
    vk_device_dispatch_table_from_entrypoints(
       &dispatch_table, &wsi_device_entrypoints, false);
