@@ -51,6 +51,9 @@
 
 #include "util/u_atomic.h"
 #include "util/macros.h"
+#include <bits/pthreadtypes.h>
+#include <pthread.h>
+#include <sched.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <sys/stat.h>
@@ -72,6 +75,7 @@
 #include <xcb/randr.h>
 #include <X11/Xlib-xcb.h>
 #endif
+#include "util/bitscan.h"
 #include "util/cnd_monotonic.h"
 #include "util/hash_table.h"
 #include "util/list.h"
@@ -2238,16 +2242,39 @@ wsi_display_wait_thread(void *data)
    return NULL;
 }
 
+#define THREAD_AFFINITY (0xF0)
+
 static int
 wsi_display_start_wait_thread(struct wsi_display *wsi)
 {
-   if (!wsi->wait_thread) {
-      int ret = pthread_create(&wsi->wait_thread, NULL,
-                               wsi_display_wait_thread, wsi);
-      if (ret)
-         return ret;
-   }
-   return 0;
+   pthread_attr_t attr;
+   cpu_set_t cpuset;
+   int ret;
+
+   if (wsi->wait_thread)
+      return 0;
+
+   ret = pthread_attr_init(&attr);
+   if (ret)
+      return ret;
+
+   CPU_ZERO(&cpuset);
+   u_foreach_bit(cpu, THREAD_AFFINITY)
+      CPU_SET(cpu, &cpuset);
+
+   ret = pthread_attr_setaffinity_np(&attr, sizeof(cpuset), &cpuset);
+   if (ret)
+      goto out;
+
+   ret = pthread_create(&wsi->wait_thread, &attr,
+                        wsi_display_wait_thread, wsi);
+   if (ret)
+      goto out;
+
+out:
+   pthread_attr_destroy(&attr);
+
+   return ret;
 }
 
 static void
