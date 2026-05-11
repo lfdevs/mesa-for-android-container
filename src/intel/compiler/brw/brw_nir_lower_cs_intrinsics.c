@@ -77,15 +77,25 @@ compute_local_index_id(struct lower_intrinsics_state *state, nir_intrinsic_instr
       linear = nir_iadd(b, channel, thread_local_id);
    }
 
+   /* There are less than 2^16 lanes within a threadgroup, so it is safe to do
+    * all math at 16-bit. This allows us to use 16-bit integer division which is
+    * much faster than 32-bit integer division (in terms of the lowerings).
+    *
+    * However, if the workgroup size is known at compile-time, the divisions
+    * will optimize away and downconverting ends up as a loss.
+    */
+   unsigned bit_size = nir->info.workgroup_size_variable ? 16 : 32;
+   linear = nir_u2uN(b, linear, bit_size);
+
    nir_def *size_x;
    nir_def *size_y;
    if (nir->info.workgroup_size_variable) {
-      nir_def *size_xyz = nir_load_workgroup_size(b);
+      nir_def *size_xyz = nir_u2uN(b, nir_load_workgroup_size(b), bit_size);
       size_x = nir_channel(b, size_xyz, 0);
       size_y = nir_channel(b, size_xyz, 1);
    } else {
-      size_x = nir_imm_int(b, nir->info.workgroup_size[0]);
-      size_y = nir_imm_int(b, nir->info.workgroup_size[1]);
+      size_x = nir_imm_intN_t(b, nir->info.workgroup_size[0], bit_size);
+      size_y = nir_imm_intN_t(b, nir->info.workgroup_size[1], bit_size);
    }
    nir_def *size_xy = nir_imul(b, size_x, size_y);
 
@@ -171,23 +181,17 @@ compute_local_index_id(struct lower_intrinsics_state *state, nir_intrinsic_instr
        * Then map that into local invocation ID (trivial) and local
        * invocation index.  Skipping Z simplify index calculation.
        */
-
-      nir_def *one = nir_imm_int(b, 1);
-      nir_def *double_size_x = nir_ishl(b, size_x, one);
+      nir_def *double_size_x = nir_ishl_imm(b, size_x, 1);
 
       /* ID within a pair of rows, where each group of 4 is 2x2 quad. */
       nir_def *row_pair_id = nir_umod(b, linear, double_size_x);
       nir_def *y_row_pairs = nir_udiv(b, linear, double_size_x);
 
-      nir_def *x =
-         nir_ior(b,
-                 nir_iand(b, row_pair_id, one),
-                 nir_iand(b, nir_ishr(b, row_pair_id, one),
-                          nir_imm_int(b, 0xfffffffe)));
-      nir_def *y =
-         nir_ior(b,
-                 nir_ishl(b, y_row_pairs, one),
-                 nir_iand(b, nir_ishr(b, row_pair_id, one), one));
+      nir_def *row_pair_id_shr_1 = nir_ishr_imm(b, row_pair_id, 1);
+      nir_def *x = nir_ior(b, nir_iand_imm(b, row_pair_id, 1),
+                              nir_iand_imm(b, row_pair_id_shr_1, 0xfffffffe));
+      nir_def *y = nir_ior(b, nir_ishl_imm(b, y_row_pairs, 1),
+                              nir_iand_imm(b, row_pair_id_shr_1, 1));
 
       state->local_id = nir_vec3(b, x,
                                  nir_umod(b, y, size_y),
@@ -270,9 +274,7 @@ lower_cs_intrinsics_convert_block(struct lower_intrinsics_state *state,
          continue;
       }
 
-      if (intrinsic->def.bit_size == 64)
-         sysval = nir_u2u64(b, sysval);
-
+      sysval = nir_u2uN(b, sysval, intrinsic->def.bit_size);
       nir_def_replace(&intrinsic->def, sysval);
 
       state->progress = true;

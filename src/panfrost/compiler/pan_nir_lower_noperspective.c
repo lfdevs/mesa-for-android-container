@@ -214,7 +214,8 @@ pan_nir_lower_noperspective_vs(nir_shader *shader)
 }
 
 bool
-pan_nir_lower_noperspective_fs(nir_shader *shader)
+pan_nir_lower_noperspective_fs(nir_shader *shader,
+                               uint32_t *noperspective_varyings)
 {
    assert(shader->info.stage == MESA_SHADER_FRAGMENT);
 
@@ -226,5 +227,7 @@ pan_nir_lower_noperspective_fs(nir_shader *shader)
    nir_shader_intrinsics_pass(shader, lower_noperspective_fs,
                               nir_metadata_control_flow, NULL);
 
+   *noperspective_varyings =
+         pan_nir_collect_noperspective_varyings_fs(shader);
    return true;
 }

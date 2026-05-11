@@ -5,9 +5,8 @@
  */
 
 #include "ac_nir_surface.h"
-#include "ac_gpu_info.h"
 #include "nir_builder.h"
-#include "sid.h"
+#include "amdgfxregs.h"
 
 static nir_def *gfx10_nir_meta_addr_from_coord(nir_builder *b, uint32_t gb_addr_config,
                                                const struct gfx9_meta_equation *equation,

@@ -7,10 +7,7 @@
 #ifndef AC_NIR_TO_LLVM_H
 #define AC_NIR_TO_LLVM_H
 
-#include "amd_family.h"
-#include "compiler/shader_enums.h"
 #include <llvm-c/Core.h>
-#include "llvm-c/TargetMachine.h"
 
 #include <stdbool.h>
 

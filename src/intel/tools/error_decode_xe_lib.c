@@ -11,6 +11,7 @@
 #include "error_decode_lib.h"
 #include "intel/common/intel_gem.h"
 #include "util/macros.h"
+#include "util/compiler.h"
 
 static const char *
 read_parameter_helper(const char *line, const char *parameter)
@@ -289,6 +290,15 @@ error_decode_xe_binary_line(const char *line, char *name, int name_len, enum xe_
    case 'l':
       *type = XE_VM_TOPIC_TYPE_LENGTH;
       break;
+   case 'r':
+      if (strncmp(c, "replay_offset", strlen("replay_offset")) == 0) {
+         *type = XE_VM_TOPIC_TYPE_REPLAY_OFFSET;
+         break;
+      } else if (strncmp(c, "replay_length", strlen("replay_length")) == 0) {
+         *type = XE_VM_TOPIC_TYPE_REPLAY_LENGTH;
+         break;
+      }
+      FALLTHROUGH;
    default:
       printf("type char: %c\n", *line);
       return false;

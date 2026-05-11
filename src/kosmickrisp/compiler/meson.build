@@ -6,6 +6,7 @@ libmsl_compiler_files = files(
     'nir_to_msl.c',
     'msl_type_inference.c',
     'msl_iomap.c',
+    'msl_nir_gather_common.c',
     'msl_nir_lower_common.c',
     'msl_nir_lower_subgroups.c',
 )

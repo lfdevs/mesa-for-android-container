@@ -478,15 +478,10 @@ KHR-GLES2.texture_3d.filtering.sizes.63x63x63_nearest_mipmap_linear,Fail
 KHR-GLES2.texture_3d.filtering.sizes.63x63x63_nearest_mipmap_nearest,Fail
 
 # Piglit GPU tests
-glx@glx-copy-sub-buffer samples=2,Fail
-glx@glx-copy-sub-buffer samples=4,Fail
-glx@glx-copy-sub-buffer samples=6,Fail
 glx@glx-make-current,Fail
 glx@glx-multi-window-single-context,Fail
 glx@glx-swap-pixmap-bad,Fail
-glx@glx-visuals-depth -pixmap,Fail
 glx@glx-visuals-depth,Fail
-glx@glx-visuals-stencil -pixmap,Fail
 glx@glx-visuals-stencil,Fail
 glx@glx_arb_sync_control@waitformsc,Fail
 
@@ -1137,6 +1132,9 @@ spec@glsl-1.20@execution@clipping@vs-clip-vertex-primitives,Fail
 
 # Writes -NaN to the output and does not match the expected zero result.
 spec@glsl-1.20@execution@const-builtin@glsl-const-builtin-normalize,Fail
+
+# Loop unrolling regression
+spec@glsl-1.20@execution@fs-function-inout-array-of-structs,Fail
 
 # See issue:
 # https://gitlab.freedesktop.org/mesa/mesa/-/issues/8618

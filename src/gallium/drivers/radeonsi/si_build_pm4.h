@@ -11,10 +11,7 @@
 #ifndef SI_BUILD_PM4_H
 #define SI_BUILD_PM4_H
 
-#include "ac_cmdbuf_cp.h"
-
 #include "si_pipe.h"
-#include "sid.h"
 
 #define radeon_begin(cs) struct radeon_cmdbuf *__rcs = (cs); \
                          ac_cmdbuf_begin(&__rcs->current)

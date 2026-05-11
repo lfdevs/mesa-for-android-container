@@ -26,6 +26,7 @@ meson.build @dbaker @eric
 
 # Build system - Android
 /android/ @roman.stratiienko
+/bin/update-android-headers.sh @zzyiwei
 
 # Compatibility headers
 /include/c99* @xexaxo
@@ -46,6 +47,8 @@ meson.build @dbaker @eric
 /src/vulkan/ @gfxstrand
 /include/vulkan/ @gfxstrand
 
+# Android Gralloc
+/src/util/u_gralloc/ @roman.stratiienko @zzyiwei
 
 #############
 # PLATFORMS #
@@ -94,6 +97,9 @@ meson.build @dbaker @eric
 /src/vulkan/wsi/wsi_common_display.* @keithp
 /src/*/vulkan/*_wsi_display.c @keithp
 
+# Vulkan - Android
+/include/vulkan/vk_android_native_buffer.h @zzyiwei
+/src/vulkan/runtime/vk_android.* @zzyiwei
 
 ######
 # CI #

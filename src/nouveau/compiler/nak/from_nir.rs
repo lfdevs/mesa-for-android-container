@@ -1159,7 +1159,7 @@ impl<'a> ShaderFromNir<'a> {
                 }
                 dst
             }
-            nir_op_fmul => {
+            nir_op_fmul | nir_op_fmul_rtz => {
                 let ftype = FloatType::from_bits(alu.def.bit_size().into());
                 let dst;
                 if alu.def.bit_size() == 64 {
@@ -1176,7 +1176,11 @@ impl<'a> ShaderFromNir<'a> {
                         dst: dst.clone().into(),
                         srcs: [srcs(0), srcs(1)],
                         saturate: self.try_saturate_alu_dst(&alu.def),
-                        rnd_mode: self.float_ctl[ftype].rnd_mode,
+                        rnd_mode: if alu.op == nir_op_fmul_rtz {
+                            FRndMode::Zero
+                        } else {
+                            self.float_ctl[ftype].rnd_mode
+                        },
                         ftz: self.float_ctl[ftype].ftz,
                         dnz: false,
                     });

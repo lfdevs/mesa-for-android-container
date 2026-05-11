@@ -150,15 +150,17 @@ crosvm --no-syslog run \
 section_start crosvm_results "Processing crosvm results"
 CROSVM_RET=$?
 
-[ ${CROSVM_RET} -eq 0 ] && {
+[ "${CROSVM_RET}" -eq 0 ] && {
     # The actual return code is the crosvm guest script's exit code
     CROSVM_RET=$(cat ${VM_TEMP_DIR}/exit_code 2>/dev/null)
+    # Sanitize it to a single integer
+    CROSVM_RET=$(echo "$CROSVM_RET" | grep -o '^[0-9]\+' | head -n 1)
     # Force error when the guest script's exit code is not available
     CROSVM_RET=${CROSVM_RET:-1}
 }
 
 # Show crosvm output on error to help with debugging
-[ ${CROSVM_RET} -eq 0 ] || {
+[ "${CROSVM_RET}" -eq 0 ] || {
     { set +x; } 2>/dev/null
     echo "Dumping crosvm output.." >&2
     cat ${VM_TEMP_DIR}/crosvm >&2

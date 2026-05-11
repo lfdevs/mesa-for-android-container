@@ -1035,6 +1035,44 @@ nvk_rendering_linear(const struct nvk_rendering_state *render)
    return true;
 }
 
+static VkResult
+ensure_linear_tiled_shadow_mem_locked(struct nvk_device *dev,
+                                      struct nvk_image *image,
+                                      uint8_t plane_idx)
+{
+   if (image->linear_tiled_shadow_mem[plane_idx] != NULL) {
+      assert(image->linear_tiled_shadows[plane_idx].addr != 0);
+      return VK_SUCCESS;
+   }
+
+   struct nvk_image_plane *plane = &image->linear_tiled_shadows[plane_idx];
+   assert(plane->nil.size_B > 0);
+   VkResult result =
+      nvkmd_dev_alloc_tiled_mem(dev->nvkmd, &dev->vk.base,
+                                plane->nil.size_B, plane->nil.align_B,
+                                plane->nil.pte_kind, plane->nil.tile_mode,
+                                NVKMD_MEM_LOCAL,
+                                &image->linear_tiled_shadow_mem[plane_idx]);
+   if (result != VK_SUCCESS)
+      return result;
+
+   plane->addr = image->linear_tiled_shadow_mem[plane_idx]->va->addr;
+
+   return VK_SUCCESS;
+}
+
+static VkResult
+nvk_image_ensure_linear_tiled_shadow_mem(struct nvk_device *dev,
+                                         struct nvk_image *image,
+                                         uint8_t plane_idx)
+{
+   simple_mtx_lock(&image->tiled_shadow_mutex);
+   VkResult result = ensure_linear_tiled_shadow_mem_locked(dev, image,
+                                                           plane_idx);
+   simple_mtx_unlock(&image->tiled_shadow_mutex);
+   return result;
+}
+
 static void
 get_depth_stencil_plane_params(struct nvk_image_view *iview,
                                uint32_t plane,
@@ -1104,7 +1142,7 @@ nvk_CmdBeginRendering(VkCommandBuffer commandBuffer,
                       const VkRenderingInfo *pRenderingInfo)
 {
    VK_FROM_HANDLE(nvk_cmd_buffer, cmd, commandBuffer);
-   const struct nvk_device *dev = nvk_cmd_buffer_device(cmd);
+   struct nvk_device *dev = nvk_cmd_buffer_device(cmd);
    const struct nvk_physical_device *pdev = nvk_device_physical(dev);
    struct nvk_rendering_state *render = &cmd->state.gfx.render;
 
@@ -1153,7 +1191,7 @@ nvk_CmdBeginRendering(VkCommandBuffer commandBuffer,
 
    nvk_cmd_buffer_dirty_render_pass(cmd);
 
-   const size_t zcull_count = 51;
+   const size_t zcull_count = 47;
    struct nv_push *p = nvk_cmd_buffer_push(
       cmd, NVK_MAX_RTS * 12 + 44 + zcull_count
    );
@@ -1182,18 +1220,23 @@ nvk_CmdBeginRendering(VkCommandBuffer commandBuffer,
    for (uint32_t i = 0; i < NVK_MAX_RTS; i++) {
       if (render->color_att[i].iview) {
          const struct nvk_image_view *iview = render->color_att[i].iview;
-         const struct nvk_image *image = (struct nvk_image *)iview->vk.image;
+         struct nvk_image *image = (struct nvk_image *)iview->vk.image;
          /* Rendering to multi-planar images is valid for a specific single
           * plane only, so assert that what we have is a single-plane, obtain
           * its index, and begin rendering
           */
          assert(iview->plane_count == 1);
          const uint8_t ip = iview->planes[0].image_plane;
-         const struct nvk_image_plane *plane = &image->planes[ip];
+         struct nvk_image_plane *plane = &image->planes[ip];
 
          if (!render->linear &&
-             plane->nil.levels[0].tiling.gob_type == NIL_GOB_TYPE_LINEAR)
-            plane = &image->linear_tiled_shadow;
+             plane->nil.levels[0].tiling.gob_type == NIL_GOB_TYPE_LINEAR) {
+            VkResult result;
+            result = nvk_image_ensure_linear_tiled_shadow_mem(dev, image, ip);
+            if (result != VK_SUCCESS)
+               vk_command_buffer_set_error(&cmd->vk, result);
+            plane = &image->linear_tiled_shadows[ip];
+         }
 
          const struct nil_image *nil_image = &plane->nil;
          const struct nil_image_level *level =
@@ -1510,33 +1553,6 @@ nvk_CmdBeginRendering(VkCommandBuffer commandBuffer,
          .type = TYPE_DEPTH_TEST,
       });
 
-      float depth = 0.0f;
-      switch (pRenderingInfo->pDepthAttachment->loadOp) {
-         case VK_ATTACHMENT_LOAD_OP_CLEAR:
-            depth =
-               pRenderingInfo->pDepthAttachment->clearValue.depthStencil.depth;
-            FALLTHROUGH;
-         case VK_ATTACHMENT_LOAD_OP_DONT_CARE:
-            P_IMMD(p, NV9097, SET_Z_CLEAR_VALUE, fui(depth));
-
-            P_IMMD(p, NV9097, CLEAR_ZCULL_REGION, {
-               .z_enable = true,
-               .stencil_enable = false,
-               .use_clear_rect = false,
-               .use_rt_array_index = false,
-               .make_conservative = true,
-            });
-            break;
-
-         case VK_ATTACHMENT_LOAD_OP_LOAD:
-            assert(zcull_plane);
-            P_IMMD(p, NV9097, LOAD_ZCULL, 0);
-            break;
-
-         default:
-            assert(!"Unhandled loadOp");
-            break;
-      }
       uint32_t end_count = nv_push_dw_count(p);
       assert(end_count - start_count <= zcull_count);
    } else {
@@ -1630,6 +1646,38 @@ nvk_CmdBeginRendering(VkCommandBuffer commandBuffer,
 
    if (render->flags & VK_RENDERING_RESUMING_BIT)
       return;
+
+   if (use_zcull) {
+      float depth = 0.0f;
+      switch (pRenderingInfo->pDepthAttachment->loadOp) {
+         case VK_ATTACHMENT_LOAD_OP_CLEAR:
+            depth =
+               pRenderingInfo->pDepthAttachment->clearValue.depthStencil.depth;
+            FALLTHROUGH;
+         case VK_ATTACHMENT_LOAD_OP_DONT_CARE:
+            p = nvk_cmd_buffer_push(cmd, 4);
+            P_IMMD(p, NV9097, SET_Z_CLEAR_VALUE, fui(depth));
+
+            P_IMMD(p, NV9097, CLEAR_ZCULL_REGION, {
+               .z_enable = true,
+               .stencil_enable = false,
+               .use_clear_rect = false,
+               .use_rt_array_index = false,
+               .make_conservative = true,
+            });
+            break;
+
+         case VK_ATTACHMENT_LOAD_OP_LOAD:
+            assert(zcull_plane);
+            p = nvk_cmd_buffer_push(cmd, 2);
+            P_IMMD(p, NV9097, LOAD_ZCULL, 0);
+            break;
+
+         default:
+            assert(!"Unhandled loadOp");
+            break;
+      }
+   }
 
    for (uint32_t i = 0; i < pRenderingInfo->colorAttachmentCount; i++) {
       const struct nvk_image_view *iview = render->color_att[i].iview;

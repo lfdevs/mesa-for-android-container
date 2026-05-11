@@ -52,6 +52,12 @@ librusticl = shared_library(
     ld_args_gc_sections,
     ld_args_bsymbolic,
     rusticl_ld_args,
+    # Seems like some proprietary apps ship libraries exporting C++ STL symbols.
+    # So let's just link statically against the standard C++ library then in order to prevent data
+    # layout mismatches and the likes.
+    cc.get_supported_link_arguments(
+      '-static-libstdc++',
+    ),
   ],
   link_depends : rusticl_ld_depends,
   version : '@0@.0.0'.format(opencl_version),

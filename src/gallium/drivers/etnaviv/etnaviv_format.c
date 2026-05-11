@@ -395,6 +395,21 @@ translate_pe_format_rb_swap(enum pipe_format fmt)
    return formats[fmt].pe & PE_FORMAT_RB_SWAP;
 }
 
+/* For RB_SWAP formats, remaps the HW texture format to the one matching
+ * native byte order in memory (e.g., A8B8G8R8 for RGBA data). Normally we
+ * use A8R8G8B8 to match PE-internal BGRA byte order, but shared resources
+ * that have been flushed store data in the standard byte order.
+ */
+uint32_t
+remap_texture_format_rb_swap(uint32_t format)
+{
+   switch (format) {
+   case TEXTURE_FORMAT_A8R8G8B8: return TEXTURE_FORMAT_A8B8G8R8;
+   case TEXTURE_FORMAT_X8R8G8B8: return TEXTURE_FORMAT_X8B8G8R8;
+   default: return format;
+   }
+}
+
 enum pipe_format
 translate_pe_internal_format(enum pipe_format fmt)
 {

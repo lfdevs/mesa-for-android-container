@@ -53,7 +53,7 @@
       <value name="Ftz" value="0" />
       <value name="SetByKernel" value="1" />
     </field>
-    <field name="Thread Preemption" dword="2" bits="20:20" type="bool" default="1" />
+    <field name="Thread Preemption" dword="2" bits="20:20" type="bool" />
     <field name="Registers Per Thread" dword="2" bits="30:26" type="uint" />
     <field name="Sampler Count" dword="3" bits="4:2" type="uint">
       <value name="No samplers used" value="0" />

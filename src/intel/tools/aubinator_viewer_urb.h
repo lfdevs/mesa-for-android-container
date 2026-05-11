@@ -33,7 +33,7 @@ struct AubinatorViewerUrb {
       ImDrawList* draw_list = ImGui::GetWindowDrawList();
 
       const float row_height = MAX2(RowHeight, label_size.y);
-      const float width = ImGui::GetContentRegionAvailWidth() - label_size.x;
+      const float width = ImGui::GetContentRegionAvail().x - label_size.x;
       const float alloc_delta = width / end_urb_offset;
       const ImVec2 window_pos = ImGui::GetWindowPos();
       const ImVec2 mouse_pos = ImGui::GetMousePos();

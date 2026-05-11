@@ -41,6 +41,9 @@ def layout_map(layout):
 def colorspace_map(colorspace):
     return 'UTIL_FORMAT_COLORSPACE_' + str(colorspace).upper()
 
+def subsampling_map(subsampling):
+    return 'PIPE_VIDEO_CHROMA_FORMAT_' + str(subsampling).upper()
+
 colorspace_channels_map = {
     'RGB': ['r', 'g', 'b', 'a'],
     'SRGB': ['sr', 'sg', 'sb', 'a'],
@@ -142,7 +145,6 @@ def has_access(format):
         'r8_g8_b8_444_unorm',
         'r8g8b8_420_unorm_packed',
         'r10g10b10_420_unorm_packed',
-        'y8_unorm',
         'y8u8v8_420_unorm_packed',
         'y10u10v10_420_unorm_packed',
         'g8_b8r8_444_unorm',
@@ -305,32 +307,6 @@ def write_format_aliases(formats):
 
 CHROMA_SUBSAMP = ['400', '420', '422', '444', '440']
 
-def write_to_chroma_format(formats):
-    print('enum pipe_video_chroma_format {', file=sys.stdout3)
-    for subsamp in CHROMA_SUBSAMP:
-        print('   PIPE_VIDEO_CHROMA_FORMAT_%s,' % subsamp, file=sys.stdout3)
-    print('   PIPE_VIDEO_CHROMA_FORMAT_NONE,', file=sys.stdout3)
-    print('};', file=sys.stdout3)
-    print(file=sys.stdout3)
-    print('static inline enum pipe_video_chroma_format', file=sys.stdout3)
-    print('pipe_format_to_chroma_format(enum pipe_format format)', file=sys.stdout3)
-    print('{', file=sys.stdout3)
-    print('   switch(format) {', file=sys.stdout3)
-    for subsamp in CHROMA_SUBSAMP:
-        format_count = 0
-        for f in formats:
-            if f.colorspace == 'YUV':
-                yuv_split_name = f.name.split('_')
-                if yuv_split_name[-2] == subsamp:
-                    print('   case %s:' % f.name, file=sys.stdout3)
-                    format_count += 1
-        if format_count > 0:
-            print('      return PIPE_VIDEO_CHROMA_FORMAT_%s;' % subsamp, file=sys.stdout3)
-    print('   default:', file=sys.stdout3)
-    print('      return PIPE_VIDEO_CHROMA_FORMAT_NONE;', file=sys.stdout3)
-    print('   }', file=sys.stdout3)
-    print('}', file=sys.stdout3)
-
 def chroma_horizontal_subsample_factor(subsample_name):
     assert(subsample_name in CHROMA_SUBSAMP)
     if subsample_name in ['420', '422']:
@@ -437,9 +413,6 @@ def write_get_plane_format(formats):
         'X4B12X4R12': 'X4R12X4G12',
     }
 
-    # On some YUV formats, we don't want RGB lowering
-    no_rgb_lowering = ['Y8_UNORM']
-
     print('static inline enum pipe_format', file=sys.stdout3)
     print('util_format_get_plane_format(enum pipe_format format, unsigned plane)', file=sys.stdout3)
     print('{', file=sys.stdout3)
@@ -447,10 +420,6 @@ def write_get_plane_format(formats):
     unhandled_formats = []
     for f in formats:
         if f.layout not in ['planar2', 'planar3'] and f.colorspace != 'YUV':
-            continue
-
-        if f.short_name().upper() in no_rgb_lowering:
-            unhandled_formats += [f.name]
             continue
 
         nplanes = int(f.layout[-1]) if f.layout.startswith('planar') else 1
@@ -538,8 +507,6 @@ def write_type_conv_helpers(formats):
                 print(file=sys.stdout3)
 
 def write_format_inline_helpers(formats):
-    write_to_chroma_format(formats)
-    print(file=sys.stdout3)
     write_get_plane_format(formats)
     print(file=sys.stdout3)
     write_get_plane_width_height(formats)
@@ -664,6 +631,7 @@ def write_format_table(formats):
         u_format_pack.print_channels(format, do_channel_array)
         u_format_pack.print_channels(format, do_swizzle_array)
         print("      .colorspace = %s," % (colorspace_map(format.colorspace),))
+        print("      .subsampling = %s," % (subsampling_map(format.subsampling),))
         if format.srgb_equivalent:
             print("      .srgb_equivalent = %s,\t/* srgb_equivalent */" % format.srgb_equivalent.name)
         elif format.linear_equivalent:

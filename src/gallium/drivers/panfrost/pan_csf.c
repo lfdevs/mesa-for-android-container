@@ -1177,7 +1177,7 @@ csf_emit_draw_state(struct panfrost_batch *batch,
                 fui(batch->maximum_z));
 #endif
 
-   if (ctx->occlusion_query && ctx->active_queries) {
+   if (panfrost_occlusion_query_active(ctx)) {
       struct panfrost_resource *rsrc = pan_resource(ctx->occlusion_query->rsrc);
       cs_move64_to(b, cs_sr_reg64(b, IDVS, OQ), rsrc->plane.base);
       panfrost_batch_write_rsrc(ctx->batch, rsrc, MESA_SHADER_FRAGMENT);
@@ -1383,6 +1383,7 @@ GENX(csf_launch_draw)(struct panfrost_batch *batch,
 
    cs_move32_to(b, cs_sr_reg32(b, IDVS, INDEX_COUNT), draw->count);
    cs_move32_to(b, cs_sr_reg32(b, IDVS, INSTANCE_COUNT), info->instance_count);
+   cs_move32_to(b, cs_sr_reg32(b, IDVS, INDEX_OFFSET), 0);
    cs_move32_to(b, cs_sr_reg32(b, IDVS, INSTANCE_OFFSET), 0);
 
    /* Base vertex offset on Valhall is used for both indexed and

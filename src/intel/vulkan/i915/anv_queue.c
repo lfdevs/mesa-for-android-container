@@ -94,9 +94,9 @@ anv_i915_create_engine(struct anv_device *device,
       }
 
       /* Check if client specified queue priority. */
-      const VkDeviceQueueGlobalPriorityCreateInfoKHR *queue_priority =
+      const VkDeviceQueueGlobalPriorityCreateInfo *queue_priority =
          vk_find_struct_const(pCreateInfo->pNext,
-                              DEVICE_QUEUE_GLOBAL_PRIORITY_CREATE_INFO_KHR);
+                              DEVICE_QUEUE_GLOBAL_PRIORITY_CREATE_INFO);
 
       VkResult result = anv_i915_set_queue_parameters(device,
                                                       queue->context_id,

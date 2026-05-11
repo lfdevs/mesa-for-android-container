@@ -506,12 +506,12 @@ insert_phis_after_terminator_merge(nir_def *def, void *state)
    nir_foreach_use_including_if_safe(src, def) {
       /* Don't reprocess the phi we just added */
       if (!nir_src_is_if(src) && phi_instr &&
-          nir_src_parent_instr(src) == &phi_instr->instr) {
+          nir_src_use_instr(src) == &phi_instr->instr) {
          continue;
       }
 
       if (nir_src_is_if(src) ||
-          (!nir_src_is_if(src) && nir_src_parent_instr(src)->block != nir_def_block(def))) {
+          (!nir_src_is_if(src) && nir_src_use_instr(src)->block != nir_def_block(def))) {
          if (!phi_created) {
             phi_instr = nir_phi_instr_create(m_state->shader);
             nir_def_init(&phi_instr->instr, &phi_instr->def, def->num_components,

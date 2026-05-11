@@ -5,7 +5,6 @@
  */
 
 #include "amd_family.h"
-#include "addrlib/src/amdgpu_asic_addr.h"
 #include "util/macros.h"
 #include "ac_gpu_info.h"
 
@@ -63,6 +62,7 @@ const char *ac_get_family_name(enum radeon_family family)
    CASE(GFX1170);
    CASE(GFX1200);
    CASE(GFX1201);
+   CASE(GFX1210);
 #undef CASE
    default:
       UNREACHABLE("Unknown GPU family");
@@ -71,6 +71,8 @@ const char *ac_get_family_name(enum radeon_family family)
 
 enum amd_gfx_level ac_get_gfx_level(enum radeon_family family)
 {
+   if (family >= CHIP_GFX1210)
+      return GFX12_1;
    if (family >= CHIP_GFX1200)
       return GFX12;
    if (family >= CHIP_GFX1170)

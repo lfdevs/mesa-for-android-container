@@ -149,6 +149,70 @@ get_byte_prop_entry(struct hash_table *ht, bi_index idx)
    return ht_entry->data;
 }
 
+/* For the given entry and swizzle, try to get it as a single word from the
+ * bytes in the entry.  Only the bytes actually referenced by the swizzle are
+ * considered and the returned word (if any) is swizzled accordingly.
+ */
+static bi_index
+entry_bytes_as_word(const struct byte_prop_entry *entry,
+                    enum bi_swizzle swizzle)
+{
+   unsigned bytes[4];
+   bi_swizzle_to_byte_channels(swizzle, bytes);
+
+   bi_index word = entry->bytes[bytes[0]];
+   if (word.type == BI_INDEX_CONSTANT) {
+      uint32_t value = 0;
+      for (unsigned i = 0; i < 4; i++) {
+         if (entry->bytes[bytes[i]].type != BI_INDEX_CONSTANT)
+            return bi_null();
+
+         bi_index byte_idx = entry->bytes[bytes[i]];
+         uint8_t byte = bi_apply_swizzle(byte_idx.value, byte_idx.swizzle);
+         value |= (uint32_t)byte << (i * 8);
+      }
+      return bi_imm_u32(value);
+   } else {
+      bytes[0] = word.swizzle - BI_SWIZZLE_B0;
+      for (unsigned i = 1; i < 4; i++) {
+         if (!bi_is_word_equiv(entry->bytes[bytes[i]], word))
+            return bi_null();
+
+         bytes[i] = entry->bytes[bytes[i]].swizzle - BI_SWIZZLE_B0;
+      }
+
+      if (!bi_swizzle_from_byte_channels(bytes, &swizzle))
+         return bi_null();
+
+      word.swizzle = swizzle;
+      return word;
+   }
+}
+
+/* For the given entry and swizzle, try to get it as a single word.  The
+ * returned word (if any) is swizzled accordingly.
+ */
+static bi_index
+entry_as_word(const struct byte_prop_entry *entry,
+              enum bi_swizzle swizzle)
+{
+   /* First, chase bytes and see if we can construct a word that way */
+   bi_index word = entry_bytes_as_word(entry, swizzle);
+   if (!bi_is_null(word))
+      return word;
+
+   /* Fall back to entry->word, if any */
+   word = entry->word;
+   if (bi_is_null(word))
+      return bi_null();
+
+   if (!bi_try_compose_swizzles(&swizzle, swizzle, word.swizzle))
+      return bi_null();
+
+   word.swizzle = swizzle;
+   return word;
+}
+
 static bool
 chase_bytes(struct byte_prop_entry *dst_entry, struct hash_table *ht)
 {
@@ -169,31 +233,7 @@ chase_bytes(struct byte_prop_entry *dst_entry, struct hash_table *ht)
       }
    }
 
-   unsigned swizzle_bytes[4];
-   bool is_swizzle = true, is_const = true;
-   for (unsigned i = 0; i < 4; i++) {
-      swizzle_bytes[i] = dst_entry->bytes[i].swizzle - BI_SWIZZLE_B0;
-      if (i > 0 && !bi_is_word_equiv(dst_entry->bytes[i], dst_entry->bytes[0]))
-         is_swizzle = false;
-
-      if (dst_entry->bytes[i].type != BI_INDEX_CONSTANT)
-         is_const = false;
-   }
-
-   enum bi_swizzle swizzle = BI_SWIZZLE_H01;
-   if (is_const) {
-      uint32_t value = 0;
-      for (unsigned i = 0; i < 4; i++) {
-         uint8_t byte = bi_apply_swizzle(dst_entry->bytes[i].value,
-                                         dst_entry->bytes[i].swizzle);
-         value |= (uint32_t)byte << (i * 8);
-      }
-      dst_entry->word = bi_imm_u32(value);
-   } else if (is_swizzle && bi_swizzle_from_byte_channels(swizzle_bytes,
-                                                          &swizzle)) {
-      dst_entry->word = dst_entry->bytes[0];
-      dst_entry->word.swizzle = swizzle;
-   }
+   dst_entry->word = entry_bytes_as_word(dst_entry, BI_SWIZZLE_H01);
 
    return progress;
 }
@@ -252,26 +292,14 @@ byte_chase_instr_srcs(bi_context *ctx, bi_instr *I, struct hash_table *ht)
       if (bi_count_read_registers(I, s) != 1)
          continue;
 
-      struct byte_prop_entry *src_entry = get_byte_prop_entry(ht, I->src[s]);
+      const struct byte_prop_entry *src_entry =
+         get_byte_prop_entry(ht, I->src[s]);
       if (src_entry == NULL)
          continue;
 
-      bi_index repl;
-      if (bi_swizzle_replicates_8(I->src[s].swizzle)) {
-         unsigned byte = I->src[s].swizzle - BI_SWIZZLE_B0;
-         repl = src_entry->bytes[byte];
-      } else {
-         if (bi_is_null(src_entry->word))
-            continue;
-
-         enum bi_swizzle swizzle = BI_SWIZZLE_H01;
-         if (!bi_try_compose_swizzles(&swizzle, I->src[s].swizzle,
-                                      src_entry->word.swizzle))
-            continue;
-
-         repl = src_entry->word;
-         repl.swizzle = swizzle;
-      }
+      bi_index repl = entry_as_word(src_entry, I->src[s].swizzle);
+      if (bi_is_null(repl))
+         continue;
 
       if (!bi_op_supports_swizzle(I->op, s, repl.swizzle, ctx->arch))
          continue;
@@ -283,7 +311,8 @@ byte_chase_instr_srcs(bi_context *ctx, bi_instr *I, struct hash_table *ht)
          continue;
 
       /* bi_replace_src uses the swizzle and other modifiers from the original
-       * and stops the replacement.
+       * and stomps the replacement but repl is already swizzled for what we
+       * want so we have to copy the swizzle manually.
        */
       I->src[s].swizzle = repl.swizzle;
       repl.swizzle = BI_SWIZZLE_H01;

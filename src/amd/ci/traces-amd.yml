@@ -68,7 +68,7 @@ traces:
       checksum: 2832d2190df232bcbde71a4b720303e1
   gputest/tessmark-v2.trace:
     gl-radeonsi-stoney:
-      checksum: 609c82248eec789f7389063639f288c3
+      checksum: dd3b850cae31a4d0c007377f67c54757
   humus/AmbientAperture-v2.trace:
     gl-radeonsi-stoney:
       checksum: ed3444722d2468d5306bc734f0c24089
@@ -98,13 +98,13 @@ traces:
       checksum: 4c36bc32bc4512773533bbbea078f65b
   supertuxkart/supertuxkart-antediluvian-abyss.rdc:
     gl-radeonsi-stoney:
-      checksum: 6b2e8d20d2774ece96c999ef01533695
+      checksum: f5c2bef676a4b5f25997872b78caa402
   supertuxkart/supertuxkart-menu.rdc:
     gl-radeonsi-stoney:
       checksum: e17f3125683d8b2acac8bc0b4b8e1b44
   supertuxkart/supertuxkart-ravenbridge-mansion.rdc:
     gl-radeonsi-stoney:
-      checksum: 3719b5ef32db846570f9b9a3b5ac8705
+      checksum: a535e9a02e01d57938b6b845cbefd0c9
   ror/ror-default.trace:
     gl-radeonsi-stoney:
       checksum: 9ab581db528a53d91f870a064aff9cd4

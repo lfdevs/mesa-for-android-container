@@ -312,7 +312,7 @@ vk_shader_compile_info_init(struct vk_shader_compile_info *info,
 
    *info = (struct vk_shader_compile_info) {
       .stage = nir->info.stage,
-      .flags = vk_info->flags | VK_SHADER_CREATE_INDEPENDENT_SETS_BIT_MESA,
+      .flags = vk_info->flags,
       .next_stage_mask = vk_info->nextStage,
       .nir = nir,
       .robustness = rs,

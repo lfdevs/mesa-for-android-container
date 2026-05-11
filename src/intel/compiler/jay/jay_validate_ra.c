@@ -11,7 +11,7 @@
 
 /* Validatation doesn't make sense in release builds */
 #ifndef NDEBUG
-#define NUM_VALIDATE_FILES (ACCUM + 1)
+#define NUM_VALIDATE_FILES (UACCUM + 1)
 
 struct regfile {
    /* For each register in each file, records the SSA index currently stored
@@ -26,7 +26,7 @@ struct regfile {
 static uint32_t *
 reg(struct regfile *rf, enum jay_file file, uint32_t reg)
 {
-   /* FLAG and UFLAG share their registers. TODO: Rework? */
+   /* FLAG and UFLAG share their registers */
    if (file == UFLAG) {
       file = FLAG;
    }
@@ -49,10 +49,8 @@ print_regfile(struct regfile *rf, FILE *fp)
    jay_foreach_ssa_file(file) {
       for (unsigned i = 0; i < rf->n[file]; ++i) {
          uint32_t v = *reg(rf, file, i);
-         const char *prefixes = "ruf"; /* XXX: share with jay_print */
-
          if (v) {
-            fprintf(fp, "   %c%u = %u\n", prefixes[file], i, v);
+            fprintf(fp, "   %s%u = %u\n", jay_file_prefix(file), i, v);
          }
       }
    }
@@ -104,15 +102,15 @@ validate_block(jay_function *func, jay_block *block, struct regfile *blocks)
     *
     * dEQP-VK.graphicsfuzz.spv-stable-mergesort-dead-code
     */
-   bool loop_header = block->loop_header && jay_num_predecessors(block) > 1;
+   bool loop_header =
+      block->loop_header && jay_num_predecessors(block, GPR) > 1;
 
    /* Initialize the register file based on predecessors. */
    /* Initialize with the exit state of any one predecessor */
-   jay_block *first_pred = jay_first_predecessor(block);
-   if (first_pred) {
-      struct regfile *pred_rf = &blocks[first_pred->index];
-
-      jay_foreach_ssa_file(f) {
+   jay_foreach_ssa_file(f) {
+      jay_block *first_pred = jay_first_predecessor(block, f);
+      if (first_pred) {
+         struct regfile *pred_rf = &blocks[first_pred->index];
          memcpy(rf->r[f], pred_rf->r[f], rf->n[f] * sizeof(uint32_t));
       }
    }
@@ -123,10 +121,10 @@ validate_block(jay_function *func, jay_block *block, struct regfile *blocks)
        * values coming in from each block, it is considered undefined at the
        * start of the block.
        */
-      jay_foreach_predecessor(block, pred) {
-         struct regfile *pred_rf = &blocks[(*pred)->index];
+      jay_foreach_ssa_file(file) {
+         jay_foreach_predecessor(block, pred, file) {
+            struct regfile *pred_rf = &blocks[(*pred)->index];
 
-         jay_foreach_ssa_file(file) {
             for (unsigned r = 0; r < rf->n[file]; ++r) {
                if (*reg(rf, file, r) != *reg(pred_rf, file, r)) {
                   *reg(rf, file, r) = 0;

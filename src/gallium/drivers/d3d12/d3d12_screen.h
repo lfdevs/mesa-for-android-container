@@ -87,6 +87,9 @@ struct d3d12_screen {
    ID3D12Fence *fence;
    uint64_t fence_value;
 
+   mtx_t pending_free_lock;
+   struct list_head pending_free_list;
+
    struct list_head residency_list;
    ID3D12Fence *residency_fence;
    uint64_t residency_fence_value;

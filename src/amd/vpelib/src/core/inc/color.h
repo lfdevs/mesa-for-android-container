@@ -235,7 +235,8 @@ struct color_gamut_data {
 union vpe_3dlut_state {
     struct {
         uint32_t initialized : 1; /*< if 3dlut is went through color module for initialization */
-        uint32_t reserved    : 15;
+        uint32_t is_dma   : 1;
+        uint32_t reserved : 14;
     } bits;
     uint32_t raw;
 };
@@ -245,6 +246,14 @@ struct vpe_3dlut {
     struct tetrahedral_params lut_3d;
     struct fixed31_32         hdr_multiplier;
     union vpe_3dlut_state     state;
+    struct {
+        enum vpe_3dlut_mem_format format;
+        enum vpe_3dlut_mem_layout layout;
+        enum vpe_3dlut_addr_mode  addr_mode;
+        enum vpe_3dlut_crossbar   crossbar_r;
+        enum vpe_3dlut_crossbar   crossbar_g;
+        enum vpe_3dlut_crossbar   crossbar_b;
+    } dma_params;
 
     // the followings are for optimization: skip if no change
     bool                dirty[MAX_3DLUT];        /*< indicate this object is updated or not */
@@ -301,6 +310,9 @@ bool vpe_color_update_degamma_tf(struct vpe_priv *vpe_priv, enum color_transfer_
 
 enum color_range_type vpe_get_range_type(
     enum color_space color_space, enum vpe_surface_pixel_format format);
+
+enum vpe_status vpe_color_setup_dma_lut(
+    struct vpe_3dlut *lut3d_func, struct stream_ctx *stream_ctx);
 
 enum vpe_status vpe_calculate_shaper(struct vpe_priv *vpe_priv, struct stream_ctx *stream_ctx);
 

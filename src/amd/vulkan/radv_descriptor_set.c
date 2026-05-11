@@ -11,7 +11,6 @@
 #include "radv_descriptors.h"
 #include "radv_entrypoints.h"
 #include "radv_sampler.h"
-#include "sid.h"
 #include "vk_descriptors.h"
 
 VKAPI_ATTR VkResult VKAPI_CALL
@@ -593,7 +592,7 @@ radv_update_descriptor_sets_impl(struct radv_device *device, struct radv_cmd_buf
          }
          case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
          case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
-            radv_write_buffer_descriptor_impl(device, ptr, writeset->pBufferInfo + j);
+            radv_write_buffer_descriptor_impl(device, writeset->descriptorType, ptr, writeset->pBufferInfo + j);
             break;
          case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:
          case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:

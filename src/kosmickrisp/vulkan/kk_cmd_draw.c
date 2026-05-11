@@ -639,6 +639,21 @@ kk_calculate_vbo_clamp(uint64_t vbuf, uint64_t sink, enum pipe_format format,
    }
 }
 
+static bool
+is_primitive_culled(VkPrimitiveTopology topology)
+{
+   switch (topology) {
+   case VK_PRIMITIVE_TOPOLOGY_POINT_LIST:
+   case VK_PRIMITIVE_TOPOLOGY_LINE_LIST:
+   case VK_PRIMITIVE_TOPOLOGY_LINE_STRIP:
+   case VK_PRIMITIVE_TOPOLOGY_LINE_LIST_WITH_ADJACENCY:
+   case VK_PRIMITIVE_TOPOLOGY_LINE_STRIP_WITH_ADJACENCY:
+      return false;
+   default:
+      return true;
+   }
+}
+
 static void
 set_empty_scissor(mtl_render_encoder *enc)
 {
@@ -660,8 +675,6 @@ kk_flush_pipeline(struct kk_cmd_buffer *cmd)
 
    /* Depth/stencil state may be dynamic, handle it as part of the pipeline. */
    if (cmd->state.gfx.is_depth_stencil_dynamic &&
-       (cmd->state.gfx.render.depth_att.vk_format != VK_FORMAT_UNDEFINED ||
-        cmd->state.gfx.render.stencil_att.vk_format != VK_FORMAT_UNDEFINED) &&
        (IS_DIRTY(DS_DEPTH_TEST_ENABLE) | IS_DIRTY(DS_DEPTH_WRITE_ENABLE) |
         IS_DIRTY(DS_DEPTH_COMPARE_OP) | IS_DIRTY(DS_STENCIL_TEST_ENABLE) |
         IS_DIRTY(DS_STENCIL_OP) | IS_DIRTY(DS_STENCIL_COMPARE_MASK) |
@@ -708,9 +721,11 @@ kk_flush_dynamic_state(struct kk_cmd_buffer *cmd)
       }
    }
 
-   if (IS_DIRTY(RS_CULL_MODE)) {
+   if (IS_DIRTY(RS_CULL_MODE) || IS_DIRTY(IA_PRIMITIVE_TOPOLOGY)) {
+      /* Only disable rendering if primitive type is culled. */
       gfx->is_cull_front_and_back =
-         dyn->rs.cull_mode == VK_CULL_MODE_FRONT_AND_BACK;
+         dyn->rs.cull_mode == VK_CULL_MODE_FRONT_AND_BACK &&
+         is_primitive_culled(dyn->ia.primitive_topology);
       if (gfx->is_cull_front_and_back) {
          set_empty_scissor(enc);
       } else {
@@ -726,6 +741,12 @@ kk_flush_dynamic_state(struct kk_cmd_buffer *cmd)
        (IS_DIRTY(VP_VIEWPORT_COUNT) || IS_DIRTY(VP_VIEWPORTS) ||
         IS_DIRTY(VP_SCISSOR_COUNT) || IS_DIRTY(VP_SCISSORS)))
       kk_flush_vp_state(cmd);
+
+   if (IS_DIRTY(VP_DEPTH_CLIP_NEGATIVE_ONE_TO_ONE)) {
+      desc->root.draw.clip_z_coeff =
+         dyn->vp.depth_clip_negative_one_to_one ? 0.5f : 0.0f;
+      desc->root_dirty = true;
+   }
 
    if (IS_DIRTY(RS_FRONT_FACE)) {
       mtl_set_front_face_winding(
@@ -838,6 +859,7 @@ struct kk_draw_data {
    bool indirect;
    bool indexed;
    bool restart;
+   struct kk_per_draw_data shader_data;
 };
 
 static void
@@ -882,8 +904,7 @@ kk_heap(struct kk_cmd_buffer *cmd)
 /* Unrolling will always be done through indirect rendering, so if this is
  * called from non-indirect calls, we will fake it. */
 static struct kk_draw_data
-kk_unroll_geometry(struct kk_cmd_buffer *cmd, struct kk_draw_data data,
-                   bool promote_index_type)
+kk_unroll_geometry(struct kk_cmd_buffer *cmd, struct kk_draw_data data)
 {
    struct kk_device *dev = kk_cmd_buffer_device(cmd);
    if (!data.indirect) {
@@ -925,8 +946,9 @@ kk_unroll_geometry(struct kk_cmd_buffer *cmd, struct kk_draw_data data,
       .in_draw = mtl_buffer_get_gpu_address(data.indirect_buffer) +
                  data.indirect_buffer_offset,
       .out_draw = out_draw->gpu,
+      /* Handle primitive restart disable by forcing index to UINT32_MAX */
       .restart_index =
-         promote_index_type ? UINT32_MAX : cmd->state.gfx.index.restart,
+         !data.restart ? UINT32_MAX : cmd->state.gfx.index.restart,
       .index_buffer_size_el = data.index_buffer_range_B,
       .in_el_size_B = data.index_size,
       .out_el_size_B = 4u,
@@ -971,10 +993,39 @@ mesa_prim_to_mtl_primitive_type(enum mesa_prim prim)
    }
 }
 
+static uint32_t
+build_per_draw_upload_mask(struct kk_cmd_buffer *cmd)
+{
+   uint32_t mask = 0;
+
+   struct kk_shader *vertex = cmd->state.shaders[MESA_SHADER_VERTEX];
+   if (vertex && vertex->info.uses_per_draw_data) {
+      mask |= BITSET_BIT(MESA_SHADER_VERTEX);
+   }
+
+   struct kk_shader *fragment = cmd->state.shaders[MESA_SHADER_FRAGMENT];
+   if (fragment && fragment->info.uses_per_draw_data) {
+      mask |= BITSET_BIT(MESA_SHADER_FRAGMENT);
+   }
+
+   return mask;
+}
+
 static void
 kk_dispatch_draw(struct kk_cmd_buffer *cmd, struct kk_draw_data data)
 {
    mtl_render_encoder *enc = kk_render_encoder(cmd);
+
+   /* Upload per-draw data to shaders if needed */
+   if (data.shader_data.upload_mask & BITSET_BIT(MESA_SHADER_VERTEX)) {
+      mtl_set_vertex_bytes(enc, &data.shader_data,
+                           sizeof(struct kk_per_draw_data), 2);
+   }
+   if (data.shader_data.upload_mask & BITSET_BIT(MESA_SHADER_FRAGMENT)) {
+      mtl_set_fragment_bytes(enc, &data.shader_data,
+                             sizeof(struct kk_per_draw_data), 2);
+   }
+
    enum mtl_primitive_type primitive_type =
       mesa_prim_to_mtl_primitive_type(data.prim);
    if (data.indirect) {
@@ -1009,16 +1060,23 @@ kk_dispatch_draw(struct kk_cmd_buffer *cmd, struct kk_draw_data data)
 }
 
 static bool
-requires_index_promotion(struct kk_cmd_buffer *cmd)
+requires_index_promotion(struct kk_draw_data data)
 {
-   const struct vk_dynamic_graphics_state *dyn =
-      &cmd->vk.dynamic_graphics_state;
-   switch (dyn->ia.primitive_topology) {
-   case VK_PRIMITIVE_TOPOLOGY_LINE_STRIP:
-   case VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP:
-   case VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN:
-      return (!dyn->ia.primitive_restart_enable &&
-              cmd->state.gfx.index.bytes_per_index < sizeof(uint32_t));
+   /* uint8_t indices must be promoted since they are not natively supported. */
+   if (data.index_size == sizeof(uint8_t))
+      return true;
+
+   /* For primitive types that support primitive restart, if restart is disabled
+    * and the index size is less than uint32_t, we need to make sure to perform
+    * unrolling as it automatically promotes the type to uint32_t, preventing
+    * valid indices from being treated as restarts. For uint32_t indices with
+    * restart disabled, we realistically will never have enough vertices for the
+    * restart index to be valid anyway. */
+   switch (data.prim) {
+   case MESA_PRIM_LINE_STRIP:
+   case MESA_PRIM_TRIANGLE_STRIP:
+   case MESA_PRIM_TRIANGLE_FAN:
+      return (!data.restart && data.index_size < sizeof(uint32_t));
    default:
       return false;
    }
@@ -1027,22 +1085,10 @@ requires_index_promotion(struct kk_cmd_buffer *cmd)
 static void
 kk_draw(struct kk_cmd_buffer *cmd, struct kk_draw_data data)
 {
-   /* Filter trivial calls. */
-   if (!data.indirect && (data.count[0] == 0u || data.count[1] == 0u))
-      return;
+   data.restart = cmd->vk.dynamic_graphics_state.ia.primitive_restart_enable;
 
-   kk_flush_gfx_state(cmd);
-
-   /* If the restart bool is set, it means that primitive restart is disabled
-    * but index type is not uint32_t which requires promoting the type to
-    * uint32_t since we cannot disable primitive restart in Metal. */
-   bool promote_index_type = requires_index_promotion(cmd);
-
-   /* We always need to unroll triangle fans. */
-   data.restart = (data.prim == MESA_PRIM_TRIANGLE_FAN);
-
-   if (promote_index_type || data.restart)
-      data = kk_unroll_geometry(cmd, data, promote_index_type);
+   if (data.prim == MESA_PRIM_TRIANGLE_FAN || requires_index_promotion(data))
+      data = kk_unroll_geometry(cmd, data);
 
    kk_dispatch_draw(cmd, data);
 }
@@ -1060,15 +1106,55 @@ kk_CmdDraw(VkCommandBuffer commandBuffer, uint32_t vertexCount,
    const struct vk_dynamic_graphics_state *dyn =
       &cmd->vk.dynamic_graphics_state;
 
+   kk_flush_gfx_state(cmd);
+
    struct kk_draw_data data = {
       .count[0] = vertexCount,
       .count[1] = instanceCount,
       .first_vertex = firstVertex,
       .first_instance = firstInstance,
       .prim = vk_topology_to_mesa(dyn->ia.primitive_topology),
+      .shader_data.upload_mask = build_per_draw_upload_mask(cmd),
    };
 
    kk_draw(cmd, data);
+}
+
+VKAPI_ATTR void VKAPI_CALL
+kk_CmdDrawMultiEXT(VkCommandBuffer commandBuffer, uint32_t drawCount,
+                   const VkMultiDrawInfoEXT *pVertexInfo,
+                   uint32_t instanceCount, uint32_t firstInstance,
+                   uint32_t stride)
+{
+   /* Metal validation dislikes empty calls */
+   if (instanceCount == 0)
+      return;
+
+   VK_FROM_HANDLE(kk_cmd_buffer, cmd, commandBuffer);
+
+   const struct vk_dynamic_graphics_state *dyn =
+      &cmd->vk.dynamic_graphics_state;
+
+   kk_flush_gfx_state(cmd);
+
+   struct kk_draw_data data = {
+      .count[1] = instanceCount,
+      .first_instance = firstInstance,
+      .prim = vk_topology_to_mesa(dyn->ia.primitive_topology),
+      .shader_data.upload_mask = build_per_draw_upload_mask(cmd),
+   };
+
+   for (uint32_t i = 0; i < drawCount; ++i) {
+      /* Metal validation dislikes empty calls */
+      if (pVertexInfo->vertexCount > 0) {
+         data.count[0] = pVertexInfo->vertexCount;
+         data.first_vertex = pVertexInfo->firstVertex;
+         data.shader_data.draw_id = i;
+         kk_draw(cmd, data);
+      }
+
+      pVertexInfo = ((void *)pVertexInfo) + stride;
+   }
 }
 
 VKAPI_ATTR void VKAPI_CALL
@@ -1085,6 +1171,8 @@ kk_CmdDrawIndexed(VkCommandBuffer commandBuffer, uint32_t indexCount,
    const struct vk_dynamic_graphics_state *dyn =
       &cmd->vk.dynamic_graphics_state;
 
+   kk_flush_gfx_state(cmd);
+
    struct kk_draw_data data = {
       .count[0] = indexCount,
       .count[1] = instanceCount,
@@ -1098,9 +1186,55 @@ kk_CmdDrawIndexed(VkCommandBuffer commandBuffer, uint32_t indexCount,
       .prim = vk_topology_to_mesa(dyn->ia.primitive_topology),
       .index_size = cmd->state.gfx.index.bytes_per_index,
       .indexed = true,
+      .shader_data.upload_mask = build_per_draw_upload_mask(cmd),
    };
 
    kk_draw(cmd, data);
+}
+
+VKAPI_ATTR void VKAPI_CALL
+kk_CmdDrawMultiIndexedEXT(VkCommandBuffer commandBuffer, uint32_t drawCount,
+                          const VkMultiDrawIndexedInfoEXT *pIndexInfo,
+                          uint32_t instanceCount, uint32_t firstInstance,
+                          uint32_t stride, const int32_t *pVertexOffset)
+{
+   /* Metal validation dislikes empty calls */
+   if (instanceCount == 0)
+      return;
+
+   VK_FROM_HANDLE(kk_cmd_buffer, cmd, commandBuffer);
+
+   const struct vk_dynamic_graphics_state *dyn =
+      &cmd->vk.dynamic_graphics_state;
+
+   kk_flush_gfx_state(cmd);
+
+   struct kk_draw_data data = {
+      .count[1] = instanceCount,
+      .index_buffer = cmd->state.gfx.index.handle,
+      .index_buffer_offset = cmd->state.gfx.index.offset,
+      .index_buffer_range_B =
+         cmd->state.gfx.index.size - cmd->state.gfx.index.offset,
+      .first_instance = firstInstance,
+      .prim = vk_topology_to_mesa(dyn->ia.primitive_topology),
+      .index_size = cmd->state.gfx.index.bytes_per_index,
+      .indexed = true,
+      .shader_data.upload_mask = build_per_draw_upload_mask(cmd),
+   };
+
+   for (uint32_t i = 0; i < drawCount; ++i) {
+      /* Metal validation dislikes empty calls */
+      if (pIndexInfo->indexCount > 0) {
+         data.count[0] = pIndexInfo->indexCount;
+         data.first_index = pIndexInfo->firstIndex;
+         data.first_vertex = pVertexOffset != NULL ? *pVertexOffset :
+                             pIndexInfo->vertexOffset;
+         data.shader_data.draw_id = i;
+         kk_draw(cmd, data);
+      }
+
+      pIndexInfo = ((void *)pIndexInfo) + stride;
+   }
 }
 
 VKAPI_ATTR void VKAPI_CALL
@@ -1113,27 +1247,21 @@ kk_CmdDrawIndirect(VkCommandBuffer commandBuffer, VkBuffer _buffer,
    const struct vk_dynamic_graphics_state *dyn =
       &cmd->vk.dynamic_graphics_state;
 
-   for (uint32_t i = 0u; i < drawCount; ++i, offset += stride) {
-      /* TODO_KOSMICKRISP
-       * Move this to a separate buffer from the root so we don't have to upload
-       * it every single loop. Pass it to the kk_draw call as a parameter that
-       * will later be uploaded.
-       */
-      cmd->state.gfx.descriptors.root_dirty = true;
-      cmd->state.gfx.descriptors.root.draw.draw_id = i;
+   kk_flush_gfx_state(cmd);
 
-      struct kk_draw_data data = {
-         .indirect_buffer = buffer->mtl_handle,
-         .indirect_buffer_offset = offset,
-         .prim = vk_topology_to_mesa(dyn->ia.primitive_topology),
-         .indirect = true,
-      };
+   struct kk_draw_data data = {
+      .prim = vk_topology_to_mesa(dyn->ia.primitive_topology),
+      .indirect = true,
+      .shader_data.upload_mask = build_per_draw_upload_mask(cmd),
+   };
+
+   for (uint32_t i = 0u; i < drawCount; ++i, offset += stride) {
+      data.indirect_buffer = buffer->mtl_handle;
+      data.indirect_buffer_offset = offset;
+      data.shader_data.draw_id = i;
 
       kk_draw(cmd, data);
    }
-   /* TODO_KOSMICKRISP Remove once above is done */
-   cmd->state.gfx.descriptors.root_dirty = true;
-   cmd->state.gfx.descriptors.root.draw.draw_id = 0;
 }
 
 VKAPI_ATTR void VKAPI_CALL
@@ -1147,33 +1275,27 @@ kk_CmdDrawIndexedIndirect(VkCommandBuffer commandBuffer, VkBuffer _buffer,
    const struct vk_dynamic_graphics_state *dyn =
       &cmd->vk.dynamic_graphics_state;
 
-   for (uint32_t i = 0u; i < drawCount; ++i, offset += stride) {
-      /* TODO_KOSMICKRISP
-       * Move this to a separate buffer from the root so we don't have to upload
-       * it every single loop. Pass it to the kk_draw call as a parameter that
-       * will later be uploaded.
-       */
-      cmd->state.gfx.descriptors.root_dirty = true;
-      cmd->state.gfx.descriptors.root.draw.draw_id = i;
+   kk_flush_gfx_state(cmd);
 
-      struct kk_draw_data data = {
-         .indirect_buffer = buffer->mtl_handle,
-         .index_buffer = cmd->state.gfx.index.handle,
-         .indirect_buffer_offset = offset,
-         .index_buffer_offset = cmd->state.gfx.index.offset,
-         .index_buffer_range_B =
-            cmd->state.gfx.index.size - cmd->state.gfx.index.offset,
-         .prim = vk_topology_to_mesa(dyn->ia.primitive_topology),
-         .index_size = cmd->state.gfx.index.bytes_per_index,
-         .indirect = true,
-         .indexed = true,
-      };
+   struct kk_draw_data data = {
+      .index_buffer = cmd->state.gfx.index.handle,
+      .index_buffer_offset = cmd->state.gfx.index.offset,
+      .index_buffer_range_B =
+         cmd->state.gfx.index.size - cmd->state.gfx.index.offset,
+      .prim = vk_topology_to_mesa(dyn->ia.primitive_topology),
+      .index_size = cmd->state.gfx.index.bytes_per_index,
+      .indirect = true,
+      .indexed = true,
+      .shader_data.upload_mask = build_per_draw_upload_mask(cmd),
+   };
+
+   for (uint32_t i = 0u; i < drawCount; ++i, offset += stride) {
+      data.indirect_buffer = buffer->mtl_handle;
+      data.indirect_buffer_offset = offset;
+      data.shader_data.draw_id = i;
 
       kk_draw(cmd, data);
    }
-   /* TODO_KOSMICKRISP Remove once above is done */
-   cmd->state.gfx.descriptors.root_dirty = true;
-   cmd->state.gfx.descriptors.root.draw.draw_id = 0;
 }
 
 VKAPI_ATTR void VKAPI_CALL
@@ -1191,6 +1313,8 @@ kk_CmdDrawIndirectCount(VkCommandBuffer commandBuffer, VkBuffer _buffer,
    const struct vk_dynamic_graphics_state *dyn =
       &cmd->vk.dynamic_graphics_state;
 
+   kk_flush_gfx_state(cmd);
+
    size_t out_stride = sizeof(uint32_t) * 4;
    struct kk_bo *patched =
       kk_cmd_allocate_buffer(cmd, out_stride * maxDrawCount, 4);
@@ -1202,27 +1326,19 @@ kk_CmdDrawIndirectCount(VkCommandBuffer commandBuffer, VkBuffer _buffer,
    libkk_predicate_indirect(cmd, grid, true, patched->gpu, in, count_addr,
                             stride / 4, false);
 
-   for (unsigned i = 0; i < maxDrawCount; ++i) {
-      /* TODO_KOSMICKRISP
-       * Move this to a separate buffer from the root so we don't have to upload
-       * it every single loop. Pass it to the kk_draw call as a parameter that
-       * will later be uploaded.
-       */
-      cmd->state.gfx.descriptors.root_dirty = true;
-      cmd->state.gfx.descriptors.root.draw.draw_id = i;
+   struct kk_draw_data data = {
+      .prim = vk_topology_to_mesa(dyn->ia.primitive_topology),
+      .indirect = true,
+      .shader_data.upload_mask = build_per_draw_upload_mask(cmd),
+   };
 
-      struct kk_draw_data data = {
-         .indirect_buffer = patched->map,
-         .indirect_buffer_offset = out_stride * i,
-         .prim = vk_topology_to_mesa(dyn->ia.primitive_topology),
-         .indirect = true,
-      };
+   for (unsigned i = 0; i < maxDrawCount; ++i) {
+      data.indirect_buffer = patched->map;
+      data.indirect_buffer_offset = out_stride * i;
+      data.shader_data.draw_id = i;
 
       kk_draw(cmd, data);
    }
-   /* TODO_KOSMICKRISP Remove once above is done */
-   cmd->state.gfx.descriptors.root_dirty = true;
-   cmd->state.gfx.descriptors.root.draw.draw_id = 0;
 }
 
 VKAPI_ATTR void VKAPI_CALL
@@ -1240,6 +1356,8 @@ kk_CmdDrawIndexedIndirectCount(VkCommandBuffer commandBuffer, VkBuffer _buffer,
    const struct vk_dynamic_graphics_state *dyn =
       &cmd->vk.dynamic_graphics_state;
 
+   kk_flush_gfx_state(cmd);
+
    size_t out_stride = sizeof(uint32_t) * 5;
    struct kk_bo *patched =
       kk_cmd_allocate_buffer(cmd, out_stride * maxDrawCount, 4);
@@ -1251,31 +1369,23 @@ kk_CmdDrawIndexedIndirectCount(VkCommandBuffer commandBuffer, VkBuffer _buffer,
    libkk_predicate_indirect(cmd, grid, true, patched->gpu, in, count_addr,
                             stride / 4, true);
 
-   for (unsigned i = 0; i < maxDrawCount; ++i) {
-      /* TODO_KOSMICKRISP
-       * Move this to a separate buffer from the root so we don't have to upload
-       * it every single loop. Pass it to the kk_draw call as a parameter that
-       * will later be uploaded.
-       */
-      cmd->state.gfx.descriptors.root_dirty = true;
-      cmd->state.gfx.descriptors.root.draw.draw_id = i;
+   struct kk_draw_data data = {
+      .index_buffer = cmd->state.gfx.index.handle,
+      .index_buffer_offset = cmd->state.gfx.index.offset,
+      .index_buffer_range_B =
+         cmd->state.gfx.index.size - cmd->state.gfx.index.offset,
+      .prim = vk_topology_to_mesa(dyn->ia.primitive_topology),
+      .index_size = cmd->state.gfx.index.bytes_per_index,
+      .indirect = true,
+      .indexed = true,
+      .shader_data.upload_mask = build_per_draw_upload_mask(cmd),
+   };
 
-      struct kk_draw_data data = {
-         .indirect_buffer = patched->map,
-         .index_buffer = cmd->state.gfx.index.handle,
-         .indirect_buffer_offset = out_stride * i,
-         .index_buffer_offset = cmd->state.gfx.index.offset,
-         .index_buffer_range_B =
-            cmd->state.gfx.index.size - cmd->state.gfx.index.offset,
-         .prim = vk_topology_to_mesa(dyn->ia.primitive_topology),
-         .index_size = cmd->state.gfx.index.bytes_per_index,
-         .indirect = true,
-         .indexed = true,
-      };
+   for (unsigned i = 0; i < maxDrawCount; ++i) {
+      data.indirect_buffer = patched->map;
+      data.indirect_buffer_offset = out_stride * i;
+      data.shader_data.draw_id = i;
 
       kk_draw(cmd, data);
    }
-   /* TODO_KOSMICKRISP Remove once above is done */
-   cmd->state.gfx.descriptors.root_dirty = true;
-   cmd->state.gfx.descriptors.root.draw.draw_id = 0;
 }

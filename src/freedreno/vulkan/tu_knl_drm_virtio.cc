@@ -430,10 +430,11 @@ tu_wait_fence(struct tu_device *dev,
       if (ret)
          goto out;
 
-      if (os_time_get_nano() >= end_time)
-         break;
-
       ret = rsp->ret;
+
+      if (timeout_ns != OS_TIMEOUT_INFINITE &&
+          os_time_get_nano() >= end_time)
+         break;
    } while (ret == -ETIMEDOUT);
 
 out:

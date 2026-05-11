@@ -35,7 +35,14 @@
 #define VK_TEXCOMPRESS_ASTC_NUM_PARTITION_TABLES 14
 #define VK_TEXCOMPRESS_ASTC_WRITE_DESC_SET_COUNT 8
 
+struct vk_texcompress_astc_params {
+   VkMemoryPropertyFlags luts_memory_flags;
+   uint32_t luts_alignment;
+};
+
 struct vk_texcompress_astc_state {
+   struct vk_texcompress_astc_params params;
+
    /* single buffer is allocated for all luts */
    VkDeviceMemory luts_mem;
    VkBuffer luts_buf;
@@ -86,10 +93,14 @@ VkPipeline vk_texcompress_astc_get_decode_pipeline(struct vk_device *device,
 VkResult vk_texcompress_astc_init(struct vk_device *device,
                                   VkAllocationCallbacks *allocator,
                                   VkPipelineCache pipeline_cache,
-                                  struct vk_texcompress_astc_state **astc);
+                                  struct vk_texcompress_astc_state **astc,
+                                  struct vk_texcompress_astc_params params);
 void vk_texcompress_astc_finish(struct vk_device *device,
                                 VkAllocationCallbacks *allocator,
                                 struct vk_texcompress_astc_state *astc);
+
+struct vk_texcompress_astc_params
+vk_texcompress_astc_default_params(struct vk_device *device);
 
 static inline VkFormat
 vk_texcompress_astc_emulation_format(VkFormat format)

@@ -28,7 +28,6 @@
 #include "radv_pipeline_graphics.h"
 #include "radv_pipeline_rt.h"
 #include "radv_shader.h"
-#include "sid.h"
 
 #include "vk_common_entrypoints.h"
 #include "vk_enum_to_str.h"

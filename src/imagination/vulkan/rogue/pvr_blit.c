@@ -45,6 +45,7 @@
 #include "util/bitscan.h"
 #include "util/list.h"
 #include "util/macros.h"
+#include "util/u_dynarray.h"
 #include "util/u_math.h"
 #include "vk_alloc.h"
 #include "vk_command_buffer.h"
@@ -1895,6 +1896,30 @@ static VkResult pvr_clear_color_attachment_static(
    return VK_SUCCESS;
 }
 
+static void
+pvr_set_rta_clear_layer_depth(const struct pvr_image_view *image_view,
+                              uint32_t view_layer,
+                              uint32_t *image_layer,
+                              float *image_depth)
+{
+   const struct pvr_image *image = vk_to_pvr_image(image_view->vk.image);
+   uint32_t view_image_layer = image_view->vk.base_array_layer + view_layer;
+
+   /* Convert layer to depth for 2D array views of 3D images */
+   if (image->memlayout == PVR_MEMLAYOUT_3DTWIDDLED) {
+      /* Vulkan does not have a 3D array image view type, so for RTAs the
+       * view must be a 2D array view of a 3D image.
+       */
+      assert(image_view->vk.view_type == VK_IMAGE_VIEW_TYPE_2D_ARRAY);
+
+      *image_layer = 0;
+      *image_depth = (float) view_image_layer;
+   } else {
+      *image_layer = view_image_layer;
+      *image_depth = 0.0f;
+   }
+}
+
 /**
  * \brief Record a deferred clear operation into the command buffer.
  *
@@ -1912,9 +1937,9 @@ static VkResult pvr_add_deferred_rta_clear(struct pvr_cmd_buffer *cmd_buffer,
    struct pvr_sub_cmd_gfx *sub_cmd = &cmd_buffer->state.current_sub_cmd->gfx;
    const struct pvr_renderpass_hwsetup_render *hw_render =
       pvr_arch_pass_info_get_hw_render(pass_info, sub_cmd->hw_render_idx);
-   const struct pvr_image_view *image_view;
-   const struct pvr_image *image;
-   uint32_t base_layer;
+   const struct pvr_image_view *image_view = NULL;
+   const struct pvr_image *image = NULL;
+   uint32_t attachment_index;
 
    const VkOffset3D offset = {
       .x = rect->rect.offset.x,
@@ -1942,73 +1967,153 @@ static VkResult pvr_add_deferred_rta_clear(struct pvr_cmd_buffer *cmd_buffer,
              attachment->aspectMask ==
                 (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT));
 
-      image_view = pass_info->attachments[hw_render->ds_attach_idx];
+      attachment_index = hw_render->ds_attach_idx;
    } else if (is_render_init) {
-      uint32_t index;
-
       assert(attachment->colorAttachment < hw_render->color_init_count);
-      index = hw_render->color_init[attachment->colorAttachment].index;
-
-      image_view = pass_info->attachments[index];
+      attachment_index =
+         hw_render->color_init[attachment->colorAttachment].index;
    } else if (cmd_buffer->state.current_sub_cmd->is_dynamic_render) {
       const struct pvr_dynamic_render_info *dr_info = pass_info->dr_info;
-      const uint32_t index =
+      attachment_index =
          dr_info->color_attachments[attachment->colorAttachment].index_color;
-
-      image_view = pass_info->attachments[index];
    } else {
       const struct pvr_renderpass_hwsetup_subpass *hw_pass =
          pvr_arch_get_hw_subpass(pass_info->pass, pass_info->subpass_idx);
       const struct pvr_render_subpass *sub_pass =
          &pass_info->pass->subpasses[hw_pass->index];
-      const uint32_t attachment_idx =
+      attachment_index =
          sub_pass->color_attachments[attachment->colorAttachment];
-
       assert(attachment->colorAttachment < sub_pass->color_count);
-
-      image_view = pass_info->attachments[attachment_idx];
    }
 
-   base_layer = image_view->vk.base_array_layer + rect->baseArrayLayer;
-   image = vk_to_pvr_image(image_view->vk.image);
+   if (pass_info->attachments) {
+      image_view = pass_info->attachments[attachment_index];
+      image = vk_to_pvr_image(image_view->vk.image);
+   } else {
+      assert(cmd_buffer->vk.level == VK_COMMAND_BUFFER_LEVEL_SECONDARY &&
+             (cmd_buffer->usage_flags &
+              VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT));
+   }
 
    for (uint32_t i = 0; i < rect->layerCount; i++) {
-      struct pvr_transfer_cmd *transfer_cmd =
-         pvr_transfer_cmd_alloc(cmd_buffer);
+      uint32_t rt_id = rect->baseArrayLayer + i;
+      /* Do not defer the clear of active render target */
+      if (hw_render->view_mask & (1 << rt_id))
+         continue;
 
-      list_addtail(&transfer_cmd->link, &cmd_buffer->deferred_clears);
+      if (pass_info->attachments) {
+         struct pvr_transfer_cmd *transfer_cmd;
+         float depth = 0.0f;
+         uint32_t layer = 0;
 
-      if (!transfer_cmd) {
-         return vk_command_buffer_set_error(&cmd_buffer->vk,
-                                            VK_ERROR_OUT_OF_HOST_MEMORY);
-      }
+         transfer_cmd = pvr_transfer_cmd_alloc(cmd_buffer);
+         if (!transfer_cmd)
+            return VK_ERROR_OUT_OF_HOST_MEMORY;
 
-      transfer_cmd->flags = PVR_TRANSFER_CMD_FLAGS_FILL;
+         list_addtail(&transfer_cmd->link, &cmd_buffer->deferred_clears);
 
-      if (attachment->aspectMask == VK_IMAGE_ASPECT_COLOR_BIT) {
-         for (uint32_t j = 0; j < ARRAY_SIZE(transfer_cmd->clear_color); j++) {
-            transfer_cmd->clear_color[j].ui =
-               attachment->clearValue.color.uint32[j];
+         transfer_cmd->flags = PVR_TRANSFER_CMD_FLAGS_FILL;
+
+         if (attachment->aspectMask == VK_IMAGE_ASPECT_COLOR_BIT) {
+            for (uint32_t j = 0; j < ARRAY_SIZE(transfer_cmd->clear_color);
+                 j++) {
+               transfer_cmd->clear_color[j].ui =
+                  attachment->clearValue.color.uint32[j];
+            }
+         } else {
+            transfer_cmd->clear_color[0].f =
+               attachment->clearValue.depthStencil.depth;
+            transfer_cmd->clear_color[1].ui =
+               attachment->clearValue.depthStencil.stencil;
          }
-      } else {
-         transfer_cmd->clear_color[0].f =
-            attachment->clearValue.depthStencil.depth;
-         transfer_cmd->clear_color[1].ui =
-            attachment->clearValue.depthStencil.stencil;
-      }
 
-      pvr_setup_transfer_surface(cmd_buffer->device,
-                                 &transfer_cmd->dst,
-                                 &transfer_cmd->scissor,
-                                 image,
-                                 base_layer + i,
-                                 0,
-                                 &offset,
-                                 &extent,
-                                 0.0f,
-                                 image->vk.format,
-                                 attachment->aspectMask);
+         pvr_set_rta_clear_layer_depth(image_view, rt_id, &layer, &depth);
+         pvr_setup_transfer_surface(cmd_buffer->device,
+                                    &transfer_cmd->dst,
+                                    &transfer_cmd->scissor,
+                                    image,
+                                    layer,
+                                    0,
+                                    &offset,
+                                    &extent,
+                                    depth,
+                                    image->vk.format,
+                                    attachment->aspectMask);
+      } else {
+         struct pvr_unbound_deferred_clear recorded_clear;
+
+         if (attachment->aspectMask == VK_IMAGE_ASPECT_COLOR_BIT) {
+            for (uint32_t j = 0; j < ARRAY_SIZE(recorded_clear.clear_color);
+                 j++) {
+               recorded_clear.clear_color[j].ui =
+                  attachment->clearValue.color.uint32[j];
+            }
+         } else {
+            recorded_clear.clear_color[0].f =
+               attachment->clearValue.depthStencil.depth;
+            recorded_clear.clear_color[1].ui =
+               attachment->clearValue.depthStencil.stencil;
+         }
+
+         recorded_clear.extent = extent;
+         recorded_clear.offset = offset;
+         recorded_clear.array_layer = rt_id;
+         recorded_clear.aspect_mask = attachment->aspectMask;
+         recorded_clear.attachment_index = attachment_index;
+
+         util_dynarray_append(&sub_cmd->unbound_deferred_clears,
+                              recorded_clear);
+      }
    }
+
+   return VK_SUCCESS;
+}
+
+VkResult pvr_bind_unbound_deferred_clear(
+   struct pvr_cmd_buffer *cmd_buffer,
+   struct pvr_unbound_deferred_clear *recorded_clear)
+{
+   struct pvr_render_pass_info *pass_info = &cmd_buffer->state.render_pass_info;
+   const struct pvr_image_view *image_view;
+   struct pvr_transfer_cmd *transfer_cmd;
+   const struct pvr_image *image;
+   float depth = 0.0f;
+   uint32_t layer = 0;
+
+   image_view = pass_info->attachments[recorded_clear->attachment_index];
+   image = vk_to_pvr_image(image_view->vk.image);
+
+   transfer_cmd = pvr_transfer_cmd_alloc(cmd_buffer);
+   if (!transfer_cmd)
+      return VK_ERROR_OUT_OF_HOST_MEMORY;
+
+   list_addtail(&transfer_cmd->link, &cmd_buffer->deferred_clears);
+
+   transfer_cmd->flags = PVR_TRANSFER_CMD_FLAGS_FILL;
+
+   if (recorded_clear->aspect_mask == VK_IMAGE_ASPECT_COLOR_BIT) {
+      for (uint32_t i = 0; i < ARRAY_SIZE(transfer_cmd->clear_color); i++)
+         transfer_cmd->clear_color[i].ui = recorded_clear->clear_color[i].ui;
+   } else {
+      transfer_cmd->clear_color[0].f = recorded_clear->clear_color[0].f;
+      transfer_cmd->clear_color[1].ui = recorded_clear->clear_color[1].ui;
+   }
+
+   pvr_set_rta_clear_layer_depth(image_view,
+                                 recorded_clear->array_layer,
+                                 &layer,
+                                 &depth);
+   pvr_setup_transfer_surface(cmd_buffer->device,
+                              &transfer_cmd->dst,
+                              &transfer_cmd->scissor,
+                              image,
+                              layer,
+                              0,
+                              &recorded_clear->offset,
+                              &recorded_clear->extent,
+                              depth,
+                              image->vk.format,
+                              recorded_clear->aspect_mask);
 
    return VK_SUCCESS;
 }
@@ -2251,19 +2356,15 @@ static void pvr_clear_attachments(struct pvr_cmd_buffer *cmd_buffer,
 
          if (!PVR_HAS_FEATURE(dev_info, gs_rta_support) &&
              (clear_rect->baseArrayLayer != 0 || clear_rect->layerCount > 1)) {
-            if (pass_info->attachments) {
-               result = pvr_add_deferred_rta_clear(cmd_buffer,
-                                                   attachment,
-                                                   clear_rect,
-                                                   is_render_init);
-               if (result != VK_SUCCESS)
-                  return;
+            result = pvr_add_deferred_rta_clear(cmd_buffer,
+                                                attachment,
+                                                clear_rect,
+                                                is_render_init);
+            if (result != VK_SUCCESS)
+               return;
 
+            if (clear_rect->baseArrayLayer != 0)
                continue;
-            } else {
-               pvr_finishme(
-                  "incomplete support for deferred (emulated) RTA clears");
-            }
          }
 
          /* TODO: Allocate all the buffers in one go before the loop, and add

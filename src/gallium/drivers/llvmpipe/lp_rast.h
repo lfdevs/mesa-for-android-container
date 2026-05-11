@@ -447,4 +447,6 @@ void
 lp_rast_fence(struct lp_rasterizer *rast,
               struct lp_fence **fence);
 
+void
+lp_rast_task_init_thread_data(struct lp_jit_thread_data *thread_data, const struct lp_rast_shader_inputs *inputs);
 #endif

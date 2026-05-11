@@ -35,7 +35,7 @@ accum_src_deps(nir_src *src, void *opaque)
        src_instr->type == nir_instr_type_undef)
       return true;
 
-   nir_instr *dst_instr = nir_src_parent_instr(src);
+   nir_instr *dst_instr = nir_src_use_instr(src);
    accum_deps(data->instr_deps[dst_instr->index],
               data->instr_deps[src_instr->index], data->num_bitset_words);
    return true;

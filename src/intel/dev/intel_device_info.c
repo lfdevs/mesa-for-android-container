@@ -83,6 +83,12 @@ static const struct {
    { "nvl", 0xd750 },
 };
 
+const char *
+intel_platform_name_by_index(unsigned idx)
+{
+   return idx < ARRAY_SIZE(name_map) ? name_map[idx].name : NULL;
+}
+
 /**
  * Get the PCI ID for the device name.
  *

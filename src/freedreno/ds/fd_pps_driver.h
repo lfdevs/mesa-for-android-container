@@ -142,4 +142,25 @@ private:
                           std::function<int64_t()> derive);
 };
 
+static inline double
+safe_div(uint64_t a, uint64_t b)
+{
+   if (b == 0)
+      return 0;
+
+   return a / static_cast<double>(b);
+}
+
+static inline float
+percent(uint64_t a, uint64_t b)
+{
+   /* Sometimes we get bogus values but we want for the timeline
+    * to look nice without higher than 100% values.
+    */
+   if (b == 0 || a > b)
+      return 0;
+
+   return 100.f * (a / static_cast<double>(b));
+}
+
 } // namespace pps

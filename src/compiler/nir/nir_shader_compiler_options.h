@@ -243,6 +243,15 @@ typedef enum {
    nir_lower_packing_num_ops,
 } nir_lower_packing_op;
 
+typedef enum {
+   /* Build: frag_coord */
+   nir_frag_coord_regular,
+   /* Build: frag_coord_xy, frag_coord_z, frag_coord_w */
+   nir_frag_coord_xy_z_w_separate,
+   /* Build: frag_coord_xy, frag_coord_z, frcp(frag_coord_w_rcp) */
+   nir_frag_coord_xy_z_w_rcp_separate,
+} nir_frag_coord_form;
+
 typedef struct nir_shader_compiler_options {
    bool lower_fdiv;
    bool lower_ffma16;
@@ -802,6 +811,9 @@ typedef struct nir_shader_compiler_options {
 
    /** Lower VARYING_SLOT_LAYER in FS to SYSTEM_VALUE_LAYER_ID. */
    bool lower_layer_fs_input_to_sysval;
+
+   /** How nir_build_frag_coord generates frag_coord. */
+   nir_frag_coord_form frag_coord_form;
 
    /** clip/cull distance and tess level arrays use compact semantics */
    bool compact_arrays;

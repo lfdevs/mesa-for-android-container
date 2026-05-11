@@ -8,31 +8,27 @@
 #define RADV_RT_COMMON_H
 
 #include "nir/nir_defines.h"
-#include "vk_nir_convert_ycbcr.h"
 
-#include "compiler/spirv/spirv.h"
+struct radv_compiler_info;
 
-struct radv_device;
-struct radv_physical_device;
+bool radv_use_bvh_stack_rtn(const struct radv_compiler_info *compiler_info);
 
-bool radv_use_bvh_stack_rtn(const struct radv_physical_device *pdevice);
-
-nir_def *radv_build_bvh_stack_rtn_addr(nir_builder *b, nir_def *stack_idx, const struct radv_physical_device *pdev,
+nir_def *radv_build_bvh_stack_rtn_addr(nir_builder *b, nir_def *stack_idx, const struct radv_compiler_info *compiler_info,
                                        uint32_t workgroup_size, uint32_t stack_base, uint32_t max_stack_entries);
 
-nir_def *build_addr_to_node(struct radv_device *device, nir_builder *b, nir_def *addr, nir_def *flags);
+nir_def *build_addr_to_node(const struct radv_compiler_info *compiler_info, nir_builder *b, nir_def *addr, nir_def *flags);
 
 nir_def *nir_build_vec3_mat_mult(nir_builder *b, nir_def *vec, nir_def *matrix[], bool translation);
 
-nir_def *radv_load_vertex_position(struct radv_device *device, nir_builder *b, nir_def *primitive_addr, uint32_t index);
+nir_def *radv_load_vertex_position(const struct radv_compiler_info *compiler_info, nir_builder *b, nir_def *primitive_addr, uint32_t index);
 
-void radv_load_wto_matrix(struct radv_device *device, nir_builder *b, nir_def *instance_addr, nir_def **out);
+void radv_load_wto_matrix(const struct radv_compiler_info *compiler_info, nir_builder *b, nir_def *instance_addr, nir_def **out);
 
-void radv_load_otw_matrix(struct radv_device *device, nir_builder *b, nir_def *instance_addr, nir_def **out);
+void radv_load_otw_matrix(const struct radv_compiler_info *compiler_info, nir_builder *b, nir_def *instance_addr, nir_def **out);
 
-nir_def *radv_load_custom_instance(struct radv_device *device, nir_builder *b, nir_def *instance_addr);
+nir_def *radv_load_custom_instance(const struct radv_compiler_info *compiler_info, nir_builder *b, nir_def *instance_addr);
 
-nir_def *radv_load_instance_id(struct radv_device *device, nir_builder *b, nir_def *instance_addr);
+nir_def *radv_load_instance_id(const struct radv_compiler_info *compiler_info, nir_builder *b, nir_def *instance_addr);
 
 struct radv_ray_traversal_args;
 
@@ -162,10 +158,10 @@ struct radv_ray_traversal_args {
  * rayQueryProceedEXT. Traversal will only be considered incomplete, if one of the specified
  * callbacks breaks out of the traversal loop.
  */
-nir_def *radv_build_ray_traversal(struct radv_device *device, nir_builder *b,
+nir_def *radv_build_ray_traversal(const struct radv_compiler_info *compiler_info, nir_builder *b,
                                   const struct radv_ray_traversal_args *args);
 
-nir_def *radv_build_ray_traversal_gfx12(struct radv_device *device, nir_builder *b,
+nir_def *radv_build_ray_traversal_gfx12(const struct radv_compiler_info *compiler_info, nir_builder *b,
                                         const struct radv_ray_traversal_args *args);
 
 #endif /* RADV_NIR_RT_COMMON_H */

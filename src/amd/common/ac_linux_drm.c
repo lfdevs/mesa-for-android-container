@@ -895,10 +895,8 @@ int ac_drm_query_sw_info(ac_drm_device *dev,
                          enum amdgpu_sw_info info, void *value)
 {
 #ifdef HAVE_AMDGPU_VIRTIO
-   if (dev->is_virtio) {
-      assert(info == amdgpu_sw_info_address32_hi);
+   if (dev->is_virtio)
       return amdvgpu_query_sw_info(dev->vdev, info, value);
-   }
 #endif
    return amdgpu_query_sw_info(dev->adev, info, value);
 }

@@ -66,6 +66,8 @@ kk_encoder_start_render(struct kk_cmd_buffer *cmd,
        * like triangle fans. For this, we signal the value pre_gfx will wait on,
        * and we wait on the value pre_gfx will signal once completed.
        */
+      mtl_encode_signal_event(encoder->main.cmd_buffer, encoder->event,
+                              ++encoder->event_value);
       encoder->wait_value_pre_gfx = encoder->event_value;
       mtl_encode_wait_for_event(encoder->main.cmd_buffer, encoder->event,
                                 ++encoder->event_value);

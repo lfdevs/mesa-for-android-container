@@ -978,6 +978,8 @@ def system_value(name, dest_comp, indices=[], bit_sizes=[32], can_reorder=True):
               bit_sizes=bit_sizes)
 
 system_value("frag_coord", 4)
+# vec2 load of frag_coord.xy (float fragment coordinates, as opposed to load_pixel_coord).
+system_value("frag_coord_xy", 2)
 # 16-bit integer vec2 of the pixel X/Y in the framebuffer.
 system_value("pixel_coord", 2, bit_sizes=[16])
 # Scalar load of frag_coord Z/W component. Backends can lower frag_coord to
@@ -1592,11 +1594,17 @@ load("shared_ir3", [1], [BASE, ALIGN_MUL, ALIGN_OFFSET], [CAN_ELIMINATE])
 
 # src[] = { value, address(vec2 of hi+lo uint32_t), offset }.
 # const_index[] = { write_mask, align_mul, align_offset }
-store("global_ir3", [1, 1], indices=[ACCESS, ALIGN_MUL, ALIGN_OFFSET])
+# Final address is calculated as `address + ((offset + BASE) << OFFSET_SHIFT)
+# `offset` is sign-extended to 64-bits first so the offset calculation does not
+# cause 32-bit overflows.
+# a6xx has another shift field which only applies to `offset`; this is not
+# represented here.
+store("global_ir3", [1, 1], indices=[ACCESS, ALIGN_MUL, ALIGN_OFFSET, OFFSET_SHIFT, BASE])
 # src[] = { address(vec2 of hi+lo uint32_t), offset }.
 # const_index[] = { access, align_mul, align_offset }
 # the alignment applies to the base address
-load("global_ir3", [1, 1], indices=[ACCESS, ALIGN_MUL, ALIGN_OFFSET, RANGE_BASE, RANGE], flags=[CAN_ELIMINATE])
+# Final address is calculated as for @store_global_ir3
+load("global_ir3", [1, 1], indices=[ACCESS, ALIGN_MUL, ALIGN_OFFSET, RANGE_BASE, RANGE, OFFSET_SHIFT, BASE], flags=[CAN_ELIMINATE])
 
 # Etnaviv-specific load/glboal intrinsics. They take a 32-bit base address and
 # a 32-bit offset, which doesn't need to be an immediate.
@@ -1731,6 +1739,34 @@ store("raw_output_pan", [], [IO_SEMANTICS, BASE])
 store("combined_output_pan", [1, 1, 1, 4], [IO_SEMANTICS, COMPONENT, SRC_TYPE, DEST_TYPE])
 load("raw_output_pan", [1], [IO_SEMANTICS], [CAN_ELIMINATE, CAN_REORDER])
 
+# Returns a vec2 which is the result of CUBEFACE1/2
+# src = { x, y, z }
+intrinsic("cubeface_pan", [1, 1, 1], dest_comp=2, bit_sizes=[32],
+          flags=[CAN_ELIMINATE, CAN_REORDER])
+
+# src = { z, x, face }
+intrinsic("cube_ssel_pan", [1, 1, 1], dest_comp=1, bit_sizes=[32],
+          flags=[CAN_ELIMINATE, CAN_REORDER])
+# src = { y, z, face }
+intrinsic("cube_tsel_pan", [1, 1, 1], dest_comp=1, bit_sizes=[32],
+          flags=[CAN_ELIMINATE, CAN_REORDER])
+
+# src = { x, y }
+intrinsic("texs_2d_pan", [1, 1], dest_comp=4, bit_sizes=[16, 32],
+          indices=[DEST_TYPE, FLAGS], flags=[CAN_ELIMINATE, CAN_REORDER])
+
+# src = { s, t, face }
+intrinsic("texs_cube_pan", [1, 1, 1], dest_comp=4, bit_sizes=[16, 32],
+          indices=[DEST_TYPE, FLAGS], flags=[CAN_ELIMINATE, CAN_REORDER])
+
+# src = { s, t, desc, sr0, sr1 }
+intrinsic("texc0_pan", [1, 1, 1], dest_comp=4, bit_sizes=[16, 32],
+          indices=[DEST_TYPE, FLAGS], flags=[CAN_ELIMINATE, CAN_REORDER])
+intrinsic("texc1_pan", [1, 1, 1, -1], dest_comp=4, bit_sizes=[16, 32],
+          indices=[DEST_TYPE, FLAGS], flags=[CAN_ELIMINATE, CAN_REORDER])
+intrinsic("texc2_pan", [1, 1, 1, -1, -1], dest_comp=4, bit_sizes=[16, 32],
+          indices=[DEST_TYPE, FLAGS], flags=[CAN_ELIMINATE, CAN_REORDER])
+
 # Loads the sampler paramaters <min_lod, max_lod, lod_bias>
 # src[] = { sampler_index }
 load("sampler_lod_parameters", [1], flags=[CAN_ELIMINATE, CAN_REORDER])
@@ -1777,21 +1813,11 @@ system_value("idvs_output_buf_index_pan", 1, bit_sizes=[32])
 
 # src[] = { handle, vertex_id, instance_id }
 intrinsic("lea_attr_pan", [1, 1, 1], dest_comp=3, bit_sizes=[32],
-          indices=[SRC_TYPE], flags=[CAN_ELIMINATE, CAN_REORDER])
+          indices=[SRC_TYPE, DESC_SET], flags=[CAN_ELIMINATE, CAN_REORDER])
 
 # src[] = { handle, index }
 intrinsic("lea_buf_pan", [1, 1], dest_comp=2, bit_sizes=[32],
           flags=[CAN_ELIMINATE, CAN_REORDER])
-
-# Load the address and potentially the conversion descriptor for a texel buffer index.
-# The 64 bit address is always in the first two channels, while the 32 bit
-# conversion descriptor is in the last channel only for Bifrost.
-# src[] = { resource_handle, index }
-intrinsic("load_texel_buf_index_address_pan", [1, 1], dest_comp=3, flags=[CAN_ELIMINATE, CAN_REORDER], bit_sizes=[32])
-
-# Load conversion descriptor for a texel buffer
-# src[] = { resource_handle }
-intrinsic("load_texel_buf_conv_pan", [1], dest_comp=1, flags=[CAN_ELIMINATE, CAN_REORDER], bit_sizes=[32])
 
 # Load input attachment target
 # src[] = { input_attachment_index }
@@ -2335,7 +2361,7 @@ intrinsic("quad_ballot_agx", src_comp=[1], dest_comp=1, flags=[CAN_ELIMINATE])
 # 1] clipping, we need to transform z' = (z + w) / 2. We express both cases as a
 # lerp between z and w, where this is the lerp coefficient: 0 for [0, 1] and 0.5
 # for [-1, 1].
-system_value("clip_z_coeff_agx", 1)
+system_value("clip_z_coeff", 1)
 
 # True if drawing triangle fans with first vertex provoking, false otherwise.
 # This affects flatshading, which is defined weirdly for fans with first.
@@ -2774,9 +2800,6 @@ system_value("tess_config_intel", 1)
 # Dynamic fragment shader parameters (see intel_fs_config) .
 system_value("fs_config_intel", 1)
 
-# Per primitive remapping table offset.
-system_value("per_primitive_remap_intel", 1)
-
 # The (linear) local invocation index provided in the payload of mesh/task shaders.
 system_value("local_invocation_index_intel", 1)
 
@@ -3011,12 +3034,13 @@ intrinsic("smp_pco", src_comp=[16, 4, 4], dest_comp=0, indices=[SMP_FLAGS_PCO, R
 
 # smp_coeffs_pco(data, tex_state, smp_state)
 # Returns the calculated sampling coefficients for the given data and state words.
-intrinsic("smp_coeffs_pco", src_comp=[16, 4, 4], dest_comp=8, indices=[SMP_FLAGS_PCO, RANGE], bit_sizes=[32])
+# Actually outputs 7/14 components, but NIR doesn't support those for num_components, so fake it as 16 for now.
+intrinsic("smp_coeffs_pco", src_comp=[16, 4, 4], dest_comp=16, indices=[SMP_FLAGS_PCO, RANGE], bit_sizes=[32])
 
 # smp_raw_pco(data, tex_state, smp_state)
 # Returns the raw sampling data for the given data and state words.
 # Actually outputs 4/8/12/16 components, but NIR doesn't support num_components == 12, so fake it as 8 for now.
-intrinsic("smp_raw_pco", src_comp=[16, 4, 4], dest_comp=16, indices=[SMP_FLAGS_PCO, RANGE], bit_sizes=[32])
+intrinsic("smp_raw_pco", src_comp=[16, 4, 4], dest_comp=16, indices=[SMP_FLAGS_PCO, RANGE, ENABLED_CHANNELS], bit_sizes=[32])
 
 # smp_write_pco(data, tex_state, smp_state)
 # Performs a sample write for the given data and state words.
@@ -3108,6 +3132,8 @@ intrinsic("is_null_descriptor", src_comp=[-1], dest_comp=1, flags=[CAN_ELIMINATE
 # Represents a pointer to the start of an argument buffer at the
 # given binding
 load("buffer_ptr_kk", [], [BINDING], [CAN_ELIMINATE, CAN_REORDER])
+# Represents a pointer to the start of the per-draw data buffer
+load("per_draw_ptr_kk", [], [], [CAN_ELIMINATE, CAN_REORDER])
 # Opaque texture<T> handle, with DEST_TYPE representing T
 load("texture_handle_kk", [1], [DEST_TYPE, IMAGE_DIM, IMAGE_ARRAY, ACCESS, FLAGS], [CAN_ELIMINATE])
 # Same as above but for depth<T> textures, T is always float

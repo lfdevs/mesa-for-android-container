@@ -87,6 +87,7 @@ struct wsi_image_info {
    VkExternalMemoryImageCreateInfo ext_mem;
    VkImageFormatListCreateInfo format_list;
    VkImageDrmFormatModifierListCreateInfoEXT drm_mod_list;
+   VkImageCompressionControlEXT img_compr_ctrl;
    VkColorSpaceKHR color_space;
 
    enum wsi_image_type image_type;

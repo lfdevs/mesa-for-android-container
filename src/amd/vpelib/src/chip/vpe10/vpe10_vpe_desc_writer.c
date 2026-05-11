@@ -46,9 +46,6 @@ enum vpe_status vpe10_vpe_desc_writer_init(
     writer->base_gpu_va      = buf->gpu_va;
     writer->buf              = buf;
     writer->num_config_desc  = 0;
-#ifdef VPE_REGISTER_PROFILE
-    writer->reuse_num_config_dec = 0;
-#endif
     writer->plane_desc_added = false;
     writer->status           = VPE_STATUS_OK;
 
@@ -126,10 +123,6 @@ void vpe10_vpe_desc_writer_add_config_desc(
     writer->buf->gpu_va += size;
     writer->buf->size -= size;
     writer->num_config_desc++;
-#ifdef VPE_REGISTER_PROFILE
-    if (reuse)
-        writer->reuse_num_config_dec++;
-#endif
 }
 
 void vpe10_vpe_desc_writer_complete(struct vpe_desc_writer *writer)

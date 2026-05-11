@@ -60,8 +60,8 @@ def begin_end_tp(name, args=[], tp_struct=None, tp_print=None,
     if not toggle_name:
         toggle_name = name
 
-    if tp_default_enabled:
-        tu_default_tps.append(name)
+    if tp_default_enabled and toggle_name not in tu_default_tps:
+        tu_default_tps.append(toggle_name)
 
     # Make all the GPU render stage events take a cmdbuf, so that the
     # command_buffer field can be set appropriately in the UI.
@@ -69,19 +69,42 @@ def begin_end_tp(name, args=[], tp_struct=None, tp_print=None,
     args = [command_buffer_arg] + (args if args else [])
 
     Tracepoint('start_{0}'.format(name),
-               toggle_name=name,
+               toggle_name=toggle_name,
                args=args,
                tp_struct=tp_struct,
                tp_perfetto='tu_perfetto_start_{0}'.format(name) if queue_tp else None,
                tp_print=tp_print if queue_tp else None,
                tp_markers='tu_cs_trace_start' if marker_tp else None)
     Tracepoint('end_{0}'.format(name),
-               toggle_name=name,
+               toggle_name=toggle_name,
                args=end_args,
                tp_struct=end_tp_struct,
                tp_perfetto='tu_perfetto_end_{0}'.format(name),
                tp_print=end_tp_print if queue_tp else None,
                tp_markers='tu_cs_trace_end' if marker_tp else None)
+
+def singular_tp(name, args=[], tp_struct=None, tp_print=None,
+                tp_default_enabled=True, marker_tp=True,
+                queue_tp=True, toggle_name=None):
+    global tu_default_tps
+
+    if not toggle_name:
+        toggle_name = name
+
+    if tp_default_enabled and toggle_name not in tu_default_tps:
+        tu_default_tps.append(toggle_name)
+
+    tp_struct = [command_buffer_struct] + (tp_struct if tp_struct else [])
+    args = [command_buffer_arg] + (args if args else [])
+
+    Tracepoint('{0}'.format(name),
+               toggle_name=toggle_name,
+               args=args,
+               tp_struct=tp_struct,
+               tp_perfetto='tu_perfetto_{0}'.format(name) if queue_tp else None,
+               tp_print=tp_print if queue_tp else None,
+               tp_markers='tu_cs_trace_singular' if marker_tp else None)
+
 
 begin_end_tp('cmd_buffer',
     args=[Arg(type='str',                       var='TUdebugFlags', c_format='%s', length_arg='96', copy_func='strncpy'),
@@ -263,12 +286,24 @@ begin_end_tp('compute_indirect',
                                       is_indirect=True, c_format="%ux%ux%u",
                                       fields=['x', 'y', 'z'])])
 
+# Performance warnings
+
+singular_tp('warning_slow_clear_lrz', toggle_name='perf_warnings')
+singular_tp('warning_depth_image_no_lrz', toggle_name='perf_warnings')
+singular_tp('warning_lrz_disabled',
+            toggle_name='perf_warnings',
+            args=[Arg(type='const char *', var='reason', c_format='%s')])
+singular_tp('warning_lrz_write_disabled',
+            toggle_name='perf_warnings',
+            args=[Arg(type='const char *', var='reason', c_format='%s')])
+singular_tp('warning_fdm_force_disabled', toggle_name='perf_warnings')
+
 # Annotations for Cmd(Begin|End)DebugUtilsLabelEXT
 for suffix in ["", "_rp"]:
     begin_end_tp('cmd_buffer_annotation' + suffix,
-                    args=[Arg(type='unsigned', var='len'),
-                          Arg(type='str', var='str', c_format='%s', length_arg='len + 1', copy_func='strncpy'),],
-                    tp_struct=[Arg(type='uint8_t', name='dummy', var='0'),])
+                    end_args=[Arg(type='unsigned', var='len'),
+                              Arg(type='str', var='str', c_format='%s', length_arg='len + 1', copy_func='strncpy'),],
+                    end_tp_struct=[Arg(type='uint8_t', name='dummy', var='0'),])
 
 utrace_generate(cpath=args.utrace_src,
                 hpath=args.utrace_hdr,

@@ -899,7 +899,7 @@ st_create_common_variant(struct st_context *st,
    }
 
    if (key->is_draw_shader) {
-      NIR_PASS(_, state.ir.nir, gl_nir_lower_images, false);
+      NIR_PASS(_, state.ir.nir, gl_nir_lower_images, NULL, false);
       v->base.driver_shader = draw_create_vertex_shader(st->draw, &state);
    }
    else

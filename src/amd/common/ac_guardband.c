@@ -9,6 +9,7 @@
 
 #include "ac_gpu_info.h"
 #include "ac_guardband.h"
+#include "util/macros.h"
 
 void
 ac_compute_guardband(const struct radeon_info *info, int minx, int miny,

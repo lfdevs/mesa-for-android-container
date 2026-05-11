@@ -63,8 +63,9 @@ bifrost_precompiled_kernel_prepare_push_uniforms(
 }
 
 void bifrost_preprocess_nir(nir_shader *nir, uint64_t gpu_id);
-void bifrost_optimize_nir(nir_shader *nir, uint64_t gpu_id);
-void bifrost_postprocess_nir(nir_shader *nir, uint64_t gpu_id);
+void bifrost_postprocess_nir(nir_shader *nir,
+                             const struct pan_compile_inputs *inputs,
+                             struct pan_shader_info *info);
 
 void bifrost_compile_shader_nir(nir_shader *nir,
                                 const struct pan_compile_inputs *inputs,
@@ -98,6 +99,7 @@ bool valhall_can_merge_workgroups(nir_shader *nir);
       .lower_bitfield_extract8 = true,                                         \
       .lower_bitfield_extract16 = true,                                        \
       .lower_insert_byte = true,                                               \
+      .has_bitfield_select = true,                                             \
                                                                                \
       .lower_pack_64_4x16 = true,                                              \
       .lower_pack_half_2x16 = true,                                            \

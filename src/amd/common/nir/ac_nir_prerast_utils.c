@@ -6,7 +6,7 @@
 
 #include "ac_nir.h"
 #include "ac_nir_helpers.h"
-#include "sid.h"
+#include "amdgfxregs.h"
 
 #include "nir_builder.h"
 #include "nir_xfb_info.h"
@@ -126,6 +126,9 @@ void ac_nir_gather_prerast_store_output_info(nir_builder *b, nir_intrinsic_instr
       /* Components of the same output slot may belong to different streams. */
       info->stream |= stream << (c * 2);
       info->components_mask |= BITFIELD_BIT(c);
+      if (io_sem.clamp) {
+         info->clamp_components_mask |= BITFIELD_BIT(c);
+      }
 
       if (!io_sem.no_varying)
          info->as_varying_mask |= BITFIELD_BIT(c);
@@ -782,21 +785,27 @@ ac_nir_clamp_vertex_color_outputs(nir_builder *b, ac_nir_prerast_out *out)
                                             VARYING_BIT_BFC0 | VARYING_BIT_BFC1)))
       return;
 
-   nir_def *color_channels[16] = {0};
+   unsigned i = 0;
+   nir_def **color_channels[16] = {0};
+   nir_def *color_channels_clamped[16] = {0};
 
    nir_if *if_clamp = nir_push_if(b, nir_load_clamp_vertex_color_amd(b));
    {
-      for (unsigned i = 0; i < 16; i++) {
-         const unsigned slot = (i / 8 ? VARYING_SLOT_BFC0 : VARYING_SLOT_COL0) + (i % 8) / 4;
-         if (out->outputs[slot][i % 4])
-            color_channels[i] = nir_fsat(b, out->outputs[slot][i % 4]);
+      for (unsigned slot = 0; slot < NUM_TOTAL_VARYING_SLOTS; slot++) {
+         unsigned clamp_mask = out->infos[slot].clamp_components_mask;
+         u_foreach_bit(comp, clamp_mask) {
+            assert(i < 16 && comp < 4);
+            color_channels[i] = &out->outputs[slot][comp];
+            color_channels_clamped[i] = nir_fsat(b, out->outputs[slot][comp]);
+            i++;
+         }
       }
    }
    nir_pop_if(b, if_clamp);
+
    for (unsigned i = 0; i < 16; i++) {
       if (color_channels[i]) {
-         const unsigned slot = (i / 8 ? VARYING_SLOT_BFC0 : VARYING_SLOT_COL0) + (i % 8) / 4;
-         out->outputs[slot][i % 4] = nir_if_phi(b, color_channels[i], out->outputs[slot][i % 4]);
+         *color_channels[i] = nir_if_phi(b, color_channels_clamped[i], *color_channels[i]);
       }
    }
 }

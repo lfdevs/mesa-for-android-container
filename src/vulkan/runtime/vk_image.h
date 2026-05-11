@@ -99,6 +99,12 @@ struct vk_image {
     * but it may be overridden by the driver as needed.
     */
    uint32_t ahb_format;
+
+   /* Deep-copied and sanitized VkImageCreateInfo for deferred ANB alias
+    * images. Set by vk_android_init_deferred_image() and freed automatically
+    * by vk_image_destroy(). NULL for non-deferred images.
+    */
+   VkImageCreateInfo *android_deferred_create_info;
 #endif
 };
 VK_DEFINE_NONDISP_HANDLE_CASTS(vk_image, base, VkImage,

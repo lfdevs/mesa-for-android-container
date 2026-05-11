@@ -28,6 +28,7 @@
 #include "common/intel_gem.h"
 #include "common/i915/intel_gem.h"
 #include "dev/intel_debug.h"
+#include "util/u_debug.h"
 
 #include "drm-uapi/i915_drm.h"
 
@@ -147,17 +148,20 @@ i915_gem_create(struct iris_bufmgr *bufmgr,
 static bool
 i915_bo_madvise(struct iris_bo *bo, enum iris_madvice state)
 {
-   uint32_t i915_state = state == IRIS_MADVICE_WILL_NEED ?
-                                  I915_MADV_WILLNEED : I915_MADV_DONTNEED;
    struct drm_i915_gem_madvise madv = {
       .handle = bo->gem_handle,
-      .madv = i915_state,
+      .madv = state,
       .retained = 1,
    };
 
-   intel_ioctl(iris_bufmgr_get_fd(bo->bufmgr), DRM_IOCTL_I915_GEM_MADVISE, &madv);
+   /* Make sure iris_madvice values match with i915 values */
+   STATIC_ASSERT(IRIS_MADVICE_WILL_NEED == I915_MADV_WILLNEED);
+   STATIC_ASSERT(IRIS_MADVICE_DONT_NEED == I915_MADV_DONTNEED);
 
-   return madv.retained;
+   int ret = intel_ioctl(iris_bufmgr_get_fd(bo->bufmgr), DRM_IOCTL_I915_GEM_MADVISE, &madv);
+   if (ret)
+      debug_warn_once("DRM_IOCTL_I915_GEM_MADVISE failed at least once\n");
+   return ret == 0 ? madv.retained : false;
 }
 
 static int

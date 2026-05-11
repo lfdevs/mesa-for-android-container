@@ -195,7 +195,7 @@ calc_dominance(struct nir_use_dominance_state *state,
                break;
             } else {
                update_imm_dom(state,
-                              get_node(state, nir_src_parent_instr(src)),
+                              get_node(state, nir_src_use_instr(src)),
                               &new_idom);
             }
          }

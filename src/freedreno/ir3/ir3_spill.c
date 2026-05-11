@@ -1032,6 +1032,18 @@ update_max_pressure(struct ra_spill_ctx *ctx)
       MAX2(ctx->max_pressure.shared_half, ctx->cur_pressure.shared_half);
 }
 
+/* True if src is killed and its register can be used to allocate a dst. A src
+ * is killed iff its SSA value is killed and it isn't part of or contains an
+ * interval that isn't killed yet.
+ */
+static bool
+is_killed(struct ra_spill_ctx *ctx, struct ir3_register *src)
+{
+   struct ra_spill_interval *interval = ctx->intervals[src->def->name];
+   return (src->flags & IR3_REG_FIRST_KILL) && !interval->interval.parent &&
+          rb_tree_is_empty(&interval->interval.children);
+}
+
 static void
 handle_instr(struct ra_spill_ctx *ctx, struct ir3_instruction *instr)
 {
@@ -1064,7 +1076,7 @@ handle_instr(struct ra_spill_ctx *ctx, struct ir3_instruction *instr)
 
    ra_foreach_dst (dst, instr) {
       struct ir3_register *tied_src = dst->tied;
-      if ((tied_src && !(tied_src->flags & IR3_REG_FIRST_KILL)) ||
+      if ((tied_src && !is_killed(ctx, tied_src)) ||
           (dst->flags & IR3_REG_EARLY_CLOBBER))
          insert_dst(ctx, dst);
    }

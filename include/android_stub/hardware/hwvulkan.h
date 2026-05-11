@@ -54,8 +54,9 @@ typedef union {
 /* A hwvulkan_device_t corresponds to an ICD on other systems. Currently there
  * can only be one on a system (HWVULKAN_DEVICE_0). It is opened once per
  * process when the Vulkan API is first used; the hw_device_t::close() function
- * is never called. Any non-trivial resource allocation should be done when
- * the VkInstance is created rather than when the hwvulkan_device_t is opened.
+ * is called upon driver unloading. Any non-trivial resource allocation should
+ * be done when the VkInstance is created rather than when the hwvulkan_device_t
+ * is opened.
  */
 typedef struct hwvulkan_device_t {
     struct hw_device_t common;

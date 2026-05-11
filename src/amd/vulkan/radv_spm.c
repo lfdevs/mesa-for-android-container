@@ -14,8 +14,6 @@
 
 #include "vk_common_entrypoints.h"
 
-#include "sid.h"
-
 static bool
 radv_spm_init_bo(struct radv_device *device)
 {

@@ -14,8 +14,8 @@ anv_bind_buffer_memory(struct anv_device *device,
    assert(pBindInfo->sType == VK_STRUCTURE_TYPE_BIND_BUFFER_MEMORY_INFO);
    assert(!anv_buffer_is_sparse(buffer));
 
-   const VkBindMemoryStatusKHR *bind_status =
-      vk_find_struct_const(pBindInfo->pNext, BIND_MEMORY_STATUS_KHR);
+   const VkBindMemoryStatus *bind_status =
+      vk_find_struct_const(pBindInfo->pNext, BIND_MEMORY_STATUS);
 
    if (mem) {
       assert(pBindInfo->memoryOffset < mem->vk.size);
@@ -61,7 +61,7 @@ static void
 anv_get_buffer_memory_requirements(struct anv_device *device,
                                    VkBufferCreateFlags flags,
                                    VkDeviceSize size,
-                                   VkBufferUsageFlags2KHR usage,
+                                   VkBufferUsageFlags2 usage,
                                    bool is_sparse,
                                    VkMemoryRequirements2* pMemoryRequirements)
 {
@@ -72,13 +72,24 @@ anv_get_buffer_memory_requirements(struct anv_device *device,
     *    only if the memory type `i` in the VkPhysicalDeviceMemoryProperties
     *    structure for the physical device is supported.
     *
-    * We have special memory types for descriptor buffers.
+    * Descriptors buffers need to be in the dynamic visible heap (for the
+    * SAMPLER_STATE).
+    *
+    * Preprocess buffers containing INTERFACE_DESCRIPTOR_DATA structures also
+    * need to be there (those structures are indexed from the dynamic state
+    * heap).
     */
+   bool need_dynamic_visible_buffer =
+      (usage & (VK_BUFFER_USAGE_2_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT |
+                VK_BUFFER_USAGE_2_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT |
+                VK_BUFFER_USAGE_2_DESCRIPTOR_HEAP_BIT_EXT)) ||
+      (device->info->verx10 <= 120 &&
+       (usage & VK_BUFFER_USAGE_2_PREPROCESS_BUFFER_BIT_EXT));
+
    uint32_t memory_types;
    if (flags & VK_BUFFER_CREATE_PROTECTED_BIT)
       memory_types = device->physical->memory.protected_mem_types;
-   else if (usage & (VK_BUFFER_USAGE_2_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT |
-                     VK_BUFFER_USAGE_2_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT))
+   else if (need_dynamic_visible_buffer)
       memory_types = device->physical->memory.dynamic_visible_mem_types;
    else if (device->physical->instance->enable_buffer_comp)
       memory_types = device->physical->memory.default_buffer_mem_types |
@@ -135,12 +146,12 @@ anv_get_buffer_memory_requirements(struct anv_device *device,
    }
 }
 
-static VkBufferUsageFlags2KHR
+static VkBufferUsageFlags2
 get_buffer_usages(const VkBufferCreateInfo *create_info)
 {
-   const VkBufferUsageFlags2CreateInfoKHR *usage2_info =
+   const VkBufferUsageFlags2CreateInfo *usage2_info =
       vk_find_struct_const(create_info->pNext,
-                           BUFFER_USAGE_FLAGS_2_CREATE_INFO_KHR);
+                           BUFFER_USAGE_FLAGS_2_CREATE_INFO);
    return usage2_info != NULL ? usage2_info->usage : create_info->usage;
 }
 
@@ -152,7 +163,7 @@ void anv_GetDeviceBufferMemoryRequirements(
    ANV_FROM_HANDLE(anv_device, device, _device);
    const bool is_sparse =
       pInfo->pCreateInfo->flags & VK_BUFFER_CREATE_SPARSE_BINDING_BIT;
-   VkBufferUsageFlags2KHR usages = get_buffer_usages(pInfo->pCreateInfo);
+   VkBufferUsageFlags2 usages = get_buffer_usages(pInfo->pCreateInfo);
 
    if ((device->physical->sparse_type == ANV_SPARSE_TYPE_NOT_SUPPORTED) &&
        INTEL_DEBUG(DEBUG_SPARSE) &&
@@ -189,7 +200,7 @@ VkResult anv_CreateBuffer(
 
    if ((pCreateInfo->flags & VK_BUFFER_CREATE_SPARSE_BINDING_BIT) &&
        device->physical->sparse_type == ANV_SPARSE_TYPE_TRTT) {
-      VkBufferUsageFlags2KHR usages = get_buffer_usages(pCreateInfo);
+      VkBufferUsageFlags2 usages = get_buffer_usages(pCreateInfo);
       if (usages & (VK_BUFFER_USAGE_2_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT |
                     VK_BUFFER_USAGE_2_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT)) {
          return vk_errorf(device, VK_ERROR_UNKNOWN,
@@ -238,7 +249,8 @@ VkResult anv_CreateBuffer(
        * allocate it on the correct heap.
        */
       if (buffer->vk.usage & (VK_BUFFER_USAGE_2_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT |
-                              VK_BUFFER_USAGE_2_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT)) {
+                              VK_BUFFER_USAGE_2_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT |
+                              VK_BUFFER_USAGE_2_DESCRIPTOR_HEAP_BIT_EXT)) {
          alloc_flags |= ANV_BO_ALLOC_DYNAMIC_VISIBLE_POOL;
       }
 
@@ -343,7 +355,7 @@ anv_fill_buffer_surface_state(struct anv_device *device,
                               struct isl_swizzle swizzle,
                               isl_surf_usage_flags_t usage,
                               struct anv_address address,
-                              uint32_t range, uint32_t stride)
+                              uint64_t range, uint32_t stride)
 {
    if (address.bo && address.bo->alloc_flags & ANV_BO_ALLOC_PROTECTED)
       usage |= ISL_SURF_USAGE_PROTECTED_BIT;

@@ -5,6 +5,7 @@
  * SPDX-License-Identifier: MIT
  */
 
+#include "compiler/spirv/spirv.h"
 #include "nir/nir.h"
 #include "nir/nir_builder.h"
 
@@ -13,8 +14,6 @@
 #include "nir/radv_nir_rt_stage_common.h"
 #include "nir/radv_nir_rt_stage_functions.h"
 
-#include "radv_device.h"
-#include "radv_physical_device.h"
 #include "radv_shader.h"
 
 #include "aco_nir_call_attribs.h"
@@ -172,7 +171,7 @@ radv_nir_init_rt_function_params(nir_function *function, mesa_shader_stage stage
  * Global variables for an RT pipeline
  */
 struct rt_variables {
-   struct radv_device *device;
+   const struct radv_compiler_info *compiler_info;
    const VkPipelineCreateFlags2 flags;
 
    /* Stage-dependent parameter indices */
@@ -214,12 +213,12 @@ struct rt_variables {
 };
 
 static struct rt_variables
-create_rt_variables(nir_shader *shader, struct radv_device *device, const VkPipelineCreateFlags2 flags,
-                    unsigned max_payload_size, unsigned max_hit_attrib_size)
+create_rt_variables(nir_shader *shader, const struct radv_compiler_info *compiler_info,
+                    const VkPipelineCreateFlags2 flags, unsigned max_payload_size, unsigned max_hit_attrib_size)
 {
    const bool uses_descriptor_heap = flags & VK_PIPELINE_CREATE_2_DESCRIPTOR_HEAP_BIT_EXT;
    struct rt_variables vars = {
-      .device = device,
+      .compiler_info = compiler_info,
       .flags = flags,
    };
 
@@ -349,6 +348,7 @@ lower_rt_instruction(nir_builder *b, nir_instr *instr, void *_vars)
 
    struct rt_variables *vars = _vars;
    const bool uses_descriptor_heap = vars->flags & VK_PIPELINE_CREATE_2_DESCRIPTOR_HEAP_BIT_EXT;
+   const struct radv_compiler_info *compiler_info = vars->compiler_info;
 
    b->cursor = nir_before_instr(&intr->instr);
 
@@ -452,7 +452,7 @@ lower_rt_instruction(nir_builder *b, nir_instr *instr, void *_vars)
       break;
    }
    case nir_intrinsic_load_ray_instance_custom_index: {
-      ret = radv_load_custom_instance(vars->device, b, nir_load_param(b, vars->instance_addr_param));
+      ret = radv_load_custom_instance(compiler_info, b, nir_load_param(b, vars->instance_addr_param));
       break;
    }
    case nir_intrinsic_load_primitive_id: {
@@ -465,7 +465,7 @@ lower_rt_instruction(nir_builder *b, nir_instr *instr, void *_vars)
       break;
    }
    case nir_intrinsic_load_instance_id: {
-      ret = radv_load_instance_id(vars->device, b, nir_load_param(b, vars->instance_addr_param));
+      ret = radv_load_instance_id(compiler_info, b, nir_load_param(b, vars->instance_addr_param));
       break;
    }
    case nir_intrinsic_load_ray_flags: {
@@ -483,7 +483,7 @@ lower_rt_instruction(nir_builder *b, nir_instr *instr, void *_vars)
       unsigned c = nir_intrinsic_column(intr);
       nir_def *instance_node_addr = nir_load_param(b, vars->instance_addr_param);
       nir_def *wto_matrix[3];
-      radv_load_wto_matrix(vars->device, b, instance_node_addr, wto_matrix);
+      radv_load_wto_matrix(compiler_info, b, instance_node_addr, wto_matrix);
 
       nir_def *vals[3];
       for (unsigned i = 0; i < 3; ++i)
@@ -495,20 +495,20 @@ lower_rt_instruction(nir_builder *b, nir_instr *instr, void *_vars)
    case nir_intrinsic_load_ray_object_to_world: {
       unsigned c = nir_intrinsic_column(intr);
       nir_def *otw_matrix[3];
-      radv_load_otw_matrix(vars->device, b, nir_load_param(b, vars->instance_addr_param), otw_matrix);
+      radv_load_otw_matrix(compiler_info, b, nir_load_param(b, vars->instance_addr_param), otw_matrix);
       ret = nir_vec3(b, nir_channel(b, otw_matrix[0], c), nir_channel(b, otw_matrix[1], c),
                      nir_channel(b, otw_matrix[2], c));
       break;
    }
    case nir_intrinsic_load_ray_object_origin: {
       nir_def *wto_matrix[3];
-      radv_load_wto_matrix(vars->device, b, nir_load_param(b, vars->instance_addr_param), wto_matrix);
+      radv_load_wto_matrix(compiler_info, b, nir_load_param(b, vars->instance_addr_param), wto_matrix);
       ret = nir_build_vec3_mat_mult(b, nir_load_param(b, vars->ray_origin_param), wto_matrix, true);
       break;
    }
    case nir_intrinsic_load_ray_object_direction: {
       nir_def *wto_matrix[3];
-      radv_load_wto_matrix(vars->device, b, nir_load_param(b, vars->instance_addr_param), wto_matrix);
+      radv_load_wto_matrix(compiler_info, b, nir_load_param(b, vars->instance_addr_param), wto_matrix);
       ret = nir_build_vec3_mat_mult(b, nir_load_param(b, vars->ray_direction_param), wto_matrix, false);
       break;
    }
@@ -713,7 +713,7 @@ lower_rt_instruction(nir_builder *b, nir_instr *instr, void *_vars)
    }
    case nir_intrinsic_load_ray_triangle_vertex_positions: {
       nir_def *primitive_addr = nir_load_param(b, vars->primitive_addr_param);
-      ret = radv_load_vertex_position(vars->device, b, primitive_addr, nir_intrinsic_column(intr));
+      ret = radv_load_vertex_position(compiler_info, b, primitive_addr, nir_intrinsic_column(intr));
       break;
    }
    default:
@@ -764,7 +764,7 @@ lower_rt_deref_var(nir_shader *shader, nir_function_impl *impl, nir_instr *instr
       if (nir_src_is_if(use))
          continue;
 
-      nir_instr *parent = nir_src_parent_instr(use);
+      nir_instr *parent = nir_src_use_instr(use);
       if (parent->type != nir_instr_type_intrinsic)
          continue;
 
@@ -852,7 +852,7 @@ radv_get_rt_shader_entrypoint(nir_shader *shader)
 
 void
 radv_nir_lower_rt_abi_functions(nir_shader *shader, const struct radv_shader_info *info, uint32_t payload_size,
-                                uint32_t hit_attrib_size, struct radv_device *device,
+                                uint32_t hit_attrib_size, const struct radv_compiler_info *compiler_info,
                                 struct radv_ray_tracing_pipeline *pipeline)
 {
    const bool uses_descriptor_heap = pipeline->base.base.create_flags & VK_PIPELINE_CREATE_2_DESCRIPTOR_HEAP_BIT_EXT;
@@ -866,7 +866,7 @@ radv_nir_lower_rt_abi_functions(nir_shader *shader, const struct radv_shader_inf
                                        uses_descriptor_heap);
 
    struct rt_variables vars =
-      create_rt_variables(shader, device, pipeline->base.base.create_flags, payload_size, hit_attrib_size);
+      create_rt_variables(shader, compiler_info, pipeline->base.base.create_flags, payload_size, hit_attrib_size);
 
    nir_builder b = nir_builder_at(nir_before_impl(impl));
    unsigned num_hit_attribs = DIV_ROUND_UP(hit_attrib_size, 4);

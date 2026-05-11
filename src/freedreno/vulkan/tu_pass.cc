@@ -540,6 +540,7 @@ tu_render_pass_disable_fdm(struct tu_device *dev, struct tu_render_pass *pass)
       if (att->samples > 1 &&
           (att->load || att->load_stencil ||
            att->store || att->store_stencil)) {
+         pass->warn_fdm_force_disabled = true;
          perf_debug(dev, "Disabling fragment density map due to %s of multisample attachment",
                     (att->load || att->load_stencil) ? "load" : "store");
          return true;

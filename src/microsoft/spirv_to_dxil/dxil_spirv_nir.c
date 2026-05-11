@@ -811,25 +811,19 @@ dxil_spirv_nir_link(nir_shader *nir, nir_shader *prev_stage_nir,
       NIR_PASS(_, nir, dxil_nir_kill_undefined_varyings, prev_stage_nir->info.outputs_written, prev_stage_nir->info.patch_outputs_written, NULL);
       NIR_PASS(_, prev_stage_nir, dxil_nir_kill_unused_outputs, nir->info.inputs_read, nir->info.patch_inputs_read, NULL);
 
-      dxil_reassign_driver_locations(nir, nir_var_shader_in, prev_stage_nir->info.outputs_written, NULL);
-      dxil_reassign_driver_locations(prev_stage_nir, nir_var_shader_out, nir->info.inputs_read, NULL);
-
+      /* Tess metadata flows TCS->TES so the placeholder helper below knows
+       * the per-vertex input array length, and TCS gets the domain config. */
       if (nir->info.stage == MESA_SHADER_TESS_EVAL) {
          assert(prev_stage_nir->info.stage == MESA_SHADER_TESS_CTRL);
          nir->info.tess.tcs_vertices_out = prev_stage_nir->info.tess.tcs_vertices_out;
          prev_stage_nir->info.tess = nir->info.tess;
 
-         for (uint32_t i = 0; i < 2; ++i) {
-            unsigned loc = i == 0 ? VARYING_SLOT_TESS_LEVEL_OUTER : VARYING_SLOT_TESS_LEVEL_INNER;
-            nir_variable *var = nir_find_variable_with_location(nir, nir_var_shader_in, loc);
-            if (!var) {
-               var = nir_variable_create(nir, nir_var_shader_in, glsl_array_type(glsl_float_type(), i == 0 ? 4 : 2, 0), i == 0 ? "outer" : "inner");
-               var->data.location = loc;
-               var->data.patch = true;
-               var->data.compact = true;
-            }
-         }
+         /* Pad TES input signature so HS<->DS match for D3D12 pipeline validation. */
+         dxil_nir_pad_tes_input_signature(nir, prev_stage_nir);
       }
+
+      dxil_reassign_driver_locations(nir, nir_var_shader_in, prev_stage_nir->info.outputs_written, NULL);
+      dxil_reassign_driver_locations(prev_stage_nir, nir_var_shader_out, nir->info.inputs_read, NULL);
    }
 
    glsl_type_singleton_decref();

@@ -41,7 +41,7 @@ svga_create_compute_state(struct pipe_context *pipe,
 
    assert(templ->ir_type == PIPE_SHADER_IR_NIR);
    /* nir_to_tgsi requires lowered images */
-   NIR_PASS(_, nir, gl_nir_lower_images, false);
+   NIR_PASS(_, nir, gl_nir_lower_images, NULL, false);
 
    cs->base.tokens = nir_to_tgsi((void *)nir, pipe->screen);
 

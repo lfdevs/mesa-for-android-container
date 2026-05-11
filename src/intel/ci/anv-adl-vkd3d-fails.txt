@@ -1,5 +1,3 @@
-test_fence_wait_robustness,Crash
-
 # Undefined behavior not supported unless EXT_descriptor_buffer is
 # used or running on Gfx12.5+ where we don't do descriptor indirection
 # (prior generations have a descriptor heap too small 64MB)

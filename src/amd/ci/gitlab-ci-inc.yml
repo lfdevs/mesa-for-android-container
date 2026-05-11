@@ -18,6 +18,7 @@
         - src/amd/ci/$GALLIUM_DRIVER-skips.txt
         - src/amd/ci/$DRIVER_NAME-skips.txt
         - src/amd/ci/$PIGLIT_TRACES_FILE
+        - src/amd/ci/$REPLAY_CONFIG
         - src/amd/ci/$GPU_VERSION-vkd3d-fails.txt
         - src/amd/ci/$GPU_VERSION-vkd3d-flakes.txt
         - src/amd/ci/$GPU_VERSION-vkd3d-skips.txt

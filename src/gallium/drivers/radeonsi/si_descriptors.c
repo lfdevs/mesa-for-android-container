@@ -36,6 +36,7 @@
  */
 
 #include "si_pipe.h"
+#include "gfx/si_gfx.h"
 #include "si_build_pm4.h"
 #include "sid.h"
 #include "util/format/u_format.h"

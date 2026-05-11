@@ -1,5 +1,6 @@
 # Tessellation isoline tests are flaky on WARP, probably a WARP bug
 isoline
+isoline-no-tcs
 
 # If the test machine are busy, these can spuriously fail
 arb_timer_query

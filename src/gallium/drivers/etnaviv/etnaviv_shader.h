@@ -46,6 +46,8 @@ struct etna_shader_key
           * Combined Vertex/Fragment shader parameters:
           */
 
+         /* per-RT bitmask: swap R/B in frag shader for shared resources */
+         unsigned frag_rb_swap : 8;
          /* do we need to invert front facing value? */
          unsigned front_ccw : 1;
          /* do we need to replace glTexCoord.xy ? */

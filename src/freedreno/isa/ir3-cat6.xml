@@ -211,7 +211,7 @@ TODO rename UAV src to "UAV" so disasm_field_cb can find it easily?
 
 	<encode>
 		<map name="SRC2">src->srcs[1]</map>
-		<map name="OFF">extract_reg_uim(src->srcs[2])</map>
+		<map name="OFF">extract_reg_uim(src->srcs[3])</map>
 		<map name="SIZE">extract_reg_uim(src->srcs[4])</map>
 		<map name="SRC1_CONST">!!(src->srcs[0]->flags &amp; IR3_REG_CONST)</map>
 	</encode>
@@ -386,7 +386,7 @@ TODO rename UAV src to "UAV" so disasm_field_cb can find it easily?
 
 	<encode>
 		<map name="SRC2">src->srcs[1]</map>
-		<map name="OFF">extract_reg_uim(src->srcs[2])</map>
+		<map name="OFF">extract_reg_uim(src->srcs[3])</map>
 		<map name="SRC3">src->srcs[4]</map>
 		<map name="SIZE">extract_reg_uim(src->srcs[5])</map>
 		<map name="SRC1_CONST">!!(src->srcs[0]->flags &amp; IR3_REG_CONST)</map>

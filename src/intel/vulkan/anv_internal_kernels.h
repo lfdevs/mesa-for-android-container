@@ -138,4 +138,176 @@ struct PACKED anv_memcpy_params {
    uint64_t dst_addr;
 };
 
+struct PACKED anv_dgc_gfx_params {
+   /* Preprocess command address */
+   uint64_t cmd_addr;
+
+   /* Preprocess data address */
+   uint64_t data_addr;
+
+   /* Sequence buffer address */
+   uint64_t seq_addr;
+
+   /* Sequence count address */
+   uint64_t seq_count_addr;
+
+   /* State address */
+   uint64_t state_addr;
+
+   /* Push constant address */
+   uint64_t const_addr;
+
+   /* Driver constant address */
+   uint64_t driver_const_addr;
+
+   /* Return address in the command buffer */
+   uint64_t return_addr;
+
+   /* Stride between each generated commands for a sequence */
+   uint32_t cmd_stride;
+
+   /* Stride between each data chunks for a sequence */
+   uint32_t data_stride;
+
+   /* Stride between sequences */
+   uint32_t seq_stride;
+
+   /* Max sequence count */
+   uint32_t max_seq_count;
+
+   /* Size of the prolog prior to generated commands */
+   uint32_t cmd_prolog_size;
+
+   /* Size of the prolog prior to generated data */
+   uint32_t data_prolog_size;
+
+   /* Push constant size */
+   uint32_t const_size;
+
+   /* Flags for the generation (ANV_GENERATED_FLAG_*) */
+   uint32_t flags;
+};
+
+struct PACKED anv_dgc_cs_params {
+   /* Preprocess command address */
+   uint64_t cmd_addr;
+
+   /* Preprocess data address */
+   uint64_t data_addr;
+
+   /* Sequence buffer address */
+   uint64_t seq_addr;
+
+   /* Sequence count address */
+   uint64_t seq_count_addr;
+
+   /* Layout address */
+   uint64_t layout_addr;
+
+   /* Push constant address */
+   uint64_t const_addr;
+
+   /* Driver constant address */
+   uint64_t driver_const_addr;
+
+   /* Indirect set address */
+   uint64_t indirect_set_addr;
+
+   /* INTERFACE_DESCRITPOR_DATA prepared data from driver */
+   uint64_t interface_descriptor_data_addr;
+
+   /* Return address in the command buffer */
+   uint64_t return_addr;
+
+   /* Stride between each generated commands for a sequence */
+   uint32_t cmd_stride;
+
+   /* Stride between each data chunks for a sequence */
+   uint32_t data_stride;
+
+   /* Stride between sequences */
+   uint32_t seq_stride;
+
+   /* Max sequence count */
+   uint32_t max_seq_count;
+
+   /* Size of the prolog prior to generated commands */
+   uint32_t cmd_prolog_size;
+
+   /* Size of the prolog prior to generated data */
+   uint32_t data_prolog_size;
+
+   /* Push constant size */
+   uint32_t const_size;
+
+   /* Flags for the generation (ANV_GENERATED_FLAG_*) */
+   uint32_t flags;
+};
+
+struct PACKED anv_dgc_rt_params {
+   /* Preprocess command address */
+   uint64_t cmd_addr;
+
+   /* Preprocess data address */
+   uint64_t data_addr;
+
+   /* Sequence buffer address */
+   uint64_t seq_addr;
+
+   /* Sequence count address */
+   uint64_t seq_count_addr;
+
+   /* Layout address */
+   uint64_t layout_addr;
+
+   /* Template COMPUTE_WALKER instruction */
+   uint64_t compute_walker_addr;
+
+   /* Template RT_DISPATCH_GLOBALS structure */
+   uint64_t rtdg_global_addr;
+
+   /* Push constant address */
+   uint64_t const_addr;
+
+   /* Driver constant address */
+   uint64_t driver_const_addr;
+
+   /* Return address in the command buffer */
+   uint64_t return_addr;
+
+   /* Stride between each generated commands for a sequence */
+   uint32_t cmd_stride;
+
+   /* Stride between each data chunks for a sequence */
+   uint32_t data_stride;
+
+   /* Stride between sequences */
+   uint32_t seq_stride;
+
+   /* Max sequence count */
+   uint32_t max_seq_count;
+
+   /* Size of the prolog prior to generated commands */
+   uint32_t cmd_prolog_size;
+
+   /* Size of the prolog prior to generated data */
+   uint32_t data_prolog_size;
+
+   /* Push constant size */
+   uint32_t const_size;
+
+   /* Flags for the generation (ANV_GENERATED_FLAG_*) */
+   uint32_t flags;
+};
+
+struct PACKED anv_dgc_dump_params {
+   /* Preprocess command address */
+   uint64_t cmd_addr;
+
+   /* Number of dwords */
+   uint32_t n_dwords;
+
+   uint64_t call_addr;
+};
+
 #endif /* ANV_GENERATED_INDIRECT_DRAWS_H */

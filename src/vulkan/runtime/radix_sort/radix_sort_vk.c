@@ -277,6 +277,14 @@ radix_sort_vk_create(VkDevice                           _device,
     { .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,  //
       .offset     = 0,
       .size       = sizeof(struct rs_push_scatter) },  // scatter_1_odd
+
+    { .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,  //
+      .offset     = 0,
+      .size       = sizeof(struct rs_push_scatter) },  // scatter_2_even
+
+    { .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,  //
+      .offset     = 0,
+      .size       = sizeof(struct rs_push_scatter) },  // scatter_2_odd
   };
 
   uint32_t spec_constants[] = {
@@ -378,6 +386,8 @@ radix_sort_vk_create(VkDevice                           _device,
     RS_SUBGROUP_SIZE_CREATE_INFO_NAME(scatter),    // scatter[0].odd
     RS_SUBGROUP_SIZE_CREATE_INFO_NAME(scatter),    // scatter[1].even
     RS_SUBGROUP_SIZE_CREATE_INFO_NAME(scatter),    // scatter[1].odd
+    RS_SUBGROUP_SIZE_CREATE_INFO_NAME(scatter),    // scatter[2].even
+    RS_SUBGROUP_SIZE_CREATE_INFO_NAME(scatter),    // scatter[2].odd
   };
 
   //
@@ -409,6 +419,8 @@ radix_sort_vk_create(VkDevice                           _device,
     RS_COMPUTE_PIPELINE_CREATE_INFO_DECL(5),  // scatter[0].odd
     RS_COMPUTE_PIPELINE_CREATE_INFO_DECL(6),  // scatter[1].even
     RS_COMPUTE_PIPELINE_CREATE_INFO_DECL(7),  // scatter[1].odd
+    RS_COMPUTE_PIPELINE_CREATE_INFO_DECL(8),  // scatter[2].even
+    RS_COMPUTE_PIPELINE_CREATE_INFO_DECL(9),  // scatter[2].odd
   };
 
   //

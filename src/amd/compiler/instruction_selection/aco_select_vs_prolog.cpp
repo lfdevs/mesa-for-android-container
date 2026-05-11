@@ -339,10 +339,18 @@ load_unaligned_vs_attrib(Builder& bld, PhysReg dst, Operand desc, Operand index,
 }
 
 bool
-is_last_attribute_large(const struct aco_vs_prolog_info* pinfo)
+is_last_attribute_large(const struct aco_vs_prolog_info* pinfo, unsigned slots = 2)
 {
+   /* If the vertex shader consumes more than two channels of a large attribute,
+    * the attribute counts as two slots in num_attributes, even though
+    * misaligned_mask marks only the lower slot. Otherwise, it counts as
+    * a single slot.
+    */
+   if (pinfo->num_attributes < slots)
+      return false;
+
    const struct ac_vtx_format_info* vtx_info_table = ac_get_vtx_format_info_table(GFX8, true);
-   unsigned last_attribute = pinfo->num_attributes - 1;
+   unsigned last_attribute = pinfo->num_attributes - slots;
 
    if ((pinfo->misaligned_mask & (1u << last_attribute))) {
       const struct ac_vtx_format_info* vtx_info = &vtx_info_table[pinfo->formats[last_attribute]];
@@ -406,12 +414,14 @@ select_vs_prolog(Program* program, const struct aco_vs_prolog_info* pinfo, ac_sh
    bool needs_tmp_vgpr1 =
       has_nontrivial_divisors && (program->gfx_level <= GFX8 || program->gfx_level >= GFX11);
 
-   int vgpr_offset = pinfo->misaligned_mask & (1u << (pinfo->num_attributes - 1)) ? 0 : -4;
    const bool is_last_attr_large = is_last_attribute_large(pinfo);
+   const bool is_last_attr_large_mismatch = is_last_attribute_large(pinfo, 1);
+   int vgpr_offset =
+      pinfo->misaligned_mask & (1u << (pinfo->num_attributes - 1)) || is_last_attr_large ? 0 : -4;
 
    unsigned num_vgprs = args->num_vgprs_used;
    PhysReg attributes_start =
-      get_next_vgpr(pinfo->num_attributes * 4 + (is_last_attr_large ? 4 : 0), &num_vgprs);
+      get_next_vgpr(pinfo->num_attributes * 4 + (is_last_attr_large_mismatch ? 4 : 0), &num_vgprs);
    PhysReg vertex_index, instance_index, start_instance_vgpr, nontrivial_tmp_vgpr0,
       nontrivial_tmp_vgpr1;
    if (needs_vertex_index)
@@ -645,7 +655,7 @@ select_vs_prolog(Program* program, const struct aco_vs_prolog_info* pinfo, ac_sh
     * them and they might be overwritten. This isn't the most optimal solution
     * but 64-bit vertex attributes are rarely used.
     */
-   if (is_last_attr_large)
+   if (is_last_attr_large_mismatch)
       wait_for_vmem_loads(bld);
 
    bld.sop1(aco_opcode::s_setpc_b64, continue_pc);

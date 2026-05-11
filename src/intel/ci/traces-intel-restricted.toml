@@ -1,0 +1,98 @@
+[traces_db]
+download_url = "https://s3.freedesktop.org/mesa-tracie-private/"
+
+[[traces]]
+path = "angle/angle_trace_tests/among_us"
+[traces.devices]
+anv-adl = { checksum = "54494f980da7e7af996f48aca9a2b74946ce3248ae4d05578190b450520bd19e" }
+
+[[traces]]
+path = "angle/angle_trace_tests/asphalt_9"
+[traces.devices]
+anv-adl = { checksum = "726844c6243ff9f2782ffd1e0e29f636239c9c58885336d08b86a55562a1a73d" }
+
+[[traces]]
+path = "angle/angle_trace_tests/brawl_starts"
+[traces.devices]
+anv-adl = { checksum = "3845dd1a5ca119c2ca13d918023201d462b9d6969a61c7114bdef65869445d49" }
+
+[[traces]]
+path = "angle/angle_trace_tests/candy_crush_soda_saga"
+[traces.devices]
+anv-adl = { checksum = "57450987a3587607ec5813fc13b6f0a990cceab28e676d027b76af11279e891b" }
+
+[[traces]]
+path = "angle/angle_trace_tests/free_fire"
+[traces.devices]
+anv-adl = { checksum = "a55f7e1bcf8004fadbe722dfd86c09bc026f7cf414efd57d13b973344df9175b" }
+
+[[traces]]
+path = "angle/angle_trace_tests/google_maps"
+[traces.devices]
+anv-adl = { checksum = "f0c803f23cb4a40b7bc78145a309772baa32c147acd46162ce39b5b22b6a0b4f" }
+
+[[traces]]
+path = "angle/angle_trace_tests/minetest"
+[traces.devices]
+anv-adl = { checksum = "63bcea065b22589bf4f0cf26a6b5f174d8e1d48819214dc32eb19258e7a3e22f" }
+
+[[traces]]
+path = "angle/angle_trace_tests/mobile_legends"
+[traces.devices]
+anv-adl = { checksum = "c5538bd3b68a8048c06ee925ac723e1bc24543960105a92997a85754dc7f145e" }
+
+[[traces]]
+path = "angle/angle_trace_tests/pubg_mobile_battle_royale"
+[traces.devices]
+anv-adl = { checksum = "baa2fa1d2f5b7ab2606a48ee6a599e8dbabb526f6466590f2b58629cfcb9f680" }
+
+[[traces]]
+path = "angle/angle_trace_tests/temple_run_300"
+[traces.devices]
+anv-adl = { checksum = "843e12d5a56ffa3d37682d69054476665859e4af896129d9ac54da00a4506319" }
+
+[[traces]]
+path = "steam-d3d9/deadspace3_unknown_dx9_unknown_unknown_none.trace"
+[traces.devices]
+anv-adl = { checksum = "8a7f5047a8c2587da500a97ba28074c34f555e9d2d796cb55879b8b366a6942b" }
+
+[[traces]]
+path = "steam-d3d9/drakensang_unknown_dx9_unknown_unknown_none.trace"
+[traces.devices]
+# Uses about 1GB on our device with 3GB available.
+anv-adl = { checksum = "1e5c0225c36659ad9515ddb5eabb0f8e26846cc8e89649405163576c7ae7d195", singlethread = true }
+
+[[traces]]
+path = "steam-d3d9/FalloutNewVegas_unknown_dx9_YesMan_ultra_1080p.trace"
+[traces.devices]
+anv-adl = { checksum = "5a408c19dbcf30cf3344ac93d88b0a2804f0f15104f2a4423de1f66ca2c8b259" }
+
+# steam-d3d9/FarCry2_unknown_dx9_unknown_unknown_none.trace: Had a crash flake.
+
+[[traces]]
+path = "steam-d3d9/KbWoTn_unknown_dx9_unknown_unknown_none.trace"
+[traces.devices]
+# Uses about 1.5GB on our device with 3GB available.
+anv-adl = { checksum = "99849e5cfc168931ff56b8cb9f915b2d463ccb56ba7f4f94d12503bd70594c93", singlethread = true }
+
+[[traces]]
+path = "steam-d3d9/Oblivion_unknown_dx9_unknown_unknown_none.trace"
+[traces.devices]
+anv-adl = { checksum = "2a50d28ae44c750354bdffcfb04d46adfa21434a1b1f99b4ff6ad6115e02c7dd" }
+
+[[traces]]
+path = "steam-d3d9/SpiderMan_unknown_dx9_unknown_unknown_none.trace"
+[traces.devices]
+anv-adl = { checksum = "082ac3af6a833f52ab0826d03a68d1b9c42afa21aaf928d5e3d5c78638f2684e" }
+
+[[traces]]
+path = "steam-d3d9/psychonauts_unknown_dx9_unknown_unknown_none.trace"
+nonloopable = true
+[traces.devices]
+anv-adl = { checksum = "06fac809f402e90d93809bc9cba4b8112091bfbc4462bc8422a58376a698ef1c" }
+
+[[traces]]
+path = "steam-d3d9/TFT_unknown_dx9_unknown_unknown_none.trace"
+[traces.devices]
+# Uses about 1GB on our device with 3GB available.
+anv-adl = { checksum = "d6e11e7b3c3b4af355a565e6cdbc3c32bead81100660a5f3e90ebe04536f6fc3", singlethread = true  }

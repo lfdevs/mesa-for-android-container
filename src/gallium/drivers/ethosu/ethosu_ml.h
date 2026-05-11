@@ -16,6 +16,8 @@
 #define SHRAM_RESERVED_END_BANKS    2
 #define SHRAM_TOTAL_BANKS           SHRAM_BANKS
 #define SHRAM_BANK_SIZE_BYTES       1024
+#define LUT8_SIZE                   256
+#define SHRAM_LUT_BASE(lut)         (46 * SHRAM_BANK_SIZE_BYTES + (lut) * LUT8_SIZE)
 #define ACC_BITS                    32 /* Use for now always 32-bit accumulators */
 #define IFM_GRANULE                 8
 #define ACC_GRANULE                 16
@@ -34,12 +36,39 @@ extern struct ethosu_block SUB_KERNEL_MAX;
 #define COEFS_REGION   0
 #define IO_REGION      1
 #define SCRATCH_REGION 2
+#define LUT_REGION     0x103     // Internal SHRAM
 
 enum ethosu_operation_type {
+   ETHOSU_OPERATION_TYPE_NONE,
    ETHOSU_OPERATION_TYPE_CONVOLUTION,
    ETHOSU_OPERATION_TYPE_POOLING,
    ETHOSU_OPERATION_TYPE_ELTWISE,
    ETHOSU_OPERATION_TYPE_DMA,
+};
+
+enum ethosu_eltwise_type {
+   ETHOSU_ELTWISE_TYPE_MUL,
+   ETHOSU_ELTWISE_TYPE_ADD,
+   ETHOSU_ELTWISE_TYPE_SUB,
+   ETHOSU_ELTWISE_TYPE_MIN,
+   ETHOSU_ELTWISE_TYPE_MAX,
+   ETHOSU_ELTWISE_TYPE_LRELU,
+   ETHOSU_ELTWISE_TYPE_ABS,
+   /* U85 only */
+   ETHOSU_ELTWISE_TYPE_CLZ,
+   ETHOSU_ELTWISE_TYPE_SHR,
+   ETHOSU_ELTWISE_TYPE_SHL,
+   ETHOSU_ELTWISE_TYPE_LSR,
+   ETHOSU_ELTWISE_TYPE_DIV,
+   ETHOSU_ELTWISE_TYPE_CMP_EQ = 0x10,
+   ETHOSU_ELTWISE_TYPE_CMP_NE,
+   ETHOSU_ELTWISE_TYPE_CMP_GE,
+   ETHOSU_ELTWISE_TYPE_CMP_GT,
+   ETHOSU_ELTWISE_TYPE_CMP_AND = 0x21,
+   ETHOSU_ELTWISE_TYPE_CMP_OR,
+   ETHOSU_ELTWISE_TYPE_CMP_XOR,
+   ETHOSU_ELTWISE_TYPE_CMP_NOT,
+   ETHOSU_ELTWISE_TYPE_CMP_AND_NOT = 0x2A,
 };
 
 struct ethosu_tile_box {
@@ -66,15 +95,25 @@ enum ethosu_upscale_mode {
    ETHOSU_UPSCALE_ZEROS = 2,
 };
 
+struct ethosu_stride {
+   unsigned x;
+   unsigned y;
+   unsigned c;
+};
+
+struct ethosu_tensor;
+
 struct ethosu_feature_map {
-   unsigned tensor_idx;
+   struct ethosu_tensor *tensor;
    struct ethosu_block shape;
+   struct ethosu_stride stride;
    bool is_signed;
    uint8_t precision;
    struct ethosu_tile_box tiles;
    unsigned zero_point;
    float scale;
    uint16_t scalar;
+   uint8_t region;
 };
 
 struct ethosu_kernel {
@@ -141,6 +180,8 @@ enum ethosu_pooling_type {
    ETHOSU_POOLING_TYPE_ARGMAX_Y,
 };
 
+#define ETHOSU_POOLING_ACTIVATION_LUT(n)  (0x10 | (n))
+
 #define MAX_MEMORY_ACCESSES 5 /* IFM, IFM2, Scales, Weights, LUT*/
 
 struct ethosu_operation {
@@ -159,9 +200,13 @@ struct ethosu_operation {
 
       struct {
          enum ethosu_pooling_type type;
+         bool nop;
+         uint8_t activation;
+         struct ethosu_address_range lut;
       } pooling;
 
       struct {
+         enum ethosu_eltwise_type type;
          uint16_t activation_min;
          unsigned lut_bytes;
          bool ifm_reversed;
@@ -169,7 +214,9 @@ struct ethosu_operation {
 
       struct {
          unsigned address;
+         unsigned dst_address;
          long size;
+         unsigned dst_region;
       } dma;
    };
 
@@ -269,6 +316,6 @@ int ethosu_round_up_to_multiple(int a, int b);
 
 int ethosu_round_up_divide(int a, int b);
 
-int ethosu_quantize_scale(double scale, uint32_t *shift);
+int ethosu_quantize_scale(double scale, int32_t *shift, bool reduced);
 
 #endif /* ETHOSU_ML_H */

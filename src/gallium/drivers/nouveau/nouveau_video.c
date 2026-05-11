@@ -832,25 +832,11 @@ nouveau_screen_get_video_param(struct pipe_screen *pscreen,
    case PIPE_VIDEO_CAP_SUPPORTED:
       return entrypoint >= PIPE_VIDEO_ENTRYPOINT_IDCT &&
          u_reduce_video_profile(profile) == PIPE_VIDEO_FORMAT_MPEG12;
-   case PIPE_VIDEO_CAP_NPOT_TEXTURES:
-      return 1;
    case PIPE_VIDEO_CAP_MAX_WIDTH:
    case PIPE_VIDEO_CAP_MAX_HEIGHT:
       return vl_video_buffer_max_size(pscreen);
-   case PIPE_VIDEO_CAP_PREFERRED_FORMAT:
-      return PIPE_FORMAT_NV12;
    case PIPE_VIDEO_CAP_SUPPORTS_PROGRESSIVE:
       return true;
-   case PIPE_VIDEO_CAP_MAX_LEVEL:
-      switch (profile) {
-      case PIPE_VIDEO_PROFILE_MPEG1:
-         return 0;
-      case PIPE_VIDEO_PROFILE_MPEG2_SIMPLE:
-      case PIPE_VIDEO_PROFILE_MPEG2_MAIN:
-         return 3;
-      default:
-         return 0;
-      }
    default:
       debug_printf("unknown video param: %d\n", param);
       return 0;

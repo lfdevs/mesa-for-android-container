@@ -14,7 +14,6 @@
 
 #include <assert.h>
 #include <stdint.h>
-#include <string.h>
 
 #include "radv_amdgpu_winsys.h"
 #include "radv_radeon_winsys.h"

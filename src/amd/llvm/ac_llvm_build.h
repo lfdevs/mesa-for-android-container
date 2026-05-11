@@ -7,7 +7,6 @@
 #define AC_LLVM_BUILD_H
 
 #include "ac_llvm_util.h"
-#include "ac_shader_abi.h"
 #include "ac_shader_args.h"
 #include "ac_shader_util.h"
 #include "amd_family.h"

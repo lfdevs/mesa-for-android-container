@@ -4106,11 +4106,7 @@ d3d12_video_encoder_encode_bitstream_impl(struct pipe_video_codec *codec,
          pD3D12Enc->m_spEncodedFrameMetadata[current_metadata_slot].pspSubregionOffsets.resize(num_slice_objects, {});
          pD3D12Enc->m_spEncodedFrameMetadata[current_metadata_slot].pspSubregionFences.resize(num_slice_objects, NULL);
          pD3D12Enc->m_spEncodedFrameMetadata[current_metadata_slot].pSubregionPipeFences.resize(num_slice_objects);
-         pD3D12Enc->m_spEncodedFrameMetadata[current_metadata_slot].ppSubregionFenceValues.resize(num_slice_objects);
-         // m_SliceFenceValue is incremented per slice object and shared across all slices of the frame so the app can
-         // wait on a single fence but individual per frame, slice values
-         for (uint32_t i = 0; i < num_slice_objects; i++)
-            pD3D12Enc->m_spEncodedFrameMetadata[current_metadata_slot].ppSubregionFenceValues[i] = pD3D12Enc->m_SliceFenceValue++;
+         pD3D12Enc->m_spEncodedFrameMetadata[current_metadata_slot].ppSubregionFenceValues.resize(num_slice_objects, pD3D12Enc->m_fenceValue);
 
          pD3D12Enc->m_spEncodedFrameMetadata[current_metadata_slot].ppSubregionSizes.resize(num_slice_objects, NULL);
          pD3D12Enc->m_spEncodedFrameMetadata[current_metadata_slot].ppSubregionOffsets.resize(num_slice_objects, NULL);
@@ -4152,11 +4148,41 @@ d3d12_video_encoder_encode_bitstream_impl(struct pipe_video_codec *codec,
 
             pD3D12Enc->m_spEncodedFrameMetadata[current_metadata_slot].ppSubregionSizes[i] = pD3D12Enc->m_spEncodedFrameMetadata[current_metadata_slot].pspSubregionSizes[i].Get();
 
-            // Share a single ID3D12Fence object across all slices of this frame (per metadata slot)
-            if (pD3D12Enc->m_spEncodedFrameMetadata[current_metadata_slot].pspSubregionFences[0] == nullptr)
-               hr = pD3D12Enc->m_pD3D12Screen->dev->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&pD3D12Enc->m_spEncodedFrameMetadata[current_metadata_slot].pspSubregionFences[0]));
-            pD3D12Enc->m_spEncodedFrameMetadata[current_metadata_slot].pspSubregionFences[i] = pD3D12Enc->m_spEncodedFrameMetadata[current_metadata_slot].pspSubregionFences[0];
-            pD3D12Enc->m_spEncodedFrameMetadata[current_metadata_slot].ppSubregionFences[i] = pD3D12Enc->m_spEncodedFrameMetadata[current_metadata_slot].pspSubregionFences[0].Get();
+            if (pD3D12Enc->m_spEncodedFrameMetadata[current_metadata_slot].pspSubregionFences[i] == nullptr)
+            {
+               hr = pD3D12Enc->m_pD3D12Screen->dev->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&pD3D12Enc->m_spEncodedFrameMetadata[current_metadata_slot].pspSubregionFences[i]));
+               if (FAILED(hr)) {
+                  debug_printf("CreateFence failed with HR %x\n", (unsigned)hr);
+                  pD3D12Enc->m_inflightResourcesPool[d3d12_video_encoder_pool_current_index(pD3D12Enc)].encode_result = PIPE_VIDEO_FEEDBACK_METADATA_ENCODE_FLAG_FAILED;
+                  pD3D12Enc->m_spEncodedFrameMetadata[d3d12_video_encoder_metadata_current_index(pD3D12Enc)].encode_result = PIPE_VIDEO_FEEDBACK_METADATA_ENCODE_FLAG_FAILED;
+                  assert(false);
+                  return;
+               }
+            }
+            else if (pD3D12Enc->m_spEncodedFrameMetadata[current_metadata_slot].ppSubregionFenceValues[i] > 0)
+            {
+               // The ID3D12Fence objects in pspSubregionFences are reused across frames, but the
+               // d3d12_fence wrappers (pSubregionPipeFences) are recreated each frame via
+               // d3d12_create_fence_raw which calls SetEventOnCompletion. When a fence was never
+               // GPU-signaled (e.g. AUTO slice mode in prev frame produced fewer slices than allocated),
+               // the previous SetEventOnCompletion registration remains orphaned inside the ID3D12Fence.
+               // CloseHandle on the event handle (in destroy_fence) does NOT unregister it.
+               // CPU-signal to (new_value - 1) to flush any stale registration without
+               // satisfying the upcoming new one.
+               // At this point, the previous frame is guaranteed to be completed since when
+               // reusing current_metadata_slot, we only pick slots for frames that are already
+               // fully completed signaled (i.e. completed) as per the logic in d3d12_video_encoder_begin_frame.
+               hr = pD3D12Enc->m_spEncodedFrameMetadata[current_metadata_slot].pspSubregionFences[i]->Signal(
+                  pD3D12Enc->m_spEncodedFrameMetadata[current_metadata_slot].ppSubregionFenceValues[i] - 1);
+               if (FAILED(hr)) {
+                  debug_printf("ID3D12Fence::Signal failed with HR %x\n", (unsigned)hr);
+                  pD3D12Enc->m_inflightResourcesPool[d3d12_video_encoder_pool_current_index(pD3D12Enc)].encode_result = PIPE_VIDEO_FEEDBACK_METADATA_ENCODE_FLAG_FAILED;
+                  pD3D12Enc->m_spEncodedFrameMetadata[d3d12_video_encoder_metadata_current_index(pD3D12Enc)].encode_result = PIPE_VIDEO_FEEDBACK_METADATA_ENCODE_FLAG_FAILED;
+                  assert(false);
+                  return;
+               }
+            }
+            pD3D12Enc->m_spEncodedFrameMetadata[current_metadata_slot].ppSubregionFences[i] = pD3D12Enc->m_spEncodedFrameMetadata[current_metadata_slot].pspSubregionFences[i].Get();
 
             pD3D12Enc->m_spEncodedFrameMetadata[current_metadata_slot].pSubregionPipeFences[i].reset(
                d3d12_create_fence_raw(pD3D12Enc->m_spEncodedFrameMetadata[current_metadata_slot].pspSubregionFences[i].Get(),

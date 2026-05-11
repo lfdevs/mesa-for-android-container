@@ -231,7 +231,8 @@ mesh_convert_attrs_prim_to_vert(struct nir_shader *nir,
    nir_def *zero = nir_imm_int(b, 0);
 
    nir_def *provoking_vertex =
-      params->load_provoking_vertex(b, params->load_provoking_vertex_data);
+      params->wa_18019110168_load_provoking_vertex(
+         b, params->wa_18019110168_data);
    nir_def *local_invocation_index = nir_load_local_invocation_index(b);
 
    nir_def *cmp = nir_ieq(b, local_invocation_index, zero);
@@ -500,7 +501,8 @@ brw_nir_frag_convert_attrs_prim_to_vert(struct nir_shader *nir,
    nir_function_impl *impl = nir_shader_get_entrypoint(nir);
    nir_builder _b = nir_builder_at(nir_before_impl(impl)), *b = &_b;
 
-   uint64_t remapped_inputs = 0;
+   uint64_t old_per_primitive_inputs = 0;
+   uint64_t new_per_vertex_inputs = 0;
    nir_foreach_shader_in_variable_safe(var, nir) {
       gl_varying_slot location = var->data.location;
       if (location == VARYING_SLOT_PRIMITIVE_COUNT ||
@@ -524,10 +526,13 @@ brw_nir_frag_convert_attrs_prim_to_vert(struct nir_shader *nir,
       new_var->data.interpolation = INTERP_MODE_FLAT;
 
       new_derefs[location] = nir_build_deref_var(b, new_var);
+
+      old_per_primitive_inputs |= BITFIELD64_BIT(location);
+      new_per_vertex_inputs |= BITFIELD64_BIT(new_location);
    }
 
-   nir->info.inputs_read |= remapped_inputs;
-   nir->info.per_primitive_inputs &= ~remapped_inputs;
+   nir->info.inputs_read |= new_per_vertex_inputs;
+   nir->info.per_primitive_inputs &= ~old_per_primitive_inputs;
 
    NIR_PASS(_, nir, frag_update_derefs, new_derefs);
 
@@ -571,7 +576,8 @@ brw_nir_frag_convert_attrs_prim_to_vert_indirect(struct nir_shader *nir,
       nir_def *remap_table_addr =
          nir_pack_64_2x32_split(
             b,
-            nir_load_per_primitive_remap_intel(b),
+            params->wa_18019110168_load_per_primitive_remap_table_offset(
+               b, params->wa_18019110168_data),
             nir_load_reloc_const_intel(
                b, BRW_SHADER_RELOC_INSTRUCTION_BASE_ADDR_HIGH));
       u_foreach_bit64(location, per_primitive_inputs) {

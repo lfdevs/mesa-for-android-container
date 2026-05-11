@@ -6,7 +6,6 @@
 
 #include "nir/nir.h"
 #include "nir/nir_builder.h"
-#include "radv_constants.h"
 #include "radv_nir.h"
 #include "radv_shader.h"
 

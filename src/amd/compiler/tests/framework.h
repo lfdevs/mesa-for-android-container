@@ -5,12 +5,10 @@
  */
 #ifndef ACO_TEST_COMMON_H
 #define ACO_TEST_COMMON_H
-#include "aco_builder.h"
-#include "aco_ir.h"
 
+#include "aco_builder.h"
 #include "util/macros.h"
 
-#include "ac_shader_util.h"
 #include "amd_family.h"
 #include <map>
 #include <stdio.h>

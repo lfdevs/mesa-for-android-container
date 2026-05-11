@@ -144,7 +144,7 @@ is_compatible_condition(const nir_alu_instr *instr)
       return true;
 
    nir_foreach_use(src, &instr->def) {
-      const nir_instr *const user_instr = nir_src_parent_instr(src);
+      const nir_instr *const user_instr = nir_src_use_instr(src);
 
       if (user_instr->type != nir_instr_type_alu)
          continue;

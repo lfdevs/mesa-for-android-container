@@ -1,6 +1,3 @@
 x86_64 CtsGraphicsTestCases
 x86_64 CtsNativeHardwareTestCases
 x86_64 CtsSkQPTestCases
-
-x86_64 CtsDeqpTestCases dEQP-VK.wsi.android.*
-x86_64 CtsDeqpTestCases dEQP-VK.api.external.memory.android_hardware_buffer.*

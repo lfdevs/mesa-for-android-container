@@ -36,6 +36,13 @@ static void convert_3dlut_to_tetrahedral_params(
     int num_values;
 
     switch (params->lut_dim) {
+    case LUT_DIM_33:
+        lut0       = params->tetrahedral_33.lut0;
+        lut1       = params->tetrahedral_33.lut1;
+        lut2       = params->tetrahedral_33.lut2;
+        lut3       = params->tetrahedral_33.lut3;
+        num_values = LUT3D_SIZE_33x33x33;
+        break;
     case LUT_DIM_9:
         lut0       = params->tetrahedral_9.lut0;
         lut1       = params->tetrahedral_9.lut1;
@@ -101,6 +108,10 @@ bool vpe_convert_to_tetrahedral(
     case 17:
         params->lut_3d.lut_dim = LUT_DIM_17;
         effective_lut_dim = 17;
+        break;
+    case 33:
+        params->lut_3d.lut_dim = LUT_DIM_33;
+        effective_lut_dim      = 33;
         break;
     default:
         params->lut_3d.lut_dim = LUT_DIM_INVALID;

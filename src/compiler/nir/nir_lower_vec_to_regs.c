@@ -81,7 +81,7 @@ try_coalesce(nir_builder *b, nir_def *reg, nir_alu_instr *vec,
       if (nir_src_is_if(src))
          return 0;
 
-      if (nir_src_parent_instr(src) != &vec->instr)
+      if (nir_src_use_instr(src) != &vec->instr)
          return 0;
    }
 

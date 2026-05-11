@@ -1,0 +1,59 @@
+From eec94e8888578c4f28607c2d5ef4e2f41480b802 Mon Sep 17 00:00:00 2001
+From: Gurchetan Singh <gurchetan.singh.foss@gmail.com>
+Date: Thu, 30 Jan 2025 13:38:39 -0800
+Subject: [PATCH 1/4] rustix: add ioctl wrappers
+
+These ioctl wrappers are used by rustix users.  For example:
+
+https://github.com/Smithay/drm-rs/blob/develop/drm-ffi/src/ioctl.rs#L6
+
+Roughly, they match the ones provided by nix.  I'm upstreaming the
+portion I have personally tested.
+---
+ src/ioctl/mod.rs | 30 ++++++++++++++++++++++++++++++
+ 1 file changed, 30 insertions(+)
+
+diff --git a/src/ioctl/mod.rs b/src/ioctl/mod.rs
+index 70c69053..b6d8fe42 100644
+--- a/src/ioctl/mod.rs
++++ b/src/ioctl/mod.rs
+@@ -344,6 +344,36 @@ type _Opcode = c::c_uint;
+ #[cfg(windows)]
+ type _Opcode = i32;
+ 
++/// Convenience macro for Rustix's ioctl write
++#[macro_export]
++macro_rules! ioctl_write_ptr {
++    ($name:ident, $ioty:expr, $nr:expr, $ty:ty) => {
++        pub unsafe fn $name(fd: std::os::fd::BorrowedFd, data: &$ty) -> std::io::Result<()> {
++            const OPCODE: $crate::ioctl::Opcode =
++                $crate::ioctl::opcode::write::<$ty>($ioty as u8, $nr as u8);
++            Ok(rustix::ioctl::ioctl(
++                fd,
++                $crate::ioctl::Setter::<OPCODE, $ty>::new(*data),
++            )?)
++        }
++    };
++}
++
++/// Convenience macro for Rustix's ioctl read
++#[macro_export]
++macro_rules! ioctl_readwrite {
++    ($name:ident, $ioty:expr, $nr:expr, $ty:ty) => {
++        pub unsafe fn $name(fd: std::os::fd::BorrowedFd, data: &mut $ty) -> std::io::Result<()> {
++            const OPCODE: $crate::ioctl::Opcode =
++                $crate::ioctl::opcode::read_write::<$ty>($ioty as u8, $nr as u8);
++            Ok($crate::ioctl::ioctl(
++                fd,
++                $crate::ioctl::Updater::<OPCODE, $ty>::new(data),
++            )?)
++        }
++    };
++}
++
+ #[cfg(linux_raw_dep)]
+ #[cfg(not(any(target_arch = "sparc", target_arch = "sparc64")))]
+ #[cfg(test)]
+-- 
+2.54.0.545.g6539524ca2-goog
+

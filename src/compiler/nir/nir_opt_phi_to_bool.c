@@ -188,8 +188,8 @@ phi_to_bool(nir_builder *b, nir_phi_instr *phi, void *unused)
       UNREACHABLE("invalid bool_type");
 
    nir_foreach_use_safe(src, &phi->def) {
-      if (nir_src_parent_instr(src) == &phi->instr ||
-          nir_src_parent_instr(src) == nir_def_instr(res))
+      if (nir_src_use_instr(src) == &phi->instr ||
+          nir_src_use_instr(src) == nir_def_instr(res))
          continue;
       nir_src_rewrite(src, res);
    }
@@ -227,7 +227,7 @@ nir_opt_phi_to_bool(nir_shader *shader)
       if (instr->pass_flags != bool_types) {
          instr->pass_flags = bool_types;
          nir_foreach_use(use, nir_instr_def(instr))
-            nir_instr_worklist_push_tail(&worklist, nir_src_parent_instr(use));
+            nir_instr_worklist_push_tail(&worklist, nir_src_use_instr(use));
       }
    }
 

@@ -460,7 +460,7 @@ etna_blit_clear_zs_rs(struct pipe_context *pctx, struct pipe_surface *dst,
       /* If the level has valid TS state we need to flush it, as the regular
        * clear will not update the state and we must therefore invalidate it. */
       etna_copy_resource(pctx, &dst_res->base, &dst_res->base,
-                         dst->level, dst->level);
+                         dst->level, dst->level, false);
 
       etna_rs_gen_clear_cmd(ctx, dst, dst_res, new_clear_value, new_clear_bits, &rs_state);
 
@@ -813,7 +813,8 @@ etna_try_rs_blit(struct pipe_context *pctx,
    /* Flush destination, as the blit will invalidate any pending TS changes. */
    if (dst != src && etna_resource_level_needs_flush(dst_lev))
       etna_copy_resource(pctx, &dst->base, &dst->base,
-                         blit_info->dst.level, blit_info->dst.level);
+                         blit_info->dst.level, blit_info->dst.level,
+                         false);
 
    /* Always flush color and depth cache together before resolving. This makes
     * sure that all previous cache content written by the PE is flushed out
@@ -883,8 +884,12 @@ etna_try_rs_blit(struct pipe_context *pctx,
       .dest_padded_height = dst_lev->padded_height,
       .downsample_x = downsample_x,
       .downsample_y = downsample_y,
-      .swap_rb = ctx->in_transfer_blit &&
-                 translate_pe_format_rb_swap(blit_info->src.format),
+      /* Swap R<->B when requested by the caller (shared resource flush) or
+       * for transfer blits of RB_SWAP formats on non-shared resources. */
+      .swap_rb = ctx->blit_rb_swap ||
+                 (ctx->in_transfer_blit &&
+                  translate_pe_format_rb_swap(blit_info->src.format) &&
+                  !src->shared && !dst->shared),
       .dither = {0xffffffff, 0xffffffff}, // XXX dither when going from 24 to 16 bit?
       .clear_mode = VIVS_RS_CLEAR_CONTROL_MODE_DISABLED,
       .width = width,

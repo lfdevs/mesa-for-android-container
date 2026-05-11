@@ -222,3 +222,7 @@ glx@glx-visuals-depth
 spec@!opengl 1.1@longprim
 spec@!opengl 1.1@teximage-colors gl_alpha12
 spec@ext_framebuffer_multisample@accuracy all_samples color small depthstencil
+
+# Flaking since May 4, 2026.
+# https://gitlab.freedesktop.org/mesa/mesa/-/work_items/15383#note_3456035
+KHR-GLES31.core.draw_indirect.advanced-twoPass-transformFeedback-arrays

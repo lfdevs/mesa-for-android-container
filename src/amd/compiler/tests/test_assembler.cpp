@@ -6,7 +6,7 @@
 #include <llvm/Config/llvm-config.h>
 
 #include "helpers.h"
-#include "sid.h"
+#include "amdgfxregs.h"
 
 using namespace aco;
 
@@ -1609,8 +1609,8 @@ BEGIN_TEST(assembler.gfx11_7)
    bld.vop3p(aco_opcode::v_pk_minimum_f16, dst_v0, op_v1, op_v2, 0x0, 0x3);
    bld.vop3p(aco_opcode::v_pk_maximum_f16, dst_v0, op_v1, op_v2, 0x0, 0x3);
 
-   //! v_pk_min_num_f16 v0, v1, v2 ; cc120000 18020501
-   //! v_pk_max_num_f16 v0, v1, v2 ; cc110000 18020501
+   //! v_pk_min_num_f16 v0, v1, v2 ; cc110000 18020501
+   //! v_pk_max_num_f16 v0, v1, v2 ; cc120000 18020501
    bld.vop3p(aco_opcode::v_pk_min_f16, dst_v0, op_v1, op_v2, 0x0, 0x3);
    bld.vop3p(aco_opcode::v_pk_max_f16, dst_v0, op_v1, op_v2, 0x0, 0x3);
 

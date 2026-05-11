@@ -7,7 +7,7 @@
 #include "nir/radv_meta_nir.h"
 #include "ac_surface.h"
 #include "radv_meta.h"
-#include "vk_format.h"
+#include "vk_shader_module.h"
 
 static VkResult
 get_pipeline(struct radv_device *device, struct radv_image *image, VkPipeline *pipeline_out,

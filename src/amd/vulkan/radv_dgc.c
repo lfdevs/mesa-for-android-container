@@ -8,9 +8,9 @@
 #include "meta/radv_meta.h"
 #include "nir/radv_meta_nir.h"
 #include "radv_cs.h"
-#include "radv_debug.h"
 #include "radv_entrypoints.h"
 #include "radv_pipeline_rt.h"
+#include "radv_shader_object.h"
 
 #include "ac_rgp.h"
 
@@ -260,6 +260,7 @@ radv_get_sequence_size_compute(const struct radv_indirect_command_layout *layout
                                uint32_t *upload_size)
 {
    const struct radv_device *device = container_of(layout->vk.base.device, struct radv_device, vk);
+   const struct radv_physical_device *pdev = radv_device_physical(device);
 
    const VkGeneratedCommandsPipelineInfoEXT *pipeline_info =
       vk_find_struct_const(pNext, GENERATED_COMMANDS_PIPELINE_INFO_EXT);
@@ -291,7 +292,7 @@ radv_get_sequence_size_compute(const struct radv_indirect_command_layout *layout
    }
 
    if (uses_grid_base_sgpr) {
-      if (device->load_grid_size_from_user_sgpr) {
+      if (pdev->load_grid_size_from_user_sgpr) {
          /* PKT3_SET_SH_REG for immediate values */
          *cmd_size += 5 * 4;
       } else {
@@ -384,7 +385,7 @@ radv_get_sequence_size_graphics(const struct radv_indirect_command_layout *layou
                *ace_cmd_size += 6 * 4;
             } else {
                /* userdata writes + instance count + non-indexed draw */
-               *cmd_size += (6 + 2 + (pdev->info.mesh_fast_launch_2 ? 5 : 3)) * 4;
+               *cmd_size += (6 + 2 + (pdev->info.gfx_level >= GFX11 ? 5 : 3)) * 4;
             }
          } else {
             /* userdata writes + instance count + non-indexed draw */
@@ -409,6 +410,7 @@ radv_get_sequence_size_rt(const struct radv_indirect_command_layout *layout, con
                           uint32_t *upload_size)
 {
    const struct radv_device *device = container_of(layout->vk.base.device, struct radv_device, vk);
+   const struct radv_physical_device *pdev = radv_device_physical(device);
 
    const VkGeneratedCommandsPipelineInfoEXT *pipeline_info =
       vk_find_struct_const(pNext, GENERATED_COMMANDS_PIPELINE_INFO_EXT);
@@ -421,7 +423,7 @@ radv_get_sequence_size_rt(const struct radv_indirect_command_layout *layout, con
 
    const struct radv_userdata_info *cs_grid_size_loc = radv_get_user_sgpr_info(rt_prolog, AC_UD_CS_GRID_SIZE);
    if (cs_grid_size_loc->sgpr_idx != -1) {
-      if (device->load_grid_size_from_user_sgpr) {
+      if (pdev->load_grid_size_from_user_sgpr) {
          /* PKT3_LOAD_SH_REG_INDEX */
          *cmd_size += 5 * 4;
       } else {
@@ -2159,13 +2161,14 @@ dgc_emit_dispatch_direct(struct dgc_cmdbuf *cs, nir_def *wg_x, nir_def *wg_y, ni
                          bool is_rt)
 {
    const struct radv_device *device = cs->dev;
+   const struct radv_physical_device *pdev = radv_device_physical(device);
    nir_builder *b = cs->b;
 
    nir_push_if(b, nir_iand(b, nir_ine_imm(b, wg_x, 0), nir_iand(b, nir_ine_imm(b, wg_y, 0), nir_ine_imm(b, wg_z, 0))));
    {
       nir_push_if(b, nir_ine_imm(b, grid_sgpr, 0));
       {
-         if (device->load_grid_size_from_user_sgpr) {
+         if (pdev->load_grid_size_from_user_sgpr) {
             dgc_emit_grid_size_user_sgpr(cs, grid_sgpr, wg_x, wg_y, wg_z);
          } else {
             dgc_emit_grid_size_pointer(cs, grid_sgpr, size_va);
@@ -2272,7 +2275,7 @@ dgc_emit_dispatch_taskmesh_gfx(struct dgc_cmdbuf *cs, nir_def *sequence_id)
    nir_def *ring_entry_reg = load_param16(b, mesh_ring_entry_sgpr);
 
    nir_def *xyz_dim_enable = nir_bcsel(b, has_grid_size, nir_imm_int(b, S_4D1_XYZ_DIM_ENABLE(1)), nir_imm_int(b, 0));
-   nir_def *mode1_enable = nir_imm_int(b, S_4D1_MODE1_ENABLE(!pdev->info.mesh_fast_launch_2));
+   nir_def *mode1_enable = nir_imm_int(b, S_4D1_MODE1_ENABLE((pdev->info.gfx_level < GFX11)));
    nir_def *linear_dispatch_en =
       nir_bcsel(b, has_linear_dispatch_en, nir_imm_int(b, S_4D1_LINEAR_DISPATCH_ENABLE(1)), nir_imm_int(b, 0));
    nir_def *sqtt_enable = nir_imm_int(b, device->sqtt.bo ? S_4D1_THREAD_TRACE_MARKER_ENABLE(1) : 0);
@@ -2323,7 +2326,7 @@ dgc_emit_draw_mesh_tasks_gfx(struct dgc_cmdbuf *cs, nir_def *stream_addr, nir_de
          dgc_emit_userdata_mesh(cs, x, y, z, sequence_id);
          dgc_emit_instance_count(cs, nir_imm_int(b, 1));
 
-         if (pdev->info.mesh_fast_launch_2) {
+         if (pdev->info.gfx_level >= GFX11) {
             dgc_emit_dispatch_mesh_direct(cs, x, y, z);
          } else {
             nir_def *vertex_count = nir_imul(b, x, nir_imul(b, y, z));
@@ -2391,7 +2394,7 @@ dgc_emit_draw_mesh_tasks_with_count_gfx(struct dgc_cmdbuf *cs, nir_def *stream_a
       if (pdev->info.gfx_level >= GFX11) {
          dgc_cs_emit(nir_ior_imm(b,
                                  nir_ior_imm(b, nir_ior(b, draw_index_enable, xyz_dim_enable),
-                                             S_4C2_MODE1_ENABLE(!pdev->info.mesh_fast_launch_2)),
+                                             S_4C2_MODE1_ENABLE((pdev->info.gfx_level < GFX11))),
                                  S_4C2_THREAD_TRACE_MARKER_ENABLE(sqtt_en)));
       } else {
          dgc_cs_emit(nir_ior_imm(b, draw_index_enable, S_4C2_THREAD_TRACE_MARKER_ENABLE(sqtt_en)));
@@ -3074,7 +3077,7 @@ radv_use_dgc_predication(struct radv_cmd_buffer *cmd_buffer, const VkGeneratedCo
     * would be uninitialized).
     */
    return cmd_buffer->qf == RADV_QUEUE_GENERAL && !radv_dgc_get_shader(pipeline_info, eso_info, MESA_SHADER_TASK) &&
-          pGeneratedCommandsInfo->sequenceCountAddress != 0 && !cmd_buffer->state.predicating;
+          pGeneratedCommandsInfo->sequenceCountAddress != 0 && !cmd_buffer->state.cond_render.enabled;
 }
 
 VKAPI_ATTR void VKAPI_CALL
@@ -3085,20 +3088,15 @@ radv_CmdPreprocessGeneratedCommandsEXT(VkCommandBuffer commandBuffer,
    VK_FROM_HANDLE(radv_cmd_buffer, state_cmd_buffer, stateCommandBuffer);
    VK_FROM_HANDLE(radv_cmd_buffer, cmd_buffer, commandBuffer);
    VK_FROM_HANDLE(radv_indirect_command_layout, layout, pGeneratedCommandsInfo->indirectCommandsLayout);
-   const bool execution_is_predicating = state_cmd_buffer->state.predicating;
+   const bool execution_is_predicating = state_cmd_buffer->state.cond_render.enabled;
 
    assert(layout->vk.usage & VK_INDIRECT_COMMANDS_LAYOUT_USAGE_EXPLICIT_PREPROCESS_BIT_EXT);
 
-   /* VK_EXT_conditional_rendering says that copy commands should not be
-    * affected by conditional rendering.
-    */
-   const bool old_predicating = cmd_buffer->state.predicating;
-   cmd_buffer->state.predicating = false;
+   radv_suspend_conditional_rendering(cmd_buffer);
 
    radv_prepare_dgc(cmd_buffer, pGeneratedCommandsInfo, state_cmd_buffer, execution_is_predicating);
 
-   /* Restore conditional rendering. */
-   cmd_buffer->state.predicating = old_predicating;
+   radv_resume_conditional_rendering(cmd_buffer);
 }
 
 static void
@@ -3120,8 +3118,8 @@ radv_prepare_dgc_compute(struct radv_cmd_buffer *cmd_buffer, const VkGeneratedCo
 
    if (cond_render_enabled) {
       params->predicating = true;
-      params->predication_va = state_cmd_buffer->state.user_predication_va;
-      params->predication_type = state_cmd_buffer->state.predication_type;
+      params->predication_va = state_cmd_buffer->state.cond_render.user_va;
+      params->predication_type = state_cmd_buffer->state.cond_render.type;
    }
 
    if (ies) {
@@ -3237,7 +3235,7 @@ radv_prepare_dgc_graphics(struct radv_cmd_buffer *cmd_buffer, const VkGeneratedC
    }
 
    params->vtx_base_sgpr = vtx_base_sgpr;
-   params->max_index_count = state_cmd_buffer->state.max_index_count;
+   params->max_index_count = state_cmd_buffer->state.index_buffer.max_index_count;
    params->max_draw_count = pGeneratedCommandsInfo->maxDrawCount;
    params->dynamic_vs_input =
       (layout->vk.dgc_info & BITFIELD_BIT(MESA_VK_DGC_VB)) && first_shader->info.vs.dynamic_inputs;

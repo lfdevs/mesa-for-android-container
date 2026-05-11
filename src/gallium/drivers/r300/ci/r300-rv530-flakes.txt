@@ -1,2 +1,3 @@
 glx@glx-buffer-age
 glx@glx-multithread-clearbuffer
+glx@glx-visuals-stencil

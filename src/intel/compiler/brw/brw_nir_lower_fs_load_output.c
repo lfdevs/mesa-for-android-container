@@ -20,11 +20,9 @@ brw_nir_lower_fs_load_output_instr(nir_builder *b,
 
    const struct brw_fs_prog_key *key = data;
 
-   const unsigned l = GET_FIELD(nir_intrinsic_base(intrin),
-                                BRW_NIR_FRAG_OUTPUT_LOCATION);
-   assert(l >= FRAG_RESULT_DATA0);
-   const unsigned load_offset = nir_src_as_uint(intrin->src[0]);
-   const unsigned target = l - FRAG_RESULT_DATA0 + load_offset;
+   const nir_io_semantics sem = nir_intrinsic_io_semantics(intrin);
+   assert(sem.location >= FRAG_RESULT_DATA0);
+   const unsigned target = sem.location - FRAG_RESULT_DATA0;
 
    /* Only used by Iris that never sets this to SOMETIMES */
    assert(key->multisample_fbo != INTEL_SOMETIMES);

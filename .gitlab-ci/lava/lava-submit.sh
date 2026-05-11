@@ -41,6 +41,14 @@ fdo_log_section_end variables
 
 fdo_log_section_start_collapsed lava_submit "Submitting job for scheduling"
 
+# GitLab jobs use a default 1-hour timeout, which can allow jobs to run longer than intended.
+# CI_JOB_TIMEOUT (GitLab timeout in seconds) is used here to set the LAVA job timeout.
+# For Marge, we override this to 25 minutes (with 5 minutes subtracted below for lava-job-submitter),
+# giving a still conservative, but safer timeout to avoid jobs running for too long.
+if [ $GITLAB_USER_LOGIN == "marge-bot" ]; then
+	export CI_JOB_TIMEOUT=1500
+fi
+
 touch results/lava.log
 tail -f results/lava.log &
 # Ensure that we are printing the commands that are being executed,

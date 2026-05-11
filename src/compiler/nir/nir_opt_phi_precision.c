@@ -217,7 +217,7 @@ try_move_narrowing_dst(nir_builder *b, nir_phi_instr *phi)
       if (nir_src_is_if(use))
          return false;
 
-      op = narrowing_conversion_op(nir_src_parent_instr(use), op);
+      op = narrowing_conversion_op(nir_src_use_instr(use), op);
 
       /* Not a (compatible) narrowing conversion: */
       if (op == INVALID_OP)
@@ -253,7 +253,7 @@ try_move_narrowing_dst(nir_builder *b, nir_phi_instr *phi)
       /* We've previously established that all the uses were alu
        * conversion ops.  Turn them into movs instead.
        */
-      nir_alu_instr *alu = nir_instr_as_alu(nir_src_parent_instr(use));
+      nir_alu_instr *alu = nir_instr_as_alu(nir_src_use_instr(use));
       alu->op = nir_op_mov;
       alu->fp_math_ctrl = nir_op_valid_fp_math_ctrl(alu->op, alu->fp_math_ctrl);
    }

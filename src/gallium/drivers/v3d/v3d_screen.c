@@ -207,13 +207,13 @@ v3d_init_compute_caps(struct v3d_screen *screen)
         /* GL_MAX_COMPUTE_WORK_GROUP_SIZE */
         caps->max_block_size[0] =
         caps->max_block_size[1] =
-        caps->max_block_size[2] = 256;
+        caps->max_block_size[2] = V3D_MAX_CSD_WG_SIZE;
 
         /* GL_MAX_COMPUTE_WORK_GROUP_INVOCATIONS: This is
          * limited by WG_SIZE in the CSD.
          */
         caps->max_threads_per_block =
-        caps->max_variable_threads_per_block = 256;
+        caps->max_variable_threads_per_block = V3D_MAX_CSD_WG_SIZE;
 
         /* GL_MAX_COMPUTE_SHARED_MEMORY_SIZE */
         caps->max_local_size = 32768;

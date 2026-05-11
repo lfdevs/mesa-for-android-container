@@ -8,6 +8,7 @@
 #include "ir3_nir.h"
 
 struct state {
+   struct ir3_compiler *compiler;
    uint32_t topology;
 
    struct primitive_map {
@@ -188,6 +189,33 @@ replace_intrinsic(nir_builder *b, nir_intrinsic_instr *intr,
    nir_instr_remove(&intr->instr);
 
    return new_intr;
+}
+
+static void
+replace_with_load_global(nir_builder *b, struct ir3_compiler *compiler,
+                         nir_intrinsic_instr *intr, nir_def *addr,
+                         nir_def *offset)
+{
+   /* Our offsets are in units of 4B. */
+   nir_io_offset global_offset =
+      ir3_nir_get_global_offset(b, compiler, offset, 2);
+   nir_def *load = nir_load_global_ir3(
+      b, intr->def.num_components, intr->def.bit_size, addr, global_offset.def,
+      .align_mul = 4, .align_offset = 0, .offset_shift = global_offset.shift);
+   nir_def_replace(&intr->def, load);
+}
+
+static void
+replace_with_store_global(nir_builder *b, struct ir3_compiler *compiler,
+                          nir_intrinsic_instr *intr, nir_def *val,
+                          nir_def *addr, nir_def *offset)
+{
+   /* Our offsets are in units of 4B. */
+   nir_io_offset global_offset =
+      ir3_nir_get_global_offset(b, compiler, offset, 2);
+   nir_store_global_ir3(b, val, addr, global_offset.def, .align_mul = 4,
+                        .align_offset = 0, .offset_shift = global_offset.shift);
+   nir_instr_remove(&intr->instr);
 }
 
 static void
@@ -577,8 +605,7 @@ lower_tess_ctrl_block(nir_block *block, nir_builder *b, struct state *state)
             nir_intrinsic_io_semantics(intr).location,
             nir_intrinsic_component(intr), intr->src[1].ssa);
 
-         replace_intrinsic(b, intr, nir_intrinsic_load_global_ir3, address,
-                           offset, NULL);
+         replace_with_load_global(b, state->compiler, intr, address, offset);
          break;
       }
 
@@ -598,8 +625,8 @@ lower_tess_ctrl_block(nir_block *block, nir_builder *b, struct state *state)
             nir_intrinsic_io_semantics(intr).location,
             nir_intrinsic_component(intr), intr->src[2].ssa);
 
-         replace_intrinsic(b, intr, nir_intrinsic_store_global_ir3, value,
-                           address, offset);
+         replace_with_store_global(b, state->compiler, intr, value, address,
+                                   offset);
 
          break;
       }
@@ -623,8 +650,7 @@ lower_tess_ctrl_block(nir_block *block, nir_builder *b, struct state *state)
                                         intr->src[0].ssa);
          }
 
-         replace_intrinsic(b, intr, nir_intrinsic_load_global_ir3, address,
-                           offset, NULL);
+         replace_with_load_global(b, state->compiler, intr, address, offset);
          break;
       }
 
@@ -664,10 +690,9 @@ lower_tess_ctrl_block(nir_block *block, nir_builder *b, struct state *state)
             nir_def *offset = build_tessfactor_base(
                b, location, nir_intrinsic_component(intr), state);
 
-            replace_intrinsic(b, intr, nir_intrinsic_store_global_ir3,
-                              intr->src[0].ssa,
-                              load_tess_factor_base(b),
-                              nir_iadd(b, intr->src[1].ssa, offset));
+            replace_with_store_global(
+               b, state->compiler, intr, intr->src[0].ssa,
+               load_tess_factor_base(b), nir_iadd(b, intr->src[1].ssa, offset));
 
             if (location != VARYING_SLOT_PRIMITIVE_ID) {
                nir_pop_if(b, nif);
@@ -678,8 +703,8 @@ lower_tess_ctrl_block(nir_block *block, nir_builder *b, struct state *state)
                b, state, location, nir_intrinsic_component(intr),
                intr->src[1].ssa);
 
-            replace_intrinsic(b, intr, nir_intrinsic_store_global_ir3,
-                              intr->src[0].ssa, address, offset);
+            replace_with_store_global(b, state->compiler, intr,
+                                      intr->src[0].ssa, address, offset);
          }
          break;
       }
@@ -694,7 +719,7 @@ bool
 ir3_nir_lower_tess_ctrl(nir_shader *shader, struct ir3_shader_variant *v,
                         unsigned topology)
 {
-   struct state state = {.topology = topology};
+   struct state state = {.topology = topology, .compiler = v->compiler};
 
    if (shader_debug_enabled(shader->info.stage, shader->info.internal)) {
       mesa_logi("NIR (before tess lowering) for %s shader:",
@@ -787,8 +812,7 @@ lower_tess_eval_block(nir_block *block, nir_builder *b, struct state *state)
             nir_intrinsic_io_semantics(intr).location,
             nir_intrinsic_component(intr), intr->src[1].ssa);
 
-         replace_intrinsic(b, intr, nir_intrinsic_load_global_ir3, address,
-                           offset, NULL);
+         replace_with_load_global(b, state->compiler, intr, address, offset);
          break;
       }
 
@@ -811,8 +835,7 @@ lower_tess_eval_block(nir_block *block, nir_builder *b, struct state *state)
                                         intr->src[0].ssa);
          }
 
-         replace_intrinsic(b, intr, nir_intrinsic_load_global_ir3, address,
-                           offset, NULL);
+         replace_with_load_global(b, state->compiler, intr, address, offset);
          break;
       }
 
@@ -826,7 +849,7 @@ bool
 ir3_nir_lower_tess_eval(nir_shader *shader, struct ir3_shader_variant *v,
                         unsigned topology)
 {
-   struct state state = {.topology = topology};
+   struct state state = {.topology = topology, .compiler = v->compiler};
 
    if (shader_debug_enabled(shader->info.stage, shader->info.internal)) {
       mesa_logi("NIR (before tess lowering) for %s shader:",

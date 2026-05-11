@@ -35,21 +35,37 @@ layout(push_constant) uniform CONSTS
 };
 
 int32_t
-longest_common_prefix(int32_t i, uint32_t key_i, int32_t j, uint32_t active_leaf_count)
+longest_common_prefix(int32_t i, uint32_t key_i_lo, uint32_t key_i_hi, int32_t j, uint32_t active_leaf_count)
 {
    if (j < 0 || j >= active_leaf_count)
       return -1;
 
-   uint32_t key_j = DEREF(INDEX(key_id_pair, args.src_ids, j)).key;
+   if (VK_BUILD_FLAG(VK_BUILD_FLAG_64BIT_KEYS)) {
+      uint64_t key_i = packUint2x32(u32vec2(key_i_lo, key_i_hi));
+      key64_id_pair key_id_j = DEREF(INDEX(key64_id_pair, args.src_ids, j));
+      uint64_t key_j = packUint2x32(u32vec2(key_id_j.key_lo, key_id_j.key_hi));
 
-   uint32_t diff = key_i ^ key_j;
-   int32_t ret = 0;
-   if (key_i == key_j) {
-      ret += 32;
-      diff = i ^ j;
+      uint64_t diff = key_i ^ key_j;
+      int32_t ret = 0;
+      if (key_i == key_j) {
+         ret += 64;
+         diff = i ^ j;
+      }
+
+      return ret + 63 - int32_t(findMSB(diff));
+   } else {
+      uint32_t key_i = key_i_lo;
+      uint32_t key_j = DEREF(INDEX(key32_id_pair, args.src_ids, j)).key;
+
+      uint32_t diff = key_i ^ key_j;
+      int32_t ret = 0;
+      if (key_i == key_j) {
+         ret += 32;
+         diff = i ^ j;
+      }
+
+      return ret + 31 - findMSB(diff);
    }
-
-   return ret + 31 - findMSB(diff);
 }
 
 /*
@@ -84,8 +100,9 @@ main()
       REF(lbvh_node_info) dst = REF(lbvh_node_info)(args.node_info);
       DEREF(dst).parent = VK_BVH_INVALID_NODE;
       DEREF(dst).path_count = 2;
-      DEREF(dst).children[0] =
-         active_leaf_count == 1 ? DEREF(INDEX(key_id_pair, args.src_ids, 0)).id : VK_BVH_INVALID_NODE;
+      uint32_t id = VK_BUILD_FLAG(VK_BUILD_FLAG_64BIT_KEYS) ? DEREF(INDEX(key64_id_pair, args.src_ids, 0)).id
+                                                            : DEREF(INDEX(key32_id_pair, args.src_ids, 0)).id;
+      DEREF(dst).children[0] = active_leaf_count == 1 ? id : VK_BVH_INVALID_NODE;
       DEREF(dst).children[1] = VK_BVH_INVALID_NODE;
       return;
    }
@@ -95,10 +112,18 @@ main()
    if (id >= internal_node_count)
       return;
 
-   uint32_t id_key = DEREF(INDEX(key_id_pair, args.src_ids, id)).key;
+   uint32_t key_lo;
+   uint32_t key_hi;
+   if (VK_BUILD_FLAG(VK_BUILD_FLAG_64BIT_KEYS)) {
+      key64_id_pair key_id = DEREF(INDEX(key64_id_pair, args.src_ids, id));
+      key_lo = key_id.key_lo;
+      key_hi = key_id.key_hi;
+   } else {
+      key_lo = DEREF(INDEX(key32_id_pair, args.src_ids, id)).key;
+   }
 
-   int32_t left_lcp = longest_common_prefix(id, id_key, id - 1, active_leaf_count);
-   int32_t right_lcp = longest_common_prefix(id, id_key, id + 1, active_leaf_count);
+   int32_t left_lcp = longest_common_prefix(id, key_lo, key_hi, id - 1, active_leaf_count);
+   int32_t right_lcp = longest_common_prefix(id, key_lo, key_hi, id + 1, active_leaf_count);
    int32_t dir = right_lcp > left_lcp ? 1 : -1;
    int32_t lcp_min = min(left_lcp, right_lcp);
 
@@ -106,13 +131,13 @@ main()
     * this subtree is going to own.
     */
    int32_t lmax = 128;
-   while (longest_common_prefix(id, id_key, id + dir * lmax, active_leaf_count) > lcp_min) {
+   while (longest_common_prefix(id, key_lo, key_hi, id + dir * lmax, active_leaf_count) > lcp_min) {
       lmax *= 2;
    }
 
    int32_t length = 0;
    for (int32_t t = lmax / 2; t >= 1; t /= 2) {
-      if (longest_common_prefix(id, id_key, id + (length + t) * dir, active_leaf_count) > lcp_min)
+      if (longest_common_prefix(id, key_lo, key_hi, id + (length + t) * dir, active_leaf_count) > lcp_min)
          length += t;
    }
    int32_t other_end = id + length * dir;
@@ -120,11 +145,11 @@ main()
    /* The number of bits in the prefix that is the same for all elements in the
     * range.
     */
-   int32_t lcp_node = longest_common_prefix(id, id_key, other_end, active_leaf_count);
+   int32_t lcp_node = longest_common_prefix(id, key_lo, key_hi, other_end, active_leaf_count);
    int32_t child_range = 0;
    for (int32_t diff = 2; diff < 2 * length; diff *= 2) {
       int32_t t = DIV_ROUND_UP(length, diff);
-      if (longest_common_prefix(id, id_key, id + (child_range + t) * dir, active_leaf_count) > lcp_node)
+      if (longest_common_prefix(id, key_lo, key_hi, id + (child_range + t) * dir, active_leaf_count) > lcp_node)
          child_range += t;
    }
 
@@ -145,8 +170,13 @@ main()
 
    REF(lbvh_node_info) dst = INDEX(lbvh_node_info, args.node_info, id);
    DEREF(dst).path_count = (left_leaf ? 1 : 0) + (right_leaf ? 1 : 0);
-   DEREF(dst).children[0] = DEREF(INDEX(key_id_pair, args.src_ids, left)).id;
-   DEREF(dst).children[1] = DEREF(INDEX(key_id_pair, args.src_ids, right)).id;
+   if (VK_BUILD_FLAG(VK_BUILD_FLAG_64BIT_KEYS)) {
+      DEREF(dst).children[0] = DEREF(INDEX(key64_id_pair, args.src_ids, left)).id;
+      DEREF(dst).children[1] = DEREF(INDEX(key64_id_pair, args.src_ids, right)).id;
+   } else {
+      DEREF(dst).children[0] = DEREF(INDEX(key32_id_pair, args.src_ids, left)).id;
+      DEREF(dst).children[1] = DEREF(INDEX(key32_id_pair, args.src_ids, right)).id;
+   }
    if (id == 0)
       DEREF(dst).parent = VK_BVH_INVALID_NODE;
 }

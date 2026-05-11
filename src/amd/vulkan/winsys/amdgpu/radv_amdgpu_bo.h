@@ -35,6 +35,8 @@ struct radv_amdgpu_winsys_bo {
    uint32_t bo_handle;
 
    void *cpu_map;
+
+   bool emulate_sparse_residency;
 };
 
 static inline struct radv_amdgpu_winsys_bo *

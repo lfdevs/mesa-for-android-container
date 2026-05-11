@@ -1144,7 +1144,9 @@ select_shader_variant(struct d3d12_selection_context *sel_ctx, d3d12_shader_sele
 
    if (new_nir_variant->info.stage == MESA_SHADER_TESS_CTRL) {
       new_nir_variant->info.tess._primitive_mode = (tess_primitive_mode)key.hs.primitive_mode;
-      new_nir_variant->info.tess.ccw = key.hs.ccw;
+      /* GL tess domain is lower-left origin, D3D is upper-left.
+       * Since we invert origin, we also need to invert triangle winding. */
+      new_nir_variant->info.tess.ccw = !key.hs.ccw;
       new_nir_variant->info.tess.point_mode = key.hs.point_mode;
       new_nir_variant->info.tess.spacing = key.hs.spacing;
 
@@ -1171,6 +1173,13 @@ select_shader_variant(struct d3d12_selection_context *sel_ctx, d3d12_shader_sele
    if (prev) {
       NIR_PASS(_, new_nir_variant, dxil_nir_kill_undefined_varyings, key.prev_varying_outputs,
                  prev->initial->info.patch_outputs_written, key.prev_varying_frac_outputs);
+
+      /* Pad TES input signature so HS<->DS match for D3D12 pipeline validation. */
+      if (new_nir_variant->info.stage == MESA_SHADER_TESS_EVAL &&
+          prev->initial->info.stage == MESA_SHADER_TESS_CTRL) {
+         dxil_nir_pad_tes_input_signature(new_nir_variant, prev->initial);
+      }
+
       dxil_reassign_driver_locations(new_nir_variant, nir_var_shader_in, key.prev_varying_outputs,
                                      key.prev_varying_frac_outputs);
    }

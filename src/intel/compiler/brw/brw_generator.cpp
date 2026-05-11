@@ -77,9 +77,9 @@ normalize_brw_reg_for_encoding(brw_reg *reg)
 }
 
 brw_generator::brw_generator(const struct brw_compiler *compiler,
-                           const struct brw_compile_params *params,
-                           struct brw_stage_prog_data *prog_data,
-                           mesa_shader_stage stage)
+                             const struct brw_compile_params *params,
+                             struct brw_stage_prog_data *prog_data,
+                             mesa_shader_stage stage)
 
    : compiler(compiler), params(params),
      devinfo(compiler->devinfo),
@@ -129,9 +129,9 @@ brw_generator::generate_send(brw_send_inst *inst,
 
 void
 brw_generator::generate_mov_indirect(brw_inst *inst,
-                                    struct brw_reg dst,
-                                    struct brw_reg reg,
-                                    struct brw_reg indirect_byte_offset)
+                                     struct brw_reg dst,
+                                     struct brw_reg reg,
+                                     struct brw_reg indirect_byte_offset)
 {
    assert(indirect_byte_offset.type == BRW_TYPE_UD);
    assert(indirect_byte_offset.file == FIXED_GRF);
@@ -257,9 +257,9 @@ brw_generator::generate_mov_indirect(brw_inst *inst,
 
 void
 brw_generator::generate_shuffle(brw_inst *inst,
-                               struct brw_reg dst,
-                               struct brw_reg src,
-                               struct brw_reg idx)
+                                struct brw_reg dst,
+                                struct brw_reg src,
+                                struct brw_reg idx)
 {
    assert(src.file == FIXED_GRF);
    assert(!src.abs && !src.negate);
@@ -378,8 +378,8 @@ brw_generator::generate_shuffle(brw_inst *inst,
 
 void
 brw_generator::generate_quad_swizzle(const brw_inst *inst,
-                                    struct brw_reg dst, struct brw_reg src,
-                                    unsigned swiz)
+                                     struct brw_reg dst, struct brw_reg src,
+                                     unsigned swiz)
 {
    /* Requires a quad. */
    assert(inst->exec_size >= 4);
@@ -488,7 +488,7 @@ brw_generator::generate_barrier(brw_inst *, struct brw_reg src)
  */
 void
 brw_generator::generate_ddx(const brw_inst *inst,
-                           struct brw_reg dst, struct brw_reg src)
+                            struct brw_reg dst, struct brw_reg src)
 {
    unsigned vstride, width;
 
@@ -521,7 +521,7 @@ brw_generator::generate_ddx(const brw_inst *inst,
  */
 void
 brw_generator::generate_ddy(const brw_inst *inst,
-                           struct brw_reg dst, struct brw_reg src)
+                            struct brw_reg dst, struct brw_reg src)
 {
    const uint32_t type_size = brw_type_size_bytes(src.type);
 
@@ -615,8 +615,8 @@ DEBUG_GET_ONCE_OPTION(shader_bin_override_path, "INTEL_SHADER_ASM_READ_PATH",
  */
 void
 brw_generator::generate_scratch_header(brw_inst *inst,
-                                      struct brw_reg dst,
-                                      struct brw_reg src)
+                                       struct brw_reg dst,
+                                       struct brw_reg src)
 {
    assert(inst->exec_size == 8 && inst->force_writemask_all);
    assert(dst.file == FIXED_GRF);
@@ -1544,19 +1544,6 @@ brw_generator::get_assembly()
    prog_data->relocs = brw_get_shader_relocs(p, &prog_data->num_relocs);
 
    return brw_get_program(p, &prog_data->program_size);
-}
-
-void brw_prog_data_init(struct brw_stage_prog_data *prog_data,
-                        const struct brw_compile_params *params)
-{
-   /* Do not memset the structure to 0, the driver might have put some bits of
-    * information in there.
-    */
-   prog_data->ray_queries = params->nir->info.ray_queries;
-   prog_data->stage = params->nir->info.stage;
-   prog_data->source_hash = params->source_hash;
-   prog_data->total_scratch = 0;
-   prog_data->total_shared = params->nir->info.shared_size;
 }
 
 /* After program generation, go back and update the UIP and JIP of

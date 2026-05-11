@@ -310,6 +310,7 @@ Struct("intel_device_info",
         Member("bool", "supports_low_latency_hint"),
         Member("bool", "xe2_has_no_compression_hint"),
         Member("bool", "xe_has_state_cache_perf_fix"),
+        Member("bool", "has_madvise_purgeable"),
         Member("bool", "has_userptr_uapi"),
 
         Member("bool", "has_coarse_pixel_primitive_and_cb", compiler_field=True,

@@ -364,7 +364,6 @@ jay_process_nir(const struct intel_device_info *devinfo,
                    &prog_data->vue.vue_map, 0, 0);
    } else if (stage == MESA_SHADER_FRAGMENT) {
       assert(key->fs.mesh_input == INTEL_NEVER && "todo");
-      assert(!key->fs.force_dual_color_blend && "todo");
       brw_nir_apply_key(pt, &key->base, 32);
       brw_nir_lower_fs_inputs(nir, devinfo, &key->fs);
       brw_nir_lower_fs_outputs(nir);
@@ -458,6 +457,12 @@ jay_process_nir(const struct intel_device_info *devinfo,
    NIR_PASS(_, nir, nir_lower_all_phis_to_scalar);
    NIR_PASS(_, nir, nir_opt_copy_prop);
    NIR_PASS(_, nir, nir_opt_dce);
+
+   /* Jay requires LCSSA for correctness reading convergent loop-dependent
+    * values outside of a divergent loop. Converting to LCSSA inserts the
+    * required divergent 1-source phi after the loop.
+    */
+   NIR_PASS(_, nir, nir_convert_to_lcssa, true, true);
 
    /* Run divergence analysis at the end */
    nir_sweep(nir);

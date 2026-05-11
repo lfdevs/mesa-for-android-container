@@ -94,7 +94,7 @@ static bool
 nir_def_is_used_as(nir_def *def, nir_alu_type type)
 {
    nir_foreach_use(use, def) {
-      nir_instr *use_instr = nir_src_parent_instr(use);
+      nir_instr *use_instr = nir_src_use_instr(use);
       if (use_instr->type != nir_instr_type_alu)
          continue;
 

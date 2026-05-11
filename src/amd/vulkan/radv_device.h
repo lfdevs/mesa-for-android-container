@@ -11,11 +11,9 @@
 #ifndef RADV_DEVICE_H
 #define RADV_DEVICE_H
 
-#include "ac_descriptors.h"
 #include "ac_spm.h"
 #include "ac_sqtt.h"
 
-#include "util/bitset.h"
 #include "util/mesa-blake3.h"
 
 #include "radv_debug_nir.h"
@@ -56,14 +54,6 @@ struct radv_layer_dispatch_tables {
    struct vk_device_dispatch_table ctx_roll;
 };
 
-struct radv_device_cache_key {
-   uint32_t image_2d_view_of_3d : 1;
-   uint32_t mesh_shader_queries : 1;
-   uint32_t primitives_generated_query : 1;
-
-   uint32_t reserved : 29;
-};
-
 enum radv_force_vrs {
    RADV_FORCE_VRS_1x1 = 0,
    RADV_FORCE_VRS_2x2,
@@ -91,7 +81,8 @@ struct radv_meta_state {
    mtx_t mtx;
 
    struct {
-      struct radix_sort_vk *radix_sort;
+      struct radix_sort_vk *radix_sort_64;
+      struct radix_sort_vk *radix_sort_96;
       struct vk_acceleration_structure_build_ops build_ops;
       struct vk_acceleration_structure_build_args build_args;
    } accel_struct_build;
@@ -151,7 +142,9 @@ struct radv_device {
    struct radv_meta_state meta_state;
 
    struct radv_queue *queues[RADV_MAX_QUEUE_FAMILIES];
+   struct radv_queue *queues_protected[RADV_MAX_QUEUE_FAMILIES];
    int queue_count[RADV_MAX_QUEUE_FAMILIES];
+   int queue_count_protected[RADV_MAX_QUEUE_FAMILIES];
 
    bool pbb_allowed;
    uint32_t scratch_waves;
@@ -199,9 +192,6 @@ struct radv_device {
 
    /* Whether to DMA shaders to invisible VRAM or to upload directly through BAR. */
    bool shader_use_invisible_vram;
-
-   /* Whether to inline the compute dispatch size in user sgprs. */
-   bool load_grid_size_from_user_sgpr;
 
    /* Whether anisotropy is forced with RADV_TEX_ANISO (-1 is disabled). */
    int force_aniso;
@@ -313,7 +303,6 @@ struct radv_device {
 
    struct radv_debug_nir debug_nir;
 
-   struct radv_device_cache_key cache_key;
    blake3_hash cache_hash;
 
    /* Not NULL if a GPU hang report has been generated for VK_EXT_device_fault. */
@@ -326,6 +315,8 @@ struct radv_device {
    simple_mtx_t blit_queue_mtx;
 
    struct radv_address_binding_tracker *addr_binding_tracker;
+
+   struct radv_compiler_info compiler_info;
 };
 
 VK_DEFINE_HANDLE_CASTS(radv_device, vk.base, VkDevice, VK_OBJECT_TYPE_DEVICE)

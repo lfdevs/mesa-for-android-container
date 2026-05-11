@@ -6,8 +6,6 @@
 
 #include "aco_ir.h"
 
-#include "util/u_debug.h"
-
 #include "amd_family.h"
 
 #if AMD_LLVM_AVAILABLE
@@ -22,7 +20,6 @@
 #endif
 
 #include <array>
-#include <iomanip>
 #include <vector>
 
 namespace aco {

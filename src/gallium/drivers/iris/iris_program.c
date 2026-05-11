@@ -558,7 +558,6 @@ iris_to_brw_fs_key(const struct iris_screen *screen,
       .alpha_to_coverage = key->alpha_to_coverage ? INTEL_ALWAYS : INTEL_NEVER,
       .persample_interp = key->persample_interp ? INTEL_ALWAYS : INTEL_NEVER,
       .multisample_fbo = key->multisample_fbo ? INTEL_ALWAYS : INTEL_NEVER,
-      .force_dual_color_blend = key->force_dual_color_blend,
       .ignore_sample_mask_out = !key->multisample_fbo,
    };
 }
@@ -638,7 +637,6 @@ iris_to_elk_fs_key(const struct iris_screen *screen,
       .alpha_to_coverage = key->alpha_to_coverage ? ELK_ALWAYS : ELK_NEVER,
       .persample_interp = key->persample_interp ? ELK_ALWAYS : ELK_NEVER,
       .multisample_fbo = key->multisample_fbo ? ELK_ALWAYS : ELK_NEVER,
-      .force_dual_color_blend = key->force_dual_color_blend,
       .coherent_fb_fetch = key->coherent_fb_fetch,
       .color_outputs_valid = key->color_outputs_valid,
       .input_slots_valid = key->input_slots_valid,
@@ -2734,6 +2732,17 @@ iris_update_compiled_gs(struct iris_context *ice)
    }
 }
 
+static void
+iris_force_dual_color_blend(nir_shader *nir)
+{
+   nir_variable *var = nir_find_variable_with_location(nir, nir_var_shader_out,
+                                                       FRAG_RESULT_DATA1);
+   if (var) {
+      var->data.location = FRAG_RESULT_DATA0;
+      var->data.index = 1;
+   }
+}
+
 /**
  * Compile a fragment (pixel) shader, and upload the assembly.
  */
@@ -2760,12 +2769,17 @@ iris_compile_fs(struct iris_screen *screen,
    iris_setup_uniforms(devinfo, mem_ctx, nir, &system_values,
                        &num_system_values, &num_cbufs);
 
+   if (key->force_dual_color_blend)
+      iris_force_dual_color_blend(nir);
+
+#ifdef INTEL_USE_ELK
    /* Lower output variables to load_output intrinsics before setting up
     * binding tables, so iris_setup_binding_table can map any load_output
     * intrinsics to IRIS_SURFACE_GROUP_RENDER_TARGET_READ on Gfx8 for
     * non-coherent framebuffer fetches.
     */
-   brw_nir_lower_fs_outputs(nir);
+   elk_nir_lower_fs_outputs(nir);
+#endif
 
    int null_rts = brw_nir_fs_needs_null_rt(devinfo, nir,
                                            key->alpha_to_coverage) ? 1 : 0;
@@ -3651,7 +3665,11 @@ iris_create_shader_state(struct pipe_context *ctx,
       const uint64_t color_outputs = info->outputs_written &
          ~(BITFIELD64_BIT(FRAG_RESULT_DEPTH) |
            BITFIELD64_BIT(FRAG_RESULT_STENCIL) |
-           BITFIELD64_BIT(FRAG_RESULT_SAMPLE_MASK));
+           BITFIELD64_BIT(FRAG_RESULT_SAMPLE_MASK) |
+           BITFIELD64_BIT(FRAG_RESULT_DUAL_SRC_BLEND));
+
+      const bool dual_color =
+         info->outputs_written & BITFIELD64_BIT(FRAG_RESULT_DUAL_SRC_BLEND);
 
       bool can_rearrange_varyings =
          util_bitcount64(info->inputs_read & BRW_FS_VARYING_INPUT_MASK) <= 16;
@@ -3659,7 +3677,7 @@ iris_create_shader_state(struct pipe_context *ctx,
       key.fs = (struct iris_fs_prog_key) {
          KEY_INIT(base),
          .vue_layout = vue_layout(ish->nir->info.separate_shader),
-         .nr_color_regions = util_bitcount(color_outputs),
+         .nr_color_regions = util_bitcount(color_outputs) ?: dual_color,
          .coherent_fb_fetch = devinfo->ver >= 9 && devinfo->ver < 20,
          .input_slots_valid =
             can_rearrange_varyings ? 0 : info->inputs_read | VARYING_BIT_POS,

@@ -145,7 +145,7 @@ tag_src(nir_src *src, validate_state *state)
    }
 }
 
-/* Due to tagging, it's not safe to use nir_src_parent_instr during the main
+/* Due to tagging, it's not safe to use nir_src_use_instr during the main
  * validate loop. This is a tagging-aware version.
  */
 static nir_instr *
@@ -176,7 +176,7 @@ static void
 validate_if_src(nir_src *src, validate_state *state)
 {
    validate_src_tag(src, state);
-   validate_assert(state, nir_src_parent_if(src) == state->if_stmt);
+   validate_assert(state, nir_src_use_if(src) == state->if_stmt);
    validate_assert(state, src->ssa != NULL);
    validate_assert(state, src->ssa->num_components == 1);
 }
@@ -184,11 +184,11 @@ validate_if_src(nir_src *src, validate_state *state)
 static void
 validate_src(nir_src *src, validate_state *state)
 {
-   /* Validate the tag first, so that nir_src_parent_instr is valid */
+   /* Validate the tag first, so that nir_src_use_instr is valid */
    validate_src_tag(src, state);
 
    /* Source assumed to be instruction, use validate_if_src for if */
-   validate_assert(state, nir_src_parent_instr(src) == state->instr);
+   validate_assert(state, nir_src_use_instr(src) == state->instr);
 
    validate_assert(state, src->ssa != NULL);
 }
@@ -1795,13 +1795,13 @@ validate_src_dominance(nir_src *src, void *_state)
 {
    validate_state *state = _state;
 
-   if (nir_def_block(src->ssa) == nir_src_parent_instr(src)->block) {
+   if (nir_def_block(src->ssa) == nir_src_use_instr(src)->block) {
       validate_assert(state, src->ssa->index < state->impl->ssa_alloc);
       validate_assert(state, BITSET_TEST(state->ssa_defs_found,
                                          src->ssa->index));
    } else {
       validate_assert(state, nir_block_dominates(nir_def_block(src->ssa),
-                                                 nir_src_parent_instr(src)->block));
+                                                 nir_src_use_instr(src)->block));
    }
    return true;
 }

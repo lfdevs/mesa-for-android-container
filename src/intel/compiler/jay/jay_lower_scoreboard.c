@@ -5,15 +5,16 @@
 
 #include <limits.h>
 #include "compiler/brw/brw_eu_defines.h"
+#include "util/bitscan.h"
 #include "util/bitset.h"
 #include "util/macros.h"
+#include "util/u_math.h"
 #include "jay_builder.h"
 #include "jay_ir.h"
 #include "jay_opcodes.h"
 #include "jay_private.h"
 
-/* TODO: Shrink */
-#define MAX_KEYS   (2 * JAY_NUM_UGPR)
+#define MAX_KEYS   (JAY_NUM_PHYS_GRF + JAY_NUM_UGPR)
 #define NUM_TOKENS (16)
 
 /** SEND scoreboarding */
@@ -33,11 +34,14 @@ def_to_gpr(jay_function *func, jay_inst *I, jay_def x)
 }
 
 static inline void
-sync_sbid(jay_function *func, jay_inst *I, uint32_t *busy, unsigned sbid)
+sync_sbids(jay_builder *b, uint32_t mask, enum tgl_sbid_mode mode)
 {
-   jay_builder b = jay_init_builder(func, jay_before_inst(I));
-   jay_SYNC(&b, TGL_SYNC_NOP)->dep = tgl_swsb_sbid(TGL_SBID_DST, sbid);
-   *busy &= ~BITFIELD_BIT(sbid);
+   if (util_is_power_of_two_nonzero(mask)) {
+      jay_SYNC(b, jay_null(), TGL_SYNC_NOP)->dep =
+         tgl_swsb_sbid(mode, util_logbase2(mask));
+   } else if (mask) {
+      jay_SYNC(b, mask, mode == TGL_SBID_DST ? TGL_SYNC_ALLWR : TGL_SYNC_ALLRD);
+   }
 }
 
 static void
@@ -52,13 +56,17 @@ lower_send_local(jay_function *func, jay_block *block)
    unsigned roundrobin = 0;
 
    jay_foreach_inst_in_block_safe(block, I) {
+      jay_builder b = jay_init_builder(func, jay_before_inst(I));
+      uint32_t sbid_dst = 0, sbid_src = 0;
+
       /* Read-after-write */
       jay_foreach_src(I, s) {
          struct gpr_range src = def_to_gpr(func, I, I->src[s]);
 
          u_foreach_bit(sbid, busy) {
             if (BITSET_TEST_COUNT(tokens[sbid].writing, src.base, src.width)) {
-               sync_sbid(func, I, &busy, sbid);
+               sbid_dst |= BITFIELD_BIT(sbid);
+               busy &= ~BITFIELD_BIT(sbid);
             }
          }
       }
@@ -68,9 +76,12 @@ lower_send_local(jay_function *func, jay_block *block)
          struct gpr_range dst = def_to_gpr(func, I, I->dst);
 
          u_foreach_bit(sbid, busy) {
-            if (BITSET_TEST_COUNT(tokens[sbid].reading, dst.base, dst.width) ||
-                BITSET_TEST_COUNT(tokens[sbid].writing, dst.base, dst.width)) {
-               sync_sbid(func, I, &busy, sbid);
+            if (BITSET_TEST_COUNT(tokens[sbid].writing, dst.base, dst.width)) {
+               sbid_dst |= BITFIELD_BIT(sbid);
+            } else if (BITSET_TEST_COUNT(tokens[sbid].reading, dst.base,
+                                         dst.width)) {
+               sbid_src |= BITFIELD_BIT(sbid);
+               BITSET_ZERO(tokens[sbid].reading);
             }
          }
       }
@@ -79,11 +90,15 @@ lower_send_local(jay_function *func, jay_block *block)
          unsigned sbid = (roundrobin++) % NUM_TOKENS;
          jay_set_send_sbid(I, sbid);
 
-         if (!(busy & BITSET_BIT(sbid))) {
-            busy |= BITSET_BIT(sbid);
+         if (!(busy & BITFIELD_BIT(sbid))) {
+            busy |= BITFIELD_BIT(sbid);
             BITSET_ZERO(tokens[sbid].writing);
             BITSET_ZERO(tokens[sbid].reading);
          }
+
+         /* SBID.set implies SBID.dst (which implies SBID.src), so elide */
+         sbid_dst &= ~BITFIELD_BIT(sbid);
+         sbid_src &= ~BITFIELD_BIT(sbid);
 
          struct gpr_range dst = def_to_gpr(func, I, I->dst);
          BITSET_SET_COUNT(tokens[sbid].writing, dst.base, dst.width);
@@ -92,16 +107,33 @@ lower_send_local(jay_function *func, jay_block *block)
             struct gpr_range src = def_to_gpr(func, I, I->src[s]);
             BITSET_SET_COUNT(tokens[sbid].reading, src.base, src.width);
          }
+
+         /* Barriers are non-EOT gateway messages. Insert the needed SYNC */
+         if (jay_send_sfid(I) == BRW_SFID_MESSAGE_GATEWAY) {
+            b.cursor = jay_after_inst(I);
+            jay_SYNC(&b, jay_null(), TGL_SYNC_BAR);
+         }
+      } else if (I->op == JAY_OPCODE_SCHEDULE_BARRIER) {
+         sbid_dst |= busy;
+      }
+
+      b.cursor = jay_before_inst(I);
+      assert(((sbid_dst & sbid_src) == 0) && "by construction");
+
+      busy &= ~sbid_dst;
+      sync_sbids(&b, sbid_dst, TGL_SBID_DST);
+      sync_sbids(&b, sbid_src, TGL_SBID_SRC);
+
+      if (I->op == JAY_OPCODE_SCHEDULE_BARRIER) {
+         /* Lowered above into a sync, but removed late to keep the cursor */
+         jay_remove_instruction(I);
       }
    }
 
    /* Sync on block boundaries. */
    if (block != jay_last_block(func)) {
       jay_builder b = jay_init_builder(func, jay_before_jump(block));
-
-      u_foreach_bit(sbid, busy) {
-         jay_SYNC(&b, TGL_SYNC_NOP)->dep = tgl_swsb_sbid(TGL_SBID_DST, sbid);
-      }
+      sync_sbids(&b, busy, TGL_SBID_DST);
    }
 }
 
@@ -132,7 +164,7 @@ struct swsb_state {
 static enum tgl_pipe
 inst_exec_pipe(const struct intel_device_info *devinfo, jay_inst *I)
 {
-   if (I->op == JAY_OPCODE_SEND || jay_op_is_control_flow(I->op) /* XXX*/) {
+   if (I->op == JAY_OPCODE_SEND || jay_op_is_control_flow(I->op)) {
       return TGL_PIPE_NONE;
    } else if (I->op == JAY_OPCODE_MATH) {
       return TGL_PIPE_MATH;
@@ -167,12 +199,50 @@ inferred_sync_pipe(const struct intel_device_info *devinfo, const jay_inst *I)
    }
 }
 
+/*
+ * Return the maximum ALU distance to consider. Anything further is guaranteed
+ * to have already written its result by the time we issue. These values are not
+ * in the bspec but are #define'd in IGC as SWSB_MAX_*_DEPENDENCE_DISTANCE.
+ *
+ * Confusingly, IGC also defines SWSB_MAX_ALU_DEPENDENCE_DISTANCE_VALUE as 7.
+ * There is a discrepency between what the hardware does and what we can encode.
+ * Any writes from 11 instructions ago are guaranteed to have landed, whereas if
+ * you need to sync, you can only sync with something up to 7 instructions ago
+ * (and implicitly, everything in-order before that).
+ *
+ * These are conservative values. Some archeology suggests the real values may
+ * be lower on some platforms but for now we match IGC to be safe.
+ */
+static inline unsigned
+max_dependence(enum tgl_pipe pipe)
+{
+   return pipe == TGL_PIPE_SCALAR ? 2 :
+          pipe == TGL_PIPE_MATH   ? 18 :
+          pipe == TGL_PIPE_LONG   ? 15 :
+                                    11;
+}
+
 static void
-depend_on_writer(struct swsb_state *state, struct gpr_range r, unsigned *dep)
+depend_on_writer(struct swsb_state *state,
+                 struct gpr_range r,
+                 unsigned *dep,
+                 enum tgl_pipe exec,
+                 bool except_exec)
 {
    for (unsigned i = 0; i < r.width; ++i) {
       uint32_t w = state->access[r.base + i][0];
-      dep[writer_pipe(w)] = MAX2(dep[writer_pipe(w)], writer_ip(w));
+      enum tgl_pipe write = writer_pipe(w);
+
+      /* We omit write-after-{read,write} dependencies (except_exec) within a
+       * single execution pipe, since each pipe is internally in-order. We also
+       * omit dependencies on the same pipe that are too far to be relevant.
+       */
+      if (write != exec ||
+          (!except_exec &&
+           writer_ip(w) + max_dependence(exec) > state->ip[write])) {
+
+         dep[write] = MAX2(dep[write], writer_ip(w));
+      }
    }
 }
 
@@ -193,25 +263,24 @@ lower_regdist_local(jay_function *func, jay_block *block, u32_per_pipe *access)
          continue;
       }
 
-      /* Write-after-{write, read} */
       jay_foreach_dst(I, def) {
          struct gpr_range r = def_to_gpr(func, I, def);
-         depend_on_writer(&state, r, dep);
+         depend_on_writer(&state, r, dep, exec_pipe, true /* except_pipe */);
 
          for (unsigned i = 0; i < r.width; ++i) {
             jay_foreach_pipe(p) {
-               dep[p] = MAX2(dep[p], state.access[r.base + i][p]);
+               if (p != exec_pipe) {
+                  dep[p] = MAX2(dep[p], state.access[r.base + i][p]);
+               }
             }
          }
       }
 
       /* Read-after-write */
       jay_foreach_src(I, s) {
-         depend_on_writer(&state, def_to_gpr(func, I, I->src[s]), dep);
+         depend_on_writer(&state, def_to_gpr(func, I, I->src[s]), dep,
+                          exec_pipe, false);
       }
-
-      unsigned nr_waits = 0;
-      unsigned last_pipe = TGL_PIPE_NONE;
 
       /* If dependency P implies dependency Q, drop dependency Q to avoid
        * unnecessary annotations.
@@ -226,17 +295,25 @@ lower_regdist_local(jay_function *func, jay_block *block, u32_per_pipe *access)
          }
       }
 
+      uint32_t wait_pipes = 0;
       unsigned min_delta = 7;
+
       jay_foreach_pipe(p) {
          if (dep[p] && (exec_pipe == TGL_PIPE_NONE /* TODO: Sends */ ||
                         dep[p] > state.finished_ip[exec_pipe][p])) {
-            unsigned delta = state.ip[p] - dep[p] + 1;
-            min_delta = MIN2(min_delta, delta);
-            state.finished_ip[exec_pipe][p] = dep[p];
-            nr_waits++;
-            last_pipe = p;
+
+            min_delta = MIN2(min_delta, state.ip[p] - dep[p] + 1);
+            wait_pipes |= BITFIELD_BIT(p);
          }
       }
+
+      /* We'll wait on the unioned dependency. Update the tracking for that. */
+      u_foreach_bit(p, wait_pipes) {
+         state.finished_ip[exec_pipe][p] = state.ip[p] + 1 - min_delta;
+      }
+
+      uint32_t last_pipe = util_logbase2(wait_pipes);
+      bool single_wait = wait_pipes == BITFIELD_BIT(last_pipe);
 
       /* If we're SIMD split the same way as our dependency, we can relax the
        * dependency to have each half wait in parallel. We could do even better
@@ -246,7 +323,7 @@ lower_regdist_local(jay_function *func, jay_block *block, u32_per_pipe *access)
       unsigned shape = ((simd_split << 2) | jay_macro_length(I)) + 1;
       bool same_shape = state.last_shape[last_pipe] == shape;
 
-      if (simd_split && same_shape && nr_waits == 1 && min_delta == 1) {
+      if (simd_split && same_shape && single_wait && min_delta == 1) {
          min_delta += ((1 << simd_split) - 1) * jay_macro_length(I);
          I->replicate_dep = true;
          I->decrement_dep = last_pipe != exec_pipe;
@@ -256,10 +333,10 @@ lower_regdist_local(jay_function *func, jay_block *block, u32_per_pipe *access)
       I->dep = (struct tgl_swsb) {
          .sbid = has_sbid ? jay_send_sbid(I) : 0,
          .mode = has_sbid ? TGL_SBID_SET : TGL_SBID_NULL,
-         .regdist = nr_waits ? min_delta : 0,
-         .pipe = nr_waits == 1 && (!has_sbid ||
-                                   last_pipe == TGL_PIPE_FLOAT ||
-                                   last_pipe == TGL_PIPE_INT) ?
+         .regdist = wait_pipes ? min_delta : 0,
+         .pipe = single_wait && (!has_sbid ||
+                                 last_pipe == TGL_PIPE_FLOAT ||
+                                 last_pipe == TGL_PIPE_INT) ?
                     last_pipe :
                     TGL_PIPE_ALL,
       };
@@ -331,7 +408,7 @@ lower_trivial(jay_function *func)
          I->dep = tgl_swsb_dst_dep(tgl_swsb_sbid(TGL_SBID_SET, 0), 1);
 
          jay_builder b = jay_init_builder(func, jay_after_inst(I));
-         jay_SYNC(&b, TGL_SYNC_NOP)->dep = tgl_swsb_sbid(TGL_SBID_DST, 0);
+         sync_sbids(&b, BITFIELD_BIT(0), TGL_SBID_DST);
       } else {
          I->dep = tgl_swsb_regdist(1);
       }

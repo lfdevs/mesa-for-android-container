@@ -136,13 +136,15 @@ split_tex_residency(nir_builder *b, nir_tex_instr *tex, bool jay)
    /* Clone the original instruction */
    nir_tex_instr *sparse_tex =
       nir_instr_as_tex(nir_instr_clone(b->shader, &tex->instr));
-   nir_def_init(&sparse_tex->instr, &sparse_tex->def, 2, tex->def.bit_size);
+   nir_def_init(&sparse_tex->instr, &sparse_tex->def,
+                tex->def.num_components, tex->def.bit_size);
    nir_builder_instr_insert(b, &sparse_tex->instr);
 
    if (jay) {
       sparse_tex->op = tex->op == nir_texop_txf ?
                        nir_texop_sparse_residency_txf_intel :
                        nir_texop_sparse_residency_intel;
+      sparse_tex->def.num_components = 2;
    }
 
    /* txl/txb/tex and tg4 both access the same pixels for residency checking

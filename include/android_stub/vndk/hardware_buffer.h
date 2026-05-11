@@ -21,10 +21,18 @@
 #include <android/hardware_buffer.h>
 
 #include <cutils/native_handle.h>
+#include <errno.h>
 
 __BEGIN_DECLS
 
-const native_handle_t* AHardwareBuffer_getNativeHandle(const AHardwareBuffer* buffer);
+/**
+ * Get the native handle from an AHardwareBuffer.
+ *
+ * \return a non-NULL native handle on success, NULL if \a buffer is nullptr or the operation fails
+ * for any reason.
+ */
+const native_handle_t* _Nullable AHardwareBuffer_getNativeHandle(
+        const AHardwareBuffer* _Nonnull buffer);
 
 enum CreateFromHandleMethod {
     // enum values chosen to match internal GraphicBuffer::HandleWrapMethod
@@ -33,9 +41,9 @@ enum CreateFromHandleMethod {
 };
 
 /**
- * Create a AHardwareBuffer from a native handle.
+ * Create an AHardwareBuffer from a native handle.
  *
- * This function wraps a native handle in a AHardwareBuffer suitable for use by applications or
+ * This function wraps a native handle in an AHardwareBuffer suitable for use by applications or
  * other parts of the system. The contents of desc will be returned by AHardwareBuffer_describe().
  *
  * If method is AHARDWAREBUFFER_CREATE_FROM_HANDLE_METHOD_REGISTER, the handle is assumed to be
@@ -44,10 +52,13 @@ enum CreateFromHandleMethod {
  *
  * If method is AHARDWAREBUFFER_CREATE_FROM_HANDLE_METHOD_CLONE, the handle will be cloned and the
  * clone registered. The AHardwareBuffer will own the cloned handle but not the original.
+ *
+ * \return 0 on success, -EINVAL if \a desc or \a handle or outBuffer is NULL, or an error number if
+ * the operation fails for any reason.
  */
-int AHardwareBuffer_createFromHandle(const AHardwareBuffer_Desc* desc,
-                                     const native_handle_t* handle, int32_t method,
-                                     AHardwareBuffer** outBuffer);
+int AHardwareBuffer_createFromHandle(const AHardwareBuffer_Desc* _Nonnull desc,
+                                     const native_handle_t* _Nonnull handle, int32_t method,
+                                     AHardwareBuffer* _Nullable* _Nonnull outBuffer);
 
 /**
  * Buffer pixel formats.
@@ -94,6 +105,76 @@ enum {
     /* Mask for the camera access values. */
     AHARDWAREBUFFER_USAGE_CAMERA_MASK               = 6UL << 16,
 };
+
+/**
+ * Additional options for AHardwareBuffer_allocateWithOptions. These correspond to
+ * android.hardware.graphics.common.ExtendableType
+ */
+typedef struct {
+    const char* _Nonnull name;
+    int64_t value;
+} AHardwareBufferLongOptions;
+
+enum AHardwareBufferStatus : int32_t {
+    /* Success, no error */
+    AHARDWAREBUFFER_STATUS_OK = 0,
+    /* There's insufficient memory to satisfy the request */
+    AHARDWAREBUFFER_STATUS_NO_MEMORY = -ENOMEM,
+    /* The given argument is invalid */
+    AHARDWAREBUFFER_STATUS_BAD_VALUE = -EINVAL,
+    /* The requested operation is not supported by the device */
+    AHARDWAREBUFFER_STATUS_UNSUPPORTED = -ENOSYS,
+    /* An unknown error occurred */
+    AHARDWAREBUFFER_STATUS_UNKNOWN_ERROR = (-2147483647 - 1),
+};
+
+/**
+ * Allocates a buffer that matches the passed AHardwareBuffer_Desc with additional options
+ *
+ * If allocation succeeds, the buffer can be used according to the
+ * usage flags specified in its description. If a buffer is used in ways
+ * not compatible with its usage flags, the results are undefined and
+ * may include program termination.
+ *
+ * @param desc The AHardwareBuffer_Desc that describes the allocation to request. Note that `stride`
+ *             is ignored.
+ * @param additionalOptions A pointer to an array of AHardwareBufferLongOptions with additional
+ *                          string key + long value options that may be specified. May be null if
+ *                          `additionalOptionsSize` is 0
+ * @param additionalOptionsSize The number of additional options to pass
+ * @param outBuffer The resulting buffer allocation
+ * @return AHARDWAREBUFFER_STATUS_OK on success
+ *         AHARDWAREBUFFER_STATUS_NO_MEMORY if there's insufficient resources for the allocation
+ *         AHARDWAREBUFFER_STATUS_BAD_VALUE if the provided description & options are not supported
+ *         by the device
+ *         AHARDWAREBUFFER_STATUS_UNKNOWN_ERROR for any other error
+ * any reason. The returned buffer has a reference count of 1.
+ */
+enum AHardwareBufferStatus AHardwareBuffer_allocateWithOptions(
+        const AHardwareBuffer_Desc* _Nonnull desc,
+        const AHardwareBufferLongOptions* _Nullable additionalOptions, size_t additionalOptionsSize,
+        AHardwareBuffer* _Nullable* _Nonnull outBuffer) __INTRODUCED_IN(__ANDROID_API_V__);
+
+/**
+ * Queries the dataspace of the given AHardwareBuffer.
+ *
+ * @param buffer The non-null buffer for which to query the Dataspace
+ * @return The dataspace of the buffer, or ADATASPACE_UNKNOWN if one hasn't been set
+ */
+enum ADataSpace AHardwareBuffer_getDataSpace(const AHardwareBuffer* _Nonnull buffer)
+        __INTRODUCED_IN(__ANDROID_API_V__);
+
+/**
+ * Sets the dataspace of the given AHardwareBuffer
+ * @param buffer The non-null buffer for which to set the dataspace
+ * @param dataSpace The dataspace to set
+ * @return AHARDWAREBUFFER_STATUS_OK on success,
+ *         AHARDWAREBUFFER_STATUS_UNSUPPORTED if the device doesn't support setting the dataspace,
+ *         AHARDWAREBUFFER_STATUS_UNKNOWN_ERROR for any other failure.
+ */
+enum AHardwareBufferStatus AHardwareBuffer_setDataSpace(AHardwareBuffer* _Nonnull buffer,
+                                                        enum ADataSpace dataSpace)
+        __INTRODUCED_IN(__ANDROID_API_V__);
 
 __END_DECLS
 

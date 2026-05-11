@@ -6,6 +6,7 @@ libfreedreno_perfcntrs_files = files(
   'fd5_perfcntr.c',
   'fd6_perfcntr.c',
   'fd7_perfcntr.c',
+  'fd8_perfcntr.c',
   'freedreno_dt.c',
   'freedreno_dt.h',
   'freedreno_perfcntr.c',

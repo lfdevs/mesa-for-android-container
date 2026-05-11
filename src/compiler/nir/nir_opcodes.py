@@ -410,6 +410,7 @@ unop_numeric_convert_mp("i2f", tfloat16, tint32, preserve_sz + preserve_inf + ex
 unop_numeric_convert_mp("u2f", tfloat16, tuint32, preserve_sz + preserve_inf + exact)
 
 unop_numeric_convert("f2i32_rtne", tint32, tfloat32, "(int32_t)_mesa_roundevenf(src0)", valid_fp_math_ctrl = exact)
+unop_numeric_convert("f2u32_rtne", tuint32, tfloat32, "(uint32_t)_mesa_roundevenf(src0)", valid_fp_math_ctrl = exact)
 
 # Note: 64-bit integers are intentionally not supported. Casting u_uintN_max
 # (and related signed values) to double is precisely representable for upto
@@ -778,6 +779,10 @@ if (nir_is_rounding_mode_rtz(execution_mode, bit_size)) {
 } else {
    dst = src0 * src1;
 }
+""")
+
+binop("fmul_rtz", tfloat32, _2src_commutative + inexact_associative, """
+dst = _mesa_double_to_float_rtz((double)src0 * (double)src1);
 """)
 
 binop("fmulz", tfloat32, _2src_commutative + inexact_associative, """

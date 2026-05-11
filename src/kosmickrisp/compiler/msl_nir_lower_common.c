@@ -205,7 +205,7 @@ msl_ensure_depth_write(nir_shader *nir)
       nir_builder b = nir_builder_at(nir_before_impl(entrypoint));
 
       nir_deref_instr *depth_deref = nir_build_deref_var(&b, depth_var);
-      nir_def *position = nir_load_frag_coord(&b);
+      nir_def *position = nir_build_frag_coord(&b, 3);
       nir_store_deref(&b, depth_deref, nir_channel(&b, position, 2u),
                       0xFFFFFFFF);
 
@@ -366,6 +366,15 @@ lower_sample_shading(nir_builder *b, nir_intrinsic_instr *intr, void *data)
       nir_def *sample_position =
          nir_fadd(b, &intr->def, nir_pad_vector_imm_int(b, offset, 0u, 4u));
       nir_def_rewrite_uses_after(&intr->def, sample_position);
+      return true;
+   }
+
+   if (intr->intrinsic == nir_intrinsic_load_sample_mask_in) {
+      b->cursor = nir_after_instr(&intr->instr);
+      nir_def *sample_id = nir_load_sample_id(b);
+      nir_def *sample_bit = nir_ishl(b, nir_imm_int(b, 1), sample_id);
+      nir_def *sample_mask_bit = nir_iand(b, &intr->def, sample_bit);
+      nir_def_rewrite_uses_after(&intr->def, sample_mask_bit);
       return true;
    }
 

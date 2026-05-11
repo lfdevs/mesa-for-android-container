@@ -99,6 +99,8 @@ int amdvgpu_device_initialize(int fd, uint32_t *drm_major, uint32_t *drm_minor,
                               struct util_sync_provider **p) {
    simple_mtx_lock(&dev_mutex);
    amdvgpu_device_handle dev;
+   uint8_t gfx_ip_version_major = 0;
+   uint32_t va_mgr_flags = 0;
 
    for (dev = dev_list; dev; dev = dev->next)
       if (fd_compare(dev->fd, fd) == 0)
@@ -166,17 +168,25 @@ int amdvgpu_device_initialize(int fd, uint32_t *drm_major, uint32_t *drm_minor,
          int count = util_bitcount(ip_info.available_rings);
          dev->virtio_ring_mapping[i] = next_ring_idx;
          next_ring_idx += count;
+
+         if (i == AMD_IP_GFX)
+            gfx_ip_version_major = ip_info.hw_ip_version_major;
       }
    }
    /* VIRTGPU_CONTEXT_PARAM_NUM_RINGS is hardcoded for now. */
    assert(next_ring_idx <= 64);
    dev->num_virtio_rings = next_ring_idx - 1;
 
+   if (gfx_ip_version_major >= 6 && gfx_ip_version_major <= 12 &&
+       gfx_ip_version_major != 9)
+      va_mgr_flags |= AMDGPU_VA_MGR_RESERVE_HALF_VA_FOR_PRT;
+
    dev->va_mgr = amdgpu_va_manager_alloc();
-   amdgpu_va_manager_init(dev->va_mgr,
+   amdgpu_va_manager_init2(dev->va_mgr,
       dev->dev_info.virtual_address_offset, dev->dev_info.virtual_address_max,
       dev->dev_info.high_va_offset, dev->dev_info.high_va_max,
-      dev->dev_info.virtual_address_alignment);
+      dev->dev_info.virtual_address_alignment,
+      va_mgr_flags);
 
    _mesa_hash_table_init(&dev->contexts, NULL,
                          _mesa_hash_pointer, _mesa_key_pointer_equal);

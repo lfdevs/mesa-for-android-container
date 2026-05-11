@@ -43,21 +43,25 @@ enum mpc_mpccid {
 
 enum mpc_mux_topsel {
     MPC_MUX_TOPSEL_DPP0    = 0,
+    MPC_MUX_TOPSEL_DPP1 = 1,
     MPC_MUX_TOPSEL_DISABLE = 0x0f,
 };
 
 enum mpc_mux_botsel {
     MPC_MUX_BOTSEL_MPCC0   = 0,
+    MPC_MUX_BOTSEL_MPCC1 = 1,
     MPC_MUX_BOTSEL_DISABLE = 0x0f,
 };
 
 enum mpc_mux_outmux {
     MPC_MUX_OUTMUX_MPCC0   = 0,
+    MPC_MUX_OUTMUX_MPCC1 = 1,
     MPC_MUX_OUTMUX_DISABLE = 0x0f,
 };
 
 enum mpc_mux_oppid {
     MPC_MUX_OPPID_OPP0    = 0,
+    MPC_MUX_OPPID_OPP1 = 1,
     MPC_MUX_OPPID_DISABLE = 0x0f,
 };
 
@@ -72,6 +76,14 @@ enum mpcc_alpha_blend_mode {
     MPCC_ALPHA_BLEND_MODE_PER_PIXEL_ALPHA,
     MPCC_ALPHA_BLEND_MODE_PER_PIXEL_ALPHA_COMBINED_GLOBAL_GAIN,
     MPCC_ALPHA_BLEND_MODE_GLOBAL_ALPHA,
+    MPCC_ALPHA_BLEND_MODE_ALPHA_THROUGH_LUMA,
+};
+
+enum mpcc_gamut_remap_id {
+    VPE_MPC_GAMUT_REMAP,
+    VPE_MPC_RMCM_GAMUT_REMAP,
+    VPE_MPC_MCM_FIRST_GAMUT_REMAP,
+    VPE_MPC_MCM_SECOND_GAMUT_REMAP,
 };
 
 /*
@@ -167,6 +179,20 @@ struct mpc_funcs {
     bool (*program_movable_cm)(struct mpc *mpc, struct transfer_func *func_shaper,
         struct vpe_3dlut *lut3d_func, struct transfer_func *blend_tf, bool afterblend);
     void (*program_crc)(struct mpc *mpc, bool enable);
+
+    void (*attach_3dlut_to_mpc_inst)(struct mpc *mpc, enum mpc_mpccid mpcc_idx);
+
+    void (*set_gamut_remap2)(struct mpc *mpc, struct colorspace_transform *gamut_remap,
+        enum mpcc_gamut_remap_id mpcc_gamut_remap_block_id);
+
+    void (*update_3dlut_fl_bias_scale)(struct mpc *mpc, uint16_t bias, uint16_t scale);
+
+    void (*program_mpc_3dlut_fl_config)(struct mpc *mpc, enum vpe_3dlut_mem_layout layout,
+        enum vpe_3dlut_mem_format format, bool enable);
+
+    void (*program_mpc_3dlut_fl)(struct mpc *mpc, enum lut_dimension lut_dimension, bool use_12bit);
+
+    void (*shaper_bypass)(struct mpc *mpc, bool bypass);
 
 };
 

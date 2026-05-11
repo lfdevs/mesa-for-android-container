@@ -544,7 +544,7 @@ VKAPI_ATTR void VKAPI_CALL lvp_GetDeviceImageSubresourceLayoutKHR(
     const VkDeviceImageSubresourceInfoKHR*      pInfo,
     VkSubresourceLayout2KHR*                    pLayout)
 {
-   VkImage image;
+   VkImage image = VK_NULL_HANDLE;
    /* technically supposed to be able to do this without creating an image, but that's harder */
    if (lvp_image_create(_device, pInfo->pCreateInfo, NULL, &image) != VK_SUCCESS)
       return;

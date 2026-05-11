@@ -262,8 +262,8 @@ load_tlas(nir_builder *b, nir_def *tlas,
    } else {
       return nir_load_global_ir3(b, components, 32,
                                  nir_pack_64_2x32(b, tlas),
-                                 nir_iadd_imm(b, nir_imul_imm(b, index, AS_RECORD_SIZE / 4),
-                                              offset / 4),
+                                 nir_iadd_imm(b, nir_imul_imm(b, index, AS_RECORD_SIZE),
+                                              offset),
                                  /* The required alignment of the
                                   * user-specified base from the Vulkan spec.
                                   */

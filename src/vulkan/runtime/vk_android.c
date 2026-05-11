@@ -190,19 +190,38 @@ vk_gralloc_to_drm_explicit_layout(
 }
 
 VkResult
-vk_android_import_anb(struct vk_device *device,
-                      const VkImageCreateInfo *pCreateInfo,
-                      const VkAllocationCallbacks *alloc,
-                      struct vk_image *image)
+vk_android_import_anb_memory(struct vk_device *device,
+                             struct vk_image *image,
+                             const VkNativeBufferANDROID *anb,
+                             const VkAllocationCallbacks *alloc)
 {
-   VkResult result;
+   assert(anb && anb->handle && anb->handle->numFds > 0);
 
-   const VkNativeBufferANDROID *native_buffer =
-      vk_find_struct_const(pCreateInfo->pNext, NATIVE_BUFFER_ANDROID);
+   int dma_buf_fd = anb->handle->data[0];
 
-   assert(native_buffer);
-   assert(native_buffer->handle);
-   assert(native_buffer->handle->numFds > 0);
+   /* Query image memory requirements for size and supported memory types */
+   VkMemoryRequirements mem_reqs;
+   device->dispatch_table.GetImageMemoryRequirements(
+      (VkDevice)device, (VkImage)image, &mem_reqs);
+
+   VkMemoryFdPropertiesKHR fd_props = {
+      .sType = VK_STRUCTURE_TYPE_MEMORY_FD_PROPERTIES_KHR,
+   };
+   VkResult result = device->dispatch_table.GetMemoryFdPropertiesKHR(
+      (VkDevice)device, VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT,
+      dma_buf_fd, &fd_props);
+   if (result != VK_SUCCESS)
+      return result;
+
+   uint32_t compatible_types = mem_reqs.memoryTypeBits & fd_props.memoryTypeBits;
+   if (!compatible_types)
+      return VK_ERROR_INVALID_EXTERNAL_HANDLE;
+
+   int dup_fd = os_dupfd_cloexec(dma_buf_fd);
+   if (dup_fd < 0) {
+      return (errno == EMFILE) ? VK_ERROR_TOO_MANY_OBJECTS
+                               : VK_ERROR_OUT_OF_HOST_MEMORY;
+   }
 
    const VkMemoryDedicatedAllocateInfo ded_alloc = {
       .sType = VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO,
@@ -214,23 +233,39 @@ vk_android_import_anb(struct vk_device *device,
       .sType = VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR,
       .pNext = &ded_alloc,
       .handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT,
-      .fd = os_dupfd_cloexec(native_buffer->handle->data[0]),
+      .fd = dup_fd,
    };
-
+   const VkMemoryAllocateInfo alloc_info = {
+      .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+      .pNext = &import_info,
+      .allocationSize = mem_reqs.size,
+      .memoryTypeIndex = ffs(compatible_types) - 1,
+   };
    result = device->dispatch_table.AllocateMemory(
-      (VkDevice)device,
-      &(VkMemoryAllocateInfo){
-         .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-         .pNext = &import_info,
-         .allocationSize = lseek(import_info.fd, 0, SEEK_END),
-         .memoryTypeIndex = 0, /* Should we be smarter here? */
-      },
-      alloc, &image->anb_memory);
-
+      (VkDevice)device, &alloc_info, alloc, &image->anb_memory);
    if (result != VK_SUCCESS) {
-      close(import_info.fd);
+      close(dup_fd);
       return result;
    }
+
+   return VK_SUCCESS;
+}
+
+VkResult
+vk_android_import_anb(struct vk_device *device,
+                      const VkImageCreateInfo *pCreateInfo,
+                      const VkAllocationCallbacks *alloc,
+                      struct vk_image *image)
+{
+   const VkNativeBufferANDROID *native_buffer =
+      vk_find_struct_const(pCreateInfo->pNext, NATIVE_BUFFER_ANDROID);
+
+   assert(native_buffer);
+
+   VkResult result = vk_android_import_anb_memory(device, image,
+                                                  native_buffer, alloc);
+   if (result != VK_SUCCESS)
+      return result;
 
    VkBindImageMemoryInfo bind_info = {
       .sType = VK_STRUCTURE_TYPE_BIND_IMAGE_MEMORY_INFO,
@@ -259,6 +294,91 @@ vk_android_get_anb_layout(
 
    return vk_gralloc_to_drm_explicit_layout(&gr_handle, out,
                                             out_layouts, max_planes);
+}
+
+VkResult
+vk_android_init_deferred_image(struct vk_device *device,
+                               struct vk_image *image,
+                               const VkImageCreateInfo *pCreateInfo,
+                               const VkAllocationCallbacks *pAllocator)
+{
+   /* collect all dynamic array infos */
+   uint32_t queue_family_count = 0;
+   uint32_t view_format_count = 0;
+
+   if (pCreateInfo->sharingMode == VK_SHARING_MODE_CONCURRENT)
+      queue_family_count = pCreateInfo->queueFamilyIndexCount;
+
+   const VkImageFormatListCreateInfo *raw_list =
+      vk_find_struct_const(pCreateInfo->pNext, IMAGE_FORMAT_LIST_CREATE_INFO);
+   if (raw_list)
+      view_format_count = raw_list->viewFormatCount;
+
+   /* Extend below when drivers support more extensions that interact with ANB
+    * or AHB. e.g. VK_EXT_image_compression_control
+    */
+   VK_MULTIALLOC(ma);
+   VK_MULTIALLOC_DECL(&ma, VkImageCreateInfo, create_info, 1);
+   VK_MULTIALLOC_DECL(&ma, VkImageFormatListCreateInfo, list_info, 1);
+   VK_MULTIALLOC_DECL(&ma, VkImageStencilUsageCreateInfo, stencil_info, 1);
+   VK_MULTIALLOC_DECL(&ma, uint32_t, queue_families, queue_family_count);
+   VK_MULTIALLOC_DECL(&ma, VkFormat, view_formats, view_format_count);
+
+   if (!vk_multialloc_zalloc2(&ma, &device->alloc, pAllocator,
+                              VK_SYSTEM_ALLOCATION_SCOPE_OBJECT))
+      return VK_ERROR_OUT_OF_HOST_MEMORY;
+
+   /* prepare the deferred VkImageCreateInfo chain */
+   *create_info = *pCreateInfo;
+   create_info->pNext = NULL;
+   /* Assign resolved AHB external format */
+   create_info->format = image->format;
+   create_info->tiling = image->tiling =
+      VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT;
+   if (pCreateInfo->sharingMode == VK_SHARING_MODE_CONCURRENT) {
+      typed_memcpy(queue_families, pCreateInfo->pQueueFamilyIndices,
+                   pCreateInfo->queueFamilyIndexCount);
+      create_info->pQueueFamilyIndices = queue_families;
+   }
+
+   /* Per spec section 12.3. Images
+    *
+    * - If tiling is VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT and flags contains
+    *   VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT, then the pNext chain must include a
+    *   VkImageFormatListCreateInfo structure with non-zero viewFormatCount.
+    *
+    * ANB and aliased ANB always chain proper format list for mutable swapchain
+    * image support, but AHB is allowed to mutate without an explicit format
+    * list due to legacy spec issue. So we chain a view format of the create
+    * format itself to satisfy VK_EXT_image_drm_format_modifier VUs.
+    */
+   if (view_format_count ||
+       image->create_flags & VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT) {
+      if (view_format_count) {
+         typed_memcpy(view_formats, raw_list->pViewFormats, view_format_count);
+      } else {
+         view_format_count = 1;
+         view_formats = &create_info->format;
+      }
+      *list_info = (VkImageFormatListCreateInfo){
+         .sType = VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO,
+         .viewFormatCount = view_format_count,
+         .pViewFormats = view_formats,
+      };
+      __vk_append_struct(create_info, list_info);
+   }
+
+   if (image->stencil_usage) {
+      *stencil_info = (VkImageStencilUsageCreateInfo){
+         .sType = VK_STRUCTURE_TYPE_IMAGE_STENCIL_USAGE_CREATE_INFO,
+         .stencilUsage = image->stencil_usage,
+      };
+      __vk_append_struct(create_info, stencil_info);
+   }
+
+   image->android_deferred_create_info = create_info;
+
+   return VK_SUCCESS;
 }
 
 static VkResult
@@ -946,6 +1066,11 @@ vk_common_GetAndroidHardwareBufferPropertiesANDROID(
          format_resolve->colorAttachmentFormat =
             num_bits == 8 ? VK_FORMAT_R8G8B8A8_UNORM
                           : VK_FORMAT_R16G16B16A16_UNORM;
+
+         format_prop2->formatFeatures |= VK_FORMAT_FEATURE_2_COLOR_ATTACHMENT_BIT;
+         if (format_prop) {
+            format_prop->formatFeatures |= VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT;
+         }
       } else {
          format_resolve->colorAttachmentFormat = VK_FORMAT_UNDEFINED;
       }

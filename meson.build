@@ -359,7 +359,7 @@ if freedreno_kmds.contains('kgsl')
 endif
 
 with_dri = false
-if with_gallium and (system_has_kms_drm or (freedreno_kmds.contains('kgsl') and with_gallium_zink))
+if with_gallium and (system_has_kms_drm or (with_gallium_zink and (freedreno_kmds.contains('kgsl') or host_machine.system() == 'darwin')))
   _glx = get_option('glx')
   _egl = get_option('egl')
   if _glx == 'dri' or _egl.enabled() or (_glx == 'disabled' and _egl.allowed())
@@ -1810,7 +1810,7 @@ endif
 dep_libdrm_amdgpu = null_dep
 dep_libdrm_intel = null_dep
 
-_drm_amdgpu_ver = '2.4.121'
+_drm_amdgpu_ver = '2.4.133'
 _drm_intel_ver = '2.4.75'
 _drm_ver = '2.4.109'
 

@@ -4404,7 +4404,7 @@ by a particular renderpass/blit.
 	<reg64 offset="0xae3c" name="SP_SW_DEBUG_ADDR" variants="A7XX-"/>
 	<reg64 offset="0xae3e" name="SP_ISDB_DEBUG_ADDR" variants="A7XX-"/>
 
-	<array offset="0xaec0" name="SP_PERFCTR_HLSQ_SEL_2_0" stride="1" length="6" variants="A7XX-"/>
+	<array offset="0xaec0" name="SP_PERFCTR_HLSQ_SEL_2" stride="1" length="6" variants="A7XX-"/>
 
 	<!--
 	The downstream kernel calls the debug cluster of registers
@@ -5099,6 +5099,10 @@ by a particular renderpass/blit.
 		<bitfield pos="0" name="FASTBLEND" type="boolean"/>
 		<bitfield pos="1" name="LPAC" type="boolean"/>
 		<bitfield pos="2" name="RAYTRACING" type="boolean"/>
+	</reg32>
+	<reg32 offset="0x0405" name="CX_MISC_SW_FUSE_FREQ_LIMIT_STATUS" variants="A8XX-">
+		<bitfield high="8" low="0" name="FINALFREQLIMIT"/>
+		<bitfield pos="24" name="SOFTSKUDISABLED" type="boolean"/>
 	</reg32>
 </domain>
 

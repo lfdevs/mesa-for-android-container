@@ -243,9 +243,10 @@ isl_genX(surf_fill_state_s)(const struct isl_device *dev, void *state,
                            ISL_SURF_USAGE_STORAGE_BIT);
    /* They may only specify one of the above bits at a time */
    assert(__builtin_popcount(_base_usage) == 1);
-   /* The only other allowed bit is ISL_SURF_USAGE_CUBE_BIT */
+   /* Check that only the other allowed bits are set */
    assert((info->view->usage & ~(ISL_SURF_USAGE_CUBE_BIT |
-                                 ISL_SURF_USAGE_PROTECTED_BIT)) ==
+                                 ISL_SURF_USAGE_PROTECTED_BIT |
+                                 ISL_SURF_USAGE_NO_ARRAY_OVERFETCH_BIT)) ==
           _base_usage);
 #endif
 
@@ -449,7 +450,9 @@ isl_genX(surf_fill_state_s)(const struct isl_device *dev, void *state,
    }
 
 #if GFX_VER >= 7
-   if (INTEL_NEEDS_WA_1806565034) {
+   if (info->view->usage & ISL_SURF_USAGE_NO_ARRAY_OVERFETCH_BIT) {
+      s.SurfaceArray = false;
+   } else if (INTEL_NEEDS_WA_1806565034) {
       /* Wa_1806565034:
        *
        *    "Only set SurfaceArray if arrayed surface is > 1."
@@ -1063,8 +1066,8 @@ isl_genX(buffer_fill_state_s)(const struct isl_device *dev, void *state,
        * newer are enough to fit 32bit num_elements.
        */
       if (num_elements > (1 << 27)) {
-         mesa_logw("%s: num_elements is too big: %"PRIu64" (buffer size: %"PRIu64")\n",
-                   __func__, num_elements, buffer_size);
+         mesa_logw_once("%s: num_elements is too big: %"PRIu64" (buffer size: %"PRIu64")\n",
+                        __func__, num_elements, buffer_size);
       }
    }
 

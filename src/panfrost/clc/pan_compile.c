@@ -428,7 +428,12 @@ main(int argc, const char **argv)
                      nir_var_mem_shared | nir_var_mem_global,
                   nir_address_format_62bit_generic);
 
-         pan_postprocess_nir(s, inputs.gpu_id);
+         struct pan_shader_info shader_info = {0};
+         if (target_arch >= 9)
+            shader_info.cs.allow_merging_workgroups =
+               valhall_can_merge_workgroups(s);
+
+         pan_postprocess_nir(s, &inputs, &shader_info);
 
          NIR_PASS(_, s, nir_shader_intrinsics_pass, lower_sysvals,
                   nir_metadata_control_flow, NULL);
@@ -436,12 +441,7 @@ main(int argc, const char **argv)
          nir_shader *clone = nir_shader_clone(NULL, s);
 
          struct util_dynarray shader_binary;
-         struct pan_shader_info shader_info = {0};
          shader_binary = UTIL_DYNARRAY_INIT;
-
-         if (target_arch >= 9)
-            shader_info.cs.allow_merging_workgroups =
-               valhall_can_merge_workgroups(s);
 
          pan_shader_compile(clone, &inputs, &shader_binary, &shader_info);
 

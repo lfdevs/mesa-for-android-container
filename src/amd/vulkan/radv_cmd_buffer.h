@@ -85,45 +85,47 @@ enum radv_dynamic_state_bits {
 };
 
 enum radv_cmd_dirty_bits {
-   RADV_CMD_DIRTY_PIPELINE = 1ull << 0,
-   RADV_CMD_DIRTY_INDEX_BUFFER = 1ull << 1,
-   RADV_CMD_DIRTY_VERTEX_BUFFER = 1ull << 2,
-   RADV_CMD_DIRTY_STREAMOUT_BUFFER = 1ull << 3,
-   RADV_CMD_DIRTY_GUARDBAND = 1ull << 4,
-   RADV_CMD_DIRTY_RBPLUS = 1ull << 5,
-   RADV_CMD_DIRTY_OCCLUSION_QUERY = 1ull << 6,
-   RADV_CMD_DIRTY_DB_SHADER_CONTROL = 1ull << 7,
-   RADV_CMD_DIRTY_STREAMOUT_ENABLE = 1ull << 8,
-   RADV_CMD_DIRTY_GRAPHICS_SHADERS = 1ull << 9,
-   RADV_CMD_DIRTY_FRAGMENT_OUTPUT = 1ull << 10,
-   RADV_CMD_DIRTY_PS_STATE = 1ull << 11,
-   RADV_CMD_DIRTY_NGG_STATE = 1ull << 12,
-   RADV_CMD_DIRTY_TASK_STATE = 1ull << 13,
-   RADV_CMD_DIRTY_DEPTH_STENCIL_STATE = 1ull << 14,
-   RADV_CMD_DIRTY_RASTER_STATE = 1ull << 15,
-   RADV_CMD_DIRTY_MSAA_STATE = 1ull << 16,
-   RADV_CMD_DIRTY_CLIP_RECTS_STATE = 1ull << 17,
-   RADV_CMD_DIRTY_TCS_TES_STATE = 1ull << 18,
-   RADV_CMD_DIRTY_CB_RENDER_STATE = 1ull << 19,
-   RADV_CMD_DIRTY_VIEWPORT_STATE = 1ull << 20,
-   RADV_CMD_DIRTY_BINNING_STATE = 1ull << 21,
-   RADV_CMD_DIRTY_FSR_STATE = 1ull << 22,
-   RADV_CMD_DIRTY_RAST_SAMPLES_STATE = 1ull << 23,
-   RADV_CMD_DIRTY_DEPTH_BIAS_STATE = 1ull << 24,
-   RADV_CMD_DIRTY_VS_PROLOG_STATE = 1ull << 25,
-   RADV_CMD_DIRTY_BLEND_CONSTANTS_STATE = 1ull << 26,
-   RADV_CMD_DIRTY_SAMPLE_LOCATIONS_STATE = 1ull << 27,
-   RADV_CMD_DIRTY_SCISSOR_STATE = 1ull << 28,
-   RADV_CMD_DIRTY_TESS_DOMAIN_ORIGIN_STATE = 1ull << 29,
-   RADV_CMD_DIRTY_LS_HS_CONFIG = 1ull << 30,
-   RADV_CMD_DIRTY_VGT_PRIM_STATE = 1ull << 31,
-   RADV_CMD_DIRTY_FORCE_VRS_STATE = 1ull << 32,
-   RADV_CMD_DIRTY_NGGC_VIEWPORT = 1ull << 33,
-   RADV_CMD_DIRTY_NGGC_SETTINGS = 1ull << 34,
-   RADV_CMD_DIRTY_PS_EPILOG_SHADER = 1ull << 35,
-   RADV_CMD_DIRTY_PS_EPILOG_STATE = 1ull << 36,
-   RADV_CMD_DIRTY_GFX12_HIZ_WA_STATE = 1ull << 37,
-   RADV_CMD_DIRTY_ALL = (1ull << 38) - 1,
+   RADV_CMD_DIRTY_GRAPHICS_PIPELINE = 1ull << 0,
+   RADV_CMD_DIRTY_COMPUTE_PIPELINE = 1ull << 1,
+   RADV_CMD_DIRTY_RAY_TRACING_PIPELINE = 1ull << 2,
+   RADV_CMD_DIRTY_INDEX_BUFFER = 1ull << 3,
+   RADV_CMD_DIRTY_VERTEX_BUFFER = 1ull << 4,
+   RADV_CMD_DIRTY_STREAMOUT_BUFFER = 1ull << 5,
+   RADV_CMD_DIRTY_GUARDBAND = 1ull << 6,
+   RADV_CMD_DIRTY_RBPLUS = 1ull << 7,
+   RADV_CMD_DIRTY_OCCLUSION_QUERY = 1ull << 8,
+   RADV_CMD_DIRTY_DB_SHADER_CONTROL = 1ull << 9,
+   RADV_CMD_DIRTY_STREAMOUT_ENABLE = 1ull << 10,
+   RADV_CMD_DIRTY_GRAPHICS_SHADERS = 1ull << 11,
+   RADV_CMD_DIRTY_FRAGMENT_OUTPUT = 1ull << 12,
+   RADV_CMD_DIRTY_PS_STATE = 1ull << 13,
+   RADV_CMD_DIRTY_NGG_STATE = 1ull << 14,
+   RADV_CMD_DIRTY_TASK_STATE = 1ull << 15,
+   RADV_CMD_DIRTY_DEPTH_STENCIL_STATE = 1ull << 16,
+   RADV_CMD_DIRTY_RASTER_STATE = 1ull << 17,
+   RADV_CMD_DIRTY_MSAA_STATE = 1ull << 18,
+   RADV_CMD_DIRTY_CLIP_RECTS_STATE = 1ull << 19,
+   RADV_CMD_DIRTY_TCS_TES_STATE = 1ull << 20,
+   RADV_CMD_DIRTY_CB_RENDER_STATE = 1ull << 21,
+   RADV_CMD_DIRTY_VIEWPORT_STATE = 1ull << 22,
+   RADV_CMD_DIRTY_BINNING_STATE = 1ull << 23,
+   RADV_CMD_DIRTY_FSR_STATE = 1ull << 24,
+   RADV_CMD_DIRTY_RAST_SAMPLES_STATE = 1ull << 25,
+   RADV_CMD_DIRTY_DEPTH_BIAS_STATE = 1ull << 26,
+   RADV_CMD_DIRTY_VS_PROLOG_STATE = 1ull << 27,
+   RADV_CMD_DIRTY_BLEND_CONSTANTS_STATE = 1ull << 28,
+   RADV_CMD_DIRTY_SAMPLE_LOCATIONS_STATE = 1ull << 29,
+   RADV_CMD_DIRTY_SCISSOR_STATE = 1ull << 30,
+   RADV_CMD_DIRTY_TESS_DOMAIN_ORIGIN_STATE = 1ull << 31,
+   RADV_CMD_DIRTY_LS_HS_CONFIG = 1ull << 32,
+   RADV_CMD_DIRTY_VGT_PRIM_STATE = 1ull << 33,
+   RADV_CMD_DIRTY_FORCE_VRS_STATE = 1ull << 34,
+   RADV_CMD_DIRTY_NGGC_VIEWPORT = 1ull << 35,
+   RADV_CMD_DIRTY_NGGC_SETTINGS = 1ull << 36,
+   RADV_CMD_DIRTY_PS_EPILOG_SHADER = 1ull << 37,
+   RADV_CMD_DIRTY_PS_EPILOG_STATE = 1ull << 38,
+   RADV_CMD_DIRTY_GFX12_HIZ_WA_STATE = 1ull << 39,
+   RADV_CMD_DIRTY_ALL = (1ull << 40) - 1,
 
    RADV_CMD_DIRTY_SHADER_QUERY = RADV_CMD_DIRTY_NGG_STATE | RADV_CMD_DIRTY_TASK_STATE,
 };
@@ -167,17 +169,15 @@ enum radv_cmd_flush_bits {
                                  RADV_CMD_FLAG_INV_L2 | RADV_CMD_FLAG_WB_L2 | RADV_CMD_FLAG_CS_PARTIAL_FLUSH),
 };
 
-struct radv_vertex_binding {
-   uint64_t addr;
-   VkDeviceSize size;
-};
-
 struct radv_streamout_binding {
    uint64_t va;
    VkDeviceSize size;
 };
 
 struct radv_streamout_state {
+   /* Buffer bindings. */
+   struct radv_streamout_binding bindings[MAX_SO_BUFFERS];
+
    /* Mask of bound streamout buffers. */
    uint8_t enabled_mask;
 
@@ -189,6 +189,9 @@ struct radv_streamout_state {
 
    /* VA of the streamout state (GFX12+). */
    uint64_t state_va;
+
+   /* Whether streamout is suspended for internal driver operations. */
+   bool suspended;
 };
 
 /**
@@ -320,48 +323,66 @@ struct radv_meta_saved_state {
    bool inside_meta_op;
 };
 
-struct radv_cmd_state {
-   /* Vertex descriptors */
-   uint64_t vb_va;
-   unsigned vb_size;
+struct radv_vertex_binding {
+   uint64_t addr;
+   VkDeviceSize size;
+};
 
-   bool predicating;
-   uint64_t dirty_dynamic;
+struct radv_vertex_buffer_state {
+   struct radv_vertex_binding bindings[MAX_VBS];
+   uint32_t bound_mask;
+};
+
+struct radv_index_buffer_state {
+   uint64_t va;
+   uint32_t index_type;
+   uint32_t max_index_count;
+};
+
+struct radv_cond_render_state {
+   uint64_t user_va;                 /* User predication VA. */
+   uint64_t emulated_va;             /* Emulated VA if no 32-bit predication support. */
+   uint64_t mec_inv_pred_va;         /* For inverted predication when using MEC. */
+   int8_t type;                      /* -1: disabled, 0: normal, 1: inverted */
+   uint8_t op;                       /* 32-bit or 64-bit predicate value */
+   bool enabled;
+   bool enabled_save;
+   bool mec_inv_pred_emitted;        /* To ensure we don't have to repeat inverting the VA. */
+   bool suspended;
+};
+
+struct radv_cmd_state {
    uint64_t dirty;
+   uint64_t dirty_dynamic;
 
    VkShaderStageFlags active_stages;
    struct radv_shader *shaders[MESA_VULKAN_SHADER_STAGES];
-   struct radv_shader *gs_copy_shader;
-   struct radv_shader *last_vgt_shader;
-   struct radv_shader *rt_prolog;
-
    struct radv_shader_object *shader_objs[MESA_VULKAN_SHADER_STAGES];
 
    uint32_t prefetch_L2_mask;
+   uint64_t vb_va;
+   unsigned vb_size;
 
    struct radv_graphics_pipeline *graphics_pipeline;
-   struct radv_graphics_pipeline *emitted_graphics_pipeline;
+   struct radv_shader_part *emitted_vs_prolog;
+   struct radv_shader *gs_copy_shader;
+   struct radv_shader *last_vgt_shader;
+   struct radv_shader *emitted_ps;
+   struct radv_shader_part *ps_epilog;
+
    struct radv_compute_pipeline *compute_pipeline;
-   struct radv_compute_pipeline *emitted_compute_pipeline;
+
    struct radv_ray_tracing_pipeline *rt_pipeline;
-   struct radv_ray_tracing_pipeline *emitted_rt_pipeline;
+   struct radv_shader *rt_prolog;
+   uint32_t rt_stack_size;
+
    struct radv_dynamic_state dynamic;
    struct radv_streamout_state streamout;
-
+   struct radv_vertex_buffer_state vertex_buffer;
+   struct radv_index_buffer_state index_buffer;
+   struct radv_cond_render_state cond_render;
    struct radv_rendering_state render;
-
    struct radv_meta_saved_state meta;
-
-   /* Index buffer */
-   uint32_t index_type;
-   uint32_t max_index_count;
-   uint64_t index_va;
-   int32_t last_index_type;
-
-   /* Primitive restart */
-   int32_t last_primitive_restart_en;
-   uint32_t primitive_restart_index;
-   uint32_t last_primitive_restart_index;
 
    enum radv_cmd_flush_bits flush_bits;
    unsigned active_occlusion_queries;
@@ -373,16 +394,8 @@ struct radv_cmd_state {
    unsigned active_prims_xfb_queries;
    unsigned active_emulated_prims_gen_queries;
    unsigned active_emulated_prims_xfb_queries;
-   uint32_t trace_id;
-   uint32_t last_ia_multi_vgt_param;
-   uint32_t last_ge_cntl;
 
-   uint32_t last_num_instances;
-   uint32_t last_first_instance;
-   bool last_vertex_offset_valid;
-   uint32_t last_vertex_offset;
-   uint32_t last_drawid;
-   uint32_t last_subpass_color_count;
+   uint32_t primitive_restart_index;
 
    /* Whether CP DMA is busy/idle. */
    bool dma_is_busy;
@@ -390,52 +403,16 @@ struct radv_cmd_state {
    /* Whether any images that are not L2 coherent are dirty from the CB. */
    bool rb_noncoherent_dirty;
 
-   /* Conditional rendering info. */
-   uint8_t predication_op;           /* 32-bit or 64-bit predicate value */
-   int predication_type;             /* -1: disabled, 0: normal, 1: inverted */
-   uint64_t user_predication_va;     /* User predication VA. */
-   uint64_t emulated_predication_va; /* Emulated VA if no 32-bit predication support. */
-   uint64_t mec_inv_pred_va;         /* For inverted predication when using MEC. */
-   bool mec_inv_pred_emitted;        /* To ensure we don't have to repeat inverting the VA. */
-   bool saved_user_cond_render;
-   bool is_user_cond_render_suspended;
-
    /* Inheritance info. */
    VkQueryPipelineStatisticFlags inherited_pipeline_statistics;
    bool inherited_occlusion_queries;
    VkQueryControlFlags inherited_query_control_flags;
-
-   /* SQTT related state. */
-   uint32_t current_event_type;
-   uint32_t num_events;
-   uint32_t num_layout_transitions;
-   bool in_barrier;
-   bool pending_sqtt_barrier_end;
-   enum rgp_flush_bits sqtt_flush_bits;
-
-   /* Mesh shading state. */
-   bool mesh_shading;
 
    uint8_t cb_mip[MAX_RTS];
    uint8_t ds_mip;
 
    /* Whether DRAW_{INDEX}_INDIRECT_{MULTI} is emitted. */
    bool uses_draw_indirect;
-
-   uint32_t rt_stack_size;
-
-   struct radv_shader_part *emitted_vs_prolog;
-   uint32_t vbo_bound_mask;
-
-   struct radv_shader *emitted_ps;
-
-   struct radv_shader_part *ps_epilog;
-
-   /* Whether to suspend streamout for internal driver operations. */
-   bool suspend_streamout;
-
-   /* Whether this commandbuffer uses performance counters. */
-   bool uses_perf_counters;
 
    struct radv_ia_multi_vgt_param_helpers ia_multi_vgt_param;
 
@@ -452,8 +429,6 @@ struct radv_cmd_state {
 
    /* Custom blend mode for internal operations. */
    unsigned custom_blend_mode;
-
-   unsigned last_cb_target_mask;
 
    VkLineRasterizationModeEXT line_rast_mode;
    unsigned vgt_outprim_type;
@@ -473,6 +448,29 @@ struct radv_cmd_state {
 
    enum radv_depth_clamp_mode depth_clamp_mode;
    bool depth_clip_enable;
+
+   uint32_t last_cb_target_mask;
+   uint32_t last_ia_multi_vgt_param;
+   uint32_t last_ge_cntl;
+   uint32_t last_num_instances;
+   uint32_t last_first_instance;
+   uint32_t last_vertex_offset;
+   uint32_t last_drawid;
+   uint32_t last_subpass_color_count;
+   uint32_t last_primitive_restart_index;
+   int32_t last_index_type;
+   int32_t last_primitive_restart_en;
+   bool last_vertex_offset_valid;
+
+   /* SQTT related state. */
+   uint32_t current_event_type;
+   uint32_t num_events;
+   uint32_t num_layout_transitions;
+   bool in_barrier;
+   bool pending_sqtt_barrier_end;
+   enum rgp_flush_bits sqtt_flush_bits;
+
+   uint32_t trace_id;
 };
 
 struct radv_enc_state {
@@ -511,14 +509,29 @@ struct radv_cmd_stream {
    struct ac_buffered_sh_regs buffered_sh_regs;
 };
 
+struct radv_cmd_buffer_queue_state {
+   uint64_t shader_upload_seq;
+   uint32_t scratch_size_per_wave_needed;
+   uint32_t scratch_waves_wanted;
+   uint32_t compute_scratch_size_per_wave_needed;
+   uint32_t compute_scratch_waves_wanted;
+   uint32_t esgs_ring_size_needed;
+   uint32_t gsvs_ring_size_needed;
+   bool tess_rings_needed;
+   bool task_rings_needed;
+   bool mesh_scratch_ring_needed;
+   bool gds_needed;    /* Emulated queries on GFX10-GFX10.3 */
+   bool gds_oa_needed; /* NGG streamout on GFX11-GFX11.5 */
+   bool sample_positions_needed;
+   bool uses_perf_counters;
+};
+
 struct radv_cmd_buffer {
    struct vk_command_buffer vk;
 
    VkCommandBufferUsageFlags usage_flags;
    struct radv_cmd_stream *cs;
    struct radv_cmd_state state;
-   struct radv_vertex_binding vertex_bindings[MAX_VBS];
-   struct radv_streamout_binding streamout_bindings[MAX_SO_BUFFERS];
    enum radv_queue_family qf;
 
    uint8_t push_constants[MAX_PUSH_CONSTANTS_SIZE];
@@ -533,19 +546,10 @@ struct radv_cmd_buffer {
 
    struct radv_cmd_buffer_upload upload;
 
-   uint32_t scratch_size_per_wave_needed;
-   uint32_t scratch_waves_wanted;
-   uint32_t compute_scratch_size_per_wave_needed;
-   uint32_t compute_scratch_waves_wanted;
-   uint32_t esgs_ring_size_needed;
-   uint32_t gsvs_ring_size_needed;
-   bool tess_rings_needed;
-   bool task_rings_needed;
-   bool mesh_scratch_ring_needed;
-   bool gds_needed;    /* Emulated queries on GFX10-GFX10.3 */
-   bool gds_oa_needed; /* NGG streamout on GFX11-GFX11.5 */
-   bool sample_positions_needed;
+   struct radv_cmd_buffer_queue_state queue_state;
 
+   struct radeon_winsys_bo *gfx9_fence_bo_tmz;
+   struct radeon_winsys_bo *gfx9_eop_bug_bo_tmz;
    uint64_t gfx9_fence_va;
    uint32_t gfx9_fence_idx;
    uint64_t gfx9_eop_bug_va;
@@ -609,8 +613,6 @@ struct radv_cmd_buffer {
       struct radeon_winsys_bo *copy_temp;
    } transfer;
 
-   uint64_t shader_upload_seq;
-
    uint32_t sqtt_cb_id;
 
    struct set *accel_struct_buffers;
@@ -631,7 +633,7 @@ radv_is_streamout_enabled(struct radv_cmd_buffer *cmd_buffer)
    struct radv_streamout_state *so = &cmd_buffer->state.streamout;
 
    /* Streamout must be enabled for the PRIMITIVES_GENERATED query to work. */
-   return (so->streamout_enabled || cmd_buffer->state.active_prims_gen_queries) && !cmd_buffer->state.suspend_streamout;
+   return (so->streamout_enabled || cmd_buffer->state.active_prims_gen_queries) && !so->suspended;
 }
 
 ALWAYS_INLINE static unsigned
@@ -845,20 +847,24 @@ void radv_upload_indirect_descriptor_sets(struct radv_cmd_buffer *cmd_buffer,
 static inline void
 radv_suspend_conditional_rendering(struct radv_cmd_buffer *cmd_buffer)
 {
-   assert(!cmd_buffer->state.is_user_cond_render_suspended);
+   struct radv_cond_render_state *cond_render = &cmd_buffer->state.cond_render;
 
-   cmd_buffer->state.saved_user_cond_render = cmd_buffer->state.predicating;
-   cmd_buffer->state.predicating = false;
-   cmd_buffer->state.is_user_cond_render_suspended = true;
+   assert(!cond_render->suspended);
+
+   cond_render->enabled_save = cond_render->enabled;
+   cond_render->enabled = false;
+   cond_render->suspended = true;
 }
 
 static inline void
 radv_resume_conditional_rendering(struct radv_cmd_buffer *cmd_buffer)
 {
-   assert(cmd_buffer->state.is_user_cond_render_suspended);
+   struct radv_cond_render_state *cond_render = &cmd_buffer->state.cond_render;
 
-   cmd_buffer->state.predicating = cmd_buffer->state.saved_user_cond_render;
-   cmd_buffer->state.is_user_cond_render_suspended = false;
+   assert(cond_render->suspended);
+
+   cond_render->enabled = cond_render->enabled_save;
+   cond_render->suspended = false;
 }
 
 #endif /* RADV_CMD_BUFFER_H */

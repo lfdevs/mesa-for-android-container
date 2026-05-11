@@ -10,7 +10,6 @@
 #include "util/enum_operators.h"
 
 #include <algorithm>
-#include <map>
 #include <vector>
 
 namespace aco {

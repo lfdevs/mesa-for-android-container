@@ -69,6 +69,8 @@
 
 #define V3D_MAX_ARRAY_LAYERS 2048
 
+#define V3D_MAX_CSD_WG_SIZE 256
+
 #define V3D_MAX_VERTEX_ATTRIB_DIVISOR 0xffff
 
 /* Tile allocation block sizes for the PTB, as enum values matching

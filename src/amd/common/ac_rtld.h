@@ -8,7 +8,6 @@
 #define AC_RTLD_H
 
 #include "compiler/shader_enums.h"
-#include "util/u_dynarray.h"
 #include "amd_family.h"
 
 #include <stdbool.h>

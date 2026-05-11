@@ -7,6 +7,14 @@ timeout = 120
 prefix = "ahb-"
 renderer_check = "Virtio-GPU Venus.*Intel"
 
+# Vulkan WSI test set
+[[deqp]]
+deqp = "/data/deqp/deqp-vk"
+caselists = ["/data/deqp/vk-main.txt"]
+include = ["dEQP-VK.wsi.android.*"]
+timeout = 120
+prefix = "awsi-"
+
 # Basic fractioned vkcts test set
 [[deqp]]
 deqp = "/data/deqp/deqp-vk"
@@ -14,9 +22,9 @@ caselists = [ "/data/deqp/vk-main.txt" ]
 tests_per_group = 10000
 skips = ["/data/deqp/android-skips.txt"]
 timeout = 120
-fraction = 50
+fraction = 100
 
-# Basic EGL test set
+# EGL test set
 [[deqp]]
 deqp = "/data/deqp/deqp-egl-android"
 caselists = ["/data/deqp/egl-main.txt"]

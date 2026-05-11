@@ -40,6 +40,7 @@
 #include "util/os_time.h"
 #include <inttypes.h>
 #include "util/detect.h"
+#include "c99_alloca.h"
 
 void
 dd_get_debug_filename_and_mkdir(char *buf, size_t buflen, bool verbose)

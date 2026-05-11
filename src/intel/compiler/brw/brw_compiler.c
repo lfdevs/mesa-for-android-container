@@ -74,6 +74,7 @@ const struct nir_shader_compiler_options brw_scalar_nir_options = {
    .support_indirect_outputs = (uint8_t)BITFIELD_MASK(MESA_SHADER_STAGES),
    .per_view_unique_driver_locations = true,
    .compact_view_index = true,
+   .io_options = nir_io_use_frag_result_dual_src_blend,
 };
 
 struct brw_compiler *

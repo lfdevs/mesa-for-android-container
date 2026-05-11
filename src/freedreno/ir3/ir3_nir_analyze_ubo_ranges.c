@@ -16,18 +16,13 @@ get_ubo_load_range(nir_shader *nir, nir_intrinsic_instr *instr,
    uint32_t offset = nir_intrinsic_range_base(instr);
    uint32_t size = nir_intrinsic_range(instr);
 
-   if (instr->intrinsic == nir_intrinsic_load_global_ir3) {
-      offset *= 4;
-      size *= 4;
-   }
-
    /* If the offset is constant, the range is trivial (and NIR may not have
     * figured it out).
     */
    if (nir_src_is_const(instr->src[1])) {
       offset = nir_src_as_uint(instr->src[1]);
       if (instr->intrinsic == nir_intrinsic_load_global_ir3)
-         offset *= 4;
+         offset <<= nir_intrinsic_offset_shift(instr);
       size = nir_intrinsic_dest_components(instr) * 4;
    }
 
@@ -297,25 +292,30 @@ lower_ubo_load_to_uniform(nir_intrinsic_instr *instr, nir_builder *b,
 
    nir_def *uniform_offset = ubo_offset;
 
-   if (instr->intrinsic == nir_intrinsic_load_ubo) {
-      /* UBO offset is in bytes, but uniform offset is in units of
-       * dwords, so we need to divide by 4 (right-shift by 2). For ldc the
-       * offset is in units of 16 bytes, so we need to multiply by 4. And
-       * also the same for the constant part of the offset:
-       */
-      const int shift = -2;
-      nir_def *new_offset = ir3_nir_try_propagate_bit_shift(b, ubo_offset, -2);
-      if (new_offset) {
-         uniform_offset = new_offset;
-      } else {
-         uniform_offset = shift > 0
-                             ? nir_ishl_imm(b, ubo_offset, shift)
-                             : nir_ushr_imm(b, ubo_offset, -shift);
-      }
+   /* UBO/global offset is in bytes, but uniform offset is in units of
+    * dwords, so we need to divide by 4 (right-shift by 2). For ldc the
+    * offset is in units of 16 bytes, so we need to multiply by 4. And
+    * also the same for the constant part of the offset:
+    */
+   int shift = -2;
+
+   if (instr->intrinsic == nir_intrinsic_load_global_ir3) {
+      unsigned offset_shift = nir_intrinsic_offset_shift(instr);
+      assert(offset_shift <= 2);
+
+      shift = -(2 - offset_shift);
+   }
+
+   nir_def *new_offset = ir3_nir_try_propagate_bit_shift(b, ubo_offset, shift);
+   if (new_offset) {
+      uniform_offset = new_offset;
+   } else {
+      uniform_offset = shift > 0 ? nir_ishl_imm(b, ubo_offset, shift)
+                                 : nir_ushr_imm(b, ubo_offset, -shift);
    }
 
    assert(!(const_offset & 0x3));
-   const_offset >>= 2;
+   const_offset >>= -shift;
 
    const int range_offset = ((int)range->offset - (int)range->start) / 4;
    const_offset += range_offset;

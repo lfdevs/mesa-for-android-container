@@ -243,6 +243,11 @@ struct etna_context {
    bool compute_only;
    bool in_draw_vbo;
    bool in_transfer_blit;
+
+   /* Set by etna_copy_resource/etna_copy_resource_box when the caller
+    * needs an R<->B swap during the blit.  Consumed by BLT/RS because
+    * pipe_blit_info has no driver-private field to carry this through. */
+   bool blit_rb_swap;
    bool needs_gpu_state_reset;
    bool alpha_coverage_dither_emitted;
 

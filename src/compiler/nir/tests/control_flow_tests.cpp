@@ -159,8 +159,8 @@ TEST_F(nir_cf_test, lcssa_iter_safety_during_deref_remat)
 
    EXPECT_FALSE(nir_def_is_unused(index));
    nir_foreach_use_including_if(src, index)
-      EXPECT_TRUE(!nir_src_is_if(src) && nir_src_parent_instr(src)->type == nir_instr_type_phi &&
-                  nir_src_parent_instr(src)->block == block_after_loop);
+      EXPECT_TRUE(!nir_src_is_if(src) && nir_src_use_instr(src)->type == nir_instr_type_phi &&
+                  nir_src_use_instr(src)->block == block_after_loop);
 
    nir_validate_shader(b->shader, NULL);
    nir_validate_ssa_dominance(b->shader, NULL);

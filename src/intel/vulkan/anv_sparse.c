@@ -1658,15 +1658,30 @@ anv_sparse_image_check_support(struct anv_physical_device *pdevice,
       return VK_ERROR_FEATURE_NOT_PRESENT;
    }
 
-   /* While our hardware allows us to support sparse with some depth/stencil
-    * formats (e.g., single-sampled 2D), the spec seems to be expecting that,
-    * if we support a format, we have to support it with all the multi-sampled
-    * flags we support for non-sparse. Therefore, just give up depth/stencil
-    * entirely since games don't seem to be requiring it.
+   /* Please see ISL's filter_tiling() functions for accurate explanations on
+    * why depth/stencil images are not always supported with the tiling
+    * formats we want.
     */
    VkImageAspectFlags aspects = vk_format_aspects(vk_format);
-   if (aspects & (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT))
-      return VK_ERROR_FORMAT_NOT_SUPPORTED;
+   if (aspects & (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT)) {
+      /* For multi-sampled images, the image layouts for color and
+       * depth/stencil are different, and only the color layout is compatible
+       * with the standard block shapes.
+       */
+      valid_samples &= VK_SAMPLE_COUNT_1_BIT;
+
+      /* For 125+, isl_gfx125_filter_tiling() claims 3D is not supported.
+       * For the previous platforms, isl_gfx6_filter_tiling() says only 2D is
+       * supported.
+       */
+      if (pdevice->info.verx10 >= 125) {
+         if (type == VK_IMAGE_TYPE_3D)
+            return VK_ERROR_FORMAT_NOT_SUPPORTED;
+      } else {
+         if (type != VK_IMAGE_TYPE_2D)
+            return VK_ERROR_FORMAT_NOT_SUPPORTED;
+      }
+   }
 
    const struct anv_format *anv_format = anv_get_format(pdevice, vk_format);
    if (!anv_format)
@@ -1708,6 +1723,9 @@ anv_sparse_image_check_support(struct anv_physical_device *pdevice,
 
    if (valid_samples_out)
       *valid_samples_out = valid_samples;
+
+   if (!valid_samples)
+      return VK_ERROR_FORMAT_NOT_SUPPORTED;
 
    return VK_SUCCESS;
 }

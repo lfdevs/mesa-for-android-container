@@ -12,7 +12,7 @@
 #include "ac_cmdbuf.h"
 #include "util/os_time.h"
 #include "util/detect_os.h"
-#include "util/bitpack_helpers.h"
+#include "util/u_math.h"
 #include "util/u_memory.h"
 
 #if DETECT_OS_POSIX

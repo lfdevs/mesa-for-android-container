@@ -231,6 +231,27 @@ typedef struct reg_id_val {
         config_writer_fill_direct_config_packet(config_writer, &packet);                           \
     } while (0)
 
+#define REG_SET_11(reg_name, init_val, f1, v1, f2, v2, f3, v3, f4, v4, f5, v5, f6, v6, f7, v7, f8, \
+    v8, f9, v9, f10, v10, f11, v11)                                                                \
+    do {                                                                                           \
+        packet.bits.INC                         = 0;                                               \
+        packet.bits.VPEP_CONFIG_DATA_SIZE       = 0;                                               \
+        packet.bits.VPEP_CONFIG_REGISTER_OFFSET = REG_OFFSET(reg_name);                            \
+        REG_IS_WRITTEN(reg_name)                = true;                                            \
+        packet.data[0]                          = REG_LAST_WRITTEN_VAL(reg_name) =                 \
+            (((uint32_t)init_val & ~(REG_FIELD_MASK(f1)) & ~(REG_FIELD_MASK(f2)) &                 \
+                 ~(REG_FIELD_MASK(f3)) & ~(REG_FIELD_MASK(f4)) & ~(REG_FIELD_MASK(f5)) &           \
+                 ~(REG_FIELD_MASK(f6)) & ~(REG_FIELD_MASK(f7)) & ~(REG_FIELD_MASK(f8)) &           \
+                 ~(REG_FIELD_MASK(f9)) & ~(REG_FIELD_MASK(f10))) |                                 \
+                REG_FIELD_VALUE(f1, (uint32_t)v1) | REG_FIELD_VALUE(f2, (uint32_t)v2) |            \
+                REG_FIELD_VALUE(f3, (uint32_t)v3) | REG_FIELD_VALUE(f4, (uint32_t)v4) |            \
+                REG_FIELD_VALUE(f5, (uint32_t)v5) | REG_FIELD_VALUE(f6, (uint32_t)v6) |            \
+                REG_FIELD_VALUE(f7, (uint32_t)v7) | REG_FIELD_VALUE(f8, (uint32_t)v8) |            \
+                REG_FIELD_VALUE(f9, (uint32_t)v9) | REG_FIELD_VALUE(f10, (uint32_t)v10) |          \
+                REG_FIELD_VALUE(f11, (uint32_t)v11));                                              \
+        config_writer_fill_direct_config_packet(config_writer, &packet);                           \
+    } while (0)
+
 #define REG_SET_DEFAULT(reg_name)                                                                  \
     do {                                                                                           \
         packet.bits.INC                         = 0;                                               \

@@ -28,8 +28,11 @@
 
 #define MAX_3DLUT 1
 
-#define MAX_INPUT_PIPE  1
-#define MAX_OUTPUT_PIPE 1
+#define MAX_INPUT_PIPE   2
+#define MAX_OUTPUT_PIPE  4
+#define FROD_NUM_OUTPUTS 4 /**< 4 outputs for FROD, one pipeline output and 3 downscaled versions 1:2, 1:4 and 1:8*/
+#define FROD_DOWNSAMPLING_RATIO 2
+#define MAX_HISTO_SETS   3
 
 #ifdef __cplusplus
 extern "C" {
@@ -136,6 +139,48 @@ enum hw_point_position {
     HW_POINT_POSITION_RIGHT,
 };
 
+/** @enum vpe_3dlut_mem_format
+ *  @brief 3DLUT memory formats
+ */
+enum vpe_3dlut_mem_format {
+    VPE_3DLUT_MEM_FORMAT_16161616_UNORM_12MSB = 0,    /**< 12 bit integer in a 16 bit container
+                                                      aligned MSB */
+    VPE_3DLUT_MEM_FORMAT_16161616_UNORM_12LSB = 1,    /**< 12 bit integer in a 16 bit container
+                                                      aligned LSB */
+    VPE_3DLUT_MEM_FORMAT_16161616_FLOAT_FP1_5_10 = 2, /**< Floating point with one sign bit,
+                                                      5 exponential bits and 10 mantissa */
+};
+
+/** @enum vpe_3dlut_mem_layout
+ *  @brief 3DLUT memory layout
+ */
+enum vpe_3dlut_mem_layout {
+    VPE_3DLUT_MEM_LAYOUT_DISABLE               = 0, /**< Disabled */
+    VPE_3DLUT_MEM_LAYOUT_3D_SWIZZLE_LINEAR_RGB = 1, /**< 3D Swizzle linear surface addressing
+                                                       incremented as R->G->B */
+    VPE_3DLUT_MEM_LAYOUT_3D_SWIZZLE_LINEAR_BGR = 2, /**< 3D Swizzle linear surface addressing
+                                                       incremented as B->G->R */
+    VPE_3DLUT_MEM_LAYOUT_1D_PACKED_LINEAR = 3,      /**< Packed 1d linear addressing */
+};
+
+/** @enum vpe_3dlut_crossbar
+ *  @brief 3DLUT Crossbar bit slice
+ */
+enum vpe_3dlut_crossbar {
+    VPE_3DLUT_CROSSBAR_BIT_SLICE_0_15  = 0, /**< 3DLUT Crossbar Mux Select bits 0-15 */
+    VPE_3DLUT_CROSSBAR_BIT_SLICE_16_31 = 1, /**< 3DLUT Crossbar Mux Select bits 16-31 */
+    VPE_3DLUT_CROSSBAR_BIT_SLICE_32_47 = 2, /**< 3DLUT Crossbar Mux Select bits 32-47 */
+    VPE_3DLUT_CROSSBAR_BIT_SLICE_48_63 = 3, /**< 3DLUT Crossbar Mux Select bits 48-63 */
+};
+
+/** @enum vpe_3dlut_addr_mode
+ *  @brief 3DLUT Swizzle addressing
+ */
+enum vpe_3dlut_addr_mode {
+    VPE_3DLUT_SIMPLE_LINEAR = 0, /**< Linear swizzle 3DLUT addressing */
+    VPE_3DLUT_SW_LINEAR     = 1, /**< Contiguous 3DLUT addressing */
+};
+
 struct gamma_point {
     int32_t                left_index;
     int32_t                right_index;
@@ -158,12 +203,20 @@ enum lut_dimension {
     LUT_DIM_INVALID = 0,
     LUT_DIM_9       = 9,
     LUT_DIM_17      = 17,
+    LUT_DIM_33      = 33,
 };
 
 struct vpe_rgb {
     uint32_t red;
     uint32_t green;
     uint32_t blue;
+};
+
+struct tetrahedral_33x33x33 {
+    struct vpe_rgb lut0[8985];
+    struct vpe_rgb lut1[8984];
+    struct vpe_rgb lut2[8984];
+    struct vpe_rgb lut3[8984];
 };
 
 struct tetrahedral_17x17x17 {
@@ -181,6 +234,7 @@ struct tetrahedral_9x9x9 {
 
 struct tetrahedral_params {
     union {
+        struct tetrahedral_33x33x33 tetrahedral_33;
         struct tetrahedral_17x17x17 tetrahedral_17;
         struct tetrahedral_9x9x9    tetrahedral_9;
     };

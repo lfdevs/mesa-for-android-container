@@ -5,7 +5,6 @@
  */
 
 #include "nir/radv_meta_nir.h"
-#include "radv_debug.h"
 #include "radv_entrypoints.h"
 #include "radv_formats.h"
 #include "radv_meta.h"

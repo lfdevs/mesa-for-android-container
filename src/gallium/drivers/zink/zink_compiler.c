@@ -3029,7 +3029,7 @@ zink_compiler_assign_io(struct zink_screen *screen, nir_shader *producer, nir_sh
       bool can_remove = false;
       if (!nir_find_variable_with_location(consumer, nir_var_shader_in, VARYING_SLOT_PSIZ)) {
          /* maintenance5 guarantees "A default size of 1.0 is used if PointSize is not written" */
-         if (screen->info.have_KHR_maintenance5 && !var->data.explicit_xfb_buffer && delete_psiz_store(producer, true))
+         if (!var->data.explicit_xfb_buffer && delete_psiz_store(producer, true))
             can_remove = !(producer->info.outputs_written & VARYING_BIT_PSIZ);
          else if (consumer->info.stage != MESA_SHADER_FRAGMENT)
             can_remove = !var->data.explicit_location;

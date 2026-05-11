@@ -430,10 +430,6 @@ mov(jay_builder *b, jay_def dst, jay_def src, struct jay_temp_regs temps)
       temp = push_temp(b, temps, GPR, false, &backing, jay_null(), jay_null());
       jay_MOV(b, temp, src);
       jay_MOV(b, dst, temp);
-   } else if (dst.file == UMEM && src.file == UMEM) {
-      temp = push_temp(b, temps, UGPR, false, &backing, jay_null(), jay_null());
-      jay_MOV(b, def_from_reg(temps.ugpr), src);
-      jay_MOV(b, dst, def_from_reg(temps.ugpr));
    } else if (dst.file == GPR &&
               src.file == GPR &&
               jay_def_stride(b->shader, dst) !=
@@ -1547,45 +1543,42 @@ jay_partition_grf(jay_shader *shader)
       }
    }
 
-   /* TODO: These are arbitrary. Need to rework somehow, we have options. */
+   /* TODO: Arbitrary. Need to rework somehow, we have options. */
    shader->num_regs[MEM] = 512;
-   shader->num_regs[UMEM] = 2048;
 }
 
-static void
-spill_file(jay_function *f, enum jay_file file, bool *spilled)
+static bool
+spill_gpr(jay_function *f)
 {
-   unsigned limit = f->shader->num_regs[file];
+   unsigned limit = f->shader->num_regs[GPR];
 
    /* If testing spilling, set limit tightly. */
    if ((jay_debug & JAY_DBG_SPILL) &&
-       file == GPR &&
        f->shader->stage != MESA_SHADER_VERTEX) {
       limit = 13;
    }
 
-   if (f->demand[file] > limit) {
-      /* If we spill, we need to reserve UGPRs for spilling */
-      if (!(*spilled)) {
-         unsigned reservation = f->shader->dispatch_width + 1;
-         f->shader->num_regs[UGPR] -= reservation;
-         f->shader->partition.large_ugpr_block.len -= reservation;
-      }
-
-      jay_spill(f, file, limit);
-      jay_validate(f->shader, "spilling");
-      jay_compute_liveness(f);
-      jay_calculate_register_demands(f);
-
-      if (f->demand[file] > limit) {
-         fprintf(stderr, "file %u, limit %u but demand %u\n", file, limit,
-                 f->demand[file]);
-         fflush(stdout);
-         UNREACHABLE("spiller bug");
-      }
-
-      *spilled = true;
+   if (f->demand[GPR] <= limit) {
+      return false;
    }
+
+   /* Spilling requires reserving UGPRs for spilling */
+   unsigned reservation = f->shader->dispatch_width + 1;
+   f->shader->num_regs[UGPR] -= reservation;
+   f->shader->partition.large_ugpr_block.len -= reservation;
+
+   jay_spill(f, limit);
+   jay_validate(f->shader, "spilling");
+   jay_compute_liveness(f);
+   jay_calculate_register_demands(f);
+
+   if (f->demand[GPR] > limit) {
+      fprintf(stderr, "limit %u but demand %u\n", limit, f->demand[GPR]);
+      fflush(stdout);
+      UNREACHABLE("spiller bug");
+   }
+
+   return true;
 }
 
 static void
@@ -1594,12 +1587,17 @@ jay_register_allocate_function(jay_function *f)
    jay_shader *shader = f->shader;
    jay_ra_state ra = { .b.shader = shader, .b.func = f };
 
-   /* Spill as needed to fit within the limits. We spill GPR before UGPR since
-    * spilling GPRs requires reserving a UGPR.
+   /* Spill as needed to fit within the limits. */
+   bool spilled = spill_gpr(f);
+
+   /* The spiller/SSA repair does not work on UGPRs because it cannot tolerate
+    * the critical edges on the physical CFG. Fortunately, dynamic GPR/UGPR
+    * partitioning means this should ~never be hit -- we can allocate 1000 UGPRs
+    * if we need them. I believe ACO has the same corner case.
     */
-   bool spilled = false;
-   spill_file(f, GPR, &spilled);
-   spill_file(f, UGPR, &spilled);
+   if (f->demand[UGPR] > f->shader->num_regs[UGPR]) {
+      UNREACHABLE("UGPR spilling is unimplemented");
+   }
 
    typed_memcpy(ra.num_regs, shader->num_regs, JAY_NUM_RA_FILES);
 

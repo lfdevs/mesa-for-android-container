@@ -38,12 +38,21 @@ tu_CreateBuffer(VkDevice _device,
          flags |= TU_SPARSE_VMA_MAP_ZERO;
       if (pCreateInfo->flags & VK_BUFFER_CREATE_DEVICE_ADDRESS_CAPTURE_REPLAY_BIT)
          flags |= TU_SPARSE_VMA_REPLAYABLE;
+      if (pCreateInfo->flags & VK_BUFFER_CREATE_DESCRIPTOR_BUFFER_CAPTURE_REPLAY_BIT_EXT)
+         flags |= TU_SPARSE_VMA_REPLAYABLE;
 
       const VkBufferOpaqueCaptureAddressCreateInfo *replay_info =
          vk_find_struct_const(pCreateInfo->pNext,
                               BUFFER_OPAQUE_CAPTURE_ADDRESS_CREATE_INFO);
       if (replay_info && replay_info->opaqueCaptureAddress) {
          client_address = replay_info->opaqueCaptureAddress;
+         flags |= TU_SPARSE_VMA_REPLAYABLE;
+      }
+
+      const VkOpaqueCaptureDescriptorDataCreateInfoEXT *descriptor_replay_info =
+         vk_find_struct_const(pCreateInfo->pNext, OPAQUE_CAPTURE_DESCRIPTOR_DATA_CREATE_INFO_EXT);
+      if (descriptor_replay_info && descriptor_replay_info->opaqueCaptureDescriptorData) {
+         client_address = *(const uint64_t *) descriptor_replay_info->opaqueCaptureDescriptorData;
          flags |= TU_SPARSE_VMA_REPLAYABLE;
       }
 
@@ -230,4 +239,18 @@ uint64_t tu_GetBufferOpaqueCaptureAddress(
       return buffer->vk.device_address;
 
    return 0;
+}
+
+VkResult VKAPI_CALL
+tu_GetBufferOpaqueCaptureDescriptorDataEXT(VkDevice device,
+                                                  const VkBufferCaptureDescriptorDataInfoEXT *pInfo,
+                                                  void *pData)
+{
+   VK_FROM_HANDLE(tu_buffer, buffer, pInfo->buffer);
+
+   /* Save the buffer iova so that when replaying sparse buffers have a
+    * consistent iova and therefore consistent descriptor contents.
+    */
+   *(uint64_t *)pData = buffer->vk.device_address;
+   return VK_SUCCESS;
 }

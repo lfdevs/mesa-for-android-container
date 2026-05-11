@@ -212,7 +212,7 @@ real_def(nir_def *def, unsigned *swiz, unsigned *mask)
     * we can apply the same logic to movs in a some cases too
     */
    nir_foreach_use(use_src, def) {
-      nir_instr *instr = nir_src_parent_instr(use_src);
+      nir_instr *instr = nir_src_use_instr(use_src);
 
       /* src bypass check: for now only deal with tex src mov case
        * note: for alu don't bypass mov for multiple uniform sources
@@ -240,7 +240,7 @@ real_def(nir_def *def, unsigned *swiz, unsigned *mask)
       case nir_op_vec4:
          assert(!nir_def_used_by_if(def));
          nir_foreach_use(use_src, def)
-            assert(nir_src_parent_instr(use_src) == instr);
+            assert(nir_src_use_instr(use_src) == instr);
 
          update_swiz_mask(alu, def, swiz, mask);
          break;

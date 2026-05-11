@@ -18,6 +18,39 @@ The easiest way to track the feature set of RADV (and other Vulkan drivers in Me
 take a look at the
 `Mesa matrix <https://mesamatrix.net/#Vulkan>`__.
 
+Contributing to RADV
+~~~~~~~~~~~~~~~~~~~~
+
+RADV is part of Mesa, so we recommend reading Mesa's
+guidelines for :doc:`submitting patches <../submittingpatches>`.
+
+Additionally, the RADV team agreed on the following workflow for contributions:
+
+* Do NOT merge any MRs without at least one approval from someone familiar with
+  the code.
+* There are different types of approvals:
+
+  - Reviewed-by tag
+
+  - MR approval button
+
+  - Acked-by tag
+
+* After receiving the first approval, please wait at least 24 hours (excluding
+  weekends) before merging the MR. This is to make sure that anyone who may be
+  interested had opportunity and time to look at the MR (eg. timezone
+  differences). The wait is not required in the following cases:
+
+  - The MR is trivial (eg. very simple cleanups, typos, CI flakes updates)
+
+  - The MR has been approved by two or more developers
+
+* Even if your MR has been approved and is ready to be merged, please make sure
+  to resolve any open conversations about potentially controversial commits.
+
+In case your MR needs to be merged immediately (should be rarely needed), feel
+free to ping the developers to get more approvals.
+
 Supported hardware
 ~~~~~~~~~~~~~~~~~~
 

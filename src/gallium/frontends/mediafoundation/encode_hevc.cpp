@@ -22,8 +22,6 @@
  */
 #if MFT_CODEC_H265ENC
 #include "hmft_entrypoints.h"
-#include "mfbufferhelp.h"
-#include "mfpipeinterop.h"
 #include "reference_frames_tracker_hevc.h"
 #include "wpptrace.h"
 
@@ -153,7 +151,8 @@ CDX12EncHMFT::UpdateH265EncPictureDesc( pipe_h265_enc_picture_desc *pPicInfo,
    pPicInfo->seq.sar_height = m_VUIInfo.stSARInfo.usHeight;
 
    pPicInfo->seq.num_units_in_tick = m_FrameRate.Denominator;
-   pPicInfo->seq.time_scale = m_FrameRate.Numerator; // Table E.6 seq.vui_flags.frame_field_info_present_flag is 0, deltaToDivisor should be 1.
+   pPicInfo->seq.time_scale =
+      m_FrameRate.Numerator;   // Table E.6 seq.vui_flags.frame_field_info_present_flag is 0, deltaToDivisor should be 1.
 
    pPicInfo->seq.video_format = m_VUIInfo.stVidSigType.eVideoFormat;
    pPicInfo->seq.colour_primaries = m_VUIInfo.stVidSigType.eColorPrimary;
@@ -986,7 +985,8 @@ CDX12EncHMFT::GetMaxReferences( unsigned int width, unsigned int height )
    UINT32 uiMaxReferences = m_EncoderCapabilities.m_uiMaxHWSupportedDPBCapacity;
    if( width != 0 && height != 0 )
    {
-      const int minCbSizeY = 1 << ( m_EncoderCapabilities.m_HWSupportH265BlockSizes.bits.log2_min_luma_coding_block_size_minus3 + 3 );
+      const int minCbSizeY =
+         1 << ( m_EncoderCapabilities.m_HWSupportH265BlockSizes.bits.log2_min_luma_coding_block_size_minus3 + 3 );
       int maxDPBSize = GetMaxDPBSize( width, height, m_uiLevel, minCbSizeY );
       uiMaxReferences = std::min( (int) m_EncoderCapabilities.m_uiMaxHWSupportedDPBCapacity, maxDPBSize );
    }

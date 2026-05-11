@@ -32,8 +32,8 @@ BEGIN_TEST(d3d11_derivs.simple)
    PipelineBuilder pbld(get_vk_device(GFX10_3));
    pbld.add_vsfs(vs, fs);
 
-   //>> v1: %x = v_interp_p2_f32 %_, %_:m0, (kill)%_ attr0.x
-   //>> v1: %y = v_interp_p2_f32 (kill)%_, (kill)%_:m0, (kill)%_ attr0.y
+   //>> v1: %y = v_interp_p2_f32 %_, %_:m0, (kill)%_ attr0.y
+   //>> v1: %x = v_interp_p2_f32 (kill)%_, (kill)%_:m0, (kill)%_ attr0.x
    //>> lv2: %wqm = p_start_linear_vgpr (kill)%x, (kill)%y
    //>> BB1
    //>> v4: %_ = image_sample (kill)%_, (kill)%_, v1: undef, %wqm 2d
@@ -42,10 +42,10 @@ BEGIN_TEST(d3d11_derivs.simple)
    //>> p_end_linear_vgpr (kill)%wqm
    pbld.print_ir(VK_SHADER_STAGE_FRAGMENT_BIT, "ACO IR");
 
-   //>> v_interp_p2_f32_e32 v#rx_tmp, v#_, attr0.x                                         ; $_
    //>> v_interp_p2_f32_e32 v#ry_tmp, v#_, attr0.y                                         ; $_
-   //>> v_mov_b32_e32 v#rx, v#rx_tmp                                                       ; $_
+   //>> v_interp_p2_f32_e32 v#rx_tmp, v#_, attr0.x                                         ; $_
    //>> v_mov_b32_e32 v#ry, v#ry_tmp                                                       ; $_
+   //>> v_mov_b32_e32 v#rx, v#rx_tmp                                                       ; $_
    //>> image_sample v[#_:#_], v[#rx:#ry], s[#_:#_], s[#_:#_] dmask:0xf dim:SQ_RSRC_IMG_2D ; $_ $_
    pbld.print_ir(VK_SHADER_STAGE_FRAGMENT_BIT, "Assembly");
 END_TEST
@@ -154,10 +154,10 @@ BEGIN_TEST(d3d11_derivs.bias)
    //>> p_end_linear_vgpr (kill)%wqm
    pbld.print_ir(VK_SHADER_STAGE_FRAGMENT_BIT, "ACO IR");
 
-   //>> v_interp_p2_f32_e32 v#rx_tmp, v#_, attr0.x                                                   ; $_
    //>> v_interp_p2_f32_e32 v#ry_tmp, v#_, attr0.y                                                   ; $_
-   //>> v_mov_b32_e32 v#rx, v#rx_tmp                                                                 ; $_
+   //>> v_interp_p2_f32_e32 v#rx_tmp, v#_, attr0.x                                                   ; $_
    //>> v_mov_b32_e32 v#ry, v#ry_tmp                                                                 ; $_
+   //>> v_mov_b32_e32 v#rx, v#rx_tmp                                                                 ; $_
    //>> BB1:
    //>> image_sample_b v[#_:#_], [v#rb, v#rx, v#ry], s[#_:#_], s[#_:#_] dmask:0xf dim:SQ_RSRC_IMG_2D ; $_ $_ $_
    pbld.print_ir(VK_SHADER_STAGE_FRAGMENT_BIT, "Assembly");
@@ -197,10 +197,10 @@ BEGIN_TEST(d3d11_derivs.offset)
    //>> p_end_linear_vgpr (kill)%wqm
    pbld.print_ir(VK_SHADER_STAGE_FRAGMENT_BIT, "ACO IR");
 
-   //>> v_interp_p2_f32_e32 v#rx_tmp, v#_, attr0.x                        ; $_
    //>> v_interp_p2_f32_e32 v#ry_tmp, v#_, attr0.y                        ; $_
-   //>> v_mov_b32_e32 v#rx, v#rx_tmp                                      ; $_
+   //>> v_interp_p2_f32_e32 v#rx_tmp, v#_, attr0.x                        ; $_
    //>> v_mov_b32_e32 v#ry, v#ry_tmp                                      ; $_
+   //>> v_mov_b32_e32 v#rx, v#rx_tmp                                      ; $_
    //>> BB1:
    //>> v_mov_b32_e32 v#ro_tmp, 0x201                                     ; $_ $_
    //>> v_mov_b32_e32 v#ro, v#r0_tmp                                      ; $_
@@ -576,8 +576,8 @@ BEGIN_TEST(d3d11_derivs.get_lod)
    PipelineBuilder pbld(get_vk_device(GFX10_3));
    pbld.add_vsfs(vs, fs);
 
-   //>> v1: %x = v_interp_p2_f32 %_, %_:m0, (kill)%_ attr0.x
-   //>> v1: %y = v_interp_p2_f32 (kill)%_, (kill)%_:m0, (kill)%_ attr0.y
+   //>> v1: %y = v_interp_p2_f32 %_, %_:m0, (kill)%_ attr0.y
+   //>> v1: %x = v_interp_p2_f32 (kill)%_, (kill)%_:m0, (kill)%_ attr0.x
    //>> lv2: %wqm = p_start_linear_vgpr %x, %y
    //>> v1: %x12_m_x0 = v_subrev_f32 (kill)%x, (kill)%x quad_perm:[0,0,0,0] bound_ctrl:1 fi
    //>> v1: %x1_m_x0 = v_mov_b32 %x12_m_x0 quad_perm:[1,1,1,1] bound_ctrl:1 fi

@@ -454,8 +454,7 @@ bool panfrost_nir_remove_fragcolor_stores(nir_shader *s, unsigned nr_cbufs);
 bool panfrost_nir_lower_sysvals(nir_shader *s, unsigned arch,
                                 struct panfrost_sysvals *sysvals);
 
-bool panfrost_nir_lower_res_indices(nir_shader *shader,
-                                    struct pan_compile_inputs *inputs);
+bool panfrost_nir_lower_res_indices(nir_shader *shader, uint64_t gpu_id);
 
 bool panfrost_nir_lower_pls(nir_shader *shader,
                             struct panfrost_screen *screen);
@@ -543,6 +542,12 @@ panfrost_clean_state_3d(struct panfrost_context *ctx)
       if (i != MESA_SHADER_COMPUTE)
          ctx->dirty_shader[i] = 0;
    }
+}
+
+static inline bool
+panfrost_occlusion_query_active(struct panfrost_context *ctx)
+{
+   return ctx->occlusion_query && ctx->active_queries;
 }
 
 void panfrost_set_batch_masks_blend(struct panfrost_batch *batch);

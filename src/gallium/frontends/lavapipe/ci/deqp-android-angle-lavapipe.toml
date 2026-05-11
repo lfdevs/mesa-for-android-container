@@ -20,7 +20,13 @@ caselists = ["/data/deqp/vk-main.txt"]
 include = ["dEQP-VK.api.external.memory.android_hardware_buffer.*"]
 renderer_check = "llvmpipe"
 
-# Basic EGL test set
+# Vulkan WSI test set
+[[deqp]]
+deqp = "/data/deqp/deqp-vk"
+caselists = ["/data/deqp/vk-main.txt"]
+include = ["dEQP-VK.wsi.android.*"]
+
+# EGL test set
 [[deqp]]
 deqp = "/data/deqp/deqp-egl-android"
 caselists = ["/data/deqp/egl-main.txt"]

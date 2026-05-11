@@ -72,6 +72,9 @@ static void tile_info(vlVaContext *context, VADecPictureParameterBufferAV1 *av1)
       tileWidthSb = (sbCols + (1 << TileColsLog2) - 1) >> TileColsLog2;
       i = 0;
       for (startSb = 0; startSb < sbCols; startSb += tileWidthSb) {
+         if (i >= ARRAY_SIZE(context->desc.av1.picture_parameter.width_in_sbs))
+            break;
+
          context->desc.av1.picture_parameter.tile_col_start_sb[i] = startSb;
          context->desc.av1.picture_parameter.width_in_sbs[i] = tileWidthSb;
          i++;
@@ -81,6 +84,9 @@ static void tile_info(vlVaContext *context, VADecPictureParameterBufferAV1 *av1)
       tileHeightSb = (sbRows + (1 << TileRowsLog2) - 1) >> TileRowsLog2;
       i = 0;
       for (startSb = 0; startSb < sbRows; startSb += tileHeightSb) {
+         if (i >= ARRAY_SIZE(context->desc.av1.picture_parameter.height_in_sbs))
+            break;
+
          context->desc.av1.picture_parameter.tile_row_start_sb[i] = startSb;
          context->desc.av1.picture_parameter.height_in_sbs[i] = tileHeightSb;
          i++;
@@ -91,10 +97,11 @@ static void tile_info(vlVaContext *context, VADecPictureParameterBufferAV1 *av1)
 
       startSb = 0;
       for (i = 0; startSb < sbCols; ++i) {
-         unsigned sizeSb;
+         if (i >= ARRAY_SIZE(av1->width_in_sbs_minus_1))
+            break;
 
+         unsigned sizeSb = (av1->width_in_sbs_minus_1)[i] + 1;
          context->desc.av1.picture_parameter.tile_col_start_sb[i] = startSb;
-         sizeSb = (av1->width_in_sbs_minus_1)[i] + 1;
          context->desc.av1.picture_parameter.width_in_sbs[i] = sizeSb;
          widestTileSb = MAX2(sizeSb, widestTileSb);
          startSb += sizeSb;
@@ -104,9 +111,11 @@ static void tile_info(vlVaContext *context, VADecPictureParameterBufferAV1 *av1)
 
       startSb = 0;
       for (i = 0; startSb < sbRows; ++i) {
+         if (i >= ARRAY_SIZE(av1->height_in_sbs_minus_1))
+            break;
+
          unsigned height_in_sbs_minus_1 = (av1->height_in_sbs_minus_1)[i];
          context->desc.av1.picture_parameter.height_in_sbs[i] = height_in_sbs_minus_1 + 1;
-
          context->desc.av1.picture_parameter.tile_row_start_sb[i] = startSb;
          startSb += height_in_sbs_minus_1 + 1;
          height_sb -= height_in_sbs_minus_1 + 1;

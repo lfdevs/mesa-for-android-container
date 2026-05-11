@@ -402,6 +402,16 @@ mtl_set_vertex_buffer(mtl_render_encoder *encoder, mtl_buffer *buffer,
 }
 
 void
+mtl_set_vertex_bytes(mtl_render_encoder *encoder, const void *bytes,
+                     uint32_t length, uint32_t index)
+{
+   @autoreleasepool {
+      id<MTLRenderCommandEncoder> enc = (id<MTLRenderCommandEncoder>)encoder;
+      [enc setVertexBytes:bytes length:length atIndex:index];
+   }
+}
+
+void
 mtl_set_fragment_buffer(mtl_render_encoder *encoder, mtl_buffer *buffer,
                         uint32_t offset, uint32_t index)
 {
@@ -409,6 +419,16 @@ mtl_set_fragment_buffer(mtl_render_encoder *encoder, mtl_buffer *buffer,
       id<MTLRenderCommandEncoder> enc = (id<MTLRenderCommandEncoder>)encoder;
       id<MTLBuffer> buf = (id<MTLBuffer>)buffer;
       [enc setFragmentBuffer:buf offset:offset atIndex:index];
+   }
+}
+
+void
+mtl_set_fragment_bytes(mtl_render_encoder *encoder, const void *bytes,
+                       uint32_t length, uint32_t index)
+{
+   @autoreleasepool {
+      id<MTLRenderCommandEncoder> enc = (id<MTLRenderCommandEncoder>)encoder;
+      [enc setFragmentBytes:bytes length:length atIndex:index];
    }
 }
 

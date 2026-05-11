@@ -182,7 +182,7 @@ get_dest_usee_mask(nir_intrinsic_instr *op)
 
    nir_foreach_use(use_src, &op->def)
    {
-      auto use_instr = nir_src_parent_instr(use_src);
+      auto use_instr = nir_src_use_instr(use_src);
       mq.ssa_index = use_src->ssa->index;
 
       switch (use_instr->type) {

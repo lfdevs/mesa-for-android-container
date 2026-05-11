@@ -9,7 +9,6 @@
 #include "ac_binary.h"
 #include "ac_gpu_info.h"
 #include "util/compiler.h"
-#include "util/u_dynarray.h"
 #include "util/u_math.h"
 
 #include <gelf.h>

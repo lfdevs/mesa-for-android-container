@@ -108,10 +108,6 @@ static void
 blorp_surface_reloc(struct blorp_batch *batch, uint32_t ss_offset,
                     struct blorp_address address, uint32_t delta);
 
-static uint64_t
-blorp_get_surface_address(struct blorp_batch *batch,
-                          struct blorp_address address);
-
 #if GFX_VER < 10
 static struct blorp_address
 blorp_get_surface_base_address(struct blorp_batch *batch);
@@ -1241,11 +1237,11 @@ blorp_emit_surface_state(struct blorp_batch *batch,
                        .aux_surf = &surface->aux_surf, .aux_usage = aux_usage,
                        .aux_format = surface->aux_format,
                        .address =
-                          blorp_get_surface_address(batch, surface->addr),
+                          batch->blorp->get_surface_address(batch, surface->addr),
                        .aux_address = !use_aux_address ? 0 :
-                          blorp_get_surface_address(batch, surface->aux_addr),
+                          batch->blorp->get_surface_address(batch, surface->aux_addr),
                        .clear_address = !use_clear_address ? 0 :
-                          blorp_get_surface_address(batch, op_clear_addr),
+                          batch->blorp->get_surface_address(batch, op_clear_addr),
                        .mocs = surface->addr.mocs,
                        .clear_color = surface->clear_color,
                        .use_clear_address = use_clear_address);
@@ -1287,6 +1283,45 @@ blorp_emit_surface_state(struct blorp_batch *batch,
    blorp_flush_range(batch, state, GENX(RENDER_SURFACE_STATE_length) * 4);
 }
 
+/**
+ * Emits the remaining rows of the 2D linear surface as a texel buffer, this
+ * is part of a workaround for performing buffer to image copies when the
+ * surface is straddling an extra page due to a misaligned sampler cache.
+ */
+static void
+blorp_emit_buffer_surface_state(struct blorp_batch *batch,
+                                const struct blorp_surface_info *surface,
+                                void *state, uint32_t state_offset)
+{
+   blorp_assert_is_buffer(surface->surf, surface->view);
+   assert(isl_format_block_is_1x1x1(surface->view.format));
+
+   const struct isl_device *isl_dev = batch->blorp->isl_dev;
+
+   struct blorp_address buffer_addr = surface->addr;
+   buffer_addr.offset +=
+      surface->surf.row_pitch_B * surface->surf.logical_level0_px.h;
+
+   uint32_t element_size_B =
+      isl_format_get_layout(surface->view.format)->bpb / 8;
+   uint64_t surface_size_B =
+      (uint64_t) surface->surf.row_pitch_B * (surface->buffer_rows - 1) +
+      surface->surf.logical_level0_px.w * element_size_B;
+
+   isl_buffer_fill_state(isl_dev, state,
+                         .address =
+                            batch->blorp->get_surface_address(batch, buffer_addr),
+                         .size_B = surface_size_B,
+                         .stride_B = element_size_B,
+                         .format = surface->view.format,
+                         .swizzle = surface->view.swizzle,
+                         .mocs = surface->addr.mocs,
+                         .usage = surface->surf.usage | surface->view.usage);
+
+   blorp_surface_reloc(batch, state_offset + isl_dev->ss.addr_offset,
+                       buffer_addr, 0);
+}
+
 static void
 blorp_emit_null_surface_state(struct blorp_batch *batch,
                               const struct blorp_surface_info *surface,
@@ -1295,8 +1330,8 @@ blorp_emit_null_surface_state(struct blorp_batch *batch,
    struct GENX(RENDER_SURFACE_STATE) ss = {
       .SurfaceType = SURFTYPE_NULL,
       .SurfaceFormat = ISL_FORMAT_R8G8B8A8_UNORM,
-      .Width = surface->surf.logical_level0_px.width - 1,
-      .Height = surface->surf.logical_level0_px.height - 1,
+      .Width = MAX2(surface->surf.logical_level0_px.width, 1) - 1,
+      .Height = MAX2(surface->surf.logical_level0_px.height, 1) - 1,
       .MIPCountLOD = surface->view.base_level,
       .MinimumArrayElement = surface->view.base_array_layer,
       .Depth = surface->view.array_len - 1,
@@ -1329,7 +1364,7 @@ blorp_setup_binding_table(struct blorp_batch *batch,
    if (params->use_pre_baked_binding_table) {
       bind_offset = params->pre_baked_binding_table_offset;
    } else {
-      unsigned num_surfaces = 1 + params->src.enabled;
+      unsigned num_surfaces = 1 + params->src.enabled + params->src.buffer;
       if (!blorp_alloc_binding_table(batch, num_surfaces,
                                      isl_dev->ss.size, isl_dev->ss.align,
                                      &bind_offset, surface_offsets, surface_maps))
@@ -1350,11 +1385,23 @@ blorp_setup_binding_table(struct blorp_batch *batch,
       }
 
       if (params->src.enabled) {
-         blorp_emit_surface_state(batch, &params->src,
-                                  params->fast_clear_op,
-                                  surface_maps[BLORP_TEXTURE_BT_INDEX],
-                                  surface_offsets[BLORP_TEXTURE_BT_INDEX],
-                                  0, false);
+         if (params->src.surf.size_B != 0) {
+            blorp_emit_surface_state(batch, &params->src,
+                                    params->fast_clear_op,
+                                    surface_maps[BLORP_TEXTURE_BT_INDEX],
+                                    surface_offsets[BLORP_TEXTURE_BT_INDEX],
+                                    0, false);
+         } else {
+            /* Nothing to do, the entire surface got converted to a buffer */
+            blorp_emit_null_surface_state(batch, &params->src,
+                                          surface_maps[BLORP_TEXTURE_BT_INDEX]);
+         }
+
+         if (params->src.buffer) {
+            blorp_emit_buffer_surface_state(batch, &params->src,
+                                            surface_maps[BLORP_TEXBUF_BT_INDEX],
+                                            surface_offsets[BLORP_TEXBUF_BT_INDEX]);
+         }
       }
    }
 

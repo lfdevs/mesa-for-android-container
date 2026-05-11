@@ -11,8 +11,6 @@
 #ifndef RADV_PERFCOUNTER_H
 #define RADV_PERFCOUNTER_H
 
-#include "radv_radeon_winsys.h"
-
 #include "radv_query.h"
 
 struct radv_physical_device;

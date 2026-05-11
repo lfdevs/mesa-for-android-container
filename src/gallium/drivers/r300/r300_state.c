@@ -2212,6 +2212,27 @@ static void* r300_create_vs_state(struct pipe_context* pipe,
     return vs;
 }
 
+void r300_mark_vs_code_dirty(struct r300_context *r300)
+{
+    struct r300_vertex_shader *vs = r300_vs(r300);
+    unsigned fc_op_dwords = r300->screen->caps.is_r500 ? 3 : 2;
+
+    r300_mark_atom_dirty(r300, &r300->vs_state);
+    r300->vs_state.size = vs->shader->code.length + 9 +
+            (R300_VS_MAX_FC_OPS * fc_op_dwords + 4);
+
+    r300_mark_atom_dirty(r300, &r300->vs_constants);
+    r300->vs_constants.size =
+            2 +
+            (vs->shader->externals_count ? vs->shader->externals_count * 4 + 3 : 0) +
+            (vs->shader->immediates_count ? vs->shader->immediates_count * 4 + 3 : 0);
+
+    ((struct r300_constant_buffer*)r300->vs_constants.state)->remap_table =
+            vs->shader->code.constants_remap_table;
+
+    r300_mark_atom_dirty(r300, &r300->pvs_flush);
+}
+
 static void r300_bind_vs_state(struct pipe_context* pipe, void* shader)
 {
     struct r300_context* r300 = r300_context(pipe);
@@ -2230,21 +2251,7 @@ static void r300_bind_vs_state(struct pipe_context* pipe, void* shader)
     r300_mark_atom_dirty(r300, &r300->rs_block_state); /* Will be updated before the emission. */
 
     if (r300->screen->caps.has_tcl) {
-        unsigned fc_op_dwords = r300->screen->caps.is_r500 ? 3 : 2;
-        r300_mark_atom_dirty(r300, &r300->vs_state);
-        r300->vs_state.size = vs->shader->code.length + 9 +
-			(R300_VS_MAX_FC_OPS * fc_op_dwords + 4);
-
-        r300_mark_atom_dirty(r300, &r300->vs_constants);
-        r300->vs_constants.size =
-                2 +
-                (vs->shader->externals_count ? vs->shader->externals_count * 4 + 3 : 0) +
-                (vs->shader->immediates_count ? vs->shader->immediates_count * 4 + 3 : 0);
-
-        ((struct r300_constant_buffer*)r300->vs_constants.state)->remap_table =
-                vs->shader->code.constants_remap_table;
-
-        r300_mark_atom_dirty(r300, &r300->pvs_flush);
+        r300_mark_vs_code_dirty(r300);
     } else {
         draw_bind_vertex_shader(r300->draw,
                 (struct draw_vertex_shader*)vs->draw_vs);

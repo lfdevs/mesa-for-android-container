@@ -8,6 +8,7 @@
 
 #include "radv_meta.h"
 #include "radv_debug_nir.h"
+#include "radv_shader_object.h"
 
 #include "vk_common_entrypoints.h"
 #include "vk_pipeline_cache.h"
@@ -39,7 +40,7 @@ radv_suspend_queries(struct radv_meta_saved_state *state, struct radv_cmd_buffer
 
    /* Primitives generated queries (legacy). */
    if (cmd_buffer->state.active_prims_gen_queries) {
-      cmd_buffer->state.suspend_streamout = true;
+      cmd_buffer->state.streamout.suspended = true;
       cmd_buffer->state.dirty |= RADV_CMD_DIRTY_STREAMOUT_ENABLE;
    }
 
@@ -82,7 +83,7 @@ radv_resume_queries(const struct radv_meta_saved_state *state, struct radv_cmd_b
 
    /* Primitives generated queries (legacy). */
    if (cmd_buffer->state.active_prims_gen_queries) {
-      cmd_buffer->state.suspend_streamout = false;
+      cmd_buffer->state.streamout.suspended = false;
       cmd_buffer->state.dirty |= RADV_CMD_DIRTY_STREAMOUT_ENABLE;
    }
 
@@ -346,7 +347,7 @@ radv_device_init_meta(struct radv_device *device)
 
    if (pdev->emulate_etc2) {
       device->meta_state.etc_decode.allocator = &device->meta_state.alloc;
-      device->meta_state.etc_decode.nir_options = &pdev->nir_options[MESA_SHADER_COMPUTE];
+      device->meta_state.etc_decode.nir_options = &device->compiler_info.nir_options[MESA_SHADER_COMPUTE];
       device->meta_state.etc_decode.pipeline_cache = device->meta_state.cache;
 
       vk_texcompress_etc2_init(&device->vk, &device->meta_state.etc_decode);
@@ -354,7 +355,8 @@ radv_device_init_meta(struct radv_device *device)
 
    if (pdev->emulate_astc) {
       result = vk_texcompress_astc_init(&device->vk, &device->meta_state.alloc, device->meta_state.cache,
-                                        &device->meta_state.astc_decode);
+                                        &device->meta_state.astc_decode,
+                                        vk_texcompress_astc_default_params(&device->vk));
       if (result != VK_SUCCESS)
          return result;
    }

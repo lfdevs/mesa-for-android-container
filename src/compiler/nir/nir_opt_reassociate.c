@@ -227,6 +227,7 @@ build_chain(struct chain *c, nir_scalar def, unsigned reserved_count)
       unsigned reserved_plus_remaining = reserved_count + remaining;
 
       if (nir_scalar_is_alu(src) && nir_scalar_alu_op(src) == alu->op &&
+          can_reassociate(nir_def_as_alu(src.def)) &&
           list_is_singular(&src.def->uses) &&
           c->length + reserved_plus_remaining + 2 <= MAX_CHAIN_LENGTH) {
 

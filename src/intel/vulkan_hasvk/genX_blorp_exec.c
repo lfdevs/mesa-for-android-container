@@ -100,14 +100,6 @@ blorp_surface_reloc(struct blorp_batch *batch, uint32_t ss_offset,
    write_reloc(cmd_buffer->device, dest, address_u64, false);
 }
 
-static uint64_t
-blorp_get_surface_address(struct blorp_batch *blorp_batch,
-                          struct blorp_address address)
-{
-   /* We'll let blorp_surface_reloc write the address. */
-   return 0;
-}
-
 static struct blorp_address
 blorp_get_surface_base_address(struct blorp_batch *batch)
 {

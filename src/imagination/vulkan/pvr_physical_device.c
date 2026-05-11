@@ -241,7 +241,7 @@ static void pvr_physical_device_get_supported_features(
       .vertexPipelineStoresAndAtomics = false,
       .fragmentStoresAndAtomics = false,
       .shaderTessellationAndGeometryPointSize = false,
-      .shaderImageGatherExtended = false,
+      .shaderImageGatherExtended = true,
       .shaderStorageImageExtendedFormats = true,
       .shaderStorageImageMultisample = false,
       .shaderStorageImageReadWithoutFormat = true,
@@ -559,7 +559,8 @@ static bool pvr_physical_device_get_properties(
       /* Vulkan 1.0 */
       .apiVersion = get_api_version(),
       .driverVersion = vk_get_driver_version(),
-      .vendorID = VK_VENDOR_ID_IMAGINATION,
+      .vendorID = pdevice->instance->force_vk_vendor ?
+                  pdevice->instance->force_vk_vendor : VK_VENDOR_ID_IMAGINATION,
       .deviceID = dev_info->ident.device_id,
       .deviceType = VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU,
       /* deviceName and pipelineCacheUUID are filled below .*/
@@ -580,11 +581,11 @@ static bool pvr_physical_device_get_properties(
       .maxBoundDescriptorSets = 4U,
       .maxPerStageDescriptorSamplers = 16,
       .maxPerStageDescriptorUniformBuffers = 12,
-      .maxPerStageDescriptorStorageBuffers = 4,
+      .maxPerStageDescriptorStorageBuffers = 8,
       .maxPerStageDescriptorSampledImages = 16,
       .maxPerStageDescriptorStorageImages = 4,
       .maxPerStageDescriptorInputAttachments = 4,
-      .maxPerStageResources = 44,
+      .maxPerStageResources = 48,
       .maxDescriptorSetSamplers = 3U * 16U,
       .maxDescriptorSetUniformBuffers = 3U * 12U,
       .maxDescriptorSetUniformBuffersDynamic = 8U,
@@ -666,8 +667,8 @@ static bool pvr_physical_device_get_properties(
       .maxTexelOffset = 7U,
 
       /* Requires shaderImageGatherExtended */
-      .minTexelGatherOffset = 0,
-      .maxTexelGatherOffset = 0U,
+      .minTexelGatherOffset = -8,
+      .maxTexelGatherOffset = 7U,
 
       /* Requires sampleRateShading */
       .minInterpolationOffset = -0.5f,

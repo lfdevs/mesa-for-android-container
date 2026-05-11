@@ -52,12 +52,15 @@ struct cdc_fe_funcs {
         enum vpe_swizzle_mode_values swizzle, const struct vpe_rect *viewport,
         const struct vpe_rect *viewport_c);
 
+    void (*program_3dlut_fl_config)(
+        struct cdc_fe *cdc_fe, enum lut_dimension lut_dimension, struct vpe_3dlut *lut_3d);
     /** segment specific */
     void (*program_viewport)(
         struct cdc_fe *cdc_fe, const struct vpe_rect *viewport, const struct vpe_rect *viewport_c);
 };
 
 struct cdc_be_funcs {
+    void (*program_cdc_control)(struct cdc_be *cdc_be, uint8_t enable_frod, uint32_t hist_dsets[]);
     void (*program_global_sync)(struct cdc_be *cdc_be, uint32_t vupdate_offset,
         uint32_t vupdate_width, uint32_t vready_offset);
 

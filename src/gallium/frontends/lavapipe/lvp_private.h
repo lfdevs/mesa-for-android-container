@@ -328,7 +328,8 @@ struct lvp_descriptor_set_binding_layout {
    uint32_t uniform_block_size;
 
    /* Immutable samplers (or NULL if no immutable samplers) */
-   struct lvp_sampler **immutable_samplers;
+   struct lp_descriptor *immutable_samplers;
+   struct vk_ycbcr_conversion_state *immutable_ycbcr;
 };
 
 struct lvp_descriptor_set_layout {

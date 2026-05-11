@@ -2347,6 +2347,10 @@ ac_vcn_create_video_decoder(const struct radeon_info *info, struct ac_video_dec_
       dec->addr_mode = RDECODE_ARRAY_MODE_ADDRLIB_SEL_GFX9;
       dec->av1_version = RDECODE_AV1_VER_2;
       break;
+   case VCN_5_3_0:
+      dec->addr_mode = RDECODE_ARRAY_MODE_ADDRLIB_SEL_GFX11;
+      dec->av1_version = RDECODE_AV1_VER_2;
+      break;
    default:
       assert(!"unsupported vcn version");
    }

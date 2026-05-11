@@ -20,8 +20,6 @@
 // Minimum supported sampling period in nanoseconds
 #define MIN_SAMPLING_PERIOD_NS 5000
 
-#define CORRELATION_TIMESTAMP_PERIOD (1000000000ull)
-
 namespace pps
 {
 /// A data source supports one driver at a time, but if you need more
@@ -289,7 +287,6 @@ void GpuDataSource::trace(TraceContext &ctx)
          auto packet = ctx.NewTracePacket();
          packet->set_timestamp_clock_id(perfetto::protos::pbzero::BUILTIN_CLOCK_BOOTTIME);
          packet->set_timestamp(descriptor_timestamp);
-         last_correlation_timestamp = perfetto::base::GetBootTimeNs().count();
          auto event = packet->set_clock_snapshot();
          add_timestamp(event, driver);
       }
@@ -322,17 +319,18 @@ void GpuDataSource::trace(TraceContext &ctx)
          event->set_gpu_id(driver->drm_device.gpu_num);
 
          add_samples(*event, *driver, state->last_counter_vals);
+
+         samples_since_correlation++;
       }
    }
 
-   uint64_t cpu_ts = perfetto::base::GetBootTimeNs().count();
-   if ((cpu_ts - last_correlation_timestamp) > CORRELATION_TIMESTAMP_PERIOD) {
+   if (samples_since_correlation > 3) {
       auto packet = ctx.NewTracePacket();
       packet->set_timestamp_clock_id(perfetto::protos::pbzero::BUILTIN_CLOCK_BOOTTIME);
-      packet->set_timestamp(cpu_ts);
+      packet->set_timestamp(perfetto::base::GetBootTimeNs().count());
       auto event = packet->set_clock_snapshot();
       add_timestamp(event, driver);
-      last_correlation_timestamp = cpu_ts;
+      samples_since_correlation = 0;
    }
 }
 

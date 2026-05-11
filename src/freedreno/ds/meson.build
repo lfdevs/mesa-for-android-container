@@ -5,6 +5,8 @@
 pps_freedreno_lib = static_library(
   'freedreno-gpu',
   sources: [
+    'fd_pps_a6xx.cc',
+    'fd_pps_a7xx.cc',
     'fd_pps_driver.cc',
     'fd_pps_driver.h',
     freedreno_xml_header_files,

@@ -548,7 +548,7 @@ queue_submit(struct vk_queue *_queue, struct vk_queue_submit *vk_submit)
 #ifdef HAVE_PERFETTO
    if (u_trace_should_process(&device->trace_context)) {
       for (int i = 0; i < vk_submit->command_buffer_count; i++)
-         tu_perfetto_refresh_debug_utils_object_name(
+         tu_perfetto_refresh_debug_utils_object_name(device,
             &vk_submit->command_buffers[i]->base);
    }
 #endif

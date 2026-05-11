@@ -5,8 +5,10 @@
  */
 
 #include "si_pipe.h"
+#include "gfx/si_gfx.h"
 #include "sid.h"
 #include "si_build_pm4.h"
+#include "ac_cmdbuf_cp.h"
 
 /* Set this if you want the ME to wait until CP DMA is done.
  * It should be set on the last CP DMA packet. */

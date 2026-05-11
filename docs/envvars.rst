@@ -638,9 +638,6 @@ Intel driver environment variables
    ``sf``
       emit messages about the strips & fans unit (for old gens, includes
       the SF program)
-   ``shader-print``
-      allow developer print traces added by `brw_nir_printf` to be
-      printed out on the console
    ``soft64``
       enable implementation of software 64bit floating point support
    ``sparse``
@@ -937,10 +934,12 @@ Anvil(ANV) driver environment variables
 
   ``bindless``
     Forces all descriptor sets to use the internal :ref:`Bindless model`
+  ``desc-dirty``
+    Print out what dirties descriptors
+  ``experimental``
+    Enable experimental features
   ``no-gpl``
     Disables `VK_KHR_graphics_pipeline_library` support
-  ``no-secondary-call``
-    Disables secondary command buffer calls
   ``no-sparse``
     Disables sparse support
   ``sparse-trtt``
@@ -953,6 +952,12 @@ Anvil(ANV) driver environment variables
     Emits dummy (MI_STORE_DATA_IMM) instructions containing the shader
     source hash, preceding shader programming instructions (internal
     shaders & ray-tracing shaders are omitted)
+  ``no-slab``
+    Disables the slab subsystem, which optimizes memory usage by allowing
+    application buffers to share GEM buffers.
+  ``shader-print``
+    Allow developer print traces added by `brw_nir_printf` to be
+    printed out on the console
 
    If defined to ``1`` or ``true``, this will prevent usage of self
    modifying command buffers to implement ``vkCmdExecuteCommands``. As
@@ -998,18 +1003,22 @@ Anvil(ANV) driver environment variables
    advertised queues to include 1 queue with compute-only support, and
    it would override the number of graphics+compute queues to be 0.
 
-.. envvar:: ANV_SPARSE
+.. envvar:: ANV_SYS_MEM_LIMIT
 
-   By default, the sparse resources feature is enabled. However, if set to 0,
-   false, or no, it will be disabled.
-   Platforms older than Tiger Lake do not support this feature.
+   Changes the amount of system memory that is available for graphics usage in
+   the Vulkan system memory heap. The variable accepts an integer from 10 to
+   100, which represents the percentage of system memory that will be used as
+   the host memory heap size. The default value is 75 if the system has more
+   than 4GB of system RAM, 50 otherwise.
 
-.. envvar:: ANV_SPARSE_USE_TRTT
+   Note that this memory is shared between the application's Vulkan allocations
+   and the system's general needs. If a value too close to 100 is set and fully
+   used, the driver may not have enough memory for its data structures and the
+   application may fail to perform system allocations (e.g., malloc()), which
+   may lead to errors or excessive memory swapping.
 
-   On platforms supported by Xe KMD (Lunar Lake and newer) this parameter
-   changes the implementation of sparse resources feature.
-   For i915 there is no option, sparse resources is always implemented with
-   TRTT.
+   This option can also be used to limit memory usage by memory-hungry
+   applications.
 
 Hasvk driver environment variables
 ---------------------------------------
@@ -1494,6 +1503,8 @@ RADV driver environment variables
       don't mitigate SMEM memory access issues on GFX6-7
    ``notccompatcmask``
       disable TC-compat CMASK for MSAA surfaces
+   ``notmz``
+      disable TMZ (trusted memory zone) support
    ``noumr``
       disable UMR dumps during GPU hang detection (only with
       :envvar:`RADV_DEBUG` = ``hang``)
@@ -1552,6 +1563,26 @@ RADV driver environment variables
       Enable tracking of VA ranges for radv_build_is_valid_va.
    ``vm``
       add a gap between all VA allocations to check for page faults
+   ``nocachecompat``
+      disable changes to code generation which increases shader cache compatiblity
+      between devices
+
+.. envvar:: RADV_QUEUE_DISABLE
+
+   a comma-separated list of named queues to disable for testing purposes:
+
+   ``gfx``
+      disable the general/gfx queue
+   ``compute``
+      disable the compute queue
+   ``vdec``
+      disable the video decode queue
+   ``venc``
+      disable the video encode queue
+   ``transfer``
+      disable the transfer queue
+   ``sparse``
+      disable the sparse queue
 
 .. envvar:: RADV_FORCE_VRS
 

@@ -194,7 +194,7 @@ lower_intrinsic(nir_builder *b, nir_intrinsic_instr *intr,
       return load_sysval_root(b, 1, 16, &u->sprite_mask);
    case nir_intrinsic_load_shader_part_tests_zs_agx:
       return load_sysval_root(b, 1, 16, &u->no_epilog_discard);
-   case nir_intrinsic_load_clip_z_coeff_agx:
+   case nir_intrinsic_load_clip_z_coeff:
       return nir_f2f32(b, load_sysval_root(b, 1, 16, &u->clip_z_coeff));
    case nir_intrinsic_load_rasterization_stream:
       return nir_imm_int(b, 0);

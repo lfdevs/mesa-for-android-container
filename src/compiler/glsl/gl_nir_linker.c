@@ -134,12 +134,12 @@ replace_tex_src(nir_tex_src *dst, nir_tex_src_type src_type, nir_def *src_def,
                 nir_instr *src_parent)
 {
    *dst = nir_tex_src_for_ssa(src_type, src_def);
-   nir_src_set_parent_instr(&dst->src, src_parent);
+   nir_src_set_use_instr(&dst->src, src_parent);
    list_addtail(&dst->src.use_link, &dst->src.ssa->uses);
 }
 
-void
-gl_nir_inline_functions(nir_shader *shader)
+static void
+gl_nir_inline_functions(const struct pipe_caps *caps, nir_shader *shader)
 {
    /* We have to lower away local constant initializers right before we
     * inline functions.  That way they get properly initialized at the top
@@ -181,6 +181,10 @@ gl_nir_inline_functions(nir_shader *shader)
                if (!nir_deref_mode_is(deref, nir_var_uniform) ||
                    nir_deref_instr_get_variable(deref)->data.bindless) {
                   nir_def *load = nir_load_deref(&b, deref);
+
+                  if (caps->glsl_bindless_handles_are_32bit)
+                     load = nir_u2u32(&b, load);
+
                   replace_tex_src(&intr->src[0], nir_tex_src_texture_handle,
                                   load, instr);
                   replace_tex_src(&intr->src[1], nir_tex_src_sampler_handle,
@@ -1371,7 +1375,7 @@ preprocess_shader(const struct pipe_screen *screen,
    NIR_PASS(_, nir, nir_opt_barrier_modes);
 
    /* before buffers and vars_to_ssa */
-   NIR_PASS(_, nir, gl_nir_lower_images, true);
+   NIR_PASS(_, nir, gl_nir_lower_images, &screen->caps, true);
 
    if (prog->nir->info.stage == MESA_SHADER_COMPUTE ||
        prog->nir->info.stage == MESA_SHADER_TASK ||
@@ -3951,7 +3955,8 @@ gl_nir_link_glsl(struct gl_context *ctx, struct gl_shader_program *prog)
       if (!prog->data->LinkStatus)
          goto done;
 
-      gl_nir_inline_functions(prog->_LinkedShaders[i]->Program->nir);
+      gl_nir_inline_functions(&ctx->screen->caps,
+                              prog->_LinkedShaders[i]->Program->nir);
    }
 
    resize_tes_inputs(consts, prog);

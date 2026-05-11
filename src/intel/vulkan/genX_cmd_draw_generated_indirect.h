@@ -324,7 +324,7 @@ genX(cmd_buffer_emit_indirect_generated_draws_inplace)(struct anv_cmd_buffer *cm
       genX(cmd_buffer_emit_indirect_generated_draws_init)(cmd_buffer);
 
    /* Emit the 3D state in the main batch. */
-   genX(cmd_buffer_flush_gfx_state)(cmd_buffer);
+   genX(cmd_buffer_flush_gfx)(cmd_buffer);
 
    if (cmd_buffer->state.conditional_render_enabled)
       genX(cmd_emit_conditional_render_predicate)(cmd_buffer);
@@ -562,7 +562,7 @@ genX(cmd_buffer_emit_indirect_generated_draws_inring)(struct anv_cmd_buffer *cmd
    trace_intel_end_generate_draws(&cmd_buffer->trace);
 
    /* Emit the 3D state in the main batch. */
-   genX(cmd_buffer_flush_gfx_state)(cmd_buffer);
+   genX(cmd_buffer_flush_gfx)(cmd_buffer);
 
    if (cmd_buffer->state.conditional_render_enabled)
       genX(cmd_emit_conditional_render_predicate)(cmd_buffer);

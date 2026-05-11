@@ -16,3 +16,6 @@ asan-dEQP-VK.wsi.*
 
 # Skip single-threaded gmem testing that doesn't give useful extra coverage.
 gmem-dEQP-VK.wsi.direct_drm.*
+
+# Mainly for testing platform features. Skip as take too long. Passes reliably though.
+awsi-dEQP-VK.wsi.android.incremental_present.*

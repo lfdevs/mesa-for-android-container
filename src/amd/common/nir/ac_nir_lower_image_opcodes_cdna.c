@@ -21,7 +21,6 @@
 
 #include "ac_nir.h"
 #include "nir_builder.h"
-#include "amdgfxregs.h"
 
 static nir_def *get_field(nir_builder *b, nir_def *desc, unsigned index, unsigned mask)
 {

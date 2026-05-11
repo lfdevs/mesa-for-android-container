@@ -66,9 +66,11 @@ static uint16_t vpe_get_visual_confirm_total_seg_count(
     uint16_t             stream_idx;
     struct stream_ctx   *stream_ctx;
     uint32_t             alignment = vpe_get_recout_width_alignment(params);
+    struct vpe_cmd_info *cmd_info;
+    uint16_t             cmd_idx;
 
     if (vpe_priv->init.debug.visual_confirm_params.input_format) {
-        for (stream_idx = 0; stream_idx < vpe_priv->num_streams; stream_idx++) {
+        for (stream_idx = 0; stream_idx < (uint16_t)vpe_priv->num_streams; stream_idx++) {
             stream_ctx = &vpe_priv->stream_ctx[stream_idx];
             if (should_generate_visual_confirm(stream_ctx->stream_type))
                 total_visual_confirm_segs += get_visual_confirm_segs_count(
@@ -81,7 +83,57 @@ static uint16_t vpe_get_visual_confirm_total_seg_count(
             get_visual_confirm_segs_count(max_seg_width, params->target_rect.width, alignment);
     }
 
+    if (vpe_priv->init.debug.visual_confirm_params.pipe_idx) {
+        cmd_info = vpe_priv->vpe_cmd_vector->element;
+        for (cmd_idx = 0; cmd_idx < (uint16_t)vpe_priv->vpe_cmd_vector->num_elements; cmd_idx++) {
+            total_visual_confirm_segs += cmd_info->num_inputs;
+            cmd_info++;
+        }
+    }
+
     return total_visual_confirm_segs;
+}
+
+static void generate_pipe_segments(struct vpe_priv *vpe_priv, const struct vpe_build_param *params,
+    struct vpe_rect *current_gap, uint32_t max_seg_width)
+{
+    uint16_t             cmd_idx, input_idx, seg_cnt;
+    struct vpe_cmd_info *cmd_info;
+    struct vpe_rect      visual_confirm_rect;
+    uint32_t             recout_alignment = vpe_get_recout_width_alignment(params);
+
+    if (vpe_priv->init.debug.visual_confirm_params.pipe_idx &&
+        params->target_rect.height > 3 * VISUAL_CONFIRM_HEIGHT) {
+        cmd_info = vpe_priv->vpe_cmd_vector->element;
+        for (cmd_idx = 0; cmd_idx < (uint16_t)vpe_priv->vpe_cmd_vector->num_elements; cmd_idx++) {
+            if (cmd_info->ops == VPE_CMD_OPS_BG_VSCF_INPUT ||
+                cmd_info->ops == VPE_CMD_OPS_BG_VSCF_OUTPUT ||
+                cmd_info->ops == VPE_CMD_OPS_BG_VSCF_PIPE0 ||
+                cmd_info->ops == VPE_CMD_OPS_BG_VSCF_PIPE1) {
+                cmd_info++;
+                continue;
+            }
+            for (input_idx = 0; input_idx < cmd_info->num_inputs; input_idx++) {
+                visual_confirm_rect        = cmd_info->inputs[input_idx].scaler_data.dst_viewport;
+                visual_confirm_rect.height = VISUAL_CONFIRM_HEIGHT;
+                visual_confirm_rect.y += 2 * VISUAL_CONFIRM_HEIGHT;
+                seg_cnt = get_visual_confirm_segs_count(
+                    max_seg_width, visual_confirm_rect.width, recout_alignment);
+                vpe_full_bg_gaps(current_gap, &visual_confirm_rect, recout_alignment, seg_cnt);
+                if (input_idx == 0) {
+                    vpe_priv->resource.create_bg_segments(
+                        vpe_priv, current_gap, seg_cnt, VPE_CMD_OPS_BG_VSCF_PIPE0);
+                } else if (input_idx == 1) {
+                    vpe_priv->resource.create_bg_segments(
+                        vpe_priv, current_gap, seg_cnt, VPE_CMD_OPS_BG_VSCF_PIPE1);
+                } else {
+                    VPE_ASSERT(0);
+                }
+                current_gap += seg_cnt;
+            }
+            cmd_info++;
+        }
+    }
 }
 
 struct vpe_color vpe_get_visual_confirm_color(struct vpe_priv *vpe_priv,
@@ -99,6 +151,7 @@ struct vpe_color vpe_get_visual_confirm_color(struct vpe_priv *vpe_priv,
     switch (format) {
     case VPE_SURFACE_PIXEL_FORMAT_VIDEO_420_YCbCr:
     case VPE_SURFACE_PIXEL_FORMAT_VIDEO_420_YCrCb:
+    case VPE_SURFACE_PIXEL_FORMAT_VIDEO_ALPHA_THRU_LUMA:
         // YUV420 8bit: Green
         visual_confirm_color.rgba.r = 0.0;
         visual_confirm_color.rgba.g = 1.0;
@@ -165,6 +218,121 @@ struct vpe_color vpe_get_visual_confirm_color(struct vpe_priv *vpe_priv,
         visual_confirm_color.rgba.g = 0.65f;
         visual_confirm_color.rgba.b = 0.0;
         break;
+    case VPE_SURFACE_PIXEL_FORMAT_VIDEO_420_12bpc_YCrCb:
+    case VPE_SURFACE_PIXEL_FORMAT_VIDEO_420_12bpc_YCbCr:
+        // P016 : Dark Green
+        visual_confirm_color.rgba.r = 0.0;
+        visual_confirm_color.rgba.g = 0.35f;
+        visual_confirm_color.rgba.b = 0.0;
+        break;
+    case VPE_SURFACE_PIXEL_FORMAT_GRPH_ABGR16161616:
+    case VPE_SURFACE_PIXEL_FORMAT_GRPH_RGBA16161616:
+    case VPE_SURFACE_PIXEL_FORMAT_GRPH_BGRA16161616:
+    case VPE_SURFACE_PIXEL_FORMAT_GRPH_BGRA16161616_UNORM:
+    case VPE_SURFACE_PIXEL_FORMAT_GRPH_ABGR16161616_UNORM:
+    case VPE_SURFACE_PIXEL_FORMAT_GRPH_BGRA16161616_SNORM:
+    case VPE_SURFACE_PIXEL_FORMAT_GRPH_ABGR16161616_SNORM:
+        // RGB16 and variants: Blue
+        visual_confirm_color.rgba.r = 0.0;
+        visual_confirm_color.rgba.g = 0.0;
+        visual_confirm_color.rgba.b = 1.0;
+        break;
+    case VPE_SURFACE_PIXEL_FORMAT_GRPH_R8:
+        // Monochrome 8 bit: Silver
+        visual_confirm_color.rgba.r = 0.753f;
+        visual_confirm_color.rgba.g = 0.753f;
+        visual_confirm_color.rgba.b = 0.753f;
+        break;
+
+    case VPE_SURFACE_PIXEL_FORMAT_GRPH_R16:
+        // Monochrome 16 bit: Dim Gray
+        visual_confirm_color.rgba.r = 0.412f;
+        visual_confirm_color.rgba.g = 0.412f;
+        visual_confirm_color.rgba.b = 0.412f;
+        break;
+    case VPE_SURFACE_PIXEL_FORMAT_VIDEO_422_YCrCb:
+    case VPE_SURFACE_PIXEL_FORMAT_VIDEO_422_YCbCr:
+        // YUY2: Misty Rose
+        visual_confirm_color.rgba.r = 0.412f;
+        visual_confirm_color.rgba.g = 0.894f;
+        visual_confirm_color.rgba.b = 0.882f;
+        break;
+    case VPE_SURFACE_PIXEL_FORMAT_VIDEO_422_10bpc_YCrYCb:
+    case VPE_SURFACE_PIXEL_FORMAT_VIDEO_422_10bpc_YCbYCr:
+    case VPE_SURFACE_PIXEL_FORMAT_VIDEO_422_10bpc_CrYCbY:
+    case VPE_SURFACE_PIXEL_FORMAT_VIDEO_422_10bpc_CbYCrY:
+    case VPE_SURFACE_PIXEL_FORMAT_VIDEO_422_10bpc_YCrCb:
+    case VPE_SURFACE_PIXEL_FORMAT_VIDEO_422_10bpc_YCbCr:
+        // Y210: Salmon
+        visual_confirm_color.rgba.r = 0.412f;
+        visual_confirm_color.rgba.g = 0.627f;
+        visual_confirm_color.rgba.b = 0.478f;
+        break;
+    case VPE_SURFACE_PIXEL_FORMAT_VIDEO_422_12bpc_YCrYCb:
+    case VPE_SURFACE_PIXEL_FORMAT_VIDEO_422_12bpc_YCbYCr:
+    case VPE_SURFACE_PIXEL_FORMAT_VIDEO_422_12bpc_CrYCbY:
+    case VPE_SURFACE_PIXEL_FORMAT_VIDEO_422_12bpc_CbYCrY:
+    case VPE_SURFACE_PIXEL_FORMAT_VIDEO_422_12bpc_YCrCb:
+    case VPE_SURFACE_PIXEL_FORMAT_VIDEO_422_12bpc_YCbCr:
+        // Y216: Maroon
+        visual_confirm_color.rgba.r = 0.5;
+        visual_confirm_color.rgba.g = 0.0;
+        visual_confirm_color.rgba.b = 0.0;
+        break;
+    case VPE_SURFACE_PIXEL_FORMAT_VIDEO_CrCbYA8888:
+    case VPE_SURFACE_PIXEL_FORMAT_VIDEO_AYCrCb8888:
+    case VPE_SURFACE_PIXEL_FORMAT_VIDEO_YCrCbA8888:
+    case VPE_SURFACE_PIXEL_FORMAT_VIDEO_ACrYCb8888:
+    case VPE_SURFACE_PIXEL_FORMAT_VIDEO_CrYCbA8888:
+    case VPE_SURFACE_PIXEL_FORMAT_VIDEO_AYCbCr8888:
+        // AYUV: Aqua Marine
+        visual_confirm_color.rgba.r = 0.5;
+        visual_confirm_color.rgba.g = 1.0;
+        visual_confirm_color.rgba.b = 0.8f;
+        break;
+    case VPE_SURFACE_PIXEL_FORMAT_VIDEO_ACrYCb2101010:
+        // Y410: Dark Cyan
+        visual_confirm_color.rgba.r = 0.0;
+        visual_confirm_color.rgba.g = 0.5;
+        visual_confirm_color.rgba.b = 0.5;
+        break;
+    case VPE_SURFACE_PIXEL_FORMAT_VIDEO_ACrYCb12121212:
+    case VPE_SURFACE_PIXEL_FORMAT_VIDEO_CrYCbA12121212:
+        // Y416: Navy
+        visual_confirm_color.rgba.r = 0.0;
+        visual_confirm_color.rgba.g = 0.0;
+        visual_confirm_color.rgba.b = 0.5;
+        break;
+    case VPE_SURFACE_PIXEL_FORMAT_PLANAR_8bpc_RGB:
+        // Planar RGB8: Lavender
+        visual_confirm_color.rgba.r = 0.9f;
+        visual_confirm_color.rgba.g = 0.9f;
+        visual_confirm_color.rgba.b = 0.98f;
+        break;
+    case VPE_SURFACE_PIXEL_FORMAT_PLANAR_8bpc_YCbCr:
+        // Planar YCbCr8: Chocolate
+        visual_confirm_color.rgba.r = 0.824f;
+        visual_confirm_color.rgba.g = 0.412f;
+        visual_confirm_color.rgba.b = 0.118f;
+        break;
+    case VPE_SURFACE_PIXEL_FORMAT_PLANAR_16bpc_RGB:
+        // Planar RGB16: Rosy Brown
+        visual_confirm_color.rgba.r = 0.737f;
+        visual_confirm_color.rgba.g = 0.56f;
+        visual_confirm_color.rgba.b = 0.56f;
+        break;
+    case VPE_SURFACE_PIXEL_FORMAT_PLANAR_16bpc_YCbCr:
+        // Planar YCbCr16: Saddle Brown
+        visual_confirm_color.rgba.r = 0.545f;
+        visual_confirm_color.rgba.g = 0.271f;
+        visual_confirm_color.rgba.b = 0.075f;
+        break;
+    case VPE_SURFACE_PIXEL_FORMAT_GRPH_RGBE:
+        // RGBE: Olive
+        visual_confirm_color.rgba.r = 0.5;
+        visual_confirm_color.rgba.g = 0.5;
+        visual_confirm_color.rgba.b = 0.0;
+        break;
     default:
         break;
     }
@@ -209,7 +377,7 @@ enum vpe_status vpe_create_visual_confirm_segs(
     // Do visual confirm bg generation for input format
     if (vpe_priv->init.debug.visual_confirm_params.input_format &&
         params->target_rect.height > 2 * VISUAL_CONFIRM_HEIGHT) {
-        for (stream_idx = 0; stream_idx < params->num_streams; stream_idx++) {
+        for (stream_idx = 0; stream_idx < (uint16_t)params->num_streams; stream_idx++) {
             stream_ctx          = &vpe_priv->stream_ctx[stream_idx];
             visual_confirm_rect = stream_ctx->stream.scaling_info.dst_rect;
             visual_confirm_rect.y += 0;
@@ -235,6 +403,8 @@ enum vpe_status vpe_create_visual_confirm_segs(
             vpe_priv, current_gap, seg_cnt, VPE_CMD_OPS_BG_VSCF_OUTPUT);
         current_gap += seg_cnt;
     }
+
+    generate_pipe_segments(vpe_priv, params, current_gap, max_seg_width);
 
     if (visual_confirm_gaps != NULL) {
         vpe_free(visual_confirm_gaps);

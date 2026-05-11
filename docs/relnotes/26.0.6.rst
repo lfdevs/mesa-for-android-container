@@ -1,0 +1,210 @@
+Mesa 26.0.6 Release Notes / 2026-04-29
+======================================
+
+Mesa 26.0.6 is a bug fix release which fixes bugs found since the 26.0.5 release.
+
+Mesa 26.0.6 implements the OpenGL 4.6 API, but the version reported by
+glGetString(GL_VERSION) or glGetIntegerv(GL_MAJOR_VERSION) /
+glGetIntegerv(GL_MINOR_VERSION) depends on the particular driver being used.
+Some drivers don't support all the features required in OpenGL 4.6. OpenGL
+4.6 is **only** available if requested at context creation.
+Compatibility contexts may report a lower version depending on each driver.
+
+Mesa 26.0.6 implements the Vulkan 1.4 API, but the version reported by
+the apiVersion property of the VkPhysicalDeviceProperties struct
+depends on the particular driver being used.
+
+SHA checksums
+-------------
+
+::
+
+    SHA256: 1d3c3b8a8363b8cc354175bb4a684ad8b035211cc1d6fa17aeb9b9623c513f89  mesa-26.0.6.tar.xz
+    SHA512: 7f298234cb7b353ac40dc4d116866115160d1a52de6da8d4f1343af7ed47ca11e1a07b70aad8d24221906e0b520a4c140c12ffa7e7e706e3f25f301842a37e68  mesa-26.0.6.tar.xz
+
+
+New features
+------------
+
+- None
+
+
+Bug fixes
+---------
+
+- glcpp: incorrect macro expansion in token pasting
+- nir: possible exactness bug in reassociate
+
+
+Changes
+-------
+
+Alyssa Rosenzweig (1):
+
+- nir/opt_reassociate: fix exactness bug
+
+Arjob Mukherjee (1):
+
+- pvr: increase value of maxPerStageDescriptorStorageBuffers
+
+Benjamin Cheng (1):
+
+- radv/wsi: Re-use transfer queue if it exists
+
+Dave Airlie (2):
+
+- nvk: don't set sector promotion on texture headers
+- nouveau: drop sector promotion.
+
+David Rosca (3):
+
+- d3d12: Use HEVC RefPicSet order from frontend
+- radv/video: Fix initializing rc structs with default rate control
+- frontends/va: Fix finding LTRs from POCs in HEVC decode
+
+Derek Lesho (1):
+
+- zink: Guard bo map/unmap on map_count.
+
+Duncan Brawley (1):
+
+- pco: Fix pco_last_igrp returning the first element instead of the last
+
+Eric Engestrom (8):
+
+- docs: add sha sum for 26.0.5
+- .pick_status.json: Update to d4d7055aee547f452689f8165e21ca100869e6fe
+- .pick_status.json: Mark c2708afbc7e91da54183c72d5e8c89a452356073 as denominated
+- .pick_status.json: Mark a5ec9b7892bd45e028cbf302eeced65864d6da22 as denominated
+- .pick_status.json: Mark 24849eef9f55a072eca342a48ff46471e3b89422 as denominated
+- .pick_status.json: Mark f78541b765e42125b846bb936ead4439ff5fe915 as denominated
+- .pick_status.json: Mark 78e2bbc70f55f1cf6ef922e2052b1ce6b879b952 as denominated
+- .pick_status.json: Mark 3256fab5a363f9bf4e749cd8f7473405334a2816 as denominated
+
+Erik Faye-Lund (7):
+
+- panvk: drop out-of-date TODO
+- pan/lib: fix up afbc and linear layout
+- pan/lib: emit high bits of buffer-size
+- nouveau: do not report unsupported feature
+- radeonsi: remove old, unsupported cap
+- panvk: do not enable extension without required feature
+- panvk: do not enable extension without required feature
+
+Faith Ekstrand (2):
+
+- pan/ci: Mark couple of WSI crashes as flakes
+- panvk/csf: Emit INDEX_BUFFER[_SIZE] even for non-indexed draws
+
+GKraats (1):
+
+- crocus: Fix shader precompilation on Gen6 and higher
+
+Georg Lehmann (1):
+
+- intel/nir_opt_peephole_ffma: fix fp_math_ctlr for modifiers
+
+Icenowy Zheng (5):
+
+- pvr: finalize query_indices array after ending last sub_cmd
+- pvr: fix the code copying query_indices to sub_query_indices
+- pvr: propagate get_vis_results flag from secondary cmdbuf gfx jobs
+- pvr: follow other drivers' practice for copying build ID
+- pvr: skip emitting query program when copy result / reset with 0 queries
+
+Janne Grunau (1):
+
+- nir/gather_info: clear interpolation qualifiers only in fragment stage
+
+Jesse Natalie (1):
+
+- wgl: Use an hwnd xor hdc for framebuffers
+
+Job Noorman (1):
+
+- ir3/shared_ra: fix live-out reload after src reload
+
+Jose Maria Casanova Crespo (1):
+
+- broadcom/compiler: really enable branch in delay slots validation
+
+Karol Herbst (2):
+
+- nak: the MS location comes last in TLD, same spot as depth compare in TEX
+- mesa/st: do not advertise CL subgroup features on the GL side
+
+Lionel Landwerlin (4):
+
+- anv: avoid C23
+- anv: fix compute push constant allocations on pre Gfx12.5 platforms
+- anv: fix debug printfs on hang
+- anv: fixup compute queue detection
+
+Liu, Mengyang (1):
+
+- aco: fix broken VGPRs reservation for 64-bit attributes in VS prologs
+
+Matt Turner (2):
+
+- intel/elk: Remove dead TXL_LZ/TXF_LZ opcodes
+- radv: fix UB in radv_format_pack_clear_color for snorm formats
+
+Natalie Vock (2):
+
+- nir/deref: Elide loads/stores from deref cast of undef
+- radv: Run nir_opt_deref after first optimization loop
+
+Nick Hamilton (1):
+
+- pco: fix clamping the array index when shaderImageGatherExtended is enabled
+
+Patrick Lerda (4):
+
+- r600: fix alpha-to-coverage and alpha-to-one used together
+- r600: fix atomic buffer offset
+- r600: update vertex emit_varying_pos
+- r600: fix atomic_counter_post_dec
+
+Pavel Ondračka (2):
+
+- r300: fix MSAA resolve COLORPITCH tiling after pipe_surface de-pointerization
+- r300: dirty VS state when switching variants
+
+Ryan Zhang (1):
+
+- panvk: add VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL to host copy layouts
+
+Sagar Ghuge (1):
+
+- anv: Fix Wa_14021821874, Wa_14018813551, Wa_14026600921
+
+Samuel Pitoiset (2):
+
+- radv: fix GPU hangs with PS epilogs and secondaries properly
+- radv: re-introduce DGC+multiview support and enable it for vkd3d-proton only
+
+Simon Perretta (2):
+
+- pco: reserve additional outputs for trilinear sampled coeffs
+- pco: amend tg4 lowering
+
+Tapani Pälli (4):
+
+- drirc/anv: add flag to disable VK_EXT_subgroup_size_control
+- drirc: set anv_disable_subgroup_size_control for bg3
+- drirc: use anv_disable_drm_ccs_modifiers for any GTK version
+- anv: do not use resource barrier with split barriers
+
+Timothy Arceri (1):
+
+- glcpp: fix paste within macro function expansion
+
+Valentine Burley (3):
+
+- zink/ci: Remove Cezanne job
+- tu/drm/virtio: Fix tu_wait_fence timeout handling
+- freedreno/drm/virtio: Fix wait_fence ret ordering
+
+Vinson Lee (1):
+
+- zink: remove unused variable in zink_instance.py

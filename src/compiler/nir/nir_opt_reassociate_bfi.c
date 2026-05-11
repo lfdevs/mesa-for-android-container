@@ -86,10 +86,10 @@ nir_opt_reassociate_bfi_instr(nir_builder *b,
    nir_src *use = list_first_entry(&bfiCD0->def.uses,
                                    nir_src, use_link);
 
-   if (nir_src_parent_instr(use)->type != nir_instr_type_alu)
+   if (nir_src_use_instr(use)->type != nir_instr_type_alu)
       return false;
 
-   nir_alu_instr *bfiABx = nir_instr_as_alu(nir_src_parent_instr(use));
+   nir_alu_instr *bfiABx = nir_instr_as_alu(nir_src_use_instr(use));
    if (bfiABx->op != nir_op_bfi || bfiABx->def.num_components != 1)
       return false;
 

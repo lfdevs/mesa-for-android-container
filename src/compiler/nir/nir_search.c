@@ -25,6 +25,7 @@
 #include <inttypes.h>
 #include "util/half_float.h"
 #include "nir_builder.h"
+#include "nir_opcodes.h"
 #include "nir_worklist.h"
 
 /* This should be the same as nir_search_max_comm_ops in nir_algebraic.py. */
@@ -441,6 +442,15 @@ construct_value(nir_builder *build,
       if (const_expr) {
          nir_instr_free(&alu->instr);
          def = const_expr;
+         if (nir_def_is_alu(def)) {
+            /* The instruction got folded into bcsel of two constants. */
+            nir_alu_instr *bcsel = nir_def_as_alu(def);
+            assert(bcsel->op == nir_op_bcsel);
+            util_dynarray_append_typed(state->states, uint16_t, 0);
+            nir_algebraic_automaton(nir_def_instr(bcsel->src[1].src.ssa), state->states, state->pass_op_table);
+            util_dynarray_append_typed(state->states, uint16_t, 0);
+            nir_algebraic_automaton(nir_def_instr(bcsel->src[2].src.ssa), state->states, state->pass_op_table);
+         }
       } else {
          nir_builder_instr_insert(build, &alu->instr);
       }
@@ -598,8 +608,8 @@ add_uses_to_worklist(nir_instr *instr,
    nir_def *def = nir_instr_def(instr);
 
    nir_foreach_use_safe(use_src, def) {
-      if (nir_algebraic_automaton(nir_src_parent_instr(use_src), states, pass_op_table))
-         nir_instr_worklist_push_tail(worklist, nir_src_parent_instr(use_src));
+      if (nir_algebraic_automaton(nir_src_use_instr(use_src), states, pass_op_table))
+         nir_instr_worklist_push_tail(worklist, nir_src_use_instr(use_src));
    }
 }
 

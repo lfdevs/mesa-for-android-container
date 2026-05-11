@@ -298,7 +298,7 @@ get_similar_flrp_stats(nir_alu_instr *alu, struct similar_flrp_stats *st)
 
    nir_foreach_use(other_use, alu->src[2].src.ssa) {
       /* Is the use also a flrp? */
-      nir_instr *const other_instr = nir_src_parent_instr(other_use);
+      nir_instr *const other_instr = nir_src_use_instr(other_use);
       if (other_instr->type != nir_instr_type_alu)
          continue;
 

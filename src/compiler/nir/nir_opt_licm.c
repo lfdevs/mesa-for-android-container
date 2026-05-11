@@ -5,15 +5,24 @@
 
 #include "nir.h"
 
+typedef struct {
+   nir_loop *loop;
+} licm_state;
+
 static bool
-defined_before_loop(nir_src *src, void *state)
+defined_before_loop(nir_src *src, void *_state)
 {
-   unsigned *loop_preheader_idx = state;
-   return nir_def_block(src->ssa)->index <= *loop_preheader_idx;
+   licm_state *state = (licm_state *)_state;
+
+   /* The current instruction is loop-invariant only if its sources are before
+    * the loop.
+    */
+   return nir_def_block(src->ssa)->index <=
+          nir_loop_predecessor_block(state->loop)->index;
 }
 
 static bool
-is_instr_loop_invariant(nir_instr *instr, unsigned loop_preheader_idx)
+is_instr_loop_invariant(nir_instr *instr, licm_state *state)
 {
    switch (instr->type) {
    case nir_instr_type_load_const:
@@ -28,7 +37,7 @@ is_instr_loop_invariant(nir_instr *instr, unsigned loop_preheader_idx)
    case nir_instr_type_alu:
    case nir_instr_type_tex:
    case nir_instr_type_deref:
-      return nir_foreach_src(instr, defined_before_loop, &loop_preheader_idx);
+      return nir_foreach_src(instr, defined_before_loop, state);
 
    case nir_instr_type_phi:
    case nir_instr_type_call:
@@ -40,13 +49,16 @@ is_instr_loop_invariant(nir_instr *instr, unsigned loop_preheader_idx)
 }
 
 static bool
-visit_block(nir_block *block, nir_block *preheader)
+visit_block(nir_block *block, licm_state *state)
 {
+   assert(state->loop);
+
    bool progress = false;
    nir_foreach_instr_safe(instr, block) {
-      if (is_instr_loop_invariant(instr, preheader->index)) {
+      if (is_instr_loop_invariant(instr, state)) {
          nir_instr_remove(instr);
-         nir_instr_insert_after_block(preheader, instr);
+         nir_instr_insert_after_block(nir_loop_predecessor_block(state->loop),
+                                      instr);
          progress = true;
       }
    }
@@ -81,40 +93,69 @@ should_optimize_loop(nir_loop *loop)
 }
 
 static bool
-visit_cf_list(struct exec_list *list, nir_block *preheader, nir_block *exit)
+visit_cf_list(struct exec_list *list, licm_state *state)
 {
    bool progress = false;
 
    foreach_list_typed(nir_cf_node, node, node, list) {
       switch (node->type) {
       case nir_cf_node_block: {
-         /* By only visiting blocks which dominate the loop exit, we
-          * ensure that we don't speculatively hoist any instructions
+         nir_cf_node *next = nir_cf_node_next(node);
+         bool optimize_loop = false;
+
+         /* If the next CF node is a loop that we optimize, visit it first
+          * before visiting its predecessor block, so that any instructions
+          * hoisted from this (potentially nested) loop are then considered
+          * for hoisting from the outer loop as well. The goal is to hoist
+          * instructions across all levels of nested loops.
+          */
+         if (next && next->type == nir_cf_node_loop) {
+            nir_loop *inner_loop = nir_cf_node_as_loop(next);
+            optimize_loop = should_optimize_loop(inner_loop);
+
+            if (optimize_loop) {
+               nir_loop *outer_loop = state->loop;
+
+               state->loop = inner_loop;
+               progress |= visit_cf_list(&inner_loop->body, state);
+               progress |= visit_cf_list(&inner_loop->continue_list, state);
+               state->loop = outer_loop;
+            }
+         }
+
+         /* By only visiting blocks which dominate the block after the loop,
+          * we ensure that we don't speculatively hoist any instructions
           * which otherwise might not be executed.
           *
           * Note, that the proper check would be whether this block
-          * postdominates the loop preheader.
+          * postdominates the block before the loop.
           */
          nir_block *block = nir_cf_node_as_block(node);
-         if (exit && nir_block_dominates(block, exit))
-            progress |= visit_block(block, preheader);
+         if (state->loop &&
+             nir_block_dominates(block, nir_loop_successor_block(state->loop)))
+            progress |= visit_block(block, state);
+
+         if (next && next->type == nir_cf_node_loop && !optimize_loop) {
+            nir_loop *loop = nir_cf_node_as_loop(next);
+
+            /* We treat this loop like any other block, so we don't do LICM
+             * from it per se, but if this loop is nested inside another
+             * loop, we still do LICM for the outer loop.
+             */
+            progress |= visit_cf_list(&loop->body, state);
+            progress |= visit_cf_list(&loop->continue_list, state);
+         }
          break;
       }
       case nir_cf_node_if: {
          nir_if *nif = nir_cf_node_as_if(node);
-         progress |= visit_cf_list(&nif->then_list, preheader, exit);
-         progress |= visit_cf_list(&nif->else_list, preheader, exit);
+         progress |= visit_cf_list(&nif->then_list, state);
+         progress |= visit_cf_list(&nif->else_list, state);
          break;
       }
-      case nir_cf_node_loop: {
-         nir_loop *loop = nir_cf_node_as_loop(node);
-         bool opt = should_optimize_loop(loop);
-         nir_block *inner_preheader = opt ? nir_cf_node_cf_tree_prev(node) : preheader;
-         nir_block *inner_exit = opt ? nir_cf_node_cf_tree_next(node) : exit;
-         progress |= visit_cf_list(&loop->body, inner_preheader, inner_exit);
-         progress |= visit_cf_list(&loop->continue_list, inner_preheader, inner_exit);
+      case nir_cf_node_loop:
+         /* All loops are handled when handling their predecessor block. */
          break;
-      }
       case nir_cf_node_function:
          UNREACHABLE("NIR LICM: Unsupported cf_node type.");
       }
@@ -126,15 +167,17 @@ visit_cf_list(struct exec_list *list, nir_block *preheader, nir_block *exit)
 bool
 nir_opt_licm(nir_shader *shader)
 {
+   licm_state state = {0};
    bool progress = false;
 
    nir_foreach_function_impl(impl, shader) {
       nir_metadata_require(impl, nir_metadata_block_index |
                                     nir_metadata_dominance);
 
-      bool impl_progress = visit_cf_list(&impl->body, NULL, NULL);
-      progress |= nir_progress(impl_progress, impl,
-                               nir_metadata_block_index | nir_metadata_dominance);
+      state.loop = NULL;
+
+      progress |= nir_progress(visit_cf_list(&impl->body, &state), impl,
+                               nir_metadata_control_flow);
    }
 
    return progress;

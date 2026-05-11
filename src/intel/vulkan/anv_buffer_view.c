@@ -11,7 +11,7 @@ anv_fill_buffer_view_surface_state(struct anv_device *device,
                                    struct isl_swizzle swizzle,
                                    isl_surf_usage_flags_t usage,
                                    struct anv_address address,
-                                   uint32_t range, uint32_t stride)
+                                   uint64_t range, uint32_t stride)
 {
    anv_fill_buffer_surface_state(device,
                                  state->state_data.data,
@@ -37,8 +37,8 @@ anv_CreateBufferView(VkDevice _device,
    if (!view)
       return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
 
-   const VkBufferUsageFlags2CreateInfoKHR *view_usage_info =
-      vk_find_struct_const(pCreateInfo->pNext, BUFFER_USAGE_FLAGS_2_CREATE_INFO_KHR);
+   const VkBufferUsageFlags2CreateInfo *view_usage_info =
+      vk_find_struct_const(pCreateInfo->pNext, BUFFER_USAGE_FLAGS_2_CREATE_INFO);
    const VkBufferUsageFlags buffer_usage =
       view_usage_info != NULL ? view_usage_info->usage : buffer->vk.usage;
 
@@ -49,8 +49,8 @@ anv_CreateBufferView(VkDevice _device,
    view->format = format.isl_format;
 
    const uint32_t format_bs = isl_format_get_layout(format.isl_format)->bpb / 8;
-   const uint32_t align_range =
-      align_down_npot_u32(view->vk.range, format_bs);
+   const uint64_t align_range =
+      align_down_npot_u64(view->vk.range, format_bs);
 
    view->address = anv_address_add(buffer->address, pCreateInfo->offset);
 

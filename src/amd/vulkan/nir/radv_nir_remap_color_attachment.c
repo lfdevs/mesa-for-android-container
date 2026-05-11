@@ -8,7 +8,8 @@
 #include "nir/nir_builder.h"
 #include "radv_constants.h"
 #include "radv_nir.h"
-#include "radv_pipeline_graphics.h"
+#include "radv_pipeline.h"
+#include "radv_shader.h"
 #include "vk_graphics_state.h"
 
 static bool

@@ -69,6 +69,7 @@ static void
 optimize(nir_shader *nir)
 {
    msl_preprocess_nir(nir);
+   msl_preprocess_nir_workarounds(nir, 0);
 
    nir_lower_compute_system_values_options csv_options = {
       .has_base_global_invocation_id = 0,

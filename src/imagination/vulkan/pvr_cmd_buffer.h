@@ -114,6 +114,15 @@ struct pvr_transfer_cmd {
    struct pvr_cmd_buffer *cmd_buffer;
 };
 
+struct pvr_unbound_deferred_clear {
+   union fi clear_color[4];
+   VkOffset3D offset;
+   VkExtent3D extent;
+   uint32_t array_layer;
+   VkImageAspectFlags aspect_mask;
+   uint32_t attachment_index;
+};
+
 struct pvr_color_attachment_output_map {
    uint32_t index_color;
    uint32_t index_resolve;
@@ -208,6 +217,10 @@ struct pvr_sub_cmd_gfx {
 
    uint32_t view_mask;
    bool multiview_enabled;
+   bool view_index_wanted;
+
+   /* Recorded deferred RTA clears for secondary command buffers */
+   struct util_dynarray unbound_deferred_clears;
 };
 
 struct pvr_sub_cmd_compute {

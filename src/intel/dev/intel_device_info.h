@@ -162,6 +162,7 @@ intel_device_info_dual_subslice_id_bound(const struct intel_device_info *devinfo
 }
 
 int intel_device_name_to_pci_device_id(const char *name);
+const char *intel_platform_name_by_index(unsigned idx);
 
 static inline uint64_t
 intel_device_info_timebase_scale(const struct intel_device_info *devinfo,
@@ -214,6 +215,16 @@ enum intel_wa_steppings intel_device_info_wa_stepping(struct intel_device_info *
 
 uint32_t intel_device_info_get_max_slm_size(const struct intel_device_info *devinfo);
 uint32_t intel_device_info_get_max_preferred_slm_size(const struct intel_device_info *devinfo);
+
+static inline unsigned
+intel_device_info_get_max_engine_prefetch(const struct intel_device_info *devinfo)
+{
+   unsigned max_prefetch = 0;
+   for (unsigned engine = INTEL_ENGINE_CLASS_RENDER;
+        engine < ARRAY_SIZE(devinfo->engine_class_prefetch); engine++)
+      max_prefetch = MAX2(max_prefetch, devinfo->engine_class_prefetch[engine]);
+   return max_prefetch;
+}
 
 /**
  * True if this device supports the Extended Bindless Surface Offset mode,

@@ -35,13 +35,14 @@ unsigned jay_process_nir(const struct intel_device_info *devinfo,
 void jay_compute_liveness(jay_function *f);
 void jay_calculate_register_demands(jay_function *f);
 
-void jay_spill(jay_function *func, enum jay_file file, unsigned limit);
+void jay_spill(jay_function *func, unsigned limit);
 void jay_partition_grf(jay_shader *shader);
 void jay_register_allocate(jay_shader *s);
 void jay_assign_flags(jay_shader *s);
+void jay_assign_accumulators(jay_shader *s);
 void jay_repair_ssa(jay_function *func);
 
-const char *jay_file_to_string(enum jay_file file);
+const char *jay_file_prefix(enum jay_file file);
 void jay_print_type(FILE *f, enum jay_type t);
 void jay_print_inst(FILE *f, jay_inst *I);
 void jay_print_block(FILE *f, jay_block *block);
@@ -66,7 +67,7 @@ jay_validate_ra(jay_function *func)
 void jay_opt_propagate_forwards(jay_shader *s);
 void jay_opt_propagate_backwards(jay_shader *s);
 void jay_opt_dead_code(jay_shader *s);
-void jay_opt_control_flow(jay_shader *s);
+void jay_opt_predicate(jay_shader *s);
 
 void jay_lower_pre_ra(jay_shader *s);
 void jay_lower_post_ra(jay_shader *s);

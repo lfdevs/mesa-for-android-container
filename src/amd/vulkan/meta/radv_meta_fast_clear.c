@@ -10,6 +10,7 @@
 #include "nir/radv_meta_nir.h"
 #include "radv_cs.h"
 #include "radv_meta.h"
+#include "vk_shader_module.h"
 
 enum radv_color_op {
    FAST_CLEAR_ELIMINATE,
@@ -338,6 +339,7 @@ radv_process_color_image(struct radv_cmd_buffer *cmd_buffer, struct radv_image *
 {
    struct radv_device *device = radv_cmd_buffer_device(cmd_buffer);
    const struct radv_physical_device *pdev = radv_device_physical(device);
+   struct radv_cond_render_state *cond_render = &cmd_buffer->state.cond_render;
    bool old_predicating = false;
    uint64_t pred_offset;
    VkPipelineLayout layout;
@@ -377,10 +379,10 @@ radv_process_color_image(struct radv_cmd_buffer *cmd_buffer, struct radv_image *
    if (pred_offset) {
       pred_offset += 8 * subresourceRange->baseMipLevel;
 
-      old_predicating = cmd_buffer->state.predicating;
+      old_predicating = cond_render->enabled;
 
       radv_emit_set_predication_state_from_image(cmd_buffer, image, pred_offset, true);
-      cmd_buffer->state.predicating = true;
+      cond_render->enabled = true;
    }
 
    radv_meta_bind_graphics_pipeline(cmd_buffer, pipeline);
@@ -407,17 +409,15 @@ radv_process_color_image(struct radv_cmd_buffer *cmd_buffer, struct radv_image *
    if (pred_offset) {
       pred_offset += 8 * subresourceRange->baseMipLevel;
 
-      cmd_buffer->state.predicating = old_predicating;
+      cond_render->enabled = old_predicating;
 
       radv_emit_set_predication_state_from_image(cmd_buffer, image, pred_offset, false);
 
-      if (cmd_buffer->state.predication_type != -1) {
+      if (cond_render->type != -1) {
          /* Restore previous conditional rendering user state. */
-         const uint64_t pred_va = pdev->info.has_32bit_predication ? cmd_buffer->state.user_predication_va
-                                                                   : cmd_buffer->state.emulated_predication_va;
+         const uint64_t pred_va = pdev->info.has_32bit_predication ? cond_render->user_va : cond_render->emulated_va;
 
-         radv_emit_set_predication_state(cmd_buffer, cmd_buffer->state.predication_type,
-                                         cmd_buffer->state.predication_op, pred_va);
+         radv_emit_set_predication_state(cmd_buffer, cond_render->type, cond_render->op, pred_va);
       }
    }
 

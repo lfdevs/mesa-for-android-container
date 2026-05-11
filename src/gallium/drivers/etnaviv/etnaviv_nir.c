@@ -26,6 +26,18 @@
 
 #include "etnaviv_nir.h"
 
+static inline int
+color_index_for_location(unsigned location)
+{
+   assert(location != FRAG_RESULT_COLOR &&
+          "gl_FragColor must be lowered before nir_lower_blend");
+
+   if (location < FRAG_RESULT_DATA0)
+      return -1;
+   else
+      return location - FRAG_RESULT_DATA0;
+}
+
 /* io related lowering
  * run after lower_int_to_float because it adds i2f/f2i ops
  */
@@ -33,6 +45,35 @@ bool
 etna_lower_io(nir_shader *shader, struct etna_shader_variant *v)
 {
    bool progress = false;
+
+   /* Phase 1: Widen fragment color output variables to vec4 for R/B swap.
+    *
+    * The R/B channel swap needs to reorder components and adjust the
+    * writemask. NIR store_deref validation requires num_components ==
+    * glsl_get_vector_elements(deref->type) and writemask bits must be
+    * within BITFIELD_MASK(num_components). So for scalar/vec2/vec3
+    * outputs we must widen the variable type to vec4 first.
+    */
+   if (shader->info.stage == MESA_SHADER_FRAGMENT && v->key.frag_rb_swap) {
+      nir_foreach_shader_out_variable(var, shader) {
+         int rt = color_index_for_location(var->data.location);
+         if (rt == -1 || !(v->key.frag_rb_swap & (1 << rt)))
+            continue;
+
+         const glsl_type *type = var->type;
+         if (glsl_type_is_array(type)) {
+            const glsl_type *elem = glsl_get_array_element(type);
+            if (glsl_get_vector_elements(elem) < 4) {
+               var->type = glsl_array_type(
+                  glsl_vector_type(glsl_get_base_type(elem), 4),
+                  glsl_array_size(type), 0);
+            }
+         } else {
+            if (glsl_get_vector_elements(type) < 4)
+               var->type = glsl_vector_type(glsl_get_base_type(type), 4);
+         }
+      }
+   }
 
    nir_foreach_function_impl(impl, shader) {
       nir_builder b = nir_builder_create(impl);
@@ -57,6 +98,56 @@ etna_lower_io(nir_shader *shader, struct etna_shader_variant *v)
                      nir_def_as_alu(ssa)->op = nir_op_ieq;
 
                   nir_def_rewrite_uses_after(&intr->def, ssa);
+
+                  func_progress = true;
+               } break;
+               case nir_intrinsic_store_deref: {
+                  nir_deref_instr *deref = nir_src_as_deref(intr->src[0]);
+                  if (shader->info.stage != MESA_SHADER_FRAGMENT ||
+                      !v->key.frag_rb_swap)
+                     break;
+
+                  nir_variable *var = nir_deref_instr_get_variable(deref);
+                  int rt = color_index_for_location(var->data.location);
+                  if (rt == -1)
+                     break;
+
+                  if (!(v->key.frag_rb_swap & (1 << rt)))
+                     break;
+
+                  /* Phase 2: Update deref type to match widened variable and
+                   * perform R/B channel swap via pad + swizzle + writemask.
+                   */
+                  if (deref->deref_type == nir_deref_type_var) {
+                     deref->type = var->type;
+                  } else {
+                     /* Array deref: update parent deref_var and this element */
+                     nir_deref_instr *parent = nir_deref_instr_parent(deref);
+                     assert(parent->deref_type == nir_deref_type_var);
+                     parent->type = var->type;
+                     deref->type = glsl_get_array_element(var->type);
+                  }
+
+                  b.cursor = nir_before_instr(instr);
+
+                  nir_def *src = intr->src[1].ssa;
+                  unsigned old_wrmask = nir_intrinsic_write_mask(intr);
+
+                  /* Pad source to 4 components (undef for missing) */
+                  nir_def *padded = nir_pad_vec4(&b, src);
+
+                  /* Swap R and B channels */
+                  unsigned swiz[] = {2, 1, 0, 3};
+                  nir_def *swapped = nir_swizzle(&b, padded, swiz, 4);
+
+                  /* Swap bits 0 and 2 in writemask */
+                  unsigned new_wrmask = (old_wrmask & ~5u) |
+                                        ((old_wrmask & 1u) << 2) |
+                                        ((old_wrmask & 4u) >> 2);
+
+                  intr->num_components = 4;
+                  nir_intrinsic_set_write_mask(intr, new_wrmask);
+                  nir_src_rewrite(&intr->src[1], swapped);
 
                   func_progress = true;
                } break;

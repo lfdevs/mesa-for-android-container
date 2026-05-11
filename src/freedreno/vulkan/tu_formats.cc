@@ -232,11 +232,18 @@ tu_physical_device_get_format_properties(
 
    if (supported_color) {
       assert(supported_tex);
-      optimal |= VK_FORMAT_FEATURE_2_COLOR_ATTACHMENT_BIT |
-                 VK_FORMAT_FEATURE_2_BLIT_DST_BIT |
-                 VK_FORMAT_FEATURE_2_STORAGE_IMAGE_BIT |
-                 VK_FORMAT_FEATURE_2_STORAGE_READ_WITHOUT_FORMAT_BIT |
-                 VK_FORMAT_FEATURE_2_STORAGE_WRITE_WITHOUT_FORMAT_BIT;
+      optimal |= VK_FORMAT_FEATURE_2_COLOR_ATTACHMENT_BIT | VK_FORMAT_FEATURE_2_BLIT_DST_BIT;
+
+      /* "Compatibility Between SPIR-V Image Formats and Vulkan Formats" doesn't
+       * map any SPIR-V image formats formats to Vulkan depth/stencil formats,
+       * except for "Unknown" which maps to anything with the feature flags set.
+       * Don't bother supporting that unformatted z/s access, either, since
+       * x8_d24 fails and it seems like an unintended corner of the spec.
+       */
+      if (!vk_format_is_depth_or_stencil(vk_format)) {
+         optimal |= VK_FORMAT_FEATURE_2_STORAGE_IMAGE_BIT | VK_FORMAT_FEATURE_2_STORAGE_READ_WITHOUT_FORMAT_BIT |
+                    VK_FORMAT_FEATURE_2_STORAGE_WRITE_WITHOUT_FORMAT_BIT;
+      }
 
       buffer |= VK_FORMAT_FEATURE_2_STORAGE_TEXEL_BUFFER_BIT |
                 VK_FORMAT_FEATURE_2_STORAGE_READ_WITHOUT_FORMAT_BIT |

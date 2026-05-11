@@ -262,11 +262,8 @@ nobin-dEQP-VK.transform_feedback.simple_optimized_gpl.draw_indirect_multiview_co
 nobin-dEQP-VK.transform_feedback.simple_optimized_gpl.draw_indirect_multiview_counter_offset_244,Fail
 
 # New failures with VKCTS 1.4.4.0
-dEQP-VK.binding_model.descriptor_buffer.traditional_buffer.capture_replay.sparse_buffer_descriptor_data_consistency_and_usage,Fail
-dEQP-VK.binding_model.descriptor_buffer.traditional_buffer.capture_replay.sparse_buffer_descriptor_data_consistency,Fail
 dEQP-VK.pipeline.monolithic.misc.identically_defined_layout,Fail
 dEQP-VK.tessellation.misc_draw.tess_factor_barrier_bug,Crash
-gmem-dEQP-VK.binding_model.descriptor_buffer.traditional_buffer.capture_replay.sparse_buffer_descriptor_data_consistency_and_usage,Fail
 gmem-dEQP-VK.transform_feedback.simple.draw_indirect_counter_offset_16,Fail
 gmem-dEQP-VK.transform_feedback.simple.draw_indirect_multiview_counter_offset_508,Fail
 gmem-dEQP-VK.transform_feedback.simple_fast_gpl.draw_indirect_counter_offset_244,Fail
@@ -499,11 +496,6 @@ vk_xfermodes3,Fail
 
 # Initial ANGLE failures
 angle-dEQP-GLES2.functional.shaders.algorithm.rgb_to_hsl_vertex,Fail
-
-# Android failures
-# ../src/freedreno/vulkan/tu_image.cc:512: VkResult tu_image_update_layout(struct tu_device *, struct tu_image *, uint64_t, const VkSubresourceLayout *) [CHIP = A6XX]: assertion "!image->force_linear_tile" failed
-ahb-dEQP-VK.api.external.memory.android_hardware_buffer.ahb_format_properties.image_formats.r8g8b8a8_unorm,Crash
-ahb-dEQP-VK.api.external.memory.android_hardware_buffer.ahb_format_properties_2.image_formats.r8g8b8a8_unorm,Crash
 
 # Early-fragment multisample autotune regressions
 dEQP-VK.fragment_operations.early_fragment.sample_count_early_fragment_tests_depth_alpha_to_coverage_samples_2_maintenance5,Fail

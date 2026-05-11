@@ -66,7 +66,8 @@ static bool
 try_remove_trivial_phi(struct ctx *ctx, struct phi *phi)
 {
    unsigned same = 0;
-   for (unsigned i = 0; i < jay_num_predecessors(phi->block); ++i) {
+   for (unsigned i = 0; i < jay_num_predecessors(phi->block, phi->old.file);
+        ++i) {
       unsigned src = remap_idx(ctx, phi->src[i]);
       if (same && src != same && src != phi->dst) {
          /* Nontrivial */
@@ -86,9 +87,9 @@ try_remove_trivial_phi(struct ctx *ctx, struct phi *phi)
 static void
 add_phi(struct ctx *ctx, jay_block *block, jay_def src, unsigned dst)
 {
-   unsigned i = 0, n = jay_num_predecessors(block);
+   unsigned i = 0, n = jay_num_predecessors(block, src.file);
    unsigned *srcs = linear_alloc_array(ctx->linctx, unsigned, n);
-   jay_foreach_predecessor(block, pred) {
+   jay_foreach_predecessor(block, pred, src.file) {
       assert(i < n);
       srcs[i++] = lookup(ctx, *pred, src);
    }
@@ -110,9 +111,10 @@ lookup(struct ctx *ctx, jay_block *block, jay_def def)
    }
 
    /* For a single predecessor, we can recurse without adding a phi. */
-   bool insert_phi = jay_num_predecessors(block) > 1;
-   unsigned val = insert_phi ? ctx->alloc++ :
-                               lookup(ctx, jay_first_predecessor(block), def);
+   bool insert_phi = jay_num_predecessors(block, def.file) > 1;
+   unsigned val = insert_phi ?
+                     ctx->alloc++ :
+                     lookup(ctx, jay_first_predecessor(block, def.file), def);
 
    _mesa_hash_table_u64_insert(ctx->defs[block->index], jay_index(def),
                                (void *) (uintptr_t) val);
@@ -190,7 +192,7 @@ jay_repair_ssa(jay_function *func)
       }
 
       /* Seal loop headers after processing the back edge */
-      jay_foreach_successor(block, succ) {
+      jay_foreach_successor(block, succ, GPR) {
          if (succ->loop_header && succ->index <= block->index) {
             util_dynarray_foreach(&ctx.incomplete_phis[succ->index],
                                   struct incomplete_phi, el) {
@@ -235,7 +237,7 @@ jay_repair_ssa(jay_function *func)
       jay_PHI_DST(&b, jay_scalar(phi->old.file, phi->dst));
 
       unsigned i = 0;
-      jay_foreach_predecessor(phi->block, pred) {
+      jay_foreach_predecessor(phi->block, pred, phi->old.file) {
          b.cursor = jay_before_jump(*pred);
          unsigned idx = remap_idx(&ctx, phi->src[i++]);
          jay_PHI_SRC_u32(&b, jay_scalar(phi->old.file, idx), phi->dst);

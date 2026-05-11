@@ -38,22 +38,13 @@
 #include <stdlib.h>
 #include <string.h>
 #include "c11/threads.h"
+#include "util/log.h"
 #include "util/macros.h"
 #include "util/os_misc.h"
 #include "util/simple_mtx.h"
 #include "util/u_string.h"
 
 #include "egllog.h"
-
-#ifdef HAVE_ANDROID_PLATFORM
-#define LOG_TAG "EGL-MAIN"
-#if ANDROID_API_LEVEL >= 26
-#include <log/log.h>
-#else
-#include <cutils/log.h>
-#endif /* use log/log.h start from android 8 major version */
-
-#endif /* HAVE_ANDROID_PLATFORM */
 
 #define MAXSTRING          1000
 #define FALLBACK_LOG_LEVEL _EGL_WARNING
@@ -77,22 +68,19 @@ static const char *level_strings[] = {
 };
 
 /**
- * The default logger.  It prints the message to stderr.
+ * The default logger.
  */
 static void
 _eglDefaultLogger(EGLint level, const char *msg)
 {
-#ifdef HAVE_ANDROID_PLATFORM
-   static const int egl2alog[] = {
-      [_EGL_FATAL] = ANDROID_LOG_ERROR,
-      [_EGL_WARNING] = ANDROID_LOG_WARN,
-      [_EGL_INFO] = ANDROID_LOG_INFO,
-      [_EGL_DEBUG] = ANDROID_LOG_DEBUG,
+   static const int egl2log[] = {
+      [_EGL_FATAL] = MESA_LOG_ERROR,
+      [_EGL_WARNING] = MESA_LOG_WARN,
+      [_EGL_INFO] = MESA_LOG_INFO,
+      [_EGL_DEBUG] = MESA_LOG_DEBUG,
    };
-   LOG_PRI(egl2alog[level], LOG_TAG, "%s", msg);
-#else
-   fprintf(stderr, "libEGL %s: %s\n", level_strings[level], msg);
-#endif /* HAVE_ANDROID_PLATFORM */
+
+   mesa_log(egl2log[level], "MESA-EGL", "%s", msg);
 }
 
 /**

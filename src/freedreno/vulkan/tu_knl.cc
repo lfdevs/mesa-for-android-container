@@ -43,6 +43,26 @@ tu_bo_init_new_explicit_iova(struct tu_device *dev,
 
    size = align64(size, os_page_size);
 
+   const VkMemoryPropertyFlags replace_flags_mask =
+      VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT |
+      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+      VK_MEMORY_PROPERTY_HOST_COHERENT_BIT |
+      VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
+
+   const VkMemoryPropertyFlags replace_flags_match =
+      VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT |
+      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+      VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+
+   if (dev->physical_device->preferred_uncached_as_cached_index >= 0 &&
+      (mem_property & replace_flags_mask) == replace_flags_match) {
+      /* Override the memory type if the requested type was uncached, only replacing
+       * if the device supports cached-coherent memory type.
+       */
+      mem_property =
+          dev->physical_device->memory.types[dev->physical_device->preferred_uncached_as_cached_index];
+   }
+
    VkResult result =
       dev->instance->knl->bo_init(dev, base, out_bo, size, client_iova,
                                   mem_property, flags, lazy_vma, name);

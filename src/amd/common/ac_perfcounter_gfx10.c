@@ -4,11 +4,9 @@
  * SPDX-License-Identifier: MIT
  */
 
-#include "ac_gpu_info.h"
 #include "ac_perfcounter.h"
 #include "ac_spm.h"
 
-#include "util/u_memory.h"
 #include "util/macros.h"
 
 /* gfx10_CB */

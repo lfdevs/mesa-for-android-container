@@ -113,3 +113,41 @@ TEST_F(misc, pipeline_key_rgp_fossilize)
 
    destroy_device();
 }
+
+/**
+ * This test verifies the compatibility between global pipeline keys. These keys are computed from
+ * the device cache hash which is used to share shader binaries between different compatible GPUs.
+ */
+TEST_F(misc, global_pipeline_key_compat)
+{
+   /* RDNA2 keys */
+   VkPipelineBinaryKeyKHR vangogh, rembrandt, navi21;
+   get_global_pipeline_key(CHIP_VANGOGH, &vangogh);
+   get_global_pipeline_key(CHIP_REMBRANDT, &rembrandt);
+   get_global_pipeline_key(CHIP_NAVI21, &navi21);
+
+   /* Verify that global keys between VANGOGH and REMBRANDT are compatible. */
+   EXPECT_EQ(vangogh.keySize, rembrandt.keySize);
+   EXPECT_FALSE(memcmp(vangogh.key, rembrandt.key, vangogh.keySize));
+
+   /* Verify that global keys between VANGOGH and NAVI21 aren't compatible. */
+   EXPECT_EQ(vangogh.keySize, navi21.keySize);
+   EXPECT_TRUE(memcmp(vangogh.key, navi21.key, vangogh.keySize));
+
+   /* RDNA3 keys */
+   VkPipelineBinaryKeyKHR phoenix, phoenix2, navi33, navi31;
+   get_global_pipeline_key(CHIP_PHOENIX, &phoenix);
+   get_global_pipeline_key(CHIP_PHOENIX2, &phoenix2);
+   get_global_pipeline_key(CHIP_NAVI33, &navi33);
+   get_global_pipeline_key(CHIP_NAVI31, &navi31);
+
+   /* Verify that global keys between PHOENIX, PHOENIX2 and NAVI33 are compatible. */
+   EXPECT_EQ(phoenix.keySize, phoenix2.keySize);
+   EXPECT_EQ(phoenix2.keySize, navi33.keySize);
+   EXPECT_FALSE(memcmp(phoenix.key, phoenix2.key, phoenix.keySize));
+   EXPECT_FALSE(memcmp(phoenix2.key, navi33.key, phoenix2.keySize));
+
+   /* Verify that global keys between NAVI33 and NAVI31 aren't compatible. */
+   EXPECT_EQ(navi33.keySize, navi31.keySize);
+   EXPECT_TRUE(memcmp(navi33.key, navi31.key, navi33.keySize));
+}

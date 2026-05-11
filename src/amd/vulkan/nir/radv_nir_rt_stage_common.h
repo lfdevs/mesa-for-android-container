@@ -41,7 +41,7 @@ typedef struct glsl_type glsl_type;
  */
 
 struct radv_rt_case_data {
-   struct radv_device *device;
+   const struct radv_compiler_info *compiler_info;
    struct radv_ray_tracing_pipeline *pipeline;
    void *param_data;
 };
@@ -154,12 +154,12 @@ struct radv_nir_rt_traversal_result {
    nir_variable *barycentrics;
 };
 
-struct radv_nir_rt_traversal_result radv_build_traversal(struct radv_device *device,
+struct radv_nir_rt_traversal_result radv_build_traversal(const struct radv_compiler_info *compiler_info,
                                                          struct radv_ray_tracing_pipeline *pipeline, nir_builder *b,
                                                          struct radv_nir_rt_traversal_params *params,
                                                          struct radv_ray_tracing_stage_info *info);
 
-void radv_build_rt_prolog(struct radv_device *device, struct radv_shader_stage *stage, bool uses_descriptor_heap,
-                          struct radv_shader_debug_info *debug);
+void radv_build_rt_prolog(const struct radv_compiler_info *compiler_info, struct radv_shader_stage *stage,
+                          bool uses_descriptor_heap, struct radv_shader_debug_info *debug);
 
 #endif // MESA_RADV_NIR_RT_STAGE_COMMON_H

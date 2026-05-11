@@ -50,6 +50,13 @@
 #define LUT_ENTRY_SIZE    (2)
 #define LUT_NUM_COMPONENT (3)
 #define LUT_BUFFER_SIZE   (LUT_NUM_ENTRIES * LUT_ENTRY_SIZE * LUT_NUM_COMPONENT)
+#define SHAPER_LUT_DATA_POINTS_PER_CHANNEL (256)
+#define SHAPER_LUT_DMA_DATA_SIZE           (0)
+#define SHAPER_LUT_DMA_CONFIG_SIZE         (0)
+#define SHAPER_LUT_DMA_DATA_ALIGNMENT      (0)
+#define SHAPER_LUT_DMA_CONFIG_ALIGNMENT    (0)
+#define SHAPER_LUT_DMA_CONFIG_PADDING      (0)
+#define LUT_3D_DMA_ALIGNMENT               (0)
 // set field/register/bitfield name
 #define SFRB(field_name, reg_name, post_fix) .field_name = reg_name##__##field_name##post_fix
 
@@ -188,6 +195,45 @@ static struct vpe_caps
                         .shared_3d_lut       = 1,
                         .global_alpha        = 1,
                         .top_bottom_blending = 0,
+                        .dma_3d_lut       = 0,
+                        .yuv_linear_blend = 0,
+                        .lut_dim_caps =
+                            {
+                                .dim_9  = 1,
+                                .dim_17 = 1,
+                                .dim_33 = 0,
+                            },
+                        .fast_load_caps =
+                            {
+                                .lut_3d_17 = 0,
+                                .lut_3d_33 = 0,
+                            },
+                        .lut_caps =
+                            {
+                                .lut_shaper_caps =
+                                    {
+                                        .dma_data             = 0,
+                                        .dma_config           = 0,
+                                        .non_monotonic        = 0,
+                                        .data_alignment       = SHAPER_LUT_DMA_DATA_ALIGNMENT,
+                                        .config_alignment     = SHAPER_LUT_DMA_CONFIG_ALIGNMENT,
+                                        .config_padding       = SHAPER_LUT_DMA_CONFIG_PADDING,
+                                        .data_size            = SHAPER_LUT_DMA_DATA_SIZE,
+                                        .config_size          = SHAPER_LUT_DMA_CONFIG_SIZE,
+                                        .data_pts_per_channel = SHAPER_LUT_DATA_POINTS_PER_CHANNEL,
+                                    },
+                                .lut_3dlut_caps =
+                                    {
+                                        .data_dim_9  = 1,
+                                        .data_dim_17 = 1,
+                                        .data_dim_33 = 0,
+                                        .dma_dim_9   = 0,
+                                        .dma_dim_17  = 0,
+                                        .dma_dim_33  = 0,
+                                        .alignment   = LUT_3D_DMA_ALIGNMENT,
+                                    },
+                                .lut_3d_compound = 0,
+                            },
                     }},
             .plane_caps =
                 {
@@ -201,6 +247,19 @@ static struct vpe_caps
                             .p016            = 0, /**< planar 4:2:0 16-bit */
                             .ayuv            = 0, /**< packed 4:4:4 */
                             .yuy2            = 0, /**< packed 4:2:2 */
+                            .y210            = 0, /**< packed 4:2:2 10-bit */
+                            .y216            = 0, /**< packed 4:2:2 16-bit */
+                            .p210            = 0, /**< planar 4:2:2 10-bit */
+                            .p216            = 0, /**< planar 4:2:2 16-bit */
+                            .rgb8_planar     = 0, /**< planar RGB 8-bit */
+                            .rgb16_planar    = 0, /**< planar RGB 16-bit */
+                            .yuv8_planar     = 0, /**< planar YUV 16-bit */
+                            .yuv16_planar    = 0, /**< planar YUV 16-bit */
+                            .fp16_planar     = 0, /**< planar RGB 8-bit */
+                            .rgbe            = 0, /**< shared exponent R9G9B9E5 */
+                            .rgb111110_fix   = 0, /**< fixed R11G11B10 */
+                            .rgb111110_float = 0, /**< float R11G11B10 */
+                            .argb_packed_64b = 0, /**< Packed RGBA formats 64-bits per pixel */
                         },
                     .output_pixel_format_support =
                         {
@@ -211,6 +270,19 @@ static struct vpe_caps
                             .p016            = 0, /**< planar 4:2:0 16-bit */
                             .ayuv            = 0, /**< packed 4:4:4 */
                             .yuy2            = 0, /**< packed 4:2:2 */
+                            .y210            = 0, /**< packed 4:2:2 10-bit */
+                            .y216            = 0, /**< packed 4:2:2 16-bit */
+                            .p210            = 0, /**< planar 4:2:2 10-bit */
+                            .p216            = 0, /**< planar 4:2:2 16-bit */
+                            .rgb8_planar     = 0, /**< planar RGB 8-bit */
+                            .rgb16_planar    = 0, /**< planar RGB 16-bit */
+                            .yuv8_planar     = 0, /**< planar YUV 16-bit */
+                            .yuv16_planar    = 0, /**< planar YUV 16-bit */
+                            .fp16_planar     = 0, /**< planar RGB 8-bit */
+                            .rgbe            = 0, /**< shared exponent R9G9B9E5 */
+                            .rgb111110_fix   = 0, /**< fixed R11G11B10 */
+                            .rgb111110_float = 0, /**< float R11G11B10 */
+                            .argb_packed_64b = 0, /**< Packed RGBA formats 64-bits per pixel */
                         },
                     .max_upscale_factor = 64000,
 
@@ -224,6 +296,31 @@ static struct vpe_caps
                     .pitch_alignment    = 256,
                     .addr_alignment     = 256,
                     .max_viewport_width = 1024,
+                },
+            .isharp_caps =
+                {
+                    .support = false,
+                    .range =
+                        {
+                            .min  = 0,
+                            .max  = 0,
+                            .step = 0,
+                        },
+                },
+            .easf_support           = 0,
+            .input_dcc_support      = 0,
+            .input_internal_dcc     = 0,
+            .output_dcc_support     = 0,
+            .output_internal_dcc    = 0,
+            .histogram_support      = 0,
+            .frod_support           = 0,
+            .alpha_blending_support = 0,
+            .alpha_fill_caps =
+                {
+                    .opaque        = 1,
+                    .bg_color      = 1,
+                    .destination   = 0,
+                    .source_stream = 0,
                 },
 };
 
@@ -428,6 +525,7 @@ enum vpe_status vpe10_construct_resource(struct vpe_priv *vpe_priv, struct resou
 
     res->check_h_mirror_support            = vpe10_check_h_mirror_support;
     res->calculate_segments                = vpe10_calculate_segments;
+    res->get_max_seg_width                 = vpe10_get_max_seg_width;
     res->set_num_segments                  = vpe10_set_num_segments;
     res->split_bg_gap                      = vpe10_split_bg_gap;
     res->calculate_dst_viewport_and_active = vpe10_calculate_dst_viewport_and_active;
@@ -444,7 +542,12 @@ enum vpe_status vpe10_construct_resource(struct vpe_priv *vpe_priv, struct resou
     res->update_blnd_gamma                 = vpe10_update_blnd_gamma;
     res->update_output_gamma               = vpe10_update_output_gamma;
     res->validate_cached_param             = vpe10_validate_cached_param;
-    res->calculate_shaper                  = vpe10_calculate_shaper;
+    res->check_alpha_fill_support          = vpe10_check_alpha_fill_support;
+    res->reset_pipes          = NULL;
+    res->populate_frod_param  = NULL;
+    res->check_lut3d_compound = NULL;
+    res->update_opp_adjust_and_boundary = NULL;
+    res->calculate_shaper = vpe10_calculate_shaper;
 
     return VPE_STATUS_OK;
 err:
@@ -669,7 +772,7 @@ enum vpe_status vpe10_calculate_segments(
     const uint32_t      max_lb_size          = dpp->funcs->get_line_buffer_size();
     uint16_t            alignment            = 1;
 
-    for (stream_idx = 0; stream_idx < vpe_priv->num_streams; stream_idx++) {
+    for (stream_idx = 0; stream_idx < (uint16_t)vpe_priv->num_streams; stream_idx++) {
         stream_ctx = &vpe_priv->stream_ctx[stream_idx];
         src_rect   = &stream_ctx->stream.scaling_info.src_rect;
         dst_rect   = &stream_ctx->stream.scaling_info.dst_rect;
@@ -696,6 +799,9 @@ enum vpe_status vpe10_calculate_segments(
             stream_ctx->num_segments = 0;
             continue;
         }
+
+        max_seg_width = vpe_priv->resource.get_max_seg_width(&vpe_priv->output_ctx,
+            stream_ctx->stream.surface_info.format, VPE_SCAN_PATTERN_0_DEGREE);
 
         /* If the source frame size in either dimension is 1 then the scaling ratio becomes 0
          * in that dimension. If destination frame size in any dimesnion is 1 the scaling ratio
@@ -740,8 +846,6 @@ enum vpe_status vpe10_calculate_segments(
         }
     }
 
-    max_seg_width = vpe_priv->pub.caps->plane_caps.max_viewport_width;
- 
     max_gaps = get_max_gap_num(vpe_priv, params, max_seg_width);
 
     gaps = vpe_zalloc(sizeof(struct vpe_rect) * max_gaps);
@@ -769,64 +873,10 @@ enum vpe_status vpe10_calculate_segments(
     return res;
 }
 
-static void build_clamping_params(
-    struct opp *opp, struct clamping_and_pixel_encoding_params *clamping)
+uint32_t vpe10_get_max_seg_width(struct output_ctx *output_ctx,
+    enum vpe_surface_pixel_format format, enum vpe_scan_direction scan)
 {
-    struct vpe_priv         *vpe_priv     = opp->vpe_priv;
-    struct vpe_surface_info *dst_surface  = &vpe_priv->output_ctx.surface;
-    enum vpe_color_range     output_range = dst_surface->cs.range;
-
-    memset(clamping, 0, sizeof(*clamping));
-    clamping->clamping_level = CLAMPING_FULL_RANGE;
-    clamping->c_depth        = vpe_get_color_depth(dst_surface->format);
-    if (output_range == VPE_COLOR_RANGE_STUDIO) {
-        if (!vpe_priv->init.debug.clamping_setting) {
-            switch (clamping->c_depth) {
-            case COLOR_DEPTH_888:
-                clamping->clamping_level = CLAMPING_LIMITED_RANGE_8BPC;
-                break;
-            case COLOR_DEPTH_101010:
-                clamping->clamping_level = CLAMPING_LIMITED_RANGE_10BPC;
-                break;
-            case COLOR_DEPTH_121212:
-                clamping->clamping_level = CLAMPING_LIMITED_RANGE_12BPC;
-                break;
-            default:
-                clamping->clamping_level =
-                    CLAMPING_FULL_RANGE; // for all the others bit depths set the full range
-                break;
-            }
-        } else {
-            switch (vpe_priv->init.debug.clamping_params.clamping_range) {
-            case VPE_CLAMPING_LIMITED_RANGE_8BPC:
-                clamping->clamping_level = CLAMPING_LIMITED_RANGE_8BPC;
-                break;
-            case VPE_CLAMPING_LIMITED_RANGE_10BPC:
-                clamping->clamping_level = CLAMPING_LIMITED_RANGE_10BPC;
-                break;
-            case VPE_CLAMPING_LIMITED_RANGE_12BPC:
-                clamping->clamping_level = CLAMPING_LIMITED_RANGE_12BPC;
-                break;
-            default:
-                clamping->clamping_level =
-                    CLAMPING_LIMITED_RANGE_PROGRAMMABLE; // for all the others set to programmable
-                                                         // range
-                clamping->r_clamp_component_lower =
-                    vpe_priv->output_ctx.clamping_params.r_clamp_component_lower;
-                clamping->g_clamp_component_lower =
-                    vpe_priv->output_ctx.clamping_params.g_clamp_component_lower;
-                clamping->b_clamp_component_lower =
-                    vpe_priv->output_ctx.clamping_params.b_clamp_component_lower;
-                clamping->r_clamp_component_upper =
-                    vpe_priv->output_ctx.clamping_params.r_clamp_component_upper;
-                clamping->g_clamp_component_upper =
-                    vpe_priv->output_ctx.clamping_params.g_clamp_component_upper;
-                clamping->b_clamp_component_upper =
-                    vpe_priv->output_ctx.clamping_params.b_clamp_component_upper;
-                break;
-            }
-        }
-    }
+    return caps.plane_caps.max_viewport_width;
 }
 
 static enum mpcc_blend_mode get_blend_mode(
@@ -1024,7 +1074,7 @@ int32_t vpe10_program_backend(
         opp->funcs->program_pipe_control(opp, &pipe_ctrl_param);
 
         display_color_depth = vpe_get_color_depth(surface_info->format);
-        build_clamping_params(opp, &clamp_param);
+        vpe_build_clamping_params(opp, &clamp_param);
         vpe_resource_build_bit_depth_reduction_params(opp, &fmt_bit_depth);
 
         // disable dynamic expansion for now as no use case
@@ -1047,7 +1097,7 @@ enum vpe_status vpe10_populate_cmd_info(struct vpe_priv *vpe_priv)
     struct vpe_cmd_info  cmd_info = {0};
     enum lut3d_type      lut3d_type;
 
-    for (stream_idx = 0; stream_idx < vpe_priv->num_streams; stream_idx++) {
+    for (stream_idx = 0; stream_idx < (uint16_t)vpe_priv->num_streams; stream_idx++) {
         stream_ctx = &vpe_priv->stream_ctx[stream_idx];
 
         lut3d_type = vpe_get_stream_lut3d_type(stream_ctx);
@@ -1534,6 +1584,33 @@ void vpe10_bg_color_convert(enum color_space output_cs, struct transfer_func *ou
 const struct vpe_caps *vpe10_get_capability(void)
 {
     return &caps;
+}
+
+enum vpe_status vpe10_check_alpha_fill_support(struct vpe *vpe, const struct vpe_build_param *param)
+{
+    struct vpe_priv *vpe_priv = container_of(vpe, struct vpe_priv, pub);
+    enum vpe_status  status   = VPE_STATUS_NOT_SUPPORTED;
+
+    switch (param->alpha_mode) {
+    case VPE_ALPHA_OPAQUE:
+        if (vpe_priv->pub.caps->alpha_fill_caps.opaque)
+            status = VPE_STATUS_OK;
+        break;
+    case VPE_ALPHA_BGCOLOR:
+        if (vpe_priv->pub.caps->alpha_fill_caps.bg_color)
+            status = VPE_STATUS_OK;
+        break;
+    case VPE_ALPHA_DESTINATION:
+        if (vpe_priv->pub.caps->alpha_fill_caps.destination)
+            status = VPE_STATUS_OK;
+        break;
+    case VPE_ALPHA_SOURCE_STREAM:
+        if (vpe_priv->pub.caps->alpha_fill_caps.source_stream)
+            status = VPE_STATUS_OK;
+        break;
+    }
+
+    return status;
 }
 
 void vpe10_setup_check_funcs(struct vpe_check_support_funcs *funcs)

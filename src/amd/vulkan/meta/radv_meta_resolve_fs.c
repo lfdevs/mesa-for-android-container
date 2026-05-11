@@ -11,6 +11,7 @@
 #include "radv_entrypoints.h"
 #include "radv_meta.h"
 #include "vk_format.h"
+#include "vk_shader_module.h"
 
 static VkResult
 get_gfx_resolve_pipeline_layout(struct radv_device *device, VkPipelineLayout *layout_out)

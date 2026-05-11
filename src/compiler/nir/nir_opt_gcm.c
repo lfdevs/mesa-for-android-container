@@ -624,7 +624,7 @@ gcm_schedule_late_def(nir_def *def, void *void_state)
    nir_block *lca = NULL;
 
    nir_foreach_use(use_src, def) {
-      nir_instr *use_instr = nir_src_parent_instr(use_src);
+      nir_instr *use_instr = nir_src_use_instr(use_src);
 
       gcm_schedule_late_instr(use_instr, state);
 
@@ -648,7 +648,7 @@ gcm_schedule_late_def(nir_def *def, void *void_state)
    }
 
    nir_foreach_if_use(use_src, def) {
-      nir_if *if_stmt = nir_src_parent_if(use_src);
+      nir_if *if_stmt = nir_src_use_if(use_src);
 
       /* For if statements, we consider the block to be the one immediately
        * preceding the if CF node.

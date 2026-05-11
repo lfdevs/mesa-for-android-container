@@ -7,7 +7,6 @@
 #ifndef SI_PM4_H
 #define SI_PM4_H
 
-#include <stdint.h>
 #include <stdbool.h>
 
 #include "ac_pm4.h"

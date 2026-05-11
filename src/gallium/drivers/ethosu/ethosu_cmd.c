@@ -137,23 +137,9 @@ emit_strides(
    struct ethosu_feature_map *feature_map,
    uint32_t cmd_stride_c, uint32_t cmd_stride_y, uint32_t cmd_stride_x)
 {
-   unsigned elem_size = 1;
-   unsigned tensor_x, tensor_y, tensor_c;
-   struct ethosu_tensor *tensor = ethosu_find_tensor(subgraph, feature_map->tensor_idx);
-
-   if (tensor->layout == ETHOSU_LAYOUT_NHCWB16) {
-      tensor_x = 16 * elem_size;
-      tensor_c = tensor_x * tensor->shape.width;
-      tensor_y = elem_size * tensor->shape.width * align(tensor->shape.depth, 16);
-   } else {
-      tensor_c = elem_size;
-      tensor_x = tensor->shape.depth * tensor_c;
-      tensor_y = tensor->shape.width * tensor_x;
-   }
-
-   EMIT1(cmd_stride_y, 0x0, tensor_y);
-   EMIT1(cmd_stride_x, 0x0, tensor_x);
-   EMIT1(cmd_stride_c, 0x0, tensor_c);
+   EMIT1(cmd_stride_y, 0x0, feature_map->stride.y);
+   EMIT1(cmd_stride_x, 0x0, feature_map->stride.x);
+   EMIT1(cmd_stride_c, 0x0, feature_map->stride.c);
 }
 
 static void
@@ -181,10 +167,9 @@ emit_ifm_precision(struct ethosu_subgraph *subgraph,
                    struct ethosu_feature_map *feature_map,
                    enum ethosu_op_to_scale op_to_scale, uint32_t precision_cmd)
 {
-   struct ethosu_tensor *tensor = ethosu_find_tensor(subgraph, feature_map->tensor_idx);
    unsigned prec = 0;
 
-   if (tensor->layout == ETHOSU_LAYOUT_NHCWB16)
+   if (feature_map->tensor->layout == ETHOSU_LAYOUT_NHCWB16)
       prec |= NPU_SET_IFM_PRECISION_FORMAT(1);
 
    prec |= NPU_SET_IFM_PRECISION_PRECISION(feature_map->precision);
@@ -238,10 +223,9 @@ emit_ofm(struct ethosu_subgraph *subgraph, struct ethosu_feature_map *feature_ma
 static void
 emit_ofm_precision(struct ethosu_subgraph *subgraph, struct ethosu_operation *operation)
 {
-   struct ethosu_tensor *tensor = ethosu_find_tensor(subgraph, operation->ofm.tensor_idx);
    unsigned prec = 0;
 
-   if (tensor->layout == ETHOSU_LAYOUT_NHCWB16)
+   if (operation->ofm.tensor->layout == ETHOSU_LAYOUT_NHCWB16)
       prec |= NPU_SET_OFM_PRECISION_FORMAT(1);
 
    prec |= NPU_SET_OFM_PRECISION_PRECISION(operation->ofm.precision);
@@ -301,7 +285,10 @@ emit_activation(struct ethosu_subgraph *subgraph, struct ethosu_operation *opera
    if (operation->type == ETHOSU_OPERATION_TYPE_ELTWISE)
       min = operation->eltwise.activation_min;
 
-   EMIT0(NPU_SET_ACTIVATION, 0x0);
+   if (operation->type == ETHOSU_OPERATION_TYPE_POOLING)
+      EMIT0(NPU_SET_ACTIVATION, operation->pooling.activation);
+   else
+      EMIT0(NPU_SET_ACTIVATION, 0x0);
 
    if (operation->ofm.is_signed) {
       EMIT0(NPU_SET_ACTIVATION_MIN, 0xff80);
@@ -423,7 +410,7 @@ emit_convolution(struct ethosu_subgraph *subgraph, struct ethosu_operation *oper
 }
 
 static unsigned
-quantise_pooling_scale(unsigned nr_kernel_elements, unsigned rescale_bits, unsigned *out_shift)
+quantise_pooling_scale(unsigned nr_kernel_elements, unsigned rescale_bits, int32_t *out_shift)
 {
    int k = 0;
    long long N = 0;
@@ -441,7 +428,7 @@ pooling_emit_ofm_scaling(
    double output_scale,
    unsigned kernel_height,
    unsigned kernel_width,
-   uint32_t *out_shift)
+   int32_t *out_shift)
 {
    double rescale = input1_scale / output_scale;
    unsigned rescale_bits = 0;
@@ -459,7 +446,7 @@ pooling_emit_ofm_scaling(
 }
 
 static unsigned
-sum_emit_ofm_scaling(double input1_scale, double output_scale, unsigned kernel_height, unsigned kernel_width, uint32_t *out_shift)
+sum_emit_ofm_scaling(double input1_scale, double output_scale, unsigned kernel_height, unsigned kernel_width, int32_t *out_shift)
 {
    int kernel_elements = kernel_height * kernel_width;
    double rescale = input1_scale / output_scale;
@@ -484,42 +471,49 @@ static void
 emit_pooling(struct ethosu_subgraph *subgraph, struct ethosu_operation *operation)
 {
    unsigned scale;
-   unsigned scale_shift;
+   int32_t scale_shift;
 
    emit_common(subgraph, operation, false);
 
-   switch (operation->pooling.type) {
-   case ETHOSU_POOLING_TYPE_MAX: {
-      if (!ethosu_ml_device(subgraph->base.device)->is_u65) {
-         EMIT1(NPU_SET_OFM_SCALE, NPU_SET_OFM_SCALE_ROUND_MODE(1), 1);
-         break;
-      } else
-         FALLTHROUGH;
-   }
-   case ETHOSU_POOLING_TYPE_AVG: {
-      scale = pooling_emit_ofm_scaling(
-         operation->ifm.scale,
-         operation->ofm.scale,
-         operation->kernel.height,
-         operation->kernel.width,
-         &scale_shift);
-
+   if (operation->pooling.nop) {
+      scale = ethosu_quantize_scale(
+         operation->ifm.scale / operation->ofm.scale,
+         &scale_shift, true);
       EMIT1(NPU_SET_OFM_SCALE, NPU_SET_OFM_SCALE_SHIFT(scale_shift), scale);
-      break;
-   }
-   case ETHOSU_POOLING_TYPE_SUM: {
-      scale = sum_emit_ofm_scaling(
-         operation->ifm.scale,
-         operation->ofm.scale,
-         operation->kernel.height,
-         operation->kernel.width,
-         &scale_shift);
+   } else {
+      switch (operation->pooling.type) {
+      case ETHOSU_POOLING_TYPE_MAX: {
+         if (!ethosu_ml_device(subgraph->base.device)->is_u65) {
+            EMIT1(NPU_SET_OFM_SCALE, NPU_SET_OFM_SCALE_ROUND_MODE(1), 1);
+            break;
+         } else
+            FALLTHROUGH;
+      }
+      case ETHOSU_POOLING_TYPE_AVG: {
+         scale = pooling_emit_ofm_scaling(
+            operation->ifm.scale,
+            operation->ofm.scale,
+            operation->kernel.height,
+            operation->kernel.width,
+            &scale_shift);
 
-      EMIT1(NPU_SET_OFM_SCALE, NPU_SET_OFM_SCALE_SHIFT(scale_shift) | NPU_SET_OFM_SCALE_ROUND_MODE(1), scale);
-      break;
-   }
-   default:
-      UNREACHABLE("Invalid pooling type");
+         EMIT1(NPU_SET_OFM_SCALE, NPU_SET_OFM_SCALE_SHIFT(scale_shift), scale);
+         break;
+      }
+      case ETHOSU_POOLING_TYPE_SUM: {
+         scale = sum_emit_ofm_scaling(
+            operation->ifm.scale,
+            operation->ofm.scale,
+            operation->kernel.height,
+            operation->kernel.width,
+            &scale_shift);
+
+         EMIT1(NPU_SET_OFM_SCALE, NPU_SET_OFM_SCALE_SHIFT(scale_shift) | NPU_SET_OFM_SCALE_ROUND_MODE(1), scale);
+         break;
+      }
+      default:
+         UNREACHABLE("Invalid pooling type");
+      }
    }
 
    emit_block_config(subgraph, operation);
@@ -534,13 +528,12 @@ emit_ifm2_precision(struct ethosu_subgraph *subgraph,
                     struct ethosu_operation *operation,
                     bool has_scalar)
 {
-   struct ethosu_tensor *tensor = ethosu_find_tensor(subgraph, operation->ifm2.tensor_idx);
    unsigned prec = 0;
 
    prec |= NPU_SET_IFM2_PRECISION_ACTIVATION_TYPE(operation->ifm2.is_signed);
    prec |= NPU_SET_IFM2_PRECISION_ACTIVATION_PRECISION(operation->ifm2.precision);
 
-   if (tensor->layout == ETHOSU_LAYOUT_NHCWB16)
+   if (operation->ifm2.tensor->layout == ETHOSU_LAYOUT_NHCWB16)
       prec |= NPU_SET_IFM2_PRECISION_ACTIVATION_FORMAT(1);
 
    /* Vela: scalar → NONE(3), non-scalar → TILE2X2(0) */
@@ -561,7 +554,7 @@ emit_ifm2(struct ethosu_subgraph *subgraph, struct ethosu_operation *operation, 
          EMIT1(NPU_SET_OP_SCALAR, 0, operation->ifm2.scalar);
       }
    } else {
-      EMIT0(NPU_SET_IFM2_REGION, IO_REGION);
+      EMIT0(NPU_SET_IFM2_REGION, operation->ifm2.region);
       emit_addresses(subgraph, &operation->ifm2, NPU_SET_IFM2_BASE0, NPU_SET_IFM2_BASE1, NPU_SET_IFM2_BASE2, NPU_SET_IFM2_BASE3);
       emit_tiles(subgraph, &operation->ifm2, NPU_SET_IFM2_HEIGHT0_M1, NPU_SET_IFM2_HEIGHT1_M1, NPU_SET_IFM2_WIDTH0_M1);
       emit_strides(subgraph, &operation->ifm2, NPU_SET_IFM2_STRIDE_C, NPU_SET_IFM2_STRIDE_Y, NPU_SET_IFM2_STRIDE_X);
@@ -658,8 +651,8 @@ eltwise_emit_ofm_scaling(
    uint32_t input_shift = (bitdepth == 8) ? 20 : 15;
    double input_shift_val = (double)(1ULL << input_shift);
    enum ethosu_op_to_scale op_to_scale;
-   uint32_t opa_scale, opa_shift;
-   uint32_t ofm_scale, ofm_shift;
+   int32_t opa_scale, opa_shift;
+   int32_t ofm_scale, ofm_shift;
    double input_rescale, output_rescale;
 
    /* Determine which operand to scale (the one with smaller scale) */
@@ -675,8 +668,8 @@ eltwise_emit_ofm_scaling(
    input_rescale = min_input_scale * input_shift_val / (2.0 * max_input_scale);
    output_rescale = (2.0 * max_input_scale) / (output_scale * input_shift_val);
 
-   opa_scale = ethosu_quantize_scale(input_rescale, &opa_shift);
-   ofm_scale = ethosu_quantize_scale(output_rescale, &ofm_shift);
+   opa_scale = ethosu_quantize_scale(input_rescale, &opa_shift, false);
+   ofm_scale = ethosu_quantize_scale(output_rescale, &ofm_shift, false);
 
    if (DBG_ENABLED(ETHOSU_DBG_MSGS)) {
       fprintf(stderr, "ADD advanced scaling: ifm1_scale=%f ifm2_scale=%f ofm_scale=%f\n",
@@ -704,11 +697,11 @@ simplified_elementwise_add_sub_scale(
    double input1_scale,
    double input2_scale,
    double output_scale,
-   uint32_t input_shift,
+   int32_t input_shift,
    double *out_input1_rescale,
    double *out_input2_rescale,
-   uint32_t *out_out_scale,
-   uint32_t *out_out_shift)
+   int32_t *out_out_scale,
+   int32_t *out_out_shift)
 {
    double max_input_scale = MAX2(input1_scale, input2_scale);
    double input_shift_val = (double)(1LL << input_shift); /* Use 1LL for large shifts */
@@ -728,7 +721,35 @@ simplified_elementwise_add_sub_scale(
       output_rescale_val = (2.0 * max_input_scale) / (output_scale * input_shift_val);
    }
 
-   *out_out_scale = ethosu_quantize_scale(output_rescale_val, out_out_shift);
+   *out_out_scale = ethosu_quantize_scale(output_rescale_val, out_out_shift, false);
+}
+
+static void
+elementwise_min_max_scale(struct ethosu_subgraph *subgraph)
+{
+   if (!ethosu_ml_device(subgraph->base.device)->is_u65) {
+      EMIT1(NPU_SET_OPA_SCALE, 0, 1);
+      EMIT1(NPU_SET_OPB_SCALE, 0, 1);
+
+   }
+   EMIT1(NPU_SET_OFM_SCALE, 0, 1);
+}
+
+static void
+elementwise_mul_scale(
+   struct ethosu_subgraph *subgraph,
+   double input1_scale,
+   double input2_scale,
+   double output_scale)
+{
+   double output_rescale;
+   int32_t ofm_scale, ofm_shift;
+
+   output_rescale = (input1_scale * input2_scale) / output_scale;
+   ofm_scale = ethosu_quantize_scale(output_rescale, &ofm_shift, false);
+
+   /* OFM_SCALE: output scale with shift */
+   EMIT1(NPU_SET_OFM_SCALE, ofm_shift, ofm_scale);
 }
 
 /*
@@ -747,17 +768,17 @@ eltwise_emit_ofm_scaling_u85(
    uint32_t input_shift = (bitdepth == 8) ? 20 : 15;
    double input1_rescale;
    double input2_rescale;
-   unsigned ofm_scale, ofm_shift;
-   unsigned opa_scale, opa_shift;
-   unsigned opb_scale, opb_shift;
+   int32_t ofm_scale, ofm_shift;
+   int32_t opa_scale, opa_shift;
+   int32_t opb_scale, opb_shift;
 
    simplified_elementwise_add_sub_scale(
       input1_scale, input2_scale, output_scale, input_shift,
       &input1_rescale, &input2_rescale,
       &ofm_scale, &ofm_shift);
 
-   opa_scale = ethosu_quantize_scale(input1_rescale, &opa_shift);
-   opb_scale = ethosu_quantize_scale(input2_rescale, &opb_shift);
+   opa_scale = ethosu_quantize_scale(input1_rescale, &opa_shift, false);
+   opb_scale = ethosu_quantize_scale(input2_rescale, &opb_shift, false);
 
    EMIT1(NPU_SET_OPA_SCALE,
          NPU_SET_OPA_SCALE_SHIFT(opa_shift) | NPU_SET_OPA_SCALE_DBL_RND(input_shift),
@@ -775,27 +796,43 @@ static void
 emit_eltwise(struct ethosu_subgraph *subgraph, struct ethosu_operation *operation)
 {
    bool has_scalar = operation->ifm2.scalar != 0;
-   enum ethosu_op_to_scale op_to_scale;
+   enum ethosu_op_to_scale op_to_scale = OP_NONE;
 
-   if (ethosu_ml_device(subgraph->base.device)->is_u65) {
-      op_to_scale = eltwise_emit_ofm_scaling(
-         subgraph,
-         operation->ifm.scale,
-         operation->ifm2.scale,
-         operation->ofm.scale);
-   } else {
-      op_to_scale = eltwise_emit_ofm_scaling_u85(
-         subgraph,
-         operation->ifm.scale,
-         operation->ifm2.scale,
-         operation->ofm.scale);
-   }
+   switch (operation->eltwise.type) {
+   case ETHOSU_ELTWISE_TYPE_MUL:
+      elementwise_mul_scale(subgraph, operation->ifm.scale,
+                            operation->ifm2.scale,
+                            operation->ofm.scale);
+      break;
+   case ETHOSU_ELTWISE_TYPE_ADD:
+      if (ethosu_ml_device(subgraph->base.device)->is_u65) {
+         op_to_scale = eltwise_emit_ofm_scaling(
+            subgraph,
+            operation->ifm.scale,
+            operation->ifm2.scale,
+            operation->ofm.scale);
+      } else {
+         op_to_scale = eltwise_emit_ofm_scaling_u85(
+            subgraph,
+            operation->ifm.scale,
+            operation->ifm2.scale,
+            operation->ofm.scale);
+      }
 
-   if (operation->eltwise.ifm_reversed) {
-      if (op_to_scale == OP_A)
-         op_to_scale = OP_B;
-      else
-         op_to_scale = OP_A;
+      if (operation->eltwise.ifm_reversed) {
+         if (op_to_scale == OP_A)
+            op_to_scale = OP_B;
+         else
+            op_to_scale = OP_A;
+      }
+      break;
+   case ETHOSU_ELTWISE_TYPE_MAX:
+   case ETHOSU_ELTWISE_TYPE_MIN:
+      elementwise_min_max_scale(subgraph);
+      break;
+   default:
+      assert(0);
+      break;
    }
 
    emit_common(subgraph, operation, op_to_scale);
@@ -821,8 +858,8 @@ emit_dma(struct ethosu_subgraph *subgraph, struct ethosu_operation *operation)
 {
    EMIT0(NPU_SET_DMA0_SRC_REGION, COEFS_REGION);
    EMIT1(NPU_SET_DMA0_SRC, 0x0, operation->dma.address);
-   EMIT0(NPU_SET_DMA0_DST_REGION, SCRATCH_REGION);
-   EMIT1(NPU_SET_DMA0_DST, 0x0, 0x0);
+   EMIT0(NPU_SET_DMA0_DST_REGION, operation->dma.dst_region);
+   EMIT1(NPU_SET_DMA0_DST, 0x0, operation->dma.dst_address);
    EMIT1(NPU_SET_DMA0_LEN, 0x0, operation->dma.size);
 }
 
@@ -842,10 +879,13 @@ emit_operation_code(struct ethosu_subgraph *subgraph, struct ethosu_operation *o
       EMIT0(NPU_OP_POOL, operation->pooling.type);
       break;
    case ETHOSU_OPERATION_TYPE_ELTWISE:
-      EMIT0(NPU_OP_ELEMENTWISE, 0x1);
+      EMIT0(NPU_OP_ELEMENTWISE, operation->eltwise.type);
       break;
    case ETHOSU_OPERATION_TYPE_DMA:
       EMIT0(NPU_OP_DMA_START, 0x0);
+      break;
+   default:
+      assert(0);
       break;
    }
 }
@@ -954,16 +994,41 @@ fill_memory_accesses(struct ethosu_subgraph *subgraph)
 {
    util_dynarray_foreach (&subgraph->operations, struct ethosu_operation, operation) {
       switch (operation->type) {
+      case ETHOSU_OPERATION_TYPE_NONE:
+         break;
       case ETHOSU_OPERATION_TYPE_DMA:
          operation->read_accesses[0].region = COEFS_REGION;
          operation->read_accesses[0].address = operation->dma.address;
          operation->read_accesses[0].size = operation->dma.size;
 
-         operation->write_accesses[0].region = SCRATCH_REGION;
+         operation->write_accesses[0].region = operation->dma.dst_region;
          operation->write_accesses[0].address = 0x0;
          operation->write_accesses[0].size = operation->dma.size;
 
          break;
+      case ETHOSU_OPERATION_TYPE_POOLING:
+         if (operation->pooling.activation >= ETHOSU_POOLING_ACTIVATION_LUT(0)) {
+            operation->read_accesses[1].region = LUT_REGION;
+            operation->read_accesses[1].address = SHRAM_LUT_BASE(operation->pooling.activation & 0xf);
+            operation->read_accesses[1].size = LUT8_SIZE;
+         }
+         operation->read_accesses[0].region = operation->ifm.region;
+         operation->read_accesses[0].address = operation->ifm.tiles.addresses[0];
+         operation->read_accesses[0].size = operation->ifm.shape.height * operation->ifm.shape.width * operation->ifm.shape.depth;
+
+         operation->write_accesses[0].region = operation->ofm.region;
+         operation->write_accesses[0].address = operation->ofm.tiles.addresses[0];
+         operation->write_accesses[0].size = operation->ofm.shape.height * operation->ofm.shape.width * operation->ofm.shape.depth;
+         break;
+      case ETHOSU_OPERATION_TYPE_CONVOLUTION:
+         operation->read_accesses[2].region = operation->conv.scales.region;
+         operation->read_accesses[2].address = operation->conv.scales.address;
+         operation->read_accesses[2].size = operation->conv.scales.size;
+
+         operation->read_accesses[3].region = operation->conv.weights.region;
+         operation->read_accesses[3].address = operation->conv.weights.address;
+         operation->read_accesses[3].size = operation->conv.weights.size;
+         /* fall-through */
       default:
          operation->read_accesses[0].region = IO_REGION;
          operation->read_accesses[0].address = operation->ifm.tiles.addresses[0];
@@ -972,14 +1037,6 @@ fill_memory_accesses(struct ethosu_subgraph *subgraph)
          operation->read_accesses[1].region = IO_REGION;
          operation->read_accesses[1].address = operation->ifm2.tiles.addresses[0];
          operation->read_accesses[1].size = operation->ifm2.shape.height * operation->ifm2.shape.width * operation->ifm2.shape.depth;
-
-         operation->read_accesses[2].region = operation->conv.scales.region;
-         operation->read_accesses[2].address = operation->conv.scales.address;
-         operation->read_accesses[2].size = operation->conv.scales.size;
-
-         operation->read_accesses[3].region = operation->conv.weights.region;
-         operation->read_accesses[3].address = operation->conv.weights.address;
-         operation->read_accesses[3].size = operation->conv.weights.size;
 
          operation->write_accesses[0].region = IO_REGION;
          operation->write_accesses[0].address = operation->ofm.tiles.addresses[0];
@@ -1087,12 +1144,14 @@ calc_blockdep(struct ethosu_subgraph *subgraph, struct ethosu_operation *prev_op
 
    /* Check if previous OFM matches current IFM (same tensor) */
    int ifm_index = 0;
-   if (operation->ifm2.tensor_idx != 0 &&
-       operation->ifm2.tensor_idx == prev_op->ofm.tensor_idx) {
+   if (operation->ifm2.tensor == prev_op->ofm.tensor) {
       ifm_index = 1;
-   } else if (operation->ifm.tensor_idx != prev_op->ofm.tensor_idx) {
-      /* Previous operation doesn't produce current operation's IFM */
-      return device->max_concurrent_blocks;
+   } else if (operation->ifm.tensor != prev_op->ofm.tensor) {
+      if (prev_op->type == ETHOSU_OPERATION_TYPE_NONE)
+         return 0;
+      else
+         /* Previous operation doesn't produce current operation's IFM */
+         return device->max_concurrent_blocks;
    }
 
    const struct ethosu_feature_map *ifm = (ifm_index == 0) ? &operation->ifm : &operation->ifm2;
@@ -1165,6 +1224,16 @@ ethosu_emit_cmdstream(struct ethosu_subgraph *subgraph)
    struct ethosu_operation *prev_op = NULL;
    struct util_dynarray outstanding_dma_ops;
    struct util_dynarray outstanding_npu_ops;
+   bool has_op = false;
+
+   util_dynarray_foreach (&subgraph->operations, struct ethosu_operation, operation) {
+      if (operation->type != ETHOSU_OPERATION_TYPE_NONE) {
+         has_op = true;
+         break;
+      }
+   }
+   if (!has_op)
+      return;
 
    outstanding_dma_ops = UTIL_DYNARRAY_INIT;
    outstanding_npu_ops = UTIL_DYNARRAY_INIT;
@@ -1184,6 +1253,11 @@ ethosu_emit_cmdstream(struct ethosu_subgraph *subgraph)
 
       int npu_waits, dma_waits;
 
+      if (operation->type == ETHOSU_OPERATION_TYPE_NONE) {
+         prev_op = operation;
+         continue;
+      }
+
       get_wait_dependency(subgraph, operation, &outstanding_dma_ops, &outstanding_npu_ops,
                           &npu_waits, &dma_waits);
 
@@ -1199,6 +1273,9 @@ ethosu_emit_cmdstream(struct ethosu_subgraph *subgraph)
          break;
       case ETHOSU_OPERATION_TYPE_DMA:
          emit_dma(subgraph, operation);
+         break;
+      default:
+         UNREACHABLE("Unknown operation");
          break;
       }
 

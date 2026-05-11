@@ -7,8 +7,6 @@
 #include "ac_gpu_info.h"
 #include "ac_nir.h"
 #include "nir_builder.h"
-#include "amdgfxregs.h"
-#include "util/u_math.h"
 
 /*
  * These NIR passes are used to lower NIR cross-stage I/O intrinsics

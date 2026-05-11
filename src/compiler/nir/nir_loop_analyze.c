@@ -26,6 +26,7 @@
 #include "util/ralloc.h"
 #include "nir.h"
 #include "nir_constant_expressions.h"
+#include "nir_search_helpers.h"
 
 typedef struct {
    /* The loop we store information for */
@@ -96,6 +97,10 @@ instr_cost(loop_info_state *state, nir_instr *instr,
       return 0;
    } else if (nir_op_is_vec_or_mov(alu->op)) {
       /* movs and vecs are likely free. */
+      return 0;
+   } else if ((alu->op == nir_op_fmul || alu->op == nir_op_fmulz) &&
+              is_only_used_by_fadd(alu)) {
+      /* If we can fuse fma/mad, do not count the mul. */
       return 0;
    }
 
@@ -1201,6 +1206,7 @@ find_trip_count(loop_info_state *state, unsigned execution_mode,
        */
 
       nir_loop_induction_variable *lv = get_loop_var(basic_ind.def, state);
+      terminator->init_src = lv->init_src;
 
       /* The basic induction var might be a vector but, because we guarantee
        * earlier that the phi source has a scalar swizzle, we can take the
@@ -1213,7 +1219,7 @@ find_trip_count(loop_info_state *state, unsigned execution_mode,
       };
 
       nir_alu_instr *step_alu =
-         nir_instr_as_alu(nir_src_parent_instr(&lv->update_src->src));
+         nir_instr_as_alu(nir_src_use_instr(&lv->update_src->src));
 
       /* If the comparision is of unsigned type we don't necessarily need to
        * know the initial value to be able to calculate the max number of

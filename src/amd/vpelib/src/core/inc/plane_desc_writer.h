@@ -45,6 +45,9 @@ struct plane_desc_writer {
     void (*init)(struct plane_desc_writer *writer, struct vpe_buf *buf, void *p_header);
     void (*add_source)(struct plane_desc_writer *writer, void *p_source, bool is_plane0);
     void (*add_destination)(struct plane_desc_writer *writer, void *p_destination, bool is_plane0);
+    void (*add_meta)(struct plane_desc_writer *writer, void *p_source);
+    void (*add_histo)(struct plane_desc_writer *writer, void *p_destination, uint32_t hist_index,
+        uint8_t hist_dsets_array[]);
 };
 
 #ifdef __cplusplus

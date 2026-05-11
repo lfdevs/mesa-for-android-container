@@ -46,7 +46,7 @@ panfrost-t860-gl:arm64:
   parallel: 3
   extends:
     - .lava-arm64-test-gl
-    - .panfrost-midgard-rules
+    - .panfrost-midgard-manual-rules
     - .panfrost-test
     - .lava-rk3399-gru-kevin:arm64
   variables:
@@ -56,7 +56,7 @@ panfrost-t860-gl:arm64:
 panfrost-t860-egl:arm64:
   extends:
     - .lava-arm64-test-gl
-    - .panfrost-midgard-rules
+    - .panfrost-midgard-manual-rules
     - .panfrost-test
     - .lava-rk3399-gru-kevin:arm64
   variables:

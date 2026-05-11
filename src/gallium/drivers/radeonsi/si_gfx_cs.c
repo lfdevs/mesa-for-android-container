@@ -5,12 +5,14 @@
  * SPDX-License-Identifier: MIT
  */
 
+#include "gfx/si_gfx.h"
 #include "si_build_pm4.h"
 #include "si_pipe.h"
 #include "sid.h"
 #include "util/os_time.h"
 #include "util/u_log.h"
 #include "util/u_upload_mgr.h"
+#include "ac_cmdbuf_cp.h"
 #include "ac_debug.h"
 #include "si_utrace.h"
 

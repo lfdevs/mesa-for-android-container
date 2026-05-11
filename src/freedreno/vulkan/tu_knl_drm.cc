@@ -87,7 +87,10 @@ tu_bo_make_zombie(struct tu_device *dev, struct tu_bo *bo)
 #endif
    vma->iova = bo->iova;
    vma->size = bo->size;
-   vma->fence = p_atomic_read(&dev->queues[0]->fence);
+   if (dev->queue_count[0] > 0)
+      vma->fence = p_atomic_read(&dev->queues[0]->fence);
+   else
+      vma->fence = -1;
 
    /* Must be cleared under the VMA mutex, or another thread could race to
     * reap the VMA, closing the BO and letting a new GEM allocation produce

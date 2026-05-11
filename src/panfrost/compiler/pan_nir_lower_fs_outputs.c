@@ -137,7 +137,7 @@ pan_nir_lower_fs_outputs(nir_shader *shader, bool skip_atest)
     */
    nir_def *alpha;
    if (color0 && glsl_type_is_float_16_32(color0->type))
-      alpha = nir_f2f32(b, nir_channel(b, nir_load_var(b, color0), 3));
+      alpha = nir_channel(b, nir_load_var(b, color0), 3);
    else
       alpha = nir_imm_float(b, 1.0f);
 
@@ -147,7 +147,7 @@ pan_nir_lower_fs_outputs(nir_shader *shader, bool skip_atest)
     * skipped for pure integer framebuffers, so the issue is moot.
     */
    if (!skip_atest)
-      coverage = nir_atest_pan(b, coverage, nir_f2f32(b, alpha));
+      coverage = nir_atest_pan(b, coverage, alpha);
 
    /* We discard depth/stencil writes if early fragment tests is forced. */
    if ((out.depth || out.stencil) && !shader->info.fs.early_fragment_tests) {

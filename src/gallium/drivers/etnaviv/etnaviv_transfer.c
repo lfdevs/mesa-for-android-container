@@ -218,7 +218,7 @@ etna_texture_unmap(struct pipe_context *pctx, struct pipe_transfer *ptrans)
          if (ptrans->usage & ETNA_PIPE_MAP_DISCARD_LEVEL)
             etna_resource_level_mark_flushed(res_level);
          else
-            etna_copy_resource(pctx, &rsc->base, &rsc->base, ptrans->level, ptrans->level);
+            etna_copy_resource(pctx, &rsc->base, &rsc->base, ptrans->level, ptrans->level, false);
       }
 
       if (trans->rsc) {
@@ -227,7 +227,7 @@ etna_texture_unmap(struct pipe_context *pctx, struct pipe_transfer *ptrans)
           */
          ctx->in_transfer_blit = true;
          etna_copy_resource_box(pctx, ptrans->resource, trans->rsc,
-                                ptrans->level, 0, &ptrans->box);
+                                ptrans->level, 0, &ptrans->box, false);
          ctx->in_transfer_blit = false;
       } else if (trans->staging) {
          /* map buffer object */
@@ -347,7 +347,7 @@ etna_texture_map(struct pipe_context *pctx, struct pipe_resource *prsc,
    }
 
    if (rsc->texture && !etna_resource_newer(rsc, etna_resource(rsc->texture)) &&
-       !translate_pe_format_rb_swap(prsc->format)) {
+       (!translate_pe_format_rb_swap(prsc->format) || rsc->shared)) {
       /* We have a texture resource which is the same age or newer than the
        * render resource. Use the texture resource, which avoids bouncing
        * pixels between the two resources, and we can de-tile it in s/w. */
@@ -393,7 +393,7 @@ etna_texture_map(struct pipe_context *pctx, struct pipe_resource *prsc,
 
       if ((usage & PIPE_MAP_READ) || !(usage & ETNA_PIPE_MAP_DISCARD_LEVEL)) {
          ctx->in_transfer_blit = true;
-         etna_copy_resource_box(pctx, trans->rsc, &rsc->base, 0, level, &ptrans->box);
+         etna_copy_resource_box(pctx, trans->rsc, &rsc->base, 0, level, &ptrans->box, false);
          ctx->in_transfer_blit = false;
       }
 

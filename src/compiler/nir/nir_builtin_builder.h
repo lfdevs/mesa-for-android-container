@@ -65,7 +65,7 @@ static inline nir_def *
 nir_fisnan(nir_builder *b, nir_def *x)
 {
    unsigned old_fp_math_ctrl = b->fp_math_ctrl;
-   b->fp_math_ctrl |= nir_fp_exact;
+   b->fp_math_ctrl |= nir_fp_preserve_inf | nir_fp_preserve_nan;
    nir_def *res = nir_fneu(b, x, x);
    b->fp_math_ctrl = old_fp_math_ctrl;
    return res;

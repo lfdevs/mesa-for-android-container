@@ -7,7 +7,6 @@
 #include "nir.h"
 #include "nir_builder.h"
 #include "radv_descriptor_set.h"
-#include "radv_device.h"
 #include "radv_nir.h"
 #include "radv_physical_device.h"
 #include "radv_sampler.h"
@@ -19,8 +18,7 @@
  * forbidden).
  */
 typedef struct {
-   const struct radv_device *device;
-   bool disable_tg4_trunc_coord;
+   const struct radv_compiler_info *compiler_info;
    const struct radv_shader_layout *layout;
 } lower_immediate_samplers_state;
 
@@ -31,8 +29,10 @@ lower_immediate_samplers(nir_builder *b, nir_tex_instr *tex, void *cb_data)
 
    b->cursor = nir_before_instr(&tex->instr);
 
+   const bool disable_tg4_trunc_coord =
+      !state->compiler_info->ac->conformant_trunc_coord && !state->compiler_info->key.disable_trunc_coord;
    const uint32_t dword0_mask =
-      tex->op == nir_texop_tg4 && state->disable_tg4_trunc_coord ? C_008F30_TRUNC_COORD : 0xffffffffu;
+      tex->op == nir_texop_tg4 && disable_tg4_trunc_coord ? C_008F30_TRUNC_COORD : 0xffffffffu;
 
    if (tex->embedded_sampler) {
       const struct vk_sampler_state_array *embedded_samplers = &state->layout->embedded_samplers;
@@ -42,7 +42,7 @@ lower_immediate_samplers(nir_builder *b, nir_tex_instr *tex, void *cb_data)
       assert(sampler_idx < embedded_samplers->sampler_count);
       const struct vk_sampler_state *sampler_state = &embedded_samplers->samplers[sampler_idx];
 
-      radv_make_sampler_descriptor(state->device, sampler_state, desc);
+      radv_make_sampler_descriptor(state->compiler_info, sampler_state, desc);
 
       nir_tex_instr_add_src(tex, nir_tex_src_sampler_handle,
                             nir_imm_ivec4(b, desc[0] & dword0_mask, desc[1], desc[2], desc[3]));
@@ -89,14 +89,11 @@ lower_immediate_samplers(nir_builder *b, nir_tex_instr *tex, void *cb_data)
 }
 
 bool
-radv_nir_lower_immediate_samplers(nir_shader *shader, struct radv_device *device, const struct radv_shader_stage *stage)
+radv_nir_lower_immediate_samplers(nir_shader *shader, const struct radv_compiler_info *compiler_info,
+                                  const struct radv_shader_stage *stage)
 {
-   const struct radv_physical_device *pdev = radv_device_physical(device);
-
    lower_immediate_samplers_state state = {
-      .device = device,
-      .disable_tg4_trunc_coord =
-         !pdev->info.compiler_info.conformant_trunc_coord && !pdev->cache_key.disable_trunc_coord,
+      .compiler_info = compiler_info,
       .layout = &stage->layout,
    };
 

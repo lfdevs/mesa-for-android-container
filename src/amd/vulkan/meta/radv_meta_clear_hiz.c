@@ -7,6 +7,7 @@
 #include "nir/radv_meta_nir.h"
 #include "radv_entrypoints.h"
 #include "radv_meta.h"
+#include "vk_shader_module.h"
 
 static VkResult
 get_clear_hiz_pipeline_layout(struct radv_device *device, VkPipelineLayout *layout_out)

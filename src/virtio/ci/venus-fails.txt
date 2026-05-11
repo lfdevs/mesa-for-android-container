@@ -5,13 +5,6 @@ dEQP-VK.api.external.memory.opaque_fd.suballocated.buffer.info,Fail
 dEQP-VK.draw.renderpass.basic_draw.misc.maintenance5,Crash
 dEQP-VK.pipeline.monolithic.timestamp.misc_tests.consistent_results,Fail
 
-# New fails in 1.4.1.0
-dEQP-VK.pipeline.pipeline_library.multisample.sample_rate_a2c.static_a2c,Fail
-dEQP-VK.pipeline.fast_linked_library.multisample.sample_rate_a2c.static_a2c,Fail
-
-# New fails in 1.4.3.3
-dEQP-VK.pipeline.monolithic.multisample.sample_rate_a2c.static_a2c,Fail
-
 # From venus-lavapipe-full
 dEQP-VK.draw.renderpass.multiple_interpolation.structured.with_sample_decoration.4_samples,Fail
 
@@ -29,10 +22,6 @@ dEQP-VK.mesh_shader.ext.smoke.monolithic.depth_only_points_position_components,F
 dEQP-VK.mesh_shader.ext.smoke.monolithic.depth_only_triangles_position_components,Fail
 dEQP-VK.mesh_shader.ext.smoke.optimized_lib.depth_only_points_position_components,Fail
 dEQP-VK.mesh_shader.ext.smoke.optimized_lib.depth_only_triangles_position_components,Fail
-
-dEQP-VK.memory.allocation.random.66,Crash
-dEQP-VK.renderpasses.dynamic_rendering.primary_cmd_buff.suballocation.formats.r8g8b8a8_unorm.input.dont_care.store.self_dep_clear_draw,Fail
-dEQP-VK.renderpasses.dynamic_rendering.primary_cmd_buff.suballocation.formats.r8g8b8a8_unorm.input.load.store.self_dep_clear_draw,Fail
 
 # CTS bug
 # https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/40520

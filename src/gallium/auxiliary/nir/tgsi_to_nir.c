@@ -604,7 +604,7 @@ ttn_src_for_file_and_index(struct ttn_compile *c, unsigned file, unsigned index,
          break;
       case TGSI_SEMANTIC_POSITION:
          assert(c->cap_position_is_sysval);
-         load = nir_load_frag_coord(b);
+         load = nir_build_frag_coord(b, 4);
          break;
       case TGSI_SEMANTIC_PCOORD:
          assert(c->cap_point_is_sysval);

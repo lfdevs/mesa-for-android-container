@@ -56,6 +56,12 @@ static const struct {
         { 42, 0xadedcdf70839f990ull, "faddnf.pushc rf55, -16.l, r3.abs; fmul.ifb rf55.l, rf38.l, r1.h" },
         { 42, 0x7dff89fa6a01f020ull, "fsub.nornc rf58.h, 0x3b800000.l, r3.l; fmul.ifnb rf39, r0.h, r0.h" },
 
+        /* V3D 7.1 small immediates */
+        { 71, 0x39c0000a3803f042ull, "add rf10, 1, rf2              ; nop" },
+        { 71, 0x39e0000b3c03f0deull, "sub rf11, rf3, -2             ; nop" },
+        { 71, 0x57c00340bb105000ull, "nop                           ; fmul rf13, 4, rf5" },
+        { 71, 0x27e00380bb188000ull, "nop                           ; smul24 rf14, rf6, 8" },
+
         /* branch conditions */
         { 42, 0x02000006002034c0ull, "b.anyap  rf19" },
         { 42, 0x02679356b4201000ull, "b.anyap  -1268280496" },
@@ -85,6 +91,7 @@ static const struct {
         { 42, 0x3de020c7bdfd200dull, "ldvpmg_in rf7, r2, r2         ; mov r3, 13" },
         { 42, 0x3de02040f8ff7201ull, "stvpmv 1, rf8                 ; mov r1, 1" },
         { 42, 0xd8000e50bb2d3000ull, "sampid rf16                   ; fmul rf57.h, r3, r1.l" },
+        { 71, 0x2c000300bb042030ull, "setnnmode_uu                  ; v8dot rf12, rf1, rf2" },
 
         /* SFU instructions. */
         { 42, 0xe98d60c1ba2aef80ull, "recip rf1, rf62               ; fmul r3.h, r2.l, r1.l       ; ldunifrf.rf53" },

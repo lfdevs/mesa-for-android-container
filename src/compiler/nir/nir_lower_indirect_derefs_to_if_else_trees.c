@@ -250,7 +250,7 @@ nir_lower_indirect_var_derefs_to_if_else_trees(nir_shader *shader,
    bool progress = false;
 
    nir_foreach_function_impl(impl, shader) {
-      progress = lower_indirects_impl(impl, nir_var_uniform, vars, UINT_MAX) ||
+      progress = lower_indirects_impl(impl, nir_var_all, vars, UINT_MAX) ||
                  progress;
    }
 

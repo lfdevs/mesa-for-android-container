@@ -8,7 +8,6 @@
 #include "aco_ir.h"
 
 #include <map>
-#include <stack>
 #include <vector>
 
 namespace aco {

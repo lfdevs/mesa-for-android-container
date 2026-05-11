@@ -91,6 +91,28 @@ kk_queue_init(struct kk_device *dev, struct kk_queue *queue,
               const VkDeviceQueueCreateInfo *pCreateInfo,
               uint32_t index_in_family)
 {
+   const VkDeviceQueueGlobalPriorityCreateInfo *priority_info =
+      vk_find_struct_const(pCreateInfo->pNext,
+                           DEVICE_QUEUE_GLOBAL_PRIORITY_CREATE_INFO);
+   const VkQueueGlobalPriority global_priority =
+      priority_info ? priority_info->globalPriority :
+                      VK_QUEUE_GLOBAL_PRIORITY_MEDIUM;
+
+   /* From the Vulkan 1.3.295 spec:
+    *
+    *    "If the globalPriorityQuery feature is enabled and the requested
+    *    global priority is not reported via
+    *    VkQueueFamilyGlobalPriorityPropertiesKHR, the driver implementation
+    *    must fail the queue creation. In this scenario,
+    *    VK_ERROR_INITIALIZATION_FAILED is returned."
+    */
+   if (dev->vk.enabled_features.globalPriorityQuery &&
+       global_priority != VK_QUEUE_GLOBAL_PRIORITY_MEDIUM)
+      return VK_ERROR_INITIALIZATION_FAILED;
+
+   if (global_priority > VK_QUEUE_GLOBAL_PRIORITY_MEDIUM)
+      return VK_ERROR_NOT_PERMITTED;
+
    VkResult result;
 
    result = vk_queue_init(&queue->vk, &dev->vk, pCreateInfo, index_in_family);

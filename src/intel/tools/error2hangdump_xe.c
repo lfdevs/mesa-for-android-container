@@ -61,18 +61,6 @@ read_xe_data_file(FILE *dump_file, FILE *hang_dump_file, bool verbose)
          const char *value_ptr;
          char binary_name[64];
 
-         uint64_t u64_value;
-
-         if (error_decode_xe_read_u64_hexacimal_parameter(line, "[HWCTX].replay_offset", &u64_value)) {
-            error_decode_xe_vm_hw_ctx_set_offset(&xe_vm, u64_value);
-            break;
-         }
-
-         if (error_decode_xe_read_u64_hexacimal_parameter(line, "[HWCTX].replay_length", &u64_value)) {
-            /* replay_length is implicitly contained in size, so we don't need to save it */
-            break;
-         }
-
          if (error_decode_xe_binary_line(line, binary_name, sizeof(binary_name), &type, &value_ptr)) {
             if (strncmp(binary_name, "HWCTX", strlen("HWCTX")) != 0)
                break;
@@ -95,6 +83,12 @@ read_xe_data_file(FILE *dump_file, FILE *hang_dump_file, bool verbose)
             }
             case XE_VM_TOPIC_TYPE_ERROR:
                printf("HWCTX not present in dump, content will be zeroed: %s\n", line);
+               break;
+            case XE_VM_TOPIC_TYPE_REPLAY_OFFSET:
+               error_decode_xe_vm_hw_ctx_set_offset(&xe_vm, strtoul(value_ptr, NULL, 0));
+               break;
+            case XE_VM_TOPIC_TYPE_REPLAY_LENGTH:
+               /* replay_length is implicitly contained in size, so we don't need to save it */
                break;
             default:
                printf("Not expected line in HWCTX: %s", line);

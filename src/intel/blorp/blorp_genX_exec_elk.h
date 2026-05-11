@@ -107,10 +107,6 @@ static void
 blorp_surface_reloc(struct blorp_batch *batch, uint32_t ss_offset,
                     struct blorp_address address, uint32_t delta);
 
-static uint64_t
-blorp_get_surface_address(struct blorp_batch *batch,
-                          struct blorp_address address);
-
 #if GFX_VER >= 7
 static struct blorp_address
 blorp_get_surface_base_address(struct blorp_batch *batch);
@@ -1445,6 +1441,7 @@ blorp_emit_surface_state(struct blorp_batch *batch,
                          uint8_t color_write_disable,
                          bool is_render_target)
 {
+   assert(!surface->buffer);
    const struct isl_device *isl_dev = batch->blorp->isl_dev;
    struct isl_surf surf = surface->surf;
 
@@ -1483,9 +1480,9 @@ blorp_emit_surface_state(struct blorp_batch *batch,
                        .surf = &surf, .view = &surface->view,
                        .aux_surf = &surface->aux_surf, .aux_usage = aux_usage,
                        .address =
-                          blorp_get_surface_address(batch, surface->addr),
+                          batch->blorp->get_surface_address(batch, surface->addr),
                        .aux_address = !use_aux_address ? 0 :
-                          blorp_get_surface_address(batch, surface->aux_addr),
+                          batch->blorp->get_surface_address(batch, surface->aux_addr),
                        .mocs = surface->addr.mocs,
                        .clear_color = surface->clear_color,
                        .write_disables = write_disable_mask);

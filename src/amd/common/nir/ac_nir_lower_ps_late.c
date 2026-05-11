@@ -11,7 +11,7 @@
  */
 
 #include "ac_nir.h"
-#include "sid.h"
+#include "amdgfxregs.h"
 #include "nir_builder.h"
 #include "nir_builtin_builder.h"
 

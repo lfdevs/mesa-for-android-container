@@ -7,12 +7,20 @@
 #ifndef RADV_DESCRIPTORS_H
 #define RADV_DESCRIPTORS_H
 
+#include "vk_command_buffer.h"
+
 #include "radv_buffer.h"
 #include "radv_buffer_view.h"
-#include "radv_cmd_buffer.h"
 #include "radv_constants.h"
+#include "radv_descriptor_set.h"
+#include "radv_device.h"
 #include "radv_image_view.h"
+#include "radv_physical_device.h"
+#include "radv_pipeline.h"
+#include "radv_pipeline_layout.h"
 #include "radv_sampler.h"
+#include "radv_shader.h"
+#include "radv_video.h"
 
 #include <vulkan/vulkan.h>
 
@@ -36,13 +44,21 @@ radv_write_texel_buffer_descriptor(unsigned *dst, const VkBufferView _buffer_vie
 }
 
 static ALWAYS_INLINE void
-radv_write_buffer_descriptor(struct radv_device *device, unsigned *dst, uint64_t va, uint64_t range)
+radv_write_buffer_descriptor(struct radv_device *device, VkDescriptorType descriptor_type, unsigned *dst, uint64_t va,
+                             uint64_t range)
 {
    const struct radv_physical_device *pdev = radv_device_physical(device);
 
    if (!va) {
       memset(dst, 0, RADV_BUFFER_DESC_SIZE);
       return;
+   }
+
+   if (pdev->info.compiler_info.has_smem_with_null_prt_bug && descriptor_type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER) {
+      /* Always use the "LOW" address space for UBOs because they are read-only and sparse feedback
+       * isn't possible. This avoids clearing the control bit in shaders.
+       */
+      va &= ~(1ull << pdev->info.address_prt_wa_control_bit);
    }
 
    /* robustBufferAccess is relaxed enough to allow this (in combination with the alignment/size
@@ -53,7 +69,8 @@ radv_write_buffer_descriptor(struct radv_device *device, unsigned *dst, uint64_t
 }
 
 static ALWAYS_INLINE void
-radv_write_buffer_descriptor_impl(struct radv_device *device, unsigned *dst, const VkDescriptorBufferInfo *buffer_info)
+radv_write_buffer_descriptor_impl(struct radv_device *device, VkDescriptorType descriptor_type, unsigned *dst,
+                                  const VkDescriptorBufferInfo *buffer_info)
 {
    VK_FROM_HANDLE(radv_buffer, buffer, buffer_info->buffer);
    uint64_t va = 0, range = 0;
@@ -65,7 +82,7 @@ radv_write_buffer_descriptor_impl(struct radv_device *device, unsigned *dst, con
       assert(buffer->vk.size > 0 && range > 0);
    }
 
-   radv_write_buffer_descriptor(device, dst, va, range);
+   radv_write_buffer_descriptor(device, descriptor_type, dst, va, range);
 }
 
 static ALWAYS_INLINE void

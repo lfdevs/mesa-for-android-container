@@ -12,8 +12,11 @@
 #include "radv_debug.h"
 #include "radv_meta.h"
 #include "radv_sdma.h"
+#include "vk_shader_module.h"
 
 #include "radv_cs.h"
+
+#include "vk_command_pool.h"
 
 struct fill_constants {
    uint64_t addr;
@@ -360,7 +363,8 @@ radv_copy_memory(struct radv_cmd_buffer *cmd_buffer, uint64_t src_va, uint64_t d
                              radv_prefer_compute_or_cp_dma(device, size, src_copy_flags, dst_copy_flags));
 
    if (cmd_buffer->qf == RADV_QUEUE_TRANSFER) {
-      radv_sdma_copy_memory(device, cmd_buffer->cs, src_va, dst_va, size);
+      radv_sdma_copy_memory(device, cmd_buffer->cs, src_va, dst_va, size,
+                            cmd_buffer->vk.pool->flags & VK_COMMAND_POOL_CREATE_PROTECTED_BIT);
    } else if (use_compute) {
       radv_compute_copy_memory(cmd_buffer, src_va, dst_va, size);
    } else if (size) {

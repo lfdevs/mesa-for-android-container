@@ -143,7 +143,8 @@ radv_update_descriptor_set_with_template_impl(struct radv_device *device, struct
          }
          case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
          case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
-            radv_write_buffer_descriptor_impl(device, pDst, (struct VkDescriptorBufferInfo *)pSrc);
+            radv_write_buffer_descriptor_impl(device, templ->entry[i].descriptor_type, pDst,
+                                              (struct VkDescriptorBufferInfo *)pSrc);
             break;
          case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:
          case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:

@@ -43,6 +43,7 @@ struct vpe_priv;
 struct vpe_cmd_output;
 struct vpe_cmd_info;
 struct segment_ctx;
+struct vpe_cmd_input;
 enum vpe_stream_type;
 
 #define MIN_VPE_CMD    (1024)
@@ -68,6 +69,9 @@ struct resource {
 
     enum vpe_status (*calculate_segments)(
         struct vpe_priv *vpe_priv, const struct vpe_build_param *params);
+
+    uint32_t (*get_max_seg_width)(struct output_ctx *output_ctx,
+        enum vpe_surface_pixel_format format, enum vpe_scan_direction scan);
 
     enum vpe_status(*check_bg_color_support)(struct vpe_priv* vpe_priv, struct vpe_color* bg_color);
 
@@ -115,7 +119,48 @@ struct resource {
 
     bool (*validate_cached_param)(struct vpe_priv *vpe_priv, const struct vpe_build_param *param);
 
+    enum vpe_status (*check_alpha_fill_support)(
+        struct vpe *vpe, const struct vpe_build_param *param);
+
+    enum vpe_status (*fill_alpha_through_luma_cmd_info)(
+        struct vpe_priv *vpe_priv, uint16_t alpha_stream_idx);
+
+    enum vpe_status (*fill_non_performance_mode_cmd_info)(
+        struct vpe_priv *vpe_priv, uint16_t stream_idx);
+
+    enum vpe_status (*fill_performance_mode_cmd_info)(
+        struct vpe_priv *vpe_priv, uint16_t stream_idx, uint16_t avail_pipe_count);
+
+    enum vpe_status (*fill_blending_cmd_info)(
+        struct vpe_priv *vpe_priv, uint16_t top_stream_idx, uint16_t bot_stream_idx);
+
+    enum vpe_status (*populate_frod_param)(
+        struct vpe_priv *vpe_priv, const struct vpe_build_param *param);
+
+    uint32_t (*get_num_pipes_available)(struct vpe_priv *vpe_priv, struct stream_ctx *stream_ctx);
+
+    void (*set_frod_output_viewport)(struct vpe_cmd_output *dst_output,
+        struct vpe_cmd_output *src_output, uint32_t viewport_divider,
+        enum vpe_surface_pixel_format format);
+
+    void (*reset_pipes)(struct vpe_priv *vpe_priv);
+
+    enum vpe_status (*check_lut3d_compound)(
+        const struct vpe_stream *stream, const struct vpe_build_param *param);
+
+    void (*set_lls_pref)(struct vpe_priv *vpe_priv, struct spl_in *spl_input,
+        enum color_transfer_func tf, enum vpe_surface_pixel_format pixel_format);
+    void (*program_fastload)(struct vpe_priv *vpe_priv, uint32_t cmd_idx);
+
     enum vpe_status (*calculate_shaper)(struct vpe_priv *vpe_priv, struct stream_ctx *stream_ctx);
+
+    void (*update_opp_adjust_and_boundary)(struct stream_ctx *stream_ctx, uint16_t seg_idx,
+        bool dst_subsampled, const struct vpe_rect *src_rect, const struct vpe_rect *dst_rect,
+        struct output_ctx *output_ctx, struct spl_opp_adjust *opp_recout_adjust);
+
+    bool (*set_dst_cmd_info_scaler)(struct stream_ctx *dst_stream_ctx,
+        struct scaler_data *dst_scaler_data, struct vpe_rect recout, struct vpe_rect dst_viewport,
+        struct fmt_boundary_mode *boundary_mode, struct spl_opp_adjust *opp_adjust);
 
     // Indicates the nominal range hdr input content should be in during processing.
     int internal_hdr_normalization;
@@ -177,6 +222,9 @@ void vpe_handle_output_h_mirror(struct vpe_priv *vpe_priv);
 void vpe_resource_build_bit_depth_reduction_params(
     struct opp *opp, struct bit_depth_reduction_params *fmt_bit_depth);
 
+void vpe_build_clamping_params(
+    struct opp *opp, struct clamping_and_pixel_encoding_params *clamping);
+
 /** resource function call backs*/
 void vpe_frontend_config_callback(
     void *ctx, uint64_t cfg_base_gpu, uint64_t cfg_base_cpu, uint64_t size, uint32_t pipe_idx);
@@ -185,6 +233,16 @@ void vpe_backend_config_callback(
     void *ctx, uint64_t cfg_base_gpu, uint64_t cfg_base_cpu, uint64_t size, uint32_t pipe_idx);
 
 bool vpe_rec_is_equal(struct vpe_rect rec1, struct vpe_rect rec2);
+
+bool vpe_is_zero_rect(struct vpe_rect *rect);
+
+bool vpe_is_valid_vp(struct vpe_rect *src_rect, struct vpe_rect *dst_rect);
+
+bool vpe_is_scaling_factor_supported(struct vpe_priv *vpe_priv, struct vpe_rect *src_rect,
+    struct vpe_rect *dst_rect, enum vpe_rotation_angle rotation);
+
+struct stream_ctx *vpe_get_virtual_stream(
+    struct vpe_priv *vpe_priv, enum vpe_stream_type stream_type);
 
 const struct vpe_caps *vpe_get_capability(enum vpe_ip_level ip_level);
 

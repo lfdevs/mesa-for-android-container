@@ -9,7 +9,7 @@
 #include "ac_formats.h"
 #include "ac_gpu_info.h"
 
-#include "sid.h"
+#include "amdgfxregs.h"
 
 uint32_t
 ac_translate_buffer_numformat(const struct util_format_description *desc,

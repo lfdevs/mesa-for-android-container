@@ -1334,8 +1334,7 @@ visit_load_interpolated_input(isel_context* ctx, nir_intrinsic_instr* instr)
 {
    Temp dst = get_ssa_temp(ctx, &instr->def);
    Temp coords = get_ssa_temp(ctx, instr->src[0].ssa);
-   unsigned idx =
-      ac_nir_get_io_driver_location(ctx->shader, nir_intrinsic_io_semantics(instr).location, true);
+   unsigned idx = nir_intrinsic_base(instr);
    unsigned component = nir_intrinsic_component(instr);
    bool high_16bits = nir_intrinsic_io_semantics(instr).high_16bits;
    Temp prim_mask = get_arg(ctx, ctx->args->prim_mask);
@@ -1472,7 +1471,7 @@ visit_load_fs_input(isel_context* ctx, nir_intrinsic_instr* instr)
    Temp prim_mask = get_arg(ctx, ctx->args->prim_mask);
 
    nir_io_semantics sem = nir_intrinsic_io_semantics(instr);
-   unsigned idx = ac_nir_get_io_driver_location(ctx->shader, sem.location, true);
+   unsigned idx = nir_intrinsic_base(instr);
    unsigned component = nir_intrinsic_component(instr);
    bool high_16bits = sem.high_16bits;
    unsigned vertex_id = 0; /* P0 */

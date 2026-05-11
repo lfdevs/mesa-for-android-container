@@ -10,7 +10,7 @@
 #include "ac_binary.h"
 #include "amd_family.h"
 #include "compiler/shader_enums.h"
-#include "util/format/u_format.h"
+#include "util/format/u_formats.h"
 #include "util/u_math.h"
 
 #include <stdbool.h>

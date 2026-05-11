@@ -229,7 +229,6 @@ zink_destroy_resource_object(struct zink_screen *screen, struct zink_resource_ob
       util_dynarray_fini(&obj->copies[i]);
    if (obj->is_buffer) {
       VKSCR(DestroyBuffer)(screen->dev, obj->buffer, NULL);
-      VKSCR(DestroyBuffer)(screen->dev, obj->storage_buffer, NULL);
    } else if (obj->dt) {
       zink_kopper_displaytarget_destroy(screen, obj->dt);
    } else if (!obj->is_aux) {
@@ -326,8 +325,7 @@ create_bci(struct zink_screen *screen, const struct pipe_resource *templ, unsign
    if (screen->info.have_KHR_buffer_device_address)
       bci.usage |= VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
 
-   if (bind & PIPE_BIND_SHADER_IMAGE)
-      bci.usage |= VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT;
+   bci.usage |= VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT;
 
    if (bind & PIPE_BIND_QUERY_BUFFER)
       bci.usage |= VK_BUFFER_USAGE_CONDITIONAL_RENDERING_BIT_EXT;
@@ -1206,15 +1204,6 @@ create_buffer(struct zink_screen *screen, struct zink_resource_object *obj,
       return roc_fail_and_free_object;
    }
 
-   if (!(templ->bind & (PIPE_BIND_SHADER_IMAGE | ZINK_BIND_DESCRIPTOR))) {
-       bci.usage |= VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT;
-     if (VKSCR(CreateBuffer)(screen->dev, &bci, NULL, &obj->storage_buffer) != VK_SUCCESS) {
-        mesa_loge("ZINK: vkCreateBuffer failed");
-        VKSCR(DestroyBuffer)(screen->dev, obj->buffer, NULL);
-        return roc_fail_and_free_object;
-     }
-   }
-
    assert(!modifiers_count);
    VKSCR(GetBufferMemoryRequirements)(screen->dev, obj->buffer, &reqs);
 
@@ -1241,10 +1230,6 @@ create_buffer(struct zink_screen *screen, struct zink_resource_object *obj,
       if (VKSCR(BindBufferMemory)(screen->dev, obj->buffer, zink_bo_get_mem(obj->bo), obj->offset) != VK_SUCCESS) {
          mesa_loge("ZINK: vkBindBufferMemory failed");
          return roc_fail_and_cleanup_all ;
-      }
-      if (obj->storage_buffer && VKSCR(BindBufferMemory)(screen->dev, obj->storage_buffer, zink_bo_get_mem(obj->bo), obj->offset) != VK_SUCCESS) {
-         mesa_loge("ZINK: vkBindBufferMemory failed");
-         return roc_fail_and_cleanup_all;
       }
    }
    _mesa_set_init(&obj->surface_cache, NULL, NULL, equals_bufferview_key);
@@ -1467,6 +1452,7 @@ create_image(struct zink_screen *screen, struct zink_resource_object *obj,
          infos[i].image = obj->image;
          infos[i].memory = zink_bo_get_mem(obj->bo);
          infos[i].memoryOffset = obj->plane_offsets[i];
+         assert(!alloc_info->need_dedicated || obj->plane_offsets[i] == 0);
          if (templ->bind & ZINK_BIND_VIDEO) {
             infos[i].pNext = &planes[i];
             planes[i].sType = VK_STRUCTURE_TYPE_BIND_IMAGE_PLANE_MEMORY_INFO;
@@ -1479,11 +1465,13 @@ create_image(struct zink_screen *screen, struct zink_resource_object *obj,
          return roc_fail_and_cleanup_all;
       }
    } else {
-      if (!(templ->flags & PIPE_RESOURCE_FLAG_SPARSE))
+      if (!(templ->flags & PIPE_RESOURCE_FLAG_SPARSE)) {
+         assert(!alloc_info->need_dedicated || obj->offset == 0);
          if (VKSCR(BindImageMemory)(screen->dev, obj->image, zink_bo_get_mem(obj->bo), obj->offset) != VK_SUCCESS) {
             mesa_loge("ZINK: vkBindImageMemory failed");
             return roc_fail_and_cleanup_all;
          }
+      }
    }
    _mesa_set_init(&obj->surface_cache, NULL, NULL, equals_surface_key);
    return roc_success;
@@ -1564,7 +1552,6 @@ resource_object_create(struct zink_screen *screen, const struct pipe_resource *t
    case roc_fail_and_cleanup_object:
       if (templ->target == PIPE_BUFFER) {
          VKSCR(DestroyBuffer)(screen->dev, obj->buffer, NULL);
-         VKSCR(DestroyBuffer)(screen->dev, obj->storage_buffer, NULL);
       } else
          VKSCR(DestroyImage)(screen->dev, obj->image, NULL);
       FALLTHROUGH;

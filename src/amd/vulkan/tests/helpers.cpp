@@ -7,6 +7,8 @@
 #include "helpers.h"
 #include "util/macros.h"
 
+#include "drm-shim/amdgpu_noop_drm_shim.h"
+
 extern "C" {
 PFN_vkVoidFunction VKAPI_CALL vk_icdGetInstanceProcAddr(VkInstance instance, const char *pName);
 }
@@ -249,4 +251,19 @@ radv_test::get_pipeline_key(uint32_t code_size, const uint32_t *code, VkPipeline
 
    DestroyPipelineLayout(device, pipeline_layout, NULL);
    DestroyShaderModule(device, shader_module, NULL);
+}
+
+void
+radv_test::get_global_pipeline_key(enum radeon_family family, VkPipelineBinaryKeyKHR *pipeline_key)
+{
+   VkResult result;
+
+   drm_shim_amdgpu_select_device(ac_get_family_name(family));
+
+   create_device();
+
+   result = GetPipelineKeyKHR(device, NULL, pipeline_key);
+   assert(result == VK_SUCCESS);
+
+   destroy_device();
 }

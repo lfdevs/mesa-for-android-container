@@ -1,0 +1,4705 @@
+/* Copyright 2024 Advanced Micro Devices, Inc.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+ * THE COPYRIGHT HOLDER(S) OR AUTHOR(S) BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
+ *
+ * Authors: AMD
+ *
+ */
+
+#if !defined (_vpe20_SHIFT_HEADER)
+#define _vpe20_SHIFT_HEADER
+
+// reg: VPEC_DEC_START block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_DEC_START__START__SHIFT                       0x00000000
+
+// reg: VPEC_UCODE_ADDR block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_UCODE_ADDR__VALUE__SHIFT                      0x00000000
+#define VPEC_UCODE_ADDR__THID__SHIFT                       0x0000000f
+
+// reg: VPEC_UCODE_DATA block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_UCODE_DATA__VALUE__SHIFT                      0x00000000
+
+// reg: VPEC_F32_CNTL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_F32_CNTL__HALT__SHIFT                         0x00000000
+#define VPEC_F32_CNTL__DBG_SELECT_BITS__SHIFT              0x00000002
+#define VPEC_F32_CNTL__TH0_CHECKSUM_CLR__SHIFT             0x00000008
+#define VPEC_F32_CNTL__TH0_RESET__SHIFT                    0x00000009
+#define VPEC_F32_CNTL__TH0_ENABLE__SHIFT                   0x0000000a
+#define VPEC_F32_CNTL__TH1_CHECKSUM_CLR__SHIFT             0x0000000c
+#define VPEC_F32_CNTL__TH1_RESET__SHIFT                    0x0000000d
+#define VPEC_F32_CNTL__TH1_ENABLE__SHIFT                   0x0000000e
+#define VPEC_F32_CNTL__TH0_PRIORITY__SHIFT                 0x00000010
+#define VPEC_F32_CNTL__TH1_PRIORITY__SHIFT                 0x00000018
+
+// reg: VPEC_MMHUB_CNTL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_MMHUB_CNTL__UNIT_ID__SHIFT                    0x00000000
+
+// reg: VPEC_MMHUB_TRUSTLVL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_MMHUB_TRUSTLVL__SECLVL0__SHIFT                0x00000000
+#define VPEC_MMHUB_TRUSTLVL__SECLVL1__SHIFT                0x00000004
+#define VPEC_MMHUB_TRUSTLVL__SECLVL2__SHIFT                0x00000008
+#define VPEC_MMHUB_TRUSTLVL__SECLVL3__SHIFT                0x0000000c
+#define VPEC_MMHUB_TRUSTLVL__SECLVL4__SHIFT                0x00000010
+#define VPEC_MMHUB_TRUSTLVL__SECLVL5__SHIFT                0x00000014
+#define VPEC_MMHUB_TRUSTLVL__SECLVL6__SHIFT                0x00000018
+#define VPEC_MMHUB_TRUSTLVL__SECLVL7__SHIFT                0x0000001c
+
+// reg: VPEC_VPEP_CTRL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_VPEP_CTRL__VPEP_SOCCLK_EN__SHIFT              0x00000000
+#define VPEC_VPEP_CTRL__VPEP_SW_RESETB__SHIFT              0x00000001
+#define VPEC_VPEP_CTRL__RESERVED__SHIFT                    0x00000002
+#define VPEC_VPEP_CTRL__SOFT_OVERRIDE_FGCLKEN_S0P0__SHIFT  0x00000016
+#define VPEC_VPEP_CTRL__SOFT_OVERRIDE_FGCLKEN_S0P1__SHIFT  0x00000017
+#define VPEC_VPEP_CTRL__SOFT_OVERRIDE_FGCLKEN_S0P2__SHIFT  0x00000018
+#define VPEC_VPEP_CTRL__SOFT_OVERRIDE_FGCLKEN_S1P0__SHIFT  0x00000019
+#define VPEC_VPEP_CTRL__SOFT_OVERRIDE_FGCLKEN_S1P1__SHIFT  0x0000001a
+#define VPEC_VPEP_CTRL__SOFT_OVERRIDE_FGCLKEN_S1P2__SHIFT  0x0000001b
+#define VPEC_VPEP_CTRL__SOFT_OVERRIDE_FGCLKEN_3DLUT__SHIFT 0x0000001c
+#define VPEC_VPEP_CTRL__SOFT_OVERRIDE_VPEC_VPEP_REG_FGCLKEN__SHIFT 0x0000001d
+#define VPEC_VPEP_CTRL__SOFT_OVERRIDE_VPEP_SOCCLK__SHIFT   0x0000001e
+#define VPEC_VPEP_CTRL__SOFT_OVERRIDE_VPECLK__SHIFT        0x0000001f
+
+// reg: VPEC_CLK_CTRL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_CLK_CTRL__VPECLK_EN__SHIFT                    0x00000001
+#define VPEC_CLK_CTRL__SOFT_OVERRIDE_IP_PIPE0_CLK__SHIFT   0x00000008
+#define VPEC_CLK_CTRL__SOFT_OVERRIDE_IP_PIPE1_CLK__SHIFT   0x00000009
+#define VPEC_CLK_CTRL__SOFT_OVERRIDE_IP_PIPE2_CLK__SHIFT   0x0000000a
+#define VPEC_CLK_CTRL__SOFT_OVERRIDE_IP_PIPE3_CLK__SHIFT   0x0000000b
+#define VPEC_CLK_CTRL__SOFT_OVERRIDE_IP_PIPE4_CLK__SHIFT   0x0000000c
+#define VPEC_CLK_CTRL__SOFT_OVERRIDE_IP_PIPE5_CLK__SHIFT   0x0000000d
+#define VPEC_CLK_CTRL__SOFT_OVERRIDE_OP_PIPE0_CLK__SHIFT   0x00000010
+#define VPEC_CLK_CTRL__SOFT_OVERRIDE_OP_PIPE1_CLK__SHIFT   0x00000011
+#define VPEC_CLK_CTRL__SOFT_OVERRIDE_OP_PIPE2_CLK__SHIFT   0x00000012
+#define VPEC_CLK_CTRL__SOFT_OVERRIDE_OP_PIPE3_CLK__SHIFT   0x00000013
+#define VPEC_CLK_CTRL__SOFT_OVERRIDE_OP_PIPE4_CLK__SHIFT   0x00000014
+#define VPEC_CLK_CTRL__SOFT_OVERRIDE_OP_PIPE5_CLK__SHIFT   0x00000015
+#define VPEC_CLK_CTRL__SOFT_OVERRIDE_OP_PIPE6_CLK__SHIFT   0x00000016
+#define VPEC_CLK_CTRL__SOFT_OVERRIDE_OP_PIPE7_CLK__SHIFT   0x00000017
+#define VPEC_CLK_CTRL__SOFT_OVERRIDE_OP_PIPE8_CLK__SHIFT   0x00000018
+#define VPEC_CLK_CTRL__SOFT_OVERRIDE_OP_PIPE9_CLK__SHIFT   0x00000019
+#define VPEC_CLK_CTRL__SOFT_OVERRIDE_PERF_CLK__SHIFT       0x0000001b
+#define VPEC_CLK_CTRL__SOFT_OVERRIDE_CE_CLK__SHIFT         0x0000001c
+#define VPEC_CLK_CTRL__SOFT_OVERRIDE_F32_CLK__SHIFT        0x0000001d
+#define VPEC_CLK_CTRL__SOFT_OVERRIDE_DYN_CLK__SHIFT        0x0000001e
+#define VPEC_CLK_CTRL__SOFT_OVERRIDE_REG_CLK__SHIFT        0x0000001f
+
+// reg: VPEC_COLLABORATE_CNTL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_COLLABORATE_CNTL__COLLABORATE_MODE_EN__SHIFT  0x00000000
+
+// reg: VPEC_COLLABORATE_CFG block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_COLLABORATE_CFG__MASTER_ID__SHIFT             0x00000000
+#define VPEC_COLLABORATE_CFG__MASTER_EN__SHIFT             0x00000003
+#define VPEC_COLLABORATE_CFG__SLAVE0_ID__SHIFT             0x00000004
+#define VPEC_COLLABORATE_CFG__SLAVE0_EN__SHIFT             0x00000007
+
+// reg: VPEC_POWER_CNTL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_POWER_CNTL__LS_ENABLE__SHIFT                  0x00000000
+#define VPEC_POWER_CNTL__UCODE_SRAM_DS_EN__SHIFT           0x00000001
+#define VPEC_POWER_CNTL__FISO__SHIFT                       0x00000002
+#define VPEC_POWER_CNTL__UCODE_SRAM_POWER_UP_RECOVER_DELAY__SHIFT 0x00000008
+#define VPEC_POWER_CNTL__UCODE_SRAM_POWER_STATUS_CHANGE_WAKEUP_TIME__SHIFT 0x0000000f
+#define VPEC_POWER_CNTL__UCODE_SRAM_POWER_STATUS_CHANGE_CLK_FORCE__SHIFT 0x00000012
+#define VPEC_POWER_CNTL__SRAM_POWER_LS_CHANGE_DELAY__SHIFT 0x00000014
+#define VPEC_POWER_CNTL__SRAM_POWER_LS_CHANGE_CLK_FORCE__SHIFT 0x00000017
+#define VPEC_POWER_CNTL__SRAM_POWER_LS_CHANGE_CLK_FORCE_DELAY__SHIFT 0x00000018
+
+// reg: VPEC_ZPR_CNTL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_ZPR_CNTL__CLK_UNGATE_DELAY__SHIFT             0x00000000
+#define VPEC_ZPR_CNTL__RESERVED__SHIFT                     0x00000008
+
+// reg: VPEC_CNTL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_CNTL__TRAP_ENABLE__SHIFT                      0x00000000
+#define VPEC_CNTL__RESERVED_2_2__SHIFT                     0x00000002
+#define VPEC_CNTL__DATA_SWAP__SHIFT                        0x00000003
+#define VPEC_CNTL__FENCE_SWAP_ENABLE__SHIFT                0x00000005
+#define VPEC_CNTL__MIDCMD_PREEMPT_ENABLE__SHIFT            0x00000006
+#define VPEC_CNTL__MIDCMD_EXPIRE_ENABLE__SHIFT             0x00000009
+#define VPEC_CNTL__UMSCH_INT_ENABLE__SHIFT                 0x0000000a
+#define VPEC_CNTL__RESERVED_13_11__SHIFT                   0x0000000b
+#define VPEC_CNTL__NACK_GEN_ERR_INT_ENABLE__SHIFT          0x0000000e
+#define VPEC_CNTL__NACK_PRT_INT_ENABLE__SHIFT              0x0000000f
+#define VPEC_CNTL__RESERVED_16_16__SHIFT                   0x00000010
+#define VPEC_CNTL__MIDCMD_WORLDSWITCH_ENABLE__SHIFT        0x00000011
+#define VPEC_CNTL__RESERVED_19_19__SHIFT                   0x00000013
+#define VPEC_CNTL__CTXEMPTY_INT_ENABLE__SHIFT              0x0000001c
+#define VPEC_CNTL__FROZEN_INT_ENABLE__SHIFT                0x0000001d
+#define VPEC_CNTL__IB_PREEMPT_INT_ENABLE__SHIFT            0x0000001e
+#define VPEC_CNTL__RB_PREEMPT_INT_ENABLE__SHIFT            0x0000001f
+
+// reg: VPEC_CNTL_DCC block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_CNTL_DCC__WDCC_COMP_MODE__SHIFT               0x00000000
+#define VPEC_CNTL_DCC__RESERVED_3_2__SHIFT                 0x00000002
+#define VPEC_CNTL_DCC__WDCC_MICRO_TILE_MODE__SHIFT         0x00000004
+#define VPEC_CNTL_DCC__RESERVED_7_6__SHIFT                 0x00000006
+#define VPEC_CNTL_DCC__WDCC_DATA_FORMAT__SHIFT             0x00000008
+#define VPEC_CNTL_DCC__RESERVED_15_13__SHIFT               0x0000000d
+#define VPEC_CNTL_DCC__WDCC_NUM_FORMAT_EN__SHIFT           0x00000010
+#define VPEC_CNTL_DCC__RESERVED_19_17__SHIFT               0x00000011
+#define VPEC_CNTL_DCC__WDCC_NUM_TYPE__SHIFT                0x00000014
+#define VPEC_CNTL_DCC__RESERVED_23_23__SHIFT               0x00000017
+#define VPEC_CNTL_DCC__WDCC_MAX_UNCOMP_SIZE__SHIFT         0x00000018
+#define VPEC_CNTL_DCC__WDCC_MAX_COMP_SIZE__SHIFT           0x00000019
+#define VPEC_CNTL_DCC__RESERVED_30_27__SHIFT               0x0000001b
+#define VPEC_CNTL_DCC__RDCC_COMP_MODE__SHIFT               0x0000001f
+
+// reg: VPEC_CE_OP_MULTI_64B_BURST block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_CE_OP_MULTI_64B_BURST__EN__SHIFT              0x00000000
+#define VPEC_CE_OP_MULTI_64B_BURST__RESERVED_3_1__SHIFT    0x00000001
+#define VPEC_CE_OP_MULTI_64B_BURST__LAZY_TIMER_DLY__SHIFT  0x00000004
+#define VPEC_CE_OP_MULTI_64B_BURST__NUM_64B_BURST_ALLOWED__SHIFT 0x0000000a
+#define VPEC_CE_OP_MULTI_64B_BURST__RESERVED_31_12__SHIFT  0x0000000c
+
+// reg: VPEC_CNTL1 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_CNTL1__RESERVED_3_1__SHIFT                    0x00000001
+#define VPEC_CNTL1__SRBM_POLL_RETRYING__SHIFT              0x00000005
+#define VPEC_CNTL1__RESERVED_23_10__SHIFT                  0x0000000a
+#define VPEC_CNTL1__CG_STATUS_OUTPUT__SHIFT                0x00000018
+#define VPEC_CNTL1__SW_FREEZE_ENABLE__SHIFT                0x00000019
+#define VPEC_CNTL1__VPEP_CONFIG_INVALID_CHECK_ENABLE__SHIFT 0x0000001a
+#define VPEC_CNTL1__RSMU_ACCESS_OFF_VPEP_RETURN_ERROR_ENABLE__SHIFT 0x0000001b
+#define VPEC_CNTL1__RSMU_ACCESS_OFF_VPEP_REPORT_ERROR_ENABLE__SHIFT 0x0000001c
+#define VPEC_CNTL1__RESERVED__SHIFT                        0x0000001d
+
+// reg: VPEC_CNTL2 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_CNTL2__F32_CMD_PROC_DELAY__SHIFT              0x00000000
+#define VPEC_CNTL2__F32_SEND_POSTCODE_EN__SHIFT            0x00000004
+#define VPEC_CNTL2__UCODE_BUF_DS_EN__SHIFT                 0x00000006
+#define VPEC_CNTL2__UCODE_SELFLOAD_THREAD_OVERLAP__SHIFT   0x00000007
+#define VPEC_CNTL2__LUTIB_FIFO_WATERMARK__SHIFT            0x00000008
+#define VPEC_CNTL2__CMDIB_FIFO_WATERMARK__SHIFT            0x0000000a
+#define VPEC_CNTL2__RESERVED_14_12__SHIFT                  0x0000000c
+#define VPEC_CNTL2__IMPROVE_CE_IP_ARBITER__SHIFT           0x0000000f
+#define VPEC_CNTL2__RB_FIFO_WATERMARK__SHIFT               0x00000010
+#define VPEC_CNTL2__IB_FIFO_WATERMARK__SHIFT               0x00000012
+#define VPEC_CNTL2__RESERVED_22_20__SHIFT                  0x00000014
+#define VPEC_CNTL2__CH_RD_WATERMARK__SHIFT                 0x00000017
+#define VPEC_CNTL2__CH_WR_WATERMARK__SHIFT                 0x00000019
+#define VPEC_CNTL2__CH_WR_WATERMARK_LSB__SHIFT             0x0000001e
+
+// reg: VPEC_GB_ADDR_CONFIG block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_GB_ADDR_CONFIG__NUM_PIPES__SHIFT              0x00000000
+#define VPEC_GB_ADDR_CONFIG__PIPE_INTERLEAVE_SIZE__SHIFT   0x00000003
+#define VPEC_GB_ADDR_CONFIG__MAX_COMPRESSED_FRAGS__SHIFT   0x00000006
+#define VPEC_GB_ADDR_CONFIG__NUM_PKRS__SHIFT               0x00000008
+#define VPEC_GB_ADDR_CONFIG__NUM_SHADER_ENGINES__SHIFT     0x00000013
+#define VPEC_GB_ADDR_CONFIG__NUM_RB_PER_SE__SHIFT          0x0000001a
+
+// reg: VPEC_GB_ADDR_CONFIG_READ block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_GB_ADDR_CONFIG_READ__NUM_PIPES__SHIFT         0x00000000
+#define VPEC_GB_ADDR_CONFIG_READ__PIPE_INTERLEAVE_SIZE__SHIFT 0x00000003
+#define VPEC_GB_ADDR_CONFIG_READ__MAX_COMPRESSED_FRAGS__SHIFT 0x00000006
+#define VPEC_GB_ADDR_CONFIG_READ__NUM_PKRS__SHIFT          0x00000008
+#define VPEC_GB_ADDR_CONFIG_READ__NUM_SHADER_ENGINES__SHIFT 0x00000013
+#define VPEC_GB_ADDR_CONFIG_READ__NUM_RB_PER_SE__SHIFT     0x0000001a
+
+// reg: VPEC_GB_ADDR_CONFIG_META block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_GB_ADDR_CONFIG_META__NUM_PIPES__SHIFT         0x00000000
+#define VPEC_GB_ADDR_CONFIG_META__PIPE_INTERLEAVE_SIZE__SHIFT 0x00000003
+#define VPEC_GB_ADDR_CONFIG_META__MAX_COMPRESSED_FRAGS__SHIFT 0x00000006
+#define VPEC_GB_ADDR_CONFIG_META__NUM_PKRS__SHIFT          0x00000008
+#define VPEC_GB_ADDR_CONFIG_META__NUM_SHADER_ENGINES__SHIFT 0x00000013
+#define VPEC_GB_ADDR_CONFIG_META__NUM_RB_PER_SE__SHIFT     0x0000001a
+
+// reg: VPEC_PROCESS_QUANTUM0 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_PROCESS_QUANTUM0__PROCESS0_QUANTUM__SHIFT     0x00000000
+#define VPEC_PROCESS_QUANTUM0__PROCESS1_QUANTUM__SHIFT     0x00000008
+#define VPEC_PROCESS_QUANTUM0__PROCESS2_QUANTUM__SHIFT     0x00000010
+#define VPEC_PROCESS_QUANTUM0__PROCESS3_QUANTUM__SHIFT     0x00000018
+
+// reg: VPEC_PROCESS_QUANTUM1 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_PROCESS_QUANTUM1__PROCESS4_QUANTUM__SHIFT     0x00000000
+#define VPEC_PROCESS_QUANTUM1__PROCESS5_QUANTUM__SHIFT     0x00000008
+#define VPEC_PROCESS_QUANTUM1__PROCESS6_QUANTUM__SHIFT     0x00000010
+#define VPEC_PROCESS_QUANTUM1__PROCESS7_QUANTUM__SHIFT     0x00000018
+
+// reg: VPEC_CONTEXT_SWITCH_THRESHOLD block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_CONTEXT_SWITCH_THRESHOLD__REALTIME_THRESHOLD__SHIFT 0x00000000
+#define VPEC_CONTEXT_SWITCH_THRESHOLD__FOCUS_THRESHOLD__SHIFT 0x00000002
+#define VPEC_CONTEXT_SWITCH_THRESHOLD__NORMAL_THRESHOLD__SHIFT 0x00000004
+#define VPEC_CONTEXT_SWITCH_THRESHOLD__IDLE_THRESHOLD__SHIFT 0x00000006
+
+// reg: VPEC_GLOBAL_QUANTUM block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_GLOBAL_QUANTUM__GLOBAL_FOCUS_QUANTUM__SHIFT   0x00000000
+#define VPEC_GLOBAL_QUANTUM__GLOBAL_NORMAL_QUANTUM__SHIFT  0x00000008
+
+// reg: VPEC_HWE_MASK block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_HWE_MASK__HWE_MASK__SHIFT                     0x00000000
+
+// reg: VPEC_HWE_SRC_DST_TABLE0 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_HWE_SRC_DST_TABLE0__TABLE0__SHIFT             0x00000000
+
+// reg: VPEC_HWE_SRC_DST_TABLE1 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_HWE_SRC_DST_TABLE1__TABLE1__SHIFT             0x00000000
+
+// reg: VPEC_WATCHDOG_CNTL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_WATCHDOG_CNTL__QUEUE_HANG_COUNT__SHIFT        0x00000000
+#define VPEC_WATCHDOG_CNTL__CMD_TIMEOUT_COUNT__SHIFT       0x00000008
+
+// reg: VPEC_ATOMIC_CNTL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_ATOMIC_CNTL__LOOP_TIMER__SHIFT                0x00000000
+#define VPEC_ATOMIC_CNTL__ATOMIC_RTN_INT_ENABLE__SHIFT     0x0000001f
+
+// reg: VPEC_UCODE_VERSION block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_UCODE_VERSION__T0_UCODE_VERSION__SHIFT        0x00000000
+#define VPEC_UCODE_VERSION__T1_UCODE_VERSION__SHIFT        0x00000010
+
+// reg: VPEC_MEMREQ_BURST_CNTL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_MEMREQ_BURST_CNTL__DATA_RD_BURST__SHIFT       0x00000000
+#define VPEC_MEMREQ_BURST_CNTL__DATA_WR_BURST__SHIFT       0x00000002
+#define VPEC_MEMREQ_BURST_CNTL__RB_RD_BURST__SHIFT         0x00000004
+#define VPEC_MEMREQ_BURST_CNTL__IB_RD_BURST__SHIFT         0x00000006
+#define VPEC_MEMREQ_BURST_CNTL__WR_BURST_WAIT_CYCLE__SHIFT 0x00000008
+
+// reg: VPEC_TIMESTAMP_CNTL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_TIMESTAMP_CNTL__CAPTURE__SHIFT                0x00000000
+
+// reg: VPEC_GLOBAL_TIMESTAMP_LO block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_GLOBAL_TIMESTAMP_LO__DATA__SHIFT              0x00000000
+
+// reg: VPEC_GLOBAL_TIMESTAMP_HI block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_GLOBAL_TIMESTAMP_HI__DATA__SHIFT              0x00000000
+
+// reg: VPEC_FREEZE block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_FREEZE__PREEMPT__SHIFT                        0x00000000
+#define VPEC_FREEZE__FREEZE__SHIFT                         0x00000004
+#define VPEC_FREEZE__FROZEN__SHIFT                         0x00000005
+#define VPEC_FREEZE__F32_FREEZE__SHIFT                     0x00000006
+
+// reg: VPEC_CE_CTRL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_CE_CTRL__RD_LUT_WATERMARK__SHIFT              0x00000000
+#define VPEC_CE_CTRL__RD_LUT_DEPTH__SHIFT                  0x00000003
+#define VPEC_CE_CTRL__WR_AFIFO_WATERMARK__SHIFT            0x00000005
+#define VPEC_CE_CTRL__RESERVED__SHIFT                      0x00000008
+
+// reg: VPEC_RELAX_ORDERING_LUT block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_RELAX_ORDERING_LUT__RESERVED0__SHIFT          0x00000000
+#define VPEC_RELAX_ORDERING_LUT__VPE__SHIFT                0x00000001
+#define VPEC_RELAX_ORDERING_LUT__RESERVED_2_2__SHIFT       0x00000002
+#define VPEC_RELAX_ORDERING_LUT__RESERVED3__SHIFT          0x00000003
+#define VPEC_RELAX_ORDERING_LUT__RESERVED4__SHIFT          0x00000004
+#define VPEC_RELAX_ORDERING_LUT__FENCE__SHIFT              0x00000005
+#define VPEC_RELAX_ORDERING_LUT__RESERVED76__SHIFT         0x00000006
+#define VPEC_RELAX_ORDERING_LUT__POLL_MEM__SHIFT           0x00000008
+#define VPEC_RELAX_ORDERING_LUT__COND_EXE__SHIFT           0x00000009
+#define VPEC_RELAX_ORDERING_LUT__ATOMIC__SHIFT             0x0000000a
+#define VPEC_RELAX_ORDERING_LUT__RESERVED_11_11__SHIFT     0x0000000b
+#define VPEC_RELAX_ORDERING_LUT__RESERVED_12_12__SHIFT     0x0000000c
+#define VPEC_RELAX_ORDERING_LUT__TIMESTAMP__SHIFT          0x0000000d
+#define VPEC_RELAX_ORDERING_LUT__NATIVE_FENCE__SHIFT       0x0000000e
+#define VPEC_RELAX_ORDERING_LUT__RESERVED__SHIFT           0x0000000f
+#define VPEC_RELAX_ORDERING_LUT__WORLD_SWITCH__SHIFT       0x0000001b
+#define VPEC_RELAX_ORDERING_LUT__RPTR_WRB__SHIFT           0x0000001c
+#define VPEC_RELAX_ORDERING_LUT__RESERVED_29_29__SHIFT     0x0000001d
+#define VPEC_RELAX_ORDERING_LUT__IB_FETCH__SHIFT           0x0000001e
+#define VPEC_RELAX_ORDERING_LUT__RB_FETCH__SHIFT           0x0000001f
+
+// reg: VPEC_CREDIT_CNTL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_CREDIT_CNTL__DRM_CREDIT__SHIFT                0x00000000
+#define VPEC_CREDIT_CNTL__MC_WRREQ_CREDIT__SHIFT           0x00000007
+#define VPEC_CREDIT_CNTL__MC_RDREQ_CREDIT__SHIFT           0x0000000d
+
+// reg: VPEC_SCRATCH_RAM_DATA block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_SCRATCH_RAM_DATA__DATA__SHIFT                 0x00000000
+
+// reg: VPEC_SCRATCH_RAM_ADDR block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_SCRATCH_RAM_ADDR__ADDR__SHIFT                 0x00000000
+
+// reg: VPEC_QUEUE_RESET_REQ block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE_RESET_REQ__QUEUE0_RESET__SHIFT          0x00000000
+#define VPEC_QUEUE_RESET_REQ__QUEUE1_RESET__SHIFT          0x00000001
+#define VPEC_QUEUE_RESET_REQ__QUEUE2_RESET__SHIFT          0x00000002
+#define VPEC_QUEUE_RESET_REQ__QUEUE3_RESET__SHIFT          0x00000003
+#define VPEC_QUEUE_RESET_REQ__QUEUE4_RESET__SHIFT          0x00000004
+#define VPEC_QUEUE_RESET_REQ__QUEUE5_RESET__SHIFT          0x00000005
+#define VPEC_QUEUE_RESET_REQ__QUEUE6_RESET__SHIFT          0x00000006
+#define VPEC_QUEUE_RESET_REQ__QUEUE7_RESET__SHIFT          0x00000007
+#define VPEC_QUEUE_RESET_REQ__RESERVED__SHIFT              0x00000008
+
+// reg: VPEC_PERFCNT_PERFCOUNTER0_CFG block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_PERFCNT_PERFCOUNTER0_CFG__PERF_SEL__SHIFT     0x00000000
+#define VPEC_PERFCNT_PERFCOUNTER0_CFG__PERF_SEL_END__SHIFT 0x00000008
+#define VPEC_PERFCNT_PERFCOUNTER0_CFG__PERF_MODE__SHIFT    0x00000018
+#define VPEC_PERFCNT_PERFCOUNTER0_CFG__ENABLE__SHIFT       0x0000001c
+#define VPEC_PERFCNT_PERFCOUNTER0_CFG__CLEAR__SHIFT        0x0000001d
+
+// reg: VPEC_PERFCNT_PERFCOUNTER1_CFG block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_PERFCNT_PERFCOUNTER1_CFG__PERF_SEL__SHIFT     0x00000000
+#define VPEC_PERFCNT_PERFCOUNTER1_CFG__PERF_SEL_END__SHIFT 0x00000008
+#define VPEC_PERFCNT_PERFCOUNTER1_CFG__PERF_MODE__SHIFT    0x00000018
+#define VPEC_PERFCNT_PERFCOUNTER1_CFG__ENABLE__SHIFT       0x0000001c
+#define VPEC_PERFCNT_PERFCOUNTER1_CFG__CLEAR__SHIFT        0x0000001d
+
+// reg: VPEC_PERFCNT_PERFCOUNTER_RSLT_CNTL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_PERFCNT_PERFCOUNTER_RSLT_CNTL__PERF_COUNTER_SELECT__SHIFT 0x00000000
+#define VPEC_PERFCNT_PERFCOUNTER_RSLT_CNTL__START_TRIGGER__SHIFT 0x00000008
+#define VPEC_PERFCNT_PERFCOUNTER_RSLT_CNTL__STOP_TRIGGER__SHIFT 0x00000010
+#define VPEC_PERFCNT_PERFCOUNTER_RSLT_CNTL__ENABLE_ANY__SHIFT 0x00000018
+#define VPEC_PERFCNT_PERFCOUNTER_RSLT_CNTL__CLEAR_ALL__SHIFT 0x00000019
+#define VPEC_PERFCNT_PERFCOUNTER_RSLT_CNTL__STOP_ALL_ON_SATURATE__SHIFT 0x0000001a
+
+// reg: VPEC_PERFCNT_MISC_CNTL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_PERFCNT_MISC_CNTL__CMD_OP__SHIFT              0x00000000
+#define VPEC_PERFCNT_MISC_CNTL__MMHUB_REQ_EVENT_SELECT__SHIFT 0x00000010
+
+// reg: VPEC_PERFCNT_PERFCOUNTER_LO block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_PERFCNT_PERFCOUNTER_LO__COUNTER_LO__SHIFT     0x00000000
+
+// reg: VPEC_PERFCNT_PERFCOUNTER_HI block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_PERFCNT_PERFCOUNTER_HI__COUNTER_HI__SHIFT     0x00000000
+#define VPEC_PERFCNT_PERFCOUNTER_HI__COMPARE_VALUE__SHIFT  0x00000010
+
+// reg: VPEC_DEBUG_INDEX block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_DEBUG_INDEX__INDEX__SHIFT                     0x00000000
+
+// reg: VPEC_DEBUG_DATA block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_DEBUG_DATA__DATA__SHIFT                       0x00000000
+
+// reg: VPEC_CRC_CNTL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_CRC_CNTL__ENABLE__SHIFT                       0x00000000
+#define VPEC_CRC_CNTL__CLEAR__SHIFT                        0x00000001
+
+// reg: VPEC_CRC_INDEX block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_CRC_INDEX__PIPE__SHIFT                        0x00000000
+#define VPEC_CRC_INDEX__CRC_NODE__SHIFT                    0x00000004
+
+// reg: VPEC_CRC_DATA0 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_CRC_DATA0__DATA__SHIFT                        0x00000000
+
+// reg: VPEC_CRC_DATA1 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_CRC_DATA1__DATA__SHIFT                        0x00000000
+
+// reg: VPEC_CRC_DATA2 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_CRC_DATA2__DATA__SHIFT                        0x00000000
+
+// reg: VPEC_MAILBOX0 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_MAILBOX0__VALUE__SHIFT                        0x00000000
+
+// reg: VPEC_MAILBOX1 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_MAILBOX1__VALUE__SHIFT                        0x00000000
+
+// reg: VPEC_MAILBOX2 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_MAILBOX2__VALUE__SHIFT                        0x00000000
+
+// reg: VPEC_MAILBOX3 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_MAILBOX3__VALUE__SHIFT                        0x00000000
+
+// reg: VPEC_MAILBOX4 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_MAILBOX4__VALUE__SHIFT                        0x00000000
+
+// reg: VPEC_MAILBOX5 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_MAILBOX5__VALUE__SHIFT                        0x00000000
+
+// reg: VPEC_MAILBOX6 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_MAILBOX6__VALUE__SHIFT                        0x00000000
+
+// reg: VPEC_MAILBOX7 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_MAILBOX7__VALUE__SHIFT                        0x00000000
+
+// reg: VPEC_MAILBOX8 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_MAILBOX8__VALUE__SHIFT                        0x00000000
+
+// reg: VPEC_MAILBOX9 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_MAILBOX9__VALUE__SHIFT                        0x00000000
+
+// reg: VPEC_MAILBOX10 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_MAILBOX10__VALUE__SHIFT                       0x00000000
+
+// reg: VPEC_MAILBOX11 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_MAILBOX11__VALUE__SHIFT                       0x00000000
+
+// reg: VPEC_MAILBOX12 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_MAILBOX12__VALUE__SHIFT                       0x00000000
+
+// reg: VPEC_MAILBOX13 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_MAILBOX13__VALUE__SHIFT                       0x00000000
+
+// reg: VPEC_MAILBOX14 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_MAILBOX14__VALUE__SHIFT                       0x00000000
+
+// reg: VPEC_MAILBOX15 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_MAILBOX15__VALUE__SHIFT                       0x00000000
+
+// reg: VPEC_PUB_DUMMY0 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_PUB_DUMMY0__VALUE__SHIFT                      0x00000000
+
+// reg: VPEC_PUB_DUMMY1 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_PUB_DUMMY1__VALUE__SHIFT                      0x00000000
+
+// reg: VPEC_PUB_DUMMY2 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_PUB_DUMMY2__VALUE__SHIFT                      0x00000000
+
+// reg: VPEC_PUB_DUMMY3 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_PUB_DUMMY3__VALUE__SHIFT                      0x00000000
+
+// reg: VPEC_PUB_DUMMY4 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_PUB_DUMMY4__VALUE__SHIFT                      0x00000000
+
+// reg: VPEC_PUB_DUMMY5 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_PUB_DUMMY5__VALUE__SHIFT                      0x00000000
+
+// reg: VPEC_PUB_DUMMY6 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_PUB_DUMMY6__VALUE__SHIFT                      0x00000000
+
+// reg: VPEC_PUB_DUMMY7 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_PUB_DUMMY7__VALUE__SHIFT                      0x00000000
+
+// reg: VPEC_PUB_DUMMY8 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_PUB_DUMMY8__VALUE__SHIFT                      0x00000000
+
+// reg: VPEC_PUB_DUMMY9 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_PUB_DUMMY9__VALUE__SHIFT                      0x00000000
+
+// reg: VPEC_PUB_DUMMY10 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_PUB_DUMMY10__VALUE__SHIFT                     0x00000000
+
+// reg: VPEC_PUB_DUMMY11 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_PUB_DUMMY11__VALUE__SHIFT                     0x00000000
+
+// reg: VPEC_UCODE1_CHECKSUM block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_UCODE1_CHECKSUM__DATA__SHIFT                  0x00000000
+
+// reg: VPEC_VERSION block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_VERSION__MINVER__SHIFT                        0x00000000
+#define VPEC_VERSION__MAJVER__SHIFT                        0x00000008
+#define VPEC_VERSION__REV__SHIFT                           0x00000010
+
+// reg: VPEC_UCODE_CHECKSUM block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_UCODE_CHECKSUM__DATA__SHIFT                   0x00000000
+
+// reg: VPEC_RB_RPTR_FETCH block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_RB_RPTR_FETCH__OFFSET__SHIFT                  0x00000002
+
+// reg: VPEC_RB_RPTR_FETCH_HI block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_RB_RPTR_FETCH_HI__OFFSET__SHIFT               0x00000000
+
+// reg: VPEC_IB_OFFSET_FETCH block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_IB_OFFSET_FETCH__OFFSET__SHIFT                0x00000002
+
+// reg: VPEC_CMDIB_OFFSET_FETCH block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_CMDIB_OFFSET_FETCH__OFFSET__SHIFT             0x00000002
+
+// reg: VPEC_3DLUTIB_OFFSET_FETCH block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_3DLUTIB_OFFSET_FETCH__OFFSET__SHIFT           0x00000002
+
+// reg: VPEC_ATOMIC_PREOP_LO block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_ATOMIC_PREOP_LO__DATA__SHIFT                  0x00000000
+
+// reg: VPEC_ATOMIC_PREOP_HI block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_ATOMIC_PREOP_HI__DATA__SHIFT                  0x00000000
+
+// reg: VPEC_CE_BUSY block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_CE_BUSY__CE_IP_PIPE0_BUSY__SHIFT              0x00000000
+#define VPEC_CE_BUSY__CE_IP_PIPE1_BUSY__SHIFT              0x00000001
+#define VPEC_CE_BUSY__CE_IP_PIPE2_BUSY__SHIFT              0x00000002
+#define VPEC_CE_BUSY__CE_IP_PIPE3_BUSY__SHIFT              0x00000003
+#define VPEC_CE_BUSY__CE_IP_PIPE4_BUSY__SHIFT              0x00000004
+#define VPEC_CE_BUSY__CE_IP_PIPE5_BUSY__SHIFT              0x00000005
+#define VPEC_CE_BUSY__CE_OP_PIPE0_BUSY__SHIFT              0x00000010
+#define VPEC_CE_BUSY__CE_OP_PIPE1_BUSY__SHIFT              0x00000011
+#define VPEC_CE_BUSY__CE_OP_PIPE2_BUSY__SHIFT              0x00000012
+#define VPEC_CE_BUSY__CE_OP_PIPE3_BUSY__SHIFT              0x00000013
+#define VPEC_CE_BUSY__CE_OP_PIPE4_BUSY__SHIFT              0x00000014
+#define VPEC_CE_BUSY__CE_OP_PIPE5_BUSY__SHIFT              0x00000015
+#define VPEC_CE_BUSY__CE_OP_PIPE6_BUSY__SHIFT              0x00000016
+#define VPEC_CE_BUSY__CE_OP_PIPE7_BUSY__SHIFT              0x00000017
+#define VPEC_CE_BUSY__CE_OP_PIPE8_BUSY__SHIFT              0x00000018
+#define VPEC_CE_BUSY__CE_OP_PIPE9_BUSY__SHIFT              0x00000019
+
+// reg: VPEC_F32_COUNTER block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_F32_COUNTER__VALUE__SHIFT                     0x00000000
+
+// reg: VPEC_HOLE_ADDR_LO block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_HOLE_ADDR_LO__VALUE__SHIFT                    0x00000000
+
+// reg: VPEC_HOLE_ADDR_HI block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_HOLE_ADDR_HI__VALUE__SHIFT                    0x00000000
+
+// reg: VPEC_ERROR_LOG block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_ERROR_LOG__OVERRIDE__SHIFT                    0x00000000
+#define VPEC_ERROR_LOG__STATUS__SHIFT                      0x00000010
+
+// reg: VPEC_INT_STATUS block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_INT_STATUS__DATA__SHIFT                       0x00000000
+
+// reg: VPEC_STATUS block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_STATUS__IDLE__SHIFT                           0x00000000
+#define VPEC_STATUS__REG_IDLE__SHIFT                       0x00000001
+#define VPEC_STATUS__RB_EMPTY__SHIFT                       0x00000002
+#define VPEC_STATUS__RB_FULL__SHIFT                        0x00000003
+#define VPEC_STATUS__RB_CMD_IDLE__SHIFT                    0x00000004
+#define VPEC_STATUS__RB_CMD_FULL__SHIFT                    0x00000005
+#define VPEC_STATUS__IB_CMD_IDLE__SHIFT                    0x00000006
+#define VPEC_STATUS__IB_CMD_FULL__SHIFT                    0x00000007
+#define VPEC_STATUS__BLOCK_IDLE__SHIFT                     0x00000008
+#define VPEC_STATUS__INSIDE_VPEP_CONFIG__SHIFT             0x00000009
+#define VPEC_STATUS__EX_IDLE__SHIFT                        0x0000000a
+#define VPEC_STATUS__INSIDE_VPEP_3DLUT_CONFIG__SHIFT       0x0000000b
+#define VPEC_STATUS__PACKET_READY__SHIFT                   0x0000000c
+#define VPEC_STATUS__MC_WR_IDLE__SHIFT                     0x0000000d
+#define VPEC_STATUS__SRBM_IDLE__SHIFT                      0x0000000e
+#define VPEC_STATUS__CONTEXT_EMPTY__SHIFT                  0x0000000f
+#define VPEC_STATUS__INSIDE_IB__SHIFT                      0x00000010
+#define VPEC_STATUS__RB_MC_RREQ_IDLE__SHIFT                0x00000011
+#define VPEC_STATUS__IB_MC_RREQ_IDLE__SHIFT                0x00000012
+#define VPEC_STATUS__MC_RD_IDLE__SHIFT                     0x00000013
+#define VPEC_STATUS__DELTA_RPTR_EMPTY__SHIFT               0x00000014
+#define VPEC_STATUS__MC_RD_RET_STALL__SHIFT                0x00000015
+#define VPEC_STATUS__LUTIB_CMD_IDLE__SHIFT                 0x00000016
+#define VPEC_STATUS__LUTIB_CMD_FULL__SHIFT                 0x00000017
+#define VPEC_STATUS__CMDIB_MC_RREQ_IDLE__SHIFT             0x00000018
+#define VPEC_STATUS__PREV_CMD_IDLE__SHIFT                  0x00000019
+#define VPEC_STATUS__CMDIB_CMD_IDLE__SHIFT                 0x0000001a
+#define VPEC_STATUS__CMDIB_CMD_FULL__SHIFT                 0x0000001b
+#define VPEC_STATUS__RESERVED_29_28__SHIFT                 0x0000001c
+#define VPEC_STATUS__INT_IDLE__SHIFT                       0x0000001e
+#define VPEC_STATUS__INT_REQ_STALL__SHIFT                  0x0000001f
+
+// reg: VPEC_STATUS1 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_STATUS1__EX_START__SHIFT                      0x00000000
+#define VPEC_STATUS1__VPEC_IDLE__SHIFT                     0x00000001
+#define VPEC_STATUS1__RESERVED_31_2__SHIFT                 0x00000002
+
+// reg: VPEC_STATUS2 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_STATUS2__ID__SHIFT                            0x00000000
+#define VPEC_STATUS2__TH0F32_INSTR_PTR__SHIFT              0x00000002
+#define VPEC_STATUS2__CMD_OP__SHIFT                        0x00000010
+
+// reg: VPEC_STATUS3 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_STATUS3__RESERVED_15_0__SHIFT                 0x00000000
+#define VPEC_STATUS3__RESERVED_19_16__SHIFT                0x00000010
+#define VPEC_STATUS3__EXCEPTION_IDLE__SHIFT                0x00000014
+#define VPEC_STATUS3__RESERVED_21_21__SHIFT                0x00000015
+#define VPEC_STATUS3__RESERVED_22_22__SHIFT                0x00000016
+#define VPEC_STATUS3__RESERVED_23_23__SHIFT                0x00000017
+#define VPEC_STATUS3__RESERVED_24_24__SHIFT                0x00000018
+#define VPEC_STATUS3__RESERVED_25_25__SHIFT                0x00000019
+#define VPEC_STATUS3__INT_QUEUE_ID__SHIFT                  0x0000001a
+#define VPEC_STATUS3__RESERVED_31_30__SHIFT                0x0000001e
+
+// reg: VPEC_STATUS4 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_STATUS4__IDLE__SHIFT                          0x00000000
+#define VPEC_STATUS4__IH_OUTSTANDING__SHIFT                0x00000002
+#define VPEC_STATUS4__RESERVED_3_3__SHIFT                  0x00000003
+#define VPEC_STATUS4__CH_RD_OUTSTANDING__SHIFT             0x00000004
+#define VPEC_STATUS4__CH_WR_OUTSTANDING__SHIFT             0x00000005
+#define VPEC_STATUS4__RESERVED_6_6__SHIFT                  0x00000006
+#define VPEC_STATUS4__RESERVED_7_7__SHIFT                  0x00000007
+#define VPEC_STATUS4__RESERVED_8_8__SHIFT                  0x00000008
+#define VPEC_STATUS4__RESERVED_9_9__SHIFT                  0x00000009
+#define VPEC_STATUS4__REG_POLLING__SHIFT                   0x0000000a
+#define VPEC_STATUS4__MEM_POLLING__SHIFT                   0x0000000b
+#define VPEC_STATUS4__VPEP_REG_RD_OUTSTANDING__SHIFT       0x0000000c
+#define VPEC_STATUS4__VPEP_REG_WR_OUTSTANDING__SHIFT       0x0000000d
+#define VPEC_STATUS4__RESERVED_15_14__SHIFT                0x0000000e
+#define VPEC_STATUS4__ACTIVE_QUEUE_ID__SHIFT               0x00000010
+#define VPEC_STATUS4__RESERVED_27_20__SHIFT                0x00000014
+
+// reg: VPEC_STATUS5 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_STATUS5__QUEUE0_RB_ENABLE_STATUS__SHIFT       0x00000000
+#define VPEC_STATUS5__QUEUE1_RB_ENABLE_STATUS__SHIFT       0x00000001
+#define VPEC_STATUS5__QUEUE2_RB_ENABLE_STATUS__SHIFT       0x00000002
+#define VPEC_STATUS5__QUEUE3_RB_ENABLE_STATUS__SHIFT       0x00000003
+#define VPEC_STATUS5__QUEUE4_RB_ENABLE_STATUS__SHIFT       0x00000004
+#define VPEC_STATUS5__QUEUE5_RB_ENABLE_STATUS__SHIFT       0x00000005
+#define VPEC_STATUS5__QUEUE6_RB_ENABLE_STATUS__SHIFT       0x00000006
+#define VPEC_STATUS5__QUEUE7_RB_ENABLE_STATUS__SHIFT       0x00000007
+#define VPEC_STATUS5__RESERVED_27_16__SHIFT                0x00000010
+
+// reg: VPEC_STATUS6 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_STATUS6__ID__SHIFT                            0x00000000
+#define VPEC_STATUS6__TH1F32_INSTR_PTR__SHIFT              0x00000002
+#define VPEC_STATUS6__TH1_EXCEPTION__SHIFT                 0x00000010
+
+// reg: VPEC_STATUS7 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_STATUS7__TH0_DBG_STATUS__SHIFT                0x00000000
+
+// reg: VPEC_STATUS8 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_STATUS8__CE_IP0_WREQ_IDLE__SHIFT              0x00000000
+#define VPEC_STATUS8__CE_IP0_WR_IDLE__SHIFT                0x00000001
+#define VPEC_STATUS8__CE_IP0_SPLIT_RD_IDLE__SHIFT          0x00000002
+#define VPEC_STATUS8__CE_IP0_SPLIT_WR_IDLE__SHIFT          0x00000003
+#define VPEC_STATUS8__CE_IP0_RREQ_IDLE__SHIFT              0x00000004
+#define VPEC_STATUS8__CE_IP0_OUT_IDLE__SHIFT               0x00000005
+#define VPEC_STATUS8__CE_IP0_IN_IDLE__SHIFT                0x00000006
+#define VPEC_STATUS8__CE_IP0_DST_IDLE__SHIFT               0x00000007
+#define VPEC_STATUS8__CE_IP0_CMD_IDLE__SHIFT               0x00000008
+#define VPEC_STATUS8__CE_IP1_WREQ_IDLE__SHIFT              0x00000009
+#define VPEC_STATUS8__CE_IP1_WR_IDLE__SHIFT                0x0000000a
+#define VPEC_STATUS8__CE_IP1_SPLIT_RD_IDLE__SHIFT          0x0000000b
+#define VPEC_STATUS8__CE_IP1_SPLIT_WR_IDLE__SHIFT          0x0000000c
+#define VPEC_STATUS8__CE_IP1_RREQ_IDLE__SHIFT              0x0000000d
+#define VPEC_STATUS8__CE_IP1_OUT_IDLE__SHIFT               0x0000000e
+#define VPEC_STATUS8__CE_IP1_IN_IDLE__SHIFT                0x0000000f
+#define VPEC_STATUS8__CE_IP1_DST_IDLE__SHIFT               0x00000010
+#define VPEC_STATUS8__CE_IP1_CMD_IDLE__SHIFT               0x00000011
+#define VPEC_STATUS8__CE_IP0_AFIFO_FULL__SHIFT             0x00000012
+#define VPEC_STATUS8__CE_IP0_CMD_INFO_FULL__SHIFT          0x00000013
+#define VPEC_STATUS8__CE_IP0_CMD_INFO1_FULL__SHIFT         0x00000014
+#define VPEC_STATUS8__CE_IP1_AFIFO_FULL__SHIFT             0x00000015
+#define VPEC_STATUS8__CE_IP1_CMD_INFO_FULL__SHIFT          0x00000016
+#define VPEC_STATUS8__CE_IP1_CMD_INFO1_FULL__SHIFT         0x00000017
+#define VPEC_STATUS8__CE_IP0_WR_STALL__SHIFT               0x00000018
+#define VPEC_STATUS8__CE_IP1_WR_STALL__SHIFT               0x00000019
+#define VPEC_STATUS8__CE_IP0_RD_STALL__SHIFT               0x0000001a
+#define VPEC_STATUS8__CE_IP1_RD_STALL__SHIFT               0x0000001b
+#define VPEC_STATUS8__RESERVED_31_28__SHIFT                0x0000001c
+
+// reg: VPEC_STATUS9 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_STATUS9__CE_IP2_WREQ_IDLE__SHIFT              0x00000000
+#define VPEC_STATUS9__CE_IP2_WR_IDLE__SHIFT                0x00000001
+#define VPEC_STATUS9__CE_IP2_SPLIT_RD_IDLE__SHIFT          0x00000002
+#define VPEC_STATUS9__CE_IP2_SPLIT_WR_IDLE__SHIFT          0x00000003
+#define VPEC_STATUS9__CE_IP2_RREQ_IDLE__SHIFT              0x00000004
+#define VPEC_STATUS9__CE_IP2_OUT_IDLE__SHIFT               0x00000005
+#define VPEC_STATUS9__CE_IP2_IN_IDLE__SHIFT                0x00000006
+#define VPEC_STATUS9__CE_IP2_DST_IDLE__SHIFT               0x00000007
+#define VPEC_STATUS9__CE_IP2_CMD_IDLE__SHIFT               0x00000008
+#define VPEC_STATUS9__CE_IP3_WREQ_IDLE__SHIFT              0x00000009
+#define VPEC_STATUS9__CE_IP3_WR_IDLE__SHIFT                0x0000000a
+#define VPEC_STATUS9__CE_IP3_SPLIT_RD_IDLE__SHIFT          0x0000000b
+#define VPEC_STATUS9__CE_IP3_SPLIT_WR_IDLE__SHIFT          0x0000000c
+#define VPEC_STATUS9__CE_IP3_RREQ_IDLE__SHIFT              0x0000000d
+#define VPEC_STATUS9__CE_IP3_OUT_IDLE__SHIFT               0x0000000e
+#define VPEC_STATUS9__CE_IP3_IN_IDLE__SHIFT                0x0000000f
+#define VPEC_STATUS9__CE_IP3_DST_IDLE__SHIFT               0x00000010
+#define VPEC_STATUS9__CE_IP3_CMD_IDLE__SHIFT               0x00000011
+#define VPEC_STATUS9__CE_IP2_AFIFO_FULL__SHIFT             0x00000012
+#define VPEC_STATUS9__CE_IP2_CMD_INFO_FULL__SHIFT          0x00000013
+#define VPEC_STATUS9__CE_IP2_CMD_INFO1_FULL__SHIFT         0x00000014
+#define VPEC_STATUS9__CE_IP3_AFIFO_FULL__SHIFT             0x00000015
+#define VPEC_STATUS9__CE_IP3_CMD_INFO_FULL__SHIFT          0x00000016
+#define VPEC_STATUS9__CE_IP3_CMD_INFO1_FULL__SHIFT         0x00000017
+#define VPEC_STATUS9__CE_IP2_WR_STALL__SHIFT               0x00000018
+#define VPEC_STATUS9__CE_IP3_WR_STALL__SHIFT               0x00000019
+#define VPEC_STATUS9__CE_IP2_RD_STALL__SHIFT               0x0000001a
+#define VPEC_STATUS9__CE_IP3_RD_STALL__SHIFT               0x0000001b
+#define VPEC_STATUS9__RESERVED_31_28__SHIFT                0x0000001c
+
+// reg: VPEC_STATUS10 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_STATUS10__CE_OP0_WR_IDLE__SHIFT               0x00000000
+#define VPEC_STATUS10__CE_OP0_CMD_IDLE__SHIFT              0x00000001
+#define VPEC_STATUS10__CE_OP1_WR_IDLE__SHIFT               0x00000002
+#define VPEC_STATUS10__CE_OP1_CMD_IDLE__SHIFT              0x00000003
+#define VPEC_STATUS10__CE_OP2_WR_IDLE__SHIFT               0x00000004
+#define VPEC_STATUS10__CE_OP2_CMD_IDLE__SHIFT              0x00000005
+#define VPEC_STATUS10__CE_OP3_WR_IDLE__SHIFT               0x00000006
+#define VPEC_STATUS10__CE_OP3_CMD_IDLE__SHIFT              0x00000007
+#define VPEC_STATUS10__CE_OP4_WR_IDLE__SHIFT               0x00000008
+#define VPEC_STATUS10__CE_OP4_CMD_IDLE__SHIFT              0x00000009
+#define VPEC_STATUS10__CE_OP5_WR_IDLE__SHIFT               0x0000000a
+#define VPEC_STATUS10__CE_OP5_CMD_IDLE__SHIFT              0x0000000b
+#define VPEC_STATUS10__CE_OP6_WR_IDLE__SHIFT               0x0000000c
+#define VPEC_STATUS10__CE_OP6_CMD_IDLE__SHIFT              0x0000000d
+#define VPEC_STATUS10__CE_OP7_WR_IDLE__SHIFT               0x0000000e
+#define VPEC_STATUS10__CE_OP7_CMD_IDLE__SHIFT              0x0000000f
+#define VPEC_STATUS10__CE_OP8_WR_IDLE__SHIFT               0x00000010
+#define VPEC_STATUS10__CE_OP8_CMD_IDLE__SHIFT              0x00000011
+#define VPEC_STATUS10__CE_OP9_WR_IDLE__SHIFT               0x00000012
+#define VPEC_STATUS10__CE_OP9_CMD_IDLE__SHIFT              0x00000013
+#define VPEC_STATUS10__RESERVED_31_28__SHIFT               0x0000001c
+
+// reg: VPEC_STATUS_DCC block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_STATUS_DCC__CE_IP0_MRQ_IDLE__SHIFT            0x00000000
+#define VPEC_STATUS_DCC__CE_IP0_DCCP_IDLE__SHIFT           0x00000001
+#define VPEC_STATUS_DCC__CE_IP0_DCC_RET_IDLE__SHIFT        0x00000002
+#define VPEC_STATUS_DCC__CE_IP1_MRQ_IDLE__SHIFT            0x00000003
+#define VPEC_STATUS_DCC__CE_IP1_DCCP_IDLE__SHIFT           0x00000004
+#define VPEC_STATUS_DCC__CE_IP1_DCC_RET_IDLE__SHIFT        0x00000005
+#define VPEC_STATUS_DCC__CE_IP2_MRQ_IDLE__SHIFT            0x00000006
+#define VPEC_STATUS_DCC__CE_IP2_DCCP_IDLE__SHIFT           0x00000007
+#define VPEC_STATUS_DCC__CE_IP2_DCC_RET_IDLE__SHIFT        0x00000008
+#define VPEC_STATUS_DCC__CE_IP3_MRQ_IDLE__SHIFT            0x00000009
+#define VPEC_STATUS_DCC__CE_IP3_DCCP_IDLE__SHIFT           0x0000000a
+#define VPEC_STATUS_DCC__CE_IP3_DCC_RET_IDLE__SHIFT        0x0000000b
+#define VPEC_STATUS_DCC__CE_IP4_MRQ_IDLE__SHIFT            0x0000000c
+#define VPEC_STATUS_DCC__CE_IP4_DCCP_IDLE__SHIFT           0x0000000d
+#define VPEC_STATUS_DCC__CE_IP4_DCC_RET_IDLE__SHIFT        0x0000000e
+#define VPEC_STATUS_DCC__CE_IP5_MRQ_IDLE__SHIFT            0x0000000f
+#define VPEC_STATUS_DCC__CE_IP5_DCCP_IDLE__SHIFT           0x00000010
+#define VPEC_STATUS_DCC__CE_IP5_DCC_RET_IDLE__SHIFT        0x00000011
+#define VPEC_STATUS_DCC__RESERVED_31_18__SHIFT             0x00000012
+
+// reg: VPEC_STATUS11 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_STATUS11__CE_IP4_WREQ_IDLE__SHIFT             0x00000000
+#define VPEC_STATUS11__CE_IP4_WR_IDLE__SHIFT               0x00000001
+#define VPEC_STATUS11__CE_IP4_SPLIT_RD_IDLE__SHIFT         0x00000002
+#define VPEC_STATUS11__CE_IP4_SPLIT_WR_IDLE__SHIFT         0x00000003
+#define VPEC_STATUS11__CE_IP4_RREQ_IDLE__SHIFT             0x00000004
+#define VPEC_STATUS11__CE_IP4_OUT_IDLE__SHIFT              0x00000005
+#define VPEC_STATUS11__CE_IP4_IN_IDLE__SHIFT               0x00000006
+#define VPEC_STATUS11__CE_IP4_DST_IDLE__SHIFT              0x00000007
+#define VPEC_STATUS11__CE_IP4_CMD_IDLE__SHIFT              0x00000008
+#define VPEC_STATUS11__CE_IP5_WREQ_IDLE__SHIFT             0x00000009
+#define VPEC_STATUS11__CE_IP5_WR_IDLE__SHIFT               0x0000000a
+#define VPEC_STATUS11__CE_IP5_SPLIT_RD_IDLE__SHIFT         0x0000000b
+#define VPEC_STATUS11__CE_IP5_SPLIT_WR_IDLE__SHIFT         0x0000000c
+#define VPEC_STATUS11__CE_IP5_RREQ_IDLE__SHIFT             0x0000000d
+#define VPEC_STATUS11__CE_IP5_OUT_IDLE__SHIFT              0x0000000e
+#define VPEC_STATUS11__CE_IP5_IN_IDLE__SHIFT               0x0000000f
+#define VPEC_STATUS11__CE_IP5_DST_IDLE__SHIFT              0x00000010
+#define VPEC_STATUS11__CE_IP5_CMD_IDLE__SHIFT              0x00000011
+#define VPEC_STATUS11__CE_IP4_AFIFO_FULL__SHIFT            0x00000012
+#define VPEC_STATUS11__CE_IP4_CMD_INFO_FULL__SHIFT         0x00000013
+#define VPEC_STATUS11__CE_IP4_CMD_INFO1_FULL__SHIFT        0x00000014
+#define VPEC_STATUS11__CE_IP5_AFIFO_FULL__SHIFT            0x00000015
+#define VPEC_STATUS11__CE_IP5_CMD_INFO_FULL__SHIFT         0x00000016
+#define VPEC_STATUS11__CE_IP5_CMD_INFO1_FULL__SHIFT        0x00000017
+#define VPEC_STATUS11__CE_IP4_WR_STALL__SHIFT              0x00000018
+#define VPEC_STATUS11__CE_IP5_WR_STALL__SHIFT              0x00000019
+#define VPEC_STATUS11__CE_IP4_RD_STALL__SHIFT              0x0000001a
+#define VPEC_STATUS11__CE_IP5_RD_STALL__SHIFT              0x0000001b
+#define VPEC_STATUS11__RESERVED_31_28__SHIFT               0x0000001c
+
+// reg: VPEC_INST block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_INST__ID__SHIFT                               0x00000000
+#define VPEC_INST__RESERVED__SHIFT                         0x00000003
+
+// reg: VPEC_QUEUE_STATUS0 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE_STATUS0__QUEUE0_STATUS__SHIFT           0x00000000
+#define VPEC_QUEUE_STATUS0__QUEUE1_STATUS__SHIFT           0x00000004
+#define VPEC_QUEUE_STATUS0__QUEUE2_STATUS__SHIFT           0x00000008
+#define VPEC_QUEUE_STATUS0__QUEUE3_STATUS__SHIFT           0x0000000c
+#define VPEC_QUEUE_STATUS0__QUEUE4_STATUS__SHIFT           0x00000010
+#define VPEC_QUEUE_STATUS0__QUEUE5_STATUS__SHIFT           0x00000014
+#define VPEC_QUEUE_STATUS0__QUEUE6_STATUS__SHIFT           0x00000018
+#define VPEC_QUEUE_STATUS0__QUEUE7_STATUS__SHIFT           0x0000001c
+
+// reg: VPEC_QUEUE_HANG_STATUS block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE_HANG_STATUS__F30T0_HANG__SHIFT          0x00000000
+#define VPEC_QUEUE_HANG_STATUS__CE_HANG__SHIFT             0x00000001
+#define VPEC_QUEUE_HANG_STATUS__EOF_MISMATCH__SHIFT        0x00000002
+#define VPEC_QUEUE_HANG_STATUS__INVALID_PKT_FIELD__SHIFT   0x00000003
+#define VPEC_QUEUE_HANG_STATUS__INVALID_VPEP_CONFIG_ADDR__SHIFT 0x00000004
+#define VPEC_QUEUE_HANG_STATUS__F32_ACCESS_OFF_VPDPP1__SHIFT 0x00000005
+#define VPEC_QUEUE_HANG_STATUS__RSMU_ACCESS_OFF_VPDPP1__SHIFT 0x00000006
+#define VPEC_QUEUE_HANG_STATUS__EOH_MISMATCH__SHIFT        0x00000007
+
+// reg: VPEC_DPM_IDLE_TIME block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_DPM_IDLE_TIME__VALUE__SHIFT                   0x00000000
+
+// reg: VPEC_DPM_BUSY_TIME block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_DPM_BUSY_TIME__VALUE__SHIFT                   0x00000000
+
+// reg: VPEC_DPM_IDLE_START_LO block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_DPM_IDLE_START_LO__VALUE__SHIFT               0x00000000
+
+// reg: VPEC_DPM_IDLE_START_HI block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_DPM_IDLE_START_HI__VALUE__SHIFT               0x00000000
+
+// reg: VPEC_DPM_BUSY_START_LO block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_DPM_BUSY_START_LO__VALUE__SHIFT               0x00000000
+
+// reg: VPEC_DPM_BUSY_START_HI block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_DPM_BUSY_START_HI__VALUE__SHIFT               0x00000000
+
+// reg: VPEC_DPM_LAST_REQ_TIMESTAMP block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_DPM_LAST_REQ_TIMESTAMP__VALUE__SHIFT          0x00000000
+
+// reg: VPEC_DPM_NEW_JOB_DUMMY3 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_DPM_NEW_JOB_DUMMY3__VALUE__SHIFT              0x00000000
+
+// reg: VPEC_DPM_STATE block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_DPM_STATE__VALUE__SHIFT                       0x00000000
+
+// reg: VPEC_DPM0_FREQ block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_DPM0_FREQ__VALUE__SHIFT                       0x00000000
+
+// reg: VPEC_DPM1_FREQ block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_DPM1_FREQ__VALUE__SHIFT                       0x00000000
+
+// reg: VPEC_DPM2_FREQ block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_DPM2_FREQ__VALUE__SHIFT                       0x00000000
+
+// reg: VPEC_DPM3_FREQ block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_DPM3_FREQ__VALUE__SHIFT                       0x00000000
+
+// reg: VPEC_DPM_THRESHOLD_SKIP block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_DPM_THRESHOLD_SKIP__VALUE__SHIFT              0x00000000
+
+// reg: VPEC_DPM_THRESHOLD_BUSY_OVERFLOW block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_DPM_THRESHOLD_BUSY_OVERFLOW__VALUE__SHIFT     0x00000000
+
+// reg: VPEC_DPM_CALC_BUSY_IN_POSTPROCESS block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_DPM_CALC_BUSY_IN_POSTPROCESS__VALUE__SHIFT    0x00000000
+
+// reg: VPEC_DPM_IN_CHECKIDLE_LOOP block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_DPM_IN_CHECKIDLE_LOOP__VALUE__SHIFT           0x00000000
+
+// reg: VPEC_DPM_THRESHOLD_IDLE_OVERFLOW block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_DPM_THRESHOLD_IDLE_OVERFLOW__VALUE__SHIFT     0x00000000
+
+// reg: VPEC_DPM_BUSY_CLAMP_COUNT block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_DPM_BUSY_CLAMP_COUNT__VALUE__SHIFT            0x00000000
+
+// reg: VPEC_DPM_IDLE_CLAMP_COUNT block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_DPM_IDLE_CLAMP_COUNT__VALUE__SHIFT            0x00000000
+
+// reg: VPEC_PG_CNTL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_PG_CNTL__PG_EN__SHIFT                         0x00000000
+#define VPEC_PG_CNTL__PG_HYSTERESIS__SHIFT                 0x00000001
+#define VPEC_PG_CNTL__PG1_EN__SHIFT                        0x00000008
+#define VPEC_PG_CNTL__PG1_HYSTERESIS__SHIFT                0x00000009
+#define VPEC_PG_CNTL__ZSTATES_ENABLE__SHIFT                0x00000010
+#define VPEC_PG_CNTL__ZSTATES_HYSTERESIS__SHIFT            0x00000011
+#define VPEC_PG_CNTL__FENCE_HYSTERESIS__SHIFT              0x00000018
+#define VPEC_PG_CNTL__CHECK_RSMU_UPON_POWER_UP__SHIFT      0x0000001c
+
+// reg: VPEC_PG_STATUS block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_PG_STATUS__PG_STATUS__SHIFT                   0x00000000
+#define VPEC_PG_STATUS__PG1_STATUS__SHIFT                  0x00000002
+
+// reg: VPEC_CLOCK_GATING_STATUS block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_CLOCK_GATING_STATUS__DYN_CLK_GATE_STATUS__SHIFT 0x00000000
+#define VPEC_CLOCK_GATING_STATUS__IP_PIPE0_CLK_GATE_STATUS__SHIFT 0x00000002
+#define VPEC_CLOCK_GATING_STATUS__IP_PIPE1_CLK_GATE_STATUS__SHIFT 0x00000003
+#define VPEC_CLOCK_GATING_STATUS__IP_PIPE2_CLK_GATE_STATUS__SHIFT 0x00000004
+#define VPEC_CLOCK_GATING_STATUS__IP_PIPE3_CLK_GATE_STATUS__SHIFT 0x00000005
+#define VPEC_CLOCK_GATING_STATUS__OP_PIPE0_CLK_GATE_STATUS__SHIFT 0x00000006
+#define VPEC_CLOCK_GATING_STATUS__OP_PIPE1_CLK_GATE_STATUS__SHIFT 0x00000007
+#define VPEC_CLOCK_GATING_STATUS__OP_PIPE2_CLK_GATE_STATUS__SHIFT 0x00000008
+#define VPEC_CLOCK_GATING_STATUS__OP_PIPE3_CLK_GATE_STATUS__SHIFT 0x00000009
+#define VPEC_CLOCK_GATING_STATUS__REG_CLK_GATE_STATUS__SHIFT 0x0000000a
+#define VPEC_CLOCK_GATING_STATUS__F32_CLK_GATE_STATUS__SHIFT 0x0000000b
+#define VPEC_CLOCK_GATING_STATUS__USRAM_CLK_GATE_STATUS__SHIFT 0x0000000c
+#define VPEC_CLOCK_GATING_STATUS__OP_PIPE4_CLK_GATE_STATUS__SHIFT 0x0000000d
+#define VPEC_CLOCK_GATING_STATUS__OP_PIPE5_CLK_GATE_STATUS__SHIFT 0x0000000e
+#define VPEC_CLOCK_GATING_STATUS__OP_PIPE6_CLK_GATE_STATUS__SHIFT 0x0000000f
+#define VPEC_CLOCK_GATING_STATUS__OP_PIPE7_CLK_GATE_STATUS__SHIFT 0x00000010
+#define VPEC_CLOCK_GATING_STATUS__IP_PIPE4_CLK_GATE_STATUS__SHIFT 0x00000011
+#define VPEC_CLOCK_GATING_STATUS__IP_PIPE5_CLK_GATE_STATUS__SHIFT 0x00000012
+#define VPEC_CLOCK_GATING_STATUS__OP_PIPE8_CLK_GATE_STATUS__SHIFT 0x00000013
+#define VPEC_CLOCK_GATING_STATUS__OP_PIPE9_CLK_GATE_STATUS__SHIFT 0x00000014
+
+// reg: VPEC_QUEUE0_RB_CNTL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE0_RB_CNTL__RB_ENABLE__SHIFT              0x00000000
+#define VPEC_QUEUE0_RB_CNTL__RB_SIZE__SHIFT                0x00000001
+#define VPEC_QUEUE0_RB_CNTL__WPTR_POLL_ENABLE__SHIFT       0x00000008
+#define VPEC_QUEUE0_RB_CNTL__RB_SWAP_ENABLE__SHIFT         0x00000009
+#define VPEC_QUEUE0_RB_CNTL__WPTR_POLL_SWAP_ENABLE__SHIFT  0x0000000a
+#define VPEC_QUEUE0_RB_CNTL__F32_WPTR_POLL_ENABLE__SHIFT   0x0000000b
+#define VPEC_QUEUE0_RB_CNTL__RPTR_WRITEBACK_ENABLE__SHIFT  0x0000000c
+#define VPEC_QUEUE0_RB_CNTL__RPTR_WRITEBACK_SWAP_ENABLE__SHIFT 0x0000000d
+#define VPEC_QUEUE0_RB_CNTL__RPTR_WRITEBACK_TIMER__SHIFT   0x00000010
+#define VPEC_QUEUE0_RB_CNTL__RB_PRIV__SHIFT                0x00000017
+#define VPEC_QUEUE0_RB_CNTL__RB_VMID__SHIFT                0x00000018
+
+// reg: VPEC_QUEUE0_SCHEDULE_CNTL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE0_SCHEDULE_CNTL__GLOBAL_ID__SHIFT        0x00000000
+#define VPEC_QUEUE0_SCHEDULE_CNTL__PROCESS_ID__SHIFT       0x00000002
+#define VPEC_QUEUE0_SCHEDULE_CNTL__LOCAL_ID__SHIFT         0x00000006
+#define VPEC_QUEUE0_SCHEDULE_CNTL__CONTEXT_QUANTUM__SHIFT  0x00000008
+
+// reg: VPEC_QUEUE0_RB_BASE block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE0_RB_BASE__ADDR__SHIFT                   0x00000000
+
+// reg: VPEC_QUEUE0_RB_BASE_HI block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE0_RB_BASE_HI__ADDR__SHIFT                0x00000000
+
+// reg: VPEC_QUEUE0_RB_RPTR block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE0_RB_RPTR__OFFSET__SHIFT                 0x00000000
+
+// reg: VPEC_QUEUE0_RB_RPTR_HI block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE0_RB_RPTR_HI__OFFSET__SHIFT              0x00000000
+
+// reg: VPEC_QUEUE0_RB_WPTR block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE0_RB_WPTR__OFFSET__SHIFT                 0x00000000
+
+// reg: VPEC_QUEUE0_RB_WPTR_HI block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE0_RB_WPTR_HI__OFFSET__SHIFT              0x00000000
+
+// reg: VPEC_QUEUE0_RB_RPTR_ADDR_HI block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE0_RB_RPTR_ADDR_HI__ADDR__SHIFT           0x00000000
+
+// reg: VPEC_QUEUE0_RB_RPTR_ADDR_LO block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE0_RB_RPTR_ADDR_LO__ADDR__SHIFT           0x00000002
+
+// reg: VPEC_QUEUE0_RB_AQL_CNTL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE0_RB_AQL_CNTL__AQL_ENABLE__SHIFT         0x00000000
+#define VPEC_QUEUE0_RB_AQL_CNTL__AQL_PACKET_SIZE__SHIFT    0x00000001
+#define VPEC_QUEUE0_RB_AQL_CNTL__PACKET_STEP__SHIFT        0x00000008
+#define VPEC_QUEUE0_RB_AQL_CNTL__MIDCMD_PREEMPT_ENABLE__SHIFT 0x00000010
+#define VPEC_QUEUE0_RB_AQL_CNTL__MIDCMD_PREEMPT_DATA_RESTORE__SHIFT 0x00000011
+#define VPEC_QUEUE0_RB_AQL_CNTL__OVERLAP_ENABLE__SHIFT     0x00000012
+
+// reg: VPEC_QUEUE0_MINOR_PTR_UPDATE block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE0_MINOR_PTR_UPDATE__ENABLE__SHIFT        0x00000000
+
+// reg: VPEC_QUEUE0_CD_INFO block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE0_CD_INFO__CD_INFO__SHIFT                0x00000000
+
+// reg: VPEC_QUEUE0_RB_PREEMPT block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE0_RB_PREEMPT__PREEMPT_REQ__SHIFT         0x00000000
+
+// reg: VPEC_QUEUE0_SKIP_CNTL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE0_SKIP_CNTL__SKIP_COUNT__SHIFT           0x00000000
+
+// reg: VPEC_QUEUE0_DOORBELL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE0_DOORBELL__ENABLE__SHIFT                0x0000001c
+#define VPEC_QUEUE0_DOORBELL__CAPTURED__SHIFT              0x0000001e
+
+// reg: VPEC_QUEUE0_DOORBELL_OFFSET block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE0_DOORBELL_OFFSET__OFFSET__SHIFT         0x00000002
+
+// reg: VPEC_QUEUE0_DUMMY0 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE0_DUMMY0__DUMMY__SHIFT                   0x00000000
+
+// reg: VPEC_QUEUE0_DUMMY1 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE0_DUMMY1__VALUE__SHIFT                   0x00000000
+
+// reg: VPEC_QUEUE0_DUMMY2 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE0_DUMMY2__VALUE__SHIFT                   0x00000000
+
+// reg: VPEC_QUEUE0_DUMMY3 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE0_DUMMY3__VALUE__SHIFT                   0x00000000
+
+// reg: VPEC_QUEUE0_DUMMY4 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE0_DUMMY4__VALUE__SHIFT                   0x00000000
+
+// reg: VPEC_QUEUE0_IB_CNTL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE0_IB_CNTL__IB_ENABLE__SHIFT              0x00000000
+#define VPEC_QUEUE0_IB_CNTL__SWITCH_INSIDE_IB__SHIFT       0x00000008
+#define VPEC_QUEUE0_IB_CNTL__CMD_VMID__SHIFT               0x00000010
+#define VPEC_QUEUE0_IB_CNTL__IB_PRIV__SHIFT                0x0000001f
+
+// reg: VPEC_QUEUE0_IB_RPTR block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE0_IB_RPTR__OFFSET__SHIFT                 0x00000002
+
+// reg: VPEC_QUEUE0_IB_OFFSET block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE0_IB_OFFSET__OFFSET__SHIFT               0x00000002
+
+// reg: VPEC_QUEUE0_IB_BASE_LO block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE0_IB_BASE_LO__ADDR__SHIFT                0x00000005
+
+// reg: VPEC_QUEUE0_IB_BASE_HI block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE0_IB_BASE_HI__ADDR__SHIFT                0x00000000
+
+// reg: VPEC_QUEUE0_IB_SIZE block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE0_IB_SIZE__SIZE__SHIFT                   0x00000000
+
+// reg: VPEC_QUEUE0_CMDIB_CNTL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE0_CMDIB_CNTL__IB_ENABLE__SHIFT           0x00000000
+#define VPEC_QUEUE0_CMDIB_CNTL__IB_SWAP_ENABLE__SHIFT      0x00000004
+#define VPEC_QUEUE0_CMDIB_CNTL__SWITCH_INSIDE_IB__SHIFT    0x00000008
+#define VPEC_QUEUE0_CMDIB_CNTL__CMD_VMID__SHIFT            0x00000010
+#define VPEC_QUEUE0_CMDIB_CNTL__IB_PRIV__SHIFT             0x0000001f
+
+// reg: VPEC_QUEUE0_CMDIB_RPTR block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE0_CMDIB_RPTR__OFFSET__SHIFT              0x00000002
+
+// reg: VPEC_QUEUE0_CMDIB_OFFSET block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE0_CMDIB_OFFSET__OFFSET__SHIFT            0x00000002
+
+// reg: VPEC_QUEUE0_CMDIB_BASE_LO block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE0_CMDIB_BASE_LO__ADDR__SHIFT             0x00000005
+
+// reg: VPEC_QUEUE0_CMDIB_BASE_HI block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE0_CMDIB_BASE_HI__ADDR__SHIFT             0x00000000
+
+// reg: VPEC_QUEUE0_CMDIB_SIZE block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE0_CMDIB_SIZE__SIZE__SHIFT                0x00000000
+
+// reg: VPEC_QUEUE0_3DLUTIB_CNTL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE0_3DLUTIB_CNTL__IB_ENABLE__SHIFT         0x00000000
+#define VPEC_QUEUE0_3DLUTIB_CNTL__SWITCH_INSIDE_IB__SHIFT  0x00000008
+#define VPEC_QUEUE0_3DLUTIB_CNTL__CMD_VMID__SHIFT          0x00000010
+#define VPEC_QUEUE0_3DLUTIB_CNTL__IB_PRIV__SHIFT           0x0000001f
+
+// reg: VPEC_QUEUE0_3DLUTIB_RPTR block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE0_3DLUTIB_RPTR__OFFSET__SHIFT            0x00000002
+
+// reg: VPEC_QUEUE0_3DLUTIB_OFFSET block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE0_3DLUTIB_OFFSET__OFFSET__SHIFT          0x00000002
+
+// reg: VPEC_QUEUE0_3DLUTIB_BASE_LO block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE0_3DLUTIB_BASE_LO__ADDR__SHIFT           0x00000005
+
+// reg: VPEC_QUEUE0_3DLUTIB_BASE_HI block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE0_3DLUTIB_BASE_HI__ADDR__SHIFT           0x00000000
+
+// reg: VPEC_QUEUE0_3DLUTIB_SIZE block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE0_3DLUTIB_SIZE__SIZE__SHIFT              0x00000000
+
+// reg: VPEC_QUEUE0_CSA_ADDR_LO block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE0_CSA_ADDR_LO__ADDR__SHIFT               0x00000000
+
+// reg: VPEC_QUEUE0_CSA_ADDR_HI block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE0_CSA_ADDR_HI__ADDR__SHIFT               0x00000000
+
+// reg: VPEC_QUEUE0_CONTEXT_STATUS block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE0_CONTEXT_STATUS__SELECTED__SHIFT        0x00000000
+#define VPEC_QUEUE0_CONTEXT_STATUS__USE_IB__SHIFT          0x00000001
+#define VPEC_QUEUE0_CONTEXT_STATUS__IDLE__SHIFT            0x00000002
+#define VPEC_QUEUE0_CONTEXT_STATUS__EXPIRED__SHIFT         0x00000003
+#define VPEC_QUEUE0_CONTEXT_STATUS__EXCEPTION__SHIFT       0x00000004
+#define VPEC_QUEUE0_CONTEXT_STATUS__CTXSW_ABLE__SHIFT      0x00000007
+#define VPEC_QUEUE0_CONTEXT_STATUS__USE_3DLUTIB__SHIFT     0x00000008
+#define VPEC_QUEUE0_CONTEXT_STATUS__PREEMPT_DISABLE__SHIFT 0x0000000a
+#define VPEC_QUEUE0_CONTEXT_STATUS__RPTR_WB_IDLE__SHIFT    0x0000000b
+#define VPEC_QUEUE0_CONTEXT_STATUS__WPTR_UPDATE_PENDING__SHIFT 0x0000000c
+#define VPEC_QUEUE0_CONTEXT_STATUS__WPTR_UPDATE_FAIL_COUNT__SHIFT 0x00000010
+
+// reg: VPEC_QUEUE0_DOORBELL_LOG block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE0_DOORBELL_LOG__BE_ERROR__SHIFT          0x00000000
+#define VPEC_QUEUE0_DOORBELL_LOG__DATA__SHIFT              0x00000002
+
+// reg: VPEC_QUEUE0_IB_SUB_REMAIN block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE0_IB_SUB_REMAIN__SIZE__SHIFT             0x00000000
+
+// reg: VPEC_QUEUE0_PREEMPT block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE0_PREEMPT__IB_PREEMPT__SHIFT             0x00000000
+
+// reg: VPEC_QUEUE0_LOG0BUFFER_CFG block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE0_LOG0BUFFER_CFG__ENABLE__SHIFT          0x00000000
+#define VPEC_QUEUE0_LOG0BUFFER_CFG__FIRST_FREE_ENTRY__SHIFT 0x00000004
+#define VPEC_QUEUE0_LOG0BUFFER_CFG__LAST_FREE_ENTRY__SHIFT 0x0000000c
+#define VPEC_QUEUE0_LOG0BUFFER_CFG__RESERVED__SHIFT        0x00000014
+
+// reg: VPEC_QUEUE0_LOG1BUFFER_CFG block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE0_LOG1BUFFER_CFG__ENABLE__SHIFT          0x00000000
+#define VPEC_QUEUE0_LOG1BUFFER_CFG__PARTIAL_ENTRY__SHIFT   0x00000001
+#define VPEC_QUEUE0_LOG1BUFFER_CFG__FIRST_FREE_ENTRY__SHIFT 0x00000004
+#define VPEC_QUEUE0_LOG1BUFFER_CFG__LAST_FREE_ENTRY__SHIFT 0x0000000c
+#define VPEC_QUEUE0_LOG1BUFFER_CFG__RESERVED__SHIFT        0x00000014
+
+// reg: VPEC_QUEUE1_RB_CNTL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE1_RB_CNTL__RB_ENABLE__SHIFT              0x00000000
+#define VPEC_QUEUE1_RB_CNTL__RB_SIZE__SHIFT                0x00000001
+#define VPEC_QUEUE1_RB_CNTL__WPTR_POLL_ENABLE__SHIFT       0x00000008
+#define VPEC_QUEUE1_RB_CNTL__RB_SWAP_ENABLE__SHIFT         0x00000009
+#define VPEC_QUEUE1_RB_CNTL__WPTR_POLL_SWAP_ENABLE__SHIFT  0x0000000a
+#define VPEC_QUEUE1_RB_CNTL__F32_WPTR_POLL_ENABLE__SHIFT   0x0000000b
+#define VPEC_QUEUE1_RB_CNTL__RPTR_WRITEBACK_ENABLE__SHIFT  0x0000000c
+#define VPEC_QUEUE1_RB_CNTL__RPTR_WRITEBACK_SWAP_ENABLE__SHIFT 0x0000000d
+#define VPEC_QUEUE1_RB_CNTL__RPTR_WRITEBACK_TIMER__SHIFT   0x00000010
+#define VPEC_QUEUE1_RB_CNTL__RB_PRIV__SHIFT                0x00000017
+#define VPEC_QUEUE1_RB_CNTL__RB_VMID__SHIFT                0x00000018
+
+// reg: VPEC_QUEUE1_SCHEDULE_CNTL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE1_SCHEDULE_CNTL__GLOBAL_ID__SHIFT        0x00000000
+#define VPEC_QUEUE1_SCHEDULE_CNTL__PROCESS_ID__SHIFT       0x00000002
+#define VPEC_QUEUE1_SCHEDULE_CNTL__LOCAL_ID__SHIFT         0x00000006
+#define VPEC_QUEUE1_SCHEDULE_CNTL__CONTEXT_QUANTUM__SHIFT  0x00000008
+
+// reg: VPEC_QUEUE1_RB_BASE block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE1_RB_BASE__ADDR__SHIFT                   0x00000000
+
+// reg: VPEC_QUEUE1_RB_BASE_HI block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE1_RB_BASE_HI__ADDR__SHIFT                0x00000000
+
+// reg: VPEC_QUEUE1_RB_RPTR block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE1_RB_RPTR__OFFSET__SHIFT                 0x00000000
+
+// reg: VPEC_QUEUE1_RB_RPTR_HI block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE1_RB_RPTR_HI__OFFSET__SHIFT              0x00000000
+
+// reg: VPEC_QUEUE1_RB_WPTR block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE1_RB_WPTR__OFFSET__SHIFT                 0x00000000
+
+// reg: VPEC_QUEUE1_RB_WPTR_HI block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE1_RB_WPTR_HI__OFFSET__SHIFT              0x00000000
+
+// reg: VPEC_QUEUE1_RB_RPTR_ADDR_HI block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE1_RB_RPTR_ADDR_HI__ADDR__SHIFT           0x00000000
+
+// reg: VPEC_QUEUE1_RB_RPTR_ADDR_LO block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE1_RB_RPTR_ADDR_LO__ADDR__SHIFT           0x00000002
+
+// reg: VPEC_QUEUE1_RB_AQL_CNTL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE1_RB_AQL_CNTL__AQL_ENABLE__SHIFT         0x00000000
+#define VPEC_QUEUE1_RB_AQL_CNTL__AQL_PACKET_SIZE__SHIFT    0x00000001
+#define VPEC_QUEUE1_RB_AQL_CNTL__PACKET_STEP__SHIFT        0x00000008
+#define VPEC_QUEUE1_RB_AQL_CNTL__MIDCMD_PREEMPT_ENABLE__SHIFT 0x00000010
+#define VPEC_QUEUE1_RB_AQL_CNTL__MIDCMD_PREEMPT_DATA_RESTORE__SHIFT 0x00000011
+#define VPEC_QUEUE1_RB_AQL_CNTL__OVERLAP_ENABLE__SHIFT     0x00000012
+
+// reg: VPEC_QUEUE1_MINOR_PTR_UPDATE block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE1_MINOR_PTR_UPDATE__ENABLE__SHIFT        0x00000000
+
+// reg: VPEC_QUEUE1_CD_INFO block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE1_CD_INFO__CD_INFO__SHIFT                0x00000000
+
+// reg: VPEC_QUEUE1_RB_PREEMPT block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE1_RB_PREEMPT__PREEMPT_REQ__SHIFT         0x00000000
+
+// reg: VPEC_QUEUE1_SKIP_CNTL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE1_SKIP_CNTL__SKIP_COUNT__SHIFT           0x00000000
+
+// reg: VPEC_QUEUE1_DOORBELL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE1_DOORBELL__ENABLE__SHIFT                0x0000001c
+#define VPEC_QUEUE1_DOORBELL__CAPTURED__SHIFT              0x0000001e
+
+// reg: VPEC_QUEUE1_DOORBELL_OFFSET block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE1_DOORBELL_OFFSET__OFFSET__SHIFT         0x00000002
+
+// reg: VPEC_QUEUE1_DUMMY0 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE1_DUMMY0__DUMMY__SHIFT                   0x00000000
+
+// reg: VPEC_QUEUE1_DUMMY1 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE1_DUMMY1__VALUE__SHIFT                   0x00000000
+
+// reg: VPEC_QUEUE1_DUMMY2 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE1_DUMMY2__VALUE__SHIFT                   0x00000000
+
+// reg: VPEC_QUEUE1_DUMMY3 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE1_DUMMY3__VALUE__SHIFT                   0x00000000
+
+// reg: VPEC_QUEUE1_DUMMY4 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE1_DUMMY4__VALUE__SHIFT                   0x00000000
+
+// reg: VPEC_QUEUE1_IB_CNTL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE1_IB_CNTL__IB_ENABLE__SHIFT              0x00000000
+#define VPEC_QUEUE1_IB_CNTL__SWITCH_INSIDE_IB__SHIFT       0x00000008
+#define VPEC_QUEUE1_IB_CNTL__CMD_VMID__SHIFT               0x00000010
+#define VPEC_QUEUE1_IB_CNTL__IB_PRIV__SHIFT                0x0000001f
+
+// reg: VPEC_QUEUE1_IB_RPTR block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE1_IB_RPTR__OFFSET__SHIFT                 0x00000002
+
+// reg: VPEC_QUEUE1_IB_OFFSET block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE1_IB_OFFSET__OFFSET__SHIFT               0x00000002
+
+// reg: VPEC_QUEUE1_IB_BASE_LO block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE1_IB_BASE_LO__ADDR__SHIFT                0x00000005
+
+// reg: VPEC_QUEUE1_IB_BASE_HI block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE1_IB_BASE_HI__ADDR__SHIFT                0x00000000
+
+// reg: VPEC_QUEUE1_IB_SIZE block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE1_IB_SIZE__SIZE__SHIFT                   0x00000000
+
+// reg: VPEC_QUEUE1_CMDIB_CNTL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE1_CMDIB_CNTL__IB_ENABLE__SHIFT           0x00000000
+#define VPEC_QUEUE1_CMDIB_CNTL__IB_SWAP_ENABLE__SHIFT      0x00000004
+#define VPEC_QUEUE1_CMDIB_CNTL__SWITCH_INSIDE_IB__SHIFT    0x00000008
+#define VPEC_QUEUE1_CMDIB_CNTL__CMD_VMID__SHIFT            0x00000010
+#define VPEC_QUEUE1_CMDIB_CNTL__IB_PRIV__SHIFT             0x0000001f
+
+// reg: VPEC_QUEUE1_CMDIB_RPTR block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE1_CMDIB_RPTR__OFFSET__SHIFT              0x00000002
+
+// reg: VPEC_QUEUE1_CMDIB_OFFSET block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE1_CMDIB_OFFSET__OFFSET__SHIFT            0x00000002
+
+// reg: VPEC_QUEUE1_CMDIB_BASE_LO block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE1_CMDIB_BASE_LO__ADDR__SHIFT             0x00000005
+
+// reg: VPEC_QUEUE1_CMDIB_BASE_HI block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE1_CMDIB_BASE_HI__ADDR__SHIFT             0x00000000
+
+// reg: VPEC_QUEUE1_CMDIB_SIZE block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE1_CMDIB_SIZE__SIZE__SHIFT                0x00000000
+
+// reg: VPEC_QUEUE1_3DLUTIB_CNTL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE1_3DLUTIB_CNTL__IB_ENABLE__SHIFT         0x00000000
+#define VPEC_QUEUE1_3DLUTIB_CNTL__SWITCH_INSIDE_IB__SHIFT  0x00000008
+#define VPEC_QUEUE1_3DLUTIB_CNTL__CMD_VMID__SHIFT          0x00000010
+#define VPEC_QUEUE1_3DLUTIB_CNTL__IB_PRIV__SHIFT           0x0000001f
+
+// reg: VPEC_QUEUE1_3DLUTIB_RPTR block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE1_3DLUTIB_RPTR__OFFSET__SHIFT            0x00000002
+
+// reg: VPEC_QUEUE1_3DLUTIB_OFFSET block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE1_3DLUTIB_OFFSET__OFFSET__SHIFT          0x00000002
+
+// reg: VPEC_QUEUE1_3DLUTIB_BASE_LO block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE1_3DLUTIB_BASE_LO__ADDR__SHIFT           0x00000005
+
+// reg: VPEC_QUEUE1_3DLUTIB_BASE_HI block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE1_3DLUTIB_BASE_HI__ADDR__SHIFT           0x00000000
+
+// reg: VPEC_QUEUE1_3DLUTIB_SIZE block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE1_3DLUTIB_SIZE__SIZE__SHIFT              0x00000000
+
+// reg: VPEC_QUEUE1_CSA_ADDR_LO block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE1_CSA_ADDR_LO__ADDR__SHIFT               0x00000000
+
+// reg: VPEC_QUEUE1_CSA_ADDR_HI block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE1_CSA_ADDR_HI__ADDR__SHIFT               0x00000000
+
+// reg: VPEC_QUEUE1_CONTEXT_STATUS block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE1_CONTEXT_STATUS__SELECTED__SHIFT        0x00000000
+#define VPEC_QUEUE1_CONTEXT_STATUS__USE_IB__SHIFT          0x00000001
+#define VPEC_QUEUE1_CONTEXT_STATUS__IDLE__SHIFT            0x00000002
+#define VPEC_QUEUE1_CONTEXT_STATUS__EXPIRED__SHIFT         0x00000003
+#define VPEC_QUEUE1_CONTEXT_STATUS__EXCEPTION__SHIFT       0x00000004
+#define VPEC_QUEUE1_CONTEXT_STATUS__CTXSW_ABLE__SHIFT      0x00000007
+#define VPEC_QUEUE1_CONTEXT_STATUS__USE_3DLUTIB__SHIFT     0x00000008
+#define VPEC_QUEUE1_CONTEXT_STATUS__PREEMPT_DISABLE__SHIFT 0x0000000a
+#define VPEC_QUEUE1_CONTEXT_STATUS__RPTR_WB_IDLE__SHIFT    0x0000000b
+#define VPEC_QUEUE1_CONTEXT_STATUS__WPTR_UPDATE_PENDING__SHIFT 0x0000000c
+#define VPEC_QUEUE1_CONTEXT_STATUS__WPTR_UPDATE_FAIL_COUNT__SHIFT 0x00000010
+
+// reg: VPEC_QUEUE1_DOORBELL_LOG block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE1_DOORBELL_LOG__BE_ERROR__SHIFT          0x00000000
+#define VPEC_QUEUE1_DOORBELL_LOG__DATA__SHIFT              0x00000002
+
+// reg: VPEC_QUEUE1_IB_SUB_REMAIN block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE1_IB_SUB_REMAIN__SIZE__SHIFT             0x00000000
+
+// reg: VPEC_QUEUE1_PREEMPT block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE1_PREEMPT__IB_PREEMPT__SHIFT             0x00000000
+
+// reg: VPEC_QUEUE1_LOG0BUFFER_CFG block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE1_LOG0BUFFER_CFG__ENABLE__SHIFT          0x00000000
+#define VPEC_QUEUE1_LOG0BUFFER_CFG__FIRST_FREE_ENTRY__SHIFT 0x00000004
+#define VPEC_QUEUE1_LOG0BUFFER_CFG__LAST_FREE_ENTRY__SHIFT 0x0000000c
+#define VPEC_QUEUE1_LOG0BUFFER_CFG__RESERVED__SHIFT        0x00000014
+
+// reg: VPEC_QUEUE1_LOG1BUFFER_CFG block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE1_LOG1BUFFER_CFG__ENABLE__SHIFT          0x00000000
+#define VPEC_QUEUE1_LOG1BUFFER_CFG__PARTIAL_ENTRY__SHIFT   0x00000001
+#define VPEC_QUEUE1_LOG1BUFFER_CFG__FIRST_FREE_ENTRY__SHIFT 0x00000004
+#define VPEC_QUEUE1_LOG1BUFFER_CFG__LAST_FREE_ENTRY__SHIFT 0x0000000c
+#define VPEC_QUEUE1_LOG1BUFFER_CFG__RESERVED__SHIFT        0x00000014
+
+// reg: VPEC_QUEUE2_RB_CNTL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE2_RB_CNTL__RB_ENABLE__SHIFT              0x00000000
+#define VPEC_QUEUE2_RB_CNTL__RB_SIZE__SHIFT                0x00000001
+#define VPEC_QUEUE2_RB_CNTL__WPTR_POLL_ENABLE__SHIFT       0x00000008
+#define VPEC_QUEUE2_RB_CNTL__RB_SWAP_ENABLE__SHIFT         0x00000009
+#define VPEC_QUEUE2_RB_CNTL__WPTR_POLL_SWAP_ENABLE__SHIFT  0x0000000a
+#define VPEC_QUEUE2_RB_CNTL__F32_WPTR_POLL_ENABLE__SHIFT   0x0000000b
+#define VPEC_QUEUE2_RB_CNTL__RPTR_WRITEBACK_ENABLE__SHIFT  0x0000000c
+#define VPEC_QUEUE2_RB_CNTL__RPTR_WRITEBACK_SWAP_ENABLE__SHIFT 0x0000000d
+#define VPEC_QUEUE2_RB_CNTL__RPTR_WRITEBACK_TIMER__SHIFT   0x00000010
+#define VPEC_QUEUE2_RB_CNTL__RB_PRIV__SHIFT                0x00000017
+#define VPEC_QUEUE2_RB_CNTL__RB_VMID__SHIFT                0x00000018
+
+// reg: VPEC_QUEUE2_SCHEDULE_CNTL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE2_SCHEDULE_CNTL__GLOBAL_ID__SHIFT        0x00000000
+#define VPEC_QUEUE2_SCHEDULE_CNTL__PROCESS_ID__SHIFT       0x00000002
+#define VPEC_QUEUE2_SCHEDULE_CNTL__LOCAL_ID__SHIFT         0x00000006
+#define VPEC_QUEUE2_SCHEDULE_CNTL__CONTEXT_QUANTUM__SHIFT  0x00000008
+
+// reg: VPEC_QUEUE2_RB_BASE block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE2_RB_BASE__ADDR__SHIFT                   0x00000000
+
+// reg: VPEC_QUEUE2_RB_BASE_HI block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE2_RB_BASE_HI__ADDR__SHIFT                0x00000000
+
+// reg: VPEC_QUEUE2_RB_RPTR block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE2_RB_RPTR__OFFSET__SHIFT                 0x00000000
+
+// reg: VPEC_QUEUE2_RB_RPTR_HI block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE2_RB_RPTR_HI__OFFSET__SHIFT              0x00000000
+
+// reg: VPEC_QUEUE2_RB_WPTR block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE2_RB_WPTR__OFFSET__SHIFT                 0x00000000
+
+// reg: VPEC_QUEUE2_RB_WPTR_HI block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE2_RB_WPTR_HI__OFFSET__SHIFT              0x00000000
+
+// reg: VPEC_QUEUE2_RB_RPTR_ADDR_HI block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE2_RB_RPTR_ADDR_HI__ADDR__SHIFT           0x00000000
+
+// reg: VPEC_QUEUE2_RB_RPTR_ADDR_LO block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE2_RB_RPTR_ADDR_LO__ADDR__SHIFT           0x00000002
+
+// reg: VPEC_QUEUE2_RB_AQL_CNTL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE2_RB_AQL_CNTL__AQL_ENABLE__SHIFT         0x00000000
+#define VPEC_QUEUE2_RB_AQL_CNTL__AQL_PACKET_SIZE__SHIFT    0x00000001
+#define VPEC_QUEUE2_RB_AQL_CNTL__PACKET_STEP__SHIFT        0x00000008
+#define VPEC_QUEUE2_RB_AQL_CNTL__MIDCMD_PREEMPT_ENABLE__SHIFT 0x00000010
+#define VPEC_QUEUE2_RB_AQL_CNTL__MIDCMD_PREEMPT_DATA_RESTORE__SHIFT 0x00000011
+#define VPEC_QUEUE2_RB_AQL_CNTL__OVERLAP_ENABLE__SHIFT     0x00000012
+
+// reg: VPEC_QUEUE2_MINOR_PTR_UPDATE block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE2_MINOR_PTR_UPDATE__ENABLE__SHIFT        0x00000000
+
+// reg: VPEC_QUEUE2_CD_INFO block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE2_CD_INFO__CD_INFO__SHIFT                0x00000000
+
+// reg: VPEC_QUEUE2_RB_PREEMPT block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE2_RB_PREEMPT__PREEMPT_REQ__SHIFT         0x00000000
+
+// reg: VPEC_QUEUE2_SKIP_CNTL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE2_SKIP_CNTL__SKIP_COUNT__SHIFT           0x00000000
+
+// reg: VPEC_QUEUE2_DOORBELL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE2_DOORBELL__ENABLE__SHIFT                0x0000001c
+#define VPEC_QUEUE2_DOORBELL__CAPTURED__SHIFT              0x0000001e
+
+// reg: VPEC_QUEUE2_DOORBELL_OFFSET block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE2_DOORBELL_OFFSET__OFFSET__SHIFT         0x00000002
+
+// reg: VPEC_QUEUE2_DUMMY0 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE2_DUMMY0__DUMMY__SHIFT                   0x00000000
+
+// reg: VPEC_QUEUE2_DUMMY1 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE2_DUMMY1__VALUE__SHIFT                   0x00000000
+
+// reg: VPEC_QUEUE2_DUMMY2 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE2_DUMMY2__VALUE__SHIFT                   0x00000000
+
+// reg: VPEC_QUEUE2_DUMMY3 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE2_DUMMY3__VALUE__SHIFT                   0x00000000
+
+// reg: VPEC_QUEUE2_DUMMY4 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE2_DUMMY4__VALUE__SHIFT                   0x00000000
+
+// reg: VPEC_QUEUE2_IB_CNTL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE2_IB_CNTL__IB_ENABLE__SHIFT              0x00000000
+#define VPEC_QUEUE2_IB_CNTL__SWITCH_INSIDE_IB__SHIFT       0x00000008
+#define VPEC_QUEUE2_IB_CNTL__CMD_VMID__SHIFT               0x00000010
+#define VPEC_QUEUE2_IB_CNTL__IB_PRIV__SHIFT                0x0000001f
+
+// reg: VPEC_QUEUE2_IB_RPTR block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE2_IB_RPTR__OFFSET__SHIFT                 0x00000002
+
+// reg: VPEC_QUEUE2_IB_OFFSET block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE2_IB_OFFSET__OFFSET__SHIFT               0x00000002
+
+// reg: VPEC_QUEUE2_IB_BASE_LO block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE2_IB_BASE_LO__ADDR__SHIFT                0x00000005
+
+// reg: VPEC_QUEUE2_IB_BASE_HI block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE2_IB_BASE_HI__ADDR__SHIFT                0x00000000
+
+// reg: VPEC_QUEUE2_IB_SIZE block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE2_IB_SIZE__SIZE__SHIFT                   0x00000000
+
+// reg: VPEC_QUEUE2_CMDIB_CNTL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE2_CMDIB_CNTL__IB_ENABLE__SHIFT           0x00000000
+#define VPEC_QUEUE2_CMDIB_CNTL__IB_SWAP_ENABLE__SHIFT      0x00000004
+#define VPEC_QUEUE2_CMDIB_CNTL__SWITCH_INSIDE_IB__SHIFT    0x00000008
+#define VPEC_QUEUE2_CMDIB_CNTL__CMD_VMID__SHIFT            0x00000010
+#define VPEC_QUEUE2_CMDIB_CNTL__IB_PRIV__SHIFT             0x0000001f
+
+// reg: VPEC_QUEUE2_CMDIB_RPTR block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE2_CMDIB_RPTR__OFFSET__SHIFT              0x00000002
+
+// reg: VPEC_QUEUE2_CMDIB_OFFSET block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE2_CMDIB_OFFSET__OFFSET__SHIFT            0x00000002
+
+// reg: VPEC_QUEUE2_CMDIB_BASE_LO block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE2_CMDIB_BASE_LO__ADDR__SHIFT             0x00000005
+
+// reg: VPEC_QUEUE2_CMDIB_BASE_HI block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE2_CMDIB_BASE_HI__ADDR__SHIFT             0x00000000
+
+// reg: VPEC_QUEUE2_CMDIB_SIZE block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE2_CMDIB_SIZE__SIZE__SHIFT                0x00000000
+
+// reg: VPEC_QUEUE2_3DLUTIB_CNTL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE2_3DLUTIB_CNTL__IB_ENABLE__SHIFT         0x00000000
+#define VPEC_QUEUE2_3DLUTIB_CNTL__SWITCH_INSIDE_IB__SHIFT  0x00000008
+#define VPEC_QUEUE2_3DLUTIB_CNTL__CMD_VMID__SHIFT          0x00000010
+#define VPEC_QUEUE2_3DLUTIB_CNTL__IB_PRIV__SHIFT           0x0000001f
+
+// reg: VPEC_QUEUE2_3DLUTIB_RPTR block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE2_3DLUTIB_RPTR__OFFSET__SHIFT            0x00000002
+
+// reg: VPEC_QUEUE2_3DLUTIB_OFFSET block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE2_3DLUTIB_OFFSET__OFFSET__SHIFT          0x00000002
+
+// reg: VPEC_QUEUE2_3DLUTIB_BASE_LO block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE2_3DLUTIB_BASE_LO__ADDR__SHIFT           0x00000005
+
+// reg: VPEC_QUEUE2_3DLUTIB_BASE_HI block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE2_3DLUTIB_BASE_HI__ADDR__SHIFT           0x00000000
+
+// reg: VPEC_QUEUE2_3DLUTIB_SIZE block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE2_3DLUTIB_SIZE__SIZE__SHIFT              0x00000000
+
+// reg: VPEC_QUEUE2_CSA_ADDR_LO block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE2_CSA_ADDR_LO__ADDR__SHIFT               0x00000000
+
+// reg: VPEC_QUEUE2_CSA_ADDR_HI block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE2_CSA_ADDR_HI__ADDR__SHIFT               0x00000000
+
+// reg: VPEC_QUEUE2_CONTEXT_STATUS block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE2_CONTEXT_STATUS__SELECTED__SHIFT        0x00000000
+#define VPEC_QUEUE2_CONTEXT_STATUS__USE_IB__SHIFT          0x00000001
+#define VPEC_QUEUE2_CONTEXT_STATUS__IDLE__SHIFT            0x00000002
+#define VPEC_QUEUE2_CONTEXT_STATUS__EXPIRED__SHIFT         0x00000003
+#define VPEC_QUEUE2_CONTEXT_STATUS__EXCEPTION__SHIFT       0x00000004
+#define VPEC_QUEUE2_CONTEXT_STATUS__CTXSW_ABLE__SHIFT      0x00000007
+#define VPEC_QUEUE2_CONTEXT_STATUS__USE_3DLUTIB__SHIFT     0x00000008
+#define VPEC_QUEUE2_CONTEXT_STATUS__PREEMPT_DISABLE__SHIFT 0x0000000a
+#define VPEC_QUEUE2_CONTEXT_STATUS__RPTR_WB_IDLE__SHIFT    0x0000000b
+#define VPEC_QUEUE2_CONTEXT_STATUS__WPTR_UPDATE_PENDING__SHIFT 0x0000000c
+#define VPEC_QUEUE2_CONTEXT_STATUS__WPTR_UPDATE_FAIL_COUNT__SHIFT 0x00000010
+
+// reg: VPEC_QUEUE2_DOORBELL_LOG block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE2_DOORBELL_LOG__BE_ERROR__SHIFT          0x00000000
+#define VPEC_QUEUE2_DOORBELL_LOG__DATA__SHIFT              0x00000002
+
+// reg: VPEC_QUEUE2_IB_SUB_REMAIN block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE2_IB_SUB_REMAIN__SIZE__SHIFT             0x00000000
+
+// reg: VPEC_QUEUE2_PREEMPT block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE2_PREEMPT__IB_PREEMPT__SHIFT             0x00000000
+
+// reg: VPEC_QUEUE2_LOG0BUFFER_CFG block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE2_LOG0BUFFER_CFG__ENABLE__SHIFT          0x00000000
+#define VPEC_QUEUE2_LOG0BUFFER_CFG__FIRST_FREE_ENTRY__SHIFT 0x00000004
+#define VPEC_QUEUE2_LOG0BUFFER_CFG__LAST_FREE_ENTRY__SHIFT 0x0000000c
+#define VPEC_QUEUE2_LOG0BUFFER_CFG__RESERVED__SHIFT        0x00000014
+
+// reg: VPEC_QUEUE2_LOG1BUFFER_CFG block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE2_LOG1BUFFER_CFG__ENABLE__SHIFT          0x00000000
+#define VPEC_QUEUE2_LOG1BUFFER_CFG__PARTIAL_ENTRY__SHIFT   0x00000001
+#define VPEC_QUEUE2_LOG1BUFFER_CFG__FIRST_FREE_ENTRY__SHIFT 0x00000004
+#define VPEC_QUEUE2_LOG1BUFFER_CFG__LAST_FREE_ENTRY__SHIFT 0x0000000c
+#define VPEC_QUEUE2_LOG1BUFFER_CFG__RESERVED__SHIFT        0x00000014
+
+// reg: VPEC_QUEUE3_RB_CNTL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE3_RB_CNTL__RB_ENABLE__SHIFT              0x00000000
+#define VPEC_QUEUE3_RB_CNTL__RB_SIZE__SHIFT                0x00000001
+#define VPEC_QUEUE3_RB_CNTL__WPTR_POLL_ENABLE__SHIFT       0x00000008
+#define VPEC_QUEUE3_RB_CNTL__RB_SWAP_ENABLE__SHIFT         0x00000009
+#define VPEC_QUEUE3_RB_CNTL__WPTR_POLL_SWAP_ENABLE__SHIFT  0x0000000a
+#define VPEC_QUEUE3_RB_CNTL__F32_WPTR_POLL_ENABLE__SHIFT   0x0000000b
+#define VPEC_QUEUE3_RB_CNTL__RPTR_WRITEBACK_ENABLE__SHIFT  0x0000000c
+#define VPEC_QUEUE3_RB_CNTL__RPTR_WRITEBACK_SWAP_ENABLE__SHIFT 0x0000000d
+#define VPEC_QUEUE3_RB_CNTL__RPTR_WRITEBACK_TIMER__SHIFT   0x00000010
+#define VPEC_QUEUE3_RB_CNTL__RB_PRIV__SHIFT                0x00000017
+#define VPEC_QUEUE3_RB_CNTL__RB_VMID__SHIFT                0x00000018
+
+// reg: VPEC_QUEUE3_SCHEDULE_CNTL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE3_SCHEDULE_CNTL__GLOBAL_ID__SHIFT        0x00000000
+#define VPEC_QUEUE3_SCHEDULE_CNTL__PROCESS_ID__SHIFT       0x00000002
+#define VPEC_QUEUE3_SCHEDULE_CNTL__LOCAL_ID__SHIFT         0x00000006
+#define VPEC_QUEUE3_SCHEDULE_CNTL__CONTEXT_QUANTUM__SHIFT  0x00000008
+
+// reg: VPEC_QUEUE3_RB_BASE block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE3_RB_BASE__ADDR__SHIFT                   0x00000000
+
+// reg: VPEC_QUEUE3_RB_BASE_HI block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE3_RB_BASE_HI__ADDR__SHIFT                0x00000000
+
+// reg: VPEC_QUEUE3_RB_RPTR block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE3_RB_RPTR__OFFSET__SHIFT                 0x00000000
+
+// reg: VPEC_QUEUE3_RB_RPTR_HI block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE3_RB_RPTR_HI__OFFSET__SHIFT              0x00000000
+
+// reg: VPEC_QUEUE3_RB_WPTR block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE3_RB_WPTR__OFFSET__SHIFT                 0x00000000
+
+// reg: VPEC_QUEUE3_RB_WPTR_HI block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE3_RB_WPTR_HI__OFFSET__SHIFT              0x00000000
+
+// reg: VPEC_QUEUE3_RB_RPTR_ADDR_HI block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE3_RB_RPTR_ADDR_HI__ADDR__SHIFT           0x00000000
+
+// reg: VPEC_QUEUE3_RB_RPTR_ADDR_LO block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE3_RB_RPTR_ADDR_LO__ADDR__SHIFT           0x00000002
+
+// reg: VPEC_QUEUE3_RB_AQL_CNTL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE3_RB_AQL_CNTL__AQL_ENABLE__SHIFT         0x00000000
+#define VPEC_QUEUE3_RB_AQL_CNTL__AQL_PACKET_SIZE__SHIFT    0x00000001
+#define VPEC_QUEUE3_RB_AQL_CNTL__PACKET_STEP__SHIFT        0x00000008
+#define VPEC_QUEUE3_RB_AQL_CNTL__MIDCMD_PREEMPT_ENABLE__SHIFT 0x00000010
+#define VPEC_QUEUE3_RB_AQL_CNTL__MIDCMD_PREEMPT_DATA_RESTORE__SHIFT 0x00000011
+#define VPEC_QUEUE3_RB_AQL_CNTL__OVERLAP_ENABLE__SHIFT     0x00000012
+
+// reg: VPEC_QUEUE3_MINOR_PTR_UPDATE block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE3_MINOR_PTR_UPDATE__ENABLE__SHIFT        0x00000000
+
+// reg: VPEC_QUEUE3_CD_INFO block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE3_CD_INFO__CD_INFO__SHIFT                0x00000000
+
+// reg: VPEC_QUEUE3_RB_PREEMPT block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE3_RB_PREEMPT__PREEMPT_REQ__SHIFT         0x00000000
+
+// reg: VPEC_QUEUE3_SKIP_CNTL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE3_SKIP_CNTL__SKIP_COUNT__SHIFT           0x00000000
+
+// reg: VPEC_QUEUE3_DOORBELL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE3_DOORBELL__ENABLE__SHIFT                0x0000001c
+#define VPEC_QUEUE3_DOORBELL__CAPTURED__SHIFT              0x0000001e
+
+// reg: VPEC_QUEUE3_DOORBELL_OFFSET block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE3_DOORBELL_OFFSET__OFFSET__SHIFT         0x00000002
+
+// reg: VPEC_QUEUE3_DUMMY0 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE3_DUMMY0__DUMMY__SHIFT                   0x00000000
+
+// reg: VPEC_QUEUE3_DUMMY1 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE3_DUMMY1__VALUE__SHIFT                   0x00000000
+
+// reg: VPEC_QUEUE3_DUMMY2 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE3_DUMMY2__VALUE__SHIFT                   0x00000000
+
+// reg: VPEC_QUEUE3_DUMMY3 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE3_DUMMY3__VALUE__SHIFT                   0x00000000
+
+// reg: VPEC_QUEUE3_DUMMY4 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE3_DUMMY4__VALUE__SHIFT                   0x00000000
+
+// reg: VPEC_QUEUE3_IB_CNTL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE3_IB_CNTL__IB_ENABLE__SHIFT              0x00000000
+#define VPEC_QUEUE3_IB_CNTL__SWITCH_INSIDE_IB__SHIFT       0x00000008
+#define VPEC_QUEUE3_IB_CNTL__CMD_VMID__SHIFT               0x00000010
+#define VPEC_QUEUE3_IB_CNTL__IB_PRIV__SHIFT                0x0000001f
+
+// reg: VPEC_QUEUE3_IB_RPTR block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE3_IB_RPTR__OFFSET__SHIFT                 0x00000002
+
+// reg: VPEC_QUEUE3_IB_OFFSET block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE3_IB_OFFSET__OFFSET__SHIFT               0x00000002
+
+// reg: VPEC_QUEUE3_IB_BASE_LO block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE3_IB_BASE_LO__ADDR__SHIFT                0x00000005
+
+// reg: VPEC_QUEUE3_IB_BASE_HI block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE3_IB_BASE_HI__ADDR__SHIFT                0x00000000
+
+// reg: VPEC_QUEUE3_IB_SIZE block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE3_IB_SIZE__SIZE__SHIFT                   0x00000000
+
+// reg: VPEC_QUEUE3_CMDIB_CNTL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE3_CMDIB_CNTL__IB_ENABLE__SHIFT           0x00000000
+#define VPEC_QUEUE3_CMDIB_CNTL__IB_SWAP_ENABLE__SHIFT      0x00000004
+#define VPEC_QUEUE3_CMDIB_CNTL__SWITCH_INSIDE_IB__SHIFT    0x00000008
+#define VPEC_QUEUE3_CMDIB_CNTL__CMD_VMID__SHIFT            0x00000010
+#define VPEC_QUEUE3_CMDIB_CNTL__IB_PRIV__SHIFT             0x0000001f
+
+// reg: VPEC_QUEUE3_CMDIB_RPTR block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE3_CMDIB_RPTR__OFFSET__SHIFT              0x00000002
+
+// reg: VPEC_QUEUE3_CMDIB_OFFSET block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE3_CMDIB_OFFSET__OFFSET__SHIFT            0x00000002
+
+// reg: VPEC_QUEUE3_CMDIB_BASE_LO block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE3_CMDIB_BASE_LO__ADDR__SHIFT             0x00000005
+
+// reg: VPEC_QUEUE3_CMDIB_BASE_HI block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE3_CMDIB_BASE_HI__ADDR__SHIFT             0x00000000
+
+// reg: VPEC_QUEUE3_CMDIB_SIZE block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE3_CMDIB_SIZE__SIZE__SHIFT                0x00000000
+
+// reg: VPEC_QUEUE3_3DLUTIB_CNTL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE3_3DLUTIB_CNTL__IB_ENABLE__SHIFT         0x00000000
+#define VPEC_QUEUE3_3DLUTIB_CNTL__SWITCH_INSIDE_IB__SHIFT  0x00000008
+#define VPEC_QUEUE3_3DLUTIB_CNTL__CMD_VMID__SHIFT          0x00000010
+#define VPEC_QUEUE3_3DLUTIB_CNTL__IB_PRIV__SHIFT           0x0000001f
+
+// reg: VPEC_QUEUE3_3DLUTIB_RPTR block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE3_3DLUTIB_RPTR__OFFSET__SHIFT            0x00000002
+
+// reg: VPEC_QUEUE3_3DLUTIB_OFFSET block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE3_3DLUTIB_OFFSET__OFFSET__SHIFT          0x00000002
+
+// reg: VPEC_QUEUE3_3DLUTIB_BASE_LO block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE3_3DLUTIB_BASE_LO__ADDR__SHIFT           0x00000005
+
+// reg: VPEC_QUEUE3_3DLUTIB_BASE_HI block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE3_3DLUTIB_BASE_HI__ADDR__SHIFT           0x00000000
+
+// reg: VPEC_QUEUE3_3DLUTIB_SIZE block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE3_3DLUTIB_SIZE__SIZE__SHIFT              0x00000000
+
+// reg: VPEC_QUEUE3_CSA_ADDR_LO block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE3_CSA_ADDR_LO__ADDR__SHIFT               0x00000000
+
+// reg: VPEC_QUEUE3_CSA_ADDR_HI block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE3_CSA_ADDR_HI__ADDR__SHIFT               0x00000000
+
+// reg: VPEC_QUEUE3_CONTEXT_STATUS block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE3_CONTEXT_STATUS__SELECTED__SHIFT        0x00000000
+#define VPEC_QUEUE3_CONTEXT_STATUS__USE_IB__SHIFT          0x00000001
+#define VPEC_QUEUE3_CONTEXT_STATUS__IDLE__SHIFT            0x00000002
+#define VPEC_QUEUE3_CONTEXT_STATUS__EXPIRED__SHIFT         0x00000003
+#define VPEC_QUEUE3_CONTEXT_STATUS__EXCEPTION__SHIFT       0x00000004
+#define VPEC_QUEUE3_CONTEXT_STATUS__CTXSW_ABLE__SHIFT      0x00000007
+#define VPEC_QUEUE3_CONTEXT_STATUS__USE_3DLUTIB__SHIFT     0x00000008
+#define VPEC_QUEUE3_CONTEXT_STATUS__PREEMPT_DISABLE__SHIFT 0x0000000a
+#define VPEC_QUEUE3_CONTEXT_STATUS__RPTR_WB_IDLE__SHIFT    0x0000000b
+#define VPEC_QUEUE3_CONTEXT_STATUS__WPTR_UPDATE_PENDING__SHIFT 0x0000000c
+#define VPEC_QUEUE3_CONTEXT_STATUS__WPTR_UPDATE_FAIL_COUNT__SHIFT 0x00000010
+
+// reg: VPEC_QUEUE3_DOORBELL_LOG block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE3_DOORBELL_LOG__BE_ERROR__SHIFT          0x00000000
+#define VPEC_QUEUE3_DOORBELL_LOG__DATA__SHIFT              0x00000002
+
+// reg: VPEC_QUEUE3_IB_SUB_REMAIN block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE3_IB_SUB_REMAIN__SIZE__SHIFT             0x00000000
+
+// reg: VPEC_QUEUE3_PREEMPT block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE3_PREEMPT__IB_PREEMPT__SHIFT             0x00000000
+
+// reg: VPEC_QUEUE3_LOG0BUFFER_CFG block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE3_LOG0BUFFER_CFG__ENABLE__SHIFT          0x00000000
+#define VPEC_QUEUE3_LOG0BUFFER_CFG__FIRST_FREE_ENTRY__SHIFT 0x00000004
+#define VPEC_QUEUE3_LOG0BUFFER_CFG__LAST_FREE_ENTRY__SHIFT 0x0000000c
+#define VPEC_QUEUE3_LOG0BUFFER_CFG__RESERVED__SHIFT        0x00000014
+
+// reg: VPEC_QUEUE3_LOG1BUFFER_CFG block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE3_LOG1BUFFER_CFG__ENABLE__SHIFT          0x00000000
+#define VPEC_QUEUE3_LOG1BUFFER_CFG__PARTIAL_ENTRY__SHIFT   0x00000001
+#define VPEC_QUEUE3_LOG1BUFFER_CFG__FIRST_FREE_ENTRY__SHIFT 0x00000004
+#define VPEC_QUEUE3_LOG1BUFFER_CFG__LAST_FREE_ENTRY__SHIFT 0x0000000c
+#define VPEC_QUEUE3_LOG1BUFFER_CFG__RESERVED__SHIFT        0x00000014
+
+// reg: VPEC_QUEUE4_RB_CNTL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE4_RB_CNTL__RB_ENABLE__SHIFT              0x00000000
+#define VPEC_QUEUE4_RB_CNTL__RB_SIZE__SHIFT                0x00000001
+#define VPEC_QUEUE4_RB_CNTL__WPTR_POLL_ENABLE__SHIFT       0x00000008
+#define VPEC_QUEUE4_RB_CNTL__RB_SWAP_ENABLE__SHIFT         0x00000009
+#define VPEC_QUEUE4_RB_CNTL__WPTR_POLL_SWAP_ENABLE__SHIFT  0x0000000a
+#define VPEC_QUEUE4_RB_CNTL__F32_WPTR_POLL_ENABLE__SHIFT   0x0000000b
+#define VPEC_QUEUE4_RB_CNTL__RPTR_WRITEBACK_ENABLE__SHIFT  0x0000000c
+#define VPEC_QUEUE4_RB_CNTL__RPTR_WRITEBACK_SWAP_ENABLE__SHIFT 0x0000000d
+#define VPEC_QUEUE4_RB_CNTL__RPTR_WRITEBACK_TIMER__SHIFT   0x00000010
+#define VPEC_QUEUE4_RB_CNTL__RB_PRIV__SHIFT                0x00000017
+#define VPEC_QUEUE4_RB_CNTL__RB_VMID__SHIFT                0x00000018
+
+// reg: VPEC_QUEUE4_SCHEDULE_CNTL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE4_SCHEDULE_CNTL__GLOBAL_ID__SHIFT        0x00000000
+#define VPEC_QUEUE4_SCHEDULE_CNTL__PROCESS_ID__SHIFT       0x00000002
+#define VPEC_QUEUE4_SCHEDULE_CNTL__LOCAL_ID__SHIFT         0x00000006
+#define VPEC_QUEUE4_SCHEDULE_CNTL__CONTEXT_QUANTUM__SHIFT  0x00000008
+
+// reg: VPEC_QUEUE4_RB_BASE block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE4_RB_BASE__ADDR__SHIFT                   0x00000000
+
+// reg: VPEC_QUEUE4_RB_BASE_HI block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE4_RB_BASE_HI__ADDR__SHIFT                0x00000000
+
+// reg: VPEC_QUEUE4_RB_RPTR block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE4_RB_RPTR__OFFSET__SHIFT                 0x00000000
+
+// reg: VPEC_QUEUE4_RB_RPTR_HI block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE4_RB_RPTR_HI__OFFSET__SHIFT              0x00000000
+
+// reg: VPEC_QUEUE4_RB_WPTR block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE4_RB_WPTR__OFFSET__SHIFT                 0x00000000
+
+// reg: VPEC_QUEUE4_RB_WPTR_HI block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE4_RB_WPTR_HI__OFFSET__SHIFT              0x00000000
+
+// reg: VPEC_QUEUE4_RB_RPTR_ADDR_HI block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE4_RB_RPTR_ADDR_HI__ADDR__SHIFT           0x00000000
+
+// reg: VPEC_QUEUE4_RB_RPTR_ADDR_LO block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE4_RB_RPTR_ADDR_LO__ADDR__SHIFT           0x00000002
+
+// reg: VPEC_QUEUE4_RB_AQL_CNTL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE4_RB_AQL_CNTL__AQL_ENABLE__SHIFT         0x00000000
+#define VPEC_QUEUE4_RB_AQL_CNTL__AQL_PACKET_SIZE__SHIFT    0x00000001
+#define VPEC_QUEUE4_RB_AQL_CNTL__PACKET_STEP__SHIFT        0x00000008
+#define VPEC_QUEUE4_RB_AQL_CNTL__MIDCMD_PREEMPT_ENABLE__SHIFT 0x00000010
+#define VPEC_QUEUE4_RB_AQL_CNTL__MIDCMD_PREEMPT_DATA_RESTORE__SHIFT 0x00000011
+#define VPEC_QUEUE4_RB_AQL_CNTL__OVERLAP_ENABLE__SHIFT     0x00000012
+
+// reg: VPEC_QUEUE4_MINOR_PTR_UPDATE block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE4_MINOR_PTR_UPDATE__ENABLE__SHIFT        0x00000000
+
+// reg: VPEC_QUEUE4_CD_INFO block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE4_CD_INFO__CD_INFO__SHIFT                0x00000000
+
+// reg: VPEC_QUEUE4_RB_PREEMPT block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE4_RB_PREEMPT__PREEMPT_REQ__SHIFT         0x00000000
+
+// reg: VPEC_QUEUE4_SKIP_CNTL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE4_SKIP_CNTL__SKIP_COUNT__SHIFT           0x00000000
+
+// reg: VPEC_QUEUE4_DOORBELL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE4_DOORBELL__ENABLE__SHIFT                0x0000001c
+#define VPEC_QUEUE4_DOORBELL__CAPTURED__SHIFT              0x0000001e
+
+// reg: VPEC_QUEUE4_DOORBELL_OFFSET block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE4_DOORBELL_OFFSET__OFFSET__SHIFT         0x00000002
+
+// reg: VPEC_QUEUE4_DUMMY0 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE4_DUMMY0__DUMMY__SHIFT                   0x00000000
+
+// reg: VPEC_QUEUE4_DUMMY1 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE4_DUMMY1__VALUE__SHIFT                   0x00000000
+
+// reg: VPEC_QUEUE4_DUMMY2 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE4_DUMMY2__VALUE__SHIFT                   0x00000000
+
+// reg: VPEC_QUEUE4_DUMMY3 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE4_DUMMY3__VALUE__SHIFT                   0x00000000
+
+// reg: VPEC_QUEUE4_DUMMY4 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE4_DUMMY4__VALUE__SHIFT                   0x00000000
+
+// reg: VPEC_QUEUE4_IB_CNTL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE4_IB_CNTL__IB_ENABLE__SHIFT              0x00000000
+#define VPEC_QUEUE4_IB_CNTL__SWITCH_INSIDE_IB__SHIFT       0x00000008
+#define VPEC_QUEUE4_IB_CNTL__CMD_VMID__SHIFT               0x00000010
+#define VPEC_QUEUE4_IB_CNTL__IB_PRIV__SHIFT                0x0000001f
+
+// reg: VPEC_QUEUE4_IB_RPTR block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE4_IB_RPTR__OFFSET__SHIFT                 0x00000002
+
+// reg: VPEC_QUEUE4_IB_OFFSET block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE4_IB_OFFSET__OFFSET__SHIFT               0x00000002
+
+// reg: VPEC_QUEUE4_IB_BASE_LO block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE4_IB_BASE_LO__ADDR__SHIFT                0x00000005
+
+// reg: VPEC_QUEUE4_IB_BASE_HI block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE4_IB_BASE_HI__ADDR__SHIFT                0x00000000
+
+// reg: VPEC_QUEUE4_IB_SIZE block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE4_IB_SIZE__SIZE__SHIFT                   0x00000000
+
+// reg: VPEC_QUEUE4_CMDIB_CNTL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE4_CMDIB_CNTL__IB_ENABLE__SHIFT           0x00000000
+#define VPEC_QUEUE4_CMDIB_CNTL__IB_SWAP_ENABLE__SHIFT      0x00000004
+#define VPEC_QUEUE4_CMDIB_CNTL__SWITCH_INSIDE_IB__SHIFT    0x00000008
+#define VPEC_QUEUE4_CMDIB_CNTL__CMD_VMID__SHIFT            0x00000010
+#define VPEC_QUEUE4_CMDIB_CNTL__IB_PRIV__SHIFT             0x0000001f
+
+// reg: VPEC_QUEUE4_CMDIB_RPTR block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE4_CMDIB_RPTR__OFFSET__SHIFT              0x00000002
+
+// reg: VPEC_QUEUE4_CMDIB_OFFSET block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE4_CMDIB_OFFSET__OFFSET__SHIFT            0x00000002
+
+// reg: VPEC_QUEUE4_CMDIB_BASE_LO block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE4_CMDIB_BASE_LO__ADDR__SHIFT             0x00000005
+
+// reg: VPEC_QUEUE4_CMDIB_BASE_HI block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE4_CMDIB_BASE_HI__ADDR__SHIFT             0x00000000
+
+// reg: VPEC_QUEUE4_CMDIB_SIZE block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE4_CMDIB_SIZE__SIZE__SHIFT                0x00000000
+
+// reg: VPEC_QUEUE4_3DLUTIB_CNTL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE4_3DLUTIB_CNTL__IB_ENABLE__SHIFT         0x00000000
+#define VPEC_QUEUE4_3DLUTIB_CNTL__SWITCH_INSIDE_IB__SHIFT  0x00000008
+#define VPEC_QUEUE4_3DLUTIB_CNTL__CMD_VMID__SHIFT          0x00000010
+#define VPEC_QUEUE4_3DLUTIB_CNTL__IB_PRIV__SHIFT           0x0000001f
+
+// reg: VPEC_QUEUE4_3DLUTIB_RPTR block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE4_3DLUTIB_RPTR__OFFSET__SHIFT            0x00000002
+
+// reg: VPEC_QUEUE4_3DLUTIB_OFFSET block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE4_3DLUTIB_OFFSET__OFFSET__SHIFT          0x00000002
+
+// reg: VPEC_QUEUE4_3DLUTIB_BASE_LO block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE4_3DLUTIB_BASE_LO__ADDR__SHIFT           0x00000005
+
+// reg: VPEC_QUEUE4_3DLUTIB_BASE_HI block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE4_3DLUTIB_BASE_HI__ADDR__SHIFT           0x00000000
+
+// reg: VPEC_QUEUE4_3DLUTIB_SIZE block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE4_3DLUTIB_SIZE__SIZE__SHIFT              0x00000000
+
+// reg: VPEC_QUEUE4_CSA_ADDR_LO block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE4_CSA_ADDR_LO__ADDR__SHIFT               0x00000000
+
+// reg: VPEC_QUEUE4_CSA_ADDR_HI block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE4_CSA_ADDR_HI__ADDR__SHIFT               0x00000000
+
+// reg: VPEC_QUEUE4_CONTEXT_STATUS block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE4_CONTEXT_STATUS__SELECTED__SHIFT        0x00000000
+#define VPEC_QUEUE4_CONTEXT_STATUS__USE_IB__SHIFT          0x00000001
+#define VPEC_QUEUE4_CONTEXT_STATUS__IDLE__SHIFT            0x00000002
+#define VPEC_QUEUE4_CONTEXT_STATUS__EXPIRED__SHIFT         0x00000003
+#define VPEC_QUEUE4_CONTEXT_STATUS__EXCEPTION__SHIFT       0x00000004
+#define VPEC_QUEUE4_CONTEXT_STATUS__CTXSW_ABLE__SHIFT      0x00000007
+#define VPEC_QUEUE4_CONTEXT_STATUS__USE_3DLUTIB__SHIFT     0x00000008
+#define VPEC_QUEUE4_CONTEXT_STATUS__PREEMPT_DISABLE__SHIFT 0x0000000a
+#define VPEC_QUEUE4_CONTEXT_STATUS__RPTR_WB_IDLE__SHIFT    0x0000000b
+#define VPEC_QUEUE4_CONTEXT_STATUS__WPTR_UPDATE_PENDING__SHIFT 0x0000000c
+#define VPEC_QUEUE4_CONTEXT_STATUS__WPTR_UPDATE_FAIL_COUNT__SHIFT 0x00000010
+
+// reg: VPEC_QUEUE4_DOORBELL_LOG block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE4_DOORBELL_LOG__BE_ERROR__SHIFT          0x00000000
+#define VPEC_QUEUE4_DOORBELL_LOG__DATA__SHIFT              0x00000002
+
+// reg: VPEC_QUEUE4_IB_SUB_REMAIN block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE4_IB_SUB_REMAIN__SIZE__SHIFT             0x00000000
+
+// reg: VPEC_QUEUE4_PREEMPT block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE4_PREEMPT__IB_PREEMPT__SHIFT             0x00000000
+
+// reg: VPEC_QUEUE4_LOG0BUFFER_CFG block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE4_LOG0BUFFER_CFG__ENABLE__SHIFT          0x00000000
+#define VPEC_QUEUE4_LOG0BUFFER_CFG__FIRST_FREE_ENTRY__SHIFT 0x00000004
+#define VPEC_QUEUE4_LOG0BUFFER_CFG__LAST_FREE_ENTRY__SHIFT 0x0000000c
+#define VPEC_QUEUE4_LOG0BUFFER_CFG__RESERVED__SHIFT        0x00000014
+
+// reg: VPEC_QUEUE4_LOG1BUFFER_CFG block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE4_LOG1BUFFER_CFG__ENABLE__SHIFT          0x00000000
+#define VPEC_QUEUE4_LOG1BUFFER_CFG__PARTIAL_ENTRY__SHIFT   0x00000001
+#define VPEC_QUEUE4_LOG1BUFFER_CFG__FIRST_FREE_ENTRY__SHIFT 0x00000004
+#define VPEC_QUEUE4_LOG1BUFFER_CFG__LAST_FREE_ENTRY__SHIFT 0x0000000c
+#define VPEC_QUEUE4_LOG1BUFFER_CFG__RESERVED__SHIFT        0x00000014
+
+// reg: VPEC_QUEUE5_RB_CNTL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE5_RB_CNTL__RB_ENABLE__SHIFT              0x00000000
+#define VPEC_QUEUE5_RB_CNTL__RB_SIZE__SHIFT                0x00000001
+#define VPEC_QUEUE5_RB_CNTL__WPTR_POLL_ENABLE__SHIFT       0x00000008
+#define VPEC_QUEUE5_RB_CNTL__RB_SWAP_ENABLE__SHIFT         0x00000009
+#define VPEC_QUEUE5_RB_CNTL__WPTR_POLL_SWAP_ENABLE__SHIFT  0x0000000a
+#define VPEC_QUEUE5_RB_CNTL__F32_WPTR_POLL_ENABLE__SHIFT   0x0000000b
+#define VPEC_QUEUE5_RB_CNTL__RPTR_WRITEBACK_ENABLE__SHIFT  0x0000000c
+#define VPEC_QUEUE5_RB_CNTL__RPTR_WRITEBACK_SWAP_ENABLE__SHIFT 0x0000000d
+#define VPEC_QUEUE5_RB_CNTL__RPTR_WRITEBACK_TIMER__SHIFT   0x00000010
+#define VPEC_QUEUE5_RB_CNTL__RB_PRIV__SHIFT                0x00000017
+#define VPEC_QUEUE5_RB_CNTL__RB_VMID__SHIFT                0x00000018
+
+// reg: VPEC_QUEUE5_SCHEDULE_CNTL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE5_SCHEDULE_CNTL__GLOBAL_ID__SHIFT        0x00000000
+#define VPEC_QUEUE5_SCHEDULE_CNTL__PROCESS_ID__SHIFT       0x00000002
+#define VPEC_QUEUE5_SCHEDULE_CNTL__LOCAL_ID__SHIFT         0x00000006
+#define VPEC_QUEUE5_SCHEDULE_CNTL__CONTEXT_QUANTUM__SHIFT  0x00000008
+
+// reg: VPEC_QUEUE5_RB_BASE block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE5_RB_BASE__ADDR__SHIFT                   0x00000000
+
+// reg: VPEC_QUEUE5_RB_BASE_HI block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE5_RB_BASE_HI__ADDR__SHIFT                0x00000000
+
+// reg: VPEC_QUEUE5_RB_RPTR block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE5_RB_RPTR__OFFSET__SHIFT                 0x00000000
+
+// reg: VPEC_QUEUE5_RB_RPTR_HI block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE5_RB_RPTR_HI__OFFSET__SHIFT              0x00000000
+
+// reg: VPEC_QUEUE5_RB_WPTR block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE5_RB_WPTR__OFFSET__SHIFT                 0x00000000
+
+// reg: VPEC_QUEUE5_RB_WPTR_HI block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE5_RB_WPTR_HI__OFFSET__SHIFT              0x00000000
+
+// reg: VPEC_QUEUE5_RB_RPTR_ADDR_HI block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE5_RB_RPTR_ADDR_HI__ADDR__SHIFT           0x00000000
+
+// reg: VPEC_QUEUE5_RB_RPTR_ADDR_LO block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE5_RB_RPTR_ADDR_LO__ADDR__SHIFT           0x00000002
+
+// reg: VPEC_QUEUE5_RB_AQL_CNTL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE5_RB_AQL_CNTL__AQL_ENABLE__SHIFT         0x00000000
+#define VPEC_QUEUE5_RB_AQL_CNTL__AQL_PACKET_SIZE__SHIFT    0x00000001
+#define VPEC_QUEUE5_RB_AQL_CNTL__PACKET_STEP__SHIFT        0x00000008
+#define VPEC_QUEUE5_RB_AQL_CNTL__MIDCMD_PREEMPT_ENABLE__SHIFT 0x00000010
+#define VPEC_QUEUE5_RB_AQL_CNTL__MIDCMD_PREEMPT_DATA_RESTORE__SHIFT 0x00000011
+#define VPEC_QUEUE5_RB_AQL_CNTL__OVERLAP_ENABLE__SHIFT     0x00000012
+
+// reg: VPEC_QUEUE5_MINOR_PTR_UPDATE block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE5_MINOR_PTR_UPDATE__ENABLE__SHIFT        0x00000000
+
+// reg: VPEC_QUEUE5_CD_INFO block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE5_CD_INFO__CD_INFO__SHIFT                0x00000000
+
+// reg: VPEC_QUEUE5_RB_PREEMPT block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE5_RB_PREEMPT__PREEMPT_REQ__SHIFT         0x00000000
+
+// reg: VPEC_QUEUE5_SKIP_CNTL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE5_SKIP_CNTL__SKIP_COUNT__SHIFT           0x00000000
+
+// reg: VPEC_QUEUE5_DOORBELL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE5_DOORBELL__ENABLE__SHIFT                0x0000001c
+#define VPEC_QUEUE5_DOORBELL__CAPTURED__SHIFT              0x0000001e
+
+// reg: VPEC_QUEUE5_DOORBELL_OFFSET block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE5_DOORBELL_OFFSET__OFFSET__SHIFT         0x00000002
+
+// reg: VPEC_QUEUE5_DUMMY0 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE5_DUMMY0__DUMMY__SHIFT                   0x00000000
+
+// reg: VPEC_QUEUE5_DUMMY1 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE5_DUMMY1__VALUE__SHIFT                   0x00000000
+
+// reg: VPEC_QUEUE5_DUMMY2 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE5_DUMMY2__VALUE__SHIFT                   0x00000000
+
+// reg: VPEC_QUEUE5_DUMMY3 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE5_DUMMY3__VALUE__SHIFT                   0x00000000
+
+// reg: VPEC_QUEUE5_DUMMY4 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE5_DUMMY4__VALUE__SHIFT                   0x00000000
+
+// reg: VPEC_QUEUE5_IB_CNTL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE5_IB_CNTL__IB_ENABLE__SHIFT              0x00000000
+#define VPEC_QUEUE5_IB_CNTL__SWITCH_INSIDE_IB__SHIFT       0x00000008
+#define VPEC_QUEUE5_IB_CNTL__CMD_VMID__SHIFT               0x00000010
+#define VPEC_QUEUE5_IB_CNTL__IB_PRIV__SHIFT                0x0000001f
+
+// reg: VPEC_QUEUE5_IB_RPTR block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE5_IB_RPTR__OFFSET__SHIFT                 0x00000002
+
+// reg: VPEC_QUEUE5_IB_OFFSET block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE5_IB_OFFSET__OFFSET__SHIFT               0x00000002
+
+// reg: VPEC_QUEUE5_IB_BASE_LO block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE5_IB_BASE_LO__ADDR__SHIFT                0x00000005
+
+// reg: VPEC_QUEUE5_IB_BASE_HI block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE5_IB_BASE_HI__ADDR__SHIFT                0x00000000
+
+// reg: VPEC_QUEUE5_IB_SIZE block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE5_IB_SIZE__SIZE__SHIFT                   0x00000000
+
+// reg: VPEC_QUEUE5_CMDIB_CNTL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE5_CMDIB_CNTL__IB_ENABLE__SHIFT           0x00000000
+#define VPEC_QUEUE5_CMDIB_CNTL__IB_SWAP_ENABLE__SHIFT      0x00000004
+#define VPEC_QUEUE5_CMDIB_CNTL__SWITCH_INSIDE_IB__SHIFT    0x00000008
+#define VPEC_QUEUE5_CMDIB_CNTL__CMD_VMID__SHIFT            0x00000010
+#define VPEC_QUEUE5_CMDIB_CNTL__IB_PRIV__SHIFT             0x0000001f
+
+// reg: VPEC_QUEUE5_CMDIB_RPTR block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE5_CMDIB_RPTR__OFFSET__SHIFT              0x00000002
+
+// reg: VPEC_QUEUE5_CMDIB_OFFSET block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE5_CMDIB_OFFSET__OFFSET__SHIFT            0x00000002
+
+// reg: VPEC_QUEUE5_CMDIB_BASE_LO block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE5_CMDIB_BASE_LO__ADDR__SHIFT             0x00000005
+
+// reg: VPEC_QUEUE5_CMDIB_BASE_HI block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE5_CMDIB_BASE_HI__ADDR__SHIFT             0x00000000
+
+// reg: VPEC_QUEUE5_CMDIB_SIZE block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE5_CMDIB_SIZE__SIZE__SHIFT                0x00000000
+
+// reg: VPEC_QUEUE5_3DLUTIB_CNTL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE5_3DLUTIB_CNTL__IB_ENABLE__SHIFT         0x00000000
+#define VPEC_QUEUE5_3DLUTIB_CNTL__SWITCH_INSIDE_IB__SHIFT  0x00000008
+#define VPEC_QUEUE5_3DLUTIB_CNTL__CMD_VMID__SHIFT          0x00000010
+#define VPEC_QUEUE5_3DLUTIB_CNTL__IB_PRIV__SHIFT           0x0000001f
+
+// reg: VPEC_QUEUE5_3DLUTIB_RPTR block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE5_3DLUTIB_RPTR__OFFSET__SHIFT            0x00000002
+
+// reg: VPEC_QUEUE5_3DLUTIB_OFFSET block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE5_3DLUTIB_OFFSET__OFFSET__SHIFT          0x00000002
+
+// reg: VPEC_QUEUE5_3DLUTIB_BASE_LO block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE5_3DLUTIB_BASE_LO__ADDR__SHIFT           0x00000005
+
+// reg: VPEC_QUEUE5_3DLUTIB_BASE_HI block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE5_3DLUTIB_BASE_HI__ADDR__SHIFT           0x00000000
+
+// reg: VPEC_QUEUE5_3DLUTIB_SIZE block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE5_3DLUTIB_SIZE__SIZE__SHIFT              0x00000000
+
+// reg: VPEC_QUEUE5_CSA_ADDR_LO block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE5_CSA_ADDR_LO__ADDR__SHIFT               0x00000000
+
+// reg: VPEC_QUEUE5_CSA_ADDR_HI block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE5_CSA_ADDR_HI__ADDR__SHIFT               0x00000000
+
+// reg: VPEC_QUEUE5_CONTEXT_STATUS block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE5_CONTEXT_STATUS__SELECTED__SHIFT        0x00000000
+#define VPEC_QUEUE5_CONTEXT_STATUS__USE_IB__SHIFT          0x00000001
+#define VPEC_QUEUE5_CONTEXT_STATUS__IDLE__SHIFT            0x00000002
+#define VPEC_QUEUE5_CONTEXT_STATUS__EXPIRED__SHIFT         0x00000003
+#define VPEC_QUEUE5_CONTEXT_STATUS__EXCEPTION__SHIFT       0x00000004
+#define VPEC_QUEUE5_CONTEXT_STATUS__CTXSW_ABLE__SHIFT      0x00000007
+#define VPEC_QUEUE5_CONTEXT_STATUS__USE_3DLUTIB__SHIFT     0x00000008
+#define VPEC_QUEUE5_CONTEXT_STATUS__PREEMPT_DISABLE__SHIFT 0x0000000a
+#define VPEC_QUEUE5_CONTEXT_STATUS__RPTR_WB_IDLE__SHIFT    0x0000000b
+#define VPEC_QUEUE5_CONTEXT_STATUS__WPTR_UPDATE_PENDING__SHIFT 0x0000000c
+#define VPEC_QUEUE5_CONTEXT_STATUS__WPTR_UPDATE_FAIL_COUNT__SHIFT 0x00000010
+
+// reg: VPEC_QUEUE5_DOORBELL_LOG block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE5_DOORBELL_LOG__BE_ERROR__SHIFT          0x00000000
+#define VPEC_QUEUE5_DOORBELL_LOG__DATA__SHIFT              0x00000002
+
+// reg: VPEC_QUEUE5_IB_SUB_REMAIN block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE5_IB_SUB_REMAIN__SIZE__SHIFT             0x00000000
+
+// reg: VPEC_QUEUE5_PREEMPT block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE5_PREEMPT__IB_PREEMPT__SHIFT             0x00000000
+
+// reg: VPEC_QUEUE5_LOG0BUFFER_CFG block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE5_LOG0BUFFER_CFG__ENABLE__SHIFT          0x00000000
+#define VPEC_QUEUE5_LOG0BUFFER_CFG__FIRST_FREE_ENTRY__SHIFT 0x00000004
+#define VPEC_QUEUE5_LOG0BUFFER_CFG__LAST_FREE_ENTRY__SHIFT 0x0000000c
+#define VPEC_QUEUE5_LOG0BUFFER_CFG__RESERVED__SHIFT        0x00000014
+
+// reg: VPEC_QUEUE5_LOG1BUFFER_CFG block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE5_LOG1BUFFER_CFG__ENABLE__SHIFT          0x00000000
+#define VPEC_QUEUE5_LOG1BUFFER_CFG__PARTIAL_ENTRY__SHIFT   0x00000001
+#define VPEC_QUEUE5_LOG1BUFFER_CFG__FIRST_FREE_ENTRY__SHIFT 0x00000004
+#define VPEC_QUEUE5_LOG1BUFFER_CFG__LAST_FREE_ENTRY__SHIFT 0x0000000c
+#define VPEC_QUEUE5_LOG1BUFFER_CFG__RESERVED__SHIFT        0x00000014
+
+// reg: VPEC_QUEUE6_RB_CNTL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE6_RB_CNTL__RB_ENABLE__SHIFT              0x00000000
+#define VPEC_QUEUE6_RB_CNTL__RB_SIZE__SHIFT                0x00000001
+#define VPEC_QUEUE6_RB_CNTL__WPTR_POLL_ENABLE__SHIFT       0x00000008
+#define VPEC_QUEUE6_RB_CNTL__RB_SWAP_ENABLE__SHIFT         0x00000009
+#define VPEC_QUEUE6_RB_CNTL__WPTR_POLL_SWAP_ENABLE__SHIFT  0x0000000a
+#define VPEC_QUEUE6_RB_CNTL__F32_WPTR_POLL_ENABLE__SHIFT   0x0000000b
+#define VPEC_QUEUE6_RB_CNTL__RPTR_WRITEBACK_ENABLE__SHIFT  0x0000000c
+#define VPEC_QUEUE6_RB_CNTL__RPTR_WRITEBACK_SWAP_ENABLE__SHIFT 0x0000000d
+#define VPEC_QUEUE6_RB_CNTL__RPTR_WRITEBACK_TIMER__SHIFT   0x00000010
+#define VPEC_QUEUE6_RB_CNTL__RB_PRIV__SHIFT                0x00000017
+#define VPEC_QUEUE6_RB_CNTL__RB_VMID__SHIFT                0x00000018
+
+// reg: VPEC_QUEUE6_SCHEDULE_CNTL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE6_SCHEDULE_CNTL__GLOBAL_ID__SHIFT        0x00000000
+#define VPEC_QUEUE6_SCHEDULE_CNTL__PROCESS_ID__SHIFT       0x00000002
+#define VPEC_QUEUE6_SCHEDULE_CNTL__LOCAL_ID__SHIFT         0x00000006
+#define VPEC_QUEUE6_SCHEDULE_CNTL__CONTEXT_QUANTUM__SHIFT  0x00000008
+
+// reg: VPEC_QUEUE6_RB_BASE block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE6_RB_BASE__ADDR__SHIFT                   0x00000000
+
+// reg: VPEC_QUEUE6_RB_BASE_HI block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE6_RB_BASE_HI__ADDR__SHIFT                0x00000000
+
+// reg: VPEC_QUEUE6_RB_RPTR block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE6_RB_RPTR__OFFSET__SHIFT                 0x00000000
+
+// reg: VPEC_QUEUE6_RB_RPTR_HI block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE6_RB_RPTR_HI__OFFSET__SHIFT              0x00000000
+
+// reg: VPEC_QUEUE6_RB_WPTR block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE6_RB_WPTR__OFFSET__SHIFT                 0x00000000
+
+// reg: VPEC_QUEUE6_RB_WPTR_HI block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE6_RB_WPTR_HI__OFFSET__SHIFT              0x00000000
+
+// reg: VPEC_QUEUE6_RB_RPTR_ADDR_HI block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE6_RB_RPTR_ADDR_HI__ADDR__SHIFT           0x00000000
+
+// reg: VPEC_QUEUE6_RB_RPTR_ADDR_LO block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE6_RB_RPTR_ADDR_LO__ADDR__SHIFT           0x00000002
+
+// reg: VPEC_QUEUE6_RB_AQL_CNTL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE6_RB_AQL_CNTL__AQL_ENABLE__SHIFT         0x00000000
+#define VPEC_QUEUE6_RB_AQL_CNTL__AQL_PACKET_SIZE__SHIFT    0x00000001
+#define VPEC_QUEUE6_RB_AQL_CNTL__PACKET_STEP__SHIFT        0x00000008
+#define VPEC_QUEUE6_RB_AQL_CNTL__MIDCMD_PREEMPT_ENABLE__SHIFT 0x00000010
+#define VPEC_QUEUE6_RB_AQL_CNTL__MIDCMD_PREEMPT_DATA_RESTORE__SHIFT 0x00000011
+#define VPEC_QUEUE6_RB_AQL_CNTL__OVERLAP_ENABLE__SHIFT     0x00000012
+
+// reg: VPEC_QUEUE6_MINOR_PTR_UPDATE block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE6_MINOR_PTR_UPDATE__ENABLE__SHIFT        0x00000000
+
+// reg: VPEC_QUEUE6_CD_INFO block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE6_CD_INFO__CD_INFO__SHIFT                0x00000000
+
+// reg: VPEC_QUEUE6_RB_PREEMPT block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE6_RB_PREEMPT__PREEMPT_REQ__SHIFT         0x00000000
+
+// reg: VPEC_QUEUE6_SKIP_CNTL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE6_SKIP_CNTL__SKIP_COUNT__SHIFT           0x00000000
+
+// reg: VPEC_QUEUE6_DOORBELL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE6_DOORBELL__ENABLE__SHIFT                0x0000001c
+#define VPEC_QUEUE6_DOORBELL__CAPTURED__SHIFT              0x0000001e
+
+// reg: VPEC_QUEUE6_DOORBELL_OFFSET block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE6_DOORBELL_OFFSET__OFFSET__SHIFT         0x00000002
+
+// reg: VPEC_QUEUE6_DUMMY0 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE6_DUMMY0__DUMMY__SHIFT                   0x00000000
+
+// reg: VPEC_QUEUE6_DUMMY1 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE6_DUMMY1__VALUE__SHIFT                   0x00000000
+
+// reg: VPEC_QUEUE6_DUMMY2 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE6_DUMMY2__VALUE__SHIFT                   0x00000000
+
+// reg: VPEC_QUEUE6_DUMMY3 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE6_DUMMY3__VALUE__SHIFT                   0x00000000
+
+// reg: VPEC_QUEUE6_DUMMY4 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE6_DUMMY4__VALUE__SHIFT                   0x00000000
+
+// reg: VPEC_QUEUE6_IB_CNTL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE6_IB_CNTL__IB_ENABLE__SHIFT              0x00000000
+#define VPEC_QUEUE6_IB_CNTL__SWITCH_INSIDE_IB__SHIFT       0x00000008
+#define VPEC_QUEUE6_IB_CNTL__CMD_VMID__SHIFT               0x00000010
+#define VPEC_QUEUE6_IB_CNTL__IB_PRIV__SHIFT                0x0000001f
+
+// reg: VPEC_QUEUE6_IB_RPTR block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE6_IB_RPTR__OFFSET__SHIFT                 0x00000002
+
+// reg: VPEC_QUEUE6_IB_OFFSET block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE6_IB_OFFSET__OFFSET__SHIFT               0x00000002
+
+// reg: VPEC_QUEUE6_IB_BASE_LO block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE6_IB_BASE_LO__ADDR__SHIFT                0x00000005
+
+// reg: VPEC_QUEUE6_IB_BASE_HI block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE6_IB_BASE_HI__ADDR__SHIFT                0x00000000
+
+// reg: VPEC_QUEUE6_IB_SIZE block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE6_IB_SIZE__SIZE__SHIFT                   0x00000000
+
+// reg: VPEC_QUEUE6_CMDIB_CNTL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE6_CMDIB_CNTL__IB_ENABLE__SHIFT           0x00000000
+#define VPEC_QUEUE6_CMDIB_CNTL__IB_SWAP_ENABLE__SHIFT      0x00000004
+#define VPEC_QUEUE6_CMDIB_CNTL__SWITCH_INSIDE_IB__SHIFT    0x00000008
+#define VPEC_QUEUE6_CMDIB_CNTL__CMD_VMID__SHIFT            0x00000010
+#define VPEC_QUEUE6_CMDIB_CNTL__IB_PRIV__SHIFT             0x0000001f
+
+// reg: VPEC_QUEUE6_CMDIB_RPTR block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE6_CMDIB_RPTR__OFFSET__SHIFT              0x00000002
+
+// reg: VPEC_QUEUE6_CMDIB_OFFSET block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE6_CMDIB_OFFSET__OFFSET__SHIFT            0x00000002
+
+// reg: VPEC_QUEUE6_CMDIB_BASE_LO block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE6_CMDIB_BASE_LO__ADDR__SHIFT             0x00000005
+
+// reg: VPEC_QUEUE6_CMDIB_BASE_HI block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE6_CMDIB_BASE_HI__ADDR__SHIFT             0x00000000
+
+// reg: VPEC_QUEUE6_CMDIB_SIZE block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE6_CMDIB_SIZE__SIZE__SHIFT                0x00000000
+
+// reg: VPEC_QUEUE6_3DLUTIB_CNTL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE6_3DLUTIB_CNTL__IB_ENABLE__SHIFT         0x00000000
+#define VPEC_QUEUE6_3DLUTIB_CNTL__SWITCH_INSIDE_IB__SHIFT  0x00000008
+#define VPEC_QUEUE6_3DLUTIB_CNTL__CMD_VMID__SHIFT          0x00000010
+#define VPEC_QUEUE6_3DLUTIB_CNTL__IB_PRIV__SHIFT           0x0000001f
+
+// reg: VPEC_QUEUE6_3DLUTIB_RPTR block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE6_3DLUTIB_RPTR__OFFSET__SHIFT            0x00000002
+
+// reg: VPEC_QUEUE6_3DLUTIB_OFFSET block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE6_3DLUTIB_OFFSET__OFFSET__SHIFT          0x00000002
+
+// reg: VPEC_QUEUE6_3DLUTIB_BASE_LO block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE6_3DLUTIB_BASE_LO__ADDR__SHIFT           0x00000005
+
+// reg: VPEC_QUEUE6_3DLUTIB_BASE_HI block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE6_3DLUTIB_BASE_HI__ADDR__SHIFT           0x00000000
+
+// reg: VPEC_QUEUE6_3DLUTIB_SIZE block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE6_3DLUTIB_SIZE__SIZE__SHIFT              0x00000000
+
+// reg: VPEC_QUEUE6_CSA_ADDR_LO block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE6_CSA_ADDR_LO__ADDR__SHIFT               0x00000000
+
+// reg: VPEC_QUEUE6_CSA_ADDR_HI block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE6_CSA_ADDR_HI__ADDR__SHIFT               0x00000000
+
+// reg: VPEC_QUEUE6_CONTEXT_STATUS block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE6_CONTEXT_STATUS__SELECTED__SHIFT        0x00000000
+#define VPEC_QUEUE6_CONTEXT_STATUS__USE_IB__SHIFT          0x00000001
+#define VPEC_QUEUE6_CONTEXT_STATUS__IDLE__SHIFT            0x00000002
+#define VPEC_QUEUE6_CONTEXT_STATUS__EXPIRED__SHIFT         0x00000003
+#define VPEC_QUEUE6_CONTEXT_STATUS__EXCEPTION__SHIFT       0x00000004
+#define VPEC_QUEUE6_CONTEXT_STATUS__CTXSW_ABLE__SHIFT      0x00000007
+#define VPEC_QUEUE6_CONTEXT_STATUS__USE_3DLUTIB__SHIFT     0x00000008
+#define VPEC_QUEUE6_CONTEXT_STATUS__PREEMPT_DISABLE__SHIFT 0x0000000a
+#define VPEC_QUEUE6_CONTEXT_STATUS__RPTR_WB_IDLE__SHIFT    0x0000000b
+#define VPEC_QUEUE6_CONTEXT_STATUS__WPTR_UPDATE_PENDING__SHIFT 0x0000000c
+#define VPEC_QUEUE6_CONTEXT_STATUS__WPTR_UPDATE_FAIL_COUNT__SHIFT 0x00000010
+
+// reg: VPEC_QUEUE6_DOORBELL_LOG block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE6_DOORBELL_LOG__BE_ERROR__SHIFT          0x00000000
+#define VPEC_QUEUE6_DOORBELL_LOG__DATA__SHIFT              0x00000002
+
+// reg: VPEC_QUEUE6_IB_SUB_REMAIN block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE6_IB_SUB_REMAIN__SIZE__SHIFT             0x00000000
+
+// reg: VPEC_QUEUE6_PREEMPT block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE6_PREEMPT__IB_PREEMPT__SHIFT             0x00000000
+
+// reg: VPEC_QUEUE6_LOG0BUFFER_CFG block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE6_LOG0BUFFER_CFG__ENABLE__SHIFT          0x00000000
+#define VPEC_QUEUE6_LOG0BUFFER_CFG__FIRST_FREE_ENTRY__SHIFT 0x00000004
+#define VPEC_QUEUE6_LOG0BUFFER_CFG__LAST_FREE_ENTRY__SHIFT 0x0000000c
+#define VPEC_QUEUE6_LOG0BUFFER_CFG__RESERVED__SHIFT        0x00000014
+
+// reg: VPEC_QUEUE6_LOG1BUFFER_CFG block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE6_LOG1BUFFER_CFG__ENABLE__SHIFT          0x00000000
+#define VPEC_QUEUE6_LOG1BUFFER_CFG__PARTIAL_ENTRY__SHIFT   0x00000001
+#define VPEC_QUEUE6_LOG1BUFFER_CFG__FIRST_FREE_ENTRY__SHIFT 0x00000004
+#define VPEC_QUEUE6_LOG1BUFFER_CFG__LAST_FREE_ENTRY__SHIFT 0x0000000c
+#define VPEC_QUEUE6_LOG1BUFFER_CFG__RESERVED__SHIFT        0x00000014
+
+// reg: VPEC_QUEUE7_RB_CNTL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE7_RB_CNTL__RB_ENABLE__SHIFT              0x00000000
+#define VPEC_QUEUE7_RB_CNTL__RB_SIZE__SHIFT                0x00000001
+#define VPEC_QUEUE7_RB_CNTL__WPTR_POLL_ENABLE__SHIFT       0x00000008
+#define VPEC_QUEUE7_RB_CNTL__RB_SWAP_ENABLE__SHIFT         0x00000009
+#define VPEC_QUEUE7_RB_CNTL__WPTR_POLL_SWAP_ENABLE__SHIFT  0x0000000a
+#define VPEC_QUEUE7_RB_CNTL__F32_WPTR_POLL_ENABLE__SHIFT   0x0000000b
+#define VPEC_QUEUE7_RB_CNTL__RPTR_WRITEBACK_ENABLE__SHIFT  0x0000000c
+#define VPEC_QUEUE7_RB_CNTL__RPTR_WRITEBACK_SWAP_ENABLE__SHIFT 0x0000000d
+#define VPEC_QUEUE7_RB_CNTL__RPTR_WRITEBACK_TIMER__SHIFT   0x00000010
+#define VPEC_QUEUE7_RB_CNTL__RB_PRIV__SHIFT                0x00000017
+#define VPEC_QUEUE7_RB_CNTL__RB_VMID__SHIFT                0x00000018
+
+// reg: VPEC_QUEUE7_SCHEDULE_CNTL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE7_SCHEDULE_CNTL__GLOBAL_ID__SHIFT        0x00000000
+#define VPEC_QUEUE7_SCHEDULE_CNTL__PROCESS_ID__SHIFT       0x00000002
+#define VPEC_QUEUE7_SCHEDULE_CNTL__LOCAL_ID__SHIFT         0x00000006
+#define VPEC_QUEUE7_SCHEDULE_CNTL__CONTEXT_QUANTUM__SHIFT  0x00000008
+
+// reg: VPEC_QUEUE7_RB_BASE block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE7_RB_BASE__ADDR__SHIFT                   0x00000000
+
+// reg: VPEC_QUEUE7_RB_BASE_HI block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE7_RB_BASE_HI__ADDR__SHIFT                0x00000000
+
+// reg: VPEC_QUEUE7_RB_RPTR block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE7_RB_RPTR__OFFSET__SHIFT                 0x00000000
+
+// reg: VPEC_QUEUE7_RB_RPTR_HI block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE7_RB_RPTR_HI__OFFSET__SHIFT              0x00000000
+
+// reg: VPEC_QUEUE7_RB_WPTR block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE7_RB_WPTR__OFFSET__SHIFT                 0x00000000
+
+// reg: VPEC_QUEUE7_RB_WPTR_HI block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE7_RB_WPTR_HI__OFFSET__SHIFT              0x00000000
+
+// reg: VPEC_QUEUE7_RB_RPTR_ADDR_HI block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE7_RB_RPTR_ADDR_HI__ADDR__SHIFT           0x00000000
+
+// reg: VPEC_QUEUE7_RB_RPTR_ADDR_LO block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE7_RB_RPTR_ADDR_LO__ADDR__SHIFT           0x00000002
+
+// reg: VPEC_QUEUE7_RB_AQL_CNTL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE7_RB_AQL_CNTL__AQL_ENABLE__SHIFT         0x00000000
+#define VPEC_QUEUE7_RB_AQL_CNTL__AQL_PACKET_SIZE__SHIFT    0x00000001
+#define VPEC_QUEUE7_RB_AQL_CNTL__PACKET_STEP__SHIFT        0x00000008
+#define VPEC_QUEUE7_RB_AQL_CNTL__MIDCMD_PREEMPT_ENABLE__SHIFT 0x00000010
+#define VPEC_QUEUE7_RB_AQL_CNTL__MIDCMD_PREEMPT_DATA_RESTORE__SHIFT 0x00000011
+#define VPEC_QUEUE7_RB_AQL_CNTL__OVERLAP_ENABLE__SHIFT     0x00000012
+
+// reg: VPEC_QUEUE7_MINOR_PTR_UPDATE block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE7_MINOR_PTR_UPDATE__ENABLE__SHIFT        0x00000000
+
+// reg: VPEC_QUEUE7_CD_INFO block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE7_CD_INFO__CD_INFO__SHIFT                0x00000000
+
+// reg: VPEC_QUEUE7_RB_PREEMPT block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE7_RB_PREEMPT__PREEMPT_REQ__SHIFT         0x00000000
+
+// reg: VPEC_QUEUE7_SKIP_CNTL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE7_SKIP_CNTL__SKIP_COUNT__SHIFT           0x00000000
+
+// reg: VPEC_QUEUE7_DOORBELL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE7_DOORBELL__ENABLE__SHIFT                0x0000001c
+#define VPEC_QUEUE7_DOORBELL__CAPTURED__SHIFT              0x0000001e
+
+// reg: VPEC_QUEUE7_DOORBELL_OFFSET block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE7_DOORBELL_OFFSET__OFFSET__SHIFT         0x00000002
+
+// reg: VPEC_QUEUE7_DUMMY0 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE7_DUMMY0__DUMMY__SHIFT                   0x00000000
+
+// reg: VPEC_QUEUE7_DUMMY1 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE7_DUMMY1__VALUE__SHIFT                   0x00000000
+
+// reg: VPEC_QUEUE7_DUMMY2 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE7_DUMMY2__VALUE__SHIFT                   0x00000000
+
+// reg: VPEC_QUEUE7_DUMMY3 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE7_DUMMY3__VALUE__SHIFT                   0x00000000
+
+// reg: VPEC_QUEUE7_DUMMY4 block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE7_DUMMY4__VALUE__SHIFT                   0x00000000
+
+// reg: VPEC_QUEUE7_IB_CNTL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE7_IB_CNTL__IB_ENABLE__SHIFT              0x00000000
+#define VPEC_QUEUE7_IB_CNTL__SWITCH_INSIDE_IB__SHIFT       0x00000008
+#define VPEC_QUEUE7_IB_CNTL__CMD_VMID__SHIFT               0x00000010
+#define VPEC_QUEUE7_IB_CNTL__IB_PRIV__SHIFT                0x0000001f
+
+// reg: VPEC_QUEUE7_IB_RPTR block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE7_IB_RPTR__OFFSET__SHIFT                 0x00000002
+
+// reg: VPEC_QUEUE7_IB_OFFSET block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE7_IB_OFFSET__OFFSET__SHIFT               0x00000002
+
+// reg: VPEC_QUEUE7_IB_BASE_LO block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE7_IB_BASE_LO__ADDR__SHIFT                0x00000005
+
+// reg: VPEC_QUEUE7_IB_BASE_HI block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE7_IB_BASE_HI__ADDR__SHIFT                0x00000000
+
+// reg: VPEC_QUEUE7_IB_SIZE block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE7_IB_SIZE__SIZE__SHIFT                   0x00000000
+
+// reg: VPEC_QUEUE7_CMDIB_CNTL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE7_CMDIB_CNTL__IB_ENABLE__SHIFT           0x00000000
+#define VPEC_QUEUE7_CMDIB_CNTL__IB_SWAP_ENABLE__SHIFT      0x00000004
+#define VPEC_QUEUE7_CMDIB_CNTL__SWITCH_INSIDE_IB__SHIFT    0x00000008
+#define VPEC_QUEUE7_CMDIB_CNTL__CMD_VMID__SHIFT            0x00000010
+#define VPEC_QUEUE7_CMDIB_CNTL__IB_PRIV__SHIFT             0x0000001f
+
+// reg: VPEC_QUEUE7_CMDIB_RPTR block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE7_CMDIB_RPTR__OFFSET__SHIFT              0x00000002
+
+// reg: VPEC_QUEUE7_CMDIB_OFFSET block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE7_CMDIB_OFFSET__OFFSET__SHIFT            0x00000002
+
+// reg: VPEC_QUEUE7_CMDIB_BASE_LO block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE7_CMDIB_BASE_LO__ADDR__SHIFT             0x00000005
+
+// reg: VPEC_QUEUE7_CMDIB_BASE_HI block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE7_CMDIB_BASE_HI__ADDR__SHIFT             0x00000000
+
+// reg: VPEC_QUEUE7_CMDIB_SIZE block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE7_CMDIB_SIZE__SIZE__SHIFT                0x00000000
+
+// reg: VPEC_QUEUE7_3DLUTIB_CNTL block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE7_3DLUTIB_CNTL__IB_ENABLE__SHIFT         0x00000000
+#define VPEC_QUEUE7_3DLUTIB_CNTL__SWITCH_INSIDE_IB__SHIFT  0x00000008
+#define VPEC_QUEUE7_3DLUTIB_CNTL__CMD_VMID__SHIFT          0x00000010
+#define VPEC_QUEUE7_3DLUTIB_CNTL__IB_PRIV__SHIFT           0x0000001f
+
+// reg: VPEC_QUEUE7_3DLUTIB_RPTR block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE7_3DLUTIB_RPTR__OFFSET__SHIFT            0x00000002
+
+// reg: VPEC_QUEUE7_3DLUTIB_OFFSET block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE7_3DLUTIB_OFFSET__OFFSET__SHIFT          0x00000002
+
+// reg: VPEC_QUEUE7_3DLUTIB_BASE_LO block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE7_3DLUTIB_BASE_LO__ADDR__SHIFT           0x00000005
+
+// reg: VPEC_QUEUE7_3DLUTIB_BASE_HI block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE7_3DLUTIB_BASE_HI__ADDR__SHIFT           0x00000000
+
+// reg: VPEC_QUEUE7_3DLUTIB_SIZE block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE7_3DLUTIB_SIZE__SIZE__SHIFT              0x00000000
+
+// reg: VPEC_QUEUE7_CSA_ADDR_LO block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE7_CSA_ADDR_LO__ADDR__SHIFT               0x00000000
+
+// reg: VPEC_QUEUE7_CSA_ADDR_HI block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE7_CSA_ADDR_HI__ADDR__SHIFT               0x00000000
+
+// reg: VPEC_QUEUE7_CONTEXT_STATUS block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE7_CONTEXT_STATUS__SELECTED__SHIFT        0x00000000
+#define VPEC_QUEUE7_CONTEXT_STATUS__USE_IB__SHIFT          0x00000001
+#define VPEC_QUEUE7_CONTEXT_STATUS__IDLE__SHIFT            0x00000002
+#define VPEC_QUEUE7_CONTEXT_STATUS__EXPIRED__SHIFT         0x00000003
+#define VPEC_QUEUE7_CONTEXT_STATUS__EXCEPTION__SHIFT       0x00000004
+#define VPEC_QUEUE7_CONTEXT_STATUS__CTXSW_ABLE__SHIFT      0x00000007
+#define VPEC_QUEUE7_CONTEXT_STATUS__USE_3DLUTIB__SHIFT     0x00000008
+#define VPEC_QUEUE7_CONTEXT_STATUS__PREEMPT_DISABLE__SHIFT 0x0000000a
+#define VPEC_QUEUE7_CONTEXT_STATUS__RPTR_WB_IDLE__SHIFT    0x0000000b
+#define VPEC_QUEUE7_CONTEXT_STATUS__WPTR_UPDATE_PENDING__SHIFT 0x0000000c
+#define VPEC_QUEUE7_CONTEXT_STATUS__WPTR_UPDATE_FAIL_COUNT__SHIFT 0x00000010
+
+// reg: VPEC_QUEUE7_DOORBELL_LOG block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE7_DOORBELL_LOG__BE_ERROR__SHIFT          0x00000000
+#define VPEC_QUEUE7_DOORBELL_LOG__DATA__SHIFT              0x00000002
+
+// reg: VPEC_QUEUE7_IB_SUB_REMAIN block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE7_IB_SUB_REMAIN__SIZE__SHIFT             0x00000000
+
+// reg: VPEC_QUEUE7_PREEMPT block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE7_PREEMPT__IB_PREEMPT__SHIFT             0x00000000
+
+// reg: VPEC_QUEUE7_LOG0BUFFER_CFG block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE7_LOG0BUFFER_CFG__ENABLE__SHIFT          0x00000000
+#define VPEC_QUEUE7_LOG0BUFFER_CFG__FIRST_FREE_ENTRY__SHIFT 0x00000004
+#define VPEC_QUEUE7_LOG0BUFFER_CFG__LAST_FREE_ENTRY__SHIFT 0x0000000c
+#define VPEC_QUEUE7_LOG0BUFFER_CFG__RESERVED__SHIFT        0x00000014
+
+// reg: VPEC_QUEUE7_LOG1BUFFER_CFG block: VPEC comp: amd.com/lib/vpec-vpe2sw/0
+#define VPEC_QUEUE7_LOG1BUFFER_CFG__ENABLE__SHIFT          0x00000000
+#define VPEC_QUEUE7_LOG1BUFFER_CFG__PARTIAL_ENTRY__SHIFT   0x00000001
+#define VPEC_QUEUE7_LOG1BUFFER_CFG__FIRST_FREE_ENTRY__SHIFT 0x00000004
+#define VPEC_QUEUE7_LOG1BUFFER_CFG__LAST_FREE_ENTRY__SHIFT 0x0000000c
+#define VPEC_QUEUE7_LOG1BUFFER_CFG__RESERVED__SHIFT        0x00000014
+
+// reg: VPEP_MGCG_CNTL block: CDC comp: amd.com/lib/vpcdc-vpep2sw/1.0
+#define VPEP_MGCG_CNTL__VPDPP0_CLK_GATE_DIS__SHIFT         0x00000000
+#define VPEP_MGCG_CNTL__VPDPP1_CLK_GATE_DIS__SHIFT         0x00000003
+#define VPEP_MGCG_CNTL__VPMPC_CLK_GATE_DIS__SHIFT          0x0000000c
+#define VPEP_MGCG_CNTL__VPOPP_CLK_GATE_DIS__SHIFT          0x00000012
+#define VPEP_MGCG_CNTL__VPCDC_SOCCLK_G_GATE_DIS__SHIFT     0x00000014
+#define VPEP_MGCG_CNTL__VPCDC_SOCCLK_R_GATE_DIS__SHIFT     0x00000015
+#define VPEP_MGCG_CNTL__VPCDC_VPECLK_G_GATE_DIS__SHIFT     0x00000016
+#define VPEP_MGCG_CNTL__VPCDC_VPECLK_R_GATE_DIS__SHIFT     0x00000017
+#define VPEP_MGCG_CNTL__VPCDC_FE1_CLK_G_GATE_DIS__SHIFT    0x00000018
+#define VPEP_MGCG_CNTL__VPCDC_BE1_CLK_G_GATE_DIS__SHIFT    0x00000019
+#define VPEP_MGCG_CNTL__VPCDC_FGCG_REP_DIS__SHIFT          0x0000001e
+
+// reg: VPCDC_SOFT_RESET block: CDC comp: amd.com/lib/vpcdc-vpep2sw/1.0
+#define VPCDC_SOFT_RESET__VPCDC_SOCCLK_SOFT_RESET__SHIFT   0x00000000
+#define VPCDC_SOFT_RESET__VPCDC_VPECLK_SOFT_RESET__SHIFT   0x00000001
+
+// reg: VPCDC_FE0_SURFACE_CONFIG block: CDC comp: amd.com/lib/vpcdc-vpep2sw/1.0
+#define VPCDC_FE0_SURFACE_CONFIG__SURFACE_PIXEL_FORMAT_FE0__SHIFT 0x00000000
+#define VPCDC_FE0_SURFACE_CONFIG__ROTATION_ANGLE_FE0__SHIFT 0x00000009
+#define VPCDC_FE0_SURFACE_CONFIG__H_MIRROR_EN_FE0__SHIFT   0x0000000c
+#define VPCDC_FE0_SURFACE_CONFIG__PIX_SURFACE_LINEAR_FE0__SHIFT 0x0000000d
+
+// reg: VPCDC_FE0_CROSSBAR_CONFIG block: CDC comp: amd.com/lib/vpcdc-vpep2sw/1.0
+#define VPCDC_FE0_CROSSBAR_CONFIG__CROSSBAR_SRC_ALPHA_FE0__SHIFT 0x00000000
+#define VPCDC_FE0_CROSSBAR_CONFIG__CROSSBAR_SRC_Y_G_FE0__SHIFT 0x00000002
+#define VPCDC_FE0_CROSSBAR_CONFIG__CROSSBAR_SRC_CB_B_FE0__SHIFT 0x00000004
+#define VPCDC_FE0_CROSSBAR_CONFIG__CROSSBAR_SRC_CR_R_FE0__SHIFT 0x00000006
+
+// reg: VPCDC_FE0_VIEWPORT_START_CONFIG block: CDC comp: amd.com/lib/vpcdc-vpep2sw/1.0
+#define VPCDC_FE0_VIEWPORT_START_CONFIG__VIEWPORT_X_START_FE0__SHIFT 0x00000000
+#define VPCDC_FE0_VIEWPORT_START_CONFIG__VIEWPORT_Y_START_FE0__SHIFT 0x00000010
+
+// reg: VPCDC_FE0_VIEWPORT_DIMENSION_CONFIG block: CDC comp: amd.com/lib/vpcdc-vpep2sw/1.0
+#define VPCDC_FE0_VIEWPORT_DIMENSION_CONFIG__VIEWPORT_WIDTH_FE0__SHIFT 0x00000000
+#define VPCDC_FE0_VIEWPORT_DIMENSION_CONFIG__VIEWPORT_HEIGHT_FE0__SHIFT 0x00000010
+
+// reg: VPCDC_FE0_VIEWPORT_START_C_CONFIG block: CDC comp: amd.com/lib/vpcdc-vpep2sw/1.0
+#define VPCDC_FE0_VIEWPORT_START_C_CONFIG__VIEWPORT_X_START_C_FE0__SHIFT 0x00000000
+#define VPCDC_FE0_VIEWPORT_START_C_CONFIG__VIEWPORT_Y_START_C_FE0__SHIFT 0x00000010
+
+// reg: VPCDC_FE0_VIEWPORT_DIMENSION_C_CONFIG block: CDC comp: amd.com/lib/vpcdc-vpep2sw/1.0
+#define VPCDC_FE0_VIEWPORT_DIMENSION_C_CONFIG__VIEWPORT_WIDTH_C_FE0__SHIFT 0x00000000
+#define VPCDC_FE0_VIEWPORT_DIMENSION_C_CONFIG__VIEWPORT_HEIGHT_C_FE0__SHIFT 0x00000010
+
+// reg: VPCDC_FE1_SURFACE_CONFIG block: CDC comp: amd.com/lib/vpcdc-vpep2sw/1.0
+#define VPCDC_FE1_SURFACE_CONFIG__SURFACE_PIXEL_FORMAT_FE1__SHIFT 0x00000000
+#define VPCDC_FE1_SURFACE_CONFIG__ROTATION_ANGLE_FE1__SHIFT 0x00000009
+#define VPCDC_FE1_SURFACE_CONFIG__H_MIRROR_EN_FE1__SHIFT   0x0000000c
+#define VPCDC_FE1_SURFACE_CONFIG__PIX_SURFACE_LINEAR_FE1__SHIFT 0x0000000d
+
+// reg: VPCDC_FE1_CROSSBAR_CONFIG block: CDC comp: amd.com/lib/vpcdc-vpep2sw/1.0
+#define VPCDC_FE1_CROSSBAR_CONFIG__CROSSBAR_SRC_ALPHA_FE1__SHIFT 0x00000000
+#define VPCDC_FE1_CROSSBAR_CONFIG__CROSSBAR_SRC_Y_G_FE1__SHIFT 0x00000002
+#define VPCDC_FE1_CROSSBAR_CONFIG__CROSSBAR_SRC_CB_B_FE1__SHIFT 0x00000004
+#define VPCDC_FE1_CROSSBAR_CONFIG__CROSSBAR_SRC_CR_R_FE1__SHIFT 0x00000006
+
+// reg: VPCDC_FE1_VIEWPORT_START_CONFIG block: CDC comp: amd.com/lib/vpcdc-vpep2sw/1.0
+#define VPCDC_FE1_VIEWPORT_START_CONFIG__VIEWPORT_X_START_FE1__SHIFT 0x00000000
+#define VPCDC_FE1_VIEWPORT_START_CONFIG__VIEWPORT_Y_START_FE1__SHIFT 0x00000010
+
+// reg: VPCDC_FE1_VIEWPORT_DIMENSION_CONFIG block: CDC comp: amd.com/lib/vpcdc-vpep2sw/1.0
+#define VPCDC_FE1_VIEWPORT_DIMENSION_CONFIG__VIEWPORT_WIDTH_FE1__SHIFT 0x00000000
+#define VPCDC_FE1_VIEWPORT_DIMENSION_CONFIG__VIEWPORT_HEIGHT_FE1__SHIFT 0x00000010
+
+// reg: VPCDC_FE1_VIEWPORT_START_C_CONFIG block: CDC comp: amd.com/lib/vpcdc-vpep2sw/1.0
+#define VPCDC_FE1_VIEWPORT_START_C_CONFIG__VIEWPORT_X_START_C_FE1__SHIFT 0x00000000
+#define VPCDC_FE1_VIEWPORT_START_C_CONFIG__VIEWPORT_Y_START_C_FE1__SHIFT 0x00000010
+
+// reg: VPCDC_FE1_VIEWPORT_DIMENSION_C_CONFIG block: CDC comp: amd.com/lib/vpcdc-vpep2sw/1.0
+#define VPCDC_FE1_VIEWPORT_DIMENSION_C_CONFIG__VIEWPORT_WIDTH_C_FE1__SHIFT 0x00000000
+#define VPCDC_FE1_VIEWPORT_DIMENSION_C_CONFIG__VIEWPORT_HEIGHT_C_FE1__SHIFT 0x00000010
+
+// reg: VPCDC_BE0_P2B_CONFIG block: CDC comp: amd.com/lib/vpcdc-vpep2sw/1.0
+#define VPCDC_BE0_P2B_CONFIG__VPCDC_BE0_P2B_XBAR_SEL0__SHIFT 0x00000000
+#define VPCDC_BE0_P2B_CONFIG__VPCDC_BE0_P2B_XBAR_SEL1__SHIFT 0x00000002
+#define VPCDC_BE0_P2B_CONFIG__VPCDC_BE0_P2B_XBAR_SEL2__SHIFT 0x00000004
+#define VPCDC_BE0_P2B_CONFIG__VPCDC_BE0_P2B_XBAR_SEL3__SHIFT 0x00000006
+#define VPCDC_BE0_P2B_CONFIG__VPCDC_BE0_P2B_FORMAT_SEL__SHIFT 0x00000008
+#define VPCDC_BE0_P2B_CONFIG__VPCDC_BE0_P2B_TILED__SHIFT   0x00000011
+#define VPCDC_BE0_P2B_CONFIG__VPCDC_BE0_P2B_X_START_PLANE0__SHIFT 0x00000012
+#define VPCDC_BE0_P2B_CONFIG__VPCDC_BE0_P2B_X_START_PLANE1__SHIFT 0x00000017
+
+// reg: VPCDC_BE0_GLOBAL_SYNC_CONFIG block: CDC comp: amd.com/lib/vpcdc-vpep2sw/1.0
+#define VPCDC_BE0_GLOBAL_SYNC_CONFIG__BE0_VUPDATE_OFFSET__SHIFT 0x00000000
+#define VPCDC_BE0_GLOBAL_SYNC_CONFIG__BE0_VUPDATE_WIDTH__SHIFT 0x0000000a
+#define VPCDC_BE0_GLOBAL_SYNC_CONFIG__BE0_VREADY_OFFSET__SHIFT 0x00000014
+
+// reg: VPCDC_BE1_P2B_CONFIG block: CDC comp: amd.com/lib/vpcdc-vpep2sw/1.0
+#define VPCDC_BE1_P2B_CONFIG__VPCDC_BE1_P2B_XBAR_SEL0__SHIFT 0x00000000
+#define VPCDC_BE1_P2B_CONFIG__VPCDC_BE1_P2B_XBAR_SEL1__SHIFT 0x00000002
+#define VPCDC_BE1_P2B_CONFIG__VPCDC_BE1_P2B_XBAR_SEL2__SHIFT 0x00000004
+#define VPCDC_BE1_P2B_CONFIG__VPCDC_BE1_P2B_XBAR_SEL3__SHIFT 0x00000006
+#define VPCDC_BE1_P2B_CONFIG__VPCDC_BE1_P2B_FORMAT_SEL__SHIFT 0x00000008
+#define VPCDC_BE1_P2B_CONFIG__VPCDC_BE1_P2B_TILED__SHIFT   0x00000011
+#define VPCDC_BE1_P2B_CONFIG__VPCDC_BE1_P2B_X_START_PLANE0__SHIFT 0x00000012
+#define VPCDC_BE1_P2B_CONFIG__VPCDC_BE1_P2B_X_START_PLANE1__SHIFT 0x00000017
+
+// reg: VPCDC_BE1_GLOBAL_SYNC_CONFIG block: CDC comp: amd.com/lib/vpcdc-vpep2sw/1.0
+#define VPCDC_BE1_GLOBAL_SYNC_CONFIG__BE1_VUPDATE_OFFSET__SHIFT 0x00000000
+#define VPCDC_BE1_GLOBAL_SYNC_CONFIG__BE1_VUPDATE_WIDTH__SHIFT 0x0000000a
+#define VPCDC_BE1_GLOBAL_SYNC_CONFIG__BE1_VREADY_OFFSET__SHIFT 0x00000014
+
+// reg: VPCDC_BE2_P2B_CONFIG block: CDC comp: amd.com/lib/vpcdc-vpep2sw/1.0
+#define VPCDC_BE2_P2B_CONFIG__VPCDC_BE2_P2B_XBAR_SEL0__SHIFT 0x00000000
+#define VPCDC_BE2_P2B_CONFIG__VPCDC_BE2_P2B_XBAR_SEL1__SHIFT 0x00000002
+#define VPCDC_BE2_P2B_CONFIG__VPCDC_BE2_P2B_XBAR_SEL2__SHIFT 0x00000004
+#define VPCDC_BE2_P2B_CONFIG__VPCDC_BE2_P2B_XBAR_SEL3__SHIFT 0x00000006
+#define VPCDC_BE2_P2B_CONFIG__VPCDC_BE2_P2B_FORMAT_SEL__SHIFT 0x00000008
+#define VPCDC_BE2_P2B_CONFIG__VPCDC_BE2_P2B_TILED__SHIFT   0x00000011
+#define VPCDC_BE2_P2B_CONFIG__VPCDC_BE2_P2B_X_START_PLANE0__SHIFT 0x00000012
+#define VPCDC_BE2_P2B_CONFIG__VPCDC_BE2_P2B_X_START_PLANE1__SHIFT 0x00000017
+
+// reg: VPCDC_BE2_GLOBAL_SYNC_CONFIG block: CDC comp: amd.com/lib/vpcdc-vpep2sw/1.0
+#define VPCDC_BE2_GLOBAL_SYNC_CONFIG__BE2_VUPDATE_OFFSET__SHIFT 0x00000000
+#define VPCDC_BE2_GLOBAL_SYNC_CONFIG__BE2_VUPDATE_WIDTH__SHIFT 0x0000000a
+#define VPCDC_BE2_GLOBAL_SYNC_CONFIG__BE2_VREADY_OFFSET__SHIFT 0x00000014
+
+// reg: VPCDC_BE3_P2B_CONFIG block: CDC comp: amd.com/lib/vpcdc-vpep2sw/1.0
+#define VPCDC_BE3_P2B_CONFIG__VPCDC_BE3_P2B_XBAR_SEL0__SHIFT 0x00000000
+#define VPCDC_BE3_P2B_CONFIG__VPCDC_BE3_P2B_XBAR_SEL1__SHIFT 0x00000002
+#define VPCDC_BE3_P2B_CONFIG__VPCDC_BE3_P2B_XBAR_SEL2__SHIFT 0x00000004
+#define VPCDC_BE3_P2B_CONFIG__VPCDC_BE3_P2B_XBAR_SEL3__SHIFT 0x00000006
+#define VPCDC_BE3_P2B_CONFIG__VPCDC_BE3_P2B_FORMAT_SEL__SHIFT 0x00000008
+#define VPCDC_BE3_P2B_CONFIG__VPCDC_BE3_P2B_TILED__SHIFT   0x00000011
+#define VPCDC_BE3_P2B_CONFIG__VPCDC_BE3_P2B_X_START_PLANE0__SHIFT 0x00000012
+#define VPCDC_BE3_P2B_CONFIG__VPCDC_BE3_P2B_X_START_PLANE1__SHIFT 0x00000017
+
+// reg: VPCDC_BE3_GLOBAL_SYNC_CONFIG block: CDC comp: amd.com/lib/vpcdc-vpep2sw/1.0
+#define VPCDC_BE3_GLOBAL_SYNC_CONFIG__BE3_VUPDATE_OFFSET__SHIFT 0x00000000
+#define VPCDC_BE3_GLOBAL_SYNC_CONFIG__BE3_VUPDATE_WIDTH__SHIFT 0x0000000a
+#define VPCDC_BE3_GLOBAL_SYNC_CONFIG__BE3_VREADY_OFFSET__SHIFT 0x00000014
+
+// reg: VPCDC_GLOBAL_SYNC_TRIGGER block: CDC comp: amd.com/lib/vpcdc-vpep2sw/1.0
+#define VPCDC_GLOBAL_SYNC_TRIGGER__VPBE_GS_TRIG__SHIFT     0x00000000
+
+// reg: VPCDC_VREADY_STATUS block: CDC comp: amd.com/lib/vpcdc-vpep2sw/1.0
+#define VPCDC_VREADY_STATUS__VPFE_VR_STATUS__SHIFT         0x00000000
+
+// reg: VPEP_MEM_GLOBAL_PWR_REQ_CNTL block: CDC comp: amd.com/lib/vpcdc-vpep2sw/1.0
+#define VPEP_MEM_GLOBAL_PWR_REQ_CNTL__MEM_GLOBAL_PWR_REQ_DIS__SHIFT 0x00000000
+
+// reg: VPFE0_MEM_PWR_CNTL block: CDC comp: amd.com/lib/vpcdc-vpep2sw/1.0
+#define VPFE0_MEM_PWR_CNTL__VPFE0_MEM_PWR_FORCE__SHIFT     0x00000000
+#define VPFE0_MEM_PWR_CNTL__VPFE0_MEM_PWR_MODE__SHIFT      0x00000002
+#define VPFE0_MEM_PWR_CNTL__VPFE0_MEM_PWR_STATE__SHIFT     0x00000004
+#define VPFE0_MEM_PWR_CNTL__VPFE0_MEM_PWR_DIS__SHIFT       0x00000006
+
+// reg: VPFE1_MEM_PWR_CNTL block: CDC comp: amd.com/lib/vpcdc-vpep2sw/1.0
+#define VPFE1_MEM_PWR_CNTL__VPFE1_MEM_PWR_FORCE__SHIFT     0x00000000
+#define VPFE1_MEM_PWR_CNTL__VPFE1_MEM_PWR_MODE__SHIFT      0x00000002
+#define VPFE1_MEM_PWR_CNTL__VPFE1_MEM_PWR_STATE__SHIFT     0x00000004
+#define VPFE1_MEM_PWR_CNTL__VPFE1_MEM_PWR_DIS__SHIFT       0x00000006
+
+// reg: VPBE0_MEM_PWR_CNTL block: CDC comp: amd.com/lib/vpcdc-vpep2sw/1.0
+#define VPBE0_MEM_PWR_CNTL__VPBE0_MEM_PWR_FORCE__SHIFT     0x00000000
+#define VPBE0_MEM_PWR_CNTL__VPBE0_MEM_PWR_MODE__SHIFT      0x00000002
+#define VPBE0_MEM_PWR_CNTL__VPBE0_MEM_PWR_STATE__SHIFT     0x00000004
+#define VPBE0_MEM_PWR_CNTL__VPBE0_MEM_PWR_DIS__SHIFT       0x00000006
+
+// reg: VPBE1_MEM_PWR_CNTL block: CDC comp: amd.com/lib/vpcdc-vpep2sw/1.0
+#define VPBE1_MEM_PWR_CNTL__VPBE1_MEM_PWR_FORCE__SHIFT     0x00000000
+#define VPBE1_MEM_PWR_CNTL__VPBE1_MEM_PWR_MODE__SHIFT      0x00000002
+#define VPBE1_MEM_PWR_CNTL__VPBE1_MEM_PWR_STATE__SHIFT     0x00000004
+#define VPBE1_MEM_PWR_CNTL__VPBE1_MEM_PWR_DIS__SHIFT       0x00000006
+
+// reg: VPBE2_MEM_PWR_CNTL block: CDC comp: amd.com/lib/vpcdc-vpep2sw/1.0
+#define VPBE2_MEM_PWR_CNTL__VPBE2_MEM_PWR_FORCE__SHIFT     0x00000000
+#define VPBE2_MEM_PWR_CNTL__VPBE2_MEM_PWR_MODE__SHIFT      0x00000002
+#define VPBE2_MEM_PWR_CNTL__VPBE2_MEM_PWR_STATE__SHIFT     0x00000004
+#define VPBE2_MEM_PWR_CNTL__VPBE2_MEM_PWR_DIS__SHIFT       0x00000006
+
+// reg: VPBE3_MEM_PWR_CNTL block: CDC comp: amd.com/lib/vpcdc-vpep2sw/1.0
+#define VPBE3_MEM_PWR_CNTL__VPBE3_MEM_PWR_FORCE__SHIFT     0x00000000
+#define VPBE3_MEM_PWR_CNTL__VPBE3_MEM_PWR_MODE__SHIFT      0x00000002
+#define VPBE3_MEM_PWR_CNTL__VPBE3_MEM_PWR_STATE__SHIFT     0x00000004
+#define VPBE3_MEM_PWR_CNTL__VPBE3_MEM_PWR_DIS__SHIFT       0x00000006
+
+// reg: VPEP_RBBMIF_TIMEOUT block: CDC comp: amd.com/lib/vpcdc-vpep2sw/1.0
+#define VPEP_RBBMIF_TIMEOUT__RBBMIF_TIMEOUT_DELAY__SHIFT   0x00000000
+#define VPEP_RBBMIF_TIMEOUT__RBBMIF_TIMEOUT_HOLD__SHIFT    0x00000014
+
+// reg: VPEP_RBBMIF_STATUS block: CDC comp: amd.com/lib/vpcdc-vpep2sw/1.0
+#define VPEP_RBBMIF_STATUS__RBBMIF_TIMEOUT_CLIENTS_DEC__SHIFT 0x00000000
+#define VPEP_RBBMIF_STATUS__RBBMIF_TIMEOUT_OP__SHIFT       0x0000001c
+#define VPEP_RBBMIF_STATUS__RBBMIF_TIMEOUT_RDWR_STATUS__SHIFT 0x0000001d
+#define VPEP_RBBMIF_STATUS__RBBMIF_TIMEOUT_ACK__SHIFT      0x0000001e
+#define VPEP_RBBMIF_STATUS__RBBMIF_TIMEOUT_MASK__SHIFT     0x0000001f
+
+// reg: VPEP_RBBMIF_TIMEOUT_DIS block: CDC comp: amd.com/lib/vpcdc-vpep2sw/1.0
+#define VPEP_RBBMIF_TIMEOUT_DIS__CLIENT0_TIMEOUT_DIS__SHIFT 0x00000000
+#define VPEP_RBBMIF_TIMEOUT_DIS__CLIENT1_TIMEOUT_DIS__SHIFT 0x00000001
+#define VPEP_RBBMIF_TIMEOUT_DIS__CLIENT2_TIMEOUT_DIS__SHIFT 0x00000002
+#define VPEP_RBBMIF_TIMEOUT_DIS__CLIENT3_TIMEOUT_DIS__SHIFT 0x00000003
+#define VPEP_RBBMIF_TIMEOUT_DIS__CLIENT4_TIMEOUT_DIS__SHIFT 0x00000004
+
+// reg: VPCDC_DEBUG_CTRL0 block: CDC comp: amd.com/lib/vpcdc-vpep2sw/1.0
+#define VPCDC_DEBUG_CTRL0__VPCDC_DBG_EN__SHIFT             0x00000000
+#define VPCDC_DEBUG_CTRL0__VPCDC_DBGMUX_OUT_0_SEL_SOCCLK__SHIFT 0x00000014
+
+// reg: VPCDC_DEBUG_CTRL1 block: CDC comp: amd.com/lib/vpcdc-vpep2sw/1.0
+#define VPCDC_DEBUG_CTRL1__VPCDC_DBGMUX_OUT_0_SEL_VPECLK__SHIFT 0x00000000
+#define VPCDC_DEBUG_CTRL1__VPCDC_DBGMUX_OUT_1_SEL_VPECLK__SHIFT 0x00000008
+#define VPCDC_DEBUG_CTRL1__VPCDC_DBGMUX_OUT_2_SEL_VPECLK__SHIFT 0x00000010
+#define VPCDC_DEBUG_CTRL1__VPCDC_DBGMUX_OUT_3_SEL_VPECLK__SHIFT 0x00000018
+
+// reg: VPCDC_TEST_DEBUG_INDEX block: CDC comp: amd.com/lib/vpcdc-vpep2sw/1.0
+#define VPCDC_TEST_DEBUG_INDEX__VPCDC_TEST_DEBUG_INDEX__SHIFT 0x00000000
+
+// reg: VPCDC_TEST_DEBUG_DATA block: CDC comp: amd.com/lib/vpcdc-vpep2sw/1.0
+#define VPCDC_TEST_DEBUG_DATA__VPCDC_TEST_DEBUG_DATA__SHIFT 0x00000000
+
+// reg: VPCDC_3DLUT_FL_CONFIG block: CDC comp: amd.com/lib/vpcdc-vpep2sw/1.0
+#define VPCDC_3DLUT_FL_CONFIG__VPCDC_3DLUT_FL_MODE__SHIFT  0x00000000
+#define VPCDC_3DLUT_FL_CONFIG__VPCDC_3DLUT_FL_CROSSBAR_SRC_G__SHIFT 0x00000002
+#define VPCDC_3DLUT_FL_CONFIG__VPCDC_3DLUT_FL_CROSSBAR_SRC_B__SHIFT 0x00000004
+#define VPCDC_3DLUT_FL_CONFIG__VPCDC_3DLUT_FL_CROSSBAR_SRC_R__SHIFT 0x00000006
+#define VPCDC_3DLUT_FL_CONFIG__VPCDC_3DLUT_FL_SIZE__SHIFT  0x00000008
+
+// reg: VPCDC_CONTROL block: CDC comp: amd.com/lib/vpcdc-vpep2sw/1.0
+#define VPCDC_CONTROL__VPCDC_HISTOGRAM0_EN__SHIFT          0x00000000
+#define VPCDC_CONTROL__VPCDC_HISTOGRAM1_EN__SHIFT          0x00000002
+#define VPCDC_CONTROL__VPCDC_FROD_EN__SHIFT                0x00000008
+
+// reg: PERFCOUNTER_CNTL block: DC_PERFMON comp: amd.com/lib/dcperfmon/1.0
+#define PERFCOUNTER_CNTL__PERFCOUNTER_EVENT_SEL__SHIFT     0x00000000
+#define PERFCOUNTER_CNTL__PERFCOUNTER_CVALUE_SEL__SHIFT    0x00000009
+#define PERFCOUNTER_CNTL__PERFCOUNTER_INC_MODE__SHIFT      0x0000000c
+#define PERFCOUNTER_CNTL__PERFCOUNTER_HW_CNTL_SEL__SHIFT   0x0000000f
+#define PERFCOUNTER_CNTL__PERFCOUNTER_RUNEN_MODE__SHIFT    0x00000010
+#define PERFCOUNTER_CNTL__PERFCOUNTER_CNTOFF_START_DIS__SHIFT 0x00000016
+#define PERFCOUNTER_CNTL__PERFCOUNTER_RESTART_EN__SHIFT    0x00000017
+#define PERFCOUNTER_CNTL__PERFCOUNTER_INT_EN__SHIFT        0x00000018
+#define PERFCOUNTER_CNTL__PERFCOUNTER_OFF_MASK__SHIFT      0x00000019
+#define PERFCOUNTER_CNTL__PERFCOUNTER_ACTIVE__SHIFT        0x0000001a
+#define PERFCOUNTER_CNTL__PERFCOUNTER_CNTL_SEL__SHIFT      0x0000001d
+
+// reg: PERFCOUNTER_CNTL2 block: DC_PERFMON comp: amd.com/lib/dcperfmon/1.0
+#define PERFCOUNTER_CNTL2__PERFCOUNTER_COUNTED_VALUE_TYPE__SHIFT 0x00000000
+#define PERFCOUNTER_CNTL2__PERFCOUNTER_HW_STOP1_SEL__SHIFT 0x00000002
+#define PERFCOUNTER_CNTL2__PERFCOUNTER_HW_STOP2_SEL__SHIFT 0x00000003
+#define PERFCOUNTER_CNTL2__PERFCOUNTER_CNTOFF_SEL__SHIFT   0x00000008
+#define PERFCOUNTER_CNTL2__PERFCOUNTER_CNTL2_SEL__SHIFT    0x0000001d
+
+// reg: PERFCOUNTER_STATE block: DC_PERFMON comp: amd.com/lib/dcperfmon/1.0
+#define PERFCOUNTER_STATE__PERFCOUNTER_CNT0_STATE__SHIFT   0x00000000
+#define PERFCOUNTER_STATE__PERFCOUNTER_STATE_SEL0__SHIFT   0x00000002
+#define PERFCOUNTER_STATE__PERFCOUNTER_CNT1_STATE__SHIFT   0x00000004
+#define PERFCOUNTER_STATE__PERFCOUNTER_STATE_SEL1__SHIFT   0x00000006
+#define PERFCOUNTER_STATE__PERFCOUNTER_CNT2_STATE__SHIFT   0x00000008
+#define PERFCOUNTER_STATE__PERFCOUNTER_STATE_SEL2__SHIFT   0x0000000a
+#define PERFCOUNTER_STATE__PERFCOUNTER_CNT3_STATE__SHIFT   0x0000000c
+#define PERFCOUNTER_STATE__PERFCOUNTER_STATE_SEL3__SHIFT   0x0000000e
+#define PERFCOUNTER_STATE__PERFCOUNTER_CNT4_STATE__SHIFT   0x00000010
+#define PERFCOUNTER_STATE__PERFCOUNTER_STATE_SEL4__SHIFT   0x00000012
+#define PERFCOUNTER_STATE__PERFCOUNTER_CNT5_STATE__SHIFT   0x00000014
+#define PERFCOUNTER_STATE__PERFCOUNTER_STATE_SEL5__SHIFT   0x00000016
+#define PERFCOUNTER_STATE__PERFCOUNTER_CNT6_STATE__SHIFT   0x00000018
+#define PERFCOUNTER_STATE__PERFCOUNTER_STATE_SEL6__SHIFT   0x0000001a
+#define PERFCOUNTER_STATE__PERFCOUNTER_CNT7_STATE__SHIFT   0x0000001c
+#define PERFCOUNTER_STATE__PERFCOUNTER_STATE_SEL7__SHIFT   0x0000001e
+
+// reg: VPCNVC_SURFACE_PIXEL_FORMAT block: VPCNVC_CFG comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCNVC_SURFACE_PIXEL_FORMAT__VPCNVC_SURFACE_PIXEL_FORMAT__SHIFT 0x00000000
+
+// reg: VPCNVC_FORMAT_CONTROL block: VPCNVC_CFG comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCNVC_FORMAT_CONTROL__FORMAT_EXPANSION_MODE__SHIFT 0x00000000
+#define VPCNVC_FORMAT_CONTROL__FORMAT_CNV16__SHIFT         0x00000004
+#define VPCNVC_FORMAT_CONTROL__ALPHA_EN__SHIFT             0x00000008
+#define VPCNVC_FORMAT_CONTROL__VPCNVC_BYPASS__SHIFT        0x0000000c
+#define VPCNVC_FORMAT_CONTROL__VPCNVC_BYPASS_MSB_ALIGN__SHIFT 0x0000000d
+#define VPCNVC_FORMAT_CONTROL__CLAMP_POSITIVE__SHIFT       0x00000010
+#define VPCNVC_FORMAT_CONTROL__CLAMP_POSITIVE_C__SHIFT     0x00000011
+#define VPCNVC_FORMAT_CONTROL__VPCNVC_UPDATE_PENDING__SHIFT 0x00000014
+
+// reg: VPCNVC_FCNV_FP_BIAS_R block: VPCNVC_CFG comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCNVC_FCNV_FP_BIAS_R__FCNV_FP_BIAS_R__SHIFT       0x00000000
+
+// reg: VPCNVC_FCNV_FP_BIAS_G block: VPCNVC_CFG comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCNVC_FCNV_FP_BIAS_G__FCNV_FP_BIAS_G__SHIFT       0x00000000
+
+// reg: VPCNVC_FCNV_FP_BIAS_B block: VPCNVC_CFG comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCNVC_FCNV_FP_BIAS_B__FCNV_FP_BIAS_B__SHIFT       0x00000000
+
+// reg: VPCNVC_FCNV_FP_SCALE_R block: VPCNVC_CFG comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCNVC_FCNV_FP_SCALE_R__FCNV_FP_SCALE_R__SHIFT     0x00000000
+
+// reg: VPCNVC_FCNV_FP_SCALE_G block: VPCNVC_CFG comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCNVC_FCNV_FP_SCALE_G__FCNV_FP_SCALE_G__SHIFT     0x00000000
+
+// reg: VPCNVC_FCNV_FP_SCALE_B block: VPCNVC_CFG comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCNVC_FCNV_FP_SCALE_B__FCNV_FP_SCALE_B__SHIFT     0x00000000
+
+// reg: VPCNVC_COLOR_KEYER_CONTROL block: VPCNVC_CFG comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCNVC_COLOR_KEYER_CONTROL__COLOR_KEYER_EN__SHIFT  0x00000000
+#define VPCNVC_COLOR_KEYER_CONTROL__LUMA_KEYER_EN__SHIFT   0x00000001
+#define VPCNVC_COLOR_KEYER_CONTROL__COLOR_KEYER_MODE__SHIFT 0x00000004
+
+// reg: VPCNVC_COLOR_KEYER_ALPHA block: VPCNVC_CFG comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCNVC_COLOR_KEYER_ALPHA__COLOR_KEYER_ALPHA_LOW__SHIFT 0x00000000
+#define VPCNVC_COLOR_KEYER_ALPHA__COLOR_KEYER_ALPHA_HIGH__SHIFT 0x00000010
+
+// reg: VPCNVC_COLOR_KEYER_RED block: VPCNVC_CFG comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCNVC_COLOR_KEYER_RED__COLOR_KEYER_RED_LOW__SHIFT 0x00000000
+#define VPCNVC_COLOR_KEYER_RED__COLOR_KEYER_RED_HIGH__SHIFT 0x00000010
+
+// reg: VPCNVC_COLOR_KEYER_GREEN block: VPCNVC_CFG comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCNVC_COLOR_KEYER_GREEN__COLOR_KEYER_GREEN_LOW__SHIFT 0x00000000
+#define VPCNVC_COLOR_KEYER_GREEN__COLOR_KEYER_GREEN_HIGH__SHIFT 0x00000010
+
+// reg: VPCNVC_COLOR_KEYER_BLUE block: VPCNVC_CFG comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCNVC_COLOR_KEYER_BLUE__COLOR_KEYER_BLUE_LOW__SHIFT 0x00000000
+#define VPCNVC_COLOR_KEYER_BLUE__COLOR_KEYER_BLUE_HIGH__SHIFT 0x00000010
+
+// reg: VPCNVC_ALPHA_2BIT_LUT01 block: VPCNVC_CFG comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCNVC_ALPHA_2BIT_LUT01__ALPHA_2BIT_LUT0__SHIFT    0x00000000
+#define VPCNVC_ALPHA_2BIT_LUT01__ALPHA_2BIT_LUT1__SHIFT    0x00000010
+
+// reg: VPCNVC_ALPHA_2BIT_LUT23 block: VPCNVC_CFG comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCNVC_ALPHA_2BIT_LUT23__ALPHA_2BIT_LUT2__SHIFT    0x00000000
+#define VPCNVC_ALPHA_2BIT_LUT23__ALPHA_2BIT_LUT3__SHIFT    0x00000010
+
+// reg: VPCNVC_PRE_DEALPHA block: VPCNVC_CFG comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCNVC_PRE_DEALPHA__PRE_DEALPHA_EN__SHIFT          0x00000000
+#define VPCNVC_PRE_DEALPHA__PRE_DEALPHA_ABLND_EN__SHIFT    0x00000004
+
+// reg: VPCNVC_PRE_CSC_MODE block: VPCNVC_CFG comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCNVC_PRE_CSC_MODE__PRE_CSC_MODE__SHIFT           0x00000000
+#define VPCNVC_PRE_CSC_MODE__PRE_CSC_MODE_CURRENT__SHIFT   0x00000002
+
+// reg: VPCNVC_PRE_CSC_C11_C12 block: VPCNVC_CFG comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCNVC_PRE_CSC_C11_C12__PRE_CSC_C11__SHIFT         0x00000000
+#define VPCNVC_PRE_CSC_C11_C12__PRE_CSC_C12__SHIFT         0x00000010
+
+// reg: VPCNVC_PRE_CSC_C13_C14 block: VPCNVC_CFG comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCNVC_PRE_CSC_C13_C14__PRE_CSC_C13__SHIFT         0x00000000
+#define VPCNVC_PRE_CSC_C13_C14__PRE_CSC_C14__SHIFT         0x00000010
+
+// reg: VPCNVC_PRE_CSC_C21_C22 block: VPCNVC_CFG comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCNVC_PRE_CSC_C21_C22__PRE_CSC_C21__SHIFT         0x00000000
+#define VPCNVC_PRE_CSC_C21_C22__PRE_CSC_C22__SHIFT         0x00000010
+
+// reg: VPCNVC_PRE_CSC_C23_C24 block: VPCNVC_CFG comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCNVC_PRE_CSC_C23_C24__PRE_CSC_C23__SHIFT         0x00000000
+#define VPCNVC_PRE_CSC_C23_C24__PRE_CSC_C24__SHIFT         0x00000010
+
+// reg: VPCNVC_PRE_CSC_C31_C32 block: VPCNVC_CFG comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCNVC_PRE_CSC_C31_C32__PRE_CSC_C31__SHIFT         0x00000000
+#define VPCNVC_PRE_CSC_C31_C32__PRE_CSC_C32__SHIFT         0x00000010
+
+// reg: VPCNVC_PRE_CSC_C33_C34 block: VPCNVC_CFG comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCNVC_PRE_CSC_C33_C34__PRE_CSC_C33__SHIFT         0x00000000
+#define VPCNVC_PRE_CSC_C33_C34__PRE_CSC_C34__SHIFT         0x00000010
+
+// reg: VPCNVC_COEF_FORMAT block: VPCNVC_CFG comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCNVC_COEF_FORMAT__PRE_CSC_COEF_FORMAT__SHIFT     0x00000000
+
+// reg: VPCNVC_PRE_DEGAM block: VPCNVC_CFG comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCNVC_PRE_DEGAM__PRE_DEGAM_MODE__SHIFT            0x00000000
+#define VPCNVC_PRE_DEGAM__PRE_DEGAM_SELECT__SHIFT          0x00000004
+
+// reg: VPCNVC_PRE_REALPHA block: VPCNVC_CFG comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCNVC_PRE_REALPHA__PRE_REALPHA_EN__SHIFT          0x00000000
+#define VPCNVC_PRE_REALPHA__PRE_REALPHA_ABLND_EN__SHIFT    0x00000004
+
+// reg: VPCNVC_CFG_TEST_DEBUG_INDEX block: VPCNVC_CFG comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCNVC_CFG_TEST_DEBUG_INDEX__VPCNVC_CFG_TEST_DEBUG_INDEX__SHIFT 0x00000000
+#define VPCNVC_CFG_TEST_DEBUG_INDEX__VPCNVC_CFG_TEST_DEBUG_WRITE_EN__SHIFT 0x00000008
+
+// reg: VPCNVC_CFG_TEST_DEBUG_DATA block: VPCNVC_CFG comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCNVC_CFG_TEST_DEBUG_DATA__VPCNVC_CFG_TEST_DEBUG_DATA__SHIFT 0x00000000
+
+// reg: VPDSCL_COEF_RAM_TAP_SELECT block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDSCL_COEF_RAM_TAP_SELECT__SCL_COEF_RAM_TAP_PAIR_IDX__SHIFT 0x00000000
+#define VPDSCL_COEF_RAM_TAP_SELECT__SCL_COEF_RAM_PHASE__SHIFT 0x00000008
+#define VPDSCL_COEF_RAM_TAP_SELECT__SCL_COEF_RAM_FILTER_TYPE__SHIFT 0x00000010
+
+// reg: VPDSCL_COEF_RAM_TAP_DATA block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDSCL_COEF_RAM_TAP_DATA__SCL_COEF_RAM_EVEN_TAP_COEF__SHIFT 0x00000000
+#define VPDSCL_COEF_RAM_TAP_DATA__SCL_COEF_RAM_EVEN_TAP_COEF_EN__SHIFT 0x0000000f
+#define VPDSCL_COEF_RAM_TAP_DATA__SCL_COEF_RAM_ODD_TAP_COEF__SHIFT 0x00000010
+#define VPDSCL_COEF_RAM_TAP_DATA__SCL_COEF_RAM_ODD_TAP_COEF_EN__SHIFT 0x0000001f
+
+// reg: VPDSCL_MODE block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDSCL_MODE__VPDSCL_MODE__SHIFT                    0x00000000
+#define VPDSCL_MODE__SCL_COEF_RAM_SELECT_CURRENT__SHIFT    0x0000000c
+#define VPDSCL_MODE__SCL_CHROMA_COEF_MODE__SHIFT           0x00000010
+#define VPDSCL_MODE__SCL_ALPHA_COEF_MODE__SHIFT            0x00000014
+#define VPDSCL_MODE__SCL_COEF_RAM_SELECT_RD__SHIFT         0x00000018
+
+// reg: VPDSCL_TAP_CONTROL block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDSCL_TAP_CONTROL__SCL_V_NUM_TAPS__SHIFT          0x00000000
+#define VPDSCL_TAP_CONTROL__SCL_H_NUM_TAPS__SHIFT          0x00000004
+#define VPDSCL_TAP_CONTROL__SCL_V_NUM_TAPS_C__SHIFT        0x00000008
+#define VPDSCL_TAP_CONTROL__SCL_H_NUM_TAPS_C__SHIFT        0x0000000c
+
+// reg: VPDSCL_CONTROL block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDSCL_CONTROL__SCL_BOUNDARY_MODE__SHIFT           0x00000000
+
+// reg: VPDSCL_2TAP_CONTROL block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDSCL_2TAP_CONTROL__SCL_H_2TAP_HARDCODE_COEF_EN__SHIFT 0x00000000
+#define VPDSCL_2TAP_CONTROL__SCL_H_2TAP_SHARP_EN__SHIFT    0x00000004
+#define VPDSCL_2TAP_CONTROL__SCL_H_2TAP_SHARP_FACTOR__SHIFT 0x00000008
+#define VPDSCL_2TAP_CONTROL__SCL_V_2TAP_HARDCODE_COEF_EN__SHIFT 0x00000010
+#define VPDSCL_2TAP_CONTROL__SCL_V_2TAP_SHARP_EN__SHIFT    0x00000014
+#define VPDSCL_2TAP_CONTROL__SCL_V_2TAP_SHARP_FACTOR__SHIFT 0x00000018
+
+// reg: VPDSCL_MANUAL_REPLICATE_CONTROL block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDSCL_MANUAL_REPLICATE_CONTROL__SCL_V_MANUAL_REPLICATE_FACTOR__SHIFT 0x00000000
+#define VPDSCL_MANUAL_REPLICATE_CONTROL__SCL_H_MANUAL_REPLICATE_FACTOR__SHIFT 0x00000008
+
+// reg: VPDSCL_HORZ_FILTER_SCALE_RATIO block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDSCL_HORZ_FILTER_SCALE_RATIO__SCL_H_SCALE_RATIO__SHIFT 0x00000000
+
+// reg: VPDSCL_HORZ_FILTER_INIT block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDSCL_HORZ_FILTER_INIT__SCL_H_INIT_FRAC__SHIFT    0x00000000
+#define VPDSCL_HORZ_FILTER_INIT__SCL_H_INIT_INT__SHIFT     0x00000018
+
+// reg: VPDSCL_HORZ_FILTER_SCALE_RATIO_C block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDSCL_HORZ_FILTER_SCALE_RATIO_C__SCL_H_SCALE_RATIO_C__SHIFT 0x00000000
+
+// reg: VPDSCL_HORZ_FILTER_INIT_C block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDSCL_HORZ_FILTER_INIT_C__SCL_H_INIT_FRAC_C__SHIFT 0x00000000
+#define VPDSCL_HORZ_FILTER_INIT_C__SCL_H_INIT_INT_C__SHIFT 0x00000018
+
+// reg: VPDSCL_VERT_FILTER_SCALE_RATIO block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDSCL_VERT_FILTER_SCALE_RATIO__SCL_V_SCALE_RATIO__SHIFT 0x00000000
+
+// reg: VPDSCL_VERT_FILTER_INIT block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDSCL_VERT_FILTER_INIT__SCL_V_INIT_FRAC__SHIFT    0x00000000
+#define VPDSCL_VERT_FILTER_INIT__SCL_V_INIT_INT__SHIFT     0x00000018
+
+// reg: VPDSCL_VERT_FILTER_INIT_BOT block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDSCL_VERT_FILTER_INIT_BOT__SCL_V_INIT_FRAC_BOT__SHIFT 0x00000000
+#define VPDSCL_VERT_FILTER_INIT_BOT__SCL_V_INIT_INT_BOT__SHIFT 0x00000018
+
+// reg: VPDSCL_VERT_FILTER_SCALE_RATIO_C block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDSCL_VERT_FILTER_SCALE_RATIO_C__SCL_V_SCALE_RATIO_C__SHIFT 0x00000000
+
+// reg: VPDSCL_VERT_FILTER_INIT_C block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDSCL_VERT_FILTER_INIT_C__SCL_V_INIT_FRAC_C__SHIFT 0x00000000
+#define VPDSCL_VERT_FILTER_INIT_C__SCL_V_INIT_INT_C__SHIFT 0x00000018
+
+// reg: VPDSCL_VERT_FILTER_INIT_BOT_C block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDSCL_VERT_FILTER_INIT_BOT_C__SCL_V_INIT_FRAC_BOT_C__SHIFT 0x00000000
+#define VPDSCL_VERT_FILTER_INIT_BOT_C__SCL_V_INIT_INT_BOT_C__SHIFT 0x00000018
+
+// reg: VPDSCL_BLACK_COLOR block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDSCL_BLACK_COLOR__SCL_BLACK_COLOR_RGB_Y__SHIFT   0x00000000
+#define VPDSCL_BLACK_COLOR__SCL_BLACK_COLOR_CBCR__SHIFT    0x00000010
+
+// reg: VPDSCL_UPDATE block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDSCL_UPDATE__SCL_UPDATE_PENDING__SHIFT           0x00000000
+
+// reg: VPDSCL_AUTOCAL block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDSCL_AUTOCAL__AUTOCAL_MODE__SHIFT                0x00000000
+
+// reg: VPDSCL_EXT_OVERSCAN_LEFT_RIGHT block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDSCL_EXT_OVERSCAN_LEFT_RIGHT__EXT_OVERSCAN_RIGHT__SHIFT 0x00000000
+#define VPDSCL_EXT_OVERSCAN_LEFT_RIGHT__EXT_OVERSCAN_LEFT__SHIFT 0x00000010
+
+// reg: VPDSCL_EXT_OVERSCAN_TOP_BOTTOM block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDSCL_EXT_OVERSCAN_TOP_BOTTOM__EXT_OVERSCAN_BOTTOM__SHIFT 0x00000000
+#define VPDSCL_EXT_OVERSCAN_TOP_BOTTOM__EXT_OVERSCAN_TOP__SHIFT 0x00000010
+
+// reg: VPOTG_H_BLANK block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPOTG_H_BLANK__OTG_H_BLANK_START__SHIFT            0x00000000
+#define VPOTG_H_BLANK__OTG_H_BLANK_END__SHIFT              0x00000010
+
+// reg: VPOTG_V_BLANK block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPOTG_V_BLANK__OTG_V_BLANK_START__SHIFT            0x00000000
+#define VPOTG_V_BLANK__OTG_V_BLANK_END__SHIFT              0x00000010
+
+// reg: VPDSCL_RECOUT_START block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDSCL_RECOUT_START__RECOUT_START_X__SHIFT         0x00000000
+#define VPDSCL_RECOUT_START__RECOUT_START_Y__SHIFT         0x00000010
+
+// reg: VPDSCL_RECOUT_SIZE block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDSCL_RECOUT_SIZE__RECOUT_WIDTH__SHIFT            0x00000000
+#define VPDSCL_RECOUT_SIZE__RECOUT_HEIGHT__SHIFT           0x00000010
+
+// reg: VPMPC_SIZE block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPMPC_SIZE__VPMPC_WIDTH__SHIFT                     0x00000000
+#define VPMPC_SIZE__VPMPC_HEIGHT__SHIFT                    0x00000010
+
+// reg: VPLB_DATA_FORMAT block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPLB_DATA_FORMAT__ALPHA_EN__SHIFT                  0x00000004
+
+// reg: VPLB_MEMORY_CTRL block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPLB_MEMORY_CTRL__LB_MAX_PARTITIONS__SHIFT         0x00000008
+#define VPLB_MEMORY_CTRL__LB_NUM_PARTITIONS__SHIFT         0x00000010
+#define VPLB_MEMORY_CTRL__LB_NUM_PARTITIONS_C__SHIFT       0x00000018
+
+// reg: VPLB_V_COUNTER block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPLB_V_COUNTER__V_COUNTER__SHIFT                   0x00000000
+#define VPLB_V_COUNTER__V_COUNTER_C__SHIFT                 0x00000010
+
+// reg: VPDSCL_MEM_PWR_CTRL block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDSCL_MEM_PWR_CTRL__LUT_MEM_PWR_FORCE__SHIFT      0x00000000
+#define VPDSCL_MEM_PWR_CTRL__LUT_MEM_PWR_DIS__SHIFT        0x00000002
+#define VPDSCL_MEM_PWR_CTRL__LB_G1_MEM_PWR_FORCE__SHIFT    0x00000004
+#define VPDSCL_MEM_PWR_CTRL__LB_G1_MEM_PWR_DIS__SHIFT      0x00000006
+#define VPDSCL_MEM_PWR_CTRL__LB_G2_MEM_PWR_FORCE__SHIFT    0x00000008
+#define VPDSCL_MEM_PWR_CTRL__LB_G2_MEM_PWR_DIS__SHIFT      0x0000000a
+#define VPDSCL_MEM_PWR_CTRL__LB_MEM_PWR_MODE__SHIFT        0x0000001c
+
+// reg: VPDSCL_MEM_PWR_STATUS block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDSCL_MEM_PWR_STATUS__LUT_MEM_PWR_STATE__SHIFT    0x00000000
+#define VPDSCL_MEM_PWR_STATUS__LB_G1_MEM_PWR_STATE__SHIFT  0x00000002
+#define VPDSCL_MEM_PWR_STATUS__LB_G2_MEM_PWR_STATE__SHIFT  0x00000004
+
+// reg: VPDSCL_EASF_H_MODE block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDSCL_EASF_H_MODE__SCL_EASF_H_EN__SHIFT           0x00000000
+#define VPDSCL_EASF_H_MODE__SCL_EASF_H_RINGEST_FORCE_EN__SHIFT 0x00000004
+#define VPDSCL_EASF_H_MODE__SCL_EASF_H_2TAP_SHARP_FACTOR__SHIFT 0x00000008
+
+// reg: VPDSCL_EASF_V_MODE block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDSCL_EASF_V_MODE__SCL_EASF_V_EN__SHIFT           0x00000000
+#define VPDSCL_EASF_V_MODE__SCL_EASF_V_RINGEST_FORCE_EN__SHIFT 0x00000004
+#define VPDSCL_EASF_V_MODE__SCL_EASF_V_2TAP_SHARP_FACTOR__SHIFT 0x00000008
+
+// reg: VPDSCL_SC_MODE block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDSCL_SC_MODE__SCL_SC_MATRIX_MODE__SHIFT          0x00000000
+#define VPDSCL_SC_MODE__SCL_SC_LTONL_EN__SHIFT             0x00000008
+
+// reg: VPDSCL_SC_MATRIX_C0C1 block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDSCL_SC_MATRIX_C0C1__SCL_SC_MATRIX_C0__SHIFT     0x00000000
+#define VPDSCL_SC_MATRIX_C0C1__SCL_SC_MATRIX_C1__SHIFT     0x00000010
+
+// reg: VPDSCL_SC_MATRIX_C2C3 block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDSCL_SC_MATRIX_C2C3__SCL_SC_MATRIX_C2__SHIFT     0x00000000
+#define VPDSCL_SC_MATRIX_C2C3__SCL_SC_MATRIX_C3__SHIFT     0x00000010
+
+// reg: VPDSCL_EASF_H_RINGEST_EVENTAP_GAIN block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDSCL_EASF_H_RINGEST_EVENTAP_GAIN__SCL_EASF_H_RINGEST_EVENTAP_GAIN1__SHIFT 0x00000000
+#define VPDSCL_EASF_H_RINGEST_EVENTAP_GAIN__SCL_EASF_H_RINGEST_EVENTAP_GAIN2__SHIFT 0x00000010
+
+// reg: VPDSCL_EASF_H_RINGEST_EVENTAP_REDUCE block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDSCL_EASF_H_RINGEST_EVENTAP_REDUCE__SCL_EASF_H_RINGEST_EVENTAP_REDUCEG1__SHIFT 0x00000000
+#define VPDSCL_EASF_H_RINGEST_EVENTAP_REDUCE__SCL_EASF_H_RINGEST_EVENTAP_REDUCEG2__SHIFT 0x00000010
+
+// reg: VPDSCL_EASF_V_RINGEST_EVENTAP_GAIN block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDSCL_EASF_V_RINGEST_EVENTAP_GAIN__SCL_EASF_V_RINGEST_EVENTAP_GAIN1__SHIFT 0x00000000
+#define VPDSCL_EASF_V_RINGEST_EVENTAP_GAIN__SCL_EASF_V_RINGEST_EVENTAP_GAIN2__SHIFT 0x00000010
+
+// reg: VPDSCL_EASF_V_RINGEST_EVENTAP_REDUCE block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDSCL_EASF_V_RINGEST_EVENTAP_REDUCE__SCL_EASF_V_RINGEST_EVENTAP_REDUCEG1__SHIFT 0x00000000
+#define VPDSCL_EASF_V_RINGEST_EVENTAP_REDUCE__SCL_EASF_V_RINGEST_EVENTAP_REDUCEG2__SHIFT 0x00000010
+
+// reg: VPDSCL_EASF_V_RINGEST_3TAP_CNTL1 block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDSCL_EASF_V_RINGEST_3TAP_CNTL1__SCL_EASF_V_RINGEST_3TAP_DNTILT_UPTILT__SHIFT 0x00000000
+#define VPDSCL_EASF_V_RINGEST_3TAP_CNTL1__SCL_EASF_V_RINGEST_3TAP_UPTILT_MAXVAL__SHIFT 0x00000010
+
+// reg: VPDSCL_EASF_V_RINGEST_3TAP_CNTL2 block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDSCL_EASF_V_RINGEST_3TAP_CNTL2__SCL_EASF_V_RINGEST_3TAP_DNTILT_SLOPE__SHIFT 0x00000000
+#define VPDSCL_EASF_V_RINGEST_3TAP_CNTL2__SCL_EASF_V_RINGEST_3TAP_UPTILT1_SLOPE__SHIFT 0x00000010
+
+// reg: VPDSCL_EASF_V_RINGEST_3TAP_CNTL3 block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDSCL_EASF_V_RINGEST_3TAP_CNTL3__SCL_EASF_V_RINGEST_3TAP_UPTILT2_SLOPE__SHIFT 0x00000000
+#define VPDSCL_EASF_V_RINGEST_3TAP_CNTL3__SCL_EASF_V_RINGEST_3TAP_UPTILT2_OFFSET__SHIFT 0x00000010
+
+// reg: VPDSCL_EASF_RINGEST_FORCE block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDSCL_EASF_RINGEST_FORCE__SCL_EASF_H_RINGEST_FORCE__SHIFT 0x00000000
+#define VPDSCL_EASF_RINGEST_FORCE__SCL_EASF_V_RINGEST_FORCE__SHIFT 0x00000010
+
+// reg: VPDSCL_EASF_H_BF_CNTL block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDSCL_EASF_H_BF_CNTL__SCL_EASF_H_BF1_EN__SHIFT    0x00000000
+#define VPDSCL_EASF_H_BF_CNTL__SCL_EASF_H_BF2_MODE__SHIFT  0x00000008
+#define VPDSCL_EASF_H_BF_CNTL__SCL_EASF_H_BF3_MODE__SHIFT  0x00000010
+#define VPDSCL_EASF_H_BF_CNTL__SCL_EASF_H_BF2_FLAT1_GAIN__SHIFT 0x00000014
+#define VPDSCL_EASF_H_BF_CNTL__SCL_EASF_H_BF2_FLAT2_GAIN__SHIFT 0x00000018
+#define VPDSCL_EASF_H_BF_CNTL__SCL_EASF_H_BF2_ROC_GAIN__SHIFT 0x0000001c
+
+// reg: VPDSCL_EASF_H_BF_FINAL_MAX_MIN block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDSCL_EASF_H_BF_FINAL_MAX_MIN__SCL_EASF_H_BF_MAXA__SHIFT 0x00000000
+#define VPDSCL_EASF_H_BF_FINAL_MAX_MIN__SCL_EASF_H_BF_MAXB__SHIFT 0x00000008
+#define VPDSCL_EASF_H_BF_FINAL_MAX_MIN__SCL_EASF_H_BF_MINA__SHIFT 0x00000010
+#define VPDSCL_EASF_H_BF_FINAL_MAX_MIN__SCL_EASF_H_BF_MINB__SHIFT 0x00000018
+
+// reg: VPDSCL_EASF_V_BF_CNTL block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDSCL_EASF_V_BF_CNTL__SCL_EASF_V_BF1_EN__SHIFT    0x00000000
+#define VPDSCL_EASF_V_BF_CNTL__SCL_EASF_V_BF2_MODE__SHIFT  0x00000008
+#define VPDSCL_EASF_V_BF_CNTL__SCL_EASF_V_BF3_MODE__SHIFT  0x00000010
+#define VPDSCL_EASF_V_BF_CNTL__SCL_EASF_V_BF2_FLAT1_GAIN__SHIFT 0x00000014
+#define VPDSCL_EASF_V_BF_CNTL__SCL_EASF_V_BF2_FLAT2_GAIN__SHIFT 0x00000018
+#define VPDSCL_EASF_V_BF_CNTL__SCL_EASF_V_BF2_ROC_GAIN__SHIFT 0x0000001c
+
+// reg: VPDSCL_EASF_V_BF_FINAL_MAX_MIN block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDSCL_EASF_V_BF_FINAL_MAX_MIN__SCL_EASF_V_BF_MAXA__SHIFT 0x00000000
+#define VPDSCL_EASF_V_BF_FINAL_MAX_MIN__SCL_EASF_V_BF_MAXB__SHIFT 0x00000008
+#define VPDSCL_EASF_V_BF_FINAL_MAX_MIN__SCL_EASF_V_BF_MINA__SHIFT 0x00000010
+#define VPDSCL_EASF_V_BF_FINAL_MAX_MIN__SCL_EASF_V_BF_MINB__SHIFT 0x00000018
+
+// reg: VPDSCL_EASF_H_BF1_PWL_SEG0 block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDSCL_EASF_H_BF1_PWL_SEG0__SCL_EASF_H_BF1_PWL_IN_SEG0__SHIFT 0x00000000
+#define VPDSCL_EASF_H_BF1_PWL_SEG0__SCL_EASF_H_BF1_PWL_BASE_SEG0__SHIFT 0x0000000c
+#define VPDSCL_EASF_H_BF1_PWL_SEG0__SCL_EASF_H_BF1_PWL_SLOPE_SEG0__SHIFT 0x00000014
+
+// reg: VPDSCL_EASF_H_BF1_PWL_SEG1 block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDSCL_EASF_H_BF1_PWL_SEG1__SCL_EASF_H_BF1_PWL_IN_SEG1__SHIFT 0x00000000
+#define VPDSCL_EASF_H_BF1_PWL_SEG1__SCL_EASF_H_BF1_PWL_BASE_SEG1__SHIFT 0x0000000c
+#define VPDSCL_EASF_H_BF1_PWL_SEG1__SCL_EASF_H_BF1_PWL_SLOPE_SEG1__SHIFT 0x00000014
+
+// reg: VPDSCL_EASF_H_BF1_PWL_SEG2 block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDSCL_EASF_H_BF1_PWL_SEG2__SCL_EASF_H_BF1_PWL_IN_SEG2__SHIFT 0x00000000
+#define VPDSCL_EASF_H_BF1_PWL_SEG2__SCL_EASF_H_BF1_PWL_BASE_SEG2__SHIFT 0x0000000c
+#define VPDSCL_EASF_H_BF1_PWL_SEG2__SCL_EASF_H_BF1_PWL_SLOPE_SEG2__SHIFT 0x00000014
+
+// reg: VPDSCL_EASF_H_BF1_PWL_SEG3 block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDSCL_EASF_H_BF1_PWL_SEG3__SCL_EASF_H_BF1_PWL_IN_SEG3__SHIFT 0x00000000
+#define VPDSCL_EASF_H_BF1_PWL_SEG3__SCL_EASF_H_BF1_PWL_BASE_SEG3__SHIFT 0x0000000c
+#define VPDSCL_EASF_H_BF1_PWL_SEG3__SCL_EASF_H_BF1_PWL_SLOPE_SEG3__SHIFT 0x00000014
+
+// reg: VPDSCL_EASF_H_BF1_PWL_SEG4 block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDSCL_EASF_H_BF1_PWL_SEG4__SCL_EASF_H_BF1_PWL_IN_SEG4__SHIFT 0x00000000
+#define VPDSCL_EASF_H_BF1_PWL_SEG4__SCL_EASF_H_BF1_PWL_BASE_SEG4__SHIFT 0x0000000c
+#define VPDSCL_EASF_H_BF1_PWL_SEG4__SCL_EASF_H_BF1_PWL_SLOPE_SEG4__SHIFT 0x00000014
+
+// reg: VPDSCL_EASF_H_BF1_PWL_SEG5 block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDSCL_EASF_H_BF1_PWL_SEG5__SCL_EASF_H_BF1_PWL_IN_SEG5__SHIFT 0x00000000
+#define VPDSCL_EASF_H_BF1_PWL_SEG5__SCL_EASF_H_BF1_PWL_BASE_SEG5__SHIFT 0x0000000c
+#define VPDSCL_EASF_H_BF1_PWL_SEG5__SCL_EASF_H_BF1_PWL_SLOPE_SEG5__SHIFT 0x00000014
+
+// reg: VPDSCL_EASF_H_BF1_PWL_SEG6 block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDSCL_EASF_H_BF1_PWL_SEG6__SCL_EASF_H_BF1_PWL_IN_SEG6__SHIFT 0x00000000
+#define VPDSCL_EASF_H_BF1_PWL_SEG6__SCL_EASF_H_BF1_PWL_BASE_SEG6__SHIFT 0x0000000c
+#define VPDSCL_EASF_H_BF1_PWL_SEG6__SCL_EASF_H_BF1_PWL_SLOPE_SEG6__SHIFT 0x00000014
+
+// reg: VPDSCL_EASF_H_BF1_PWL_SEG7 block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDSCL_EASF_H_BF1_PWL_SEG7__SCL_EASF_H_BF1_PWL_IN_SEG7__SHIFT 0x00000000
+#define VPDSCL_EASF_H_BF1_PWL_SEG7__SCL_EASF_H_BF1_PWL_BASE_SEG7__SHIFT 0x0000000c
+
+// reg: VPDSCL_EASF_V_BF1_PWL_SEG0 block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDSCL_EASF_V_BF1_PWL_SEG0__SCL_EASF_V_BF1_PWL_IN_SEG0__SHIFT 0x00000000
+#define VPDSCL_EASF_V_BF1_PWL_SEG0__SCL_EASF_V_BF1_PWL_BASE_SEG0__SHIFT 0x0000000c
+#define VPDSCL_EASF_V_BF1_PWL_SEG0__SCL_EASF_V_BF1_PWL_SLOPE_SEG0__SHIFT 0x00000014
+
+// reg: VPDSCL_EASF_V_BF1_PWL_SEG1 block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDSCL_EASF_V_BF1_PWL_SEG1__SCL_EASF_V_BF1_PWL_IN_SEG1__SHIFT 0x00000000
+#define VPDSCL_EASF_V_BF1_PWL_SEG1__SCL_EASF_V_BF1_PWL_BASE_SEG1__SHIFT 0x0000000c
+#define VPDSCL_EASF_V_BF1_PWL_SEG1__SCL_EASF_V_BF1_PWL_SLOPE_SEG1__SHIFT 0x00000014
+
+// reg: VPDSCL_EASF_V_BF1_PWL_SEG2 block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDSCL_EASF_V_BF1_PWL_SEG2__SCL_EASF_V_BF1_PWL_IN_SEG2__SHIFT 0x00000000
+#define VPDSCL_EASF_V_BF1_PWL_SEG2__SCL_EASF_V_BF1_PWL_BASE_SEG2__SHIFT 0x0000000c
+#define VPDSCL_EASF_V_BF1_PWL_SEG2__SCL_EASF_V_BF1_PWL_SLOPE_SEG2__SHIFT 0x00000014
+
+// reg: VPDSCL_EASF_V_BF1_PWL_SEG3 block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDSCL_EASF_V_BF1_PWL_SEG3__SCL_EASF_V_BF1_PWL_IN_SEG3__SHIFT 0x00000000
+#define VPDSCL_EASF_V_BF1_PWL_SEG3__SCL_EASF_V_BF1_PWL_BASE_SEG3__SHIFT 0x0000000c
+#define VPDSCL_EASF_V_BF1_PWL_SEG3__SCL_EASF_V_BF1_PWL_SLOPE_SEG3__SHIFT 0x00000014
+
+// reg: VPDSCL_EASF_V_BF1_PWL_SEG4 block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDSCL_EASF_V_BF1_PWL_SEG4__SCL_EASF_V_BF1_PWL_IN_SEG4__SHIFT 0x00000000
+#define VPDSCL_EASF_V_BF1_PWL_SEG4__SCL_EASF_V_BF1_PWL_BASE_SEG4__SHIFT 0x0000000c
+#define VPDSCL_EASF_V_BF1_PWL_SEG4__SCL_EASF_V_BF1_PWL_SLOPE_SEG4__SHIFT 0x00000014
+
+// reg: VPDSCL_EASF_V_BF1_PWL_SEG5 block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDSCL_EASF_V_BF1_PWL_SEG5__SCL_EASF_V_BF1_PWL_IN_SEG5__SHIFT 0x00000000
+#define VPDSCL_EASF_V_BF1_PWL_SEG5__SCL_EASF_V_BF1_PWL_BASE_SEG5__SHIFT 0x0000000c
+#define VPDSCL_EASF_V_BF1_PWL_SEG5__SCL_EASF_V_BF1_PWL_SLOPE_SEG5__SHIFT 0x00000014
+
+// reg: VPDSCL_EASF_V_BF1_PWL_SEG6 block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDSCL_EASF_V_BF1_PWL_SEG6__SCL_EASF_V_BF1_PWL_IN_SEG6__SHIFT 0x00000000
+#define VPDSCL_EASF_V_BF1_PWL_SEG6__SCL_EASF_V_BF1_PWL_BASE_SEG6__SHIFT 0x0000000c
+#define VPDSCL_EASF_V_BF1_PWL_SEG6__SCL_EASF_V_BF1_PWL_SLOPE_SEG6__SHIFT 0x00000014
+
+// reg: VPDSCL_EASF_V_BF1_PWL_SEG7 block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDSCL_EASF_V_BF1_PWL_SEG7__SCL_EASF_V_BF1_PWL_IN_SEG7__SHIFT 0x00000000
+#define VPDSCL_EASF_V_BF1_PWL_SEG7__SCL_EASF_V_BF1_PWL_BASE_SEG7__SHIFT 0x0000000c
+
+// reg: VPDSCL_EASF_H_BF3_PWL_SEG0 block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDSCL_EASF_H_BF3_PWL_SEG0__SCL_EASF_H_BF3_PWL_IN_SEG0__SHIFT 0x00000000
+#define VPDSCL_EASF_H_BF3_PWL_SEG0__SCL_EASF_H_BF3_PWL_BASE_SEG0__SHIFT 0x0000000c
+#define VPDSCL_EASF_H_BF3_PWL_SEG0__SCL_EASF_H_BF3_PWL_SLOPE_SEG0__SHIFT 0x00000013
+
+// reg: VPDSCL_EASF_H_BF3_PWL_SEG1 block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDSCL_EASF_H_BF3_PWL_SEG1__SCL_EASF_H_BF3_PWL_IN_SEG1__SHIFT 0x00000000
+#define VPDSCL_EASF_H_BF3_PWL_SEG1__SCL_EASF_H_BF3_PWL_BASE_SEG1__SHIFT 0x0000000c
+#define VPDSCL_EASF_H_BF3_PWL_SEG1__SCL_EASF_H_BF3_PWL_SLOPE_SEG1__SHIFT 0x00000013
+
+// reg: VPDSCL_EASF_H_BF3_PWL_SEG2 block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDSCL_EASF_H_BF3_PWL_SEG2__SCL_EASF_H_BF3_PWL_IN_SEG2__SHIFT 0x00000000
+#define VPDSCL_EASF_H_BF3_PWL_SEG2__SCL_EASF_H_BF3_PWL_BASE_SEG2__SHIFT 0x0000000c
+#define VPDSCL_EASF_H_BF3_PWL_SEG2__SCL_EASF_H_BF3_PWL_SLOPE_SEG2__SHIFT 0x00000013
+
+// reg: VPDSCL_EASF_H_BF3_PWL_SEG3 block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDSCL_EASF_H_BF3_PWL_SEG3__SCL_EASF_H_BF3_PWL_IN_SEG3__SHIFT 0x00000000
+#define VPDSCL_EASF_H_BF3_PWL_SEG3__SCL_EASF_H_BF3_PWL_BASE_SEG3__SHIFT 0x0000000c
+#define VPDSCL_EASF_H_BF3_PWL_SEG3__SCL_EASF_H_BF3_PWL_SLOPE_SEG3__SHIFT 0x00000013
+
+// reg: VPDSCL_EASF_H_BF3_PWL_SEG4 block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDSCL_EASF_H_BF3_PWL_SEG4__SCL_EASF_H_BF3_PWL_IN_SEG4__SHIFT 0x00000000
+#define VPDSCL_EASF_H_BF3_PWL_SEG4__SCL_EASF_H_BF3_PWL_BASE_SEG4__SHIFT 0x0000000c
+#define VPDSCL_EASF_H_BF3_PWL_SEG4__SCL_EASF_H_BF3_PWL_SLOPE_SEG4__SHIFT 0x00000013
+
+// reg: VPDSCL_EASF_H_BF3_PWL_SEG5 block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDSCL_EASF_H_BF3_PWL_SEG5__SCL_EASF_H_BF3_PWL_IN_SEG5__SHIFT 0x00000000
+#define VPDSCL_EASF_H_BF3_PWL_SEG5__SCL_EASF_H_BF3_PWL_BASE_SEG5__SHIFT 0x0000000c
+
+// reg: VPDSCL_EASF_V_BF3_PWL_SEG0 block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDSCL_EASF_V_BF3_PWL_SEG0__SCL_EASF_V_BF3_PWL_IN_SEG0__SHIFT 0x00000000
+#define VPDSCL_EASF_V_BF3_PWL_SEG0__SCL_EASF_V_BF3_PWL_BASE_SEG0__SHIFT 0x0000000c
+#define VPDSCL_EASF_V_BF3_PWL_SEG0__SCL_EASF_V_BF3_PWL_SLOPE_SEG0__SHIFT 0x00000013
+
+// reg: VPDSCL_EASF_V_BF3_PWL_SEG1 block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDSCL_EASF_V_BF3_PWL_SEG1__SCL_EASF_V_BF3_PWL_IN_SEG1__SHIFT 0x00000000
+#define VPDSCL_EASF_V_BF3_PWL_SEG1__SCL_EASF_V_BF3_PWL_BASE_SEG1__SHIFT 0x0000000c
+#define VPDSCL_EASF_V_BF3_PWL_SEG1__SCL_EASF_V_BF3_PWL_SLOPE_SEG1__SHIFT 0x00000013
+
+// reg: VPDSCL_EASF_V_BF3_PWL_SEG2 block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDSCL_EASF_V_BF3_PWL_SEG2__SCL_EASF_V_BF3_PWL_IN_SEG2__SHIFT 0x00000000
+#define VPDSCL_EASF_V_BF3_PWL_SEG2__SCL_EASF_V_BF3_PWL_BASE_SEG2__SHIFT 0x0000000c
+#define VPDSCL_EASF_V_BF3_PWL_SEG2__SCL_EASF_V_BF3_PWL_SLOPE_SEG2__SHIFT 0x00000013
+
+// reg: VPDSCL_EASF_V_BF3_PWL_SEG3 block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDSCL_EASF_V_BF3_PWL_SEG3__SCL_EASF_V_BF3_PWL_IN_SEG3__SHIFT 0x00000000
+#define VPDSCL_EASF_V_BF3_PWL_SEG3__SCL_EASF_V_BF3_PWL_BASE_SEG3__SHIFT 0x0000000c
+#define VPDSCL_EASF_V_BF3_PWL_SEG3__SCL_EASF_V_BF3_PWL_SLOPE_SEG3__SHIFT 0x00000013
+
+// reg: VPDSCL_EASF_V_BF3_PWL_SEG4 block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDSCL_EASF_V_BF3_PWL_SEG4__SCL_EASF_V_BF3_PWL_IN_SEG4__SHIFT 0x00000000
+#define VPDSCL_EASF_V_BF3_PWL_SEG4__SCL_EASF_V_BF3_PWL_BASE_SEG4__SHIFT 0x0000000c
+#define VPDSCL_EASF_V_BF3_PWL_SEG4__SCL_EASF_V_BF3_PWL_SLOPE_SEG4__SHIFT 0x00000013
+
+// reg: VPDSCL_EASF_V_BF3_PWL_SEG5 block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDSCL_EASF_V_BF3_PWL_SEG5__SCL_EASF_V_BF3_PWL_IN_SEG5__SHIFT 0x00000000
+#define VPDSCL_EASF_V_BF3_PWL_SEG5__SCL_EASF_V_BF3_PWL_BASE_SEG5__SHIFT 0x0000000c
+
+// reg: VPISHARP_MODE block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPISHARP_MODE__ISHARP_EN__SHIFT                    0x00000000
+#define VPISHARP_MODE__ISHARP_NOISEDET_EN__SHIFT           0x00000004
+#define VPISHARP_MODE__ISHARP_NOISEDET_MODE__SHIFT         0x00000005
+#define VPISHARP_MODE__ISHARP_LBA_MODE__SHIFT              0x00000009
+#define VPISHARP_MODE__ISHARP_FMT_MODE__SHIFT              0x0000000b
+#define VPISHARP_MODE__ISHARP_FMT_NORM__SHIFT              0x0000000c
+#define VPISHARP_MODE__ISHARP_DELTA_LUT_SELECT_CURRENT__SHIFT 0x0000001c
+
+// reg: VPISHARP_DELTA_CTRL block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPISHARP_DELTA_CTRL__ISHARP_DELTA_LUT_HOST_SELECT__SHIFT 0x00000000
+
+// reg: VPISHARP_DELTA_INDEX block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPISHARP_DELTA_INDEX__ISHARP_DELTA_INDEX__SHIFT    0x00000000
+
+// reg: VPISHARP_DELTA_DATA block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPISHARP_DELTA_DATA__ISHARP_DELTA_DATA__SHIFT      0x00000000
+
+// reg: VPISHARP_NLDELTA_SOFT_CLIP block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPISHARP_NLDELTA_SOFT_CLIP__ISHARP_NLDELTA_SCLIP_EN_P__SHIFT 0x00000000
+#define VPISHARP_NLDELTA_SOFT_CLIP__ISHARP_NLDELTA_SCLIP_PIVOT_P__SHIFT 0x00000001
+#define VPISHARP_NLDELTA_SOFT_CLIP__ISHARP_NLDELTA_SCLIP_SLOPE_P__SHIFT 0x00000008
+#define VPISHARP_NLDELTA_SOFT_CLIP__ISHARP_NLDELTA_SCLIP_EN_N__SHIFT 0x00000010
+#define VPISHARP_NLDELTA_SOFT_CLIP__ISHARP_NLDELTA_SCLIP_PIVOT_N__SHIFT 0x00000011
+#define VPISHARP_NLDELTA_SOFT_CLIP__ISHARP_NLDELTA_SCLIP_SLOPE_N__SHIFT 0x00000018
+
+// reg: VPISHARP_NOISEDET_THRESHOLD block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPISHARP_NOISEDET_THRESHOLD__ISHARP_NOISEDET_UTHRE__SHIFT 0x00000000
+#define VPISHARP_NOISEDET_THRESHOLD__ISHARP_NOISEDET_DTHRE__SHIFT 0x00000010
+
+// reg: VPISHARP_NOISE_GAIN_PWL block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPISHARP_NOISE_GAIN_PWL__ISHARP_NOISEDET_PWL_START_IN__SHIFT 0x00000000
+#define VPISHARP_NOISE_GAIN_PWL__ISHARP_NOISEDET_PWL_END_IN__SHIFT 0x00000008
+#define VPISHARP_NOISE_GAIN_PWL__ISHARP_NOISEDET_PWL_SLOPE__SHIFT 0x00000010
+
+// reg: VPISHARP_LBA_PWL_SEG0 block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPISHARP_LBA_PWL_SEG0__ISHARP_LBA_PWL_IN_SEG0__SHIFT 0x00000000
+#define VPISHARP_LBA_PWL_SEG0__ISHARP_LBA_PWL_BASE_SEG0__SHIFT 0x0000000c
+#define VPISHARP_LBA_PWL_SEG0__ISHARP_LBA_PWL_SLOPE_SEG0__SHIFT 0x00000014
+
+// reg: VPISHARP_LBA_PWL_SEG1 block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPISHARP_LBA_PWL_SEG1__ISHARP_LBA_PWL_IN_SEG1__SHIFT 0x00000000
+#define VPISHARP_LBA_PWL_SEG1__ISHARP_LBA_PWL_BASE_SEG1__SHIFT 0x0000000c
+#define VPISHARP_LBA_PWL_SEG1__ISHARP_LBA_PWL_SLOPE_SEG1__SHIFT 0x00000014
+
+// reg: VPISHARP_LBA_PWL_SEG2 block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPISHARP_LBA_PWL_SEG2__ISHARP_LBA_PWL_IN_SEG2__SHIFT 0x00000000
+#define VPISHARP_LBA_PWL_SEG2__ISHARP_LBA_PWL_BASE_SEG2__SHIFT 0x0000000c
+#define VPISHARP_LBA_PWL_SEG2__ISHARP_LBA_PWL_SLOPE_SEG2__SHIFT 0x00000014
+
+// reg: VPISHARP_LBA_PWL_SEG3 block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPISHARP_LBA_PWL_SEG3__ISHARP_LBA_PWL_IN_SEG3__SHIFT 0x00000000
+#define VPISHARP_LBA_PWL_SEG3__ISHARP_LBA_PWL_BASE_SEG3__SHIFT 0x0000000c
+#define VPISHARP_LBA_PWL_SEG3__ISHARP_LBA_PWL_SLOPE_SEG3__SHIFT 0x00000014
+
+// reg: VPISHARP_LBA_PWL_SEG4 block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPISHARP_LBA_PWL_SEG4__ISHARP_LBA_PWL_IN_SEG4__SHIFT 0x00000000
+#define VPISHARP_LBA_PWL_SEG4__ISHARP_LBA_PWL_BASE_SEG4__SHIFT 0x0000000c
+#define VPISHARP_LBA_PWL_SEG4__ISHARP_LBA_PWL_SLOPE_SEG4__SHIFT 0x00000014
+
+// reg: VPISHARP_LBA_PWL_SEG5 block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPISHARP_LBA_PWL_SEG5__ISHARP_LBA_PWL_IN_SEG5__SHIFT 0x00000000
+#define VPISHARP_LBA_PWL_SEG5__ISHARP_LBA_PWL_BASE_SEG5__SHIFT 0x0000000c
+
+// reg: VPISHARP_DELTA_LUT_MEM_PWR_CTRL block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPISHARP_DELTA_LUT_MEM_PWR_CTRL__ISHARP_DELTA_LUT_MEM_PWR_FORCE__SHIFT 0x00000000
+#define VPISHARP_DELTA_LUT_MEM_PWR_CTRL__ISHARP_DELTA_LUT_MEM_PWR_DIS__SHIFT 0x00000002
+#define VPISHARP_DELTA_LUT_MEM_PWR_CTRL__ISHARP_DELTA_LUT_MEM_PWR_STATE__SHIFT 0x00000004
+
+// reg: VPDSCL_DEBUG block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDSCL_DEBUG__SCL_DEBUG__SHIFT                     0x00000000
+
+// reg: VPDSCL_TEST_DEBUG_INDEX block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDSCL_TEST_DEBUG_INDEX__SCL_TEST_DEBUG_INDEX__SHIFT 0x00000000
+#define VPDSCL_TEST_DEBUG_INDEX__SCL_TEST_DEBUG_WRITE_EN__SHIFT 0x00000008
+
+// reg: VPDSCL_TEST_DEBUG_DATA block: VPDSCL comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDSCL_TEST_DEBUG_DATA__SCL_TEST_DEBUG_DATA__SHIFT 0x00000000
+
+// reg: VPCM_CONTROL block: VPCM comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCM_CONTROL__VPCM_BYPASS__SHIFT                   0x00000000
+#define VPCM_CONTROL__VPCM_UPDATE_PENDING__SHIFT           0x00000008
+
+// reg: VPCM_POST_CSC_CONTROL block: VPCM comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCM_POST_CSC_CONTROL__VPCM_POST_CSC_MODE__SHIFT   0x00000000
+#define VPCM_POST_CSC_CONTROL__VPCM_POST_CSC_MODE_CURRENT__SHIFT 0x00000002
+
+// reg: VPCM_POST_CSC_C11_C12 block: VPCM comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCM_POST_CSC_C11_C12__VPCM_POST_CSC_C11__SHIFT    0x00000000
+#define VPCM_POST_CSC_C11_C12__VPCM_POST_CSC_C12__SHIFT    0x00000010
+
+// reg: VPCM_POST_CSC_C13_C14 block: VPCM comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCM_POST_CSC_C13_C14__VPCM_POST_CSC_C13__SHIFT    0x00000000
+#define VPCM_POST_CSC_C13_C14__VPCM_POST_CSC_C14__SHIFT    0x00000010
+
+// reg: VPCM_POST_CSC_C21_C22 block: VPCM comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCM_POST_CSC_C21_C22__VPCM_POST_CSC_C21__SHIFT    0x00000000
+#define VPCM_POST_CSC_C21_C22__VPCM_POST_CSC_C22__SHIFT    0x00000010
+
+// reg: VPCM_POST_CSC_C23_C24 block: VPCM comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCM_POST_CSC_C23_C24__VPCM_POST_CSC_C23__SHIFT    0x00000000
+#define VPCM_POST_CSC_C23_C24__VPCM_POST_CSC_C24__SHIFT    0x00000010
+
+// reg: VPCM_POST_CSC_C31_C32 block: VPCM comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCM_POST_CSC_C31_C32__VPCM_POST_CSC_C31__SHIFT    0x00000000
+#define VPCM_POST_CSC_C31_C32__VPCM_POST_CSC_C32__SHIFT    0x00000010
+
+// reg: VPCM_POST_CSC_C33_C34 block: VPCM comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCM_POST_CSC_C33_C34__VPCM_POST_CSC_C33__SHIFT    0x00000000
+#define VPCM_POST_CSC_C33_C34__VPCM_POST_CSC_C34__SHIFT    0x00000010
+
+// reg: VPCM_BIAS_CR_R block: VPCM comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCM_BIAS_CR_R__VPCM_BIAS_CR_R__SHIFT              0x00000000
+
+// reg: VPCM_BIAS_Y_G_CB_B block: VPCM comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCM_BIAS_Y_G_CB_B__VPCM_BIAS_Y_G__SHIFT           0x00000000
+#define VPCM_BIAS_Y_G_CB_B__VPCM_BIAS_CB_B__SHIFT          0x00000010
+
+// reg: VPCM_GAMCOR_CONTROL block: VPCM comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCM_GAMCOR_CONTROL__VPCM_GAMCOR_MODE__SHIFT       0x00000000
+#define VPCM_GAMCOR_CONTROL__VPCM_GAMCOR_PWL_DISABLE__SHIFT 0x00000003
+#define VPCM_GAMCOR_CONTROL__VPCM_GAMCOR_MODE_CURRENT__SHIFT 0x00000004
+#define VPCM_GAMCOR_CONTROL__VPCM_GAMCOR_SELECT_CURRENT__SHIFT 0x00000006
+
+// reg: VPCM_GAMCOR_LUT_INDEX block: VPCM comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCM_GAMCOR_LUT_INDEX__VPCM_GAMCOR_LUT_INDEX__SHIFT 0x00000000
+
+// reg: VPCM_GAMCOR_LUT_DATA block: VPCM comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCM_GAMCOR_LUT_DATA__VPCM_GAMCOR_LUT_DATA__SHIFT  0x00000000
+
+// reg: VPCM_GAMCOR_LUT_CONTROL block: VPCM comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCM_GAMCOR_LUT_CONTROL__VPCM_GAMCOR_LUT_WRITE_COLOR_MASK__SHIFT 0x00000000
+#define VPCM_GAMCOR_LUT_CONTROL__VPCM_GAMCOR_LUT_READ_COLOR_SEL__SHIFT 0x00000003
+#define VPCM_GAMCOR_LUT_CONTROL__VPCM_GAMCOR_LUT_READ_DBG__SHIFT 0x00000005
+#define VPCM_GAMCOR_LUT_CONTROL__VPCM_GAMCOR_LUT_HOST_SEL__SHIFT 0x00000006
+#define VPCM_GAMCOR_LUT_CONTROL__VPCM_GAMCOR_LUT_CONFIG_MODE__SHIFT 0x00000007
+
+// reg: VPCM_GAMCOR_RAMA_START_CNTL_B block: VPCM comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCM_GAMCOR_RAMA_START_CNTL_B__VPCM_GAMCOR_RAMA_EXP_REGION_START_B__SHIFT 0x00000000
+#define VPCM_GAMCOR_RAMA_START_CNTL_B__VPCM_GAMCOR_RAMA_EXP_REGION_START_SEGMENT_B__SHIFT 0x00000014
+
+// reg: VPCM_GAMCOR_RAMA_START_CNTL_G block: VPCM comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCM_GAMCOR_RAMA_START_CNTL_G__VPCM_GAMCOR_RAMA_EXP_REGION_START_G__SHIFT 0x00000000
+#define VPCM_GAMCOR_RAMA_START_CNTL_G__VPCM_GAMCOR_RAMA_EXP_REGION_START_SEGMENT_G__SHIFT 0x00000014
+
+// reg: VPCM_GAMCOR_RAMA_START_CNTL_R block: VPCM comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCM_GAMCOR_RAMA_START_CNTL_R__VPCM_GAMCOR_RAMA_EXP_REGION_START_R__SHIFT 0x00000000
+#define VPCM_GAMCOR_RAMA_START_CNTL_R__VPCM_GAMCOR_RAMA_EXP_REGION_START_SEGMENT_R__SHIFT 0x00000014
+
+// reg: VPCM_GAMCOR_RAMA_START_SLOPE_CNTL_B block: VPCM comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCM_GAMCOR_RAMA_START_SLOPE_CNTL_B__VPCM_GAMCOR_RAMA_EXP_REGION_START_SLOPE_B__SHIFT 0x00000000
+
+// reg: VPCM_GAMCOR_RAMA_START_SLOPE_CNTL_G block: VPCM comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCM_GAMCOR_RAMA_START_SLOPE_CNTL_G__VPCM_GAMCOR_RAMA_EXP_REGION_START_SLOPE_G__SHIFT 0x00000000
+
+// reg: VPCM_GAMCOR_RAMA_START_SLOPE_CNTL_R block: VPCM comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCM_GAMCOR_RAMA_START_SLOPE_CNTL_R__VPCM_GAMCOR_RAMA_EXP_REGION_START_SLOPE_R__SHIFT 0x00000000
+
+// reg: VPCM_GAMCOR_RAMA_START_BASE_CNTL_B block: VPCM comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCM_GAMCOR_RAMA_START_BASE_CNTL_B__VPCM_GAMCOR_RAMA_EXP_REGION_START_BASE_B__SHIFT 0x00000000
+
+// reg: VPCM_GAMCOR_RAMA_START_BASE_CNTL_G block: VPCM comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCM_GAMCOR_RAMA_START_BASE_CNTL_G__VPCM_GAMCOR_RAMA_EXP_REGION_START_BASE_G__SHIFT 0x00000000
+
+// reg: VPCM_GAMCOR_RAMA_START_BASE_CNTL_R block: VPCM comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCM_GAMCOR_RAMA_START_BASE_CNTL_R__VPCM_GAMCOR_RAMA_EXP_REGION_START_BASE_R__SHIFT 0x00000000
+
+// reg: VPCM_GAMCOR_RAMA_END_CNTL1_B block: VPCM comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCM_GAMCOR_RAMA_END_CNTL1_B__VPCM_GAMCOR_RAMA_EXP_REGION_END_BASE_B__SHIFT 0x00000000
+
+// reg: VPCM_GAMCOR_RAMA_END_CNTL2_B block: VPCM comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCM_GAMCOR_RAMA_END_CNTL2_B__VPCM_GAMCOR_RAMA_EXP_REGION_END_B__SHIFT 0x00000000
+#define VPCM_GAMCOR_RAMA_END_CNTL2_B__VPCM_GAMCOR_RAMA_EXP_REGION_END_SLOPE_B__SHIFT 0x00000010
+
+// reg: VPCM_GAMCOR_RAMA_END_CNTL1_G block: VPCM comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCM_GAMCOR_RAMA_END_CNTL1_G__VPCM_GAMCOR_RAMA_EXP_REGION_END_BASE_G__SHIFT 0x00000000
+
+// reg: VPCM_GAMCOR_RAMA_END_CNTL2_G block: VPCM comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCM_GAMCOR_RAMA_END_CNTL2_G__VPCM_GAMCOR_RAMA_EXP_REGION_END_G__SHIFT 0x00000000
+#define VPCM_GAMCOR_RAMA_END_CNTL2_G__VPCM_GAMCOR_RAMA_EXP_REGION_END_SLOPE_G__SHIFT 0x00000010
+
+// reg: VPCM_GAMCOR_RAMA_END_CNTL1_R block: VPCM comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCM_GAMCOR_RAMA_END_CNTL1_R__VPCM_GAMCOR_RAMA_EXP_REGION_END_BASE_R__SHIFT 0x00000000
+
+// reg: VPCM_GAMCOR_RAMA_END_CNTL2_R block: VPCM comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCM_GAMCOR_RAMA_END_CNTL2_R__VPCM_GAMCOR_RAMA_EXP_REGION_END_R__SHIFT 0x00000000
+#define VPCM_GAMCOR_RAMA_END_CNTL2_R__VPCM_GAMCOR_RAMA_EXP_REGION_END_SLOPE_R__SHIFT 0x00000010
+
+// reg: VPCM_GAMCOR_RAMA_OFFSET_B block: VPCM comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCM_GAMCOR_RAMA_OFFSET_B__VPCM_GAMCOR_RAMA_OFFSET_B__SHIFT 0x00000000
+
+// reg: VPCM_GAMCOR_RAMA_OFFSET_G block: VPCM comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCM_GAMCOR_RAMA_OFFSET_G__VPCM_GAMCOR_RAMA_OFFSET_G__SHIFT 0x00000000
+
+// reg: VPCM_GAMCOR_RAMA_OFFSET_R block: VPCM comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCM_GAMCOR_RAMA_OFFSET_R__VPCM_GAMCOR_RAMA_OFFSET_R__SHIFT 0x00000000
+
+// reg: VPCM_GAMCOR_RAMA_REGION_0_1 block: VPCM comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCM_GAMCOR_RAMA_REGION_0_1__VPCM_GAMCOR_RAMA_EXP_REGION0_LUT_OFFSET__SHIFT 0x00000000
+#define VPCM_GAMCOR_RAMA_REGION_0_1__VPCM_GAMCOR_RAMA_EXP_REGION0_NUM_SEGMENTS__SHIFT 0x0000000c
+#define VPCM_GAMCOR_RAMA_REGION_0_1__VPCM_GAMCOR_RAMA_EXP_REGION1_LUT_OFFSET__SHIFT 0x00000010
+#define VPCM_GAMCOR_RAMA_REGION_0_1__VPCM_GAMCOR_RAMA_EXP_REGION1_NUM_SEGMENTS__SHIFT 0x0000001c
+
+// reg: VPCM_GAMCOR_RAMA_REGION_2_3 block: VPCM comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCM_GAMCOR_RAMA_REGION_2_3__VPCM_GAMCOR_RAMA_EXP_REGION2_LUT_OFFSET__SHIFT 0x00000000
+#define VPCM_GAMCOR_RAMA_REGION_2_3__VPCM_GAMCOR_RAMA_EXP_REGION2_NUM_SEGMENTS__SHIFT 0x0000000c
+#define VPCM_GAMCOR_RAMA_REGION_2_3__VPCM_GAMCOR_RAMA_EXP_REGION3_LUT_OFFSET__SHIFT 0x00000010
+#define VPCM_GAMCOR_RAMA_REGION_2_3__VPCM_GAMCOR_RAMA_EXP_REGION3_NUM_SEGMENTS__SHIFT 0x0000001c
+
+// reg: VPCM_GAMCOR_RAMA_REGION_4_5 block: VPCM comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCM_GAMCOR_RAMA_REGION_4_5__VPCM_GAMCOR_RAMA_EXP_REGION4_LUT_OFFSET__SHIFT 0x00000000
+#define VPCM_GAMCOR_RAMA_REGION_4_5__VPCM_GAMCOR_RAMA_EXP_REGION4_NUM_SEGMENTS__SHIFT 0x0000000c
+#define VPCM_GAMCOR_RAMA_REGION_4_5__VPCM_GAMCOR_RAMA_EXP_REGION5_LUT_OFFSET__SHIFT 0x00000010
+#define VPCM_GAMCOR_RAMA_REGION_4_5__VPCM_GAMCOR_RAMA_EXP_REGION5_NUM_SEGMENTS__SHIFT 0x0000001c
+
+// reg: VPCM_GAMCOR_RAMA_REGION_6_7 block: VPCM comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCM_GAMCOR_RAMA_REGION_6_7__VPCM_GAMCOR_RAMA_EXP_REGION6_LUT_OFFSET__SHIFT 0x00000000
+#define VPCM_GAMCOR_RAMA_REGION_6_7__VPCM_GAMCOR_RAMA_EXP_REGION6_NUM_SEGMENTS__SHIFT 0x0000000c
+#define VPCM_GAMCOR_RAMA_REGION_6_7__VPCM_GAMCOR_RAMA_EXP_REGION7_LUT_OFFSET__SHIFT 0x00000010
+#define VPCM_GAMCOR_RAMA_REGION_6_7__VPCM_GAMCOR_RAMA_EXP_REGION7_NUM_SEGMENTS__SHIFT 0x0000001c
+
+// reg: VPCM_GAMCOR_RAMA_REGION_8_9 block: VPCM comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCM_GAMCOR_RAMA_REGION_8_9__VPCM_GAMCOR_RAMA_EXP_REGION8_LUT_OFFSET__SHIFT 0x00000000
+#define VPCM_GAMCOR_RAMA_REGION_8_9__VPCM_GAMCOR_RAMA_EXP_REGION8_NUM_SEGMENTS__SHIFT 0x0000000c
+#define VPCM_GAMCOR_RAMA_REGION_8_9__VPCM_GAMCOR_RAMA_EXP_REGION9_LUT_OFFSET__SHIFT 0x00000010
+#define VPCM_GAMCOR_RAMA_REGION_8_9__VPCM_GAMCOR_RAMA_EXP_REGION9_NUM_SEGMENTS__SHIFT 0x0000001c
+
+// reg: VPCM_GAMCOR_RAMA_REGION_10_11 block: VPCM comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCM_GAMCOR_RAMA_REGION_10_11__VPCM_GAMCOR_RAMA_EXP_REGION10_LUT_OFFSET__SHIFT 0x00000000
+#define VPCM_GAMCOR_RAMA_REGION_10_11__VPCM_GAMCOR_RAMA_EXP_REGION10_NUM_SEGMENTS__SHIFT 0x0000000c
+#define VPCM_GAMCOR_RAMA_REGION_10_11__VPCM_GAMCOR_RAMA_EXP_REGION11_LUT_OFFSET__SHIFT 0x00000010
+#define VPCM_GAMCOR_RAMA_REGION_10_11__VPCM_GAMCOR_RAMA_EXP_REGION11_NUM_SEGMENTS__SHIFT 0x0000001c
+
+// reg: VPCM_GAMCOR_RAMA_REGION_12_13 block: VPCM comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCM_GAMCOR_RAMA_REGION_12_13__VPCM_GAMCOR_RAMA_EXP_REGION12_LUT_OFFSET__SHIFT 0x00000000
+#define VPCM_GAMCOR_RAMA_REGION_12_13__VPCM_GAMCOR_RAMA_EXP_REGION12_NUM_SEGMENTS__SHIFT 0x0000000c
+#define VPCM_GAMCOR_RAMA_REGION_12_13__VPCM_GAMCOR_RAMA_EXP_REGION13_LUT_OFFSET__SHIFT 0x00000010
+#define VPCM_GAMCOR_RAMA_REGION_12_13__VPCM_GAMCOR_RAMA_EXP_REGION13_NUM_SEGMENTS__SHIFT 0x0000001c
+
+// reg: VPCM_GAMCOR_RAMA_REGION_14_15 block: VPCM comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCM_GAMCOR_RAMA_REGION_14_15__VPCM_GAMCOR_RAMA_EXP_REGION14_LUT_OFFSET__SHIFT 0x00000000
+#define VPCM_GAMCOR_RAMA_REGION_14_15__VPCM_GAMCOR_RAMA_EXP_REGION14_NUM_SEGMENTS__SHIFT 0x0000000c
+#define VPCM_GAMCOR_RAMA_REGION_14_15__VPCM_GAMCOR_RAMA_EXP_REGION15_LUT_OFFSET__SHIFT 0x00000010
+#define VPCM_GAMCOR_RAMA_REGION_14_15__VPCM_GAMCOR_RAMA_EXP_REGION15_NUM_SEGMENTS__SHIFT 0x0000001c
+
+// reg: VPCM_GAMCOR_RAMA_REGION_16_17 block: VPCM comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCM_GAMCOR_RAMA_REGION_16_17__VPCM_GAMCOR_RAMA_EXP_REGION16_LUT_OFFSET__SHIFT 0x00000000
+#define VPCM_GAMCOR_RAMA_REGION_16_17__VPCM_GAMCOR_RAMA_EXP_REGION16_NUM_SEGMENTS__SHIFT 0x0000000c
+#define VPCM_GAMCOR_RAMA_REGION_16_17__VPCM_GAMCOR_RAMA_EXP_REGION17_LUT_OFFSET__SHIFT 0x00000010
+#define VPCM_GAMCOR_RAMA_REGION_16_17__VPCM_GAMCOR_RAMA_EXP_REGION17_NUM_SEGMENTS__SHIFT 0x0000001c
+
+// reg: VPCM_GAMCOR_RAMA_REGION_18_19 block: VPCM comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCM_GAMCOR_RAMA_REGION_18_19__VPCM_GAMCOR_RAMA_EXP_REGION18_LUT_OFFSET__SHIFT 0x00000000
+#define VPCM_GAMCOR_RAMA_REGION_18_19__VPCM_GAMCOR_RAMA_EXP_REGION18_NUM_SEGMENTS__SHIFT 0x0000000c
+#define VPCM_GAMCOR_RAMA_REGION_18_19__VPCM_GAMCOR_RAMA_EXP_REGION19_LUT_OFFSET__SHIFT 0x00000010
+#define VPCM_GAMCOR_RAMA_REGION_18_19__VPCM_GAMCOR_RAMA_EXP_REGION19_NUM_SEGMENTS__SHIFT 0x0000001c
+
+// reg: VPCM_GAMCOR_RAMA_REGION_20_21 block: VPCM comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCM_GAMCOR_RAMA_REGION_20_21__VPCM_GAMCOR_RAMA_EXP_REGION20_LUT_OFFSET__SHIFT 0x00000000
+#define VPCM_GAMCOR_RAMA_REGION_20_21__VPCM_GAMCOR_RAMA_EXP_REGION20_NUM_SEGMENTS__SHIFT 0x0000000c
+#define VPCM_GAMCOR_RAMA_REGION_20_21__VPCM_GAMCOR_RAMA_EXP_REGION21_LUT_OFFSET__SHIFT 0x00000010
+#define VPCM_GAMCOR_RAMA_REGION_20_21__VPCM_GAMCOR_RAMA_EXP_REGION21_NUM_SEGMENTS__SHIFT 0x0000001c
+
+// reg: VPCM_GAMCOR_RAMA_REGION_22_23 block: VPCM comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCM_GAMCOR_RAMA_REGION_22_23__VPCM_GAMCOR_RAMA_EXP_REGION22_LUT_OFFSET__SHIFT 0x00000000
+#define VPCM_GAMCOR_RAMA_REGION_22_23__VPCM_GAMCOR_RAMA_EXP_REGION22_NUM_SEGMENTS__SHIFT 0x0000000c
+#define VPCM_GAMCOR_RAMA_REGION_22_23__VPCM_GAMCOR_RAMA_EXP_REGION23_LUT_OFFSET__SHIFT 0x00000010
+#define VPCM_GAMCOR_RAMA_REGION_22_23__VPCM_GAMCOR_RAMA_EXP_REGION23_NUM_SEGMENTS__SHIFT 0x0000001c
+
+// reg: VPCM_GAMCOR_RAMA_REGION_24_25 block: VPCM comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCM_GAMCOR_RAMA_REGION_24_25__VPCM_GAMCOR_RAMA_EXP_REGION24_LUT_OFFSET__SHIFT 0x00000000
+#define VPCM_GAMCOR_RAMA_REGION_24_25__VPCM_GAMCOR_RAMA_EXP_REGION24_NUM_SEGMENTS__SHIFT 0x0000000c
+#define VPCM_GAMCOR_RAMA_REGION_24_25__VPCM_GAMCOR_RAMA_EXP_REGION25_LUT_OFFSET__SHIFT 0x00000010
+#define VPCM_GAMCOR_RAMA_REGION_24_25__VPCM_GAMCOR_RAMA_EXP_REGION25_NUM_SEGMENTS__SHIFT 0x0000001c
+
+// reg: VPCM_GAMCOR_RAMA_REGION_26_27 block: VPCM comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCM_GAMCOR_RAMA_REGION_26_27__VPCM_GAMCOR_RAMA_EXP_REGION26_LUT_OFFSET__SHIFT 0x00000000
+#define VPCM_GAMCOR_RAMA_REGION_26_27__VPCM_GAMCOR_RAMA_EXP_REGION26_NUM_SEGMENTS__SHIFT 0x0000000c
+#define VPCM_GAMCOR_RAMA_REGION_26_27__VPCM_GAMCOR_RAMA_EXP_REGION27_LUT_OFFSET__SHIFT 0x00000010
+#define VPCM_GAMCOR_RAMA_REGION_26_27__VPCM_GAMCOR_RAMA_EXP_REGION27_NUM_SEGMENTS__SHIFT 0x0000001c
+
+// reg: VPCM_GAMCOR_RAMA_REGION_28_29 block: VPCM comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCM_GAMCOR_RAMA_REGION_28_29__VPCM_GAMCOR_RAMA_EXP_REGION28_LUT_OFFSET__SHIFT 0x00000000
+#define VPCM_GAMCOR_RAMA_REGION_28_29__VPCM_GAMCOR_RAMA_EXP_REGION28_NUM_SEGMENTS__SHIFT 0x0000000c
+#define VPCM_GAMCOR_RAMA_REGION_28_29__VPCM_GAMCOR_RAMA_EXP_REGION29_LUT_OFFSET__SHIFT 0x00000010
+#define VPCM_GAMCOR_RAMA_REGION_28_29__VPCM_GAMCOR_RAMA_EXP_REGION29_NUM_SEGMENTS__SHIFT 0x0000001c
+
+// reg: VPCM_GAMCOR_RAMA_REGION_30_31 block: VPCM comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCM_GAMCOR_RAMA_REGION_30_31__VPCM_GAMCOR_RAMA_EXP_REGION30_LUT_OFFSET__SHIFT 0x00000000
+#define VPCM_GAMCOR_RAMA_REGION_30_31__VPCM_GAMCOR_RAMA_EXP_REGION30_NUM_SEGMENTS__SHIFT 0x0000000c
+#define VPCM_GAMCOR_RAMA_REGION_30_31__VPCM_GAMCOR_RAMA_EXP_REGION31_LUT_OFFSET__SHIFT 0x00000010
+#define VPCM_GAMCOR_RAMA_REGION_30_31__VPCM_GAMCOR_RAMA_EXP_REGION31_NUM_SEGMENTS__SHIFT 0x0000001c
+
+// reg: VPCM_GAMCOR_RAMA_REGION_32_33 block: VPCM comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCM_GAMCOR_RAMA_REGION_32_33__VPCM_GAMCOR_RAMA_EXP_REGION32_LUT_OFFSET__SHIFT 0x00000000
+#define VPCM_GAMCOR_RAMA_REGION_32_33__VPCM_GAMCOR_RAMA_EXP_REGION32_NUM_SEGMENTS__SHIFT 0x0000000c
+#define VPCM_GAMCOR_RAMA_REGION_32_33__VPCM_GAMCOR_RAMA_EXP_REGION33_LUT_OFFSET__SHIFT 0x00000010
+#define VPCM_GAMCOR_RAMA_REGION_32_33__VPCM_GAMCOR_RAMA_EXP_REGION33_NUM_SEGMENTS__SHIFT 0x0000001c
+
+// reg: VPCM_HDR_MULT_COEF block: VPCM comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCM_HDR_MULT_COEF__VPCM_HDR_MULT_COEF__SHIFT      0x00000000
+
+// reg: VPCM_MEM_PWR_CTRL block: VPCM comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCM_MEM_PWR_CTRL__GAMCOR_MEM_PWR_FORCE__SHIFT     0x00000000
+#define VPCM_MEM_PWR_CTRL__GAMCOR_MEM_PWR_DIS__SHIFT       0x00000002
+#define VPCM_MEM_PWR_CTRL__HIST_MEM_PWR_FORCE__SHIFT       0x00000008
+#define VPCM_MEM_PWR_CTRL__HIST_MEM_PWR_DIS__SHIFT         0x00000009
+
+// reg: VPCM_MEM_PWR_STATUS block: VPCM comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCM_MEM_PWR_STATUS__GAMCOR_MEM_PWR_STATE__SHIFT   0x00000000
+#define VPCM_MEM_PWR_STATUS__HIST_MEM_PWR_STATE__SHIFT     0x00000008
+
+// reg: VPCM_DEALPHA block: VPCM comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCM_DEALPHA__VPCM_DEALPHA_EN__SHIFT               0x00000000
+#define VPCM_DEALPHA__VPCM_DEALPHA_ABLND__SHIFT            0x00000001
+
+// reg: VPCM_COEF_FORMAT block: VPCM comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCM_COEF_FORMAT__VPCM_BIAS_FORMAT__SHIFT          0x00000000
+#define VPCM_COEF_FORMAT__VPCM_POST_CSC_COEF_FORMAT__SHIFT 0x00000004
+
+// reg: VPCM_TEST_DEBUG_INDEX block: VPCM comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCM_TEST_DEBUG_INDEX__VPCM_TEST_DEBUG_INDEX__SHIFT 0x00000000
+#define VPCM_TEST_DEBUG_INDEX__VPCM_TEST_DEBUG_WRITE_EN__SHIFT 0x00000008
+
+// reg: VPCM_TEST_DEBUG_DATA block: VPCM comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCM_TEST_DEBUG_DATA__VPCM_TEST_DEBUG_DATA__SHIFT  0x00000000
+
+// reg: VPCM_HIST_CNTL block: VPCM comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCM_HIST_CNTL__VPCM_HIST_SEL__SHIFT               0x00000000
+#define VPCM_HIST_CNTL__VPCM_HIST_CH_EN__SHIFT             0x00000002
+#define VPCM_HIST_CNTL__VPCM_HIST_SRC1_SEL__SHIFT          0x00000004
+#define VPCM_HIST_CNTL__VPCM_HIST_SRC2_SEL__SHIFT          0x00000005
+#define VPCM_HIST_CNTL__VPCM_HIST_SRC3_SEL__SHIFT          0x00000006
+#define VPCM_HIST_CNTL__VPCM_HIST_CH1_XBAR__SHIFT          0x00000007
+#define VPCM_HIST_CNTL__VPCM_HIST_CH2_XBAR__SHIFT          0x00000009
+#define VPCM_HIST_CNTL__VPCM_HIST_CH3_XBAR__SHIFT          0x0000000b
+#define VPCM_HIST_CNTL__VPCM_HIST_FORMAT__SHIFT            0x0000000d
+#define VPCM_HIST_CNTL__VPCM_HIST_READ_CHANNEL_MASK__SHIFT 0x0000000f
+
+// reg: VPCM_HIST_SCALE_SRC1 block: VPCM comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCM_HIST_SCALE_SRC1__VPCM_HIST_SCALE_SRC1__SHIFT  0x00000000
+
+// reg: VPCM_HIST_COEFA_SRC2 block: VPCM comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCM_HIST_COEFA_SRC2__VPCM_HIST_COEFA_SRC2__SHIFT  0x00000000
+
+// reg: VPCM_HIST_COEFB_SRC2 block: VPCM comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCM_HIST_COEFB_SRC2__VPCM_HIST_COEFB_SRC2__SHIFT  0x00000000
+
+// reg: VPCM_HIST_COEFC_SRC2 block: VPCM comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCM_HIST_COEFC_SRC2__VPCM_HIST_COEFC_SRC2__SHIFT  0x00000000
+
+// reg: VPCM_HIST_SCALE_SRC3 block: VPCM comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCM_HIST_SCALE_SRC3__VPCM_HIST_SCALE_SRC3__SHIFT  0x00000000
+
+// reg: VPCM_HIST_BIAS_SRC1 block: VPCM comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCM_HIST_BIAS_SRC1__VPCM_HIST_BIAS_SRC1__SHIFT    0x00000000
+
+// reg: VPCM_HIST_BIAS_SRC2 block: VPCM comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCM_HIST_BIAS_SRC2__VPCM_HIST_BIAS_SRC2__SHIFT    0x00000000
+
+// reg: VPCM_HIST_BIAS_SRC3 block: VPCM comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCM_HIST_BIAS_SRC3__VPCM_HIST_BIAS_SRC3__SHIFT    0x00000000
+
+// reg: VPCM_HIST_LOCK block: VPCM comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCM_HIST_LOCK__VPCM_HIST_LOCK__SHIFT              0x00000000
+
+// reg: VPCM_HIST_INDEX block: VPCM comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCM_HIST_INDEX__VPCM_HIST_INDEX__SHIFT            0x00000000
+
+// reg: VPCM_HIST_DATA block: VPCM comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCM_HIST_DATA__VPCM_HIST_DATA__SHIFT              0x00000000
+
+// reg: VPCM_HIST_STATUS block: VPCM comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPCM_HIST_STATUS__VPCM_HIST_RDY_STATUS__SHIFT      0x00000000
+#define VPCM_HIST_STATUS__VPCM_HIST_FRAME_COLLECT_SKIPPED__SHIFT 0x00000004
+#define VPCM_HIST_STATUS__VPCM_HIST_FRAME_COLLECT_SKIPPED_CURRENT__SHIFT 0x00000005
+#define VPCM_HIST_STATUS__VPCM_HIST_FRAME_COLLECT_SKIPPED_CNT__SHIFT 0x00000006
+#define VPCM_HIST_STATUS__VPCM_HIST_TX_NOT_COMPLETED__SHIFT 0x00000010
+#define VPCM_HIST_STATUS__VPCM_HIST_TX_NOT_COMPLETED_CURRENT__SHIFT 0x00000011
+#define VPCM_HIST_STATUS__VPCM_HIST_TX_STATUS__SHIFT       0x00000012
+#define VPCM_HIST_STATUS__VPCM_HIST_COUNT_OVERFLOW__SHIFT  0x00000018
+#define VPCM_HIST_STATUS__VPCM_HIST_COUNT_OVERFLOW_CURRENT__SHIFT 0x00000019
+#define VPCM_HIST_STATUS__VPCM_HIST_COLLECT_INCOMPLETE__SHIFT 0x0000001a
+#define VPCM_HIST_STATUS__VPCM_HIST_COLLECT_INCOMPLETE_CURRENT__SHIFT 0x0000001b
+
+// reg: VPDPP_CONTROL block: VPDPP_TOP comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDPP_CONTROL__VPECLK_G_GATE_DISABLE__SHIFT        0x00000008
+#define VPDPP_CONTROL__VPECLK_G_VPDSCL_GATE_DISABLE__SHIFT 0x0000000c
+#define VPDPP_CONTROL__VPECLK_R_GATE_DISABLE__SHIFT        0x0000000e
+#define VPDPP_CONTROL__VPDPP_FGCG_REP_DIS__SHIFT           0x00000018
+
+// reg: VPDPP_SOFT_RESET block: VPDPP_TOP comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDPP_SOFT_RESET__VPCNVC_SOFT_RESET__SHIFT         0x00000000
+#define VPDPP_SOFT_RESET__VPDSCL_SOFT_RESET__SHIFT         0x00000004
+#define VPDPP_SOFT_RESET__VPCM_SOFT_RESET__SHIFT           0x00000008
+#define VPDPP_SOFT_RESET__VPOBUF_SOFT_RESET__SHIFT         0x0000000c
+#define VPDPP_SOFT_RESET__VPHIST_SOFT_RESET__SHIFT         0x00000010
+
+// reg: VPDPP_CRC_VAL_R_G block: VPDPP_TOP comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDPP_CRC_VAL_R_G__VPDPP_CRC_R_CR__SHIFT           0x00000000
+#define VPDPP_CRC_VAL_R_G__VPDPP_CRC_G_Y__SHIFT            0x00000010
+
+// reg: VPDPP_CRC_VAL_B_A block: VPDPP_TOP comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDPP_CRC_VAL_B_A__VPDPP_CRC_B_CB__SHIFT           0x00000000
+#define VPDPP_CRC_VAL_B_A__VPDPP_CRC_ALPHA__SHIFT          0x00000010
+
+// reg: VPDPP_CRC_CTRL block: VPDPP_TOP comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDPP_CRC_CTRL__VPDPP_CRC_EN__SHIFT                0x00000000
+#define VPDPP_CRC_CTRL__VPDPP_CRC_CONT_EN__SHIFT           0x00000001
+#define VPDPP_CRC_CTRL__VPDPP_CRC_ONE_SHOT_PENDING__SHIFT  0x00000002
+#define VPDPP_CRC_CTRL__VPDPP_CRC_420_COMP_SEL__SHIFT      0x00000003
+#define VPDPP_CRC_CTRL__VPDPP_CRC_SRC_SEL__SHIFT           0x00000004
+#define VPDPP_CRC_CTRL__VPDPP_CRC_PIX_FORMAT_SEL__SHIFT    0x0000000b
+#define VPDPP_CRC_CTRL__VPDPP_CRC_MASK__SHIFT              0x00000010
+
+// reg: VPHOST_READ_CONTROL block: VPDPP_TOP comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPHOST_READ_CONTROL__HOST_READ_RATE_CONTROL__SHIFT 0x00000000
+
+// reg: VPDPP_DEBUG_SEL block: VPDPP_TOP comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDPP_DEBUG_SEL__VPDPP_VPECLK_DEBUG_BUS_SEL__SHIFT 0x00000000
+#define VPDPP_DEBUG_SEL__VPDPP_DBG_EN__SHIFT               0x0000001f
+
+// reg: VPDPP_DEBUG_SPARE block: VPDPP_TOP comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDPP_DEBUG_SPARE__VPDPP_DEBUG_SPARE__SHIFT        0x00000000
+
+// reg: VPDPP_TEST_DEBUG_INDEX block: VPDPP_TOP comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDPP_TEST_DEBUG_INDEX__VPDPP_TEST_DEBUG_INDEX__SHIFT 0x00000000
+#define VPDPP_TEST_DEBUG_INDEX__VPDPP_TEST_DEBUG_WRITE_EN__SHIFT 0x00000008
+
+// reg: VPDPP_TEST_DEBUG_DATA block: VPDPP_TOP comp: amd.com/lib/vpdpp-vpep2sw/1.0
+#define VPDPP_TEST_DEBUG_DATA__VPDPP_TEST_DEBUG_DATA__SHIFT 0x00000000
+
+// reg: VPMPC_CLOCK_CONTROL block: VPMPC_CFG comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_CLOCK_CONTROL__VPECLK_G_GATE_DISABLE__SHIFT  0x00000000
+#define VPMPC_CLOCK_CONTROL__VPECLK_R_GATE_DISABLE__SHIFT  0x00000001
+
+// reg: VPMPC_SOFT_RESET block: VPMPC_CFG comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_SOFT_RESET__VPMPCC0_SOFT_RESET__SHIFT        0x00000000
+#define VPMPC_SOFT_RESET__VPMPCC1_SOFT_RESET__SHIFT        0x00000001
+#define VPMPC_SOFT_RESET__VPMPC_SFR0_SOFT_RESET__SHIFT     0x0000000a
+#define VPMPC_SOFT_RESET__VPMPC_SFR1_SOFT_RESET__SHIFT     0x0000000b
+#define VPMPC_SOFT_RESET__VPMPC_SFT0_SOFT_RESET__SHIFT     0x00000014
+#define VPMPC_SOFT_RESET__VPMPC_SFT1_SOFT_RESET__SHIFT     0x00000015
+#define VPMPC_SOFT_RESET__VPMPC_SOFT_RESET__SHIFT          0x0000001f
+
+// reg: VPMPC_CRC_CTRL block: VPMPC_CFG comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_CRC_CTRL__VPMPC_CRC_EN__SHIFT                0x00000000
+#define VPMPC_CRC_CTRL__VPMPC_CRC_CONT_EN__SHIFT           0x00000004
+#define VPMPC_CRC_CTRL__VPMPC_CRC_SRC_SEL__SHIFT           0x00000018
+#define VPMPC_CRC_CTRL__VPMPC_CRC_ONE_SHOT_PENDING__SHIFT  0x0000001c
+#define VPMPC_CRC_CTRL__VPMPC_CRC_UPDATE_ENABLED__SHIFT    0x0000001e
+#define VPMPC_CRC_CTRL__VPMPC_CRC_UPDATE_LOCK__SHIFT       0x0000001f
+
+// reg: VPMPC_CRC_SEL_CONTROL block: VPMPC_CFG comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_CRC_SEL_CONTROL__VPMPC_CRC_VPDPP_SEL__SHIFT  0x00000000
+#define VPMPC_CRC_SEL_CONTROL__VPMPC_CRC_VPOPP_SEL__SHIFT  0x00000004
+#define VPMPC_CRC_SEL_CONTROL__VPMPC_CRC_MASK__SHIFT       0x00000010
+
+// reg: VPMPC_CRC_RESULT_AR block: VPMPC_CFG comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_CRC_RESULT_AR__VPMPC_CRC_RESULT_A__SHIFT     0x00000000
+#define VPMPC_CRC_RESULT_AR__VPMPC_CRC_RESULT_R__SHIFT     0x00000010
+
+// reg: VPMPC_CRC_RESULT_GB block: VPMPC_CFG comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_CRC_RESULT_GB__VPMPC_CRC_RESULT_G__SHIFT     0x00000000
+#define VPMPC_CRC_RESULT_GB__VPMPC_CRC_RESULT_B__SHIFT     0x00000010
+
+// reg: VPMPC_CRC_RESULT_C block: VPMPC_CFG comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_CRC_RESULT_C__VPMPC_CRC_RESULT_C__SHIFT      0x00000000
+
+// reg: VPMPC_DEBUG_CONTROL block: VPMPC_CFG comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_DEBUG_CONTROL__VPMPC_DEBUG_DATA_EN__SHIFT    0x00000000
+#define VPMPC_DEBUG_CONTROL__VPMPC_DEBUG_TOP_DATA_SELECT__SHIFT 0x00000001
+#define VPMPC_DEBUG_CONTROL__VPMPC_DEBUG_DATA_DIRECT_OUT_SELECT__SHIFT 0x00000004
+#define VPMPC_DEBUG_CONTROL__VPMPC_DEBUG_DATA_DIRECT_OUT_SFR_SELECT__SHIFT 0x00000008
+#define VPMPC_DEBUG_CONTROL__VPMPC_DEBUG_DATA_DIRECT_OUT_SFT_SELECT__SHIFT 0x0000000c
+#define VPMPC_DEBUG_CONTROL__VPMPC_RMCM_DEBUG_DATA_SELECT__SHIFT 0x00000010
+
+// reg: VPMPCC_DEBUG_DATA_SELECT block: VPMPC_CFG comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_DEBUG_DATA_SELECT__VPMPCC_DEBUG_DATA_VPMPCC_SELECT0__SHIFT 0x00000000
+#define VPMPCC_DEBUG_DATA_SELECT__VPMPCC_DEBUG_DATA_VPMPCC_BYTE_SELECT0__SHIFT 0x00000004
+#define VPMPCC_DEBUG_DATA_SELECT__VPMPCC_DEBUG_DATA_VPMPCC_OGAM_SELECT0__SHIFT 0x00000006
+#define VPMPCC_DEBUG_DATA_SELECT__VPMPCC_DEBUG_DATA_VPMPCC_SELECT1__SHIFT 0x00000008
+#define VPMPCC_DEBUG_DATA_SELECT__VPMPCC_DEBUG_DATA_VPMPCC_BYTE_SELECT1__SHIFT 0x0000000c
+#define VPMPCC_DEBUG_DATA_SELECT__VPMPCC_DEBUG_DATA_VPMPCC_OGAM_SELECT1__SHIFT 0x0000000e
+#define VPMPCC_DEBUG_DATA_SELECT__VPMPCC_DEBUG_DATA_VPMPCC_SELECT2__SHIFT 0x00000010
+#define VPMPCC_DEBUG_DATA_SELECT__VPMPCC_DEBUG_DATA_VPMPCC_BYTE_SELECT2__SHIFT 0x00000014
+#define VPMPCC_DEBUG_DATA_SELECT__VPMPCC_DEBUG_DATA_VPMPCC_OGAM_SELECT2__SHIFT 0x00000016
+#define VPMPCC_DEBUG_DATA_SELECT__VPMPCC_DEBUG_DATA_VPMPCC_SELECT3__SHIFT 0x00000018
+#define VPMPCC_DEBUG_DATA_SELECT__VPMPCC_DEBUG_DATA_VPMPCC_BYTE_SELECT3__SHIFT 0x0000001c
+#define VPMPCC_DEBUG_DATA_SELECT__VPMPCC_DEBUG_DATA_VPMPCC_OGAM_SELECT3__SHIFT 0x0000001e
+
+// reg: VPMPC_BYPASS_BG_AR block: VPMPC_CFG comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_BYPASS_BG_AR__VPMPC_BYPASS_BG_ALPHA__SHIFT   0x00000000
+#define VPMPC_BYPASS_BG_AR__VPMPC_BYPASS_BG_R_CR__SHIFT    0x00000010
+
+// reg: VPMPC_BYPASS_BG_GB block: VPMPC_CFG comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_BYPASS_BG_GB__VPMPC_BYPASS_BG_G_Y__SHIFT     0x00000000
+#define VPMPC_BYPASS_BG_GB__VPMPC_BYPASS_BG_B_CB__SHIFT    0x00000010
+
+// reg: VPMPC_HOST_READ_CONTROL block: VPMPC_CFG comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_HOST_READ_CONTROL__HOST_READ_RATE_CONTROL__SHIFT 0x00000000
+
+// reg: VPMPC_PENDING_STATUS_MISC block: VPMPC_CFG comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_PENDING_STATUS_MISC__VPMPCC0_CONFIG_UPDATE_PENDING__SHIFT 0x00000008
+#define VPMPC_PENDING_STATUS_MISC__VPMPCC1_CONFIG_UPDATE_PENDING__SHIFT 0x00000009
+
+// reg: VPMPC_VPCDC0_3DLUT_FL_CONFIG block: VPMPC_CFG comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_VPCDC0_3DLUT_FL_CONFIG__VPCDC0_3DLUT_FL_MODE__SHIFT 0x00000000
+#define VPMPC_VPCDC0_3DLUT_FL_CONFIG__VPCDC0_3DLUT_FL_FORMAT__SHIFT 0x00000004
+
+// reg: VPMPC_VPCDC0_3DLUT_FL_BIAS_SCALE block: VPMPC_CFG comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_VPCDC0_3DLUT_FL_BIAS_SCALE__VPCDC0_3DLUT_FL_BIAS__SHIFT 0x00000000
+#define VPMPC_VPCDC0_3DLUT_FL_BIAS_SCALE__VPCDC0_3DLUT_FL_SCALE__SHIFT 0x00000010
+
+// reg: VPMPC_CFG_TEST_DEBUG_INDEX block: VPMPC_CFG comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_CFG_TEST_DEBUG_INDEX__VPMPC_CFG_TEST_DEBUG_INDEX__SHIFT 0x00000000
+#define VPMPC_CFG_TEST_DEBUG_INDEX__VPMPC_CFG_TEST_DEBUG_WRITE_EN__SHIFT 0x00000008
+
+// reg: VPMPC_CFG_TEST_DEBUG_DATA block: VPMPC_CFG comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_CFG_TEST_DEBUG_DATA__VPMPC_CFG_TEST_DEBUG_DATA__SHIFT 0x00000000
+
+// reg: VPMPC_OUT0_MUX block: VPMPC_OCSC comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_OUT0_MUX__VPMPC_OUT_MUX__SHIFT               0x00000000
+
+// reg: VPMPC_OUT0_FLOAT_CONTROL block: VPMPC_OCSC comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_OUT0_FLOAT_CONTROL__VPMPC_OUT_FLOAT_EN__SHIFT 0x00000000
+
+// reg: VPMPC_OUT0_DENORM_CONTROL block: VPMPC_OCSC comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_OUT0_DENORM_CONTROL__VPMPC_OUT_DENORM_CLAMP_MIN_R_CR__SHIFT 0x00000000
+#define VPMPC_OUT0_DENORM_CONTROL__VPMPC_OUT_DENORM_CLAMP_MAX_R_CR__SHIFT 0x0000000c
+#define VPMPC_OUT0_DENORM_CONTROL__VPMPC_OUT_DENORM_MODE__SHIFT 0x00000018
+
+// reg: VPMPC_OUT0_DENORM_CLAMP_G_Y block: VPMPC_OCSC comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_OUT0_DENORM_CLAMP_G_Y__VPMPC_OUT_DENORM_CLAMP_MIN_G_Y__SHIFT 0x00000000
+#define VPMPC_OUT0_DENORM_CLAMP_G_Y__VPMPC_OUT_DENORM_CLAMP_MAX_G_Y__SHIFT 0x0000000c
+
+// reg: VPMPC_OUT0_DENORM_CLAMP_B_CB block: VPMPC_OCSC comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_OUT0_DENORM_CLAMP_B_CB__VPMPC_OUT_DENORM_CLAMP_MIN_B_CB__SHIFT 0x00000000
+#define VPMPC_OUT0_DENORM_CLAMP_B_CB__VPMPC_OUT_DENORM_CLAMP_MAX_B_CB__SHIFT 0x0000000c
+
+// reg: VPMPC_OUT1_MUX block: VPMPC_OCSC comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_OUT1_MUX__VPMPC_OUT_MUX__SHIFT               0x00000000
+
+// reg: VPMPC_OUT1_FLOAT_CONTROL block: VPMPC_OCSC comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_OUT1_FLOAT_CONTROL__VPMPC_OUT_FLOAT_EN__SHIFT 0x00000000
+
+// reg: VPMPC_OUT1_DENORM_CONTROL block: VPMPC_OCSC comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_OUT1_DENORM_CONTROL__VPMPC_OUT_DENORM_CLAMP_MIN_R_CR__SHIFT 0x00000000
+#define VPMPC_OUT1_DENORM_CONTROL__VPMPC_OUT_DENORM_CLAMP_MAX_R_CR__SHIFT 0x0000000c
+#define VPMPC_OUT1_DENORM_CONTROL__VPMPC_OUT_DENORM_MODE__SHIFT 0x00000018
+
+// reg: VPMPC_OUT1_DENORM_CLAMP_G_Y block: VPMPC_OCSC comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_OUT1_DENORM_CLAMP_G_Y__VPMPC_OUT_DENORM_CLAMP_MIN_G_Y__SHIFT 0x00000000
+#define VPMPC_OUT1_DENORM_CLAMP_G_Y__VPMPC_OUT_DENORM_CLAMP_MAX_G_Y__SHIFT 0x0000000c
+
+// reg: VPMPC_OUT1_DENORM_CLAMP_B_CB block: VPMPC_OCSC comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_OUT1_DENORM_CLAMP_B_CB__VPMPC_OUT_DENORM_CLAMP_MIN_B_CB__SHIFT 0x00000000
+#define VPMPC_OUT1_DENORM_CLAMP_B_CB__VPMPC_OUT_DENORM_CLAMP_MAX_B_CB__SHIFT 0x0000000c
+
+// reg: VPMPC_OUT_CSC_COEF_FORMAT block: VPMPC_OCSC comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_OUT_CSC_COEF_FORMAT__VPMPC_OCSC0_COEF_FORMAT__SHIFT 0x00000000
+#define VPMPC_OUT_CSC_COEF_FORMAT__VPMPC_OCSC1_COEF_FORMAT__SHIFT 0x00000001
+
+// reg: VPMPC_OUT0_CSC_MODE block: VPMPC_OCSC comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_OUT0_CSC_MODE__VPMPC_OCSC_MODE__SHIFT        0x00000000
+#define VPMPC_OUT0_CSC_MODE__VPMPC_OCSC_MODE_CURRENT__SHIFT 0x00000007
+
+// reg: VPMPC_OUT0_CSC_C11_C12_A block: VPMPC_OCSC comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_OUT0_CSC_C11_C12_A__VPMPC_OCSC_C11_A__SHIFT  0x00000000
+#define VPMPC_OUT0_CSC_C11_C12_A__VPMPC_OCSC_C12_A__SHIFT  0x00000010
+
+// reg: VPMPC_OUT0_CSC_C13_C14_A block: VPMPC_OCSC comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_OUT0_CSC_C13_C14_A__VPMPC_OCSC_C13_A__SHIFT  0x00000000
+#define VPMPC_OUT0_CSC_C13_C14_A__VPMPC_OCSC_C14_A__SHIFT  0x00000010
+
+// reg: VPMPC_OUT0_CSC_C21_C22_A block: VPMPC_OCSC comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_OUT0_CSC_C21_C22_A__VPMPC_OCSC_C21_A__SHIFT  0x00000000
+#define VPMPC_OUT0_CSC_C21_C22_A__VPMPC_OCSC_C22_A__SHIFT  0x00000010
+
+// reg: VPMPC_OUT0_CSC_C23_C24_A block: VPMPC_OCSC comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_OUT0_CSC_C23_C24_A__VPMPC_OCSC_C23_A__SHIFT  0x00000000
+#define VPMPC_OUT0_CSC_C23_C24_A__VPMPC_OCSC_C24_A__SHIFT  0x00000010
+
+// reg: VPMPC_OUT0_CSC_C31_C32_A block: VPMPC_OCSC comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_OUT0_CSC_C31_C32_A__VPMPC_OCSC_C31_A__SHIFT  0x00000000
+#define VPMPC_OUT0_CSC_C31_C32_A__VPMPC_OCSC_C32_A__SHIFT  0x00000010
+
+// reg: VPMPC_OUT0_CSC_C33_C34_A block: VPMPC_OCSC comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_OUT0_CSC_C33_C34_A__VPMPC_OCSC_C33_A__SHIFT  0x00000000
+#define VPMPC_OUT0_CSC_C33_C34_A__VPMPC_OCSC_C34_A__SHIFT  0x00000010
+
+// reg: VPMPC_OUT1_CSC_MODE block: VPMPC_OCSC comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_OUT1_CSC_MODE__VPMPC_OCSC_MODE__SHIFT        0x00000000
+#define VPMPC_OUT1_CSC_MODE__VPMPC_OCSC_MODE_CURRENT__SHIFT 0x00000007
+
+// reg: VPMPC_OUT1_CSC_C11_C12_A block: VPMPC_OCSC comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_OUT1_CSC_C11_C12_A__VPMPC_OCSC_C11_A__SHIFT  0x00000000
+#define VPMPC_OUT1_CSC_C11_C12_A__VPMPC_OCSC_C12_A__SHIFT  0x00000010
+
+// reg: VPMPC_OUT1_CSC_C13_C14_A block: VPMPC_OCSC comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_OUT1_CSC_C13_C14_A__VPMPC_OCSC_C13_A__SHIFT  0x00000000
+#define VPMPC_OUT1_CSC_C13_C14_A__VPMPC_OCSC_C14_A__SHIFT  0x00000010
+
+// reg: VPMPC_OUT1_CSC_C21_C22_A block: VPMPC_OCSC comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_OUT1_CSC_C21_C22_A__VPMPC_OCSC_C21_A__SHIFT  0x00000000
+#define VPMPC_OUT1_CSC_C21_C22_A__VPMPC_OCSC_C22_A__SHIFT  0x00000010
+
+// reg: VPMPC_OUT1_CSC_C23_C24_A block: VPMPC_OCSC comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_OUT1_CSC_C23_C24_A__VPMPC_OCSC_C23_A__SHIFT  0x00000000
+#define VPMPC_OUT1_CSC_C23_C24_A__VPMPC_OCSC_C24_A__SHIFT  0x00000010
+
+// reg: VPMPC_OUT1_CSC_C31_C32_A block: VPMPC_OCSC comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_OUT1_CSC_C31_C32_A__VPMPC_OCSC_C31_A__SHIFT  0x00000000
+#define VPMPC_OUT1_CSC_C31_C32_A__VPMPC_OCSC_C32_A__SHIFT  0x00000010
+
+// reg: VPMPC_OUT1_CSC_C33_C34_A block: VPMPC_OCSC comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_OUT1_CSC_C33_C34_A__VPMPC_OCSC_C33_A__SHIFT  0x00000000
+#define VPMPC_OUT1_CSC_C33_C34_A__VPMPC_OCSC_C34_A__SHIFT  0x00000010
+
+// reg: VPMPC_OCSC_TEST_DEBUG_INDEX block: VPMPC_OCSC comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_OCSC_TEST_DEBUG_INDEX__VPMPC_OCSC_TEST_DEBUG_INDEX__SHIFT 0x00000000
+#define VPMPC_OCSC_TEST_DEBUG_INDEX__VPMPC_OCSC_TEST_DEBUG_WRITE_EN__SHIFT 0x00000008
+
+// reg: VPMPC_OCSC_TEST_DEBUG_DATA block: VPMPC_OCSC comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_OCSC_TEST_DEBUG_DATA__VPMPC_OCSC_TEST_DEBUG_DATA__SHIFT 0x00000000
+
+// reg: VPMPCC_TOP_SEL block: VPMPCC comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_TOP_SEL__VPMPCC_TOP_SEL__SHIFT              0x00000000
+
+// reg: VPMPCC_BOT_SEL block: VPMPCC comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_BOT_SEL__VPMPCC_BOT_SEL__SHIFT              0x00000000
+
+// reg: VPMPCC_VPOPP_ID block: VPMPCC comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_VPOPP_ID__VPMPCC_VPOPP_ID__SHIFT            0x00000000
+
+// reg: VPMPCC_CONTROL block: VPMPCC comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_CONTROL__VPMPCC_MODE__SHIFT                 0x00000000
+#define VPMPCC_CONTROL__VPMPCC_ALPHA_BLND_MODE__SHIFT      0x00000004
+#define VPMPCC_CONTROL__VPMPCC_ALPHA_MULTIPLIED_MODE__SHIFT 0x00000006
+#define VPMPCC_CONTROL__VPMPCC_BLND_ACTIVE_OVERLAP_ONLY__SHIFT 0x00000007
+#define VPMPCC_CONTROL__VPMPCC_BOT_GAIN_MODE__SHIFT        0x0000000b
+
+// reg: VPMPCC_CONTROL2 block: VPMPCC comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_CONTROL2__VPMPCC_GLOBAL_ALPHA__SHIFT        0x00000000
+#define VPMPCC_CONTROL2__VPMPCC_GLOBAL_GAIN__SHIFT         0x00000010
+
+// reg: VPMPCC_TOP_GAIN block: VPMPCC comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_TOP_GAIN__VPMPCC_TOP_GAIN__SHIFT            0x00000000
+
+// reg: VPMPCC_BOT_GAIN_INSIDE block: VPMPCC comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_BOT_GAIN_INSIDE__VPMPCC_BOT_GAIN_INSIDE__SHIFT 0x00000000
+
+// reg: VPMPCC_BOT_GAIN_OUTSIDE block: VPMPCC comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_BOT_GAIN_OUTSIDE__VPMPCC_BOT_GAIN_OUTSIDE__SHIFT 0x00000000
+
+// reg: VPMPCC_MOVABLE_CM_LOCATION_CONTROL block: VPMPCC comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_MOVABLE_CM_LOCATION_CONTROL__VPMPCC_MOVABLE_CM_LOCATION_CNTL__SHIFT 0x00000000
+#define VPMPCC_MOVABLE_CM_LOCATION_CONTROL__VPMPCC_MOVABLE_CM_LOCATION_CNTL_CURRENT__SHIFT 0x00000004
+
+// reg: VPMPCC_BG_R_CR block: VPMPCC comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_BG_R_CR__VPMPCC_BG_R_CR__SHIFT              0x00000000
+
+// reg: VPMPCC_BG_G_Y block: VPMPCC comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_BG_G_Y__VPMPCC_BG_G_Y__SHIFT                0x00000000
+
+// reg: VPMPCC_BG_B_CB block: VPMPCC comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_BG_B_CB__VPMPCC_BG_B_CB__SHIFT              0x00000000
+
+// reg: VPMPCC_MEM_PWR_CTRL block: VPMPCC comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_MEM_PWR_CTRL__VPMPCC_OGAM_MEM_PWR_FORCE__SHIFT 0x00000000
+#define VPMPCC_MEM_PWR_CTRL__VPMPCC_OGAM_MEM_PWR_DIS__SHIFT 0x00000002
+#define VPMPCC_MEM_PWR_CTRL__VPMPCC_OGAM_MEM_LOW_PWR_MODE__SHIFT 0x00000004
+#define VPMPCC_MEM_PWR_CTRL__VPMPCC_OGAM_MEM_PWR_STATE__SHIFT 0x00000008
+
+// reg: VPMPCC_STATUS block: VPMPCC comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_STATUS__VPMPCC_IDLE__SHIFT                  0x00000000
+#define VPMPCC_STATUS__VPMPCC_BUSY__SHIFT                  0x00000001
+#define VPMPCC_STATUS__VPMPCC_DISABLED__SHIFT              0x00000002
+
+// reg: VPMPCC_TEST_DEBUG_INDEX block: VPMPCC comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_TEST_DEBUG_INDEX__VPMPCC_TEST_DEBUG_INDEX__SHIFT 0x00000000
+#define VPMPCC_TEST_DEBUG_INDEX__VPMPCC_TEST_DEBUG_WRITE_EN__SHIFT 0x00000008
+
+// reg: VPMPCC_TEST_DEBUG_DATA block: VPMPCC comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_TEST_DEBUG_DATA__VPMPCC_TEST_DEBUG_DATA__SHIFT 0x00000000
+
+// reg: VPMPCC_OGAM_CONTROL block: VPMPCC_OGAM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_OGAM_CONTROL__VPMPCC_OGAM_MODE__SHIFT       0x00000000
+#define VPMPCC_OGAM_CONTROL__VPMPCC_OGAM_PWL_DISABLE__SHIFT 0x00000003
+#define VPMPCC_OGAM_CONTROL__VPMPCC_OGAM_MODE_CURRENT__SHIFT 0x00000007
+#define VPMPCC_OGAM_CONTROL__VPMPCC_OGAM_SELECT_CURRENT__SHIFT 0x00000009
+
+// reg: VPMPCC_OGAM_LUT_INDEX block: VPMPCC_OGAM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_OGAM_LUT_INDEX__VPMPCC_OGAM_LUT_INDEX__SHIFT 0x00000000
+
+// reg: VPMPCC_OGAM_LUT_DATA block: VPMPCC_OGAM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_OGAM_LUT_DATA__VPMPCC_OGAM_LUT_DATA__SHIFT  0x00000000
+
+// reg: VPMPCC_OGAM_LUT_CONTROL block: VPMPCC_OGAM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_OGAM_LUT_CONTROL__VPMPCC_OGAM_LUT_WRITE_COLOR_MASK__SHIFT 0x00000000
+#define VPMPCC_OGAM_LUT_CONTROL__VPMPCC_OGAM_LUT_READ_COLOR_SEL__SHIFT 0x00000003
+#define VPMPCC_OGAM_LUT_CONTROL__VPMPCC_OGAM_LUT_READ_DBG__SHIFT 0x00000005
+#define VPMPCC_OGAM_LUT_CONTROL__VPMPCC_OGAM_LUT_HOST_SEL__SHIFT 0x00000006
+#define VPMPCC_OGAM_LUT_CONTROL__VPMPCC_OGAM_LUT_CONFIG_MODE__SHIFT 0x00000007
+
+// reg: VPMPCC_OGAM_RAMA_START_CNTL_B block: VPMPCC_OGAM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_OGAM_RAMA_START_CNTL_B__VPMPCC_OGAM_RAMA_EXP_REGION_START_B__SHIFT 0x00000000
+#define VPMPCC_OGAM_RAMA_START_CNTL_B__VPMPCC_OGAM_RAMA_EXP_REGION_START_SEGMENT_B__SHIFT 0x00000014
+
+// reg: VPMPCC_OGAM_RAMA_START_CNTL_G block: VPMPCC_OGAM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_OGAM_RAMA_START_CNTL_G__VPMPCC_OGAM_RAMA_EXP_REGION_START_G__SHIFT 0x00000000
+#define VPMPCC_OGAM_RAMA_START_CNTL_G__VPMPCC_OGAM_RAMA_EXP_REGION_START_SEGMENT_G__SHIFT 0x00000014
+
+// reg: VPMPCC_OGAM_RAMA_START_CNTL_R block: VPMPCC_OGAM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_OGAM_RAMA_START_CNTL_R__VPMPCC_OGAM_RAMA_EXP_REGION_START_R__SHIFT 0x00000000
+#define VPMPCC_OGAM_RAMA_START_CNTL_R__VPMPCC_OGAM_RAMA_EXP_REGION_START_SEGMENT_R__SHIFT 0x00000014
+
+// reg: VPMPCC_OGAM_RAMA_START_SLOPE_CNTL_B block: VPMPCC_OGAM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_OGAM_RAMA_START_SLOPE_CNTL_B__VPMPCC_OGAM_RAMA_EXP_REGION_START_SLOPE_B__SHIFT 0x00000000
+
+// reg: VPMPCC_OGAM_RAMA_START_SLOPE_CNTL_G block: VPMPCC_OGAM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_OGAM_RAMA_START_SLOPE_CNTL_G__VPMPCC_OGAM_RAMA_EXP_REGION_START_SLOPE_G__SHIFT 0x00000000
+
+// reg: VPMPCC_OGAM_RAMA_START_SLOPE_CNTL_R block: VPMPCC_OGAM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_OGAM_RAMA_START_SLOPE_CNTL_R__VPMPCC_OGAM_RAMA_EXP_REGION_START_SLOPE_R__SHIFT 0x00000000
+
+// reg: VPMPCC_OGAM_RAMA_START_BASE_CNTL_B block: VPMPCC_OGAM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_OGAM_RAMA_START_BASE_CNTL_B__VPMPCC_OGAM_RAMA_EXP_REGION_START_BASE_B__SHIFT 0x00000000
+
+// reg: VPMPCC_OGAM_RAMA_START_BASE_CNTL_G block: VPMPCC_OGAM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_OGAM_RAMA_START_BASE_CNTL_G__VPMPCC_OGAM_RAMA_EXP_REGION_START_BASE_G__SHIFT 0x00000000
+
+// reg: VPMPCC_OGAM_RAMA_START_BASE_CNTL_R block: VPMPCC_OGAM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_OGAM_RAMA_START_BASE_CNTL_R__VPMPCC_OGAM_RAMA_EXP_REGION_START_BASE_R__SHIFT 0x00000000
+
+// reg: VPMPCC_OGAM_RAMA_END_CNTL1_B block: VPMPCC_OGAM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_OGAM_RAMA_END_CNTL1_B__VPMPCC_OGAM_RAMA_EXP_REGION_END_BASE_B__SHIFT 0x00000000
+
+// reg: VPMPCC_OGAM_RAMA_END_CNTL2_B block: VPMPCC_OGAM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_OGAM_RAMA_END_CNTL2_B__VPMPCC_OGAM_RAMA_EXP_REGION_END_B__SHIFT 0x00000000
+#define VPMPCC_OGAM_RAMA_END_CNTL2_B__VPMPCC_OGAM_RAMA_EXP_REGION_END_SLOPE_B__SHIFT 0x00000010
+
+// reg: VPMPCC_OGAM_RAMA_END_CNTL1_G block: VPMPCC_OGAM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_OGAM_RAMA_END_CNTL1_G__VPMPCC_OGAM_RAMA_EXP_REGION_END_BASE_G__SHIFT 0x00000000
+
+// reg: VPMPCC_OGAM_RAMA_END_CNTL2_G block: VPMPCC_OGAM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_OGAM_RAMA_END_CNTL2_G__VPMPCC_OGAM_RAMA_EXP_REGION_END_G__SHIFT 0x00000000
+#define VPMPCC_OGAM_RAMA_END_CNTL2_G__VPMPCC_OGAM_RAMA_EXP_REGION_END_SLOPE_G__SHIFT 0x00000010
+
+// reg: VPMPCC_OGAM_RAMA_END_CNTL1_R block: VPMPCC_OGAM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_OGAM_RAMA_END_CNTL1_R__VPMPCC_OGAM_RAMA_EXP_REGION_END_BASE_R__SHIFT 0x00000000
+
+// reg: VPMPCC_OGAM_RAMA_END_CNTL2_R block: VPMPCC_OGAM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_OGAM_RAMA_END_CNTL2_R__VPMPCC_OGAM_RAMA_EXP_REGION_END_R__SHIFT 0x00000000
+#define VPMPCC_OGAM_RAMA_END_CNTL2_R__VPMPCC_OGAM_RAMA_EXP_REGION_END_SLOPE_R__SHIFT 0x00000010
+
+// reg: VPMPCC_OGAM_RAMA_OFFSET_B block: VPMPCC_OGAM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_OGAM_RAMA_OFFSET_B__VPMPCC_OGAM_RAMA_OFFSET_B__SHIFT 0x00000000
+
+// reg: VPMPCC_OGAM_RAMA_OFFSET_G block: VPMPCC_OGAM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_OGAM_RAMA_OFFSET_G__VPMPCC_OGAM_RAMA_OFFSET_G__SHIFT 0x00000000
+
+// reg: VPMPCC_OGAM_RAMA_OFFSET_R block: VPMPCC_OGAM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_OGAM_RAMA_OFFSET_R__VPMPCC_OGAM_RAMA_OFFSET_R__SHIFT 0x00000000
+
+// reg: VPMPCC_OGAM_RAMA_REGION_0_1 block: VPMPCC_OGAM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_OGAM_RAMA_REGION_0_1__VPMPCC_OGAM_RAMA_EXP_REGION0_LUT_OFFSET__SHIFT 0x00000000
+#define VPMPCC_OGAM_RAMA_REGION_0_1__VPMPCC_OGAM_RAMA_EXP_REGION0_NUM_SEGMENTS__SHIFT 0x0000000c
+#define VPMPCC_OGAM_RAMA_REGION_0_1__VPMPCC_OGAM_RAMA_EXP_REGION1_LUT_OFFSET__SHIFT 0x00000010
+#define VPMPCC_OGAM_RAMA_REGION_0_1__VPMPCC_OGAM_RAMA_EXP_REGION1_NUM_SEGMENTS__SHIFT 0x0000001c
+
+// reg: VPMPCC_OGAM_RAMA_REGION_2_3 block: VPMPCC_OGAM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_OGAM_RAMA_REGION_2_3__VPMPCC_OGAM_RAMA_EXP_REGION2_LUT_OFFSET__SHIFT 0x00000000
+#define VPMPCC_OGAM_RAMA_REGION_2_3__VPMPCC_OGAM_RAMA_EXP_REGION2_NUM_SEGMENTS__SHIFT 0x0000000c
+#define VPMPCC_OGAM_RAMA_REGION_2_3__VPMPCC_OGAM_RAMA_EXP_REGION3_LUT_OFFSET__SHIFT 0x00000010
+#define VPMPCC_OGAM_RAMA_REGION_2_3__VPMPCC_OGAM_RAMA_EXP_REGION3_NUM_SEGMENTS__SHIFT 0x0000001c
+
+// reg: VPMPCC_OGAM_RAMA_REGION_4_5 block: VPMPCC_OGAM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_OGAM_RAMA_REGION_4_5__VPMPCC_OGAM_RAMA_EXP_REGION4_LUT_OFFSET__SHIFT 0x00000000
+#define VPMPCC_OGAM_RAMA_REGION_4_5__VPMPCC_OGAM_RAMA_EXP_REGION4_NUM_SEGMENTS__SHIFT 0x0000000c
+#define VPMPCC_OGAM_RAMA_REGION_4_5__VPMPCC_OGAM_RAMA_EXP_REGION5_LUT_OFFSET__SHIFT 0x00000010
+#define VPMPCC_OGAM_RAMA_REGION_4_5__VPMPCC_OGAM_RAMA_EXP_REGION5_NUM_SEGMENTS__SHIFT 0x0000001c
+
+// reg: VPMPCC_OGAM_RAMA_REGION_6_7 block: VPMPCC_OGAM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_OGAM_RAMA_REGION_6_7__VPMPCC_OGAM_RAMA_EXP_REGION6_LUT_OFFSET__SHIFT 0x00000000
+#define VPMPCC_OGAM_RAMA_REGION_6_7__VPMPCC_OGAM_RAMA_EXP_REGION6_NUM_SEGMENTS__SHIFT 0x0000000c
+#define VPMPCC_OGAM_RAMA_REGION_6_7__VPMPCC_OGAM_RAMA_EXP_REGION7_LUT_OFFSET__SHIFT 0x00000010
+#define VPMPCC_OGAM_RAMA_REGION_6_7__VPMPCC_OGAM_RAMA_EXP_REGION7_NUM_SEGMENTS__SHIFT 0x0000001c
+
+// reg: VPMPCC_OGAM_RAMA_REGION_8_9 block: VPMPCC_OGAM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_OGAM_RAMA_REGION_8_9__VPMPCC_OGAM_RAMA_EXP_REGION8_LUT_OFFSET__SHIFT 0x00000000
+#define VPMPCC_OGAM_RAMA_REGION_8_9__VPMPCC_OGAM_RAMA_EXP_REGION8_NUM_SEGMENTS__SHIFT 0x0000000c
+#define VPMPCC_OGAM_RAMA_REGION_8_9__VPMPCC_OGAM_RAMA_EXP_REGION9_LUT_OFFSET__SHIFT 0x00000010
+#define VPMPCC_OGAM_RAMA_REGION_8_9__VPMPCC_OGAM_RAMA_EXP_REGION9_NUM_SEGMENTS__SHIFT 0x0000001c
+
+// reg: VPMPCC_OGAM_RAMA_REGION_10_11 block: VPMPCC_OGAM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_OGAM_RAMA_REGION_10_11__VPMPCC_OGAM_RAMA_EXP_REGION10_LUT_OFFSET__SHIFT 0x00000000
+#define VPMPCC_OGAM_RAMA_REGION_10_11__VPMPCC_OGAM_RAMA_EXP_REGION10_NUM_SEGMENTS__SHIFT 0x0000000c
+#define VPMPCC_OGAM_RAMA_REGION_10_11__VPMPCC_OGAM_RAMA_EXP_REGION11_LUT_OFFSET__SHIFT 0x00000010
+#define VPMPCC_OGAM_RAMA_REGION_10_11__VPMPCC_OGAM_RAMA_EXP_REGION11_NUM_SEGMENTS__SHIFT 0x0000001c
+
+// reg: VPMPCC_OGAM_RAMA_REGION_12_13 block: VPMPCC_OGAM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_OGAM_RAMA_REGION_12_13__VPMPCC_OGAM_RAMA_EXP_REGION12_LUT_OFFSET__SHIFT 0x00000000
+#define VPMPCC_OGAM_RAMA_REGION_12_13__VPMPCC_OGAM_RAMA_EXP_REGION12_NUM_SEGMENTS__SHIFT 0x0000000c
+#define VPMPCC_OGAM_RAMA_REGION_12_13__VPMPCC_OGAM_RAMA_EXP_REGION13_LUT_OFFSET__SHIFT 0x00000010
+#define VPMPCC_OGAM_RAMA_REGION_12_13__VPMPCC_OGAM_RAMA_EXP_REGION13_NUM_SEGMENTS__SHIFT 0x0000001c
+
+// reg: VPMPCC_OGAM_RAMA_REGION_14_15 block: VPMPCC_OGAM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_OGAM_RAMA_REGION_14_15__VPMPCC_OGAM_RAMA_EXP_REGION14_LUT_OFFSET__SHIFT 0x00000000
+#define VPMPCC_OGAM_RAMA_REGION_14_15__VPMPCC_OGAM_RAMA_EXP_REGION14_NUM_SEGMENTS__SHIFT 0x0000000c
+#define VPMPCC_OGAM_RAMA_REGION_14_15__VPMPCC_OGAM_RAMA_EXP_REGION15_LUT_OFFSET__SHIFT 0x00000010
+#define VPMPCC_OGAM_RAMA_REGION_14_15__VPMPCC_OGAM_RAMA_EXP_REGION15_NUM_SEGMENTS__SHIFT 0x0000001c
+
+// reg: VPMPCC_OGAM_RAMA_REGION_16_17 block: VPMPCC_OGAM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_OGAM_RAMA_REGION_16_17__VPMPCC_OGAM_RAMA_EXP_REGION16_LUT_OFFSET__SHIFT 0x00000000
+#define VPMPCC_OGAM_RAMA_REGION_16_17__VPMPCC_OGAM_RAMA_EXP_REGION16_NUM_SEGMENTS__SHIFT 0x0000000c
+#define VPMPCC_OGAM_RAMA_REGION_16_17__VPMPCC_OGAM_RAMA_EXP_REGION17_LUT_OFFSET__SHIFT 0x00000010
+#define VPMPCC_OGAM_RAMA_REGION_16_17__VPMPCC_OGAM_RAMA_EXP_REGION17_NUM_SEGMENTS__SHIFT 0x0000001c
+
+// reg: VPMPCC_OGAM_RAMA_REGION_18_19 block: VPMPCC_OGAM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_OGAM_RAMA_REGION_18_19__VPMPCC_OGAM_RAMA_EXP_REGION18_LUT_OFFSET__SHIFT 0x00000000
+#define VPMPCC_OGAM_RAMA_REGION_18_19__VPMPCC_OGAM_RAMA_EXP_REGION18_NUM_SEGMENTS__SHIFT 0x0000000c
+#define VPMPCC_OGAM_RAMA_REGION_18_19__VPMPCC_OGAM_RAMA_EXP_REGION19_LUT_OFFSET__SHIFT 0x00000010
+#define VPMPCC_OGAM_RAMA_REGION_18_19__VPMPCC_OGAM_RAMA_EXP_REGION19_NUM_SEGMENTS__SHIFT 0x0000001c
+
+// reg: VPMPCC_OGAM_RAMA_REGION_20_21 block: VPMPCC_OGAM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_OGAM_RAMA_REGION_20_21__VPMPCC_OGAM_RAMA_EXP_REGION20_LUT_OFFSET__SHIFT 0x00000000
+#define VPMPCC_OGAM_RAMA_REGION_20_21__VPMPCC_OGAM_RAMA_EXP_REGION20_NUM_SEGMENTS__SHIFT 0x0000000c
+#define VPMPCC_OGAM_RAMA_REGION_20_21__VPMPCC_OGAM_RAMA_EXP_REGION21_LUT_OFFSET__SHIFT 0x00000010
+#define VPMPCC_OGAM_RAMA_REGION_20_21__VPMPCC_OGAM_RAMA_EXP_REGION21_NUM_SEGMENTS__SHIFT 0x0000001c
+
+// reg: VPMPCC_OGAM_RAMA_REGION_22_23 block: VPMPCC_OGAM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_OGAM_RAMA_REGION_22_23__VPMPCC_OGAM_RAMA_EXP_REGION22_LUT_OFFSET__SHIFT 0x00000000
+#define VPMPCC_OGAM_RAMA_REGION_22_23__VPMPCC_OGAM_RAMA_EXP_REGION22_NUM_SEGMENTS__SHIFT 0x0000000c
+#define VPMPCC_OGAM_RAMA_REGION_22_23__VPMPCC_OGAM_RAMA_EXP_REGION23_LUT_OFFSET__SHIFT 0x00000010
+#define VPMPCC_OGAM_RAMA_REGION_22_23__VPMPCC_OGAM_RAMA_EXP_REGION23_NUM_SEGMENTS__SHIFT 0x0000001c
+
+// reg: VPMPCC_OGAM_RAMA_REGION_24_25 block: VPMPCC_OGAM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_OGAM_RAMA_REGION_24_25__VPMPCC_OGAM_RAMA_EXP_REGION24_LUT_OFFSET__SHIFT 0x00000000
+#define VPMPCC_OGAM_RAMA_REGION_24_25__VPMPCC_OGAM_RAMA_EXP_REGION24_NUM_SEGMENTS__SHIFT 0x0000000c
+#define VPMPCC_OGAM_RAMA_REGION_24_25__VPMPCC_OGAM_RAMA_EXP_REGION25_LUT_OFFSET__SHIFT 0x00000010
+#define VPMPCC_OGAM_RAMA_REGION_24_25__VPMPCC_OGAM_RAMA_EXP_REGION25_NUM_SEGMENTS__SHIFT 0x0000001c
+
+// reg: VPMPCC_OGAM_RAMA_REGION_26_27 block: VPMPCC_OGAM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_OGAM_RAMA_REGION_26_27__VPMPCC_OGAM_RAMA_EXP_REGION26_LUT_OFFSET__SHIFT 0x00000000
+#define VPMPCC_OGAM_RAMA_REGION_26_27__VPMPCC_OGAM_RAMA_EXP_REGION26_NUM_SEGMENTS__SHIFT 0x0000000c
+#define VPMPCC_OGAM_RAMA_REGION_26_27__VPMPCC_OGAM_RAMA_EXP_REGION27_LUT_OFFSET__SHIFT 0x00000010
+#define VPMPCC_OGAM_RAMA_REGION_26_27__VPMPCC_OGAM_RAMA_EXP_REGION27_NUM_SEGMENTS__SHIFT 0x0000001c
+
+// reg: VPMPCC_OGAM_RAMA_REGION_28_29 block: VPMPCC_OGAM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_OGAM_RAMA_REGION_28_29__VPMPCC_OGAM_RAMA_EXP_REGION28_LUT_OFFSET__SHIFT 0x00000000
+#define VPMPCC_OGAM_RAMA_REGION_28_29__VPMPCC_OGAM_RAMA_EXP_REGION28_NUM_SEGMENTS__SHIFT 0x0000000c
+#define VPMPCC_OGAM_RAMA_REGION_28_29__VPMPCC_OGAM_RAMA_EXP_REGION29_LUT_OFFSET__SHIFT 0x00000010
+#define VPMPCC_OGAM_RAMA_REGION_28_29__VPMPCC_OGAM_RAMA_EXP_REGION29_NUM_SEGMENTS__SHIFT 0x0000001c
+
+// reg: VPMPCC_OGAM_RAMA_REGION_30_31 block: VPMPCC_OGAM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_OGAM_RAMA_REGION_30_31__VPMPCC_OGAM_RAMA_EXP_REGION30_LUT_OFFSET__SHIFT 0x00000000
+#define VPMPCC_OGAM_RAMA_REGION_30_31__VPMPCC_OGAM_RAMA_EXP_REGION30_NUM_SEGMENTS__SHIFT 0x0000000c
+#define VPMPCC_OGAM_RAMA_REGION_30_31__VPMPCC_OGAM_RAMA_EXP_REGION31_LUT_OFFSET__SHIFT 0x00000010
+#define VPMPCC_OGAM_RAMA_REGION_30_31__VPMPCC_OGAM_RAMA_EXP_REGION31_NUM_SEGMENTS__SHIFT 0x0000001c
+
+// reg: VPMPCC_OGAM_RAMA_REGION_32_33 block: VPMPCC_OGAM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_OGAM_RAMA_REGION_32_33__VPMPCC_OGAM_RAMA_EXP_REGION32_LUT_OFFSET__SHIFT 0x00000000
+#define VPMPCC_OGAM_RAMA_REGION_32_33__VPMPCC_OGAM_RAMA_EXP_REGION32_NUM_SEGMENTS__SHIFT 0x0000000c
+#define VPMPCC_OGAM_RAMA_REGION_32_33__VPMPCC_OGAM_RAMA_EXP_REGION33_LUT_OFFSET__SHIFT 0x00000010
+#define VPMPCC_OGAM_RAMA_REGION_32_33__VPMPCC_OGAM_RAMA_EXP_REGION33_NUM_SEGMENTS__SHIFT 0x0000001c
+
+// reg: VPMPCC_GAMUT_REMAP_COEF_FORMAT block: VPMPCC_OGAM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_GAMUT_REMAP_COEF_FORMAT__VPMPCC_GAMUT_REMAP_COEF_FORMAT__SHIFT 0x00000000
+
+// reg: VPMPCC_GAMUT_REMAP_MODE block: VPMPCC_OGAM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_GAMUT_REMAP_MODE__VPMPCC_GAMUT_REMAP_MODE__SHIFT 0x00000000
+#define VPMPCC_GAMUT_REMAP_MODE__VPMPCC_GAMUT_REMAP_MODE_CURRENT__SHIFT 0x00000007
+
+// reg: VPMPC_GAMUT_REMAP_C11_C12_A block: VPMPCC_OGAM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_GAMUT_REMAP_C11_C12_A__VPMPCC_GAMUT_REMAP_C11_A__SHIFT 0x00000000
+#define VPMPC_GAMUT_REMAP_C11_C12_A__VPMPCC_GAMUT_REMAP_C12_A__SHIFT 0x00000010
+
+// reg: VPMPC_GAMUT_REMAP_C13_C14_A block: VPMPCC_OGAM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_GAMUT_REMAP_C13_C14_A__VPMPCC_GAMUT_REMAP_C13_A__SHIFT 0x00000000
+#define VPMPC_GAMUT_REMAP_C13_C14_A__VPMPCC_GAMUT_REMAP_C14_A__SHIFT 0x00000010
+
+// reg: VPMPC_GAMUT_REMAP_C21_C22_A block: VPMPCC_OGAM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_GAMUT_REMAP_C21_C22_A__VPMPCC_GAMUT_REMAP_C21_A__SHIFT 0x00000000
+#define VPMPC_GAMUT_REMAP_C21_C22_A__VPMPCC_GAMUT_REMAP_C22_A__SHIFT 0x00000010
+
+// reg: VPMPC_GAMUT_REMAP_C23_C24_A block: VPMPCC_OGAM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_GAMUT_REMAP_C23_C24_A__VPMPCC_GAMUT_REMAP_C23_A__SHIFT 0x00000000
+#define VPMPC_GAMUT_REMAP_C23_C24_A__VPMPCC_GAMUT_REMAP_C24_A__SHIFT 0x00000010
+
+// reg: VPMPC_GAMUT_REMAP_C31_C32_A block: VPMPCC_OGAM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_GAMUT_REMAP_C31_C32_A__VPMPCC_GAMUT_REMAP_C31_A__SHIFT 0x00000000
+#define VPMPC_GAMUT_REMAP_C31_C32_A__VPMPCC_GAMUT_REMAP_C32_A__SHIFT 0x00000010
+
+// reg: VPMPC_GAMUT_REMAP_C33_C34_A block: VPMPCC_OGAM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_GAMUT_REMAP_C33_C34_A__VPMPCC_GAMUT_REMAP_C33_A__SHIFT 0x00000000
+#define VPMPC_GAMUT_REMAP_C33_C34_A__VPMPCC_GAMUT_REMAP_C34_A__SHIFT 0x00000010
+
+// reg: VPMPCC_OGAM_TEST_DEBUG_INDEX block: VPMPCC_OGAM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_OGAM_TEST_DEBUG_INDEX__VPMPCC_OGAM_TEST_DEBUG_INDEX__SHIFT 0x00000000
+#define VPMPCC_OGAM_TEST_DEBUG_INDEX__VPMPCC_OGAM_TEST_DEBUG_WRITE_EN__SHIFT 0x00000008
+
+// reg: VPMPCC_OGAM_TEST_DEBUG_DATA block: VPMPCC_OGAM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_OGAM_TEST_DEBUG_DATA__VPMPCC_OGAM_TEST_DEBUG_DATA__SHIFT 0x00000000
+
+// reg: VPMPCC_MCM_1DLUT_CONTROL block: VPMPCC_MCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_MCM_1DLUT_CONTROL__VPMPCC_MCM_1DLUT_MODE__SHIFT 0x00000000
+#define VPMPCC_MCM_1DLUT_CONTROL__VPMPCC_MCM_1DLUT_PWL_DISABLE__SHIFT 0x00000003
+#define VPMPCC_MCM_1DLUT_CONTROL__VPMPCC_MCM_1DLUT_MODE_CURRENT__SHIFT 0x00000004
+#define VPMPCC_MCM_1DLUT_CONTROL__VPMPCC_MCM_1DLUT_SELECT_CURRENT__SHIFT 0x00000006
+
+// reg: VPMPCC_MCM_1DLUT_LUT_INDEX block: VPMPCC_MCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_MCM_1DLUT_LUT_INDEX__VPMPCC_MCM_1DLUT_LUT_INDEX__SHIFT 0x00000000
+
+// reg: VPMPCC_MCM_1DLUT_LUT_DATA block: VPMPCC_MCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_MCM_1DLUT_LUT_DATA__VPMPCC_MCM_1DLUT_LUT_DATA__SHIFT 0x00000000
+
+// reg: VPMPCC_MCM_1DLUT_LUT_CONTROL block: VPMPCC_MCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_MCM_1DLUT_LUT_CONTROL__VPMPCC_MCM_1DLUT_LUT_WRITE_COLOR_MASK__SHIFT 0x00000000
+#define VPMPCC_MCM_1DLUT_LUT_CONTROL__VPMPCC_MCM_1DLUT_LUT_READ_COLOR_SEL__SHIFT 0x00000003
+#define VPMPCC_MCM_1DLUT_LUT_CONTROL__VPMPCC_MCM_1DLUT_LUT_READ_DBG__SHIFT 0x00000005
+#define VPMPCC_MCM_1DLUT_LUT_CONTROL__VPMPCC_MCM_1DLUT_LUT_HOST_SEL__SHIFT 0x00000006
+#define VPMPCC_MCM_1DLUT_LUT_CONTROL__VPMPCC_MCM_1DLUT_LUT_CONFIG_MODE__SHIFT 0x00000007
+
+// reg: VPMPCC_MCM_1DLUT_RAMA_START_CNTL_B block: VPMPCC_MCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_MCM_1DLUT_RAMA_START_CNTL_B__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION_START_B__SHIFT 0x00000000
+#define VPMPCC_MCM_1DLUT_RAMA_START_CNTL_B__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION_START_SEGMENT_B__SHIFT 0x00000014
+
+// reg: VPMPCC_MCM_1DLUT_RAMA_START_CNTL_G block: VPMPCC_MCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_MCM_1DLUT_RAMA_START_CNTL_G__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION_START_G__SHIFT 0x00000000
+#define VPMPCC_MCM_1DLUT_RAMA_START_CNTL_G__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION_START_SEGMENT_G__SHIFT 0x00000014
+
+// reg: VPMPCC_MCM_1DLUT_RAMA_START_CNTL_R block: VPMPCC_MCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_MCM_1DLUT_RAMA_START_CNTL_R__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION_START_R__SHIFT 0x00000000
+#define VPMPCC_MCM_1DLUT_RAMA_START_CNTL_R__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION_START_SEGMENT_R__SHIFT 0x00000014
+
+// reg: VPMPCC_MCM_1DLUT_RAMA_START_SLOPE_CNTL_B block: VPMPCC_MCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_MCM_1DLUT_RAMA_START_SLOPE_CNTL_B__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION_START_SLOPE_B__SHIFT 0x00000000
+
+// reg: VPMPCC_MCM_1DLUT_RAMA_START_SLOPE_CNTL_G block: VPMPCC_MCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_MCM_1DLUT_RAMA_START_SLOPE_CNTL_G__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION_START_SLOPE_G__SHIFT 0x00000000
+
+// reg: VPMPCC_MCM_1DLUT_RAMA_START_SLOPE_CNTL_R block: VPMPCC_MCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_MCM_1DLUT_RAMA_START_SLOPE_CNTL_R__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION_START_SLOPE_R__SHIFT 0x00000000
+
+// reg: VPMPCC_MCM_1DLUT_RAMA_START_BASE_CNTL_B block: VPMPCC_MCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_MCM_1DLUT_RAMA_START_BASE_CNTL_B__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION_START_BASE_B__SHIFT 0x00000000
+
+// reg: VPMPCC_MCM_1DLUT_RAMA_START_BASE_CNTL_G block: VPMPCC_MCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_MCM_1DLUT_RAMA_START_BASE_CNTL_G__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION_START_BASE_G__SHIFT 0x00000000
+
+// reg: VPMPCC_MCM_1DLUT_RAMA_START_BASE_CNTL_R block: VPMPCC_MCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_MCM_1DLUT_RAMA_START_BASE_CNTL_R__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION_START_BASE_R__SHIFT 0x00000000
+
+// reg: VPMPCC_MCM_1DLUT_RAMA_END_CNTL1_B block: VPMPCC_MCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_MCM_1DLUT_RAMA_END_CNTL1_B__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION_END_BASE_B__SHIFT 0x00000000
+
+// reg: VPMPCC_MCM_1DLUT_RAMA_END_CNTL2_B block: VPMPCC_MCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_MCM_1DLUT_RAMA_END_CNTL2_B__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION_END_B__SHIFT 0x00000000
+#define VPMPCC_MCM_1DLUT_RAMA_END_CNTL2_B__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION_END_SLOPE_B__SHIFT 0x00000010
+
+// reg: VPMPCC_MCM_1DLUT_RAMA_END_CNTL1_G block: VPMPCC_MCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_MCM_1DLUT_RAMA_END_CNTL1_G__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION_END_BASE_G__SHIFT 0x00000000
+
+// reg: VPMPCC_MCM_1DLUT_RAMA_END_CNTL2_G block: VPMPCC_MCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_MCM_1DLUT_RAMA_END_CNTL2_G__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION_END_G__SHIFT 0x00000000
+#define VPMPCC_MCM_1DLUT_RAMA_END_CNTL2_G__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION_END_SLOPE_G__SHIFT 0x00000010
+
+// reg: VPMPCC_MCM_1DLUT_RAMA_END_CNTL1_R block: VPMPCC_MCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_MCM_1DLUT_RAMA_END_CNTL1_R__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION_END_BASE_R__SHIFT 0x00000000
+
+// reg: VPMPCC_MCM_1DLUT_RAMA_END_CNTL2_R block: VPMPCC_MCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_MCM_1DLUT_RAMA_END_CNTL2_R__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION_END_R__SHIFT 0x00000000
+#define VPMPCC_MCM_1DLUT_RAMA_END_CNTL2_R__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION_END_SLOPE_R__SHIFT 0x00000010
+
+// reg: VPMPCC_MCM_1DLUT_RAMA_OFFSET_B block: VPMPCC_MCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_MCM_1DLUT_RAMA_OFFSET_B__VPMPCC_MCM_1DLUT_RAMA_OFFSET_B__SHIFT 0x00000000
+
+// reg: VPMPCC_MCM_1DLUT_RAMA_OFFSET_G block: VPMPCC_MCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_MCM_1DLUT_RAMA_OFFSET_G__VPMPCC_MCM_1DLUT_RAMA_OFFSET_G__SHIFT 0x00000000
+
+// reg: VPMPCC_MCM_1DLUT_RAMA_OFFSET_R block: VPMPCC_MCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_MCM_1DLUT_RAMA_OFFSET_R__VPMPCC_MCM_1DLUT_RAMA_OFFSET_R__SHIFT 0x00000000
+
+// reg: VPMPCC_MCM_1DLUT_RAMA_REGION_0_1 block: VPMPCC_MCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_MCM_1DLUT_RAMA_REGION_0_1__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION0_LUT_OFFSET__SHIFT 0x00000000
+#define VPMPCC_MCM_1DLUT_RAMA_REGION_0_1__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION0_NUM_SEGMENTS__SHIFT 0x0000000c
+#define VPMPCC_MCM_1DLUT_RAMA_REGION_0_1__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION1_LUT_OFFSET__SHIFT 0x00000010
+#define VPMPCC_MCM_1DLUT_RAMA_REGION_0_1__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION1_NUM_SEGMENTS__SHIFT 0x0000001c
+
+// reg: VPMPCC_MCM_1DLUT_RAMA_REGION_2_3 block: VPMPCC_MCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_MCM_1DLUT_RAMA_REGION_2_3__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION2_LUT_OFFSET__SHIFT 0x00000000
+#define VPMPCC_MCM_1DLUT_RAMA_REGION_2_3__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION2_NUM_SEGMENTS__SHIFT 0x0000000c
+#define VPMPCC_MCM_1DLUT_RAMA_REGION_2_3__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION3_LUT_OFFSET__SHIFT 0x00000010
+#define VPMPCC_MCM_1DLUT_RAMA_REGION_2_3__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION3_NUM_SEGMENTS__SHIFT 0x0000001c
+
+// reg: VPMPCC_MCM_1DLUT_RAMA_REGION_4_5 block: VPMPCC_MCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_MCM_1DLUT_RAMA_REGION_4_5__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION4_LUT_OFFSET__SHIFT 0x00000000
+#define VPMPCC_MCM_1DLUT_RAMA_REGION_4_5__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION4_NUM_SEGMENTS__SHIFT 0x0000000c
+#define VPMPCC_MCM_1DLUT_RAMA_REGION_4_5__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION5_LUT_OFFSET__SHIFT 0x00000010
+#define VPMPCC_MCM_1DLUT_RAMA_REGION_4_5__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION5_NUM_SEGMENTS__SHIFT 0x0000001c
+
+// reg: VPMPCC_MCM_1DLUT_RAMA_REGION_6_7 block: VPMPCC_MCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_MCM_1DLUT_RAMA_REGION_6_7__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION6_LUT_OFFSET__SHIFT 0x00000000
+#define VPMPCC_MCM_1DLUT_RAMA_REGION_6_7__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION6_NUM_SEGMENTS__SHIFT 0x0000000c
+#define VPMPCC_MCM_1DLUT_RAMA_REGION_6_7__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION7_LUT_OFFSET__SHIFT 0x00000010
+#define VPMPCC_MCM_1DLUT_RAMA_REGION_6_7__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION7_NUM_SEGMENTS__SHIFT 0x0000001c
+
+// reg: VPMPCC_MCM_1DLUT_RAMA_REGION_8_9 block: VPMPCC_MCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_MCM_1DLUT_RAMA_REGION_8_9__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION8_LUT_OFFSET__SHIFT 0x00000000
+#define VPMPCC_MCM_1DLUT_RAMA_REGION_8_9__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION8_NUM_SEGMENTS__SHIFT 0x0000000c
+#define VPMPCC_MCM_1DLUT_RAMA_REGION_8_9__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION9_LUT_OFFSET__SHIFT 0x00000010
+#define VPMPCC_MCM_1DLUT_RAMA_REGION_8_9__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION9_NUM_SEGMENTS__SHIFT 0x0000001c
+
+// reg: VPMPCC_MCM_1DLUT_RAMA_REGION_10_11 block: VPMPCC_MCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_MCM_1DLUT_RAMA_REGION_10_11__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION10_LUT_OFFSET__SHIFT 0x00000000
+#define VPMPCC_MCM_1DLUT_RAMA_REGION_10_11__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION10_NUM_SEGMENTS__SHIFT 0x0000000c
+#define VPMPCC_MCM_1DLUT_RAMA_REGION_10_11__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION11_LUT_OFFSET__SHIFT 0x00000010
+#define VPMPCC_MCM_1DLUT_RAMA_REGION_10_11__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION11_NUM_SEGMENTS__SHIFT 0x0000001c
+
+// reg: VPMPCC_MCM_1DLUT_RAMA_REGION_12_13 block: VPMPCC_MCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_MCM_1DLUT_RAMA_REGION_12_13__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION12_LUT_OFFSET__SHIFT 0x00000000
+#define VPMPCC_MCM_1DLUT_RAMA_REGION_12_13__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION12_NUM_SEGMENTS__SHIFT 0x0000000c
+#define VPMPCC_MCM_1DLUT_RAMA_REGION_12_13__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION13_LUT_OFFSET__SHIFT 0x00000010
+#define VPMPCC_MCM_1DLUT_RAMA_REGION_12_13__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION13_NUM_SEGMENTS__SHIFT 0x0000001c
+
+// reg: VPMPCC_MCM_1DLUT_RAMA_REGION_14_15 block: VPMPCC_MCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_MCM_1DLUT_RAMA_REGION_14_15__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION14_LUT_OFFSET__SHIFT 0x00000000
+#define VPMPCC_MCM_1DLUT_RAMA_REGION_14_15__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION14_NUM_SEGMENTS__SHIFT 0x0000000c
+#define VPMPCC_MCM_1DLUT_RAMA_REGION_14_15__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION15_LUT_OFFSET__SHIFT 0x00000010
+#define VPMPCC_MCM_1DLUT_RAMA_REGION_14_15__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION15_NUM_SEGMENTS__SHIFT 0x0000001c
+
+// reg: VPMPCC_MCM_1DLUT_RAMA_REGION_16_17 block: VPMPCC_MCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_MCM_1DLUT_RAMA_REGION_16_17__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION16_LUT_OFFSET__SHIFT 0x00000000
+#define VPMPCC_MCM_1DLUT_RAMA_REGION_16_17__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION16_NUM_SEGMENTS__SHIFT 0x0000000c
+#define VPMPCC_MCM_1DLUT_RAMA_REGION_16_17__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION17_LUT_OFFSET__SHIFT 0x00000010
+#define VPMPCC_MCM_1DLUT_RAMA_REGION_16_17__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION17_NUM_SEGMENTS__SHIFT 0x0000001c
+
+// reg: VPMPCC_MCM_1DLUT_RAMA_REGION_18_19 block: VPMPCC_MCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_MCM_1DLUT_RAMA_REGION_18_19__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION18_LUT_OFFSET__SHIFT 0x00000000
+#define VPMPCC_MCM_1DLUT_RAMA_REGION_18_19__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION18_NUM_SEGMENTS__SHIFT 0x0000000c
+#define VPMPCC_MCM_1DLUT_RAMA_REGION_18_19__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION19_LUT_OFFSET__SHIFT 0x00000010
+#define VPMPCC_MCM_1DLUT_RAMA_REGION_18_19__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION19_NUM_SEGMENTS__SHIFT 0x0000001c
+
+// reg: VPMPCC_MCM_1DLUT_RAMA_REGION_20_21 block: VPMPCC_MCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_MCM_1DLUT_RAMA_REGION_20_21__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION20_LUT_OFFSET__SHIFT 0x00000000
+#define VPMPCC_MCM_1DLUT_RAMA_REGION_20_21__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION20_NUM_SEGMENTS__SHIFT 0x0000000c
+#define VPMPCC_MCM_1DLUT_RAMA_REGION_20_21__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION21_LUT_OFFSET__SHIFT 0x00000010
+#define VPMPCC_MCM_1DLUT_RAMA_REGION_20_21__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION21_NUM_SEGMENTS__SHIFT 0x0000001c
+
+// reg: VPMPCC_MCM_1DLUT_RAMA_REGION_22_23 block: VPMPCC_MCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_MCM_1DLUT_RAMA_REGION_22_23__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION22_LUT_OFFSET__SHIFT 0x00000000
+#define VPMPCC_MCM_1DLUT_RAMA_REGION_22_23__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION22_NUM_SEGMENTS__SHIFT 0x0000000c
+#define VPMPCC_MCM_1DLUT_RAMA_REGION_22_23__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION23_LUT_OFFSET__SHIFT 0x00000010
+#define VPMPCC_MCM_1DLUT_RAMA_REGION_22_23__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION23_NUM_SEGMENTS__SHIFT 0x0000001c
+
+// reg: VPMPCC_MCM_1DLUT_RAMA_REGION_24_25 block: VPMPCC_MCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_MCM_1DLUT_RAMA_REGION_24_25__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION24_LUT_OFFSET__SHIFT 0x00000000
+#define VPMPCC_MCM_1DLUT_RAMA_REGION_24_25__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION24_NUM_SEGMENTS__SHIFT 0x0000000c
+#define VPMPCC_MCM_1DLUT_RAMA_REGION_24_25__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION25_LUT_OFFSET__SHIFT 0x00000010
+#define VPMPCC_MCM_1DLUT_RAMA_REGION_24_25__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION25_NUM_SEGMENTS__SHIFT 0x0000001c
+
+// reg: VPMPCC_MCM_1DLUT_RAMA_REGION_26_27 block: VPMPCC_MCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_MCM_1DLUT_RAMA_REGION_26_27__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION26_LUT_OFFSET__SHIFT 0x00000000
+#define VPMPCC_MCM_1DLUT_RAMA_REGION_26_27__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION26_NUM_SEGMENTS__SHIFT 0x0000000c
+#define VPMPCC_MCM_1DLUT_RAMA_REGION_26_27__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION27_LUT_OFFSET__SHIFT 0x00000010
+#define VPMPCC_MCM_1DLUT_RAMA_REGION_26_27__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION27_NUM_SEGMENTS__SHIFT 0x0000001c
+
+// reg: VPMPCC_MCM_1DLUT_RAMA_REGION_28_29 block: VPMPCC_MCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_MCM_1DLUT_RAMA_REGION_28_29__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION28_LUT_OFFSET__SHIFT 0x00000000
+#define VPMPCC_MCM_1DLUT_RAMA_REGION_28_29__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION28_NUM_SEGMENTS__SHIFT 0x0000000c
+#define VPMPCC_MCM_1DLUT_RAMA_REGION_28_29__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION29_LUT_OFFSET__SHIFT 0x00000010
+#define VPMPCC_MCM_1DLUT_RAMA_REGION_28_29__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION29_NUM_SEGMENTS__SHIFT 0x0000001c
+
+// reg: VPMPCC_MCM_1DLUT_RAMA_REGION_30_31 block: VPMPCC_MCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_MCM_1DLUT_RAMA_REGION_30_31__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION30_LUT_OFFSET__SHIFT 0x00000000
+#define VPMPCC_MCM_1DLUT_RAMA_REGION_30_31__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION30_NUM_SEGMENTS__SHIFT 0x0000000c
+#define VPMPCC_MCM_1DLUT_RAMA_REGION_30_31__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION31_LUT_OFFSET__SHIFT 0x00000010
+#define VPMPCC_MCM_1DLUT_RAMA_REGION_30_31__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION31_NUM_SEGMENTS__SHIFT 0x0000001c
+
+// reg: VPMPCC_MCM_1DLUT_RAMA_REGION_32_33 block: VPMPCC_MCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_MCM_1DLUT_RAMA_REGION_32_33__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION32_LUT_OFFSET__SHIFT 0x00000000
+#define VPMPCC_MCM_1DLUT_RAMA_REGION_32_33__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION32_NUM_SEGMENTS__SHIFT 0x0000000c
+#define VPMPCC_MCM_1DLUT_RAMA_REGION_32_33__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION33_LUT_OFFSET__SHIFT 0x00000010
+#define VPMPCC_MCM_1DLUT_RAMA_REGION_32_33__VPMPCC_MCM_1DLUT_RAMA_EXP_REGION33_NUM_SEGMENTS__SHIFT 0x0000001c
+
+// reg: VPMPCC_MCM_FIRST_GAMUT_REMAP_COEF_FORMAT block: VPMPCC_MCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_MCM_FIRST_GAMUT_REMAP_COEF_FORMAT__VPMPCC_MCM_FIRST_GAMUT_REMAP_COEF_FORMAT__SHIFT 0x00000000
+
+// reg: VPMPCC_MCM_FIRST_GAMUT_REMAP_MODE block: VPMPCC_MCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_MCM_FIRST_GAMUT_REMAP_MODE__VPMPCC_MCM_FIRST_GAMUT_REMAP_MODE__SHIFT 0x00000000
+#define VPMPCC_MCM_FIRST_GAMUT_REMAP_MODE__VPMPCC_MCM_FIRST_GAMUT_REMAP_MODE_CURRENT__SHIFT 0x00000007
+
+// reg: VPMPC_MCM_FIRST_GAMUT_REMAP_C11_C12_SETA block: VPMPCC_MCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_MCM_FIRST_GAMUT_REMAP_C11_C12_SETA__VPMPCC_MCM_FIRST_GAMUT_REMAP_C11_SETA__SHIFT 0x00000000
+#define VPMPC_MCM_FIRST_GAMUT_REMAP_C11_C12_SETA__VPMPCC_MCM_FIRST_GAMUT_REMAP_C12_SETA__SHIFT 0x00000010
+
+// reg: VPMPC_MCM_FIRST_GAMUT_REMAP_C13_C14_SETA block: VPMPCC_MCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_MCM_FIRST_GAMUT_REMAP_C13_C14_SETA__VPMPCC_MCM_FIRST_GAMUT_REMAP_C13_SETA__SHIFT 0x00000000
+#define VPMPC_MCM_FIRST_GAMUT_REMAP_C13_C14_SETA__VPMPCC_MCM_FIRST_GAMUT_REMAP_C14_SETA__SHIFT 0x00000010
+
+// reg: VPMPC_MCM_FIRST_GAMUT_REMAP_C21_C22_SETA block: VPMPCC_MCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_MCM_FIRST_GAMUT_REMAP_C21_C22_SETA__VPMPCC_MCM_FIRST_GAMUT_REMAP_C21_SETA__SHIFT 0x00000000
+#define VPMPC_MCM_FIRST_GAMUT_REMAP_C21_C22_SETA__VPMPCC_MCM_FIRST_GAMUT_REMAP_C22_SETA__SHIFT 0x00000010
+
+// reg: VPMPC_MCM_FIRST_GAMUT_REMAP_C23_C24_SETA block: VPMPCC_MCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_MCM_FIRST_GAMUT_REMAP_C23_C24_SETA__VPMPCC_MCM_FIRST_GAMUT_REMAP_C23_SETA__SHIFT 0x00000000
+#define VPMPC_MCM_FIRST_GAMUT_REMAP_C23_C24_SETA__VPMPCC_MCM_FIRST_GAMUT_REMAP_C24_SETA__SHIFT 0x00000010
+
+// reg: VPMPC_MCM_FIRST_GAMUT_REMAP_C31_C32_SETA block: VPMPCC_MCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_MCM_FIRST_GAMUT_REMAP_C31_C32_SETA__VPMPCC_MCM_FIRST_GAMUT_REMAP_C31_SETA__SHIFT 0x00000000
+#define VPMPC_MCM_FIRST_GAMUT_REMAP_C31_C32_SETA__VPMPCC_MCM_FIRST_GAMUT_REMAP_C32_SETA__SHIFT 0x00000010
+
+// reg: VPMPC_MCM_FIRST_GAMUT_REMAP_C33_C34_SETA block: VPMPCC_MCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_MCM_FIRST_GAMUT_REMAP_C33_C34_SETA__VPMPCC_MCM_FIRST_GAMUT_REMAP_C33_SETA__SHIFT 0x00000000
+#define VPMPC_MCM_FIRST_GAMUT_REMAP_C33_C34_SETA__VPMPCC_MCM_FIRST_GAMUT_REMAP_C34_SETA__SHIFT 0x00000010
+
+// reg: VPMPCC_MCM_SECOND_GAMUT_REMAP_COEF_FORMAT block: VPMPCC_MCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_MCM_SECOND_GAMUT_REMAP_COEF_FORMAT__VPMPCC_MCM_SECOND_GAMUT_REMAP_COEF_FORMAT__SHIFT 0x00000000
+
+// reg: VPMPCC_MCM_SECOND_GAMUT_REMAP_MODE block: VPMPCC_MCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_MCM_SECOND_GAMUT_REMAP_MODE__VPMPCC_MCM_SECOND_GAMUT_REMAP_MODE__SHIFT 0x00000000
+#define VPMPCC_MCM_SECOND_GAMUT_REMAP_MODE__VPMPCC_MCM_SECOND_GAMUT_REMAP_MODE_CURRENT__SHIFT 0x00000007
+
+// reg: VPMPC_MCM_SECOND_GAMUT_REMAP_C11_C12_SETA block: VPMPCC_MCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_MCM_SECOND_GAMUT_REMAP_C11_C12_SETA__VPMPCC_MCM_SECOND_GAMUT_REMAP_C11_SETA__SHIFT 0x00000000
+#define VPMPC_MCM_SECOND_GAMUT_REMAP_C11_C12_SETA__VPMPCC_MCM_SECOND_GAMUT_REMAP_C12_SETA__SHIFT 0x00000010
+
+// reg: VPMPC_MCM_SECOND_GAMUT_REMAP_C13_C14_SETA block: VPMPCC_MCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_MCM_SECOND_GAMUT_REMAP_C13_C14_SETA__VPMPCC_MCM_SECOND_GAMUT_REMAP_C13_SETA__SHIFT 0x00000000
+#define VPMPC_MCM_SECOND_GAMUT_REMAP_C13_C14_SETA__VPMPCC_MCM_SECOND_GAMUT_REMAP_C14_SETA__SHIFT 0x00000010
+
+// reg: VPMPC_MCM_SECOND_GAMUT_REMAP_C21_C22_SETA block: VPMPCC_MCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_MCM_SECOND_GAMUT_REMAP_C21_C22_SETA__VPMPCC_MCM_SECOND_GAMUT_REMAP_C21_SETA__SHIFT 0x00000000
+#define VPMPC_MCM_SECOND_GAMUT_REMAP_C21_C22_SETA__VPMPCC_MCM_SECOND_GAMUT_REMAP_C22_SETA__SHIFT 0x00000010
+
+// reg: VPMPC_MCM_SECOND_GAMUT_REMAP_C23_C24_SETA block: VPMPCC_MCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_MCM_SECOND_GAMUT_REMAP_C23_C24_SETA__VPMPCC_MCM_SECOND_GAMUT_REMAP_C23_SETA__SHIFT 0x00000000
+#define VPMPC_MCM_SECOND_GAMUT_REMAP_C23_C24_SETA__VPMPCC_MCM_SECOND_GAMUT_REMAP_C24_SETA__SHIFT 0x00000010
+
+// reg: VPMPC_MCM_SECOND_GAMUT_REMAP_C31_C32_SETA block: VPMPCC_MCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_MCM_SECOND_GAMUT_REMAP_C31_C32_SETA__VPMPCC_MCM_SECOND_GAMUT_REMAP_C31_SETA__SHIFT 0x00000000
+#define VPMPC_MCM_SECOND_GAMUT_REMAP_C31_C32_SETA__VPMPCC_MCM_SECOND_GAMUT_REMAP_C32_SETA__SHIFT 0x00000010
+
+// reg: VPMPC_MCM_SECOND_GAMUT_REMAP_C33_C34_SETA block: VPMPCC_MCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_MCM_SECOND_GAMUT_REMAP_C33_C34_SETA__VPMPCC_MCM_SECOND_GAMUT_REMAP_C33_SETA__SHIFT 0x00000000
+#define VPMPC_MCM_SECOND_GAMUT_REMAP_C33_C34_SETA__VPMPCC_MCM_SECOND_GAMUT_REMAP_C34_SETA__SHIFT 0x00000010
+
+// reg: VPMPCC_MCM_MEM_PWR_CTRL block: VPMPCC_MCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_MCM_MEM_PWR_CTRL__VPMPCC_MCM_1DLUT_MEM_PWR_FORCE__SHIFT 0x00000010
+#define VPMPCC_MCM_MEM_PWR_CTRL__VPMPCC_MCM_1DLUT_MEM_PWR_DIS__SHIFT 0x00000012
+#define VPMPCC_MCM_MEM_PWR_CTRL__VPMPCC_MCM_1DLUT_MEM_LOW_PWR_MODE__SHIFT 0x00000014
+#define VPMPCC_MCM_MEM_PWR_CTRL__VPMPCC_MCM_1DLUT_MEM_PWR_STATE__SHIFT 0x0000001c
+
+// reg: VPMPCC_MCM_TEST_DEBUG_INDEX block: VPMPCC_MCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_MCM_TEST_DEBUG_INDEX__VPMPCC_MCM_TEST_DEBUG_INDEX__SHIFT 0x00000000
+#define VPMPCC_MCM_TEST_DEBUG_INDEX__VPMPCC_MCM_TEST_DEBUG_WRITE_EN__SHIFT 0x00000008
+
+// reg: VPMPCC_MCM_TEST_DEBUG_DATA block: VPMPCC_MCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPCC_MCM_TEST_DEBUG_DATA__VPMPCC_MCM_TEST_DEBUG_DATA__SHIFT 0x00000000
+
+// reg: VPMPC_RMCM_SHAPER_CONTROL block: VPMPC_RMCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_RMCM_SHAPER_CONTROL__VPMPC_RMCM_SHAPER_LUT_MODE__SHIFT 0x00000000
+#define VPMPC_RMCM_SHAPER_CONTROL__VPMPC_RMCM_SHAPER_MODE_CURRENT__SHIFT 0x00000002
+#define VPMPC_RMCM_SHAPER_CONTROL__VPMPC_RMCM_SHAPER_SELECT_CURRENT__SHIFT 0x00000004
+
+// reg: VPMPC_RMCM_SHAPER_OFFSET_R block: VPMPC_RMCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_RMCM_SHAPER_OFFSET_R__VPMPC_RMCM_SHAPER_OFFSET_R__SHIFT 0x00000000
+
+// reg: VPMPC_RMCM_SHAPER_OFFSET_G block: VPMPC_RMCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_RMCM_SHAPER_OFFSET_G__VPMPC_RMCM_SHAPER_OFFSET_G__SHIFT 0x00000000
+
+// reg: VPMPC_RMCM_SHAPER_OFFSET_B block: VPMPC_RMCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_RMCM_SHAPER_OFFSET_B__VPMPC_RMCM_SHAPER_OFFSET_B__SHIFT 0x00000000
+
+// reg: VPMPC_RMCM_SHAPER_SCALE_R block: VPMPC_RMCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_RMCM_SHAPER_SCALE_R__VPMPC_RMCM_SHAPER_SCALE_R__SHIFT 0x00000000
+
+// reg: VPMPC_RMCM_SHAPER_SCALE_G_B block: VPMPC_RMCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_RMCM_SHAPER_SCALE_G_B__VPMPC_RMCM_SHAPER_SCALE_G__SHIFT 0x00000000
+#define VPMPC_RMCM_SHAPER_SCALE_G_B__VPMPC_RMCM_SHAPER_SCALE_B__SHIFT 0x00000010
+
+// reg: VPMPC_RMCM_SHAPER_LUT_INDEX block: VPMPC_RMCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_RMCM_SHAPER_LUT_INDEX__VPMPC_RMCM_SHAPER_LUT_INDEX__SHIFT 0x00000000
+
+// reg: VPMPC_RMCM_SHAPER_LUT_DATA block: VPMPC_RMCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_RMCM_SHAPER_LUT_DATA__VPMPC_RMCM_SHAPER_LUT_DATA__SHIFT 0x00000000
+
+// reg: VPMPC_RMCM_SHAPER_LUT_WRITE_EN_MASK block: VPMPC_RMCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_RMCM_SHAPER_LUT_WRITE_EN_MASK__VPMPC_RMCM_SHAPER_LUT_WRITE_EN_MASK__SHIFT 0x00000000
+#define VPMPC_RMCM_SHAPER_LUT_WRITE_EN_MASK__VPMPC_RMCM_SHAPER_LUT_WRITE_SEL__SHIFT 0x00000004
+
+// reg: VPMPC_RMCM_SHAPER_RAMA_START_CNTL_B block: VPMPC_RMCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_RMCM_SHAPER_RAMA_START_CNTL_B__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION_START_B__SHIFT 0x00000000
+#define VPMPC_RMCM_SHAPER_RAMA_START_CNTL_B__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION_START_SEGMENT_B__SHIFT 0x00000014
+
+// reg: VPMPC_RMCM_SHAPER_RAMA_START_CNTL_G block: VPMPC_RMCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_RMCM_SHAPER_RAMA_START_CNTL_G__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION_START_G__SHIFT 0x00000000
+#define VPMPC_RMCM_SHAPER_RAMA_START_CNTL_G__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION_START_SEGMENT_G__SHIFT 0x00000014
+
+// reg: VPMPC_RMCM_SHAPER_RAMA_START_CNTL_R block: VPMPC_RMCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_RMCM_SHAPER_RAMA_START_CNTL_R__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION_START_R__SHIFT 0x00000000
+#define VPMPC_RMCM_SHAPER_RAMA_START_CNTL_R__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION_START_SEGMENT_R__SHIFT 0x00000014
+
+// reg: VPMPC_RMCM_SHAPER_RAMA_END_CNTL_B block: VPMPC_RMCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_RMCM_SHAPER_RAMA_END_CNTL_B__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION_END_B__SHIFT 0x00000000
+#define VPMPC_RMCM_SHAPER_RAMA_END_CNTL_B__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION_END_BASE_B__SHIFT 0x00000010
+
+// reg: VPMPC_RMCM_SHAPER_RAMA_END_CNTL_G block: VPMPC_RMCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_RMCM_SHAPER_RAMA_END_CNTL_G__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION_END_G__SHIFT 0x00000000
+#define VPMPC_RMCM_SHAPER_RAMA_END_CNTL_G__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION_END_BASE_G__SHIFT 0x00000010
+
+// reg: VPMPC_RMCM_SHAPER_RAMA_END_CNTL_R block: VPMPC_RMCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_RMCM_SHAPER_RAMA_END_CNTL_R__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION_END_R__SHIFT 0x00000000
+#define VPMPC_RMCM_SHAPER_RAMA_END_CNTL_R__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION_END_BASE_R__SHIFT 0x00000010
+
+// reg: VPMPC_RMCM_SHAPER_RAMA_REGION_0_1 block: VPMPC_RMCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_RMCM_SHAPER_RAMA_REGION_0_1__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION0_LUT_OFFSET__SHIFT 0x00000000
+#define VPMPC_RMCM_SHAPER_RAMA_REGION_0_1__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION0_NUM_SEGMENTS__SHIFT 0x0000000c
+#define VPMPC_RMCM_SHAPER_RAMA_REGION_0_1__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION1_LUT_OFFSET__SHIFT 0x00000010
+#define VPMPC_RMCM_SHAPER_RAMA_REGION_0_1__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION1_NUM_SEGMENTS__SHIFT 0x0000001c
+
+// reg: VPMPC_RMCM_SHAPER_RAMA_REGION_2_3 block: VPMPC_RMCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_RMCM_SHAPER_RAMA_REGION_2_3__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION2_LUT_OFFSET__SHIFT 0x00000000
+#define VPMPC_RMCM_SHAPER_RAMA_REGION_2_3__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION2_NUM_SEGMENTS__SHIFT 0x0000000c
+#define VPMPC_RMCM_SHAPER_RAMA_REGION_2_3__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION3_LUT_OFFSET__SHIFT 0x00000010
+#define VPMPC_RMCM_SHAPER_RAMA_REGION_2_3__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION3_NUM_SEGMENTS__SHIFT 0x0000001c
+
+// reg: VPMPC_RMCM_SHAPER_RAMA_REGION_4_5 block: VPMPC_RMCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_RMCM_SHAPER_RAMA_REGION_4_5__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION4_LUT_OFFSET__SHIFT 0x00000000
+#define VPMPC_RMCM_SHAPER_RAMA_REGION_4_5__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION4_NUM_SEGMENTS__SHIFT 0x0000000c
+#define VPMPC_RMCM_SHAPER_RAMA_REGION_4_5__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION5_LUT_OFFSET__SHIFT 0x00000010
+#define VPMPC_RMCM_SHAPER_RAMA_REGION_4_5__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION5_NUM_SEGMENTS__SHIFT 0x0000001c
+
+// reg: VPMPC_RMCM_SHAPER_RAMA_REGION_6_7 block: VPMPC_RMCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_RMCM_SHAPER_RAMA_REGION_6_7__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION6_LUT_OFFSET__SHIFT 0x00000000
+#define VPMPC_RMCM_SHAPER_RAMA_REGION_6_7__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION6_NUM_SEGMENTS__SHIFT 0x0000000c
+#define VPMPC_RMCM_SHAPER_RAMA_REGION_6_7__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION7_LUT_OFFSET__SHIFT 0x00000010
+#define VPMPC_RMCM_SHAPER_RAMA_REGION_6_7__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION7_NUM_SEGMENTS__SHIFT 0x0000001c
+
+// reg: VPMPC_RMCM_SHAPER_RAMA_REGION_8_9 block: VPMPC_RMCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_RMCM_SHAPER_RAMA_REGION_8_9__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION8_LUT_OFFSET__SHIFT 0x00000000
+#define VPMPC_RMCM_SHAPER_RAMA_REGION_8_9__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION8_NUM_SEGMENTS__SHIFT 0x0000000c
+#define VPMPC_RMCM_SHAPER_RAMA_REGION_8_9__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION9_LUT_OFFSET__SHIFT 0x00000010
+#define VPMPC_RMCM_SHAPER_RAMA_REGION_8_9__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION9_NUM_SEGMENTS__SHIFT 0x0000001c
+
+// reg: VPMPC_RMCM_SHAPER_RAMA_REGION_10_11 block: VPMPC_RMCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_RMCM_SHAPER_RAMA_REGION_10_11__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION10_LUT_OFFSET__SHIFT 0x00000000
+#define VPMPC_RMCM_SHAPER_RAMA_REGION_10_11__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION10_NUM_SEGMENTS__SHIFT 0x0000000c
+#define VPMPC_RMCM_SHAPER_RAMA_REGION_10_11__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION11_LUT_OFFSET__SHIFT 0x00000010
+#define VPMPC_RMCM_SHAPER_RAMA_REGION_10_11__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION11_NUM_SEGMENTS__SHIFT 0x0000001c
+
+// reg: VPMPC_RMCM_SHAPER_RAMA_REGION_12_13 block: VPMPC_RMCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_RMCM_SHAPER_RAMA_REGION_12_13__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION12_LUT_OFFSET__SHIFT 0x00000000
+#define VPMPC_RMCM_SHAPER_RAMA_REGION_12_13__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION12_NUM_SEGMENTS__SHIFT 0x0000000c
+#define VPMPC_RMCM_SHAPER_RAMA_REGION_12_13__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION13_LUT_OFFSET__SHIFT 0x00000010
+#define VPMPC_RMCM_SHAPER_RAMA_REGION_12_13__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION13_NUM_SEGMENTS__SHIFT 0x0000001c
+
+// reg: VPMPC_RMCM_SHAPER_RAMA_REGION_14_15 block: VPMPC_RMCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_RMCM_SHAPER_RAMA_REGION_14_15__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION14_LUT_OFFSET__SHIFT 0x00000000
+#define VPMPC_RMCM_SHAPER_RAMA_REGION_14_15__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION14_NUM_SEGMENTS__SHIFT 0x0000000c
+#define VPMPC_RMCM_SHAPER_RAMA_REGION_14_15__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION15_LUT_OFFSET__SHIFT 0x00000010
+#define VPMPC_RMCM_SHAPER_RAMA_REGION_14_15__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION15_NUM_SEGMENTS__SHIFT 0x0000001c
+
+// reg: VPMPC_RMCM_SHAPER_RAMA_REGION_16_17 block: VPMPC_RMCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_RMCM_SHAPER_RAMA_REGION_16_17__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION16_LUT_OFFSET__SHIFT 0x00000000
+#define VPMPC_RMCM_SHAPER_RAMA_REGION_16_17__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION16_NUM_SEGMENTS__SHIFT 0x0000000c
+#define VPMPC_RMCM_SHAPER_RAMA_REGION_16_17__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION17_LUT_OFFSET__SHIFT 0x00000010
+#define VPMPC_RMCM_SHAPER_RAMA_REGION_16_17__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION17_NUM_SEGMENTS__SHIFT 0x0000001c
+
+// reg: VPMPC_RMCM_SHAPER_RAMA_REGION_18_19 block: VPMPC_RMCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_RMCM_SHAPER_RAMA_REGION_18_19__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION18_LUT_OFFSET__SHIFT 0x00000000
+#define VPMPC_RMCM_SHAPER_RAMA_REGION_18_19__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION18_NUM_SEGMENTS__SHIFT 0x0000000c
+#define VPMPC_RMCM_SHAPER_RAMA_REGION_18_19__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION19_LUT_OFFSET__SHIFT 0x00000010
+#define VPMPC_RMCM_SHAPER_RAMA_REGION_18_19__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION19_NUM_SEGMENTS__SHIFT 0x0000001c
+
+// reg: VPMPC_RMCM_SHAPER_RAMA_REGION_20_21 block: VPMPC_RMCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_RMCM_SHAPER_RAMA_REGION_20_21__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION20_LUT_OFFSET__SHIFT 0x00000000
+#define VPMPC_RMCM_SHAPER_RAMA_REGION_20_21__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION20_NUM_SEGMENTS__SHIFT 0x0000000c
+#define VPMPC_RMCM_SHAPER_RAMA_REGION_20_21__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION21_LUT_OFFSET__SHIFT 0x00000010
+#define VPMPC_RMCM_SHAPER_RAMA_REGION_20_21__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION21_NUM_SEGMENTS__SHIFT 0x0000001c
+
+// reg: VPMPC_RMCM_SHAPER_RAMA_REGION_22_23 block: VPMPC_RMCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_RMCM_SHAPER_RAMA_REGION_22_23__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION22_LUT_OFFSET__SHIFT 0x00000000
+#define VPMPC_RMCM_SHAPER_RAMA_REGION_22_23__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION22_NUM_SEGMENTS__SHIFT 0x0000000c
+#define VPMPC_RMCM_SHAPER_RAMA_REGION_22_23__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION23_LUT_OFFSET__SHIFT 0x00000010
+#define VPMPC_RMCM_SHAPER_RAMA_REGION_22_23__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION23_NUM_SEGMENTS__SHIFT 0x0000001c
+
+// reg: VPMPC_RMCM_SHAPER_RAMA_REGION_24_25 block: VPMPC_RMCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_RMCM_SHAPER_RAMA_REGION_24_25__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION24_LUT_OFFSET__SHIFT 0x00000000
+#define VPMPC_RMCM_SHAPER_RAMA_REGION_24_25__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION24_NUM_SEGMENTS__SHIFT 0x0000000c
+#define VPMPC_RMCM_SHAPER_RAMA_REGION_24_25__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION25_LUT_OFFSET__SHIFT 0x00000010
+#define VPMPC_RMCM_SHAPER_RAMA_REGION_24_25__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION25_NUM_SEGMENTS__SHIFT 0x0000001c
+
+// reg: VPMPC_RMCM_SHAPER_RAMA_REGION_26_27 block: VPMPC_RMCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_RMCM_SHAPER_RAMA_REGION_26_27__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION26_LUT_OFFSET__SHIFT 0x00000000
+#define VPMPC_RMCM_SHAPER_RAMA_REGION_26_27__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION26_NUM_SEGMENTS__SHIFT 0x0000000c
+#define VPMPC_RMCM_SHAPER_RAMA_REGION_26_27__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION27_LUT_OFFSET__SHIFT 0x00000010
+#define VPMPC_RMCM_SHAPER_RAMA_REGION_26_27__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION27_NUM_SEGMENTS__SHIFT 0x0000001c
+
+// reg: VPMPC_RMCM_SHAPER_RAMA_REGION_28_29 block: VPMPC_RMCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_RMCM_SHAPER_RAMA_REGION_28_29__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION28_LUT_OFFSET__SHIFT 0x00000000
+#define VPMPC_RMCM_SHAPER_RAMA_REGION_28_29__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION28_NUM_SEGMENTS__SHIFT 0x0000000c
+#define VPMPC_RMCM_SHAPER_RAMA_REGION_28_29__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION29_LUT_OFFSET__SHIFT 0x00000010
+#define VPMPC_RMCM_SHAPER_RAMA_REGION_28_29__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION29_NUM_SEGMENTS__SHIFT 0x0000001c
+
+// reg: VPMPC_RMCM_SHAPER_RAMA_REGION_30_31 block: VPMPC_RMCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_RMCM_SHAPER_RAMA_REGION_30_31__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION30_LUT_OFFSET__SHIFT 0x00000000
+#define VPMPC_RMCM_SHAPER_RAMA_REGION_30_31__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION30_NUM_SEGMENTS__SHIFT 0x0000000c
+#define VPMPC_RMCM_SHAPER_RAMA_REGION_30_31__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION31_LUT_OFFSET__SHIFT 0x00000010
+#define VPMPC_RMCM_SHAPER_RAMA_REGION_30_31__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION31_NUM_SEGMENTS__SHIFT 0x0000001c
+
+// reg: VPMPC_RMCM_SHAPER_RAMA_REGION_32_33 block: VPMPC_RMCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_RMCM_SHAPER_RAMA_REGION_32_33__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION32_LUT_OFFSET__SHIFT 0x00000000
+#define VPMPC_RMCM_SHAPER_RAMA_REGION_32_33__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION32_NUM_SEGMENTS__SHIFT 0x0000000c
+#define VPMPC_RMCM_SHAPER_RAMA_REGION_32_33__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION33_LUT_OFFSET__SHIFT 0x00000010
+#define VPMPC_RMCM_SHAPER_RAMA_REGION_32_33__VPMPC_RMCM_SHAPER_RAMA_EXP_REGION33_NUM_SEGMENTS__SHIFT 0x0000001c
+
+// reg: VPMPC_RMCM_3DLUT_MODE block: VPMPC_RMCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_RMCM_3DLUT_MODE__VPMPC_RMCM_3DLUT_MODE__SHIFT 0x00000000
+#define VPMPC_RMCM_3DLUT_MODE__VPMPC_RMCM_3DLUT_SIZE__SHIFT 0x00000004
+#define VPMPC_RMCM_3DLUT_MODE__VPMPC_RMCM_3DLUT_MODE_CURRENT__SHIFT 0x00000008
+#define VPMPC_RMCM_3DLUT_MODE__VPMPC_RMCM_3DLUT_SELECT_CURRENT__SHIFT 0x0000000a
+
+// reg: VPMPC_RMCM_3DLUT_INDEX block: VPMPC_RMCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_RMCM_3DLUT_INDEX__VPMPC_RMCM_3DLUT_INDEX__SHIFT 0x00000000
+
+// reg: VPMPC_RMCM_3DLUT_DATA block: VPMPC_RMCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_RMCM_3DLUT_DATA__VPMPC_RMCM_3DLUT_DATA0__SHIFT 0x00000000
+#define VPMPC_RMCM_3DLUT_DATA__VPMPC_RMCM_3DLUT_DATA1__SHIFT 0x00000010
+
+// reg: VPMPC_RMCM_3DLUT_DATA_30BIT block: VPMPC_RMCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_RMCM_3DLUT_DATA_30BIT__VPMPC_RMCM_3DLUT_DATA_30BIT__SHIFT 0x00000002
+
+// reg: VPMPC_RMCM_3DLUT_READ_WRITE_CONTROL block: VPMPC_RMCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_RMCM_3DLUT_READ_WRITE_CONTROL__VPMPC_RMCM_3DLUT_WRITE_EN_MASK__SHIFT 0x00000000
+#define VPMPC_RMCM_3DLUT_READ_WRITE_CONTROL__VPMPC_RMCM_3DLUT_RAM_SEL__SHIFT 0x00000004
+#define VPMPC_RMCM_3DLUT_READ_WRITE_CONTROL__VPMPC_RMCM_3DLUT_30BIT_EN__SHIFT 0x00000008
+#define VPMPC_RMCM_3DLUT_READ_WRITE_CONTROL__VPMPC_RMCM_3DLUT_READ_SEL__SHIFT 0x00000010
+
+// reg: VPMPC_RMCM_3DLUT_OUT_NORM_FACTOR block: VPMPC_RMCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_RMCM_3DLUT_OUT_NORM_FACTOR__VPMPC_RMCM_3DLUT_OUT_NORM_FACTOR__SHIFT 0x00000000
+
+// reg: VPMPC_RMCM_3DLUT_OUT_OFFSET_R block: VPMPC_RMCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_RMCM_3DLUT_OUT_OFFSET_R__VPMPC_RMCM_3DLUT_OUT_OFFSET_R__SHIFT 0x00000000
+#define VPMPC_RMCM_3DLUT_OUT_OFFSET_R__VPMPC_RMCM_3DLUT_OUT_SCALE_R__SHIFT 0x00000010
+
+// reg: VPMPC_RMCM_3DLUT_OUT_OFFSET_G block: VPMPC_RMCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_RMCM_3DLUT_OUT_OFFSET_G__VPMPC_RMCM_3DLUT_OUT_OFFSET_G__SHIFT 0x00000000
+#define VPMPC_RMCM_3DLUT_OUT_OFFSET_G__VPMPC_RMCM_3DLUT_OUT_SCALE_G__SHIFT 0x00000010
+
+// reg: VPMPC_RMCM_3DLUT_OUT_OFFSET_B block: VPMPC_RMCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_RMCM_3DLUT_OUT_OFFSET_B__VPMPC_RMCM_3DLUT_OUT_OFFSET_B__SHIFT 0x00000000
+#define VPMPC_RMCM_3DLUT_OUT_OFFSET_B__VPMPC_RMCM_3DLUT_OUT_SCALE_B__SHIFT 0x00000010
+
+// reg: VPMPC_RMCM_GAMUT_REMAP_COEF_FORMAT block: VPMPC_RMCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_RMCM_GAMUT_REMAP_COEF_FORMAT__VPMPC_RMCM_GAMUT_REMAP_COEF_FORMAT__SHIFT 0x00000000
+
+// reg: VPMPC_RMCM_GAMUT_REMAP_MODE block: VPMPC_RMCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_RMCM_GAMUT_REMAP_MODE__VPMPC_RMCM_GAMUT_REMAP_MODE__SHIFT 0x00000000
+#define VPMPC_RMCM_GAMUT_REMAP_MODE__VPMPC_RMCM_GAMUT_REMAP_MODE_CURRENT__SHIFT 0x00000007
+
+// reg: VPMPC_RMCM_GAMUT_REMAP_C11_C12_SETA block: VPMPC_RMCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_RMCM_GAMUT_REMAP_C11_C12_SETA__VPMPC_RMCM_GAMUT_REMAP_C11_SETA__SHIFT 0x00000000
+#define VPMPC_RMCM_GAMUT_REMAP_C11_C12_SETA__VPMPC_RMCM_GAMUT_REMAP_C12_SETA__SHIFT 0x00000010
+
+// reg: VPMPC_RMCM_GAMUT_REMAP_C13_C14_SETA block: VPMPC_RMCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_RMCM_GAMUT_REMAP_C13_C14_SETA__VPMPC_RMCM_GAMUT_REMAP_C13_SETA__SHIFT 0x00000000
+#define VPMPC_RMCM_GAMUT_REMAP_C13_C14_SETA__VPMPC_RMCM_GAMUT_REMAP_C14_SETA__SHIFT 0x00000010
+
+// reg: VPMPC_RMCM_GAMUT_REMAP_C21_C22_SETA block: VPMPC_RMCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_RMCM_GAMUT_REMAP_C21_C22_SETA__VPMPC_RMCM_GAMUT_REMAP_C21_SETA__SHIFT 0x00000000
+#define VPMPC_RMCM_GAMUT_REMAP_C21_C22_SETA__VPMPC_RMCM_GAMUT_REMAP_C22_SETA__SHIFT 0x00000010
+
+// reg: VPMPC_RMCM_GAMUT_REMAP_C23_C24_SETA block: VPMPC_RMCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_RMCM_GAMUT_REMAP_C23_C24_SETA__VPMPC_RMCM_GAMUT_REMAP_C23_SETA__SHIFT 0x00000000
+#define VPMPC_RMCM_GAMUT_REMAP_C23_C24_SETA__VPMPC_RMCM_GAMUT_REMAP_C24_SETA__SHIFT 0x00000010
+
+// reg: VPMPC_RMCM_GAMUT_REMAP_C31_C32_SETA block: VPMPC_RMCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_RMCM_GAMUT_REMAP_C31_C32_SETA__VPMPC_RMCM_GAMUT_REMAP_C31_SETA__SHIFT 0x00000000
+#define VPMPC_RMCM_GAMUT_REMAP_C31_C32_SETA__VPMPC_RMCM_GAMUT_REMAP_C32_SETA__SHIFT 0x00000010
+
+// reg: VPMPC_RMCM_GAMUT_REMAP_C33_C34_SETA block: VPMPC_RMCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_RMCM_GAMUT_REMAP_C33_C34_SETA__VPMPC_RMCM_GAMUT_REMAP_C33_SETA__SHIFT 0x00000000
+#define VPMPC_RMCM_GAMUT_REMAP_C33_C34_SETA__VPMPC_RMCM_GAMUT_REMAP_C34_SETA__SHIFT 0x00000010
+
+// reg: VPMPC_RMCM_MEM_PWR_CTRL block: VPMPC_RMCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_RMCM_MEM_PWR_CTRL__VPMPC_RMCM_SHAPER_MEM_PWR_FORCE__SHIFT 0x00000000
+#define VPMPC_RMCM_MEM_PWR_CTRL__VPMPC_RMCM_SHAPER_MEM_PWR_DIS__SHIFT 0x00000002
+#define VPMPC_RMCM_MEM_PWR_CTRL__VPMPC_RMCM_SHAPER_MEM_LOW_PWR_MODE__SHIFT 0x00000004
+#define VPMPC_RMCM_MEM_PWR_CTRL__VPMPC_RMCM_3DLUT_MEM_PWR_FORCE__SHIFT 0x00000008
+#define VPMPC_RMCM_MEM_PWR_CTRL__VPMPC_RMCM_3DLUT_MEM_PWR_DIS__SHIFT 0x0000000a
+#define VPMPC_RMCM_MEM_PWR_CTRL__VPMPC_RMCM_3DLUT_MEM_LOW_PWR_MODE__SHIFT 0x0000000c
+#define VPMPC_RMCM_MEM_PWR_CTRL__VPMPC_RMCM_SHAPER_MEM_PWR_STATE__SHIFT 0x00000018
+#define VPMPC_RMCM_MEM_PWR_CTRL__VPMPC_RMCM_3DLUT_MEM_PWR_STATE__SHIFT 0x0000001a
+
+// reg: VPMPC_RMCM_3DLUT_FAST_LOAD_SELECT block: VPMPC_RMCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_RMCM_3DLUT_FAST_LOAD_SELECT__VPMPC_RMCM_3DLUT_FL_SEL__SHIFT 0x00000000
+
+// reg: VPMPC_RMCM_3DLUT_FAST_LOAD_STATUS block: VPMPC_RMCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_RMCM_3DLUT_FAST_LOAD_STATUS__VPMPC_RMCM_3DLUT_FL_DONE__SHIFT 0x00000000
+
+// reg: VPMPC_RMCM_CNTL block: VPMPC_RMCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_RMCM_CNTL__VPMPC_RMCM_CNTL__SHIFT            0x00000000
+
+// reg: VPMPC_RMCM_TEST_DEBUG_INDEX block: VPMPC_RMCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_RMCM_TEST_DEBUG_INDEX__VPMPC_RMCM_TEST_DEBUG_INDEX__SHIFT 0x00000000
+#define VPMPC_RMCM_TEST_DEBUG_INDEX__VPMPC_RMCM_TEST_DEBUG_WRITE_EN__SHIFT 0x00000008
+
+// reg: VPMPC_RMCM_TEST_DEBUG_DATA block: VPMPC_RMCM comp: amd.com/lib/vpmpc-vpep2sw/1.0
+#define VPMPC_RMCM_TEST_DEBUG_DATA__VPMPC_RMCM_TEST_DEBUG_DATA__SHIFT 0x00000000
+
+// reg: VPFMT_CLAMP_COMPONENT_R block: VPFMT comp: amd.com/lib/vpopp-vpep2sw/1.0
+#define VPFMT_CLAMP_COMPONENT_R__VPFMT_CLAMP_LOWER_R__SHIFT 0x00000000
+#define VPFMT_CLAMP_COMPONENT_R__VPFMT_CLAMP_UPPER_R__SHIFT 0x00000010
+
+// reg: VPFMT_CLAMP_COMPONENT_G block: VPFMT comp: amd.com/lib/vpopp-vpep2sw/1.0
+#define VPFMT_CLAMP_COMPONENT_G__VPFMT_CLAMP_LOWER_G__SHIFT 0x00000000
+#define VPFMT_CLAMP_COMPONENT_G__VPFMT_CLAMP_UPPER_G__SHIFT 0x00000010
+
+// reg: VPFMT_CLAMP_COMPONENT_B block: VPFMT comp: amd.com/lib/vpopp-vpep2sw/1.0
+#define VPFMT_CLAMP_COMPONENT_B__VPFMT_CLAMP_LOWER_B__SHIFT 0x00000000
+#define VPFMT_CLAMP_COMPONENT_B__VPFMT_CLAMP_UPPER_B__SHIFT 0x00000010
+
+// reg: VPFMT_DYNAMIC_EXP_CNTL block: VPFMT comp: amd.com/lib/vpopp-vpep2sw/1.0
+#define VPFMT_DYNAMIC_EXP_CNTL__VPFMT_DYNAMIC_EXP_EN__SHIFT 0x00000000
+#define VPFMT_DYNAMIC_EXP_CNTL__VPFMT_DYNAMIC_EXP_MODE__SHIFT 0x00000004
+
+// reg: VPFMT_CONTROL block: VPFMT comp: amd.com/lib/vpopp-vpep2sw/1.0
+#define VPFMT_CONTROL__VPFMT_PIXEL_ENCODING__SHIFT         0x00000000
+#define VPFMT_CONTROL__VPFMT_CBCR_BIT_REDUCTION_BYPASS__SHIFT 0x00000004
+#define VPFMT_CONTROL__VPFMT_SPATIAL_DITHER_FRAME_COUNTER_MAX__SHIFT 0x00000008
+#define VPFMT_CONTROL__VPFMT_SPATIAL_DITHER_FRAME_COUNTER_BIT_SWAP__SHIFT 0x0000000c
+#define VPFMT_CONTROL__VPFMT_SUBSAMPLE_HTAPS__SHIFT        0x00000010
+#define VPFMT_CONTROL__VPFMT_SUBSAMPLE_LEFT_EDGE__SHIFT    0x00000012
+#define VPFMT_CONTROL__VPFMT_SUBSAMPLE_RIGHT_EDGE__SHIFT   0x00000013
+#define VPFMT_CONTROL__VPFMT_SUBSAMPLE_VTAPS__SHIFT        0x00000014
+#define VPFMT_CONTROL__VPFMT_SUBSAMPLE_TOP_EDGE__SHIFT     0x00000016
+#define VPFMT_CONTROL__VPFMT_SUBSAMPLE_BOTTOM_EDGE__SHIFT  0x00000017
+#define VPFMT_CONTROL__VPFMT_DOUBLE_BUFFER_REG_UPDATE_PENDING__SHIFT 0x00000018
+
+// reg: VPFMT_BIT_DEPTH_CONTROL block: VPFMT comp: amd.com/lib/vpopp-vpep2sw/1.0
+#define VPFMT_BIT_DEPTH_CONTROL__VPFMT_TRUNCATE_EN__SHIFT  0x00000000
+#define VPFMT_BIT_DEPTH_CONTROL__VPFMT_TRUNCATE_MODE__SHIFT 0x00000001
+#define VPFMT_BIT_DEPTH_CONTROL__VPFMT_TRUNCATE_DEPTH__SHIFT 0x00000004
+#define VPFMT_BIT_DEPTH_CONTROL__VPFMT_SPATIAL_DITHER_EN__SHIFT 0x00000008
+#define VPFMT_BIT_DEPTH_CONTROL__VPFMT_SPATIAL_DITHER_MODE__SHIFT 0x00000009
+#define VPFMT_BIT_DEPTH_CONTROL__VPFMT_SPATIAL_DITHER_DEPTH__SHIFT 0x0000000b
+#define VPFMT_BIT_DEPTH_CONTROL__VPFMT_FRAME_RANDOM_ENABLE__SHIFT 0x0000000d
+#define VPFMT_BIT_DEPTH_CONTROL__VPFMT_RGB_RANDOM_ENABLE__SHIFT 0x0000000e
+#define VPFMT_BIT_DEPTH_CONTROL__VPFMT_HIGHPASS_RANDOM_ENABLE__SHIFT 0x0000000f
+
+// reg: VPFMT_DITHER_RAND_R_SEED block: VPFMT comp: amd.com/lib/vpopp-vpep2sw/1.0
+#define VPFMT_DITHER_RAND_R_SEED__VPFMT_RAND_R_SEED__SHIFT 0x00000000
+#define VPFMT_DITHER_RAND_R_SEED__VPFMT_OFFSET_R_CR__SHIFT 0x00000010
+
+// reg: VPFMT_DITHER_RAND_G_SEED block: VPFMT comp: amd.com/lib/vpopp-vpep2sw/1.0
+#define VPFMT_DITHER_RAND_G_SEED__VPFMT_RAND_G_SEED__SHIFT 0x00000000
+#define VPFMT_DITHER_RAND_G_SEED__VPFMT_OFFSET_G_Y__SHIFT  0x00000010
+
+// reg: VPFMT_DITHER_RAND_B_SEED block: VPFMT comp: amd.com/lib/vpopp-vpep2sw/1.0
+#define VPFMT_DITHER_RAND_B_SEED__VPFMT_RAND_B_SEED__SHIFT 0x00000000
+#define VPFMT_DITHER_RAND_B_SEED__VPFMT_OFFSET_B_CB__SHIFT 0x00000010
+
+// reg: VPFMT_CLAMP_CNTL block: VPFMT comp: amd.com/lib/vpopp-vpep2sw/1.0
+#define VPFMT_CLAMP_CNTL__VPFMT_CLAMP_DATA_EN__SHIFT       0x00000000
+#define VPFMT_CLAMP_CNTL__VPFMT_CLAMP_COLOR_FORMAT__SHIFT  0x00000010
+
+// reg: VPFMT_SUBSAMPLER_MEMORY_CONTROL block: VPFMT comp: amd.com/lib/vpopp-vpep2sw/1.0
+#define VPFMT_SUBSAMPLER_MEMORY_CONTROL__VPFMT_SUBSAMPLER_MEM_PWR_FORCE__SHIFT 0x00000000
+#define VPFMT_SUBSAMPLER_MEMORY_CONTROL__VPFMT_SUBSAMPLER_MEM_PWR_DIS__SHIFT 0x00000004
+#define VPFMT_SUBSAMPLER_MEMORY_CONTROL__VPFMT_SUBSAMPLER_MEM_PWR_STATE__SHIFT 0x00000008
+#define VPFMT_SUBSAMPLER_MEMORY_CONTROL__VPFMT_DEFAULT_MEM_LOW_POWER_STATE__SHIFT 0x0000000c
+
+// reg: VPFMT_DEBUG_CNTL block: VPFMT comp: amd.com/lib/vpopp-vpep2sw/1.0
+#define VPFMT_DEBUG_CNTL__VPFMT_DEBUG_COLOR_SELECT__SHIFT  0x00000000
+
+// reg: VPFMT_TEST_DEBUG_INDEX block: VPFMT comp: amd.com/lib/vpopp-vpep2sw/1.0
+#define VPFMT_TEST_DEBUG_INDEX__VPFMT_TEST_DEBUG_INDEX__SHIFT 0x00000000
+#define VPFMT_TEST_DEBUG_INDEX__VPFMT_TEST_DEBUG_WRITE_EN__SHIFT 0x00000008
+
+// reg: VPFMT_TEST_DEBUG_DATA block: VPFMT comp: amd.com/lib/vpopp-vpep2sw/1.0
+#define VPFMT_TEST_DEBUG_DATA__VPFMT_TEST_DEBUG_DATA__SHIFT 0x00000000
+
+// reg: VPOPP_PIPE_CONTROL block: VPOPP_PIPE comp: amd.com/lib/vpopp-vpep2sw/1.0
+#define VPOPP_PIPE_CONTROL__VPOPP_PIPE_CLOCK_ON__SHIFT     0x00000001
+#define VPOPP_PIPE_CONTROL__VPOPP_PIPE_DIGITAL_BYPASS_EN__SHIFT 0x00000004
+#define VPOPP_PIPE_CONTROL__VPOPP_PIPE_ALPHA_SEL__SHIFT    0x00000005
+#define VPOPP_PIPE_CONTROL__VPOPP_PIPE_ALPHA__SHIFT        0x00000010
+
+// reg: VPOPP_PIPE_OUTBG_EXT1 block: VPOPP_PIPE comp: amd.com/lib/vpopp-vpep2sw/1.0
+#define VPOPP_PIPE_OUTBG_EXT1__OUTBG_EXT_TOP__SHIFT        0x00000000
+#define VPOPP_PIPE_OUTBG_EXT1__OUTBG_EXT_BOT__SHIFT        0x0000000e
+
+// reg: VPOPP_PIPE_OUTBG_EXT2 block: VPOPP_PIPE comp: amd.com/lib/vpopp-vpep2sw/1.0
+#define VPOPP_PIPE_OUTBG_EXT2__OUTBG_EXT_LEFT__SHIFT       0x00000000
+#define VPOPP_PIPE_OUTBG_EXT2__OUTBG_EXT_RIGHT__SHIFT      0x0000000b
+
+// reg: VPOPP_PIPE_OUTBG_COL1 block: VPOPP_PIPE comp: amd.com/lib/vpopp-vpep2sw/1.0
+#define VPOPP_PIPE_OUTBG_COL1__OUTBG_R_CR__SHIFT           0x00000000
+#define VPOPP_PIPE_OUTBG_COL1__OUTBG_B_CB__SHIFT           0x00000010
+
+// reg: VPOPP_PIPE_OUTBG_COL2 block: VPOPP_PIPE comp: amd.com/lib/vpopp-vpep2sw/1.0
+#define VPOPP_PIPE_OUTBG_COL2__OUTBG_Y__SHIFT              0x00000000
+
+// reg: VPOPP_PIPE_SPARE_DEBUG block: VPOPP_PIPE comp: amd.com/lib/vpopp-vpep2sw/1.0
+#define VPOPP_PIPE_SPARE_DEBUG__VPOPP_PIPE_SPARE_DEBUG__SHIFT 0x00000000
+
+// reg: VPOPP_PIPE_TEST_DEBUG_INDEX block: VPOPP_PIPE comp: amd.com/lib/vpopp-vpep2sw/1.0
+#define VPOPP_PIPE_TEST_DEBUG_INDEX__VPOPP_PIPE_TEST_DEBUG_INDEX__SHIFT 0x00000000
+
+// reg: VPOPP_PIPE_TEST_DEBUG_DATA block: VPOPP_PIPE comp: amd.com/lib/vpopp-vpep2sw/1.0
+#define VPOPP_PIPE_TEST_DEBUG_DATA__VPOPP_PIPE_TEST_DEBUG_DATA__SHIFT 0x00000000
+
+// reg: VPOPP_TOP_CLK_CONTROL block: VPOPP_TOP comp: amd.com/lib/vpopp-vpep2sw/1.0
+#define VPOPP_TOP_CLK_CONTROL__VPOPP_VPECLK_R_GATE_DIS__SHIFT 0x00000000
+#define VPOPP_TOP_CLK_CONTROL__VPOPP_VPECLK_G_GATE_DIS__SHIFT 0x00000001
+
+// reg: VPOPP_DEBUG_CONTROL block: VPOPP_TOP comp: amd.com/lib/vpopp-vpep2sw/1.0
+#define VPOPP_DEBUG_CONTROL__VPOPP_DBG_EN__SHIFT           0x00000000
+#define VPOPP_DEBUG_CONTROL__VPOPP_VPFMT_DEBUG_BUS_SELECT__SHIFT 0x00000004
+#define VPOPP_DEBUG_CONTROL__VPOPP_VPOPP_PIPE_DEBUG_BUS_SELECT__SHIFT 0x00000010
+
+// reg: VPOPP_CRC_CONTROL block: VPOPP_TOP comp: amd.com/lib/vpopp-vpep2sw/1.0
+#define VPOPP_CRC_CONTROL__VPOPP_CRC_EN__SHIFT             0x00000000
+#define VPOPP_CRC_CONTROL__VPOPP_CRC_CONT_EN__SHIFT        0x00000001
+#define VPOPP_CRC_CONTROL__VPOPP_CRC_PIXEL_SELECT__SHIFT   0x00000002
+#define VPOPP_CRC_CONTROL__VPOPP_CRC_SOURCE_SELECT__SHIFT  0x00000004
+#define VPOPP_CRC_CONTROL__VPOPP_CRC_PIPE_SELECT__SHIFT    0x00000006
+#define VPOPP_CRC_CONTROL__VPOPP_CRC_MASK__SHIFT           0x00000008
+#define VPOPP_CRC_CONTROL__VPOPP_CRC_ONE_SHOT_PENDING__SHIFT 0x0000001f
+
+// reg: VPOPP_CRC_RESULT_RG block: VPOPP_TOP comp: amd.com/lib/vpopp-vpep2sw/1.0
+#define VPOPP_CRC_RESULT_RG__VPOPP_CRC_RESULT_R__SHIFT     0x00000000
+#define VPOPP_CRC_RESULT_RG__VPOPP_CRC_RESULT_G__SHIFT     0x00000010
+
+// reg: VPOPP_CRC_RESULT_BC block: VPOPP_TOP comp: amd.com/lib/vpopp-vpep2sw/1.0
+#define VPOPP_CRC_RESULT_BC__VPOPP_CRC_RESULT_B__SHIFT     0x00000000
+#define VPOPP_CRC_RESULT_BC__VPOPP_CRC_RESULT_C__SHIFT     0x00000010
+
+// reg: VPOPP_FROD_CONTROL block: VPOPP_TOP comp: amd.com/lib/vpopp-vpep2sw/1.0
+#define VPOPP_FROD_CONTROL__FROD_EN__SHIFT                 0x00000000
+
+// reg: VPOPP_FROD_MEM_PWR_CONTROL block: VPOPP_TOP comp: amd.com/lib/vpopp-vpep2sw/1.0
+#define VPOPP_FROD_MEM_PWR_CONTROL__FROD_MEM_PWR_FORCE__SHIFT 0x00000000
+#define VPOPP_FROD_MEM_PWR_CONTROL__FROD_MEM_PWR_DIS__SHIFT 0x00000004
+#define VPOPP_FROD_MEM_PWR_CONTROL__FROD_MEM_PWR_STATE__SHIFT 0x00000008
+#define VPOPP_FROD_MEM_PWR_CONTROL__FROD_MEM_DEFAULT_LOW_PWR_STATE__SHIFT 0x0000000c
+
+// reg: VPOPP_TOP_SPARE_DEBUG block: VPOPP_TOP comp: amd.com/lib/vpopp-vpep2sw/1.0
+#define VPOPP_TOP_SPARE_DEBUG__VPOPP_TOP_SPARE_DEBUG__SHIFT 0x00000000
+
+// reg: VPOPP_TOP_TEST_DEBUG_INDEX block: VPOPP_TOP comp: amd.com/lib/vpopp-vpep2sw/1.0
+#define VPOPP_TOP_TEST_DEBUG_INDEX__VPOPP_TOP_TEST_DEBUG_INDEX__SHIFT 0x00000000
+
+// reg: VPOPP_TOP_TEST_DEBUG_DATA block: VPOPP_TOP comp: amd.com/lib/vpopp-vpep2sw/1.0
+#define VPOPP_TOP_TEST_DEBUG_DATA__VPOPP_TOP_TEST_DEBUG_DATA__SHIFT 0x00000000
+
+
+#endif

@@ -711,15 +711,10 @@ spec@glsl-1.10@execution@glsl-fs-texture2d-mipmap-const-bias-01,Fail
 spec@glsl-1.10@execution@glsl-fs-texture2d-mipmap-const-bias-04,Fail
 spec@glsl-1.10@execution@glsl-fs-texture2d-mipmap-const-bias-05,Fail
 
-glx@glx-copy-sub-buffer samples=2,Fail
-glx@glx-copy-sub-buffer samples=4,Fail
-glx@glx-copy-sub-buffer samples=6,Fail
 glx@glx-make-current,Fail
 glx@glx-multi-window-single-context,Fail
 glx@glx-swap-pixmap-bad,Fail
 glx@glx-visuals-depth,Fail
-glx@glx-visuals-depth -pixmap,Fail
 glx@glx-visuals-stencil,Fail
-glx@glx-visuals-stencil -pixmap,Fail
 glx@glx_arb_sync_control@waitformsc,Fail
 spec@egl_mesa_configless_context@basic,Fail

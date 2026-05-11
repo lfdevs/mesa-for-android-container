@@ -7,6 +7,7 @@
 #include "amdgpu_bo.h"
 #include "amdgpu_cs.h"
 #include "ac_linux_drm.h"
+#include "ac_pm4.h"
 #include "sid.h"
 #include "util/log.h"
 

@@ -268,6 +268,7 @@ pub fn drm_format_mods_for_format(
         return;
     }
 
+    // This rejects unsupported color formats like YCbCr and any others
     if !format.supports_color_targets(dev) {
         return;
     }

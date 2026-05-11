@@ -58,6 +58,10 @@ static struct dpp_funcs vpe10_dpp_funcs = {
     .set_frame_scaler            = vpe10_dpp_set_frame_scaler,
     .get_line_buffer_size        = vpe10_get_line_buffer_size,
     .validate_number_of_taps     = vpe10_dpp_validate_number_of_taps,
+    .enable_clocks       = NULL,
+    .dscl_program_easf   = NULL,
+    .dscl_disable_easf   = NULL,
+    .dscl_program_isharp = NULL,
 };
 
 void vpe10_construct_dpp(struct vpe_priv *vpe_priv, struct dpp *dpp)

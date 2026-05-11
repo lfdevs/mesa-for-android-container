@@ -525,8 +525,11 @@ v3dv_image_init(struct v3dv_device *device,
     * Image layout will be filled up during vkBindImageMemory2
     * This section is removed by the optimizer for non-ANDROID builds
     */
-   if (vk_image_is_android_hardware_buffer(&image->vk))
-      return VK_SUCCESS;
+   if (vk_image_is_android_hardware_buffer(&image->vk) ||
+       vk_image_is_android_native_buffer_alias(&image->vk)) {
+      return vk_android_init_deferred_image(&device->vk, &image->vk,
+                                            pCreateInfo, pAllocator);
+   }
 
    bool disjoint = image->vk.create_flags & VK_IMAGE_CREATE_DISJOINT_BIT;
 

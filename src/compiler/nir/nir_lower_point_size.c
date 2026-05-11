@@ -63,10 +63,10 @@ lower_point_size_intrin(nir_builder *b, nir_intrinsic_instr *intr, void *data)
    assert(psiz->num_components == 1);
 
    if (minmax[0] > 0.0f)
-      psiz = nir_fmax(b, psiz, nir_imm_float(b, minmax[0]));
+      psiz = nir_fmax(b, psiz, nir_imm_floatN_t(b, minmax[0], psiz->bit_size));
 
    if (minmax[1] > 0.0f)
-      psiz = nir_fmin(b, psiz, nir_imm_float(b, minmax[1]));
+      psiz = nir_fmin(b, psiz, nir_imm_floatN_t(b, minmax[1], psiz->bit_size));
 
    nir_src_rewrite(psiz_src, psiz);
 

@@ -159,6 +159,7 @@ get_device_extensions(const struct anv_physical_device *device,
       .KHR_depth_stencil_resolve             = true,
       .KHR_descriptor_update_template        = true,
       .KHR_device_group                      = true,
+      .KHR_device_address_commands           = true,
       .KHR_draw_indirect_count               = true,
       .KHR_driver_properties                 = true,
       .KHR_dynamic_rendering                 = true,
@@ -194,6 +195,7 @@ get_device_extensions(const struct anv_physical_device *device,
       .KHR_maintenance8                      = true,
       .KHR_maintenance9                      = true,
       .KHR_maintenance10                     = true,
+      .KHR_maintenance11                     = true,
       .KHR_map_memory2                       = true,
       .KHR_multiview                         = true,
       .KHR_performance_query =
@@ -222,6 +224,7 @@ get_device_extensions(const struct anv_physical_device *device,
       .KHR_separate_depth_stencil_layouts    = true,
       .KHR_shader_atomic_int64               = true,
       .KHR_shader_clock                      = true,
+      .KHR_shader_constant_data              = true,
       .KHR_shader_draw_parameters            = true,
       .KHR_shader_expect_assume              = true,
       .KHR_shader_float16_int8               = !device->instance->no_16bit,
@@ -290,8 +293,20 @@ get_device_extensions(const struct anv_physical_device *device,
       .EXT_depth_clip_enable                 = true,
       .EXT_depth_range_unrestricted          = device->info.ver >= 20,
       .EXT_descriptor_buffer                 = true,
+      .EXT_descriptor_heap                   = ANV_DEBUG(EXPERIMENTAL),
       .EXT_descriptor_indexing               = true,
       .EXT_device_address_binding_report     = true,
+      /* Emitting a single compute dispatch potentially lot of memory (> 4KiB)
+       * on device prior to Gfx12.5 due to the fact that we need to emit 32B
+       * worth of data per subgroup in a workgroup, see anv_dgc_layout.c. So
+       * make it experimental on those devices for now, since vkd3d-proton
+       * will try to allocate lots of DGC preprocess buffer and those
+       * requiring to be in the dynamic visible heap, things run out of VMA
+       * pretty quick. We can some something less memory intensive with a ring
+       * buffer approach, at the expense of late preprocessing. But this is
+       * for later.
+       */
+      .EXT_device_generated_commands         = device->info.verx10 >= 125 || ANV_DEBUG(EXPERIMENTAL),
       .EXT_device_memory_report              = true,
 #ifdef VK_USE_PLATFORM_DISPLAY_KHR
       .EXT_display_control                   = true,
@@ -313,12 +328,7 @@ get_device_extensions(const struct anv_physical_device *device,
       .EXT_host_image_copy                   = true,
       .EXT_host_query_reset                  = true,
       .EXT_image_2d_view_of_3d               = true,
-      /* Because of Xe2 PAT selected compression and the Vulkan spec
-       * requirement to always return the same memory types for Images with
-       * same properties we can't support EXT_image_compression_control on Xe2+
-       */
-      .EXT_image_compression_control         = device->instance->compression_control_enabled &&
-                                               device->info.ver < 20,
+      .EXT_image_compression_control         = device->has_compression_control,
       .EXT_image_drm_format_modifier         = true,
       .EXT_image_robustness                  = true,
       .EXT_image_sliced_view_of_3d           = true,
@@ -375,8 +385,9 @@ get_device_extensions(const struct anv_physical_device *device,
       .EXT_shader_subgroup_vote              = true,
       .EXT_shader_viewport_index_layer       = true,
       .EXT_shader_uniform_buffer_unsized_array = true,
-      .EXT_subgroup_size_control             = true,
+      .EXT_subgroup_size_control             = !device->brw_disable_subgroup_size_control,
 #ifdef ANV_USE_WSI_PLATFORM
+      .EXT_image_compression_control_swapchain = device->has_compression_control,
       .EXT_swapchain_maintenance1            = true,
 #endif
       .EXT_texel_buffer_alignment            = true,
@@ -936,7 +947,7 @@ get_features(const struct anv_physical_device *pdevice,
       .videoDecodeVP9 = true,
 
       /* VK_EXT_image_compression_control */
-      .imageCompressionControl = true,
+      .imageCompressionControl = pdevice->has_compression_control,
 
       /* VK_KHR_shader_float_controls2 */
       .shaderFloatControls2 = true,
@@ -1023,6 +1034,26 @@ get_features(const struct anv_physical_device *pdevice,
 
       /* VK_EXT_primitive_restart_index */
       .primitiveRestartIndex = true,
+
+      /* VK_KHR_shader_constant_data */
+      .shaderConstantData = true,
+
+      /* VK_EXT_descriptor_heap */
+      .descriptorHeap = true,
+      .descriptorHeapCaptureReplay = true,
+
+      /* VK_EXT_device_generated_commands */
+      .deviceGeneratedCommands = true,
+      .dynamicGeneratedPipelineLayout = true,
+
+      /* VK_KHR_maintenance11 */
+      .maintenance11 = true,
+
+      /* VK_KHR_device_address_commands */
+      .deviceAddressCommands = true,
+
+      /* VK_EXT_swapchain_compression_control */
+      .imageCompressionControlSwapchain = pdevice->has_compression_control,
    };
 
    /* The new DOOM and Wolfenstein games require depthBounds without
@@ -1741,6 +1772,67 @@ get_properties(const struct anv_physical_device *pdevice,
       props->resourceDescriptorBufferAddressSpaceSize = pdevice->va.dynamic_visible_pool.size;
       props->descriptorBufferAddressSpaceSize = pdevice->va.dynamic_visible_pool.size;
       props->samplerDescriptorBufferAddressSpaceSize = pdevice->va.dynamic_visible_pool.size;
+   }
+
+   /* VK_EXT_descriptor_heap */
+   {
+      props->samplerHeapAlignment = 64;
+      props->resourceHeapAlignment = 64;
+      props->maxSamplerHeapSize = pdevice->va.dynamic_visible_pool.size;
+      props->maxResourceHeapSize = anv_physical_device_bindless_heap_size(pdevice,
+                                                                          true);
+      props->minSamplerHeapReservedRange = 0;
+      props->minSamplerHeapReservedRangeWithEmbedded = 0;
+      props->minResourceHeapReservedRange = 0;
+      props->samplerDescriptorSize = ANV_SAMPLER_STATE_SIZE;
+      props->imageDescriptorSize = ANV_SURFACE_STATE_SIZE;
+      props->bufferDescriptorSize = ANV_SURFACE_STATE_SIZE;
+      props->samplerDescriptorAlignment = ANV_SAMPLER_STATE_SIZE;
+      props->imageDescriptorAlignment = ANV_SURFACE_STATE_SIZE;
+      props->bufferDescriptorAlignment = ANV_SURFACE_STATE_SIZE;
+      props->maxPushDataSize = MAX_PUSH_CONSTANTS_SIZE;
+      props->imageCaptureReplayOpaqueDataSize = 8;
+      props->maxDescriptorHeapEmbeddedSamplers = MAX_EMBEDDED_SAMPLERS;
+      props->samplerYcbcrConversionCount = 3;
+      props->sparseDescriptorHeaps = pdevice->info.kmd_type == INTEL_KMD_TYPE_XE;
+      props->protectedDescriptorHeaps = false;
+   }
+
+   /* VK_EXT_device_generated_commands */
+   {
+      VkShaderStageFlags stages =
+         VK_SHADER_STAGE_VERTEX_BIT |
+         VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT |
+         VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT |
+         VK_SHADER_STAGE_GEOMETRY_BIT |
+         VK_SHADER_STAGE_FRAGMENT_BIT |
+         VK_SHADER_STAGE_COMPUTE_BIT;
+      /* TODO: fixup Wa_18019110168 */
+      if (pdevice->info.has_mesh_shading &&
+          !intel_needs_workaround(&pdevice->info, 18019110168))
+         stages |= VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT;
+      if (ANV_SUPPORT_RT && pdevice->info.has_ray_tracing)
+         stages |= ANV_RT_STAGE_BITS;
+
+      const VkShaderStageFlags indirect_stages =
+         stages & (VK_SHADER_STAGE_COMPUTE_BIT | ANV_RT_STAGE_BITS);
+
+      props->maxIndirectPipelineCount = 1 << 12; /* spec minimum */
+      props->maxIndirectShaderObjectCount = 1 << 12; /* spec minimum */
+      props->maxIndirectSequenceCount = 1 << 20; /* spec minimum */
+      props->maxIndirectCommandsTokenCount = 32;
+      props->maxIndirectCommandsTokenOffset = 64 * 1024;
+      props->maxIndirectCommandsIndirectStride = UINT32_MAX;
+      props->supportedIndirectCommandsInputModes = VK_INDIRECT_COMMANDS_INPUT_MODE_VULKAN_INDEX_BUFFER_EXT |
+                                                   VK_INDIRECT_COMMANDS_INPUT_MODE_DXGI_INDEX_BUFFER_EXT;
+      props->supportedIndirectCommandsShaderStages = stages;
+      props->supportedIndirectCommandsShaderStagesShaderBinding = indirect_stages;
+      props->supportedIndirectCommandsShaderStagesPipelineBinding = indirect_stages;
+      props->deviceGeneratedCommandsTransformFeedback = true;
+      /* Xe2+ has an indirect instruction, unfortunately it does not have a HW
+       * generated gl_DrawID so we cannot implement this...
+       */
+      props->deviceGeneratedCommandsMultiDrawIndirectCount = false;
    }
 
    /* VK_EXT_extended_dynamic_state3 */
@@ -2776,6 +2868,10 @@ anv_physical_device_try_create(struct vk_instance *vk_instance,
    }
    device->disable_fcv = device->info.verx10 >= 125 ||
                          instance->disable_fcv;
+   device->brw_disable_subgroup_size_control =
+      !intel_use_jay(&device->info, MESA_SHADER_COMPUTE) &&
+      driQueryOptionb(&device->instance->dri_options,
+                      "anv_brw_disable_subgroup_size_control");
 
    result = anv_physical_device_init_heaps(device, fd);
    if (result != VK_SUCCESS)
@@ -2785,6 +2881,13 @@ anv_physical_device_try_create(struct vk_instance *vk_instance,
       (device->info.has_systolic || debug_get_bool_option("INTEL_LOWER_DPAS", false)) &&
       device->info.cooperative_matrix_configurations[0].scope != INTEL_CMAT_SCOPE_NONE &&
       !intel_use_jay_any_stage(&device->info);
+
+   /* Because of Xe2 PAT selected compression and the Vulkan spec requirement
+    * to always return the same memory types for Images with same properties
+    * we can't support EXT_image_compression_control on Xe2+.
+    */
+   device->has_compression_control =
+      instance->compression_control_enabled && device->info.ver < 20;
 
    if (is_virtio) {
       struct util_sync_provider *sync = intel_virtio_sync_provider(fd);
@@ -2837,6 +2940,14 @@ anv_physical_device_try_create(struct vk_instance *vk_instance,
    device->always_flush_cache = INTEL_DEBUG(DEBUG_STALL) ||
       driQueryOptionb(&instance->dri_options, "always_flush_cache");
 
+   /* The ring buffer mechanism for page fault reporting is not supported until
+    * PVC (unsupported by our Mesa driver), so we keep the scratch page enabled
+    * for anything before Xe2 since debugging it would be impossible.
+    */
+   device->has_scratch_page =
+      device->info.ver < 20 || device->info.kmd_type == INTEL_KMD_TYPE_I915 ||
+      driQueryOptionb(&instance->dri_options, "anv_enable_scratch_page");
+
    device->compiler = brw_compiler_create(NULL, &device->info);
    if (device->compiler == NULL) {
       result = vk_error(instance, VK_ERROR_OUT_OF_HOST_MEMORY);
@@ -2853,6 +2964,7 @@ anv_physical_device_try_create(struct vk_instance *vk_instance,
       driQueryOptionb(&instance->dri_options, "intel_sampler_route_to_lsc");
    device->isl_dev.l1_storage_wt =
       driQueryOptionb(&instance->dri_options, "intel_storage_cache_policy_wt");
+   device->isl_dev.requires_padding = !device->has_scratch_page;
 
    result = anv_physical_device_init_uuids(device);
    if (result != VK_SUCCESS)
@@ -3022,11 +3134,11 @@ void anv_GetPhysicalDeviceQueueFamilyProperties2(
                   (VkQueueFamilyGlobalPriorityPropertiesKHR *)ext;
 
                /* Deliberately sorted low to high */
-               VkQueueGlobalPriorityKHR all_priorities[] = {
-                  VK_QUEUE_GLOBAL_PRIORITY_LOW_KHR,
-                  VK_QUEUE_GLOBAL_PRIORITY_MEDIUM_KHR,
-                  VK_QUEUE_GLOBAL_PRIORITY_HIGH_KHR,
-                  VK_QUEUE_GLOBAL_PRIORITY_REALTIME_KHR,
+               VkQueueGlobalPriority all_priorities[] = {
+                  VK_QUEUE_GLOBAL_PRIORITY_LOW,
+                  VK_QUEUE_GLOBAL_PRIORITY_MEDIUM,
+                  VK_QUEUE_GLOBAL_PRIORITY_HIGH,
+                  VK_QUEUE_GLOBAL_PRIORITY_REALTIME,
                };
 
                uint32_t count = 0;
@@ -3070,6 +3182,13 @@ void anv_GetPhysicalDeviceQueueFamilyProperties2(
                   prop->optimalImageTransferToQueueFamilies = BITSET_MASK(pdevice->queue.family_count);
                else
                   prop->optimalImageTransferToQueueFamilies = 0;
+               break;
+            }
+
+            case VK_STRUCTURE_TYPE_QUEUE_FAMILY_OPTIMAL_IMAGE_TRANSFER_GRANULARITY_PROPERTIES_KHR: {
+               VkQueueFamilyOptimalImageTransferGranularityPropertiesKHR *prop =
+                  (VkQueueFamilyOptimalImageTransferGranularityPropertiesKHR *)ext;
+               prop->optimalImageTransferGranularity = (VkExtent3D){ 1, 1, 1, };
                break;
             }
 
@@ -3402,4 +3521,35 @@ VkResult anv_GetPhysicalDeviceCooperativeMatrixFlexibleDimensionsPropertiesNV(
    VK_OUTARRAY_MAKE_TYPED(VkCooperativeMatrixFlexibleDimensionsPropertiesNV, out, pProperties, pPropertyCount);
    /* TODO: When we enable flexible dimensions, fill this properly. */
    return vk_outarray_status(&out);
+}
+
+VkDeviceSize anv_GetPhysicalDeviceDescriptorSizeEXT(
+    VkPhysicalDevice                            physicalDevice,
+    VkDescriptorType                            descriptorType)
+{
+   switch (descriptorType) {
+   case VK_DESCRIPTOR_TYPE_SAMPLER:
+      return ANV_SAMPLER_STATE_SIZE;
+
+   case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
+      return ANV_SURFACE_STATE_SIZE +
+             align(ANV_SAMPLER_STATE_SIZE, ANV_SURFACE_STATE_SIZE);
+
+   case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
+   case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
+   case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:
+   case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:
+   case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
+   case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
+   case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
+   case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
+   case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
+      return ANV_SURFACE_STATE_SIZE;
+
+   case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR:
+      return sizeof(uint64_t);
+
+   default:
+      UNREACHABLE("invalid descriptor type");
+   }
 }

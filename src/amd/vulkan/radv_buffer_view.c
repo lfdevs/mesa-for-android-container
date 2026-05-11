@@ -9,7 +9,6 @@
  */
 
 #include "ac_descriptors.h"
-#include "gfx10_format_table.h"
 
 #include "radv_buffer.h"
 #include "radv_buffer_view.h"

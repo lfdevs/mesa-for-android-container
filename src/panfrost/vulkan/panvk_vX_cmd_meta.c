@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: MIT
  */
 
+#include "panvk_buffer.h"
 #include "panvk_cmd_meta.h"
 #include "panvk_entrypoints.h"
 #include "panvk_meta.h"
@@ -469,13 +470,49 @@ panvk_per_arch(CmdFillBuffer)(VkCommandBuffer commandBuffer, VkBuffer dstBuffer,
                               uint32_t data)
 {
    VK_FROM_HANDLE(panvk_cmd_buffer, cmdbuf, commandBuffer);
-   struct panvk_device *dev = to_panvk_device(cmdbuf->vk.base.device);
-   struct panvk_cmd_meta_compute_save_ctx save = {0};
+   VK_FROM_HANDLE(panvk_buffer, buffer, dstBuffer);
+   struct panvk_physical_device *phys_dev =
+      to_panvk_physical_device(cmdbuf->vk.base.device->physical);
 
-   meta_compute_start(cmdbuf, &save);
-   vk_meta_fill_buffer(&cmdbuf->vk, &dev->meta, dstBuffer, dstOffset, fillSize,
-                       data);
-   meta_compute_end(cmdbuf, &save);
+   uint64_t addr = panvk_buffer_gpu_ptr(buffer, dstOffset);
+   uint64_t range = panvk_buffer_range(buffer, dstOffset, fillSize) & ~3ULL;
+   if (!range)
+      return;
+
+   const uint32_t max_wg = phys_dev->vk.properties.maxComputeWorkGroupCount[0];
+   struct panvk_precomp_ctx ctx = panvk_per_arch(precomp_cs)(cmdbuf);
+
+   const bool uint4_path =
+      util_is_aligned(addr, 16) && util_is_aligned(range, 16);
+   const uint32_t elem_size = uint4_path ? 16 : 4;
+   const uint32_t wg_bytes = 32 * elem_size;
+
+   while (range >= wg_bytes) {
+      const uint32_t wgs = MIN2(range / wg_bytes, max_wg);
+      const uint64_t bulk = (uint64_t)wgs * wg_bytes;
+
+      if (uint4_path) {
+         panlib_fill_uint4(&ctx, panlib_1d(wgs), PANLIB_BARRIER_NONE, addr,
+                           data, data, data, data);
+      } else {
+         panlib_fill(&ctx, panlib_1d(wgs), PANLIB_BARRIER_NONE, addr, data);
+      }
+
+      addr += bulk;
+      range -= bulk;
+   }
+
+   if (range) {
+      const uint32_t tail = range / elem_size;
+
+      if (uint4_path) {
+         panlib_fill_uint4_scalar(&ctx, panlib_1d(tail), PANLIB_BARRIER_NONE,
+                                  addr, data, data, data, data);
+      } else {
+         panlib_fill_scalar(&ctx, panlib_1d(tail), PANLIB_BARRIER_NONE, addr,
+                            data);
+      }
+   }
 }
 
 VKAPI_ATTR void VKAPI_CALL

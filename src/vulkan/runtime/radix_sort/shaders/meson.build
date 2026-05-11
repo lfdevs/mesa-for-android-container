@@ -19,14 +19,91 @@
 # SOFTWARE.
 
 radix_sort_shaders = [
-  'init.comp',
-  'fill.comp',
-  'histogram.comp',
-  'prefix.comp',
-  'scatter_0_even.comp',
-  'scatter_0_odd.comp',
-  'scatter_1_even.comp',
-  'scatter_1_odd.comp'
+  [
+    'init.comp',
+    'u64_init',
+    ['-DRS_KEYVAL_DWORDS=2'],
+  ],
+  [
+    'init.comp',
+    'u96_init',
+    ['-DRS_KEYVAL_DWORDS=3'],
+  ],
+  [
+    'fill.comp',
+    'fill',
+    [],
+  ],
+  [
+    'histogram.comp',
+    'u64_histogram',
+    ['-DRS_KEYVAL_DWORDS=2'],
+  ],
+  [
+    'histogram.comp',
+    'u96_histogram',
+    ['-DRS_KEYVAL_DWORDS=3'],
+  ],
+  [
+    'prefix.comp',
+    'u64_prefix',
+    ['-DRS_KEYVAL_DWORDS=2'],
+  ],
+  [
+    'prefix.comp',
+    'u96_prefix',
+    ['-DRS_KEYVAL_DWORDS=3'],
+  ],
+  [
+    'scatter_0_even.comp',
+    'u64_scatter_0_even',
+    ['-DRS_KEYVAL_DWORDS=2'],
+  ],
+  [
+    'scatter_0_even.comp',
+    'u96_scatter_0_even',
+    ['-DRS_KEYVAL_DWORDS=3'],
+  ],
+  [
+    'scatter_0_odd.comp',
+    'u64_scatter_0_odd',
+    ['-DRS_KEYVAL_DWORDS=2'],
+  ],
+  [
+    'scatter_0_odd.comp',
+    'u96_scatter_0_odd',
+    ['-DRS_KEYVAL_DWORDS=3'],
+  ],
+  [
+    'scatter_1_even.comp',
+    'u64_scatter_1_even',
+    ['-DRS_KEYVAL_DWORDS=2'],
+  ],
+  [
+    'scatter_1_even.comp',
+    'u96_scatter_1_even',
+    ['-DRS_KEYVAL_DWORDS=3'],
+  ],
+  [
+    'scatter_1_odd.comp',
+    'u64_scatter_1_odd',
+    ['-DRS_KEYVAL_DWORDS=2'],
+  ],
+  [
+    'scatter_1_odd.comp',
+    'u96_scatter_1_odd',
+    ['-DRS_KEYVAL_DWORDS=3'],
+  ],
+  [
+    'scatter_2_even.comp',
+    'u96_scatter_2_even',
+    ['-DRS_KEYVAL_DWORDS=3'],
+  ],
+  [
+    'scatter_2_odd.comp',
+    'u96_scatter_2_odd',
+    ['-DRS_KEYVAL_DWORDS=3'],
+  ],
 ]
 
 shader_include_files = files(
@@ -38,16 +115,14 @@ shader_include_files = files(
   'config.h',
 )
 
-defines = ['-DRS_KEYVAL_DWORDS=2']
-
 radix_sort_spv = []
 foreach s : radix_sort_shaders
   radix_sort_spv += custom_target(
-    s + '.spv.h',
-    input : s,
-    output : s + '.spv.h',
+    s[1] + '.spv.h',
+    input : s[0],
+    output : s[1] + '.spv.h',
     command : [
       prog_glslang, '-V', '--target-env', 'spirv1.5', '-x', '-o', '@OUTPUT@', '@INPUT@'
-    ] + defines + glslang_quiet + (with_mesa_debug ? ['-g'] : []),
+    ] + s[2] + glslang_quiet + (with_mesa_debug ? ['-g'] : []),
     depend_files: shader_include_files)
 endforeach

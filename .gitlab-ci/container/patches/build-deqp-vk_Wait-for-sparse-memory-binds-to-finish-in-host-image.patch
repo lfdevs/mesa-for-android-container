@@ -1,0 +1,174 @@
+From faff9262e1d75a7484ff454c7fffb2b9daf04d0e Mon Sep 17 00:00:00 2001
+From: Ricardo Garcia <rgarcia@igalia.com>
+Date: Wed, 6 May 2026 11:48:13 +0200
+Subject: [PATCH] Wait for sparse memory binds to finish in host image copy
+ tests
+
+We add an optional fence to the SparseImage class and use it to wait for
+memory binds to finish before changing image layouts on the host.
+
+Affects:
+dEQP-VK.image.host_image_copy.*
+
+Components: Vulkan
+VK-GL-CTS issue: 6503
+
+Change-Id: I9a4183c464a4cdfc5735a8478d6cd241b8519746
+---
+ .../vulkancts/framework/vulkan/vkImageUtil.cpp  |  4 ++--
+ .../vulkancts/framework/vulkan/vkImageUtil.hpp  |  2 +-
+ .../vulkan/image/vktImageHostImageCopyTests.cpp | 15 ++++++++++++---
+ .../modules/vulkan/image/vktImageTestsUtil.cpp  |  8 ++++++--
+ .../modules/vulkan/image/vktImageTestsUtil.hpp  | 17 +++++++++++++++--
+ 5 files changed, 36 insertions(+), 10 deletions(-)
+
+diff --git a/external/vulkancts/framework/vulkan/vkImageUtil.cpp b/external/vulkancts/framework/vulkan/vkImageUtil.cpp
+index f29f62bc30..d52e09cb6f 100644
+--- a/external/vulkancts/framework/vulkan/vkImageUtil.cpp
++++ b/external/vulkancts/framework/vulkan/vkImageUtil.cpp
+@@ -5456,7 +5456,7 @@ void allocateAndBindSparseImage(const DeviceInterface &vk, VkDevice device, cons
+                                 const InstanceInterface &instance, const VkImageCreateInfo &imageCreateInfo,
+                                 const VkSemaphore &signalSemaphore, VkQueue queue, Allocator &allocator,
+                                 std::vector<de::SharedPtr<Allocation>> &allocations, tcu::TextureFormat format,
+-                                VkImage destImage)
++                                VkImage destImage, VkFence fence)
+ {
+     const VkImageAspectFlags imageAspectFlags         = getImageAspectFlags(format);
+     const VkPhysicalDeviceProperties deviceProperties = getPhysicalDeviceProperties(instance, physicalDevice);
+@@ -5693,7 +5693,7 @@ void allocateAndBindSparseImage(const DeviceInterface &vk, VkDevice device, cons
+         bindSparseInfo.pImageOpaqueBinds    = &imageMipTailBindInfo;
+     }
+ 
+-    VK_CHECK(vk.queueBindSparse(queue, 1u, &bindSparseInfo, VK_NULL_HANDLE));
++    VK_CHECK(vk.queueBindSparse(queue, 1u, &bindSparseInfo, fence));
+ }
+ 
+ bool checkSparseImageFormatSupport(const VkPhysicalDevice physicalDevice, const InstanceInterface &instance,
+diff --git a/external/vulkancts/framework/vulkan/vkImageUtil.hpp b/external/vulkancts/framework/vulkan/vkImageUtil.hpp
+index 1fb9eafcee..94425d222a 100644
+--- a/external/vulkancts/framework/vulkan/vkImageUtil.hpp
++++ b/external/vulkancts/framework/vulkan/vkImageUtil.hpp
+@@ -372,7 +372,7 @@ void allocateAndBindSparseImage(const vk::DeviceInterface &vk, vk::VkDevice devi
+                                 const vk::VkImageCreateInfo &imageCreateInfo, const vk::VkSemaphore &signalSemaphore,
+                                 vk::VkQueue queue, vk::Allocator &allocator,
+                                 std::vector<de::SharedPtr<vk::Allocation>> &allocations, tcu::TextureFormat format,
+-                                vk::VkImage destImage);
++                                vk::VkImage destImage, vk::VkFence fence = VK_NULL_HANDLE);
+ #endif // CTS_USES_VULKANSC
+ } // namespace vk
+ 
+diff --git a/external/vulkancts/modules/vulkan/image/vktImageHostImageCopyTests.cpp b/external/vulkancts/modules/vulkan/image/vktImageHostImageCopyTests.cpp
+index a63adbc2c3..75f610e258 100644
+--- a/external/vulkancts/modules/vulkan/image/vktImageHostImageCopyTests.cpp
++++ b/external/vulkancts/modules/vulkan/image/vktImageHostImageCopyTests.cpp
+@@ -493,16 +493,19 @@ tcu::TestStatus HostImageCopyTestInstance::iterate(void)
+         {
+             createInfo.flags |= (vk::VK_IMAGE_CREATE_SPARSE_BINDING_BIT | vk::VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT);
+             // VUID-VkImageCreateInfo-tiling-04121
+-            createInfo.tiling  = vk::VK_IMAGE_TILING_OPTIMAL;
++            createInfo.tiling = vk::VK_IMAGE_TILING_OPTIMAL;
++            const auto waitType =
++                ((m_parameters.action == MEMORY_TO_IMAGE) ? SparseImage::WaitType::SEMAPHORE_AND_FENCE :
++                                                            SparseImage::WaitType::SEMAPHORE);
+             sparseSampledImage = de::MovePtr<SparseImage>(new SparseImage(vk, device, physicalDevice, vki, createInfo,
+                                                                           m_context.getSparseQueue(), alloc,
+-                                                                          mapVkFormat(createInfo.format)));
++                                                                          mapVkFormat(createInfo.format), waitType));
+             sampledImage       = **sparseSampledImage;
+             if (m_parameters.action == MEMCPY)
+             {
+                 sparseSampledImageCopy = de::MovePtr<SparseImage>(
+                     new SparseImage(vk, device, physicalDevice, vki, createInfo, m_context.getSparseQueue(), alloc,
+-                                    mapVkFormat(createInfo.format)));
++                                    mapVkFormat(createInfo.format), SparseImage::WaitType::SEMAPHORE_AND_FENCE));
+                 sampledImageCopy = **sparseSampledImageCopy;
+             }
+         }
+@@ -757,6 +760,9 @@ tcu::TestStatus HostImageCopyTestInstance::iterate(void)
+     // Load sampled image
+     if (m_parameters.action == MEMORY_TO_IMAGE)
+     {
++        if (sparseSampledImage && sparseSampledImage->getFence() != VK_NULL_HANDLE)
++            waitForFence(vk, device, sparseSampledImage->getFence());
++
+         transitionImageLayout(&cmdBuffer, sampledImage, sampledImageUsage, vk::VK_IMAGE_LAYOUT_UNDEFINED,
+                               m_parameters.dstLayout, sampledSubresourceRange);
+         commandsLog << "vkTransitionImageLayoutEXT() image " << sampledImage << " to layout "
+@@ -905,6 +911,9 @@ tcu::TestStatus HostImageCopyTestInstance::iterate(void)
+                     << "), yOffset (" << region.imageOffset.y << "), width (" << mipImageSize.width << "), height ("
+                     << mipImageSize.height << ")\n";
+ 
++        if (sparseSampledImageCopy && sparseSampledImageCopy->getFence() != VK_NULL_HANDLE)
++            waitForFence(vk, device, sparseSampledImageCopy->getFence());
++
+         transitionImageLayout(&cmdBuffer, sampledImageCopy, sampledImageUsage, vk::VK_IMAGE_LAYOUT_UNDEFINED,
+                               m_parameters.dstLayout, sampledSubresourceRange);
+ 
+diff --git a/external/vulkancts/modules/vulkan/image/vktImageTestsUtil.cpp b/external/vulkancts/modules/vulkan/image/vktImageTestsUtil.cpp
+index 962dc5f7c0..043047e807 100644
+--- a/external/vulkancts/modules/vulkan/image/vktImageTestsUtil.cpp
++++ b/external/vulkancts/modules/vulkan/image/vktImageTestsUtil.cpp
+@@ -52,14 +52,18 @@ Image::Image(void) : m_allocations(), m_image()
+ #ifndef CTS_USES_VULKANSC
+ SparseImage::SparseImage(const vk::DeviceInterface &vkd, vk::VkDevice device, vk::VkPhysicalDevice physicalDevice,
+                          const vk::InstanceInterface &vki, const vk::VkImageCreateInfo &createInfo,
+-                         const vk::VkQueue sparseQueue, vk::Allocator &allocator, const tcu::TextureFormat &format)
++                         const vk::VkQueue sparseQueue, vk::Allocator &allocator, const tcu::TextureFormat &format,
++                         WaitType waitType)
+     : Image()
+     , m_semaphore()
++    , m_fence()
+ {
+     m_image     = createImage(vkd, device, &createInfo);
+     m_semaphore = createSemaphore(vkd, device);
++    if (waitType == WaitType::SEMAPHORE_AND_FENCE)
++        m_fence = createFence(vkd, device);
+     allocateAndBindSparseImage(vkd, device, physicalDevice, vki, createInfo, m_semaphore.get(), sparseQueue, allocator,
+-                               m_allocations, format, m_image.get());
++                               m_allocations, format, m_image.get(), *m_fence);
+ }
+ #endif // CTS_USES_VULKANSC
+ 
+diff --git a/external/vulkancts/modules/vulkan/image/vktImageTestsUtil.hpp b/external/vulkancts/modules/vulkan/image/vktImageTestsUtil.hpp
+index 20b0a5a08d..5e2b00eaae 100644
+--- a/external/vulkancts/modules/vulkan/image/vktImageTestsUtil.hpp
++++ b/external/vulkancts/modules/vulkan/image/vktImageTestsUtil.hpp
+@@ -106,20 +106,33 @@ protected:
+ class SparseImage : public Image
+ {
+ public:
++    enum class WaitType
++    {
++        SEMAPHORE = 0,
++        SEMAPHORE_AND_FENCE
++    };
++
+     SparseImage(const vk::DeviceInterface &vkd, vk::VkDevice device, vk::VkPhysicalDevice physicalDevice,
+                 const vk::InstanceInterface &vki, const vk::VkImageCreateInfo &createInfo,
+-                const vk::VkQueue sparseQueue, vk::Allocator &allocator, const tcu::TextureFormat &format);
++                const vk::VkQueue sparseQueue, vk::Allocator &allocator, const tcu::TextureFormat &format,
++                WaitType waitType = WaitType::SEMAPHORE);
+ 
+-    virtual vk::VkSemaphore getSemaphore(void) const
++    vk::VkSemaphore getSemaphore(void) const override
+     {
+         return m_semaphore.get();
+     }
+ 
++    vk::VkFence getFence(void) const
++    {
++        return m_fence.get();
++    }
++
+     SparseImage(const SparseImage &)            = delete;
+     SparseImage &operator=(const SparseImage &) = delete;
+ 
+ protected:
+     vk::Move<vk::VkSemaphore> m_semaphore;
++    vk::Move<vk::VkFence> m_fence;
+ };
+ #endif // CTS_USES_VULKANSC
+ 
+-- 
+2.51.0
+

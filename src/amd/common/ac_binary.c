@@ -8,7 +8,6 @@
 
 #include "ac_gpu_info.h"
 #include "util/u_math.h"
-#include "util/u_memory.h"
 
 #include <sid.h>
 #include <stdio.h>

@@ -10,8 +10,6 @@
 #include "util/list.h"
 #include "util/mesa-blake3.h"
 
-#include "radv_constants.h"
-
 #include "vk_descriptor_set_layout.h"
 #include "vk_object.h"
 

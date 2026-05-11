@@ -65,10 +65,10 @@ void radv_sdma_copy_image_t2t_scanline(const struct radv_device *device, struct 
                                        const struct ac_sdma_surf *src, const struct ac_sdma_surf *dst,
                                        const VkExtent3D extent, struct radeon_winsys_bo *temp_bo);
 void radv_sdma_copy_memory(const struct radv_device *device, struct radv_cmd_stream *cs, uint64_t src_va,
-                           uint64_t dst_va, uint64_t size);
+                           uint64_t dst_va, uint64_t size, bool tmz);
 void radv_sdma_fill_memory(const struct radv_device *device, struct radv_cmd_stream *cs, const uint64_t va,
                            const uint64_t size, const uint32_t value);
-bool radv_sdma_supports_image(const struct radv_device *device, const struct radv_image *image);
+bool radv_sdma_supports_image(const struct radv_device *device, const struct radv_image *image, bool to_image);
 
 void radv_sdma_emit_nop(const struct radv_device *device, struct radv_cmd_stream *cs);
 

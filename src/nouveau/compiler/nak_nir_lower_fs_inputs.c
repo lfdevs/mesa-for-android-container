@@ -67,8 +67,15 @@ interp_fs_input(nir_builder *b, unsigned num_components, uint32_t addr,
          comps[c] = nir_ipa_nv(b, nir_imm_float(b, 0), offset,
                                .base = addr + c * 4,
                                .flags = NAK_AS_U32(flags));
-         if (interp_mode == NAK_INTERP_MODE_PERSPECTIVE)
-            comps[c] = nir_fmul(b, comps[c], inv_w);
+         if (interp_mode == NAK_INTERP_MODE_PERSPECTIVE) {
+            unsigned fp_math_ctrl = b->fp_math_ctrl;
+            b->fp_math_ctrl |= nir_fp_exact;
+            /* It seems critical that this is done as round to zero.
+             * The Surge 2 and Shadow of the Tomb Raider show artifacts if not.
+             */
+            comps[c] = nir_fmul_rtz(b, comps[c], inv_w);
+            b->fp_math_ctrl = fp_math_ctrl;
+         }
       }
       return nir_vec(b, comps, num_components);
    } else if (nak->sm >= 20) {

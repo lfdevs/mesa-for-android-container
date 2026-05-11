@@ -105,10 +105,10 @@ static void
 radv_emit_cp_dma(struct radv_cmd_buffer *cmd_buffer, uint64_t dst_va, uint64_t src_va, unsigned size, unsigned flags)
 {
    struct radv_device *device = radv_cmd_buffer_device(cmd_buffer);
+   const struct radv_cond_render_state *cond_render = &cmd_buffer->state.cond_render;
    struct radv_cmd_stream *cs = cmd_buffer->cs;
-   bool predicating = cmd_buffer->state.predicating;
 
-   radv_cs_emit_cp_dma(device, cs, predicating, dst_va, src_va, size, flags);
+   radv_cs_emit_cp_dma(device, cs, cond_render->enabled, dst_va, src_va, size, flags);
 
    /* CP DMA is executed in ME, but index buffers are read by PFP.
     * This ensures that ME (CP DMA) is idle before PFP starts fetching
@@ -117,7 +117,7 @@ radv_emit_cp_dma(struct radv_cmd_buffer *cmd_buffer, uint64_t dst_va, uint64_t s
     */
    if (flags & CP_DMA_SYNC) {
       if (cmd_buffer->qf == RADV_QUEUE_GENERAL) {
-         ac_emit_cp_pfp_sync_me(cs->b, cmd_buffer->state.predicating);
+         ac_emit_cp_pfp_sync_me(cs->b, cond_render->enabled);
       }
 
       /* CP will see the sync flag and wait for all DMAs to complete. */
@@ -190,8 +190,9 @@ void
 radv_cp_dma_prefetch(struct radv_cmd_buffer *cmd_buffer, uint64_t va, unsigned size)
 {
    struct radv_device *device = radv_cmd_buffer_device(cmd_buffer);
+   const struct radv_cond_render_state *cond_render = &cmd_buffer->state.cond_render;
 
-   radv_cs_cp_dma_prefetch(device, cmd_buffer->cs, va, size, cmd_buffer->state.predicating);
+   radv_cs_cp_dma_prefetch(device, cmd_buffer->cs, va, size, cond_render->enabled);
 
    if (radv_device_fault_detection_enabled(device))
       radv_cmd_buffer_trace_emit(cmd_buffer);

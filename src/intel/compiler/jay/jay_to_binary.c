@@ -94,14 +94,14 @@ to_brw_reg(jay_function *f,
       R = brw_imm_ud(jay_as_uint(d));
    } else if (jay_is_null(d)) {
       R = brw_null_reg();
-   } else if (d.file == UGPR) {
-      unsigned grf = (reg >> 1) / 8;
+   } else if (d.file == UGPR || d.file == UACCUM) {
+      unsigned phys_reg = (reg >> 1) / 8;
       offset_B = ((reg >> 1) % 8) * 4;
 
       if (d.file == UGPR) {
-         R = brw_ud1_grf(grf, 0);
+         R = brw_ud1_grf(phys_reg, 0);
       } else {
-         R = brw_ud1_reg(ARF, BRW_ARF_ACCUMULATOR + (grf * 2), 0);
+         R = brw_ud1_reg(ARF, BRW_ARF_ACCUMULATOR + (phys_reg * 2), 0);
       }
 
       /* Handle 3-src restrictions and vectorized uniform code. */
@@ -140,24 +140,25 @@ to_brw_reg(jay_function *f,
       unsigned stride_bits = jay_stride_to_bits(def_stride);
       unsigned simd_width = jay_simd_width_physical(f->shader, I);
 
-      unsigned grf;
+      unsigned phys_reg;
       if (def_stride == JAY_STRIDE_2) {
          /* Bit 0 selects between lo/hi halves of the GPR */
-         grf = (reg / 2) * jay_grf_per_gpr(f->shader);
+         phys_reg = (reg / 2) * jay_grf_per_gpr(f->shader);
          offset_B = (reg & 1) * 2 * f->shader->dispatch_width;
       } else {
          /* Low bits are an offset in 2-byte words into the GRF */
          unsigned mask = BITFIELD_MASK(stride_bits / 32);
-         grf = ((reg & ~mask) / 2) * jay_grf_per_gpr(f->shader);
+         phys_reg = ((reg & ~mask) / 2) * jay_grf_per_gpr(f->shader);
          offset_B = (reg & mask) * 2;
       }
 
       if (d.file == GPR) {
-         R = byte_offset(xe2_vec8_grf(grf, 0),
-                         simd_offs * simd_width * stride_bits / 8);
+         R = xe2_vec8_grf(phys_reg, 0);
       } else {
-         R = brw_vecn_reg(8, ARF, BRW_ARF_ACCUMULATOR + (grf * 2), 0);
+         R = brw_vecn_reg(8, ARF, BRW_ARF_ACCUMULATOR + (phys_reg * 2), 0);
       }
+
+      R = byte_offset(R, simd_offs * simd_width * stride_bits / 8);
 
       if (stride_bits == (type_bits * 4)) {
          R = stride(R, 8, 2, 4);
@@ -340,6 +341,7 @@ emit(struct brw_codegen *p,
       OP2(SHR, SHR)
       OP2(SHL, SHL)
       OP2(BFI1, BFI1)
+      OP2(MAC, MAC)
       OP3(BFI2, BFI2)
       OP3(ADD3, ADD3)
       OP3(CSEL, CSEL)
@@ -411,6 +413,10 @@ emit(struct brw_codegen *p,
 
    case JAY_OPCODE_SYNC:
       brw_SYNC(p, jay_sync_op(I));
+
+      if (!jay_is_null(I->src[0])) {
+         brw_set_src0(p, brw_eu_last_inst(p), stride(SRC(0), 0, 1, 0));
+      }
       break;
 
    case JAY_OPCODE_CMP:

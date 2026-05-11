@@ -7,7 +7,7 @@ set -uex
 
 section_start libdrm "Building libdrm"
 
-export LIBDRM_VERSION=libdrm-2.4.122
+export LIBDRM_VERSION=libdrm-2.4.133
 
 curl -L -O --retry 4 -f --retry-all-errors --retry-delay 60 \
     https://dri.freedesktop.org/libdrm/"$LIBDRM_VERSION".tar.xz

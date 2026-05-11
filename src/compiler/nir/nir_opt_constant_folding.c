@@ -36,10 +36,60 @@ struct constant_fold_state {
    bool has_indirect_load_const;
 };
 
+static nir_def *
+const_value_for_alu(nir_builder *b, nir_alu_instr *alu, unsigned bit_size,
+                    nir_const_value src[NIR_ALU_MAX_INPUTS][NIR_MAX_VEC_COMPONENTS])
+{
+   nir_const_value dest[NIR_MAX_VEC_COMPONENTS];
+   nir_const_value *srcs[NIR_ALU_MAX_INPUTS];
+
+   memset(dest, 0, sizeof(dest));
+   for (unsigned i = 0; i < nir_op_infos[alu->op].num_inputs; ++i)
+      srcs[i] = src[i];
+
+   nir_eval_const_opcode(alu->op, dest, NULL, alu->def.num_components,
+                         bit_size, srcs,
+                         b->shader->info.float_controls_execution_mode);
+
+   return nir_build_imm(b, alu->def.num_components, alu->def.bit_size,
+                        dest);
+}
+
+static bool
+is_bcsel_with_two_constants(nir_alu_instr *bcsel)
+{
+   return bcsel && bcsel->op == nir_op_bcsel &&
+          bcsel->def.num_components == 1 &&
+          bcsel->src[0].swizzle[0] == 0 &&
+          bcsel->src[0].src.ssa->num_components == 1 &&
+          nir_src_is_const(bcsel->src[1].src) &&
+          nir_src_is_const(bcsel->src[2].src);
+}
+
+static bool
+should_fold_bcsel(nir_alu_instr *alu)
+{
+   /* Don't fold bcsel if the resulting bit size is larger than 32 bit
+    * as these commonly require two instructions.
+    */
+   if (alu->def.bit_size > 32)
+      return false;
+
+   /* Don't fight with nir_lower_load_const_to_scalar. */
+   if (nir_op_is_vec_or_mov(alu->op))
+      return false;
+
+   /* Make an exception for fneg, because in many cases it can be
+    * folded with the next instruction.
+    */
+   return alu->op != nir_op_fneg;
+}
+
 nir_def *
 nir_try_constant_fold_alu(nir_builder *b, nir_alu_instr *alu)
 {
    nir_const_value src[NIR_ALU_MAX_INPUTS][NIR_MAX_VEC_COMPONENTS];
+   nir_def *bcsel = NULL;
 
    /* In the case that any outputs/inputs have unsized types, then we need to
     * guess the bit-size. In this case, the validator ensures that all
@@ -60,30 +110,57 @@ nir_try_constant_fold_alu(nir_builder *b, nir_alu_instr *alu)
          bit_size = alu->src[i].src.ssa->bit_size;
 
       nir_load_const_instr *load_const = nir_src_as_load_const(alu->src[i].src);
-      if (!load_const)
-         return NULL;
 
-      for (unsigned j = 0; j < nir_ssa_alu_instr_src_components(alu, i);
-           j++) {
-         src[i][j] = load_const->value[alu->src[i].swizzle[j]];
+      if (load_const) {
+         for (unsigned j = 0; j < nir_ssa_alu_instr_src_components(alu, i); j++)
+            src[i][j] = load_const->value[alu->src[i].swizzle[j]];
+         continue;
+      }
+
+      /* Check if the source is a bcsel with two constants. */
+      nir_alu_instr *bcsel_alu = nir_src_as_alu(alu->src[i].src);
+      if (should_fold_bcsel(alu) && is_bcsel_with_two_constants(bcsel_alu)) {
+         /* If there is multiple bcsel sources, they must use the same condition. */
+         if (bcsel && bcsel_alu->src[0].src.ssa != bcsel)
+            return false;
+
+         bcsel = bcsel_alu->src[0].src.ssa;
+
+         /* Use first bcsel constant. */
+         load_const = nir_src_as_load_const(bcsel_alu->src[1].src);
+         for (unsigned j = 0; j < nir_ssa_alu_instr_src_components(alu, i); j++)
+            src[i][j] = load_const->value[bcsel_alu->src[1].swizzle[alu->src[i].swizzle[j]]];
+      } else {
+         return NULL;
       }
    }
 
    if (bit_size == 0)
       bit_size = 32;
 
-   nir_const_value dest[NIR_MAX_VEC_COMPONENTS];
-   nir_const_value *srcs[NIR_ALU_MAX_INPUTS];
-   memset(dest, 0, sizeof(dest));
-   for (unsigned i = 0; i < nir_op_infos[alu->op].num_inputs; ++i)
-      srcs[i] = src[i];
-   nir_eval_const_opcode(alu->op, dest, NULL, alu->def.num_components,
-                         bit_size, srcs,
-                         b->shader->info.float_controls_execution_mode);
+   /* If all sources are constant, we can fold the ALU. */
+   if (!bcsel)
+      return const_value_for_alu(b, alu, bit_size, src);
 
-   return nir_build_imm(b, alu->def.num_components,
-                                alu->def.bit_size,
-                                dest);
+   /* At least one source is a bcsel with two constants. Fold the ALU twice
+    * and create a new bcsel, selecting between the folded values.
+    */
+   nir_def *then_const = const_value_for_alu(b, alu, bit_size, src);
+
+   /* Create second bcsel constant. */
+   for (unsigned i = 0; i < nir_op_infos[alu->op].num_inputs; i++) {
+      nir_alu_instr *bcsel_alu = nir_src_as_alu(alu->src[i].src);
+      if (!bcsel_alu)
+         continue;
+
+      nir_load_const_instr *load_const = nir_src_as_load_const(bcsel_alu->src[2].src);
+      for (unsigned j = 0; j < nir_ssa_alu_instr_src_components(alu, i); j++) {
+         src[i][j] = load_const->value[bcsel_alu->src[2].swizzle[alu->src[i].swizzle[j]]];
+      }
+   }
+   nir_def *else_const = const_value_for_alu(b, alu, bit_size, src);
+
+   return nir_bcsel(b, bcsel, then_const, else_const);
 }
 
 static nir_const_value *

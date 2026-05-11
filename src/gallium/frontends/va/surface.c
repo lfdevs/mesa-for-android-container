@@ -347,6 +347,7 @@ vlVaQuerySurfaceAttributes(VADriverContextP ctx, VAConfigID config_id,
 
    /* VA_RT_FORMAT_RGB32 */
    vlVaAddSurfaceFormat(pscreen, config, PIPE_FORMAT_R8G8B8A8_UNORM, attribs, &i);
+   vlVaAddSurfaceFormat(pscreen, config, PIPE_FORMAT_A8B8G8R8_UNORM, attribs, &i);
    vlVaAddSurfaceFormat(pscreen, config, PIPE_FORMAT_B8G8R8A8_UNORM, attribs, &i);
    vlVaAddSurfaceFormat(pscreen, config, PIPE_FORMAT_R8G8B8X8_UNORM, attribs, &i);
    vlVaAddSurfaceFormat(pscreen, config, PIPE_FORMAT_B8G8R8X8_UNORM, attribs, &i);

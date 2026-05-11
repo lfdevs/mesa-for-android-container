@@ -1,0 +1,98 @@
+[traces_db]
+download_url = "https://s3.freedesktop.org/mesa-tracie-private/"
+
+[[traces]]
+path = "angle/angle_trace_tests/among_us"
+[traces.devices]
+radv-raven = { checksum = "cba5142fef374856c462fbc0d51d60b40cd208e0515222483c92d07735e22b15" }
+
+[[traces]]
+path = "angle/angle_trace_tests/asphalt_9"
+[traces.devices]
+radv-raven = { checksum = "69ad73f3c68c993161616535fead74c40d3a474261ea98e62d40cf5468759d3d" }
+
+[[traces]]
+path = "angle/angle_trace_tests/brawl_starts"
+[traces.devices]
+radv-raven = { checksum = "af1e95679a6de6a7bbbb097e098894e51ee50b402ca2207c89245ecabbd51bbc" }
+
+[[traces]]
+path = "angle/angle_trace_tests/candy_crush_soda_saga"
+[traces.devices]
+radv-raven = { checksum = "24127f4c59470c738984c878ac35b62d6e34075d200b884a245db11378d533f1" }
+
+[[traces]]
+path = "angle/angle_trace_tests/google_maps"
+[traces.devices]
+radv-raven = { checksum = "aa6a7cb360c512598cae45077ec85efdf3d744205c5ddc154d4f03f04b3247d8" }
+
+[[traces]]
+path = "angle/angle_trace_tests/free_fire"
+[traces.devices]
+radv-raven = { checksum = "93fef722d4306301b05a449a9a7a201cfb7eddf4aab95ae11ece854db93ef4dc" }
+
+[[traces]]
+path = "angle/angle_trace_tests/minetest"
+[traces.devices]
+radv-raven = { checksum = "55f9bc8f7e631e4672f63a8e218230b9365d09a3bdb5a57864aa5f786bd29dd2" }
+
+[[traces]]
+path = "angle/angle_trace_tests/mobile_legends"
+[traces.devices]
+radv-raven = { checksum = "256017105d46cb1e924c47686de1e48bad798282f78ecb3e9a4f4dc464dd1378" }
+
+[[traces]]
+path = "angle/angle_trace_tests/pubg_mobile_battle_royale"
+[traces.devices]
+radv-raven = { checksum = "156736f62e4f73fd2ecd180321f70563298f12c9aa23e9cb82ebbdbf90f74a41" }
+
+[[traces]]
+path = "angle/angle_trace_tests/temple_run_300"
+[traces.devices]
+radv-raven = { checksum = "35d2c4f94af8d4b4a4c401aee7f928d1547926cba53f250d6632f4afd0eb38b1" }
+
+[[traces]]
+path = "steam-d3d9/deadspace3_unknown_dx9_unknown_unknown_none.trace"
+[traces.devices]
+radv-raven = { checksum = "b7aa99f6b0533a2284bc788721e5ab04378243e0731fb7e087385d9cdbe3cd91" }
+
+[[traces]]
+path = "steam-d3d9/drakensang_unknown_dx9_unknown_unknown_none.trace"
+[traces.devices]
+radv-raven = { checksum = "5b380c648d6b623095fb6504e4259d04bfebddf28574f8066cdcfc7402b64aaf" }
+
+[[traces]]
+path = "steam-d3d9/FalloutNewVegas_unknown_dx9_YesMan_ultra_1080p.trace"
+[traces.devices]
+radv-raven = { checksum = "ed261235e7f7b1144232771d4916fc71684fb7c74ff293a791883a9520276fe2" }
+
+[[traces]]
+path = "steam-d3d9/FarCry2_unknown_dx9_unknown_unknown_none.trace"
+[traces.devices]
+radv-raven = { checksum = "2c26eeb43d9f9d06ea14c7260ebd2efc3b7f0df2b9d3d0665aaebe1baecd29cf" }
+
+[[traces]]
+path = "steam-d3d9/KbWoTn_unknown_dx9_unknown_unknown_none.trace"
+[traces.devices]
+radv-raven = { checksum = "ddad71225331f2b8c41b79fed277dc266515e49ee03035daf678faa0d96ae5cc" }
+
+[[traces]]
+path = "steam-d3d9/Oblivion_unknown_dx9_unknown_unknown_none.trace"
+[traces.devices]
+radv-raven = { checksum = "2d5ad1465abdb462130f172e6a11da9372c8d7f0134cba2e31a2dec9ccd8aa93" }
+
+[[traces]]
+path = "steam-d3d9/SpiderMan_unknown_dx9_unknown_unknown_none.trace"
+[traces.devices]
+radv-raven = { checksum = "e910a5c20a917491ea3462231a7bd42077cfcfa8616008829ee4547bdd2e2780" }
+
+[[traces]]
+path = "steam-d3d9/psychonauts_unknown_dx9_unknown_unknown_none.trace"
+nonloopable = true
+[traces.devices]
+radv-raven = { checksum = "53d87cec9dbf01a72f22b7f57a7590d5a1103c656d02e26413fc412eb5f7caf5" }
+
+[[traces]]
+path = "steam-d3d9/TFT_unknown_dx9_unknown_unknown_none.trace"
+[traces.devices]
+radv-raven = { checksum = "4d86de9edb028938081c370ff0139f3c7c5022b15b329506fff8d5ece6e6b433" }

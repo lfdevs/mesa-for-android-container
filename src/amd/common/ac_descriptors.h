@@ -11,8 +11,6 @@
 #include "ac_gpu_info.h"
 #include "ac_surface.h"
 
-#include "util/format/u_format.h"
-
 #ifdef __cplusplus
 extern "C" {
 #endif

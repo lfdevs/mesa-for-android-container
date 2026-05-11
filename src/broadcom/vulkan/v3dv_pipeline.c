@@ -224,6 +224,11 @@ v3dv_pipeline_get_nir_options(const struct v3d_device_info *devinfo)
 
    if (!initialized) {
       options.lower_fsat = devinfo->ver < 71;
+      if (devinfo->ver >= 71) {
+         options.has_udot_4x8 = true;
+         options.has_sdot_4x8 = true;
+         options.has_sudot_4x8 = true;
+      }
       initialized = true;
     }
 
@@ -3137,6 +3142,26 @@ lower_compute(struct nir_shader *nir)
 
    NIR_PASS(_, nir, nir_lower_explicit_io,
             nir_var_mem_shared, nir_address_format_32bit_offset);
+
+   /* V3D can't execute workgroups with more than 256 invocations
+    * (maxComputeWorkGroupInvocations). If the shader requested a
+    * larger workgroup, serialize it into a 256-invocation one.
+    */
+   const uint32_t wg_size = nir->info.workgroup_size[0] *
+                            nir->info.workgroup_size[1] *
+                            nir->info.workgroup_size[2];
+   if (wg_size > V3D_MAX_CSD_WG_SIZE) {
+      perf_debug("Compute shader requested workgroup size %u (>256); "
+                 "lowering to a 256-invocation workgroup wrapping an "
+                 "outer loop (workgroup_size=(%u,%u,%u)).\n",
+                 wg_size,
+                 nir->info.workgroup_size[0],
+                 nir->info.workgroup_size[1],
+                 nir->info.workgroup_size[2]);
+      NIR_PASS(_, nir, nir_lower_workgroup_size, V3D_MAX_CSD_WG_SIZE);
+      v3d_optimize_nir(NULL, nir);
+      nir_shader_gather_info(nir, nir_shader_get_entrypoint(nir));
+   }
 
    struct nir_lower_compute_system_values_options sysval_options = {
       .has_base_workgroup_id = true,

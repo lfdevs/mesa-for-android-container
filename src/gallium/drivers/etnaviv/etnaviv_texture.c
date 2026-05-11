@@ -182,7 +182,8 @@ etna_update_sampler_source(struct pipe_sampler_view *view, int num)
    if ((to != from) && etna_resource_older(to, from)) {
       etna_copy_resource(view->context, &to->base, &from->base,
                          view->u.tex.first_level,
-                         MIN2(view->texture->last_level, view->u.tex.last_level));
+                         MIN2(view->texture->last_level, view->u.tex.last_level),
+                         false);
       ctx->dirty |= ETNA_DIRTY_TEXTURE_CACHES;
    } else if (to == from) {
       if (etna_can_use_sampler_ts(view, num)) {
@@ -191,7 +192,8 @@ etna_update_sampler_source(struct pipe_sampler_view *view, int num)
          /* Resolve TS if needed */
          etna_copy_resource(view->context, &to->base, &from->base,
                             view->u.tex.first_level,
-                            MIN2(view->texture->last_level, view->u.tex.last_level));
+                            MIN2(view->texture->last_level, view->u.tex.last_level),
+                            false);
          ctx->dirty |= ETNA_DIRTY_TEXTURE_CACHES;
       }
    }

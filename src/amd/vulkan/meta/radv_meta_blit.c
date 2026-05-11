@@ -7,7 +7,7 @@
 #include "nir/radv_meta_nir.h"
 #include "radv_meta.h"
 #include "radv_sampler.h"
-#include "vk_command_pool.h"
+#include "vk_shader_module.h"
 
 static enum glsl_sampler_dim
 translate_sampler_dim(VkImageType type)

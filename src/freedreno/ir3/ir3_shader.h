@@ -825,6 +825,11 @@ struct ir3_shader_variant {
     */
    unsigned varying_in;
 
+   /* For vertex shaders, the number of generic attribute slots (i.e. 1 plus the
+    * max VERT_ATTRIB_GENERICn).
+    */
+   unsigned attr_in;
+
    /* Remapping table to map Image and SSBO to hw state: */
    struct ir3_ibo_mapping image_mapping;
 

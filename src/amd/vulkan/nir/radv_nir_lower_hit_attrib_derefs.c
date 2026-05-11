@@ -7,7 +7,6 @@
 #include "nir.h"
 #include "nir_builder.h"
 #include "nir_deref.h"
-#include "radv_constants.h"
 #include "radv_nir.h"
 
 typedef nir_def *(*load_intrin_cb)(nir_builder *b, unsigned base);

@@ -16,8 +16,6 @@
 #include "vk_pipeline.h"
 #include "vk_pipeline_cache.h"
 
-#include "radv_radeon_winsys.h"
-
 struct radv_device;
 struct radv_shader_stage_key;
 struct radv_shader_stage;
@@ -26,6 +24,7 @@ struct radv_graphics_state_key;
 struct radv_shader_layout;
 struct nir_shader;
 typedef struct nir_shader nir_shader;
+struct radv_compiler_info;
 
 enum radv_pipeline_type {
    RADV_PIPELINE_GRAPHICS,
@@ -72,9 +71,9 @@ VK_DEFINE_NONDISP_HANDLE_CASTS(radv_pipeline, base, VkPipeline, VK_OBJECT_TYPE_P
       return (struct radv_##pipe_type##_pipeline *)pipeline;                                                           \
    }
 
-bool radv_pipeline_capture_shaders(const struct radv_device *device, VkPipelineCreateFlags2 flags);
+bool radv_pipeline_capture_shaders(const struct radv_compiler_info *compiler_info, VkPipelineCreateFlags2 flags);
 
-bool radv_pipeline_capture_shader_stats(const struct radv_device *device, VkPipelineCreateFlags2 flags);
+bool radv_pipeline_capture_shader_stats(const struct radv_compiler_info *compiler_info, VkPipelineCreateFlags2 flags);
 
 bool radv_pipeline_skip_shaders_cache(const struct radv_device *device, const struct radv_pipeline *pipeline);
 
@@ -83,7 +82,7 @@ void radv_pipeline_init(struct radv_device *device, struct radv_pipeline *pipeli
 void radv_pipeline_destroy(struct radv_device *device, struct radv_pipeline *pipeline,
                            const VkAllocationCallbacks *allocator);
 
-struct radv_shader_stage_key radv_pipeline_get_shader_key(const struct radv_device *device,
+struct radv_shader_stage_key radv_pipeline_get_shader_key(const struct radv_compiler_info *compiler_info,
                                                           const VkPipelineShaderStageCreateInfo *stage,
                                                           VkPipelineCreateFlags2 flags, const void *pNext);
 
@@ -96,10 +95,10 @@ void radv_shader_layout_init(const struct radv_pipeline_layout *pipeline_layout,
 
 void radv_pipeline_stage_finish(struct radv_shader_stage *stage);
 
-void radv_postprocess_nir(struct radv_device *device, const struct radv_graphics_state_key *gfx_state,
-                          struct radv_shader_stage *stage);
+void radv_postprocess_nir(const struct radv_compiler_info *compiler_info,
+                          const struct radv_graphics_state_key *gfx_state, struct radv_shader_stage *stage);
 
-bool radv_shader_should_clear_lds(const struct radv_device *device, const nir_shader *shader);
+bool radv_shader_should_clear_lds(const struct radv_compiler_info *compiler_info, const nir_shader *shader);
 
 VkPipelineShaderStageCreateInfo *radv_copy_shader_stage_create_info(struct radv_device *device, uint32_t stageCount,
                                                                     const VkPipelineShaderStageCreateInfo *pStages,

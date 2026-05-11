@@ -38,6 +38,8 @@ void conv_convert_float_matrix(
 
 struct fixed31_32 vpe_convfix31_32(int16_t inval);
 
+uint32_t vpe_float_to_S1n(float value, int N);
+
 #ifdef __cplusplus
 }
 #endif

@@ -4,7 +4,9 @@
  * SPDX-License-Identifier: MIT
  */
 
-#include "si_build_pm4.h"
+#include "si_pipe.h"
+#include "gfx/si_gfx.h"
+#include "ac_cmdbuf_cp.h"
 
 void si_cp_release_mem_pws(struct si_context *sctx, struct radeon_cmdbuf *cs,
                            unsigned event_type, unsigned gcr_cntl)

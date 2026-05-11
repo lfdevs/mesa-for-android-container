@@ -821,30 +821,11 @@ nv84_screen_get_video_param(struct pipe_screen *pscreen,
       return (codec == PIPE_VIDEO_FORMAT_MPEG4_AVC ||
               codec == PIPE_VIDEO_FORMAT_MPEG12) &&
          firmware_present(pscreen, codec);
-   case PIPE_VIDEO_CAP_NPOT_TEXTURES:
-      return 1;
    case PIPE_VIDEO_CAP_MAX_WIDTH:
    case PIPE_VIDEO_CAP_MAX_HEIGHT:
       return 2048;
-   case PIPE_VIDEO_CAP_PREFERRED_FORMAT:
-      return PIPE_FORMAT_NV12;
    case PIPE_VIDEO_CAP_SUPPORTS_PROGRESSIVE:
       return false;
-   case PIPE_VIDEO_CAP_MAX_LEVEL:
-      switch (profile) {
-      case PIPE_VIDEO_PROFILE_MPEG1:
-         return 0;
-      case PIPE_VIDEO_PROFILE_MPEG2_SIMPLE:
-      case PIPE_VIDEO_PROFILE_MPEG2_MAIN:
-         return 3;
-      case PIPE_VIDEO_PROFILE_MPEG4_AVC_BASELINE:
-      case PIPE_VIDEO_PROFILE_MPEG4_AVC_MAIN:
-      case PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH:
-         return 41;
-      default:
-         debug_printf("unknown video profile: %d\n", profile);
-         return 0;
-      }
    case PIPE_VIDEO_CAP_MAX_MACROBLOCKS:
       return 8192; /* vc-1 actually has 8190, but this is not supported */
    default:

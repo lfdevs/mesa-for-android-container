@@ -497,11 +497,6 @@ panvk_preprocess_nir(struct vk_physical_device *vk_pdev,
    if (nir->info.stage == MESA_SHADER_FRAGMENT)
       NIR_PASS(_, nir, nir_lower_wpos_center);
 
-   pan_optimize_nir(nir, pdev->kmod.dev->props.gpu_id);
-
-   NIR_PASS(_, nir, nir_split_var_copies);
-   NIR_PASS(_, nir, nir_lower_var_copies);
-
    assert(pdev->kmod.dev->props.shader_present != 0);
    uint64_t core_max_id =
       util_last_bit(pdev->kmod.dev->props.shader_present) - 1;
@@ -971,15 +966,7 @@ panvk_compile_nir(struct panvk_device *dev, nir_shader *nir,
       NIR_PASS(_, nir, nir_shader_intrinsics_pass, panvk_lower_load_vs_input,
                nir_metadata_control_flow, NULL);
 
-   /* since valhall, panvk_per_arch(nir_lower_descriptors) separates the
-    * driver set and the user sets, and does not need pan_nir_lower_image_index
-    */
-   if (PAN_ARCH < 9 && nir->info.stage == MESA_SHADER_VERTEX) {
-      NIR_PASS(_, nir, pan_nir_lower_image_index, MAX_VS_ATTRIBS);
-      NIR_PASS(_, nir, pan_nir_lower_texel_buffer_fetch_index, MAX_VS_ATTRIBS);
-   }
-
-   pan_postprocess_nir(nir, input.gpu_id);
+   pan_postprocess_nir(nir, &input, &shader->info);
 
    if (noperspective_varyings && nir->info.stage == MESA_SHADER_VERTEX) {
       NIR_PASS(_, nir, nir_inline_sysval,
@@ -2471,6 +2458,8 @@ panvk_per_arch(create_internal_shader)(
    struct util_dynarray binary;
 
    panvk_per_arch(compiler_lock)();
+
+   pan_postprocess_nir(nir, compiler_inputs, &shader->info);
 
    util_dynarray_init(&binary, nir);
    pan_shader_compile(nir, compiler_inputs, &binary, &shader->info);

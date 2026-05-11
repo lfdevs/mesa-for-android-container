@@ -22,8 +22,6 @@
  */
 #if MFT_CODEC_H264ENC
 #include "hmft_entrypoints.h"
-#include "mfbufferhelp.h"
-#include "mfpipeinterop.h"
 #include "reference_frames_tracker_h264.h"
 #include "wpptrace.h"
 
@@ -1150,7 +1148,7 @@ CDX12EncHMFT::GetMaxReferences( unsigned int width, unsigned int height )
    if( width != 0 && height != 0 )
    {
       int maxDPBSize = GetMaxDPBSize( width, height, m_uiLevel );
-      uiMaxReferences = std::min( (int) m_EncoderCapabilities.m_uiMaxHWSupportedDPBCapacity, maxDPBSize );   
+      uiMaxReferences = std::min( (int) m_EncoderCapabilities.m_uiMaxHWSupportedDPBCapacity, maxDPBSize );
    }
    return uiMaxReferences;
 }

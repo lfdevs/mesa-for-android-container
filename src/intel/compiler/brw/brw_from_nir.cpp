@@ -3282,17 +3282,15 @@ alloc_temporary(const brw_builder &bld, unsigned size, brw_reg *regs, unsigned n
 }
 
 static brw_reg
-alloc_frag_output(nir_to_brw_state &ntb, unsigned location)
+alloc_frag_output(nir_to_brw_state &ntb, unsigned l)
 {
    brw_shader &s = ntb.s;
 
    assert(s.stage == MESA_SHADER_FRAGMENT);
    const brw_fs_prog_key *const key =
       reinterpret_cast<const brw_fs_prog_key *>(s.key);
-   const unsigned l = GET_FIELD(location, BRW_NIR_FRAG_OUTPUT_LOCATION);
-   const unsigned i = GET_FIELD(location, BRW_NIR_FRAG_OUTPUT_INDEX);
 
-   if (i > 0 || (key->force_dual_color_blend && l == FRAG_RESULT_DATA1))
+   if (l == FRAG_RESULT_DUAL_SRC_BLEND)
       return alloc_temporary(ntb.bld, 4, &s.dual_src_output, 1);
 
    else if (l == FRAG_RESULT_COLOR)
@@ -3807,11 +3805,9 @@ brw_from_nir_emit_fs_intrinsic(nir_to_brw_state &ntb,
 
    case nir_intrinsic_store_output: {
       const brw_reg src = get_nir_src(ntb, instr->src[0], -1);
-      const unsigned store_offset = nir_src_as_uint(instr->src[1]);
-      const unsigned location = nir_intrinsic_base(instr) +
-         SET_FIELD(store_offset, BRW_NIR_FRAG_OUTPUT_LOCATION);
+      const nir_io_semantics sem = nir_intrinsic_io_semantics(instr);
       const brw_reg new_dest =
-         offset(retype(alloc_frag_output(ntb, location), src.type),
+         offset(retype(alloc_frag_output(ntb, sem.location), src.type),
                 bld, nir_intrinsic_component(instr));
 
       brw_combine_with_vec(bld, new_dest, src, instr->num_components);
@@ -3819,11 +3815,9 @@ brw_from_nir_emit_fs_intrinsic(nir_to_brw_state &ntb,
    }
 
    case nir_intrinsic_load_output: {
-      const unsigned l = GET_FIELD(nir_intrinsic_base(instr),
-                                   BRW_NIR_FRAG_OUTPUT_LOCATION);
-      assert(l >= FRAG_RESULT_DATA0);
-      const unsigned load_offset = nir_src_as_uint(instr->src[0]);
-      const unsigned target = l - FRAG_RESULT_DATA0 + load_offset;
+      const nir_io_semantics sem = nir_intrinsic_io_semantics(instr);
+      assert(sem.location >= FRAG_RESULT_DATA0);
+      const unsigned target = sem.location - FRAG_RESULT_DATA0;
       const brw_reg tmp = bld.vgrf(dest.type, 4);
 
       /* Not functional after Gfx20 */
@@ -4155,11 +4149,6 @@ brw_from_nir_emit_fs_intrinsic(nir_to_brw_state &ntb,
 
    case nir_intrinsic_load_max_polygon_intel:
       bld.MOV(retype(dest, BRW_TYPE_UD), brw_imm_ud(s.max_polygons));
-      break;
-
-   case nir_intrinsic_load_per_primitive_remap_intel:
-      bld.MOV(retype(dest, BRW_TYPE_UD),
-              brw_dynamic_per_primitive_remap(brw_fs_prog_data(s.prog_data)));
       break;
 
    default:
@@ -4573,10 +4562,10 @@ get_nir_buffer_intrinsic_index(nir_to_brw_state &ntb, const brw_builder &bld,
 static unsigned
 choose_block_size_dwords(const intel_device_info *devinfo, unsigned dwords)
 {
-   const unsigned min_block = 8;
+   const unsigned min_block = devinfo->has_lsc ? 1 : 4;
    const unsigned max_block = devinfo->has_lsc ? 64 : 32;
 
-   const unsigned block = 1 << util_logbase2(dwords);
+   const unsigned block = dwords > 4 ? 1 << util_logbase2(dwords) : dwords;
 
    return CLAMP(block, min_block, max_block);
 }
@@ -5235,8 +5224,10 @@ brw_from_nir_emit_intrinsic(nir_to_brw_state &ntb,
       break;
    }
 
-   case nir_intrinsic_load_push_data_intel:
-   case nir_intrinsic_load_inline_data_intel: {
+   case nir_intrinsic_load_inline_data_intel:
+      assert(brw_shader_stage_has_inline_data(ntb.devinfo, ntb.s.stage));
+      FALLTHROUGH;
+   case nir_intrinsic_load_push_data_intel: {
       /* Offsets are in bytes but they should always aligned to
        * the type size
        */
@@ -6186,23 +6177,32 @@ brw_from_nir_emit_memory_access(nir_to_brw_state &ntb,
       unsigned first_read_component = 0;
 
       if (convergent_block_load) {
-         /* If the address is a constant and alignment permits, skip unread
-          * leading and trailing components.  (It's probably not worth the
+         /* If the address is a constant and alignment permits, skip as many
+          * unread leading and trailing components as we can without splitting
+          * the load into more smaller blocks.  (It's probably not worth the
           * extra address math for non-constant addresses.)
           *
           * Note that SLM block loads on HDC platforms need to be 16B aligned.
           */
          if (srcs[MEMORY_LOGICAL_ADDRESS].file == IMM &&
-             alignment >= data_bit_size / 8 &&
-             (devinfo->has_lsc || mode != MEMORY_MODE_SHARED_LOCAL)) {
+             alignment >= nir_bit_size / 8) {
             first_read_component = nir_def_first_component_read(&instr->def);
-            unsigned last_component = nir_def_last_component_read(&instr->def);
+            unsigned last_component = nir_def_last_component_read(&instr->def) + 1;
+            if (!devinfo->has_lsc && mode == MEMORY_MODE_SHARED_LOCAL) {
+               first_read_component = ROUND_DOWN_TO(first_read_component, 4);
+               last_component = align(last_component, 4);
+            }
+            total = last_component - first_read_component;
+            total = brw_uniform_block_size(devinfo, total);
+            first_read_component =
+               total >= last_component ? 0 : last_component - total;
+            components = MIN2(components, last_component) - first_read_component;
             srcs[MEMORY_LOGICAL_ADDRESS].u64 +=
-               first_read_component * (data_bit_size / 8);
-            components = last_component - first_read_component + 1;
+               first_read_component * (nir_bit_size / 8);
+         } else {
+            total = brw_uniform_block_size(devinfo, components);
          }
 
-         total = align(components, REG_SIZE * reg_unit(devinfo) / 4);
          dest = ubld.vgrf(BRW_TYPE_UD, total);
       } else {
          total = components * bld.dispatch_width();
@@ -6216,6 +6216,11 @@ brw_from_nir_emit_memory_access(nir_to_brw_state &ntb,
          unsigned block_comps = choose_block_size_dwords(devinfo, total - done);
          const unsigned block_bytes = block_comps * (nir_bit_size / 8);
 
+         /* Our current choice of block sizes and 32-bit data type will
+          * always give us a GRF-aligned offset into dest
+          */
+         assert(done % (REG_SIZE / 4 * reg_unit(devinfo)) == 0);
+
          brw_reg dst_offset = is_store ? brw_reg() :
             retype(byte_offset(dest, done * 4), BRW_TYPE_UD);
          if (is_store) {
@@ -6226,7 +6231,7 @@ brw_from_nir_emit_memory_access(nir_to_brw_state &ntb,
          mem = ubld.emit(opcode, dst_offset, srcs, MEMORY_LOGICAL_NUM_SRCS)->as_mem();
          mem->has_no_mask_send_params = no_mask_handle;
          if (is_load)
-            mem->size_written = block_bytes;
+            mem->size_written = align(block_bytes, REG_SIZE * reg_unit(devinfo));
          mem->lsc_op = op;
          mem->mode = *mode;
          mem->binding_type = *binding_type;

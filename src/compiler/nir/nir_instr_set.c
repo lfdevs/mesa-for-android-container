@@ -748,9 +748,29 @@ nir_instrs_equal(const nir_instr *instr1, const nir_instr *instr2)
             return false;
       }
 
-      for (unsigned i = 0; i < info->num_index_slots; i++) {
-         if (intrinsic1->const_index[i] != intrinsic2->const_index[i])
-            return false;
+      /* Compare indices, but allow fp_math_ctrl mismatches. */
+      for (unsigned i = 0; i < info->num_indices; i++) {
+         nir_intrinsic_index_flag index = info->indices[i];
+
+         if (index == NIR_INTRINSIC_FP_MATH_CTRL) {
+            continue;
+         } else if (index == NIR_INTRINSIC_IO_SEMANTICS) {
+            nir_io_semantics sem1 = nir_intrinsic_io_semantics(intrinsic1);
+            nir_io_semantics sem2 = nir_intrinsic_io_semantics(intrinsic2);
+            sem1.no_signed_zero = false;
+            sem2.no_signed_zero = false;
+
+            if (memcmp(&sem1, &sem2, sizeof(sem1)))
+               return false;
+         } else {
+            unsigned size = nir_intrinsic_index_size(i);
+            unsigned offset = info->index_map[index] - 1;
+
+            if (memcmp(&intrinsic1->const_index[offset],
+                       &intrinsic2->const_index[offset],
+                       sizeof(intrinsic1->const_index[0]) * size))
+               return false;
+         }
       }
 
       return true;
@@ -806,8 +826,22 @@ nir_instr_set_add_or_rewrite(struct set *instr_set, nir_instr *instr,
        * long as we take the fp_math_ctrl union. If we got here, the two instructions are
        * exactly identical in every other way.
        */
-      if (instr->type == nir_instr_type_alu)
+      if (instr->type == nir_instr_type_alu) {
          nir_instr_as_alu(match)->fp_math_ctrl |= nir_instr_as_alu(instr)->fp_math_ctrl;
+      } else if (instr->type == nir_instr_type_intrinsic) {
+         nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
+         nir_intrinsic_instr *match_intr = nir_instr_as_intrinsic(match);
+         if (nir_intrinsic_has_io_semantics(intr) &&
+             !nir_intrinsic_io_semantics(intr).no_signed_zero) {
+            nir_io_semantics sem = nir_intrinsic_io_semantics(match_intr);
+            sem.no_signed_zero = false;
+            nir_intrinsic_set_io_semantics(match_intr, sem);
+         } else if (nir_intrinsic_has_fp_math_ctrl(intr)) {
+            unsigned fp_math_ctrl = nir_intrinsic_fp_math_ctrl(match_intr);
+            fp_math_ctrl |= nir_intrinsic_fp_math_ctrl(intr);
+            nir_intrinsic_set_fp_math_ctrl(match_intr, fp_math_ctrl);
+         }
+      }
 
       assert(!def == !new_def);
       if (def)

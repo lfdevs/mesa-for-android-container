@@ -431,6 +431,132 @@ emit_intrinsic_image_size(struct ir3_context *ctx, nir_intrinsic_instr *intr,
    ir3_split_dest(b, dst, resinfo, 0, intr->num_components);
 }
 
+/* On a6xx, on top of the offset_shift that applies to the whole offset, there's
+ * a second shift that only applies to the GPR part of the offset (so not to the
+ * immediate part). We extract that here by simply pattern matching for ishl on
+ * the offset src. Returns the shift if a match is found and it fits in the
+ * 2-bit field, in which case *offset_src is set to the src of ishl and
+ * *offset_src_comp to the component of *offset_src.
+ */
+static unsigned
+parse_src_shift(struct ir3_context *ctx, nir_src **offset_src,
+                unsigned *offset_src_comp)
+{
+   *offset_src_comp = 0;
+
+   if (ctx->compiler->gen >= 7) {
+      return 0;
+   }
+
+   nir_scalar offset =
+      nir_scalar_chase_movs(nir_get_scalar((*offset_src)->ssa, 0));
+
+   if (!nir_scalar_is_alu(offset) || nir_scalar_alu_op(offset) != nir_op_ishl) {
+      return 0;
+   }
+
+   nir_scalar shift_src = nir_scalar_chase_alu_src(offset, 1);
+
+   if (!nir_scalar_is_const(shift_src)) {
+      return 0;
+   }
+
+   unsigned shift = nir_scalar_as_uint(shift_src);
+
+   if (shift >= (1 << 2)) {
+      return 0;
+   }
+
+   nir_alu_instr *offset_alu = nir_def_as_alu(offset.def);
+   *offset_src = &offset_alu->src[0].src;
+   *offset_src_comp = offset_alu->src[0].swizzle[offset.comp];
+   return shift;
+}
+
+static bool
+base_fits_ldg_stg_a(struct ir3_compiler *compiler, unsigned base)
+{
+   if (compiler->gen >= 7) {
+      return base < (1 << 8);
+   }
+
+   return base < (1 << 2);
+}
+
+/* Represents an offset for ldg/stg(.a):
+ * - src == NULL: ldg/stg base_address + imm
+ * - src != NULL:
+ *   - a6xx: ldg/stg.a base_addr + (src << src_shift) + imm
+ *   - a7xx: ldg/stg.a base_addr + src + imm
+ */
+struct ldg_stg_offset {
+   struct ir3_instruction *src;
+   struct ir3_instruction *src_shift;
+   struct ir3_instruction *imm;
+};
+
+static struct ldg_stg_offset
+ldg_stg_offset(struct ir3_context *ctx, nir_intrinsic_instr *intr)
+{
+   assert(intr->intrinsic == nir_intrinsic_load_global_ir3 ||
+          intr->intrinsic == nir_intrinsic_store_global_ir3);
+
+   if (ctx->compiler->gen >= 7) {
+      assert(nir_intrinsic_offset_shift(intr) == 0);
+   } else {
+      ASSERTED unsigned bit_size =
+         intr->intrinsic == nir_intrinsic_load_global_ir3
+            ? intr->def.bit_size
+            : intr->src[0].ssa->bit_size;
+      assert(nir_intrinsic_offset_shift(intr) == ffs(bit_size / 8) - 1);
+   }
+
+   struct ldg_stg_offset offset = {};
+   nir_src *offset_src = nir_get_io_offset_src(intr);
+   int32_t base = nir_intrinsic_base(intr);
+   unsigned offset_shift = nir_intrinsic_offset_shift(intr);
+   struct ir3_builder *b = &ctx->build;
+
+   if (nir_src_is_const(*offset_src)) {
+      int32_t full_imm_offset = base + nir_src_as_int(*offset_src);
+      int32_t full_imm_offset_bytes = full_imm_offset << offset_shift;
+
+      /* ldg/stg offset immediate is 13 bits. Note that ldg/stg use byte offsets
+       * even on a6xx.
+       */
+      if (full_imm_offset_bytes < (1 << 12) &&
+          full_imm_offset_bytes >= -(1 << 12)) {
+         offset.imm = create_immed(b, full_imm_offset_bytes);
+      } else {
+         /* The immediate offset does not fit. Generate ldg/stg.a with the
+          * immediate in a GPR.
+          */
+         offset.src = create_immed(b, full_imm_offset);
+         offset.src_shift = create_immed(b, 0);
+         offset.imm = create_immed(b, 0);
+      }
+   } else {
+      if (base_fits_ldg_stg_a(ctx->compiler, base)) {
+         unsigned offset_src_comp;
+         unsigned shift = parse_src_shift(ctx, &offset_src, &offset_src_comp);
+         offset.src = ir3_get_src(ctx, offset_src)[offset_src_comp];
+         offset.src_shift = create_immed(b, shift);
+         offset.imm = create_immed(b, base);
+      } else {
+         /* This should be rare, but various passes might update
+          * base/offset_shift in a way that makes the combination illegal.
+          * Detect that here and replace base by an add.
+          */
+         offset.src = ir3_ADD_U(b, ir3_get_src(ctx, offset_src)[0], 0,
+                                create_immed(b, base), 0);
+         offset.src_shift = create_immed(b, 0);
+         offset.imm = create_immed(b, 0);
+      }
+   }
+
+   return offset;
+}
+
 static void
 emit_intrinsic_load_global_ir3(struct ir3_context *ctx,
                                nir_intrinsic_instr *intr,
@@ -438,31 +564,19 @@ emit_intrinsic_load_global_ir3(struct ir3_context *ctx,
 {
    struct ir3_builder *b = &ctx->build;
    unsigned dest_components = nir_intrinsic_dest_components(intr);
-   struct ir3_instruction *addr, *offset;
+   struct ir3_instruction *addr;
 
    addr = ir3_collect(b, ir3_get_src(ctx, &intr->src[0])[0]);
 
+   struct ldg_stg_offset offset = ldg_stg_offset(ctx, intr);
    struct ir3_instruction *load;
 
-   bool const_offset_in_bounds =
-      nir_src_is_const(intr->src[1]) &&
-      nir_src_as_int(intr->src[1]) < (1 << 8) &&
-      nir_src_as_int(intr->src[1]) > -(1 << 8);
-
-   if (const_offset_in_bounds) {
-      load = ir3_LDG(b, addr, 0,
-                     create_immed(b, nir_src_as_int(intr->src[1]) * 4),
-                     0, create_immed(b, dest_components), 0);
+   if (!offset.src) {
+      load = ir3_LDG(b, addr, 0, offset.imm, 0,
+                     create_immed(b, dest_components), 0);
    } else {
-      unsigned shift = ctx->compiler->gen >= 7 ? 2 : 0;
-      offset = ir3_get_src(ctx, &intr->src[1])[0];
-      if (shift) {
-         /* A7XX TODO: Move to NIR for it to be properly optimized? */
-         offset = ir3_SHL_B(b, offset, 0, create_immed(b, shift), 0);
-      }
-      load =
-         ir3_LDG_A(b, addr, 0, offset, 0, create_immed(b, 0), 0,
-                   create_immed(b, 0), 0, create_immed(b, dest_components), 0);
+      load = ir3_LDG_A(b, addr, 0, offset.src, 0, offset.src_shift, 0,
+                       offset.imm, 0, create_immed(b, dest_components), 0);
    }
 
    load->cat6.type = type_uint_size(intr->def.bit_size);
@@ -479,33 +593,22 @@ emit_intrinsic_store_global_ir3(struct ir3_context *ctx,
                                 nir_intrinsic_instr *intr)
 {
    struct ir3_builder *b = &ctx->build;
-   struct ir3_instruction *value, *addr, *offset;
+   struct ir3_instruction *value, *addr;
    unsigned ncomp = nir_intrinsic_src_components(intr, 0);
 
    addr = ir3_collect(b, ir3_get_src(ctx, &intr->src[1])[0]);
 
    value = ir3_create_collect(b, ir3_get_src(ctx, &intr->src[0]), ncomp);
 
+   struct ldg_stg_offset offset = ldg_stg_offset(ctx, intr);
    struct ir3_instruction *stg;
 
-   bool const_offset_in_bounds = nir_src_is_const(intr->src[2]) &&
-                                 nir_src_as_int(intr->src[2]) < (1 << 10) &&
-                                 nir_src_as_int(intr->src[2]) > -(1 << 10);
-
-   if (const_offset_in_bounds) {
-      stg = ir3_STG(b, addr, 0,
-                    create_immed(b, nir_src_as_int(intr->src[2]) * 4), 0,
-                    value, 0,
-                    create_immed(b, ncomp), 0);
+   if (!offset.src) {
+      stg = ir3_STG(b, addr, 0, offset.imm, 0, value, 0, create_immed(b, ncomp),
+                    0);
    } else {
-      offset = ir3_get_src(ctx, &intr->src[2])[0];
-      if (ctx->compiler->gen >= 7) {
-         /* A7XX TODO: Move to NIR for it to be properly optimized? */
-         offset = ir3_SHL_B(b, offset, 0, create_immed(b, 2), 0);
-      }
-      stg =
-         ir3_STG_A(b, addr, 0, offset, 0, create_immed(b, 0), 0,
-                   create_immed(b, 0), 0, value, 0, create_immed(b, ncomp), 0);
+      stg = ir3_STG_A(b, addr, 0, offset.src, 0, offset.src_shift, 0,
+                      offset.imm, 0, value, 0, create_immed(b, ncomp), 0);
    }
 
    stg->cat6.type = type_uint_size(intr->src[0].ssa->bit_size);

@@ -402,6 +402,25 @@ anv_device_finish_descriptors_view(struct anv_device *device)
 }
 
 static VkResult
+anv_device_bind_null_va(struct anv_device *device,
+                        struct anv_va_range *range,
+                        enum anv_vm_bind_op op)
+{
+   struct anv_vm_bind bind = {
+      .address = range->addr,
+      .size = range->size,
+      .op = op,
+   };
+   struct anv_sparse_submission submit = {
+      .binds = &bind,
+      .binds_len = 1,
+      .binds_capacity = 1,
+   };
+   return device->kmd_backend->vm_bind(device, &submit,
+                                       ANV_VM_BIND_FLAG_SIGNAL_BIND_TIMELINE);
+}
+
+static VkResult
 anv_device_init_vma_heaps(struct anv_device *device)
 {
    if (pthread_mutex_init(&device->vma_mutex, NULL) != 0)
@@ -415,6 +434,16 @@ anv_device_init_vma_heaps(struct anv_device *device)
    util_vma_heap_init(&device->vma_hi,
                       device->physical->va.high_heap.addr,
                       device->physical->va.high_heap.size);
+
+   /* Reduce the usable size of the null initialized heap by enough pages so
+    * that no batch buffers get placed where the CS could end up prefetching
+    * beyond the limit of the null pages.
+    */
+   unsigned max_prefetch = intel_device_info_get_max_engine_prefetch(device->info);
+   max_prefetch = align(max_prefetch, device->info->mem_alignment);
+   util_vma_heap_init(&device->vma_null_initialized,
+                      device->physical->va.null_initialized_heap.addr,
+                      device->physical->va.null_initialized_heap.size - max_prefetch);
 
    if (device->physical->indirect_descriptors) {
       util_vma_heap_init(&device->vma_desc,
@@ -442,6 +471,7 @@ anv_device_init_vma_heaps(struct anv_device *device)
 static void
 anv_device_finish_vma_heaps(struct anv_device *device)
 {
+   util_vma_heap_finish(&device->vma_null_initialized);
    util_vma_heap_finish(&device->vma_trtt);
    util_vma_heap_finish(&device->vma_dynamic_visible);
    util_vma_heap_finish(&device->vma_desc);
@@ -843,12 +873,18 @@ VkResult anv_CreateDevice(
       goto fail_vmas;
    }
 
+   result = anv_device_bind_null_va(device,
+                                    &device->physical->va.null_initialized_heap,
+                                    ANV_VM_BIND);
+   if (result != VK_SUCCESS)
+      goto fail_mutex;
+
    if (physical_device->instance->vk.trace_mode & VK_TRACE_MODE_RMV)
       anv_memory_trace_init(device);
 
    result = anv_bo_cache_init(&device->bo_cache, device);
    if (result != VK_SUCCESS)
-      goto fail_mutex;
+      goto fail_null_vma_init;
 
    if (!anv_slab_bo_init(device))
       goto fail_cache;
@@ -924,6 +960,10 @@ VkResult anv_CreateDevice(
    memcpy(device->rt_uuid_addr.bo->map + device->rt_uuid_addr.offset,
           physical_device->rt_uuid,
           sizeof(physical_device->rt_uuid));
+
+   /* A null cache line for bounded UBO loads. */
+   wa_addr = anv_address_add_aligned(wa_addr, 64, 64);
+   device->null_cacheline_addr = wa_addr;
 
    /* Make sure the workaround address is the last one in the workaround BO,
     * so that writes never overwrite other bits of data stored in the
@@ -1078,10 +1118,6 @@ VkResult anv_CreateDevice(
       goto fail_default_pipeline_cache;
    }
 
-   /* The device (currently is ICL/TGL) does not have float64 support. */
-   if (!device->info->has_64bit_float)
-      anv_load_fp64_shader(device);
-
    if (anv_needs_printf_buffer()) {
       result = anv_device_print_init(device);
       if (result != VK_SUCCESS)
@@ -1121,6 +1157,12 @@ VkResult anv_CreateDevice(
    if (result != VK_SUCCESS) {
       result = vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
       goto fail_trtt;
+   }
+
+   result = anv_device_init_shader_dump(device);
+   if (result != VK_SUCCESS) {
+      result = vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
+      goto fail_rt_shaders;
    }
 
    anv_device_init_blorp(device);
@@ -1198,6 +1240,7 @@ VkResult anv_CreateDevice(
    device->vk.disable_lto = device->physical->instance->disable_lto;
 
    simple_mtx_init(&device->accel_struct_build.mutex, mtx_plain);
+   simple_mtx_init(&device->fp64_mutex, mtx_plain);
 
    *pDevice = anv_device_to_handle(device);
 
@@ -1215,6 +1258,8 @@ VkResult anv_CreateDevice(
    anv_device_finish_blorp(device);
    anv_device_finish_astc_emu(device);
    anv_device_finish_internal_kernels(device);
+   anv_device_finish_shader_dump(device);
+ fail_rt_shaders:
    anv_device_finish_rt_shaders(device);
  fail_trtt:
    anv_device_finish_trtt(device);
@@ -1273,6 +1318,10 @@ VkResult anv_CreateDevice(
    anv_slab_bo_deinit(device);
  fail_cache:
    anv_bo_cache_finish(&device->bo_cache);
+ fail_null_vma_init:
+   anv_device_bind_null_va(device,
+                           &device->physical->va.null_initialized_heap,
+                           ANV_VM_UNBIND);
  fail_mutex:
    pthread_mutex_destroy(&device->mutex);
  fail_vmas:
@@ -1300,6 +1349,9 @@ void anv_DestroyDevice(
 
    if (!device)
       return;
+
+   if (anv_needs_printf_buffer())
+      vk_check_printf_status(&device->vk, &device->printf);
 
    anv_memory_trace_finish(device);
 
@@ -1414,6 +1466,7 @@ void anv_DestroyDevice(
    pthread_mutex_destroy(&device->mutex);
 
    simple_mtx_destroy(&device->accel_struct_build.mutex);
+   simple_mtx_destroy(&device->fp64_mutex);
 
    ralloc_free(device->fp64_nir);
 
@@ -1477,6 +1530,9 @@ anv_vma_heap_for_flags(struct anv_device *device,
    if (alloc_flags & ANV_BO_ALLOC_DYNAMIC_VISIBLE_POOL)
       return &device->vma_dynamic_visible;
 
+   if (alloc_flags & ANV_BO_ALLOC_NULL_INITIALIZED_HEAP)
+      return &device->vma_null_initialized;
+
    return &device->vma_hi;
 }
 
@@ -1531,7 +1587,8 @@ anv_vma_free(struct anv_device *device,
           vma_heap == &device->vma_hi ||
           vma_heap == &device->vma_desc ||
           vma_heap == &device->vma_dynamic_visible ||
-          vma_heap == &device->vma_trtt);
+          vma_heap == &device->vma_trtt ||
+          vma_heap == &device->vma_null_initialized);
 
    const uint64_t addr_48b = intel_48b_address(address);
 
@@ -1971,11 +2028,11 @@ void anv_FreeMemory(
    pthread_mutex_unlock(&device->mutex);
 
    if (mem->map) {
-      const VkMemoryUnmapInfoKHR unmap = {
-         .sType = VK_STRUCTURE_TYPE_MEMORY_UNMAP_INFO_KHR,
+      const VkMemoryUnmapInfo unmap = {
+         .sType = VK_STRUCTURE_TYPE_MEMORY_UNMAP_INFO,
          .memory = _mem,
       };
-      anv_UnmapMemory2KHR(_device, &unmap);
+      anv_UnmapMemory2(_device, &unmap);
    }
 
    p_atomic_add(&device->physical->memory.heaps[mem->type->heapIndex].used,
@@ -1991,9 +2048,9 @@ void anv_FreeMemory(
    vk_device_memory_destroy(&device->vk, pAllocator, &mem->vk);
 }
 
-VkResult anv_MapMemory2KHR(
+VkResult anv_MapMemory2(
     VkDevice                                    _device,
-    const VkMemoryMapInfoKHR*                   pMemoryMapInfo,
+    const VkMemoryMapInfo*                      pMemoryMapInfo,
     void**                                      ppData)
 {
    ANV_FROM_HANDLE(anv_device, device, _device);
@@ -2065,9 +2122,9 @@ VkResult anv_MapMemory2KHR(
    return VK_SUCCESS;
 }
 
-VkResult anv_UnmapMemory2KHR(
+VkResult anv_UnmapMemory2(
     VkDevice                                    _device,
-    const VkMemoryUnmapInfoKHR*                 pMemoryUnmapInfo)
+    const VkMemoryUnmapInfo*                    pMemoryUnmapInfo)
 {
    ANV_FROM_HANDLE(anv_device, device, _device);
    ANV_FROM_HANDLE(anv_device_memory, mem, pMemoryUnmapInfo->memory);

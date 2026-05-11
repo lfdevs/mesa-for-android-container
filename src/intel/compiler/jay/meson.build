@@ -47,6 +47,7 @@ jay_nir_algebraic = custom_target(
 
 libintel_compiler_jay_files = files(
   'jay.h',
+  'jay_assign_accumulators.c',
   'jay_assign_flags.c',
   'jay_from_nir.c',
   'jay_ir.h',
@@ -58,7 +59,7 @@ libintel_compiler_jay_files = files(
   'jay_lower_spill.c',
   'jay_nir.c',
   'jay_opt_dead_code.c',
-  'jay_opt_control_flow.c',
+  'jay_opt_predicate.c',
   'jay_opt_propagate.c',
   'jay_print.c',
   'jay_private.h',

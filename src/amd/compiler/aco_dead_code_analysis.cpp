@@ -6,7 +6,6 @@
 
 #include "aco_ir.h"
 
-#include <algorithm>
 #include <vector>
 
 /*

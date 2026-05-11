@@ -8,3 +8,4 @@ extern crate quote;
 extern crate syn;
 
 pub mod as_slice;
+pub mod from_variants;

@@ -75,6 +75,7 @@ struct blorp_compiler {
 enum {
    BLORP_RENDERBUFFER_BT_INDEX,
    BLORP_TEXTURE_BT_INDEX,
+   BLORP_TEXBUF_BT_INDEX,
    BLORP_NUM_BT_ENTRIES
 };
 
@@ -84,8 +85,15 @@ struct blorp_surface_info
 {
    bool enabled;
 
+   /* Should we unpack the last few rows using a texel buffer? */
+   bool buffer;
+   uint32_t buffer_rows;
+
    struct isl_surf surf;
    struct blorp_address addr;
+
+   /* Inferred page boundaries of the surface address */
+   uint64_t page_base, page_limit;
 
    struct isl_surf aux_surf;
    struct blorp_address aux_addr;
@@ -182,6 +190,9 @@ struct blorp_wm_inputs_blit
    /* (1/width, 1/height) for the source surface */
    float src_inv_size[2];
 
+   uint32_t src_buffer_first_row;
+   uint32_t src_buffer_row_pitch;
+
    /* Minimum layer setting works for all the textures types but texture_3d
     * for which the setting has no effect. Use the z-coordinate instead.
     */
@@ -204,7 +215,7 @@ struct blorp_wm_inputs
    /* Note: Pad out to an integral number of registers when extending, but
     * make sure subgroup_id is the last 32-bit item.
     */
-   uint32_t pad[4];
+   uint32_t pad[2];
    uint32_t subgroup_id;
 };
 
@@ -434,6 +445,12 @@ struct blorp_blit_prog_key
     */
    bool need_src_offset;
 
+   /* True if this blit operation is unpacking the last few rows of the 2D image
+    * from a 1D buffer. This is part of a workaround for performing buffer-to-image
+    * copies when the source is straddling an extra page due to a misaligned cache.
+    */
+   bool need_src_buffer;
+
    /* True if this blit operation may involve intratile offsets on the
     * destination.  In this case, we need to add the offset to gl_FragCoord.
     */
@@ -579,6 +596,20 @@ blorp_op_type_is_clear(enum blorp_op op)
       return false;
    }
 }
+
+/* Asserts unless the surface is a buffer to image copy */
+#define blorp_assert_is_buffer(surf, view)                     \
+   do {                                                        \
+      assert((surf).dim == ISL_SURF_DIM_2D);                   \
+      assert((surf).tiling == ISL_TILING_LINEAR);              \
+      assert((surf).logical_level0_px.d == 1);                 \
+      assert((surf).logical_level0_px.array_len == 1);         \
+      assert((surf).samples == 1);                             \
+      assert((surf).levels == 1);                              \
+      UNUSED const struct isl_format_layout *fmtl =            \
+         isl_format_get_layout((view).format);                 \
+      assert((surf).row_pitch_B % (fmtl->bpb / 8) == 0);       \
+   } while (false)
 
 /** \} */
 

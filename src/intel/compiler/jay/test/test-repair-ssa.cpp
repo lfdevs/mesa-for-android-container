@@ -90,11 +90,11 @@ TEST_F(RepairSSA, IfElse)
       jay_block *C = jay_test_block(b->func);
       jay_block *D = jay_test_block(b->func);
 
-      jay_block_add_successor(A, B);
-      jay_block_add_successor(A, C);
+      jay_block_add_successor(A, B, UGPR);
+      jay_block_add_successor(A, C, UGPR);
 
-      jay_block_add_successor(B, D);
-      jay_block_add_successor(C, D);
+      jay_block_add_successor(B, D, UGPR);
+      jay_block_add_successor(C, D, UGPR);
 
       b->cursor = jay_after_block(A);
       jay_IF(b);
@@ -140,12 +140,12 @@ TEST_F(RepairSSA, Loop)
       jay_block *D = jay_test_block(b->func);
       jay_block *E = jay_test_block(b->func);
 
-      jay_block_add_successor(H, A);
-      jay_block_add_successor(A, B);
-      jay_block_add_successor(A, C);
-      jay_block_add_successor(B, E);
-      jay_block_add_successor(C, D);
-      jay_block_add_successor(D, A);
+      jay_block_add_successor(H, A, GPR);
+      jay_block_add_successor(A, B, GPR);
+      jay_block_add_successor(A, C, GPR);
+      jay_block_add_successor(B, E, GPR);
+      jay_block_add_successor(C, D, GPR);
+      jay_block_add_successor(D, A, GPR);
 
       A->loop_header = true;
 
@@ -189,11 +189,11 @@ TEST_F(RepairSSA, TrivialPhisOptimized)
       jay_block *C = jay_test_block(b->func);
       jay_block *D = jay_test_block(b->func);
 
-      jay_block_add_successor(A, B);
-      jay_block_add_successor(A, C);
+      jay_block_add_successor(A, B, UGPR);
+      jay_block_add_successor(A, C, UGPR);
 
-      jay_block_add_successor(B, D);
-      jay_block_add_successor(C, D);
+      jay_block_add_successor(B, D, UGPR);
+      jay_block_add_successor(C, D, UGPR);
 
       b->cursor = jay_after_block(A);
       jay_def x = jay_MOV_u32(b, 0xcafe);

@@ -1746,12 +1746,9 @@ get_tessellator_output_primitive(const struct shader_info *info)
       return DXIL_TESSELLATOR_OUTPUT_PRIMITIVE_POINT;
    if (info->tess._primitive_mode == TESS_PRIMITIVE_ISOLINES)
       return DXIL_TESSELLATOR_OUTPUT_PRIMITIVE_LINE;
-   /* Note: GL tessellation domain is inverted from D3D, which means triangle
-    * winding needs to be inverted.
-    */
    if (info->tess.ccw)
-      return DXIL_TESSELLATOR_OUTPUT_PRIMITIVE_TRIANGLE_CW;
-   return DXIL_TESSELLATOR_OUTPUT_PRIMITIVE_TRIANGLE_CCW;
+      return DXIL_TESSELLATOR_OUTPUT_PRIMITIVE_TRIANGLE_CCW;
+   return DXIL_TESSELLATOR_OUTPUT_PRIMITIVE_TRIANGLE_CW;
 }
 
 static const struct dxil_mdnode *
@@ -2139,7 +2136,7 @@ static bool
 is_phi_src(nir_def *ssa)
 {
    nir_foreach_use(src, ssa)
-      if (nir_src_parent_instr(src)->type == nir_instr_type_phi)
+      if (nir_src_use_instr(src)->type == nir_instr_type_phi)
          return true;
    return false;
 }
@@ -3094,7 +3091,10 @@ emit_barrier_impl(struct ntd_context *ctx, nir_variable_mode modes, mesa_scope e
        (mem_scope > SCOPE_WORKGROUP || !is_compute)) {
       flags |= DXIL_BARRIER_MODE_UAV_FENCE_GLOBAL;
    } else {
-      flags |= DXIL_BARRIER_MODE_UAV_FENCE_THREAD_GROUP;
+      /* This used to be DXIL_BARRIER_MODE_UAV_FENCE_THREAD_GROUP. However, since 
+       * it's inaccessible in HLSL, certain drivers (eg. for Intel Iris Xe Graphics) 
+       * do not seem robust against it, and appear to ignore the barrier instruction. */
+      flags |= DXIL_BARRIER_MODE_UAV_FENCE_GLOBAL;
    }
 
    if ((modes & nir_var_mem_shared) && is_compute)

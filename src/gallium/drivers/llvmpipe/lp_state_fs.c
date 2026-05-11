@@ -473,6 +473,39 @@ lp_build_sample_alpha_to_coverage(struct gallivm_state *gallivm,
    }
 };
 
+static void
+lp_build_sample_alpha_to_coverage_per_sample(struct gallivm_state *gallivm,
+                                             struct lp_type type,
+                                             struct lp_build_mask_context *mask,
+                                             unsigned coverage_samples,
+                                             LLVMValueRef num_loop,
+                                             LLVMValueRef loop_counter,
+                                             LLVMValueRef sample_loop_counter,
+                                             LLVMTypeRef coverage_mask_type,
+                                             LLVMValueRef coverage_mask_store,
+                                             LLVMValueRef alpha)
+{
+   struct lp_build_context bld;
+   LLVMBuilderRef builder = gallivm->builder;
+   float step = 1.0 / coverage_samples;
+
+   lp_build_context_init(&bld, gallivm, type);
+   LLVMValueRef alpha_ref_value = LLVMBuildFMul(builder,
+                                                lp_build_const_float(gallivm, step),
+                                                LLVMBuildBitCast(builder, sample_loop_counter, bld.elem_type, ""),
+                                                "");
+   LLVMValueRef test = lp_build_cmp(&bld, PIPE_FUNC_GREATER,
+                                    alpha, lp_build_broadcast_scalar(&bld, alpha_ref_value));
+   LLVMValueRef s_mask_idx = LLVMBuildMul(builder, sample_loop_counter, num_loop, "");
+   s_mask_idx = LLVMBuildAdd(builder, s_mask_idx, loop_counter, "");
+   LLVMValueRef s_mask_ptr = LLVMBuildGEP2(builder, coverage_mask_type,
+                                             coverage_mask_store, &s_mask_idx, 1, "");
+   LLVMValueRef s_mask = LLVMBuildLoad2(builder, coverage_mask_type, s_mask_ptr, "");
+   s_mask = LLVMBuildAnd(builder, s_mask, test, "");
+   LLVMBuildStore(builder, s_mask, s_mask_ptr);
+   lp_build_mask_update(mask, s_mask);
+};
+
 
 struct lp_build_fs_llvm_iface {
    struct lp_build_fs_iface base;
@@ -1165,8 +1198,18 @@ generate_fs_loop(struct gallivm_state *gallivm,
                                        &mask, alpha,
                                        key->blend.alpha_to_coverage_dither,
                                        (depth_mode & LATE_DEPTH_TEST) != 0);
+         } else if (key->coverage_samples == key->min_samples) {
+            /* when running at sample rate, directly update the current sample's mask to avoid mask desync
+             * PS. I have no idea why this works
+             */
+            lp_build_sample_alpha_to_coverage_per_sample(gallivm, type, &mask,
+                                                         key->coverage_samples, num_loop,
+                                                         loop_state.counter,
+                                                         sample_loop_state.counter,
+                                                         mask_type, mask_store, alpha);
          } else {
-            lp_build_sample_alpha_to_coverage(gallivm, type, key->coverage_samples, num_loop,
+            lp_build_sample_alpha_to_coverage(gallivm, type,
+                                              key->coverage_samples, num_loop,
                                               loop_state.counter,
                                               mask_type, mask_store, alpha);
          }

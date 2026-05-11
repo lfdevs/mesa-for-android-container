@@ -172,6 +172,8 @@ enum tu_onchip_addr {
    TU_ONCHIP_BARRIER,
    TU_ONCHIP_CB_RESLIST_OVERFLOW,
 
+   TU_ONCHIP_U_TRACE_BARRIER,
+
    /* Registers 8-15 are defined by firmware to be split between BR and BV.
     * Each has their own copy.
     */

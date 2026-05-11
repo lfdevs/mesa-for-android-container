@@ -79,6 +79,7 @@ union large_integer {
 enum vpe_plane_addr_type {
     VPE_PLN_ADDR_TYPE_GRAPHICS = 0,      /**< For RGB planes */
     VPE_PLN_ADDR_TYPE_VIDEO_PROGRESSIVE, /**< For YCbCr planes */
+    VPE_PLN_ADDR_TYPE_PLANAR,            /**< For RGB 3-planar case */
 };
 
 /** @struct vpe_plane_address
@@ -117,6 +118,23 @@ struct vpe_plane_address {
                 chroma_dcc_const_color; /**< DCC constant color of the chroma plane */
         } video_progressive;
 
+        /** @brief Only used for RGB 3-planar case. Each plane is a struct of two \ref
+         *  PHYSICAL_ADDRESS_LOC to store address and meta address, and one \ref large_integer to
+         *  store dcc constant color.
+         */
+        struct {
+            PHYSICAL_ADDRESS_LOC y_g_addr;             /**< Address of the Y/G plane */
+            PHYSICAL_ADDRESS_LOC y_g_meta_addr;        /**< Meta address of the Y/G plane */
+            union large_integer  y_g_dcc_const_color;  /**< DCC constant color of the Y/G plane */
+
+            PHYSICAL_ADDRESS_LOC cb_b_addr;            /**< Address of the Cb/B plane */
+            PHYSICAL_ADDRESS_LOC cb_b_meta_addr;       /**< Meta address of the Cb/B plane */
+            union large_integer  cb_b_dcc_const_color; /**< DCC constant color of the Cb/B plane */
+
+            PHYSICAL_ADDRESS_LOC cr_r_addr;            /**< Address of the Cr/R plane */
+            PHYSICAL_ADDRESS_LOC cr_r_meta_addr;       /**< Meta address of the Cr/R plane */
+            union large_integer  cr_r_dcc_const_color; /**< DCC constant color of the Cr/R plane */
+        } planar;
     };
 };
 
@@ -152,6 +170,14 @@ enum vpe_scan_direction {
         2, /**< Right to Left, Bottom to Top. 180 Degree Rotation and no Mirroring */
     VPE_SCAN_PATTERN_270_DEGREE =
         3, /**< Top to Bottom, Right to Left. 270 Degree Rotation and no Mirroring */
+    VPE_SCAN_PATTERN_0_DEGREE_H_MIRROR = 4, /**< Right to Left, Top to Bottom. 0 Degree Rotation and
+                                               HMirror or 180 Degree Rotation and VMirror */
+    VPE_SCAN_PATTERN_90_DEGREE_V_MIRROR = 5,  /**< Bottom to Top, Right to Left. 270 Degree Rotation
+                                                 and HMirror or 90 Degree Rotation and VMirror */
+    VPE_SCAN_PATTERN_180_DEGREE_H_MIRROR = 6, /**< Left to Right, Bottom to Top. 180 Degree Rotation
+                                                 and HMirror or 0 Degree Rotation and VMirror */
+    VPE_SCAN_PATTERN_270_DEGREE_V_MIRROR = 7, /**< Top to Bottom, Left to Right. 90 Degree Rotation
+                                                 and HMirror or 270 Degree Rotation and VMirror */
 };
 
 /** @struct vpe_size
@@ -222,70 +248,105 @@ struct vpe_plane_dcc_param {
  */
 enum vpe_surface_pixel_format {
     VPE_SURFACE_PIXEL_FORMAT_GRPH_BEGIN = 0,
-    /*16 bpp*/
-    VPE_SURFACE_PIXEL_FORMAT_GRPH_ARGB1555,
-    /*16 bpp*/
-    VPE_SURFACE_PIXEL_FORMAT_GRPH_RGB565,
-    /*32 bpp*/
-    VPE_SURFACE_PIXEL_FORMAT_GRPH_ARGB8888,
-    /*32 bpp swaped*/
-    VPE_SURFACE_PIXEL_FORMAT_GRPH_ABGR8888,
-    /*32 bpp alpha rotated*/
-    VPE_SURFACE_PIXEL_FORMAT_GRPH_RGBA8888,
-    /*32 bpp swaped & alpha rotated*/
-    VPE_SURFACE_PIXEL_FORMAT_GRPH_BGRA8888,
+    VPE_SURFACE_PIXEL_FORMAT_GRPH_ARGB1555,        /**< RGB 16 bpp A1 R5 G5 B5 */
+    VPE_SURFACE_PIXEL_FORMAT_GRPH_RGB565,          /**< RGB 16 bpp no alpha R5 G6 B5 */
+    VPE_SURFACE_PIXEL_FORMAT_GRPH_ARGB8888,        /**< RGB 32 bpp A8 R8 G8 B8 */
+    VPE_SURFACE_PIXEL_FORMAT_GRPH_ABGR8888,        /**< Swapped RGB 32 bpp A8 B8 G8 R8 */
+    VPE_SURFACE_PIXEL_FORMAT_GRPH_RGBA8888,        /**< Alpha rotated RGB 32 bpp R8 G8 B8 A8 */
+    VPE_SURFACE_PIXEL_FORMAT_GRPH_BGRA8888,        /**< Swapped and alpha rotated RGB 32 bpp
+                                                      B8 G8 R8 A8 */
+    VPE_SURFACE_PIXEL_FORMAT_GRPH_ARGB2101010,     /**< RGB 32 bpp A2 R10 G10 B10 */
+    VPE_SURFACE_PIXEL_FORMAT_GRPH_ABGR2101010,     /**< Swapped RGB 32 bpp A2 B10 G10 R10 */
+    VPE_SURFACE_PIXEL_FORMAT_GRPH_RGBA1010102,     /**< Alpha rotated RGB 32 bpp R10 G10 B10 A2*/
+    VPE_SURFACE_PIXEL_FORMAT_GRPH_BGRA1010102,     /**< Swapped and alpha rotated RGB 32 bpp
+                                                      A2 B10 G10 R10 */
+    VPE_SURFACE_PIXEL_FORMAT_GRPH_ARGB16161616,    /**< RGB 64 bpp A16 R16 G16 B16 */
+    VPE_SURFACE_PIXEL_FORMAT_GRPH_ABGR16161616,    /**< RGB 64 bpp A16 B16 G16 R16 */
+    VPE_SURFACE_PIXEL_FORMAT_GRPH_RGBA16161616,    /**< RGB 64 bpp R16 G16 B16 A16 */
+    VPE_SURFACE_PIXEL_FORMAT_GRPH_BGRA16161616,    /**< RGB 64 bpp B16 G16 R16 A16 */
+    VPE_SURFACE_PIXEL_FORMAT_GRPH_ARGB16161616F,   /**< Floating point RGB 64 bpp A16 R16 G16 B16 */
+    VPE_SURFACE_PIXEL_FORMAT_GRPH_ABGR16161616F,   /**< Floating point swapped RGB 64 bpp
+                                                     A16 B16 G16 R16 */
+    VPE_SURFACE_PIXEL_FORMAT_GRPH_RGBA16161616F,   /**< Floating point alpha rotated RGB 64 bpp
+                                                     R16 G16 R16 A16 */
+    VPE_SURFACE_PIXEL_FORMAT_GRPH_BGRA16161616F,   /**< Floating point swapped and alpha rotated
+                                                     RGB 64 bpp B16 G16 R16 A16 */
+    VPE_SURFACE_PIXEL_FORMAT_GRPH_XRGB8888,        /**< Opaque RGB 32 bpp X8 (ignored) R8 G8 B8 */
+    VPE_SURFACE_PIXEL_FORMAT_GRPH_XBGR8888,        /**< Opaque swapped RGB 32 bpp X8 B8 G8 R8 */
+    VPE_SURFACE_PIXEL_FORMAT_GRPH_RGBX8888,        /**< Opaque rotated RGB 32 bpp R8 G8 B8 X8 */
+    VPE_SURFACE_PIXEL_FORMAT_GRPH_BGRX8888,        /**< Opaque rotated and swapped RGB 32 bpp
+                                                      B8 G8 R8 X8 */
+    VPE_SURFACE_PIXEL_FORMAT_GRPH_RGB111110_FIX,   /**< RGB 32 bpp UNORM R11 G11 B10 */
+    VPE_SURFACE_PIXEL_FORMAT_GRPH_BGR101111_FIX,   /**< Swapped RGB 32 bpp UNORM R11 G11 B10 */
+    VPE_SURFACE_PIXEL_FORMAT_GRPH_RGB111110_FLOAT, /**< Floating point RGB 32 bpp R11 G11 B10 */
+    VPE_SURFACE_PIXEL_FORMAT_GRPH_BGR101111_FLOAT, /**< Swapped Floating point RGB 32 bpp
+                                                      R11 G11 B10 */
+    VPE_SURFACE_PIXEL_FORMAT_GRPH_RGBE,            /**< Shared Exponent RGB 32 bpp R9 G9 B9 E5 */
+    VPE_SURFACE_PIXEL_FORMAT_GRPH_BGRA16161616_UNORM, /**< RGB 64 bpp UNORM A16 R16 G16 B16 */
+    VPE_SURFACE_PIXEL_FORMAT_GRPH_ABGR16161616_UNORM, /**< RGB 64 bpp UNORM R16 G16 B16 A16 */
+    VPE_SURFACE_PIXEL_FORMAT_GRPH_BGRA16161616_SNORM, /**< RGB 64 bpp SNORM A16 R16 G16 B16 */
+    VPE_SURFACE_PIXEL_FORMAT_GRPH_ABGR16161616_SNORM, /**< RGB 64 bpp SNORM R16 G16 B16 A16 */
+    VPE_SURFACE_PIXEL_FORMAT_GRPH_R8,                 /**< Monochrome 8 bpp R8 */
+    VPE_SURFACE_PIXEL_FORMAT_GRPH_R16,                /**< Monochrome 16 bpp R16 */
+    VPE_SURFACE_PIXEL_FORMAT_VIDEO_BEGIN,          /**< Start of YCbCr formats. Used internally.*/
+    VPE_SURFACE_PIXEL_FORMAT_VIDEO_420_YCbCr =
+        VPE_SURFACE_PIXEL_FORMAT_VIDEO_BEGIN,      /**< Planar YUV 4:2:0 8 bpc Y Cb Cr, AKA NV12*/
+    VPE_SURFACE_PIXEL_FORMAT_VIDEO_420_YCrCb,      /**< Semi-Planar YUV 4:2:0 8 bpc Y Cr Cb, AKA
+                                                      NV21 */
+    VPE_SURFACE_PIXEL_FORMAT_VIDEO_420_10bpc_YCbCr,  /**< Semi-Planar YUV 4:2:0 10 bpc Y Cb Cr, AKA
+                                                        P010 */
+    VPE_SURFACE_PIXEL_FORMAT_VIDEO_420_10bpc_YCrCb,  /**< Semi-Planar YUV 4:2:0 10 bpc Y Cr Cb */
+    VPE_SURFACE_PIXEL_FORMAT_VIDEO_420_12bpc_YCrCb,  /**< Semi-Planar YUV 4:2:0 12 bpc Y Cr Cb */
+    VPE_SURFACE_PIXEL_FORMAT_VIDEO_420_12bpc_YCbCr,  /**< Semi-Planar YUV 4:2:0 12 bpc Y Cb Cr, AKA
+                                                        P016 */
+    VPE_SURFACE_PIXEL_FORMAT_VIDEO_422_YCrYCb,       /**< Packed YUV 4:2:2 8 bpc Y Cr Y Cb */
+    VPE_SURFACE_PIXEL_FORMAT_VIDEO_422_YCbYCr,       /**< Packed YUV 4:2:2 8 bpc Y Cb Y Cr */
+    VPE_SURFACE_PIXEL_FORMAT_VIDEO_422_CrYCbY,       /**< Packed YUV 4:2:2 8 bpc Cr Y Cb Y */
+    VPE_SURFACE_PIXEL_FORMAT_VIDEO_422_CbYCrY,       /**< Packed YUV 4:2:2 8 bpc Cb Y Cr Y */
+    VPE_SURFACE_PIXEL_FORMAT_VIDEO_422_10bpc_YCrYCb, /**< Packed YUV 4:2:2 10 bpc Y Cr Y Cb */
+    VPE_SURFACE_PIXEL_FORMAT_VIDEO_422_10bpc_YCbYCr, /**< Packed YUV 4:2:2 10 bpc Y Cb Y Cr */
+    VPE_SURFACE_PIXEL_FORMAT_VIDEO_422_10bpc_CrYCbY, /**< Packed YUV 4:2:2 10 bpc Cr Y Cb Y */
+    VPE_SURFACE_PIXEL_FORMAT_VIDEO_422_10bpc_CbYCrY, /**< Packed YUV 4:2:2 10 bpc Cb Y Cr Y */
+    VPE_SURFACE_PIXEL_FORMAT_VIDEO_422_12bpc_YCrYCb, /**< Packed YUV 4:2:2 12 bpc Y Cr Y Cb */
+    VPE_SURFACE_PIXEL_FORMAT_VIDEO_422_12bpc_YCbYCr, /**< Packed YUV 4:2:2 12 bpc Y Cb Y Cr */
+    VPE_SURFACE_PIXEL_FORMAT_VIDEO_422_12bpc_CrYCbY, /**< Packed YUV 4:2:2 12 bpc Cr Y Cb Y */
+    VPE_SURFACE_PIXEL_FORMAT_VIDEO_422_12bpc_CbYCrY, /**< Packed YUV 4:2:2 12 bpc Cb Y Cr Y */
+    VPE_SURFACE_PIXEL_FORMAT_VIDEO_422_YCrCb,        /**< Semi-Planar YUV 4:2:2 8 bpc Y Cr Cb */
+    VPE_SURFACE_PIXEL_FORMAT_VIDEO_422_YCbCr,        /**< Semi-Planar YUV 4:2:2 8 bpc Y Cb Cr */
+    VPE_SURFACE_PIXEL_FORMAT_VIDEO_422_10bpc_YCrCb,  /**< Semi-Planar YUV 4:2:2 10 bpc Y Cr Cb */
+    VPE_SURFACE_PIXEL_FORMAT_VIDEO_422_10bpc_YCbCr,  /**< Semi-Planar YUV 4:2:2 10 bpc Y Cb Cr */
+    VPE_SURFACE_PIXEL_FORMAT_VIDEO_422_12bpc_YCrCb,  /**< Semi-Planar YUV 4:2:2 12 bpc Y Cr Cb */
+    VPE_SURFACE_PIXEL_FORMAT_VIDEO_422_12bpc_YCbCr,  /**< Semi-Planar YUV 4:2:2 12 bpc Y Cb Cr */
+    VPE_SURFACE_PIXEL_FORMAT_SUBSAMPLE_END =
+        VPE_SURFACE_PIXEL_FORMAT_VIDEO_422_12bpc_YCbCr, /**< End of chroma sub-sampled formats.
+                                                           Used internally */
+    VPE_SURFACE_PIXEL_FORMAT_VIDEO_ACrYCb12121212,  /**< Y416 64 bpp A12 Cr12 Y12 Cb12 */
+    VPE_SURFACE_PIXEL_FORMAT_VIDEO_CrYCbA12121212,  /**< A-rotated Y416 64 bpp Cr12 Y12 Cb12 A12 */
+    VPE_SURFACE_PIXEL_FORMAT_VIDEO_ALPHA_THRU_LUMA, /**< Alpha plane 8bpc passed as YUV 4:2:0 */
+    VPE_SURFACE_PIXEL_FORMAT_VIDEO_CrCbYA8888,      /**< AYUV 32 bpp 8 bpc Cb8 Cr8 Y8 A8*/
+    VPE_SURFACE_PIXEL_FORMAT_VIDEO_ACrYCb2101010, /**< Y410 32 bpp A2 Cr10 Y10 Cb10 */
+    VPE_SURFACE_PIXEL_FORMAT_VIDEO_CrYCbA1010102, /**< A-rotated Y410 32 bpp Cr10 Y10 Cb10 A2 */
+    VPE_SURFACE_PIXEL_FORMAT_VIDEO_AYCrCb8888,    /**< AYUV 32 bpp 8 bpc A8 Y8 Cr8 Cb8 */
+    VPE_SURFACE_PIXEL_FORMAT_VIDEO_YCrCbA8888,    /**< A-rotated AYUV 32 bpp 8 bpc Y8 Cr8 Cb8 A8 */
+    VPE_SURFACE_PIXEL_FORMAT_VIDEO_ACrYCb8888,    /**< Cr first AYUV 32 bpp 8 bpc A8 Cr8 Y8 Cb8 */
+    VPE_SURFACE_PIXEL_FORMAT_VIDEO_CrYCbA8888,    /**< Alpha rotated Cr first AYUV 32 bpp 8 bpc
+                                                     Cr8 Y8 Cb8 A8 */
+    VPE_SURFACE_PIXEL_FORMAT_VIDEO_AYCbCr8888,    /**< AYUV 32 bpp 8 bpc A8 Y8 Cb8 Cbr */
+    VPE_SURFACE_PIXEL_FORMAT_VIDEO_END =
+        VPE_SURFACE_PIXEL_FORMAT_VIDEO_AYCbCr8888, /**< End of YCbCr formats. Used internally. */
 
-    VPE_SURFACE_PIXEL_FORMAT_GRPH_ARGB2101010,
-    /*swaped*/
-    VPE_SURFACE_PIXEL_FORMAT_GRPH_ABGR2101010,
-    /*alpha rotated*/
-    VPE_SURFACE_PIXEL_FORMAT_GRPH_RGBA1010102,
-    /*swaped & alpha rotated*/
-    VPE_SURFACE_PIXEL_FORMAT_GRPH_BGRA1010102,
-
-    /*64 bpp */
-    VPE_SURFACE_PIXEL_FORMAT_GRPH_ARGB16161616,
-    /*float*/
-    VPE_SURFACE_PIXEL_FORMAT_GRPH_ARGB16161616F,
-    /*swaped & float*/
-    VPE_SURFACE_PIXEL_FORMAT_GRPH_ABGR16161616F,
-    /*alpha rotated*/
-    VPE_SURFACE_PIXEL_FORMAT_GRPH_RGBA16161616F,
-    /*swaped & alpha rotated*/
-    VPE_SURFACE_PIXEL_FORMAT_GRPH_BGRA16161616F,
-
-    VPE_SURFACE_PIXEL_FORMAT_GRPH_XRGB8888,
-    /*swaped*/
-    VPE_SURFACE_PIXEL_FORMAT_GRPH_XBGR8888,
-    /*rotated*/
-    VPE_SURFACE_PIXEL_FORMAT_GRPH_RGBX8888,
-    /*swaped & rotated*/
-    VPE_SURFACE_PIXEL_FORMAT_GRPH_BGRX8888,
-    /*grow graphics here if necessary */
-    VPE_SURFACE_PIXEL_FORMAT_GRPH_RGB111110_FIX,
-    VPE_SURFACE_PIXEL_FORMAT_GRPH_BGR101111_FIX,
-    VPE_SURFACE_PIXEL_FORMAT_GRPH_RGB111110_FLOAT,
-    VPE_SURFACE_PIXEL_FORMAT_GRPH_BGR101111_FLOAT,
-    VPE_SURFACE_PIXEL_FORMAT_GRPH_RGBE,
-    VPE_SURFACE_PIXEL_FORMAT_VIDEO_BEGIN,
-    VPE_SURFACE_PIXEL_FORMAT_VIDEO_420_YCbCr = VPE_SURFACE_PIXEL_FORMAT_VIDEO_BEGIN,
-    VPE_SURFACE_PIXEL_FORMAT_VIDEO_420_YCrCb,
-    VPE_SURFACE_PIXEL_FORMAT_VIDEO_420_10bpc_YCbCr,
-    VPE_SURFACE_PIXEL_FORMAT_VIDEO_420_10bpc_YCrCb,
-    VPE_SURFACE_PIXEL_FORMAT_VIDEO_420_16bpc_YCrCb,
-    VPE_SURFACE_PIXEL_FORMAT_VIDEO_420_16bpc_YCbCr,
-    VPE_SURFACE_PIXEL_FORMAT_SUBSAMPLE_END = VPE_SURFACE_PIXEL_FORMAT_VIDEO_420_16bpc_YCbCr,
-    VPE_SURFACE_PIXEL_FORMAT_VIDEO_ACrYCb2101010,
-    VPE_SURFACE_PIXEL_FORMAT_VIDEO_CrYCbA1010102,
-    VPE_SURFACE_PIXEL_FORMAT_VIDEO_AYCrCb8888,
-    VPE_SURFACE_PIXEL_FORMAT_VIDEO_YCrCbA8888,
-    VPE_SURFACE_PIXEL_FORMAT_VIDEO_ACrYCb8888,
-    VPE_SURFACE_PIXEL_FORMAT_VIDEO_CrYCbA8888,
-    VPE_SURFACE_PIXEL_FORMAT_VIDEO_AYCbCr8888, //seems to be dummy, not part of surface pixel register values
-    VPE_SURFACE_PIXEL_FORMAT_VIDEO_END = VPE_SURFACE_PIXEL_FORMAT_VIDEO_AYCbCr8888,
-    VPE_SURFACE_PIXEL_FORMAT_INVALID
-
-    /*grow 444 video here if necessary */
+    VPE_SURFACE_PIXEL_FORMAT_PLANAR_BEGIN,               /**< Full 3 Plane Formats */
+    VPE_SURFACE_PIXEL_FORMAT_PLANAR_8bpc_RGB =           /**< Planar RGB 8bpc */
+        VPE_SURFACE_PIXEL_FORMAT_PLANAR_BEGIN,
+    VPE_SURFACE_PIXEL_FORMAT_PLANAR_8bpc_YCbCr,          /**< Planar YCbCr 8bpc */
+    VPE_SURFACE_PIXEL_FORMAT_PLANAR_16bpc_RGB,           /**< Planar RGB 16bpc */
+    VPE_SURFACE_PIXEL_FORMAT_PLANAR_16bpc_YCbCr,         /**< Planar YCbCr 16bpc */
+    VPE_SURFACE_PIXEL_FORMAT_PLANAR_16bpc_RGB_FLOAT,     /**< Planar RGB FP16 */
+    VPE_SURFACE_PIXEL_FORMAT_PLANAR_END =
+        VPE_SURFACE_PIXEL_FORMAT_PLANAR_16bpc_RGB_FLOAT, /**< End of PLANAR formats. Used
+                                                            internally. */
+    VPE_SURFACE_PIXEL_FORMAT_INVALID               /**< Used for the formats which are not among
+                                                      the recognized formats. */
 };
 
 /** @enum vpe_swizzle_mode_values
@@ -341,6 +402,13 @@ struct vpe_scaling_taps {
     uint32_t h_taps_c; /**< Number of horizontal taps for chroma plane */
 };
 
+/** @enum vpe_3dlut_mem_align
+ *  @brief 3DLUT dma buffer alignment
+ */
+enum vpe_3dlut_mem_align {
+    VPE_3DLUT_ALIGNMENT_128 = 0, /**< 32 bytes alignment */
+    VPE_3DLUT_ALIGNMENT_256 = 1, /**< 64 bytes alignment */
+};
 #ifdef __cplusplus
 }
 #endif

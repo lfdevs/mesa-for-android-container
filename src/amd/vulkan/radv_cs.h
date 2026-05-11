@@ -10,7 +10,6 @@
 
 #include <assert.h>
 #include <stdint.h>
-#include <string.h>
 
 #include "radv_cmd_buffer.h"
 #include "radv_radeon_winsys.h"
@@ -164,7 +163,8 @@ radv_gfx12_emit_buffered_regs(const struct radv_device *device, struct radv_cmd_
    radeon_check_space(device->ws, cs->b, 1 + reg_count * 2);
 
    radeon_begin(cs);
-   radeon_emit(PKT3(PKT3_SET_SH_REG_PAIRS, reg_count * 2 - 1, 0) | PKT3_RESET_FILTER_CAM_S(1));
+   radeon_emit(PKT3(PKT3_SET_SH_REG_PAIRS, reg_count * 2 - 1, 0) |
+               PKT3_RESET_FILTER_CAM_S(cs->hw_ip == AMD_IP_GFX));
    radeon_emit_array(cs->buffered_sh_regs.gfx12.regs, reg_count * 2);
    radeon_end();
 

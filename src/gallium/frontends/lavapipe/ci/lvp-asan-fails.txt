@@ -42,7 +42,6 @@ dEQP-VK.shader_object.misc.state.pipeline.vert_tess_geom_frag.rasterization_disc
 # New failures with VKCTS 1.4.4.0
 dEQP-VK.pipeline.monolithic.extended_dynamic_state.cmd_buffer_start.large_stride_with_offset_and_padding,Fail
 dEQP-VK.pipeline.pipeline_library.extended_dynamic_state.before_good_static.tess_domain_origin_upper_left,Fail
-dEQP-VK.pipeline.shader_object_linked_binary.multisample.sample_rate_a2c.dynamic_a2c,Fail
 dEQP-VK.pipeline.shader_object_linked_spirv.bind_buffers_2.maintenance5.robustness2.triangle_list.buffers9.stride_offset_rnd654.true_size.beyond_size,Fail
 dEQP-VK.pipeline.shader_object_unlinked_spirv.extended_dynamic_state.cmd_buffer_start.stride_with_offset_and_padding,Fail
 dEQP-VK.shader_object.misc.state.pipeline.vert_tess_frag.color_write.true,Fail

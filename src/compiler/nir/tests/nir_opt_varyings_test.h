@@ -197,7 +197,7 @@ protected:
    has_non_io_offset_non_vertex_index_use(nir_builder *b, nir_def *def)
    {
       nir_foreach_use(src, def) {
-         nir_instr *instr = nir_src_parent_instr(src);
+         nir_instr *instr = nir_src_use_instr(src);
 
          if (instr->type == nir_instr_type_intrinsic) {
             nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);

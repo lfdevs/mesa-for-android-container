@@ -8,12 +8,10 @@
 
 #include "radv_buffer.h"
 #include "radv_cs.h"
-#include "radv_debug.h"
 #include "radv_entrypoints.h"
 #include "radv_perfcounter.h"
 #include "radv_spm.h"
 #include "radv_sqtt.h"
-#include "sid.h"
 
 #include "ac_pm4.h"
 #include "ac_rgp.h"

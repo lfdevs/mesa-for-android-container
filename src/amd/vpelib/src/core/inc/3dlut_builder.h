@@ -27,6 +27,7 @@
 #include "vpe_priv.h"
 #include "common.h"
 
+#define LUT3D_SIZE_33x33x33 35937
 #define LUT3D_SIZE_17x17x17 4913
 #define LUT3D_SIZE_9x9x9    729
 

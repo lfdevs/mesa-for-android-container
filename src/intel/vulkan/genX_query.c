@@ -2062,6 +2062,40 @@ void genX(CmdCopyQueryPoolResults)(
    }
 }
 
+void genX(CmdCopyQueryPoolResultsToMemoryKHR)(
+    VkCommandBuffer                             commandBuffer,
+    VkQueryPool                                 queryPool,
+    uint32_t                                    firstQuery,
+    uint32_t                                    queryCount,
+    const VkStridedDeviceAddressRangeKHR*       pDstRange,
+    VkAddressCommandFlagsKHR                    dstFlags,
+    VkQueryResultFlags                          queryResultFlags)
+{
+   ANV_FROM_HANDLE(anv_cmd_buffer, cmd_buffer, commandBuffer);
+   ANV_FROM_HANDLE(anv_query_pool, pool, queryPool);
+   struct anv_device *device = cmd_buffer->device;
+   struct anv_physical_device *pdevice = device->physical;
+
+   struct anv_address dst_addr =
+      anv_address_from_strided_range_flags(*pDstRange, dstFlags);
+
+   if (queryCount > pdevice->instance->query_copy_with_shader_threshold) {
+      copy_query_results_with_shader(cmd_buffer, pool,
+                                     dst_addr,
+                                     pDstRange->stride,
+                                     firstQuery,
+                                     queryCount,
+                                     queryResultFlags);
+   } else {
+      copy_query_results_with_cs(cmd_buffer, pool,
+                                 dst_addr,
+                                 pDstRange->stride,
+                                 firstQuery,
+                                 queryCount,
+                                 queryResultFlags);
+   }
+}
+
 #if GFX_VERx10 >= 125 && ANV_SUPPORT_RT
 
 #include "bvh/anv_bvh.h"

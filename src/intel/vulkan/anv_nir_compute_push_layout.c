@@ -67,8 +67,8 @@ adjust_driver_push_values(nir_shader *nir,
 
       if (data->needs_wa_18019110168) {
          const uint32_t fs_per_prim_remap_start =
-            anv_drv_const_offset(gfx.fs_per_prim_remap_offset);
-         assert(anv_drv_const_size(gfx.fs_per_prim_remap_offset) <= 4);
+            anv_drv_const_offset(gfx.wa_18019110168);
+         assert(anv_drv_const_size(gfx.wa_18019110168) <= 4);
          BITSET_SET(data->push_dwords, fs_per_prim_remap_start / 4);
       }
    }
@@ -76,8 +76,8 @@ adjust_driver_push_values(nir_shader *nir,
    if (nir->info.stage == MESA_SHADER_MESH &&
        brw_nir_mesh_shader_needs_wa_18019110168(devinfo, nir)) {
       const uint32_t mesh_provoking_vertex_start =
-         anv_drv_const_offset(gfx.mesh_provoking_vertex);
-      assert(anv_drv_const_size(gfx.mesh_provoking_vertex) <= 4);
+         anv_drv_const_offset(gfx.wa_18019110168);
+      assert(anv_drv_const_size(gfx.wa_18019110168) <= 4);
       BITSET_SET(data->push_dwords, mesh_provoking_vertex_start / 4);
    }
 
@@ -811,7 +811,7 @@ anv_nir_compute_push_layout(nir_shader *nir,
       }
       if (data.needs_wa_18019110168) {
          const uint32_t fs_per_prim_remap_offset =
-            anv_drv_const_offset(gfx.fs_per_prim_remap_offset);
+            anv_drv_const_offset(gfx.wa_18019110168);
          assert(fs_per_prim_remap_offset >= push_start);
          fs_prog_data->per_primitive_remap_param =
             fs_per_prim_remap_offset - push_start;

@@ -32,9 +32,7 @@ blorp_compile_fs_elk(struct blorp_context *blorp, void *mem_ctx,
    fs_prog_data->base.nr_params = 0;
    fs_prog_data->base.param = NULL;
 
-   struct elk_nir_compiler_opts opts = {
-      .softfp64 = blorp->get_fp64_nir ? blorp->get_fp64_nir(blorp) : NULL,
-   };
+   struct elk_nir_compiler_opts opts = {};
    elk_preprocess_nir(compiler, nir, &opts);
    nir_remove_dead_variables(nir, nir_var_shader_in, NULL);
    nir_shader_gather_info(nir, nir_shader_get_entrypoint(nir));
@@ -81,9 +79,7 @@ blorp_compile_vs_elk(struct blorp_context *blorp, void *mem_ctx,
 {
    const struct elk_compiler *compiler = blorp->compiler->elk;
 
-   struct elk_nir_compiler_opts opts = {
-      .softfp64 = blorp->get_fp64_nir ? blorp->get_fp64_nir(blorp) : NULL,
-   };
+   struct elk_nir_compiler_opts opts = {};
    elk_preprocess_nir(compiler, nir, &opts);
    nir_shader_gather_info(nir, nir_shader_get_entrypoint(nir));
 
@@ -139,9 +135,7 @@ blorp_compile_cs_elk(struct blorp_context *blorp, void *mem_ctx,
 {
    const struct elk_compiler *compiler = blorp->compiler->elk;
 
-   struct elk_nir_compiler_opts opts = {
-      .softfp64 = blorp->get_fp64_nir ? blorp->get_fp64_nir(blorp) : NULL,
-   };
+   struct elk_nir_compiler_opts opts = {};
    elk_preprocess_nir(compiler, nir, &opts);
    nir_shader_gather_info(nir, nir_shader_get_entrypoint(nir));
 

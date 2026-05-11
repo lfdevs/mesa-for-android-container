@@ -10,15 +10,19 @@
 
 #include "util/u_math.h"
 
-#define OPT(nir, pass, ...) ({                           \
+#define _OPT(pass_macro, ...) ({                         \
    bool this_progress = false;                           \
-   NIR_PASS(this_progress, nir, pass, ##__VA_ARGS__);    \
+   pass_macro(this_progress, ##__VA_ARGS__);             \
    if (this_progress)                                    \
       progress = true;                                   \
    this_progress;                                        \
 })
 
+#define OPT(nir, pass, ...) _OPT(NIR_PASS, nir, pass, ##__VA_ARGS__)
 #define OPT_V(nir, pass, ...) NIR_PASS(_, nir, pass, ##__VA_ARGS__)
+#define LOOP_OPT(...) _OPT(NIR_LOOP_PASS, skip, ##__VA_ARGS__)
+#define LOOP_OPT_NOT_IDEMPOTENT(...) \
+   _OPT(NIR_LOOP_PASS_NOT_IDEMPOTENT, skip, ##__VA_ARGS__)
 
 nir_def *
 nak_nir_load_sysval(nir_builder *b, enum nak_sv idx,
@@ -111,6 +115,7 @@ vectorize_filter_cb(const nir_instr *instr, const void *data)
    case nir_op_flt:
    case nir_op_fneu:
    case nir_op_fmul:
+   case nir_op_fmul_rtz:
    case nir_op_ffma:
    case nir_op_fsign:
    case nir_op_fsat:
@@ -135,10 +140,11 @@ phi_vectorize_cb(const nir_instr *instr, const void *data)
    return 1;
 }
 
-static void
-optimize_nir(nir_shader *nir, const struct nak_compiler *nak, bool allow_copies)
+void
+nak_optimize_nir(nir_shader *nir, const struct nak_compiler *nak)
 {
    bool progress;
+   struct set *skip = _mesa_pointer_set_create(NULL);
 
    unsigned lower_flrp =
       (nir->options->lower_flrp16 ? 16 : 0) |
@@ -155,78 +161,76 @@ optimize_nir(nir_shader *nir, const struct nak_compiler *nak, bool allow_copies)
        * code.
        */
       if (nir->info.stage != MESA_SHADER_KERNEL)
-         OPT(nir, nir_split_array_vars, nir_var_function_temp);
+         LOOP_OPT(nir, nir_split_array_vars, nir_var_function_temp);
 
-      OPT(nir, nir_shrink_vec_array_vars, nir_var_function_temp);
-      OPT(nir, nir_opt_deref);
-      if (OPT(nir, nir_opt_memcpy))
-         OPT(nir, nir_split_var_copies);
+      LOOP_OPT(nir, nir_shrink_vec_array_vars, nir_var_function_temp);
+      LOOP_OPT(nir, nir_opt_deref);
+      if (LOOP_OPT(nir, nir_opt_memcpy))
+         LOOP_OPT(nir, nir_split_var_copies);
 
-      OPT(nir, nir_lower_vars_to_ssa);
+      LOOP_OPT(nir, nir_lower_vars_to_ssa);
 
-      if (allow_copies) {
-         /* Only run this pass in the first call to brw_nir_optimize.  Later
-          * calls assume that we've lowered away any copy_deref instructions
-          * and we don't want to introduce any more.
+      if (!nir->info.var_copies_lowered) {
+         /* Only run this pass if nir_lower_var_copies was not called
+          * yet. That would lower away any copy_deref instructions and we
+          * don't want to introduce any more.
           */
-         OPT(nir, nir_opt_find_array_copies);
+         LOOP_OPT(nir, nir_opt_find_array_copies);
       }
-      OPT(nir, nir_opt_copy_prop_vars);
-      OPT(nir, nir_opt_dead_write_vars);
-      OPT(nir, nir_opt_combine_stores, nir_var_all);
+      LOOP_OPT(nir, nir_opt_copy_prop_vars);
+      LOOP_OPT(nir, nir_opt_dead_write_vars);
+      LOOP_OPT(nir, nir_opt_combine_stores, nir_var_all);
 
-      OPT(nir, nir_lower_alu_width, vectorize_filter_cb, nak);
-      OPT(nir, nir_opt_vectorize, vectorize_filter_cb, (void*)nak);
-      OPT(nir, nir_lower_phis_to_scalar, phi_vectorize_cb, NULL);
-      OPT(nir, nir_lower_frexp);
-      OPT(nir, nir_opt_copy_prop);
-      OPT(nir, nir_opt_dce);
-      OPT(nir, nir_opt_cse);
+      LOOP_OPT(nir, nir_lower_alu_width, vectorize_filter_cb, nak);
+      LOOP_OPT(nir, nir_opt_vectorize, vectorize_filter_cb, (void*)nak);
+      LOOP_OPT(nir, nir_lower_phis_to_scalar, phi_vectorize_cb, NULL);
+      LOOP_OPT(nir, nir_lower_frexp);
+      LOOP_OPT(nir, nir_opt_copy_prop);
+      LOOP_OPT(nir, nir_opt_dce);
+      LOOP_OPT(nir, nir_opt_cse);
 
       nir_opt_peephole_select_options peephole_select_options = {
          .limit = 0,
          .discard_ok = true,
       };
-      OPT(nir, nir_opt_peephole_select, &peephole_select_options);
-      OPT(nir, nir_opt_intrinsics);
-      OPT(nir, nir_opt_idiv_const, 32);
-      OPT(nir, nir_opt_algebraic);
-      OPT(nir, nir_lower_constant_convert_alu_types);
-      OPT(nir, nir_opt_constant_folding);
+      LOOP_OPT_NOT_IDEMPOTENT(nir, nir_opt_peephole_select,
+                              &peephole_select_options);
+      LOOP_OPT(nir, nir_opt_intrinsics);
+      LOOP_OPT(nir, nir_opt_idiv_const, 32);
+      LOOP_OPT_NOT_IDEMPOTENT(nir, nir_opt_algebraic);
+      LOOP_OPT(nir, nir_lower_constant_convert_alu_types);
+      LOOP_OPT(nir, nir_opt_constant_folding);
 
       if (lower_flrp != 0) {
-         OPT(nir, nir_lower_flrp, lower_flrp, false /* always_precise */);
+         LOOP_OPT(nir, nir_lower_flrp, lower_flrp, false /* always_precise */);
          /* Nothing should rematerialize any flrps */
          lower_flrp = 0;
       }
 
-      OPT(nir, nir_opt_dead_cf);
-      if (OPT(nir, nir_opt_loop)) {
+      LOOP_OPT(nir, nir_opt_dead_cf);
+      if (LOOP_OPT_NOT_IDEMPOTENT(nir, nir_opt_loop)) {
          /* If nir_opt_loop makes progress, then we need to clean things up
           * if we want any hope of nir_opt_if or nir_opt_loop_unroll to make
           * progress.
           */
-         OPT(nir, nir_opt_copy_prop);
-         OPT(nir, nir_opt_dce);
+         LOOP_OPT(nir, nir_opt_copy_prop);
+         LOOP_OPT(nir, nir_opt_dce);
       }
-      OPT(nir, nir_opt_if, nir_opt_if_optimize_phi_true_false);
-      OPT(nir, nir_opt_phi_to_bool);
+      LOOP_OPT_NOT_IDEMPOTENT(nir, nir_opt_if,
+                              nir_opt_if_optimize_phi_true_false);
+      LOOP_OPT(nir, nir_opt_phi_to_bool);
       if (nir->options->max_unroll_iterations != 0) {
-         OPT(nir, nir_opt_loop_unroll);
+         LOOP_OPT_NOT_IDEMPOTENT(nir, nir_opt_loop_unroll);
       }
-      OPT(nir, nir_opt_remove_phis);
-      OPT(nir, nir_opt_gcm, false);
-      OPT(nir, nir_opt_undef);
+      LOOP_OPT(nir, nir_opt_remove_phis);
+      LOOP_OPT_NOT_IDEMPOTENT(nir, nir_opt_gcm, false);
+      LOOP_OPT(nir, nir_opt_undef);
    } while (progress);
    OPT(nir, nir_lower_undef_to_zero);
 
    OPT(nir, nir_remove_dead_variables, nir_var_function_temp, NULL);
-}
 
-void
-nak_optimize_nir(nir_shader *nir, const struct nak_compiler *nak)
-{
-   optimize_nir(nir, nak, false);
+   _mesa_set_destroy(skip, NULL);
 }
 
 static unsigned
@@ -263,6 +267,7 @@ lower_bit_size_cb(const nir_instr *instr, void *data)
       case nir_op_flt:
       case nir_op_fneu:
       case nir_op_fmul:
+      case nir_op_fmul_rtz:
       case nir_op_ffma:
       case nir_op_ffmaz:
       case nir_op_fsign:
@@ -378,8 +383,7 @@ nak_preprocess_nir(nir_shader *nir, const struct nak_compiler *nak)
    OPT(nir, nir_split_var_copies);
    OPT(nir, nir_split_struct_vars, nir_var_function_temp);
 
-   /* Optimize but allow copies because we haven't lowered them yet */
-   optimize_nir(nir, nak, true /* allow_copies */);
+   nak_optimize_nir(nir, nak);
 
    OPT(nir, nir_opt_barrier_modes);
    OPT(nir, nir_opt_acquire_release_barriers, SCOPE_QUEUE_FAMILY);
@@ -1326,12 +1330,14 @@ nak_postprocess_nir(nir_shader *nir,
    if (nak->sm >= 70)
       OPT(nir, nir_normalize_sin_cos);
 
+   OPT(nir, nir_opt_fp_math_ctrl);
    nak_optimize_nir(nir, nak);
 
    do {
       progress = false;
       OPT(nir, nir_opt_algebraic_late);
       OPT(nir, nak_nir_lower_algebraic_late, nak);
+      OPT(nir, nir_opt_algebraic_distribute_src_mods);
 
       /* If we're lowering fp64 sat but not min/max, the sat lowering may have
        * been undone by nir_opt_algebraic.  Lower sat again just to be sure.

@@ -134,6 +134,10 @@ struct tu_physical_device
 
    bool has_cached_coherent_memory;
    bool has_cached_non_coherent_memory;
+   /* Index for device local, host-coherent, host-cached memory.
+    * Only set to positive index when overwriting device-local, uncached memory
+    */
+   int32_t preferred_uncached_as_cached_index;
    uintptr_t level1_dcache_size;
 
    struct fdl_ubwc_config ubwc_config;
@@ -240,6 +244,11 @@ struct tu_instance
 
    /* Configuration option to use a specific autotune algorithm by default. */
    const char *autotune_algo;
+
+   /* When enabled, replaces uncached+host_visible allocations
+    * with cached+coherent+host_visible when the hardware supports it.
+    */
+   bool override_uncached_as_cache_coherent;
 };
 VK_DEFINE_HANDLE_CASTS(tu_instance, vk.base, VkInstance,
                        VK_OBJECT_TYPE_INSTANCE)

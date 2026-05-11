@@ -10,12 +10,10 @@
 #include "radv_sdma.h"
 #include "meta/radv_meta.h"
 #include "util/macros.h"
-#include "util/u_memory.h"
 #include "radv_cs.h"
 #include "radv_formats.h"
 
 #include "ac_cmdbuf_sdma.h"
-#include "ac_formats.h"
 
 struct radv_sdma_chunked_copy_info {
    unsigned extent_horizontal_blocks;
@@ -119,6 +117,7 @@ radv_sdma_get_buf_surf(const struct radv_image *const image, const VkDeviceMemor
       .pitch = pitch,
       .slice_pitch = slice_pitch,
       .bpp = bpe,
+      .is_secure = image->vk.create_flags & VK_IMAGE_CREATE_PROTECTED_BIT,
    };
 
    return info;
@@ -153,6 +152,7 @@ radv_sdma_get_surf(struct radv_cmd_buffer *cmd_buffer, const struct radv_image *
       .first_level = subresource.mipLevel,
       .num_levels = image->vk.mip_levels,
       .is_stencil = subresource.aspectMask == VK_IMAGE_ASPECT_STENCIL_BIT,
+      .is_secure = image->vk.create_flags & VK_IMAGE_CREATE_PROTECTED_BIT,
    };
 
    info.offset.x = offset.x * radv_sdma_get_texel_scale(image);
@@ -216,13 +216,13 @@ radv_sdma_emit_nop(const struct radv_device *device, struct radv_cmd_stream *cs)
 
 void
 radv_sdma_copy_memory(const struct radv_device *device, struct radv_cmd_stream *cs, uint64_t src_va, uint64_t dst_va,
-                      uint64_t size)
+                      uint64_t size, bool tmz)
 {
    const struct radv_physical_device *pdev = radv_device_physical(device);
 
    while (size > 0) {
       radeon_check_space(device->ws, cs->b, 7);
-      uint64_t bytes_written = ac_emit_sdma_copy_linear(cs->b, pdev->info.sdma_ip_version, src_va, dst_va, size, false);
+      uint64_t bytes_written = ac_emit_sdma_copy_linear(cs->b, pdev->info.sdma_ip_version, src_va, dst_va, size, tmz);
 
       size -= bytes_written;
       src_va += bytes_written;
@@ -263,10 +263,12 @@ radv_sdma_emit_copy_tiled_sub_window(const struct radv_device *device, struct ra
                                      const VkExtent3D extent, const bool detile)
 {
    const struct radv_physical_device *pdev = radv_device_physical(device);
+   bool tmz = tiled->is_secure;
+   assert(!tmz || linear->is_secure);
 
    radeon_check_space(device->ws, cs->b, 17);
    ac_emit_sdma_copy_tiled_sub_window(cs->b, &pdev->info, linear, tiled, detile, extent.width, extent.height,
-                                      extent.depth, false);
+                                      extent.depth, tmz);
 }
 
 static void
@@ -327,6 +329,9 @@ radv_sdma_copy_buffer_image_unaligned(const struct radv_device *device, struct r
       .slice_pitch = info.aligned_row_pitch * info.extent_vertical_blocks,
    };
 
+   bool tmz = buf->is_secure;
+   assert(!tmz || img_in->is_secure);
+
    VkExtent3D extent = base_extent;
    extent.depth = 1;
 
@@ -357,7 +362,7 @@ radv_sdma_copy_buffer_image_unaligned(const struct radv_device *device, struct r
             const uint64_t buf_va = buf->va + slice * buf->slice_pitch * img.bpp + (row + r) * buf->pitch * img.bpp;
             const uint64_t tmp_va = tmp.va + r * info.aligned_row_pitch * img.bpp;
             radv_sdma_copy_memory(device, cs, to_image ? buf_va : tmp_va, to_image ? tmp_va : buf_va,
-                                  info.extent_horizontal_blocks * img.bpp);
+                                  info.extent_horizontal_blocks * img.bpp, tmz);
          }
 
          /* Wait for the copy to finish. */
@@ -519,12 +524,12 @@ radv_sdma_copy_image_t2t_scanline(const struct radv_device *device, struct radv_
 }
 
 bool
-radv_sdma_supports_image(const struct radv_device *device, const struct radv_image *image)
+radv_sdma_supports_image(const struct radv_device *device, const struct radv_image *image, bool to_image)
 {
    const struct radv_physical_device *pdev = radv_device_physical(device);
 
    if (radv_is_format_emulated(pdev, image->vk.format))
-      return false;
+      return to_image ? false : true;
 
    if (!pdev->info.sdma_supports_sparse &&
        (image->vk.create_flags & VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT))

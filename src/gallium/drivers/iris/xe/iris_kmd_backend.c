@@ -31,6 +31,7 @@
 #include "iris/iris_bufmgr.h"
 #include "iris/iris_batch.h"
 #include "iris/iris_context.h"
+#include "util/u_debug.h"
 
 #include "drm-uapi/xe_drm.h"
 
@@ -202,12 +203,31 @@ xe_gem_vm_unbind(struct iris_bo *bo)
 static bool
 xe_bo_madvise(struct iris_bo *bo, enum iris_madvice state)
 {
-   /* Only applicable if VM was created with DRM_XE_VM_CREATE_FAULT_MODE but
-    * that is not compatible with DRM_XE_VM_CREATE_SCRATCH_PAGE
-    *
-    * So returning as retained.
-    */
-   return true;
+   struct iris_bufmgr *bufmgr = bo->bufmgr;
+   const struct intel_device_info *devinfo = iris_bufmgr_get_device_info(bufmgr);
+   struct drm_xe_madvise madvise = {};
+   uint32_t retained_val = 0;
+
+   /* If not supported bo are always retained */
+   if (!devinfo->has_madvise_purgeable)
+      return true;
+
+   madvise.start = bo->address;
+   madvise.range = bo->size;
+   madvise.vm_id = iris_bufmgr_get_global_vm_id(bufmgr);
+   madvise.type = DRM_XE_VMA_ATTR_PURGEABLE_STATE;
+   /* Same values between iris_madvice and Xe KMD */
+   STATIC_ASSERT(IRIS_MADVICE_WILL_NEED == DRM_XE_VMA_PURGEABLE_STATE_WILLNEED);
+   STATIC_ASSERT(IRIS_MADVICE_DONT_NEED == DRM_XE_VMA_PURGEABLE_STATE_DONTNEED);
+   madvise.purge_state_val.val = state;
+   madvise.purge_state_val.retained_ptr = (uintptr_t)&retained_val;
+
+   if (intel_ioctl(iris_bufmgr_get_fd(bufmgr), DRM_IOCTL_XE_MADVISE, &madvise)) {
+      debug_warn_once("DRM_XE_VMA_ATTR_PURGEABLE_STATE failed at least once\n");
+      return false;
+   }
+
+   return retained_val;
 }
 
 static int

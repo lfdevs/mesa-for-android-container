@@ -33,6 +33,7 @@
 #include "etnaviv_debug.h"
 #include "etnaviv_emit.h"
 #include "etnaviv_fence.h"
+#include "etnaviv_format.h"
 #include "etnaviv_ml.h"
 #include "etnaviv_query.h"
 #include "etnaviv_query_acc.h"
@@ -417,6 +418,22 @@ etna_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info,
    if (screen->info->halti >= 5)
       key.flatshade = ctx->rasterizer->flatshade;
 
+   /* On LINEAR_PE GPUs rendering directly to a linear shared resource,
+    * use shader-based R/B swap so bytes in memory have the correct order
+    * for external consumers. This avoids a dedicated flush-time blit.
+    * Per-RT bitmask so MRT with mixed shared/non-shared targets works. */
+   if (VIV_FEATURE(screen, ETNA_FEATURE_LINEAR_PE)) {
+      for (i = 0; i < pfb->nr_cbufs; i++) {
+         if (pfb->cbufs[i].texture) {
+            struct etna_resource *rsc = etna_resource(pfb->cbufs[i].texture);
+            if (rsc->shared && rsc->layout == ETNA_LAYOUT_LINEAR &&
+                translate_pe_format_rb_swap(pfb->cbufs[i].format)) {
+               key.frag_rb_swap |= (1 << i);
+            }
+         }
+      }
+   }
+
    if (!etna_get_vs(ctx, &key) || !etna_get_fs(ctx, &key)) {
       BUG("compiled shaders are not okay");
       return;
@@ -556,10 +573,17 @@ etna_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info,
 
    for (i = 0; i < pfb->nr_cbufs; i++) {
       if (pfb->cbufs[i].texture) {
+         struct etna_resource *rsc = etna_resource(pfb->cbufs[i].texture);
          struct etna_resource *res = etna_resource_get_render_compatible(pctx, pfb->cbufs[i].texture);
          struct etna_resource_level *level = &res->levels[pfb->cbufs[i].level];
 
          etna_resource_level_mark_changed(level);
+
+         /* PE rendered directly to the shared buffer (no render shadow).
+          * If the shader swapped R/B, data is in native byte order.
+          * Otherwise it's in PE-internal order (BGRA for RB_SWAP formats). */
+         if (rsc->shared && res == rsc)
+            rsc->shared_native_order = !!(key.frag_rb_swap & (1 << i));
       }
    }
 

@@ -205,8 +205,13 @@ lower_image_load_instr_without_format(nir_builder *b,
 
    assert(nir_intrinsic_format(intrin) == PIPE_FORMAT_NONE);
 
-   nir_def *image_fmt = nir_image_deref_load_param_intel(
-      b, 1, 32, img, .base = ISL_SURF_PARAM_FORMAT);
+   nir_def *image_fmt =
+      (intrin->intrinsic == nir_intrinsic_image_heap_load ||
+       intrin->intrinsic == nir_intrinsic_image_heap_sparse_load) ?
+      nir_image_heap_load_param_intel(
+         b, 1, 32, img, .base = ISL_SURF_PARAM_FORMAT) :
+      nir_image_deref_load_param_intel(
+         b, 1, 32, img, .base = ISL_SURF_PARAM_FORMAT);
 
    nir_def *color = convert_color_for_load_format(
       b, state->compiler, &intrin->def, image_fmt);
@@ -394,7 +399,8 @@ lower(nir_builder *b, nir_intrinsic_instr *intrin, void *cb_data)
    const struct brw_nir_lower_storage_image_state *state = cb_data;
 
    switch (intrin->intrinsic) {
-   case nir_intrinsic_image_deref_load: {
+   case nir_intrinsic_image_deref_load:
+   case nir_intrinsic_image_heap_load:
       if (nir_intrinsic_format(intrin) == PIPE_FORMAT_NONE) {
          if (state->opts.lower_loads_without_formats)
             return lower_image_load_instr_without_format(b, state, intrin);
@@ -405,9 +411,9 @@ lower(nir_builder *b, nir_intrinsic_instr *intrin, void *cb_data)
          }
       }
       return false;
-   }
 
-   case nir_intrinsic_image_deref_sparse_load: {
+   case nir_intrinsic_image_deref_sparse_load:
+   case nir_intrinsic_image_heap_sparse_load:
       if (nir_intrinsic_format(intrin) == PIPE_FORMAT_NONE) {
          if (state->opts.lower_loads_without_formats)
             return lower_image_load_instr_without_format(b, state, intrin);
@@ -418,9 +424,9 @@ lower(nir_builder *b, nir_intrinsic_instr *intrin, void *cb_data)
          }
       }
       return false;
-   }
 
    case nir_intrinsic_image_deref_store:
+   case nir_intrinsic_image_heap_store:
       return lower_image_store_instr(
          b, &state->opts, state->compiler->devinfo, intrin);
 

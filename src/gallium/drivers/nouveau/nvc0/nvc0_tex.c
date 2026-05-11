@@ -117,8 +117,7 @@ gm107_create_texture_view(struct pipe_context *pipe,
    address = mt->base.address;
 
    tic[3]  = GM107_TIC2_3_LOD_ANISO_QUALITY_2;
-   tic[4]  = GM107_TIC2_4_SECTOR_PROMOTION_PROMOTE_TO_2_V;
-   tic[4] |= GM107_TIC2_4_BORDER_SIZE_SAMPLER_COLOR;
+   tic[4]  = GM107_TIC2_4_BORDER_SIZE_SAMPLER_COLOR;
 
    if (desc->colorspace == UTIL_FORMAT_COLORSPACE_SRGB)
       tic[4] |= GM107_TIC2_4_SRGB_CONVERSION;
@@ -332,7 +331,7 @@ gf100_create_texture_view(struct pipe_context *pipe,
 
    address = mt->base.address;
 
-   tic[2] = 0x10001000 | G80_TIC_2_BORDER_SOURCE_COLOR;
+   tic[2] = 0x00001000 | G80_TIC_2_BORDER_SOURCE_COLOR;
 
    if (desc->colorspace == UTIL_FORMAT_COLORSPACE_SRGB)
       tic[2] |= G80_TIC_2_SRGB_CONVERSION;

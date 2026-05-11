@@ -447,5 +447,6 @@ genX(crocus_init_blorp)(struct crocus_context *ice)
    blorp_init_elk(&ice->blorp, ice, &screen->isl_dev, screen->compiler, NULL);
    ice->blorp.lookup_shader = crocus_blorp_lookup_shader;
    ice->blorp.upload_shader = crocus_blorp_upload_shader;
+   ice->blorp.get_surface_address = blorp_get_surface_address;
    ice->blorp.exec = crocus_blorp_exec;
 }

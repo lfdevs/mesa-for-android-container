@@ -24,6 +24,7 @@
         - src/intel/ci/$GALLIUM_DRIVER-skips.txt
         - src/intel/ci/$DRIVER_NAME-skips.txt
         - src/intel/ci/$PIGLIT_TRACES_FILE
+        - src/intel/ci/$REPLAY_CONFIG
       when: on_success
 
 .intel-common-manual-rules:

@@ -690,6 +690,7 @@ def print_packet_parser(is_header):
         print('#include "amd_cp_print_packet_%s.h"' % gfx_version)
         print('#include "amd_cp_packets_%s.h"' % gfx_version)
         print('#include "amdgfxregs.h"')
+        print('#include "util/macros.h"')
 
     # Generate enum-to-string tables.
     if not is_header:

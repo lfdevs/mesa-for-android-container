@@ -75,7 +75,9 @@ adjust_coords(nir_builder *b, nir_def *in_coords,
 }
 
 static nir_def *
-load_image_param(nir_builder *b, nir_def *surface_handle, unsigned index)
+load_image_param(nir_builder *b,
+                 nir_def *surface_handle, unsigned index,
+                 bool heap)
 {
    unsigned num_components, bit_size;
    switch (index) {
@@ -93,9 +95,13 @@ load_image_param(nir_builder *b, nir_def *surface_handle, unsigned index)
       UNREACHABLE("Invalid param offset");
    }
 
-   return nir_image_deref_load_param_intel(b, num_components, bit_size,
-                                           surface_handle,
-                                           .base = index);
+   return heap ?
+      nir_image_heap_load_param_intel(b, num_components, bit_size,
+                                      surface_handle,
+                                      .base = index) :
+      nir_image_deref_load_param_intel(b, num_components, bit_size,
+                                       surface_handle,
+                                       .base = index);
 }
 
 static nir_def *
@@ -224,7 +230,8 @@ image_address(nir_builder *b,
               bool is_array,
               enum pipe_format format,
               nir_def *surface_handle,
-              nir_def *coords_vec)
+              nir_def *coords_vec,
+              bool heap)
 {
    const struct util_format_description *desc =
       util_format_description(format);
@@ -243,9 +250,9 @@ image_address(nir_builder *b,
       coords[c] = nir_channel(b, coords_vec, c);
 
    nir_def *pitch =
-      load_image_param(b, surface_handle, ISL_SURF_PARAM_PITCH);
+      load_image_param(b, surface_handle, ISL_SURF_PARAM_PITCH, heap);
    nir_def *qpitch =
-      load_image_param(b, surface_handle, ISL_SURF_PARAM_QPITCH);
+      load_image_param(b, surface_handle, ISL_SURF_PARAM_QPITCH, heap);
 
    if (!isl_tiling_supports_dimensions(devinfo, tiling,
                                        glsl_sampler_dim_to_isl(dim)))
@@ -255,7 +262,7 @@ image_address(nir_builder *b,
    nir_def *tiled_addr = NULL;
 
    nir_def *tile_mode =
-      load_image_param(b, surface_handle, ISL_SURF_PARAM_TILE_MODE);
+      load_image_param(b, surface_handle, ISL_SURF_PARAM_TILE_MODE, heap);
    nir_push_if(b, nir_ieq_imm(b, tile_mode, 0));
    {
       linear_addr = image_linear_address(b, bpp, coords, pitch, qpitch);
@@ -278,13 +285,17 @@ brw_nir_lower_texel_address_instr(nir_builder *b,
                                   void *data)
 {
    struct lower_state *state = data;
+   bool heap = false;
 
    switch (intrin->intrinsic) {
-   case nir_intrinsic_image_texel_address:
    case nir_intrinsic_image_deref_texel_address:
-   case nir_intrinsic_bindless_image_texel_address:
       break;
-
+   case nir_intrinsic_image_heap_texel_address:
+      heap = true;
+      break;
+   case nir_intrinsic_image_texel_address:
+   case nir_intrinsic_bindless_image_texel_address:
+      UNREACHABLE("Should be called before deref lowering");
    default:
       return false;
    }
@@ -293,7 +304,7 @@ brw_nir_lower_texel_address_instr(nir_builder *b,
 
    nir_def *addr = nir_iadd(
       b,
-      load_image_param(b, intrin->src[0].ssa, ISL_SURF_PARAM_BASE_ADDRESSS),
+      load_image_param(b, intrin->src[0].ssa, ISL_SURF_PARAM_BASE_ADDRESSS, heap),
       nir_u2u64(b,
                 image_address(b,
                               state->devinfo,
@@ -302,7 +313,8 @@ brw_nir_lower_texel_address_instr(nir_builder *b,
                               nir_intrinsic_image_array(intrin),
                               nir_intrinsic_format(intrin),
                               intrin->src[0].ssa,
-                              intrin->src[1].ssa)));
+                              intrin->src[1].ssa,
+                              heap)));
 
    nir_def_rewrite_uses(&intrin->def, addr);
 

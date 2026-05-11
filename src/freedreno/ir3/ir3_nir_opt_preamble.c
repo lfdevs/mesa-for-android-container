@@ -36,7 +36,7 @@ all_uses_float(nir_def *def, bool allow_src2)
       if (nir_src_is_if(use))
          return false;
 
-      nir_instr *use_instr = nir_src_parent_instr(use);
+      nir_instr *use_instr = nir_src_use_instr(use);
       if (use_instr->type != nir_instr_type_alu)
          return false;
       nir_alu_instr *use_alu = nir_instr_as_alu(use_instr);
@@ -66,7 +66,7 @@ all_uses_bit(nir_def *def)
       if (nir_src_is_if(use))
          return false;
 
-      nir_instr *use_instr = nir_src_parent_instr(use);
+      nir_instr *use_instr = nir_src_use_instr(use);
       if (use_instr->type != nir_instr_type_alu)
          return false;
       nir_alu_instr *use_alu = nir_instr_as_alu(use_instr);
@@ -222,7 +222,7 @@ rewrite_cost(nir_def *def, const void *data)
 
    bool mov_needed = false;
    nir_foreach_use (use, def) {
-      nir_instr *parent_instr = nir_src_parent_instr(use);
+      nir_instr *parent_instr = nir_src_use_instr(use);
       if (parent_instr->type == nir_instr_type_alu) {
          nir_alu_instr *alu = nir_instr_as_alu(parent_instr);
          if (alu->op == nir_op_vec2 ||

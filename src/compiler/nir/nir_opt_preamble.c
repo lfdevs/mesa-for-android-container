@@ -794,7 +794,7 @@ nir_opt_preamble(nir_shader *shader, const nir_opt_preamble_options *options,
             if (nir_src_is_if(use)) {
                is_can_move_user = false;
             } else {
-               nir_def *use_def = nir_instr_def(nir_src_parent_instr(use));
+               nir_def *use_def = nir_instr_def(nir_src_use_instr(use));
                is_can_move_user = use_def != NULL &&
                                   ctx.states[use_def->index].can_move &&
                                   !ctx.states[use_def->index].must_stay;

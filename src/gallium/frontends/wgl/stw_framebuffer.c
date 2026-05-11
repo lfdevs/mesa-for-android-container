@@ -475,7 +475,7 @@ stw_framebuffer_from_hdc_locked(HDC hdc)
 
    hwnd = WindowFromDC(hdc);
 
-   return stw_framebuffer_from_hwnd_hdc_locked(hwnd, hdc);
+   return stw_framebuffer_from_hwnd_hdc_locked(hwnd, hwnd ? NULL : hdc);
 }
 
 

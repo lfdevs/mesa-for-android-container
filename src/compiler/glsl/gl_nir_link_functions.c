@@ -23,6 +23,7 @@
 
 #include "gl_nir_linker.h"
 #include "linker_util.h"
+#include "util/u_dynarray.h"
 #include "program/symbol_table.h"
 #include "util/hash_table.h"
 #include "main/shader_types.h"
@@ -318,6 +319,86 @@ find_matching_signature(struct list_head *f_list,
    return match;
 }
 
+/**
+ * Resolve the function calls reachable from the shader entrypoint.
+ * Remove unreachable functions. This is done using DFS traversal from main.
+ * It avoids spurious "unresolved reference" linker errors for dead helper 
+ * functions. Only calls that are actually reachable from main must be resolved.
+ */
+static bool
+resolve_calls_and_remove_unreachable(struct gl_shader_program *prog,
+                                     struct gl_shader *main,
+                                     struct gl_linked_shader *linked_sh,
+                                     struct hash_table *func_lookup)
+{
+   nir_shader *shader = linked_sh->Program->nir;
+   nir_function_impl *entry = nir_shader_get_entrypoint(shader);
+   if (!entry)
+      return true;
+
+   /* use nir_function::pass_flags to check function reachability */
+   nir_foreach_function(func, shader)
+      func->pass_flags = 0;
+
+   struct util_dynarray stack;
+   util_dynarray_init(&stack, NULL);
+   util_dynarray_append(&stack, entry);
+
+   bool success = true;
+
+   while (util_dynarray_num_elements(&stack, nir_function_impl *) > 0) {
+      nir_function_impl *impl =
+          util_dynarray_pop(&stack, nir_function_impl *);
+
+      if (impl->function->pass_flags)
+         continue;
+
+      impl->function->pass_flags = 1;
+
+      nir_foreach_block(block, impl) {
+         nir_foreach_instr(instr, block) {
+            if (instr->type != nir_instr_type_call)
+               continue;
+            nir_call_instr *call = nir_instr_as_call(instr);
+
+            /* Already resolved */
+            if (call->callee->impl) {
+               util_dynarray_append(&stack, call->callee->impl);
+               continue;
+            }
+
+            struct hash_entry *e = _mesa_hash_table_search(func_lookup, call->callee->name);
+            if (e) {
+               struct list_head *f_list = (struct list_head *) e->data;
+               nir_function *f = find_matching_signature(f_list, call->callee->params,
+                                                         call->callee->num_params,
+                                                         main->has_implicit_conversions,
+                                                         main->has_implicit_int_to_uint_conversion);
+               if (f)
+                  call->callee = f;
+            }
+            if(!call->callee->impl) {
+               linker_error(prog, "unresolved reference to function `%s'\n",
+                            call->callee->name);
+               success = false;
+               goto done;
+            }
+
+            util_dynarray_append(&stack, call->callee->impl);
+         }
+      }
+   }
+done:
+   util_dynarray_fini(&stack);
+   nir_foreach_function_safe(func, shader) {
+      if (func->impl && func->pass_flags == 0
+          && strstr(func->name, "gl_mesa_tmp") == NULL)
+         exec_node_remove(&func->node);
+   }
+
+   return success;
+}
+
 static nir_function *
 clone_function(struct hash_table *remap_table,
                const nir_function *fxn, nir_shader *ns)
@@ -492,44 +573,10 @@ gl_nir_link_function_calls(struct gl_shader_program *prog,
       }
    }
 
-   /* Now that all shaders have been combined together make sure all function
-    * calls can be resolved.
-    */
-   nir_foreach_function_impl(impl, linked_sh->Program->nir) {
-      nir_foreach_block(block, impl) {
-         nir_foreach_instr(instr, block) {
-            if (instr->type == nir_instr_type_call) {
-               nir_call_instr *call = nir_instr_as_call(instr);
-
-               /* If this was already set at compile time don't try to set it
-                * again.
-                */
-               if (call->callee->impl)
-                  continue;
-
-               struct hash_entry *e = _mesa_hash_table_search(func_lookup,
-                                                              call->callee->name);
-               if (e) {
-                  struct list_head *f_list = (struct list_head *) e->data;
-
-                  nir_function *f =
-                     find_matching_signature(f_list, call->callee->params,
-                                             call->callee->num_params,
-                                             main->has_implicit_conversions,
-                                             main->has_implicit_int_to_uint_conversion);
-                  if (f)
-                     call->callee = f;
-               }
-
-               if (!call->callee->impl) {
-                  linker_error(prog, "unresolved reference to function `%s'\n",
-                               call->callee->name);
-                  ralloc_free(mem_ctx);
-                  return false;
-               }
-            }
-         }
-      }
+   /* Resolve function calls and remove unreachable functions */
+   if (!resolve_calls_and_remove_unreachable(prog, main, linked_sh, func_lookup)) {
+      ralloc_free(mem_ctx);
+      return false;
    }
 
    /**

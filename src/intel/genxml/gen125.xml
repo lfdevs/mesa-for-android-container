@@ -2,6 +2,7 @@
 <genxml name="GFX125" gen="12.5">
   <import name="gen120.xml">
     <exclude name="3D_CHICKEN3" />
+    <exclude name="3DSTATE_PUSH_CONSTANT_ALLOC_PS" />
     <exclude name="GPGPU_WALKER" />
     <exclude name="GT_MODE" />
     <exclude name="MEDIA_CURBE_LOAD" />
@@ -599,18 +600,14 @@
     <field name="3D Command Opcode" dword="0" bits="26:24" type="uint" default="1" />
     <field name="Command SubType" dword="0" bits="28:27" type="uint" default="0" />
     <field name="Command Type" dword="0" bits="31:29" type="uint" default="3" />
-    <field name="Dispatch Timeout Counter" dword="1" bits="1:0" type="uint">
-      <value name="64 clocks" value="0" />
-      <value name="128 clocks" value="1" />
-      <value name="192 clocks" value="2" />
-      <value name="256 clocks" value="3" />
-    </field>
+    <field name="Dispatch Timeout Counter" dword="1" bits="1:0" type="uint" />
     <field name="AMFS Mode" dword="1" bits="4:3" type="uint" prefix="AMFS_MODE">
       <value name="NORMAL" value="0" />
       <value name="TOUCH" value="1" />
       <value name="BACKFILL" value="2" />
       <value name="FALLBACK" value="3" />
     </field>
+    <field name="Dispatch Timeout Counter Extend" dword="1" bits="6:5" type="uint" />
     <field name="Per DSS Memory Backed Buffer Size" dword="2" bits="2:0" type="uint" />
     <field name="Memory Backed Buffer Base Pointer" dword="2" bits="63:10" type="address" />
     <field name="Scratch Space Buffer" dword="4" bits="31:10" type="uint" />

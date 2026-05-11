@@ -11,13 +11,13 @@
 #ifndef RADV_NIR_TO_LLVM_H
 #define RADV_NIR_TO_LLVM_H
 
-struct radv_nir_compiler_options;
+struct radv_llvm_compiler_options;
 struct radv_shader_info;
 struct nir_shader;
 struct radv_shader_binary;
 struct radv_shader_args;
 
-void llvm_compile_shader(const struct radv_nir_compiler_options *options, const struct radv_shader_info *info,
+void llvm_compile_shader(const struct radv_llvm_compiler_options *options, const struct radv_shader_info *info,
                          unsigned shader_count, struct nir_shader *const *shaders, struct radv_shader_binary **binary,
                          const struct radv_shader_args *args);
 

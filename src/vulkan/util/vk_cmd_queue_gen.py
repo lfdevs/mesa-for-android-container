@@ -674,7 +674,7 @@ def get_param_copy(builder, command, types, src_parent_access, dst_parent_access
 
             is_ndarray = param.len and "," in param.len
             if param.len and param.len != "struct-ptr" and not is_ndarray:
-                size = "%s * %s%s" % (size, src_parent_access, param.len)
+                size = "%s * ceil(%s%s)" % (size, src_parent_access, param.len)
 
             builder.add("%s = linear_alloc_child(queue->ctx, %s);" % (dst, size))
             builder.add("if (%s == NULL) return NULL;" % (dst))

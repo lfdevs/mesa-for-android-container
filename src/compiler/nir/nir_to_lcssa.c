@@ -64,7 +64,7 @@ is_if_use_inside_loop(nir_src *use, nir_loop *loop)
       nir_cf_node_as_block(nir_cf_node_next(&loop->cf_node));
 
    nir_block *prev_block =
-      nir_cf_node_as_block(nir_cf_node_prev(&nir_src_parent_if(use)->cf_node));
+      nir_cf_node_as_block(nir_cf_node_prev(&nir_src_use_if(use)->cf_node));
    if (prev_block->index <= block_before_loop->index ||
        prev_block->index >= block_after_loop->index) {
       return false;
@@ -81,8 +81,8 @@ is_use_inside_loop(nir_src *use, nir_loop *loop)
    nir_block *block_after_loop =
       nir_cf_node_as_block(nir_cf_node_next(&loop->cf_node));
 
-   if (nir_src_parent_instr(use)->block->index <= block_before_loop->index ||
-       nir_src_parent_instr(use)->block->index >= block_after_loop->index) {
+   if (nir_src_use_instr(use)->block->index <= block_before_loop->index ||
+       nir_src_use_instr(use)->block->index >= block_after_loop->index) {
       return false;
    }
 
@@ -212,8 +212,8 @@ convert_loop_exit_for_ssa(nir_def *def, void *void_state)
          continue;
       }
 
-      if (nir_src_parent_instr(use)->type == nir_instr_type_phi &&
-          nir_src_parent_instr(use)->block == state->block_after_loop) {
+      if (nir_src_use_instr(use)->type == nir_instr_type_phi &&
+          nir_src_use_instr(use)->block == state->block_after_loop) {
          continue;
       }
 
@@ -253,13 +253,13 @@ convert_loop_exit_for_ssa(nir_def *def, void *void_state)
    nir_foreach_use_including_if_safe(use, def) {
       if (nir_src_is_if(use)) {
          if (!is_if_use_inside_loop(use, state->loop))
-            nir_src_rewrite(&nir_src_parent_if(use)->condition, dest);
+            nir_src_rewrite(&nir_src_use_if(use)->condition, dest);
 
          continue;
       }
 
-      if (nir_src_parent_instr(use)->type == nir_instr_type_phi &&
-          state->block_after_loop == nir_src_parent_instr(use)->block) {
+      if (nir_src_use_instr(use)->type == nir_instr_type_phi &&
+          state->block_after_loop == nir_src_use_instr(use)->block) {
          continue;
       }
 

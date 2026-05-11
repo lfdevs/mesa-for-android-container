@@ -175,15 +175,8 @@ extern uint32_t intel_shader_dump_filter;
 
 #ifdef HAVE_ANDROID_PLATFORM
 #define LOG_TAG "INTEL-MESA"
-#if ANDROID_API_LEVEL >= 26
-#include <log/log.h>
-#else
-#include <cutils/log.h>
-#endif /* use log/log.h start from android 8 major version */
-#ifndef ALOGW
-#define ALOGW LOGW
-#endif
-#define dbg_printf(...)	ALOGW(__VA_ARGS__)
+#include <android/log.h>
+#define dbg_printf(...)	__android_log_print(ANDROID_LOG_WARN, LOG_TAG, __VA_ARGS__)
 #else
 #define dbg_printf(...)	fprintf(stderr, __VA_ARGS__)
 #endif /* HAVE_ANDROID_PLATFORM */

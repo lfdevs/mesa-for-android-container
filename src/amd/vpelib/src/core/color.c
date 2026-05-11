@@ -195,6 +195,7 @@ static enum vpe_status vpe_allocate_cm_memory(
     }
 
     output_ctx = &vpe_priv->output_ctx;
+
     if (!output_ctx->output_tf) {
         output_ctx->output_tf = (struct transfer_func *)vpe_zalloc(sizeof(struct transfer_func));
         if (!output_ctx->output_tf) {
@@ -390,6 +391,24 @@ static bool build_scale_and_bias(struct bias_and_scale *bias_and_scale,
             bias_c  = vpe_fixpt_from_fraction(-64, 1024); // See notes in function comment
             is_chroma_different = true;
         } // else report error? not sure if default is right
+    }
+    else if (vpe_is_rgb16(format)) {
+        if (vcs->range == VPE_COLOR_RANGE_FULL) {
+            scale = vpe_fixpt_from_fraction(65536, 65535);
+        } else if (vcs->range == VPE_COLOR_RANGE_STUDIO) {
+            scale = vpe_fixpt_from_fraction(65536, 60160 - 4096);
+            bias  = vpe_fixpt_from_fraction(-4096, 65536);
+        } // else report error? here just go with default (1.0, 0.0)
+    } else if (vpe_is_yuv12(format)) {
+        if (vcs->range == VPE_COLOR_RANGE_FULL) {
+            scale = vpe_fixpt_from_fraction(65536, 65535);
+        } else if (vcs->range == VPE_COLOR_RANGE_STUDIO) {
+            scale   = vpe_fixpt_from_fraction(65536, 60160 - 4096);
+            bias    = vpe_fixpt_from_fraction(-4096, 65536);
+            scale_c = vpe_fixpt_from_fraction(65536, 61440 - 4096);
+            bias_c  = vpe_fixpt_from_fraction(-4096, 65536); // See notes in function comment
+            is_chroma_different = true;
+        }
     }
 
     if (!vpe_convert_to_custom_float_format(scale, &fmt, &bias_and_scale->scale_green)) {
@@ -596,9 +615,45 @@ enum vpe_status vpe_color_update_3dlut(
             }
         }
         stream_ctx->lut3d_func->state.bits.initialized = 1;
+        stream_ctx->lut3d_func->state.bits.is_dma = 0;
     }
 
     stream_ctx->uid_3dlut = stream_ctx->stream.tm_params.UID;
+
+    return VPE_STATUS_OK;
+}
+
+// This only updates the matrix as provided in the 3DLUT compound case
+// 3DLUT itself is updated elsewhere
+static enum vpe_status vpe_color_update_3dlut_matrix(
+    struct vpe_priv *vpe_priv, struct stream_ctx *stream_ctx)
+{
+    float *matrix_ptr    = &stream_ctx->stream.lut_compound.pCscMatrix[0][0];
+    float  max_coeff     = matrix_ptr[0];
+    float  max_allowed   = 4.0f - 1.0f / 4096.0f; // max coeff allowed is 4.0 - smallest step
+    float  renorm_factor = 1.0f;
+
+    struct fixed31_32 renorm_fixed[12];
+
+    // Find the maximum element in the 3x4 matrix (12 elements total)
+    for (int i = 0; i < 12; i++) {
+        if (matrix_ptr[i] > max_coeff) {
+            max_coeff = matrix_ptr[i];
+        }
+    }
+
+    if (max_coeff > max_allowed) {
+        renorm_factor = max_coeff / max_allowed;
+    }
+    stream_ctx->csc_renorm_factor.value = vpe_double_to_fixed_point(renorm_factor, 0, 32, true);
+
+    for (int i = 0; i < 12; i++) {
+        // renorm_factor is always >= 1.0f, so division is safe
+        renorm_fixed[i].value =
+            vpe_double_to_fixed_point(matrix_ptr[i] / renorm_factor, 0, 32, true);
+    }
+
+    conv_convert_float_matrix(&stream_ctx->input_cs->regval[0], renorm_fixed, 12);
 
     return VPE_STATUS_OK;
 }
@@ -635,6 +690,12 @@ enum vpe_status vpe_color_update_color_space_and_tf(
                 stream_ctx->stream.tm_params.UID != 0 || stream_ctx->stream.tm_params.enable_3dlut;
             bool require_update = stream_ctx->uid_3dlut != stream_ctx->stream.tm_params.UID;
 
+            if (stream_ctx->stream.lut_compound.enabled) {
+                // handle 3dlut compound case
+                vpe_color_update_3dlut_matrix(vpe_priv, stream_ctx);
+                continue; // skip the rest of color space and tf update
+            }
+
             color_check_input_cm_update(vpe_priv, stream_ctx,
                 &stream_ctx->stream.surface_info.cs, &stream_ctx->stream.color_adj,
                 is_3dlut_enable, geometric_update);
@@ -668,6 +729,8 @@ enum vpe_status vpe_color_update_color_space_and_tf(
             }
 
             if (stream_ctx->dirty_bits.color_space || output_ctx->dirty_bits.color_space) {
+                if (stream_ctx->stream_type == VPE_STREAM_TYPE_DESTINATION)
+                    stream_ctx->cs = output_ctx->cs;
                 enum color_space shaper_in_cs;
                 bool             can_bypass_gamut = geometric_scaling;
                 if (is_3dlut_enable) {
@@ -764,6 +827,8 @@ enum vpe_status vpe_color_update_shaper(const struct vpe_priv *vpe_priv, uint16_
 
         shaper_in.shaper_in_max      = 1 << 16;
         shaper_in.use_const_hdr_mult = false; // can not be true. Fix is required.
+        shaper_in.index_mode = vpe_get_shaper_index_mode(stream_ctx->lut3d_func->state.bits.is_dma,
+            stream_ctx->lut3d_func->lut_3d.lut_dim, stream_ctx->stream.tm_params.lut_container_dim);
 
         ret = vpe_build_shaper(&shaper_in, shaper_func->tf, pq_norm_gain, &shaper_func->pwl);
 
@@ -776,6 +841,95 @@ enum vpe_status vpe_color_update_shaper(const struct vpe_priv *vpe_priv, uint16_
         }
     }
     return ret;
+}
+
+enum vpe_status vpe_color_setup_dma_lut(struct vpe_3dlut *lut3d_func, struct stream_ctx *stream_ctx)
+{
+    lut3d_func->state.bits.is_dma = 1;
+    lut3d_func->lut_3d.use_12bits = true;
+
+    switch (stream_ctx->stream.tm_params.lut_type) {
+    case VPE_LUT_TYPE_GPU_1D_PACKED:
+        lut3d_func->dma_params.layout    = VPE_3DLUT_MEM_LAYOUT_1D_PACKED_LINEAR;
+        lut3d_func->dma_params.addr_mode = VPE_3DLUT_SIMPLE_LINEAR;
+        break;
+    case VPE_LUT_TYPE_GPU_3D_SWIZZLE:
+        lut3d_func->dma_params.layout    = VPE_3DLUT_MEM_LAYOUT_3D_SWIZZLE_LINEAR_RGB;
+        lut3d_func->dma_params.addr_mode = VPE_3DLUT_SW_LINEAR;
+        break;
+    default:
+        lut3d_func->dma_params.layout = VPE_3DLUT_MEM_LAYOUT_DISABLE;
+    }
+
+    switch (stream_ctx->stream.tm_params.lut_dim) {
+    case 9:
+        lut3d_func->lut_3d.lut_dim = LUT_DIM_9;
+        break;
+    case 17:
+        lut3d_func->lut_3d.lut_dim = LUT_DIM_17;
+        break;
+    case 33:
+        lut3d_func->lut_3d.lut_dim = LUT_DIM_33;
+        break;
+    default:
+        lut3d_func->lut_3d.lut_dim = LUT_DIM_INVALID;
+        VPE_ASSERT(false);
+        return VPE_STATUS_BAD_TONE_MAP_PARAMS;
+    }
+
+    switch (stream_ctx->stream.dma_info.lut3d.format) {
+    case VPE_SURFACE_PIXEL_FORMAT_PLANAR_16bpc_RGB_FLOAT:
+    case VPE_SURFACE_PIXEL_FORMAT_GRPH_ARGB16161616F:
+        lut3d_func->dma_params.crossbar_r = VPE_3DLUT_CROSSBAR_BIT_SLICE_32_47;
+        lut3d_func->dma_params.crossbar_g = VPE_3DLUT_CROSSBAR_BIT_SLICE_16_31;
+        lut3d_func->dma_params.crossbar_b = VPE_3DLUT_CROSSBAR_BIT_SLICE_0_15;
+        lut3d_func->dma_params.format     = VPE_3DLUT_MEM_FORMAT_16161616_FLOAT_FP1_5_10;
+        break;
+    case VPE_SURFACE_PIXEL_FORMAT_GRPH_ABGR16161616F:
+        lut3d_func->dma_params.crossbar_b = VPE_3DLUT_CROSSBAR_BIT_SLICE_32_47;
+        lut3d_func->dma_params.crossbar_g = VPE_3DLUT_CROSSBAR_BIT_SLICE_16_31;
+        lut3d_func->dma_params.crossbar_r = VPE_3DLUT_CROSSBAR_BIT_SLICE_0_15;
+        lut3d_func->dma_params.format     = VPE_3DLUT_MEM_FORMAT_16161616_FLOAT_FP1_5_10;
+        break;
+    case VPE_SURFACE_PIXEL_FORMAT_GRPH_RGBA16161616F:
+        lut3d_func->dma_params.crossbar_r = VPE_3DLUT_CROSSBAR_BIT_SLICE_48_63;
+        lut3d_func->dma_params.crossbar_g = VPE_3DLUT_CROSSBAR_BIT_SLICE_32_47;
+        lut3d_func->dma_params.crossbar_b = VPE_3DLUT_CROSSBAR_BIT_SLICE_16_31;
+        lut3d_func->dma_params.format     = VPE_3DLUT_MEM_FORMAT_16161616_FLOAT_FP1_5_10;
+        break;
+    case VPE_SURFACE_PIXEL_FORMAT_GRPH_BGRA16161616F:
+        lut3d_func->dma_params.crossbar_b = VPE_3DLUT_CROSSBAR_BIT_SLICE_48_63;
+        lut3d_func->dma_params.crossbar_g = VPE_3DLUT_CROSSBAR_BIT_SLICE_32_47;
+        lut3d_func->dma_params.crossbar_r = VPE_3DLUT_CROSSBAR_BIT_SLICE_16_31;
+        lut3d_func->dma_params.format     = VPE_3DLUT_MEM_FORMAT_16161616_FLOAT_FP1_5_10;
+        break;
+    case VPE_SURFACE_PIXEL_FORMAT_GRPH_ARGB16161616:
+        lut3d_func->dma_params.crossbar_r = VPE_3DLUT_CROSSBAR_BIT_SLICE_32_47;
+        lut3d_func->dma_params.crossbar_g = VPE_3DLUT_CROSSBAR_BIT_SLICE_16_31;
+        lut3d_func->dma_params.crossbar_b = VPE_3DLUT_CROSSBAR_BIT_SLICE_0_15;
+        lut3d_func->dma_params.format     = VPE_3DLUT_MEM_FORMAT_16161616_UNORM_12MSB;
+        break;
+    case VPE_SURFACE_PIXEL_FORMAT_GRPH_ABGR16161616:
+        lut3d_func->dma_params.crossbar_b = VPE_3DLUT_CROSSBAR_BIT_SLICE_32_47;
+        lut3d_func->dma_params.crossbar_g = VPE_3DLUT_CROSSBAR_BIT_SLICE_16_31;
+        lut3d_func->dma_params.crossbar_r = VPE_3DLUT_CROSSBAR_BIT_SLICE_0_15;
+        lut3d_func->dma_params.format     = VPE_3DLUT_MEM_FORMAT_16161616_UNORM_12MSB;
+        break;
+    case VPE_SURFACE_PIXEL_FORMAT_GRPH_RGBA16161616:
+        lut3d_func->dma_params.crossbar_r = VPE_3DLUT_CROSSBAR_BIT_SLICE_48_63;
+        lut3d_func->dma_params.crossbar_g = VPE_3DLUT_CROSSBAR_BIT_SLICE_32_47;
+        lut3d_func->dma_params.crossbar_b = VPE_3DLUT_CROSSBAR_BIT_SLICE_16_31;
+        lut3d_func->dma_params.format     = VPE_3DLUT_MEM_FORMAT_16161616_UNORM_12MSB;
+        break;
+    case VPE_SURFACE_PIXEL_FORMAT_GRPH_BGRA16161616:
+    default:
+        lut3d_func->dma_params.crossbar_b = VPE_3DLUT_CROSSBAR_BIT_SLICE_48_63;
+        lut3d_func->dma_params.crossbar_g = VPE_3DLUT_CROSSBAR_BIT_SLICE_32_47;
+        lut3d_func->dma_params.crossbar_r = VPE_3DLUT_CROSSBAR_BIT_SLICE_16_31;
+        lut3d_func->dma_params.format     = VPE_3DLUT_MEM_FORMAT_16161616_UNORM_12MSB;
+        break;
+    }
+    return VPE_STATUS_OK;
 }
 
 enum vpe_status vpe_calculate_shaper(struct vpe_priv *vpe_priv, struct stream_ctx *stream_ctx)
@@ -855,16 +1009,28 @@ enum vpe_status vpe_color_update_movable_cm(
                     goto exit;
                 }
             }
-            // Get the normalization factor for the shaper based on tone mapping parameters.
-            get_shaper_norm_factor(&stream_ctx->stream.tm_params, stream_ctx, &shaper_norm_factor);
+            if (stream_ctx->stream.lut_compound.enabled) {
+                stream_ctx->lut3d_func->hdr_multiplier = stream_ctx->csc_renorm_factor;
+            } else {
+                // Get the normalization factor for the shaper based on tone mapping parameters.
+                get_shaper_norm_factor(
+                    &stream_ctx->stream.tm_params, stream_ctx, &shaper_norm_factor);
 
-            // Update the HDR multiplier based on the shaper normalization factor and other
-            // parameters.
-            vpe_color_tm_update_hdr_mult(shaper_norm_factor,
-                &stream_ctx->lut3d_func->hdr_multiplier, enable_3dlut,
-                stream_ctx->stream.surface_info.cs.tf == VPE_TF_G10);
+                // Update the HDR multiplier based on the shaper normalization factor and other
+                // parameters.
+                vpe_color_tm_update_hdr_mult(shaper_norm_factor,
+                    &stream_ctx->lut3d_func->hdr_multiplier, enable_3dlut,
+                    stream_ctx->stream.surface_info.cs.tf == VPE_TF_G10);
+            }
 
-            vpe_color_update_3dlut(vpe_priv, stream_ctx, enable_3dlut);
+            // Set up 3DLUT before Shaper to determine indexing mode
+            if (stream_ctx->stream.tm_params.lut_type > VPE_LUT_TYPE_CPU) {
+                /* FastLoading */
+                vpe_color_setup_dma_lut(stream_ctx->lut3d_func, stream_ctx);
+            } else {
+                /* DirectConfig loading case */
+                vpe_color_update_3dlut(vpe_priv, stream_ctx, enable_3dlut);
+            }
 
             vpe_priv->resource.calculate_shaper(vpe_priv, stream_ctx);
 
@@ -875,7 +1041,6 @@ enum vpe_status vpe_color_update_movable_cm(
             vpe_color_update_gamut(vpe_priv, out_lut_cs, vpe_priv->output_ctx.cs,
                 output_ctx->gamut_remap, !enable_3dlut);
 
-            vpe_color_update_3dlut(vpe_priv, stream_ctx, enable_3dlut);
         }
     }
 exit:

@@ -167,7 +167,7 @@
 #   FDO_CI_CONCURRENT: ?
     RUNNER_TAG: mesa-ci-x86-64-lava-meson-g12b-a311d-khadas-vim3
     VK_DRIVER: panfrost
-    KERNEL_TAG: "v6.18-pan-mesa-296c"
+    KERNEL_TAG: "v6.18-pan-mesa-952e"
 
 # Status: https://lava.collabora.dev/scheduler/device_type/mt8183-kukui-jacuzzi-juniper-sku16
 .lava-mt8183-kukui-jacuzzi-juniper-sku16:arm64:
@@ -193,7 +193,7 @@
     KERNEL_IMAGE_TYPE: ""
     RUNNER_TAG: mesa-ci-x86-64-lava-mt8186-corsola-steelix-sku131072
     VK_DRIVER: panfrost
-    KERNEL_TAG: "v6.18-pan-mesa-296c"
+    KERNEL_TAG: "v6.18-pan-mesa-952e"
 
 # Status: https://lava.collabora.dev/scheduler/device_type/mt8192-asurada-spherion-r0
 .lava-mt8192-asurada-spherion-r0:arm64:
@@ -259,7 +259,7 @@
     RUNNER_TAG: mesa-ci-x86-64-lava-rk3588-rock-5b
     VK_DRIVER: panfrost
     LAVA_FIRMWARE: arm
-    KERNEL_TAG: "v6.18-pan-mesa-296c"
+    KERNEL_TAG: "v6.18-pan-mesa-952e"
 
 # Status: https://lava.collabora.dev/scheduler/device_type/mt8196-rauru-navi-sku0
 .lava-mt8196-rauru-navi-sku0:arm64:
@@ -276,7 +276,7 @@
     VK_DRIVER: panfrost
     LAVA_FIRMWARE: arm
     # Mainline kernel support for MT8196 is still incomplete
-    KERNEL_TAG: "v6.18-pan-mesa-296c"
+    KERNEL_TAG: "v6.18-pan-mesa-952e"
 
 # Status: https://lava.collabora.dev/scheduler/device_type/sun50i-h6-pine-h64
 .lava-sun50i-h6-pine-h64:arm64:

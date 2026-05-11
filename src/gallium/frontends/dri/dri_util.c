@@ -527,6 +527,19 @@ driCreateContextAttribs(struct dri_screen *screen, int api,
         screen->max_gl_compat_version < 31)
        mesa_api = API_OPENGL_CORE;
 
+    /* If the screen supports at maximum OpenGL 3.1, it's free to implement
+     * GL_ARB_compatibility or not. However, as OpenGL 3.1 is a corner case
+     * on the Core vs Compatiblity thing (it has no Compatibility Profile
+     * defined, only GL_ARB_compatibility extension defined), some applications
+     * will misbehave without GL_ARB_compatibility, so try hard to support
+     * GL_ARB_compatiblity in such case.
+     */
+    if (mesa_api == API_OPENGL_CORE &&
+        ctx_config.major_version == 3 && ctx_config.minor_version == 1 &&
+        screen->max_gl_compat_version == 31 &&
+        screen->max_gl_core_version == 31)
+       mesa_api = API_OPENGL_COMPAT;
+
     /* The latest version of EGL_KHR_create_context spec says:
      *
      *     "If the EGL_CONTEXT_OPENGL_DEBUG_BIT_KHR flag bit is set in
@@ -943,6 +956,24 @@ static const struct {
       .image_format    = __DRI_IMAGE_FORMAT_XBGR8888,
       .internal_format =        GL_RGB8,
    },
+#if UTIL_ARCH_BIG_ENDIAN
+   {
+      .image_format    = PIPE_FORMAT_A8R8G8B8_UNORM,
+      .internal_format =        GL_RGBA8,
+   },
+   {
+      .image_format    = PIPE_FORMAT_X8R8G8B8_UNORM,
+      .internal_format =        GL_RGB8,
+   },
+   {
+      .image_format    = PIPE_FORMAT_A8B8G8R8_UNORM,
+      .internal_format =        GL_RGBA8,
+   },
+   {
+      .image_format    = PIPE_FORMAT_X8B8G8R8_UNORM,
+      .internal_format =        GL_RGB8,
+   },
+#endif
    {
       .image_format    = __DRI_IMAGE_FORMAT_R8,
       .internal_format =        GL_R8,

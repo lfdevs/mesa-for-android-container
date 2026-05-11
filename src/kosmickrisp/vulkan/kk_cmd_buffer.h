@@ -37,6 +37,7 @@ struct kk_root_descriptor_table {
          uint64_t attrib_base[KK_MAX_ATTRIBS];
          uint32_t attrib_clamps[KK_MAX_ATTRIBS];
          float blend_constant[4];
+         float clip_z_coeff;
          uint32_t draw_id;
       } draw;
       struct {
@@ -66,6 +67,13 @@ struct kk_descriptor_state {
 
    uint32_t push_dirty;
    struct kk_push_descriptor_set *push[KK_MAX_SETS];
+};
+
+struct kk_per_draw_data {
+   /* Mask of stages that need per-draw data uploaded */
+   uint32_t upload_mask;
+
+   uint32_t draw_id;
 };
 
 struct kk_attachment {

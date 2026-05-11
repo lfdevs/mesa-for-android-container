@@ -162,7 +162,13 @@
  *    * Eliminated output stores get the "no_varying" flag if they are also
  *      xfb stores or write sysval outputs.
  *
- * 5. Backward inter-shader code motion
+ * 5. Link signed zero information
+ *
+ *    If no loads care about the sign of zero, and if there is no xfb or
+ *    sign aware sysval usage, set the no_signed_zero flag for output stores.
+ *    This can then be further back propagated by `nir_opt_fp_math_ctrl`.
+ *
+ * 6. Backward inter-shader code motion
  *
  *    "Backward" refers to moving code in the opposite direction that shaders
  *    are executed, i.e. moving code from the consumer to the producer.
@@ -329,7 +335,7 @@
  *    the above case (which is temp0 and temp1 to replace all 3 inputs), let
  *    us know.
  *
- * 6. Forward inter-shader code motion
+ * 7. Forward inter-shader code motion
  *
  *    TODO: Not implemented. The text below is a draft of the description.
  *
@@ -365,7 +371,7 @@
  *    we don't increase the GPU overhead measurably by moving code across
  *    pipeline stages that amplify GPU work.
  *
- * 7. Compaction to vec4 slots (AKA packing)
+ * 8. Compaction to vec4 slots (AKA packing)
  *
  *    First, varyings are divided into these groups, and components from each
  *    group are assigned locations in this order (effectively forcing
@@ -764,6 +770,11 @@ struct linkage_info {
     */
    BITSET_DECLARE(convergent32_mask, NUM_SCALAR_SLOTS);
    BITSET_DECLARE(convergent16_mask, NUM_SCALAR_SLOTS);
+
+   /* Mask of components that have an input load, xfb, or sysval usage that
+    * cares about the sign of zero.
+    */
+   BITSET_DECLARE(signed_zero_mask, NUM_SCALAR_SLOTS);
 };
 
 /******************************************************************
@@ -1060,6 +1071,32 @@ is_active_sysval_output(struct linkage_info *linkage, unsigned slot,
           !nir_intrinsic_io_semantics(intr).no_sysval_output;
 }
 
+static bool
+is_sz_sysval(struct linkage_info *linkage, unsigned slot,
+             nir_intrinsic_instr *intr)
+{
+   if (!is_active_sysval_output(linkage, slot, intr))
+      return false;
+
+   switch (vec4_slot(slot)) {
+   case VARYING_SLOT_POS:
+   case VARYING_SLOT_CLIP_VERTEX:
+   case VARYING_SLOT_PSIZ:
+   case VARYING_SLOT_CLIP_DIST0:
+   case VARYING_SLOT_CLIP_DIST1:
+   case VARYING_SLOT_CULL_DIST0:
+   case VARYING_SLOT_CULL_DIST1:
+      return false;
+   case VARYING_SLOT_TESS_LEVEL_OUTER:
+   case VARYING_SLOT_TESS_LEVEL_INNER:
+   case VARYING_SLOT_BOUNDING_BOX0:
+   case VARYING_SLOT_BOUNDING_BOX1:
+      /* These enums are aliased with integer mesh outputs. */
+      return linkage->producer_stage != MESA_SHADER_TESS_CTRL;
+   default: return true;
+   }
+}
+
 /**
  * This function acts like a filter. The pass won't touch varyings that
  * return false here, and the return value is saved in the linkage bitmasks,
@@ -1264,9 +1301,6 @@ gather_inputs(struct nir_builder *builder, nir_intrinsic_instr *intr, void *cb_d
 
    nir_io_semantics sem = nir_intrinsic_io_semantics(intr);
 
-   if (!can_remove_varying(linkage, sem.location))
-      return false;
-
    /* Insert the load into the list of loads for this scalar slot. */
    unsigned slot = intr_get_scalar_16bit_slot(intr);
    struct scalar_slot *in = &linkage->slot[slot];
@@ -1275,6 +1309,15 @@ gather_inputs(struct nir_builder *builder, nir_intrinsic_instr *intr, void *cb_d
    node->instr = intr;
    list_addtail(&node->head, &in->consumer.loads);
    in->num_slots = MAX2(in->num_slots, sem.num_slots);
+
+   if (!sem.no_signed_zero && intr->intrinsic != nir_intrinsic_load_interpolated_input) {
+      unsigned nsz_count = nir_src_is_const(offset) ? 1 : sem.num_slots;
+      for (unsigned i = 0; i < nsz_count; i++)
+         BITSET_SET(linkage->signed_zero_mask, slot + i * 8);
+   }
+
+   if (!can_remove_varying(linkage, sem.location))
+      return false;
 
    BITSET_SET(linkage->removable_mask, slot);
 
@@ -1506,9 +1549,6 @@ gather_outputs(struct nir_builder *builder, nir_intrinsic_instr *intr, void *cb_
 
    nir_io_semantics sem = nir_intrinsic_io_semantics(intr);
 
-   if (!can_remove_varying(linkage, sem.location))
-      return false;
-
    /* For "xx -> FS", treat BFCn stores as COLn to make dead varying
     * elimination do the right thing automatically. The rules are:
     * - COLn inputs can be removed only if both COLn and BFCn are not
@@ -1535,27 +1575,32 @@ gather_outputs(struct nir_builder *builder, nir_intrinsic_instr *intr, void *cb_
    node->instr = intr;
    out->num_slots = MAX2(out->num_slots, sem.num_slots);
 
-   if (is_store) {
-      list_addtail(&node->head, &out->producer.stores);
+   list_addtail(&node->head, is_store ? &out->producer.stores : &out->producer.loads);
 
-      if (has_xfb(intr)) {
-         BITSET_SET(linkage->xfb_mask, slot);
-
-         if (sem.no_varying &&
-             !is_active_sysval_output(linkage, slot, intr)) {
-            if (intr->src[0].ssa->bit_size == 32)
-               BITSET_SET(linkage->xfb32_only_mask, slot);
-            else if (intr->src[0].ssa->bit_size == 16)
-               BITSET_SET(linkage->xfb16_only_mask, slot);
-            else
-               UNREACHABLE("invalid load_input type");
-         }
-      }
-   } else {
-      list_addtail(&node->head, &out->producer.loads);
+   if (is_store ? (is_sz_sysval(linkage, slot, intr) || has_xfb(intr)) : !sem.no_signed_zero) {
+      unsigned nsz_count = nir_src_is_const(offset) ? 1 : sem.num_slots;
+      for (unsigned i = 0; i < nsz_count; i++)
+         BITSET_SET(linkage->signed_zero_mask, slot + i * 8);
    }
 
+   if (!can_remove_varying(linkage, sem.location))
+      return false;
+
    BITSET_SET(linkage->removable_mask, slot);
+
+   if (is_store && has_xfb(intr)) {
+      BITSET_SET(linkage->xfb_mask, slot);
+
+      if (sem.no_varying &&
+          !is_active_sysval_output(linkage, slot, intr)) {
+         if (intr->src[0].ssa->bit_size == 32)
+            BITSET_SET(linkage->xfb32_only_mask, slot);
+         else if (intr->src[0].ssa->bit_size == 16)
+            BITSET_SET(linkage->xfb16_only_mask, slot);
+         else
+            UNREACHABLE("invalid load_input type");
+      }
+   }
 
    /* Indirect indexing. */
    if (!nir_src_is_const(offset)) {
@@ -2834,7 +2879,7 @@ get_single_use_as_alu(nir_def *def)
       return NULL;
 
    nir_instr *instr =
-      nir_src_parent_instr(list_first_entry(&def->uses, nir_src, use_link));
+      nir_src_use_instr(list_first_entry(&def->uses, nir_src, use_link));
    if (instr->type != nir_instr_type_alu)
       return NULL;
 
@@ -3855,7 +3900,7 @@ try_move_postdominator(struct linkage_info *linkage,
           */
          nir_foreach_use_safe(src, nir_instr_def(load)) {
             if (nir_instr_dominates_use(postdom_state, postdom,
-                                        nir_src_parent_instr(src))) {
+                                        nir_src_use_instr(src))) {
                nir_src_rewrite(src, nir_undef(&linkage->consumer_builder,
                                               src->ssa->num_components,
                                               src->ssa->bit_size));
@@ -4180,6 +4225,35 @@ backward_inter_shader_code_motion(struct linkage_info *linkage,
    ralloc_free(postdom_state);
    return false;
 }
+
+/******************************************************************
+ * SIGNED ZERO LINKING
+ ******************************************************************/
+
+static void
+link_no_signed_zero(struct linkage_info *linkage,
+                    nir_opt_varyings_progress *progress)
+{
+   for (unsigned slot = 0; slot < NUM_SCALAR_SLOTS; slot++) {
+      struct scalar_slot *scalar_slot = &linkage->slot[slot];
+
+      list_for_each_entry(struct list_node, iter, &scalar_slot->producer.stores, head) {
+         nir_io_semantics sem = nir_intrinsic_io_semantics(iter->instr);
+
+         bool no_signed_zero = true;
+         unsigned nsz_count = nir_src_is_const(*nir_get_io_offset_src(iter->instr)) ? 1 : sem.num_slots;
+         for (unsigned i = 0; i < nsz_count; i++)
+            no_signed_zero &= !BITSET_TEST(linkage->signed_zero_mask, slot + i * 8);
+
+         if (sem.no_signed_zero != no_signed_zero) {
+            *progress |= nir_progress_producer;
+            sem.no_signed_zero = no_signed_zero;
+            nir_intrinsic_set_io_semantics(iter->instr, sem);
+         }
+      }
+   }
+}
+
 
 /******************************************************************
  * COMPACTION
@@ -5395,6 +5469,9 @@ nir_opt_varyings(nir_shader *producer, nir_shader *consumer, bool spirv,
    /* Re-gather linkage info after optimizations. */
    init_linkage(producer, consumer, spirv, max_uniform_components,
                 max_ubos_per_stage, linkage, &progress);
+
+
+   link_no_signed_zero(linkage, &progress);
 
    /* This must be done after deduplication and before inter-shader code
     * motion.

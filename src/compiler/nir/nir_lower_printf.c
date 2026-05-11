@@ -312,7 +312,7 @@ void nir_printf_fmt_at_px(nir_builder *b, unsigned ptr_bit_size, unsigned x_px, 
    va_list ap;
 
    nir_def *xy_px = b->shader->options->has_pixel_coord ?
-      nir_load_pixel_coord(b) : nir_f2u32(b, nir_load_frag_coord(b));
+      nir_load_pixel_coord(b) : nir_f2u32(b, nir_build_frag_coord(b, 2));
    nir_def *is_at_px = b->shader->options->has_pixel_coord ?
       nir_ball_iequal(b, nir_imm_uvec2_intN(b, x_px, y_px, 16), xy_px) :
       nir_ball_iequal(b, nir_imm_ivec2(b, x_px, y_px), xy_px);

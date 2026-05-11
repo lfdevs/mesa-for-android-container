@@ -556,9 +556,6 @@ jay_populate_prog_data(const struct intel_device_info *devinfo,
 
       populate_fs_prog_data(nir, devinfo, &key->fs, &prog_data->fs,
                             NULL /* TODO: mue_map */, per_primitive_offsets);
-   } else if (mesa_shader_stage_is_compute(nir->info.stage)) {
-      prog_data->cs.uses_inline_push_addr = key->base.uses_inline_push_addr;
-      prog_data->cs.uses_inline_data |= key->base.uses_inline_push_addr;
    }
 
    if (nir->info.stage == MESA_SHADER_VERTEX ||

@@ -44,11 +44,7 @@ max_simd_width(const jay_shader *shader, const jay_inst *I)
          }
       }
    } else {
-      /* TODO: Do we ever split SENDs? ..Can we even split SENDs given we don't
-       * have stride control? How is this supposed to work?
-       *
-       * XXX
-       */
+      /* TODO: Split SENDs, needs RA work */
    }
 
    return 32;

@@ -1868,8 +1868,8 @@ static void parse_vcn_enc_ib(FILE *f, struct ac_ib_parser *ib, uint32_t num_dw)
             uint32_t swizzle = ac_ib_get(ib);
             fprintf(f, "    swizzle mode = %s\n",
                     swizzle == RENCODE_REC_SWIZZLE_MODE_LINEAR ? "LINEAR" :
-                    (ib->vcn_version < VCN_5_0_0 && swizzle == RENCODE_REC_SWIZZLE_MODE_256B_D) ||
-                    (ib->vcn_version >= VCN_5_0_0 && swizzle == RENCODE_REC_SWIZZLE_MODE_256B_D_VCN5) ? "256B D" :
+                    (ib->gfx_level < GFX12 && swizzle == RENCODE_REC_SWIZZLE_MODE_256B_D) ||
+                    (ib->gfx_level >= GFX12 && swizzle == RENCODE_REC_SWIZZLE_MODE_256B_D_GFX12) ? "256B D" :
                     swizzle == RENCODE_REC_SWIZZLE_MODE_256B_S ? "256B S" :
                     swizzle == RENCODE_REC_SWIZZLE_MODE_8x8_1D_THIN_12_24BPP ? "8x8 1D THIN 12 24BPP" :
                     "???");

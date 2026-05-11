@@ -9,7 +9,6 @@
 #include "vulkan/vulkan.h"
 
 #include "framework.h"
-#include "ac_gpu_info.h"
 #include "nir_builder.h"
 #include <functional>
 

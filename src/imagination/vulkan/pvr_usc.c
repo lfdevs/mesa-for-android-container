@@ -817,6 +817,9 @@ pvr_uscgen_tq_frag_load(nir_builder *b,
       else if (layer_props->sample)
          params.sampler_dim = GLSL_SAMPLER_DIM_3D;
 
+      params.sample_components =
+         pvr_pbe_format_num_sample_components(layer_props->pbe_format);
+
       nir_intrinsic_instr *smp = pco_emit_nir_smp(b, &params);
       samples[sample_idx] = &smp->def;
    }

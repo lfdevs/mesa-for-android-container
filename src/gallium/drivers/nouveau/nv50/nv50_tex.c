@@ -120,7 +120,7 @@ nv50_create_texture_view(struct pipe_context *pipe,
       depth = view->pipe.u.tex.last_layer - view->pipe.u.tex.first_layer + 1;
    }
 
-   tic[2] = 0x10001000 | G80_TIC_2_BORDER_SOURCE_COLOR;
+   tic[2] = 0x00001000 | G80_TIC_2_BORDER_SOURCE_COLOR;
 
    if (desc->colorspace == UTIL_FORMAT_COLORSPACE_SRGB)
       tic[2] |= G80_TIC_2_SRGB_CONVERSION;

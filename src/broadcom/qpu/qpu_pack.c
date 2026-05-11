@@ -644,6 +644,11 @@ static const struct opcode_desc v3d71_add_ops[] = {
         { 187, 187, .raddr_mask = OP_RANGE(32, 34), V3D_QPU_A_FXCD },
         { 187, 187, .raddr_mask = OP_RANGE(36, 38), V3D_QPU_A_FYCD },
 
+        { 187, 187, .raddr_mask = OP_MASK(48), V3D_QPU_A_SETNNMODE_UU, 71 },
+        { 187, 187, .raddr_mask = OP_MASK(49), V3D_QPU_A_SETNNMODE_SU, 71 },
+        { 187, 187, .raddr_mask = OP_MASK(50), V3D_QPU_A_SETNNMODE_US, 71 },
+        { 187, 187, .raddr_mask = OP_MASK(51), V3D_QPU_A_SETNNMODE_SS, 71 },
+
         { 188, 188, .raddr_mask = OP_MASK(0), V3D_QPU_A_LDVPMV_IN, 71 },
         { 188, 188, .raddr_mask = OP_MASK(1), V3D_QPU_A_LDVPMD_IN, 71 },
         { 188, 188, .raddr_mask = OP_MASK(2), V3D_QPU_A_LDVPMP, 71 },
@@ -754,6 +759,8 @@ static const struct opcode_desc v3d71_mul_ops[] = {
         { 4, 8, .raddr_mask = ANYOPMASK, V3D_QPU_M_VFMUL, 71 },
         { 9, 9, .raddr_mask = ANYOPMASK, V3D_QPU_M_SMUL24, 71 },
         { 10, 10, .raddr_mask = ANYOPMASK, V3D_QPU_M_MULTOP, 71 },
+
+        { 11, 11, .raddr_mask = ANYOPMASK, V3D_QPU_M_V8DOT, 71 },
 
         { 14, 14, .raddr_mask = OP_RANGE(0, 2),   V3D_QPU_M_FMOV, 71 },
         { 14, 14, .raddr_mask = OP_RANGE(4, 6),   V3D_QPU_M_FMOV, 71 },

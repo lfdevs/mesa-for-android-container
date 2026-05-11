@@ -7,35 +7,35 @@
 #include <assert.h>
 
 static const uint32_t init_spv[] = {
-#include "radix_sort/shaders/init.comp.spv.h"
+#include "radix_sort/shaders/u64_init.spv.h"
 };
 
 static const uint32_t fill_spv[] = {
-#include "radix_sort/shaders/fill.comp.spv.h"
+#include "radix_sort/shaders/fill.spv.h"
 };
 
 static const uint32_t histogram_spv[] = {
-#include "radix_sort/shaders/histogram.comp.spv.h"
+#include "radix_sort/shaders/u64_histogram.spv.h"
 };
 
 static const uint32_t prefix_spv[] = {
-#include "radix_sort/shaders/prefix.comp.spv.h"
+#include "radix_sort/shaders/u64_prefix.spv.h"
 };
 
 static const uint32_t scatter_0_even_spv[] = {
-#include "radix_sort/shaders/scatter_0_even.comp.spv.h"
+#include "radix_sort/shaders/u64_scatter_0_even.spv.h"
 };
 
 static const uint32_t scatter_0_odd_spv[] = {
-#include "radix_sort/shaders/scatter_0_odd.comp.spv.h"
+#include "radix_sort/shaders/u64_scatter_0_odd.spv.h"
 };
 
 static const uint32_t scatter_1_even_spv[] = {
-#include "radix_sort/shaders/scatter_1_even.comp.spv.h"
+#include "radix_sort/shaders/u64_scatter_1_even.spv.h"
 };
 
 static const uint32_t scatter_1_odd_spv[] = {
-#include "radix_sort/shaders/scatter_1_odd.comp.spv.h"
+#include "radix_sort/shaders/u64_scatter_1_odd.spv.h"
 };
 
 

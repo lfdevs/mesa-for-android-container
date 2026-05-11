@@ -8,7 +8,8 @@
 #ifndef AC_CMDBUF_SDMA_H
 #define AC_CMDBUF_SDMA_H
 
-#include "util/format/u_format.h"
+#include <stdbool.h>
+#include "util/format/u_formats.h"
 
 enum sdma_version;
 struct radeon_info;
@@ -33,6 +34,7 @@ struct ac_sdma_surf {
    } offset;
 
    bool is_compressed;
+   bool is_secure;
 
    /* Linear */
    struct {

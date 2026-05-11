@@ -234,11 +234,8 @@ from_emulated_float(int32_t bits)
 
 TYPE(vk_aabb, 4);
 
-struct key_id_pair {
-   uint32_t id;
-   uint32_t key;
-};
-TYPE(key_id_pair, 4);
+TYPE(key32_id_pair, 4);
+TYPE(key64_id_pair, 4);
 
 TYPE(vk_accel_struct_serialization_header, 8);
 

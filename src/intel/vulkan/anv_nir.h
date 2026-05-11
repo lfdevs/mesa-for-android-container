@@ -113,9 +113,17 @@ bool anv_nir_apply_pipeline_layout(nir_shader *shader,
                                    struct anv_descriptor_set_layout * const *set_layouts,
                                    uint32_t set_count,
                                    const uint32_t *dynamic_offset_start,
+                                   bool device_bindable,
                                    struct anv_pipeline_bind_map *map,
                                    struct anv_pipeline_push_map *push_map,
                                    void *push_map_mem_ctx);
+
+bool
+anv_nir_lower_descriptor_heap(nir_shader *shader,
+                              const struct anv_device *device,
+                              uint32_t embedded_sampler_count,
+                              const struct vk_sampler_state* embedded_samplers,
+                              struct anv_pipeline_bind_map *map);
 
 struct anv_nir_push_layout_info {
    bool separate_tessellation;

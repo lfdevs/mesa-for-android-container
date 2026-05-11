@@ -21,6 +21,7 @@ struct kk_cmd_buffer;
 
 struct kk_shader_info {
    mesa_shader_stage stage;
+   bool uses_per_draw_data;
    union {
       /* Vertex shader is the pipeline, store all relevant data here. */
       struct {
