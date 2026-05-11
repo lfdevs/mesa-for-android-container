@@ -109,6 +109,12 @@ nir_dedup_inline_samplers(nir_shader *nir)
 bool
 nir_lower_cl_images(nir_shader *shader, bool lower_image_derefs, bool lower_sampler_derefs)
 {
+   nir_foreach_function_with_impl(function, impl, shader) {
+      if (function->is_entrypoint)
+         continue;
+      nir_no_progress(impl);
+   }
+
    nir_function_impl *impl = nir_shader_get_entrypoint(shader);
 
    ASSERTED int last_loc = -1;

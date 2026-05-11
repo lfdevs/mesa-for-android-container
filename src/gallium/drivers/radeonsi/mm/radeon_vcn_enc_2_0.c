@@ -1,0 +1,144 @@
+/**************************************************************************
+ *
+ * Copyright 2017 Advanced Micro Devices, Inc.
+ *
+ * SPDX-License-Identifier: MIT
+ *
+ **************************************************************************/
+
+#include "pipe/p_video_codec.h"
+#include "radeon_vcn_enc.h"
+#include "si_pipe.h"
+#include "util/u_video.h"
+
+#define RENCODE_FW_INTERFACE_MAJOR_VERSION         1
+#define RENCODE_FW_INTERFACE_MINOR_VERSION         20
+
+static void radeon_enc_quality_params(struct radeon_encoder *enc)
+{
+   RADEON_ENC_BEGIN(enc->cmd.quality_params);
+   RADEON_ENC_CS(enc->enc_pic.quality_params.vbaq_mode);
+   RADEON_ENC_CS(enc->enc_pic.quality_params.scene_change_sensitivity);
+   RADEON_ENC_CS(enc->enc_pic.quality_params.scene_change_min_idr_interval);
+   RADEON_ENC_CS(enc->enc_pic.quality_params.two_pass_search_center_map_mode);
+   RADEON_ENC_CS(enc->enc_pic.quality_params.vbaq_strength);
+   RADEON_ENC_END();
+}
+
+static void radeon_enc_loop_filter_hevc(struct radeon_encoder *enc)
+{
+   RADEON_ENC_BEGIN(enc->cmd.deblocking_filter_hevc);
+   RADEON_ENC_CS(enc->enc_pic.hevc_deblock.loop_filter_across_slices_enabled);
+   RADEON_ENC_CS(enc->enc_pic.hevc_deblock.deblocking_filter_disabled);
+   RADEON_ENC_CS(enc->enc_pic.hevc_deblock.beta_offset_div2);
+   RADEON_ENC_CS(enc->enc_pic.hevc_deblock.tc_offset_div2);
+   RADEON_ENC_CS(enc->enc_pic.hevc_deblock.cb_qp_offset);
+   RADEON_ENC_CS(enc->enc_pic.hevc_deblock.cr_qp_offset);
+   RADEON_ENC_CS(enc->enc_pic.hevc_deblock.disable_sao);
+   RADEON_ENC_END();
+}
+
+static void radeon_enc_input_format(struct radeon_encoder *enc)
+{
+   RADEON_ENC_BEGIN(enc->cmd.input_format);
+   RADEON_ENC_CS(enc->enc_pic.enc_input_format.input_color_volume);
+   RADEON_ENC_CS(enc->enc_pic.enc_input_format.input_color_space);
+   RADEON_ENC_CS(enc->enc_pic.enc_input_format.input_color_range);
+   RADEON_ENC_CS(enc->enc_pic.enc_input_format.input_chroma_subsampling);
+   RADEON_ENC_CS(enc->enc_pic.enc_input_format.input_chroma_location);
+   RADEON_ENC_CS(enc->enc_pic.enc_input_format.input_color_bit_depth);
+   RADEON_ENC_CS(enc->enc_pic.enc_input_format.input_color_packing_format);
+   RADEON_ENC_END();
+}
+
+static void radeon_enc_output_format(struct radeon_encoder *enc)
+{
+   RADEON_ENC_BEGIN(enc->cmd.output_format);
+   RADEON_ENC_CS(enc->enc_pic.enc_output_format.output_color_volume);
+   RADEON_ENC_CS(enc->enc_pic.enc_output_format.output_color_range);
+   RADEON_ENC_CS(enc->enc_pic.enc_output_format.output_chroma_location);
+   RADEON_ENC_CS(enc->enc_pic.enc_output_format.output_color_bit_depth);
+   RADEON_ENC_END();
+}
+
+static uint32_t radeon_enc_ref_swizzle_mode(struct radeon_encoder *enc)
+{
+   /* return RENCODE_REC_SWIZZLE_MODE_LINEAR; for debugging purpose */
+   if (enc->enc_pic.bit_depth_luma_minus8 != 0)
+      return RENCODE_REC_SWIZZLE_MODE_8x8_1D_THIN_12_24BPP;
+   else
+      return RENCODE_REC_SWIZZLE_MODE_256B_S;
+}
+
+static void radeon_enc_ctx(struct radeon_encoder *enc)
+{
+   enc->enc_pic.ctx_buf.swizzle_mode = radeon_enc_ref_swizzle_mode(enc);
+   enc->enc_pic.ctx_buf.two_pass_search_center_map_offset = 0;
+
+   RADEON_ENC_BEGIN(enc->cmd.ctx);
+   RADEON_ENC_READWRITE(enc->dpb->buf, enc->dpb->domains, 0);
+   RADEON_ENC_CS(enc->enc_pic.ctx_buf.swizzle_mode);
+   RADEON_ENC_CS(enc->enc_pic.ctx_buf.rec_luma_pitch);
+   RADEON_ENC_CS(enc->enc_pic.ctx_buf.rec_chroma_pitch);
+   RADEON_ENC_CS(enc->enc_pic.ctx_buf.num_reconstructed_pictures);
+
+   for (int i = 0; i < RENCODE_MAX_NUM_RECONSTRUCTED_PICTURES; i++) {
+      RADEON_ENC_CS(enc->enc_pic.ctx_buf.reconstructed_pictures[i].luma_offset);
+      RADEON_ENC_CS(enc->enc_pic.ctx_buf.reconstructed_pictures[i].chroma_offset);
+   }
+
+   RADEON_ENC_CS(enc->enc_pic.ctx_buf.pre_encode_picture_luma_pitch);
+   RADEON_ENC_CS(enc->enc_pic.ctx_buf.pre_encode_picture_chroma_pitch);
+
+   for (int i = 0; i < RENCODE_MAX_NUM_RECONSTRUCTED_PICTURES; i++) {
+      RADEON_ENC_CS(enc->enc_pic.ctx_buf.pre_encode_reconstructed_pictures[i].luma_offset);
+      RADEON_ENC_CS(enc->enc_pic.ctx_buf.pre_encode_reconstructed_pictures[i].chroma_offset);
+   }
+
+   RADEON_ENC_CS(enc->enc_pic.ctx_buf.pre_encode_input_picture.yuv.luma_offset);
+   RADEON_ENC_CS(enc->enc_pic.ctx_buf.pre_encode_input_picture.yuv.chroma_offset);
+   RADEON_ENC_CS(enc->enc_pic.ctx_buf.two_pass_search_center_map_offset);
+   RADEON_ENC_CS(enc->enc_pic.ctx_buf.pre_encode_input_picture.rgb.red_offset);
+   RADEON_ENC_CS(enc->enc_pic.ctx_buf.pre_encode_input_picture.rgb.green_offset);
+   RADEON_ENC_CS(enc->enc_pic.ctx_buf.pre_encode_input_picture.rgb.blue_offset);
+
+   RADEON_ENC_END();
+}
+
+static void radeon_enc_spec_misc_hevc(struct radeon_encoder *enc)
+{
+   RADEON_ENC_BEGIN(enc->cmd.spec_misc_hevc);
+   RADEON_ENC_CS(enc->enc_pic.hevc_spec_misc.log2_min_luma_coding_block_size_minus3);
+   RADEON_ENC_CS(enc->enc_pic.hevc_spec_misc.amp_disabled);
+   RADEON_ENC_CS(enc->enc_pic.hevc_spec_misc.strong_intra_smoothing_enabled);
+   RADEON_ENC_CS(enc->enc_pic.hevc_spec_misc.constrained_intra_pred_flag);
+   RADEON_ENC_CS(enc->enc_pic.hevc_spec_misc.cabac_init_flag);
+   RADEON_ENC_CS(enc->enc_pic.hevc_spec_misc.half_pel_enabled);
+   RADEON_ENC_CS(enc->enc_pic.hevc_spec_misc.quarter_pel_enabled);
+   RADEON_ENC_CS(enc->enc_pic.hevc_spec_misc.cu_qp_delta_enabled_flag);
+   RADEON_ENC_END();
+}
+
+void radeon_enc_2_0_init(struct radeon_encoder *enc)
+{
+   struct si_screen *sscreen = (struct si_screen *)enc->screen;
+   uint32_t minor_version;
+
+   radeon_enc_1_2_init(enc);
+   enc->input_format = radeon_enc_input_format;
+   enc->output_format = radeon_enc_output_format;
+   enc->ctx = radeon_enc_ctx;
+   enc->quality_params = radeon_enc_quality_params;
+
+   if (u_reduce_video_profile(enc->base.profile) == PIPE_VIDEO_FORMAT_HEVC) {
+      enc->deblocking_filter = radeon_enc_loop_filter_hevc;
+      enc->spec_misc = radeon_enc_spec_misc_hevc;
+   }
+
+   minor_version =
+      MIN2(sscreen->info.vcn_enc_minor_version, RENCODE_FW_INTERFACE_MINOR_VERSION);
+
+   enc->enc_pic.session_info.interface_version =
+      ((RENCODE_FW_INTERFACE_MAJOR_VERSION << RENCODE_IF_MAJOR_VERSION_SHIFT) |
+       (minor_version << RENCODE_IF_MINOR_VERSION_SHIFT));
+}

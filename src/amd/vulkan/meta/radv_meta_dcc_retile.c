@@ -8,6 +8,7 @@
 #include "ac_surface.h"
 
 #include "radv_meta.h"
+#include "vk_shader_module.h"
 
 static VkResult
 get_pipeline_layout(struct radv_device *device, VkPipelineLayout *layout_out)

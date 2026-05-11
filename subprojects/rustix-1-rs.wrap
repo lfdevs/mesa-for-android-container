@@ -1,6 +1,7 @@
 [wrap-file]
-directory = rustix-1.1.2
-source_url = https://crates.io/api/v1/crates/rustix/1.1.2/download
-source_filename = rustix-1.1.2.tar.gz
-source_hash = cd15f8a2c5551a84d56efdc1cd049089e409ac19a3072d5037a17fd70719ff3e
+directory = rustix-1.1.4
+source_url = https://crates.io/api/v1/crates/rustix/1.1.4/download
+source_filename = rustix-1.1.4.tar.gz
+source_hash = b6fe4565b9518b83ef4f91bb47ce29620ca828bd32cb7e408f0062e9930ba190
 patch_directory = rustix-1-rs
+diff_files = rustix-1-rs/0001-rustix-add-ioctl-wrappers.patch, rustix-1-rs/0002-rustix-improve-for-musl-build-without-linux-raw-sys.patch, rustix-1-rs/0003-rustix-enable-rustix-thread-futex-without-linux-raw-.patch

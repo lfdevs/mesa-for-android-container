@@ -148,7 +148,6 @@ brw_compile_bs(const struct brw_compiler *compiler,
    brw_prog_data_init(&prog_data->base, &params->base);
 
    prog_data->max_stack_size = 0;
-   prog_data->num_resume_shaders = num_resume_shaders;
 
    brw_generator g(compiler, &params->base, &prog_data->base,
                   shader->info.stage);

@@ -690,6 +690,7 @@ panfrost_init_screen_caps(struct panfrost_screen *screen)
    caps->depth_clip_disable = true;
    caps->mixed_framebuffer_sizes = true;
    caps->frontend_noop = true;
+   caps->texture_query_lod = dev->arch >= 9;
    caps->sample_shading = dev->arch >= 6;
    caps->fragment_shader_derivatives = true;
    caps->framebuffer_no_attachment = true;

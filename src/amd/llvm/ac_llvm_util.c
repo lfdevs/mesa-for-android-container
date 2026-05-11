@@ -3,19 +3,17 @@
  *
  * SPDX-License-Identifier: MIT
  */
-/* based on pieces from si_pipe.c and radeon_llvm_emit.c */
-#include "ac_llvm_util.h"
-
-#include "ac_llvm_build.h"
-#include "c11/threads.h"
-#include "util/bitscan.h"
-#include "util/u_math.h"
-#include <llvm-c/Core.h>
-#include <llvm-c/Support.h>
 
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
+
+#include <llvm-c/Core.h>
+#include <llvm-c/Support.h>
+
+#include "c11/threads.h"
+#include "ac_llvm_util.h"
+#include "ac_llvm_build.h"
 
 static void ac_init_llvm_target(void)
 {

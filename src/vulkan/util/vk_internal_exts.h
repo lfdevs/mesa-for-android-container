@@ -145,7 +145,6 @@ static const VkPipelineCreateFlagBits2
 
 #define VK_SHADER_CREATE_CAPTURE_INTERNAL_REPRESENTATIONS_BIT_MESA 0x1000
 #define VK_SHADER_CREATE_UNALIGNED_DISPATCH_BIT_MESA               0x2000
-#define VK_SHADER_CREATE_INDEPENDENT_SETS_BIT_MESA                 0x4000
 
 #ifdef __cplusplus
 }

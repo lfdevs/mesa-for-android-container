@@ -470,7 +470,8 @@ generate_compute(struct llvmpipe_context *lp,
 
          LLVMTypeRef func_type = LLVMFunctionType(LLVMVoidTypeInContext(gallivm->context),
                                                   args, num_args, 0);
-         LLVMValueRef lfunc = LLVMAddFunction(gallivm->module, func->name, func_type);
+         const char *func_name = func->name ? func->name : "";
+         LLVMValueRef lfunc = LLVMAddFunction(gallivm->module, func_name, func_type);
          LLVMSetFunctionCallConv(lfunc, LLVMCCallConv);
 
          struct lp_build_fn *new_fn = ralloc(fns, struct lp_build_fn);

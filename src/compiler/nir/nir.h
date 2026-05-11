@@ -1099,7 +1099,7 @@ nir_src_is_if(const nir_src *src)
 }
 
 static inline nir_instr *
-nir_src_parent_instr(const nir_src *src)
+nir_src_use_instr(const nir_src *src)
 {
    assert(!nir_src_is_if(src));
 
@@ -1108,7 +1108,7 @@ nir_src_parent_instr(const nir_src *src)
 }
 
 static inline nir_if *
-nir_src_parent_if(const nir_src *src)
+nir_src_use_if(const nir_src *src)
 {
    assert(nir_src_is_if(src));
 
@@ -1117,7 +1117,7 @@ nir_src_parent_if(const nir_src *src)
 }
 
 static inline void
-_nir_src_set_parent(nir_src *src, void *parent, bool is_if)
+_nir_src_set_use(nir_src *src, void *parent, bool is_if)
 {
     uintptr_t ptr = (uintptr_t) parent;
     assert((ptr & ~NIR_SRC_PARENT_MASK) == 0 && "pointer must be aligned");
@@ -1129,15 +1129,15 @@ _nir_src_set_parent(nir_src *src, void *parent, bool is_if)
 }
 
 static inline void
-nir_src_set_parent_instr(nir_src *src, nir_instr *parent_instr)
+nir_src_set_use_instr(nir_src *src, nir_instr *parent_instr)
 {
-   _nir_src_set_parent(src, parent_instr, false);
+   _nir_src_set_use(src, parent_instr, false);
 }
 
 static inline void
-nir_src_set_parent_if(nir_src *src, nir_if *parent_if)
+nir_src_set_use_if(nir_src *src, nir_if *parent_if)
 {
-   _nir_src_set_parent(src, parent_if, true);
+   _nir_src_set_use(src, parent_if, true);
 }
 
 static inline nir_src
@@ -2118,7 +2118,8 @@ typedef struct nir_io_semantics {
 
    /* Start of the second uint. */
    unsigned no_signed_zero : 1; /* whether it matters if the input/output is -0.0 or +0.0. */
-   unsigned padding : 31;
+   unsigned clamp : 1; /* whether the IO component should be clamped when GL_CLAMP_VERTEX_COLOR is enabled */
+   unsigned padding : 30;
 } nir_io_semantics;
 
 /* Transform feedback info for 4 outputs. */
@@ -2535,6 +2536,8 @@ typedef enum nir_texop {
    nir_texop_tex_type_nv,
    /** Maps to TXQ.SAMPLER_POS */
    nir_texop_sample_pos_nv,
+   /** Maps to TEX_GRADIENT */
+   nir_texop_gradient_pan,
    /**
     * Returns the weighted average of a region of texels in the texture, using
     * the filter kernel sampled from ref_texture. (VK_QCOM_image_processing)
@@ -3581,6 +3584,9 @@ typedef struct nir_loop_terminator {
    /** Condition instruction that contains the induction variable */
    nir_instr *conditional_instr;
 
+   /** Init source of the induction variable used in conditional_instr. */
+   nir_src *init_src;
+
    /** Block within ::nif that has the break instruction. */
    nir_block *break_block;
 
@@ -4541,11 +4547,11 @@ nir_before_src(nir_src *src)
 {
    if (nir_src_is_if(src)) {
       nir_block *prev_block =
-         nir_cf_node_as_block(nir_cf_node_prev(&nir_src_parent_if(src)->cf_node));
+         nir_cf_node_as_block(nir_cf_node_prev(&nir_src_use_if(src)->cf_node));
       return nir_after_block(prev_block);
-   } else if (nir_src_parent_instr(src)->type == nir_instr_type_phi) {
+   } else if (nir_src_use_instr(src)->type == nir_instr_type_phi) {
 #ifndef NDEBUG
-      nir_phi_instr *cond_phi = nir_instr_as_phi(nir_src_parent_instr(src));
+      nir_phi_instr *cond_phi = nir_instr_as_phi(nir_src_use_instr(src));
       bool found = false;
       nir_foreach_phi_src(phi_src, cond_phi) {
          if (phi_src->src.ssa == src->ssa) {
@@ -4561,7 +4567,7 @@ nir_before_src(nir_src *src)
       nir_phi_src *phi_src = list_entry(src, nir_phi_src, src);
       return nir_after_block_before_jump(phi_src->pred);
    } else {
-      return nir_before_instr(nir_src_parent_instr(src));
+      return nir_before_instr(nir_src_use_instr(src));
    }
 }
 
@@ -4772,7 +4778,7 @@ static inline void
 nir_src_rewrite(nir_src *src, nir_def *new_ssa)
 {
    assert(src->ssa);
-   assert(nir_src_is_if(src) ? (nir_src_parent_if(src) != NULL) : (nir_src_parent_instr(src) != NULL));
+   assert(nir_src_is_if(src) ? (nir_src_use_if(src) != NULL) : (nir_src_use_instr(src) != NULL));
    list_del(&src->use_link);
    src->ssa = new_ssa;
    list_addtail(&src->use_link, &new_ssa->uses);
@@ -4968,6 +4974,18 @@ nir_block *nir_cf_node_cf_tree_prev(nir_cf_node *node);
                   *prev = nir_block_cf_tree_prev(block);       \
         block != nir_cf_node_cf_tree_prev(node);               \
         block = prev, prev = nir_block_cf_tree_prev(block))
+
+static inline nir_block *
+nir_loop_predecessor_block(nir_loop *loop)
+{
+   return nir_cf_node_cf_tree_prev(&loop->cf_node);
+}
+
+static inline nir_block *
+nir_loop_successor_block(nir_loop *loop)
+{
+   return nir_cf_node_cf_tree_next(&loop->cf_node);
+}
 
 /* If the following CF node is an if, this function returns that if.
  * Otherwise, it returns NULL.
@@ -5444,6 +5462,7 @@ bool nir_lower_vars_to_scratch_global(nir_shader *shader,
 bool nir_lower_scratch_to_var(nir_shader *nir);
 
 bool nir_lower_clip_halfz(nir_shader *shader);
+bool nir_lower_clip_halfz_dynamic(nir_shader *shader);
 
 void nir_shader_gather_info(nir_shader *shader, nir_function_impl *entrypoint);
 void nir_gather_clip_cull_distance_sizes_from_vars(nir_shader *nir);
@@ -6669,6 +6688,7 @@ bool nir_opt_algebraic_late(nir_shader *shader);
 bool nir_opt_algebraic_distribute_src_mods(nir_shader *shader);
 bool nir_opt_algebraic_integer_promotion(nir_shader *shader);
 bool nir_opt_reassociate_matrix_mul(nir_shader *shader);
+bool nir_opt_reassociate_for_fma(nir_shader *shader);
 bool nir_opt_constant_folding(nir_shader *shader);
 
 bool nir_opt_fp_math_ctrl(nir_shader *shader);
@@ -6793,6 +6813,9 @@ typedef struct nir_opt_offsets_options {
 
    /** nir_load/store_buffer_amd max base offset */
    uint32_t buffer_max;
+
+   /** nir_load/store_global_offset max base offset */
+   uint32_t global_max;
 
    /**
     * Callback to get the max base offset for instructions for which the
@@ -7095,26 +7118,26 @@ nir_is_store_reg(nir_intrinsic_instr *intr)
 #define nir_foreach_reg_load(load, reg)              \
    assert(reg->intrinsic == nir_intrinsic_decl_reg); \
                                                      \
-   nir_foreach_use(load, &reg->def)             \
-      if (nir_is_load_reg(nir_instr_as_intrinsic(nir_src_parent_instr(load))))
+   nir_foreach_use(load, &reg->def)                  \
+      if (nir_is_load_reg(nir_instr_as_intrinsic(nir_src_use_instr(load))))
 
 #define nir_foreach_reg_load_safe(load, reg)         \
    assert(reg->intrinsic == nir_intrinsic_decl_reg); \
                                                      \
    nir_foreach_use_safe(load, &reg->def)             \
-      if (nir_is_load_reg(nir_instr_as_intrinsic(nir_src_parent_instr(load))))
+      if (nir_is_load_reg(nir_instr_as_intrinsic(nir_src_use_instr(load))))
 
 #define nir_foreach_reg_store(store, reg)            \
    assert(reg->intrinsic == nir_intrinsic_decl_reg); \
                                                      \
-   nir_foreach_use(store, &reg->def)            \
-      if (nir_is_store_reg(nir_instr_as_intrinsic(nir_src_parent_instr(store))))
+   nir_foreach_use(store, &reg->def)                 \
+      if (nir_is_store_reg(nir_instr_as_intrinsic(nir_src_use_instr(store))))
 
 #define nir_foreach_reg_store_safe(store, reg)       \
    assert(reg->intrinsic == nir_intrinsic_decl_reg); \
                                                      \
    nir_foreach_use_safe(store, &reg->def)            \
-      if (nir_is_store_reg(nir_instr_as_intrinsic(nir_src_parent_instr(store))))
+      if (nir_is_store_reg(nir_instr_as_intrinsic(nir_src_use_instr(store))))
 
 static inline nir_intrinsic_instr *
 nir_load_reg_for_def(const nir_def *def)
@@ -7142,7 +7165,7 @@ nir_store_reg_for_def(const nir_def *def)
    if (nir_src_is_if(src))
       return NULL;
 
-   nir_instr *parent = nir_src_parent_instr(src);
+   nir_instr *parent = nir_src_use_instr(src);
    if (parent->type != nir_instr_type_intrinsic)
       return NULL;
 

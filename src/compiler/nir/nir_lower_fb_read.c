@@ -55,7 +55,7 @@ nir_lower_fb_read_instr(nir_builder *b, nir_intrinsic_instr *intr,
 
    b->cursor = nir_before_instr(&intr->instr);
 
-   nir_def *fragcoord = nir_load_frag_coord(b);
+   nir_def *fragcoord = nir_build_frag_coord(b, 2);
    nir_def *sampid = nir_load_sample_id(b);
    nir_def *layer = nir_load_layer_id(b);
    fragcoord = nir_f2i32(b, fragcoord);

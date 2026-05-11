@@ -45,13 +45,20 @@
 #ifndef ANDROID_HARDWARE_BUFFER_H
 #define ANDROID_HARDWARE_BUFFER_H
 
+#include <android/rect.h>
+#define ADATASPACE_SKIP_LEGACY_DEFINES
+#include <android/data_space.h>
+#undef ADATASPACE_SKIP_LEGACY_DEFINES
 #include <inttypes.h>
-
 #include <sys/cdefs.h>
 
-#include <android/rect.h>
+#if !defined(__INTRODUCED_IN)
+#define __INTRODUCED_IN(__api_level) /* nothing */
+#endif
 
 __BEGIN_DECLS
+
+// clang-format off
 
 /**
  * Buffer pixel formats.
@@ -168,57 +175,97 @@ enum AHardwareBuffer_Format {
     AHARDWAREBUFFER_FORMAT_YCbCr_P010               = 0x36,
 
     /**
+     * YUV P210 format.
+     * Must have an even width and height. Can be accessed in OpenGL
+     * shaders through an external sampler. Does not support mip-maps
+     * cube-maps or multi-layered textures.
+     */
+    AHARDWAREBUFFER_FORMAT_YCbCr_P210               = 0x3c,
+
+    /**
      * Corresponding formats:
      *   Vulkan: VK_FORMAT_R8_UNORM
      *   OpenGL ES: GR_GL_R8
      */
     AHARDWAREBUFFER_FORMAT_R8_UNORM                 = 0x38,
+
+    /**
+     * Corresponding formats:
+     *   Vulkan: VK_FORMAT_R16_UINT
+     *   OpenGL ES: GL_R16UI
+     */
+    AHARDWAREBUFFER_FORMAT_R16_UINT                 = 0x39,
+
+    /**
+     * Corresponding formats:
+     *   Vulkan: VK_FORMAT_R16G16_UINT
+     *   OpenGL ES: GL_RG16UI
+     */
+    AHARDWAREBUFFER_FORMAT_R16G16_UINT              = 0x3a,
+
+    /**
+     * Corresponding formats:
+     *   Vulkan: VK_FORMAT_R10X6G10X6B10X6A10X6_UNORM_4PACK16
+     *   OpenGL ES: N/A
+     */
+    AHARDWAREBUFFER_FORMAT_R10G10B10A10_UNORM       = 0x3b,
 };
 
 /**
  * Buffer usage flags, specifying how the buffer will be accessed.
  */
 enum AHardwareBuffer_UsageFlags {
-    /// The buffer will never be locked for direct CPU reads using the
-    /// AHardwareBuffer_lock() function. Note that reading the buffer
-    /// using OpenGL or Vulkan functions or memory mappings is still
-    /// allowed.
+    /**
+     * The buffer will never be locked for direct CPU reads using the
+     * AHardwareBuffer_lock() function. Note that reading the buffer
+     * using OpenGL or Vulkan functions or memory mappings is still
+     * allowed.
+     */
     AHARDWAREBUFFER_USAGE_CPU_READ_NEVER        = 0UL,
-    /// The buffer will sometimes be locked for direct CPU reads using
-    /// the AHardwareBuffer_lock() function. Note that reading the
-    /// buffer using OpenGL or Vulkan functions or memory mappings
-    /// does not require the presence of this flag.
+    /**
+     * The buffer will sometimes be locked for direct CPU reads using
+     * the AHardwareBuffer_lock() function. Note that reading the
+     * buffer using OpenGL or Vulkan functions or memory mappings
+     * does not require the presence of this flag.
+     */
     AHARDWAREBUFFER_USAGE_CPU_READ_RARELY       = 2UL,
-    /// The buffer will often be locked for direct CPU reads using
-    /// the AHardwareBuffer_lock() function. Note that reading the
-    /// buffer using OpenGL or Vulkan functions or memory mappings
-    /// does not require the presence of this flag.
+    /**
+     * The buffer will often be locked for direct CPU reads using
+     * the AHardwareBuffer_lock() function. Note that reading the
+     * buffer using OpenGL or Vulkan functions or memory mappings
+     * does not require the presence of this flag.
+     */
     AHARDWAREBUFFER_USAGE_CPU_READ_OFTEN        = 3UL,
-    /// CPU read value mask.
+
+    /** CPU read value mask. */
     AHARDWAREBUFFER_USAGE_CPU_READ_MASK         = 0xFUL,
-
-    /// The buffer will never be locked for direct CPU writes using the
-    /// AHardwareBuffer_lock() function. Note that writing the buffer
-    /// using OpenGL or Vulkan functions or memory mappings is still
-    /// allowed.
+    /**
+     * The buffer will never be locked for direct CPU writes using the
+     * AHardwareBuffer_lock() function. Note that writing the buffer
+     * using OpenGL or Vulkan functions or memory mappings is still
+     * allowed.
+     */
     AHARDWAREBUFFER_USAGE_CPU_WRITE_NEVER       = 0UL << 4,
-    /// The buffer will sometimes be locked for direct CPU writes using
-    /// the AHardwareBuffer_lock() function. Note that writing the
-    /// buffer using OpenGL or Vulkan functions or memory mappings
-    /// does not require the presence of this flag.
+    /**
+     * The buffer will sometimes be locked for direct CPU writes using
+     * the AHardwareBuffer_lock() function. Note that writing the
+     * buffer using OpenGL or Vulkan functions or memory mappings
+     * does not require the presence of this flag.
+     */
     AHARDWAREBUFFER_USAGE_CPU_WRITE_RARELY      = 2UL << 4,
-    /// The buffer will often be locked for direct CPU writes using
-    /// the AHardwareBuffer_lock() function. Note that writing the
-    /// buffer using OpenGL or Vulkan functions or memory mappings
-    /// does not require the presence of this flag.
+    /**
+     * The buffer will often be locked for direct CPU writes using
+     * the AHardwareBuffer_lock() function. Note that writing the
+     * buffer using OpenGL or Vulkan functions or memory mappings
+     * does not require the presence of this flag.
+     */
     AHARDWAREBUFFER_USAGE_CPU_WRITE_OFTEN       = 3UL << 4,
-    /// CPU write value mask.
+    /** CPU write value mask. */
     AHARDWAREBUFFER_USAGE_CPU_WRITE_MASK        = 0xFUL << 4,
-
-    /// The buffer will be read from by the GPU as a texture.
-    AHARDWAREBUFFER_USAGE_GPU_SAMPLED_IMAGE      = 1UL << 8,
-    /// The buffer will be written to by the GPU as a framebuffer attachment.
-    AHARDWAREBUFFER_USAGE_GPU_FRAMEBUFFER        = 1UL << 9,
+    /** The buffer will be read from by the GPU as a texture. */
+    AHARDWAREBUFFER_USAGE_GPU_SAMPLED_IMAGE     = 1UL << 8,
+    /** The buffer will be written to by the GPU as a framebuffer attachment.*/
+    AHARDWAREBUFFER_USAGE_GPU_FRAMEBUFFER       = 1UL << 9,
     /**
      * The buffer will be written to by the GPU as a framebuffer
      * attachment.
@@ -229,7 +276,7 @@ enum AHardwareBuffer_UsageFlags {
      * attachment should also have this flag. Use the equivalent flag
      * AHARDWAREBUFFER_USAGE_GPU_FRAMEBUFFER to avoid this confusion.
      */
-    AHARDWAREBUFFER_USAGE_GPU_COLOR_OUTPUT       = AHARDWAREBUFFER_USAGE_GPU_FRAMEBUFFER,
+    AHARDWAREBUFFER_USAGE_GPU_COLOR_OUTPUT      = AHARDWAREBUFFER_USAGE_GPU_FRAMEBUFFER,
     /**
      * The buffer will be used as a composer HAL overlay layer.
      *
@@ -240,7 +287,7 @@ enum AHardwareBuffer_UsageFlags {
      * directly through AHardwareBuffer_allocate instead of buffers allocated
      * by the framework.
      */
-    AHARDWAREBUFFER_USAGE_COMPOSER_OVERLAY       = 1ULL << 11,
+    AHARDWAREBUFFER_USAGE_COMPOSER_OVERLAY      = 1ULL << 11,
     /**
      * The buffer is protected from direct CPU access or being read by
      * non-secure hardware, such as video encoders.
@@ -251,19 +298,19 @@ enum AHardwareBuffer_UsageFlags {
      * GL_EXT_protected_textures for more information on how these
      * buffers are expected to behave.
      */
-    AHARDWAREBUFFER_USAGE_PROTECTED_CONTENT      = 1UL << 14,
-    /// The buffer will be read by a hardware video encoder.
-    AHARDWAREBUFFER_USAGE_VIDEO_ENCODE           = 1UL << 16,
+    AHARDWAREBUFFER_USAGE_PROTECTED_CONTENT     = 1UL << 14,
+    /** The buffer will be read by a hardware video encoder. */
+    AHARDWAREBUFFER_USAGE_VIDEO_ENCODE          = 1UL << 16,
     /**
      * The buffer will be used for direct writes from sensors.
      * When this flag is present, the format must be AHARDWAREBUFFER_FORMAT_BLOB.
      */
-    AHARDWAREBUFFER_USAGE_SENSOR_DIRECT_DATA     = 1UL << 23,
+    AHARDWAREBUFFER_USAGE_SENSOR_DIRECT_DATA    = 1UL << 23,
     /**
      * The buffer will be used as a shader storage or uniform buffer object.
      * When this flag is present, the format must be AHARDWAREBUFFER_FORMAT_BLOB.
      */
-    AHARDWAREBUFFER_USAGE_GPU_DATA_BUFFER        = 1UL << 24,
+    AHARDWAREBUFFER_USAGE_GPU_DATA_BUFFER       = 1UL << 24,
     /**
      * The buffer will be used as a cube map texture.
      * When this flag is present, the buffer must have a layer count
@@ -271,13 +318,23 @@ enum AHardwareBuffer_UsageFlags {
      * bound to OpenGL textures using the extension
      * GL_EXT_EGL_image_storage instead of GL_KHR_EGL_image.
      */
-    AHARDWAREBUFFER_USAGE_GPU_CUBE_MAP               = 1UL << 25,
+    AHARDWAREBUFFER_USAGE_GPU_CUBE_MAP          = 1UL << 25,
     /**
      * The buffer contains a complete mipmap hierarchy.
      * Note that buffers with this flag must be bound to OpenGL textures using
      * the extension GL_EXT_EGL_image_storage instead of GL_KHR_EGL_image.
      */
-    AHARDWAREBUFFER_USAGE_GPU_MIPMAP_COMPLETE        = 1UL << 26,
+    AHARDWAREBUFFER_USAGE_GPU_MIPMAP_COMPLETE   = 1UL << 26,
+
+    /**
+     * Usage: The buffer is used for front-buffer rendering. When
+     * front-buffering rendering is specified, different usages may adjust their
+     * behavior as a result. For example, when used as GPU_COLOR_OUTPUT the buffer
+     * will behave similar to a single-buffered window. When used with
+     * COMPOSER_OVERLAY, the system will try to prioritize the buffer receiving
+     * an overlay plane & avoid caching it in intermediate composition buffers.
+     */
+    AHARDWAREBUFFER_USAGE_FRONT_BUFFER = 1ULL << 32,
 
     AHARDWAREBUFFER_USAGE_VENDOR_0  = 1ULL << 28,
     AHARDWAREBUFFER_USAGE_VENDOR_1  = 1ULL << 29,
@@ -306,8 +363,8 @@ enum AHardwareBuffer_UsageFlags {
  * parameters of existing ones.
  */
 typedef struct AHardwareBuffer_Desc {
-    uint32_t    width;      ///< Width in pixels.
-    uint32_t    height;     ///< Height in pixels.
+    uint32_t width;  ///< Width in pixels.
+    uint32_t height; ///< Height in pixels.
     /**
      * Number of images in an image array. AHardwareBuffers with one
      * layer correspond to regular 2D textures. AHardwareBuffers with
@@ -316,21 +373,21 @@ typedef struct AHardwareBuffer_Desc {
      * AHARDWAREBUFFER_USAGE_GPU_CUBE_MAP is present, the buffer is
      * a cube map or a cube map array.
      */
-    uint32_t    layers;
-    uint32_t    format;     ///< One of AHardwareBuffer_Format.
-    uint64_t    usage;      ///< Combination of AHardwareBuffer_UsageFlags.
-    uint32_t    stride;     ///< Row stride in pixels, ignored for AHardwareBuffer_allocate()
-    uint32_t    rfu0;       ///< Initialize to zero, reserved for future use.
-    uint64_t    rfu1;       ///< Initialize to zero, reserved for future use.
+    uint32_t layers;
+    uint32_t format; ///< One of AHardwareBuffer_Format.
+    uint64_t usage;  ///< Combination of AHardwareBuffer_UsageFlags.
+    uint32_t stride; ///< Row stride in pixels, ignored for AHardwareBuffer_allocate()
+    uint32_t rfu0;   ///< Initialize to zero, reserved for future use.
+    uint64_t rfu1;   ///< Initialize to zero, reserved for future use.
 } AHardwareBuffer_Desc;
 
 /**
  * Holds data for a single image plane.
  */
 typedef struct AHardwareBuffer_Plane {
-    void*       data;        ///< Points to first byte in plane
-    uint32_t    pixelStride; ///< Distance in bytes from the color channel of one pixel to the next
-    uint32_t    rowStride;   ///< Distance in bytes from the first value of one row of the image to
+    void*    _Nullable data; ///< Points to first byte in plane
+    uint32_t pixelStride;    ///< Distance in bytes from the color channel of one pixel to the next
+    uint32_t rowStride;      ///< Distance in bytes from the first value of one row of the image to
                              ///  the first value of the next row.
 } AHardwareBuffer_Plane;
 
@@ -338,14 +395,16 @@ typedef struct AHardwareBuffer_Plane {
  * Holds all image planes that contain the pixel data.
  */
 typedef struct AHardwareBuffer_Planes {
-    uint32_t               planeCount; ///< Number of distinct planes
-    AHardwareBuffer_Plane  planes[4];     ///< Array of image planes
+    uint32_t              planeCount; ///< Number of distinct planes
+    AHardwareBuffer_Plane planes[4];  ///< Array of image planes
 } AHardwareBuffer_Planes;
 
 /**
  * Opaque handle for a native hardware buffer.
  */
 typedef struct AHardwareBuffer AHardwareBuffer;
+
+// clang-format on
 
 /**
  * Allocates a buffer that matches the passed AHardwareBuffer_Desc.
@@ -360,8 +419,8 @@ typedef struct AHardwareBuffer AHardwareBuffer;
  * \return 0 on success, or an error number of the allocation fails for
  * any reason. The returned buffer has a reference count of 1.
  */
-int AHardwareBuffer_allocate(const AHardwareBuffer_Desc* desc,
-        AHardwareBuffer** outBuffer) __INTRODUCED_IN(26);
+int AHardwareBuffer_allocate(const AHardwareBuffer_Desc* _Nonnull desc,
+                             AHardwareBuffer* _Nullable* _Nonnull outBuffer) __INTRODUCED_IN(26);
 /**
  * Acquire a reference on the given AHardwareBuffer object.
  *
@@ -370,7 +429,7 @@ int AHardwareBuffer_allocate(const AHardwareBuffer_Desc* desc,
  *
  * Available since API level 26.
  */
-void AHardwareBuffer_acquire(AHardwareBuffer* buffer) __INTRODUCED_IN(26);
+void AHardwareBuffer_acquire(AHardwareBuffer* _Nonnull buffer) __INTRODUCED_IN(26);
 
 /**
  * Remove a reference that was previously acquired with
@@ -378,7 +437,7 @@ void AHardwareBuffer_acquire(AHardwareBuffer* buffer) __INTRODUCED_IN(26);
  *
  * Available since API level 26.
  */
-void AHardwareBuffer_release(AHardwareBuffer* buffer) __INTRODUCED_IN(26);
+void AHardwareBuffer_release(AHardwareBuffer* _Nonnull buffer) __INTRODUCED_IN(26);
 
 /**
  * Return a description of the AHardwareBuffer in the passed
@@ -386,8 +445,8 @@ void AHardwareBuffer_release(AHardwareBuffer* buffer) __INTRODUCED_IN(26);
  *
  * Available since API level 26.
  */
-void AHardwareBuffer_describe(const AHardwareBuffer* buffer,
-        AHardwareBuffer_Desc* outDesc) __INTRODUCED_IN(26);
+void AHardwareBuffer_describe(const AHardwareBuffer* _Nonnull buffer,
+                              AHardwareBuffer_Desc* _Nonnull outDesc) __INTRODUCED_IN(26);
 
 /**
  * Lock the AHardwareBuffer for direct CPU access.
@@ -441,8 +500,53 @@ void AHardwareBuffer_describe(const AHardwareBuffer* buffer,
  * has more than one layer. Error number if the lock fails for any other
  * reason.
  */
-int AHardwareBuffer_lock(AHardwareBuffer* buffer, uint64_t usage,
-        int32_t fence, const ARect* rect, void** outVirtualAddress) __INTRODUCED_IN(26);
+int AHardwareBuffer_lock(AHardwareBuffer* _Nonnull buffer, uint64_t usage, int32_t fence,
+                         const ARect* _Nullable rect, void* _Nullable* _Nonnull outVirtualAddress)
+        __INTRODUCED_IN(26);
+
+/**
+ * Unlock the AHardwareBuffer from direct CPU access.
+ *
+ * Must be called after all changes to the buffer are completed by the
+ * caller.  If \a fence is NULL, the function will block until all work
+ * is completed.  Otherwise, \a fence will be set either to a valid file
+ * descriptor or to -1.  The file descriptor will become signaled once
+ * the unlocking is complete and buffer contents are updated.
+ * The caller is responsible for closing the file descriptor once it's
+ * no longer needed.  The value -1 indicates that unlocking has already
+ * completed before the function returned and no further operations are
+ * necessary.
+ *
+ * Available since API level 26.
+ *
+ * \return 0 on success. -EINVAL if \a buffer is NULL. Error number if
+ * the unlock fails for any reason.
+ */
+int AHardwareBuffer_unlock(AHardwareBuffer* _Nonnull buffer, int32_t* _Nullable fence)
+        __INTRODUCED_IN(26);
+
+/**
+ * Send the AHardwareBuffer to an AF_UNIX socket.
+ *
+ * Available since API level 26.
+ *
+ * \return 0 on success, -EINVAL if \a buffer is NULL, or an error
+ * number if the operation fails for any reason.
+ */
+int AHardwareBuffer_sendHandleToUnixSocket(const AHardwareBuffer* _Nonnull buffer, int socketFd)
+        __INTRODUCED_IN(26);
+
+/**
+ * Receive an AHardwareBuffer from an AF_UNIX socket.
+ *
+ * Available since API level 26.
+ *
+ * \return 0 on success, -EINVAL if \a outBuffer is NULL, or an error
+ * number if the operation fails for any reason.
+ */
+int AHardwareBuffer_recvHandleFromUnixSocket(int socketFd,
+                                             AHardwareBuffer* _Nullable* _Nonnull outBuffer)
+        __INTRODUCED_IN(26);
 
 /**
  * Lock a potentially multi-planar AHardwareBuffer for direct CPU access.
@@ -471,48 +575,9 @@ int AHardwareBuffer_lock(AHardwareBuffer* buffer, uint64_t usage,
  * has more than one layer. Error number if the lock fails for any other
  * reason.
  */
-int AHardwareBuffer_lockPlanes(AHardwareBuffer* buffer, uint64_t usage,
-        int32_t fence, const ARect* rect, AHardwareBuffer_Planes* outPlanes) __INTRODUCED_IN(29);
-
-/**
- * Unlock the AHardwareBuffer from direct CPU access.
- *
- * Must be called after all changes to the buffer are completed by the
- * caller.  If \a fence is NULL, the function will block until all work
- * is completed.  Otherwise, \a fence will be set either to a valid file
- * descriptor or to -1.  The file descriptor will become signaled once
- * the unlocking is complete and buffer contents are updated.
- * The caller is responsible for closing the file descriptor once it's
- * no longer needed.  The value -1 indicates that unlocking has already
- * completed before the function returned and no further operations are
- * necessary.
- *
- * Available since API level 26.
- *
- * \return 0 on success. -EINVAL if \a buffer is NULL. Error number if
- * the unlock fails for any reason.
- */
-int AHardwareBuffer_unlock(AHardwareBuffer* buffer, int32_t* fence) __INTRODUCED_IN(26);
-
-/**
- * Send the AHardwareBuffer to an AF_UNIX socket.
- *
- * Available since API level 26.
- *
- * \return 0 on success, -EINVAL if \a buffer is NULL, or an error
- * number if the operation fails for any reason.
- */
-int AHardwareBuffer_sendHandleToUnixSocket(const AHardwareBuffer* buffer, int socketFd) __INTRODUCED_IN(26);
-
-/**
- * Receive an AHardwareBuffer from an AF_UNIX socket.
- *
- * Available since API level 26.
- *
- * \return 0 on success, -EINVAL if \a outBuffer is NULL, or an error
- * number if the operation fails for any reason.
- */
-int AHardwareBuffer_recvHandleFromUnixSocket(int socketFd, AHardwareBuffer** outBuffer) __INTRODUCED_IN(26);
+int AHardwareBuffer_lockPlanes(AHardwareBuffer* _Nonnull buffer, uint64_t usage, int32_t fence,
+                               const ARect* _Nullable rect,
+                               AHardwareBuffer_Planes* _Nonnull outPlanes) __INTRODUCED_IN(29);
 
 /**
  * Test whether the given format and usage flag combination is
@@ -533,7 +598,7 @@ int AHardwareBuffer_recvHandleFromUnixSocket(int socketFd, AHardwareBuffer** out
  * \return 1 if the format and usage flag combination is allocatable,
  *     0 otherwise.
  */
-int AHardwareBuffer_isSupported(const AHardwareBuffer_Desc* desc) __INTRODUCED_IN(29);
+int AHardwareBuffer_isSupported(const AHardwareBuffer_Desc* _Nonnull desc) __INTRODUCED_IN(29);
 
 /**
  * Lock an AHardwareBuffer for direct CPU access.
@@ -546,9 +611,23 @@ int AHardwareBuffer_isSupported(const AHardwareBuffer_Desc* desc) __INTRODUCED_I
  *
  * Available since API level 29.
  */
-int AHardwareBuffer_lockAndGetInfo(AHardwareBuffer* buffer, uint64_t usage,
-        int32_t fence, const ARect* rect, void** outVirtualAddress,
-        int32_t* outBytesPerPixel, int32_t* outBytesPerStride) __INTRODUCED_IN(29);
+int AHardwareBuffer_lockAndGetInfo(AHardwareBuffer* _Nonnull buffer, uint64_t usage, int32_t fence,
+                                   const ARect* _Nullable rect,
+                                   void* _Nullable* _Nonnull outVirtualAddress,
+                                   int32_t* _Nonnull outBytesPerPixel,
+                                   int32_t* _Nonnull outBytesPerStride) __INTRODUCED_IN(29);
+
+
+/**
+ * Get the system wide unique id for an AHardwareBuffer.
+ *
+ * Available since API level 31.
+ *
+ * \return 0 on success, -EINVAL if \a buffer or \a outId is NULL, or an error number if the
+ * operation fails for any reason.
+ */
+int AHardwareBuffer_getId(const AHardwareBuffer* _Nonnull buffer, uint64_t* _Nonnull outId)
+        __INTRODUCED_IN(31);
 
 __END_DECLS
 

@@ -139,6 +139,7 @@ panvk_per_arch(get_physical_device_extensions)(
          device->kmod.dev->props.gpu_can_query_timestamp,
       .EXT_conditional_rendering = PAN_ARCH >= 10,
       .EXT_color_write_enable = true,
+      .EXT_conservative_rasterization = PAN_ARCH >= 11,
       .EXT_custom_border_color = true,
       .EXT_depth_bias_control = true,
       .EXT_depth_clamp_control = true,
@@ -150,8 +151,10 @@ panvk_per_arch(get_physical_device_extensions)(
       .EXT_display_control = true,
 #endif
       .EXT_descriptor_indexing = PAN_ARCH >= 9,
+      .EXT_dynamic_rendering_unused_attachments = true,
       .EXT_extended_dynamic_state = true,
       .EXT_extended_dynamic_state2 = true,
+      .EXT_extended_dynamic_state3 = true,
       .EXT_external_memory_acquire_unmodified = true,
       .EXT_external_memory_dma_buf = true,
       .EXT_global_priority = true,
@@ -485,6 +488,9 @@ panvk_per_arch(get_physical_device_features)(
       /* VK_EXT_depth_clip_enable */
       .depthClipEnable = true,
 
+      /* VK_EXT_dynamic_rendering_unused_attachments */
+      .dynamicRenderingUnusedAttachments = true,
+
       /* VK_EXT_extended_dynamic_state */
       .extendedDynamicState = true,
 
@@ -492,6 +498,39 @@ panvk_per_arch(get_physical_device_features)(
       .extendedDynamicState2 = true,
       .extendedDynamicState2LogicOp = true,
       .extendedDynamicState2PatchControlPoints = false,
+
+      /* VK_EXT_extended_dynamic_state3 */
+      .extendedDynamicState3TessellationDomainOrigin = false,
+      .extendedDynamicState3DepthClampEnable = true,
+      .extendedDynamicState3PolygonMode = false,
+      .extendedDynamicState3RasterizationSamples = true,
+      .extendedDynamicState3SampleMask = true,
+      .extendedDynamicState3AlphaToCoverageEnable = true,
+      .extendedDynamicState3AlphaToOneEnable = false,
+      .extendedDynamicState3LogicOpEnable = true,
+      .extendedDynamicState3ColorBlendEnable = true,
+      .extendedDynamicState3ColorBlendEquation = true,
+      .extendedDynamicState3ColorWriteMask = true,
+      .extendedDynamicState3RasterizationStream = false,
+      .extendedDynamicState3ConservativeRasterizationMode = PAN_ARCH >= 11,
+      .extendedDynamicState3ExtraPrimitiveOverestimationSize = false,
+      .extendedDynamicState3DepthClipEnable = true,
+      .extendedDynamicState3SampleLocationsEnable = false,
+      .extendedDynamicState3ColorBlendAdvanced = false,
+      .extendedDynamicState3ProvokingVertexMode = false,
+      .extendedDynamicState3LineRasterizationMode = true,
+      .extendedDynamicState3LineStippleEnable = false,
+      .extendedDynamicState3DepthClipNegativeOneToOne = false,
+      .extendedDynamicState3ViewportWScalingEnable = false,
+      .extendedDynamicState3ViewportSwizzle = false,
+      .extendedDynamicState3CoverageToColorEnable = false,
+      .extendedDynamicState3CoverageToColorLocation = false,
+      .extendedDynamicState3CoverageModulationMode = false,
+      .extendedDynamicState3CoverageModulationTableEnable = false,
+      .extendedDynamicState3CoverageModulationTable = false,
+      .extendedDynamicState3CoverageReductionMode = false,
+      .extendedDynamicState3RepresentativeFragmentTestEnable = false,
+      .extendedDynamicState3ShadingRateImageEnable = false,
 
       /* VK_EXT_attachment_feedback_loop_dynamic_state */
       .attachmentFeedbackLoopDynamicState = true,
@@ -1148,6 +1187,17 @@ panvk_per_arch(get_physical_device_properties)(
       /* Sparse binding not supported yet. */
       .image2DViewOf3DSparse = false,
       .defaultVertexAttributeValue = VK_DEFAULT_VERTEX_ATTRIBUTE_VALUE_ZERO_ZERO_ZERO_ZERO_KHR,
+
+      /* VK_EXT_conservative_rasterization */
+      .primitiveOverestimationSize = 1.0f / 512.0f,
+      .maxExtraPrimitiveOverestimationSize = 0.0f,
+      .extraPrimitiveOverestimationSizeGranularity = 0.0f,
+      .primitiveUnderestimation = false,
+      .conservativePointAndLineRasterization = false,
+      .degenerateTrianglesRasterized = PAN_ARCH >= 14,
+      .degenerateLinesRasterized = false,
+      .fullyCoveredFragmentShaderInputVariable = false,
+      .conservativeRasterizationPostDepthCoverage = false,
 
       /* VK_EXT_custom_border_color */
       .maxCustomBorderColorSamplers = 32768,

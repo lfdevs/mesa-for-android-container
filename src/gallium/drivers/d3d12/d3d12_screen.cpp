@@ -598,6 +598,9 @@ d3d12_is_format_supported(struct pipe_screen *pscreen,
 void
 d3d12_deinit_screen(struct d3d12_screen *screen)
 {
+   while (d3d12_screen_reclaim_one(screen))
+      ;
+
 #ifdef HAVE_GALLIUM_D3D12_GRAPHICS
    if (screen->max_feature_level >= D3D_FEATURE_LEVEL_11_0) {
       if (screen->rtv_pool) {
@@ -666,6 +669,7 @@ d3d12_destroy_screen(struct d3d12_screen *screen)
 {
    slab_destroy_parent(&screen->transfer_pool);
    mtx_destroy(&screen->submit_mutex);
+   mtx_destroy(&screen->pending_free_lock);
    mtx_destroy(&screen->descriptor_pool_mutex);
 
 #ifdef HAVE_GALLIUM_D3D12_GRAPHICS
@@ -1300,6 +1304,8 @@ d3d12_init_screen_base(struct d3d12_screen *screen, struct sw_winsys *winsys, LU
       screen->adapter_luid = *adapter_luid;
    mtx_init(&screen->descriptor_pool_mutex, mtx_plain);
    mtx_init(&screen->submit_mutex, mtx_plain);
+   mtx_init(&screen->pending_free_lock, mtx_plain);
+   list_inithead(&screen->pending_free_list);
 
    list_inithead(&screen->context_list);
    screen->context_id_count = 16;

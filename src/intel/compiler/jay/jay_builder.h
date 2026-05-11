@@ -106,10 +106,12 @@ jay_before_function(jay_function *f)
  * have other predecessorss since there are no critical edges.
  */
 static inline jay_block *
-jay_edge_to_block(jay_block *pred, jay_block *succ)
+jay_edge_to_block(jay_block *pred, jay_block *succ, enum jay_file file)
 {
-   assert(jay_num_successors(pred) == 1 || jay_num_predecessors(succ) == 1);
-   return jay_num_successors(pred) == 1 ? pred : succ;
+   assert(jay_num_successors(pred, file) == 1 ||
+          jay_num_predecessors(succ, file) == 1);
+
+   return jay_num_successors(pred, file) == 1 ? pred : succ;
 }
 
 /*
@@ -118,9 +120,9 @@ jay_edge_to_block(jay_block *pred, jay_block *succ)
  * flow graph having no critical edges.
  */
 static inline jay_cursor
-jay_along_edge(jay_block *pred, jay_block *succ)
+jay_along_edge(jay_block *pred, jay_block *succ, enum jay_file file)
 {
-   jay_block *to = jay_edge_to_block(pred, succ);
+   jay_block *to = jay_edge_to_block(pred, succ, file);
 
    if (to == pred)
       return jay_after_block_logical(pred);

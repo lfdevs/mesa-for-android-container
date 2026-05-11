@@ -200,7 +200,7 @@ st_update_framebuffer_state( struct st_context *st )
       memset(&framebuffer.zsbuf, 0, sizeof(framebuffer.zsbuf));
    }
 
-   framebuffer.viewmask = BITFIELD_MASK(num_multiview_layer);
+   framebuffer.viewmask = (uint8_t)BITFIELD_MASK(num_multiview_layer);
 
 #ifndef NDEBUG
    /* Make sure the resource binding flags were set properly */

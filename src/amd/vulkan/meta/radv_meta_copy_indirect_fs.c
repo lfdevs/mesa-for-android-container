@@ -4,9 +4,9 @@
  * SPDX-License-Identifier: MIT
  */
 #include "nir/radv_meta_nir.h"
-#include "radv_cs.h"
 #include "radv_formats.h"
 #include "radv_meta.h"
+#include "vk_shader_module.h"
 
 static VkResult
 get_gfx_copy_memory_to_image_indirect_pipeline_layout(struct radv_device *device, VkPipelineLayout *layout_out)

@@ -117,7 +117,7 @@ payload_u1(struct nir_to_jay_state *nj, unsigned idx, unsigned len)
 static jay_def
 emit_active_lane_mask(struct nir_to_jay_state *nj)
 {
-   /* TODO: We don't use jay_exec_mask yet due to hardware issues */
+   /* Note that we don't use mask0 since it needs fixups. Just ballot(true). */
    if (jay_is_null(nj->active_lane_mask)) {
       nj->active_lane_mask = jay_alloc_def(&nj->bld, FLAG, 1);
       jay_MOV(&nj->bld, nj->active_lane_mask, 1);
@@ -681,8 +681,6 @@ jay_emit_memory_barrier(struct nir_to_jay_state *nj, nir_intrinsic_instr *intr)
 {
    nir_variable_mode modes = nir_intrinsic_memory_modes(intr);
 
-   jay_SYNC(&nj->bld, TGL_SYNC_ALLWR);
-
    if (modes & nir_var_image) {
       emit_lsc_fence(nj, intr, BRW_SFID_TGM);
       assert(!nj->nir->info.use_lowered_image_to_global && "fix common code");
@@ -703,10 +701,8 @@ jay_emit_memory_barrier(struct nir_to_jay_state *nj, nir_intrinsic_instr *intr)
 }
 
 static void
-jay_emit_signal_barrier(struct nir_to_jay_state *nj)
+jay_emit_signal_barrier(jay_builder *b, struct nir_to_jay_state *nj)
 {
-   jay_builder *b = &nj->bld;
-
    /* Signal barrier / Active threads only (BSpec 72052).
     *
     * Source 0 is the number of subgroups in [31:24], which comes from the u0.2
@@ -729,8 +725,6 @@ jay_emit_signal_barrier(struct nir_to_jay_state *nj)
    jay_SEND(b, .sfid = BRW_SFID_MESSAGE_GATEWAY,
             .msg_desc = BRW_MESSAGE_GATEWAY_SFID_BARRIER_MSG, .srcs = &zipped,
             .nr_srcs = 1, .type = JAY_TYPE_U32, .uniform = true);
-
-   jay_SYNC(b, TGL_SYNC_BAR);
 }
 
 static void
@@ -1194,24 +1188,22 @@ jay_emit_intrinsic(struct nir_to_jay_state *nj, nir_intrinsic_instr *intr)
       break;
    }
 
-   case nir_intrinsic_barrier:
+   case nir_intrinsic_barrier: {
+      jay_SCHEDULE_BARRIER(b);
+
       if (nir_intrinsic_memory_scope(intr) != SCOPE_NONE) {
          jay_emit_memory_barrier(nj, intr);
       }
 
-      if (cs) {
-         if (nir_intrinsic_execution_scope(intr) == SCOPE_WORKGROUP) {
-            if (jay_workgroup_is_one_subgroup(b, nj->nir)) {
-               // XXX: when we have a scheduler, jay_SCHEDULE_BARRIER(b);
-            } else {
-               jay_emit_signal_barrier(nj);
-               s->prog_data->cs.uses_barrier = true;
-            }
-         }
-      } else {
-         // XXX: when we have a scheduler, jay_SCHEDULE_BARRIER(b);
+      if ((cs && nir_intrinsic_execution_scope(intr) == SCOPE_WORKGROUP) &&
+          !jay_workgroup_is_one_subgroup(b, nj->nir)) {
+
+         jay_emit_signal_barrier(b, nj);
+         s->prog_data->cs.uses_barrier = true;
       }
+
       break;
+   }
 
    case nir_intrinsic_begin_invocation_interlock:
    case nir_intrinsic_end_invocation_interlock:
@@ -1475,7 +1467,6 @@ jay_emit_intrinsic(struct nir_to_jay_state *nj, nir_intrinsic_instr *intr)
 
    case nir_intrinsic_load_inline_data_intel: {
       assert(cs && f->is_entrypoint && "todo: this needs ABI");
-      b->shader->prog_data->cs.uses_inline_data = true;
 
       unsigned offset = nir_intrinsic_base(intr) / 4;
       unsigned nr = jay_num_values(dst);
@@ -2042,7 +2033,7 @@ jay_emit_jump(struct nir_to_jay_state *nj, nir_jump_instr *instr)
 {
    switch (instr->type) {
    case nir_jump_break:
-      jay_block_add_successor(nj->current_block, nj->break_block);
+      jay_block_add_successor(nj->current_block, nj->break_block, GPR);
       jay_BREAK(&nj->bld);
       break;
    case nir_jump_halt:
@@ -2144,14 +2135,22 @@ jay_emit_if(struct nir_to_jay_state *nj, nir_if *nif)
    /* Pop */
    --nj->indent;
 
-   jay_block_add_successor(before_block, then_first);
-   jay_block_add_successor(before_block, else_first);
+   bool uniform = jay_is_uniform(condition);
+
+   /* Logical CFG edges */
+   jay_block_add_successor(before_block, then_first, GPR);
+   jay_block_add_successor(before_block, else_first, GPR);
 
    if (!jay_block_ending_unconditional_jump(then_last))
-      jay_block_add_successor(then_last, after_block);
+      jay_block_add_successor(then_last, after_block, GPR);
 
    if (!jay_block_ending_unconditional_jump(else_last))
-      jay_block_add_successor(else_last, after_block);
+      jay_block_add_successor(else_last, after_block, GPR);
+
+   /* For a non-uniform IF, we fall through both sides in the physical CFG */
+   if (!uniform) {
+      jay_block_add_successor(then_last, else_first, UGPR);
+   }
 
    nj->after_block = after_block;
 
@@ -2183,7 +2182,7 @@ jay_emit_loop(struct nir_to_jay_state *nj, nir_loop *nloop)
    loop_header->loop_header = true;
 
    /* The current block falls through to the start of the loop */
-   jay_block_add_successor(nj->current_block, loop_header);
+   jay_block_add_successor(nj->current_block, loop_header, GPR);
 
    /* Emit the loop body */
    nj->after_block = loop_header;
@@ -2194,7 +2193,7 @@ jay_emit_loop(struct nir_to_jay_state *nj, nir_loop *nloop)
    if (jump && jump->op == JAY_OPCODE_BREAK) {
       jump->op = JAY_OPCODE_LOOP_ONCE;
    } else {
-      jay_block_add_successor(nj->current_block, loop_header);
+      jay_block_add_successor(nj->current_block, loop_header, GPR);
       jay_WHILE(b);
    }
 
@@ -2442,7 +2441,6 @@ setup_fragment_payload(struct nir_to_jay_state *nj, struct payload_builder *p)
       }
    }
 
-   /* XXX: I do not love this */
    if (BITSET_TEST(nj->nir->info.system_values_read, SYSTEM_VALUE_FRAG_COORD)) {
       jay_def t = jay_alloc_def(&nj->bld, GPR, 1);
       jay_def lo = jay_extract_range(nj->payload.u0, 10, 4);
@@ -2508,9 +2506,9 @@ jay_setup_payload(struct nir_to_jay_state *nj)
 }
 
 /*
- * NIR sometimes contains unreachable blocks (e.g. due to infinite loops). These
- * blocks have no predecessors, but do have successors and can contribute to
- * phis. They are dead and violate the IR invariant:
+ * NIR sometimes contains logically unreachable blocks (e.g. due to infinite
+ * loops). These blocks have no predecessors, but do have successors and can
+ * contribute to phis. They are dead and violate the IR invariant:
  *
  *    Live-in sources are live-out in all predecessors.
  *
@@ -2530,16 +2528,23 @@ jay_remove_unreachable_blocks(jay_function *func)
 
       jay_foreach_block(func, pred) {
          if (pred != jay_first_block(func) &&
-             jay_num_predecessors(pred) == 0 &&
-             jay_num_successors(pred) > 0) {
+             jay_num_predecessors(pred, GPR) == 0 &&
+             jay_num_successors(pred, GPR) > 0) {
 
-            jay_foreach_successor(pred, succ) {
-               util_dynarray_delete_unordered(&succ->predecessors, jay_block *,
+            jay_foreach_successor(pred, succ, GPR) {
+               util_dynarray_delete_unordered(&succ->logical_preds, jay_block *,
                                               pred);
             }
 
-            pred->successors[0] = NULL;
-            pred->successors[1] = NULL;
+            jay_foreach_successor(pred, succ, UGPR) {
+               util_dynarray_delete_unordered(&succ->physical_preds,
+                                              jay_block *, pred);
+            }
+
+            pred->logical_succs[0] = NULL;
+            pred->logical_succs[1] = NULL;
+            pred->physical_succs[0] = NULL;
+            pred->physical_succs[1] = NULL;
             progress = true;
          }
       }
@@ -2672,7 +2677,8 @@ jay_compile(const struct intel_device_info *devinfo,
             nir->info.bit_sizes_float);
 
    if (!(jay_debug & JAY_DBG_NOOPT)) {
-      JAY_PASS(s, jay_opt_control_flow);
+      JAY_PASS(s, jay_opt_predicate);
+      JAY_PASS(s, jay_assign_accumulators);
    }
 
    JAY_PASS(s, jay_lower_scoreboard);

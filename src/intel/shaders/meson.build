@@ -20,6 +20,8 @@ endif
 
 intel_shader_files = files(
   'libintel_shaders.h',
+  'dgc.cl',
+  'dgc_debug.cl',
   'generate.cl',
   'generate_draws.cl',
   'generate_draws_iris.cl',
@@ -45,6 +47,7 @@ foreach gen : intel_shaders_gens
     command : [
       prog_mesa_clc,
       intel_shader_files, '-o', '@OUTPUT@', '--depfile', '@DEPFILE@', '--',
+      '-Wno-initializer-overrides',
       '-DGFX_VERx10=@0@'.format(gen[0]),
       '-I' + join_paths(meson.current_source_dir(), '.'),
       '-I' + join_paths(dir_source_root, 'src/compiler/libcl'),

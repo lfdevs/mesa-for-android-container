@@ -25,12 +25,12 @@
 
 #include "vk_instance.h"
 #include "vk_log.h"
-#include "vk_util.h"
 
 static const struct debug_control radv_debug_options[] = {
    {"nofastclears", RADV_DEBUG_NO_FAST_CLEARS},
    {"nodcc", RADV_DEBUG_NO_DCC},
    {"shaders", RADV_DEBUG_DUMP_SHADERS},
+   {"nocachecompat", RADV_DEBUG_NO_CACHE_COMPAT},
    {"nocache", RADV_DEBUG_NO_CACHE},
    {"shaderstats", RADV_DEBUG_DUMP_SHADER_STATS},
    {"nohiz", RADV_DEBUG_NO_HIZ},
@@ -90,6 +90,7 @@ static const struct debug_control radv_debug_options[] = {
    {"vm", RADV_DEBUG_VM},
    {"nosmemmitigation", RADV_DEBUG_NO_SMEM_MITIGATION},
    {"fullsync", RADV_DEBUG_FULL_SYNC},
+   {"notmz", RADV_DEBUG_NO_TMZ},
    {NULL, 0},
 };
 
@@ -149,6 +150,17 @@ static const struct debug_control radv_trap_excp_options[] = {
    {"float_underflow", RADV_TRAP_EXCP_FLOAT_UNDERFLOW},
    {NULL, 0},
 };
+
+// clang-format off
+static const struct debug_control radv_queue_disable_options[] = {
+   {"gfx", RADV_QUEUE_DISABLE_GENERAL},
+   {"compute", RADV_QUEUE_DISABLE_COMPUTE},
+   {"vdec", RADV_QUEUE_DISABLE_VIDEO_DEC},
+   {"venc", RADV_QUEUE_DISABLE_VIDEO_ENC},
+   {"transfer", RADV_QUEUE_DISABLE_TRANSFER},
+   {"sparse", RADV_QUEUE_DISABLE_SPARSE},
+};
+// clang-format on
 
 const char *
 radv_get_perftest_option_name(int id)
@@ -451,6 +463,7 @@ radv_CreateInstance(const VkInstanceCreateInfo *pCreateInfo, const VkAllocationC
    instance->experimental_flags = parse_debug_string(os_get_option("RADV_EXPERIMENTAL"), radv_experimental_options);
    instance->trap_excp_flags = parse_debug_string(os_get_option("RADV_TRAP_HANDLER_EXCP"), radv_trap_excp_options);
    instance->profile_pstate = radv_parse_pstate(debug_get_option("RADV_PROFILE_PSTATE", "peak"));
+   instance->queue_disable_flags = parse_debug_string(os_get_option("RADV_QUEUE_DISABLE"), radv_queue_disable_options);
 
    const uint64_t shader_stage_flags = RADV_DEBUG_DUMP_VS | RADV_DEBUG_DUMP_TCS | RADV_DEBUG_DUMP_TES |
                                        RADV_DEBUG_DUMP_GS | RADV_DEBUG_DUMP_PS | RADV_DEBUG_DUMP_TASK |
@@ -488,6 +501,13 @@ radv_CreateInstance(const VkInstanceCreateInfo *pCreateInfo, const VkAllocationC
    VG(VALGRIND_CREATE_MEMPOOL(instance, 0, false));
 
    radv_convert_perftest_to_experimental(instance);
+
+   if (instance->debug_flags & RADV_DEBUG_NO_COMPUTE_QUEUE) {
+      fprintf(stderr, "radv: RADV_DEBUG=nocompute is deprecated and will be removed in future Mesa Releases.\n"
+                      "Please use RADV_QUEUE_DISABLE=compute instead.\n");
+      instance->queue_disable_flags |= RADV_QUEUE_DISABLE_COMPUTE;
+   }
+
    radv_init_dri_options(instance);
 
    *pInstance = radv_instance_to_handle(instance);

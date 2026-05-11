@@ -3476,7 +3476,7 @@ static uint32_t pvr_get_executable_count(struct pvr_pipeline *pipeline)
    return exe_count;
 }
 
-VkResult pvr_GetPipelineExecutableStatisticsKHR(
+VkResult PVR_PER_ARCH(GetPipelineExecutableStatisticsKHR)(
    UNUSED VkDevice _device,
    const VkPipelineExecutableInfoKHR *pExecutableInfo,
    uint32_t *pStatisticCount,
@@ -3518,7 +3518,7 @@ VkResult pvr_GetPipelineExecutableStatisticsKHR(
    return vk_outarray_status(&out);
 }
 
-VkResult pvr_GetPipelineExecutablePropertiesKHR(
+VkResult PVR_PER_ARCH(GetPipelineExecutablePropertiesKHR)(
    VkDevice _device,
    const VkPipelineInfoKHR *pPipelineInfo,
    uint32_t *pExecutableCount,
@@ -3607,7 +3607,7 @@ write_ir_text(VkPipelineExecutableInternalRepresentationKHR *ir,
    return true;
 }
 
-VkResult pvr_GetPipelineExecutableInternalRepresentationsKHR(
+VkResult PVR_PER_ARCH(GetPipelineExecutableInternalRepresentationsKHR)(
    UNUSED VkDevice _device,
    UNUSED const VkPipelineExecutableInfoKHR *pExecutableInfo,
    uint32_t *pInternalRepresentationCount,

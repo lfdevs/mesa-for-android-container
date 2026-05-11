@@ -88,11 +88,11 @@ fixup_cast_deref_mode(nir_deref_instr *deref)
       deref->modes ^= nir_var_function_temp;
 
       nir_foreach_use(use, &deref->def) {
-         if (nir_src_parent_instr(use)->type != nir_instr_type_deref)
+         if (nir_src_use_instr(use)->type != nir_instr_type_deref)
             continue;
 
          /* Recurse into children */
-         fixup_cast_deref_mode(nir_instr_as_deref(nir_src_parent_instr(use)));
+         fixup_cast_deref_mode(nir_instr_as_deref(nir_src_use_instr(use)));
       }
    }
 }

@@ -11,6 +11,7 @@
 #ifndef RADV_IMAGE_H
 #define RADV_IMAGE_H
 
+#include "ac_descriptors.h"
 #include "ac_surface.h"
 
 #include "radv_device.h"

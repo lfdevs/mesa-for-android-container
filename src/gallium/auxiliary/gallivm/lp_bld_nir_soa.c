@@ -2854,7 +2854,7 @@ glsl_sampler_to_pipe(int sampler_dim, bool is_array)
 static uint32_t
 get_src_index(nir_src *src)
 {
-   nir_instr *instr = nir_src_parent_instr(src);
+   nir_instr *instr = nir_src_use_instr(src);
    switch (instr->type) {
    case nir_instr_type_alu: {
       nir_alu_instr *alu = nir_instr_as_alu(instr);
@@ -2952,7 +2952,7 @@ get_src(struct lp_build_nir_soa_context *bld, nir_src *src, uint32_t component)
       return bld->ssa_defs[src->ssa->index * NIR_MAX_VEC_COMPONENTS * 2 + NIR_MAX_VEC_COMPONENTS + component];
 
    LLVMValueRef result[NIR_MAX_VEC_COMPONENTS] = { NULL };
-   get_instr_src_vec(bld, nir_src_parent_instr(src), get_src_index(src), result);
+   get_instr_src_vec(bld, nir_src_use_instr(src), get_src_index(src), result);
    return result[component];
 }
 
@@ -3009,7 +3009,7 @@ assign_ssa_dest(struct lp_build_nir_soa_context *bld, const nir_def *ssa,
    nir_foreach_use_including_if(use, ssa) {
       bool use_divergent = nir_src_is_if(use);
       if (!use_divergent)
-         use_divergent =  lp_nir_instr_src_divergent(nir_src_parent_instr(use), get_src_index(use));
+         use_divergent =  lp_nir_instr_src_divergent(nir_src_use_instr(use), get_src_index(use));
       used_by_divergent |= use_divergent;
    }
 
@@ -5898,7 +5898,7 @@ void lp_build_nir_soa_func(struct gallivm_state *gallivm,
    }
    {
       struct lp_type bool_type;
-      bool_type = lp_int_type(type);
+      bool_type = lp_uint_type(type);
       bool_type.width /= 32;
       lp_build_context_init(&bld.bool_bld, gallivm, bool_type);
    }
@@ -5961,7 +5961,7 @@ void lp_build_nir_soa_func(struct gallivm_state *gallivm,
    }
    {
       struct lp_type bool_type;
-      bool_type = lp_int_type(elem_type);
+      bool_type = lp_uint_type(elem_type);
       bool_type.width /= 32;
       lp_build_context_init(&bld.scalar_bool_bld, gallivm, bool_type);
    }

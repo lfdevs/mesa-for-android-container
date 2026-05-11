@@ -57,7 +57,7 @@ typedef struct ARect {
 } ARect;
 
 #ifdef __cplusplus
-};
+}
 #endif
 
 #endif // ANDROID_RECT_H

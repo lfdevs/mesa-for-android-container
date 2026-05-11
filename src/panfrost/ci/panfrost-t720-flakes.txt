@@ -5,6 +5,7 @@ dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src
 dEQP-GLES2.functional.fragment_ops.blend.rgb_func_alpha_func.dst.one_minus_src_color_dst_alpha
 dEQP-GLES2.functional.fragment_ops.blend.rgb_func_alpha_func.src.one_minus_constant_color_one_minus_dst_alphar
 dEQP-GLES2.functional.fragment_ops.random.49
+dEQP-GLES2.functional.fragment_ops.random.54
 
 # Some of these fail almost every nightly CI job
 dEQP-GLES2.functional.fbo.render.shared_colorbuffer.rbo_bgra_depth_component16

@@ -6,13 +6,12 @@
 
 #include "radv_pipeline_binary.h"
 #include "util/blob.h"
-#include "util/disk_cache.h"
 #include "util/macros.h"
 #include "util/mesa-blake3.h"
 #include "util/mesa-blake3.h"
 #include "util/u_atomic.h"
-#include "util/u_debug.h"
-#include "radv_debug.h"
+#include "radv_device.h"
+#include "radv_physical_device.h"
 #include "radv_device.h"
 #include "radv_entrypoints.h"
 #include "radv_pipeline_cache.h"
@@ -21,7 +20,6 @@
 #include "radv_shader.h"
 #include "vk_log.h"
 #include "vk_pipeline.h"
-#include "vk_util.h"
 
 static VkResult
 radv_get_pipeline_key(struct radv_device *device, const VkPipelineCreateInfoKHR *pPipelineCreateInfo,

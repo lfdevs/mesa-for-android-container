@@ -50,6 +50,14 @@ record_write(struct repair_ctx *ctx, bi_block *block, unsigned node,
              bi_index val)
 {
    assert(node < ctx->n);
+
+   /* The value always gets used as a source, where we don't want the
+    * destination "swizzle" and other modifiers that are applied on write.
+    */
+   val.swizzle = BI_SWIZZLE_H01;
+   val.neg = false;
+   val.abs = false;
+
    struct hash_table_u64 *defs = repair_block(ctx, block)->defs;
    _mesa_hash_table_u64_insert(defs, node,
                                ralloc_memdup(defs, &val, sizeof(val)));
@@ -106,6 +114,7 @@ resolve_read(struct repair_ctx *ctx, bi_block *block, bi_index node)
    }
 
    assert(!bi_is_null(val));
+   assert(val.swizzle == BI_SWIZZLE_H01);
    record_write(ctx, block, node.value, val);
    return val;
 }
@@ -315,7 +324,7 @@ bi_repair_ssa(bi_context *ctx)
             };
 
             bi_replace_src(phi, s,
-                            resolve_read(&rctx, read_block, phi->src[s]));
+                           resolve_read(&rctx, read_block, phi->src[s]));
          }
       }
    }

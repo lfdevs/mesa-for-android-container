@@ -250,6 +250,8 @@ va_pack_widen(const bi_instr *I, enum bi_swizzle swz, enum va_size size)
       switch (swz) {
       case BI_SWIZZLE_B0123:
          return VA_SWIZZLES_8_BIT_B0123;
+      case BI_SWIZZLE_B3210:
+         return VA_SWIZZLES_8_BIT_B3210;
       case BI_SWIZZLE_B0101:
          return VA_SWIZZLES_8_BIT_B0101;
       case BI_SWIZZLE_B2323:
@@ -1041,8 +1043,11 @@ va_pack_instr(const bi_instr *I, unsigned arch)
          hex |= (1ull << 46);
 
       if (I->op == BI_OPCODE_TEX_GRADIENT) {
-         if (I->force_delta_enable)
+         if (I->force_delta_enable) {
+            if (arch < 10)
+               invalid_instruction(I, "gradient instruction does not support .force_delta_enable");
             hex |= (1ull << 12);
+         }
          if (I->lod_bias_disable)
             hex |= (1ull << 13);
          if (I->lod_clamp_disable)

@@ -728,7 +728,8 @@ etna_try_blt_blit(struct pipe_context *pctx,
    /* Flush destination, as the blit will invalidate any pending TS changes. */
    if (dst != src && etna_resource_level_needs_flush(dst_lev))
       etna_copy_resource(pctx, &dst->base, &dst->base,
-                         blit_info->dst.level, blit_info->dst.level);
+                         blit_info->dst.level, blit_info->dst.level,
+                         false);
 
    /* Kick off BLT here */
    if (src == dst && src_lev->ts_compress_fmt < 0) {
@@ -788,10 +789,17 @@ etna_try_blt_blit(struct pipe_context *pctx,
       for (unsigned x=0; x<4; ++x)
          op.dest.swizzle[x] = x;
 
-      /* For transfer blits of RB_SWAP formats, apply R<->B swizzle on the
-       * linear side to convert between GPU-internal BGRA and CPU RGBA. */
-      if (ctx->in_transfer_blit &&
-          translate_pe_format_rb_swap(blit_info->src.format)) {
+      /* Apply R<->B swizzle when needed:
+       * - Transfer blits (CPU access): swap on the linear side to convert
+       *   between GPU-internal BGRA and CPU RGBA byte order.
+       * - Shared resource flushes: swap dest to convert PE-internal BGRA
+       *   back to the standard RGBA byte order for external consumers. */
+      if (ctx->blit_rb_swap) {
+         op.dest.swizzle[0] = 2; /* R from B position */
+         op.dest.swizzle[2] = 0; /* B from R position */
+      } else if (ctx->in_transfer_blit &&
+                 translate_pe_format_rb_swap(blit_info->src.format) &&
+                 !src->shared && !dst->shared) {
          bool src_linear = src->layout == ETNA_LAYOUT_LINEAR;
          bool dst_linear = dst->layout == ETNA_LAYOUT_LINEAR;
 

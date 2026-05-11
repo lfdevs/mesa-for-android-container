@@ -46,14 +46,15 @@ layout (constant_id = ROOT_FLAGS_OFFSET_ID) const int ROOT_FLAGS_OFFSET = -1;
 
 #define VK_BUILD_FLAG_ALWAYS_ACTIVE (1u << 0)
 #define VK_BUILD_FLAG_PROPAGATE_CULL_FLAGS (1u << 1)
-#define VK_BUILD_FLAG_COUNT 2
+#define VK_BUILD_FLAG_64BIT_KEYS (1u << 2)
+#define VK_BUILD_FLAG_COUNT 3
 
 #define VK_BUILD_FLAG(flag) ((BUILD_FLAGS & flag) != 0)
 
 struct leaf_args {
    VOID_REF bvh;
    REF(vk_ir_header) header;
-   REF(key_id_pair) ids;
+   VOID_REF ids;
 
    vk_bvh_geometry_data geom_data;
 };
@@ -61,7 +62,7 @@ struct leaf_args {
 struct morton_args {
    VOID_REF bvh;
    REF(vk_ir_header) header;
-   REF(key_id_pair) ids;
+   VOID_REF ids;
 };
 
 #define LBVH_RIGHT_CHILD_BIT_SHIFT 29
@@ -79,7 +80,7 @@ struct lbvh_node_info {
 
 struct lbvh_main_args {
    VOID_REF bvh;
-   REF(key_id_pair) src_ids;
+   VOID_REF src_ids;
    VOID_REF node_info;
    REF(vk_ir_header) header;
    uint32_t internal_node_base;
@@ -113,7 +114,7 @@ struct ploc_args {
 struct hploc_args {
    REF(vk_ir_header) header;
    VOID_REF bvh;
-   REF(key_id_pair) ids;
+   REF(key32_id_pair) ids;
    VOID_REF ranges;
    uint32_t internal_node_base;
 };

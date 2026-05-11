@@ -27,6 +27,7 @@ struct radv_shader_binary;
 struct radv_shader_debug_info;
 struct radv_shader_stage;
 struct radv_spirv_to_nir_options;
+struct radv_compiler_info;
 struct util_dynarray;
 struct nir_shader;
 typedef struct nir_shader nir_shader;
@@ -55,17 +56,18 @@ void radv_ray_tracing_pipeline_cache_insert(struct radv_device *device, struct v
                                             struct radv_ray_tracing_pipeline *pipeline, unsigned num_stages,
                                             unsigned num_groups);
 
-nir_shader *radv_pipeline_cache_lookup_nir(struct radv_device *device, struct vk_pipeline_cache *cache,
-                                           mesa_shader_stage stage, const blake3_hash key);
+nir_shader *radv_pipeline_cache_lookup_nir(const struct radv_compiler_info *compiler_info,
+                                           struct vk_pipeline_cache *cache, mesa_shader_stage stage,
+                                           const blake3_hash key);
 
-void radv_pipeline_cache_insert_nir(struct radv_device *device, struct vk_pipeline_cache *cache, const blake3_hash key,
-                                    const nir_shader *nir);
+void radv_pipeline_cache_insert_nir(const struct radv_compiler_info *compiler_info, struct vk_pipeline_cache *cache,
+                                    const blake3_hash key, const nir_shader *nir);
 
-struct vk_pipeline_cache_object *radv_pipeline_cache_lookup_nir_handle(struct radv_device *device,
+struct vk_pipeline_cache_object *radv_pipeline_cache_lookup_nir_handle(const struct radv_compiler_info *compiler_info,
                                                                        struct vk_pipeline_cache *cache,
                                                                        const unsigned char *blake3);
 
-struct nir_shader *radv_pipeline_cache_handle_to_nir(struct radv_device *device,
+struct nir_shader *radv_pipeline_cache_handle_to_nir(const struct radv_compiler_info *compiler_info,
                                                      struct vk_pipeline_cache_object *object);
 
 struct vk_pipeline_cache_object *radv_pipeline_cache_nir_to_handle(struct radv_device *device,

@@ -1004,7 +1004,7 @@ emit_ms_finale(nir_builder *b, lower_ngg_ms_state *s)
    ms_prim_gen_query(b, invocation_index, num_prm, s);
 
    nir_def *row_start = NULL;
-   if (s->ac->mesh_fast_launch_2)
+   if (s->ac->gfx_level >= GFX11)
       row_start = s->hw_workgroup_size <= s->wave_size ? nir_imm_int(b, 0) : nir_load_subgroup_id(b);
 
    /* Load vertex/primitive attributes from shared memory and
@@ -1369,7 +1369,7 @@ ac_nir_lower_ngg_mesh(nir_shader *shader, const ac_nir_lower_ngg_options *option
                                  shader->info.workgroup_size[1] *
                                  shader->info.workgroup_size[2];
 
-   bool fast_launch_2 = options->compiler_info->mesh_fast_launch_2;
+   bool fast_launch_2 = options->compiler_info->gfx_level >= GFX11;
 
    unsigned hw_workgroup_size = options->max_workgroup_size;
    lower_ngg_ms_state state = {

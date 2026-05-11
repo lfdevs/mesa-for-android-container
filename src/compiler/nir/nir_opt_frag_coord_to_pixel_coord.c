@@ -15,7 +15,8 @@
 static bool
 opt_frag_pos(nir_builder *b, nir_intrinsic_instr *intr, UNUSED void *data)
 {
-   if (intr->intrinsic != nir_intrinsic_load_frag_coord)
+   if (intr->intrinsic != nir_intrinsic_load_frag_coord &&
+       intr->intrinsic != nir_intrinsic_load_frag_coord_xy)
       return false;
 
    /* Don't increase precision. */
@@ -27,16 +28,18 @@ opt_frag_pos(nir_builder *b, nir_intrinsic_instr *intr, UNUSED void *data)
       if (nir_src_is_if(use))
          return false;
 
-      unsigned mask = nir_src_components_read(use);
+      if (intr->intrinsic == nir_intrinsic_load_frag_coord) {
+         unsigned mask = nir_src_components_read(use);
 
-      if (!(mask & 0x3))
-         continue;
+         if (!(mask & 0x3))
+            continue;
 
-      /* Don't handle instructions that read x/y and z/w for simplicity. */
-      if (mask & ~0x3)
-         return false;
+         /* Don't handle instructions that read x/y and z/w for simplicity. */
+         if (mask & ~0x3)
+            return false;
+      }
 
-      nir_instr *use_instr = nir_src_parent_instr(use);
+      nir_instr *use_instr = nir_src_use_instr(use);
 
       if (use_instr->type != nir_instr_type_alu)
          return false;
@@ -62,14 +65,16 @@ opt_frag_pos(nir_builder *b, nir_intrinsic_instr *intr, UNUSED void *data)
    nir_def *pixel_coord = nir_load_pixel_coord(b);
 
    nir_foreach_use_safe(use, &intr->def) {
-      unsigned mask = nir_src_components_read(use);
+      if (intr->intrinsic == nir_intrinsic_load_frag_coord) {
+         unsigned mask = nir_src_components_read(use);
 
-      if (!(mask & 0x3))
-         continue;
+         if (!(mask & 0x3))
+            continue;
+      }
 
       nir_src_rewrite(use, pixel_coord);
 
-      nir_alu_instr *use_instr = nir_instr_as_alu(nir_src_parent_instr(use));
+      nir_alu_instr *use_instr = nir_instr_as_alu(nir_src_use_instr(use));
 
       /* load_frag_coord is always positive, so we should never sign extend here. */
       bool needs_float = use_instr->op == nir_op_ffloor || use_instr->op == nir_op_ftrunc;

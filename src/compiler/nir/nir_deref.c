@@ -161,7 +161,7 @@ nir_deref_instr_has_complex_use(nir_deref_instr *deref,
       if (nir_src_is_if(use_src))
          return true;
 
-      nir_instr *use_instr = nir_src_parent_instr(use_src);
+      nir_instr *use_instr = nir_src_use_instr(use_src);
 
       switch (use_instr->type) {
       case nir_instr_type_deref: {
@@ -837,7 +837,7 @@ nir_rematerialize_deref_in_use_blocks(nir_deref_instr *instr)
    };
 
    nir_foreach_use_safe(use, &instr->def) {
-      nir_instr *parent = nir_src_parent_instr(use);
+      nir_instr *parent = nir_src_use_instr(use);
       if (parent->block == instr->instr.block)
          continue;
 
@@ -890,10 +890,10 @@ static void
 nir_deref_instr_fixup_child_types(nir_deref_instr *parent)
 {
    nir_foreach_use(use, &parent->def) {
-      if (nir_src_parent_instr(use)->type != nir_instr_type_deref)
+      if (nir_src_use_instr(use)->type != nir_instr_type_deref)
          continue;
 
-      nir_deref_instr *child = nir_instr_as_deref(nir_src_parent_instr(use));
+      nir_deref_instr *child = nir_instr_as_deref(nir_src_use_instr(use));
       switch (child->deref_type) {
       case nir_deref_type_var:
          UNREACHABLE("nir_deref_type_var cannot be a child");
@@ -1235,7 +1235,7 @@ opt_deref_cast(nir_builder *b, nir_deref_instr *cast)
       /* If this isn't a trivial array cast, we can't propagate into
        * ptr_as_array derefs.
        */
-      if (is_deref_ptr_as_array(nir_src_parent_instr(use_src)) &&
+      if (is_deref_ptr_as_array(nir_src_use_instr(use_src)) &&
           !trivial_array_cast)
          continue;
 

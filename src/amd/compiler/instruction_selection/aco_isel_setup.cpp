@@ -6,7 +6,6 @@
 
 #include "aco_instruction_selection.h"
 #include "aco_interface.h"
-#include "aco_nir_call_attribs.h"
 
 #include "nir_builder.h"
 #include "nir_control_flow.h"
@@ -23,9 +22,9 @@ bool
 only_used_by_cross_lane_instrs(nir_def* ssa, bool follow_phis = true)
 {
    nir_foreach_use (src, ssa) {
-      switch (nir_src_parent_instr(src)->type) {
+      switch (nir_src_use_instr(src)->type) {
       case nir_instr_type_alu: {
-         nir_alu_instr* alu = nir_instr_as_alu(nir_src_parent_instr(src));
+         nir_alu_instr* alu = nir_instr_as_alu(nir_src_use_instr(src));
          if (alu->op != nir_op_unpack_64_2x32_split_x && alu->op != nir_op_unpack_64_2x32_split_y)
             return false;
          if (!only_used_by_cross_lane_instrs(&alu->def, follow_phis))
@@ -34,7 +33,7 @@ only_used_by_cross_lane_instrs(nir_def* ssa, bool follow_phis = true)
          continue;
       }
       case nir_instr_type_intrinsic: {
-         nir_intrinsic_instr* intrin = nir_instr_as_intrinsic(nir_src_parent_instr(src));
+         nir_intrinsic_instr* intrin = nir_instr_as_intrinsic(nir_src_use_instr(src));
          if (intrin->intrinsic != nir_intrinsic_read_invocation &&
              intrin->intrinsic != nir_intrinsic_read_first_invocation &&
              intrin->intrinsic != nir_intrinsic_lane_permute_16_amd)
@@ -47,7 +46,7 @@ only_used_by_cross_lane_instrs(nir_def* ssa, bool follow_phis = true)
          if (!follow_phis)
             return false;
 
-         nir_phi_instr* phi = nir_instr_as_phi(nir_src_parent_instr(src));
+         nir_phi_instr* phi = nir_instr_as_phi(nir_src_use_instr(src));
          if (!only_used_by_cross_lane_instrs(&phi->def, false))
             return false;
 
@@ -270,9 +269,9 @@ skip_uniformize_merge_phi(nir_def* ssa, unsigned depth)
       return false;
 
    nir_foreach_use (src, ssa) {
-      switch (nir_src_parent_instr(src)->type) {
+      switch (nir_src_use_instr(src)->type) {
       case nir_instr_type_alu: {
-         nir_alu_instr* alu = nir_instr_as_alu(nir_src_parent_instr(src));
+         nir_alu_instr* alu = nir_instr_as_alu(nir_src_use_instr(src));
          if (alu->def.divergent)
             break;
 
@@ -303,7 +302,7 @@ skip_uniformize_merge_phi(nir_def* ssa, unsigned depth)
          break;
       }
       case nir_instr_type_intrinsic: {
-         nir_intrinsic_instr* intrin = nir_instr_as_intrinsic(nir_src_parent_instr(src));
+         nir_intrinsic_instr* intrin = nir_instr_as_intrinsic(nir_src_use_instr(src));
          unsigned src_idx = src - intrin->src;
          /* nir_intrinsic_lane_permute_16_amd is only safe because we don't use divergence analysis
           * for it's instruction selection. We use that intrinsic for NGG culling. All others are
@@ -322,7 +321,7 @@ skip_uniformize_merge_phi(nir_def* ssa, unsigned depth)
          return false;
       }
       case nir_instr_type_phi: {
-         nir_phi_instr* phi = nir_instr_as_phi(nir_src_parent_instr(src));
+         nir_phi_instr* phi = nir_instr_as_phi(nir_src_use_instr(src));
          if (phi->def.divergent || skip_uniformize_merge_phi(&phi->def, depth + 1))
             break;
          return false;

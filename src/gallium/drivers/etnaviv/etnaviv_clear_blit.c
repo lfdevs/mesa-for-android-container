@@ -251,26 +251,67 @@ etna_resource_copy_region(struct pipe_context *pctx, struct pipe_resource *dst,
 static void
 etna_flush_resource(struct pipe_context *pctx, struct pipe_resource *prsc)
 {
+   struct etna_context *ctx = etna_context(pctx);
    struct etna_resource *rsc = etna_resource(prsc);
+
+   /* When flushing a shared resource with an RB_SWAP format, the PE has
+    * written BGRA bytes internally. Convert to RGBA during the flush copy
+    * so the shared buffer has the correct byte order for external consumers. */
+   const bool flush_rb_swap = rsc->shared &&
+                              translate_pe_format_rb_swap(prsc->format);
 
    if (rsc->render) {
       if (etna_resource_older(rsc, etna_resource(rsc->render))) {
          if (rsc->damage) {
             for (unsigned i = 0; i < rsc->num_damage; i++) {
-               etna_copy_resource_box(pctx, prsc, rsc->render, 0, 0, &rsc->damage[i]);
+               etna_copy_resource_box(pctx, prsc, rsc->render, 0, 0,
+                                      &rsc->damage[i], flush_rb_swap);
             }
          } else {
-            etna_copy_resource(pctx, prsc, rsc->render, 0, 0);
+            etna_copy_resource(pctx, prsc, rsc->render, 0, 0, flush_rb_swap);
          }
+
+         if (flush_rb_swap)
+            rsc->shared_native_order = true;
       }
    } else if (!etna_resource_ext_ts(rsc) && etna_resource_needs_flush(rsc)) {
-      etna_copy_resource(pctx, prsc, prsc, 0, 0);
+      etna_copy_resource(pctx, prsc, prsc, 0, 0, flush_rb_swap);
+
+      if (flush_rb_swap) {
+         rsc->shared_native_order = true;
+         etna_resource_level_mark_changed(&rsc->levels[0]);
+      }
+   } else if (flush_rb_swap) {
+      /* No render shadow and no TS — PE rendered directly into the shared
+       * buffer. If the fragment shader already swapped R/B (LINEAR_PE),
+       * bytes are already correct. Otherwise we need to swap here. */
+      if (!rsc->shared_native_order) {
+         assert(prsc->last_level == 0);
+         struct etna_resource_level *lev = &rsc->levels[0];
+         struct pipe_blit_info blit = {
+            .mask = util_format_get_mask(prsc->format),
+            .filter = PIPE_TEX_FILTER_NEAREST,
+            .src.resource = blit.dst.resource = prsc,
+            .src.format = blit.dst.format = prsc->format,
+            .src.box.width = blit.dst.box.width = lev->width,
+            .src.box.height = blit.dst.box.height = lev->height,
+            .src.box.depth = blit.dst.box.depth = 1,
+         };
+
+         ctx->blit_rb_swap = true;
+         ctx->blit(pctx, &blit);
+         ctx->blit_rb_swap = false;
+
+         rsc->shared_native_order = true;
+         etna_resource_level_mark_changed(&rsc->levels[0]);
+      }
    }
 }
 
 void
 etna_copy_resource(struct pipe_context *pctx, struct pipe_resource *dst,
-                   struct pipe_resource *src, int first_level, int last_level)
+                   struct pipe_resource *src, int first_level, int last_level,
+                   bool rb_swap)
 {
    struct etna_context *ctx = etna_context(pctx);
    struct etna_resource *src_priv = etna_resource(src);
@@ -279,6 +320,8 @@ etna_copy_resource(struct pipe_context *pctx, struct pipe_resource *dst,
    assert(src->format == dst->format || util_format_is_yuv(src->format));
    assert(src->array_size == dst->array_size);
    assert(last_level <= dst->last_level && last_level <= src->last_level);
+
+   ctx->blit_rb_swap = rb_swap;
 
    struct pipe_blit_info blit = {};
    blit.mask = util_format_get_mask(dst->format);
@@ -324,12 +367,14 @@ etna_copy_resource(struct pipe_context *pctx, struct pipe_resource *dst,
       else
          etna_resource_level_copy_seqno(&dst_priv->levels[level], &src_priv->levels[level]);
    }
+
+   ctx->blit_rb_swap = false;
 }
 
 void
 etna_copy_resource_box(struct pipe_context *pctx, struct pipe_resource *dst,
                        struct pipe_resource *src, int dst_level, int src_level,
-                       struct pipe_box *box)
+                       struct pipe_box *box, bool rb_swap)
 {
    struct etna_context *ctx = etna_context(pctx);
    struct etna_resource *src_priv = etna_resource(src);
@@ -338,6 +383,8 @@ etna_copy_resource_box(struct pipe_context *pctx, struct pipe_resource *dst,
    assert(src->format == dst->format);
    assert(src->array_size == dst->array_size);
    assert(!etna_resource_level_needs_flush(&dst_priv->levels[dst_level]));
+
+   ctx->blit_rb_swap = rb_swap;
 
    struct pipe_blit_info blit = {};
    blit.mask = util_format_get_mask(dst->format);
@@ -366,6 +413,8 @@ etna_copy_resource_box(struct pipe_context *pctx, struct pipe_resource *dst,
    else
       etna_resource_level_copy_seqno(&dst_priv->levels[dst_level],
                                      &src_priv->levels[src_level]);
+
+   ctx->blit_rb_swap = false;
 }
 
 void

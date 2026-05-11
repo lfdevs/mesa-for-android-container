@@ -847,7 +847,7 @@ vk_common_CmdCopyBufferToImage2(
          .addressRange = vk_device_address_range(
             buffer, pCopyBufferToImageInfo->pRegions[r].bufferOffset,
             VK_WHOLE_SIZE),
-         .addressFlags = buffer->copy_flags,
+         .addressFlags = buffer->address_flags,
          .addressRowLength = pCopyBufferToImageInfo->pRegions[r].bufferRowLength,
          .addressImageHeight = pCopyBufferToImageInfo->pRegions[r].bufferImageHeight,
          .imageSubresource = pCopyBufferToImageInfo->pRegions[r].imageSubresource,

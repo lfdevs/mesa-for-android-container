@@ -1,0 +1,277 @@
+From 0ce7ca82289ec3351ccec4b37540d8fdbc8dd095 Mon Sep 17 00:00:00 2001
+From: Valentine Burley <valentine.burley@collabora.com>
+Date: Thu, 23 Apr 2026 11:03:14 +0200
+Subject: [PATCH] android: Implement headless WSI fallback using AImageReader
+
+When running dEQP as a native executable (DEQP_ANDROID_EXE) on Android,
+a system-provided NativeActivity window is typically unavailable. This
+prevents Vulkan and EGL WSI tests from running as they require a valid
+ANativeWindow.
+
+This patch:
+- Implements a headless fallback using the AImageReader NDK API to
+  create an off-screen ANativeWindow in tcuAndroidPlatform.cpp.
+- Adds ImageReaderNativeWindow (EGL) and ImageReaderVulkanWindow (Vulkan)
+  to manage the AImageReader lifecycle within the framework.
+- Extracts the AImageReader creation logic into a shared helper
+  acquireImageReaderWindow().
+- Links against mediandk in android.cmake to provide AImageReader
+  support for Android API levels >= 24.
+- On Android API levels < 24 (where AImageReader is unavailable), window
+  acquisition failure now consistently throws ResourceError instead of
+  NotSupportedError. This aligns the EGL path with the existing Vulkan
+  behavior and reverts EGL to the previous CTS behavior.
+
+This allows surface and swapchain tests to function correctly in headless
+environments for both EGL and Vulkan.
+
+Components: Android, EGL, Framework, Vulkan
+VK-GL-CTS issue: 6468
+Affects:
+dEQP-EGL.*
+dEQP-VK.wsi.android.*
+
+Change-Id: I462e617ae60e4dc3d9f0aeec11fd1628d0c6ff12
+Signed-off-by: Valentine Burley <valentine.burley@collabora.com>
+---
+ external/openglcts/README.md                  |   7 +-
+ .../platform/android/tcuAndroidPlatform.cpp   | 159 +++++++++++++++++-
+ targets/android/android.cmake                 |   5 +
+ 3 files changed, 164 insertions(+), 7 deletions(-)
+
+diff --git a/external/openglcts/README.md b/external/openglcts/README.md
+index 69eb8a5c1e..f464291858 100644
+--- a/external/openglcts/README.md
++++ b/external/openglcts/README.md
+@@ -323,9 +323,10 @@ This is identical to the builds on other platforms and is better for iterative
+ runs of headless tests as CTS can be invoked and the output can be checked from
+ a single interactive terminal.
+ 
+-This build doesn't support WSI tests and shouldn't be used for conformance
+-submissions, it also isn't recommended for longer running tests since Android
+-will terminate this process as soon as the `adb shell` session ends which may
++This build supports WSI tests via a headless AImageReader fallback for both EGL
++and Vulkan (Android API 24+). However, it shouldn't be used for conformance
++submissions. It also isn't recommended for longer running tests since Android
++will terminate this process as soon as the `adb shell` session ends, which may
+ happen due to an unintentional device disconnection.
+ 
+ 	cmake <path to openglcts> -GNinja -DCMAKE_BUILD_TYPE=Debug \
+diff --git a/framework/platform/android/tcuAndroidPlatform.cpp b/framework/platform/android/tcuAndroidPlatform.cpp
+index af56dabb83..86984202fb 100644
+--- a/framework/platform/android/tcuAndroidPlatform.cpp
++++ b/framework/platform/android/tcuAndroidPlatform.cpp
+@@ -35,6 +35,12 @@
+ 
+ // Assume no call translation is needed
+ #include <android/native_window.h>
++#if DE_ANDROID_API >= 24
++#include <media/NdkImageReader.h>
++#endif
++#if DE_ANDROID_API >= 26
++#include <android/hardware_buffer.h>
++#endif
+ struct egl_native_pixmap_t;
+ DE_STATIC_ASSERT(sizeof(eglw::EGLNativeDisplayType) == sizeof(void *));
+ DE_STATIC_ASSERT(sizeof(eglw::EGLNativePixmapType) == sizeof(struct egl_native_pixmap_t *));
+@@ -136,6 +142,81 @@ private:
+     WindowRegistry &m_windowRegistry;
+ };
+ 
++#if DE_ANDROID_API >= 24
++static ANativeWindow *acquireImageReaderWindow(int width, int height, int32_t format, AImageReader **outReader)
++{
++    AImageReader *reader = nullptr;
++#if DE_ANDROID_API >= 26
++    uint64_t usage        = AHARDWAREBUFFER_USAGE_GPU_SAMPLED_IMAGE | AHARDWAREBUFFER_USAGE_COMPOSER_OVERLAY;
++    media_status_t status = AImageReader_newWithUsage(width, height, format, usage, 2, &reader);
++#else
++    media_status_t status = AImageReader_new(width, height, format, 2, &reader);
++#endif
++    if (status != AMEDIA_OK || !reader)
++        throw ResourceError("Failed to create AImageReader", nullptr, __FILE__, __LINE__);
++
++    ANativeWindow *nativeWindow = nullptr;
++    status                      = AImageReader_getWindow(reader, &nativeWindow);
++    if (status != AMEDIA_OK || !nativeWindow)
++    {
++        AImageReader_delete(reader);
++        throw ResourceError("Failed to get window from AImageReader", nullptr, __FILE__, __LINE__);
++    }
++
++    *outReader = reader;
++    return nativeWindow;
++}
++
++class ImageReaderNativeWindow : public eglu::NativeWindow
++{
++public:
++    ImageReaderNativeWindow(AImageReader *reader, ANativeWindow *window, int width, int height)
++        : eglu::NativeWindow(WINDOW_CAPABILITIES)
++        , m_reader(reader)
++        , m_window(window)
++        , m_size(width, height)
++    {
++    }
++
++    virtual ~ImageReaderNativeWindow(void)
++    {
++        if (m_reader)
++            AImageReader_delete(m_reader);
++    }
++
++    virtual eglw::EGLNativeWindowType getLegacyNative(void)
++    {
++        return m_window;
++    }
++    virtual void *getPlatformExtension(void)
++    {
++        return m_window;
++    }
++    virtual void *getPlatformNative(void)
++    {
++        return m_window;
++    }
++    tcu::IVec2 getScreenSize(void) const
++    {
++        return m_size;
++    }
++    void setSurfaceSize(tcu::IVec2 size)
++    {
++        int32_t format = 0; // 0 means keep the existing format
++        ANativeWindow_setBuffersGeometry(m_window, size.x(), size.y(), format);
++        m_size = size;
++    }
++    virtual void processEvents(void)
++    {
++    }
++
++private:
++    AImageReader *m_reader;
++    ANativeWindow *m_window;
++    tcu::IVec2 m_size;
++};
++#endif
++
+ // NativeWindow
+ 
+ NativeWindow::NativeWindow(Window *window, int width, int height, int32_t format)
+@@ -197,10 +278,29 @@ eglu::NativeWindow *NativeWindowFactory::createWindow(const eglu::WindowParams &
+ {
+     Window *window = m_windowRegistry.tryAcquireWindow();
+ 
+-    if (!window)
+-        throw NotSupportedError("Native window is not available", nullptr, __FILE__, __LINE__);
+-
+-    return new NativeWindow(window, params.width, params.height, format);
++    if (window)
++    {
++        return new NativeWindow(window, params.width, params.height, format);
++    }
++    else
++    {
++#if DE_ANDROID_API >= 24
++        int width  = params.width != eglu::WindowParams::SIZE_DONT_CARE ? params.width : 256;
++        int height = params.height != eglu::WindowParams::SIZE_DONT_CARE ? params.height : 256;
++        width      = width > 0 ? width : 256;
++        height     = height > 0 ? height : 256;
++
++        AImageReader *reader = nullptr;
++        // Always use AIMAGE_FORMAT_RGBA_8888: the AImageReader is only used as a
++        // surface handle provider, and AIMAGE_FORMAT_* constants are not
++        // interchangeable with ANativeWindow_LegacyFormat values.
++        ANativeWindow *nativeWindow = acquireImageReaderWindow(width, height, AIMAGE_FORMAT_RGBA_8888, &reader);
++
++        return new ImageReaderNativeWindow(reader, nativeWindow, width, height);
++#else
++        throw ResourceError("Native window is not available", nullptr, __FILE__, __LINE__);
++#endif
++    }
+ }
+ 
+ // NativeDisplayFactory
+@@ -279,6 +379,43 @@ private:
+     tcu::Android::Window &m_window;
+ };
+ 
++#if DE_ANDROID_API >= 24
++class ImageReaderVulkanWindow : public vk::wsi::AndroidWindowInterface
++{
++public:
++    ImageReaderVulkanWindow(AImageReader *reader, ANativeWindow *window)
++        : vk::wsi::AndroidWindowInterface(vk::pt::AndroidNativeWindowPtr(window))
++        , m_reader(reader)
++    {
++    }
++
++    void setVisible(bool visible)
++    {
++        DE_UNREF(visible);
++    }
++
++    void resize(const UVec2 &newSize)
++    {
++        DE_UNREF(newSize);
++    }
++
++    void setMinimized(bool minimized)
++    {
++        DE_UNREF(minimized);
++        TCU_THROW(NotSupportedError, "Minimized on Android is not implemented");
++    }
++
++    ~ImageReaderVulkanWindow(void)
++    {
++        if (m_reader)
++            AImageReader_delete(m_reader);
++    }
++
++private:
++    AImageReader *m_reader;
++};
++#endif
++
+ class VulkanDisplay : public vk::wsi::Display
+ {
+ public:
+@@ -306,7 +443,21 @@ public:
+             }
+         }
+         else
++        {
++#if DE_ANDROID_API >= 24
++            uint32_t width  = initialSize ? initialSize->x() : 256;
++            uint32_t height = initialSize ? initialSize->y() : 256;
++            width           = width > 0 ? width : 256;
++            height          = height > 0 ? height : 256;
++
++            AImageReader *reader        = nullptr;
++            ANativeWindow *nativeWindow = acquireImageReaderWindow(width, height, AIMAGE_FORMAT_RGBA_8888, &reader);
++
++            return new ImageReaderVulkanWindow(reader, nativeWindow);
++#else
+             TCU_THROW(ResourceError, "Native window is not available");
++#endif
++        }
+     }
+ 
+ private:
+diff --git a/targets/android/android.cmake b/targets/android/android.cmake
+index 33843fcc09..6da33d3c17 100644
+--- a/targets/android/android.cmake
++++ b/targets/android/android.cmake
+@@ -64,6 +64,11 @@ if (DE_ANDROID_API GREATER 8)
+ 	set(DEQP_PLATFORM_LIBRARIES ${DEQP_PLATFORM_LIBRARIES} ${ANDROID_LIBRARY})
+ endif ()
+ 
++if (DE_ANDROID_API GREATER 23)
++	find_library(MEDIANDK_LIBRARY NAMES mediandk PATHS /usr/lib)
++	set(DEQP_PLATFORM_LIBRARIES ${DEQP_PLATFORM_LIBRARIES} ${MEDIANDK_LIBRARY})
++endif ()
++
+ # Android uses customized execserver
+ include_directories(execserver)
+ set(DEQP_PLATFORM_LIBRARIES xscore ${DEQP_PLATFORM_LIBRARIES})
+-- 
+2.51.0
+

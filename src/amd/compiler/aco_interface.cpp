@@ -12,8 +12,6 @@
 
 #include "ac_gpu_info.h"
 #include "nir.h"
-#include <array>
-#include <iostream>
 #include <vector>
 
 using namespace aco;

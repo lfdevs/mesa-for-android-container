@@ -163,7 +163,10 @@ def define_tracepoints(args):
 
     # Indirect draw generation, only for Anv
     begin_end_tp('generate_draws')
-    begin_end_tp('generate_commands')
+
+    # Generated commands, only for Anv
+    begin_end_tp('generate_cmds_pre')
+    begin_end_tp('generate_cmds_post')
 
     # vkCmdResetQuery, only for Anv
     begin_end_tp('query_clear_blorp',

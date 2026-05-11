@@ -9,13 +9,10 @@
 #include "nir.h"
 #include "nir_builder.h"
 #include "radv_descriptor_set.h"
-#include "radv_descriptors.h"
-#include "radv_device.h"
 #include "radv_nir.h"
 #include "radv_physical_device.h"
 #include "radv_shader.h"
 #include "radv_shader_args.h"
-#include "sid.h"
 
 typedef struct {
    enum amd_gfx_level gfx_level;
@@ -676,21 +673,21 @@ lower_descriptors_tex(nir_builder *b, lower_descriptors_state *state, nir_tex_in
 }
 
 bool
-radv_nir_lower_descriptors(nir_shader *shader, struct radv_device *device, const struct radv_shader_stage *stage)
+radv_nir_lower_descriptors(nir_shader *shader, const struct radv_compiler_info *compiler_info,
+                           const struct radv_shader_stage *stage)
 {
    bool progress = false;
-   const struct radv_physical_device *pdev = radv_device_physical(device);
 
    lower_descriptors_state state = {
-      .gfx_level = pdev->info.gfx_level,
-      .address32_hi = pdev->info.address32_hi,
-      .sampled_image_desc_size = radv_get_sampled_image_desc_size(pdev),
-      .combined_image_sampler_desc_size = radv_get_combined_image_sampler_desc_size(pdev),
-      .combined_image_sampler_offset = radv_get_combined_image_sampler_offset(pdev),
-      .disable_aniso_single_level = pdev->cache_key.disable_aniso_single_level,
-      .has_image_load_dcc_bug = pdev->info.compiler_info.has_image_load_dcc_bug,
-      .disable_tg4_trunc_coord =
-         !pdev->info.compiler_info.conformant_trunc_coord && !pdev->cache_key.disable_trunc_coord,
+      .gfx_level = compiler_info->ac->gfx_level,
+      .address32_hi = compiler_info->hw.address32_hi,
+      .sampled_image_desc_size = compiler_info->sampled_image_desc_size,
+      .combined_image_sampler_desc_size = compiler_info->combined_image_sampler_desc_size,
+      .combined_image_sampler_offset = compiler_info->combined_image_sampler_offset,
+      .disable_aniso_single_level =
+         compiler_info->key.disable_aniso_single_level && compiler_info->ac->gfx_level < GFX8,
+      .has_image_load_dcc_bug = compiler_info->ac->has_image_load_dcc_bug,
+      .disable_tg4_trunc_coord = !compiler_info->ac->conformant_trunc_coord && !compiler_info->key.disable_trunc_coord,
       .args = &stage->args,
       .info = &stage->info,
       .layout = &stage->layout,

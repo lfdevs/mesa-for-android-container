@@ -619,6 +619,12 @@ lp_build_gather_array(struct gallivm_state * gallivm,
    return arr;
 }
 
+static LLVMAttributeRef
+create_align_attr(LLVMContextRef context, uint64_t align_bytes) {
+   unsigned kind_id = LLVMGetEnumAttributeKindForName("align", 5);
+   return LLVMCreateEnumAttribute(context, kind_id, align_bytes);
+}
+
 LLVMValueRef
 lp_build_masked_gather(struct gallivm_state *gallivm,
                        unsigned length,
@@ -630,7 +636,7 @@ lp_build_masked_gather(struct gallivm_state *gallivm,
    LLVMBuilderRef builder = gallivm->builder;
    LLVMValueRef args[4];
    char intrin_name[64];
-
+   int arg_count = 0;
 #if LLVM_VERSION_MAJOR >= 16
    snprintf(intrin_name, 64, "llvm.masked.gather.v%ui%u.v%up0",
             length, bit_size, length);
@@ -639,13 +645,22 @@ lp_build_masked_gather(struct gallivm_state *gallivm,
             length, bit_size, length, bit_size);
 #endif
 
-   args[0] = offset_ptr;
-   args[1] = lp_build_const_int32(gallivm, bit_size / 8);
-   args[2] = LLVMBuildICmp(builder, LLVMIntNE, exec_mask,
-                           LLVMConstNull(LLVMTypeOf(exec_mask)), "");
-   args[3] = LLVMConstNull(vec_type);
-   return lp_build_intrinsic(builder, intrin_name, vec_type,
-                             args, 4, 0);
+   args[arg_count++] = offset_ptr;
+#if LLVM_VERSION_MAJOR < 22
+   args[arg_count++] = lp_build_const_int32(gallivm, bit_size / 8);
+#endif
+   args[arg_count++] = LLVMBuildICmp(builder, LLVMIntNE, exec_mask,
+                                     LLVMConstNull(LLVMTypeOf(exec_mask)), "");
+   args[arg_count++] = LLVMConstNull(vec_type);
+
+   LLVMValueRef func = lp_build_intrinsic(builder, intrin_name, vec_type,
+                             args, arg_count, 0);
+
+#if LLVM_VERSION_MAJOR >= 22
+   LLVMAttributeRef AlignAttr = create_align_attr(gallivm->context, bit_size / 8);
+   LLVMAddCallSiteAttribute(func, 1, AlignAttr);
+#endif
+   return func;
 
 }
 
@@ -660,7 +675,7 @@ lp_build_masked_scatter(struct gallivm_state *gallivm,
    LLVMBuilderRef builder = gallivm->builder;
    LLVMValueRef args[4];
    char intrin_name[64];
-
+   int arg_count = 0;
 #if LLVM_VERSION_MAJOR >= 16
    snprintf(intrin_name, 64, "llvm.masked.scatter.v%ui%u.v%up0",
             length, bit_size, length);
@@ -669,11 +684,20 @@ lp_build_masked_scatter(struct gallivm_state *gallivm,
             length, bit_size, length, bit_size);
 #endif
 
-   args[0] = value_vec;
-   args[1] = offset_ptr;
-   args[2] = lp_build_const_int32(gallivm, bit_size / 8);
-   args[3] = LLVMBuildICmp(builder, LLVMIntNE, exec_mask,
-                           LLVMConstNull(LLVMTypeOf(exec_mask)), "");
-   lp_build_intrinsic(builder, intrin_name, LLVMVoidTypeInContext(gallivm->context),
-                      args, 4, 0);
+   args[arg_count++] = value_vec;
+   args[arg_count++] = offset_ptr;
+#if LLVM_VERSION_MAJOR < 22
+   args[arg_count++] = lp_build_const_int32(gallivm, bit_size / 8);
+#endif
+
+   args[arg_count++] = LLVMBuildICmp(builder, LLVMIntNE, exec_mask,
+                                     LLVMConstNull(LLVMTypeOf(exec_mask)), "");
+   LLVMValueRef func = lp_build_intrinsic(builder, intrin_name, LLVMVoidTypeInContext(gallivm->context),
+                                          args, arg_count, 0);
+#if LLVM_VERSION_MAJOR >= 22
+   LLVMAttributeRef AlignAttr = create_align_attr(gallivm->context, bit_size / 8);
+   LLVMAddCallSiteAttribute(func, 2, AlignAttr);
+#else
+   (void)func;
+#endif
 }

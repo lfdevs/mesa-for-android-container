@@ -125,12 +125,6 @@ xe_vm_create(int drm_fd, uint32_t flags)
       .flags = flags,
    };
 
-   /* Mesa enforces the flag but it may go away at some point */
-   if (flags != (flags | DRM_XE_VM_CREATE_FLAG_SCRATCH_PAGE)) {
-      create.flags = flags | DRM_XE_VM_CREATE_FLAG_SCRATCH_PAGE;
-      fprintf(stderr, "DRM_XE_VM_CREATE_FLAG_SCRATCH_PAGE flag is now being set.\n");
-   }
-
    if (flags & DRM_XE_VM_CREATE_FLAG_LR_MODE) {
       fprintf(stderr, "Long running VM is not supported, aborting.\n");
       exit(EXIT_FAILURE);
@@ -283,7 +277,7 @@ process_xe_dmp_file(int file_fd, int drm_fd, const struct intel_device_info *dev
                     struct util_dynarray *buffers, void *mem_ctx,
                     struct intel_hang_dump_block_exec *init,
                     struct intel_hang_dump_block_exec *block_exec,
-                    uint32_t vm_flags, uint32_t bo_dumpable)
+                    uint32_t vm_flags, uint32_t bo_dumpable, bool scratch)
 {
    void *hw_img = NULL;
    uint32_t hw_img_size = 0;
@@ -299,6 +293,11 @@ process_xe_dmp_file(int file_fd, int drm_fd, const struct intel_device_info *dev
        .num_batch_buffer = 1,
    };
    const uint32_t dumpable_bit = bo_dumpable ? DRM_XE_VM_BIND_FLAG_DUMPABLE : 0;
+
+   if (scratch && vm_flags != (vm_flags | DRM_XE_VM_CREATE_FLAG_SCRATCH_PAGE)) {
+      vm_flags |= DRM_XE_VM_CREATE_FLAG_SCRATCH_PAGE;
+      fprintf(stderr, "DRM_XE_VM_CREATE_FLAG_SCRATCH_PAGE flag is now being set.\n");
+   }
 
    uint32_t vm = xe_vm_create(drm_fd, vm_flags);
 

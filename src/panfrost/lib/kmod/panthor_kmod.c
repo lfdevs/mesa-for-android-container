@@ -247,7 +247,7 @@ panthor_kmod_dev_create(int fd, uint32_t flags, drmVersionPtr version,
    }
 
    /* Map the LATEST_FLUSH_ID register at device creation time. */
-   if (version->version_major > 1 || version->version_minor >= 10) {
+   if (version->version_major > 1 || version->version_minor >= 5) {
       struct drm_panthor_set_user_mmio_offset user_mmio_offset = {
          .offset = DRM_PANTHOR_USER_MMIO_OFFSET,
       };
@@ -1042,8 +1042,8 @@ panthor_kmod_vm_bind(struct pan_kmod_vm *vm, enum pan_kmod_vm_op_mode mode,
       vm_orig_sync_point = vm_new_sync_point = panthor_kmod_vm_sync_lock(vm);
 
    for (uint32_t i = 0; i < op_count; i++) {
-      uint32_t op_sync_cnt = ops[i].syncs.count;
       uint64_t signal_vm_point = 0;
+      uint32_t op_sync_cnt = 0;
 
       if (async && track_activity) {
          signal_vm_point = ++vm_new_sync_point;
@@ -1261,7 +1261,7 @@ panthor_kmod_query_timestamp(const struct pan_kmod_dev *dev)
    if (!pan_kmod_driver_version_at_least(&dev->driver, 1, 1))
       return 0;
 
-   struct drm_panthor_timestamp_info timestamp_info;
+   struct drm_panthor_timestamp_info timestamp_info = {};
 
    struct drm_panthor_dev_query query = (struct drm_panthor_dev_query){
       .type = DRM_PANTHOR_DEV_QUERY_TIMESTAMP_INFO,

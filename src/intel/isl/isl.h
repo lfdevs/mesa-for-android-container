@@ -1172,6 +1172,8 @@ typedef uint64_t isl_surf_usage_flags_t;
 #define ISL_SURF_USAGE_MULTI_ENGINE_PAR_BIT    (1u << 25)
 #define ISL_SURF_USAGE_SOFTWARE_DETILING       (1u << 26)
 #define ISL_SURF_USAGE_PREFER_4K_ALIGNMENT     (1u << 27)
+#define ISL_SURF_USAGE_NO_ARRAY_OVERFETCH_BIT  (1u << 28)
+#define ISL_SURF_USAGE_NO_OVERFETCH_PADDING_BIT (1u << 29)
 /** @} */
 
 /**
@@ -1384,6 +1386,12 @@ struct isl_device {
     * address, size).
     */
    bool buffer_length_in_aux_addr;
+
+   /**
+    * True if the driver is running with scratch page disabled and requires
+    * extra padding on some surfaces to avoid page faults.
+    */
+   bool requires_padding;
 
    uint64_t dummy_aux_address;
 
@@ -3302,6 +3310,148 @@ isl_tiling_get_intratile_offset_sa(enum isl_tiling tiling,
    *y_offset_sa *= fmtl->bh;
    *z_offset_sa *= fmtl->bd;
 }
+
+/**
+ * Calculate the intratile extent of a slice of a surface, in elements.
+ *
+ * This function takes a coordinate and extent in global tile space and
+ * returns the byte offset to the specific range of tiles as well as the
+ * offset within those tiles to the given coordinate in tile space.  The
+ * returned x/y/z/array offsets are guaranteed to lie within the first tile.
+ *
+ * :param tiling:               |in|  The tiling of the surface
+ * :param bpb:                  |in|  The size of the surface format in bits per
+ *                                    block
+ * :param array_pitch_el_rows:  |in|  The array pitch of the surface for flat 2D
+ *                                    tilings such as ISL_TILING_Y0
+ * :param total_x_offset_el:    |in|  The X offset in tile space, in elements
+ * :param total_y_offset_el:    |in|  The Y offset in tile space, in elements
+ * :param total_z_offset_el:    |in|  The Z offset in tile space, in elements
+ * :param total_array_offset:   |in|  The array offset in tile space
+ * :param total_extent_el:      |in|  The extent in tile space
+ * :param tile_start_B:         |out| The returned byte offset to the start of
+ *                                    the first tile
+ * :param tile_end_B:           |out| The returned byte offset to the end of
+ *                                    the last tile
+ * :param x_offset_el:          |out| The X offset within the tile, in elements
+ * :param y_offset_el:          |out| The Y offset within the tile, in elements
+ * :param z_offset_el:          |out| The Z offset within the tile, in elements
+ * :param array_offset:         |out| The array offset within the tile
+ */
+void
+isl_tiling_get_intratile_range_el(enum isl_tiling tiling,
+                                  enum isl_surf_dim dim,
+                                  enum isl_msaa_layout msaa_layout,
+                                  uint32_t bpb,
+                                  uint32_t samples,
+                                  uint32_t row_pitch_B,
+                                  uint32_t array_pitch_el_rows,
+                                  uint32_t total_x_offset_el,
+                                  uint32_t total_y_offset_el,
+                                  uint32_t total_z_offset_el,
+                                  uint32_t total_array_offset,
+                                  struct isl_extent4d total_extent_el,
+                                  uint64_t *tile_start_B,
+                                  uint64_t *tile_end_B,
+                                  uint32_t *x_offset_el,
+                                  uint32_t *y_offset_el,
+                                  uint32_t *z_offset_el,
+                                  uint32_t *array_offset);
+
+/**
+ * Calculate the intratile extent of a slice of a surface, in samples.
+ *
+ * This function takes a coordinate and extent in global tile space and
+ * returns the byte offset to the specific range of tiles as well as the
+ * offset within those tiles to the given coordinate in tile space.  The
+ * returned x/y/z/array offsets are guaranteed to lie within the first tile.
+ *
+ * :param tiling:               |in|  The tiling of the surface
+ * :param bpb:                  |in|  The size of the surface format in bits per
+ *                                    block
+ * :param array_pitch_el_rows:  |in|  The array pitch of the surface for flat 2D
+ *                                    tilings such as ISL_TILING_Y0
+ * :param total_x_offset_sa:    |in|  The X offset in tile space, in samples
+ * :param total_y_offset_sa:    |in|  The Y offset in tile space, in samples
+ * :param total_z_offset_sa:    |in|  The Z offset in tile space, in samples
+ * :param total_array_offset:   |in|  The array offset in tile space
+ * :param total_extent_sa:      |in|  The extent in tile space
+ * :param tile_start_B:         |out| The returned byte offset to the start of
+ *                                    the first tile
+ * :param tile_end_B:           |out| The returned byte offset to the end of
+ *                                    the last tile
+ * :param x_offset_sa:          |out| The X offset within the tile, in samples
+ * :param y_offset_sa:          |out| The Y offset within the tile, in samples
+ * :param z_offset_sa:          |out| The Z offset within the tile, in samples
+ * :param array_offset:         |out| The array offset within the tile
+ */
+static inline void
+isl_tiling_get_intratile_range_sa(enum isl_tiling tiling,
+                                  enum isl_surf_dim dim,
+                                  enum isl_msaa_layout msaa_layout,
+                                  enum isl_format format,
+                                  uint32_t samples,
+                                  uint32_t row_pitch_B,
+                                  uint32_t array_pitch_el_rows,
+                                  uint32_t total_x_offset_sa,
+                                  uint32_t total_y_offset_sa,
+                                  uint32_t total_z_offset_sa,
+                                  uint32_t total_array_offset,
+                                  struct isl_extent4d total_extent_sa,
+                                  uint64_t *tile_start_B,
+                                  uint64_t *tile_end_B,
+                                  uint32_t *x_offset_sa,
+                                  uint32_t *y_offset_sa,
+                                  uint32_t *z_offset_sa,
+                                  uint32_t *array_offset)
+{
+   const struct isl_format_layout *fmtl = isl_format_get_layout(format);
+
+   /* For computing the intratile offsets, we actually want a strange unit
+    * which is samples for multisampled surfaces but elements for compressed
+    * surfaces.
+    */
+   assert(total_x_offset_sa % fmtl->bw == 0);
+   assert(total_y_offset_sa % fmtl->bh == 0);
+   assert(total_z_offset_sa % fmtl->bd == 0);
+   assert(total_extent_sa.w % fmtl->bw == 0);
+   assert(total_extent_sa.h % fmtl->bh == 0);
+   assert(total_extent_sa.d % fmtl->bd == 0);
+   const uint32_t total_x_offset_el = total_x_offset_sa / fmtl->bw;
+   const uint32_t total_y_offset_el = total_y_offset_sa / fmtl->bh;
+   const uint32_t total_z_offset_el = total_z_offset_sa / fmtl->bd;
+   const struct isl_extent4d total_extent_el = {
+      .w = total_extent_sa.w / fmtl->bw,
+      .h = total_extent_sa.h / fmtl->bh,
+      .d = total_extent_sa.d / fmtl->bd,
+      .a = total_extent_sa.a
+   };
+
+   isl_tiling_get_intratile_range_el(tiling, dim, msaa_layout, fmtl->bpb,
+                                     samples, row_pitch_B,
+                                     array_pitch_el_rows,
+                                     total_x_offset_el,
+                                     total_y_offset_el,
+                                     total_z_offset_el,
+                                     total_array_offset,
+                                     total_extent_el,
+                                     tile_start_B,
+                                     tile_end_B,
+                                     x_offset_sa, y_offset_sa,
+                                     z_offset_sa, array_offset);
+   *x_offset_sa *= fmtl->bw;
+   *y_offset_sa *= fmtl->bh;
+   *z_offset_sa *= fmtl->bd;
+}
+
+/**
+ * Calculates the size of a sampling engine surface, including the maximum
+ * number of extra padding bytes that could be fetched due to caching.
+ */
+uint64_t
+isl_surf_get_sampler_overfetch_size_B(const struct isl_device *dev,
+                                      const struct isl_surf *surf,
+                                      const struct isl_view *view);
 
 /**
  * Get value of 3DSTATE_DEPTH_BUFFER.SurfaceFormat

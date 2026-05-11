@@ -212,6 +212,10 @@ unsigned ir3_nir_max_offset_shift(nir_intrinsic_instr *intr, const void *data);
 gl_system_value
 ir3_nir_intrinsic_barycentric_sysval(nir_intrinsic_instr *intr);
 
+nir_io_offset ir3_nir_get_global_offset(nir_builder *b,
+                                        struct ir3_compiler *compiler,
+                                        nir_def *offset, unsigned offset_shift);
+
 ENDC;
 
 #endif /* IR3_NIR_H_ */

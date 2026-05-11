@@ -82,7 +82,7 @@ TEST_F(nir_opt_varyings_test_bicm_binary_alu, \
       ASSERT_TRUE(!shader_contains_def(b2, load[0])); \
       ASSERT_TRUE(!shader_contains_def(b2, load[1])); \
    } else { \
-      ASSERT_EQ(opt_varyings(), 0); \
+      ASSERT_EQ(opt_varyings() & nir_progress_consumer, 0); \
       ASSERT_TRUE(!shader_contains_alu_op(b1, nir_op_##alu, bitsize)); \
       ASSERT_TRUE(shader_contains_alu_op(b2, nir_op_##alu, bitsize)); \
       ASSERT_TRUE(shader_contains_instr(b1, &store[0]->instr)); \

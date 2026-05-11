@@ -16,6 +16,7 @@
 #include <libdrm/amdgpu.h>
 
 #include "amdgpu_virtio_private.h"
+#include "drm-uapi/amdgpu_drm.h"
 
 #include "util/log.h"
 #include "util/u_math.h"
@@ -48,10 +49,14 @@ amdvgpu_query_info(amdvgpu_device_handle dev, struct drm_amdgpu_info *info)
 int
 amdvgpu_query_sw_info(amdvgpu_device_handle dev, enum amdgpu_sw_info info, void *value)
 {
-   if (info != amdgpu_sw_info_address32_hi)
-      return -EINVAL;
-   memcpy(value, &dev->vdev->caps.u.amdgpu.address32_hi, 4);
-   return 0;
+   if (info == amdgpu_sw_info_address32_hi) {
+      memcpy(value, &dev->vdev->caps.u.amdgpu.address32_hi, 4);
+      return 0;
+   } else if (info == amdgpu_sw_info_address_prt_wa_control_bit) {
+      return amdgpu_va_manager_query_sw_info(dev->va_mgr, amdgpu_va_manager_sw_info_address_prt_wa_control_bit, value);
+   }
+   assert(false);
+   return -1;
 }
 
 int

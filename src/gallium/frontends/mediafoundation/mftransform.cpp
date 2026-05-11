@@ -1262,10 +1262,10 @@ CDX12EncHMFT::ProcessSliceBitstreamZeroCopy( LPDX12EncodeContext pDX12EncodeCont
       return false;
    }
 
-   uint64_t total_slice_size =
-      std::accumulate( mfsample_codec_unit_metadata.begin(), mfsample_codec_unit_metadata.end(), 0ull, []( uint64_t sum, const auto &nal ) {
-         return sum + nal.size;
-      } );
+   uint64_t total_slice_size = std::accumulate( mfsample_codec_unit_metadata.begin(),
+                                                mfsample_codec_unit_metadata.end(),
+                                                0ull,
+                                                []( uint64_t sum, const auto &nal ) { return sum + nal.size; } );
 
    // Create IMFMediaBuffer from the D3D12Resource (zero-copy)
    spMediaBuffer.Attach(
@@ -1593,10 +1593,11 @@ CDX12EncHMFT::xThreadProc( void *pCtx )
 
                      if( WaitForFence( pDX12EncodeContext->pSliceFences[slice_idx], OS_TIMEOUT_INFINITE ) )
                      {
-                        if( !pThis->ProcessSliceBitstreamZeroCopy( pDX12EncodeContext,
-                                                                   slice_idx,
-                                                                   spMediaBuffer,
-                                                                   codec_unit_metadata ) ) // codec_unit_metadata.clear() will be called in this function
+                        if( !pThis->ProcessSliceBitstreamZeroCopy(
+                               pDX12EncodeContext,
+                               slice_idx,
+                               spMediaBuffer,
+                               codec_unit_metadata ) )   // codec_unit_metadata.clear() will be called in this function
                         {
                            debug_printf( "[dx12 hmft 0x%p] Failed to process slice %u bitstream\n", pThis, slice_idx );
                            MFE_ERROR( "[dx12 hmft 0x%p] Failed to process slice %u bitstream", pThis, slice_idx );
@@ -1633,16 +1634,19 @@ CDX12EncHMFT::xThreadProc( void *pCtx )
                   pendingMetadata.reserve( 16 );
                   uint32_t actual_slice_count = 0;
 
-                  struct HandleCloser {
-                     void operator()( void *h ) {
-                        if(h) CloseHandle(h);
+                  struct HandleCloser
+                  {
+                     void operator()( void *h )
+                     {
+                        if( h )
+                           CloseHandle( h );
                      }
                   };
 
                   std::unique_ptr<void, HandleCloser> lastSliceFenceEvent(
-                     pThis->m_pPipeContext->screen->fence_get_win32_event(
-                     pThis->m_pPipeContext->screen, pDX12EncodeContext->pLastSliceFence ) );
-                  assert(lastSliceFenceEvent);
+                     pThis->m_pPipeContext->screen->fence_get_win32_event( pThis->m_pPipeContext->screen,
+                                                                           pDX12EncodeContext->pLastSliceFence ) );
+                  assert( lastSliceFenceEvent );
 
                   // Pre-create all slice fence events to avoid per-iteration
                   // CreateEvent+SetEventOnCompletion kernel round-trips
@@ -1651,8 +1655,9 @@ CDX12EncHMFT::xThreadProc( void *pCtx )
                   sliceFenceEvents.reserve( num_slice_buffers );
                   for( uint32_t i = 0; i < num_slice_buffers; i++ )
                   {
-                     sliceFenceEvents.emplace_back( pThis->m_pPipeContext->screen->fence_get_win32_event(
-                        pThis->m_pPipeContext->screen, pDX12EncodeContext->pSliceFences[i] ) );
+                     sliceFenceEvents.emplace_back(
+                        pThis->m_pPipeContext->screen->fence_get_win32_event( pThis->m_pPipeContext->screen,
+                                                                              pDX12EncodeContext->pSliceFences[i] ) );
                      assert( sliceFenceEvents[i] );
                   }
 
@@ -1695,10 +1700,11 @@ CDX12EncHMFT::xThreadProc( void *pCtx )
                         pendingSample = std::move( preallocatedSamples[slice_idx] );
                         pendingBuffer.Reset();
 
-                        if( !pThis->ProcessSliceBitstreamZeroCopy( pDX12EncodeContext,
-                                                                   slice_idx,
-                                                                   pendingBuffer,
-                                                                   pendingMetadata ) ) // pendingMetadata.clear() will be called in this function
+                        if( !pThis->ProcessSliceBitstreamZeroCopy(
+                               pDX12EncodeContext,
+                               slice_idx,
+                               pendingBuffer,
+                               pendingMetadata ) )   // pendingMetadata.clear() will be called in this function
                         {
                            debug_printf( "[dx12 hmft 0x%p] Failed to process slice %u bitstream\n", pThis, slice_idx );
                            MFE_ERROR( "[dx12 hmft 0x%p] Failed to process slice %u bitstream", pThis, slice_idx );
@@ -1723,7 +1729,8 @@ CDX12EncHMFT::xThreadProc( void *pCtx )
                      {
                         // Unexpected WaitForMultipleObjects result on waitResult
                         DWORD lastError = GetLastError();
-                        debug_printf( "[dx12 hmft 0x%p] WaitForMultipleObjects failed for slice %" PRIu32 " (result=0x%" PRIx32 ", GetLastError=0x%" PRIx32 ")\n",
+                        debug_printf( "[dx12 hmft 0x%p] WaitForMultipleObjects failed for slice %" PRIu32 " (result=0x%" PRIx32
+                                      ", GetLastError=0x%" PRIx32 ")\n",
                                       pThis,
                                       slice_idx,
                                       static_cast<uint32_t>( waitResult ),
@@ -2839,7 +2846,7 @@ CDX12EncHMFT::ProcessOutput( DWORD dwFlags, DWORD cOutputBufferCount, MFT_OUTPUT
          UINT32 isLastSlice = FALSE;
          if( SUCCEEDED( pOutputSamples[0].pSample->GetUINT32( MFSampleExtension_LastSlice, &isLastSlice ) ) )
          {
-            if (!isLastSlice)
+            if( !isLastSlice )
             {
                sendNeedInput = false;
             }

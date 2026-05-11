@@ -18,7 +18,7 @@
 #include <vulkan/vk_android_native_buffer.h>
 #include <vulkan/vulkan_android.h>
 
-#include "vk_android.h"
+#include "util/detect_os.h"
 
 /* Helper to determine if we should compile
  * any of the Android AHB support.

@@ -656,9 +656,11 @@ anv_cmd_buffer_bind_descriptor_set(struct anv_cmd_buffer *cmd_buffer,
          cmd_buffer->state.descriptor_buffers.offsets_dirty |= stages;
       } else {
          /* Plaforms with LSC will use descriptor buffer push constant
-          * offsets
+          * offsets, also with device generated commands, shaders are much
+          * more likely to access the offset on pre-LSC platforms.
           */
-         bool update_desc_sets = cmd_buffer->device->info->has_lsc;
+         bool update_desc_sets = cmd_buffer->device->vk.enabled_features.deviceGeneratedCommands ||
+                                 cmd_buffer->device->info->has_lsc;
 
          if (update_desc_sets) {
             struct anv_push_constants *push = &pipe_state->push_constants;
@@ -733,9 +735,9 @@ anv_cmd_buffer_bind_descriptor_set(struct anv_cmd_buffer *cmd_buffer,
    pipe_state->push_constants_data_dirty = true;
 }
 
-void anv_CmdBindDescriptorSets2KHR(
+void anv_CmdBindDescriptorSets2(
     VkCommandBuffer                             commandBuffer,
-    const VkBindDescriptorSetsInfoKHR*          pInfo)
+    const VkBindDescriptorSetsInfo*             pInfo)
 {
    ANV_FROM_HANDLE(anv_cmd_buffer, cmd_buffer, commandBuffer);
    VK_FROM_HANDLE(vk_pipeline_layout, layout, pInfo->layout);
@@ -892,14 +894,84 @@ void anv_CmdBindDescriptorBufferEmbeddedSamplers2EXT(
    /* no-op */
 }
 
-void anv_CmdBindVertexBuffers2(
-   VkCommandBuffer                              commandBuffer,
-   uint32_t                                     firstBinding,
-   uint32_t                                     bindingCount,
-   const VkBuffer*                              pBuffers,
-   const VkDeviceSize*                          pOffsets,
-   const VkDeviceSize*                          pSizes,
-   const VkDeviceSize*                          pStrides)
+void anv_CmdBindSamplerHeapEXT(
+    VkCommandBuffer                             commandBuffer,
+    const VkBindHeapInfoEXT*                    pBindInfo)
+{
+   ANV_FROM_HANDLE(anv_cmd_buffer, cmd_buffer, commandBuffer);
+   struct anv_cmd_state *state = &cmd_buffer->state;
+
+   if (state->descriptor_buffers.samplers_address != pBindInfo->heapRange.address)
+      state->descriptor_buffers.samplers_address = pBindInfo->heapRange.address;
+}
+
+void anv_CmdBindResourceHeapEXT(
+    VkCommandBuffer                             commandBuffer,
+    const VkBindHeapInfoEXT*                    pBindInfo)
+{
+   ANV_FROM_HANDLE(anv_cmd_buffer, cmd_buffer, commandBuffer);
+   struct anv_cmd_state *state = &cmd_buffer->state;
+
+   if (state->descriptor_buffers.surfaces_address != pBindInfo->heapRange.address) {
+       state->descriptor_buffers.surfaces_address = pBindInfo->heapRange.address;
+       state->descriptor_buffers.dirty = true;
+   }
+
+   anv_cmd_buffer_maybe_dirty_descriptor_mode(cmd_buffer,
+                                              ANV_CMD_DESCRIPTOR_BUFFER_MODE_HEAP);
+}
+
+void anv_CmdPushDataEXT(
+    VkCommandBuffer                             commandBuffer,
+    const VkPushDataInfoEXT*                    pPushDataInfo)
+{
+   ANV_FROM_HANDLE(anv_cmd_buffer, cmd_buffer, commandBuffer);
+
+   if (anv_cmd_buffer_is_render_queue(cmd_buffer)) {
+      struct anv_cmd_pipeline_state *pipe_state =
+         &cmd_buffer->state.gfx.base;
+
+      memcpy(pipe_state->push_constants.client_data + pPushDataInfo->offset,
+             pPushDataInfo->data.address, pPushDataInfo->data.size);
+      pipe_state->push_constants_data_dirty = true;
+      pipe_state->push_constants_client_size = MAX2(
+         pipe_state->push_constants_client_size,
+         pPushDataInfo->offset + pPushDataInfo->data.size);
+      cmd_buffer->state.push_constants_dirty |= ANV_GRAPHICS_STAGE_BITS;
+   }
+
+   if (anv_cmd_buffer_is_render_or_compute_queue(cmd_buffer)) {
+      struct anv_cmd_pipeline_state *cs_state =
+         &cmd_buffer->state.compute.base;
+
+      memcpy(cs_state->push_constants.client_data + pPushDataInfo->offset,
+             pPushDataInfo->data.address, pPushDataInfo->data.size);
+      cs_state->push_constants_data_dirty = true;
+      cs_state->push_constants_client_size = MAX2(
+         cs_state->push_constants_client_size,
+         pPushDataInfo->offset + pPushDataInfo->data.size);
+      cmd_buffer->state.push_constants_dirty |= VK_SHADER_STAGE_COMPUTE_BIT;
+
+
+      if (ANV_SUPPORT_RT && cmd_buffer->device->vk.enabled_features.rayTracingPipeline) {
+         struct anv_cmd_pipeline_state *rt_state =
+            &cmd_buffer->state.rt.base;
+         memcpy(rt_state->push_constants.client_data + pPushDataInfo->offset,
+                pPushDataInfo->data.address, pPushDataInfo->data.size);
+         rt_state->push_constants_data_dirty = true;
+         rt_state->push_constants_client_size = MAX2(
+            rt_state->push_constants_client_size,
+            pPushDataInfo->offset + pPushDataInfo->data.size);
+         cmd_buffer->state.push_constants_dirty |= ANV_RT_STAGE_BITS;
+      }
+   }
+}
+
+void anv_CmdBindVertexBuffers3KHR(
+   VkCommandBuffer                             commandBuffer,
+   uint32_t                                    firstBinding,
+   uint32_t                                    bindingCount,
+   const VkBindVertexBuffer3InfoKHR*           pBindingInfos)
 {
    ANV_FROM_HANDLE(anv_cmd_buffer, cmd_buffer, commandBuffer);
    struct anv_vertex_binding *vb = cmd_buffer->state.vertex_bindings;
@@ -909,68 +981,57 @@ void anv_CmdBindVertexBuffers2(
 
    assert(firstBinding + bindingCount <= get_max_vbs(cmd_buffer->device->info));
    for (uint32_t i = 0; i < bindingCount; i++) {
-      ANV_FROM_HANDLE(anv_buffer, buffer, pBuffers[i]);
-
-      if (buffer == NULL) {
-         vb[firstBinding + i] = (struct anv_vertex_binding) { 0 };
-      } else {
+      if (vb[firstBinding + i].addr != pBindingInfos[i].addressRange.address ||
+          vb[firstBinding + i].size != pBindingInfos[i].addressRange.size) {
          vb[firstBinding + i] = (struct anv_vertex_binding) {
-            .addr = anv_address_physical(
-               anv_address_add(buffer->address, pOffsets[i])),
-            .size = vk_buffer_range(&buffer->vk, pOffsets[i],
-                                    pSizes ? pSizes[i] : VK_WHOLE_SIZE),
-            .mocs = anv_mocs(cmd_buffer->device, buffer->address.bo,
+            .addr = pBindingInfos[i].addressRange.address,
+            .size = pBindingInfos[i].addressRange.size,
+            .mocs = anv_mocs(cmd_buffer->device, NULL,
+                             ((pBindingInfos[i].addressFlags &
+                               VK_ADDRESS_COMMAND_PROTECTED_BIT_KHR) ?
+                              ISL_SURF_USAGE_PROTECTED_BIT : 0) |
                              ISL_SURF_USAGE_VERTEX_BUFFER_BIT),
          };
+         cmd_buffer->state.gfx.vb_dirty |= 1 << (firstBinding + i);
       }
-      cmd_buffer->state.gfx.vb_dirty |= 1 << (firstBinding + i);
    }
 
-   if (pStrides != NULL) {
-      vk_cmd_set_vertex_binding_strides(&cmd_buffer->vk, firstBinding,
-                                        bindingCount, pStrides);
-   }
+   vk_cmd_set_vertex_binding_strides2(&cmd_buffer->vk, firstBinding,
+                                      bindingCount, pBindingInfos);
 }
 
-void anv_CmdBindIndexBuffer2KHR(
+void anv_CmdBindIndexBuffer3KHR(
     VkCommandBuffer                             commandBuffer,
-    VkBuffer                                    _buffer,
-    VkDeviceSize                                offset,
-    VkDeviceSize                                size,
-    VkIndexType                                 indexType)
+    const VkBindIndexBuffer3InfoKHR*            pInfo)
 {
    ANV_FROM_HANDLE(anv_cmd_buffer, cmd_buffer, commandBuffer);
-   ANV_FROM_HANDLE(anv_buffer, buffer, _buffer);
 
-   if (cmd_buffer->state.gfx.index_type != indexType) {
-      cmd_buffer->state.gfx.index_type = indexType;
+   if (cmd_buffer->state.gfx.index_type != pInfo->indexType) {
+      cmd_buffer->state.gfx.index_type = pInfo->indexType;
       cmd_buffer->state.gfx.dirty |= ANV_CMD_DIRTY_INDEX_TYPE;
    }
 
-   vk_cmd_set_index_buffer_type(&cmd_buffer->vk, indexType);
+   vk_cmd_set_index_buffer_type(&cmd_buffer->vk, pInfo->indexType);
 
-   uint64_t index_addr = buffer ?
-      anv_address_physical(anv_address_add(buffer->address, offset)) : 0;
-   uint32_t index_size = buffer ? vk_buffer_range(&buffer->vk, offset, size) : 0;
-   if (cmd_buffer->state.gfx.index_addr != index_addr ||
-       cmd_buffer->state.gfx.index_size != index_size) {
-      cmd_buffer->state.gfx.index_addr = index_addr;
-      cmd_buffer->state.gfx.index_size = index_size;
+   if (cmd_buffer->state.gfx.index_addr != pInfo->addressRange.address ||
+       cmd_buffer->state.gfx.index_size != pInfo->addressRange.size) {
+      cmd_buffer->state.gfx.index_addr = pInfo->addressRange.address;
+      cmd_buffer->state.gfx.index_size = pInfo->addressRange.size;
       cmd_buffer->state.gfx.index_mocs =
-         anv_mocs(cmd_buffer->device, buffer->address.bo,
+         anv_mocs(cmd_buffer->device, NULL,
+                  ((pInfo->addressFlags &
+                    VK_ADDRESS_COMMAND_PROTECTED_BIT_KHR) ?
+                   ISL_SURF_USAGE_PROTECTED_BIT : 0) |
                   ISL_SURF_USAGE_INDEX_BUFFER_BIT);
       cmd_buffer->state.gfx.dirty |= ANV_CMD_DIRTY_INDEX_BUFFER;
    }
 }
 
-
-void anv_CmdBindTransformFeedbackBuffersEXT(
+void anv_CmdBindTransformFeedbackBuffers2EXT(
     VkCommandBuffer                             commandBuffer,
     uint32_t                                    firstBinding,
     uint32_t                                    bindingCount,
-    const VkBuffer*                             pBuffers,
-    const VkDeviceSize*                         pOffsets,
-    const VkDeviceSize*                         pSizes)
+    const VkBindTransformFeedbackBuffer2InfoEXT* pBindingInfos)
 {
    ANV_FROM_HANDLE(anv_cmd_buffer, cmd_buffer, commandBuffer);
    struct anv_xfb_binding *xfb = cmd_buffer->state.xfb_bindings;
@@ -980,16 +1041,16 @@ void anv_CmdBindTransformFeedbackBuffersEXT(
 
    assert(firstBinding + bindingCount <= MAX_XFB_BUFFERS);
    for (uint32_t i = 0; i < bindingCount; i++) {
-      if (pBuffers[i] == VK_NULL_HANDLE) {
+      if (pBindingInfos[i].addressRange.size == 0) {
          xfb[firstBinding + i] = (struct anv_xfb_binding) { 0 };
       } else {
-         ANV_FROM_HANDLE(anv_buffer, buffer, pBuffers[i]);
          xfb[firstBinding + i] = (struct anv_xfb_binding) {
-            .addr = anv_address_physical(
-               anv_address_add(buffer->address, pOffsets[i])),
-            .size = vk_buffer_range(&buffer->vk, pOffsets[i],
-                                    pSizes ? pSizes[i] : VK_WHOLE_SIZE),
-            .mocs = anv_mocs(cmd_buffer->device, buffer->address.bo,
+            .addr = pBindingInfos[i].addressRange.address,
+            .size = pBindingInfos[i].addressRange.size,
+            .mocs = anv_mocs(cmd_buffer->device, NULL,
+                             ((pBindingInfos[i].addressFlags &
+                               VK_ADDRESS_COMMAND_PROTECTED_BIT_KHR) ?
+                              ISL_SURF_USAGE_PROTECTED_BIT : 0) |
                              ISL_SURF_USAGE_STREAM_OUT_BIT),
          };
       }
@@ -1139,9 +1200,9 @@ anv_cmd_buffer_cs_push_constants(struct anv_cmd_buffer *cmd_buffer)
    return state;
 }
 
-void anv_CmdPushConstants2KHR(
+void anv_CmdPushConstants2(
     VkCommandBuffer                             commandBuffer,
-    const VkPushConstantsInfoKHR*               pInfo)
+    const VkPushConstantsInfo*                  pInfo)
 {
    ANV_FROM_HANDLE(anv_cmd_buffer, cmd_buffer, commandBuffer);
 
@@ -1199,7 +1260,7 @@ anv_cmd_buffer_get_pipe_state(struct anv_cmd_buffer *cmd_buffer,
 static void
 anv_cmd_buffer_push_descriptor_sets(struct anv_cmd_buffer *cmd_buffer,
                                     VkPipelineBindPoint bind_point,
-                                    const VkPushDescriptorSetInfoKHR *pInfo)
+                                    const VkPushDescriptorSetInfo *pInfo)
 {
    VK_FROM_HANDLE(vk_pipeline_layout, layout, pInfo->layout);
 
@@ -1223,9 +1284,9 @@ anv_cmd_buffer_push_descriptor_sets(struct anv_cmd_buffer *cmd_buffer,
                                       NULL, NULL);
 }
 
-void anv_CmdPushDescriptorSet2KHR(
+void anv_CmdPushDescriptorSet2(
     VkCommandBuffer                            commandBuffer,
-    const VkPushDescriptorSetInfoKHR*          pInfo)
+    const VkPushDescriptorSetInfo*             pInfo)
 {
    ANV_FROM_HANDLE(anv_cmd_buffer, cmd_buffer, commandBuffer);
 
@@ -1243,9 +1304,9 @@ void anv_CmdPushDescriptorSet2KHR(
                                           pInfo);
 }
 
-void anv_CmdPushDescriptorSetWithTemplate2KHR(
+void anv_CmdPushDescriptorSetWithTemplate2(
     VkCommandBuffer                                commandBuffer,
-    const VkPushDescriptorSetWithTemplateInfoKHR*  pInfo)
+    const VkPushDescriptorSetWithTemplateInfo*     pInfo)
 {
    ANV_FROM_HANDLE(anv_cmd_buffer, cmd_buffer, commandBuffer);
    VK_FROM_HANDLE(vk_descriptor_update_template, template,
@@ -1425,15 +1486,15 @@ anv_cmd_buffer_restore_state(struct anv_cmd_buffer *cmd_buffer,
    }
 
    if (state->flags & ANV_CMD_SAVED_STATE_PUSH_CONSTANTS) {
-      VkPushConstantsInfoKHR push_info = {
-         .sType = VK_STRUCTURE_TYPE_PUSH_CONSTANTS_INFO_KHR,
+      VkPushConstantsInfo push_info = {
+         .sType = VK_STRUCTURE_TYPE_PUSH_CONSTANTS_INFO,
          .layout = VK_NULL_HANDLE,
          .stageFlags = stage_flags,
          .offset = 0,
          .size = sizeof(state->push_constants),
          .pValues = state->push_constants,
       };
-      anv_CmdPushConstants2KHR(cmd_buffer_, &push_info);
+      anv_CmdPushConstants2(cmd_buffer_, &push_info);
    }
 }
 

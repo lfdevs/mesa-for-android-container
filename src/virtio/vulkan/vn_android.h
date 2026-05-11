@@ -17,18 +17,19 @@
 #include <vulkan/vulkan.h>
 #include <vulkan/vulkan_android.h>
 
+#include "vk_android.h"
+
 #ifdef VK_USE_PLATFORM_ANDROID_KHR
 
 VkResult
 vn_android_image_from_anb(struct vn_device *dev,
                           const VkImageCreateInfo *image_info,
-                          const VkNativeBufferANDROID *anb_info,
                           const VkAllocationCallbacks *alloc,
                           struct vn_image **out_img);
 
-struct vn_device_memory *
-vn_android_get_wsi_memory_from_bind_info(
-   struct vn_device *dev, const VkBindImageMemoryInfo *bind_info);
+VkDeviceMemory
+vn_android_get_wsi_memory(struct vn_device *dev,
+                          const VkBindImageMemoryInfo *bind_info);
 
 VkResult
 vn_android_device_import_ahb(struct vn_device *dev,
@@ -40,19 +41,17 @@ vn_android_device_import_ahb(struct vn_device *dev,
 static inline VkResult
 vn_android_image_from_anb(UNUSED struct vn_device *dev,
                           UNUSED const VkImageCreateInfo *image_info,
-                          UNUSED const VkNativeBufferANDROID *anb_info,
                           UNUSED const VkAllocationCallbacks *alloc,
                           UNUSED struct vn_image **out_img)
 {
    return VK_ERROR_OUT_OF_HOST_MEMORY;
 }
 
-static inline struct vn_device_memory *
-vn_android_get_wsi_memory_from_bind_info(
-   UNUSED struct vn_device *dev,
-   UNUSED const VkBindImageMemoryInfo *bind_info)
+static inline VkDeviceMemory
+vn_android_get_wsi_memory(UNUSED struct vn_device *dev,
+                          UNUSED const VkBindImageMemoryInfo *bind_info)
 {
-   return NULL;
+   return VK_NULL_HANDLE;
 }
 
 static inline VkResult

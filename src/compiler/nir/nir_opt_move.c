@@ -88,7 +88,7 @@ nir_opt_move_block(nir_block *block, nir_move_options options)
       const nir_def *def = nir_instr_def(instr);
       nir_instr *first_user = instr == if_cond_instr ? NULL : last_instr;
       nir_foreach_use(use, def) {
-         nir_instr *parent = nir_src_parent_instr(use);
+         nir_instr *parent = nir_src_use_instr(use);
          if (parent->type == nir_instr_type_phi || parent->block != block)
             continue;
          if (!first_user || parent->index > first_user->index)

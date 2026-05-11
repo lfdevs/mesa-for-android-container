@@ -103,6 +103,7 @@ enum vk_internal_build_type {
 struct vk_build_config {
    enum vk_internal_build_type internal_type;
    bool updateable;
+   bool u64_keys;
    uint32_t encode_key[MAX_ENCODE_PASSES];
    uint32_t update_key[MAX_ENCODE_PASSES];
 };
@@ -179,7 +180,8 @@ struct vk_acceleration_structure_build_args {
    uint32_t root_flags_offset;
    bool propagate_cull_flags;
    bool emit_markers;
-   const radix_sort_vk_t *radix_sort;
+   const radix_sort_vk_t *radix_sort_64;
+   const radix_sort_vk_t *radix_sort_96;
 };
 
 VkResult vk_get_bvh_build_pipeline_layout(struct vk_device *device, struct vk_meta_device *meta,

@@ -9,13 +9,12 @@
 #include "ac_nir.h"
 #include "ac_llvm_util.h"
 #include "ac_shader_util.h"
-#include "c11/threads.h"
 #include "shader_enums.h"
 #include "sid.h"
 #include "util/bitscan.h"
+#include "util/format/u_format.h"
 #include "util/macros.h"
 #include "util/u_atomic.h"
-#include "util/u_math.h"
 #include <llvm-c/Core.h>
 #include <llvm/Config/llvm-config.h>
 

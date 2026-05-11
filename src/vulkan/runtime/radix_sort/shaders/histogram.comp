@@ -12,6 +12,7 @@
 #extension GL_GOOGLE_include_directive             : require
 #extension GL_EXT_control_flow_attributes          : require
 #extension GL_KHR_shader_subgroup_basic            : require
+#extension GL_EXT_scalar_block_layout              : require
 // clang-format on
 
 //
@@ -80,6 +81,8 @@ layout(push_constant) uniform block_push
 #define RS_KEYVAL_TYPE uint32_t
 #elif (RS_KEYVAL_DWORDS == 2)
 #define RS_KEYVAL_TYPE u32vec2
+#elif (RS_KEYVAL_DWORDS == 3)
+#define RS_KEYVAL_TYPE u32vec3
 #else
 #error "Unsupported RS_KEYVAL_DWORDS"
 #endif
@@ -154,7 +157,7 @@ layout(local_size_x_id = RS_HISTOGRAM_WORKGROUP_SIZE_ID) in;
 //
 //
 //
-layout(buffer_reference, std430) buffer buffer_rs_kv
+layout(buffer_reference, scalar) buffer buffer_rs_kv
 {
   RS_KEYVAL_TYPE extent[];
 };
@@ -413,8 +416,23 @@ main()
   RS_HISTOGRAM_PASS(1)
   RS_HISTOGRAM_PASS(0)
 
+#elif (RS_KEYVAL_DWORDS == 3)
+
+  RS_HISTOGRAM_PASS(11)
+  RS_HISTOGRAM_PASS(10)
+  RS_HISTOGRAM_PASS(9)
+  RS_HISTOGRAM_PASS(8)
+  RS_HISTOGRAM_PASS(7)
+  RS_HISTOGRAM_PASS(6)
+  RS_HISTOGRAM_PASS(5)
+  RS_HISTOGRAM_PASS(4)
+  RS_HISTOGRAM_PASS(3)
+  RS_HISTOGRAM_PASS(2)
+  RS_HISTOGRAM_PASS(1)
+  RS_HISTOGRAM_PASS(0)
+
 #else
-#error "Error: (RS_KEYVAL_DWORDS >= 3) not implemented."
+#error "Error: (RS_KEYVAL_DWORDS >= 4) not implemented."
 #endif
 }
 

@@ -15,7 +15,6 @@ spec@glsl-1.50@execution@variable-indexing@gs-output-array-vec4-index-wr,Crash
 
 # These tests use a TCS output variable only as temporary storage. Since the output
 # is unused by the TES, we remove it.
-spec@arb_tessellation_shader@execution@barrier,Fail
 spec@arb_tessellation_shader@execution@barrier-patch,Crash
 spec@arb_tessellation_shader@execution@variable-indexing@tcs-output-array-float-index-wr-before-barrier,Fail
 spec@arb_tessellation_shader@execution@variable-indexing@tcs-output-array-vec2-index-rd-after-barrier,Fail

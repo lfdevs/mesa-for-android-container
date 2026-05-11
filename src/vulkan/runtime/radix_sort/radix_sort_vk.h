@@ -71,7 +71,7 @@ typedef struct radix_sort_vk_target radix_sort_vk_target_t;
 // NOTE: The library currently supports uint32_t and uint64_t keyvals.
 //
 
-#define RS_KV_DWORDS_MAX 2
+#define RS_KV_DWORDS_MAX 3
 
 //
 //

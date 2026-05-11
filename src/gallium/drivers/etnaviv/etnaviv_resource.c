@@ -835,6 +835,7 @@ etna_resource_from_handle(struct pipe_screen *pscreen,
    rsc->modifier = modifier;
 
    rsc->shared = true;
+   rsc->shared_native_order = true;
    if (usage & PIPE_HANDLE_USAGE_EXPLICIT_FLUSH)
       rsc->explicit_flush = true;
 
@@ -937,7 +938,12 @@ etna_resource_get_handle(struct pipe_screen *pscreen,
    }
    handle->modifier = etna_resource_modifier(rsc);
 
+   /* Mark as shared. Data is in native byte order at export time (either
+    * empty or CPU-written). draw_vbo will set shared_native_order = false
+    * when the PE renders to this resource. */
    rsc->shared = true;
+   rsc->shared_native_order = true;
+
    if (!(usage & PIPE_HANDLE_USAGE_EXPLICIT_FLUSH))
       rsc->explicit_flush = false;
 

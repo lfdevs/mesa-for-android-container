@@ -6,10 +6,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "drm-uapi/amdgpu_drm.h"
 #include "drm-uapi/drm_fourcc.h"
 
 #include "ac_surface.h"
+#include "util/format/u_format.h"
 #include "util/macros.h"
 #include "util/u_math.h"
 #include "util/u_vector.h"

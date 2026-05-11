@@ -121,23 +121,8 @@ brw_do_emit_fb_writes(brw_shader &s, int nr_color_regions, bool replicate_alpha)
 static void
 brw_emit_fb_writes(brw_shader &s)
 {
-   const struct intel_device_info *devinfo = s.devinfo;
    assert(s.stage == MESA_SHADER_FRAGMENT);
-   struct brw_fs_prog_data *prog_data = brw_fs_prog_data(s.prog_data);
    brw_fs_prog_key *key = (brw_fs_prog_key*) s.key;
-
-   if (s.nir->info.outputs_written & BITFIELD64_BIT(FRAG_RESULT_STENCIL)) {
-      /* From the 'Render Target Write message' section of the docs:
-       * "Output Stencil is not supported with SIMD16 Render Target Write
-       * Messages."
-       */
-      if (devinfo->ver >= 20)
-         s.limit_dispatch_width(16, "gl_FragStencilRefARB unsupported "
-                                "in SIMD32+ mode.\n");
-      else
-         s.limit_dispatch_width(8, "gl_FragStencilRefARB unsupported "
-                                "in SIMD16+ mode.\n");
-   }
 
    /* ANV doesn't know about sample mask output during the wm key creation
     * so we compute if we need replicate alpha and emit alpha to coverage
@@ -146,36 +131,6 @@ brw_emit_fb_writes(brw_shader &s)
    const bool replicate_alpha = key->alpha_test_replicate_alpha ||
       (key->nr_color_regions > 1 && key->alpha_to_coverage &&
        s.sample_mask.file == BAD_FILE);
-
-   prog_data->dual_src_blend = s.dual_src_output.file != BAD_FILE;
-   assert(!prog_data->dual_src_blend || key->nr_color_regions == 1);
-
-   /* Following condition implements Wa_14017468336:
-    *
-    * "If dual source blend is enabled do not enable SIMD32 dispatch" and
-    * "For a thread dispatched as SIMD32, must not issue SIMD8 message with Last
-    *  Render Target Select set."
-    */
-   if (devinfo->ver >= 11 && devinfo->ver <= 12 &&
-       prog_data->dual_src_blend) {
-      /* The dual-source RT write messages fail to release the thread
-       * dependency on ICL and TGL with SIMD32 dispatch, leading to hangs.
-       *
-       * XXX - Emit an extra single-source NULL RT-write marked LastRT in
-       *       order to release the thread dependency without disabling
-       *       SIMD32.
-       *
-       * The dual-source RT write messages may lead to hangs with SIMD16
-       * dispatch on ICL due some unknown reasons, see
-       * https://gitlab.freedesktop.org/mesa/mesa/-/issues/2183
-       */
-      if (devinfo->ver >= 20)
-         s.limit_dispatch_width(16, "Dual source blending unsupported "
-                                "in SIMD32 mode.\n");
-      else
-         s.limit_dispatch_width(8, "Dual source blending unsupported "
-                                "in SIMD16 and SIMD32 modes.\n");
-   }
 
    brw_do_emit_fb_writes(s, key->nr_color_regions, replicate_alpha);
 }
@@ -882,6 +837,10 @@ brw_nir_populate_fs_prog_data(nir_shader *shader,
    prog_data->computed_stencil =
       shader->info.outputs_written & BITFIELD64_BIT(FRAG_RESULT_STENCIL);
 
+   prog_data->dual_src_blend =
+      shader->info.outputs_written & BITFIELD64_BIT(FRAG_RESULT_DUAL_SRC_BLEND);
+   assert(!prog_data->dual_src_blend || key->nr_color_regions == 1);
+
    prog_data->sample_shading =
       shader->info.fs.uses_sample_shading ||
       shader->info.outputs_read;
@@ -1302,9 +1261,6 @@ run_fs(brw_shader &s, bool allow_spilling, bool do_rep_send)
 
    s.payload_ = new brw_fs_thread_payload(s);
 
-   if (nir->info.ray_queries > 0)
-      s.limit_dispatch_width(16, "SIMD32 not supported with ray queries.\n");
-
    if (do_rep_send) {
       assert(s.dispatch_width == 16);
       brw_emit_repclear_shader(s);
@@ -1426,6 +1382,63 @@ brw_nir_cleanup_pre_fs_prog_data(brw_pass_tracker *pt)
       BRW_NIR_LOOP_PASS(nir_opt_dce);
       BRW_NIR_LOOP_PASS(nir_opt_cse);
    } while (pt->progress);
+}
+
+static unsigned
+limit_fs_dispatch_width(const struct intel_device_info *devinfo,
+                        const nir_shader *nir,
+                        const struct brw_fs_prog_key *key)
+{
+   unsigned limit = 32;
+
+   /* We don't support SIMD32 FS with ray queries.  We could, but the message
+    * is limited to SIMD16, and they're complex enough that SIMD32 isn't
+    * likely to be useful anyway.
+    */
+   if (nir->info.ray_queries > 0)
+      limit = MIN2(limit, 16);
+
+   /* The 'Render Target Write message' section of the docs says:
+    *
+    *    "Output Stencil is not supported with SIMD16 Render Target
+    *     Write Messages."
+    */
+   if (nir->info.outputs_written & BITFIELD64_BIT(FRAG_RESULT_STENCIL))
+      limit = MIN2(limit, devinfo->ver >= 20 ? 16 : 8);
+
+   /* Following condition implements Wa_14017468336:
+    *
+    * "If dual source blend is enabled do not enable SIMD32 dispatch" and
+    * "For a thread dispatched as SIMD32, must not issue SIMD8 message with
+    *  Last Render Target Select set."
+    *
+    * The dual-source RT write messages fail to release the thread
+    * dependency on ICL and TGL with SIMD32 dispatch, leading to hangs.
+    *
+    * XXX - Emit an extra single-source NULL RT-write marked LastRT in
+    *       order to release the thread dependency without disabling SIMD32.
+    *
+    * The dual-source RT write messages may lead to hangs with SIMD16
+    * dispatch on ICL due some unknown reasons, see:
+    *
+    * https://gitlab.freedesktop.org/mesa/mesa/-/issues/2183
+    */
+   if (nir->info.fs.color_is_dual_source &&
+       devinfo->ver >= 11 && devinfo->ver <= 12)
+      limit = MIN2(limit, 8);
+
+   if (devinfo->ver < 20 && key->coarse_pixel) {
+      /* SIMD32 is not supported for coarse pixel shading */
+      limit = MIN2(limit, 16);
+
+      /* SIMD16 coarse pixel shading cannot use the SIMD8 messages required
+       * for dual source blending.
+       */
+      if (nir->info.fs.color_is_dual_source)
+         limit = MIN2(limit, 8);
+   }
+
+   return limit;
 }
 
 const unsigned *
@@ -1558,10 +1571,8 @@ brw_compile_fs(const struct brw_compiler *compiler,
    const unsigned reqd_dispatch_width = brw_required_dispatch_width(&nir->info);
    assert(reqd_dispatch_width == 0 || reqd_dispatch_width == 16);
 
-   /* Limit identified when first variant is compiled, see
-    * brw_shader::limit_dispatch_width().
-    */
-   unsigned dispatch_width_limit = UINT_MAX;
+   const unsigned dispatch_width_limit =
+      limit_fs_dispatch_width(devinfo, nir, key);
 
    std::unique_ptr<brw_shader> v8, v16, v32, vmulti;
    float throughput = 0;
@@ -1591,17 +1602,6 @@ brw_compile_fs(const struct brw_compiler *compiler,
                                                 v8->fail_msg);
          return NULL;
       }
-
-      if (key->coarse_pixel) {
-         if (prog_data->dual_src_blend) {
-            v8->limit_dispatch_width(8, "SIMD16 coarse pixel shading cannot"
-                                     " use SIMD8 messages.\n");
-         }
-         v8->limit_dispatch_width(16, "SIMD32 not supported with coarse"
-                                  " pixel shading.\n");
-      }
-
-      dispatch_width_limit = MIN2(dispatch_width_limit, v8->max_dispatch_width);
 
       if (INTEL_SIMD(FS, 8)) {
          assert(v8->payload().num_regs % reg_unit(devinfo) == 0);
@@ -1745,8 +1745,6 @@ brw_compile_fs(const struct brw_compiler *compiler,
                                 v16->fail_msg);
             v16.reset();
          } else {
-            dispatch_width_limit = MIN2(dispatch_width_limit, v16->max_dispatch_width);
-
             assert(v16->payload().num_regs % reg_unit(devinfo) == 0);
             prog_data->dispatch_grf_start_reg_16 = v16->payload().num_regs / reg_unit(devinfo);
             prog_data->base.grf_used = MAX2(prog_data->base.grf_used,

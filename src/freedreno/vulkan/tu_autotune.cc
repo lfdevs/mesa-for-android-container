@@ -2061,10 +2061,10 @@ tu_autotune::emit_switch_away_amble(struct tu_cs *cs) const
    static size_t counter = 0;
    if (counter++ % 2 == 0) {
       tu_cs_emit_pkt4(cs, preemption_latency_selector_reg, 1);
-      tu_cs_emit(cs, always_count_selector);
+      tu_cs_emit(cs, preemption_latency_selector);
 
       tu_cs_emit_pkt4(cs, always_count_selector_reg, 1);
-      tu_cs_emit(cs, preemption_latency_selector);
+      tu_cs_emit(cs, always_count_selector);
    }
 
    tu_cond_exec_end(cs);

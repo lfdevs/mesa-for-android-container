@@ -1020,10 +1020,12 @@ get_device_properties(const struct v3dv_physical_device *device,
                                                   MAX_STORAGE_IMAGES,
 
       /* Compute limits */
-      .maxComputeSharedMemorySize               = 16384,
+      .maxComputeSharedMemorySize               = 32u * 1024u,
       .maxComputeWorkGroupCount                 = { 65535, 65535, 65535 },
-      .maxComputeWorkGroupInvocations           = 256,
-      .maxComputeWorkGroupSize                  = { 256, 256, 256 },
+      .maxComputeWorkGroupInvocations           = V3D_MAX_CSD_WG_SIZE,
+      .maxComputeWorkGroupSize                  = { V3D_MAX_CSD_WG_SIZE,
+                                                    V3D_MAX_CSD_WG_SIZE,
+                                                    V3D_MAX_CSD_WG_SIZE },
 
       .subPixelPrecisionBits                    = V3D_COORD_SHIFT,
       .subTexelPrecisionBits                    = 8,
@@ -1192,12 +1194,14 @@ get_device_properties(const struct v3dv_physical_device *device,
       .storageTexelBufferOffsetSingleTexelAlignment = false,
       .uniformTexelBufferOffsetAlignmentBytes = V3D_TMU_TEXEL_ALIGN,
       .uniformTexelBufferOffsetSingleTexelAlignment = false,
-      /* No native acceleration for integer dot product. We use NIR lowering. */
+      /* V3D 7.1+ has native v8dot instructions for 4x8-bit packed dot
+       * products (unsigned, signed, mixed signedness).
+       */
       .integerDotProduct8BitUnsignedAccelerated = false,
       .integerDotProduct8BitMixedSignednessAccelerated = false,
-      .integerDotProduct4x8BitPackedUnsignedAccelerated = false,
-      .integerDotProduct4x8BitPackedSignedAccelerated = false,
-      .integerDotProduct4x8BitPackedMixedSignednessAccelerated = false,
+      .integerDotProduct4x8BitPackedUnsignedAccelerated = device->devinfo.ver >= 71,
+      .integerDotProduct4x8BitPackedSignedAccelerated = device->devinfo.ver >= 71,
+      .integerDotProduct4x8BitPackedMixedSignednessAccelerated = device->devinfo.ver >= 71,
       .integerDotProduct16BitUnsignedAccelerated = false,
       .integerDotProduct16BitSignedAccelerated = false,
       .integerDotProduct16BitMixedSignednessAccelerated = false,
@@ -1278,7 +1282,7 @@ get_device_properties(const struct v3dv_physical_device *device,
       /* VK_EXT_subgroup_size_control */
       .minSubgroupSize = V3D_CHANNELS,
       .maxSubgroupSize = V3D_CHANNELS,
-      .maxComputeWorkgroupSubgroups = 16, /* 256 / 16 */
+      .maxComputeWorkgroupSubgroups = V3D_MAX_CSD_WG_SIZE / V3D_CHANNELS,
       .requiredSubgroupSizeStages = VK_SHADER_STAGE_COMPUTE_BIT,
 
       /* VK_KHR_maintenance5 */
@@ -1680,13 +1684,13 @@ v3dv_physical_device_device_id(const struct v3dv_physical_device *dev)
    }
 }
 
-/* We support exactly one queue family. */
+/* We support multiqueue emulation */
 static const VkQueueFamilyProperties
 v3dv_queue_family_properties = {
    .queueFlags = VK_QUEUE_GRAPHICS_BIT |
                  VK_QUEUE_COMPUTE_BIT |
                  VK_QUEUE_TRANSFER_BIT,
-   .queueCount = 1,
+   .queueCount = V3DV_MAX_QUEUES,
    .timestampValidBits = 64,
    .minImageTransferGranularity = { 1, 1, 1 },
 };
@@ -1837,7 +1841,6 @@ queue_init(struct v3dv_device *device, struct v3dv_queue *queue,
       }
    }
 
-   queue->noop_job = NULL;
    return VK_SUCCESS;
 
 fail_last_job_syncs:
@@ -1850,10 +1853,29 @@ fail_submit_thread:
 static void
 queue_finish(struct v3dv_queue *queue)
 {
-   if (queue->noop_job)
-      v3dv_job_destroy(queue->noop_job);
    destroy_queue_syncs(queue);
    vk_queue_finish(&queue->vk);
+}
+
+VkResult
+v3dv_device_create_noop_job(struct v3dv_device *device)
+{
+   device->noop_job = vk_zalloc(&device->vk.alloc, sizeof(struct v3dv_job), 8,
+                                VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+   if (!device->noop_job)
+      return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
+   v3dv_job_init(device->noop_job, V3DV_JOB_TYPE_GPU_CL, device, NULL, -1);
+
+   v3d_X((&device->devinfo), job_emit_noop)(device->noop_job);
+
+   /* We use no-op jobs to signal semaphores/fences. These jobs needs to be
+    * serialized across all hw queues to comply with Vulkan's signal operation
+    * order requirements, which basically require that signal operations occur
+    * in submission order.
+    */
+   device->noop_job->serialize = V3DV_BARRIER_ALL;
+
+   return VK_SUCCESS;
 }
 
 static void
@@ -1887,14 +1909,16 @@ v3dv_CreateDevice(VkPhysicalDevice physicalDevice,
 
    assert(pCreateInfo->sType == VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO);
 
-   /* Check requested queues (we only expose one queue ) */
-   assert(pCreateInfo->queueCreateInfoCount == 1);
+   /* Check requested queues */
+   uint32_t total_queues = 0;
    for (uint32_t i = 0; i < pCreateInfo->queueCreateInfoCount; i++) {
       assert(pCreateInfo->pQueueCreateInfos[i].queueFamilyIndex == 0);
-      assert(pCreateInfo->pQueueCreateInfos[i].queueCount == 1);
+      assert(pCreateInfo->pQueueCreateInfos[i].queueCount <= V3DV_MAX_QUEUES);
       if (pCreateInfo->pQueueCreateInfos[i].flags != 0)
          return vk_error(instance, VK_ERROR_INITIALIZATION_FAILED);
+      total_queues += pCreateInfo->pQueueCreateInfos[i].queueCount;
    }
+   assert(total_queues <= V3DV_MAX_QUEUES);
 
    device = vk_zalloc2(&physical_device->vk.instance->alloc, pAllocator,
                        sizeof(*device), 8,
@@ -1917,6 +1941,7 @@ v3dv_CreateDevice(VkPhysicalDevice physicalDevice,
    device->instance = instance;
    device->pdevice = physical_device;
 
+   mtx_init(&device->queue_mutex, mtx_plain);
    mtx_init(&device->query_mutex, mtx_plain);
    cnd_init(&device->query_ended);
 
@@ -1926,10 +1951,25 @@ v3dv_CreateDevice(VkPhysicalDevice physicalDevice,
    vk_device_set_drm_fd(&device->vk, physical_device->render_fd);
    vk_device_enable_threaded_submit(&device->vk);
 
-   result = queue_init(device, &device->queue,
-                       pCreateInfo->pQueueCreateInfos, 0);
-   if (result != VK_SUCCESS)
-      goto fail;
+   device->queues = vk_zalloc2(&device->vk.alloc, pAllocator,
+                               sizeof(*device->queues) * total_queues, 8,
+                               VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
+   if (!device->queues) {
+      result = vk_error(instance, VK_ERROR_OUT_OF_HOST_MEMORY);
+      goto fail_queues_alloc;
+   }
+
+   device->queue_count = 0;
+   for (uint32_t i = 0; i < pCreateInfo->queueCreateInfoCount; i++) {
+      for (uint32_t j = 0; j < pCreateInfo->pQueueCreateInfos[i].queueCount; j++) {
+         result = queue_init(device, &device->queues[device->queue_count],
+                             &pCreateInfo->pQueueCreateInfos[i], j);
+         if (result != VK_SUCCESS)
+            goto fail;
+
+         device->queue_count++;
+      }
+   }
 
    device->devinfo = physical_device->devinfo;
 
@@ -1950,6 +1990,10 @@ v3dv_CreateDevice(VkPhysicalDevice physicalDevice,
                             device->instance->default_pipeline_cache_enabled);
    device->default_attribute_float =
       v3d_X((&device->devinfo), create_default_attribute_values)(device, NULL);
+
+   result = v3dv_device_create_noop_job(device);
+   if (result != VK_SUCCESS)
+      goto fail;
 
    device->device_address_mem_ctx = ralloc_context(NULL);
    util_dynarray_init(&device->device_address_bo_list,
@@ -1974,9 +2018,15 @@ v3dv_CreateDevice(VkPhysicalDevice physicalDevice,
    return VK_SUCCESS;
 
 fail:
+   for (uint32_t i = 0; i < device->queue_count; i++)
+      queue_finish(&device->queues[i]);
+   vk_free2(&device->vk.alloc, pAllocator, device->queues);
+fail_queues_alloc:
    cnd_destroy(&device->query_ended);
    mtx_destroy(&device->query_mutex);
-   queue_finish(&device->queue);
+   mtx_destroy(&device->queue_mutex);
+   if (device->noop_job)
+      v3dv_job_destroy(device->noop_job);
    destroy_device_meta(device);
    v3dv_pipeline_cache_finish(&device->default_pipeline_cache);
    v3dv_event_free_resources(device);
@@ -1994,7 +2044,12 @@ v3dv_DestroyDevice(VkDevice _device,
    V3DV_FROM_HANDLE(v3dv_device, device, _device);
 
    device->vk.dispatch_table.DeviceWaitIdle(_device);
-   queue_finish(&device->queue);
+   for (uint32_t i = 0; i < device->queue_count; i++)
+      queue_finish(&device->queues[i]);
+   vk_free2(&device->vk.alloc, pAllocator, device->queues);
+
+   if (device->noop_job)
+      v3dv_job_destroy(device->noop_job);
 
    v3dv_event_free_resources(device);
    mtx_destroy(&device->events.lock);
@@ -2018,6 +2073,7 @@ v3dv_DestroyDevice(VkDevice _device,
 
    cnd_destroy(&device->query_ended);
    mtx_destroy(&device->query_mutex);
+   mtx_destroy(&device->queue_mutex);
 
    vk_device_finish(&device->vk);
    vk_free2(&device->vk.alloc, pAllocator, device);
@@ -2227,8 +2283,11 @@ free_memory(struct v3dv_device *device,
    if (mem->bo->map)
       device_unmap(device, mem);
 
-   if (mem->is_for_device_address)
+   if (mem->is_for_device_address) {
+      mtx_lock(&device->queue_mutex);
       device_remove_device_address_bo(device, mem->bo);
+      mtx_unlock(&device->queue_mutex);
+   }
 
    device_free(device, mem);
 
@@ -2586,17 +2645,35 @@ v3dv_BindImageMemory2(VkDevice _device,
                       const VkBindImageMemoryInfo *pBindInfos)
 {
    for (uint32_t i = 0; i < bindInfoCount; i++) {
-      /* This section is removed by the optimizer for non-ANDROID builds */
+#if DETECT_OS_ANDROID
       V3DV_FROM_HANDLE(v3dv_image, image, pBindInfos[i].image);
-      if (vk_image_is_android_hardware_buffer(&image->vk)) {
+      if (vk_image_is_android_hardware_buffer(&image->vk) ||
+          vk_image_is_android_native_buffer_alias(&image->vk)) {
+         const VkNativeBufferANDROID *anb =
+            vk_find_struct_const(pBindInfos[i].pNext, NATIVE_BUFFER_ANDROID);
+
          V3DV_FROM_HANDLE(v3dv_device, device, _device);
-         V3DV_FROM_HANDLE(v3dv_device_memory, mem, pBindInfos[i].memory);
 
          VkImageDrmFormatModifierExplicitCreateInfoEXT eci;
          VkSubresourceLayout a_plane_layouts[V3DV_MAX_PLANE_COUNT];
-         VkResult result = vk_android_get_ahb_layout(mem->vk.ahardware_buffer,
-                                                     &eci, a_plane_layouts,
-                                                     V3DV_MAX_PLANE_COUNT);
+         VkResult result;
+
+         if (vk_image_is_android_native_buffer_alias(&image->vk)) {
+            assert(anb && image->vk.android_deferred_create_info);
+            VkNativeBufferANDROID local_anb = *anb;
+            local_anb.pNext = image->vk.android_deferred_create_info->pNext;
+            image->vk.android_deferred_create_info->pNext = &local_anb;
+
+            result = vk_android_get_anb_layout(image->vk.android_deferred_create_info,
+                                               &eci, a_plane_layouts, V3DV_MAX_PLANE_COUNT);
+            image->vk.android_deferred_create_info->pNext = NULL;
+         } else {
+            V3DV_FROM_HANDLE(v3dv_device_memory, mem, pBindInfos[i].memory);
+            result = vk_android_get_ahb_layout(mem->vk.ahardware_buffer,
+                                               &eci, a_plane_layouts,
+                                               V3DV_MAX_PLANE_COUNT);
+         }
+
          if (result != VK_SUCCESS)
             return result;
 
@@ -2605,7 +2682,21 @@ v3dv_BindImageMemory2(VkDevice _device,
                                            /* disjoint = */ false, &eci);
          if (result != VK_SUCCESS)
             return result;
+
+         if (vk_image_is_android_native_buffer_alias(&image->vk)) {
+            result = vk_android_import_anb_memory(&device->vk, &image->vk, anb,
+                                                  &device->vk.alloc);
+            if (result != VK_SUCCESS)
+               return result;
+
+            VkBindImageMemoryInfo local_bind = pBindInfos[i];
+            local_bind.memory = image->vk.anb_memory;
+            local_bind.memoryOffset = 0;
+            bind_image_memory(&local_bind);
+            continue;
+         }
       }
+#endif
 
       const VkBindImageMemorySwapchainInfoKHR *swapchain_info =
          vk_find_struct_const(pBindInfos[i].pNext,

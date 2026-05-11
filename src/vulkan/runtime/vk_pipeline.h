@@ -230,6 +230,12 @@ void
 vk_cmd_unbind_pipelines_for_stages(struct vk_command_buffer *cmd_buffer,
                                    VkShaderStageFlags stages);
 
+uint32_t
+vk_pipeline_get_rt_scratch_size(struct vk_pipeline *pipeline);
+
+uint32_t
+vk_pipeline_get_rt_ray_queries(struct vk_pipeline *pipeline);
+
 #ifdef __cplusplus
 }
 #endif

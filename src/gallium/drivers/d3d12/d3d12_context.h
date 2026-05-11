@@ -184,6 +184,7 @@ struct d3d12_context {
    ID3D12GraphicsCommandList8 *cmdlist8;
    ID3D12GraphicsCommandList *state_fixup_cmdlist;
    struct hash_table_u64 *bo_state_table;
+   struct set *local_state_bos;
    struct blitter_context *blitter;
    uint flags;
    bool queries_disabled;

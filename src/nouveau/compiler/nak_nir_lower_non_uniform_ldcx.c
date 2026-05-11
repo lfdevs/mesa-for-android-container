@@ -355,8 +355,8 @@ try_remat_ldcx_alu_use(nir_builder *b, nir_alu_instr *alu, uint8_t src_idx,
    nir_instr_insert(nir_before_instr(&alu->instr), &new_load->instr);
 
    nir_foreach_use_safe(use, &load->def) {
-      if (nir_src_parent_instr(use)->type == nir_instr_type_alu &&
-          nir_src_parent_instr(use)->block == alu->instr.block)
+      if (nir_src_use_instr(use)->type == nir_instr_type_alu &&
+          nir_src_use_instr(use)->block == alu->instr.block)
          nir_src_rewrite(use, &new_load->def);
    }
 

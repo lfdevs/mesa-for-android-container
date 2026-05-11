@@ -31,12 +31,21 @@
 #define ARRAY_SIZE(arr)   (sizeof(arr) / sizeof((arr)[0]))
 #define SHAPER_EXP_MAX_IN 16
 
+enum vpe_shaper_index_mode {
+    SHAPER_INDEX_MODE_DEFAULT,
+    SHAPER_INDEX_MODE_17IN33LUT
+};
+
 struct vpe_shaper_setup_in {
     double source_luminance;
     double shaper_in_max;
     bool   use_const_hdr_mult;
+    enum vpe_shaper_index_mode index_mode;
 };
 
 enum vpe_status vpe_build_shaper(const struct vpe_shaper_setup_in *shaper_in,
     enum color_transfer_func shaper_tf, struct fixed31_32 pq_norm_gain,
     struct pwl_params *shaper_out);
+
+enum vpe_shaper_index_mode vpe_get_shaper_index_mode(
+    uint32_t is_dma, enum lut_dimension lut_dim, enum lut_dimension lut_container_dim);

@@ -755,7 +755,7 @@ st_finalize_nir(struct st_context *st, struct gl_program *prog,
 
    st_nir_lower_samplers(screen, nir, shader_program, prog);
    if (!is_draw_shader && !screen->caps.nir_images_as_deref)
-      NIR_PASS(_, nir, gl_nir_lower_images, false);
+      NIR_PASS(_, nir, gl_nir_lower_images, NULL, false);
 }
 
 /**

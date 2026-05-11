@@ -132,7 +132,7 @@ all_uses_same_cov(struct ir3_instruction *movs)
  * shifts the use to a simple mov.
  */
 static void
-rewrite_src_uses(struct ir3_instruction *src)
+rewrite_src_uses(struct ir3_instruction *src, type_t src_type)
 {
    foreach_ssa_use (use, src) {
       assert(use->opc == OPC_MOV);
@@ -143,7 +143,7 @@ rewrite_src_uses(struct ir3_instruction *src)
          use->srcs[0]->flags &= ~IR3_REG_HALF;
       }
 
-      use->cat1.src_type = use->cat1.dst_type;
+      use->cat1.src_type = src_type;
    }
 }
 
@@ -215,7 +215,7 @@ try_conversion_folding(struct ir3_instruction *conv,
    }
 
    ir3_set_dst_type(src, is_half(conv));
-   rewrite_src_uses(src);
+   rewrite_src_uses(src, conv->cat1.dst_type);
 
    return true;
 }

@@ -101,6 +101,8 @@ struct radv_instance {
    uint64_t perftest_flags;
    uint64_t experimental_flags;
    uint64_t trap_excp_flags;
+   uint32_t queue_disable_flags;
+
    enum radeon_ctx_pstate profile_pstate;
 
    struct radv_drirc drirc;

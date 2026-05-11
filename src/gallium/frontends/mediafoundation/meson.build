@@ -47,6 +47,35 @@ if get_option('mediafoundation-store-dll')
   mf_cpp_args += '-DBUILD_FOR_MSDK' # Can use #if BUILD_FOR_MSDK in .cpp code
 endif
 
+# InputQPSettings::step was renamed to ::steps in BR (Bromine) SDK
+# Probe which field name the installed SDK exposes.
+_inputqp_has_steps = cc.compiles(
+  '''
+  #include <windows.h>
+  #include <mfapi.h>
+  void test() { InputQPSettings s; (void)s.steps; }
+  ''',
+  name : 'InputQPSettings::steps present',
+)
+if _inputqp_has_steps
+  message('InputQPSettings: using field "steps"')
+  mf_cpp_args += '-DINPUTQPSETTINGS_HAS_STEPS'
+else
+  _inputqp_has_step = cc.compiles(
+    '''
+    #include <windows.h>
+    #include <mfapi.h>
+    void test() { InputQPSettings s; (void)s.step; }
+    ''',
+    name : 'InputQPSettings::step present',
+  )
+  if _inputqp_has_step
+    message('InputQPSettings: using field "step"')
+  else
+    error('InputQPSettings has neither "steps" nor "step" — unsupported Windows SDK version')
+  endif
+endif
+
 mediafoundation_files = files(
   'codecapi.cpp',
   'encode.cpp',

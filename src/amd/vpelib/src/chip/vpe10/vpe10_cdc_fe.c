@@ -40,6 +40,7 @@ enum mux_sel {
 static struct cdc_fe_funcs cdc_fe_func = {
     .program_surface_config  = vpe10_cdc_program_surface_config,
     .program_crossbar_config = vpe10_cdc_program_crossbar_config,
+    .program_3dlut_fl_config = NULL,
     .program_viewport = vpe10_cdc_program_viewport,
 };
 

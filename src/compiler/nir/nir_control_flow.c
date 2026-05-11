@@ -549,7 +549,7 @@ update_if_uses(nir_cf_node *node)
       return;
 
    nir_if *if_stmt = nir_cf_node_as_if(node);
-   nir_src_set_parent_if(&if_stmt->condition, if_stmt);
+   nir_src_set_use_if(&if_stmt->condition, if_stmt);
 
    list_addtail(&if_stmt->condition.use_link,
                 &if_stmt->condition.ssa->uses);

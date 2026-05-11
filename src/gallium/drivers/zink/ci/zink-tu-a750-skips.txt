@@ -1,11 +1,11 @@
 GTF-GL46.gtf32.GL3Tests.packed_pixels.packed_pixels_pixelstore
 KHR-GL46.texture_swizzle.smoke
-KHR-Single-GL46.arrays_of_arrays_gl.SubroutineFunctionCalls2
+KHR-Single-GL46.arrays_of_arrays_gl.SubroutineFunctionCalls2_var_type_index_11
+KHR-Single-GL46.arrays_of_arrays_gl.SubroutineFunctionCalls2_var_type_index_12
+KHR-Single-GL46.arrays_of_arrays_gl.SubroutineFunctionCalls2_var_type_index_13
 
 # timeout (60sec)
 dEQP-GLES31.functional.fbo.no_attachments.npot_size.31x31
-KHR-GL46.copy_image.functional
-KHR-GL46.texture_swizzle.functional
 
 # crashes
 KHR-Single-GL46.enhanced_layouts.xfb_capture_inactive_output_component

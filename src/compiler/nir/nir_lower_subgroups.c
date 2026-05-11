@@ -1396,7 +1396,7 @@ lower_subgroups_instr(nir_builder *b, nir_instr *instr, void *_options)
          return intrin->src[0].ssa;
       if (options->lower_to_scalar && intrin->num_components > 1)
          return lower_subgroup_op_to_scalar(b, intrin, is_bitwise(nir_intrinsic_reduction_op(intrin)));
-      if (intrin->def.bit_size == 1 && options->ballot_components == 1 &&
+      if (intrin->def.bit_size == 1 && intrin->def.num_components == 1 && options->ballot_components == 1 &&
           (options->lower_boolean_reduce || options->lower_reduce))
          return lower_boolean_reduce(b, intrin, options);
       if (options->lower_reduce)
@@ -1407,7 +1407,7 @@ lower_subgroups_instr(nir_builder *b, nir_instr *instr, void *_options)
    case nir_intrinsic_exclusive_scan:
       if (options->lower_to_scalar && intrin->num_components > 1)
          return lower_subgroup_op_to_scalar(b, intrin, is_bitwise(nir_intrinsic_reduction_op(intrin)));
-      if (intrin->def.bit_size == 1 && options->ballot_components == 1 &&
+      if (intrin->def.bit_size == 1 && intrin->def.num_components == 1 && options->ballot_components == 1 &&
           (options->lower_boolean_reduce || options->lower_reduce))
          return lower_boolean_reduce(b, intrin, options);
       if (options->lower_reduce)

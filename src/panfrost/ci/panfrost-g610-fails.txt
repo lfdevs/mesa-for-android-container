@@ -22,14 +22,6 @@ afbcp-spec@arb_shader_texture_lod@execution@tex-miplevel-selection *projgradarb 
 afbcp-spec@arb_shader_texture_lod@execution@tex-miplevel-selection *projgradarb 2d_projvec4,Fail
 afbcp-spec@arb_shader_texture_lod@execution@tex-miplevel-selection *projgradarb 2dshadow,Fail
 afbcp-spec@arb_shader_texture_lod@execution@tex-miplevel-selection *projgradarb 3d,Fail
-afbcp-spec@arb_texture_query_levels@execution@fs-baselevel,Crash
-afbcp-spec@arb_texture_query_levels@execution@fs-maxlevel,Crash
-afbcp-spec@arb_texture_query_levels@execution@fs-miptree,Crash
-afbcp-spec@arb_texture_query_levels@execution@fs-nomips,Crash
-afbcp-spec@arb_texture_query_levels@execution@vs-baselevel,Crash
-afbcp-spec@arb_texture_query_levels@execution@vs-maxlevel,Crash
-afbcp-spec@arb_texture_query_levels@execution@vs-miptree,Crash
-afbcp-spec@arb_texture_query_levels@execution@vs-nomips,Crash
 afbcp-spec@ext_image_dma_buf_import@ext_image_dma_buf_import-refcount-multithread,Crash
 afbcp-spec@glsl-1.30@execution@tex-miplevel-selection texturegrad 1darray,Fail
 afbcp-spec@glsl-1.30@execution@tex-miplevel-selection texturegrad 1darrayshadow,Fail
@@ -83,7 +75,6 @@ shaders@point-vertex-id gl_vertexid divisor,Fail
 shaders@point-vertex-id gl_vertexid,Fail
 shaders@point-vertex-id gl_vertexid gl_instanceid divisor,Fail
 shaders@point-vertex-id gl_vertexid gl_instanceid,Fail
-spec@arb_arrays_of_arrays@execution@atomic_counters@fs-indirect-index,Fail
 spec@arb_point_sprite@arb_point_sprite-mipmap,Fail
 spec@arb_shader_texture_lod@execution@arb_shader_texture_lod-texgradcube,Fail
 spec@arb_shader_texture_lod@execution@arb_shader_texture_lod-texgrad,Fail
@@ -99,14 +90,6 @@ spec@arb_shader_texture_lod@execution@tex-miplevel-selection *projgradarb 2d,Fai
 spec@arb_shader_texture_lod@execution@tex-miplevel-selection *projgradarb 2d_projvec4,Fail
 spec@arb_shader_texture_lod@execution@tex-miplevel-selection *projgradarb 2dshadow,Fail
 spec@arb_shader_texture_lod@execution@tex-miplevel-selection *projgradarb 3d,Fail
-spec@arb_texture_query_levels@execution@fs-baselevel,Crash
-spec@arb_texture_query_levels@execution@fs-maxlevel,Crash
-spec@arb_texture_query_levels@execution@fs-miptree,Crash
-spec@arb_texture_query_levels@execution@fs-nomips,Crash
-spec@arb_texture_query_levels@execution@vs-baselevel,Crash
-spec@arb_texture_query_levels@execution@vs-maxlevel,Crash
-spec@arb_texture_query_levels@execution@vs-miptree,Crash
-spec@arb_texture_query_levels@execution@vs-nomips,Crash
 spec@arb_transform_feedback_instanced@draw-auto instanced,Fail
 spec@egl 1.4@egl-ext_egl_image_storage,Fail
 spec@egl 1.4@eglterminate then unbind context,Fail

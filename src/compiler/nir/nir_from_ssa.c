@@ -1128,8 +1128,8 @@ ssa_def_is_local_to_block(nir_def *def, UNUSED void *state)
    nir_block *block = nir_def_block(def);
    nir_foreach_use_including_if(use_src, def) {
       if (nir_src_is_if(use_src) ||
-          nir_src_parent_instr(use_src)->block != block ||
-          nir_src_parent_instr(use_src)->type == nir_instr_type_phi) {
+          nir_src_use_instr(use_src)->block != block ||
+          nir_src_use_instr(use_src)->type == nir_instr_type_phi) {
          return false;
       }
    }

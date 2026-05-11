@@ -26,7 +26,6 @@ ci_tag_build_time_check "ANDROID_CTS_TAG"
 # This should be the union of all modules required by our CI jobs
 # Specific modules to run are selected via the ${GPU_VERSION}-android-cts-include.txt files
 ANDROID_CTS_MODULES=(
-    "CtsDeqpTestCases"
     "CtsGraphicsTestCases"
     "CtsNativeHardwareTestCases"
     "CtsSkQPTestCases"

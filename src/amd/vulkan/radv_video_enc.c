@@ -1816,7 +1816,9 @@ radv_enc_ctx2(struct radv_cmd_buffer *cmd_buffer, const VkVideoEncodeInfoKHR *in
       RADEON_ENC_CS(0);
       RADEON_ENC_CS(0);
       RADEON_ENC_CS(0);
-      RADEON_ENC_CS(RENCODE_REC_SWIZZLE_MODE_256B_D_VCN5);
+      RADEON_ENC_CS(pdev->info.gfx_level >= GFX12 ?
+                    RENCODE_REC_SWIZZLE_MODE_256B_D_GFX12 :
+                    RENCODE_REC_SWIZZLE_MODE_256B_D);
       RADEON_ENC_CS(fcb_va >> 32);
       RADEON_ENC_CS(fcb_va & 0xffffffff);
       RADEON_ENC_CS(RENCODE_MAX_METADATA_BUFFER_SIZE_PER_FRAME); // colloc/cdf offset

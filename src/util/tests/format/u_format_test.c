@@ -731,6 +731,63 @@ test_format_norm_flags(const struct util_format_description *format_desc)
    return success;
 }
 
+
+/* Test that subsampling is set up correctly */
+static bool
+test_format_subsampling(const struct util_format_description *format_desc)
+{
+   const char *map[] = {
+#define SUBSAMP(x) [PIPE_VIDEO_CHROMA_FORMAT_##x] = "_" #x "_"
+      SUBSAMP(400),
+      SUBSAMP(420),
+      SUBSAMP(422),
+      SUBSAMP(440),
+      SUBSAMP(444),
+#undef SUBSAMP
+   };
+
+   if (format_desc->colorspace == UTIL_FORMAT_COLORSPACE_YUV ||
+       format_desc->layout == UTIL_FORMAT_LAYOUT_SUBSAMPLED ||
+       format_desc->layout == UTIL_FORMAT_LAYOUT_PLANAR2 ||
+       format_desc->layout == UTIL_FORMAT_LAYOUT_PLANAR3) {
+
+      /* subsampled, planar and YUV formats must specify subsampling */
+      if (format_desc->subsampling == PIPE_VIDEO_CHROMA_FORMAT_NONE) {
+         fprintf(stderr, "%s is not subsampled, as it should be.\n",
+                 format_desc->name);
+         return false;
+      }
+
+      /* make sure the subsampling is specified in the name */
+      assert(format_desc->subsampling < ARRAY_SIZE(map));
+      assert(map[format_desc->subsampling] != NULL);
+      if (!strstr(format_desc->name, map[format_desc->subsampling])) {
+         fprintf(stderr, "format name %s should contain %s.\n",
+                 format_desc->name, map[format_desc->subsampling]);
+         return false;
+      }
+   } else {
+      /* other formats shouldn't have subsampling */
+      if (format_desc->subsampling != PIPE_VIDEO_CHROMA_FORMAT_NONE) {
+         fprintf(stderr, "%s is not subsampled, as it should be.\n",
+                 format_desc->name);
+         return false;
+      }
+
+      /* ...also not in the name */
+      for (unsigned i = 1; i < ARRAY_SIZE(map); i++) {
+         assert(map[i] != NULL);
+         if (strstr(format_desc->name, map[i])) {
+            fprintf(stderr, "format name %s should not contain subsampling "
+                    "info. (got %s)\n", format_desc->name, map[i]);
+            return false;
+         }
+      }
+   }
+
+   return true;
+}
+
 typedef bool
 (*test_func_t)(const struct util_format_description *format_desc,
                const struct util_format_test_case *test);
@@ -856,6 +913,7 @@ test_all(void)
       TEST_ONE_PACK_FUNC(pack_s_8uint);
 
       TEST_FORMAT_METADATA(norm_flags);
+      TEST_FORMAT_METADATA(subsampling);
 
 #     undef TEST_ONE_FUNC
 #     undef TEST_ONE_FORMAT

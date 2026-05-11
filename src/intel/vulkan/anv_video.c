@@ -68,6 +68,107 @@ anv_DestroyVideoSessionKHR(VkDevice _device,
    vk_free2(&device->vk.alloc, pAllocator, vid);
 }
 
+static void
+anv_video_patch_encode_session_parameters(struct anv_device *device, struct vk_video_session_parameters *params)
+{
+   switch (params->op) {
+   case VK_VIDEO_CODEC_OPERATION_ENCODE_H264_BIT_KHR: {
+      /* Set 0 where we don't advertise via stdSyntaxFlags */
+      for (unsigned i = 0; i < params->h264_enc.h264_sps_count; i++) {
+         StdVideoH264SequenceParameterSet *sps = &params->h264_enc.h264_sps[i].base;
+
+         sps->flags.separate_colour_plane_flag = 0;
+         sps->flags.qpprime_y_zero_transform_bypass_flag = 0;
+         sps->flags.seq_scaling_matrix_present_flag = 0;
+      }
+
+      for (unsigned i = 0; i < params->h264_enc.h264_pps_count; i++) {
+         StdVideoH264PictureParameterSet *pps = &params->h264_enc.h264_pps[i].base;
+
+         pps->flags.pic_scaling_matrix_present_flag = 0;
+         pps->flags.weighted_pred_flag = 0;
+         pps->weighted_bipred_idc = STD_VIDEO_H264_WEIGHTED_BIPRED_IDC_DEFAULT;
+      }
+      break;
+   }
+   case VK_VIDEO_CODEC_OPERATION_ENCODE_H265_BIT_KHR: {
+      for (unsigned i = 0; i < params->h265_enc.h265_sps_count; i++) {
+         StdVideoH265SequenceParameterSet *sps = &params->h265_enc.h265_sps[i].base;
+
+         /* CTB: 64, transform: 4..32 */
+         sps->log2_min_luma_coding_block_size_minus3 = 0;
+         sps->log2_diff_max_min_luma_coding_block_size = 3;
+         sps->log2_min_luma_transform_block_size_minus2 = 0;
+         sps->log2_diff_max_min_luma_transform_block_size = 3;
+
+         /* maxSubLayerCount = 1 */
+         sps->sps_max_sub_layers_minus1 = 0;
+
+         /* Set 0 where we don't advertise via stdSyntaxFlags */
+         sps->flags.separate_colour_plane_flag = 0;
+         sps->flags.pcm_enabled_flag = 0;
+         sps->flags.sps_temporal_mvp_enabled_flag = 0;
+      }
+      for (unsigned i = 0; i < params->h265_enc.h265_pps_count; i++) {
+         StdVideoH265PictureParameterSet *pps = &params->h265_enc.h265_pps[i].base;
+
+         /* maxTiles = 1x1 */
+         pps->flags.tiles_enabled_flag = 0;
+
+         /* rateControlModes is DEFAULT|DISABLED only — no cu_qp_delta path */
+         pps->flags.cu_qp_delta_enabled_flag = 0;
+
+         /* Set 0 where we don't advertise via stdSyntaxFlags */
+         pps->flags.weighted_pred_flag = 0;
+         pps->flags.weighted_bipred_flag = 0;
+         pps->flags.sign_data_hiding_enabled_flag = 0;
+         pps->flags.transquant_bypass_enabled_flag = 0;
+         pps->flags.constrained_intra_pred_flag = 0;
+         pps->flags.entropy_coding_sync_enabled_flag = 0;
+         pps->flags.deblocking_filter_override_enabled_flag = 0;
+         pps->flags.dependent_slice_segments_enabled_flag = 0;
+         pps->flags.pps_slice_chroma_qp_offsets_present_flag = 0;
+         pps->flags.pps_scaling_list_data_present_flag = 0;
+         pps->log2_parallel_merge_level_minus2 = 0;
+      }
+      break;
+   }
+   default:
+      break;
+   }
+}
+
+static void
+anv_video_patch_session_parameters(struct anv_device *device, struct vk_video_session_parameters *params)
+{
+   switch (params->op) {
+   case VK_VIDEO_CODEC_OPERATION_ENCODE_H264_BIT_KHR:
+   case VK_VIDEO_CODEC_OPERATION_ENCODE_H265_BIT_KHR:
+      anv_video_patch_encode_session_parameters(device, params);
+      break;
+   default:
+      return;
+   }
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL
+anv_CreateVideoSessionParametersKHR(VkDevice _device, const VkVideoSessionParametersCreateInfoKHR *pCreateInfo,
+                                    const VkAllocationCallbacks *pAllocator,
+                                    VkVideoSessionParametersKHR *pVideoSessionParameters)
+{
+   ANV_FROM_HANDLE(anv_device, device, _device);
+
+   struct vk_video_session_parameters *params =
+      vk_video_session_parameters_create(&device->vk, pCreateInfo, pAllocator, sizeof(*params));
+   if (!params)
+      return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
+
+   anv_video_patch_session_parameters(device, params);
+
+   *pVideoSessionParameters = vk_video_session_parameters_to_handle(params);
+   return VK_SUCCESS;
+}
+
 static VkResult
 video_profile_supported(struct anv_physical_device *pdevice,
                   const VkVideoProfileInfoKHR *profile)
@@ -1051,7 +1152,6 @@ anv_GetEncodedVideoSessionParametersKHR(VkDevice device,
          char *data_ptr = pData ? (char *)pData + vps_size + sps_size : NULL;
          for (unsigned i = 0; i < params->h265_enc.h265_pps_count; i++)
             if (params->h265_enc.h265_pps[i].base.pps_seq_parameter_set_id == h265_get_info->stdPPSId) {
-               params->h265_enc.h265_pps[i].base.flags.cu_qp_delta_enabled_flag = 0;
                vk_video_encode_h265_pps(&params->h265_enc.h265_pps[i].base, size_limit, &pps_size, data_ptr);
             }
       }

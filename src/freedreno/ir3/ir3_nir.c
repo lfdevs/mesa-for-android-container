@@ -607,7 +607,7 @@ lower_shader_clock(struct nir_builder *b, nir_intrinsic_instr *instr, void *data
       nir_def *clock_lo =
          nir_load_global_ir3(b, 1, 32, base_addr, nir_imm_int(b, 0));
       nir_def *clock_hi =
-         nir_load_global_ir3(b, 1, 32, base_addr, nir_imm_int(b, 1));
+         nir_load_global_ir3(b, 1, 32, base_addr, nir_imm_int(b, 4));
       clock = nir_vec2(b, clock_lo, clock_hi);
    }
    nir_push_else(b, NULL);
@@ -2051,4 +2051,21 @@ ir3_nir_intrinsic_barycentric_sysval(nir_intrinsic_instr *intr)
    }
 
    return sysval;
+}
+
+nir_io_offset
+ir3_nir_get_global_offset(nir_builder *b, struct ir3_compiler *compiler,
+                          nir_def *offset, unsigned offset_shift)
+{
+   if (compiler->gen >= 7) {
+      return (nir_io_offset){
+         .def = nir_ishl_imm(b, offset, offset_shift),
+         .shift = 0,
+      };
+   }
+
+   return (nir_io_offset){
+      .def = offset,
+      .shift = offset_shift,
+   };
 }

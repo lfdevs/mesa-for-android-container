@@ -78,18 +78,6 @@ extern uint32_t v3d_mesa_debug;
                                      V3D_DEBUG_VS | V3D_DEBUG_CS | \
                                      V3D_DEBUG_RA)
 
-#ifdef HAVE_ANDROID_PLATFORM
-#define LOG_TAG "BROADCOM-MESA"
-#if ANDROID_API_LEVEL >= 26
-#include <log/log.h>
-#else
-#include <cutils/log.h>
-#endif /* use log/log.h start from android 8 major version */
-#ifndef ALOGW
-#define ALOGW LOGW
-#endif
-#endif /* HAVE_ANDROID_PLATFORM */
-
 extern bool v3d_debug_flag_for_shader_stage(mesa_shader_stage stage);
 
 extern void v3d_process_debug_variable(void);

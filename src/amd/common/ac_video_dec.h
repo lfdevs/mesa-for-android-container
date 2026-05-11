@@ -9,7 +9,6 @@
 
 #include "ac_video.h"
 #include "ac_gpu_info.h"
-#include "util/format/u_format.h"
 
 #define AC_VIDEO_DEC_MAX_REFS 17
 

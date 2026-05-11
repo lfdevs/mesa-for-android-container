@@ -59,8 +59,8 @@ try_lower_input_load(nir_intrinsic_instr *load, bool use_fragcoord_sysval)
 
    nir_builder b = nir_builder_at(nir_before_instr(&load->instr));
 
-   nir_def *frag_coord = use_fragcoord_sysval ? nir_load_frag_coord(&b)
-                                                  : load_frag_coord(&b);
+   nir_def *frag_coord = use_fragcoord_sysval ? nir_build_frag_coord(&b, 2)
+                                              : load_frag_coord(&b);
    frag_coord = nir_f2i32(&b, frag_coord);
    nir_def *offset = nir_trim_vector(&b, load->src[1].ssa, 2);
    nir_def *pos = nir_iadd(&b, frag_coord, offset);

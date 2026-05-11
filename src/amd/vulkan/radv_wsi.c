@@ -7,12 +7,18 @@
  */
 
 #include "radv_wsi.h"
-#include "meta/radv_meta.h"
-#include "util/macros.h"
+#include "radv_buffer.h"
+#include "radv_buffer_view.h"
+#include "radv_device.h"
+#include "radv_device_memory.h"
+#include "radv_entrypoints.h"
+#include "radv_physical_device.h"
+#include "radv_pipeline.h"
+#include "radv_pipeline_compute.h"
+#include "radv_queue.h"
+#include "radv_shader.h"
+
 #include "radv_debug.h"
-#include "vk_fence.h"
-#include "vk_semaphore.h"
-#include "vk_util.h"
 #include "wsi_common.h"
 
 static VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL
@@ -48,10 +54,22 @@ radv_wsi_get_prime_blit_queue(VkDevice _device)
 
    if (pdev->info.gfx_level >= GFX9 && !(instance->debug_flags & RADV_DEBUG_NO_DMA_BLIT)) {
 
-      pdev->vk_queue_to_radv[pdev->num_queues++] = RADV_QUEUE_TRANSFER;
+      uint32_t queue_family_index = pdev->num_queues;
+      for (uint32_t i = 0; i < pdev->num_queues; i++) {
+         if (pdev->vk_queue_to_radv[i] == RADV_QUEUE_TRANSFER) {
+            queue_family_index = i;
+            break;
+         }
+      }
+
+      if (queue_family_index == pdev->num_queues) {
+         assert(pdev->num_queues < RADV_MAX_QUEUE_FAMILIES);
+         pdev->vk_queue_to_radv[pdev->num_queues++] = RADV_QUEUE_TRANSFER;
+      }
+
       const VkDeviceQueueCreateInfo queue_create = {
          .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-         .queueFamilyIndex = pdev->num_queues - 1,
+         .queueFamilyIndex = queue_family_index,
          .queueCount = 1,
       };
 
@@ -86,6 +104,10 @@ radv_init_wsi(struct radv_physical_device *pdev)
    pdev->wsi_device.supports_modifiers = pdev->info.gfx_level >= GFX9;
    pdev->wsi_device.set_memory_ownership = radv_wsi_set_memory_ownership;
    pdev->wsi_device.get_blit_queue = radv_wsi_get_prime_blit_queue;
+
+   for (uint32_t i = 0; i < ARRAY_SIZE(pdev->wsi_device.supports_protected); i++) {
+      pdev->wsi_device.supports_protected[i] = radv_tmz_enabled(pdev);
+   }
 
    wsi_device_setup_syncobj_fd(&pdev->wsi_device, pdev->local_fd);
 

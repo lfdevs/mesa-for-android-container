@@ -4,6 +4,31 @@
 
 #include "libintel_shaders.h"
 
+void genX(write_address)(global void *dst_ptr, global void *address, uint64_t value)
+{
+   struct GENX(MI_STORE_DATA_IMM) v = {
+      GENX(MI_STORE_DATA_IMM_header),
+      .DWordLength = GENX(MI_STORE_DATA_IMM_length) -
+                     GENX(MI_STORE_DATA_IMM_length_bias) + 1,
+#if GFX_VER >= 12
+      .ForceWriteCompletionCheck = true,
+#endif
+      .Address = (uint64_t)address,
+      .ImmediateData = value,
+   };
+   GENX(MI_STORE_DATA_IMM_pack)(dst_ptr, &v);
+}
+
+void genX(write_3DSTATE_VF_TOPOLOGY)(global void *dst_ptr,
+                                     uint32_t topology)
+{
+   struct GENX(3DSTATE_VF_TOPOLOGY) v = {
+      GENX(3DSTATE_VF_TOPOLOGY_header),
+      .PrimitiveTopologyType = topology,
+   };
+   GENX(3DSTATE_VF_TOPOLOGY_pack)(dst_ptr, &v);
+}
+
 void genX(write_3DSTATE_VERTEX_BUFFERS)(global void *dst_ptr,
                                         uint32_t buffer_count)
 {
@@ -36,6 +61,25 @@ void genX(write_VERTEX_BUFFER_STATE)(global void *dst_ptr,
       .BufferSize = size,
    };
    GENX(VERTEX_BUFFER_STATE_pack)(dst_ptr, &v);
+}
+
+void genX(write_3DSTATE_INDEX_BUFFER)(global void *dst_ptr,
+                                      uint64_t buffer_addr,
+                                      uint32_t buffer_size,
+                                      uint32_t index_format,
+                                      uint32_t mocs)
+{
+   struct GENX(3DSTATE_INDEX_BUFFER) v = {
+      GENX(3DSTATE_INDEX_BUFFER_header),
+      .MOCS = mocs,
+      .IndexFormat = index_format,
+#if GFX_VER >= 12
+      .L3BypassDisable = true,
+#endif
+      .BufferStartingAddress = buffer_addr,
+      .BufferSize = buffer_size,
+   };
+   GENX(3DSTATE_INDEX_BUFFER_pack)(dst_ptr, &v);
 }
 
 void genX(write_3DPRIMITIVE)(global void *dst_ptr,
@@ -202,3 +246,25 @@ void genX(write_draw)(global uint32_t *dst_ptr,
    }
 #endif
 }
+
+#if GFX_VERx10 >= 125
+void genX(write_3DMESH_3D)(global uint32_t *dst_ptr,
+                           global void *indirect_ptr,
+                           bool is_predicated,
+                           bool uses_tbimr)
+{
+   VkDrawMeshTasksIndirectCommandEXT data =
+      *((global VkDrawMeshTasksIndirectCommandEXT *)indirect_ptr);
+
+   struct GENX(3DMESH_3D) v = {
+      GENX(3DMESH_3D_header),
+      .TBIMREnabled      = uses_tbimr,
+      .PredicateEnable   = is_predicated,
+      .ThreadGroupCountX = data.groupCountX,
+      .ThreadGroupCountY = data.groupCountY,
+      .ThreadGroupCountZ = data.groupCountZ,
+
+   };
+   GENX(3DMESH_3D_pack)(dst_ptr, &v);
+}
+#endif

@@ -98,3 +98,22 @@ struct fixed31_32 vpe_convfix31_32(int16_t inval)
         result.value = -result.value;
     return result;
 }
+
+uint32_t vpe_float_to_S1n(float value, int N)
+{
+    float max_val = (float)(2.0 - 1.0 / (1 << N));
+    float min_val = (float)-2.0;
+
+    if (value > max_val)
+        value = max_val;
+    if (value < min_val)
+        value = min_val;
+
+    uint32_t fixed_val;
+    // +- 0.5 for simple rounding
+    if (value * (1 << N) >= 0)
+        fixed_val = (int32_t)(value * (float)(1 << ((N < 0) ? 0 : N)) + 0.5);
+    else
+        fixed_val = (int32_t)(value * ((N < 0) ? 1.0f : (float)(1U << N)) - 0.5);
+    return fixed_val;
+}

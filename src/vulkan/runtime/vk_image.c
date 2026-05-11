@@ -171,6 +171,7 @@ vk_image_destroy(struct vk_device *device,
       device->dispatch_table.FreeMemory(
          (VkDevice)device, image->anb_memory, alloc);
    }
+   vk_free2(&device->alloc, alloc, image->android_deferred_create_info);
 #endif
    vk_object_free(device, alloc, image);
 }

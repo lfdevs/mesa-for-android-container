@@ -149,7 +149,7 @@ lower(nir_builder *b, nir_intrinsic_instr *intr, void *data)
          return false;
 
       nir_src *use = list_first_entry(&intr->def.uses, nir_src, use_link);
-      nir_instr *parent = nir_src_parent_instr(use);
+      nir_instr *parent = nir_src_use_instr(use);
       if (parent->type != nir_instr_type_alu)
          return false;
 

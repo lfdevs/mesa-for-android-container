@@ -754,6 +754,25 @@ nvk_cmd_invalidate_deps(struct nvk_cmd_buffer *cmd,
       P_IMMD(p, NVB1C0, INVALIDATE_SKED_CACHES, 0);
 }
 
+static void
+nvk_cmd_image_layout_transition(struct nvk_cmd_buffer *cmd,
+                                const VkDependencyInfo *dep)
+{
+   for (uint32_t i = 0; i < dep->imageMemoryBarrierCount; i++) {
+      const VkImageMemoryBarrier2 *bar = &dep->pImageMemoryBarriers[i];
+      if (bar->oldLayout == VK_IMAGE_LAYOUT_UNDEFINED &&
+          bar->newLayout != VK_IMAGE_LAYOUT_UNDEFINED) {
+         VK_FROM_HANDLE(nvk_image, image, bar->image);
+         /*
+          * zcull hardware kills the context if we try to LOAD_ZCULL on garbage
+          * data. Handle this by initializing the zcull data to zero.
+          */
+         if (image->zcull.nil.size_B > 0)
+            nvk_cmd_fill_memory(cmd, image->zcull.addr, image->zcull.nil.size_B, 0);
+      }
+   }
+}
+
 VKAPI_ATTR void VKAPI_CALL
 nvk_CmdPipelineBarrier2(VkCommandBuffer commandBuffer,
                         const VkDependencyInfo *pDependencyInfo)
@@ -761,6 +780,7 @@ nvk_CmdPipelineBarrier2(VkCommandBuffer commandBuffer,
    VK_FROM_HANDLE(nvk_cmd_buffer, cmd, commandBuffer);
 
    nvk_cmd_flush_wait_dep(cmd, pDependencyInfo, true);
+   nvk_cmd_image_layout_transition(cmd, pDependencyInfo);
    nvk_cmd_invalidate_deps(cmd, 1, pDependencyInfo);
 }
 

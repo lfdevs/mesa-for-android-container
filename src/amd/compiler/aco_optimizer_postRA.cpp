@@ -4,12 +4,10 @@
  * SPDX-License-Identifier: MIT
  */
 
-#include "aco_builder.h"
 #include "aco_ir.h"
 
 #include <algorithm>
 #include <array>
-#include <bitset>
 #include <vector>
 
 namespace aco {

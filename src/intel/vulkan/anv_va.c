@@ -62,6 +62,7 @@ anv_device_print_vas(struct anv_physical_device *device)
    PRINT_HEAP(dynamic_state_pool);
    PRINT_HEAP(dynamic_visible_pool);
    PRINT_HEAP(push_descriptor_buffer_pool);
+   PRINT_HEAP(null_initialized_heap);
    PRINT_HEAP(high_heap);
    PRINT_HEAP(trtt);
 }
@@ -144,8 +145,9 @@ anv_physical_device_init_va_ranges(struct anv_physical_device *device)
    if (device->info.verx10 >= 125)
       address = va_add(&device->va.push_descriptor_buffer_pool, address, _1Gb - 4096);
 
-   address = align64(address, device->info.mem_alignment);
+   address = align64(address, _1Gb);
    address = va_add(&device->va.aux_tt_pool, address, 2 * _1Gb);
+   address = va_add(&device->va.null_initialized_heap, address, _1Gb * 8);
 
    /* What's left to do for us is to set va.high_heap and va.trtt without
     * overlap, but there are a few things to be considered:

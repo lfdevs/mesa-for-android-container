@@ -446,14 +446,12 @@ iris_blorp_exec_blitter(struct blorp_batch *blorp_batch,
    iris_bo_bump_seqno(params->dst.addr.buffer, batch->next_seqno,
                       IRIS_DOMAIN_OTHER_WRITE);
 
-   /*
-    * TDOD: Add INTEL_NEEDS_WA_14025112257 check once HSD is propogated for all
-    * other impacted platforms.
-    */
-   if (batch->screen->devinfo->ver >= 20 && batch->name == IRIS_BATCH_COMPUTE) {
+#if INTEL_NEEDS_WA_14025112257
+   if (batch->name == IRIS_BATCH_COMPUTE) {
       iris_emit_pipe_control_flush(batch, "WA_14025112257",
                                    PIPE_CONTROL_STATE_CACHE_INVALIDATE);
    }
+#endif
 }
 
 static void
@@ -513,6 +511,7 @@ genX(init_blorp)(struct iris_context *ice)
 #endif
    ice->blorp.lookup_shader = iris_blorp_lookup_shader;
    ice->blorp.upload_shader = iris_blorp_upload_shader;
+   ice->blorp.get_surface_address = blorp_get_surface_address;
    ice->blorp.exec = iris_blorp_exec;
    ice->blorp.enable_tbimr = screen->driconf.enable_tbimr;
 }

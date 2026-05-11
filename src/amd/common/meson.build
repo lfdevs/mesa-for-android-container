@@ -98,6 +98,7 @@ amd_common_files = files(
   'ac_binary.h',
   'ac_cmdbuf.c',
   'ac_cmdbuf.h',
+  'ac_cmdbuf_base.h',
   'ac_cmdbuf_cp.c',
   'ac_cmdbuf_cp.h',
   'ac_cmdbuf_sdma.c',
@@ -150,10 +151,12 @@ amd_common_files = files(
   'ac_video_dec.c',
   'nir/ac_nir.c',
   'nir/ac_nir.h',
+  'nir/ac_nir_assign_io_locations.c',
   'nir/ac_nir_helpers.h',
   'nir/ac_nir_opt_outputs.c',
   'nir/ac_nir_cull.c',
   'nir/ac_nir_create_gs_copy_shader.c',
+  'nir/ac_nir_fixup_smem_loads_null_prt.c',
   'nir/ac_nir_lower_esgs_io_to_mem.c',
   'nir/ac_nir_lower_global_access.c',
   'nir/ac_nir_lower_image_opcodes_cdna.c',
@@ -170,6 +173,7 @@ amd_common_files = files(
   'nir/ac_nir_lower_ngg_mesh.c',
   'nir/ac_nir_lower_ps_early.c',
   'nir/ac_nir_lower_ps_late.c',
+  'nir/ac_nir_lower_tex_coords.c',
   'nir/ac_nir_meta.h',
   'nir/ac_nir_meta_cs_blit.c',
   'nir/ac_nir_meta_cs_clear_copy_buffer.c',
@@ -230,6 +234,17 @@ libamd_common = static_library(
 executable(
   'ac_ib_parser',
   ['ac_ib_parser.c'],
+  link_with: [libamd_common],
+  include_directories : [
+    inc_amd, inc_include, inc_src,
+  ],
+  dependencies : [idep_amd_generated_headers, idep_mesautil, idep_nir_headers],
+  build_by_default: with_tools.contains('amd')
+)
+
+executable(
+  'ac_print_tiling_layouts',
+  ['tools/ac_print_tiling_layouts.c', 'amdgpu_devices.c'],
   link_with: [libamd_common],
   include_directories : [
     inc_amd, inc_include, inc_src,

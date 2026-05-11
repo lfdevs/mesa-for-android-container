@@ -32,6 +32,7 @@
 #include "util/detect_arch.h"
 #include "util/detect_cc.h"
 #include "util/u_cpu_detect.h"
+#include "util/u_math.h"
 
 #if DETECT_ARCH_X86_64
 #include <xmmintrin.h>
@@ -129,6 +130,110 @@ _mesa_half_is_negative(uint16_t h)
    return !!(h & 0x8000);
 }
 
+static inline bool
+_mesa_float_is_half(double val)
+{
+   /* val parameter is double to prevent implicit double->float cast.  We have
+    * to cast to float because that's what _mesa_float_to_half expects and we
+    * don't have any readily available _double_to_half function.  This may
+    * introduce double-rounding errors, however this is ok because the final
+    * check is done at double precision, any rounding will fail to produce the
+    * original value.
+    */
+   uint16_t fp16_val = _mesa_float_to_half((float) val);
+   bool is_denorm = (fp16_val & 0x7fff) != 0 && (fp16_val & 0x7fff) <= 0x3ff;
+   return val == (double) _mesa_half_to_float(fp16_val) && !is_denorm;
+}
+
+/** Returns a "reduced" double, suitable for conversion to f16
+ *
+ * RTNE is tricky to get right through a double conversion.  To work around
+ * this, we do a little fixup of the fp64 value first.
+ *
+ * For a 64-bit float, the mantissa bits are as follows:
+ *
+ *    HHHHHHHHHHHLTFFFFFFFFF FFFDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+ *                           |                              |
+ *                           +------- bottom 32 bits -------+
+ *
+ * Where:
+ *  - D are only used for fp64
+ *  - T and F are used for fp64 and fp32
+ *  - H and L are used for fp64, fp32, and fp16
+ *  - L denotes the low bit of the fp16 mantissa
+ *  - T is the tie bit
+ *
+ * The RTNE tie-breaking rules for fp64 -> fp16 can then be described as
+ * follows:
+ *
+ *  - If any F or D bit is non-zero:
+ *     - If T == 1, round up
+ *     - If T == 0, round down
+ *  - If all F and D bits are zero:
+ *     - If T == 0, it's already fp16, do nothing
+ *     - If T != 0 and L == 0, round down
+ *     - If T != 0 and L != 0, round up
+ *
+ * What's important here is that the only way the F or D bits fit into the
+ * algorithm is if any are zero or none are zero.  So we will get the same
+ * result if we take all of the bits in the low dword, or them together, and
+ * then or that into the low F bits of the high dword.  The result of "all F
+ * and D bits are zero" will be the same.  We can also zero the low dword
+ * without affecting the final result.  Doing this accomplishes two useful
+ * things:
+ *
+ *  1. The resulting fp64 value is exactly representable as fp32 so we don't
+ *     have to care about the rounding of the fp64 -> fp32 conversion.
+ *
+ *  2. The fp32 -> fp16 conversion will round exactly the same as a full
+ *     fp64 -> fp16 conversion on the original data since it now takes all of
+ *     the D bits into account as well as the F bits.
+ *
+ * It's also correct for NaN/INF since those are delineated by the entire
+ * mantissa being either zero or non-zero.  For denorms, anything that might
+ * be a denorm in fp32 or fp64 will have a sufficiently negative exponent that
+ * it will flush to zero when converted to fp16, regardless of what we do
+ * here.
+ *
+ * This same trick works for all the rounding modes.  Even though the actual
+ * rounding logic is a bit different, they all treat the F and D bits together
+ * based on "all F and D bits are zero" or not.
+ */
+static inline float
+_mesa_reduce_double_for_f16(double val)
+{
+   union di d;
+   d.d = val;
+   const uint32_t u_low = (uint32_t)d.ui;
+   d.ui &= 0xffffffff00000000ull;
+   if (u_low)
+      d.ui |= (1ull << 32);
+   return (float)d.d;
+}
+
+static inline uint16_t
+_mesa_double_to_float16_rtne(double val)
+{
+   return _mesa_float_to_float16_rtne(_mesa_reduce_double_for_f16(val));
+}
+
+static inline uint16_t
+_mesa_double_to_float16_rtz(double val)
+{
+   return _mesa_float_to_float16_rtz(_mesa_reduce_double_for_f16(val));
+}
+
+static inline uint16_t
+_mesa_double_to_float16_ru(double val)
+{
+   return _mesa_float_to_float16_ru(_mesa_reduce_double_for_f16(val));
+}
+
+static inline uint16_t
+_mesa_double_to_float16_rd(double val)
+{
+   return _mesa_float_to_float16_rd(_mesa_reduce_double_for_f16(val));
+}
 
 #ifdef __cplusplus
 
@@ -139,8 +244,8 @@ namespace mesa
 
 struct float16_t {
    uint16_t bits;
-   float16_t(float f) : bits(_mesa_float_to_half(f)) {}
-   float16_t(double d) : bits(_mesa_float_to_half((float)d)) {}
+   float16_t(float f) : bits(_mesa_float_to_float16_rtne(f)) {}
+   float16_t(double d) : bits(_mesa_double_to_float16_rtne(d)) {}
    float16_t(uint16_t raw_bits) : bits(raw_bits) {}
    static float16_t one() { return float16_t(FP16_ONE); }
    static float16_t zero() { return float16_t(FP16_ZERO); }

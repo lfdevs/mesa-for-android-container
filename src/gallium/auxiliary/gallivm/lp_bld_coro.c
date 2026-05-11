@@ -88,10 +88,18 @@ void lp_build_coro_end(struct gallivm_state *gallivm, LLVMValueRef coro_hdl)
    coro_end_args[2] = LLVMConstNull(LLVMTokenTypeInContext(gallivm->context));
    num_args++;
 #endif
+
+#if LLVM_VERSION_MAJOR >= 22
+   lp_build_intrinsic(gallivm->builder,
+                      "llvm.coro.end",
+                      LLVMVoidTypeInContext(gallivm->context),
+                      coro_end_args, num_args, 0);
+#else
    lp_build_intrinsic(gallivm->builder,
                       "llvm.coro.end",
                       LLVMInt1TypeInContext(gallivm->context),
                       coro_end_args, num_args, 0);
+#endif
 }
 
 void lp_build_coro_resume(struct gallivm_state *gallivm, LLVMValueRef coro_hdl)

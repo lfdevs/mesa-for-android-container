@@ -17,6 +17,7 @@
         - src/gallium/frontends/lavapipe/ci/$GALLIUM_DRIVER-skips.txt
         - src/gallium/frontends/lavapipe/ci/$DRIVER_NAME-skips.txt
         - src/gallium/frontends/lavapipe/ci/$PIGLIT_TRACES_FILE
+        - src/gallium/frontends/lavapipe/ci/$REPLAY_CONFIG
         - src/gallium/winsys/sw/**/*
         - src/gallium/auxiliary/draw/**/*
         - src/gallium/auxiliary/gallivm/**/*

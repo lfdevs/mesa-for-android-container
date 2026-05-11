@@ -479,6 +479,16 @@ v3d_vir_to_qpu(struct v3d_compile *c, struct qpu_reg *temp_registers)
 
         v3d_qpu_schedule_instructions(c);
 
+        /* If the shader ends exactly on a page boundary, append a trailing
+         * NOP so the QPU's instruction prefetcher can't read past the last
+         * real instruction into an unmapped page.
+         */
+        if (c->qpu_inst_count * sizeof(*c->qpu_insts) % c->devinfo->page_size == 0) {
+                struct qinst *inst = vir_nop();
+                list_addtail(&inst->link, &vir_exit_block(c)->instructions);
+                c->qpu_inst_count++;
+        }
+
         c->qpu_insts = rzalloc_array(c, uint64_t, c->qpu_inst_count);
         int i = 0;
         vir_for_each_inst_inorder(inst, c) {

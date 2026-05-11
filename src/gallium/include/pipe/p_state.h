@@ -1061,10 +1061,17 @@ enum pipe_ml_operation_type {
    PIPE_ML_OPERATION_TYPE_RELU,
    PIPE_ML_OPERATION_TYPE_ABSOLUTE,
    PIPE_ML_OPERATION_TYPE_LOGISTIC,
+   PIPE_ML_OPERATION_TYPE_TANH,
+   PIPE_ML_OPERATION_TYPE_HSWISH,
    PIPE_ML_OPERATION_TYPE_SUBTRACT,
    PIPE_ML_OPERATION_TYPE_TRANSPOSE,
    PIPE_ML_OPERATION_TYPE_STRIDED_SLICE,
    PIPE_ML_OPERATION_TYPE_RESIZE,
+   PIPE_ML_OPERATION_TYPE_MUL,
+   PIPE_ML_OPERATION_TYPE_LEAKY_RELU,
+   PIPE_ML_OPERATION_TYPE_QUANTIZE,
+   PIPE_ML_OPERATION_TYPE_MAXIMUM,
+   PIPE_ML_OPERATION_TYPE_MINIMUM,
 };
 
 enum pipe_ml_pooling_type {
@@ -1265,6 +1272,10 @@ struct pipe_ml_operation
          int end[4];
          int strides[4];
       } slice;
+
+      struct {
+         float alpha;
+      } leakyrelu;
    };
 };
 

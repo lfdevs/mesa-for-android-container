@@ -10,7 +10,6 @@
 #include "ac_shader_util.h"
 #include "nir_builder.h"
 #include "nir_tcs_info.h"
-#include "util/u_math.h"
 
 /*
  * These NIR passes are used to lower NIR cross-stage I/O intrinsics into the

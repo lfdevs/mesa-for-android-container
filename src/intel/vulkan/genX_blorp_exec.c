@@ -95,17 +95,6 @@ blorp_surface_reloc(struct blorp_batch *batch, uint32_t ss_offset,
       anv_batch_set_error(&cmd_buffer->batch, result);
 }
 
-static uint64_t
-blorp_get_surface_address(struct blorp_batch *blorp_batch,
-                          struct blorp_address address)
-{
-   struct anv_address anv_addr = {
-      .bo = address.buffer,
-      .offset = address.offset,
-   };
-   return anv_address_physical(anv_addr);
-}
-
 #if GFX_VER == 9
 static struct blorp_address
 blorp_get_surface_base_address(struct blorp_batch *batch)

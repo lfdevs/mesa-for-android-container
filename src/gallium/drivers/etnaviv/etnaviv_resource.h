@@ -227,6 +227,9 @@ struct etna_resource {
    bool explicit_flush;
    /* resource is shared outside of the screen */
    bool shared;
+   /* shared buffer has standard byte order (RGBA for R8G8B8A8_UNORM).
+    * false when PE has written BGRA directly to the shared buffer. */
+   bool shared_native_order;
 
    struct pipe_box *damage;
    unsigned num_damage;

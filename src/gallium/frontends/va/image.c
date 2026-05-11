@@ -58,6 +58,8 @@ static const VAImageFormat formats[] =
     0x00ff0000, 0x0000ff00, 0x000000ff, 0xff000000},
    {.fourcc = VA_FOURCC('R','G','B','A'), .byte_order = VA_LSB_FIRST, 32, 32,
     0x000000ff, 0x0000ff00, 0x00ff0000, 0xff000000},
+   {.fourcc = VA_FOURCC('A','B','G','R'), .byte_order = VA_LSB_FIRST, 32, 32,
+    0x000000ff, 0x0000ff00, 0x00ff0000, 0xff000000},
    {.fourcc = VA_FOURCC('A','R','G','B'), .byte_order = VA_LSB_FIRST, 32, 32,
     0x000000ff, 0x0000ff00, 0x00ff0000, 0xff000000},
    {.fourcc = VA_FOURCC('B','G','R','X'), .byte_order = VA_LSB_FIRST, 32, 24,
@@ -187,6 +189,7 @@ vlVaCreateImage(VADriverContextP ctx, VAImageFormat *format, int width, int heig
 
    case VA_FOURCC('B','G','R','A'):
    case VA_FOURCC('R','G','B','A'):
+   case VA_FOURCC('A','B','G','R'):
    case VA_FOURCC('A','R','G','B'):
    case VA_FOURCC('B','G','R','X'):
    case VA_FOURCC('R','G','B','X'):

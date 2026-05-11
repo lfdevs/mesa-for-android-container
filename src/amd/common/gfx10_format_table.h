@@ -8,7 +8,7 @@
 #define GFX10_FORMAT_TABLE_H
 
 #include "util/format/u_formats.h"
-#include "ac_gpu_info.h"
+#include "amd_family.h"
 
 #include <stdbool.h>
 

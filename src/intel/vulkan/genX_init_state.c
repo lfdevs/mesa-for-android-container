@@ -353,12 +353,17 @@ init_common_queue_state(struct anv_queue *queue, struct anv_batch *batch)
 #if GFX_VERx10 >= 125
    if (ANV_SUPPORT_RT && device->info->has_ray_tracing) {
       anv_batch_emit(batch, GENX(3DSTATE_BTD), btd) {
-         /* TODO: This is the timeout after which the bucketed thread
-          *       dispatcher will kick off a wave of threads. We go with the
-          *       lowest value for now. It could be tweaked on a per
-          *       application basis (drirc).
-          */
-         btd.DispatchTimeoutCounter = _64clocks;
+         uint32_t dispatch_timeout_counter =
+            device->physical->instance->dispatch_timeout_counter;
+         uint32_t clamped_timeout_counter =
+            genX(anv_get_btd_dispatch_timeout_counter)(dispatch_timeout_counter);
+#if GFX_VERx10 >= 200
+         btd.DispatchTimeoutCounter = clamped_timeout_counter;
+#else
+         btd.DispatchTimeoutCounter = clamped_timeout_counter & 0x3;
+         btd.DispatchTimeoutCounterExtend = (clamped_timeout_counter >> 2) & 0x3;
+#endif
+
          /* BSpec 43851: "This field must be programmed to 6h i.e. memory
           *               backed buffer must be 128KB."
           */
@@ -777,6 +782,16 @@ init_render_queue_state(struct anv_queue *queue, bool is_companion_rcs_batch)
       p.RCCRHWOOptimizationDisableMask = true;
    }
 #endif
+
+   if (device->physical->instance->disable_push_constant_alloc) {
+      genX(batch_emit_push_constants_alloc)(
+         batch, device,
+         VK_SHADER_STAGE_VERTEX_BIT |
+         VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT |
+         VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT |
+         VK_SHADER_STAGE_GEOMETRY_BIT |
+         VK_SHADER_STAGE_FRAGMENT_BIT);
+   }
 
    anv_batch_emit(batch, GENX(MI_BATCH_BUFFER_END), bbe);
 
@@ -1322,121 +1337,39 @@ static const uint32_t vk_to_intel_sampler_reduction_mode[] = {
    [VK_SAMPLER_REDUCTION_MODE_MAX]              = MAXIMUM,
 };
 
-static VkResult
-border_color_load(struct anv_device *device,
-                  struct anv_sampler *sampler,
-                  const VkSamplerCreateInfo* pCreateInfo,
-                  uint32_t *ret_border_color_offset)
+void
+genX(emit_sampler_state)(const struct anv_device *device,
+                         const struct vk_sampler_state *vk_state,
+                         uint32_t border_color_offset,
+                         struct anv_sampler_state *state)
 {
-   uint32_t border_color_stride = 64;
-   uint32_t border_color_offset;
-   void *border_color_ptr;
-
-   if (sampler->vk.border_color <= VK_BORDER_COLOR_INT_OPAQUE_WHITE) {
-      border_color_offset = device->border_colors.offset +
-                            pCreateInfo->borderColor *
-                            border_color_stride;
-      border_color_ptr = device->border_colors.map +
-                         pCreateInfo->borderColor * border_color_stride;
-   } else {
-      assert(vk_border_color_is_custom(sampler->vk.border_color));
-      if (pCreateInfo->flags & VK_SAMPLER_CREATE_DESCRIPTOR_BUFFER_CAPTURE_REPLAY_BIT_EXT) {
-         const VkOpaqueCaptureDescriptorDataCreateInfoEXT *opaque_info =
-            vk_find_struct_const(pCreateInfo->pNext,
-                                 OPAQUE_CAPTURE_DESCRIPTOR_DATA_CREATE_INFO_EXT);
-         if (opaque_info) {
-            uint32_t alloc_idx = *((const uint32_t *)opaque_info->opaqueCaptureDescriptorData);
-            sampler->custom_border_color_state =
-               anv_state_reserved_array_pool_alloc_index(&device->custom_border_colors, alloc_idx);
-         } else {
-            sampler->custom_border_color_state =
-               anv_state_reserved_array_pool_alloc(&device->custom_border_colors, true);
-         }
-      } else {
-         sampler->custom_border_color_state =
-            anv_state_reserved_array_pool_alloc(&device->custom_border_colors, false);
-      }
-      if (sampler->custom_border_color_state.alloc_size == 0)
-         return vk_error(device, VK_ERROR_OUT_OF_DEVICE_MEMORY);
-
-      border_color_offset = sampler->custom_border_color_state.offset;
-      border_color_ptr = sampler->custom_border_color_state.map;
-
-      union isl_color_value color = { .u32 = {
-         sampler->vk.border_color_value.uint32[0],
-         sampler->vk.border_color_value.uint32[1],
-         sampler->vk.border_color_value.uint32[2],
-         sampler->vk.border_color_value.uint32[3],
-      } };
-
-      const struct anv_format *format_desc =
-         sampler->vk.format != VK_FORMAT_UNDEFINED ?
-         anv_get_format(device->physical, sampler->vk.format) : NULL;
-
-      if (format_desc && format_desc->n_planes == 1 &&
-          !isl_swizzle_is_identity(format_desc->planes[0].swizzle)) {
-         const struct anv_format_plane *fmt_plane = &format_desc->planes[0];
-
-         assert(!isl_format_has_int_channel(fmt_plane->isl_format));
-         color = isl_color_value_swizzle(color, fmt_plane->swizzle, true);
-      }
-
-      memcpy(border_color_ptr, color.u32, sizeof(color));
-   }
-
-   *ret_border_color_offset = border_color_offset;
-   return VK_SUCCESS;
-}
-
-VkResult genX(CreateSampler)(
-    VkDevice                                    _device,
-    const VkSamplerCreateInfo*                  pCreateInfo,
-    const VkAllocationCallbacks*                pAllocator,
-    VkSampler*                                  pSampler)
-{
-   ANV_FROM_HANDLE(anv_device, device, _device);
-   struct anv_sampler *sampler;
-
-   sampler = vk_sampler_create(&device->vk, pCreateInfo,
-                               pAllocator, sizeof(*sampler));
-   if (!sampler)
-      return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
+   const bool seamless_cube =
+      !(vk_state->flags & VK_SAMPLER_CREATE_NON_SEAMLESS_CUBE_MAP_BIT_EXT);
 
    const struct vk_format_ycbcr_info *ycbcr_info =
-      sampler->vk.format != VK_FORMAT_UNDEFINED ?
-      vk_format_get_ycbcr_info(sampler->vk.format) : NULL;
-   assert((ycbcr_info == NULL) == (sampler->vk.ycbcr_conversion == NULL));
+      vk_state->has_ycbcr_conversion ?
+      vk_format_get_ycbcr_info(vk_state->format) : NULL;
 
-   sampler->n_planes = ycbcr_info ? ycbcr_info->n_planes : 1;
+   state->n_planes = ycbcr_info ? ycbcr_info->n_planes : 1;
 
-   uint32_t border_color_offset = 0;
-   VkResult result = border_color_load(device, sampler, pCreateInfo, &border_color_offset);
-   if (result != VK_SUCCESS)
-      return result;
-
-   const bool seamless_cube =
-      !(pCreateInfo->flags & VK_SAMPLER_CREATE_NON_SEAMLESS_CUBE_MAP_BIT_EXT);
-
-   for (unsigned p = 0; p < sampler->n_planes; p++) {
+   for (unsigned p = 0; p < state->n_planes; p++) {
       const bool plane_has_chroma =
          ycbcr_info && ycbcr_info->planes[p].has_chroma;
-      const VkFilter min_filter =
-         plane_has_chroma ? sampler->vk.ycbcr_conversion->state.chroma_filter :
-                            pCreateInfo->minFilter;
-      const VkFilter mag_filter =
-         plane_has_chroma ? sampler->vk.ycbcr_conversion->state.chroma_filter :
-                            pCreateInfo->magFilter;
+      const VkFilter min_filter = plane_has_chroma ?
+         vk_state->ycbcr_conversion.chroma_filter : vk_state->min_filter;
+      const VkFilter mag_filter = plane_has_chroma ?
+         vk_state->ycbcr_conversion.chroma_filter : vk_state->mag_filter;
       const bool force_addr_rounding =
-            device->physical->instance->force_filter_addr_rounding;
+         device->physical->instance->force_filter_addr_rounding;
       const bool enable_min_filter_addr_rounding =
-            force_addr_rounding || min_filter != VK_FILTER_NEAREST;
+         force_addr_rounding || min_filter != VK_FILTER_NEAREST;
       const bool enable_mag_filter_addr_rounding =
-            force_addr_rounding || mag_filter != VK_FILTER_NEAREST;
+         force_addr_rounding || mag_filter != VK_FILTER_NEAREST;
       /* From Broadwell PRM, SAMPLER_STATE:
        *   "Mip Mode Filter must be set to MIPFILTER_NONE for Planar YUV surfaces."
        */
-      enum isl_format plane0_isl_format = sampler->vk.ycbcr_conversion ?
-         anv_get_format(device->physical, sampler->vk.format)->planes[0].isl_format :
+      enum isl_format plane0_isl_format = ycbcr_info ?
+         anv_get_format(device->physical, vk_state->format)->planes[0].isl_format :
          ISL_FORMAT_UNSUPPORTED;
       const bool isl_format_is_planar_yuv =
          plane0_isl_format != ISL_FORMAT_UNSUPPORTED &&
@@ -1445,7 +1378,7 @@ VkResult genX(CreateSampler)(
 
       const uint32_t mip_filter_mode =
          isl_format_is_planar_yuv ?
-         MIPFILTER_NONE : vk_to_intel_mipmap_mode[pCreateInfo->mipmapMode];
+         MIPFILTER_NONE : vk_to_intel_mipmap_mode[vk_state->mipmap_mode];
 
       struct GENX(SAMPLER_STATE) sampler_state = {
          .SamplerDisable = false,
@@ -1459,24 +1392,23 @@ VkResult genX(CreateSampler)(
          .LODPreClampMode = CLAMP_MODE_OGL,
 
          .MipModeFilter = mip_filter_mode,
-         .MagModeFilter = vk_to_intel_tex_filter(mag_filter, pCreateInfo->anisotropyEnable),
-         .MinModeFilter = vk_to_intel_tex_filter(min_filter, pCreateInfo->anisotropyEnable),
-         .TextureLODBias = CLAMP(pCreateInfo->mipLodBias, -16, 15.996),
-         .AnisotropicAlgorithm =
-            pCreateInfo->anisotropyEnable ? EWAApproximation : LEGACY,
-         .MinLOD = CLAMP(pCreateInfo->minLod, 0, 14),
-         .MaxLOD = CLAMP(pCreateInfo->maxLod, 0, 14),
+         .MagModeFilter = vk_to_intel_tex_filter(mag_filter, vk_state->anisotropy_enable),
+         .MinModeFilter = vk_to_intel_tex_filter(min_filter, vk_state->anisotropy_enable),
+         .TextureLODBias = CLAMP(vk_state->mip_lod_bias, -16, 15.996),
+         .AnisotropicAlgorithm = vk_state->anisotropy_enable ? EWAApproximation : LEGACY,
+         .MinLOD = CLAMP(vk_state->min_lod, 0, 14),
+         .MaxLOD = CLAMP(vk_state->max_lod, 0, 14),
          .ChromaKeyEnable = 0,
          .ChromaKeyIndex = 0,
          .ChromaKeyMode = 0,
          .ShadowFunction =
-            vk_to_intel_shadow_compare_op[pCreateInfo->compareEnable ?
-                                        pCreateInfo->compareOp : VK_COMPARE_OP_NEVER],
+            vk_to_intel_shadow_compare_op[vk_state->compare_enable ?
+                                          vk_state->compare_op : VK_COMPARE_OP_NEVER],
          .CubeSurfaceControlMode = seamless_cube ? OVERRIDE : PROGRAMMED,
 
          .LODClampMagnificationMode = MIPNONE,
 
-         .MaximumAnisotropy = vk_to_intel_max_anisotropy(pCreateInfo->maxAnisotropy),
+         .MaximumAnisotropy = vk_to_intel_max_anisotropy(vk_state->max_anisotropy),
          .RAddressMinFilterRoundingEnable = enable_min_filter_addr_rounding,
          .RAddressMagFilterRoundingEnable = enable_mag_filter_addr_rounding,
          .VAddressMinFilterRoundingEnable = enable_min_filter_addr_rounding,
@@ -1484,53 +1416,36 @@ VkResult genX(CreateSampler)(
          .UAddressMinFilterRoundingEnable = enable_min_filter_addr_rounding,
          .UAddressMagFilterRoundingEnable = enable_mag_filter_addr_rounding,
          .TrilinearFilterQuality = 0,
-         .NonnormalizedCoordinateEnable = pCreateInfo->unnormalizedCoordinates,
-         .TCXAddressControlMode = vk_to_intel_tex_address[pCreateInfo->addressModeU],
-         .TCYAddressControlMode = vk_to_intel_tex_address[pCreateInfo->addressModeV],
-         .TCZAddressControlMode = vk_to_intel_tex_address[pCreateInfo->addressModeW],
+         .NonnormalizedCoordinateEnable = vk_state->unnormalized_coordinates,
+         .TCXAddressControlMode = vk_to_intel_tex_address[vk_state->address_mode_u],
+         .TCYAddressControlMode = vk_to_intel_tex_address[vk_state->address_mode_v],
+         .TCZAddressControlMode = vk_to_intel_tex_address[vk_state->address_mode_w],
 
          .ReductionType =
-            vk_to_intel_sampler_reduction_mode[sampler->vk.reduction_mode],
+            vk_to_intel_sampler_reduction_mode[vk_state->reduction_mode],
          .ReductionTypeEnable =
-            sampler->vk.reduction_mode != VK_SAMPLER_REDUCTION_MODE_WEIGHTED_AVERAGE,
+            vk_state->reduction_mode != VK_SAMPLER_REDUCTION_MODE_WEIGHTED_AVERAGE,
       };
 
       /* Pack a version of the SAMPLER_STATE without the border color. We'll
        * use it to store into the shader cache and also for hashing.
        */
-      GENX(SAMPLER_STATE_pack)(NULL, sampler->state_no_bc[p], &sampler_state);
+      GENX(SAMPLER_STATE_pack)(NULL, state->state_no_bc[p], &sampler_state);
 
       /* Put border color after the hashing, we don't want the allocation
        * order of border colors to influence the hash. We just need th
        * parameters to be hashed.
        */
       sampler_state.BorderColorPointer = border_color_offset;
-      GENX(SAMPLER_STATE_pack)(NULL, sampler->state[p], &sampler_state);
+      GENX(SAMPLER_STATE_pack)(NULL, state->state[p], &sampler_state);
    }
 
-   memcpy(sampler->embedded_key.sampler,
-          sampler->state_no_bc[0],
-          sizeof(sampler->embedded_key.sampler));
-   memcpy(sampler->embedded_key.color,
-          sampler->vk.border_color_value.uint32,
-          sizeof(sampler->embedded_key.color));
-
-   /* If we have bindless, allocate enough samplers.  We allocate 32 bytes
-    * for each sampler instead of 16 bytes because we want all bindless
-    * samplers to be 32-byte aligned so we don't have to use indirect
-    * sampler messages on them.
-    */
-   sampler->bindless_state =
-      anv_state_pool_alloc(&device->dynamic_state_pool,
-                           sampler->n_planes * 32, 32);
-   if (sampler->bindless_state.map) {
-      memcpy(sampler->bindless_state.map, sampler->state,
-             sampler->n_planes * GENX(SAMPLER_STATE_length) * 4);
-   }
-
-   *pSampler = anv_sampler_to_handle(sampler);
-
-   return VK_SUCCESS;
+   memcpy(state->embedded_key.sampler,
+          state->state_no_bc[0],
+          sizeof(state->embedded_key.sampler));
+   memcpy(state->embedded_key.color,
+          vk_state->border_color_value.uint32,
+          sizeof(state->embedded_key.color));
 }
 
 void

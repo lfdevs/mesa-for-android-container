@@ -13,7 +13,7 @@ bool nir_fuse_io_16(nir_shader *shader);
 static bool
 nir_src_is_f2fmp(nir_src *use)
 {
-   nir_instr *parent = nir_src_parent_instr(use);
+   nir_instr *parent = nir_src_use_instr(use);
 
    if (parent->type != nir_instr_type_alu)
       return false;

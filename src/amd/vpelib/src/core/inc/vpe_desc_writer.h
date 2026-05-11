@@ -41,9 +41,6 @@ struct vpe_desc_writer {
     uint64_t        base_cpu_va;
 
     uint32_t        num_config_desc;
-#ifdef VPE_REGISTER_PROFILE
-    uint32_t        reuse_num_config_dec;
-#endif
     bool            plane_desc_added;
     enum vpe_status status;
 

@@ -85,17 +85,16 @@ amd-raven-skqp:
 
 radv-raven-traces-restricted:
   extends:
-    - .lava-x86_64-piglit-traces
+    - .lava-x86_64-test-vk
+    - .traces-test
+    - .test-wine
     - .radv-raven-test:x86_64
     - .lava-lenovo-TPad-C13-Yoga-zork:x86_64
     - .radv-collabora-restricted-rules
   variables:
     HWCI_START_WESTON: 1
     ANGLE_TRACE_FILES_TAG: "2025-03-28"
-    PIGLIT_REPLAY_ANGLE_ARCH: x64
-    PIGLIT_TRACES_FILE: restricted-traces-amd.yml
-    PIGLIT_REPLAY_DEVICE_NAME: "vk-${GPU_VERSION}"
-    PIGLIT_REPLAY_EXTRA_ARGS: --keep-image --minio_bucket=${S3_TRACIE_PRIVATE_BUCKET} --jwt-file=${S3_JWT_FILE}
+    REPLAY_CONFIG: traces-amd-restricted.toml
     FDO_CI_CONCURRENT: 5  # Run the 10 traces in 2 sets of 5 to avoid OOMs
   allow_failure: true
 
@@ -155,10 +154,11 @@ radv-cezanne-vkcts-asan:
     - .lava-x86_64-test-asan-vk
     - .radv-cezanne-test:x86_64
     - .radv-collabora-rules
-  parallel: 2
+  parallel: 10
   variables:
     DEQP_SUITE: radv
-    DEQP_FRACTION: 25
+    DEQP_FRACTION: 5
+    FDO_CI_CONCURRENT: 3  # We get OOMkills if we go wider
 
 ############### VKCTS tests ###############
 
@@ -247,13 +247,13 @@ radv-navi21-vkcts:
     RADV_EXPERIMENTAL: transfer_queue,heap
 
 radv-navi21-vkcts-full:
-  timeout: 50m
+  timeout: 60m
   extends:
     - .ci-tron-test-radv-vk-nightly
     - .navi21-test-valve
     - .radv-valve-manual-rules
   variables:
-    CI_TRON_TIMEOUT__OVERALL__MINUTES: 45
+    CI_TRON_TIMEOUT__OVERALL__MINUTES: 55
     RADV_EXPERIMENTAL: transfer_queue,heap
 
 radv-vangogh-vkcts-full:
@@ -336,14 +336,14 @@ radv-gfx1201-vkcts:
     CI_TRON_TIMEOUT__OVERALL__MINUTES: 20
 
 radv-gfx1201-vkcts-full:
-  timeout: 35m
+  timeout: 45m
   extends:
     - .ci-tron-test-radv-vk-nightly
     - .gfx1201-test-valve
     - .radv-valve-manual-rules
   variables:
     RADV_EXPERIMENTAL: transfer_queue,heap
-    CI_TRON_TIMEOUT__OVERALL__MINUTES: 30
+    CI_TRON_TIMEOUT__OVERALL__MINUTES: 40
 
 radv-gfx1201-fluster:
   extends:

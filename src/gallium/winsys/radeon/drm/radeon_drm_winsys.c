@@ -639,10 +639,9 @@ static bool do_winsys_init(struct radeon_drm_winsys *ws)
    ws->info.max_gflops = 128 * ws->info.num_cu * ws->info.max_gpu_freq_mhz / 1000;
    ws->info.num_tcc_blocks = ws->info.max_tcc_blocks;
    ws->info.tcp_cache_size = 16 * 1024;
-   ws->info.lds_size_per_workgroup = ws->info.gfx_level == GFX7 ? 64 * 1024 : 32 * 1024;
 
 #ifdef HAVE_GALLIUM_RADEONSI
-   ac_fill_compiler_info(&ws->info, NULL);
+   ac_fill_compiler_info(&ws->info, NULL, false);
 #endif
 
    for (unsigned se = 0; se < ws->info.max_se; se++) {

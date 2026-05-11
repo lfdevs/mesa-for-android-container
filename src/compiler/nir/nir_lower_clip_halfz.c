@@ -63,3 +63,42 @@ nir_lower_clip_halfz(nir_shader *shader)
                                      nir_metadata_control_flow,
                                      NULL);
 }
+
+/* Dynamic lowered I/O version of nir_lower_clip_halfz.
+ * nir_intrinsic_load_clip_z_coeff is used to load the dynamic clip coefficient.
+ */
+static bool
+lower_pos_write_dynamic(nir_builder *b, nir_intrinsic_instr *intr,
+                        UNUSED void *data)
+{
+   if (intr->intrinsic != nir_intrinsic_store_output)
+      return false;
+   if (nir_intrinsic_io_semantics(intr).location != VARYING_SLOT_POS)
+      return false;
+
+   assert(nir_intrinsic_component(intr) == 0 && "not yet scalarized");
+   b->cursor = nir_before_instr(&intr->instr);
+
+   nir_def *pos = intr->src[0].ssa;
+   nir_def *z = nir_channel(b, pos, 2);
+   nir_def *w = nir_channel(b, pos, 3);
+   nir_def *c = nir_load_clip_z_coeff(b);
+
+   /* Lerp. If c = 0, reduces to z. If c = 1/2, reduces to (z + w)/2 */
+   nir_def *new_z = nir_ffma(b, nir_fneg(b, z), c, nir_ffma(b, w, c, z));
+   nir_src_rewrite(&intr->src[0], nir_vector_insert_imm(b, pos, new_z, 2));
+   return true;
+}
+
+bool
+nir_lower_clip_halfz_dynamic(nir_shader *shader)
+{
+   if (shader->info.stage != MESA_SHADER_VERTEX &&
+       shader->info.stage != MESA_SHADER_GEOMETRY &&
+       shader->info.stage != MESA_SHADER_TESS_EVAL)
+      return false;
+
+   return nir_shader_intrinsics_pass(shader, lower_pos_write_dynamic,
+                                     nir_metadata_control_flow,
+                                     NULL);
+}

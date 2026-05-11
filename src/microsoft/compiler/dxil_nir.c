@@ -2205,13 +2205,13 @@ add_def_to_worklist(nir_def *def, void *state)
 {
    nir_foreach_use_including_if(src, def) {
       if (nir_src_is_if(src)) {
-         nir_if *nif = nir_src_parent_if(src);
+         nir_if *nif = nir_src_use_if(src);
          nir_foreach_block_in_cf_node(block, &nif->cf_node) {
             nir_foreach_instr(instr, block)
                nir_instr_worklist_push_tail(state, instr);
          }
       } else
-         nir_instr_worklist_push_tail(state, nir_src_parent_instr(src));
+         nir_instr_worklist_push_tail(state, nir_src_use_instr(src));
    }
    return true;
 }
@@ -2699,11 +2699,38 @@ struct undefined_varying_masks {
    uint64_t io_mask;
    uint32_t patch_io_mask;
    const BITSET_WORD *frac_io_mask;
+
+   /* Stage of the shader being processed; used to scope cross-stage
+    * preservation heuristics to TCS<->TES linkage where they apply. */
+   mesa_shader_stage stage;
+
+   /* For kill_unused_outputs: locations of shader_out variables that have at
+    * least one load_deref use in the same shader (e.g. TCS patch-constant
+    * function reading back per-vertex outputs). These must be kept alive even
+    * if the next stage doesn't read them. */
+   uint64_t intra_shader_load_mask;
+   uint32_t intra_shader_patch_load_mask;
 };
 
 static bool
 is_dead_in_variable(nir_variable *var, void *data)
 {
+   const struct undefined_varying_masks *masks = data;
+
+   /* Only TES needs this: placeholder tess-level inputs (synthesized by
+    * spirv_to_dxil for signature matching with HS) have no local uses but
+    * must be preserved. Other stages don't synthesize such placeholders,
+    * and it's perfectly valid for a prev stage to write outputs the next
+    * stage doesn't read. */
+   if (masks && masks->stage == MESA_SHADER_TESS_EVAL) {
+      unsigned loc = var->data.patch && var->data.location >= VARYING_SLOT_PATCH0 ?
+         var->data.location - VARYING_SLOT_PATCH0 : var->data.location;
+      uint64_t written = var->data.patch && var->data.location >= VARYING_SLOT_PATCH0 ?
+         masks->patch_io_mask : masks->io_mask;
+      if (BITFIELD64_RANGE(loc, glsl_varying_count(var->type)) & written)
+         return false;
+   }
+
    switch (var->data.location) {
    /* Only these values can be system generated values in addition to varyings */
    case VARYING_SLOT_PRIMITIVE_ID:
@@ -2774,7 +2801,8 @@ dxil_nir_kill_undefined_varyings(nir_shader *shader, uint64_t prev_stage_written
    struct undefined_varying_masks masks = {
       .io_mask = prev_stage_written_mask,
       .patch_io_mask = prev_stage_patch_written_mask,
-      .frac_io_mask = prev_stage_frac_output_mask
+      .frac_io_mask = prev_stage_frac_output_mask,
+      .stage = shader->info.stage,
    };
    bool progress = nir_shader_instructions_pass(shader,
                                                 kill_undefined_varyings,
@@ -2831,6 +2859,15 @@ kill_unused_outputs(struct nir_builder *b,
    unsigned loc = var->data.patch && var->data.location >= VARYING_SLOT_PATCH0 ?
       var->data.location - VARYING_SLOT_PATCH0 :
       var->data.location;
+
+   /* Outputs read back by load_deref in the same shader (e.g. TCS patch-
+    * constant function reading per-vertex outputs after a barrier) must
+    * stay alive even if the next stage doesn't consume them. */
+   uint64_t intra = var->data.patch && var->data.location >= VARYING_SLOT_PATCH0 ?
+      masks->intra_shader_patch_load_mask : masks->intra_shader_load_mask;
+   if (BITFIELD64_RANGE(loc, glsl_varying_count(var->type)) & intra)
+      return false;
+
    uint64_t read = var->data.patch && var->data.location >= VARYING_SLOT_PATCH0 ?
       masks->patch_io_mask : masks->io_mask;
    if (BITFIELD64_RANGE(loc, glsl_varying_count(var->type)) & read) {
@@ -2856,8 +2893,35 @@ dxil_nir_kill_unused_outputs(nir_shader *shader, uint64_t next_stage_read_mask, 
    struct undefined_varying_masks masks = {
       .io_mask = next_stage_read_mask,
       .patch_io_mask = next_stage_patch_read_mask,
-      .frac_io_mask = next_stage_frac_input_mask
+      .frac_io_mask = next_stage_frac_input_mask,
+      .stage = shader->info.stage,
    };
+
+   /* In TCS, the patch-constant function reads per-vertex outputs via
+    * output[i].x after a barrier; such outputs must be preserved even if
+    * the next stage doesn't consume them. load_deref on shader_out is only
+    * valid in TCS, so scope the scan to that stage. */
+   if (shader->info.stage == MESA_SHADER_TESS_CTRL) {
+      nir_function_impl *entrypoint = nir_shader_get_entrypoint(shader);
+      nir_foreach_block(block, entrypoint) {
+         nir_foreach_instr(instr, block) {
+            if (instr->type != nir_instr_type_intrinsic)
+               continue;
+            nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
+            if (intr->intrinsic != nir_intrinsic_load_deref)
+               continue;
+            nir_variable *var = nir_intrinsic_get_var(intr, 0);
+            if (!var || var->data.mode != nir_var_shader_out)
+               continue;
+            if (var->data.patch && var->data.location >= VARYING_SLOT_PATCH0) {
+               unsigned loc = var->data.location - VARYING_SLOT_PATCH0;
+               masks.intra_shader_patch_load_mask |= BITFIELD_RANGE(loc, glsl_varying_count(var->type));
+            } else {
+               masks.intra_shader_load_mask |= BITFIELD64_RANGE(var->data.location, glsl_varying_count(var->type));
+            }
+         }
+      }
+   }
 
    bool progress = nir_shader_instructions_pass(shader,
                                                 kill_unused_outputs,
@@ -2905,4 +2969,77 @@ dxil_nir_propagate_interp_to_outputs(nir_shader *prev_stage_nir,
          }
       }
    }
+}
+
+/* Without this, an HS output that survives the kill pass (e.g. via the
+ * intra-shader scratchpad pattern) but has no matching DS input makes
+ * D3D12 CreatePipelineState fail with E_INVALIDARG. */
+bool
+dxil_nir_pad_tes_input_signature(nir_shader *tes, const nir_shader *tcs)
+{
+   if (!tcs || !tes ||
+       tes->info.stage != MESA_SHADER_TESS_EVAL ||
+       tcs->info.stage != MESA_SHADER_TESS_CTRL)
+      return false;
+
+   bool added = false;
+
+   /* Pad only for outputs that TCS reads back itself -- the ones
+    * kill_unused_outputs keeps alive when TES doesn't read them. Padding
+    * DS for anything else produces a longer input sig than HS output. */
+   const uint64_t tcs_intra_read = tcs->info.outputs_read;
+   const uint32_t tcs_intra_patch_read = tcs->info.patch_outputs_read;
+
+   nir_foreach_variable_with_modes(out_var, tcs, nir_var_shader_out) {
+      unsigned loc = out_var->data.location;
+      switch (loc) {
+      case VARYING_SLOT_POS:
+      case VARYING_SLOT_PSIZ:
+      case VARYING_SLOT_PRIMITIVE_ID:
+      case VARYING_SLOT_LAYER:
+      case VARYING_SLOT_VIEWPORT:
+         continue;
+      }
+
+      bool intra_accessed;
+      if (out_var->data.patch && loc >= VARYING_SLOT_PATCH0)
+         intra_accessed = tcs_intra_patch_read & BITFIELD_BIT(loc - VARYING_SLOT_PATCH0);
+      else
+         intra_accessed = tcs_intra_read & BITFIELD64_BIT(loc);
+      if (!intra_accessed)
+         continue;
+
+      if (nir_find_variable_with_location(tes, nir_var_shader_in, loc))
+         continue;
+
+      nir_variable *v = nir_variable_create(tes, nir_var_shader_in, out_var->type,
+                                            out_var->name ? out_var->name : "tes_pad");
+      v->data = out_var->data;
+      v->data.mode = nir_var_shader_in;
+      v->data.read_only = 1;
+      added = true;
+   }
+
+   /* Tess levels come from the fixed-function tessellator, not TCS code. */
+   const struct {
+      gl_varying_slot loc;
+      const char *name;
+      uint8_t arr_len;
+   } tess_levels[] = {
+      { VARYING_SLOT_TESS_LEVEL_OUTER, "gl_TessLevelOuter", 4 },
+      { VARYING_SLOT_TESS_LEVEL_INNER, "gl_TessLevelInner", 2 },
+   };
+   for (unsigned k = 0; k < ARRAY_SIZE(tess_levels); ++k) {
+      if (nir_find_variable_with_location(tes, nir_var_shader_in, tess_levels[k].loc))
+         continue;
+      const struct glsl_type *t = glsl_array_type(glsl_float_type(), tess_levels[k].arr_len, 0);
+      nir_variable *v = nir_variable_create(tes, nir_var_shader_in, t, tess_levels[k].name);
+      v->data.location = tess_levels[k].loc;
+      v->data.patch = true;
+      v->data.compact = true;
+      v->data.always_active_io = 1;
+      added = true;
+   }
+
+   return added;
 }

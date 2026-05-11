@@ -318,6 +318,10 @@ enum brw_reg_type brw_type_for_base_type(enum glsl_base_type base_type);
 enum brw_reg_type brw_type_for_nir_type(const struct intel_device_info *devinfo,
                                         nir_alu_type type);
 
+struct brw_nir_vectorize_mem_cb_data {
+   const struct intel_device_info *devinfo;
+};
+
 bool brw_nir_should_vectorize_mem(unsigned align_mul, unsigned align_offset,
                                   unsigned bit_size,
                                   unsigned num_components,
@@ -326,12 +330,25 @@ bool brw_nir_should_vectorize_mem(unsigned align_mul, unsigned align_offset,
                                   nir_intrinsic_instr *high,
                                   void *data);
 
-void brw_nir_optimize(struct brw_pass_tracker *pt);
+/**
+ * Gets the size of a nir_load_*_uniform_block_intel after its lowered
+ * by the backend to a block load message, note that page faults can
+ * happen if this is not accounted for when using these intrinsics.
+ */
+static inline unsigned
+brw_uniform_block_size(const struct intel_device_info *devinfo,
+                       unsigned num_components)
+{
+   /* Round up to a supported block size, or to the nearest multiple of
+    * 16 components if its any larger.
+    */
+   return num_components > 8 ? align(num_components, 16)
+      : num_components > 4 ? 8
+      : !devinfo->has_lsc ? 4
+      : num_components;
+}
 
-#define BRW_NIR_FRAG_OUTPUT_INDEX_SHIFT 0
-#define BRW_NIR_FRAG_OUTPUT_INDEX_MASK INTEL_MASK(0, 0)
-#define BRW_NIR_FRAG_OUTPUT_LOCATION_SHIFT 1
-#define BRW_NIR_FRAG_OUTPUT_LOCATION_MASK INTEL_MASK(31, 1)
+void brw_nir_optimize(struct brw_pass_tracker *pt);
 
 bool brw_nir_move_interpolation_to_top(nir_shader *nir);
 nir_def *brw_nir_load_global_const(nir_builder *b,
@@ -369,8 +386,6 @@ brw_nir_no_indirect_mask(mesa_shader_stage stage)
 
    return indirect_mask;
 }
-
-bool brw_nir_uses_inline_data(nir_shader *shader);
 
 nir_variable *
 brw_nir_find_complete_variable_with_location(nir_shader *shader,

@@ -43,6 +43,7 @@ VkResult
 radv_create_buffer(struct radv_device *device, const VkBufferCreateInfo *pCreateInfo,
                    const VkAllocationCallbacks *pAllocator, VkBuffer *pBuffer, bool is_internal)
 {
+   const struct radv_physical_device *pdev = radv_device_physical(device);
    struct radv_buffer *buffer;
 
    assert(pCreateInfo->sType == VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO);
@@ -66,6 +67,14 @@ radv_create_buffer(struct radv_device *device, const VkBufferCreateInfo *pCreate
    if (pCreateInfo->flags & VK_BUFFER_CREATE_SPARSE_BINDING_BIT) {
       enum radeon_bo_flag flags = RADEON_FLAG_VIRTUAL;
       uint64_t replay_address = 0;
+
+      if (pdev->info.compiler_info.has_smem_with_null_prt_bug &&
+          (buffer->vk.create_flags & VK_BUFFER_CREATE_SPARSE_RESIDENCY_BIT) &&
+          (buffer->vk.usage & (VK_BUFFER_USAGE_2_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_2_UNIFORM_BUFFER_BIT |
+                               VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT))) {
+         /* Emulate sparse residency for sparse buffers that might use SMEM reads. */
+         flags |= RADEON_FLAG_EMULATE_SPARSE_RESIDENCY;
+      }
 
       if (pCreateInfo->flags & VK_BUFFER_CREATE_DEVICE_ADDRESS_CAPTURE_REPLAY_BIT) {
          flags |= RADEON_FLAG_REPLAYABLE;
@@ -188,6 +197,9 @@ radv_get_buffer_memory_requirements(struct radv_device *device, VkDeviceSize siz
         VK_BUFFER_USAGE_2_PREPROCESS_BUFFER_BIT_EXT | VK_BUFFER_USAGE_2_DESCRIPTOR_HEAP_BIT_EXT))
       pMemoryRequirements->memoryRequirements.memoryTypeBits = pdev->memory_types_32bit;
 
+   if (flags & VK_BUFFER_CREATE_PROTECTED_BIT)
+      pMemoryRequirements->memoryRequirements.memoryTypeBits &= pdev->memory_types_protected;
+
    if (flags & VK_BUFFER_CREATE_SPARSE_BINDING_BIT) {
       pMemoryRequirements->memoryRequirements.alignment = 4096;
    } else {
@@ -269,7 +281,7 @@ radv_bo_create(struct radv_device *device, struct vk_object_base *object, uint64
    /* Pad the BO with an extra VM page to mitigate OOB access from SMEM instructions.
     * This doesn't allocate extra memory, just writes an extra page table entry.
     */
-   if (pdev->cache_key.mitigate_smem_oob && !is_internal)
+   if (device->compiler_info.key.mitigate_smem_oob && !is_internal)
       flags |= RADEON_FLAG_VM_PAD_1PAGE;
 
    result = ws->buffer_create(ws, size, alignment, domain, flags, priority, address, out_bo);

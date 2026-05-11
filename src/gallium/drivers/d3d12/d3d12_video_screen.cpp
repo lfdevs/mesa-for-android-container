@@ -2245,11 +2245,8 @@ d3d12_screen_get_video_param_decode(struct pipe_screen *pscreen,
             flush internally on end frame for decode
          */
          return 0;
-      case PIPE_VIDEO_CAP_NPOT_TEXTURES:
-         return 1;
       case PIPE_VIDEO_CAP_MAX_WIDTH:
       case PIPE_VIDEO_CAP_MAX_HEIGHT:
-      case PIPE_VIDEO_CAP_MAX_LEVEL:
       case PIPE_VIDEO_CAP_MIN_WIDTH:
       case PIPE_VIDEO_CAP_MIN_HEIGHT:
       case PIPE_VIDEO_CAP_SUPPORTED:
@@ -2286,8 +2283,6 @@ d3d12_screen_get_video_param_decode(struct pipe_screen *pscreen,
                         return lowestSupportedConfig.resolution.Width;
                      } else if (param == PIPE_VIDEO_CAP_MIN_HEIGHT) {
                         return lowestSupportedConfig.resolution.Height;
-                     } else if (param == PIPE_VIDEO_CAP_MAX_LEVEL) {
-                        return bestSupportedConfig.level;
                      } else if (param == PIPE_VIDEO_CAP_SUPPORTED) {
                         return 1;
                      }
@@ -2297,8 +2292,6 @@ d3d12_screen_get_video_param_decode(struct pipe_screen *pscreen,
          }
          return 0;
       } break;
-      case PIPE_VIDEO_CAP_PREFERRED_FORMAT:
-         return (profile == PIPE_VIDEO_PROFILE_UNKNOWN) ? PIPE_FORMAT_NV12 : d3d12_get_pipe_format(d3d12_convert_pipe_video_profile_to_dxgi_format(profile));
       case PIPE_VIDEO_CAP_SUPPORTS_PROGRESSIVE:
          return true;
       case PIPE_VIDEO_CAP_SUPPORTS_CONTIGUOUS_PLANES_MAP:
@@ -2318,14 +2311,11 @@ d3d12_screen_get_video_param_postproc(struct pipe_screen *pscreen,
    switch (param) {
       case PIPE_VIDEO_CAP_REQUIRES_FLUSH_ON_END_FRAME:
          return 1;
-      case PIPE_VIDEO_CAP_NPOT_TEXTURES:
-         return 1;
       case PIPE_VIDEO_CAP_MAX_WIDTH:
       case PIPE_VIDEO_CAP_MAX_HEIGHT:
       case PIPE_VIDEO_CAP_MIN_WIDTH:
       case PIPE_VIDEO_CAP_MIN_HEIGHT:
       case PIPE_VIDEO_CAP_SUPPORTED:
-      case PIPE_VIDEO_CAP_PREFERRED_FORMAT:
       case PIPE_VIDEO_CAP_SUPPORTS_PROGRESSIVE:
       case PIPE_VIDEO_CAP_SUPPORTS_CONTIGUOUS_PLANES_MAP:
       case PIPE_VIDEO_CAP_VPP_MAX_INPUT_WIDTH:
@@ -2366,8 +2356,6 @@ d3d12_screen_get_video_param_postproc(struct pipe_screen *pscreen,
          if (d3d12_has_video_process_support(pscreen, supportCaps, minSupportedInput, maxSupportedInput)) {
             if (param == PIPE_VIDEO_CAP_SUPPORTED) {
                return true;
-            } else if (param == PIPE_VIDEO_CAP_PREFERRED_FORMAT) {
-               return  PIPE_FORMAT_NV12;
             } else if (param == PIPE_VIDEO_CAP_MIN_WIDTH) {
                return minSupportedInput.Width;
             } else if (param == PIPE_VIDEO_CAP_MIN_HEIGHT) {
@@ -2466,8 +2454,6 @@ d3d12_screen_get_video_param_encode(struct pipe_screen *pscreen,
    switch (param) {
       case PIPE_VIDEO_CAP_REQUIRES_FLUSH_ON_END_FRAME:
          return 1;
-      case PIPE_VIDEO_CAP_NPOT_TEXTURES:
-         return 1;
       case PIPE_VIDEO_CAP_MAX_TEMPORAL_LAYERS:
       {
             switch (u_reduce_video_profile(profile)) {
@@ -2498,7 +2484,6 @@ d3d12_screen_get_video_param_encode(struct pipe_screen *pscreen,
       case PIPE_VIDEO_CAP_MAX_HEIGHT:
       case PIPE_VIDEO_CAP_MIN_WIDTH:
       case PIPE_VIDEO_CAP_MIN_HEIGHT:
-      case PIPE_VIDEO_CAP_MAX_LEVEL:
       case PIPE_VIDEO_CAP_SUPPORTED:
       case PIPE_VIDEO_CAP_ENC_MAX_SLICES_PER_FRAME:
       case PIPE_VIDEO_CAP_ENC_SLICES_STRUCTURE:
@@ -2583,8 +2568,6 @@ d3d12_screen_get_video_param_encode(struct pipe_screen *pscreen,
                   return minResEncode.Width;
                } else if (param == PIPE_VIDEO_CAP_MIN_HEIGHT) {
                   return minResEncode.Height;
-               } else if (param == PIPE_VIDEO_CAP_MAX_LEVEL) {
-                  return maxLvlEncode;
                } else if (param == PIPE_VIDEO_CAP_SUPPORTED) {
                   return 1;
                } else if (param == PIPE_VIDEO_CAP_ENC_MAX_SLICES_PER_FRAME) {
@@ -2689,8 +2672,6 @@ d3d12_screen_get_video_param_encode(struct pipe_screen *pscreen,
          }
          return 0;
       } break;
-      case PIPE_VIDEO_CAP_PREFERRED_FORMAT:
-         return (profile == PIPE_VIDEO_PROFILE_UNKNOWN) ? PIPE_FORMAT_NV12 : d3d12_get_pipe_format(d3d12_convert_pipe_video_profile_to_dxgi_format(profile));
       case PIPE_VIDEO_CAP_SUPPORTS_PROGRESSIVE:
          return true;
       case PIPE_VIDEO_CAP_SUPPORTS_CONTIGUOUS_PLANES_MAP:

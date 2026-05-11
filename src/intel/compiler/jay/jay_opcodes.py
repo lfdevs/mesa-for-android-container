@@ -98,6 +98,8 @@ op('lzd',        1, 'u32')
 op('frc',        1, 'f32 f64', Props.NEGATE | Props.CMOD)
 op('mad',        3, 'u32 s32 u16 s16 f32 f64 f16 bf16',
    Props.NEGATE | Props.SAT | Props.CMOD | Props.COMMUTATIVE)
+op('mac',        3, 'f32', Props.NEGATE | Props.SAT | Props.CMOD |
+                           Props.COMMUTATIVE)
 op('max',        2, 'u32 s32 u64 s64 u16 s16 f32 f64 f16 bf16',
    Props.NEGATE | Props.SAT | Props.COMMUTATIVE)
 op('min',        2, 'u32 s32 u64 s64 u16 s16 f32 f64 f16 bf16',
@@ -126,7 +128,8 @@ op('shl', 2, 'u32 u64 u16 s16 s32 s64', Props.CMOD | Props.NEGATE0)
 op('shr', 2, 'u32 u64 u16 s16 s32 s64', Props.CMOD | Props.NEGATE0)
 
 op('quad_swizzle', 1, 'u1 u32', 0, ['enum jay_quad_swizzle swizzle'])
-op('sync', 0, None, Props.NO_DEST, ['enum tgl_sync_function op'])
+op('sync', 1, 'u32', Props.NO_DEST, ['enum tgl_sync_function op'])
+op('schedule_barrier', 0, None, Props.NO_DEST)
 
 for n in ['brd', 'illegal', 'goto', 'join', 'if', 'else',
           'endif', 'while', 'break', 'cont', 'call', 'calla', 'jmpi', 'ret',
@@ -149,8 +152,8 @@ op('send', 4, None, Props.SIDE_EFFECTS, [
 op('reloc',   0, 'u32 u64', 0, ['unsigned param', 'unsigned base'])
 op('preload', 0, 'u32',     0, ['unsigned reg'])
 op('deswizzle', 0, 'u32', Props.NO_DEST, ['unsigned size'])
-op('deswizzle_odd', 2, 'u32', 0, ['bool src2_hi'])
-op('deswizzle_even', 1, 'u32', 0, ['bool src_hi'])
+op('deswizzle_odd', 2, 'f32', 0, ['bool src2_hi'])
+op('deswizzle_even', 1, 'f32', 0, ['bool src_hi'])
 
 # Calculating the lane ID requires multiple power-of-two steps each involving
 # complex architectural features not modelled in the IR.

@@ -24,6 +24,7 @@ c_args_vpe += [
   '-DVPE_BUILD_1_0',
   '-DVPE_BUILD_1_X',
   '-DVPE_BUILD_1_1',
+  '-DVPE_BUILD_2_0',
 ]
 
 vpe_files = files(
@@ -124,7 +125,31 @@ vpe_files = files(
   'src/chip/vpe11/inc/vpe11_vpe_desc_writer.h',
   'src/chip/vpe11/vpe11_cmd_builder.c',
   'src/chip/vpe11/vpe11_resource.c',
-  'src/chip/vpe11/vpe11_vpe_desc_writer.c'
+  'src/chip/vpe11/vpe11_vpe_desc_writer.c',
+  'src/core/inc/multi_pipe_segmentation.h',
+  'src/core/multi_pipe_segmentation.c',
+  'src/core/vpe_spl_translation.c',
+  'src/chip/vpe20/inc/vpe20_resource.h',
+  'src/chip/vpe20/vpe20_cdc_be.c',
+  'src/chip/vpe20/vpe20_cdc_fe.c',
+  'src/chip/vpe20/vpe20_cmd_builder.c',
+  'src/chip/vpe20/vpe20_config_writer.c',
+  'src/chip/vpe20/vpe20_dpp_cm.c',
+  'src/chip/vpe20/vpe20_dpp_dscl.c',
+  'src/chip/vpe20/vpe20_dpp.c',
+  'src/chip/vpe20/vpe20_mpc.c',
+  'src/chip/vpe20/vpe20_opp.c',
+  'src/chip/vpe20/vpe20_plane_desc_writer.c',
+  'src/chip/vpe20/vpe20_resource.c',
+  'src/chip/vpe20/vpe20_vpe_desc_writer.c',
+  'src/imported/SPL/dc_spl.c',
+  'src/imported/SPL/dc_spl.h',
+  'src/imported/SPL/dc_spl_filters.c',
+  'src/imported/SPL/dc_spl_isharp_filters.c',
+  'src/imported/SPL/dc_spl_scl_easf_filters.c',
+  'src/imported/SPL/dc_spl_scl_filters.c',
+  'src/imported/SPL/spl_custom_float.c',
+  'src/imported/SPL/spl_fixpt31_32.c',
 )
 
 inc_amd_vpe = include_directories(
@@ -135,6 +160,9 @@ inc_amd_vpe = include_directories(
   'src/utils/inc',
   'src/chip/vpe10/inc',
   'src/chip/vpe11/inc',
+  'src/chip/vpe20/inc',
+  'src/imported/SPL',
+  'src/imported',
 )
 
 libvpe = static_library(

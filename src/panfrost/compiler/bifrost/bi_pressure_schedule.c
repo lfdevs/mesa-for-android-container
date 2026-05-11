@@ -74,6 +74,11 @@ create_dag(bi_context *ctx, bi_block *block, void *memctx)
           */
          if (I->seg != BI_SEG_UBO) {
             add_dep(node, memory_store);
+            /* Chain loads together so a store cannot be scheduled
+             * between two loads to the same address. Without alias
+             * analysis we conservatively serialize all loads.
+             */
+            add_dep(node, memory_load);
             memory_load = node;
          }
 
@@ -87,6 +92,7 @@ create_dag(bi_context *ctx, bi_block *block, void *memctx)
          if ((I->op == BI_OPCODE_LD_TEX) || (I->op == BI_OPCODE_LD_TEX_IMM) ||
              (I->op == BI_OPCODE_LD_ATTR_TEX)) {
             add_dep(node, memory_store);
+            add_dep(node, memory_load);
             memory_load = node;
          }
 

@@ -1234,7 +1234,16 @@ anv_state_reserved_array_pool_free(struct anv_state_reserved_array_pool *pool,
    simple_mtx_lock(&pool->mutex);
    BITSET_SET(pool->states, idx);
    simple_mtx_unlock(&pool->mutex);
- }
+}
+
+void
+anv_state_reserved_array_pool_index_free(struct anv_state_reserved_array_pool *pool,
+                                         uint32_t index)
+{
+   simple_mtx_lock(&pool->mutex);
+   BITSET_SET(pool->states, index);
+   simple_mtx_unlock(&pool->mutex);
+}
 
 void
 anv_bo_pool_init(struct anv_bo_pool *pool, struct anv_device *device,

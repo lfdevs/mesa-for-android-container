@@ -870,7 +870,7 @@ emit_alu(struct ir3_context *ctx, nir_alu_instr *alu)
    case nir_op_imad24_ir3:
       if (use_shared) {
          dst = ir3_ADD_U_rpt(b, dst_sz,
-                             ir3_MUL_U24_rpt(b, dst_sz, src[0], 0, src[1], 0),
+                             ir3_MUL_S24_rpt(b, dst_sz, src[0], 0, src[1], 0),
                              0, src[2], 0);
       } else {
          dst = ir3_MAD_S24_rpt(b, dst_sz, src[0], 0, src[1], 0, src[2], 0);
@@ -5170,6 +5170,9 @@ setup_input(struct ir3_context *ctx, nir_intrinsic_instr *intr)
          unsigned idx = (n * 4) + i + frac;
          ctx->last_dst[i] = ctx->inputs[idx];
       }
+
+      if (slot >= VERT_ATTRIB_GENERIC0)
+         so->attr_in = MAX2(so->attr_in, slot - VERT_ATTRIB_GENERIC0 + 1);
    }
 }
 

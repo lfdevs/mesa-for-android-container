@@ -12,5 +12,7 @@ dEQP-GLES2.functional.fragment_ops.scissor.contained_point
 shaders@glsl-max-varyings
 shaders@glsl-vs-point-size
 
+spec@!opengl 1.2@tex3d-maxsize
+
 glx@glx-buffer-age
 glx@glx-multithread-clearbuffer

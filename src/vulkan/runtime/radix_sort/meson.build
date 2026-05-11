@@ -29,6 +29,7 @@ radix_sort_files = files(
   'shaders/push.h',
   'radix_sort_u64.c',
   'radix_sort_u64.h',
+  'radix_sort_u96.c',
   'radix_sort_vk_devaddr.h',
   'radix_sort_vk_ext.h',
   'radix_sort_vk.c',

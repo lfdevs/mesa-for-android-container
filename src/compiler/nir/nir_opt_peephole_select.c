@@ -25,6 +25,7 @@
 #include "nir.h"
 #include "nir_builder.h"
 #include "nir_control_flow.h"
+#include "nir_search_helpers.h"
 
 /*
  * Implements a small peephole optimization that looks for
@@ -166,6 +167,7 @@ block_check_for_allowed_instrs(nir_block *block, unsigned *count,
          case nir_intrinsic_load_layer_id:
          case nir_intrinsic_load_frag_coord:
          case nir_intrinsic_load_pixel_coord:
+         case nir_intrinsic_load_frag_coord_xy:
          case nir_intrinsic_load_frag_coord_z:
          case nir_intrinsic_load_frag_coord_w:
          case nir_intrinsic_load_sample_pos:
@@ -229,10 +231,10 @@ block_check_for_allowed_instrs(nir_block *block, unsigned *count,
          break;
 
       case nir_instr_type_alu: {
-         nir_alu_instr *mov = nir_instr_as_alu(instr);
+         nir_alu_instr *alu = nir_instr_as_alu(instr);
          bool movelike = false;
 
-         switch (mov->op) {
+         switch (alu->op) {
          case nir_op_mov:
          case nir_op_fneg:
          case nir_op_ineg:
@@ -279,14 +281,21 @@ block_check_for_allowed_instrs(nir_block *block, unsigned *count,
              * merged as a destination modifier or source modifier on some
              * other instruction.
              */
-            if (mov->op != nir_op_fsat && !movelike)
-               (*count)++;
+            if (alu->op != nir_op_fsat && !movelike) {
+               /* If this is a fmul that is only used by fadd, don't count it.
+                * It will likely be fused to fma/mad.
+                */
+               if ((alu->op != nir_op_fmul && alu->op != nir_op_fmulz) ||
+                   !is_only_used_by_fadd(alu)) {
+                  (*count)++;
+               }
+            }
          } else {
             /* The only uses of this definition must be phis in the successor */
-            nir_foreach_use_including_if(use, &mov->def) {
+            nir_foreach_use_including_if(use, &alu->def) {
                if (nir_src_is_if(use) ||
-                   nir_src_parent_instr(use)->type != nir_instr_type_phi ||
-                   nir_src_parent_instr(use)->block != block->successors[0])
+                   nir_src_use_instr(use)->type != nir_instr_type_phi ||
+                   nir_src_use_instr(use)->block != block->successors[0])
                   return false;
             }
          }
@@ -425,9 +434,9 @@ nir_opt_collapse_if(nir_if *if_stmt, nir_shader *shader,
          nir_phi_get_src_from_block(phi, nir_if_first_else_block(if_stmt));
 
       nir_foreach_use(src, &phi->def) {
-         assert(nir_src_parent_instr(src)->type == nir_instr_type_phi);
+         assert(nir_src_use_instr(src)->type == nir_instr_type_phi);
          nir_phi_src *phi_src =
-            nir_phi_get_src_from_block(nir_instr_as_phi(nir_src_parent_instr(src)),
+            nir_phi_get_src_from_block(nir_instr_as_phi(nir_src_use_instr(src)),
                                        nir_if_first_else_block(parent_if));
          if (phi_src->src.ssa != else_src->src.ssa)
             return false;
@@ -451,7 +460,7 @@ nir_opt_collapse_if(nir_if *if_stmt, nir_shader *shader,
          nir_phi_get_src_from_block(phi, nir_if_first_else_block(if_stmt));
       nir_foreach_use_safe(src, &phi->def) {
          nir_phi_src *phi_src =
-            nir_phi_get_src_from_block(nir_instr_as_phi(nir_src_parent_instr(src)),
+            nir_phi_get_src_from_block(nir_instr_as_phi(nir_src_use_instr(src)),
                                        nir_if_first_else_block(parent_if));
          if (phi_src->src.ssa == else_src->src.ssa)
             nir_src_rewrite(&phi_src->src, &phi->def);

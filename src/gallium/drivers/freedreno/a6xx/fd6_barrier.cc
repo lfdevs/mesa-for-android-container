@@ -38,8 +38,13 @@ fd6_emit_flushes(struct fd_context *ctx, fd_cs &cs, unsigned flushes)
    if ((CHIP >= A7XX) && (flushes & FD6_BLIT_CLEAN_CACHE))
       fd6_event_write<CHIP>(ctx, cs, FD_CCU_CLEAN_BLIT_CACHE);
 
-   if ((CHIP >= A7XX) && (flushes & FD6_INVALIDATE_CCHE))
+   if ((CHIP >= A7XX) && (flushes & FD6_INVALIDATE_CCHE)) {
+      /* CP_CCHE_INVALIDATE is just a plain register write underneath, so
+       * it needs WFI before it, in order to invalidate at the right point.
+       */
+      fd_pkt7(cs, CP_WAIT_FOR_IDLE, 0);
       fd_pkt7(cs, CP_CCHE_INVALIDATE, 0);
+   }
 
    if (flushes & FD6_WAIT_MEM_WRITES)
       fd_pkt7(cs, CP_WAIT_MEM_WRITES, 0);

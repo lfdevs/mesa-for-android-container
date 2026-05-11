@@ -1829,6 +1829,24 @@ ntq_emit_alu(struct v3d_compile *c, nir_alu_instr *instr)
                 vir_set_unpack(c->defs[result.index], 0, V3D71_QPU_UNPACK_MAX0);
                 break;
 
+        case nir_op_udot_4x8_uadd:
+                assert(c->devinfo->ver >= 71);
+                vir_SETNNMODE_UU(c);
+                result = vir_ADD(c, vir_V8DOT(c, src[0], src[1]), src[2]);
+                break;
+
+        case nir_op_sdot_4x8_iadd:
+                assert(c->devinfo->ver >= 71);
+                vir_SETNNMODE_SS(c);
+                result = vir_ADD(c, vir_V8DOT(c, src[0], src[1]), src[2]);
+                break;
+
+        case nir_op_sudot_4x8_iadd:
+                assert(c->devinfo->ver >= 71);
+                vir_SETNNMODE_SU(c);
+                result = vir_ADD(c, vir_V8DOT(c, src[0], src[1]), src[2]);
+                break;
+
         default:
                 mesa_loge("Unknown NIR ALU inst: %s",
                           nir_instr_as_str(&instr->instr, NULL));
@@ -2243,7 +2261,6 @@ v3d_optimize_nir(struct v3d_compile *c, struct nir_shader *s)
                 }
 
                 NIR_PASS(progress, s, nir_opt_undef);
-                NIR_PASS(progress, s, nir_lower_undef_to_zero);
 
                 if (c && !c->disable_loop_unrolling &&
                     s->options->max_unroll_iterations > 0) {
@@ -2253,6 +2270,8 @@ v3d_optimize_nir(struct v3d_compile *c, struct nir_shader *s)
                        progress |= local_progress;
                 }
         } while (progress);
+
+        NIR_PASS(progress, s, nir_lower_undef_to_zero);
 
         /* needs to be outside of optimization loop, otherwise it fights with
          * opt_algebraic optimizing the conversion lowering

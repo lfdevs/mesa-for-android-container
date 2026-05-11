@@ -257,6 +257,9 @@ read_xe_data_file(FILE *file,
             case XE_VM_TOPIC_TYPE_ERROR:
                printf("HWCTX not present in dump, content will be zeroed: %s\n", line);
                break;
+            case XE_VM_TOPIC_TYPE_REPLAY_OFFSET:
+            case XE_VM_TOPIC_TYPE_REPLAY_LENGTH:
+               break;
             default:
                printf("Not expected line in HWCTX: %s", line);
             }

@@ -7,7 +7,6 @@
 #include "ac_nir.h"
 #include "ac_nir_helpers.h"
 #include "ac_gpu_info.h"
-#include "amdgfxregs.h"
 #include "nir_builder.h"
 #include "nir_xfb_info.h"
 #include "util/u_math.h"

@@ -18,7 +18,7 @@ are_all_uses_fadd(nir_def *def)
       if (nir_src_is_if(use_src))
          return false;
 
-      nir_instr *use_instr = nir_src_parent_instr(use_src);
+      nir_instr *use_instr = nir_src_use_instr(use_src);
       if (use_instr->type != nir_instr_type_alu)
          return false;
 
@@ -191,6 +191,7 @@ intel_nir_opt_peephole_ffma_instr(nir_builder *b,
    }
 
    b->cursor = nir_before_instr(&add->instr);
+   b->fp_math_ctrl = mul->fp_math_ctrl | add->fp_math_ctrl;
 
    if (abs) {
       for (unsigned i = 0; i < 2; i++)
@@ -201,7 +202,7 @@ intel_nir_opt_peephole_ffma_instr(nir_builder *b,
       mul_src[0] = nir_fneg(b, mul_src[0]);
 
    nir_alu_instr *ffma = nir_alu_instr_create(b->shader, nir_op_ffma);
-   ffma->fp_math_ctrl = mul->fp_math_ctrl | add->fp_math_ctrl;
+   ffma->fp_math_ctrl = b->fp_math_ctrl;
 
    for (unsigned i = 0; i < 2; i++) {
       ffma->src[i].src = nir_src_for_ssa(mul_src[i]);

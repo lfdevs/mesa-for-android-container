@@ -1068,7 +1068,7 @@ nir_phi_instr_add_src(nir_phi_instr *instr, nir_block *pred, nir_def *src)
                        nir_phi_src, 1);
    phi_src->pred = pred;
    phi_src->src = nir_src_for_ssa(src);
-   nir_src_set_parent_instr(&phi_src->src, &instr->instr);
+   nir_src_set_use_instr(&phi_src->src, &instr->instr);
    exec_list_push_tail(&instr->srcs, &phi_src->node);
 
    return phi_src;
@@ -1233,7 +1233,7 @@ add_use_cb(nir_src *src, void *state)
 {
    nir_instr *instr = state;
 
-   nir_src_set_parent_instr(src, instr);
+   nir_src_set_use_instr(src, instr);
    list_addtail(&src->use_link, &src->ssa->uses);
 
    return true;
@@ -1656,11 +1656,11 @@ nir_block *
 nir_src_get_block(nir_src *src)
 {
    if (nir_src_is_if(src))
-      return nir_cf_node_cf_tree_prev(&nir_src_parent_if(src)->cf_node);
-   else if (nir_src_parent_instr(src)->type == nir_instr_type_phi)
+      return nir_cf_node_cf_tree_prev(&nir_src_use_if(src)->cf_node);
+   else if (nir_src_use_instr(src)->type == nir_instr_type_phi)
       return list_entry(src, nir_phi_src, src)->pred;
    else
-      return nir_src_parent_instr(src)->block;
+      return nir_src_use_instr(src)->block;
 }
 
 static void
@@ -1680,10 +1680,10 @@ src_add_all_uses(nir_src *src, nir_instr *parent_instr, nir_if *parent_if)
       return;
 
    if (parent_instr) {
-      nir_src_set_parent_instr(src, parent_instr);
+      nir_src_set_use_instr(src, parent_instr);
    } else {
       assert(parent_if);
-      nir_src_set_parent_if(src, parent_if);
+      nir_src_set_use_if(src, parent_if);
    }
 
    list_addtail(&src->use_link, &src->ssa->uses);
@@ -1706,7 +1706,7 @@ nir_instr_clear_src(nir_instr *instr, nir_src *src)
 void
 nir_instr_move_src(nir_instr *dest_instr, nir_src *dest, nir_src *src)
 {
-   assert(!src_is_valid(dest) || nir_src_parent_instr(dest) == dest_instr);
+   assert(!src_is_valid(dest) || nir_src_use_instr(dest) == dest_instr);
 
    src_remove_all_uses(dest);
    src_remove_all_uses(src);
@@ -1810,13 +1810,13 @@ nir_def_rewrite_uses_after_instr(nir_def *def, nir_def *new_ssa,
 
    nir_foreach_use_including_if_safe(use_src, def) {
       if (!nir_src_is_if(use_src)) {
-         assert(nir_src_parent_instr(use_src) != nir_def_instr(def));
+         assert(nir_src_use_instr(use_src) != nir_def_instr(def));
 
          /* Since def already dominates all of its uses, the only way a use can
           * not be dominated by after_me is if it is between def and after_me in
           * the instruction list.
           */
-         if (is_instr_between(nir_def_instr(def), after_me, nir_src_parent_instr(use_src)))
+         if (is_instr_between(nir_def_instr(def), after_me, nir_src_use_instr(use_src)))
             continue;
       }
 
@@ -1840,16 +1840,16 @@ get_store_value(nir_intrinsic_instr *intrin)
 nir_component_mask_t
 nir_src_components_read(const nir_src *src)
 {
-   assert(nir_src_parent_instr(src));
+   assert(nir_src_use_instr(src));
 
-   if (nir_src_parent_instr(src)->type == nir_instr_type_alu) {
-      nir_alu_instr *alu = nir_instr_as_alu(nir_src_parent_instr(src));
+   if (nir_src_use_instr(src)->type == nir_instr_type_alu) {
+      nir_alu_instr *alu = nir_instr_as_alu(nir_src_use_instr(src));
       nir_alu_src *alu_src = exec_node_data(nir_alu_src, src, src);
       int src_idx = alu_src - &alu->src[0];
       assert(src_idx >= 0 && src_idx < nir_op_infos[alu->op].num_inputs);
       return nir_alu_instr_src_read_mask(alu, src_idx);
-   } else if (nir_src_parent_instr(src)->type == nir_instr_type_intrinsic) {
-      nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(nir_src_parent_instr(src));
+   } else if (nir_src_use_instr(src)->type == nir_instr_type_intrinsic) {
+      nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(nir_src_use_instr(src));
       if (nir_intrinsic_has_write_mask(intrin) && src->ssa == get_store_value(intrin))
          return nir_intrinsic_write_mask(intrin);
       else
@@ -1881,7 +1881,7 @@ nir_def_all_uses_are_fsat(const nir_def *def)
       if (nir_src_is_if(src))
          return false;
 
-      nir_instr *use = nir_src_parent_instr(src);
+      nir_instr *use = nir_src_use_instr(src);
       if (use->type != nir_instr_type_alu)
          return false;
 
@@ -1899,7 +1899,7 @@ nir_def_all_uses_ignore_sign_bit(const nir_def *def)
    nir_foreach_use_including_if(use, def) {
       if (nir_src_is_if(use))
          return false;
-      nir_instr *instr = nir_src_parent_instr(use);
+      nir_instr *instr = nir_src_use_instr(use);
 
       if (instr->type != nir_instr_type_alu)
          return false;
@@ -2435,6 +2435,12 @@ nir_intrinsic_from_system_value(gl_system_value val)
       return nir_intrinsic_load_invocation_id;
    case SYSTEM_VALUE_FRAG_COORD:
       return nir_intrinsic_load_frag_coord;
+   case SYSTEM_VALUE_FRAG_COORD_XY:
+      return nir_intrinsic_load_frag_coord_xy;
+   case SYSTEM_VALUE_FRAG_COORD_Z:
+      return nir_intrinsic_load_frag_coord_z;
+   case SYSTEM_VALUE_FRAG_COORD_W:
+      return nir_intrinsic_load_frag_coord_w;
    case SYSTEM_VALUE_PIXEL_COORD:
       return nir_intrinsic_load_pixel_coord;
    case SYSTEM_VALUE_POINT_COORD:
@@ -2615,9 +2621,13 @@ nir_system_value_from_intrinsic(nir_intrinsic_op intrin)
    case nir_intrinsic_load_invocation_id:
       return SYSTEM_VALUE_INVOCATION_ID;
    case nir_intrinsic_load_frag_coord:
-   case nir_intrinsic_load_frag_coord_z:
-   case nir_intrinsic_load_frag_coord_w:
       return SYSTEM_VALUE_FRAG_COORD;
+   case nir_intrinsic_load_frag_coord_xy:
+      return SYSTEM_VALUE_FRAG_COORD_XY;
+   case nir_intrinsic_load_frag_coord_z:
+      return SYSTEM_VALUE_FRAG_COORD_Z;
+   case nir_intrinsic_load_frag_coord_w:
+      return SYSTEM_VALUE_FRAG_COORD_W;
    case nir_intrinsic_load_pixel_coord:
       return SYSTEM_VALUE_PIXEL_COORD;
    case nir_intrinsic_load_point_coord:
@@ -3499,6 +3509,9 @@ nir_tex_instr_result_size(const nir_tex_instr *instr)
    case nir_texop_sample_pos_nv:
       return 4;
 
+   case nir_texop_gradient_pan:
+      return 2;
+
    case nir_texop_custom_border_color_agx:
       return 4;
 
@@ -3552,6 +3565,7 @@ nir_tex_instr_is_query(const nir_tex_instr *instr)
    case nir_texop_samples_identical:
    case nir_texop_fragment_mask_fetch_amd:
    case nir_texop_fragment_fetch_amd:
+   case nir_texop_gradient_pan:
    case nir_texop_sample_weighted_qcom:
    case nir_texop_box_filter_qcom:
    case nir_texop_block_match_sad_qcom:

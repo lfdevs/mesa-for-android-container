@@ -125,6 +125,7 @@ _mesa_shader_stage_to_file_ext(unsigned stage)
    case MESA_SHADER_FRAGMENT:     return "frag";
    case MESA_SHADER_GEOMETRY:     return "geom";
    case MESA_SHADER_COMPUTE:      return "comp";
+   case MESA_SHADER_KERNEL:       return "kernel";
    case MESA_SHADER_TESS_CTRL:    return "tesc";
    case MESA_SHADER_TESS_EVAL:    return "tese";
    case MESA_SHADER_TASK:         return "task";
@@ -383,6 +384,7 @@ gl_system_value_name(gl_system_value sysval)
      ENUM(SYSTEM_VALUE_INVOCATION_ID),
      ENUM(SYSTEM_VALUE_FRAG_COORD),
      ENUM(SYSTEM_VALUE_PIXEL_COORD),
+     ENUM(SYSTEM_VALUE_FRAG_COORD_XY),
      ENUM(SYSTEM_VALUE_FRAG_COORD_Z),
      ENUM(SYSTEM_VALUE_FRAG_COORD_W),
      ENUM(SYSTEM_VALUE_POINT_COORD),

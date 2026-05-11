@@ -39,10 +39,20 @@ delta(uint32_t index)
    uint32_t left_index = index;
    uint32_t right_index = index + 1;
 
-   uint32_t left_key = DEREF(INDEX(key_id_pair, args.ids, left_index)).key;
-   uint32_t right_key = DEREF(INDEX(key_id_pair, args.ids, right_index)).key;
+   if (VK_BUILD_FLAG(VK_BUILD_FLAG_64BIT_KEYS)) {
+      uint64_t left_key = packUint2x32(u32vec2(
+         DEREF(INDEX(key64_id_pair, args.ids, left_index)).key_lo,
+         DEREF(INDEX(key64_id_pair, args.ids, left_index)).key_hi));
+      uint64_t right_key = packUint2x32(u32vec2(
+         DEREF(INDEX(key64_id_pair, args.ids, right_index)).key_lo,
+         DEREF(INDEX(key64_id_pair, args.ids, right_index)).key_hi));
+      return left_key != right_key ? (32 + uint32_t(findMSB(left_key ^ right_key))) : uint32_t(findMSB(left_index ^ right_index));
+   } else {
+      uint32_t left_key = DEREF(INDEX(key32_id_pair, args.ids, left_index)).key;
+      uint32_t right_key = DEREF(INDEX(key32_id_pair, args.ids, right_index)).key;
 
-   return left_key != right_key ? (32 + findMSB(left_key ^ right_key)) : findMSB(left_index ^ right_index);
+      return left_key != right_key ? (32 + findMSB(left_key ^ right_key)) : findMSB(left_index ^ right_index);
+   }
 }
 
 #define SEARCH_RADIUS 16
@@ -67,8 +77,13 @@ main(void)
       uint32_t child_id = VK_BVH_INVALID_NODE;
       vk_ir_node child = vk_ir_node(vk_aabb(vec3(0.0), vec3(0.0)));
       if (active_leaf_count > 0) {
-         REF(key_id_pair) key_id = INDEX(key_id_pair, args.ids, global_id);
-         child_id = DEREF(key_id).id;
+         if (VK_BUILD_FLAG(VK_BUILD_FLAG_64BIT_KEYS)) {
+            REF(key64_id_pair) key_id = INDEX(key64_id_pair, args.ids, global_id);
+            child_id = DEREF(key_id).id;
+	 } else {
+            REF(key32_id_pair) key_id = INDEX(key32_id_pair, args.ids, global_id);
+            child_id = DEREF(key_id).id;
+	 }
          child = DEREF(REF(vk_ir_node)(OFFSET(args.bvh, ir_id_to_offset(child_id))));
       }
 
@@ -142,8 +157,13 @@ main(void)
          }
          uint32_t node_id_index = load_base + load_index;
          uint32_t node_id = VK_BVH_INVALID_NODE;
-         if (load_index < index_range)
-            node_id = DEREF(INDEX(key_id_pair, args.ids, node_id_index)).id;
+         if (load_index < index_range) {
+            if (VK_BUILD_FLAG(VK_BUILD_FLAG_64BIT_KEYS)) {
+               node_id = DEREF(INDEX(key64_id_pair, args.ids, node_id_index)).id;
+	    } else {
+               node_id = DEREF(INDEX(key32_id_pair, args.ids, node_id_index)).id;
+	    }
+	 }
 
          uvec4 node_valid_mask = subgroupBallot(node_id != VK_BVH_INVALID_NODE);
          uint32_t node_prefix_sum = subgroupBallotExclusiveBitCount(node_valid_mask);
@@ -225,7 +245,11 @@ main(void)
 
          if (gl_SubgroupInvocationID < min(end - start + 1, cluster_threshold)) {
             uint32_t dst_node = gl_SubgroupInvocationID < node_count ? node_ids[gl_SubgroupInvocationID] : VK_BVH_INVALID_NODE;
-            DEREF(INDEX(key_id_pair, args.ids, start + gl_SubgroupInvocationID)).id = dst_node;
+            if (VK_BUILD_FLAG(VK_BUILD_FLAG_64BIT_KEYS)) {
+               DEREF(INDEX(key64_id_pair, args.ids, start + gl_SubgroupInvocationID)).id = dst_node;
+	    } else {
+               DEREF(INDEX(key32_id_pair, args.ids, start + gl_SubgroupInvocationID)).id = dst_node;
+	    }
          }
 
          memoryBarrier(gl_ScopeDevice, gl_StorageSemanticsBuffer,

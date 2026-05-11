@@ -1557,12 +1557,20 @@ add_all_surfaces_explicit_layout(
                               plane, image->vk.tiling);
       const VkSubresourceLayout *primary_layout = &drm_info->pPlaneLayouts[plane];
 
+      VkImageUsageFlags vk_usage = vk_image_usage(&image->vk, aspect);
+      isl_surf_usage_flags_t isl_usage =
+         anv_image_choose_isl_surf_usage(device->physical,
+                                         image->vk.format,
+                                         format_list_info,
+                                         image->vk.create_flags, vk_usage,
+                                         isl_extra_usage_flags, aspect,
+                                         image->vk.compr_flags);
+
       result = add_primary_surface(device, image, plane,
                                    format_plane,
                                    primary_layout->offset,
                                    primary_layout->rowPitch,
-                                   isl_tiling_flags,
-                                   isl_extra_usage_flags);
+                                   isl_tiling_flags, isl_usage);
       if (result != VK_SUCCESS)
          return result;
 
@@ -1736,6 +1744,20 @@ anv_image_init_sparse_bindings(struct anv_image *image,
                               OPAQUE_CAPTURE_DESCRIPTOR_DATA_CREATE_INFO_EXT);
       if (opaque_info)
          explicit_addresses = opaque_info->opaqueCaptureDescriptorData;
+   }
+
+   if (image->vk.create_flags & VK_IMAGE_CREATE_DESCRIPTOR_HEAP_CAPTURE_REPLAY_BIT_EXT) {
+      alloc_flags |= ANV_BO_ALLOC_FIXED_ADDRESS;
+
+      const VkOpaqueCaptureDataCreateInfoEXT *opaque_info =
+         vk_find_struct_const(create_info->vk_info->pNext,
+                              OPAQUE_CAPTURE_DATA_CREATE_INFO_EXT);
+      if (opaque_info) {
+         assert(opaque_info->pData[0].size ==
+                sizeof(struct anv_image_opaque_capture_data));
+         explicit_addresses =
+            (const struct anv_image_opaque_capture_data *)opaque_info->pData;
+      }
    }
 
    uint64_t total_size = 0;
@@ -3060,7 +3082,7 @@ anv_bind_image_memory(struct anv_device *device,
    ANV_FROM_HANDLE(anv_image, image, bind_info->image);
    bool did_bind = false;
    VkResult result = VK_SUCCESS;
-   const VkBindMemoryStatusKHR *bind_status = NULL;
+   const VkBindMemoryStatus *bind_status = NULL;
 
    assert(!anv_image_is_sparse(image));
 
@@ -3161,8 +3183,8 @@ anv_bind_image_memory(struct anv_device *device,
          break;
       }
 #pragma GCC diagnostic pop
-      case VK_STRUCTURE_TYPE_BIND_MEMORY_STATUS_KHR: {
-         bind_status = (const VkBindMemoryStatusKHR *)s;
+      case VK_STRUCTURE_TYPE_BIND_MEMORY_STATUS: {
+         bind_status = (const VkBindMemoryStatus *)s;
          break;
       }
       default:
@@ -3267,8 +3289,8 @@ VkResult anv_BindImageMemory2(
 static void
 anv_get_image_subresource_layout(struct anv_device *device,
                                  const struct anv_image *image,
-                                 const VkImageSubresource2KHR *subresource,
-                                 VkSubresourceLayout2KHR *layout)
+                                 const VkImageSubresource2 *subresource,
+                                 VkSubresourceLayout2 *layout)
 {
    const struct isl_surf *isl_surf = NULL;
    const struct anv_image_memory_range *mem_range;
@@ -3436,10 +3458,10 @@ anv_get_image_subresource_layout(struct anv_device *device,
    }
 }
 
-void anv_GetDeviceImageSubresourceLayoutKHR(
+void anv_GetDeviceImageSubresourceLayout(
     VkDevice                                    _device,
-    const VkDeviceImageSubresourceInfoKHR*      pInfo,
-    VkSubresourceLayout2KHR*                    pLayout)
+    const VkDeviceImageSubresourceInfo*         pInfo,
+    VkSubresourceLayout2*                       pLayout)
 {
    ANV_FROM_HANDLE(anv_device, device, _device);
 
@@ -3454,11 +3476,11 @@ void anv_GetDeviceImageSubresourceLayoutKHR(
    anv_get_image_subresource_layout(device, &image, pInfo->pSubresource, pLayout);
 }
 
-void anv_GetImageSubresourceLayout2KHR(
+void anv_GetImageSubresourceLayout2(
     VkDevice                                    _device,
     VkImage                                     _image,
-    const VkImageSubresource2KHR*               pSubresource,
-    VkSubresourceLayout2KHR*                    pLayout)
+    const VkImageSubresource2*                  pSubresource,
+    VkSubresourceLayout2*                       pLayout)
 {
    ANV_FROM_HANDLE(anv_device, device, _device);
    ANV_FROM_HANDLE(anv_image, image, _image);
@@ -4293,4 +4315,31 @@ anv_layout_has_untracked_aux_writes(const struct intel_device_info * const devin
       return false;
 
    return true;
+}
+
+VkResult anv_GetImageOpaqueCaptureDataEXT(
+    VkDevice                                    _device,
+    uint32_t                                    imageCount,
+    const VkImage*                              pImages,
+    VkHostAddressRangeEXT*                      pDatas)
+{
+   ANV_FROM_HANDLE(anv_device, device, _device);
+
+   for (uint32_t i = 0; i < imageCount; i++) {
+      ANV_FROM_HANDLE(anv_image, image, pImages[i]);
+
+      if (pDatas[i].size < sizeof(uint64_t))
+         return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
+
+      if (anv_image_is_sparse(image) &&
+          (image->vk.create_flags & VK_IMAGE_CREATE_DESCRIPTOR_HEAP_CAPTURE_REPLAY_BIT_EXT)) {
+         *((uint64_t *)pDatas[i].address) = anv_address_physical(
+            image->bindings[ANV_IMAGE_MEMORY_BINDING_MAIN].address);
+      } else {
+         *((uint64_t *)pDatas[i].address) = 0;
+      }
+      pDatas[i].size = sizeof(uint64_t);
+   }
+
+   return VK_SUCCESS;
 }

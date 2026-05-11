@@ -30,7 +30,9 @@ lower_non_tied_default(jay_builder *b, jay_inst *I, jay_def default_)
          jay_def dst = jay_extract_post_ra(I->dst, c);
          jay_def src = jay_extract_post_ra(default_, c);
 
-         jay_add_predicate(b, jay_MOV(b, dst, src), not_pred);
+         jay_inst *mov = jay_MOV(b, dst, src);
+         mov->type = I->type;
+         jay_add_predicate(b, mov, not_pred);
       }
    }
 }
@@ -74,6 +76,18 @@ lower(jay_builder *b, jay_inst *I)
             src.hi = true;
             jay_MOV(b, dst, src)->type = JAY_TYPE_U16;
          }
+      }
+
+      /* Do moves on the float point to promote accumulator usage */
+      if (I->type == JAY_TYPE_U32 &&
+          I->dst.file == GPR &&
+          jay_def_stride(b->shader, I->dst) == JAY_STRIDE_4 &&
+          ((I->src[0].file == GPR &&
+            jay_def_stride(b->shader, I->src[0]) == JAY_STRIDE_4) ||
+           I->src[0].file == UGPR ||
+           jay_is_imm(I->src[0]))) {
+
+         I->type = JAY_TYPE_F32;
       }
 
       return false;

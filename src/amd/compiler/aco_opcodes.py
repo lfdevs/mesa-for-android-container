@@ -1221,8 +1221,8 @@ VOPP = {
    ("v_pk_fma_f16",     dst(PkF16), src(PkF16, PkF16, PkF16), op(gfx9=0x0e)),
    ("v_pk_add_f16",     dst(PkF16), src(PkF16, PkF16), op(gfx9=0x0f)),
    ("v_pk_mul_f16",     dst(PkF16), src(PkF16, PkF16), op(gfx9=0x10)),
-   ("v_pk_min_f16",     dst(PkF16), src(PkF16, PkF16), op(gfx9=0x11, gfx11_7=0x12, gfx12=0x1b)), # called v_pk_min_num_f16 in GFX12
-   ("v_pk_max_f16",     dst(PkF16), src(PkF16, PkF16), op(gfx9=0x12, gfx11_7=0x11, gfx12=0x1c)), # called v_pk_min_num_f16 in GFX12
+   ("v_pk_min_f16",     dst(PkF16), src(PkF16, PkF16), op(gfx9=0x11, gfx12=0x1b)), # called v_pk_min_num_f16 in GFX12
+   ("v_pk_max_f16",     dst(PkF16), src(PkF16, PkF16), op(gfx9=0x12, gfx12=0x1c)), # called v_pk_min_num_f16 in GFX12
    ("v_pk_minimum_f16", dst(PkF16), src(PkF16, PkF16), op(gfx11_7=0x1d)),
    ("v_pk_maximum_f16", dst(PkF16), src(PkF16, PkF16), op(gfx11_7=0x1e)),
    ("v_fma_mix_f32",    dst(F32), src(F32, F32, F32), op(gfx9=0x20)), # v_mad_mix_f32 in VEGA ISA, v_fma_mix_f32 in RDNA ISA

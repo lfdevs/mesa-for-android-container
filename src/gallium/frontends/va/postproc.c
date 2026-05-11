@@ -165,7 +165,7 @@ VAStatus
 vlVaQueryVideoProcFilters(VADriverContextP ctx, VAContextID context_id,
                           VAProcFilterType *filters, unsigned int *num_filters)
 {
-   vlVaDriver *drv = VL_VA_DRIVER(ctx);
+   vlVaDriver *drv;
    vlVaContext *context;
    unsigned int num = 0;
 
@@ -174,6 +174,8 @@ vlVaQueryVideoProcFilters(VADriverContextP ctx, VAContextID context_id,
 
    if (!num_filters || !filters)
       return VA_STATUS_ERROR_INVALID_PARAMETER;
+
+   drv = VL_VA_DRIVER(ctx);
 
    mtx_lock(&drv->mutex);
    context = handle_table_get(drv->htab, context_id);
@@ -198,7 +200,7 @@ vlVaQueryVideoProcFilterCaps(VADriverContextP ctx, VAContextID context_id,
                              VAProcFilterType type, void *filter_caps,
                              unsigned int *num_filter_caps)
 {
-   vlVaDriver *drv = VL_VA_DRIVER(ctx);
+   vlVaDriver *drv;
    vlVaContext *context;
    unsigned int i;
    bool supports_filters;
@@ -208,6 +210,8 @@ vlVaQueryVideoProcFilterCaps(VADriverContextP ctx, VAContextID context_id,
 
    if (!filter_caps || !num_filter_caps)
       return VA_STATUS_ERROR_INVALID_PARAMETER;
+
+   drv = VL_VA_DRIVER(ctx);
 
    mtx_lock(&drv->mutex);
    context = handle_table_get(drv->htab, context_id);
@@ -553,6 +557,8 @@ vlVaHandleVAProcPipelineParameterBufferType(vlVaDriver *drv, vlVaContext *contex
          return VA_STATUS_ERROR_INVALID_PARAMETER;
 
       dst_surface = handle_table_get(drv->htab, param->additional_outputs[0]);
+      if (!dst_surface)
+         return VA_STATUS_ERROR_INVALID_SURFACE;
    }
 
    src_region = vlVaRegionDefault(param->surface_region, src_surface, &def_src_region);
@@ -704,7 +710,7 @@ vlVaHandleVAProcPipelineParameterBufferType(vlVaDriver *drv, vlVaContext *contex
       vpp.out_transfer_characteristics = param->output_color_properties.transfer_characteristics;
       vpp.out_matrix_coefficients = param->output_color_properties.matrix_coefficients;
    } else {
-      vlVaGetColorProperties(param->surface_color_standard, &vpp.out_color_primaries,
+      vlVaGetColorProperties(param->output_color_standard, &vpp.out_color_primaries,
                              &vpp.out_transfer_characteristics, &vpp.out_matrix_coefficients);
    }
 

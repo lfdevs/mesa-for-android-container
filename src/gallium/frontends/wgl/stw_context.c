@@ -546,8 +546,9 @@ get_unlocked_refd_framebuffer_from_dc(HDC hDC)
        * those here.
        */
       int iPixelFormat = stw_pixelformat_guess(hDC);
+      HWND hWnd = WindowFromDC(hDC);
       if (iPixelFormat)
-         fb = stw_framebuffer_create(hDC, WindowFromDC(hDC), stw_pixelformat_get_info(iPixelFormat), STW_FRAMEBUFFER_WGL_WINDOW, stw_dev->fscreen);
+         fb = stw_framebuffer_create(hWnd ? NULL : hDC, hWnd, stw_pixelformat_get_info(iPixelFormat), STW_FRAMEBUFFER_WGL_WINDOW, stw_dev->fscreen);
       if (!fb)
          return NULL;
    }

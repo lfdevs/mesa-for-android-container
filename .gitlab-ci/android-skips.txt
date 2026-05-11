@@ -1,8 +1,4 @@
-# Skip these tests when running fractional dEQP batches, as the AHB tests are expected
-# to be handled separately  in a non-fractional run within the deqp-runner suite.
+# Skip these tests when running fractional dEQP batches, as the AHB and WSI tests are
+# expected to be handled separately in non-fractional runs within the deqp-runner suite.
 dEQP-VK.api.external.memory.android_hardware_buffer.*
-
-# Skip all WSI tests: the DEQP_ANDROID_EXE build used can't create native windows, as
-# only APKs support window creation on Android.
-dEQP-VK.image.swapchain_mutable.*
 dEQP-VK.wsi.*

@@ -199,7 +199,7 @@ visit_undef_use(nir_src *src, struct visit_info *info)
       return;
    }
 
-   nir_instr *instr = nir_src_parent_instr(src);
+   nir_instr *instr = nir_src_use_instr(src);
 
    if (instr->type == nir_instr_type_alu) {
       /* Replacing undef with a constant is only beneficial with ALU

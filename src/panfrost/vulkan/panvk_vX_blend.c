@@ -93,7 +93,6 @@ get_blend_shader(struct panvk_device *dev,
    };
 
    pan_preprocess_nir(nir, inputs.gpu_id);
-   pan_postprocess_nir(nir, inputs.gpu_id);
 
    VkResult result =
       panvk_per_arch(create_internal_shader)(dev, nir, &inputs, &shader);

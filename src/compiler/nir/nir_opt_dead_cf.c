@@ -132,9 +132,9 @@ def_only_used_in_cf_node(nir_def *def, void *_node)
       nir_block *block;
 
       if (nir_src_is_if(use))
-         block = nir_cf_node_as_block(nir_cf_node_prev(&nir_src_parent_if(use)->cf_node));
+         block = nir_cf_node_as_block(nir_cf_node_prev(&nir_src_use_if(use)->cf_node));
       else
-         block = nir_src_parent_instr(use)->block;
+         block = nir_src_use_instr(use)->block;
 
       /* Note: Normally, the uses of a phi instruction are considered to be
        * used in the block that is the predecessor of the phi corresponding to

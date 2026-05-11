@@ -234,6 +234,10 @@ class Format:
         self.block_depth = consume_int(self, source, 'block', 'depth')
         consumed(self, source, 'block')
         self.colorspace = consume_str(self, source, 'colorspace')
+        if 'subsampling' in source:
+            self.subsampling = consume_int(self, source, 'subsampling')
+        else:
+            self.subsampling = None
         self.srgb_equivalent = None
         self.linear_equivalent = None
 

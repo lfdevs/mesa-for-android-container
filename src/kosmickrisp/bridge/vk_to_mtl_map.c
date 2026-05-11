@@ -227,6 +227,7 @@ vk_front_face_to_mtl_cull_mode(enum VkCullModeFlagBits mode)
 {
    switch (mode) {
    case VK_CULL_MODE_NONE:
+   case VK_CULL_MODE_FRONT_AND_BACK: // Emulated with scissor
       return MTL_CULL_MODE_NONE;
    case VK_CULL_MODE_FRONT_BIT:
       return MTL_CULL_MODE_FRONT;

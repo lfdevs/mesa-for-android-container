@@ -1,3 +1,13 @@
 cl_khr_subgroup_rotate on radeonsi
 cl_khr_subgroup_rotate on iris
 VK_EXT_shader_uniform_buffer_unsized_array on panvk
+VK_KHR_shader_constant_data on RADV
+VK_EXT_dynamic_rendering_unused_attachments on panvk
+protectedMemory support on RADV/GFX10+ and VEGA10
+VK_KHR_performance_query on RADV/GFX11
+VK_EXT_conservative_rasterization on panvk
+shaderImageGatherExtended on pvr
+static C++ stdlib required on rusticl to workaround applications using their own C++ stdlib
+VK_EXT_pipeline_protected_access on RADV
+VK_EXT_extended_dynamic_state3 on panvk
+GL_ARB_texture_query_lod on panfrost/v9+

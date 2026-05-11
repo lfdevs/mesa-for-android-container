@@ -765,11 +765,6 @@ static void r300_simple_msaa_resolve(struct pipe_context *pipe,
     surf_tmpl.last_layer = dst_layer;
     dstsurf = r300_surface(r300_create_surface(pipe, dst, &surf_tmpl));
 
-    /* COLORPITCH should contain the tiling info of the resolve buffer.
-     * The tiling of the AA buffer isn't programmable anyway. */
-    srcsurf->pitch &= ~(R300_COLOR_TILE(1) | R300_COLOR_MICROTILE(3));
-    srcsurf->pitch |= dstsurf->pitch & (R300_COLOR_TILE(1) | R300_COLOR_MICROTILE(3));
-
     /* Enable AA resolve. */
     aa->dest = dstsurf;
     r300->aa_state.size = 8;

@@ -86,6 +86,7 @@ struct schedule_state {
         struct schedule_node *last_rtop;
         struct schedule_node *last_unifa;
         struct schedule_node *last_setmsf;
+        struct schedule_node *last_nn_mode;
         enum direction dir;
         /* Estimated cycle when the current instruction would start. */
         uint32_t time;
@@ -418,6 +419,16 @@ calculate_deps(struct schedule_state *state, struct schedule_node *n)
                 add_read_dep(state, state->last_setmsf, n);
                 break;
 
+        case V3D_QPU_A_SETNNMODE_UU:
+        case V3D_QPU_A_SETNNMODE_SU:
+        case V3D_QPU_A_SETNNMODE_US:
+        case V3D_QPU_A_SETNNMODE_SS:
+                /* SETNNMODE sets the sign nnmode register. It must be set
+                 * before any v8dot that depends on the mode setting. It
+                 * applies from the current instruction.
+                 */
+                add_write_dep(state, &state->last_nn_mode, n);
+                break;
         default:
                 break;
         }
@@ -435,6 +446,12 @@ calculate_deps(struct schedule_state *state, struct schedule_node *n)
                  * UMUL24_RTOP0 in the middle of a MULTOP+UMUL24 sequence.
                  */
                 add_read_dep(state, state->last_rtop, n);
+                break;
+        case V3D_QPU_M_V8DOT:
+                /* V8DOT reads the NN mode to determine sign interpretation
+                 * of the 8-bit dot product inputs.
+                 */
+                add_read_dep(state, state->last_nn_mode, n);
                 break;
         default:
                 break;

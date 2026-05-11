@@ -65,6 +65,10 @@ vir_has_side_effects(struct v3d_compile *c, struct qinst *inst)
                 case V3D_QPU_A_STVPMP:
                 case V3D_QPU_A_VPMWT:
                 case V3D_QPU_A_TMUWT:
+                case V3D_QPU_A_SETNNMODE_UU:
+                case V3D_QPU_A_SETNNMODE_SU:
+                case V3D_QPU_A_SETNNMODE_US:
+                case V3D_QPU_A_SETNNMODE_SS:
                         return true;
                 default:
                         break;
@@ -2535,6 +2539,7 @@ vir_optimize(struct v3d_compile *c)
                 OPTPASS(vir_opt_small_immediates);
                 OPTPASS(vir_opt_constant_alu);
                 OPTPASS(vir_opt_alu);
+                OPTPASS(vir_opt_redundant_setnnmode);
 
                 if (!progress)
                         break;

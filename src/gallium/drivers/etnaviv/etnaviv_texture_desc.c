@@ -64,9 +64,12 @@ struct etna_sampler_view_desc {
    uint32_t SAMP_CTRL0;
    uint32_t SAMP_CTRL0_MASK;
    uint32_t SAMP_CTRL1;
+   bool has_rb_swap;
 
    struct pipe_resource *res;
-   struct etna_reloc DESC_ADDR[2];  /* [0] = seamless disabled, [1] = seamless enabled */
+   /* [0]=non-seamless PE-internal, [1]=seamless PE-internal,
+    * [2]=non-seamless native, [3]=seamless native */
+   struct etna_reloc DESC_ADDR[4];
    struct etna_sampler_ts ts;
 };
 
@@ -137,7 +140,13 @@ etna_create_sampler_view_desc(struct pipe_context *pctx, struct pipe_resource *p
    const struct util_format_description *desc = util_format_description(so->format);
    struct etna_sampler_view_desc *sv = CALLOC_STRUCT(etna_sampler_view_desc);
    struct etna_context *ctx = etna_context(pctx);
-   const uint32_t format = translate_texture_format(so->format);
+   uint32_t format = translate_texture_format(so->format);
+
+   /* For RB_SWAP formats, pre-compute the alternative texture format for when
+    * shared resources hold data in native byte order (RGBA). */
+   bool rb_swap = translate_pe_format_rb_swap(so->format);
+   uint32_t native_format = rb_swap ? remap_texture_format_rb_swap(format) : 0;
+
    const bool ext = !!(format & EXT_FORMAT);
    const bool astc = !!(format & ASTC_FORMAT);
    const uint32_t swiz = get_texture_swiz(so->format, so->swizzle_r,
@@ -170,8 +179,10 @@ etna_create_sampler_view_desc(struct pipe_context *pctx, struct pipe_resource *p
    if (util_format_is_srgb(so->format))
       sv->SAMP_CTRL1 |= VIVS_NTE_DESCRIPTOR_SAMP_CTRL1_SRGB;
 
-   /* Create two texture descriptors: one with seamless cube map disabled, one enabled */
-   u_suballocator_alloc(&ctx->tex_desc_allocator, TEXTURE_DESC_SIZE * 2, 64,
+   /* Create texture descriptors: 2 normally (non-seamless + seamless),
+    * or 4 for RB_SWAP formats (2 PE-internal + 2 native byte order). */
+   unsigned num_descs = rb_swap ? 4 : 2;
+   u_suballocator_alloc(&ctx->tex_desc_allocator, TEXTURE_DESC_SIZE * num_descs, 64,
                         &suballoc_offset, &sv->res);
    if (!sv->res)
       goto error;
@@ -243,7 +254,7 @@ etna_create_sampler_view_desc(struct pipe_context *pctx, struct pipe_resource *p
    memcpy(seamless, buf, TEXTURE_DESC_SIZE);
    seamless[(TEXDESC_CONFIG1) >> 2] |= VIVS_TE_SAMPLER_CONFIG1_SEAMLESS_CUBE_MAP;
 
-   /* Setup relocations for both descriptors. */
+   /* Setup relocations for PE-internal format descriptors. */
    sv->DESC_ADDR[0].bo = etna_buffer_resource(sv->res)->bo;
    sv->DESC_ADDR[0].offset = suballoc_offset;
    sv->DESC_ADDR[0].flags = ETNA_RELOC_READ;
@@ -251,6 +262,30 @@ etna_create_sampler_view_desc(struct pipe_context *pctx, struct pipe_resource *p
    sv->DESC_ADDR[1].bo = etna_buffer_resource(sv->res)->bo;
    sv->DESC_ADDR[1].offset = suballoc_offset + TEXTURE_DESC_SIZE;
    sv->DESC_ADDR[1].flags = ETNA_RELOC_READ;
+
+   if (rb_swap) {
+      /* Build descriptors 2,3 with native byte order format.
+       * Copy from descriptors 0,1 and patch the CONFIG0 format field. */
+      uint32_t *native = buf + 2 * (TEXTURE_DESC_SIZE / sizeof(uint32_t));
+      memcpy(native, buf, TEXTURE_DESC_SIZE);
+      native[(TEXDESC_CONFIG0) >> 2] = (native[(TEXDESC_CONFIG0) >> 2] &
+                                         ~VIVS_TE_SAMPLER_CONFIG0_FORMAT__MASK) |
+                                        VIVS_TE_SAMPLER_CONFIG0_FORMAT(native_format);
+
+      uint32_t *native_seamless = native + (TEXTURE_DESC_SIZE / sizeof(uint32_t));
+      memcpy(native_seamless, native, TEXTURE_DESC_SIZE);
+      native_seamless[(TEXDESC_CONFIG1) >> 2] |= VIVS_TE_SAMPLER_CONFIG1_SEAMLESS_CUBE_MAP;
+
+      sv->DESC_ADDR[2].bo = etna_buffer_resource(sv->res)->bo;
+      sv->DESC_ADDR[2].offset = suballoc_offset + 2 * TEXTURE_DESC_SIZE;
+      sv->DESC_ADDR[2].flags = ETNA_RELOC_READ;
+
+      sv->DESC_ADDR[3].bo = etna_buffer_resource(sv->res)->bo;
+      sv->DESC_ADDR[3].offset = suballoc_offset + 3 * TEXTURE_DESC_SIZE;
+      sv->DESC_ADDR[3].flags = ETNA_RELOC_READ;
+
+      sv->has_rb_swap = true;
+   }
 
    return &sv->base;
 
@@ -354,8 +389,17 @@ etna_emit_texture_desc(struct etna_context *ctx)
             if ((1 << x) & active_samplers) {
                struct etna_sampler_state_desc *ss = etna_sampler_state_desc(ctx->sampler[x]);
                struct etna_sampler_view_desc *sv = etna_sampler_view_desc(ctx->sampler_view[x]);
+               int desc_base = 0;
+
+               if (sv->has_rb_swap) {
+                  struct etna_resource *rsc = etna_resource(sv->base.texture);
+
+                  if (rsc->shared && rsc->shared_native_order)
+                     desc_base = 2;
+               }
+
                struct etna_reloc *desc_addr = ss->base.seamless_cube_map ?
-                                              &sv->DESC_ADDR[1] : &sv->DESC_ADDR[0];
+                                              &sv->DESC_ADDR[desc_base + 1] : &sv->DESC_ADDR[desc_base];
                etna_sampler_view_update_descriptor(ctx, stream, sv);
                etna_set_state_reloc(stream, VIVS_NTE_DESCRIPTOR_ADDR(x), desc_addr);
             } else if ((1 << x) & ctx->prev_active_samplers){

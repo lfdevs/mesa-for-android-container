@@ -129,7 +129,7 @@ lower_64b_reg(nir_builder *b, nir_intrinsic_instr *reg)
 
    nir_foreach_reg_store_safe (store_reg_src, reg) {
       nir_intrinsic_instr *store =
-         nir_instr_as_intrinsic(nir_src_parent_instr(store_reg_src));
+         nir_instr_as_intrinsic(nir_src_use_instr(store_reg_src));
       b->cursor = nir_before_instr(&store->instr);
 
       nir_def *packed = store->src[0].ssa;
@@ -153,7 +153,7 @@ lower_64b_reg(nir_builder *b, nir_intrinsic_instr *reg)
 
    nir_foreach_reg_load_safe (load_reg_src, reg) {
       nir_intrinsic_instr *load =
-         nir_instr_as_intrinsic(nir_src_parent_instr(load_reg_src));
+         nir_instr_as_intrinsic(nir_src_use_instr(load_reg_src));
       b->cursor = nir_before_instr(&load->instr);
 
       int base = nir_intrinsic_base(load);

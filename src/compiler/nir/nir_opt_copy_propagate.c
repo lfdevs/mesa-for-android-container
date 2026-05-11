@@ -77,7 +77,7 @@ static bool
 copy_propagate_alu(nir_alu_src *use_of_copy, nir_alu_instr *copy)
 {
    nir_def *new_use_src = NULL;
-   nir_alu_instr *user = nir_instr_as_alu(nir_src_parent_instr(&use_of_copy->src));
+   nir_alu_instr *user = nir_instr_as_alu(nir_src_use_instr(&use_of_copy->src));
    unsigned src_idx = use_of_copy - user->src;
    assert(src_idx < nir_op_infos[user->op].num_inputs);
    unsigned num_use_components = nir_ssa_alu_instr_src_components(user, src_idx);
@@ -154,7 +154,7 @@ copy_prop_instr(nir_instr *instr)
    bool progress = false;
 
    nir_foreach_use_including_if_safe(src, &copy->def) {
-      if (!nir_src_is_if(src) && nir_src_parent_instr(src)->type == nir_instr_type_alu)
+      if (!nir_src_is_if(src) && nir_src_use_instr(src)->type == nir_instr_type_alu)
          progress |= copy_propagate_alu(container_of(src, nir_alu_src, src), copy);
       else
          progress |= copy_propagate(src, copy);

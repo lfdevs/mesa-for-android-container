@@ -1697,15 +1697,20 @@ static pco_instr *lower_smp(trans_ctx *tctx,
    enum pco_sb_mode sb_mode = PCO_SB_MODE_NONE;
    switch (intr->intrinsic) {
    case nir_intrinsic_smp_coeffs_pco:
-      /* Shrink the destination to its actual size. */
-      *dest = pco_ref_chans(*dest, ROGUE_SMP_COEFF_COUNT);
+      /* Shrink the destination to its actual size.
+       * Trilinear filtering will produce two sets of coeffs;
+       * reserve both just in case so that we don't clobber output regs.
+       */
+      *dest = pco_ref_chans(*dest, ROGUE_SMP_COEFF_COUNT * 2u);
       chans = 1; /* Chans must be 1 for coeff mode. */
 
       sb_mode = PCO_SB_MODE_COEFFS;
       break;
 
    case nir_intrinsic_smp_raw_pco:
-      chans = 4;
+      chans = nir_intrinsic_enabled_channels(intr);
+      /* Shrink the destination to its actual size. */
+      *dest = pco_ref_chans(*dest, chans * 4);
       sb_mode = PCO_SB_MODE_RAWDATA;
       break;
 

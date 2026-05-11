@@ -10,7 +10,6 @@
 #include "ac_surface.h"
 #include "amd_family.h"
 #include "nir_defines.h"
-#include "util/format/u_format.h"
 
 #ifdef __cplusplus
 extern "C" {

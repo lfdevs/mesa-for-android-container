@@ -66,6 +66,9 @@ uint16_t vpe10_get_bg_stream_idx(struct vpe_priv *vpe_priv);
 enum vpe_status vpe10_calculate_segments(
     struct vpe_priv *vpe_priv, const struct vpe_build_param *params);
 
+uint32_t vpe10_get_max_seg_width(struct output_ctx *output_ctx,
+    enum vpe_surface_pixel_format format, enum vpe_scan_direction scan);
+
 int32_t vpe10_program_frontend(struct vpe_priv *vpe_priv, uint32_t pipe_idx, uint32_t cmd_idx,
     uint32_t cmd_input_idx, bool seg_only);
 
@@ -102,6 +105,9 @@ struct cdc_fe *vpe10_cdc_fe_create(struct vpe_priv *vpe_priv, int inst);
 struct cdc_be *vpe10_cdc_be_create(struct vpe_priv *vpe_priv, int inst);
 
 bool vpe10_validate_cached_param(struct vpe_priv *vpe_priv, const struct vpe_build_param *param);
+
+enum vpe_status vpe10_check_alpha_fill_support(
+    struct vpe *vpe, const struct vpe_build_param *param);
 
 void vpe10_setup_check_funcs(struct vpe_check_support_funcs *funcs);
 

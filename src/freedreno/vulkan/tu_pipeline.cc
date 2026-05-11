@@ -2451,17 +2451,18 @@ static const enum mesa_vk_dynamic_graphics_state tu_vertex_input_state[] = {
 template <chip CHIP>
 static unsigned
 tu6_vertex_input_size(struct tu_device *dev,
-                      const struct vk_vertex_input_state *vi)
+                      const struct vk_vertex_input_state *vi,
+                      unsigned attr_count)
 {
-   return 1 + 2 * util_last_bit(vi->attributes_valid);
+   return 1 + 2 * attr_count;
 }
 
 template <chip CHIP>
 static void
 tu6_emit_vertex_input(struct tu_cs *cs,
-                      const struct vk_vertex_input_state *vi)
+                      const struct vk_vertex_input_state *vi,
+                      unsigned attr_count)
 {
-   unsigned attr_count = util_last_bit(vi->attributes_valid);
    if (attr_count != 0)
       tu_cs_emit_pkt4(cs, REG_A6XX_VFD_FETCH_INSTR_INSTR(0), attr_count * 2);
 
@@ -3924,8 +3925,10 @@ tu_pipeline_builder_emit_state(struct tu_pipeline_builder *builder,
    }
 #define DRAW_STATE(name, id, ...) DRAW_STATE_COND(name, id, true, __VA_ARGS__)
 
-   DRAW_STATE(vertex_input, TU_DYNAMIC_STATE_VERTEX_INPUT,
-              builder->graphics_state.vi);
+   DRAW_STATE_COND(vertex_input, TU_DYNAMIC_STATE_VERTEX_INPUT,
+                   pipeline->shaders[MESA_SHADER_VERTEX],
+                   builder->graphics_state.vi,
+                   pipeline->shaders[MESA_SHADER_VERTEX]->variant->attr_in);
    DRAW_STATE(vertex_stride, TU_DYNAMIC_STATE_VB_STRIDE,
               builder->graphics_state.vi);
    /* If (a) per-view viewport is used or (b) we don't know yet, then we need
@@ -4188,8 +4191,10 @@ tu_emit_draw_state(struct tu_cmd_buffer *cmd)
    }
 #define DRAW_STATE(name, id, ...) DRAW_STATE_COND(name, id, false, __VA_ARGS__)
 
-   DRAW_STATE(vertex_input, TU_DYNAMIC_STATE_VERTEX_INPUT,
-              cmd->vk.dynamic_graphics_state.vi);
+   DRAW_STATE_COND(vertex_input, TU_DYNAMIC_STATE_VERTEX_INPUT,
+                   cmd->state.dirty & TU_CMD_DIRTY_VS,
+                   cmd->vk.dynamic_graphics_state.vi,
+                   cmd->state.shaders[MESA_SHADER_VERTEX]->variant->attr_in);
 
    /* Vertex input stride is special because it's part of the vertex input in
     * the pipeline but a separate array when it's dynamic state so we have to

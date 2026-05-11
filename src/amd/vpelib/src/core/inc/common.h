@@ -67,10 +67,13 @@ bool vpe_is_dual_plane_format(enum vpe_surface_pixel_format format);
 bool vpe_is_32bit_packed_rgb(enum vpe_surface_pixel_format format);
 bool vpe_is_rgb8(enum vpe_surface_pixel_format format);
 bool vpe_is_rgb10(enum vpe_surface_pixel_format format);
+bool vpe_is_rgb16(enum vpe_surface_pixel_format format);
+bool vpe_is_planar_format(enum vpe_surface_pixel_format format);
 bool vpe_is_fp16(enum vpe_surface_pixel_format format);
 
 bool vpe_is_yuv8(enum vpe_surface_pixel_format format);
 bool vpe_is_yuv10(enum vpe_surface_pixel_format format);
+bool vpe_is_yuv12(enum vpe_surface_pixel_format format);
 
 // yuv 4:2:0 check
 bool vpe_is_yuv420_8(enum vpe_surface_pixel_format format);
@@ -81,14 +84,23 @@ bool vpe_is_yuv420(enum vpe_surface_pixel_format format);
 // yuv 4:4:4 check
 bool vpe_is_yuv444_8(enum vpe_surface_pixel_format format);
 bool vpe_is_yuv444_10(enum vpe_surface_pixel_format format);
+bool vpe_is_yuv444_12(enum vpe_surface_pixel_format format);
 bool vpe_is_yuv444(enum vpe_surface_pixel_format format);
 
+// yuv 4:2:2 check
+bool vpe_is_yuv422_8(enum vpe_surface_pixel_format format);
+bool vpe_is_yuv422_10(enum vpe_surface_pixel_format format);
+bool vpe_is_yuv422_12(enum vpe_surface_pixel_format format);
+bool vpe_is_yuv422(enum vpe_surface_pixel_format format);
+bool vpe_is_yuv_packed(enum vpe_surface_pixel_format format);
+bool vpe_is_mono(enum vpe_surface_pixel_format format);
 bool vpe_is_yuv(enum vpe_surface_pixel_format format);
 
 bool vpe_is_8bit(enum vpe_surface_pixel_format format);
 
 bool vpe_is_10bit(enum vpe_surface_pixel_format format);
 
+bool vpe_is_16bit(enum vpe_surface_pixel_format format);
 enum color_depth vpe_get_color_depth(enum vpe_surface_pixel_format format);
 
 bool vpe_has_per_pixel_alpha(enum vpe_surface_pixel_format format);
@@ -106,6 +118,17 @@ enum vpe_status vpe_check_blending_support(
 uint8_t vpe_get_element_size_in_bytes(enum vpe_surface_pixel_format format, int plane_idx);
 
 uint32_t vpe_align_seg(uint32_t seg_size, uint32_t alignment);
+
+enum vpe_status vpe_check_3dlut_compound(
+    struct vpe *vpe, const struct vpe_stream *stream, const struct vpe_build_param *param);
+
+enum vpe_status vpe_check_histogram_support(struct vpe *vpe, const struct vpe_stream *stream);
+
+enum vpe_scan_direction vpe_get_scan_direction(
+    enum vpe_rotation_angle rotation, bool horizontal_mirror, bool vertical_mirror);
+bool vpe_supported_linear_scan_pattern(enum vpe_scan_direction scan_dir);
+
+bool vpe_validate_hist_collection(struct vpe_stream* stream);
 
 #ifdef __cplusplus
 }

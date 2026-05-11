@@ -1837,6 +1837,12 @@ ir3_valid_flags(struct ir3_instruction *instr, unsigned n, unsigned flags)
          else if (n == 1)
             valid_flags |= IR3_REG_SHARED;
       }
+      if (compiler->gen >= 7 &&
+          (instr->opc == OPC_LDG_A || instr->opc == OPC_STG_A ||
+           instr->opc == OPC_RAY_INTERSECTION) &&
+          n == 0) {
+         valid_flags |= IR3_REG_CONST;
+      }
 
       if (flags & ~valid_flags)
          return false;
@@ -1962,6 +1968,25 @@ ir3_valid_immediate(struct ir3_instruction *instr, int32_t immed)
 
    /* Other than cat1 (mov) we can only encode up to 10 bits, sign-extended: */
    return !(immed & ~0x1ff) || !(-(uint32_t)immed & ~0x1ff);
+}
+
+/* Some instructions (e.g., cat6) don't support the full range of const
+ * registers as src.
+ */
+bool
+ir3_valid_const(struct ir3_instruction *instr, unsigned src_n, unsigned num)
+{
+   assert(ir3_valid_flags(instr, src_n, IR3_REG_CONST));
+
+   switch (instr->opc) {
+   case OPC_LDG_A:
+   case OPC_STG_A:
+   case OPC_RAY_INTERSECTION:
+      assert(src_n == 0);
+      return num < (1 << 8);
+   default:
+      return true;
+   }
 }
 
 struct ir3_instruction *

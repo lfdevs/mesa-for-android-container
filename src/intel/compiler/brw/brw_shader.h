@@ -86,7 +86,6 @@ public:
 
    void vfail(const char *msg, va_list args);
    void fail(const char *msg, ...);
-   void limit_dispatch_width(unsigned n, const char *msg);
 
    void emit_gs_control_data_bits(const brw_reg &vertex_count);
    brw_reg gs_urb_channel_mask(const brw_reg &dword_index);
@@ -213,7 +212,6 @@ public:
 
    const unsigned dispatch_width; /**< 8, 16 or 32 */
    const unsigned max_polygons;
-   unsigned max_dispatch_width;
 
    /* The API selected subgroup size */
    unsigned api_subgroup_size; /**< 0, 8, 16, 32 */

@@ -75,3 +75,7 @@ dEQP-VK.wsi.direct_drm.*
 # New timeouts since https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/40211
 dEQP-VK.api.external.fence.sync_fd.export_multiple_times_temporary
 dEQP-VK.api.external.semaphore.sync_fd.export_multiple_times_temporary
+
+# Skip flaky memory pressure related tests
+dEQP-VK.memory.allocation.basic.percent_1.*
+dEQP-VK.memory.allocation.random.*

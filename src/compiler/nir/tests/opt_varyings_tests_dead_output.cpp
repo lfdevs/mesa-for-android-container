@@ -34,7 +34,7 @@ TEST_F(nir_opt_varyings_test_dead_output, \
       store_output(b1, VARYING_SLOT_##slot, 0, nir_type_float##bitsize, \
                    nir_imm_floatN_t(b1, 0, bitsize), 0); \
    \
-   ASSERT_TRUE(opt_varyings() == 0); \
+   opt_varyings(); \
    ASSERT_TRUE(b1->shader->info.outputs_written == VARYING_BIT_##slot); \
    ASSERT_TRUE(shader_contains_instr(b1, &intr->instr)); \
    ASSERT_TRUE(nir_intrinsic_io_semantics(intr).no_varying == \

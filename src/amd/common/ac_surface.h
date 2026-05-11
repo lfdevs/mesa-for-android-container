@@ -8,7 +8,7 @@
 #define AC_SURFACE_H
 
 #include "amd_family.h"
-#include "util/format/u_format.h"
+#include "util/format/u_formats.h"
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -560,6 +560,7 @@ struct ac_surface_copy_region {
    uint64_t mem_slice_pitch;
 
    bool is_stencil_only;
+   bool memcpy;
 };
 
 bool ac_surface_copy_mem_to_surface(struct ac_addrlib *addrlib, const struct radeon_info *info,

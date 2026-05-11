@@ -19,15 +19,12 @@ insert_spill_fill(jay_builder *b,
                   jay_def gpr,
                   jay_def sp,
                   bool load,
-                  unsigned *sp_delta_B,
-                  unsigned umem_base)
+                  unsigned *sp_delta_B)
 {
-   assert(jay_is_mem(mem) && !jay_is_mem(gpr));
+   assert(mem.file == MEM && gpr.file != MEM);
 
-   bool uniform = mem.file == UMEM;
    unsigned offs_B = mem.reg * 4;
-   unsigned mem_reg_B =
-      uniform ? (umem_base + offs_B) : (offs_B * b->shader->dispatch_width);
+   unsigned mem_reg_B = offs_B * b->shader->dispatch_width;
 
    /* The stack pointer needs to be offset to the desired offset */
    signed sp_adjust_B = mem_reg_B - (*sp_delta_B);
@@ -41,16 +38,12 @@ insert_spill_fill(jay_builder *b,
                            LSC_CACHE(devinfo, STORE, L1STATE_L3MOCS);
    uint32_t desc = lsc_msg_desc(devinfo, load ? LSC_OP_LOAD : LSC_OP_STORE,
                                 LSC_ADDR_SURFTYPE_SS, LSC_ADDR_SIZE_A32,
-                                LSC_DATA_SIZE_D32, 1, uniform, cache);
-   if (uniform) {
-      sp.num_values_m1 = 0;
-   }
-
+                                LSC_DATA_SIZE_D32, 1, false, cache);
    jay_def srcs[] = { sp, gpr };
 
    jay_SEND(b, .sfid = BRW_SFID_UGM, .msg_desc = desc, .srcs = srcs,
             .nr_srcs = load ? 1 : 2, .dst = load ? gpr : jay_null(),
-            .type = JAY_TYPE_U32, .uniform = uniform, .ex_desc = ADDRESS_REG);
+            .type = JAY_TYPE_U32, .ex_desc = ADDRESS_REG);
 }
 
 void
@@ -67,18 +60,15 @@ jay_lower_spill(jay_function *func)
    sp.num_values_m1 = func->shader->dispatch_width - 1;
 
    /* Calculate how much stack space we need */
-   unsigned nr_mem = 0, nr_umem = 0;
+   unsigned nr_mem = 0;
    jay_foreach_inst_in_func(func, block, I) {
       if (I->op == JAY_OPCODE_MOV && jay_is_send_like(I)) {
-         jay_def mem = jay_is_mem(I->dst) ? I->dst : I->src[0];
-         unsigned *nr = mem.file == UMEM ? &nr_umem : &nr_mem;
-
-         *nr = MAX2(*nr, mem.reg + 1);
+         jay_def mem = I->dst.file == MEM ? I->dst : I->src[0];
+         nr_mem = MAX2(nr_mem, mem.reg + 1);
       }
    }
 
-   assert((nr_umem > 0) || (nr_mem > 0));
-   unsigned umem_base = (func->shader->dispatch_width * nr_mem * 4);
+   assert(nr_mem > 0);
 
    /* We burn the address & stack pointer registers for all spills/fills in a
     * shader. Preinitialize at the top using a scratch register.
@@ -118,13 +108,11 @@ jay_lower_spill(jay_function *func)
                address_valid = true;
             }
 
-            if (jay_is_mem(I->dst)) {
-               insert_spill_fill(&b, I->dst, I->src[0], sp, false, &sp_delta_B,
-                                 umem_base);
+            if (I->dst.file == MEM) {
+               insert_spill_fill(&b, I->dst, I->src[0], sp, false, &sp_delta_B);
                func->shader->spills++;
             } else {
-               insert_spill_fill(&b, I->src[0], I->dst, sp, true, &sp_delta_B,
-                                 umem_base);
+               insert_spill_fill(&b, I->src[0], I->dst, sp, true, &sp_delta_B);
                func->shader->fills++;
             }
 
@@ -138,7 +126,7 @@ jay_lower_spill(jay_function *func)
       }
 
       /* Canonicalize our internal registers at block boundaries */
-      if (jay_num_successors(block) > 0) {
+      if (jay_num_successors(block, GPR) > 0) {
          if (!address_valid) {
             jay_SHR(&b, JAY_TYPE_U32, ADDRESS_REG, surf, 4);
          }
@@ -152,5 +140,5 @@ jay_lower_spill(jay_function *func)
    /* Note this is bogus with recursion, but recursion is not supported on any
     * current graphics/compute API.
     */
-   func->shader->scratch_size += umem_base + (nr_umem * 4);
+   func->shader->scratch_size += func->shader->dispatch_width * nr_mem * 4;
 }

@@ -29,7 +29,3 @@ wayland-dEQP-EGL.functional.resize.surface_size.grow,Fail
 wayland-dEQP-EGL.functional.resize.surface_size.shrink,Fail
 wayland-dEQP-EGL.functional.resize.surface_size.stretch_height,Fail
 wayland-dEQP-EGL.functional.resize.surface_size.stretch_width,Fail
-
-# Turnip-specific failures
-x11-dEQP-EGL.functional.image.modify.renderbuffer_depth16_renderbuffer_clear_depth,Fail
-wayland-dEQP-EGL.functional.image.modify.renderbuffer_depth16_renderbuffer_clear_depth,Fail

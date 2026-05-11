@@ -403,9 +403,13 @@ iris_ensure_indirect_generation_shader(struct iris_batch *batch)
    /* Do vectorizing here. For some reason when trying to do it in the back
     * this just isn't working.
     */
+   struct brw_nir_vectorize_mem_cb_data cb_data = {
+      .devinfo = screen->devinfo,
+   };
    nir_load_store_vectorize_options options = {
       .modes = nir_var_mem_ubo | nir_var_mem_ssbo | nir_var_mem_global,
       .callback = brw_nir_should_vectorize_mem,
+      .cb_data = &cb_data,
       .robust_modes = (nir_variable_mode)0,
    };
    NIR_PASS(_, nir, nir_opt_load_store_vectorize, &options);

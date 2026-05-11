@@ -60,7 +60,9 @@ static void
 emit_base_vertex_instance_bo(struct anv_cmd_buffer *cmd_buffer,
                              struct anv_address addr)
 {
-   emit_vertex_bo(cmd_buffer, addr, addr.bo ? 8 : 0, ANV_SVGS_VB_INDEX);
+   emit_vertex_bo(cmd_buffer, addr,
+                  anv_address_is_null(addr) ? 0 : 8,
+                  ANV_SVGS_VB_INDEX);
 }
 
 static void

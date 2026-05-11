@@ -88,10 +88,8 @@ static void
 si_vpe_free(void* mem_ctx, void *ptr)
 {
    /* mem_ctx is optional for now */
-   if (ptr != NULL) {
+   if (ptr != NULL)
       FREE(ptr);
-      ptr = NULL;
-   }
 }
 
 static void
@@ -184,6 +182,143 @@ si_vpe_get_tf_str(enum vpe_transfer_function tf)
    }
 }
 
+static char*
+si_vpe_get_swizzle_str(enum vpe_swizzle_mode_values swizzle)
+{
+   switch (swizzle) {
+   case VPE_SW_LINEAR:
+      return "LINEAR";
+   case VPE_SW_256B_S:
+      return "256B_S";
+   case VPE_SW_256B_D:
+      return "256B_D";
+   case VPE_SW_256B_R:
+      return "256B_R";
+   case VPE_SW_4KB_Z:
+      return "4KB_Z";
+   case VPE_SW_4KB_S:
+      return "4KB_S";
+   case VPE_SW_4KB_D:
+      return "4KB_D";
+   case VPE_SW_4KB_R:
+      return "4KB_R";
+   case VPE_SW_64KB_Z:
+      return "64KB_Z";
+   case VPE_SW_64KB_S:
+      return "64KB_S";
+   case VPE_SW_64KB_D:
+      return "64KB_D";
+   case VPE_SW_64KB_R:
+      return "64KB_R";
+   case VPE_SW_VAR_Z:
+      return "VAR_Z";
+   case VPE_SW_VAR_S:
+      return "VAR_S";
+   case VPE_SW_VAR_D:
+      return "VAR_D";
+   case VPE_SW_VAR_R:
+      return "VAR_R";
+   case VPE_SW_64KB_Z_T:
+      return "64KB_Z_T";
+   case VPE_SW_64KB_S_T:
+      return "64KB_S_T";
+   case VPE_SW_64KB_D_T:
+      return "64KB_D_T";
+   case VPE_SW_64KB_R_T:
+      return "64KB_R_T";
+   case VPE_SW_4KB_Z_X:
+      return "4KB_Z_X";
+   case VPE_SW_4KB_S_X:
+      return "4KB_S_X";
+   case VPE_SW_4KB_D_X:
+      return "4KB_D_X";
+   case VPE_SW_4KB_R_X:
+      return "4KB_R_X";
+   case VPE_SW_64KB_Z_X:
+      return "64KB_Z_X";
+   case VPE_SW_64KB_S_X:
+      return "64KB_S_X";
+   case VPE_SW_64KB_D_X:
+      return "64KB_D_X";
+   case VPE_SW_64KB_R_X:
+      return "64KB_R_X";
+   case VPE_SW_VAR_Z_X:
+      return "VAR_Z_X";
+   case VPE_SW_VAR_S_X:
+      return "VAR_S_X";
+   case VPE_SW_VAR_D_X:
+      return "VAR_D_X";
+   case VPE_SW_VAR_R_X:
+      return "VAR_R_X";
+   default:
+      return "ERROR";
+   }
+}
+
+static char*
+si_vpe_get_format_str(enum vpe_surface_pixel_format format)
+{
+   switch (format) {
+   /* YU(cr)V(cb) format: */
+   case VPE_SURFACE_PIXEL_FORMAT_VIDEO_420_YCrCb:
+      return "NV12(420 YCrCb)";
+   case VPE_SURFACE_PIXEL_FORMAT_VIDEO_420_YCbCr:
+      return "NV21(420 YCrCb)";
+   case VPE_SURFACE_PIXEL_FORMAT_VIDEO_420_10bpc_YCrCb:
+      return "P010(420 10bpc YCrCb)";
+   case VPE_SURFACE_PIXEL_FORMAT_VIDEO_420_12bpc_YCrCb:
+      return "P012(420 12bpc YCrCb)";
+   case VPE_SURFACE_PIXEL_FORMAT_VIDEO_422_CrYCbY:
+      return "YUYV(422 CrYCbY)";
+   case VPE_SURFACE_PIXEL_FORMAT_VIDEO_422_CbYCrY:
+      return "YVYU(422 CbYCrY)";
+   case VPE_SURFACE_PIXEL_FORMAT_VIDEO_422_YCrYCb:
+      return "UYVY(422 YCrYCb)";
+   case VPE_SURFACE_PIXEL_FORMAT_VIDEO_422_YCbYCr:
+      return "VYUY(422 YCrYCb)";
+   case VPE_SURFACE_PIXEL_FORMAT_VIDEO_422_10bpc_CrYCbY:
+      return "Y210(422 10bpc YCrYCb)";
+   case VPE_SURFACE_PIXEL_FORMAT_VIDEO_422_12bpc_YCrYCb:
+      return "Y212(422 12bpc YCrYCb)";
+   case VPE_SURFACE_PIXEL_FORMAT_VIDEO_ALPHA_THRU_LUMA:
+      return "A8_UNORM";
+   case VPE_SURFACE_PIXEL_FORMAT_GRPH_ABGR16161616_UNORM:
+      return "R16G16B16A16";
+   /* RGB format: */
+   case VPE_SURFACE_PIXEL_FORMAT_GRPH_BGRA8888:
+      return "ARGB";
+   case VPE_SURFACE_PIXEL_FORMAT_GRPH_RGBA8888:
+      return "ABGR";
+   case VPE_SURFACE_PIXEL_FORMAT_GRPH_ABGR8888:
+      return "RGBA";
+   case VPE_SURFACE_PIXEL_FORMAT_GRPH_ARGB8888:
+      return "BGRA";
+   case VPE_SURFACE_PIXEL_FORMAT_GRPH_BGRX8888:
+      return "XRGB";
+   case VPE_SURFACE_PIXEL_FORMAT_GRPH_RGBX8888:
+      return "XBGR";
+   case VPE_SURFACE_PIXEL_FORMAT_GRPH_XBGR8888:
+      return "RGBX";
+   case VPE_SURFACE_PIXEL_FORMAT_GRPH_XRGB8888:
+      return "BGRX";
+   /* ARGB 2-10-10-10 formats are not supported in Mesa VA-frontend
+    * but they are defined in Mesa already.
+    */
+   case VPE_SURFACE_PIXEL_FORMAT_GRPH_BGRA1010102:
+      return "ARGB 2101010";
+   case VPE_SURFACE_PIXEL_FORMAT_GRPH_RGBA1010102:
+      return "ABGR 2101010";
+   case VPE_SURFACE_PIXEL_FORMAT_GRPH_ARGB2101010:
+      return "BGRA 1010102";
+   case VPE_SURFACE_PIXEL_FORMAT_GRPH_ABGR2101010:
+      return "RGBA 1010102";
+   case VPE_SURFACE_PIXEL_FORMAT_GRPH_ABGR16161616F:
+      return "RGBA float 16";
+   default:
+      return "Unknow format";
+   }
+}
+
 /* cycle to the next set of buffers */
 static void
 next_buffer(struct vpe_video_processor *vpeproc)
@@ -249,7 +384,7 @@ si_vpe_pipe_map_to_vpe_format(enum pipe_format format)
    enum vpe_surface_pixel_format ret;
 
    switch (format) {
-   /* YUV format: */
+   /* YU(cr)V(cb) format: */
    case PIPE_FORMAT_NV12:
       ret = VPE_SURFACE_PIXEL_FORMAT_VIDEO_420_YCrCb;
       break;
@@ -258,6 +393,33 @@ si_vpe_pipe_map_to_vpe_format(enum pipe_format format)
       break;
    case PIPE_FORMAT_P010:
       ret = VPE_SURFACE_PIXEL_FORMAT_VIDEO_420_10bpc_YCrCb;
+      break;
+   case PIPE_FORMAT_P012:
+      ret = VPE_SURFACE_PIXEL_FORMAT_VIDEO_420_12bpc_YCrCb;
+      break;
+   case PIPE_FORMAT_YUYV:
+      ret = VPE_SURFACE_PIXEL_FORMAT_VIDEO_422_CrYCbY;
+      break;
+   case PIPE_FORMAT_YVYU:
+      ret = VPE_SURFACE_PIXEL_FORMAT_VIDEO_422_CbYCrY;
+      break;
+   case PIPE_FORMAT_UYVY:
+      ret = VPE_SURFACE_PIXEL_FORMAT_VIDEO_422_YCrYCb;
+      break;
+   case PIPE_FORMAT_VYUY:
+      ret = VPE_SURFACE_PIXEL_FORMAT_VIDEO_422_YCbYCr;
+      break;
+   case PIPE_FORMAT_Y210:
+      ret = VPE_SURFACE_PIXEL_FORMAT_VIDEO_422_10bpc_CrYCbY;
+      break;
+   case PIPE_FORMAT_Y212:
+      ret = VPE_SURFACE_PIXEL_FORMAT_VIDEO_422_12bpc_YCrYCb;
+      break;
+   case PIPE_FORMAT_A8_UNORM:
+      ret = VPE_SURFACE_PIXEL_FORMAT_VIDEO_ALPHA_THRU_LUMA;
+      break;
+   case PIPE_FORMAT_R16G16B16A16_UNORM:
+      ret = VPE_SURFACE_PIXEL_FORMAT_GRPH_ABGR16161616_UNORM;
       break;
    /* RGB format: */
    case PIPE_FORMAT_A8R8G8B8_UNORM:
@@ -298,6 +460,9 @@ si_vpe_pipe_map_to_vpe_format(enum pipe_format format)
       break;
    case PIPE_FORMAT_R10G10B10A2_UNORM:
       ret = VPE_SURFACE_PIXEL_FORMAT_GRPH_ABGR2101010;
+      break;
+   case PIPE_FORMAT_R16G16B16A16_FLOAT:
+      ret = VPE_SURFACE_PIXEL_FORMAT_GRPH_ABGR16161616F;
       break;
    default:
       ret = VPE_SURFACE_PIXEL_FORMAT_INVALID;
@@ -436,6 +601,14 @@ si_vpe_set_color_space(const struct pipe_vpp_desc *process_properties,
    case PIPE_FORMAT_NV12:
    case PIPE_FORMAT_NV21:
    case PIPE_FORMAT_P010:
+   case PIPE_FORMAT_P012:
+   case PIPE_FORMAT_YUYV:
+   case PIPE_FORMAT_YVYU:
+   case PIPE_FORMAT_UYVY:
+   case PIPE_FORMAT_VYUY:
+   case PIPE_FORMAT_Y210:
+   case PIPE_FORMAT_Y212:
+   case PIPE_FORMAT_A8_UNORM:
       color_space->encoding = VPE_PIXEL_ENCODING_YCbCr;
       break;
    case PIPE_FORMAT_A8R8G8B8_UNORM:
@@ -450,6 +623,8 @@ si_vpe_set_color_space(const struct pipe_vpp_desc *process_properties,
    case PIPE_FORMAT_R10G10B10A2_UNORM:
    case PIPE_FORMAT_A2B10G10R10_UNORM:
    case PIPE_FORMAT_B10G10R10A2_UNORM:
+   case PIPE_FORMAT_R16G16B16A16_FLOAT:
+   case PIPE_FORMAT_R16G16B16A16_UNORM:
    default:
       color_space->encoding = VPE_PIXEL_ENCODING_RGB;
       break;
@@ -517,14 +692,20 @@ si_vpe_set_plane_info(struct vpe_video_processor *vpeproc,
    /* Trusted memory not supported now */
    plane_address->tmz_surface = false;
 
-   /* Only support 1 plane for RGB formats, and 2 plane format for YUV formats */
-   if (util_format_is_yuv(format) && util_format_get_num_planes(format) == 2) {
+   /* Only support 1 plane for RGB formats, and 1 & 2 plane(s) format for YUV formats */
+   if (util_format_is_yuv(format) && util_format_get_num_planes(format) == 1) {
+      si_tex_0 = (struct si_texture *)surfaces[0].texture;
+      si_tex_1 = NULL;
+      plane_address->type = VPE_PLN_ADDR_TYPE_VIDEO_PROGRESSIVE;
+      plane_address->video_progressive.luma_addr.quad_part = si_tex_0->buffer.gpu_address + si_tex_0->surface.u.gfx9.surf_offset;
+      plane_address->video_progressive.chroma_addr.quad_part = 0;
+   } else if (util_format_is_yuv(format) && util_format_get_num_planes(format) == 2) {
       si_tex_0 = (struct si_texture *)surfaces[0].texture;
       si_tex_1 = (struct si_texture *)surfaces[1].texture;
       plane_address->type = VPE_PLN_ADDR_TYPE_VIDEO_PROGRESSIVE;
       plane_address->video_progressive.luma_addr.quad_part = si_tex_0->buffer.gpu_address + si_tex_0->surface.u.gfx9.surf_offset;
       plane_address->video_progressive.chroma_addr.quad_part = si_tex_1->buffer.gpu_address + si_tex_1->surface.u.gfx9.surf_offset;
-   } else if (!util_format_is_yuv(format) && util_format_get_num_planes(format) == 1){
+   } else if (!util_format_is_yuv(format) && util_format_get_num_planes(format) == 1) {
       si_tex_0 = (struct si_texture *)surfaces[0].texture;
       si_tex_1 = NULL;
       plane_address->type = VPE_PLN_ADDR_TYPE_GRAPHICS;
@@ -533,24 +714,21 @@ si_vpe_set_plane_info(struct vpe_video_processor *vpeproc,
       return VPE_STATUS_NOT_SUPPORTED;
 
    /* 1st plane ret setting */
-   unsigned width, height;
-   pipe_surface_size(&surfaces[0], &width, &height);
    plane_size->surface_size.x         = 0;
    plane_size->surface_size.y         = 0;
-   plane_size->surface_size.width     = width;
-   plane_size->surface_size.height    = height;
-   plane_size->surface_pitch          = si_tex_0->surface.u.gfx9.surf_pitch;
-   plane_size->surface_aligned_height = height;
+   plane_size->surface_size.width     = surfaces[0].texture->width0;
+   plane_size->surface_size.height    = surfaces[0].texture->height0;
+   plane_size->surface_pitch          = si_tex_0->surface.u.gfx9.surf_pitch * si_tex_0->surface.blk_w;
+   plane_size->surface_aligned_height = surfaces[0].texture->height0;
 
    /* YUV 2nd plane ret setting */
-   if (util_format_get_num_planes(format) == 2) {
-      pipe_surface_size(&surfaces[1], &width, &height);
+   if (util_format_is_yuv(format) && (util_format_get_num_planes(format) == 2)) {
       plane_size->chroma_size.x         = 0;
       plane_size->chroma_size.y         = 0;
-      plane_size->chroma_size.width     = width;
-      plane_size->chroma_size.height    = height;
-      plane_size->chroma_pitch          = si_tex_1->surface.u.gfx9.surf_pitch;
-      plane_size->chrome_aligned_height = height;
+      plane_size->chroma_size.width     = surfaces[1].texture->width0;
+      plane_size->chroma_size.height    = surfaces[1].texture->height0;
+      plane_size->chroma_pitch          = si_tex_1->surface.u.gfx9.surf_pitch * si_tex_1->surface.blk_w;
+      plane_size->chrome_aligned_height = surfaces[1].texture->height0;
    }
 
    /* Color space setting */
@@ -719,15 +897,21 @@ si_vpe_set_stream_in_param(struct vpe_video_processor *vpeproc,
       si_vpe_init_polyphase_filter(vpeproc, stream, scaling_ratios);
    }
 
-   blend_info->blending                = false;
-   blend_info->pre_multiplied_alpha    = false;
-   blend_info->global_alpha            = blend_info->blending;
-   blend_info->global_alpha_value      = 1.0;
+   scaling_info->enable_easf                         = false;
+   scaling_info->prefer_easf                         = false;
+   scaling_info->adaptive_sharpeness.enable          = false;
+   scaling_info->adaptive_sharpeness.sharpness_level = 0;
 
-   /* Global Alpha for Background ? */
-   if (process_properties->blend.mode == PIPE_VIDEO_VPP_BLEND_MODE_GLOBAL_ALPHA) {
-      //blend_info->global_alpha = true;
-      blend_info->global_alpha_value = process_properties->blend.global_alpha;
+   if (process_properties->blend.global_alpha) {
+      blend_info->global_alpha_value   = process_properties->blend.global_alpha;
+      blend_info->blending             = true;
+      blend_info->pre_multiplied_alpha = false;
+      blend_info->global_alpha         = true;
+   } else {
+      blend_info->global_alpha_value   = 0;
+      blend_info->blending             = false;
+      blend_info->pre_multiplied_alpha = false;
+      blend_info->global_alpha         = false;
    }
 
    /* TO-DO: do ProcAmp in next stage */
@@ -761,6 +945,73 @@ si_vpe_set_stream_in_param(struct vpe_video_processor *vpeproc,
    stream->flags.reserved          = 0;
    stream->flags.geometric_scaling = is_geometric_scaling_round;
    stream->flags.hdr_metadata      = 0;
+
+   /* TO-DO: support HDR10 Metadata */
+   si_vpe_load_default_primaries(&stream->hdr_metadata, stream->surface_info.cs.primaries);
+}
+
+static void
+si_vpe_set_bg_stream_in_param(struct vpe_video_processor *vpeproc,
+                              const struct pipe_vpp_desc *process_properties,
+                              struct vpe_stream *stream)
+{
+   struct vpe *vpe_handle = vpeproc->vpe_handle;
+   struct vpe_scaling_info *scaling_info = &stream->scaling_info;
+   struct vpe_blend_info *blend_info     = &stream->blend_info;
+   struct vpe_color_adjust *color_adj    = &stream->color_adj;
+   float scaling_ratios[2] = { 1.0, 1.0 };
+
+   /* Init: scaling_info */
+   /* BG Frame no need scaling */
+   scaling_info->src_rect.x            = process_properties->dst_region.x0;
+   scaling_info->src_rect.y            = process_properties->dst_region.y0;
+   scaling_info->src_rect.width        = process_properties->dst_region.x1 - process_properties->dst_region.x0;
+   scaling_info->src_rect.height       = process_properties->dst_region.y1 - process_properties->dst_region.y0;
+   scaling_info->dst_rect.x            = scaling_info->src_rect.x;
+   scaling_info->dst_rect.y            = scaling_info->src_rect.y;
+   scaling_info->dst_rect.width        = scaling_info->src_rect.width;
+   scaling_info->dst_rect.height       = scaling_info->src_rect.height;
+   scaling_info->taps.v_taps           = 0;
+   scaling_info->taps.h_taps           = 0;
+   scaling_info->taps.v_taps_c         = 2;
+   scaling_info->taps.h_taps_c         = 2;
+
+   if (!si_vpe_reuse_scaling_info(vpeproc, stream, scaling_ratios)) {
+      /* Failed to reuse scaling info,
+       * it means the new scaling coeff have to be generated
+       */
+      vpe_get_optimal_num_of_taps(vpe_handle, scaling_info);
+      si_vpe_init_polyphase_filter(vpeproc, stream, scaling_ratios);
+   }
+
+   scaling_info->enable_easf                         = false;
+   scaling_info->prefer_easf                         = false;
+   scaling_info->adaptive_sharpeness.enable          = false;
+   scaling_info->adaptive_sharpeness.sharpness_level = 0;
+
+   blend_info->global_alpha_value                    = 1.0 - process_properties->blend.global_alpha;
+   blend_info->blending                              = true;
+   blend_info->pre_multiplied_alpha                  = false;
+   blend_info->global_alpha                          = true;
+
+   /* TO-DO: do ProcAmp in next stage */
+   color_adj->brightness                             = 0.0;
+   color_adj->contrast                               = 1.0;
+   color_adj->hue                                    = 0.0;
+   color_adj->saturation                             = 1.0;
+
+   stream->rotation                                  = VPE_ROTATION_ANGLE_0;
+
+   stream->horizontal_mirror                         = false;
+   stream->vertical_mirror                           = false;
+
+   stream->enable_luma_key                           = false;
+   stream->lower_luma_bound                          = 0.5;
+   stream->upper_luma_bound                          = 0.5;
+
+   stream->flags.reserved                            = 0;
+   stream->flags.geometric_scaling                   = 0;
+   stream->flags.hdr_metadata                        = 0;
 
    /* TO-DO: support HDR10 Metadata */
    si_vpe_load_default_primaries(&stream->hdr_metadata, stream->surface_info.cs.primaries);
@@ -818,98 +1069,152 @@ si_vpe_is_tonemappingstream(enum vpe_transfer_function tf, unsigned int in_lum, 
 static void
 si_vpe_set_tonemap(struct vpe_video_processor *vpeproc,
                    const struct pipe_vpp_desc *process_properties,
-                   struct vpe_build_param *build_param)
+                   struct vpe_build_param *build_param,
+                   uint8_t stream_idx)
 {
-   if (!debug_get_bool_option("AMDGPU_SIVPE_HDR_TONEMAPPING", true))
+   struct si_resource *fl_buf;
+   enum vpe_lut_type lut_type;
+
+   /* FastLoading Case:
+    * Call GMLib to generate 17^3 3DLut,
+    * and load the 3DLut into GPU Memory (with size = 33^3).
+    */
+
+   /* By default, disable HDR metadata and 3DLut */
+   build_param->streams[stream_idx].flags.hdr_metadata     = 0;
+   build_param->streams[stream_idx].tm_params.enable_3dlut = 0;
+   build_param->streams[stream_idx].tm_params.UID          = 0;
+
+   if (!debug_get_bool_option("AMDGPU_SIVPE_HDR_TONEMAPPING", true)) {
+      SIVPE_DBG(vpeproc->log_level, "Tonemapping is disabled by debug option, skip tonemapping\n");
       return;
-
-   /* Check if source is tone mapping stream */
-   if (si_vpe_is_tonemappingstream(
-               build_param->streams[0].surface_info.cs.tf,
-               build_param->streams[0].hdr_metadata.max_mastering,
-               build_param->hdr_metadata.max_mastering)) {
-
-      SIVPE_DBG(vpeproc->log_level, "Handling Tone mapping stream...\n");
-
-      if (!vpeproc->gm_handle) {
-         vpeproc->gm_handle = tm_create();
-         if (!vpeproc->gm_handle) {
-            SIVPE_WARN(vpeproc->log_level, "Allocate GMLib resource faied, skip tonemapping\n");
-            build_param->streams[0].flags.hdr_metadata = 0;
-            return;
-         }
-      }
-
-      if (!vpeproc->lut_data) {
-         struct tonemap_param tm_par;
-
-         vpeproc->lut_data = (uint16_t *)CALLOC(VPE_LUT_DIM * VPE_LUT_DIM * VPE_LUT_DIM * 3, sizeof(uint16_t));
-         if (!vpeproc->lut_data) {
-            SIVPE_WARN(vpeproc->log_level, "Allocate lut resource faied, skip tonemapping\n");
-            build_param->streams[0].flags.hdr_metadata = 0;
-            return;
-         }
-
-         /* Fill all parametters that GMLib needs to calculate tone mapping 3DLut */
-         tm_par.tm_handle = vpeproc->gm_handle;
-         tm_par.lutDim = VPE_LUT_DIM;
-         /* In */
-         tm_par.streamMetaData.redPrimaryX               = build_param->streams[0].hdr_metadata.redX;
-         tm_par.streamMetaData.redPrimaryY               = build_param->streams[0].hdr_metadata.redY;
-         tm_par.streamMetaData.greenPrimaryX             = build_param->streams[0].hdr_metadata.greenX;
-         tm_par.streamMetaData.greenPrimaryY             = build_param->streams[0].hdr_metadata.greenY;
-         tm_par.streamMetaData.bluePrimaryX              = build_param->streams[0].hdr_metadata.blueX;
-         tm_par.streamMetaData.bluePrimaryY              = build_param->streams[0].hdr_metadata.blueY;
-         tm_par.streamMetaData.whitePointX               = build_param->streams[0].hdr_metadata.whiteX;
-         tm_par.streamMetaData.whitePointY               = build_param->streams[0].hdr_metadata.whiteY;
-         tm_par.streamMetaData.maxMasteringLuminance     = build_param->streams[0].hdr_metadata.max_mastering;
-         tm_par.streamMetaData.minMasteringLuminance     = build_param->streams[0].hdr_metadata.min_mastering;
-         tm_par.streamMetaData.maxContentLightLevel      = build_param->streams[0].hdr_metadata.max_content;
-         tm_par.streamMetaData.maxFrameAverageLightLevel = build_param->streams[0].hdr_metadata.avg_content;
-         tm_par.inputContainerGamma                      = si_vpe_maps_vpe_to_gm_transfer_function(build_param->streams[0].surface_info.cs.tf);
-         /* Out */
-         tm_par.dstMetaData.redPrimaryX                  = build_param->hdr_metadata.redX;
-         tm_par.dstMetaData.redPrimaryY                  = build_param->hdr_metadata.redY;
-         tm_par.dstMetaData.greenPrimaryX                = build_param->hdr_metadata.greenX;
-         tm_par.dstMetaData.greenPrimaryY                = build_param->hdr_metadata.greenY;
-         tm_par.dstMetaData.bluePrimaryX                 = build_param->hdr_metadata.blueX;
-         tm_par.dstMetaData.bluePrimaryY                 = build_param->hdr_metadata.blueY;
-         tm_par.dstMetaData.whitePointX                  = build_param->hdr_metadata.whiteX;
-         tm_par.dstMetaData.whitePointY                  = build_param->hdr_metadata.whiteY;
-         tm_par.dstMetaData.maxMasteringLuminance        = build_param->hdr_metadata.max_mastering;
-         tm_par.dstMetaData.minMasteringLuminance        = build_param->hdr_metadata.min_mastering;
-         tm_par.dstMetaData.maxContentLightLevel         = build_param->hdr_metadata.max_content;
-         tm_par.dstMetaData.maxFrameAverageLightLevel    = build_param->hdr_metadata.avg_content;
-         tm_par.outputContainerGamma                     = si_vpe_maps_vpe_to_gm_transfer_function(build_param->dst_surface.cs.tf);
-         tm_par.outputContainerPrimaries                 = si_vpe_mpes_vpe_to_gm_primary(build_param->dst_surface.cs.primaries);
-
-         /* If the tone mapping of source is changed during playback, it must be recalculated.
-          * Now assume that the tone mapping is fixed.
-          */
-         if (tm_generate3DLut(&tm_par, vpeproc->lut_data)) {
-            SIVPE_WARN(vpeproc->log_level, "Generate lut data faied, skip tonemapping\n");
-            FREE(vpeproc->lut_data);
-            build_param->streams[0].flags.hdr_metadata = 0;
-            return;
-         }
-      }
-      build_param->streams[0].flags.hdr_metadata             = 1;
-      build_param->streams[0].tm_params.enable_3dlut         = 1;
-      build_param->streams[0].tm_params.UID                  = 1;
-      SIVPE_DBG(vpeproc->log_level, "Enable Tone mapping 3DLut\n");
-   } else {
-      build_param->streams[0].flags.hdr_metadata             = 0;
-      build_param->streams[0].tm_params.enable_3dlut         = 0;
-      build_param->streams[0].tm_params.UID                  = 0;
-      SIVPE_DBG(vpeproc->log_level, "Disable Tone mapping 3DLut\n");
    }
-   build_param->streams[0].tm_params.lut_data                = vpeproc->lut_data;
-   build_param->streams[0].tm_params.lut_dim                 = VPE_LUT_DIM;
-   build_param->streams[0].tm_params.input_pq_norm_factor    = 0;
-   build_param->streams[0].tm_params.shaper_tf               = build_param->streams[0].surface_info.cs.tf;
-   build_param->streams[0].tm_params.lut_in_gamut            = build_param->streams[0].surface_info.cs.primaries;
-   build_param->streams[0].tm_params.lut_out_tf              = build_param->dst_surface.cs.tf;
-   build_param->streams[0].tm_params.lut_out_gamut           = build_param->dst_surface.cs.primaries;
+   if (!vpeproc->gm_handle) {
+      SIVPE_DBG(vpeproc->log_level, "No GMLib handle, skip tonemapping\n");
+      return;
+   }
+   if (!si_vpe_is_tonemappingstream(build_param->streams[stream_idx].surface_info.cs.tf,
+                                    build_param->streams[stream_idx].hdr_metadata.max_mastering,
+                                    build_param->hdr_metadata.max_mastering)) {
+      SIVPE_DBG(vpeproc->log_level, "Not a tonemapping stream, skip tonemapping\n");
+      return;
+   }
+
+   /* Decide Lut type: CPU or FastLoading*/
+   if (vpeproc->fl3dlut_buf) {
+      lut_type = VPE_LUT_TYPE_GPU_3D_SWIZZLE;
+      fl_buf = vpeproc->fl3dlut_buf;
+   } else {
+      lut_type = VPE_LUT_TYPE_CPU;
+      fl_buf = NULL;
+   }
+
+
+   /* Allocate CPU buffer for generating 3DLut */
+   if (!vpeproc->lut_data) {
+      struct tonemap_param tm_par;
+
+      // Allocate CPU Formatted Buffer 
+      vpeproc->lut_data = (uint16_t *)CALLOC(VPE_LUT_DIM * VPE_LUT_DIM * VPE_LUT_DIM * 3, sizeof(uint16_t));
+      if (!vpeproc->lut_data) {
+         SIVPE_WARN(vpeproc->log_level, "Allocate lut resource faied, skip tonemapping\n");
+         return;
+      }
+
+      /* Fill all parametters that GMLib needs to calculate tone mapping 3DLut */
+      tm_par.tm_handle = vpeproc->gm_handle;
+      tm_par.lutDim    = VPE_LUT_DIM;
+      /* In */
+      tm_par.streamMetaData.redPrimaryX               = build_param->streams[stream_idx].hdr_metadata.redX;
+      tm_par.streamMetaData.redPrimaryY               = build_param->streams[stream_idx].hdr_metadata.redY;
+      tm_par.streamMetaData.greenPrimaryX             = build_param->streams[stream_idx].hdr_metadata.greenX;
+      tm_par.streamMetaData.greenPrimaryY             = build_param->streams[stream_idx].hdr_metadata.greenY;
+      tm_par.streamMetaData.bluePrimaryX              = build_param->streams[stream_idx].hdr_metadata.blueX;
+      tm_par.streamMetaData.bluePrimaryY              = build_param->streams[stream_idx].hdr_metadata.blueY;
+      tm_par.streamMetaData.whitePointX               = build_param->streams[stream_idx].hdr_metadata.whiteX;
+      tm_par.streamMetaData.whitePointY               = build_param->streams[stream_idx].hdr_metadata.whiteY;
+      tm_par.streamMetaData.maxMasteringLuminance     = build_param->streams[stream_idx].hdr_metadata.max_mastering;
+      tm_par.streamMetaData.minMasteringLuminance     = build_param->streams[stream_idx].hdr_metadata.min_mastering;
+      tm_par.streamMetaData.maxContentLightLevel      = build_param->streams[stream_idx].hdr_metadata.max_content;
+      tm_par.streamMetaData.maxFrameAverageLightLevel = build_param->streams[stream_idx].hdr_metadata.avg_content;
+      tm_par.inputContainerGamma                      = si_vpe_maps_vpe_to_gm_transfer_function(build_param->streams[stream_idx].surface_info.cs.tf);
+      /* Out */
+      tm_par.dstMetaData.redPrimaryX                  = build_param->hdr_metadata.redX;
+      tm_par.dstMetaData.redPrimaryY                  = build_param->hdr_metadata.redY;
+      tm_par.dstMetaData.greenPrimaryX                = build_param->hdr_metadata.greenX;
+      tm_par.dstMetaData.greenPrimaryY                = build_param->hdr_metadata.greenY;
+      tm_par.dstMetaData.bluePrimaryX                 = build_param->hdr_metadata.blueX;
+      tm_par.dstMetaData.bluePrimaryY                 = build_param->hdr_metadata.blueY;
+      tm_par.dstMetaData.whitePointX                  = build_param->hdr_metadata.whiteX;
+      tm_par.dstMetaData.whitePointY                  = build_param->hdr_metadata.whiteY;
+      tm_par.dstMetaData.maxMasteringLuminance        = build_param->hdr_metadata.max_mastering;
+      tm_par.dstMetaData.minMasteringLuminance        = build_param->hdr_metadata.min_mastering;
+      tm_par.dstMetaData.maxContentLightLevel         = build_param->hdr_metadata.max_content;
+      tm_par.dstMetaData.maxFrameAverageLightLevel    = build_param->hdr_metadata.avg_content;
+      tm_par.outputContainerGamma                     = si_vpe_maps_vpe_to_gm_transfer_function(build_param->dst_surface.cs.tf);
+      tm_par.outputContainerPrimaries                 = si_vpe_mpes_vpe_to_gm_primary(build_param->dst_surface.cs.primaries);
+
+      /* Generat 3DLut Data.
+       * If the meta data of source is changed during playback, it must be recalculated.
+       * Now assume that is fixed.
+       */
+      if (tm_generate3DLut(&tm_par, vpeproc->lut_data)) {
+         SIVPE_WARN(vpeproc->log_level, "Generate lut data faied, skip tonemapping\n");
+         FREE(vpeproc->lut_data);
+         vpeproc->lut_data = NULL;
+         return;
+      }
+
+      /* If FastLoading is supported, copy LUT data to GPU memory */
+      if (lut_type == VPE_LUT_TYPE_GPU_3D_SWIZZLE) {
+         uint64_t *fl_ptr;
+         fl_ptr = (uint64_t *)vpeproc->ws->buffer_map(vpeproc->ws,
+                                                      fl_buf->buf,
+                                                      &vpeproc->cs,
+                                                      PIPE_MAP_WRITE | RADEON_MAP_TEMPORARY);
+         if (!fl_ptr) {
+            SIVPE_ERR("Mapping fast loading 3DLut failed\n");
+            return;
+         }
+         /* Copy CPU Lut Data to GPU Lut Data Buffer */
+         if (tm_generate_formatted_3DLut(vpeproc->lut_data, VPE_LUT_DIM, VPE_LUTLF_DIM, TM_GMLIB_BITDEPTH, TM_GPU_BITDEPTH, fl_ptr)) {
+            SIVPE_ERR("Formatted 3DLut failed\n");
+            vpeproc->ws->buffer_unmap(vpeproc->ws, fl_buf->buf);
+            return;
+         }
+         vpeproc->ws->buffer_unmap(vpeproc->ws, fl_buf->buf);
+      }
+   }
+
+   if (lut_type == VPE_LUT_TYPE_CPU) {
+      SIVPE_DBG(vpeproc->log_level, "Enable Tone mapping 3DLut\n");
+      build_param->streams[stream_idx].tm_params.lut_type          = VPE_LUT_TYPE_CPU;
+   } else {
+      SIVPE_DBG(vpeproc->log_level, "Enable Tone mapping 3DLut with FastLoading\n");
+      build_param->streams[stream_idx].tm_params.lut_type          = VPE_LUT_TYPE_GPU_3D_SWIZZLE;
+      build_param->streams[stream_idx].dma_info.lut3d.data         = vpeproc->ws->buffer_get_virtual_address(fl_buf->buf);
+      build_param->streams[stream_idx].dma_info.lut3d.format       = VPE_SURFACE_PIXEL_FORMAT_GRPH_ARGB16161616;
+      build_param->streams[stream_idx].dma_info.lut3d.mem_align    = VPE_3DLUT_ALIGNMENT_256;
+      build_param->streams[stream_idx].dma_info.lut3d.bias         = 0.0f;
+      build_param->streams[stream_idx].dma_info.lut3d.scale        = 1.0f;
+      build_param->streams[stream_idx].dma_info.lut3d.tmz          = 0;
+      build_param->streams[stream_idx].tm_params.lut_container_dim = VPE_LUTLF_DIM;
+      vpeproc->ws->cs_add_buffer(&vpeproc->cs, fl_buf->buf, RADEON_USAGE_READ | RADEON_USAGE_SYNCHRONIZED, RADEON_DOMAIN_GTT);
+   }
+
+   build_param->streams[stream_idx].flags.hdr_metadata             = 1;
+   build_param->streams[stream_idx].tm_params.enable_3dlut         = 1;
+   build_param->streams[stream_idx].tm_params.UID                  = 1;
+   build_param->streams[stream_idx].tm_params.lut_data             = vpeproc->lut_data;
+   build_param->streams[stream_idx].tm_params.lut_dim              = VPE_LUT_DIM;
+   build_param->streams[stream_idx].tm_params.input_pq_norm_factor = 0;
+   build_param->streams[stream_idx].tm_params.shaper_tf            = build_param->streams[stream_idx].surface_info.cs.tf;
+   build_param->streams[stream_idx].tm_params.lut_in_gamut         = build_param->streams[stream_idx].surface_info.cs.primaries;
+   build_param->streams[stream_idx].tm_params.lut_out_tf           = build_param->dst_surface.cs.tf;
+   build_param->streams[stream_idx].tm_params.lut_out_gamut        = build_param->dst_surface.cs.primaries;
+   build_param->streams[stream_idx].flags.is_alpha_plane           = false;
+   build_param->streams[stream_idx].flags.is_alpha_combine         = false;
+   build_param->streams[stream_idx].flags.is_background_plane      = false;
 }
 
 static void
@@ -918,6 +1223,12 @@ si_vpe_processor_destroy(struct pipe_video_codec *codec)
    struct vpe_video_processor *vpeproc = (struct vpe_video_processor *)codec;
    unsigned int i;
    assert(codec);
+
+   if (vpeproc->last_fence)
+      vpeproc->ws->fence_reference(vpeproc->ws, &vpeproc->last_fence, NULL);
+
+   if (vpeproc->fl3dlut_buf)
+      si_resource_reference(&vpeproc->fl3dlut_buf, NULL);
 
    if (vpeproc->vpe_build_bufs)
       si_vpe_free_buffer(vpeproc->vpe_build_bufs);
@@ -993,25 +1304,79 @@ si_vpe_show_process_settings(struct vpe_video_processor *vpeproc,
                              struct vpe_build_param *build_param)
 {
    if (vpeproc->log_level >= SI_VPE_LOG_LEVEL_DEBUG) {
-      SIVPE_PRINT("src surface format(%d) rect (%d, %d, %d, %d)\n",
-               build_param->streams[0].surface_info.format,
-               build_param->streams[0].surface_info.plane_size.surface_size.x,
-               build_param->streams[0].surface_info.plane_size.surface_size.y,
-               build_param->streams[0].surface_info.plane_size.surface_size.width,
-               build_param->streams[0].surface_info.plane_size.surface_size.height);
+      for (uint8_t stream_idx = 0; stream_idx < build_param->num_streams; stream_idx++) {
+         SIVPE_PRINT("======== Stream %d Settings ========\n", stream_idx);
 
-      SIVPE_PRINT("src surface Cositing(%s), primaries(%s), tf(%s), range(%s)\n",
-               si_vpe_get_cositing_str(build_param->streams[0].surface_info.cs.cositing),
-               si_vpe_get_primarie_str(build_param->streams[0].surface_info.cs.primaries),
-               si_vpe_get_tf_str(build_param->streams[0].surface_info.cs.tf),
-               (build_param->streams[0].surface_info.cs.range == VPE_COLOR_RANGE_FULL)?"FULL":"STUDIO");
+         SIVPE_PRINT("src surface format: %s(%d) rect (%d, %d, %d, %d)\n",
+                  si_vpe_get_format_str(build_param->streams[stream_idx].surface_info.format),
+                  build_param->streams[stream_idx].surface_info.format,
+                  build_param->streams[stream_idx].surface_info.plane_size.surface_size.x,
+                  build_param->streams[stream_idx].surface_info.plane_size.surface_size.y,
+                  build_param->streams[stream_idx].surface_info.plane_size.surface_size.width,
+                  build_param->streams[stream_idx].surface_info.plane_size.surface_size.height);
 
-      SIVPE_PRINT("dst surface format(%d) rect (%d, %d, %d, %d)\n",
+         SIVPE_PRINT("src surface swizzle mode(%s)\n",
+                  si_vpe_get_swizzle_str(build_param->streams[stream_idx].surface_info.swizzle));
+
+         SIVPE_PRINT("src surface Cositing(%s), primaries(%s), tf(%s), range(%s)\n",
+                  si_vpe_get_cositing_str(build_param->streams[stream_idx].surface_info.cs.cositing),
+                  si_vpe_get_primarie_str(build_param->streams[stream_idx].surface_info.cs.primaries),
+                  si_vpe_get_tf_str(build_param->streams[stream_idx].surface_info.cs.tf),
+                  (build_param->streams[stream_idx].surface_info.cs.range == VPE_COLOR_RANGE_FULL)?"FULL":"STUDIO");
+
+         SIVPE_PRINT("Source surface pitch(%d), chroma pitch(%d), dst-surface pitch(%d), chroma pitch(%d)\n",
+                  build_param->streams[stream_idx].surface_info.plane_size.surface_pitch,
+                  build_param->streams[stream_idx].surface_info.plane_size.chroma_pitch,
+                  build_param->dst_surface.plane_size.surface_pitch,
+                  build_param->dst_surface.plane_size.chroma_pitch);
+
+         SIVPE_PRINT("rotation(%d) horizontal_mirror(%d) vertical_mirror(%d)\n",
+                  build_param->streams[stream_idx].rotation,
+                  build_param->streams[stream_idx].horizontal_mirror,
+                  build_param->streams[stream_idx].vertical_mirror);
+
+         SIVPE_PRINT("scaling_src_rect(%d, %d, %d, %d)\n",
+                  build_param->streams[stream_idx].scaling_info.src_rect.x,
+                  build_param->streams[stream_idx].scaling_info.src_rect.y,
+                  build_param->streams[stream_idx].scaling_info.src_rect.width,
+                  build_param->streams[stream_idx].scaling_info.src_rect.height);
+
+         SIVPE_PRINT("scaling_dst_rect(%d, %d, %d, %d)\n",
+                  build_param->streams[stream_idx].scaling_info.dst_rect.x,
+                  build_param->streams[stream_idx].scaling_info.dst_rect.y,
+                  build_param->streams[stream_idx].scaling_info.dst_rect.width,
+                  build_param->streams[stream_idx].scaling_info.dst_rect.height);
+
+         SIVPE_PRINT("scaling_taps h_taps(%d) v_taps(%d) h_taps_c(%d) v_taps_c(%d)\n",
+                  build_param->streams[stream_idx].scaling_info.taps.h_taps,
+                  build_param->streams[stream_idx].scaling_info.taps.v_taps,
+                  build_param->streams[stream_idx].scaling_info.taps.h_taps_c,
+                  build_param->streams[stream_idx].scaling_info.taps.v_taps_c);
+
+         SIVPE_PRINT("blend(%d) pre_multiplied_alpha(%d) global_alpha(%d) global_alpha_value: %0.3f\n",
+                  build_param->streams[stream_idx].blend_info.blending,
+                  build_param->streams[stream_idx].blend_info.pre_multiplied_alpha,
+                  build_param->streams[stream_idx].blend_info.global_alpha,
+                  build_param->streams[stream_idx].blend_info.global_alpha_value);
+
+         SIVPE_PRINT("ToneMapping shaper_tf(%d) lut_out_tf(%d) lut_in_gamut(%d) lut_out_gamut(%d) enable3DLut(%d)\n",
+                  build_param->streams[stream_idx].tm_params.shaper_tf,
+                  build_param->streams[stream_idx].tm_params.lut_out_tf,
+                  build_param->streams[stream_idx].tm_params.lut_in_gamut,
+                  build_param->streams[stream_idx].tm_params.lut_out_gamut,
+                  build_param->streams[stream_idx].tm_params.enable_3dlut);
+      }
+      SIVPE_PRINT("======== Stream Out Settings ========\n");
+      SIVPE_PRINT("dst surface format: %s(%d) rect (%d, %d, %d, %d)\n",
+               si_vpe_get_format_str(build_param->dst_surface.format),
                build_param->dst_surface.format,
                build_param->dst_surface.plane_size.surface_size.x,
                build_param->dst_surface.plane_size.surface_size.y,
                build_param->dst_surface.plane_size.surface_size.width,
                build_param->dst_surface.plane_size.surface_size.height);
+
+      SIVPE_PRINT("dst surface swizzle mode(%s)\n",
+               si_vpe_get_swizzle_str(build_param->dst_surface.swizzle));
 
       SIVPE_PRINT("dst surface Cositing(%s), primaries(%s), tf(%s), range(%s)\n",
                si_vpe_get_cositing_str(build_param->dst_surface.cs.cositing),
@@ -1019,11 +1384,11 @@ si_vpe_show_process_settings(struct vpe_video_processor *vpeproc,
                si_vpe_get_tf_str(build_param->dst_surface.cs.tf),
                (build_param->dst_surface.cs.range == VPE_COLOR_RANGE_FULL)?"FULL":"STUDIO");
 
-      SIVPE_PRINT("Source surface pitch(%d), chroma pitch(%d), dst-surface pitch(%d), chroma pitch(%d)\n",
-               build_param->streams[0].surface_info.plane_size.surface_pitch,
-               build_param->streams[0].surface_info.plane_size.chroma_pitch,
-               build_param->dst_surface.plane_size.surface_pitch,
-               build_param->dst_surface.plane_size.chroma_pitch);
+      SIVPE_PRINT("target_rect(%d, %d, %d, %d)\n",
+               build_param->target_rect.x,
+               build_param->target_rect.y,
+               build_param->target_rect.width,
+               build_param->target_rect.height);
 
       SIVPE_PRINT("background color RGBA(%0.3f, %0.3f, %0.3f, %0.3f)\n",
                build_param->bg_color.rgba.r,
@@ -1031,44 +1396,7 @@ si_vpe_show_process_settings(struct vpe_video_processor *vpeproc,
                build_param->bg_color.rgba.b,
                build_param->bg_color.rgba.a);
 
-      SIVPE_PRINT("target_rect(%d, %d, %d, %d)\n",
-               build_param->target_rect.x,
-               build_param->target_rect.y,
-               build_param->target_rect.width,
-               build_param->target_rect.height);
-
-      SIVPE_PRINT("rotation(%d) horizontal_mirror(%d) vertical_mirror(%d)\n",
-               build_param->streams[0].rotation,
-               build_param->streams[0].horizontal_mirror,
-               build_param->streams[0].vertical_mirror);
-
-      SIVPE_PRINT("scaling_src_rect(%d, %d, %d, %d)\n",
-               build_param->streams[0].scaling_info.src_rect.x,
-               build_param->streams[0].scaling_info.src_rect.y,
-               build_param->streams[0].scaling_info.src_rect.width,
-               build_param->streams[0].scaling_info.src_rect.height);
-
-      SIVPE_PRINT("scaling_dst_rect(%d, %d, %d, %d)\n",
-               build_param->streams[0].scaling_info.dst_rect.x,
-               build_param->streams[0].scaling_info.dst_rect.y,
-               build_param->streams[0].scaling_info.dst_rect.width,
-               build_param->streams[0].scaling_info.dst_rect.height);
-
-      SIVPE_PRINT("scaling_taps h_taps(%d) v_taps(%d) h_taps_c(%d) v_taps_c(%d)\n",
-               build_param->streams[0].scaling_info.taps.h_taps,
-               build_param->streams[0].scaling_info.taps.v_taps,
-               build_param->streams[0].scaling_info.taps.h_taps_c,
-               build_param->streams[0].scaling_info.taps.v_taps_c);
-
-      SIVPE_PRINT("blend global_alpha(%d): %0.3f\n",
-               build_param->streams[0].blend_info.global_alpha,
-               build_param->streams[0].blend_info.global_alpha_value);
-
-      SIVPE_PRINT("ToneMapping shaper_tf(%d) lut_out_tf(%d) lut_in_gamut(%d) lut_out_gamut(%d)\n",
-               build_param->streams[0].tm_params.shaper_tf,
-               build_param->streams[0].tm_params.lut_out_tf,
-               build_param->streams[0].tm_params.lut_in_gamut,
-               build_param->streams[0].tm_params.lut_out_gamut);
+      SIVPE_PRINT("alpha_mode = %d\n", build_param->alpha_mode);
    }
 }
 
@@ -1077,26 +1405,60 @@ si_vpe_processor_check_and_build_settins(struct vpe_video_processor *vpeproc,
                                          const struct pipe_vpp_desc *process_properties,
                                          struct pipe_surface *src_surfaces,
                                          struct pipe_surface *dst_surfaces,
-                                         bool is_geometric_scaling_round)
+                                         bool is_geometric_scaling_round,
+                                         bool final_blit)
 {
    enum vpe_status result = VPE_STATUS_OK;
    struct vpe *vpe_handle = vpeproc->vpe_handle;
    struct vpe_build_param *build_param = vpeproc->vpe_build_param;
    struct vpe_bufs_req bufs_required;
+   uint8_t stream_idx = 0;
 
-   /* Mesa only sends one input frame at one time (one stream pipe).
-    * If there is more than one pipe need to be handled, it have to re-locate memory.
-    * But now we only focuse on handling one stream pipe.
+   /* final_blit is true means that the output of current blit is the real output to be displayed or processed by next stage,
+    * not intermediate surface for geometric scaling.
+    * In this case, some special processing is needed for blending mode with global alpha,
+    * which requires using dst surface as background input stream for blending.
     */
-   build_param->num_streams = 1;
+   if (final_blit && process_properties->blend.mode == PIPE_VIDEO_VPP_BLEND_MODE_GLOBAL_ALPHA) {
+      SIVPE_INFO(vpeproc->log_level, "Going to handle blending blit\n");
+      build_param->num_streams = 2;
+   } else {
+      /* Regular Blit */
+      SIVPE_INFO(vpeproc->log_level, "Going to handle regular blit\n");
+      build_param->num_streams = 1;
+   }
+
    memset(build_param->streams, 0, sizeof(struct vpe_stream) * build_param->num_streams);
+
+   /* Use dst frame as background stream when blending mode is enabled */
+   if (build_param->num_streams == 2) {
+      /* Init background surface setting */
+      result = si_vpe_set_surface_info(vpeproc,
+                                       process_properties,
+                                       dst_surfaces,
+                                       USE_DST_SURFACE,
+                                       &build_param->streams[stream_idx].surface_info,
+                                       is_geometric_scaling_round);
+      if (VPE_STATUS_OK != result) {
+         SIVPE_WARN(vpeproc->log_level, "Set BgSrc surface failed with result: %d\n", result);
+         return result;
+      }
+
+      /* Init background stream setting */
+      si_vpe_set_bg_stream_in_param(
+                  vpeproc,
+                  process_properties,
+                  &build_param->streams[stream_idx]);
+
+      stream_idx++;
+   }
 
    /* Init input surface setting */
    result = si_vpe_set_surface_info(vpeproc,
                                     process_properties,
                                     src_surfaces,
                                     USE_SRC_SURFACE,
-                                    &build_param->streams[0].surface_info,
+                                    &build_param->streams[stream_idx].surface_info,
                                     is_geometric_scaling_round);
    if (VPE_STATUS_OK != result) {
       SIVPE_WARN(vpeproc->log_level, "Set Src surface failed with result: %d\n", result);
@@ -1107,7 +1469,7 @@ si_vpe_processor_check_and_build_settins(struct vpe_video_processor *vpeproc,
    si_vpe_set_stream_in_param(
                vpeproc,
                process_properties,
-               &build_param->streams[0],
+               &build_param->streams[stream_idx],
                is_geometric_scaling_round);
 
    /* Init output surface setting */
@@ -1132,7 +1494,8 @@ si_vpe_processor_check_and_build_settins(struct vpe_video_processor *vpeproc,
    si_vpe_set_tonemap(
                vpeproc,
                process_properties,
-               build_param
+               build_param,
+               stream_idx
    );
 
    /* Shows details of current processing. */
@@ -1165,7 +1528,8 @@ si_vpe_construct_blt(struct vpe_video_processor *vpeproc,
                      const struct pipe_vpp_desc *process_properties,
                      struct pipe_surface *src_surfaces,
                      struct pipe_surface *dst_surfaces,
-                     bool is_geometric_scaling_round)
+                     bool is_geometric_scaling_round,
+                     bool final_blit)
 {
    enum vpe_status result = VPE_STATUS_OK;
    struct vpe *vpe_handle = vpeproc->vpe_handle;
@@ -1181,7 +1545,10 @@ si_vpe_construct_blt(struct vpe_video_processor *vpeproc,
    /* Check if the blt operation is supported and build related settings.
     * Command settings will be is stored in vpeproc->vpe_build_param.
     */
-   result = si_vpe_processor_check_and_build_settins(vpeproc, process_properties, src_surfaces, dst_surfaces, is_geometric_scaling_round);
+   result = si_vpe_processor_check_and_build_settins(vpeproc, process_properties,
+                                                     src_surfaces, dst_surfaces,
+                                                     is_geometric_scaling_round,
+                                                     final_blit);
    if (VPE_STATUS_OK != result) {
       return result;
    }
@@ -1203,7 +1570,7 @@ si_vpe_construct_blt(struct vpe_video_processor *vpeproc,
                                                  PIPE_MAP_WRITE | RADEON_MAP_TEMPORARY);
    if (!vpe_ptr) {
       SIVPE_ERR("Mapping Embbuf failed\n");
-      return 1;
+      return VPE_STATUS_NO_MEMORY;
    }
    build_bufs->emb_buf.cpu_va = (uintptr_t)vpe_ptr;
    build_bufs->emb_buf.gpu_va = vpeproc->ws->buffer_get_virtual_address(emb_buf->buf);
@@ -1219,7 +1586,6 @@ si_vpe_construct_blt(struct vpe_video_processor *vpeproc,
       SIVPE_ERR("Build commands failed with result: %d\n", result);
       return VPE_STATUS_NO_MEMORY;
    }
-
 
    /* Check buffer size */
    if (vpeproc->vpe_build_bufs->cmd_buf.size == 0 || vpeproc->vpe_build_bufs->cmd_buf.size == vpeproc->cs.current.max_dw) {
@@ -1242,6 +1608,15 @@ si_vpe_construct_blt(struct vpe_video_processor *vpeproc,
    /* Add surface buffers into bo_handle list */
    si_vpe_cs_add_surface_buffer(vpeproc, src_surfaces, RADEON_USAGE_READ);
    si_vpe_cs_add_surface_buffer(vpeproc, dst_surfaces, RADEON_USAGE_WRITE);
+
+   /* Execute the flush command to force VPE bliting here in order to support blending functionality.
+    * When blending two images, vaRenderPicture will pass in the two (or more) images sequentially (one at a time), 
+    * meaning it will construct (at least) two vpe blit commands.
+    * Then, it will finally request VPE to start in vaEndPicture, which can cause VPE to malfunction.
+    * Therefore, after creating one vpe blit command, that command must be executed first to fulfill the blending requirement.
+    */
+   vpeproc->ws->cs_flush(&vpeproc->cs, PIPE_FLUSH_ASYNC, &vpeproc->last_fence);
+   next_buffer(vpeproc);
 
    return VPE_STATUS_OK;
 }
@@ -1273,12 +1648,23 @@ si_vpe_decide_substage_scal_ratios(struct vpe_video_processor *vpeproc,
    /* The scaling ratios are the same as pre-processing */
    if (vpeproc->geometric_scaling_ratios &&
        vpeproc->scaling_ratios[0] == p_target_ratios[0] &&
-       vpeproc->scaling_ratios[1] == p_target_ratios[1])
+       vpeproc->scaling_ratios[1] == p_target_ratios[1] &&
+       vpeproc->geometric_buf[0] && vpeproc->geometric_buf[1]
+      )
       return VPE_STATUS_OK;
 
+   /* Free geometric scaling resources */
    if (vpeproc->geometric_scaling_ratios) {
       FREE(vpeproc->geometric_scaling_ratios);
       vpeproc->geometric_scaling_ratios = NULL;
+   }
+   if (vpeproc->geometric_buf[0]) {
+      vpeproc->geometric_buf[0]->destroy(vpeproc->geometric_buf[0]);
+      vpeproc->geometric_buf[0] = NULL;
+   }
+   if (vpeproc->geometric_buf[1]) {
+      vpeproc->geometric_buf[1]->destroy(vpeproc->geometric_buf[1]);
+      vpeproc->geometric_buf[1] = NULL;
    }
 
    /* How many passes we need */
@@ -1357,9 +1743,13 @@ si_vpe_processor_process_frame(struct pipe_video_codec *codec,
    scaling_ratio[0] = (float)src_rect_width  / dst_rect_width;
    scaling_ratio[1] = (float)src_rect_height / dst_rect_height;
 
-   /* Perform general processing */
+   /* Perform general processing.
+    * If the scaling ratio is smaller than the max geometric downscale, it means the scaling can be done in one pass without geometric scaling.
+    * So that the blt command can be directly constructed without geometric scaling.
+    * Otherwise, the geometric scaling will be needed before blt command construction.
+    */
    if ((scaling_ratio[0] <= VPE_MAX_GEOMETRIC_DOWNSCALE) && (scaling_ratio[1] <= VPE_MAX_GEOMETRIC_DOWNSCALE)) {
-      result = si_vpe_construct_blt(vpeproc, process_properties, vpeproc->src_surfaces, vpeproc->dst_surfaces, false);
+      result = si_vpe_construct_blt(vpeproc, process_properties, vpeproc->src_surfaces, vpeproc->dst_surfaces, false, true);
       return result == VPE_STATUS_OK ? 0 : 1;
    }
 
@@ -1381,16 +1771,21 @@ si_vpe_processor_process_frame(struct pipe_video_codec *codec,
    SIVPE_DBG(vpeproc->log_level, "\tscaling_ratio[0] = %f\n", scaling_ratio[0]);
    SIVPE_DBG(vpeproc->log_level, "\tscaling_ratio[1] = %f\n", scaling_ratio[1]);
 
-   /* Geometric Scaling #1: decide how many passes and scaling ratios in each pass */
+   /* Geometric Scaling #1: 
+    * Decide how many passes and scaling ratios in each pass.
+    * geometric_buf[0] and geometric_buf[1] will be freed in si_vpe_decide_substage_scal_ratios function if the scaling ratios are updated.
+    */
    result = si_vpe_decide_substage_scal_ratios(vpeproc, scaling_ratio);
    if (VPE_STATUS_OK != result) {
-      SIVPE_WARN(vpeproc->log_level, "Failed in deciding geometric scaling ratios\n");
+      SIVPE_ERR("Failed in deciding geometric scaling ratios\n");
       return result;
    }
    pHrSr = vpeproc->geometric_scaling_ratios;
    pVtSr = pHrSr + vpeproc->geometric_passes;
 
-   /* Geometric Scaling #2: Allocate working frame buffer of geometric scaling */
+   /* Geometric Scaling #2:
+    * Allocate working frame buffer of geometric scaling.
+    */
    if (!vpeproc->geometric_buf[0] || !vpeproc->geometric_buf[1]) {
       struct si_texture *dst_tex = (struct si_texture *)vpeproc->dst_surfaces[0].texture;
       struct pipe_video_buffer templat;
@@ -1406,7 +1801,7 @@ si_vpe_processor_process_frame(struct pipe_video_codec *codec,
       templat.height = (int)(src_rect_height / pVtSr[0]);
       vpeproc->geometric_buf[0] = vpeproc->base.context->create_video_buffer(vpeproc->base.context, &templat);
       if (!vpeproc->geometric_buf[0]) {
-         SIVPE_ERR("Failed in allocating geometric scaling frame buffer[0]]\n");
+         SIVPE_ERR("Failed in allocating geometric scaling frame buffer[0]\n");
          return VPE_STATUS_NO_MEMORY;
       }
 
@@ -1415,14 +1810,16 @@ si_vpe_processor_process_frame(struct pipe_video_codec *codec,
       vpeproc->geometric_buf[1] = vpeproc->base.context->create_video_buffer(vpeproc->base.context, &templat);
       if (!vpeproc->geometric_buf[1]) {
          vpeproc->geometric_buf[0]->destroy(vpeproc->geometric_buf[0]);
-         SIVPE_ERR("Failed in allocating temp geometric scaling frame buffer[1]]\n");
+         vpeproc->geometric_buf[0] = NULL;
+         SIVPE_ERR("Failed in allocating temp geometric scaling frame buffer[1]\n");
          return VPE_STATUS_NO_MEMORY;
       }
    }
    tmp_geo_scaling_surf_1 = vpeproc->geometric_buf[0]->get_surfaces(vpeproc->geometric_buf[0]);
    tmp_geo_scaling_surf_2 = vpeproc->geometric_buf[1]->get_surfaces(vpeproc->geometric_buf[1]);
 
-   /* Geometric Scaling #3: Process scaling passes */
+   /* Geometric Scaling #3:
+    * Process scaling passes */
    if (vpeproc->geometric_passes > 1) {
       struct pipe_vpp_desc process_geoscl;
       struct u_rect *src_region, *dst_region;
@@ -1434,11 +1831,11 @@ si_vpe_processor_process_frame(struct pipe_video_codec *codec,
       dst_region = &process_geoscl.dst_region;
 
       /* First Round:
-       * Sould copy the source setting and destination setting from original command.
+       * Should copy the source setting and destination setting from original command.
        * Complete the CSC at the first round.
        */
       process_geoscl.orientation                  = process_properties->orientation;
-      process_geoscl.blend.mode                   = process_properties->blend.mode;
+      process_geoscl.blend.mode                   = PIPE_VIDEO_VPP_BLEND_MODE_NONE;
       process_geoscl.blend.global_alpha           = process_properties->blend.global_alpha;
       process_geoscl.background_color             = 0;
 
@@ -1469,16 +1866,14 @@ si_vpe_processor_process_frame(struct pipe_video_codec *codec,
       src_surfaces = vpeproc->src_surfaces;
       dst_surfaces = tmp_geo_scaling_surf_1;
 
-      /* Fitst Round, no need to change the format of input and output frames
+      /* First Round, no need to change the format of input and output frames
        * Set is_geometric_scaling_round = false
        */
-      result = si_vpe_construct_blt(vpeproc, &process_geoscl, src_surfaces, dst_surfaces, false);
+      result = si_vpe_construct_blt(vpeproc, &process_geoscl, src_surfaces, dst_surfaces, false, false);
       if (VPE_STATUS_OK != result) {
          SIVPE_ERR("Failed in Geometric Scaling first blt command\n");
          return result;
       }
-      vpeproc->ws->cs_flush(&vpeproc->cs, PIPE_FLUSH_ASYNC, NULL);
-      next_buffer(vpeproc);
 
       /* Second to Final Round:
        * The source format should be reset to the format of DstFormat.
@@ -1505,18 +1900,15 @@ si_vpe_processor_process_frame(struct pipe_video_codec *codec,
          src_surfaces = dst_surfaces;
          dst_surfaces = tmp_surfaces;
 
-         result = si_vpe_construct_blt(vpeproc, &process_geoscl, src_surfaces, dst_surfaces, true);
+         result = si_vpe_construct_blt(vpeproc, &process_geoscl, src_surfaces, dst_surfaces, true, false);
          if (VPE_STATUS_OK != result) {
             SIVPE_ERR("Failed in Geometric Scaling first blt command\n");
             return result;
          }
-         vpeproc->ws->cs_flush(&vpeproc->cs, PIPE_FLUSH_ASYNC, NULL);
-         next_buffer(vpeproc);
       }
 
-      /* Final Round:
-       * Will be flushed in normal flow when end_frame() is called
-       */
+      /* Final Round */
+      process_geoscl.blend.mode       = process_properties->blend.mode;
       process_geoscl.background_color = process_properties->background_color;
       process_geoscl.out_color_range  = process_properties->out_color_range;
 
@@ -1529,7 +1921,7 @@ si_vpe_processor_process_frame(struct pipe_video_codec *codec,
 
       src_surfaces = dst_surfaces;
       dst_surfaces = vpeproc->dst_surfaces;
-      result = si_vpe_construct_blt(vpeproc, &process_geoscl, src_surfaces, dst_surfaces, true);
+      result = si_vpe_construct_blt(vpeproc, &process_geoscl, src_surfaces, dst_surfaces, true, true);
       if (VPE_STATUS_OK != result) {
          SIVPE_ERR("Failed in Geometric Scaling first blt command\n");
          return result;
@@ -1547,8 +1939,8 @@ si_vpe_processor_end_frame(struct pipe_video_codec *codec,
    struct vpe_video_processor *vpeproc = (struct vpe_video_processor *)codec;
    assert(codec);
 
-   vpeproc->ws->cs_flush(&vpeproc->cs, picture->flush_flags, picture->out_fence);
-   next_buffer(vpeproc);
+   if (picture->out_fence)
+      vpeproc->ws->fence_reference(vpeproc->ws, picture->out_fence, vpeproc->last_fence);
 
    return 0;
 }
@@ -1556,8 +1948,7 @@ si_vpe_processor_end_frame(struct pipe_video_codec *codec,
 static void
 si_vpe_processor_flush(struct pipe_video_codec *codec)
 {
-   /* Commands will be flushed when end_frame() is called */
-   return;
+
 }
 
 static int si_vpe_processor_fence_wait(struct pipe_video_codec *codec,
@@ -1668,6 +2059,25 @@ si_vpe_create_processor(struct pipe_context *context, const struct pipe_video_co
       }
    }
 
+   /* Allocate GM resources */
+   vpeproc->gm_handle = tm_create();
+   if (!vpeproc->gm_handle) {
+      vpeproc->gm_handle = NULL;
+      SIVPE_DBG(vpeproc->log_level, "Create GM handle failed, can't support ToneMapping feature\n");
+   } else {
+      /* Allocate 3DLut GPU buffer
+       * 3DLut GPU buffer is used for fast loading 3Dlut
+       * It finally calls into si_buffer_create(screen, templ, 256) to create 256-alignment buffer
+       */
+      if (vpeproc->vpe_handle->level == VPE_IP_LEVEL_2_0) {
+         vpeproc->fl3dlut_buf = si_resource(pipe_buffer_create(vpeproc->screen, 0, PIPE_USAGE_DEFAULT, VPE_FASTLOAD_SIZE));
+         if (!vpeproc->fl3dlut_buf) {
+            vpeproc->fl3dlut_buf = NULL;
+            SIVPE_DBG(vpeproc->log_level, "Can't allocated fast loading buffers, can't support fast loading feature\n");
+         }
+      }
+   }
+
    /* Create VPE parameters structure */
    vpeproc->vpe_build_param = CALLOC_STRUCT(vpe_build_param);
    if (!vpeproc->vpe_build_param) {
@@ -1675,8 +2085,9 @@ si_vpe_create_processor(struct pipe_context *context, const struct pipe_video_co
       goto fail;
    }
 
-   /* Only one input frame is passed in for processing at a time (one stream pipe).
-    * Only needs to handle one stream processing.
+   /* Allocate 2 streams.
+    * For regular blit, only stream[0] is used for input surface.
+    * For global alpha blending, stream[0] is used for background surface and stream[1] is used for input surface.
     */
    vpeproc->vpe_build_param->streams = (struct vpe_stream *)CALLOC(VPE_STREAM_MAX_NUM, sizeof(struct vpe_stream));
    if (!vpeproc->vpe_build_param->streams) {

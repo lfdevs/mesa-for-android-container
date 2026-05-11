@@ -23,7 +23,7 @@ follow_modifiers(nir_instr *instr)
           intrin->intrinsic == nir_intrinsic_load_constant ||
           intrin->intrinsic == nir_intrinsic_load_input) {
          nir_foreach_use (use, &intrin->def) {
-            if (nir_src_parent_instr(use)->type == nir_instr_type_phi)
+            if (nir_src_use_instr(use)->type == nir_instr_type_phi)
                return intrin->def.index;
          }
       }

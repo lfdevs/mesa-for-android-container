@@ -170,7 +170,8 @@ devices = { llvmpipe = { checksum = "6f5b3f7159563f8006adef16c6afa052801fe7d0b65
 [[traces]]
 path = "neverball/neverball-v2.trace"
 nonloopable = true
-devices = { llvmpipe = { checksum = "66d56cb8ce7f27c14c4ef671b600378b6f66f223853d24ec1c58d44ee4714850" } }
+# About 50s, too close to the timeout.
+# devices = { llvmpipe = { checksum = "66d56cb8ce7f27c14c4ef671b600378b6f66f223853d24ec1c58d44ee4714850" } }
 
 [[traces]]
 path = "pathfinder/demo-v2.trace"
@@ -200,7 +201,8 @@ devices = { llvmpipe = { checksum = "f0b75a40185b778e533c4a0d31ee151b98adb5d7ea3
 
 [[traces]]
 path = "ror/ror-default.trace"
-devices = { llvmpipe = { checksum = "87a11302455eaeba643795aec9f410d5bb7e01465d356aa86972b990a6cf5af0" } }
+# Intermittent timeout at 60s.
+# devices = { llvmpipe = { checksum = "87a11302455eaeba643795aec9f410d5bb7e01465d356aa86972b990a6cf5af0" } }
 
 [[traces]]
 path = "supertuxkart/supertuxkart-antediluvian-abyss.rdc"
@@ -229,7 +231,8 @@ devices = { llvmpipe = { checksum = "b3f44f2dbbbaebe12e4fc60eb12b51effaaa36aaf42
 
 [[traces]]
 path = "valve/portal-2-v2.trace"
-devices = { llvmpipe = { checksum = "dd13112c3325f5c46976e0f74981b363a6fd6e92e03916c3d0d4007aa535c82b" } }
+# Intermittent timeout at 60s.
+# devices = { llvmpipe = { checksum = "dd13112c3325f5c46976e0f74981b363a6fd6e92e03916c3d0d4007aa535c82b" } }
 
 [[traces]]
 path = "warzone2100/warzone2100-default.trace"

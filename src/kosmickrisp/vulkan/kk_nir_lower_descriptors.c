@@ -65,6 +65,18 @@ load_root(nir_builder *b, unsigned num_components, unsigned bit_size,
    return load_speculatable(b, num_components, bit_size, addr, align);
 }
 
+static nir_def *
+load_per_draw(nir_builder *b, unsigned num_components, unsigned bit_size,
+              nir_def *offset, unsigned align)
+{
+   nir_def *per_draw = nir_load_per_draw_ptr_kk(b, 1, 64);
+
+   /* We've bound the address of the per-draw data, index in. */
+   nir_def *addr = nir_iadd(b, per_draw, nir_u2u64(b, offset));
+
+   return load_speculatable(b, num_components, bit_size, addr, align);
+}
+
 static bool
 lower_load_constant(nir_builder *b, nir_intrinsic_instr *load,
                     const struct lower_descriptors_ctx *ctx)
@@ -92,6 +104,10 @@ lower_load_constant(nir_builder *b, nir_intrinsic_instr *load,
 /* helper macro for computing root descriptor byte offsets */
 #define kk_root_descriptor_offset(member)                                      \
    offsetof(struct kk_root_descriptor_table, member)
+
+/* helper macro for computing per-draw data byte offsets */
+#define kk_per_draw_offset(member)                                             \
+   offsetof(struct kk_per_draw_data, member)
 
 static nir_def *
 load_descriptor_set_addr(nir_builder *b, uint32_t set,
@@ -274,6 +290,25 @@ _lower_sysval_to_root_table(nir_builder *b, nir_intrinsic_instr *intrin,
    _lower_sysval_to_root_table(b, intrin, kk_root_descriptor_offset(member))
 
 static bool
+_lower_sysval_to_per_draw(nir_builder *b, nir_intrinsic_instr *intrin,
+                          uint32_t per_draw_offset)
+{
+   b->cursor = nir_instr_remove(&intrin->instr);
+   assert((per_draw_offset & 3) == 0 && "aligned");
+
+   nir_def *val = load_per_draw(b, intrin->def.num_components,
+                                intrin->def.bit_size,
+                                nir_imm_int(b, per_draw_offset), 4);
+
+   nir_def_rewrite_uses(&intrin->def, val);
+
+   return true;
+}
+
+#define lower_sysval_to_per_draw(b, intrin, member)                            \
+   _lower_sysval_to_per_draw(b, intrin, kk_per_draw_offset(member))
+
+static bool
 lower_load_push_constant(nir_builder *b, nir_intrinsic_instr *load,
                          const struct lower_descriptors_ctx *ctx)
 {
@@ -407,11 +442,14 @@ try_lower_intrin(nir_builder *b, nir_intrinsic_instr *intrin,
    case nir_intrinsic_load_blend_const_color_rgba:
       return lower_sysval_to_root_table(b, intrin, draw.blend_constant);
 
+   case nir_intrinsic_load_clip_z_coeff:
+      return lower_sysval_to_root_table(b, intrin, draw.clip_z_coeff);
+
    case nir_intrinsic_load_push_constant:
       return lower_load_push_constant(b, intrin, ctx);
 
    case nir_intrinsic_load_draw_id:
-      return lower_sysval_to_root_table(b, intrin, draw.draw_id);
+      return lower_sysval_to_per_draw(b, intrin, draw_id);
 
    case nir_intrinsic_image_deref_load:
    case nir_intrinsic_image_deref_sparse_load:

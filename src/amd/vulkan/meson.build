@@ -342,7 +342,7 @@ if with_radv_tests
         inc_util,
         include_directories('.'),
       ],
-      link_with  : [ libvulkan_radeon ],
+      link_with  : [ libamd_common, libvulkan_radeon, libamdgpu_noop_drm_shim ],
       dependencies : [dep_llvm, dep_thread, idep_gtest, idep_nir, idep_mesautil, idep_vulkan_util_headers],
     ),
     suite : ['compiler', 'nir'],

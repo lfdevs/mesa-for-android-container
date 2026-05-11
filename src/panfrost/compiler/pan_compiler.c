@@ -77,26 +77,21 @@ pan_preprocess_nir(nir_shader *nir, uint64_t gpu_id)
       .lower_txd = pan_arch(gpu_id) < 6,
       .lower_txd_cube_map = true,
       .lower_invalid_implicit_lod = true,
-      .lower_index_to_offset = pan_arch(gpu_id) >= 6,
    };
 
    NIR_PASS(_, nir, nir_lower_tex, &lower_tex_options);
 }
 
 void
-pan_optimize_nir(nir_shader *nir, uint64_t gpu_id)
+pan_postprocess_nir(nir_shader *nir, const struct pan_compile_inputs *inputs,
+                    struct pan_shader_info *info)
 {
-   assert(pan_arch(gpu_id) >= 6);
-   bifrost_optimize_nir(nir, gpu_id);
-}
+   memset(info, 0, sizeof(*info));
 
-void
-pan_postprocess_nir(nir_shader *nir, uint64_t gpu_id)
-{
-   if (pan_arch(gpu_id) >= 6)
-      bifrost_postprocess_nir(nir, gpu_id);
+   if (pan_arch(inputs->gpu_id) >= 6)
+      bifrost_postprocess_nir(nir, inputs, info);
    else
-      midgard_postprocess_nir(nir, gpu_id);
+      midgard_postprocess_nir(nir, inputs->gpu_id);
 }
 
 /** Converts a per-component mask to a byte mask */
@@ -272,8 +267,6 @@ pan_shader_compile(nir_shader *s, struct pan_compile_inputs *inputs,
                    struct util_dynarray *binary, struct pan_shader_info *info)
 {
    unsigned arch = pan_arch(inputs->gpu_id);
-
-   memset(info, 0, sizeof(*info));
 
    NIR_PASS(_, s, nir_inline_sysval, nir_intrinsic_load_printf_buffer_size,
             PAN_PRINTF_BUFFER_SIZE - 8);

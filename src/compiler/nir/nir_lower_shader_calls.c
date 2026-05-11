@@ -345,11 +345,11 @@ static bool
 rewrite_instr_src_from_phi_builder(nir_src *src, void *_pbv_arr)
 {
    nir_block *block;
-   if (nir_src_parent_instr(src)->type == nir_instr_type_phi) {
+   if (nir_src_use_instr(src)->type == nir_instr_type_phi) {
       nir_phi_src *phi_src = exec_node_data(nir_phi_src, src, src);
       block = phi_src->pred;
    } else {
-      block = nir_src_parent_instr(src)->block;
+      block = nir_src_use_instr(src)->block;
    }
 
    nir_def *new_def = get_phi_builder_def_for_src(src, _pbv_arr, block);
@@ -1522,16 +1522,16 @@ nir_opt_trim_stack_values(nir_shader *shader)
          nir_def *def = nir_instr_def(instr);
 
          nir_foreach_use_safe(use_src, def) {
-            if (nir_src_parent_instr(use_src)->type == nir_instr_type_alu) {
-               nir_alu_instr *alu = nir_instr_as_alu(nir_src_parent_instr(use_src));
+            if (nir_src_use_instr(use_src)->type == nir_instr_type_alu) {
+               nir_alu_instr *alu = nir_instr_as_alu(nir_src_use_instr(use_src));
                nir_alu_src *alu_src = exec_node_data(nir_alu_src, use_src, src);
 
                unsigned count = alu->def.num_components;
                for (unsigned idx = 0; idx < count; ++idx)
                   alu_src->swizzle[idx] = swiz_map[alu_src->swizzle[idx]];
-            } else if (nir_src_parent_instr(use_src)->type == nir_instr_type_intrinsic) {
+            } else if (nir_src_use_instr(use_src)->type == nir_instr_type_intrinsic) {
                nir_intrinsic_instr *use_intrin =
-                  nir_instr_as_intrinsic(nir_src_parent_instr(use_src));
+                  nir_instr_as_intrinsic(nir_src_use_instr(use_src));
                assert(nir_intrinsic_has_write_mask(use_intrin));
                unsigned write_mask = nir_intrinsic_write_mask(use_intrin);
                unsigned new_write_mask = 0;
@@ -1731,7 +1731,7 @@ find_last_dominant_use_block(nir_function_impl *impl, nir_def *value)
 
       nir_foreach_if_use(src, value) {
          nir_block *block_before_if =
-            nir_cf_node_as_block(nir_cf_node_prev(&nir_src_parent_if(src)->cf_node));
+            nir_cf_node_as_block(nir_cf_node_prev(&nir_src_use_if(src)->cf_node));
          if (!nir_block_dominates(block, block_before_if)) {
             fits = false;
             break;
@@ -1741,13 +1741,13 @@ find_last_dominant_use_block(nir_function_impl *impl, nir_def *value)
          continue;
 
       nir_foreach_use(src, value) {
-         if (nir_src_parent_instr(src)->type == nir_instr_type_phi &&
-             block == nir_src_parent_instr(src)->block) {
+         if (nir_src_use_instr(src)->type == nir_instr_type_phi &&
+             block == nir_src_use_instr(src)->block) {
             fits = false;
             break;
          }
 
-         if (!nir_block_dominates(block, nir_src_parent_instr(src)->block)) {
+         if (!nir_block_dominates(block, nir_src_use_instr(src)->block)) {
             fits = false;
             break;
          }

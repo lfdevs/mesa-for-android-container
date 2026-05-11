@@ -58,7 +58,7 @@ st_nir_finish_builtin_nir(struct st_context *st, nir_shader *nir)
    st_nir_lower_samplers(screen, nir, NULL, NULL);
    st_nir_lower_uniforms(st, nir);
    if (!screen->caps.nir_images_as_deref)
-      NIR_PASS(_, nir, gl_nir_lower_images, false);
+      NIR_PASS(_, nir, gl_nir_lower_images, NULL, false);
 
    assert(nir->info.stage == MESA_SHADER_COMPUTE || nir->info.io_lowered);
 

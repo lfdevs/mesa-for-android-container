@@ -1539,7 +1539,7 @@ read_phi(read_ctx *ctx, nir_block *blk, union packed_instr header)
        * we have to set the parent_instr manually.  It doesn't really matter
        * when we do it, so we might as well do it here.
        */
-      nir_src_set_parent_instr(&src->src, &phi->instr);
+      nir_src_set_use_instr(&src->src, &phi->instr);
 
       /* Stash it in the list of phi sources.  We'll walk this list and fix up
        * sources at the very end of read_function_impl.

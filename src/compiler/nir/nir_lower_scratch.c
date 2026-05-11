@@ -74,15 +74,15 @@ static bool
 only_used_for_load_store(nir_deref_instr *deref)
 {
    nir_foreach_use(src, &deref->def) {
-      if (!nir_src_parent_instr(src))
+      if (!nir_src_use_instr(src))
          return false;
-      if (nir_src_parent_instr(src)->type == nir_instr_type_deref) {
-         if (!only_used_for_load_store(nir_instr_as_deref(nir_src_parent_instr(src))))
+      if (nir_src_use_instr(src)->type == nir_instr_type_deref) {
+         if (!only_used_for_load_store(nir_instr_as_deref(nir_src_use_instr(src))))
             return false;
-      } else if (nir_src_parent_instr(src)->type != nir_instr_type_intrinsic) {
+      } else if (nir_src_use_instr(src)->type != nir_instr_type_intrinsic) {
          return false;
       } else {
-         nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(nir_src_parent_instr(src));
+         nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(nir_src_use_instr(src));
          if (intrin->intrinsic != nir_intrinsic_load_deref &&
              intrin->intrinsic != nir_intrinsic_store_deref)
             return false;

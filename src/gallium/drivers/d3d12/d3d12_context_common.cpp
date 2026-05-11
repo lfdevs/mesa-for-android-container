@@ -49,6 +49,7 @@
 #include "indices/u_primconvert.h"
 #include "util/u_atomic.h"
 #include "util/u_blitter.h"
+#include "util/set.h"
 #include "util/u_dual_blend.h"
 #include "util/u_framebuffer.h"
 #include "util/u_helpers.h"
@@ -85,12 +86,6 @@ d3d12_context_destroy(struct pipe_context *pctx)
    }
 
    struct d3d12_screen *screen = d3d12_screen(pctx->screen);
-   mtx_lock(&screen->submit_mutex);
-   list_del(&ctx->context_list_entry);
-   if (ctx->id != D3D12_CONTEXT_NO_ID)
-      screen->context_id_list[screen->context_id_count++] = ctx->id;
-   mtx_unlock(&screen->submit_mutex);
-
 
 #ifdef HAVE_GALLIUM_D3D12_GRAPHICS
    if ((screen->max_feature_level >= D3D_FEATURE_LEVEL_11_0) && !(ctx->flags & PIPE_CONTEXT_MEDIA_ONLY)) {
@@ -107,6 +102,22 @@ d3d12_context_destroy(struct pipe_context *pctx)
       ctx->cmdlist2->Release();
    if (ctx->cmdlist8)
       ctx->cmdlist8->Release();
+
+   mtx_lock(&screen->submit_mutex);
+   list_del(&ctx->context_list_entry);
+   if (ctx->id != D3D12_CONTEXT_NO_ID) {
+      unsigned context_bit = 1u << ctx->id;
+      set_foreach(ctx->local_state_bos, entry) {
+         struct d3d12_bo *bo = (struct d3d12_bo *)entry->key;
+         if (bo->local_context_state_mask & context_bit) {
+            d3d12_destroy_context_state_table_entry(&bo->local_context_states[ctx->id]);
+            bo->local_context_state_mask &= ~context_bit;
+         }
+      }
+      _mesa_set_clear(ctx->local_state_bos, nullptr);
+      screen->context_id_list[screen->context_id_count++] = ctx->id;
+   }
+   mtx_unlock(&screen->submit_mutex);
 
 #ifdef HAVE_GALLIUM_D3D12_GRAPHICS
    if ((screen->max_feature_level >= D3D_FEATURE_LEVEL_11_0) && !(ctx->flags & PIPE_CONTEXT_MEDIA_ONLY)) {

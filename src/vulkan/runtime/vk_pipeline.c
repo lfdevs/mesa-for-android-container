@@ -1271,7 +1271,7 @@ vk_pipeline_to_shader_flags(VkPipelineCreateFlags2KHR pipeline_flags,
        pipeline_layout != NULL &&
        (pipeline_layout->create_flags &
         VK_PIPELINE_LAYOUT_CREATE_INDEPENDENT_SETS_BIT_EXT))
-      shader_flags |= VK_SHADER_CREATE_INDEPENDENT_SETS_BIT_MESA;
+      shader_flags |= VK_SHADER_CREATE_INDEPENDENT_SETS_BIT_KHR;
 
    return shader_flags;
 }
@@ -2725,6 +2725,20 @@ struct vk_rt_pipeline {
 
    uint8_t dynamic_descriptor_offsets[MESA_VK_MAX_DESCRIPTOR_SETS];
 };
+
+uint32_t
+vk_pipeline_get_rt_scratch_size(struct vk_pipeline *pipeline)
+{
+   assert(pipeline->bind_point == VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR);
+   return container_of(pipeline, struct vk_rt_pipeline, base)->scratch_size;
+}
+
+uint32_t
+vk_pipeline_get_rt_ray_queries(struct vk_pipeline *pipeline)
+{
+   assert(pipeline->bind_point == VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR);
+   return container_of(pipeline, struct vk_rt_pipeline, base)->ray_queries;
+}
 
 static struct vk_rt_stage
 vk_rt_stage_ref(struct vk_rt_stage *stage)

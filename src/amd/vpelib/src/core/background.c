@@ -41,6 +41,11 @@ void vpe_create_bg_segments(
     uint16_t            dst_h_div  = vpe_is_yuv420(vpe_priv->output_ctx.surface.format) ? 2 : 1;
     uint16_t            dst_v_div  = vpe_is_yuv420(vpe_priv->output_ctx.surface.format) ? 2 : 1;
 
+    if (vpe_is_yuv422(stream_ctx->stream.surface_info.format))
+        src_h_div = 2;
+    if (vpe_is_yuv422(vpe_priv->output_ctx.surface.format))
+        dst_h_div = 2;
+
     for (gap_index = 0; gap_index < gaps_cnt; gap_index++) {
 
         /* format */
@@ -61,6 +66,10 @@ void vpe_create_bg_segments(
         if (vpe_is_yuv420(scaler_data->format)) {
             scaler_data->ratios.horz_c = vpe_fixpt_from_fraction(1, 2);
             scaler_data->ratios.vert_c = vpe_fixpt_from_fraction(1, 2);
+        }
+        else if (vpe_is_yuv422(scaler_data->format)) {
+            scaler_data->ratios.horz_c = vpe_fixpt_from_fraction(1, 2);
+            scaler_data->ratios.vert_c = vpe_fixpt_one;
         }
         else {
             scaler_data->ratios.horz_c = vpe_fixpt_one;

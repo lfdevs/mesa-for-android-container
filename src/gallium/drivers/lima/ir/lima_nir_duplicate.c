@@ -35,7 +35,7 @@ duplicate_def_at_use(nir_builder *b, nir_def *def, bool duplicate_for_ffma)
       nir_def *dupl;
 
       if (!nir_src_is_if(use_src) &&
-          last_parent_instr == nir_src_parent_instr(use_src)) {
+          last_parent_instr == nir_src_use_instr(use_src)) {
          dupl = last_dupl;
       } else {
          /* if ssa use, clone for the target block
@@ -44,8 +44,8 @@ duplicate_def_at_use(nir_builder *b, nir_def *def, bool duplicate_for_ffma)
          if (nir_src_is_if(use_src)) {
             b->cursor = nir_before_def(def);
          } else {
-            b->cursor = nir_before_instr(nir_src_parent_instr(use_src));
-            last_parent_instr = nir_src_parent_instr(use_src);
+            b->cursor = nir_before_instr(nir_src_use_instr(use_src));
+            last_parent_instr = nir_src_use_instr(use_src);
 
             if (duplicate_for_ffma &&
                 last_parent_instr->type == nir_instr_type_alu &&

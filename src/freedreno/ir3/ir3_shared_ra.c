@@ -826,7 +826,7 @@ reload_interval(struct ra_ctx *ctx, struct ir3_cursor cursor,
 }
 
 static void
-reload_src_finalize(struct ra_ctx *ctx, struct ir3_instruction *instr,
+reload_src_finalize(struct ra_ctx *ctx, struct ir3_cursor reload_cursor,
                     struct ir3_register *src)
 {
    struct ir3_register *reg = src->def;
@@ -835,7 +835,7 @@ reload_src_finalize(struct ra_ctx *ctx, struct ir3_instruction *instr,
    if (!interval->needs_reload)
       return;
 
-   reload_interval(ctx, ir3_before_instr(instr), interval);
+   reload_interval(ctx, reload_cursor, interval);
 
    interval->needs_reload = false;
 }
@@ -945,7 +945,7 @@ assign_src(struct ra_ctx *ctx, struct ir3_register *src)
 
 static void
 handle_dst(struct ra_ctx *ctx, struct ir3_instruction *instr,
-           struct ir3_register *dst)
+           struct ir3_register *dst, struct ir3_cursor *reload_cursor)
 {
    if (!(dst->flags & IR3_REG_SHARED))
       return;
@@ -1015,18 +1015,23 @@ handle_dst(struct ra_ctx *ctx, struct ir3_instruction *instr,
       mov->cat1.src_type = mov->cat1.dst_type =
          (dst->flags & IR3_REG_HALF) ? TYPE_U16 : TYPE_U32;;
       dst->tied->num = dst->num;
+
+      /* If the tied src needs to be reloaded, this has to happen before the
+       * parallel copy we just inserted.
+       */
+      *reload_cursor = ir3_before_instr(mov);
    }
 }
 
 static void
-handle_src_late(struct ra_ctx *ctx, struct ir3_instruction *instr,
+handle_src_late(struct ra_ctx *ctx, struct ir3_cursor reload_cursor,
                 struct ir3_register *src)
 {
    if (!(src->flags & IR3_REG_SHARED))
       return;
 
    struct ra_interval *interval = ra_interval_get(ctx, src->def);
-   reload_src_finalize(ctx, instr, src);
+   reload_src_finalize(ctx, reload_cursor, src);
 
    /* Remove killed sources that have to be killed late due to being merged with
     * other defs.
@@ -1050,11 +1055,12 @@ handle_normal_instr(struct ra_ctx *ctx, struct ir3_instruction *instr)
    ra_foreach_src_rev (src, instr)
       assign_src(ctx, src);
 
+   struct ir3_cursor reload_cursor = ir3_before_instr(instr);
    ra_foreach_dst (dst, instr)
-      handle_dst(ctx, instr, dst);
+      handle_dst(ctx, instr, dst, &reload_cursor);
 
    ra_foreach_src (src, instr)
-      handle_src_late(ctx, instr, src);
+      handle_src_late(ctx, reload_cursor, src);
 }
 
 static void
@@ -1208,7 +1214,7 @@ handle_pcopy(struct ra_ctx *ctx, struct ir3_instruction *pcopy)
       assign_src(ctx, src);
 
    ra_foreach_src (src, pcopy)
-      handle_src_late(ctx, pcopy, src);
+      handle_src_late(ctx, ir3_before_instr(pcopy), src);
 }
 
 static void
@@ -1246,7 +1252,9 @@ reload_live_outs(struct ra_ctx *ctx, struct ir3_block *block)
       struct ir3_register *reg = ctx->live->definitions[name];
 
       struct ra_interval *interval = &ctx->intervals[name];
-      if (!interval->interval.inserted) {
+      if (!interval->interval.inserted ||
+          (interval->spill_def &&
+           interval->physreg_start != interval->physreg_start_orig)) {
          d("reloading %d at end of backedge", reg->name);
 
          /* When this interval was spilled inside the loop, we probably chose a

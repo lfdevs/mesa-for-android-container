@@ -24,11 +24,12 @@
 #define RADEON_FLUSH_ASYNC_START_NEXT_GFX_IB_NOW                                                   \
    (PIPE_FLUSH_ASYNC | RADEON_FLUSH_START_NEXT_GFX_IB_NOW)
 
-#include "amd/common/ac_cmdbuf.h"
+#include "amd/common/ac_cmdbuf_base.h"
 #include "amd/common/ac_gpu_info.h"
 #include "amd/common/ac_surface.h"
-#include "amd/common/ac_pm4.h"
 #include "pipebuffer/pb_buffer.h"
+
+struct ac_pm4_state;
 
 /* Tiling flags. */
 enum radeon_bo_layout

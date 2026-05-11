@@ -318,7 +318,7 @@ disk_cache_init(struct zink_screen *screen)
    const struct build_id_note *note =
        build_id_find_nhdr_for_addr(disk_cache_init);
    unsigned build_id_len = build_id_length(note);
-   assert(note && build_id_len == BUILD_ID_EXPECTED_HASH_LENGTH);
+   assert(note && build_id_len <= BUILD_ID_EXPECTED_HASH_LENGTH);
    _mesa_blake3_update(&ctx, build_id_data(note), build_id_len);
 #endif
 
@@ -1133,9 +1133,7 @@ zink_init_screen_caps(struct zink_screen *screen)
 
    caps->viewport_transform_lowered = true;
 
-   caps->point_size_fixed =
-      screen->info.have_KHR_maintenance5 ?
-      PIPE_POINT_SIZE_LOWER_USER_ONLY : PIPE_POINT_SIZE_LOWER_ALWAYS;
+   caps->point_size_fixed = PIPE_POINT_SIZE_LOWER_USER_ONLY;
    caps->flatshade = false;
    caps->alpha_test = false;
    caps->clip_planes = 0;
@@ -2970,8 +2968,6 @@ init_driver_workarounds(struct zink_screen *screen)
       /* performance */
       screen->info.border_color_feats.customBorderColorWithoutFormat = VK_FALSE;
    }
-   if (!screen->info.have_KHR_maintenance5)
-      screen->driver_workarounds.missing_a8_unorm = true;
 
    if ((!screen->info.have_EXT_line_rasterization ||
         !screen->info.line_rast_feats.stippledBresenhamLines) &&
@@ -3251,7 +3247,6 @@ init_optimal_keys(struct zink_screen *screen)
       screen->info.have_EXT_graphics_pipeline_library = false;
 
    if (!screen->optimal_keys ||
-       !screen->info.have_KHR_maintenance5 ||
       /* EXT_shader_object needs either dynamic feedback loop or per-app enablement */
        (!screen->driconf.zink_shader_object_enable && !screen->info.have_EXT_attachment_feedback_loop_dynamic_state))
       screen->info.have_EXT_shader_object = false;

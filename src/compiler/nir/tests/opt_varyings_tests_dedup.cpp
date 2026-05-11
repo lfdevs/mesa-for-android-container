@@ -62,7 +62,7 @@ TEST_F(nir_opt_varyings_test_dedup, \
          ASSERT_TRUE(!shader_contains_def(b2, load[1][v])); \
       } \
    } else { \
-      ASSERT_EQ(opt_varyings(), 0); \
+      ASSERT_EQ(opt_varyings() & nir_progress_consumer, 0); \
       for (unsigned v = 0; v < (is_per_vertex(b1, (gl_varying_slot)pslot[1], false) ? 3 : 1); v++) { \
          ASSERT_TRUE(shader_contains_instr(b1, &store[0][v]->instr)); \
          ASSERT_TRUE(shader_contains_instr(b1, &store[1][v]->instr)); \

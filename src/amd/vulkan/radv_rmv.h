@@ -12,8 +12,6 @@
 #define RADV_RMV_H
 
 #include "rmv/vk_rmv_common.h"
-#include "rmv/vk_rmv_tokens.h"
-
 #include "radv_radeon_winsys.h"
 
 struct radv_device;

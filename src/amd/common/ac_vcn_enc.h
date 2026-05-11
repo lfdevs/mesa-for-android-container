@@ -28,6 +28,7 @@
 #ifndef AC_VCN_ENC_H
 #define AC_VCN_ENC_H
 
+#include <stdint.h>
 #include "amd_family.h"
 
 #define RENCODE_IB_OP_INITIALIZE                                                    0x01000001
@@ -200,7 +201,7 @@
 #define RENCODE_REC_SWIZZLE_MODE_256B_D                                             2
 #define RENCODE_REC_SWIZZLE_MODE_8x8_1D_THIN_12_24BPP                               0x10000001
 #define RENCODE_REC_SWIZZLE_MODE_8x8_1D_THIN_12_24BPP_VCN4                          0x10000000
-#define RENCODE_REC_SWIZZLE_MODE_256B_D_VCN5                                        1
+#define RENCODE_REC_SWIZZLE_MODE_256B_D_GFX12                                       1
 
 #define RENCODE_VIDEO_BITSTREAM_BUFFER_MODE_LINEAR                                  0
 #define RENCODE_VIDEO_BITSTREAM_BUFFER_MODE_CIRCULAR                                1

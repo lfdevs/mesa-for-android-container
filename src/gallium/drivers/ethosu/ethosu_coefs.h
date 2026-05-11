@@ -15,4 +15,9 @@ fill_coefs(struct ethosu_subgraph *subgraph,
            uint8_t *weight_data,
            unsigned weight_size);
 
+void
+fill_lut(struct ethosu_subgraph *subgraph,
+         struct ethosu_operation *operation,
+         void *lut);
+
 #endif /* ETHOSU_COEFS_H */

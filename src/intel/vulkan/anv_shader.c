@@ -8,7 +8,97 @@
 #include "nir/nir_serialize.h"
 
 #include "compiler/brw/brw_disasm.h"
+#include "mda/debug_archiver.h"
 #include "util/shader_stats.h"
+
+
+VkResult
+anv_device_init_shader_dump(struct anv_device *device)
+{
+   if (!ANV_DEBUG(SHADER_DUMP) && !INTEL_DEBUG(DEBUG_SHADERS_LINENO))
+      return VK_SUCCESS;
+
+   /* No filename -> stdout */
+   if (ANV_DEBUG(SHADER_DUMP)) {
+      device->shader_dump.archive =
+         debug_archiver_open(NULL, "anv-shaders", "");
+      if (device->shader_dump.archive == NULL)
+         return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
+   }
+
+   simple_mtx_init(&device->shader_dump.mutex, mtx_plain);
+
+   return VK_SUCCESS;
+}
+
+void
+anv_device_finish_shader_dump(struct anv_device *device)
+{
+   if (!ANV_DEBUG(SHADER_DUMP) && !INTEL_DEBUG(DEBUG_SHADERS_LINENO))
+      return;
+
+   debug_archiver_finish_file(device->shader_dump.archive);
+
+   simple_mtx_destroy(&device->shader_dump.mutex);
+}
+
+static void
+anv_device_dump_shader_variant(struct anv_device *device,
+                               struct anv_shader *shader,
+                               const char *variant,
+                               uint32_t code_offset)
+{
+   FILE *f = stderr;
+
+   simple_mtx_lock(&device->shader_dump.mutex);
+
+   if (device->shader_dump.archive != NULL) {
+      char filename[80];
+      snprintf(filename, sizeof(filename), "0x%08x-%s%s",
+               shader->prog_data->source_hash,
+               _mesa_shader_stage_to_abbrev(shader->vk.stage),
+               variant);
+      f = debug_archiver_start_file(device->shader_dump.archive, filename);
+      int64_t _offset = shader->kernel.offset;
+      brw_disassemble_with_errors(&device->physical->compiler->isa,
+                                  shader->code, code_offset,
+                                  &_offset, f);
+      debug_archiver_finish_file(device->shader_dump.archive);
+   } else {
+      brw_disassemble_with_lineno(&device->physical->compiler->isa,
+                                  shader->vk.stage, -1,
+                                  shader->prog_data->source_hash,
+                                  shader->code, code_offset,
+                                  shader->kernel.offset,
+                                  stderr);
+   }
+
+   simple_mtx_unlock(&device->shader_dump.mutex);
+}
+
+static void
+anv_device_maybe_dump_shader(struct anv_device *device, struct anv_shader *shader)
+{
+   if (!ANV_DEBUG(SHADER_DUMP) && !INTEL_DEBUG(DEBUG_SHADERS_LINENO))
+      return;
+
+   if (intel_shader_dump_filter &&
+       intel_shader_dump_filter != shader->prog_data->source_hash)
+      return;
+
+   if (shader->vk.stage == MESA_SHADER_FRAGMENT) {
+      const struct brw_fs_prog_data *fs_prog_data = get_shader_fs_prog_data(shader);
+
+      if (fs_prog_data->dispatch_8 || fs_prog_data->dispatch_multi)
+         anv_device_dump_shader_variant(device, shader, "-8", 0);
+      if (fs_prog_data->dispatch_16)
+         anv_device_dump_shader_variant(device, shader, "-16", fs_prog_data->prog_offset_16);
+      if (fs_prog_data->dispatch_32)
+         anv_device_dump_shader_variant(device, shader, "-32", fs_prog_data->prog_offset_32);
+   } else {
+      anv_device_dump_shader_variant(device, shader, "", 0);
+   }
+}
 
 static void
 anv_shader_destroy(struct vk_device *vk_device,
@@ -474,6 +564,10 @@ anv_shader_set_relocs(struct anv_device *device,
       .id = BRW_SHADER_RELOC_DESCRIPTORS_BUFFER_ADDR_HIGH,
       .value = device->physical->va.dynamic_visible_pool.addr >> 32,
    };
+   reloc_values[rv_count++] = (struct intel_shader_reloc_value) {
+      .id = BRW_SHADER_RELOC_PUSH_DESCRIPTORS_BUFFER_ADDR_HIGH,
+      .value = device->physical->va.internal_surface_state_pool.addr >> 32,
+   };
    assert((device->physical->va.indirect_descriptor_pool.addr & 0xffffffff) == 0);
    assert((device->physical->va.internal_surface_state_pool.addr & 0xffffffff) == 0);
    reloc_values[rv_count++] = (struct intel_shader_reloc_value) {
@@ -496,6 +590,14 @@ anv_shader_set_relocs(struct anv_device *device,
    reloc_values[rv_count++] = (struct intel_shader_reloc_value) {
       .id = INTEL_SHADER_RELOC_SHADER_START_OFFSET,
       .value = shader->kernel.offset,
+   };
+   reloc_values[rv_count++] = (struct intel_shader_reloc_value) {
+      .id = BRW_SHADER_RELOC_NULL_CACHELINE_ADDR_HIGH,
+      .value = anv_address_physical(device->null_cacheline_addr) >> 32,
+   };
+   reloc_values[rv_count++] = (struct intel_shader_reloc_value) {
+      .id = BRW_SHADER_RELOC_NULL_CACHELINE_ADDR_LOW,
+      .value = anv_address_physical(device->null_cacheline_addr) & 0xffffffff,
    };
    if (brw_shader_stage_is_bindless(shader->vk.stage)) {
       const struct brw_bs_prog_data *bs_prog_data =
@@ -748,11 +850,12 @@ anv_shader_create(struct anv_device *device,
    if (result != VK_SUCCESS)
       goto error_state;
 
+   anv_device_maybe_dump_shader(device, shader);
+
    anv_shader_heap_upload(&device->shader_heap,
                           shader->kernel,
                           reloc.relocated_code,
-                          shader->prog_data,
-                          shader->stats->dispatch_width);
+                          shader_data->prog_data.base.program_size);
 
    anv_shader_reloc_end(&reloc);
 
@@ -922,8 +1025,7 @@ anv_replay_rt_shader_group(struct vk_device *vk_device,
          anv_shader_heap_upload(&device->shader_heap,
                                 shader->replay_kernel,
                                 reloc.relocated_code,
-                                shader->prog_data,
-                                shader->stats->dispatch_width);
+                                shader->prog_data->program_size);
 
          anv_shader_reloc_end(&reloc);
       }

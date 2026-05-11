@@ -1559,7 +1559,7 @@ static inline pco_igrp *pco_last_igrp(pco_block *block)
    if (list_is_empty(&block->instrs))
       return NULL;
 
-   return list_first_entry(&block->instrs, pco_igrp, link);
+   return list_last_entry(&block->instrs, pco_igrp, link);
 }
 
 /**

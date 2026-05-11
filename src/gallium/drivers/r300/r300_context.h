@@ -804,6 +804,7 @@ enum r300_fb_state_change {
 
 void r300_mark_fb_state_dirty(struct r300_context *r300,
                               enum r300_fb_state_change change);
+void r300_mark_vs_code_dirty(struct r300_context *r300);
 void r300_mark_fs_code_dirty(struct r300_context *r300);
 
 struct pipe_sampler_view *

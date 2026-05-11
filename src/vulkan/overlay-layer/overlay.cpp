@@ -1016,7 +1016,7 @@ static void compute_swapchain_display(struct swapchain_data *data)
          ImGui::PlotHistogram(hash, get_time_stat, data,
                               ARRAY_SIZE(data->frames_stats), 0,
                               NULL, min_time, max_time,
-                              ImVec2(ImGui::GetContentRegionAvailWidth(), 30));
+                              ImVec2(ImGui::GetContentRegionAvail().x, 30));
          ImGui::Text("%s: %.3fms [%.3f, %.3f]", overlay_param_names[s],
                      get_time_stat(data, ARRAY_SIZE(data->frames_stats) - 1),
                      min_time, max_time);
@@ -1026,7 +1026,7 @@ static void compute_swapchain_display(struct swapchain_data *data)
                               NULL,
                               data->stats_min.stats[s],
                               data->stats_max.stats[s],
-                              ImVec2(ImGui::GetContentRegionAvailWidth(), 30));
+                              ImVec2(ImGui::GetContentRegionAvail().x, 30));
          ImGui::Text("%s: %.0f [%" PRIu64 ", %" PRIu64 "]", overlay_param_names[s],
                      get_stat(data, ARRAY_SIZE(data->frames_stats) - 1),
                      data->stats_min.stats[s], data->stats_max.stats[s]);
@@ -1560,15 +1560,15 @@ static void setup_swapchain_data_pipeline(struct swapchain_data *data)
    attribute_desc[0].location = 0;
    attribute_desc[0].binding = binding_desc[0].binding;
    attribute_desc[0].format = VK_FORMAT_R32G32_SFLOAT;
-   attribute_desc[0].offset = IM_OFFSETOF(ImDrawVert, pos);
+   attribute_desc[0].offset = offsetof(ImDrawVert, pos);
    attribute_desc[1].location = 1;
    attribute_desc[1].binding = binding_desc[0].binding;
    attribute_desc[1].format = VK_FORMAT_R32G32_SFLOAT;
-   attribute_desc[1].offset = IM_OFFSETOF(ImDrawVert, uv);
+   attribute_desc[1].offset = offsetof(ImDrawVert, uv);
    attribute_desc[2].location = 2;
    attribute_desc[2].binding = binding_desc[0].binding;
    attribute_desc[2].format = VK_FORMAT_R8G8B8A8_UNORM;
-   attribute_desc[2].offset = IM_OFFSETOF(ImDrawVert, col);
+   attribute_desc[2].offset = offsetof(ImDrawVert, col);
 
    VkPipelineVertexInputStateCreateInfo vertex_info = {};
    vertex_info.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;

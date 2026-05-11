@@ -15,7 +15,7 @@ r300_is_only_used_as_float(const nir_alu_instr *instr)
       if (nir_src_is_if(src))
          return false;
 
-      nir_instr *user_instr = nir_src_parent_instr(src);
+      nir_instr *user_instr = nir_src_use_instr(src);
       if (user_instr->type == nir_instr_type_alu) {
          nir_alu_instr *alu = nir_instr_as_alu(user_instr);
          switch (alu->op) {
@@ -129,7 +129,7 @@ remove_clip_vertex(nir_builder *b, nir_instr *instr, UNUSED void *_)
        deref->var->data.mode == nir_var_shader_out &&
        deref->var->data.location == VARYING_SLOT_CLIP_VERTEX) {
       nir_foreach_use_safe (src, &deref->def) {
-         nir_instr_remove(nir_src_parent_instr(src));
+         nir_instr_remove(nir_src_use_instr(src));
       }
       nir_instr_remove(instr);
       return true;

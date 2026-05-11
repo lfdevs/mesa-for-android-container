@@ -440,9 +440,6 @@ tu_CreateQueryPool(VkDevice _device,
       return result;
    }
 
-   /* Initialize all query statuses to unavailable */
-   memset(pool->bo->map, 0, pool->bo->size);
-
    pool->size = pCreateInfo->queryCount;
    pool->query_stride = slot_size;
 
@@ -698,10 +695,7 @@ get_query_pool_results(struct tu_device *device,
             }
 
             if (is_perf_query_raw(pool)) {
-               struct tu_perf_query_raw *perf_query = &pool->perf_query.raw;
-               struct tu_perf_query_raw_data *data = &perf_query->data[k];
-               VkPerformanceCounterStorageKHR storage =
-                  fd_perfcntr_type_to_vk_storage[perf_query->perf_group[data->gid].countables[data->cid].query_type];
+               VkPerformanceCounterStorageKHR storage = VK_PERFORMANCE_COUNTER_STORAGE_UINT64_KHR;
                write_performance_query_value_cpu(result_base, k, storage, result);
             } else if (is_perf_query_derived(pool)) {
                struct tu_perf_query_derived *perf_query = &pool->perf_query.derived;
@@ -2243,10 +2237,8 @@ tu_EnumeratePhysicalDeviceQueueFamilyPerformanceQueryCountersKHR(
          for (int j = 0; j < group[i].num_countables; j++) {
             vk_outarray_append_typed(VkPerformanceCounterKHR, &out, counter) {
                counter->scope = VK_PERFORMANCE_COUNTER_SCOPE_COMMAND_BUFFER_KHR;
-               counter->unit =
-                     fd_perfcntr_type_to_vk_unit[group[i].countables[j].query_type];
-               counter->storage =
-                     fd_perfcntr_type_to_vk_storage[group[i].countables[j].query_type];
+               counter->unit = VK_PERFORMANCE_COUNTER_UNIT_GENERIC_KHR;
+               counter->storage = VK_PERFORMANCE_COUNTER_STORAGE_UINT64_KHR;
 
                unsigned char blake3_result[BLAKE3_KEY_LEN];
                _mesa_blake3_compute(group[i].countables[j].name,

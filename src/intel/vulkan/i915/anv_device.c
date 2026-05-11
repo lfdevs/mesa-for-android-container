@@ -30,16 +30,16 @@
 #include "drm-uapi/i915_drm.h"
 
 static int
-vk_priority_to_i915(VkQueueGlobalPriorityKHR priority)
+vk_priority_to_i915(VkQueueGlobalPriority priority)
 {
    switch (priority) {
-   case VK_QUEUE_GLOBAL_PRIORITY_LOW_KHR:
+   case VK_QUEUE_GLOBAL_PRIORITY_LOW:
       return INTEL_CONTEXT_LOW_PRIORITY;
-   case VK_QUEUE_GLOBAL_PRIORITY_MEDIUM_KHR:
+   case VK_QUEUE_GLOBAL_PRIORITY_MEDIUM:
       return INTEL_CONTEXT_MEDIUM_PRIORITY;
-   case VK_QUEUE_GLOBAL_PRIORITY_HIGH_KHR:
+   case VK_QUEUE_GLOBAL_PRIORITY_HIGH:
       return INTEL_CONTEXT_HIGH_PRIORITY;
-   case VK_QUEUE_GLOBAL_PRIORITY_REALTIME_KHR:
+   case VK_QUEUE_GLOBAL_PRIORITY_REALTIME:
       return INTEL_CONTEXT_REALTIME_PRIORITY;
    default:
       UNREACHABLE("Invalid priority");
@@ -59,7 +59,7 @@ anv_gem_set_context_param(int fd, uint32_t context, uint32_t param, uint64_t val
 }
 
 static bool
-anv_gem_has_context_priority(int fd, VkQueueGlobalPriorityKHR priority)
+anv_gem_has_context_priority(int fd, VkQueueGlobalPriority priority)
 {
    return !anv_gem_set_context_param(fd, 0, I915_CONTEXT_PARAM_PRIORITY,
                                      priority);
@@ -128,13 +128,13 @@ anv_i915_physical_device_get_parameters(struct anv_physical_device *device)
    }
 
    /* Start with medium; sorted low to high */
-   const VkQueueGlobalPriorityKHR priorities[] = {
-         VK_QUEUE_GLOBAL_PRIORITY_LOW_KHR,
-         VK_QUEUE_GLOBAL_PRIORITY_MEDIUM_KHR,
-         VK_QUEUE_GLOBAL_PRIORITY_HIGH_KHR,
-         VK_QUEUE_GLOBAL_PRIORITY_REALTIME_KHR,
+   const VkQueueGlobalPriority priorities[] = {
+         VK_QUEUE_GLOBAL_PRIORITY_LOW,
+         VK_QUEUE_GLOBAL_PRIORITY_MEDIUM,
+         VK_QUEUE_GLOBAL_PRIORITY_HIGH,
+         VK_QUEUE_GLOBAL_PRIORITY_REALTIME,
    };
-   device->max_context_priority = VK_QUEUE_GLOBAL_PRIORITY_LOW_KHR;
+   device->max_context_priority = VK_QUEUE_GLOBAL_PRIORITY_LOW;
    for (unsigned i = 0; i < ARRAY_SIZE(priorities); i++) {
       if (!anv_gem_has_context_priority(fd, priorities[i]))
          break;
@@ -230,7 +230,7 @@ VkResult
 anv_i915_set_queue_parameters(
       struct anv_device *device,
       uint32_t context_id,
-      const VkDeviceQueueGlobalPriorityCreateInfoKHR *queue_priority)
+      const VkDeviceQueueGlobalPriorityCreateInfo *queue_priority)
 {
    struct anv_physical_device *physical_device = device->physical;
 
@@ -243,9 +243,9 @@ anv_i915_set_queue_parameters(
    anv_gem_set_context_param(device->fd, context_id,
                              I915_CONTEXT_PARAM_RECOVERABLE, false);
 
-   VkQueueGlobalPriorityKHR priority =
+   VkQueueGlobalPriority priority =
       queue_priority ? queue_priority->globalPriority :
-         VK_QUEUE_GLOBAL_PRIORITY_MEDIUM_KHR;
+      VK_QUEUE_GLOBAL_PRIORITY_MEDIUM;
 
    /* As per spec, the driver implementation may deny requests to acquire
     * a priority above the default priority (MEDIUM) if the caller does not
@@ -316,9 +316,10 @@ anv_i915_device_setup_context(struct anv_device *device,
       return result;
 
    /* Check if client specified queue priority. */
-   const VkDeviceQueueGlobalPriorityCreateInfoKHR *queue_priority =
+   const VkDeviceQueueGlobalPriorityCreateInfo *queue_priority =
+      num_queues == 0 ? NULL :
       vk_find_struct_const(pCreateInfo->pQueueCreateInfos[0].pNext,
-                           DEVICE_QUEUE_GLOBAL_PRIORITY_CREATE_INFO_KHR);
+                           DEVICE_QUEUE_GLOBAL_PRIORITY_CREATE_INFO);
 
    result = anv_i915_set_queue_parameters(device, device->context_id,
                                           queue_priority);

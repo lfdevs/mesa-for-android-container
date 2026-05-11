@@ -131,18 +131,14 @@ for bsz in [8, 16, 32]:
 #     than -126 (single- precision) or -1022 (double-precision), the value
 #     returned may be flushed to zero."
 #
-# So we can't just truncate the exponent. Overflow is undefined behavior, but
-# we need to return signed zero on underflow. If exp32 < INT16_MIN, we can use
-# any 16-bit exponent that's sufficiently small to send all f16 values to zero.
-#
-# If we test exp32 < INT16_MIN directly, the comparison could not be
-# vectorized, so instead we test the upper half.
-# TODO: some possible values for -127 can be encoded as small
-#       immediates on valhall. None of the usable immediates have replicated
-#       i16 lanes, but for example 0xFAFCFDFE would be {-1284,-514}, both of
-#       which are small enough.
+# So we can't just truncate the exponent. Overflow is undefined behavior for
+# GLSL, but OpenCL expects us to return signed infinity, and we need to return
+# signed zero on underflow. Clamp to a range that's sufficient to overflow or
+# underflow all f16 values, avoiding implementation-defined behaviour for huge
+# exponents in LDEXP.v2f16.
 algebraic_late += [
-    (('ldexp', 'a@16', b), ('ldexp16_pan', a, ('b16csel', ('ilt16', ('unpack_32_2x16_split_y', b), -1), -127, ('i2i16', b))))
+    (('ldexp', 'a@16', b),
+     ('ldexp16_pan', a, ('i2i16', ('imin', ('imax', b, -127), 127))))
 ]
 
 

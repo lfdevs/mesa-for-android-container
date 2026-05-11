@@ -30,9 +30,8 @@
 
 #include "pipe/p_screen.h"
 #include "pipe/p_video_codec.h"
-#include "vl/vl_video_buffer.h"
+#include "vl/vl_defines.h"
 #include "vpelib/inc/vpelib.h"
-#include "si_video.h"
 
 /* The buffer size of cmd_buf and emb_buf in bytes
  *
@@ -41,11 +40,17 @@
 #define VPE_FENCE_TIMEOUT_NS 1000000000
 
 /* VPE 1st generation only support 1 input stram */
-#define VPE_STREAM_MAX_NUM   1
+#define VPE_STREAM_MAX_NUM   2
 
 #define VPE_BUFFERS_NUM      6
-#define VPE_EMBBUF_SIZE      50000
+#define VPE_EMBBUF_SIZE      300000
 #define VPE_LUT_DIM          17
+#define VPE_LUTLF_DIM        33
+/* 33 x 33 x 33 x 4(RGBA) x sizeof(uint_16) Bytes */
+/* After 256 alignment -> 64 x 64 x 64 x 4 x 2 */
+#define VPE_FASTLOAD_SIZE    2097152
+#define TM_GMLIB_BITDEPTH    4095.0f
+#define TM_GPU_BITDEPTH      65535
 
 #define VPE_MAX_GEOMETRIC_DOWNSCALE 4.f
 
@@ -74,6 +79,7 @@ struct vpe_video_processor {
     struct vpe_init_data vpe_data;
     struct vpe_build_bufs *vpe_build_bufs;
     struct vpe_build_param *vpe_build_param;
+    struct pipe_fence_handle *last_fence;
 
     uint8_t log_level;
 
@@ -85,6 +91,7 @@ struct vpe_video_processor {
     /* For HDR content display */
     void *gm_handle;
     uint16_t *lut_data;
+    struct si_resource *fl3dlut_buf;
 
     /* For Geometric scaling */
     float scaling_ratios[2];

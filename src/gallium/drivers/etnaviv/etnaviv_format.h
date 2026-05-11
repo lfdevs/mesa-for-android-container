@@ -56,6 +56,9 @@ translate_pe_format(enum pipe_format fmt);
 int
 translate_pe_format_rb_swap(enum pipe_format fmt);
 
+uint32_t
+remap_texture_format_rb_swap(uint32_t format);
+
 enum pipe_format
 translate_pe_internal_format(enum pipe_format fmt);
 

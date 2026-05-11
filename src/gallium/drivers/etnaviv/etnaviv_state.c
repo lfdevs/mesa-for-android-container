@@ -128,7 +128,7 @@ etna_update_render_surface(struct pipe_context *pctx,
 
    if ((to != from) &&
        etna_resource_level_older(&to->levels[level], &from->levels[level]))
-      etna_copy_resource(pctx, &to->base, &from->base, level, level);
+      etna_copy_resource(pctx, &to->base, &from->base, level, level, false);
 }
 
 static void
@@ -166,7 +166,7 @@ etna_set_framebuffer_state(struct pipe_context *pctx,
 
       /* Resolve TS if needed */
       if (!use_ts) {
-         etna_copy_resource(pctx, &res->base, &res->base, surf->level, surf->level);
+         etna_copy_resource(pctx, &res->base, &res->base, surf->level, surf->level, false);
          etna_resource_level_ts_mark_invalid(level);
       }
 

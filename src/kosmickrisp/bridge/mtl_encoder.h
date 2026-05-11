@@ -105,8 +105,14 @@ void mtl_set_vertex_amplification_count(mtl_render_encoder *encoder,
 void mtl_set_vertex_buffer(mtl_render_encoder *encoder, mtl_buffer *buffer,
                            uint32_t offset, uint32_t index);
 
+void mtl_set_vertex_bytes(mtl_render_encoder *encoder, const void *bytes,
+                          uint32_t length, uint32_t index);
+
 void mtl_set_fragment_buffer(mtl_render_encoder *encoder, mtl_buffer *buffer,
                              uint32_t offset, uint32_t index);
+
+void mtl_set_fragment_bytes(mtl_render_encoder *encoder, const void *bytes,
+                            uint32_t length, uint32_t index);
 
 void mtl_draw_primitives(mtl_render_encoder *encoder,
                          enum mtl_primitive_type primitve_type,

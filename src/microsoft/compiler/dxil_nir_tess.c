@@ -48,7 +48,8 @@ remove_hs_intrinsics(nir_function_impl *impl)
          if (instr->type != nir_instr_type_intrinsic)
             continue;
          nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
-         if (intr->intrinsic == nir_intrinsic_load_output) {
+         if (intr->intrinsic == nir_intrinsic_load_output ||
+             intr->intrinsic == nir_intrinsic_load_per_vertex_output) {
             nir_builder b = nir_builder_at(nir_before_instr(&intr->instr));
             nir_def_rewrite_uses(&intr->def, nir_undef(&b, intr->def.num_components, intr->def.bit_size));
          } else if (intr->intrinsic != nir_intrinsic_store_output &&
@@ -214,9 +215,11 @@ dxil_nir_split_tess_ctrl(nir_shader *nir, nir_function **patch_const_func)
     * will run sequentially. Then a loop is inserted so load_invocation_id will load the
     * loop counter. This loop continues until a barrier is reached, when the loop
     * is closed and the process begins again.
-    * 
-    * First, sink load_invocation_id so that it's present on both sides of barriers.
-    * Each use gets a unique load of the invocation ID.
+    *
+    * First, sink load_invocation_id so that each use has its own local load.
+    * This ensures the load sits in the same pre/post-barrier region as its
+    * use, which the loop-wrapping pass below relies on — even for single-use
+    * loads whose use sits across a barrier.
     */
    nir_builder b = nir_builder_create(patch_const_func_impl);
    nir_foreach_block(block, patch_const_func_impl) {
@@ -225,8 +228,7 @@ dxil_nir_split_tess_ctrl(nir_shader *nir, nir_function **patch_const_func)
             continue;
          nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
          if (intr->intrinsic != nir_intrinsic_load_invocation_id ||
-             list_is_empty(&intr->def.uses) ||
-             list_is_singular(&intr->def.uses))
+             list_is_empty(&intr->def.uses))
             continue;
          nir_foreach_use_including_if_safe(src, &intr->def) {
             b.cursor = nir_before_src(src);

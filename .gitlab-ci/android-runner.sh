@@ -8,8 +8,18 @@ set -uex
 
 : "${ADB:=adb}"
 
-$ADB wait-for-device root
-sleep 1
+$ADB wait-for-device
+for i in $(seq 1 5); do
+    if $ADB root; then
+        break
+    fi
+    if [ "$i" -eq 5 ]; then
+        echo "Failed to get adb root after 5 attempts"
+        exit 1
+    fi
+    sleep 2
+done
+$ADB wait-for-device
 
 # overlay 
 
@@ -122,7 +132,6 @@ if ! printf "%s" "$VK_RUNTIME_VERSION" | grep -Fq -- "${MESA_BUILD_VERSION}"; th
 fi
 
 get_surfaceflinger_pid() {
-  while [ "$($ADB shell dumpsys -l | grep 'SurfaceFlinger$')" = "" ] ; do sleep 1; done
   $ADB shell ps -A | grep -i surfaceflinger | tr -s ' ' | cut -d ' ' -f 2
 }
 

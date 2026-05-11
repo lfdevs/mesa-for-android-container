@@ -62,7 +62,7 @@ alpha_to_coverage(nir_builder *b, nir_def *alpha, bool has_intrinsic)
    /* Rotate the mask based on (pixel.x % 2) + (pixel.y % 2). This provides
     * dithering and randomizes the sample locations.
     */
-   nir_def *pixel = nir_f2u32(b, nir_channels(b, nir_load_frag_coord(b), 0x3));
+   nir_def *pixel = nir_f2u32(b, nir_build_frag_coord(b, 2));
    nir_def *rotate_amount =
       nir_iadd(b, nir_iand_imm(b, nir_channel(b, pixel, 0), 0x1),
                   nir_iand_imm(b, nir_channel(b, pixel, 1), 0x1));

@@ -8,9 +8,6 @@
 #ifndef AC_NIR_HELPERS_H
 #define AC_NIR_HELPERS_H
 
-#include "ac_hw_stage.h"
-#include "ac_shader_args.h"
-#include "ac_shader_util.h"
 #include "ac_nir.h"
 #include "nir_defines.h"
 
@@ -53,6 +50,8 @@ typedef struct
    uint8_t stream;
    /* Bitmask of components used: 4 bits per slot, 1 bit per component. */
    uint8_t components_mask : 4;
+   /* Bitmask of components that should be clamped. */
+   uint8_t clamp_components_mask : 4;
    /* Bitmask of components that are used as varying, 1 bit per component. */
    uint8_t as_varying_mask : 4;
    /* Bitmask of components that are used as sysval, 1 bit per component. */

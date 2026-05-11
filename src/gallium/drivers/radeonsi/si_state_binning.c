@@ -7,7 +7,6 @@
 /* This file handles register programming of primitive binning. */
 
 #include "si_build_pm4.h"
-#include "sid.h"
 
 struct uvec2 {
    unsigned x, y;

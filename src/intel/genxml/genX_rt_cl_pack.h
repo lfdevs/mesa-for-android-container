@@ -14,9 +14,11 @@
 #elif (GFX_VERx10 == 125)
 #  include "genxml/gen125_rt_cl_pack.h"
 #elif (GFX_VERx10 == 200)
-#  include "genxml/gen200_rt_cl_pack.h"
+#  include "genxml/xe2_rt_cl_pack.h"
 #elif (GFX_VERx10 == 300)
-#  include "genxml/gen300_rt_cl_pack.h"
+#  include "genxml/xe3_rt_cl_pack.h"
+#elif (GFX_VERx10 == 350)
+#  include "genxml/xe3p_rt_cl_pack.h"
 #else
 #  error "Need to add a pack header include for this gen"
 #endif

@@ -76,14 +76,14 @@ static VkResult pvr_srv_alloc_display_pmr(struct pvr_srv_winsys *srv_ws,
                                           &size_out,
                                           &aligment_out);
 
-   assert(size_out >= size);
-   assert(aligment_out == srv_ws->base.page_size);
-
    /* close fd, not needed anymore */
    close(fd);
 
    if (result != VK_SUCCESS)
       goto err_display_buffer_destroy;
+
+   assert(size_out >= size);
+   assert(aligment_out == srv_ws->base.page_size);
 
    *handle_out = handle;
 

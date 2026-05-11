@@ -9,7 +9,7 @@
 
 #include <stdbool.h>
 
-#include "sid.h"
+#include "amdgfxregs.h"
 
 #include "ac_gpu_info.h"
 

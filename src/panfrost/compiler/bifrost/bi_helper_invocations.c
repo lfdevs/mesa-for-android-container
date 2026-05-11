@@ -79,6 +79,10 @@ bi_instr_uses_helpers(bi_instr *I)
    case BI_OPCODE_TEX_SINGLE:
       return (I->va_lod_mode == BI_VA_LOD_MODE_COMPUTED_LOD) ||
              (I->va_lod_mode == BI_VA_LOD_MODE_COMPUTED_BIAS);
+   case BI_OPCODE_TEX_GRADIENT:
+      /* If we don't use derivatives to compute the lod we need disabled lanes
+       * to have valid texture coordinates. */
+      return !I->derivative_enable;
    case BI_OPCODE_WMASK:
       /* Helpers are needed to implement voting in fragment shaders. */
       return true;

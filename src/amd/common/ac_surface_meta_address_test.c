@@ -13,15 +13,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "drm-uapi/amdgpu_drm.h"
-#include "drm-uapi/drm_fourcc.h"
-
 #include "ac_surface.h"
 #include "util/macros.h"
 #include "util/u_atomic.h"
 #include "util/u_math.h"
-#include "util/u_vector.h"
-#include "util/mesa-blake3.h"
 #include "addrlib/inc/addrinterface.h"
 
 #include "ac_surface_test.h"

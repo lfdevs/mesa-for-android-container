@@ -180,7 +180,7 @@ static void
 rewrite_return_param_uses(nir_def *def, unsigned param_idx, struct lower_param_info *param_defs)
 {
    nir_foreach_use_safe (use, def) {
-      nir_instr *use_instr = nir_src_parent_instr(use);
+      nir_instr *use_instr = nir_src_use_instr(use);
 
       if (use_instr->type == nir_instr_type_deref) {
          assert(nir_instr_as_deref(use_instr)->deref_type == nir_deref_type_cast);

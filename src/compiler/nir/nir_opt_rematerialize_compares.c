@@ -91,10 +91,10 @@ static bool
 all_uses_are_bcsel(const nir_alu_instr *instr)
 {
    nir_foreach_use(use, &instr->def) {
-      if (nir_src_parent_instr(use)->type != nir_instr_type_alu)
+      if (nir_src_use_instr(use)->type != nir_instr_type_alu)
          return false;
 
-      nir_alu_instr *const alu = nir_instr_as_alu(nir_src_parent_instr(use));
+      nir_alu_instr *const alu = nir_instr_as_alu(nir_src_use_instr(use));
       if (alu->op != nir_op_bcsel &&
           alu->op != nir_op_b32csel)
          return false;
@@ -113,10 +113,10 @@ static bool
 all_uses_are_compare_with_zero(const nir_alu_instr *instr)
 {
    nir_foreach_use(use, &instr->def) {
-      if (nir_src_parent_instr(use)->type != nir_instr_type_alu)
+      if (nir_src_use_instr(use)->type != nir_instr_type_alu)
          return false;
 
-      nir_alu_instr *const alu = nir_instr_as_alu(nir_src_parent_instr(use));
+      nir_alu_instr *const alu = nir_instr_as_alu(nir_src_use_instr(use));
       if (!is_two_src_comparison(alu))
          return false;
 
@@ -160,7 +160,7 @@ nir_opt_rematerialize_compares_impl(nir_shader *shader, nir_function_impl *impl)
           */
          nir_foreach_use_including_if_safe(use, &alu->def) {
             if (nir_src_is_if(use)) {
-               nir_if *const if_stmt = nir_src_parent_if(use);
+               nir_if *const if_stmt = nir_src_use_if(use);
 
                nir_block *const prev_block =
                   nir_cf_node_as_block(nir_cf_node_prev(&if_stmt->cf_node));
@@ -178,7 +178,7 @@ nir_opt_rematerialize_compares_impl(nir_shader *shader, nir_function_impl *impl)
                nir_src_rewrite(&if_stmt->condition, &clone->def);
                progress = true;
             } else {
-               nir_instr *const use_instr = nir_src_parent_instr(use);
+               nir_instr *const use_instr = nir_src_use_instr(use);
 
                /* If the use is in the same block as the def, don't
                 * rematerialize.
@@ -272,7 +272,7 @@ nir_opt_rematerialize_alu_impl(nir_shader *shader, nir_function_impl *impl)
           * block because CSE cannot be run after this pass.
           */
          nir_foreach_use_safe(use, &alu->def) {
-            nir_instr *const use_instr = nir_src_parent_instr(use);
+            nir_instr *const use_instr = nir_src_use_instr(use);
 
             /* If the use is in the same block as the def, don't
              * rematerialize.

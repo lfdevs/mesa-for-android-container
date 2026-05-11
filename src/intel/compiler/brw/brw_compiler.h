@@ -220,8 +220,6 @@ struct brw_base_prog_key {
 
    enum brw_robustness_flags robust_flags:2;
 
-   bool uses_inline_push_addr:1;
-
    enum intel_vue_layout vue_layout:2;
 
    /**
@@ -233,7 +231,7 @@ struct brw_base_prog_key {
 
    enum brw_divergent_atomics_flags divergent_atomics_flags:2;
 
-   uint32_t padding:24;
+   uint32_t padding:25;
 };
 
 /**
@@ -373,8 +371,6 @@ struct brw_fs_prog_key {
    bool alpha_test_replicate_alpha:1;
    enum intel_sometimes alpha_to_coverage:2;
 
-   bool force_dual_color_blend:1;
-
    /** Whether or inputs are interpolated at sample rate by default
     *
     * This corresponds to the sample shading API bit in Vulkan or OpenGL which
@@ -397,7 +393,7 @@ struct brw_fs_prog_key {
    bool ignore_sample_mask_out:1;
    bool coarse_pixel:1;
    bool api_sample_shading:1;
-   unsigned pad:12;
+   unsigned pad:13;
 };
 
 static inline bool
@@ -495,9 +491,6 @@ struct brw_stage_prog_data {
    unsigned grf_used;
 
    uint32_t source_hash;
-
-   /* Whether shader uses atomic operations. */
-   bool uses_atomic_load_store;
 };
 
 /**
@@ -855,11 +848,6 @@ struct brw_cs_prog_data {
    unsigned prog_spilled;
 
    bool uses_barrier;
-   bool uses_inline_data;
-   /** Whether inline push data is used to provide a 64bit pointer to push
-    * constants
-    */
-   bool uses_inline_push_addr;
    bool uses_btd_stack_ids;
    bool uses_systolic;
    uint8_t generate_local_id;
@@ -889,11 +877,6 @@ brw_cs_prog_data_prog_offset(const struct brw_cs_prog_data *prog_data,
 struct brw_bs_prog_data {
    struct brw_stage_prog_data base;
 
-   /** Whether inline push data is used to provide a 64bit pointer to push
-    * constants
-    */
-   bool uses_inline_push_addr;
-
    /** SIMD size of the root shader */
    uint8_t simd_size;
 
@@ -902,9 +885,6 @@ struct brw_bs_prog_data {
 
    /** Offset into the shader where the resume SBT is located */
    uint32_t resume_sbt_offset;
-
-   /** Number of resume shaders */
-   uint32_t num_resume_shaders;
 };
 
 #define BRW_VUE_HEADER_VARYING_MASK \
@@ -971,7 +951,6 @@ struct brw_vue_prog_data {
    bool include_vue_handles;
 
    unsigned urb_read_length;
-   unsigned total_grf;
 
    uint32_t clip_distance_mask;
    uint32_t cull_distance_mask;
@@ -1024,12 +1003,6 @@ struct brw_tcs_prog_data
 
    /** Should the non-SINGLE_PATCH payload provide primitive ID? */
    bool include_primitive_id;
-
-   /** Whether the tessellation domain is unknown at compile time
-    *
-    * Used with VK_EXT_shader_object
-    */
-   bool dynamic_domain;
 
    /** Number vertices in output patch */
    int instances;
@@ -1121,9 +1094,6 @@ struct brw_mue_map {
 
    /* Per vertex offset in bytes from the start of the MUE (32B aligned) */
    uint32_t per_vertex_offset;
-
-   /* Size of the per vertex header (32B aligned) */
-   uint32_t per_vertex_header_size;
 
    /* Per vertex stride in bytes (32B aligned) */
    uint32_t per_vertex_stride;
@@ -1438,12 +1408,12 @@ struct brw_compile_mesh_params {
    struct brw_mesh_prog_data *prog_data;
    const struct brw_tue_map *tue_map;
 
-   /** Load provoking vertex
+   /** Load provoking vertex for wa_18019110168
     *
     * The callback returns a 32bit integer representing the provoking vertex.
     */
-   void *load_provoking_vertex_data;
-   nir_def *(*load_provoking_vertex)(nir_builder *b, void *data);
+   void *wa_18019110168_data;
+   nir_def *(*wa_18019110168_load_provoking_vertex)(nir_builder *b, void *data);
 };
 
 const unsigned *
@@ -1467,6 +1437,14 @@ struct brw_compile_fs_params {
    bool allow_spilling;
    bool use_rep_send;
    uint8_t max_polygons;
+
+   /** Load per primitive remapping offset for wa_18019110168
+    *
+    * The callback returns a 32bit integer representing the offset of the
+    * table in the instruction heap.
+    */
+   void *wa_18019110168_data;
+   nir_def *(*wa_18019110168_load_per_primitive_remap_table_offset)(nir_builder *b, void *data);
 };
 
 /**

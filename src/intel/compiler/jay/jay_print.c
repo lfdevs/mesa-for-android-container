@@ -23,6 +23,12 @@ static const char *jay_conditional_mod_str[] = {
    [JAY_CONDITIONAL_OV] = ".ov", [JAY_CONDITIONAL_NAN] = ".nan",
 };
 
+static const char *tgl_pipe_str[] = {
+   [TGL_PIPE_NONE] = "",  [TGL_PIPE_FLOAT] = "F", [TGL_PIPE_INT] = "I",
+   [TGL_PIPE_LONG] = "L", [TGL_PIPE_MATH] = "M",  [TGL_PIPE_SCALAR] = "S",
+   [TGL_PIPE_ALL] = "A",
+};
+
 static const char *jay_arf_str[] = {
    [JAY_ARF_NULL] = "_",
    [JAY_ARF_MASK] = "mask",
@@ -31,9 +37,9 @@ static const char *jay_arf_str[] = {
 };
 
 static const char *jay_file_str[JAY_FILE_LAST + 1] = {
-   [GPR] = "r",       [UGPR] = "u",    [FLAG] = "f",      [UFLAG] = "uf",
-   [J_ADDRESS] = "a", [ACCUM] = "acc", [UACCUM] = "uacc", [J_ARF] = "arf",
-   [MEM] = "m",       [UMEM] = "um",   [TEST_FILE] = "t",
+   [GPR] = "r",       [UGPR] = "u",      [FLAG] = "f",      [UFLAG] = "uf",
+   [J_ADDRESS] = "a", [ACCUM] = "acc",   [UACCUM] = "uacc", [J_ARF] = "arf",
+   [MEM] = "m",       [TEST_FILE] = "t",
 };
 
 static const char *jay_base_types[] = {
@@ -47,12 +53,18 @@ jay_print_type(FILE *fp, enum jay_type t)
            jay_type_size_bits(t));
 }
 
+const char *
+jay_file_prefix(enum jay_file file)
+{
+   return ENUM_TO_STR(file, jay_file_str);
+}
+
 static void
 jay_print_def(FILE *fp, const jay_inst *I, int src)
 {
    jay_def def = src == -2 ? I->cond_flag : src == -1 ? I->dst : I->src[src];
    unsigned len = jay_num_values(def);
-   const char *file = ENUM_TO_STR(def.file, jay_file_str);
+   const char *file = jay_file_prefix(def.file);
    bool has_lu = jay_is_ssa(def) && !jay_is_null(def) && src >= 0;
    unsigned lu_bit = has_lu ? jay_source_last_use_bit(I->src, src) : 0;
 
@@ -119,33 +131,6 @@ jay_print_src(FILE *fp, jay_inst *I, unsigned s)
       }
    } else {
       jay_print_def(fp, I, s);
-   }
-}
-
-/* XXX: copypaste of brw_print_swsb */
-static void
-jay_print_swsb(FILE *f, const struct tgl_swsb swsb)
-{
-   if (swsb.regdist) {
-      fprintf(f, "%s@%d",
-              (swsb.pipe == TGL_PIPE_FLOAT  ? "F" :
-               swsb.pipe == TGL_PIPE_INT    ? "I" :
-               swsb.pipe == TGL_PIPE_LONG   ? "L" :
-               swsb.pipe == TGL_PIPE_ALL    ? "A" :
-               swsb.pipe == TGL_PIPE_MATH   ? "M" :
-               swsb.pipe == TGL_PIPE_SCALAR ? "S" :
-                                              ""),
-              swsb.regdist);
-   }
-
-   if (swsb.mode) {
-      if (swsb.regdist)
-         fprintf(f, " ");
-
-      fprintf(f, "$%d%s", swsb.sbid,
-              (swsb.mode & TGL_SBID_SET ? "" :
-               swsb.mode & TGL_SBID_DST ? ".dst" :
-                                          ".src"));
    }
 }
 
@@ -218,7 +203,21 @@ jay_print_inst(FILE *fp, jay_inst *I)
    if (I->dep.regdist || I->dep.mode) {
       fprintf(fp, "%s%s%s", strlen(sep) ? " {" : "{",
               I->replicate_dep ? "*" : "", I->decrement_dep ? "+" : "");
-      jay_print_swsb(fp, I->dep);
+      sep = "";
+
+      if (I->dep.regdist) {
+         fprintf(fp, "%s@%d", ENUM_TO_STR(I->dep.pipe, tgl_pipe_str),
+                 I->dep.regdist);
+         sep = " ";
+      }
+
+      if (I->dep.mode) {
+         fprintf(fp, "%s$%d%s", sep, I->dep.sbid,
+                 (I->dep.mode & TGL_SBID_SET ? "" :
+                  I->dep.mode & TGL_SBID_DST ? ".dst" :
+                                               ".src"));
+      }
+
       fprintf(fp, "}");
    }
 
@@ -250,8 +249,13 @@ jay_print_block(FILE *fp, jay_block *block)
    fprintf(fp, "B%d%s%s", block->index, block->uniform ? " [uniform]" : "",
            block->loop_header ? " [loop header]" : "");
    bool first = true;
-   jay_foreach_predecessor(block, p) {
+   jay_foreach_predecessor(block, p, GPR) {
       fprintf(fp, "%s B%d", first ? " <-" : "", (*p)->index);
+      first = false;
+   }
+   first = true;
+   jay_foreach_predecessor(block, p, UGPR) {
+      fprintf(fp, "%s B%d", first ? " <=" : "", (*p)->index);
       first = false;
    }
    fprintf(fp, " {\n");
@@ -282,11 +286,14 @@ jay_print_block(FILE *fp, jay_block *block)
    indent(fp, block, false);
    fprintf(fp, "}");
    first = true;
-   jay_foreach_successor(block, succ) {
-      if (succ) {
-         fprintf(fp, "%s B%d", first ? " ->" : "", succ->index);
-         first = false;
-      }
+   jay_foreach_successor(block, succ, GPR) {
+      fprintf(fp, "%s B%d", first ? " ->" : "", succ->index);
+      first = false;
+   }
+   first = true;
+   jay_foreach_successor(block, succ, UGPR) {
+      fprintf(fp, "%s B%d", first ? " =>" : "", succ->index);
+      first = false;
    }
    fprintf(fp, "\n\n");
 }

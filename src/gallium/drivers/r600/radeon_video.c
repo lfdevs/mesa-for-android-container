@@ -204,18 +204,12 @@ int rvid_get_video_param(struct pipe_screen *screen,
 		case PIPE_VIDEO_CAP_SUPPORTED:
 			return codec == PIPE_VIDEO_FORMAT_MPEG4_AVC &&
 				rvce_is_fw_version_supported(rscreen);
-		case PIPE_VIDEO_CAP_NPOT_TEXTURES:
-			return 1;
 		case PIPE_VIDEO_CAP_MAX_WIDTH:
 			return 2048;
 		case PIPE_VIDEO_CAP_MAX_HEIGHT:
 			return 1152;
-		case PIPE_VIDEO_CAP_PREFERRED_FORMAT:
-			return PIPE_FORMAT_NV12;
 		case PIPE_VIDEO_CAP_SUPPORTS_PROGRESSIVE:
 			return true;
-		case PIPE_VIDEO_CAP_STACKED_FRAMES:
-			return 1;
 		default:
 			return 0;
 		}
@@ -239,37 +233,12 @@ int rvid_get_video_param(struct pipe_screen *screen,
 		default:
 			return false;
 		}
-	case PIPE_VIDEO_CAP_NPOT_TEXTURES:
-		return 1;
 	case PIPE_VIDEO_CAP_MAX_WIDTH:
 		return 2048;
 	case PIPE_VIDEO_CAP_MAX_HEIGHT:
 		return 1152;
-	case PIPE_VIDEO_CAP_PREFERRED_FORMAT:
-		return PIPE_FORMAT_NV12;
-
 	case PIPE_VIDEO_CAP_SUPPORTS_PROGRESSIVE:
 		return true;
-	case PIPE_VIDEO_CAP_MAX_LEVEL:
-		switch (profile) {
-		case PIPE_VIDEO_PROFILE_MPEG1:
-			return 0;
-		case PIPE_VIDEO_PROFILE_MPEG2_SIMPLE:
-		case PIPE_VIDEO_PROFILE_MPEG2_MAIN:
-			return 3;
-		case PIPE_VIDEO_PROFILE_VC1_SIMPLE:
-			return 1;
-		case PIPE_VIDEO_PROFILE_VC1_MAIN:
-			return 2;
-		case PIPE_VIDEO_PROFILE_VC1_ADVANCED:
-			return 4;
-		case PIPE_VIDEO_PROFILE_MPEG4_AVC_BASELINE:
-		case PIPE_VIDEO_PROFILE_MPEG4_AVC_MAIN:
-		case PIPE_VIDEO_PROFILE_MPEG4_AVC_HIGH:
-			return 41;
-		default:
-			return 0;
-		}
 	default:
 		return 0;
 	}

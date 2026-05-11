@@ -98,8 +98,8 @@ blorp_params_get_clear_kernel_fs(struct blorp_batch *batch,
    nir_def *color = nir_load_var(&b, v_color);
 
    if (clear_rgb_as_red) {
-      nir_def *pos = nir_f2i32(&b, nir_load_frag_coord(&b));
-      nir_def *comp = nir_umod_imm(&b, nir_channel(&b, pos, 0), 3);
+      nir_def *pos = nir_f2i32(&b, nir_build_frag_coord(&b, 1));
+      nir_def *comp = nir_umod_imm(&b, pos, 3);
       color = nir_pad_vec4(&b, nir_vector_extract(&b, color, comp));
    }
 
@@ -1530,7 +1530,7 @@ blorp_params_get_mcs_partial_resolve_kernel(struct blorp_batch *batch,
 
    /* Do an MCS fetch and check if it is equal to the magic clear value */
    nir_def *mcs =
-      blorp_nir_txf_ms_mcs(&b, nir_f2i32(&b, nir_load_frag_coord(&b)),
+      blorp_nir_txf_ms_mcs(&b, nir_f2i32(&b, nir_build_frag_coord(&b, 2)),
                                nir_load_layer_id(&b),
                                blorp->isl_dev->info);
    nir_def *is_clear =

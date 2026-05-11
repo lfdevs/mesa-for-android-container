@@ -57,6 +57,10 @@ void si_init_resource_fields(struct si_screen *sscreen, struct si_resource *res,
       break;
    }
 
+   /* If no compute/graphics -> use GTT since we can't copy/blit. */
+   if (!sscreen->has_gfx_compute)
+      res->domains = RADEON_DOMAIN_GTT;
+
    if (res->b.b.target == PIPE_BUFFER && res->b.b.flags & PIPE_RESOURCE_FLAG_MAP_PERSISTENT) {
       /* Use GTT for all persistent mappings with older
        * kernels, because they didn't always flush the HDP
@@ -199,7 +203,7 @@ bool si_alloc_resource(struct si_screen *sscreen, struct si_resource *res)
    if (res->b.b.flags & SI_RESOURCE_FLAG_CLEAR) {
       struct si_aux_context *auxctx = res->flags & RADEON_FLAG_ENCRYPTED ?
          &sscreen->aux_context.general : &sscreen->aux_context.compute_resource_init;
-      struct si_context *ctx = si_get_aux_context(auxctx);
+      struct si_context *ctx = si_get_aux_context(sscreen, auxctx);
       uint32_t value = 0;
 
       si_clear_buffer(ctx, &res->b.b, 0, res->bo_size, &value, 4, SI_AUTO_SELECT_CLEAR_METHOD,
@@ -837,6 +841,24 @@ void si_clear_buffer(struct si_context *sctx, struct pipe_resource *dst,
    si_cp_dma_clear_buffer(sctx, &sctx->gfx_cs, dst, offset, size, *clear_value);
 }
 
+void si_resource_copy_buffer(struct pipe_context *ctx, struct pipe_resource *dst,
+                             unsigned dst_level, unsigned dstx, unsigned dsty, unsigned dstz,
+                             struct pipe_resource *src, unsigned src_level,
+                             const struct pipe_box *src_box)
+{
+   struct si_context *sctx = (struct si_context *)ctx;
+
+   /* This function only handles buffers. */
+   if (dst->target != PIPE_BUFFER || src->target != PIPE_BUFFER) {
+      assert(false);
+      return;
+   }
+
+   si_barrier_before_simple_buffer_op(sctx, 0, dst, src);
+   si_copy_buffer(sctx, dst, src, dstx, src_box->x, src_box->width);
+   si_barrier_after_simple_buffer_op(sctx, 0, dst, src);
+}
+
 static uint64_t si_resource_get_address(struct pipe_screen *screen,
                                         struct pipe_resource *resource)
 {
@@ -894,4 +916,8 @@ void si_init_buffer_functions(struct si_context *sctx)
    sctx->b.texture_subdata = u_default_texture_subdata;
    sctx->b.buffer_subdata = si_buffer_subdata;
    sctx->b.resource_commit = si_resource_commit;
+   /* Default implementation, may be overriden from
+    * si_init_blit_functions.
+    */
+   sctx->b.resource_copy_region = si_resource_copy_buffer;
 }

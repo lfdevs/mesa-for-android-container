@@ -7,7 +7,6 @@
 #include <stdbool.h>
 
 #include "radv_meta.h"
-#include "sid.h"
 #include "vk_format.h"
 
 static void

@@ -9,7 +9,8 @@
 
 #include "nir/radv_meta_nir.h"
 #include "radv_meta.h"
-#include "sid.h"
+
+#include "vk_shader_module.h"
 
 struct radv_htile_expand_key {
    enum radv_meta_object_key_type type;
@@ -260,10 +261,9 @@ radv_process_depth_stencil(struct radv_cmd_buffer *cmd_buffer, struct radv_image
 }
 
 static VkResult
-get_pipeline_cs(struct radv_device *device, VkPipeline *pipeline_out, VkPipelineLayout *layout_out)
+get_pipeline_layout(struct radv_device *device, VkPipelineLayout *layout_out)
 {
    enum radv_meta_object_key_type key = RADV_META_OBJECT_KEY_HTILE_EXPAND_CS;
-   VkResult result;
 
    const VkDescriptorSetLayoutBinding bindings[] = {
       {
@@ -288,10 +288,30 @@ get_pipeline_cs(struct radv_device *device, VkPipeline *pipeline_out, VkPipeline
       .pBindings = bindings,
    };
 
-   result = vk_meta_get_pipeline_layout(&device->vk, &device->meta_state.device, &desc_info, NULL, &key, sizeof(key),
-                                        layout_out);
+   return vk_meta_get_pipeline_layout(&device->vk, &device->meta_state.device, &desc_info, NULL, &key, sizeof(key),
+                                      layout_out);
+}
+
+struct radv_htile_expand_cs_key {
+   enum radv_meta_object_key_type type;
+   uint8_t samples;
+};
+
+static VkResult
+get_pipeline_cs(struct radv_device *device, const struct radv_image *image, VkPipeline *pipeline_out,
+                VkPipelineLayout *layout_out)
+{
+   const uint32_t samples = image->vk.samples;
+   struct radv_htile_expand_cs_key key;
+   VkResult result;
+
+   result = get_pipeline_layout(device, layout_out);
    if (result != VK_SUCCESS)
       return result;
+
+   memset(&key, 0, sizeof(key));
+   key.type = RADV_META_OBJECT_KEY_HTILE_EXPAND_CS;
+   key.samples = samples;
 
    VkPipeline pipeline_from_cache = vk_meta_lookup_pipeline(&device->meta_state.device, &key, sizeof(key));
    if (pipeline_from_cache != VK_NULL_HANDLE) {
@@ -299,7 +319,7 @@ get_pipeline_cs(struct radv_device *device, VkPipeline *pipeline_out, VkPipeline
       return VK_SUCCESS;
    }
 
-   nir_shader *cs = radv_meta_nir_build_expand_depth_stencil_compute_shader();
+   nir_shader *cs = radv_meta_nir_build_expand_depth_stencil_compute_shader(samples);
 
    const VkPipelineShaderStageCreateInfo stage_info = {
       .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
@@ -336,7 +356,7 @@ radv_expand_depth_stencil_compute(struct radv_cmd_buffer *cmd_buffer, struct rad
 
    assert(radv_tc_compat_htile_enabled(image, subresourceRange->baseMipLevel));
 
-   result = get_pipeline_cs(device, &pipeline, &layout);
+   result = get_pipeline_cs(device, image, &pipeline, &layout);
    if (result != VK_SUCCESS) {
       vk_command_buffer_set_error(&cmd_buffer->vk, result);
       return;

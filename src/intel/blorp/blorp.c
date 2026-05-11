@@ -253,6 +253,26 @@ blorp_surface_info_init(struct blorp_batch *batch,
       info->surf.phys_level0_sa.w += surf->tile_x_sa;
       info->surf.phys_level0_sa.h += surf->tile_y_sa;
    }
+
+   if (blorp->isl_dev->requires_padding && !is_dest &&
+       (batch->flags & BLORP_BATCH_SRC_UNPADDED)) {
+      blorp_assert_is_buffer(info->surf, info->view);
+
+      /* Infers the page boundaries for a buffer to image copy based on the
+       * surface address and dimensions, following Vulkan semantics to
+       * determine the extent of the final row.
+       */
+      uint64_t size_B =
+         (uint64_t) info->surf.phys_level0_sa.w *
+            (isl_format_get_layout(info->view.format)->bpb / 8) +
+         (uint64_t) (info->surf.phys_level0_sa.h - 1) *
+            info->surf.row_pitch_B;
+
+      uint64_t mask = blorp->isl_dev->info->mem_alignment - 1;
+      uint64_t address = batch->blorp->get_surface_address(batch, info->addr);
+      info->page_base = address & ~mask;
+      info->page_limit = (address + size_B + mask) & ~mask;
+   }
 }
 
 

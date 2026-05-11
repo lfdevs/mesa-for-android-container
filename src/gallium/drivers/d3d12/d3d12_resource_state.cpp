@@ -209,6 +209,7 @@ void
 d3d12_context_state_table_init(struct d3d12_context *ctx)
 {
    ctx->bo_state_table = _mesa_hash_table_u64_create(nullptr);
+   ctx->local_state_bos = _mesa_pointer_set_create(nullptr);
    ctx->pending_barriers_bos = _mesa_pointer_set_create(nullptr);
    util_dynarray_init(&ctx->local_pending_barriers_bos, nullptr);
 }
@@ -221,6 +222,7 @@ d3d12_context_state_table_destroy(struct d3d12_context *ctx)
       free(entry->data);
    }
    _mesa_hash_table_u64_destroy(ctx->bo_state_table);
+   _mesa_set_destroy(ctx->local_state_bos, nullptr);
    util_dynarray_fini(&ctx->barrier_scratch);
    if (ctx->state_fixup_cmdlist)
       ctx->state_fixup_cmdlist->Release();
@@ -266,6 +268,7 @@ find_or_create_state_entry(struct d3d12_context *ctx, d3d12_bo *bo)
       if ((bo->local_context_state_mask & context_bit) == 0) {
          init_state_table_entry(&bo->local_context_states[ctx->id], bo);
          bo->local_context_state_mask |= context_bit;
+         _mesa_set_add(ctx->local_state_bos, bo);
       }
       return &bo->local_context_states[ctx->id];
    }

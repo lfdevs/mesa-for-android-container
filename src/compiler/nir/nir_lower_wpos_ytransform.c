@@ -279,7 +279,8 @@ lower_wpos_ytransform_instr(nir_builder *b, nir_intrinsic_instr *intr,
       nir_deref_instr *deref = nir_src_as_deref(intr->src[0]);
       nir_variable *var = nir_deref_instr_get_variable(deref);
       if (var->data.mode == nir_var_system_value &&
-          var->data.location == SYSTEM_VALUE_FRAG_COORD) {
+          (var->data.location == SYSTEM_VALUE_FRAG_COORD ||
+           var->data.location == SYSTEM_VALUE_FRAG_COORD_XY)) {
          /* gl_FragCoord should not have array/struct derefs: */
          return lower_fragcoord(state, intr);
       } else if (var->data.mode == nir_var_system_value &&
@@ -295,6 +296,7 @@ lower_wpos_ytransform_instr(nir_builder *b, nir_intrinsic_instr *intr,
       return false;
    }
    case nir_intrinsic_load_frag_coord:
+   case nir_intrinsic_load_frag_coord_xy:
       return lower_fragcoord(state, intr);
    case nir_intrinsic_load_sample_pos:
       return lower_load_sample_pos(state, intr);

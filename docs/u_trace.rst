@@ -73,4 +73,4 @@ u_trace is controlled by environment variables:
         - ``src/freedreno/vulkan/tu_tracepoints.py``
       * - ANV
         - .. envvar:: INTEL_GPU_TRACEPOINT
-        - ``src/intel/vulkan/intel_tracepoints.py``
+        - ``src/intel/ds/intel_tracepoints.py``

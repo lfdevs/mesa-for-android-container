@@ -59,7 +59,7 @@ TEST_F(nir_opt_varyings_test_prop_const, \
    SHADER_CONST_OUTPUT(producer_stage, consumer_stage, slot, comp, type, bitsize, value, value) \
    \
    if (nir_slot_is_sysval_output((gl_varying_slot)pindex, MESA_SHADER_##consumer_stage)) { \
-      ASSERT_TRUE(opt_varyings() == nir_progress_consumer); \
+      ASSERT_TRUE(opt_varyings() & nir_progress_consumer); \
       ASSERT_TRUE(b1->shader->info.outputs_written == BITFIELD64_BIT(pindex)); \
       ASSERT_TRUE(nir_intrinsic_io_semantics(store).no_varying); \
    } else { \

@@ -81,6 +81,7 @@ enum tu_cmd_dirty_bits
    TU_CMD_DIRTY_SHADING_RATE = BIT(15),
    TU_CMD_DIRTY_DISABLE_FS = BIT(16),
    TU_CMD_DIRTY_TCS = BIT(17),
+   TU_CMD_DIRTY_VS = BIT(18),
 
    /* all draw states were disabled and need to be re-enabled: */
    TU_CMD_DIRTY_DRAW_STATE = BIT(18)
@@ -214,6 +215,10 @@ enum tu_stage {
     */
    TU_STAGE_BOTTOM,
 };
+
+enum tu_stage
+vk2tu_dst_stage(struct tu_device *dev,
+                VkPipelineStageFlags2 vk_stages);
 
 enum tu_cmd_flush_bits {
    TU_CMD_FLAG_CCU_CLEAN_DEPTH = 1 << 0,
@@ -903,7 +908,8 @@ struct tu_vis_stream_patchpoint_cs {
 void
 tu_barrier(struct tu_cmd_buffer *cmd,
            uint32_t dep_count,
-           const VkDependencyInfo *dep_info);
+           const VkDependencyInfo *dep_info,
+           bool no_sync);
 
 template <chip CHIP>
 void
@@ -964,6 +970,10 @@ void
 tu7_set_thread_br_patchpoint(struct tu_cmd_buffer *cmd,
                              struct tu_cs *cs,
                              bool force_disable_cb);
+
+void
+tu7_set_thread_both_patchpoint(struct tu_cmd_buffer *cmd,
+                               struct tu_cs *cs);
 
 /* For bin offsetting we want to do "Euclidean division," where the remainder
  * (i.e. the offset of the bin) is always positive. Unfortunately C/C++

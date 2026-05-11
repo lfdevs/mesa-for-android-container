@@ -22,6 +22,9 @@ extern const unsigned a6xx_num_perfcntr_groups;
 extern const struct fd_perfcntr_group a7xx_perfcntr_groups[];
 extern const unsigned a7xx_num_perfcntr_groups;
 
+extern const struct fd_perfcntr_group a8xx_perfcntr_groups[];
+extern const unsigned a8xx_num_perfcntr_groups;
+
 const struct fd_perfcntr_group *
 fd_perfcntrs(const struct fd_dev_id *id, unsigned *count)
 {

@@ -399,3 +399,37 @@ be experimented with to try to narrow down the issue :
 
 A combinaison of those can also be tried if the issue has multiple
 causes, for example : ``INTEL_DEBUG=stall,sync``
+
+Shader performance analysis
+---------------------------
+
+On Xe2+ GPUs a new feature call EU monitor is available to analyze hot
+paths in the shaders. To make use of this feature :
+
+1. Run the EU monitor tools in a terminal :
+
+.. code-block:: sh
+
+   mesa % intel_monitor -e > eustall.csv
+
+
+2. Launch you application with :
+
+.. code-block:: sh
+
+   mesa % ANV_DEBUG=shader-dump my_app
+
+3. Exit the application once enough data is captured
+
+4. Untar the ``anv-shaders.mda.tar`` file created in the directory the
+   application was launched
+
+.. code-block:: sh
+
+   mesa % tar xfv anv-shaders.mda.tar
+
+5. Look at the hot spots with ``intel_eu_stall_viewer`` :
+
+.. code-block:: sh
+
+   mesa % intel_eu_stall_viewer -s /path/to/untar/anv-shaders.mda -c /path/to/eustall.csv

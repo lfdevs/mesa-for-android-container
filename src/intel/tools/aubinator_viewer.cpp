@@ -217,12 +217,9 @@ update_mem_for_exec(struct aub_mem *mem, struct aub_file *file, int exec_idx)
 
 /* UI */
 
-#include <epoxy/gl.h>
-
 #include "imgui/imgui.h"
 #include "imgui/imgui_memory_editor.h"
-#include "imgui_impl_gtk3.h"
-#include "imgui_impl_opengl3.h"
+#include "imgui/intel_imgui.h"
 
 #include "aubinator_viewer.h"
 #include "aubinator_viewer_urb.h"
@@ -306,8 +303,6 @@ static struct Context {
    char *input_file;
    char *xml_path;
 
-   GtkWidget *gtk_window;
-
    /* UI state*/
    bool show_commands_window;
    bool show_registers_window;
@@ -323,10 +318,10 @@ static struct Context {
 
 thread_local ImGuiContext* __MesaImGui;
 
-static int
+static ImGuiKey
 map_key(int k)
 {
-   return ImGuiKey_COUNT + k;
+   return (ImGuiKey)(ImGuiKey_COUNT + k);
 }
 
 static bool
@@ -338,7 +333,7 @@ has_ctrl_key(int key)
 static bool
 window_has_ctrl_key(int key)
 {
-   return ImGui::IsRootWindowOrAnyChildFocused() && has_ctrl_key(key);
+   return ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows) && has_ctrl_key(key);
 }
 
 static void
@@ -462,17 +457,17 @@ new_urb_window(struct aub_viewer_decode_ctx *decode_ctx, uint64_t address)
 /* Memory editor windows */
 
 static uint8_t
-read_edit_window(const uint8_t *data, size_t off)
+read_edit_window(const ImU8* mem, size_t off, void* user_data)
 {
-   struct edit_window *window = (struct edit_window *) data;
+   struct edit_window *window = (struct edit_window *) mem;
 
    return *((const uint8_t *) window->gtt_bo.map + window->gtt_offset + off);
 }
 
 static void
-write_edit_window(uint8_t *data, size_t off, uint8_t d)
+write_edit_window(ImU8* mem, size_t off, ImU8 d, void* user_data)
 {
-   struct edit_window *window = (struct edit_window *) data;
+   struct edit_window *window = (struct edit_window *) mem;
    uint8_t *gtt = (uint8_t *) window->gtt_bo.map + window->gtt_offset + off;
    uint8_t *aub = (uint8_t *) window->aub_bo.map + window->aub_offset + off;
 
@@ -743,7 +738,7 @@ display_batch_window(struct window *win)
 {
    struct batch_window *window = (struct batch_window *) win;
 
-   ImGui::PushItemWidth(ImGui::GetContentRegionAvailWidth() / (2 * 2));
+   ImGui::PushItemWidth(ImGui::GetContentRegionAvail().x / (2 * 2));
    if (window_has_ctrl_key('f')) ImGui::SetKeyboardFocusHere();
    display_decode_options(&window->decode_cfg);
    ImGui::PopItemWidth();
@@ -1008,7 +1003,7 @@ display_aubfile_window(struct window *win)
    ImGui::Text("Application name: %s", context.file->app_name);
    ImGui::Text("%s", context.file->devinfo.name);
 
-   ImGui::SetNextWindowContentWidth(500);
+   ImGui::SetNextWindowContentSize(ImVec2(500.0f, 0.0f));
    if (ImGui::BeginPopupModal("Help", NULL, ImGuiWindowFlags_AlwaysAutoResize)) {
       ImGui::Text("Some global keybindings:");
       ImGui::Separator();
@@ -1061,8 +1056,10 @@ show_aubfile_window(void)
 /* Main redrawing */
 
 static void
-display_windows(void)
+draw_ui(void)
 {
+   show_aubfile_window();
+
    /* Start by disposing closed windows, we don't want to destroy windows that
     * have already been scheduled to be painted. So destroy always happens on
     * the next draw cycle, prior to any drawing.
@@ -1095,66 +1092,6 @@ display_windows(void)
          window->opened = false;
       ImGui::End();
    }
-}
-
-static void
-repaint_area(GtkGLArea *area, GdkGLContext *gdk_gl_context)
-{
-   ImGui_ImplOpenGL3_NewFrame();
-   ImGui_ImplGtk3_NewFrame();
-   ImGui::NewFrame();
-
-   display_windows();
-
-   ImGui::EndFrame();
-   ImGui::Render();
-
-   glClearColor(context.cfg.clear_color.Value.x,
-                context.cfg.clear_color.Value.y,
-                context.cfg.clear_color.Value.z, 1.0);
-   glClear(GL_COLOR_BUFFER_BIT);
-   ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-}
-
-static void
-realize_area(GtkGLArea *area)
-{
-   ImGui::CreateContext();
-   ImGui_ImplGtk3_Init(GTK_WIDGET(area), true);
-   ImGui_ImplOpenGL3_Init("#version 130");
-
-   list_inithead(&context.windows);
-
-   ImGui::StyleColorsDark();
-   context.cfg = aub_viewer_cfg();
-
-   ImGuiIO& io = ImGui::GetIO();
-   io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
-}
-
-static void
-unrealize_area(GtkGLArea *area)
-{
-   gtk_gl_area_make_current(area);
-
-   ImGui_ImplOpenGL3_Shutdown();
-   ImGui_ImplGtk3_Shutdown();
-   ImGui::DestroyContext();
-}
-
-static void
-size_allocate_area(GtkGLArea *area,
-                   GdkRectangle *allocation,
-                   gpointer user_data)
-{
-   if (!gtk_widget_get_realized(GTK_WIDGET(area)))
-      return;
-
-   /* We want to catch only initial size allocate. */
-   g_signal_handlers_disconnect_by_func(area,
-                                        (gpointer) size_allocate_area,
-                                        user_data);
-   show_aubfile_window();
 }
 
 static void
@@ -1201,23 +1138,7 @@ int main(int argc, char *argv[])
 
    context.file = aub_file_open(context.input_file);
 
-   gtk_init(NULL, NULL);
-
-   context.gtk_window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
-   gtk_window_set_title(GTK_WINDOW(context.gtk_window), "Aubinator Viewer");
-   g_signal_connect(context.gtk_window, "delete-event", G_CALLBACK(gtk_main_quit), NULL);
-   gtk_window_resize(GTK_WINDOW(context.gtk_window), 1280, 720);
-
-   GtkWidget* gl_area = gtk_gl_area_new();
-   g_signal_connect(gl_area, "render", G_CALLBACK(repaint_area), NULL);
-   g_signal_connect(gl_area, "realize", G_CALLBACK(realize_area), NULL);
-   g_signal_connect(gl_area, "unrealize", G_CALLBACK(unrealize_area), NULL);
-   g_signal_connect(gl_area, "size_allocate", G_CALLBACK(size_allocate_area), NULL);
-   gtk_container_add(GTK_CONTAINER(context.gtk_window), gl_area);
-
-   gtk_widget_show_all(context.gtk_window);
-
-   gtk_main();
+   intel_imgui_ui("Aubinator Viewer", draw_ui);
 
    free(context.xml_path);
 

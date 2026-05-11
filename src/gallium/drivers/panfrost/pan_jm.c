@@ -522,7 +522,7 @@ jm_emit_tiler_draw(struct mali_draw_packed *out, struct panfrost_batch *batch,
       cfg.front_face_ccw = rast->front_ccw;
 #endif
 
-      if (ctx->occlusion_query && ctx->active_queries) {
+      if (panfrost_occlusion_query_active(ctx)) {
 #if PAN_ARCH == 9
          if (ctx->occlusion_query->type == PIPE_QUERY_OCCLUSION_COUNTER)
             cfg.flags_0.occlusion_query = MALI_OCCLUSION_MODE_COUNTER;
@@ -569,7 +569,7 @@ jm_emit_tiler_draw(struct mali_draw_packed *out, struct panfrost_batch *batch,
          cfg.flags_0.multisample_enable = true;
 
       if (fs_required) {
-         bool has_oq = ctx->occlusion_query && ctx->active_queries;
+         bool has_oq = panfrost_occlusion_query_active(ctx);
 
          struct pan_earlyzs_state earlyzs = pan_earlyzs_get(
             fs->earlyzs, ctx->depth_stencil->writes_zs || has_oq,

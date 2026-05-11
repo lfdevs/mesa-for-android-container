@@ -1,3 +1,6 @@
 # Triggers an assertion on the Turnip host and hangs Cuttlefish
 # virgl_render_server: ../src/freedreno/vulkan/tu_knl_drm_msm.cc:1400: VkResult msm_queue_submit(tu_queue*, void*, vk_sync_wait*, uint32_t, vk_sync_signal*, uint32_t, tu_u_trace_submission_data*): Assertion `errno_ != EINVAL' failed.
 dEQP-VK.sparse_resources.*
+
+# Mainly for testing platform features. Skip as take too long. Flaky on both ANV and Turnip.
+awsi-dEQP-VK.wsi.android.incremental_present.*

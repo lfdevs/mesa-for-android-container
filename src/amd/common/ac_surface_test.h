@@ -10,7 +10,6 @@
 
 #include "ac_gpu_info.h"
 #include "amdgfxregs.h"
-#include "addrlib/src/amdgpu_asic_addr.h"
 
 #include "amdgpu_devices.h"
 #include "ac_linux_drm.h"
@@ -95,7 +94,7 @@ static void get_radeon_info(struct radeon_info *info, const struct ac_surface_fa
    ac_fill_feature_info(info, &dev->dev);
    ac_fill_bug_info(info);
    ac_fill_tess_info(info);
-   ac_fill_compiler_info(info, &dev->dev);
+   ac_fill_compiler_info(info, &dev->dev, false);
 
    switch(info->gfx_level) {
    case GFX9:

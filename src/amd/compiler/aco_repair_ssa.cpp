@@ -6,8 +6,6 @@
 
 #include "aco_ir.h"
 
-#include <functional>
-
 namespace aco {
 
 namespace {

@@ -20,16 +20,9 @@ dEQP-GLES3.functional.multisample.fbo_max_samples.stencil,Fail
 
 GTF-GL46.gtf30.GL3Tests.sgis_texture_lod.sgis_texture_lod_basic_lod_selection,Fail
 
-KHR-Single-GL46.arrays_of_arrays_gl.SubroutineFunctionCalls2,Crash
-
 # Turnip has maxFragmentInputComponents = 124, while GL requires
 # gl_MaxFragmentInputComponents >= 128
 KHR-GL46.limits.max_fragment_input_components,Fail
-
-# https://gitlab.freedesktop.org/mesa/mesa/-/issues/6723
-KHR-GL46.copy_image.functional,Fail
-KHR-GL46.texture_view.view_classes,Fail
-
 
 dEQP-GLES3.functional.shaders.matrix.inverse.dynamic.lowp_mat4_float_vertex,Fail
 dEQP-GLES3.functional.shaders.matrix.inverse.dynamic.mediump_mat4_float_vertex,Fail

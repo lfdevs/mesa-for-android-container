@@ -22,6 +22,9 @@ void PVR_PER_ARCH(CmdResetQueryPool)(VkCommandBuffer commandBuffer,
 
    PVR_CHECK_COMMAND_BUFFER_BUILDING_STATE(cmd_buffer);
 
+   if (queryCount == 0)
+      return;
+
    query_info.type = PVR_QUERY_TYPE_RESET_QUERY_POOL;
 
    query_info.reset_query_pool.query_pool = queryPool;
@@ -81,6 +84,9 @@ void PVR_PER_ARCH(CmdCopyQueryPoolResults)(VkCommandBuffer commandBuffer,
 
    PVR_CHECK_COMMAND_BUFFER_BUILDING_STATE(cmd_buffer);
 
+   if (queryCount == 0)
+      return;
+
    query_info.type = PVR_QUERY_TYPE_COPY_QUERY_RESULTS;
 
    query_info.copy_query_results.query_pool = queryPool;
@@ -112,7 +118,7 @@ void PVR_PER_ARCH(CmdCopyQueryPoolResults)(VkCommandBuffer commandBuffer,
    cmd_buffer->state.current_sub_cmd->event = (struct pvr_sub_cmd_event){
       .type = PVR_EVENT_TYPE_BARRIER,
       .barrier = {
-         .wait_for_stage_mask = PVR_PIPELINE_STAGE_TRANSFER_BIT,
+         .wait_for_stage_mask = PVR_PIPELINE_STAGE_ALL_GRAPHICS_BITS | PVR_PIPELINE_STAGE_TRANSFER_BIT,
          .wait_at_stage_mask = PVR_PIPELINE_STAGE_QUERY_BIT,
       },
    };
@@ -132,7 +138,7 @@ void PVR_PER_ARCH(CmdCopyQueryPoolResults)(VkCommandBuffer commandBuffer,
       .type = PVR_EVENT_TYPE_BARRIER,
       .barrier = {
          .wait_for_stage_mask = PVR_PIPELINE_STAGE_QUERY_BIT,
-         .wait_at_stage_mask = PVR_PIPELINE_STAGE_TRANSFER_BIT,
+         .wait_at_stage_mask = PVR_PIPELINE_STAGE_ALL_GRAPHICS_BITS | PVR_PIPELINE_STAGE_TRANSFER_BIT,
       },
    };
 }

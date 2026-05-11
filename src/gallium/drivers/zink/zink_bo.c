@@ -707,8 +707,8 @@ zink_bo_map(struct zink_screen *screen, struct zink_bo *bo)
       offset = bo->offset - real->offset;
    }
 
-   p_atomic_inc(&real->u.real.map_count);
-   cpu = p_atomic_read(&real->u.real.cpu_ptr);
+   if (p_atomic_inc_return(&real->u.real.map_count) > 1)
+      cpu = p_atomic_read(&real->u.real.cpu_ptr);
    if (!cpu) {
       simple_mtx_lock(&real->lock);
       /* Must re-check due to the possibility of a race. Re-check need not
@@ -743,12 +743,15 @@ zink_bo_unmap(struct zink_screen *screen, struct zink_bo *bo)
 
    if (p_atomic_dec_zero(&real->u.real.map_count)) {
       simple_mtx_lock(&real->lock);
-      p_atomic_set(&real->u.real.cpu_ptr, NULL);
-      if (unlikely(zink_debug & ZINK_DEBUG_MAP)) {
-         p_atomic_add(&screen->mapped_vram, -real->base.base.size);
-         mesa_loge("UNMAP(%"PRIu64") TOTAL(%"PRIu64")", real->base.base.size, screen->mapped_vram);
+      /* Re-check in case of race with zink_bo_map */
+      if (!p_atomic_read(&real->u.real.map_count)) {
+         p_atomic_set(&real->u.real.cpu_ptr, NULL);
+         if (unlikely(zink_debug & ZINK_DEBUG_MAP)) {
+            p_atomic_add(&screen->mapped_vram, -real->base.base.size);
+            mesa_loge("UNMAP(%"PRIu64") TOTAL(%"PRIu64")", real->base.base.size, screen->mapped_vram);
+         }
+         VKSCR(UnmapMemory)(screen->dev, real->mem);
       }
-      VKSCR(UnmapMemory)(screen->dev, real->mem);
       simple_mtx_unlock(&real->lock);
    }
 }
@@ -804,18 +807,16 @@ buffer_commit_single(struct zink_context *ctx, struct zink_resource *res, struct
    VkBindSparseInfo sparse = {0};
    sparse.sType = VK_STRUCTURE_TYPE_BIND_SPARSE_INFO;
    sparse.pNext = &timeline;
-   sparse.bufferBindCount = res->obj->storage_buffer ? 2 : 1;
+   sparse.bufferBindCount = 1;
    sparse.waitSemaphoreCount = !!wait;
    sparse.pWaitSemaphores = &wait;
    sparse.signalSemaphoreCount = 1;
    sparse.pSignalSemaphores = &sem;
 
-   VkSparseBufferMemoryBindInfo sparse_bind[2];
-   sparse_bind[0].buffer = res->obj->buffer;
-   sparse_bind[1].buffer = res->obj->storage_buffer;
-   sparse_bind[0].bindCount = 1;
-   sparse_bind[1].bindCount = 1;
-   sparse.pBufferBinds = sparse_bind;
+   VkSparseBufferMemoryBindInfo sparse_bind;
+   sparse_bind.buffer = res->obj->buffer;
+   sparse_bind.bindCount = 1;
+   sparse.pBufferBinds = &sparse_bind;
 
    VkSparseMemoryBind mem_bind;
    mem_bind.resourceOffset = offset;
@@ -823,8 +824,7 @@ buffer_commit_single(struct zink_context *ctx, struct zink_resource *res, struct
    mem_bind.memory = commit ? (bo->mem ? bo->mem : bo->u.slab.real->mem) : VK_NULL_HANDLE;
    mem_bind.memoryOffset = bo_offset * ZINK_SPARSE_BUFFER_PAGE_SIZE + (commit ? (bo->mem ? 0 : bo->offset) : 0);
    mem_bind.flags = 0;
-   sparse_bind[0].pBinds = &mem_bind;
-   sparse_bind[1].pBinds = &mem_bind;
+   sparse_bind.pBinds = &mem_bind;
 
    VkResult ret = VKSCR(QueueBindSparse)(screen->queue_sparse, 1, &sparse, VK_NULL_HANDLE);
    if (zink_screen_handle_vkresult(screen, ret))

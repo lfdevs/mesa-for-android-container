@@ -84,8 +84,8 @@ fill_scale_and_biases(struct ethosu_subgraph *subgraph, struct ethosu_operation 
          conv_scale = ((double)ifm_scale * (double)kernel_scale) / (double)ofm_scale;
       }
 
-      uint32_t shift;
-      int scale = ethosu_quantize_scale(conv_scale, &shift);
+      int32_t shift;
+      int scale = ethosu_quantize_scale(conv_scale, &shift, false);
 
       uint64_t bias = biases ? biases[i] : 0;
 
@@ -159,4 +159,18 @@ fill_coefs(struct ethosu_subgraph *subgraph,
    subgraph->coefs = realloc(subgraph->coefs, subgraph->coefs_used);
    memcpy(subgraph->coefs + operation->conv.weights.address, weights, operation->conv.weights.size);
    free(weights);
+}
+
+#define LUT_SIZE  256
+
+void
+fill_lut(struct ethosu_subgraph *subgraph,
+         struct ethosu_operation *operation,
+         void *lut)
+{
+   operation->pooling.lut.region = COEFS_REGION;
+   operation->pooling.lut.address = subgraph->coefs_used;
+   subgraph->coefs_used += LUT_SIZE;
+   subgraph->coefs = realloc(subgraph->coefs, subgraph->coefs_used);
+   memcpy(subgraph->coefs + operation->pooling.lut.address, lut, LUT_SIZE);
 }

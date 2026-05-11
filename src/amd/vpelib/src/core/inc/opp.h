@@ -103,12 +103,59 @@ struct opp_pipe_control_params {
     /**< Digital bypass enable */
     bool bypass_enable;
     /**< Enable bypass mode for the pipe */
+    /**< Pipe alpha select  */
+    bool alpha_select;
+};
+
+enum subsampling_quality {
+    SUBSAMPLING_QUALITY_HIGH,
+    SUBSAMPLING_QUALITY_LOW,
+    SUBSAMPLING_QUALITY_COUNT,
+};
+
+enum fmt_subsampling_boundary_mode {
+    FMT_SUBSAMPLING_BOUNDARY_REPEAT = 0,
+    FMT_SUBSAMPLING_BOUNDARY_EXTRA  = 1,
+};
+
+struct fmt_boundary_mode {
+    enum fmt_subsampling_boundary_mode left;
+    enum fmt_subsampling_boundary_mode right;
+    enum fmt_subsampling_boundary_mode top;
+    enum fmt_subsampling_boundary_mode bottom;
+};
+
+struct chroma_taps {
+    uint32_t v_taps_c; /**< Number of vertical taps for chroma plane */
+    uint32_t h_taps_c; /**< Number of horizontal taps for chroma plane */
+};
+
+struct fmt_extra_pixel_info {
+    uint32_t left_pixels;
+    uint32_t right_pixels;
+    uint32_t top_pixels;
+    uint32_t bottom_pixels;
+};
+
+struct fmt_subsampling_params {
+    uint32_t                 pixel_encoding;
+    uint32_t                 bit_reduction_bypass;
+    uint32_t                 vtaps;
+    uint32_t                 htaps;
+    struct fmt_boundary_mode boundary_mode;
 };
 
 struct fmt_control_params {
     uint8_t fmt_spatial_dither_frame_counter_max;
     uint8_t fmt_spatial_dither_frame_counter_bit_swap;
 
+    struct fmt_subsampling_params subsampling_params;
+};
+
+struct opp_frod_param {
+    union {
+        uint8_t enable_frod;
+    };
 };
 
 struct opp_funcs {
@@ -128,6 +175,20 @@ struct opp_funcs {
     void (*program_pipe_control)(struct opp *opp, const struct opp_pipe_control_params *params);
 
     void (*program_pipe_crc)(struct opp *opp, bool enable);
+
+    void (*build_fmt_subsample_params)(struct opp *opp, enum vpe_surface_pixel_format format,
+        enum subsampling_quality subsample_quality, enum chroma_cositing cositing,
+        struct fmt_boundary_mode boundary_mode, struct fmt_subsampling_params *subsample_params);
+
+    void (*set_bg)(struct opp* opp, struct vpe_rect target_rect, struct vpe_rect dst_rect,
+        enum vpe_surface_pixel_format format, struct vpe_color bgcolor);
+
+    void (*program_frod)(struct opp *opp, struct opp_frod_param *frod_param);
+
+    void (*get_fmt_extra_pixel)(enum vpe_surface_pixel_format format,
+        enum subsampling_quality subsample_quality, enum chroma_cositing cositing,
+        struct fmt_extra_pixel_info *extra_pixel);
+
 };
 
 struct opp {

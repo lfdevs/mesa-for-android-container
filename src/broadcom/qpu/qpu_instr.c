@@ -190,6 +190,10 @@ v3d_qpu_add_op_name(enum v3d_qpu_add_op op)
                 [V3D_QPU_A_ROTQ] = "rotq",
                 [V3D_QPU_A_ROT] = "rot",
                 [V3D_QPU_A_SHUFFLE] = "shuffle",
+                [V3D_QPU_A_SETNNMODE_UU] = "setnnmode_uu",
+                [V3D_QPU_A_SETNNMODE_SU] = "setnnmode_su",
+                [V3D_QPU_A_SETNNMODE_US] = "setnnmode_us",
+                [V3D_QPU_A_SETNNMODE_SS] = "setnnmode_ss",
         };
 
         if (op >= ARRAY_SIZE(op_names))
@@ -223,6 +227,7 @@ v3d_qpu_mul_op_name(enum v3d_qpu_mul_op op)
                 [V3D_QPU_M_FUNPACKSNORMHI] = "funpacksnormhi",
                 [V3D_QPU_M_VFTOUNORM10LO] = "vftounorm10lo",
                 [V3D_QPU_M_VFTOUNORM10HI] = "vftounorm10hi",
+                [V3D_QPU_M_V8DOT] = "v8dot",
         };
 
         if (op >= ARRAY_SIZE(op_names))
@@ -503,6 +508,10 @@ static const uint8_t add_op_args[] = {
         [V3D_QPU_A_ROTQ] = D | A | B,
         [V3D_QPU_A_ROT] = D | A | B,
         [V3D_QPU_A_SHUFFLE] = D | A | B,
+        [V3D_QPU_A_SETNNMODE_UU] = 0,
+        [V3D_QPU_A_SETNNMODE_SU] = 0,
+        [V3D_QPU_A_SETNNMODE_US] = 0,
+        [V3D_QPU_A_SETNNMODE_SS] = 0,
 };
 
 static const uint8_t mul_op_args[] = {
@@ -527,6 +536,7 @@ static const uint8_t mul_op_args[] = {
         [V3D_QPU_M_FUNPACKSNORMHI] = D | A,
         [V3D_QPU_M_VFTOUNORM10LO] = D | A,
         [V3D_QPU_M_VFTOUNORM10HI] = D | A,
+        [V3D_QPU_M_V8DOT] = D | A | B,
 };
 
 bool

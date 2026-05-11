@@ -114,7 +114,7 @@ GENX(pan_blend_get_shader_locked)(struct pan_blend_shader_cache *cache,
             pan_prod_id(cache->gpu_id) < 0x700);
 #endif
 
-   pan_postprocess_nir(nir, inputs.gpu_id);
+   pan_postprocess_nir(nir, &inputs, &info);
 
    struct util_dynarray binary;
    binary = UTIL_DYNARRAY_INIT;

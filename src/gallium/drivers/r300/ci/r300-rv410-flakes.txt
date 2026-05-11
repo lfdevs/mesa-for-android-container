@@ -10,3 +10,6 @@ spec@!opengl 1.2@tex3d-maxsize
 
 glx@glx-buffer-age
 glx@glx-multithread-clearbuffer
+glx@glx-visuals-depth
+glx@glx-visuals-stencil
+

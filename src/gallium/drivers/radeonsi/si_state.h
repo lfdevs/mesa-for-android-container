@@ -9,9 +9,6 @@
 
 #include "si_pm4.h"
 #include "util/format/u_format.h"
-#include "util/bitset.h"
-
-#include "common/ac_cmdbuf.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -477,17 +474,8 @@ void si_restore_qbo_state(struct si_context *sctx, struct si_qbo_state *st);
 void si_emit_dpbb_state(struct si_context *sctx, unsigned index);
 
 /* si_state_shaders.cpp */
-void si_get_ir_cache_key(struct si_shader_selector *sel, bool ngg, bool es,
-                         unsigned wave_size, unsigned char ir_blake3_cache_key[BLAKE3_KEY_LEN]);
-bool si_shader_cache_load_shader(struct si_screen *sscreen, unsigned char ir_blake3_cache_key[BLAKE3_KEY_LEN],
-                                 struct si_shader *shader);
-void si_shader_cache_insert_shader(struct si_screen *sscreen, unsigned char ir_blake3_cache_key[BLAKE3_KEY_LEN],
-                                   struct si_shader *shader, bool insert_into_disk_cache);
 bool si_shader_mem_ordered(struct si_shader *shader);
-MESAPROC void si_init_screen_live_shader_cache(struct si_screen *sscreen) TAILV;
 void si_init_shader_functions(struct si_context *sctx);
-MESAPROC bool si_init_shader_cache(struct si_screen *sscreen) TAILBT;
-MESAPROC void si_destroy_shader_cache(struct si_screen *sscreen) TAILV;
 void si_schedule_initial_compile(struct si_context *sctx, mesa_shader_stage stage,
                                  struct util_queue_fence *ready_fence,
                                  struct si_compiler_ctx_state *compiler_ctx_state, void *job,
@@ -513,6 +501,9 @@ bool si_set_tcs_to_fixed_func_shader(struct si_context *sctx);
 void si_update_tess_io_layout_state(struct si_context *sctx);
 void si_update_common_shader_state(struct si_context *sctx, struct si_shader_selector *sel,
                                    mesa_shader_stage type);
+void *si_create_shader_selector(struct pipe_context *ctx,
+                                const struct pipe_shader_state *state);
+void si_destroy_shader_selector(struct pipe_context *ctx, void *cso);
 
 /* si_state_draw.cpp */
 void si_cp_dma_prefetch(struct radeon_cmdbuf *cs,

@@ -246,6 +246,7 @@ void pvr_get_hw_clear_color(VkFormat vk_format,
 uint32_t pvr_pbe_pixel_num_loads(enum pvr_transfer_pbe_pixel_src pbe_format);
 bool pvr_pbe_pixel_is_norm(enum pvr_transfer_pbe_pixel_src pbe_format);
 uint32_t pvr_pbe_pixel_size(enum pvr_transfer_pbe_pixel_src pbe_format);
+unsigned pvr_pbe_format_num_sample_components(enum pvr_transfer_pbe_pixel_src format);
 
 static inline bool pvr_vk_format_has_32bit_component(VkFormat vk_format)
 {

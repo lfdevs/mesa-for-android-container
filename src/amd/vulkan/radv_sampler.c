@@ -132,10 +132,10 @@ radv_tex_filter_mode(VkSamplerReductionMode mode)
 }
 
 static uint32_t
-radv_get_max_anisotropy(const struct radv_device *device, const struct vk_sampler_state *sampler_state)
+radv_get_max_anisotropy(const struct radv_compiler_info *compiler_info, const struct vk_sampler_state *sampler_state)
 {
-   if (device->force_aniso >= 0)
-      return device->force_aniso;
+   if (compiler_info->key.force_aniso >= 0)
+      return compiler_info->key.force_aniso;
 
    if (sampler_state->anisotropy_enable && sampler_state->max_anisotropy > 1.0f)
       return (uint32_t)sampler_state->max_anisotropy;
@@ -199,19 +199,17 @@ radv_unregister_border_color(struct radv_device *device, uint32_t index)
 }
 
 void
-radv_make_sampler_descriptor(const struct radv_device *device, const struct vk_sampler_state *sampler_state,
-                             uint32_t *desc)
+radv_make_sampler_descriptor(const struct radv_compiler_info *compiler_info,
+                             const struct vk_sampler_state *sampler_state, uint32_t *desc)
 {
-   const struct radv_physical_device *pdev = radv_device_physical(device);
-   const struct radv_instance *instance = radv_physical_device_instance(pdev);
-   const uint32_t max_aniso = radv_get_max_anisotropy(device, sampler_state);
+   const uint32_t max_aniso = radv_get_max_anisotropy(compiler_info, sampler_state);
    const uint32_t max_aniso_ratio = radv_tex_aniso_filter(max_aniso);
    const unsigned filter_mode = radv_tex_filter_mode(sampler_state->reduction_mode);
    unsigned depth_compare_func = V_008F30_SQ_TEX_DEPTH_COMPARE_NEVER;
    const bool trunc_coord =
       ((sampler_state->min_filter == VK_FILTER_NEAREST && sampler_state->mag_filter == VK_FILTER_NEAREST) ||
-       pdev->info.compiler_info.conformant_trunc_coord) &&
-      !instance->drirc.debug.disable_trunc_coord;
+       compiler_info->ac->conformant_trunc_coord) &&
+      !compiler_info->key.disable_trunc_coord;
    const VkBorderColor border_color = radv_get_border_color(sampler_state);
    const bool disable_cube_wrap = sampler_state->flags & VK_SAMPLER_CREATE_NON_SEAMLESS_CUBE_MAP_BIT_EXT;
 
@@ -238,12 +236,12 @@ radv_make_sampler_descriptor(const struct radv_device *device, const struct vk_s
       .min_lod = sampler_state->min_lod,
       .max_lod = sampler_state->max_lod,
       .lod_bias = sampler_state->mip_lod_bias,
-      .aniso_single_level = !instance->drirc.debug.disable_aniso_single_level,
+      .aniso_single_level = !compiler_info->key.disable_aniso_single_level,
       .border_color_type = radv_tex_bordercolor(border_color),
       .border_color_ptr = border_color_ptr,
    };
 
-   ac_build_sampler_descriptor(pdev->info.gfx_level, &ac_state, desc);
+   ac_build_sampler_descriptor(compiler_info->ac->gfx_level, &ac_state, desc);
 }
 
 VkResult
@@ -285,7 +283,7 @@ radv_sampler_init(struct radv_device *device, struct radv_sampler *sampler, cons
       }
    }
 
-   radv_make_sampler_descriptor(device, &sampler_state, sampler->state);
+   radv_make_sampler_descriptor(&device->compiler_info, &sampler_state, sampler->state);
 
    return VK_SUCCESS;
 }

@@ -79,7 +79,16 @@ protected:
       glsl_type_singleton_decref();
    }
 
+   enum instr_count_filter {
+      instr_count_all,
+      instr_count_used,
+      instr_count_unused,
+   };
+
+   int count_instr_common(nir_op op, instr_count_filter filter);
    int count_instr(nir_op op);
+   int count_used_instr(nir_op op);
+   int count_unused_instr(nir_op op);
    int count_loops(void);
 
    nir_builder bld;
@@ -88,7 +97,7 @@ protected:
 } /* namespace */
 
 int
-nir_loop_unroll_test::count_instr(nir_op op)
+nir_loop_unroll_test::count_instr_common(nir_op op, instr_count_filter filter)
 {
    int count = 0;
    nir_foreach_block(block, bld.impl) {
@@ -96,12 +105,36 @@ nir_loop_unroll_test::count_instr(nir_op op)
          if (instr->type != nir_instr_type_alu)
             continue;
          nir_alu_instr *alu_instr = nir_instr_as_alu(instr);
-         if (alu_instr->op == op)
+         if (alu_instr->op != op)
+            continue;
+
+         bool unused = nir_def_is_unused(&alu_instr->def);
+         if (filter == instr_count_all ||
+             (filter == instr_count_used && !unused) ||
+             (filter == instr_count_unused && unused))
             count++;
       }
    }
 
    return count;
+}
+
+int
+nir_loop_unroll_test::count_instr(nir_op op)
+{
+   return count_instr_common(op, instr_count_all);
+}
+
+int
+nir_loop_unroll_test::count_used_instr(nir_op op)
+{
+   return count_instr_common(op, instr_count_used);
+}
+
+int
+nir_loop_unroll_test::count_unused_instr(nir_op op)
+{
+   return count_instr_common(op, instr_count_unused);
 }
 
 int
@@ -114,6 +147,61 @@ nir_loop_unroll_test::count_loops(void)
    }
 
    return count;
+}
+
+static void
+partial_unroll_oob_load_test_helper(nir_builder *bld, unsigned init_value,
+                                    unsigned array_len, bool limit_minus_one)
+{
+   /* Build:
+    *
+    *    for (int i = init_value; i < n_stop [- 1]; i++)
+    *       if (0.0 < stops[i])
+    *          break;
+    */
+   nir_variable *n_stop =
+      nir_variable_create(bld->shader, nir_var_uniform, glsl_int_type(),
+                          "n_stop");
+   nir_variable *stops =
+      nir_variable_create(bld->shader, nir_var_uniform,
+                          glsl_array_type(glsl_float_type(), array_len, 0),
+                          "stops");
+
+   nir_def *stop_len = nir_imm_float(bld, 0.0f);
+   nir_def *init = nir_imm_int(bld, init_value);
+
+   nir_loop *loop = nir_push_loop(bld);
+
+   nir_block *top_block =
+      nir_cf_node_as_block(nir_cf_node_prev(&loop->cf_node));
+   nir_block *head_block = nir_loop_first_block(loop);
+
+   nir_phi_instr *phi = nir_phi_instr_create(bld->shader);
+   nir_def_init(&phi->instr, &phi->def, 1, 32);
+   nir_phi_instr_add_src(phi, top_block, init);
+
+   nir_def *i = &phi->def;
+   nir_def *limit = nir_load_deref(bld, nir_build_deref_var(bld, n_stop));
+   if (limit_minus_one)
+      limit = nir_iadd_imm(bld, limit, -1);
+
+   nir_def *limit_cond = nir_ige(bld, i, limit);
+   nir_deref_instr *deref =
+      nir_build_deref_array(bld, nir_build_deref_var(bld, stops), i);
+   nir_def *stop = nir_load_deref(bld, deref);
+   nir_def *stop_cond = nir_flt(bld, stop_len, stop);
+
+   nir_break_if(bld, nir_ior(bld, limit_cond, stop_cond));
+
+   nir_def *next = nir_iadd_imm(bld, i, 1);
+   nir_phi_instr_add_src(phi, nir_cursor_current_block(bld->cursor), next);
+
+   nir_pop_loop(bld, loop);
+
+   bld->cursor = nir_after_phis(head_block);
+   nir_builder_instr_insert(bld, &phi->instr);
+
+   nir_validate_shader(bld->shader, NULL);
 }
 
 void
@@ -200,3 +288,25 @@ UNROLL_TEST_UNKNOWN_INIT_INSERT(iadd_ugt_unknown_init_eq, int, 16, 4,
                                 ult, iadd, true, TRUE, 6, 0)
 UNROLL_TEST_UNKNOWN_INIT_INSERT(iadd_ige_unknown_init, int, 4, 6,
                                 ige, iadd, false, FALSE, 1, 1)
+
+/* Partial unrolling leaves a residual loop.  The OOB array access check should
+ * make that residual loop exit unconditionally, leaving the stops[i] comparison
+ * computed but unused until later DCE removes it.
+ */
+TEST_F(nir_loop_unroll_test, partial_unroll_oob_load_nonzero_init)
+{
+   partial_unroll_oob_load_test_helper(&bld, 1, 4, false);
+
+   ASSERT_TRUE(nir_opt_loop_unroll(bld.shader));
+   EXPECT_EQ(3, count_used_instr(nir_op_flt));
+   EXPECT_EQ(1, count_unused_instr(nir_op_flt));
+}
+
+TEST_F(nir_loop_unroll_test, partial_unroll_oob_load_zero_init)
+{
+   partial_unroll_oob_load_test_helper(&bld, 0, 4, true);
+
+   ASSERT_TRUE(nir_opt_loop_unroll(bld.shader));
+   EXPECT_EQ(4, count_used_instr(nir_op_flt));
+   EXPECT_EQ(1, count_unused_instr(nir_op_flt));
+}

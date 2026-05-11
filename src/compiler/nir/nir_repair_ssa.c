@@ -58,11 +58,11 @@ static nir_block *
 get_src_block(nir_src *src)
 {
    if (nir_src_is_if(src)) {
-      return nir_cf_node_as_block(nir_cf_node_prev(&nir_src_parent_if(src)->cf_node));
-   } else if (nir_src_parent_instr(src)->type == nir_instr_type_phi) {
+      return nir_cf_node_as_block(nir_cf_node_prev(&nir_src_use_if(src)->cf_node));
+   } else if (nir_src_use_instr(src)->type == nir_instr_type_phi) {
       return exec_node_data(nir_phi_src, src, src)->pred;
    } else {
-      return nir_src_parent_instr(src)->block;
+      return nir_src_use_instr(src)->block;
    }
 }
 
@@ -114,8 +114,8 @@ repair_ssa_def(nir_def *def, void *void_state)
        */
       if (!nir_src_is_if(src) &&
           nir_def_is_deref(def) &&
-          nir_src_parent_instr(src)->type == nir_instr_type_deref &&
-          nir_instr_as_deref(nir_src_parent_instr(src))->deref_type != nir_deref_type_cast) {
+          nir_src_use_instr(src)->type == nir_instr_type_deref &&
+          nir_instr_as_deref(nir_src_use_instr(src))->deref_type != nir_deref_type_cast) {
          nir_deref_instr *cast =
             nir_deref_instr_create(state->impl->function->shader,
                                    nir_deref_type_cast);
@@ -128,13 +128,13 @@ repair_ssa_def(nir_def *def, void *void_state)
 
          nir_def_init(&cast->instr, &cast->def, def->num_components,
                       def->bit_size);
-         nir_instr_insert(nir_before_instr(nir_src_parent_instr(src)),
+         nir_instr_insert(nir_before_instr(nir_src_use_instr(src)),
                           &cast->instr);
          block_def = &cast->def;
       }
 
       if (nir_src_is_if(src))
-         nir_src_rewrite(&nir_src_parent_if(src)->condition, block_def);
+         nir_src_rewrite(&nir_src_use_if(src)->condition, block_def);
       else
          nir_src_rewrite(src, block_def);
    }

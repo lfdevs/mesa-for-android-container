@@ -11,12 +11,12 @@
 #include "radv_pipeline_rt.h"
 #include "radv_queue.h"
 #include "radv_shader.h"
-#include "radv_spm.h"
 #include "radv_sqtt.h"
 #include "vk_semaphore.h"
 
 #include "ac_rgp.h"
 #include "ac_sqtt.h"
+#include "util/u_memory.h"
 
 void
 radv_sqtt_emit_relocated_shaders(struct radv_cmd_buffer *cmd_buffer, struct radv_graphics_pipeline *pipeline)

@@ -7,11 +7,7 @@
 #include <assert.h>
 #include <stdbool.h>
 
-#include "nir/nir_builder.h"
-#include "radv_cs.h"
 #include "radv_meta.h"
-#include "sid.h"
-#include "vk_format.h"
 
 static VkPipeline
 radv_get_etc_decode_pipeline(struct radv_cmd_buffer *cmd_buffer, bool indirect)

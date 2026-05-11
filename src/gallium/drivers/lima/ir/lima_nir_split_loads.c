@@ -61,8 +61,8 @@ replace_intrinsic(nir_builder *b, nir_intrinsic_instr *intrin)
 
    nir_foreach_use_safe(src, &intrin->def) {
       struct hash_entry *entry =
-         _mesa_hash_table_search(visited_instrs, nir_src_parent_instr(src));
-      if (entry && (nir_src_parent_instr(src)->type != nir_instr_type_phi)) {
+         _mesa_hash_table_search(visited_instrs, nir_src_use_instr(src));
+      if (entry && (nir_src_use_instr(src)->type != nir_instr_type_phi)) {
          nir_def *def = entry->data;
          nir_src_rewrite(src, def);
          continue;
@@ -70,11 +70,11 @@ replace_intrinsic(nir_builder *b, nir_intrinsic_instr *intrin)
       b->cursor = nir_before_src(src);
       nir_def *new = clone_intrinsic(b, intrin);
       nir_src_rewrite(src, new);
-      _mesa_hash_table_insert(visited_instrs, nir_src_parent_instr(src), new);
+      _mesa_hash_table_insert(visited_instrs, nir_src_use_instr(src), new);
    }
    nir_foreach_if_use_safe(src, &intrin->def) {
       b->cursor = nir_before_src(src);
-      nir_src_rewrite(&nir_src_parent_if(src)->condition, clone_intrinsic(b, intrin));
+      nir_src_rewrite(&nir_src_use_if(src)->condition, clone_intrinsic(b, intrin));
    }
 
    nir_instr_remove(&intrin->instr);
@@ -89,8 +89,8 @@ replace_load_const(nir_builder *b, nir_load_const_instr *load_const)
 
    nir_foreach_use_safe(src, &load_const->def) {
       struct hash_entry *entry =
-         _mesa_hash_table_search(visited_instrs, nir_src_parent_instr(src));
-      if (entry && (nir_src_parent_instr(src)->type != nir_instr_type_phi)) {
+         _mesa_hash_table_search(visited_instrs, nir_src_use_instr(src));
+      if (entry && (nir_src_use_instr(src)->type != nir_instr_type_phi)) {
          nir_def *def = entry->data;
          nir_src_rewrite(src, def);
          continue;
@@ -100,7 +100,7 @@ replace_load_const(nir_builder *b, nir_load_const_instr *load_const)
                                        load_const->def.bit_size,
                                        load_const->value);
       nir_src_rewrite(src, new);
-      _mesa_hash_table_insert(visited_instrs, nir_src_parent_instr(src), new);
+      _mesa_hash_table_insert(visited_instrs, nir_src_use_instr(src), new);
    }
 
    nir_instr_remove(&load_const->instr);

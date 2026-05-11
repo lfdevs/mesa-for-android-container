@@ -6,6 +6,7 @@
 
 #include "si_build_pm4.h"
 #include "si_query.h"
+#include "gfx/si_gfx.h"
 
 static struct si_resource *si_get_wait_mem_scratch_bo(struct si_context *ctx,
                                                       struct radeon_cmdbuf *cs, bool is_secure)

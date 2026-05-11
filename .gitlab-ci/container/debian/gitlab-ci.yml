@@ -185,7 +185,7 @@ debian/s390x_build:
     LLVM_VERSION: &debian-android-llvm 19
     CUTTLEFISH_PROJECT_PATH: gfx-ci/android/aosp-manifest
     CUTTLEFISH_BUILD_VERSION_TAGS: mesa-venus
-    CUTTLEFISH_BUILD_NUMBER: 20260402.001
+    CUTTLEFISH_BUILD_NUMBER: 20260427.001
 
 # Android NDK cross-build image
 debian/android_build:

@@ -4,7 +4,9 @@
  * SPDX-License-Identifier: MIT
  */
 
-#include "si_build_pm4.h"
+#include "si_pipe.h"
+#include "gfx/si_gfx.h"
+#include "ac_cmdbuf_cp.h"
 #include "util/os_time.h"
 #include "util/u_memory.h"
 #include "util/u_queue.h"

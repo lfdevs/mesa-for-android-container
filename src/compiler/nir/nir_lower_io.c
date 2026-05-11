@@ -608,6 +608,7 @@ emit_store(struct lower_io_state *state, nir_def *data,
       assert(location == FRAG_RESULT_COLOR || location == FRAG_RESULT_DATA0);
 
       location = FRAG_RESULT_DUAL_SRC_BLEND;
+      b->shader->info.outputs_written |= BITFIELD64_BIT(location);
       dual_src_blend = false;
    }
 
@@ -1032,6 +1033,7 @@ nir_get_io_offset_src_number(const nir_intrinsic_instr *instr)
    case nir_intrinsic_load_global_bounded:
    case nir_intrinsic_load_global_constant_offset:
    case nir_intrinsic_load_global_constant_bounded:
+   case nir_intrinsic_load_global_ir3:
    case nir_intrinsic_store_output:
    case nir_intrinsic_store_pixel_local:
    case nir_intrinsic_store_shared:
@@ -1070,6 +1072,7 @@ nir_get_io_offset_src_number(const nir_intrinsic_instr *instr)
    case nir_intrinsic_store_buffer_amd:
    case nir_intrinsic_store_ssbo_intel:
    case nir_intrinsic_store_global_amd:
+   case nir_intrinsic_store_global_ir3:
    case nir_intrinsic_global_atomic_amd:
       return 2;
    case nir_intrinsic_load_ssbo_ir3:

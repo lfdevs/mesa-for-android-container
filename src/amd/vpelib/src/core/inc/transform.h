@@ -29,6 +29,7 @@
 #include <stdbool.h>
 #include "vpe_hw_types.h"
 #include "fixed31_32.h"
+#include "SPL/dc_spl_types.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -44,22 +45,6 @@ enum gamut_adjust_type {
 struct gamut_remap_matrix {
     struct fixed31_32      matrix[VPE_GAMUT_REMAP_MATRIX_SIZE];
     enum gamut_adjust_type adjust_type;
-};
-
-enum lb_memory_config {
-    /* Enable all 3 pieces of memory */
-    LB_MEMORY_CONFIG_0 = 0,
-
-    /* Enable only the first piece of memory */
-    LB_MEMORY_CONFIG_1 = 1,
-
-    /* Enable only the second piece of memory */
-    LB_MEMORY_CONFIG_2 = 2,
-
-    /* Only applicable in 4:2:0 mode, enable all 3 pieces of memory and the
-     * last piece of chroma memory used for the luma storage
-     */
-    LB_MEMORY_CONFIG_3 = 3,
 };
 
 struct scaling_ratios {
@@ -100,6 +85,7 @@ struct scaler_data {
     enum vpe_surface_pixel_format     format;
     struct line_buffer_params         lb_params;
     struct vpe_scaling_filter_coeffs *polyphase_filter_coeffs;
+    struct dscl_prog_data dscl_prog_data;
 };
 
 const uint16_t *vpe_get_filter_2tap_64p(void);

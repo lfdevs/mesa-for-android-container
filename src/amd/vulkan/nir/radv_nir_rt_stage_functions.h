@@ -17,7 +17,7 @@ void radv_nir_init_rt_function_params(nir_function *function, mesa_shader_stage 
                                       unsigned hit_attrib_size, bool uses_descriptor_heap);
 
 void radv_nir_lower_rt_abi_functions(nir_shader *shader, const struct radv_shader_info *info, uint32_t payload_size,
-                                     uint32_t hit_attrib_size, struct radv_device *device,
+                                     uint32_t hit_attrib_size, const struct radv_compiler_info *compiler_info,
                                      struct radv_ray_tracing_pipeline *pipeline);
 void radv_nir_lower_rt_io_functions(nir_shader *shader);
 

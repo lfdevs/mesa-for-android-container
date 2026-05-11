@@ -197,9 +197,9 @@ group_loads(nir_instr *first, nir_instr *last, instr_info *infos)
 
       if (def) {
          nir_foreach_use(use, def) {
-            if (nir_src_parent_instr(use)->block == instr->block &&
-                infos[nir_src_parent_instr(use)->index].instr_index <=
-                infos[last->index].instr_index) {
+            if (nir_src_use_instr(use)->block == instr->block &&
+                infos[nir_src_use_instr(use)->index].instr_index <=
+                   infos[last->index].instr_index) {
                all_uses_after_last = false;
                break;
             }

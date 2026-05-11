@@ -649,10 +649,18 @@ display_field(struct decode_scope *scope, const char *field_name)
 			f = uif(val);
 			fmt = "%.9g";
 		}
-		if (f == truncf(f) && isfinite(f))
+		if (isnan(f)) {
+			/* IEEE 754 declares the sign optional when converting
+			 * NaN to strings, so manually extract it from the raw
+			 * value and print it instead of relying on printf().
+			 */
+			bool negative = (width == 16) ? (val >> 15) & 1 : (val >> 31) & 1;
+			isa_print(print, "%snan", negative ? "-" : "");
+		} else if (f == truncf(f) && isfinite(f)) {
 			isa_print(print, "%.1f", f);
-		else
+		} else {
 			isa_print(print, fmt, f);
+		}
 		break;
 	}
 	case TYPE_BOOL:

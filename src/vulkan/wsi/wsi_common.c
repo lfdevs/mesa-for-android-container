@@ -756,6 +756,15 @@ wsi_configure_image(const struct wsi_swapchain *chain,
       __vk_append_struct(&info->create, &info->ext_mem);
    }
 
+   const VkImageCompressionControlEXT *sc_compr_ctrl =
+      vk_find_struct_const(pCreateInfo->pNext,
+                           IMAGE_COMPRESSION_CONTROL_EXT);
+   if (sc_compr_ctrl != NULL) {
+      info->img_compr_ctrl = *sc_compr_ctrl;
+      info->img_compr_ctrl.pNext = NULL;
+      __vk_append_struct(&info->create, &info->img_compr_ctrl);
+   }
+
    info->wsi = (struct wsi_image_create_info) {
       .sType = VK_STRUCTURE_TYPE_WSI_IMAGE_CREATE_INFO_MESA,
    };

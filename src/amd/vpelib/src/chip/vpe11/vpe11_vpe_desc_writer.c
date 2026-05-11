@@ -47,9 +47,6 @@ enum vpe_status vpe11_vpe_desc_writer_init(
     writer->base_gpu_va      = buf->gpu_va;
     writer->buf              = buf;
     writer->num_config_desc  = 0;
-#ifdef VPE_REGISTER_PROFILE
-    writer->reuse_num_config_dec = 0;
-#endif
     writer->plane_desc_added = false;
     writer->status           = VPE_STATUS_OK;
 

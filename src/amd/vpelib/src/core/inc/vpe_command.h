@@ -87,8 +87,9 @@ enum VPE_CMD_OPCODE {
  * VPEP Config
  ************************/
 enum VPE_VPEP_CFG_SUBOP {
-    VPE_VPEP_CFG_SUBOP_DIR_CFG = 0x0,
-    VPE_VPEP_CFG_SUBOP_IND_CFG = 0x1
+    VPE_VPEP_CFG_SUBOP_DIR_CFG   = 0x0,
+    VPE_VPEP_CFG_SUBOP_IND_CFG   = 0x1,
+    VPE_VPEP_CFG_SUBOP_3DLUT_CFG = 0x2,
 };
 
 // Direct Config Command Header
@@ -118,6 +119,22 @@ enum VPE_VPEP_CFG_SUBOP {
 
 #define VPE_IND_CFG_PKT_REGISTER_OFFSET__SHIFT 2
 #define VPE_IND_CFG_PKT_REGISTER_OFFSET_MASK   0x000FFFFC
+
+// VPEP 3D LUT Config Command Header
+#define VPE_3DLUT_CFG_HEADER_ADDR_MOD__SHIFT 31
+#define VPE_3DLUT_CFG_HEADER_ADDR_MOD_MASK   0x80000000
+#define VPE_3DLUT_CFG_HEADER_PITCH_MOD__SHIFT 30
+#define VPE_3DLUT_CFG_HEADER_PITCH_MOD_MASK   0x40000000
+
+#define VPE_3DLUT_CFG_CMD_HEADER(addr_mode, mem_align)                                             \
+    (VPE_CMD_HEADER(VPE_CMD_OPCODE_VPEP_CFG, VPE_VPEP_CFG_SUBOP_3DLUT_CFG) |                       \
+        ((((uint32_t)addr_mode) << VPE_3DLUT_CFG_HEADER_ADDR_MOD__SHIFT) &                         \
+            VPE_3DLUT_CFG_HEADER_ADDR_MOD_MASK) |                                                  \
+        ((((uint32_t)mem_align) << VPE_3DLUT_CFG_HEADER_PITCH_MOD__SHIFT) &                        \
+            VPE_3DLUT_CFG_HEADER_PITCH_MOD_MASK))
+
+#define VPE_3DLUT_CFG_COMP_MODE__SHIFT 5
+#define VPE_3DLUT_CFG_COMP_MODE_MASK   0x20
 
 /**************************
 * Poll Reg/Mem Sub-OpCode

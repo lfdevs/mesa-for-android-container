@@ -366,8 +366,7 @@ lp_rast_shade_tile(struct lp_rasterizer_task *task,
             mask[i / 4] |= (uint64_t)(0xffff) << (16 * (i % 4));
 
          /* Propagate non-interpolated raster state. */
-         task->thread_data.raster_state.viewport_index = inputs->viewport_index;
-         task->thread_data.raster_state.view_index = inputs->view_index;
+         lp_rast_task_init_thread_data(&task->thread_data, inputs);
 
          /* run shader on 4x4 block */
          BEGIN_JIT_CALL(state, task);
@@ -475,8 +474,7 @@ lp_rast_shade_quads_mask_sample(struct lp_rasterizer_task *task,
     */
    if ((x % TILE_SIZE) < task->width && (y % TILE_SIZE) < task->height) {
       /* Propagate non-interpolated raster state. */
-      task->thread_data.raster_state.viewport_index = inputs->viewport_index;
-      task->thread_data.raster_state.view_index = inputs->view_index;
+      lp_rast_task_init_thread_data(&task->thread_data, inputs);
 
       /* run shader on 4x4 block */
       BEGIN_JIT_CALL(state, task);
@@ -1382,4 +1380,11 @@ lp_rast_fence(struct lp_rasterizer *rast,
 {
    if (fence)
       lp_fence_reference((struct lp_fence **)fence, rast->last_fence);
+}
+
+void
+lp_rast_task_init_thread_data(struct lp_jit_thread_data *thread_data, const struct lp_rast_shader_inputs *inputs)
+{
+   thread_data->raster_state.viewport_index = inputs->viewport_index;
+   thread_data->raster_state.view_index = inputs->view_index;
 }

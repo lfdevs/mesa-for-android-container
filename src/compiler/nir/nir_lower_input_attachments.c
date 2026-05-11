@@ -28,12 +28,14 @@ static nir_def *
 load_frag_coord(nir_builder *b, nir_deref_instr *deref,
                 const nir_input_attachment_options *options)
 {
-   nir_def *frag_coord = nir_load_frag_coord(b);
+   nir_def *frag_coord = nir_build_frag_coord(b, 2);
+
    if (options->gmem_input_attachment_ir3 ||
        options->gmem_depth_stencil_ir3) {
       nir_variable *var = nir_deref_instr_get_variable(deref);
       unsigned base = var->data.index;
-      nir_def *gmem_frag_coord = nir_load_frag_coord_gmem_ir3(b);
+      nir_def *gmem_frag_coord = nir_trim_vector(b, nir_load_frag_coord_gmem_ir3(b), 2);
+
       if (deref->deref_type == nir_deref_type_array &&
           options->gmem_input_attachment_ir3) {
          nir_def *gmem =

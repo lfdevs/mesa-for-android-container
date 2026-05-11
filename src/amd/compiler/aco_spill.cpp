@@ -9,9 +9,6 @@
 #include "aco_ir.h"
 #include "aco_util.h"
 
-#include "common/ac_descriptors.h"
-#include "common/sid.h"
-
 #include <algorithm>
 #include <cstring>
 #include <map>

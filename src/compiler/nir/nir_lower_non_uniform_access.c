@@ -139,7 +139,7 @@ get_first_use(nir_def *def, void *state)
 {
    uint32_t *last_first_use = state;
    nir_foreach_use(use, def)
-      *last_first_use = MIN2(*last_first_use, nir_src_parent_instr(use)->index);
+      *last_first_use = MIN2(*last_first_use, nir_src_use_instr(use)->index);
 
    return true;
 }
@@ -149,7 +149,7 @@ add_non_uniform_instr(struct nu_state *state, struct nu_handle *handles,
                       nir_src **srcs, uint32_t handle_count, bool group,
                       enum nir_lower_non_uniform_access_type access_type)
 {
-   nir_instr *instr = nir_src_parent_instr(srcs[0]);
+   nir_instr *instr = nir_src_use_instr(srcs[0]);
 
    struct nu_access_group_state *access_group = &state->access_groups[ffs(access_type) - 1];
 
@@ -490,7 +490,7 @@ nir_lower_non_uniform_access_impl(nir_function_impl *impl,
       struct nu_handle_data data = *(struct nu_handle_data *)entry->data;
 
       nir_src *first_src = util_dynarray_top_ptr(&data.srcs, struct nu_handle_src)->srcs[0];
-      b.cursor = nir_after_instr(nir_src_parent_instr(first_src));
+      b.cursor = nir_after_instr(nir_src_use_instr(first_src));
 
       nir_push_loop(&b);
 
@@ -514,7 +514,7 @@ nir_lower_non_uniform_access_impl(nir_function_impl *impl,
          for (uint32_t i = 0; i < key->handle_count; i++)
             nu_handle_rewrite(&b, &data.handles[i], src->srcs[i]);
 
-         nir_instr *instr = nir_src_parent_instr(src->srcs[0]);
+         nir_instr *instr = nir_src_use_instr(src->srcs[0]);
          nir_instr_remove(instr);
          nir_builder_instr_insert(&b, instr);
       }

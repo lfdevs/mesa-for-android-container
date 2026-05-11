@@ -142,9 +142,9 @@ pub fn derive_as_slice(
                             }
                         }
 
-                        fn attrs(&self) -> AttrList<Self::Attr> {
+                        fn attrs(&self) -> &'static [Self::Attr] {
                             static ATTRS: [#attr_type; #count] = [#attrs];
-                            AttrList::Array(&ATTRS)
+                            &ATTRS
                         }
                     }
                 }
@@ -161,8 +161,8 @@ pub fn derive_as_slice(
                             &mut []
                         }
 
-                        fn attrs(&self) -> AttrList<Self::Attr> {
-                            AttrList::Uniform(#attr_type::DEFAULT)
+                        fn attrs(&self) -> &'static [Self::Attr] {
+                            &[]
                         }
                     }
                 }
@@ -203,7 +203,7 @@ pub fn derive_as_slice(
                         }
                     }
 
-                    fn attrs(&self) -> AttrList<Self::Attr> {
+                    fn attrs(&self) -> &'static [Self::Attr] {
                         match self {
                             #types_cases
                         }

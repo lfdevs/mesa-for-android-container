@@ -242,6 +242,10 @@ enum v3d_qpu_add_op {
         V3D_QPU_A_ROTQ,
         V3D_QPU_A_ROT,
         V3D_QPU_A_SHUFFLE,
+        V3D_QPU_A_SETNNMODE_UU,
+        V3D_QPU_A_SETNNMODE_SU,
+        V3D_QPU_A_SETNNMODE_US,
+        V3D_QPU_A_SETNNMODE_SS,
 };
 
 enum v3d_qpu_mul_op {
@@ -275,6 +279,7 @@ enum v3d_qpu_mul_op {
         V3D_QPU_M_FUNPACKSNORMHI,
         V3D_QPU_M_VFTOUNORM10LO,
         V3D_QPU_M_VFTOUNORM10HI,
+        V3D_QPU_M_V8DOT,
 };
 
 enum v3d_qpu_output_pack {

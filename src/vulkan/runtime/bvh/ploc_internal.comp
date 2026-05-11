@@ -177,10 +177,14 @@ shared uint32_t nearest_neighbour_indices[NUM_PLOC_LDS_ITEMS];
 uint32_t
 load_id(VOID_REF ids, uint32_t iter, uint32_t index)
 {
-   if (iter == 0)
-      return DEREF(REF(key_id_pair)(INDEX(key_id_pair, ids, index))).id;
-   else
+   if (iter == 0) {
+      if (VK_BUILD_FLAG(VK_BUILD_FLAG_64BIT_KEYS))
+         return DEREF(REF(key64_id_pair)(INDEX(key64_id_pair, ids, index))).id;
+      else
+         return DEREF(REF(key32_id_pair)(INDEX(key32_id_pair, ids, index))).id;
+   } else {
       return DEREF(REF(uint32_t)(INDEX(uint32_t, ids, index)));
+   }
 }
 
 void
@@ -231,7 +235,11 @@ main(void)
 
          uint32_t i = 0;
          for (; i < DEREF(args.header).active_leaf_count; i++) {
-            uint32_t child_id = DEREF(INDEX(key_id_pair, src_ids, i)).id;
+            uint32_t child_id;
+            if (VK_BUILD_FLAG(VK_BUILD_FLAG_64BIT_KEYS))
+               child_id = DEREF(INDEX(key64_id_pair, src_ids, i)).id;
+            else
+               child_id = DEREF(INDEX(key32_id_pair, src_ids, i)).id;
 
             if (child_id != VK_BVH_INVALID_NODE) {
                VOID_REF node = OFFSET(args.bvh, ir_id_to_offset(child_id));

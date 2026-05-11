@@ -274,6 +274,7 @@ enum amdgpu_gpu_va_range
 
 enum amdgpu_sw_info {
    amdgpu_sw_info_address32_hi = 0,
+   amdgpu_sw_info_address_prt_wa_control_bit = 1,
 };
 
 struct amdgpu_bo_alloc_request {

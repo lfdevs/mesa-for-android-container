@@ -835,6 +835,63 @@ tu_image_init(struct tu_device *device, struct tu_image *image,
    return VK_SUCCESS;
 }
 
+/* Deferred ANB image support for ANB v8+ aliased images. */
+#ifdef VK_USE_PLATFORM_ANDROID_KHR
+static VkResult
+tu_android_get_wsi_memory(struct tu_device *dev,
+                          const VkBindImageMemoryInfo *bind_info,
+                          VkDeviceMemory *out_mem_handle)
+{
+   VK_FROM_HANDLE(tu_image, img, bind_info->image);
+   VkResult result;
+
+   assert(img->vk.android_deferred_create_info);
+
+   const VkNativeBufferANDROID *anb =
+      vk_find_struct_const(bind_info->pNext, NATIVE_BUFFER_ANDROID);
+
+   /* Inject ANB into the deferred pNext chain to leverage the existing common
+    * Android helper vk_android_get_anb_layout.
+    */
+   VkNativeBufferANDROID local_anb = *anb;
+   local_anb.pNext = img->vk.android_deferred_create_info->pNext;
+   img->vk.android_deferred_create_info->pNext = &local_anb;
+
+   VkImageDrmFormatModifierExplicitCreateInfoEXT eci;
+   VkSubresourceLayout a_plane_layouts[TU_MAX_PLANE_COUNT];
+   result = vk_android_get_anb_layout(img->vk.android_deferred_create_info,
+                                      &eci, a_plane_layouts,
+                                      TU_MAX_PLANE_COUNT);
+   if (result != VK_SUCCESS)
+      return result;
+
+   VkExternalMemoryImageCreateInfo external_info = {
+      .sType = VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO,
+      .pNext = img->vk.android_deferred_create_info->pNext,
+      .handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT,
+   };
+   img->vk.android_deferred_create_info->pNext = &external_info;
+
+   result = tu_image_init(dev, img, img->vk.android_deferred_create_info);
+   if (result != VK_SUCCESS)
+      return result;
+
+   result = TU_CALLX(dev, tu_image_update_layout)(
+      dev, img, eci.drmFormatModifier, a_plane_layouts);
+   if (result != VK_SUCCESS)
+      return result;
+
+   result = vk_android_import_anb_memory(&dev->vk, &img->vk, anb,
+                                         &dev->vk.alloc);
+   if (result != VK_SUCCESS)
+      return result;
+
+   *out_mem_handle = img->vk.anb_memory;
+
+   return VK_SUCCESS;
+}
+#endif /* VK_USE_PLATFORM_ANDROID_KHR */
+
 VKAPI_ATTR VkResult VKAPI_CALL
 tu_CreateImage(VkDevice _device,
                const VkImageCreateInfo *pCreateInfo,
@@ -858,6 +915,18 @@ tu_CreateImage(VkDevice _device,
 
    if (!image)
       return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
+
+   if (vk_image_is_android_native_buffer_alias(&image->vk) ||
+       vk_image_is_android_hardware_buffer(&image->vk)) {
+      result = vk_android_init_deferred_image(&device->vk, &image->vk,
+                                              pCreateInfo, alloc);
+      if (result != VK_SUCCESS) {
+         vk_image_destroy(&device->vk, alloc, &image->vk);
+         return result;
+      }
+      *pImage = tu_image_to_handle(image);
+      return VK_SUCCESS;
+   }
 
    if (pCreateInfo->tiling == VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT) {
       const VkImageDrmFormatModifierListCreateInfoEXT *mod_info =
@@ -904,15 +973,6 @@ tu_CreateImage(VkDevice _device,
    result = tu_image_init(device, image, pCreateInfo);
    if (result != VK_SUCCESS)
       goto fail;
-
-   /* This section is removed by the optimizer for non-ANDROID builds */
-   if (vk_image_is_android_hardware_buffer(&image->vk)) {
-      /* At this time, an AHB handle is not yet provided.
-       * Image layout will be filled up during vkBindImageMemory2
-       */
-      *pImage = tu_image_to_handle(image);
-      return VK_SUCCESS;
-   }
 
    result = TU_CALLX(device, tu_image_update_layout)(device, image, modifier,
                                                     plane_layouts);
@@ -1013,37 +1073,27 @@ tu_image_bind(struct tu_device *device,
    VkResult result;
 
    if (!mem) {
-#if DETECT_OS_ANDROID
-      /* TODO handle VkNativeBufferANDROID */
-      UNREACHABLE("VkBindImageMemoryInfo with no memory");
+      VkDeviceMemory mem_handle;
+#ifdef VK_USE_PLATFORM_ANDROID_KHR
+      result = tu_android_get_wsi_memory(device, bind_info, &mem_handle);
+      if (result != VK_SUCCESS)
+         return result;
 #else
       const VkBindImageMemorySwapchainInfoKHR *swapchain_info =
          vk_find_struct_const(bind_info->pNext,
                               BIND_IMAGE_MEMORY_SWAPCHAIN_INFO_KHR);
       assert(swapchain_info && swapchain_info->swapchain != VK_NULL_HANDLE);
-      mem = tu_device_memory_from_handle(wsi_common_get_memory(
-         swapchain_info->swapchain, swapchain_info->imageIndex));
+      mem_handle = wsi_common_get_memory(swapchain_info->swapchain,
+                                         swapchain_info->imageIndex);
+#endif
+      mem = tu_device_memory_from_handle(mem_handle);
       /* memoryOffset is ignored when VkBindImageMemorySwapchainInfoKHR is
        * present, so we follow common wsi to set the offset to 0 here.
        */
       offset = 0;
-#endif
    }
 
    assert(mem);
-   if (vk_image_is_android_hardware_buffer(&image->vk)) {
-      VkImageDrmFormatModifierExplicitCreateInfoEXT eci;
-      VkSubresourceLayout a_plane_layouts[TU_MAX_PLANE_COUNT];
-      result = vk_android_get_ahb_layout(mem->vk.ahardware_buffer, &eci,
-                                         a_plane_layouts, TU_MAX_PLANE_COUNT);
-      if (result != VK_SUCCESS)
-         return result;
-
-      result = TU_CALLX(device, tu_image_update_layout)(
-         device, image, eci.drmFormatModifier, a_plane_layouts);
-      if (result != VK_SUCCESS)
-         return result;
-   }
    image->mem = mem;
    image->mem_offset = offset;
    image->iova = mem->iova + offset;

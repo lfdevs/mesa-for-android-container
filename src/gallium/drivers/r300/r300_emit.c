@@ -416,6 +416,7 @@ void r300_emit_aa_state(struct r300_context *r300, unsigned size, void *state)
 void r300_emit_fb_state(struct r300_context* r300, unsigned size, void* state)
 {
     struct pipe_framebuffer_state* fb = (struct pipe_framebuffer_state*)state;
+    struct r300_aa_state *aa = (struct r300_aa_state*)r300->aa_state.state;
     struct r300_surface* surf;
     unsigned i;
     uint32_t rb3d_cctl = 0;
@@ -445,7 +446,14 @@ void r300_emit_fb_state(struct r300_context* r300, unsigned size, void* state)
         OUT_CS_REG(R300_RB3D_COLOROFFSET0 + (4 * i), surf->offset);
         OUT_CS_RELOC(surf);
 
-        OUT_CS_REG(R300_RB3D_COLORPITCH0 + (4 * i), surf->pitch);
+        /* COLORPITCH should contain the tiling info of the resolve buffer.
+         * The tiling of the AA buffer isn't programmable anyway. */
+        uint32_t pitch = surf->pitch;
+        if (aa->dest) {
+            pitch &= ~(R300_COLOR_TILE(1) | R300_COLOR_MICROTILE(3));
+            pitch |= aa->dest->pitch & (R300_COLOR_TILE(1) | R300_COLOR_MICROTILE(3));
+        }
+        OUT_CS_REG(R300_RB3D_COLORPITCH0 + (4 * i), pitch);
         OUT_CS_RELOC(surf);
 
         if (r300->cmask_in_use && i == 0) {

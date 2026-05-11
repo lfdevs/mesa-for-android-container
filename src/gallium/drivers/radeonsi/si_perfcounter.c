@@ -6,8 +6,10 @@
 
 #include "si_build_pm4.h"
 #include "si_query.h"
+#include "gfx/si_gfx.h"
 #include "util/u_memory.h"
 
+#include "ac_cmdbuf_cp.h"
 #include "ac_perfcounter.h"
 
 struct si_query_group {

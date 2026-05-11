@@ -51,9 +51,9 @@ lower_base_workgroup_id(nir_builder *b, nir_intrinsic_instr *intrin,
 static void
 check_sends(struct genisa_stats *stats, unsigned send_count)
 {
-   assert(stats->spills == 0);
-   assert(stats->fills == 0);
-   assert(stats->sends == send_count);
+   assert(send_count == 0 || stats->spills == 0);
+   assert(send_count == 0 || stats->fills == 0);
+   assert(send_count == 0 || stats->sends == send_count);
 }
 
 static struct anv_shader_internal *
@@ -63,7 +63,8 @@ compile_shader(struct anv_device *device,
                const char *name,
                const void *hash_key,
                uint32_t hash_key_size,
-               uint32_t sends_count_expectation)
+               uint32_t sends_count_expectation,
+               const uint16_t local_size[3])
 {
    const nir_shader_compiler_options *nir_options =
       &device->physical->compiler->nir_options[stage];
@@ -91,9 +92,13 @@ compile_shader(struct anv_device *device,
    NIR_PASS(_, nir, nir_split_per_member_structs);
 
    if (stage == MESA_SHADER_COMPUTE) {
-      nir->info.workgroup_size[0] = 16;
-      nir->info.workgroup_size[1] = 1;
-      nir->info.workgroup_size[2] = 1;
+      if (local_size[0] != 0) {
+         memcpy(nir->info.workgroup_size, local_size, sizeof(nir->info.workgroup_size));
+      } else {
+         nir->info.workgroup_size[0] = 16;
+         nir->info.workgroup_size[1] = 1;
+         nir->info.workgroup_size[2] = 1;
+      }
    }
 
    struct brw_compiler *compiler = device->physical->compiler;
@@ -145,9 +150,13 @@ compile_shader(struct anv_device *device,
    /* Do vectorizing here. For some reason when trying to do it in the back
     * this just isn't working.
     */
+   struct brw_nir_vectorize_mem_cb_data vectorize_cb_data = {
+      .devinfo = device->info,
+   };
    nir_load_store_vectorize_options options = {
       .modes = nir_var_mem_ubo | nir_var_mem_ssbo | nir_var_mem_global,
       .callback = brw_nir_should_vectorize_mem,
+      .cb_data = &vectorize_cb_data,
       .robust_modes = (nir_variable_mode)0,
    };
    NIR_PASS(_, nir, nir_opt_load_store_vectorize, &options);
@@ -158,7 +167,7 @@ compile_shader(struct anv_device *device,
 
    const unsigned *program;
    if (stage == MESA_SHADER_FRAGMENT) {
-      struct genisa_stats stats[3];
+      struct genisa_stats stats[3] = {};
       struct brw_compile_fs_params params = {
          .base = {
             .nir = nir,
@@ -185,6 +194,11 @@ compile_shader(struct anv_device *device,
             check_sends(&stats[stat_idx++], sends_count_expectation *
                                             (device->info->ver < 20 ? 2 : 1));
          }
+      } else {
+         for (uint32_t i = 0; i < ARRAY_SIZE(stats); i++) {
+            assert(stats[i].spills == 0);
+            assert(stats[i].fills == 0);
+         }
       }
    } else {
       brw_cs_fill_push_const_info(device->info, &prog_data.cs, -1);
@@ -209,7 +223,8 @@ compile_shader(struct anv_device *device,
       }
    }
 
-   assert(prog_data.base.total_scratch == 0);
+   /* Complex shaders are allowed to spill */
+   assert(sends_count_expectation == 0 || prog_data.base.total_scratch == 0);
    assert(program != NULL);
    struct anv_shader_internal *kernel = NULL;
    if (program == NULL)
@@ -249,8 +264,8 @@ anv_device_get_internal_shader(struct anv_device *device,
       } key;
 
       mesa_shader_stage stage;
-
-      uint32_t        send_count;
+      uint16_t local_size[3];
+      uint32_t send_count;
    } internal_kernels[] = {
       [ANV_INTERNAL_KERNEL_GENERATED_DRAWS] = {
          .key        = {
@@ -299,6 +314,70 @@ anv_device_get_internal_shader(struct anv_device *device,
                        10 /* 5 loads (1 pull constants) + 4 stores + 1 EOT */ :
                        9 /* 4 loads + 4 stores + 1 EOT */,
       },
+      [ANV_INTERNAL_KERNEL_DGC_GFX_COMPUTE] = {
+         .key        = {
+            .name    = "anv-dgc-gfx-compute",
+         },
+         .stage      = MESA_SHADER_COMPUTE,
+         .send_count = 0 /* too complex */,
+      },
+      [ANV_INTERNAL_KERNEL_DGC_GFX_FRAGMENT] = {
+         .key        = {
+            .name    = "anv-dgc-gfx-fragment",
+         },
+         .stage      = MESA_SHADER_FRAGMENT,
+         .send_count = 0 /* too complex */,
+      },
+      [ANV_INTERNAL_KERNEL_DGC_CS_COMPUTE] = {
+         .key        = {
+            .name    = "anv-dgc-cs-compute",
+         },
+         .stage      = MESA_SHADER_COMPUTE,
+         .send_count = 0 /* too complex */,
+      },
+      [ANV_INTERNAL_KERNEL_DGC_CS_FRAGMENT] = {
+         .key        = {
+            .name    = "anv-dgc-cs-fragment",
+         },
+         .stage      = MESA_SHADER_FRAGMENT,
+         .send_count = 0 /* too complex */,
+      },
+      [ANV_INTERNAL_KERNEL_DGC_CS_POSTPROCESS_COMPUTE] = {
+         .key        = {
+            .name    = "anv-dgc-postprocess-compute",
+         },
+         .stage      = MESA_SHADER_COMPUTE,
+         .send_count = device->info->verx10 >= 125 ? 11 : 8,
+      },
+      [ANV_INTERNAL_KERNEL_DGC_RT_COMPUTE] = {
+         .key        = {
+            .name    = "anv-dgc-rt-compute",
+         },
+         .stage      = MESA_SHADER_COMPUTE,
+         .send_count = 0 /* too complex */,
+      },
+      [ANV_INTERNAL_KERNEL_DGC_RT_FRAGMENT] = {
+         .key        = {
+            .name    = "anv-dgc-rt-fragment",
+         },
+         .stage      = MESA_SHADER_FRAGMENT,
+         .send_count = 0 /* too complex */,
+      },
+      [ANV_INTERNAL_KERNEL_DGC_DUMP_COMPUTE] = {
+         .key        = {
+            .name    = "anv-dgc-dump-compute",
+         },
+         .stage      = MESA_SHADER_COMPUTE,
+         .local_size = { 1, 1, 1 },
+         .send_count = 0 /* too complex */,
+      },
+      [ANV_INTERNAL_KERNEL_DGC_DUMP_FRAGMENT] = {
+         .key        = {
+            .name    = "anv-dgc-dump-fragment",
+         },
+         .stage      = MESA_SHADER_FRAGMENT,
+         .send_count = 0 /* too complex */,
+      },
    };
 
    struct anv_shader_internal *bin =
@@ -326,7 +405,8 @@ anv_device_get_internal_shader(struct anv_device *device,
                         internal_kernels[name].key.name,
                         &internal_kernels[name].key,
                         sizeof(internal_kernels[name].key),
-                        internal_kernels[name].send_count);
+                        internal_kernels[name].send_count,
+                        internal_kernels[name].local_size);
    if (bin == NULL)
       return vk_errorf(device, VK_ERROR_OUT_OF_HOST_MEMORY,
                        "Unable to compiler internal kernel");

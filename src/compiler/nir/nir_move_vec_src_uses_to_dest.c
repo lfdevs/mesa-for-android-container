@@ -82,7 +82,7 @@ move_vec_src_uses_to_dest_block(nir_block *block, bool skip_const_srcs)
        */
       if (list_is_singular(&vec->def.uses)) {
          nir_src *src = list_first_entry(&vec->def.uses, nir_src, use_link);
-         nir_instr *use_instr = nir_src_parent_instr(src);
+         nir_instr *use_instr = nir_src_use_instr(src);
          if (use_instr->type == nir_instr_type_intrinsic) {
             nir_intrinsic_instr *intr = nir_instr_as_intrinsic(use_instr);
             if (intr->intrinsic == nir_intrinsic_store_output ||
@@ -122,18 +122,18 @@ move_vec_src_uses_to_dest_block(nir_block *block, bool skip_const_srcs)
          }
 
          nir_foreach_use_safe(use, vec->src[i].src.ssa) {
-            if (nir_src_parent_instr(use) == &vec->instr)
+            if (nir_src_use_instr(use) == &vec->instr)
                continue;
 
             /* We need to dominate the use if we are going to rewrite it */
-            if (!ssa_def_dominates_instr(&vec->def, nir_src_parent_instr(use)))
+            if (!ssa_def_dominates_instr(&vec->def, nir_src_use_instr(use)))
                continue;
 
             /* For now, we'll just rewrite ALU instructions */
-            if (nir_src_parent_instr(use)->type != nir_instr_type_alu)
+            if (nir_src_use_instr(use)->type != nir_instr_type_alu)
                continue;
 
-            nir_alu_instr *use_alu = nir_instr_as_alu(nir_src_parent_instr(use));
+            nir_alu_instr *use_alu = nir_instr_as_alu(nir_src_use_instr(use));
 
             /* Figure out which source we're actually looking at */
             nir_alu_src *use_alu_src = exec_node_data(nir_alu_src, use, src);

@@ -5,7 +5,10 @@ ahb-dEQP-VK.api.external.memory.android_hardware_buffer.suballocated.device_only
 ahb-dEQP-VK.api.external.memory.android_hardware_buffer.suballocated.host_visible.import_multiple_times
 
 # These can cause hangs
-dEQP-VK.robustness.buffer_access.compute.vec4_copy.r32_sfloat.oob_storage_read.range_32_bytes
+dEQP-VK.robustness.buffer_access.*
 dEQP-VK.synchronization2.op.multi_queue.fence.write_image_compute_read_image_compute.image_128x128_r8_unorm_concurrent
 dEQP-VK.synchronization2.op.multi_queue.fence.write_ssbo_compute_read_ssbo_vertex.buffer_16384_concurrent
 dEQP-VK.synchronization2.timeline_semaphore.wait_before_signal.write_ssbo_compute_indirect_read_vertex_input.buffer_262144
+
+# Mainly for testing platform features. Skip as take too long. Flaky on both ANV and Turnip.
+awsi-dEQP-VK.wsi.android.incremental_present.*

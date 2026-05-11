@@ -92,6 +92,10 @@ bool dxil_nir_kill_unused_outputs(nir_shader *shader, uint64_t next_stage_read_m
 void dxil_nir_propagate_interp_to_outputs(nir_shader *prev_stage_nir,
                                           const nir_shader *fs_nir);
 
+/* Synthesize placeholder TES inputs mirroring TCS outputs the consumer
+ * doesn't already declare, so DXIL signature shapes match. */
+bool dxil_nir_pad_tes_input_signature(nir_shader *tes, const nir_shader *tcs);
+
 #ifdef __cplusplus
 }
 #endif

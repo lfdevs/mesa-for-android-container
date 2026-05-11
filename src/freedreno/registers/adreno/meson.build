@@ -17,6 +17,14 @@ xml_reg_files = [
   'a8xx_perfcntrs.xml',
 ]
 
+perfcntr_files = [
+  [ 'a2xx.xml', 'a2xx_perfcntrs.json' ],
+  [ 'a5xx.xml', 'a5xx_perfcntrs.json' ],
+  [ 'a6xx.xml', 'a6xx_perfcntrs.json' ],
+  [ 'a6xx.xml', 'a7xx_perfcntrs.json' ],
+  [ 'a6xx.xml', 'a8xx_perfcntrs.json' ],
+]
+
 xml_files = xml_reg_files
 xml_files += [
   'a6xx_gmu.xml',
@@ -80,6 +88,17 @@ foreach f : xml_files
       build_by_default: install_fd_decode_tools,
     )
   endif
+endforeach
+
+foreach e : perfcntr_files
+  _name = e[1] + '.h'
+  freedreno_xml_header_files += custom_target(
+    _name,
+    input: [gen_header_py, e[0], e[1], freedreno_schema, freedreno_copyright],
+    output: _name,
+    command: [prog_python, '@INPUT0@', '--validate', '--rnn', rnn_src_path, '--xml', '@INPUT1@', 'perfcntrs', '--json', '@INPUT2@'],
+    capture: true,
+  )
 endforeach
 
 freedreno_xml_header_files += custom_target(

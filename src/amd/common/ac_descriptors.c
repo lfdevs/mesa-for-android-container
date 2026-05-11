@@ -11,7 +11,7 @@
 #include "ac_surface.h"
 
 #include "gfx10_format_table.h"
-#include "sid.h"
+#include "amdgfxregs.h"
 
 #include "util/u_math.h"
 #include "util/format/u_format.h"

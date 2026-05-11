@@ -35,7 +35,6 @@
  * with our #define in include/c99_compat.h
  */
 
-#include "ac_binary.h"
 #include "ac_llvm_util.h"
 #include "ac_llvm_build.h"
 #include "util/macros.h"

@@ -1629,15 +1629,8 @@ brw_nir_lower_mesh_outputs(nir_shader *nir,
 void
 brw_nir_lower_fs_outputs(nir_shader *nir)
 {
-   nir_foreach_shader_out_variable(var, nir) {
-      var->data.driver_location =
-         SET_FIELD(var->data.index, BRW_NIR_FRAG_OUTPUT_INDEX) |
-         SET_FIELD(var->data.location, BRW_NIR_FRAG_OUTPUT_LOCATION);
-   }
-
    NIR_PASS(_, nir, nir_lower_io, nir_var_shader_out, type_size_vec4, 0);
    NIR_PASS(_, nir, brw_nir_lower_16bit_io, nir_var_shader_out);
-   nir->info.disable_output_offset_src_constant_folding = true;
 }
 
 static bool
@@ -1698,6 +1691,31 @@ brw_nir_tag_speculative_access(nir_shader *nir)
                                      nir_metadata_all, NULL);
 }
 
+static uint8_t
+brw_nir_lower_phis_to_scalar_cb(const nir_instr *instr, const void *_)
+{
+   nir_phi_instr *phi = nir_instr_as_phi(instr);
+
+   /* If a phi is used by DPAS or if a phi source is the result of a DPAS, do
+    * not scalarize.
+    */
+   nir_foreach_phi_src(src, phi) {
+      const nir_intrinsic_instr *intrin = nir_src_as_intrinsic(src->src);
+
+      if (intrin != NULL && intrin->intrinsic == nir_intrinsic_dpas_intel)
+         return 0;
+   }
+
+   nir_foreach_use(use_src, &phi->def) {
+      const nir_intrinsic_instr *intrin = nir_src_as_intrinsic(*use_src);
+
+      if (intrin != NULL && intrin->intrinsic == nir_intrinsic_dpas_intel)
+         return 0;
+   }
+
+   return 1;
+}
+
 #define OPT BRW_NIR_PASS
 #define LOOP_OPT BRW_NIR_LOOP_PASS
 #define LOOP_OPT_NOT_IDEMPOTENT BRW_NIR_LOOP_PASS_NOT_IDEMPOTENT
@@ -1735,7 +1753,7 @@ brw_nir_optimize(brw_pass_tracker *pt)
 
       LOOP_OPT(nir_opt_copy_prop);
 
-      LOOP_OPT(nir_lower_phis_to_scalar, NULL, NULL);
+      LOOP_OPT(nir_lower_phis_to_scalar, brw_nir_lower_phis_to_scalar_cb, NULL);
 
       LOOP_OPT(nir_opt_copy_prop);
       LOOP_OPT(nir_opt_dce);
@@ -2371,8 +2389,10 @@ brw_nir_should_vectorize_mem(unsigned align_mul, unsigned align_offset,
                              int64_t hole_size,
                              nir_intrinsic_instr *low,
                              nir_intrinsic_instr *high,
-                             void *data)
+                             void *_data)
 {
+   struct brw_nir_vectorize_mem_cb_data *data = _data;
+
    /* Don't combine things to generate 64-bit loads/stores.  We have to split
     * those back into 32-bit ones anyway and UBO loads aren't split in NIR so
     * we don't want to make a mess for the back-end.
@@ -2380,12 +2400,21 @@ brw_nir_should_vectorize_mem(unsigned align_mul, unsigned align_offset,
    if (bit_size > 32)
       return false;
 
-   if (low->intrinsic == nir_intrinsic_load_ubo_uniform_block_intel ||
-       low->intrinsic == nir_intrinsic_load_ssbo_uniform_block_intel ||
-       low->intrinsic == nir_intrinsic_load_shared_uniform_block_intel ||
-       low->intrinsic == nir_intrinsic_load_global_constant_uniform_block_intel ||
-       (low->intrinsic == nir_intrinsic_load_shader_indirect_data_intel &&
-        low->src[0].ssa == high->src[0].ssa)) {
+   bool convergent_block_load =
+      low->intrinsic == nir_intrinsic_load_ubo_uniform_block_intel ||
+      low->intrinsic == nir_intrinsic_load_ssbo_uniform_block_intel ||
+      low->intrinsic == nir_intrinsic_load_shared_uniform_block_intel ||
+      low->intrinsic == nir_intrinsic_load_global_constant_uniform_block_intel ||
+      (low->intrinsic == nir_intrinsic_load_shader_indirect_data_intel &&
+       low->src[0].ssa == high->src[0].ssa);
+
+   unsigned unaligned_size = num_components * bit_size;
+   unsigned aligned_size = convergent_block_load ?
+      brw_uniform_block_size(data->devinfo, num_components) * bit_size :
+      nir_round_up_components(num_components) * bit_size;
+   hole_size += (aligned_size - unaligned_size) / 8;
+
+   if (convergent_block_load) {
       if (num_components > 4) {
          if (bit_size != 32)
             return false;
@@ -2407,11 +2436,18 @@ brw_nir_should_vectorize_mem(unsigned align_mul, unsigned align_offset,
          return false;
    }
 
-
-   const uint32_t align = nir_combined_align(align_mul, align_offset);
-
-   if (align < bit_size / 8)
+   if (nir_combined_align(align_mul, align_offset) < bit_size / 8)
       return false;
+
+   if (low->intrinsic == nir_intrinsic_load_global ||
+       low->intrinsic == nir_intrinsic_load_global_constant ||
+       low->intrinsic == nir_intrinsic_load_global_constant_uniform_block_intel) {
+      /* Only increase the size of loads if doing so doesn't extend into a new page. */
+      uint32_t mul = MIN2(align_mul, data->devinfo->mem_alignment);
+      unsigned end = align_offset + unaligned_size / 8;
+      if ((aligned_size - unaligned_size) / 8 > (align(end, mul) - end))
+         return false;
+   }
 
    return true;
 }
@@ -2507,7 +2543,7 @@ get_mem_access_size_align(nir_intrinsic_op intrin, uint8_t bytes,
       /* Choose a byte, word, or dword */
       bytes = MIN2(bytes, 4);
       if (bytes == 3)
-         bytes = is_load ? 4 : 2;
+         bytes = (is_load && align >= 4) ? 4 : 2;
 
       /* Ensure we split into aligned pieces. We cannot blindly turn an i8vec4
        * into i32 due to the alignment requirements. It might be possible to
@@ -2617,12 +2653,16 @@ brw_vectorize_lower_mem_access(brw_pass_tracker *pt)
 {
    const struct intel_device_info *devinfo = pt->compiler->devinfo;
 
+   struct brw_nir_vectorize_mem_cb_data vectorize_cb_data = {
+      .devinfo = devinfo,
+   };
    nir_load_store_vectorize_options options = {
       .modes = nir_var_mem_ubo | nir_var_mem_ssbo |
                nir_var_mem_global | nir_var_mem_shared |
                nir_var_mem_task_payload,
       .round_up_components = lsc_urb_round_up_components,
       .callback = brw_nir_should_vectorize_mem,
+      .cb_data = &vectorize_cb_data,
       .robust_modes = (nir_variable_mode)0,
    };
 
@@ -2656,6 +2696,7 @@ brw_vectorize_lower_mem_access(brw_pass_tracker *pt)
          nir_load_store_vectorize_options ubo_options = {
             .modes = nir_var_mem_ubo,
             .callback = brw_nir_should_vectorize_mem,
+            .cb_data = &vectorize_cb_data,
             .robust_modes = options.robust_modes & nir_var_mem_ubo,
          };
 
@@ -3541,27 +3582,6 @@ brw_nir_get_var_type(const struct nir_shader *nir, nir_variable *var)
    }
 
    return type;
-}
-
-bool
-brw_nir_uses_inline_data(nir_shader *shader)
-{
-   nir_foreach_function_impl(impl, shader) {
-      nir_foreach_block(block, impl) {
-         nir_foreach_instr(instr, block) {
-            if (instr->type != nir_instr_type_intrinsic)
-               continue;
-
-            nir_intrinsic_instr *intrin  = nir_instr_as_intrinsic(instr);
-            if (intrin->intrinsic != nir_intrinsic_load_inline_data_intel)
-               continue;
-
-            return true;
-         }
-      }
-   }
-
-   return false;
 }
 
 /**

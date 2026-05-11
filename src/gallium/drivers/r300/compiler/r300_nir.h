@@ -53,7 +53,7 @@ is_only_used_by_intrinsic(const nir_alu_instr *instr, nir_intrinsic_op op)
    nir_foreach_use (src, &instr->def) {
       is_used = true;
 
-      nir_instr *user_instr = nir_src_parent_instr(src);
+      nir_instr *user_instr = nir_src_use_instr(src);
       if (user_instr->type != nir_instr_type_intrinsic)
          return false;
 

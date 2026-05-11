@@ -229,7 +229,8 @@ vl_video_buffer_destroy(struct pipe_video_buffer *buffer)
    assert(buf);
 
    for (i = 0; i < VL_NUM_COMPONENTS; ++i) {
-      buf->base.context->sampler_view_release(buf->base.context, buf->sampler_view_planes[i]);
+      if (buf->sampler_view_planes[i])
+         buf->base.context->sampler_view_release(buf->base.context, buf->sampler_view_planes[i]);
       if (i < buf->num_sampler_view_components)
          buf->base.context->sampler_view_release(buf->base.context, buf->sampler_view_components[i]);
       pipe_resource_reference(&buf->resources[i], NULL);
@@ -389,26 +390,15 @@ vl_video_buffer_create(struct pipe_context *pipe,
 {
    enum pipe_format resource_formats[VL_NUM_COMPONENTS];
    struct pipe_video_buffer templat, *result;
-   bool pot_buffers;
 
    assert(pipe);
    assert(tmpl->width > 0 && tmpl->height > 0);
 
-   pot_buffers = !pipe->screen->get_video_param
-   (
-      pipe->screen,
-      PIPE_VIDEO_PROFILE_UNKNOWN,
-      PIPE_VIDEO_ENTRYPOINT_UNKNOWN,
-      PIPE_VIDEO_CAP_NPOT_TEXTURES
-   );
-
    vl_get_video_buffer_formats(pipe->screen, tmpl->buffer_format, resource_formats);
 
    templat = *tmpl;
-   templat.width = pot_buffers ? util_next_power_of_two(tmpl->width)
-                 : align(tmpl->width, VL_MACROBLOCK_WIDTH);
-   templat.height = pot_buffers ? util_next_power_of_two(tmpl->height)
-                  : align(tmpl->height, VL_MACROBLOCK_HEIGHT);
+   templat.width = align(tmpl->width, VL_MACROBLOCK_WIDTH);
+   templat.height = align(tmpl->height, VL_MACROBLOCK_HEIGHT);
 
    if (tmpl->interlaced)
       templat.height /= 2;

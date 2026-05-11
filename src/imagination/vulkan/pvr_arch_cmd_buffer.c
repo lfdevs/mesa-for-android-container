@@ -136,6 +136,7 @@ static void pvr_cmd_buffer_free_sub_cmd(struct pvr_cmd_buffer *cmd_buffer,
                            VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT);
 
          util_dynarray_fini(&sub_cmd->gfx.sec_query_indices);
+         util_dynarray_fini(&sub_cmd->gfx.unbound_deferred_clears);
          pvr_csb_finish(&sub_cmd->gfx.control_stream);
          pvr_bo_free(cmd_buffer->device, sub_cmd->gfx.terminate_ctrl_stream);
          pvr_bo_free(cmd_buffer->device, sub_cmd->gfx.multiview_ctrl_stream);
@@ -2465,7 +2466,7 @@ VkResult pvr_arch_cmd_buffer_end_sub_cmd(struct pvr_cmd_buffer *cmd_buffer)
       if (result != VK_SUCCESS)
          return pvr_cmd_buffer_set_error_unwarned(cmd_buffer, result);
 
-      if (gfx_sub_cmd->multiview_enabled) {
+      if (gfx_sub_cmd->view_index_wanted) {
          result = pvr_csb_gfx_build_view_index_ctrl_stream(
             device,
             pvr_csb_get_start_address(&gfx_sub_cmd->control_stream),
@@ -2736,6 +2737,7 @@ VkResult pvr_arch_cmd_buffer_start_sub_cmd(struct pvr_cmd_buffer *cmd_buffer,
                ? state->render_pass_info.pass->multiview_enabled
                : false;
       }
+      sub_cmd->gfx.view_index_wanted = sub_cmd->gfx.multiview_enabled;
 
       if (state->vis_test_enabled)
          sub_cmd->gfx.query_pool = state->query_pool;
@@ -2753,6 +2755,7 @@ VkResult pvr_arch_cmd_buffer_start_sub_cmd(struct pvr_cmd_buffer *cmd_buffer,
       }
 
       sub_cmd->gfx.sec_query_indices = UTIL_DYNARRAY_INIT;
+      sub_cmd->gfx.unbound_deferred_clears = UTIL_DYNARRAY_INIT;
       break;
 
    case PVR_SUB_CMD_TYPE_QUERY:
@@ -6609,11 +6612,19 @@ pvr_setup_isp_faces_and_control(struct pvr_cmd_buffer *const cmd_buffer,
    const enum ROGUE_TA_OBJTYPE obj_type =
       pvr_ta_objtype(dynamic_state->ia.primitive_topology);
 
-   const VkImageAspectFlags ds_aspects =
+   VkImageAspectFlags ds_aspects =
       (!rasterizer_discard && attachment)
          ? vk_format_aspects(attachment->vk_format) &
               (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT)
          : VK_IMAGE_ASPECT_NONE;
+
+   /* Dynamic rendering attachments could be bound with a D+S format but only
+    * D or S active.
+    */
+   if (!pass_info->pass && attachment && !attachment->is_depth)
+      ds_aspects &= ~VK_IMAGE_ASPECT_DEPTH_BIT;
+   if (!pass_info->pass && attachment && !attachment->is_stencil)
+      ds_aspects &= ~VK_IMAGE_ASPECT_STENCIL_BIT;
 
    /* This is deliberately a full copy rather than a pointer because
     * vk_optimize_depth_stencil_state() can only be run once against any given
@@ -8138,6 +8149,7 @@ static VkResult pvr_validate_draw_state(struct pvr_cmd_buffer *cmd_buffer)
    struct vk_dynamic_graphics_state *const dynamic_state =
       &cmd_buffer->vk.dynamic_graphics_state;
    const struct pvr_graphics_pipeline *const gfx_pipeline = state->gfx_pipeline;
+   const pco_data *const vs_data = &gfx_pipeline->vs_data;
    const pco_data *const fs_data = &gfx_pipeline->fs_data;
    struct pvr_sub_cmd_gfx *sub_cmd;
    bool fstencil_writemask_zero;
@@ -8183,6 +8195,9 @@ static VkResult pvr_validate_draw_state(struct pvr_cmd_buffer *cmd_buffer)
    sub_cmd->frag_has_side_effects |= fs_data->common.uses.side_effects;
    sub_cmd->frag_uses_texture_rw |= false;
    sub_cmd->vertex_uses_texture_rw |= false;
+
+   sub_cmd->view_index_wanted |= vs_data->common.multiview;
+   sub_cmd->view_index_wanted |= fs_data->common.multiview;
 
    sub_cmd->job.get_vis_results = state->vis_test_enabled;
 
@@ -9036,6 +9051,17 @@ pvr_execute_graphics_cmd_buffer(struct pvr_cmd_buffer *cmd_buffer,
                                        &sec_sub_cmd->gfx.sec_query_indices);
       }
 
+      if (!PVR_HAS_FEATURE(dev_info, gs_rta_support)) {
+         util_dynarray_foreach (&sec_sub_cmd->gfx.unbound_deferred_clears,
+                                struct pvr_unbound_deferred_clear,
+                                recorded_clear) {
+            result =
+               pvr_bind_unbound_deferred_clear(cmd_buffer, recorded_clear);
+            if (result != VK_SUCCESS)
+               return result;
+         }
+      }
+
       if (pvr_cmd_uses_deferred_cs_cmds(sec_cmd_buffer)) {
          /* TODO: In case if secondary buffer is created with
           * VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT, then we patch the
@@ -9070,6 +9096,8 @@ pvr_execute_graphics_cmd_buffer(struct pvr_cmd_buffer *cmd_buffer,
 
       primary_sub_cmd->gfx.job.get_vis_results |=
          sec_sub_cmd->gfx.job.get_vis_results;
+      primary_sub_cmd->gfx.view_index_wanted |=
+         sec_sub_cmd->gfx.view_index_wanted;
 
       primary_sub_cmd->gfx.max_tiles_in_flight =
          MIN2(primary_sub_cmd->gfx.max_tiles_in_flight,

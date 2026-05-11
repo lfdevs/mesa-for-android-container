@@ -11,12 +11,10 @@
 
 #include "aco_nir_call_attribs.h"
 #include "nir_builder.h"
-#include "radv_device.h"
 #include "radv_nir_rt_stage_functions.h"
-#include "radv_physical_device.h"
 
 struct chit_miss_inlining_params {
-   struct radv_device *device;
+   const struct radv_compiler_info *compiler_info;
 
    struct radv_nir_rt_traversal_params *trav_params;
    struct radv_nir_rt_traversal_result *trav_result;
@@ -27,7 +25,7 @@ struct chit_miss_inlining_params {
 };
 
 struct chit_miss_inlining_vars {
-   struct radv_device *device;
+   const struct radv_compiler_info *compiler_info;
 
    nir_variable *shader_record_ptr;
    nir_variable *origin;
@@ -104,6 +102,7 @@ static bool
 lower_rt_instruction_chit_miss(nir_builder *b, nir_intrinsic_instr *intr, void *_vars)
 {
    struct chit_miss_inlining_vars *vars = _vars;
+   const struct radv_compiler_info *compiler_info = vars->compiler_info;
 
    b->cursor = nir_after_instr(&intr->instr);
 
@@ -125,13 +124,13 @@ lower_rt_instruction_chit_miss(nir_builder *b, nir_intrinsic_instr *intr, void *
       ret = nir_load_var(b, vars->tmin);
       break;
    case nir_intrinsic_load_ray_instance_custom_index:
-      ret = radv_load_custom_instance(vars->device, b, nir_load_var(b, vars->instance_addr));
+      ret = radv_load_custom_instance(compiler_info, b, nir_load_var(b, vars->instance_addr));
       break;
    case nir_intrinsic_load_primitive_id:
       ret = nir_load_var(b, vars->primitive_id);
       break;
    case nir_intrinsic_load_instance_id:
-      ret = radv_load_instance_id(vars->device, b, nir_load_var(b, vars->instance_addr));
+      ret = radv_load_instance_id(compiler_info, b, nir_load_var(b, vars->instance_addr));
       break;
    case nir_intrinsic_load_ray_hit_kind:
       ret = nir_load_var(b, vars->hit_kind);
@@ -151,7 +150,7 @@ lower_rt_instruction_chit_miss(nir_builder *b, nir_intrinsic_instr *intr, void *
       unsigned c = nir_intrinsic_column(intr);
       nir_def *instance_node_addr = nir_load_var(b, vars->instance_addr);
       nir_def *wto_matrix[3];
-      radv_load_wto_matrix(vars->device, b, instance_node_addr, wto_matrix);
+      radv_load_wto_matrix(compiler_info, b, instance_node_addr, wto_matrix);
 
       nir_def *vals[3];
       for (unsigned i = 0; i < 3; ++i)
@@ -163,26 +162,26 @@ lower_rt_instruction_chit_miss(nir_builder *b, nir_intrinsic_instr *intr, void *
    case nir_intrinsic_load_ray_object_to_world: {
       unsigned c = nir_intrinsic_column(intr);
       nir_def *otw_matrix[3];
-      radv_load_otw_matrix(vars->device, b, nir_load_var(b, vars->instance_addr), otw_matrix);
+      radv_load_otw_matrix(compiler_info, b, nir_load_var(b, vars->instance_addr), otw_matrix);
       ret = nir_vec3(b, nir_channel(b, otw_matrix[0], c), nir_channel(b, otw_matrix[1], c),
                      nir_channel(b, otw_matrix[2], c));
       break;
    }
    case nir_intrinsic_load_ray_object_origin: {
       nir_def *wto_matrix[3];
-      radv_load_wto_matrix(vars->device, b, nir_load_var(b, vars->instance_addr), wto_matrix);
+      radv_load_wto_matrix(compiler_info, b, nir_load_var(b, vars->instance_addr), wto_matrix);
       ret = nir_build_vec3_mat_mult(b, nir_load_var(b, vars->origin), wto_matrix, true);
       break;
    }
    case nir_intrinsic_load_ray_object_direction: {
       nir_def *wto_matrix[3];
-      radv_load_wto_matrix(vars->device, b, nir_load_var(b, vars->instance_addr), wto_matrix);
+      radv_load_wto_matrix(compiler_info, b, nir_load_var(b, vars->instance_addr), wto_matrix);
       ret = nir_build_vec3_mat_mult(b, nir_load_var(b, vars->direction), wto_matrix, false);
       break;
    }
    case nir_intrinsic_load_ray_triangle_vertex_positions: {
       nir_def *primitive_addr = nir_load_var(b, vars->primitive_addr);
-      ret = radv_load_vertex_position(vars->device, b, primitive_addr, nir_intrinsic_column(intr));
+      ret = radv_load_vertex_position(compiler_info, b, primitive_addr, nir_intrinsic_column(intr));
       break;
    }
    default:
@@ -238,7 +237,6 @@ radv_nir_lower_rt_io_monolithic(nir_shader *nir)
 }
 
 struct rt_variables {
-   struct radv_device *device;
    const VkPipelineCreateFlags2 flags;
 
    uint32_t payload_offset;
@@ -252,13 +250,13 @@ radv_build_recursive_case(nir_builder *b, nir_def *idx, struct radv_ray_tracing_
                           struct radv_rt_case_data *data)
 {
    nir_shader *shader =
-      radv_pipeline_cache_handle_to_nir(data->device, data->pipeline->stages[group->recursive_shader].nir);
+      radv_pipeline_cache_handle_to_nir(data->compiler_info, data->pipeline->stages[group->recursive_shader].nir);
    assert(shader);
 
    struct chit_miss_inlining_params *params = data->param_data;
 
    struct chit_miss_inlining_vars vars = {
-      .device = params->device,
+      .compiler_info = params->compiler_info,
    };
 
    nir_opt_dead_cf(shader);
@@ -283,7 +281,7 @@ radv_build_recursive_case(nir_builder *b, nir_def *idx, struct radv_ray_tracing_
 }
 
 struct lower_rt_instruction_monolithic_state {
-   struct radv_device *device;
+   const struct radv_compiler_info *compiler_info;
    struct radv_ray_tracing_pipeline *pipeline;
    const VkRayTracingPipelineCreateInfoKHR *pCreateInfo;
 
@@ -296,8 +294,8 @@ lower_rt_call_monolithic(nir_builder *b, nir_intrinsic_instr *intr, void *data)
    b->cursor = nir_after_instr(&intr->instr);
 
    struct lower_rt_instruction_monolithic_state *state = data;
-   const struct radv_physical_device *pdev = radv_device_physical(state->device);
    struct rt_variables *vars = state->vars;
+   const struct radv_compiler_info *compiler_info = state->compiler_info;
 
    switch (intr->intrinsic) {
    case nir_intrinsic_execute_callable:
@@ -333,19 +331,19 @@ lower_rt_call_monolithic(nir_builder *b, nir_intrinsic_instr *intr, void *data)
       nir_store_var(b, vars->stack_ptr, nir_iadd_imm(b, stack_ptr, vars->stack_size), 0x1);
 
       struct radv_nir_rt_traversal_result result =
-         radv_build_traversal(state->device, state->pipeline, b, &params, NULL);
+         radv_build_traversal(compiler_info, state->pipeline, b, &params, NULL);
 
       nir_store_var(b, vars->stack_ptr, stack_ptr, 0x1);
 
       struct chit_miss_inlining_params inline_params = {
-         .device = state->device,
+         .compiler_info = compiler_info,
          .trav_params = &params,
          .trav_result = &result,
          .payload_offset = vars->payload_offset,
       };
 
       struct radv_rt_case_data case_data = {
-         .device = state->device,
+         .compiler_info = compiler_info,
          .pipeline = state->pipeline,
          .param_data = &inline_params,
       };
@@ -383,7 +381,7 @@ lower_rt_call_monolithic(nir_builder *b, nir_intrinsic_instr *intr, void *data)
       nir_pop_if(b, NULL);
 
       b->shader->info.shared_size =
-         MAX2(b->shader->info.shared_size, pdev->rt_wave_size * MAX_STACK_ENTRY_COUNT * sizeof(uint32_t));
+         MAX2(b->shader->info.shared_size, compiler_info->key.rt_wave_size * MAX_STACK_ENTRY_COUNT * sizeof(uint32_t));
 
       nir_instr_remove(&intr->instr);
       return true;
@@ -455,7 +453,7 @@ radv_count_ray_payload_size(nir_builder *b, nir_intrinsic_instr *instr, void *da
 }
 
 void
-radv_nir_lower_rt_abi_monolithic(nir_shader *shader, struct radv_device *device,
+radv_nir_lower_rt_abi_monolithic(nir_shader *shader, const struct radv_compiler_info *compiler_info,
                                  struct radv_ray_tracing_pipeline *pipeline)
 {
    const bool uses_descriptor_heap = pipeline->base.base.create_flags & VK_PIPELINE_CREATE_2_DESCRIPTOR_HEAP_BIT_EXT;
@@ -465,7 +463,6 @@ radv_nir_lower_rt_abi_monolithic(nir_shader *shader, struct radv_device *device,
    nir_builder b = nir_builder_at(nir_before_impl(impl));
 
    struct rt_variables vars = {
-      .device = device,
       .flags = pipeline->base.base.create_flags,
       .stack_size = b.shader->scratch_size,
    };
@@ -474,7 +471,7 @@ radv_nir_lower_rt_abi_monolithic(nir_shader *shader, struct radv_device *device,
    nir_store_var(&b, vars.stack_ptr, nir_imm_int(&b, 0), 0x1);
 
    struct lower_rt_instruction_monolithic_state state = {
-      .device = device,
+      .compiler_info = compiler_info,
       .pipeline = pipeline,
       .vars = &vars,
    };

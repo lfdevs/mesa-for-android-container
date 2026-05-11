@@ -82,25 +82,26 @@ static void r600_memory_barrier(struct pipe_context *ctx, unsigned flags)
 {
 	struct r600_context *rctx = (struct r600_context *)ctx;
 
-	if (!(flags & ~PIPE_BARRIER_UPDATE))
+	if (!(flags & ~PIPE_BARRIER_UPDATE_TEXTURE))
 		return;
-
-	if (flags & PIPE_BARRIER_CONSTANT_BUFFER)
-		rctx->b.flags |= R600_CONTEXT_INV_CONST_CACHE;
 
 	if (flags & (PIPE_BARRIER_VERTEX_BUFFER |
 		     PIPE_BARRIER_SHADER_BUFFER |
-		     PIPE_BARRIER_TEXTURE |
-		     PIPE_BARRIER_IMAGE |
 		     PIPE_BARRIER_STREAMOUT_BUFFER |
 		     PIPE_BARRIER_GLOBAL_BUFFER)) {
 		rctx->b.flags |= R600_CONTEXT_INV_VERTEX_CACHE|
 			R600_CONTEXT_INV_TEX_CACHE;
 	}
 
-	if (flags & (PIPE_BARRIER_FRAMEBUFFER|
+	if (flags & (PIPE_BARRIER_FRAMEBUFFER |
 		     PIPE_BARRIER_IMAGE))
 		rctx->b.flags |= R600_CONTEXT_FLUSH_AND_INV;
+
+	if (flags & (PIPE_BARRIER_INDEX_BUFFER |
+		     PIPE_BARRIER_UPDATE_BUFFER |
+		     PIPE_BARRIER_CONSTANT_BUFFER |
+		     PIPE_BARRIER_TEXTURE))
+		rctx->b.flags |= R600_CONTEXT_FLUSH_AND_INV_CB;
 
 	rctx->b.flags |= R600_CONTEXT_WAIT_3D_IDLE;
 }

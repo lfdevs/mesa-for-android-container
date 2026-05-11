@@ -158,6 +158,18 @@ d3d12_bo_map(struct d3d12_bo *bo, D3D12_RANGE *range);
 void
 d3d12_bo_unmap(struct d3d12_bo *bo, D3D12_RANGE *range);
 
+struct d3d12_pending_free_entry {
+   struct list_head link;
+   struct d3d12_bo *bo;
+   uint64_t fence_value;
+};
+
+bool
+d3d12_screen_reclaim_completed(struct d3d12_screen *screen);
+
+bool
+d3d12_screen_reclaim_one(struct d3d12_screen *screen);
+
 struct pb_manager *
 d3d12_bufmgr_create(struct d3d12_screen *screen);
 

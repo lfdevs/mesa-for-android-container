@@ -13,6 +13,7 @@
 #extension GL_KHR_shader_subgroup_arithmetic       : require
 #extension GL_KHR_memory_scope_semantics           : require
 #extension GL_KHR_shader_subgroup_ballot           : require
+#extension GL_EXT_scalar_block_layout              : require
 // clang-format on
 
 //
@@ -140,6 +141,8 @@ layout(push_constant) uniform block_push
 #define RS_KEYVAL_TYPE uint32_t
 #elif (RS_KEYVAL_DWORDS == 2)
 #define RS_KEYVAL_TYPE u32vec2
+#elif (RS_KEYVAL_DWORDS == 3)
+#define RS_KEYVAL_TYPE u32vec3
 #else
 #error "Error: Unsupported RS_KEYVAL_DWORDS"
 #endif
@@ -272,7 +275,7 @@ layout(local_size_x_id = RS_SCATTER_WORKGROUP_SIZE_ID) in;
 //
 //
 //
-layout(buffer_reference, std430) buffer buffer_rs_kv
+layout(buffer_reference, scalar) buffer buffer_rs_kv
 {
   RS_KEYVAL_TYPE extent[];
 };

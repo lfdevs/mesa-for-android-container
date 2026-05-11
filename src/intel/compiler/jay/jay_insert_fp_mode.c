@@ -6,13 +6,15 @@
 #include "jay_ir.h"
 
 static void
-set_cr0(jay_function *f, jay_cursor cursor, uint32_t *cr0, uint32_t desired)
+set_cr0(jay_function *f, jay_cursor cursor, uint32_t *existing, uint32_t desired)
 {
    /* Only touch cr0 if we are changing bits */
-   if ((*cr0) != desired) {
+   if ((*existing) != desired) {
       jay_builder b = jay_init_builder(f, cursor);
-      jay_XOR(&b, JAY_TYPE_U32, jay_control(), jay_control(), (*cr0) ^ desired);
-      *cr0 = desired;
+      jay_def cr0 = jay_scalar(J_ARF, JAY_ARF_CONTROL);
+
+      jay_XOR(&b, JAY_TYPE_U32, cr0, cr0, (*existing) ^ desired);
+      *existing = desired;
    }
 }
 
@@ -77,7 +79,7 @@ jay_insert_fp_mode(jay_shader *shader, uint32_t api, uint32_t float_sizes)
          }
 
          /* Restore to global state on block boundaries */
-         if (jay_num_successors(block) > 0) {
+         if (jay_num_successors(block, GPR) > 0) {
             set_cr0(func, jay_after_block(block), &current, cr0);
          }
       }

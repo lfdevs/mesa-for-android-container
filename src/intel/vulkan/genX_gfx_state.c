@@ -876,6 +876,15 @@ update_fs_config(struct anv_gfx_dynamic_state *hw_state,
          });
 
    SET(FS_CONFIG, fs_config, fs_config);
+
+#if INTEL_WA_18019110168_GFX_VER
+   if (mesh_prog_data && mesh_prog_data->map.wa_18019110168_active) {
+      SET(WA_18019110168, wa_18019110168,
+          (GET(wa_18019110168) & ~ANV_WA_18019110168_PER_PRIMITIVE_REMAP_TABLE_OFFSET_MASK) |
+          ((gfx->shaders[MESA_SHADER_MESH]->kernel.offset +
+            mesh_prog_data->wa_18019110168_mapping_offset)));
+   }
+#endif
 }
 
 static bool
@@ -2313,6 +2322,9 @@ cmd_buffer_flush_gfx_runtime_state(struct anv_gfx_dynamic_state *hw_state,
       update_sbe(hw_state, gfx, device);
 
    if ((gfx->dirty & ANV_CMD_DIRTY_PS) ||
+#if INTEL_WA_18019110168_GFX_VER
+       (gfx->dirty & ANV_CMD_DIRTY_MESH) ||
+#endif
        BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_MS_ALPHA_TO_COVERAGE_ENABLE) ||
        BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_MS_RASTERIZATION_SAMPLES) ||
        BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_RS_PROVOKING_VERTEX) ||
@@ -2587,9 +2599,10 @@ cmd_buffer_flush_gfx_runtime_state(struct anv_gfx_dynamic_state *hw_state,
       ((gfx->dirty & ANV_CMD_DIRTY_MESH) ||
        BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_RS_PROVOKING_VERTEX));
    if (mesh_provoking_vertex_update) {
-      SET(MESH_PROVOKING_VERTEX, mesh_provoking_vertex,
-                                 compute_mesh_provoking_vertex(
-                                    mesh_prog_data, dyn));
+      SET(WA_18019110168, wa_18019110168,
+          (GET(wa_18019110168) & ~ANV_WA_18019110168_PROVOKING_VERTEX_MASK) |
+          compute_mesh_provoking_vertex(
+             mesh_prog_data, dyn));
    }
 #endif
 }
@@ -3663,26 +3676,21 @@ cmd_buffer_gfx_state_emission(struct anv_cmd_buffer *cmd_buffer)
    }
 #endif
 
-#if INTEL_WA_18019110168_GFX_VER
-   if (IS_DIRTY(MESH_PROVOKING_VERTEX))
-      cmd_buffer->state.push_constants_dirty |= VK_SHADER_STAGE_MESH_BIT_EXT;
-#endif
-
    if (IS_DIRTY(FS_CONFIG)) {
       push_consts->gfx.fs_config = hw_state->fs_config;
-
-#if INTEL_WA_18019110168_GFX_VER
-      const struct brw_mesh_prog_data *mesh_prog_data = get_gfx_mesh_prog_data(gfx);
-      if (mesh_prog_data) {
-         push_consts->gfx.fs_per_prim_remap_offset =
-            gfx->shaders[MESA_SHADER_MESH]->kernel.offset +
-            mesh_prog_data->wa_18019110168_mapping_offset;
-      }
-#endif
-
       cmd_buffer->state.push_constants_dirty |= VK_SHADER_STAGE_FRAGMENT_BIT;
       gfx->base.push_constants_data_dirty = true;
    }
+
+#if INTEL_WA_18019110168_GFX_VER
+   if (IS_DIRTY(WA_18019110168)) {
+      push_consts->gfx.wa_18019110168 = hw_state->wa_18019110168;
+      cmd_buffer->state.push_constants_dirty |= VK_SHADER_STAGE_MESH_BIT_EXT |
+                                                VK_SHADER_STAGE_FRAGMENT_BIT;
+      gfx->base.push_constants_data_dirty = true;
+   }
+#endif
+
 
 #define anv_batch_emit_gfx(batch, cmd, name) ({                         \
       void *__dst = anv_batch_emit_dwords(                              \

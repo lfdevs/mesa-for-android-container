@@ -858,7 +858,7 @@ lower_load_input_attachment_coord(nir_builder *b, nir_intrinsic_instr *load,
 {
    b->cursor = nir_before_instr(&load->instr);
 
-   nir_def *pos = nir_f2i32(b, nir_load_frag_coord(b));
+   nir_def *pos = nir_f2i32(b, nir_build_frag_coord(b, 2));
 
    nir_def *layer = nir_load_layer_id(b);
    nir_def *view = load_root_table(b, 1, 32, draw.view_index, ctx);

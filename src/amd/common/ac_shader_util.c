@@ -7,12 +7,10 @@
 #include "ac_shader_util.h"
 #include "ac_gpu_info.h"
 
-#include "sid.h"
+#include "amdgfxregs.h"
 #include "util/u_math.h"
 
 #include <assert.h>
-#include <stdlib.h>
-#include <string.h>
 
 unsigned ac_get_spi_shader_z_format(bool writes_z, bool writes_stencil, bool writes_samplemask,
                                     bool writes_mrt0_alpha)

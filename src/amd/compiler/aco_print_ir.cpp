@@ -8,7 +8,7 @@
 #include "aco_ir.h"
 
 #include "common/ac_shader_util.h"
-#include "common/sid.h"
+#include "common/amdgfxregs.h"
 
 #include <array>
 

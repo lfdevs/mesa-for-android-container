@@ -74,7 +74,7 @@ nir_shader *radv_meta_nir_build_copy_vrs_htile_shader(enum amd_gfx_level gfx_lev
 nir_shader *radv_meta_nir_build_dcc_retile_compute_shader(enum amd_gfx_level gfx_level, uint32_t gb_addr_config,
                                                           const struct radeon_surf *surf);
 
-nir_shader *radv_meta_nir_build_expand_depth_stencil_compute_shader(void);
+nir_shader *radv_meta_nir_build_expand_depth_stencil_compute_shader(uint8_t samples);
 
 nir_shader *radv_meta_nir_build_dcc_decompress_compute_shader(void);
 

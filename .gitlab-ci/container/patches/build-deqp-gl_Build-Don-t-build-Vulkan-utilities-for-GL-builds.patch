@@ -1,4 +1,4 @@
-From ccdc2b9341c703507cba6017d2a494595335ffdc Mon Sep 17 00:00:00 2001
+From 8a9b46a0fd740679ff576ae70e5ac4bae12ac8b0 Mon Sep 17 00:00:00 2001
 From: Daniel Stone <daniels@collabora.com>
 Date: Wed, 29 Jan 2025 12:50:33 +0000
 Subject: [PATCH] Build: Don't build Vulkan utilities for GL builds
@@ -6,15 +6,15 @@ Subject: [PATCH] Build: Don't build Vulkan utilities for GL builds
 Change-Id: Ie412f914bb6264ffbd502deea57d80cc11a9948e
 Signed-off-by: Daniel Stone <daniels@collabora.com>
 ---
- framework/platform/CMakeLists.txt             |   9 --
- .../platform/android/tcuAndroidPlatform.cpp   | 126 +-----------------
+ framework/platform/CMakeLists.txt             |   9 -
+ .../platform/android/tcuAndroidPlatform.cpp   | 177 +-----------------
  .../platform/android/tcuAndroidPlatform.hpp   |  14 +-
  framework/platform/lnx/tcuLnxPlatform.cpp     |   9 +-
- .../surfaceless/tcuSurfacelessPlatform.cpp    |  54 --------
- 5 files changed, 3 insertions(+), 209 deletions(-)
+ .../surfaceless/tcuSurfacelessPlatform.cpp    |  54 ------
+ 5 files changed, 3 insertions(+), 260 deletions(-)
 
 diff --git a/framework/platform/CMakeLists.txt b/framework/platform/CMakeLists.txt
-index ec1deb5c2..49fe412a7 100644
+index 64d248b30f..833df5a08a 100644
 --- a/framework/platform/CMakeLists.txt
 +++ b/framework/platform/CMakeLists.txt
 @@ -15,8 +15,6 @@ if (NOT DEFINED TCUTIL_PLATFORM_SRCS)
@@ -35,7 +35,7 @@ index ec1deb5c2..49fe412a7 100644
  		)
  
  		include_directories(lnx)
-@@ -164,8 +160,6 @@ if (NOT DEFINED TCUTIL_PLATFORM_SRCS)
+@@ -168,8 +164,6 @@ if (NOT DEFINED TCUTIL_PLATFORM_SRCS)
  		set(TCUTIL_PLATFORM_SRCS
  			osx/tcuOSXPlatform.cpp
  			osx/tcuOSXPlatform.hpp
@@ -44,7 +44,7 @@ index ec1deb5c2..49fe412a7 100644
  			osx/tcuOSXMetalView.mm
  			osx/tcuOSXMetalView.hpp
  			)
-@@ -191,9 +185,6 @@ if (DEQP_USE_WAYLAND)
+@@ -195,9 +189,6 @@ if (DEQP_USE_WAYLAND)
  	add_dependencies(tcutil-platform deqp-xdg-shell)
  endif()
  
@@ -55,7 +55,7 @@ index ec1deb5c2..49fe412a7 100644
  
  # Always link to glutil as some platforms such as Win32 always support GL
 diff --git a/framework/platform/android/tcuAndroidPlatform.cpp b/framework/platform/android/tcuAndroidPlatform.cpp
-index af56dabb8..6b0de6dba 100644
+index 9b117f50c6..b007c783cf 100644
 --- a/framework/platform/android/tcuAndroidPlatform.cpp
 +++ b/framework/platform/android/tcuAndroidPlatform.cpp
 @@ -31,7 +31,6 @@
@@ -66,7 +66,7 @@ index af56dabb8..6b0de6dba 100644
  
  // Assume no call translation is needed
  #include <android/native_window.h>
-@@ -217,102 +216,6 @@ eglu::NativeDisplay *NativeDisplayFactory::createDisplay(const EGLAttrib *attrib
+@@ -309,153 +308,6 @@ eglu::NativeDisplay *NativeDisplayFactory::createDisplay(const EGLAttrib *attrib
      return new NativeDisplay();
  }
  
@@ -132,6 +132,43 @@ index af56dabb8..6b0de6dba 100644
 -    tcu::Android::Window &m_window;
 -};
 -
+-#if DE_ANDROID_API >= 24
+-class ImageReaderVulkanWindow : public vk::wsi::AndroidWindowInterface
+-{
+-public:
+-    ImageReaderVulkanWindow(AImageReader *reader, ANativeWindow *window)
+-        : vk::wsi::AndroidWindowInterface(vk::pt::AndroidNativeWindowPtr(window))
+-        , m_reader(reader)
+-    {
+-    }
+-
+-    void setVisible(bool visible)
+-    {
+-        DE_UNREF(visible);
+-    }
+-
+-    void resize(const UVec2 &newSize)
+-    {
+-        DE_UNREF(newSize);
+-    }
+-
+-    void setMinimized(bool minimized)
+-    {
+-        DE_UNREF(minimized);
+-        TCU_THROW(NotSupportedError, "Minimized on Android is not implemented");
+-    }
+-
+-    ~ImageReaderVulkanWindow(void)
+-    {
+-        if (m_reader)
+-            AImageReader_delete(m_reader);
+-    }
+-
+-private:
+-    AImageReader *m_reader;
+-};
+-#endif
+-
 -class VulkanDisplay : public vk::wsi::Display
 -{
 -public:
@@ -159,7 +196,21 @@ index af56dabb8..6b0de6dba 100644
 -            }
 -        }
 -        else
+-        {
+-#if DE_ANDROID_API >= 24
+-            uint32_t width  = initialSize ? initialSize->x() : 256;
+-            uint32_t height = initialSize ? initialSize->y() : 256;
+-            width           = width > 0 ? width : 256;
+-            height          = height > 0 ? height : 256;
+-
+-            AImageReader *reader        = nullptr;
+-            ANativeWindow *nativeWindow = acquireImageReaderWindow(width, height, AIMAGE_FORMAT_RGBA_8888, &reader);
+-
+-            return new ImageReaderVulkanWindow(reader, nativeWindow);
+-#else
 -            TCU_THROW(ResourceError, "Native window is not available");
+-#endif
+-        }
 -    }
 -
 -private:
@@ -169,7 +220,7 @@ index af56dabb8..6b0de6dba 100644
  static size_t getTotalSystemMemory(ANativeActivity *activity)
  {
      const size_t MiB = (size_t)(1 << 20);
-@@ -341,8 +244,7 @@ static size_t getTotalSystemMemory(ANativeActivity *activity)
+@@ -484,8 +336,7 @@ static size_t getTotalSystemMemory(ANativeActivity *activity)
  // Platform
  
  Platform::Platform(NativeActivity &activity)
@@ -179,7 +230,7 @@ index af56dabb8..6b0de6dba 100644
  {
      m_nativeDisplayFactoryRegistry.registerFactory(new NativeDisplayFactory(m_windowRegistry));
      m_contextFactoryRegistry.registerFactory(new eglu::GLContextFactory(m_nativeDisplayFactoryRegistry));
-@@ -358,16 +260,6 @@ bool Platform::processEvents(void)
+@@ -501,16 +352,6 @@ bool Platform::processEvents(void)
      return true;
  }
  
@@ -196,7 +247,7 @@ index af56dabb8..6b0de6dba 100644
  void Platform::getMemoryLimits(tcu::PlatformMemoryLimits &limits) const
  {
      // Worst-case estimates
-@@ -401,22 +293,6 @@ void Platform::getMemoryLimits(tcu::PlatformMemoryLimits &limits) const
+@@ -544,22 +385,6 @@ void Platform::getMemoryLimits(tcu::PlatformMemoryLimits &limits) const
      limits.devicePageTableHierarchyLevels    = 3;
  }
  
@@ -220,7 +271,7 @@ index af56dabb8..6b0de6dba 100644
  } // namespace tcu
  
 diff --git a/framework/platform/android/tcuAndroidPlatform.hpp b/framework/platform/android/tcuAndroidPlatform.hpp
-index 32cc9068c..3c3f02d98 100644
+index 32cc9068c4..3c3f02d98d 100644
 --- a/framework/platform/android/tcuAndroidPlatform.hpp
 +++ b/framework/platform/android/tcuAndroidPlatform.hpp
 @@ -27,7 +27,6 @@
@@ -267,7 +318,7 @@ index 32cc9068c..3c3f02d98 100644
      const size_t m_totalSystemMemory;
  };
 diff --git a/framework/platform/lnx/tcuLnxPlatform.cpp b/framework/platform/lnx/tcuLnxPlatform.cpp
-index 8c0a3ef06..6b1a4985a 100644
+index 8c0a3ef06e..6b1a4985a1 100644
 --- a/framework/platform/lnx/tcuLnxPlatform.cpp
 +++ b/framework/platform/lnx/tcuLnxPlatform.cpp
 @@ -23,12 +23,10 @@
@@ -309,7 +360,7 @@ index 8c0a3ef06..6b1a4985a 100644
  #if defined(DEQP_SUPPORT_GLX)
      m_glPlatform.registerFactory(x11::glx::createContextFactory(m_eventState));
 diff --git a/framework/platform/surfaceless/tcuSurfacelessPlatform.cpp b/framework/platform/surfaceless/tcuSurfacelessPlatform.cpp
-index 585bfbbae..9f386b3ca 100644
+index 2224f4164e..c9f044b130 100644
 --- a/framework/platform/surfaceless/tcuSurfacelessPlatform.cpp
 +++ b/framework/platform/surfaceless/tcuSurfacelessPlatform.cpp
 @@ -43,7 +43,6 @@
@@ -388,5 +439,5 @@ index 585bfbbae..9f386b3ca 100644
  
  class ContextFactory : public glu::ContextFactory
 -- 
-2.45.2
+2.51.0
 

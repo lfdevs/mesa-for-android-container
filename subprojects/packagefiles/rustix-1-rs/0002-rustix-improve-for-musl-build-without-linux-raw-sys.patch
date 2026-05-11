@@ -1,0 +1,85 @@
+From 50c2d9e76170080ac1ab87672771ea65b9b33bcb Mon Sep 17 00:00:00 2001
+From: Gurchetan Singh <gurchetan.singh.foss@gmail.com>
+Date: Mon, 30 Jun 2025 11:24:05 -0700
+Subject: [PATCH 2/4] rustix: improve for musl build without linux-raw-sys
+
+Android likes to build host tools (adb, Cuttlefish, ..)
+via musl, using the same hermetic tree as for Bionic
+build.
+
+And linux-raw-sys isn't in that hermetic tree, so add support
+for the libc-backend.
+---
+ src/backend/libc/fs/syscalls.rs |  4 ++--
+ src/fs/statx.rs                 | 34 +++++++++++++++++++++++++++++++++
+ 2 files changed, 36 insertions(+), 2 deletions(-)
+
+diff --git a/src/backend/libc/fs/syscalls.rs b/src/backend/libc/fs/syscalls.rs
+index 71bc8b0a..1c687cc3 100644
+--- a/src/backend/libc/fs/syscalls.rs
++++ b/src/backend/libc/fs/syscalls.rs
+@@ -2071,10 +2071,10 @@ pub(crate) fn statx(
+     // doesn't represent all the known flags.
+     //
+     // [it's deprecated]: https://patchwork.kernel.org/project/linux-fsdevel/patch/20200505095915.11275-7-mszeredi@redhat.com/
+-    #[cfg(any(not(linux_raw_dep), not(target_env = "musl")))]
++    #[cfg(not(target_env = "musl"))]
+     const STATX__RESERVED: u32 = c::STATX__RESERVED as u32;
+     #[cfg(target_env = "musl")]
+-    const STATX__RESERVED: u32 = linux_raw_sys::general::STATX__RESERVED;
++    const STATX__RESERVED: u32 = 0x80000000;
+     if (mask.bits() & STATX__RESERVED) == STATX__RESERVED {
+         return Err(io::Errno::INVAL);
+     }
+diff --git a/src/fs/statx.rs b/src/fs/statx.rs
+index f8be29f7..e85d63aa 100644
+--- a/src/fs/statx.rs
++++ b/src/fs/statx.rs
+@@ -3,6 +3,7 @@
+ use crate::fd::AsFd;
+ use crate::fs::AtFlags;
+ use crate::{backend, io, path};
++#[cfg(any(linux_raw_dep, not(target_env = "musl")))]
+ use backend::c;
+ use bitflags::bitflags;
+ 
+@@ -275,3 +276,36 @@ mod compat {
+         }
+     }
+ }
++
++// These are the actual values for the constants, needed for the fallback implementation.
++// TODO(https://github.com/bytecodealliance/rustix/issues/1589): try to upstream these
++// constants to libc.
++#[cfg(all(not(linux_raw_dep), target_env = "musl"))]
++mod c {
++    pub const STATX_TYPE: u32 = 0x00000001;
++    pub const STATX_MODE: u32 = 0x00000002;
++    pub const STATX_NLINK: u32 = 0x00000004;
++    pub const STATX_UID: u32 = 0x00000008;
++    pub const STATX_GID: u32 = 0x00000010;
++    pub const STATX_ATIME: u32 = 0x00000020;
++    pub const STATX_MTIME: u32 = 0x00000040;
++    pub const STATX_CTIME: u32 = 0x00000080;
++    pub const STATX_INO: u32 = 0x00000100;
++    pub const STATX_SIZE: u32 = 0x00000200;
++    pub const STATX_BLOCKS: u32 = 0x00000400;
++    pub const STATX_BASIC_STATS: u32 = 0x000007ff;
++    pub const STATX_BTIME: u32 = 0x00000800;
++    pub const STATX_MNT_ID: u32 = 0x00001000;
++    pub const STATX_DIOALIGN: u32 = 0x00002000; // Deprecated, but here for completeness
++    pub const STATX_ALL: u32 = 0x00000fff; // Note: Doesn't include newer flags
++
++    pub const STATX_ATTR_COMPRESSED: u64 = 0x00000004;
++    pub const STATX_ATTR_IMMUTABLE: u64 = 0x00000010;
++    pub const STATX_ATTR_APPEND: u64 = 0x00000020;
++    pub const STATX_ATTR_NODUMP: u64 = 0x00000040;
++    pub const STATX_ATTR_ENCRYPTED: u64 = 0x00000800;
++    pub const STATX_ATTR_AUTOMOUNT: u64 = 0x00001000;
++    pub const STATX_ATTR_MOUNT_ROOT: u64 = 0x00020000;
++    pub const STATX_ATTR_VERITY: u64 = 0x00100000;
++    pub const STATX_ATTR_DAX: u64 = 0x00200000;
++}
+-- 
+2.54.0.545.g6539524ca2-goog
+

@@ -34,12 +34,14 @@ struct nir_shader;
 struct gl_constants;
 struct gl_linked_shader;
 struct gl_shader_program;
+struct pipe_caps;
 
 bool gl_nir_lower_atomics(nir_shader *shader,
                           const struct gl_shader_program *shader_program,
                           bool use_binding_as_idx);
 
-bool gl_nir_lower_images(nir_shader *shader, bool bindless_only);
+bool gl_nir_lower_images(nir_shader *shader, const struct pipe_caps *caps,
+                         bool bindless_only);
 bool gl_nir_lower_samplers(nir_shader *shader,
                            const struct gl_shader_program *shader_program);
 bool gl_nir_lower_samplers_as_deref(nir_shader *shader,
@@ -63,8 +65,6 @@ void gl_nir_lower_packed_varyings(const struct gl_constants *consts,
                                   struct gl_linked_shader *linked_shader,
                                   bool disable_varying_packing,
                                   bool disable_xfb_packing, bool xfb_enabled);
-
-void gl_nir_inline_functions(nir_shader *shader);
 
 #ifdef __cplusplus
 }

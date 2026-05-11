@@ -155,7 +155,7 @@ astc_emu_init_flush_denorm_pipeline_locked(struct anv_device *device)
    if (astc_emu->ds_layout == VK_NULL_HANDLE) {
       const VkDescriptorSetLayoutCreateInfo ds_layout_create_info = {
          .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-         .flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR,
+         .flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT,
          .bindingCount = 2,
          .pBindings = (VkDescriptorSetLayoutBinding[]){
             {
@@ -299,18 +299,18 @@ astc_emu_flush_denorm_slice(struct anv_cmd_buffer *cmd_buffer,
                              VK_PIPELINE_BIND_POINT_COMPUTE,
                              astc_emu->pipeline);
 
-   VkPushConstantsInfoKHR push_info = {
-      .sType = VK_STRUCTURE_TYPE_PUSH_CONSTANTS_INFO_KHR,
+   VkPushConstantsInfo push_info = {
+      .sType = VK_STRUCTURE_TYPE_PUSH_CONSTANTS_INFO,
       .layout = astc_emu->pipeline_layout,
       .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
       .offset = 0,
       .size = sizeof(push_const),
       .pValues = push_const,
    };
-   anv_CmdPushConstants2KHR(cmd_buffer_, &push_info);
+   anv_CmdPushConstants2(cmd_buffer_, &push_info);
 
-   VkBindDescriptorSetsInfoKHR bind_info = {
-      .sType = VK_STRUCTURE_TYPE_BIND_DESCRIPTOR_SETS_INFO_KHR,
+   VkBindDescriptorSetsInfo bind_info = {
+      .sType = VK_STRUCTURE_TYPE_BIND_DESCRIPTOR_SETS_INFO,
       .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
       .layout = astc_emu->pipeline_layout,
       .firstSet = 0,
@@ -319,7 +319,7 @@ astc_emu_flush_denorm_slice(struct anv_cmd_buffer *cmd_buffer,
       .dynamicOffsetCount = 0,
       .pDynamicOffsets = NULL,
    };
-   anv_CmdBindDescriptorSets2KHR(cmd_buffer_, &bind_info);
+   anv_CmdBindDescriptorSets2(cmd_buffer_, &bind_info);
 
    /* each workgroup processes 8x8 texel blocks */
    rect.extent.width = DIV_ROUND_UP(rect.extent.width, 8);
@@ -371,8 +371,8 @@ astc_emu_decompress_slice(struct anv_cmd_buffer *cmd_buffer,
 
    VkDescriptorSet set = anv_descriptor_set_to_handle(&push_set.set);
 
-   VkBindDescriptorSetsInfoKHR bind_info = {
-      .sType = VK_STRUCTURE_TYPE_BIND_DESCRIPTOR_SETS_INFO_KHR,
+   VkBindDescriptorSetsInfo bind_info = {
+      .sType = VK_STRUCTURE_TYPE_BIND_DESCRIPTOR_SETS_INFO,
       .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
       .layout = astc_emu->texcompress->p_layout,
       .firstSet = 0,
@@ -381,7 +381,7 @@ astc_emu_decompress_slice(struct anv_cmd_buffer *cmd_buffer,
       .dynamicOffsetCount = 0,
       .pDynamicOffsets = NULL,
    };
-   anv_CmdBindDescriptorSets2KHR(cmd_buffer_, &bind_info);
+   anv_CmdBindDescriptorSets2(cmd_buffer_, &bind_info);
 
    const uint32_t push_const[] = {
       rect.offset.x,
@@ -392,15 +392,15 @@ astc_emu_decompress_slice(struct anv_cmd_buffer *cmd_buffer,
          vk_format_get_blockheight(astc_format),
       false, /* we don't use VK_IMAGE_VIEW_TYPE_3D */
    };
-   VkPushConstantsInfoKHR push_info = {
-      .sType = VK_STRUCTURE_TYPE_PUSH_CONSTANTS_INFO_KHR,
+   VkPushConstantsInfo push_info = {
+      .sType = VK_STRUCTURE_TYPE_PUSH_CONSTANTS_INFO,
       .layout = astc_emu->texcompress->p_layout,
       .stageFlags = VK_SHADER_STAGE_COMPUTE_BIT,
       .offset = 0,
       .size = sizeof(push_const),
       .pValues = push_const,
    };
-   anv_CmdPushConstants2KHR(cmd_buffer_, &push_info);
+   anv_CmdPushConstants2(cmd_buffer_, &push_info);
 
    /* each workgroup processes 2x2 texel blocks */
    rect.extent.width = DIV_ROUND_UP(rect.extent.width, 2);
@@ -493,9 +493,16 @@ anv_device_init_astc_emu(struct anv_device *device)
       simple_mtx_init(&astc_emu->mutex, mtx_plain);
 
    if (device->physical->emu_astc_ldr) {
-      result = vk_texcompress_astc_init(&device->vk, &device->vk.alloc,
-                                        VK_NULL_HANDLE,
-                                        &astc_emu->texcompress);
+      result = vk_texcompress_astc_init(
+         &device->vk, &device->vk.alloc, VK_NULL_HANDLE,
+         &astc_emu->texcompress,
+         (struct vk_texcompress_astc_params) {
+            .luts_alignment = 64,
+            .luts_memory_flags = (VK_MEMORY_PROPERTY_HOST_COHERENT_BIT |
+                                  VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                                  (device->physical->has_small_bar ? 0 :
+                                   VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)),
+         });
    }
 
    return result;

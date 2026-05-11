@@ -177,6 +177,9 @@ ac_nir_lower_gs_inputs_to_mem(nir_shader *shader,
                               bool triangle_strip_adjacency_fix);
 
 bool
+ac_nir_lower_indirect_derefs_early(nir_shader *shader);
+
+bool
 ac_nir_lower_indirect_derefs(nir_shader *shader);
 
 typedef struct {
@@ -407,6 +410,13 @@ typedef struct {
     */
    bool fix_derivs_in_divergent_cf;
    unsigned max_wqm_vgprs;
+} ac_nir_lower_tex_coords_options;
+
+bool
+ac_nir_lower_tex_coords(nir_shader *nir, const ac_nir_lower_tex_coords_options *options);
+
+typedef struct {
+   enum amd_gfx_level gfx_level;
 } ac_nir_lower_image_tex_options;
 
 bool
@@ -471,6 +481,12 @@ ac_nir_opt_vectorize_cb(const nir_instr *instr, const void *data);
 
 unsigned
 ac_nir_get_io_driver_location(const nir_shader *nir, unsigned location, bool is_input);
+
+bool
+ac_nir_assign_fs_input_locations(nir_shader *nir);
+
+bool
+ac_nir_fixup_smem_loads_null_prt(nir_shader *shader, uint8_t address_prt_wa_control_bit);
 
 #ifdef __cplusplus
 }

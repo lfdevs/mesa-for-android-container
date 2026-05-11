@@ -273,9 +273,9 @@ get_singluar_user_bcsel(nir_def *def, unsigned *src_idx)
 
    nir_alu_instr *bcsel = NULL;
    nir_foreach_use_including_if_safe (src, def) {
-      if (nir_src_is_if(src) || nir_src_parent_instr(src)->type != nir_instr_type_alu)
+      if (nir_src_is_if(src) || nir_src_use_instr(src)->type != nir_instr_type_alu)
          return NULL;
-      bcsel = nir_instr_as_alu(nir_src_parent_instr(src));
+      bcsel = nir_instr_as_alu(nir_src_use_instr(src));
       if (bcsel->op != nir_op_bcsel || bcsel->def.num_components != 1)
          return NULL;
       *src_idx = list_entry(src, nir_alu_src, src) - bcsel->src;

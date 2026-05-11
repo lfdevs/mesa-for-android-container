@@ -34,9 +34,21 @@ layout(push_constant) uniform CONSTS {
 uint32_t
 morton_component(uint32_t x)
 {
+   x = (x * 0x00010001u) & 0xFF0000FFu;
    x = (x * 0x00000101u) & 0x0F00F00Fu;
    x = (x * 0x00000011u) & 0xC30C30C3u;
    x = (x * 0x00000005u) & 0x49249249u;
+   return x;
+}
+
+uint64_t
+morton_component64(uint64_t x)
+{
+   x = (x | x << 32) & 0x1f00000000fffful;
+   x = (x | x << 16) & 0x1f0000ff0000fful;
+   x = (x | x << 8) & 0x100f00f00f00f00ful;
+   x = (x | x << 4) & 0x10c30c30c30c30c3ul;
+   x = (x | x << 2) & 0x1249249249249249ul;
    return x;
 }
 
@@ -46,10 +58,22 @@ morton_code(uint32_t x, uint32_t y, uint32_t z)
    return (morton_component(x) << 2) | (morton_component(y) << 1) | morton_component(z);
 }
 
+uint64_t
+morton_code64(uint64_t x, uint64_t y, uint64_t z)
+{
+   return (morton_component64(x) << 2) | (morton_component64(y) << 1) | morton_component64(z);
+}
+
 uint32_t
 lbvh_key(float x01, float y01, float z01)
 {
    return morton_code(uint32_t(x01 * 255.0), uint32_t(y01 * 255.0), uint32_t(z01 * 255.0)) << 8;
+}
+
+uint64_t
+lbvh_key64(float x01, float y01, float z01)
+{
+   return morton_code64(uint64_t(x01 * float(0x1fffff)), uint64_t(y01 * float(0x1fffff)), uint64_t(z01 * float(0x1fffff)));
 }
 
 void
@@ -57,11 +81,14 @@ main(void)
 {
    uint32_t global_id = gl_GlobalInvocationID.x;
 
-   REF(key_id_pair) key_id = INDEX(key_id_pair, args.ids, global_id);
-
-   uint32_t id = DEREF(key_id).id;
+   uint32_t id;
+   if (VK_BUILD_FLAG(VK_BUILD_FLAG_64BIT_KEYS))
+      id = DEREF(INDEX(key64_id_pair, args.ids, global_id)).id;
+   else
+      id = DEREF(INDEX(key32_id_pair, args.ids, global_id)).id;
 
    uint32_t key;
+   uint64_t key64;
    if (id != VK_BVH_INVALID_NODE) {
       vk_aabb bounds = DEREF(REF(vk_ir_node)OFFSET(args.bvh, ir_id_to_offset(id))).aabb;
       vec3 center = (bounds.min + bounds.max) * 0.5;
@@ -76,12 +103,22 @@ main(void)
 
       vec3 normalized_center = (center - bvh_bounds.min) / (bvh_bounds.max - bvh_bounds.min);
 
-      key = lbvh_key(normalized_center.x, normalized_center.y, normalized_center.z);
+      if (VK_BUILD_FLAG(VK_BUILD_FLAG_64BIT_KEYS))
+         key64 = lbvh_key64(normalized_center.x, normalized_center.y, normalized_center.z);
+      else
+         key = lbvh_key(normalized_center.x, normalized_center.y, normalized_center.z);
    } else {
       /* Move null instances to the end to avoid mixing null instances with active instances. This
        * way, we can skip early during traversal.
        */
-      key = 0xFFFFFFFF;
+      key = 0xFFFFFFFFu;
+      key64 = 0xFFFFFFFFFFFFFFFFul;
    }
-   DEREF(key_id).key = key;
+   if (VK_BUILD_FLAG(VK_BUILD_FLAG_64BIT_KEYS)) {
+      REF(key64_id_pair) key_id = INDEX(key64_id_pair, args.ids, global_id);
+      DEREF(key_id).key_lo = unpackUint2x32(key64).x;
+      DEREF(key_id).key_hi = unpackUint2x32(key64).y;
+   } else {
+      DEREF(INDEX(key32_id_pair, args.ids, global_id)).key = key;
+   }
 }

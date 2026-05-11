@@ -113,7 +113,6 @@ KHR-GL46.texture_gather.plain-gather-unorm-cube-array
 KHR-GL46.texture_gather.swizzle
 KHR-GL46.texture_lod_bias.texture_lod_bias_all
 KHR-GL46.texture_size_promotion.functional
-KHR-GL46.transform_feedback_overflow_query_ARB.multiple-streams-one-buffer-per-stream
 KHR-GL46.vertex_attrib_64bit.limits_test
 
 dEQP-GLES2.functional.color_clear.masked_scissored_rgba
@@ -515,7 +514,6 @@ KHR-GL46.sparse_texture_tests.SparseTextureCommitment_texture_2d_rgba16f
 KHR-GL46.sparse_texture_tests.SparseTextureCommitment_texture_cube_map_r8_snorm
 KHR-GL46.sparse_texture_tests.SparseTextureCommitment_texture_rectangle_rgba32f
 KHR-GL46.texture_lod_bias.texture_lod_bias_all
-KHR-GL46.transform_feedback_overflow_query_ARB.multiple-streams-one-buffer-per-stream
 dEQP-GLES31.functional.copy_image.mixed.viewclass_64_bits_mixed.rg32f_r11_eac.texture3d_to_cubemap
 shaders@glsl-fs-loop
 spec@arb_gpu_shader5@texturegather@vs-rgba-3-unorm-2d

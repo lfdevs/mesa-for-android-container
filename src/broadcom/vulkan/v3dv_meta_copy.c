@@ -1862,7 +1862,7 @@ v3dv_CmdFillBuffer(VkCommandBuffer commandBuffer,
    }
 
    v3d_X((&cmd_buffer->device->devinfo), meta_fill_buffer)
-      (cmd_buffer, bo, dstOffset, size, data);
+      (cmd_buffer, bo, dst_buffer->mem_offset + dstOffset, size, data);
 
    cmd_buffer->state.is_transfer = false;
 }

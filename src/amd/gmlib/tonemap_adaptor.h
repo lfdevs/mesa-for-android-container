@@ -26,7 +26,13 @@ struct tonemap_param
 
 void* tm_create(void);
 void  tm_destroy(void** pp_tmGenerator);
-int   tm_generate3DLut(struct tonemap_param* pInparam, void* pformattedLutData);
+int   tm_generate3DLut(struct tonemap_param* pInparam, void* pLutData);
+int   tm_generate_formatted_3DLut(uint16_t* pCpuLutData,
+                                  int cpuLutDim,
+                                  int gpuLutContainerDim,
+                                  const float bitDepthCpu,
+                                  const uint32_t bitDepthGpu,
+                                  void* pGpuLutData);
 
 #ifdef __cplusplus
 }

@@ -13,7 +13,6 @@
 #include "build_helpers.h"
 #else
 #include <stdint.h>
-#include "bvh.h"
 #define REF(type) uint64_t
 #define VOID_REF  uint64_t
 #endif

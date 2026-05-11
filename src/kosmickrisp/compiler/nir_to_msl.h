@@ -31,6 +31,11 @@ bool msl_optimize_nir(struct nir_shader *nir);
 /* Call this before all API-speicific lowerings, it will */
 void msl_preprocess_nir(struct nir_shader *nir);
 
+/* Call this before all API-specific lowerings. It will pre-process with
+ * instruction workarounds based on the disabled workarounds bitmask. */
+void msl_preprocess_nir_workarounds(struct nir_shader *nir,
+                                    uint64_t disabled_workarounds);
+
 enum msl_tex_access_flag {
    MSL_ACCESS_SAMPLE = 0,
    MSL_ACCESS_READ,
@@ -72,6 +77,8 @@ bool msl_nir_vs_io_types(nir_shader *nir);
 bool msl_nir_fake_guard_for_discards(struct nir_shader *nir);
 bool msl_nir_lower_sample_shading(nir_shader *nir);
 void msl_lower_nir_late(nir_shader *nir);
+
+bool msl_gather_uses_per_draw_data(nir_shader *nir);
 
 static const nir_shader_compiler_options kk_nir_options = {
    .lower_fdph = true,

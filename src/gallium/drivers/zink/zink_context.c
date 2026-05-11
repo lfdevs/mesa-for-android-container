@@ -971,16 +971,10 @@ static VkBufferViewCreateInfo
 create_bvci(struct zink_context *ctx, struct zink_resource *res, enum pipe_format format, uint32_t offset, uint32_t range)
 {
    struct zink_screen *screen = zink_screen(ctx->base.screen);
-   VkBufferViewCreateInfo bvci;
-   // Zero whole struct (including alignment holes), so hash_bufferview
-   // does not access potentially uninitialized data.
-   memset(&bvci, 0, sizeof(bvci));
-   bvci.sType = VK_STRUCTURE_TYPE_BUFFER_VIEW_CREATE_INFO;
-   bvci.pNext = NULL;
-   if (zink_get_format_props(screen, format)->bufferFeatures & VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_BIT)
-      bvci.buffer = res->obj->storage_buffer ? res->obj->storage_buffer : res->obj->buffer;
-   else
-      bvci.buffer = res->obj->buffer;
+   VkBufferViewCreateInfo bvci = {
+      VK_STRUCTURE_TYPE_BUFFER_VIEW_CREATE_INFO,
+   };
+   bvci.buffer = res->obj->buffer;
    bvci.format = zink_get_format(screen, format);
    assert(bvci.format);
    bvci.offset = offset;
@@ -995,7 +989,6 @@ create_bvci(struct zink_context *ctx, struct zink_resource *res, enum pipe_forma
    uint64_t clamp = (uint64_t)blocksize * (uint64_t)screen->info.props.limits.maxTexelBufferElements;
    if (bvci.range == VK_WHOLE_SIZE && res->base.b.width0 > clamp)
       bvci.range = clamp;
-   bvci.flags = 0;
    return bvci;
 }
 
@@ -1019,6 +1012,16 @@ get_buffer_view(struct zink_context *ctx, struct zink_resource *res, enum pipe_f
       buffer_view = (void*)he->key;
    } else {
       VkBufferView view;
+
+      VkBufferUsageFlags2CreateInfo usage = {
+         VK_STRUCTURE_TYPE_BUFFER_USAGE_FLAGS_2_CREATE_INFO,
+         NULL,
+         VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT
+      };
+      bvci.pNext = &usage;
+      if (zink_get_format_props(screen, format)->bufferFeatures & VK_FORMAT_FEATURE_STORAGE_TEXEL_BUFFER_BIT)
+         usage.usage |= VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT;
+
       VkResult result = VKSCR(CreateBufferView)(screen->dev, &bvci, NULL, &view);
       if (result != VK_SUCCESS) {
          _mesa_set_remove(&res->obj->surface_cache, he);

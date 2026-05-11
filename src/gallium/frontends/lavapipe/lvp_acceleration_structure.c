@@ -49,7 +49,7 @@ lvp_init_radix_sort(struct lvp_device *device)
                                &device->vk.alloc, VK_NULL_HANDLE,
                                lvp_radix_sort_config);
 
-   device->accel_struct_args.radix_sort = device->radix_sort;
+   device->accel_struct_args.radix_sort_64 = device->radix_sort;
 
    simple_mtx_unlock(&device->radix_sort_lock);
 }

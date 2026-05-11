@@ -19,8 +19,6 @@
 #include "radv_image_view.h"
 
 #include "ac_descriptors.h"
-#include "ac_formats.h"
-#include "gfx10_format_table.h"
 
 static unsigned
 radv_tex_dim(VkImageType image_type, VkImageViewType view_type, unsigned nr_layers, unsigned nr_samples,

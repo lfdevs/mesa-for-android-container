@@ -970,6 +970,9 @@ spec@glsl-1.20@execution@fs-vec4-const-array-indirect-access-048-elements,Fail
 spec@glsl-1.20@execution@fs-vec4-const-array-indirect-access-128-elements,Fail
 spec@glsl-1.20@execution@fs-vec4-const-array-indirect-access-256-elements,Fail
 
+# Loop unrolling regression
+spec@glsl-1.20@execution@fs-function-inout-array-of-structs,Fail
+
 # https://gitlab.freedesktop.org/mesa/mesa/-/issues/4980
 spec@glsl-1.20@execution@glsl-fs-frontfacing,Fail
 spec@glsl-1.20@execution@glsl-fs-frontfacing-not,Fail

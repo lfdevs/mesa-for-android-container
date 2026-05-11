@@ -6,8 +6,11 @@
 
 #include "nir/nir.h"
 #include "nir/nir_builder.h"
+
+#include "amdgfxregs.h"
 #include "radv_nir.h"
-#include "radv_pipeline_graphics.h"
+#include "radv_pipeline.h"
+#include "radv_shader.h"
 
 typedef struct {
    const struct radv_graphics_state_key *gfx;

@@ -7,7 +7,7 @@
 #include "aco_builder.h"
 #include "aco_ir.h"
 
-#include "common/sid.h"
+#include "common/amdgfxregs.h"
 
 #include "util/memstream.h"
 

@@ -66,6 +66,7 @@ jay_compute_liveness(jay_function *f)
 
    ralloc_free(f->dead_defs);
    f->dead_defs = BITSET_RZALLOC(f, f->ssa_alloc);
+   BITSET_WORD *uniform = BITSET_CALLOC(f->ssa_alloc);
 
    jay_foreach_block(f, block) {
       u_sparse_bitset_free(&block->live_in);
@@ -75,6 +76,14 @@ jay_compute_liveness(jay_function *f)
       u_sparse_bitset_init(&block->live_out, f->ssa_alloc, block);
 
       jay_worklist_push_head(&worklist, block);
+   }
+
+   jay_foreach_inst_in_func(f, _, I) {
+      jay_foreach_dst_index(I, dst, index) {
+         if (jay_is_uniform(dst)) {
+            BITSET_SET(uniform, index);
+         }
+      }
    }
 
    while (!u_worklist_is_empty(&worklist)) {
@@ -94,9 +103,20 @@ jay_compute_liveness(jay_function *f)
       /* Propagate block->live_in[] to the live_out[] of predecessors. Since
        * phis are split, they are handled naturally without special cases.
        */
-      jay_foreach_predecessor(block, p) {
-         if (u_sparse_bitset_merge(&(*p)->live_out, &block->live_in)) {
-            jay_worklist_push_tail(&worklist, *p);
+      for (enum jay_file file = GPR; file <= UGPR; ++file) {
+         jay_foreach_predecessor(block, p, file) {
+            bool progress = false;
+
+            U_SPARSE_BITSET_FOREACH_SET(&block->live_in, i) {
+               if ((file == UGPR) == BITSET_TEST(uniform, i)) {
+                  progress |= !u_sparse_bitset_test(&(*p)->live_out, i);
+                  u_sparse_bitset_set(&(*p)->live_out, i);
+               }
+            }
+
+            if (progress) {
+               jay_worklist_push_tail(&worklist, *p);
+            }
          }
       }
    }
@@ -110,6 +130,7 @@ jay_compute_liveness(jay_function *f)
 #endif
 
    u_worklist_fini(&worklist);
+   free(uniform);
 }
 
 /*

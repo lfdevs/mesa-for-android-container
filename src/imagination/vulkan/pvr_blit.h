@@ -34,6 +34,7 @@ struct pvr_device;
 struct pvr_image;
 struct pvr_transfer_cmd;
 struct pvr_transfer_cmd_surface;
+struct pvr_unbound_deferred_clear;
 
 VkFormat pvr_get_raw_copy_format(VkFormat format);
 
@@ -79,5 +80,9 @@ void pvr_clear_depth_stencil_image(struct pvr_cmd_buffer *cmd_buffer,
                                    const VkClearDepthStencilValue *pDepthStencil,
                                    uint32_t rangeCount,
                                    const VkImageSubresourceRange *pRanges);
+
+VkResult pvr_bind_unbound_deferred_clear(
+   struct pvr_cmd_buffer *cmd_buffer,
+   struct pvr_unbound_deferred_clear *recorded_clear);
 
 #endif /* PVR_BLIT_H */

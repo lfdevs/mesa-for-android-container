@@ -275,17 +275,8 @@ ntr_output_decl(struct ntr_compile *c, nir_intrinsic_instr *instr, uint32_t *fra
       tgsi_get_gl_varying_semantic(semantics.location, true, &semantic_name, &semantic_index);
 
       uint32_t usage_mask = BITFIELD_RANGE(*frac, instr->num_components);
-      uint32_t gs_streams = semantics.gs_streams;
-      for (int i = 0; i < 4; i++) {
-         if (!(usage_mask & (1 << i)))
-            gs_streams &= ~(0x3 << 2 * i);
-      }
-
-      /* No driver appears to use array_id of outputs. */
-      unsigned array_id = 0;
-
-      out = ureg_DECL_output_layout(c->ureg, semantic_name, semantic_index, gs_streams, base,
-                                    usage_mask, array_id, semantics.num_slots, false);
+      out = ureg_DECL_output_layout(c->ureg, semantic_name, semantic_index, 0, base,
+                                    usage_mask, 0, semantics.num_slots, false);
    }
 
    unsigned write_mask;
@@ -306,10 +297,10 @@ ntr_try_store_in_tgsi_output_with_use(struct ntr_compile *c, struct ureg_dst *ds
    if (nir_src_is_if(src))
       return false;
 
-   if (nir_src_parent_instr(src)->type != nir_instr_type_intrinsic)
+   if (nir_src_use_instr(src)->type != nir_instr_type_intrinsic)
       return false;
 
-   nir_intrinsic_instr *intr = nir_instr_as_intrinsic(nir_src_parent_instr(src));
+   nir_intrinsic_instr *intr = nir_instr_as_intrinsic(nir_src_use_instr(src));
    if (intr->intrinsic != nir_intrinsic_store_output || !nir_src_is_const(intr->src[1])) {
       return false;
    }
@@ -336,7 +327,7 @@ ntr_try_store_reg_in_tgsi_output(struct ntr_compile *c, struct ureg_dst *dst,
    /* Look for a single use for try_store_in_tgsi_output */
    nir_src *use = NULL;
    nir_foreach_reg_load (src, reg_decl) {
-      nir_intrinsic_instr *load = nir_instr_as_intrinsic(nir_src_parent_instr(src));
+      nir_intrinsic_instr *load = nir_instr_as_intrinsic(nir_src_use_instr(src));
       nir_foreach_use_including_if (load_use, &load->def) {
          /* We can only have one use */
          if (use != NULL)
@@ -377,8 +368,6 @@ ntr_setup_inputs(struct ntr_compile *c)
       return;
 
    unsigned num_inputs = 0;
-   int num_input_arrays = 0;
-
    nir_foreach_shader_in_variable (var, c->s) {
       const struct glsl_type *type = var->type;
       unsigned array_len = glsl_count_attribute_slots(type, false);
@@ -412,20 +401,15 @@ ntr_setup_inputs(struct ntr_compile *c)
          sample_loc = TGSI_INTERPOLATE_LOC_SAMPLE;
       } else if (var->data.centroid) {
          sample_loc = TGSI_INTERPOLATE_LOC_CENTROID;
-         c->centroid_inputs |= (BITSET_MASK(array_len) << var->data.driver_location);
       } else {
          sample_loc = TGSI_INTERPOLATE_LOC_CENTER;
       }
-
-      unsigned array_id = 0;
-      if (glsl_type_is_array(type))
-         array_id = ++num_input_arrays;
 
       uint32_t usage_mask = ntr_tgsi_var_usage_mask(var);
 
       decl = ureg_DECL_fs_input_centroid_layout(
          c->ureg, semantic_name, semantic_index, interpolation, sample_loc,
-         var->data.driver_location, usage_mask, array_id, array_len);
+         var->data.driver_location, usage_mask, 0, array_len);
 
       if (semantic_name == TGSI_SEMANTIC_FACE) {
          struct ureg_dst temp = ntr_temp(c);
@@ -480,22 +464,20 @@ ntr_setup_outputs(struct ntr_compile *c)
 static enum tgsi_texture_type
 tgsi_texture_type_from_sampler_dim(enum glsl_sampler_dim dim, bool is_array)
 {
+   /* r300 has no array, multisample or buffer textures. */
+   assert(!is_array);
    switch (dim) {
    case GLSL_SAMPLER_DIM_1D:
-      return is_array ? TGSI_TEXTURE_1D_ARRAY : TGSI_TEXTURE_1D;
+      return TGSI_TEXTURE_1D;
    case GLSL_SAMPLER_DIM_2D:
    case GLSL_SAMPLER_DIM_EXTERNAL:
-      return is_array ? TGSI_TEXTURE_2D_ARRAY : TGSI_TEXTURE_2D;
+      return TGSI_TEXTURE_2D;
    case GLSL_SAMPLER_DIM_3D:
       return TGSI_TEXTURE_3D;
    case GLSL_SAMPLER_DIM_CUBE:
-      return is_array ? TGSI_TEXTURE_CUBE_ARRAY : TGSI_TEXTURE_CUBE;
+      return TGSI_TEXTURE_CUBE;
    case GLSL_SAMPLER_DIM_RECT:
       return TGSI_TEXTURE_RECT;
-   case GLSL_SAMPLER_DIM_MS:
-      return is_array ? TGSI_TEXTURE_2D_ARRAY_MSAA : TGSI_TEXTURE_2D_MSAA;
-   case GLSL_SAMPLER_DIM_BUF:
-      return TGSI_TEXTURE_BUFFER;
    default:
       UNREACHABLE("unknown sampler dim");
    }
@@ -545,25 +527,15 @@ ntr_setup_uniforms(struct ntr_compile *c)
       }
    }
 
-   c->first_ubo = ~0;
-
-   unsigned ubo_sizes[PIPE_MAX_CONSTANT_BUFFERS] = {0};
+   /* We expect only single ubo. */
+   unsigned size = 0;
    nir_foreach_variable_with_modes (var, c->s, nir_var_mem_ubo) {
       int ubo = var->data.driver_location;
-      if (ubo == -1)
-         continue;
-
-      if (!(ubo == 0 && c->s->info.first_ubo_is_default_ubo))
-         c->first_ubo = MIN2(c->first_ubo, ubo);
-
-      unsigned size = glsl_get_explicit_size(var->interface_type, false);
-      ubo_sizes[ubo] = size;
+      assert(ubo == 0 && size == 0);
+      size = glsl_get_explicit_size(var->interface_type, false);
    }
-
-   for (int i = 0; i < ARRAY_SIZE(ubo_sizes); i++) {
-      if (ubo_sizes[i])
-         ureg_DECL_constant2D(c->ureg, 0, DIV_ROUND_UP(ubo_sizes[i], 16) - 1, i);
-   }
+   if (size)
+      ureg_DECL_constant2D(c->ureg, 0, DIV_ROUND_UP(size, 16) - 1, 0);
 }
 
 static void
@@ -834,9 +806,7 @@ ntr_emit_alu(struct ntr_compile *c, nir_alu_instr *instr)
       [nir_op_fdot2_replicated] = TGSI_OPCODE_DP2,
       [nir_op_fdot3_replicated] = TGSI_OPCODE_DP3,
       [nir_op_fdot4_replicated] = TGSI_OPCODE_DP4,
-      [nir_op_ffloor] = TGSI_OPCODE_FLR,
       [nir_op_ffract] = TGSI_OPCODE_FRC,
-      [nir_op_fceil] = TGSI_OPCODE_CEIL,
       [nir_op_fround_even] = TGSI_OPCODE_ROUND,
 
       [nir_op_slt] = TGSI_OPCODE_SLT,
@@ -844,7 +814,6 @@ ntr_emit_alu(struct ntr_compile *c, nir_alu_instr *instr)
       [nir_op_seq] = TGSI_OPCODE_SEQ,
       [nir_op_sne] = TGSI_OPCODE_SNE,
 
-      [nir_op_ftrunc] = TGSI_OPCODE_TRUNC,
       [nir_op_fadd] = TGSI_OPCODE_ADD,
       [nir_op_fmul] = TGSI_OPCODE_MUL,
 
@@ -927,10 +896,6 @@ ntr_emit_alu(struct ntr_compile *c, nir_alu_instr *instr)
          ntr_emit_scalar(c, TGSI_OPCODE_POW, dst, src[0], src[1]);
          break;
 
-      case nir_op_flrp:
-         ntr_LRP(c, dst, src[2], src[1], src[0]);
-         break;
-
       case nir_op_fcsel:
          /* Implement this as CMP(-abs(src0), src1, src2). */
          ntr_CMP(c, dst, ureg_negate(ureg_abs(src[0])), src[1], src[2]);
@@ -1005,23 +970,10 @@ ntr_emit_load_ubo(struct ntr_compile *c, nir_intrinsic_instr *instr)
 {
    struct ureg_src src = ureg_src_register(TGSI_FILE_CONSTANT, 0);
 
-   struct ureg_dst addr_temp = ureg_dst_undef();
-
-   if (nir_src_is_const(instr->src[0])) {
-      src = ureg_src_dimension(src, ntr_src_as_uint(c, instr->src[0]));
-   } else {
-      /* virglrenderer requires that indirect UBO references have the UBO
-       * array's base index in the Index field, not added to the indirect
-       * address.
-       *
-       * Many nir intrinsics have a base address const value for the start of
-       * their array indirection, but load_ubo doesn't.  We fake it by
-       * subtracting it off here.
-       */
-      addr_temp = ntr_temp(c);
-      ntr_UADD(c, addr_temp, ntr_get_src(c, instr->src[0]), ureg_imm1i(c->ureg, -c->first_ubo));
-      src = ureg_src_dimension_indirect(src, ntr_reladdr(c, ureg_src(addr_temp), 1), c->first_ubo);
-   }
+   /* r300 only exposes a single UBO and any indirect UBO array indexing
+    * has been lowered before we get here. */
+   assert(nir_src_is_const(instr->src[0]));
+   src = ureg_src_dimension(src, ntr_src_as_uint(c, instr->src[0]));
 
    /* !pipe_caps.load_constbuf: Just emit it as a vec4 reference to the const
     * file.
@@ -1073,33 +1025,17 @@ ntr_emit_load_input(struct ntr_compile *c, nir_intrinsic_instr *instr)
 
       switch (bary_instr->intrinsic) {
       case nir_intrinsic_load_barycentric_pixel:
-      case nir_intrinsic_load_barycentric_sample:
-         /* For these, we know that the barycentric load matches the
-          * interpolation on the input declaration, so we can use it directly.
+         /* The barycentric load matches the interpolation on the input
+          * declaration, so we can use it directly.
           */
          ntr_store(c, &instr->def, input);
          break;
 
       case nir_intrinsic_load_barycentric_centroid:
-         /* If the input was declared centroid, then there's no need to
-          * emit the extra TGSI interp instruction, we can just read the
-          * input.
-          */
-         if (c->centroid_inputs & (1ull << nir_intrinsic_base(instr))) {
-            ntr_store(c, &instr->def, input);
-         } else {
-            ntr_INTERP_CENTROID(c, ntr_get_dest(c, &instr->def), input);
-         }
-         break;
-
-      case nir_intrinsic_load_barycentric_at_sample:
-         /* We stored the sample in the fake "bary" dest. */
-         ntr_INTERP_SAMPLE(c, ntr_get_dest(c, &instr->def), input, ntr_get_src(c, instr->src[0]));
-         break;
-
-      case nir_intrinsic_load_barycentric_at_offset:
-         /* We stored the offset in the fake "bary" dest. */
-         ntr_INTERP_OFFSET(c, ntr_get_dest(c, &instr->def), input, ntr_get_src(c, instr->src[0]));
+         /* On r300 interpolation is fixed at the input declaration; the
+          * NIR lowering pairs centroid intrinsics with centroid-declared
+          * inputs, so we never need an explicit INTERP instruction. */
+         ntr_store(c, &instr->def, input);
          break;
 
       default:
@@ -1129,12 +1065,7 @@ ntr_emit_store_output(struct ntr_compile *c, nir_intrinsic_instr *instr)
    uint32_t frac;
    struct ureg_dst out = ntr_output_decl(c, instr, &frac);
 
-   if (instr->intrinsic == nir_intrinsic_store_per_vertex_output) {
-      out = ntr_ureg_dst_indirect(c, out, instr->src[2]);
-      out = ntr_ureg_dst_dimension_indirect(c, out, instr->src[1]);
-   } else {
-      out = ntr_ureg_dst_indirect(c, out, instr->src[1]);
-   }
+   out = ntr_ureg_dst_indirect(c, out, instr->src[1]);
 
    uint8_t swizzle[4] = {0, 0, 0, 0};
    for (int i = frac; i < 4; i++) {
@@ -1150,42 +1081,10 @@ ntr_emit_store_output(struct ntr_compile *c, nir_intrinsic_instr *instr)
 static void
 ntr_emit_load_output(struct ntr_compile *c, nir_intrinsic_instr *instr)
 {
-   nir_io_semantics semantics = nir_intrinsic_io_semantics(instr);
-
-   /* ntr_try_store_in_tgsi_output() optimization is not valid if normal
-    * load_output is present.
+   /* r300 has no GS/tess stages and doesn't expose framebuffer fetch,
+    * so the only callers of nir_intrinsic_load_output are gone.
     */
-   assert(c->s->info.stage != MESA_SHADER_VERTEX &&
-          (c->s->info.stage != MESA_SHADER_FRAGMENT || semantics.fb_fetch_output));
-
-   uint32_t frac;
-   struct ureg_dst out = ntr_output_decl(c, instr, &frac);
-
-   if (instr->intrinsic == nir_intrinsic_load_per_vertex_output) {
-      out = ntr_ureg_dst_indirect(c, out, instr->src[1]);
-      out = ntr_ureg_dst_dimension_indirect(c, out, instr->src[0]);
-   } else {
-      out = ntr_ureg_dst_indirect(c, out, instr->src[0]);
-   }
-
-   struct ureg_dst dst = ntr_get_dest(c, &instr->def);
-   struct ureg_src out_src = ureg_src(out);
-
-   /* Don't swizzling unavailable channels of the output in the writemasked-out
-    * components. Avoids compile failures in virglrenderer with
-    * TESS_LEVEL_INNER.
-    */
-   int fill_channel = ffs(dst.WriteMask) - 1;
-   uint8_t swizzles[4] = {0, 1, 2, 3};
-   for (int i = 0; i < 4; i++)
-      if (!(dst.WriteMask & (1 << i)))
-         swizzles[i] = fill_channel;
-   out_src = ureg_swizzle(out_src, swizzles[0], swizzles[1], swizzles[2], swizzles[3]);
-
-   if (semantics.fb_fetch_output)
-      ntr_FBFETCH(c, dst, out_src);
-   else
-      ntr_MOV(c, dst, out_src);
+   UNREACHABLE("load_output not supported on r300");
 }
 
 static void
@@ -1202,21 +1101,6 @@ ntr_emit_load_sysval(struct ntr_compile *c, nir_intrinsic_instr *instr)
    uint32_t write_mask = BITSET_MASK(instr->def.num_components);
    sv = ntr_swizzle_for_write_mask(sv, write_mask);
 
-   /* TGSI and NIR define these intrinsics as always loading ints, but they can
-    * still appear on hardware with non-native-integers fragment shaders using
-    * the draw path (i915g).  In that case, having called nir_lower_int_to_float
-    * means that we actually want floats instead.
-    */
-   switch (instr->intrinsic) {
-   case nir_intrinsic_load_vertex_id:
-   case nir_intrinsic_load_instance_id:
-      ntr_U2F(c, ntr_get_dest(c, &instr->def), sv);
-      return;
-
-   default:
-      break;
-   }
-
    ntr_store(c, &instr->def, sv);
 }
 
@@ -1229,9 +1113,6 @@ ntr_emit_intrinsic(struct ntr_compile *c, nir_intrinsic_instr *instr)
       ntr_emit_load_ubo(c, instr);
       break;
 
-      /* Vertex */
-   case nir_intrinsic_load_draw_id:
-   case nir_intrinsic_load_invocation_id:
    case nir_intrinsic_load_frag_coord:
    case nir_intrinsic_load_point_coord:
    case nir_intrinsic_load_front_face:
@@ -1239,18 +1120,15 @@ ntr_emit_intrinsic(struct ntr_compile *c, nir_intrinsic_instr *instr)
       break;
 
    case nir_intrinsic_load_input:
-   case nir_intrinsic_load_per_vertex_input:
    case nir_intrinsic_load_interpolated_input:
       ntr_emit_load_input(c, instr);
       break;
 
    case nir_intrinsic_store_output:
-   case nir_intrinsic_store_per_vertex_output:
       ntr_emit_store_output(c, instr);
       break;
 
    case nir_intrinsic_load_output:
-   case nir_intrinsic_load_per_vertex_output:
       ntr_emit_load_output(c, instr);
       break;
 
@@ -1264,17 +1142,13 @@ ntr_emit_intrinsic(struct ntr_compile *c, nir_intrinsic_instr *instr)
       ntr_KILL_IF(c, ureg_negate(cond));
       break;
    }
-      /* In TGSI we don't actually generate the barycentric coords, and emit
-       * interp intrinsics later.  However, we do need to store the
-       * load_barycentric_at_* argument so that we can use it at that point.
+      /* In TGSI we don't actually generate the barycentric coords, and
+       * emit the corresponding INTERP_CENTROID instruction in
+       * ntr_emit_load_input. The barycentric loads themselves are
+       * therefore consumed there.
        */
    case nir_intrinsic_load_barycentric_pixel:
    case nir_intrinsic_load_barycentric_centroid:
-   case nir_intrinsic_load_barycentric_sample:
-      break;
-   case nir_intrinsic_load_barycentric_at_sample:
-   case nir_intrinsic_load_barycentric_at_offset:
-      ntr_store(c, &instr->def, ntr_get_src(c, instr->src[0]));
       break;
 
    case nir_intrinsic_ddx:
@@ -1363,21 +1237,6 @@ ntr_emit_texture(struct ntr_compile *c, nir_tex_instr *instr)
    case nir_texop_txd:
       tex_opcode = TGSI_OPCODE_TXD;
       break;
-   case nir_texop_txs:
-      tex_opcode = TGSI_OPCODE_TXQ;
-      break;
-   case nir_texop_tg4:
-      tex_opcode = TGSI_OPCODE_TG4;
-      break;
-   case nir_texop_query_levels:
-      tex_opcode = TGSI_OPCODE_TXQ;
-      break;
-   case nir_texop_lod:
-      tex_opcode = TGSI_OPCODE_LODQ;
-      break;
-   case nir_texop_texture_samples:
-      tex_opcode = TGSI_OPCODE_TXQS;
-      break;
    default:
       UNREACHABLE("unsupported tex op");
    }
@@ -1386,23 +1245,10 @@ ntr_emit_texture(struct ntr_compile *c, nir_tex_instr *instr)
    ntr_push_tex_arg(c, instr, nir_tex_src_backend1, &s);
    ntr_push_tex_arg(c, instr, nir_tex_src_backend2, &s);
 
-   /* non-coord arg for TXQ */
-   if (tex_opcode == TGSI_OPCODE_TXQ) {
-      ntr_push_tex_arg(c, instr, nir_tex_src_lod, &s);
-      /* virglrenderer mistakenly looks at .w instead of .x, so make sure it's
-       * scalar
-       */
-      s.srcs[s.i - 1] = ureg_scalar(s.srcs[s.i - 1], 0);
-   }
-
-   if (s.i > 1) {
-      if (tex_opcode == TGSI_OPCODE_TEX)
-         tex_opcode = TGSI_OPCODE_TEX2;
-      if (tex_opcode == TGSI_OPCODE_TXB)
-         tex_opcode = TGSI_OPCODE_TXB2;
-      if (tex_opcode == TGSI_OPCODE_TXL)
-         tex_opcode = TGSI_OPCODE_TXL2;
-   }
+   /* The RC backend doesn't have TEX2/TXB2/TXL2-style opcodes; the
+    * shadow comparator that would need a second backend slot is
+    * already lowered before nir_to_rc by nir_lower_tex_shadow. */
+   assert(s.i <= 1);
 
    if (instr->op == nir_texop_txd) {
       /* Derivs appear in their own src args */
@@ -1410,15 +1256,6 @@ ntr_emit_texture(struct ntr_compile *c, nir_tex_instr *instr)
       int ddy = nir_tex_instr_src_index(instr, nir_tex_src_ddy);
       s.srcs[s.i++] = ntr_get_src(c, instr->src[ddx].src);
       s.srcs[s.i++] = ntr_get_src(c, instr->src[ddy].src);
-   }
-
-   if (instr->op == nir_texop_tg4 && target != TGSI_TEXTURE_SHADOWCUBE_ARRAY) {
-      if (c->screen->caps.tgsi_tg4_component_in_swizzle) {
-         sampler = ureg_scalar(sampler, instr->component);
-         s.srcs[s.i++] = ureg_src_undef();
-      } else {
-         s.srcs[s.i++] = ureg_imm1u(c->ureg, instr->component);
-      }
    }
 
    s.srcs[s.i++] = sampler;

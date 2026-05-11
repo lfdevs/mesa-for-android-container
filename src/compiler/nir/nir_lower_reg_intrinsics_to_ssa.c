@@ -51,7 +51,7 @@ setup_reg(nir_intrinsic_instr *decl, struct regs_to_ssa_state *state)
    memset(state->defs, 0, state->defs_words * sizeof(*state->defs));
 
    nir_foreach_reg_store(store, decl)
-      BITSET_SET(state->defs, nir_src_parent_instr(store)->block->index);
+      BITSET_SET(state->defs, nir_src_use_instr(store)->block->index);
 
    state->values[decl->def.index] =
       nir_phi_builder_add_value(state->phi_builder, num_components,

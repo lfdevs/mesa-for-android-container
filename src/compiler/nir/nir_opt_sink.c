@@ -221,6 +221,10 @@ can_sink_instr(nir_instr *instr, nir_move_options options, bool *can_mov_out_of_
       case nir_intrinsic_load_per_vertex_input:
       case nir_intrinsic_load_per_primitive_input:
       case nir_intrinsic_load_attribute_pan:
+      case nir_intrinsic_load_var_pan:
+      case nir_intrinsic_load_var_buf_pan:
+      case nir_intrinsic_load_var_flat_pan:
+      case nir_intrinsic_load_var_buf_flat_pan:
       case nir_intrinsic_load_urb_vec4_intel:
       case nir_intrinsic_load_urb_lsc_intel:
          *can_mov_out_of_loop = true;
@@ -253,6 +257,7 @@ can_sink_instr(nir_instr *instr, nir_move_options options, bool *can_mov_out_of_
          return options & nir_move_load_buffer_amd;
 
       case nir_intrinsic_load_frag_coord:
+      case nir_intrinsic_load_frag_coord_xy:
       case nir_intrinsic_load_frag_coord_z:
       case nir_intrinsic_load_frag_coord_w:
       case nir_intrinsic_load_var_special_pan:

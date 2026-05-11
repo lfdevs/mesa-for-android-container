@@ -9,22 +9,15 @@
 
 #include <inttypes.h>
 
+#include "ac_cmdbuf_base.h"
 #include "ac_pm4.h"
+#include "sid.h"
 
 #include "util/bitset.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-struct ac_cmdbuf {
-   uint32_t cdw;         /* Number of used dwords. */
-   uint32_t max_dw;      /* Maximum number of dwords. */
-   uint32_t reserved_dw; /* Number of dwords reserved. */
-   uint32_t *buf;        /* The base pointer of the chunk. */
-
-   bool context_roll;
-};
 
 /* The structure layout is identical to a pair of registers in SET_*_REG_PAIRS_PACKED. */
 struct ac_gfx11_reg_pair {

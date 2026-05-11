@@ -299,6 +299,9 @@ lower_system_value_instr(nir_builder *b, nir_instr *instr, void *_state)
                                            bit_size, column, .base = 0,
                                            .range = intrin->def.num_components * bit_size / 8);
 
+      case SYSTEM_VALUE_FRAG_COORD:
+         return nir_build_frag_coord(b, 4);
+
       default:
          break;
       }

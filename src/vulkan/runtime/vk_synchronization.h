@@ -89,6 +89,10 @@ vk_filter_dst_access_flags2(VkPipelineStageFlags2 stages,
 VkPipelineStageFlags2
 vk_collect_dependency_info_src_stages(const VkDependencyInfo* pDependencyInfo);
 
+/** Union all the dstStageMasks on a VkDependencyInfo */
+VkPipelineStageFlags2
+vk_collect_dependency_info_dst_stages(const VkDependencyInfo* pDependencyInfo);
+
 #ifdef __cplusplus
 }
 #endif

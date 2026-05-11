@@ -450,6 +450,9 @@ tu_cs_trace_start(struct u_trace_context *utctx,
 __attribute__((format(printf, 3, 4))) void
 tu_cs_trace_end(struct u_trace_context *utctx, void *cs, const char *fmt, ...);
 
+__attribute__((format(printf, 3, 4))) void
+tu_cs_trace_singular(struct u_trace_context *utctx, void *cs, const char *fmt, ...);
+
 struct tu_cs_patchable_state {
    uint32_t *nop_header;
    uint32_t dwords;

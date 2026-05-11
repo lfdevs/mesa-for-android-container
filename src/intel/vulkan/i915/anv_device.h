@@ -44,4 +44,4 @@ VkResult anv_i915_device_setup_vm(struct anv_device *device);
 VkResult anv_i915_set_queue_parameters(
       struct anv_device *device,
       uint32_t context_id,
-      const VkDeviceQueueGlobalPriorityCreateInfoKHR *queue_priority);
+      const VkDeviceQueueGlobalPriorityCreateInfo *queue_priority);

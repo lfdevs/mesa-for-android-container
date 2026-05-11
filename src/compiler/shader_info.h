@@ -258,6 +258,17 @@ typedef struct shader_info {
     */
    bool io_lowered:1;
 
+   /* If true, fail an assertion in nir_opt_dce if a dead input is eliminated.
+    *
+    * This is a debug aid to easily identify passes that cause shader inputs
+    * to become dead after nir_opt_varyings when it's preferrable that dead
+    * shader inputs are identified before nir_opt_varyings.
+    *
+    * It shouldn't be enabled by default because inputs can become dead late
+    * for all sorts of reasons.
+    */
+   bool assert_inputs_not_dead : 1;
+
    /** Has nir_lower_var_copies called. To avoid calling any
     * lowering/optimization that would introduce any copy_deref later.
     */

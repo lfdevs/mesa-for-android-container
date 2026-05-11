@@ -126,32 +126,24 @@ virgl_get_video_param(struct pipe_screen *screen,
 
    /*
     * Since there are calls like this:
-    *   pot_buffers = !pipe->screen->get_video_param
+    *   pipe->screen->get_video_param
     *   (
     *      pipe->screen,
     *      PIPE_VIDEO_PROFILE_UNKNOWN,
     *      PIPE_VIDEO_ENTRYPOINT_UNKNOWN,
-    *      PIPE_VIDEO_CAP_NPOT_TEXTURES
+    *      PIPE_VIDEO_CAP_SUPPORTS_PROGRESSIVE
     *   );
     * All parameters need to check the vcaps.
     */
    switch (param) {
       case PIPE_VIDEO_CAP_SUPPORTED:
          return vcaps != NULL;
-      case PIPE_VIDEO_CAP_NPOT_TEXTURES:
-         return vcaps ? vcaps->npot_texture : true;
       case PIPE_VIDEO_CAP_MAX_WIDTH:
          return vcaps ? vcaps->max_width : 0;
       case PIPE_VIDEO_CAP_MAX_HEIGHT:
          return vcaps ? vcaps->max_height : 0;
-      case PIPE_VIDEO_CAP_PREFERRED_FORMAT:
-         return vcaps ? virgl_to_pipe_format(vcaps->prefered_format) : PIPE_FORMAT_NV12;
       case PIPE_VIDEO_CAP_SUPPORTS_PROGRESSIVE:
          return vcaps ? vcaps->supports_progressive : true;
-      case PIPE_VIDEO_CAP_MAX_LEVEL:
-         return vcaps ? vcaps->max_level : 0;
-      case PIPE_VIDEO_CAP_STACKED_FRAMES:
-         return vcaps ? vcaps->stacked_frames : 0;
       case PIPE_VIDEO_CAP_MAX_MACROBLOCKS:
          return vcaps ? vcaps->max_macroblocks : 0;
       case PIPE_VIDEO_CAP_MAX_TEMPORAL_LAYERS:

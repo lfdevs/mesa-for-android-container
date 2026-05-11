@@ -138,11 +138,11 @@ virtio_pipe_wait(struct fd_pipe *pipe, const struct fd_fence *fence, uint64_t ti
       if (ret)
          goto out;
 
+      ret = rsp->ret;
+
       if ((timeout != OS_TIMEOUT_INFINITE) &&
           (os_time_get_nano() >= end_time))
          break;
-
-      ret = rsp->ret;
    } while (ret == -ETIMEDOUT);
 
 out:

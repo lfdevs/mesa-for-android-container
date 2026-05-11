@@ -128,8 +128,13 @@ intel_nir_lower_non_uniform_tex(nir_builder *b,
 
    bool progress = false;
    for (unsigned s = 0; s < tex->num_srcs; s++) {
-      if (tex->src[s].src_type != nir_tex_src_texture_handle &&
-          tex->src[s].src_type != nir_tex_src_sampler_handle)
+      const bool needs_lowering =
+         tex->src[s].src_type == nir_tex_src_texture_handle ||
+         tex->src[s].src_type == nir_tex_src_sampler_handle ||
+         tex->src[s].src_type == nir_tex_src_texture_heap_offset ||
+         tex->src[s].src_type == nir_tex_src_sampler_heap_offset;
+
+      if (!needs_lowering)
          continue;
 
       util_dynarray_clear(inst_array);
@@ -269,7 +274,7 @@ intel_nir_cleanup_resource_intel_instr(nir_builder *b,
 
    bool progress = false;
    nir_foreach_use_safe(src, &intrin->def) {
-      if (!nir_src_is_if(src) && skip_resource_intel_cleanup(nir_src_parent_instr(src)))
+      if (!nir_src_is_if(src) && skip_resource_intel_cleanup(nir_src_use_instr(src)))
          continue;
 
       progress = true;

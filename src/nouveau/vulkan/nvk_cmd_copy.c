@@ -680,9 +680,9 @@ nvk_linear_render_copy(struct nvk_cmd_buffer *cmd,
    const struct nvk_image_plane *src_plane = NULL, *dst_plane = NULL;
    if (copy_to_tiled_shadow) {
       src_plane = &image->planes[ip];
-      dst_plane = &image->linear_tiled_shadow;
+      dst_plane = &image->linear_tiled_shadows[ip];
    } else {
-      src_plane = &image->linear_tiled_shadow;
+      src_plane = &image->linear_tiled_shadows[ip];
       dst_plane = &image->planes[ip];
    }
 
@@ -893,19 +893,11 @@ nvk_CmdCopyImage2(VkCommandBuffer commandBuffer,
    }
 }
 
-VKAPI_ATTR void VKAPI_CALL
-nvk_CmdFillBuffer(VkCommandBuffer commandBuffer,
-                  VkBuffer dstBuffer,
-                  VkDeviceSize dstOffset,
-                  VkDeviceSize size,
-                  uint32_t data)
+void
+nvk_cmd_fill_memory(struct nvk_cmd_buffer *cmd,
+                    uint64_t dst_addr, uint64_t size,
+                    uint32_t data)
 {
-   VK_FROM_HANDLE(nvk_cmd_buffer, cmd, commandBuffer);
-   VK_FROM_HANDLE(nvk_buffer, dst_buffer, dstBuffer);
-
-   uint64_t dst_addr = vk_buffer_address(&dst_buffer->vk, dstOffset);
-   size = vk_buffer_range(&dst_buffer->vk, dstOffset, size);
-
    uint32_t max_dim = 1 << 15;
 
    struct nv_push *p = nvk_cmd_buffer_push(cmd, 7);
@@ -962,6 +954,22 @@ nvk_CmdFillBuffer(VkCommandBuffer commandBuffer,
       dst_addr += dma_size;
       size -= dma_size;
    }
+}
+
+VKAPI_ATTR void VKAPI_CALL
+nvk_CmdFillBuffer(VkCommandBuffer commandBuffer,
+                  VkBuffer dstBuffer,
+                  VkDeviceSize dstOffset,
+                  VkDeviceSize size,
+                  uint32_t data)
+{
+   VK_FROM_HANDLE(nvk_cmd_buffer, cmd, commandBuffer);
+   VK_FROM_HANDLE(nvk_buffer, dst_buffer, dstBuffer);
+
+   uint64_t dst_addr = vk_buffer_address(&dst_buffer->vk, dstOffset);
+   size = vk_buffer_range(&dst_buffer->vk, dstOffset, size);
+
+   nvk_cmd_fill_memory(cmd, dst_addr, size, data);
 }
 
 VKAPI_ATTR void VKAPI_CALL

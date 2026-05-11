@@ -1389,30 +1389,6 @@ asahi_cs_shader_key_equal(const void *a, const void *b)
    return true;
 }
 
-/* Dynamic lowered I/O version of nir_lower_clip_halfz */
-static bool
-agx_nir_lower_clip_m1_1(nir_builder *b, nir_intrinsic_instr *intr,
-                        UNUSED void *data)
-{
-   if (intr->intrinsic != nir_intrinsic_store_output)
-      return false;
-   if (nir_intrinsic_io_semantics(intr).location != VARYING_SLOT_POS)
-      return false;
-
-   assert(nir_intrinsic_component(intr) == 0 && "not yet scalarized");
-   b->cursor = nir_before_instr(&intr->instr);
-
-   nir_def *pos = intr->src[0].ssa;
-   nir_def *z = nir_channel(b, pos, 2);
-   nir_def *w = nir_channel(b, pos, 3);
-   nir_def *c = nir_load_clip_z_coeff_agx(b);
-
-   /* Lerp. If c = 0, reduces to z. If c = 1/2, reduces to (z + w)/2 */
-   nir_def *new_z = nir_ffma(b, nir_fneg(b, z), c, nir_ffma(b, w, c, z));
-   nir_src_rewrite(&intr->src[0], nir_vector_insert_imm(b, pos, new_z, 2));
-   return true;
-}
-
 /*
  * To implement point sprites, we'll replace TEX0...7 with point coordinate
  * reads as required. However, the .zw needs to read back 0.0/1.0. This pass
@@ -1560,8 +1536,7 @@ agx_compile_variant(struct agx_device *dev, struct pipe_context *pctx,
 
       if (key->hw) {
          NIR_PASS(_, nir, agx_nir_lower_point_size, true);
-         NIR_PASS(_, nir, nir_shader_intrinsics_pass, agx_nir_lower_clip_m1_1,
-                  nir_metadata_control_flow, NULL);
+         NIR_PASS(_, nir, nir_lower_clip_halfz_dynamic);
 
          NIR_PASS(_, nir, nir_lower_io_to_scalar, nir_var_shader_out, NULL,
                   NULL);
@@ -1661,8 +1636,7 @@ agx_compile_variant(struct agx_device *dev, struct pipe_context *pctx,
        */
       NIR_PASS(_, gs_copy, agx_nir_lower_point_size, false);
 
-      NIR_PASS(_, gs_copy, nir_shader_intrinsics_pass, agx_nir_lower_clip_m1_1,
-               nir_metadata_control_flow, NULL);
+      NIR_PASS(_, gs_copy, nir_lower_clip_halfz_dynamic);
 
       NIR_PASS(_, gs_copy, nir_lower_io_to_scalar, nir_var_shader_out, NULL,
                NULL);

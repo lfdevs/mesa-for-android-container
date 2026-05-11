@@ -1804,7 +1804,7 @@ VkResult ResourceTracker::on_vkEnumerateDeviceExtensionProperties(
         "VK_KHR_storage_buffer_storage_class",
         "VK_EXT_depth_clip_enable",
         "VK_KHR_create_renderpass2",
-        "VK_EXT_vertex_attribute_divisor",
+        "VK_KHR_vertex_attribute_divisor",
         "VK_EXT_host_query_reset",
         "VK_EXT_blend_operation_advanced",
         "VK_EXT_frame_boundary",
@@ -1818,14 +1818,12 @@ VkResult ResourceTracker::on_vkEnumerateDeviceExtensionProperties(
         "VK_EXT_device_memory_report",
 #endif
 #ifdef LINUX_GUEST_BUILD
-        // Required by Zink
-        "VK_KHR_imageless_framebuffer",
         // Passthrough if available on host. Will otherwise be emulated by guest
         "VK_EXT_image_drm_format_modifier",
         "VK_KHR_external_memory_fd",
 #endif
         // Vulkan 1.1
-        // "VK_KHR_16bit_storage",
+        "VK_KHR_16bit_storage",
         "VK_KHR_device_group",
         "VK_KHR_device_group_creation",
         "VK_KHR_external_fence_capabilities",
@@ -1834,7 +1832,6 @@ VkResult ResourceTracker::on_vkEnumerateDeviceExtensionProperties(
         "VK_KHR_get_physical_device_properties2",
         "VK_KHR_relaxed_block_layout",
         "VK_KHR_shader_draw_parameters",
-        "VK_KHR_storage_buffer_storage_class",
         "VK_KHR_variable_pointers",
         "VK_EXT_color_write_enable",
         "VK_EXT_memory_budget",
@@ -1849,13 +1846,11 @@ VkResult ResourceTracker::on_vkEnumerateDeviceExtensionProperties(
         "VK_KHR_sampler_mirror_clamp_to_edge",
         "VK_KHR_separate_depth_stencil_layouts",
         "VK_KHR_shader_atomic_int64",
-        "VK_KHR_shader_float16_int8",
         "VK_KHR_shader_float_controls",
         "VK_KHR_spirv_1_4",
         "VK_KHR_uniform_buffer_standard_layout",
         "VK_EXT_descriptor_indexing",
         "VK_EXT_sampler_filter_minmax",
-        "VK_EXT_scalar_block_layout",
         "VK_EXT_separate_stencil_usage",
         "VK_EXT_shader_viewport_index_layer",
 
@@ -1880,6 +1875,13 @@ VkResult ResourceTracker::on_vkEnumerateDeviceExtensionProperties(
         "VK_EXT_texture_compression_astc_hdr",
         "VK_EXT_tooling_info",
         "VK_EXT_ycbcr_2plane_444_formats",
+
+        // Android requirements
+        "VK_EXT_pipeline_protected_access",
+        "VK_KHR_maintenance6",
+        "VK_KHR_maintenance7",
+        "VK_KHR_maintenance8",
+        "VK_KHR_maintenance9",
     };
 
     VkEncoder* enc = (VkEncoder*)context;

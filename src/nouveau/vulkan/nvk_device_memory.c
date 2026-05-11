@@ -172,7 +172,8 @@ nvk_AllocateMemory(VkDevice device,
 
       mem->dedicated_image = image;
 
-      if (image->vk.tiling == VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT) {
+      if (image->vk.tiling == VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT &&
+          image->vk.drm_format_mod != DRM_FORMAT_MOD_LINEAR) {
          /* This image might be shared with GL so we need to set the BO flags
           * such that GL can bind and use it.
           */

@@ -13,6 +13,7 @@
         - src/gallium/drivers/llvmpipe/ci/$GPU_VERSION-flakes.txt
         - src/gallium/drivers/llvmpipe/ci/$GPU_VERSION-skips.txt
         - src/gallium/drivers/llvmpipe/ci/$PIGLIT_TRACES_FILE
+        - src/gallium/drivers/llvmpipe/ci/$REPLAY_CONFIG
         - src/gallium/drivers/llvmpipe/ci/$GALLIUM_DRIVER-skips.txt
         - src/gallium/drivers/llvmpipe/ci/$DRIVER_NAME-skips.txt
         - src/gallium/winsys/sw/**/*

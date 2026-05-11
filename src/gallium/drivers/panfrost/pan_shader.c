@@ -184,9 +184,9 @@ panfrost_shader_compile(struct panfrost_screen *screen, const nir_shader *ir,
    }
 
    /* Lower resource indices */
-   NIR_PASS(_, s, panfrost_nir_lower_res_indices, &inputs);
+   NIR_PASS(_, s, panfrost_nir_lower_res_indices, inputs.gpu_id);
 
-   pan_postprocess_nir(s, panfrost_device_gpu_id(dev));
+   pan_postprocess_nir(s, &inputs, &out->info);
 
    if (s->info.stage == MESA_SHADER_VERTEX) {
       NIR_PASS(_, s, nir_inline_sysval,
@@ -543,26 +543,16 @@ panfrost_create_shader_state(struct pipe_context *pctx,
             nir_var_shader_in | nir_var_shader_out, UINT32_MAX);
    NIR_PASS(_, nir, nir_lower_io, nir_var_shader_in | nir_var_shader_out,
             glsl_type_size, nir_lower_io_use_interpolated_input_intrinsics);
+   /* nir_lower_io just computes offsets based on the original deref and
+    * lower_indirect_derefs ensures that the array derefs have a constant
+    * index.  Constant-fold to get us actual constants in in load/store
+    * instructions.
+    */
+   NIR_PASS(_, nir, nir_opt_constant_folding);
 
    if (nir->info.stage == MESA_SHADER_FRAGMENT)
       so->noperspective_varyings =
          pan_nir_collect_noperspective_varyings_fs(nir);
-
-   unsigned attrib_offset = 0;
-   if (nir->info.stage == MESA_SHADER_VERTEX && dev->arch <= 7) {
-      /* Vertex shaders get passed images through the vertex attribute
-       * descriptor array. We need to add an offset to all image intrinsics so
-       * they point to the right attribute.
-       */
-      attrib_offset += util_bitcount64(nir->info.inputs_read);
-      NIR_PASS(_, nir, pan_nir_lower_image_index, attrib_offset);
-   }
-   if (dev->arch >= 6 && dev->arch <= 7) {
-      /* Bifrost needs to use attributes to access texel buffers. We place these
-       * after images, which are also accessed using attributes. */
-      attrib_offset += BITSET_LAST_BIT(nir->info.images_used);
-      NIR_PASS(_, nir, pan_nir_lower_texel_buffer_fetch_index, attrib_offset);
-   }
 
    /* If this shader uses transform feedback, compile the transform
     * feedback program. This is a special shader variant.

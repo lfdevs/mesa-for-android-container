@@ -89,6 +89,7 @@ tu_lrz_disable_reason(struct tu_cmd_buffer *cmd, const char *reason) {
    cmd->state.rp.lrz_disabled_at_draw = cmd->state.rp.drawcall_count;
    perf_debug(cmd->device, "Disabling LRZ because '%s' at draw %u", reason,
               cmd->state.rp.lrz_disabled_at_draw);
+   trace_warning_lrz_disabled(&cmd->rp_trace, &cmd->draw_cs, cmd, reason);
 }
 
 void
@@ -104,6 +105,7 @@ tu_lrz_disable_write_for_rp(struct tu_cmd_buffer *cmd, const char *reason)
       cmd->device,
       "Disabling LRZ write for the rest of the RP because '%s' at draw %u",
       reason, cmd->state.rp.lrz_write_disabled_at_draw);
+   trace_warning_lrz_write_disabled(&cmd->rp_trace, &cmd->draw_cs, cmd, reason);
 }
 
 template <chip CHIP>
@@ -217,7 +219,7 @@ tu_lrz_init_state(struct tu_cmd_buffer *cmd,
                   const struct tu_image_view *view)
 {
    if (!view->image->lrz_layout.lrz_total_size) {
-      assert(!cmd->device->use_lrz || !vk_format_has_depth(att->format));
+      trace_warning_depth_image_no_lrz(&cmd->trace, &cmd->draw_cs, cmd);
       return;
    }
 
@@ -226,15 +228,7 @@ tu_lrz_init_state(struct tu_cmd_buffer *cmd,
    bool has_gpu_tracking =
       cmd->device->physical_device->info->props.has_lrz_dir_tracking;
 
-   if (!has_gpu_tracking && !clears_depth)
-      return;
-
-   /* Reusing previous state doesn't work with FDM offset because the LRZ
-    * image is offsetted.
-    */
-   if ((view->image->vk.create_flags &
-        VK_IMAGE_CREATE_FRAGMENT_DENSITY_MAP_OFFSET_BIT_EXT) &&
-       !clears_depth)
+   if (!has_gpu_tracking && (!clears_depth || cmd->state.resuming))
       return;
 
    /* We need to always have an LRZ view just to disable it if there is a
@@ -246,8 +240,20 @@ tu_lrz_init_state(struct tu_cmd_buffer *cmd,
    cmd->state.lrz.image_view = view;
    cmd->state.lrz.store = att->store;
 
-   if (!clears_depth && !att->load)
+   /* Reusing previous state doesn't work with FDM offset because the LRZ
+    * image is offsetted.
+    */
+   if ((view->image->vk.create_flags &
+        VK_IMAGE_CREATE_FRAGMENT_DENSITY_MAP_OFFSET_BIT_EXT) &&
+       !clears_depth) {
+      tu_lrz_disable_reason(cmd, "FRAGMENT_DENSITY_MAP_OFFSET_BIT attachment used without depth attachment clear");
       return;
+   }
+
+   if (!clears_depth && !att->load) {
+      tu_lrz_disable_reason(cmd, "Depth attachment isn't loaded or cleared");
+      return;
+   }
 
    cmd->state.lrz.valid = true;
    cmd->state.lrz.valid_at_start = true;

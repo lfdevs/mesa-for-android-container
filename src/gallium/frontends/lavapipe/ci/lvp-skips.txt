@@ -57,9 +57,6 @@ dEQP-VK.binding_model.descriptor_buffer.multiple.graphics_vert_buffers8_sets1
 dEQP-VK.mesh_shader.ext.misc.many_task_work_groups_y
 dEQP-VK.mesh_shader.ext.misc.many_task_work_groups_z
 
-# https://gitlab.khronos.org/Tracker/vk-gl-cts/-/issues/5117
-dEQP-VK.image.host_image_copy.*
-
 # Times out since a commit in the range 6006588a...edcad250
 dEQP-VK.api.descriptor_pool.repeated_free_reset_long
 
