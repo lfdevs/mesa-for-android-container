@@ -1710,9 +1710,9 @@ intrinsic("shuffle_down_uniform_ir3", src_comp=[0, 1], dest_comp=0,
           bit_sizes=src0, flags=[CAN_ELIMINATE])
 
 # IR3-specific intrinsics for prefetching descriptors in preambles.
-intrinsic("prefetch_sam_ir3", [1, 1], flags=[CAN_REORDER])
-intrinsic("prefetch_tex_ir3", [1], flags=[CAN_REORDER])
-intrinsic("prefetch_ubo_ir3", [1], flags=[CAN_REORDER])
+intrinsic("prefetch_sam_ir3", [1, 1], indices=[ACCESS], flags=[CAN_REORDER])
+intrinsic("prefetch_tex_ir3", [1], indices=[ACCESS], flags=[CAN_REORDER])
+intrinsic("prefetch_ubo_ir3", [1], indices=[ACCESS], flags=[CAN_REORDER])
 
 intrinsic("resbase_ir3", src_comp=[1], dest_comp=2, flags=[CAN_ELIMINATE, CAN_REORDER])
 
