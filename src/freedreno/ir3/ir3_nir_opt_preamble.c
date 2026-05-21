@@ -160,11 +160,11 @@ instr_cost(nir_instr *instr, const void *data)
       nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
       switch (intrin->intrinsic) {
       case nir_intrinsic_load_ubo: {
-         /* If the UBO and offset are constant, then UBO lowering should do a
-          * better job trying to lower this, and opt_preamble shouldn't try to
-          * duplicate it. However if it has a non-constant offset then we can
-          * avoid setting up a0.x etc. in the main shader and potentially have
-          * to push less.
+         /* If the UBO and offset are constant and it is speculatable, then UBO
+          * lowering should do a better job trying to lower this, and
+          * opt_preamble shouldn't try to duplicate it. However if it has a
+          * non-constant offset then we can avoid setting up a0.x etc. in the
+          * main shader and potentially have to push less.
           */
          bool const_ubo = nir_src_is_const(intrin->src[0]);
          if (!const_ubo) {
@@ -173,7 +173,9 @@ instr_cost(nir_instr *instr, const void *data)
                const_ubo = nir_src_is_const(rsrc->src[0]);
          }
 
-         if (const_ubo && nir_src_is_const(intrin->src[1]))
+         if (const_ubo && nir_src_is_const(intrin->src[1]) &&
+             (instr->block->cf_node.parent->type == nir_cf_node_function ||
+              (nir_intrinsic_access(intrin) & ACCESS_CAN_SPECULATE)))
             return 0;
 
          /* TODO: get actual numbers for ldc */
