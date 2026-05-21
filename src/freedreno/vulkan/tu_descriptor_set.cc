@@ -196,6 +196,17 @@ tu_CreateDescriptorSetLayout(
       set_layout->binding[b].offset = set_layout->size;
       set_layout->binding[b].dynamic_offset_offset = dynamic_offset_size;
       set_layout->binding[b].shader_stages = binding->stageFlags;
+      set_layout->binding[b].partially_bound =
+         /* Descriptor buffer implies PARTIALLY_BOUND. From a NOTE in the
+          * spec: "The requirements above imply that all descriptor bindings
+          * have been defined with the equivalent of ...
+          * VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT"
+          */
+         (pCreateInfo->flags &
+          VK_DESCRIPTOR_SET_LAYOUT_CREATE_DESCRIPTOR_BUFFER_BIT_EXT) ||
+         (variable_flags && j < variable_flags->bindingCount &&
+          (variable_flags->pBindingFlags[j] &
+           VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT));
 
       bool has_subsampled_sampler = false;
       if ((binding->descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER ||
@@ -473,6 +484,7 @@ blake3_update_descriptor_set_binding_layout(blake3_hasher *ctx,
    BLAKE3_UPDATE_VALUE(ctx, layout->array_size);
    BLAKE3_UPDATE_VALUE(ctx, layout->dynamic_offset_offset);
    BLAKE3_UPDATE_VALUE(ctx, layout->immutable_samplers_offset);
+   BLAKE3_UPDATE_VALUE(ctx, layout->partially_bound);
 
    const struct tu_sampler *samplers =
       tu_immutable_samplers(set_layout, layout);

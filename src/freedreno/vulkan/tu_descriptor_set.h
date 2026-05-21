@@ -61,6 +61,12 @@ struct tu_descriptor_set_binding_layout
 
    /* Shader stages that use this binding */
    uint32_t shader_stages;
+
+   /* Whether statically accessing this binding guarantees that the descriptor
+    * accessed is valid. If true, only dynamically accessed descriptors are
+    * valid and we cannot speculate descriptor access.
+    */
+   bool partially_bound;
 };
 
 struct tu_descriptor_set_layout
