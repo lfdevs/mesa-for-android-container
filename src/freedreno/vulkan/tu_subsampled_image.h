@@ -85,4 +85,5 @@ tu_calc_subsampled_aprons(VkRect2D *dst,
 nir_def *
 tu_get_subsampled_coordinates(nir_builder *b,
                               nir_def *coords,
-                              nir_def *descriptor);
+                              nir_def *descriptor,
+                              bool can_speculate);
