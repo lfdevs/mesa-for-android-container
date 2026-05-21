@@ -1648,7 +1648,7 @@ load("global_etna", [1, 1], [ACCESS, ALIGN_MUL, ALIGN_OFFSET], [CAN_ELIMINATE])
 # without the binding because the hardware expects a single flattened index
 # rather than a (binding, index) pair. We may also want to use this with GL.
 # Note that this doesn't actually turn into a HW instruction.
-intrinsic("bindless_resource_ir3", [1], dest_comp=1, indices=[DESC_SET], flags=[CAN_ELIMINATE, CAN_REORDER])
+intrinsic("bindless_resource_ir3", [1], dest_comp=1, indices=[DESC_SET, ACCESS], flags=[CAN_ELIMINATE, CAN_REORDER])
 
 # IR3-specific intrinsics for shader preamble. These are meant to be used like
 # this:
