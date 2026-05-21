@@ -90,6 +90,7 @@ load_driver_ubo(nir_builder *b, unsigned components, nir_def *ubo, unsigned offs
 {
    return nir_load_ubo(b, components, 32, ubo,
                        nir_imm_int(b, offset * sizeof(uint32_t)),
+                       .access = ACCESS_CAN_SPECULATE,
                        .align_mul = 16,
                        .align_offset = (offset % 4) * sizeof(uint32_t),
                        .range_base = offset * sizeof(uint32_t),
