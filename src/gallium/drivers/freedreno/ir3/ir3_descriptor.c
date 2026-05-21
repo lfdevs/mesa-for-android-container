@@ -13,6 +13,20 @@ lower_intrinsic(nir_builder *b, nir_intrinsic_instr *intr)
 {
    unsigned desc_offset;
 
+   bool progress = false;
+   switch (intr->intrinsic) {
+   case nir_intrinsic_load_ubo:
+   case nir_intrinsic_load_ssbo:
+   case nir_intrinsic_get_ssbo_size:
+      nir_intrinsic_set_access(intr,
+                               nir_intrinsic_access(intr) | ACCESS_CAN_SPECULATE);
+      progress = true;
+      break;
+   default:
+      break;
+   }
+
+
    switch (intr->intrinsic) {
    case nir_intrinsic_load_ssbo:
    case nir_intrinsic_store_ssbo:
@@ -20,6 +34,7 @@ lower_intrinsic(nir_builder *b, nir_intrinsic_instr *intr)
    case nir_intrinsic_ssbo_atomic_swap:
    case nir_intrinsic_get_ssbo_size:
       desc_offset = IR3_BINDLESS_SSBO_OFFSET;
+      progress = true;
       break;
    case nir_intrinsic_image_load:
    case nir_intrinsic_image_store:
@@ -28,9 +43,10 @@ lower_intrinsic(nir_builder *b, nir_intrinsic_instr *intr)
    case nir_intrinsic_image_size:
    case nir_intrinsic_image_samples:
       desc_offset = IR3_BINDLESS_IMAGE_OFFSET;
+      progress = true;
       break;
    default:
-      return false;
+      return progress;
    }
 
    unsigned buffer_src;
@@ -53,7 +69,9 @@ lower_intrinsic(nir_builder *b, nir_intrinsic_instr *intr)
     * can avoid the dmesg spam and users thinking this is a driver bug:
     */
    src = nir_umod_imm(b, src, IR3_BINDLESS_DESC_COUNT);
-   nir_def *bindless = nir_bindless_resource_ir3(b, 32, src, set);
+   nir_def *bindless = nir_bindless_resource_ir3(b, 32, src,
+                                                 .desc_set = set,
+                                                 .access = ACCESS_CAN_SPECULATE);
    nir_src_rewrite(&intr->src[buffer_src], bindless);
 
    return true;
