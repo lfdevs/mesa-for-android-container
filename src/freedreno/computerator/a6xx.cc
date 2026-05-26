@@ -419,7 +419,7 @@ cs_uav_emit(fd_cs &cs, struct fd_device *dev, struct kernel *kernel)
       };
 
       fdl6_buffer_view_init<CHIP>(descriptor, PIPE_FORMAT_R32_UINT, swiz_identity,
-                                  iova, kernel->buf_sizes[i]);
+                                  iova, kernel->buf_sizes[i] * 4);
 
       memcpy(buf, descriptor, 16 * 4);
       buf += 16;

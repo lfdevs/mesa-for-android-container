@@ -203,7 +203,7 @@ libvulkan_lite_runtime = static_library(
   vulkan_lite_runtime_files,
   include_directories : [inc_include, inc_src],
   dependencies : vulkan_lite_runtime_deps,
-  c_args : [c_msvc_compat_args, '-DMESA_VK_LOG=@0@'.format(get_option('debug').to_int())],
+  c_args : [c_msvc_compat_args, soong_compat_c_args, '-DMESA_VK_LOG=@0@'.format(get_option('debug').to_int())],
   gnu_symbol_visibility : 'hidden',
   build_by_default : false,
 )
@@ -213,7 +213,7 @@ libvulkan_lite_instance = static_library(
   ['vk_instance.c'],
   include_directories : [inc_include, inc_src],
   dependencies : vulkan_lite_runtime_deps,
-  c_args : ['-DVK_LITE_RUNTIME_INSTANCE=1', c_msvc_compat_args],
+  c_args : ['-DVK_LITE_RUNTIME_INSTANCE=1', c_msvc_compat_args, soong_compat_c_args],
   gnu_symbol_visibility : 'hidden',
   build_by_default : false,
 )
@@ -303,7 +303,7 @@ libvulkan_runtime = static_library(
   [vulkan_runtime_files],
   include_directories : [inc_include, inc_src],
   dependencies : vulkan_runtime_deps,
-  c_args : c_msvc_compat_args,
+  c_args : [c_msvc_compat_args, soong_compat_c_args],
   gnu_symbol_visibility : 'hidden',
   build_by_default : false,
 )
@@ -313,7 +313,7 @@ libvulkan_instance = static_library(
   ['vk_instance.c'],
   include_directories : [inc_include, inc_src],
   dependencies : vulkan_runtime_deps,
-  c_args : ['-DVK_LITE_RUNTIME_INSTANCE=0', c_msvc_compat_args],
+  c_args : ['-DVK_LITE_RUNTIME_INSTANCE=0', c_msvc_compat_args, soong_compat_c_args],
   gnu_symbol_visibility : 'hidden',
   build_by_default : false,
 )

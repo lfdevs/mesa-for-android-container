@@ -52,11 +52,11 @@ r300_nir_prepare_presubtract = [
         (('fadd', a, -1.0), ('fneg', ('fadd', 1.0, ('fneg', a)))),
         (('fadd', -1.0, a), ('fneg', ('fadd', 1.0, ('fneg', a)))),
         # Bias presubtract 1 - 2 * x expects MAD -a 2.0 1.0 form.
-        (('ffma', 2.0, ('fneg', a), 1.0), ('ffma', ('fneg', a), 2.0, 1.0)),
-        (('ffma', a, -2.0, 1.0), ('ffma', ('fneg', a), 2.0, 1.0)),
-        (('ffma', -2.0, a, 1.0), ('ffma', ('fneg', a), 2.0, 1.0)),
-        (('ffma', 2.0, a, -1.0), ('fneg', ('ffma', ('fneg', a), 2.0, 1.0))),
-        (('ffma', a, 2.0, -1.0), ('fneg', ('ffma', ('fneg', a), 2.0, 1.0))),
+        (('fmad', 2.0, ('fneg', a), 1.0), ('fmad', ('fneg', a), 2.0, 1.0)),
+        (('fmad', a, -2.0, 1.0), ('fmad', ('fneg', a), 2.0, 1.0)),
+        (('fmad', -2.0, a, 1.0), ('fmad', ('fneg', a), 2.0, 1.0)),
+        (('fmad', 2.0, a, -1.0), ('fneg', ('fmad', ('fneg', a), 2.0, 1.0))),
+        (('fmad', a, 2.0, -1.0), ('fneg', ('fmad', ('fneg', a), 2.0, 1.0))),
         # x * 2 can be usually folded into output modifier for the previous
         # instruction, but that only works if x is a temporary. If it is input or
         # constant just convert it to add instead.
@@ -85,7 +85,7 @@ r300_nir_opt_algebraic_late = [
 
 # This is very late flrp lowering to clean up after bcsel->fcsel->flrp.
 r300_nir_lower_flrp = [
-        (('flrp', a, b, c), ('ffma', b, c, ('ffma', ('fneg', a), c, a)))
+        (('flrp', a, b, c), ('fmad', b, c, ('fmad', ('fneg', a), c, a)))
 ]
 
 # Lower fcsel_ge from ftrunc on r300

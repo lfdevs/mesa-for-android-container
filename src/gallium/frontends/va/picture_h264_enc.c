@@ -202,6 +202,7 @@ vlVaHandleVAEncSliceParameterBufferTypeH264(vlVaDriver *drv, vlVaContext *contex
    slice_descriptor.slice_type = h264->slice_type;
    assert(slice_descriptor.slice_type <= PIPE_H264_SLICE_TYPE_I);
 
+#ifndef NDEBUG
    /* Assert that the slices are coming in order */
    if (context->desc.h264enc.num_slice_descriptors == 0) {
       assert(slice_descriptor.macroblock_address == 0);
@@ -211,6 +212,7 @@ vlVaHandleVAEncSliceParameterBufferTypeH264(vlVaDriver *drv, vlVaContext *contex
       assert(last_slice_descriptor->macroblock_address +
              last_slice_descriptor->num_macroblocks == slice_descriptor.macroblock_address);
    }
+#endif
 
    if (context->desc.h264enc.num_slice_descriptors < ARRAY_SIZE(context->desc.h264enc.slices_descriptors))
       context->desc.h264enc.slices_descriptors[context->desc.h264enc.num_slice_descriptors++] = slice_descriptor;

@@ -45,17 +45,6 @@ ir3_nir_triop_bitwise_c = custom_target(
   depend_files : nir_algebraic_depends,
 )
 
-ir3_nir_opt_algebraic_late_c = custom_target(
-  'ir3_nir_opt_algebraic_late.c',
-  input : 'ir3_nir_opt_algebraic_late.py',
-  output : 'ir3_nir_opt_algebraic_late.c',
-  command : [
-    prog_python, '@INPUT@', '-p', dir_compiler_nir,
-  ],
-  capture : true,
-  depend_files : nir_algebraic_depends,
-)
-
 ir3_parser = custom_target(
   'ir3_parser.[ch]',
   input: 'ir3_parser.y',
@@ -150,12 +139,11 @@ libfreedreno_ir3 = static_library(
     ir3_nir_imul_c,
     ir3_nir_branch_and_or_not_c,
     ir3_nir_triop_bitwise_c,
-    ir3_nir_opt_algebraic_late_c,
     ir3_parser[0], ir3_parser[1],
     ir3_lexer,
   ],
   include_directories : [inc_freedreno, inc_include, inc_src],
-  c_args : [no_override_init_args],
+  c_args : [no_override_init_args, soong_compat_c_args],
   gnu_symbol_visibility : 'hidden',
   link_with: [libir3encode, libfreedreno_common],
   dependencies : [idep_libir3decode, idep_nir_headers, dep_dl, idep_mesautil],

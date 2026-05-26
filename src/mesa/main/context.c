@@ -1004,13 +1004,6 @@ _mesa_initialize_context(struct gl_context *ctx,
 
    _mesa_reset_vertex_processing_mode(ctx);
 
-   /* Mesa core handles all the formats that mesa core knows about.
-    * Drivers will want to override this list with just the formats
-    * they can handle.
-    */
-   memset(&ctx->TextureFormatSupported, GL_TRUE,
-          sizeof(ctx->TextureFormatSupported));
-
    switch (ctx->API) {
    case API_OPENGL_COMPAT:
    case API_OPENGL_CORE:
@@ -1408,15 +1401,6 @@ handle_first_current(struct gl_context *ctx)
                                        || (_mesa_is_desktop_gl_compat(ctx)
                                            && !is_forward_compatible_context));
    }
-
-   /* We can use this to help debug user's problems.  Tell them to set
-    * the MESA_INFO env variable before running their app.  Then the
-    * first time each context is made current we'll print some useful
-    * information.
-    */
-   if (os_get_option("MESA_INFO")) {
-      _mesa_print_info(ctx);
-   }
 }
 
 /**
@@ -1439,9 +1423,6 @@ _mesa_make_current( struct gl_context *newCtx,
                     struct gl_framebuffer *readBuffer )
 {
    GET_CURRENT_CONTEXT(curCtx);
-
-   if (MESA_VERBOSE & VERBOSE_API)
-      _mesa_debug(newCtx, "_mesa_make_current()\n");
 
    /* Check that the context's and framebuffer's visuals are compatible.
     */

@@ -66,9 +66,11 @@ brw_compile_tes(const struct brw_compiler *compiler,
 {
    const struct intel_device_info *devinfo = compiler->devinfo;
    nir_shader *nir = params->base.nir;
-   const struct brw_tes_prog_key *key = params->key;
+   const struct brw_tes_prog_key *key =
+      (const struct brw_tes_prog_key *)params->base.key;
    struct intel_vue_map input_vue_map;
-   struct brw_tes_prog_data *prog_data = params->prog_data;
+   struct brw_tes_prog_data *prog_data =
+      (struct brw_tes_prog_data *)params->base.prog_data;
    const unsigned dispatch_width = brw_geometry_stage_dispatch_width(compiler->devinfo);
 
    const bool debug_enabled = brw_should_print_shader(nir, DEBUG_TES, params->base.source_hash);

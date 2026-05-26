@@ -46,6 +46,7 @@ executor = executable(
     idep_genxml,
     idep_intel_decoder_brw,
     idep_intel_dev,
+    idep_intel_perf,
     idep_libintel_common,
   ],
   include_directories: [executor_includes],

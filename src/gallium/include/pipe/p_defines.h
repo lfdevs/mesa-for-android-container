@@ -802,6 +802,7 @@ struct pipe_shader_caps {
    bool fp16;
    bool fp16_derivatives;
    bool fp16_const_buffers;
+   bool fp16_no_denorms;
    bool int16;
    bool glsl_16bit_consts;
    bool glsl_16bit_load_dst; /* fp16 or int16 is AND'ed with this */

@@ -25,6 +25,7 @@
 #include "vk_debug_utils.h"
 #include "vk_shader_module.h"
 #include "vk_util.h"
+#include "vk_sampler.h"
 
 #include "common/freedreno_uuid.h"
 #include "fdl/freedreno_layout.h"
@@ -1435,7 +1436,8 @@ tu_get_properties(struct tu_physical_device *pdevice,
    /* VK_KHR_maintenance5 */
    props->earlyFragmentMultisampleCoverageAfterSampleCounting = true;
    props->earlyFragmentSampleMaskTestBeforeSampleCounting = true;
-   props->depthStencilSwizzleOneSupport = true;
+   props->depthStencilSwizzleOneSupport =
+      pdevice->info->props.has_z24uint_s8uint && pdevice->instance->enable_d24s8_border_color_workaround;
    props->polygonModePointSize = true;
    props->nonStrictWideLinesUseParallelogram = false;
    props->nonStrictSinglePixelWideLinesUseParallelogram = false;
@@ -1838,6 +1840,7 @@ static const driOptionDescription tu_dri_options[] = {
       DRI_CONF_VK_X11_STRICT_IMAGE_COUNT(false)
       DRI_CONF_VK_X11_ENSURE_MIN_IMAGE_COUNT(false)
       DRI_CONF_VK_XWAYLAND_WAIT_READY(false)
+      DRI_CONF_TU_ALLOW_CONCURRENT_BINNING(false)
    DRI_CONF_SECTION_END
 
    DRI_CONF_SECTION_DEBUG
@@ -1852,7 +1855,8 @@ static const driOptionDescription tu_dri_options[] = {
       DRI_CONF_DISABLE_CONSERVATIVE_LRZ(false)
       DRI_CONF_TU_DONT_RESERVE_DESCRIPTOR_SET(false)
       DRI_CONF_TU_ALLOW_OOB_INDIRECT_UBO_LOADS(false)
-      DRI_CONF_TU_DISABLE_D24S8_BORDER_COLOR_WORKAROUND(false)
+      DRI_CONF_TU_ENABLE_D24S8_BORDER_COLOR_WORKAROUND(false)
+      DRI_CONF_TU_ENABLE_FAST_BORDER_COLOR_FOR_UNDEFINED_FORMATS(false)
       DRI_CONF_TU_USE_TEX_COORD_ROUND_NEAREST_EVEN_MODE(false)
       DRI_CONF_TU_IGNORE_FRAG_DEPTH_DIRECTION(false)
       DRI_CONF_TU_ENABLE_SOFTFLOAT32(false)
@@ -1865,11 +1869,18 @@ static const driOptionDescription tu_dri_options[] = {
 static void
 tu_init_dri_options(struct tu_instance *instance)
 {
+   driConfigFileParseParams params = {
+      .driverName = "turnip",
+      .applicationName = instance->vk.app_info.app_name,
+      .applicationVersion = instance->vk.app_info.app_version,
+      .engineName = instance->vk.app_info.engine_name,
+      .engineVersion = instance->vk.app_info.engine_version,
+   };
+
    driParseOptionInfo(&instance->available_dri_options, tu_dri_options,
                       ARRAY_SIZE(tu_dri_options));
-   driParseConfigFiles(&instance->dri_options, &instance->available_dri_options, 0, "turnip", NULL, NULL,
-                       instance->vk.app_info.app_name, instance->vk.app_info.app_version,
-                       instance->vk.app_info.engine_name, instance->vk.app_info.engine_version);
+   driParseConfigFiles(&instance->dri_options, &instance->available_dri_options,
+                       &params);
 
    instance->force_vk_vendor =
          driQueryOptioni(&instance->dri_options, "force_vk_vendor");
@@ -1881,8 +1892,10 @@ tu_init_dri_options(struct tu_instance *instance)
          !driQueryOptionb(&instance->dri_options, "tu_dont_reserve_descriptor_set");
    instance->allow_oob_indirect_ubo_loads =
          driQueryOptionb(&instance->dri_options, "tu_allow_oob_indirect_ubo_loads");
-   instance->disable_d24s8_border_color_workaround =
-         driQueryOptionb(&instance->dri_options, "tu_disable_d24s8_border_color_workaround");
+   instance->enable_d24s8_border_color_workaround =
+         driQueryOptionb(&instance->dri_options, "tu_enable_d24s8_border_color_workaround");
+   instance->enable_fast_border_color_for_undefined_formats =
+         driQueryOptionb(&instance->dri_options, "tu_enable_fast_border_color_for_undefined_formats");
    instance->use_tex_coord_round_nearest_even_mode =
          driQueryOptionb(&instance->dri_options, "tu_use_tex_coord_round_nearest_even_mode");
    instance->ignore_frag_depth_direction =
@@ -1895,6 +1908,9 @@ tu_init_dri_options(struct tu_instance *instance)
          driQueryOptionstr(&instance->dri_options, "tu_autotune_algorithm");
    instance->override_uncached_as_cache_coherent =
          driQueryOptionb(&instance->dri_options, "tu_override_uncached_as_cache_coherent");
+   instance->allow_concurrent_binning =
+      (driQueryOptionb(&instance->dri_options, "tu_allow_concurrent_binning") && !TU_DEBUG(NO_CONCURRENT_BINNING)) ||
+      TU_DEBUG(FORCE_CONCURRENT_BINNING);
 }
 
 static uint32_t instance_count = 0;
@@ -2251,7 +2267,7 @@ tu_trace_destroy_buffer(struct u_trace_context *utctx, void *timestamps)
 }
 
 template <chip CHIP>
-static void
+static bool
 tu_trace_record_ts(struct u_trace *ut, void *cs, void *timestamps,
                    uint64_t offset_B, uint32_t)
 {
@@ -2273,6 +2289,8 @@ tu_trace_record_ts(struct u_trace *ut, void *cs, void *timestamps,
                            .value);
       tu_cs_emit_qw(ts_cs, bo->iova + offset_B);
    }
+
+   return true;
 }
 
 static uint64_t
@@ -2462,7 +2480,8 @@ tu_u_trace_submission_data_create(
           * single-use. Therefor we have to copy trace points and create
           * a new timestamp buffer on every submit of reusable command buffer.
           */
-         trace_chunks_to_copy += list_length(&cmdbuf->trace.trace_chunks);
+         trace_chunks_to_copy += u_trace_clone_append_copy_count(
+            u_trace_begin_iterator(&cmdbuf->trace), u_trace_end_iterator(&cmdbuf->trace));
       } else {
          data->trace_per_cmd_buffer[i] = &cmdbuf->trace;
       }
@@ -2482,7 +2501,7 @@ fail:
    return vk_error(device->instance, VK_ERROR_OUT_OF_HOST_MEMORY);
 }
 
-void
+static void
 tu_free_copy_timestamp_data(struct tu_device *device,
                             struct tu_copy_timestamp_data *data)
 {
@@ -2730,7 +2749,7 @@ tu_device_get_timestamp(struct vk_device *vk_device, uint64_t *timestamp)
    return ret == 0 ? VK_SUCCESS : VK_ERROR_UNKNOWN;
 }
 
-void
+static void
 tu_device_destroy_mutexes(struct tu_device *device)
 {
    mtx_destroy(&device->bo_mutex);
@@ -3042,6 +3061,12 @@ tu_CreateDevice(VkPhysicalDevice physicalDevice,
 
    global->zero_64b = 0;
 
+   for (int i = 0; i < TU_BORDER_COLOR_BUILTIN; i++) {
+      VkClearColorValue border_color = vk_border_color_value((VkBorderColor) i);
+      tu6_pack_border_color(&global->bcolor_builtin[i], &border_color,
+                            vk_border_color_is_int((VkBorderColor) i));
+   }
+
    /* initialize to ones so ffs can be used to find unused slots */
    BITSET_ONES(device->custom_border_color);
 
@@ -3139,7 +3164,7 @@ tu_CreateDevice(VkPhysicalDevice physicalDevice,
    device->use_z24uint_s8uint =
       physical_device->info->props.has_z24uint_s8uint &&
       (!border_color_without_format ||
-       physical_device->instance->disable_d24s8_border_color_workaround);
+       !physical_device->instance->enable_d24s8_border_color_workaround);
    device->use_lrz = !TU_DEBUG_START(NOLRZ);
 
    tu_gpu_tracepoint_config_variable();
@@ -3745,15 +3770,9 @@ tu_AllocateMemory(VkDevice _device,
       __vk_append_struct(mem->image->vk.android_deferred_create_info,
                          &external_info);
 
-      result = tu_image_init(device, mem->image,
-                             mem->image->vk.android_deferred_create_info);
-      if (result != VK_SUCCESS) {
-         vk_device_memory_destroy(&device->vk, pAllocator, &mem->vk);
-         return result;
-      }
-
-      result = TU_CALLX(device, tu_image_update_layout)(
-         device, mem->image, eci.drmFormatModifier, a_plane_layouts);
+      result = TU_CALLX(device, tu_image_init)(
+         device, mem->image, mem->image->vk.android_deferred_create_info,
+         eci.drmFormatModifier, a_plane_layouts);
       if (result != VK_SUCCESS) {
          vk_device_memory_destroy(&device->vk, pAllocator, &mem->vk);
          return result;
@@ -3969,7 +3988,7 @@ tu_get_msrtss_temporary(struct tu_device *dev,
  * framebuffer with render passes or the command buffer with dynamic
  * rendering.
  */
-VkResult
+static VkResult
 tu_init_msrtss_attachments(struct tu_device *device,
                            const struct tu_render_pass *pass,
                            const struct tu_framebuffer *fb,
@@ -4019,8 +4038,7 @@ tu_init_msrtss_attachments(struct tu_device *device,
        */
       vk_image_init(&device->vk, &images[i].vk, &image_info);
 
-      tu_image_init(device, &images[i], &image_info);
-      TU_CALLX(device, tu_image_update_layout)(device, &images[i], DRM_FORMAT_MOD_INVALID, NULL);
+      TU_CALLX(device, tu_image_init)(device, &images[i], &image_info, DRM_FORMAT_MOD_INVALID, NULL);
 
       if (is_ds) {
          depth_size = align64(depth_size, images[i].layout[0].base_align);

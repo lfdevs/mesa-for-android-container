@@ -809,20 +809,20 @@ _mesa_clip_blit(struct gl_context *ctx,
       return GL_FALSE;
 
    /*
-    * dest clip
-    */
-   clip_right_or_top(srcX0, srcX1, dstX0, dstX1, dstXmax);
-   clip_right_or_top(srcY0, srcY1, dstY0, dstY1, dstYmax);
-   clip_left_or_bottom(srcX0, srcX1, dstX0, dstX1, dstXmin);
-   clip_left_or_bottom(srcY0, srcY1, dstY0, dstY1, dstYmin);
-
-   /*
-    * src clip (just swap src/dst values from above)
+    * src clip
     */
    clip_right_or_top(dstX0, dstX1, srcX0, srcX1, srcXmax);
    clip_right_or_top(dstY0, dstY1, srcY0, srcY1, srcYmax);
    clip_left_or_bottom(dstX0, dstX1, srcX0, srcX1, srcXmin);
    clip_left_or_bottom(dstY0, dstY1, srcY0, srcY1, srcYmin);
+
+   /*
+    * dest clip (just swap src/dst values from above)
+    */
+   clip_right_or_top(srcX0, srcX1, dstX0, dstX1, dstXmax);
+   clip_right_or_top(srcY0, srcY1, dstY0, dstY1, dstYmax);
+   clip_left_or_bottom(srcX0, srcX1, dstX0, dstX1, dstXmin);
+   clip_left_or_bottom(srcY0, srcY1, dstY0, dstY1, dstYmin);
 
    /*
    printf("PostClipX: src: %d .. %d  dst: %d .. %d\n",

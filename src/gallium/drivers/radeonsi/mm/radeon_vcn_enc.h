@@ -104,7 +104,6 @@ struct radeon_enc_pic {
 
    bool use_rc_per_pic_ex;
    bool av1_tile_splitting_legacy_flag;
-   bool has_dependent_slice_instructions;
    bool av1_unidir_rc_available;
 
    struct {
@@ -256,6 +255,8 @@ struct radeon_encoder {
 
    bool error;
    bool first_frame;
+
+   struct ac_video_enc_codec_caps *caps;
 
    enum {
       DPB_LEGACY = 0,

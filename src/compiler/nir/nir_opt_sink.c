@@ -260,6 +260,7 @@ can_sink_instr(nir_instr *instr, nir_move_options options, bool *can_mov_out_of_
       case nir_intrinsic_load_frag_coord_xy:
       case nir_intrinsic_load_frag_coord_z:
       case nir_intrinsic_load_frag_coord_w:
+      case nir_intrinsic_load_frag_coord_w_rcp:
       case nir_intrinsic_load_var_special_pan:
       case nir_intrinsic_load_pixel_coord:
          *can_mov_out_of_loop = true;

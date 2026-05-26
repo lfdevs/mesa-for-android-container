@@ -329,7 +329,7 @@ vl_video_buffer_sampler_view_components(struct pipe_video_buffer *buffer)
                         (PIPE_SWIZZLE_X + j + 1) % 3 :
                         (PIPE_SWIZZLE_X + j);
          sv_templ.swizzle_r = sv_templ.swizzle_g = sv_templ.swizzle_b = pipe_swizzle;
-         sv_templ.swizzle_a = PIPE_SWIZZLE_1;
+         sv_templ.swizzle_a = util_format_has_alpha(res->format) ? PIPE_SWIZZLE_W : PIPE_SWIZZLE_1;
 
          buf->sampler_view_components[component] = pipe->create_sampler_view(pipe, res, &sv_templ);
          if (!buf->sampler_view_components[component])

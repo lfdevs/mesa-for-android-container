@@ -140,7 +140,10 @@ brw_compile_bs(const struct brw_compiler *compiler,
                struct brw_compile_bs_params *params)
 {
    nir_shader *shader = params->base.nir;
-   struct brw_bs_prog_data *prog_data = params->prog_data;
+   const struct brw_bs_prog_key *key =
+      (const struct brw_bs_prog_key *)params->base.key;
+   struct brw_bs_prog_data *prog_data =
+      (struct brw_bs_prog_data *)params->base.prog_data;
    unsigned num_resume_shaders = params->num_resume_shaders;
    nir_shader **resume_shaders = params->resume_shaders;
    const bool debug_enabled = brw_should_print_shader(shader, DEBUG_RT, params->base.source_hash);
@@ -162,7 +165,7 @@ brw_compile_bs(const struct brw_compiler *compiler,
    }
 
    prog_data->simd_size =
-      compile_single_bs(compiler, params, params->key, prog_data,
+      compile_single_bs(compiler, params, key, prog_data,
                         shader, &g, params->base.stats, NULL, NULL);
    if (prog_data->simd_size == 0)
       return NULL;
@@ -183,9 +186,8 @@ brw_compile_bs(const struct brw_compiler *compiler,
       /* TODO: Figure out shader stats etc. for resume shaders */
       int offset = 0;
       uint8_t simd_size =
-         compile_single_bs(compiler, params, params->key,
-                           prog_data, resume_shaders[i], &g, NULL, &offset,
-                           &resume_sbt[i]);
+         compile_single_bs(compiler, params, key, prog_data, resume_shaders[i],
+                           &g, NULL, &offset, &resume_sbt[i]);
       if (simd_size == 0)
          return NULL;
 

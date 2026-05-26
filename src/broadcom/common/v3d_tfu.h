@@ -24,6 +24,11 @@
 #ifndef V3D_TFU_H
 #define V3D_TFU_H
 
+/* Maximum width and height (in pixels) per submitted TFU job. The ios
+ * register encodes width and height as 14-bit values each.
+ */
+#define V3D_TFU_MAX_DIM 16384
+
 /* Disable level 0 write, just write following mipmaps */
 #define V3D33_TFU_IOA_DIMTW (1 << 0)
 #define V3D33_TFU_IOA_FORMAT_SHIFT 3

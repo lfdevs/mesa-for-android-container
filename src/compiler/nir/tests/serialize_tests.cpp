@@ -165,7 +165,7 @@ TEST_P(nir_serialize_all_test, alu_vec)
 TEST_P(nir_serialize_all_test, alu_two_components_full_swizzle)
 {
    nir_def *undef = nir_undef(b, 2, 32);
-   nir_def *fma = nir_ffma(b, undef, undef, undef);
+   nir_def *fma = nir_ffma_weak(b, undef, undef, undef);
    nir_alu_instr *fma_alu = nir_def_as_alu(fma);
 
    fma->num_components = GetParam();

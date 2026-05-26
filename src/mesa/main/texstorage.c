@@ -692,12 +692,6 @@ texstorage_error(GLuint dims, GLenum target, GLsizei levels,
       return;
    }
 
-   if (MESA_VERBOSE & (VERBOSE_API|VERBOSE_TEXTURE))
-      _mesa_debug(ctx, "%s %s %d %s %d %d %d\n", caller,
-                  _mesa_enum_to_string(target), levels,
-                  _mesa_enum_to_string(internalformat),
-                  width, height, depth);
-
    /* Check the format to make sure it is sized. */
    if (!_mesa_is_legal_tex_storage_format(ctx, internalformat)) {
       _mesa_error(ctx, GL_INVALID_ENUM,
@@ -738,12 +732,6 @@ texturestorage_error(GLuint dims, GLuint texture, GLsizei levels,
 {
    struct gl_texture_object *texObj;
    GET_CURRENT_CONTEXT(ctx);
-
-   if (MESA_VERBOSE & (VERBOSE_API|VERBOSE_TEXTURE))
-      _mesa_debug(ctx, "%s %d %d %s %d %d %d\n",
-                  caller, texture, levels,
-                  _mesa_enum_to_string(internalformat),
-                  width, height, depth);
 
    /* Check the format to make sure it is sized. */
    if (!_mesa_is_legal_tex_storage_format(ctx, internalformat)) {

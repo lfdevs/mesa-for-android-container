@@ -760,8 +760,6 @@ static bool visit_alu(struct ac_nir_context *ctx, const nir_alu_instr *instr)
       }
       break;
    case nir_op_ffma:
-      /* FMA is slow on gfx6-8, so it shouldn't be used. */
-      assert(instr->def.bit_size != 32 || ctx->ac.gfx_level >= GFX9);
       result = emit_fp_intrinsic(&ctx->ac, "llvm.fma", def_type, src[0], src[1], src[2]);
       break;
    case nir_op_ffmaz:
@@ -769,18 +767,8 @@ static bool visit_alu(struct ac_nir_context *ctx, const nir_alu_instr *instr)
       src[0] = ac_to_float(&ctx->ac, src[0]);
       src[1] = ac_to_float(&ctx->ac, src[1]);
       src[2] = ac_to_float(&ctx->ac, src[2]);
-#if LLVM_VERSION_MAJOR <= 21
-      /* Workaround for LLVM bug that crashes when using legacy fma on GFX12. */
-      if (ctx->ac.gfx_level == GFX12) {
-         LLVMValueRef mulz = ac_build_intrinsic(&ctx->ac, "llvm.amdgcn.fmul.legacy",
-                                                ctx->ac.f32, src, 2, 0);
-         result = LLVMBuildFAdd(ctx->ac.builder, mulz, src[2], "");
-      } else
-#endif
-      {
-         result = ac_build_intrinsic(&ctx->ac, "llvm.amdgcn.fma.legacy", ctx->ac.f32,
-                                     src, 3, 0);
-      }
+      result = ac_build_intrinsic(&ctx->ac, "llvm.amdgcn.fma.legacy", ctx->ac.f32,
+                                  src, 3, 0);
       break;
    case nir_op_ldexp:
       src[0] = ac_to_float(&ctx->ac, src[0]);

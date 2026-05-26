@@ -1,6 +1,5 @@
 # In current VKCTS 1.4.4.0
 dEQP-VK.reconvergence.terminate_invocation.bit_count,Fail
-dEQP-VK.reconvergence.terminate_invocation.quad_any,Fail
 
 dEQP-VK.sparse_resources.buffer.misc.null_address_read,Fail
 dEQP-VK.sparse_resources.buffer.misc.null_address_read_descriptors,Fail
@@ -12,3 +11,9 @@ dEQP-VK.sparse_resources.buffer.ssbo.sparse_residency.non_resident_buffer_strict
 dEQP-VK.sparse_resources.buffer.ssbo.sparse_residency.non_resident_buffer_strict_copy_dest_alloc_none_65536,Fail
 dEQP-VK.sparse_resources.buffer.ssbo.sparse_residency.non_resident_buffer_strict_copy_dest_alloc_partial_16777216,Fail
 dEQP-VK.sparse_resources.buffer.ssbo.sparse_residency.non_resident_buffer_strict_copy_dest_alloc_partial_65536,Fail
+
+# VKCTS 1.4.4.2 -> 1.4.5.3 uprev
+dEQP-VK.compute.shader_object_binary.basic.copy_ssbo_bounds,Fail
+dEQP-VK.compute.shader_object_spirv.basic.copy_ssbo_bounds,Fail
+dEQP-VK.shader_object.tessellation.hlsl.point_mode,Fail
+dEQP-VK.wsi.xcb.present_timing.basic.timing_queue,Fail

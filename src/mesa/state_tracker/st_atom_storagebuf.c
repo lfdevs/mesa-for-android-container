@@ -79,7 +79,7 @@ st_bind_ssbos(struct st_context *st, struct gl_program *prog,
 
    /* Clear out any stale shader buffers (or lowered atomic counters). */
    int num_ssbos = prog->info.num_ssbos;
-   if (!st->has_hw_atomics)
+   if (st->screen->shader_caps[MESA_SHADER_FRAGMENT].max_hw_atomic_counters == 0)
       num_ssbos += st->last_used_atomic_bindings[shader_type];
    if (st->last_num_ssbos[shader_type] > num_ssbos) {
       st->pipe->set_shader_buffers(

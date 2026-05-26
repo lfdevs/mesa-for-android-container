@@ -938,6 +938,24 @@ static pco_instr *trans_store_common_store(trans_ctx *tctx,
                          .rpt = chans);
 }
 
+static pco_instr *trans_load_shared_base_ptr(trans_ctx *tctx, pco_ref dest)
+{
+   assert(tctx->stage == MESA_SHADER_COMPUTE);
+   assert(tctx->shader->data.cs.shmem.count > 0);
+   assert(tctx->shader->data.cs.global_shmem);
+
+   unsigned chans = pco_ref_get_chans(dest);
+   assert(chans == 2);
+   assert(pco_ref_get_bits(dest) == 32);
+
+   pco_ref shmem_base_addr =
+      pco_ref_hwreg_vec(tctx->shader->data.cs.shmem.start,
+                        PCO_REG_CLASS_SHARED,
+                        chans);
+
+   return pco_mov(&tctx->b, dest, shmem_base_addr, .rpt = chans);
+}
+
 static inline enum pco_atom_op to_atom_op(nir_atomic_op op)
 {
    switch (op) {
@@ -2051,6 +2069,10 @@ static pco_instr *trans_intr(trans_ctx *tctx, nir_intrinsic_instr *intr)
                                        &tctx->shader->data.cs.shmem);
       break;
 
+   case nir_intrinsic_load_shared_base_ptr:
+      instr = trans_load_shared_base_ptr(tctx, dest);
+      break;
+
    case nir_intrinsic_shared_atomic:
    case nir_intrinsic_shared_atomic_swap:
       instr = trans_atomic_shared(tctx, intr, dest, src[0], src[1], src[2]);
@@ -2364,6 +2386,18 @@ static pco_instr *trans_intr(trans_ctx *tctx, nir_intrinsic_instr *intr)
       instr = pco_mov(&tctx->b,
                       dest,
                       pco_ref_hwreg(PCO_SR_INST_NUM, PCO_REG_CLASS_SPEC));
+      break;
+
+   case nir_intrinsic_load_slot_num_pco:
+      instr = pco_mov(&tctx->b,
+                      dest,
+                      pco_ref_hwreg(PCO_SR_SLOT_NUM, PCO_REG_CLASS_SPEC));
+      break;
+
+   case nir_intrinsic_load_cluster_num_pco:
+      instr = pco_mov(&tctx->b,
+                      dest,
+                      pco_ref_hwreg(PCO_SR_CLUSTER_NUM, PCO_REG_CLASS_SPEC));
       break;
 
    case nir_intrinsic_load_shared_reg_alloc_size_pco:

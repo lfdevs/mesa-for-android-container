@@ -55,7 +55,7 @@ libblorp = static_library(
   'blorp',
   [files_libblorp, files_blorp_brw],
   include_directories : [inc_include, inc_src, inc_intel, inc_intel_compiler],
-  c_args : [no_override_init_args],
+  c_args : [no_override_init_args, soong_compat_c_args],
   gnu_symbol_visibility : 'hidden',
   dependencies : [
     idep_nir_headers, idep_genxml, idep_mesautil, idep_intel_dev,
@@ -73,13 +73,13 @@ if with_intel_elk
     'blorp_elk',
     [files_libblorp, files_blorp_elk],
     include_directories : [inc_include, inc_src, inc_intel],
-    c_args : [no_override_init_args],
+    c_args : [no_override_init_args, soong_compat_c_args],
     gnu_symbol_visibility : 'hidden',
     dependencies : [
       idep_nir_headers, idep_genxml, idep_mesautil, idep_intel_dev,
       idep_blorp_shaders
     ],
-    build_by_default: true, # FIXME XXX
+    build_by_default: false,
   )
 
   idep_intel_blorp_elk = declare_dependency(

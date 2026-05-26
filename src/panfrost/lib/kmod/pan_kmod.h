@@ -384,6 +384,15 @@ struct pan_kmod_va_range {
    uint64_t size;
 };
 
+/* KMD information. */
+struct pan_kmod_driver {
+   /* KMD version. */
+   struct {
+      uint32_t major;
+      uint32_t minor;
+   } version;
+};
+
 /* KMD backend vtable.
  *
  * All methods described there are mandatory, unless explicitly flagged as
@@ -394,7 +403,7 @@ struct pan_kmod_ops {
     * Return NULL if the creation fails for any reason.
     */
    struct pan_kmod_dev *(*dev_create)(
-      int fd, uint32_t flags, const drmVersionPtr version,
+      int fd, uint32_t flags, const struct pan_kmod_driver *drv_info,
       const struct pan_kmod_allocator *allocator);
 
    /* Destroy a pan_kmod_dev object. */
@@ -474,15 +483,6 @@ struct pan_kmod_ops {
 
    /* Label the BO */
    void (*bo_set_label)(struct pan_kmod_dev *dev, struct pan_kmod_bo *bo, const char *label);
-};
-
-/* KMD information. */
-struct pan_kmod_driver {
-   /* KMD version. */
-   struct {
-      uint32_t major;
-      uint32_t minor;
-   } version;
 };
 
 static inline bool

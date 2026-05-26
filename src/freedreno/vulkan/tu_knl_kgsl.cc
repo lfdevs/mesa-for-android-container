@@ -561,11 +561,18 @@ kgsl_is_memory_type_supported(int fd, uint32_t flags)
       return false;
    }
 
+   /* The kernel echoes back the *actual* flags it used. Some KGSL
+    * versions silently strip unsupported flags (e.g. IOCOHERENT on
+    * GPUs that lack IO-coherence) instead of failing the ioctl.
+    * Detect this by checking the requested bits are still present.
+    */
+   bool supported = (req_alloc.flags & flags) == flags;
+
    struct kgsl_gpumem_free_id req_free = { .id = req_alloc.id };
 
    safe_ioctl(fd, IOCTL_KGSL_GPUMEM_FREE_ID, &req_free);
 
-   return true;
+   return supported;
 }
 
 static bool
@@ -786,7 +793,7 @@ wait_timestamp_safe(int fd,
    }
 }
 
-VkResult
+static VkResult
 kgsl_queue_wait_fence(struct tu_queue *queue, uint32_t fence,
                       uint64_t timeout_ns)
 {
@@ -1452,7 +1459,8 @@ kgsl_queue_submit(struct tu_queue *queue, void *_submit,
 
    struct kgsl_command_object *objs = (struct kgsl_command_object *)
       vk_alloc(&queue->device->vk.alloc, sizeof(*objs) * obj_count,
-               alignof(*objs), VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
+               alignof(struct kgsl_command_object),
+               VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
 
    struct kgsl_cmdbatch_profiling_buffer *profiling_buffer = NULL;
    uint32_t obj_idx = 0;

@@ -346,18 +346,18 @@ radv_sqtt_init_bo(struct radv_device *device)
    VkDeviceMemory memory, staging_memory;
    VkBuffer buffer, staging_buffer;
    VkResult result;
-   uint64_t size;
+   uint64_t per_se_size, size;
    uint64_t va;
    void *ptr;
 
    /* The buffer size and address need to be aligned in HW regs. Align the
     * size as early as possible so that we do all the allocation & addressing
     * correctly. */
-   device->sqtt.buffer_size = align64(device->sqtt.buffer_size, 1ull << SQTT_BUFFER_ALIGN_SHIFT);
+   per_se_size = align64(device->sqtt.buffer_size, 1ull << SQTT_BUFFER_ALIGN_SHIFT);
 
    /* Compute total size of the thread trace BO for all SEs. */
    size = align64(sizeof(struct ac_sqtt_data_info) * max_se, 1ull << SQTT_BUFFER_ALIGN_SHIFT);
-   size += device->sqtt.buffer_size * (uint64_t)max_se;
+   size += per_se_size * (uint64_t)max_se;
 
    /* Allocate the SQTT buffer (it must be in VRAM). */
    const uint32_t memory_type_index = radv_find_memory_index(
@@ -506,8 +506,9 @@ radv_sqtt_init(struct radv_device *device)
    const struct radv_physical_device *pdev = radv_device_physical(device);
    struct ac_sqtt *sqtt = &device->sqtt;
 
-   /* Default buffer size set to 32MB per SE. */
-   device->sqtt.buffer_size = (uint32_t)debug_get_num_option("RADV_THREAD_TRACE_BUFFER_SIZE", 32 * 1024 * 1024);
+   if (!ac_sqtt_update_bo_size(&device->sqtt, "RADV"))
+      return false;
+
    device->sqtt.instruction_timing_enabled = radv_is_instruction_timing_enabled();
 
    /* Whether to use a staging buffer for faster reads on dGPUs. */
@@ -556,13 +557,8 @@ radv_sqtt_resize_bo(struct radv_device *device)
    /* Destroy the previous thread trace BO. */
    radv_sqtt_finish_bo(device);
 
-   /* Double the size of the thread trace buffer per SE. */
-   device->sqtt.buffer_size *= 2;
-
-   fprintf(stderr,
-           "Failed to get the thread trace because the buffer "
-           "was too small, resizing to %d KB\n",
-           device->sqtt.buffer_size / 1024);
+   if (!ac_sqtt_update_bo_size(&device->sqtt, "RADV"))
+      return false;
 
    /* Re-create the thread trace BO. */
    return radv_sqtt_init_bo(device);

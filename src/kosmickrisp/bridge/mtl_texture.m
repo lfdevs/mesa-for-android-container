@@ -92,3 +92,36 @@ mtl_new_texture_view_with_no_swizzle(mtl_texture *texture, const struct kk_view_
    }
 }
 
+void
+mtl_texture_get_bytes(mtl_texture *texture, void *host_ptr,
+                      struct mtl_texture_memory_copy *data)
+{
+   @autoreleasepool {
+      id<MTLTexture> tex = (id<MTLTexture>)texture;
+      MTLRegion region = MTLRegionMake3D(data->image_origin.x, data->image_origin.y, data->image_origin.z,
+                                         data->image_size.x, data->image_size.y, data->image_size.z);
+      return [tex getBytes:host_ptr
+               bytesPerRow:data->buffer_stride_B
+             bytesPerImage:data->buffer_2d_image_size_B
+                fromRegion:region
+               mipmapLevel:data->image_level
+                     slice:data->image_slice];
+   }
+}
+
+void
+mtl_texture_replace_region(mtl_texture *texture, const void *host_ptr,
+                           struct mtl_texture_memory_copy *data)
+{
+   @autoreleasepool {
+      id<MTLTexture> tex = (id<MTLTexture>)texture;
+      MTLRegion region = MTLRegionMake3D(data->image_origin.x, data->image_origin.y, data->image_origin.z,
+                                         data->image_size.x, data->image_size.y, data->image_size.z);
+      return [tex replaceRegion:region
+                    mipmapLevel:data->image_level
+                          slice:data->image_slice
+                      withBytes:host_ptr
+                    bytesPerRow:data->buffer_stride_B
+                  bytesPerImage:data->buffer_2d_image_size_B];
+   }
+}

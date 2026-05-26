@@ -47,16 +47,13 @@ pass(nir_builder *b, nir_intrinsic_instr *intrin, void *data)
       nir_def_replace(&intrin->def, def);
       return true;
    }
-   case nir_intrinsic_load_frag_coord: {
+   case nir_intrinsic_load_frag_coord_z: {
       if (!gfx_state->adjust_frag_coord_z)
-         return false;
-
-      if (!(nir_def_components_read(&intrin->def) & (1 << 2)))
          return false;
 
       b->fp_math_ctrl = nir_fp_no_fast_math;
 
-      nir_def *frag_z = nir_channel(b, &intrin->def, 2);
+      nir_def *frag_z = &intrin->def;
 
       /* VRS Rate X = Ancillary[2:3] */
       nir_def *ancillary = nir_load_vector_arg_amd(b, 1, .base = args->ac.ancillary.arg_index);
@@ -67,10 +64,9 @@ pass(nir_builder *b, nir_intrinsic_instr *intrin, void *data)
       nir_def *mul = nir_bcsel(b, cond, nir_imm_float(b, 0.0625f), nir_imm_float(b, -0.0));
 
       /* adjusted_frag_z = dFdxFine(frag_z) * 0.0625 + frag_z */
-      frag_z = nir_ffma(b, nir_ddx_fine(b, frag_z), mul, frag_z);
+      frag_z = nir_ffma_weak(b, nir_ddx_fine(b, frag_z), mul, frag_z);
 
-      nir_def *new_dest = nir_vector_insert_imm(b, &intrin->def, frag_z, 2);
-      nir_def_rewrite_uses_after(&intrin->def, new_dest);
+      nir_def_rewrite_uses_after(&intrin->def, frag_z);
 
       b->fp_math_ctrl = 0;
       return true;

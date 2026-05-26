@@ -1511,3 +1511,98 @@ retry_select_mode:
           max_out_vertices <= max_workgroup_size &&
           out->hw_max_esverts >= min_esverts;
 }
+
+/* Print SPI_PS_INPUT_ADDR as follows:
+ *   v[0:1] = PERSP_SAMPLE
+ *   v[2:3] = PERSP_CENTER
+ *   v[4:5] = LINEAR_SAMPLE
+ *   v[6:7] = LINEAR_CENTER
+ *   v8 = LINE_STIPPLE_TEX
+ *   v9 = FRONT_FACE
+ *   v10 = ANCILLARY
+ *   v11 = SAMPLE_COVERAGE
+ *   v12 = POS_FIXED_PT
+ */
+void
+ac_print_spi_ps_input_vgpr_list(uint32_t spi_ps_input_ena, uint32_t spi_ps_input_addr, FILE *f)
+{
+   unsigned vgpr = 0;
+
+#define PRINT_PS_INPUT_VGPR(count, name) do { \
+   if (G_0286CC_##name##_ENA(spi_ps_input_addr)) { \
+      bool enabled = G_0286CC_##name##_ENA(spi_ps_input_ena); \
+      if (count > 1) { \
+         fprintf(f, "  v[%2u:%2u] = %16s%s\n", vgpr, vgpr + count - 1, #name, \
+                 enabled ? "  === initialized ===" : ""); \
+      } else { \
+         fprintf(f, "  v%2u      = %16s%s\n", vgpr, #name, \
+                 enabled ? "  === initialized ===" : ""); \
+      } \
+      vgpr += count; \
+   } \
+} while (0)
+
+   PRINT_PS_INPUT_VGPR(2, PERSP_SAMPLE);
+   PRINT_PS_INPUT_VGPR(2, PERSP_CENTER);
+   PRINT_PS_INPUT_VGPR(2, PERSP_CENTROID);
+   PRINT_PS_INPUT_VGPR(3, PERSP_PULL_MODEL);
+   PRINT_PS_INPUT_VGPR(2, LINEAR_SAMPLE);
+   PRINT_PS_INPUT_VGPR(2, LINEAR_CENTER);
+   PRINT_PS_INPUT_VGPR(2, LINEAR_CENTROID);
+   PRINT_PS_INPUT_VGPR(1, LINE_STIPPLE_TEX);
+   PRINT_PS_INPUT_VGPR(1, POS_X_FLOAT);
+   PRINT_PS_INPUT_VGPR(1, POS_Y_FLOAT);
+   PRINT_PS_INPUT_VGPR(1, POS_Z_FLOAT);
+   PRINT_PS_INPUT_VGPR(1, POS_W_FLOAT);
+   PRINT_PS_INPUT_VGPR(1, FRONT_FACE);
+   PRINT_PS_INPUT_VGPR(1, ANCILLARY);
+   PRINT_PS_INPUT_VGPR(1, SAMPLE_COVERAGE);
+   PRINT_PS_INPUT_VGPR(1, POS_FIXED_PT);
+#undef PRINT_PS_INPUT_VGPR
+}
+
+static const char *
+get_spi_shader_format(unsigned format)
+{
+   switch (format) {
+#define PS_FORMAT(name) case V_028714_SPI_SHADER_##name: return #name;
+   PS_FORMAT(ZERO)
+   PS_FORMAT(32_R)
+   PS_FORMAT(32_GR)
+   PS_FORMAT(32_AR)
+   PS_FORMAT(FP16_ABGR)
+   PS_FORMAT(UNORM16_ABGR)
+   PS_FORMAT(SNORM16_ABGR)
+   PS_FORMAT(UINT16_ABGR)
+   PS_FORMAT(SINT16_ABGR)
+   PS_FORMAT(32_ABGR)
+#undef PS_FORMAT
+   default:
+      UNREACHABLE("invalid export format");
+   }
+}
+
+/* Print (example):
+ *   mrt0 = FP16_ABGR
+ *   mrt1 = 32_R
+ */
+void
+ac_print_spi_ps_shader_col_format(uint32_t spi_shader_col_format, FILE *f)
+{
+   for (unsigned i = 0; i < 8; i++) {
+      unsigned format = (spi_shader_col_format >> (i * 4)) & 0xf;
+
+      if (format)
+         fprintf(f, "  mrt%u = %s\n", i, get_spi_shader_format(format));
+   }
+}
+
+/* Print (example):
+ *   mrtz = 32_R
+ */
+void
+ac_print_spi_ps_shader_z_format(uint32_t spi_shader_z_format, FILE *f)
+{
+   if (spi_shader_z_format)
+      fprintf(f, "  mrtz = %s\n", get_spi_shader_format(spi_shader_z_format));
+}

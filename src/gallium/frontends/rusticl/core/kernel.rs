@@ -698,13 +698,6 @@ fn compile_nir_to_args(
     args: &[spirv::SPIRVKernelArg],
     lib_clc: &NirShader,
 ) -> (Vec<KernelArg>, NirShader) {
-    // this is a hack until we support fp16 properly and check for denorms inside vstore/vload_half
-    nir.preserve_fp16_denorms();
-
-    // Set to rtne for now until drivers are able to report their preferred rounding mode, that also
-    // matches what we report via the API.
-    nir.set_fp_rounding_mode_rtne();
-
     nir_pass!(nir, nir_scale_fdiv);
     nir.structurize();
     nir_pass!(
@@ -1227,7 +1220,7 @@ pub(super) fn convert_spirv_to_nir(
     args: &[spirv::SPIRVKernelArg],
     spec_constants: &mut HashMap<u32, Vec<u8>>,
     dev: &'static Device,
-) -> SPIRVToNirResult {
+) -> Option<SPIRVToNirResult> {
     let cache = dev.screen().shader_cache();
     let key = build.hash_key(cache.as_ref(), name, spec_constants);
     let spirv_info = build.kernel_info(name).unwrap();
@@ -1236,8 +1229,8 @@ pub(super) fn convert_spirv_to_nir(
         .as_ref()
         .and_then(|cache| cache.get(&mut key?))
         .and_then(|entry| SPIRVToNirResult::deserialize(&entry, dev, spirv_info))
-        .unwrap_or_else(|| {
-            let nir = build.to_nir(name, dev, spec_constants);
+        .or_else(|| {
+            let nir = build.to_nir(name, dev, spec_constants)?;
 
             if Platform::dbg().nir {
                 eprintln!("=== Printing nir for '{name}' after spirv_to_nir");
@@ -1270,7 +1263,13 @@ pub(super) fn convert_spirv_to_nir(
                 }
             }
 
-            SPIRVToNirResult::new(dev, spirv_info, args, default_build, optimized)
+            Some(SPIRVToNirResult::new(
+                dev,
+                spirv_info,
+                args,
+                default_build,
+                optimized,
+            ))
         })
 }
 

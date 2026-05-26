@@ -7,6 +7,7 @@
 #include "util/blake3/blake3_impl.h"
 #include "ac_nir.h"
 #include "ac_nir_helpers.h"
+#include "../compiler/aco_nir_call_attribs.h"
 
 #include "nir_builder.h"
 
@@ -120,8 +121,26 @@ fixup_smem_null_descriptor_gfx6(nir_builder *b, nir_intrinsic_instr *intrin, fix
    nir_def *desc = intrin->src[0].ssa;
    b->cursor = nir_after_def(desc);
 
-   /* Use the descriptor BO (or compute scratch BO) as dummy address */
-   nir_def *dummy_0_1 = nir_pack_64_2x32(b, ac_nir_load_arg(b, state->args, state->args->ring_offsets));
+   nir_def *dummy_0_1 = NULL;
+   nir_def *ptr = NULL;
+
+   if (mesa_shader_stage_is_rt(b->shader->info.stage)) {
+      /* Use the RT descriptor pointer */
+      ptr = nir_load_param(b, RT_ARG_DESCRIPTORS);
+   } else if (state->args->ring_offsets.used) {
+      /* Use the descriptor BO (or compute scratch BO) as dummy address */
+      ptr = ac_nir_load_arg(b, state->args, state->args->ring_offsets);
+   } else {
+      /* Can't mitigate the NULL descriptor bug. */
+      return false;
+   }
+
+   if (ptr->num_components == 1) {
+      /* Assume that address32_hi is 0 on GFX6-7. */
+      dummy_0_1 = nir_pack_64_2x32_split(b, ptr, nir_imm_int(b, 0));
+   } else {
+      dummy_0_1 = nir_pack_64_2x32(b, nir_trim_vector(b, ptr, 2));
+   }
 
    /* Get each individual dword of the descriptor */
    nir_def *dw0 = nir_channel(b, desc, 0);

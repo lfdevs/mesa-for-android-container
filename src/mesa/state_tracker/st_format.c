@@ -114,7 +114,7 @@ st_mesa_format_to_pipe_format(const struct st_context *st,
                           mesaFormat == PIPE_FORMAT_ASTC_5x5_SRGB;
 
       /* If we're only emulating ASTC void extents, use the original format */
-      if (st->astc_void_extents_need_denorm_flush &&
+      if (st->screen->caps.astc_void_extents_need_denorm_flush &&
           (is_5x5 ? st->has_astc_5x5_ldr : st->has_astc_2d_ldr))
          return mesaFormat;
 

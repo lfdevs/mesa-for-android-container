@@ -303,15 +303,14 @@ enum glsl_cmat_use {
 };
 
 struct glsl_cmat_description {
-   /* MSVC can't merge bitfields of different types and also sign extend enums,
-    * so use uint8_t for those cases.
-    */
-   uint8_t element_type:5; /* enum glsl_base_type */
-   uint8_t scope:3; /* mesa_scope */
-   uint8_t rows;
-   uint8_t cols;
+   uint16_t rows;
+   uint16_t cols;
+   uint16_t element_type; /* enum glsl_base_type */
+   uint8_t scope; /* mesa_scope */
    uint8_t use; /* enum glsl_cmat_use */
 };
+static_assert(sizeof(struct glsl_cmat_description) == 8,
+              "glsl_cmat_description must fit in two NIR const_index slots");
 
 const char *glsl_get_type_name(const glsl_type *type);
 

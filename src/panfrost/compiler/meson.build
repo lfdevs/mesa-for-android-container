@@ -5,6 +5,7 @@ libpanfrost_compiler_files = files(
   'pan_compiler.c',
   'pan_compiler.h',
   'pan_nir_collect_varyings.c',
+  'pan_nir_fuse_io_cvt.c',
   'pan_nir_lower_bool_to_bitsize.c',
   'pan_nir_lower_var_special.c',
   'pan_nir_lower_framebuffer.c',
@@ -31,7 +32,7 @@ libpanfrost_compiler = static_library(
   include_directories : [inc_include, inc_src, inc_valhall],
   dependencies: [idep_nir, idep_mesautil, idep_valhall_enums_h, idep_bi_opcodes_h],
   link_with: [libpanfrost_midgard, libpanfrost_bifrost],
-  c_args : [no_override_init_args],
+  c_args : [no_override_init_args, soong_compat_c_args],
   gnu_symbol_visibility : 'hidden',
   build_by_default : false,
 )

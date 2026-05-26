@@ -366,12 +366,14 @@ vn_CreateInstance(const VkInstanceCreateInfo *pCreateInfo,
 
    driParseOptionInfo(&instance->available_dri_options, vn_dri_options,
                       ARRAY_SIZE(vn_dri_options));
-   driParseConfigFiles(&instance->dri_options,
-                       &instance->available_dri_options, 0, "venus", NULL,
-                       NULL, instance->base.vk.app_info.app_name,
-                       instance->base.vk.app_info.app_version,
-                       instance->base.vk.app_info.engine_name,
-                       instance->base.vk.app_info.engine_version);
+   driParseConfigFiles(&instance->dri_options, &instance->available_dri_options,
+                       &(driConfigFileParseParams) {
+                          .driverName = "venus",
+                          .applicationName = instance->base.vk.app_info.app_name,
+                          .applicationVersion = instance->base.vk.app_info.app_version,
+                          .engineName = instance->base.vk.app_info.engine_name,
+                          .engineVersion = instance->base.vk.app_info.engine_version,
+                       });
 
    instance->renderer->info.has_implicit_fencing =
       driQueryOptionb(&instance->dri_options, "venus_implicit_fencing");

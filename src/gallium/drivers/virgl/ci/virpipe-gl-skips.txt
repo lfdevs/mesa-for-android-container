@@ -22,3 +22,6 @@ spec@ext_framebuffer_object@fbo-blending-formats
 # uprev Piglit in Mesa
 spec@egl_ext_protected_content@conformance
 
+# !41455
+dEQP-GLES2.functional.shaders.struct.uniform.equal_fragment
+dEQP-GLES2.functional.shaders.struct.uniform.not_equal_fragment

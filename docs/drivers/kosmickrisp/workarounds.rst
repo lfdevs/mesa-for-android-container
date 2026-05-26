@@ -49,6 +49,26 @@ info on what was updated.
 Workarounds
 ===========
 
+KK_WORKAROUND_10
+----------------
+| macOS version: 26.4.1
+| Metal ticket: Not reported
+| Metal ticket status:
+| CTS test failure: ``dEQP-VK.subgroups.arithmetic.compute.subgroupinclusive*_vec4``
+| Comments:
+
+See comment
+https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/41186#note_3470793
+
+In short, certain ``ior`` operations can be and will be turned into ``bcsel``
+before reaching NIR to MSL. However, the MSL compiler seems to incorrectly
+handle ``bcsel`` and the compiled shader misbehaves while the ``ior`` version
+does not. This is worked around by adding a known true value to the conditional
+of the ``bcsel``.
+
+| Log:
+| 2026-05-14: Workaround implemented
+
 KK_WORKAROUND_9
 ---------------
 | macOS version: 26.4.1

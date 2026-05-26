@@ -68,6 +68,65 @@
 
 #define FILE_DEBUG_FLAG DEBUG_PERFMON
 
+const char *
+intel_perf_counter_type_name(enum intel_perf_counter_type type)
+{
+   switch (type) {
+   case INTEL_PERF_COUNTER_TYPE_EVENT: return "event";
+   case INTEL_PERF_COUNTER_TYPE_DURATION_NORM: return "duration-norm";
+   case INTEL_PERF_COUNTER_TYPE_DURATION_RAW: return "duration-raw";
+   case INTEL_PERF_COUNTER_TYPE_THROUGHPUT: return "throughput";
+   case INTEL_PERF_COUNTER_TYPE_RAW: return "raw";
+   case INTEL_PERF_COUNTER_TYPE_TIMESTAMP: return "timestamp";
+   default: return "unknown";
+   }
+}
+
+const char *
+intel_perf_counter_data_type_name(enum intel_perf_counter_data_type type)
+{
+   switch (type) {
+   case INTEL_PERF_COUNTER_DATA_TYPE_BOOL32: return "bool32";
+   case INTEL_PERF_COUNTER_DATA_TYPE_UINT32: return "uint32";
+   case INTEL_PERF_COUNTER_DATA_TYPE_UINT64: return "uint64";
+   case INTEL_PERF_COUNTER_DATA_TYPE_FLOAT: return "float";
+   case INTEL_PERF_COUNTER_DATA_TYPE_DOUBLE: return "double";
+   default: return "unknown";
+   }
+}
+
+const char *
+intel_perf_counter_units_name(enum intel_perf_counter_units units)
+{
+   switch (units) {
+   case INTEL_PERF_COUNTER_UNITS_BYTES: return "bytes";
+   case INTEL_PERF_COUNTER_UNITS_GBPS: return "GB/s";
+   case INTEL_PERF_COUNTER_UNITS_HZ: return "Hz";
+   case INTEL_PERF_COUNTER_UNITS_NS: return "ns";
+   case INTEL_PERF_COUNTER_UNITS_US: return "us";
+   case INTEL_PERF_COUNTER_UNITS_PIXELS: return "pixels";
+   case INTEL_PERF_COUNTER_UNITS_TEXELS: return "texels";
+   case INTEL_PERF_COUNTER_UNITS_THREADS: return "threads";
+   case INTEL_PERF_COUNTER_UNITS_PERCENT: return "%";
+   case INTEL_PERF_COUNTER_UNITS_MESSAGES: return "messages";
+   case INTEL_PERF_COUNTER_UNITS_NUMBER: return "number";
+   case INTEL_PERF_COUNTER_UNITS_CYCLES: return "cycles";
+   case INTEL_PERF_COUNTER_UNITS_EVENTS: return "events";
+   case INTEL_PERF_COUNTER_UNITS_UTILIZATION: return "utilization";
+   case INTEL_PERF_COUNTER_UNITS_EU_SENDS_TO_L3_CACHE_LINES:
+      return "EU sends to L3 cache lines";
+   case INTEL_PERF_COUNTER_UNITS_EU_ATOMIC_REQUESTS_TO_L3_CACHE_LINES:
+      return "EU atomic requests to L3 cache lines";
+   case INTEL_PERF_COUNTER_UNITS_EU_REQUESTS_TO_L3_CACHE_LINES:
+      return "EU requests to L3 cache lines";
+   case INTEL_PERF_COUNTER_UNITS_EU_BYTES_PER_L3_CACHE_LINE:
+      return "EU bytes per L3 cache line";
+   case INTEL_PERF_COUNTER_UNITS_MAX:
+   default:
+      return "unknown";
+   }
+}
+
 static bool
 is_dir_or_link(const struct dirent *entry, const char *parent_dir)
 {

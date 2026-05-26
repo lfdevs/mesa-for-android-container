@@ -1369,9 +1369,18 @@ transition_color_buffer(struct anv_cmd_buffer *cmd_buffer,
           final_aux_usage == ISL_AUX_USAGE_NONE ||
           initial_aux_usage == final_aux_usage);
 
-   /* If initial aux usage is NONE, there is nothing to resolve */
-   if (initial_aux_usage == ISL_AUX_USAGE_NONE)
+   /* If initial aux usage is NONE, there is nothing to resolve. However, we
+    * need to ensure uncompressed cachelines don't interfere with compressed
+    * cachelines which may be generated in the final layout.
+    */
+   if (initial_aux_usage == ISL_AUX_USAGE_NONE) {
+      if (final_aux_usage != ISL_AUX_USAGE_NONE) {
+         genX(cmd_buffer_update_color_aux_op)(cmd_buffer, GFX_VER == 9 ?
+              ANV_COLOR_AUX_OP_CLASS_SW_AMBIGUATE :
+              ANV_COLOR_AUX_OP_CLASS_HW_AMBIGUATE);
+      }
       return;
+   }
 
    enum isl_aux_op resolve_op = ISL_AUX_OP_NONE;
 
@@ -4415,6 +4424,20 @@ genX(CmdExecuteCommands)(
 
       container->state.compute.trace_rays_active |=
          secondary->state.compute.trace_rays_active;
+
+      /* For each GFX instruction emitted in the secondary, mark it dirty in
+       * the container, so it's reemited. Even though Vulkan spec says that
+       * after a secondary command buffer is executed the state in the primary
+       * is undefined, our emission optimization code will avoid dirtying an
+       * instruction if the values inside an instruction haven't changed, but
+       * it doesn't see that this was potentially changed by the secondary.
+       *
+       * TODO: do an ultimate version of this by diffing secondary/container
+       *       emitted instructions
+       */
+      BITSET_OR(container->state.gfx.dyn_state.emit_dirty,
+                container->state.gfx.dyn_state.emit_dirty,
+                secondary->state.gfx.dyn_state.emitted);
    }
 
    /* The secondary isn't counted in our VF cache tracking so we need to
@@ -4446,10 +4469,6 @@ genX(CmdExecuteCommands)(
 
    memset(&container->state.gfx.urb_cfg, 0, sizeof(struct intel_urb_config));
 
-   /* Reemit all GFX instructions in container */
-   BITSET_OR(container->state.gfx.dyn_state.emit_dirty,
-             container->state.gfx.dyn_state.emit_dirty,
-             device->gfx_dirty_state);
    if (container->device->vk.enabled_extensions.KHR_fragment_shading_rate) {
       /* Also recompute the CPS_STATE offset */
       struct vk_dynamic_graphics_state *dyn =
@@ -4490,7 +4509,7 @@ genX(CmdExecuteCommands)(
       for (uint32_t i = 0; i < commandBufferCount; i++) {
          ANV_FROM_HANDLE(anv_cmd_buffer, secondary, pCmdBuffers[i]);
 
-         num_traces += secondary->trace.num_traces;
+         num_traces += u_trace_num_events(&secondary->trace);
          u_trace_clone_append(u_trace_begin_iterator(&secondary->trace),
                               u_trace_end_iterator(&secondary->trace),
                               &container->trace,
@@ -6762,6 +6781,9 @@ void genX(CmdBeginRendering)(
     */
    gfx->dirty |= ANV_CMD_DIRTY_ALL_SHADERS(cmd_buffer->device);
 
+   memset(gfx->color_output_mapping, ANV_COLOR_OUTPUT_UNKNOWN,
+          sizeof(gfx->color_output_mapping));
+
 #if GFX_VER >= 11
    if (render_target_change && cmd_buffer->device->physical->rt_change_needs_flush) {
       /* The PIPE_CONTROL command description says:
@@ -7374,7 +7396,7 @@ void genX(cmd_emit_timestamp)(struct anv_batch *batch,
 
       GENX(EXECUTE_INDIRECT_DISPATCH_pack)
       (batch, dwords, &(struct GENX(EXECUTE_INDIRECT_DISPATCH)) {
-            .MOCS = anv_mocs(device, NULL, 0),
+            .MOCSIndex = MOCS_GET_INDEX(anv_mocs(device, NULL, 0)),
             .body = {
                .PostSync = (struct GENX(POSTSYNC_DATA)) {
                   .Operation = WriteTimestamp,

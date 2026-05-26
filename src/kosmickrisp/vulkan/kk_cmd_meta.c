@@ -26,15 +26,15 @@ kk_cmd_bind_map_buffer(struct vk_command_buffer *vk_cmd,
    VK_FROM_HANDLE(kk_buffer, buffer, _buffer);
 
    assert(buffer->vk.size < UINT_MAX);
-   struct kk_bo *bo = kk_cmd_allocate_buffer(cmd, buffer->vk.size, 16u);
-   if (unlikely(bo == NULL))
+   struct kk_ptr buf = kk_pool_alloc(cmd, buffer->vk.size, 16u);
+   if (unlikely(!buf.gpu))
       return VK_ERROR_OUT_OF_POOL_MEMORY;
 
    /* Need to retain since VkBuffers release the mtl_handle too */
-   mtl_retain(bo->map);
-   buffer->mtl_handle = bo->map;
-   buffer->vk.device_address = bo->gpu;
-   *map_out = bo->cpu;
+   mtl_retain(buf.buffer);
+   buffer->mtl_handle = buf.buffer;
+   buffer->vk.device_address = buf.gpu;
+   *map_out = buf.cpu;
 
    return VK_SUCCESS;
 }

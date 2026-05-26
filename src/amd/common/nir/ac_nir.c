@@ -10,10 +10,16 @@
 #include "nir_builder.h"
 #include "nir_intrinsics.h"
 
+#if AMD_LLVM_AVAILABLE
+#include <llvm/Config/llvm-config.h>
+#endif
+
 /* Set NIR options shared by ACO, LLVM, RADV, and radeonsi. */
 void ac_nir_set_options(const struct ac_compiler_info *info, bool use_llvm,
                         nir_shader_compiler_options *options)
 {
+   memset(options, 0, sizeof(*options));
+
    /*        |---------------------------------- Performance & Availability --------------------------------|
     *        |MAD/MAC/MADAK/MADMK|MAD_LEGACY|MAC_LEGACY|    FMA     |FMAC/FMAAK/FMAMK|FMA_LEGACY|PK_FMA_F16,|Best choice
     * Arch   |    F32,F16,F64    | F32,F16  | F32,F16  |F32,F16,F64 |    F32,F16     |   F32    |PK_FMAC_F16|F16,F32,F64
@@ -34,7 +40,17 @@ void ac_nir_set_options(const struct ac_compiler_info *info, bool use_llvm,
     * gfx10 and older prefer MAD for F32 because of the legacy instruction.
     */
 
-   memset(options, 0, sizeof(*options));
+   options->float_mul_add32 = nir_float_muladd_support_has_ffma;
+   if (info->has_mad32)
+      options->float_mul_add32 |= nir_float_muladd_support_prefers_split;
+
+   if (info->gfx_level >= GFX8) {
+      options->float_mul_add16 = nir_float_muladd_support_has_ffma;
+      if (info->gfx_level == GFX8)
+         options->float_mul_add16 |= nir_float_muladd_support_prefers_split;
+   }
+
+   options->float_mul_add64 = nir_float_muladd_support_has_ffma;
    options->vertex_id_zero_based = true;
    options->lower_scmp = true;
    options->lower_flrp16 = true;
@@ -87,6 +103,7 @@ void ac_nir_set_options(const struct ac_compiler_info *info, bool use_llvm,
    options->has_pack_half_2x16_rtz = true;
    options->has_bit_test = !use_llvm;
    options->has_fmulz = true;
+   options->has_ffmaz_no_denorms = info->gfx_level >= GFX10_3;
    options->has_msad = true;
    options->has_shfr32 = true;
    options->has_mul24_relaxed = true;
@@ -131,6 +148,14 @@ void ac_nir_set_options(const struct ac_compiler_info *info, bool use_llvm,
    options->max_workgroup_count[1] = UINT16_MAX;
    options->max_workgroup_count[2] = UINT16_MAX;
    options->max_samples = 8;
+
+   /* Workaround for LLVM bug that crashes when using legacy fma on GFX12. */
+#if AMD_LLVM_AVAILABLE
+   if (info->gfx_level == GFX12 && use_llvm && LLVM_VERSION_MAJOR <= 21)
+      options->has_ffmaz_no_denorms = false;
+#else
+   assert(!use_llvm);
+#endif
 }
 
 /* Sleep for the given number of clock cycles. */
@@ -157,6 +182,8 @@ nir_def *
 ac_nir_load_arg_at_offset(nir_builder *b, const struct ac_shader_args *ac_args,
                           struct ac_arg arg, unsigned relative_index)
 {
+   assert(arg.used);
+
    unsigned arg_index = arg.arg_index + relative_index;
    unsigned num_components = ac_args->args[arg_index].size;
 

@@ -119,8 +119,8 @@ lower_pos_read(nir_builder *b, struct nir_intrinsic_instr *intr, void *_var)
                                                       "d3d12_DepthTransform",
                                                       glsl_vec_type(2),
                                                       depth_transform_var);
-   depth = nir_fmad(b, depth, nir_channel(b, depth_transform, 0),
-                              nir_channel(b, depth_transform, 1));
+   depth = nir_ffma_weak(b, depth, nir_channel(b, depth_transform, 0),
+                                   nir_channel(b, depth_transform, 1));
 
    pos = nir_vector_insert_imm(b, pos, depth, 2);
 

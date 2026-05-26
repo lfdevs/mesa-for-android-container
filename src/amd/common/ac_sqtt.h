@@ -577,4 +577,6 @@ void ac_sqtt_emit_stop(const struct radeon_info *info, struct ac_pm4_state *pm4,
 void ac_sqtt_emit_wait(const struct radeon_info *info, struct ac_pm4_state *pm4,
                        const struct ac_sqtt *sqtt, bool is_compute_queue);
 
+bool ac_sqtt_update_bo_size(struct ac_sqtt *sqtt, const char *env_var_prefix);
+
 #endif

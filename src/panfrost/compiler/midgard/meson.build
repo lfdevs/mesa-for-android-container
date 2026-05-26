@@ -43,7 +43,7 @@ libpanfrost_midgard_disasm = static_library(
   'panfrost_midgard_disasm',
   ['disassemble.c', 'midgard_ops.c', 'midgard_print_constant.c'],
   include_directories : [inc_include, inc_src],
-  c_args : [no_override_init_args],
+  c_args : [no_override_init_args, soong_compat_c_args],
   gnu_symbol_visibility : 'hidden',
   build_by_default : false,
 )
@@ -57,7 +57,7 @@ libpanfrost_midgard = static_library(
    idep_mesautil,
   ],
   link_with: [libpanfrost_midgard_disasm],
-  c_args : [no_override_init_args],
+  c_args : [no_override_init_args, soong_compat_c_args],
   gnu_symbol_visibility : 'hidden',
   build_by_default : false,
 )

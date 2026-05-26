@@ -35,7 +35,8 @@ struct kk_attribute {
    bool instanced : 1;
 };
 
-bool kk_nir_lower_vbo(nir_shader *shader, struct kk_attribute *attribs);
+bool kk_nir_lower_vbo(nir_shader *shader, struct kk_attribute *attribs,
+                      bool robustness2);
 
 bool kk_vbo_supports_format(enum pipe_format format);
 

@@ -11,7 +11,7 @@ else
     ['pan_compile.c'],
     link_with : [libpanfrost_compiler],
     include_directories : [inc_include, inc_src],
-    c_args : [c_msvc_compat_args, no_override_init_args],
+    c_args : [c_msvc_compat_args, no_override_init_args, soong_compat_c_args],
     link_args : [ld_args_build_id],
     dependencies : [idep_vtn, idep_nir, idep_mesautil, libpanfrost_dep],
     # If we can run host binaries directly, just build panfrost_compile for the host.

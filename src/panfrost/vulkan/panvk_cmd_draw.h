@@ -27,6 +27,7 @@
 #include "pan_props.h"
 
 #define MAX_VBS 16
+#define MAX_FRAMEBUFFER_LAYERS 256
 
 struct panvk_cmd_buffer;
 
@@ -243,7 +244,7 @@ struct panvk_cmd_graphics_state {
       }                                                                        \
    } while (0)
 
-#if PAN_ARCH >= 10
+#if PAN_ARCH >= 10 && PAN_ARCH < 14
 struct panvk_device_draw_context {
    struct panvk_priv_bo *fns_bo;
    uint64_t fn_set_fbds_provoking_vertex_stride;
@@ -376,8 +377,7 @@ cached_fs_required(ASSERTED const struct panvk_cmd_graphics_state *state,
          gfx_state_set_dirty(__cmdbuf, FS_PUSH_UNIFORMS);                      \
    } while (0)
 
-
-#if PAN_ARCH >= 10
+#if PAN_ARCH >= 10 && PAN_ARCH < 14
 VkResult
 panvk_per_arch(device_draw_context_init)(struct panvk_device *dev);
 

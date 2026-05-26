@@ -2140,7 +2140,7 @@ needs_ss(const struct ir3_compiler *compiler, struct ir3_instruction *producer,
 static inline bool
 supports_ss(struct ir3_instruction *instr)
 {
-   return opc_cat(instr->opc) < 5 || instr->opc == OPC_ALIAS;
+   return opc_cat(instr->opc) < 5 || opc_cat(instr->opc) == 7;
 }
 
 /* The soft delay for approximating the cost of (ss). */

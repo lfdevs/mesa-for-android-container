@@ -13,8 +13,9 @@ tiler_oom_reg_perm_cb(struct cs_builder *b, unsigned reg)
 {
    switch (reg) {
    /* The bbox is set up by the fragment subqueue, we should not modify it. */
-   case 42:
-   case 43:
+   case MALI_FRAGMENT_SR_BBOX_MIN:
+   case MALI_FRAGMENT_SR_BBOX_MAX:
+
    /* We should only load from the subqueue context. */
    case PANVK_CS_REG_SUBQUEUE_CTX_START:
    case PANVK_CS_REG_SUBQUEUE_CTX_END:
@@ -42,8 +43,14 @@ copy_fbd(struct cs_builder *b, bool has_zs_ext, uint32_t rt_count,
    cs_store(b, cs_scratch_reg_tuple(b, 0, 8), dst, BITFIELD_MASK(8),
             8 * sizeof(uint32_t));
 
+#if PAN_ARCH >= 14
+   const size_t fbd_size = ALIGN_POT(sizeof(struct panvk_fb_layer_state), 64);
+#else
+   const size_t fbd_size = sizeof(struct mali_framebuffer_packed);
+#endif
+
    if (has_zs_ext) {
-      const uint16_t dbd_offset = sizeof(struct mali_framebuffer_packed);
+      const uint16_t dbd_offset = fbd_size;
 
       /* Copy the whole DBD. */
       cs_load_to(b, cs_scratch_reg_tuple(b, 0, 8), src_other,
@@ -57,8 +64,7 @@ copy_fbd(struct cs_builder *b, bool has_zs_ext, uint32_t rt_count,
    }
 
    const uint16_t rts_offset =
-      sizeof(struct mali_framebuffer_packed) +
-      (has_zs_ext ? sizeof(struct mali_zs_crc_extension_packed) : 0);
+      fbd_size + (has_zs_ext ? sizeof(struct mali_zs_crc_extension_packed) : 0);
 
    for (uint32_t rt = 0; rt < rt_count; rt++) {
       const uint16_t rt_offset =
@@ -110,12 +116,14 @@ generate_tiler_oom_handler(struct panvk_device *dev,
       .tracebuf_addr_offset =
          offsetof(struct panvk_cs_subqueue_context, debug.tracebuf.cs),
    };
-   struct mali_framebuffer_pointer_packed fb_tag;
 
+#if PAN_ARCH < 14
+   struct mali_framebuffer_pointer_packed fb_tag;
    pan_pack(&fb_tag, FRAMEBUFFER_POINTER, cfg) {
       cfg.zs_crc_extension_present = has_zs_ext;
       cfg.render_target_count = rt_count;
    }
+#endif
 
    cs_function_def(&b, &handler, handler_ctx) {
       struct cs_index subqueue_ctx = cs_subqueue_ctx_reg(&b);
@@ -140,7 +148,7 @@ generate_tiler_oom_handler(struct panvk_device *dev,
       struct cs_index run_fragment_regs = cs_scratch_reg_tuple(&b, 0, 4);
 
       /* The tiler pointer is pre-filled. */
-      struct cs_index tiler_ptr = cs_reg64(&b, 38);
+      struct cs_index tiler_ptr = cs_reg64(&b, PANVK_CS_REG_TILER_DESC_PTR);
 
       cs_load64_to(&b, scratch_fbd_ptr_reg, subqueue_ctx,
                    TILER_OOM_CTX_FIELD_OFFSET(ir_scratch_fbd_ptr));
@@ -176,11 +184,17 @@ generate_tiler_oom_handler(struct panvk_device *dev,
          cs_wait_slot(&b, SB_ID(LS));
 
          /* Set FBD pointer to the scratch fbd */
-         cs_add64(&b, cs_sr_reg64(&b, FRAGMENT, FBD_POINTER),
-                  scratch_fbd_ptr_reg, fb_tag.opaque[0]);
-
+         struct cs_index fbd_pointer = cs_sr_reg64(&b, FRAGMENT, FBD_POINTER);
+#if PAN_ARCH >= 14
+         cs_add64(&b, fbd_pointer, scratch_fbd_ptr_reg, 0);
+         cs_emit_layer_fragment_state(&b, fbd_pointer);
+         cs_trace_run_fragment2(&b, &tracing_ctx, run_fragment_regs, false,
+                                MALI_TILE_RENDER_ORDER_Z_ORDER);
+#else
+         cs_add64(&b, fbd_pointer, scratch_fbd_ptr_reg, fb_tag.opaque[0]);
          cs_trace_run_fragment(&b, &tracing_ctx, run_fragment_regs, false,
                                MALI_TILE_RENDER_ORDER_Z_ORDER);
+#endif
 
          /* Serialize run fragments since we reuse FBD for the runs */
          cs_wait_slots(&b, dev->csf.sb.all_iters_mask);

@@ -94,7 +94,7 @@ is_expression(const brw_shader *v, const brw_inst *const inst)
    case FS_OPCODE_INTERPOLATE_AT_PER_SLOT_OFFSET:
       return true;
    case SHADER_OPCODE_MEMORY_LOAD_LOGICAL:
-      return inst->as_mem()->mode == MEMORY_MODE_CONSTANT;
+      return inst->as_mem()->flags & MEMORY_FLAG_CAN_REORDER;
    case SHADER_OPCODE_LOAD_PAYLOAD:
       return !is_coalescing_payload(*v, inst);
    case SHADER_OPCODE_SEND:

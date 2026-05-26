@@ -41,6 +41,10 @@ nir_fuse_io_16(nir_shader *shader)
             if (intr->def.bit_size != 32)
                continue;
 
+            /* Do not change interpolation precision in highp */
+            if (!nir_intrinsic_io_semantics(intr).medium_precision)
+               continue;
+
             /* We swizzle at a 32-bit level so need a multiple of 2. We could
              * do a bit better and handle even components though */
             if (nir_intrinsic_component(intr))

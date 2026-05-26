@@ -95,6 +95,7 @@ vn_deps = [
 
 vn_c_args = [
   no_override_init_args,
+  soong_compat_c_args,
 ] + cc.get_supported_arguments([
   '-Werror=switch',
 ])

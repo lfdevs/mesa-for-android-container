@@ -18,12 +18,14 @@
         - src/panfrost/ci/$GPU_VERSION-gles2-extensions.txt
         - src/panfrost/ci/$DRIVER_NAME-skips.txt
         - src/panfrost/ci/$PIGLIT_TRACES_FILE
+        - src/panfrost/clc/*
+        - src/panfrost/compiler/*
         - src/panfrost/genxml/*
-        - src/panfrost/include/*
         - src/panfrost/lib/*
         - src/panfrost/lib/kmod/*
+        - src/panfrost/libpan/*
+        - src/panfrost/model/*
         - src/panfrost/shared/*
-        - src/panfrost/util/*
       when: on_success
     - changes:
         - src/panfrost/compiler/midgard/**/*
@@ -233,17 +235,17 @@
     KERNEL_IMAGE_TYPE: ""
     RUNNER_TAG: mesa-ci-x86-64-lava-rk3288-veyron-jaq
 
-# Status: https://lava.collabora.dev/scheduler/device_type/rk3399-gru-kevin
-.lava-rk3399-gru-kevin:arm64:
+# Status: https://lava.collabora.dev/scheduler/device_type/rk3399-rock-pi-4b
+.lava-rk3399-rock-pi-4b:arm64:
   variables:
-    DEVICE_TYPE: rk3399-gru-kevin
+    DEVICE_TYPE: rk3399-rock-pi-4b
     DTB: $DEVICE_TYPE
     FARM: collabora
     GPU_VERSION: panfrost-t860
 #   FDO_CI_CONCURRENT: ?
-    BOOT_METHOD: depthcharge
-    KERNEL_IMAGE_TYPE: ""
-    RUNNER_TAG: mesa-ci-x86-64-lava-rk3399-gru-kevin
+    BOOT_METHOD: u-boot
+    KERNEL_IMAGE_TYPE: "image"
+    RUNNER_TAG: mesa-ci-x86-64-lava-rk3399-rock-pi-4b
 
 # Status: https://lava.collabora.dev/scheduler/device_type/rk3588-rock-5b
 .lava-rk3588-rock-5b:arm64:

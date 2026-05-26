@@ -905,7 +905,8 @@ namespace {
 
       /* Stall on any source dependencies. */
       for (unsigned i = 0; i < inst->sources; i++) {
-         for (unsigned j = 0; j < regs_read(devinfo, inst, i); j++)
+         const unsigned read = regs_read(devinfo, inst, i);
+         for (unsigned j = 0; j < read; j++)
             stall_on_dependency(
                st, reg_dependency_id(devinfo, inst->src[i], j));
       }
@@ -927,7 +928,8 @@ namespace {
 
       /* Stall on any write dependencies. */
       if (inst->dst.file != BAD_FILE && !inst->dst.is_null()) {
-         for (unsigned j = 0; j < regs_written(inst); j++)
+         const unsigned written = regs_written(inst);
+         for (unsigned j = 0; j < written; j++)
             stall_on_dependency(
                st, reg_dependency_id(devinfo, inst->dst, j));
       }
@@ -960,7 +962,8 @@ namespace {
       if (inst->is_send()) {
          for (unsigned i = 0; i < inst->sources; i++) {
             if (inst->is_payload(i)) {
-               for (unsigned j = 0; j < regs_read(devinfo, inst, i); j++)
+               const unsigned read = regs_read(devinfo, inst, i);
+               for (unsigned j = 0; j < read; j++)
                   mark_read_dependency(
                      st, perf, reg_dependency_id(devinfo, inst->src[i], j));
             }
@@ -969,7 +972,8 @@ namespace {
 
       /* Mark any destination dependencies. */
       if (inst->dst.file != BAD_FILE && !inst->dst.is_null()) {
-         for (unsigned j = 0; j < regs_written(inst); j++) {
+         const unsigned written = regs_written(inst);
+         for (unsigned j = 0; j < written; j++) {
             mark_write_dependency(st, perf,
                                   reg_dependency_id(devinfo, inst->dst, j));
          }

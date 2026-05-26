@@ -1120,8 +1120,16 @@ radv_CmdCopyAccelerationStructureKHR(VkCommandBuffer commandBuffer, const VkCopy
    cmd_buffer->state.flush_bits |= radv_dst_access_flush(cmd_buffer, VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT,
                                                          VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT, 0, NULL, NULL);
 
-   radv_CmdDispatchIndirect(commandBuffer, vk_buffer_to_handle(src->buffer),
-                            src->offset + offsetof(struct radv_accel_struct_header, copy_dispatch_size));
+   const uint64_t offset = offsetof(struct radv_accel_struct_header, copy_dispatch_size);
+
+   const VkDispatchIndirect2InfoKHR info = {
+      .sType = VK_STRUCTURE_TYPE_DISPATCH_INDIRECT_2_INFO_KHR,
+      .addressRange.address = vk_acceleration_structure_get_va(src) + offset,
+      .addressRange.size = 12,
+      .addressFlags = src->buffer ? src->buffer->address_flags : 0,
+   };
+
+   radv_CmdDispatchIndirect2KHR(commandBuffer, &info);
 
    radv_meta_end(cmd_buffer);
 }
@@ -1202,8 +1210,16 @@ radv_CmdCopyAccelerationStructureToMemoryKHR(VkCommandBuffer commandBuffer,
    cmd_buffer->state.flush_bits |= radv_dst_access_flush(cmd_buffer, VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT,
                                                          VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT, 0, NULL, NULL);
 
-   radv_CmdDispatchIndirect(commandBuffer, vk_buffer_to_handle(src->buffer),
-                            src->offset + offsetof(struct radv_accel_struct_header, copy_dispatch_size));
+   const uint64_t offset = offsetof(struct radv_accel_struct_header, copy_dispatch_size);
+
+   const VkDispatchIndirect2InfoKHR info = {
+      .sType = VK_STRUCTURE_TYPE_DISPATCH_INDIRECT_2_INFO_KHR,
+      .addressRange.address = vk_acceleration_structure_get_va(src) + offset,
+      .addressRange.size = 12,
+      .addressFlags = src->buffer ? src->buffer->address_flags : 0,
+   };
+
+   radv_CmdDispatchIndirect2KHR(commandBuffer, &info);
 
    if (radv_use_bvh8(pdev)) {
       /* Wait for the main copy dispatch to finish. */

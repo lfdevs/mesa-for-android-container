@@ -579,48 +579,55 @@ lower_compute_system_value_instr(nir_builder *b,
           * That's the layout required by AMD hardware for derivatives to
           * work. Other hardware may work differently.
           *
-          * It's a classic tiling pattern that can be implemented by inserting
-          * bit y[0] between bits x[0] and x[1] like this:
+          * Map each thread to a 2x2 block by decomposing the linear index
+          * i = y * W + x into a block index and a within-block position:
           *
-          *    x[0],y[0],x[1],...x[last],y[1],...,y[last]
+          *    block     = i / 4
+          *    block_pos = i % 4     (0=(0,0) 1=(1,0) 2=(0,1) 3=(1,1))
           *
           * If the width is a power of two, use:
-          *    i = ((x & 1) | ((y & 1) << 1) | ((x & ~1) << 1)) | ((y & ~1) << logbase2(size_x))
+          *    block_x = block & ((W/2) - 1)
+          *    block_y = block >> (log2(W) - 1)
           *
           * If the width is not a power of two or the local size is variable, use:
-          *    i = ((x & 1) | ((y & 1) << 1) | ((x & ~1) << 1)) + ((y & ~1) * size_x)
+          *    block_x = block % (W/2)
+          *    block_y = block / (W/2)
+          *
+          * In both cases:
+          *    x' = block_x * 2 + (block_pos & 1)
+          *    y' = block_y * 2 + (block_pos >> 1)
           *
           * GL_NV_compute_shader_derivatives requires that the width and height
           * are a multiple of two, which is also a requirement for the second
           * expression to work.
-          *
-          * The 2D result is: (x,y) = (i % w, i / w)
           */
 
-         nir_def *one = nir_imm_int(b, 1);
-         nir_def *inv_one = nir_imm_int(b, ~1);
-         nir_def *x_bit0 = nir_iand(b, x, one);
-         nir_def *y_bit0 = nir_iand(b, y, one);
-         nir_def *x_bits_1n = nir_iand(b, x, inv_one);
-         nir_def *y_bits_1n = nir_iand(b, y, inv_one);
-         nir_def *bits_01 = nir_ior(b, x_bit0, nir_ishl(b, y_bit0, one));
-         nir_def *bits_01x = nir_ior(b, bits_01,
-                                     nir_ishl(b, x_bits_1n, one));
          nir_def *i;
 
          if (!b->shader->info.workgroup_size_variable &&
              util_is_power_of_two_nonzero(size_x)) {
-            nir_def *log2_size_x = nir_imm_int(b, util_logbase2(size_x));
-            i = nir_ior(b, bits_01x, nir_ishl(b, y_bits_1n, log2_size_x));
+            i = nir_ior(b, x, nir_ishl_imm(b, y, util_logbase2(size_x)));
          } else {
-            i = nir_iadd(b, bits_01x, nir_imul(b, y_bits_1n, size_x_imm));
+            i = nir_iadd(b, x, nir_imul(b, y, size_x_imm));
          }
 
-         /* This should be fast if size_x is an immediate or even a power
-          * of two.
-          */
-         x = nir_umod(b, i, size_x_imm);
-         y = nir_udiv(b, i, size_x_imm);
+         nir_def *block     = nir_ushr_imm(b, i, 2);
+         nir_def *block_pos = nir_iand_imm(b, i, 3);
+
+         nir_def *block_x, *block_y;
+         if (!b->shader->info.workgroup_size_variable &&
+             util_is_power_of_two_nonzero(size_x)) {
+            unsigned log2_half_size_x = util_logbase2(size_x) - 1;
+            block_x = nir_iand_imm(b, block, (size_x >> 1) - 1);
+            block_y = nir_ushr_imm(b, block, log2_half_size_x);
+         } else {
+            nir_def *half_size_x = nir_ushr_imm(b, size_x_imm, 1);
+            block_x = nir_umod(b, block, half_size_x);
+            block_y = nir_udiv(b, block, half_size_x);
+         }
+
+         x = nir_ior(b, nir_ishl_imm(b, block_x, 1), nir_iand_imm(b, block_pos, 1));
+         y = nir_ior(b, nir_ishl_imm(b, block_y, 1), nir_ushr_imm(b, block_pos, 1));
 
          return nir_vec3(b, x, y, z);
       }

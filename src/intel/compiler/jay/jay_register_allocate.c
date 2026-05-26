@@ -115,6 +115,10 @@ jay_dst_stride_minmax(jay_inst *I, bool do_max)
       min = MAX2(min, jay_min_stride_for_type(jay_src_type(I, 0)));
    }
 
+   if (I->op == JAY_OPCODE_EXPAND_QUAD) {
+      return JAY_STRIDE_4;
+   }
+
    /* V/UV types are restricted */
    if (I->op == JAY_OPCODE_SHR_ODD_SUBSPANS_BY_4) {
       return JAY_STRIDE_2;
@@ -191,7 +195,8 @@ struct affinity {
    /** If true, this UGPR needs full GRF alignment */
    unsigned align     :5;
    unsigned align_offs:4;
-   unsigned padding   :18;
+   unsigned nr        :4;
+   unsigned padding   :14;
 };
 static_assert(sizeof(struct affinity) == 8, "packed");
 
@@ -762,6 +767,8 @@ pick_regs(jay_ra_state *ra,
    if (file == UGPR && size > 16) {
       first = partition->large_ugpr_block.start;
       end = partition->large_ugpr_block.start + partition->large_ugpr_block.len;
+   } else if (file == GPR && size > 1 && ra->b.shader->payload_gprs < 8) {
+      first = align(ra->b.shader->payload_gprs, MAX2(size, alignment));
    }
 
    /* Sources used by end-of-thread sends must be at the end of the file */
@@ -792,7 +799,12 @@ pick_regs(jay_ra_state *ra,
    unsigned nr = DIV_ROUND_UP((end + 1 - size - first), alignment);
    unsigned roundrobin = (ra->roundrobin[file]) % nr;
    unsigned rr_al = roundrobin * alignment, nr_al = nr * alignment;
-   ra->roundrobin[file] += size;
+
+   /* Heuristic: Advance the roundrobin by a whole vector if we are the
+    * representative. This leaves us registers for the rest of the vector.
+    */
+   ra->roundrobin[file] +=
+      affinity.repr == jay_channel(var, 0) ? MAX2(size, affinity.nr) : size;
 
    for (unsigned i = rr_al; i < rr_al + nr_al; i += alignment) {
       /* We select registers roundrobin. This has several benefits:
@@ -1415,13 +1427,17 @@ build_partition(jay_shader *shader, unsigned *blocks, unsigned n)
       if (file == UGPR) {
          ugpr_base += blocks[i];
       }
-
-      /* GPR partition blocks must be vector size aligned to avoid crossing */
-      if (file == GPR && i != (n - 1)) {
-         unsigned max_vec = 8;
-         assert(util_is_aligned(blocks[i], max_vec * jay_grf_per_gpr(shader)));
-      }
    }
+}
+
+static unsigned
+gpr_limit(jay_shader *shader)
+{
+   /* If testing spilling, set limit tightly. */
+   bool test = (jay_debug & JAY_DBG_SPILL);
+   test &= shader->stage != MESA_SHADER_VERTEX;
+
+   return test ? 13 : shader->num_regs[GPR];
 }
 
 /*
@@ -1481,7 +1497,6 @@ jay_partition_grf(jay_shader *shader)
    assert((uniform_grfs + nonuniform_grfs) == JAY_NUM_PHYS_GRF);
 
    /* Partition GRFs between GPR & UGPR */
-   unsigned dispatch_grf = 0;
    unsigned stride4_header_size = 0;
 
    if (shader->stage == MESA_SHADER_VERTEX) {
@@ -1496,18 +1511,18 @@ jay_partition_grf(jay_shader *shader)
       };
 
       build_partition(shader, blocks, ARRAY_SIZE(blocks));
-      dispatch_grf = blocks[0] + blocks[1];
       stride4_header_size = blocks[1] + blocks[3];
    } else if (shader->stage == MESA_SHADER_FRAGMENT) {
       unsigned len0 = jay_grf_per_gpr(shader);
+      unsigned payload_grfs = shader->payload_gprs * len0;
+
       unsigned blocks[] = {
          len0,                /* UGPR: g0 (and maybe g1) */
-         len0 * 8,            /* GPR: Barycentrics */
+         payload_grfs,        /* GPR: Barycentrics */
          uniform_grfs - len0, /* UGPR: Dispatch (eg push constants) & general */
-         nonuniform_grfs - (len0 * 8), /* GPR: General & end-of-thread */
+         nonuniform_grfs - payload_grfs, /* GPR: General & EOT */
       };
       build_partition(shader, blocks, ARRAY_SIZE(blocks));
-      dispatch_grf = blocks[0] + blocks[1];
       stride4_header_size = blocks[1];
    } else {
       unsigned blocks[] = { uniform_grfs - 4, nonuniform_grfs, 4 };
@@ -1524,15 +1539,6 @@ jay_partition_grf(jay_shader *shader)
    // print_partition(p);
    validate_partition(p, stride4_header_size, nonuniform_gprs);
 
-   if (shader->stage == MESA_SHADER_FRAGMENT && shader->dispatch_width == 32) {
-      shader->prog_data->fs.dispatch_grf_start_reg_32 = dispatch_grf;
-   } else if (shader->stage == MESA_SHADER_FRAGMENT &&
-              shader->dispatch_width == 16) {
-      shader->prog_data->fs.dispatch_grf_start_reg_16 = dispatch_grf;
-   } else {
-      shader->prog_data->base.dispatch_grf_start_reg = dispatch_grf;
-   }
-
    /* By construction of our partition, the entire GRF is used. */
    shader->prog_data->base.grf_used = JAY_NUM_PHYS_GRF;
 
@@ -1543,42 +1549,12 @@ jay_partition_grf(jay_shader *shader)
       }
    }
 
-   /* TODO: Arbitrary. Need to rework somehow, we have options. */
-   shader->num_regs[MEM] = 512;
-}
-
-static bool
-spill_gpr(jay_function *f)
-{
-   unsigned limit = f->shader->num_regs[GPR];
-
-   /* If testing spilling, set limit tightly. */
-   if ((jay_debug & JAY_DBG_SPILL) &&
-       f->shader->stage != MESA_SHADER_VERTEX) {
-      limit = 13;
+   /* This should be an acceptable upper limit since we assign memory tightly
+    * thanks to the usual SSA allocator guarantees.
+    */
+   if (demand[GPR] > gpr_limit(shader)) {
+      shader->num_regs[MEM] = demand[GPR];
    }
-
-   if (f->demand[GPR] <= limit) {
-      return false;
-   }
-
-   /* Spilling requires reserving UGPRs for spilling */
-   unsigned reservation = f->shader->dispatch_width + 1;
-   f->shader->num_regs[UGPR] -= reservation;
-   f->shader->partition.large_ugpr_block.len -= reservation;
-
-   jay_spill(f, limit);
-   jay_validate(f->shader, "spilling");
-   jay_compute_liveness(f);
-   jay_calculate_register_demands(f);
-
-   if (f->demand[GPR] > limit) {
-      fprintf(stderr, "limit %u but demand %u\n", limit, f->demand[GPR]);
-      fflush(stdout);
-      UNREACHABLE("spiller bug");
-   }
-
-   return true;
 }
 
 static void
@@ -1588,7 +1564,26 @@ jay_register_allocate_function(jay_function *f)
    jay_ra_state ra = { .b.shader = shader, .b.func = f };
 
    /* Spill as needed to fit within the limits. */
-   bool spilled = spill_gpr(f);
+   unsigned limit = gpr_limit(f->shader);
+   bool spilled = f->demand[GPR] > limit;
+
+   if (spilled) {
+      /* Spilling requires reserving UGPRs for spilling */
+      unsigned reservation = f->shader->dispatch_width + 1;
+      f->shader->num_regs[UGPR] -= reservation;
+      f->shader->partition.large_ugpr_block.len -= reservation;
+
+      jay_spill(f, limit);
+      jay_validate(f->shader, "spilling");
+      jay_compute_liveness(f);
+      jay_calculate_register_demands(f);
+   }
+
+   if (f->demand[GPR] > limit) {
+      fprintf(stderr, "limit %u but demand %u\n", limit, f->demand[GPR]);
+      fflush(stdout);
+      UNREACHABLE("spiller bug");
+   }
 
    /* The spiller/SSA repair does not work on UGPRs because it cannot tolerate
     * the critical edges on the physical CFG. Fortunately, dynamic GPR/UGPR
@@ -1665,6 +1660,7 @@ jay_register_allocate_function(jay_function *f)
 
             ra.affinities[index].repr = repr;
             ra.affinities[index].offset = repr == index ? c : c - repr_c;
+            ra.affinities[index].nr = MIN2(jay_num_values(I->src[s]), 15);
          }
 
          if (I->op == JAY_OPCODE_SEND && jay_send_eot(I)) {

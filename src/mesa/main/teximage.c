@@ -3118,25 +3118,6 @@ teximage(struct gl_context *ctx, GLboolean compressed, GLuint dims,
 
    FLUSH_VERTICES(ctx, 0, 0);
 
-   if (MESA_VERBOSE & (VERBOSE_API|VERBOSE_TEXTURE)) {
-      if (compressed)
-         _mesa_debug(ctx,
-                     "glCompressedTexImage%uD %s %d %s %d %d %d %d %p\n",
-                     dims,
-                     _mesa_enum_to_string(target), level,
-                     _mesa_enum_to_string(internalFormat),
-                     width, height, depth, border, pixels);
-      else
-         _mesa_debug(ctx,
-                     "glTexImage%uD %s %d %s %d %d %d %d %s %s %p\n",
-                     dims,
-                     _mesa_enum_to_string(target), level,
-                     _mesa_enum_to_string(internalFormat),
-                     width, height, depth, border,
-                     _mesa_enum_to_string(format),
-                     _mesa_enum_to_string(type), pixels);
-   }
-
    internalFormat = override_internal_format(internalFormat, width, height);
 
    if (!no_error &&
@@ -3853,14 +3834,6 @@ texsubimage_err(struct gl_context *ctx, GLuint dims, GLenum target, GLint level,
    texImage = _mesa_select_tex_image(texObj, target, level);
    /* texsubimage_error_check ensures that texImage is not NULL */
 
-   if (MESA_VERBOSE & (VERBOSE_API|VERBOSE_TEXTURE))
-      _mesa_debug(ctx, "glTexSubImage%uD %s %d %d %d %d %d %d %d %s %s %p\n",
-                  dims,
-                  _mesa_enum_to_string(target), level,
-                  xoffset, yoffset, zoffset, width, height, depth,
-                  _mesa_enum_to_string(format),
-                  _mesa_enum_to_string(type), pixels);
-
    texture_sub_image(ctx, dims, texObj, texImage, target, level,
                      xoffset, yoffset, zoffset, width, height, depth,
                      format, type, pixels);
@@ -3900,14 +3873,6 @@ texturesubimage(struct gl_context *ctx, GLuint dims,
    struct gl_texture_object *texObj;
    struct gl_texture_image *texImage;
    int i;
-
-   if (MESA_VERBOSE & (VERBOSE_API|VERBOSE_TEXTURE))
-      _mesa_debug(ctx,
-                  "glTextureSubImage%uD %d %d %d %d %d %d %d %d %s %s %p\n",
-                  dims, texture, level,
-                  xoffset, yoffset, zoffset, width, height, depth,
-                  _mesa_enum_to_string(format),
-                  _mesa_enum_to_string(type), pixels);
 
    /* Get the texture object by Name. */
    if (!no_error) {
@@ -4464,11 +4429,6 @@ copy_texture_sub_image_err(struct gl_context *ctx, GLuint dims,
 {
    FLUSH_VERTICES(ctx, 0, 0);
 
-   if (MESA_VERBOSE & (VERBOSE_API|VERBOSE_TEXTURE))
-      _mesa_debug(ctx, "%s %s %d %d %d %d %d %d %d %d\n", caller,
-                  _mesa_enum_to_string(target),
-                  level, xoffset, yoffset, zoffset, x, y, width, height);
-
    _mesa_update_pixel(ctx);
 
    if (ctx->NewState & _NEW_BUFFERS)
@@ -4519,13 +4479,6 @@ copyteximage(struct gl_context *ctx, GLuint dims, struct gl_texture_object *texO
    MESA_TRACE_FUNC();
 
    FLUSH_VERTICES(ctx, 0, 0);
-
-   if (MESA_VERBOSE & (VERBOSE_API|VERBOSE_TEXTURE))
-      _mesa_debug(ctx, "glCopyTexImage%uD %s %d %s %d %d %d %d %d\n",
-                  dims,
-                  _mesa_enum_to_string(target), level,
-                  _mesa_enum_to_string(internalFormat),
-                  x, y, width, height, border);
 
    _mesa_update_pixel(ctx);
 
@@ -7024,11 +6977,6 @@ texture_image_multisample(struct gl_context *ctx, GLuint dims,
    mesa_format texFormat;
    GLenum sample_count_error;
    bool dsa = strstr(func, "ture") ? true : false;
-
-   if (MESA_VERBOSE & (VERBOSE_API|VERBOSE_TEXTURE)) {
-      _mesa_debug(ctx, "%s(target=%s, samples=%d, internalformat=%s)\n", func,
-                  _mesa_enum_to_string(target), samples, _mesa_enum_to_string(internalformat));
-   }
 
    if (!((ctx->Extensions.ARB_texture_multisample
          && _mesa_is_desktop_gl(ctx))) && !_mesa_is_gles31(ctx)) {

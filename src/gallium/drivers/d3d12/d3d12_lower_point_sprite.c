@@ -180,14 +180,14 @@ lower_emit_vertex(nir_intrinsic_instr *instr, nir_builder *b, struct lower_state
          /* pos = scaled_point_size * point_dir + point_pos */
          nir_def *point_dir = get_point_dir(b, state, i);
          nir_def *pos = nir_vec4(b,
-                                     nir_ffma(b,
-                                              point_width,
-                                              nir_channel(b, point_dir, 0),
-                                              nir_channel(b, state->point_pos, 0)),
-                                     nir_ffma(b,
-                                              point_height,
-                                              nir_channel(b, point_dir, 1),
-                                              nir_channel(b, state->point_pos, 1)),
+                                     nir_ffma_weak(b,
+                                                   point_width,
+                                                   nir_channel(b, point_dir, 0),
+                                                   nir_channel(b, state->point_pos, 0)),
+                                     nir_ffma_weak(b,
+                                                   point_height,
+                                                   nir_channel(b, point_dir, 1),
+                                                   nir_channel(b, state->point_pos, 1)),
                                      nir_channel(b, state->point_pos, 2),
                                      nir_channel(b, state->point_pos, 3));
          nir_store_var(b, state->pos_out, pos, 0xf);

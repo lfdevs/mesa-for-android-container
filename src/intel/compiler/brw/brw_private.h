@@ -19,6 +19,25 @@ void brw_alloc_reg_sets(struct brw_compiler *compiler);
 extern const char *const conditional_modifier[16];
 extern const char *const pred_ctrl_align16[16];
 
+const unsigned *brw_compile_vs(const struct brw_compiler *compiler,
+                               struct brw_compile_vs_params *params);
+const unsigned *brw_compile_tcs(const struct brw_compiler *compiler,
+                                struct brw_compile_tcs_params *params);
+const unsigned *brw_compile_tes(const struct brw_compiler *compiler,
+                                struct brw_compile_tes_params *params);
+const unsigned *brw_compile_gs(const struct brw_compiler *compiler,
+                               struct brw_compile_gs_params *params);
+const unsigned *brw_compile_task(const struct brw_compiler *compiler,
+                                 struct brw_compile_task_params *params);
+const unsigned *brw_compile_mesh(const struct brw_compiler *compiler,
+                                 struct brw_compile_mesh_params *params);
+const unsigned *brw_compile_fs(const struct brw_compiler *compiler,
+                               struct brw_compile_fs_params *params);
+const unsigned *brw_compile_cs(const struct brw_compiler *compiler,
+                               struct brw_compile_cs_params *params);
+const unsigned *brw_compile_bs(const struct brw_compiler *compiler,
+                               struct brw_compile_bs_params *params);
+
 typedef struct brw_pass_tracker {
    nir_shader *nir;
    unsigned dispatch_width;

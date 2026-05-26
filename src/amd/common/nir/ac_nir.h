@@ -308,7 +308,6 @@ typedef struct {
    bool load_sample_positions_always_loads_current_ones;
    bool dynamic_rasterization_samples;
    int force_front_face; /* 0 -> keep, 1 -> set to true, -1 -> set to false */
-   bool optimize_frag_coord; /* TODO: remove this after RADV can handle it */
    bool frag_coord_is_center; /* GL requirement for sample shading */
 
    /* frag_coord/pixel_coord:

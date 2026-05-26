@@ -990,8 +990,8 @@ virgl_create_screen(struct virgl_winsys *vws, const struct pipe_screen_config *c
    virgl_debug = debug_get_option_virgl_debug();
 
    if (config && config->options) {
-      driParseConfigFiles(config->options, config->options_info, 0, "virtio_gpu",
-                          NULL, NULL, NULL, 0, NULL, 0);
+      driParseConfigFiles(config->options, config->options_info,
+                          &(driConfigFileParseParams) { .driverName = "virtio_gpu" });
 
       screen->tweak_gles_emulate_bgra =
             driQueryOptionb(config->options, VIRGL_GLES_EMULATE_BGRA);
@@ -1056,10 +1056,11 @@ virgl_create_screen(struct virgl_winsys *vws, const struct pipe_screen_config *c
        */
       screen->compiler_options.lower_ffloor = true;
       screen->compiler_options.lower_fneg = true;
+      /* We implement TGSI's MAD as fmul + fadd in virglrenderer */
+      screen->compiler_options.float_mul_add64 = nir_float_muladd_support_has_fmad |
+         nir_float_muladd_support_fuse;
    }
    screen->compiler_options.no_integers = screen->caps.caps.v1.glsl_level < 130;
-   screen->compiler_options.lower_ffma32 = true;
-   screen->compiler_options.fuse_ffma32 = false;
    screen->compiler_options.lower_image_offset_to_range_base = true;
    screen->compiler_options.lower_atomic_offset_to_range_base = true;
    screen->compiler_options.support_indirect_outputs = BITFIELD_BIT(MESA_SHADER_TESS_CTRL);

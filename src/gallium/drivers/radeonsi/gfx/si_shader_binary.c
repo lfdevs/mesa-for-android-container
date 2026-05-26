@@ -491,9 +491,15 @@ static void si_shader_dump_stats(struct si_screen *sscreen, struct si_shader *sh
    if (shader->selector->stage == MESA_SHADER_FRAGMENT) {
       fprintf(file,
               "*** SHADER CONFIG ***\n"
-              "SPI_PS_INPUT_ADDR = 0x%04x\n"
-              "SPI_PS_INPUT_ENA  = 0x%04x\n",
+              "SPI_PS_INPUT_ADDR     = 0x%04x\n"
+              "SPI_PS_INPUT_ENA      = 0x%04x\n",
               conf->spi_ps_input_addr, conf->spi_ps_input_ena);
+      ac_print_spi_ps_input_vgpr_list(conf->spi_ps_input_ena, conf->spi_ps_input_addr, file);
+
+      fprintf(file, "SPI_SHADER_Z_FORMAT   = 0x%x\n", shader->info.spi_shader_z_format);
+      ac_print_spi_ps_shader_z_format(shader->info.spi_shader_z_format, file);
+      fprintf(file, "SPI_SHADER_COL_FORMAT = 0x%x\n", shader->info.spi_shader_col_format);
+      ac_print_spi_ps_shader_col_format(shader->info.spi_shader_col_format, file);
    }
 
    fprintf(file,
@@ -601,8 +607,6 @@ static void si_dump_shader_key(const struct si_shader *shader, FILE *f)
               key->ps.part.prolog.bc_optimize_for_linear);
       fprintf(f, "  prolog.samplemask_log_ps_iter = %u\n",
               key->ps.part.prolog.samplemask_log_ps_iter);
-      fprintf(f, "  prolog.get_frag_coord_from_pixel_coord = %u\n",
-              key->ps.part.prolog.get_frag_coord_from_pixel_coord);
       fprintf(f, "  prolog.force_samplemask_to_helper_invocation = %u\n",
               key->ps.part.prolog.force_samplemask_to_helper_invocation);
       fprintf(f, "  epilog.spi_shader_col_format = 0x%x\n",

@@ -119,8 +119,11 @@ driCreateNewScreen3(int scrn, int fd,
     /* Option parsing before ->InitScreen(), as some options apply there. */
     driParseOptionInfo(&screen->optionInfo,
                        __dri2ConfigOptions, ARRAY_SIZE(__dri2ConfigOptions));
-    driParseConfigFiles(&screen->optionCache, &screen->optionInfo, screen->myNum,
-                        "dri2", NULL, NULL, NULL, 0, NULL, 0);
+    driParseConfigFiles(&screen->optionCache, &screen->optionInfo,
+                        &(driConfigFileParseParams) {
+                           .screenNum = screen->myNum,
+                           .driverName = "dri2",
+                        });
 
    (void) mtx_init(&screen->opencl_func_mutex, mtx_plain);
 

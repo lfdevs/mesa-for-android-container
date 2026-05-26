@@ -68,6 +68,14 @@ static const struct {
    [VARYING_SLOT_VIEWPORT] = {"viewport_array_index"},
    [VARYING_SLOT_CLIP_DIST0] = {"clip_0", .user = true, .scalarized = true},
    [VARYING_SLOT_CLIP_DIST1] = {"clip_1", .user = true, .scalarized = true},
+   [VARYING_SLOT_CULL_DIST0] = {"cull_0", .user = true, .scalarized = true},
+   [VARYING_SLOT_CULL_DIST1] = {"cull_1", .user = true, .scalarized = true},
+   [VARYING_SLOT_CULL_PRIMITIVE] = {"cull_primitive_0", .user = true,
+                                    .scalarized = true},
+   /* Using cull primitive slots to emulate cull distances in fragment shader,
+    * which may extend to one varying extra (which is otherwise unused) */
+   [VARYING_SLOT_CULL_PRIMITIVE + 1] = {"cull_primitive_1", .user = true,
+                                        .scalarized = true},
    [VARYING_SLOT_VAR0] = {"vary_00", .user = true},
    [VARYING_SLOT_VAR1] = {"vary_01", .user = true},
    [VARYING_SLOT_VAR2] = {"vary_02", .user = true},
@@ -183,7 +191,7 @@ vs_output_block(nir_shader *shader, struct nir_to_msl_ctx *ctx)
    }
 
    if (shader->info.clip_distance_array_size)
-      P_IND(ctx, "float gl_ClipDistance [[clip_distance]] [%d];",
+      P_IND(ctx, "float gl_ClipDistance [[clip_distance]] [%d];\n",
             shader->info.clip_distance_array_size);
    ctx->indentlevel--;
    P(ctx, "};\n");

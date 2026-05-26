@@ -214,13 +214,13 @@ panfrost_dev_query_props(struct panfrost_kmod_dev *panfrost_dev)
 }
 
 static struct pan_kmod_dev *
-panfrost_kmod_dev_create(int fd, uint32_t flags, drmVersionPtr version,
+panfrost_kmod_dev_create(int fd, uint32_t flags,
+                         const struct pan_kmod_driver *drv_info,
                          const struct pan_kmod_allocator *allocator)
 {
-   if (version->version_major < 1 ||
-       (version->version_major == 1 && version->version_minor < 1)) {
+   if (!pan_kmod_driver_version_at_least(drv_info, 1, 1)) {
       mesa_loge("kernel driver is too old (requires at least 1.1, found %d.%d)",
-                version->version_major, version->version_minor);
+                drv_info->version.major, drv_info->version.minor);
       return NULL;
    }
 
@@ -231,7 +231,7 @@ panfrost_kmod_dev_create(int fd, uint32_t flags, drmVersionPtr version,
       return NULL;
    }
 
-   pan_kmod_dev_init(&panfrost_dev->base, fd, flags, version,
+   pan_kmod_dev_init(&panfrost_dev->base, fd, flags, drv_info,
                      &panfrost_kmod_ops, allocator);
    panfrost_dev_query_props(panfrost_dev);
 

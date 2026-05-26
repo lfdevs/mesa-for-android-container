@@ -206,8 +206,10 @@ void st_init_limits(struct pipe_screen *screen,
    for (sh = 0; sh < MESA_SHADER_MESH_STAGES; ++sh) {
       struct gl_program_constants *pc = &c->Program[sh];
 
-      if (!screen->shader_caps[sh].max_instructions)
+      if (!screen->shader_caps[sh].max_instructions) {
+         pc->MaxTextureImageUnits = 0;
          continue;
+      }
 
       pc->MaxTextureImageUnits =
          _min(screen->shader_caps[sh].max_texture_samplers,

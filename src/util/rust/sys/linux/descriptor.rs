@@ -47,6 +47,14 @@ impl OwnedDescriptor {
     }
 
     pub fn determine_type(&self) -> Result<DescriptorType> {
+        // Check for eventfd first (not seekable, special symlink)
+        if let Ok(fd_path) = read_link(format!("/proc/self/fd/{}", self.as_raw_descriptor())) {
+            let path_str = fd_path.to_string_lossy();
+            if path_str.starts_with("anon_inode:[eventfd]") {
+                return Ok(DescriptorType::Event);
+            }
+        }
+
         match seek(&self.owned, SeekFrom::End(0)) {
             Ok(seek_size) => {
                 let size: u32 = seek_size

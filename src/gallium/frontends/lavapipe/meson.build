@@ -54,7 +54,7 @@ endif
 liblavapipe_st = static_library(
   'lavapipe_st',
   [liblvp_files, lvp_entrypoints, sha1_h],
-  c_args : [ c_msvc_compat_args, lvp_flags],
+  c_args : [ c_msvc_compat_args, lvp_flags, soong_compat_c_args],
   gnu_symbol_visibility : 'hidden',
   include_directories : [ inc_include, inc_src, inc_util, inc_gallium, inc_gallium_aux, inc_llvmpipe ],
   dependencies : [ dep_llvm, idep_nir, idep_mesautil, idep_vulkan_util, idep_vulkan_wsi,

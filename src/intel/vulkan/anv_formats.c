@@ -541,7 +541,7 @@ anv_get_format(const struct anv_physical_device *device, VkFormat vk_format)
     * disabled.
     */
    if ((format->flags & ANV_FORMAT_FLAG_NO_CBCWF) &&
-       device->instance->custom_border_colors_without_format)
+       device->instance->drirc.debug.custom_border_colors_without_format)
       return NULL;
 
    return format;
@@ -898,7 +898,7 @@ anv_get_color_format_features(const struct anv_physical_device *physical_device,
     */
    if ((anv_format->flags & ANV_FORMAT_FLAG_STORAGE_FORMAT_EMULATED) == 0) {
       if (isl_format_supports_typed_reads(devinfo, base_isl_format) ||
-          (physical_device->instance->emulate_read_without_format &&
+          (physical_device->instance->drirc.debug.read_without_format_emu &&
            isl_is_storage_image_format(devinfo, plane_format.isl_format)))
          flags |= VK_FORMAT_FEATURE_2_STORAGE_READ_WITHOUT_FORMAT_BIT;
       if (isl_format_supports_typed_writes(devinfo, base_isl_format))
@@ -1240,7 +1240,7 @@ get_drm_format_modifier_properties_list(const struct anv_physical_device *physic
          continue;
 
       if (physical_device->info.ver >= 20 &&
-          physical_device->instance->disable_xe2_drm_ccs_modifiers &&
+          physical_device->instance->drirc.debug.disable_xe2_ccs_modifiers &&
           isl_mod_info->supports_render_compression)
          continue;
 
@@ -1840,8 +1840,7 @@ anv_get_image_format_properties(
 
       if (isl_drm_modifier_has_aux(isl_mod_info->modifier) &&
           !anv_formats_ccs_e_compatible(physical_device, info->flags, info->format,
-                                        info->tiling, info->usage,
-                                        format_list_info)) {
+                                        info->tiling, format_list_info)) {
          goto unsupported;
       }
    }
@@ -2108,8 +2107,7 @@ anv_get_image_format_properties(
       (vk_format_has_depth(info->format) ||
        isl_format_supports_ccs_d(devinfo, format->planes[0].isl_format) ||
        anv_formats_ccs_e_compatible(physical_device, info->flags, info->format,
-                                    info->tiling, info->usage,
-                                    format_list_info));
+                                    info->tiling, format_list_info));
 
    if (comp_props) {
       comp_props->imageCompressionFixedRateFlags =

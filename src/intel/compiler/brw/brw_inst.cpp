@@ -707,7 +707,8 @@ brw_inst::flags_read(const intel_device_info *devinfo) const
    } else {
       unsigned mask = 0;
       for (int i = 0; i < sources; i++) {
-         mask |= brw_flag_mask(src[i], size_read(devinfo, i));
+         if (src[i].file == ARF)
+            mask |= brw_flag_mask(src[i], size_read(devinfo, i));
       }
       return mask;
    }

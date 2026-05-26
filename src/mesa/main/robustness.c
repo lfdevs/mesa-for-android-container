@@ -124,11 +124,10 @@ _mesa_GetGraphicsResetStatusARB( void )
     *     events, and GetGraphicsResetStatusARB will always return NO_ERROR."
     */
    if (ctx->Const.ResetStrategy == GL_NO_RESET_NOTIFICATION_ARB) {
-      if (MESA_VERBOSE & VERBOSE_API)
-         _mesa_debug(ctx,
-                     "glGetGraphicsResetStatusARB always returns GL_NO_ERROR "
-                     "because reset notifictation was not requested at context "
-                     "creation.\n");
+      _mesa_perf_debug(ctx, MESA_DEBUG_SEVERITY_LOW,
+                       "glGetGraphicsResetStatusARB always returns GL_NO_ERROR "
+                       "because reset notifictation was not requested at context "
+                       "creation.\n");
 
       return GL_NO_ERROR;
    }
@@ -139,11 +138,6 @@ _mesa_GetGraphicsResetStatusARB( void )
 
    if (status != GL_NO_ERROR)
       _mesa_set_context_lost_dispatch(ctx);
-
-   if (!ctx->Driver.GetGraphicsResetStatus && (MESA_VERBOSE & VERBOSE_API))
-      _mesa_debug(ctx,
-                  "glGetGraphicsResetStatusARB always returns GL_NO_ERROR "
-                  "because the driver doesn't track reset status.\n");
 
    return status;
 }

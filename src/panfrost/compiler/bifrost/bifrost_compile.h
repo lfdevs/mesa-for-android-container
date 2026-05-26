@@ -125,9 +125,12 @@ bool valhall_can_merge_workgroups(nir_shader *nir);
       .has_ldexp = true,                                                       \
       .has_isub = true,                                                        \
       .vectorize_vec2_16bit = true,                                            \
-      .fuse_ffma16 = true,                                                     \
-      .fuse_ffma32 = true,                                                     \
-      .fuse_ffma64 = true,                                                     \
+      .float_mul_add16 = nir_float_muladd_support_has_ffma |                   \
+          nir_float_muladd_support_fuse,                                       \
+      .float_mul_add32 = nir_float_muladd_support_has_ffma |                   \
+          nir_float_muladd_support_fuse,                                       \
+      .float_mul_add64 = nir_float_muladd_support_has_ffma |                   \
+          nir_float_muladd_support_fuse,                                       \
                                                                                \
       .lower_uniforms_to_ubo = true,                                           \
                                                                                \

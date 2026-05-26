@@ -53,6 +53,12 @@ mtl_device_get_registry_id(mtl_device *dev)
    return 0u;
 }
 
+bool
+mtl_device_supports_sample_count(mtl_device *dev, uint32_t sample_count)
+{
+   return false;
+}
+
 struct mtl_size
 mtl_device_max_threads_per_threadgroup(mtl_device *dev)
 {
@@ -67,6 +73,18 @@ mtl_device_max_threadgroup_memory_length(mtl_device *dev)
 
 uint64_t
 mtl_device_max_buffer_length(mtl_device *dev)
+{
+   return 0u;
+}
+
+uint64_t
+mtl_device_recommended_max_working_set_size(mtl_device *dev)
+{
+   return 0u;
+}
+
+uint64_t
+mtl_device_current_allocated_size(mtl_device *dev)
 {
    return 0u;
 }

@@ -19,11 +19,11 @@ use compiler::as_slice::*;
 use compiler::cfg::CFG;
 use compiler::dataflow::ForwardDataflow;
 use compiler::smallvec::SmallVec;
+use compiler::vec_pair::VecPair;
 use nak_ir_proc::*;
 use std::cmp::{max, min};
 use std::fmt;
 use std::fmt::Write;
-use std::iter::Zip;
 use std::ops::{BitAnd, BitOr, Deref, DerefMut, Index, IndexMut, Not, Range};
 use std::slice;
 
@@ -6483,6 +6483,17 @@ pub enum OffsetStride {
     X16 = 4,
 }
 
+impl OffsetStride {
+    pub fn shift(&self) -> u32 {
+        match self {
+            Self::X1 => 0,
+            Self::X4 => 2,
+            Self::X8 => 3,
+            Self::X16 => 4,
+        }
+    }
+}
+
 impl fmt::Display for OffsetStride {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let s = match self {
@@ -6517,6 +6528,9 @@ pub struct OpLd {
     #[src_type(GPR)]
     pub addr: Src,
 
+    #[src_type(GPR)]
+    pub uniform_addr: Src,
+
     /// On false the load returns 0
     #[src_type(Pred)]
     pub pred: Src,
@@ -6528,7 +6542,11 @@ pub struct OpLd {
 
 impl DisplayOp for OpLd {
     fn fmt_op(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "ld{} [{}{}", self.access, self.addr, self.stride)?;
+        write!(
+            f,
+            "ld{} [{}{}+{}",
+            self.access, self.addr, self.stride, self.uniform_addr
+        )?;
         if self.offset > 0 {
             write!(f, "+{:#x}", self.offset)?;
         }
@@ -6617,6 +6635,9 @@ pub struct OpLdsm {
     #[src_type(SSA)]
     pub addr: Src,
 
+    #[src_type(SSA)]
+    pub uniform_addr: Src,
+
     pub offset: i32,
 }
 
@@ -6673,6 +6694,9 @@ pub struct OpSt {
     #[src_type(SSA)]
     pub data: Src,
 
+    #[src_type(GPR)]
+    pub uniform_addr: Src,
+
     pub offset: i32,
     pub stride: OffsetStride,
     pub access: MemAccess,
@@ -6680,7 +6704,11 @@ pub struct OpSt {
 
 impl DisplayOp for OpSt {
     fn fmt_op(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "st{} [{}{}", self.access, self.addr, self.stride)?;
+        write!(
+            f,
+            "st{} [{}{}+{}",
+            self.access, self.addr, self.stride, self.uniform_addr
+        )?;
         if self.offset > 0 {
             write!(f, "+{:#x}", self.offset)?;
         }
@@ -6727,6 +6755,9 @@ pub struct OpAtom {
     pub addr: Src,
 
     #[src_type(GPR)]
+    pub uniform_address: Src,
+
+    #[src_type(GPR)]
     pub cmpr: Src,
 
     #[src_type(SSA)]
@@ -6758,8 +6789,14 @@ impl DisplayOp for OpAtom {
         if !self.addr.is_zero() {
             write!(f, "{}{}", self.addr, self.addr_stride)?;
         }
-        if self.addr_offset > 0 {
+        if !self.uniform_address.is_zero() {
             if !self.addr.is_zero() {
+                write!(f, "+")?;
+            }
+            write!(f, "{}", self.uniform_address)?;
+        }
+        if self.addr_offset > 0 {
+            if !self.addr.is_zero() || !self.uniform_address.is_zero() {
                 write!(f, "+")?;
             }
             write!(f, "{:#x}", self.addr_offset)?;
@@ -7627,89 +7664,6 @@ impl DisplayOp for OpSrcBar {
 }
 impl_display_for_op!(OpSrcBar);
 
-pub struct VecPair<A, B> {
-    a: Vec<A>,
-    b: Vec<B>,
-}
-
-impl<A, B> VecPair<A, B> {
-    pub fn append(&mut self, other: &mut VecPair<A, B>) {
-        self.a.append(&mut other.a);
-        self.b.append(&mut other.b);
-    }
-
-    pub fn is_empty(&self) -> bool {
-        debug_assert!(self.a.len() == self.b.len());
-        self.a.is_empty()
-    }
-
-    pub fn iter(&self) -> Zip<slice::Iter<'_, A>, slice::Iter<'_, B>> {
-        debug_assert!(self.a.len() == self.b.len());
-        self.a.iter().zip(self.b.iter())
-    }
-
-    pub fn iter_mut(
-        &mut self,
-    ) -> Zip<slice::IterMut<'_, A>, slice::IterMut<'_, B>> {
-        debug_assert!(self.a.len() == self.b.len());
-        self.a.iter_mut().zip(self.b.iter_mut())
-    }
-
-    pub fn len(&self) -> usize {
-        debug_assert!(self.a.len() == self.b.len());
-        self.a.len()
-    }
-
-    pub fn new() -> Self {
-        Self {
-            a: Vec::new(),
-            b: Vec::new(),
-        }
-    }
-
-    pub fn push(&mut self, a: A, b: B) {
-        debug_assert!(self.a.len() == self.b.len());
-        self.a.push(a);
-        self.b.push(b);
-    }
-}
-
-impl<A: Clone, B: Clone> VecPair<A, B> {
-    pub fn retain(&mut self, mut f: impl FnMut(&A, &B) -> bool) {
-        debug_assert!(self.a.len() == self.b.len());
-        let len = self.a.len();
-        let mut i = 0_usize;
-        while i < len {
-            if !f(&self.a[i], &self.b[i]) {
-                break;
-            }
-            i += 1;
-        }
-
-        let mut new_len = i;
-
-        // Don't check this one twice.
-        i += 1;
-
-        while i < len {
-            // This could be more efficient but it's good enough for our
-            // purposes since everything we're storing is small and has a
-            // trivial Drop.
-            if f(&self.a[i], &self.b[i]) {
-                self.a[new_len] = self.a[i].clone();
-                self.b[new_len] = self.b[i].clone();
-                new_len += 1;
-            }
-            i += 1;
-        }
-
-        if new_len < len {
-            self.a.truncate(new_len);
-            self.b.truncate(new_len);
-        }
-    }
-}
-
 mod phi {
     #[allow(unused_imports)]
     use crate::ir::{OpPhiDsts, OpPhiSrcs};
@@ -7804,11 +7758,11 @@ impl OpPhiSrcs {
 
 impl SrcsAsSlice for OpPhiSrcs {
     fn srcs_as_slice(&self) -> &[Src] {
-        &self.srcs.b
+        self.srcs.b_as_slice()
     }
 
     fn srcs_as_mut_slice(&mut self) -> &mut [Src] {
-        &mut self.srcs.b
+        self.srcs.b_as_mut_slice()
     }
 
     fn src_types(&self) -> SrcTypeList {
@@ -7851,11 +7805,11 @@ impl OpPhiDsts {
 
 impl DstsAsSlice for OpPhiDsts {
     fn dsts_as_slice(&self) -> &[Dst] {
-        &self.dsts.b
+        self.dsts.b_as_slice()
     }
 
     fn dsts_as_mut_slice(&mut self) -> &mut [Dst] {
-        &mut self.dsts.b
+        self.dsts.b_as_mut_slice()
     }
 
     fn dst_types(&self) -> DstTypeList {
@@ -7966,11 +7920,11 @@ impl OpParCopy {
 
 impl SrcsAsSlice for OpParCopy {
     fn srcs_as_slice(&self) -> &[Src] {
-        &self.dsts_srcs.b
+        self.dsts_srcs.b_as_slice()
     }
 
     fn srcs_as_mut_slice(&mut self) -> &mut [Src] {
-        &mut self.dsts_srcs.b
+        self.dsts_srcs.b_as_mut_slice()
     }
 
     fn src_types(&self) -> SrcTypeList {
@@ -7980,11 +7934,11 @@ impl SrcsAsSlice for OpParCopy {
 
 impl DstsAsSlice for OpParCopy {
     fn dsts_as_slice(&self) -> &[Dst] {
-        &self.dsts_srcs.a
+        self.dsts_srcs.a_as_slice()
     }
 
     fn dsts_as_mut_slice(&mut self) -> &mut [Dst] {
-        &mut self.dsts_srcs.a
+        self.dsts_srcs.a_as_mut_slice()
     }
 
     fn dst_types(&self) -> DstTypeList {

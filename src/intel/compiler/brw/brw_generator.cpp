@@ -1377,7 +1377,7 @@ brw_generator::generate_code(const brw_shader &s,
 
       for (unsigned i = 0; i < ARRAY_SIZE(files); i++) {
          if (!files[i]) continue;
-         fprintf(files[i], "Native code for %s (src_hash 0x%08x) (blake3 %s)\n"
+         fprintf(files[i], "Native code for %s (src_hash 0x%016" PRIx64 ") (blake3 %s)\n"
                  "SIMD%d shader: %d instructions. %d loops. %u cycles. "
                  "%d:%d spills:fills, %u sends, "
                  "scheduled with mode %s. "

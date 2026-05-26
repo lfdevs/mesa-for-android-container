@@ -1387,6 +1387,7 @@ static void si_dec_destroy(struct pipe_video_codec *decoder)
    }
    si_resource_reference(&vid->session_buffer, NULL);
    si_resource_reference(&vid->session_tmz_buffer, NULL);
+   si_resource_reference(&vid->dpb_buffer, NULL);
 
    for (unsigned i = 0; i < ARRAY_SIZE(vid->dpb); i++)
       pipe_resource_reference(&vid->dpb[i], NULL);

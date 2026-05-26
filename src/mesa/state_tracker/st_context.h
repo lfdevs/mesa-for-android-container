@@ -144,15 +144,12 @@ struct st_context
    GLboolean clamp_frag_color_in_shader;
    GLboolean clamp_vert_color_in_shader;
    bool thread_scheduler_disabled;
-   bool has_stencil_export; /**< can do shader stencil export? */
-   bool has_time_elapsed;
    bool has_etc1;
    bool has_etc2;
    bool transcode_etc;
    bool transcode_astc;
    bool has_astc_2d_ldr;
    bool has_astc_5x5_ldr;
-   bool astc_void_extents_need_denorm_flush;
    bool has_s3tc;
    bool has_rgtc;
    bool has_latc;
@@ -162,36 +159,8 @@ struct st_context
    bool force_compute_based_texture_transfer;
    bool force_specialized_compute_transfer;
    bool force_persample_in_shader;
-   bool has_shareable_shaders;
-   bool has_multi_draw_indirect;
-   bool has_indirect_partial_stride;
-   bool has_occlusion_query;
-   bool has_single_pipe_stat;
-   bool has_pipeline_stat;
-   bool has_indep_blend_enable;
-   bool has_indep_blend_func;
-   bool can_dither;
-   bool can_bind_const_buffer_as_vertex;
-   bool lower_flatshade;
-   bool lower_alpha_test;
    bool lower_point_size;
    bool add_point_size;
-   bool lower_two_sided_color;
-   bool lower_ucp;
-   bool prefer_real_buffer_in_constbuf0;
-   bool has_conditional_render;
-   bool lower_rect_tex;
-
-   /* There are consequences for drivers wanting to call st_finalize_nir
-    * twice, once before shader caching and once after lowering for shader
-    * variants. If shader variants use lowering passes that are not ready
-    * for that, things can blow up.
-    *
-    * If this is true, st_finalize_nir and pipe_screen::finalize_nir will be
-    * called before the result is stored in the shader cache. If lowering for
-    * shader variants is invoked, the functions will be called again.
-    */
-   bool allow_st_finalize_nir_twice;
 
    /**
     * If a shader can be created when we get its source.
@@ -200,17 +169,11 @@ struct st_context
     */
    bool shader_has_one_variant[MESA_SHADER_MESH_STAGES];
 
-   bool needs_texcoord_semantic;
    bool apply_texture_swizzle_to_border_color;
    bool use_format_with_border_color;
    bool alpha_border_color_is_not_w;
-   bool emulate_gl_clamp;
 
    bool draw_needs_minmax_index;
-   bool has_hw_atomics;
-
-   bool validate_all_dirty_states;
-   bool can_null_texture;
    bool is_threaded_context;
 
    /* driver supports scissored clears */

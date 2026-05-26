@@ -94,14 +94,14 @@ st_update_rasterizer(struct st_context *st)
    }
 
    /* _NEW_LIGHT_STATE */
-   raster->flatshade = !st->lower_flatshade &&
+   raster->flatshade = st->screen->caps.flatshade &&
                        ctx->Light.ShadeModel == GL_FLAT;
 
    raster->flatshade_first = ctx->Light.ProvokingVertex ==
                              GL_FIRST_VERTEX_CONVENTION_EXT;
 
    /* _NEW_LIGHT_STATE | _NEW_PROGRAM */
-   if (!st->lower_two_sided_color)
+   if (st->screen->caps.two_sided_color)
       raster->light_twoside = _mesa_vertex_program_two_side_enabled(ctx);
 
    /*_NEW_LIGHT_STATE | _NEW_BUFFERS */
@@ -216,7 +216,7 @@ st_update_rasterizer(struct st_context *st)
        */
       raster->sprite_coord_enable = ctx->Point.CoordReplace &
          ((1u << MAX_TEXTURE_COORD_UNITS) - 1);
-      if (!st->needs_texcoord_semantic &&
+      if (!st->screen->caps.tgsi_texcoord &&
           fragProg->info.inputs_read & VARYING_BIT_PNTC) {
          raster->sprite_coord_enable |=
             1 << st_get_generic_varying_index(st, VARYING_SLOT_PNTC);

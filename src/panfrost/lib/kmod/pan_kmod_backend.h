@@ -11,7 +11,8 @@
 
 static inline void
 pan_kmod_dev_init(struct pan_kmod_dev *dev, int fd, uint32_t flags,
-                  drmVersionPtr version, const struct pan_kmod_ops *ops,
+                  const struct pan_kmod_driver *drv_info,
+                  const struct pan_kmod_ops *ops,
                   const struct pan_kmod_allocator *allocator)
 {
    simple_mtx_init(&dev->handle_to_bo.lock, mtx_plain);
@@ -19,8 +20,7 @@ pan_kmod_dev_init(struct pan_kmod_dev *dev, int fd, uint32_t flags,
                           sizeof(struct pan_kmod_bo *), 512);
    simple_mtx_init(&dev->pending_bo_syncs.lock, mtx_plain);
    util_dynarray_init(&dev->pending_bo_syncs.array, NULL);
-   dev->driver.version.major = version->version_major;
-   dev->driver.version.minor = version->version_minor;
+   dev->driver = *drv_info;
    dev->fd = fd;
    dev->flags = flags;
    dev->ops = ops;

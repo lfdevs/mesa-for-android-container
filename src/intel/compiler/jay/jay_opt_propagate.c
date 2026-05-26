@@ -147,11 +147,16 @@ propagate_forwards(jay_function *f)
              I->src[s].file == def->src[0].file) {
 
             jay_insert_channel(&b, &I->src[s], c, def->src[0]);
+         } else if (def->op == JAY_OPCODE_UNDEF && c > 0) {
+            jay_insert_channel_index(&b, &I->src[s], c, 0);
          }
       }
 
       /* Don't propagate into phis yet - TODO: File awareness */
-      if (I->op == JAY_OPCODE_PHI_SRC || I->op == JAY_OPCODE_SEND)
+      if (I->op == JAY_OPCODE_PHI_SRC ||
+          I->op == JAY_OPCODE_SEND ||
+          I->op == JAY_OPCODE_BYTE_PACK ||
+          I->op == JAY_OPCODE_WORD_PACK)
          continue;
 
       jay_foreach_ssa_src(I, s) {
@@ -187,8 +192,14 @@ propagate_forwards(jay_function *f)
             }
          } else if (def->op == JAY_OPCODE_MODIFIER && !jay_uses_flag(def)) {
             propagate_modifier(I, s, def);
-         } else if (def->op == JAY_OPCODE_NOT && !jay_uses_flag(def)) {
+         } else if (def->op == JAY_OPCODE_NOT && !jay_uses_implicit_flag(def)) {
             propagate_not(I, s, def);
+         } else if (def->op == JAY_OPCODE_UNDEF &&
+                    I->op == JAY_OPCODE_MOV &&
+                    !jay_uses_implicit_flag(I)) {
+
+            I->op = JAY_OPCODE_UNDEF;
+            jay_shrink_sources(I, 0);
          }
       }
 
@@ -317,7 +328,8 @@ propagate_backwards(jay_function *f)
       if (!use || BITSET_TEST(multiple, jay_base_index(dst)))
          continue;
 
-      if (def_block[jay_base_index(use->dst)] == block->index &&
+      if (!jay_is_null(use->dst) &&
+          def_block[jay_base_index(use->dst)] == block->index &&
           local_fuse_flag_and_or(f, I, use, defined)) {
 
          jay_remove_instruction(use);

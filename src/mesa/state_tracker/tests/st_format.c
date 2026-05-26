@@ -56,6 +56,7 @@ int main(int argc, char **argv)
    };
    struct st_context local_st = {
       .pipe = &pctx,
+      .screen = &screen,
       .has_etc1 = true,
       .has_etc2 = true,
       .has_astc_2d_ldr = true,

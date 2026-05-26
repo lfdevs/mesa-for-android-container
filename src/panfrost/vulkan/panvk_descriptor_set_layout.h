@@ -121,7 +121,7 @@ to_panvk_descriptor_set_layout(const struct vk_descriptor_set_layout *layout)
    return container_of(layout, const struct panvk_descriptor_set_layout, vk);
 }
 
-static inline const uint32_t
+static inline uint32_t
 panvk_get_desc_stride(const struct panvk_descriptor_set_binding_layout *layout)
 {
    /* One descriptor for each sampler plane, and one for each texture. */
@@ -129,7 +129,7 @@ panvk_get_desc_stride(const struct panvk_descriptor_set_binding_layout *layout)
       ? layout->textures_per_desc + layout->samplers_per_desc : 1;
 }
 
-static inline const uint32_t
+static inline uint32_t
 panvk_get_iub_desc_count(uint32_t size)
 {
    /* Each inline uniform block contains an internal buffer descriptor, in
@@ -138,7 +138,7 @@ panvk_get_iub_desc_count(uint32_t size)
    return DIV_ROUND_UP(size, PANVK_DESCRIPTOR_SIZE) + 1;
 }
 
-static inline const uint32_t
+static inline uint32_t
 panvk_get_iub_size(uint32_t desc_count)
 {
    assert(desc_count >= 1);

@@ -657,6 +657,11 @@ static uint
 poly_load_index(uintptr_t index_buffer, uint32_t index_buffer_range_el, uint id,
                 uint index_size)
 {
+   if (index_size == 0) {
+      /* No index buffer, return vertex ID */
+      return id;
+   }
+
    bool oob = id >= index_buffer_range_el;
 
    /* If the load would be out-of-bounds, load the first element which is

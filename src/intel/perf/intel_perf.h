@@ -99,6 +99,10 @@ enum ENUM_PACKED intel_perf_counter_units {
    INTEL_PERF_COUNTER_UNITS_MAX
 };
 
+const char *intel_perf_counter_type_name(enum intel_perf_counter_type type);
+const char *intel_perf_counter_data_type_name( enum intel_perf_counter_data_type type);
+const char *intel_perf_counter_units_name(enum intel_perf_counter_units units);
+
 struct intel_pipeline_stat {
    uint32_t reg;
    uint32_t numerator;

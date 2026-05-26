@@ -87,6 +87,7 @@ pub enum DescriptorType {
     Unknown,
     Memory(u32, u32), // (size, handle_type)
     WritePipe,
+    Event,
 }
 
 /// # Safety

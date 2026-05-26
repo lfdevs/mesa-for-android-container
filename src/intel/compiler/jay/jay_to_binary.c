@@ -87,7 +87,7 @@ to_brw_reg(jay_function *f,
       if (jay_type_size_bits(type) == 64) {
          type = jay_type_resize(type, 32);
       } else if (I->op == JAY_OPCODE_BFN) {
-         assert(jay_as_uint(d) < UINT16_MAX);
+         assert(jay_as_uint(d) <= UINT16_MAX);
          type = JAY_TYPE_U16;
       }
 
@@ -484,8 +484,24 @@ emit(struct brw_codegen *p,
               brw_imm_uw(jay_lane_id_expand_width(I)));
       break;
 
+   case JAY_OPCODE_GPR_FROM_UGPRS:
+      brw_MOV(p, dst,
+              byte_offset(stride(SRC(0), jay_gpr_from_ugprs_stride(I), 1, 0),
+                          jay_gpr_from_ugprs_index(I)));
+      break;
+
    case JAY_OPCODE_EXTRACT_BYTE_PER_8LANES:
       brw_MOV(p, dst, stride(retype(SRC(simd_offs), BRW_TYPE_UB), 1, 8, 0));
+      break;
+
+   case JAY_OPCODE_BYTE_PACK:
+      brw_MOV(p, stride(retype(dst, BRW_TYPE_UB), 1, 1, 0),
+              stride(retype(SRC(0), BRW_TYPE_UB), 4, 1, 0));
+      break;
+
+   case JAY_OPCODE_WORD_PACK:
+      brw_set_default_exec_size(p, util_logbase2(2 * exec_size));
+      brw_MOV(p, retype(dst, BRW_TYPE_UW), subscript(SRC(0), BRW_TYPE_UW, 0));
       break;
 
    case JAY_OPCODE_SHR_ODD_SUBSPANS_BY_4:

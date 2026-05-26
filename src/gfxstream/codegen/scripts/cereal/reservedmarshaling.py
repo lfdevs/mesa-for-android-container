@@ -813,7 +813,7 @@ class VulkanReservedMarshaling(VulkanWrapperGenerator):
                     freeParams.append(makeVulkanTypeSimple(True, bindingInfo["type"], 0, envname))
                 else:
                     if not bindingInfo["structmember"]:
-                        letParams.append(makeVulkanTypeSimple(True, bindingInfo["type"], 0, envname))
+                        letParams.append(makeVulkanTypeSimple(False, bindingInfo["type"], 0, envname))
 
             marshalPrototype = \
                 VulkanAPI(API_PREFIX_RESERVEDMARSHAL + name,

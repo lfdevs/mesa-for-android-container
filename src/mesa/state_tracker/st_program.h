@@ -377,7 +377,7 @@ static inline unsigned
 st_get_generic_varying_index(struct st_context *st, GLuint attr)
 {
    return tgsi_get_generic_gl_varying_index((gl_varying_slot)attr,
-                                            st->needs_texcoord_semantic);
+                                            st->screen->caps.tgsi_texcoord);
 }
 
 extern void

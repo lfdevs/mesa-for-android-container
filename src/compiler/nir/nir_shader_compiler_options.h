@@ -244,22 +244,40 @@ typedef enum {
 } nir_lower_packing_op;
 
 typedef enum {
-   /* Build: frag_coord */
-   nir_frag_coord_regular,
-   /* Build: frag_coord_xy, frag_coord_z, frag_coord_w */
-   nir_frag_coord_xy_z_w_separate,
-   /* Build: frag_coord_xy, frag_coord_z, frcp(frag_coord_w_rcp) */
-   nir_frag_coord_xy_z_w_rcp_separate,
+   /* When set: use frag_coord_xy, frag_coord_z, frag_coord_w
+    * When unset: use frag_coord
+    */
+   nir_frag_coord_xy_z_w_separate = BITFIELD_BIT(0),
+
+   /* Use frag_coord_w_rcp instead of frag_coord_w. */
+   nir_frag_coord_use_w_rcp = BITFIELD_BIT(1),
+
+   /* Use pixel_coord + (pixel_center_integer ? 0 : 0.5) instead of
+    * frag_coord_xy. This is always correct for OpenGL without VRS because
+    * even sample shading must have gl_FragCoord at pixel center.
+    */
+   nir_frag_coord_use_pixel_coord = BITFIELD_BIT(2),
 } nir_frag_coord_form;
+
+typedef enum {
+   nir_float_muladd_support_has_ffma       = 0x01,
+   nir_float_muladd_support_has_fmad       = 0x02,
+
+   /** Strongly hints that fmad or fmul+fadd is preferred over ffma */
+   nir_float_muladd_support_prefers_split  = 0x04,
+
+   /** ffma_weak won't be lowered */
+   nir_float_muladd_support_keep_weak_ffma = 0x08,
+
+   nir_float_muladd_support_fuse           = 0x10,
+} nir_float_muladd_support;
+MESA_DEFINE_CPP_ENUM_BITFIELD_OPERATORS(nir_float_muladd_support)
 
 typedef struct nir_shader_compiler_options {
    bool lower_fdiv;
-   bool lower_ffma16;
-   bool lower_ffma32;
-   bool lower_ffma64;
-   bool fuse_ffma16;
-   bool fuse_ffma32;
-   bool fuse_ffma64;
+   nir_float_muladd_support float_mul_add16;
+   nir_float_muladd_support float_mul_add32;
+   nir_float_muladd_support float_mul_add64;
    bool lower_flrp16;
    bool lower_flrp32;
    /** Lowers flrp when it does not support doubles */
@@ -536,6 +554,11 @@ typedef struct nir_shader_compiler_options {
    bool unify_interfaces;
 
    /**
+    * Whether nir_shader_gather_info ignores INTERP_MODE_NONE.
+    */
+   bool ignore_none_interpolation_in_sysval_gathering;
+
+   /**
     * Whether nir_lower_io() will lower interpolateAt functions to
     * load_interpolated_input intrinsics.
     *
@@ -650,14 +673,20 @@ typedef struct nir_shader_compiler_options {
    /** Backend supports bfdot2_bfadd opcode. */
    bool has_bfdot2_bfadd;
 
-   /** Backend supports fmulz (and ffmaz if lower_ffma32=false) */
+   /** Backend supports fmulz (and fmadz if has_fmad) */
    bool has_fmulz;
 
    /**
-    * Backend supports fmulz (and ffmaz if lower_ffma32=false) but only if
+    * Backend supports fmulz (and fmadz if has_fmad) but only if
     * FLOAT_CONTROLS_DENORM_PRESERVE_FP32 is not set
     */
    bool has_fmulz_no_denorms;
+
+   /**
+    * Backend supports ffmaz but only if
+    * FLOAT_CONTROLS_DENORM_PRESERVE_FP32 is not set
+    */
+   bool has_ffmaz_no_denorms;
 
    /** Backend supports fcanonicalize, if not set fcanonicalize will be lowered
     * to fmul(a, 1.0)

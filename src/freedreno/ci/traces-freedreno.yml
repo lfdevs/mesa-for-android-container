@@ -167,7 +167,7 @@ traces:
       checksum: d25edb433abfcde517b626b3071906ff
     zink-a618:
       label: [no-perf]
-      checksum: d25edb433abfcde517b626b3071906ff
+      checksum: a8a714fd7017fb07be6c3e904595eb0f
 
   glxgears/glxgears-2-v2.trace:
     freedreno-a306:

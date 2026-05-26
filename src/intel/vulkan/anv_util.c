@@ -415,14 +415,14 @@ anv_device_init_rt_shaders(struct anv_device *device)
       struct brw_compile_cs_params params = {
          .base = {
             .nir = trampoline_nir,
+            .key = &trampoline_key.key.base,
+            .prog_data = (struct brw_stage_prog_data *)&trampoline_prog_data,
             .log_data = device,
             .mem_ctx = tmp_ctx,
          },
-         .key = &trampoline_key.key,
-         .prog_data = &trampoline_prog_data,
       };
       const unsigned *tramp_data =
-         brw_compile_cs(device->physical->compiler, &params);
+         brw_compile(device->physical->compiler, &params.base);
 
       struct anv_shader_upload_params upload_params = {
          .stage               = MESA_SHADER_COMPUTE,
@@ -473,14 +473,14 @@ anv_device_init_rt_shaders(struct anv_device *device)
       struct brw_compile_bs_params params = {
          .base = {
             .nir = trivial_return_nir,
+            .key = &return_key.key.base,
+            .prog_data = (struct brw_stage_prog_data *)&return_prog_data,
             .log_data = device,
             .mem_ctx = tmp_ctx,
          },
-         .key = &return_key.key,
-         .prog_data = &return_prog_data,
       };
       const unsigned *return_data =
-         brw_compile_bs(device->physical->compiler, &params);
+         brw_compile(device->physical->compiler, &params.base);
 
       struct anv_shader_upload_params upload_params = {
          .stage               = MESA_SHADER_CALLABLE,
@@ -531,14 +531,14 @@ anv_device_init_rt_shaders(struct anv_device *device)
       struct brw_compile_bs_params params = {
          .base = {
             .nir = null_ahs_nir,
+            .key = &null_return_key.key.base,
+            .prog_data = (struct brw_stage_prog_data *)&return_prog_data,
             .log_data = device,
             .mem_ctx = tmp_ctx,
          },
-         .key = &null_return_key.key,
-         .prog_data = &return_prog_data,
       };
       const unsigned *return_data =
-         brw_compile_bs(device->physical->compiler, &params);
+         brw_compile(device->physical->compiler, &params.base);
 
       struct anv_shader_upload_params upload_params = {
          .stage               = MESA_SHADER_CALLABLE,

@@ -74,8 +74,8 @@ lower_float_instr_to_soft(nir_builder *b, nir_instr *instr,
    case nir_op_fmul:
       mangled_name = "__fmul32(u1;u1;";
       break;
-   case nir_op_ffma:
-      mangled_name = "__ffma32(u1;u1;u1;";
+   case nir_op_fmad:
+      mangled_name = "__fmad32(u1;u1;u1;";
       break;
    case nir_op_fsat:
       mangled_name = "__fsat32(u1;";

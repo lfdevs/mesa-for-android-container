@@ -60,11 +60,19 @@ pan_kmod_dev_create(int fd, uint32_t flags,
    if (!allocator)
       allocator = &default_allocator;
 
+   const char *drv_name = version->name;
+   const struct pan_kmod_driver drv_info = {
+      .version = {
+         .major = version->version_major,
+         .minor = version->version_minor,
+      },
+   };
+
    for (unsigned i = 0; i < ARRAY_SIZE(drivers); i++) {
-      if (!strcmp(drivers[i].name, version->name)) {
+      if (!strcmp(drivers[i].name, drv_name)) {
          const struct pan_kmod_ops *ops = drivers[i].ops;
 
-         dev = ops->dev_create(fd, flags, version, allocator);
+         dev = ops->dev_create(fd, flags, &drv_info, allocator);
          break;
       }
    }

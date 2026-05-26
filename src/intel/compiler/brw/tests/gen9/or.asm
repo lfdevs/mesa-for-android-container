@@ -1,8 +1,8 @@
 or(8)           g53<1>UD        g49<8,8,1>UD    g21<8,8,1>UD    { align1 1Q };
-or.nz.f0.0(8)   null<1>UD       g21<8,8,1>UD    g2<8,8,1>UD     { align1 1Q };
+or.nz.f0.0(8)   nullUD          g21<8,8,1>UD    g2<8,8,1>UD     { align1 1Q };
 or.nz.f0.0(8)   g5<1>UD         g62<8,8,1>UD    g67<8,8,1>UD    { align1 1Q };
 or(8)           g5<1>UD         g106.1<8,4,2>UD 0x7ff00000UD    { align1 2Q };
-or.nz.f0.0(16)  null<1>UD       g35<8,8,1>UD    g32<8,8,1>UD    { align1 1H };
+or.nz.f0.0(16)  nullUD          g35<8,8,1>UD    g32<8,8,1>UD    { align1 1H };
 or(16)          g36<1>UD        g34<8,8,1>UD    g20<8,8,1>UD    { align1 1H };
 or.nz.f0.0(16)  g53<1>UD        g51<8,8,1>UD    g49<8,8,1>UD    { align1 1H };
 or(1)           g8<1>UD         g8<0,1,0>UD     g4<0,1,0>UD     { align1 WE_all 1N };
@@ -19,5 +19,5 @@ or(16)          g37<1>UD        ~g2.2<0,1,0>D   g35<8,8,1>UD    { align1 1H };
 or(8)           g9<1>D          ~g8<8,8,1>D     ~g7<8,8,1>D     { align1 1Q };
 or(16)          g13<1>D         ~g11<8,8,1>D    ~g9<8,8,1>D     { align1 1H };
 or(1)           g14<1>UD        g14<0,1,0>UD    g19<0,1,0>UD    { align1 WE_all 3N };
-or.z.f0.0(8)    null<1>UD       g5<8,8,1>UD     g6<8,8,1>UD     { align1 1Q };
-or.z.f0.0(16)   null<1>UD       g17<8,8,1>UD    g19<8,8,1>UD    { align1 1H };
+or.z.f0.0(8)    nullUD          g5<8,8,1>UD     g6<8,8,1>UD     { align1 1Q };
+or.z.f0.0(16)   nullUD          g17<8,8,1>UD    g19<8,8,1>UD    { align1 1H };

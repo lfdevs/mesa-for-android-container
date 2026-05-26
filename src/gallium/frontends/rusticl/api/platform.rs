@@ -25,7 +25,7 @@ unsafe impl CLInfo<cl_platform_info> for cl_platform_id {
             CL_PLATFORM_HOST_TIMER_RESOLUTION => v.write::<cl_ulong>(1),
             CL_PLATFORM_ICD_SUFFIX_KHR => v.write::<&CStr>(c"MESA"),
             CL_PLATFORM_NAME => v.write::<&CStr>(c"rusticl"),
-            CL_PLATFORM_NUMERIC_VERSION => v.write::<cl_version>(CLVersion::Cl3_0.into()),
+            CL_PLATFORM_NUMERIC_VERSION => v.write::<cl_version>(CLVersion::Cl3_1.into()),
             CL_PLATFORM_PROFILE => v.write::<&CStr>(c"FULL_PROFILE"),
             CL_PLATFORM_SEMAPHORE_EXPORT_HANDLE_TYPES_KHR => {
                 v.write::<&[cl_external_semaphore_handle_type_khr]>(
@@ -54,7 +54,7 @@ unsafe impl CLInfo<cl_platform_info> for cl_platform_id {
             }
             CL_PLATFORM_VENDOR => v.write::<&CStr>(c"Mesa/X.org"),
             // OpenCL<space><major_version.minor_version><space><platform-specific information>
-            CL_PLATFORM_VERSION => v.write::<&CStr>(c"OpenCL 3.0 "),
+            CL_PLATFORM_VERSION => v.write::<&CStr>(c"OpenCL 3.1 "),
             // CL_INVALID_VALUE if param_name is not one of the supported values
             _ => Err(CL_INVALID_VALUE),
         }

@@ -441,6 +441,9 @@ lower_abi_instr(nir_builder *b, nir_intrinsic_instr *intrin, void *state)
       /* Load the primitive topology from an user SGPR when it's unknown at compile time (GPL). */
       replacement = GET_SGPR_FIELD_NIR(s->args->ps_state, PS_STATE_RAST_PRIM);
       break;
+   case nir_intrinsic_load_use_float_frag_coord_xy_amd:
+      replacement = nir_ine_imm(b, GET_SGPR_FIELD_NIR(s->args->ps_state, PS_STATE_USE_FLOAT_FRAG_COORD_XY), 0);
+      break;
    default:
       progress = false;
       break;

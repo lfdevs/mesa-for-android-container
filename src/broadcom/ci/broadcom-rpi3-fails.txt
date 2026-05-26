@@ -1230,7 +1230,6 @@ ubsan-KHR-GLES2.core.internalformat.texture2d.depth_component_unsigned_int_depth
 ubsan-KHR-GLES2.core.internalformat.texture2d.depth_component_unsigned_short_depth_component16,Fail
 ubsan-dEQP-GLES2.functional.clipping.line.wide_line_clip_viewport_center,Fail
 ubsan-dEQP-GLES2.functional.clipping.line.wide_line_clip_viewport_corner,Fail
-ubsan-dEQP-GLES2.functional.clipping.triangle_vertex.clip_three.clip_neg_x_and_pos_x_neg_y_pos_z_and_neg_x_pos_y_neg_z,Fail
 ubsan-dEQP-GLES2.functional.depth_stencil_clear.depth_stencil_masked,Fail
 ubsan-dEQP-GLES2.functional.texture.filtering.2d.nearest_mipmap_linear_linear_mirror_rgba8888,Fail
 ubsan-dEQP-GLES2.functional.texture.filtering.2d.nearest_mipmap_linear_linear_repeat_rgba8888,Fail

@@ -95,8 +95,8 @@ kk_queue_init(struct kk_device *dev, struct kk_queue *queue,
       vk_find_struct_const(pCreateInfo->pNext,
                            DEVICE_QUEUE_GLOBAL_PRIORITY_CREATE_INFO);
    const VkQueueGlobalPriority global_priority =
-      priority_info ? priority_info->globalPriority :
-                      VK_QUEUE_GLOBAL_PRIORITY_MEDIUM;
+      priority_info ? priority_info->globalPriority
+                    : VK_QUEUE_GLOBAL_PRIORITY_MEDIUM;
 
    /* From the Vulkan 1.3.295 spec:
     *

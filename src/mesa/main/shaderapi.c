@@ -1656,8 +1656,6 @@ void GLAPIENTRY
 _mesa_CompileShader(GLuint shaderObj)
 {
    GET_CURRENT_CONTEXT(ctx);
-   if (MESA_VERBOSE & VERBOSE_API)
-      _mesa_debug(ctx, "glCompileShader %u\n", shaderObj);
    _mesa_compile_shader(ctx, _mesa_lookup_shader_err(ctx, shaderObj,
                                                      "glCompileShader"));
 }
@@ -1675,10 +1673,6 @@ GLuint GLAPIENTRY
 _mesa_CreateShader(GLenum type)
 {
    GET_CURRENT_CONTEXT(ctx);
-
-   if (MESA_VERBOSE & VERBOSE_API)
-      _mesa_debug(ctx, "glCreateShader %s\n", _mesa_enum_to_string(type));
-
    return create_shader_err(ctx, type, "glCreateShader");
 }
 
@@ -1703,8 +1697,6 @@ GLuint GLAPIENTRY
 _mesa_CreateProgram(void)
 {
    GET_CURRENT_CONTEXT(ctx);
-   if (MESA_VERBOSE & VERBOSE_API)
-      _mesa_debug(ctx, "glCreateProgram\n");
    return create_shader_program(ctx);
 }
 
@@ -1720,11 +1712,6 @@ _mesa_CreateProgramObjectARB(void)
 void GLAPIENTRY
 _mesa_DeleteObjectARB(GLhandleARB obj)
 {
-   if (MESA_VERBOSE & VERBOSE_API) {
-      GET_CURRENT_CONTEXT(ctx);
-      _mesa_debug(ctx, "glDeleteObjectARB(%lu)\n", (unsigned long)obj);
-   }
-
    if (obj) {
       GET_CURRENT_CONTEXT(ctx);
       FLUSH_VERTICES(ctx, 0, 0);
@@ -1949,9 +1936,6 @@ void GLAPIENTRY
 _mesa_LinkProgram(GLuint programObj)
 {
    GET_CURRENT_CONTEXT(ctx);
-
-   if (MESA_VERBOSE & VERBOSE_API)
-      _mesa_debug(ctx, "glLinkProgram %u\n", programObj);
 
    struct gl_shader_program *shProg =
       _mesa_lookup_shader_program_err(ctx, programObj, "glLinkProgram");
@@ -2220,9 +2204,6 @@ use_program(GLuint program, bool no_error)
 {
    GET_CURRENT_CONTEXT(ctx);
    struct gl_shader_program *shProg = NULL;
-
-   if (MESA_VERBOSE & VERBOSE_API)
-      _mesa_debug(ctx, "glUseProgram %u\n", program);
 
    if (no_error) {
       if (program) {

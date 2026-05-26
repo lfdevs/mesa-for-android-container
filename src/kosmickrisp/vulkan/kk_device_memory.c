@@ -60,12 +60,10 @@ kk_AllocateMemory(VkDevice device, const VkMemoryAllocateInfo *pAllocateInfo,
                   const VkAllocationCallbacks *pAllocator, VkDeviceMemory *pMem)
 {
    VK_FROM_HANDLE(kk_device, dev, device);
-   struct kk_physical_device *pdev = kk_device_physical(dev);
    struct kk_device_memory *mem;
    VkResult result = VK_SUCCESS;
    const VkImportMemoryMetalHandleInfoEXT *metal_info = vk_find_struct_const(
       pAllocateInfo->pNext, IMPORT_MEMORY_METAL_HANDLE_INFO_EXT);
-   const VkMemoryType *type = &pdev->mem_types[pAllocateInfo->memoryTypeIndex];
 
    // TODO_KOSMICKRISP Do the actual memory allocation with alignment requirements
    uint32_t alignment = (1ULL << 12);
@@ -102,9 +100,6 @@ kk_AllocateMemory(VkDevice device, const VkMemoryAllocateInfo *pAllocateInfo,
          goto fail_alloc;
    }
 
-   struct kk_memory_heap *heap = &pdev->mem_heaps[type->heapIndex];
-   p_atomic_add(&heap->used, mem->bo->size_B);
-
    *pMem = kk_device_memory_to_handle(mem);
 
    return VK_SUCCESS;
@@ -120,14 +115,9 @@ kk_FreeMemory(VkDevice device, VkDeviceMemory _mem,
 {
    VK_FROM_HANDLE(kk_device, dev, device);
    VK_FROM_HANDLE(kk_device_memory, mem, _mem);
-   struct kk_physical_device *pdev = kk_device_physical(dev);
 
    if (!mem)
       return;
-
-   const VkMemoryType *type = &pdev->mem_types[mem->vk.memory_type_index];
-   struct kk_memory_heap *heap = &pdev->mem_heaps[type->heapIndex];
-   p_atomic_add(&heap->used, -((int64_t)mem->bo->size_B));
 
    kk_destroy_bo(dev, mem->bo);
 

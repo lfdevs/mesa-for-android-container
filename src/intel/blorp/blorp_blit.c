@@ -3258,8 +3258,19 @@ get_max_format_scale(const struct isl_device *isl_dev,
    uint32_t lod1_w = u_minify(info->surf.logical_level0_px.width, 1);
    uint32_t phys_lod1_w = align(lod1_w, info->surf.image_alignment_el.w);
 
+   int max_bpb = 128;
+   /* From the Sandybridge PRM, Volume 1, Part 2, page 32:
+    *
+    *    "NOTE: 128BPE Format Color Buffer ( render target ) MUST be either
+    *     TileX or Linear."
+    *
+    * This is necessary all the way back to 965, but is permitted on Gfx7+.
+    */
+   if (ISL_GFX_VER(isl_dev) < 7 && info->surf.tiling == ISL_TILING_Y0)
+      max_bpb = 64;
+
    /* Find the format size which satisfies alignment requirements. */
-   for (int max_bpb = 128; max_bpb >= surf_fmtl->bpb; max_bpb /= 2) {
+   for (; max_bpb >= surf_fmtl->bpb; max_bpb /= 2) {
       if (info->view.base_level >= 1 &&
           phys_lod1_w * surf_fmtl->bpb % max_bpb)
          continue;

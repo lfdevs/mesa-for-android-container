@@ -438,9 +438,9 @@ regs_read(const struct intel_device_info *devinfo, const brw_inst *inst, unsigne
       return 1;
 
    const unsigned reg_size = inst->src[i].file == UNIFORM ? 4 : REG_SIZE;
+   const unsigned size_read = inst->size_read(devinfo, i);
    return DIV_ROUND_UP(reg_offset(inst->src[i]) % reg_size +
-                       inst->size_read(devinfo, i) -
-                       MIN2(inst->size_read(devinfo, i), reg_padding(inst->src[i])),
+                       size_read - MIN2(size_read, reg_padding(inst->src[i])),
                        reg_size);
 }
 

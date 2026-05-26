@@ -191,7 +191,7 @@
          <stat name="Non SSA regs after NIR">
             Non SSA regs after NIR translation to BRW.
          </stat>
-         <stat name="Source hash" hash="true">
+         <stat name="Source hash" hash="true" type="u64">
             Hash generated from shader source.
          </stat>
          <stat name="Scheduler mode" type="str">

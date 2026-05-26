@@ -257,8 +257,23 @@ GENX(jm_emit_fbds)(struct panfrost_batch *batch, struct pan_fb_info *fb,
 {
    PAN_TRACE_FUNC(PAN_TRACE_GL_JM);
 
-   batch->framebuffer.gpu |= GENX(pan_emit_fbd)(
-      fb, 0, tls, &batch->tiler_ctx, batch->framebuffer.cpu);
+#if PAN_ARCH >= 5
+   const int crc_rt = GENX(pan_select_crc_rt)(fb, fb->tile_size);
+   const bool has_zs_ext = (fb->zs.view.zs || fb->zs.view.s || crc_rt >= 0);
+#endif
+
+   const struct pan_fbd_descs fb_descs = {
+      .fbd = batch->framebuffer.cpu,
+#if PAN_ARCH >= 5
+      .zs_crc =
+         has_zs_ext ? batch->framebuffer.cpu + pan_size(FRAMEBUFFER) : NULL,
+      .rts = has_zs_ext ? batch->framebuffer.cpu + pan_size(FRAMEBUFFER) +
+                             pan_size(ZS_CRC_EXTENSION)
+                        : batch->framebuffer.cpu + pan_size(FRAMEBUFFER),
+#endif
+   };
+   batch->framebuffer.gpu |=
+      GENX(pan_emit_fbd)(fb, 0, tls, &batch->tiler_ctx, &fb_descs);
 }
 
 void

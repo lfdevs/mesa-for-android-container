@@ -128,7 +128,7 @@ st_update_depth_stencil_alpha(struct st_context *st)
       }
    }
 
-   if (ctx->Color.AlphaEnabled && !st->lower_alpha_test &&
+   if (ctx->Color.AlphaEnabled && st->screen->caps.alpha_test &&
        !(ctx->DrawBuffer->_IntegerDrawBuffers & 0x1)) {
       dsa->alpha_enabled = 1;
       dsa->alpha_func = func_to_gallium(ctx->Color.AlphaFunc);

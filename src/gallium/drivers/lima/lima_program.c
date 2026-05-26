@@ -43,9 +43,6 @@
 #include "ir/lima_ir.h"
 
 static const nir_shader_compiler_options vs_nir_options = {
-   .lower_ffma16 = true,
-   .lower_ffma32 = true,
-   .lower_ffma64 = true,
    .lower_fpow = true,
    .lower_ffract = true,
    .lower_fdiv = true,
@@ -68,9 +65,9 @@ static const nir_shader_compiler_options vs_nir_options = {
 };
 
 static const nir_shader_compiler_options fs_nir_options = {
-   .fuse_ffma16 = true,
-   .fuse_ffma32 = true,
-   .fuse_ffma64 = true,
+   .float_mul_add16 = nir_float_muladd_support_has_fmad | nir_float_muladd_support_fuse,
+   .float_mul_add32 = nir_float_muladd_support_has_fmad | nir_float_muladd_support_fuse,
+   .float_mul_add64 = nir_float_muladd_support_has_fmad | nir_float_muladd_support_fuse,
    .lower_fpow = true,
    .lower_fdiv = true,
    .lower_fmod = true,

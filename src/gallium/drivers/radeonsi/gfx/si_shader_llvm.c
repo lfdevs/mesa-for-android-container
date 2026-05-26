@@ -191,7 +191,8 @@ static void si_llvm_create_main_func(struct si_shader_context *ctx)
    /* Reserve register locations for VGPR inputs the PS prolog may need. */
    if (ctx->stage == MESA_SHADER_FRAGMENT && !ctx->shader->is_monolithic) {
       ac_llvm_add_target_dep_function_attr(
-         ctx->main_fn.value, "InitialPSInputAddr", SI_SPI_PS_INPUT_ADDR_FOR_PROLOG);
+         ctx->main_fn.value, "InitialPSInputAddr",
+         si_get_spi_ps_input_addr_for_prolog(shader->selector));
    }
 }
 

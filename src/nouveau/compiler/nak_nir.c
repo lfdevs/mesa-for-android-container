@@ -1019,8 +1019,23 @@ nak_nir_lower_load_store(nir_shader *nir, const struct nak_compiler *nak)
                continue;
 
             nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
+            nir_src *addr;
+
+            switch (intr->intrinsic) {
+            case nir_intrinsic_load_global_bounded:
+            case nir_intrinsic_load_global_constant_bounded: {
+               addr = &intr->src[0];
+               break;
+            }
+            default:
+               addr = nir_get_io_offset_src(intr);
+               break;
+            }
+            if (!addr)
+               continue;
+
             b.cursor = nir_before_instr(instr);
-            nir_src *addr = nir_get_io_offset_src(intr);
+            nir_def *uaddr = nir_imm_zero(&b, 1, addr->ssa->bit_size);
             nir_def *res = NULL;
             nir_intrinsic_instr *new = NULL;
 
@@ -1028,7 +1043,7 @@ nak_nir_lower_load_store(nir_shader *nir, const struct nak_compiler *nak)
             case nir_intrinsic_load_global:
             case nir_intrinsic_load_global_constant: {
                nir_def *nir_true = nir_imm_bool(&b, true);
-               res = nir_load_global_nv(&b, intr->def.num_components, intr->def.bit_size, addr->ssa, nir_true);
+               res = nir_load_global_nv(&b, intr->def.num_components, intr->def.bit_size, addr->ssa, uaddr, nir_true);
                break;
             }
             case nir_intrinsic_load_global_bounded:
@@ -1044,32 +1059,32 @@ nak_nir_lower_load_store(nir_shader *nir, const struct nak_compiler *nak)
                nir_def *addr = nir_iadd(&b, base->ssa, nir_u2u64(&b, offset->ssa));
                nir_def *last_byte = nir_iadd_imm(&b, offset->ssa, load_size - 1);
                nir_def *cond = nir_ult(&b, last_byte, size->ssa);
-               res = nir_load_global_nv(&b, intr->def.num_components, intr->def.bit_size, addr, cond);
+               res = nir_load_global_nv(&b, intr->def.num_components, intr->def.bit_size, addr, uaddr, cond);
                break;
             }
             case nir_intrinsic_load_scratch:
-               res = nir_load_scratch_nv(&b, intr->def.num_components, intr->def.bit_size, addr->ssa);
+               res = nir_load_scratch_nv(&b, intr->def.num_components, intr->def.bit_size, addr->ssa, uaddr);
                break;
             case nir_intrinsic_load_shared:
-               res = nir_load_shared_nv(&b, intr->def.num_components, intr->def.bit_size, addr->ssa);
+               res = nir_load_shared_nv(&b, intr->def.num_components, intr->def.bit_size, addr->ssa, uaddr);
                break;
             case nir_intrinsic_store_global:
-               new = nir_store_global_nv(&b, intr->src[0].ssa, addr->ssa);
+               new = nir_store_global_nv(&b, intr->src[0].ssa, addr->ssa, uaddr);
                break;
             case nir_intrinsic_store_scratch:
-               new = nir_store_scratch_nv(&b, intr->src[0].ssa, addr->ssa);
+               new = nir_store_scratch_nv(&b, intr->src[0].ssa, addr->ssa, uaddr);
                break;
             case nir_intrinsic_store_shared:
-               new = nir_store_shared_nv(&b, intr->src[0].ssa, addr->ssa);
+               new = nir_store_shared_nv(&b, intr->src[0].ssa, addr->ssa, uaddr);
                break;
             case nir_intrinsic_global_atomic:
-               res = nir_global_atomic_nv(&b, intr->def.bit_size, addr->ssa, intr->src[1].ssa);
+               res = nir_global_atomic_nv(&b, intr->def.bit_size, addr->ssa, uaddr, intr->src[1].ssa);
                break;
             case nir_intrinsic_global_atomic_swap:
                res = nir_global_atomic_swap_nv(&b, intr->def.bit_size, addr->ssa, intr->src[1].ssa, intr->src[2].ssa);
                break;
             case nir_intrinsic_shared_atomic:
-               res = nir_shared_atomic_nv(&b, intr->def.bit_size, addr->ssa, intr->src[1].ssa);
+               res = nir_shared_atomic_nv(&b, intr->def.bit_size, addr->ssa, uaddr, intr->src[1].ssa);
                break;
             case nir_intrinsic_shared_atomic_swap:
                res = nir_shared_atomic_swap_nv(&b, intr->def.bit_size, addr->ssa, intr->src[1].ssa, intr->src[2].ssa);
@@ -1114,6 +1129,99 @@ nak_nir_lower_load_store(nir_shader *nir, const struct nak_compiler *nak)
 
    return progress;
 }
+
+static bool
+nak_nir_opt_uniform_address_impl(struct nir_builder *b,
+                                 nir_intrinsic_instr *intr, void *cb_data)
+{
+   switch (intr->intrinsic) {
+   case nir_intrinsic_cmat_load_shared_nv:
+   case nir_intrinsic_global_atomic_nv:
+   case nir_intrinsic_load_global_nv:
+   case nir_intrinsic_load_scratch_nv:
+   case nir_intrinsic_load_shared_nv:
+   case nir_intrinsic_shared_atomic_nv:
+   case nir_intrinsic_store_global_nv:
+   case nir_intrinsic_store_scratch_nv:
+   case nir_intrinsic_store_shared_nv: {
+      nir_src *offset_src = nir_get_io_offset_src(intr);
+      nir_def *offset = offset_src->ssa;
+      nir_src *uniform_offset_src = nir_get_io_uniform_offset_src(intr);
+      nir_def *uniform_offset = uniform_offset_src->ssa;
+      nir_block *use_block = intr->instr.block;
+
+      assert(nir_src_as_uint(*uniform_offset_src) == 0);
+
+      /* Nak can't collect vectors in non uniform control flow, so don't
+       * even try */
+      if (offset->bit_size == 64 && nak_block_is_divergent(use_block))
+         return false;
+
+      /* We ignore any constant offset */
+      if (nir_src_is_const(*offset_src))
+         return false;
+
+      /* If the source is already uniform, just swap them as the uniform slot
+       * should be 0 */
+      if (!nir_def_is_divergent_at_use_block(offset, use_block)) {
+         nir_src_rewrite(uniform_offset_src, offset);
+         nir_src_rewrite(offset_src, uniform_offset);
+         return true;
+      }
+
+      nir_alu_instr *iadd = nir_def_as_alu_or_null(offset_src->ssa);
+      if (!iadd || iadd->op != nir_op_iadd)
+         return false;
+
+      unsigned src0_div = nir_def_is_divergent_at_use_block(iadd->src[0].src.ssa, use_block);
+      unsigned src1_div = nir_def_is_divergent_at_use_block(iadd->src[1].src.ssa, use_block);
+      if (src0_div && src1_div)
+         return false;
+
+      b->cursor = nir_before_instr(&intr->instr);
+
+      nir_def *addr, *uaddr;
+      if (src0_div) {
+         assert(!src1_div);
+         addr = nir_ssa_for_alu_src(b, iadd, 0);
+         uaddr = nir_ssa_for_alu_src(b, iadd, 1);
+      } else {
+         assert(src1_div);
+         addr = nir_ssa_for_alu_src(b, iadd, 1);
+         uaddr = nir_ssa_for_alu_src(b, iadd, 0);
+      }
+
+      /* We can remove a u2u64 on the non uniform src */
+      if (addr->bit_size == 64) {
+         nir_alu_instr *u2u64 = nir_def_as_alu_or_null(addr);
+         if (u2u64 && u2u64->op == nir_op_u2u64)
+            addr = nir_ssa_for_alu_src(b, u2u64, 0);
+      }
+
+      nir_src_rewrite(offset_src, addr);
+      nir_src_rewrite(uniform_offset_src, uaddr);
+      return true;
+   }
+   default:
+      return false;
+   }
+}
+
+/** This pass assumes it is ran after nir_opt_offset */
+static bool
+nak_nir_opt_uniform_address(nir_shader *nir)
+{
+   if (nak_debug_no_ugpr())
+      return false;
+   nir_divergence_analysis(nir);
+   return nir_shader_intrinsics_pass(
+      nir,
+      nak_nir_opt_uniform_address_impl,
+      nir_metadata_control_flow,
+      NULL
+   );
+}
+
 
 static bool
 nak_nir_opt_offset_shift_nv_impl(struct nir_builder *b,
@@ -1318,6 +1426,12 @@ nak_postprocess_nir(nir_shader *nir,
       .cb_data = nak,
    };
    OPT(nir, nir_opt_offsets, &nak_offset_options);
+   if (nak->sm >= 73) {
+      OPT(nir, nak_nir_opt_uniform_address);
+      /* TODO: as we eliminate u2u64s we could fold more offsets in, however
+       * This would require us to verify it doesn't overflow, which we can't. */
+      /* OPT(nir, nir_opt_offsets, &nak_offset_options); */
+   }
 
    /* Should run after nir_opt_offsets, because nir_opt_algebraic will move
     * iadds down the chain */

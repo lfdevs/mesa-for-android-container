@@ -55,10 +55,10 @@ interpolate_at_offset(nir_builder *b, nir_def *cf, nir_def *offset,
    nir_def *pos = nir_fadd(b, center, nir_f2f32(b, offset));
 
    /* Interpolate with the given coefficients */
-   nir_def *interp = nir_ffma(b, nir_channel(b, pos, 1), nir_channel(b, cf, 1),
-                              nir_channel(b, cf, 2));
+   nir_def *interp = nir_ffma_weak(b, nir_channel(b, pos, 1), nir_channel(b, cf, 1),
+                                   nir_channel(b, cf, 2));
 
-   interp = nir_ffma(b, nir_channel(b, pos, 0), nir_channel(b, cf, 0), interp);
+   interp = nir_ffma_weak(b, nir_channel(b, pos, 0), nir_channel(b, cf, 0), interp);
 
    /* Divide by RHW. This load will be lowered recursively. */
    if (perspective) {

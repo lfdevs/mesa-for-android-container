@@ -346,16 +346,14 @@ static void pvr_init_dri_options(struct pvr_instance *instance)
    driParseOptionInfo(&instance->available_dri_options,
                       pvr_dri_options,
                       ARRAY_SIZE(pvr_dri_options));
-   driParseConfigFiles(&instance->dri_options,
-                       &instance->available_dri_options,
-                       0,
-                       "pvr",
-                       NULL,
-                       NULL,
-                       instance->vk.app_info.app_name,
-                       instance->vk.app_info.app_version,
-                       instance->vk.app_info.engine_name,
-                       instance->vk.app_info.engine_version);
+   driParseConfigFiles(&instance->dri_options, &instance->available_dri_options,
+                       &(driConfigFileParseParams) {
+                          .driverName = "pvr",
+                          .applicationName = instance->vk.app_info.app_name,
+                          .applicationVersion = instance->vk.app_info.app_version,
+                          .engineName = instance->vk.app_info.engine_name,
+                          .engineVersion = instance->vk.app_info.engine_version,
+                       });
 
    instance->force_vk_vendor =
       driQueryOptioni(&instance->dri_options, "force_vk_vendor");

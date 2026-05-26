@@ -1,0 +1,3 @@
+arm64-v8a CtsGraphicsTestCases
+arm64-v8a CtsNativeHardwareTestCases
+arm64-v8a CtsSkQPTestCases

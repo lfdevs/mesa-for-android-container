@@ -581,7 +581,7 @@ typedef struct jay_inst {
    enum jay_opcode op;
    enum jay_type type; /**< execution type of the instruction */
 
-   /** Software scoreboarding dependencies (for non-SYNC instructions) */
+   /** Software scoreboarding dependencies */
    struct tgl_swsb dep;
 
    /** Number of sources */
@@ -628,12 +628,17 @@ jay_num_isa_srcs(const jay_inst *I)
 }
 
 static inline bool
-jay_uses_flag(const jay_inst *I)
+jay_uses_implicit_flag(const jay_inst *I)
 {
-   return jay_is_flag(I->dst) ||
-          I->predication ||
+   return I->predication ||
           !jay_is_null(I->cond_flag) ||
           I->op == JAY_OPCODE_SEL;
+}
+
+static inline bool
+jay_uses_flag(const jay_inst *I)
+{
+   return jay_is_flag(I->dst) || jay_uses_implicit_flag(I);
 }
 
 static inline void
@@ -685,6 +690,9 @@ jay_src_type(const jay_inst *I, unsigned s)
    /* Conversions have an explicit source type, use that. */
    if (I->op == JAY_OPCODE_CVT)
       return jay_cvt_src_type(I);
+
+   if (I->op == JAY_OPCODE_GPR_FROM_UGPRS)
+      return jay_gpr_from_ugprs_src_type(I);
 
    /* 16-bit operand */
    if (I->op == JAY_OPCODE_MUL_32X16 && s == 1)
@@ -778,7 +786,7 @@ typedef struct jay_shader {
    union brw_any_prog_data *prog_data;
    unsigned spills, fills;
    unsigned scratch_size;
-   unsigned push_grfs;
+   unsigned payload_gprs, push_grfs;
 
    /**
     * Ralloc linear context. Since we don't typically free as we go,
@@ -1093,6 +1101,10 @@ typedef struct jay_block {
 
    /** Pretty printing based on original structured control flow */
    uint8_t indent;
+
+   /* Register demand metadata calculated for scheduling use */
+   unsigned demand_max[JAY_NUM_SSA_FILES];
+   unsigned demand_out[JAY_NUM_SSA_FILES];
 } jay_block;
 
 static inline jay_block *
@@ -1372,6 +1384,13 @@ jay_block_add_successor(jay_block *block, jay_block *succ, enum jay_file file)
    if (file == GPR) {
       jay_block_add_successor(block, succ, UGPR);
    }
+}
+
+static inline bool
+jay_cfg_has_edge(jay_block *pred, jay_block *succ, enum jay_file file)
+{
+   return jay_successors(pred, file)[0] == succ ||
+          jay_successors(pred, file)[1] == succ;
 }
 
 static inline unsigned

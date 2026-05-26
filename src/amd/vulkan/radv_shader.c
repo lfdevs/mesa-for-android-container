@@ -60,12 +60,15 @@ get_nir_options_for_stage(struct radv_compiler_info *compiler_info, mesa_shader_
 
    ac_nir_set_options(compiler_info->ac, compiler_info->key.use_llvm, options);
 
-   options->lower_ffma16 = split_fma || compiler_info->ac->gfx_level < GFX9;
-   options->lower_ffma32 = split_fma || compiler_info->ac->gfx_level < GFX10_3;
-   options->lower_ffma64 = split_fma;
+   if (split_fma) {
+      options->float_mul_add16 |= nir_float_muladd_support_prefers_split;
+      options->float_mul_add32 |= nir_float_muladd_support_prefers_split;
+      options->float_mul_add64 |= nir_float_muladd_support_prefers_split;
+   }
    options->max_unroll_iterations = 32;
    options->max_unroll_iterations_aggressive = 128;
    options->lower_doubles_options = nir_lower_drcp | nir_lower_dsqrt | nir_lower_drsq | nir_lower_ddiv;
+   options->frag_coord_form = nir_frag_coord_xy_z_w_separate | nir_frag_coord_use_w_rcp;
    options->io_options |= nir_io_mediump_is_32bit | nir_io_radv_intrinsic_component_workaround;
    options->varying_expression_max_cost = ac_nir_varying_expression_max_cost;
 }
@@ -3767,8 +3770,8 @@ radv_compute_spi_ps_input(enum amd_gfx_level gfx_level, const struct radv_graphi
                   S_0286CC_FRONT_FACE_ENA(info->ps.reads_front_face) |
                   S_0286CC_POS_FIXED_PT_ENA(info->ps.reads_pixel_coord);
 
-   if (info->ps.reads_frag_coord_mask || info->ps.reads_sample_pos_mask) {
-      uint8_t mask = info->ps.reads_frag_coord_mask | info->ps.reads_sample_pos_mask;
+   if (info->ps.reads_frag_coord_mask) {
+      uint8_t mask = info->ps.reads_frag_coord_mask;
 
       for (unsigned i = 0; i < 4; i++) {
          if (mask & (1 << i))

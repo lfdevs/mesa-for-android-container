@@ -57,19 +57,6 @@ struct radv_video_session {
    uint32_t enc_wa_flags;
 };
 
-/**
- *  WRITE_MEMORY support in FW.
- *
- *  none: Not supported at all. Old VCN FW and all UVD.
- *  pcie_atomics: Supported, relies on PCIe atomics.
- *  full: Supported, works also without PCIe atomics.
- */
-enum radv_video_write_memory_support {
-   RADV_VIDEO_WRITE_MEMORY_SUPPORT_NONE = 0,
-   RADV_VIDEO_WRITE_MEMORY_SUPPORT_PCIE_ATOMICS,
-   RADV_VIDEO_WRITE_MEMORY_SUPPORT_FULL,
-};
-
 VK_DEFINE_NONDISP_HANDLE_CASTS(radv_video_session, vk.base, VkVideoSessionKHR, VK_OBJECT_TYPE_VIDEO_SESSION_KHR)
 
 void radv_init_physical_device_decoder(struct radv_physical_device *pdev);
@@ -79,7 +66,6 @@ void radv_video_get_profile_alignments(struct radv_physical_device *pdev, const 
 
 void radv_vcn_sq_header(struct radv_cmd_stream *cs, struct rvcn_sq_var *sq, unsigned type);
 void radv_vcn_sq_tail(struct radv_cmd_stream *cs, struct rvcn_sq_var *sq);
-void radv_vcn_write_memory(struct radv_cmd_buffer *cmd_buffer, uint64_t va, unsigned value);
 
 void radv_init_physical_device_encoder(struct radv_physical_device *pdevice);
 void radv_probe_video_decode(struct radv_physical_device *pdev);
@@ -96,11 +82,7 @@ void radv_video_get_uvd_dpb_image(struct radv_physical_device *pdev,
                                   const struct VkVideoProfileListInfoKHR *profile_list, struct radv_image *image);
 void radv_video_get_enc_dpb_image(struct radv_device *device, const struct VkVideoProfileListInfoKHR *profile_list,
                                   struct radv_image *image, struct radv_image_create_info *create_info);
-bool radv_video_decode_vp9_supported(const struct radv_physical_device *pdev);
-bool radv_video_encode_av1_supported(const struct radv_physical_device *pdev);
-bool radv_video_encode_qp_map_supported(const struct radv_physical_device *pdev);
-enum radv_video_write_memory_support radv_video_write_memory_supported(const struct radv_physical_device *pdev);
-uint32_t radv_video_get_qp_map_texel_size(VkVideoCodecOperationFlagBitsKHR codec);
-bool radv_check_vcn_fw_version(const struct radv_physical_device *pdev, uint32_t dec, uint32_t enc, uint32_t rev);
+void radv_video_get_caps(struct radv_physical_device *pdev, VkVideoCodecOperationFlagBitsKHR op,
+                         struct ac_video_dec_codec_caps **dec, struct ac_video_enc_codec_caps **enc);
 
 #endif /* RADV_VIDEO_H */

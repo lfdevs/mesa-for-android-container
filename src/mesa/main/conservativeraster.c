@@ -47,10 +47,6 @@ conservative_raster_parameter(GLenum pname, GLfloat param,
       return;
    }
 
-   if (MESA_VERBOSE & VERBOSE_API)
-      _mesa_debug(ctx, "%s(%s, %g)\n",
-                  func, _mesa_enum_to_string(pname), param);
-
    ASSERT_OUTSIDE_BEGIN_END(ctx);
 
    switch (pname) {

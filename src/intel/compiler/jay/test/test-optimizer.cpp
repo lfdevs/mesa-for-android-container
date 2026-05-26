@@ -22,12 +22,16 @@ jay_optimize_and_dce(jay_shader *shader)
 #define CASE(instr, expected)                                                  \
    INSTRUCTION_CASE(                                                           \
       {                                                                        \
+         bool check_out = true;                                                \
          instr;                                                                \
-         jay_UNIT_TEST_u32(b, out);                                            \
+         if (check_out)                                                        \
+            jay_UNIT_TEST_u32(b, out);                                         \
       },                                                                       \
       {                                                                        \
+         bool check_out = true;                                                \
          expected;                                                             \
-         jay_UNIT_TEST_u32(b, out);                                            \
+         if (check_out)                                                        \
+            jay_UNIT_TEST_u32(b, out);                                         \
       },                                                                       \
       jay_optimize_and_dce)
 
@@ -210,6 +214,23 @@ TEST_F(Optimizer, MultipleCmp)
       }
       jay_CMP(b, JAY_TYPE_S32, JAY_CONDITIONAL_GT, flag2, 0, x);
       jay_SEL(b, JAY_TYPE_U32, out, x, jay_SEL_u32(b, x, 123, flag), flag2);
+   });
+}
+
+TEST_F(Optimizer, IfNot)
+{
+   CASEB({
+      check_out = false;
+      jay_def flag = jay_alloc_def(b, FLAG, 1);
+      jay_def flag2 = jay_alloc_def(b, FLAG, 1);
+      jay_CMP(b, JAY_TYPE_S32, JAY_CONDITIONAL_LT, flag, 0, wx);
+
+      if (after) {
+         jay_add_predicate(b, jay_IF(b), jay_negate(flag));
+      } else {
+         jay_NOT(b, flag2, flag);
+         jay_add_predicate(b, jay_IF(b), flag2);
+      }
    });
 }
 

@@ -35,7 +35,8 @@ class Tracepoint(object):
     """
     def __init__(self, name, args=[], toggle_name=None,
                  tp_struct=None, tp_print=None, tp_perfetto=None,
-                 tp_markers=None, tp_flags=[], need_cs_param=True):
+                 tp_markers=None, tp_flags=[], need_cs_param=True,
+                 tp_type="u_tracepoint_type_marker"):
         """Parameters:
 
         - name: the tracepoint name, a tracepoint function with the given
@@ -96,6 +97,7 @@ class Tracepoint(object):
         self.tp_flags = tp_flags
         self.toggle_name = toggle_name
         self.need_cs_param = need_cs_param
+        self.tp_type = tp_type
 
         TRACEPOINTS[name] = self
         if toggle_name is not None and toggle_name not in TRACEPOINTS_TOGGLES:
@@ -373,6 +375,8 @@ static ALWAYS_INLINE void trace_${trace_name}(
 }
 #endif
 
+${additional_code}
+
 #endif /* ${guard_name} */
 """
 
@@ -537,6 +541,7 @@ static const struct u_tracepoint __tp_${trace_name} = {
     ,
     ${0 if len(trace.tp_flags) == 0 else " | ".join(trace.tp_flags)},
     ${index},
+    ${trace.tp_type},
     __print_${trace_name},
     __print_json_${trace_name},
  % if trace.tp_perfetto is not None:
@@ -608,7 +613,7 @@ void __trace_${trace_name}(
 """
 
 def utrace_generate(cpath, hpath, ctx_param, trace_toggle_name=None,
-                    trace_toggle_defaults=[]):
+                    trace_toggle_defaults=[], additional_code=""):
     """Parameters:
 
     - cpath: c file to generate.
@@ -644,7 +649,8 @@ def utrace_generate(cpath, hpath, ctx_param, trace_toggle_name=None,
                     HEADERS=[h for h in HEADERS if h.scope & HeaderScope.HEADER],
                     FORWARD_DECLS=FORWARD_DECLS,
                     TRACEPOINTS=TRACEPOINTS,
-                    TRACEPOINTS_TOGGLES=TRACEPOINTS_TOGGLES))
+                    TRACEPOINTS_TOGGLES=TRACEPOINTS_TOGGLES,
+                    additional_code=additional_code))
             except:
                 print(exceptions.text_error_template().render())
 

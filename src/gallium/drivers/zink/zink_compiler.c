@@ -246,8 +246,8 @@ lower_gl_point_gs_instr(nir_builder *b, nir_instr *instr, void *data)
 
    for (size_t i = 0; i < 4; i++) {
       pos = nir_vec4(b,
-                     nir_ffma(b, half_w_delta, point_dir[i][0], point_pos_x),
-                     nir_ffma(b, half_h_delta, point_dir[i][1], point_pos_y),
+                     nir_ffma_weak(b, half_w_delta, point_dir[i][0], point_pos_x),
+                     nir_ffma_weak(b, half_h_delta, point_dir[i][1], point_pos_y),
                      nir_channel(b, point_pos, 2),
                      nir_channel(b, point_pos, 3));
 
@@ -1266,9 +1266,6 @@ zink_screen_init_compiler(struct zink_screen *screen)
    static const struct nir_shader_compiler_options
    default_options = {
       .io_options = nir_io_has_intrinsics | nir_io_mediump_is_32bit,
-      .lower_ffma16 = true,
-      .lower_ffma32 = true,
-      .lower_ffma64 = true,
       .lower_scmp = true,
       .lower_fdph = true,
       .lower_flrp32 = true,
@@ -1307,6 +1304,7 @@ zink_screen_init_compiler(struct zink_screen *screen)
       .lower_mul_2x32_64 = true,
       .support_16bit_alu = true, /* not quite what it sounds like */
       .max_unroll_iterations = 0,
+      .float_mul_add32 = nir_float_muladd_support_keep_weak_ffma,
    };
 
    screen->nir_options = default_options;
@@ -1317,12 +1315,17 @@ zink_screen_init_compiler(struct zink_screen *screen)
    if (!screen->info.feats.features.shaderFloat64) {
       screen->nir_options.lower_doubles_options = ~0;
       screen->nir_options.lower_flrp64 = true;
-      screen->nir_options.lower_ffma64 = true;
       /* soft fp64 function inlining will blow up loop bodies and effectively
        * stop Vulkan drivers from unrolling the loops.
        */
       screen->nir_options.max_unroll_iterations_fp64 = 32;
+   } else {
+      screen->nir_options.float_mul_add64 |= nir_float_muladd_support_keep_weak_ffma;
    }
+
+   if (screen->info.feats12.shaderFloat16 ||
+       (screen->info.have_KHR_shader_float16_int8 && screen->info.shader_float16_int8_feats.shaderFloat16))
+      screen->nir_options.float_mul_add16 |= nir_float_muladd_support_keep_weak_ffma;
 
    /* XXX: do any drivers need different estimates? */
    screen->nir_options.varying_expression_max_cost = amd_varying_expression_max_cost;
@@ -1387,6 +1390,15 @@ zink_screen_init_compiler(struct zink_screen *screen)
    }
    screen->ntv_info.have_float_controls2 = screen->info.have_KHR_shader_float_controls2;
    screen->ntv_info.bindless_set_idx = screen->desc_set_id[ZINK_DESCRIPTOR_BINDLESS];
+
+   if (screen->info.have_KHR_shader_fma) {
+      if (screen->info.fma_feats.shaderFmaFloat16)
+         screen->nir_options.float_mul_add16 |= nir_float_muladd_support_has_ffma;
+      if (screen->info.fma_feats.shaderFmaFloat32)
+         screen->nir_options.float_mul_add32 |= nir_float_muladd_support_has_ffma;
+      if (screen->info.fma_feats.shaderFmaFloat64)
+         screen->nir_options.float_mul_add64 |= nir_float_muladd_support_has_ffma;
+   }
 }
 
 struct nir_shader *

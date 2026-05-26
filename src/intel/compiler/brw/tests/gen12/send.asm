@@ -37,7 +37,5 @@ sendc(16)       nullUD          g119UD          nullUD          0x10031000      
                             render MsgDesc: RT write SIMD16 LastRT Surface = 0  mlen 8 ex_mlen 0 rlen 0 { align1 1H @1 EOT };
 sendc(8)        nullUD          g125UD          g123UD          0x04031400                0x00000080
                             render MsgDesc: RT write SIMD8 LastRT Surface = 0  mlen 2 ex_mlen 2 rlen 0 { align1 1Q @1 EOT };
-sendc(16)       nullUD          g119UD          nullUD          0x10031000                0x00000000
-                            render MsgDesc: RT write SIMD16 LastRT Surface = 0  mlen 8 ex_mlen 0 rlen 0 { align1 1H @1 EOT };
 sendc(16)       nullUD          g123UD          g119UD          0x08031000                0x00000100
                             render MsgDesc: RT write SIMD16 LastRT Surface = 0  mlen 4 ex_mlen 4 rlen 0 { align1 1H @1 EOT };

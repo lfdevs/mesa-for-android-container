@@ -500,11 +500,8 @@ bool
 anv_formats_ccs_e_compatible(const struct anv_physical_device *physical_device,
                              VkImageCreateFlags create_flags,
                              VkFormat vk_format, VkImageTiling vk_tiling,
-                             VkImageUsageFlags vk_usage,
                              const VkImageFormatListCreateInfo *fmt_list)
 {
-   const struct intel_device_info *devinfo = &physical_device->info;
-
    u_foreach_bit(b, vk_format_aspects(vk_format)) {
       VkImageAspectFlagBits aspect = 1 << b;
       enum isl_format format =
@@ -513,37 +510,6 @@ anv_formats_ccs_e_compatible(const struct anv_physical_device *physical_device,
       if (!formats_ccs_e_compatible(physical_device, create_flags, aspect,
                                     format, vk_tiling, fmt_list))
          return false;
-   }
-
-   if (vk_usage & VK_IMAGE_USAGE_STORAGE_BIT) {
-      /* Only color */
-      assert((vk_format_aspects(vk_format) & ~VK_IMAGE_ASPECT_ANY_COLOR_BIT_ANV) == 0);
-      if (devinfo->ver == 12) {
-         /* From the TGL Bspec 44930 (r47128):
-          *
-          *    "Memory atomic operation on compressed data is not supported
-          *     in Gen12 E2E compression. Result of such operation is
-          *     undefined.
-          *
-          *     Software should ensure at the time of the Atomic operation
-          *     the surface is resolved (uncompressed) state."
-          *
-          * On gfx12.0, compression is not supported with atomic
-          * operations. On gfx12.5, the support is there, but it's slow
-          * (see HSD 1406337848).
-          *
-          * We only care about the non-modifier case. Modifier capabilities
-          * are exposed via the standard interfaces and unlike prior
-          * platforms, we don't enable compression for uncompressed modifiers.
-          */
-         if (vk_tiling != VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT &&
-             image_may_use_r32_view(create_flags, vk_format, fmt_list))
-            return false;
-
-      } else if (devinfo->ver <= 11) {
-         /* Storage accesses are not supported on compressed surfaces. */
-         return false;
-      }
    }
 
    return true;
@@ -866,13 +832,16 @@ add_aux_surface_if_supported(struct anv_device *device,
       } else if (device->info->ver >= 12) {
          /* Support for CCS_E was already checked for in anv_image_init(). */
          image->planes[plane].aux_usage = ISL_AUX_USAGE_CCS_E;
-      } else if (anv_formats_ccs_e_compatible(device->physical,
+      } else if (!(image->vk.usage & VK_IMAGE_USAGE_STORAGE_BIT) &&
+                 anv_formats_ccs_e_compatible(device->physical,
                                               image->vk.create_flags,
                                               image->vk.format,
-                                              image->vk.tiling,
-                                              image->vk.usage, fmt_list)) {
+                                              image->vk.tiling, fmt_list)) {
          image->planes[plane].aux_usage = ISL_AUX_USAGE_CCS_E;
       } else {
+         /* Compression is only enabled in a few layouts (none of which
+          * support STORAGE access). See anv_layout_to_aux_state().
+          */
          image->planes[plane].aux_usage = ISL_AUX_USAGE_CCS_D;
       }
 
@@ -1655,13 +1624,14 @@ choose_drm_format_mod(const struct anv_physical_device *device,
 }
 
 static VkImageUsageFlags
-anv_image_create_usage(const VkImageCreateInfo *pCreateInfo,
+anv_image_create_usage(const struct anv_device *device,
+                       const VkImageCreateInfo *pCreateInfo,
                        VkImageUsageFlags usage)
 {
-   /* Add TRANSFER_SRC usage for multisample attachment images. This is
-    * because we might internally use the TRANSFER_SRC layout on them for
-    * blorp operations associated with resolving those into other attachments
-    * at the end of a subpass.
+   /* Add TRANSFER_SRC usage for some attachments. This is because we might
+    * internally use the TRANSFER_SRC layout on them for blorp operations
+    * associated with resolving those into other attachments at the end of a
+    * subpass.
     *
     * Without this additional usage, we compute an incorrect AUX state in
     * anv_layout_to_aux_state().
@@ -1670,6 +1640,12 @@ anv_image_create_usage(const VkImageCreateInfo *pCreateInfo,
        (usage & (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
                  VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)))
       usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+
+   if (device->vk.enabled_extensions.ANDROID_external_format_resolve &&
+       pCreateInfo->samples == VK_SAMPLE_COUNT_1_BIT &&
+       (usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT))
+      usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+
    return usage;
 }
 
@@ -1855,9 +1831,10 @@ anv_image_init(struct anv_device *device, struct anv_image *image,
 
    vk_image_init(&device->vk, &image->vk, pCreateInfo);
 
-   image->vk.usage = anv_image_create_usage(pCreateInfo, image->vk.usage);
+   image->vk.usage =
+      anv_image_create_usage(device, pCreateInfo, image->vk.usage);
    image->vk.stencil_usage =
-      anv_image_create_usage(pCreateInfo, image->vk.stencil_usage);
+      anv_image_create_usage(device, pCreateInfo, image->vk.stencil_usage);
 
    isl_surf_usage_flags_t isl_extra_usage_flags =
       create_info->isl_extra_usage_flags;
@@ -1986,6 +1963,7 @@ anv_image_init(struct anv_device *device, struct anv_image *image,
                            IMAGE_FORMAT_LIST_CREATE_INFO);
 
    if ((image->vk.aspects & VK_IMAGE_ASPECT_ANY_COLOR_BIT_ANV) &&
+       !vk_format_is_block_compressed(image->vk.format) &&
        image->vk.samples == 1) {
       if (image->n_planes != 1) {
          /* Multiplanar images seem to hit a sampler bug with CCS and R16G16
@@ -2014,24 +1992,69 @@ anv_image_init(struct anv_device *device, struct anv_image *image,
          isl_extra_usage_flags |= ISL_SURF_USAGE_DISABLE_AUX_BIT;
       }
 
+      if (device->info->verx10 == 125 &&
+          image->vk.tiling != VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT &&
+          (image->vk.usage & VK_IMAGE_USAGE_STORAGE_BIT) &&
+          (image->vk.format == VK_FORMAT_R32_UINT ||
+           image->vk.format == VK_FORMAT_R32_SINT) &&
+          image->vk.extent.width * image->vk.extent.height <= 16384 * 127) {
+         /* According to HSD 1406337848, atomics are slow on compressed
+          * surfaces. To mitigate this, HSD 18014810884 suggests disabling CCS
+          * if the total size of every pixel in the image is <= 64KB. In order
+          * to avoid trace regressions, we implement a stricter size check.
+          * This upper limit specifically avoids regressions from 1080p images
+          * in a Sons of the Forest trace.
+          *
+          * Note that atomics on the compressed modifiers are disabled through
+          * format queries. So, we ignore that tiling here.
+          */
+         anv_perf_warn(VK_LOG_OBJS(&image->vk.base),
+                       "Disabling aux: atomics are slow with CCS");
+         isl_extra_usage_flags |= ISL_SURF_USAGE_DISABLE_AUX_BIT;
+      }
+
+      if (device->info->verx10 == 120 &&
+          (image->vk.usage & VK_IMAGE_USAGE_STORAGE_BIT) &&
+          image->vk.tiling != VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT &&
+          image_may_use_r32_view(image->vk.create_flags, image->vk.format,
+                                 fmt_list)) {
+         /* From the TGL Bspec 44930 (r47128):
+          *
+          *    "Memory atomic operation on compressed data is not supported
+          *     in Gen12 E2E compression. Result of such operation is
+          *     undefined.
+          *
+          *     Software should ensure at the time of the Atomic operation
+          *     the surface is resolved (uncompressed) state."
+          *
+          * On gfx12.0, compression is not supported with atomic operations.
+          * Restrict the combination for non-modifier images here (modifier
+          * images are handled through another interface).
+          */
+         anv_perf_warn(VK_LOG_OBJS(&image->vk.base),
+                       "Disabling aux: atomics not supported");
+         isl_extra_usage_flags |= ISL_SURF_USAGE_DISABLE_AUX_BIT;
+      }
+
       if (device->info->ver >= 12 &&
           !anv_formats_ccs_e_compatible(device->physical,
                                         image->vk.create_flags,
                                         image->vk.format, image->vk.tiling,
-                                        image->vk.usage, fmt_list)) {
+                                        fmt_list)) {
          /* CCS_E is the only aux-mode supported for single sampled color
           * surfaces on gfx12+. If we can't support it, we should configure
           * the main surface without aux support.
           */
          anv_perf_warn(VK_LOG_OBJS(&image->vk.base),
-                       "Disabling aux: CCS_E incompatible format");
+                       "Disabling aux: CCS_E incompatible format(s)[0]=%s",
+                       vk_format_description(image->vk.format)->short_name);
          isl_extra_usage_flags |= ISL_SURF_USAGE_DISABLE_AUX_BIT;
       }
 
       /* Workaround to disable XE2 CCS modifiers from drirc. */
       if (device->info->ver >= 20 &&
           image->vk.tiling == VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT &&
-          device->physical->instance->disable_xe2_drm_ccs_modifiers) {
+          device->physical->instance->drirc.debug.disable_xe2_ccs_modifiers) {
          anv_perf_warn(VK_LOG_OBJS(&image->vk.base),
                        "Disabling aux: "
                        "drirc disable_xe2_drm_ccs_modifiers");
@@ -2197,7 +2220,6 @@ anv_image_init(struct anv_device *device, struct anv_image *image,
                                              image->vk.create_flags,
                                              image->emu_plane_format,
                                              image->vk.tiling,
-                                             image->vk.usage,
                                              emu_format_list_info_ptr));
       }
 
@@ -4032,6 +4054,9 @@ anv_can_fast_clear_color(const struct anv_cmd_buffer *cmd_buffer,
       return false;
    }
 
+   const uint32_t plane = anv_image_aspect_to_plane(image, clear_aspect);
+   const struct anv_surface *anv_surf = &image->planes[plane].primary_surface;
+
    /* Start by getting the fast clear type.  We use the first subpass
     * layout here because we don't want to fast-clear if the first subpass
     * to use the attachment can't handle fast-clears.
@@ -4042,8 +4067,16 @@ anv_can_fast_clear_color(const struct anv_cmd_buffer *cmd_buffer,
                                     cmd_buffer->queue_family->queueFlags);
    switch (fast_clear_type) {
    case ANV_FAST_CLEAR_NONE:
-      anv_perf_warn(VK_LOG_OBJS(&image->vk.base),
-                    "layout does not support fast clear. Slow clearing.");
+      if (image->planes[plane].aux_usage != ISL_AUX_USAGE_NONE) {
+         anv_perf_warn(VK_LOG_OBJS(&image->vk.base),
+                       "%s does not support fast clear on %dx%d %s "
+                       "isl_tiling_%s image with usage 0x%x. Slow clearing.",
+                       vk_ImageLayout_to_str(layout),
+                       image->vk.extent.width, image->vk.extent.height,
+                       vk_format_description(image->vk.format)->short_name,
+                       isl_tiling_to_name(anv_surf->isl.tiling),
+                       image->vk.usage);
+      }
       return false;
    case ANV_FAST_CLEAR_DEFAULT_VALUE: {
       uint32_t view_pixel[4] = {};
@@ -4105,8 +4138,6 @@ anv_can_fast_clear_color(const struct anv_cmd_buffer *cmd_buffer,
    }
 
    /* Wa_18020603990 - slow clear surfaces up to 256x256, 32bpp. */
-   const uint32_t plane = anv_image_aspect_to_plane(image, clear_aspect);
-   const struct anv_surface *anv_surf = &image->planes[plane].primary_surface;
    if (intel_needs_workaround(cmd_buffer->device->info, 18020603990)) {
       if (isl_format_get_layout(anv_surf->isl.format)->bpb <= 32 &&
           anv_surf->isl.logical_level0_px.w <= 256 &&

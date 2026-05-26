@@ -166,6 +166,7 @@ panvk_per_arch(cmd_close_batch)(struct panvk_cmd_buffer *cmdbuf)
          util_bitcount(view_mask) :
          batch->fb.layer_count;
 
+      const bool has_zs_ext = pan_fb_has_zs(&render->fb.layout);
       for (uint32_t i = 0; i < enabled_layer_count; i++) {
          uint32_t layer_id = (view_mask != 0) ? u_bit_scan(&view_mask) : i;
          VkResult result;
@@ -181,7 +182,15 @@ panvk_per_arch(cmd_close_batch)(struct panvk_cmd_buffer *cmdbuf)
          fbd_info.layer = layer_id;
          fbd_info.frame_shaders = fs;
          fbd_info.frame_shaders.dcd_pointer += layer_id * 3 * pan_size(DRAW);
-         tagged_fbd_ptr |= GENX(pan_emit_fb_desc)(&fbd_info, fbd.cpu);
+
+         const struct pan_fb_descs fb_descs = {
+            .fbd = fbd.cpu,
+            .zs_crc = has_zs_ext ? fbd.cpu + pan_size(FRAMEBUFFER) : NULL,
+            .rts = has_zs_ext ? fbd.cpu + pan_size(FRAMEBUFFER) +
+                                   pan_size(ZS_CRC_EXTENSION)
+                              : fbd.cpu + pan_size(FRAMEBUFFER),
+         };
+         tagged_fbd_ptr |= GENX(pan_emit_fb_desc)(&fbd_info, &fb_descs);
 
          result = panvk_cmd_prepare_fragment_job(cmdbuf, tagged_fbd_ptr);
          if (result != VK_SUCCESS)

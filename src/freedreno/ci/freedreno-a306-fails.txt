@@ -485,7 +485,6 @@ spec@nv_conditional_render@copytexsubimage,Fail
 spec@nv_copy_image@nv_copy_image-formats,Fail
 spec@nv_copy_image@nv_copy_image-formats@Source: GL_DEPTH_COMPONENT/Destination: GL_DEPTH_COMPONENT,Fail
 spec@nv_copy_image@nv_copy_image-formats@Source: GL_DEPTH_COMPONENT16/Destination: GL_DEPTH_COMPONENT16,Fail
-spec@nv_read_depth@read_depth_gles3,Fail
 
 # No SNORM blend / alphatest
 spec@arb_color_buffer_float@gl_rgba8_snorm-render,Fail

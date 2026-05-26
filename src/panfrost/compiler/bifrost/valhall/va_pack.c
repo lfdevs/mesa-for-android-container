@@ -568,6 +568,10 @@ va_pack_alu(const bi_instr *I, unsigned arch)
       hex |= ((uint64_t)I->sample) << 38;
       break;
 
+   case BI_OPCODE_LD_VAR_BUF_FLAT_IMM:
+      hex |= ((uint64_t)I->index) << 8;
+      break;
+
    case BI_OPCODE_LD_ATTR_IMM:
       hex |= ((uint64_t)I->table) << 16;
       hex |= ((uint64_t)I->attribute_index) << 20;

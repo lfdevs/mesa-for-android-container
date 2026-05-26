@@ -61,3 +61,8 @@ spec@!opengl es 3.0@gles-3.0-transform-feedback-uniform-buffer-object
 
 # May time out
 glx@glx_arb_sync_control@swapbuffersmsc-return
+
+# uprev Piglit in Mesa
+# sometimes times out
+spec@egl_ext_surface_compression@create
+

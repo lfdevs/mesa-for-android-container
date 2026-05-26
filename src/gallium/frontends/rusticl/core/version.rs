@@ -13,6 +13,7 @@ pub const CL2_0_VER: cl_version = mk_cl_version(2, 0, 0);
 pub const CL2_1_VER: cl_version = mk_cl_version(2, 1, 0);
 pub const CL2_2_VER: cl_version = mk_cl_version(2, 2, 0);
 pub const CL3_0_VER: cl_version = mk_cl_version(3, 0, 0);
+pub const CL3_1_VER: cl_version = mk_cl_version(3, 1, 0);
 
 #[repr(u32)]
 #[derive(Copy, Clone, Eq, Hash, PartialEq, PartialOrd, Ord)]
@@ -24,6 +25,7 @@ pub enum CLVersion {
     Cl2_1 = CL2_1_VER,
     Cl2_2 = CL2_2_VER,
     Cl3_0 = CL3_0_VER,
+    Cl3_1 = CL3_1_VER,
 }
 
 pub const fn mk_cl_version_ext(major: u32, minor: u32, patch: u32, ext: &str) -> cl_name_version {
@@ -58,6 +60,7 @@ impl CLVersion {
             CLVersion::Cl2_1 => "2.1",
             CLVersion::Cl2_2 => "2.2",
             CLVersion::Cl3_0 => "3.0",
+            CLVersion::Cl3_1 => "3.1",
         }
     }
 
@@ -70,6 +73,7 @@ impl CLVersion {
             CLVersion::Cl2_1 => "210",
             CLVersion::Cl2_2 => "220",
             CLVersion::Cl3_0 => "300",
+            CLVersion::Cl3_1 => "310",
         }
     }
 }

@@ -244,9 +244,6 @@ spec@nv_image_formats@compiler@declaration-disallow-rgba16-unorm-cube.vert,Fail
 spec@oes_point_sprite@arb_point_sprite-checkerboard_gles1,Fail
 spec@oes_shader_io_blocks@compiler@layout-location-aliasing.vert,Fail
 
-# https://gitlab.freedesktop.org/mesa/piglit/-/merge_requests/1109
-spec@nv_read_depth@read_depth_gles3,Fail
-
 # A sub-case involving polygon stipple fails because driver doesn't implement
 # stipple
 spec@!opengl 1.0@gl-1.0-no-op-paths,Fail
@@ -484,6 +481,10 @@ program@execute@scalar-load-long,Crash
 program@execute@scalar-load-ulong,Crash
 program@run kernel with max work item sizes,Fail
 
+# Bisected to 626ec83855a ("rusticl: implement CL 3.1 platform features")
+api@clsetkernelarg,Fail
+api@clsetkernelarg@Input checks,Fail
+
 # Bisected to 6bc47e65 ("rusticl: Fix work group size validation")
 program@bitcoin: phatk kernel,Fail
 
@@ -516,19 +517,6 @@ program@execute@vector-conversion,Fail
 
 
 ubsan-KHR-GL31.framebuffer_blit.multisampled_to_singlesampled_blit_color_config_test,Fail
-
-
-# https://gitlab.khronos.org/Tracker/vk-gl-cts/-/issues/6437
-dEQP-VK.binding_model.unused_invalid_descriptor.copy.combined_image_sampler,Crash
-dEQP-VK.binding_model.unused_invalid_descriptor.copy.uniform_buffer,Crash
-dEQP-VK.binding_model.unused_invalid_descriptor.copy.sampled_image,Crash
-dEQP-VK.binding_model.unused_invalid_descriptor.copy.storage_buffer,Crash
-dEQP-VK.binding_model.unused_invalid_descriptor.write.invalid.combined_image_sampler,Crash
-dEQP-VK.binding_model.unused_invalid_descriptor.write.invalid.sampled_image,Crash
-dEQP-VK.binding_model.unused_invalid_descriptor.write.unused.combined_image_sampler,Crash
-dEQP-VK.binding_model.unused_invalid_descriptor.write.unused.sampled_image,Crash
-dEQP-VK.binding_model.unused_invalid_descriptor.write.unused.storage_buffer,Crash
-dEQP-VK.binding_model.unused_invalid_descriptor.write.unused.uniform_buffer,Crash
 
 # SKQP failing tests
 ES2BlendWithNoTexture,Fail
@@ -669,4 +657,5 @@ TransferPixelsTest,Fail
 
 # uprev Piglit in Mesa
 spec@arb_texture_view@tex-view,Fail
+spec@glsl-1.30@execution@glsl-packed-back-color,Fail
 

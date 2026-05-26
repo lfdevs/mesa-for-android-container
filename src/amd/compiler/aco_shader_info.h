@@ -91,15 +91,15 @@ struct aco_ps_prolog_info {
    bool force_linear_sample_interp;
    bool force_persp_center_interp;
    bool force_linear_center_interp;
+   bool uses_persp_centroid;
+   bool uses_linear_centroid;
 
    unsigned samplemask_log_ps_iter;
-   bool get_frag_coord_from_pixel_coord;
-   bool pixel_center_integer;
    bool force_samplemask_to_helper_invocation;
    unsigned num_interp_inputs;
    unsigned colors_read;
-   int color_interp_vgpr_index[2];
-   int color_attr_index[2];
+   uint8_t color_attr_index[2];
+   enum ac_color_interp color_interp[2];
    bool color_two_side;
    bool needs_wqm;
 

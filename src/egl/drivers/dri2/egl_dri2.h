@@ -598,6 +598,7 @@ dri2_set_WL_bind_wayland_display(_EGLDisplay *disp)
    struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
 
    disp->Extensions.WL_bind_wayland_display =
+      dri2_dpy->fd_render_gpu >= 0 &&
       dri2_dpy->has_dmabuf_import && dri2_dpy->has_dmabuf_export;
 #endif
 }

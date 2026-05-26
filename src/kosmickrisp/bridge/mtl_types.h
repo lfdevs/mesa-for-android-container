@@ -234,6 +234,10 @@ struct mtl_size {
    size_t x, y, z;
 };
 
+struct mtl_sample_position {
+   float x, y;
+};
+
 struct mtl_viewport {
    double originX, originY, width, height, znear, zfar;
 };
@@ -269,6 +273,15 @@ struct mtl_buffer_image_copy {
    size_t image_slice;
    size_t image_level;
    enum mtl_blit_options options;
+};
+
+struct mtl_texture_memory_copy {
+   struct mtl_size image_size;
+   struct mtl_origin image_origin;
+   size_t buffer_stride_B;
+   size_t buffer_2d_image_size_B;
+   size_t image_slice;
+   size_t image_level;
 };
 
 #endif /* KK_MTL_TYPES_H */

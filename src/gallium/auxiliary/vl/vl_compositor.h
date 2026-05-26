@@ -107,6 +107,11 @@ struct vl_compositor_layer
    void *samplers[3];
    void *blend;
 
+   /* for the CS compositor */
+   bool blend_enabled;
+   float blend_alpha;
+   unsigned blend_mode;
+
    struct pipe_sampler_view *sampler_views[3];
    struct {
       struct vertex2f tl, br;

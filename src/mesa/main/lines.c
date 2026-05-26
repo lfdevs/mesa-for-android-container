@@ -87,10 +87,6 @@ void GLAPIENTRY
 _mesa_LineWidth(GLfloat width)
 {
    GET_CURRENT_CONTEXT(ctx);
-
-   if (MESA_VERBOSE & VERBOSE_API)
-      _mesa_debug(ctx, "glLineWidth %f\n", width);
-
    line_width(ctx, width, false);
 }
 
@@ -111,9 +107,6 @@ void GLAPIENTRY
 _mesa_LineStipple( GLint factor, GLushort pattern )
 {
    GET_CURRENT_CONTEXT(ctx);
-
-   if (MESA_VERBOSE & VERBOSE_API)
-      _mesa_debug(ctx, "glLineStipple %d %u\n", factor, pattern);
 
    factor = CLAMP( factor, 1, 256 );
 

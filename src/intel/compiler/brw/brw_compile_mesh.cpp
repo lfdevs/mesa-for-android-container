@@ -277,8 +277,10 @@ brw_compile_task(const struct brw_compiler *compiler,
 {
    const struct intel_device_info *devinfo = compiler->devinfo;
    struct nir_shader *nir = params->base.nir;
-   const struct brw_task_prog_key *key = params->key;
-   struct brw_task_prog_data *prog_data = params->prog_data;
+   const struct brw_task_prog_key *key =
+      (const struct brw_task_prog_key *)params->base.key;
+   struct brw_task_prog_data *prog_data =
+      (struct brw_task_prog_data *)params->base.prog_data;
    const bool debug_enabled = brw_should_print_shader(nir, DEBUG_TASK, params->base.source_hash);
 
    brw_pass_tracker pt_ = {
@@ -963,8 +965,10 @@ brw_compile_mesh(const struct brw_compiler *compiler,
 {
    const struct intel_device_info *devinfo = compiler->devinfo;
    struct nir_shader *nir = params->base.nir;
-   const struct brw_mesh_prog_key *key = params->key;
-   struct brw_mesh_prog_data *prog_data = params->prog_data;
+   const struct brw_mesh_prog_key *key =
+      (const struct brw_mesh_prog_key *)params->base.key;
+   struct brw_mesh_prog_data *prog_data =
+      (struct brw_mesh_prog_data *)params->base.prog_data;
    const bool debug_enabled = brw_should_print_shader(nir, DEBUG_MESH, params->base.source_hash);
 
    brw_pass_tracker pt_ = {

@@ -1581,13 +1581,38 @@ static void parse_vcn_enc_ib(FILE *f, struct ac_ib_parser *ib, uint32_t num_dw)
          fprintf(f, "    slice control mode = %s\n",
                  mode == RENCODE_HEVC_SLICE_CONTROL_MODE_FIXED_CTBS ? "FIXED CTBS" :
                  mode == RENCODE_HEVC_SLICE_CONTROL_MODE_FIXED_BITS ? "FIXED BITS" :
+                 mode == RENCODE_HEVC_SLICE_CONTROL_MODE_VARIABLE_CTBS ? "VARIABLE CTBS" :
                  "???");
          uint32_t per_slice = ac_ib_get(ib);
-         fprintf(f, "    num %s per slice = %u\n",
-                 mode == RENCODE_HEVC_SLICE_CONTROL_MODE_FIXED_CTBS ? "ctbs" : "bits", per_slice);
+         if (mode != RENCODE_HEVC_SLICE_CONTROL_MODE_VARIABLE_CTBS)
+            fprintf(f, "    num %s per slice = %u\n",
+                    mode == RENCODE_HEVC_SLICE_CONTROL_MODE_FIXED_CTBS ? "ctbs" : "bits", per_slice);
+         else
+            fprintf(f, "    num ctbs/bits per slice (ignored)\n");
          uint32_t per_slice_segment = ac_ib_get(ib);
-         fprintf(f, "    num %s per slice segment = %u\n",
-                 mode == RENCODE_HEVC_SLICE_CONTROL_MODE_FIXED_CTBS ? "ctbs" : "bits", per_slice_segment);
+         if (mode != RENCODE_HEVC_SLICE_CONTROL_MODE_VARIABLE_CTBS)
+            fprintf(f, "    num %s per slice segment = %u\n",
+                    mode == RENCODE_HEVC_SLICE_CONTROL_MODE_FIXED_CTBS ? "ctbs" : "bits", per_slice_segment);
+         else
+            fprintf(f, "    num ctbs/bits per slice segment (ignored)\n");
+      } else if (op == cmd.slice_info_hevc) {
+         fprintf(f, "%sHEVC_SLICE_INFO%s\n", O_COLOR_GREEN, O_COLOR_RESET);
+         uint32_t num_slice_segments = ac_ib_get(ib);
+         fprintf(f, "    num_slice_segments = %u\n", num_slice_segments);
+         uint32_t i;
+         for (i = 0; i < num_slice_segments; i++) {
+            uint32_t num_ctbs_per_segment = ac_ib_get(ib);
+            fprintf(f, "    num_ctbs_per_segment[%u] = %u\n", i, num_ctbs_per_segment);
+            uint32_t is_independent = ac_ib_get(ib);
+            fprintf(f, "    is_independent[%u] = %u\n", i, is_independent);
+         }
+         while (i < RENCODE_MAX_NUM_SLICES && ib->cur_dw < start_dw + size / 4) {
+            ac_ib_get(ib);
+            fprintf(f, "    num_ctbs_per_segment[%u] (ignored)\n", i);
+            ac_ib_get(ib);
+            fprintf(f, "    is_independent[%u] (ignored)\n", i);
+            i++;
+         }
       } else if (op == cmd.spec_misc_hevc) {
          fprintf(f, "%sHEVC_SPEC_MISC%s\n", O_COLOR_GREEN, O_COLOR_RESET);
          uint32_t min_coding_block_size = ac_ib_get(ib);
@@ -1640,10 +1665,28 @@ static void parse_vcn_enc_ib(FILE *f, struct ac_ib_parser *ib, uint32_t num_dw)
          fprintf(f, "    slice control mode = %s\n",
                  mode == RENCODE_H264_SLICE_CONTROL_MODE_FIXED_MBS ? "FIXED MBS" :
                  mode == RENCODE_H264_SLICE_CONTROL_MODE_FIXED_BITS ? "FIXED BITS" :
+                 mode == RENCODE_H264_SLICE_CONTROL_MODE_VARIABLE_MBS ? "VARIABLE MBS" :
                  "???");
          uint32_t per_slice = ac_ib_get(ib);
-         fprintf(f, "    num %s per slice = %u\n",
-                 mode == RENCODE_H264_SLICE_CONTROL_MODE_FIXED_MBS ? "mbs" : "bits", per_slice);
+         if (mode != RENCODE_H264_SLICE_CONTROL_MODE_VARIABLE_MBS)
+            fprintf(f, "    num %s per slice = %u\n",
+                    mode == RENCODE_H264_SLICE_CONTROL_MODE_FIXED_MBS ? "mbs" : "bits", per_slice);
+         else
+            fprintf(f, "    num mbs/bits per slice (ignored) \n");
+      } else if (op == cmd.slice_info_h264) {
+         fprintf(f, "%sH264_SLICE_INFO%s\n", O_COLOR_GREEN, O_COLOR_RESET);
+         uint32_t num_slices = ac_ib_get(ib);
+         fprintf(f, "    num_slices = %u\n", num_slices);
+         uint32_t i;
+         for (i = 0; i < num_slices; i++) {
+            uint32_t num_mbs_per_slice = ac_ib_get(ib);
+            fprintf(f, "    num_mbs_per_slice[%u] = %u\n", i, num_mbs_per_slice);
+         }
+         while (i < RENCODE_MAX_NUM_SLICES && ib->cur_dw < start_dw + size / 4) {
+            ac_ib_get(ib);
+            fprintf(f, "    num_mbs_per_slice[%u] (ignored)\n", i);
+            i++;
+         }
       } else if (op == cmd.spec_misc_h264) {
          fprintf(f, "%sH264_SPEC_MISC%s\n", O_COLOR_GREEN, O_COLOR_RESET);
          uint32_t constrained_intra = ac_ib_get(ib);

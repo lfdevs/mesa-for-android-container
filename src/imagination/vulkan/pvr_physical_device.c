@@ -149,6 +149,7 @@ static void pvr_physical_device_get_supported_extensions(
       .KHR_maintenance2 = true,
       .KHR_maintenance3 = true,
       .KHR_maintenance4 = true,
+      .KHR_maintenance5 = true,
       .KHR_map_memory2 = true,
       .KHR_multiview = true,
       .KHR_pipeline_executable_properties = true,
@@ -174,7 +175,7 @@ static void pvr_physical_device_get_supported_extensions(
       .KHR_timeline_semaphore = true,
       .KHR_uniform_buffer_standard_layout = true,
       .KHR_vertex_attribute_divisor = true,
-      .KHR_zero_initialize_workgroup_memory = false,
+      .KHR_workgroup_memory_explicit_layout = true,
       .EXT_border_color_swizzle = true,
       .EXT_color_write_enable = true,
       .EXT_custom_border_color = true,
@@ -334,6 +335,9 @@ static void pvr_physical_device_get_supported_features(
       /* Vulkan 1.3 / VK_KHR_maintenance4 */
       .maintenance4 = true,
 
+      /* Vulkan 1.4 / VK_KHR_maintenance5 */
+      .maintenance5 = true,
+
       /* Vulkan 1.1 / VK_KHR_shader_draw_parameters */
       .shaderDrawParameters = true,
 
@@ -460,6 +464,12 @@ static void pvr_physical_device_get_supported_features(
       .vertexAttributeInstanceRateDivisor = true,
       .vertexAttributeInstanceRateZeroDivisor = true,
 
+      /* VK_KHR_workgroup_memory_explicit_layout */
+      .workgroupMemoryExplicitLayout = true,
+      .workgroupMemoryExplicitLayoutScalarBlockLayout = true,
+      .workgroupMemoryExplicitLayout8BitAccess = false,
+      .workgroupMemoryExplicitLayout16BitAccess = false,
+
       /* Vulkan 1.3 / VK_KHR_zero_initialize_workgroup_memory */
       .shaderZeroInitializeWorkgroupMemory = false,
 
@@ -581,11 +591,11 @@ static bool pvr_physical_device_get_properties(
       .maxBoundDescriptorSets = 4U,
       .maxPerStageDescriptorSamplers = 16,
       .maxPerStageDescriptorUniformBuffers = 12,
-      .maxPerStageDescriptorStorageBuffers = 8,
+      .maxPerStageDescriptorStorageBuffers = 16,
       .maxPerStageDescriptorSampledImages = 16,
       .maxPerStageDescriptorStorageImages = 4,
       .maxPerStageDescriptorInputAttachments = 4,
-      .maxPerStageResources = 48,
+      .maxPerStageResources = 56,
       .maxDescriptorSetSamplers = 3U * 16U,
       .maxDescriptorSetUniformBuffers = 3U * 12U,
       .maxDescriptorSetUniformBuffersDynamic = 8U,
@@ -850,6 +860,14 @@ static bool pvr_physical_device_get_properties(
 
       /* Vulkan 1.3 / VK_KHR_maintenance4 */
       .maxBufferSize = max_memory_alloc_size,
+
+      /* Vulkan 1.4 / VK_KHR_maintenance5 */
+      .earlyFragmentMultisampleCoverageAfterSampleCounting = true,
+      .earlyFragmentSampleMaskTestBeforeSampleCounting = false,
+      .depthStencilSwizzleOneSupport = false,
+      .polygonModePointSize = false,
+      .nonStrictSinglePixelWideLinesUseParallelogram = false,
+      .nonStrictWideLinesUseParallelogram = true,
 
       /* Vulkan 1.4 / VK_EXT_vertex_attribute_divisor / VK_KHR_vertex_attribute_divisor */
       .maxVertexAttribDivisor = UINT32_MAX,
@@ -1156,7 +1174,8 @@ VkResult pvr_physical_device_init(struct pvr_physical_device *pdevice,
 
    pdevice->vk.supported_sync_types = ws->sync_types;
 
-   pdevice->pco_ctx = pco_ctx_create(&pdevice->dev_info, NULL);
+   pdevice->pco_ctx =
+      pco_ctx_create(&pdevice->dev_info, &pdevice->dev_runtime_info, NULL);
    if (!pdevice->pco_ctx) {
       result = vk_errorf(instance,
                          VK_ERROR_INITIALIZATION_FAILED,

@@ -594,7 +594,7 @@ __fmul32(uint a, uint b)
 }
 
 uint
-__ffma32(uint a, uint b, uint c)
+__fmad32(uint a, uint b, uint c)
 {
    return __fadd32(__fmul32(a, b), c);
 }

@@ -1268,7 +1268,7 @@ radv_amdgpu_winsys_cs_submit(struct radeon_winsys_ctx *_ctx, const struct radv_w
       if (waits[i].sync->type == &vk_sync_dummy_type)
          continue;
 
-      assert(waits[i].sync->type == &ws->syncobj_sync_type);
+      assert(vk_sync_type_is_drm_syncobj(waits[i].sync->type));
       wait_syncobj[wait_idx] = ((struct vk_drm_syncobj *)waits[i].sync)->syncobj;
       wait_points[wait_idx] = waits[i].wait_value;
       ++wait_idx;
@@ -1278,7 +1278,7 @@ radv_amdgpu_winsys_cs_submit(struct radeon_winsys_ctx *_ctx, const struct radv_w
       if (signals[i].sync->type == &vk_sync_dummy_type)
          continue;
 
-      assert(signals[i].sync->type == &ws->syncobj_sync_type);
+      assert(vk_sync_type_is_drm_syncobj(signals[i].sync->type));
       signal_syncobj[signal_idx] = ((struct vk_drm_syncobj *)signals[i].sync)->syncobj;
       signal_points[signal_idx] = signals[i].signal_value;
       ++signal_idx;
@@ -1287,10 +1287,8 @@ radv_amdgpu_winsys_cs_submit(struct radeon_winsys_ctx *_ctx, const struct radv_w
    assert(signal_idx <= signal_count);
    assert(wait_idx <= wait_count);
 
-   const uint32_t wait_timeline_syncobj_count =
-      (ws->syncobj_sync_type.features & VK_SYNC_FEATURE_TIMELINE) ? wait_idx : 0;
-   const uint32_t signal_timeline_syncobj_count =
-      (ws->syncobj_sync_type.features & VK_SYNC_FEATURE_TIMELINE) ? signal_idx : 0;
+   const uint32_t wait_timeline_syncobj_count = ws->info.has_timeline_syncobj ? wait_idx : 0;
+   const uint32_t signal_timeline_syncobj_count = ws->info.has_timeline_syncobj ? signal_idx : 0;
 
    struct radv_winsys_sem_info sem_info = {
       .wait =

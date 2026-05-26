@@ -24,12 +24,9 @@ static const struct spirv_to_nir_options spirv_options = {
 };
 
 struct nir_shader_compiler_options generic_opts = {
-   /* TODO: Do we want to set has_*? Will drivers be able to lower
-    * appropriately?
-    */
-   .fuse_ffma16 = true,
-   .fuse_ffma32 = true,
-   .fuse_ffma64 = true,
+   .float_mul_add16 = nir_float_muladd_support_keep_weak_ffma,
+   .float_mul_add32 = nir_float_muladd_support_keep_weak_ffma,
+   .float_mul_add64 = nir_float_muladd_support_keep_weak_ffma,
 
    .max_unroll_iterations = 32,
    .max_unroll_iterations_fp64 = 32,

@@ -877,10 +877,16 @@ translate_prim_topology(VkPrimitiveTopology in)
       return MALI_DRAW_MODE_TRIANGLE_STRIP;
    case VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN:
       return MALI_DRAW_MODE_TRIANGLE_FAN;
+#if PAN_ARCH >= 9
    case VK_PRIMITIVE_TOPOLOGY_LINE_LIST_WITH_ADJACENCY:
+      return MALI_DRAW_MODE_LINES_ADJACENCY;
    case VK_PRIMITIVE_TOPOLOGY_LINE_STRIP_WITH_ADJACENCY:
+      return MALI_DRAW_MODE_LINE_STRIP_ADJACENCY;
    case VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST_WITH_ADJACENCY:
+      return MALI_DRAW_MODE_TRIANGLES_ADJACENCY;
    case VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP_WITH_ADJACENCY:
+      return MALI_DRAW_MODE_TRIANGLE_STRIP_ADJACENCY;
+#endif
    case VK_PRIMITIVE_TOPOLOGY_PATCH_LIST:
    default:
       UNREACHABLE("Invalid primitive type");
@@ -1016,8 +1022,8 @@ panvk_emit_tiler_dcd(struct panvk_cmd_buffer *cmdbuf,
        * be set to 0 and the provoking vertex is selected with the
        * PRIMITIVE.first_provoking_vertex field.
        */
-      if (ia->primitive_topology == VK_PRIMITIVE_TOPOLOGY_LINE_LIST ||
-          ia->primitive_topology == VK_PRIMITIVE_TOPOLOGY_LINE_STRIP)
+      enum mesa_prim prim = vk_topology_to_mesa(ia->primitive_topology);
+      if (u_reduced_prim(prim) == MESA_PRIM_LINES)
          cfg.flat_shading_vertex = true;
 
       /* In case of indirect draw, the descriptor will be patched at runtime */

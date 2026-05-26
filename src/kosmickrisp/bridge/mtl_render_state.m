@@ -182,6 +182,26 @@ mtl_render_pass_descriptor_set_default_raster_sample_count(mtl_render_pass_descr
 }
 
 void
+mtl_render_pass_descriptor_set_sample_positions(
+   mtl_render_pass_descriptor *descriptor,
+   const struct mtl_sample_position *positions,
+   uint32_t count)
+{
+   @autoreleasepool {
+      MTLRenderPassDescriptor *desc = (MTLRenderPassDescriptor *)descriptor;
+      if (count > 0) {
+         MTLSamplePosition pos[count];
+         for (uint32_t i = 0; i < count; i++) {
+            pos[i] = MTLSamplePositionMake(positions[i].x, positions[i].y);
+         }
+         [desc setSamplePositions:pos count:count];
+      } else {
+         [desc setSamplePositions:NULL count:count];
+      }
+   }
+}
+
+void
 mtl_render_pass_descriptor_set_visibility_buffer(mtl_render_pass_descriptor *descriptor,
                                                  mtl_buffer *visibility_buffer)
 {

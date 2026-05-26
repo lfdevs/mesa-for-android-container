@@ -220,7 +220,7 @@ brw_nir_lower_intersection_shader(nir_shader *intersection,
                      nir_store_var(b, commit, nir_imm_true(b), 0x1);
 
                      nir_def *ray_addr =
-                        brw_nir_rt_mem_ray_addr(b, brw_nir_rt_stack_addr(b), BRW_RT_BVH_LEVEL_WORLD);
+                        brw_nir_rt_mem_ray_addr(b, brw_nir_rt_stack_addr(b), BRW_RT_BVH_LEVEL_OBJECT);
 
                      nir_store_global(b, hit_t, nir_iadd_imm(b, ray_addr, 16 + 12));
                      if (devinfo->ver >= 30) {

@@ -181,7 +181,7 @@ setup_render_state(struct gl_context *ctx,
    struct st_fp_variant_key key;
 
    memset(&key, 0, sizeof(key));
-   key.st = st->has_shareable_shaders ? NULL : st;
+   key.st = st->screen->caps.shareable_shaders ? NULL : st;
    key.bitmap = GL_TRUE;
    key.clamp_color = st->clamp_frag_color_in_shader &&
                      clamp_frag_color;
@@ -594,7 +594,7 @@ init_bitmap_state(struct st_context *st)
    st->bitmap.sampler.mag_img_filter = PIPE_TEX_FILTER_NEAREST;
    st->bitmap.sampler.unnormalized_coords = !(st->internal_target == PIPE_TEXTURE_2D ||
                                               (st->internal_target == PIPE_TEXTURE_RECT &&
-                                               st->lower_rect_tex));
+                                               !st->screen->caps.texrect));
 
    /* init baseline rasterizer state once */
    memset(&st->bitmap.rasterizer, 0, sizeof(st->bitmap.rasterizer));

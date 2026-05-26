@@ -5495,6 +5495,10 @@ threaded_context_create(struct pipe_context *pipe,
    if (!pipe)
       return NULL;
 
+#ifndef HAVE_GFX_COMPUTE
+   return pipe;
+#endif
+
    if (!debug_get_bool_option("GALLIUM_THREAD", true))
       return pipe;
 

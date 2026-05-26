@@ -251,6 +251,16 @@ v3dv_cmd_buffer_add_private_obj(struct v3dv_cmd_buffer *cmd_buffer,
    list_addtail(&pobj->list_link, &cmd_buffer->private_objs);
 }
 
+void
+v3dv_cmd_buffer_destroy_bo_cb(VkDevice _device,
+                              uint64_t pobj,
+                              VkAllocationCallbacks *alloc)
+{
+   V3DV_FROM_HANDLE(v3dv_device, device, _device);
+   struct v3dv_bo *bo = (struct v3dv_bo *)((uintptr_t) pobj);
+   v3dv_bo_free(device, bo);
+}
+
 static void
 cmd_buffer_destroy_private_obj(struct v3dv_cmd_buffer *cmd_buffer,
                                struct v3dv_cmd_buffer_private_obj *pobj)

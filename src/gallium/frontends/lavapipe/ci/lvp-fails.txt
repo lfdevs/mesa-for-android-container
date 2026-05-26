@@ -872,3 +872,8 @@ dEQP-VK.renderpasses.dynamic_rendering.primary_cmd_buff.suballocation.formats.r8
 dEQP-VK.renderpasses.dynamic_rendering.primary_cmd_buff.suballocation.formats.r8g8b8a8_unorm.input.load.store.self_dep_clear_draw,Fail
 dEQP-VK.sparse_resources.image_block_shapes.2d.b8g8r8g8_422_unorm.samples_1,Fail
 dEQP-VK.sparse_resources.image_block_shapes.2d_array.b8g8r8g8_422_unorm.samples_1,Fail
+
+# VKCTS 1.4.4.2 -> 1.4.5.3 uprev
+dEQP-VK.dgc.ext.graphics.misc.mix_normal_dgc_preprocess_with_vbo_token,Fail
+dEQP-VK.mesh_shader.ext.smoke.fast_lib.depth_only_points_position_components,Fail
+dEQP-VK.reconvergence.maximal.compute.nesting4.3.38,Crash

@@ -1,6 +1,7 @@
 // Copyright 2025 Google
 // SPDX-License-Identifier: MIT
 
+pub mod atomic_memory_sentinel;
 pub mod descriptor;
 pub mod event;
 pub mod memory_mapping;

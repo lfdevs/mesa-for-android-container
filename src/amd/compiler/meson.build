@@ -92,7 +92,7 @@ _libaco = static_library(
     dep_llvm, dep_thread, dep_valgrind, idep_nir_headers, idep_amd_generated_headers, idep_mesautil,
   ],
   gnu_symbol_visibility : 'hidden',
-  build_by_default : true,
+  build_by_default : false,
   cpp_args : [cpp_args_aco, cpp_msvc_compat_args],
 )
 

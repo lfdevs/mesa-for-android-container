@@ -143,15 +143,16 @@ op('send', 4, None, Props.SIDE_EFFECTS, [
     'bool check_tdr',
     'bool uniform',
     'bool bindless',
+    'bool pure',
     'enum jay_type type_0',
     'enum jay_type type_1',
     'uint8_t ex_mlen',
+    'bool pad[3]',
     'uint32_t ex_desc_imm',
 ])
 
 op('reloc',   0, 'u32 u64', 0, ['unsigned param', 'unsigned base'])
 op('preload', 0, 'u32',     0, ['unsigned reg'])
-op('deswizzle', 0, 'u32', Props.NO_DEST, ['unsigned size'])
 op('deswizzle_odd', 2, 'f32', 0, ['bool src2_hi'])
 op('deswizzle_even', 1, 'f32', 0, ['bool src_hi'])
 
@@ -160,10 +161,29 @@ op('deswizzle_even', 1, 'f32', 0, ['bool src_hi'])
 op('lane_id_8', 0, 'u16')
 op('lane_id_expand', 1, 'u16', 0, ['unsigned width'])
 
+# Fill a scalar GPR from a contiguous UGPR[16] range containing words or bytes.
+# src_type can be either U8 or U16 (only).  For U8, stride can be 1 or 2, and
+# index can be either 0 or 1.  For U16, both stride and index must be 0.
+op('gpr_from_ugprs', 1, 'u32', 0, [
+    'enum jay_type src_type',
+    'uint8_t stride',
+    'uint8_t index',
+    'uint8_t pad',
+])
+
 # Sample ID calculation
 op('extract_byte_per_8lanes', 2, 'u32')
 op('shr_odd_subspans_by_4', 1, 'u16')
 op('and_u32_u16', 2, 'u32')
+
+# Copy the first byte of each lane, treating the destination as if it were
+# effectively JAY_STRIDE_1 (which doesn't exist).  Because the destination
+# doesn't follow proper lane alignments, this should not write to GPRs.
+# This is used for stencil outputs in render target write messages.
+op('byte_pack', 1, 'u32')
+
+# Similar to byte_pack, but for words
+op('word_pack', 1, 'u32')
 
 # Pixel coord calculations. expand_quad replicates out the per-2x2 values from
 # its source g0.[10...13] and - in the case of SIMD32 - g1.[10...13] into a
@@ -204,8 +224,8 @@ op('phi_dst', 0, 'u1 u32')
 # Output from a unit test to prevent dead code elimination.
 op('unit_test', 1, 'u32', Props.NO_DEST)
 
-# Produces a stable indeterminate value. Freeze(Poison) in LLVM parlance.
-op('indeterminate', 0, 'u1 u32')
+# Produces a unstable indeterminate value. Undef in LLVM parlance.
+op('undef', 0, 'u1 u32')
 
 op('not', 1, 'u1 u32', Props.CMOD)
 op('cast_canonical_to_flag', 1, 'u1')

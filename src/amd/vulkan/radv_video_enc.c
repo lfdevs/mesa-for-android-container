@@ -35,6 +35,7 @@
 #include "radv_query.h"
 #include "radv_video.h"
 
+#include "ac_cmdbuf_video.h"
 #include "ac_vcn_enc.h"
 #include "ac_vcn_enc_av1_default_cdf.h"
 
@@ -74,7 +75,7 @@ radv_probe_video_encode(struct radv_physical_device *pdev)
       return;
 
    /* WRITE_MEMORY is needed for SetEvent and is required to pass CTS */
-   if (radv_video_write_memory_supported(pdev)) {
+   if (pdev->info.video_caps.queue[AMD_IP_VCN_ENC].write_memory != AC_VIDEO_WRITE_MEMORY_SUPPORT_NONE) {
       pdev->video_encode_enabled = true;
       return;
    }
@@ -3090,8 +3091,10 @@ radv_vcn_encode_video(struct radv_cmd_buffer *cmd_buffer, const VkVideoEncodeInf
 
    if (pdev->enc_hw_ver >= RADV_VIDEO_ENC_HW_2) {
       radv_vcn_sq_tail(cs, &cmd_buffer->video.sq);
-      if (feedback_query_va && radv_video_write_memory_supported(pdev) == RADV_VIDEO_WRITE_MEMORY_SUPPORT_FULL)
-         radv_vcn_write_memory(cmd_buffer, feedback_query_va + RADV_ENC_FEEDBACK_STATUS_IDX * sizeof(uint32_t), 1);
+      if (feedback_query_va &&
+          pdev->info.video_caps.queue[AMD_IP_VCN_ENC].write_memory == AC_VIDEO_WRITE_MEMORY_SUPPORT_FULL)
+         ac_emit_video_write_memory(cs->b, &pdev->info, cs->hw_ip,
+                                    feedback_query_va + RADV_ENC_FEEDBACK_STATUS_IDX * sizeof(uint32_t), 1);
    }
 }
 
@@ -3417,14 +3420,15 @@ void
 radv_video_patch_encode_session_parameters(struct radv_device *device, struct vk_video_session_parameters *params)
 {
    struct radv_physical_device *pdev = radv_device_physical(device);
+   struct ac_video_enc_codec_caps *caps;
 
    switch (params->op) {
    case VK_VIDEO_CODEC_OPERATION_ENCODE_H264_BIT_KHR:
+      caps = &pdev->info.video_caps.enc[AC_VIDEO_CODEC_AVC];
       for (unsigned i = 0; i < params->h264_enc.h264_pps_count; i++) {
          params->h264_enc.h264_pps[i].base.pic_init_qp_minus26 = 0;
          params->h264_enc.h264_pps[i].base.pic_init_qs_minus26 = 0;
-         if (pdev->enc_hw_ver < RADV_VIDEO_ENC_HW_5 ||
-             !params->h264_enc.h264_pps[i].base.flags.entropy_coding_mode_flag)
+         if (!caps->avc.transform_8x8 || !params->h264_enc.h264_pps[i].base.flags.entropy_coding_mode_flag)
             params->h264_enc.h264_pps[i].base.flags.transform_8x8_mode_flag = 0;
 
          params->h264_enc.h264_pps[i].base.num_ref_idx_l0_default_active_minus1 = 0;
@@ -3432,12 +3436,16 @@ radv_video_patch_encode_session_parameters(struct radv_device *device, struct vk
       }
       break;
    case VK_VIDEO_CODEC_OPERATION_ENCODE_H265_BIT_KHR: {
+      caps = &pdev->info.video_caps.enc[AC_VIDEO_CODEC_HEVC];
       for (unsigned i = 0; i < params->h265_enc.h265_sps_count; i++) {
          VkExtent2D extent = {
             .width = params->h265_enc.h265_sps[i].base.pic_width_in_luma_samples,
             .height = params->h265_enc.h265_sps[i].base.pic_height_in_luma_samples,
          };
-         VkExtent2D aligned_extent = radv_enc_aligned_coded_extent(pdev, params->op, extent);
+         VkExtent2D aligned_extent = {
+            .width = align(extent.width, caps->width_alignment),
+            .height = align(extent.height, caps->height_alignment),
+         };
 
          /* Override the unaligned pic_{width,height} and make up for it with conformance window
           * cropping */
@@ -3450,25 +3458,22 @@ radv_video_patch_encode_session_parameters(struct radv_device *device, struct vk
             params->h265_enc.h265_sps[i].base.conf_win_bottom_offset += (aligned_extent.height - extent.height) / 2;
          }
 
-         /* VCN supports only the following block sizes (resulting in 64x64 CTBs with any coding
-          * block size) */
-         params->h265_enc.h265_sps[i].base.log2_min_luma_coding_block_size_minus3 = 0;
-         params->h265_enc.h265_sps[i].base.log2_diff_max_min_luma_coding_block_size = 3;
-         params->h265_enc.h265_sps[i].base.log2_min_luma_transform_block_size_minus2 = 0;
-         params->h265_enc.h265_sps[i].base.log2_diff_max_min_luma_transform_block_size = 3;
+         params->h265_enc.h265_sps[i].base.log2_min_luma_coding_block_size_minus3 =
+            caps->hevc.log2_min_luma_coding_block_size_minus3;
+         params->h265_enc.h265_sps[i].base.log2_diff_max_min_luma_coding_block_size =
+            caps->hevc.log2_diff_max_min_luma_coding_block_size;
+         params->h265_enc.h265_sps[i].base.log2_min_luma_transform_block_size_minus2 =
+            caps->hevc.log2_min_luma_transform_block_size_minus2;
+         params->h265_enc.h265_sps[i].base.log2_diff_max_min_luma_transform_block_size =
+            caps->hevc.log2_diff_max_min_luma_transform_block_size;
       }
 
       for (unsigned i = 0; i < params->h265_enc.h265_pps_count; i++) {
-         /* cu_qp_delta needs to be enabled if rate control is enabled. VCN2 and newer can also enable
-          * it with rate control disabled. Since we don't know what rate control will be used, we
-          * need to always force enable it.
-          * On VCN1 rate control modes are disabled.
-          */
-         params->h265_enc.h265_pps[i].base.flags.cu_qp_delta_enabled_flag = !!(pdev->enc_hw_ver >= RADV_VIDEO_ENC_HW_2);
+         params->h265_enc.h265_pps[i].base.flags.cu_qp_delta_enabled_flag = caps->hevc.cu_qp_delta ? 1 : 0;
          params->h265_enc.h265_pps[i].base.diff_cu_qp_delta_depth = 0;
          params->h265_enc.h265_pps[i].base.init_qp_minus26 = 0;
          params->h265_enc.h265_pps[i].base.flags.dependent_slice_segments_enabled_flag = 1;
-         if (pdev->enc_hw_ver < RADV_VIDEO_ENC_HW_3)
+         if (!caps->hevc.transform_skip)
             params->h265_enc.h265_pps[i].base.flags.transform_skip_enabled_flag = 0;
 
          params->h265_enc.h265_pps[i].base.num_ref_idx_l0_default_active_minus1 = 0;
@@ -3477,12 +3482,16 @@ radv_video_patch_encode_session_parameters(struct radv_device *device, struct vk
       break;
    }
    case VK_VIDEO_CODEC_OPERATION_ENCODE_AV1_BIT_KHR: {
+      caps = &pdev->info.video_caps.enc[AC_VIDEO_CODEC_AV1];
       /* If the resolution isn't aligned, we need to override it. */
       VkExtent2D extent = {
          .width = params->av1_enc.seq_hdr.base.max_frame_width_minus_1 + 1,
          .height = params->av1_enc.seq_hdr.base.max_frame_height_minus_1 + 1,
       };
-      VkExtent2D aligned_extent = radv_enc_aligned_coded_extent(pdev, params->op, extent);
+      VkExtent2D aligned_extent = {
+         .width = align(extent.width, caps->width_alignment),
+         .height = align(extent.height, caps->height_alignment),
+      };
       params->av1_enc.seq_hdr.base.max_frame_width_minus_1 = aligned_extent.width - 1;
       params->av1_enc.seq_hdr.base.max_frame_height_minus_1 = aligned_extent.height - 1;
 
@@ -3651,9 +3660,10 @@ radv_video_get_encode_session_memory_requirements(struct radv_device *device, st
 
    if (vid->vk.flags & VK_VIDEO_SESSION_CREATE_ALLOW_ENCODE_QUANTIZATION_DELTA_MAP_BIT_KHR &&
        pdev->enc_hw_ver >= RADV_VIDEO_ENC_HW_5) {
-      const uint32_t texel_size = radv_video_get_qp_map_texel_size(vid->vk.op);
-      const uint32_t map_width = DIV_ROUND_UP(vid->vk.max_coded.width, texel_size);
-      const uint32_t map_height = DIV_ROUND_UP(vid->vk.max_coded.height, texel_size);
+      struct ac_video_enc_codec_caps *caps;
+      radv_video_get_caps(pdev, vid->vk.op, NULL, &caps);
+      const uint32_t map_width = DIV_ROUND_UP(vid->vk.max_coded.width, caps->qp_map_texel_size);
+      const uint32_t map_height = DIV_ROUND_UP(vid->vk.max_coded.height, caps->qp_map_texel_size);
 
       vk_outarray_append_typed(VkVideoSessionMemoryRequirementsKHR, &out, m)
       {
@@ -3725,42 +3735,4 @@ radv_video_get_enc_dpb_image(struct radv_device *device, const struct VkVideoPro
       image->size += align(metadata_size, ENC_ALIGNMENT);
    }
    image->alignment = ENC_ALIGNMENT;
-}
-
-bool
-radv_video_encode_av1_supported(const struct radv_physical_device *pdev)
-{
-   if (pdev->info.vcn_ip_version >= VCN_5_0_0) {
-      return true;
-   } else if (pdev->info.vcn_ip_version >= VCN_4_0_0) {
-      return pdev->info.vcn_ip_version != VCN_4_0_3 && pdev->info.vcn_enc_minor_version >= 20;
-   } else {
-      return false;
-   }
-}
-
-bool
-radv_video_encode_qp_map_supported(const struct radv_physical_device *pdev)
-{
-   if (pdev->info.vcn_ip_version >= VCN_5_0_0)
-      return radv_check_vcn_fw_version(pdev, 9, 9, 28);
-   return true;
-}
-
-enum radv_video_write_memory_support
-radv_video_write_memory_supported(const struct radv_physical_device *pdev)
-{
-   if (pdev->info.vcn_ip_version >= VCN_5_0_0) {
-      return RADV_VIDEO_WRITE_MEMORY_SUPPORT_PCIE_ATOMICS;
-   } else if (pdev->info.vcn_ip_version >= VCN_4_0_0) {
-      if (pdev->info.vcn_enc_minor_version >= 22)
-         return RADV_VIDEO_WRITE_MEMORY_SUPPORT_PCIE_ATOMICS;
-   } else if (pdev->info.vcn_ip_version >= VCN_3_0_0) {
-      if (pdev->info.vcn_enc_minor_version >= 33)
-         return RADV_VIDEO_WRITE_MEMORY_SUPPORT_PCIE_ATOMICS;
-   } else if (pdev->info.vcn_ip_version >= VCN_2_0_0) {
-      if (pdev->info.vcn_enc_minor_version >= 24)
-         return RADV_VIDEO_WRITE_MEMORY_SUPPORT_PCIE_ATOMICS;
-   }
-   return RADV_VIDEO_WRITE_MEMORY_SUPPORT_NONE;
 }

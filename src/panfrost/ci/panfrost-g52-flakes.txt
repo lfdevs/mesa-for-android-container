@@ -77,10 +77,5 @@ dEQP-VK.glsl.operator.binary_operator.div.mediump_float_vec3_vertex
 # Nightly run expectations update
 glx@glx-visuals-stencil
 
-# https://gerrit.khronos.org/c/vk-gl-cts/+/19859
-dEQP-VK.wsi.xcb.maintenance1.present_modes.*
-dEQP-VK.wsi.xcb.maintenance1.present_fence.*
-dEQP-VK.wsi.xcb.maintenance1.deferred_alloc.*
-
 # New timeout flakes since wsi maintenance1 support
 dEQP-VK.wsi.xcb.maintenance1.release_images.mailbox.no_scaling.basic

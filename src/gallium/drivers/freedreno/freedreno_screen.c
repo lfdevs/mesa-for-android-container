@@ -275,6 +275,7 @@ fd_init_shader_caps(struct fd_screen *screen)
          (is_a5xx(screen) || is_a6xx(screen)) &&
          (i == MESA_SHADER_COMPUTE || i == MESA_SHADER_FRAGMENT) &&
          !FD_DBG(NOFP16);
+      caps->fp16_no_denorms = caps->fp16 && screen->gen < 8;
       caps->glsl_16bit_load_dst = true;
 
       caps->max_texture_samplers =
@@ -361,7 +362,11 @@ fd_init_compute_caps(struct fd_screen *screen)
 
    caps->max_compute_units = screen->info->num_sp_cores;
 
-   caps->subgroup_sizes = screen->info->max_waves;
+   caps->subgroup_sizes = screen->info->threadsize_base;
+   if (screen->info->props.supports_double_threadsize)
+      caps->subgroup_sizes |= 2 * screen->info->threadsize_base;
+
+   caps->max_subgroups = screen->info->max_waves;
 
    caps->max_variable_threads_per_block = compiler->max_variable_workgroup_size;
 }
@@ -694,6 +699,29 @@ fd_init_screen_caps(struct fd_screen *screen)
 
    if (is_a6xx(screen)) {
       caps->shader_clock = true;
+
+      caps->shader_subgroup_size = screen->info->threadsize_base *
+         (screen->info->props.supports_double_threadsize ? 2 : 1);
+      caps->shader_subgroup_supported_stages = BITFIELD_BIT(MESA_SHADER_COMPUTE);
+      caps->shader_subgroup_supported_features =
+         PIPE_SHADER_SUBGROUP_FEATURE_BASIC |
+         PIPE_SHADER_SUBGROUP_FEATURE_VOTE |
+         PIPE_SHADER_SUBGROUP_FEATURE_ARITHMETIC |
+         PIPE_SHADER_SUBGROUP_FEATURE_BALLOT |
+         PIPE_SHADER_SUBGROUP_FEATURE_ROTATE |
+         PIPE_SHADER_SUBGROUP_FEATURE_ROTATE_CLUSTERED |
+         PIPE_SHADER_SUBGROUP_FEATURE_SHUFFLE |
+         PIPE_SHADER_SUBGROUP_FEATURE_SHUFFLE_RELATIVE |
+         PIPE_SHADER_SUBGROUP_FEATURE_CLUSTERED |
+         0;
+      if (screen->info->props.has_getfiberid) {
+         caps->shader_subgroup_supported_stages |=
+            BITFIELD_MASK(MESA_SHADER_STAGES);
+         caps->shader_subgroup_supported_features |=
+            PIPE_SHADER_SUBGROUP_FEATURE_QUAD;
+      }
+
+      caps->shader_ballot = caps->shader_subgroup_size <= 64;
    }
 }
 
@@ -997,8 +1025,11 @@ fd_screen_create(int fd,
    screen->has_syncobj = fd_has_syncobj(screen->dev);
 
    /* parse driconf configuration now for device specific overrides: */
-   driParseConfigFiles(config->options, config->options_info, 0, "msm",
-                       NULL, fd_dev_name(screen->dev_id), NULL, 0, NULL, 0);
+   driParseConfigFiles(config->options, config->options_info,
+                       &(driConfigFileParseParams) {
+                          .driverName = "msm",
+                          .deviceName = fd_dev_name(screen->dev_id),
+                       });
 
    screen->driconf.conservative_lrz =
          !driQueryOptionb(config->options, "disable_conservative_lrz");

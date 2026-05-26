@@ -36,13 +36,12 @@ kk_get_nir_options(struct vk_physical_device *vk_pdev, mesa_shader_stage stage,
    return &kk_nir_options;
 }
 
-/* TODO_KOSMICKRISP Once we support robustness2, update these values. */
 static const struct vk_pipeline_robustness_state rs_all_supported = {
    .uniform_buffers =
-      VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_ROBUST_BUFFER_ACCESS,
+      VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_ROBUST_BUFFER_ACCESS_2,
    .storage_buffers =
-      VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_ROBUST_BUFFER_ACCESS,
-   .images = VK_PIPELINE_ROBUSTNESS_IMAGE_BEHAVIOR_ROBUST_IMAGE_ACCESS_2_EXT,
+      VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_ROBUST_BUFFER_ACCESS_2,
+   .images = VK_PIPELINE_ROBUSTNESS_IMAGE_BEHAVIOR_ROBUST_IMAGE_ACCESS_2,
 };
 
 static struct spirv_to_nir_options
@@ -183,6 +182,9 @@ kk_hash_graphics_state(struct vk_physical_device *device,
                           sizeof(state->mv->view_mask));
    }
 
+   _mesa_blake3_update(&blake3_ctx, &enabled_features->nullDescriptor,
+                       sizeof(enabled_features->nullDescriptor));
+
    _mesa_blake3_final(&blake3_ctx, blake3_out);
 }
 
@@ -287,7 +289,8 @@ kk_nir_swizzle_fragment_output(nir_builder *b, nir_intrinsic_instr *intrin,
 }
 
 static void
-kk_lower_vs_vbo(nir_shader *nir, const struct vk_graphics_pipeline_state *state)
+kk_lower_vs_vbo(nir_shader *nir, const struct vk_graphics_pipeline_state *state,
+                const struct vk_pipeline_robustness_state *rs)
 {
    assert(!(nir->info.inputs_read & BITFIELD64_MASK(VERT_ATTRIB_GENERIC0)) &&
           "Fixed-function attributes not used in Vulkan");
@@ -315,7 +318,10 @@ kk_lower_vs_vbo(nir_shader *nir, const struct vk_graphics_pipeline_state *state)
       attributes[slot].instanced =
          binding->input_rate == VK_VERTEX_INPUT_RATE_INSTANCE;
    }
-   NIR_PASS(_, nir, kk_nir_lower_vbo, attributes);
+   bool robustness2 =
+      rs->vertex_inputs ==
+      VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_ROBUST_BUFFER_ACCESS_2;
+   NIR_PASS(_, nir, kk_nir_lower_vbo, attributes, robustness2);
 }
 
 static void
@@ -402,8 +408,8 @@ static void
 kk_lower_fs(struct kk_device *dev, nir_shader *nir,
             const struct vk_graphics_pipeline_state *state)
 {
-   nir->info.fs.uses_sample_shading |= state->ms &&
-                                       state->ms->sample_shading_enable;
+   nir->info.fs.uses_sample_shading |=
+      state->ms && state->ms->sample_shading_enable;
 
    /* msl_nir_lower_sample_shading needs to go before blending since
     * nir_lower_blend will always set uses_sample_shading to true if there's any
@@ -448,8 +454,8 @@ kk_lower_fs(struct kk_device *dev, nir_shader *nir,
 
             nir_def *sample_id = nir_load_sample_id(&b);
             nir_def *sample_bit = nir_ishl(&b, nir_imm_int(&b, 1), sample_id);
-            nir_def *sample_mask_bit = nir_iand(&b, nir_load_sample_mask_in(&b),
-                                                sample_bit);
+            nir_def *sample_mask_bit =
+               nir_iand(&b, nir_load_sample_mask_in(&b), sample_bit);
             nir_discard_if(&b, nir_ieq_imm(&b, sample_mask_bit, 0u));
          }
       }
@@ -498,6 +504,8 @@ kk_lower_nir(struct kk_device *dev, nir_shader *nir,
                glsl_get_natural_size_align_bytes);
 
       NIR_PASS(_, nir, msl_ensure_vertex_position_output);
+      if (state->ia->primitive_topology == VK_PRIMITIVE_TOPOLOGY_POINT_LIST)
+         NIR_PASS(_, nir, msl_ensure_vertex_point_size_output);
    } else if (nir->info.stage == MESA_SHADER_FRAGMENT) {
       NIR_PASS(_, nir, kk_nir_lower_fs_multiview, state->mv->view_mask);
 
@@ -583,6 +591,9 @@ kk_lower_nir(struct kk_device *dev, nir_shader *nir,
             set_layouts);
    NIR_PASS(_, nir, kk_nir_lower_textures);
 
+   if (dev->vk.enabled_features.nullDescriptor)
+      NIR_PASS(_, nir, kk_nir_lower_null_images);
+
    NIR_PASS(_, nir, nir_lower_global_vars_to_local);
 }
 
@@ -635,6 +646,7 @@ gather_shader_info(struct kk_shader *shader, nir_shader *nir,
    if (nir->info.stage == MESA_SHADER_VERTEX) {
       nir_shader_intrinsics_pass(nir, gather_vs_inputs, nir_metadata_all,
                                  &shader->info.vs.attribs_read);
+      shader->info.vs.num_cull_distances = nir->info.cull_distance_array_size;
    } else if (nir->info.stage == MESA_SHADER_FRAGMENT) {
       /* Some meta shaders like vk-meta-resolve will have depth_layout as NONE
        * which is not a valid Metal layout */
@@ -679,6 +691,7 @@ modify_nir_info(nir_shader *nir)
 
 static VkResult
 kk_compile_shader(struct kk_device *dev, struct vk_shader_compile_info *info,
+                  struct kk_shader *prev_stage,
                   const struct vk_graphics_pipeline_state *state,
                   const VkAllocationCallbacks *pAllocator,
                   struct vk_shader **shader_out)
@@ -705,9 +718,11 @@ kk_compile_shader(struct kk_device *dev, struct vk_shader_compile_info *info,
    /* VBO lowering needs to go here otherwise, the linking step removes all
     * inputs since we read vertex attributes from UBOs. */
    if (info->stage == MESA_SHADER_VERTEX) {
-      kk_lower_vs_vbo(nir, state);
+      kk_lower_vs_vbo(nir, state, info->robustness);
    }
-   msl_lower_nir_late(nir);
+   unsigned num_cull_distances =
+      prev_stage ? prev_stage->info.vs.num_cull_distances : 0;
+   msl_nir_lower_clip_cull_distance(nir, num_cull_distances);
    msl_optimize_nir(nir);
    modify_nir_info(nir);
 
@@ -747,9 +762,9 @@ kk_compile_shader(struct kk_device *dev, struct vk_shader_compile_info *info,
 }
 
 static const struct vk_pipeline_robustness_state rs_none = {
-   .uniform_buffers = VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_DISABLED_EXT,
-   .storage_buffers = VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_DISABLED_EXT,
-   .images = VK_PIPELINE_ROBUSTNESS_IMAGE_BEHAVIOR_ROBUST_IMAGE_ACCESS_2_EXT,
+   .uniform_buffers = VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_DISABLED,
+   .storage_buffers = VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_DISABLED,
+   .images = VK_PIPELINE_ROBUSTNESS_IMAGE_BEHAVIOR_ROBUST_IMAGE_ACCESS_2,
 };
 
 VkResult
@@ -772,7 +787,7 @@ kk_compile_nir_shader(struct kk_device *dev, nir_shader *nir,
 
    struct vk_shader *shader = NULL;
    nir_shader_gather_info(nir, nir_shader_get_entrypoint(nir));
-   VkResult result = kk_compile_shader(dev, &info, NULL, alloc, &shader);
+   VkResult result = kk_compile_shader(dev, &info, NULL, NULL, alloc, &shader);
    if (result != VK_SUCCESS)
       return result;
 
@@ -1154,8 +1169,10 @@ kk_compile_shaders(struct vk_device *device, uint32_t shader_count,
                          nir_opts, NULL);
 
    for (uint32_t i = 0; i < shader_count; i++) {
-      result =
-         kk_compile_shader(dev, &infos[i], state, pAllocator, &shaders_out[i]);
+      struct kk_shader *prev_stage =
+         i > 0 ? container_of(shaders_out[i - 1], struct kk_shader, vk) : NULL;
+      result = kk_compile_shader(dev, &infos[i], prev_stage, state, pAllocator,
+                                 &shaders_out[i]);
       if (result != VK_SUCCESS) {
          /* Clean up all the shaders before this point */
          for (uint32_t j = 0; j < i; j++)
@@ -1194,8 +1211,8 @@ kk_compile_shaders(struct vk_device *device, uint32_t shader_count,
             .robustness = &rs_none,
          };
          struct vk_shader *frag_shader;
-         result =
-            kk_compile_shader(dev, &info, state, &dev->vk.alloc, &frag_shader);
+         result = kk_compile_shader(dev, &info, fs, state, &dev->vk.alloc,
+                                    &frag_shader);
 
          if (result != VK_SUCCESS) {
             for (uint32_t i = 0; i < shader_count; i++)
@@ -1209,8 +1226,7 @@ kk_compile_shaders(struct vk_device *device, uint32_t shader_count,
          fs = container_of(frag_shader, struct kk_shader, vk);
       }
 
-      gather_graphics_pipeline_create_info(
-         state, &vs->info, fs);
+      gather_graphics_pipeline_create_info(state, &vs->info, fs);
       result = kk_compile_graphics_pipeline(
          dev, vs->msl_code, vs->entrypoint_name, fs->msl_code,
          fs->entrypoint_name, &vs->info, &vs->pipeline);
@@ -1369,7 +1385,7 @@ kk_cmd_bind_graphics_shader(struct kk_cmd_buffer *cmd,
    cmd->state.gfx.is_depth_stencil_dynamic = requires_dynamic_depth_stencil;
    cmd->state.gfx.dirty |= KK_DIRTY_VB;
 
-   cmd->state.gfx.sample_count = shader->info.vs.sample_count;
+   cmd->state.gfx.pipeline_sample_count = shader->info.vs.sample_count;
 }
 
 static void

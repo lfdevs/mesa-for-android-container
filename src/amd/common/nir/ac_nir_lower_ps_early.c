@@ -27,8 +27,6 @@ typedef struct {
 
    bool frag_color_is_frag_data0;
    bool seen_color0_alpha;
-   bool uses_fragcoord_xy_as_float;
-   bool use_fragcoord;
 
    nir_def *load_helper_invoc_at_top;
 } lower_ps_early_state;
@@ -302,8 +300,8 @@ lower_load_barycentric_at_offset(nir_builder *b, nir_def *offset, enum glsl_inte
    nir_def *offset_y = nir_channel(b, offset, 1);
 
    /* Interpolate standard barycentrics by offset. */
-   nir_def *offset_i = nir_ffma(b, ddy_i, offset_y, nir_ffma(b, ddx_i, offset_x, i));
-   nir_def *offset_j = nir_ffma(b, ddy_j, offset_y, nir_ffma(b, ddx_j, offset_x, j));
+   nir_def *offset_i = nir_ffma_weak(b, ddy_i, offset_y, nir_ffma_weak(b, ddx_i, offset_x, i));
+   nir_def *offset_j = nir_ffma_weak(b, ddy_j, offset_y, nir_ffma_weak(b, ddx_j, offset_x, j));
    return nir_vec2(b, offset_i, offset_j);
 }
 
@@ -497,35 +495,6 @@ lower_ps_intrinsic(nir_builder *b, nir_intrinsic_instr *intrin, void *state)
          return true;
       }
       break;
-   case nir_intrinsic_load_frag_coord:
-      if (!s->options->optimize_frag_coord)
-         break;
-      /* Compute frag_coord.xy from pixel_coord. */
-      if (!s->use_fragcoord && nir_def_components_read(&intrin->def) & 0x3) {
-         nir_def *new_fragcoord_xy = nir_u2f32(b, nir_load_pixel_coord(b));
-         if (!b->shader->info.fs.pixel_center_integer)
-            new_fragcoord_xy = nir_fadd_imm(b, new_fragcoord_xy, 0.5);
-         nir_def *fragcoord = nir_build_frag_coord(b, 4);
-         nir_def_replace(&intrin->def,
-                         nir_vec4(b, nir_channel(b, new_fragcoord_xy, 0),
-                                  nir_channel(b, new_fragcoord_xy, 1),
-                                  nir_channel(b, fragcoord, 2),
-                                  nir_channel(b, fragcoord, 3)));
-         return true;
-      }
-      break;
-   case nir_intrinsic_load_pixel_coord:
-      if (!s->options->optimize_frag_coord)
-         break;
-      /* There is already a floating-point frag_coord.xy use in the shader. Don't add pixel_coord.
-       * Instead, compute pixel_coord from frag_coord.
-       */
-      if (s->use_fragcoord) {
-         nir_def *new_pixel_coord = nir_f2u16(b, nir_build_frag_coord(b, 2));
-         nir_def_replace(&intrin->def, new_pixel_coord);
-         return true;
-      }
-      break;
    default:
       break;
    }
@@ -546,35 +515,6 @@ gather_info(nir_builder *b, nir_intrinsic_instr *intr, void *state)
        */
       if (nir_intrinsic_io_semantics(intr).location == FRAG_RESULT_DUAL_SRC_BLEND)
          s->frag_color_is_frag_data0 = true;
-      break;
-   case nir_intrinsic_load_frag_coord:
-      assert(intr->def.bit_size == 32);
-      nir_foreach_use(use, &intr->def) {
-         if (nir_src_use_instr(use)->type == nir_instr_type_alu &&
-             nir_src_components_read(use) & 0x3) {
-            switch (nir_instr_as_alu(nir_src_use_instr(use))->op) {
-            case nir_op_f2i8:
-            case nir_op_f2i16:
-            case nir_op_f2i32:
-            case nir_op_f2i64:
-            case nir_op_f2u8:
-            case nir_op_f2u16:
-            case nir_op_f2u32:
-            case nir_op_f2u64:
-            case nir_op_ftrunc:
-            case nir_op_ffloor:
-               continue;
-            default:
-               break;
-            }
-         }
-         s->uses_fragcoord_xy_as_float = true;
-         break;
-      }
-      break;
-   case nir_intrinsic_load_sample_pos:
-      if (!s->options->frag_coord_is_center)
-         s->uses_fragcoord_xy_as_float = true;
       break;
    default:
       break;
@@ -598,17 +538,6 @@ ac_nir_lower_ps_early(nir_shader *nir, const ac_nir_lower_ps_early_options *opti
 
    /* Don't gather shader_info. Just gather the single thing we want to know. */
    nir_shader_intrinsics_pass(nir, gather_info, nir_metadata_all, &state);
-
-   /* The preferred option is replacing frag_coord by pixel_coord.xy + 0.5. The goal is to reduce
-    * input VGPRs to increase PS wave launch rate. pixel_coord uses 1 input VGPR, while
-    * frag_coord.xy uses 2 input VGPRs. It only helps performance if the number of input VGPRs
-    * decreases to an even number. If it only decreases to an odd number, it has no effect.
-    *
-    * TODO: estimate input VGPRs and don't lower to pixel_coord if their number doesn't decrease to
-    * an even number?
-    */
-   state.use_fragcoord = !options->frag_coord_is_center && state.options->ps_iter_samples != 1 &&
-                         !state.options->msaa_disabled && state.uses_fragcoord_xy_as_float;
 
    bool progress = nir_shader_intrinsics_pass(nir, lower_ps_intrinsic,
                                               nir_metadata_control_flow, &state);

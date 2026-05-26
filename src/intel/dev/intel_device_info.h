@@ -171,8 +171,11 @@ intel_device_info_timebase_scale(const struct intel_device_info *devinfo,
    /* Try to avoid going over the 64bits when doing the scaling */
    uint64_t upper_ts = gpu_timestamp >> 32;
    uint64_t lower_ts = gpu_timestamp & 0xffffffff;
-   uint64_t upper_scaled_ts = upper_ts * 1000000000ull / devinfo->timestamp_frequency;
-   uint64_t lower_scaled_ts = lower_ts * 1000000000ull / devinfo->timestamp_frequency;
+   uint64_t upper_num = upper_ts * 1000000000ull;
+   uint64_t upper_scaled_ts = upper_num / devinfo->timestamp_frequency;
+   uint64_t upper_remainder = upper_num % devinfo->timestamp_frequency;
+   uint64_t lower_scaled_ts = ((upper_remainder << 32) + lower_ts * 1000000000ull) /
+                              devinfo->timestamp_frequency;
    return (upper_scaled_ts << 32) + lower_scaled_ts;
 }
 

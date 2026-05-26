@@ -335,8 +335,7 @@ nv30_screen_is_format_supported(struct pipe_screen *pscreen,
 }
 
 static const nir_shader_compiler_options nv30_base_compiler_options = {
-   .fuse_ffma32 = true,
-   .fuse_ffma64 = true,
+   .float_mul_add32 = nir_float_muladd_support_has_fmad | nir_float_muladd_support_fuse,
    .lower_bitops = true,
    .lower_extract_byte = true,
    .lower_extract_word = true,

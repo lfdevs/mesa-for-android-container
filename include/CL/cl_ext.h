@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2008-2023 The Khronos Group Inc.
+ * Copyright (c) 2008-2026 The Khronos Group Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -883,7 +883,7 @@ clLogMessagesToStderrAPPLE(
     "cl_khr_icd"
 
 
-#define CL_KHR_ICD_EXTENSION_VERSION CL_MAKE_VERSION(2, 0, 0)
+#define CL_KHR_ICD_EXTENSION_VERSION CL_MAKE_VERSION(2, 0, 1)
 
 /* cl_platform_info */
 #define CL_PLATFORM_ICD_SUFFIX_KHR                          0x0920
@@ -943,6 +943,19 @@ clIcdSetPlatformDispatchDataKHR(
     void* dispatch_data) ;
 
 #endif /* !defined(CL_NO_NON_ICD_DISPATCH_EXTENSION_PROTOTYPES) */
+
+/***************************************************************
+* cl_khr_icd_unloadable
+***************************************************************/
+#define cl_khr_icd_unloadable 1
+#define CL_KHR_ICD_UNLOADABLE_EXTENSION_NAME \
+    "cl_khr_icd_unloadable"
+
+
+#define CL_KHR_ICD_UNLOADABLE_EXTENSION_VERSION CL_MAKE_VERSION(1, 0, 0)
+
+/* cl_platform_info */
+#define CL_PLATFORM_UNLOADABLE_KHR                          0x0921
 
 /***************************************************************
 * cl_khr_il_program
@@ -4657,6 +4670,28 @@ typedef cl_bitfield         cl_context_safety_properties_img;
 #define CL_SVM_ALLOC_EXTERNAL_MEMORY_DMA_BUF_IMG            0x4221
 
 #endif /* defined(CL_ENABLE_BETA_EXTENSIONS) */
+
+/***************************************************************
+* cl_intel_kernel_allocations_info
+***************************************************************/
+#define cl_intel_kernel_allocations_info 1
+#define CL_INTEL_KERNEL_ALLOCATIONS_INFO_EXTENSION_NAME \
+    "cl_intel_kernel_allocations_info"
+
+
+#define CL_INTEL_KERNEL_ALLOCATIONS_INFO_EXTENSION_VERSION CL_MAKE_VERSION(1, 0, 0)
+
+/* type cl_unified_shared_memory_type_intel */
+
+typedef struct _cl_kernel_allocation_info_intel {
+    void* base;
+    size_t size;
+    cl_unified_shared_memory_type_intel type;
+    cl_int arg_index;
+} cl_kernel_allocation_info_intel;
+
+/* cl_kernel_workgroup_info */
+#define CL_KERNEL_ALLOCATIONS_INFO_INTEL                    0x425A
 
 /***************************************************************
 * cl_qcom_perf_hint

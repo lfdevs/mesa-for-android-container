@@ -291,10 +291,6 @@ draw_buffer(struct gl_context *ctx, struct gl_framebuffer *fb,
 
    FLUSH_VERTICES(ctx, 0, GL_COLOR_BUFFER_BIT);
 
-   if (MESA_VERBOSE & VERBOSE_API) {
-      _mesa_debug(ctx, "%s %s\n", caller, _mesa_enum_to_string(buffer));
-   }
-
    if (buffer == GL_NONE) {
       destMask = 0x0;
    }
@@ -940,9 +936,6 @@ read_buffer(struct gl_context *ctx, struct gl_framebuffer *fb,
    gl_buffer_index srcBuffer;
 
    FLUSH_VERTICES(ctx, 0, GL_PIXEL_MODE_BIT);
-
-   if (MESA_VERBOSE & VERBOSE_API)
-      _mesa_debug(ctx, "%s %s\n", caller, _mesa_enum_to_string(buffer));
 
    if (buffer == GL_NONE) {
       /* This is legal--it means that no buffer should be bound for reading. */

@@ -769,3 +769,9 @@ angle-dEQP-GLES3.functional.texture.wrap.rgba8.clamp_repeat_nearest_npot,Fail
 angle-dEQP-GLES3.functional.texture.wrap.rgba8.mirror_repeat_nearest_npot,Fail
 angle-dEQP-GLES3.functional.texture.wrap.rgba8.repeat_mirror_nearest_npot,Fail
 angle-dEQP-GLES3.functional.texture.wrap.rgba8.repeat_repeat_nearest_npot,Fail
+
+# VKCTS 1.4.4.2 -> 1.4.5.3 uprev
+dEQP-VK.wsi.xcb.present_timing.basic.timing_queue,Fail
+dEQP-VK.wsi.xcb.present_timing.query.parallel.parallel,Fail
+dEQP-VK.wsi.xlib.present_timing.basic.timing_queue,Fail
+dEQP-VK.wsi.xlib.present_timing.query.parallel.parallel,Fail

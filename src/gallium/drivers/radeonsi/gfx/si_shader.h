@@ -234,6 +234,12 @@ enum
    SI_NUM_PARAMS = SI_PARAM_POS_FIXED_PT + 9, /* +8 for COLOR[0..1] */
 };
 
+enum {
+   SI_INTERPOLATE_LOC_CENTER,
+   SI_INTERPOLATE_LOC_CENTROID,
+   SI_INTERPOLATE_LOC_SAMPLE,
+};
+
 /* These fields are only set in current_vs_state (except INDEXED) in si_context, and they are
  * accessible in the shader via vs_state_bits in VS, TES, and GS.
  */
@@ -536,7 +542,6 @@ struct si_ps_prolog_bits {
    unsigned bc_optimize_for_persp : 1;
    unsigned bc_optimize_for_linear : 1;
    unsigned samplemask_log_ps_iter : 2;
-   unsigned get_frag_coord_from_pixel_coord : 1;
    unsigned force_samplemask_to_helper_invocation : 1;
 };
 
@@ -565,11 +570,16 @@ union si_shader_part_key {
       /* Color interpolation and two-side color selection. */
       unsigned colors_read : 8;       /* color input components read */
       unsigned num_interp_inputs : 5; /* BCOLOR is at this location */
+      unsigned uses_persp_centroid : 1;
+      unsigned uses_linear_sample_and_center : 1;
+      unsigned uses_linear_centroid : 1;
+      unsigned reserve_line_stipple_tex_ena : 1; /* only reserve the VGPR, don't use it */
       unsigned fragcoord_usage_mask : 4;
-      unsigned pixel_center_integer : 1;
+      unsigned uses_ancillary : 1;
+      unsigned uses_sample_coverage : 1;
       unsigned wqm : 1;
-      char color_attr_index[2];
-      signed char color_interp_vgpr_index[2]; /* -1 == constant */
+      uint8_t color_attr_index[2];
+      uint8_t color_interp[2]; /* AC_COLOR_INTERP_* */
    } ps_prolog;
    struct {
       struct si_ps_epilog_bits states;

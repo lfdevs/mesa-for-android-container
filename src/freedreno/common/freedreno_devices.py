@@ -693,6 +693,7 @@ add_gpus([
         GPUId(702), # KGSL
         GPUId(chip_id=0x00b207002000, name="FD702"), # QRB2210 RB1
         GPUId(chip_id=0xffff07002000, name="FD702"), # Default no-speedbin fallback
+        GPUId(chip_id=0xffff07000400, name="Adreno (TM) 704"),
     ], A6xxGPUInfo(
         CHIP.A6XX, # NOT a mistake!
         [a6xx_base, a6xx_gen1_low, GPUProps(
@@ -1489,7 +1490,26 @@ add_gpus([
     ))
 
 add_gpus([
-        GPUId(chip_id=0xffff44070041, name="Adreno (TM) X2-85"),
+        GPUId(chip_id=0xffff44070031, name="Adreno (TM) X2-85"),
+    ], A6xxGPUInfo(
+        CHIP.A8XX,
+        [a7xx_base, a7xx_gen3, a8xx_base, a8xx_gen2],
+        num_ccu = 6,
+        num_slices = 3,
+        tile_align_w = 96,
+        tile_align_h = 32,
+        tile_max_w = 16416,
+        tile_max_h = 16384,
+        num_vsc_pipes = 32,
+        cs_shared_mem_size = 32 * 1024,
+        wave_granularity = 2,
+        fibers_per_sp = 128 * 2 * 16,
+        magic_regs = dict(),
+        raw_magic_regs = a8xx_base_raw_magic_regs,
+    ))
+
+add_gpus([
+        GPUId(chip_id=0xffff44070041, name="Adreno (TM) X2-90"),
     ], A6xxGPUInfo(
         CHIP.A8XX,
         [a7xx_base, a7xx_gen3, a8xx_base, a8xx_gen2],

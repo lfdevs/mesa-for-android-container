@@ -204,31 +204,6 @@ vk_common_CmdSetDeviceMask(VkCommandBuffer commandBuffer, uint32_t deviceMask)
    assert(deviceMask == 0x1);
 }
 
-VkShaderStageFlags
-vk_shader_stages_from_bind_point(VkPipelineBindPoint pipelineBindPoint)
-{
-   switch (pipelineBindPoint) {
-#ifdef VK_ENABLE_BETA_EXTENSIONS
-    case VK_PIPELINE_BIND_POINT_EXECUTION_GRAPH_AMDX:
-      return VK_SHADER_STAGE_COMPUTE_BIT | MESA_VK_SHADER_STAGE_WORKGRAPH_HACK_BIT_FIXME;
-#endif
-   case VK_PIPELINE_BIND_POINT_COMPUTE:
-      return VK_SHADER_STAGE_COMPUTE_BIT;
-   case VK_PIPELINE_BIND_POINT_GRAPHICS:
-      return VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT;
-   case VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR:
-      return VK_SHADER_STAGE_RAYGEN_BIT_KHR |
-             VK_SHADER_STAGE_ANY_HIT_BIT_KHR |
-             VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR |
-             VK_SHADER_STAGE_MISS_BIT_KHR |
-             VK_SHADER_STAGE_INTERSECTION_BIT_KHR |
-             VK_SHADER_STAGE_CALLABLE_BIT_KHR;
-   default:
-      UNREACHABLE("unknown bind point!");
-   }
-   return 0;
-}
-
 VKAPI_ATTR void VKAPI_CALL
 vk_common_CmdBindDescriptorSets(
     VkCommandBuffer                             commandBuffer,

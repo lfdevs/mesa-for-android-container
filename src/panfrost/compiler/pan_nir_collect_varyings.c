@@ -9,6 +9,8 @@
 #include "pan_nir.h"
 #include "panfrost/model/pan_model.h"
 
+#define DEBUG_PRINT false
+
 enum pipe_format
 pan_varying_format(nir_alu_type t, unsigned ncomps)
 {
@@ -45,6 +47,49 @@ pan_varying_format(nir_alu_type t, unsigned ncomps)
    }
 
    UNREACHABLE("Invalid type");
+}
+
+static void
+pan_print_varying_layout(FILE *f, nir_shader *s,
+                         const struct pan_varying_layout *layout)
+{
+   const char *section_name[] = {
+      "POSITION",
+      "ATTRIBS",
+      "SPECIAL",
+      "GENERIC"
+   };
+
+   fprintf(f, "Layout for %s (%s):\n", s->info.name,
+           mesa_shader_stage_name(s->info.stage));
+   fprintf(f, "Known:");
+   if (layout->known == 0) {
+      fprintf(f, " empty");
+   } else {
+      if (layout->known & PAN_VARYING_FORMAT_KNOWN)
+         fprintf(f, " format");
+      if (layout->known & PAN_VARYING_LAYOUT_KNOWN)
+         fprintf(f, " layout");
+   }
+   fprintf(f, "\n");
+
+   fprintf(f, "Varying count: %d\n", layout->count);
+   if (layout->known & PAN_VARYING_LAYOUT_KNOWN)
+      fprintf(f, "Generic size (bytes): %x\n", layout->generic_size_B);
+   for (unsigned i = 0; i < layout->count; i++) {
+      const struct pan_varying_slot *slot =
+         pan_varying_layout_slot_at(layout, i);
+      if (slot == NULL)
+         continue;
+      const char *loc_name =
+         gl_varying_slot_name_for_stage(slot->location, s->info.stage);
+      fprintf(f, "%02d: %s alu=%x comps=%d", i, loc_name, slot->alu_type,
+              slot->ncomps);
+      if (layout->known & PAN_VARYING_LAYOUT_KNOWN)
+         fprintf(f, " off=%x section=%s", slot->offset,
+                 section_name[slot->section]);
+      fprintf(f, "\n");
+   }
 }
 
 struct slot_info {
@@ -359,6 +404,9 @@ pan_varying_collect_formats(struct pan_varying_layout *layout, nir_shader *nir,
    layout->count = count;
    layout->generic_size_B = 0;
    layout->known |= PAN_VARYING_FORMAT_KNOWN;
+
+   if (DEBUG_PRINT)
+      pan_print_varying_layout(stderr, nir, layout);
 }
 
 void
@@ -394,4 +442,7 @@ pan_build_varying_layout_compact(struct pan_varying_layout *layout,
    }
    layout->generic_size_B = generic_size_B;
    layout->known |= PAN_VARYING_LAYOUT_KNOWN;
+
+   if (DEBUG_PRINT)
+      pan_print_varying_layout(stderr, nir, layout);
 }

@@ -1956,11 +1956,11 @@ AluInstr::from_nir(nir_alu_instr *alu, Shader& shader)
    case nir_op_unpack_64_2x32_split_y:
       return emit_unpack_64_2x32_split(*alu, 1, shader);
 
-   case nir_op_ffma:
+   case nir_op_fmad:
       if (!shader.has_flag(Shader::sh_legacy_math_rules))
          return emit_alu_op3(*alu, op3_muladd_ieee, shader);
       FALLTHROUGH;
-   case nir_op_ffmaz:
+   case nir_op_fmadz:
       return emit_alu_op3(*alu, op3_muladd, shader);
 
    case nir_op_mov:

@@ -249,9 +249,6 @@ _get_vao_pointerv(GLenum pname, struct gl_vertex_array_object* vao,
    if (!params)
       return;
 
-   if (MESA_VERBOSE & VERBOSE_API)
-      _mesa_debug(ctx, "%s %s\n", callerstr, _mesa_enum_to_string(pname));
-
    switch (pname) {
       case GL_VERTEX_ARRAY_POINTER:
          if (!_mesa_is_desktop_gl_compat(ctx) && !_mesa_is_gles1(ctx))
@@ -361,9 +358,6 @@ _mesa_GetPointerIndexedvEXT( GLenum pname, GLuint index, GLvoid **params )
    if (!params)
       return;
 
-   if (MESA_VERBOSE & VERBOSE_API)
-      _mesa_debug(ctx, "%s %s\n", "glGetPointerIndexedvEXT", _mesa_enum_to_string(pname));
-
    switch (pname) {
       case GL_TEXTURE_COORD_ARRAY_POINTER:
          *params = (GLvoid *) ctx->Array.VAO->VertexAttrib[VERT_ATTRIB_TEX(index)].Ptr;
@@ -402,9 +396,6 @@ _mesa_GetError( void )
    if (_mesa_is_no_error_enabled(ctx) && e != GL_OUT_OF_MEMORY) {
       e = GL_NO_ERROR;
    }
-
-   if (MESA_VERBOSE & VERBOSE_API)
-      _mesa_debug(ctx, "glGetError <-- %s\n", _mesa_enum_to_string(e));
 
    ctx->ErrorValue = (GLenum) GL_NO_ERROR;
    ctx->ErrorDebugCount = 0;

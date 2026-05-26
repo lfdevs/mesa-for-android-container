@@ -1,5 +1,6 @@
 <!--
   Copyright (C) 2025 Collabora Ltd.
+  Copyright (C) 2026 Arm Ltd.
   SPDX-License-Identifier: MIT
 -->
 
@@ -61,10 +62,14 @@
     <value name="None" value="0"/>
     <value name="Points" value="1"/>
     <value name="Lines" value="2"/>
+    <value name="Lines adjacency" value="3"/>
     <value name="Line strip" value="4"/>
+    <value name="Line strip adjacency" value="5"/>
     <value name="Line loop" value="6"/>
     <value name="Triangles" value="8"/>
+    <value name="Triangles adjacency" value="9"/>
     <value name="Triangle strip" value="10"/>
+    <value name="Triangle strip adjacency" value="11"/>
     <value name="Triangle fan" value="12"/>
     <value name="Polygon" value="13"/>
     <value name="Quads" value="14"/>
@@ -84,6 +89,7 @@
   <enum name="Address Mode">
     <value name="Flat" value="0"/>
     <value name="Packed" value="1"/>
+    <value name="Out of bounds" value="8"/>
   </enum>
 
   <enum name="Format">
@@ -132,6 +138,7 @@
     <value name="A2 YUV10" value="41"/>
     <value name="YUYAAYVYAA" value="42"/>
     <!--- TODO: revisit YUV -->
+    <value name="Y10U10V10_420" value="43"/>
     <value name="YUYV10" value="44"/>
     <value name="VYUY10" value="45"/>
     <value name="Y10 UV10 422" value="46"/>
@@ -1728,6 +1735,9 @@
   <enum name="Clump Ordering">
     <value name="Tiled U-Interleaved" value="1"/>
     <value name="Linear" value="2"/>
+    <value name="Block-linear interleaved 16x16" value="3"/>
+    <value name="Block-linear interleaved 8x16" value="4"/>
+    <value name="Block-linear interleaved 8x8" value="5"/>
     <value name="Interleaved 64k" value="8"/>
   </enum>
 

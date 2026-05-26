@@ -10,7 +10,7 @@
 #include "util/u_memory.h"
 #include "util/u_upload_mgr.h"
 #include "util/os_time.h"
-#include "tgsi/tgsi_text.h"
+#include "nir/nir_builder.h"
 
 #define R600_MAX_STREAMS 4
 
@@ -1353,6 +1353,230 @@ bool r600_query_hw_get_result(struct r600_common_context *rctx,
 	return true;
 }
 
+enum r600_query_result_shader_config {
+	R600_QUERY_READ_PREV = 1,
+	R600_QUERY_WRITE_CHAIN = 2,
+	R600_QUERY_WRITE_AVAIL = 4,
+	R600_QUERY_BOOL = 8,
+	R600_QUERY_ONE_DWORD = 16,
+	R600_QUERY_TIMESTAMP = 32,
+	R600_QUERY_RESULT64 = 64,
+	R600_QUERY_SIGNED32 = 128,
+	R600_QUERY_SO_OVERFLOW = 256,
+};
+
+struct r600_query_result_accum_vars {
+	nir_variable *accum;
+	nir_variable *result_available;
+};
+
+#define QUERY_RESULT_BUF nir_imm_int(b, 0)
+#define QUERY_PREV_SUMMARY_BUF nir_imm_int(b, 1)
+#define NEXT_SUMMARY_OR_USER_BUF nir_imm_int(b, 2)
+
+static void r600_query_result_load_one_dword(nir_builder *b, nir_def *fence_offset,
+					      nir_def *result_offset,
+					      const struct r600_query_result_accum_vars *vars)
+{
+	nir_def *fence_value = nir_load_ssbo(b, 1, 32, QUERY_RESULT_BUF,
+				      nir_iadd(b, fence_offset, result_offset));
+	nir_def *is_fence_set = nir_ilt_imm(b, fence_value, 0);
+	nir_store_var(b, vars->result_available, nir_inot(b, is_fence_set), 0x1);
+	nir_def *result = nir_load_ssbo(b, 2, 32, QUERY_RESULT_BUF, result_offset);
+	result = nir_bcsel(b, is_fence_set, nir_pack_64_2x32(b, result), nir_imm_int64(b, 0));
+	nir_store_var(b, vars->accum, result, 0x1);
+}
+
+static void r600_query_result_accumulate_pairs(nir_builder *b, nir_function_impl *impl,
+					       nir_def *config_bitfield,
+					       nir_def *result_count,
+					       nir_def *result_stride,
+					       nir_def *fence_offset,
+					       nir_def *pair_stride,
+					       nir_def *pair_count,
+					       nir_def *end_offset,
+					       nir_def *result_offset,
+					       const struct r600_query_result_accum_vars *vars)
+{
+	nir_def *_0i = nir_imm_int(b, 0);
+
+	nir_store_var(b, vars->accum, nir_imm_int64(b, 0), 0x1);
+
+	nir_def *cfg_prev_acc_result = nir_test_mask(b, config_bitfield, R600_QUERY_READ_PREV);
+	nir_if *if_prev_acc_result = nir_push_if(b, cfg_prev_acc_result); {
+		nir_def *result = nir_load_ssbo(b, 3, 32, QUERY_PREV_SUMMARY_BUF, _0i);
+		nir_def *result_data = nir_channels(b, result, 3);
+		nir_store_var(b, vars->accum, nir_pack_64_2x32(b, result_data), 0x1);
+		nir_store_var(b, vars->result_available, nir_i2b(b, nir_channel(b, result, 2)), 0x1);
+	}
+	nir_pop_if(b, if_prev_acc_result);
+
+	nir_def *availability_mask_value = nir_load_var(b, vars->result_available);
+	nir_if *if_not_z = nir_push_if(b, nir_inot(b, availability_mask_value)); {
+
+		/* Accumulate query result pairs across result buffers:
+		 * for (result_index = 0; result_index < result_count; ++result_index) {
+		 *   fence = load_fence(result_index)
+		 *   if (!fence.valid) break  // Stop when we hit an invalid fence
+		 *   for (pair_index = 0; pair_index < pair_count; ++pair_index) {
+		 *     pair_start = load64(result_offset + pair_index * pair_stride)
+		 *     pair_end = load64(result_offset + pair_index * pair_stride + end_offset)
+		 *     accumulator += (pair_end - pair_start)
+		 *     if (SO_OVERFLOW_mode) {
+		 *       fence_start = load64(...)
+		 *       fence_end = load64(...)
+		 *       accumulator -= (fence_end - fence_start)
+		 *     }
+		 *   }
+		 * }
+		 */
+
+		nir_variable *outer_loop_iter =
+			nir_local_variable_create(impl, glsl_uint_type(), "outer_loop_iter");
+		nir_variable *inner_loop_iter =
+			nir_local_variable_create(impl, glsl_uint_type(), "inner_loop_iter");
+
+		nir_store_var(b, outer_loop_iter, _0i, 0x1);
+		nir_loop *loop_outer = nir_push_loop(b); {
+			nir_def *result_index = nir_load_var(b, outer_loop_iter);
+
+			nir_break_if(b, nir_uge(b, result_index, result_count));
+
+			nir_def *pitch_outer_loop = nir_imul(b, result_index, result_stride);
+			nir_def *address = nir_iadd(b, pitch_outer_loop,
+						nir_iadd(b, fence_offset,
+							 result_offset));
+			nir_def *value = nir_load_ssbo(b, 1, 32, QUERY_RESULT_BUF, address);
+			nir_def *fence_not_set = nir_inot(b, nir_ilt_imm(b, value, 0));
+			nir_store_var(b, vars->result_available, fence_not_set, 0x1);
+
+			nir_break_if(b, fence_not_set);
+
+			nir_store_var(b, inner_loop_iter, _0i, 0x1);
+			nir_loop *loop_inner = nir_push_loop(b); {
+				nir_def *i = nir_load_var(b, inner_loop_iter);
+				nir_def *pitch_inner_loop = nir_imul(b, i, pair_stride);
+				nir_def *base =
+					nir_iadd(b, pitch_outer_loop,
+						 nir_iadd(b,  pitch_inner_loop,
+								result_offset));
+				nir_def *end_base = nir_iadd(b, base, end_offset);
+				nir_def *first_result = nir_load_ssbo(b, 1, 64, QUERY_RESULT_BUF, base);
+				nir_def *second_result = nir_load_ssbo(b, 1, 64, QUERY_RESULT_BUF,
+													end_base);
+				nir_def *first_fence = nir_load_ssbo(b, 1, 64, QUERY_RESULT_BUF,
+					      						nir_iadd_imm(b, base, 8));
+				nir_def *second_fence = nir_load_ssbo(b, 1, 64, QUERY_RESULT_BUF,
+				       							nir_iadd_imm(b, end_base, 8));
+				nir_def *start_half_pair = nir_isub(b, second_result, first_result);
+
+				nir_def *end_half_pair = nir_isub(b, second_fence, first_fence);
+				nir_def *difference = nir_isub(b, start_half_pair, end_half_pair);
+
+				nir_def *cfg_so_overflow_mode = nir_test_mask(b, config_bitfield, R600_QUERY_SO_OVERFLOW);
+				nir_def *sum = nir_iadd(b, nir_load_var(b, vars->accum),
+						 nir_bcsel(b, cfg_so_overflow_mode, difference, start_half_pair));
+
+				i = nir_iadd_imm(b, i, 1);
+
+				nir_store_var(b, inner_loop_iter, i, 0x1);
+				nir_store_var(b, vars->accum, sum, 0x1);
+
+				nir_def *is_pair_count_exceeded = nir_uge(b, i, pair_count);
+				nir_break_if(b, is_pair_count_exceeded);
+			}
+			nir_pop_loop(b, loop_inner);
+
+			nir_store_var(b, outer_loop_iter, nir_iadd_imm(b, result_index, 1), 0x1);
+		}
+		nir_pop_loop(b, loop_outer);
+	}
+	nir_pop_if(b, if_not_z);
+}
+
+static void r600_query_result_store_output(nir_builder *b,
+					   struct r600_common_context *rctx,
+					   nir_def *config_bitfield,
+					   nir_def *result_offset,
+					   const struct r600_query_result_accum_vars *vars)
+{
+	nir_def *_0i = nir_imm_int(b, 0);
+	nir_def *accum_value = nir_load_var(b, vars->accum);
+	nir_def *availability_value = nir_load_var(b, vars->result_available);
+
+	/* Store query results to output buffer based on configuration:
+	 * if (write_chain) {
+	 *   // Store accumulated values for chaining to next grid invocation
+	 *   output = (accum_lo, accum_hi, availability_mask)
+	 * } else if (write_available) {
+	 *   // Store query availability flag (!fence_valid) and optional 64-bit padding
+	 *   output = (fence_valid ? 0 : 1)
+	 *   if (is_64bit) output += padding_word
+	 * } else {
+	 *   // Store actual query result with optional conversions
+	 *   if (apply_timestamp)
+	 *     result = convert_to_timestamp(x, y)
+	 *   if (convert_to_bool)
+	 *     result = (result != 0) ? 1 : 0
+	 *   if (is_64bit) {
+	 *     output = (result_low, result_high)
+	 *   } else {
+	 *     output = result_low (clamped for signed mode)
+	 *   }
+	 * }
+	 */
+	nir_def *is_acc_chaining = nir_test_mask(b, config_bitfield, R600_QUERY_WRITE_CHAIN);
+	nir_if *if_acc_chaining = nir_push_if(b, is_acc_chaining); {
+		nir_def *accum_unpacked = nir_unpack_64_2x32(b, accum_value);
+		nir_store_ssbo(b, nir_vec3(b, nir_channel(b, accum_unpacked, 0), nir_channel(b, accum_unpacked, 1), nir_b2i32(b, availability_value)), NEXT_SUMMARY_OR_USER_BUF,
+		       result_offset);
+	} nir_push_else(b, if_acc_chaining); {
+		nir_def *cfg_write_result_available = nir_test_mask(b, config_bitfield, R600_QUERY_WRITE_AVAIL);
+		nir_if *if_write_result_available = nir_push_if(b, cfg_write_result_available); {
+			nir_store_ssbo(b,
+			       nir_b2i32(b, nir_inot(b, availability_value)),
+				       NEXT_SUMMARY_OR_USER_BUF, result_offset);
+
+			nir_def *is_result_64_bits = nir_test_mask(b, config_bitfield, R600_QUERY_RESULT64);
+			nir_if *if_result_64_bits = nir_push_if(b, is_result_64_bits); {
+				nir_store_ssbo(b, _0i, NEXT_SUMMARY_OR_USER_BUF, nir_iadd_imm(b, result_offset, 4));
+			}
+			nir_pop_if(b, if_result_64_bits);
+		} nir_push_else(b, if_write_result_available); {
+			nir_def *result_pending = nir_inot(b, availability_value);
+			nir_if *if_result_pending = nir_push_if(b, result_pending); {
+				nir_def *cfg_apply_timestamp = nir_test_mask(b, config_bitfield, R600_QUERY_TIMESTAMP);
+				nir_def *clock_crystal_frequency =
+					nir_imm_int64(b, rctx->screen->info.clock_crystal_freq);
+				nir_def *xy_million = nir_imul(b, accum_value, nir_imm_int64(b, 1000000));
+				nir_def *ts_converted = nir_udiv(b, xy_million, clock_crystal_frequency);
+				nir_def *n = nir_bcsel(b, cfg_apply_timestamp, ts_converted, accum_value);
+
+				nir_def *cfg_convert_to_bool = nir_test_mask(b, config_bitfield, R600_QUERY_BOOL);
+				n = nir_bcsel(b, cfg_convert_to_bool, nir_b2i64(b, nir_ine_imm(b, n, 0)), n);
+
+				nir_def *cfg_result_64_bits = nir_test_mask(b, config_bitfield, R600_QUERY_RESULT64);
+				nir_if *if_result_64_bits = nir_push_if(b, cfg_result_64_bits); {
+					nir_store_ssbo(b, nir_unpack_64_2x32(b, n), NEXT_SUMMARY_OR_USER_BUF, result_offset);
+				} nir_push_else(b, if_result_64_bits); {
+					nir_def *nx = nir_unpack_64_2x32_split_x(b, n);
+					nir_def *ny = nir_unpack_64_2x32_split_y(b, n);
+					nir_def *is_y = nir_ine(b, ny, _0i);
+					nx = nir_bcsel(b, is_y, nir_imm_int(b, UINT32_MAX), nx);
+					nir_def *cfg_signed_32bit_result = nir_test_mask(b, config_bitfield, R600_QUERY_SIGNED32);
+					nir_def *min = nir_umin(b, nx, nir_imm_int(b, INT_MAX));
+					nx = nir_bcsel(b, cfg_signed_32bit_result, min, nx);
+					nir_store_ssbo(b, nx, NEXT_SUMMARY_OR_USER_BUF, result_offset);
+				}
+				nir_pop_if(b, if_result_64_bits);
+			}
+			nir_pop_if(b, if_result_pending);
+		}
+		nir_pop_if(b, if_write_result_available);
+	}
+	nir_pop_if(b, if_acc_chaining);
+}
+
 /* Create the compute shader that is used to collect the results.
  *
  * One compute grid with a single thread is launched for every query result
@@ -1389,188 +1613,68 @@ bool r600_query_hw_get_result(struct r600_common_context *rctx,
  */
 static void r600_create_query_result_shader(struct r600_common_context *rctx)
 {
-	/* TEMP[0].xy = accumulated result so far
-	 * TEMP[0].z = result not available
-	 *
-	 * TEMP[1].x = current result index
-	 * TEMP[1].y = current pair index
-	 */
-	static const char text_tmpl[] =
-		"COMP\n"
-		"PROPERTY CS_FIXED_BLOCK_WIDTH 1\n"
-		"PROPERTY CS_FIXED_BLOCK_HEIGHT 1\n"
-		"PROPERTY CS_FIXED_BLOCK_DEPTH 1\n"
-		"DCL BUFFER[0]\n"
-		"DCL BUFFER[1]\n"
-		"DCL BUFFER[2]\n"
-		"DCL CONST[0][0..2]\n"
-		"DCL TEMP[0..5]\n"
-		"IMM[0] UINT32 {0, 31, 2147483647, 4294967295}\n"
-		"IMM[1] UINT32 {1, 2, 4, 8}\n"
-		"IMM[2] UINT32 {16, 32, 64, 128}\n"
-		"IMM[3] UINT32 {1000000, 0, %u, 0}\n" /* for timestamp conversion */
-		"IMM[4] UINT32 {256, 0, 0, 0}\n"
-
-		"AND TEMP[5], CONST[0][0].wwww, IMM[2].xxxx\n"
-		"UIF TEMP[5]\n"
-			/* Check result availability. */
-			"UADD TEMP[1].x, CONST[0][1].xxxx, CONST[0][2].xxxx\n"
-			"LOAD TEMP[1].x, BUFFER[0], TEMP[1].xxxx\n"
-			"ISHR TEMP[0].z, TEMP[1].xxxx, IMM[0].yyyy\n"
-			"MOV TEMP[1], TEMP[0].zzzz\n"
-			"NOT TEMP[0].z, TEMP[0].zzzz\n"
-
-			/* Load result if available. */
-			"UIF TEMP[1]\n"
-				"UADD TEMP[0].x, IMM[0].xxxx, CONST[0][2].xxxx\n"
-				"LOAD TEMP[0].xy, BUFFER[0], TEMP[0].xxxx\n"
-			"ENDIF\n"
-		"ELSE\n"
-			/* Load previously accumulated result if requested. */
-			"MOV TEMP[0], IMM[0].xxxx\n"
-			"AND TEMP[4], CONST[0][0].wwww, IMM[1].xxxx\n"
-			"UIF TEMP[4]\n"
-				"LOAD TEMP[0].xyz, BUFFER[1], IMM[0].xxxx\n"
-			"ENDIF\n"
-
-			"MOV TEMP[1].x, IMM[0].xxxx\n"
-			"BGNLOOP\n"
-				/* Break if accumulated result so far is not available. */
-				"UIF TEMP[0].zzzz\n"
-					"BRK\n"
-				"ENDIF\n"
-
-				/* Break if result_index >= result_count. */
-				"USGE TEMP[5], TEMP[1].xxxx, CONST[0][0].zzzz\n"
-				"UIF TEMP[5]\n"
-					"BRK\n"
-				"ENDIF\n"
-
-				/* Load fence and check result availability */
-				"UMAD TEMP[5].x, TEMP[1].xxxx, CONST[0][0].yyyy, CONST[0][1].xxxx\n"
-				"UADD TEMP[5].x, TEMP[5].xxxx, CONST[0][2].xxxx\n"
-				"LOAD TEMP[5].x, BUFFER[0], TEMP[5].xxxx\n"
-				"ISHR TEMP[0].z, TEMP[5].xxxx, IMM[0].yyyy\n"
-				"NOT TEMP[0].z, TEMP[0].zzzz\n"
-				"UIF TEMP[0].zzzz\n"
-					"BRK\n"
-				"ENDIF\n"
-
-				"MOV TEMP[1].y, IMM[0].xxxx\n"
-				"BGNLOOP\n"
-					/* Load start and end. */
-					"UMUL TEMP[5].x, TEMP[1].xxxx, CONST[0][0].yyyy\n"
-					"UMAD TEMP[5].x, TEMP[1].yyyy, CONST[0][1].yyyy, TEMP[5].xxxx\n"
-					"UADD TEMP[5].x, TEMP[5].xxxx, CONST[0][2].xxxx\n"
-					"LOAD TEMP[2].xy, BUFFER[0], TEMP[5].xxxx\n"
-
-					"UADD TEMP[5].y, TEMP[5].xxxx, CONST[0][0].xxxx\n"
-					"LOAD TEMP[3].xy, BUFFER[0], TEMP[5].yyyy\n"
-
-					"U64ADD TEMP[4].xy, TEMP[3], -TEMP[2]\n"
-
-					"AND TEMP[5].z, CONST[0][0].wwww, IMM[4].xxxx\n"
-					"UIF TEMP[5].zzzz\n"
-						/* Load second start/end half-pair and
-						 * take the difference
-						 */
-						"UADD TEMP[5].xy, TEMP[5], IMM[1].wwww\n"
-						"LOAD TEMP[2].xy, BUFFER[0], TEMP[5].xxxx\n"
-						"LOAD TEMP[3].xy, BUFFER[0], TEMP[5].yyyy\n"
-
-						"U64ADD TEMP[3].xy, TEMP[3], -TEMP[2]\n"
-						"U64ADD TEMP[4].xy, TEMP[4], -TEMP[3]\n"
-					"ENDIF\n"
-
-					"U64ADD TEMP[0].xy, TEMP[0], TEMP[4]\n"
-
-					/* Increment pair index */
-					"UADD TEMP[1].y, TEMP[1].yyyy, IMM[1].xxxx\n"
-					"USGE TEMP[5], TEMP[1].yyyy, CONST[0][1].zzzz\n"
-					"UIF TEMP[5]\n"
-						"BRK\n"
-					"ENDIF\n"
-				"ENDLOOP\n"
-
-				/* Increment result index */
-				"UADD TEMP[1].x, TEMP[1].xxxx, IMM[1].xxxx\n"
-			"ENDLOOP\n"
-		"ENDIF\n"
-
-		"AND TEMP[4], CONST[0][0].wwww, IMM[1].yyyy\n"
-		"UIF TEMP[4]\n"
-			/* Store accumulated data for chaining. */
-			"STORE BUFFER[2].xyz, CONST[0][1].wwww, TEMP[0]\n"
-		"ELSE\n"
-			"AND TEMP[4], CONST[0][0].wwww, IMM[1].zzzz\n"
-			"UIF TEMP[4]\n"
-				/* Store result availability. */
-				"NOT TEMP[0].z, TEMP[0]\n"
-				"AND TEMP[0].z, TEMP[0].zzzz, IMM[1].xxxx\n"
-				"STORE BUFFER[2].x, CONST[0][1].wwww, TEMP[0].zzzz\n"
-
-				"AND TEMP[4], CONST[0][0].wwww, IMM[2].zzzz\n"
-				"UIF TEMP[4]\n"
-					"STORE BUFFER[2].y, CONST[0][1].wwww, IMM[0].xxxx\n"
-				"ENDIF\n"
-			"ELSE\n"
-				/* Store result if it is available. */
-				"NOT TEMP[4], TEMP[0].zzzz\n"
-				"UIF TEMP[4]\n"
-					/* Apply timestamp conversion */
-					"AND TEMP[4], CONST[0][0].wwww, IMM[2].yyyy\n"
-					"UIF TEMP[4]\n"
-						"U64MUL TEMP[0].xy, TEMP[0], IMM[3].xyxy\n"
-						"U64DIV TEMP[0].xy, TEMP[0], IMM[3].zwzw\n"
-					"ENDIF\n"
-
-					/* Convert to boolean */
-					"AND TEMP[4], CONST[0][0].wwww, IMM[1].wwww\n"
-					"UIF TEMP[4]\n"
-						"U64SNE TEMP[0].x, TEMP[0].xyxy, IMM[4].zwzw\n"
-						"AND TEMP[0].x, TEMP[0].xxxx, IMM[1].xxxx\n"
-						"MOV TEMP[0].y, IMM[0].xxxx\n"
-					"ENDIF\n"
-
-					"AND TEMP[4], CONST[0][0].wwww, IMM[2].zzzz\n"
-					"UIF TEMP[4]\n"
-						"STORE BUFFER[2].xy, CONST[0][1].wwww, TEMP[0].xyxy\n"
-					"ELSE\n"
-						/* Clamping */
-						"UIF TEMP[0].yyyy\n"
-							"MOV TEMP[0].x, IMM[0].wwww\n"
-						"ENDIF\n"
-
-						"AND TEMP[4], CONST[0][0].wwww, IMM[2].wwww\n"
-						"UIF TEMP[4]\n"
-							"UMIN TEMP[0].x, TEMP[0].xxxx, IMM[0].zzzz\n"
-						"ENDIF\n"
-
-						"STORE BUFFER[2].x, CONST[0][1].wwww, TEMP[0].xxxx\n"
-					"ENDIF\n"
-				"ENDIF\n"
-			"ENDIF\n"
-		"ENDIF\n"
-
-		"END\n";
-
-	char text[sizeof(text_tmpl) + 32];
-	struct tgsi_token tokens[1024];
+	const struct nir_shader_compiler_options *options =
+		rctx->b.screen->nir_options[MESA_SHADER_COMPUTE];
+	nir_builder b = nir_builder_init_simple_shader(MESA_SHADER_COMPUTE, options,
+						      "r600_create_query_result_cs");
 	struct pipe_compute_state state = {};
 
-	/* Hard code the frequency into the shader so that the backend can
-	 * use the full range of optimizations for divide-by-constant.
+	b.shader->info.workgroup_size[0] = 1;
+	b.shader->info.workgroup_size[1] = 1;
+	b.shader->info.workgroup_size[2] = 1;
+	b.shader->info.num_ubos = 1;
+	b.shader->info.num_ssbos = 3;
+	b.shader->num_uniforms = 3;
+
+	/* uint64_t accum = 0; bool availability_mask = false; */
+	nir_function_impl *impl = nir_shader_get_entrypoint(b.shader);
+	nir_variable *accum = nir_local_variable_create(impl, glsl_uint64_t_type(), "accum");
+	nir_variable *availability_mask = nir_local_variable_create(impl, glsl_bool_type(), "availability_mask");
+	nir_store_var(&b, availability_mask, nir_imm_false(&b), 0x1);
+	const struct r600_query_result_accum_vars accum_vars = {accum, availability_mask};
+
+	/* consts[0] = {end_offset, result_stride, result_count, config}
+	 * consts[1] = {fence_offset, pair_stride, pair_count, buffer_offset}
+	 * consts[2] = {buffer0_offset, 0, 0, 0}
 	 */
-	snprintf(text, sizeof(text), text_tmpl,
-		 rctx->screen->info.clock_crystal_freq);
+	nir_def *default_ubo = nir_imm_int(&b, 0);
+	nir_def *config_0 = nir_load_ubo(&b, 4, 32, default_ubo, nir_imm_int(&b, 0), .range_base = 0, .range = 16);
+	nir_def *config_1 = nir_load_ubo(&b, 4, 32, default_ubo, nir_imm_int(&b, 16), .range_base = 16, .range = 16);
+	nir_def *config_2 = nir_load_ubo(&b, 4, 32, default_ubo, nir_imm_int(&b, 32), .range_base = 32, .range = 16);
 
-	if (!tgsi_text_translate(text, tokens, ARRAY_SIZE(tokens))) {
-		assert(false);
-		return;
+	/* Decode UBO payload into named fields to make the shader logic readable. */
+	nir_def *end_offset = nir_channel(&b, config_0, 0);
+	nir_def *result_stride = nir_channel(&b, config_0, 1);
+	nir_def *result_count = nir_channel(&b, config_0, 2);
+	nir_def *config_bitfield = nir_channel(&b, config_0, 3);
+	nir_def *fence_offset = nir_channel(&b, config_1, 0);
+	nir_def *pair_stride = nir_channel(&b, config_1, 1);
+	nir_def *pair_count = nir_channel(&b, config_1, 2);
+	nir_def *result_offset = nir_channel(&b, config_1, 3);
+	nir_def *buffer0_offset = nir_channel(&b, config_2, 0);
+
+	/* Check result availability for timestamp queries. */
+	nir_def *is_one_dword_result =
+		nir_test_mask(&b, config_bitfield, R600_QUERY_ONE_DWORD);
+	nir_if *if_one_dword_result = nir_push_if(&b, is_one_dword_result); {
+		r600_query_result_load_one_dword(&b, fence_offset, buffer0_offset, &accum_vars);
+	} nir_push_else(&b, if_one_dword_result); {
+		r600_query_result_accumulate_pairs(&b, impl, config_bitfield, result_count,
+						  result_stride, fence_offset,
+						  pair_stride, pair_count,
+						  end_offset, buffer0_offset,
+						  &accum_vars);
 	}
+	nir_pop_if(&b, if_one_dword_result);
 
-	state.ir_type = PIPE_SHADER_IR_TGSI;
-	state.prog = tokens;
+	r600_query_result_store_output(&b, rctx, config_bitfield, result_offset, &accum_vars);
+
+	rctx->b.screen->finalize_nir(rctx->b.screen, b.shader, true);
+
+	state.ir_type = PIPE_SHADER_IR_NIR;
+	state.prog = b.shader;
+
+
 
 	rctx->query_result_shader = rctx->b.create_compute_state(&rctx->b, &state);
 }
@@ -1613,6 +1717,7 @@ static void r600_query_hw_get_result_resource(struct r600_common_context *rctx,
 		uint32_t pair_count;
 		uint32_t buffer_offset;
 		uint32_t buffer0_offset;
+		uint32_t pad[3];
 	} consts;
 
 	if (!rctx->query_result_shader) {

@@ -235,7 +235,7 @@ unsigned int radeon_enc_write_pps(struct radeon_encoder *enc, uint8_t nal_byte, 
 unsigned int radeon_enc_write_pps_hevc(struct radeon_encoder *enc, uint8_t *out)
 {
    struct pipe_h265_enc_pic_param pps = enc->enc_pic.hevc.desc->pic;
-   if (!enc->enc_pic.has_dependent_slice_instructions)
+   if (!enc->caps->hevc.dependent_slice_segments)
       pps.dependent_slice_segments_enabled_flag = 1;
    pps.constrained_intra_pred_flag = enc->enc_pic.hevc_spec_misc.constrained_intra_pred_flag;
    pps.transform_skip_enabled_flag = !enc->enc_pic.hevc_spec_misc.transform_skip_disabled;
@@ -484,7 +484,7 @@ static void radeon_enc_slice_header_hevc(struct radeon_encoder *enc)
    bits_copied = bs.bits_output;
    inst_index++;
 
-   if (enc->enc_pic.has_dependent_slice_instructions) {
+   if (enc->caps->hevc.dependent_slice_segments) {
       if (pps->dependent_slice_segments_enabled_flag) {
          instruction[inst_index] = RENCODE_HEVC_HEADER_INSTRUCTION_DEPENDENT_SLICE_SEGMENT_FLAG;
          inst_index++;

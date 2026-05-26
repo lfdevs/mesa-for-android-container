@@ -1571,6 +1571,9 @@ has_immediate(const struct intel_device_info *devinfo, const brw_eu_inst *inst,
 static brw_eu_inst
 precompact(const struct brw_isa_info *isa, brw_eu_inst inst)
 {
+   if (is_3src(isa, brw_eu_inst_opcode(isa, &inst)))
+       return inst;
+
    const struct intel_device_info *devinfo = isa->devinfo;
 
    /* In XeHP the compaction tables removed the entries for source regions

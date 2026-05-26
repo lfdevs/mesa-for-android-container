@@ -41,7 +41,7 @@ st_nir_lower_position_invariant(struct nir_shader *s,
 
    result = nir_fmul(&b, mvp[0], nir_channel(&b, in_pos, 0));
    for (int i = 1; i < 4; i++)
-      result = nir_fmad(&b, mvp[i], nir_channel(&b, in_pos, i), result);
+      result = nir_ffma_weak(&b, mvp[i], nir_channel(&b, in_pos, i), result);
 
    nir_store_output(&b, result, nir_imm_int(&b, 0),
                     .io_semantics.location = VARYING_SLOT_POS);

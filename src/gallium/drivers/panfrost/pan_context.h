@@ -346,6 +346,13 @@ struct panfrost_fs_key {
    uint8_t clip_plane_enable;
 
    bool line_smooth;
+
+   /* The VS varying layout determines how the FS is compiled (LD_VAR vs
+    * LD_VAR_BUF and byte offsets). Include the full layout in the key so
+    * the disk cache and in-memory variant cache correctly distinguish FS
+    * binaries compiled against different VS layouts.
+    */
+   struct pan_varying_layout vs_varying_layout;
 };
 
 struct panfrost_vs_key {
@@ -402,6 +409,9 @@ struct panfrost_uncompiled_shader {
 
    /* Stream output information */
    struct pipe_stream_output_info stream_output;
+
+   /* Varying layout (if known) */
+   struct pan_varying_layout vs_varying_layout;
 
    /** Lock for the variants array */
    simple_mtx_t lock;

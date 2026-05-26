@@ -45,9 +45,8 @@ lower_flat_inputs(nir_builder *b, nir_intrinsic_instr *intrin, void *data)
    nir_def *first_vtx = load_input_vertex(b, intrin, 0, intrin->def.num_components);
    nir_def *last_vtx = load_input_vertex(b, intrin, 2, intrin->def.num_components);
 
-   nir_def *fs_config = nir_load_fs_config_intel(b);
-
-   nir_def *last = nir_test_mask(b, fs_config, INTEL_FS_CONFIG_PROVOKING_VERTEX_LAST);
+   nir_def *last = nir_test_fs_config_intel(
+      b, 1, INTEL_FS_CONFIG_PROVOKING_VERTEX_LAST);
    nir_def *input_vertex = nir_bcsel(b, last, last_vtx, first_vtx);
 
    nir_def_replace(&intrin->def, input_vertex);

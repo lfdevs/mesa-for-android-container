@@ -297,8 +297,6 @@ static void radeon_vcn_enc_h264_get_dbk_param(struct radeon_encoder *enc,
 static void radeon_vcn_enc_h264_get_spec_misc_param(struct radeon_encoder *enc,
                                                     struct pipe_h264_enc_picture_desc *pic)
 {
-   struct si_screen *sscreen = (struct si_screen *)enc->screen;
-
    enc->enc_pic.spec_misc.profile_idc = u_get_h264_profile_idc(enc->base.profile);
    if (enc->enc_pic.spec_misc.profile_idc >= PIPE_VIDEO_PROFILE_MPEG4_AVC_MAIN &&
          enc->enc_pic.spec_misc.profile_idc != PIPE_VIDEO_PROFILE_MPEG4_AVC_EXTENDED)
@@ -323,7 +321,7 @@ static void radeon_vcn_enc_h264_get_spec_misc_param(struct radeon_encoder *enc,
       pic->pic_ctrl.weighted_bipred_idc != 1 ?
       pic->pic_ctrl.weighted_bipred_idc : 0;
    enc->enc_pic.spec_misc.transform_8x8_mode =
-      sscreen->info.vcn_ip_version >= VCN_5_0_0 &&
+      enc->caps->avc.transform_8x8 &&
       enc->enc_pic.spec_misc.cabac_enable &&
       pic->pic_ctrl.transform_8x8_mode_flag;
    enc->enc_pic.spec_misc.level_idc = pic->seq.level_idc;
@@ -638,13 +636,11 @@ static void radeon_vcn_enc_hevc_get_session_param(struct radeon_encoder *enc,
 static void radeon_vcn_enc_hevc_get_dbk_param(struct radeon_encoder *enc,
                                               struct pipe_h265_enc_picture_desc *pic)
 {
-   struct si_screen *sscreen = (struct si_screen *)enc->screen;
-
    enc->enc_pic.hevc_deblock.deblocking_filter_disabled = 0;
    enc->enc_pic.hevc_deblock.beta_offset_div2 = 0;
    enc->enc_pic.hevc_deblock.tc_offset_div2 = 0;
    enc->enc_pic.hevc_deblock.disable_sao =
-      sscreen->info.vcn_ip_version < VCN_2_0_0 ||
+      !enc->caps->hevc.sao ||
       !pic->seq.sample_adaptive_offset_enabled_flag;
 
    if (pic->pic.deblocking_filter_override_enabled_flag &&
@@ -679,37 +675,9 @@ static void radeon_vcn_enc_hevc_get_dbk_param(struct radeon_encoder *enc,
    }
 }
 
-static bool cu_qp_delta_supported(struct si_screen *sscreen)
-{
-   if (sscreen->info.vcn_ip_version >= VCN_5_0_0)
-      return true;
-   else if (sscreen->info.vcn_ip_version >= VCN_4_0_0)
-      return sscreen->info.vcn_enc_minor_version >= 7;
-   else if (sscreen->info.vcn_ip_version >= VCN_3_0_0)
-      return sscreen->info.vcn_enc_minor_version >= 26;
-   else if (sscreen->info.vcn_ip_version >= VCN_2_0_0)
-      return sscreen->info.vcn_enc_minor_version >= 20;
-   else
-      return false;
-}
-
-static bool transform_skip_supported(struct si_screen *sscreen)
-{
-   if (sscreen->info.vcn_ip_version >= VCN_5_0_0)
-      return true;
-   else if (sscreen->info.vcn_ip_version >= VCN_4_0_0)
-      return sscreen->info.vcn_enc_minor_version >= 2;
-   else if (sscreen->info.vcn_ip_version >= VCN_3_0_0)
-      return sscreen->info.vcn_enc_minor_version >= 23;
-   else
-      return false;
-}
-
 static void radeon_vcn_enc_hevc_get_spec_misc_param(struct radeon_encoder *enc,
                                                     struct pipe_h265_enc_picture_desc *pic)
 {
-   struct si_screen *sscreen = (struct si_screen *)enc->screen;
-
    enc->enc_pic.hevc_spec_misc.log2_min_luma_coding_block_size_minus3 =
       pic->seq.log2_min_luma_coding_block_size_minus3;
    enc->enc_pic.hevc_spec_misc.amp_disabled = !pic->seq.amp_enabled_flag;
@@ -723,10 +691,10 @@ static void radeon_vcn_enc_hevc_get_spec_misc_param(struct radeon_encoder *enc,
    enc->enc_pic.hevc_spec_misc.half_pel_enabled = 1;
    enc->enc_pic.hevc_spec_misc.quarter_pel_enabled = 1;
    enc->enc_pic.hevc_spec_misc.transform_skip_disabled =
-      !transform_skip_supported(sscreen) ||
+      !enc->caps->hevc.transform_skip ||
       !pic->pic.transform_skip_enabled_flag;
    enc->enc_pic.hevc_spec_misc.cu_qp_delta_enabled_flag =
-      (cu_qp_delta_supported(sscreen) && pic->pic.cu_qp_delta_enabled_flag) ||
+      (enc->caps->hevc.cu_qp_delta && pic->pic.cu_qp_delta_enabled_flag) ||
       enc->enc_pic.enc_qp_map.qp_map_type ||
       enc->enc_pic.rc_session_init.rate_control_method;
 }
@@ -1902,8 +1870,7 @@ static bool radeon_vcn_enc_efc_supported(struct radeon_encoder *enc,
    enum pipe_format src_format = src->buffer_format;
    enum pipe_format dst_format = vpp->dst->buffer_format;
 
-   if (sscreen->info.vcn_ip_version < VCN_2_0_0 ||
-       sscreen->info.vcn_ip_version == VCN_2_2_0 ||
+   if (!sscreen->info.video_caps.enc[si_pipe_video_profile_to_codec(enc->base.profile)].efc ||
        sscreen->multimedia_debug_flags & DBG(NO_EFC))
       return false;
 
@@ -2248,6 +2215,8 @@ struct pipe_video_codec *radeon_create_encoder(struct pipe_context *context,
       goto error;
    }
 
+   enc->caps = &sscreen->info.video_caps.enc[si_pipe_video_profile_to_codec(templ->profile)];
+
    enc->enc_pic.use_rc_per_pic_ex = false;
 
    ac_vcn_enc_init_cmds(&enc->cmd, sscreen->info.vcn_ip_version);
@@ -2265,8 +2234,6 @@ struct pipe_video_codec *radeon_create_encoder(struct pipe_context *context,
          /* this limits tile splitting scheme to use legacy method */
          enc->enc_pic.av1_tile_splitting_legacy_flag = true;
       }
-      if (sscreen->info.vcn_enc_minor_version >= 8)
-         enc->enc_pic.has_dependent_slice_instructions = true;
       if (sscreen->info.vcn_enc_minor_version > 8 ||
           (sscreen->info.vcn_enc_minor_version == 8 &&
            sscreen->info.vcn_fw_revision >= 6))
@@ -2275,8 +2242,6 @@ struct pipe_video_codec *radeon_create_encoder(struct pipe_context *context,
    else if (sscreen->info.vcn_ip_version >= VCN_4_0_0) {
       if (sscreen->info.vcn_enc_minor_version >= 1)
          enc->enc_pic.use_rc_per_pic_ex = true;
-      if (sscreen->info.vcn_enc_minor_version >= 23)
-         enc->enc_pic.has_dependent_slice_instructions = true;
       radeon_enc_4_0_init(enc);
    }
    else if (sscreen->info.vcn_ip_version >= VCN_3_0_0) {

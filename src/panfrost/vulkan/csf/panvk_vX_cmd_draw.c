@@ -51,6 +51,7 @@
 #include "vk_render_pass.h"
 #include "poly/geometry.h"
 
+#if PAN_ARCH < 14
 static enum cs_reg_perm
 provoking_vertex_fn_reg_perm_cb(struct cs_builder *b, unsigned reg)
 {
@@ -202,6 +203,7 @@ panvk_per_arch(device_draw_context_cleanup)(struct panvk_device *dev)
    panvk_priv_bo_unref(dev->draw_ctx->fns_bo);
    vk_free(&dev->vk.alloc, dev->draw_ctx);
 }
+#endif /* PAN_ARCH < 14 */
 
 static void
 emit_vs_attrib(struct panvk_cmd_buffer *cmdbuf,
@@ -577,9 +579,13 @@ translate_prim_topology(VkPrimitiveTopology in)
    case VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN:
       return MALI_DRAW_MODE_TRIANGLE_FAN;
    case VK_PRIMITIVE_TOPOLOGY_LINE_LIST_WITH_ADJACENCY:
+      return MALI_DRAW_MODE_LINES_ADJACENCY;
    case VK_PRIMITIVE_TOPOLOGY_LINE_STRIP_WITH_ADJACENCY:
+      return MALI_DRAW_MODE_LINE_STRIP_ADJACENCY;
    case VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST_WITH_ADJACENCY:
+      return MALI_DRAW_MODE_TRIANGLES_ADJACENCY;
    case VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP_WITH_ADJACENCY:
+      return MALI_DRAW_MODE_TRIANGLE_STRIP_ADJACENCY;
    case VK_PRIMITIVE_TOPOLOGY_PATCH_LIST:
    default:
       UNREACHABLE("Invalid primitive type");
@@ -831,34 +837,6 @@ prepare_vp(struct panvk_cmd_buffer *cmdbuf)
 }
 #endif
 
-#if PAN_ARCH >= 12
-static inline uint64_t
-get_vs_all_spd(const struct panvk_cmd_buffer *cmdbuf)
-{
-   const struct panvk_shader_variant *vs =
-      panvk_shader_hw_variant(cmdbuf->state.gfx.vs.shader);
-   assert(vs);
-   const struct vk_input_assembly_state *ia =
-      &cmdbuf->vk.dynamic_graphics_state.ia;
-   return ia->primitive_topology == VK_PRIMITIVE_TOPOLOGY_POINT_LIST
-             ? panvk_priv_mem_dev_addr(vs->spds.all_points)
-             : panvk_priv_mem_dev_addr(vs->spds.all_triangles);
-}
-#else
-static inline uint64_t
-get_vs_pos_spd(const struct panvk_cmd_buffer *cmdbuf)
-{
-   const struct panvk_shader_variant *vs =
-      panvk_shader_hw_variant(cmdbuf->state.gfx.vs.shader);
-   assert(vs);
-   const struct vk_input_assembly_state *ia =
-      &cmdbuf->vk.dynamic_graphics_state.ia;
-   return ia->primitive_topology == VK_PRIMITIVE_TOPOLOGY_POINT_LIST
-             ? panvk_priv_mem_dev_addr(vs->spds.pos_points)
-             : panvk_priv_mem_dev_addr(vs->spds.pos_triangles);
-}
-#endif
-
 static void
 prepare_tiler_primitive_size(struct panvk_cmd_buffer *cmdbuf)
 {
@@ -873,7 +851,8 @@ prepare_tiler_primitive_size(struct panvk_cmd_buffer *cmdbuf)
        !gfx_state_dirty(cmdbuf, VS))
       return;
 
-   switch (ia->primitive_topology) {
+   enum mesa_prim prim = vk_topology_to_mesa(ia->primitive_topology);
+   switch (u_reduced_prim(prim)) {
    /* From the Vulkan spec 1.3.293:
     *
     *    "If maintenance5 is enabled and a value is not written to a variable
@@ -884,7 +863,7 @@ prepare_tiler_primitive_size(struct panvk_cmd_buffer *cmdbuf)
     * On v13+, the point size default to 1.0f.
     */
 #if PAN_ARCH < 13
-   case VK_PRIMITIVE_TOPOLOGY_POINT_LIST: {
+   case MESA_PRIM_POINTS: {
       const struct panvk_shader_variant *vs =
          panvk_shader_hw_variant(cmdbuf->state.gfx.vs.shader);
 
@@ -895,8 +874,7 @@ prepare_tiler_primitive_size(struct panvk_cmd_buffer *cmdbuf)
       break;
    }
 #endif
-   case VK_PRIMITIVE_TOPOLOGY_LINE_LIST:
-   case VK_PRIMITIVE_TOPOLOGY_LINE_STRIP:
+   case MESA_PRIM_LINES:
       primitive_size = cmdbuf->vk.dynamic_graphics_state.rs.line.width;
       break;
    default:
@@ -935,6 +913,18 @@ calc_render_descs_size(struct panvk_cmd_buffer *cmdbuf)
    uint32_t fbd_count = calc_enabled_layer_count(cmdbuf);
    uint32_t td_count = DIV_ROUND_UP(cmdbuf->state.gfx.render.layer_count,
                                     MAX_LAYERS_PER_TILER_DESC);
+
+   /* v14+ supports a maximum of one tiler descriptor.
+    * This should be enough since the driver reports maxFramebufferLayers
+    * and maxMultiviewViewCount lower or equal to MAX_LAYERS_PER_TILER_DESC. */
+   assert(PAN_ARCH < 14 || td_count <= 1);
+   static_assert(
+      PAN_ARCH < 14 || MAX_FRAMEBUFFER_LAYERS <= MAX_LAYERS_PER_TILER_DESC,
+      "MAX_FRAMEBUFFER_LAYERS must be <= max amount of layers a Tiler descriptor can index");
+   static_assert(
+      PAN_ARCH < 14 ||
+         PAN_MAX_MULTIVIEW_VIEW_COUNT <= MAX_LAYERS_PER_TILER_DESC,
+      "PAN_MAX_MULTIVIEW_VIEW_COUNT must be <= max amount of layers a Tiler descriptor can index");
 
    return (calc_fbd_size(cmdbuf) * fbd_count) +
           (td_count * pan_size(TILER_CONTEXT));
@@ -1057,7 +1047,10 @@ get_tiler_desc(struct panvk_cmd_buffer *cmdbuf)
 
       /* This will be overloaded. */
       cfg.layer_count = 1;
+
+#if PAN_ARCH < 14
       cfg.layer_offset = 0;
+#endif
    }
 
    /* When simul_use=true, the tiler descriptors are allocated from the
@@ -1230,6 +1223,94 @@ get_tiler_context(struct panvk_cmd_buffer *cmdbuf, uint32_t layer)
    return tiler_ctx;
 }
 
+#if PAN_ARCH >= 14
+static void
+init_layer_fragment_state(const struct pan_fb_desc_info *info,
+                          const struct pan_ptr fbd)
+{
+   const struct pan_fb_layout *fb = info->fb;
+   const struct pan_fb_load *load = info->load;
+   const struct pan_fb_store *store = info->store;
+   const struct pan_fb_clean_tile ct = GENX(pan_fb_get_clean_tile)(info);
+   const bool has_zs_crc_ext = pan_fb_has_zs(fb);
+
+   struct panvk_fb_layer_state fbd_data = {0};
+   fbd_data.tiler = info->tiler_ctx->valhall.desc;
+
+   /* layer_index in flags0 is used to select the right primitive list in
+    * the tiler context, and frame_arg is the value that's passed to the
+    * fragment shader through r62-r63, which we use to pass gl_Layer. Since
+    * the layer_idx only takes 8-bits, we might use the extra 56-bits we
+    * have in frame_argument to pass other information to the fragment
+    * shader at some point.
+    */
+   fbd_data.frame_argument = info->layer;
+
+   /* Layer offset is unused on v14+. */
+   assert(info->tiler_ctx->valhall.layer_offset == 0);
+
+   pan_pack(&fbd_data.flags0, FRAGMENT_FLAGS_0, cfg) {
+      cfg.pre_frame_0 = pan_fix_frame_shader_mode(info->frame_shaders.modes[0],
+                                                  ct.rts || ct.zs || ct.s);
+      cfg.pre_frame_1 = pan_fix_frame_shader_mode(info->frame_shaders.modes[1],
+                                                  ct.rts || ct.zs || ct.s);
+      cfg.post_frame = info->frame_shaders.modes[2];
+
+      /* Enabling prepass without pipelineing is generally not good for
+       * performance, so disable HSR in that case.
+       */
+      cfg.hsr_prepass_enable =
+         info->allow_hsr_prepass && pan_fb_can_pipeline_zs(fb);
+      cfg.hsr_prepass_interleaving_enable = pan_fb_can_pipeline_zs(fb);
+      cfg.hsr_prepass_filter_enable = true;
+      cfg.hsr_hierarchical_optimizations_enable = true;
+
+      cfg.internal_layer_index = info->layer;
+   }
+
+   pan_pack(&fbd_data.flags2, FRAGMENT_FLAGS_2, cfg) {
+      if (fb->s_format != PIPE_FORMAT_NONE) {
+         cfg.s_clear =
+            load && pan_target_has_clear(&load->s) ? load->s.clear.stencil : 0;
+         cfg.s_write_enable = store && store->s.store;
+      }
+
+      if (fb->z_format != PIPE_FORMAT_NONE) {
+         cfg.z_internal_format = pan_get_z_internal_format(fb->z_format);
+         cfg.z_write_enable = store && store->zs.store;
+      } else {
+         cfg.z_internal_format = MALI_Z_INTERNAL_FORMAT_D24;
+         assert(!store || !store->zs.store);
+      }
+   }
+
+   fbd_data.z_clear =
+      util_bitpack_float(fb->z_format != PIPE_FORMAT_NONE && load && load &&
+                               pan_target_has_clear(&load->z)
+                            ? load->z.clear.depth
+                            : 0);
+
+   fbd_data.dcd_pointer = info->frame_shaders.dcd_pointer;
+
+   /* Set the DBD and RTD pointers. Both must be 64-bytes aligned. */
+   {
+      uint64_t out_gpu_addr =
+         fbd.gpu + ALIGN_POT(sizeof(struct panvk_fb_layer_state), 64);
+
+      if (has_zs_crc_ext) {
+         fbd_data.dbd_pointer = out_gpu_addr;
+         assert(fbd_data.dbd_pointer % 64 == 0);
+         out_gpu_addr += pan_size(ZS_CRC_EXTENSION);
+      }
+
+      fbd_data.rtd_pointer = out_gpu_addr;
+      assert(fbd_data.rtd_pointer % 64 == 0);
+   }
+
+   memcpy(fbd.cpu, &fbd_data, sizeof(fbd_data));
+}
+#endif /* PAN_ARCH >= 14 */
+
 static VkResult
 get_fb_descs(struct panvk_cmd_buffer *cmdbuf)
 {
@@ -1245,8 +1326,13 @@ get_fb_descs(struct panvk_cmd_buffer *cmdbuf)
    uint32_t fbd_sz = calc_fbd_size(cmdbuf);
    uint32_t fbds_sz = enabled_layer_count * fbd_sz;
 
-   cmdbuf->state.gfx.render.fbds = panvk_cmd_alloc_dev_mem(
-      cmdbuf, desc, fbds_sz, pan_alignment(FRAMEBUFFER));
+#if PAN_ARCH >= 14
+   const unsigned fbds_alignment = alignof(struct panvk_fb_layer_state);
+#else
+   const unsigned fbds_alignment = pan_alignment(FRAMEBUFFER);
+#endif
+   cmdbuf->state.gfx.render.fbds =
+      panvk_cmd_alloc_dev_mem(cmdbuf, desc, fbds_sz, fbds_alignment);
    if (!cmdbuf->state.gfx.render.fbds.gpu)
       return VK_ERROR_OUT_OF_DEVICE_MEMORY;
 
@@ -1309,21 +1395,47 @@ get_fb_descs(struct panvk_cmd_buffer *cmdbuf)
    if (result != VK_SUCCESS)
       return result;
 
+   const bool has_zs_ext = pan_fb_has_zs(&render->fb.layout);
+#if PAN_ARCH >= 14
+   const unsigned fb_sz = ALIGN_POT(sizeof(struct panvk_fb_layer_state), 64);
+#else
+   const unsigned fb_sz = pan_size(FRAMEBUFFER);
+#endif
    for (uint32_t i = 0; i < enabled_layer_count; i++) {
       uint32_t layer_idx = multiview ? u_bit_scan(&view_mask_temp) : i;
 
       fbd_info.layer = layer_idx;
       tiler_ctx = get_tiler_context(cmdbuf, layer_idx);
 
-      uint32_t new_fbd_flags =
-         GENX(pan_emit_fb_desc)(&fbd_info, fbds.cpu + fbd_sz * i);
+      const struct pan_ptr fbd = pan_ptr_offset(fbds, fbd_sz * i);
+      const struct pan_fb_descs fb_descs = {
+#if PAN_ARCH <= 13
+         .fbd = fbd.cpu,
+#endif
+         .zs_crc = has_zs_ext ? fbd.cpu + fb_sz : NULL,
+         .rts = has_zs_ext ? fbd.cpu + fb_sz + pan_size(ZS_CRC_EXTENSION)
+                           : fbd.cpu + fb_sz,
+      };
+      uint32_t new_fbd_flags = GENX(pan_emit_fb_desc)(&fbd_info, &fb_descs);
+#if PAN_ARCH >= 14
+      init_layer_fragment_state(&fbd_info, fbd);
+#endif
 
       /* Make sure all FBDs have the same flags. */
       assert(i == 0 || new_fbd_flags == fbd_flags);
       fbd_flags = new_fbd_flags;
    }
 
+#if PAN_ARCH >= 14
+   /* fbd_flags is unused on v14+. */
+   assert(!fbd_flags);
+#endif
+
    struct cs_builder *b = panvk_get_cs_builder(cmdbuf, PANVK_SUBQUEUE_FRAGMENT);
+
+#if PAN_ARCH >= 14
+   // TODO: Implement IR support for v14.
+#else
    for (uint32_t ir_pass = 0; ir_pass < PANVK_IR_PASS_COUNT; ir_pass++) {
       struct pan_ptr ir_fbds = panvk_cmd_alloc_dev_mem(
          cmdbuf, desc, fbds_sz, pan_alignment(FRAMEBUFFER));
@@ -1335,7 +1447,6 @@ get_fb_descs(struct panvk_cmd_buffer *cmdbuf)
 
       for (uint32_t i = 0; i < enabled_layer_count; i++) {
          uint32_t layer_idx = multiview ? u_bit_scan(&ir_view_mask_temp) : i;
-         void *ir_fbd = (void *)((uint8_t *)ir_fbds.cpu + (i * fbd_sz));
 
          fbd_info.layer = layer_idx;
          tiler_ctx = get_tiler_context(cmdbuf, layer_idx);
@@ -1353,8 +1464,20 @@ get_fb_descs(struct panvk_cmd_buffer *cmdbuf)
          if (result != VK_SUCCESS)
             return result;
 
+         const struct pan_ptr fbd = pan_ptr_offset(ir_fbds, fbd_sz * i);
+         const struct pan_fb_descs fb_descs = {
+#if PAN_ARCH <= 13
+            .fbd = fbd.cpu,
+#endif
+            .zs_crc = has_zs_ext ? fbd.cpu + fb_sz : NULL,
+            .rts = has_zs_ext ? fbd.cpu + fb_sz + pan_size(ZS_CRC_EXTENSION)
+                              : fbd.cpu + fb_sz,
+         };
          ASSERTED uint32_t new_fbd_flags =
-            GENX(pan_emit_fb_desc)(&fbd_info, ir_fbd);
+            GENX(pan_emit_fb_desc)(&fbd_info, &fb_descs);
+#if PAN_ARCH >= 14
+         init_layer_fragment_state(&fbd_info, fbd);
+#endif
 
          /* Make sure all FBDs have the same flags. */
          assert(new_fbd_flags == fbd_flags);
@@ -1367,16 +1490,14 @@ get_fb_descs(struct panvk_cmd_buffer *cmdbuf)
 
    /* Wait for IR info push to complete */
    cs_wait_slot(b, SB_ID(LS));
-
-   bool unset_provoking_vertex =
-      cmdbuf->state.gfx.render.first_provoking_vertex == U_TRISTATE_UNSET;
+#endif /* PAN_ARCH >= 14 */
 
    if (copy_fbds) {
-      struct cs_index cur_tiler = cs_reg64(b, 38);
+      struct cs_index cur_tiler = cs_reg64(b, PANVK_CS_REG_TILER_DESC_PTR);
       struct cs_index dst_fbd_ptr = cs_sr_reg64(b, FRAGMENT, FBD_POINTER);
-      struct cs_index fbd_idx = cs_reg32(b, 47);
-      struct cs_index src_fbd_ptr = cs_reg64(b, 48);
-      struct cs_index remaining_layers_in_td = cs_reg32(b, 50);
+      struct cs_index fbd_idx = cs_reg32(b, 60);
+      struct cs_index src_fbd_ptr = cs_reg64(b, 64);
+      struct cs_index remaining_layers_in_td = cs_reg32(b, 61);
       uint32_t td_count = DIV_ROUND_UP(cmdbuf->state.gfx.render.layer_count,
                                        MAX_LAYERS_PER_TILER_DESC);
 
@@ -1400,10 +1521,27 @@ get_fb_descs(struct panvk_cmd_buffer *cmdbuf)
           * framebuffer size is aligned on 64-bytes. */
          assert(fbd_sz == ALIGN_POT(fbd_sz, 64));
 
+#if PAN_ARCH >= 14
+         for (uint32_t fbd_off = 0; fbd_off < fbd_sz; fbd_off += 64) {
+            cs_load_to(b, cs_scratch_reg_tuple(b, 0, 16), src_fbd_ptr,
+                       BITFIELD_MASK(16), fbd_off);
+
+            /* Patch the Tiler pointer. */
+            if (fbd_off == 0)
+               cs_add64(b, cs_scratch_reg64(b, 0), cur_tiler, 0);
+
+            cs_store(b, cs_scratch_reg_tuple(b, 0, 16), dst_fbd_ptr,
+                     BITFIELD_MASK(16), fbd_off);
+         }
+#else
+         bool unset_provoking_vertex =
+            cmdbuf->state.gfx.render.first_provoking_vertex == U_TRISTATE_UNSET;
          for (uint32_t fbd_off = 0; fbd_off < fbd_sz; fbd_off += 64) {
             if (fbd_off == 0) {
                cs_load_to(b, cs_scratch_reg_tuple(b, 0, 14), src_fbd_ptr,
                           BITFIELD_MASK(14), fbd_off);
+
+               /* Patch the Tiler pointer. */
                cs_add64(b, cs_scratch_reg64(b, 14), cur_tiler, 0);
 
                /* If we don't know what provoking vertex mode the
@@ -1423,6 +1561,7 @@ get_fb_descs(struct panvk_cmd_buffer *cmdbuf)
             cs_store(b, cs_scratch_reg_tuple(b, 0, 16), dst_fbd_ptr,
                      BITFIELD_MASK(16), fbd_off);
          }
+#endif
 
          /* Finish stores to pass_dst_fbd_ptr. */
          cs_flush_stores(b);
@@ -1459,9 +1598,11 @@ get_fb_descs(struct panvk_cmd_buffer *cmdbuf)
       cs_update_frag_ctx(b) {
          cs_move64_to(b, cs_sr_reg64(b, FRAGMENT, FBD_POINTER),
                       fbds.gpu | fbd_flags);
-         cs_move64_to(b, cs_reg64(b, 38), cmdbuf->state.gfx.render.tiler);
+         cs_move64_to(b, cs_reg64(b, PANVK_CS_REG_TILER_DESC_PTR),
+                      cmdbuf->state.gfx.render.tiler);
       }
 
+#if PAN_ARCH < 14
       /* If we don't know what provoking vertex mode the application wants yet,
        * leave space to patch it later */
       if (cmdbuf->state.gfx.render.first_provoking_vertex == U_TRISTATE_UNSET) {
@@ -1483,6 +1624,7 @@ get_fb_descs(struct panvk_cmd_buffer *cmdbuf)
          cs_maybe(b, &cmdbuf->state.gfx.render.maybe_set_fbds_provoking_vertex)
             cs_call(b, addr_reg, length_reg);
       }
+#endif
    }
 
    return VK_SUCCESS;
@@ -1556,6 +1698,8 @@ get_render_ctx(struct panvk_cmd_buffer *cmdbuf)
 static VkResult
 prepare_vs(struct panvk_cmd_buffer *cmdbuf, const struct panvk_draw_info *draw)
 {
+   const struct vk_input_assembly_state *ia =
+      &cmdbuf->vk.dynamic_graphics_state.ia;
    struct panvk_descriptor_state *desc_state = &cmdbuf->state.gfx.desc_state;
    struct panvk_shader_desc_state *vs_desc_state = &cmdbuf->state.gfx.vs.desc;
    const struct panvk_shader_variant *vs =
@@ -1590,13 +1734,23 @@ prepare_vs(struct panvk_cmd_buffer *cmdbuf, const struct panvk_draw_info *draw)
                       vs_desc_state->res_table);
 
 #if PAN_ARCH >= 12
-      if (gfx_state_dirty(cmdbuf, VS))
-         cs_move64_to(b, cs_sr_reg64(b, IDVS, VERTEX_SPD), get_vs_all_spd(cmdbuf));
+      if (gfx_state_dirty(cmdbuf, VS) ||
+          dyn_gfx_state_dirty(cmdbuf, IA_PRIMITIVE_TOPOLOGY)) {
+         const uint64_t spd_addr =
+            ia->primitive_topology == VK_PRIMITIVE_TOPOLOGY_POINT_LIST
+            ? panvk_priv_mem_dev_addr(vs->spds.all_points)
+            : panvk_priv_mem_dev_addr(vs->spds.all_triangles);
+         cs_move64_to(b, cs_sr_reg64(b, IDVS, VERTEX_SPD), spd_addr);
+      }
 #else
       if (gfx_state_dirty(cmdbuf, VS) ||
-          dyn_gfx_state_dirty(cmdbuf, IA_PRIMITIVE_TOPOLOGY))
-         cs_move64_to(b, cs_sr_reg64(b, IDVS, VERTEX_POS_SPD),
-                      get_vs_pos_spd(cmdbuf));
+          dyn_gfx_state_dirty(cmdbuf, IA_PRIMITIVE_TOPOLOGY)) {
+         const uint64_t pos_spd_addr =
+            ia->primitive_topology == VK_PRIMITIVE_TOPOLOGY_POINT_LIST
+            ? panvk_priv_mem_dev_addr(vs->spds.pos_points)
+            : panvk_priv_mem_dev_addr(vs->spds.pos_triangles);
+         cs_move64_to(b, cs_sr_reg64(b, IDVS, VERTEX_POS_SPD), pos_spd_addr);
+      }
 
       if (gfx_state_dirty(cmdbuf, VS))
          cs_move64_to(b, cs_sr_reg64(b, IDVS, VERTEX_VARY_SPD),
@@ -1935,8 +2089,8 @@ prepare_dcd(struct panvk_cmd_buffer *cmdbuf,
    }
 
    bool msaa = dyns->ms.rasterization_samples > 1;
-   if ((ia->primitive_topology == VK_PRIMITIVE_TOPOLOGY_LINE_LIST ||
-        ia->primitive_topology == VK_PRIMITIVE_TOPOLOGY_LINE_STRIP) &&
+   enum mesa_prim prim = vk_topology_to_mesa(ia->primitive_topology);
+   if (u_reduced_prim(prim) == MESA_PRIM_LINES &&
        rs->line.mode == VK_LINE_RASTERIZATION_MODE_BRESENHAM) {
       /* we need to disable MSAA when rendering bresenham lines.
        *
@@ -3299,6 +3453,9 @@ calc_tiler_oom_handler_idx(struct panvk_cmd_buffer *cmdbuf)
 static void
 setup_tiler_oom_ctx(struct panvk_cmd_buffer *cmdbuf)
 {
+#if PAN_ARCH >= 14
+   // TODO: Implement IR support for v14.
+#else
    struct cs_builder *b = panvk_get_cs_builder(cmdbuf, PANVK_SUBQUEUE_FRAGMENT);
    const struct pan_fb_layout *fb = &cmdbuf->state.gfx.render.fb.layout;
    const bool has_zs_ext = pan_fb_has_zs(fb);
@@ -3343,6 +3500,7 @@ setup_tiler_oom_ctx(struct panvk_cmd_buffer *cmdbuf)
               TILER_OOM_CTX_FIELD_OFFSET(layer_count));
 
    cs_flush_stores(b);
+#endif /* PAN_ARCH >= 14 */
 }
 
 static uint32_t
@@ -3351,24 +3509,106 @@ pack_32_2x16(uint16_t lo, uint16_t hi)
    return (((uint32_t)hi) << 16) | (uint32_t)lo;
 }
 
+#if PAN_ARCH >= 14
+static void
+cs_emit_static_fragment_state(struct cs_builder *b,
+                              struct panvk_cmd_buffer *cmdbuf)
+{
+   /* Emit the static fragment staging registers. These don't change per-layer. */
+
+   const struct panvk_device *dev = to_panvk_device(cmdbuf->vk.base.device);
+   const struct panvk_rendering_state *render = &cmdbuf->state.gfx.render;
+   const struct pan_fb_layout *fb = &render->fb.layout;
+
+   const uint8_t sample_count = render->fb.layout.sample_count;
+
+   const struct pan_fb_bbox fb_area_px =
+      pan_fb_bbox_from_xywh(0, 0, fb->width_px, fb->height_px);
+   const struct pan_fb_bbox bbox_px =
+      pan_fb_bbox_clamp(fb->tiling_area_px, fb_area_px);
+
+   assert(pan_fb_bbox_is_valid(fb->tiling_area_px));
+
+   struct mali_fragment_bounding_box_packed bbox;
+   pan_pack(&bbox, FRAGMENT_BOUNDING_BOX, cfg) {
+      cfg.bound_min_x = bbox_px.min_x;
+      cfg.bound_min_y = bbox_px.min_y;
+      cfg.bound_max_x = bbox_px.max_x;
+      cfg.bound_max_y = bbox_px.max_y;
+   }
+
+   struct mali_frame_size_packed frame_size;
+   pan_pack(&frame_size, FRAME_SIZE, cfg) {
+      cfg.width = fb->width_px;
+      cfg.height = fb->height_px;
+   }
+
+   cs_move32_to(b, cs_sr_reg32(b, FRAGMENT, BBOX_MIN),
+                bbox.opaque[0]);
+   cs_move32_to(b, cs_sr_reg32(b, FRAGMENT, BBOX_MAX),
+                bbox.opaque[1]);
+   cs_move32_to(b, cs_sr_reg32(b, FRAGMENT, FRAME_SIZE), frame_size.opaque[0]);
+   cs_move64_to(
+      b, cs_sr_reg64(b, FRAGMENT, SAMPLE_POSITION_ARRAY_POINTER),
+      dev->sample_positions->addr.dev +
+         pan_sample_positions_offset(pan_sample_pattern(sample_count)));
+
+   /* Flags 1 */
+   struct mali_fragment_flags_1_packed flags1;
+   pan_pack(&flags1, FRAGMENT_FLAGS_1, cfg) {
+      cfg.sample_count = fb->sample_count;
+      cfg.sample_pattern = pan_sample_pattern(fb->sample_count);
+      cfg.effective_tile_size = fb->tile_size_px;
+      cfg.point_sprite_coord_origin_max_y = false;
+      cfg.first_provoking_vertex = get_first_provoking_vertex(cmdbuf);
+
+      assert(fb->rt_count > 0);
+      cfg.render_target_count = fb->rt_count;
+      cfg.color_buffer_allocation = fb->tile_rt_alloc_B;
+   }
+   cs_move32_to(b, cs_sr_reg32(b, FRAGMENT, FLAGS_1), flags1.opaque[0]);
+
+   /* If we don't know what provoking vertex mode the application wants yet,
+    * leave space to patch it later */
+   if (cmdbuf->state.gfx.render.first_provoking_vertex == U_TRISTATE_UNSET) {
+      cs_maybe(b, &cmdbuf->state.gfx.render.maybe_set_fbds_provoking_vertex)
+      {
+         /* provoking_vertex flag is bit 14 of Fragment Flags 1. */
+         cs_add32(b, cs_sr_reg32(b, FRAGMENT, FLAGS_1),
+                  cs_sr_reg32(b, FRAGMENT, FLAGS_1), -(1 << 14));
+      }
+   }
+
+   /* Leave the remaining RUN_FRAGMENT2 staging registers as zero. */
+}
+#endif /* PAN_ARCH >= 14 */
+
 static VkResult
 issue_fragment_jobs(struct panvk_cmd_buffer *cmdbuf)
 {
+#if PAN_ARCH < 14
    struct panvk_device *dev = to_panvk_device(cmdbuf->vk.base.device);
+#endif
    const struct cs_tracing_ctx *tracing_ctx =
       &cmdbuf->state.cs[PANVK_SUBQUEUE_FRAGMENT].tracing;
-   const struct pan_fb_layout *fb = &cmdbuf->state.gfx.render.fb.layout;
    struct cs_builder *b = panvk_get_cs_builder(cmdbuf, PANVK_SUBQUEUE_FRAGMENT);
    bool has_oq_chain = cmdbuf->state.gfx.render.oq.chain != 0;
 
    /* Now initialize the fragment bits. */
+   struct cs_index fbd_pointer = cs_sr_reg64(b, FRAGMENT, FBD_POINTER);
    cs_update_frag_ctx(b) {
+#if PAN_ARCH >= 14
+      cs_emit_static_fragment_state(b, cmdbuf);
+      cs_emit_layer_fragment_state(b, fbd_pointer);
+#else
+      const struct pan_fb_layout *fb = &cmdbuf->state.gfx.render.fb.layout;
       cs_move32_to(b, cs_sr_reg32(b, FRAGMENT, BBOX_MIN),
                    pack_32_2x16(fb->tiling_area_px.min_x,
                                 fb->tiling_area_px.min_y));
       cs_move32_to(b, cs_sr_reg32(b, FRAGMENT, BBOX_MAX),
                    pack_32_2x16(fb->tiling_area_px.max_x,
                                 fb->tiling_area_px.max_y));
+#endif
    }
 
    bool simul_use =
@@ -3401,6 +3641,9 @@ issue_fragment_jobs(struct panvk_cmd_buffer *cmdbuf)
     * state for this renderpass, so it's safe to enable. */
    struct cs_index addr_reg = cs_scratch_reg64(b, 0);
    struct cs_index length_reg = cs_scratch_reg32(b, 2);
+#if PAN_ARCH >= 14
+   // TODO: Implement IR support for v14.
+#else
    uint32_t handler_idx = calc_tiler_oom_handler_idx(cmdbuf);
    uint64_t handler_addr = dev->tiler_oom.handlers_bo->addr.dev +
                            handler_idx * dev->tiler_oom.handler_stride;
@@ -3408,6 +3651,7 @@ issue_fragment_jobs(struct panvk_cmd_buffer *cmdbuf)
    cs_move32_to(b, length_reg, dev->tiler_oom.handler_stride);
    cs_set_exception_handler(b, MALI_CS_EXCEPTION_TYPE_TILER_OOM, addr_reg,
                             length_reg);
+#endif
 
    /* Wait for the tiling to be done before submitting the fragment job. */
    wait_finish_tiling(cmdbuf);
@@ -3422,8 +3666,12 @@ issue_fragment_jobs(struct panvk_cmd_buffer *cmdbuf)
     * up. */
    cs_move64_to(b, addr_reg, 0);
    cs_move32_to(b, length_reg, 0);
+#if PAN_ARCH >= 14
+   // TODO: Implement IR support for v14.
+#else
    cs_set_exception_handler(b, MALI_CS_EXCEPTION_TYPE_TILER_OOM, addr_reg,
                             length_reg);
+#endif
 
    /* Applications tend to forget to describe subpass dependencies, especially
     * when it comes to write -> read dependencies on attachments. The
@@ -3439,8 +3687,13 @@ issue_fragment_jobs(struct panvk_cmd_buffer *cmdbuf)
    }
 
    if (cmdbuf->state.gfx.render.layer_count <= 1) {
+#if PAN_ARCH >= 14
+      cs_trace_run_fragment2(b, tracing_ctx, cs_scratch_reg_tuple(b, 0, 4),
+                             false, MALI_TILE_RENDER_ORDER_Z_ORDER);
+#else
       cs_trace_run_fragment(b, tracing_ctx, cs_scratch_reg_tuple(b, 0, 4),
                             false, MALI_TILE_RENDER_ORDER_Z_ORDER);
+#endif
    } else {
       struct cs_index run_fragment_regs = cs_scratch_reg_tuple(b, 0, 4);
       struct cs_index remaining_layers = cs_scratch_reg32(b, 4);
@@ -3449,12 +3702,17 @@ issue_fragment_jobs(struct panvk_cmd_buffer *cmdbuf)
       cs_while(b, MALI_CS_CONDITION_GREATER, remaining_layers) {
          cs_add32(b, remaining_layers, remaining_layers, -1);
 
+#if PAN_ARCH >= 14
+         cs_emit_layer_fragment_state(b, fbd_pointer);
+         cs_trace_run_fragment2(b, tracing_ctx, run_fragment_regs, false,
+                                MALI_TILE_RENDER_ORDER_Z_ORDER);
+#else
          cs_trace_run_fragment(b, tracing_ctx, run_fragment_regs, false,
                                MALI_TILE_RENDER_ORDER_Z_ORDER);
+#endif
 
          cs_update_frag_ctx(b)
-            cs_add64(b, cs_sr_reg64(b, FRAGMENT, FBD_POINTER),
-                     cs_sr_reg64(b, FRAGMENT, FBD_POINTER), fbd_sz);
+            cs_add64(b, fbd_pointer, fbd_pointer, fbd_sz);
       }
    }
 
@@ -3468,8 +3726,8 @@ issue_fragment_jobs(struct panvk_cmd_buffer *cmdbuf)
    struct cs_index completed = cs_scratch_reg_tuple(b, 10, 4);
    struct cs_index completed_top = cs_scratch_reg64(b, 10);
    struct cs_index completed_bottom = cs_scratch_reg64(b, 12);
-   struct cs_index cur_tiler = cs_reg64(b, 38);
-   struct cs_index tiler_count = cs_reg32(b, 47);
+   struct cs_index cur_tiler = cs_reg64(b, PANVK_CS_REG_TILER_DESC_PTR);
+   struct cs_index tiler_count = cs_reg32(b, 60);
    struct cs_index oq_chain = cs_scratch_reg64(b, 10);
    struct cs_index oq_chain_lo = cs_scratch_reg32(b, 10);
    struct cs_index oq_syncobj = cs_scratch_reg64(b, 12);

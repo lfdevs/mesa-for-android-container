@@ -2208,6 +2208,9 @@ PowerVR driver environment variables
    ``int_smp``
       Enable integer coordinate support for sampler instructions.
 
+   ``global_shmem``
+      Force spill shared memory to global memory.
+
 .. envvar:: PCO_SKIP_PASSES
 
    A comma-separated list of passes to skip.

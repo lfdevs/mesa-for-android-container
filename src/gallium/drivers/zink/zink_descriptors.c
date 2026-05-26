@@ -222,14 +222,12 @@ descriptor_util_pool_key_get(struct zink_screen *screen, enum zink_descriptor_ty
 }
 
 static void
-init_push_binding(VkDescriptorSetLayoutBinding *binding, unsigned b, unsigned stage_bits, VkDescriptorType type)
+init_push_binding(VkDescriptorSetLayoutBinding *binding, unsigned b, mesa_shader_stage stage, VkDescriptorType type)
 {
    binding->binding = b;
    binding->descriptorType = type;
    binding->descriptorCount = 1;
-   binding->stageFlags = 0;
-   u_foreach_bit(stage, stage_bits)
-      binding->stageFlags |= mesa_to_vk_shader_stage(stage);
+   binding->stageFlags = mesa_to_vk_shader_stage(stage);
    binding->pImmutableSamplers = NULL;
 }
 
@@ -241,17 +239,18 @@ get_push_types(struct zink_screen *screen, enum zink_descriptor_type *dsl_type)
 }
 
 static struct zink_descriptor_layout *
-create_gfx_layout(struct zink_context *ctx, struct zink_descriptor_layout_key **layout_key, bool fbfetch)
+create_gfx_layout(struct zink_context *ctx, struct zink_descriptor_layout_key **layout_key, enum zink_pipeline_idx pidx, bool fbfetch)
 {
    struct zink_screen *screen = zink_screen(ctx->base.screen);
    VkDescriptorSetLayoutBinding bindings[MESA_SHADER_STAGES];
    enum zink_descriptor_type dsl_type;
    VkDescriptorType vktype = get_push_types(screen, &dsl_type);
-   for (unsigned i = 0; i < ZINK_GFX_SHADER_COUNT; i++) {
-      unsigned stage_bits = BITFIELD_BIT(i);
-      if (i < MESA_SHADER_TESS_EVAL && screen->info.have_EXT_mesh_shader)
-         stage_bits |= BITFIELD_BIT(i + MESA_SHADER_TASK);
-      init_push_binding(&bindings[i], i, stage_bits, vktype);
+   if (pidx == ZINK_PIPELINE_MESH) {
+      for (unsigned i = 0; i < ZINK_GFX_SHADER_COUNT; i++)
+         init_push_binding(&bindings[i], i, i < MESA_SHADER_TESS_EVAL ? i + MESA_SHADER_TASK : MESA_SHADER_TASK, vktype);
+   } else {
+      for (unsigned i = 0; i < ZINK_GFX_SHADER_COUNT; i++)
+         init_push_binding(&bindings[i], i, i, vktype);
    }
    if (fbfetch) {
       bindings[ZINK_GFX_SHADER_COUNT].binding = ZINK_FBFETCH_BINDING;
@@ -270,10 +269,12 @@ zink_descriptor_util_push_layouts_get(struct zink_context *ctx)
    VkDescriptorSetLayoutBinding compute_binding;
    enum zink_descriptor_type dsl_type;
    VkDescriptorType vktype = get_push_types(screen, &dsl_type);
-   init_push_binding(&compute_binding, MESA_SHADER_COMPUTE, BITFIELD_BIT(MESA_SHADER_COMPUTE), vktype);
-   ctx->dd.push_dsl[0] = create_gfx_layout(ctx, &ctx->dd.push_layout_keys[0], false);
-   ctx->dd.push_dsl[1] = create_layout(screen, dsl_type, &compute_binding, 1, &ctx->dd.push_layout_keys[1]);
-   return ctx->dd.push_dsl[0] && ctx->dd.push_dsl[1];
+   init_push_binding(&compute_binding, MESA_SHADER_COMPUTE, MESA_SHADER_COMPUTE, vktype);
+   ctx->dd.push_dsl[ZINK_PIPELINE_GFX] = create_gfx_layout(ctx, &ctx->dd.push_layout_keys[ZINK_PIPELINE_GFX], ZINK_PIPELINE_GFX, false);
+   if (screen->info.have_EXT_mesh_shader)
+      ctx->dd.push_dsl[ZINK_PIPELINE_MESH] = create_gfx_layout(ctx, &ctx->dd.push_layout_keys[ZINK_PIPELINE_MESH], ZINK_PIPELINE_MESH, false);
+   ctx->dd.push_dsl[ZINK_PIPELINE_COMPUTE] = create_layout(screen, dsl_type, &compute_binding, 1, &ctx->dd.push_layout_keys[ZINK_PIPELINE_COMPUTE]);
+   return ctx->dd.push_dsl[ZINK_PIPELINE_GFX] && ctx->dd.push_dsl[ZINK_PIPELINE_COMPUTE] && (!screen->info.have_EXT_mesh_shader || ctx->dd.push_dsl[ZINK_PIPELINE_MESH]);
 }
 
 VkImageLayout
@@ -576,7 +577,8 @@ zink_descriptor_program_init(struct zink_context *ctx, struct zink_program *pg)
       return !!pg->layout;
    }
 
-   pg->dsl[pg->num_dsl++] = push_count ? ctx->dd.push_dsl[pg->is_compute]->layout : ctx->dd.dummy_dsl->layout;
+   enum zink_pipeline_idx pidx = pg->is_compute ? ZINK_PIPELINE_COMPUTE : stages[MESA_SHADER_VERTEX]? ZINK_PIPELINE_GFX : ZINK_PIPELINE_MESH;
+   pg->dsl[pg->num_dsl++] = push_count ? ctx->dd.push_dsl[pidx]->layout : ctx->dd.dummy_dsl->layout;
    /* iterate over the found descriptor types and create layouts / pool keys */
    if (has_bindings) {
       for (unsigned i = 0; i < ARRAY_SIZE(sizes); i++)
@@ -659,7 +661,6 @@ zink_descriptor_program_init(struct zink_context *ctx, struct zink_program *pg)
    for (unsigned i = 0; i < ZINK_DESCRIPTOR_BASE_TYPES; i++)
       wd_count[i + 1] = pg->dd.pool_key[i] ? pg->dd.pool_key[i]->layout->num_bindings : 0;
 
-   enum zink_pipeline_idx pidx = pg->is_compute ? ZINK_PIPELINE_COMPUTE : stages[MESA_SHADER_VERTEX]? ZINK_PIPELINE_GFX : ZINK_PIPELINE_MESH;
    VkDescriptorUpdateTemplateEntry *push_entries[] = {
       ctx->dd.push_entries,
       &ctx->dd.compute_push_entry,
@@ -867,7 +868,7 @@ create_pool(struct zink_screen *screen, unsigned num_type_sizes, const VkDescrip
 }
 
 static struct zink_descriptor_pool *
-get_descriptor_pool(struct zink_context *ctx, struct zink_program *pg, enum zink_descriptor_type type, struct zink_batch_state *bs, bool is_compute);
+get_descriptor_pool(struct zink_context *ctx, struct zink_program *pg, enum zink_descriptor_type type, struct zink_batch_state *bs, enum zink_pipeline_idx pidx);
 
 /* set a multi-pool to its zink_descriptor_pool_key::id-indexed array element on a given batch state */
 static bool
@@ -924,7 +925,7 @@ find_pool(struct zink_screen *screen, struct zink_batch_state *bs, struct zink_d
 
 static struct zink_descriptor_pool *
 check_pool_alloc(struct zink_context *ctx, struct zink_descriptor_pool_multi *mpool, struct zink_program *pg,
-                 enum zink_descriptor_type type, struct zink_batch_state *bs, bool is_compute)
+                 enum zink_descriptor_type type, struct zink_batch_state *bs, enum zink_pipeline_idx pidx)
 {
    struct zink_screen *screen = zink_screen(ctx->base.screen);
    assert(mpool->pool_key == pg->dd.pool_key[type]);
@@ -966,7 +967,7 @@ check_pool_alloc(struct zink_context *ctx, struct zink_descriptor_pool_multi *mp
                               pool);
          mpool->pool = NULL;
          /* call recursively to get recycle/oom handling */
-         return get_descriptor_pool(ctx, pg, type, bs, is_compute);
+         return get_descriptor_pool(ctx, pg, type, bs, pidx);
       }
       if (!zink_descriptor_util_alloc_sets(screen, pg->dsl[type + 1],
                                            pool->pool, &pool->sets[pool->sets_alloc], sets_to_alloc))
@@ -994,7 +995,7 @@ create_push_pool(struct zink_screen *screen, struct zink_batch_state *bs, bool i
 }
 
 static struct zink_descriptor_pool *
-check_push_pool_alloc(struct zink_context *ctx, struct zink_descriptor_pool_multi *mpool, struct zink_batch_state *bs, bool is_compute)
+check_push_pool_alloc(struct zink_context *ctx, struct zink_descriptor_pool_multi *mpool, struct zink_batch_state *bs, enum zink_pipeline_idx pidx)
 {
    struct zink_screen *screen = zink_screen(ctx->base.screen);
    struct zink_descriptor_pool *pool = mpool->pool;
@@ -1007,15 +1008,15 @@ check_push_pool_alloc(struct zink_context *ctx, struct zink_descriptor_pool_mult
          util_dynarray_append(&mpool->overflowed_pools[mpool->overflow_idx],
                               pool);
          if (util_dynarray_contains(&mpool->overflowed_pools[!mpool->overflow_idx], struct zink_descriptor_pool*))
-            bs->dd.push_pool[is_compute].pool = util_dynarray_pop(&mpool->overflowed_pools[!mpool->overflow_idx], struct zink_descriptor_pool*);
+            bs->dd.push_pool[pidx].pool = util_dynarray_pop(&mpool->overflowed_pools[!mpool->overflow_idx], struct zink_descriptor_pool*);
          else
-            bs->dd.push_pool[is_compute].pool = create_push_pool(screen, bs, is_compute, ctx->dd.has_fbfetch);
+            bs->dd.push_pool[pidx].pool = create_push_pool(screen, bs, pidx == ZINK_PIPELINE_COMPUTE, ctx->dd.has_fbfetch);
          if (unlikely(ctx->dd.has_fbfetch != bs->dd.has_fbfetch))
             mpool->reinit_overflow = true;
          bs->dd.has_fbfetch = ctx->dd.has_fbfetch;
-         return check_push_pool_alloc(ctx, &bs->dd.push_pool[is_compute], bs, is_compute);
+         return check_push_pool_alloc(ctx, &bs->dd.push_pool[pidx], bs, pidx);
       }
-      if (!zink_descriptor_util_alloc_sets(screen, ctx->dd.push_dsl[is_compute]->layout,
+      if (!zink_descriptor_util_alloc_sets(screen, ctx->dd.push_dsl[pidx]->layout,
                                            pool->pool, &pool->sets[pool->sets_alloc], sets_to_alloc)) {
          mesa_loge("ZINK: failed to allocate push set!");
          return NULL;
@@ -1026,7 +1027,7 @@ check_push_pool_alloc(struct zink_context *ctx, struct zink_descriptor_pool_mult
 }
 
 static struct zink_descriptor_pool *
-get_descriptor_pool(struct zink_context *ctx, struct zink_program *pg, enum zink_descriptor_type type, struct zink_batch_state *bs, bool is_compute)
+get_descriptor_pool(struct zink_context *ctx, struct zink_program *pg, enum zink_descriptor_type type, struct zink_batch_state *bs, enum zink_pipeline_idx pidx)
 {
    struct zink_screen *screen = zink_screen(ctx->base.screen);
    const struct zink_descriptor_pool_key *pool_key = pg->dd.pool_key[type];
@@ -1034,19 +1035,19 @@ get_descriptor_pool(struct zink_context *ctx, struct zink_program *pg, enum zink
                                          util_dynarray_element(&bs->dd.pools[type], struct zink_descriptor_pool_multi *, pool_key->id) :
                                          NULL;
    if (mppool && *mppool)
-      return check_pool_alloc(ctx, *mppool, pg, type, bs, is_compute);
+      return check_pool_alloc(ctx, *mppool, pg, type, bs, pidx);
    struct zink_descriptor_pool_multi *mpool = CALLOC_STRUCT(zink_descriptor_pool_multi);
    if (!mpool)
       return NULL;
-   mpool->overflowed_pools[0] = UTIL_DYNARRAY_INIT;
-   mpool->overflowed_pools[1] = UTIL_DYNARRAY_INIT;
+   for (unsigned i = 0; i < ARRAY_SIZE(mpool->overflowed_pools); i++)
+      mpool->overflowed_pools[i] = UTIL_DYNARRAY_INIT;
    mpool->pool_key = pool_key;
    if (!set_pool(bs, pg, mpool, type)) {
       multi_pool_destroy(screen, mpool);
       return NULL;
    }
    assert(pool_key->id < bs->dd.pool_size[type]);
-   return check_pool_alloc(ctx, mpool, pg, type, bs, is_compute);
+   return check_pool_alloc(ctx, mpool, pg, type, bs, pidx);
 }
 
 ALWAYS_INLINE static VkDescriptorSet
@@ -1061,11 +1062,11 @@ get_descriptor_set(struct zink_descriptor_pool *pool)
 
 static bool
 populate_sets(struct zink_context *ctx, struct zink_batch_state *bs,
-              struct zink_program *pg, uint8_t changed_sets, VkDescriptorSet *sets)
+              struct zink_program *pg, uint8_t changed_sets, VkDescriptorSet *sets, enum zink_pipeline_idx pidx)
 {
    u_foreach_bit(type, changed_sets) {
       if (pg->dd.pool_key[type]) {
-         struct zink_descriptor_pool *pool = get_descriptor_pool(ctx, pg, type, bs, pg->is_compute);
+         struct zink_descriptor_pool *pool = get_descriptor_pool(ctx, pg, type, bs, pidx);
          sets[type] = get_descriptor_set(pool);
          if (!sets[type])
             return false;
@@ -1262,7 +1263,7 @@ zink_descriptors_update_masked(struct zink_context *ctx, enum zink_pipeline_idx 
       return;
 
    /* populate usable sets for the changed_sets mask */
-   if (!populate_sets(ctx, bs, pg, changed_sets, desc_sets)) {
+   if (!populate_sets(ctx, bs, pg, changed_sets, desc_sets, pidx)) {
       debug_printf("ZINK: couldn't get descriptor sets!\n");
       return;
    }
@@ -1723,11 +1724,12 @@ void
 zink_descriptors_deinit(struct zink_context *ctx)
 {
    struct zink_screen *screen = zink_screen(ctx->base.screen);
-   if (ctx->dd.push_dsl[0])
-      VKSCR(DestroyDescriptorSetLayout)(screen->dev, ctx->dd.push_dsl[0]->layout, NULL);
-   if (ctx->dd.push_dsl[1])
-      VKSCR(DestroyDescriptorSetLayout)(screen->dev, ctx->dd.push_dsl[1]->layout, NULL);
-   VKSCR(DestroyDescriptorSetLayout)(screen->dev, ctx->dd.old_push_dsl, NULL);
+   for (unsigned i = 0; i < ARRAY_SIZE(ctx->dd.push_dsl); i++)
+      if (ctx->dd.push_dsl[i])
+         VKSCR(DestroyDescriptorSetLayout)(screen->dev, ctx->dd.push_dsl[i]->layout, NULL);
+   
+   for (unsigned i = 0; i < ARRAY_SIZE(ctx->dd.old_push_dsl); i++)
+      VKSCR(DestroyDescriptorSetLayout)(screen->dev, ctx->dd.old_push_dsl[i], NULL);
 }
 
 /* called on screen creation */
@@ -1770,11 +1772,15 @@ zink_descriptor_util_init_fbfetch(struct zink_context *ctx)
 
    struct zink_screen *screen = zink_screen(ctx->base.screen);
    /* save this layout; it may be used by programs, and tracking that is extra complexity */
-   ctx->dd.old_push_dsl = ctx->dd.push_dsl[0]->layout;
+   ctx->dd.old_push_dsl[ZINK_PIPELINE_GFX] = ctx->dd.push_dsl[ZINK_PIPELINE_GFX]->layout;
+   if (screen->info.have_EXT_mesh_shader)
+      ctx->dd.old_push_dsl[ZINK_PIPELINE_MESH] = ctx->dd.push_dsl[ZINK_PIPELINE_MESH]->layout;
    //don't free these now, let ralloc free on teardown to avoid invalid access
    //ralloc_free(ctx->dd.push_dsl[0]);
    //ralloc_free(ctx->dd.push_layout_keys[0]);
-   ctx->dd.push_dsl[0] = create_gfx_layout(ctx, &ctx->dd.push_layout_keys[0], true);
+   ctx->dd.push_dsl[ZINK_PIPELINE_GFX] = create_gfx_layout(ctx, &ctx->dd.push_layout_keys[ZINK_PIPELINE_GFX], ZINK_PIPELINE_GFX, true);
+   if (screen->info.have_EXT_mesh_shader)
+      ctx->dd.push_dsl[ZINK_PIPELINE_MESH] = create_gfx_layout(ctx, &ctx->dd.push_layout_keys[ZINK_PIPELINE_MESH], ZINK_PIPELINE_MESH, true);
    ctx->dd.has_fbfetch = true;
 
    if (zink_descriptor_mode == ZINK_DESCRIPTOR_MODE_DB) {

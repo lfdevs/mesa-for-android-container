@@ -126,7 +126,7 @@ get_builder(struct panvk_cmd_buffer *cmdbuf, struct u_trace *ut)
    return panvk_get_cs_builder(cmdbuf, subqueue);
 }
 
-static void
+static bool
 panvk_utrace_record_ts(struct u_trace *ut, void *cs, void *timestamps,
                        uint64_t offset_B, uint32_t flags)
 {
@@ -140,6 +140,8 @@ panvk_utrace_record_ts(struct u_trace *ut, void *cs, void *timestamps,
    const uint64_t addr = buf->dev + offset_B;
 
    cmd_write_timestamp(dev, b, addr, *cs_info->ts_async_op);
+
+   return true;
 }
 
 static void

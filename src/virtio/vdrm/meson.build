@@ -3,7 +3,7 @@
 
 inc_virtio_vdrm = include_directories('.')
 
-libvdrm_c_args = [no_override_init_args]
+libvdrm_c_args = [no_override_init_args, soong_compat_c_args]
 if with_amdgpu_virtio
   libvdrm_c_args += ['-DENABLE_DRM_AMDGPU']
 endif

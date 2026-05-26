@@ -143,7 +143,7 @@ extern uint32_t intel_debug_bkp_before_dispatch_count;
 extern uint32_t intel_debug_bkp_after_dispatch_count;
 extern uint64_t intel_debug_batch_frame_start;
 extern uint64_t intel_debug_batch_frame_stop;
-extern uint32_t intel_shader_dump_filter;
+extern uint64_t intel_shader_dump_filter;
 
 #define INTEL_SIMD(type, size)        (!!(intel_simd & (DEBUG_ ## type ## _SIMD ## size)))
 

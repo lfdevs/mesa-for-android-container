@@ -44,7 +44,7 @@ libfreedreno_cffdec = static_library(
     inc_include,
     inc_src,
   ],
-  c_args : [ no_override_init_args ],
+  c_args : [ no_override_init_args, soong_compat_c_args ],
   gnu_symbol_visibility: 'hidden',
   dependencies: [
     dep_lua,
@@ -65,7 +65,7 @@ libfreedreno_io = static_library(
     'io.h',
   ],
   include_directories: [],
-  c_args : [no_override_init_args],
+  c_args : [no_override_init_args, soong_compat_c_args],
   gnu_symbol_visibility: 'hidden',
   dependencies: [
     dep_libarchive,
@@ -108,7 +108,7 @@ foreach kmd : freedreno_kmds
       inc_include,
       inc_src,
     ],
-    c_args : [no_override_init_args, replay_flags],
+    c_args : [no_override_init_args, soong_compat_c_args, replay_flags],
     gnu_symbol_visibility: 'hidden',
     dependencies: replay_deps,
     link_with: [
@@ -132,7 +132,7 @@ rddecompiler = executable(
     inc_include,
     inc_src,
   ],
-  c_args : [no_override_init_args],
+  c_args : [no_override_init_args, soong_compat_c_args],
   gnu_symbol_visibility: 'hidden',
   dependencies: [
     dep_libdrm,
@@ -182,7 +182,7 @@ cffdump = executable(
     inc_include,
     inc_src,
   ],
-  c_args : [no_override_init_args],
+  c_args : [no_override_init_args, soong_compat_c_args],
   gnu_symbol_visibility: 'hidden',
   dependencies: [
     dep_lua,

@@ -720,9 +720,6 @@ _mesa_GenPerfMonitorsAMD(GLsizei n, GLuint *monitors)
 {
    GET_CURRENT_CONTEXT(ctx);
 
-   if (MESA_VERBOSE & VERBOSE_API)
-      _mesa_debug(ctx, "glGenPerfMonitorsAMD(%d)\n", n);
-
    init_groups(ctx);
 
    if (n < 0) {
@@ -755,9 +752,6 @@ _mesa_DeletePerfMonitorsAMD(GLsizei n, GLuint *monitors)
 {
    GLint i;
    GET_CURRENT_CONTEXT(ctx);
-
-   if (MESA_VERBOSE & VERBOSE_API)
-      _mesa_debug(ctx, "glDeletePerfMonitorsAMD(%d)\n", n);
 
    if (n < 0) {
       _mesa_error(ctx, GL_INVALID_VALUE, "glDeletePerfMonitorsAMD(n < 0)");

@@ -298,7 +298,7 @@ cl_prop_for_type!(cl_ulong);
 cl_prop_for_type!(isize);
 cl_prop_for_type!(usize);
 
-cl_prop_for_type!(cl_device_integer_dot_product_acceleration_properties_khr);
+cl_prop_for_type!(cl_device_integer_dot_product_acceleration_properties);
 cl_prop_for_type!(cl_device_pci_bus_info_khr);
 cl_prop_for_type!(cl_image_format);
 cl_prop_for_type!(cl_name_version);

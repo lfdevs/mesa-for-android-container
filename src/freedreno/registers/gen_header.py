@@ -1003,7 +1003,7 @@ def dump_c(args, guard, func):
 
     # TODO figure out what to do about fd_reg_stomp_allowed()
     # vs gcc.. for now only enable the warnings with clang:
-    print("#if defined(__clang__) && !defined(FD_NO_DEPRECATED_PACK)")
+    print("#if defined(__clang__) && !defined(FD_NO_DEPRECATED_PACK) && !defined(__KERNEL__)")
     print("#define __FD_DEPRECATED _Pragma (\"GCC warning \\\"Deprecated reg builder\\\"\")")
     print("#else")
     print("#define __FD_DEPRECATED")

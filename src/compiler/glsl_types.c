@@ -51,7 +51,7 @@ static struct {
 
    struct hash_table *explicit_matrix_types;
    struct hash_table *array_types;
-   struct hash_table *cmat_types;
+   struct hash_table_u64 *cmat_types;
    struct hash_table *struct_types;
    struct hash_table *interface_types;
    struct hash_table *subroutine_types;
@@ -1333,12 +1333,11 @@ make_cmat_type(linear_ctx *lin_ctx, const struct glsl_cmat_description desc)
 const glsl_type *
 glsl_cmat_type(const struct glsl_cmat_description *desc)
 {
-   STATIC_ASSERT(sizeof(struct glsl_cmat_description) == 4);
-
-   const uint32_t key = desc->element_type | desc->scope << 5 |
-                        desc->rows << 8 | desc->cols << 16 |
-                        desc->use << 24;
-   const uint32_t key_hash = _mesa_hash_uint(&key);
+   const uint64_t key = (uint64_t)desc->rows |
+                        (uint64_t)desc->cols << 16 |
+                        (uint64_t)desc->element_type << 32 |
+                        (uint64_t)desc->scope << 48 |
+                        (uint64_t)desc->use << 56;
 
    simple_mtx_lock(&glsl_type_cache_mutex);
    assert(glsl_type_cache.users > 0);
@@ -1346,19 +1345,16 @@ glsl_cmat_type(const struct glsl_cmat_description *desc)
 
    if (glsl_type_cache.cmat_types == NULL) {
       glsl_type_cache.cmat_types =
-         _mesa_hash_table_create_u32_keys(mem_ctx);
+         _mesa_hash_table_u64_create(mem_ctx);
    }
-   struct hash_table *cmat_types = glsl_type_cache.cmat_types;
+   struct hash_table_u64 *cmat_types = glsl_type_cache.cmat_types;
 
-   const struct hash_entry *entry = _mesa_hash_table_search_pre_hashed(
-      cmat_types, key_hash, (void *) (uintptr_t) key);
-   if (entry == NULL) {
-      const glsl_type *t = make_cmat_type(glsl_type_cache.lin_ctx, *desc);
-      entry = _mesa_hash_table_insert_pre_hashed(cmat_types, key_hash,
-                                                 (void *) (uintptr_t) key, (void *) t);
+   const glsl_type *t = _mesa_hash_table_u64_search(cmat_types, key);
+   if (t == NULL) {
+      t = make_cmat_type(glsl_type_cache.lin_ctx, *desc);
+      _mesa_hash_table_u64_insert(cmat_types, key, (void *) t);
    }
 
-   const glsl_type *t = (const glsl_type *)entry->data;
    simple_mtx_unlock(&glsl_type_cache_mutex);
 
    assert(t->base_type == GLSL_TYPE_COOPERATIVE_MATRIX);
@@ -3058,7 +3054,6 @@ union packed_type {
       unsigned length:13;
       unsigned explicit_stride:14;
    } array;
-   struct glsl_cmat_description cmat_desc;
    struct {
       unsigned base_type:5;
       unsigned interface_packing_or_packed:2;
@@ -3177,13 +3172,8 @@ encode_type_to_blob(struct blob *blob, const glsl_type *type)
       encode_type_to_blob(blob, type->fields.array);
       return;
    case GLSL_TYPE_COOPERATIVE_MATRIX:
-      /* The first 5 bits of encoded/decoded are used to identify the
-       * actual type, but cmat_desc already is 32-bit without that tag, so
-       * encode just the cmat base type first, then the actual cmat desc.
-       */
       blob_write_uint32(blob, encoded.u32);
-      encoded.cmat_desc = type->cmat_desc;
-      blob_write_uint32(blob, encoded.u32);
+      blob_write_bytes(blob, &type->cmat_desc, sizeof(type->cmat_desc));
       return;
    case GLSL_TYPE_STRUCT:
    case GLSL_TYPE_INTERFACE:
@@ -3295,8 +3285,9 @@ decode_type_from_blob(struct blob_reader *blob)
                              explicit_stride);
    }
    case GLSL_TYPE_COOPERATIVE_MATRIX: {
-      encoded.u32 = blob_read_uint32(blob);
-      return glsl_cmat_type(&encoded.cmat_desc);
+      const struct glsl_cmat_description *desc =
+         blob_read_bytes(blob, sizeof(struct glsl_cmat_description));
+      return glsl_cmat_type(desc);
    }
    case GLSL_TYPE_STRUCT:
    case GLSL_TYPE_INTERFACE: {

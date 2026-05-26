@@ -96,9 +96,6 @@ _mesa_Scissor(GLint x, GLint y, GLsizei width, GLsizei height)
 {
    GET_CURRENT_CONTEXT(ctx);
 
-   if (MESA_VERBOSE & VERBOSE_API)
-      _mesa_debug(ctx, "glScissor %d %d %d %d\n", x, y, width, height);
-
    if (width < 0 || height < 0) {
       _mesa_error( ctx, GL_INVALID_VALUE, "glScissor" );
       return;
@@ -200,10 +197,6 @@ scissor_indexed_err(struct gl_context *ctx, GLuint index, GLint left,
                     GLint bottom, GLsizei width, GLsizei height,
                     const char *function)
 {
-   if (MESA_VERBOSE & VERBOSE_API)
-      _mesa_debug(ctx, "%s(%d, %d, %d, %d, %d)\n",
-                  function, index, left, bottom, width, height);
-
    if (index >= ctx->Const.MaxViewports) {
       _mesa_error(ctx, GL_INVALID_VALUE,
                   "%s: index (%d) >= MaxViewports (%d)",
@@ -259,10 +252,6 @@ _mesa_WindowRectanglesEXT(GLenum mode, GLsizei count, const GLint *box)
    int i;
    struct gl_scissor_rect newval[MAX_WINDOW_RECTANGLES];
    GET_CURRENT_CONTEXT(ctx);
-
-   if (MESA_VERBOSE & VERBOSE_API)
-      _mesa_debug(ctx, "glWindowRectanglesEXT(%s, %d, %p)\n",
-                  _mesa_enum_to_string(mode), count, box);
 
    if (mode != GL_INCLUSIVE_EXT && mode != GL_EXCLUSIVE_EXT) {
       _mesa_error(ctx, GL_INVALID_ENUM,

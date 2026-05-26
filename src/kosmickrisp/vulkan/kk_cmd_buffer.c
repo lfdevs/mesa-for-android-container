@@ -33,9 +33,13 @@ kk_descriptor_state_fini(struct kk_cmd_buffer *cmd,
 void
 kk_cmd_release_resources(struct kk_device *dev, struct kk_cmd_buffer *cmd)
 {
+   struct kk_cmd_pool *pool = kk_cmd_buffer_pool(cmd);
+
    kk_cmd_release_dynamic_ds_state(cmd);
    kk_descriptor_state_fini(cmd, &cmd->state.gfx.descriptors);
    kk_descriptor_state_fini(cmd, &cmd->state.cs.descriptors);
+
+   kk_cmd_pool_free_bo_list(pool, &cmd->uploader.bos);
 
    /* Release all BOs used as descriptor buffers for submissions */
    util_dynarray_foreach(&cmd->large_bos, struct kk_bo *, bo) {
@@ -88,6 +92,8 @@ kk_create_cmd_buffer(struct vk_command_pool *vk_pool,
    cmd->vk.dynamic_graphics_state.ms.sample_locations =
       &cmd->state.gfx._dynamic_sl;
 
+   list_inithead(&cmd->uploader.bos);
+
    *cmd_buffer_out = &cmd->vk;
 
    return VK_SUCCESS;
@@ -103,6 +109,9 @@ kk_reset_cmd_buffer(struct vk_command_buffer *vk_cmd_buffer,
 
    vk_command_buffer_reset(&cmd->vk);
    kk_cmd_release_resources(dev, cmd);
+
+   cmd->uploader.bo = NULL;
+   cmd->uploader.offset = 0;
 
    memset(&cmd->state, 0, sizeof(cmd->state));
    cmd->uses_heap = false;
@@ -340,9 +349,9 @@ kk_cmd_buffer_write_descriptor_buffer(struct kk_cmd_buffer *cmd,
 {
    assert(size + offset <= sizeof(desc->root.sets));
 
-   struct kk_bo *root_buffer = desc->root.root_buffer;
+   struct kk_ptr root_buffer = desc->root.root_buffer;
 
-   memcpy(root_buffer->cpu, (uint8_t *)desc->root.sets + offset, size);
+   memcpy(root_buffer.cpu, (uint8_t *)desc->root.sets + offset, size);
 }
 
 void
@@ -354,35 +363,100 @@ kk_cmd_release_dynamic_ds_state(struct kk_cmd_buffer *cmd)
    cmd->state.gfx.depth_stencil_state = NULL;
 }
 
-struct kk_bo *
-kk_cmd_allocate_buffer(struct kk_cmd_buffer *cmd, size_t size_B,
-                       size_t alignment_B)
+static VkResult
+kk_cmd_buffer_alloc_bo(struct kk_cmd_buffer *cmd, struct kk_cmd_bo **bo_out)
 {
-   struct kk_bo *buffer = NULL;
+   VkResult result = kk_cmd_pool_alloc_bo(kk_cmd_buffer_pool(cmd), bo_out);
+   if (result != VK_SUCCESS)
+      return result;
 
-   VkResult result = kk_alloc_bo(kk_cmd_buffer_device(cmd), &cmd->vk.base,
-                                 size_B, alignment_B, &buffer);
-   if (result != VK_SUCCESS) {
-      vk_command_buffer_set_error(&cmd->vk, result);
-      return NULL;
-   }
-   util_dynarray_append(&cmd->large_bos, buffer);
-
-   return buffer;
+   list_addtail(&(*bo_out)->link, &cmd->uploader.bos);
+   return VK_SUCCESS;
 }
 
-struct kk_pool
-kk_pool_upload(struct kk_cmd_buffer *cmd, void *data, size_t size_B,
-               size_t alignment_B)
+struct kk_ptr
+kk_pool_alloc(struct kk_cmd_buffer *cmd, uint32_t size_B, uint32_t alignment_B)
 {
-   struct kk_bo *bo = kk_cmd_allocate_buffer(cmd, size_B, alignment_B);
-   if (!bo)
-      return (struct kk_pool){};
+   struct kk_device *dev = kk_cmd_buffer_device(cmd);
+   struct kk_uploader *uploader = &cmd->uploader;
 
-   memcpy(bo->cpu, data, size_B);
-   struct kk_pool pool = {.handle = bo->map, .gpu = bo->gpu, .cpu = bo->cpu};
+   /* Specially handle large allocations owned by the command buffer, e.g. used
+    * for statically allocated vertex output buffers with geometry shaders.
+    */
+   if (size_B > KK_CMD_BO_SIZE) {
+      struct kk_bo *buffer = NULL;
+      const VkResult result =
+         kk_alloc_bo(dev, &cmd->vk.base, size_B, alignment_B, &buffer);
+      if (result != VK_SUCCESS) {
+         vk_command_buffer_set_error(&cmd->vk, result);
+         return (struct kk_ptr){0};
+      }
+      util_dynarray_append(&cmd->large_bos, buffer);
 
-   return pool;
+      return (struct kk_ptr){
+         .gpu = buffer->gpu,
+         .cpu = buffer->cpu,
+
+         .buffer = buffer->map,
+         .offset = 0u,
+      };
+   }
+
+   assert(size_B <= KK_CMD_BO_SIZE);
+   assert(alignment_B > 0);
+
+   const uint32_t offset = align(uploader->offset, alignment_B);
+
+   assert(offset <= KK_CMD_BO_SIZE);
+   if (uploader->bo != NULL && size_B <= KK_CMD_BO_SIZE - offset) {
+      uploader->offset = offset + size_B;
+
+      return (struct kk_ptr){
+         .gpu = uploader->bo->gpu + offset,
+         .cpu = uploader->bo->cpu + offset,
+
+         .buffer = uploader->bo->map,
+         .offset = offset,
+      };
+   }
+
+   struct kk_cmd_bo *bo;
+   const VkResult result = kk_cmd_buffer_alloc_bo(cmd, &bo);
+   if (unlikely(result != VK_SUCCESS)) {
+      vk_command_buffer_set_error(&cmd->vk, result);
+      return (struct kk_ptr){0};
+   }
+
+   /* Pick whichever of the current upload BO and the new BO will have more
+    * room left to be the BO for the next upload.  If our upload size is
+    * bigger than the old offset, we're better off burning the whole new
+    * upload BO on this one allocation and continuing on the current upload
+    * BO.
+    */
+   if (uploader->bo == NULL || size_B < uploader->offset) {
+      uploader->bo = bo->bo;
+      uploader->offset = size_B;
+   }
+
+   return (struct kk_ptr){
+      .gpu = bo->bo->gpu,
+      .cpu = bo->bo->cpu,
+
+      .buffer = bo->bo->map,
+      .offset = 0u,
+   };
+}
+
+struct kk_ptr
+kk_pool_upload(struct kk_cmd_buffer *cmd, const void *data, uint32_t size,
+               uint32_t alignment)
+{
+   struct kk_ptr T = kk_pool_alloc(cmd, size, alignment);
+   if (unlikely(T.cpu == NULL))
+      return (struct kk_ptr){0};
+
+   memcpy(T.cpu, data, size);
+   return T;
 }
 
 uint64_t
@@ -391,15 +465,14 @@ kk_upload_descriptor_root(struct kk_cmd_buffer *cmd,
 {
    struct kk_descriptor_state *desc = kk_get_descriptors_state(cmd, bind_point);
    struct kk_root_descriptor_table *root = &desc->root;
-   struct kk_bo *bo = kk_cmd_allocate_buffer(cmd, sizeof(*root), 8u);
-   if (bo == NULL)
+   struct kk_ptr root_gpu = kk_pool_upload(cmd, root, sizeof(*root), 8u);
+   if (unlikely(!root_gpu.gpu))
       return 0u;
 
-   memcpy(bo->cpu, root, sizeof(*root));
-   root->root_buffer = bo;
+   root->root_buffer = root_gpu;
    desc->root_dirty = false;
 
-   return bo->gpu;
+   return root_gpu.gpu;
 }
 
 void
@@ -408,13 +481,12 @@ kk_cmd_buffer_flush_push_descriptors(struct kk_cmd_buffer *cmd,
 {
    u_foreach_bit(set_idx, desc->push_dirty) {
       struct kk_push_descriptor_set *push_set = desc->push[set_idx];
-      struct kk_bo *bo = kk_cmd_allocate_buffer(cmd, sizeof(push_set->data),
-                                                KK_MIN_UBO_ALIGNMENT);
-      if (bo == NULL)
+      struct kk_ptr push_gpu = kk_pool_upload(
+         cmd, push_set->data, sizeof(push_set->data), KK_MIN_UBO_ALIGNMENT);
+      if (unlikely(!push_gpu.gpu))
          return;
 
-      memcpy(bo->cpu, push_set->data, sizeof(push_set->data));
-      desc->root.sets[set_idx] = bo->gpu;
+      desc->root.sets[set_idx] = push_gpu.gpu;
       desc->set_sizes[set_idx] = sizeof(push_set->data);
    }
 
@@ -433,10 +505,11 @@ kk_dispatch_precomp(struct kk_cmd_buffer *cmd, struct mtl_size grid,
    mtl_compute_encoder *encoder =
       pre_gfx ? kk_encoder_pre_gfx_encoder(cmd) : kk_compute_encoder(cmd);
 
-   struct kk_bo *bo = kk_cmd_allocate_buffer(cmd, data_size, 4u);
-   memcpy(bo->cpu, data, data_size);
+   struct kk_ptr data_gpu = kk_pool_upload(cmd, data, data_size, 4u);
+   if (unlikely(!data_gpu.gpu))
+      return;
 
-   mtl_compute_set_buffer(encoder, bo->map, 0, 0);
+   mtl_compute_set_buffer(encoder, data_gpu.buffer, data_gpu.offset, 0);
    mtl_compute_set_pipeline_state(encoder, prog->pipeline);
 
    struct mtl_size local_size = {

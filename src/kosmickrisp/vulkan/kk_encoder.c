@@ -141,15 +141,14 @@ upload_queue_writes(struct kk_cmd_buffer *cmd)
    uint32_t count =
       util_dynarray_num_elements(&enc->imm_writes, struct libkk_imm_write);
    if (count != 0) {
-      uint64_t addr =
+      struct kk_ptr data_gpu =
          kk_pool_upload(cmd, enc->imm_writes.data, enc->imm_writes.size,
-                        sizeof(struct libkk_imm_write))
-            .gpu;
+                        sizeof(struct libkk_imm_write));
       /* kk_cmd_allocate_buffer sets the cmd buffer error so we can just exit */
-      if (!addr)
+      if (unlikely(!data_gpu.gpu))
          return;
       struct mtl_size grid = {count, 1, 1};
-      libkk_write_u32_array(cmd, grid, false, addr);
+      libkk_write_u32_array(cmd, grid, false, data_gpu.gpu);
       enc->imm_writes.size = 0u;
    }
 
@@ -274,19 +273,76 @@ kk_encoder_submit(struct kk_encoder *encoder)
    mtl_command_buffer_commit(encoder->main.cmd_buffer);
 }
 
+static bool
+kk_try_configure_line_ms(struct kk_cmd_buffer *cmd)
+{
+   struct kk_graphics_state *gfx = &cmd->state.gfx;
+   struct vk_dynamic_graphics_state *dyn = &cmd->vk.dynamic_graphics_state;
+
+   bool was_ms_bresenham_lines = cmd->state.gfx.is_ms_bresenham_lines;
+   gfx->is_ms_bresenham_lines =
+      u_reduced_prim(dyn->ia.primitive_topology) == MESA_PRIM_LINES &&
+      dyn->rs.line.mode == VK_LINE_RASTERIZATION_MODE_BRESENHAM &&
+      gfx->render.samples > 1;
+
+   if (was_ms_bresenham_lines != gfx->is_ms_bresenham_lines) {
+      if (gfx->is_ms_bresenham_lines) {
+         /* Set all sample positions to center for bresenham lines */
+         static const struct mtl_sample_position center = {0.5f, 0.5f};
+         static const struct mtl_sample_position center_all[8] = {
+            center, center, center, center, center, center, center, center};
+         mtl_render_pass_descriptor_set_sample_positions(
+            gfx->render_pass_descriptor, center_all, gfx->render.samples);
+      } else {
+         /* Disable sample positions */
+         mtl_render_pass_descriptor_set_sample_positions(
+            gfx->render_pass_descriptor, NULL, 0);
+      }
+
+      return true;
+   }
+
+   return false;
+}
+
+static bool
+kk_flush_render_pass(struct kk_cmd_buffer *cmd)
+{
+   struct kk_encoder *encoder = cmd->encoder;
+
+   bool needs_restart = kk_try_configure_line_ms(cmd);
+   if (needs_restart && encoder->main.last_used == KK_ENC_RENDER &&
+       encoder->main.encoder) {
+      kk_encoder_signal_fence_and_end(cmd);
+      kk_cmd_buffer_dirty_all_gfx(cmd);
+   }
+
+   return needs_restart;
+}
+
 mtl_render_encoder *
 kk_render_encoder(struct kk_cmd_buffer *cmd)
 {
    struct kk_encoder *encoder = cmd->encoder;
 
    struct kk_graphics_state *gfx = &cmd->state.gfx;
+
+   bool start_render_pass = false;
    if (gfx->need_to_start_render_pass) {
+      gfx->render.samples = gfx->pipeline_sample_count;
       mtl_render_pass_descriptor_set_default_raster_sample_count(
-         cmd->state.gfx.render_pass_descriptor, gfx->sample_count);
+         cmd->state.gfx.render_pass_descriptor, gfx->render.samples);
       gfx->need_to_start_render_pass = false;
+      start_render_pass = true;
+   }
+
+   start_render_pass |= kk_flush_render_pass(cmd);
+
+   if (start_render_pass) {
       kk_encoder_start_render(cmd, gfx->render_pass_descriptor,
                               gfx->render.view_mask);
    }
+
    /* Render encoders are created at vkBeginRendering only */
    assert(encoder->main.last_used == KK_ENC_RENDER && encoder->main.encoder);
    return (mtl_render_encoder *)encoder->main.encoder;

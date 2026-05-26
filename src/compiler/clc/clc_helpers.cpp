@@ -24,7 +24,6 @@
 // OTHER DEALINGS IN THE SOFTWARE.
 
 #include <cstdlib>
-#include <filesystem>
 #include <sstream>
 #include <mutex>
 
@@ -92,8 +91,6 @@
 #endif
 
 #include "clc_helpers.h"
-
-namespace fs = std::filesystem;
 
 /* Use the highest version of SPIRV supported by SPIRV-Tools. */
 constexpr spv_target_env spirv_target = SPV_ENV_UNIVERSAL_1_6;
@@ -930,22 +927,22 @@ clc_compile_to_llvm_module(LLVMContext &llvm_ctx,
 #else
       Driver::GetResourcesPath(std::string(clang_path), CLANG_RESOURCE_DIR);
 #endif
-   auto clang_res_path = fs::path(tmp_res_path) / "include";
+   auto clang_res_path = tmp_res_path + "/include";
 
    free(clang_path);
 
    c->getHeaderSearchOpts().UseBuiltinIncludes = true;
    c->getHeaderSearchOpts().UseStandardSystemIncludes = true;
-   c->getHeaderSearchOpts().ResourceDir = clang_res_path.string();
+   c->getHeaderSearchOpts().ResourceDir = clang_res_path;
 
    // Add opencl-c generic search path
-   c->getHeaderSearchOpts().AddPath(clang_res_path.string(),
+   c->getHeaderSearchOpts().AddPath(clang_res_path,
                                     clang::frontend::Angled,
                                     false, false);
 
    auto clang_install_res_path =
-      fs::path(LLVM_LIB_DIR) / "clang" / std::to_string(LLVM_VERSION_MAJOR) / "include";
-   c->getHeaderSearchOpts().AddPath(clang_install_res_path.string(),
+      std::string(LLVM_LIB_DIR) + "/clang/" + std::to_string(LLVM_VERSION_MAJOR) + "/include";
+   c->getHeaderSearchOpts().AddPath(clang_install_res_path,
                                     clang::frontend::Angled,
                                     false, false);
 #endif

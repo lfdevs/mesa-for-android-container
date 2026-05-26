@@ -52,6 +52,7 @@ pan_get_nir_shader_compiler_options(unsigned arch, bool merge_wg)
    case 11:
    case 12:
    case 13:
+   case 14:
       return merge_wg ? &bifrost_nir_options_v11_merge_wg :
                         &bifrost_nir_options_v11;
    default:

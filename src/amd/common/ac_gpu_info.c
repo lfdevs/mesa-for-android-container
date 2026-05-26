@@ -1554,11 +1554,6 @@ ac_query_gpu_info(int fd, void *dev_p, struct radeon_info *info,
       return AC_QUERY_GPU_INFO_FAIL;
    }
 
-   ac_drm_query_video_caps_info(dev, AMDGPU_INFO_VIDEO_CAPS_DECODE,
-                                sizeof(info->dec_caps), &(info->dec_caps));
-   ac_drm_query_video_caps_info(dev, AMDGPU_INFO_VIDEO_CAPS_ENCODE,
-                                sizeof(info->enc_caps), &(info->enc_caps));
-
    if (!ac_identify_chip(info, &device_info))
       return AC_QUERY_GPU_INFO_UNIMPLEMENTED_HW;
 
@@ -1583,6 +1578,8 @@ ac_query_gpu_info(int fd, void *dev_p, struct radeon_info *info,
    ac_fill_tess_info(info);
 
    ac_fill_compiler_info(info, &device_info, compiler_compat_mode);
+
+   ac_fill_video_info(info, dev);
 
    /* BIG_PAGE is supported since gfx10.3 and requires VRAM. VRAM is only guaranteed
     * with AMDGPU_GEM_CREATE_DISCARDABLE.
@@ -2019,37 +2016,10 @@ void ac_print_gpu_info(FILE *f, const struct radeon_info *info, int fd)
    if (info->ip[AMD_IP_VCN_JPEG].num_queues)
       fprintf(f, "    jpeg_decode = %u\n", info->ip[AMD_IP_VCN_JPEG].num_instances);
 
-   if (info->ip[AMD_IP_VCN_DEC].num_queues || info->ip[AMD_IP_VCN_UNIFIED].num_queues
-       || info->ip[AMD_IP_VCE].num_queues || info->ip[AMD_IP_UVD].num_queues) {
-      char max_res_dec[64] = {0}, max_res_enc[64] = {0};
-      char codec_str[][8] = {
-         [AMDGPU_INFO_VIDEO_CAPS_CODEC_IDX_MPEG2] = "mpeg2",
-         [AMDGPU_INFO_VIDEO_CAPS_CODEC_IDX_MPEG4] = "mpeg4",
-         [AMDGPU_INFO_VIDEO_CAPS_CODEC_IDX_VC1] = "vc1",
-         [AMDGPU_INFO_VIDEO_CAPS_CODEC_IDX_MPEG4_AVC] = "h264",
-         [AMDGPU_INFO_VIDEO_CAPS_CODEC_IDX_HEVC] = "hevc",
-         [AMDGPU_INFO_VIDEO_CAPS_CODEC_IDX_JPEG] = "jpeg",
-         [AMDGPU_INFO_VIDEO_CAPS_CODEC_IDX_VP9] = "vp9",
-         [AMDGPU_INFO_VIDEO_CAPS_CODEC_IDX_AV1] = "av1",
-      };
-      fprintf(f, "    %-8s %-4s %-16s %-4s %-16s\n",
-              "codec", "dec", "max_resolution", "enc", "max_resolution");
-      for (unsigned i = 0; i < AMDGPU_INFO_VIDEO_CAPS_CODEC_IDX_COUNT; i++) {
-         if (info->dec_caps.codec_info[i].valid)
-            sprintf(max_res_dec, "%ux%u", info->dec_caps.codec_info[i].max_width,
-                    info->dec_caps.codec_info[i].max_height);
-         else
-            sprintf(max_res_dec, "%s", "-");
-         if (info->enc_caps.codec_info[i].valid)
-            sprintf(max_res_enc, "%ux%u", info->enc_caps.codec_info[i].max_width,
-                    info->enc_caps.codec_info[i].max_height);
-         else
-            sprintf(max_res_enc, "%s", "-");
-         fprintf(f, "    %-8s %-4s %-16s %-4s %-16s\n", codec_str[i],
-                 info->dec_caps.codec_info[i].valid ? "*" : "-", max_res_dec,
-                 info->enc_caps.codec_info[i].valid ? "*" : "-", max_res_enc);
-      }
-   }
+   if (info->ip[AMD_IP_VPE].num_queues)
+      fprintf(f, "    vpe = %u\n", info->ip[AMD_IP_VPE].num_instances);
+
+   ac_print_video_info(f, info);
 
    fprintf(f, "Kernel & winsys capabilities:\n");
    fprintf(f, "    drm = %i.%i.%i\n", info->drm_major, info->drm_minor, info->drm_patchlevel);

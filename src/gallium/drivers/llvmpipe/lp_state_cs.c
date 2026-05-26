@@ -401,10 +401,16 @@ generate_compute(struct llvmpipe_context *lp,
    }
 
    if (variant->gallivm->cache->data_size) {
+#if GALLIVM_USE_ORCJIT
       gallivm_stub_func(gallivm, function);
       if (use_coro)
          gallivm_stub_func(gallivm, coro);
+      /* Otherwise continue to stub all other functions */
+      if (exec_list_length(&nir->functions) <= 1)
+         return;
+#else
       return;
+#endif
    }
 
    context_ptr  = LLVMGetParam(function, CS_ARG_CONTEXT);
@@ -474,11 +480,27 @@ generate_compute(struct llvmpipe_context *lp,
          LLVMValueRef lfunc = LLVMAddFunction(gallivm->module, func_name, func_type);
          LLVMSetFunctionCallConv(lfunc, LLVMCCallConv);
 
+#if GALLIVM_USE_ORCJIT
+         if (gallivm->cache->data_size) {
+            gallivm_stub_func(gallivm, lfunc);
+            continue;
+         }
+#endif
+
          struct lp_build_fn *new_fn = ralloc(fns, struct lp_build_fn);
          new_fn->fn_type = func_type;
          new_fn->fn = lfunc;
          _mesa_hash_table_insert(fns, func, new_fn);
       }
+
+#if GALLIVM_USE_ORCJIT
+      if (gallivm->cache->data_size) {
+         lp_bld_llvm_sampler_soa_destroy(sampler);
+         lp_bld_llvm_image_soa_destroy(image);
+         _mesa_hash_table_destroy(fns, NULL);
+         return;
+      }
+#endif
 
       nir_foreach_function(func, nir) {
          if (func->is_entrypoint)

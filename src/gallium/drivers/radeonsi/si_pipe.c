@@ -276,8 +276,8 @@ struct pipe_screen *radeonsi_screen_create(int fd, const struct pipe_screen_conf
    ac_init_llvm_once();
 #endif
 
-   driParseConfigFiles(config->options, config->options_info, 0, "radeonsi",
-                       NULL, NULL, NULL, 0, NULL, 0);
+   driParseConfigFiles(config->options, config->options_info,
+                       &(driConfigFileParseParams) { .driverName = "radeonsi" });
 
 #ifdef HAVE_AMDGPU_VIRTIO
    if (strcmp(version->name, "virtio_gpu") == 0) {

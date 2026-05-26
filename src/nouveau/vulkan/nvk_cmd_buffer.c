@@ -21,6 +21,7 @@
 #include "util/compiler.h"
 
 #include "clb097.h"
+#include "clb197.h"
 #include "clcb97.h"
 #include "nv_push_cl906f.h"
 #include "nv_push_cla16f.h"
@@ -28,6 +29,7 @@
 #include "nv_push_cl90b5.h"
 #include "nv_push_cla097.h"
 #include "nv_push_cla0c0.h"
+#include "nv_push_clb06f.h"
 #include "nv_push_clb1c0.h"
 #include "nv_push_clc597.h"
 #include "nv_push_clc86f.h"
@@ -452,14 +454,16 @@ nvk_CmdExecuteCommands(VkCommandBuffer commandBuffer,
 }
 
 enum nvk_barrier {
-   NVK_BARRIER_WFI                     = 1 << 0,
-   NVK_BARRIER_FLUSH_SHADER_DATA       = 1 << 1,
-   NVK_BARRIER_INVALIDATE_SHADER_DATA  = 1 << 2,
-   NVK_BARRIER_INVALIDATE_TEX_DATA     = 1 << 3,
-   NVK_BARRIER_INVALIDATE_CONSTANT     = 1 << 4,
-   NVK_BARRIER_INVALIDATE_MME_DATA     = 1 << 5,
-   NVK_BARRIER_INVALIDATE_QMD_DATA     = 1 << 6,
-   NVK_BARRIER_INVALIDATE_RASTER_CACHE = 1 << 7,
+   NVK_BARRIER_WFI                        = 1 << 0,
+   NVK_BARRIER_FLUSH_SHADER_DATA          = 1 << 1,
+   NVK_BARRIER_INVALIDATE_SHADER_DATA     = 1 << 2,
+   NVK_BARRIER_INVALIDATE_TEX_DATA        = 1 << 3,
+   NVK_BARRIER_INVALIDATE_CONSTANT        = 1 << 4,
+   NVK_BARRIER_INVALIDATE_MME_DATA        = 1 << 5,
+   NVK_BARRIER_INVALIDATE_QMD_DATA        = 1 << 6,
+   NVK_BARRIER_INVALIDATE_RASTER_CACHE    = 1 << 7,
+   NVK_BARRIER_HOST_WFI_INVALIDATE_SYSMEM = 1 << 8,
+   NVK_BARRIER_HOST_WFI_FLUSH_SYSMEM      = 1 << 9,
 };
 
 static enum nvk_barrier
@@ -480,6 +484,9 @@ nvk_barrier_flushes_waits(VkPipelineStageFlags2 stages,
 
    if (access & VK_ACCESS_2_COMMAND_PREPROCESS_WRITE_BIT_EXT)
       barriers |= NVK_BARRIER_FLUSH_SHADER_DATA;
+
+   if (access & VK_ACCESS_2_HOST_WRITE_BIT)
+      barriers |= NVK_BARRIER_HOST_WFI_FLUSH_SYSMEM;
 
    return barriers;
 }
@@ -523,6 +530,9 @@ nvk_barrier_invalidates(VkPipelineStageFlags2 stages,
    if (access & VK_ACCESS_2_FRAGMENT_SHADING_RATE_ATTACHMENT_READ_BIT_KHR)
       barriers |= NVK_BARRIER_INVALIDATE_RASTER_CACHE;
 
+   if (access & (VK_ACCESS_2_HOST_READ_BIT | VK_ACCESS_2_HOST_WRITE_BIT))
+      barriers |= NVK_BARRIER_HOST_WFI_FLUSH_SYSMEM;
+
    return barriers;
 }
 
@@ -531,6 +541,8 @@ nvk_cmd_flush_wait_dep(struct nvk_cmd_buffer *cmd,
                        const VkDependencyInfo *dep,
                        bool wait)
 {
+   struct nvk_device *dev = nvk_cmd_buffer_device(cmd);
+   const struct nvk_physical_device *pdev = nvk_device_physical(dev);
    VkQueueFlags queue_flags = nvk_cmd_buffer_queue_flags(cmd);
    enum nvkmd_engines engines =
       nvk_queue_engines_from_queue_flags(queue_flags);
@@ -562,12 +574,18 @@ nvk_cmd_flush_wait_dep(struct nvk_cmd_buffer *cmd,
       const VkBufferMemoryBarrier2 *bar = &dep->pBufferMemoryBarriers[i];
       barriers |= nvk_barrier_flushes_waits(bar->srcStageMask,
                                             bar->srcAccessMask);
+
+      if (bar->srcQueueFamilyIndex == VK_QUEUE_FAMILY_FOREIGN_EXT)
+         barriers |= NVK_BARRIER_HOST_WFI_INVALIDATE_SYSMEM;
    }
 
    for (uint32_t i = 0; i < dep->imageMemoryBarrierCount; i++) {
       const VkImageMemoryBarrier2 *bar = &dep->pImageMemoryBarriers[i];
       barriers |= nvk_barrier_flushes_waits(bar->srcStageMask,
                                             bar->srcAccessMask);
+
+      if (bar->srcQueueFamilyIndex == VK_QUEUE_FAMILY_FOREIGN_EXT)
+         barriers |= NVK_BARRIER_HOST_WFI_INVALIDATE_SYSMEM;
    }
 
    if (!(engines & (NVKMD_ENGINE_3D | NVKMD_ENGINE_COMPUTE)))
@@ -630,6 +648,31 @@ nvk_cmd_flush_wait_dep(struct nvk_cmd_buffer *cmd,
       }
       }
    }
+
+   if (barriers & NVK_BARRIER_HOST_WFI_INVALIDATE_SYSMEM) {
+      struct nv_push *p = nvk_cmd_buffer_push(cmd, 8);
+      uint32_t last_subchannel = nvk_cmd_buffer_last_subchannel(cmd);
+
+      if (pdev->info.cls_eng3d >= HOPPER_A) {
+         __push_immd(p, last_subchannel, NVC86F_WFI, 0);
+         __push_mthd(p, last_subchannel, NVC86F_MEM_OP_A);
+         P_NVC86F_MEM_OP_A(p, {});
+         P_NVC86F_MEM_OP_B(p, 0);
+         P_NVC86F_MEM_OP_C(p, { .membar_type = 0 });
+         P_NVC86F_MEM_OP_D(p, { .operation = OPERATION_MEMBAR });
+      } else {
+         __push_immd(p, last_subchannel, NV906F_SET_REFERENCE, 0);
+      }
+
+      /* MEM_OP_D path is really usable starting with Maxwell B */
+      if (pdev->info.cls_eng3d >= MAXWELL_B) {
+         __push_mthd(p, last_subchannel, NVC86F_MEM_OP_D);
+         P_NVC86F_MEM_OP_D(p, {.operation = OPERATION_L2_SYSMEM_INVALIDATE});
+      } else {
+         __push_mthd(p, last_subchannel, NV906F_MEM_OP_B);
+         P_NV906F_MEM_OP_B(p, {.operation = OPERATION_L2_SYSMEM_INVALIDATE});
+      }
+   }
 }
 
 void
@@ -655,12 +698,18 @@ nvk_cmd_invalidate_deps(struct nvk_cmd_buffer *cmd,
          const VkBufferMemoryBarrier2 *bar = &dep->pBufferMemoryBarriers[i];
          barriers |= nvk_barrier_invalidates(bar->dstStageMask,
                                              bar->dstAccessMask);
+
+         if (bar->dstQueueFamilyIndex == VK_QUEUE_FAMILY_FOREIGN_EXT)
+            barriers |= NVK_BARRIER_HOST_WFI_FLUSH_SYSMEM;
       }
 
       for (uint32_t i = 0; i < dep->imageMemoryBarrierCount; i++) {
          const VkImageMemoryBarrier2 *bar = &dep->pImageMemoryBarriers[i];
          barriers |= nvk_barrier_invalidates(bar->dstStageMask,
                                              bar->dstAccessMask);
+
+         if (bar->dstQueueFamilyIndex == VK_QUEUE_FAMILY_FOREIGN_EXT)
+            barriers |= NVK_BARRIER_HOST_WFI_FLUSH_SYSMEM;
       }
    }
 
@@ -681,7 +730,7 @@ nvk_cmd_invalidate_deps(struct nvk_cmd_buffer *cmd,
    if (!barriers)
       return;
 
-   struct nv_push *p = nvk_cmd_buffer_push(cmd, 18);
+   struct nv_push *p = nvk_cmd_buffer_push(cmd, 24);
 
    if (barriers & NVK_BARRIER_INVALIDATE_TEX_DATA) {
       if (pdev->info.cls_eng3d >= MAXWELL_A) {
@@ -728,6 +777,20 @@ nvk_cmd_invalidate_deps(struct nvk_cmd_buffer *cmd,
             .global_data = (barriers & NVK_BARRIER_INVALIDATE_SHADER_DATA) != 0,
             .constant = (barriers & NVK_BARRIER_INVALIDATE_CONSTANT) != 0,
          });
+      }
+   }
+
+   if (barriers & NVK_BARRIER_HOST_WFI_FLUSH_SYSMEM) {
+      uint32_t last_subchannel = nvk_cmd_buffer_last_subchannel(cmd);
+      if (pdev->info.cls_eng3d >= HOPPER_A) {
+         __push_immd(p, last_subchannel, NVC86F_WFI, 0);
+         __push_mthd(p, last_subchannel, NVC86F_MEM_OP_A);
+         P_NVC86F_MEM_OP_A(p, {});
+         P_NVC86F_MEM_OP_B(p, 0);
+         P_NVC86F_MEM_OP_C(p, { .membar_type = 0 });
+         P_NVC86F_MEM_OP_D(p, { .operation = OPERATION_MEMBAR });
+      } else {
+         __push_immd(p, last_subchannel, NV906F_SET_REFERENCE, 0);
       }
    }
 

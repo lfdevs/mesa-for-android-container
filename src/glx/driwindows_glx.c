@@ -119,9 +119,6 @@ driwindows_create_context(struct glx_screen *base,
    struct driwindows_screen *psc = (struct driwindows_screen *) base;
    windowsContext *shared = NULL;
 
-   if (!psc->base.driScreen)
-      return NULL;
-
    /* Check the renderType value */
    if (!validate_renderType_against_config(config_base, renderType))
        return NULL;
@@ -193,7 +190,7 @@ driwindows_create_context_attribs(struct glx_screen *base,
      identical values, so far
    */
 
-   if (!psc->base.driScreen || !config_base)
+   if (!config_base)
       return NULL;
 
    /* Check the renderType value */
@@ -273,10 +270,10 @@ driwindowsCreateDrawable(struct glx_screen *base, XID xDrawable,
       HBITMAP
    */
 
-   unsigned int type;
+   unsigned int drawable_type;
    void *handle;
 
-   if (!XWindowsDRIQueryDrawable(psc->base.dpy, base->scr, drawable, &type, &handle))
+   if (!XWindowsDRIQueryDrawable(psc->base.dpy, base->scr, drawable, &drawable_type, &handle))
    {
       free(pdp);
       return NULL;
@@ -289,7 +286,7 @@ driwindowsCreateDrawable(struct glx_screen *base, XID xDrawable,
    }
 
    /* Create a new drawable */
-   pdp->windowsDrawable = windows_create_drawable(type, handle);
+   pdp->windowsDrawable = windows_create_drawable(drawable_type, handle);
 
    if (!pdp->windowsDrawable) {
       free(pdp);
@@ -444,7 +441,7 @@ driwindowsMapConfigs(struct glx_display *priv, int screen, struct glx_config *co
    return head.next;
 }
 
-static struct glx_screen *
+struct glx_screen *
 driwindowsCreateScreen(int screen, struct glx_display *priv, bool driver_name_is_inferred)
 {
    __GLXDRIscreen *psp;
@@ -455,12 +452,12 @@ driwindowsCreateScreen(int screen, struct glx_display *priv, bool driver_name_is
    int major, minor, patch;
 
    /* Verify server has Windows-DRI extension */
-   if (!XWindowsDRIQueryExtension(dpy, &eventBase, &errorBase)) {
+   if (!XWindowsDRIQueryExtension(priv->dpy, &eventBase, &errorBase)) {
       ErrorMessageF("Windows-DRI extension not available\n");
       return NULL;
    }
 
-   if (!XWindowsDRIQueryVersion(dpy, &major, &minor, &patch)) {
+   if (!XWindowsDRIQueryVersion(priv->dpy, &major, &minor, &patch)) {
       ErrorMessageF("Fetching Windows-DRI extension version failed\n");
       return NULL;
    }

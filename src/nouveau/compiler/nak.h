@@ -284,6 +284,10 @@ struct nak_qmd_dispatch_size_layout {
    uint16_t x_start, x_end;
    uint16_t y_start, y_end;
    uint16_t z_start, z_end;
+
+   uint16_t local_x_start, local_x_end;
+   uint16_t local_y_start, local_y_end;
+   uint16_t local_z_start, local_z_end;
 };
 
 struct nak_qmd_dispatch_size_layout

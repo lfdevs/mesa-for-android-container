@@ -154,6 +154,7 @@ impl<'a> TestShaderBuilder<'a> {
         self.push_op(OpLd {
             dst: dst.clone().into(),
             addr: self.data_addr.clone().into(),
+            uniform_addr: Src::ZERO,
             pred: true.into(),
             offset: offset.into(),
             access: access,
@@ -178,6 +179,7 @@ impl<'a> TestShaderBuilder<'a> {
         assert!(data.comps() == comps);
         self.push_op(OpSt {
             addr: self.data_addr.clone().into(),
+            uniform_addr: Src::ZERO,
             data: data.into(),
             offset: offset.into(),
             access: access,
@@ -1734,6 +1736,7 @@ fn test_op_ldsm() {
     let offset = b.imul(lane_id.into(), 16.into());
     b.push_op(OpSt {
         addr: offset.into(),
+        uniform_addr: Src::ZERO,
         data: input.into(),
         offset: 0,
         access: MemAccess {
@@ -1755,6 +1758,7 @@ fn test_op_ldsm() {
         mat_size: LdsmSize::M8N8,
         mat_count: 4,
         addr: addr.into(),
+        uniform_addr: Src::ZERO,
         offset: 0,
     });
     b.st_test_data(16, MemType::B128, res);

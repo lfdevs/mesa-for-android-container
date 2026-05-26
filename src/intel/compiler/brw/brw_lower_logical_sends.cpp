@@ -1192,6 +1192,7 @@ lower_lsc_memory_logical_send(const brw_builder &bld, brw_mem_inst *mem)
    const bool coherent_access = mem->flags & MEMORY_FLAG_COHERENT_ACCESS;
    const bool has_side_effects = mem->has_side_effects();
    const bool fused_eu_disable = mem->flags & MEMORY_FLAG_FUSED_EU_DISABLE;
+   const bool can_reorder = mem->flags & MEMORY_FLAG_CAN_REORDER;
 
    const uint32_t data_size_B = lsc_data_size_bytes(data_size);
    const enum brw_reg_type data_type =
@@ -1344,7 +1345,7 @@ lower_lsc_memory_logical_send(const brw_builder &bld, brw_mem_inst *mem)
    send->ex_mlen = ex_mlen;
    send->header_size = 0;
    send->has_side_effects = has_side_effects;
-   send->is_volatile = !has_side_effects || volatile_access;
+   send->is_volatile = (!has_side_effects && !can_reorder) || volatile_access;
    send->fused_eu_disable = fused_eu_disable;
 
    /* Finally, the payload */
@@ -1405,6 +1406,7 @@ lower_hdc_memory_logical_send(const brw_builder &bld, brw_mem_inst *mem)
    const bool volatile_access = mem->flags & MEMORY_FLAG_VOLATILE_ACCESS;
    const bool fused_eu_disable = mem->flags & MEMORY_FLAG_FUSED_EU_DISABLE;
    const bool has_side_effects = mem->has_side_effects();
+   const bool can_reorder = mem->flags & MEMORY_FLAG_CAN_REORDER;
    const bool has_dest = mem->dst.file != BAD_FILE && !mem->dst.is_null();
    assert(mem->address_offset == 0);
 
@@ -1610,7 +1612,7 @@ lower_hdc_memory_logical_send(const brw_builder &bld, brw_mem_inst *mem)
    send->ex_mlen = ex_mlen;
    send->header_size = header.file != BAD_FILE ? 1 : 0;
    send->has_side_effects = has_side_effects;
-   send->is_volatile = !has_side_effects || volatile_access;
+   send->is_volatile = (!has_side_effects && !can_reorder) || volatile_access;
    send->fused_eu_disable = fused_eu_disable;
 
    if (block) {

@@ -34,7 +34,11 @@ struct panvk_sync_scope {
 
 #define MAX_VBS 16
 #define MAX_RTS 8
+#if PAN_ARCH >= 14
+#define MAX_LAYERS_PER_TILER_DESC 256
+#else
 #define MAX_LAYERS_PER_TILER_DESC 8
+#endif
 
 struct panvk_cs_sync32 {
    uint32_t seqno;
@@ -61,6 +65,37 @@ enum panvk_incremental_rendering_pass {
    PANVK_IR_PASS_COUNT
 };
 
+#if PAN_ARCH >= 14
+/* Framebuffer per-layer state. Keep this structure 64-byte aligned, since
+ * we want the adjacent ZS_CRC_EXTENSION and RENDER_TARGET descriptors
+ * aligned. */
+struct panvk_fb_layer_state {
+   /** GPU address to the tiler descriptor. */
+   uint64_t tiler;
+
+   /** Frame argument. */
+   uint64_t frame_argument;
+
+   /** An instance of Fragment Flags 0. */
+   struct mali_fragment_flags_0_packed flags0;
+
+   /** An instance of Fragment Flags 2. */
+   struct mali_fragment_flags_2_packed flags2;
+
+   /** Z clear value. */
+   uint32_t z_clear;
+
+   /** GPU address to the draw call descriptors. It may be 0. */
+   uint64_t dcd_pointer;
+
+   /** GPU address to the ZS_CRC_EXTENSION descriptor. It may be 0. */
+   uint64_t dbd_pointer;
+
+   /** GPU address to the RENDER_TARGET descriptors. */
+   uint64_t rtd_pointer;
+} __attribute__((aligned(64)));
+#endif /* PAN_ARCH >= 14 */
+
 static inline uint32_t
 get_tiler_oom_handler_idx(bool has_zs_ext, uint32_t rt_count)
 {
@@ -74,7 +109,11 @@ static inline uint32_t
 get_fbd_size(bool has_zs_ext, uint32_t rt_count)
 {
    assert(rt_count >= 1 && rt_count <= MAX_RTS);
+#if PAN_ARCH >= 14
+   uint32_t fbd_size = ALIGN_POT(sizeof(struct panvk_fb_layer_state), 64);
+#else
    uint32_t fbd_size = pan_size(FRAMEBUFFER);
+#endif
    if (has_zs_ext)
       fbd_size += pan_size(ZS_CRC_EXTENSION);
    fbd_size += pan_size(RENDER_TARGET) * rt_count;
@@ -209,13 +248,25 @@ enum panvk_cs_regs {
    PANVK_CS_REG_RUN_IDVS_SR_END = 60,
 #endif
 
+#if PAN_ARCH >= 14
+   /* RUN_FRAGMENT2 staging regs.
+    * SW ABI:
+    * - r58:59 contain the pointer to the first tiler descriptor. This is
+    *   needed to gather completed heap chunks after a run_fragment2.
+    */
+   PANVK_CS_REG_RUN_FRAGMENT_SR_START = 0,
+   PANVK_CS_REG_RUN_FRAGMENT_SR_END = 55,
+   PANVK_CS_REG_TILER_DESC_PTR = 58,
+#else
    /* RUN_FRAGMENT staging regs.
     * SW ABI:
-    * - r38:39 contain the pointer to the first tiler descriptor. This is
+    * - r58:59 contain the pointer to the first tiler descriptor. This is
     *   needed to gather completed heap chunks after a run_fragment.
     */
    PANVK_CS_REG_RUN_FRAGMENT_SR_START = 38,
    PANVK_CS_REG_RUN_FRAGMENT_SR_END = 46,
+   PANVK_CS_REG_TILER_DESC_PTR = 58,
+#endif
 
    /* RUN_COMPUTE staging regs. */
    PANVK_CS_REG_RUN_COMPUTE_SR_START = 0,
@@ -869,5 +920,32 @@ vk_stages_to_subqueue_mask(VkPipelineStageFlags2 vk_stages,
 
 void panvk_per_arch(emit_barrier)(struct panvk_cmd_buffer *cmdbuf,
                                   struct panvk_cs_deps deps);
+
+#if PAN_ARCH >= 14
+static inline void
+cs_emit_layer_fragment_state(struct cs_builder *b, struct cs_index fbd_ptr)
+{
+   /* Emit the dynamic fragment state. This state may change per-layer. */
+
+   cs_load32_to(b, cs_sr_reg32(b, FRAGMENT, FLAGS_0), fbd_ptr,
+                offsetof(struct panvk_fb_layer_state, flags0));
+   cs_load32_to(b, cs_sr_reg32(b, FRAGMENT, FLAGS_2), fbd_ptr,
+                offsetof(struct panvk_fb_layer_state, flags2));
+   cs_load32_to(b, cs_sr_reg32(b, FRAGMENT, Z_CLEAR), fbd_ptr,
+                offsetof(struct panvk_fb_layer_state, z_clear));
+   cs_load64_to(b, cs_sr_reg64(b, FRAGMENT, TILER_DESCRIPTOR_POINTER), fbd_ptr,
+                offsetof(struct panvk_fb_layer_state, tiler));
+   cs_load64_to(b, cs_sr_reg64(b, FRAGMENT, RTD_POINTER), fbd_ptr,
+                offsetof(struct panvk_fb_layer_state, rtd_pointer));
+   cs_load64_to(b, cs_sr_reg64(b, FRAGMENT, DBD_POINTER), fbd_ptr,
+                offsetof(struct panvk_fb_layer_state, dbd_pointer));
+   cs_load64_to(b, cs_sr_reg64(b, FRAGMENT, FRAME_ARG), fbd_ptr,
+                offsetof(struct panvk_fb_layer_state, frame_argument));
+   cs_load64_to(b, cs_sr_reg64(b, FRAGMENT, FRAME_SHADER_DCD_POINTER), fbd_ptr,
+                offsetof(struct panvk_fb_layer_state, dcd_pointer));
+
+   cs_flush_loads(b);
+}
+#endif /* PAN_ARCH >= 14 */
 
 #endif /* PANVK_CMD_BUFFER_H */

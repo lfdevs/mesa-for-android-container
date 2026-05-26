@@ -31,12 +31,16 @@ ANDROID_CTS_MODULES=(
     "CtsSkQPTestCases"
 )
 
-ANDROID_CTS_VERSION="${ANDROID_VERSION}_r3"
-ANDROID_CTS_DEVICE_ARCH="x86"
+ANDROID_CTS_VERSION="${ANDROID_VERSION}_r5"
+
+case "$ANDROID_ARCH" in
+  x86_64) ANDROID_CTS_ARCH=x86;;
+  arm64) ANDROID_CTS_ARCH=arm;;
+esac
 
 # Download the stripped CTS from S3, because the CTS download from Google can take 20 minutes
-CTS_FILENAME="android-cts-${ANDROID_CTS_VERSION}-linux_x86-${ANDROID_CTS_DEVICE_ARCH}"
-ARTIFACT_PATH="${DATA_STORAGE_PATH}/android-cts/${ANDROID_CTS_TAG}.tar.zst"
+CTS_FILENAME="android-cts-${ANDROID_CTS_VERSION}-linux_x86-${ANDROID_CTS_ARCH}"
+ARTIFACT_PATH="${DATA_STORAGE_PATH}/android-cts/${DEBIAN_ARCH}/${ANDROID_CTS_TAG}.tar.zst"
 
 if FOUND_ARTIFACT_URL="$(find_s3_project_artifact "${ARTIFACT_PATH}")"; then
     echo "Found Android CTS at: ${FOUND_ARTIFACT_URL}"
@@ -55,6 +59,13 @@ else
     # shellcheck disable=SC2086 # we want word splitting
     ANDROID_CTS_MODULES_KEEP_EXPRESSION=$(printf "%s|" "${ANDROID_CTS_MODULES[@]}" | sed -e 's/|$//g')
     find /android-cts/testcases/ -mindepth 1 -type d | grep -v -E "$ANDROID_CTS_MODULES_KEEP_EXPRESSION" | xargs rm -rf
+
+    # Android CTS bundles a JDK for x86_64 hosts.
+    # Replace this with the JDK we installed.
+    if [ "${DEBIAN_ARCH}" = "arm64" ]; then
+        rm -rf /android-cts/jdk
+        mv /usr/lib/jvm/java-21-openjdk-arm64 /android-cts/jdk
+    fi
 
     # Using zstd compressed tarball instead of zip, the compression ratio is almost the same, but
     # the extraction is faster, also LAVA overlays don't support zip compression.

@@ -65,6 +65,7 @@ OUT_ARRAYS = {
     'pCopySrcLayouts': 'copySrcLayoutCount',
     'pCopyDstLayouts': 'copyDstLayoutCount',
     'pLayeredApis': 'layeredApiCount',
+    'pPerfBlocks': 'perfBlockCount',
 }
 OUT_ARRAY_COUNTS = OUT_ARRAYS.values()
 

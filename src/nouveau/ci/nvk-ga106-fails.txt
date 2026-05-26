@@ -4,17 +4,3 @@ dEQP-VK.pipeline.shader_object_linked_binary.pipeline_cache.robustness2.storage,
 dEQP-VK.pipeline.shader_object_linked_spirv.pipeline_cache.robustness2.storage,Fail
 dEQP-VK.pipeline.shader_object_unlinked_binary.pipeline_cache.robustness2.storage,Fail
 dEQP-VK.pipeline.shader_object_unlinked_spirv.pipeline_cache.robustness2.storage,Fail
-
-dEQP-VK.spirv_assembly.instruction.compute.untyped_pointers.glsl_memory_model.basic_usecase.array_length.float16,Crash
-dEQP-VK.spirv_assembly.instruction.compute.untyped_pointers.glsl_memory_model.basic_usecase.array_length.int8,Crash
-dEQP-VK.spirv_assembly.instruction.compute.untyped_pointers.glsl_memory_model.basic_usecase.atomics.increment.uint64,Crash
-dEQP-VK.spirv_assembly.instruction.compute.untyped_pointers.glsl_memory_model.basic_usecase.copy.from_untyped.op_copy_memory.uint8,Crash
-dEQP-VK.spirv_assembly.instruction.compute.untyped_pointers.glsl_memory_model.basic_usecase.copy.from_untyped.op_copy_memory_sized.float32,Crash
-dEQP-VK.spirv_assembly.instruction.compute.untyped_pointers.glsl_memory_model.basic_usecase.copy.from_untyped.op_copy_object.float32,Crash
-dEQP-VK.spirv_assembly.instruction.compute.untyped_pointers.glsl_memory_model.basic_usecase.copy.from_untyped.op_copy_object.int16,Crash
-dEQP-VK.spirv_assembly.instruction.compute.untyped_pointers.glsl_memory_model.basic_usecase.copy.to_untyped.op_copy_memory_sized.uint16,Crash
-dEQP-VK.spirv_assembly.instruction.compute.untyped_pointers.glsl_memory_model.type_punning.copy.from_untyped.op_copy_memory_sized.float16_to_int16,Crash
-dEQP-VK.spirv_assembly.instruction.compute.untyped_pointers.glsl_memory_model.type_punning.store.vec2_uint32_to_uint64,Crash
-dEQP-VK.spirv_assembly.instruction.compute.untyped_pointers.vulkan_memory_model.cooperative_matrix.mixed.load.accumulator.col_major.int32,Crash
-dEQP-VK.spirv_assembly.instruction.compute.untyped_pointers.vulkan_memory_model.cooperative_matrix.mixed.load.accumulator.col_major.uint32,Crash
-dEQP-VK.spirv_assembly.instruction.compute.untyped_pointers.vulkan_memory_model.cooperative_matrix.mixed.load.b.row_major.uint8,Crash

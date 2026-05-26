@@ -234,7 +234,7 @@ st_DrawTex(struct gl_context *ctx, GLfloat x, GLfloat y, GLfloat z,
             SET_ATTRIB(2, tex_attr, s1, t1, 0.0f, 1.0f);  /* upper right */
             SET_ATTRIB(3, tex_attr, s0, t1, 0.0f, 1.0f);  /* upper left */
 
-            slots[tex_attr] = st->needs_texcoord_semantic ?
+            slots[tex_attr] = st->screen->caps.tgsi_texcoord ?
                VARYING_SLOT_TEX0 : VARYING_SLOT_VAR0;
 
             tex_attr++;

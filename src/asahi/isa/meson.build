@@ -16,7 +16,7 @@ libagx2_disasm = static_library(
   include_directories : [inc_include, inc_src],
   c_args : [no_override_init_args],
   gnu_symbol_visibility : 'hidden',
-  build_by_default : true,
+  build_by_default : false,
 )
 
 if with_tests

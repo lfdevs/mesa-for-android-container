@@ -21,6 +21,7 @@
 #include "git_sha1.h"
 
 #include "vulkan/wsi/wsi_common.h"
+#include "vk_common_entrypoints.h"
 #include "vk_device.h"
 #include "vk_drm_syncobj.h"
 #include "vk_shader_module.h"
@@ -116,8 +117,11 @@ kk_get_device_extensions(const struct kk_instance *instance,
 
       /* Vulkan 1.4 */
       .KHR_global_priority = true,
+      .KHR_line_rasterization = true,
       .KHR_index_type_uint8 = true,
       .KHR_load_store_op_none = true,
+      .KHR_maintenance5 = true,
+      .KHR_maintenance6 = true,
       .KHR_map_memory2 = true,
       .KHR_push_descriptor = true,
       .KHR_shader_expect_assume = true,
@@ -125,29 +129,44 @@ kk_get_device_extensions(const struct kk_instance *instance,
       .KHR_vertex_attribute_divisor = true,
       .EXT_global_priority = true,
       .EXT_global_priority_query = true,
+      .EXT_host_image_copy = true,
       .EXT_index_type_uint8 = true,
+      .EXT_line_rasterization = true,
+      .EXT_pipeline_robustness = true,
       .EXT_vertex_attribute_divisor = true,
 
       /* Optional extensions */
       .KHR_calibrated_timestamps = true,
+      .KHR_maintenance7 = true,
+      .KHR_maintenance8 = true,
+      .KHR_maintenance9 = true,
+      .KHR_maintenance10 = true,
+      .KHR_robustness2 = true,
+      .KHR_shader_fma = true,
       .KHR_shader_maximal_reconvergence = true,
       .KHR_shader_relaxed_extended_instruction = true,
       .KHR_shader_subgroup_uniform_control_flow = true,
+      .KHR_shader_untyped_pointers = true,
 #ifdef KK_USE_WSI_PLATFORM
       .KHR_swapchain = true,
       .KHR_swapchain_mutable_format = true,
 #endif
+      .KHR_unified_image_layouts = true,
       .KHR_workgroup_memory_explicit_layout = true,
 
+      .EXT_attachment_feedback_loop_layout = true,
+      .EXT_attachment_feedback_loop_dynamic_state = true,
       .EXT_calibrated_timestamps = true,
       .EXT_depth_clip_control = true,
       .EXT_extended_dynamic_state3 = true,
       .EXT_external_memory_metal = true,
       .EXT_image_2d_view_of_3d = true,
       .EXT_load_store_op_none = true,
+      .EXT_memory_budget = true,
       .EXT_multi_draw = true,
       .EXT_mutable_descriptor_type = true,
       .EXT_post_depth_coverage = true,
+      .EXT_robustness2 = true,
       .EXT_shader_atomic_float = true,
       .EXT_shader_replicated_composites = true,
       .EXT_shader_subgroup_ballot = true,
@@ -188,6 +207,7 @@ kk_get_device_features(
       .samplerAnisotropy = true,
       .sampleRateShading = true,
       .shaderClipDistance = true,
+      .shaderCullDistance = true,
       .shaderImageGatherExtended = true,
       .shaderInt16 = true,
       .shaderInt64 = true,
@@ -286,8 +306,13 @@ kk_get_device_features(
       .vulkanMemoryModelDeviceScope = true,
 
       /* Vulkan 1.4 */
+      .bresenhamLines = true,
       .globalPriorityQuery = true,
+      .hostImageCopy = true,
       .indexTypeUint8 = true,
+      .maintenance5 = true,
+      .maintenance6 = true,
+      .pipelineRobustness = true,
       .pushDescriptor = true,
       .shaderSubgroupRotate = true,
       .shaderSubgroupRotateClustered = true,
@@ -297,14 +322,43 @@ kk_get_device_features(
       /* VK_EXT_mutable_descriptor_type */
       .mutableDescriptorType = true,
 
+      /* VK_KHR_maintenance7 */
+      .maintenance7 = true,
+
+      /* VK_KHR_maintenance8 */
+      .maintenance8 = true,
+
+      /* VK_KHR_maintenance9 */
+      .maintenance9 = true,
+
+      /* VK_KHR_maintenance10 */
+      .maintenance10 = true,
+
+      /* VK_KHR_robustness2 */
+      .robustBufferAccess2 = true,
+      .robustImageAccess2 = true,
+      .nullDescriptor = true,
+
       /* VK_KHR_shader_expect_assume */
       .shaderExpectAssume = true,
+
+      /* VK_KHR_shader_fma */
+      .shaderFmaFloat16 = true,
+      .shaderFmaFloat32 = true,
+      .shaderFmaFloat64 = false,
 
       /* VK_KHR_shader_maximal_reconvergence */
       .shaderMaximalReconvergence = true,
 
       /* VK_KHR_shader_relaxed_extended_instruction */
       .shaderRelaxedExtendedInstruction = true,
+
+      /* VK_KHR_shader_untyped_pointers */
+      .shaderUntypedPointers = true,
+
+      /* VK_KHR_unified_image_layouts */
+      .unifiedImageLayouts = true,
+      .unifiedImageLayoutsVideo = false,
 
       /* VK_KHR_workgroup_memory_explicit_layout */
       .workgroupMemoryExplicitLayout = true,
@@ -316,12 +370,19 @@ kk_get_device_features(
       .formatA4R4G4B4 = true,
       .formatA4B4G4R4 = true,
 
+      /* VK_EXT_attachment_feedback_loop_layout */
+      .attachmentFeedbackLoopLayout = true,
+
+      /* VK_EXT_attachment_feedback_loop_dynamic_state */
+      .attachmentFeedbackLoopDynamicState = true,
+
       /* VK_EXT_depth_clip_control */
       .depthClipControl = true,
 
       /* VK_EXT_extended_dynamic_state3 */
       .extendedDynamicState3DepthClampEnable = true,
       .extendedDynamicState3DepthClipNegativeOneToOne = true,
+      .extendedDynamicState3LineRasterizationMode = true,
 
       /* EXT_image_2d_view_of_3d */
       .image2DViewOf3D = true,
@@ -351,12 +412,12 @@ kk_get_device_properties(const struct kk_physical_device *pdev,
                          const struct kk_instance *instance,
                          struct vk_properties *properties)
 {
-   const VkSampleCountFlagBits sample_counts =
-      VK_SAMPLE_COUNT_1_BIT | VK_SAMPLE_COUNT_2_BIT |
-      // TODO_KOSMICKRISP Modify sample count based on what pdev supports
-      VK_SAMPLE_COUNT_4_BIT /* |
-       VK_SAMPLE_COUNT_8_BIT */
-      ;
+   VkSampleCountFlagBits sample_counts = VK_SAMPLE_COUNT_1_BIT;
+   for (uint32_t sample_count = VK_SAMPLE_COUNT_2_BIT;
+        sample_count <= VK_SAMPLE_COUNT_8_BIT; sample_count <<= 1) {
+      if (mtl_device_supports_sample_count(pdev->mtl_dev_handle, sample_count))
+         sample_counts |= sample_count;
+   }
 
    assert(sample_counts <= (KK_MAX_SAMPLES << 1) - 1);
 
@@ -605,9 +666,9 @@ kk_get_device_properties(const struct kk_physical_device *pdev,
       .lineSubPixelPrecisionBits = 8,
 
       /* VK_KHR_maintenance5 */
-      .earlyFragmentMultisampleCoverageAfterSampleCounting = false,
-      .earlyFragmentSampleMaskTestBeforeSampleCounting = true,
-      .depthStencilSwizzleOneSupport = false,
+      .earlyFragmentMultisampleCoverageAfterSampleCounting = true,
+      .earlyFragmentSampleMaskTestBeforeSampleCounting = false,
+      .depthStencilSwizzleOneSupport = true,
       .polygonModePointSize = false,
       .nonStrictSinglePixelWideLinesUseParallelogram = false,
       .nonStrictWideLinesUseParallelogram = false,
@@ -619,7 +680,7 @@ kk_get_device_properties(const struct kk_physical_device *pdev,
 
       /* VK_KHR_maintenance7 */
       .robustFragmentShadingRateAttachmentAccess = false,
-      .separateDepthStencilAttachmentAccess = false,
+      .separateDepthStencilAttachmentAccess = true,
       .maxDescriptorSetTotalUniformBuffersDynamic = KK_MAX_DYNAMIC_BUFFERS / 2,
       .maxDescriptorSetTotalStorageBuffersDynamic = KK_MAX_DYNAMIC_BUFFERS / 2,
       .maxDescriptorSetTotalBuffersDynamic = KK_MAX_DYNAMIC_BUFFERS,
@@ -629,6 +690,16 @@ kk_get_device_properties(const struct kk_physical_device *pdev,
          KK_MAX_DYNAMIC_BUFFERS / 2,
       .maxDescriptorSetUpdateAfterBindTotalBuffersDynamic =
          KK_MAX_DYNAMIC_BUFFERS,
+
+      /* VK_KHR_maintenance9 */
+      .image2DViewOf3DSparse = false,
+      .defaultVertexAttributeValue =
+         VK_DEFAULT_VERTEX_ATTRIBUTE_VALUE_ZERO_ZERO_ZERO_ONE_KHR,
+
+      /* VK_KHR_maintenance10 */
+      .rgba4OpaqueBlackSwizzled = false,
+      .resolveSrgbFormatAppliesTransferFunction = true,
+      .resolveSrgbFormatSupportsTransferFunctionControl = true,
 
       /* VK_EXT_legacy_vertex_attributes */
       .nativeUnalignedPerformance = true,
@@ -644,13 +715,13 @@ kk_get_device_properties(const struct kk_physical_device *pdev,
 
       /* VK_EXT_pipeline_robustness */
       .defaultRobustnessStorageBuffers =
-         VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_DISABLED_EXT,
+         VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_DISABLED,
       .defaultRobustnessUniformBuffers =
-         VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_DISABLED_EXT,
+         VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_DISABLED,
       .defaultRobustnessVertexInputs =
-         VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_DISABLED_EXT,
+         VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_DISABLED,
       .defaultRobustnessImages =
-         VK_PIPELINE_ROBUSTNESS_IMAGE_BEHAVIOR_ROBUST_IMAGE_ACCESS_2_EXT,
+         VK_PIPELINE_ROBUSTNESS_IMAGE_BEHAVIOR_ROBUST_IMAGE_ACCESS_2,
 
       /* VK_EXT_physical_device_drm gets populated later */
 
@@ -658,7 +729,7 @@ kk_get_device_properties(const struct kk_physical_device *pdev,
       .provokingVertexModePerPipeline = true,
       .transformFeedbackPreservesTriangleFanProvokingVertex = true,
 
-      /* VK_EXT_robustness2 */
+      /* VK_KHR_robustness2 */
       .robustStorageBufferAccessSizeAlignment = KK_SSBO_BOUNDS_CHECK_ALIGNMENT,
       .robustUniformBufferAccessSizeAlignment = KK_MIN_UBO_ALIGNMENT,
 
@@ -731,7 +802,8 @@ kk_get_device_properties(const struct kk_physical_device *pdev,
    memcpy(properties->optimalTilingLayoutUUID, instance->driver_build_sha,
           VK_UUID_SIZE);
 
-   properties->identicalMemoryTypeRequirements = false;
+   /* We're a UMR so we can always map every kind of memory */
+   properties->identicalMemoryTypeRequirements = true;
 
    /* VK_EXT_shader_module_identifier */
    STATIC_ASSERT(sizeof(vk_shaderModuleIdentifierAlgorithmUUID) ==
@@ -791,25 +863,80 @@ kk_physical_device_free_disk_cache(struct kk_physical_device *pdev)
 static uint64_t
 kk_get_sysmem_heap_size(void)
 {
+   /* Report the total amount of system memory as the actual heap size */
    uint64_t sysmem_size_B = 0;
    if (!os_get_total_physical_memory(&sysmem_size_B))
       return 0;
 
-   /* Use 3/4 of total size to avoid swapping */
-   return ROUND_DOWN_TO(sysmem_size_B * 3 / 4, 1 << 20);
+   return sysmem_size_B;
 }
 
 static uint64_t
-kk_get_sysmem_heap_available(struct kk_physical_device *pdev)
+kk_get_sysmem_heap_budget(struct kk_physical_device *pdev)
 {
+   /* From the Vulkan 1.3.278 spec:
+    *
+    *    "heapBudget is an array of VK_MAX_MEMORY_HEAPS VkDeviceSize
+    *    values in which memory budgets are returned, with one
+    *    element for each memory heap. A heap’s budget is a rough
+    *    estimate of how much memory the process can allocate from
+    *    that heap before allocations may fail or cause performance
+    *    degradation. The budget includes any currently allocated
+    *    device memory."
+    *
+    * and
+    *
+    *    "The heapBudget value must be less than or equal to
+    *    VkMemoryHeap::size for each heap."
+    *
+    * From Metal documentation for recommendedMaxWorkingSetSize:
+    *
+    *     An approximation of how much memory, in bytes, this GPU device can
+    *     allocate without affecting its runtime performance.
+    *
+    * From Metal documentation for currentAllocatedSize:
+    *
+    *     The total amount of memory, in bytes, the GPU device is using for all
+    *     of its resources.
+    *
+    * First, determine the total and available system memory to calculate the
+    * amount of used memory. Then, subtract this from the Metal-defined budget,
+    * and add back the current used memory by this device.
+    */
    uint64_t sysmem_size_B = 0;
-   if (!os_get_available_system_memory(&sysmem_size_B)) {
-      vk_loge(VK_LOG_OBJS(pdev), "Failed to query available system memory");
+   uint64_t sysmem_available_B = 0;
+   if (!os_get_total_physical_memory(&sysmem_size_B) ||
+       !os_get_available_system_memory(&sysmem_available_B))
       return 0;
-   }
 
-   /* Use 3/4 of available to avoid swapping */
-   return ROUND_DOWN_TO(sysmem_size_B * 3 / 4, 1 << 20);
+   uint64_t sysmem_used_B = sysmem_size_B - sysmem_available_B;
+   uint64_t sysmem_budget_B =
+      mtl_device_recommended_max_working_set_size(pdev->mtl_dev_handle);
+   uint64_t remaining_budget_B =
+      sysmem_budget_B > sysmem_used_B ? sysmem_budget_B - sysmem_used_B : 0u;
+   return remaining_budget_B +
+          mtl_device_current_allocated_size(pdev->mtl_dev_handle);
+}
+
+static uint64_t
+kk_get_sysmem_heap_used(struct kk_physical_device *pdev)
+{
+   /* From the Vulkan 1.3.278 spec:
+    *
+    *    "heapUsage is an array of VK_MAX_MEMORY_HEAPS VkDeviceSize
+    *    values in which memory usages are returned, with one element
+    *    for each memory heap. A heap’s usage is an estimate of how
+    *    much memory the process is currently using in that heap."
+    *
+    * From Metal documentation for currentAllocatedSize:
+    *
+    *     The total amount of memory, in bytes, the GPU device is using for all
+    *     of its resources.
+    *
+    * We can trivially report estimated heap usage using Metal's reported
+    * allocated size
+    */
+   return mtl_device_current_allocated_size(pdev->mtl_dev_handle);
 }
 
 static void
@@ -886,7 +1013,8 @@ kk_enumerate_physical_devices(struct vk_instance *_instance)
    pdev->mem_heaps[sysmem_heap_idx] = (struct kk_memory_heap){
       .size = sysmem_size_B,
       .flags = VK_MEMORY_HEAP_DEVICE_LOCAL_BIT,
-      .available = kk_get_sysmem_heap_available,
+      .budget = kk_get_sysmem_heap_budget,
+      .used = kk_get_sysmem_heap_used,
    };
 
    pdev->mem_types[pdev->mem_type_count++] = (VkMemoryType){
@@ -946,6 +1074,32 @@ kk_physical_device_destroy(struct vk_physical_device *vk_pdev)
 }
 
 VKAPI_ATTR void VKAPI_CALL
+kk_GetPhysicalDeviceProperties2(VkPhysicalDevice physicalDevice,
+                                VkPhysicalDeviceProperties2 *pProperties)
+{
+   vk_common_GetPhysicalDeviceProperties2(physicalDevice, pProperties);
+
+   /* Properly populate layered API properties */
+   VkPhysicalDeviceLayeredApiPropertiesListKHR *layered_props_list =
+      vk_find_struct(pProperties->pNext,
+                     PHYSICAL_DEVICE_LAYERED_API_PROPERTIES_LIST_KHR);
+   if (!layered_props_list)
+      return;
+
+   layered_props_list->layeredApiCount = 1;
+   if (!layered_props_list->pLayeredApis)
+      return;
+
+   VkPhysicalDeviceLayeredApiPropertiesKHR *layered_props =
+      &layered_props_list->pLayeredApis[0];
+   layered_props->vendorID = pProperties->properties.vendorID;
+   layered_props->deviceID = pProperties->properties.deviceID;
+   layered_props->layeredAPI = VK_PHYSICAL_DEVICE_LAYERED_API_METAL_KHR;
+   strncpy(layered_props->deviceName, pProperties->properties.deviceName,
+           VK_MAX_PHYSICAL_DEVICE_NAME_SIZE);
+}
+
+VKAPI_ATTR void VKAPI_CALL
 kk_GetPhysicalDeviceMemoryProperties2(
    VkPhysicalDevice physicalDevice,
    VkPhysicalDeviceMemoryProperties2 *pMemoryProperties)
@@ -972,46 +1126,8 @@ kk_GetPhysicalDeviceMemoryProperties2(
 
          for (unsigned i = 0; i < pdev->mem_heap_count; i++) {
             const struct kk_memory_heap *heap = &pdev->mem_heaps[i];
-            uint64_t used = p_atomic_read(&heap->used);
-
-            /* From the Vulkan 1.3.278 spec:
-             *
-             *    "heapUsage is an array of VK_MAX_MEMORY_HEAPS VkDeviceSize
-             *    values in which memory usages are returned, with one element
-             *    for each memory heap. A heap’s usage is an estimate of how
-             *    much memory the process is currently using in that heap."
-             *
-             * TODO: Include internal allocations?
-             */
-            p->heapUsage[i] = used;
-
-            uint64_t available = heap->size;
-            if (heap->available)
-               available = heap->available(pdev);
-
-            /* From the Vulkan 1.3.278 spec:
-             *
-             *    "heapBudget is an array of VK_MAX_MEMORY_HEAPS VkDeviceSize
-             *    values in which memory budgets are returned, with one
-             *    element for each memory heap. A heap’s budget is a rough
-             *    estimate of how much memory the process can allocate from
-             *    that heap before allocations may fail or cause performance
-             *    degradation. The budget includes any currently allocated
-             *    device memory."
-             *
-             * and
-             *
-             *    "The heapBudget value must be less than or equal to
-             *    VkMemoryHeap::size for each heap."
-             *
-             * available (queried above) is the total amount free memory
-             * system-wide and does not include our allocations so we need
-             * to add that in.
-             */
-            uint64_t budget = MIN2(available + used, heap->size);
-
-            /* Set the budget at 90% of available to avoid thrashing */
-            p->heapBudget[i] = ROUND_DOWN_TO(budget * 9 / 10, 1 << 20);
+            p->heapBudget[i] = heap->budget ? heap->budget(pdev) : 0;
+            p->heapUsage[i] = heap->used ? heap->used(pdev) : 0;
          }
 
          /* From the Vulkan 1.3.278 spec:
@@ -1056,13 +1172,20 @@ kk_GetPhysicalDeviceQueueFamilyProperties2(
          p->queueFamilyProperties.minImageTransferGranularity =
             (VkExtent3D){1, 1, 1};
 
-         vk_foreach_struct(ext, p->pNext)
-         {
+         vk_foreach_struct(ext, p->pNext) {
             switch (ext->sType) {
             case VK_STRUCTURE_TYPE_QUEUE_FAMILY_GLOBAL_PRIORITY_PROPERTIES: {
-               VkQueueFamilyGlobalPriorityProperties *p = (void *)ext;
-               p->priorityCount = 1;
-               p->priorities[0] = VK_QUEUE_GLOBAL_PRIORITY_MEDIUM;
+               VkQueueFamilyGlobalPriorityProperties *pSub = (void *)ext;
+               pSub->priorityCount = 1;
+               pSub->priorities[0] = VK_QUEUE_GLOBAL_PRIORITY_MEDIUM;
+               break;
+            }
+
+            case VK_STRUCTURE_TYPE_QUEUE_FAMILY_OPTIMAL_IMAGE_TRANSFER_GRANULARITY_PROPERTIES_KHR: {
+               VkQueueFamilyOptimalImageTransferGranularityPropertiesKHR *pSub =
+                  (void *)ext;
+               pSub->optimalImageTransferGranularity =
+                  p->queueFamilyProperties.minImageTransferGranularity;
                break;
             }
 

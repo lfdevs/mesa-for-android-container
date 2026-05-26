@@ -95,6 +95,7 @@ impl LowerCopySwap {
                         b.push_op(OpLd {
                             dst: copy.dst,
                             addr: Src::ZERO,
+                            uniform_addr: Src::ZERO,
                             pred: true.into(),
                             offset: addr.try_into().unwrap(),
                             stride: OffsetStride::X1,
@@ -175,6 +176,7 @@ impl LowerCopySwap {
                         self.slm_size = max(self.slm_size, addr + 4);
                         b.push_op(OpSt {
                             addr: Src::ZERO,
+                            uniform_addr: Src::ZERO,
                             data: copy.src,
                             offset: addr.try_into().unwrap(),
                             stride: OffsetStride::X1,

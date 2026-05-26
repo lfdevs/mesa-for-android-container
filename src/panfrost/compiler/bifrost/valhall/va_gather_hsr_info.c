@@ -77,6 +77,8 @@ walk_bir_shader(bi_context *ctx, struct pan_shader_info *info)
             if (instr->sample == BI_SAMPLE_CENTROID)
                info->fs.hsr.centroid_interpolation = true;
             FALLTHROUGH;
+         case BI_OPCODE_LD_VAR_BUF_FLAT:
+         case BI_OPCODE_LD_VAR_BUF_FLAT_IMM:
          case BI_OPCODE_LD_VAR_FLAT:
          case BI_OPCODE_LD_VAR_FLAT_IMM:
             if (!found_atest)

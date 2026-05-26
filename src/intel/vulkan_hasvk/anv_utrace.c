@@ -39,7 +39,7 @@ command_buffers_count_utraces(struct anv_device *device,
       if (u_trace_has_points(&cmd_buffers[i]->trace)) {
          utraces++;
          if (!(cmd_buffers[i]->usage_flags & VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT))
-            *utrace_copies += list_length(&cmd_buffers[i]->trace.trace_chunks);
+            *utrace_copies += u_trace_num_events(&cmd_buffers[i]->trace);
       }
    }
 
@@ -120,7 +120,7 @@ anv_device_utrace_flush_cmd_buffers(struct anv_queue *queue,
 
    if (utrace_copies > 0) {
       result = anv_bo_pool_alloc(&device->utrace_bo_pool,
-                                 utrace_copies * 4096,
+                                 align(utrace_copies * 8, 4096),
                                  &flush->trace_bo);
       if (result != VK_SUCCESS)
          goto error_trace_buf;
@@ -221,7 +221,7 @@ anv_utrace_destroy_buffer(struct u_trace_context *utctx, void *timestamps)
    anv_bo_pool_free(&device->utrace_bo_pool, bo);
 }
 
-static void
+static bool
 anv_utrace_record_ts(struct u_trace *ut, void *cs,
                      void *timestamps, uint64_t offset_B,
                      uint32_t flags)
@@ -240,6 +240,8 @@ anv_utrace_record_ts(struct u_trace *ut, void *cs,
                                            .bo = bo,
                                            .offset = offset_B, },
                                         capture_type);
+
+   return true;
 }
 
 static uint64_t

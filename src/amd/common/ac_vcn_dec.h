@@ -1244,41 +1244,15 @@ typedef struct rvcn_dec_av1_segment_fg_s {
    rvcn_dec_av1_fg_init_buf_t fg_buf;
 } rvcn_dec_av1_segment_fg_t;
 
-struct jpeg_params {
-   unsigned bsd_size;
-   unsigned dt_pitch;
-   unsigned dt_uv_pitch;
-   unsigned dt_luma_top_offset;
-   unsigned dt_chroma_top_offset;
-   unsigned dt_chromav_top_offset;
-   unsigned dt_addr_mode;
-   unsigned dt_swizzle_mode;
-   uint16_t crop_x;
-   uint16_t crop_y;
-   uint16_t crop_width;
-   uint16_t crop_height;
+struct ac_vcn_dec_reg {
+   uint32_t data0;
+   uint32_t data1;
+   uint32_t data2;
+   uint32_t cmd;
+   uint32_t cntl;
 };
 
-#define RDECODE_VCN1_GPCOM_VCPU_CMD   0x2070c
-#define RDECODE_VCN1_GPCOM_VCPU_DATA0 0x20710
-#define RDECODE_VCN1_GPCOM_VCPU_DATA1 0x20714
-#define RDECODE_VCN1_ENGINE_CNTL      0x20718
-
-#define RDECODE_VCN2_GPCOM_VCPU_CMD       (0x503 << 2)
-#define RDECODE_VCN2_GPCOM_VCPU_DATA0     (0x504 << 2)
-#define RDECODE_VCN2_GPCOM_VCPU_DATA1     (0x505 << 2)
-#define RDECODE_VCN2_GPCOM_VCPU_DATA2     (0x54C << 2)
-#define RDECODE_VCN2_ENGINE_CNTL          (0x506 << 2)
-
-#define RDECODE_VCN2_5_GPCOM_VCPU_CMD       0x3c
-#define RDECODE_VCN2_5_GPCOM_VCPU_DATA0     0x40
-#define RDECODE_VCN2_5_GPCOM_VCPU_DATA1     0x44
-#define RDECODE_VCN2_5_GPCOM_VCPU_DATA2     0x1A0
-#define RDECODE_VCN2_5_ENGINE_CNTL          0x9b4
-
-#define RDECODE_SESSION_CONTEXT_SIZE (128 * 1024)
-#define RDECODE_MAX_SUBSAMPLE_SIZE   (2048 * 2 * 4)
-#define RDECODE_IT_SCALING_TABLE_SIZE       992
+void ac_vcn_dec_init_regs(struct ac_vcn_dec_reg *reg, enum vcn_version version);
 
 uint32_t ac_vcn_dec_dpb_size(const struct radeon_info *info, struct ac_video_dec_session_param *param);
 uint32_t ac_vcn_dec_dpb_alignment(const struct radeon_info *info, struct ac_video_dec_session_param *param);

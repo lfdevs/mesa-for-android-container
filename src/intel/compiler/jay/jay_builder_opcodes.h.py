@@ -58,7 +58,7 @@ TEMPLATE = """
     multi_type = len(op.types) > 1
     info_size = f'sizeof(jay_{op.name}_info)' if op.extra_struct else '0'
     operands = ["dst"] + [f"src{i}" for i in range(num_srcs)]
-    if num_srcs > 0:
+    if num_srcs > 0 and op.name != 'gpr_from_ugprs':
         uniform = " && " .join([f"jay_is_uniform(src{i})" for i in range(num_srcs)])
         reg_file = f"({uniform}) ? UGPR : GPR"
     else:

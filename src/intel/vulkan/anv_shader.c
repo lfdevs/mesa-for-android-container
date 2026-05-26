@@ -54,7 +54,7 @@ anv_device_dump_shader_variant(struct anv_device *device,
 
    if (device->shader_dump.archive != NULL) {
       char filename[80];
-      snprintf(filename, sizeof(filename), "0x%08x-%s%s",
+      snprintf(filename, sizeof(filename), "0x%016"PRIx64"-%s%s",
                shader->prog_data->source_hash,
                _mesa_shader_stage_to_abbrev(shader->vk.stage),
                variant);

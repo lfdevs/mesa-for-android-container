@@ -82,3 +82,35 @@ void ac_compact_ps_vgpr_args(struct ac_shader_args *info, uint32_t spi_ps_input)
 
    info->num_vgprs_used = vgpr_reg;
 }
+
+unsigned
+ac_get_color_interp_arg(const struct ac_shader_args *args, enum ac_color_interp interp)
+{
+   struct ac_arg arg;
+
+   switch (interp) {
+   case AC_COLOR_INTERP_PERSP_SAMPLE:
+      arg = args->persp_sample;
+      break;
+   case AC_COLOR_INTERP_PERSP_CENTER:
+      arg = args->persp_center;
+      break;
+   case AC_COLOR_INTERP_PERSP_CENTROID:
+      arg = args->persp_centroid;
+      break;
+   case AC_COLOR_INTERP_LINEAR_SAMPLE:
+      arg = args->linear_sample;
+      break;
+   case AC_COLOR_INTERP_LINEAR_CENTER:
+      arg = args->linear_center;
+      break;
+   case AC_COLOR_INTERP_LINEAR_CENTROID:
+      arg = args->linear_centroid;
+      break;
+   default:
+      UNREACHABLE("unexpected interp mode");
+   }
+
+   assert(arg.used);
+   return arg.arg_index;
+}

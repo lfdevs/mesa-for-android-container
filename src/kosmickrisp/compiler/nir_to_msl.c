@@ -76,8 +76,7 @@ emit_sysvals(struct nir_to_msl_ctx *ctx, nir_shader *shader)
    unsigned i;
    BITSET_FOREACH_SET(i, shader->info.system_values_read, SYSTEM_VALUE_MAX) {
       const char *sysval;
-      if (is_frag_with_post_depth_coverage &&
-          i == SYSTEM_VALUE_SAMPLE_MASK_IN)
+      if (is_frag_with_post_depth_coverage && i == SYSTEM_VALUE_SAMPLE_MASK_IN)
          sysval = sysval_sample_mask_in_post_depth_coverage;
       else
          sysval = sysval_table[i];
@@ -504,6 +503,10 @@ alu_to_msl(struct nir_to_msl_ctx *ctx, nir_alu_instr *instr)
       P(ctx, " ? 1.0 : 0.0");
       break;
    case nir_op_bcsel:
+      /* KK_WORKAROUND_10 All shaders will have buf0 bound */
+      if (!(ctx->disabled_workarounds & BITFIELD_BIT(10)) &&
+          ctx->shader->info.stage == MESA_SHADER_COMPUTE)
+         P(ctx, "(ulong)&buf0.contents[0] && ");
       alu_src_to_msl(ctx, instr, 0);
       P(ctx, " ? ");
       alu_src_to_msl(ctx, instr, 1);
@@ -1491,7 +1494,7 @@ intrinsic_to_msl(struct nir_to_msl_ctx *ctx, nir_intrinsic_instr *instr)
       src_to_msl(ctx, &instr->src[0]);
       P(ctx, ", ");
       src_to_msl(ctx, &instr->src[1]);
-      P(ctx, ");");
+      P(ctx, ");\n");
       break;
    case nir_intrinsic_rotate:
       P(ctx, "simd_shuffle_rotate_down(");
@@ -1611,6 +1614,10 @@ intrinsic_to_msl(struct nir_to_msl_ctx *ctx, nir_intrinsic_instr *instr)
       P_IND(ctx, "out.gl_ClipDistance[%d] = ", nir_intrinsic_base(instr));
       src_to_msl(ctx, &instr->src[0]);
       P(ctx, ";\n");
+      break;
+   case nir_intrinsic_load_ro_sink_address_poly:
+      /* Point to NULL, not really used currently */
+      P(ctx, "0x0;\n");
       break;
    default:
       P_IND(ctx, "Unknown intrinsic %s\n", info->name);
@@ -2028,6 +2035,7 @@ msl_preprocess_nir(struct nir_shader *nir)
    NIR_PASS(_, nir, nir_opt_combine_barriers, NULL, NULL);
    NIR_PASS(_, nir, nir_lower_var_copies);
    NIR_PASS(_, nir, nir_split_var_copies);
+   NIR_PASS(_, nir, nir_lower_memcpy);
 
    NIR_PASS(_, nir, nir_split_array_vars,
             nir_var_function_temp | nir_var_shader_in | nir_var_shader_out);
@@ -2099,16 +2107,17 @@ lower_ballot(nir_builder *b, nir_intrinsic_instr *intrin, void *_unused)
       return false;
 
    b->cursor = nir_before_instr(&intrin->instr);
-   nir_def* invocation = nir_load_subgroup_invocation(b);
-   nir_def* mask = nir_ishl(b, nir_b2i32(b, intrin->src[0].ssa), invocation);
-   nir_def* reduce = nir_reduce(b, mask, .reduction_op = nir_op_ior);
+   nir_def *invocation = nir_load_subgroup_invocation(b);
+   nir_def *mask = nir_ishl(b, nir_b2i32(b, intrin->src[0].ssa), invocation);
+   nir_def *reduce = nir_reduce(b, mask, .reduction_op = nir_op_ior);
    nir_def_rewrite_uses(&intrin->def, reduce);
 
    return true;
 }
 
-void msl_preprocess_nir_workarounds(struct nir_shader *nir,
-                                    uint64_t disabled_workarounds)
+void
+msl_preprocess_nir_workarounds(struct nir_shader *nir,
+                               uint64_t disabled_workarounds)
 {
    /* KK_WORKAROUND_3 */
    if (!(disabled_workarounds & BITFIELD64_BIT(3))) {
@@ -2123,26 +2132,6 @@ void msl_preprocess_nir_workarounds(struct nir_shader *nir,
       NIR_PASS(_, nir, nir_shader_intrinsics_pass, lower_ballot,
                nir_metadata_control_flow, NULL);
    }
-}
-
-/* Scalarize stores to CLIP_DIST* varyings */
-static bool
-scalarize_clip_distance_filter(const nir_intrinsic_instr *intrin,
-                               UNUSED const void *_data)
-{
-   if (intrin->intrinsic != nir_intrinsic_store_output)
-      return false;
-   nir_io_semantics semantics = nir_intrinsic_io_semantics(intrin);
-   return semantics.location == VARYING_SLOT_CLIP_DIST0 ||
-          semantics.location == VARYING_SLOT_CLIP_DIST1;
-}
-
-void
-msl_lower_nir_late(nir_shader *nir)
-{
-   NIR_PASS(_, nir, nir_lower_io_to_scalar, nir_var_shader_out,
-            scalarize_clip_distance_filter, NULL);
-   NIR_PASS(_, nir, msl_nir_lower_clip_distance);
 }
 
 static void

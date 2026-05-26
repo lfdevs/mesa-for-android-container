@@ -384,6 +384,12 @@ fn compile_program(
                 return Err(CL_INVALID_OPERATION);
             }
 
+            // CL_INVALID_CONTEXT if the context associated with program and programs in
+            // input_headers are not the same.
+            if header.context != program.context {
+                return Err(CL_INVALID_CONTEXT);
+            }
+
             headers.push(HeaderProgram {
                 // SAFETY: The OpenCL spec requires that there be a
                 // one-to-one correspondence between input_headers and
@@ -446,6 +452,15 @@ pub fn link_program(
     // context.
     if !devices.iter().all(|device| context.devs.contains(device)) {
         return Err(CL_INVALID_DEVICE);
+    }
+
+    // CL_INVALID_CONTEXT if the context associated with programs in input_programs is not the same
+    // as context.
+    if input_programs
+        .iter()
+        .any(|program| program.context != context)
+    {
+        return Err(CL_INVALID_CONTEXT);
     }
 
     // CL_INVALID_OPERATION if the compilation or build of a program executable for any of the

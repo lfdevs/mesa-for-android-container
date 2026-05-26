@@ -673,6 +673,8 @@ genX(cmd_buffer_emit_indirect_generated_draws)(struct anv_cmd_buffer *cmd_buffer
                                                uint32_t max_draw_count,
                                                bool indexed)
 {
+   const struct anv_instance *instance = cmd_buffer->device->physical->instance;
+
    /* In order to have the vertex fetch gather the data we need to have a non
     * 0 stride. It's possible to have a 0 stride given by the application when
     * draw_count is 1, but we need a correct value for the
@@ -686,7 +688,7 @@ genX(cmd_buffer_emit_indirect_generated_draws)(struct anv_cmd_buffer *cmd_buffer
    assert(indirect_data_stride > 0);
 
    const bool use_ring_buffer = max_draw_count >=
-      cmd_buffer->device->physical->instance->generated_indirect_ring_threshold;
+      instance->drirc.perf.generated_indirect_ring_threshold;
    if (use_ring_buffer) {
       genX(cmd_buffer_emit_indirect_generated_draws_inring)(cmd_buffer,
                                                             indirect_data_addr,

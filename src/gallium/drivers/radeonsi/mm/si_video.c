@@ -18,6 +18,28 @@
 #include "si_video_dec.h"
 #include "ac_uvd_dec.h"
 
+enum ac_video_codec si_pipe_video_profile_to_codec(enum pipe_video_profile profile)
+{
+   switch (u_reduce_video_profile(profile)) {
+   case PIPE_VIDEO_FORMAT_MPEG12:
+      return AC_VIDEO_CODEC_MPEG2;
+   case PIPE_VIDEO_FORMAT_VC1:
+      return AC_VIDEO_CODEC_VC1;
+   case PIPE_VIDEO_FORMAT_MPEG4_AVC:
+      return AC_VIDEO_CODEC_AVC;
+   case PIPE_VIDEO_FORMAT_HEVC:
+      return AC_VIDEO_CODEC_HEVC;
+   case PIPE_VIDEO_FORMAT_JPEG:
+      return AC_VIDEO_CODEC_MJPEG;
+   case PIPE_VIDEO_FORMAT_VP9:
+      return AC_VIDEO_CODEC_VP9;
+   case PIPE_VIDEO_FORMAT_AV1:
+      return AC_VIDEO_CODEC_AV1;
+   default:
+      return AC_VIDEO_CODEC_MAX;
+   }
+}
+
 unsigned si_vid_alloc_stream_handle()
 {
    static struct ac_uvd_stream_handle stream_handle;

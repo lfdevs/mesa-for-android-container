@@ -58,7 +58,9 @@ tu_CreateSampler(VkDevice _device,
       tu6_pack_border_color(
          &device->global_bo_map->bcolor[border_color], &color,
          pCreateInfo->borderColor == VK_BORDER_COLOR_INT_CUSTOM_EXT);
-   } else {
+      border_color += TU_BORDER_COLOR_BUILTIN;
+   } else if (sampler->vk.format != VK_FORMAT_UNDEFINED ||
+              device->instance->enable_fast_border_color_for_undefined_formats) {
       fast_border_color_enable = true;
       switch (pCreateInfo->borderColor) {
          case VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK:
@@ -184,7 +186,7 @@ tu_DestroySampler(VkDevice _device,
       fast_border_color =
          (sampler->descriptor[2] & A8XX_TEX_SAMP_2_FASTBORDERCOLOREN) != 0;
       border_color =
-         pkt_field_get(A8XX_TEX_SAMP_2_FASTBORDERCOLOR, sampler->descriptor[2]);
+         pkt_field_get(A8XX_TEX_SAMP_2_BCOLOR, sampler->descriptor[2]);
    } else {
       fast_border_color =
          (sampler->descriptor[2] & A6XX_TEX_SAMP_2_FASTBORDERCOLOREN) != 0;
@@ -192,7 +194,8 @@ tu_DestroySampler(VkDevice _device,
          pkt_field_get(A6XX_TEX_SAMP_2_BCOLOR, sampler->descriptor[2]);
    }
 
-   if (!fast_border_color) {
+   if (!fast_border_color && border_color >= TU_BORDER_COLOR_BUILTIN) {
+      border_color -= TU_BORDER_COLOR_BUILTIN;
       /* if the sampler had a custom border color, free it. TODO: no lock */
       mtx_lock(&device->mutex);
       assert(!BITSET_TEST(device->custom_border_color, border_color));

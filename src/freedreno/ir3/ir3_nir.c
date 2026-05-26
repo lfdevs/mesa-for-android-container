@@ -728,8 +728,11 @@ ir3_finalize_nir(struct ir3_compiler *compiler,
     * more optimal at the top.
     */
    if (s->info.stage == MESA_SHADER_VERTEX ||
-       s->info.stage == MESA_SHADER_FRAGMENT)
-      NIR_PASS(_, s, nir_opt_move_to_top, nir_move_to_top_input_loads);
+       s->info.stage == MESA_SHADER_FRAGMENT) {
+      NIR_PASS(_, s, nir_opt_move_to_top,
+               nir_move_to_top_input_loads_simple |
+               nir_move_to_top_input_loads_complex_baryc);
+   }
 
    if (s->info.stage == MESA_SHADER_GEOMETRY) {
       /* nir_unlower_io_to_vars expects constant indirect offsets to be folded
@@ -1644,8 +1647,7 @@ ir3_nir_lower_variant(struct ir3_shader_variant *so,
     */
    bool more_late_algebraic = true;
    while (more_late_algebraic) {
-      more_late_algebraic = OPT(s, nir_opt_algebraic_late) ||
-         OPT(s, ir3_nir_opt_algebraic_late);
+      more_late_algebraic = OPT(s, nir_opt_algebraic_late);
       if (!more_late_algebraic && so->compiler->gen >= 5) {
          /* Lowers texture operations that have only f2f16 or u2u16 called on
           * them to have a 16-bit destination.  Also, lower 16-bit texture

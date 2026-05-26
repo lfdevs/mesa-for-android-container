@@ -28,7 +28,7 @@
 struct kk_query_pool;
 
 struct kk_root_descriptor_table {
-   struct kk_bo *root_buffer;
+   struct kk_ptr root_buffer;
 
    union {
       struct {
@@ -77,6 +77,7 @@ struct kk_per_draw_data {
 };
 
 struct kk_attachment {
+   VkRenderingAttachmentFlagsKHR flags;
    VkFormat vk_format;
    struct kk_image_view *iview;
 
@@ -119,10 +120,11 @@ struct kk_graphics_state {
    mtl_render_pass_descriptor *render_pass_descriptor;
    bool is_depth_stencil_dynamic;
    bool is_cull_front_and_back;
+   bool is_ms_bresenham_lines;
    bool need_to_start_render_pass;
 
    enum kk_dirty dirty;
-   uint32_t sample_count;
+   uint32_t pipeline_sample_count;
 
    struct {
       enum mtl_visibility_result_mode mode;
@@ -136,7 +138,8 @@ struct kk_graphics_state {
    /* Index buffer */
    struct {
       mtl_buffer *handle;
-      uint32_t size;
+      uint64_t buffer_size;
+      uint32_t range;
       uint32_t offset;
       uint32_t restart;
       uint8_t bytes_per_index;
@@ -159,6 +162,15 @@ struct kk_compute_state {
 
 struct kk_encoder;
 
+struct kk_uploader {
+   /** List of kk_cmd_bo */
+   struct list_head bos;
+
+   /* Current addresses */
+   struct kk_bo *bo;
+   uint32_t offset;
+};
+
 struct kk_cmd_buffer {
    struct vk_command_buffer vk;
 
@@ -172,6 +184,8 @@ struct kk_cmd_buffer {
       /* Only tracks graphics shaders since compute is always bound for now. */
       uint32_t dirty_shaders;
    } state;
+
+   struct kk_uploader uploader;
 
    /* Owned large BOs */
    struct util_dynarray large_bos;
@@ -242,18 +256,11 @@ void kk_cmd_buffer_write_descriptor_buffer(struct kk_cmd_buffer *cmd,
                                            struct kk_descriptor_state *desc,
                                            size_t size, size_t offset);
 
-/* Allocates temporary buffer that will be released once the command buffer has
- * completed */
-struct kk_bo *kk_cmd_allocate_buffer(struct kk_cmd_buffer *cmd, size_t size_B,
-                                     size_t alignment_B);
+struct kk_ptr kk_pool_alloc(struct kk_cmd_buffer *cmd, uint32_t size,
+                            uint32_t alignment);
 
-struct kk_pool {
-   mtl_buffer *handle;
-   uint64_t gpu;
-   void *cpu;
-};
-struct kk_pool kk_pool_upload(struct kk_cmd_buffer *cmd, void *data,
-                              size_t size_B, size_t alignment_B);
+struct kk_ptr kk_pool_upload(struct kk_cmd_buffer *cmd, const void *data,
+                             uint32_t size, uint32_t alignment);
 
 uint64_t kk_upload_descriptor_root(struct kk_cmd_buffer *cmd,
                                    VkPipelineBindPoint bind_point);

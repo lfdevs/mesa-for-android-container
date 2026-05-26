@@ -49,15 +49,14 @@ struct kk_image {
 
    uint8_t plane_count;
    struct kk_image_plane planes[3];
-
-   /* In order to support D32_SFLOAT_S8_UINT, a temp area is
-    * needed. The stencil plane can't be a copied using the DMA
-    * engine in a single pass since it would need 8 components support.
-    * Instead we allocate a 16-bit temp, that gets copied into, then
-    * copied again down to the 8-bit result.
-    */
-   struct kk_image_plane stencil_copy_temp;
 };
+
+#define kk_foreach_slice(ndx, image, subresource_member)                       \
+   for (uint32_t ndx = region->subresource_member.baseArrayLayer;              \
+        ndx < (region->subresource_member.baseArrayLayer +                     \
+               vk_image_subresource_layer_count(&image->vk,                    \
+                                                &region->subresource_member)); \
+        ++ndx)
 
 static inline mtl_resource *
 kk_image_to_mtl_resource(const struct kk_image *image, int plane)

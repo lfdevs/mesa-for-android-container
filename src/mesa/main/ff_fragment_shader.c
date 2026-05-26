@@ -590,7 +590,7 @@ emit_combine(struct texenv_fragment_program *p,
       return nir_fdot3(p->b, smear(p->b, tmp0), smear(p->b, tmp1));
 
    case TEXENV_MODE_MODULATE_ADD_ATI:
-      return nir_fmad(p->b, src[0], src[2], src[1]);
+      return nir_ffma_weak(p->b, src[0], src[2], src[1]);
 
    case TEXENV_MODE_MODULATE_SIGNED_ADD_ATI:
       return nir_fadd_imm(p->b,
@@ -961,7 +961,7 @@ create_new_program(struct gl_context *ctx, struct state_key *key,
    if (key->num_draw_buffers)
       emit_instructions(&p);
 
-   nir_validate_shader(b.shader, "after generating ff-vertex shader");
+   nir_validate_shader(b.shader, "after generating ff-fragment shader");
 
    if (key->fog_mode) {
       NIR_PASS(_, b.shader, st_nir_lower_fog, key->fog_mode, p.state_params,

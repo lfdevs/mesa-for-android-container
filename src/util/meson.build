@@ -217,6 +217,8 @@ if with_amd_vk
   files_drirc += files('00-radv-defaults.conf')
 endif
 
+drirc_gen = files('drirc_gen.py')
+
 if with_tests
   prog_xmllint = find_program('xmllint', required : false, native : true)
   if prog_xmllint.found()
@@ -328,7 +330,7 @@ u_trace_py = files('perf/u_trace.py')
 libmesa_util_simd = static_library(
   'mesa_util_simd',
   files('streaming-load-memcpy.c'),
-  c_args : [c_msvc_compat_args, sse41_args],
+  c_args : [c_msvc_compat_args, soong_compat_c_args, sse41_args],
   include_directories : [inc_util],
   gnu_symbol_visibility : 'hidden',
   build_by_default : false,
@@ -341,7 +343,7 @@ _libmesa_util = static_library(
   include_directories : [inc_util, include_directories('format')],
   dependencies : deps_for_libmesa_util,
   link_with: libmesa_util_links,
-  c_args : [c_msvc_compat_args],
+  c_args : [c_msvc_compat_args, soong_compat_c_args],
   gnu_symbol_visibility : 'hidden',
   build_by_default : false
 )
@@ -378,6 +380,7 @@ _libxmlconfig = static_library(
   dependencies : [idep_mesautil, dep_m, xmlconfig_deps],
   c_args : [
     c_msvc_compat_args,
+    soong_compat_c_args,
     c_xmlconfig_arg,
     '-DSYSCONFDIR="@0@"'.format(
       join_paths(get_option('prefix'), get_option('sysconfdir'))

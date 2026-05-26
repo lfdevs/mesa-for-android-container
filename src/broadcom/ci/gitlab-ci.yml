@@ -187,7 +187,6 @@ v3dv-rpi4-vk:arm64:
     DEQP_SUITE: broadcom-rpi4-vk
     DEQP_FRACTION: 3
     FLAKES_CHANNEL: "#videocore-ci"
-    FDO_CI_CONCURRENT: 3  # We get OOMkills if we go too wide since VKCTS 1.4.4.0
 
 .ci-tron-v3dv-rpi4-vk:arm64:
   extends:
@@ -201,7 +200,6 @@ v3dv-rpi4-vk:arm64:
     HWCI_START_WESTON: 1
     DEQP_SUITE: broadcom-rpi4-vk
     DEQP_FRACTION: 3
-    FDO_CI_CONCURRENT: 3  # We get OOMkills if we go too wide since VKCTS 1.4.4.0
 
 v3dv-rpi4-vk-full:arm64:
   extends:

@@ -13,7 +13,6 @@
 #include "nir_xfb_info.h"
 #include "si_pipe.h"
 #include "si_shader_internal.h"
-#include "pipe/p_shader_tokens.h"
 
 static void si_fix_resource_usage(struct si_screen *sscreen, struct si_shader *shader);
 
@@ -850,14 +849,13 @@ static void si_preprocess_nir(struct si_nir_shader_ctx *ctx)
                              key->ps.mono.interpolate_at_sample_force_center,
             .load_sample_positions_always_loads_current_ones = true,
             .force_front_face = key->ps.opt.force_front_face_input,
-            .optimize_frag_coord = true,
             .frag_coord_is_center = true,
             /* This does a lot of things. See the description in ac_nir_lower_ps_early_options. */
-            .ps_iter_samples = key->ps.part.prolog.samplemask_log_ps_iter ?
-                                 (1 << key->ps.part.prolog.samplemask_log_ps_iter) :
-                                 (key->ps.part.prolog.force_persp_sample_interp ||
-                                  key->ps.part.prolog.force_linear_sample_interp ? 2 :
-                                  (key->ps.part.prolog.get_frag_coord_from_pixel_coord ? 1 : 0)),
+            .ps_iter_samples = nir->info.fs.uses_sample_shading ? 8 :
+                                  key->ps.part.prolog.samplemask_log_ps_iter ?
+                                     (1 << key->ps.part.prolog.samplemask_log_ps_iter) :
+                                     (key->ps.part.prolog.force_persp_sample_interp ||
+                                      key->ps.part.prolog.force_linear_sample_interp ? 2 : 0),
 
             .fbfetch_is_1D = key->ps.mono.fbfetch_is_1D,
             .fbfetch_layered = key->ps.mono.fbfetch_layered,
@@ -890,8 +888,8 @@ static void si_preprocess_nir(struct si_nir_shader_ctx *ctx)
             NIR_PASS(progress, nir, si_nir_lower_polygon_stipple);
       } else {
          ac_nir_lower_ps_early_options early_options = {
-            .optimize_frag_coord = true,
             .frag_coord_is_center = true,
+            .ps_iter_samples = nir->info.fs.uses_sample_shading ? 8 : 0,
             .lower_color_inputs_to_load_color01 = true,
             .alpha_func = COMPARE_FUNC_ALWAYS,
             .spi_shader_col_format_hint = ~0,
@@ -914,7 +912,7 @@ static void si_preprocess_nir(struct si_nir_shader_ctx *ctx)
     */
    if (nir->info.stage == MESA_SHADER_VERTEX ||
        nir->info.stage == MESA_SHADER_FRAGMENT)
-      NIR_PASS(progress, nir, nir_opt_move_to_top, nir_move_to_top_input_loads);
+      NIR_PASS(progress, nir, nir_opt_move_to_top, nir_move_to_top_input_loads_simple);
 
    /* Remove dead temps before we lower indirect indexing. */
    NIR_PASS(_, nir, nir_remove_dead_variables, nir_var_function_temp, NULL);
@@ -959,9 +957,6 @@ static void si_postprocess_nir(struct si_nir_shader_ctx *ctx)
    bool progress = false;
 
    si_init_shader_args(shader, &ctx->args, &nir->info);
-
-   if (nir->info.stage == MESA_SHADER_FRAGMENT)
-      NIR_PASS(progress, nir, nir_lower_fragcoord_wtrans);
 
    NIR_PASS(progress, nir, ac_nir_lower_tex_coords,
             &(ac_nir_lower_tex_coords_options){
@@ -1742,15 +1737,26 @@ static void si_get_ps_prolog_key(struct si_shader *shader, union si_shader_part_
        key->ps_prolog.states.force_linear_center_interp ||
        key->ps_prolog.states.bc_optimize_for_persp || key->ps_prolog.states.bc_optimize_for_linear ||
        key->ps_prolog.states.samplemask_log_ps_iter ||
-       key->ps_prolog.states.get_frag_coord_from_pixel_coord ||
        key->ps_prolog.states.force_samplemask_to_helper_invocation);
+   key->ps_prolog.uses_persp_centroid =
+      G_0286CC_PERSP_CENTROID_ENA(shader->config.spi_ps_input_addr); /* addr because the PS prolog may use it */
+   /* The PS prolog can change one to the other, so we need both or neither to be set. */
+   assert(G_0286CC_LINEAR_SAMPLE_ENA(shader->config.spi_ps_input_addr) ==
+          G_0286CC_LINEAR_CENTER_ENA(shader->config.spi_ps_input_addr));
+   key->ps_prolog.uses_linear_sample_and_center =
+      G_0286CC_LINEAR_SAMPLE_ENA(shader->config.spi_ps_input_addr) || /* addr because the PS prolog may use it */
+      G_0286CC_LINEAR_CENTER_ENA(shader->config.spi_ps_input_addr);
+   key->ps_prolog.uses_linear_centroid =
+      G_0286CC_LINEAR_CENTROID_ENA(shader->config.spi_ps_input_addr); /* addr because the PS prolog may use it */
+   key->ps_prolog.reserve_line_stipple_tex_ena =
+      G_0286CC_LINE_STIPPLE_TEX_ENA(shader->config.spi_ps_input_addr); /* unused but may need to be reserved */
    key->ps_prolog.fragcoord_usage_mask =
-      G_0286CC_POS_X_FLOAT_ENA(shader->config.spi_ps_input_ena) |
-      (G_0286CC_POS_Y_FLOAT_ENA(shader->config.spi_ps_input_ena) << 1) |
       (G_0286CC_POS_Z_FLOAT_ENA(shader->config.spi_ps_input_ena) << 2) |
       (G_0286CC_POS_W_FLOAT_ENA(shader->config.spi_ps_input_ena) << 3);
-   key->ps_prolog.pixel_center_integer = key->ps_prolog.fragcoord_usage_mask &&
-                                         shader->selector->info.base.fs.pixel_center_integer;
+   key->ps_prolog.uses_ancillary =
+      G_0286CC_ANCILLARY_ENA(shader->config.spi_ps_input_addr); /* addr because the PS prolog may use it */
+   key->ps_prolog.uses_sample_coverage =
+      G_0286CC_SAMPLE_COVERAGE_ENA(shader->config.spi_ps_input_addr); /* addr because the PS prolog may use it */
 
    if (shader->key.ps.part.prolog.poly_stipple)
       shader->info.uses_vmem_load_other = true;
@@ -1778,27 +1784,27 @@ static void si_get_ps_prolog_key(struct si_shader *shader, union si_shader_part_
 
          switch (interp) {
          case INTERP_MODE_FLAT:
-            key->ps_prolog.color_interp_vgpr_index[i] = -1;
+            key->ps_prolog.color_interp[i] = AC_COLOR_INTERP_FLAT;
             break;
          case INTERP_MODE_SMOOTH:
          case INTERP_MODE_COLOR:
             /* Force the interpolation location for colors here. */
             if (shader->key.ps.part.prolog.force_persp_sample_interp)
-               location = TGSI_INTERPOLATE_LOC_SAMPLE;
+               location = SI_INTERPOLATE_LOC_SAMPLE;
             if (shader->key.ps.part.prolog.force_persp_center_interp)
-               location = TGSI_INTERPOLATE_LOC_CENTER;
+               location = SI_INTERPOLATE_LOC_CENTER;
 
             switch (location) {
-            case TGSI_INTERPOLATE_LOC_SAMPLE:
-               key->ps_prolog.color_interp_vgpr_index[i] = 0;
+            case SI_INTERPOLATE_LOC_SAMPLE:
+               key->ps_prolog.color_interp[i] = AC_COLOR_INTERP_PERSP_SAMPLE;
                shader->config.spi_ps_input_ena |= S_0286CC_PERSP_SAMPLE_ENA(1);
                break;
-            case TGSI_INTERPOLATE_LOC_CENTER:
-               key->ps_prolog.color_interp_vgpr_index[i] = 2;
+            case SI_INTERPOLATE_LOC_CENTER:
+               key->ps_prolog.color_interp[i] = AC_COLOR_INTERP_PERSP_CENTER;
                shader->config.spi_ps_input_ena |= S_0286CC_PERSP_CENTER_ENA(1);
                break;
-            case TGSI_INTERPOLATE_LOC_CENTROID:
-               key->ps_prolog.color_interp_vgpr_index[i] = 4;
+            case SI_INTERPOLATE_LOC_CENTROID:
+               key->ps_prolog.color_interp[i] = AC_COLOR_INTERP_PERSP_CENTROID;
                shader->config.spi_ps_input_ena |= S_0286CC_PERSP_CENTROID_ENA(1);
                break;
             default:
@@ -1808,25 +1814,25 @@ static void si_get_ps_prolog_key(struct si_shader *shader, union si_shader_part_
          case INTERP_MODE_NOPERSPECTIVE:
             /* Force the interpolation location for colors here. */
             if (shader->key.ps.part.prolog.force_linear_sample_interp)
-               location = TGSI_INTERPOLATE_LOC_SAMPLE;
+               location = SI_INTERPOLATE_LOC_SAMPLE;
             if (shader->key.ps.part.prolog.force_linear_center_interp)
-               location = TGSI_INTERPOLATE_LOC_CENTER;
+               location = SI_INTERPOLATE_LOC_CENTER;
 
             /* The VGPR assignment for non-monolithic shaders
              * works because InitialPSInputAddr is set on the
              * main shader and PERSP_PULL_MODEL is never used.
              */
             switch (location) {
-            case TGSI_INTERPOLATE_LOC_SAMPLE:
-               key->ps_prolog.color_interp_vgpr_index[i] = 6;
+            case SI_INTERPOLATE_LOC_SAMPLE:
+               key->ps_prolog.color_interp[i] = AC_COLOR_INTERP_LINEAR_SAMPLE;
                shader->config.spi_ps_input_ena |= S_0286CC_LINEAR_SAMPLE_ENA(1);
                break;
-            case TGSI_INTERPOLATE_LOC_CENTER:
-               key->ps_prolog.color_interp_vgpr_index[i] = 8;
+            case SI_INTERPOLATE_LOC_CENTER:
+               key->ps_prolog.color_interp[i] = AC_COLOR_INTERP_LINEAR_CENTER;
                shader->config.spi_ps_input_ena |= S_0286CC_LINEAR_CENTER_ENA(1);
                break;
-            case TGSI_INTERPOLATE_LOC_CENTROID:
-               key->ps_prolog.color_interp_vgpr_index[i] = 10;
+            case SI_INTERPOLATE_LOC_CENTROID:
+               key->ps_prolog.color_interp[i] = AC_COLOR_INTERP_LINEAR_CENTROID;
                shader->config.spi_ps_input_ena |= S_0286CC_LINEAR_CENTROID_ENA(1);
                break;
             default:
@@ -1852,7 +1858,6 @@ static bool si_need_ps_prolog(const union si_shader_part_key *key)
           key->ps_prolog.states.bc_optimize_for_persp ||
           key->ps_prolog.states.bc_optimize_for_linear || key->ps_prolog.states.poly_stipple ||
           key->ps_prolog.states.samplemask_log_ps_iter ||
-          key->ps_prolog.states.get_frag_coord_from_pixel_coord ||
           key->ps_prolog.states.force_samplemask_to_helper_invocation;
 }
 

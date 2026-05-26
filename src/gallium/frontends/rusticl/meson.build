@@ -128,7 +128,7 @@ cl_c_args = [
   '-DCL_USE_DEPRECATED_OPENCL_2_0_APIS',
   '-DCL_USE_DEPRECATED_OPENCL_2_1_APIS',
   '-DCL_USE_DEPRECATED_OPENCL_2_2_APIS',
-  '-DCL_TARGET_OPENCL_VERSION=300',
+  '-DCL_TARGET_OPENCL_VERSION=310',
 ]
 
 rusticl_opencl_bindings_rs = rust.bindgen(
@@ -308,6 +308,7 @@ rusticl_mesa_bindings = rust.bindgen(
     '--bitfield-enum',          'nir_lower_int64_options',
     '--bitfield-enum',          'nir_opt_if_options',
     '--bitfield-enum',          'nir_variable_mode',
+    '--bitfield-enum',          'float_controls',
     '--allowlist-function',     'should_.*_nir',
     '--allowlist-function',     'spirv_.*',
 

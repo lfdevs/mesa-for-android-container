@@ -84,6 +84,7 @@ const struct pan_mod_handler *pan_mod_get_handler_v9(uint64_t modifier);
 const struct pan_mod_handler *pan_mod_get_handler_v10(uint64_t modifier);
 const struct pan_mod_handler *pan_mod_get_handler_v12(uint64_t modifier);
 const struct pan_mod_handler *pan_mod_get_handler_v13(uint64_t modifier);
+const struct pan_mod_handler *pan_mod_get_handler_v14(uint64_t modifier);
 
 static inline const struct pan_mod_handler *
 pan_mod_get_handler(unsigned arch, uint64_t modifier)
@@ -105,6 +106,8 @@ pan_mod_get_handler(unsigned arch, uint64_t modifier)
       return pan_mod_get_handler_v12(modifier);
    case 13:
       return pan_mod_get_handler_v13(modifier);
+   case 14:
+      return pan_mod_get_handler_v14(modifier);
    default:
       UNREACHABLE("Unsupported arch");
    }

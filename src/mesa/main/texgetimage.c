@@ -1406,15 +1406,6 @@ get_texture_image(struct gl_context *ctx,
       return;
    }
 
-   if (MESA_VERBOSE & (VERBOSE_API | VERBOSE_TEXTURE)) {
-      _mesa_debug(ctx, "%s(tex %u) format = %s, w=%d, h=%d,"
-                  " dstFmt=0x%x, dstType=0x%x\n",
-                  caller, texObj->Name,
-                  _mesa_get_format_name(texImage->TexFormat),
-                  texImage->Width, texImage->Height,
-                  format, type);
-   }
-
    if (target == GL_TEXTURE_CUBE_MAP) {
       /* Compute stride between cube faces */
       imageStride = _mesa_image_image_stride(&ctx->Pack, width, height,
@@ -1781,14 +1772,6 @@ get_compressed_texture_image(struct gl_context *ctx,
 
    if (_mesa_is_zero_size_texture(texImage))
       return;
-
-   if (MESA_VERBOSE & (VERBOSE_API | VERBOSE_TEXTURE)) {
-      _mesa_debug(ctx,
-                  "%s(tex %u) format = %s, w=%d, h=%d\n",
-                  caller, texObj->Name,
-                  _mesa_get_format_name(texImage->TexFormat),
-                  texImage->Width, texImage->Height);
-   }
 
    if (target == GL_TEXTURE_CUBE_MAP) {
       struct compressed_pixelstore store;

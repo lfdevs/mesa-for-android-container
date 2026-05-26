@@ -723,6 +723,7 @@ try_lower_cmat_load_to_ldsm(nir_builder *b, nir_intrinsic_instr *intr)
    nir_def *base = intr->src[1].ssa;
    offset = nir_u2uN(b, offset, base->bit_size);
    nir_def *addr = nir_iadd(b, base, offset);
+   nir_def *zero = nir_imm_zero(b, addr->num_components, addr->bit_size);
 
    /* flip the layout for B matrices */
    if (desc.use == GLSL_CMAT_USE_B) {
@@ -734,7 +735,7 @@ try_lower_cmat_load_to_ldsm(nir_builder *b, nir_intrinsic_instr *intr)
 
    /* Each thread loads 32 bits per matrix */
    assert(length * bit_size == 32 * ldsm_count);
-   return nir_cmat_load_shared_nv(b, length, bit_size, addr,
+   return nir_cmat_load_shared_nv(b, length, bit_size, addr, zero,
                                      .num_matrices = ldsm_count,
                                      .matrix_layout = layout);
 }

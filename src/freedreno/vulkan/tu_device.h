@@ -35,6 +35,7 @@
 #define TU_MAX_QUEUE_FAMILIES 2
 
 #define TU_BORDER_COLOR_COUNT 4096
+#define TU_BORDER_COLOR_BUILTIN 6
 
 #define TU_BLIT_SHADER_SIZE 4096
 
@@ -217,13 +218,25 @@ struct tu_instance
     */
    bool allow_oob_indirect_ubo_loads;
 
-   /* DXVK and VKD3D-Proton use customBorderColorWithoutFormat
-    * and have most of D24S8 images with USAGE_SAMPLED, in such case we
-    * disable UBWC for correctness. However, games don't use border color for
-    * depth-stencil images. So we elect to ignore this edge case and force
-    * UBWC to be enabled.
+   /* The hardware doesn't support Vulkan's stencil swizzling rules for
+    * custom border colors. Vulkan requires stencil to be sampled as the red
+    * component, but hardware samples it as the green component. Without
+    * customBorderColorWithoutFormat we can work around this issue without
+    * perf loss, but with customBorderColorWithoutFormat we have to disable
+    * UBWC for D24S8 images with USAGE_SAMPLED set.
+    * However, VkPhysicalDeviceMaintenance5Properties.depthStencilSwizzleOneSupport
+    * forbids this state combination when false. It was added after the HW
+    * deficiency was discovered, and we want to work around apps that aren't
+    * aware of this.
     */
-   bool disable_d24s8_border_color_workaround;
+   bool enable_d24s8_border_color_workaround;
+
+   /* When D24S8 is used without enable_d24s8_border_color_workaround, the
+    * fast border color HW feature results in an incorrect color being used.
+    * However, we want to enable fast border colors for apps that are known
+    * not to use border colors with D24S8, such as DXVK and vkd3d-proton.
+    */
+   bool enable_fast_border_color_for_undefined_formats;
 
    /* D3D emulation requires texture coordinates to be rounded to nearest even value. */
    bool use_tex_coord_round_nearest_even_mode;
@@ -249,6 +262,8 @@ struct tu_instance
     * with cached+coherent+host_visible when the hardware supports it.
     */
    bool override_uncached_as_cache_coherent;
+
+   bool allow_concurrent_binning;
 };
 VK_DEFINE_HANDLE_CASTS(tu_instance, vk.base, VkInstance,
                        VK_OBJECT_TYPE_INSTANCE)
@@ -329,6 +344,7 @@ struct tu6_global
    uint64_t preemption_latency_cmp_scratch;
    uint64_t zero_64b;
 
+   struct bcolor_entry bcolor_builtin[TU_BORDER_COLOR_BUILTIN];
    struct bcolor_entry bcolor[];
 };
 #define gb_offset(member) offsetof(struct tu6_global, member)

@@ -490,5 +490,6 @@ spec@ext_framebuffer_multisample@sample-alpha-to-coverage 8 color,Fail
 
 # uprev Piglit in Mesa
 afbcp-spec@arb_texture_view@tex-view,Fail
+spec@!opengl 1.1@large-tex,Fail
 spec@arb_texture_view@tex-view,Fail
 

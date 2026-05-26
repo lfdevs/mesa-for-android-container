@@ -231,7 +231,7 @@ emit_arith_inst(struct st_translate *t,
       return nir_fmul(t->b, src[0], src[1]);
 
    case GL_MAD_ATI:
-      return nir_ffma(t->b, src[0], src[1], src[2]);
+      return nir_ffma_weak(t->b, src[0], src[1], src[2]);
 
    case GL_LERP_ATI:
       return nir_flrp(t->b, src[2], src[1], src[0]);

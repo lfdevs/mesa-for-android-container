@@ -130,7 +130,7 @@ static const uint32_t float32_spv[] = {
 
 #include "float64_spv.h"
 
-void
+static void
 tu_init_softfloat32(struct tu_device *dev)
 {
    if (dev->float32_shader)
@@ -144,7 +144,7 @@ tu_init_softfloat32(struct tu_device *dev)
    mtx_unlock(&dev->softfloat_mutex);
 }
 
-void
+static void
 tu_init_softfloat64(struct tu_device *dev)
 {
    if (dev->float64_shader)

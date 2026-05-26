@@ -140,7 +140,7 @@ get_bvh_layout(VkGeometryTypeKHR geometry_type,
    layout->size = offset;
 }
 
-VkDeviceSize
+static VkDeviceSize
 get_bvh_size(VkDevice device,
              const struct vk_acceleration_structure_build_state *state)
 {

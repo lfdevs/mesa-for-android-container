@@ -129,11 +129,6 @@ _mesa_DeleteMemoryObjectsEXT(GLsizei n, const GLuint *memoryObjects)
 {
    GET_CURRENT_CONTEXT(ctx);
 
-   if (MESA_VERBOSE & (VERBOSE_API)) {
-      _mesa_debug(ctx, "glDeleteMemoryObjectsEXT(%d, %p)\n", n,
-                  memoryObjects);
-   }
-
    if (!_mesa_has_EXT_memory_object(ctx)) {
       _mesa_error(ctx, GL_INVALID_OPERATION,
                   "glDeleteMemoryObjectsEXT(unsupported)");
@@ -187,9 +182,6 @@ _mesa_CreateMemoryObjectsEXT(GLsizei n, GLuint *memoryObjects)
    GET_CURRENT_CONTEXT(ctx);
 
    const char *func = "glCreateMemoryObjectsEXT";
-
-   if (MESA_VERBOSE & (VERBOSE_API))
-      _mesa_debug(ctx, "%s(%d, %p)\n", func, n, memoryObjects);
 
    if (!_mesa_has_EXT_memory_object(ctx)) {
       _mesa_error(ctx, GL_INVALID_OPERATION, "%s(unsupported)", func);
@@ -785,9 +777,6 @@ create_semaphores(GLsizei n, GLuint *semaphores, bool NV)
 
    const char *func = NV ? "glCreateSemaphoresNV" : "glGenSemaphoresEXT";
 
-   if (MESA_VERBOSE & (VERBOSE_API))
-      _mesa_debug(ctx, "%s(%d, %p)\n", func, n, semaphores);
-
    if (NV ? !_mesa_has_NV_timeline_semaphore(ctx) : !_mesa_has_EXT_semaphore(ctx)) {
       _mesa_error(ctx, GL_INVALID_OPERATION, "%s(unsupported)", func);
       return;
@@ -830,10 +819,6 @@ _mesa_DeleteSemaphoresEXT(GLsizei n, const GLuint *semaphores)
    GET_CURRENT_CONTEXT(ctx);
 
    const char *func = "glDeleteSemaphoresEXT";
-
-   if (MESA_VERBOSE & (VERBOSE_API)) {
-      _mesa_debug(ctx, "%s(%d, %p)\n", func, n, semaphores);
-   }
 
    if (!_mesa_has_EXT_semaphore(ctx)) {
       _mesa_error(ctx, GL_INVALID_OPERATION, "%s(unsupported)", func);

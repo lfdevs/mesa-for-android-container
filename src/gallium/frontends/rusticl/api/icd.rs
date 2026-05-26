@@ -211,6 +211,7 @@ cl_dispatch!([
     clCreateBufferWithProperties: Some(clCreateBufferWithProperties),
     clCreateImageWithProperties: Some(clCreateImageWithProperties),
     clSetContextDestructorCallback: Some(clSetContextDestructorCallback),
+    clGetKernelSuggestedLocalWorkSize: Some(clGetKernelSuggestedLocalWorkSize),
 ]);
 
 pub type CLError = cl_int;
@@ -577,7 +578,7 @@ pub extern "C" fn clGetExtensionFunctionAddress(
         "clRetainSemaphoreKHR" => cl_ext_func!(clRetainSemaphoreKHR: clRetainSemaphoreKHR_t),
 
         // cl_khr_suggested_local_work_size
-        "clGetKernelSuggestedLocalWorkSizeKHR" => cl_ext_func!(clGetKernelSuggestedLocalWorkSizeKHR: clGetKernelSuggestedLocalWorkSizeKHR_fn),
+        "clGetKernelSuggestedLocalWorkSizeKHR" => cl_ext_func!(clGetKernelSuggestedLocalWorkSize: clGetKernelSuggestedLocalWorkSizeKHR_fn),
 
         // cl_ext_buffer_device_address
         "clSetKernelArgDevicePointerEXT" => cl_ext_func!(clSetKernelArgDevicePointerEXT: clSetKernelArgDevicePointerEXT_fn),

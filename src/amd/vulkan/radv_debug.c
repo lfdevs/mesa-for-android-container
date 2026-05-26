@@ -1065,7 +1065,7 @@ radv_check_gpu_hangs(struct radv_queue *queue, const struct radv_winsys_submit_i
          break;
       case RADV_DEVICE_FAULT_CHUNK_GPU_INFO:
          radv_dump_device_name(device, f);
-         ac_print_gpu_info(f, &pdev->info, pdev->local_fd);
+         ac_print_gpu_info(f, &pdev->info, device->ws->get_fd(device->ws));
          break;
       case RADV_DEVICE_FAULT_CHUNK_DMESG:
          radv_dump_dmesg(f);
@@ -1453,68 +1453,4 @@ radv_check_trap_handler(struct radv_queue *queue)
    fprintf(stderr, "radv: Trap handler report saved successfully!\n");
    abort();
 #endif
-}
-
-/* VK_EXT_device_fault */
-VKAPI_ATTR VkResult VKAPI_CALL
-radv_GetDeviceFaultInfoEXT(VkDevice _device, VkDeviceFaultCountsEXT *pFaultCounts, VkDeviceFaultInfoEXT *pFaultInfo)
-{
-   VK_OUTARRAY_MAKE_TYPED(VkDeviceFaultAddressInfoEXT, out, pFaultInfo ? pFaultInfo->pAddressInfos : NULL,
-                          &pFaultCounts->addressInfoCount);
-   struct radv_winsys_gpuvm_fault_info fault_info = {0};
-   VK_FROM_HANDLE(radv_device, device, _device);
-   const struct radv_physical_device *pdev = radv_device_physical(device);
-   const struct radv_instance *instance = radv_physical_device_instance(pdev);
-   bool vm_fault_occurred = false;
-
-   /* Query if a GPUVM fault happened. */
-   vm_fault_occurred = radv_vm_fault_occurred(device, &fault_info);
-
-   /* No vendor-specific crash dumps yet. */
-   pFaultCounts->vendorInfoCount = 0;
-   pFaultCounts->vendorBinarySize = 0;
-
-   if (device->gpu_hang_report) {
-      VkDeviceFaultVendorBinaryHeaderVersionOneEXT hdr;
-
-      hdr.headerSize = sizeof(VkDeviceFaultVendorBinaryHeaderVersionOneEXT);
-      hdr.headerVersion = VK_DEVICE_FAULT_VENDOR_BINARY_HEADER_VERSION_ONE_EXT;
-      hdr.vendorID = pdev->vk.properties.vendorID;
-      hdr.deviceID = pdev->vk.properties.deviceID;
-      hdr.driverVersion = pdev->vk.properties.driverVersion;
-      memcpy(hdr.pipelineCacheUUID, pdev->cache_uuid, VK_UUID_SIZE);
-      hdr.applicationNameOffset = 0;
-      hdr.applicationVersion = instance->vk.app_info.app_version;
-      hdr.engineNameOffset = 0;
-      hdr.engineVersion = instance->vk.app_info.engine_version;
-      hdr.apiVersion = instance->vk.app_info.api_version;
-
-      pFaultCounts->vendorBinarySize = sizeof(hdr) + strlen(device->gpu_hang_report);
-      if (pFaultInfo) {
-         memcpy(pFaultInfo->pVendorBinaryData, &hdr, sizeof(hdr));
-         memcpy((char *)pFaultInfo->pVendorBinaryData + sizeof(hdr), device->gpu_hang_report,
-                strlen(device->gpu_hang_report));
-      }
-   }
-
-   if (vm_fault_occurred) {
-      VkDeviceFaultAddressInfoEXT addr_fault_info = {
-         .reportedAddress = ((int64_t)fault_info.addr << 16) >> 16,
-         .addressPrecision = 4096, /* 4K page granularity */
-      };
-
-      if (pFaultInfo)
-         strncpy(pFaultInfo->description, "A GPUVM fault has been detected", sizeof(pFaultInfo->description));
-
-      if (pdev->info.gfx_level >= GFX10) {
-         addr_fault_info.addressType = G_00A130_RW(fault_info.status) ? VK_DEVICE_FAULT_ADDRESS_TYPE_WRITE_INVALID_EXT
-                                                                      : VK_DEVICE_FAULT_ADDRESS_TYPE_READ_INVALID_EXT;
-      } else {
-         /* Not sure how to get the access status on GFX6-9. */
-         addr_fault_info.addressType = VK_DEVICE_FAULT_ADDRESS_TYPE_NONE_EXT;
-      }
-      vk_outarray_append_typed(VkDeviceFaultAddressInfoEXT, &out, elem) *elem = addr_fault_info;
-   }
-
-   return vk_outarray_status(&out);
 }

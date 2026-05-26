@@ -631,6 +631,8 @@ zink_init_shader_caps(struct zink_screen *screen)
          screen->info.feats12.shaderFloat16 ||
          (screen->info.have_KHR_shader_float16_int8 &&
           screen->info.shader_float16_int8_feats.shaderFloat16);
+      caps->fp16_no_denorms = caps->fp16 && !screen->info.props12.shaderDenormPreserveFloat16
+         && screen->info.props12.shaderDenormFlushToZeroFloat16;
       caps->glsl_16bit_load_dst = true;
 
       caps->int16 = screen->info.feats.features.shaderInt16;
@@ -883,7 +885,8 @@ zink_init_screen_caps(struct zink_screen *screen)
 
    caps->programmable_sample_locations =
       screen->info.have_EXT_sample_locations &&
-      screen->info.sample_locations_props.variableSampleLocations;
+      screen->info.sample_locations_props.variableSampleLocations &&
+      screen->info.dynamic_state3_feats.extendedDynamicState3SampleLocationsEnable;
 
    caps->query_time_elapsed = screen->timestamp_valid_bits > 0;
 
@@ -2916,6 +2919,7 @@ init_driver_workarounds(struct zink_screen *screen)
    case VK_DRIVER_ID_MESA_V3DV:
    case VK_DRIVER_ID_MESA_PANVK:
    case VK_DRIVER_ID_MESA_NVK:
+   case VK_DRIVER_ID_QUALCOMM_PROPRIETARY:
       screen->driver_workarounds.implicit_sync = false;
       break;
    default:
@@ -3423,8 +3427,8 @@ zink_internal_create_screen(const struct pipe_screen_config *config, int64_t dev
    }
 
    if (config) {
-      driParseConfigFiles(config->options, config->options_info, 0, "zink",
-                          NULL, NULL, NULL, 0, NULL, 0);
+      driParseConfigFiles(config->options, config->options_info,
+                          &(driConfigFileParseParams) { .driverName = "zink" });
       screen->driconf.dual_color_blend_by_location = driQueryOptionb(config->options, "dual_color_blend_by_location");
       //screen->driconf.inline_uniforms = driQueryOptionb(config->options, "radeonsi_inline_uniforms");
       screen->driconf.emulate_point_smooth = driQueryOptionb(config->options, "zink_emulate_point_smooth");

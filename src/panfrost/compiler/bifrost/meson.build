@@ -142,7 +142,7 @@ libpanfrost_bifrost_disasm = static_library(
   ['bifrost/disassemble.c', 'bi_print_common.c', bifrost_gen_disasm_c],
   include_directories : [inc_include, inc_src],
   dependencies: [idep_nir],
-  c_args : [no_override_init_args],
+  c_args : [no_override_init_args, soong_compat_c_args],
   gnu_symbol_visibility : 'hidden',
   build_by_default : false,
 )
@@ -153,7 +153,7 @@ libpanfrost_bifrost = static_library(
   include_directories : [inc_include, inc_src, inc_valhall],
   dependencies: [idep_nir, idep_bi_opcodes_h, idep_bi_builder_h, idep_valhall_enums_h, libpanfrost_model_dep],
   link_with: [libpanfrost_bifrost_disasm, libpanfrost_valhall_disasm],
-  c_args : [no_override_init_args],
+  c_args : [no_override_init_args, soong_compat_c_args],
   gnu_symbol_visibility : 'hidden',
   build_by_default : false,
 )

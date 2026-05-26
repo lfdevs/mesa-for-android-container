@@ -1019,6 +1019,7 @@ nir_get_io_offset_src_number(const nir_intrinsic_instr *instr)
    case nir_intrinsic_load_push_data_intel:
    case nir_intrinsic_vild_nv:
    case nir_intrinsic_load_shader_indirect_data_intel:
+   case nir_intrinsic_cmat_load_shared_nv:
       return 0;
    case nir_intrinsic_load_ubo:
    case nir_intrinsic_load_ubo_vec4:
@@ -1109,6 +1110,39 @@ nir_get_io_offset_src(nir_intrinsic_instr *instr)
    case nir_intrinsic_image_heap_##name
 
 /**
+ * Return the uniform offset source number for a load/store intrinsic or -1 if there's no offset.
+ */
+int
+nir_get_io_uniform_offset_src_number(const nir_intrinsic_instr *instr)
+{
+   switch (instr->intrinsic) {
+   case nir_intrinsic_cmat_load_shared_nv:
+   case nir_intrinsic_global_atomic_nv:
+   case nir_intrinsic_load_global_nv:
+   case nir_intrinsic_load_scratch_nv:
+   case nir_intrinsic_load_shared_nv:
+   case nir_intrinsic_shared_atomic_nv:
+      return 1;
+   case nir_intrinsic_store_global_nv:
+   case nir_intrinsic_store_scratch_nv:
+   case nir_intrinsic_store_shared_nv:
+      return 2;
+   default:
+      return -1;
+   }
+}
+
+/**
+ * Return the uniform offset source for a load/store intrinsic.
+ */
+nir_src *
+nir_get_io_uniform_offset_src(nir_intrinsic_instr *instr)
+{
+   const int idx = nir_get_io_uniform_offset_src_number(instr);
+   return idx >= 0 ? &instr->src[idx] : NULL;
+}
+
+/**
  * Return the index or handle source number for a load/store intrinsic or -1
  * if there's no index or handle.
  */
@@ -1176,6 +1210,7 @@ nir_get_io_data_src_number(const nir_intrinsic_instr *intr)
    case nir_intrinsic_store_pixel_local:
    case nir_intrinsic_store_per_vertex_output:
    case nir_intrinsic_store_per_primitive_output:
+   case nir_intrinsic_store_per_view_output:
    case nir_intrinsic_store_ssbo:
    case nir_intrinsic_store_ssbo_block_intel:
    case nir_intrinsic_store_ssbo_intel:

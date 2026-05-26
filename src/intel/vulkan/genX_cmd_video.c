@@ -450,7 +450,8 @@ anv_h265_decode_video(struct anv_cmd_buffer *cmd_buffer,
       };
 
       indirect.HCPIndirectBitstreamObjectAccessUpperBound =
-         anv_address_add(src_buffer->address, align64(frame_info->srcBufferRange, 4096));
+         anv_address_add(src_buffer->address,
+                         align64(frame_info->srcBufferRange + frame_info->srcBufferOffset, 4096));
 
       indirect.HCPIndirectCUObjectMemoryAddressAttributes = (struct GENX(MEMORYADDRESSATTRIBUTES)) {
          .MOCS = anv_mocs(cmd_buffer->device, NULL, 0),

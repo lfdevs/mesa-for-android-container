@@ -743,7 +743,8 @@ pvr_get_image_format_properties(struct pvr_physical_device *pdevice,
       break;
 
    default:
-      UNREACHABLE("Invalid image type.");
+      result = vk_error(pdevice, VK_ERROR_FORMAT_NOT_SUPPORTED);
+      goto err_unsupported_format;
    }
 
    /* The spec says maxMipLevels may be 1 when tiling is VK_IMAGE_TILING_LINEAR

@@ -27,3 +27,15 @@ mtl_new_texture_view_with_no_swizzle(mtl_texture *texture,
 {
    return NULL;
 }
+
+void
+mtl_texture_get_bytes(mtl_texture *texture, void *host_ptr,
+                      struct mtl_texture_memory_copy *data)
+{
+}
+
+void
+mtl_texture_replace_region(mtl_texture *texture, const void *host_ptr,
+                           struct mtl_texture_memory_copy *data)
+{
+}

@@ -22,8 +22,3 @@ dEQP-VK.mesh_shader.ext.smoke.monolithic.depth_only_points_position_components,F
 dEQP-VK.mesh_shader.ext.smoke.monolithic.depth_only_triangles_position_components,Fail
 dEQP-VK.mesh_shader.ext.smoke.optimized_lib.depth_only_points_position_components,Fail
 dEQP-VK.mesh_shader.ext.smoke.optimized_lib.depth_only_triangles_position_components,Fail
-
-# CTS bug
-# https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/40520
-dEQP-VK.spirv_assembly.instruction.graphics.float_controls2.fp32.input_args.reflect_testedWithout_NSZ_arg1_minusZero_arg2_one_res_minusZero_deco_vert,Fail
-dEQP-VK.spirv_assembly.instruction.graphics.float_controls2.fp64.input_args.reflect_testedWithout_NSZ_arg1_minusZero_arg2_one_res_minusZero_exec_vert,Fail

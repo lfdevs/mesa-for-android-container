@@ -23,10 +23,12 @@ brw_barycentric_mode(const struct brw_fs_prog_key *key,
    case nir_intrinsic_load_barycentric_at_offset:
       /* When per sample interpolation is dynamic, assume sample interpolation.
        * We'll dynamically remap things so that the FS payload is not affected.
+       *
+       * TODO: Implement this mechanism properly, this is a hack for now.
        */
-      bary = key->persample_interp == INTEL_SOMETIMES ?
-                INTEL_BARYCENTRIC_PERSPECTIVE_SAMPLE :
-                INTEL_BARYCENTRIC_PERSPECTIVE_PIXEL;
+      bary = // key->persample_interp == INTEL_SOMETIMES ?
+             //   INTEL_BARYCENTRIC_PERSPECTIVE_SAMPLE :
+         INTEL_BARYCENTRIC_PERSPECTIVE_PIXEL;
       break;
    case nir_intrinsic_load_barycentric_centroid:
       bary = INTEL_BARYCENTRIC_PERSPECTIVE_CENTROID;
@@ -88,11 +90,8 @@ gather_fs_info(nir_builder *b, nir_intrinsic_instr *intr, void *data)
       prog_data->uses_src_w = true;
       break;
 
-   case nir_intrinsic_load_sample_mask_in:
-      /* TODO: Sample masks are broken and discards are broken and simd32
-       * layouts are broken too. XXX.
-       */
-      // prog_data->uses_sample_mask = true;
+   case nir_intrinsic_load_coverage_mask_intel:
+      prog_data->uses_sample_mask = true;
       break;
 
    case nir_intrinsic_load_pixel_coord_intel:
@@ -468,6 +467,7 @@ populate_fs_prog_data(nir_shader *shader,
    prog_data->uses_depth_w_coefficients = prog_data->uses_pc_bary_coefficients;
 
    if (prog_data->coarse_pixel_dispatch != INTEL_NEVER) {
+      assert(false && "TODO: coarse pixel shading");
       prog_data->uses_depth_w_coefficients |= prog_data->uses_src_depth;
       prog_data->uses_src_depth = false;
    }

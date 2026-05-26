@@ -172,7 +172,7 @@ public:
 
             float inst_hotness =
                (double) std::get<3>(inst).types[stall_type_] /
-               (double) std::max(max_hits_.types[stall_type_], 1ul);
+               (double) std::max<uint64_t>(max_hits_.types[stall_type_], 1ull);
             ImU32 row_bg_color = ImGui::GetColorU32(ImVec4(inst_hotness, 0.0f, 0.0f, 0.5f));
             ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0, row_bg_color);
 

@@ -12,32 +12,30 @@
  * replace it with load_pixel_coord.
  */
 
-static bool
-opt_frag_pos(nir_builder *b, nir_intrinsic_instr *intr, UNUSED void *data)
+/* Return true if all uses of component_mask components ignore the fractional
+ * part.
+ *
+ * Return false if any uses of components outside component_mask exist.
+ */
+bool
+nir_all_uses_of_float_are_integer(nir_def *def, unsigned component_mask)
 {
-   if (intr->intrinsic != nir_intrinsic_load_frag_coord &&
-       intr->intrinsic != nir_intrinsic_load_frag_coord_xy)
-      return false;
-
-   /* Don't increase precision. */
-   if (intr->def.bit_size != 32)
-      return false;
-
    /* Check if xy are only used by casts to integers. */
-   nir_foreach_use(use, &intr->def) {
-      if (nir_src_is_if(use))
+   nir_foreach_use(use, def) {
+      /* Ifs aren't expected to source float. */
+      assert(!nir_src_is_if(use));
+
+      unsigned mask = nir_src_components_read(use);
+      if (!(mask & component_mask))
+         continue;
+
+      /* Reject instructions that use more components than expected.
+       *
+       * (e.g. frag_coord that has zw uses is always pessimistically treated
+       * as having no integer use)
+       */
+      if (mask & ~component_mask)
          return false;
-
-      if (intr->intrinsic == nir_intrinsic_load_frag_coord) {
-         unsigned mask = nir_src_components_read(use);
-
-         if (!(mask & 0x3))
-            continue;
-
-         /* Don't handle instructions that read x/y and z/w for simplicity. */
-         if (mask & ~0x3)
-            return false;
-      }
 
       nir_instr *use_instr = nir_src_use_instr(use);
 
@@ -61,6 +59,23 @@ opt_frag_pos(nir_builder *b, nir_intrinsic_instr *intr, UNUSED void *data)
       }
    }
 
+   return true;
+}
+
+static bool
+opt_frag_pos(nir_builder *b, nir_intrinsic_instr *intr, UNUSED void *data)
+{
+   if (intr->intrinsic != nir_intrinsic_load_frag_coord &&
+       intr->intrinsic != nir_intrinsic_load_frag_coord_xy)
+      return false;
+
+   /* Don't increase precision. */
+   if (intr->def.bit_size != 32)
+      return false;
+
+   if (!nir_all_uses_of_float_are_integer(&intr->def, 0x3))
+      return false;
+
    b->cursor = nir_before_instr(&intr->instr);
    nir_def *pixel_coord = nir_load_pixel_coord(b);
 
@@ -70,6 +85,9 @@ opt_frag_pos(nir_builder *b, nir_intrinsic_instr *intr, UNUSED void *data)
 
          if (!(mask & 0x3))
             continue;
+
+         /* This is implied by nir_all_uses_of_float_are_integer. */
+         assert(!(mask & ~0x3));
       }
 
       nir_src_rewrite(use, pixel_coord);

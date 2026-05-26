@@ -214,7 +214,7 @@ uint64_t intel_debug_batch_frame_stop = -1;
 
 uint32_t intel_debug_bkp_before_draw_count = 0;
 uint32_t intel_debug_bkp_after_draw_count = 0;
-uint32_t intel_shader_dump_filter = 0;
+uint64_t intel_shader_dump_filter = 0;
 
 uint32_t intel_debug_bkp_before_dispatch_count = 0;
 uint32_t intel_debug_bkp_after_dispatch_count = 0;

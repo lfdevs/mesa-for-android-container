@@ -824,7 +824,11 @@ cs_instr_is_asynchronous(enum mali_cs_opcode opcode, uint16_t wait_mask)
    case MALI_CS_OPCODE_STORE_MULTIPLE:
    case MALI_CS_OPCODE_RUN_COMPUTE:
    case MALI_CS_OPCODE_RUN_COMPUTE_INDIRECT:
+#if PAN_ARCH >= 14
+   case MALI_CS_OPCODE_RUN_FRAGMENT2:
+#else
    case MALI_CS_OPCODE_RUN_FRAGMENT:
+#endif
    case MALI_CS_OPCODE_RUN_FULLSCREEN:
 #if PAN_ARCH >= 12
    case MALI_CS_OPCODE_RUN_IDVS2:
@@ -1614,6 +1618,22 @@ cs_run_idvs(struct cs_builder *b, uint32_t flags_override, bool malloc_enable,
 }
 #endif
 
+#if PAN_ARCH >= 14
+static inline void
+cs_run_fragment2(struct cs_builder *b, bool enable_tem,
+                 enum mali_tile_render_order tile_order)
+{
+   /* Staging regs */
+   cs_flush_loads(b);
+
+   b->req_resource_mask |= CS_FRAG_RES;
+
+   cs_emit(b, RUN_FRAGMENT2, I) {
+      I.enable_tem = enable_tem;
+      I.tile_order = tile_order;
+   }
+}
+#else
 static inline void
 cs_run_fragment(struct cs_builder *b, bool enable_tem,
                 enum mali_tile_render_order tile_order)
@@ -1628,6 +1648,7 @@ cs_run_fragment(struct cs_builder *b, bool enable_tem,
       I.tile_order = tile_order;
    }
 }
+#endif
 
 static inline void
 cs_run_fullscreen(struct cs_builder *b, uint32_t flags_override,
@@ -2469,6 +2490,53 @@ cs_trace_preamble(struct cs_builder *b, const struct cs_tracing_ctx *ctx,
    (int16_t)(offsetof(struct cs_##__type##_trace, __field) -                   \
              sizeof(struct cs_##__type##_trace))
 
+#if PAN_ARCH >= 14
+#define CS_RUN_FRAGMENT2_SR_COUNT 56
+#define CS_RUN_FRAGMENT2_SR_MASK  BITFIELD64_RANGE(0, CS_RUN_FRAGMENT2_SR_COUNT)
+struct cs_run_fragment2_trace {
+   uint64_t ip;
+   uint32_t sr[CS_RUN_FRAGMENT2_SR_COUNT];
+} __attribute__((aligned(64)));
+
+static inline void
+cs_trace_run_fragment2(struct cs_builder *b, const struct cs_tracing_ctx *ctx,
+                       struct cs_index scratch_regs, bool enable_tem,
+                       enum mali_tile_render_order tile_order)
+{
+   if (likely(!ctx->enabled)) {
+      cs_run_fragment2(b, enable_tem, tile_order);
+      return;
+   }
+
+   struct cs_index tracebuf_addr = cs_reg64(b, scratch_regs.reg);
+   struct cs_index data = cs_reg64(b, scratch_regs.reg + 2);
+
+   cs_trace_preamble(b, ctx, scratch_regs,
+                     sizeof(struct cs_run_fragment2_trace));
+
+   /* cs_run_xx() must immediately follow cs_load_ip_to() otherwise the IP
+    * won't point to the right instruction. */
+   cs_load_ip_to(b, data);
+   cs_run_fragment2(b, enable_tem, tile_order);
+   cs_store64(b, data, tracebuf_addr, cs_trace_field_offset(run_fragment2, ip));
+
+   ASSERTED unsigned sr_count = 0;
+   unsigned sr_offset = cs_trace_field_offset(run_fragment2, sr);
+   for (unsigned i = 0; i < CS_RUN_FRAGMENT2_SR_COUNT; i += 16) {
+      unsigned mask = (CS_RUN_FRAGMENT2_SR_MASK >> i) & BITFIELD_MASK(16);
+      if (!mask)
+         continue;
+
+      cs_store(b, cs_reg_tuple(b, i, util_last_bit(mask)), tracebuf_addr, mask,
+               sr_offset);
+      sr_offset += util_bitcount(mask) * sizeof(uint32_t);
+      sr_count += util_bitcount(mask);
+   }
+   assert(sr_count == CS_RUN_FRAGMENT2_SR_COUNT);
+
+   cs_flush_stores(b);
+}
+#else
 struct cs_run_fragment_trace {
    uint64_t ip;
    uint32_t sr[7];
@@ -2500,6 +2568,7 @@ cs_trace_run_fragment(struct cs_builder *b, const struct cs_tracing_ctx *ctx,
             cs_trace_field_offset(run_fragment, sr));
    cs_flush_stores(b);
 }
+#endif
 
 #if PAN_ARCH >= 13
 #define CS_RUN_FULLSCREEN_SR_MASK \

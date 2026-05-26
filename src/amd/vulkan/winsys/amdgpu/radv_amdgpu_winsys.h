@@ -54,10 +54,6 @@ struct radv_amdgpu_winsys {
    struct u_rwlock log_bo_list_lock;
    struct list_head log_bo_list;
 
-   const struct vk_sync_type *sync_types[3];
-   struct vk_sync_type syncobj_sync_type;
-   struct vk_sync_timeline_type emulated_timeline_sync_type;
-
    simple_mtx_t vm_ioctl_lock;
    uint32_t vm_timeline_syncobj;
    uint64_t vm_timeline_seq_num;

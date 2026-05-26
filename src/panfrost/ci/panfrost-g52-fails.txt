@@ -284,6 +284,7 @@ afbcp-spec@khr_texture_compression_astc@sliced-3d-miptree-gl srgb-fp@sRGB decode
 afbcp-spec@arb_texture_view@tex-view,Fail
 afbcp-spec@ext_image_dma_buf_import@ext_image_dma_buf_import-refcount-multithread,Crash
 glx@glx-copy-sub-buffer,Fail
+spec@!opengl 1.1@large-tex,Fail
 spec@arb_texture_view@tex-view,Fail
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-refcount-multithread,Crash
 
@@ -308,8 +309,6 @@ dEQP-VK.api.device_init.create_device_global_priority_query.basic,Fail
 dEQP-VK.api.device_init.create_device_global_priority_query_khr.basic,Fail
 
 # New failures with VKCTS 1.4.4.0
-dEQP-VK.binding_model.unused_invalid_descriptor.write.invalid.combined_image_sampler,Crash
-dEQP-VK.binding_model.unused_invalid_descriptor.write.invalid.sampled_image,Crash
 dEQP-VK.pipeline.fast_linked_library.vertex_input.misc.unbound_input,Crash
 dEQP-VK.pipeline.fast_linked_library.vertex_input.misc.unbound_input_dynamic,Crash
 dEQP-VK.pipeline.monolithic.vertex_input.misc.unbound_input,Crash
@@ -773,3 +772,24 @@ dEQP-VK.robustness.image_robustness.bind.notemplate.r32i.dontunroll.nonvolatile.
 dEQP-VK.robustness.image_robustness.bind.notemplate.r32i.dontunroll.nonvolatile.storage_image.fmt_qual.img.samples_1.cube_array.frag,Crash
 dEQP-VK.robustness.image_robustness.push.notemplate.r32i.dontunroll.nonvolatile.storage_image.fmt_qual.img.samples_1.cube.comp,Crash
 dEQP-VK.robustness.image_robustness.push.notemplate.r32i.dontunroll.nonvolatile.storage_image.fmt_qual.img.samples_1.cube.frag,Crash
+
+# VKCTS 1.4.4.2 -> 1.4.5.3 uprev
+dEQP-VK.glsl.texture_functions.query.texturequerylod.sampler2d_fixed_trilinear_fragment,Fail
+dEQP-VK.glsl.texture_functions.query.texturequerylod.sampler2d_fixed_trilinearnon_zero_base_level_fragment,Fail
+dEQP-VK.glsl.texture_functions.query.texturequerylod.sampler2d_float_trilinear_fragment,Fail
+dEQP-VK.glsl.texture_functions.query.texturequerylod.sampler2d_float_trilinearnon_zero_base_level_fragment,Fail
+dEQP-VK.image.host_image_copy.properties.properties,Fail
+dEQP-VK.pipeline.fast_linked_library.vertex_input.misc.unbound_input_dynamic_integer,Crash
+dEQP-VK.pipeline.fast_linked_library.vertex_input.misc.unbound_input_integer,Crash
+dEQP-VK.pipeline.monolithic.vertex_input.misc.unbound_input_dynamic_integer,Crash
+dEQP-VK.pipeline.monolithic.vertex_input.misc.unbound_input_integer,Crash
+dEQP-VK.wsi.acquire_drm_display.acquire_drm_display_invalid_fd,Crash
+dEQP-VK.wsi.acquire_drm_display.acquire_drm_display_not_master,Crash
+dEQP-VK.wsi.acquire_drm_display.acquire_drm_display_unowned_connector_id,Crash
+dEQP-VK.wsi.acquire_drm_display.acquire_drm_display,Crash
+dEQP-VK.wsi.acquire_drm_display.get_drm_display_invalid_connector_id,Crash
+dEQP-VK.wsi.acquire_drm_display.get_drm_display_invalid_fd,Crash
+dEQP-VK.wsi.acquire_drm_display.get_drm_display_not_master,Crash
+dEQP-VK.wsi.acquire_drm_display.get_drm_display_unowned_connector_id,Crash
+dEQP-VK.wsi.acquire_drm_display.get_drm_display,Crash
+dEQP-VK.wsi.acquire_drm_display.release_display,Crash

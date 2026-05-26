@@ -93,6 +93,7 @@ struct kk_device {
 
    struct kk_precompiled_cache precompiled_cache;
 
+   bool has_queue;
    struct kk_queue queue;
 
    struct vk_meta_device meta;

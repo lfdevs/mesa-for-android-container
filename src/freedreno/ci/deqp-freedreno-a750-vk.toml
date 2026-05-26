@@ -31,6 +31,18 @@ tests_per_group = 10000
 [deqp.env]
 TU_DEBUG = "gmem,unaligned_store"
 
+# force-gmem with concurrent binning allowed to test concurrent binning
+[[deqp]]
+deqp = "/deqp-vk/external/vulkancts/modules/vulkan/deqp-vk"
+caselists = ["/deqp-vk/mustpass/vk-main.txt"]
+include = ["dEQP-VK.renderpass2.*"]
+prefix = "gmem-cb-"
+fraction = 20
+tests_per_group = 10000
+[deqp.env]
+TU_DEBUG = "gmem"
+tu_allow_concurrent_binning = "true"
+
 # force-sysmem testing
 [[deqp]]
 deqp = "/deqp-vk/external/vulkancts/modules/vulkan/deqp-vk"

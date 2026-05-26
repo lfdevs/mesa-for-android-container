@@ -20,6 +20,7 @@ struct ctx {
    bool requires_vertex_id;
    bool requires_instance_id;
    bool requires_base_instance;
+   bool requires_robustness2;
 };
 
 static bool
@@ -201,6 +202,18 @@ pass(struct nir_builder *b, nir_intrinsic_instr *intr, void *data)
       b, interchange_comps, interchange_register_size, base, stride_offset_el,
       .format = interchange_format, .base = 0u);
 
+   if (ctx->requires_robustness2) {
+      uint64_t attrib_clamp_offset =
+         offsetof(struct kk_root_descriptor_table, draw.attrib_clamps[index]);
+      nir_def *bounds = nir_load_global_constant(
+         b, 1, 32, nir_iadd_imm(b, argbuf, attrib_clamp_offset));
+      nir_def *oob = nir_ult(b, bounds, el);
+
+      /* Produce zero for out-of-bounds access */
+      nir_def *zero = nir_imm_zero(b, memory->num_components, memory->bit_size);
+      memory = nir_bcsel(b, oob, zero, memory);
+   }
+
    unsigned dest_size = intr->def.bit_size;
    unsigned bits[] = {desc->channel[chan].size, desc->channel[chan].size,
                       desc->channel[chan].size, desc->channel[chan].size};
@@ -261,11 +274,15 @@ pass(struct nir_builder *b, nir_intrinsic_instr *intr, void *data)
 }
 
 bool
-kk_nir_lower_vbo(nir_shader *nir, struct kk_attribute *attribs)
+kk_nir_lower_vbo(nir_shader *nir, struct kk_attribute *attribs,
+                 bool robustness2)
 {
    assert(nir->info.stage == MESA_SHADER_VERTEX);
 
-   struct ctx ctx = {.attribs = attribs};
+   struct ctx ctx = {
+      .attribs = attribs,
+      .requires_robustness2 = robustness2,
+   };
    bool progress =
       nir_shader_intrinsics_pass(nir, pass, nir_metadata_control_flow, &ctx);
 

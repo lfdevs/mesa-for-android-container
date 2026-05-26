@@ -43,9 +43,9 @@ lower(jay_builder *b, jay_inst *I)
    switch (I->op) {
    case JAY_OPCODE_PRELOAD:
    case JAY_OPCODE_PHI_DST:
-   case JAY_OPCODE_INDETERMINATE:
+   case JAY_OPCODE_UNDEF:
       /* Delete instructions that only exist for RA. Uninitialized register
-       * contents is a perfectly cromulent indeterminate value.
+       * contents is a perfectly cromulent undefined value.
        */
       return true;
 
@@ -96,30 +96,6 @@ lower(jay_builder *b, jay_inst *I)
    case JAY_OPCODE_ZERO_FLAG: {
       jay_MOV(b, jay_bare_reg(FLAG, jay_zero_flag_reg(I)), 0)->type =
          JAY_TYPE_U32;
-      return true;
-   }
-
-   case JAY_OPCODE_DESWIZZLE: {
-      unsigned size = jay_deswizzle_size(I);
-      assert(b->shader->partition.blocks[GPR][0].start == 1);
-
-      /* Odd: copy both halves to contiguous pair after payload */
-      for (unsigned i = 0; i < (size / 2); ++i) {
-         jay_DESWIZZLE_ODD(b, jay_bare_reg(GPR, size + i), jay_bare_reg(GPR, i),
-                           jay_bare_reg(GPR, i + ((size + 1) / 2)),
-                           !(size & 1));
-      }
-
-      /* Even: leave the bottom half in place, copy top half. If size=1 (rare
-       * but possible), this would be a no-op move so skip it.
-       */
-      if (size > 1) {
-         for (unsigned i = 0; i < DIV_ROUND_UP(size, 2); ++i) {
-            jay_DESWIZZLE_EVEN(b, jay_bare_reg(GPR, i),
-                               jay_bare_reg(GPR, (size / 2) + i), size & 1);
-         }
-      }
-
       return true;
    }
 

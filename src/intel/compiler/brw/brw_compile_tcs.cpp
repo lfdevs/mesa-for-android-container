@@ -176,8 +176,10 @@ brw_compile_tcs(const struct brw_compiler *compiler,
 {
    const struct intel_device_info *devinfo = compiler->devinfo;
    nir_shader *nir = params->base.nir;
-   const struct brw_tcs_prog_key *key = params->key;
-   struct brw_tcs_prog_data *prog_data = params->prog_data;
+   const struct brw_tcs_prog_key *key =
+      (const struct brw_tcs_prog_key *)params->base.key;
+   struct brw_tcs_prog_data *prog_data =
+      (struct brw_tcs_prog_data *)params->base.prog_data;
    struct brw_vue_prog_data *vue_prog_data = &prog_data->base;
    const unsigned dispatch_width = brw_geometry_stage_dispatch_width(compiler->devinfo);
 

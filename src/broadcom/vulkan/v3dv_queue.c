@@ -578,6 +578,10 @@ handle_copy_query_results_cpu_job(struct v3dv_queue *queue,
       uintptr_t *kperfmon_ids = NULL;
 
       if (info->pool->query_type == VK_QUERY_TYPE_TIMESTAMP) {
+         /* timestamp pool BO is V3DV-internal, never aliased by user BO. If
+          * that could happen we would need to dedupe them
+          */
+         assert(bo->handle != info->pool->timestamp.bo->handle);
          submit.bo_handle_count = 2;
 
          bo_handles = (uint32_t *)
@@ -866,13 +870,16 @@ handle_csd_indirect_cpu_job(struct v3dv_queue *queue,
    submit.bo_handle_count = 1;
    submit.bo_handles = (uintptr_t)(void *)&bo->handle;
 
-   csd_job->csd.submit.bo_handle_count = csd_job->bo_count;
    uint32_t *bo_handles = (uint32_t *) malloc(sizeof(uint32_t) * csd_job->bo_count);
    uint32_t bo_idx = 0;
    set_foreach (csd_job->bos, entry) {
-      struct v3dv_bo *bo = (struct v3dv_bo *)entry->key;
-      bo_handles[bo_idx++] = bo->handle;
+      struct v3dv_bo *csd_bo = (struct v3dv_bo *)entry->key;
+      /* dedup against cpu_job bo */
+      if (csd_bo->handle == bo->handle)
+         continue;
+      bo_handles[bo_idx++] = csd_bo->handle;
    }
+   csd_job->csd.submit.bo_handle_count = bo_idx;
    csd_job->csd.submit.bo_handles = (uintptr_t)(void *)bo_handles;
 
    struct drm_v3d_indirect_csd indirect = {0};

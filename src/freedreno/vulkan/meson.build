@@ -178,6 +178,10 @@ tu_cpp_args += cpp.get_supported_arguments([
   '-Wno-write-strings',
 ])
 
+if cpp.get_id() == 'gcc'
+  tu_cpp_args += cpp.get_supported_arguments(['-Wno-misleading-indentation'])
+endif
+
 libvulkan_freedreno = shared_library(
   'vulkan_freedreno',
   [libtu_files, tu_entrypoints, tu_tracepoints, freedreno_xml_header_files, sha1_h, u_format_pack_h, bvh_spv],
@@ -202,8 +206,8 @@ libvulkan_freedreno = shared_library(
     idep_vulkan_wsi,
     idep_mesautil,
   ],
-  c_args : [no_override_init_args, tu_flags],
-  cpp_args : [tu_cpp_args, tu_flags],
+  c_args : [no_override_init_args, tu_flags, soong_compat_c_args],
+  cpp_args : [tu_cpp_args, tu_flags, soong_compat_cpp_args],
   gnu_symbol_visibility : 'hidden',
   link_args : [vulkan_icd_link_args, ld_args_bsymbolic, ld_args_gc_sections, ld_args_build_id],
   link_depends : vulkan_icd_link_depends,

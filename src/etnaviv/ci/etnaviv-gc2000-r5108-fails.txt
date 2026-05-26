@@ -639,15 +639,19 @@ spec@glsl-1.10@execution@variable-indexing@fs-input-array-float-index-rd,Fail
 spec@glsl-1.10@execution@variable-indexing@fs-input-array-vec2-index-rd,Fail
 
 # uprev Piglit in Mesa
+spec@!opengl 1.1@line-smooth-coverage,Fail
 spec@!opengl 1.1@push-pop-color-material,Fail
-spec@!opengl 2.0@incomplete-cubemap-format,Fail
-spec@ati_fragment_shader@ati_fragment_shader-render-textargets,Fail
+spec@ext_framebuffer_object@fbo-generatemipmap-scissor,Fail
+spec@ext_framebuffer_object@fbo-readpixels-depth-formats,Fail
+spec@ext_texture_swizzle@ext_texture_swizzle-swizzle,Fail
+spec@glsl-1.10@execution@built-in-functions@fs-op-selection-bool-bvec4-bvec4,Fail
+spec@glsl-1.10@execution@built-in-functions@vs-sign-vec4,Fail
+spec@glsl-1.10@execution@fs-texture-select,Fail
 
 # Nightly run expectations update
 spec@!opengl 1.0@gl-1.0-scissor-many,Fail
 spec@!opengl 1.4@tex-miplevel-selection-lod,Fail
 spec@!opengl 1.4@tex-miplevel-selection-lod-bias,Fail
-spec@arb_clear_texture@arb_clear_texture-simple,Fail
 spec@arb_shader_texture_lod@execution@tex-miplevel-selection *gradarb 3d,Fail
 spec@arb_shader_texture_lod@execution@tex-miplevel-selection *projgradarb 3d,Fail
 spec@glsl-1.20@execution@tex-miplevel-selection gl2:texture() 1d,Fail

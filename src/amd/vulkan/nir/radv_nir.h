@@ -96,6 +96,8 @@ bool radv_nir_opt_tid_function(nir_shader *shader, const radv_nir_opt_tid_functi
 bool radv_nir_opt_fs_builtins(nir_shader *shader, const struct radv_graphics_state_key *gfx_state,
                               unsigned vgt_outprim_type);
 
+bool radv_nir_lower_opt_fs_frag_pos(nir_shader *shader, bool force_pixel_coord);
+
 bool radv_nir_lower_immediate_samplers(nir_shader *shader, const struct radv_compiler_info *compiler_info,
                                        const struct radv_shader_stage *stage);
 

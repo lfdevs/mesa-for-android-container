@@ -63,7 +63,6 @@ nir_mem_access_size_align ir3_mem_access_size_align(
 
 bool ir3_nir_opt_branch_and_or_not(nir_shader *nir);
 bool ir3_nir_opt_triops_bitwise(nir_shader *nir);
-bool ir3_nir_opt_algebraic_late(nir_shader *nir);
 
 struct ir3_optimize_options {
    nir_opt_uub_options opt_uub_options;

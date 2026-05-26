@@ -4,17 +4,6 @@
 subdir('glapi')
 subdir('program')
 
-if _shader_replacement != ''
-  shader_replacement_h = custom_target(
-    'shader_replacement.h',
-    input: [files(_shader_replacement + '/process_shaders.py')],
-    output: 'shader_replacement.h',
-    command: [prog_python, '@INPUT0@', _shader_replacement, '@OUTPUT@'],
-    build_by_default : true,
-    build_always_stale : true,
-  )
-endif
-
 # files shared between classic mesa and gallium mesa
 files_libmesa = files(
   'main/accum.c',
@@ -382,6 +371,17 @@ files_libmesa = files(
   'vbo/vbo_save_loopback.c',
   'vbo/vbo_util.h',
 )
+
+if _shader_replacement != ''
+  files_libmesa += custom_target(
+    'shader_replacement.h',
+    input: [files(_shader_replacement + '/process_shaders.py')],
+    output: 'shader_replacement.h',
+    command: [prog_python, '@INPUT0@', _shader_replacement, '@OUTPUT@'],
+    build_by_default : false,
+    build_always_stale : true,
+  )
+endif
 
 inc_libmesa_asm = []
 

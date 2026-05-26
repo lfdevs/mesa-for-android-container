@@ -121,8 +121,10 @@ brw_compile_gs(const struct brw_compiler *compiler,
                struct brw_compile_gs_params *params)
 {
    nir_shader *nir = params->base.nir;
-   const struct brw_gs_prog_key *key = params->key;
-   struct brw_gs_prog_data *prog_data = params->prog_data;
+   const struct brw_gs_prog_key *key =
+      (const struct brw_gs_prog_key *)params->base.key;
+   struct brw_gs_prog_data *prog_data =
+      (struct brw_gs_prog_data *)params->base.prog_data;
    const unsigned dispatch_width = brw_geometry_stage_dispatch_width(compiler->devinfo);
 
    struct intel_vue_map input_vue_map = {0};

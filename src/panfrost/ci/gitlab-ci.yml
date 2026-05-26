@@ -34,7 +34,7 @@ panfrost-t860-cl:arm64:
     - .panfrost-midgard-manual-rules
     - .panfrost-test
     - .test-piglit
-    - .lava-rk3399-gru-kevin:arm64
+    - .lava-rk3399-rock-pi-4b:arm64
   rules:
     - !reference [.panfrost-midgard-manual-rules, rules]
     - !reference [.rusticl-manual-rules, rules]
@@ -48,7 +48,7 @@ panfrost-t860-gl:arm64:
     - .lava-arm64-test-gl
     - .panfrost-midgard-manual-rules
     - .panfrost-test
-    - .lava-rk3399-gru-kevin:arm64
+    - .lava-rk3399-rock-pi-4b:arm64
   variables:
     FDO_CI_CONCURRENT: 6
     DEQP_SUITE: panfrost-t860
@@ -58,7 +58,7 @@ panfrost-t860-egl:arm64:
     - .lava-arm64-test-gl
     - .panfrost-midgard-manual-rules
     - .panfrost-test
-    - .lava-rk3399-gru-kevin:arm64
+    - .lava-rk3399-rock-pi-4b:arm64
   variables:
     HWCI_START_WESTON: 1
     DEQP_SUITE: panfrost-t860-egl
@@ -68,7 +68,7 @@ panfrost-t860-traces:arm64:
     - .lava-arm64-piglit-traces
     - .panfrost-midgard-manual-rules
     - .panfrost-test
-    - .lava-rk3399-gru-kevin:arm64
+    - .lava-rk3399-rock-pi-4b:arm64
     - .panfrost-traces
 
 panfrost-g52-gl:arm64:
@@ -91,7 +91,6 @@ panfrost-g52-vk:arm64:
     - .panfrost-vk-rules
   variables:
     DRIVER_NAME: panvk
-    FDO_CI_CONCURRENT: 6  # We get OOMkills if we go too wide since VKCTS 1.4.4.0
     MESA_VK_IGNORE_CONFORMANCE_WARNING: 1
     PAN_I_WANT_A_BROKEN_VULKAN_DRIVER: 1
     PANVK_DEBUG: "sync,coherent_before_cached"
@@ -183,6 +182,10 @@ panfrost-g610-vk:arm64:
     DEQP_SUITE: panfrost-g610-vk
     DEQP_FRACTION: 3
     HWCI_START_WESTON: 1
+    # We get "weston: ../xwayland/window-manager.c:1291: weston_wm_handle_map_request: Assertion `!window->shsurf' failed" (resulting in x11 tests all UnexpectedSkipping) if we go too wide since VKCTS 1.4.5.3
+    # We see a lot of "dEQP error: MESA: error: failed to allocate a panthor_kmod_bo object" both before and after the uprev.
+    FDO_CI_CONCURRENT: 4
+
     LAVA_TAGS: at-least-8gb
 
 panfrost-g610-vk-asan:arm64:
@@ -214,6 +217,7 @@ panfrost-g925-vk:arm64:
     PANVK_DEBUG: "sync,cs,coherent_before_cached"
     DEQP_SUITE: panfrost-g925-vk
     HWCI_START_WESTON: 1
+    FDO_CI_CONCURRENT: 8  # We get OOMkills if we go too wide since VKCTS 1.4.5.3
 
 panfrost-g925-angle:arm64:
   extends:

@@ -714,6 +714,12 @@ get_preamble_offset(nir_def *def)
    return nir_intrinsic_base(nir_def_as_intrinsic(def));
 }
 
+static bool
+should_prefetch_descriptor(nir_def *desc)
+{
+   return desc != NULL && ir3_bindless_resource(nir_src_for_ssa(desc));
+}
+
 /* Prefetch descriptors in the preamble. This is an optimization introduced on
  * a7xx, mainly useful when the preamble is an early preamble, and replaces the
  * use of CP_LOAD_STATE on a6xx to prefetch descriptors in HLSQ.
@@ -765,8 +771,9 @@ ir3_nir_opt_prefetch_descriptors(nir_shader *nir, struct ir3_shader_variant *v)
          nir_def *preamble_descs[2] = { NULL, NULL };
          get_descriptors(instr, descs);
 
-         /* We must have found at least one descriptor */
-         if (!descs[0] && !descs[1])
+         /* Bail unless we found at least one bindless descriptor */
+         if (!(should_prefetch_descriptor(descs[0]) ||
+               should_prefetch_descriptor(descs[1])))
             continue;
 
          /* The instruction itself must be hoistable.

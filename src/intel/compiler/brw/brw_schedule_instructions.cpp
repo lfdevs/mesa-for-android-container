@@ -571,7 +571,8 @@ public:
                              int block_count, bool post_reg_alloc, bool need_latencies);
 
    void add_barrier_deps(schedule_node *n);
-   void add_cross_lane_deps(schedule_node *n);
+   void add_memory_deps(schedule_node *n);
+   void add_halt_deps(schedule_node *n);
    void add_dep(schedule_node *before, schedule_node *after, int latency);
    void add_dep(schedule_node *before, schedule_node *after);
    void add_address_dep(schedule_node *before, schedule_node *after);
@@ -1080,8 +1081,28 @@ static bool
 is_scheduling_barrier(const brw_inst *inst)
 {
    return inst->opcode == SHADER_OPCODE_HALT_TARGET ||
+          inst->opcode == SHADER_OPCODE_RND_MODE ||
+          inst->opcode == SHADER_OPCODE_FLOAT_CONTROL_MODE ||
           (inst->is_control_flow() && inst->opcode != BRW_OPCODE_HALT) ||
-          inst->has_side_effects();
+          inst->eot;
+}
+
+static bool
+has_memory_side_effects(const brw_inst *inst)
+{
+   assert(inst->opcode != SHADER_OPCODE_LSC_SPILL);
+   return inst->opcode == BRW_OPCODE_SYNC ||
+          inst->opcode == BRW_OPCODE_WAIT ||
+          inst->opcode == SHADER_OPCODE_BARRIER ||
+          inst->opcode == FS_OPCODE_SCHEDULING_FENCE ||
+          (inst->is_send() && inst->as_send()->has_side_effects);
+}
+
+static bool
+is_memory_volatile(const brw_inst *inst)
+{
+   return has_memory_side_effects(inst) ||
+          (inst->is_send() && inst->as_send()->is_volatile);
 }
 
 static bool
@@ -1186,16 +1207,43 @@ brw_instruction_scheduler::add_barrier_deps(schedule_node *n)
    }
 }
 
+void
+brw_instruction_scheduler::add_memory_deps(schedule_node *n)
+{
+   for (schedule_node *prev = n - 1; prev >= current.start; prev--) {
+      if (has_memory_side_effects(prev->inst)) {
+         add_dep(prev, n, 0);
+         break;
+      }
+      if (is_memory_volatile(prev->inst)) {
+         add_dep(prev, n, 0);
+      }
+   }
+
+   for (schedule_node *next = n + 1; next < current.end; next++) {
+      if (has_memory_side_effects(next->inst)) {
+         add_dep(n, next, 0);
+         break;
+      }
+      if (is_memory_volatile(next->inst)) {
+         add_dep(n, next, 0);
+      }
+   }
+}
+
 /**
  * Because some instructions like HALT can disable lanes, scheduling prior to
  * a cross lane access should not be allowed, otherwise we could end up with
- * later instructions accessing uninitialized data.
+ * later instructions accessing uninitialized data. Instructions with memory
+ * side effects must also be scheduled prior to a HALT, otherwise we would be
+ * changing the behavior of the program.
  */
 void
-brw_instruction_scheduler::add_cross_lane_deps(schedule_node *n)
+brw_instruction_scheduler::add_halt_deps(schedule_node *n)
 {
    for (schedule_node *prev = n - 1; prev >= current.start; prev--) {
-      if (has_cross_lane_access((brw_inst*)prev->inst))
+      if (has_cross_lane_access(prev->inst) ||
+          has_memory_side_effects(prev->inst))
          add_dep(prev, n, 0);
    }
 }
@@ -1315,7 +1363,8 @@ brw_instruction_scheduler::calculate_deps()
             if (!inst->src[i].is_address())
                continue;
 
-            for (unsigned byte = 0; byte < inst->size_read(s->devinfo, i); byte += 2) {
+            const unsigned read = inst->size_read(s->devinfo, i);
+            for (unsigned byte = 0; byte < read; byte += 2) {
                assert(inst->src[i].address_slot(byte) < ARRAY_SIZE(last_address_write));
                schedule_node *write_addr_node =
                   last_address_write[inst->src[i].address_slot(byte)];
@@ -1338,18 +1387,23 @@ brw_instruction_scheduler::calculate_deps()
       if (is_scheduling_barrier(inst))
          add_barrier_deps(n);
 
+      if (has_memory_side_effects(inst))
+         add_memory_deps(n);
+
       if (inst->opcode == BRW_OPCODE_HALT ||
           inst->opcode == SHADER_OPCODE_HALT_TARGET)
-          add_cross_lane_deps(n);
+         add_halt_deps(n);
 
       /* read-after-write deps. */
       for (int i = 0; i < inst->sources; i++) {
          if (inst->src[i].file == VGRF) {
-            for (unsigned r = 0; r < regs_read(s->devinfo, inst, i); r++)
+            const unsigned read = regs_read(s->devinfo, inst, i);
+            for (unsigned r = 0; r < read; r++)
                add_dep(last_grf_write[grf_index(inst->src[i]) + r], n);
          } else if (inst->src[i].file == FIXED_GRF) {
             if (post_reg_alloc) {
-               for (unsigned r = 0; r < regs_read(s->devinfo, inst, i); r++)
+               const unsigned read = regs_read(s->devinfo, inst, i);
+               for (unsigned r = 0; r < read; r++)
                   add_dep(last_grf_write[inst->src[i].nr + r], n);
             } else {
                add_dep(last_fixed_grf_write, n);
@@ -1358,7 +1412,8 @@ brw_instruction_scheduler::calculate_deps()
             add_dep(last_accumulator_write, n);
          } else if (inst->src[i].is_address()) {
             if (post_reg_alloc) {
-               for (unsigned byte = 0; byte < inst->size_read(s->devinfo, i); byte += 2)
+               const unsigned read = inst->size_read(s->devinfo, i);
+               for (unsigned byte = 0; byte < read; byte += 2)
                   add_dep(last_address_write[inst->src[i].address_slot(byte)], n);
             }
          } else if (register_needs_barrier(inst->src[i])) {
@@ -1382,13 +1437,15 @@ brw_instruction_scheduler::calculate_deps()
       /* write-after-write deps. */
       if (inst->dst.file == VGRF) {
          int grf_idx = grf_index(inst->dst);
-         for (unsigned r = 0; r < regs_written(inst); r++) {
+         const unsigned written = regs_written(inst);
+         for (unsigned r = 0; r < written; r++) {
             add_dep(last_grf_write[grf_idx + r], n);
             last_grf_write[grf_idx + r] = n;
          }
       } else if (inst->dst.file == FIXED_GRF) {
          if (post_reg_alloc) {
-            for (unsigned r = 0; r < regs_written(inst); r++) {
+            const unsigned written = regs_written(inst);
+            for (unsigned r = 0; r < written; r++) {
                add_dep(last_grf_write[inst->dst.nr + r], n);
                last_grf_write[inst->dst.nr + r] = n;
             }
@@ -1449,11 +1506,13 @@ brw_instruction_scheduler::calculate_deps()
       /* write-after-read deps. */
       for (int i = 0; i < inst->sources; i++) {
          if (inst->src[i].file == VGRF) {
-            for (unsigned r = 0; r < regs_read(s->devinfo, inst, i); r++)
+            const unsigned read = regs_read(s->devinfo, inst, i);
+            for (unsigned r = 0; r < read; r++)
                add_dep(n, last_grf_write[grf_index(inst->src[i]) + r], 0);
          } else if (inst->src[i].file == FIXED_GRF) {
             if (post_reg_alloc) {
-               for (unsigned r = 0; r < regs_read(s->devinfo, inst, i); r++)
+               const unsigned read = regs_read(s->devinfo, inst, i);
+               for (unsigned r = 0; r < read; r++)
                   add_dep(n, last_grf_write[inst->src[i].nr + r], 0);
             } else {
                add_dep(n, last_fixed_grf_write, 0);
@@ -1462,7 +1521,8 @@ brw_instruction_scheduler::calculate_deps()
             add_dep(n, last_accumulator_write, 0);
          } else if (inst->src[i].is_address()) {
             if (post_reg_alloc) {
-               for (unsigned byte = 0; byte < inst->size_read(s->devinfo, i); byte += 2) {
+               const unsigned read = inst->size_read(s->devinfo, i);
+               for (unsigned byte = 0; byte < read; byte += 2) {
                   add_dep(n, last_address_write[inst->src[i].address_slot(byte)], 0);
                }
             }
@@ -1493,7 +1553,8 @@ brw_instruction_scheduler::calculate_deps()
        * can mark this as WAR dependency.
        */
       if (inst->dst.file == VGRF) {
-         for (unsigned r = 0; r < regs_written(inst); r++)
+         const unsigned written = regs_written(inst);
+         for (unsigned r = 0; r < written; r++)
             last_grf_write[grf_index(inst->dst) + r] = n;
       } else if (inst->dst.file == FIXED_GRF) {
          if (post_reg_alloc) {
@@ -1552,7 +1613,8 @@ brw_instruction_scheduler::address_register_interfere(const schedule_node *n)
       for (unsigned i = 0; i < n->inst->sources; i++) {
          if (!n->inst->src[i].is_address())
             continue;
-         for (unsigned byte = 0; byte < n->inst->size_read(s->devinfo, i); byte += 2) {
+         const unsigned read = n->inst->size_read(s->devinfo, i);
+         for (unsigned byte = 0; byte < read; byte += 2) {
             if (current.address_register[n->inst->src[i].address_slot(byte)] !=
                 n->inst->src[i].nr)
                return true;
@@ -1721,7 +1783,8 @@ brw_instruction_scheduler::update_children(schedule_node *chosen)
       for (unsigned i = 0; i < chosen->inst->sources; i++) {
          if (!chosen->inst->src[i].is_address())
             continue;
-         for (unsigned byte = 0; byte < chosen->inst->size_read(s->devinfo, i); byte += 2) {
+         const unsigned read = chosen->inst->size_read(s->devinfo, i);
+         for (unsigned byte = 0; byte < read; byte += 2) {
             assert(chosen->inst->src[i].address_slot(byte) <
                    ARRAY_SIZE(current.address_register));
             current.address_register[chosen->inst->src[i].address_slot(byte)] = 0;

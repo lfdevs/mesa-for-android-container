@@ -11,3 +11,9 @@ static C++ stdlib required on rusticl to workaround applications using their own
 VK_EXT_pipeline_protected_access on RADV
 VK_EXT_extended_dynamic_state3 on panvk
 GL_ARB_texture_query_lod on panfrost/v9+
+VK_KHR_maintenance11 on RADV
+OpenCL 3.1 support for rusticl on asahi, iris, radeonsi, llvmpipe and zink
+VK_KHR_workgroup_memory_explicit_layout on pvr
+VK_KHR_maintenance5 on pvr
+VK_KHR_shader_fma on RADV
+VK_KHR_shader_fma on nvk

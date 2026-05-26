@@ -158,9 +158,9 @@ protected:
 
    nir_def *build_uniform_expr(nir_builder *b, unsigned bit_size, unsigned index)
    {
-      return nir_fsqrt(b, nir_ffma(b, load_uniform(b, bit_size, index),
-                                   nir_imm_floatN_t(b, 3.14, bit_size),
-                                   load_ubo(b, bit_size, index)));
+      return nir_fsqrt(b, nir_ffma_weak(b, load_uniform(b, bit_size, index),
+                                        nir_imm_floatN_t(b, 3.14, bit_size),
+                                        load_ubo(b, bit_size, index)));
    }
 
    bool shader_contains_uniform(nir_builder *target_b, unsigned bit_size,
@@ -254,13 +254,13 @@ protected:
       if (contains) {
          return shader_contains_uniform(b, bit_size, index) &&
                 shader_contains_ubo(b, bit_size, index) &&
-                shader_contains_alu_op(b, nir_op_ffma, bit_size) &&
+                shader_contains_alu_op(b, nir_op_ffma_weak, bit_size) &&
                 shader_contains_alu_op(b, nir_op_fsqrt, bit_size) &&
                 shader_contains_const_float(b, 3.14, bit_size);
       } else {
          return !shader_contains_uniform(b, bit_size, index) &&
                 !shader_contains_ubo(b, bit_size, index) &&
-                !shader_contains_alu_op(b, nir_op_ffma, bit_size) &&
+                !shader_contains_alu_op(b, nir_op_ffma_weak, bit_size) &&
                 !shader_contains_alu_op(b, nir_op_fsqrt, bit_size) &&
                 !shader_contains_const_float(b, 3.14, bit_size);
       }
@@ -553,8 +553,8 @@ load_interpolated_input_tes(nir_builder *b, gl_varying_slot slot,
          if (i == 0)
             def[i] = nir_fmul(b, def[i], nir_channel(b, tesscoord, remap[i]));
          else
-            def[i] = nir_ffma(b, def[i], nir_channel(b, tesscoord, remap[i]),
-                              def[i - 1]);
+            def[i] = nir_ffma_weak(b, def[i], nir_channel(b, tesscoord, remap[i]),
+                                   def[i - 1]);
       } else {
          def[i] = nir_fmul(b, def[i], nir_channel(b, tesscoord, remap[i]));
       }
@@ -651,7 +651,10 @@ movable_across_interp(nir_builder *b, nir_op op, unsigned interp[3],
    case nir_op_fmul:
    case nir_op_fmulz:
    case nir_op_ffma:
+   case nir_op_ffma_weak:
    case nir_op_ffmaz:
+   case nir_op_fmad:
+   case nir_op_fmadz:
       return !divergent[0] || !divergent[1];
 
    case nir_op_fdiv:
@@ -663,4 +666,6 @@ movable_across_interp(nir_builder *b, nir_op op, unsigned interp[3],
    default:
       return false;
    }
+}
+
 }

@@ -1084,9 +1084,9 @@ bool r600_common_screen_init(struct r600_common_screen *rscreen,
 	}
 
 	const struct nir_shader_compiler_options nir_options = {
-		.fuse_ffma16 = true,
-		.fuse_ffma32 = true,
-		.fuse_ffma64 = true,
+		.float_mul_add16 = nir_float_muladd_support_has_fmad | nir_float_muladd_support_fuse,
+		.float_mul_add32 = nir_float_muladd_support_has_fmad | nir_float_muladd_support_fuse,
+		.float_mul_add64 = nir_float_muladd_support_has_ffma | nir_float_muladd_support_fuse,
 		.lower_flrp32 = true,
 		.lower_flrp64 = true,
 		.lower_fdiv = true,

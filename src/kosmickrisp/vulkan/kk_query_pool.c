@@ -52,6 +52,79 @@ kk_reports_per_query(struct kk_query_pool *pool)
    }
 }
 
+static uint32_t *
+kk_query_available_map(struct kk_query_pool *pool, uint32_t query)
+{
+   assert(kk_has_available(pool));
+   assert(query < pool->vk.query_count);
+   return (uint32_t *)pool->bo->cpu + query;
+}
+
+static uint64_t
+kk_query_offset(struct kk_query_pool *pool, uint32_t query)
+{
+   assert(query < pool->vk.query_count);
+   return pool->query_start + query * pool->query_stride;
+}
+
+static uint64_t
+kk_query_report_addr(struct kk_device *dev, struct kk_query_pool *pool,
+                     uint32_t query)
+{
+   if (pool->oq_queries) {
+      uint16_t *oq_index = kk_pool_oq_index_ptr(pool);
+      return dev->occlusion_queries.bo->gpu +
+             (oq_index[query] * sizeof(uint64_t));
+   } else {
+      return pool->bo->gpu + kk_query_offset(pool, query);
+   }
+}
+
+static uint64_t
+kk_query_available_addr(struct kk_query_pool *pool, uint32_t query)
+{
+   assert(kk_has_available(pool));
+   assert(query < pool->vk.query_count);
+   return pool->bo->gpu + query * sizeof(uint32_t);
+}
+
+static struct kk_query_report *
+kk_query_report_map(struct kk_device *dev, struct kk_query_pool *pool,
+                    uint32_t query)
+{
+   if (pool->oq_queries) {
+      uint64_t *queries = (uint64_t *)(dev->occlusion_queries.bo->cpu);
+      uint16_t *oq_index = kk_pool_oq_index_ptr(pool);
+
+      return (struct kk_query_report *)&queries[oq_index[query]];
+   } else {
+      return (void *)((char *)pool->bo->cpu + kk_query_offset(pool, query));
+   }
+}
+
+static void
+host_zero_queries(struct kk_device *dev, struct kk_query_pool *pool,
+                  uint32_t first_index, uint32_t num_queries,
+                  bool set_available)
+{
+   for (uint32_t i = 0; i < num_queries; i++) {
+      struct kk_query_report *reports =
+         kk_query_report_map(dev, pool, first_index + i);
+
+      uint64_t value = 0;
+      if (kk_has_available(pool)) {
+         uint32_t *available = kk_query_available_map(pool, first_index + i);
+         *available = set_available;
+      } else {
+         value = set_available ? 0 : UINT64_MAX;
+      }
+
+      for (unsigned j = 0; j < kk_reports_per_query(pool); ++j) {
+         reports[j].value = value;
+      }
+   }
+}
+
 VKAPI_ATTR VkResult VKAPI_CALL
 kk_CreateQueryPool(VkDevice device, const VkQueryPoolCreateInfo *pCreateInfo,
                    const VkAllocationCallbacks *pAllocator,
@@ -116,6 +189,9 @@ kk_CreateQueryPool(VkDevice device, const VkQueryPoolCreateInfo *pCreateInfo,
       oq_index[pool->oq_queries++] = index;
    }
 
+   if (pCreateInfo->flags & VK_QUERY_POOL_CREATE_RESET_BIT_KHR)
+      host_zero_queries(dev, pool, 0, pool->vk.query_count, false);
+
    *pQueryPool = kk_query_pool_to_handle(pool);
 
    return result;
@@ -142,78 +218,14 @@ kk_DestroyQueryPool(VkDevice device, VkQueryPool queryPool,
    vk_query_pool_destroy(&dev->vk, pAllocator, &pool->vk);
 }
 
-static uint32_t *
-kk_query_available_map(struct kk_query_pool *pool, uint32_t query)
-{
-   assert(kk_has_available(pool));
-   assert(query < pool->vk.query_count);
-   return (uint32_t *)pool->bo->cpu + query;
-}
-
-static uint64_t
-kk_query_offset(struct kk_query_pool *pool, uint32_t query)
-{
-   assert(query < pool->vk.query_count);
-   return pool->query_start + query * pool->query_stride;
-}
-
-static uint64_t
-kk_query_report_addr(struct kk_device *dev, struct kk_query_pool *pool,
-                     uint32_t query)
-{
-   if (pool->oq_queries) {
-      uint16_t *oq_index = kk_pool_oq_index_ptr(pool);
-      return dev->occlusion_queries.bo->gpu +
-             (oq_index[query] * sizeof(uint64_t));
-   } else {
-      return pool->bo->gpu + kk_query_offset(pool, query);
-   }
-}
-
-static uint64_t
-kk_query_available_addr(struct kk_query_pool *pool, uint32_t query)
-{
-   assert(kk_has_available(pool));
-   assert(query < pool->vk.query_count);
-   return pool->bo->gpu + query * sizeof(uint32_t);
-}
-
-static struct kk_query_report *
-kk_query_report_map(struct kk_device *dev, struct kk_query_pool *pool,
-                    uint32_t query)
-{
-   if (pool->oq_queries) {
-      uint64_t *queries = (uint64_t *)(dev->occlusion_queries.bo->cpu);
-      uint16_t *oq_index = kk_pool_oq_index_ptr(pool);
-
-      return (struct kk_query_report *)&queries[oq_index[query]];
-   } else {
-      return (void *)((char *)pool->bo->cpu + kk_query_offset(pool, query));
-   }
-}
-
 VKAPI_ATTR void VKAPI_CALL
 kk_ResetQueryPool(VkDevice device, VkQueryPool queryPool, uint32_t firstQuery,
                   uint32_t queryCount)
 {
    VK_FROM_HANDLE(kk_device, dev, device);
    VK_FROM_HANDLE(kk_query_pool, pool, queryPool);
-   for (uint32_t i = 0; i < queryCount; i++) {
-      struct kk_query_report *reports =
-         kk_query_report_map(dev, pool, firstQuery + i);
 
-      uint64_t value = 0;
-      if (kk_has_available(pool)) {
-         uint32_t *available = kk_query_available_map(pool, firstQuery + i);
-         *available = 0u;
-      } else {
-         value = UINT64_MAX;
-      }
-
-      for (unsigned j = 0; j < kk_reports_per_query(pool); ++j) {
-         reports[j].value = value;
-      }
-   }
+   host_zero_queries(dev, pool, firstQuery, queryCount, false);
 }
 
 static void

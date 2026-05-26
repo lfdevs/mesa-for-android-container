@@ -4,23 +4,23 @@ add(16)         g122<1>F        g98<8,8,1>F     (abs)g102<8,8,1>F { align1 1H @3
 shl(8)          g75<1>D         g122<8,8,1>D    0x00000002UD    { align1 1Q @4 };
 sel.l(4)        g90.4<1>D       g90.3<0,1,0>D   g90.4<4,4,1>D   { align1 WE_all 1N @5 };
 and(16)         g58<1>UD        g16<8,8,1>UD    g56<8,8,1>UD    { align1 1H @6 };
-or.nz.f0.0(16)  null<1>UD       g105<8,8,1>UD   g103<8,8,1>UD   { align1 1H @7 };
+or.nz.f0.0(16)  nullUD          g105<8,8,1>UD   g103<8,8,1>UD   { align1 1H @7 };
 
-math cos(16)    g17<1>F         g15<8,8,1>F     null<8,8,1>F    { align1 1H @1 $0 };
-math exp(16)    g1<1>F          g29<8,8,1>F     null<8,8,1>F    { align1 1H @5 $2 };
-math sqrt(8)    g9<1>HF         g6<8,8,1>HF     null<8,8,1>F    { align1 1Q @1 $3 };
+math cos(16)    g17<1>F         g15<8,8,1>F     nullUD          { align1 1H @1 $0 };
+math exp(16)    g1<1>F          g29<8,8,1>F     nullUD          { align1 1H @5 $2 };
+math sqrt(8)    g9<1>HF         g6<8,8,1>HF     nullUD          { align1 1Q @1 $3 };
 math intdiv(8)  g103<1>D        g101<8,8,1>D    g35<8,8,1>D     { align1 1Q @4 $4 };
 math intmod(8)  g101<1>D        g97<8,8,1>D     g76<8,8,1>D     { align1 2Q @2 $5 };
-math inv(16)    g10<1>F         g8<8,8,1>F      null<8,8,1>F    { align1 2H @2 $6 };
-math log(16)    g102<1>F        g100<8,8,1>F    null<8,8,1>F    { align1 2H @1 $7 };
-math rsq(16)    g76<1>F         g74<8,8,1>F     null<8,8,1>F    { align1 1H @7 $8 };
-math sin(16)    g123<1>F        g121<8,8,1>F    null<8,8,1>F    { align1 1H @4 $9 };
-math sqrt(16)   g43<1>F         g47<8,8,1>F     null<8,8,1>F    { align1 2H @7 $10 };
-math cos(8)     g103<1>HF       g98<8,8,1>HF    null<8,8,1>F    { align1 1Q @3 $11 };
-math exp(8)     g54<1>HF        g52<8,8,1>HF    null<8,8,1>F    { align1 1Q @1 $12 };
+math inv(16)    g10<1>F         g8<8,8,1>F      nullUD          { align1 2H @2 $6 };
+math log(16)    g102<1>F        g100<8,8,1>F    nullUD          { align1 2H @1 $7 };
+math rsq(16)    g76<1>F         g74<8,8,1>F     nullUD          { align1 1H @7 $8 };
+math sin(16)    g123<1>F        g121<8,8,1>F    nullUD          { align1 1H @4 $9 };
+math sqrt(16)   g43<1>F         g47<8,8,1>F     nullUD          { align1 2H @7 $10 };
+math cos(8)     g103<1>HF       g98<8,8,1>HF    nullUD          { align1 1Q @3 $11 };
+math exp(8)     g54<1>HF        g52<8,8,1>HF    nullUD          { align1 1Q @1 $12 };
 math intdiv(8)  g35<1>D         g31<8,8,1>D     g33<8,8,1>D     { align1 4Q @2 $13 };
 math intmod(8)  g101<1>D        g97<8,8,1>D     g99<8,8,1>D     { align1 2Q @4 $14 };
-math inv(8)     g102<1>HF       g92<8,8,1>HF    null<8,8,1>F    { align1 1Q @6 $15 };
+math inv(8)     g102<1>HF       g92<8,8,1>HF    nullUD          { align1 1Q @6 $15 };
 
 sel.ge(16)      g7<1>UW         g7<16,16,1>UW   g89<16,8,2>UW   { align1 1H @7 $0.dst };
 mov(16)         a0<1>UW         0x03e0UW                        { align1 WE_all 1H @3 $1.dst };

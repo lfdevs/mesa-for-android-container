@@ -420,7 +420,7 @@ get_free_sample_buf(struct intel_perf_context *perf_ctx)
    if (node)
       buf = brw_exec_node_data(struct oa_sample_buf, node, link);
    else {
-      buf = ralloc_size(perf_ctx->perf, sizeof(*buf) + oa_sample_buf_buf_length(perf_ctx->perf));
+      buf = ralloc_size(perf_ctx, sizeof(*buf) + oa_sample_buf_buf_length(perf_ctx->perf));
 
       brw_exec_node_init(&buf->link);
       buf->refcount = 0;

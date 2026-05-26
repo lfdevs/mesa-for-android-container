@@ -115,6 +115,13 @@ mtl_render_pass_descriptor_set_default_raster_sample_count(
 }
 
 void
+mtl_render_pass_descriptor_set_sample_positions(
+   mtl_render_pass_descriptor *descriptor,
+   const struct mtl_sample_position *positions, uint32_t count)
+{
+}
+
+void
 mtl_render_pass_descriptor_set_visibility_buffer(
    mtl_render_pass_descriptor *descriptor, mtl_buffer *visibility_buffer)
 {

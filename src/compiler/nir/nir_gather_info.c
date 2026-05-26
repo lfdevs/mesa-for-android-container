@@ -794,7 +794,8 @@ gather_intrinsic_info(nir_intrinsic_instr *instr, nir_shader *shader)
 
    case nir_intrinsic_load_barycentric_pixel:
       if (nir_intrinsic_interp_mode(instr) == INTERP_MODE_SMOOTH ||
-          nir_intrinsic_interp_mode(instr) == INTERP_MODE_NONE) {
+          (!shader->options->ignore_none_interpolation_in_sysval_gathering &&
+           nir_intrinsic_interp_mode(instr) == INTERP_MODE_NONE)) {
          BITSET_SET(shader->info.system_values_read,
                     SYSTEM_VALUE_BARYCENTRIC_PERSP_PIXEL);
       } else if (nir_intrinsic_interp_mode(instr) == INTERP_MODE_NOPERSPECTIVE) {
@@ -805,7 +806,8 @@ gather_intrinsic_info(nir_intrinsic_instr *instr, nir_shader *shader)
 
    case nir_intrinsic_load_barycentric_centroid:
       if (nir_intrinsic_interp_mode(instr) == INTERP_MODE_SMOOTH ||
-          nir_intrinsic_interp_mode(instr) == INTERP_MODE_NONE) {
+          (!shader->options->ignore_none_interpolation_in_sysval_gathering &&
+           nir_intrinsic_interp_mode(instr) == INTERP_MODE_NONE)) {
          BITSET_SET(shader->info.system_values_read,
                     SYSTEM_VALUE_BARYCENTRIC_PERSP_CENTROID);
       } else if (nir_intrinsic_interp_mode(instr) == INTERP_MODE_NOPERSPECTIVE) {
@@ -816,7 +818,8 @@ gather_intrinsic_info(nir_intrinsic_instr *instr, nir_shader *shader)
 
    case nir_intrinsic_load_barycentric_sample:
       if (nir_intrinsic_interp_mode(instr) == INTERP_MODE_SMOOTH ||
-          nir_intrinsic_interp_mode(instr) == INTERP_MODE_NONE) {
+          (!shader->options->ignore_none_interpolation_in_sysval_gathering &&
+           nir_intrinsic_interp_mode(instr) == INTERP_MODE_NONE)) {
          BITSET_SET(shader->info.system_values_read,
                     SYSTEM_VALUE_BARYCENTRIC_PERSP_SAMPLE);
       } else if (nir_intrinsic_interp_mode(instr) == INTERP_MODE_NOPERSPECTIVE) {

@@ -6,10 +6,13 @@
 #ifndef EXECUTOR_H
 #define EXECUTOR_H
 
+#include <stdbool.h>
 #include <stdint.h>
 
 #include "intel/dev/intel_device_info.h"
 #include "intel/isl/isl.h"
+#include "perf/intel_perf.h"
+#include "perf/intel_perf_query.h"
 
 typedef struct {
    uint32_t size;
@@ -39,7 +42,15 @@ typedef struct {
       executor_bo batch;
       executor_bo extra;
       executor_bo data;
+      executor_bo perf;
    } bo;
+
+   bool perf_enabled;
+
+   struct {
+      struct intel_perf_context *ctx;
+      struct intel_perf_query_object *obj;
+   } perf_query;
 
    uint64_t batch_start;
 } executor_context;

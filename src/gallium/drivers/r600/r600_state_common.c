@@ -19,9 +19,9 @@
 #include "util/u_math.h"
 #include "tgsi/tgsi_parse.h"
 #include "tgsi/tgsi_scan.h"
-#include "tgsi/tgsi_ureg.h"
 
 #include "nir.h"
+#include "nir_builder.h"
 #include "nir/nir_to_tgsi_info.h"
 
 void r600_init_command_buffer(struct r600_command_buffer *cb, unsigned num_dw)
@@ -1680,32 +1680,25 @@ static void r600_update_clip_state(struct r600_context *rctx,
 	}
 }
 
-static void r600_generate_fixed_func_tcs(struct r600_context *rctx)
+/* The TCS passthrough shader only writes the tessellation levels, 
+ * the IO doesn't need to be copied over, because TES gets handed the 
+ * location of the VS outputs directly if this shader is used
+ * (see evergreen_setup_tess_constants)
+*/
+
+static struct r600_pipe_shader_selector *
+r600_create_fixed_func_tcs_nir(struct r600_context *rctx)
 {
-	struct ureg_src const0, const1;
-	struct ureg_dst tessouter, tessinner;
-	struct ureg_program *ureg = ureg_create(MESA_SHADER_TESS_CTRL);
+	const struct nir_shader_compiler_options *options =
+		rctx->screen->b.b.nir_options[MESA_SHADER_TESS_CTRL];
 
-	if (!ureg)
-		return; /* if we get here, we're screwed */
+	struct pipe_shader_state state = {
+		.type = PIPE_SHADER_IR_NIR,
+		.ir.nir = nir_create_passthrough_tcs_impl(options, NULL, 0, 0)
+	};
 
-	assert(!rctx->fixed_func_tcs_shader);
-
-	ureg_DECL_constant2D(ureg, 0, 1, R600_BUFFER_INFO_CONST_BUFFER);
-	const0 = ureg_src_dimension(ureg_src_register(TGSI_FILE_CONSTANT, 0),
-				    R600_BUFFER_INFO_CONST_BUFFER);
-	const1 = ureg_src_dimension(ureg_src_register(TGSI_FILE_CONSTANT, 1),
-				    R600_BUFFER_INFO_CONST_BUFFER);
-
-	tessouter = ureg_DECL_output(ureg, TGSI_SEMANTIC_TESSOUTER, 0);
-	tessinner = ureg_DECL_output(ureg, TGSI_SEMANTIC_TESSINNER, 0);
-
-	ureg_MOV(ureg, tessouter, const0);
-	ureg_MOV(ureg, tessinner, const1);
-	ureg_END(ureg);
-
-	rctx->fixed_func_tcs_shader =
-		ureg_create_shader_and_destroy(ureg, &rctx->b.b);
+	return (struct r600_pipe_shader_selector *)
+		rctx->b.b.create_tcs_state(&rctx->b.b, &state);
 }
 
 void r600_update_compressed_resource_state(struct r600_context *rctx, bool compute_only)
@@ -1920,7 +1913,7 @@ static bool r600_update_derived_state(struct r600_context *rctx)
 		UPDATE_SHADER(EG_HW_STAGE_HS, tcs);
 	} else if (rctx->tes_shader) {
 		if (!rctx->fixed_func_tcs_shader) {
-			r600_generate_fixed_func_tcs(rctx);
+			rctx->fixed_func_tcs_shader = r600_create_fixed_func_tcs_nir(rctx);
 			if (!rctx->fixed_func_tcs_shader)
 				return false;
 

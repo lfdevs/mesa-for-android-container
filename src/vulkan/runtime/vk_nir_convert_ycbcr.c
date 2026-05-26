@@ -81,9 +81,9 @@ nir_convert_ycbcr_to_rgb(nir_builder *b,
 
    nir_def *expanded_channels =
       nir_vec4(b,
-               nir_ffma_imm12(b, nir_channel(b, raw_channels, 0), range_coeffs[2][0], range_coeffs[2][1]),
-               nir_ffma_imm12(b, nir_channel(b, raw_channels, 1), range_coeffs[0][0], range_coeffs[0][1]),
-               nir_ffma_imm12(b, nir_channel(b, raw_channels, 2), range_coeffs[1][0], range_coeffs[1][1]),
+               nir_ffma_weak_imm12(b, nir_channel(b, raw_channels, 0), range_coeffs[2][0], range_coeffs[2][1]),
+               nir_ffma_weak_imm12(b, nir_channel(b, raw_channels, 1), range_coeffs[0][0], range_coeffs[0][1]),
+               nir_ffma_weak_imm12(b, nir_channel(b, raw_channels, 2), range_coeffs[1][0], range_coeffs[1][1]),
                nir_channel(b, raw_channels, 3));
 
    if (model == VK_SAMPLER_YCBCR_MODEL_CONVERSION_YCBCR_IDENTITY)

@@ -38,7 +38,7 @@ libpanfrost_valhall_disasm = static_library(
   'panfrost_valhall_disasm',
   valhall_disasm_c,
   include_directories : [inc_include, inc_src],
-  c_args : [no_override_init_args],
+  c_args : [no_override_init_args, soong_compat_c_args],
   gnu_symbol_visibility : 'hidden',
   build_by_default : false,
 )
@@ -49,7 +49,7 @@ if with_tests
     executable(
       'valhall_disasm_test',
       files('test/test-disassembler.c'),
-      c_args : [c_msvc_compat_args, no_override_init_args],
+      c_args : [c_msvc_compat_args, no_override_init_args, soong_compat_c_args],
       gnu_symbol_visibility : 'hidden',
       include_directories : [inc_include, inc_src],
       dependencies: [idep_valhall_enums_h],

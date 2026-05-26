@@ -1610,7 +1610,7 @@ radv_layout_is_htile_compressed(const struct radv_device *device, const struct r
        * the number of decompressions from/to GENERAL.
        */
       if (radv_tc_compat_htile_enabled(image, level) && queue_mask & (1u << RADV_QUEUE_GENERAL) &&
-          !instance->drirc.debug.disable_tc_compat_htile_in_general) {
+          !instance->drirc.debug.disable_tc_compat_htile_general) {
          return true;
       } else {
          return false;

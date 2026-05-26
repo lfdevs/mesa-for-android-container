@@ -13,7 +13,7 @@
 #define RVID_ERR(fmt, args...)                                                                     \
    mesa_loge("%s:%d %s UVD - " fmt, __FILE__, __LINE__, __func__, ##args)
 
-#define UVD_FW_1_66_16 ((1 << 24) | (66 << 16) | (16 << 8))
+enum ac_video_codec si_pipe_video_profile_to_codec(enum pipe_video_profile profile);
 
 /* generate a stream handle */
 unsigned si_vid_alloc_stream_handle(void);

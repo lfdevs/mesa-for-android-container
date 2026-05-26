@@ -1907,7 +1907,7 @@ nir_def_all_uses_ignore_sign_bit(const nir_def *def)
       nir_alu_instr *alu = nir_instr_as_alu(instr);
       if (alu->op == nir_op_fabs) {
          continue;
-      } else if (alu->op == nir_op_fmul || alu->op == nir_op_ffma) {
+      } else if (alu->op == nir_op_fmul || nir_alu_instr_is_mul_add(alu)) {
          nir_alu_src *alu_src = list_entry(use, nir_alu_src, src);
          unsigned src_index = alu_src - alu->src;
          /* a * a doesn't care about sign of a. */
@@ -2441,6 +2441,8 @@ nir_intrinsic_from_system_value(gl_system_value val)
       return nir_intrinsic_load_frag_coord_z;
    case SYSTEM_VALUE_FRAG_COORD_W:
       return nir_intrinsic_load_frag_coord_w;
+   case SYSTEM_VALUE_FRAG_COORD_W_RCP:
+      return nir_intrinsic_load_frag_coord_w_rcp;
    case SYSTEM_VALUE_PIXEL_COORD:
       return nir_intrinsic_load_pixel_coord;
    case SYSTEM_VALUE_POINT_COORD:
@@ -2628,6 +2630,8 @@ nir_system_value_from_intrinsic(nir_intrinsic_op intrin)
       return SYSTEM_VALUE_FRAG_COORD_Z;
    case nir_intrinsic_load_frag_coord_w:
       return SYSTEM_VALUE_FRAG_COORD_W;
+   case nir_intrinsic_load_frag_coord_w_rcp:
+      return SYSTEM_VALUE_FRAG_COORD_W_RCP;
    case nir_intrinsic_load_pixel_coord:
       return SYSTEM_VALUE_PIXEL_COORD;
    case nir_intrinsic_load_point_coord:

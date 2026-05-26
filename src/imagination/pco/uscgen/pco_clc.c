@@ -373,6 +373,11 @@ int main(int argc, char *argv[argc])
           sizeof(pvr_device_info_common));
    ++num_devices;
 
+   /* Dummy device runtime info (just zeroes).
+    * None of the precompiled shaders will be using any related functionality.
+    */
+   struct pvr_device_runtime_info dev_runtime_info = { 0 };
+
    int fd = open(spv_file, O_RDONLY);
    if (fd < 0) {
       fprintf(stderr, "Failed to open %s\n", spv_file);
@@ -410,7 +415,7 @@ int main(int argc, char *argv[argc])
                             "Imagination Technologies Ltd.",
                             basename(hdr_file));
 
-   pco_ctx *ctx = pco_ctx_create(NULL, mem_ctx);
+   pco_ctx *ctx = pco_ctx_create(NULL, &dev_runtime_info, mem_ctx);
    nir_shader *nir = spv_to_nir(mem_ctx, spirv_map, spirv_len);
    struct nir_precomp_opts opts = { 0 };
 

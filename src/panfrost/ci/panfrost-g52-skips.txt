@@ -142,14 +142,16 @@ dEQP-VK.image.store.without_format.3d.e5b9g9r9_ufloat_pack32_linear
 dEQP-VK.texture.shadow.cube_array.nearest.less_d16_unorm
 dEQP-VK.synchronization.op.single_queue.timeline_semaphore.write_image_compute_indirect_read_image_tess_control.image_128x128_r16_uint
 
-# tests are broken with Vulkan 1.0: https://gerrit.khronos.org/c/vk-gl-cts/+/19422
-dEQP-VK.image.swapchain_mutable.direct_drm.*
-dEQP-VK.wsi.acquire_drm_display.*
-
 # more tests broken on Vulkan 1.0: https://gitlab.khronos.org/Tracker/vk-gl-cts/-/issues/6409
 dEQP-VK.wsi.*.maintenance1.*.bind_image*
+
+# Almost all crashes
+dEQP-VK.wsi.*present_timing.*
 
 # https://gitlab.freedesktop.org/mesa/mesa/-/issues/15116
 dEQP-VK.wsi.xlib.maintenance1.present_modes.*
 dEQP-VK.wsi.xlib.maintenance1.deferred_alloc.fifo.*
 dEQP-VK.wsi.xlib.maintenance1.present_fence.fifo.*
+
+# Intermittent timeouts
+dEQP-VK.wsi.wayland.swapchain.render.10swapchains.*

@@ -116,7 +116,7 @@ asahi_blit_compute_shader(struct pipe_context *ctx, struct asahi_blit_key *key)
    {
       /* For pixels within the copy area, texture from the source */
       nir_def *coords_el_2d =
-         nir_ffma(b, nir_u2f32(b, logical_id_el_2d), trans_scale, trans_offs);
+         nir_ffma_weak(b, nir_u2f32(b, logical_id_el_2d), trans_scale, trans_offs);
 
       nir_def *coords_el_nd = coords_el_2d;
       if (layer) {

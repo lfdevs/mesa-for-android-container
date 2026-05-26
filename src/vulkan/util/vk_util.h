@@ -320,6 +320,41 @@ mesa_to_vk_shader_stage(mesa_shader_stage mesa_stage)
    return (VkShaderStageFlagBits) (1 << ((uint32_t) mesa_stage));
 }
 
+/* this needs spec fixes */
+#define MESA_VK_SHADER_STAGE_WORKGRAPH_HACK_BIT_FIXME (1<<30)
+
+/* Internal version of VK_SHADER_STAGE_ALL which only includes valid bits. */
+#define MESA_VK_SHADER_STAGE_ALL (VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_COMPUTE_BIT |              \
+                                  VK_SHADER_STAGE_RAYGEN_BIT_KHR | VK_SHADER_STAGE_ANY_HIT_BIT_KHR |        \
+                                  VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR | VK_SHADER_STAGE_MISS_BIT_KHR |      \
+                                  VK_SHADER_STAGE_INTERSECTION_BIT_KHR | VK_SHADER_STAGE_CALLABLE_BIT_KHR | \
+                                  VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT)
+
+static inline VkShaderStageFlags
+vk_shader_stages_from_bind_point(VkPipelineBindPoint pipelineBindPoint)
+{
+   switch (pipelineBindPoint) {
+#ifdef VK_ENABLE_BETA_EXTENSIONS
+    case VK_PIPELINE_BIND_POINT_EXECUTION_GRAPH_AMDX:
+      return VK_SHADER_STAGE_COMPUTE_BIT | MESA_VK_SHADER_STAGE_WORKGRAPH_HACK_BIT_FIXME;
+#endif
+   case VK_PIPELINE_BIND_POINT_COMPUTE:
+      return VK_SHADER_STAGE_COMPUTE_BIT;
+   case VK_PIPELINE_BIND_POINT_GRAPHICS:
+      return VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_TASK_BIT_EXT | VK_SHADER_STAGE_MESH_BIT_EXT;
+   case VK_PIPELINE_BIND_POINT_RAY_TRACING_KHR:
+      return VK_SHADER_STAGE_RAYGEN_BIT_KHR |
+             VK_SHADER_STAGE_ANY_HIT_BIT_KHR |
+             VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR |
+             VK_SHADER_STAGE_MISS_BIT_KHR |
+             VK_SHADER_STAGE_INTERSECTION_BIT_KHR |
+             VK_SHADER_STAGE_CALLABLE_BIT_KHR;
+   default:
+      UNREACHABLE("unknown bind point!");
+   }
+   return 0;
+}
+
 /* iterate over a sequence of indexed multidraws for VK_EXT_multi_draw extension */
 /* 'i' must be explicitly declared */
 #define vk_foreach_multi_draw_indexed(_draw, _i, _pDrawInfo, _num_draws, _stride) \

@@ -297,7 +297,6 @@ update_gfx_pipeline(struct zink_context *ctx, struct zink_batch_state *bs, enum 
          }
          VKCTX(CmdSetDepthBiasEnable)(bs->cmdbuf, VK_TRUE);
          VKCTX(CmdSetTessellationDomainOriginEXT)(bs->cmdbuf, VK_TESSELLATION_DOMAIN_ORIGIN_LOWER_LEFT);
-         VKCTX(CmdSetSampleLocationsEnableEXT)(bs->cmdbuf, ctx->gfx_pipeline_state.custom_sample_locations);
          VKCTX(CmdSetRasterizationStreamEXT)(bs->cmdbuf, 0);
          pipeline_changed = true;
       }
@@ -340,7 +339,7 @@ zink_rast_prim(const struct zink_context *ctx,
 
 template <zink_dynamic_state DYNAMIC_STATE, bool BATCH_CHANGED>
 ALWAYS_INLINE static void
-emit_dynamic_state(struct zink_context *ctx, bool pipeline_changed, unsigned num_viewports)
+emit_dynamic_state(struct zink_context *ctx, bool pipeline_changed, unsigned num_viewports, bool uses_shobj)
 {
    struct zink_screen *screen = zink_screen(ctx->base.screen);
    struct zink_batch_state *bs = ctx->bs;
@@ -449,8 +448,9 @@ emit_dynamic_state(struct zink_context *ctx, bool pipeline_changed, unsigned num
       ctx->dsa_state_changed = false;
    }
 
-   if (ctx->sample_locations_changed) {
-      if (ctx->gfx_pipeline_state.custom_sample_locations) {
+   if ((BATCH_CHANGED && (screen->base.caps.programmable_sample_locations || uses_shobj)) || ctx->sample_locations_changed) {
+      VKCTX(CmdSetSampleLocationsEnableEXT)(bs->cmdbuf, ctx->sample_locations_enabled);
+      if (ctx->sample_locations_enabled) {
          VkSampleLocationsInfoEXT loc;
          zink_init_vk_sample_locations(ctx, &loc);
          VKCTX(CmdSetSampleLocationsEXT)(bs->cmdbuf, &loc);
@@ -732,7 +732,7 @@ zink_draw(struct pipe_context *pctx,
                            update_gfx_pipeline<DYNAMIC_STATE, BATCH_CHANGED>(ctx, bs, mode) :
                            false;
 
-   emit_dynamic_state<DYNAMIC_STATE, BATCH_CHANGED>(ctx, pipeline_changed, ctx->vp_state.num_viewports);
+   emit_dynamic_state<DYNAMIC_STATE, BATCH_CHANGED>(ctx, pipeline_changed, ctx->vp_state.num_viewports, ctx->curr_program->base.uses_shobj);
 
    bool using_depth_bias = zink_prim_type(ctx, dinfo) == MESA_PRIM_TRIANGLES && rast_state->offset_fill;
    if (BATCH_CHANGED || using_depth_bias != ctx->was_using_depth_bias || ctx->depth_bias_changed) {
@@ -1009,7 +1009,6 @@ update_mesh_pipeline(struct zink_context *ctx, struct zink_batch_state *bs)
          /* always rebind all stages */
          VKCTX(CmdBindShadersEXT)(bs->cmdbuf, ZINK_GFX_SHADER_COUNT, stages, ctx->mesh_program->objects);
          VKCTX(CmdBindShadersEXT)(bs->cmdbuf, 2, &stages[MESA_SHADER_TASK], &ctx->mesh_program->objects[MESA_SHADER_TASK]);
-         VKCTX(CmdSetSampleLocationsEnableEXT)(bs->cmdbuf, ctx->gfx_pipeline_state.custom_sample_locations);
          VKCTX(CmdSetDepthBiasEnable)(bs->cmdbuf, VK_TRUE);
          pipeline_changed = true;
       }
@@ -1079,7 +1078,7 @@ zink_draw_mesh_tasks(struct pipe_context *pctx, const struct pipe_grid_info *inf
                            update_mesh_pipeline<BATCH_CHANGED>(ctx, bs) :
                            false;
 
-   emit_dynamic_state<ZINK_DYNAMIC_STATE3, BATCH_CHANGED>(ctx, pipeline_changed, ctx->vp_state.mesh_num_viewports);
+   emit_dynamic_state<ZINK_DYNAMIC_STATE3, BATCH_CHANGED>(ctx, pipeline_changed, ctx->vp_state.mesh_num_viewports, ctx->mesh_program->base.uses_shobj);
 
    struct zink_rasterizer_state *rast_state = ctx->rast_state;
    bool using_depth_bias = !!rast_state->offset_fill;

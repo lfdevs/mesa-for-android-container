@@ -57,7 +57,6 @@ struct brw_shader_params
    const nir_shader *nir;
    const brw_base_prog_key *key;
    brw_stage_prog_data *prog_data;
-
    unsigned dispatch_width;
 
    /* Fragment shader. */
@@ -125,7 +124,6 @@ public:
    const brw_base_prog_key *const key;
 
    struct brw_stage_prog_data *prog_data;
-
    brw_analysis<brw_live_variables, brw_shader> live_analysis;
    brw_analysis<brw_register_pressure, brw_shader> regpressure_analysis;
    brw_analysis<brw_performance, brw_shader> performance_analysis;

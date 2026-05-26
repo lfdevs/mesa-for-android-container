@@ -325,13 +325,14 @@ fd6_compute_state_delete(struct pipe_context *pctx, void *_hwcso)
    free(hwcso);
 }
 
+static struct ir3_shader_key null_key; /* static is implicitly zeroed */
+
 static void
 fd6_get_compute_state_info(struct pipe_context *pctx, void *cso, struct pipe_compute_state_object_info *cinfo)
 {
-   static struct ir3_shader_key key; /* static is implicitly zeroed */
    struct fd6_compute_state *cs = (struct fd6_compute_state *)cso;
    struct ir3_shader_state *hwcso = (struct ir3_shader_state *)cs->hwcso;
-   struct ir3_shader_variant *v = ir3_shader_variant(ir3_get_shader(hwcso), key, false, &pctx->debug);
+   struct ir3_shader_variant *v = ir3_shader_variant(ir3_get_shader(hwcso), null_key, false, &pctx->debug);
    const struct fd_dev_info *info = fd_context(pctx)->screen->info;
    uint32_t threadsize_base = info->threadsize_base;
 
@@ -340,9 +341,8 @@ fd6_get_compute_state_info(struct pipe_context *pctx, void *cso, struct pipe_com
    cinfo->preferred_simd_size = threadsize_base;
 
    if (info->props.supports_double_threadsize && v->info.double_threadsize) {
-
       cinfo->max_threads *= 2;
-      cinfo->simd_sizes |= (threadsize_base * 2);
+      cinfo->simd_sizes *= 2;
       cinfo->preferred_simd_size *= 2;
    }
 

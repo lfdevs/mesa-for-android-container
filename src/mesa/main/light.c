@@ -41,9 +41,6 @@ _mesa_ShadeModel( GLenum mode )
 {
    GET_CURRENT_CONTEXT(ctx);
 
-   if (MESA_VERBOSE & VERBOSE_API)
-      _mesa_debug(ctx, "glShadeModel %s\n", _mesa_enum_to_string(mode));
-
    if (ctx->Light.ShadeModel == mode)
       return;
 
@@ -66,9 +63,6 @@ void GLAPIENTRY
 _mesa_ProvokingVertex(GLenum mode)
 {
    GET_CURRENT_CONTEXT(ctx);
-
-   if (MESA_VERBOSE&VERBOSE_API)
-      _mesa_debug(ctx, "glProvokingVertexEXT 0x%x\n", mode);
 
    if (ctx->Light.ProvokingVertex == mode)
       return;
@@ -669,9 +663,6 @@ _mesa_update_material( struct gl_context *ctx, GLuint bitmask )
 {
    GLfloat (*mat)[4] = ctx->Light.Material.Attrib;
 
-   if (MESA_VERBOSE & VERBOSE_MATERIAL)
-      _mesa_debug(ctx, "_mesa_update_material, mask 0x%x\n", bitmask);
-
    if (!bitmask)
       return;
 
@@ -790,11 +781,6 @@ _mesa_ColorMaterial( GLenum face, GLenum mode )
 		   MAT_BIT_FRONT_SPECULAR | MAT_BIT_BACK_SPECULAR |
 		   MAT_BIT_FRONT_DIFFUSE  | MAT_BIT_BACK_DIFFUSE  |
 		   MAT_BIT_FRONT_AMBIENT  | MAT_BIT_BACK_AMBIENT);
-
-   if (MESA_VERBOSE&VERBOSE_API)
-      _mesa_debug(ctx, "glColorMaterial %s %s\n",
-                  _mesa_enum_to_string(face),
-                  _mesa_enum_to_string(mode));
 
    bitmask = _mesa_material_bitmask(ctx, face, mode, legal, "glColorMaterial");
    if (bitmask == 0)

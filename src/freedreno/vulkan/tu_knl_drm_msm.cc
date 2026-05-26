@@ -474,7 +474,7 @@ tu_wait_fence(struct tu_device *dev,
    return VK_SUCCESS;
 }
 
-VkResult
+static VkResult
 msm_queue_wait_fence(struct tu_queue *queue, uint32_t fence,
                      uint64_t timeout_ns)
 {
@@ -769,7 +769,7 @@ tu_allocate_iova(struct tu_device *dev,
    return result;
 }
 
-void
+static void
 tu_free_iova(struct tu_device *dev,
              uint64_t iova,
              uint64_t size)

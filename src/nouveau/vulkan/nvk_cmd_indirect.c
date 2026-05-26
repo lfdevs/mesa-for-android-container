@@ -394,12 +394,43 @@ build_process_cs_cmd_seq(nir_builder *b, struct nvk_nir_push *p,
                nir_ior(b, load_global_dw(b, shader_qmd_addr, cb0_addr_hi_dw),
                           nir_unpack_64_2x32_split_y(b, root_addr_shifted));
 
+            /* Ensure each local size parameters are part of the same 32-bit
+             * value */
+            assert(qmd_layout.local_x_start / 32 ==
+                   (qmd_layout.local_x_end - 1) / 32);
+            assert(qmd_layout.local_y_start / 32 ==
+                   (qmd_layout.local_y_end - 1) / 32);
+            assert(qmd_layout.local_z_start / 32 ==
+                   (qmd_layout.local_z_end - 1) / 32);
+
+            /* Preload local size parameters as we are going to use them */
+            qmd_repl[qmd_layout.local_x_start / 32] = load_global_dw(
+               b, shader_qmd_addr, qmd_layout.local_x_start / 32);
+            qmd_repl[qmd_layout.local_y_start / 32] = load_global_dw(
+               b, shader_qmd_addr, qmd_layout.local_y_start / 32);
+            qmd_repl[qmd_layout.local_z_start / 32] = load_global_dw(
+               b, shader_qmd_addr, qmd_layout.local_z_start / 32);
+
             copy_repl_global_dw(b, qmd_addr, shader_qmd_addr,
                                 qmd_repl, qmd_repl_count);
 
-            /* Now emit commands */
+            nir_def *local_x = nir_ubitfield_extract_imm(
+               b, qmd_repl[qmd_layout.local_x_start / 32],
+               qmd_layout.local_x_start % 32, qmd_layout.local_x_end % 32);
+            nir_def *local_y = nir_ubitfield_extract_imm(
+               b, qmd_repl[qmd_layout.local_y_start / 32],
+               qmd_layout.local_y_start % 32, qmd_layout.local_y_end % 32);
+            nir_def *local_z = nir_ubitfield_extract_imm(
+               b, qmd_repl[qmd_layout.local_z_start / 32],
+               qmd_layout.local_z_start % 32, qmd_layout.local_z_end % 32);
+            nir_def *local_size =
+               nir_imul(b, nir_imul(b, local_x, local_y), local_z);
+
             nir_def *invoc = nir_imul_2x32_64(b, disp_size_x, disp_size_y);
             invoc = nir_imul(b, invoc, nir_u2u64(b, disp_size_z));
+            invoc = nir_imul(b, invoc, nir_u2u64(b, local_size));
+
+            /* Now emit commands */
             if (pdev->info.cls_compute >= AMPERE_COMPUTE_B)
                nvk_nir_P_1INC(b, p, NVC7C0, CALL_MME_MACRO(NVK_MME_ADD_CS_INVOCATIONS), 2);
             else

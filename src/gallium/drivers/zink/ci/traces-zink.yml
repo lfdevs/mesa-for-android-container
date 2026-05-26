@@ -153,9 +153,9 @@ traces:
     gl-zink-anv-tgl:
       checksum: 04a5a9b7cbc88d8a66c33b5f1c08294d
     zink-radv-vangogh:
-      checksum: b361dcda8115d96061fd3700c1d5c415
+      checksum: cb5220d7e102b43ce3d778414f547bab
     zink-radv-gfx1201:
-      checksum: b361dcda8115d96061fd3700c1d5c415
+      checksum: cb5220d7e102b43ce3d778414f547bab
 
   humus/AmbientAperture-v2.trace:
     gl-zink-anv-adl:
@@ -163,7 +163,7 @@ traces:
     gl-zink-anv-tgl:
       checksum: 0f3b7351a84e1e6f15430f8766af4b4c
     zink-radv-vangogh:
-      checksum: 8347dcdc720c4a3799df737f24c10a88
+      checksum: fae285449fe53b508c22e2265b534523
     zink-radv-gfx1201:
       checksum: 31566f62731204fe422d22db9c5ba759
 

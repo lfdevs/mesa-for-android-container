@@ -11,6 +11,7 @@ _compiler_rs_sources = [
   'nir_instr_printer.rs',
   'nir.rs',
   'smallvec.rs',
+  'vec_pair.rs',
 ]
 
 _compiler_binding_types = [

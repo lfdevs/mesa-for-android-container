@@ -10,6 +10,10 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* Maximum dwords of inline push constants when the indirect path is still used */
 #define AC_MAX_INLINE_PUSH_CONSTS_WITH_INDIRECT 8
 /* Maximum dwords of inline push constants when the indirect path is not used */
@@ -25,6 +29,16 @@ enum ac_arg_type
 {
    AC_ARG_VALUE,
    AC_ARG_CONST_ADDR,
+};
+
+enum ac_color_interp {
+   AC_COLOR_INTERP_FLAT,
+   AC_COLOR_INTERP_PERSP_SAMPLE,
+   AC_COLOR_INTERP_PERSP_CENTER,
+   AC_COLOR_INTERP_PERSP_CENTROID,
+   AC_COLOR_INTERP_LINEAR_SAMPLE,
+   AC_COLOR_INTERP_LINEAR_CENTER,
+   AC_COLOR_INTERP_LINEAR_CENTROID,
 };
 
 struct ac_arg {
@@ -163,6 +177,7 @@ struct ac_shader_args {
    struct ac_arg linear_sample;
    struct ac_arg linear_center;
    struct ac_arg linear_centroid;
+   struct ac_arg line_stipple_tex_ena;
    struct ac_arg pos_fixed_pt;
 
    /* CS */
@@ -204,5 +219,10 @@ void ac_add_arg(struct ac_shader_args *info, enum ac_arg_regfile regfile, unsign
 void ac_add_return(struct ac_shader_args *info, enum ac_arg_regfile regfile);
 void ac_add_preserved(struct ac_shader_args *info, const struct ac_arg *arg);
 void ac_compact_ps_vgpr_args(struct ac_shader_args *info, uint32_t spi_ps_input);
+unsigned ac_get_color_interp_arg(const struct ac_shader_args *args, enum ac_color_interp interp);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

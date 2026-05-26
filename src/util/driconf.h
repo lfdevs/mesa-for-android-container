@@ -353,18 +353,6 @@
 #define DRI_CONF_FORCE_VK_VENDOR() \
    DRI_CONF_OPT_I(force_vk_vendor, 0, -1, 2147483647, "Override GPU vendor id")
 
-#define DRI_CONF_FAKE_SPARSE(def) \
-   DRI_CONF_OPT_B(fake_sparse, def, \
-                  "Advertise support for sparse binding of textures regardless of real support")
-
-#define DRI_CONF_INTEL_BINDING_TABLE_BLOCK_SIZE(def,min,max) \
-   DRI_CONF_OPT_I(intel_binding_table_block_size, def, min, max, \
-                  "Intel binding table block allocation size (3DSTATE_BINDING_TABLE_POOL_ALLOC)")
-
-#define DRI_CONF_INTEL_DISABLE_PUSH_CONSTANT_ALLOC(def) \
-   DRI_CONF_OPT_B(intel_disable_push_constant_alloc, def, \
-                  "Disable push constant space allocations")
-
 #define DRI_CONFIG_INTEL_TBIMR(def) \
    DRI_CONF_OPT_B(intel_tbimr, def, "Enable TBIMR tiled rendering")
 
@@ -537,10 +525,6 @@
    DRI_CONF_OPT_B(vertex_program_default_out, def, \
                   "Initialize outputs of vertex program to a default value vec4(0, 0, 0, 1)")
 
-#define DRI_CONF_CUSTOM_BORDER_COLORS_WITHOUT_FORMAT(def) \
-   DRI_CONF_OPT_B(custom_border_colors_without_format, def, \
-                  "Enable custom border colors without format")
-
 #define DRI_CONF_NO_FP16(def) \
    DRI_CONF_OPT_B(no_fp16, def, \
                   "Disable 16-bit float support")
@@ -648,9 +632,13 @@
    DRI_CONF_OPT_B(tu_allow_oob_indirect_ubo_loads, def, \
                   "Some D3D11 games rely on out-of-bounds indirect UBO loads to return real values from underlying bound descriptor, this prevents us from lowering indirectly accessed UBOs to consts")
 
-#define DRI_CONF_TU_DISABLE_D24S8_BORDER_COLOR_WORKAROUND(def) \
-   DRI_CONF_OPT_B(tu_disable_d24s8_border_color_workaround, def, \
-                  "Use UBWC for D24S8 images with VK_IMAGE_USAGE_SAMPLED_BIT when customBorderColorWithoutFormat is enabled")
+#define DRI_CONF_TU_ENABLE_D24S8_BORDER_COLOR_WORKAROUND(def) \
+   DRI_CONF_OPT_B(tu_enable_d24s8_border_color_workaround, def, \
+                  "Disable UBWC for D24S8 images with VK_IMAGE_USAGE_SAMPLED_BIT when customBorderColorWithoutFormat is enabled")
+
+#define DRI_CONF_TU_ENABLE_FAST_BORDER_COLOR_FOR_UNDEFINED_FORMATS(def) \
+   DRI_CONF_OPT_B(tu_enable_fast_border_color_for_undefined_formats, def, \
+                  "Enables fast border color HW feature for VK_FORMAT_UNDEFINED sampler formats.")
 
 #define DRI_CONF_TU_USE_TEX_COORD_ROUND_NEAREST_EVEN_MODE(def) \
    DRI_CONF_OPT_B(tu_use_tex_coord_round_nearest_even_mode, def, \
@@ -675,6 +663,11 @@
 #define DRI_CONF_TU_OVERRIDE_UNCACHED_AS_CACHE_COHERENT(def) \
    DRI_CONF_OPT_B(tu_override_uncached_as_cache_coherent, def, \
                   "Replaces uncached-host allocations with cached-coherent-host when possible. Only useful under x86 emulation where memory accesses tend to be atomic")
+
+#define DRI_CONF_TU_ALLOW_CONCURRENT_BINNING(def) \
+   DRI_CONF_OPT_B(tu_allow_concurrent_binning, def, \
+                  "Allow concurrent binning on A7XX+, the CB is disabled by default because it regresses performance on desktop games")
+
 /**
  * \brief Honeykrisp specific configuration options
  */
@@ -707,281 +700,20 @@
                   "Enable support of multi-plane format modifiers for wsi images")
 
 /**
- * \brief RADV specific configuration options
- */
-
-#define DRI_CONF_RADV_REPORT_LLVM9_VERSION_STRING(def) \
-   DRI_CONF_OPT_B(radv_report_llvm9_version_string, def, \
-                  "Report LLVM 9.0.1 for games that apply shader workarounds if missing (for ACO only)")
-
-#define DRI_CONF_RADV_ENABLE_MRT_OUTPUT_NAN_FIXUP(def) \
-   DRI_CONF_OPT_B(radv_enable_mrt_output_nan_fixup, def, \
-                  "Replace NaN outputs from fragment shaders with zeroes for floating point render target")
-
-#define DRI_CONF_RADV_NO_DYNAMIC_BOUNDS(def) \
-   DRI_CONF_OPT_B(radv_no_dynamic_bounds, def, \
-                  "Disabling bounds checking for dynamic buffer descriptors")
-
-#define DRI_CONF_RADV_DISABLE_SHRINK_IMAGE_STORE(def) \
-   DRI_CONF_OPT_B(radv_disable_shrink_image_store, def, \
-                  "Disabling shrinking of image stores based on the format")
-
-#define DRI_CONF_RADV_OVERRIDE_UNIFORM_OFFSET_ALIGNMENT(def) \
-   DRI_CONF_OPT_I(radv_override_uniform_offset_alignment, def, 0, 128, \
-                  "Override the minUniformBufferOffsetAlignment exposed to the application. (0 = default)")
-
-#define DRI_CONF_RADV_ZERO_VRAM(def) \
-   DRI_CONF_OPT_B(radv_zero_vram, def, \
-                  "Initialize to zero all VRAM allocations")
-
-#define DRI_CONF_RADV_INVARIANT_GEOM(def) \
-   DRI_CONF_OPT_B(radv_invariant_geom, def, \
-                  "Mark geometry-affecting outputs as invariant")
-
-#define DRI_CONF_RADV_SPLIT_FMA(def) \
-   DRI_CONF_OPT_B(radv_split_fma, def, \
-                  "Split application-provided fused multiply-add in geometry stages")
-
-#define DRI_CONF_RADV_DISABLE_TC_COMPAT_HTILE_GENERAL(def) \
-   DRI_CONF_OPT_B(radv_disable_tc_compat_htile_general, def, \
-                  "Disable TC-compat HTILE in GENERAL layout")
-
-#define DRI_CONF_RADV_DISABLE_DCC(def) \
-   DRI_CONF_OPT_B(radv_disable_dcc, def, \
-                  "Disable DCC for color images on GFX8-GFX11.5")
-
-#define DRI_CONF_RADV_DISABLE_DCC_MIPS(def) \
-   DRI_CONF_OPT_B(radv_disable_dcc_mips, def, \
-                  "Disable DCC for color images with mips on GFX8-GFX11.5")
-
-#define DRI_CONF_RADV_DISABLE_DCC_STORES(def) \
-   DRI_CONF_OPT_B(radv_disable_dcc_stores, def, \
-                  "Disable DCC for color storage images on GFX10-GFX11.5")
-
-#define DRI_CONF_RADV_DISABLE_ANISO_SINGLE_LEVEL(def) \
-  DRI_CONF_OPT_B(radv_disable_aniso_single_level, def, \
-                 "Disable anisotropic filtering for single level images")
-
-#define DRI_CONF_RADV_DISABLE_TRUNC_COORD(def) \
-  DRI_CONF_OPT_B(radv_disable_trunc_coord, def, \
-                 "Disable TRUNC_COORD to use D3D10/11/12 point sampling behaviour. This has special behaviour for DXVK.")
-
-#define DRI_CONF_RADV_DISABLE_SINKING_LOAD_INPUT_FS(def) \
-   DRI_CONF_OPT_B(radv_disable_sinking_load_input_fs, def, \
-                  "Disable sinking load inputs for fragment shaders")
-
-#define DRI_CONF_RADV_FLUSH_BEFORE_QUERY_COPY(def) \
-  DRI_CONF_OPT_B( \
-      radv_flush_before_query_copy, def, \
-      "Wait for timestamps to be written before a query copy command")
-
-#define DRI_CONF_RADV_ENABLE_UNIFIED_HEAP_ON_APU(def) \
-   DRI_CONF_OPT_B(radv_enable_unified_heap_on_apu, def, \
-                  "Enable an unified heap with DEVICE_LOCAL on integrated GPUs")
-
-#define DRI_CONF_RADV_TEX_NON_UNIFORM(def) \
-   DRI_CONF_OPT_B(radv_tex_non_uniform, def, \
-                  "Always mark texture sample operations as non-uniform.")
-
-#define DRI_CONF_RADV_SSBO_NON_UNIFORM(def) \
-   DRI_CONF_OPT_B(radv_ssbo_non_uniform, def, \
-                  "Always mark SSBO operations as non-uniform.")
-
-#define DRI_CONF_RADV_FLUSH_BEFORE_TIMESTAMP_WRITE(def) \
-   DRI_CONF_OPT_B(radv_flush_before_timestamp_write, def, \
-                  "Wait for previous commands to finish before writing timestamps")
-
-#define DRI_CONF_RADV_RT_WAVE64(def) \
-   DRI_CONF_OPT_B(radv_rt_wave64, def, \
-                  "Force wave64 in RT shaders")
-
-#define DRI_CONF_RADV_WAIT_FOR_VM_MAP_UPDATES(def) \
-   DRI_CONF_OPT_B(radv_wait_for_vm_map_updates, def, \
-                  "Wait for VM MAP updates at allocation time to mitigate use-before-alloc")
-
-#define DRI_CONF_RADV_NO_IMPLICIT_VARYING_SUBGROUP_SIZE(def) \
-   DRI_CONF_OPT_B(radv_no_implicit_varying_subgroup_size, def, \
-                  "Do not assume VK_PIPELINE_SHADER_STAGE_CREATE_ALLOW_VARYING_SUBGROUP_SIZE for SPIR-V 1.6.")
-
-#define DRI_CONF_RADV_PREFER_2D_SWIZZLE_FOR_3D_STORAGE(def) \
-   DRI_CONF_OPT_B(radv_prefer_2d_swizzle_for_3d_storage, def, \
-                  "Prefer 2D swizzle mode for 3D storage images.")
-
-/**
- * Overrides for forcing re-compilation of pipelines when RADV_BUILD_ID_OVERRIDE is enabled.
- * These need to be bumped every time a compiler bugfix is backported (up to 8 shader
- * versions are supported).
- */
-#define DRI_CONF_RADV_OVERRIDE_GRAPHICS_SHADER_VERSION(def) \
-   DRI_CONF_OPT_I(radv_override_graphics_shader_version, def, 0, 7, \
-                  "Override the shader version of graphics pipelines to force re-compilation. (0 = default)")
-
-#define DRI_CONF_RADV_OVERRIDE_COMPUTE_SHADER_VERSION(def) \
-   DRI_CONF_OPT_I(radv_override_compute_shader_version, def, 0, 7, \
-                  "Override the shader version of compute pipelines to force re-compilation. (0 = default)")
-
-#define DRI_CONF_RADV_OVERRIDE_RAY_TRACING_SHADER_VERSION(def) \
-   DRI_CONF_OPT_I(radv_override_ray_tracing_shader_version, def, 0, 7, \
-                  "Override the shader version of ray tracing pipelines to force re-compilation. (0 = default)")
-
-#define DRI_CONF_RADV_APP_LAYER() DRI_CONF_OPT_S_NODEF(radv_app_layer, "Select an application layer.")
-
-#define DRI_CONF_RADV_CLEAR_LDS(def) \
-   DRI_CONF_OPT_B(radv_clear_lds, def, "Clear LDS at the end of shaders. Might decrease performance.")
-
-#define DRI_CONF_RADV_DISABLE_NGG_GS(def) \
-   DRI_CONF_OPT_B(radv_disable_ngg_gs, def, "Disable NGG GS on GFX10/GFX10.3.")
-
-#define DRI_CONF_RADV_EMULATE_RT(def) \
-   DRI_CONF_OPT_B(radv_emulate_rt, def, \
-                  "Expose RT extensions on GFX10 and below through software emulation.")
-
-#define DRI_CONF_RADV_ENABLE_FLOAT16_GFX8(def) \
-   DRI_CONF_OPT_B(radv_enable_float16_gfx8, def, \
-                  "Expose float16 on GFX8, where it's supported but usually not beneficial.")
-
-#define DRI_CONF_RADV_COOPERATIVE_MATRIX2_NV(def) \
-   DRI_CONF_OPT_B(radv_cooperative_matrix2_nv, def, \
-                  "Expose VK_NV_cooperative_matrix2 on supported hardware.")
-
-#define DRI_CONF_RADV_GFX12_HIZ_WA() \
-   DRI_CONF_OPT_S_NODEF(radv_gfx12_hiz_wa, \
-                        "Choose the specific HiZ workaround to apply on GFX12 (RDNA4). " \
-                        "Accepted values are: disabled, partial or full")
-
-#define DRI_CONF_RADV_HIDE_REBAR_ON_DGPU(def) \
-   DRI_CONF_OPT_B(radv_hide_rebar_on_dgpu, def, \
-                  "Hide resizable bar on dGPUs by exposing a fake carveout of 256MiB.")
-
-/**
- * \brief ANV specific configuration options
- */
-
-#define DRI_CONF_ANV_ASSUME_FULL_SUBGROUPS(def) \
-   DRI_CONF_OPT_I(anv_assume_full_subgroups, def, 0, 32, \
-                  "Allow assuming full subgroups requirement even when it's not specified explicitly and set the given size")
-
-#define DRI_CONF_ANV_ASSUME_FULL_SUBGROUPS_WITH_BARRIER(def) \
-   DRI_CONF_OPT_B(anv_assume_full_subgroups_with_barrier, def, \
-                  "Assume full subgroups requirement for compute shaders that use control barriers")
-
-#define DRI_CONF_ANV_ASSUME_FULL_SUBGROUPS_WITH_SHARED_MEMORY(def) \
-   DRI_CONF_OPT_B(anv_assume_full_subgroups_with_shared_memory, def, \
-                  "Allow assuming full subgroups requirement for shaders using shared memory even when it's not specified explicitly")
-
-#define DRI_CONF_ANV_EMULATE_READ_WITHOUT_FORMAT(def) \
-   DRI_CONF_OPT_B(anv_emulate_read_without_format, def, \
-                  "Emulate shaderStorageImageReadWithoutFormat with shader conversions")
-
-#define DRI_CONF_ANV_SAMPLE_MASK_OUT_OPENGL_BEHAVIOUR(def) \
-   DRI_CONF_OPT_B(anv_sample_mask_out_opengl_behaviour, def, \
-                  "Ignore sample mask out when having single sampled target")
-
-#define DRI_CONF_ANV_FORCE_FILTER_ADDR_ROUNDING(def) \
-   DRI_CONF_OPT_B(anv_force_filter_addr_rounding, def, \
-                  "Force min/mag filter address rounding to be enabled even for NEAREST sampling")
-
-#define DRI_CONF_ANV_FP64_WORKAROUND_ENABLED(def) \
-   DRI_CONF_OPT_B(fp64_workaround_enabled, def, \
-                  "Use softpf64 when the shader uses float64, but the device doesn't support that type")
-
-#define DRI_CONF_ANV_GENERATED_INDIRECT_THRESHOLD(def) \
-   DRI_CONF_OPT_I(generated_indirect_threshold, def, 0, INT32_MAX, \
-                  "Indirect threshold count above which we start generating commands")
-
-#define DRI_CONF_ANV_GENERATED_INDIRECT_RING_THRESHOLD(def) \
-   DRI_CONF_OPT_I(generated_indirect_ring_threshold, def, 0, INT32_MAX, \
-                  "Indirect threshold count above which we start generating commands in a ring buffer")
-
-#define DRI_CONF_ANV_QUERY_CLEAR_WITH_BLORP_THRESHOLD(def) \
-   DRI_CONF_OPT_I(query_clear_with_blorp_threshold, def, 0, INT32_MAX, \
-                  "Query threshold count above which query buffers are cleared with blorp")
-
-#define DRI_CONF_ANV_QUERY_COPY_WITH_SHADER_THRESHOLD(def) \
-   DRI_CONF_OPT_I(query_copy_with_shader_threshold, def, 0, INT32_MAX, \
-                  "Query threshold count above which query copies are executed with a shader")
-
-#define DRI_CONF_ANV_FORCE_INDIRECT_DESCRIPTORS(def) \
-   DRI_CONF_OPT_B(force_indirect_descriptors, def, \
-                  "Use an indirection to access buffer/image/texture/sampler handles")
-
-#define DRI_CONF_ANV_DISABLE_FCV(def) \
-   DRI_CONF_OPT_B(anv_disable_fcv, def, \
-                  "Disable FCV optimization")
-
-#define DRI_CONF_ANV_ENABLE_BUFFER_COMP(def) \
-   DRI_CONF_OPT_B(anv_enable_buffer_comp, def, \
-                  "Enable CCS on buffers where possible")
-
-#define DRI_CONF_ANV_EXTERNAL_MEMORY_IMPLICIT_SYNC(def) \
-   DRI_CONF_OPT_B(anv_external_memory_implicit_sync, def, "Implicit sync on external BOs")
-
-#define DRI_CONF_ANV_PROMOTE_CBV_TO_PUSH_BUFFERS(def) \
-   DRI_CONF_OPT_B(anv_promote_cbv_to_push_buffers, def, \
-                  "Promote CBV 64bit pointers in push constant data to push buffers")
-
-#define DRI_CONF_ANV_STATE_CACHE_PERF_FIX(def) \
-   DRI_CONF_OPT_B(anv_state_cache_perf_fix, def, \
-                  "Whether COMMON_SLICE_CHICKEN3 bit13 should be programmed to enable BTP+BTI RCC keying")
-
-#define DRI_CONF_ANV_COMPRESSION_CONTROL_ENABLED(def) \
-   DRI_CONF_OPT_B(compression_control_enabled, def, "Enable VK_EXT_image_compression_control support")
-
-#define DRI_CONF_ANV_FAKE_NONLOCAL_MEMORY(def) \
-   DRI_CONF_OPT_B(anv_fake_nonlocal_memory, def, \
-                  "Present host-visible device-local memory types as non device-local")
-
-#define DRI_CONF_ANV_UPPER_BOUND_DESCRIPTOR_POOL_SAMPLER(def) \
-   DRI_CONF_OPT_B(anv_upper_bound_descriptor_pool_sampler, def, \
-                  "Overallocate samplers in descriptor pools to workaround app bug")
-
-#define DRI_CONF_ANV_VF_COMPONENT_PACKING(def) \
-   DRI_CONF_OPT_B(anv_vf_component_packing, def, \
-                  "Vertex fetching component packing")
-
-#define DRI_CONF_ANV_LARGE_WORKGROUP_NON_COHERENT_IMAGE_WORKAROUND(def) \
-   DRI_CONF_OPT_B(anv_large_workgroup_non_coherent_image_workaround, def, \
-                  "Fixup image coherency qualifier for certain shaders.")
-
-#define DRI_CONF_ANV_FORCE_GUC_LOW_LATENCY(def) \
-   DRI_CONF_OPT_B(force_guc_low_latency, def, \
-                  "Enable low latency GuC strategy.")
-
-#define DRI_CONF_ANV_DISABLE_DRM_AUX_MODIFIERS(def) \
-   DRI_CONF_OPT_B(anv_disable_drm_ccs_modifiers, def, \
-                  "Disable DRM CCS modifier usage")
-
-#define DRI_CONF_ANV_DISABLE_LINK_TIME_OPTIMIZATION(def) \
-   DRI_CONF_OPT_B(anv_disable_link_time_optimization, def, \
-                  "Disable linking of graphics pipeline shaders")
-
-#define DRI_CONF_ANV_BARRIER_POST_UNTYPED_CLEAR_SHADER(def) \
-   DRI_CONF_OPT_B(anv_barrier_post_untyped_clear_shader, def, \
-                  "Insert pipeline barriers post clearing shader on untyped data")
-
-#define DRI_CONF_ANV_BARRIER_POST_TYPED_CLEAR_SHADER(def) \
-   DRI_CONF_OPT_B(anv_barrier_post_typed_clear_shader, def, \
-                  "Insert pipeline barriers post clearing shader on typed data")
-
-#define DRI_CONF_ANV_ENABLE_OPT_DIVERGENT_ATOMICS(def) \
-   DRI_CONF_OPT_I(anv_enable_opt_divergent_atomics, def, 0, 3,\
-                  "Enable fusion of divergent atomics (see brw_divergent_atomics_flags)")
-
-#define DRI_CONF_ANV_BRW_DISABLE_SUBGROUP_SIZE_CONTROL(def) \
-   DRI_CONF_OPT_B(anv_brw_disable_subgroup_size_control, def, \
-                  "Disable EXT_subgroup_size_control support when using brw compiler.")
-
-#define DRI_CONF_ANV_ENABLE_SCRATCH_PAGE(def) \
-   DRI_CONF_OPT_B(anv_enable_scratch_page, def, \
-                  "Disables surface padding and suppresses all page faults, drops writes and returns zeros on reads.")
-
-/**
  * \brief HASVK specific configuration options
  */
+
+#define DRI_CONF_HASVK_ASSUME_FULL_SUBGROUPS(def) \
+  DRI_CONF_OPT_I(anv_assume_full_subgroups, def, 0, 32, \
+                 "Allow assuming full subgroups requirement even when it's not specified explicitly and set the given size")
 
 #define DRI_CONF_HASVK_OVERRIDE_API_VERSION(def) \
    DRI_CONF_OPT_B(hasvk_report_vk_1_3_version, def, \
                   "Override intel_hasvk API version")
+
+#define DRI_CONF_HASVK_SAMPLE_MASK_OUT_OPENGL_BEHAVIOUR(def) \
+   DRI_CONF_OPT_B(anv_sample_mask_out_opengl_behaviour, def, \
+                  "Ignore sample mask out when having single sampled target")
 
 /**
  * \brief DZN specific configuration options

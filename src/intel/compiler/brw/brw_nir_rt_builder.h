@@ -696,9 +696,9 @@ brw_nir_rt_generate_hit_addr(nir_builder *b, nir_def *stack_addr, nir_def *t_val
                nir_imm_float(b, 0.0f),
                nir_imm_float(b, 0.0f),
                nir_ior_imm(b,
-                           nir_ior_imm(b, nir_channel(b, potential_hit_dwords_0_3, 3), 0x000e0000),
+                           nir_iand_imm(b, nir_channel(b, potential_hit_dwords_0_3, 3), 0x000e0000) /* leaf type */,
                            (0x1 << 16)                     /* valid */ |
-                           (BRW_RT_BVH_LEVEL_OBJECT << 24) /* leaf_type */));
+                           (BRW_RT_BVH_LEVEL_OBJECT << 24) /* BVH level */));
    brw_nir_rt_store(b, committed_addr, 16, committed_hit_dwords_0_3, 0xf /* write_mask */);
 
    /* Set:

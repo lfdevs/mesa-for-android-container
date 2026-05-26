@@ -118,6 +118,15 @@ mtl_device_get_registry_id(mtl_device *dev)
    }
 }
 
+bool
+mtl_device_supports_sample_count(mtl_device *dev, uint32_t sample_count)
+{
+   @autoreleasepool {
+      id<MTLDevice> device = (id<MTLDevice>)dev;
+      return [device supportsTextureSampleCount:sample_count];
+   }
+}
+
 struct mtl_size
 mtl_device_max_threads_per_threadgroup(mtl_device *dev)
 {
@@ -144,6 +153,24 @@ mtl_device_max_buffer_length(mtl_device *dev)
    @autoreleasepool {
       id<MTLDevice> device = (id<MTLDevice>)dev;
       return device.maxBufferLength;
+   }
+}
+
+uint64_t
+mtl_device_recommended_max_working_set_size(mtl_device *dev)
+{
+   @autoreleasepool {
+      id<MTLDevice> device = (id<MTLDevice>)dev;
+      return device.recommendedMaxWorkingSetSize;
+   }
+}
+
+uint64_t
+mtl_device_current_allocated_size(mtl_device *dev)
+{
+   @autoreleasepool {
+      id<MTLDevice> device = (id<MTLDevice>)dev;
+      return device.currentAllocatedSize;
    }
 }
 
@@ -203,15 +230,15 @@ mtl_heap_texture_size_and_align_with_descriptor(mtl_device *device,
 {
    @autoreleasepool {
       id<MTLDevice> dev = (id<MTLDevice>)device;
-      if (layout->optimized_layout) {
+      if (layout->linear) {
+         /* Linear textures have different alignment since they are allocated on top of MTLBuffers */
+         layout->align_B = [dev minimumLinearTextureAlignmentForPixelFormat:layout->format.mtl];
+      } else {
          MTLTextureDescriptor *descriptor = [mtl_new_texture_descriptor(layout) autorelease];
          descriptor.resourceOptions = KK_MTL_RESOURCE_OPTIONS;
          MTLSizeAndAlign size_align = [dev heapTextureSizeAndAlignWithDescriptor:descriptor];
          layout->size_B = size_align.size;
          layout->align_B = size_align.align;
-      } else {
-         /* Linear textures have different alignment since they are allocated on top of MTLBuffers */
-         layout->align_B = [dev minimumLinearTextureAlignmentForPixelFormat:layout->format.mtl];
       }
    }
 }

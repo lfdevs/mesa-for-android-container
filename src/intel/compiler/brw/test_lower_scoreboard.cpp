@@ -1125,8 +1125,7 @@ TEST_F(scoreboard_test, scalar_register_mov_immediate_is_in_scalar_pipe)
    EXPECT_PROGRESS(brw_lower_scoreboard, bld);
 
    exp.uniform().MOV(scalar, imm);
-                 SYNC_NOP(exp   )->sched = SWSB("S@1");
-   exp          .MOV(r20, scalar);
+   exp          .MOV(r20, scalar)->sched = SWSB("S@1");
 
    EXPECT_SHADERS_MATCH(bld, exp);
 }
@@ -1148,8 +1147,7 @@ TEST_F(scoreboard_test, scalar_register_mov_grf_is_not_in_scalar_pipe)
    EXPECT_PROGRESS(brw_lower_scoreboard, bld);
 
    exp.uniform().MOV     (scalar, r10);
-                 SYNC_NOP(exp       )->sched = SWSB("I@1");
-   exp          .MOV     (r20, scalar);
+   exp          .MOV     (r20, scalar)->sched = SWSB("I@1");
 
    EXPECT_SHADERS_MATCH(bld, exp);
 }
@@ -1283,6 +1281,49 @@ TEST_F(scoreboard_test, implicit_dependency_inside_if)
    exp.ELSE();
    exp.NOP();
    exp.ENDIF();
+
+   EXPECT_SHADERS_MATCH(bld, exp);
+}
+
+TEST_F(scoreboard_test, xe2_uniform_writer_baked_into_masked_consumer)
+{
+   set_gfx_verx10(200);
+
+   brw_builder bld = make_shader();
+   brw_builder exp = make_shader();
+
+   brw_reg *g = vgrf_array(bld, exp, BRW_TYPE_D, 8);
+   brw_reg  x = vgrf(bld, exp, BRW_TYPE_D);
+
+   bld.uniform().ADD(   x, g[1], g[2]);
+   bld          .ADD(g[3],    x, g[4]);
+
+   EXPECT_PROGRESS(brw_lower_scoreboard, bld);
+
+   exp.uniform().ADD(   x, g[1], g[2]);
+   exp          .ADD(g[3],    x, g[4])->sched = SWSB("I@1");
+
+   EXPECT_SHADERS_MATCH(bld, exp);
+}
+
+TEST_F(scoreboard_test, xe2_uniform_writer_baked_into_masked_send)
+{
+   set_gfx_verx10(200);
+
+   brw_builder bld = make_shader();
+   brw_builder exp = make_shader();
+
+   brw_reg a = brw_ud8_grf(10, 0);
+   brw_reg b = brw_ud8_grf(20, 0);
+   brw_reg x = brw_ud8_grf(30, 0);
+
+   bld.uniform().ADD(a, a, a);
+   emit_SEND   (bld, x, a, b);
+
+   EXPECT_PROGRESS(brw_lower_scoreboard, bld);
+
+   exp.uniform().ADD(a, a, a);
+   emit_SEND   (exp, x, a, b)->sched = SWSB("I@1 $0");
 
    EXPECT_SHADERS_MATCH(bld, exp);
 }

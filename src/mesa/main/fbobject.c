@@ -1508,7 +1508,7 @@ _mesa_test_framebuffer_completeness(struct gl_context *ctx,
          if (baseFormat == GL_RGB)
             fb->_IsRGB |= (1 << i);
 
-         if (ctx->st->has_indep_blend_func &&
+         if (ctx->st->screen->caps.indep_blend_func &&
              ((baseFormat == GL_RGB) ||
               (baseFormat == GL_LUMINANCE && !util_format_is_luminance(attFormat)) ||
               (baseFormat == GL_INTENSITY && !util_format_is_intensity(attFormat))))
@@ -2908,19 +2908,6 @@ renderbuffer_storage_named(GLuint renderbuffer, GLenum internalFormat,
 {
    GET_CURRENT_CONTEXT(ctx);
 
-   if (MESA_VERBOSE & VERBOSE_API) {
-      if (samples == NO_SAMPLES)
-         _mesa_debug(ctx, "%s(%u, %s, %d, %d)\n",
-                     func, renderbuffer,
-                     _mesa_enum_to_string(internalFormat),
-                     width, height);
-      else
-         _mesa_debug(ctx, "%s(%u, %s, %d, %d, %d)\n",
-                     func, renderbuffer,
-                     _mesa_enum_to_string(internalFormat),
-                     width, height, samples);
-   }
-
    struct gl_renderbuffer *rb = _mesa_lookup_renderbuffer(ctx, renderbuffer);
    if (!rb || rb == &DummyRenderbuffer) {
       /* ID was reserved, but no real renderbuffer object made yet */
@@ -2944,21 +2931,6 @@ renderbuffer_storage_target(GLenum target, GLenum internalFormat,
                             GLsizei storageSamples, const char *func)
 {
    GET_CURRENT_CONTEXT(ctx);
-
-   if (MESA_VERBOSE & VERBOSE_API) {
-      if (samples == NO_SAMPLES)
-         _mesa_debug(ctx, "%s(%s, %s, %d, %d)\n",
-                     func,
-                     _mesa_enum_to_string(target),
-                     _mesa_enum_to_string(internalFormat),
-                     width, height);
-      else
-         _mesa_debug(ctx, "%s(%s, %s, %d, %d, %d)\n",
-                     func,
-                     _mesa_enum_to_string(target),
-                     _mesa_enum_to_string(internalFormat),
-                     width, height, samples);
-   }
 
    if (target != GL_RENDERBUFFER_EXT) {
       _mesa_error(ctx, GL_INVALID_ENUM, "%s(target)", func);
@@ -3338,12 +3310,6 @@ bind_framebuffer(GLenum target, GLuint framebuffer)
    GLboolean bindReadBuf, bindDrawBuf;
    GET_CURRENT_CONTEXT(ctx);
 
-   if (MESA_VERBOSE & VERBOSE_API)
-      _mesa_debug(ctx,
-                  "glBindFramebuffer(%s, %u)\n",
-                  _mesa_enum_to_string(target),
-                  framebuffer);
-
    switch (target) {
    case GL_DRAW_FRAMEBUFFER_EXT:
       bindDrawBuf = GL_TRUE;
@@ -3643,10 +3609,6 @@ _mesa_CheckFramebufferStatus(GLenum target)
 {
    struct gl_framebuffer *fb;
    GET_CURRENT_CONTEXT(ctx);
-
-   if (MESA_VERBOSE & VERBOSE_API)
-      _mesa_debug(ctx, "glCheckFramebufferStatus(%s)\n",
-                  _mesa_enum_to_string(target));
 
    fb = get_framebuffer_target(ctx, target);
    if (!fb) {
@@ -5835,14 +5797,6 @@ _mesa_InvalidateFramebuffer(GLenum target, GLsizei numAttachments,
 {
    struct gl_framebuffer *fb;
    GET_CURRENT_CONTEXT(ctx);
-
-   if (MESA_VERBOSE & VERBOSE_API) {
-      for (unsigned i = 0; i < numAttachments; i++)
-         _mesa_debug(ctx,
-                     "glInvalidateFramebuffer(%s, %s)\n",
-                     _mesa_enum_to_string(target),
-                     _mesa_enum_to_string(attachments[i]));
-   }
 
    fb = get_framebuffer_target(ctx, target);
    if (!fb) {

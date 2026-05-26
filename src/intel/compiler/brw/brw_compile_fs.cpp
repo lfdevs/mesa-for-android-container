@@ -58,7 +58,6 @@ brw_emit_single_fb_write(brw_shader &s, const brw_builder &bld,
 static void
 brw_do_emit_fb_writes(brw_shader &s, int nr_color_regions, bool replicate_alpha)
 {
-   struct brw_fs_prog_data *prog_data = brw_fs_prog_data(s.prog_data);
    const brw_builder bld = brw_builder(&s);
 
    brw_fb_write_inst *write = NULL;
@@ -89,15 +88,14 @@ brw_do_emit_fb_writes(brw_shader &s, int nr_color_regions, bool replicate_alpha)
    }
 
    if (write == NULL) {
-      struct brw_fs_prog_key *key = (brw_fs_prog_key*) s.key;
-      /* Disable null_rt if any non color output is written or if
-       * alpha_to_coverage can be enabled. Since the alpha_to_coverage bit is
-       * coming from the BLEND_STATE structure and the HW will avoid reading
-       * it if null_rt is enabled.
+      /* Disable null_rt if the shader doesn't write any relevant output.
        */
       const bool use_null_rt =
-         key->alpha_to_coverage == INTEL_NEVER &&
-         !prog_data->uses_omask;
+         (s.nir->info.outputs_written &
+          (BITFIELD_RANGE(FRAG_RESULT_DATA0, 8) |
+           BITFIELD_BIT(FRAG_RESULT_DEPTH) |
+           BITFIELD_BIT(FRAG_RESULT_STENCIL) |
+           BITFIELD64_BIT(FRAG_RESULT_SAMPLE_MASK))) == 0;
 
       /* Even if there's no color buffers enabled, we still need to send alpha
        * out the pipeline to our null renderbuffer to support alpha-testing,
@@ -565,6 +563,7 @@ calculate_urb_setup(const struct intel_device_info *devinfo,
                     const struct brw_fs_prog_key *key,
                     struct brw_fs_prog_data *prog_data,
                     nir_shader *nir,
+                    const struct intel_vue_map *prev_stage_vue_map,
                     const struct brw_mue_map *mue_map,
                     int *per_primitive_offsets)
 {
@@ -616,9 +615,12 @@ calculate_urb_setup(const struct intel_device_info *devinfo,
          first_read_offset = per_primitive_stride = 0;
       }
    } else {
-      brw_compute_vue_map(devinfo, &vue_map, inputs_read,
-                          key->base.vue_layout,
-                          1 /* pos_slots, TODO */);
+      if (prev_stage_vue_map) {
+         memcpy(&vue_map, prev_stage_vue_map, sizeof(vue_map));
+      } else {
+         brw_compute_vue_map(devinfo, &vue_map, inputs_read,
+                             key->base.vue_layout, 1 /* pos_slots */);
+      }
       brw_compute_per_primitive_map(per_primitive_offsets,
                                     &per_primitive_stride,
                                     &first_read_offset,
@@ -679,13 +681,15 @@ calculate_urb_setup(const struct intel_device_info *devinfo,
          }
       }
 
+      int last_slot = first_slot;
       for (int slot = first_slot; slot < vue_map.num_slots; slot++) {
          int varying = vue_map.slot_to_varying[slot];
          if (varying > 0 && (inputs_read & BITFIELD64_BIT(varying))) {
             prog_data->urb_setup[varying] = slot - first_slot;
+            last_slot = slot;
          }
       }
-      urb_next = vue_map.num_slots - first_slot;
+      urb_next = last_slot - first_slot + 1;
    }
 
    prog_data->num_varying_inputs = urb_next;
@@ -826,6 +830,7 @@ brw_nir_populate_fs_prog_data(nir_shader *shader,
                               const struct intel_device_info *devinfo,
                               const struct brw_fs_prog_key *key,
                               struct brw_fs_prog_data *prog_data,
+                              const struct intel_vue_map *prev_stage_vue_map,
                               const struct brw_mue_map *mue_map,
                               int *per_primitive_offsets)
 {
@@ -870,7 +875,9 @@ brw_nir_populate_fs_prog_data(nir_shader *shader,
    assert(devinfo->verx10 >= 200 || key->provoking_vertex_last == INTEL_NEVER);
    prog_data->provoking_vertex_last = key->provoking_vertex_last;
 
-   prog_data->uses_sample_mask =
+   prog_data->uses_fully_covered =
+      BITSET_TEST(shader->info.system_values_read, SYSTEM_VALUE_FULLY_COVERED);
+   prog_data->uses_sample_mask = prog_data->uses_fully_covered ||
       BITSET_TEST(shader->info.system_values_read, SYSTEM_VALUE_SAMPLE_MASK_IN);
 
    /* From the Ivy Bridge PRM documentation for 3DSTATE_PS:
@@ -999,7 +1006,8 @@ brw_nir_populate_fs_prog_data(nir_shader *shader,
       (BITSET_TEST(shader->info.system_values_read, SYSTEM_VALUE_FRAG_COORD_Z) &&
        prog_data->coarse_pixel_dispatch != INTEL_NEVER);
 
-   calculate_urb_setup(devinfo, key, prog_data, shader, mue_map, per_primitive_offsets);
+   calculate_urb_setup(devinfo, key, prog_data, shader, prev_stage_vue_map,
+                       mue_map, per_primitive_offsets);
    brw_compute_flat_inputs(prog_data, shader);
 }
 
@@ -1446,8 +1454,10 @@ brw_compile_fs(const struct brw_compiler *compiler,
                struct brw_compile_fs_params *params)
 {
    struct nir_shader *nir = params->base.nir;
-   const struct brw_fs_prog_key *key = params->key;
-   struct brw_fs_prog_data *prog_data = params->prog_data;
+   const struct brw_fs_prog_key *key =
+      (const struct brw_fs_prog_key *)params->base.key;
+   struct brw_fs_prog_data *prog_data =
+      (struct brw_fs_prog_data *)params->base.prog_data;
    bool allow_spilling = params->allow_spilling;
    const bool debug_enabled =
       brw_should_print_shader(nir, params->base.debug_flag ?
@@ -1506,7 +1516,7 @@ brw_compile_fs(const struct brw_compiler *compiler,
    memset(per_primitive_offsets, -1, sizeof(per_primitive_offsets));
 
    brw_nir_populate_fs_prog_data(nir, compiler->devinfo, key, prog_data,
-                                 params->mue_map,
+                                 params->vue_map, params->mue_map,
                                  per_primitive_offsets);
 
    /* From the SKL PRM, Volume 7, "Alpha Coverage":
@@ -1525,28 +1535,7 @@ brw_compile_fs(const struct brw_compiler *compiler,
    if (prog_data->coarse_pixel_dispatch != INTEL_NEVER)
       BRW_NIR_PASS(brw_nir_lower_frag_coord_z, devinfo);
 
-   if (!brw_fs_prog_key_is_dynamic(key)) {
-      uint32_t f = 0;
-
-      if (key->multisample_fbo == INTEL_ALWAYS)
-         f |= INTEL_FS_CONFIG_MULTISAMPLE_FBO;
-
-      if (key->alpha_to_coverage == INTEL_ALWAYS)
-         f |= INTEL_FS_CONFIG_ALPHA_TO_COVERAGE;
-
-      if (key->provoking_vertex_last == INTEL_ALWAYS)
-         f |= INTEL_FS_CONFIG_PROVOKING_VERTEX_LAST;
-
-      if (key->persample_interp == INTEL_ALWAYS) {
-         f |= INTEL_FS_CONFIG_PERSAMPLE_DISPATCH |
-              INTEL_FS_CONFIG_PERSAMPLE_INTERP;
-      }
-
-      if (prog_data->coarse_pixel_dispatch == INTEL_ALWAYS)
-         f |= INTEL_FS_CONFIG_COARSE_RT_WRITES;
-
-      BRW_NIR_PASS(nir_inline_sysval, nir_intrinsic_load_fs_config_intel, f);
-   }
+   BRW_NIR_PASS(brw_nir_lower_fs_config_intel, key, prog_data);
 
    brw_postprocess_nir_opts(pt);
 

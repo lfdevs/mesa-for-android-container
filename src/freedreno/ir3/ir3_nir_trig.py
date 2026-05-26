@@ -7,8 +7,9 @@ import argparse
 import sys
 
 trig_workarounds = [
-   (('fsin', 'x@32'), ('fsin', ('!ffma', 6.2831853, ('ffract', ('!ffma', 0.15915494, 'x', 0.5)), -3.14159265))),
-   (('fcos', 'x@32'), ('fcos', ('!ffma', 6.2831853, ('ffract', ('!ffma', 0.15915494, 'x', 0.5)), -3.14159265))),
+   # !fmad as reassociation could make this not precise enough.
+   (('fsin', 'x@32'), ('fsin', ('!fmad', 6.2831853, ('ffract', ('!fmad', 0.15915494, 'x', 0.5)), -3.14159265))),
+   (('fcos', 'x@32'), ('fcos', ('!fmad', 6.2831853, ('ffract', ('!fmad', 0.15915494, 'x', 0.5)), -3.14159265))),
 ]
 
 

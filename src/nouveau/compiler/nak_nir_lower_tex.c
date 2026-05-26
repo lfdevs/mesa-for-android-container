@@ -845,6 +845,11 @@ lower_image_txq(nir_builder *b, nir_intrinsic_instr *intrin,
           */
          nir_def *samples = build_txq_samples_raw(b, img_h, can_speculate, nak);
          nir_def *px_size_sa_log2 = build_px_size_sa_log2(b, samples);
+         /* The first two coordinates are X/Y. If we have more than that,
+          * it’s the array index and that isn’t scaled.
+          */
+         px_size_sa_log2 = nir_pad_vector_imm_int(b, px_size_sa_log2, 0,
+                                                  intrin->def.num_components);
          res = nir_ushr(b, res, px_size_sa_log2);
       }
       break;

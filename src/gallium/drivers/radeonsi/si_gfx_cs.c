@@ -114,7 +114,7 @@ void si_flush_gfx_cs(struct si_context *ctx, unsigned flags, struct pipe_fence_h
    /* Drop this flush if it's a no-op. */
    if (!radeon_emitted(cs, ctx->initial_gfx_cs_size) &&
        (!wait_flags || !ctx->gfx_last_ib_is_busy) &&
-       !(flags & RADEON_FLUSH_TOGGLE_SECURE_SUBMISSION)) {
+       !(flags & (RADEON_FLUSH_TOGGLE_SECURE_SUBMISSION | RADEON_FLUSH_FORCE))) {
       tc_driver_internal_flush_notify(ctx->tc);
       return;
    }

@@ -471,22 +471,6 @@ impl NirShader {
         }
     }
 
-    pub fn preserve_fp16_denorms(&mut self) {
-        unsafe {
-            self.nir.as_mut().info.float_controls_execution_mode |=
-                float_controls::FLOAT_CONTROLS_DENORM_PRESERVE_FP16 as u32;
-        }
-    }
-
-    pub fn set_fp_rounding_mode_rtne(&mut self) {
-        unsafe {
-            self.nir.as_mut().info.float_controls_execution_mode |=
-                float_controls::FLOAT_CONTROLS_ROUNDING_MODE_RTE_FP16 as u32
-                    | float_controls::FLOAT_CONTROLS_ROUNDING_MODE_RTE_FP32 as u32
-                    | float_controls::FLOAT_CONTROLS_ROUNDING_MODE_RTE_FP64 as u32;
-        }
-    }
-
     pub fn reads_sysval(&self, sysval: gl_system_value) -> bool {
         let nir = unsafe { self.nir.as_ref() };
         bitset::test_bit(&nir.info.system_values_read, sysval as u32)

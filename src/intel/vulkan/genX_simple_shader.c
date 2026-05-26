@@ -44,6 +44,7 @@ genX(emit_simpler_shader_init_fragment)(struct anv_simple_shader *state)
 
    struct anv_batch *batch = state->batch;
    struct anv_device *device = state->device;
+   const struct anv_instance *instance = device->physical->instance;
    const struct brw_fs_prog_data *prog_data =
       brw_fs_prog_data_const(state->kernel->prog_data);
 
@@ -88,7 +89,7 @@ genX(emit_simpler_shader_init_fragment)(struct anv_simple_shader *state)
        * distribution.
        */
       vf.GeometryDistributionEnable =
-         device->physical->instance->enable_vf_distribution;
+         instance->drirc.debug.vf_distribution;
 #endif
    }
    anv_batch_emit(batch, GENX(3DSTATE_VF_SGVS), sgvs) {
@@ -273,7 +274,7 @@ genX(emit_simpler_shader_init_fragment)(struct anv_simple_shader *state)
    anv_batch_emit(batch, GENX(3DSTATE_PRIMITIVE_REPLICATION), pr);
 #endif
 
-   if (!device->physical->instance->disable_push_constant_alloc) {
+   if (!instance->drirc.perf.disable_push_const_alloc) {
       VkShaderStageFlags push_stages =
          genX(push_constant_alloc_stages)(VK_SHADER_STAGE_FRAGMENT_BIT);
       genX(batch_emit_push_constants_alloc)(batch, device, push_stages);
@@ -357,6 +358,9 @@ genX(emit_simpler_shader_init_fragment)(struct anv_simple_shader *state)
       BITSET_SET(hw_state->emit_dirty, ANV_GFX_STATE_MESH_CONTROL);
       BITSET_SET(hw_state->emit_dirty, ANV_GFX_STATE_TASK_CONTROL);
    }
+
+   /* Add the flagged instructions as emitted */
+   BITSET_OR(hw_state->emitted, hw_state->emitted, hw_state->emit_dirty);
 
    /* Update urb config after simple shader. */
    memcpy(&state->cmd_buffer->state.gfx.urb_cfg, &urb_cfg,

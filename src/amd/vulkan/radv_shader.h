@@ -133,6 +133,7 @@ struct radv_graphics_state_key {
    uint32_t lib_flags : 4; /* VkGraphicsPipelineLibraryFlagBitsEXT */
 
    uint32_t has_multiview_view_index : 1;
+   uint32_t vrs_may_be_enabled : 1;
    uint32_t adjust_frag_coord_z : 1;
    uint32_t dynamic_rasterization_samples : 1;
    uint32_t dynamic_provoking_vtx_mode : 1;
@@ -236,14 +237,16 @@ struct radv_llvm_compiler_options {
 #define NGG_STATE_QUERY__SHIFT              6
 #define NGG_STATE_QUERY__MASK               0x7
 
-#define PS_STATE_NUM_SAMPLES__SHIFT    0
-#define PS_STATE_NUM_SAMPLES__MASK     0xf
-#define PS_STATE_LINE_RAST_MODE__SHIFT 4
-#define PS_STATE_LINE_RAST_MODE__MASK  0x3
-#define PS_STATE_PS_ITER_MASK__SHIFT   6
-#define PS_STATE_PS_ITER_MASK__MASK    0xffff
-#define PS_STATE_RAST_PRIM__SHIFT      22
-#define PS_STATE_RAST_PRIM__MASK       0x3
+#define PS_STATE_NUM_SAMPLES__SHIFT             0
+#define PS_STATE_NUM_SAMPLES__MASK              0xf
+#define PS_STATE_LINE_RAST_MODE__SHIFT          4
+#define PS_STATE_LINE_RAST_MODE__MASK           0x3
+#define PS_STATE_PS_ITER_MASK__SHIFT            6
+#define PS_STATE_PS_ITER_MASK__MASK             0xffff
+#define PS_STATE_RAST_PRIM__SHIFT               22
+#define PS_STATE_RAST_PRIM__MASK                0x3
+#define PS_STATE_USE_FLOAT_FRAG_COORD_XY__SHIFT 24
+#define PS_STATE_USE_FLOAT_FRAG_COORD_XY__MASK  0x1
 
 struct radv_shader_layout {
    uint32_t num_sets;
@@ -525,6 +528,7 @@ struct radv_compiler_info {
       uint32_t mesh_shader_queries : 1;
       uint32_t image_2d_view_of_3d : 1;
       uint32_t use_fmask : 1;
+      uint32_t force_64_byte_sampled_image : 1;
       uint32_t robust_buffer_access : 1; /* Only used by LLVM. */
       uint32_t mitigate_smem_oob : 1;
       uint32_t mitigate_smem_with_null_prt : 1;
@@ -544,7 +548,7 @@ struct radv_compiler_info {
       uint32_t tex_non_uniform : 1;
       uint32_t lower_terminate_to_discard : 1;
       uint32_t no_implicit_varying_subgroup_size : 1;
-      uint32_t padding : 31;
+      uint32_t padding : 30;
 
       int32_t force_aniso;
 

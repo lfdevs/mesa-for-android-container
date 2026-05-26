@@ -1,0 +1,245 @@
+Mesa 26.1.1 Release Notes / 2026-05-19
+======================================
+
+Mesa 26.1.1 is a bug fix release which fixes bugs found since the 26.1.0 release.
+
+Mesa 26.1.1 implements the OpenGL 4.6 API, but the version reported by
+glGetString(GL_VERSION) or glGetIntegerv(GL_MAJOR_VERSION) /
+glGetIntegerv(GL_MINOR_VERSION) depends on the particular driver being used.
+Some drivers don't support all the features required in OpenGL 4.6. OpenGL
+4.6 is **only** available if requested at context creation.
+Compatibility contexts may report a lower version depending on each driver.
+
+Mesa 26.1.1 implements the Vulkan 1.4 API, but the version reported by
+the apiVersion property of the VkPhysicalDeviceProperties struct
+depends on the particular driver being used.
+
+SHA checksums
+-------------
+
+::
+
+    SHA256: 8bd36c031cc6d0edfec04617527609454ee3a09ad53bdf983b45fc2c1e129b2e  mesa-26.1.1.tar.xz
+    SHA512: 384a7db33d2f06e287337329f2f17503082ba6b1cd876a1884e940fdb6193ffae6d6b14344625256f3b3b39972ad697130a4d2ea25c40979f7aa76c2176f7988  mesa-26.1.1.tar.xz
+
+
+New features
+------------
+
+- None
+
+
+Bug fixes
+---------
+
+- None
+
+
+Changes
+-------
+
+Benjamin Cheng (2):
+
+- ac/parse_ib: Add parsing for variable slice mode
+- radeonsi/video: Cleanup dpb buffer
+
+Calder Young (2):
+
+- anv: Fix some usage flags not propagated to ISL for explicit layouts
+- spirv: Fix debugPrintfEXT not working with multiple arguments
+
+Christoph Pillmayer (1):
+
+- pan/kmod: Fix uninitialized timestamp info
+
+Danylo Piliaiev (2):
+
+- tu/a8xx: Fix reading border_color from sampler memory
+- tu: Always lazy_init_vsc for tiler rendering
+
+Dave Airlie (2):
+
+- nak: fix image size for multisample arrays
+- nak: add more sizes to assert in bindless_image_sparse_load
+
+David Rosca (1):
+
+- radeonsi/uvd_enc: Skip extra padding bytes in output bitstream
+
+Dmitry Osipenko (1):
+
+- intel/virtio: Preserve errno properly when handling ioctl
+
+Emma Anholt (1):
+
+- tu: Set HALF_PRECISION on blits to R11G11B10.
+
+Eric Engestrom (4):
+
+- docs: add sha sum for 26.1.0
+- .pick_status.json: Update to b1083190d02cb244718816dded908088959d8054
+- docs: fix unescaped \`*`
+- etnaviv: initialize value before calling etna_gpu_get_param(), in case it fails
+
+Erik Faye-Lund (8):
+
+- mesa/main: remove stale prototypes
+- mesa/main: remove incorrect debug-output
+- Revert "mesa: check for ARB_ES3_compatibility in format checks"
+- mesa/main: remove unused array
+- pan/ci: add missing gitlab rules
+- pan/ci: remove outdated gitlab rule
+- pan/ci: add missing gitlab rule
+- pan/ci: fix gitlab rules after move
+
+Frank Binns (1):
+
+- pvr/ci: drop two tests from bxs-4-64-{fails,flakes}
+
+Georg Lehmann (5):
+
+- nir: fix fp_math_ctrl in fisnan
+- radv: fix amount of sample shading with required sample shaded inputs
+- aco/tests: use explicit lod in sparse texture test
+- ac/nir/lower_tex_coords: fix optimizing cube txd to tex
+- spirv: always preserve infinities for FMin, FMax and FClamp
+
+Hans-Kristian Arntzen (1):
+
+- wsi/common: Report correct time domain in VkPresentTimingInfo.
+
+Iago Toral Quiroga (1):
+
+- pan/bi: TEX_GRADIENT may need helper invocations
+
+Ian Romanick (1):
+
+- brw: Calcuate divergence before brw_from_nir
+
+Icenowy Zheng (6):
+
+- pvr: setup viewindex if the shader wants it even when multiview disabled
+- pvr: fix handling of invalid attachment info in pvr_init_fs_outputs_mrt
+- pvr: copy sub_cmd flags except owned when executing subcmds out of pass
+- pvr: stop to derive rt datasets based on geometry_terminate
+- pvr: add a structure containing data kept for suspended renderpasses
+- pvr: preserve and pass more data for suspending render passes
+
+Job Noorman (2):
+
+- ir3: don't cache driver param instructions
+- freedreno/computerator: fix UAV view size
+
+Jon Turney (4):
+
+- glx/windows: Avoid shadowing 'type' parameter of driwindowsCreateDrawable()
+- glx/windows: Fix compilation of driwindows_glx after driscreen changed from pointer to member
+- glx/windows: Fix compliation after code motion to put event base in 'dri' context
+- glx/windows: Drop static from driwindowsCreateScreen()
+
+Jose Maria Casanova Crespo (2):
+
+- v3dv: include mem_offset in vkCmdFillBuffer destination
+- v3dv: avoid duplicate bo_handles between cpu_job and CSD lists
+
+Karol Herbst (5):
+
+- nir/lower_cl_images: call nir_progress on every function
+- gallivm/nir/soa: use uint for booleans
+- llvmpipe: never pass a NULL function name to LLVMAddFunction
+- clc: do not use std::filesystem
+- Revert "rusticl: link the C++ runtime statically"
+
+Lionel Landwerlin (5):
+
+- vulkan/runtime: fix invalid address flags value for CmdCopyBufferToImage2
+- anv: fixup null address check
+- anv: implement missing device image property compression filtering
+- anv: add SIMD32 requirement heuristic for Dragon Dogma 2
+- anv: bump max compute workgroup count
+
+Lone_Wolf (1):
+
+- ac/llvm: fix build with LLVM 23 (MCSubtargetInfo)
+
+Lorenzo Rossi (1):
+
+- pan/compiler/lower_fs_inputs: Do not trust slot->alu_type
+
+Marc Alcala Prieto (1):
+
+- pan/decode: Support INTERLEAVED_64K Z/S target dumps
+
+Marek Olšák (1):
+
+- radeonsi: fix a typo in si_shader_update_spi_shader_formats
+
+Mary Guillemard (4):
+
+- nir/lower_bit_size: Preserve float controls when lowering alu ops
+- nvk: Handle foreign queue dependencies
+- nvk: Handle host accesses barrier
+- nvk: Multiply by local_size for CS invocations in DGC codepath
+
+Matthieu Oechslin (1):
+
+- r600: Fix crash on R600/R700 with custom border color
+
+Mel Henning (2):
+
+- nvk: Add a wfi for blackwell in CmdDispatchIndirect
+- nvk: Disable compression on Turing
+
+Mike Blumenkrantz (5):
+
+- lavapipe: update cbuf count when remapping attachments
+- lavapipe: unset attachment remap state if pColorAttachmentLocations==NULL
+- lavapipe: fix setting colormasks when attachments get remapped
+- zink: fix mixing of mesh descriptor bindings with gfx bindings
+- meson: fix renderdoc integration define
+
+Nemallapudi, Jaikrishna (1):
+
+- intel/dev: fix timebase_scale ticks-to-ns precision loss across 2^32
+
+Paulo Zanoni (1):
+
+- intel/nir: fix sparse shadow comparison for BRW
+
+Rhys Perry (2):
+
+- aco/ra: test the register file in get_reg_specified() when necessary
+- aco/ra: don't rename phi operands in get_reg_phi()
+
+Samuel Pitoiset (6):
+
+- radv: do not fallback to compute for image->buffer copies with emulated formats
+- spirv: preserve the explicit stride for untyped pointers with matrices
+- radv: fix another case of VRS with mipmaps on GFX10.3
+- radv: fix copying acceleration structure with DAC
+- nir: fix shuffling local IDs for quad derivatives with larger workgroup sizes
+- radv: enable radv_wait_for_vm_map_updates for Forza Horizon 6
+
+Valentine Burley (1):
+
+- tu/autotune: Clear active_batches before history objects are freed
+
+Yiwei Zhang (1):
+
+- venus: fix a renderer side queue timeline bound race
+
+hwandy (1):
+
+- Revert "intel/decoder: make libvulkan_intel to depend on stub decoder when buildtyle=release."
+
+johniyoods (1):
+
+- egl/dri2: require valid render fd before advertising EGL_WL_bind_wayland_display
+
+llyyr (1):
+
+- vulkan/wsi/wayland: use mtx helpers in wait_for_present2
+
+yserrr (1):
+
+- llvmpipe: fix UB and incorrect value in compute caps shift

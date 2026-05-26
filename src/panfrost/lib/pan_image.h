@@ -130,7 +130,7 @@ pan_image_view_get_layer_count(const struct pan_image_view *iview)
                         : iview->last_layer - iview->first_layer + 1;
 }
 
-static inline const struct pan_image_plane_ref
+static inline struct pan_image_plane_ref
 pan_image_view_get_color_plane(const struct pan_image_view *iview)
 {
    /* We only support rendering to plane 0 */

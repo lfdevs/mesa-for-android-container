@@ -11,11 +11,6 @@ dEQP-VK.sparse_resources.buffer.ssbo.sparse_residency.non_resident_buffer_copy_s
 dEQP-VK.wsi.wayland.swapchain.create.image_extent
 dEQP-VK.wsi.wayland.swapchain.simulate_oom.image_extent
 
-# https://gerrit.khronos.org/c/vk-gl-cts/+/19859
-dEQP-VK.wsi.xcb.maintenance1.present_modes.*
-dEQP-VK.wsi.xcb.maintenance1.present_fence.*
-dEQP-VK.wsi.xcb.maintenance1.deferred_alloc.*
-
 angle-dEQP-GLES3.functional.multisample.fbo_4_samples.proportionality_sample_coverage
 angle-dEQP-GLES3.functional.multisample.fbo_max_samples.constancy_alpha_to_coverage
 angle-KHR-GLES31.core.compute_shader.sso-case2
@@ -45,9 +40,11 @@ dEQP-VK.memory.pipeline_barrier.host_write_vertex_buffer.1048576_vertex_buffer_s
 dEQP-VK.pipeline.fast_linked_library.stencil.format.d24_unorm_s8_uint.states.fail_decw.pass_zero.dfail_wrap.comp_greater.any
 dEQP-VK.subgroups.arithmetic.graphics.subgroupexclusiveadd_u64vec2
 dEQP-VK.subgroups.arithmetic.graphics.subgroupinclusivemax_uint8_t
+dEQP-VK.subgroups.arithmetic.graphics.subgroupmin_int16_t
 dEQP-VK.subgroups.ballot_broadcast.graphics.subgroupbroadcastfirst_u8vec2
 dEQP-VK.subgroups.shuffle.graphics.subgroupclusteredrotate_u16vec3_constant
 dEQP-VK.subgroups.shuffle.graphics.subgroupshuffledown_float_constant
+dEQP-VK.subgroups.shuffle.graphics.subgroupshufflexor_i8vec2_dynamically_uniform
 dEQP-VK.subgroups.shuffle.graphics.subgroupshufflexor_ivec2
 dEQP-VK.synchronization.op.single_queue.fence.write_blit_image_read_image_compute.image_128x128_r8g8b8a8_unorm
 dEQP-VK.synchronization.signal_order.timeline_semaphore.write_copy_image_read_image_compute.image_128x128_r16_uint
@@ -67,3 +64,13 @@ dEQP-VK.wsi.xcb.swapchain.create.image_array_layers
 dEQP-VK.wsi.xlib.maintenance1.scaling.demand.one_to_one.center_center.swapchain_taller
 dEQP-VK.wsi.xlib.maintenance1.scaling.resize_window.mailbox.aspect_stretch.center_max.swapchain_smaller_taller_aspect
 dEQP-VK.wsi.xlib.surface.query_capabilities2
+
+# Since the weston intermittently crashes on 925, these xfails from VKCTS
+# 1.4.4.2 -> 1.4.5.3 uprev will sometimes flake into being Skips.
+dEQP-VK.wsi.xcb.present_timing.basic.timing_queue
+dEQP-VK.wsi.xcb.present_timing.query.parallel.parallel
+dEQP-VK.wsi.xlib.present_timing.basic.timing_queue
+dEQP-VK.wsi.xlib.present_timing.query.parallel.parallel
+
+# Various subgroups tests are intermittently failing. Just ignore them for now.
+dEQP-VK.subgroups.*

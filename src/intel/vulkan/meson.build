@@ -6,9 +6,12 @@ inc_anv = include_directories('.')
 anv_flags = [
   no_override_init_args,
   sse2_args,
+  soong_compat_c_args,
 ]
 
-anv_cpp_flags = []
+anv_cpp_flags = [
+  soong_compat_cpp_args,
+]
 
 anv_entrypoints = custom_target(
   'anv_entrypoints',
@@ -85,6 +88,38 @@ _dev_icd = custom_target(
 
 devenv.append('VK_DRIVER_FILES', _dev_icd.full_path())
 
+libanv_drirc_args = []
+if with_platform_android
+  libanv_drirc_args += [ '--android-ver', get_option('platform-sdk-version').to_string() ]
+endif
+
+libanv_drirc_files = custom_target(
+  'libanv_drirc',
+  input : ['anv_dricrc_gen.py', drirc_gen],
+  output : ['anv_drirc.c', 'anv_drirc.h'],
+  command : [prog_python, '@INPUT0@',
+             '-p', join_paths(dir_source_root, 'src/util/'),
+             libanv_drirc_args,
+             '--drirc-src', '@OUTPUT0@',
+             '--drirc-hdr', '@OUTPUT1@',
+             '--validate', join_paths(dir_source_root, 'src/util/00-mesa-defaults.conf')],
+)
+
+libanv_drirc = static_library(
+  'libanv_drirc',
+  libanv_drirc_files,
+    include_directories : [
+      inc_include, inc_src, inc_intel,
+    ],
+    c_args : anv_flags,
+    gnu_symbol_visibility : 'hidden',
+    dependencies : idep_mesautil)
+
+idep_anv_drirc = declare_dependency(
+  sources : libanv_drirc_files[1],
+  link_with : libanv_drirc,
+)
+
 libanv_per_hw_ver_libs = []
 anv_per_hw_ver_files = files(
   'genX_blorp_exec.c',
@@ -125,6 +160,7 @@ foreach _gfx_ver : ['90', '110', '120', '125', '200', '300', '350']
       idep_vulkan_runtime_headers, idep_mesautil,
       idep_intel_dev, idep_intel_driver_ds_headers,
       idep_intel_shaders, idep_intel_blorp,
+      idep_anv_drirc,
     ],
   )
 endforeach
@@ -225,6 +261,7 @@ anv_deps = [
   idep_intel_shaders,
   idep_intel_blorp,
   idep_mda,
+  idep_anv_drirc,
 ]
 
 if with_platform_x11
@@ -264,9 +301,6 @@ libanv_common = static_library(
   dependencies : anv_deps
 )
 
-idep_libvulkan_intel_decoder = (with_mesa_ndebug ?
-  idep_intel_decoder_stub_brw : idep_intel_decoder_brw)
-
 libvulkan_intel = shared_library(
   'vulkan_intel',
   [files('anv_gem.c'), anv_entrypoints[0], bvh_spv],
@@ -282,7 +316,7 @@ libvulkan_intel = shared_library(
     idep_nir, idep_genxml, idep_vulkan_util, idep_vulkan_wsi,
     idep_vulkan_runtime, idep_mesautil, idep_xmlconfig,
     idep_intel_driver_ds, idep_intel_dev, idep_intel_blorp,
-    idep_intel_compiler_brw, idep_libvulkan_intel_decoder,
+    idep_intel_compiler_brw, idep_intel_decoder_brw,
     idep_intel_compiler_jay,
   ],
   c_args : anv_flags,
@@ -321,7 +355,7 @@ if with_tests
       dep_thread, dep_dl, dep_m, anv_deps,
       idep_nir, idep_vulkan_util, idep_vulkan_wsi, idep_vulkan_runtime,
       idep_mesautil, idep_intel_dev, idep_intel_blorp,
-      idep_intel_compiler_brw, idep_intel_compiler_jay, idep_libvulkan_intel_decoder,
+      idep_intel_compiler_brw, idep_intel_compiler_jay, idep_intel_decoder_brw,
     ],
     c_args : anv_flags,
     gnu_symbol_visibility : 'hidden',

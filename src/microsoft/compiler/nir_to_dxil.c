@@ -92,8 +92,7 @@ nir_options = {
    .compact_arrays = true,
    .lower_ineg = true,
    .lower_fneg = true,
-   .lower_ffma16 = true,
-   .lower_ffma32 = true,
+   .float_mul_add64 = nir_float_muladd_support_has_ffma,
    .lower_isign = true,
    .lower_fsign = true,
    .lower_iabs = true,
@@ -180,8 +179,10 @@ dxil_get_nir_compiler_options(nir_shader_compiler_options *options,
       options->lower_unpack_64_2x32_split = false;
       options->lower_int64_options = ~0;
    }
-   if (!(supported_float_sizes & 64))
+   if (!(supported_float_sizes & 64)) {
       options->lower_doubles_options = ~0;
+      options->float_mul_add64 = 0;
+   }
    if (shader_model_max >= SHADER_MODEL_6_4) {
       options->has_sdot_4x8 = true;
       options->has_udot_4x8 = true;

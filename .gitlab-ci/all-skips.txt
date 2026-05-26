@@ -50,7 +50,3 @@ spec@!opengl 1.1@read-front
 # Also, individually, it was disabled in most of the tests as it is
 # either too slow or results in an OOM
 spec@!opengl 1.1@streaming-texture-leak
-
-# Fails everywhere, invalid test: https://gitlab.khronos.org/Tracker/vk-gl-cts/-/issues/6317
-dEQP-VK.spirv_assembly.instruction.*.float_controls2.*.input_args.mat_det_testedWithout_NotNaN_arg1_nan_arg2_one_res_nan*
-dEQP-VK.spirv_assembly.instruction.*.float_controls2.*.input_args.cross_testedWithout_NotNaN_arg1_nan_arg2_one_res_nan*

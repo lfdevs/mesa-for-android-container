@@ -275,7 +275,7 @@ main(int argc, const char **argv)
 
    unsigned target_arch = atoi(target_arch_str);
 
-   if (target_arch < 4 || target_arch > 13) {
+   if (target_arch < 4 || target_arch > 14) {
       fprintf(stderr, "Unsupported target arch %d\n", target_arch);
       return 1;
    }

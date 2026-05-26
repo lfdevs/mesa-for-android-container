@@ -1861,10 +1861,14 @@ static void r600_emit_sampler_states(struct r600_context *rctx,
 			union pipe_color_union border_color = {{0,0,0,1}};
 			unsigned offset;
 
-			/* The rv770 border color is fully compatible with
-			 * evergreen. */
-			evergreen_convert_border_color(&rstate->border_color,
-						       &border_color, &rview->base);
+			if (rview) {
+				/* The rv770 border color is fully compatible with
+				* evergreen. */
+				evergreen_convert_border_color(&rstate->border_color,
+				                	       &border_color, &rview->base);
+			} else {
+				border_color = rstate->border_color;
+			}
 
 			offset = border_color_reg;
 			offset += i * 16;

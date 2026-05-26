@@ -13,7 +13,7 @@ libpanfrost_model_lib = static_library(
   'panfrost_model_lib',
   [libpanfrost_model_files],
   include_directories : [inc_src],
-  c_args : [no_override_init_args],
+  c_args : [no_override_init_args, soong_compat_c_args],
   gnu_symbol_visibility : 'hidden',
   build_by_default : false,
 )

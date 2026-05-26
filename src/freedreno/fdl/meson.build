@@ -14,7 +14,7 @@ libfreedreno_layout = static_library(
     freedreno_xml_header_files,
   ],
   include_directories : [inc_freedreno, inc_include, inc_src],
-  c_args : [no_override_init_args],
+  c_args : [no_override_init_args, soong_compat_c_args],
   gnu_symbol_visibility : 'hidden',
   dependencies : [idep_nir_headers, idep_mesautil, idep_libfreedreno_common],
   build_by_default : false,

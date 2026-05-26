@@ -86,5 +86,3 @@ bool msl_def_is_sampler(struct nir_to_msl_ctx *ctx, nir_def *def);
 void msl_nir_lower_subgroups(nir_shader *nir);
 
 bool msl_nir_lower_algebraic_late(nir_shader *shader);
-
-bool msl_nir_lower_clip_distance(nir_shader *nir);

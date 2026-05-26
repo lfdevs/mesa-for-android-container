@@ -11,6 +11,9 @@
 
 /* The public winsys interface header for the radeon driver. */
 
+/* Force flush. */
+#define RADEON_FLUSH_FORCE                    (1u << 28)
+
 /* Skip command submission. Same as RADEON_NOOP=1. */
 #define RADEON_FLUSH_NOOP                     (1u << 29)
 

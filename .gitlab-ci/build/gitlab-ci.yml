@@ -718,7 +718,7 @@ debian-x86_32:
       -D install-mesa-clc=true
 
 # In case of issues with this job, contact @frankbinns
-debian-riscv64:
+.debian-riscv64:
   extends:
     - .meson-cross
     - .use-debian/riscv64_build

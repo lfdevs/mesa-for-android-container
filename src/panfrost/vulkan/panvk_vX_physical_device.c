@@ -918,7 +918,7 @@ panvk_per_arch(get_physical_device_properties)(
       .subPixelInterpolationOffsetBits = 8,
       .maxFramebufferWidth = (1 << 14),
       .maxFramebufferHeight = (1 << 14),
-      .maxFramebufferLayers = 256,
+      .maxFramebufferLayers = MAX_FRAMEBUFFER_LAYERS,
       .framebufferColorSampleCounts = sample_counts,
       .framebufferDepthSampleCounts = sample_counts,
       .framebufferStencilSampleCounts = sample_counts,

@@ -717,7 +717,12 @@ init_tiler(struct panvk_gpu_queue *queue)
    tiler_heap->chunk_size = phys_dev->csf.tiler.chunk_size;
 
    alloc_info.size = get_fbd_size(true, MAX_RTS);
-   alloc_info.alignment = pan_alignment(FRAMEBUFFER);
+#if PAN_ARCH >= 14
+   const unsigned fbds_alignment = alignof(struct panvk_fb_layer_state);
+#else
+   const unsigned fbds_alignment = pan_alignment(FRAMEBUFFER);
+#endif
+   alloc_info.alignment = fbds_alignment;
    tiler_heap->oom_fbd = panvk_pool_alloc_mem(&dev->mempools.rw, alloc_info);
    if (!panvk_priv_mem_check_alloc(tiler_heap->oom_fbd)) {
       result = panvk_errorf(dev, VK_ERROR_OUT_OF_DEVICE_MEMORY,

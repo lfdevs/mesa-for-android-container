@@ -297,10 +297,6 @@ active_texture(GLenum texture, bool no_error)
 
    GET_CURRENT_CONTEXT(ctx);
 
-   if (MESA_VERBOSE & (VERBOSE_API|VERBOSE_TEXTURE))
-      _mesa_debug(ctx, "glActiveTexture %s\n",
-                  _mesa_enum_to_string(texture));
-
    if (ctx->Texture.CurrentUnit == texUnit)
       return;
 
@@ -357,10 +353,6 @@ _mesa_ClientActiveTexture(GLenum texture)
 {
    GET_CURRENT_CONTEXT(ctx);
    GLuint texUnit = texture - GL_TEXTURE0;
-
-   if (MESA_VERBOSE & (VERBOSE_API | VERBOSE_TEXTURE))
-      _mesa_debug(ctx, "glClientActiveTexture %s\n",
-                  _mesa_enum_to_string(texture));
 
    if (ctx->Array.ActiveTexture == texUnit)
       return;

@@ -106,8 +106,7 @@ lower_load_constant(nir_builder *b, nir_intrinsic_instr *load,
    offsetof(struct kk_root_descriptor_table, member)
 
 /* helper macro for computing per-draw data byte offsets */
-#define kk_per_draw_offset(member)                                             \
-   offsetof(struct kk_per_draw_data, member)
+#define kk_per_draw_offset(member) offsetof(struct kk_per_draw_data, member)
 
 static nir_def *
 load_descriptor_set_addr(nir_builder *b, uint32_t set,
@@ -130,7 +129,8 @@ load_dynamic_buffer_start(nir_builder *b, uint32_t set,
          break;
       }
 
-      dynamic_buffer_start_imm += ctx->set_layouts[s]->vk.dynamic_descriptor_count;
+      dynamic_buffer_start_imm +=
+         ctx->set_layouts[s]->vk.dynamic_descriptor_count;
    }
 
    if (dynamic_buffer_start_imm >= 0) {
@@ -296,9 +296,9 @@ _lower_sysval_to_per_draw(nir_builder *b, nir_intrinsic_instr *intrin,
    b->cursor = nir_instr_remove(&intrin->instr);
    assert((per_draw_offset & 3) == 0 && "aligned");
 
-   nir_def *val = load_per_draw(b, intrin->def.num_components,
-                                intrin->def.bit_size,
-                                nir_imm_int(b, per_draw_offset), 4);
+   nir_def *val =
+      load_per_draw(b, intrin->def.num_components, intrin->def.bit_size,
+                    nir_imm_int(b, per_draw_offset), 4);
 
    nir_def_rewrite_uses(&intrin->def, val);
 
@@ -775,10 +775,10 @@ kk_nir_lower_descriptors(nir_shader *nir,
    struct lower_descriptors_ctx ctx = {
       .clamp_desc_array_bounds =
          rs->storage_buffers !=
-            VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_DISABLED_EXT ||
+            VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_DISABLED ||
          rs->uniform_buffers !=
-            VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_DISABLED_EXT ||
-         rs->images != VK_PIPELINE_ROBUSTNESS_IMAGE_BEHAVIOR_DISABLED_EXT,
+            VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_DISABLED ||
+         rs->images != VK_PIPELINE_ROBUSTNESS_IMAGE_BEHAVIOR_DISABLED,
       .ssbo_addr_format = kk_buffer_addr_format(rs->storage_buffers),
       .ubo_addr_format = kk_buffer_addr_format(rs->uniform_buffers),
    };

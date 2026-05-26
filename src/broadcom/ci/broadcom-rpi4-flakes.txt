@@ -127,6 +127,7 @@ dEQP-VK.rasterization.primitives.no_stipple.rectangular_lines_with_adjacency_fac
 dEQP-VK.rasterization.primitives.no_stipple.triangle_fan
 dEQP-VK.rasterization.provoking_vertex.draw.last.triangle_list_with_adjacency
 dEQP-VK.robustness.image_robustness.bind.notemplate.rg32f.unroll.volatile.storage_image.fmt_qual.img.samples_1.cube_array.vert
+dEQP-VK.robustness.robustness2.bind.notemplate.r32f.unroll.nonvolatile.storage_image.fmt_qual.img.samples_1.cube.vert
 dEQP-VK.spirv_assembly.instruction.graphics.float_controls2.fp32.input_args.ord_gt_testedWithout_NotInf_arg1_inf_arg2_one_res_one_deco_vert
 dEQP-VK.ssbo.phys.layout.basic_unsized_array.std430.row_major_mat2x4_store_cols
 dEQP-VK.ssbo.phys.layout.random.basic_types.15
@@ -176,3 +177,4 @@ spec@!opengl 1.1@depthstencil-default_fb-drawpixels-float-and-ushort samples=2
 
 dEQP-VK.glsl.operator.unary_operator.post_decrement_result.highp_uvec4_vertex
 dEQP-VK.image.format_reinterpret.1d.r8g8b8a8_sint_b10g11r11_ufloat_pack32
+dEQP-VK.synchronization2.timeline_semaphore.device_host.write_copy_image_to_buffer_read_vertex_input.buffer_262144

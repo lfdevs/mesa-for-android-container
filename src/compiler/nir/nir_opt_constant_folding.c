@@ -75,6 +75,13 @@ should_fold_bcsel(nir_alu_instr *alu)
    if (alu->def.bit_size > 32)
       return false;
 
+   /* Don't fight with nir_lower_bit_size. */
+   if (alu->op == nir_op_u2u8 || alu->op == nir_op_i2i8 ||
+       alu->op == nir_op_u2u16 || alu->op == nir_op_i2i16 ||
+       alu->op == nir_op_u2u32 || alu->op == nir_op_i2i32) {
+      return false;
+   }
+
    /* Don't fight with nir_lower_load_const_to_scalar. */
    if (nir_op_is_vec_or_mov(alu->op))
       return false;

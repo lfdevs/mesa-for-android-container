@@ -112,6 +112,8 @@ gitlab-ci*.yml @eric
 # Broadcom
 /src/broadcom/ci/ @jasuarez @chema
 
+# Lima
+/src/gallium/drivers/lima/ci/ @enunes
 
 ###########
 # Drivers #
@@ -122,9 +124,9 @@ gitlab-ci*.yml @eric
 /src/gallium/drivers/asahi/ @alyssa
 
 # Broadcom
-/src/broadcom/ @itoral @apinheiro
-/src/gallium/drivers/v3d/ @itoral @chema @jasuarez
-/src/gallium/drivers/vc4/ @itoral @chema @jasuarez
+/src/broadcom/ @chema @jasuarez @itoral @apinheiro
+/src/gallium/drivers/v3d/ @chema @jasuarez @itoral @apinheiro
+/src/gallium/drivers/vc4/ @chema @jasuarez @itoral @apinheiro
 
 # Freedreno
 /src/gallium/drivers/freedreno/ @robclark
@@ -146,6 +148,9 @@ gitlab-ci*.yml @eric
 # KosmicKrisp
 /src/kosmickrisp @aitor
 /src/kosmickrisp/compiler @agoldmints
+
+# Lima
+/src/gallium/drivers/lima/ @enunes @anarsoul
 
 # Microsoft
 /src/microsoft/ @jenatali

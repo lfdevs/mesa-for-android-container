@@ -207,13 +207,13 @@ build_terminate_ray(nir_builder *b)
 {
    nir_def *skip_closest_hit = nir_test_mask(b, nir_load_ray_flags(b),
       BRW_RT_RAY_FLAG_SKIP_CLOSEST_HIT_SHADER);
+
+   brw_nir_rt_commit_hit(b);
    nir_push_if(b, skip_closest_hit);
    {
       /* The shader that calls traceRay() is unable to access any ray hit
        * information except for that which is explicitly written into the ray
-       * payload by shaders invoked during the trace.  If there's no closest-
-       * hit shader, then accepting the hit has no observable effect; it's
-       * just extra memory traffic for no reason.
+       * payload by shaders invoked during the trace.
        */
       brw_nir_btd_return(b);
       nir_jump(b, nir_jump_halt);
@@ -230,7 +230,6 @@ build_terminate_ray(nir_builder *b)
          nir_iadd_imm(b, nir_load_shader_record_ptr(b),
                         -BRW_RT_SBT_HANDLE_SIZE);
 
-      brw_nir_rt_commit_hit(b);
       brw_nir_btd_spawn(b, closest_hit);
       nir_jump(b, nir_jump_halt);
    }

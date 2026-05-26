@@ -1288,12 +1288,12 @@ static nir_def *alu_iter(nir_builder *b,
                                             .component = component,
                                             .io_semantics = io_semantics);
 
-   nir_def *result = nir_ffma(b,
-                              nir_channel(b, coeffs, 1),
-                              nir_channel(b, coords, 1),
-                              nir_channel(b, coeffs, 2));
+   nir_def *result = nir_ffma_weak(b,
+                                   nir_channel(b, coeffs, 1),
+                                   nir_channel(b, coords, 1),
+                                   nir_channel(b, coeffs, 2));
    result =
-      nir_ffma(b, nir_channel(b, coeffs, 0), nir_channel(b, coords, 0), result);
+      nir_ffma_weak(b, nir_channel(b, coeffs, 0), nir_channel(b, coords, 0), result);
 
    return result;
 }

@@ -15,7 +15,7 @@ libpanfrost_shared = static_library(
   [libpanfrost_shared_files],
   include_directories : [inc_include, inc_src],
   dependencies : idep_mesautil,
-  c_args : [no_override_init_args, '-O3'],
+  c_args : [no_override_init_args, soong_compat_c_args, '-O3'],
   gnu_symbol_visibility : 'hidden',
   build_by_default : false,
 )

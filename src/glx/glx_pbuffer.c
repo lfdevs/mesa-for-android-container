@@ -203,7 +203,7 @@ DestroyDRIDrawable(Display *dpy, GLXDrawable drawable)
 }
 
 /* TODO: delete these after more refactoring */
-#if defined(GLX_DIRECT_RENDERING) && !defined(GLX_USE_APPLEGL)
+#if defined(GLX_DIRECT_RENDERING) && !defined(GLX_USE_APPLEGL) && !defined(GLX_USE_WINDOWSGL)
 int
 dri3_get_buffer_age(__GLXDRIdrawable *pdraw);
 int
@@ -262,7 +262,7 @@ __glXGetDrawableAttribute(Display * dpy, GLXDrawable drawable,
    if (!opcode)
       return 0;
 
-#if defined(GLX_DIRECT_RENDERING) && !defined(GLX_USE_APPLEGL)
+#if defined(GLX_DIRECT_RENDERING) && !defined(GLX_USE_APPLEGL) && !defined(GLX_USE_WINDOWSGL)
    pdraw = GetGLXDRIDrawable(dpy, drawable);
 
    if (attribute == GLX_BACK_BUFFER_AGE_EXT) {

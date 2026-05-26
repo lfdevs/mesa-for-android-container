@@ -700,3 +700,25 @@ _mesa_set_intersects(struct set *a, struct set *b)
    }
    return false;
 }
+
+bool
+_mesa_set_equal(const struct set *a, const struct set *b)
+{
+   assert(a->key_hash_function == b->key_hash_function);
+   assert(a->key_equals_function == b->key_equals_function);
+
+   if (a->entries != b->entries)
+      return false;
+
+   set_foreach(a, entry) {
+      if (!_mesa_set_search_pre_hashed(b, entry->hash, entry->key))
+         return false;
+   }
+
+   set_foreach(b, entry) {
+      if (!_mesa_set_search_pre_hashed(a, entry->hash, entry->key))
+         return false;
+   }
+
+   return true;
+}

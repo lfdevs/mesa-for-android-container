@@ -123,7 +123,7 @@ static void ppir_node_add_src(ppir_compiler *comp, ppir_node *node,
    ppir_node_target_assign(ps, child);
 }
 
-static bool ppir_emit_ffma(ppir_block *block, nir_instr *ni)
+static bool ppir_emit_fmad(ppir_block *block, nir_instr *ni)
 {
    nir_alu_instr *instr = nir_instr_as_alu(ni);
    nir_def *def = &instr->def;
@@ -203,7 +203,7 @@ static int nir_to_ppir_opcodes[nir_num_opcodes] = {
    [nir_op_ftrunc] = ppir_op_trunc,
    [nir_op_fsat] = ppir_op_sat,
    [nir_op_fclamp_pos] = ppir_op_clamp_pos,
-   [nir_op_ffma] = ppir_op_ffma,
+   [nir_op_fmad] = ppir_op_fmad,
 };
 
 static bool ppir_emit_alu(ppir_block *block, nir_instr *ni)
@@ -217,8 +217,8 @@ static bool ppir_emit_alu(ppir_block *block, nir_instr *ni)
       return false;
    }
 
-   if (op == ppir_op_ffma) {
-      return ppir_emit_ffma(block, ni);
+   if (op == ppir_op_fmad) {
+      return ppir_emit_fmad(block, ni);
    }
 
    unsigned mask = nir_component_mask(def->num_components);
