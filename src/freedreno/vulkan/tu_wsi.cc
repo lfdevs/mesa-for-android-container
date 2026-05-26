@@ -33,11 +33,11 @@ tu_wsi_is_kgsl(const struct tu_physical_device *pdevice)
 }
 
 static bool
-tu_wsi_needs_linear_x11(const struct tu_physical_device *pdevice)
+tu_wsi_needs_fd725_x11_workarounds(const struct tu_physical_device *pdevice)
 {
    /* Adreno730v3/Adreno725v1 reports this chip-id on KGSL.  On Termux:X11,
-    * keep the native DRI3 path but avoid the modifier import path which fails
-    * on this device.
+    * keep the native DRI3 path but avoid the modifier import path and X
+    * Present idle fence import, both of which have failed on this device.
     */
    return tu_wsi_is_kgsl(pdevice) &&
           (pdevice->dev_id.chip_id == 0x07030002 ||
@@ -97,17 +97,21 @@ tu_wsi_init(struct tu_physical_device *physical_device)
    if (result != VK_SUCCESS)
       return result;
 
-   physical_device->wsi_device.supports_modifiers =
-      !tu_wsi_needs_linear_x11(physical_device);
+   const bool fd725_x11_workarounds =
+      tu_wsi_needs_fd725_x11_workarounds(physical_device);
+   physical_device->wsi_device.supports_modifiers = !fd725_x11_workarounds;
+   physical_device->wsi_device.x11.disable_shm_fences =
+      fd725_x11_workarounds;
    physical_device->wsi_device.can_present_on_device =
       tu_wsi_can_present_on_device;
 
    if (tu_wsi_debug_enabled()) {
       fprintf(stderr,
-              "TU_WSI_DEBUG: init kgsl=%d chip_id=0x%llx supports_modifiers=%d\n",
+              "TU_WSI_DEBUG: init kgsl=%d chip_id=0x%llx supports_modifiers=%d disable_shm_fences=%d\n",
               tu_wsi_is_kgsl(physical_device),
               (unsigned long long) physical_device->dev_id.chip_id,
-              physical_device->wsi_device.supports_modifiers);
+              physical_device->wsi_device.supports_modifiers,
+              physical_device->wsi_device.x11.disable_shm_fences);
    }
 
    physical_device->vk.wsi_device = &physical_device->wsi_device;

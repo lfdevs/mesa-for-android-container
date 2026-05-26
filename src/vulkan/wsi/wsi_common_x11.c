@@ -1439,7 +1439,8 @@ x11_present_to_x11_dri3(struct x11_swapchain *chain, uint32_t image_index,
        !wsi_device->x11.ignore_suboptimal)
       options |= XCB_PRESENT_OPTION_SUBOPTIMAL;
 
-   xshmfence_reset(image->shm_fence);
+   if (image->shm_fence)
+      xshmfence_reset(image->shm_fence);
 
    if (!chain->base.image_info.explicit_sync) {
       ++chain->sent_image_count;
@@ -2263,6 +2264,18 @@ x11_image_init(VkDevice device_h, struct x11_swapchain *chain,
 #endif
 
 out_fence:
+   if (chain->base.wsi->x11.disable_shm_fences &&
+       !chain->base.image_info.explicit_sync) {
+      image->shm_fence = NULL;
+      image->sync_fence = XCB_NONE;
+      if (tu_wsi_debug_enabled()) {
+         fprintf(stderr,
+                 "TU_WSI_DEBUG: x11_image_init skipping shm fence for x11 compatibility pixmap=%u\n",
+                 image->pixmap);
+      }
+      return VK_SUCCESS;
+   }
+
    fence_fd = xshmfence_alloc_shm();
    if (fence_fd < 0) {
       if (tu_wsi_debug_enabled()) {
@@ -2339,9 +2352,12 @@ x11_image_finish(struct x11_swapchain *chain,
    xcb_void_cookie_t cookie;
    if (!chain->base.wsi->sw || chain->has_mit_shm) {
 #ifdef HAVE_X11_DRM
-      cookie = xcb_sync_destroy_fence(chain->conn, image->sync_fence);
-      xcb_discard_reply(chain->conn, cookie.sequence);
-      xshmfence_unmap_shm(image->shm_fence);
+      if (image->sync_fence != XCB_NONE) {
+         cookie = xcb_sync_destroy_fence(chain->conn, image->sync_fence);
+         xcb_discard_reply(chain->conn, cookie.sequence);
+      }
+      if (image->shm_fence)
+         xshmfence_unmap_shm(image->shm_fence);
 #endif
 
       cookie = xcb_free_pixmap(chain->conn, image->pixmap);
@@ -2790,13 +2806,14 @@ x11_surface_create_swapchain(VkIcdSurfaceBase *icd_surface,
       }
       if (tu_wsi_debug_enabled()) {
          fprintf(stderr,
-                 "TU_WSI_DEBUG: x11 swapchain params sw=0 same_gpu=%d modifier_lists=%u modifiers=[%u,%u] explicit_sync=%d supports_modifiers=%d use_modifiers=%d present_caps=0x%x\n",
+                 "TU_WSI_DEBUG: x11 swapchain params sw=0 same_gpu=%d modifier_lists=%u modifiers=[%u,%u] explicit_sync=%d supports_modifiers=%d use_modifiers=%d disable_shm_fences=%d present_caps=0x%x\n",
                  drm_image_params.same_gpu,
                  drm_image_params.num_modifier_lists,
                  num_modifiers[0], num_modifiers[1],
                  drm_image_params.explicit_sync,
                  wsi_device->supports_modifiers,
                  use_modifiers(wsi_device),
+                 wsi_device->x11.disable_shm_fences,
                  present_caps);
       }
       image_params = &drm_image_params.base;
