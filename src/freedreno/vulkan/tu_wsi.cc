@@ -10,10 +10,39 @@
 
 #include "drm-uapi/drm_fourcc.h"
 
+#include "util/u_debug.h"
 #include "vk_util.h"
 #include "wsi_common_drm.h"
 
 #include "tu_device.h"
+
+#include <stdio.h>
+#include <string.h>
+
+static bool
+tu_wsi_debug_enabled(void)
+{
+   return debug_get_bool_option("TU_WSI_DEBUG", false);
+}
+
+static bool
+tu_wsi_is_kgsl(const struct tu_physical_device *pdevice)
+{
+   return pdevice->instance->knl &&
+          strcmp(pdevice->instance->knl->name, "kgsl") == 0;
+}
+
+static bool
+tu_wsi_needs_linear_x11(const struct tu_physical_device *pdevice)
+{
+   /* Adreno730v3/Adreno725v1 reports this chip-id on KGSL.  On Termux:X11,
+    * keep the native DRI3 path but avoid the modifier import path which fails
+    * on this device.
+    */
+   return tu_wsi_is_kgsl(pdevice) &&
+          (pdevice->dev_id.chip_id == 0x07030002 ||
+           pdevice->dev_id.chip_id == 0xffff07030002);
+}
 
 static VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL
 tu_wsi_proc_addr(VkPhysicalDevice physicalDevice, const char *pName)
@@ -27,8 +56,27 @@ tu_wsi_can_present_on_device(VkPhysicalDevice physicalDevice, int fd)
 {
 #ifdef HAVE_LIBDRM
    VK_FROM_HANDLE(tu_physical_device, pdevice, physicalDevice);
-   return wsi_common_drm_devices_equal(fd, pdevice->local_fd);
+   const bool is_kgsl = tu_wsi_is_kgsl(pdevice);
+
+   if (is_kgsl) {
+      if (tu_wsi_debug_enabled()) {
+         fprintf(stderr,
+                 "TU_WSI_DEBUG: can_present kgsl=1 dri3_fd=%d local_fd=%d result=1\n",
+                 fd, pdevice->local_fd);
+      }
+      return true;
+   }
+
+   const bool result = wsi_common_drm_devices_equal(fd, pdevice->local_fd);
+   if (tu_wsi_debug_enabled()) {
+      fprintf(stderr,
+              "TU_WSI_DEBUG: can_present kgsl=0 dri3_fd=%d local_fd=%d result=%d\n",
+              fd, pdevice->local_fd, result);
+   }
+   return result;
 #else
+   if (tu_wsi_debug_enabled())
+      fprintf(stderr, "TU_WSI_DEBUG: can_present libdrm=0 result=1\n");
    return true;
 #endif
 }
@@ -49,9 +97,18 @@ tu_wsi_init(struct tu_physical_device *physical_device)
    if (result != VK_SUCCESS)
       return result;
 
-   physical_device->wsi_device.supports_modifiers = true;
+   physical_device->wsi_device.supports_modifiers =
+      !tu_wsi_needs_linear_x11(physical_device);
    physical_device->wsi_device.can_present_on_device =
       tu_wsi_can_present_on_device;
+
+   if (tu_wsi_debug_enabled()) {
+      fprintf(stderr,
+              "TU_WSI_DEBUG: init kgsl=%d chip_id=0x%llx supports_modifiers=%d\n",
+              tu_wsi_is_kgsl(physical_device),
+              (unsigned long long) physical_device->dev_id.chip_id,
+              physical_device->wsi_device.supports_modifiers);
+   }
 
    physical_device->vk.wsi_device = &physical_device->wsi_device;
 
