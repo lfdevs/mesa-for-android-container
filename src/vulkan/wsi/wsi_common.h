@@ -140,11 +140,6 @@ struct wsi_device {
       /* Never report VK_SUBOPTIMAL_KHR. Used to workaround
        * games that cannot handle SUBOPTIMAL correctly. */
       bool ignore_suboptimal;
-
-      /* Skip Present idle fences and rely on IdleNotify events for implicit
-       * sync image reuse.
-       */
-      bool disable_shm_fences;
    } x11;
 
    struct {

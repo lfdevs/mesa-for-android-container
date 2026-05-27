@@ -28,7 +28,6 @@
 #include "util/os_file.h"
 #include "util/log.h"
 #include "util/u_atomic.h"
-#include "util/u_debug.h"
 #include "util/xmlconfig.h"
 #include "vk_device.h"
 #include "vk_physical_device.h"
@@ -44,12 +43,6 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <xf86drm.h>
-
-static bool
-tu_wsi_debug_enabled(void)
-{
-   return debug_get_bool_option("TU_WSI_DEBUG", false);
-}
 
 static VkResult
 wsi_dma_buf_export_sync_file(int dma_buf_fd, int *sync_file_fd)
@@ -756,15 +749,6 @@ wsi_create_native_image_mem(const struct wsi_swapchain *chain,
 
    VkMemoryRequirements reqs;
    wsi->GetImageMemoryRequirements(chain->device, image->image, &reqs);
-   if (tu_wsi_debug_enabled()) {
-      fprintf(stderr,
-              "TU_WSI_DEBUG: native image mem requirements size=%llu alignment=%llu type_bits=0x%x modifiers=%u explicit_sync=%d\n",
-              (unsigned long long) reqs.size,
-              (unsigned long long) reqs.alignment,
-              reqs.memoryTypeBits,
-              info->drm_mod_list.drmFormatModifierCount,
-              info->explicit_sync);
-   }
 
    const struct wsi_memory_allocate_info memory_wsi_info = {
       .sType = VK_STRUCTURE_TYPE_WSI_MEMORY_ALLOCATE_INFO_MESA,
@@ -795,38 +779,12 @@ wsi_create_native_image_mem(const struct wsi_swapchain *chain,
    };
    result = wsi->AllocateMemory(chain->device, &memory_info,
                                 &chain->alloc, &image->memory);
-   if (result != VK_SUCCESS) {
-      if (tu_wsi_debug_enabled()) {
-         fprintf(stderr,
-                 "TU_WSI_DEBUG: native image AllocateMemory failed result=%d size=%llu memoryTypeIndex=%u\n",
-                 result,
-                 (unsigned long long) memory_info.allocationSize,
-                 memory_info.memoryTypeIndex);
-      }
+   if (result != VK_SUCCESS)
       return result;
-   }
-   if (tu_wsi_debug_enabled()) {
-      fprintf(stderr,
-              "TU_WSI_DEBUG: native image AllocateMemory success size=%llu memoryTypeIndex=%u memory=%p\n",
-              (unsigned long long) memory_info.allocationSize,
-              memory_info.memoryTypeIndex,
-              (void *)(uintptr_t) image->memory);
-   }
 
    result = wsi_init_image_dmabuf_fd(chain, image, false);
-   if (result != VK_SUCCESS) {
-      if (tu_wsi_debug_enabled()) {
-         fprintf(stderr,
-                 "TU_WSI_DEBUG: native image GetMemoryFdKHR failed result=%d memory=%p\n",
-                 result, (void *)(uintptr_t) image->memory);
-      }
+   if (result != VK_SUCCESS)
       return result;
-   }
-   if (tu_wsi_debug_enabled()) {
-      fprintf(stderr,
-              "TU_WSI_DEBUG: native image GetMemoryFdKHR success fd=%d\n",
-              image->dma_buf_fd);
-   }
 
    if (info->drm_mod_list.drmFormatModifierCount > 0) {
       VkImageDrmFormatModifierPropertiesEXT image_mod_props = {
@@ -835,14 +793,8 @@ wsi_create_native_image_mem(const struct wsi_swapchain *chain,
       result = wsi->GetImageDrmFormatModifierPropertiesEXT(chain->device,
                                                            image->image,
                                                            &image_mod_props);
-      if (result != VK_SUCCESS) {
-         if (tu_wsi_debug_enabled()) {
-            fprintf(stderr,
-                    "TU_WSI_DEBUG: native image GetImageDrmFormatModifierPropertiesEXT failed result=%d\n",
-                    result);
-         }
+      if (result != VK_SUCCESS)
          return result;
-      }
 
       image->drm_modifier = image_mod_props.drmFormatModifier;
       assert(image->drm_modifier != DRM_FORMAT_MOD_INVALID);
@@ -879,16 +831,6 @@ wsi_create_native_image_mem(const struct wsi_swapchain *chain,
       image->sizes[0] = reqs.size;
       image->row_pitches[0] = image_layout.rowPitch;
       image->offsets[0] = 0;
-   }
-
-   if (tu_wsi_debug_enabled()) {
-      fprintf(stderr,
-              "TU_WSI_DEBUG: native image layout modifier=0x%llx planes=%u size0=%llu row_pitch0=%llu offset0=%llu\n",
-              (unsigned long long) image->drm_modifier,
-              image->num_planes,
-              (unsigned long long) image->sizes[0],
-              (unsigned long long) image->row_pitches[0],
-              (unsigned long long) image->offsets[0]);
    }
 
    return VK_SUCCESS;

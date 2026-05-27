@@ -8,7 +8,6 @@
 #include <linux/dma-heap.h>
 #include <poll.h>
 #include <stdint.h>
-#include <stdio.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 
@@ -35,11 +34,6 @@
 /* ION_HEAP(ION_SYSTEM_HEAP_ID) */
 #define KGSL_ION_SYSTEM_HEAP_MASK (1u << 25)
 
-static bool
-tu_wsi_debug_enabled(void)
-{
-   return debug_get_bool_option("TU_WSI_DEBUG", false);
-}
 
 static int
 safe_ioctl(int fd, unsigned long request, void *arg)
@@ -87,17 +81,10 @@ static VkResult
 kgsl_import_allocated_dmabuf(struct tu_device *dev,
                              struct tu_bo **out_bo,
                              uint64_t size,
-                             int fd,
-                             const char *source)
+                             int fd)
 {
    VkResult result =
       tu_bo_init_dmabuf(dev, out_bo, size, TU_BO_ALLOC_NO_FLAGS, fd);
-
-   if (tu_wsi_debug_enabled()) {
-      fprintf(stderr,
-              "TU_WSI_DEBUG: KGSL %s import allocated dma-buf fd=%d size=%llu result=%d\n",
-              source, fd, (unsigned long long) size, result);
-   }
 
    close(fd);
    return result;
@@ -120,7 +107,7 @@ bo_init_new_ion_fd(struct tu_device *dev, struct tu_bo **out_bo,
                        "ION_IOC_NEW_ALLOC failed (%s)", strerror(errno));
    }
 
-   return kgsl_import_allocated_dmabuf(dev, out_bo, size, alloc.fd, "ION");
+   return kgsl_import_allocated_dmabuf(dev, out_bo, size, alloc.fd);
 }
 
 static VkResult
@@ -162,8 +149,7 @@ bo_init_new_ion_legacy_fd(struct tu_device *dev, struct tu_bo **out_bo,
                        "ION_IOC_FREE failed (%s)", strerror(errno));
    }
 
-   return kgsl_import_allocated_dmabuf(dev, out_bo, size, share.fd,
-                                       "legacy ION");
+   return kgsl_import_allocated_dmabuf(dev, out_bo, size, share.fd);
 }
 
 static VkResult
@@ -171,22 +157,11 @@ bo_init_new_ion_fallback(struct tu_device *dev, struct tu_bo **out_bo,
                          uint64_t size)
 {
    int ion_fd = open("/dev/ion", O_RDONLY);
-   if (ion_fd < 0) {
-      if (tu_wsi_debug_enabled()) {
-         fprintf(stderr,
-                 "TU_WSI_DEBUG: KGSL dmaheap fallback cannot open /dev/ion errno=%d (%s)\n",
-                 errno, strerror(errno));
-      }
+   if (ion_fd < 0)
       return VK_ERROR_OUT_OF_DEVICE_MEMORY;
-   }
 
    struct ion_handle_data free = { .handle = 0 };
    bool legacy = safe_ioctl(ion_fd, ION_IOC_FREE, &free) >= 0 || errno != ENOTTY;
-   if (tu_wsi_debug_enabled()) {
-      fprintf(stderr,
-              "TU_WSI_DEBUG: KGSL dmaheap fallback using %s ION\n",
-              legacy ? "legacy" : "new");
-   }
 
    VkResult result = legacy ?
       bo_init_new_ion_legacy_fd(dev, out_bo, size, ion_fd) :
@@ -210,12 +185,6 @@ bo_init_new_dmaheap(struct tu_device *dev, struct tu_bo **out_bo, uint64_t size,
 
    if (ret) {
       int dmaheap_errno = errno;
-      if (tu_wsi_debug_enabled()) {
-         fprintf(stderr,
-                 "TU_WSI_DEBUG: KGSL DMA_HEAP_IOCTL_ALLOC failed size=%llu errno=%d (%s), trying ION fallback\n",
-                 (unsigned long long) size, dmaheap_errno,
-                 strerror(dmaheap_errno));
-      }
       VkResult fallback = bo_init_new_ion_fallback(dev, out_bo, size);
       if (fallback == VK_SUCCESS)
          return VK_SUCCESS;
@@ -225,8 +194,7 @@ bo_init_new_dmaheap(struct tu_device *dev, struct tu_bo **out_bo, uint64_t size,
                        "DMA_HEAP_IOCTL_ALLOC failed (%s)", strerror(errno));
    }
 
-   return kgsl_import_allocated_dmabuf(dev, out_bo, size, alloc.fd,
-                                       "dmaheap");
+   return kgsl_import_allocated_dmabuf(dev, out_bo, size, alloc.fd);
 }
 
 static VkResult
@@ -337,25 +305,10 @@ kgsl_bo_init(struct tu_device *dev,
 
       switch(dev->physical_device->kgsl_dma_type) {
       case TU_KGSL_DMA_TYPE_DMAHEAP:
-         if (tu_wsi_debug_enabled()) {
-            fprintf(stderr,
-                    "TU_WSI_DEBUG: KGSL shareable BO allocate via dmaheap size=%llu flags=0x%x\n",
-                    (unsigned long long) size, flags);
-         }
          return bo_init_new_dmaheap(dev, out_bo, size, flags);
       case TU_KGSL_DMA_TYPE_ION:
-         if (tu_wsi_debug_enabled()) {
-            fprintf(stderr,
-                    "TU_WSI_DEBUG: KGSL shareable BO allocate via ION size=%llu flags=0x%x\n",
-                    (unsigned long long) size, flags);
-         }
          return bo_init_new_ion(dev, out_bo, size, flags);
       case TU_KGSL_DMA_TYPE_ION_LEGACY:
-         if (tu_wsi_debug_enabled()) {
-            fprintf(stderr,
-                    "TU_WSI_DEBUG: KGSL shareable BO allocate via legacy ION size=%llu flags=0x%x\n",
-                    (unsigned long long) size, flags);
-         }
          return bo_init_new_ion_legacy(dev, out_bo, size, flags);
       }
    }
@@ -446,20 +399,9 @@ kgsl_bo_init_dmabuf(struct tu_device *dev,
 
    ret = safe_ioctl(dev->physical_device->local_fd,
                     IOCTL_KGSL_GPUOBJ_IMPORT, &req);
-   if (ret) {
-      if (tu_wsi_debug_enabled()) {
-         fprintf(stderr,
-                 "TU_WSI_DEBUG: KGSL GPUOBJ_IMPORT dma-buf failed fd=%d size=%llu flags=0x%x errno=%d (%s)\n",
-                 fd, (unsigned long long) size, flags, errno, strerror(errno));
-      }
+   if (ret)
       return vk_errorf(dev, VK_ERROR_OUT_OF_DEVICE_MEMORY,
                        "Failed to import dma-buf (%s)\n", strerror(errno));
-   }
-   if (tu_wsi_debug_enabled()) {
-      fprintf(stderr,
-              "TU_WSI_DEBUG: KGSL GPUOBJ_IMPORT dma-buf success fd=%d id=%u size=%llu flags=0x%x\n",
-              fd, req.id, (unsigned long long) size, flags);
-   }
 
    struct kgsl_gpuobj_info info_req = {
       .id = req.id,
@@ -467,15 +409,9 @@ kgsl_bo_init_dmabuf(struct tu_device *dev,
 
    ret = safe_ioctl(dev->physical_device->local_fd,
                     IOCTL_KGSL_GPUOBJ_INFO, &info_req);
-   if (ret) {
-      if (tu_wsi_debug_enabled()) {
-         fprintf(stderr,
-                 "TU_WSI_DEBUG: KGSL GPUOBJ_INFO failed id=%u errno=%d (%s)\n",
-                 req.id, errno, strerror(errno));
-      }
+   if (ret)
       return vk_errorf(dev, VK_ERROR_OUT_OF_DEVICE_MEMORY,
                        "Failed to get dma-buf info (%s)\n", strerror(errno));
-   }
 
    struct tu_bo* bo = tu_device_lookup_bo(dev, req.id);
    assert(bo && bo->gem_handle == 0);
@@ -496,14 +432,6 @@ kgsl_bo_init_dmabuf(struct tu_device *dev,
        */
       bo->unique_id = st.st_ino | (1ULL << 63);
 
-   if (tu_wsi_debug_enabled()) {
-      fprintf(stderr,
-              "TU_WSI_DEBUG: KGSL dma-buf BO ready id=%u bo_size=%llu iova=0x%llx shared_fd=%d unique_id=0x%llx\n",
-              bo->gem_handle, (unsigned long long) bo->size,
-              (unsigned long long) bo->iova, bo->shared_fd,
-              (unsigned long long) bo->unique_id);
-   }
-
    tu_dump_bo_init(dev, bo);
 
    *out_bo = bo;
@@ -515,13 +443,7 @@ static int
 kgsl_bo_export_dmabuf(struct tu_device *dev, struct tu_bo *bo)
 {
    assert(bo->shared_fd != -1);
-   int fd = os_dupfd_cloexec(bo->shared_fd);
-   if (tu_wsi_debug_enabled()) {
-      fprintf(stderr,
-              "TU_WSI_DEBUG: KGSL export dma-buf id=%u shared_fd=%d exported_fd=%d\n",
-              bo->gem_handle, bo->shared_fd, fd);
-   }
-   return fd;
+   return os_dupfd_cloexec(bo->shared_fd);
 }
 
 static VkResult

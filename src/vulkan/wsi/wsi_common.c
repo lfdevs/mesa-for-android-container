@@ -60,12 +60,6 @@ static const struct debug_control debug_control[] = {
    { NULL, },
 };
 
-static bool
-tu_wsi_debug_enabled(void)
-{
-   return debug_get_bool_option("TU_WSI_DEBUG", false);
-}
-
 static bool present_false(VkPhysicalDevice pdevice, int fd) {
    return false;
 }
@@ -856,81 +850,33 @@ wsi_create_image(const struct wsi_swapchain *chain,
 
    result = wsi->CreateImage(chain->device, &info->create,
                              &chain->alloc, &image->image);
-   if (result != VK_SUCCESS) {
-      if (tu_wsi_debug_enabled()) {
-         fprintf(stderr,
-                 "TU_WSI_DEBUG: wsi_create_image CreateImage failed result=%d type=%u tiling=%u modifiers=%u explicit_sync=%d\n",
-                 result, info->image_type, info->create.tiling,
-                 info->drm_mod_list.drmFormatModifierCount,
-                 info->explicit_sync);
-      }
+   if (result != VK_SUCCESS)
       goto fail;
-   }
 
    result = info->create_mem(chain, info, image);
-   if (result != VK_SUCCESS) {
-      if (tu_wsi_debug_enabled()) {
-         fprintf(stderr,
-                 "TU_WSI_DEBUG: wsi_create_image create_mem failed result=%d type=%u tiling=%u modifiers=%u explicit_sync=%d\n",
-                 result, info->image_type, info->create.tiling,
-                 info->drm_mod_list.drmFormatModifierCount,
-                 info->explicit_sync);
-      }
+   if (result != VK_SUCCESS)
       goto fail;
-   }
 
    result = wsi->BindImageMemory(chain->device, image->image,
                                  image->memory, 0);
-   if (result != VK_SUCCESS) {
-      if (tu_wsi_debug_enabled()) {
-         fprintf(stderr,
-                 "TU_WSI_DEBUG: wsi_create_image BindImageMemory failed result=%d memory=%p image=%p\n",
-                 result, (void *)(uintptr_t) image->memory,
-                 (void *)(uintptr_t) image->image);
-      }
+   if (result != VK_SUCCESS)
       goto fail;
-   }
 
    if (info->finish_create) {
       result = info->finish_create(chain, info, image);
-      if (result != VK_SUCCESS) {
-         if (tu_wsi_debug_enabled()) {
-            fprintf(stderr,
-                    "TU_WSI_DEBUG: wsi_create_image finish_create failed result=%d\n",
-                    result);
-         }
+      if (result != VK_SUCCESS)
          goto fail;
-      }
    }
 
    if (info->explicit_sync) {
 #if HAVE_LIBDRM
       result = wsi_create_image_explicit_sync_drm(chain, image);
-      if (result != VK_SUCCESS) {
-         if (tu_wsi_debug_enabled()) {
-            fprintf(stderr,
-                    "TU_WSI_DEBUG: wsi_create_image explicit_sync init failed result=%d\n",
-                    result);
-         }
+      if (result != VK_SUCCESS)
          goto fail;
-      }
 #else
       result = VK_ERROR_FEATURE_NOT_PRESENT;
       goto fail;
 #endif
-   }
-
-   if (tu_wsi_debug_enabled()) {
-      fprintf(stderr,
-              "TU_WSI_DEBUG: wsi_create_image success type=%u tiling=%u modifiers=%u dma_buf_fd=%d explicit_sync=%d\n",
-              info->image_type, info->create.tiling,
-              info->drm_mod_list.drmFormatModifierCount,
-#ifndef _WIN32
-              image->dma_buf_fd,
-#else
-              -1,
-#endif
-              info->explicit_sync);
    }
 
    return VK_SUCCESS;

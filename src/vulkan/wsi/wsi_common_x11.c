@@ -76,14 +76,11 @@
 #ifndef XCB_PRESENT_CAPABILITY_ASYNC_MAY_TEAR
 #define XCB_PRESENT_CAPABILITY_ASYNC_MAY_TEAR 8
 #endif
+#ifndef XCB_VALUE
+#define XCB_VALUE 2
+#endif
 
 #define MAX_DAMAGE_RECTS 64
-
-static bool
-tu_wsi_debug_enabled(void)
-{
-   return debug_get_bool_option("TU_WSI_DEBUG", false);
-}
 
 struct wsi_x11_connection {
    bool has_dri3;
@@ -1127,6 +1124,10 @@ struct x11_swapchain {
    bool                                         has_dri3_modifiers;
    bool                                         has_mit_shm;
    bool                                         has_async_may_tear;
+   /* Some X servers reject DRI3FenceFromFD for imported pixmaps.  Fall back
+    * to Present IdleNotify for implicit-sync image reuse when that happens.
+    */
+   bool                                         disable_shm_fences;
 
    xcb_connection_t *                           conn;
    xcb_window_t                                 window;
@@ -2110,14 +2111,8 @@ x11_image_init(VkDevice device_h, struct x11_swapchain *chain,
 
    result = wsi_create_image(&chain->base, &chain->base.image_info,
                              &image->base);
-   if (result != VK_SUCCESS) {
-      if (tu_wsi_debug_enabled()) {
-         fprintf(stderr,
-                 "TU_WSI_DEBUG: x11_image_init wsi_create_image failed result=%d\n",
-                 result);
-      }
+   if (result != VK_SUCCESS)
       return result;
-   }
 
    image->update_region = None;
    if (chain->base.wsi->sw && !chain->has_mit_shm)
@@ -2128,7 +2123,6 @@ x11_image_init(VkDevice device_h, struct x11_swapchain *chain,
    xcb_generic_error_t *error = NULL;
    uint32_t bpp = 32;
    int fence_fd = -1;
-   const char *pixmap_request = NULL;
    image->update_region = xcb_generate_id(chain->conn);
    xcb_xfixes_create_region(chain->conn, image->update_region, 0, NULL);
 
@@ -2164,17 +2158,11 @@ x11_image_init(VkDevice device_h, struct x11_swapchain *chain,
             for (int j = 0; j < i; j++)
                close(fds[j]);
 
-            if (tu_wsi_debug_enabled()) {
-               fprintf(stderr,
-                       "TU_WSI_DEBUG: x11_image_init dup dma-buf for modifier import failed plane=%d source_fd=%d errno=%d (%s)\n",
-                       i, image->base.dma_buf_fd, errno, strerror(errno));
-            }
             result = VK_ERROR_OUT_OF_HOST_MEMORY;
             goto fail_image;
          }
       }
 
-      pixmap_request = "xcb_dri3_pixmap_from_buffers";
       cookie =
          xcb_dri3_pixmap_from_buffers_checked(chain->conn,
                                               image->pixmap,
@@ -2200,16 +2188,10 @@ x11_image_init(VkDevice device_h, struct x11_swapchain *chain,
       /* XCB will take ownership of the FD we pass it. */
       int fd = os_dupfd_cloexec(image->base.dma_buf_fd);
       if (fd == -1) {
-         if (tu_wsi_debug_enabled()) {
-            fprintf(stderr,
-                    "TU_WSI_DEBUG: x11_image_init dup dma-buf failed source_fd=%d errno=%d (%s)\n",
-                    image->base.dma_buf_fd, errno, strerror(errno));
-         }
          result = VK_ERROR_OUT_OF_HOST_MEMORY;
          goto fail_image;
       }
 
-      pixmap_request = "xcb_dri3_pixmap_from_buffer";
       cookie =
          xcb_dri3_pixmap_from_buffer_checked(chain->conn,
                                              image->pixmap,
@@ -2223,23 +2205,8 @@ x11_image_init(VkDevice device_h, struct x11_swapchain *chain,
 
    error = xcb_request_check(chain->conn, cookie);
    if (error != NULL) {
-      if (tu_wsi_debug_enabled()) {
-         fprintf(stderr,
-                 "TU_WSI_DEBUG: x11_image_init %s failed error=%u major=%u minor=%u modifier=0x%llx planes=%u dma_buf_fd=%d\n",
-                 pixmap_request ? pixmap_request : "xcb pixmap import",
-                 error->error_code, error->major_code, error->minor_code,
-                 (unsigned long long) image->base.drm_modifier,
-                 image->base.num_planes, image->base.dma_buf_fd);
-      }
       free(error);
       goto fail_image;
-   }
-   if (tu_wsi_debug_enabled()) {
-      fprintf(stderr,
-              "TU_WSI_DEBUG: x11_image_init %s success pixmap=%u modifier=0x%llx planes=%u dma_buf_fd=%d\n",
-              pixmap_request ? pixmap_request : "xcb pixmap import",
-              image->pixmap, (unsigned long long) image->base.drm_modifier,
-              image->base.num_planes, image->base.dma_buf_fd);
    }
 
 #ifdef HAVE_DRI3_EXPLICIT_SYNC
@@ -2264,37 +2231,19 @@ x11_image_init(VkDevice device_h, struct x11_swapchain *chain,
 #endif
 
 out_fence:
-   if (chain->base.wsi->x11.disable_shm_fences &&
-       !chain->base.image_info.explicit_sync) {
+   if (chain->disable_shm_fences && !chain->base.image_info.explicit_sync) {
       image->shm_fence = NULL;
       image->sync_fence = XCB_NONE;
-      if (tu_wsi_debug_enabled()) {
-         fprintf(stderr,
-                 "TU_WSI_DEBUG: x11_image_init skipping shm fence for x11 compatibility pixmap=%u\n",
-                 image->pixmap);
-      }
       return VK_SUCCESS;
    }
 
    fence_fd = xshmfence_alloc_shm();
-   if (fence_fd < 0) {
-      if (tu_wsi_debug_enabled()) {
-         fprintf(stderr,
-                 "TU_WSI_DEBUG: x11_image_init xshmfence_alloc_shm failed errno=%d (%s)\n",
-                 errno, strerror(errno));
-      }
+   if (fence_fd < 0)
       goto fail_pixmap;
-   }
 
    image->shm_fence = xshmfence_map_shm(fence_fd);
-   if (image->shm_fence == NULL) {
-      if (tu_wsi_debug_enabled()) {
-         fprintf(stderr,
-                 "TU_WSI_DEBUG: x11_image_init xshmfence_map_shm failed fence_fd=%d errno=%d (%s)\n",
-                 fence_fd, errno, strerror(errno));
-      }
+   if (image->shm_fence == NULL)
       goto fail_shmfence_alloc;
-   }
 
    image->sync_fence = xcb_generate_id(chain->conn);
    cookie = xcb_dri3_fence_from_fd_checked(chain->conn,
@@ -2305,22 +2254,21 @@ out_fence:
    fence_fd = -1;
    error = xcb_request_check(chain->conn, cookie);
    if (error != NULL) {
-      if (tu_wsi_debug_enabled()) {
-         fprintf(stderr,
-                 "TU_WSI_DEBUG: x11_image_init xcb_dri3_fence_from_fd failed error=%u major=%u minor=%u pixmap=%u sync_fence=%u\n",
-                 error->error_code, error->major_code, error->minor_code,
-                 image->pixmap, image->sync_fence);
-      }
+      const uint8_t error_code = error->error_code;
       free(error);
+
+      if (error_code == XCB_VALUE && !chain->base.image_info.explicit_sync) {
+         chain->disable_shm_fences = true;
+         image->sync_fence = XCB_NONE;
+         xshmfence_unmap_shm(image->shm_fence);
+         image->shm_fence = NULL;
+         return VK_SUCCESS;
+      }
+
       goto fail_shmfence_map;
    }
 
    xshmfence_trigger(image->shm_fence);
-   if (tu_wsi_debug_enabled()) {
-      fprintf(stderr,
-              "TU_WSI_DEBUG: x11_image_init fence success pixmap=%u sync_fence=%u\n",
-              image->pixmap, image->sync_fence);
-   }
    return VK_SUCCESS;
 
 fail_shmfence_map:
@@ -2804,18 +2752,6 @@ x11_surface_create_swapchain(VkIcdSurfaceBase *icd_surface,
 
          wsi_x11_recompute_dri3_modifier_hash(&chain->dri3_modifier_hash, &drm_image_params);
       }
-      if (tu_wsi_debug_enabled()) {
-         fprintf(stderr,
-                 "TU_WSI_DEBUG: x11 swapchain params sw=0 same_gpu=%d modifier_lists=%u modifiers=[%u,%u] explicit_sync=%d supports_modifiers=%d use_modifiers=%d disable_shm_fences=%d present_caps=0x%x\n",
-                 drm_image_params.same_gpu,
-                 drm_image_params.num_modifier_lists,
-                 num_modifiers[0], num_modifiers[1],
-                 drm_image_params.explicit_sync,
-                 wsi_device->supports_modifiers,
-                 use_modifiers(wsi_device),
-                 wsi_device->x11.disable_shm_fences,
-                 present_caps);
-      }
       image_params = &drm_image_params.base;
 #else
       UNREACHABLE("X11 DRM support missing!");
@@ -2824,12 +2760,6 @@ x11_surface_create_swapchain(VkIcdSurfaceBase *icd_surface,
 
    result = wsi_swapchain_init(wsi_device, &chain->base, device, pCreateInfo,
                                image_params, pAllocator);
-   if (tu_wsi_debug_enabled()) {
-      fprintf(stderr,
-              "TU_WSI_DEBUG: x11 swapchain init result=%d blit_type=%d image_type=%u\n",
-              result, result == VK_SUCCESS ? chain->base.blit.type : -1,
-              result == VK_SUCCESS ? chain->base.image_info.image_type : 0);
-   }
 
    for (int i = 0; i < ARRAY_SIZE(modifiers); i++)
       vk_free(pAllocator, modifiers[i]);
