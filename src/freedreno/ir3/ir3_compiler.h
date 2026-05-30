@@ -246,6 +246,13 @@ struct ir3_compiler {
 
    bool cat3_rel_offset_0_quirk;
 
+   /*
+    * Some low-bandwidth parts benefit from spending a little more constant
+    * file space to merge nearby promoted UBO ranges. This reduces the number
+    * of memory-backed UBO fetch windows left in hot shader code.
+    */
+   bool coalesce_ubo_push_ranges;
+
    struct {
       /* The number of cycles needed for the result of one ALU operation to be
        * available to another ALU operation. Only valid when the halfness of the

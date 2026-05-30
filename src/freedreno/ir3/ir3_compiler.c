@@ -419,6 +419,14 @@ ir3_compiler_create(struct fd_device *dev, const struct fd_dev_id *dev_id,
    compiler->has_bitwise_triops = compiler->gen >= 5;
    compiler->cat3_rel_offset_0_quirk = compiler->gen <= 5;
 
+   /*
+    * Adreno 810 has a much smaller cache/GMEM budget and substantially lower
+    * external memory bandwidth than the larger A8xx parts. Let the UBO
+    * promotion pass spend a few extra const-file slots merging nearby ranges
+    * so hot shader code issues fewer memory-backed UBO reads.
+    */
+   compiler->coalesce_ubo_push_ranges = dev_id->chip_id == 0xffff44010000ull;
+
    /* The driver can't request this unless preambles are supported. */
    if (options->push_ubo_with_preamble)
       assert(compiler->has_preamble);
