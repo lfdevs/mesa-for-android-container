@@ -1532,14 +1532,16 @@ add_gpus([
             gmem_per_ccu_color_cache_size = 128 * 1024,
             gmem_ccu_depth_cache_fraction = CCUColorCacheFraction.HALF.value,
             gmem_per_ccu_depth_cache_size = 128 * 1024,
-            # This is probably not an optimal config for gmem/sysmem, but it was working before and I don't have any a825 device to test (neither I have any trace info)
+            
             sysmem_ccu_color_cache_fraction = CCUColorCacheFraction.FULL.value,
             sysmem_per_ccu_color_cache_size = 128 * 1024,
             sysmem_ccu_depth_cache_fraction = CCUColorCacheFraction.THREE_QUARTER.value,
             sysmem_per_ccu_depth_cache_size = 96 * 1024,
-            gmem_vpc_attr_buf_size = 65536, 
-            gmem_vpc_pos_buf_size = 32768,
+            
+            gmem_vpc_attr_buf_size = 49152, 
+            gmem_vpc_pos_buf_size = 24576,
             gmem_vpc_bv_pos_buf_size = 32768,
+            
             disable_gmem = False,
             gmem_size = 2 * 1024 * 1024,
             shading_rate_matches_vk = True,
@@ -1572,7 +1574,7 @@ add_gpus([
 
             gmem_vpc_attr_buf_size = 49152,
             gmem_vpc_pos_buf_size = 24576,     
-            gmem_vpc_bv_pos_buf_size = 16384,  
+            gmem_vpc_bv_pos_buf_size = 32768,  
     
             gmem_ccu_color_cache_fraction = CCUColorCacheFraction.HALF.value,
             gmem_per_ccu_color_cache_size = 128 * 1024, 
