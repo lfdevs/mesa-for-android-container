@@ -2702,11 +2702,9 @@ struct ir3_instruction *ir3_create_collect(struct ir3_builder *build,
                                            struct ir3_instruction *const *arr,
                                            unsigned arrsz);
 
-#define ir3_collect(build, ...)                                                \
-   ({                                                                          \
-      struct ir3_instruction *__arr[] = {__VA_ARGS__};                         \
-      ir3_create_collect(build, __arr, ARRAY_SIZE(__arr));                     \
-   })
+#define ir3_collect(build, ...)                                             \
+   MESA_CALL_WITH_LTR_ARRAY_ARGS(ir3_create_collect, struct ir3_instruction *, \
+                                 build, __VA_ARGS__)
 
 void ir3_split_dest(struct ir3_builder *build, struct ir3_instruction **dst,
                     struct ir3_instruction *src, unsigned base, unsigned n);
@@ -2800,7 +2798,7 @@ static inline struct ir3_instruction_rpt ir3_##name##_rpt(                     \
 
 /* clang-format off */
 #define __INSTR2(flag, dst_count, name, opc, scalar_alu)                       \
-static inline struct ir3_instruction *ir3_##name(                              \
+static inline struct ir3_instruction *_ir3_##name(                             \
    struct ir3_builder *build, struct ir3_instruction *a, unsigned aflags,      \
    struct ir3_instruction *b, unsigned bflags)                                 \
 {                                                                              \
@@ -2814,7 +2812,7 @@ static inline struct ir3_instruction *ir3_##name(                              \
    instr->flags |= flag;                                                       \
    return instr;                                                               \
 }                                                                              \
-static inline struct ir3_instruction_rpt ir3_##name##_rpt(                     \
+static inline struct ir3_instruction_rpt _ir3_##name##_rpt(                    \
    struct ir3_builder *build, unsigned nrpt,                                   \
    struct ir3_instruction_rpt a, unsigned aflags,                              \
    struct ir3_instruction_rpt b, unsigned bflags)                              \
@@ -2822,8 +2820,8 @@ static inline struct ir3_instruction_rpt ir3_##name##_rpt(                     \
    struct ir3_instruction_rpt dst;                                             \
    assert(nrpt <= ARRAY_SIZE(dst.rpts));                                       \
    for (unsigned rpt = 0; rpt < nrpt; rpt++) {                                 \
-      dst.rpts[rpt] = ir3_##name(build, a.rpts[rpt], aflags,                   \
-                                 b.rpts[rpt], bflags);                         \
+      dst.rpts[rpt] = _ir3_##name(build, a.rpts[rpt], aflags,                  \
+                                  b.rpts[rpt], bflags);                        \
    }                                                                           \
    ir3_instr_create_rpt(dst.rpts, nrpt);                                       \
    return dst;                                                                 \
@@ -2837,7 +2835,7 @@ static inline struct ir3_instruction_rpt ir3_##name##_rpt(                     \
 
 /* clang-format off */
 #define __INSTR3(flag, dst_count, name, opc, scalar_alu)                       \
-static inline struct ir3_instruction *ir3_##name(                              \
+static inline struct ir3_instruction *_ir3_##name(                             \
    struct ir3_builder *build, struct ir3_instruction *a, unsigned aflags,      \
    struct ir3_instruction *b, unsigned bflags, struct ir3_instruction *c,      \
    unsigned cflags)                                                            \
@@ -2854,7 +2852,7 @@ static inline struct ir3_instruction *ir3_##name(                              \
    instr->flags |= flag;                                                       \
    return instr;                                                               \
 }                                                                              \
-static inline struct ir3_instruction_rpt ir3_##name##_rpt(                     \
+static inline struct ir3_instruction_rpt _ir3_##name##_rpt(                    \
    struct ir3_builder *build, unsigned nrpt,                                   \
    struct ir3_instruction_rpt a, unsigned aflags,                              \
    struct ir3_instruction_rpt b, unsigned bflags,                              \
@@ -2863,9 +2861,9 @@ static inline struct ir3_instruction_rpt ir3_##name##_rpt(                     \
    struct ir3_instruction_rpt dst;                                             \
    assert(nrpt <= ARRAY_SIZE(dst.rpts));                                       \
    for (unsigned rpt = 0; rpt < nrpt; rpt++) {                                 \
-      dst.rpts[rpt] = ir3_##name(build, a.rpts[rpt], aflags,                   \
-                                 b.rpts[rpt], bflags,                          \
-                                 c.rpts[rpt], cflags);                         \
+      dst.rpts[rpt] = _ir3_##name(build, a.rpts[rpt], aflags,                  \
+                                  b.rpts[rpt], bflags,                         \
+                                  c.rpts[rpt], cflags);                        \
    }                                                                           \
    ir3_instr_create_rpt(dst.rpts, nrpt);                                       \
    return dst;                                                                 \
@@ -2879,7 +2877,7 @@ static inline struct ir3_instruction_rpt ir3_##name##_rpt(                     \
 
 /* clang-format off */
 #define __INSTR4(flag, dst_count, name, opc)                                   \
-static inline struct ir3_instruction *ir3_##name(                              \
+static inline struct ir3_instruction *_ir3_##name(                             \
    struct ir3_builder *build, struct ir3_instruction *a, unsigned aflags,      \
    struct ir3_instruction *b, unsigned bflags, struct ir3_instruction *c,      \
    unsigned cflags, struct ir3_instruction *d, unsigned dflags)                \
@@ -2902,7 +2900,7 @@ static inline struct ir3_instruction *ir3_##name(                              \
 
 /* clang-format off */
 #define __INSTR5(flag, name, opc)                                              \
-static inline struct ir3_instruction *ir3_##name(                              \
+static inline struct ir3_instruction *_ir3_##name(                             \
    struct ir3_builder *build, struct ir3_instruction *a, unsigned aflags,      \
    struct ir3_instruction *b, unsigned bflags, struct ir3_instruction *c,      \
    unsigned cflags, struct ir3_instruction *d, unsigned dflags,                \
@@ -2924,7 +2922,7 @@ static inline struct ir3_instruction *ir3_##name(                              \
 
 /* clang-format off */
 #define __INSTR6(flag, dst_count, name, opc)                                   \
-static inline struct ir3_instruction *ir3_##name(                              \
+static inline struct ir3_instruction *_ir3_##name(                             \
    struct ir3_builder *build, struct ir3_instruction *a, unsigned aflags,      \
    struct ir3_instruction *b, unsigned bflags, struct ir3_instruction *c,      \
    unsigned cflags, struct ir3_instruction *d, unsigned dflags,                \
@@ -2954,7 +2952,13 @@ INSTR1NODST(BR)
 INSTR1NODST(BALL)
 INSTR1NODST(BANY)
 INSTR2NODST(BRAA)
+#define ir3_BRAA(...) MESA_CALL_WITH_LTR_ARGS(_ir3_BRAA, __VA_ARGS__)
+#define ir3_BRAA_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_BRAA_rpt, __VA_ARGS__)
+
 INSTR2NODST(BRAO)
+#define ir3_BRAO(...) MESA_CALL_WITH_LTR_ARGS(_ir3_BRAO, __VA_ARGS__)
+#define ir3_BRAO_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_BRAO_rpt, __VA_ARGS__)
+
 INSTR0(JUMP)
 INSTR1NODST(KILL)
 INSTR1NODST(DEMOTE)
@@ -2974,6 +2978,9 @@ INSTR1(ANY_MACRO)
 INSTR1(ALL_MACRO)
 INSTR1(READ_FIRST_MACRO)
 INSTR2(READ_COND_MACRO)
+#define ir3_READ_COND_MACRO(...) MESA_CALL_WITH_LTR_ARGS(_ir3_READ_COND_MACRO, __VA_ARGS__)
+#define ir3_READ_COND_MACRO_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_READ_COND_MACRO_rpt, __VA_ARGS__)
+
 INSTR1(READ_GETLAST_MACRO)
 
 static inline struct ir3_instruction *
@@ -2995,78 +3002,244 @@ ir3_SHPS_MACRO(struct ir3_builder *build)
 
 /* cat2 instructions, most 2 src but some 1 src: */
 INSTR2S(ADD_F)
+#define ir3_ADD_F(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ADD_F, __VA_ARGS__)
+#define ir3_ADD_F_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ADD_F_rpt, __VA_ARGS__)
+
 INSTR2S(MIN_F)
+#define ir3_MIN_F(...) MESA_CALL_WITH_LTR_ARGS(_ir3_MIN_F, __VA_ARGS__)
+#define ir3_MIN_F_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_MIN_F_rpt, __VA_ARGS__)
+
 INSTR2S(MAX_F)
+#define ir3_MAX_F(...) MESA_CALL_WITH_LTR_ARGS(_ir3_MAX_F, __VA_ARGS__)
+#define ir3_MAX_F_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_MAX_F_rpt, __VA_ARGS__)
+
 INSTR2S(MUL_F)
+#define ir3_MUL_F(...) MESA_CALL_WITH_LTR_ARGS(_ir3_MUL_F, __VA_ARGS__)
+#define ir3_MUL_F_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_MUL_F_rpt, __VA_ARGS__)
+
 INSTR1S(SIGN_F)
 INSTR2S(CMPS_F)
+#define ir3_CMPS_F(...) MESA_CALL_WITH_LTR_ARGS(_ir3_CMPS_F, __VA_ARGS__)
+#define ir3_CMPS_F_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_CMPS_F_rpt, __VA_ARGS__)
+
 INSTR1S(ABSNEG_F)
 INSTR2S(CMPV_F)
+#define ir3_CMPV_F(...) MESA_CALL_WITH_LTR_ARGS(_ir3_CMPV_F, __VA_ARGS__)
+#define ir3_CMPV_F_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_CMPV_F_rpt, __VA_ARGS__)
+
 INSTR1S(FLOOR_F)
 INSTR1S(CEIL_F)
 INSTR1S(RNDNE_F)
 INSTR1S(RNDAZ_F)
 INSTR1S(TRUNC_F)
 INSTR2S(ADD_U)
+#define ir3_ADD_U(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ADD_U, __VA_ARGS__)
+#define ir3_ADD_U_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ADD_U_rpt, __VA_ARGS__)
+
 INSTR2S(ADD_S)
+#define ir3_ADD_S(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ADD_S, __VA_ARGS__)
+#define ir3_ADD_S_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ADD_S_rpt, __VA_ARGS__)
+
 INSTR2S(SUB_U)
+#define ir3_SUB_U(...) MESA_CALL_WITH_LTR_ARGS(_ir3_SUB_U, __VA_ARGS__)
+#define ir3_SUB_U_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_SUB_U_rpt, __VA_ARGS__)
+
 INSTR2S(SUB_S)
+#define ir3_SUB_S(...) MESA_CALL_WITH_LTR_ARGS(_ir3_SUB_S, __VA_ARGS__)
+#define ir3_SUB_S_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_SUB_S_rpt, __VA_ARGS__)
+
 INSTR2S(CMPS_U)
+#define ir3_CMPS_U(...) MESA_CALL_WITH_LTR_ARGS(_ir3_CMPS_U, __VA_ARGS__)
+#define ir3_CMPS_U_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_CMPS_U_rpt, __VA_ARGS__)
+
 INSTR2S(CMPS_S)
+#define ir3_CMPS_S(...) MESA_CALL_WITH_LTR_ARGS(_ir3_CMPS_S, __VA_ARGS__)
+#define ir3_CMPS_S_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_CMPS_S_rpt, __VA_ARGS__)
+
 INSTR2S(MIN_U)
+#define ir3_MIN_U(...) MESA_CALL_WITH_LTR_ARGS(_ir3_MIN_U, __VA_ARGS__)
+#define ir3_MIN_U_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_MIN_U_rpt, __VA_ARGS__)
+
 INSTR2S(MIN_S)
+#define ir3_MIN_S(...) MESA_CALL_WITH_LTR_ARGS(_ir3_MIN_S, __VA_ARGS__)
+#define ir3_MIN_S_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_MIN_S_rpt, __VA_ARGS__)
+
 INSTR2S(MAX_U)
+#define ir3_MAX_U(...) MESA_CALL_WITH_LTR_ARGS(_ir3_MAX_U, __VA_ARGS__)
+#define ir3_MAX_U_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_MAX_U_rpt, __VA_ARGS__)
+
 INSTR2S(MAX_S)
+#define ir3_MAX_S(...) MESA_CALL_WITH_LTR_ARGS(_ir3_MAX_S, __VA_ARGS__)
+#define ir3_MAX_S_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_MAX_S_rpt, __VA_ARGS__)
+
 INSTR1S(ABSNEG_S)
 INSTR2S(AND_B)
+#define ir3_AND_B(...) MESA_CALL_WITH_LTR_ARGS(_ir3_AND_B, __VA_ARGS__)
+#define ir3_AND_B_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_AND_B_rpt, __VA_ARGS__)
+
 INSTR2S(OR_B)
+#define ir3_OR_B(...) MESA_CALL_WITH_LTR_ARGS(_ir3_OR_B, __VA_ARGS__)
+#define ir3_OR_B_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_OR_B_rpt, __VA_ARGS__)
+
 INSTR1S(NOT_B)
 INSTR2S(XOR_B)
+#define ir3_XOR_B(...) MESA_CALL_WITH_LTR_ARGS(_ir3_XOR_B, __VA_ARGS__)
+#define ir3_XOR_B_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_XOR_B_rpt, __VA_ARGS__)
+
 INSTR2S(CMPV_U)
+#define ir3_CMPV_U(...) MESA_CALL_WITH_LTR_ARGS(_ir3_CMPV_U, __VA_ARGS__)
+#define ir3_CMPV_U_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_CMPV_U_rpt, __VA_ARGS__)
+
 INSTR2S(CMPV_S)
+#define ir3_CMPV_S(...) MESA_CALL_WITH_LTR_ARGS(_ir3_CMPV_S, __VA_ARGS__)
+#define ir3_CMPV_S_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_CMPV_S_rpt, __VA_ARGS__)
+
 INSTR2S(MUL_U24)
+#define ir3_MUL_U24(...) MESA_CALL_WITH_LTR_ARGS(_ir3_MUL_U24, __VA_ARGS__)
+#define ir3_MUL_U24_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_MUL_U24_rpt, __VA_ARGS__)
+
 INSTR2S(MUL_S24)
+#define ir3_MUL_S24(...) MESA_CALL_WITH_LTR_ARGS(_ir3_MUL_S24, __VA_ARGS__)
+#define ir3_MUL_S24_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_MUL_S24_rpt, __VA_ARGS__)
+
 INSTR2S(MULL_U)
+#define ir3_MULL_U(...) MESA_CALL_WITH_LTR_ARGS(_ir3_MULL_U, __VA_ARGS__)
+#define ir3_MULL_U_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_MULL_U_rpt, __VA_ARGS__)
+
 INSTR1S(BFREV_B)
 INSTR1S(CLZ_S)
 INSTR1S(CLZ_B)
 INSTR2S(SHL_B)
+#define ir3_SHL_B(...) MESA_CALL_WITH_LTR_ARGS(_ir3_SHL_B, __VA_ARGS__)
+#define ir3_SHL_B_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_SHL_B_rpt, __VA_ARGS__)
+
 INSTR2S(SHR_B)
+#define ir3_SHR_B(...) MESA_CALL_WITH_LTR_ARGS(_ir3_SHR_B, __VA_ARGS__)
+#define ir3_SHR_B_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_SHR_B_rpt, __VA_ARGS__)
+
 INSTR2S(ASHR_B)
+#define ir3_ASHR_B(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ASHR_B, __VA_ARGS__)
+#define ir3_ASHR_B_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ASHR_B_rpt, __VA_ARGS__)
+
 INSTR2(BARY_F)
+#define ir3_BARY_F(...) MESA_CALL_WITH_LTR_ARGS(_ir3_BARY_F, __VA_ARGS__)
+#define ir3_BARY_F_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_BARY_F_rpt, __VA_ARGS__)
+
 INSTR2(FLAT_B)
+#define ir3_FLAT_B(...) MESA_CALL_WITH_LTR_ARGS(_ir3_FLAT_B, __VA_ARGS__)
+#define ir3_FLAT_B_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_FLAT_B_rpt, __VA_ARGS__)
+
 INSTR2S(MGEN_B)
+#define ir3_MGEN_B(...) MESA_CALL_WITH_LTR_ARGS(_ir3_MGEN_B, __VA_ARGS__)
+#define ir3_MGEN_B_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_MGEN_B_rpt, __VA_ARGS__)
+
 INSTR2S(GETBIT_B)
+#define ir3_GETBIT_B(...) MESA_CALL_WITH_LTR_ARGS(_ir3_GETBIT_B, __VA_ARGS__)
+#define ir3_GETBIT_B_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_GETBIT_B_rpt, __VA_ARGS__)
+
 INSTR1(SETRM)
 INSTR1S(CBITS_B)
 INSTR2S(SHB)
+#define ir3_SHB(...) MESA_CALL_WITH_LTR_ARGS(_ir3_SHB, __VA_ARGS__)
+#define ir3_SHB_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_SHB_rpt, __VA_ARGS__)
+
 INSTR2S(MSAD)
+#define ir3_MSAD(...) MESA_CALL_WITH_LTR_ARGS(_ir3_MSAD, __VA_ARGS__)
+#define ir3_MSAD_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_MSAD_rpt, __VA_ARGS__)
 
 /* cat3 instructions: */
 INSTR3(MAD_U16)
+#define ir3_MAD_U16(...) MESA_CALL_WITH_LTR_ARGS(_ir3_MAD_U16, __VA_ARGS__)
+#define ir3_MAD_U16_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_MAD_U16_rpt, __VA_ARGS__)
+
 INSTR3(MADSH_U16)
+#define ir3_MADSH_U16(...) MESA_CALL_WITH_LTR_ARGS(_ir3_MADSH_U16, __VA_ARGS__)
+#define ir3_MADSH_U16_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_MADSH_U16_rpt, __VA_ARGS__)
+
 INSTR3(MAD_S16)
+#define ir3_MAD_S16(...) MESA_CALL_WITH_LTR_ARGS(_ir3_MAD_S16, __VA_ARGS__)
+#define ir3_MAD_S16_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_MAD_S16_rpt, __VA_ARGS__)
+
 INSTR3(MADSH_M16)
+#define ir3_MADSH_M16(...) MESA_CALL_WITH_LTR_ARGS(_ir3_MADSH_M16, __VA_ARGS__)
+#define ir3_MADSH_M16_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_MADSH_M16_rpt, __VA_ARGS__)
+
 INSTR3(MAD_U24)
+#define ir3_MAD_U24(...) MESA_CALL_WITH_LTR_ARGS(_ir3_MAD_U24, __VA_ARGS__)
+#define ir3_MAD_U24_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_MAD_U24_rpt, __VA_ARGS__)
+
 INSTR3(MAD_S24)
+#define ir3_MAD_S24(...) MESA_CALL_WITH_LTR_ARGS(_ir3_MAD_S24, __VA_ARGS__)
+#define ir3_MAD_S24_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_MAD_S24_rpt, __VA_ARGS__)
+
 INSTR3(MAD_F16)
+#define ir3_MAD_F16(...) MESA_CALL_WITH_LTR_ARGS(_ir3_MAD_F16, __VA_ARGS__)
+#define ir3_MAD_F16_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_MAD_F16_rpt, __VA_ARGS__)
+
 INSTR3(MAD_F32)
+#define ir3_MAD_F32(...) MESA_CALL_WITH_LTR_ARGS(_ir3_MAD_F32, __VA_ARGS__)
+#define ir3_MAD_F32_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_MAD_F32_rpt, __VA_ARGS__)
+
 INSTR3(DP2ACC)
+#define ir3_DP2ACC(...) MESA_CALL_WITH_LTR_ARGS(_ir3_DP2ACC, __VA_ARGS__)
+#define ir3_DP2ACC_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_DP2ACC_rpt, __VA_ARGS__)
+
 INSTR3(DP4ACC)
+#define ir3_DP4ACC(...) MESA_CALL_WITH_LTR_ARGS(_ir3_DP4ACC, __VA_ARGS__)
+#define ir3_DP4ACC_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_DP4ACC_rpt, __VA_ARGS__)
+
 /* NOTE: SEL_B32 checks for zero vs nonzero */
 INSTR3S(SEL_B16)
+#define ir3_SEL_B16(...) MESA_CALL_WITH_LTR_ARGS(_ir3_SEL_B16, __VA_ARGS__)
+#define ir3_SEL_B16_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_SEL_B16_rpt, __VA_ARGS__)
+
 INSTR3S(SEL_B32)
+#define ir3_SEL_B32(...) MESA_CALL_WITH_LTR_ARGS(_ir3_SEL_B32, __VA_ARGS__)
+#define ir3_SEL_B32_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_SEL_B32_rpt, __VA_ARGS__)
+
 INSTR3S(SEL_S16)
+#define ir3_SEL_S16(...) MESA_CALL_WITH_LTR_ARGS(_ir3_SEL_S16, __VA_ARGS__)
+#define ir3_SEL_S16_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_SEL_S16_rpt, __VA_ARGS__)
+
 INSTR3S(SEL_S32)
+#define ir3_SEL_S32(...) MESA_CALL_WITH_LTR_ARGS(_ir3_SEL_S32, __VA_ARGS__)
+#define ir3_SEL_S32_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_SEL_S32_rpt, __VA_ARGS__)
+
 INSTR3S(SEL_F16)
+#define ir3_SEL_F16(...) MESA_CALL_WITH_LTR_ARGS(_ir3_SEL_F16, __VA_ARGS__)
+#define ir3_SEL_F16_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_SEL_F16_rpt, __VA_ARGS__)
+
 INSTR3S(SEL_F32)
+#define ir3_SEL_F32(...) MESA_CALL_WITH_LTR_ARGS(_ir3_SEL_F32, __VA_ARGS__)
+#define ir3_SEL_F32_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_SEL_F32_rpt, __VA_ARGS__)
+
 INSTR3(SAD_S16)
+#define ir3_SAD_S16(...) MESA_CALL_WITH_LTR_ARGS(_ir3_SAD_S16, __VA_ARGS__)
+#define ir3_SAD_S16_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_SAD_S16_rpt, __VA_ARGS__)
+
 INSTR3(SAD_S32)
+#define ir3_SAD_S32(...) MESA_CALL_WITH_LTR_ARGS(_ir3_SAD_S32, __VA_ARGS__)
+#define ir3_SAD_S32_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_SAD_S32_rpt, __VA_ARGS__)
+
 INSTR3S(SHRM)
+#define ir3_SHRM(...) MESA_CALL_WITH_LTR_ARGS(_ir3_SHRM, __VA_ARGS__)
+#define ir3_SHRM_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_SHRM_rpt, __VA_ARGS__)
+
 INSTR3S(SHLM)
+#define ir3_SHLM(...) MESA_CALL_WITH_LTR_ARGS(_ir3_SHLM, __VA_ARGS__)
+#define ir3_SHLM_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_SHLM_rpt, __VA_ARGS__)
+
 INSTR3S(SHRG)
+#define ir3_SHRG(...) MESA_CALL_WITH_LTR_ARGS(_ir3_SHRG, __VA_ARGS__)
+#define ir3_SHRG_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_SHRG_rpt, __VA_ARGS__)
+
 INSTR3S(SHLG)
+#define ir3_SHLG(...) MESA_CALL_WITH_LTR_ARGS(_ir3_SHLG, __VA_ARGS__)
+#define ir3_SHLG_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_SHLG_rpt, __VA_ARGS__)
+
 INSTR3S(ANDG)
+#define ir3_ANDG(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ANDG, __VA_ARGS__)
+#define ir3_ANDG_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ANDG_rpt, __VA_ARGS__)
 
 /* cat4 instructions: */
 INSTR1S(RCP)
@@ -3159,89 +3332,275 @@ _ir3_BRCST_ACTIVE(struct ir3_builder *build, unsigned cluster_size,
 /* cat6 instructions: */
 INSTR0(GETFIBERID)
 INSTR2(LDLV)
+#define ir3_LDLV(...) MESA_CALL_WITH_LTR_ARGS(_ir3_LDLV, __VA_ARGS__)
+#define ir3_LDLV_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_LDLV_rpt, __VA_ARGS__)
+
 INSTR3(LDG)
+#define ir3_LDG(...) MESA_CALL_WITH_LTR_ARGS(_ir3_LDG, __VA_ARGS__)
+#define ir3_LDG_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_LDG_rpt, __VA_ARGS__)
+
 INSTR3(LDL)
+#define ir3_LDL(...) MESA_CALL_WITH_LTR_ARGS(_ir3_LDL, __VA_ARGS__)
+#define ir3_LDL_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_LDL_rpt, __VA_ARGS__)
+
 INSTR3(LDLW)
+#define ir3_LDLW(...) MESA_CALL_WITH_LTR_ARGS(_ir3_LDLW, __VA_ARGS__)
+#define ir3_LDLW_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_LDLW_rpt, __VA_ARGS__)
+
 INSTR3(LDP)
+#define ir3_LDP(...) MESA_CALL_WITH_LTR_ARGS(_ir3_LDP, __VA_ARGS__)
+#define ir3_LDP_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_LDP_rpt, __VA_ARGS__)
+
 INSTR4NODST(STG)
+#define ir3_STG(...) MESA_CALL_WITH_LTR_ARGS(_ir3_STG, __VA_ARGS__)
+
 INSTR3NODST(STL)
+#define ir3_STL(...) MESA_CALL_WITH_LTR_ARGS(_ir3_STL, __VA_ARGS__)
+#define ir3_STL_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_STL_rpt, __VA_ARGS__)
+
 INSTR3NODST(STLW)
+#define ir3_STLW(...) MESA_CALL_WITH_LTR_ARGS(_ir3_STLW, __VA_ARGS__)
+#define ir3_STLW_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_STLW_rpt, __VA_ARGS__)
+
 INSTR3NODST(STP)
+#define ir3_STP(...) MESA_CALL_WITH_LTR_ARGS(_ir3_STP, __VA_ARGS__)
+#define ir3_STP_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_STP_rpt, __VA_ARGS__)
+
 INSTR1(RESINFO)
 INSTR1(RESFMT)
 INSTR1(RESBASE)
 INSTR2(ATOMIC_ADD)
+#define ir3_ATOMIC_ADD(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ATOMIC_ADD, __VA_ARGS__)
+#define ir3_ATOMIC_ADD_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ATOMIC_ADD_rpt, __VA_ARGS__)
+
 INSTR2(ATOMIC_SUB)
+#define ir3_ATOMIC_SUB(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ATOMIC_SUB, __VA_ARGS__)
+#define ir3_ATOMIC_SUB_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ATOMIC_SUB_rpt, __VA_ARGS__)
+
 INSTR2(ATOMIC_XCHG)
+#define ir3_ATOMIC_XCHG(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ATOMIC_XCHG, __VA_ARGS__)
+#define ir3_ATOMIC_XCHG_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ATOMIC_XCHG_rpt, __VA_ARGS__)
+
 INSTR2(ATOMIC_INC)
+#define ir3_ATOMIC_INC(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ATOMIC_INC, __VA_ARGS__)
+#define ir3_ATOMIC_INC_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ATOMIC_INC_rpt, __VA_ARGS__)
+
 INSTR2(ATOMIC_DEC)
+#define ir3_ATOMIC_DEC(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ATOMIC_DEC, __VA_ARGS__)
+#define ir3_ATOMIC_DEC_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ATOMIC_DEC_rpt, __VA_ARGS__)
+
 INSTR2(ATOMIC_CMPXCHG)
+#define ir3_ATOMIC_CMPXCHG(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ATOMIC_CMPXCHG, __VA_ARGS__)
+#define ir3_ATOMIC_CMPXCHG_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ATOMIC_CMPXCHG_rpt, __VA_ARGS__)
+
 INSTR2(ATOMIC_MIN)
+#define ir3_ATOMIC_MIN(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ATOMIC_MIN, __VA_ARGS__)
+#define ir3_ATOMIC_MIN_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ATOMIC_MIN_rpt, __VA_ARGS__)
+
 INSTR2(ATOMIC_MAX)
+#define ir3_ATOMIC_MAX(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ATOMIC_MAX, __VA_ARGS__)
+#define ir3_ATOMIC_MAX_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ATOMIC_MAX_rpt, __VA_ARGS__)
+
 INSTR2(ATOMIC_AND)
+#define ir3_ATOMIC_AND(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ATOMIC_AND, __VA_ARGS__)
+#define ir3_ATOMIC_AND_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ATOMIC_AND_rpt, __VA_ARGS__)
+
 INSTR2(ATOMIC_OR)
+#define ir3_ATOMIC_OR(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ATOMIC_OR, __VA_ARGS__)
+#define ir3_ATOMIC_OR_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ATOMIC_OR_rpt, __VA_ARGS__)
+
 INSTR2(ATOMIC_XOR)
+#define ir3_ATOMIC_XOR(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ATOMIC_XOR, __VA_ARGS__)
+#define ir3_ATOMIC_XOR_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ATOMIC_XOR_rpt, __VA_ARGS__)
+
 INSTR2(LDC)
+#define ir3_LDC(...) MESA_CALL_WITH_LTR_ARGS(_ir3_LDC, __VA_ARGS__)
+#define ir3_LDC_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_LDC_rpt, __VA_ARGS__)
+
 INSTR2(QUAD_SHUFFLE_BRCST)
+#define ir3_QUAD_SHUFFLE_BRCST(...) MESA_CALL_WITH_LTR_ARGS(_ir3_QUAD_SHUFFLE_BRCST, __VA_ARGS__)
+#define ir3_QUAD_SHUFFLE_BRCST_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_QUAD_SHUFFLE_BRCST_rpt, __VA_ARGS__)
+
 INSTR1(QUAD_SHUFFLE_HORIZ)
 INSTR1(QUAD_SHUFFLE_VERT)
 INSTR1(QUAD_SHUFFLE_DIAG)
 INSTR2NODST(LDC_K)
+#define ir3_LDC_K(...) MESA_CALL_WITH_LTR_ARGS(_ir3_LDC_K, __VA_ARGS__)
+#define ir3_LDC_K_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_LDC_K_rpt, __VA_ARGS__)
+
 INSTR2NODST(STC)
+#define ir3_STC(...) MESA_CALL_WITH_LTR_ARGS(_ir3_STC, __VA_ARGS__)
+#define ir3_STC_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_STC_rpt, __VA_ARGS__)
+
 INSTR2NODST(STSC)
+#define ir3_STSC(...) MESA_CALL_WITH_LTR_ARGS(_ir3_STSC, __VA_ARGS__)
+#define ir3_STSC_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_STSC_rpt, __VA_ARGS__)
+
 INSTR2(SHFL)
+#define ir3_SHFL(...) MESA_CALL_WITH_LTR_ARGS(_ir3_SHFL, __VA_ARGS__)
+#define ir3_SHFL_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_SHFL_rpt, __VA_ARGS__)
+
 #ifndef GPU
 #elif GPU >= 500
 INSTR5(LDG_A);
+#define ir3_LDG_A(...) MESA_CALL_WITH_LTR_ARGS(_ir3_LDG_A, __VA_ARGS__)
+
 INSTR6NODST(STG_A);
+#define ir3_STG_A(...) MESA_CALL_WITH_LTR_ARGS(_ir3_STG_A, __VA_ARGS__)
 #endif
 #ifndef GPU
 #elif GPU >= 600
 INSTR4NODST(STIB);
+#define ir3_STIB(...) MESA_CALL_WITH_LTR_ARGS(_ir3_STIB, __VA_ARGS__)
+
 INSTR3(LDIB);
+#define ir3_LDIB(...) MESA_CALL_WITH_LTR_ARGS(_ir3_LDIB, __VA_ARGS__)
+#define ir3_LDIB_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_LDIB_rpt, __VA_ARGS__)
+
 INSTR2(ATOMIC_G_ADD)
+#define ir3_ATOMIC_G_ADD(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ATOMIC_G_ADD, __VA_ARGS__)
+#define ir3_ATOMIC_G_ADD_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ATOMIC_G_ADD_rpt, __VA_ARGS__)
+
 INSTR2(ATOMIC_G_SUB)
+#define ir3_ATOMIC_G_SUB(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ATOMIC_G_SUB, __VA_ARGS__)
+#define ir3_ATOMIC_G_SUB_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ATOMIC_G_SUB_rpt, __VA_ARGS__)
+
 INSTR2(ATOMIC_G_XCHG)
+#define ir3_ATOMIC_G_XCHG(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ATOMIC_G_XCHG, __VA_ARGS__)
+#define ir3_ATOMIC_G_XCHG_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ATOMIC_G_XCHG_rpt, __VA_ARGS__)
+
 INSTR2(ATOMIC_G_INC)
+#define ir3_ATOMIC_G_INC(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ATOMIC_G_INC, __VA_ARGS__)
+#define ir3_ATOMIC_G_INC_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ATOMIC_G_INC_rpt, __VA_ARGS__)
+
 INSTR2(ATOMIC_G_DEC)
+#define ir3_ATOMIC_G_DEC(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ATOMIC_G_DEC, __VA_ARGS__)
+#define ir3_ATOMIC_G_DEC_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ATOMIC_G_DEC_rpt, __VA_ARGS__)
+
 INSTR2(ATOMIC_G_CMPXCHG)
+#define ir3_ATOMIC_G_CMPXCHG(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ATOMIC_G_CMPXCHG, __VA_ARGS__)
+#define ir3_ATOMIC_G_CMPXCHG_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ATOMIC_G_CMPXCHG_rpt, __VA_ARGS__)
+
 INSTR2(ATOMIC_G_MIN)
+#define ir3_ATOMIC_G_MIN(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ATOMIC_G_MIN, __VA_ARGS__)
+#define ir3_ATOMIC_G_MIN_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ATOMIC_G_MIN_rpt, __VA_ARGS__)
+
 INSTR2(ATOMIC_G_MAX)
+#define ir3_ATOMIC_G_MAX(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ATOMIC_G_MAX, __VA_ARGS__)
+#define ir3_ATOMIC_G_MAX_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ATOMIC_G_MAX_rpt, __VA_ARGS__)
+
 INSTR2(ATOMIC_G_AND)
+#define ir3_ATOMIC_G_AND(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ATOMIC_G_AND, __VA_ARGS__)
+#define ir3_ATOMIC_G_AND_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ATOMIC_G_AND_rpt, __VA_ARGS__)
+
 INSTR2(ATOMIC_G_OR)
+#define ir3_ATOMIC_G_OR(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ATOMIC_G_OR, __VA_ARGS__)
+#define ir3_ATOMIC_G_OR_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ATOMIC_G_OR_rpt, __VA_ARGS__)
+
 INSTR2(ATOMIC_G_XOR)
+#define ir3_ATOMIC_G_XOR(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ATOMIC_G_XOR, __VA_ARGS__)
+#define ir3_ATOMIC_G_XOR_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ATOMIC_G_XOR_rpt, __VA_ARGS__)
+
 INSTR3(ATOMIC_B_ADD)
+#define ir3_ATOMIC_B_ADD(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ATOMIC_B_ADD, __VA_ARGS__)
+#define ir3_ATOMIC_B_ADD_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ATOMIC_B_ADD_rpt, __VA_ARGS__)
+
 INSTR3(ATOMIC_B_SUB)
+#define ir3_ATOMIC_B_SUB(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ATOMIC_B_SUB, __VA_ARGS__)
+#define ir3_ATOMIC_B_SUB_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ATOMIC_B_SUB_rpt, __VA_ARGS__)
+
 INSTR3(ATOMIC_B_XCHG)
+#define ir3_ATOMIC_B_XCHG(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ATOMIC_B_XCHG, __VA_ARGS__)
+#define ir3_ATOMIC_B_XCHG_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ATOMIC_B_XCHG_rpt, __VA_ARGS__)
+
 INSTR3(ATOMIC_B_INC)
+#define ir3_ATOMIC_B_INC(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ATOMIC_B_INC, __VA_ARGS__)
+#define ir3_ATOMIC_B_INC_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ATOMIC_B_INC_rpt, __VA_ARGS__)
+
 INSTR3(ATOMIC_B_DEC)
+#define ir3_ATOMIC_B_DEC(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ATOMIC_B_DEC, __VA_ARGS__)
+#define ir3_ATOMIC_B_DEC_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ATOMIC_B_DEC_rpt, __VA_ARGS__)
+
 INSTR3(ATOMIC_B_CMPXCHG)
+#define ir3_ATOMIC_B_CMPXCHG(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ATOMIC_B_CMPXCHG, __VA_ARGS__)
+#define ir3_ATOMIC_B_CMPXCHG_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ATOMIC_B_CMPXCHG_rpt, __VA_ARGS__)
+
 INSTR3(ATOMIC_B_MIN)
+#define ir3_ATOMIC_B_MIN(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ATOMIC_B_MIN, __VA_ARGS__)
+#define ir3_ATOMIC_B_MIN_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ATOMIC_B_MIN_rpt, __VA_ARGS__)
+
 INSTR3(ATOMIC_B_MAX)
+#define ir3_ATOMIC_B_MAX(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ATOMIC_B_MAX, __VA_ARGS__)
+#define ir3_ATOMIC_B_MAX_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ATOMIC_B_MAX_rpt, __VA_ARGS__)
+
 INSTR3(ATOMIC_B_AND)
+#define ir3_ATOMIC_B_AND(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ATOMIC_B_AND, __VA_ARGS__)
+#define ir3_ATOMIC_B_AND_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ATOMIC_B_AND_rpt, __VA_ARGS__)
+
 INSTR3(ATOMIC_B_OR)
+#define ir3_ATOMIC_B_OR(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ATOMIC_B_OR, __VA_ARGS__)
+#define ir3_ATOMIC_B_OR_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ATOMIC_B_OR_rpt, __VA_ARGS__)
+
 INSTR3(ATOMIC_B_XOR)
+#define ir3_ATOMIC_B_XOR(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ATOMIC_B_XOR, __VA_ARGS__)
+#define ir3_ATOMIC_B_XOR_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ATOMIC_B_XOR_rpt, __VA_ARGS__)
+
 #elif GPU >= 400
 INSTR3(LDGB)
+#define ir3_LDGB(...) MESA_CALL_WITH_LTR_ARGS(_ir3_LDGB, __VA_ARGS__)
+#define ir3_LDGB_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_LDGB_rpt, __VA_ARGS__)
+
 #if GPU >= 500
 INSTR3(LDIB)
+#define ir3_LDIB(...) MESA_CALL_WITH_LTR_ARGS(_ir3_LDIB, __VA_ARGS__)
+#define ir3_LDIB_rpt(...) MESA_CALL_WITH_LTR_ARGS(_ir3_LDIB_rpt, __VA_ARGS__)
+
 #endif
 INSTR4NODST(STGB)
+#define ir3_STGB(...) MESA_CALL_WITH_LTR_ARGS(_ir3_STGB, __VA_ARGS__)
+
 INSTR4NODST(STIB)
+#define ir3_STIB(...) MESA_CALL_WITH_LTR_ARGS(_ir3_STIB, __VA_ARGS__)
+
 INSTR4(ATOMIC_S_ADD)
+#define ir3_ATOMIC_S_ADD(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ATOMIC_S_ADD, __VA_ARGS__)
+
 INSTR4(ATOMIC_S_SUB)
+#define ir3_ATOMIC_S_SUB(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ATOMIC_S_SUB, __VA_ARGS__)
+
 INSTR4(ATOMIC_S_XCHG)
+#define ir3_ATOMIC_S_XCHG(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ATOMIC_S_XCHG, __VA_ARGS__)
+
 INSTR4(ATOMIC_S_INC)
+#define ir3_ATOMIC_S_INC(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ATOMIC_S_INC, __VA_ARGS__)
+
 INSTR4(ATOMIC_S_DEC)
+#define ir3_ATOMIC_S_DEC(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ATOMIC_S_DEC, __VA_ARGS__)
+
 INSTR4(ATOMIC_S_CMPXCHG)
+#define ir3_ATOMIC_S_CMPXCHG(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ATOMIC_S_CMPXCHG, __VA_ARGS__)
+
 INSTR4(ATOMIC_S_MIN)
+#define ir3_ATOMIC_S_MIN(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ATOMIC_S_MIN, __VA_ARGS__)
+
 INSTR4(ATOMIC_S_MAX)
+#define ir3_ATOMIC_S_MAX(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ATOMIC_S_MAX, __VA_ARGS__)
+
 INSTR4(ATOMIC_S_AND)
+#define ir3_ATOMIC_S_AND(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ATOMIC_S_AND, __VA_ARGS__)
+
 INSTR4(ATOMIC_S_OR)
+#define ir3_ATOMIC_S_OR(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ATOMIC_S_OR, __VA_ARGS__)
+
 INSTR4(ATOMIC_S_XOR)
+#define ir3_ATOMIC_S_XOR(...) MESA_CALL_WITH_LTR_ARGS(_ir3_ATOMIC_S_XOR, __VA_ARGS__)
+
 #endif
 INSTR4NODST(LDG_K)
+#define ir3_LDG_K(...) MESA_CALL_WITH_LTR_ARGS(_ir3_LDG_K, __VA_ARGS__)
+
 INSTR5(RAY_INTERSECTION)
+#define ir3_RAY_INTERSECTION(...) MESA_CALL_WITH_LTR_ARGS(_ir3_RAY_INTERSECTION, __VA_ARGS__)
 
 /* cat7 instructions: */
 INSTR0(BAR)
