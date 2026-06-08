@@ -994,8 +994,9 @@ print_var_decl(nir_variable *var, print_state *state)
       fprintf(fp, "%s ", precisions[var->data.precision]);
    }
 
-   fprintf(fp, "%s %s", get_type_name(var->type, state),
-           get_var_name(var, state));
+   const char *type_name = get_type_name(var->type, state);
+   const char *var_name = get_var_name(var, state);
+   fprintf(fp, "%s %s", type_name, var_name);
 
    if (var->data.mode & (nir_var_shader_in |
                          nir_var_shader_out |
