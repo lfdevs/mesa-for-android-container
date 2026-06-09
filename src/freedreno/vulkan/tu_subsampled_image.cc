@@ -121,7 +121,7 @@ tu_emit_subsampled_metadata(struct tu_cmd_buffer *cmd,
 }
 
 nir_def *
-tu_get_subsampled_coordinates(nir_builder *b,
+_tu_get_subsampled_coordinates(nir_builder *b,
                               nir_def *coords,
                               nir_def *descriptor,
                               bool can_speculate)
