@@ -36,18 +36,29 @@ extern "C" {
  * Definitions for functions in the C file come first.
  */
 
-nir_def *nir_cross3(nir_builder *b, nir_def *x, nir_def *y);
-nir_def *nir_cross4(nir_builder *b, nir_def *x, nir_def *y);
+#define nir_cross3(...) MESA_CALL_WITH_LTR_ARGS(_nir_cross3, __VA_ARGS__)
+nir_def *_nir_cross3(nir_builder *b, nir_def *x, nir_def *y);
+
+#define nir_cross4(...) MESA_CALL_WITH_LTR_ARGS(_nir_cross4, __VA_ARGS__)
+nir_def *_nir_cross4(nir_builder *b, nir_def *x, nir_def *y);
 nir_def *nir_fast_length(nir_builder *b, nir_def *vec);
-nir_def *nir_nextafter(nir_builder *b, nir_def *x, nir_def *y);
+
+#define nir_nextafter(...) MESA_CALL_WITH_LTR_ARGS(_nir_nextafter, __VA_ARGS__)
+nir_def *_nir_nextafter(nir_builder *b, nir_def *x, nir_def *y);
 nir_def *nir_normalize(nir_builder *b, nir_def *vec);
-nir_def *nir_smoothstep(nir_builder *b, nir_def *edge0,
+
+#define nir_smoothstep(...) MESA_CALL_WITH_LTR_ARGS(_nir_smoothstep, __VA_ARGS__)
+nir_def *_nir_smoothstep(nir_builder *b, nir_def *edge0,
                         nir_def *edge1, nir_def *x);
-nir_def *nir_upsample(nir_builder *b, nir_def *hi, nir_def *lo);
+
+#define nir_upsample(...) MESA_CALL_WITH_LTR_ARGS(_nir_upsample, __VA_ARGS__)
+nir_def *_nir_upsample(nir_builder *b, nir_def *hi, nir_def *lo);
 nir_def *nir_acos(nir_builder *b, nir_def *x);
 nir_def *nir_asin(nir_builder *b, nir_def *x);
 nir_def *nir_atan(nir_builder *b, nir_def *y_over_x);
-nir_def *nir_atan2(nir_builder *b, nir_def *y, nir_def *x);
+
+#define nir_atan2(...) MESA_CALL_WITH_LTR_ARGS(_nir_atan2, __VA_ARGS__)
+nir_def *_nir_atan2(nir_builder *b, nir_def *y, nir_def *x);
 
 
 nir_def *
@@ -74,8 +85,9 @@ nir_fisnan(nir_builder *b, nir_def *x)
    return res;
 }
 
+#define nir_nan_check2(...) MESA_CALL_WITH_LTR_ARGS(_nir_nan_check2, __VA_ARGS__)
 static inline nir_def *
-nir_nan_check2(nir_builder *b, nir_def *x, nir_def *y, nir_def *res)
+_nir_nan_check2(nir_builder *b, nir_def *x, nir_def *y, nir_def *res)
 {
    return nir_bcsel(b, nir_fisnan(b, x), x, nir_bcsel(b, nir_fisnan(b, y), y, res));
 }
@@ -90,8 +102,9 @@ nir_fmax_abs_vec_comp(nir_builder *b, nir_def *vec)
    return res;
 }
 
+#define nir_iabs_diff(...) MESA_CALL_WITH_LTR_ARGS(_nir_iabs_diff, __VA_ARGS__)
 static inline nir_def *
-nir_iabs_diff(nir_builder *b, nir_def *x, nir_def *y)
+_nir_iabs_diff(nir_builder *b, nir_def *x, nir_def *y)
 {
    nir_def *cond = nir_ige(b, x, y);
    nir_def *res0 = nir_isub(b, x, y);
@@ -99,8 +112,9 @@ nir_iabs_diff(nir_builder *b, nir_def *x, nir_def *y)
    return nir_bcsel(b, cond, res0, res1);
 }
 
+#define nir_uabs_diff(...) MESA_CALL_WITH_LTR_ARGS(_nir_uabs_diff, __VA_ARGS__)
 static inline nir_def *
-nir_uabs_diff(nir_builder *b, nir_def *x, nir_def *y)
+_nir_uabs_diff(nir_builder *b, nir_def *x, nir_def *y)
 {
    nir_def *cond = nir_uge(b, x, y);
    nir_def *res0 = nir_isub(b, x, y);
@@ -120,35 +134,40 @@ nir_flog(nir_builder *b, nir_def *x)
    return nir_fmul_imm(b, nir_flog2(b, x), 1.0 / M_LOG2E);
 }
 
+#define nir_imad24(...) MESA_CALL_WITH_LTR_ARGS(_nir_imad24, __VA_ARGS__)
 static inline nir_def *
-nir_imad24(nir_builder *b, nir_def *x, nir_def *y, nir_def *z)
+_nir_imad24(nir_builder *b, nir_def *x, nir_def *y, nir_def *z)
 {
    nir_def *temp = nir_imul24(b, x, y);
    return nir_iadd(b, temp, z);
 }
 
+#define nir_imad_hi(...) MESA_CALL_WITH_LTR_ARGS(_nir_imad_hi, __VA_ARGS__)
 static inline nir_def *
-nir_imad_hi(nir_builder *b, nir_def *x, nir_def *y, nir_def *z)
+_nir_imad_hi(nir_builder *b, nir_def *x, nir_def *y, nir_def *z)
 {
    nir_def *temp = nir_imul_high(b, x, y);
    return nir_iadd(b, temp, z);
 }
 
+#define nir_umad_hi(...) MESA_CALL_WITH_LTR_ARGS(_nir_umad_hi, __VA_ARGS__)
 static inline nir_def *
-nir_umad_hi(nir_builder *b, nir_def *x, nir_def *y, nir_def *z)
+_nir_umad_hi(nir_builder *b, nir_def *x, nir_def *y, nir_def *z)
 {
    nir_def *temp = nir_umul_high(b, x, y);
    return nir_iadd(b, temp, z);
 }
 
+#define nir_bitselect(...) MESA_CALL_WITH_LTR_ARGS(_nir_bitselect, __VA_ARGS__)
 static inline nir_def *
-nir_bitselect(nir_builder *b, nir_def *x, nir_def *y, nir_def *s)
+_nir_bitselect(nir_builder *b, nir_def *x, nir_def *y, nir_def *s)
 {
    return nir_ior(b, nir_iand(b, nir_inot(b, s), x), nir_iand(b, s, y));
 }
 
+#define nir_copysign(...) MESA_CALL_WITH_LTR_ARGS(_nir_copysign, __VA_ARGS__)
 static inline nir_def *
-nir_copysign(nir_builder *b, nir_def *x, nir_def *y)
+_nir_copysign(nir_builder *b, nir_def *x, nir_def *y)
 {
    if (b->shader->options->no_integers) {
       /* Unlike the integer path, this is not signed zero correct. We assume
@@ -173,8 +192,9 @@ nir_degrees(nir_builder *b, nir_def *val)
    return nir_fmul_imm(b, val, 180.0 / M_PI);
 }
 
+#define nir_fdim(...) MESA_CALL_WITH_LTR_ARGS(_nir_fdim, __VA_ARGS__)
 static inline nir_def *
-nir_fdim(nir_builder *b, nir_def *x, nir_def *y)
+_nir_fdim(nir_builder *b, nir_def *x, nir_def *y)
 {
    nir_def *cond = nir_flt(b, y, x);
    nir_def *res = nir_fsub(b, x, y);
@@ -184,8 +204,9 @@ nir_fdim(nir_builder *b, nir_def *x, nir_def *y)
    return nir_nan_check2(b, x, y, nir_bcsel(b, cond, res, zero));
 }
 
+#define nir_fast_distance(...) MESA_CALL_WITH_LTR_ARGS(_nir_fast_distance, __VA_ARGS__)
 static inline nir_def *
-nir_fast_distance(nir_builder *b, nir_def *x, nir_def *y)
+_nir_fast_distance(nir_builder *b, nir_def *x, nir_def *y)
 {
    return nir_fast_length(b, nir_fsub(b, x, y));
 }
@@ -196,8 +217,9 @@ nir_fast_normalize(nir_builder *b, nir_def *vec)
    return nir_fdiv(b, vec, nir_fast_length(b, vec));
 }
 
+#define nir_maxmag(...) MESA_CALL_WITH_LTR_ARGS(_nir_maxmag, __VA_ARGS__)
 static inline nir_def *
-nir_maxmag(nir_builder *b, nir_def *x, nir_def *y)
+_nir_maxmag(nir_builder *b, nir_def *x, nir_def *y)
 {
    nir_def *xabs = nir_fabs(b, x);
    nir_def *yabs = nir_fabs(b, y);
@@ -208,8 +230,9 @@ nir_maxmag(nir_builder *b, nir_def *x, nir_def *y)
    return nir_bcsel(b, condy, y, nir_bcsel(b, condx, x, nir_fmax(b, x, y)));
 }
 
+#define nir_minmag(...) MESA_CALL_WITH_LTR_ARGS(_nir_minmag, __VA_ARGS__)
 static inline nir_def *
-nir_minmag(nir_builder *b, nir_def *x, nir_def *y)
+_nir_minmag(nir_builder *b, nir_def *x, nir_def *y)
 {
    nir_def *xabs = nir_fabs(b, x);
    nir_def *yabs = nir_fabs(b, y);
@@ -240,8 +263,9 @@ nir_radians(nir_builder *b, nir_def *val)
    return nir_fmul_imm(b, val, M_PI / 180.0);
 }
 
+#define nir_select(...) MESA_CALL_WITH_LTR_ARGS(_nir_select, __VA_ARGS__)
 static inline nir_def *
-nir_select(nir_builder *b, nir_def *x, nir_def *y, nir_def *s)
+_nir_select(nir_builder *b, nir_def *x, nir_def *y, nir_def *s)
 {
    if (s->num_components != 1) {
       uint64_t mask = 1ull << (s->bit_size - 1);

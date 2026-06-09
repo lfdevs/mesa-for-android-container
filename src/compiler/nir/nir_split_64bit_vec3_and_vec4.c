@@ -84,8 +84,9 @@ typedef struct {
    nir_variable *zw;
 } variable_pair;
 
+#define merge_to_vec3_or_vec4(...) MESA_CALL_WITH_LTR_ARGS(_merge_to_vec3_or_vec4, __VA_ARGS__)
 static nir_def *
-merge_to_vec3_or_vec4(nir_builder *b, nir_def *load1,
+_merge_to_vec3_or_vec4(nir_builder *b, nir_def *load1,
                       nir_def *load2)
 {
    assert(load2->num_components > 0 && load2->num_components < 3);

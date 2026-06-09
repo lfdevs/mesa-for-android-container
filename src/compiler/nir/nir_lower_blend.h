@@ -66,16 +66,19 @@ typedef struct {
    bool scalar_blend_const;
 } nir_lower_blend_options;
 
+#define nir_color_logicop(...) MESA_CALL_WITH_LTR_ARGS(_nir_color_logicop, __VA_ARGS__)
 nir_def *
-nir_color_logicop(nir_builder *b, nir_def *src, nir_def *dst,
+_nir_color_logicop(nir_builder *b, nir_def *src, nir_def *dst,
                   enum pipe_logicop func, enum pipe_format format);
 
+#define nir_color_blend(...) MESA_CALL_WITH_LTR_ARGS(_nir_color_blend, __VA_ARGS__)
 nir_def *
-nir_color_blend(nir_builder *b, nir_def *src0, nir_def *src1, nir_def *dst,
+_nir_color_blend(nir_builder *b, nir_def *src0, nir_def *src1, nir_def *dst,
                 const nir_lower_blend_rt *rt, bool scalar_blend_const);
 
+#define nir_color_mask(...) MESA_CALL_WITH_LTR_ARGS(_nir_color_mask, __VA_ARGS__)
 nir_def *
-nir_color_mask(nir_builder *b, nir_def *src, nir_def *dst, unsigned mask);
+_nir_color_mask(nir_builder *b, nir_def *src, nir_def *dst, unsigned mask);
 
 bool nir_lower_blend(nir_shader *shader,
                      const nir_lower_blend_options *options);

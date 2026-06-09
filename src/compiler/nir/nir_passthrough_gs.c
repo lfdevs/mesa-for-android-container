@@ -93,8 +93,9 @@ vertices_for_prim(enum mesa_prim prim)
    }
 }
 
+#define copy_vars(...) MESA_CALL_WITH_LTR_ARGS(_copy_vars, __VA_ARGS__)
 static void
-copy_vars(nir_builder *b, nir_deref_instr *dst, nir_deref_instr *src)
+_copy_vars(nir_builder *b, nir_deref_instr *dst, nir_deref_instr *src)
 {
    assert(glsl_get_bare_type(dst->type) == glsl_get_bare_type(src->type));
    if (glsl_type_is_struct_or_ifc(dst->type)) {

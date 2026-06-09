@@ -701,8 +701,9 @@ array_path_is_out_of_bounds(nir_deref_path *path,
    return false;
 }
 
+#define emit_split_copies(...) MESA_CALL_WITH_LTR_ARGS(_emit_split_copies, __VA_ARGS__)
 static void
-emit_split_copies(nir_builder *b,
+_emit_split_copies(nir_builder *b,
                   struct array_var_info *dst_info, nir_deref_path *dst_path,
                   unsigned dst_level, nir_deref_instr *dst,
                   struct array_var_info *src_info, nir_deref_path *src_path,

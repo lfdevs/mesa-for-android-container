@@ -15,22 +15,25 @@ imm3(nir_builder *b, float x)
     return nir_imm_vec3(b, x, x, x);
 }
 
+#define blend_multiply(...) MESA_CALL_WITH_LTR_ARGS(_blend_multiply, __VA_ARGS__)
 static inline nir_def *
-blend_multiply(nir_builder *b, nir_def *src, nir_def *dst)
+_blend_multiply(nir_builder *b, nir_def *src, nir_def *dst)
 {
    /* f(Cs,Cd) = Cs*Cd */
    return nir_fmul(b, src, dst);
 }
 
+#define blend_screen(...) MESA_CALL_WITH_LTR_ARGS(_blend_screen, __VA_ARGS__)
 static inline nir_def *
-blend_screen(nir_builder *b, nir_def *src, nir_def *dst)
+_blend_screen(nir_builder *b, nir_def *src, nir_def *dst)
 {
    /* f(Cs,Cd) = Cs+Cd-Cs*Cd */
    return nir_fsub(b, nir_fadd(b, src, dst), nir_fmul(b, src, dst));
 }
 
+#define blend_overlay(...) MESA_CALL_WITH_LTR_ARGS(_blend_overlay, __VA_ARGS__)
 static inline nir_def *
-blend_overlay(nir_builder *b, nir_def *src, nir_def *dst)
+_blend_overlay(nir_builder *b, nir_def *src, nir_def *dst)
 {
    /* f(Cs,Cd) = 2*Cs*Cd, if Cd <= 0.5
     *            1-2*(1-Cs)*(1-Cd), otherwise
@@ -40,22 +43,26 @@ blend_overlay(nir_builder *b, nir_def *src, nir_def *dst)
       nir_fsub(b, imm3(b, 1.0), nir_fmul(b, nir_fmul(b, nir_fsub(b, imm3(b, 1.0), src), nir_fsub(b, imm3(b, 1.0), dst)), imm3(b, 2.0)));
    return nir_bcsel(b, nir_fge(b, imm3(b, 0.5f), dst), rule_1, rule_2);
 }
+
+#define blend_darken(...) MESA_CALL_WITH_LTR_ARGS(_blend_darken, __VA_ARGS__)
 static inline nir_def *
-blend_darken(nir_builder *b, nir_def *src, nir_def *dst)
+_blend_darken(nir_builder *b, nir_def *src, nir_def *dst)
 {
    /* f(Cs,Cd) = min(Cs,Cd) */
    return nir_fmin(b, src, dst);
 }
 
+#define blend_lighten(...) MESA_CALL_WITH_LTR_ARGS(_blend_lighten, __VA_ARGS__)
 static inline nir_def *
-blend_lighten(nir_builder *b, nir_def *src, nir_def *dst)
+_blend_lighten(nir_builder *b, nir_def *src, nir_def *dst)
 {
    /* f(Cs,Cd) = max(Cs,Cd) */
    return nir_fmax(b, src, dst);
 }
 
+#define blend_colordodge(...) MESA_CALL_WITH_LTR_ARGS(_blend_colordodge, __VA_ARGS__)
 static inline nir_def *
-blend_colordodge(nir_builder *b, nir_def *src, nir_def *dst)
+_blend_colordodge(nir_builder *b, nir_def *src, nir_def *dst)
 {
    /* f(Cs,Cd) =
     *   0, if Cd <= 0
@@ -67,8 +74,9 @@ blend_colordodge(nir_builder *b, nir_def *src, nir_def *dst)
                               nir_fmin(b, imm3(b, 1.0), nir_fdiv(b, dst, nir_fsub(b, imm3(b, 1.0), src)))));
 }
 
+#define blend_colorburn(...) MESA_CALL_WITH_LTR_ARGS(_blend_colorburn, __VA_ARGS__)
 static inline nir_def *
-blend_colorburn(nir_builder *b, nir_def *src, nir_def *dst)
+_blend_colorburn(nir_builder *b, nir_def *src, nir_def *dst)
 {
    /* f(Cs,Cd) =
     *   1, if Cd >= 1
@@ -80,8 +88,9 @@ blend_colorburn(nir_builder *b, nir_def *src, nir_def *dst)
                               nir_fsub(b, imm3(b, 1.0), nir_fmin(b, imm3(b, 1.0), nir_fdiv(b, nir_fsub(b, imm3(b, 1.0), dst), src)))));
 }
 
+#define blend_hardlight(...) MESA_CALL_WITH_LTR_ARGS(_blend_hardlight, __VA_ARGS__)
 static inline nir_def *
-blend_hardlight(nir_builder *b, nir_def *src, nir_def *dst)
+_blend_hardlight(nir_builder *b, nir_def *src, nir_def *dst)
 {
    /* f(Cs,Cd) = 2*Cs*Cd, if Cs <= 0.5
     *            1-2*(1-Cs)*(1-Cd), otherwise
@@ -92,8 +101,9 @@ blend_hardlight(nir_builder *b, nir_def *src, nir_def *dst)
    return nir_bcsel(b, nir_fge(b, imm3(b, 0.5), src), rule_1, rule_2);
 }
 
+#define blend_softlight(...) MESA_CALL_WITH_LTR_ARGS(_blend_softlight, __VA_ARGS__)
 static inline nir_def *
-blend_softlight(nir_builder *b, nir_def *src, nir_def *dst)
+_blend_softlight(nir_builder *b, nir_def *src, nir_def *dst)
 {
    /* f(Cs,Cd) =
     *   Cd-(1-2*Cs)*Cd*(1-Cd),
@@ -119,14 +129,16 @@ blend_softlight(nir_builder *b, nir_def *src, nir_def *dst)
    return nir_fadd(b, dst, nir_fmul(b, nir_fsub(b, nir_fmul(b, imm3(b, 2.0), src), imm3(b, 1.0)), factor));
 }
 
+#define blend_difference(...) MESA_CALL_WITH_LTR_ARGS(_blend_difference, __VA_ARGS__)
 static inline nir_def *
-blend_difference(nir_builder *b, nir_def *src, nir_def *dst)
+_blend_difference(nir_builder *b, nir_def *src, nir_def *dst)
 {
    return nir_fabs(b, nir_fsub(b, dst, src));
 }
 
+#define blend_exclusion(...) MESA_CALL_WITH_LTR_ARGS(_blend_exclusion, __VA_ARGS__)
 static inline nir_def *
-blend_exclusion(nir_builder *b, nir_def *src, nir_def *dst)
+_blend_exclusion(nir_builder *b, nir_def *src, nir_def *dst)
 {
    return nir_fadd(b, src, nir_fsub(b, dst, nir_fmul(b, imm3(b, 2.0), nir_fmul(b, src, dst))));
 }

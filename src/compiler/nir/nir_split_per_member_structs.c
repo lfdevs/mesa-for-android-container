@@ -97,8 +97,9 @@ split_variable(struct nir_variable *var, nir_shader *shader,
    _mesa_hash_table_insert(var_to_member_map, var, members);
 }
 
+#define build_member_deref(...) MESA_CALL_WITH_LTR_ARGS(_build_member_deref, __VA_ARGS__)
 static nir_deref_instr *
-build_member_deref(nir_builder *b, nir_deref_instr *deref, nir_variable *member)
+_build_member_deref(nir_builder *b, nir_deref_instr *deref, nir_variable *member)
 {
    if (deref->deref_type == nir_deref_type_var) {
       return nir_build_deref_var(b, member);

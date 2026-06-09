@@ -914,7 +914,7 @@ GENX(pan_blend_create_shader)(const struct pan_blend_state *state,
       color = nir_color_blend(b, src0, src1, dest, &nir_rt, false);
    }
 
-   color = nir_color_mask(b, color, dest, rt_state->equation.color_mask);
+   color = nir_color_mask(b, color, dest, (unsigned) rt_state->equation.color_mask);
 
    /* Throw away any channels we don't need */
    color = nir_color_mask(b, color, nir_undef(b, 4, dest_bit_size),

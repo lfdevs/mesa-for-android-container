@@ -47,8 +47,9 @@ struct ctx {
 
 /* Given processed factors, combine them per a blend function */
 
+#define nir_blend_func(...) MESA_CALL_WITH_LTR_ARGS(_nir_blend_func, __VA_ARGS__)
 static nir_def *
-nir_blend_func(
+_nir_blend_func(
    nir_builder *b,
    enum pipe_blend_func func,
    nir_def *src, nir_def *dst)
@@ -85,8 +86,10 @@ nir_blend_factored(enum pipe_blend_func func)
 }
 
 /* Compute a src_alpha_saturate factor */
+
+#define nir_alpha_saturate(...) MESA_CALL_WITH_LTR_ARGS(_nir_alpha_saturate, __VA_ARGS__)
 static nir_def *
-nir_alpha_saturate(
+_nir_alpha_saturate(
    nir_builder *b,
    nir_def *src, nir_def *dst,
    unsigned chan)
@@ -101,8 +104,9 @@ nir_alpha_saturate(
 
 /* Returns a scalar single factor, unmultiplied */
 
+#define nir_blend_factor_value(...) MESA_CALL_WITH_LTR_ARGS(_nir_blend_factor_value, __VA_ARGS__)
 static nir_def *
-nir_blend_factor_value(
+_nir_blend_factor_value(
    nir_builder *b,
    nir_def *src, nir_def *src1, nir_def *dst, nir_def *bconst,
    unsigned chan,
@@ -175,8 +179,9 @@ channel_uses_dest(nir_lower_blend_channel chan)
    }
 }
 
+#define nir_blend_factor(...) MESA_CALL_WITH_LTR_ARGS(_nir_blend_factor, __VA_ARGS__)
 static nir_def *
-nir_blend_factor(
+_nir_blend_factor(
    nir_builder *b,
    nir_def *raw_scalar,
    nir_def *src, nir_def *src1, nir_def *dst, nir_def *bconst,
@@ -197,7 +202,7 @@ nir_blend_factor(
 /* Given a colormask, "blend" with the destination */
 
 nir_def *
-nir_color_mask(nir_builder *b, nir_def *src, nir_def *dst, unsigned mask)
+_nir_color_mask(nir_builder *b, nir_def *src, nir_def *dst, unsigned mask)
 {
    mask &= 0xf;
    if (mask == 0)
@@ -212,8 +217,9 @@ nir_color_mask(nir_builder *b, nir_def *src, nir_def *dst, unsigned mask)
                    nir_channel(b, (mask & (1 << 3)) ? src : dst, 3));
 }
 
+#define nir_logicop_func(...) MESA_CALL_WITH_LTR_ARGS(_nir_logicop_func, __VA_ARGS__)
 static nir_def *
-nir_logicop_func(
+_nir_logicop_func(
    nir_builder *b,
    enum pipe_logicop func,
    nir_def *src, nir_def *dst, nir_def *bitmask)
@@ -257,7 +263,7 @@ nir_logicop_func(
 }
 
 nir_def *
-nir_color_logicop(nir_builder *b, nir_def *src, nir_def *dst,
+_nir_color_logicop(nir_builder *b, nir_def *src, nir_def *dst,
                   enum pipe_logicop func, enum pipe_format format)
 {
    unsigned bit_size = src->bit_size;
@@ -408,8 +414,10 @@ clip_color(nir_builder *b, nir_def *c)
 }
 
 /* Set luminosity of cbase to match clum */
+
+#define set_lum(...) MESA_CALL_WITH_LTR_ARGS(_set_lum, __VA_ARGS__)
 static nir_def *
-set_lum(nir_builder *b, nir_def *cbase, nir_def *clum)
+_set_lum(nir_builder *b, nir_def *cbase, nir_def *clum)
 {
    nir_def *lbase = lumv3(b, cbase);
    nir_def *llum = lumv3(b, clum);
@@ -420,8 +428,10 @@ set_lum(nir_builder *b, nir_def *cbase, nir_def *clum)
 }
 
 /* Set saturation of cbase to match csat, then luminosity to match clum */
+
+#define set_lum_sat(...) MESA_CALL_WITH_LTR_ARGS(_set_lum_sat, __VA_ARGS__)
 static nir_def *
-set_lum_sat(nir_builder *b, nir_def *cbase, nir_def *csat, nir_def *clum)
+_set_lum_sat(nir_builder *b, nir_def *cbase, nir_def *csat, nir_def *clum)
 {
    nir_def *sbase = satv3(b, cbase);
    nir_def *ssat = satv3(b, csat);
@@ -436,63 +446,72 @@ set_lum_sat(nir_builder *b, nir_def *cbase, nir_def *csat, nir_def *clum)
    return set_lum(b, scaled, clum);
 }
 
+#define blend_hsl_hue(...) MESA_CALL_WITH_LTR_ARGS(_blend_hsl_hue, __VA_ARGS__)
 static nir_def *
-blend_hsl_hue(nir_builder *b, nir_def *src, nir_def *dst)
+_blend_hsl_hue(nir_builder *b, nir_def *src, nir_def *dst)
 {
    /* Hue from src, saturation and luminosity from dst */
    return set_lum_sat(b, src, dst, dst);
 }
 
+#define blend_hsl_saturation(...) MESA_CALL_WITH_LTR_ARGS(_blend_hsl_saturation, __VA_ARGS__)
 static nir_def *
-blend_hsl_saturation(nir_builder *b, nir_def *src, nir_def *dst)
+_blend_hsl_saturation(nir_builder *b, nir_def *src, nir_def *dst)
 {
    /* Saturation from src, hue and luminosity from dst */
    return set_lum_sat(b, dst, src, dst);
 }
 
+#define blend_hsl_color(...) MESA_CALL_WITH_LTR_ARGS(_blend_hsl_color, __VA_ARGS__)
 static nir_def *
-blend_hsl_color(nir_builder *b, nir_def *src, nir_def *dst)
+_blend_hsl_color(nir_builder *b, nir_def *src, nir_def *dst)
 {
    /* Hue and saturation from src, luminosity from dst */
    return set_lum(b, src, dst);
 }
 
+#define blend_hsl_luminosity(...) MESA_CALL_WITH_LTR_ARGS(_blend_hsl_luminosity, __VA_ARGS__)
 static nir_def *
-blend_hsl_luminosity(nir_builder *b, nir_def *src, nir_def *dst)
+_blend_hsl_luminosity(nir_builder *b, nir_def *src, nir_def *dst)
 {
    /* Luminosity from src, hue and saturation from dst */
    return set_lum(b, dst, src);
 }
 
+#define blend_invert(...) MESA_CALL_WITH_LTR_ARGS(_blend_invert, __VA_ARGS__)
 static nir_def *
-blend_invert(nir_builder *b, nir_def *src, nir_def *dst)
+_blend_invert(nir_builder *b, nir_def *src, nir_def *dst)
 {
    return nir_fsub_imm(b, 1.0, dst);
 }
 
+#define blend_invert_rgb(...) MESA_CALL_WITH_LTR_ARGS(_blend_invert_rgb, __VA_ARGS__)
 static nir_def *
-blend_invert_rgb(nir_builder *b, nir_def *src, nir_def *dst)
+_blend_invert_rgb(nir_builder *b, nir_def *src, nir_def *dst)
 {
    return nir_fmul(b, src, nir_fsub_imm(b, 1.0, dst));
 }
 
+#define blend_lineardodge(...) MESA_CALL_WITH_LTR_ARGS(_blend_lineardodge, __VA_ARGS__)
 static nir_def *
-blend_lineardodge(nir_builder *b, nir_def *src, nir_def *dst)
+_blend_lineardodge(nir_builder *b, nir_def *src, nir_def *dst)
 {
    /* min(1, src + dst) */
    return nir_fmin(b, imm3(b, 1.0), nir_fadd(b, src, dst));
 }
 
+#define blend_linearburn(...) MESA_CALL_WITH_LTR_ARGS(_blend_linearburn, __VA_ARGS__)
 static nir_def *
-blend_linearburn(nir_builder *b, nir_def *src, nir_def *dst)
+_blend_linearburn(nir_builder *b, nir_def *src, nir_def *dst)
 {
    /* max(0, src + dst - 1) */
    return nir_fmax(b, nir_imm_float(b, 0.0),
                    nir_fadd(b, src, nir_fadd_imm(b, dst, -1.0)));
 }
 
+#define blend_vividlight(...) MESA_CALL_WITH_LTR_ARGS(_blend_vividlight, __VA_ARGS__)
 static nir_def *
-blend_vividlight(nir_builder *b, nir_def *src, nir_def *dst)
+_blend_vividlight(nir_builder *b, nir_def *src, nir_def *dst)
 {
    /*
     * if src <= 0: 0
@@ -515,8 +534,9 @@ blend_vividlight(nir_builder *b, nir_def *src, nir_def *dst)
                                         imm3(b, 1.0))));
 }
 
+#define blend_linearlight(...) MESA_CALL_WITH_LTR_ARGS(_blend_linearlight, __VA_ARGS__)
 static nir_def *
-blend_linearlight(nir_builder *b, nir_def *src, nir_def *dst)
+_blend_linearlight(nir_builder *b, nir_def *src, nir_def *dst)
 {
    /*
     * if 2*src + dst > 2: 1
@@ -532,8 +552,9 @@ blend_linearlight(nir_builder *b, nir_def *src, nir_def *dst)
                               result));
 }
 
+#define blend_pinlight(...) MESA_CALL_WITH_LTR_ARGS(_blend_pinlight, __VA_ARGS__)
 static nir_def *
-blend_pinlight(nir_builder *b, nir_def *src, nir_def *dst)
+_blend_pinlight(nir_builder *b, nir_def *src, nir_def *dst)
 {
    /*
     * if (2*src - 1 > dst) && src < 0.5: 0
@@ -554,8 +575,9 @@ blend_pinlight(nir_builder *b, nir_def *src, nir_def *dst)
                     nir_bcsel(b, cond3, two_src, dst));
 }
 
+#define blend_hardmix(...) MESA_CALL_WITH_LTR_ARGS(_blend_hardmix, __VA_ARGS__)
 static nir_def *
-blend_hardmix(nir_builder *b, nir_def *src, nir_def *dst)
+_blend_hardmix(nir_builder *b, nir_def *src, nir_def *dst)
 {
    /* if src + dst >= 1: 1, else 0.
     * Use small epsilon to handle 8-bit quantization.
@@ -570,8 +592,10 @@ blend_hardmix(nir_builder *b, nir_def *src, nir_def *dst)
  * Calculate the blend factor f(Cs', Cd').
  * Returns NULL for blend modes where X=0, meaning f() is not used.
  */
+
+#define calc_blend_factor(...) MESA_CALL_WITH_LTR_ARGS(_calc_blend_factor, __VA_ARGS__)
 static nir_def *
-calc_blend_factor(nir_builder *b, enum pipe_advanced_blend_mode blend_op, nir_def *src, nir_def *dst)
+_calc_blend_factor(nir_builder *b, enum pipe_advanced_blend_mode blend_op, nir_def *src, nir_def *dst)
 {
    switch (blend_op) {
    /* f() result unused (X=0) */
@@ -649,8 +673,9 @@ calc_blend_factor(nir_builder *b, enum pipe_advanced_blend_mode blend_op, nir_de
    }
 }
 
+#define calc_additional_rgb_blend(...) MESA_CALL_WITH_LTR_ARGS(_calc_additional_rgb_blend, __VA_ARGS__)
 static nir_def *
-calc_additional_rgb_blend(nir_builder *b, const nir_lower_blend_options *options,
+_calc_additional_rgb_blend(nir_builder *b, const nir_lower_blend_options *options,
                           unsigned rt,
                           nir_def *src, nir_def *dst)
 {
@@ -793,8 +818,9 @@ static const float blend_xyz[][3] = {
    [PIPE_ADVANCED_BLEND_HARDMIX] = { 1, 1, 1 },
 };
 
+#define nir_blend_advanced(...) MESA_CALL_WITH_LTR_ARGS(_nir_blend_advanced, __VA_ARGS__)
 static nir_def *
-nir_blend_advanced(
+_nir_blend_advanced(
    nir_builder *b,
    const nir_lower_blend_options *options,
    unsigned rt,
@@ -908,7 +934,7 @@ nir_blend_advanced(
  */
 
 nir_def *
-nir_color_blend(nir_builder *b, nir_def *src, nir_def *src1, nir_def *dst,
+_nir_color_blend(nir_builder *b, nir_def *src, nir_def *src1, nir_def *dst,
                 const nir_lower_blend_rt *rt, bool scalar_blend_const)
 {
    if (util_format_is_pure_integer(rt->format) || nir_blend_replace_rt(rt))
@@ -1109,7 +1135,8 @@ nir_lower_blend_instr(nir_builder *b, nir_intrinsic_instr *store, void *data)
    }
 
    /* Apply a colormask if necessary */
-   blended = nir_color_mask(b, blended, dst, options->rt[rt].colormask);
+   blended = nir_color_mask(b, blended, dst,
+                            (unsigned) options->rt[rt].colormask);
 
    /* Shave off any components we don't want to store */
    const unsigned num_components = util_format_get_nr_components(format);

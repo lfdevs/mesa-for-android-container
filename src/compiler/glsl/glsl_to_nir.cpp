@@ -2105,7 +2105,7 @@ nir_visitor::visit(ir_expression *ir)
       }
 
       if (precision_op) {
-         result = nir_build_alu(&b, nir_op_f2fmp, result, NULL, NULL, NULL);
+         result = nir_build_alu(&b, nir_op_f2fmp, result, nullptr, nullptr, nullptr);
       }
 
       return;
@@ -2245,17 +2245,17 @@ nir_visitor::visit(ir_expression *ir)
    }
 
    case ir_unop_f2fmp: {
-      result = nir_build_alu(&b, nir_op_f2fmp, srcs[0], NULL, NULL, NULL);
+      result = nir_build_alu(&b, nir_op_f2fmp, srcs[0], nullptr, nullptr, nullptr);
       break;
    }
 
    case ir_unop_i2imp: {
-      result = nir_build_alu(&b, nir_op_i2imp, srcs[0], NULL, NULL, NULL);
+      result = nir_build_alu(&b, nir_op_i2imp, srcs[0], nullptr, nullptr, nullptr);
       break;
    }
 
    case ir_unop_u2ump: {
-      result = nir_build_alu(&b, nir_op_i2imp, srcs[0], NULL, NULL, NULL);
+      result = nir_build_alu(&b, nir_op_i2imp, srcs[0], nullptr, nullptr, nullptr);
       break;
    }
 

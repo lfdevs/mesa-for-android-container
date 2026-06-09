@@ -45,8 +45,9 @@
  * Version 2.1.0
  */
 
+#define half_rounded(...) MESA_CALL_WITH_LTR_ARGS(_half_rounded, __VA_ARGS__)
 static nir_def *
-half_rounded(nir_builder *b, nir_def *value, nir_def *guard, nir_def *sticky,
+_half_rounded(nir_builder *b, nir_def *value, nir_def *guard, nir_def *sticky,
              nir_def *sign, nir_rounding_mode mode)
 {
    switch (mode) {

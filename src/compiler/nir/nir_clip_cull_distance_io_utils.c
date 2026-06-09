@@ -225,8 +225,10 @@ interp_deref(nir_builder *b, nir_intrinsic_instr *old_intrin,
  * with an expression that indexes into one of the vec4's in
  * gl_ClipDistanceMESA and accesses the appropriate component.
  */
+
+#define lower_distance_deref(...) MESA_CALL_WITH_LTR_ARGS(_lower_distance_deref, __VA_ARGS__)
 static void
-lower_distance_deref(struct lower_distance_state *state, nir_builder *b,
+_lower_distance_deref(struct lower_distance_state *state, nir_builder *b,
                      nir_intrinsic_instr *intrin, nir_deref_instr *deref,
                      nir_variable *new_var)
 {
