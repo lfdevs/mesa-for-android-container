@@ -1379,8 +1379,10 @@ add_nop_before_block(struct ir3_block *block, unsigned repeat)
  * This function should be called with the second pred[tf] of such a pair and
  * NULL if there is only one pred[tf].
  */
+
+#define add_predication_workaround(...) MESA_CALL_WITH_LTR_ARGS(_add_predication_workaround, __VA_ARGS__)
 static void
-add_predication_workaround(struct ir3_compiler *compiler,
+_add_predication_workaround(struct ir3_compiler *compiler,
                            struct ir3_instruction *predtf,
                            struct ir3_instruction *prede)
 {

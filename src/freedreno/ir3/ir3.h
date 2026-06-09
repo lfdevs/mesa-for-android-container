@@ -16,6 +16,7 @@
 #include "util/macros.h"
 #include "util/set.h"
 #include "util/u_debug.h"
+#include "util/u_func_arg_order.h"
 
 #include "freedreno_common.h"
 
@@ -1104,7 +1105,9 @@ struct ir3_instruction *ir3_instr_create(struct ir3_block *block, opc_t opc,
 struct ir3_instruction *ir3_instr_create_at_end(struct ir3_block *block,
                                                 opc_t opc, int ndst, int nsrc);
 struct ir3_instruction *ir3_instr_clone(struct ir3_instruction *instr);
-void ir3_instr_add_dep(struct ir3_instruction *instr,
+
+#define ir3_instr_add_dep(...) MESA_CALL_WITH_LTR_ARGS(_ir3_instr_add_dep, __VA_ARGS__)
+void _ir3_instr_add_dep(struct ir3_instruction *instr,
                        struct ir3_instruction *dep);
 const char *ir3_instr_name(struct ir3_instruction *instr);
 void ir3_instr_remove(struct ir3_instruction *instr);
@@ -1137,7 +1140,8 @@ void ir3_reg_set_last_array(struct ir3_instruction *instr,
                             struct ir3_register *reg,
                             struct ir3_register *last_write);
 
-void ir3_instr_set_address(struct ir3_instruction *instr,
+#define ir3_instr_set_address(...) MESA_CALL_WITH_LTR_ARGS(_ir3_instr_set_address, __VA_ARGS__)
+void _ir3_instr_set_address(struct ir3_instruction *instr,
                            struct ir3_instruction *addr);
 
 struct ir3_instruction *ir3_create_addr1(struct ir3_builder *build,
@@ -1162,8 +1166,10 @@ unsigned ir3_count_instructions_ra(struct ir3 *ir);
 /**
  * Move 'instr' to just before 'after'
  */
+
+#define ir3_instr_move_before(...) MESA_CALL_WITH_LTR_ARGS(_ir3_instr_move_before, __VA_ARGS__)
 static inline void
-ir3_instr_move_before(struct ir3_instruction *instr,
+_ir3_instr_move_before(struct ir3_instruction *instr,
                       struct ir3_instruction *after)
 {
    list_delinit(&instr->node);
@@ -1173,8 +1179,10 @@ ir3_instr_move_before(struct ir3_instruction *instr,
 /**
  * Move 'instr' to just after 'before':
  */
+
+#define ir3_instr_move_after(...) MESA_CALL_WITH_LTR_ARGS(_ir3_instr_move_after, __VA_ARGS__)
 static inline void
-ir3_instr_move_after(struct ir3_instruction *instr,
+_ir3_instr_move_after(struct ir3_instruction *instr,
                      struct ir3_instruction *before)
 {
    list_delinit(&instr->node);
@@ -2111,10 +2119,14 @@ void ir3_print_instr_stream(struct log_stream *stream, struct ir3_instruction *i
 /* delay calculation: */
 unsigned ir3_src_read_delay(struct ir3_compiler *compiler,
                             struct ir3_instruction *instr, unsigned src_n);
-int ir3_delayslots(struct ir3_compiler *compiler,
+
+#define ir3_delayslots(...) MESA_CALL_WITH_LTR_ARGS(_ir3_delayslots, __VA_ARGS__)
+int _ir3_delayslots(struct ir3_compiler *compiler,
                    struct ir3_instruction *assigner,
                    struct ir3_instruction *consumer, unsigned n, bool soft);
-unsigned ir3_delayslots_with_repeat(struct ir3_compiler *compiler,
+
+#define ir3_delayslots_with_repeat(...) MESA_CALL_WITH_LTR_ARGS(_ir3_delayslots_with_repeat, __VA_ARGS__)
+unsigned _ir3_delayslots_with_repeat(struct ir3_compiler *compiler,
                                     struct ir3_instruction *assigner,
                                     struct ir3_instruction *consumer,
                                     unsigned assigner_n, unsigned consumer_n);
@@ -2146,8 +2158,9 @@ is_ss_producer(struct ir3_instruction *instr)
    return is_sfu(instr) || is_local_mem_load(instr) || instr->opc == OPC_SHFL;
 }
 
+#define needs_ss(...) MESA_CALL_WITH_LTR_ARGS(_needs_ss, __VA_ARGS__)
 static inline bool
-needs_ss(const struct ir3_compiler *compiler, struct ir3_instruction *producer,
+_needs_ss(const struct ir3_compiler *compiler, struct ir3_instruction *producer,
          struct ir3_instruction *consumer)
 {
    if (is_scalar_alu(producer, compiler) &&
@@ -2633,8 +2646,9 @@ ir3_COV_rpt(struct ir3_builder *build, unsigned nrpt,
    return dst;
 }
 
+#define ir3_MOVS(...) MESA_CALL_WITH_LTR_ARGS(_ir3_MOVS, __VA_ARGS__)
 static inline struct ir3_instruction *
-ir3_MOVS(struct ir3_builder *build, struct ir3_instruction *src,
+_ir3_MOVS(struct ir3_builder *build, struct ir3_instruction *src,
          struct ir3_instruction *invocation, type_t type)
 {
    bool use_a0 = writes_addr0(invocation);
@@ -2700,8 +2714,9 @@ struct ir3_instruction *ir3_split_off_scalar(struct ir3_builder *build,
                                              struct ir3_instruction *src,
                                              unsigned bit_size);
 
+#define ir3_64b(...) MESA_CALL_WITH_LTR_ARGS(_ir3_64b, __VA_ARGS__)
 static inline struct ir3_instruction *
-ir3_64b(struct ir3_builder *build, struct ir3_instruction *lo,
+_ir3_64b(struct ir3_builder *build, struct ir3_instruction *lo,
         struct ir3_instruction *hi)
 {
    assert((lo->dsts[0]->flags & IR3_REG_SHARED) ==
@@ -3074,8 +3089,9 @@ INSTR1FEXTRADST(3D, DSX)
 INSTR1FEXTRADST(3D, DSY)
 INSTR1EXTRADST(RGETPOS)
 
+#define ir3_SAM(...) MESA_CALL_WITH_LTR_ARGS(_ir3_SAM, __VA_ARGS__)
 static inline struct ir3_instruction *
-ir3_SAM(struct ir3_builder *build, opc_t opc, type_t type, unsigned wrmask,
+_ir3_SAM(struct ir3_builder *build, opc_t opc, type_t type, unsigned wrmask,
         ir3_instruction_flags flags, struct ir3_instruction *samp_tex,
         struct ir3_instruction *src0, struct ir3_instruction *src1)
 {
@@ -3122,8 +3138,10 @@ ir3_SAM(struct ir3_builder *build, opc_t opc, type_t type, unsigned wrmask,
  * value or is set to ry. In order to model this in SSA form, we add an extra
  * argument (the initial value of rx) and tie it to the destination.
  */
+
+#define ir3_BRCST_ACTIVE(...) MESA_CALL_WITH_LTR_ARGS(_ir3_BRCST_ACTIVE, __VA_ARGS__)
 static inline struct ir3_instruction *
-ir3_BRCST_ACTIVE(struct ir3_builder *build, unsigned cluster_size,
+_ir3_BRCST_ACTIVE(struct ir3_builder *build, unsigned cluster_size,
                  struct ir3_instruction *src,
                  struct ir3_instruction *dst_default)
 {

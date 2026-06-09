@@ -158,7 +158,9 @@ struct ir3_sched_node {
 
 static void sched_node_init(struct ir3_sched_ctx *ctx,
                             struct ir3_instruction *instr);
-static void sched_node_add_dep(struct ir3_sched_ctx *ctx,
+
+#define sched_node_add_dep(...) MESA_CALL_WITH_LTR_ARGS(_sched_node_add_dep, __VA_ARGS__)
+static void _sched_node_add_dep(struct ir3_sched_ctx *ctx,
                                struct ir3_instruction *instr,
                                struct ir3_instruction *src, int i);
 
@@ -194,8 +196,9 @@ sched_check_src_cond(struct ir3_instruction *instr,
 
 /* Is this a sy producer that hasn't been waited on yet? */
 
+#define is_outstanding_sy(...) MESA_CALL_WITH_LTR_ARGS(_is_outstanding_sy, __VA_ARGS__)
 static bool
-is_outstanding_sy(struct ir3_instruction *instr, struct ir3_instruction *use,
+_is_outstanding_sy(struct ir3_instruction *instr, struct ir3_instruction *use,
                   struct ir3_sched_ctx *ctx)
 {
    if (!is_sy_producer(instr))
@@ -211,8 +214,9 @@ is_outstanding_sy(struct ir3_instruction *instr, struct ir3_instruction *use,
    return n->sy_index >= ctx->first_outstanding_sy_index;
 }
 
+#define is_outstanding_ss(...) MESA_CALL_WITH_LTR_ARGS(_is_outstanding_ss, __VA_ARGS__)
 static bool
-is_outstanding_ss(struct ir3_instruction *instr, struct ir3_instruction *use,
+_is_outstanding_ss(struct ir3_instruction *instr, struct ir3_instruction *use,
                   struct ir3_sched_ctx *ctx)
 {
    if (!needs_ss(ctx->compiler, instr, use))
@@ -354,7 +358,7 @@ schedule(struct ir3_sched_ctx *ctx, struct ir3_instruction *instr)
       ctx->ss_delay = soft_ss_delay(instr);
       n->ss_index = ctx->ss_index++;
    } else if (!is_meta(instr) &&
-              sched_check_src_cond(instr, is_outstanding_ss, ctx)) {
+              sched_check_src_cond(instr, _is_outstanding_ss, ctx)) {
       ctx->ss_delay = 0;
       ctx->first_outstanding_ss_index = ctx->ss_index;
    } else if (ctx->ss_delay > 0) {
@@ -372,7 +376,7 @@ schedule(struct ir3_sched_ctx *ctx, struct ir3_instruction *instr)
       ctx->remaining_tex--;
       n->sy_index = ctx->sy_index++;
    } else if (!is_meta(instr) &&
-              sched_check_src_cond(instr, is_outstanding_sy, ctx)) {
+              sched_check_src_cond(instr, _is_outstanding_sy, ctx)) {
       ctx->sy_delay = 0;
       ctx->first_outstanding_sy_index = ctx->sy_index;
    } else if (ctx->sy_delay > 0) {
@@ -411,8 +415,10 @@ should_skip(struct ir3_sched_ctx *ctx, struct ir3_instruction *instr)
 }
 
 /* could an instruction be scheduled if specified ssa src was scheduled? */
+
+#define could_sched(...) MESA_CALL_WITH_LTR_ARGS(_could_sched, __VA_ARGS__)
 static bool
-could_sched(struct ir3_sched_ctx *ctx,
+_could_sched(struct ir3_sched_ctx *ctx,
             struct ir3_instruction *instr, struct ir3_instruction *src)
 {
    foreach_ssa_src (other_src, instr) {
@@ -583,8 +589,9 @@ nearest_use(struct ir3_instruction *instr)
    return nearest;
 }
 
+#define is_only_nonscheduled_use(...) MESA_CALL_WITH_LTR_ARGS(_is_only_nonscheduled_use, __VA_ARGS__)
 static bool
-is_only_nonscheduled_use(struct ir3_instruction *instr,
+_is_only_nonscheduled_use(struct ir3_instruction *instr,
                          struct ir3_instruction *use)
 {
    foreach_ssa_use (other_use, instr) {
@@ -650,7 +657,7 @@ static bool
 should_defer(struct ir3_sched_ctx *ctx, struct ir3_instruction *instr)
 {
    if (ctx->ss_delay) {
-      if (sched_check_src_cond(instr, is_outstanding_ss, ctx))
+      if (sched_check_src_cond(instr, _is_outstanding_ss, ctx))
          return true;
    }
 
@@ -660,7 +667,7 @@ should_defer(struct ir3_sched_ctx *ctx, struct ir3_instruction *instr)
     * fetches
     */
    if (ctx->sy_delay && ctx->remaining_tex) {
-      if (sched_check_src_cond(instr, is_outstanding_sy, ctx))
+      if (sched_check_src_cond(instr, _is_outstanding_sy, ctx))
          return true;
    }
 
@@ -1004,7 +1011,7 @@ sched_node_init(struct ir3_sched_ctx *ctx, struct ir3_instruction *instr)
 }
 
 static void
-sched_node_add_dep(struct ir3_sched_ctx *ctx,
+_sched_node_add_dep(struct ir3_sched_ctx *ctx,
                    struct ir3_instruction *instr, struct ir3_instruction *src,
                    int i)
 {
@@ -1329,8 +1336,10 @@ get_array_id(struct ir3_instruction *instr)
 }
 
 /* does instruction 'prior' need to be scheduled before 'instr'? */
+
+#define depends_on(...) MESA_CALL_WITH_LTR_ARGS(_depends_on, __VA_ARGS__)
 static bool
-depends_on(struct ir3_instruction *instr, struct ir3_instruction *prior)
+_depends_on(struct ir3_instruction *instr, struct ir3_instruction *prior)
 {
    /* TODO for dependencies that are related to a specific object, ie
     * a specific SSBO/image/array, we could relax this constraint to

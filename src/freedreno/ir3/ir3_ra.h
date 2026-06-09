@@ -187,7 +187,9 @@ void ir3_ra_validate(struct ir3_shader_variant *v, unsigned full_size,
                      unsigned half_size, unsigned block_count, bool shared_ra);
 
 void ir3_lower_copies(struct ir3_shader_variant *v);
-void ir3_lower_copies_validate(struct ir3_shader_variant *v,
+
+#define ir3_lower_copies_validate(...) MESA_CALL_WITH_LTR_ARGS(_ir3_lower_copies_validate, __VA_ARGS__)
+void _ir3_lower_copies_validate(struct ir3_shader_variant *v,
                                struct ir3_instruction *copy_instr,
                                struct ir3_instruction *before);
 
