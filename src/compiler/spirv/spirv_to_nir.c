@@ -4494,8 +4494,9 @@ vtn_ssa_transpose(struct vtn_builder *b, struct vtn_ssa_value *src)
    return dest;
 }
 
+#define vtn_vector_shuffle(...) MESA_CALL_WITH_LTR_ARGS(_vtn_vector_shuffle, __VA_ARGS__)
 static nir_def *
-vtn_vector_shuffle(struct vtn_builder *b, unsigned num_components,
+_vtn_vector_shuffle(struct vtn_builder *b, unsigned num_components,
                    nir_def *src0, nir_def *src1,
                    const uint32_t *indices)
 {
@@ -4594,7 +4595,7 @@ vtn_composite_copy_logical(struct vtn_builder *b, struct vtn_ssa_value *src, str
 }
 
 struct vtn_ssa_value *
-vtn_composite_insert(struct vtn_builder *b, struct vtn_ssa_value *src,
+_vtn_composite_insert(struct vtn_builder *b, struct vtn_ssa_value *src,
                      struct vtn_type *src_type, struct vtn_ssa_value *insert,
                      const uint32_t *indices, unsigned num_indices)
 {
@@ -5823,8 +5824,9 @@ vtn_handle_variable_or_type_instruction(struct vtn_builder *b, SpvOp opcode,
    return true;
 }
 
+#define vtn_nir_select(...) MESA_CALL_WITH_LTR_ARGS(_vtn_nir_select, __VA_ARGS__)
 static struct vtn_ssa_value *
-vtn_nir_select(struct vtn_builder *b, struct vtn_ssa_value *src0,
+_vtn_nir_select(struct vtn_builder *b, struct vtn_ssa_value *src0,
                struct vtn_ssa_value *src1, struct vtn_ssa_value *src2)
 {
    struct vtn_ssa_value *dest = vtn_zalloc(b, struct vtn_ssa_value);
