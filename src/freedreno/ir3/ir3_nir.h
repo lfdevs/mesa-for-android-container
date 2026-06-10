@@ -215,6 +215,8 @@ nir_io_offset ir3_nir_get_global_offset(nir_builder *b,
                                         struct ir3_compiler *compiler,
                                         nir_def *offset, unsigned offset_shift);
 
+bool ir3_nir_is_preamble_speculatable(nir_shader *s);
+
 ENDC;
 
 #endif /* IR3_NIR_H_ */
