@@ -276,7 +276,6 @@ struct intel_batch_decode_ctx {
    void *user_data;
 
    FILE *fp;
-   const struct brw_isa_info *brw;
    const struct elk_isa_info *elk;
    struct intel_device_info devinfo;
    struct intel_spec *spec;
@@ -305,8 +304,7 @@ struct intel_batch_decode_ctx {
                                const char *name);
 };
 
-void intel_batch_decode_ctx_init_brw(struct intel_batch_decode_ctx *ctx,
-                                     const struct brw_isa_info *isa,
+void intel_batch_decode_ctx_init_gen(struct intel_batch_decode_ctx *ctx,
                                      const struct intel_device_info *devinfo,
                                      FILE *fp, enum intel_batch_decode_flags flags,
                                      const char *xml_path,

@@ -146,7 +146,7 @@ create_engine(struct anv_device *device,
                            DRM_XE_EXEC_QUEUE_EXTENSION_SET_PROPERTY,
                            &state_cache_perf_ext.base);
    }
-   if (device->physical->instance->force_guc_low_latency &&
+   if (device->physical->instance->drirc.perf.guc_low_latency &&
        physical->info.supports_low_latency_hint)
       create.flags |= DRM_XE_EXEC_QUEUE_LOW_LATENCY_HINT;
 

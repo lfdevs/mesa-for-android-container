@@ -9,6 +9,11 @@
 
 #include <stdint.h>
 
+struct si_screen;
+
+/* si_test_oa_bandwidth.c */
+void si_test_oa_bandwidth(struct si_screen *sscreen);
+
  /* si_test_image_copy_region.c */
 void si_test_image_copy_region(struct si_screen *sscreen);
 void si_test_blit(struct si_screen *sscreen, unsigned test_flags);

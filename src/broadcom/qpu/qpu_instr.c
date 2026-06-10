@@ -111,6 +111,13 @@ v3d_qpu_add_op_name(enum v3d_qpu_add_op op)
                 [V3D_QPU_A_FMIN] = "fmin",
                 [V3D_QPU_A_FMAX] = "fmax",
                 [V3D_QPU_A_VFMIN] = "vfmin",
+                [V3D_QPU_A_VFADD] = "vfadd",
+                [V3D_QPU_A_VFSUB] = "vfsub",
+                [V3D_QPU_A_VFCMP] = "vfcmp",
+                [V3D_QPU_A_VFMOV] = "vfmov",
+                [V3D_QPU_A_VFABS] = "vfabs",
+                [V3D_QPU_A_VFNEG] = "vfneg",
+                [V3D_QPU_A_VFNAB] = "vfnab",
                 [V3D_QPU_A_AND] = "and",
                 [V3D_QPU_A_OR] = "or",
                 [V3D_QPU_A_XOR] = "xor",
@@ -414,6 +421,13 @@ static const uint8_t add_op_args[] = {
         [V3D_QPU_A_FMIN] = D | A | B,
         [V3D_QPU_A_FMAX] = D | A | B,
         [V3D_QPU_A_VFMIN] = D | A | B,
+        [V3D_QPU_A_VFADD] = D | A | B,
+        [V3D_QPU_A_VFSUB] = D | A | B,
+        [V3D_QPU_A_VFCMP] = D | A | B,
+        [V3D_QPU_A_VFMOV] = D | A,
+        [V3D_QPU_A_VFABS] = D | A,
+        [V3D_QPU_A_VFNEG] = D | A,
+        [V3D_QPU_A_VFNAB] = D | A,
 
         [V3D_QPU_A_AND] = D | A | B,
         [V3D_QPU_A_OR] = D | A | B,
@@ -1185,6 +1199,9 @@ v3d_qpu_unpacks_f16(const struct v3d_qpu_instr *inst)
         switch (inst->alu.add.op) {
         case V3D_QPU_A_VFMIN:
         case V3D_QPU_A_VFMAX:
+        case V3D_QPU_A_VFADD:
+        case V3D_QPU_A_VFSUB:
+        case V3D_QPU_A_VFCMP:
                 return true;
                 break;
         default:

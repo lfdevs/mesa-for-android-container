@@ -19,8 +19,9 @@ namespace r600 {
 
 
 class AddressSplitVisitor : public InstrVisitor {
-public: 
-   AddressSplitVisitor(Shader& sh); 
+public:
+   AddressSplitVisitor(Shader& sh);
+   bool progress() const {return m_progress;};
    
 private:    
    void visit(AluInstr *instr) override;
@@ -42,7 +43,7 @@ private:
    void visit(RatInstr *instr) override;
    
    void load_ar(Instr *instr, PRegister addr);
-   auto load_index_register(Instr *instr, PRegister index) -> int;
+   void load_index_register(Instr *instr, PRegister index);
    auto load_index_register_eg(Instr *instr, PRegister index) -> int;
    auto load_index_register_ca(PRegister index) -> int;
    auto reuse_loaded_idx(PRegister index) -> int;
@@ -66,6 +67,7 @@ private:
    std::list<Instr *> m_last_idx_use[2];
    std::list<Instr *> m_prev_non_alu;
 
+   bool m_progress {false};
 };
 
 
@@ -75,7 +77,7 @@ bool split_address_loads(Shader& sh)
    for (auto block : sh.func()) {
       block->accept(visitor); 
    }
-   return true;
+   return visitor.progress();
 }
 
 AddressSplitVisitor::AddressSplitVisitor(Shader& sh):
@@ -155,13 +157,14 @@ void AddressSplitVisitor::visit(AluInstr *instr)
       addr->del_use(instr);
       m_last_ar_load->inc_ar_uses();
       m_last_ar_use.push_back(instr);
+      m_progress = true;
    }
 
    if (index)
       load_index_register(instr, index);
 }
 
-auto AddressSplitVisitor::load_index_register(Instr *instr, PRegister index) -> int
+void AddressSplitVisitor::load_index_register(Instr *instr, PRegister index)
 {
    int idx_id = m_chip_class < ISA_CC_CAYMAN ?
                    load_index_register_eg(instr, index):
@@ -172,7 +175,7 @@ auto AddressSplitVisitor::load_index_register(Instr *instr, PRegister index) -> 
    index->del_use(instr);
    instr->update_indirect_addr(index, m_current_idx[idx_id]);
    m_last_idx_load_index[idx_id] = (instr->block_id() << 16) | instr->index();
-   return idx_id == 0 ? bim_zero : bim_one;
+   m_progress = true;
 }
 
 auto AddressSplitVisitor::load_index_register_eg(Instr *instr,

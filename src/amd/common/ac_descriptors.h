@@ -199,6 +199,9 @@ typedef union {
    .vrs_x = 0, /* VRS = 1x1 (0-based) */ \
    .vrs_y = 0)
 
+void
+ac_print_htile_dword(uint32_t htile_code, bool has_stencil, bool vrs, bool zrange_precision, FILE *f);
+
 unsigned
 ac_map_swizzle(unsigned swizzle);
 

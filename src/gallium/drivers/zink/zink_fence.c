@@ -185,7 +185,7 @@ zink_fence_finish(struct zink_screen *screen, struct pipe_context *pctx, struct 
 
    struct zink_fence *fence = mfence->fence;
 
-   unsigned submit_diff = zink_batch_state(mfence->fence)->usage.submit_count - mfence->submit_count;
+   unsigned submit_diff = zink_batch_submit_count_diff(zink_batch_state(mfence->fence)->usage.submit_count, mfence->submit_count);
    /* this batch is known to have finished because it has been submitted more than 1 time
     * since the tc fence last saw it
     */

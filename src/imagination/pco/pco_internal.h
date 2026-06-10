@@ -37,6 +37,9 @@ typedef struct _pco_ctx {
    /** Device information. */
    const struct pvr_device_info *dev_info;
 
+   /** Device runtime information. */
+   const struct pvr_device_runtime_info *dev_runtime_info;
+
    /** Device-specific NIR options. */
    nir_shader_compiler_options nir_options;
 
@@ -47,10 +50,14 @@ typedef struct _pco_ctx {
    const nir_shader *usclib;
 } pco_ctx;
 
-void pco_setup_spirv_options(const struct pvr_device_info *dev_info,
-                             struct spirv_to_nir_options *spirv_options);
-void pco_setup_nir_options(const struct pvr_device_info *dev_info,
-                           nir_shader_compiler_options *nir_options);
+void pco_setup_spirv_options(
+   const struct pvr_device_info *dev_info,
+   const struct pvr_device_runtime_info *dev_runtime_info,
+   struct spirv_to_nir_options *spirv_options);
+void pco_setup_nir_options(
+   const struct pvr_device_info *dev_info,
+   const struct pvr_device_runtime_info *dev_runtime_info,
+   nir_shader_compiler_options *nir_options);
 
 /* Debug. */
 enum pco_debug {
@@ -59,6 +66,7 @@ enum pco_debug {
    PCO_DEBUG_NO_PRED_CF = BITFIELD64_BIT(2),
    PCO_DEBUG_ALLOC_EXTRA_VTXINS = BITFIELD64_BIT(3),
    PCO_DEBUG_INT_SMP = BITFIELD64_BIT(4),
+   PCO_DEBUG_GLOBAL_SHMEM = BITFIELD64_BIT(5),
 };
 
 extern uint64_t pco_debug;
@@ -1803,6 +1811,7 @@ bool pco_nir_lower_vs_intrinsics(nir_shader *shader);
 bool pco_nir_lower_images(nir_shader *shader, pco_data *data, pco_ctx *ctx);
 bool pco_nir_lower_interpolation(nir_shader *shader, pco_fs_data *fs);
 bool pco_nir_lower_io(nir_shader *shader);
+bool pco_nir_lower_shared_io_to_global(nir_shader *shader, unsigned usc_slots);
 bool pco_nir_lower_subgroups(nir_shader *shader);
 bool pco_nir_lower_tex(nir_shader *shader, pco_data *data, pco_ctx *ctx);
 bool pco_nir_lower_variables(nir_shader *shader, bool inputs, bool outputs);
@@ -1818,11 +1827,10 @@ bool pco_shrink_vecs(pco_shader *shader);
 typedef enum {
    pco_nir_lower_null_descriptor_ubo = (1 << 0),
    pco_nir_lower_null_descriptor_ssbo = (1 << 1),
-   pco_nir_lower_null_descriptor_global = (1 << 2),
-   pco_nir_lower_null_descriptor_texture = (1 << 3),
-   pco_nir_lower_null_descriptor_image = (1 << 4),
+   pco_nir_lower_null_descriptor_texture = (1 << 2),
+   pco_nir_lower_null_descriptor_image = (1 << 3),
 
-   pco_nir_lower_null_descriptor_all = BITFIELD_MASK(5),
+   pco_nir_lower_null_descriptor_all = BITFIELD_MASK(4),
 } pco_nir_lower_null_descriptor_options;
 
 bool pco_nir_lower_null_descriptors(

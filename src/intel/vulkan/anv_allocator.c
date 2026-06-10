@@ -1696,16 +1696,18 @@ anv_device_alloc_bo(struct anv_device *device,
     * MTL(Xe KMD only)/LNL platforms, which incur largest perf penalty from
     * page misses.
     */
-   if (align64(size, 2 * 1024 * 1024) <= (size * 4 / 3) &&
-       anv_device_has_perf_improvement_with_2mb_pages_oversubscription(device))
-      size = align64(size, 2 * 1024 * 1024);
-   /* bos larger than 1MB can't be allocated with slab but to reduce pages we
-    * could align size to 64k pages to gain performance with minimum memory
-    * waste.
-    */
-   else if ((size > (1 * 1024 * 1024)) &&
-            anv_device_has_perf_improvement_with_64k_pages(device))
-      size = align64(size, 64 * 1024);
+   if (!ANV_DEBUG(NO_ALLOC_OVER_SUBSCRIPTION)) {
+      if (align64(size, 2 * 1024 * 1024) <= (size * 4 / 3) &&
+          anv_device_has_perf_improvement_with_2mb_pages_oversubscription(device))
+         size = align64(size, 2 * 1024 * 1024);
+      /* bos larger than 1MB can't be allocated with slab but to reduce pages we
+       * could align size to 64k pages to gain performance with minimum memory
+       * waste.
+       */
+      else if ((size > (1 * 1024 * 1024)) &&
+               anv_device_has_perf_improvement_with_64k_pages(device))
+         size = align64(size, 64 * 1024);
+   }
 
    const struct intel_memory_class_instance *regions[2];
    uint32_t nregions = 0;

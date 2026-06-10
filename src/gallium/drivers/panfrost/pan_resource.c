@@ -14,6 +14,7 @@
 
 #include "frontend/winsys_handle.h"
 #include "util/format/u_format.h"
+#include "util/os_misc.h"
 #include "util/u_debug_image.h"
 #include "util/u_drm.h"
 #include "util/u_gen_mipmap.h"
@@ -869,8 +870,12 @@ panfrost_resource_try_setup(struct pipe_screen *screen,
    /* Z32_S8X24 variants are actually stored in 2 planes (one per
     * component), we have to adjust the format on the first plane.
     */
+   unsigned arch = pan_arch(dev->kmod.dev->props.gpu_id);
    if (fmt == PIPE_FORMAT_Z32_FLOAT_S8X24_UINT)
       fmt = PIPE_FORMAT_Z32_FLOAT;
+   else if (drm_is_afbc(chosen_mod) && fmt == PIPE_FORMAT_Z24X8_UNORM &&
+            arch >= 9)
+      fmt = PIPE_FORMAT_Z24_UNORM_PACKED;
 
    pres->modifier = chosen_mod;
 
@@ -1049,10 +1054,10 @@ panfrost_can_create_resource(struct pipe_screen *screen,
    if (!os_get_total_physical_memory(&system_memory))
       return false;
 
-   /* Limit maximum texture size to a quarter of the system memory, to avoid
-    * allocating huge textures on systems with little memory.
-    */
-   return tmp.plane.layout.data_size_B <= system_memory / 4;
+   const float heap_memory_percent = pan_screen(screen)->heap_memory_percent;
+   uint64_t memory = os_get_gpu_heap_size(heap_memory_percent, NULL);
+
+   return tmp.plane.layout.data_size_B <= memory;
 }
 
 static struct pipe_resource *
@@ -2340,7 +2345,7 @@ panfrost_ptr_unmap(struct pipe_context *pctx, struct pipe_transfer *transfer)
             pan_resource_afbcp_stop(prsrc);
 
             panfrost_resource_setup(screen, prsrc, DRM_FORMAT_MOD_LINEAR,
-                                    prsrc->image.props.format, 0);
+                                    prsrc->base.format, 0);
 
             prsrc->bo = pan_resource(trans->staging.rsrc)->bo;
             prsrc->plane.base = prsrc->bo->ptr.gpu;
@@ -2463,6 +2468,18 @@ static enum pipe_format
 panfrost_resource_get_internal_format(struct pipe_resource *rsrc)
 {
    struct panfrost_resource *prsrc = (struct panfrost_resource *)rsrc;
+
+   /* With AFBC enabled, Z24X8 can be packed into Z24 internally. However, with
+    * AFBC we can't map directly to CPU so we setup a new resource in the
+    * external format which is handled by Panfrost. To stop u_transfer_helper
+    * from trying to handle it, we return the external format here.
+    */
+   if (prsrc->base.format == PIPE_FORMAT_Z24X8_UNORM &&
+       prsrc->image.props.format == PIPE_FORMAT_Z24_UNORM_PACKED) {
+      assert(drm_is_afbc(prsrc->modifier));
+      return PIPE_FORMAT_Z24X8_UNORM;
+   }
+
    return prsrc->image.props.format;
 }
 

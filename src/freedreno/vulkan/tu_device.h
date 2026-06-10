@@ -11,6 +11,7 @@
 #define TU_DEVICE_H
 
 #include "tu_common.h"
+#include "perfcntrs/freedreno_perfcntr.h"
 
 #include "radix_sort/radix_sort_vk.h"
 #include "util/rwlock.h"
@@ -23,6 +24,7 @@
 #include "common/freedreno_rd_output.h"
 #include "tu_autotune.h"
 #include "tu_cs.h"
+#include "tu_drirc.h"
 #include "tu_pass.h"
 #include "tu_perfetto.h"
 #include "tu_queue.h"
@@ -35,6 +37,7 @@
 #define TU_MAX_QUEUE_FAMILIES 2
 
 #define TU_BORDER_COLOR_COUNT 4096
+#define TU_BORDER_COLOR_BUILTIN 6
 
 #define TU_BLIT_SHADER_SIZE 4096
 
@@ -144,6 +147,8 @@ struct tu_physical_device
 
    bool has_preemption;
 
+   bool expose_double_threadsize;
+
    /* Whether performance counter selector registers can be written by userspace CSes. */
    bool is_perf_cntr_selectable;
 
@@ -155,6 +160,9 @@ struct tu_physical_device
 
    struct tu_queue_family queue_families[TU_MAX_QUEUE_FAMILIES];
    unsigned num_queue_families;
+
+   /** Queue family index with an emulated second queue, or -1 if none */
+   int emulate_second_queue;
 
    struct fd_dev_id dev_id;
    struct fd_dev_info dev_info;
@@ -183,72 +191,12 @@ struct tu_instance
 {
    struct vk_instance vk;
 
+   struct turnip_drirc drirc;
+
    const struct tu_knl *knl;
 
    uint32_t instance_idx;
    uint32_t api_version;
-
-   struct driOptionCache dri_options;
-   struct driOptionCache available_dri_options;
-
-   uint32_t force_vk_vendor;
-   bool dont_care_as_load;
-
-   /* Conservative LRZ (default true) invalidates LRZ on draws with
-    * blend and depth-write enabled, because this can lead to incorrect
-    * rendering.  Driconf can be used to disable conservative LRZ for
-    * games which do not have the problematic sequence of draws *and*
-    * suffer a performance loss with conservative LRZ.
-    */
-   bool conservative_lrz;
-
-   /* If to internally reserve a descriptor set for descriptor set
-    * dynamic offsets, a descriptor set can be freed at the cost of
-    * being unable to use the feature. As it is a part of the Vulkan
-    * core, this is enabled by default.
-    */
-   bool reserve_descriptor_set;
-
-   /* Allow out of bounds UBO access by disabling lowering of UBO loads for
-    * indirect access, which rely on the UBO bounds specified in the shader,
-    * rather than the bound UBO size which isn't known until draw time.
-    *
-    * See: https://github.com/doitsujin/dxvk/issues/3861
-    */
-   bool allow_oob_indirect_ubo_loads;
-
-   /* DXVK and VKD3D-Proton use customBorderColorWithoutFormat
-    * and have most of D24S8 images with USAGE_SAMPLED, in such case we
-    * disable UBWC for correctness. However, games don't use border color for
-    * depth-stencil images. So we elect to ignore this edge case and force
-    * UBWC to be enabled.
-    */
-   bool disable_d24s8_border_color_workaround;
-
-   /* D3D emulation requires texture coordinates to be rounded to nearest even value. */
-   bool use_tex_coord_round_nearest_even_mode;
-
-   /* Apps may be accidentally incorrect  */
-   bool ignore_frag_depth_direction;
-
-   /* D3D12 SM6.2 requires float32 denorm support which we have to emulate.
-    * However we don't want native Vulkan apps using this.
-    */
-   bool enable_softfloat32;
-
-   /* The hardware implementation of alpha-to-coverage gives visually poor
-    * results for many games. Set this option to enable it in the shader
-    * instead.
-    */
-   bool emulate_alpha_to_coverage;
-
-   /* Configuration option to use a specific autotune algorithm by default. */
-   const char *autotune_algo;
-
-   /* When enabled, replaces uncached+host_visible allocations
-    * with cached+coherent+host_visible when the hardware supports it.
-    */
-   bool override_uncached_as_cache_coherent;
 };
 VK_DEFINE_HANDLE_CASTS(tu_instance, vk.base, VkInstance,
                        VK_OBJECT_TYPE_INSTANCE)
@@ -329,6 +277,7 @@ struct tu6_global
    uint64_t preemption_latency_cmp_scratch;
    uint64_t zero_64b;
 
+   struct bcolor_entry bcolor_builtin[TU_BORDER_COLOR_BUILTIN];
    struct bcolor_entry bcolor[];
 };
 #define gb_offset(member) offsetof(struct tu6_global, member)
@@ -494,6 +443,8 @@ struct tu_device
     * new submit is executed. */
    pthread_cond_t timeline_cond;
    pthread_mutex_t submit_mutex;
+
+   struct fd_perfcntr_state *perfcntrs;
 
    struct tu_autotune *autotune;
 

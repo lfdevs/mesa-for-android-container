@@ -1230,11 +1230,7 @@ driInjectExecName(const char *exec)
 
 void
 driParseConfigFiles(driOptionCache *cache, const driOptionCache *info,
-                    int screenNum, const char *driverName,
-                    const char *kernelDriverName,
-                    const char *deviceName,
-                    const char *applicationName, uint32_t applicationVersion,
-                    const char *engineName, uint32_t engineVersion)
+                    const driConfigFileParseParams *params)
 {
    initOptionCache(cache, info);
    struct OptConfData userData = {0};
@@ -1245,14 +1241,14 @@ driParseConfigFiles(driOptionCache *cache, const driOptionCache *info,
       execname = util_get_process_name();
 
    userData.cache = cache;
-   userData.screenNum = screenNum;
-   userData.driverName = driverName;
-   userData.kernelDriverName = kernelDriverName;
-   userData.deviceName = deviceName;
-   userData.applicationName = applicationName ? applicationName : "";
-   userData.applicationVersion = applicationVersion;
-   userData.engineName = engineName ? engineName : "";
-   userData.engineVersion = engineVersion;
+   userData.screenNum = params->screenNum;
+   userData.driverName = params->driverName;
+   userData.kernelDriverName = params->kernelDriverName;
+   userData.deviceName = params->deviceName;
+   userData.applicationName = params->applicationName ? params->applicationName : "";
+   userData.applicationVersion = params->applicationVersion;
+   userData.engineName = params->engineName ? params->engineName : "";
+   userData.engineVersion = params->engineVersion;
    userData.execName = execname;
 
 #if WITH_XMLCONFIG

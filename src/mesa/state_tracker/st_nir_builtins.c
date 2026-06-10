@@ -47,7 +47,7 @@ st_nir_finish_builtin_nir(struct st_context *st, nir_shader *nir)
    };
    NIR_PASS(_, nir, nir_lower_compute_system_values, &cs_options);
 
-   if (st->lower_rect_tex) {
+   if (!st->screen->caps.texrect) {
       const struct nir_lower_tex_options opts = { .lower_rect = true, };
       NIR_PASS(_, nir, nir_lower_tex, &opts);
    }

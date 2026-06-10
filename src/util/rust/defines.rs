@@ -81,12 +81,15 @@ pub struct WaitEvent {
     pub readable: bool,
 }
 
+#[allow(dead_code)]
 pub const WAIT_CONTEXT_MAX: usize = 16;
 
 pub enum DescriptorType {
     Unknown,
     Memory(u32, u32), // (size, handle_type)
     WritePipe,
+    Event,
+    Socket(TubeType),
 }
 
 /// # Safety

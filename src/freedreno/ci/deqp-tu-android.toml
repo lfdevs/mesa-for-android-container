@@ -38,6 +38,17 @@ timeout = 120
 fraction = 600
 prefix = "android-"
 
+# force multi queue emulation
+[[deqp]]
+deqp = "/data/deqp/deqp-vk"
+caselists = [ "/data/deqp/vk-main.txt" ]
+include = ["dEQP-VK.synchronization2.op.multi_queue.*", "dEQP-VK.synchronization2.signal_order.*"]
+prefix = "multiq-"
+fraction = 100
+tests_per_group = 10000
+[deqp.env]
+tu_emulate_second_queue = "true"
+
 # EGL test set
 [[deqp]]
 deqp = "/data/deqp/deqp-egl-android"

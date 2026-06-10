@@ -196,8 +196,6 @@ v3dv_descriptor_map_get_sampler(struct v3dv_descriptor_state *descriptor_state,
    assert(descriptor->type == VK_DESCRIPTOR_TYPE_SAMPLER ||
           descriptor->type == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
 
-   assert(descriptor->sampler);
-
    return descriptor->sampler;
 }
 
@@ -238,13 +236,15 @@ v3dv_descriptor_map_get_texture_bo(struct v3dv_descriptor_state *descriptor_stat
    switch (descriptor->type) {
    case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:
    case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:
-      assert(descriptor->buffer_view);
+      if (!descriptor->buffer_view)
+         return NULL;
       return descriptor->buffer_view->buffer->mem->bo;
    case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
    case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
    case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
    case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE: {
-      assert(descriptor->image_view);
+      if (!descriptor->image_view)
+         return NULL;
       struct v3dv_image *image =
          (struct v3dv_image *) descriptor->image_view->vk.image;
       assert(map->plane[index] < image->plane_count);
@@ -1059,6 +1059,17 @@ write_buffer_descriptor(struct v3dv_descriptor *descriptor,
 
    descriptor->type = desc_type;
    descriptor->buffer = buffer;
+
+   /* This can happen when nullDescriptor is used. In that
+    * case the compiler will not emit the buffer access so
+    * the descriptor won't be accessed at all.
+    */
+   if (!buffer) {
+      descriptor->offset = 0;
+      descriptor->range = 0;
+      return;
+   }
+
    descriptor->offset = buffer_info->offset;
    if (buffer_info->range == VK_WHOLE_SIZE) {
       descriptor->range = buffer->size - buffer_info->offset;
@@ -1082,11 +1093,45 @@ write_image_descriptor(struct v3dv_device *device,
    descriptor->sampler = sampler;
    descriptor->image_view = iview;
 
-   assert(iview || sampler);
-   uint8_t plane_count = iview ? iview->plane_count : sampler->plane_count;
+   if (!device->vk.enabled_features.nullDescriptor)
+      assert(iview || sampler);
+
+   /* When VK_KHR_robustness2 nullDescriptor is enabled, applications are
+    * allowed to write VK_NULL_HANDLE for the imageView and sampler.
+    */
+   const bool sampler_required =
+      (desc_type == VK_DESCRIPTOR_TYPE_SAMPLER ||
+       desc_type == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER) &&
+      !binding_layout->immutable_samplers_offset;
+
+   const bool image_required =
+      desc_type == VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE ||
+      desc_type == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE ||
+      desc_type == VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT ||
+      desc_type == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 
    void *desc_map = descriptor_bo_map(device, set,
                                       binding_layout, array_index);
+
+   if ((image_required && !iview) || (sampler_required && !sampler)) {
+      /* Multiplanar YCbCr descriptors require immutable samplers and a non-null
+       * imageView (VUID-VkWriteDescriptorSet-descriptorType-02738) both of
+       * which are not true here so we must never reach the null path
+       * with plane count > 1 when VK_KHR_robustness2 nullDescriptor is enabled.
+       */
+      const uint32_t size =
+         v3d_X((&device->devinfo), descriptor_bo_size)(desc_type) *
+         binding_layout->plane_stride;
+      memset(desc_map, 0, size);
+
+      v3d_X((&device->devinfo), pack_null_texture_state)(device, desc_map);
+
+      descriptor->sampler = NULL;
+      descriptor->image_view = NULL;
+      return;
+   }
+
+   uint8_t plane_count = iview ? iview->plane_count : sampler->plane_count;
 
    for (uint8_t plane = 0; plane < plane_count; plane++) {
       if (iview) {
@@ -1128,11 +1173,18 @@ write_buffer_view_descriptor(struct v3dv_device *device,
                              struct v3dv_buffer_view *bview,
                              uint32_t array_index)
 {
-   assert(bview);
+   assert(bview || device->vk.enabled_features.nullDescriptor);
+
    descriptor->type = desc_type;
    descriptor->buffer_view = bview;
 
    void *desc_map = descriptor_bo_map(device, set, binding_layout, array_index);
+
+   if (!bview) {
+      memset(desc_map, 0, sizeof(bview->texture_shader_state));
+      v3d_X((&device->devinfo), pack_null_texture_state)(device, desc_map);
+      return;
+   }
 
    memcpy(desc_map,
           bview->texture_shader_state,
@@ -1240,7 +1292,7 @@ v3dv_UpdateDescriptorSets(VkDevice  _device,
                 * image sampler, but for YCbCr we kwnow that we must use
                 * immutable combined image samplers
                 */
-               assert(iview->plane_count == 1);
+               assert(!iview || iview->plane_count == 1);
                V3DV_FROM_HANDLE(v3dv_sampler, _sampler, image_info->sampler);
                sampler = _sampler;
             }
@@ -1417,7 +1469,16 @@ v3dv_UpdateDescriptorSetWithTemplate(
          break;
 
       case VK_DESCRIPTOR_TYPE_SAMPLER:
-      case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
+         for (uint32_t j = 0; j < entry->array_count; j++) {
+            const VkDescriptorImageInfo *info =
+               pData + entry->offset + j * entry->stride;
+            V3DV_FROM_HANDLE(v3dv_sampler, sampler, info->sampler);
+            write_image_descriptor(device, descriptor + entry->array_element + j,
+                                   entry->type, set, binding_layout, NULL,
+                                   sampler, entry->array_element + j);
+         }
+         break;
+
       case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
       case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
       case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
@@ -1425,10 +1486,29 @@ v3dv_UpdateDescriptorSetWithTemplate(
             const VkDescriptorImageInfo *info =
                pData + entry->offset + j * entry->stride;
             V3DV_FROM_HANDLE(v3dv_image_view, iview, info->imageView);
-            V3DV_FROM_HANDLE(v3dv_sampler, sampler, info->sampler);
             write_image_descriptor(device, descriptor + entry->array_element + j,
                                    entry->type, set, binding_layout, iview,
-                                   sampler, entry->array_element + j);
+                                   NULL, entry->array_element + j);
+         }
+         break;
+
+      case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
+         for (uint32_t j = 0; j < entry->array_count; j++) {
+            const VkDescriptorImageInfo *info =
+               pData + entry->offset + j * entry->stride;
+            V3DV_FROM_HANDLE(v3dv_image_view, iview, info->imageView);
+            struct v3dv_sampler *sampler = NULL;
+            if (!binding_layout->immutable_samplers_offset) {
+               /* In general we ignore the sampler when updating a combined
+                * image sampler, but for YCbCr we know that we must use
+                * immutable combined image samplers.
+                */
+               assert(!iview || iview->plane_count == 1);
+               sampler = v3dv_sampler_from_handle(info->sampler);
+            }
+            write_image_descriptor(device, descriptor + entry->array_element + j,
+                                   entry->type, set, binding_layout,
+                                   iview, sampler, entry->array_element + j);
          }
          break;
 

@@ -213,9 +213,35 @@ endif
 
 files_drirc = files('00-mesa-defaults.conf')
 
-if with_amd_vk
-  files_drirc += files('00-radv-defaults.conf')
-endif
+foreach i : [
+  [with_amd_vk, '00-radv-defaults.conf'],
+  [with_intel_vk, '00-anv-defaults.conf'],
+  [with_intel_hasvk, '00-hasvk-defaults.conf'],
+  [with_nouveau_vk, '00-nvk-defaults.conf'],
+  [with_microsoft_vk, '00-dzn-defaults.conf'],
+  [with_freedreno_vk, '00-turnip-defaults.conf'],
+  [with_gallium_r300, '00-r300-defaults.conf'],
+  [with_gallium_iris, '00-iris-defaults.conf'],
+  [with_gallium_crocus, '00-crocus-defaults.conf'],
+  [with_gallium_asahi, '00-asahi-defaults.conf'],
+  [with_gallium_v3d, '00-v3d-defaults.conf'],
+  [with_asahi_vk, '00-hk-defaults.conf'],
+  [with_panfrost_vk, '00-panvk-defaults.conf'],
+  [with_gallium_virgl, '00-virtio_gpu-defaults.conf'],
+  [with_gallium_panfrost, '00-panfrost-defaults.conf'],
+  [with_gallium_radeonsi, '00-radeonsi-defaults.conf'],
+  [with_gallium_zink, '00-zink-defaults.conf'],
+  [with_gallium_r600, '00-r600-defaults.conf'],
+  [with_gallium_freedreno, '00-msm-defaults.conf'],
+  [with_gallium_d3d12, '00-d3d12-defaults.conf'],
+  [with_gallium_svga, '00-vmwgfx-defaults.conf'],
+]
+  if i[0]
+    files_drirc += files(i[1])
+  endif
+endforeach
+
+drirc_gen = files('drirc_gen.py')
 
 if with_tests
   prog_xmllint = find_program('xmllint', required : false, native : true)
@@ -223,7 +249,7 @@ if with_tests
     test(
       'drirc xml validation',
       prog_xmllint,
-      args : ['--noout', '--valid', files_drirc],
+      args : ['--noout', '--dtdvalid', files('driconf.dtd'), files_drirc],
       suite : ['util'],
     )
   endif
@@ -328,7 +354,7 @@ u_trace_py = files('perf/u_trace.py')
 libmesa_util_simd = static_library(
   'mesa_util_simd',
   files('streaming-load-memcpy.c'),
-  c_args : [c_msvc_compat_args, sse41_args],
+  c_args : [c_msvc_compat_args, soong_compat_c_args, sse41_args],
   include_directories : [inc_util],
   gnu_symbol_visibility : 'hidden',
   build_by_default : false,
@@ -341,7 +367,7 @@ _libmesa_util = static_library(
   include_directories : [inc_util, include_directories('format')],
   dependencies : deps_for_libmesa_util,
   link_with: libmesa_util_links,
-  c_args : [c_msvc_compat_args],
+  c_args : [c_msvc_compat_args, soong_compat_c_args],
   gnu_symbol_visibility : 'hidden',
   build_by_default : false
 )
@@ -378,6 +404,7 @@ _libxmlconfig = static_library(
   dependencies : [idep_mesautil, dep_m, xmlconfig_deps],
   c_args : [
     c_msvc_compat_args,
+    soong_compat_c_args,
     c_xmlconfig_arg,
     '-DSYSCONFDIR="@0@"'.format(
       join_paths(get_option('prefix'), get_option('sysconfdir'))

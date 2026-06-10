@@ -32,6 +32,7 @@
 #include "nv_push_cl9097.h"
 #include "nv_push_clb197.h"
 #include "nv_push_clc397.h"
+#include "nv_push_clc597.h"
 #include "nv_push_clc797.h"
 
 const struct nak_constant_offset_info nak_const_offsets_base = {
@@ -381,7 +382,10 @@ nvk_lower_nir(struct nvk_device *dev, nir_shader *nir,
             lookup_ycbcr_conversion, &ycbcr_state);
 
    nir_lower_compute_system_values_options csv_options = {
-      .has_base_workgroup_id = true,
+      .has_base_workgroup_id = mesa_shader_stage_is_compute(nir->info.stage),
+      .lower_local_invocation_index = mesa_shader_stage_is_compute(nir->info.stage),
+      .lower_workgroup_id_to_index = mesa_shader_stage_is_mesh(nir->info.stage),
+      .lower_cs_local_id_to_index = mesa_shader_stage_is_mesh(nir->info.stage),
    };
    NIR_PASS(_, nir, nir_lower_compute_system_values, &csv_options);
 
@@ -459,24 +463,53 @@ nvk_lower_nir(struct nvk_device *dev, nir_shader *nir,
    NIR_PASS(_, nir, nir_shader_intrinsics_pass,
             lower_load_intrinsic, nir_metadata_none, pdev);
 
-   NIR_PASS(_, nir, nir_lower_vars_to_explicit_types,
-            nir_var_mem_shared, shared_var_info);
-   NIR_PASS(_, nir, nir_lower_explicit_io, nir_var_mem_shared,
-            nir_address_format_32bit_offset);
+   if (mesa_shader_stage_uses_workgroup(nir->info.stage)) {
+      nir_variable_mode var_modes = nir_var_mem_shared;
 
-   if (nir->info.zero_initialize_shared_memory && nir->info.shared_size > 0) {
-      /* QMD::SHARED_MEMORY_SIZE requires an alignment of 256B so it's safe to
-       * align everything up to 16B so we can write whole vec4s.
-       */
-      nir->info.shared_size = align(nir->info.shared_size, 16);
-      NIR_PASS(_, nir, nir_zero_initialize_shared_memory,
-               nir->info.shared_size, 16);
+      if (mesa_shader_stage_is_mesh(nir->info.stage))
+         var_modes |= nir_var_mem_task_payload;
 
-      /* We need to call lower_compute_system_values again because
-       * nir_zero_initialize_shared_memory generates load_invocation_id which
-       * has to be lowered to load_invocation_index.
-       */
-      NIR_PASS(_, nir, nir_lower_compute_system_values, NULL);
+      NIR_PASS(_, nir, nir_lower_vars_to_explicit_types, var_modes,
+               shared_var_info);
+      NIR_PASS(_, nir, nir_lower_explicit_io, var_modes,
+               nir_address_format_32bit_offset);
+
+      if (nir->info.stage == MESA_SHADER_TASK)
+         NIR_PASS(_, nir, nvk_nir_lower_task_shader);
+      else if (nir->info.stage == MESA_SHADER_MESH)
+         NIR_PASS(_, nir, nvk_nir_lower_mesh_shader, shader_flags);
+
+      if (nir->info.zero_initialize_shared_memory && nir->info.shared_size > 0) {
+         uint32_t alignment;
+         uint32_t chunk_size;
+
+         if (mesa_shader_stage_is_mesh(nir->info.stage)) {
+            /* With task/mesh shaders, shared is in ISBE attribute space and is
+             * allocated in "lines" of 128 bytes. Additionally, we ISBE I/O
+             * instructions only support 1B and 4B granualities.*/
+            alignment = 128;
+            chunk_size = 4;
+         } else {
+            /* QMD::SHARED_MEMORY_SIZE requires an alignment of 256B so it's
+             * safe to align everything up to 16B so we can write whole vec4s.
+             */
+            alignment = 16;
+            chunk_size = 16;
+         }
+
+         nir->info.shared_size = align(nir->info.shared_size, alignment);
+         NIR_PASS(_, nir, nir_zero_initialize_shared_memory,
+                  nir->info.shared_size, chunk_size);
+
+         /* We need to call lower_compute_system_values again because
+         * nir_zero_initialize_shared_memory generates load_invocation_id which
+         * has to be lowered to load_invocation_index.
+         */
+         nir_lower_compute_system_values_options csv_options = {
+            .lower_local_invocation_index = mesa_shader_stage_is_compute(nir->info.stage),
+         };
+         NIR_PASS(_, nir, nir_lower_compute_system_values, &csv_options);
+      }
    }
 }
 
@@ -515,6 +548,9 @@ nvk_compile_nir(struct nvk_device *dev, nir_shader *nir,
    const bool dump_asm =
       shader_flags & VK_SHADER_CREATE_CAPTURE_INTERNAL_REPRESENTATIONS_BIT_MESA;
 
+   const bool has_task_shader =
+      (shader_flags & VK_SHADER_CREATE_NO_TASK_SHADER_BIT_EXT) == 0;
+
    nir_variable_mode robust2_modes = 0;
    if (rs->uniform_buffers == VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_ROBUST_BUFFER_ACCESS_2_EXT)
       robust2_modes |= nir_var_mem_ubo;
@@ -522,7 +558,7 @@ nvk_compile_nir(struct nvk_device *dev, nir_shader *nir,
       robust2_modes |= nir_var_mem_ssbo;
 
    shader->nak = nak_compile_shader(nir, dump_asm, pdev->nak,
-                                    robust2_modes, fs_key);
+                                    robust2_modes, fs_key, has_task_shader);
    if (!shader->nak)
       return vk_errorf(pdev, VK_ERROR_UNKNOWN, "Internal compiler error in NAK");
 
@@ -578,7 +614,8 @@ nvk_shader_get_shader_alignment(struct nvk_device *dev)
 
 static uint32_t
 nvk_shader_get_shader_size(struct nvk_device *dev, struct nvk_shader *shader,
-                           uint32_t *out_hdr_offset, uint32_t *out_code_offset)
+                           uint32_t *out_hdr_offset, uint32_t *out_code_offset,
+                           uint32_t *out_gs_hdr_offset)
 {
    const struct nvk_physical_device *pdev = nvk_device_physical(dev);
    const uint32_t hdr_size = nvk_shader_get_hdr_size(dev, shader);
@@ -606,6 +643,18 @@ nvk_shader_get_shader_size(struct nvk_device *dev, struct nvk_shader *shader,
 
    total_size += shader->code_size;
 
+   const bool has_mesh_gs_sph = shader->info.stage == MESA_SHADER_MESH &&
+                                shader->info.mesh.has_gs_sph;
+
+   if (out_gs_hdr_offset)
+      *out_gs_hdr_offset = 0;
+   if (has_mesh_gs_sph) {
+      total_size = align(total_size, nvk_min_cbuf_alignment(&pdev->info));
+      if (out_gs_hdr_offset)
+         *out_gs_hdr_offset = total_size;
+      total_size += hdr_size;
+   }
+
    return total_size;
 }
 
@@ -614,12 +663,15 @@ nvk_shader_upload(struct nvk_device *dev, struct nvk_shader *shader)
 {
    const struct nvk_physical_device *pdev = nvk_device_physical(dev);
 
+   const bool has_mesh_gs_sph = shader->info.stage == MESA_SHADER_MESH &&
+                                shader->info.mesh.has_gs_sph;
    const uint32_t hdr_size = nvk_shader_get_hdr_size(dev, shader);
    uint32_t hdr_offset;
    uint32_t code_offset;
+   uint32_t gs_hdr_offset;
 
    uint32_t total_size = nvk_shader_get_shader_size(dev, shader, &hdr_offset,
-                                                    &code_offset);
+                                                    &code_offset, &gs_hdr_offset);
    uint32_t alignment = nvk_shader_get_shader_alignment(dev);
 
    uint32_t data_offset = 0;
@@ -638,6 +690,8 @@ nvk_shader_upload(struct nvk_device *dev, struct nvk_shader *shader)
    assert(hdr_size <= sizeof(shader->info.hdr));
    memcpy(data + hdr_offset, shader->info.hdr, hdr_size);
    memcpy(data + code_offset, shader->code_ptr, shader->code_size);
+   if (has_mesh_gs_sph)
+      memcpy(data + gs_hdr_offset, shader->info.mesh.gs_hdr, hdr_size);
    if (shader->data_size > 0)
       memcpy(data + data_offset, shader->data_ptr, shader->data_size);
 
@@ -659,6 +713,7 @@ nvk_shader_upload(struct nvk_device *dev, struct nvk_shader *shader)
          assert(shader->upload_addr - heap_base_addr < UINT32_MAX);
          shader->hdr_addr -= heap_base_addr;
       }
+      shader->gs_hdr_addr = shader->upload_addr + gs_hdr_offset;
       shader->data_addr = shader->upload_addr + data_offset;
    }
    free(data);
@@ -667,22 +722,34 @@ nvk_shader_upload(struct nvk_device *dev, struct nvk_shader *shader)
 }
 
 uint32_t
-mesa_to_nv9097_shader_type(mesa_shader_stage stage)
+mesa_to_nv9097_shader_type(mesa_shader_stage stage, bool has_task_shader)
 {
+   if (stage == MESA_SHADER_MESH && !has_task_shader)
+      stage = MESA_SHADER_TASK;
+
    static const uint32_t mesa_to_nv9097[] = {
       [MESA_SHADER_VERTEX]    = NV9097_SET_PIPELINE_SHADER_TYPE_VERTEX,
       [MESA_SHADER_TESS_CTRL] = NV9097_SET_PIPELINE_SHADER_TYPE_TESSELLATION_INIT,
       [MESA_SHADER_TESS_EVAL] = NV9097_SET_PIPELINE_SHADER_TYPE_TESSELLATION,
       [MESA_SHADER_GEOMETRY]  = NV9097_SET_PIPELINE_SHADER_TYPE_GEOMETRY,
       [MESA_SHADER_FRAGMENT]  = NV9097_SET_PIPELINE_SHADER_TYPE_PIXEL,
+      [MESA_SHADER_TASK]      = NV9097_SET_PIPELINE_SHADER_TYPE_VERTEX,
+      [MESA_SHADER_MESH]      = NV9097_SET_PIPELINE_SHADER_TYPE_TESSELLATION,
    };
    assert(stage < ARRAY_SIZE(mesa_to_nv9097));
    return mesa_to_nv9097[stage];
 }
 
 uint32_t
-nvk_pipeline_bind_group(mesa_shader_stage stage)
+nvk_pipeline_bind_group(mesa_shader_stage stage, bool has_task_shader)
 {
+   if (stage == MESA_SHADER_MESH && !has_task_shader)
+      return MESA_SHADER_VERTEX;
+   else if (stage == MESA_SHADER_MESH)
+      return MESA_SHADER_TESS_EVAL;
+   else if (stage == MESA_SHADER_TASK)
+      return MESA_SHADER_VERTEX;
+
    return stage;
 }
 
@@ -695,11 +762,21 @@ nvk_max_shader_push_dw(const struct nvk_physical_device *pdev,
 
    uint16_t max_dw_count = 9;
 
+   if (stage == MESA_SHADER_VERTEX || stage == MESA_SHADER_TASK ||
+       stage == MESA_SHADER_MESH)
+      max_dw_count += 2;
+
    if (stage == MESA_SHADER_TESS_CTRL || stage == MESA_SHADER_TESS_EVAL)
       max_dw_count += 2;
 
    if (stage == MESA_SHADER_FRAGMENT)
       max_dw_count += 13;
+
+   if (stage == MESA_SHADER_TASK)
+      max_dw_count += 2;
+
+   if (stage == MESA_SHADER_MESH)
+      max_dw_count += 15;
 
    if (last_vtgm) {
       max_dw_count += 8;
@@ -722,7 +799,10 @@ nvk_shader_fill_push(struct nvk_device *dev,
    nv_push_init(&push, push_dw, ARRAY_SIZE(push_dw),
                 nvk_queue_subchannels_from_engines(NVKMD_ENGINE_3D));
 
-   const uint32_t type = mesa_to_nv9097_shader_type(shader->info.stage);
+   bool has_task_shader = shader->info.stage == MESA_SHADER_MESH &&
+                          shader->info.mesh.has_task_shader;
+   const uint32_t type =
+      mesa_to_nv9097_shader_type(shader->info.stage, has_task_shader);
 
    /* We always map index == type */
    const uint32_t idx = type;
@@ -744,7 +824,7 @@ nvk_shader_fill_push(struct nvk_device *dev,
        * shader. */
       if (pdev->info.cls_eng3d >= AMPERE_B) {
          uint32_t shader_size =
-            nvk_shader_get_shader_size(dev, shader, NULL, NULL);
+            nvk_shader_get_shader_size(dev, shader, NULL, NULL, NULL);
          uint32_t shader_prefetch_size_in_blocks =
             MIN2(DIV_ROUND_UP(shader_size, 256), 127);
          P_NVC797_SET_PIPELINE_PROGRAM_PREFETCH(p, idx,
@@ -759,7 +839,7 @@ nvk_shader_fill_push(struct nvk_device *dev,
    P_MTHD(p, NVC397, SET_PIPELINE_REGISTER_COUNT(idx));
    P_NVC397_SET_PIPELINE_REGISTER_COUNT(p, idx, shader->info.num_gprs);
    P_NVC397_SET_PIPELINE_BINDING(p, idx,
-      nvk_pipeline_bind_group(shader->info.stage));
+      nvk_pipeline_bind_group(shader->info.stage, has_task_shader));
 
    if (shader->info.stage == MESA_SHADER_TESS_CTRL ||
        shader->info.stage == MESA_SHADER_TESS_EVAL) {
@@ -772,7 +852,74 @@ nvk_shader_fill_push(struct nvk_device *dev,
                                            shader->info.ts.point_mode));
    }
 
-   if (shader->info.stage == MESA_SHADER_FRAGMENT) {
+   bool could_be_first_stage = shader->info.stage == MESA_SHADER_VERTEX ||
+                               shader->info.stage == MESA_SHADER_TASK ||
+                               shader->info.stage == MESA_SHADER_MESH;
+   bool is_first_stage =
+      could_be_first_stage && (shader->info.stage != MESA_SHADER_MESH ||
+                               !shader->info.mesh.has_task_shader);
+
+   if (could_be_first_stage) {
+      max_dw_count += 2;
+
+      if (pdev->info.cls_eng3d >= TURING_A && is_first_stage)
+         P_IMMD(p, NVC597, SET_MESH_CONTROL,
+                shader->info.stage != MESA_SHADER_VERTEX);
+   }
+
+   if (shader->info.stage == MESA_SHADER_TASK) {
+      max_dw_count += 2;
+      uint16_t smem_lines = DIV_ROUND_UP(shader->info.task.smem_size, 128);
+      uint16_t task_smem_lines = DIV_ROUND_UP(shader->info.task.payload_smem_size, 128);
+
+      /* Task payload should be part of shared memory */
+      assert(task_smem_lines <= smem_lines);
+
+      P_IMMD(p, NVC597, SET_MESH_INIT_SHADER, {
+         .thread_count = shader->info.task.local_size,
+         .local_buffer_lines = smem_lines,
+         .output_to_m_s_lines = task_smem_lines,
+      });
+   } else if (shader->info.stage == MESA_SHADER_MESH) {
+      max_dw_count += 15;
+
+      assert(shader->info.mesh.max_vertices != 0);
+      assert(shader->info.mesh.max_primitives != 0);
+
+      /* On Turing only, if a task+mesh pipeline was previously bound and we
+       * bind a mesh only pipeline after it, the hardware will misbehave in
+       * TRACK_WITH_FILTER mode and assume that the vertex stage has a task
+       * shader instead.
+       *
+       * NVIDIA proprietary driver apply this workaround on all generations so
+       * we also do the same here just in case.
+       */
+      P_IMMD(p, NV9097, SET_MME_SHADOW_RAM_CONTROL, MODE_METHOD_TRACK);
+      P_MTHD(p, NVC597, SET_MESH_SHADER_A);
+      P_NVC597_SET_MESH_SHADER_A(p, {
+         .output_topology = shader->info.mesh.topology,
+         .max_vertex = shader->info.mesh.max_vertices,
+         .max_primitive = shader->info.mesh.max_primitives,
+      });
+      P_NVC597_SET_MESH_SHADER_B(p, {
+         .shared_mem_lines = DIV_ROUND_UP(shader->info.mesh.smem_size, 128),
+         .thread_count = shader->info.mesh.local_size,
+      });
+      P_IMMD(p, NV9097, SET_MME_SHADOW_RAM_CONTROL, MODE_METHOD_TRACK_WITH_FILTER);
+
+      if (shader->info.mesh.has_gs_sph) {
+         P_IMMD(p, NV9097, SET_PIPELINE_SHADER(NV9097_SET_PIPELINE_SHADER_TYPE_GEOMETRY), {
+            .enable  = shader->info.mesh.has_gs_sph,
+            .type    = TYPE_GEOMETRY,
+         });
+
+         uint64_t gs_hdr_addr = shader->gs_hdr_addr;
+         P_MTHD(p, NVC397, SET_PIPELINE_PROGRAM_ADDRESS_A(NV9097_SET_PIPELINE_SHADER_TYPE_GEOMETRY));
+         P_NVC397_SET_PIPELINE_PROGRAM_ADDRESS_A(p, NV9097_SET_PIPELINE_SHADER_TYPE_GEOMETRY, gs_hdr_addr >> 32);
+         P_NVC397_SET_PIPELINE_PROGRAM_ADDRESS_B(p, NV9097_SET_PIPELINE_SHADER_TYPE_GEOMETRY, gs_hdr_addr);
+         P_IMMD(p, NVC397, SET_GS_MODE, TYPE_ANY);
+      }
+   } else if (shader->info.stage == MESA_SHADER_FRAGMENT) {
       max_dw_count += 13;
 
       P_MTHD(p, NVC397, SET_SUBTILING_PERF_KNOB_A);

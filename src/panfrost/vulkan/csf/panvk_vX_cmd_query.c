@@ -89,8 +89,8 @@ reset_queries_batch(struct cs_builder *b, struct cs_index addr,
       cs_move32_to(b, counter, full_batches);
       cs_while(b, MALI_CS_CONDITION_GREATER, counter) {
          cs_store(b, new_zero_regs, addr, BITFIELD_MASK(new_zero_regs.size), 0);
-         cs_add64(b, addr, addr, new_zero_regs.size * sizeof(uint32_t));
-         cs_add32(b, counter, counter, -1);
+         cs_add_imm64(b, addr, addr, new_zero_regs.size * sizeof(uint32_t));
+         cs_add_imm32(b, counter, counter, -1);
       }
 
       remaining_queries =
@@ -238,11 +238,12 @@ panvk_copy_query_results(struct panvk_cmd_buffer *cmd,
          copy_result_batch(b, flags, dst_addr, stride, res_addr, avail_addr,
                            scratch_regs, queries_per_batch);
 
-         cs_add32(b, counter, counter, -queries_per_batch);
-         cs_add64(b, dst_addr, dst_addr, queries_per_batch * stride);
-         cs_add64(b, res_addr, res_addr, queries_per_batch * sizeof(uint64_t));
-         cs_add64(b, avail_addr, avail_addr,
-                  queries_per_batch * sizeof(uint64_t));
+         cs_add_imm32(b, counter, counter, -queries_per_batch);
+         cs_add_imm64(b, dst_addr, dst_addr, queries_per_batch * stride);
+         cs_add_imm64(b, res_addr, res_addr,
+                      queries_per_batch * sizeof(uint64_t));
+         cs_add_imm64(b, avail_addr, avail_addr,
+                      queries_per_batch * sizeof(uint64_t));
       }
 
       dst_buffer_addr += stride * copied_query_count;
@@ -370,8 +371,8 @@ panvk_cmd_reset_timestamp_queries(struct panvk_cmd_buffer *cmd,
          else
             cs_store64(b, zero64, addr, offset);
 
-         cs_add64(b, addr, addr, pool->query_stride);
-         cs_add32(b, counter, counter, -1);
+         cs_add_imm64(b, addr, addr, pool->query_stride);
+         cs_add_imm32(b, counter, counter, -1);
       }
 
       cs_flush_stores(b);
@@ -624,9 +625,9 @@ panvk_copy_timestamp_query_results(struct panvk_cmd_buffer *cmd,
          if (sq == PANVK_QUERY_TS_INFO_SUBQUEUE)
             cs_store64(b, tmp2, dst, sq_offset + 8);
 
-         cs_add64(b, src, src, query_stride);
-         cs_add64(b, dst, dst, query_stride);
-         cs_add32(b, count, count, -1);
+         cs_add_imm64(b, src, src, query_stride);
+         cs_add_imm64(b, dst, dst, query_stride);
+         cs_add_imm32(b, count, count, -1);
       }
    }
 

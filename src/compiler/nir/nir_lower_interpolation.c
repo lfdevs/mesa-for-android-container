@@ -106,12 +106,12 @@ nir_lower_interpolation_instr(nir_builder *b, nir_instr *instr, void *cb_data)
       nir_def *bary = intr->src[0].ssa;
       nir_def *val;
 
-      val = nir_ffma(b, nir_channel(b, bary, 1),
-                     nir_channel(b, iid, 1),
-                     nir_channel(b, iid, 0));
-      val = nir_ffma(b, nir_channel(b, bary, 0),
-                     nir_channel(b, iid, 2),
-                     val);
+      val = nir_ffma_weak(b, nir_channel(b, bary, 1),
+                             nir_channel(b, iid, 1),
+                             nir_channel(b, iid, 0));
+      val = nir_ffma_weak(b, nir_channel(b, bary, 0),
+                             nir_channel(b, iid, 2),
+                             val);
 
       comps[i] = val;
    }

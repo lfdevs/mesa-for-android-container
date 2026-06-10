@@ -471,16 +471,11 @@ static LLVMValueRef insert_ret_of_arg(struct si_shader_context *ctx, LLVMValueRe
    if (is_vgpr)
       data = ac_to_float(&ctx->ac, data);
 
-   if (ctx->args->ac.args[arg_index].size == 1) {
-      return LLVMBuildInsertValue(ctx->ac.builder, ret, data, index, "");
-   } else {
-      assert(ctx->args->ac.args[arg_index].size == 2);
-      LLVMValueRef tmp = LLVMBuildExtractElement(ctx->ac.builder, data, ctx->ac.i32_0, "");
-      ret = LLVMBuildInsertValue(ctx->ac.builder, ret, tmp, index, "");
-      tmp = LLVMBuildExtractElement(ctx->ac.builder, data, ctx->ac.i32_1, "");
-      ret = LLVMBuildInsertValue(ctx->ac.builder, ret, tmp, index + 1, "");
-      return ret;
+   for (unsigned i = 0; i < ctx->args->ac.args[arg_index].size; i++) {
+      ret = LLVMBuildInsertValue(ctx->ac.builder, ret,
+                                 ac_llvm_extract_elem(&ctx->ac, data, i), index + i, "");
    }
+   return ret;
 }
 
 /**
@@ -514,11 +509,20 @@ void si_llvm_build_ps_prolog(struct si_shader_context *ctx, union si_shader_part
    si_llvm_create_func(ctx, "ps_prolog", return_types, num_returns, 0);
    LLVMValueRef func = ctx->main_fn.value;
 
+   /* Disable elimination of unused inputs. */
+   ac_llvm_add_target_dep_function_attr(ctx->main_fn.value, "InitialPSInputAddr", 0xffffff);
+
    /* Copy inputs to outputs. This should be no-op, as the registers match,
     * but it will prevent the compiler from overwriting them unintentionally.
     */
    LLVMValueRef ret = ctx->return_value;
    for (int i = 0; i < args->ac.arg_count; i++) {
+      /* Don't pass LINE_STIPPLE_TEX_ENA to the next shader binary because it's unused.
+       * This saves 1 VGPR in the prolog.
+       */
+      if (args->ac.line_stipple_tex_ena.used && i == args->ac.line_stipple_tex_ena.arg_index)
+         continue;
+
       LLVMValueRef p = LLVMGetParam(func, i);
       ret = insert_ret_of_arg(ctx, ret, p, i);
    }
@@ -541,15 +545,22 @@ void si_llvm_build_ps_prolog(struct si_shader_context *ctx, union si_shader_part
       bc_optimize = LLVMBuildTrunc(ctx->ac.builder, bc_optimize, ctx->ac.i1, "");
 
       if (key->ps_prolog.states.bc_optimize_for_persp) {
+         assert(key->ps_prolog.uses_persp_centroid);
+
          center = ac_to_float(&ctx->ac, ac_get_arg(&ctx->ac, args->ac.persp_center));
          centroid = ac_to_float(&ctx->ac, ac_get_arg(&ctx->ac, args->ac.persp_centroid));
+
          /* Select PERSP_CENTROID. */
          tmp = LLVMBuildSelect(ctx->ac.builder, bc_optimize, center, centroid, "");
          ret = insert_ret_of_arg(ctx, ret, tmp, args->ac.persp_centroid.arg_index);
       }
+
       if (key->ps_prolog.states.bc_optimize_for_linear) {
+         assert(key->ps_prolog.uses_linear_centroid);
+
          center = ac_to_float(&ctx->ac, ac_get_arg(&ctx->ac, args->ac.linear_center));
          centroid = ac_to_float(&ctx->ac, ac_get_arg(&ctx->ac, args->ac.linear_centroid));
+
          /* Select PERSP_CENTROID. */
          tmp = LLVMBuildSelect(ctx->ac.builder, bc_optimize, center, centroid, "");
          ret = insert_ret_of_arg(ctx, ret, tmp, args->ac.linear_centroid.arg_index);
@@ -561,15 +572,21 @@ void si_llvm_build_ps_prolog(struct si_shader_context *ctx, union si_shader_part
       LLVMValueRef persp_sample = ac_to_float(&ctx->ac, ac_get_arg(&ctx->ac, args->ac.persp_sample));
       /* Overwrite PERSP_CENTER. */
       ret = insert_ret_of_arg(ctx, ret, persp_sample, args->ac.persp_center.arg_index);
-      /* Overwrite PERSP_CENTROID. */
-      ret = insert_ret_of_arg(ctx, ret, persp_sample, args->ac.persp_centroid.arg_index);
+
+      if (key->ps_prolog.uses_persp_centroid) {
+         /* Overwrite PERSP_CENTROID. */
+         ret = insert_ret_of_arg(ctx, ret, persp_sample, args->ac.persp_centroid.arg_index);
+      }
    }
    if (key->ps_prolog.states.force_linear_sample_interp) {
       LLVMValueRef linear_sample = ac_to_float(&ctx->ac, ac_get_arg(&ctx->ac, args->ac.linear_sample));
       /* Overwrite LINEAR_CENTER. */
       ret = insert_ret_of_arg(ctx, ret, linear_sample, args->ac.linear_center.arg_index);
-      /* Overwrite LINEAR_CENTROID. */
-      ret = insert_ret_of_arg(ctx, ret, linear_sample, args->ac.linear_centroid.arg_index);
+
+      if (key->ps_prolog.uses_linear_centroid) {
+         /* Overwrite LINEAR_CENTROID. */
+         ret = insert_ret_of_arg(ctx, ret, linear_sample, args->ac.linear_centroid.arg_index);
+      }
    }
 
    /* Force center interpolation. */
@@ -577,15 +594,21 @@ void si_llvm_build_ps_prolog(struct si_shader_context *ctx, union si_shader_part
       LLVMValueRef persp_center = ac_to_float(&ctx->ac, ac_get_arg(&ctx->ac, args->ac.persp_center));
       /* Overwrite PERSP_SAMPLE. */
       ret = insert_ret_of_arg(ctx, ret, persp_center, args->ac.persp_sample.arg_index);
-      /* Overwrite PERSP_CENTROID. */
-      ret = insert_ret_of_arg(ctx, ret, persp_center, args->ac.persp_centroid.arg_index);
+
+      if (key->ps_prolog.uses_persp_centroid) {
+         /* Overwrite PERSP_CENTROID. */
+         ret = insert_ret_of_arg(ctx, ret, persp_center, args->ac.persp_centroid.arg_index);
+      }
    }
    if (key->ps_prolog.states.force_linear_center_interp) {
       LLVMValueRef linear_center = ac_to_float(&ctx->ac, ac_get_arg(&ctx->ac, args->ac.linear_center));
       /* Overwrite LINEAR_SAMPLE. */
       ret = insert_ret_of_arg(ctx, ret, linear_center, args->ac.linear_sample.arg_index);
-      /* Overwrite LINEAR_CENTROID. */
-      ret = insert_ret_of_arg(ctx, ret, linear_center, args->ac.linear_centroid.arg_index);
+
+      if (key->ps_prolog.uses_linear_centroid) {
+         /* Overwrite LINEAR_CENTROID. */
+         ret = insert_ret_of_arg(ctx, ret, linear_center, args->ac.linear_centroid.arg_index);
+      }
    }
 
    /* Interpolate colors. */
@@ -597,11 +620,12 @@ void si_llvm_build_ps_prolog(struct si_shader_context *ctx, union si_shader_part
       if (!writemask)
          continue;
 
-      /* If the interpolation qualifier is not CONSTANT (-1). */
       LLVMValueRef interp_ij = NULL;
-      if (key->ps_prolog.color_interp_vgpr_index[i] != -1) {
-         unsigned index =
-            args->ac.num_sgprs_used + key->ps_prolog.color_interp_vgpr_index[i];
+
+      if (key->ps_prolog.color_interp[i] != AC_COLOR_INTERP_FLAT) {
+         unsigned index = ac_get_color_interp_arg(&args->ac, key->ps_prolog.color_interp[i]);
+
+         index = args->ac.num_sgprs_used + args->ac.args[index].offset;
 
          /* Get the (i,j) updated by bc_optimize handling. */
          LLVMValueRef interp[2] = {
@@ -675,28 +699,6 @@ void si_llvm_build_ps_prolog(struct si_shader_context *ctx, union si_shader_part
                        ctx->ac.i32, "");
       ret = insert_ret_of_arg(ctx, ret, ac_to_float(&ctx->ac, sample_mask_in),
                               args->ac.sample_coverage.arg_index);
-   }
-
-   if (key->ps_prolog.states.get_frag_coord_from_pixel_coord) {
-      LLVMValueRef pixel_coord = ac_get_arg(&ctx->ac, args->ac.pos_fixed_pt);
-      pixel_coord = LLVMBuildBitCast(ctx->ac.builder, pixel_coord, ctx->ac.v2i16, "");
-      pixel_coord = LLVMBuildUIToFP(ctx->ac.builder, pixel_coord, ctx->ac.v2f32, "");
-
-      if (!key->ps_prolog.pixel_center_integer) {
-         LLVMValueRef vec2_half = LLVMConstVector((LLVMValueRef[]){LLVMConstReal(ctx->ac.f32, 0.5),
-                                                                   LLVMConstReal(ctx->ac.f32, 0.5)}, 2);
-         pixel_coord = LLVMBuildFAdd(ctx->ac.builder, pixel_coord, vec2_half, "");
-      }
-
-      for (unsigned i = 0; i < 2; i++) {
-         if (!args->ac.frag_pos[i].used)
-            continue;
-
-         ret = insert_ret_of_arg(ctx, ret,
-                                 LLVMBuildExtractElement(ctx->ac.builder, pixel_coord,
-                                                         LLVMConstInt(ctx->ac.i32, i, 0), ""),
-                                 args->ac.frag_pos[i].arg_index);
-      }
    }
 
    /* Tell LLVM to insert WQM instruction sequence when needed. */

@@ -1299,6 +1299,14 @@ static const char *sampler_dim_name[] = {
 };
 
 static void
+print_cmat_description(struct glsl_cmat_description desc, print_state *state)
+{
+   FILE *fp = state->fp;
+   const struct glsl_type *t = glsl_cmat_type(&desc);
+   fprintf(fp, "%s", get_type_name(t, state));
+}
+
+static void
 print_intrinsic_instr(nir_intrinsic_instr *instr, print_state *state)
 {
    const nir_intrinsic_info *info = &nir_intrinsic_infos[instr->intrinsic];
@@ -1772,12 +1780,17 @@ print_intrinsic_instr(nir_intrinsic_instr *instr, print_state *state)
          break;
       }
 
-      case NIR_INTRINSIC_CMAT_DESC: {
-         struct glsl_cmat_description desc = nir_intrinsic_cmat_desc(instr);
-         const struct glsl_type *t = glsl_cmat_type(&desc);
-         fprintf(fp, "%s", get_type_name(t, state));
+      case NIR_INTRINSIC_CMAT_DESC:
+         print_cmat_description(nir_intrinsic_cmat_desc(instr), state);
          break;
-      }
+
+      case NIR_INTRINSIC_DST_CMAT_DESC:
+         print_cmat_description(nir_intrinsic_dst_cmat_desc(instr), state);
+         break;
+
+      case NIR_INTRINSIC_SRC_CMAT_DESC:
+         print_cmat_description(nir_intrinsic_src_cmat_desc(instr), state);
+         break;
 
       case NIR_INTRINSIC_CMAT_SIGNED_MASK: {
          fprintf(fp, "cmat_signed=");

@@ -33,11 +33,12 @@ vtn_handle_cooperative_type(struct vtn_builder *b, struct vtn_value *val,
    struct vtn_type *component_type = vtn_get_type(b, w[2]);
 
    const mesa_scope scope = vtn_translate_scope(b, vtn_constant_uint(b, w[3]));
-   const uint32_t rows = vtn_constant_uint(b, w[4]);
-   const uint32_t cols = vtn_constant_uint(b, w[5]);
+   const uint64_t rows = vtn_constant_uint(b, w[4]);
+   const uint64_t cols = vtn_constant_uint(b, w[5]);
 
-   vtn_assert(rows < 256);
-   vtn_assert(cols < 256);
+   vtn_assert(rows <= UINT16_MAX);
+   vtn_assert(cols <= UINT16_MAX);
+   vtn_assert(cols == 0 || rows <= UINT32_MAX / cols);
 
    enum glsl_cmat_use use = vtn_cooperative_matrix_use_to_glsl(vtn_constant_uint(b, w[6]));
 

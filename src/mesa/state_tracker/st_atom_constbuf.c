@@ -121,7 +121,7 @@ st_upload_constants(struct st_context *st, struct gl_program *prog, mesa_shader_
       cb.buffer_size = paramBytes;
 
       /* this path cannot be used with select/feedback draws */
-      if (st->prefer_real_buffer_in_constbuf0) {
+      if (st->screen->caps.prefer_real_buffer_in_constbuf0) {
          struct pipe_context *pipe = st->pipe;
          struct pipe_resource *releasebuf = NULL;
          uint32_t *ptr;

@@ -33,3 +33,9 @@ spec@glsl-3.*
 spec@glsl-4.*
 spec@glsl-es-3.*
 
+# Slow piglit tests (> 1 minute to run)
+spec@!opengl 1.0@gl-1.0-blend-func
+spec@!opengl 1.1@copypixels-draw-sync
+spec@!opengl 1.1@draw-copypixels-sync
+spec@!opengl 1.1@draw-sync
+spec@arb_vertex_buffer_object@vbo-subdata-many drawrangeelements

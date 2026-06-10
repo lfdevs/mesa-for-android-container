@@ -89,6 +89,8 @@ struct v3d_screen {
         bool has_cpu_queue;
         bool has_multisync;
 
+        float heap_memory_percent;
+
 #if USE_V3D_SIMULATOR
         struct v3d_simulator_file *sim_file;
 #endif

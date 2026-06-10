@@ -299,4 +299,7 @@ void ra_update_affinity(unsigned file_size, struct ir3_register *reg,
 
 void ir3_ra_handle_unavailable_merge_set(struct ir3_register *reg);
 
+bool ir3_ra_src_is_killed(struct ir3_register *src,
+                          struct ir3_reg_interval *def_interval);
+
 #endif

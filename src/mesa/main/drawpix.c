@@ -54,17 +54,6 @@ _mesa_DrawPixels( GLsizei width, GLsizei height,
 
    FLUSH_VERTICES(ctx, 0, 0);
 
-   if (MESA_VERBOSE & VERBOSE_API)
-      _mesa_debug(ctx, "glDrawPixels(%d, %d, %s, %s, %p) // to %s at %ld, %ld\n",
-                  width, height,
-                  _mesa_enum_to_string(format),
-                  _mesa_enum_to_string(type),
-                  pixels,
-                  _mesa_enum_to_string(ctx->DrawBuffer->ColorDrawBuffer[0]),
-                  lroundf(ctx->Current.RasterPos[0]),
-                  lroundf(ctx->Current.RasterPos[1]));
-
-
    if (width < 0 || height < 0) {
       _mesa_error( ctx, GL_INVALID_VALUE, "glDrawPixels(width or height < 0)" );
       return;
@@ -202,16 +191,6 @@ _mesa_CopyPixels( GLint srcx, GLint srcy, GLsizei width, GLsizei height,
    GET_CURRENT_CONTEXT(ctx);
 
    FLUSH_VERTICES(ctx, 0, 0);
-
-   if (MESA_VERBOSE & VERBOSE_API)
-      _mesa_debug(ctx,
-                  "glCopyPixels(%d, %d, %d, %d, %s) // from %s to %s at %ld, %ld\n",
-                  srcx, srcy, width, height,
-                  _mesa_enum_to_string(type),
-                  _mesa_enum_to_string(ctx->ReadBuffer->ColorReadBuffer),
-                  _mesa_enum_to_string(ctx->DrawBuffer->ColorDrawBuffer[0]),
-                  lroundf(ctx->Current.RasterPos[0]),
-                  lroundf(ctx->Current.RasterPos[1]));
 
    if (width < 0 || height < 0) {
       _mesa_error(ctx, GL_INVALID_VALUE, "glCopyPixels(width or height < 0)");

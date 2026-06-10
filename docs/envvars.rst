@@ -912,8 +912,11 @@ Intel driver environment variables
 
 .. envvar:: MDA_OUTPUT_DIR
 
-   Directory where the mda.tar files generated when using INTEL_DEBUG=mda are
-   going to be written to.  If not set, use the current directory.
+   Directory where the mda.tar files generated when using INTEL_DEBUG=mda or ANV_DEBUG=shader-dump are
+   going to be written to. If set, use that directory. If not set, create and
+   use a ``NAME_PID_mda`` subdirectory, where ``NAME`` is the process name and
+   ``PID`` is the process ID. If directory creation fails, use the current
+   directory.
 
 .. envvar:: MDA_PREFIX
 
@@ -2207,6 +2210,9 @@ PowerVR driver environment variables
 
    ``int_smp``
       Enable integer coordinate support for sampler instructions.
+
+   ``global_shmem``
+      Force spill shared memory to global memory.
 
 .. envvar:: PCO_SKIP_PASSES
 

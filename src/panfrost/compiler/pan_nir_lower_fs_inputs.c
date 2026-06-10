@@ -62,18 +62,17 @@ lower_fs_input_load(struct nir_builder *b,
 
    nir_def *res;
    if (use_ld_var_buf) {
-      const nir_alu_type src_type = slot->alu_type;
       nir_def *offset_B = nir_imm_int(b, slot->offset);
 
       if (load->intrinsic == nir_intrinsic_load_interpolated_input) {
          res = nir_load_var_buf_pan(b, load_comps, load->def.bit_size,
                                     offset_B, &bary->def,
-                                    .src_type = src_type,
+                                    .src_type = dest_type,
                                     .io_semantics = sem);
       } else {
          res = nir_load_var_buf_flat_pan(b, load_comps, load->def.bit_size,
                                          offset_B,
-                                         .src_type = src_type,
+                                         .src_type = dest_type,
                                          .io_semantics = sem);
       }
    } else {

@@ -921,6 +921,7 @@ RELATION(a_number, FP_CLASS_NAN)
 RELATION(finite, FP_CLASS_ANY_INF | FP_CLASS_NAN)
 RELATION(finite_not_zero, FP_CLASS_ANY_INF | FP_CLASS_NAN | FP_CLASS_ANY_ZERO)
 RELATION(integral, FP_CLASS_NON_INTEGRAL)
+RELATION(integral_not_negative, FP_CLASS_ANY_NEG | FP_CLASS_NON_INTEGRAL)
 
 static inline bool
 compare_component(const nir_alu_instr *instr, unsigned src, unsigned component,

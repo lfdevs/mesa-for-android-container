@@ -270,11 +270,14 @@ gather_intrinsic_info(const nir_shader *nir, const nir_intrinsic_instr *instr, s
    case nir_intrinsic_load_pixel_coord:
       info->ps.reads_pixel_coord = true;
       break;
-   case nir_intrinsic_load_frag_coord:
+   case nir_intrinsic_load_frag_coord_xy:
       info->ps.reads_frag_coord_mask |= nir_def_components_read(&instr->def);
       break;
-   case nir_intrinsic_load_sample_pos:
-      info->ps.reads_sample_pos_mask |= nir_def_components_read(&instr->def);
+   case nir_intrinsic_load_frag_coord_z:
+      info->ps.reads_frag_coord_mask |= BITFIELD_BIT(2);
+      break;
+   case nir_intrinsic_load_frag_coord_w_rcp:
+      info->ps.reads_frag_coord_mask |= BITFIELD_BIT(3);
       break;
    case nir_intrinsic_load_push_constant:
       gather_push_constant_info(nir, instr, info);
@@ -308,6 +311,12 @@ gather_intrinsic_info(const nir_shader *nir, const nir_intrinsic_instr *instr, s
       break;
    case nir_intrinsic_begin_invocation_interlock:
       info->ps.pops = true;
+      break;
+   case nir_intrinsic_load_use_float_frag_coord_xy_amd:
+      info->ps.selects_frag_coord_xy_dynamically = true;
+      break;
+   case nir_intrinsic_load_use_sample_mask_in_amd:
+      info->ps.selects_sample_mask_in_dynamically = true;
       break;
    default:
       break;
@@ -813,7 +822,9 @@ gather_shader_info_fs(enum amd_gfx_level gfx_level, const nir_shader *nir,
    info->ps.allow_flat_shading =
       !(uses_persp_or_linear_interp || info->ps.needs_sample_positions || info->ps.reads_frag_shading_rate ||
         info->ps.writes_memory || nir->info.fs.needs_coarse_quad_helper_invocations ||
-        BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_FRAG_COORD) ||
+        BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_FRAG_COORD_XY) ||
+        BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_FRAG_COORD_Z) ||
+        BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_FRAG_COORD_W_RCP) ||
         BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_PIXEL_COORD) ||
         BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_POINT_COORD) ||
         BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_SAMPLE_ID) ||

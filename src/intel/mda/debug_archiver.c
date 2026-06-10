@@ -9,6 +9,7 @@
 #include "tar.h"
 #include "util/ralloc.h"
 #include "util/u_debug.h"
+#include "util/u_process.h"
 
 #include <string.h>
 #include <sys/stat.h>
@@ -25,7 +26,7 @@ struct debug_archiver
    char *mda_dir_in_archive;
 };
 
-DEBUG_GET_ONCE_OPTION(mda_output_dir, "MDA_OUTPUT_DIR", ".")
+DEBUG_GET_ONCE_OPTION(mda_output_dir, "MDA_OUTPUT_DIR", "")
 DEBUG_GET_ONCE_OPTION(mda_prefix, "MDA_PREFIX", NULL)
 DEBUG_GET_ONCE_OPTION(mda_filter, "MDA_FILTER", NULL)
 
@@ -80,6 +81,14 @@ debug_archiver_open(void *mem_ctx, const char *name, const char *info)
 
    const char *output_dir = debug_get_option_mda_output_dir();
    const char *prefix     = debug_get_option_mda_prefix();
+
+   if (!output_dir || !*output_dir) {
+      const char *process_name = util_get_process_name();
+      if (!process_name || !*process_name)
+         process_name = "unknown_process";
+
+      output_dir = ralloc_asprintf(da, "./%s_%d_mda", process_name, getpid());
+   }
 
    if (!ensure_output_dir(output_dir)) {
       /* Fallback to current directory on failure. */

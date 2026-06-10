@@ -26,7 +26,6 @@ struct hk_memory_heap {
    uint64_t size;
    uint64_t used;
    VkMemoryHeapFlags flags;
-   uint64_t (*available)(struct hk_physical_device *pdev);
 };
 
 struct hk_physical_device {

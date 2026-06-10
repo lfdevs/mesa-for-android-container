@@ -1,33 +1,33 @@
-dp4a(8)         g10<1>D         g2<8,8,1>D      g6<8,8,1>D      g7<1,1,1>D { align1 1Q @1 };
-dp4a(8)         g10<1>D         g2<8,8,1>D      g6<8,8,1>D      g7<1,1,1>UD { align1 1Q @1 };
-dp4a(8)         g10<1>D         g2<8,8,1>D      g8<8,8,1>D      g9<1,1,1>D { align1 1Q @1 };
-dp4a(8)         g10<1>D         g2<8,8,1>D      g8<8,8,1>D      g9<1,1,1>UD { align1 1Q @1 };
-dp4a(8)         g10<1>UD        g2<8,8,1>UD     g6<8,8,1>UD     g7<1,1,1>UD { align1 1Q @1 };
-dp4a(8)         g10<1>UD        g2<8,8,1>UD     g8<8,8,1>UD     g9<1,1,1>UD { align1 1Q @1 };
-dp4a(8)         g5<1>D          g2<8,8,1>D      g3<8,8,1>D      g4<1,1,1>D { align1 1Q @3 $0.dst };
-dp4a(8)         g5<1>D          g2<8,8,1>D      g3<8,8,1>D      g4<1,1,1>UD { align1 1Q @3 $0.dst };
-dp4a(8)         g5<1>UD         g2<8,8,1>UD     g3<8,8,1>UD     g4<1,1,1>UD { align1 1Q @3 $0.dst };
-dp4a(8)         g6<1>D          g2<8,8,1>D      g3<8,8,1>D      g4<1,1,1>D { align1 1Q @4 $1.dst };
-dp4a(8)         g6<1>D          g2<8,8,1>D      g3<8,8,1>D      g4<1,1,1>UD { align1 1Q @4 $1.dst };
-dp4a(8)         g6<1>D          g2<8,8,1>D      g4<8,8,1>D      g5<1,1,1>D { align1 1Q @4 $0.dst };
-dp4a(8)         g6<1>D          g2<8,8,1>D      g4<8,8,1>D      g5<1,1,1>UD { align1 1Q @4 $0.dst };
-dp4a(8)         g6<1>UD         g2<8,8,1>UD     g3<8,8,1>UD     g4<1,1,1>UD { align1 1Q @4 $1.dst };
-dp4a(8)         g6<1>UD         g2<8,8,1>UD     g4<8,8,1>UD     g5<1,1,1>UD { align1 1Q @4 $0.dst };
-dp4a(8)         g7<1>D          g2<8,8,1>D      g5<8,8,1>D      g6<1,1,1>D { align1 1Q @1 };
-dp4a(8)         g7<1>D          g2<8,8,1>D      g5<8,8,1>D      g6<1,1,1>UD { align1 1Q @1 };
-dp4a(8)         g7<1>UD         g2<8,8,1>UD     g5<8,8,1>UD     g6<1,1,1>UD { align1 1Q @1 };
-dp4a(8)         g8<1>D          g2<8,8,1>D      g4<8,8,1>D      g5<1,1,1>D { align1 1Q @3 $0.dst };
-dp4a(8)         g8<1>D          g2<8,8,1>D      g4<8,8,1>D      g5<1,1,1>D { align1 1Q @4 $0.dst };
-dp4a(8)         g8<1>D          g2<8,8,1>D      g4<8,8,1>D      g5<1,1,1>UD { align1 1Q @3 $0.dst };
-dp4a(8)         g8<1>D          g2<8,8,1>D      g4<8,8,1>D      g5<1,1,1>UD { align1 1Q @4 $0.dst };
-dp4a(8)         g8<1>D          g2<8,8,1>D      g6<8,8,1>D      g7<1,1,1>D { align1 1Q @1 };
-dp4a(8)         g8<1>D          g2<8,8,1>D      g6<8,8,1>D      g7<1,1,1>UD { align1 1Q @1 };
-dp4a(8)         g8<1>UD         g2<8,8,1>UD     g4<8,8,1>UD     g5<1,1,1>UD { align1 1Q @3 $0.dst };
-dp4a(8)         g8<1>UD         g2<8,8,1>UD     g4<8,8,1>UD     g5<1,1,1>UD { align1 1Q @4 $0.dst };
-dp4a(8)         g8<1>UD         g2<8,8,1>UD     g6<8,8,1>UD     g7<1,1,1>UD { align1 1Q @1 };
-dp4a.sat(8)     g10<1>D         g5<8,8,1>D      g6<8,8,1>D      g7<1,1,1>D { align1 1Q @1 $2.dst };
-dp4a.sat(8)     g10<1>D         g5<8,8,1>D      g6<8,8,1>D      g7<1,1,1>UD { align1 1Q @1 $2.dst };
-dp4a.sat(8)     g10<1>UD        g5<8,8,1>UD     g6<8,8,1>UD     g7<1,1,1>UD { align1 1Q @1 $2.dst };
-dp4a.sat(8)     g8<1>D          g5<8,8,1>D      g3<8,8,1>D      g4<1,1,1>D { align1 1Q $2.dst };
-dp4a.sat(8)     g8<1>D          g5<8,8,1>D      g3<8,8,1>D      g4<1,1,1>UD { align1 1Q $2.dst };
-dp4a.sat(8)     g8<1>UD         g5<8,8,1>UD     g3<8,8,1>UD     g4<1,1,1>UD { align1 1Q $2.dst };
+        dp4a (8)                  r10:d         r2<8;1>:d         r6<8;1>:d         r7<1>:d {@1}
+        dp4a (8)                  r10:d         r2<8;1>:d         r6<8;1>:d         r7<1> {@1}
+        dp4a (8)                  r10:d         r2<8;1>:d         r8<8;1>:d         r9<1>:d {@1}
+        dp4a (8)                  r10:d         r2<8;1>:d         r8<8;1>:d         r9<1> {@1}
+        dp4a (8)                  r10           r2<8;1>           r6<8;1>           r7<1> {@1}
+        dp4a (8)                  r10           r2<8;1>           r8<8;1>           r9<1> {@1}
+        dp4a (8)                  r5:d          r2<8;1>:d         r3<8;1>:d         r4<1>:d {@3,$0.dst}
+        dp4a (8)                  r5:d          r2<8;1>:d         r3<8;1>:d         r4<1> {@3,$0.dst}
+        dp4a (8)                  r5            r2<8;1>           r3<8;1>           r4<1> {@3,$0.dst}
+        dp4a (8)                  r6:d          r2<8;1>:d         r3<8;1>:d         r4<1>:d {@4,$1.dst}
+        dp4a (8)                  r6:d          r2<8;1>:d         r3<8;1>:d         r4<1> {@4,$1.dst}
+        dp4a (8)                  r6:d          r2<8;1>:d         r4<8;1>:d         r5<1>:d {@4,$0.dst}
+        dp4a (8)                  r6:d          r2<8;1>:d         r4<8;1>:d         r5<1> {@4,$0.dst}
+        dp4a (8)                  r6            r2<8;1>           r3<8;1>           r4<1> {@4,$1.dst}
+        dp4a (8)                  r6            r2<8;1>           r4<8;1>           r5<1> {@4,$0.dst}
+        dp4a (8)                  r7:d          r2<8;1>:d         r5<8;1>:d         r6<1>:d {@1}
+        dp4a (8)                  r7:d          r2<8;1>:d         r5<8;1>:d         r6<1> {@1}
+        dp4a (8)                  r7            r2<8;1>           r5<8;1>           r6<1> {@1}
+        dp4a (8)                  r8:d          r2<8;1>:d         r4<8;1>:d         r5<1>:d {@3,$0.dst}
+        dp4a (8)                  r8:d          r2<8;1>:d         r4<8;1>:d         r5<1>:d {@4,$0.dst}
+        dp4a (8)                  r8:d          r2<8;1>:d         r4<8;1>:d         r5<1> {@3,$0.dst}
+        dp4a (8)                  r8:d          r2<8;1>:d         r4<8;1>:d         r5<1> {@4,$0.dst}
+        dp4a (8)                  r8:d          r2<8;1>:d         r6<8;1>:d         r7<1>:d {@1}
+        dp4a (8)                  r8:d          r2<8;1>:d         r6<8;1>:d         r7<1> {@1}
+        dp4a (8)                  r8            r2<8;1>           r4<8;1>           r5<1> {@3,$0.dst}
+        dp4a (8)                  r8            r2<8;1>           r4<8;1>           r5<1> {@4,$0.dst}
+        dp4a (8)                  r8            r2<8;1>           r6<8;1>           r7<1> {@1}
+        dp4a.sat (8)              r10:d         r5<8;1>:d         r6<8;1>:d         r7<1>:d {@1,$2.dst}
+        dp4a.sat (8)              r10:d         r5<8;1>:d         r6<8;1>:d         r7<1> {@1,$2.dst}
+        dp4a.sat (8)              r10           r5<8;1>           r6<8;1>           r7<1> {@1,$2.dst}
+        dp4a.sat (8)              r8:d          r5<8;1>:d         r3<8;1>:d         r4<1>:d {$2.dst}
+        dp4a.sat (8)              r8:d          r5<8;1>:d         r3<8;1>:d         r4<1> {$2.dst}
+        dp4a.sat (8)              r8            r5<8;1>           r3<8;1>           r4<1> {$2.dst}

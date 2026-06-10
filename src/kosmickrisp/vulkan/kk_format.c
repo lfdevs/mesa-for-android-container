@@ -163,7 +163,10 @@
 static const struct kk_va_format kk_vf_formats[] = {
    // 8-bit formats
    MTL_FMT_NATIVE(R8_UNORM, MTL_FMT_ALL_NO_ATOMIC(8), MTL_FMT_TB_ALL),
-   MTL_FMT_NATIVE(A8_UNORM, MTL_FMT_ALL_NO_ATOMIC(8), MTL_FMT_TB_ALL),
+   /* Hardware has issues with border color opaque black, and since it's not
+    * required by Vulkan, we can just disable it.
+    */
+   /* MTL_FMT_NATIVE(A8_UNORM, MTL_FMT_ALL_NO_ATOMIC(8), MTL_FMT_TB_ALL), */
    MTL_FMT_NATIVE(R8_SRGB, MTL_FMT_ALL_NO_ATOMIC(8), MTL_FMT_TB_NONE),
    MTL_FMT_NATIVE(R8_SNORM, MTL_FMT_ALL_NO_ATOMIC(8), MTL_FMT_TB_WR),
    MTL_FMT_NATIVE(R8_UINT, MTL_FMT_WCMS(8), MTL_FMT_TB_ALL),

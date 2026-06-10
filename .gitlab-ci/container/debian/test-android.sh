@@ -55,7 +55,9 @@ if "${BUILD_CONTAINER}"; then
   )
 else
   # We only need the build tools in build containers
-  EPHEMERAL=()
+  EPHEMERAL=(
+      unzip
+  )
 fi
 
 if "${TEST_CONTAINER}"; then
@@ -66,6 +68,10 @@ if "${TEST_CONTAINER}"; then
       cuttlefish-user
       iproute2
   )
+  # Android CTS only comes with x86_64 Java bundled, so we need to install it on arm64
+  if [ "${DEBIAN_ARCH}" = "arm64" ]; then
+    DEPS+=(openjdk-21-jdk-headless)
+  fi
 else
   DEPS=()
 fi
@@ -203,8 +209,7 @@ fi
 
 ############### Downloading Android CTS
 
-# We currently only have x86_64 CTS jobs
-if [ "${ANDROID_ARCH}" = "x86_64" ]; then
+if "${TEST_CONTAINER}"; then
 . .gitlab-ci/container/build-android-cts.sh
 fi
 
@@ -237,6 +242,12 @@ section_switch debian_cleanup "Cleaning up base Debian system"
 
 if "${BUILD_CONTAINER}"; then
   rm -rf "/${ndk:?}"
+fi
+
+# We currently only have LAVA jobs on arm64, where we deploy Android CTS as a LAVA overlay.
+# Remove it from the container image to save some space.
+if "${TEST_CONTAINER}" &&  [ "${DEBIAN_ARCH}" = "arm64" ]; then
+  rm -rf "/android-cts"
 fi
 
 apt-get purge -y "${EPHEMERAL[@]}"

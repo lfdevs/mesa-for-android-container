@@ -16,14 +16,14 @@
 #include "nir/radv_meta_nir.h"
 #include "nir/radv_nir.h"
 #include "spirv/nir_spirv.h"
+#include "tools/radv_debug_hang.h"
+#include "tools/radv_debug_nir.h"
 #include "util/memstream.h"
 #include "util/mesa-blake3.h"
 #include "util/streaming-load-memcpy.h"
 #include "util/u_atomic.h"
 #include "ac_shader_util.h"
 #include "radv_cs.h"
-#include "radv_debug.h"
-#include "radv_debug_nir.h"
 #include "radv_entrypoints.h"
 #include "radv_nir_to_llvm.h"
 #include "radv_sdma.h"
@@ -60,12 +60,15 @@ get_nir_options_for_stage(struct radv_compiler_info *compiler_info, mesa_shader_
 
    ac_nir_set_options(compiler_info->ac, compiler_info->key.use_llvm, options);
 
-   options->lower_ffma16 = split_fma || compiler_info->ac->gfx_level < GFX9;
-   options->lower_ffma32 = split_fma || compiler_info->ac->gfx_level < GFX10_3;
-   options->lower_ffma64 = split_fma;
+   if (split_fma) {
+      options->float_mul_add16 |= nir_float_muladd_support_prefers_split;
+      options->float_mul_add32 |= nir_float_muladd_support_prefers_split;
+      options->float_mul_add64 |= nir_float_muladd_support_prefers_split;
+   }
    options->max_unroll_iterations = 32;
    options->max_unroll_iterations_aggressive = 128;
    options->lower_doubles_options = nir_lower_drcp | nir_lower_dsqrt | nir_lower_drsq | nir_lower_ddiv;
+   options->frag_coord_form = nir_frag_coord_xy_z_w_separate | nir_frag_coord_use_w_rcp;
    options->io_options |= nir_io_mediump_is_32bit | nir_io_radv_intrinsic_component_workaround;
    options->varying_expression_max_cost = ac_nir_varying_expression_max_cost;
 }
@@ -576,7 +579,7 @@ radv_shader_spirv_to_nir(const struct radv_compiler_info *compiler_info, struct 
          NIR_PASS(_, nir, nir_remove_dead_variables, nir_var_function_temp | nir_var_shader_temp, NULL);
       }
 
-      NIR_PASS(progress, nir, radv_nir_lower_cooperative_matrix, compiler_info->ac->gfx_level,
+      NIR_PASS(progress, nir, radv_nir_lower_cooperative_matrix, compiler_info->ac->gfx_level, stage,
                nir->info.max_subgroup_size);
       if (progress) {
          NIR_PASS(_, nir, nir_opt_dce);
@@ -624,23 +627,23 @@ radv_shader_spirv_to_nir(const struct radv_compiler_info *compiler_info, struct 
           nir->info.stage == MESA_SHADER_GEOMETRY)
          nir_shader_gather_xfb_info(nir);
 
-      nir_lower_doubles_options lower_doubles = nir->options->lower_doubles_options;
-
-      if (compiler_info->ac->gfx_level == GFX6) {
-         /* GFX6 doesn't support v_floor_f64 and the precision
-          * of v_fract_f64 which is used to implement 64-bit
-          * floor is less than what Vulkan requires.
-          */
-         lower_doubles |= nir_lower_dfloor;
-      }
-
-      NIR_PASS(_, nir, nir_lower_doubles, NULL, lower_doubles);
+      NIR_PASS(_, nir, nir_lower_doubles, NULL, nir->options->lower_doubles_options);
 
       NIR_PASS(_, nir, nir_normalize_sin_cos);
    }
 
    if (nir->info.uses_printf)
       NIR_PASS(_, nir, radv_nir_lower_printf, compiler_info->debug.debug_nir);
+
+   if (nir->info.uses_abort) {
+      nir_lower_abort_options abort_options = {
+         .buffer_addr = compiler_info->debug.shader_abort->buffer_addr,
+         .max_buffer_size = compiler_info->debug.shader_abort->buffer_size,
+         .ptr_bit_size = 64,
+      };
+
+      NIR_PASS(_, nir, nir_lower_abort, &abort_options);
+   }
 
    if (options && options->lower_view_index_to_device_index)
       NIR_PASS(_, nir, nir_lower_view_index_to_device_index);
@@ -3767,8 +3770,8 @@ radv_compute_spi_ps_input(enum amd_gfx_level gfx_level, const struct radv_graphi
                   S_0286CC_FRONT_FACE_ENA(info->ps.reads_front_face) |
                   S_0286CC_POS_FIXED_PT_ENA(info->ps.reads_pixel_coord);
 
-   if (info->ps.reads_frag_coord_mask || info->ps.reads_sample_pos_mask) {
-      uint8_t mask = info->ps.reads_frag_coord_mask | info->ps.reads_sample_pos_mask;
+   if (info->ps.reads_frag_coord_mask) {
+      uint8_t mask = info->ps.reads_frag_coord_mask;
 
       for (unsigned i = 0; i < 4; i++) {
          if (mask & (1 << i))
@@ -3780,8 +3783,7 @@ radv_compute_spi_ps_input(enum amd_gfx_level gfx_level, const struct radv_graphi
       }
    }
 
-   if (info->ps.reads_sample_id || info->ps.reads_frag_shading_rate || info->ps.reads_sample_mask_in ||
-       info->ps.reads_layer) {
+   if (info->ps.reads_sample_id || info->ps.reads_frag_shading_rate || info->ps.reads_layer) {
       spi_ps_input |= S_0286CC_ANCILLARY_ENA(1);
    }
 

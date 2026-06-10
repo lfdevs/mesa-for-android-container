@@ -138,11 +138,11 @@ query_type_is_dummy(struct gl_context *ctx, unsigned type)
    case PIPE_QUERY_OCCLUSION_COUNTER:
    case PIPE_QUERY_OCCLUSION_PREDICATE:
    case PIPE_QUERY_OCCLUSION_PREDICATE_CONSERVATIVE:
-      return !st->has_occlusion_query;
+      return !st->screen->caps.occlusion_query;
    case PIPE_QUERY_PIPELINE_STATISTICS:
-      return !st->has_pipeline_stat;
+      return !st->screen->caps.query_pipeline_statistics;
    case PIPE_QUERY_PIPELINE_STATISTICS_SINGLE:
-      return !st->has_single_pipe_stat;
+      return !st->screen->caps.query_pipeline_statistics_single;
    default:
       break;
    }
@@ -183,7 +183,7 @@ begin_query(struct gl_context *ctx, struct gl_query_object *q)
       type = PIPE_QUERY_SO_OVERFLOW_ANY_PREDICATE;
       break;
    case GL_TIME_ELAPSED:
-      if (st->has_time_elapsed)
+      if (st->screen->caps.query_time_elapsed)
          type = PIPE_QUERY_TIME_ELAPSED;
       else
          type = PIPE_QUERY_TIMESTAMP;
@@ -202,7 +202,7 @@ begin_query(struct gl_context *ctx, struct gl_query_object *q)
    case GL_TASK_SHADER_INVOCATIONS_EXT:
    case GL_MESH_SHADER_INVOCATIONS_EXT:
    case GL_MESH_PRIMITIVES_GENERATED_EXT:
-      type = st->has_single_pipe_stat ? PIPE_QUERY_PIPELINE_STATISTICS_SINGLE
+      type = st->screen->caps.query_pipeline_statistics_single ? PIPE_QUERY_PIPELINE_STATISTICS_SINGLE
                                       : PIPE_QUERY_PIPELINE_STATISTICS;
       break;
    default:
@@ -613,9 +613,6 @@ create_queries(struct gl_context *ctx, GLenum target, GLsizei n, GLuint *ids,
 {
    const char *func = dsa ? "glGenQueries" : "glCreateQueries";
 
-   if (MESA_VERBOSE & VERBOSE_API)
-      _mesa_debug(ctx, "%s(%d)\n", func, n);
-
    if (n < 0) {
       _mesa_error(ctx, GL_INVALID_VALUE, "%s(n < 0)", func);
       return;
@@ -667,9 +664,6 @@ _mesa_DeleteQueries(GLsizei n, const GLuint *ids)
    GET_CURRENT_CONTEXT(ctx);
    FLUSH_VERTICES(ctx, 0, 0);
 
-   if (MESA_VERBOSE & VERBOSE_API)
-      _mesa_debug(ctx, "glDeleteQueries(%d)\n", n);
-
    if (n < 0) {
       _mesa_error(ctx, GL_INVALID_VALUE, "glDeleteQueriesARB(n < 0)");
       return;
@@ -704,9 +698,6 @@ _mesa_IsQuery(GLuint id)
 
    GET_CURRENT_CONTEXT(ctx);
    ASSERT_OUTSIDE_BEGIN_END_WITH_RETVAL(ctx, GL_FALSE);
-
-   if (MESA_VERBOSE & VERBOSE_API)
-      _mesa_debug(ctx, "glIsQuery(%u)\n", id);
 
    if (id == 0)
       return GL_FALSE;
@@ -745,10 +736,6 @@ _mesa_BeginQueryIndexed(GLenum target, GLuint index, GLuint id)
 {
    struct gl_query_object *q, **bindpt;
    GET_CURRENT_CONTEXT(ctx);
-
-   if (MESA_VERBOSE & VERBOSE_API)
-      _mesa_debug(ctx, "glBeginQueryIndexed(%s, %u, %u)\n",
-                  _mesa_enum_to_string(target), index, id);
 
    if (!query_error_check_index(ctx, target, index))
       return;
@@ -852,10 +839,6 @@ _mesa_EndQueryIndexed(GLenum target, GLuint index)
    struct gl_query_object *q, **bindpt;
    GET_CURRENT_CONTEXT(ctx);
 
-   if (MESA_VERBOSE & VERBOSE_API)
-      _mesa_debug(ctx, "glEndQueryIndexed(%s, %u)\n",
-                  _mesa_enum_to_string(target), index);
-
    if (!query_error_check_index(ctx, target, index))
       return;
 
@@ -908,10 +891,6 @@ _mesa_QueryCounter(GLuint id, GLenum target)
 {
    struct gl_query_object *q;
    GET_CURRENT_CONTEXT(ctx);
-
-   if (MESA_VERBOSE & VERBOSE_API)
-      _mesa_debug(ctx, "glQueryCounter(%u, %s)\n", id,
-                  _mesa_enum_to_string(target));
 
    /* error checking */
    if (target != GL_TIMESTAMP) {
@@ -979,12 +958,6 @@ _mesa_GetQueryIndexediv(GLenum target, GLuint index, GLenum pname,
 {
    struct gl_query_object *q = NULL, **bindpt = NULL;
    GET_CURRENT_CONTEXT(ctx);
-
-   if (MESA_VERBOSE & VERBOSE_API)
-      _mesa_debug(ctx, "glGetQueryIndexediv(%s, %u, %s)\n",
-                  _mesa_enum_to_string(target),
-                  index,
-                  _mesa_enum_to_string(pname));
 
    if (!query_error_check_index(ctx, target, index))
       return;
@@ -1135,10 +1108,6 @@ get_query_object(struct gl_context *ctx, const char *func,
 {
    struct gl_query_object *q = NULL;
    uint64_t value;
-
-   if (MESA_VERBOSE & VERBOSE_API)
-      _mesa_debug(ctx, "%s(%u, %s)\n", func, id,
-                  _mesa_enum_to_string(pname));
 
    if (id)
       q = _mesa_lookup_query_object(ctx, id);

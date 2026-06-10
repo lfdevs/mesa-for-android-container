@@ -12,10 +12,9 @@
 #include "meta/radv_meta.h"
 #include "nir/nir.h"
 #include "nir/radv_nir.h"
+#include "tools/radv_rmv.h"
 #include "util/u_atomic.h"
-#include "radv_debug.h"
 #include "radv_pipeline_rt.h"
-#include "radv_rmv.h"
 #include "radv_shader.h"
 #include "radv_shader_args.h"
 #include "vk_pipeline.h"
@@ -142,6 +141,11 @@ radv_pipeline_get_shader_key(const struct radv_compiler_info *compiler_info,
    vk_pipeline_robustness_state_fill(compiler_info->device_robustness_state, &rs, pNext, stage->pNext);
 
    radv_set_stage_key_robustness(&rs, s, &key);
+
+   if (compiler_info->key.coop_matrix_robust_buffer_access) {
+      key.coop_matrix_storage_robustness = rs.storage_buffers != VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_DISABLED;
+      key.coop_matrix_uniform_robustness = rs.uniform_buffers != VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_DISABLED;
+   }
 
    const VkPipelineShaderStageRequiredSubgroupSizeCreateInfo *const subgroup_size =
       vk_find_struct_const(stage->pNext, PIPELINE_SHADER_STAGE_REQUIRED_SUBGROUP_SIZE_CREATE_INFO);
@@ -371,13 +375,13 @@ radv_postprocess_nir(const struct radv_compiler_info *compiler_info, const struc
    nir_move_options sink_opts = nir_move_const_undef | nir_move_copies | nir_dont_move_byte_word_vecs;
 
    if (!stage->key.optimisations_disabled) {
-      NIR_PASS(_, stage->nir, nir_opt_licm);
+      NIR_PASS(_, stage->nir, nir_opt_licm, NULL);
 
       if (stage->stage == MESA_SHADER_VERTEX) {
          /* Always load all VS inputs at the top to eliminate needless VMEM->s_wait->VMEM sequences.
           * Each s_wait can cost 1000 cycles, so make sure all VS input loads are grouped.
           */
-         NIR_PASS(_, stage->nir, nir_opt_move_to_top, nir_move_to_top_input_loads);
+         NIR_PASS(_, stage->nir, nir_opt_move_to_top, nir_move_to_top_input_loads_simple);
          NIR_PASS(_, stage->nir, nir_opt_sink, sink_opts);
          NIR_PASS(_, stage->nir, nir_opt_move, sink_opts);
       } else {
@@ -556,9 +560,7 @@ radv_postprocess_nir(const struct radv_compiler_info *compiler_info, const struc
       if (gfx_level >= GFX8)
          nir_divergence_analysis(stage->nir);
 
-      if (nir_lower_bit_size(stage->nir, ac_nir_lower_bit_size_callback, &gfx_level)) {
-         NIR_PASS(_, stage->nir, nir_opt_constant_folding);
-      }
+      NIR_PASS(_, stage->nir, nir_lower_bit_size, ac_nir_lower_bit_size_callback, &gfx_level);
    }
    if (gfx_level >= GFX9) {
       bool separate_g16 = gfx_level >= GFX10;

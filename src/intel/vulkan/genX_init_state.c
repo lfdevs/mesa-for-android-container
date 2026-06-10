@@ -354,7 +354,7 @@ init_common_queue_state(struct anv_queue *queue, struct anv_batch *batch)
    if (ANV_SUPPORT_RT && device->info->has_ray_tracing) {
       anv_batch_emit(batch, GENX(3DSTATE_BTD), btd) {
          uint32_t dispatch_timeout_counter =
-            device->physical->instance->dispatch_timeout_counter;
+            device->physical->instance->drirc.perf.rt_dispatch_timeout;
          uint32_t clamped_timeout_counter =
             genX(anv_get_btd_dispatch_timeout_counter)(dispatch_timeout_counter);
 #if GFX_VERx10 >= 200
@@ -404,6 +404,7 @@ static VkResult
 init_render_queue_state(struct anv_queue *queue, bool is_companion_rcs_batch)
 {
    struct anv_device *device = queue->device;
+   const struct anv_instance *instance = device->physical->instance;
    UNUSED const struct intel_device_info *devinfo = queue->device->info;
 
    struct anv_async_submit *submit;
@@ -783,7 +784,7 @@ init_render_queue_state(struct anv_queue *queue, bool is_companion_rcs_batch)
    }
 #endif
 
-   if (device->physical->instance->disable_push_constant_alloc) {
+   if (instance->drirc.perf.disable_push_const_alloc) {
       genX(batch_emit_push_constants_alloc)(
          batch, device,
          VK_SHADER_STAGE_VERTEX_BIT |
@@ -1343,6 +1344,7 @@ genX(emit_sampler_state)(const struct anv_device *device,
                          uint32_t border_color_offset,
                          struct anv_sampler_state *state)
 {
+   const struct anv_instance *instance = device->physical->instance;
    const bool seamless_cube =
       !(vk_state->flags & VK_SAMPLER_CREATE_NON_SEAMLESS_CUBE_MAP_BIT_EXT);
 
@@ -1360,7 +1362,7 @@ genX(emit_sampler_state)(const struct anv_device *device,
       const VkFilter mag_filter = plane_has_chroma ?
          vk_state->ycbcr_conversion.chroma_filter : vk_state->mag_filter;
       const bool force_addr_rounding =
-         device->physical->instance->force_filter_addr_rounding;
+         instance->drirc.debug.force_filter_addr_rounding;
       const bool enable_min_filter_addr_rounding =
          force_addr_rounding || min_filter != VK_FILTER_NEAREST;
       const bool enable_mag_filter_addr_rounding =

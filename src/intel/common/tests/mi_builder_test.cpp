@@ -1252,6 +1252,58 @@ TEST_F(mi_builder_test, udiv32_imm)
    }
 }
 
+TEST_F(mi_builder_test, umax2_32)
+{
+   const uint32_t values[] = {
+      0x01234567,
+      0x42424242,
+      0xffffffff,
+      0xf0000000,
+      0x00000001,
+      0x00000000,
+      0x000f0000,
+      0x000f0001,
+   };
+   memcpy(input, values, sizeof(values));
+
+   uint32_t cmp_val = 0x000f0001;
+   for (unsigned i = 0; i < ARRAY_SIZE(values); i++)
+      mi_store(&b, out_mem64(i * 4), mi_umax2(&b, in_mem32(i * 4), mi_imm(cmp_val)));
+
+   submit_batch();
+
+   for (unsigned i = 0; i < ARRAY_SIZE(values); i++) {
+      EXPECT_EQ(*(uint32_t *)(output + i * 4),
+                values[i] >= cmp_val ? values[i] : cmp_val);
+   }
+}
+
+TEST_F(mi_builder_test, umax2_64)
+{
+   const uint64_t values[] = {
+      0x0123456789abcdef,
+      0x4242424242424242,
+      0xffffffffffffffff,
+      0xf000000000000000,
+      0x0000000000000001,
+      0x0000000000000000,
+      0x00000000f0000000,
+      0x00000000f0000001,
+   };
+   memcpy(input, values, sizeof(values));
+
+   uint64_t cmp_val = 0x00000000f0000001;
+   for (unsigned i = 0; i < ARRAY_SIZE(values); i++)
+      mi_store(&b, out_mem64(i * 8), mi_umax2(&b, in_mem64(i * 8), mi_imm(cmp_val)));
+
+   submit_batch();
+
+   for (unsigned i = 0; i < ARRAY_SIZE(values); i++) {
+      EXPECT_EQ(*(uint64_t *)(output + i * 8),
+                values[i] >= cmp_val ? values[i] : cmp_val);
+   }
+}
+
 TEST_F(mi_builder_test, store_if)
 {
    uint64_t u64 = 0xb453b411deadc0deull;

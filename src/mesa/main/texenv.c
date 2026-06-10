@@ -493,13 +493,6 @@ _mesa_texenvfv_indexed( struct gl_context* ctx, GLuint texunit, GLenum target,
                   _mesa_enum_to_string(target));
       return;
    }
-
-   if (MESA_VERBOSE&(VERBOSE_API|VERBOSE_TEXTURE))
-      _mesa_debug(ctx, "glTexEnv %s %s %.1f(%s) ...\n",
-                  _mesa_enum_to_string(target),
-                  _mesa_enum_to_string(pname),
-                  *param,
-                  _mesa_enum_to_string((GLenum) iparam0));
 }
 
 

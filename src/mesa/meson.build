@@ -4,23 +4,14 @@
 subdir('glapi')
 subdir('program')
 
-if _shader_replacement != ''
-  shader_replacement_h = custom_target(
-    'shader_replacement.h',
-    input: [files(_shader_replacement + '/process_shaders.py')],
-    output: 'shader_replacement.h',
-    command: [prog_python, '@INPUT0@', _shader_replacement, '@OUTPUT@'],
-    build_by_default : true,
-    build_always_stale : true,
-  )
-endif
-
 # files shared between classic mesa and gallium mesa
 files_libmesa = files(
   'main/accum.c',
   'main/accum.h',
   'main/api_arrayelt.c',
   'main/api_arrayelt.h',
+  'main/api_trace_helpers.c',
+  'main/api_trace_helpers.h',
   'main/arbprogram.c',
   'main/arrayobj.c',
   'main/arrayobj.h',
@@ -383,6 +374,17 @@ files_libmesa = files(
   'vbo/vbo_util.h',
 )
 
+if _shader_replacement != ''
+  files_libmesa += custom_target(
+    'shader_replacement.h',
+    input: [files(_shader_replacement + '/process_shaders.py')],
+    output: 'shader_replacement.h',
+    command: [prog_python, '@INPUT0@', _shader_replacement, '@OUTPUT@'],
+    build_by_default : false,
+    build_always_stale : true,
+  )
+endif
+
 inc_libmesa_asm = []
 
 format_fallback_c = custom_target(
@@ -417,6 +419,7 @@ files_libmesa += [
   mesa_lex,
   program_parse_tab,
   main_api_exec_c,
+  main_api_trace_c,
   main_api_exec_decl_h,
   main_api_save_h,
   main_api_save_init_h,

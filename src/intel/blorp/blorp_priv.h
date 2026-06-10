@@ -205,17 +205,55 @@ struct blorp_wm_inputs_clear {
    struct blorp_bounds_rect bounds_rect;
 };
 
+/* Parameters using in blorp_indirect_copy.c */
+struct blorp_wm_inputs_indirect {
+   /* The address of the indirect buffer containing the information about the
+    * indirect copy.
+    */
+   uint64_t indirect_buf_addr;
+
+   /* How far apart the information about each copy is inside the indirect
+    * buffer.
+    */
+   uint64_t indirect_buf_stride;
+
+   /* How many copies we have to do. */
+   uint32_t copy_count;
+
+   /* For memory to image copies, we do a single copy per shader. This
+    * represents the index of the copy to be done.
+    */
+   uint32_t copy_idx;
+
+   /* How many dimensions does our image have? 1, 2 or 3. */
+   uint32_t dimensions;
+
+   /* The maximum array layer of the image. */
+   uint32_t max_layer;
+
+   /* When compressed formats are used, we pretend they are a non-compressed
+    * format, of the same bpb. Since we can't maintain the exact same layout
+    * of mipmap and layer offsets, we're forced to make adjustments to where X
+    * and Y actually start, and are also forced to copy only one layer (or Z
+    * axis position) per shader invocation.
+    */
+   uint32_t x_offset;
+   uint32_t y_offset;
+   int forced_layer_or_z;
+};
+
 struct blorp_wm_inputs
 {
    union {
       struct blorp_wm_inputs_blit blit;
       struct blorp_wm_inputs_clear clear;
+      struct blorp_wm_inputs_indirect indirect;
    };
 
    /* Note: Pad out to an integral number of registers when extending, but
     * make sure subgroup_id is the last 32-bit item.
     */
-   uint32_t pad[2];
+   uint32_t pad[1];
    uint32_t subgroup_id;
 };
 
@@ -257,6 +295,7 @@ enum blorp_shader_type {
    BLORP_SHADER_TYPE_MCS_PARTIAL_RESOLVE,
    BLORP_SHADER_TYPE_LAYER_OFFSET_VS,
    BLORP_SHADER_TYPE_GFX4_SF,
+   BLORP_SHADER_TYPE_COPY_INDIRECT,
 };
 
 enum blorp_shader_pipeline {
@@ -328,144 +367,12 @@ struct blorp_base_key
    enum blorp_shader_pipeline shader_pipeline;
 };
 
-#define BLORP_BASE_KEY_INIT(_type)                      \
-   (struct blorp_base_key) {                            \
-      .name = "blorp",                                  \
-      .shader_type = _type,                             \
-      .shader_pipeline = BLORP_SHADER_PIPELINE_RENDER,  \
+#define BLORP_BASE_KEY_INIT(_type, _pipeline)   \
+   (struct blorp_base_key) {                    \
+      .name = "blorp",                          \
+      .shader_type = (_type),                   \
+      .shader_pipeline = (_pipeline),           \
    }
-
-struct blorp_blit_prog_key
-{
-   struct blorp_base_key base;
-
-   /* Number of samples per pixel that have been configured in the surface
-    * state for texturing from.
-    */
-   unsigned tex_samples;
-
-   /* MSAA layout that has been configured in the surface state for texturing
-    * from.
-    */
-   enum isl_msaa_layout tex_layout;
-
-   enum isl_aux_usage tex_aux_usage;
-
-   /* Actual number of samples per pixel in the source image. */
-   unsigned src_samples;
-
-   /* Actual MSAA layout used by the source image. */
-   enum isl_msaa_layout src_layout;
-
-   /* The swizzle to apply to the source in the shader */
-   struct isl_swizzle src_swizzle;
-
-   /* The format of the source if format-specific workarounds are needed
-    * and 0 (ISL_FORMAT_R32G32B32A32_FLOAT) if the destination is natively
-    * renderable.
-    */
-   enum isl_format src_format;
-
-   /* True if the source requires normalized coordinates */
-   bool src_coords_normalized;
-
-   /* Number of samples per pixel that have been configured in the render
-    * target.
-    */
-   unsigned rt_samples;
-
-   /* MSAA layout that has been configured in the render target. */
-   enum isl_msaa_layout rt_layout;
-
-   /* Actual number of samples per pixel in the destination image. */
-   unsigned dst_samples;
-
-   /* Actual MSAA layout used by the destination image. */
-   enum isl_msaa_layout dst_layout;
-
-   /* The swizzle to apply to the destination in the shader */
-   struct isl_swizzle dst_swizzle;
-
-   /* The format of the destination if format-specific workarounds are needed
-    * and 0 (ISL_FORMAT_R32G32B32A32_FLOAT) if the destination is natively
-    * renderable.
-    */
-   enum isl_format dst_format;
-
-   /* Whether or not the format workarounds are a bitcast operation */
-   bool format_bit_cast;
-
-   /** True if we need to perform SINT -> UINT clamping. */
-   bool sint32_to_uint;
-
-   /** True if we need to perform UINT -> SINT clamping. */
-   bool uint32_to_sint;
-
-   /* Type of the data to be read from the texture (one of
-    * nir_type_(int|uint|float)).
-    */
-   nir_alu_type texture_data_type;
-
-   /* True if the source image is W tiled.  If true, the surface state for the
-    * source image must be configured as Y tiled, and tex_samples must be 0.
-    */
-   bool src_tiled_w;
-
-   /* True if the destination image is W tiled.  If true, the surface state
-    * for the render target must be configured as Y tiled, and rt_samples must
-    * be 0.
-    */
-   bool dst_tiled_w;
-
-   /* True if the destination is an RGB format.  If true, the surface state
-    * for the render target must be configured as red with three times the
-    * normal width.  We need to do this because you cannot render to
-    * non-power-of-two formats.
-    */
-   bool dst_rgb;
-
-   isl_surf_usage_flags_t dst_usage;
-
-   enum blorp_filter filter;
-
-   /* True if the rectangle being sent through the rendering pipeline might be
-    * larger than the destination rectangle, so the WM program should kill any
-    * pixels that are outside the destination rectangle.
-    */
-   bool use_kill;
-
-   /**
-    * True if the WM program should be run in MSDISPMODE_PERSAMPLE with more
-    * than one sample per pixel.
-    */
-   bool persample_msaa_dispatch;
-
-   /* True if this blit operation may involve intratile offsets on the source.
-    * In this case, we need to add the offset before texturing.
-    */
-   bool need_src_offset;
-
-   /* True if this blit operation is unpacking the last few rows of the 2D image
-    * from a 1D buffer. This is part of a workaround for performing buffer-to-image
-    * copies when the source is straddling an extra page due to a misaligned cache.
-    */
-   bool need_src_buffer;
-
-   /* True if this blit operation may involve intratile offsets on the
-    * destination.  In this case, we need to add the offset to gl_FragCoord.
-    */
-   bool need_dst_offset;
-
-   /* Scale factors between the pixel grid and the grid of samples. We're
-    * using grid of samples for bilinear filetring in multisample scaled blits.
-    */
-   float x_scale;
-   float y_scale;
-
-   /* If a compute shader is used, this is the local size y dimension.
-    */
-   uint8_t local_y;
-};
 
 /**
  * \name BLORP internals
@@ -591,6 +498,19 @@ blorp_op_type_is_clear(enum blorp_op op)
    case BLORP_OP_SLOW_STENCIL_CLEAR:
    case BLORP_OP_SLOW_DEPTH_STENCIL_CLEAR:
    case BLORP_OP_SLOW_DEPTH_CLEAR:
+      return true;
+   default:
+      return false;
+   }
+}
+
+/* This means: blorp->wm_inputs.indirect should be used. */
+static inline bool
+blorp_op_type_is_indirect(enum blorp_op op)
+{
+   switch (op) {
+   case BLORP_OP_COPY_INDIRECT:
+   case BLORP_OP_COPY_IMAGE_INDIRECT:
       return true;
    default:
       return false;

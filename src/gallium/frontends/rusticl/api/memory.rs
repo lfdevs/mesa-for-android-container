@@ -13,6 +13,7 @@ use crate::core::event::EventSig;
 use crate::core::format::*;
 use crate::core::gl::*;
 use crate::core::memory::*;
+use crate::core::platform::Platform;
 use crate::core::queue::*;
 use crate::rusticl_warn_once;
 
@@ -52,6 +53,14 @@ fn validate_mem_flags(flags: cl_mem_flags, validation: MemFlagValidationType) ->
             | CL_MEM_IMMUTABLE_EXT
             | CL_MEM_ALLOW_UNRESTRICTED_SIZE_INTEL,
     );
+
+    if Platform::features().intel {
+        valid_flags |= cl_bitfield::from(
+            CL_MEM_FORCE_HOST_MEMORY_INTEL
+                | CL_MEM_COMPRESSED_HINT_INTEL
+                | CL_MEM_UNCOMPRESSED_HINT_INTEL,
+        );
+    }
 
     if validation != MemFlagValidationType::Imported {
         valid_flags |= cl_bitfield::from(
@@ -327,6 +336,9 @@ unsafe impl CLInfo<cl_mem_info> for cl_mem {
             }),
             CL_MEM_SIZE => v.write::<usize>(mem.size),
             CL_MEM_TYPE => v.write::<cl_mem_object_type>(mem.mem_type),
+            CL_MEM_USES_COMPRESSION_INTEL if Platform::features().intel => {
+                v.write::<cl_bool>(CL_FALSE)
+            }
             CL_MEM_USES_SVM_POINTER | CL_MEM_USES_SVM_POINTER_ARM => {
                 v.write::<cl_bool>(mem.is_svm().into())
             }

@@ -541,7 +541,7 @@ anv_get_format(const struct anv_physical_device *device, VkFormat vk_format)
     * disabled.
     */
    if ((format->flags & ANV_FORMAT_FLAG_NO_CBCWF) &&
-       device->instance->custom_border_colors_without_format)
+       device->instance->drirc.debug.custom_border_colors_without_format)
       return NULL;
 
    return format;
@@ -627,6 +627,39 @@ anv_get_format_aspect(const struct anv_physical_device *device,
    const uint32_t plane =
       anv_aspect_to_plane(vk_format_aspects(vk_format), aspect);
    return anv_get_format_plane(device, vk_format, plane, tiling);
+}
+
+static bool
+anv_format_supports_indirect_copies(const struct anv_physical_device *pdevice,
+                                    const struct anv_format *anv_format)
+{
+   const struct isl_format_layout *fmtl =
+      isl_format_get_layout(anv_format->planes[0].isl_format);
+
+   /* CTS insists on it even when we say we don't support it. */
+   if (!pdevice->vk.supported_features.indirectMemoryToImageCopy)
+      return false;
+
+   /* TODO: implement support for this in the copy shader. */
+   if (!util_is_power_of_two_or_zero(fmtl->bpb))
+      return false;
+
+   /* TODO: we use compute for indirect copies, and compute cannot write HiZ,
+    * we could try to support that if we see that applications want it.
+    */
+   if (vk_format_is_depth_or_stencil(anv_format->vk_format))
+      return false;
+
+   /* Let's leave YCbCr and multi-planar formats out until we have proper
+    * tests to verify they work.
+    */
+   if (isl_format_is_yuv(anv_format->planes[0].isl_format))
+      return false;
+
+   if (anv_format->n_planes > 1)
+      return false;
+
+   return true;
 }
 
 // Format capabilities
@@ -898,7 +931,7 @@ anv_get_color_format_features(const struct anv_physical_device *physical_device,
     */
    if ((anv_format->flags & ANV_FORMAT_FLAG_STORAGE_FORMAT_EMULATED) == 0) {
       if (isl_format_supports_typed_reads(devinfo, base_isl_format) ||
-          (physical_device->instance->emulate_read_without_format &&
+          (physical_device->instance->drirc.debug.read_without_format_emu &&
            isl_is_storage_image_format(devinfo, plane_format.isl_format)))
          flags |= VK_FORMAT_FEATURE_2_STORAGE_READ_WITHOUT_FORMAT_BIT;
       if (isl_format_supports_typed_writes(devinfo, base_isl_format))
@@ -941,6 +974,10 @@ anv_get_color_format_features(const struct anv_physical_device *physical_device,
       flags |= VK_FORMAT_FEATURE_2_TRANSFER_SRC_BIT |
                VK_FORMAT_FEATURE_2_TRANSFER_DST_BIT;
    }
+
+   if ((flags & VK_FORMAT_FEATURE_2_TRANSFER_DST_BIT) &&
+       anv_format_supports_indirect_copies(physical_device, anv_format))
+      flags |= VK_FORMAT_FEATURE_2_COPY_IMAGE_INDIRECT_DST_BIT_KHR;
 
    /* XXX: We handle 3-channel formats by switching them out for RGBX or
     * RGBA formats behind-the-scenes.  This works fine for textures
@@ -1240,7 +1277,7 @@ get_drm_format_modifier_properties_list(const struct anv_physical_device *physic
          continue;
 
       if (physical_device->info.ver >= 20 &&
-          physical_device->instance->disable_xe2_drm_ccs_modifiers &&
+          physical_device->instance->drirc.debug.disable_xe2_ccs_modifiers &&
           isl_mod_info->supports_render_compression)
          continue;
 
@@ -1840,8 +1877,7 @@ anv_get_image_format_properties(
 
       if (isl_drm_modifier_has_aux(isl_mod_info->modifier) &&
           !anv_formats_ccs_e_compatible(physical_device, info->flags, info->format,
-                                        info->tiling, info->usage,
-                                        format_list_info)) {
+                                        info->tiling, format_list_info)) {
          goto unsupported;
       }
    }
@@ -2108,8 +2144,7 @@ anv_get_image_format_properties(
       (vk_format_has_depth(info->format) ||
        isl_format_supports_ccs_d(devinfo, format->planes[0].isl_format) ||
        anv_formats_ccs_e_compatible(physical_device, info->flags, info->format,
-                                    info->tiling, info->usage,
-                                    format_list_info));
+                                    info->tiling, format_list_info));
 
    if (comp_props) {
       comp_props->imageCompressionFixedRateFlags =

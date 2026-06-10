@@ -1132,6 +1132,26 @@ def triop_horiz(name, output_size, src1_size, src2_size, src3_size, const_expr,
    [src1_size, src2_size, src3_size],
    [tuint, tuint, tuint], False, "", const_expr, description)
 
+triop("fmad", tfloat, _2src_commutative, """
+if (nir_is_rounding_mode_rtz(execution_mode, bit_size)) {
+   if (bit_size == 64)
+      dst = _mesa_double_mul_rtz(src0, src1);
+   else
+      dst = _mesa_double_to_float_rtz((double)src0 * (double)src1);
+} else {
+   dst = src0 * src1;
+}
+dst = handle_intermediate_float_result(dst, execution_mode, bit_size);
+if (nir_is_rounding_mode_rtz(execution_mode, bit_size)) {
+   if (bit_size == 64)
+      dst = _mesa_double_add_rtz(dst, src2);
+   else
+      dst = _mesa_double_to_float_rtz((double)dst + (double)src2);
+} else {
+   dst = dst + src2;
+}
+""", description = "Floating-point unfused multiple-add")
+
 triop("ffma", tfloat, _2src_commutative, """
 if (nir_is_rounding_mode_rtz(execution_mode, bit_size)) {
    if (bit_size == 64)
@@ -1146,6 +1166,53 @@ if (nir_is_rounding_mode_rtz(execution_mode, bit_size)) {
    else
       dst = fma(src0, src1, src2);
 }
+""", description = "Floating-point fused multiple-add")
+
+triop("ffma_weak", tfloat, _2src_commutative, """
+if (nir_is_rounding_mode_rtz(execution_mode, bit_size)) {
+   if (bit_size == 64)
+      dst = _mesa_double_fma_rtz(src0, src1, src2);
+   else if (bit_size == 32)
+      dst = _mesa_float_fma_rtz(src0, src1, src2);
+   else
+      dst = _mesa_double_to_float_rtz(_mesa_double_fma_rtz(src0, src1, src2));
+} else {
+   if (bit_size == 32)
+      dst = fmaf(src0, src1, src2);
+   else
+      dst = fma(src0, src1, src2);
+}
+""", description = """
+Floating-point multiple-add that can eitehr be unfused or fused.
+
+Precise ``ffma_weak`` are required to be either fused or unfused across all
+shaders and shader stages where inprecise ``ffma_weak`` doesn't have to remain
+consistent not even within the same shader.
+
+This is like GLSLs ``ffma``.
+""")
+
+triop("fmadz", tfloat32, _2src_commutative, """
+if (src0 == 0.0 || src1 == 0.0) {
+   dst = 0.0 + src2;
+} else {
+   if (nir_is_rounding_mode_rtz(execution_mode, 32))
+      dst = _mesa_double_to_float_rtz((double)src0 * (double)src1);
+   else
+      dst = (src0 * src1);
+
+   dst = handle_intermediate_float_result(dst, execution_mode, bit_size);
+
+   if (nir_is_rounding_mode_rtz(execution_mode, 32))
+      dst = _mesa_double_to_float_rtz((double)dst + (double)src2);
+   dst = dst + src2;
+}
+""", description = """
+Floating-point unfused multiply-add with modified zero handling.
+
+Unlike :nir:alu-op:`fmad`, anything (even infinity or NaN) multiplied by +/-0.0 is
++0.0. ``fmadz(0.0, inf, src2)`` and ``fmadz(0.0, nan, src2)`` must be
+``+0.0 + src2``.
 """)
 
 triop("ffmaz", tfloat32, _2src_commutative, """
@@ -1156,7 +1223,7 @@ else if (nir_is_rounding_mode_rtz(execution_mode, 32))
 else
    dst = fmaf(src0, src1, src2);
 """, description = """
-Floating-point multiply-add with modified zero handling.
+Floating-point fused multiply-add with modified zero handling.
 
 Unlike :nir:alu-op:`ffma`, anything (even infinity or NaN) multiplied by +/-0.0 is
 +0.0. ``ffmaz(0.0, inf, src2)`` and ``ffmaz(0.0, nan, src2)`` must be

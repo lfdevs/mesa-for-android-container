@@ -127,7 +127,7 @@ libvulkan_util = static_library(
    vk_struct_type_cast, vk_extensions],
   include_directories : [inc_include, inc_src],
   dependencies : [vulkan_wsi_deps, idep_mesautil, idep_nir_headers],
-  c_args : [c_msvc_compat_args],
+  c_args : [c_msvc_compat_args, soong_compat_c_args],
   gnu_symbol_visibility : 'hidden',
   build_by_default : false,
 )

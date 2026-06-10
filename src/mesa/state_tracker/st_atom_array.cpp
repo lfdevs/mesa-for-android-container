@@ -309,7 +309,7 @@ st_setup_current(struct st_context *st,
        * times (thousands of times), so a better placement is going to
        * perform better.
        */
-      struct u_upload_mgr *uploader = st->can_bind_const_buffer_as_vertex ?
+      struct u_upload_mgr *uploader = st->screen->caps.can_bind_const_buffer_as_vertex ?
                                       st->pipe->const_uploader :
                                       st->pipe->stream_uploader;
       uint8_t *ptr = NULL;

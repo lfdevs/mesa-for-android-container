@@ -1088,6 +1088,9 @@ write_ubo_descriptor_addr(uint32_t *dst,
    uint32_t range = va ? DIV_ROUND_UP(buffer_info->range, 16) : 0;
    dst[0] = A6XX_UBO_0_BASE_LO(va);
    dst[1] = A6XX_UBO_1_BASE_HI(va >> 32) | A6XX_UBO_1_SIZE(range);
+
+   for (unsigned i = 2; i < FDL6_TEX_CONST_DWORDS; i++)
+      dst[i] = 0;
 }
 
 static void
@@ -1129,6 +1132,8 @@ write_combined_image_sampler_descriptor(uint32_t *dst,
    if (write_sampler) {
       VK_FROM_HANDLE(tu_sampler, sampler, image_info->sampler);
       memcpy(dst + FDL6_TEX_CONST_DWORDS, sampler->descriptor, sizeof(sampler->descriptor));
+      for (unsigned i = A6XX_TEX_SAMP_DWORDS; i < FDL6_TEX_CONST_DWORDS; i++)
+         dst[i + FDL6_TEX_CONST_DWORDS] = 0;
    }
 
    /* It's technically legal to sample from a mismatched descriptor (i.e. only
@@ -1157,6 +1162,8 @@ write_sampler_descriptor(uint32_t *dst, VkSampler _sampler)
    VK_FROM_HANDLE(tu_sampler, sampler, _sampler);
 
    memcpy(dst, sampler->descriptor, sizeof(sampler->descriptor));
+   for (unsigned i = A6XX_TEX_SAMP_DWORDS; i < FDL6_TEX_CONST_DWORDS; i++)
+      dst[i] = 0;
 }
 
 template <chip CHIP>

@@ -32,7 +32,9 @@ struct r300_capabilities {
     unsigned num_vert_fpus;
     /* The number of texture units. */
     unsigned num_tex_units;
-    /* Whether or not TCL is physically present */
+    /* Whether or not TCL is physically present. */
+    bool has_hardware_tcl;
+    /* Whether or not hardware TCL is enabled. Debug options may disable it. */
     bool has_tcl;
     /* Some chipsets do not have HiZ RAM - other have varying amounts. */
     int hiz_ram;

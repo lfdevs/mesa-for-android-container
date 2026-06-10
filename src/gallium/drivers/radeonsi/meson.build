@@ -53,8 +53,6 @@ files_libradeonsi = files(
   'si_texture.c',
   'si_utrace.c',
   'si_utrace.h',
-  'si_vpe.c',
-  'si_vpe.h',
   'gfx/si_gfx.h',
   'mm/si_mm.h',
   'mm/radeon_bitstream.c',
@@ -79,12 +77,18 @@ files_libradeonsi = files(
   'mm/si_video_dec.h',
   'mm/si_video.c',
   'mm/si_video.h',
+  'mm/si_vpe.c',
+  'mm/si_vpe.h',
 )
 
 radeonsi_include_dirs = [inc_src, inc_include, inc_gallium, inc_gallium_aux, inc_amd_common,
                          inc_gallium_drivers, inc_compiler, inc_amd, inc_amd_vpe, inc_virtio_gpu]
 radeonsi_deps = [dep_clock, dep_libdrm, idep_nir_headers, idep_amd_generated_headers,
-                 idep_mesautil, idep_aco, idep_u_tracepoints, idep_si_tracepoints]
+                 idep_mesautil, idep_u_tracepoints, idep_si_tracepoints]
+
+if with_gfx_compute
+  radeonsi_deps += [idep_aco]
+endif
 
 if with_perfetto
   radeonsi_deps += dep_perfetto
@@ -145,6 +149,7 @@ if with_gfx_compute
     'gfx/si_nir_mark_divergent_texture_non_uniform.c',
     'gfx/si_nir_optim.c',
     'tests/si_tests.c',
+    'tests/si_test_oa_bandwidth.c',
     'tests/si_test_dma_perf.c',
     'tests/si_test_image_copy_region.c',
     'tests/si_test_vm_fault.c',

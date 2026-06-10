@@ -25,6 +25,7 @@
  */
 
 #include "etnaviv_format.h"
+#include "etnaviv_screen.h"
 
 #include "hw/common_3d.xml.h"
 #include "hw/state.xml.h"
@@ -269,14 +270,23 @@ static struct etna_format formats[PIPE_FORMAT_COUNT] = {
 };
 
 uint32_t
-translate_texture_format(enum pipe_format fmt)
+translate_texture_format(enum pipe_format fmt, const struct etna_screen *screen)
 {
    fmt = util_format_linear(fmt);
 
    if (!formats[fmt].present)
       return ETNA_NO_MATCH;
 
-   return formats[fmt].tex;
+   uint32_t format = formats[fmt].tex;
+
+   if (screen->info->halti >= 5) {
+      if (fmt == PIPE_FORMAT_R32_SINT || fmt == PIPE_FORMAT_R32_UINT)
+         format = TEXTURE_FORMAT_EXT_R32I | EXT_FORMAT;
+      else if (fmt == PIPE_FORMAT_R32G32_SINT || fmt == PIPE_FORMAT_R32G32_UINT)
+         format = TEXTURE_FORMAT_EXT_G32R32I | EXT_FORMAT;
+   }
+
+   return format;
 }
 
 bool

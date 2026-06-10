@@ -1,6 +1,8 @@
 // Copyright 2025 Google
 // SPDX-License-Identifier: MIT
 
+use std::io::Error;
+use std::io::ErrorKind;
 use std::io::IoSlice;
 use std::io::IoSliceMut;
 use std::mem::MaybeUninit;
@@ -17,6 +19,7 @@ use rustix::net::listen;
 use rustix::net::recvmsg;
 use rustix::net::sendmsg;
 use rustix::net::socket_with;
+use rustix::net::sockopt::socket_type;
 use rustix::net::AddressFamily;
 use rustix::net::RecvAncillaryBuffer;
 use rustix::net::RecvAncillaryMessage;
@@ -39,6 +42,33 @@ const MAX_IDENTIFIERS: usize = 28;
 
 pub struct Tube {
     socket: OwnedDescriptor,
+}
+
+impl TryFrom<OwnedDescriptor> for Tube {
+    type Error = MesaError;
+
+    fn try_from(socket: OwnedDescriptor) -> Result<Self, Self::Error> {
+        let ty = socket_type(&socket)?;
+        match ty {
+            SocketType::SEQPACKET | SocketType::STREAM => Ok(Tube { socket }),
+            _ => Err(MesaError::Unsupported),
+        }
+    }
+}
+
+impl TryFrom<SocketType> for TubeType {
+    type Error = std::io::Error;
+
+    fn try_from(ty: SocketType) -> Result<Self, Self::Error> {
+        match ty {
+            SocketType::SEQPACKET => Ok(TubeType::Packet),
+            SocketType::STREAM => Ok(TubeType::Stream),
+            ty => {
+                log::warn!("Unsupported socket type {ty:?}");
+                Err(Error::from(ErrorKind::Unsupported))
+            }
+        }
+    }
 }
 
 impl Tube {

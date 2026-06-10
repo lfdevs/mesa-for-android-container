@@ -11,6 +11,7 @@
 #define TU_QUERY_POOL_H
 
 #include "tu_common.h"
+#include "perfcntrs/freedreno_perfcntr.h"
 
 #include "vk_query_pool.h"
 
@@ -24,9 +25,8 @@ enum tu_perf_query_type {
 
 struct tu_perf_query_raw_data
 {
-   uint32_t gid;      /* group-id */
-   uint32_t cid;      /* countable-id within the group */
-   uint32_t cntr_reg; /* counter register within the group */
+   const struct fd_perfcntr_counter *counter;
+   const struct fd_perfcntr_countable *countable;
    uint32_t pass;     /* pass index that countables can be requested */
    uint32_t app_idx;  /* index provided by apps */
 };

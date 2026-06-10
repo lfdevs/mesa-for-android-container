@@ -49,6 +49,49 @@ info on what was updated.
 Workarounds
 ===========
 
+KK_WORKAROUND_11
+----------------
+| macOS version: 26.5
+| Metal ticket: FB22683138
+| Metal ticket status: Waiting resolution
+| CTS test failure: ``dEQP-VK.api.object_management.multithreaded_per_thread_device.merged_pipeline_cache``
+| Comments:
+
+If multiple MTL4Compiler instances are created and used concurrently, they may
+corrupt the heap and crash the application. This has been verified
+independently of KosmicKrisp and reported to Apple using a small demo
+application which directly uses Metal.
+
+The CTS test in question here creates an instance, physical device, and device
+for each of multiple threads, and intentionally creates several pipelines in
+each thread at the same time.
+
+To work around this, maintain a table of devices to compilers, and use it to
+ensure that each device only has one compiler instance to share. `MTLDevice`
+instances are unique within the process, so no matter how many Vulkan devices
+we create, the same GPU uses the same `MTLDevice`. Each `MTL4Compiler` instance
+is still capable of performing concurrent compilation.
+
+KK_WORKAROUND_10
+----------------
+| macOS version: 26.4.1
+| Metal ticket: Not reported
+| Metal ticket status:
+| CTS test failure: ``dEQP-VK.subgroups.arithmetic.compute.subgroupinclusive*_vec4``
+| Comments:
+
+See comment
+https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/41186#note_3470793
+
+In short, certain ``ior`` operations can be and will be turned into ``bcsel``
+before reaching NIR to MSL. However, the MSL compiler seems to incorrectly
+handle ``bcsel`` and the compiled shader misbehaves while the ``ior`` version
+does not. This is worked around by adding a known true value to the conditional
+of the ``bcsel``.
+
+| Log:
+| 2026-05-14: Workaround implemented
+
 KK_WORKAROUND_9
 ---------------
 | macOS version: 26.4.1

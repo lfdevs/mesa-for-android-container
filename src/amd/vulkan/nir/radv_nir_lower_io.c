@@ -130,7 +130,7 @@ radv_nir_lower_io_to_mem(const struct radv_compiler_info *compiler_info, struct 
       ac_nir_lower_task_outputs_to_mem(nir, info->cs.has_query);
       return true;
    } else if (nir->info.stage == MESA_SHADER_MESH) {
-      ac_nir_lower_mesh_inputs_to_mem(nir);
+      ac_nir_lower_mesh_inputs_to_mem(nir, stage->info.ms.has_task);
       return true;
    }
 

@@ -29,6 +29,22 @@
 #include <float.h>
 #include <math.h>
 
+static nir_def *
+nir_fmad_or_ffma(nir_builder *build, nir_def *src0, nir_def *src1,
+                 nir_def *src2)
+{
+   if (nir_prefers_fmad(build->shader, src0->bit_size))
+      return nir_fadd(build, nir_fmul(build, src0, src1), src2);
+   else
+      return nir_ffma(build, src0, src1, src2);
+}
+
+static nir_def *
+nir_fmad_or_fma_imm2(nir_builder *build, nir_def *src0, nir_def *src1, double src2)
+{
+   return nir_fmad_or_ffma(build, src0, src1, nir_imm_floatN_t(build, src2, src0->bit_size));
+}
+
 /*
  * Lowers some unsupported double operations, using only:
  *
@@ -172,8 +188,8 @@ lower_rcp(nir_builder *b, nir_def *src)
     * See https://en.wikipedia.org/wiki/Division_algorithm for more details.
     */
 
-   ra = nir_ffma(b, nir_fneg(b, ra), nir_ffma_imm2(b, ra, src, -1), ra);
-   ra = nir_ffma(b, nir_fneg(b, ra), nir_ffma_imm2(b, ra, src, -1), ra);
+   ra = nir_fmad_or_ffma(b, nir_fneg(b, ra), nir_fmad_or_fma_imm2(b, ra, src, -1), ra);
+   ra = nir_fmad_or_ffma(b, nir_fneg(b, ra), nir_fmad_or_fma_imm2(b, ra, src, -1), ra);
 
    return fix_inv_result(b, ra, src, new_exp);
 }
@@ -299,18 +315,18 @@ lower_sqrt_rsq(nir_builder *b, nir_def *src, bool sqrt)
    nir_def *one_half = nir_imm_double(b, 0.5);
    nir_def *h_0 = nir_fmul(b, one_half, ra);
    nir_def *g_0 = nir_fmul(b, src, ra);
-   nir_def *r_0 = nir_ffma(b, nir_fneg(b, h_0), g_0, one_half);
-   nir_def *h_1 = nir_ffma(b, h_0, r_0, h_0);
+   nir_def *r_0 = nir_fmad_or_ffma(b, nir_fneg(b, h_0), g_0, one_half);
+   nir_def *h_1 = nir_fmad_or_ffma(b, h_0, r_0, h_0);
    nir_def *res;
    if (sqrt) {
-      nir_def *g_1 = nir_ffma(b, g_0, r_0, g_0);
-      nir_def *r_1 = nir_ffma(b, nir_fneg(b, g_1), g_1, src);
-      res = nir_ffma(b, h_1, r_1, g_1);
+      nir_def *g_1 = nir_fmad_or_ffma(b, g_0, r_0, g_0);
+      nir_def *r_1 = nir_fmad_or_ffma(b, nir_fneg(b, g_1), g_1, src);
+      res = nir_fmad_or_ffma(b, h_1, r_1, g_1);
    } else {
       nir_def *y_1 = nir_fmul_imm(b, h_1, 2.0);
-      nir_def *r_1 = nir_ffma(b, nir_fneg(b, y_1), nir_fmul(b, h_1, src),
-                              one_half);
-      res = nir_ffma(b, y_1, r_1, y_1);
+      nir_def *r_1 = nir_fmad_or_ffma(b, nir_fneg(b, y_1), nir_fmul(b, h_1, src),
+                                         one_half);
+      res = nir_fmad_or_ffma(b, y_1, r_1, y_1);
    }
 
    if (sqrt) {
@@ -654,9 +670,9 @@ lower_doubles_instr_to_soft(nir_builder *b, nir_alu_instr *instr,
       name = "__fmul64";
       mangled_name = "__fmul64(u641;u641;";
       break;
-   case nir_op_ffma:
-      name = "__ffma64";
-      mangled_name = "__ffma64(u641;u641;u641;";
+   case nir_op_fmad:
+      name = "__fmad64";
+      mangled_name = "__fmad64(u641;u641;u641;";
       break;
    case nir_op_fsat:
       name = "__fsat64";

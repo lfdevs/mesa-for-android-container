@@ -171,16 +171,16 @@ compile_shader(struct anv_device *device,
       struct brw_compile_fs_params params = {
          .base = {
             .nir = nir,
+            .key = &key.fs.base,
+            .prog_data = (struct brw_stage_prog_data *)&prog_data.fs,
             .log_data = device,
             .debug_flag = DEBUG_WM,
             .stats = stats,
             .mem_ctx = temp_ctx,
          },
-         .key = &key.fs,
-         .prog_data = &prog_data.fs,
       };
       prog_data.base.push_sizes[0] = align(prog_data.base.push_sizes[0], REG_SIZE);
-      program = brw_compile_fs(compiler, &params);
+      program = brw_compile(compiler, &params.base);
 
       if (!ANV_DEBUG(SHADER_PRINT)) {
          unsigned stat_idx = 0;
@@ -208,15 +208,15 @@ compile_shader(struct anv_device *device,
       struct brw_compile_cs_params params = {
          .base = {
             .nir = nir,
+            .key = &key.cs.base,
+            .prog_data = (struct brw_stage_prog_data *)&prog_data.cs,
             .stats = &stats,
             .log_data = device,
             .debug_flag = DEBUG_CS,
             .mem_ctx = temp_ctx,
          },
-         .key = &key.cs,
-         .prog_data = &prog_data.cs,
       };
-      program = brw_compile_cs(compiler, &params);
+      program = brw_compile(compiler, &params.base);
 
       if (!ANV_DEBUG(SHADER_PRINT)) {
          check_sends(&stats, sends_count_expectation);

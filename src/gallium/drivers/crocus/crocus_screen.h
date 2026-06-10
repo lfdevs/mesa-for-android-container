@@ -201,6 +201,7 @@ struct crocus_screen {
       bool always_flush_cache;
       bool limit_trig_input_range;
       float lower_depth_range_rate;
+      float heap_memory_percent;
    } driconf;
 
    uint64_t aperture_bytes;

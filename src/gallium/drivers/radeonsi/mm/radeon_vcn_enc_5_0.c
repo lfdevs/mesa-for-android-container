@@ -80,17 +80,22 @@ static void radeon_enc_encode_params(struct radeon_encoder *enc)
 
 static void radeon_enc_encode_params_h264(struct radeon_encoder *enc)
 {
+   enc->enc_pic.h264_enc_params.lsm_reference_pictures[0].list = 0;
+   enc->enc_pic.h264_enc_params.lsm_reference_pictures[0].list_index = 0xFFFFFFFF;
+   enc->enc_pic.h264_enc_params.lsm_reference_pictures[1].list = 0;
+   enc->enc_pic.h264_enc_params.lsm_reference_pictures[1].list_index = 0xFFFFFFFF;
+   enc->enc_pic.h264_enc_params.num_active_references_l0 = 0;
+   enc->enc_pic.h264_enc_params.num_active_references_l1 = 0;
+   enc->enc_pic.h264_enc_params.ref_list0[0] = 0;
+   enc->enc_pic.h264_enc_params.ref_list0[1] = 0;
+   enc->enc_pic.h264_enc_params.ref_list1[0] = 0;
+
    if (enc->enc_pic.enc_params.reference_picture_index != 0xFFFFFFFF){
       enc->enc_pic.h264_enc_params.lsm_reference_pictures[0].list = 0;
       enc->enc_pic.h264_enc_params.lsm_reference_pictures[0].list_index = 0;
       enc->enc_pic.h264_enc_params.ref_list0[0] =
                enc->enc_pic.enc_params.reference_picture_index;
       enc->enc_pic.h264_enc_params.num_active_references_l0 = 1;
-   } else {
-      enc->enc_pic.h264_enc_params.lsm_reference_pictures[0].list = 0;
-      enc->enc_pic.h264_enc_params.lsm_reference_pictures[0].list_index = 0xFFFFFFFF;
-      enc->enc_pic.h264_enc_params.ref_list0[0] = 0xFFFFFFFF;
-      enc->enc_pic.h264_enc_params.num_active_references_l0 = 0;
    }
 
    if (enc->enc_pic.h264_enc_params.l1_reference_picture0_index != 0xFFFFFFFF) {
@@ -99,12 +104,12 @@ static void radeon_enc_encode_params_h264(struct radeon_encoder *enc)
       enc->enc_pic.h264_enc_params.ref_list1[0] =
                enc->enc_pic.h264_enc_params.l1_reference_picture0_index;
       enc->enc_pic.h264_enc_params.num_active_references_l1 = 1;
-   } else {
+   } else if (enc->enc_pic.h264_enc_params.l0_reference_picture1_index != 0xFFFFFFFF) {
       enc->enc_pic.h264_enc_params.lsm_reference_pictures[1].list = 0;
-      enc->enc_pic.h264_enc_params.lsm_reference_pictures[1].list_index = 0xFFFFFFFF;
-      enc->enc_pic.h264_enc_params.ref_list0[1] = 0;
-      enc->enc_pic.h264_enc_params.ref_list1[0] = 0;
-      enc->enc_pic.h264_enc_params.num_active_references_l1 = 0;
+      enc->enc_pic.h264_enc_params.lsm_reference_pictures[1].list_index = 1;
+      enc->enc_pic.h264_enc_params.ref_list0[1] =
+               enc->enc_pic.h264_enc_params.l0_reference_picture1_index;
+      enc->enc_pic.h264_enc_params.num_active_references_l0 = 2;
    }
 
    RADEON_ENC_BEGIN(enc->cmd.enc_params_h264);
@@ -113,13 +118,11 @@ static void radeon_enc_encode_params_h264(struct radeon_encoder *enc)
    RADEON_ENC_CS(enc->enc_pic.h264_enc_params.is_reference);
    RADEON_ENC_CS(enc->enc_pic.h264_enc_params.is_long_term);
    RADEON_ENC_CS(enc->enc_pic.h264_enc_params.interlaced_mode);
-   RADEON_ENC_CS(enc->enc_pic.h264_enc_params.ref_list0[0]);
-   for (int i = 1; i < RENCODE_H264_MAX_REFERENCE_LIST_SIZE; i++)
-      RADEON_ENC_CS(0x00000000);
+   for (int i = 0; i < RENCODE_H264_MAX_REFERENCE_LIST_SIZE; i++)
+      RADEON_ENC_CS(enc->enc_pic.h264_enc_params.ref_list0[i]);
    RADEON_ENC_CS(enc->enc_pic.h264_enc_params.num_active_references_l0);
-   RADEON_ENC_CS(enc->enc_pic.h264_enc_params.ref_list1[0]);
-   for (int i = 1; i < RENCODE_H264_MAX_REFERENCE_LIST_SIZE; i++)
-      RADEON_ENC_CS(0x00000000);
+   for (int i = 0; i < RENCODE_H264_MAX_REFERENCE_LIST_SIZE; i++)
+      RADEON_ENC_CS(enc->enc_pic.h264_enc_params.ref_list1[i]);
    RADEON_ENC_CS(enc->enc_pic.h264_enc_params.num_active_references_l1);
    RADEON_ENC_CS(enc->enc_pic.h264_enc_params.lsm_reference_pictures[0].list);
    RADEON_ENC_CS(enc->enc_pic.h264_enc_params.lsm_reference_pictures[0].list_index);

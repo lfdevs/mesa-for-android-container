@@ -257,6 +257,7 @@ struct ethosu_subgraph {
    uint32_t *cmdstream;
    uint32_t *cursor;
    uint32_t cmdstream_bo;
+   uint32_t perfmon_id;
 
    struct pipe_resource *io_rsrc;
    unsigned io_used;

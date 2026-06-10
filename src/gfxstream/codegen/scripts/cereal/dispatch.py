@@ -173,10 +173,10 @@ bool vulkan_dispatch_check_%s_%s(
     const VulkanDispatch* vk);
 """ % (tag, featureToCheck))
 
-        emit_feature_check_decl(self.cgenHeader, "instance", "VK_VERSION_1_0")
-        emit_feature_check_decl(self.cgenHeader, "instance", "VK_VERSION_1_1")
-        emit_feature_check_decl(self.cgenHeader, "device", "VK_VERSION_1_0")
-        emit_feature_check_decl(self.cgenHeader, "device", "VK_VERSION_1_1")
+        emit_feature_check_decl(self.cgenHeader, "instance", "VK_BASE_VERSION_1_0")
+        emit_feature_check_decl(self.cgenHeader, "instance", "VK_BASE_VERSION_1_1")
+        emit_feature_check_decl(self.cgenHeader, "device", "VK_BASE_VERSION_1_0")
+        emit_feature_check_decl(self.cgenHeader, "device", "VK_BASE_VERSION_1_1")
 
         self.cgenHeader.line("struct VulkanDispatch {")
         self.module.appendHeader(self.cgenHeader.swapCode())
@@ -331,10 +331,10 @@ bool vulkan_dispatch_check_%s_%s(
 
         instanceApis = self.apisToGet["global-instance"] + self.apisToGet["instance"]
 
-        emit_feature_check_impl(self, self.cgenImpl, "instance", "VK_VERSION_1_0", instanceApis)
-        emit_feature_check_impl(self, self.cgenImpl, "instance", "VK_VERSION_1_1", instanceApis)
-        emit_feature_check_impl(self, self.cgenImpl, "device", "VK_VERSION_1_0", self.apisToGet["device"])
-        emit_feature_check_impl(self, self.cgenImpl, "device", "VK_VERSION_1_1", self.apisToGet["device"])
+        emit_feature_check_impl(self, self.cgenImpl, "instance", "VK_BASE_VERSION_1_0", instanceApis)
+        emit_feature_check_impl(self, self.cgenImpl, "instance", "VK_BASE_VERSION_1_1", instanceApis)
+        emit_feature_check_impl(self, self.cgenImpl, "device", "VK_BASE_VERSION_1_0", self.apisToGet["device"])
+        emit_feature_check_impl(self, self.cgenImpl, "device", "VK_BASE_VERSION_1_1", self.apisToGet["device"])
 
         self.module.appendImpl(self.cgenImpl.swapCode())
 

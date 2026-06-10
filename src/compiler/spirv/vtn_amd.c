@@ -20,7 +20,7 @@ vtn_handle_amd_gcn_shader_instruction(struct vtn_builder *b, SpvOp ext_opcode,
       def = nir_cube_amd(&b->nb, vtn_get_nir_ssa(b, w[5]));
       nir_def *st = nir_swizzle(&b->nb, def, (unsigned[]){1, 0}, 2);
       nir_def *invma = nir_frcp(&b->nb, nir_channel(&b->nb, def, 2));
-      def = nir_ffma_imm2(&b->nb, st, invma, 0.5);
+      def = nir_ffma_weak_imm2(&b->nb, st, invma, 0.5);
       break;
    }
    case TimeAMD: {

@@ -141,15 +141,13 @@ upload_queue_writes(struct kk_cmd_buffer *cmd)
    uint32_t count =
       util_dynarray_num_elements(&enc->imm_writes, struct libkk_imm_write);
    if (count != 0) {
-      uint64_t addr =
+      struct kk_ptr data_gpu =
          kk_pool_upload(cmd, enc->imm_writes.data, enc->imm_writes.size,
-                        sizeof(struct libkk_imm_write))
-            .gpu;
+                        sizeof(struct libkk_imm_write));
       /* kk_cmd_allocate_buffer sets the cmd buffer error so we can just exit */
-      if (!addr)
+      if (unlikely(!data_gpu.gpu))
          return;
-      struct mtl_size grid = {count, 1, 1};
-      libkk_write_u32_array(cmd, grid, false, addr);
+      libkk_write_u32_array(cmd, kk_grid_1d(count), false, data_gpu.gpu);
       enc->imm_writes.size = 0u;
    }
 
@@ -161,10 +159,10 @@ upload_queue_writes(struct kk_cmd_buffer *cmd)
             util_dynarray_element(&enc->copy_query_pool_result_infos,
                                   struct kk_copy_query_pool_results_info, i);
 
-         struct mtl_size grid = {push_data->query_count, 1, 1};
          const struct libkk_copy_queries_args *data =
             (const struct libkk_copy_queries_args *)push_data;
-         libkk_copy_queries_struct(cmd, grid, false, *data);
+         libkk_copy_queries_struct(cmd, kk_grid_1d(push_data->query_count),
+                                   false, *data);
       }
       enc->copy_query_pool_result_infos.size = 0u;
    }
@@ -280,13 +278,16 @@ kk_render_encoder(struct kk_cmd_buffer *cmd)
    struct kk_encoder *encoder = cmd->encoder;
 
    struct kk_graphics_state *gfx = &cmd->state.gfx;
+
    if (gfx->need_to_start_render_pass) {
+      gfx->render.samples = gfx->pipeline_sample_count;
       mtl_render_pass_descriptor_set_default_raster_sample_count(
-         cmd->state.gfx.render_pass_descriptor, gfx->sample_count);
+         cmd->state.gfx.render_pass_descriptor, gfx->render.samples);
       gfx->need_to_start_render_pass = false;
       kk_encoder_start_render(cmd, gfx->render_pass_descriptor,
                               gfx->render.view_mask);
    }
+
    /* Render encoders are created at vkBeginRendering only */
    assert(encoder->main.last_used == KK_ENC_RENDER && encoder->main.encoder);
    return (mtl_render_encoder *)encoder->main.encoder;

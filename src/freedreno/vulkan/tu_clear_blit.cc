@@ -487,27 +487,42 @@ r2d_setup_common(struct tu_cmd_buffer *cmd,
    fixup_dst_format(src_format, &dst_format, &fmt);
    enum a6xx_2d_ifmt ifmt = format_to_ifmt(dst_format);
 
-   uint32_t unknown_8c01 = 0;
+   enum a6xx_a2d_pixel_op pixel_op = PIXEL_OP_DISABLED;
+   enum adreno_rb_blend_factor color_src_factor = FACTOR_ZERO;
+   enum adreno_rb_blend_factor color_dst_factor = FACTOR_ZERO;
+   enum adreno_rb_blend_factor alpha_src_factor = FACTOR_ZERO;
+   enum adreno_rb_blend_factor alpha_dst_factor = FACTOR_ZERO;
 
    /* note: the only format with partial clearing is D24S8 */
    if (dst_format == PIPE_FORMAT_Z24_UNORM_S8_UINT) {
       /* preserve stencil channel */
-      if (aspect_mask == VK_IMAGE_ASPECT_DEPTH_BIT)
-         unknown_8c01 = 0x08000041;
+      if (aspect_mask == VK_IMAGE_ASPECT_DEPTH_BIT) {
+         pixel_op = PIXEL_OP_BLENDING;
+         color_src_factor = FACTOR_ONE;
+         alpha_dst_factor = FACTOR_ONE;
+      }
       /* preserve depth channels */
-      if (aspect_mask == VK_IMAGE_ASPECT_STENCIL_BIT)
-         unknown_8c01 = 0x00084001;
+      if (aspect_mask == VK_IMAGE_ASPECT_STENCIL_BIT) {
+         pixel_op = PIXEL_OP_BLENDING;
+         color_dst_factor = FACTOR_ONE;
+         alpha_src_factor = FACTOR_ONE;
+      }
    }
 
-   tu_cs_emit_pkt4(cs, REG_A6XX_RB_A2D_PIXEL_CNTL, 1);
-   tu_cs_emit(cs, unknown_8c01);    // TODO: seem to be always 0 on A7XX
+   tu_cs_emit_regs(cs, A6XX_RB_A2D_PIXEL_CNTL(
+      .pixel_op = pixel_op,
+      .color_src_factor = color_src_factor,
+      .color_dst_factor = color_dst_factor,
+      .alpha_src_factor = alpha_src_factor,
+      .alpha_dst_factor = alpha_dst_factor,
+   ));
 
    tu_cs_emit_regs(cs, A6XX_RB_A2D_BLT_CNTL(
       .rotate = (enum a6xx_rotation) blit_param,
       .solid_color = clear,
       .color_format = fmt,
       .scissor = scissor,
-      .d24s8 = fmt == FMT6_Z24_UNORM_S8_UINT_AS_R8G8B8A8 && !clear,
+      .is_src_yuv = fmt == FMT6_Z24_UNORM_S8_UINT_AS_R8G8B8A8 && !clear,
       .mask = 0xf,
       .ifmt = util_format_is_srgb(dst_format) ? R2D_UNORM8_SRGB : ifmt,
    ));
@@ -517,7 +532,7 @@ r2d_setup_common(struct tu_cmd_buffer *cmd,
       .solid_color = clear,
       .color_format = fmt,
       .scissor = scissor,
-      .d24s8 = fmt == FMT6_Z24_UNORM_S8_UINT_AS_R8G8B8A8 && !clear,
+      .is_src_yuv = fmt == FMT6_Z24_UNORM_S8_UINT_AS_R8G8B8A8 && !clear,
       .mask = 0xf,
       .ifmt = util_format_is_srgb(dst_format) ? R2D_UNORM8_SRGB : ifmt,
    ));

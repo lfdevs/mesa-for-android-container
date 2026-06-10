@@ -1699,3 +1699,33 @@ BEGIN_TEST(regalloc.call.params.split_blocking_vecs)
 
    finish_ra_test(ra_test_policy());
 END_TEST
+
+BEGIN_TEST(regalloc.move_phi_operand_for_def)
+   //>> p_startpgm
+   if (!setup_cs("", GFX10))
+      return;
+
+   program->dev.vgpr_limit = 4;
+
+   //! v2: %tmp0:v[1-2] = p_unit_test
+   Temp tmp0 = bld.pseudo(aco_opcode::p_unit_test, bld.def(v2, PhysReg(256 + 1)));
+
+   //! p_branch
+   bld.branch(aco_opcode::p_branch);
+
+   //! BB1
+   //! /* logical preds: BB0, / linear preds: BB0, / kind: uniform, top-level, */
+   bld.reset(program->create_and_insert_block());
+   program->blocks[1].linear_preds.push_back(0);
+   program->blocks[1].logical_preds.push_back(0);
+   program->blocks[1].kind |= block_kind_top_level;
+
+   //! v2: %tmp1:v[0-1] = p_phi %tmp0:v[1-2]
+   //! v2: %tmp0_2:v[2-3] = p_phi %tmp0:v[1-2]
+   Temp tmp1 = bld.pseudo(aco_opcode::p_phi, bld.def(v2), tmp0);
+
+   //! p_unit_test %tmp0_2:v[2-3], %tmp1:v[0-1]
+   bld.pseudo(aco_opcode::p_unit_test, tmp0, tmp1);
+
+   finish_ra_test(ra_test_policy());
+END_TEST

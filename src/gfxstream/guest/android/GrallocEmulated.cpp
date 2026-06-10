@@ -19,6 +19,10 @@ static constexpr int numInts = 1;
 
 #define DRM_FORMAT_R8_BLOB fourcc_code('9', '9', '9', '9')
 
+#ifndef DRM_FORMAT_DEPTH32_STENCIL8
+#define DRM_FORMAT_DEPTH32_STENCIL8 fourcc_code('D', 'F', 'S', '8')
+#endif
+
 template <typename T, typename N>
 T DivideRoundUp(T n, N divisor) {
     const T div = static_cast<T>(divisor);
@@ -66,6 +70,8 @@ std::optional<uint32_t> AhbToDrmFormat(uint32_t ahbFormat) {
             return DRM_FORMAT_ARGB8888;
         case GFXSTREAM_AHB_FORMAT_BLOB:
             return DRM_FORMAT_R8_BLOB;
+        case GFXSTREAM_AHB_FORMAT_D32_FLOAT_S8_UINT:
+            return DRM_FORMAT_DEPTH32_STENCIL8;
         case GFXSTREAM_AHB_FORMAT_R8_UNORM:
             return DRM_FORMAT_R8;
         case GFXSTREAM_AHB_FORMAT_YV12:
@@ -156,6 +162,22 @@ const std::unordered_map<uint32_t, DrmFormatInfo>& GetDrmFormatInfoMap() {
                          .horizontalSubsampling = 1,
                          .verticalSubsampling = 1,
                          .bytesPerPixel = 2,
+                     },
+                 },
+         }},
+        {DRM_FORMAT_DEPTH32_STENCIL8,
+         {
+             .androidFormat = GFXSTREAM_AHB_FORMAT_D32_FLOAT_S8_UINT,
+             .virglFormat = VIRGL_FORMAT_Z32_FLOAT_S8X24_UINT,
+             .isYuv = false,
+             .horizontalAlignmentPixels = 1,
+             .verticalAlignmentPixels = 1,
+             .planes =
+                 {
+                     {
+                         .horizontalSubsampling = 1,
+                         .verticalSubsampling = 1,
+                         .bytesPerPixel = 8,
                      },
                  },
          }},

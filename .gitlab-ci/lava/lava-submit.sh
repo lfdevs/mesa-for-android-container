@@ -83,7 +83,7 @@ if [ -n "${ANDROID_CTS_TAG:-}" ]; then
 	LAVA_EXTRA_OVERLAYS+=(
 		- append-overlay
 		  --name=android-cts
-		  --url="$(fdo_find_s3_path "${DATA_STORAGE_PATH}/android-cts/${ANDROID_CTS_TAG}.tar.zst")"
+		  --url="$(fdo_find_s3_path "${DATA_STORAGE_PATH}/android-cts/${DEBIAN_ARCH}/${ANDROID_CTS_TAG}.tar.zst")"
 		  --path="/"
 		  --format=tar
 		  --compression=zstd

@@ -10,7 +10,6 @@
 
 #include <stdbool.h>
 #include <stdio.h>
-#include "brw_eu_inst.h"
 #include "brw_compiler.h"
 #include "brw_eu_defines.h"
 #include "brw_isa_info.h"
@@ -19,217 +18,15 @@
 #include "intel_wa.h"
 #include "util/bitset.h"
 
+#include "intel/compiler/gen/gen.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-struct disasm_info;
-
-#define BRW_EU_MAX_INSN_STACK 5
-
-struct brw_insn_state {
-   /* One of BRW_EXECUTE_* */
-   unsigned exec_size:3;
-
-   /* Group in units of channels */
-   unsigned group:5;
-
-   /* One of BRW_MASK_* */
-   unsigned mask_control:1;
-
-   /* Scheduling info for Gfx12+ */
-   struct tgl_swsb swsb;
-
-   bool saturate:1;
-
-   /* One of BRW_ALIGN_* */
-   unsigned access_mode:1;
-
-   /* One of BRW_PREDICATE_* */
-   enum brw_predicate predicate:4;
-
-   bool pred_inv:1;
-
-   /* Flag subreg.  Bottom bit is subreg, top bits are reg */
-   unsigned flag_subreg:3;
-
-   bool acc_wr_control:1;
-};
-
-struct brw_codegen {
-   brw_eu_inst *store;
-   int store_size;
-   unsigned nr_insn;
-   unsigned int next_insn_offset;
-
-   void *mem_ctx;
-
-   /* Allow clients to push/pop instruction state:
-    */
-   struct brw_insn_state stack[BRW_EU_MAX_INSN_STACK];
-   struct brw_insn_state *current;
-
-   const struct brw_isa_info *isa;
-   const struct intel_device_info *devinfo;
-
-   /* Control flow stacks:
-    * - if_stack contains IF and ELSE instructions which must be patched
-    *   (and popped) once the matching ENDIF instruction is encountered.
-    *
-    *   Just store the instruction pointer(an index).
-    */
-   int *if_stack;
-   int if_stack_depth;
-   int if_stack_array_size;
-
-   /**
-    * loop_stack contains the instruction pointers of the starts of loops which
-    * must be patched (and popped) once the matching WHILE instruction is
-    * encountered.
-    */
-   int *loop_stack;
-   int loop_stack_depth;
-   int loop_stack_array_size;
-
-   struct intel_shader_reloc *relocs;
-   int num_relocs;
-   int reloc_array_size;
-};
-
-struct brw_label {
-   int offset;
-   int number;
-   struct brw_label *next;
-};
-
-static inline brw_eu_inst *
-brw_eu_last_inst(struct brw_codegen *p)
-{
-   return &p->store[p->nr_insn - 1];
-}
-
-void brw_pop_insn_state( struct brw_codegen *p );
-void brw_push_insn_state( struct brw_codegen *p );
-unsigned brw_get_default_exec_size(struct brw_codegen *p);
-unsigned brw_get_default_group(struct brw_codegen *p);
-unsigned brw_get_default_access_mode(struct brw_codegen *p);
-struct tgl_swsb brw_get_default_swsb(struct brw_codegen *p);
-void brw_set_default_exec_size(struct brw_codegen *p, unsigned value);
-void brw_set_default_mask_control( struct brw_codegen *p, unsigned value );
-void brw_set_default_saturate( struct brw_codegen *p, bool enable );
-void brw_set_default_access_mode( struct brw_codegen *p, unsigned access_mode );
-void brw_eu_inst_set_group(const struct intel_device_info *devinfo,
-                        brw_eu_inst *inst, unsigned group);
-void brw_set_default_group(struct brw_codegen *p, unsigned group);
-void brw_set_default_predicate_control(struct brw_codegen *p, enum brw_predicate pc);
-void brw_set_default_predicate_inverse(struct brw_codegen *p, bool predicate_inverse);
-void brw_set_default_flag_reg(struct brw_codegen *p, int reg, int subreg);
-void brw_set_default_acc_write_control(struct brw_codegen *p, unsigned value);
-void brw_set_default_swsb(struct brw_codegen *p, struct tgl_swsb value);
-
-void brw_init_codegen(const struct brw_isa_info *isa,
-                      struct brw_codegen *p, void *mem_ctx);
-bool brw_has_jip(const struct intel_device_info *devinfo, enum opcode opcode);
-bool brw_has_uip(const struct intel_device_info *devinfo, enum opcode opcode);
-bool brw_has_branch_ctrl(const struct intel_device_info *devinfo, enum opcode opcode);
-const struct intel_shader_reloc *brw_get_shader_relocs(struct brw_codegen *p,
-                                                     unsigned *num_relocs);
-const unsigned *brw_get_program( struct brw_codegen *p, unsigned *sz );
-
 bool brw_should_dump_shader_bin(void);
 void brw_dump_shader_bin(void *assembly, int start_offset, int end_offset,
                          const char *identifier);
-
-bool brw_try_override_assembly(struct brw_codegen *p, int start_offset,
-                               const char *read_path, const char *identifier);
-
-void brw_realign(struct brw_codegen *p, unsigned alignment);
-int brw_append_data(struct brw_codegen *p, void *data,
-                    unsigned size, unsigned alignment);
-brw_eu_inst *brw_next_insn(struct brw_codegen *p, unsigned opcode);
-void brw_add_reloc(struct brw_codegen *p, uint32_t id,
-                   enum intel_shader_reloc_type type,
-                   uint32_t offset, uint32_t delta);
-void brw_set_dest(struct brw_codegen *p, brw_eu_inst *insn, struct brw_reg dest);
-void brw_set_src0(struct brw_codegen *p, brw_eu_inst *insn, struct brw_reg reg);
-
-brw_eu_inst *brw_alu1(struct brw_codegen *p, unsigned opcode, struct brw_reg dest,
-                      struct brw_reg src);
-brw_eu_inst *brw_alu2(struct brw_codegen *p, unsigned opcode, struct brw_reg dest,
-                      struct brw_reg src0, struct brw_reg src1);
-brw_eu_inst *brw_alu3(struct brw_codegen *p, unsigned opcode, struct brw_reg dest,
-                      struct brw_reg src0, struct brw_reg src1, struct brw_reg src2);
-
-/* Helpers for regular instructions:
- */
-#define ALU1(OP)				\
-brw_eu_inst *brw_##OP(struct brw_codegen *p,	\
-	      struct brw_reg dest,		\
-	      struct brw_reg src0);
-
-#define ALU2(OP)				\
-brw_eu_inst *brw_##OP(struct brw_codegen *p,	\
-	      struct brw_reg dest,		\
-	      struct brw_reg src0,		\
-	      struct brw_reg src1);
-
-#define ALU3(OP)				\
-brw_eu_inst *brw_##OP(struct brw_codegen *p,	\
-	      struct brw_reg dest,		\
-	      struct brw_reg src0,		\
-	      struct brw_reg src1,		\
-	      struct brw_reg src2);
-
-ALU1(MOV)
-ALU2(SEL)
-ALU1(NOT)
-ALU2(AND)
-ALU2(OR)
-ALU2(XOR)
-ALU2(SHR)
-ALU2(SHL)
-ALU1(DIM)
-ALU2(ASR)
-ALU2(ROL)
-ALU2(ROR)
-ALU3(CSEL)
-ALU1(F32TO16)
-ALU1(F16TO32)
-ALU2(ADD)
-ALU3(ADD3)
-ALU2(AVG)
-ALU2(MUL)
-ALU1(FRC)
-ALU1(RNDD)
-ALU1(RNDE)
-ALU1(RNDU)
-ALU1(RNDZ)
-ALU2(MAC)
-ALU2(MACL)
-ALU2(MACH)
-ALU1(LZD)
-ALU2(DP4)
-ALU2(DPH)
-ALU2(DP3)
-ALU2(DP2)
-ALU3(DP4A)
-ALU2(LINE)
-ALU2(PLN)
-ALU3(MAD)
-ALU3(LRP)
-ALU1(BFREV)
-ALU3(BFE)
-ALU2(BFI1)
-ALU3(BFI2)
-ALU1(FBH)
-ALU1(FBL)
-ALU1(CBIT)
-ALU2(ADDC)
-ALU2(SUBB)
-
-#undef ALU1
-#undef ALU2
-#undef ALU3
 
 /* In Xe2+ each register is 64bytes/512bits long while older platforms it is
  * 32bytes/256bits long.
@@ -315,7 +112,7 @@ static inline uint32_t
 brw_urb_fence_desc(const struct intel_device_info *devinfo)
 {
    assert(devinfo->has_lsc);
-   return brw_urb_desc(devinfo, GFX125_URB_OPCODE_FENCE, false, false, 0);
+   return brw_urb_desc(devinfo, GEN_GFX125_URB_OPCODE_FENCE, false, false, 0);
 }
 
 /**
@@ -497,9 +294,9 @@ brw_dp_untyped_atomic_desc(const struct intel_device_info *devinfo,
 
    unsigned msg_type;
    if (exec_size > 0) {
-      msg_type = HSW_DATAPORT_DC_PORT1_UNTYPED_ATOMIC_OP;
+      msg_type = GEN_DATAPORT_DC_PORT1_UNTYPED_ATOMIC_OP;
    } else {
-      msg_type = HSW_DATAPORT_DC_PORT1_UNTYPED_ATOMIC_OP_SIMD4X2;
+      msg_type = GEN_DATAPORT_DC_PORT1_UNTYPED_ATOMIC_OP_SIMD4X2;
    }
 
    const unsigned msg_control =
@@ -519,7 +316,7 @@ brw_dp_untyped_atomic_float_desc(const struct intel_device_info *devinfo,
    assert(exec_size <= 8 || exec_size == 16);
 
    assert(exec_size > 0);
-   const unsigned msg_type = GFX9_DATAPORT_DC_PORT1_UNTYPED_ATOMIC_FLOAT_OP;
+   const unsigned msg_type = GEN_DATAPORT_DC_PORT1_UNTYPED_ATOMIC_FLOAT_OP;
 
    const unsigned msg_control =
       SET_BITS(atomic_op, 1, 0) |
@@ -545,8 +342,8 @@ brw_dp_untyped_surface_rw_desc(const struct intel_device_info *devinfo,
    assert(exec_size <= 8 || exec_size == 16);
 
    const unsigned msg_type =
-      write ? HSW_DATAPORT_DC_PORT1_UNTYPED_SURFACE_WRITE :
-              HSW_DATAPORT_DC_PORT1_UNTYPED_SURFACE_READ;
+      write ? GEN_DATAPORT_DC_PORT1_UNTYPED_SURFACE_WRITE :
+              GEN_DATAPORT_DC_PORT1_UNTYPED_SURFACE_READ;
 
    /* See also MDC_SM3 in the SKL PRM Vol 2d. */
    const unsigned simd_mode = exec_size == 0 ? 0 : /* SIMD4x2 */
@@ -603,7 +400,7 @@ brw_dp_dword_scattered_rw_desc(const struct intel_device_info *devinfo,
 
    const unsigned msg_type =
       write ? GFX6_DATAPORT_WRITE_MESSAGE_DWORD_SCATTERED_WRITE :
-              GFX7_DATAPORT_DC_DWORD_SCATTERED_READ;
+              GEN_DATAPORT_DC_DWORD_SCATTERED_READ;
 
    const unsigned msg_control =
       SET_BITS(1, 1, 1) | /* Legacy SIMD Mode */
@@ -622,9 +419,9 @@ brw_dp_oword_block_rw_desc(const struct intel_device_info *devinfo,
    assert(!write || align_16B);
 
    const unsigned msg_type =
-      write ?     GFX7_DATAPORT_DC_OWORD_BLOCK_WRITE :
-      align_16B ? GFX7_DATAPORT_DC_OWORD_BLOCK_READ :
-                  GFX7_DATAPORT_DC_UNALIGNED_OWORD_BLOCK_READ;
+      write ?     GEN_DATAPORT_DC_OWORD_BLOCK_WRITE :
+      align_16B ? GEN_DATAPORT_DC_OWORD_BLOCK_READ :
+                  GEN_DATAPORT_DC_UNALIGNED_OWORD_BLOCK_READ;
 
    const unsigned msg_control =
       SET_BITS(BRW_DATAPORT_OWORD_BLOCK_DWORDS(num_dwords), 2, 0);
@@ -641,8 +438,8 @@ brw_dp_a64_untyped_surface_rw_desc(const struct intel_device_info *devinfo,
    assert(exec_size <= 8 || exec_size == 16);
 
    unsigned msg_type =
-      write ? GFX8_DATAPORT_DC_PORT1_A64_UNTYPED_SURFACE_WRITE :
-              GFX8_DATAPORT_DC_PORT1_A64_UNTYPED_SURFACE_READ;
+      write ? GEN_DATAPORT_DC_PORT1_A64_UNTYPED_SURFACE_WRITE :
+              GEN_DATAPORT_DC_PORT1_A64_UNTYPED_SURFACE_READ;
 
    /* See also MDC_SM3 in the SKL PRM Vol 2d. */
    const unsigned simd_mode = exec_size == 0 ? 0 : /* SIMD4x2 */
@@ -652,7 +449,7 @@ brw_dp_a64_untyped_surface_rw_desc(const struct intel_device_info *devinfo,
       SET_BITS(brw_mdc_cmask(num_channels), 3, 0) |
       SET_BITS(simd_mode, 5, 4);
 
-   return brw_dp_desc(devinfo, GFX8_BTI_STATELESS_NON_COHERENT,
+   return brw_dp_desc(devinfo, GEN_BTI_STATELESS_NON_COHERENT,
                       msg_type, msg_control);
 }
 
@@ -666,14 +463,14 @@ brw_dp_a64_oword_block_rw_desc(const struct intel_device_info *devinfo,
    assert(!write || align_16B);
 
    unsigned msg_type =
-      write ? GFX9_DATAPORT_DC_PORT1_A64_OWORD_BLOCK_WRITE :
-              GFX9_DATAPORT_DC_PORT1_A64_OWORD_BLOCK_READ;
+      write ? GEN_DATAPORT_DC_PORT1_A64_OWORD_BLOCK_WRITE :
+              GEN_DATAPORT_DC_PORT1_A64_OWORD_BLOCK_READ;
 
    unsigned msg_control =
       SET_BITS(!align_16B, 4, 3) |
       SET_BITS(BRW_DATAPORT_OWORD_BLOCK_DWORDS(num_dwords), 2, 0);
 
-   return brw_dp_desc(devinfo, GFX8_BTI_STATELESS_NON_COHERENT,
+   return brw_dp_desc(devinfo, GEN_BTI_STATELESS_NON_COHERENT,
                       msg_type, msg_control);
 }
 
@@ -703,15 +500,15 @@ brw_dp_a64_byte_scattered_rw_desc(const struct intel_device_info *devinfo,
    assert(exec_size <= 8 || exec_size == 16);
 
    unsigned msg_type =
-      write ? GFX8_DATAPORT_DC_PORT1_A64_SCATTERED_WRITE :
-              GFX9_DATAPORT_DC_PORT1_A64_SCATTERED_READ;
+      write ? GEN_DATAPORT_DC_PORT1_A64_SCATTERED_WRITE :
+              GEN_DATAPORT_DC_PORT1_A64_SCATTERED_READ;
 
    const unsigned msg_control =
       SET_BITS(GFX8_A64_SCATTERED_SUBTYPE_BYTE, 1, 0) |
       SET_BITS(brw_mdc_a64_ds(bit_size / 8), 3, 2) |
       SET_BITS(exec_size == 16, 4, 4);
 
-   return brw_dp_desc(devinfo, GFX8_BTI_STATELESS_NON_COHERENT,
+   return brw_dp_desc(devinfo, GEN_BTI_STATELESS_NON_COHERENT,
                       msg_type, msg_control);
 }
 
@@ -727,15 +524,15 @@ brw_dp_a64_untyped_atomic_desc(const struct intel_device_info *devinfo,
    assert(devinfo->ver >= 12 || bit_size >= 32);
 
    const unsigned msg_type = bit_size == 16 ?
-      GFX12_DATAPORT_DC_PORT1_A64_UNTYPED_ATOMIC_HALF_INT_OP :
-      GFX8_DATAPORT_DC_PORT1_A64_UNTYPED_ATOMIC_OP;
+      GEN_GFX12_DATAPORT_DC_PORT1_A64_UNTYPED_ATOMIC_HALF_INT_OP :
+      GEN_DATAPORT_DC_PORT1_A64_UNTYPED_ATOMIC_OP;
 
    const unsigned msg_control =
       SET_BITS(atomic_op, 3, 0) |
       SET_BITS(bit_size == 64, 4, 4) |
       SET_BITS(response_expected, 5, 5);
 
-   return brw_dp_desc(devinfo, GFX8_BTI_STATELESS_NON_COHERENT,
+   return brw_dp_desc(devinfo, GEN_BTI_STATELESS_NON_COHERENT,
                       msg_type, msg_control);
 }
 
@@ -752,14 +549,14 @@ brw_dp_a64_untyped_atomic_float_desc(const struct intel_device_info *devinfo,
 
    assert(exec_size > 0);
    const unsigned msg_type = bit_size == 32 ?
-      GFX9_DATAPORT_DC_PORT1_A64_UNTYPED_ATOMIC_FLOAT_OP :
-      GFX12_DATAPORT_DC_PORT1_A64_UNTYPED_ATOMIC_HALF_FLOAT_OP;
+      GEN_DATAPORT_DC_PORT1_A64_UNTYPED_ATOMIC_FLOAT_OP :
+      GEN_GFX12_DATAPORT_DC_PORT1_A64_UNTYPED_ATOMIC_HALF_FLOAT_OP;
 
    const unsigned msg_control =
       SET_BITS(atomic_op, 1, 0) |
       SET_BITS(response_expected, 5, 5);
 
-   return brw_dp_desc(devinfo, GFX8_BTI_STATELESS_NON_COHERENT,
+   return brw_dp_desc(devinfo, GEN_BTI_STATELESS_NON_COHERENT,
                       msg_type, msg_control);
 }
 
@@ -774,8 +571,8 @@ brw_dp_typed_atomic_desc(const struct intel_device_info *devinfo,
    assert(exec_group % 8 == 0);
 
    const unsigned msg_type =
-      exec_size == 0 ? HSW_DATAPORT_DC_PORT1_TYPED_ATOMIC_OP_SIMD4X2 :
-                       HSW_DATAPORT_DC_PORT1_TYPED_ATOMIC_OP;
+      exec_size == 0 ? GEN_DATAPORT_DC_PORT1_TYPED_ATOMIC_OP_SIMD4X2 :
+                       GEN_DATAPORT_DC_PORT1_TYPED_ATOMIC_OP;
 
    const bool high_sample_mask = (exec_group / 8) % 2 == 1;
 
@@ -801,8 +598,8 @@ brw_dp_typed_surface_rw_desc(const struct intel_device_info *devinfo,
    assert(exec_size <= 8);
 
    const unsigned msg_type =
-      write ? HSW_DATAPORT_DC_PORT1_TYPED_SURFACE_WRITE :
-              HSW_DATAPORT_DC_PORT1_TYPED_SURFACE_READ;
+      write ? GEN_DATAPORT_DC_PORT1_TYPED_SURFACE_WRITE :
+              GEN_DATAPORT_DC_PORT1_TYPED_SURFACE_READ;
 
    /* See also MDC_SG3 in the SKL PRM Vol 2d. */
    const unsigned slot_group = exec_size == 0 ? 0 : /* SIMD4x2 */
@@ -855,7 +652,7 @@ brw_fb_read_desc(const struct intel_device_info *devinfo,
    assert(exec_size == 8 || exec_size == 16);
 
    return brw_fb_desc(devinfo, binding_table_index,
-                      GFX9_DATAPORT_RC_RENDER_TARGET_READ, msg_control) |
+                      GEN_DATAPORT_RC_RENDER_TARGET_READ, msg_control) |
           SET_BITS(per_sample, 13, 13) |
           SET_BITS(exec_size == 8, 8, 8) /* Render Target Message Subtype */;
 }
@@ -867,7 +664,7 @@ brw_fb_write_desc(const struct intel_device_info *devinfo,
                   bool last_render_target,
                   bool coarse_write)
 {
-   const unsigned msg_type = GFX6_DATAPORT_WRITE_MESSAGE_RENDER_TARGET_WRITE;
+   const unsigned msg_type = GEN_DATAPORT_WRITE_MESSAGE_RENDER_TARGET_WRITE;
 
    assert(devinfo->ver >= 10 || !coarse_write);
 
@@ -891,96 +688,6 @@ brw_fb_write_desc_coarse_write(const struct intel_device_info *devinfo,
    return GET_BITS(desc, 18, 18);
 }
 
-static inline bool
-lsc_opcode_has_cmask(enum lsc_opcode opcode)
-{
-   return opcode == LSC_OP_LOAD_CMASK || opcode == LSC_OP_STORE_CMASK ||
-          opcode == LSC_OP_LOAD_CMASK_MSRT ||
-          opcode == LSC_OP_STORE_CMASK_MSRT;
-}
-
-static inline bool
-lsc_opcode_has_transpose(enum lsc_opcode opcode)
-{
-   return opcode == LSC_OP_LOAD || opcode == LSC_OP_STORE;
-}
-
-static inline bool
-lsc_opcode_is_store(enum lsc_opcode opcode)
-{
-   return opcode == LSC_OP_STORE ||
-          opcode == LSC_OP_STORE_CMASK ||
-          opcode == LSC_OP_STORE_CMASK_MSRT;
-}
-
-static inline bool
-lsc_opcode_is_atomic(enum lsc_opcode opcode)
-{
-   switch (opcode) {
-   case LSC_OP_ATOMIC_INC:
-   case LSC_OP_ATOMIC_DEC:
-   case LSC_OP_ATOMIC_LOAD:
-   case LSC_OP_ATOMIC_STORE:
-   case LSC_OP_ATOMIC_ADD:
-   case LSC_OP_ATOMIC_SUB:
-   case LSC_OP_ATOMIC_MIN:
-   case LSC_OP_ATOMIC_MAX:
-   case LSC_OP_ATOMIC_UMIN:
-   case LSC_OP_ATOMIC_UMAX:
-   case LSC_OP_ATOMIC_CMPXCHG:
-   case LSC_OP_ATOMIC_FADD:
-   case LSC_OP_ATOMIC_FSUB:
-   case LSC_OP_ATOMIC_FMIN:
-   case LSC_OP_ATOMIC_FMAX:
-   case LSC_OP_ATOMIC_FCMPXCHG:
-   case LSC_OP_ATOMIC_AND:
-   case LSC_OP_ATOMIC_OR:
-   case LSC_OP_ATOMIC_XOR:
-      return true;
-
-   default:
-      return false;
-   }
-}
-
-static inline bool
-lsc_opcode_is_atomic_float(enum lsc_opcode opcode)
-{
-   switch (opcode) {
-   case LSC_OP_ATOMIC_FADD:
-   case LSC_OP_ATOMIC_FSUB:
-   case LSC_OP_ATOMIC_FMIN:
-   case LSC_OP_ATOMIC_FMAX:
-   case LSC_OP_ATOMIC_FCMPXCHG:
-      return true;
-
-   default:
-      return false;
-   }
-}
-
-static inline unsigned
-lsc_op_num_data_values(unsigned _op)
-{
-   enum lsc_opcode op = (enum lsc_opcode) _op;
-
-   switch (op) {
-   case LSC_OP_ATOMIC_CMPXCHG:
-   case LSC_OP_ATOMIC_FCMPXCHG:
-      return 2;
-   case LSC_OP_ATOMIC_INC:
-   case LSC_OP_ATOMIC_DEC:
-   case LSC_OP_LOAD:
-   case LSC_OP_LOAD_CMASK:
-   case LSC_OP_FENCE:
-   case LSC_OP_LOAD_CMASK_MSRT:
-      /* XXX: actually check docs */
-      return 0;
-   default:
-      return 1;
-   }
-}
-
 static inline unsigned
 brw_lsc_op_to_legacy_atomic(unsigned _op)
 {
@@ -988,40 +695,40 @@ brw_lsc_op_to_legacy_atomic(unsigned _op)
 
    switch (op) {
    case LSC_OP_ATOMIC_INC:
-      return BRW_AOP_INC;
+      return GEN_AOP_INC;
    case LSC_OP_ATOMIC_DEC:
-      return BRW_AOP_DEC;
+      return GEN_AOP_DEC;
    case LSC_OP_ATOMIC_STORE:
-      return BRW_AOP_MOV;
+      return GEN_AOP_MOV;
    case LSC_OP_ATOMIC_ADD:
-      return BRW_AOP_ADD;
+      return GEN_AOP_ADD;
    case LSC_OP_ATOMIC_SUB:
-      return BRW_AOP_SUB;
+      return GEN_AOP_SUB;
    case LSC_OP_ATOMIC_MIN:
-      return BRW_AOP_IMIN;
+      return GEN_AOP_IMIN;
    case LSC_OP_ATOMIC_MAX:
-      return BRW_AOP_IMAX;
+      return GEN_AOP_IMAX;
    case LSC_OP_ATOMIC_UMIN:
-      return BRW_AOP_UMIN;
+      return GEN_AOP_UMIN;
    case LSC_OP_ATOMIC_UMAX:
-      return BRW_AOP_UMAX;
+      return GEN_AOP_UMAX;
    case LSC_OP_ATOMIC_CMPXCHG:
-      return BRW_AOP_CMPWR;
+      return GEN_AOP_CMPWR;
    case LSC_OP_ATOMIC_FADD:
-      return BRW_AOP_FADD;
+      return GEN_AOP_FADD;
    case LSC_OP_ATOMIC_FMIN:
-      return BRW_AOP_FMIN;
+      return GEN_AOP_FMIN;
    case LSC_OP_ATOMIC_FMAX:
-      return BRW_AOP_FMAX;
+      return GEN_AOP_FMAX;
    case LSC_OP_ATOMIC_FCMPXCHG:
-      return BRW_AOP_FCMPWR;
+      return GEN_AOP_FCMPWR;
    case LSC_OP_ATOMIC_AND:
-      return BRW_AOP_AND;
+      return GEN_AOP_AND;
    case LSC_OP_ATOMIC_OR:
-      return BRW_AOP_OR;
+      return GEN_AOP_OR;
    case LSC_OP_ATOMIC_XOR:
-      return BRW_AOP_XOR;
-   /* No LSC op maps to BRW_AOP_PREDEC */
+      return GEN_AOP_XOR;
+   /* No LSC op maps to GEN_AOP_PREDEC */
    case LSC_OP_ATOMIC_LOAD:
    case LSC_OP_ATOMIC_FSUB:
       UNREACHABLE("no corresponding legacy atomic operation");
@@ -1038,158 +745,6 @@ brw_lsc_op_to_legacy_atomic(unsigned _op)
    UNREACHABLE("invalid LSC op");
 }
 
-static inline uint32_t
-lsc_data_size_bytes(enum lsc_data_size data_size)
-{
-   switch (data_size) {
-   case LSC_DATA_SIZE_D8:
-      return 1;
-   case LSC_DATA_SIZE_D16:
-      return 2;
-   case LSC_DATA_SIZE_D32:
-   case LSC_DATA_SIZE_D8U32:
-   case LSC_DATA_SIZE_D16U32:
-   case LSC_DATA_SIZE_D16BF32:
-      return 4;
-   case LSC_DATA_SIZE_D64:
-      return 8;
-   default:
-      UNREACHABLE("Unsupported data payload size.");
-   }
-}
-
-static inline uint32_t
-lsc_addr_size_bytes(enum lsc_addr_size addr_size)
-{
-   switch (addr_size) {
-   case LSC_ADDR_SIZE_A16: return 2;
-   case LSC_ADDR_SIZE_A32: return 4;
-   case LSC_ADDR_SIZE_A64: return 8;
-   default:
-      UNREACHABLE("Unsupported address size.");
-   }
-}
-
-static inline uint32_t
-lsc_vector_length(enum lsc_vect_size vect_size)
-{
-   switch (vect_size) {
-   case LSC_VECT_SIZE_V1: return 1;
-   case LSC_VECT_SIZE_V2: return 2;
-   case LSC_VECT_SIZE_V3: return 3;
-   case LSC_VECT_SIZE_V4: return 4;
-   case LSC_VECT_SIZE_V8: return 8;
-   case LSC_VECT_SIZE_V16: return 16;
-   case LSC_VECT_SIZE_V32: return 32;
-   case LSC_VECT_SIZE_V64: return 64;
-   default:
-      UNREACHABLE("Unsupported size of vector");
-   }
-}
-
-static inline enum lsc_vect_size
-lsc_vect_size(unsigned vect_size)
-{
-   switch(vect_size) {
-   case 1:  return LSC_VECT_SIZE_V1;
-   case 2:  return LSC_VECT_SIZE_V2;
-   case 3:  return LSC_VECT_SIZE_V3;
-   case 4:  return LSC_VECT_SIZE_V4;
-   case 8:  return LSC_VECT_SIZE_V8;
-   case 16: return LSC_VECT_SIZE_V16;
-   case 32: return LSC_VECT_SIZE_V32;
-   case 64: return LSC_VECT_SIZE_V64;
-   default:
-      UNREACHABLE("Unsupported vector size for dataport");
-   }
-}
-
-static inline uint32_t
-lsc_msg_desc(const struct intel_device_info *devinfo,
-             enum lsc_opcode opcode,
-             enum lsc_addr_surface_type addr_type,
-             enum lsc_addr_size addr_sz,
-             enum lsc_data_size data_sz, unsigned num_channels_or_cmask,
-             bool transpose, unsigned cache_ctrl)
-{
-   assert(devinfo->has_lsc);
-   assert(!transpose || lsc_opcode_has_transpose(opcode));
-
-   unsigned msg_desc =
-      SET_BITS(opcode, 5, 0) |
-      SET_BITS(addr_sz, 8, 7) |
-      SET_BITS(data_sz, 11, 9) |
-      SET_BITS(transpose, 15, 15) |
-      (devinfo->ver >= 20 ? SET_BITS(cache_ctrl, 19, 16) :
-                            SET_BITS(cache_ctrl, 19, 17)) |
-      SET_BITS(addr_type, 30, 29);
-
-   if (lsc_opcode_has_cmask(opcode))
-      msg_desc |= SET_BITS(num_channels_or_cmask, 15, 12);
-   else
-      msg_desc |= SET_BITS(lsc_vect_size(num_channels_or_cmask), 14, 12);
-
-   return msg_desc;
-}
-
-static inline enum lsc_opcode
-lsc_msg_desc_opcode(UNUSED const struct intel_device_info *devinfo,
-                    uint32_t desc)
-{
-   assert(devinfo->has_lsc);
-   return (enum lsc_opcode) GET_BITS(desc, 5, 0);
-}
-
-static inline enum lsc_addr_size
-lsc_msg_desc_addr_size(UNUSED const struct intel_device_info *devinfo,
-                       uint32_t desc)
-{
-   assert(devinfo->has_lsc);
-   return (enum lsc_addr_size) GET_BITS(desc, 8, 7);
-}
-
-static inline enum lsc_data_size
-lsc_msg_desc_data_size(UNUSED const struct intel_device_info *devinfo,
-                       uint32_t desc)
-{
-   assert(devinfo->has_lsc);
-   return (enum lsc_data_size) GET_BITS(desc, 11, 9);
-}
-
-static inline enum lsc_vect_size
-lsc_msg_desc_vect_size(UNUSED const struct intel_device_info *devinfo,
-                       uint32_t desc)
-{
-   assert(devinfo->has_lsc);
-   assert(!lsc_opcode_has_cmask(lsc_msg_desc_opcode(devinfo, desc)));
-   return (enum lsc_vect_size) GET_BITS(desc, 14, 12);
-}
-
-static inline enum lsc_cmask
-lsc_msg_desc_cmask(UNUSED const struct intel_device_info *devinfo,
-                   uint32_t desc)
-{
-   assert(devinfo->has_lsc);
-   assert(lsc_opcode_has_cmask(lsc_msg_desc_opcode(devinfo, desc)));
-   return (enum lsc_cmask) GET_BITS(desc, 15, 12);
-}
-
-static inline bool
-lsc_msg_desc_transpose(UNUSED const struct intel_device_info *devinfo,
-                       uint32_t desc)
-{
-   assert(devinfo->has_lsc);
-   return GET_BITS(desc, 15, 15);
-}
-
-static inline unsigned
-lsc_msg_desc_cache_ctrl(UNUSED const struct intel_device_info *devinfo,
-                        uint32_t desc)
-{
-   assert(devinfo->has_lsc);
-   return devinfo->ver >= 20 ? GET_BITS(desc, 19, 16) : GET_BITS(desc, 19, 17);
-}
-
 static inline unsigned
 brw_lsc_msg_dest_len(const struct intel_device_info *devinfo,
                      enum lsc_data_size data_sz, unsigned n)
@@ -1204,115 +759,6 @@ brw_lsc_msg_addr_len(const struct intel_device_info *devinfo,
 {
    return DIV_ROUND_UP(lsc_addr_size_bytes(addr_sz) * n,
                        reg_unit(devinfo) * REG_SIZE) * reg_unit(devinfo);
-}
-
-static inline enum lsc_addr_surface_type
-lsc_msg_desc_addr_type(UNUSED const struct intel_device_info *devinfo,
-                       uint32_t desc)
-{
-   assert(devinfo->has_lsc);
-   return (enum lsc_addr_surface_type) GET_BITS(desc, 30, 29);
-}
-
-static inline uint32_t
-lsc_fence_msg_desc(UNUSED const struct intel_device_info *devinfo,
-                   enum lsc_fence_scope scope,
-                   enum lsc_flush_type flush_type,
-                   bool route_to_lsc)
-{
-   assert(devinfo->has_lsc);
-
-#if INTEL_NEEDS_WA_22017182272
-   assert(flush_type != LSC_FLUSH_TYPE_DISCARD);
-#endif
-
-   return SET_BITS(LSC_OP_FENCE, 5, 0) |
-          SET_BITS(LSC_ADDR_SIZE_A32, 8, 7) |
-          SET_BITS(scope, 11, 9) |
-          SET_BITS(flush_type, 14, 12) |
-          SET_BITS(route_to_lsc, 18, 18) |
-          SET_BITS(LSC_ADDR_SURFTYPE_FLAT, 30, 29);
-}
-
-static inline enum lsc_fence_scope
-lsc_fence_msg_desc_scope(UNUSED const struct intel_device_info *devinfo,
-                         uint32_t desc)
-{
-   assert(devinfo->has_lsc);
-   return (enum lsc_fence_scope) GET_BITS(desc, 11, 9);
-}
-
-static inline enum lsc_flush_type
-lsc_fence_msg_desc_flush_type(UNUSED const struct intel_device_info *devinfo,
-                              uint32_t desc)
-{
-   assert(devinfo->has_lsc);
-   return (enum lsc_flush_type) GET_BITS(desc, 14, 12);
-}
-
-static inline enum lsc_backup_fence_routing
-lsc_fence_msg_desc_backup_routing(UNUSED const struct intel_device_info *devinfo,
-                                  uint32_t desc)
-{
-   assert(devinfo->has_lsc);
-   return (enum lsc_backup_fence_routing) GET_BITS(desc, 18, 18);
-}
-
-static inline uint32_t
-lsc_bti_ex_desc(const struct intel_device_info *devinfo, unsigned bti,
-                unsigned base_offset)
-{
-   assert(devinfo->has_lsc);
-   return SET_BITS(bti, 31, 24) |
-          SET_BITS(base_offset, 23, 12);  /* base offset */
-}
-
-static inline unsigned
-lsc_bti_ex_desc_base_offset(const struct intel_device_info *devinfo,
-                            uint32_t ex_desc)
-{
-   assert(devinfo->has_lsc);
-   return GET_BITS(ex_desc, 23, 12);
-}
-
-static inline unsigned
-lsc_bti_ex_desc_index(const struct intel_device_info *devinfo,
-                      uint32_t ex_desc)
-{
-   assert(devinfo->has_lsc);
-   return GET_BITS(ex_desc, 31, 24);
-}
-
-static inline unsigned
-lsc_flat_ex_desc(const struct intel_device_info *devinfo,
-                 uint32_t base_offset)
-{
-   assert(devinfo->has_lsc);
-   return SET_BITS(base_offset, 31, 12);
-}
-
-static inline unsigned
-lsc_flat_ex_desc_base_offset(const struct intel_device_info *devinfo,
-                             uint32_t ex_desc)
-{
-   assert(devinfo->has_lsc);
-   return GET_BITS(ex_desc, 31, 12);
-}
-
-static inline uint32_t
-lsc_bss_ex_desc(const struct intel_device_info *devinfo,
-                unsigned surface_state_index)
-{
-   assert(devinfo->has_lsc);
-   return SET_BITS(surface_state_index, 31, 6);
-}
-
-static inline unsigned
-lsc_bss_ex_desc_index(const struct intel_device_info *devinfo,
-                      uint32_t ex_desc)
-{
-   assert(devinfo->has_lsc);
-   return GET_BITS(ex_desc, 31, 6);
 }
 
 static inline uint32_t
@@ -1398,183 +844,8 @@ brw_pixel_interp_desc(UNUSED const struct intel_device_info *devinfo,
            SET_BITS(simd_mode, 16, 16));
 }
 
-static inline enum gfx12_systolic_depth
-translate_systolic_depth(unsigned d)
-{
-   /* Could also return (ffs(d) - 1) & 3. */
-   switch (d) {
-   case 2:  return BRW_SYSTOLIC_DEPTH_2;
-   case 4:  return BRW_SYSTOLIC_DEPTH_4;
-   case 8:  return BRW_SYSTOLIC_DEPTH_8;
-   case 16: return BRW_SYSTOLIC_DEPTH_16;
-   default: UNREACHABLE("Invalid systolic depth.");
-   }
-}
-
-void
-brw_SEND(struct brw_codegen *p,
-         unsigned sfid,
-         struct brw_reg dst,
-         struct brw_reg payload0,
-         struct brw_reg payload1,
-         struct brw_reg desc,
-         struct brw_reg ex_desc,
-         uint32_t ex_desc_imm_inst,
-         unsigned ex_mlen,
-         bool ex_bso,
-         bool eot,
-         bool gather);
-
-void gfx6_math(struct brw_codegen *p,
-	       struct brw_reg dest,
-	       unsigned function,
-	       struct brw_reg src0,
-	       struct brw_reg src1);
-
-/**
- * Return the generation-specific jump distance scaling factor.
- *
- * Given the number of instructions to jump, we need to scale by
- * some number to obtain the actual jump distance to program in an
- * instruction.
- */
-static inline unsigned
-brw_jump_scale(const struct intel_device_info *devinfo)
-{
-   /* Broadwell measures jump targets in bytes. */
-   return 16;
-}
-
-void brw_barrier(struct brw_codegen *p, struct brw_reg src);
-
-/* If/else/endif.  Works by manipulating the execution flags on each
- * channel.
- */
-brw_eu_inst *brw_IF(struct brw_codegen *p, unsigned execute_size);
-
-void brw_ELSE(struct brw_codegen *p);
-void brw_ENDIF(struct brw_codegen *p);
-
-brw_eu_inst *brw_BFN(struct brw_codegen *p, struct brw_reg dest,
-                     struct brw_reg src0, struct brw_reg src1,
-                     struct brw_reg src2, struct brw_reg table_byte);
-
-/* DO/WHILE loops:
- */
-brw_eu_inst *brw_DO(struct brw_codegen *p, unsigned execute_size);
-
-brw_eu_inst *brw_WHILE(struct brw_codegen *p);
-
-brw_eu_inst *brw_BREAK(struct brw_codegen *p);
-brw_eu_inst *brw_CONT(struct brw_codegen *p);
-brw_eu_inst *brw_HALT(struct brw_codegen *p);
-
-/* Forward jumps:
- */
-brw_eu_inst *brw_JMPI(struct brw_codegen *p, struct brw_reg index,
-                   unsigned predicate_control);
-
-void brw_NOP(struct brw_codegen *p);
-
-void brw_WAIT(struct brw_codegen *p);
-
-void brw_SYNC(struct brw_codegen *p, enum tgl_sync_function func);
-
-/* Special case: there is never a destination, execution size will be
- * taken from src0:
- */
-void brw_CMP(struct brw_codegen *p,
-	     struct brw_reg dest,
-	     unsigned conditional,
-	     struct brw_reg src0,
-	     struct brw_reg src1);
-
-void brw_CMPN(struct brw_codegen *p,
-              struct brw_reg dest,
-              unsigned conditional,
-              struct brw_reg src0,
-              struct brw_reg src1);
-
-brw_eu_inst *brw_DPAS(struct brw_codegen *p, enum gfx12_systolic_depth sdepth,
-                   unsigned rcount, struct brw_reg dest, struct brw_reg src0,
-                   struct brw_reg src1, struct brw_reg src2);
-
-brw_eu_inst *brw_SRND(struct brw_codegen *p, struct brw_reg dest,
-                   struct brw_reg src0, struct brw_reg src1);
-
-void
-brw_broadcast(struct brw_codegen *p,
-              struct brw_reg dst,
-              struct brw_reg src,
-              struct brw_reg idx);
-
-void
-brw_float_controls_mode(struct brw_codegen *p,
-                        unsigned mode, unsigned mask);
-
-void
-brw_update_reloc_imm(const struct brw_isa_info *isa,
-                     brw_eu_inst *inst,
-                     uint32_t value);
-
-void
-brw_MOV_reloc_imm(struct brw_codegen *p,
-                  struct brw_reg dst,
-                  enum brw_reg_type src_type,
-                  uint32_t id, uint32_t base);
-
-unsigned
-brw_num_sources_from_inst(const struct brw_isa_info *isa,
-                          const brw_eu_inst *inst);
-
-void brw_set_src1(struct brw_codegen *p, brw_eu_inst *insn, struct brw_reg reg);
-
-void brw_set_desc_ex(struct brw_codegen *p, brw_eu_inst *insn,
-                     unsigned desc, unsigned ex_desc, bool gather);
-
-static inline void
-brw_set_desc(struct brw_codegen *p, brw_eu_inst *insn, unsigned desc, bool gather)
-{
-   brw_set_desc_ex(p, insn, desc, 0, gather);
-}
-
-void brw_set_uip_jip(struct brw_codegen *p, int start_offset, int final_halt_offset);
-
 enum brw_conditional_mod brw_negate_cmod(enum brw_conditional_mod cmod);
 enum brw_conditional_mod brw_swap_cmod(enum brw_conditional_mod cmod);
-
-/* brw_eu_compact.c */
-void brw_compact_instructions(struct brw_codegen *p, int start_offset,
-                              struct disasm_info *disasm);
-void brw_uncompact_instruction(const struct brw_isa_info *isa,
-                               brw_eu_inst *dst, brw_eu_compact_inst *src);
-bool brw_try_compact_instruction(const struct brw_isa_info *isa,
-                                 brw_eu_compact_inst *dst, const brw_eu_inst *src);
-
-void brw_debug_compact_uncompact(const struct brw_isa_info *isa,
-                                 brw_eu_inst *orig, brw_eu_inst *uncompacted);
-
-/* brw_eu_validate.c */
-bool brw_validate_instruction(const struct brw_isa_info *isa,
-                              const brw_eu_inst *inst, int offset,
-                              unsigned inst_size,
-                              struct disasm_info *disasm);
-bool brw_validate_instructions(const struct brw_isa_info *isa,
-                               const void *assembly, int start_offset, int end_offset,
-                               struct disasm_info *disasm);
-
-static inline int
-next_offset(struct brw_codegen *p, void *store, int offset)
-{
-   const struct intel_device_info *devinfo = p->devinfo;
-   assert((char *)store + offset < (char *)p->store + p->next_insn_offset);
-   brw_eu_inst *insn = (brw_eu_inst *)((char *)store + offset);
-
-   if (brw_eu_inst_cmpt_control(devinfo, insn))
-      return offset + 8;
-   else
-      return offset + 16;
-}
 
 /** Maximum SEND message length */
 #define BRW_MAX_MSG_LENGTH 15

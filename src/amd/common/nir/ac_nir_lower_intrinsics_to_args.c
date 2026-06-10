@@ -195,11 +195,18 @@ lower_intrinsic_to_arg(nir_builder *b, nir_intrinsic_instr *intrin, void *state)
    case nir_intrinsic_load_pixel_coord:
       replacement = nir_unpack_32_2x16(b, ac_nir_load_arg(b, s->args, s->args->pos_fixed_pt));
       break;
-   case nir_intrinsic_load_frag_coord:
-      replacement = nir_vec4(b, ac_nir_load_arg(b, s->args, s->args->frag_pos[0]),
-                             ac_nir_load_arg(b, s->args, s->args->frag_pos[1]),
-                             ac_nir_load_arg(b, s->args, s->args->frag_pos[2]),
-                             ac_nir_load_arg(b, s->args, s->args->frag_pos[3]));
+   case nir_intrinsic_load_frag_coord_xy:
+      replacement = nir_vec2(b, ac_nir_load_arg(b, s->args, s->args->frag_pos[0]),
+                             ac_nir_load_arg(b, s->args, s->args->frag_pos[1]));
+      break;
+   case nir_intrinsic_load_frag_coord_z:
+      replacement = ac_nir_load_arg(b, s->args, s->args->frag_pos[2]);
+      break;
+   case nir_intrinsic_load_frag_coord_w_rcp:
+      replacement = ac_nir_load_arg(b, s->args, s->args->frag_pos[3]);
+      break;
+   case nir_intrinsic_load_sample_mask_in:
+      replacement = ac_nir_load_arg(b, s->args, s->args->sample_coverage);
       break;
    case nir_intrinsic_load_local_invocation_id: {
       unsigned num_bits[3];
@@ -335,10 +342,6 @@ lower_intrinsic_to_arg(nir_builder *b, nir_intrinsic_instr *intrin, void *state)
    case nir_intrinsic_load_sample_id:
       replacement = ac_nir_unpack_arg(b, s->args, s->args->ancillary, 8, 4);
       break;
-   case nir_intrinsic_load_sample_pos:
-      replacement = nir_vec2(b, nir_ffract(b, ac_nir_load_arg(b, s->args, s->args->frag_pos[0])),
-                             nir_ffract(b, ac_nir_load_arg(b, s->args, s->args->frag_pos[1])));
-      break;
    case nir_intrinsic_load_frag_shading_rate: {
       /* VRS Rate X = Ancillary[2:3]
        * VRS Rate Y = Ancillary[4:5]
@@ -405,8 +408,8 @@ lower_intrinsic_to_arg(nir_builder *b, nir_intrinsic_instr *intrin, void *state)
       nir_def *ddy_j = nir_ddy(b, j);
 
       /* Interpolate standard barycentrics by offset. */
-      nir_def *offset_i = nir_ffma(b, ddy_i, offset_y, nir_ffma(b, ddx_i, offset_x, i));
-      nir_def *offset_j = nir_ffma(b, ddy_j, offset_y, nir_ffma(b, ddx_j, offset_x, j));
+      nir_def *offset_i = nir_ffma_weak(b, ddy_i, offset_y, nir_ffma_weak(b, ddx_i, offset_x, i));
+      nir_def *offset_j = nir_ffma_weak(b, ddy_j, offset_y, nir_ffma_weak(b, ddx_j, offset_x, j));
       replacement = nir_vec2(b, offset_i, offset_j);
       break;
    }

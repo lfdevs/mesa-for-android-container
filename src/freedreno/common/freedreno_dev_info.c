@@ -75,7 +75,7 @@ fd_dev_info_raw(const struct fd_dev_id *id)
    return NULL;
 }
 
-const struct fd_dev_info
+struct fd_dev_info
 fd_dev_info(const struct fd_dev_id *id)
 {
    struct fd_dev_info modified = {};

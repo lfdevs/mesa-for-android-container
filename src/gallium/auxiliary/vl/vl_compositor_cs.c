@@ -46,6 +46,9 @@ struct cs_viewport {
    float chroma_offset_y;
    float proj[2][4];
    float chroma_proj[2][4];
+   int blend_enabled;
+   int blend_mode;
+   float blend_alpha;
 };
 
 struct cs_shader {
@@ -55,7 +58,7 @@ struct cs_shader {
    unsigned num_samplers;
    nir_variable *samplers[3];
    nir_variable *image;
-   nir_def *params[17];
+   nir_def *params[18];
    nir_def *fone;
    nir_def *fzero;
 };
@@ -92,10 +95,13 @@ static nir_def *cs_create_shader(struct vl_compositor *c, struct cs_shader *s)
          vec2 subsample_ratio; // params[5].zw
          vec2 coord_clamp;     // params[6].xy
          vec2 chroma_clamp;    // params[6].zw
-         vec4 proj[3];         // params[7-8]
-         vec4 chroma_proj[3];  // params[9-10]
+         vec4 proj[2];         // params[7-8]
+         vec4 chroma_proj[2];  // params[9-10]
          vec4 rgb2yuv[3];      // params[11-13]
          vec4 primaries[3];    // params[14-16]
+         int blend_enabled;    // params[17].x
+         int blend_mode;       // params[17].y
+         float blend_alpha;    // params[17].z
       };
 
       void main()
@@ -208,7 +214,7 @@ static inline nir_def *cs_chroma_offset(struct cs_shader *s, nir_def *src, unsig
    nir_def *offset = nir_channels(b, s->params[3], 0x3 << 2);
    if (flags & COORDS_CHROMA)
       return nir_fadd(b, src, offset);
-   return nir_ffma_imm1(b, offset, -0.5f, src);
+   return nir_ffma_weak_imm1(b, offset, -0.5f, src);
 }
 
 static inline nir_def *cs_clamp(struct cs_shader *s, nir_def *src, unsigned flags)
@@ -417,6 +423,53 @@ static inline nir_def *cs_fetch_texel(struct cs_shader *s, nir_def *coords, unsi
                   .texture_deref = tex_deref, .sampler_deref = tex_deref);
 }
 
+static inline nir_def *cs_apply_blend(struct cs_shader *s, nir_def *color, nir_def *dst_color, nir_def *alpha, nir_def *dst_alpha)
+{
+   /*
+      int blend_enabled = params[17].x;
+      float global_alpha = params[17].z;
+      float alpha = alpha ? alpha : 1.0;
+      alpha *= global_alpha;
+
+      blended = dst_color * (1.0 - alpha) + color * alpha;
+      if (dst_alpha)
+         blended.w = dst_alpha;
+      color = blend_enabled ? blended : color;
+      return color;
+   */
+   nir_builder *b = &s->b;
+   nir_def *blend_enabled = nir_channel(b, s->params[17], 0);
+   nir_def *global_alpha = nir_channel(b, s->params[17], 2);
+   alpha = alpha ? alpha : s->fone;
+   alpha = nir_fmul(b, alpha, global_alpha);
+
+   alpha = nir_replicate(b, alpha, color->num_components);
+   nir_def *blended = nir_flrp(b, dst_color, color, alpha);
+
+   if (dst_alpha)
+      blended = nir_vector_insert_imm(b, blended, dst_alpha, 3);
+
+   color = nir_bcsel(b, nir_ine_imm(b, blend_enabled, 0), blended, color);
+   return color;
+}
+
+static inline nir_def *cs_premultiplied_to_straight_alpha(struct cs_shader *s, nir_def *color, nir_def *alpha)
+{
+   /*
+      if (blend_mode & PIPE_VIDEO_VPP_BLEND_MODE_PREMULTIPLIED_ALPHA)
+         return color / alpha;
+      return color;
+   */
+   nir_builder *b = &s->b;
+   nir_def *blend_mode = nir_channel(b, s->params[17], 1);
+   nir_def *has_premultiplied_alpha =
+      nir_ine_imm(b, nir_iand_imm(b, blend_mode, PIPE_VIDEO_VPP_BLEND_MODE_PREMULTIPLIED_ALPHA), 0);
+
+   nir_def *straight_alpha_color = nir_fdiv(b, color, nir_replicate(b, alpha, color->num_components));
+   straight_alpha_color = nir_fsat(b, straight_alpha_color);
+   return nir_bcsel(b, has_premultiplied_alpha, straight_alpha_color, color);
+}
+
 static inline nir_def *cs_image_load(struct cs_shader *s, nir_def *pos)
 {
    /*
@@ -480,13 +533,23 @@ static void *create_video_buffer_shader(struct vl_compositor *c)
    nir_def *col[3];
    for (unsigned i = 0; i < 3; ++i)
       col[i] = cs_fetch_texel(&s, pos[MIN2(i, 1)], i);
+   nir_def *alpha = nir_channel(b, col[0], 3);
 
    nir_def *color = nir_vec4(b, col[0], col[1], col[2], s.fone);
+   color = cs_premultiplied_to_straight_alpha(&s, color, alpha);
+
    for (unsigned i = 0; i < 3; ++i)
       col[i] = cs_color_conversion(&s, color, i, YUV2RGB);
 
    color = nir_vec4(b, col[0], col[1], col[2], s.fone);
    color = cs_prim_trc_conversion(&s, color);
+   color = nir_vector_insert_imm(b, color, alpha, 3);
+
+   nir_def *dst_color = cs_image_load(&s, cs_translate(&s, ipos));
+   nir_def *dst_alpha = nir_channel(b, dst_color, 3);
+
+   color = cs_apply_blend(&s, color, dst_color, alpha, dst_alpha);
+
    cs_image_store(&s, cs_translate(&s, ipos), color);
 
    return cs_create_shader_state(c, &s);
@@ -522,17 +585,21 @@ static void *create_yuv_progressive_shader(struct vl_compositor *c, enum vl_comp
 
    color = nir_vec4(b, col[0], col[1], col[2], s.fone);
 
+   nir_def *dst_color = cs_image_load(&s, cs_translate(&s, ipos));
+
    if (plane != VL_COMPOSITOR_PLANE_UV) {
       unsigned c = 0;
       if (plane == VL_COMPOSITOR_PLANE_U)
          c = 1;
       else if (plane == VL_COMPOSITOR_PLANE_V)
          c = 2;
-      color = nir_channel(b, color, c);
+      nir_def *src = nir_channel(b, color, c);
+      nir_def *dst = nir_channel(b, dst_color, c);
+      color = cs_apply_blend(&s, src, dst, NULL, NULL);
    } else {
-      nir_def *col1 = nir_channel(b, color, 1);
-      nir_def *col2 = nir_channel(b, color, 2);
-      color = nir_vec2(b, col1, col2);
+      nir_def *src = nir_vec2(b, nir_channel(b, color, 1), nir_channel(b, color, 2));
+      nir_def *dst = nir_vec2(b, nir_channel(b, dst_color, 0), nir_channel(b, dst_color, 1));
+      color = cs_apply_blend(&s, src, dst, NULL, NULL);
    }
 
    cs_image_store(&s, cs_translate(&s, ipos), color);
@@ -550,10 +617,12 @@ static void *create_rgb_yuv_shader(struct vl_compositor *c, enum vl_compositor_p
 
    nir_def *ipos = cs_create_shader(c, &s);
    nir_def *color = NULL;
+   nir_def *alpha = NULL;
 
    if (plane == VL_COMPOSITOR_PLANE_Y) {
       nir_def *pos = cs_tex_coords(&s, ipos, COORDS_LUMA);
       color = cs_fetch_texel(&s, pos, 0);
+      alpha = nir_channel(b, color, 3);
    } else {
       /*
          vec2 pos[4];
@@ -594,12 +663,18 @@ static void *create_rgb_yuv_shader(struct vl_compositor *c, enum vl_compositor_p
 
          nir_def *c = cs_fetch_texel(&s, pos[i], 0);
          color = color ? nir_fadd(b, color, c) : c;
+         nir_def *a = nir_channel(b, c, 3);
+         alpha = alpha ? nir_fadd(b, alpha, a) : a;
       }
       color = nir_fmul_imm(b, color, 0.25f);
+      alpha = nir_fmul_imm(b, alpha, 0.25f);
    }
 
+   color = cs_premultiplied_to_straight_alpha(&s, color, alpha);
    color = nir_vector_insert_imm(b, color, s.fone, 3);
    color = cs_prim_trc_conversion(&s, color);
+
+   nir_def *dst_color = cs_image_load(&s, cs_translate(&s, ipos));
 
    if (plane != VL_COMPOSITOR_PLANE_UV) {
       unsigned c = 0;
@@ -607,11 +682,15 @@ static void *create_rgb_yuv_shader(struct vl_compositor *c, enum vl_compositor_p
          c = 1;
       else if (plane == VL_COMPOSITOR_PLANE_V)
          c = 2;
-      color = cs_color_conversion(&s, color, c, RGB2YUV);
+      nir_def *src = cs_color_conversion(&s, color, c, RGB2YUV);
+      nir_def *dst = nir_channel(b, dst_color, c);
+      color = cs_apply_blend(&s, src, dst, alpha, NULL);
    } else {
       nir_def *col1 = cs_color_conversion(&s, color, 1, RGB2YUV);
       nir_def *col2 = cs_color_conversion(&s, color, 2, RGB2YUV);
-      color = nir_vec2(b, col1, col2);
+      nir_def *src = nir_vec2(b, col1, col2);
+      nir_def *dst = nir_vec2(b, nir_channel(b, dst_color, 0), nir_channel(b, dst_color, 1));
+      color = cs_apply_blend(&s, src, dst, alpha, NULL);
    }
 
    cs_image_store(&s, cs_translate(&s, ipos), color);
@@ -992,6 +1071,12 @@ set_viewport(struct vl_compositor_state *s,
    memcpy(ptr_float, &s->primaries, sizeof(vl_csc_matrix));
    ptr_float += sizeof(vl_csc_matrix) / sizeof(float);
 
+   ptr_int = (int *)ptr_float;
+   *ptr_int++ = drawn->blend_enabled;
+   *ptr_int++ = drawn->blend_mode;
+   ptr_float = (float *)ptr_int;
+   *ptr_float++ = drawn->blend_alpha;
+
    pipe_buffer_unmap(s->pipe, buf_transfer);
 
    return true;
@@ -1025,6 +1110,12 @@ draw_layers(struct vl_compositor       *c,
          drawn.chroma_clamp_y = (float)sampler1->texture->height0 * layer->src.br.y - 0.5;
          drawn.chroma_offset_x = chroma_offset_x(s->chroma_location);
          drawn.chroma_offset_y = chroma_offset_y(s->chroma_location);
+         drawn.blend_enabled = layer->blend_enabled;
+         drawn.blend_mode = layer->blend_mode;
+         if (layer->blend_mode & PIPE_VIDEO_VPP_BLEND_MODE_GLOBAL_ALPHA)
+            drawn.blend_alpha = layer->blend_alpha;
+         else
+            drawn.blend_alpha = 1.0f;
          calc_proj(layer, samplers[0]->texture, drawn.proj);
          calc_proj(layer, sampler1->texture, drawn.chroma_proj);
          set_viewport(s, &drawn, samplers);

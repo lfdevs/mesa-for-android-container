@@ -8,7 +8,6 @@
 #include "brw_nir.h"
 #include "brw_shader.h"
 #include "brw_builder.h"
-#include "brw_generator.h"
 #include "brw_private.h"
 #include "dev/intel_debug.h"
 
@@ -176,8 +175,10 @@ brw_compile_tcs(const struct brw_compiler *compiler,
 {
    const struct intel_device_info *devinfo = compiler->devinfo;
    nir_shader *nir = params->base.nir;
-   const struct brw_tcs_prog_key *key = params->key;
-   struct brw_tcs_prog_data *prog_data = params->prog_data;
+   const struct brw_tcs_prog_key *key =
+      (const struct brw_tcs_prog_key *)params->base.key;
+   struct brw_tcs_prog_data *prog_data =
+      (struct brw_tcs_prog_data *)params->base.prog_data;
    struct brw_vue_prog_data *vue_prog_data = &prog_data->base;
    const unsigned dispatch_width = brw_geometry_stage_dispatch_width(compiler->devinfo);
 
@@ -307,18 +308,11 @@ brw_compile_tcs(const struct brw_compiler *compiler,
    prog_data->base.base.dispatch_grf_start_reg = v.payload().num_regs / reg_unit(devinfo);
    prog_data->base.base.grf_used = v.grf_used;
 
-   brw_generator g(compiler, &params->base,
-                  &prog_data->base.base, MESA_SHADER_TESS_CTRL);
-   if (unlikely(debug_enabled)) {
-      g.enable_debug(ralloc_asprintf(params->base.mem_ctx,
-                                     "%s tessellation control shader %s",
-                                     nir->info.label ? nir->info.label
-                                                     : "unnamed",
-                                     nir->info.name));
-   }
-
-   g.generate_code(v, params->base.stats);
-   g.add_const_data(nir->constant_data, nir->constant_data_size);
-
-   return g.get_assembly();
+   const brw_to_binary_params to_binary_params = {
+      .compiler = compiler,
+      .params = &params->base,
+      .prog_data = &prog_data->base.base,
+      .shaders = { &v },
+   };
+   return brw_to_binary(&to_binary_params);
 }

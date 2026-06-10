@@ -10,12 +10,18 @@ import sys
 import math
 
 a = 'a'
+b = 'b'
 
-lower_pack = [
+lower = [
   # Based on the VIR lowering
   (('f2f16_rtz', 'a@32'),
    ('bcsel', ('flt', ('fabs', a), ('fabs', ('f2f32', ('f2f16_rtne', a)))),
     ('isub', ('f2f16_rtne', a), 1), ('f2f16_rtne', a))),
+
+  # Handle imod behavior with negative values using lowering
+  (('imod', a, b),
+   ('bcsel', ('ior', ('ieq', ('irem', a, b), 0), ('ieq', ('isign', a), ('isign', b))),
+    ('irem', a, b), ('iadd', ('irem', a, b), b))),
 ]
 
 
@@ -32,7 +38,7 @@ def run():
 
     print('#include "msl_private.h"')
 
-    print(nir_algebraic.AlgebraicPass("msl_nir_lower_algebraic_late", lower_pack).render())
+    print(nir_algebraic.AlgebraicPass("msl_nir_lower_algebraic_late", lower).render())
 
 if __name__ == '__main__':
     main()

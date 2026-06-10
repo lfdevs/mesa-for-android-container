@@ -316,9 +316,9 @@ CDX12EncHMFT::CheckMediaType( IMFMediaType *pmt, bool bInputType )
       CHECKBOOL_GOTO( videoProfile != PIPE_VIDEO_PROFILE_UNKNOWN, MF_E_INVALIDMEDIATYPE, done );
 
       // Fetch the capabilities of this encoder
-      encoder_capabilities encoderCapabilities = {};
+      encoder_capabilities encoderCapabilities( this );
 
-      encoderCapabilities.initialize( m_pPipeContext->screen, videoProfile );
+      CHECKHR_GOTO( encoderCapabilities.initialize( m_pPipeContext->screen, videoProfile ), done );
 
       CHECKHR_GOTO( CheckMediaTypeLevel( pmt, Width, Height, encoderCapabilities, nullptr ), done );
 
@@ -525,7 +525,7 @@ CDX12EncHMFT::OnOutputTypeChanged()
    m_outputPipeProfile = ConvertAVEncVProfileToPipeVideoProfile( m_pVlScreen, m_uiProfile, m_Codec );
 
    // Fetch the capabilities of this encoder
-   m_EncoderCapabilities.initialize( m_pPipeContext->screen, m_outputPipeProfile );
+   CHECKHR_GOTO( m_EncoderCapabilities.initialize( m_pPipeContext->screen, m_outputPipeProfile ), done );
 
    // Handle MF_MT_VIDEO_LEVEL (optional)
    CHECKHR_GOTO( CheckMediaTypeLevel( m_spOutputType.Get(), m_uiOutputWidth, m_uiOutputHeight, m_EncoderCapabilities, &m_uiLevel ),
@@ -2495,7 +2495,7 @@ CDX12EncHMFT::ProcessMessage( MFT_MESSAGE_TYPE eMessage, ULONG_PTR ulParam )
          CHECKHR_GOTO( xOnSetD3DManager( ulParam ), done );
          if( m_pPipeContext )
          {
-            m_EncoderCapabilities.initialize( m_pPipeContext->screen, m_outputPipeProfile );
+            CHECKHR_GOTO( m_EncoderCapabilities.initialize( m_pPipeContext->screen, m_outputPipeProfile ), done );
          }
          break;
       }

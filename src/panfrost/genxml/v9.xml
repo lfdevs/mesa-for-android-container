@@ -1,5 +1,6 @@
 <!--
   Copyright (C) 2020 Collabora Ltd.
+  Copyright (C) 2026 Arm Ltd.
   SPDX-License-Identifier: MIT
 -->
 
@@ -73,10 +74,14 @@
     <value name="None" value="0"/>
     <value name="Points" value="1"/>
     <value name="Lines" value="2"/>
+    <value name="Lines adjacency" value="3"/>
     <value name="Line strip" value="4"/>
+    <value name="Line strip adjacency" value="5"/>
     <value name="Line loop" value="6"/>
     <value name="Triangles" value="8"/>
+    <value name="Triangles adjacency" value="9"/>
     <value name="Triangle strip" value="10"/>
+    <value name="Triangle strip adjacency" value="11"/>
     <value name="Triangle fan" value="12"/>
     <value name="Polygon" value="13"/>
     <value name="Quads" value="14"/>
@@ -103,6 +108,7 @@
   <enum name="Address Mode">
     <value name="Flat" value="0"/>
     <value name="Packed" value="1"/>
+    <value name="Out of bounds" value="8"/>
   </enum>
 
   <enum name="Format">
@@ -1437,7 +1443,7 @@
     <field name="Bound Min Y" size="12" start="0:16" type="uint"/>
     <field name="Bound Max X" size="12" start="1:0" type="uint"/>
     <field name="Bound Max Y" size="12" start="1:16" type="uint"/>
-    <field name="Tile render order" size="3" start="1:28" type="Tile Render Order" default="Z Order"/>
+    <field name="Tile render order" size="3" start="1:28" type="Tile Render Order"/>
     <field name="Has Tile Enable Map" size="1" start="1:31" type="bool"/>
     <field name="Framebuffer" size="64" start="2:0" type="address"/>
     <field name="Tile Enable Map" size="64" start="4:0" type="address"/>
@@ -1586,11 +1592,11 @@
     <field name="Shader modifies coverage" size="1" start="20" type="bool"/>
     <field name="Alpha-to-coverage Invert" size="1" start="21" type="bool"/>
     <field name="Alpha-to-coverage" size="1" start="22" type="bool"/>
-    <field name="Scissor to bounding box" size="1" start="23" type="bool"/>
+    <field name="Scissor To Bounding Box" size="1" start="23" type="bool"/>
   </struct>
 
   <struct name="DCD Flags 1" size="1">
-    <field name="Sample mask" size="16" start="0" type="uint"/>
+    <field name="Sample mask" size="16" start="0" type="hex"/>
     <field name="Render target mask" start="16" size="8" type="hex"/>
   </struct>
 

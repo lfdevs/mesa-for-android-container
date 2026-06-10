@@ -18,9 +18,10 @@ libteflon = shared_library(
 
 if with_tests
   tensorflow_lite = shared_library(
-    'tensorflow-lite',
+    'tensorflow-lite-stub',
     [ 'tflite-stub.c' ],
     include_directories : [ inc_include ],
+    link_args : [ '-Wl,-soname,libtensorflow-lite.so' ],
     install : false,
   )
 

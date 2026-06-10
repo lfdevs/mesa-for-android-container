@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2022-2023 Collabora, Ltd.
+ * Copyright (C) 2026 Arm Ltd.
  * SPDX-License-Identifier: MIT
  */
 
@@ -89,6 +90,12 @@ static const char *defer_modes_str[] = {
 #define defer_mode_str(I) ""
 #endif
 
+#if PAN_ARCH <= 13
+#define assert_no_progress_inc(I) assert(!I.progress_increment)
+#else
+#define assert_no_progress_inc(I) do {} while (0)
+#endif
+
 static void
 print_cs_instr(FILE *fp, const uint64_t *instr)
 {
@@ -117,28 +124,27 @@ print_cs_instr(FILE *fp, const uint64_t *instr)
 
    case MALI_CS_OPCODE_WAIT: {
       cs_unpack(instr, CS_WAIT, I);
-      fprintf(fp, "WAIT%s #%x", I.progress_increment ? ".progress_inc" : "",
-              I.wait_mask);
+      assert_no_progress_inc(I);
+      fprintf(fp, "WAIT #%x", I.wait_mask);
       break;
    }
 
    case MALI_CS_OPCODE_RUN_COMPUTE: {
       const char *axes[4] = {"x_axis", "y_axis", "z_axis"};
       cs_unpack(instr, CS_RUN_COMPUTE, I);
+      assert_no_progress_inc(I);
 
       /* Print the instruction. Ignore the selects and the flags override
        * since we'll print them implicitly later.
        */
 #if PAN_ARCH >= 12
-      fprintf(fp, "RUN_COMPUTE%s.%s.srt%d.spd%d.tsd%d.fau%d #%u, #%u",
-              I.progress_increment ? ".progress_inc" : "", axes[I.task_axis],
-              I.srt_select, I.spd_select, I.tsd_select, I.fau_select,
-              I.task_increment, I.ep_limit);
+      fprintf(fp, "RUN_COMPUTE.%s.srt%d.spd%d.tsd%d.fau%d #%u, #%u",
+              axes[I.task_axis], I.srt_select, I.spd_select, I.tsd_select,
+              I.fau_select, I.task_increment, I.ep_limit);
 #else
-      fprintf(fp, "RUN_COMPUTE%s.%s.srt%d.spd%d.tsd%d.fau%d #%u",
-              I.progress_increment ? ".progress_inc" : "", axes[I.task_axis],
-              I.srt_select, I.spd_select, I.tsd_select, I.fau_select,
-              I.task_increment);
+      fprintf(fp, "RUN_COMPUTE.%s.srt%d.spd%d.tsd%d.fau%d #%u",
+              axes[I.task_axis], I.srt_select, I.spd_select, I.tsd_select,
+              I.fau_select, I.task_increment);
 #endif
       break;
    }
@@ -146,8 +152,8 @@ print_cs_instr(FILE *fp, const uint64_t *instr)
 #if PAN_ARCH == 10
    case MALI_CS_OPCODE_RUN_TILING: {
       cs_unpack(instr, CS_RUN_TILING, I);
-      fprintf(fp, "RUN_TILING%s.srt%d.spd%d.tsd%d.fau%d",
-              I.progress_increment ? ".progress_inc" : "", I.srt_select,
+      assert_no_progress_inc(I);
+      fprintf(fp, "RUN_TILING.srt%d.spd%d.tsd%d.fau%d", I.srt_select,
               I.spd_select, I.tsd_select, I.fau_select);
       break;
    }
@@ -156,10 +162,10 @@ print_cs_instr(FILE *fp, const uint64_t *instr)
 #if PAN_ARCH < 12
    case MALI_CS_OPCODE_RUN_IDVS: {
       cs_unpack(instr, CS_RUN_IDVS, I);
+      assert_no_progress_inc(I);
       fprintf(
          fp,
-         "RUN_IDVS%s%s%s.varying_srt%d.varying_fau%d.varying_tsd%d.frag_srt%d.frag_tsd%d r%u, #%" PRIx64,
-         I.progress_increment ? ".progress_inc" : "",
+         "RUN_IDVS%s%s.varying_srt%d.varying_fau%d.varying_tsd%d.frag_srt%d.frag_tsd%d r%u, #%" PRIx64,
          I.malloc_enable ? "" : ".no_malloc",
          I.draw_id_register_enable ? ".draw_id_enable" : "",
          I.varying_srt_select, I.varying_fau_select, I.varying_tsd_select,
@@ -170,6 +176,7 @@ print_cs_instr(FILE *fp, const uint64_t *instr)
 #else
    case MALI_CS_OPCODE_RUN_IDVS2: {
       cs_unpack(instr, CS_RUN_IDVS2, I);
+      assert_no_progress_inc(I);
 
       const char *vertex_shading_str[] = {
          ".early",
@@ -178,8 +185,7 @@ print_cs_instr(FILE *fp, const uint64_t *instr)
          ".INVALID",
       };
 
-      fprintf(fp, "RUN_IDVS2%s%s%s%s r%u, #%" PRIx64,
-              I.progress_increment ? ".progress_inc" : "",
+      fprintf(fp, "RUN_IDVS2%s%s%s r%u, #%" PRIx64,
               I.malloc_enable ? "" : ".no_malloc",
               I.draw_id_register_enable ? ".draw_id_enable" : "",
               vertex_shading_str[I.vertex_shading_mode], I.draw_id,
@@ -317,32 +323,37 @@ print_cs_instr(FILE *fp, const uint64_t *instr)
 
    case MALI_CS_OPCODE_SHARED_SB_INC: {
       cs_unpack(instr, CS_SHARED_SB_INC, I);
-
-      const char *progress_increment_name[] = {
-         ".no_increment",
-         ".increment",
-      };
-
-      fprintf(fp, "SHARED_SB_INC%s%s #%u, #%u",
-              progress_increment_name[I.progress_increment],
-              defer_mode_str(I), I.sb_mask, I.shared_entry);
+      assert_no_progress_inc(I);
+      fprintf(fp, "SHARED_SB_INC%s #%u, #%u", defer_mode_str(I), I.sb_mask,
+              I.shared_entry);
       break;
    }
 
    case MALI_CS_OPCODE_SHARED_SB_DEC: {
       cs_unpack(instr, CS_SHARED_SB_DEC, I);
-
-      const char *progress_increment_name[] = {
-         ".no_increment",
-         ".increment",
-      };
-
-      fprintf(fp, "SHARED_SB_DEC%s #%u",
-              progress_increment_name[I.progress_increment], I.shared_entry);
+      assert_no_progress_inc(I);
+      fprintf(fp, "SHARED_SB_DEC #%u", I.shared_entry);
       break;
    }
 #endif
 
+#if PAN_ARCH >= 14
+   case MALI_CS_OPCODE_RUN_FRAGMENT2: {
+      static const char *tile_order[] = {
+         "zorder",  "horizontal",     "vertical",     "unknown",
+         "unknown", "rev_horizontal", "rev_vertical", "unknown",
+         "unknown", "unknown",        "unknown",      "unknown",
+         "unknown", "unknown",        "unknown",      "unknown",
+      };
+
+      cs_unpack(instr, CS_RUN_FRAGMENT2, I);
+
+      fprintf(fp, "RUN_FRAGMENT2%s.tile_order=%s",
+              I.enable_tem ? ".tile_enable_map_enable" : "",
+              tile_order[I.tile_order]);
+      break;
+   }
+#else
    case MALI_CS_OPCODE_RUN_FRAGMENT: {
       static const char *tile_order[] = {
          "zorder",  "horizontal",     "vertical",     "unknown",
@@ -350,27 +361,27 @@ print_cs_instr(FILE *fp, const uint64_t *instr)
          "unknown", "unknown",        "unknown",      "unknown",
          "unknown", "unknown",        "unknown",      "unknown",
       };
-      cs_unpack(instr, CS_RUN_FRAGMENT, I);
 
-      fprintf(fp, "RUN_FRAGMENT%s%s.tile_order=%s",
-              I.progress_increment ? ".progress_inc" : "",
+      cs_unpack(instr, CS_RUN_FRAGMENT, I);
+      assert_no_progress_inc(I);
+      fprintf(fp, "RUN_FRAGMENT%s.tile_order=%s",
               I.enable_tem ? ".tile_enable_map_enable" : "",
               tile_order[I.tile_order]);
       break;
    }
+#endif
 
    case MALI_CS_OPCODE_RUN_FULLSCREEN: {
       cs_unpack(instr, CS_RUN_FULLSCREEN, I);
-      fprintf(fp, "RUN_FULLSCREEN%s r%u, #%" PRIx64,
-              I.progress_increment ? ".progress_inc" : "", I.dcd,
-              I.flags_override);
+      assert_no_progress_inc(I);
+      fprintf(fp, "RUN_FULLSCREEN r%u, #%" PRIx64, I.dcd, I.flags_override);
       break;
    }
 
    case MALI_CS_OPCODE_FINISH_TILING: {
       cs_unpack(instr, CS_FINISH_TILING, I);
-      fprintf(fp, "FINISH_TILING%s",
-              I.progress_increment ? ".progress_inc" : "");
+      assert_no_progress_inc(I);
+      fprintf(fp, "FINISH_TILING");
       break;
    }
 
@@ -440,12 +451,6 @@ print_cs_instr(FILE *fp, const uint64_t *instr)
    case MALI_CS_OPCODE_SET_SB_ENTRY: {
       cs_unpack(instr, CS_SET_SB_ENTRY, I);
       fprintf(fp, "SET_SB_ENTRY #%u, #%u", I.endpoint_entry, I.other_entry);
-      break;
-   }
-
-   case MALI_CS_OPCODE_PROGRESS_WAIT: {
-      cs_unpack(instr, CS_PROGRESS_WAIT, I);
-      fprintf(fp, "PROGRESS_WAIT d%u, #%u", I.source, I.queue);
       break;
    }
 
@@ -547,29 +552,17 @@ print_cs_instr(FILE *fp, const uint64_t *instr)
       break;
    }
 
-   case MALI_CS_OPCODE_PROGRESS_STORE: {
-      cs_unpack(instr, CS_PROGRESS_STORE, I);
-      fprintf(fp, "PROGRESS_STORE d%u", I.source);
-      break;
-   }
-
-   case MALI_CS_OPCODE_PROGRESS_LOAD: {
-      cs_unpack(instr, CS_PROGRESS_LOAD, I);
-      fprintf(fp, "PROGRESS_LOAD d%u", I.destination);
-      break;
-   }
-
    case MALI_CS_OPCODE_RUN_COMPUTE_INDIRECT: {
       cs_unpack(instr, CS_RUN_COMPUTE_INDIRECT, I);
+      assert_no_progress_inc(I);
 #if PAN_ARCH >= 12
-      fprintf(fp, "RUN_COMPUTE_INDIRECT%s.srt%d.spd%d.tsd%d.fau%d #%u, #%u",
-              I.progress_increment ? ".progress_inc" : "", I.srt_select,
-              I.spd_select, I.tsd_select, I.fau_select, I.workgroups_per_task,
-              I.ep_limit);
+      fprintf(fp, "RUN_COMPUTE_INDIRECT.srt%d.spd%d.tsd%d.fau%d #%u, #%u",
+              I.srt_select, I.spd_select, I.tsd_select, I.fau_select,
+              I.workgroups_per_task, I.ep_limit);
 #else
-      fprintf(fp, "RUN_COMPUTE_INDIRECT%s.srt%d.spd%d.tsd%d.fau%d #%u",
-              I.progress_increment ? ".progress_inc" : "", I.srt_select,
-              I.spd_select, I.tsd_select, I.fau_select, I.workgroups_per_task);
+      fprintf(fp, "RUN_COMPUTE_INDIRECT.srt%d.spd%d.tsd%d.fau%d #%u",
+              I.srt_select, I.spd_select, I.tsd_select, I.fau_select,
+              I.workgroups_per_task);
 #endif
 
       break;
@@ -1097,6 +1090,99 @@ pandecode_run_idvs(struct pandecode_context *ctx, FILE *fp,
 }
 #endif
 
+#if PAN_ARCH >= 14
+static void
+pandecode_run_fragment2(struct pandecode_context *ctx, FILE *fp,
+                        struct queue_ctx *qctx, struct MALI_CS_RUN_FRAGMENT2 *I)
+{
+   if (qctx->in_exception_handler)
+      return;
+
+   ctx->indent++;
+
+   pandecode_log(ctx, "Iter trace ID0: %" PRIu32 "\n",
+                 cs_get_u32(qctx, MALI_FRAGMENT_SR_ITER_TRACE_ID0));
+   pandecode_log(ctx, "Iter trace ID1: %" PRIu32 "\n",
+                 cs_get_u32(qctx, MALI_FRAGMENT_SR_ITER_TRACE_ID1));
+   pandecode_log(ctx, "TEM pointer: %" PRIx64 "\n",
+                 cs_get_u64(qctx, MALI_FRAGMENT_SR_TEM_POINTER));
+   pandecode_log(ctx, "TEM row stride: %" PRIu32 "\n",
+                 cs_get_u32(qctx, MALI_FRAGMENT_SR_TEM_ROW_STRIDE));
+
+   for (unsigned i = 0; i < 11; ++i) {
+      const unsigned reg = MALI_FRAGMENT_SR_IRD_BUFFER_POINTER_0 + (i * 2);
+      pandecode_log(ctx, "IRD buffer pointer %u: %" PRIx64 "\n", i,
+                    cs_get_u64(qctx, reg));
+   }
+
+   DUMP_CL(ctx, FRAGMENT_FLAGS_3, &qctx->regs[MALI_FRAGMENT_SR_FLAGS_3],
+           "Flags 3:\n");
+   DUMP_CL(ctx, FRAGMENT_BOUNDING_BOX, &qctx->regs[MALI_FRAGMENT_SR_BBOX_MIN],
+           "Bounding Box:\n");
+   DUMP_CL(ctx, FRAME_SIZE, &qctx->regs[MALI_FRAGMENT_SR_FRAME_SIZE],
+           "Frame size:\n");
+
+   pan_unpack((const struct mali_fragment_flags_0_packed *)&qctx
+                 ->regs[MALI_FRAGMENT_SR_FLAGS_0],
+              FRAGMENT_FLAGS_0, flags0_unpacked);
+   DUMP_UNPACKED(ctx, FRAGMENT_FLAGS_0, flags0_unpacked, "Flags 0:\n");
+
+   pan_unpack((const struct mali_fragment_flags_1_packed *)&qctx
+                 ->regs[MALI_FRAGMENT_SR_FLAGS_1],
+              FRAGMENT_FLAGS_1, flags1_unpacked);
+   DUMP_UNPACKED(ctx, FRAGMENT_FLAGS_1, flags1_unpacked, "Flags 1:\n");
+
+   DUMP_CL(ctx, FRAGMENT_FLAGS_2, &qctx->regs[MALI_FRAGMENT_SR_FLAGS_2],
+           "Flags 2:\n");
+   pandecode_log(ctx, "Z clear: %f\n",
+                 uif(cs_get_u32(qctx, MALI_FRAGMENT_SR_Z_CLEAR)));
+
+   const uint64_t tiler_pointer =
+      cs_get_u64(qctx, MALI_FRAGMENT_SR_TILER_DESCRIPTOR_POINTER);
+   pandecode_log(ctx, "Tiler descriptor pointer: 0x%" PRIx64 "\n",
+                 tiler_pointer);
+
+   const uint64_t rtd_pointer = cs_get_u64(qctx, MALI_FRAGMENT_SR_RTD_POINTER);
+   pandecode_log(ctx, "RTD pointer: 0x%" PRIx64 "\n", rtd_pointer);
+
+   const uint64_t dbd_pointer = cs_get_u64(qctx, MALI_FRAGMENT_SR_DBD_POINTER);
+   pandecode_log(ctx, "DBD pointer: 0x%" PRIx64 "\n", dbd_pointer);
+
+   pandecode_log(ctx, "Frame argument: %" PRIx64 "\n",
+                 cs_get_u64(qctx, MALI_FRAGMENT_SR_FRAME_ARG));
+
+   const uint64_t sample_locations =
+      cs_get_u64(qctx, MALI_FRAGMENT_SR_SAMPLE_POSITION_ARRAY_POINTER);
+   pandecode_log(ctx, "Sample locations: 0x%" PRIx64 "\n", sample_locations);
+
+   const uint64_t dcd_pointer =
+      cs_get_u64(qctx, MALI_FRAGMENT_SR_FRAME_SHADER_DCD_POINTER);
+   pandecode_log(ctx, "Frame shader DCD pointer: 0x%" PRIx64 "\n", dcd_pointer);
+
+   DUMP_CL(ctx, VRS_IMAGE, &qctx->regs[MALI_FRAGMENT_SR_VRS_IMAGE],
+           "VRS image:\n");
+
+   GENX(pandecode_sample_locations)(ctx, sample_locations);
+
+   const unsigned job_type_param = 0;
+   GENX(pandecode_frame_shader_dcds)(ctx, dcd_pointer,
+                                     flags0_unpacked.pre_frame_0,
+                                     flags0_unpacked.pre_frame_1,
+                                     flags0_unpacked.post_frame,
+                                     job_type_param, qctx->gpu_id);
+
+   if (tiler_pointer)
+      GENX(pandecode_tiler)(ctx, tiler_pointer);
+
+   if (dbd_pointer)
+      GENX(pandecode_zs_crc_ext)(ctx, dbd_pointer);
+
+   if (rtd_pointer)
+      GENX(pandecode_rts)(ctx, rtd_pointer, flags1_unpacked.render_target_count);
+
+   ctx->indent--;
+}
+#else
 static void
 pandecode_run_fragment(struct pandecode_context *ctx, FILE *fp,
                        struct queue_ctx *qctx, struct MALI_CS_RUN_FRAGMENT *I)
@@ -1115,6 +1201,7 @@ pandecode_run_fragment(struct pandecode_context *ctx, FILE *fp,
 
    ctx->indent--;
 }
+#endif /* PAN_ARCH >= 14 */
 
 static void
 pandecode_run_fullscreen(struct pandecode_context *ctx, FILE *fp,
@@ -1261,11 +1348,19 @@ interpret_cs_instr(struct pandecode_context *ctx, struct queue_ctx *qctx)
    }
 #endif
 
+#if PAN_ARCH >= 14
+   case MALI_CS_OPCODE_RUN_FRAGMENT2: {
+      cs_unpack(bytes, CS_RUN_FRAGMENT2, I);
+      pandecode_run_fragment2(ctx, fp, qctx, &I);
+      break;
+   }
+#else
    case MALI_CS_OPCODE_RUN_FRAGMENT: {
       cs_unpack(bytes, CS_RUN_FRAGMENT, I);
       pandecode_run_fragment(ctx, fp, qctx, &I);
       break;
    }
+#endif
 
    case MALI_CS_OPCODE_RUN_FULLSCREEN: {
       cs_unpack(bytes, CS_RUN_FULLSCREEN, I);
@@ -2192,18 +2287,6 @@ collect_indirect_branch_targets_recurse(struct cs_code_cfg *cfg,
          break;
       }
 
-      case MALI_CS_OPCODE_PROGRESS_LOAD: {
-         cs_unpack(instr, CS_PROGRESS_LOAD, I);
-         for (unsigned i = 0; i < 16; i++) {
-            if (BITSET_TEST(track_map, I.destination) ||
-                BITSET_TEST(track_map, I.destination + 1)) {
-               ibranch->has_unknown_targets = true;
-               return;
-            }
-         }
-         break;
-      }
-
       default:
          break;
       }
@@ -2430,7 +2513,12 @@ print_cs_binary(struct pandecode_context *ctx, uint64_t bin,
 #else
       case MALI_CS_OPCODE_RUN_IDVS:
 #endif
+
+#if PAN_ARCH >= 14
+      case MALI_CS_OPCODE_RUN_FRAGMENT2:
+#else
       case MALI_CS_OPCODE_RUN_FRAGMENT:
+#endif
       case MALI_CS_OPCODE_RUN_FULLSCREEN:
       case MALI_CS_OPCODE_RUN_COMPUTE:
       case MALI_CS_OPCODE_RUN_COMPUTE_INDIRECT:
@@ -2539,6 +2627,19 @@ GENX(pandecode_cs_trace)(struct pandecode_context *ctx, uint64_t trace,
       }
 #endif
 
+#if PAN_ARCH >= 14
+      case MALI_CS_OPCODE_RUN_FRAGMENT2: {
+         struct cs_run_fragment2_trace *frag_trace = trace_data;
+
+         assert(trace_size >= sizeof(*frag_trace));
+         cs_unpack(instr, CS_RUN_FRAGMENT2, I);
+         memcpy(&regs[0], frag_trace->sr, sizeof(frag_trace->sr));
+         pandecode_run_fragment2(ctx, ctx->dump_stream, &qctx, &I);
+         trace_data = frag_trace + 1;
+         trace_size -= sizeof(*frag_trace);
+         break;
+      }
+#else
       case MALI_CS_OPCODE_RUN_FRAGMENT: {
          struct cs_run_fragment_trace *frag_trace = trace_data;
 
@@ -2550,6 +2651,7 @@ GENX(pandecode_cs_trace)(struct pandecode_context *ctx, uint64_t trace,
          trace_size -= sizeof(*frag_trace);
          break;
       }
+#endif
 
       case MALI_CS_OPCODE_RUN_FULLSCREEN: {
          struct cs_run_fullscreen_trace *fs_trace = trace_data;

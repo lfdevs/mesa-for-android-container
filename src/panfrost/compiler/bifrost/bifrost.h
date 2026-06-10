@@ -515,7 +515,7 @@ struct bifrost_texture_operation {
 
          /* Method to compute LOD value or for a FETCH, the
           * bifrost_texture_fetch component specification */
-         enum bifrost_lod_mode lod_or_fetch : 3;
+         unsigned lod_or_fetch : 3;
 
          /* Reserved */
          unsigned zero : 1;

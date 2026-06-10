@@ -7,7 +7,6 @@
 #include "brw_compiler.h"
 #include "brw_shader.h"
 #include "brw_builder.h"
-#include "brw_generator.h"
 #include "brw_nir.h"
 #include "brw_private.h"
 #include "compiler/nir/nir_builder.h"
@@ -220,7 +219,7 @@ brw_emit_urb_fence(brw_shader &s)
                                     brw_vec8_grf(0, 0),
                                     brw_imm_ud(true))->as_send();
    fence->size_written = REG_SIZE * reg_unit(s.devinfo);
-   fence->sfid = BRW_SFID_URB;
+   fence->sfid = GEN_SFID_URB;
    /* The logical thing here would likely be a THREADGROUP fence but that's
     * still failing some tests like in dEQP-VK.mesh_shader.ext.query.*
     *
@@ -277,8 +276,10 @@ brw_compile_task(const struct brw_compiler *compiler,
 {
    const struct intel_device_info *devinfo = compiler->devinfo;
    struct nir_shader *nir = params->base.nir;
-   const struct brw_task_prog_key *key = params->key;
-   struct brw_task_prog_data *prog_data = params->prog_data;
+   const struct brw_task_prog_key *key =
+      (const struct brw_task_prog_key *)params->base.key;
+   struct brw_task_prog_data *prog_data =
+      (struct brw_task_prog_data *)params->base.prog_data;
    const bool debug_enabled = brw_should_print_shader(nir, DEBUG_TASK, params->base.source_hash);
 
    brw_pass_tracker pt_ = {
@@ -411,19 +412,13 @@ brw_compile_task(const struct brw_compiler *compiler,
       brw_print_tue_map(stderr, &prog_data->map);
    }
 
-   brw_generator g(compiler, &params->base, &prog_data->base.base,
-                  MESA_SHADER_TASK);
-   if (unlikely(debug_enabled)) {
-      g.enable_debug(ralloc_asprintf(params->base.mem_ctx,
-                                     "%s task shader %s",
-                                     nir->info.label ? nir->info.label
-                                                     : "unnamed",
-                                     nir->info.name));
-   }
-
-   g.generate_code(selected, params->base.stats);
-   g.add_const_data(nir->constant_data, nir->constant_data_size);
-   return g.get_assembly();
+   const brw_to_binary_params to_binary_params = {
+      .compiler = compiler,
+      .params = &params->base,
+      .prog_data = &prog_data->base.base,
+      .shaders = { &selected },
+   };
+   return brw_to_binary(&to_binary_params);
 }
 
 static void
@@ -963,8 +958,10 @@ brw_compile_mesh(const struct brw_compiler *compiler,
 {
    const struct intel_device_info *devinfo = compiler->devinfo;
    struct nir_shader *nir = params->base.nir;
-   const struct brw_mesh_prog_key *key = params->key;
-   struct brw_mesh_prog_data *prog_data = params->prog_data;
+   const struct brw_mesh_prog_key *key =
+      (const struct brw_mesh_prog_key *)params->base.key;
+   struct brw_mesh_prog_data *prog_data =
+      (struct brw_mesh_prog_data *)params->base.prog_data;
    const bool debug_enabled = brw_should_print_shader(nir, DEBUG_MESH, params->base.source_hash);
 
    brw_pass_tracker pt_ = {
@@ -1140,36 +1137,30 @@ brw_compile_mesh(const struct brw_compiler *compiler,
       brw_print_mue_map(stderr, &prog_data->map, nir);
    }
 
-   brw_generator g(compiler, &params->base, &prog_data->base.base,
-                  MESA_SHADER_MESH);
-   if (unlikely(debug_enabled)) {
-      g.enable_debug(ralloc_asprintf(params->base.mem_ctx,
-                                     "%s mesh shader %s",
-                                     nir->info.label ? nir->info.label
-                                                     : "unnamed",
-                                     nir->info.name));
-   }
-
-   g.generate_code(selected, params->base.stats);
+   int8_t remap_table[VARYING_SLOT_TESS_MAX] = {};
    if (prog_data->map.wa_18019110168_active) {
-      int8_t remap_table[VARYING_SLOT_TESS_MAX];
       memset(remap_table, -1, sizeof(remap_table));
       for (uint32_t i = 0; i < ARRAY_SIZE(wa_18019110168_mapping); i++) {
          if (wa_18019110168_mapping[i] != -1)
             remap_table[i] = prog_data->map.vue_map.varying_to_slot[wa_18019110168_mapping[i]];
       }
-      uint32_t constant_data_aligned_size = align(nir->constant_data_size, 32);
-      uint8_t *const_data =
-         (uint8_t *) rzalloc_size(params->base.mem_ctx,
-                                  constant_data_aligned_size + sizeof(remap_table));
-      memcpy(const_data, nir->constant_data, nir->constant_data_size);
-      memcpy(const_data + constant_data_aligned_size, remap_table, sizeof(remap_table));
-      g.add_const_data(const_data, constant_data_aligned_size + sizeof(remap_table));
-      prog_data->wa_18019110168_mapping_offset =
-         prog_data->base.base.const_data_offset + constant_data_aligned_size;
-   } else {
-      g.add_const_data(nir->constant_data, nir->constant_data_size);
    }
 
-   return g.get_assembly();
+   const brw_to_binary_params to_binary_params = {
+      .compiler = compiler,
+      .params = &params->base,
+      .prog_data = &prog_data->base.base,
+      .shaders = { &selected },
+      .extra_const_data = prog_data->map.wa_18019110168_active ? remap_table : NULL,
+      .extra_const_data_size = prog_data->map.wa_18019110168_active ? (unsigned)sizeof(remap_table) : 0u,
+   };
+   const unsigned *assembly = brw_to_binary(&to_binary_params);
+
+   if (prog_data->map.wa_18019110168_active) {
+      prog_data->wa_18019110168_mapping_offset =
+         prog_data->base.base.const_data_offset +
+         align(nir->constant_data_size, 32);
+   }
+
+   return assembly;
 }

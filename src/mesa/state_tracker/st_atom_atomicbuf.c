@@ -70,7 +70,8 @@ st_bind_atomics(struct st_context *st, struct gl_program *prog,
 {
    unsigned i;
 
-   if (!prog || !st->pipe->set_shader_buffers || st->has_hw_atomics)
+   if (!prog || !st->pipe->set_shader_buffers ||
+       st->screen->shader_caps[MESA_SHADER_FRAGMENT].max_hw_atomic_counters != 0)
       return;
 
    /* For !has_hw_atomics, the atomic counters have been rewritten to be above
@@ -141,7 +142,7 @@ st_bind_tes_atomics(struct st_context *st)
 void
 st_bind_cs_atomics(struct st_context *st)
 {
-   if (st->has_hw_atomics) {
+   if (st->screen->shader_caps[MESA_SHADER_FRAGMENT].max_hw_atomic_counters != 0) {
       st_bind_hw_atomic_buffers(st);
       return;
    }
@@ -176,7 +177,7 @@ st_bind_hw_atomic_buffers(struct st_context *st)
    int i;
    unsigned count;
 
-   if (!st->has_hw_atomics)
+   if (st->screen->shader_caps[MESA_SHADER_FRAGMENT].max_hw_atomic_counters == 0)
       return;
 
    count = MIN2(st->ctx->Const.MaxAtomicBufferBindings, PIPE_MAX_HW_ATOMIC_BUFFERS);

@@ -883,7 +883,7 @@ attachment_set_ops(struct tu_device *device,
                    VkAttachmentStoreOp store_op,
                    VkAttachmentStoreOp stencil_store_op)
 {
-   if (unlikely(device->instance->dont_care_as_load)) {
+   if (unlikely(device->instance->drirc.debug.dont_care_as_load)) {
       if (load_op == VK_ATTACHMENT_LOAD_OP_DONT_CARE)
          load_op = VK_ATTACHMENT_LOAD_OP_LOAD;
       if (stencil_load_op == VK_ATTACHMENT_LOAD_OP_DONT_CARE)
@@ -1145,7 +1145,8 @@ tu_CreateRenderPass2(VkDevice _device,
    const VkRenderPassFragmentDensityMapCreateInfoEXT *fdm_info =
       vk_find_struct_const(pCreateInfo->pNext,
                            RENDER_PASS_FRAGMENT_DENSITY_MAP_CREATE_INFO_EXT);
-   if (fdm_info && !tu_render_pass_disable_fdm(device, pass)) {
+   if (fdm_info && fdm_info->fragmentDensityMapAttachment.attachment != VK_ATTACHMENT_UNUSED &&
+       !tu_render_pass_disable_fdm(device, pass)) {
       pass->fragment_density_map.attachment =
          fdm_info->fragmentDensityMapAttachment.attachment;
       pass->has_fdm = true;

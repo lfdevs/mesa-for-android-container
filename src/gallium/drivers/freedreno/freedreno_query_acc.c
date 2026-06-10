@@ -21,6 +21,9 @@ fd_acc_destroy_query(struct fd_context *ctx, struct fd_query *q) assert_dt
 
    DBG("%p", q);
 
+   if (aq->provider->cleanup)
+      aq->provider->cleanup(aq->query_data);
+
    pipe_resource_reference(&aq->prsc, NULL);
    list_del(&aq->node);
 

@@ -77,7 +77,7 @@ query_features_from_kernel(struct etna_gpu *gpu)
 	STATIC_ASSERT(ETNA_GPU_FEATURES_12 == 0xf);
 
 	for (unsigned i = ETNA_GPU_FEATURES_0; i <= ETNA_GPU_FEATURES_12; i++) {
-		uint64_t val;
+		uint64_t val = 0;
 
 		etna_gpu_get_param(gpu, i, &val);
 		features[i - ETNA_GPU_FEATURES_0] = val;

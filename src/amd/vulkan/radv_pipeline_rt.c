@@ -15,9 +15,10 @@
 #include "nir/radv_nir_rt_stage_functions.h"
 #include "nir/radv_nir_rt_stage_monolithic.h"
 #include "nir/radv_nir_rt_traversal_shader.h"
+#include "tools/radv_debug.h"
 #include "ac_nir.h"
-#include "radv_debug.h"
 #include "radv_descriptor_set.h"
+#include "radv_device.h"
 #include "radv_entrypoints.h"
 #include "radv_pipeline_binary.h"
 #include "radv_pipeline_cache.h"
@@ -25,8 +26,8 @@
 #include "radv_pipeline_rt.h"
 
 #include "nir/radv_nir_rt_stage_common.h"
+#include "tools/radv_rmv.h"
 #include "aco_interface.h"
-#include "radv_rmv.h"
 #include "radv_shader.h"
 
 struct rt_handle_hash_entry {
@@ -882,6 +883,10 @@ radv_rt_compile_shaders(struct radv_device *device, struct vk_pipeline_cache *ca
          result = radv_rt_compile_nir(device, cache, pipeline, RADV_RT_LOWERING_MODE_FUNCTION_CALLS, &combined_stage,
                                       &payload_size, &hit_attrib_size, &stack_size, NULL, NULL, replay_block,
                                       skip_shaders_cache, has_position_fetch, &pipeline->groups[idx].ahit_isec_shader);
+         ralloc_free(final_shader);
+         if (isec && ahit)
+            ralloc_free(ahit);
+
          if (result != VK_SUCCESS)
             goto cleanup;
 
@@ -1061,6 +1066,7 @@ compile_rt_prolog(struct radv_device *device, struct radv_ray_tracing_pipeline *
    NIR_PASS(_, prolog_stage.nir, nir_opt_remove_phis);
 
    pipeline->prolog = radv_compile_rt_prolog(device, &prolog_stage, &debug);
+   ralloc_free(prolog_stage.nir);
 
    bool has_traversal = !!pipeline->base.base.shaders[MESA_SHADER_INTERSECTION];
 
@@ -1165,7 +1171,7 @@ radv_rt_pipeline_compile(struct radv_device *device, const VkRayTracingPipelineC
                          const VkPipelineCreationFeedbackCreateInfo *creation_feedback)
 {
    bool skip_shaders_cache = radv_pipeline_skip_shaders_cache(device, &pipeline->base.base);
-   const bool emit_ray_history = !!device->rra_trace.ray_history_buffer;
+   const bool emit_ray_history = !!device->rra_trace.ray_history_addr;
    VkPipelineCreationFeedback pipeline_feedback = {
       .flags = VK_PIPELINE_CREATION_FEEDBACK_VALID_BIT,
    };

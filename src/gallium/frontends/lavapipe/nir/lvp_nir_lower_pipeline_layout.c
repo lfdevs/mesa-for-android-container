@@ -34,7 +34,7 @@ static nir_def *lower_vri_intrin_vri(struct nir_builder *b,
       get_binding_layout(data_cb, desc_set_idx, binding_idx);
 
    return nir_vec3(b, nir_imm_int(b, desc_set_idx + 1),
-                   nir_iadd_imm(b, intrin->src[0].ssa, binding->descriptor_index),
+                   nir_iadd_imm(b, nir_imul_imm(b, intrin->src[0].ssa, binding->stride), binding->offset),
                    nir_imm_int(b, 0));
 }
 
@@ -42,8 +42,23 @@ static nir_def *lower_vri_intrin_vrri(struct nir_builder *b,
                                           nir_instr *instr, void *data_cb)
 {
    nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
+   nir_descriptor_type desc_type = nir_intrinsic_desc_type(intrin);
+
+   uint32_t stride = 0;
+   switch (desc_type) {
+   case nir_descriptor_type_uniform_buffer:
+   case nir_descriptor_type_storage_buffer:
+      stride = sizeof(struct lp_buffer_descriptor);
+      break;
+   case nir_descriptor_type_acceleration_structure:
+      stride = sizeof(uint64_t);
+      break;
+   default:
+      UNREACHABLE("Unimplemented nir_descriptor_type");
+   }
+
    nir_def *old_index = intrin->src[0].ssa;
-   nir_def *delta = intrin->src[1].ssa;
+   nir_def *delta = nir_imul_imm(b, intrin->src[1].ssa, stride);
    return nir_vec3(b, nir_channel(b, old_index, 0),
                    nir_iadd(b, nir_channel(b, old_index, 1), delta),
                    nir_channel(b, old_index, 2));
@@ -63,10 +78,9 @@ lower_buffer(nir_builder *b, nir_intrinsic_instr *intr, uint32_t src_index)
       return;
 
    nir_def *set = nir_channel(b, intr->src[src_index].ssa, 0);
-   nir_def *binding = nir_channel(b, intr->src[src_index].ssa, 1);
+   nir_def *offset = nir_channel(b, intr->src[src_index].ssa, 1);
 
    nir_def *base = nir_load_const_buf_base_addr_lvp(b, set);
-   nir_def *offset = nir_imul_imm(b, binding, sizeof(struct lp_descriptor));
    nir_def *descriptor = nir_iadd(b, base, nir_u2u64(b, offset));
    nir_src_rewrite(&intr->src[src_index], descriptor);
 }
@@ -78,15 +92,13 @@ lower_accel_struct(nir_builder *b, nir_intrinsic_instr *intr, uint32_t src_index
       return;
 
    nir_def *set = nir_channel(b, intr->src[src_index].ssa, 0);
-   nir_def *binding = nir_channel(b, intr->src[src_index].ssa, 1);
-
-   nir_def *offset = nir_imul_imm(b, binding, sizeof(struct lp_descriptor));
+   nir_def *offset = nir_channel(b, intr->src[src_index].ssa, 1);
    nir_src_rewrite(&intr->src[src_index], nir_load_ubo(b, 1, 64, set, offset, .range = UINT32_MAX));
 }
 
 static nir_def *
 vulkan_resource_from_deref(nir_builder *b, nir_deref_instr *deref, const struct lvp_pipeline_layout *layout,
-                           unsigned plane)
+                           unsigned plane, bool is_sampler)
 {
    nir_def *index = nir_imm_int(b, 0);
 
@@ -102,11 +114,14 @@ vulkan_resource_from_deref(nir_builder *b, nir_deref_instr *deref, const struct 
    nir_variable *var = deref->var;
 
    const struct lvp_descriptor_set_binding_layout *binding = get_binding_layout(layout, var->data.descriptor_set, var->data.binding);
-   uint32_t binding_base = binding->descriptor_index + plane;
-   index = nir_iadd_imm(b, nir_imul_imm(b, index, binding->stride), binding_base);
+
+   uint32_t binding_base = binding->offset + plane * lvp_get_descriptor_size(binding->type);
+   if (is_sampler)
+      binding_base += lvp_get_sampler_descriptor_offset(binding->type);
+
+   nir_def *offset = nir_iadd_imm(b, nir_imul_imm(b, index, binding->stride), binding_base);
 
    nir_def *set = nir_load_const_buf_base_addr_lvp(b, nir_imm_int(b, var->data.descriptor_set + 1));
-   nir_def *offset = nir_imul_imm(b, index, sizeof(struct lp_descriptor));
    return nir_iadd(b, set, nir_u2u64(b, offset));
 }
 
@@ -119,6 +134,7 @@ static void lower_vri_instr_tex(struct nir_builder *b,
       plane_ssa ? nir_src_as_uint(nir_src_for_ssa(plane_ssa)) : 0;
 
    for (unsigned i = 0; i < tex->num_srcs; i++) {
+      bool is_sampler = false;
       nir_deref_instr *deref;
       switch (tex->src[i].src_type) {
       case nir_tex_src_texture_deref:
@@ -128,12 +144,13 @@ static void lower_vri_instr_tex(struct nir_builder *b,
       case nir_tex_src_sampler_deref:
          tex->src[i].src_type = nir_tex_src_sampler_handle;
          deref = nir_src_as_deref(tex->src[i].src);
+         is_sampler = true;
          break;
       default:
          continue;
       }
 
-      nir_def *resource = vulkan_resource_from_deref(b, deref, layout, plane);
+      nir_def *resource = vulkan_resource_from_deref(b, deref, layout, plane, is_sampler);
       nir_src_rewrite(&tex->src[i].src, resource);
    }
 }
@@ -147,7 +164,7 @@ lower_image_intrinsic(nir_builder *b,
 
    nir_deref_instr *deref = nir_src_as_deref(intrin->src[0]);
 
-   nir_def *resource = vulkan_resource_from_deref(b, deref, layout, 0);
+   nir_def *resource = vulkan_resource_from_deref(b, deref, layout, 0, false);
    nir_rewrite_image_intrinsic(intrin, resource, nir_image_intrinsic_type_bindless);
 }
 
@@ -177,16 +194,6 @@ lower_load_ubo(nir_builder *b, nir_intrinsic_instr *intrin, void *data_cb)
    nir_src_rewrite(&intrin->src[1], offset);
 
    return true;
-}
-
-static void
-lower_push_constant(nir_builder *b, nir_intrinsic_instr *intrin, void *data_cb)
-{
-   nir_def *load = nir_load_ubo(b, intrin->def.num_components, intrin->def.bit_size,
-                                nir_imm_int(b, 0), intrin->src[0].ssa,
-                                .range = nir_intrinsic_range(intrin));
-   nir_def_rewrite_uses(&intrin->def, load);
-   nir_instr_remove(&intrin->instr);
 }
 
 static bool
@@ -241,10 +248,6 @@ lower_vri_instr(struct nir_builder *b, nir_instr *instr, void *data_cb)
       case nir_intrinsic_image_deref_size:
       case nir_intrinsic_image_deref_samples:
          lower_image_intrinsic(b, intrin, data_cb);
-         return true;
-
-      case nir_intrinsic_load_push_constant:
-         lower_push_constant(b, intrin, data_cb);
          return true;
 
       default:

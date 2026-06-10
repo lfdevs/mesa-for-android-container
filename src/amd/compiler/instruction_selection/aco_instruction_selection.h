@@ -251,6 +251,7 @@ isel_context setup_isel_context(Program* program, unsigned shader_count,
 
 /* aco_isel_cfg.cpp */
 void emit_loop_break(isel_context* ctx);
+void emit_halt(isel_context* ctx);
 void begin_loop(isel_context* ctx);
 void end_loop(isel_context* ctx);
 void begin_uniform_if_then(isel_context* ctx, Temp cond);

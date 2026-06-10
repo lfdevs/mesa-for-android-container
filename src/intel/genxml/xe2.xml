@@ -1520,7 +1520,7 @@
   <instruction name="EXECUTE_INDIRECT_DISPATCH" bias="2" length="45" engine="render|compute">
     <field name="DWord Length" dword="0" bits="7:0" type="uint" default="43" />
     <field name="Predicate Enable" dword="0" bits="8:8" type="bool" />
-    <field name="MOCS" dword="0" bits="15:12" type="uint" nonzero="true" />
+    <field name="MOCS Index" dword="0" bits="15:12" type="uint" nonzero="true" />
     <field name="3D Command Sub Opcode" dword="0" bits="23:16" type="uint" default="1" />
     <field name="3D Command Opcode" dword="0" bits="26:24" type="uint" default="4" />
     <field name="Command SubType" dword="0" bits="28:27" type="uint" default="3" />

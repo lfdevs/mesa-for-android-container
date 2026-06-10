@@ -134,6 +134,7 @@ typedef struct _pco_cs_data {
 
    pco_range shmem;
    bool zero_shmem;
+   bool global_shmem;
 } pco_cs_data;
 
 /** PCO image descriptor metadata. */

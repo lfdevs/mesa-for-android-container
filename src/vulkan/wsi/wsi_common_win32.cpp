@@ -304,8 +304,9 @@ wsi_win32_surface_get_capabilities2(VkIcdSurfaceBase *surface,
 static const struct {
    VkFormat     format;
 } available_surface_formats[] = {
-   { VK_FORMAT_B8G8R8A8_SRGB },
    { VK_FORMAT_B8G8R8A8_UNORM },
+   { VK_FORMAT_R8G8B8A8_UNORM },
+   { VK_FORMAT_B8G8R8A8_SRGB },
 };
 
 

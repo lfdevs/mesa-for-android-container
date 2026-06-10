@@ -6,7 +6,6 @@
 #include "brw_eu.h"
 #include "brw_shader.h"
 #include "brw_builder.h"
-#include "brw_generator.h"
 #include "intel_prim.h"
 #include "brw_nir.h"
 #include "brw_private.h"
@@ -121,8 +120,10 @@ brw_compile_gs(const struct brw_compiler *compiler,
                struct brw_compile_gs_params *params)
 {
    nir_shader *nir = params->base.nir;
-   const struct brw_gs_prog_key *key = params->key;
-   struct brw_gs_prog_data *prog_data = params->prog_data;
+   const struct brw_gs_prog_key *key =
+      (const struct brw_gs_prog_key *)params->base.key;
+   struct brw_gs_prog_data *prog_data =
+      (struct brw_gs_prog_data *)params->base.prog_data;
    const unsigned dispatch_width = brw_geometry_stage_dispatch_width(compiler->devinfo);
 
    struct intel_vue_map input_vue_map = {0};
@@ -374,19 +375,13 @@ brw_compile_gs(const struct brw_compiler *compiler,
          v.payload().num_regs / reg_unit(compiler->devinfo);
       prog_data->base.base.grf_used = v.grf_used;
 
-      brw_generator g(compiler, &params->base,
-                     &prog_data->base.base, MESA_SHADER_GEOMETRY);
-      if (unlikely(debug_enabled)) {
-         const char *label =
-            nir->info.label ? nir->info.label : "unnamed";
-         char *name = ralloc_asprintf(params->base.mem_ctx,
-                                      "%s geometry shader %s",
-                                      label, nir->info.name);
-         g.enable_debug(name);
-      }
-      g.generate_code(v, params->base.stats);
-      g.add_const_data(nir->constant_data, nir->constant_data_size);
-      return g.get_assembly();
+      const brw_to_binary_params to_binary_params = {
+         .compiler = compiler,
+         .params = &params->base,
+         .prog_data = &prog_data->base.base,
+         .shaders = { &v },
+      };
+      return brw_to_binary(&to_binary_params);
    }
 
    params->base.error_str = ralloc_strdup(params->base.mem_ctx, v.fail_msg);

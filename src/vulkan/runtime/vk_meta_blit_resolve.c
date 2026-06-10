@@ -218,7 +218,7 @@ build_blit_shader(const struct vk_meta_blit_key *key)
 
    nir_def *out_coord_xy = nir_load_frag_coord(b);
    out_coord_xy = nir_trim_vector(b, out_coord_xy, 2);
-   nir_def *src_coord_xy = nir_ffma(b, out_coord_xy, xy_scale, xy_off);
+   nir_def *src_coord_xy = nir_ffma_weak(b, out_coord_xy, xy_scale, xy_off);
 
    nir_def *z_xform = load_struct_var(b, push, 1);
    nir_def *out_layer = nir_load_layer_id(b);
@@ -227,7 +227,7 @@ build_blit_shader(const struct vk_meta_blit_key *key)
       nir_def *z_off = nir_channel(b, z_xform, 0);
       nir_def *z_scale = nir_channel(b, z_xform, 1);
       nir_def *out_coord_z = nir_fadd_imm(b, nir_u2f32(b, out_layer), 0.5);
-      nir_def *src_coord_z = nir_ffma(b, out_coord_z, z_scale, z_off);
+      nir_def *src_coord_z = nir_ffma_weak(b, out_coord_z, z_scale, z_off);
       src_coord = nir_vec3(b, nir_channel(b, src_coord_xy, 0),
                               nir_channel(b, src_coord_xy, 1),
                               src_coord_z);

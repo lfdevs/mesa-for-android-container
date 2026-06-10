@@ -1,0 +1,150 @@
+[traces_db]
+download_url = "https://s3.freedesktop.org/mesa-tracie-public/"
+
+[[traces]]
+path = "behdad-glyphy/glyphy-v2.trace"
+[traces.devices]
+panfrost-t860 = { checksum = "7aa10c6586a6e1c542879922a51aa4b60785edda699158fc25d70a0fff07f7a3" }
+
+[[traces]]
+path = "glxgears/glxgears-2-v2.trace"
+[traces.devices]
+panfrost-t860 = { checksum = "956ac05e0d104d28b384168efec353a5e39c34a71f2add6ce85050f26b6bbfd3" }
+panfrost-t760 = { checksum = "956ac05e0d104d28b384168efec353a5e39c34a71f2add6ce85050f26b6bbfd3" }
+
+# [[traces]]
+# path = "pathfinder/demo-v2.trace"
+# [traces.devices]
+
+# [[traces]]
+# path = "pathfinder/canvas_moire-v2.trace"
+# [traces.devices]
+
+[[traces]]
+path = "pathfinder/canvas_text_v2-v2.trace"
+[traces.devices]
+panfrost-t860 = { checksum = "be8b730df375d252c3af062cabe436940a0b8a9dde7f05f96f0fb87e9a188026" }
+panfrost-t760 = { checksum = "be8b730df375d252c3af062cabe436940a0b8a9dde7f05f96f0fb87e9a188026" }
+
+[[traces]]
+path = "gputest/furmark-v2.trace"
+[traces.devices]
+panfrost-t860 = { checksum = "be93c04484d1e354403e823a299ba2ab3da2ad29fa742cb83e7d800a427eb760" }
+
+[[traces]]
+path = "gputest/triangle-v2.trace"
+[traces.devices]
+panfrost-t860 = { checksum = "2d9ec3916cf5654a8594c006907e84b5ee36419ed8a55101fcba9aee4d8a76b0" }
+panfrost-t760 = { checksum = "2d9ec3916cf5654a8594c006907e84b5ee36419ed8a55101fcba9aee4d8a76b0" }
+
+[[traces]]
+path = "humus/Portals-v2.trace"
+[traces.devices]
+panfrost-t860 = { checksum = "e5b747bd615fb49b8fab76f842ad9121daa38f8344824a5e55e80b63882c21bd" }
+panfrost-t760 = { checksum = "25ee6261e71f6a2f15d0edfadcfa2432b2ffb6be9e4e2339065c75b1b261f571" }
+
+# [[traces]]
+# path = "0ad/0ad-v2.trace"
+# [traces.devices]
+
+# gimark requires an environment var to work around a bug, disable for now
+# [[traces]]
+# path = "gputest/gimark-v2.trace"
+# [traces.devices]
+# Some blue rings are missing on the top-left corner, also the penguin watermark.
+# panfrost-t860 = { checksum = "0020a77e25003e4e8db1ce929eed8914" }
+
+[[traces]]
+path = "gputest/pixmark-julia-fp32-v2.trace"
+[traces.devices]
+panfrost-t860 = { checksum = "40ed809d3766b84229135260158746e9e3f3bc7fd40e87307bd34c419696592c" }
+
+[[traces]]
+path = "gputest/plot3d-v2.trace"
+[traces.devices]
+panfrost-t860 = { checksum = "905f702df1d8c21ef58965e25569fb538ce01d439ac7db473a9fa0d84394719b" }
+
+[[traces]]
+path = "humus/AmbientAperture-v2.trace"
+[traces.devices]
+panfrost-t860 = { checksum = "851d9a9a1f6209c6cf79a12a36eb674b2661ca753da2bd4b890af887483f36bd" }
+
+[[traces]]
+path = "humus/CelShading-v2.trace"
+[traces.devices]
+panfrost-t860 = { checksum = "d905649f3642e6bf9c86f53f8f8bb514219607bcca80464d92d3288a25b03242" }
+
+[[traces]]
+path = "humus/DynamicBranching3-v2.trace"
+[traces.devices]
+panfrost-t860 = { checksum = "5049dc77e75b188ec23bd9430bcc556630ccce1060274cf793ee8dedbf6995ce" }
+
+[[traces]]
+path = "humus/RaytracedShadows-v2.trace"
+[traces.devices]
+panfrost-t860 = { checksum = "aa020ccb8900c72d22826b27d54220fe4dd037414c84d433b9af4c665e11052e" }
+
+[[traces]]
+path = "humus/VolumetricFogging2-v2.trace"
+[traces.devices]
+panfrost-t860 = { checksum = "ed79d36abcda3514afadcd9a3be35b86c6db30e63d66dcbcc75b4a3925daf6e4" }
+
+# [[traces]]
+# path = "neverball/neverball-v2.trace"
+# [traces.devices]
+# Missing the coins and the texture on the \"Nev\" of the level.
+# panfrost-t860 = { checksum = "53365059f3b84436c199f1cb6f6d3b35" }
+
+[[traces]]
+path = "paraview/pv-manyspheres-v2.trace"
+[traces.devices]
+panfrost-t860 = { checksum = "846fde9480b1877bc52b75e4ff1902b35f57efcf98031978004e50dada19b148" }
+
+[[traces]]
+path = "paraview/pv-waveletcontour-v2.trace"
+[traces.devices]
+panfrost-t860 = { checksum = "fdb2e3cf120be26a8c458aaaacaaa59f55a134df5c3d234ea7349fcf92868636", singlethread = true }
+
+[[traces]]
+path = "paraview/pv-waveletvolume-v2.trace"
+[traces.devices]
+panfrost-t860 = { checksum = "44a68bb926feb07dac94642fe46907cef541fba017fceba84fa7bb493148c31b" }
+
+[[traces]]
+path = "valve/counterstrike-v2.trace"
+[traces.devices]
+panfrost-t860 = { checksum = "ea458cdc37994d5cb2d3a8956246347690341b620f5d35c372a1fe3ff415e4f8" }
+
+# [[traces]]
+# path = "valve/counterstrike-source-v2.trace"
+# [traces.devices]
+
+# [[traces]]
+# path = "ror/ror-default.trace"
+# [traces.devices]
+
+# [[traces]]
+# path = "nheko/nheko-colors.trace"
+# [traces.devices]
+
+[[traces]]
+path = "warzone2100/warzone2100-default.trace"
+[traces.devices]
+panfrost-t760 = { checksum = "b0a1cd3eb73cf1c546ce6a4121f54106d4b892c7b48d7cdd49dc32f4e82b53c5" }
+panfrost-t860 = { checksum = "8ec666b1f4916f2b1612abf97db387b606184b0084626d79addd0944bef84bf4" }
+
+# [[traces]]
+# path = "blender/blender-demo-cube_diorama.trace"
+# [traces.devices]
+
+# [[traces]]
+# path = "blender/blender-demo-ellie_pose.trace"
+# [traces.devices]
+
+# [[traces]]
+# path = "unvanquished/unvanquished-lowest.trace"
+# [traces.devices]
+
+# [[traces]]
+# path = "unvanquished/unvanquished-ultra.trace"
+# [traces.devices]

@@ -342,9 +342,6 @@ static bool lower_intrinsic(nir_builder *b, nir_instr *instr, struct lower_abi_s
       replacement =
          nir_iadd_imm(b, ac_nir_unpack_arg(b, &args->ac, args->ac.tcs_offchip_layout, 7, 5), 1);
       break;
-   case nir_intrinsic_load_sample_mask_in:
-      replacement = ac_nir_load_arg(b, &args->ac, args->ac.sample_coverage);
-      break;
    case nir_intrinsic_load_lshs_vertex_stride_amd:
       if (stage == MESA_SHADER_VERTEX) {
          replacement = nir_imm_int(b, si_shader_lshs_vertex_stride(shader));
@@ -694,6 +691,9 @@ static bool lower_intrinsic(nir_builder *b, nir_instr *instr, struct lower_abi_s
       break;
    case nir_intrinsic_load_ring_mesh_scratch_amd:
       replacement = build_mesh_scratch_ring_desc(b, s);
+      break;
+   case nir_intrinsic_load_use_sample_mask_in_amd:
+      replacement = nir_imm_true(b);
       break;
    default:
       return false;

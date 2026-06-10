@@ -161,4 +161,6 @@ extern bool r300_nir_lower_flrp(nir_shader *shader);
 
 extern bool r300_nir_lower_comparison_fs(nir_shader *shader);
 
+extern bool r300_nir_add_wpos(nir_shader *shader, nir_variable **wpos_var_out);
+
 #endif /* R300_NIR_H */

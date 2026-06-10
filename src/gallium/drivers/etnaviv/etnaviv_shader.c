@@ -67,7 +67,6 @@ etna_dump_shader(const struct etna_shader_variant *shader)
 
    etna_disasm(shader->code, shader->code_size, PRINT_RAW);
 
-   printf("num loops: %i\n", shader->num_loops);
    printf("num temps: %i\n", shader->num_temps);
    printf("immediates:\n");
    for (int idx = 0; idx < shader->uniforms.count; ++idx) {
@@ -423,12 +422,11 @@ dump_shader_info(struct etna_shader_variant *v, struct util_debug_callback *debu
 
    util_debug_message(debug, SHADER_INFO,
          "%s shader: %u instructions, %u temps, "
-         "%u immediates, %u loops",
+         "%u immediates",
          etna_shader_stage(v->shader),
          v->code_size / 4,
          v->num_temps,
-         v->uniforms.count,
-         v->num_loops);
+         v->uniforms.count);
 }
 
 bool

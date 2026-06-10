@@ -2290,6 +2290,21 @@ emit_alu(struct ntv_context *ctx, nir_alu_instr *alu)
       break;
    }
 
+   case nir_op_ffma_weak: {
+      assert(nir_op_infos[alu->op].num_inputs == 3);
+      result = emit_builtin_triop(ctx, GLSLstd450Fma, dest_type,
+                                  src[0], src[1], src[2]);
+      break;
+   }
+
+   case nir_op_ffma: {
+      assert(nir_op_infos[alu->op].num_inputs == 3);
+      spirv_builder_emit_cap(&ctx->builder, SpvCapabilityFMAKHR);
+      spirv_builder_emit_extension(&ctx->builder, "SPV_KHR_fma");
+      result = emit_triop(ctx, SpvOpFmaKHR, dest_type, src[0], src[1], src[2]);
+      break;
+   }
+
    default:
       fprintf(stderr, "emit_alu: not implemented (%s)\n",
               nir_op_infos[alu->op].name);

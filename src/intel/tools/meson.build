@@ -14,7 +14,7 @@ libintel_tools = static_library(
   dependencies : [
     idep_mesautil,
     idep_intel_dev,
-    idep_intel_decoder_brw,
+    idep_intel_decoder_gen,
     idep_intel_decoder_elk,
     idep_intel_compiler_brw,
     idep_intel_compiler_elk,
@@ -29,7 +29,7 @@ libintel_tools = static_library(
 idep_libintel_tools = declare_dependency(
   link_with : libintel_tools,
   dependencies : [
-    idep_intel_decoder_brw,
+    idep_intel_decoder_gen,
     idep_intel_decoder_elk,
   ]
 )

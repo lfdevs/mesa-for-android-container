@@ -92,24 +92,6 @@ bool si_init_gfx_context(struct si_screen *sscreen, struct si_context *sctx, uns
    if (!sscreen->has_gfx_compute)
       return false;
 
-   if (sscreen->info.gfx_level >= GFX9 && sscreen->debug_flags & DBG(SQTT)) {
-      /* Auto-enable stable performance profile if possible. */
-      if (sscreen->b.num_contexts == 1)
-         ws->cs_set_pstate(&sctx->gfx_cs, RADEON_CTX_PSTATE_PEAK);
-
-      if (ac_check_profile_state(&sscreen->info)) {
-         mesa_loge("Canceling RGP trace request as a hang condition has been "
-                  "detected. Force the GPU into a profiling mode with e.g. "
-                  "\"echo profile_peak  > "
-                  "/sys/class/drm/card0/device/power_dpm_force_performance_level\"");
-      } else {
-         if (!si_init_sqtt(sctx))
-            return false;
-
-         si_handle_sqtt(sctx, &sctx->gfx_cs);
-      }
-   }
-
    sctx->is_gfx_queue = sscreen->info.gfx_level == GFX6 ||
                         /* Compute queues hang on Raven and derivatives, see:
                          * https://gitlab.freedesktop.org/mesa/mesa/-/issues/12310 */
@@ -306,6 +288,24 @@ bool si_init_gfx_context(struct si_screen *sscreen, struct si_context *sctx, uns
 
       /* This enables jumping over the VS for GS-only waves. */
       sctx->shader.gs.key.ge.opt.prefer_mono = 1;
+   }
+
+   if (sscreen->info.gfx_level >= GFX9 && sscreen->debug_flags & DBG(SQTT)) {
+      /* Auto-enable stable performance profile if possible. */
+      if (sscreen->b.num_contexts == 0)
+         ws->cs_set_pstate(&sctx->gfx_cs, RADEON_CTX_PSTATE_PEAK);
+
+      if (ac_check_profile_state(&sscreen->info)) {
+         mesa_loge("Canceling RGP trace request as a hang condition has been "
+                  "detected. Force the GPU into a profiling mode with e.g. "
+                  "\"echo profile_peak  > "
+                  "/sys/class/drm/card0/device/power_dpm_force_performance_level\"");
+      } else {
+         if (!si_init_sqtt(sctx))
+            return false;
+
+         si_handle_sqtt(sctx, &sctx->gfx_cs);
+      }
    }
 
    si_utrace_init(sctx);

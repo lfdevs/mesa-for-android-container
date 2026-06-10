@@ -145,6 +145,35 @@ kk_image_view_init(struct kk_device *dev, struct kk_image_view *view,
           view->vk.view_type != VK_IMAGE_VIEW_TYPE_3D)
          mtl_handle = image->planes[image_plane].mtl_handle_array;
 
+      /* Block texel view requires subresource aliasing. We do it here to avoid
+       * having to create a texture for every possible subresource up-front */
+      if (util_format_is_compressed(plane->layout.format.pipe) &&
+          !util_format_is_compressed(view_layout.format.pipe)) {
+         uint64_t subres_offset_B =
+            kk_get_layer_level_B(&plane->layout, view_layout.base_array_layer,
+                                 view_layout.base_level);
+
+         /* Construct layout for the reinterpreted image */
+         struct kk_image_layout subres_layout = plane->layout;
+         subres_layout.width_px = view->vk.extent.width;
+         subres_layout.height_px = view->vk.extent.height;
+         subres_layout.depth_px = view->vk.extent.depth;
+         subres_layout.layers = view->vk.layer_count;
+         subres_layout.levels = view->vk.level_count;
+         subres_layout.format.pipe = view_layout.format.pipe;
+         subres_layout.format.mtl = view_layout.format.mtl;
+
+         mtl_handle = kk_image_plane_create_texture(plane, &subres_layout,
+                                                    subres_offset_B);
+         view->planes[view_plane].mtl_handle_subres = mtl_handle;
+
+         /* Adjust for new base texture pointing to subresource */
+         view_layout.base_level = 0u;
+         view_layout.num_levels = subres_layout.levels;
+         view_layout.base_array_layer = 0u;
+         view_layout.array_len = subres_layout.layers;
+      }
+
       if (view->vk.usage &
           (VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT)) {
          view->planes[view_plane].mtl_handle_sampled =
@@ -192,15 +221,12 @@ kk_image_view_init(struct kk_device *dev, struct kk_image_view *view,
                view->planes[view_plane].mtl_handle_input);
 
          /* Handle mutable formats */
+         view->planes[view_plane].render_is_view = requires_format_change;
          if (requires_format_change) {
             view_layout.view_type = original_type;
-            view_layout.base_array_layer = 0u;
-            view_layout.base_level = 0u;
-            view_layout.array_len = image->vk.array_layers;
-            view_layout.num_levels = image->vk.mip_levels;
             view->planes[view_plane].mtl_handle_render =
                mtl_new_texture_view_with_no_swizzle(mtl_handle, &view_layout);
-         } else
+         } else /* Subresource indices will be set in attachment descriptor */
             view->planes[view_plane].mtl_handle_render = mtl_retain(mtl_handle);
       }
    }
@@ -223,6 +249,9 @@ kk_image_view_finish(struct kk_device *dev, struct kk_image_view *view)
 
       if (view->planes[plane].mtl_handle_render)
          mtl_release(view->planes[plane].mtl_handle_render);
+
+      if (view->planes[plane].mtl_handle_subres)
+         mtl_release(view->planes[plane].mtl_handle_subres);
    }
 
    vk_image_view_finish(&view->vk);

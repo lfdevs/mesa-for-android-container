@@ -35,6 +35,7 @@ DEPS=(
     libgbm-dev
     libglvnd-dev
     liblua5.3-dev
+    libpng-dev
     libxcb-dri2-0-dev
     libxcb-dri3-dev
     libxcb-glx0-dev

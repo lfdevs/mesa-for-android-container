@@ -149,18 +149,31 @@
  *
  * 4. Remove duplicated output components
  *
- *    * By comparing SSA defs.
- *    * If there are multiple stores to the same output, all such stores
- *      should store the same SSA as all stores of another output for
- *      the output to be considered duplicated. If an output has multiple
- *      vertices, all vertices should store the same SSA.
+ *    * 2 output components are duplicated if:
+ *      * They store the same values (SSA defs).
+ *      * They must have stores in the same blocks, and they can store
+ *        different values in each such block, but the values must be equal
+ *        within each block between the 2 output components.
+ *      * Blocks are divided into GS emit sections for GS if a block contains
+ *        more than one emit_vertex, and the previous rule is applied to GS
+ *        emit sections as if they were blocks.
+ *      * If the outputs are arrayed (TCS and MS), the same values must be
+ *        stored in the same vertex/primitive elements (which are identified
+ *        by the index SSA def), but the values can be different between
+ *        those elements.
+ *      * Front colors and back colors are deduplicated in sync. For example,
+ *        if the front color is (a,b,c,a) and the back color is (d,e,f,d), then
+ *        the last component is removed and sourced from the first component.
+ *        This works the same as the previous rules for blocks, GS emit
+ *        sections, and arrayed outputs, but here the key is front/back instead
+ *        of block 0/1, GS emit section 0/1, or index 0/1.
  *    * Deduplication can only be done between outputs of the same category.
  *      Those are: interpolated, patch, flat, interpolated color, flat color,
- *                 and conditionally interpolated color based on the flat
- *                 shade state
+ *                 and conditionally interpolated color based on the dynamic
+ *                 shade model state
  *    * Everything is deduplicated except TEXn due to the coord replace state.
- *    * Eliminated output stores get the "no_varying" flag if they are also
- *      xfb stores or write sysval outputs.
+ *    * Duplicated output stores that can't be removed because they are also
+ *      xfb stores or write sysval outputs get the "no_varying" flag.
  *
  * 5. Link signed zero information
  *
@@ -507,6 +520,9 @@
 #include "nir_builder.h"
 #include "nir_xfb_info.h"
 
+#define XXH_INLINE_ALL
+#include "util/xxhash.h"
+
 /* nir_opt_varyings works at scalar 16-bit granularity across all varyings.
  *
  * Slots (i % 8 == 0,2,4,6) are 32-bit channels or low bits of 16-bit channels.
@@ -616,14 +632,22 @@ vec4_slot(unsigned scalar_slot)
 
 struct list_node {
    struct list_head head;
-   nir_intrinsic_instr *instr;
+   nir_intrinsic_instr *instr; /* load or store */
+
+   /* The number of emit_vertex instructions that precede this store
+    * in the current block. It's the index of the following emit_vertex,
+    * effectively identifying which emit_vertex section this store belongs
+    * to within a block.
+    */
+   unsigned gs_emit_index;
 };
 
 /* Information about 1 scalar varying slot for both shader stages. */
 struct scalar_slot {
    struct {
       /* Linked list of all store instructions writing into the scalar slot
-       * in the producer.
+       * in the producer. The stores are inserted in the order in which they
+       * occur in the shader.
        */
       struct list_head stores;
 
@@ -751,7 +775,6 @@ struct linkage_info {
     * the same value. If the output has multiple vertices, all vertices store
     * the same value. This is a useful property for:
     * - constant and uniform propagation to the next shader
-    * - deduplicating outputs
     */
    BITSET_DECLARE(output_equal_mask, NUM_SCALAR_SLOTS);
 
@@ -775,6 +798,11 @@ struct linkage_info {
     * cares about the sign of zero.
     */
    BITSET_DECLARE(signed_zero_mask, NUM_SCALAR_SLOTS);
+
+   struct {
+      nir_block *last_gs_emit_block;
+      unsigned gs_emit_index;
+   } gather_outputs_state;
 };
 
 /******************************************************************
@@ -1047,7 +1075,7 @@ static nir_def *
 build_convert_inf_to_nan(nir_builder *b, nir_def *x)
 {
    /* Do x*0 + x. The multiplication by 0 can't be optimized out. */
-   nir_def *fma = nir_ffma_imm1(b, x, 0, x);
+   nir_def *fma = nir_ffma_weak_imm1(b, x, 0, x);
    nir_def_as_alu(fma)->fp_math_ctrl = nir_fp_preserve_nan | nir_fp_preserve_inf | nir_fp_exact;
    return fma;
 }
@@ -1513,6 +1541,22 @@ gather_outputs(struct nir_builder *builder, nir_intrinsic_instr *intr, void *cb_
 {
    struct linkage_info *linkage = (struct linkage_info *)cb_data;
 
+   /* Track the index of emit_vertex in the same block, so that we can identify
+    * which GS output stores belong to which emit_vertex section in the same
+    * block.
+    */
+   if (intr->intrinsic == nir_intrinsic_emit_vertex ||
+       intr->intrinsic == nir_intrinsic_emit_vertex_with_counter) {
+      if (linkage->gather_outputs_state.last_gs_emit_block ==
+          intr->instr.block) {
+         linkage->gather_outputs_state.gs_emit_index++;
+      } else {
+         linkage->gather_outputs_state.last_gs_emit_block = intr->instr.block;
+         linkage->gather_outputs_state.gs_emit_index = 0;
+      }
+      return false;
+   }
+
    if (intr->intrinsic != nir_intrinsic_store_output &&
        intr->intrinsic != nir_intrinsic_load_output &&
        intr->intrinsic != nir_intrinsic_store_per_vertex_output &&
@@ -1573,6 +1617,7 @@ gather_outputs(struct nir_builder *builder, nir_intrinsic_instr *intr, void *cb_
    struct list_node *node = linear_alloc_child(linkage->linear_mem_ctx,
                                                sizeof(struct list_node));
    node->instr = intr;
+   node->gs_emit_index = linkage->gather_outputs_state.gs_emit_index;
    out->num_slots = MAX2(out->num_slots, sem.num_slots);
 
    list_addtail(&node->head, is_store ? &out->producer.stores : &out->producer.loads);
@@ -1625,17 +1670,13 @@ gather_outputs(struct nir_builder *builder, nir_intrinsic_instr *intr, void *cb_
    if (is_store) {
       nir_scalar value = nir_scalar_resolved(intr->src[0].ssa, 0);
 
-      const bool constant = nir_scalar_is_const(value);
-
       /* If the store instruction is executed in a divergent block, the value
        * that's stored in the output becomes divergent.
        *
-       * Mesh shaders get special treatment because we can't follow their topology,
-       * so we only propagate constants.
-       * TODO: revisit this when workgroup divergence analysis is merged.
+       * For all shaders except mesh shaders, "divergent" is vertex divergence.
+       * For mesh shaders, it's workgroup divergence.
        */
-      const bool divergent = (!constant && linkage->producer_stage == MESA_SHADER_MESH) ||
-                             intr->instr.block->divergent ||
+      const bool divergent = intr->instr.block->divergent ||
                              nir_src_is_divergent(&intr->src[0]);
 
       if (!out->producer.value.def) {
@@ -1974,9 +2015,11 @@ remove_all_stores(struct linkage_info *linkage, unsigned i,
 
    /* Remove all stores. */
    list_for_each_entry_safe(struct list_node, iter, &slot->producer.stores, head) {
+      /* nir_remove_varying always makes progress. */
+      *progress |= nir_progress_producer;
+
       if (nir_remove_varying(iter->instr, linkage->consumer_stage)) {
          list_del(&iter->head);
-         *progress |= nir_progress_producer;
       } else {
          if (has_xfb(iter->instr)) {
             *uses_xfb = true;
@@ -2746,22 +2789,93 @@ get_input_qualifier(struct linkage_info *linkage, unsigned i)
    return qual + pixel_location;
 }
 
-static uint32_t
-nir_ht_scalar_hash(const void *key)
-{
-   nir_scalar s;
-   static_assert(offsetof(nir_scalar, def) == 0, "known layout");
-   static_assert(offsetof(nir_scalar, comp) == sizeof(s.def), "no padding");
-   static_assert(sizeof(s.comp) == sizeof(unsigned), "known layout");
+/* Duplicated outputs are those outputs that have stores in the same blocks and
+ * store equal values in each such block.
+ *
+ * It's implemented by representing each output store as <block, stored_value,
+ * index, gs_emit_index, is_back_color> entries. 1 output slot is
+ * represented as a set of such entries. 2 outputs store identical values if
+ * their sets are equal.
+ *
+ * dedup_entry is the entry. Entries are in "struct set". The sets are keys in
+ * the hash table storing all outputs. An output slot is a duplicate of
+ * another if its set of dedup_entries is equal to the set of dedup_entries
+ * of another slot that's already in the hash table.
+ */
+typedef struct {
+   /* The block and the value stored in that block. */
+   nir_block *block;
+   nir_scalar value;
 
-   /* Don't include structure padding of nir_scalar. */
-   return _mesa_hash_data(key, offsetof(nir_scalar, comp) + sizeof(unsigned));
+   /* The output vertex or primitive index for TCS and MS.
+    * If this is non-NULL, it means the output is arrayed.
+    */
+   nir_scalar index;
+
+   /* If a block has multiple emits, this is the index of the next emit.
+    * There is one dedup_entry per emit.
+    */
+   unsigned gs_emit_index;
+
+   /* Treat back colors as different outputs from front colors because both
+    * front and back colors happen to be in the same output slot and set.
+     */
+   bool is_back_color;
+} dedup_entry;
+
+#define DEBUG_PRINT_DEDUP 0
+
+static void
+print_dedup_entry(const char *place, struct set *set, dedup_entry *entry)
+{
+   printf("%s> set=0x%" SCNxPTR ", entry=0x%" SCNxPTR ", block=0x%" SCNxPTR ", "
+          "value=0x%" SCNxPTR ":%u, index=0x%" SCNxPTR ":%u, emit=%u\n",
+          place, (uintptr_t)set, (uintptr_t)entry, (uintptr_t)entry->block,
+          (uintptr_t)entry->value.def, entry->value.comp,
+          (uintptr_t)entry->index.def, entry->index.comp,
+          entry->gs_emit_index);
+}
+
+static uint32_t
+dedup_entry_hash_accum(const void *key, uint32_t hash)
+{
+   return XXH32(key, sizeof(dedup_entry), hash);
+}
+
+static uint32_t
+dedup_entry_set_hash(const void *key)
+{
+   return dedup_entry_hash_accum(key, 0);
 }
 
 static bool
-nir_ht_scalar_equal(const void *a, const void *b)
+dedup_entry_set_equal(const void *a, const void *b)
 {
-   return nir_scalar_equal(*(nir_scalar*)a, *(nir_scalar*)b);
+   return !memcmp(a, b, sizeof(dedup_entry));
+}
+
+static uint32_t
+dedup_ht_key_hash(const void *_key)
+{
+   struct set *set = (struct set *)_key;
+   uint32_t hash = 0;
+
+   set_foreach(set, entry) {
+      if (DEBUG_PRINT_DEDUP)
+         print_dedup_entry("ht_key_hash", set, (dedup_entry *)entry->key);
+
+      hash = dedup_entry_hash_accum((dedup_entry *)entry->key, hash);
+   }
+
+   if (DEBUG_PRINT_DEDUP)
+      printf("ht_key_hash key=0x%" SCNuPTR " hash=%u\n", (uintptr_t)_key, hash);
+   return hash;
+}
+
+static bool
+dedup_ht_key_equal(const void *a, const void *b)
+{
+   return _mesa_set_equal((struct set *)a, (struct set *)b);
 }
 
 static void
@@ -2769,24 +2883,41 @@ deduplicate_outputs(struct linkage_info *linkage,
                     nir_opt_varyings_progress *progress,
                     bool *consumer_progress)
 {
-   struct hash_table *tables[NUM_DEDUP_QUALIFIERS] = { NULL };
+   struct hash_table tables[NUM_DEDUP_QUALIFIERS] = { 0 };
    unsigned i;
+   void *mem_ctx = ralloc_context(NULL);
 
-   /* Find duplicated outputs. If there are multiple stores, they should all
-    * store the same value as all stores of some other output. That's
-    * guaranteed by output_equal_mask.
-    */
-   BITSET_FOREACH_SET(i, linkage->output_equal_mask, NUM_SCALAR_SLOTS) {
+   /* Find duplicated outputs. */
+   BITSET_FOREACH_SET(i, linkage->removable_mask, NUM_SCALAR_SLOTS) {
       if (!can_optimize_varying(linkage, vec4_slot(i)).deduplicate)
          continue;
 
+      /* Skip indirect indexing. */
+      if (BITSET_TEST(linkage->indirect_mask, i))
+         continue;
+
       struct scalar_slot *slot = &linkage->slot[i];
+      assert(!list_is_empty(&slot->producer.stores));
+
+      /* Skip non-zero GS streams because they should be just XFB outputs. */
+      if (linkage->producer_stage == MESA_SHADER_GEOMETRY) {
+         nir_intrinsic_instr *store =
+            list_first_entry(&slot->producer.stores, struct list_node,
+                             head)->instr;
+
+         if (nir_intrinsic_io_semantics(store).gs_streams)
+            continue;
+      }
+
       enum var_qualifier qualifier;
       gl_varying_slot var_slot = vec4_slot(i);
 
       /* Determine which qualifier this slot has. */
-      if ((var_slot >= VARYING_SLOT_PATCH0 &&
-           var_slot <= VARYING_SLOT_PATCH31) ||
+      if (list_is_empty(&slot->consumer.loads)) {
+         /* XFB or TCS outputs not consumed by the next stage */
+         qualifier = QUAL_VAR_FLAT;
+      } else if ((var_slot >= VARYING_SLOT_PATCH0 &&
+                var_slot <= VARYING_SLOT_PATCH31) ||
           var_slot == VARYING_SLOT_TESS_LEVEL_INNER ||
           var_slot == VARYING_SLOT_TESS_LEVEL_OUTER)
          qualifier = QUAL_PATCH;
@@ -2798,21 +2929,74 @@ deduplicate_outputs(struct linkage_info *linkage,
       if (qualifier == QUAL_SKIP)
          continue;
 
-      struct hash_table **table = &tables[qualifier];
-      if (!*table)
-         *table = _mesa_hash_table_create(NULL, nir_ht_scalar_hash,
-                                          nir_ht_scalar_equal);
-
-      nir_scalar value = slot->producer.value;
-
-      struct hash_entry *entry = _mesa_hash_table_search(*table, &value);
-      if (!entry) {
-         _mesa_hash_table_insert(*table, &value, (void *)(uintptr_t)i);
-         continue;
+      struct hash_table *table = &tables[qualifier];
+      if (!table->table) {
+         _mesa_hash_table_init(table, mem_ctx, dedup_ht_key_hash,
+                               dedup_ht_key_equal);
       }
 
+      /* Create the hash table key. */
+      struct set *key = _mesa_set_create(mem_ctx, dedup_entry_set_hash,
+                                         dedup_entry_set_equal);
+
+      /* Only looking at SSA def equality is insufficient.
+       *
+       * TCS proof:
+       *
+       *    if (invocation_id == 0)
+       *       patch_output[0] = invocation_id;
+       *    else
+       *       patch_output[1] = invocation_id; // not duplicated
+       *
+       * VS proof:
+       *
+       *    if (vertex_id == 0)
+       *       output[0] = vertex_id;
+       *    else
+       *       output[1] = vertex_id; // can't remove because output[0] is
+       *                              // uninitialized for vertex_id > 0
+       */
+
+      /* Add all stores to the set of <block, value, index, gs_emit_index,
+       * is_back_color> entries.
+       */
+      list_for_each_entry(struct list_node, iter, &slot->producer.stores,
+                          head) {
+         unsigned location = nir_intrinsic_io_semantics(iter->instr).location;
+         dedup_entry *entry = rzalloc(mem_ctx, dedup_entry);
+         entry->block = iter->instr->instr.block;
+         entry->value =
+            nir_scalar_resolved(nir_get_io_data_src(iter->instr)->ssa, 0);
+         entry->gs_emit_index = iter->gs_emit_index;
+         entry->is_back_color = location == VARYING_SLOT_BFC0 ||
+                                location == VARYING_SLOT_BFC1;
+         /* TODO: per-view outputs might need something here */
+
+         nir_src *index = nir_get_io_arrayed_index_src(iter->instr);
+         if (index)
+            entry->index = nir_scalar_resolved(index->ssa, 0);
+
+         if (DEBUG_PRINT_DEDUP)
+            print_dedup_entry("add/block", key, entry);
+
+         _mesa_set_add(key, entry);
+      }
+
+      /* Search in the table for an identical output. */
+      struct hash_entry *entry = _mesa_hash_table_search(table, key);
+      if (!entry) {
+         if (DEBUG_PRINT_DEDUP)
+            printf("ht miss slot=%u\n", i);
+         _mesa_hash_table_insert(table, key, slot);
+         if (DEBUG_PRINT_DEDUP)
+            printf("ht inserted slot=%u\n", i);
+         continue;
+      }
+      if (DEBUG_PRINT_DEDUP)
+         printf("ht hit slot=%u\n", i);
+
       /* We've found a duplicate. Redirect loads and remove stores. */
-      struct scalar_slot *found_slot = &linkage->slot[(uintptr_t)entry->data];
+      struct scalar_slot *found_slot = (struct scalar_slot *)entry->data;
       nir_intrinsic_instr *store =
          list_first_entry(&found_slot->producer.stores,
                           struct list_node, head)
@@ -2822,27 +3006,42 @@ deduplicate_outputs(struct linkage_info *linkage,
 
       /* Redirect loads. */
       for (unsigned list_index = 0; list_index < 2; list_index++) {
-         struct list_head *src_loads = list_index ? &slot->producer.loads : &slot->consumer.loads;
-         struct list_head *dst_loads = list_index ? &found_slot->producer.loads : &found_slot->consumer.loads;
-         bool has_progress = !list_is_empty(src_loads);
+         struct list_head *dupl_slot_loads =
+            list_index ? &slot->producer.loads : &slot->consumer.loads;
+         struct list_head *slot_loads =
+            list_index ? &found_slot->producer.loads :
+                         &found_slot->consumer.loads;
+         bool has_progress = !list_is_empty(dupl_slot_loads);
 
-         list_for_each_entry(struct list_node, iter, src_loads, head) {
+         list_for_each_entry(struct list_node, iter, dupl_slot_loads, head) {
             nir_intrinsic_instr *loadi = iter->instr;
+            nir_io_semantics load_sem = nir_intrinsic_io_semantics(loadi);
 
-            nir_intrinsic_set_io_semantics(loadi, sem);
+            /* Only redirect the location. */
+            load_sem.location = sem.location;
+            nir_intrinsic_set_io_semantics(loadi, load_sem);
             nir_intrinsic_set_component(loadi, component);
 
             /* We also need to set the base to match the duplicate load, so
              * that CSE can eliminate it.
              */
             if (list_index == 0) {
-               /* Outputs that aren't loaded by the consumer should be already deleted. */
-               assert(!list_is_empty(dst_loads));
-               struct list_node *first =
-                  list_first_entry(dst_loads, struct list_node, head);
-               nir_intrinsic_set_base(loadi, nir_intrinsic_base(first->instr));
+               if (!list_is_empty(slot_loads)) {
+                  struct list_node *first =
+                     list_first_entry(slot_loads, struct list_node, head);
+                  nir_intrinsic_set_base(loadi, nir_intrinsic_base(first->instr));
+               } else {
+                  /* Keep the same base because the found slot has no consumer
+                   * loads. Drivers should call nir_recompute_io_bases after
+                   * this. If they don't and expect bases to be sensible,
+                   * the behavior can be undefined. This pass arguably
+                   * shouldn't be trying to preserve bases anyway.
+                   */
+               }
             } else {
-               /* The duplicate output may not have any loads, use the base of the found store. */
+               /* The duplicated output might not have any loads, use the base
+                * of the found store.
+                */
                nir_intrinsic_set_base(loadi, nir_intrinsic_base(store));
             }
          }
@@ -2851,8 +3050,8 @@ deduplicate_outputs(struct linkage_info *linkage,
             /* Move the redirected loads to the found slot, so that compaction
              * can find them.
              */
-            list_splicetail(src_loads, dst_loads);
-            list_inithead(src_loads);
+            list_splicetail(dupl_slot_loads, slot_loads);
+            list_inithead(dupl_slot_loads);
 
             *progress |= list_index ? nir_progress_producer : nir_progress_consumer;
             *consumer_progress |= list_index == 0; /* 0 means consumer loads */
@@ -2863,8 +3062,7 @@ deduplicate_outputs(struct linkage_info *linkage,
       remove_all_stores_and_clear_slot(linkage, i, progress);
    }
 
-   for (unsigned i = 0; i < ARRAY_SIZE(tables); i++)
-      _mesa_hash_table_destroy(tables[i], NULL);
+   ralloc_free(mem_ctx);
 }
 
 /******************************************************************
@@ -3055,7 +3253,7 @@ find_tes_triangle_interp_1fmul_2ffma(struct linkage_info *linkage, unsigned i)
       /* Reject exact ops because we are going to do an inexact transformation
        * with it.
        */
-      if (!alu || (alu->op != nir_op_fmul && alu->op != nir_op_ffma) ||
+      if (!alu || (alu->op != nir_op_fmul && !nir_alu_instr_is_mul_add(alu)) ||
           nir_alu_instr_is_exact(alu) ||
           !gather_fmul_tess_coord(iter->instr, alu, vertex_index,
                                   &tess_coord_swizzle, &tess_coord_used,
@@ -3065,7 +3263,7 @@ find_tes_triangle_interp_1fmul_2ffma(struct linkage_info *linkage, unsigned i)
       /* The multiplication must only be used by ffma. */
       if (alu->op == nir_op_fmul) {
          nir_alu_instr *ffma = get_single_use_as_alu(&alu->def);
-         if (!ffma || ffma->op != nir_op_ffma)
+         if (!nir_alu_instr_is_mul_add(ffma))
             return false;
 
          if (num_fmuls == 1)
@@ -3191,7 +3389,10 @@ can_move_alu_across_interp(struct linkage_info *linkage, nir_alu_instr *alu)
    case nir_op_fmul:
    case nir_op_fmulz:
    case nir_op_ffma:
+   case nir_op_ffma_weak:
    case nir_op_ffmaz:
+   case nir_op_fmad:
+   case nir_op_fmadz:
       return GET_SRC_INTERP(alu, 0) == FLAG_INTERP_CONVERGENT ||
              GET_SRC_INTERP(alu, 1) == FLAG_INTERP_CONVERGENT;
 
@@ -3717,9 +3918,9 @@ try_move_postdominator(struct linkage_info *linkage,
             defs[i] = nir_fmul(b, new_tes_loads[i],
                                nir_channel(b, tesscoord, remap[i]));
          } else {
-            defs[i] = nir_ffma(b, new_tes_loads[i],
-                               nir_channel(b, tesscoord, remap[i]),
-                               defs[i - 1]);
+            defs[i] = nir_ffma_weak(b, new_tes_loads[i],
+                                    nir_channel(b, tesscoord, remap[i]),
+                                    defs[i - 1]);
          }
       }
       new_input = defs[2];
@@ -5426,7 +5627,11 @@ nir_opt_varyings(nir_shader *producer, nir_shader *consumer, bool spirv,
     * divergence information.
     */
    if (consumer->info.stage == MESA_SHADER_FRAGMENT) {
-      nir_vertex_divergence_analysis(producer);
+      nir_divergence_options divergence_options =
+         producer->info.stage == MESA_SHADER_MESH ?
+               nir_divergence_across_subgroups : nir_divergence_vertex;
+
+      nir_custom_divergence_analysis(producer, divergence_options);
    }
 
    /* This also removes dead varyings. */
@@ -5604,7 +5809,7 @@ nir_opt_varyings_bulk(nir_shader **shaders, uint32_t num_shaders, bool spirv,
       if (nir->info.stage == MESA_SHADER_FRAGMENT) {
          NIR_PASS(_, nir, nir_opt_move_to_top,
                   nir_move_to_entry_block_only |
-                     nir_move_to_top_input_loads);
+                     nir_move_to_top_input_loads_simple);
       }
 
       /* nir_opt_varyings requires scalar IO. Scalarize all varyings (not just

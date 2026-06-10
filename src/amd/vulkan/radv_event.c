@@ -11,11 +11,11 @@
 #include "vk_alloc.h"
 #include "vk_log.h"
 
+#include "tools/radv_rmv.h"
 #include "radv_buffer.h"
 #include "radv_device.h"
 #include "radv_entrypoints.h"
 #include "radv_event.h"
-#include "radv_rmv.h"
 
 static void
 radv_destroy_event(struct radv_device *device, const VkAllocationCallbacks *pAllocator, struct radv_event *event)

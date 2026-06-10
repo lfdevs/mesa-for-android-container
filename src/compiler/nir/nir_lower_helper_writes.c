@@ -39,8 +39,11 @@ lower(nir_builder *b, nir_intrinsic_instr *intr, void *data)
    case nir_intrinsic_bindless_image_atomic_swap:
    case nir_intrinsic_image_heap_atomic:
    case nir_intrinsic_image_heap_atomic_swap:
+   case nir_intrinsic_ssbo_atomic:
+   case nir_intrinsic_ssbo_atomic_swap:
       break;
    case nir_intrinsic_store_global:
+   case nir_intrinsic_store_ssbo:
    case nir_intrinsic_image_store:
    case nir_intrinsic_bindless_image_store:
    case nir_intrinsic_image_heap_store:
@@ -51,6 +54,10 @@ lower(nir_builder *b, nir_intrinsic_instr *intr, void *data)
    default:
       return false;
    }
+
+   if (nir_intrinsic_has_access(intr) &&
+       (nir_intrinsic_access(intr) & ACCESS_INCLUDE_HELPERS))
+      return false;
 
    b->cursor = nir_before_instr(&intr->instr);
    bool has_dest = nir_intrinsic_infos[intr->intrinsic].has_dest;

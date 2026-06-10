@@ -418,9 +418,9 @@ emit_transpose_matrix_transform_vec4(nir_builder *b,
 {
    nir_def *result;
    result = nir_fmul(b, nir_channel(b, src, 0), mat[0]);
-   result = nir_fmad(b, nir_channel(b, src, 1), mat[1], result);
-   result = nir_fmad(b, nir_channel(b, src, 2), mat[2], result);
-   result = nir_fmad(b, nir_channel(b, src, 3), mat[3], result);
+   result = nir_ffma_weak(b, nir_channel(b, src, 1), mat[1], result);
+   result = nir_ffma_weak(b, nir_channel(b, src, 2), mat[2], result);
+   result = nir_ffma_weak(b, nir_channel(b, src, 3), mat[3], result);
    return result;
 }
 
@@ -603,10 +603,10 @@ get_scenecolor(struct tnl_program *p, GLuint side)
 
       // rgb: material_emission + material_ambient * lm_ambient
       // alpha: material_diffuse.a
-      return nir_vector_insert_imm(p->b, nir_fmad(p->b,
-                                                  lm_ambient,
-                                                  material_ambient,
-                                                  material_emission),
+      return nir_vector_insert_imm(p->b, nir_ffma_weak(p->b,
+                                                       lm_ambient,
+                                                       material_ambient,
+                                                       material_emission),
                                    nir_channel(p->b,
                                                material_diffuse,
                                                3),
@@ -956,7 +956,7 @@ static void build_lighting( struct tnl_program *p )
                /* light is attenuated by distance */
                lit = emit_lit(p->b, dots);
                lit = nir_fmul(p->b, lit, att);
-               _col0 = nir_fmad(p->b, nir_channel(p->b, lit, 0), ambient, _col0);
+               _col0 = nir_ffma_weak(p->b, nir_channel(p->b, lit, 0), ambient, _col0);
             } else if (!p->state->material_shininess_is_zero) {
                /* there's a non-zero specular term */
                lit = emit_lit(p->b, dots);
@@ -967,14 +967,14 @@ static void build_lighting( struct tnl_program *p )
                _col0 = nir_fadd(p->b, ambient, _col0);
             }
 
-            _col0 = nir_fmad(p->b, nir_channel(p->b, lit, 1),
-                             diffuse, _col0);
+            _col0 = nir_ffma_weak(p->b, nir_channel(p->b, lit, 1),
+                                  diffuse, _col0);
             if (separate)
-               _col1 = nir_fmad(p->b, nir_channel(p->b, lit, 2),
-                                specular, _col1);
+               _col1 = nir_ffma_weak(p->b, nir_channel(p->b, lit, 2),
+                                     specular, _col1);
             else
-               _col0 = nir_fmad(p->b, nir_channel(p->b, lit, 2),
-                                specular, _col0);
+               _col0 = nir_ffma_weak(p->b, nir_channel(p->b, lit, 2),
+                                     specular, _col0);
          }
          /* Back face lighting:
           */
@@ -1009,7 +1009,7 @@ static void build_lighting( struct tnl_program *p )
                /* light is attenuated by distance */
                lit = emit_lit(p->b, dots);
                lit = nir_fmul(p->b, lit, att);
-               _bfc0 = nir_fmad(p->b, nir_channel(p->b, lit, 0), ambient, _bfc0);
+               _bfc0 = nir_ffma_weak(p->b, nir_channel(p->b, lit, 0), ambient, _bfc0);
             } else if (!p->state->material_shininess_is_zero) {
                /* there's a non-zero specular term */
                lit = emit_lit(p->b, dots);
@@ -1020,14 +1020,14 @@ static void build_lighting( struct tnl_program *p )
                _bfc0 = nir_fadd(p->b, ambient, _bfc0);
             }
 
-            _bfc0 = nir_fmad(p->b, nir_channel(p->b, lit, 1),
-                             diffuse, _bfc0);
+            _bfc0 = nir_ffma_weak(p->b, nir_channel(p->b, lit, 1),
+                                  diffuse, _bfc0);
             if (separate)
-               _bfc1 = nir_fmad(p->b, nir_channel(p->b, lit, 2),
-                                specular, _bfc1);
+               _bfc1 = nir_ffma_weak(p->b, nir_channel(p->b, lit, 2),
+                                     specular, _bfc1);
             else
-               _bfc0 = nir_fmad(p->b, nir_channel(p->b, lit, 2),
-                                specular, _bfc0);
+               _bfc0 = nir_ffma_weak(p->b, nir_channel(p->b, lit, 2),
+                                     specular, _bfc0);
          }
       }
    }
@@ -1080,7 +1080,7 @@ build_reflect_texgen(struct tnl_program *p)
    /* 2n.u */
    tmp = nir_fadd(p->b, tmp, tmp);
    /* (-2n.u)n + u */
-   return nir_fmad(p->b, nir_fneg(p->b, tmp), normal, eye_hat);
+   return nir_ffma_weak(p->b, nir_fneg(p->b, tmp), normal, eye_hat);
 }
 
 
@@ -1103,7 +1103,7 @@ build_sphere_texgen(struct tnl_program *p)
    /* 2n.u */
    tmp = nir_fadd(p->b, tmp, tmp);
    /* (-2n.u)n + u */
-   nir_def *r = nir_fmad(p->b, nir_fneg(p->b, tmp), normal, eye_hat);
+   nir_def *r = nir_ffma_weak(p->b, nir_fneg(p->b, tmp), normal, eye_hat);
    /* r + 0,0,1 */
    tmp = nir_fadd(p->b, r, nir_imm_vec4(p->b, 0.0f, 0.0f, 1.0f, 0.0f));
    /* rx^2 + ry^2 + (rz+1)^2 */
@@ -1113,7 +1113,7 @@ build_sphere_texgen(struct tnl_program *p)
    /* 1/m */
    nir_def *inv_m = nir_fmul_imm(p->b, tmp, 0.5f);
    /* r/m + 1/2 */
-   return nir_fmad(p->b, r, inv_m, nir_imm_float(p->b, 0.5f));
+   return nir_ffma_weak(p->b, r, inv_m, nir_imm_float(p->b, 0.5f));
 }
 
 static void build_texture_transform( struct tnl_program *p )
@@ -1235,9 +1235,9 @@ static void build_atten_pointsize( struct tnl_program *p )
    nir_def *dist = nir_fabs(p->b, eye);
 
    /* p1 + dist * (p2 + dist * p3); */
-   nir_def *factor = nir_fmad(p->b, dist, nir_channel(p->b, att, 2),
-                                              nir_channel(p->b, att, 1));
-   factor = nir_fmad(p->b, dist, factor, nir_channel(p->b, att, 0));
+   nir_def *factor = nir_ffma_weak(p->b, dist, nir_channel(p->b, att, 2),
+                                               nir_channel(p->b, att, 1));
+   factor = nir_ffma_weak(p->b, dist, factor, nir_channel(p->b, att, 0));
 
    /* 1 / sqrt(factor) */
    factor = nir_frsq(p->b, factor);

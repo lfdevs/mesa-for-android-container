@@ -1066,6 +1066,17 @@ mi_ior(struct mi_builder *b,
                            MI_ALU_STORE, MI_ALU_ACCU);
 }
 
+static inline struct mi_value
+mi_ixor(struct mi_builder *b,
+        struct mi_value src0, struct mi_value src1)
+{
+   if (src0.type == MI_VALUE_TYPE_IMM && src1.type == MI_VALUE_TYPE_IMM)
+      return mi_imm(mi_value_to_u64(src0) ^ mi_value_to_u64(src1));
+
+   return mi_math_binop(b, MI_ALU_XOR, src0, src1,
+                           MI_ALU_STORE, MI_ALU_ACCU);
+}
+
 #if GFX_VERx10 >= 125
 static inline struct mi_value
 mi_ishl(struct mi_builder *b, struct mi_value src0, struct mi_value src1)
@@ -1288,6 +1299,40 @@ mi_udiv32_imm(struct mi_builder *b, struct mi_value N, uint32_t D)
 
       return N;
    }
+}
+
+/* Finds the maximum between the two specified unsigned numbers. */
+static inline struct mi_value
+mi_umax2(struct mi_builder *b, struct mi_value val1, struct mi_value val2)
+{
+   /* The idea of the alrogithm here is that the value of 'mask' will be
+    * either 0 or ~0 depending on which number is bigger. Then we use AND
+    * operations to ensure the smaller value becomes zero and the bigger value
+    * is preserved, and finally OR both values to the destination (the bigger
+    * and zero).
+    *
+    * In other words:
+    *   mask = val1 < val2 ? 0xFFFFFFFF : 0x0;
+    *   biggest = (val1 & ~mask) | (val2 & mask);
+    */
+
+   /* If 'val1' is smaller, 'mask' is ~0, otherwise it's 0. */
+   struct mi_value mask = mi_ult(b, mi_value_ref(b, val1),
+                                 mi_value_ref(b, val2));
+   struct mi_value notmask = mi_ixor(b, mi_value_ref(b, mask),
+                                     mi_imm(UINT64_MAX));
+   /* If 'val1' is smaller, 'notmask' is 0, so we zero it, otherwise we
+    * preserve the value by ANDing it with ~0.
+    */
+   struct mi_value val1_or_zero = mi_iand(b, val1, notmask);
+   /* If 'val2' is smaller, mask is 0, so we zero it, otherwise we preserve
+    * the value.
+    */
+   struct mi_value val2_or_zero = mi_iand(b, val2, mask);
+   /* The smaller value was zeroed, the other was preserved, so just OR
+    * them now.
+    */
+   return mi_ior(b, val1_or_zero, val2_or_zero);
 }
 
 #endif /* MI_MATH section */

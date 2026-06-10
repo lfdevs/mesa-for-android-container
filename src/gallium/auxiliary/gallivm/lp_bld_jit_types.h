@@ -45,11 +45,6 @@ enum {
 };
 
 LLVMValueRef
-lp_llvm_descriptor_base(struct gallivm_state *gallivm,
-                        LLVMValueRef buffers_ptr,
-                        LLVMValueRef index, unsigned buffers_limit);
-
-LLVMValueRef
 lp_llvm_buffer_base(struct gallivm_state *gallivm,
                     LLVMValueRef buffers_ptr,
                     LLVMValueRef buffers_offset, unsigned buffers_limit);
@@ -201,6 +196,10 @@ LLVMTypeRef lp_build_sample_function_type(struct gallivm_state *gallivm, uint32_
 LLVMTypeRef lp_build_size_function_type(struct gallivm_state *gallivm,
                                         const struct lp_sampler_size_query_params *params);
 
+LLVMTypeRef lp_build_image_function_component_type(struct gallivm_state *gallivm,
+                                                   const struct lp_img_params *params,
+                                                   bool is64, bool integer);
+
 LLVMTypeRef lp_build_image_function_type(struct gallivm_state *gallivm,
                                          const struct lp_img_params *params, bool ms,
                                          bool is64);
@@ -238,26 +237,30 @@ struct lp_jit_bindless_texture
 {
    const void *base;
    const void *residency;
-   uint32_t sampler_index;
+   uint32_t base_offset;
 };
 
-struct lp_descriptor {
+struct lp_image_descriptor {
    union {
-      struct {
-         struct lp_jit_bindless_texture texture;
-         struct lp_jit_sampler sampler;
-      };
-      struct {
-         struct lp_jit_image image;
-      };
-      struct lp_jit_buffer buffer;
-      uint64_t accel_struct;
+      struct lp_jit_bindless_texture texture;
+      struct lp_jit_image image;
    };
 
    /* Store sample/image functions in the same location since some d3d12 games
     * rely on mismatched descriptor types with null descriptors.
     */
    void *functions;
+
+   uint32_t padding[2];
+};
+
+struct lp_sampler_descriptor {
+   struct lp_jit_sampler jit;
+   uint32_t sampler_index;
+};
+
+struct lp_buffer_descriptor {
+   struct lp_jit_buffer jit;
 };
 
 #define LP_MAX_TEX_FUNC_ARGS 32

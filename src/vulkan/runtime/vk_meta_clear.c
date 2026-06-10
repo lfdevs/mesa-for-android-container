@@ -479,8 +479,9 @@ clear_image_level_layers(struct vk_command_buffer *cmd,
       .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
       .imageView = image_view,
       .imageLayout = image_layout,
-      .loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+      .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
       .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+      .clearValue = *clear_value,
    };
    VkRenderingInfo vk_render = {
       .sType = VK_STRUCTURE_TYPE_RENDERING_INFO,
@@ -490,50 +491,21 @@ clear_image_level_layers(struct vk_command_buffer *cmd,
       },
       .layerCount = layer_count,
    };
-   struct vk_meta_rendering_info meta_render = {
-      .samples = image->samples,
-   };
 
    if (image->aspects == VK_IMAGE_ASPECT_COLOR_BIT) {
       vk_render.colorAttachmentCount = 1;
       vk_render.pColorAttachments = &vk_att;
-      meta_render.color_attachment_count = 1;
-      meta_render.color_attachment_formats[0] = format;
-      meta_render.color_attachment_write_masks[0] =
-         VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
-         VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
    }
 
    if (aspects & VK_IMAGE_ASPECT_DEPTH_BIT) {
       vk_render.pDepthAttachment = &vk_att;
-      meta_render.depth_attachment_format = format;
    }
 
    if (aspects & VK_IMAGE_ASPECT_STENCIL_BIT) {
       vk_render.pStencilAttachment = &vk_att;
-      meta_render.stencil_attachment_format = format;
    }
 
-   const VkClearAttachment clear_att = {
-      .aspectMask = aspects,
-      .colorAttachment = 0,
-      .clearValue = *clear_value,
-   };
-
-   const VkClearRect clear_rect = {
-      .rect = {
-         .offset = { 0, 0 },
-         .extent = { level_extent.width, level_extent.height },
-      },
-      .baseArrayLayer = 0,
-      .layerCount = layer_count,
-   };
-
    disp->CmdBeginRendering(_cmd, &vk_render);
-
-   vk_meta_clear_attachments(cmd, meta, &meta_render,
-                             1, &clear_att, 1, &clear_rect);
-
    disp->CmdEndRendering(_cmd);
 }
 

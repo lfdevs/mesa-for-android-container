@@ -10,12 +10,12 @@
 #include "nir/radv_nir_rt_stage_common.h"
 #include "nir/radv_nir_rt_traversal_shader.h"
 
+#include "tools/radv_rra.h"
 #include "aco_nir_call_attribs.h"
 #include "nir_builder.h"
 #include "radv_meta_nir.h"
 #include "radv_nir_rt_stage_functions.h"
 #include "radv_physical_device.h"
-#include "radv_rra.h"
 
 /* Variables only used internally to ray traversal. This is data that describes
  * the current state of the traversal vs. what we'd give to a shader.  e.g. what
@@ -400,6 +400,8 @@ insert_inlined_shader(nir_builder *b, struct traversal_inlining_params *params, 
    nir_push_if(b, nir_ieq_imm(b, idx, call_idx));
    nir_inline_function_impl(b, nir_shader_get_entrypoint(shader), NULL, var_remap);
    nir_pop_if(b, NULL);
+
+   _mesa_hash_table_destroy(var_remap, NULL);
 }
 
 static nir_function_impl *

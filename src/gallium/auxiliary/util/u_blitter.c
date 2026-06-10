@@ -869,7 +869,8 @@ static void get_texcoords(struct pipe_sampler_view *src,
 
    case PIPE_TEXTURE_2D_ARRAY:
       out->texcoord.z = layer;
-      out->texcoord.w = sample;
+      if (util_res_sample_count(src->texture) > 1)
+         out->texcoord.w = sample;
       break;
 
    case PIPE_TEXTURE_CUBE_ARRAY:
@@ -877,7 +878,8 @@ static void get_texcoords(struct pipe_sampler_view *src,
       break;
 
    case PIPE_TEXTURE_2D:
-      out->texcoord.w = sample;
+      if (util_res_sample_count(src->texture) > 1)
+         out->texcoord.w = sample;
       break;
 
    default:;
@@ -968,7 +970,7 @@ static void *blitter_get_fs_texfetch_col(struct blitter_context_priv *ctx,
    enum tgsi_return_type dtype;
    unsigned type;
 
-   assert(target < PIPE_MAX_TEXTURE_TYPES);
+   assert(target >= 0 && target < PIPE_MAX_TEXTURE_TYPES);
 
    if (util_format_is_pure_uint(src_format)) {
       stype = TGSI_RETURN_TYPE_UINT;

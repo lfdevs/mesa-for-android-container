@@ -150,6 +150,12 @@ pipe_loader_drm_probe_fd_nodup(struct pipe_loader_device **dev, int fd, bool zin
       ddev->base.driver_name = strdup("radeonsi");
    }
 
+   /* powervr has no Gallium driver and relies on Zink */
+   if (strcmp(ddev->base.driver_name, "powervr") == 0) {
+      FREE(ddev->base.driver_name);
+      ddev->base.driver_name = strdup("zink");
+   }
+
    if (strcmp(ddev->base.driver_name, "virtio_gpu") == 0) {
       struct virgl_renderer_capset_drm caps;
       if (get_nctx_caps(fd, &caps) == 0) {
@@ -172,13 +178,9 @@ pipe_loader_drm_probe_fd_nodup(struct pipe_loader_device **dev, int fd, bool zin
    if (strcmp(ddev->base.driver_name, "vgem") == 0)
       goto fail;
 
-   /* kmsro supports lots of drivers, try as a fallback for primary nodes */
-   if (!ddev->dd && !zink && drmGetNodeTypeFromFd(fd) == DRM_NODE_PRIMARY)
+   /* kmsro supports lots of drivers, try as a fallback */
+   if (!ddev->dd && !zink)
       ddev->dd = get_driver_descriptor("kmsro");
-
-   /* Try zink for unknown render nodes */
-   if (!ddev->dd && drmGetNodeTypeFromFd(fd) == DRM_NODE_RENDER)
-      ddev->dd = get_driver_descriptor("zink");
 
    if (!ddev->dd)
       goto fail;

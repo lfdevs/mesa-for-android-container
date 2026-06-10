@@ -118,7 +118,7 @@ st_invalidate_state(struct gl_context *ctx)
       ST_SET_STATE(ctx->NewDriverState, ST_NEW_RASTERIZER);
 
    if ((new_state & _NEW_LIGHT_STATE) &&
-       (st->lower_flatshade || st->lower_two_sided_color))
+       (!st->screen->caps.flatshade || !st->screen->caps.two_sided_color))
       ST_SET_STATE(ctx->NewDriverState, ST_NEW_FS_STATE);
 
    if (new_state & _NEW_PROJECTION &&
@@ -218,7 +218,7 @@ st_save_zombie_shader(struct st_context *st,
    struct st_zombie_shader_node *entry;
 
    /* we shouldn't be here if the driver supports shareable shaders */
-   assert(!st->has_shareable_shaders);
+   assert(!st->screen->caps.shareable_shaders);
 
    entry = MALLOC_STRUCT(st_zombie_shader_node);
    if (!entry)
@@ -377,7 +377,7 @@ st_init_driver_flags(struct st_context *st)
    struct gl_driver_flags *f = &st->ctx->DriverFlags;
 
    /* Shader resources */
-   if (st->has_hw_atomics)
+   if (st->screen->shader_caps[MESA_SHADER_FRAGMENT].max_hw_atomic_counters != 0)
       ST_SET_STATE2(f->NewAtomicBuffer, ST_NEW_HW_ATOMICS, ST_NEW_CS_ATOMICS);
    else
       ST_SET_SHADER_STATES(f->NewAtomicBuffer, ATOMICS);
@@ -389,7 +389,7 @@ st_init_driver_flags(struct st_context *st)
    ST_SET_STATE(f->NewShaderConstants[MESA_SHADER_FRAGMENT], ST_NEW_FS_CONSTANTS);
    ST_SET_STATE(f->NewShaderConstants[MESA_SHADER_COMPUTE], ST_NEW_CS_CONSTANTS);
 
-   if (st->lower_alpha_test)
+   if (!st->screen->caps.alpha_test)
       ST_SET_STATE2(f->NewAlphaTest, ST_NEW_FS_STATE, ST_NEW_FS_CONSTANTS);
    else
       ST_SET_STATE(f->NewAlphaTest, ST_NEW_DSA);
@@ -413,17 +413,18 @@ st_init_driver_flags(struct st_context *st)
    }
 
    ST_SET_STATE(f->NewClipPlaneEnable, ST_NEW_RASTERIZER);
-   if (st->lower_ucp) {
+   if (!st->screen->caps.clip_planes) {
       ST_SET_STATE3(f->NewClipPlaneEnable, ST_NEW_VS_STATE, ST_NEW_GS_STATE,
                     ST_NEW_TES_STATE);
    }
 
-   if (st->emulate_gl_clamp) {
+   if (!st->screen->caps.gl_clamp) {
       ST_SET_SHADER_STATES(f->NewSamplersWithClamp, SAMPLERS);
       ST_SET_SHADER_STATES(f->NewSamplersWithClamp, STATE);
    }
 
-   if (!st->has_hw_atomics && st->ctx->Const.ShaderStorageBufferOffsetAlignment > 4)
+   if (st->screen->shader_caps[MESA_SHADER_FRAGMENT].max_hw_atomic_counters == 0
+       && st->ctx->Const.ShaderStorageBufferOffsetAlignment > 4)
       ST_SET_SHADER_STATES(f->NewAtomicBuffer, CONSTANTS);
 }
 
@@ -456,8 +457,6 @@ st_create_context_priv(struct gl_context *ctx, struct pipe_context *pipe,
    st->screen = screen;
    st->pipe = pipe;
 
-   st->can_bind_const_buffer_as_vertex =
-      screen->caps.can_bind_const_buffer_as_vertex;
 
    /* st/mesa always uploads zero-stride vertex attribs, and other user
     * vertex buffers are only possible with a compatibility profile.
@@ -532,8 +531,6 @@ st_create_context_priv(struct gl_context *ctx, struct pipe_context *pipe,
    ctx->Const.QueryCounterBits.Timestamp =
       screen->caps.query_timestamp_bits;
 
-   st->has_stencil_export =
-      screen->caps.shader_stencil_export;
    st->has_etc1 = screen->is_format_supported(screen, PIPE_FORMAT_ETC1_RGB8,
                                               PIPE_TEXTURE_2D, 0, 0,
                                               PIPE_BIND_SAMPLER_VIEW);
@@ -557,8 +554,6 @@ st_create_context_priv(struct gl_context *ctx, struct pipe_context *pipe,
    st->has_astc_5x5_ldr =
       screen->is_format_supported(screen, PIPE_FORMAT_ASTC_5x5_SRGB,
                                   PIPE_TEXTURE_2D, 0, 0, PIPE_BIND_SAMPLER_VIEW);
-   st->astc_void_extents_need_denorm_flush =
-      screen->caps.astc_void_extents_need_denorm_flush;
 
    st->has_s3tc = screen->is_format_supported(screen, PIPE_FORMAT_DXT5_RGBA,
                                               PIPE_TEXTURE_2D, 0, 0,
@@ -575,9 +570,6 @@ st_create_context_priv(struct gl_context *ctx, struct pipe_context *pipe,
    st->force_persample_in_shader =
       screen->caps.sample_shading &&
       !screen->caps.force_persample_interp;
-   st->has_shareable_shaders = screen->caps.shareable_shaders;
-   st->needs_texcoord_semantic =
-      screen->caps.tgsi_texcoord;
    st->apply_texture_swizzle_to_border_color =
       !!(screen->caps.texture_border_color_quirk &
          (PIPE_QUIRK_TEXTURE_BORDER_COLOR_SWIZZLE_NV50 |
@@ -588,32 +580,8 @@ st_create_context_priv(struct gl_context *ctx, struct pipe_context *pipe,
    st->alpha_border_color_is_not_w =
       !!(screen->caps.texture_border_color_quirk &
          PIPE_QUIRK_TEXTURE_BORDER_COLOR_SWIZZLE_ALPHA_NOT_W);
-   st->emulate_gl_clamp =
-      !screen->caps.gl_clamp;
-   st->has_time_elapsed =
-      screen->caps.query_time_elapsed;
    ctx->Const.GLSLHasHalfFloatPacking =
       screen->caps.shader_pack_half_float;
-   st->has_multi_draw_indirect =
-      screen->caps.multi_draw_indirect;
-   st->has_indirect_partial_stride =
-      screen->caps.multi_draw_indirect_partial_stride;
-   st->has_occlusion_query =
-      screen->caps.occlusion_query;
-   st->has_single_pipe_stat =
-      screen->caps.query_pipeline_statistics_single;
-   st->has_pipeline_stat =
-      screen->caps.query_pipeline_statistics;
-   st->has_indep_blend_enable =
-      screen->caps.indep_blend_enable;
-   st->has_indep_blend_func =
-      screen->caps.indep_blend_func;
-   st->can_dither =
-      screen->caps.dithering;
-   st->lower_flatshade =
-      !screen->caps.flatshade;
-   st->lower_alpha_test =
-      !screen->caps.alpha_test;
    switch (screen->caps.point_size_fixed) {
    case PIPE_POINT_SIZE_LOWER_ALWAYS:
       st->lower_point_size = true;
@@ -624,29 +592,6 @@ st_create_context_priv(struct gl_context *ctx, struct pipe_context *pipe,
       break;
    default: break;
    }
-   st->lower_two_sided_color =
-      !screen->caps.two_sided_color;
-   st->lower_ucp =
-      !screen->caps.clip_planes;
-   st->prefer_real_buffer_in_constbuf0 =
-      screen->caps.prefer_real_buffer_in_constbuf0;
-   st->has_conditional_render =
-      screen->caps.conditional_render;
-   st->lower_rect_tex =
-      !screen->caps.texrect;
-   st->allow_st_finalize_nir_twice =
-      screen->caps.call_finalize_nir_in_linker;
-
-   st->has_hw_atomics =
-      screen->shader_caps[MESA_SHADER_FRAGMENT].max_hw_atomic_counters
-      ? true : false;
-
-   st->validate_all_dirty_states =
-      screen->caps.validate_all_dirty_states
-      ? true : false;
-   st->can_null_texture =
-      screen->caps.null_textures
-      ? true : false;
 
    util_throttle_init(&st->throttle,
                       screen->caps.max_texture_upload_memory_budget);
@@ -703,32 +648,32 @@ st_create_context_priv(struct gl_context *ctx, struct pipe_context *pipe,
 
    /* Set which shader types can be compiled at link time. */
    st->shader_has_one_variant[MESA_SHADER_VERTEX] =
-         st->has_shareable_shaders &&
+         st->screen->caps.shareable_shaders &&
          !st->clamp_vert_color_in_shader &&
          !st->lower_point_size &&
-         (is_gles2 || !st->lower_ucp);
+         (is_gles2 || st->screen->caps.clip_planes);
 
    st->shader_has_one_variant[MESA_SHADER_FRAGMENT] =
-         st->has_shareable_shaders &&
-         !st->lower_flatshade &&
-         (is_gles2 || !st->lower_alpha_test) &&
+         st->screen->caps.shareable_shaders &&
+         st->screen->caps.flatshade &&
+         (is_gles2 || st->screen->caps.alpha_test) &&
          !st->clamp_frag_color_in_shader &&
          !st->force_persample_in_shader &&
-         (is_gles2 || !st->lower_two_sided_color);
+         (is_gles2 || st->screen->caps.two_sided_color);
 
-   st->shader_has_one_variant[MESA_SHADER_TESS_CTRL] = st->has_shareable_shaders;
+   st->shader_has_one_variant[MESA_SHADER_TESS_CTRL] = st->screen->caps.shareable_shaders;
    st->shader_has_one_variant[MESA_SHADER_TESS_EVAL] =
-         st->has_shareable_shaders &&
+         st->screen->caps.shareable_shaders &&
          !st->clamp_vert_color_in_shader &&
          !st->lower_point_size &&
-         (is_gles2 || !st->lower_ucp);
+         (is_gles2 || st->screen->caps.clip_planes);
 
    st->shader_has_one_variant[MESA_SHADER_GEOMETRY] =
-         st->has_shareable_shaders &&
+         st->screen->caps.shareable_shaders &&
          !st->clamp_vert_color_in_shader &&
          !st->lower_point_size &&
-         (is_gles2 || !st->lower_ucp);
-   st->shader_has_one_variant[MESA_SHADER_COMPUTE] = st->has_shareable_shaders;
+         (is_gles2 || st->screen->caps.clip_planes);
+   st->shader_has_one_variant[MESA_SHADER_COMPUTE] = st->screen->caps.shareable_shaders;
 
    if (!st->pipe->set_context_param || !util_thread_scheduler_enabled())
       st->thread_scheduler_disabled = true;

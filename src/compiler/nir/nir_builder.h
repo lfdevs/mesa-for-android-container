@@ -718,6 +718,17 @@ nir_mov_alu(nir_builder *build, nir_alu_src src, unsigned num_components)
          return src.src.ssa;
    }
 
+   if (build->constant_fold_alu && nir_src_is_const(src.src)) {
+      nir_const_value dest[NIR_MAX_VEC_COMPONENTS];
+      nir_load_const_instr *load_const = nir_src_as_load_const(src.src);
+      for (unsigned i = 0; i < num_components; i++)
+         dest[i] = load_const->value[src.swizzle[i]];
+
+      return nir_build_imm(build, num_components,
+                           nir_src_bit_size(src.src),
+                           dest);
+   }
+
    nir_alu_instr *mov = nir_alu_instr_create(build->shader, nir_op_mov);
    nir_def_init(&mov->instr, &mov->def, num_components,
                 nir_src_bit_size(src.src));
@@ -1350,33 +1361,33 @@ nir_uclamp(nir_builder *b,
 }
 
 static inline nir_def *
-nir_ffma_imm12(nir_builder *build, nir_def *src0, double src1, double src2)
+nir_ffma_weak_imm12(nir_builder *build, nir_def *src0, double src1, double src2)
 {
    if (build->shader->options &&
        build->shader->options->avoid_ternary_with_two_constants)
       return nir_fadd_imm(build, nir_fmul_imm(build, src0, src1), src2);
    else
-      return nir_ffma(build, src0, nir_imm_floatN_t(build, src1, src0->bit_size),
-                      nir_imm_floatN_t(build, src2, src0->bit_size));
+      return nir_ffma_weak(build, src0, nir_imm_floatN_t(build, src1, src0->bit_size),
+                                  nir_imm_floatN_t(build, src2, src0->bit_size));
 }
 
 static inline nir_def *
-nir_ffma_imm1(nir_builder *build, nir_def *src0, double src1, nir_def *src2)
+nir_ffma_weak_imm1(nir_builder *build, nir_def *src0, double src1, nir_def *src2)
 {
-   return nir_ffma(build, src0, nir_imm_floatN_t(build, src1, src0->bit_size), src2);
+   return nir_ffma_weak(build, src0, nir_imm_floatN_t(build, src1, src0->bit_size), src2);
 }
 
 static inline nir_def *
-nir_ffma_imm2(nir_builder *build, nir_def *src0, nir_def *src1, double src2)
+nir_ffma_weak_imm2(nir_builder *build, nir_def *src0, nir_def *src1, double src2)
 {
-   return nir_ffma(build, src0, src1, nir_imm_floatN_t(build, src2, src0->bit_size));
+   return nir_ffma_weak(build, src0, src1, nir_imm_floatN_t(build, src2, src0->bit_size));
 }
 
 static inline nir_def *
 nir_a_minus_bc(nir_builder *build, nir_def *src0, nir_def *src1,
                nir_def *src2)
 {
-   return nir_ffma(build, nir_fneg(build, src1), src2, src0);
+   return nir_ffma_weak(build, nir_fneg(build, src1), src2, src0);
 }
 
 static inline nir_def *

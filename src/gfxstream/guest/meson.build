@@ -13,7 +13,7 @@ endif
 #===============#
 # Configuration #
 #===============#
-gfxstream_guest_args = cpp_msvc_compat_args + ['-D_FILE_OFFSET_BITS=64']
+gfxstream_guest_args = cpp_msvc_compat_args + soong_compat_cpp_args + ['-D_FILE_OFFSET_BITS=64']
 
 # Our internal guest build
 if host_machine.system() == 'windows'

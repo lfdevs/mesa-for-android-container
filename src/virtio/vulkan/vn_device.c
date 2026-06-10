@@ -100,8 +100,8 @@ vn_queue_init(struct vn_device *dev,
    };
 
    VkQueue queue_handle = vn_queue_to_handle(queue);
-   vn_async_vkGetDeviceQueue2(dev->primary_ring, vn_device_to_handle(dev),
-                              &device_queue_info, &queue_handle);
+   vn_call_vkGetDeviceQueue2(dev->primary_ring, vn_device_to_handle(dev),
+                             &device_queue_info, &queue_handle);
 
    return VK_SUCCESS;
 }

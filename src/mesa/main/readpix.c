@@ -1055,13 +1055,6 @@ read_pixels(GLint x, GLint y, GLsizei width, GLsizei height, GLenum format,
 
    FLUSH_VERTICES(ctx, 0, 0);
 
-   if (MESA_VERBOSE & VERBOSE_API)
-      _mesa_debug(ctx, "glReadPixels(%d, %d, %s, %s, %p)\n",
-                  width, height,
-                  _mesa_enum_to_string(format),
-                  _mesa_enum_to_string(type),
-                  pixels);
-
    if (!no_error && (width < 0 || height < 0)) {
       _mesa_error( ctx, GL_INVALID_VALUE,
                    "glReadPixels(width=%d height=%d)", width, height );

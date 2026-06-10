@@ -38,6 +38,13 @@
             "countable_type": "a6xx_lrz_perfcounter_select"
         },
         {
+            "name": "CMP",
+            "num": 4,
+            "select": "RB_PERFCTR_CMP_SEL",
+            "counter": "RBBM_PERFCTR_CMP",
+            "countable_type": "a6xx_cmp_perfcounter_select"
+        },
+        {
             "name": "HLSQ",
             "num": 6,
             "select": "HLSQ_PERFCTR_HLSQ_SEL",

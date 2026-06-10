@@ -39,6 +39,7 @@ static const struct debug_named_value shader_debug_options[] = {
    {"noaliastex", IR3_DBG_NOALIASTEX, "Don't use alias.tex"},
    {"noaliasrt",  IR3_DBG_NOALIASRT,  "Don't use alias.rt"},
    {"asmroundtrip", IR3_DBG_ASM_ROUNDTRIP, "Disassemble, reassemble and compare every shader"},
+   {"thread64",   IR3_DBG_THREAD64,   "Prefer 64-thread wave size (when available)"},
 #if MESA_DEBUG
    /* MESA_DEBUG-only options: */
    {"schedmsgs",  IR3_DBG_SCHEDMSGS,  "Enable scheduler debug messages"},
@@ -129,21 +130,9 @@ static const nir_shader_compiler_options ir3_base_options = {
    .lower_usub_borrow = true,
    .lower_mul_high = true,
    .lower_mul_2x32_64 = true,
-   /* ir3's mad is an unfused mul-add instruction, so we need to flag fma
-    * lowering so that CL can implement fused fma in software.  GLSL,
-    * SPIRV, and NIR don't require either fused or unfused behavior from
-    * fma, and we'll turn mul+adds back into nir_op_ffma (again, implemented
-    * as unfused) during nir_opt_algebraic_late() (assuming it's not
-    * decorated with GLSL's precise, or SPIRV's NoContraction), or
-    * ir3_nir_opt_algebraic_late (if it is, since ir3's unfused mul-add is
-    * precise).
-    */
-   .lower_ffma16 = true,
-   .lower_ffma32 = true,
-   .lower_ffma64 = true,
-   .fuse_ffma16 = true,
-   .fuse_ffma32 = true,
-   .fuse_ffma64 = true,
+   .float_mul_add16 = nir_float_muladd_support_has_fmad | nir_float_muladd_support_fuse,
+   .float_mul_add32 = nir_float_muladd_support_has_fmad | nir_float_muladd_support_fuse,
+   .float_mul_add64 = nir_float_muladd_support_has_fmad | nir_float_muladd_support_fuse,
    .vertex_id_zero_based = false,
    .lower_extract_byte = true,
    .lower_extract_word = true,

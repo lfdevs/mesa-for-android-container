@@ -565,12 +565,11 @@ bi_lower_tex(nir_builder *b, nir_tex_instr *tex, uint64_t gpu_id)
          desc.lod_or_fetch = BIFROST_LOD_MODE_BIAS;
          sr[BI_TEX_SR_LOD] = build_lod_bias_clamp(b, srcs.bias, srcs.min_lod);
       } else if (srcs.ddx || srcs.ddy) {
-         desc.lod_or_fetch = BIFROST_LOD_MODE_GRDESC;
+         desc.lod_or_fetch = BIFROST_LOD_MODE_EXPLICIT;
          nir_def *grdesc = build_bi_gradient_desc(b, srcs.tex_h, srcs.samp_h,
                                                   tex->sampler_dim,
                                                   srcs.ddx, srcs.ddy);
-         sr[BI_TEX_SR_GRDESC0] = nir_channel(b, grdesc, 0);
-         sr[BI_TEX_SR_GRDESC1] = nir_channel(b, grdesc, 1);
+         sr[BI_TEX_SR_LOD] = nir_channel(b, grdesc, 0);
       } else {
          desc.lod_or_fetch = BIFROST_LOD_MODE_COMPUTE;
       }

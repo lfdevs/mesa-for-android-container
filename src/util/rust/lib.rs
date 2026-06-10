@@ -1,6 +1,7 @@
 // Copyright 2025 Google
 // SPDX-License-Identifier: MIT
 
+mod atomic_memory_sentinel;
 mod bytestream;
 mod defines;
 mod descriptor;
@@ -9,6 +10,7 @@ mod memory_mapping;
 mod shm;
 mod sys;
 
+pub use atomic_memory_sentinel::AtomicMemorySentinel;
 pub use bytestream::Reader;
 pub use bytestream::Writer;
 pub use defines::*;

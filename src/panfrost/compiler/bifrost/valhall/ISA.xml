@@ -939,6 +939,32 @@
     <imm name="index" start="12" size="4"/> <!-- 0 for pointx, 1 for pointy, 2 for fragw, 3 for fragz -->
   </ins>
 
+  <ins name="LD_VAR_BUF_FLAT_IMM" title="Load immediate flat varying" message="varying" unit="V">
+    <opcode>
+      <op val="0x40" start="48" mask="0x1FF"/>
+    </opcode>
+    <desc>Fetches a given flat varying from hardware buffer</desc>
+    <slot/>
+    <vecsize/>
+    <regfmt/>
+    <sr write="true"/>
+    <sr_count count="format"/>
+    <imm name="index" start="8" size="11"/>
+  </ins>
+
+  <ins name="LD_VAR_BUF_FLAT" title="Load indirect flat varying" message="varying" unit="V">
+    <opcode>
+      <op val="0x5F" start="48" mask="0x1FF"/>
+    </opcode>
+    <desc>Fetches a given flat varying from hardware buffer</desc>
+    <slot/>
+    <vecsize/>
+    <regfmt/>
+    <sr write="true"/>
+    <sr_count count="format"/>
+    <src/>
+  </ins>
+
   <group name="LD_VAR_BUF_IMM" title="Load immediate varying" message="varying" unit="V">
     <desc>Interpolates a given varying from hardware buffer</desc>
     <ins name="LD_VAR_BUF_IMM.f32">

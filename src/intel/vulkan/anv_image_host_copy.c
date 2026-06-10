@@ -573,7 +573,14 @@ anv_CopyImageToMemory(
                             VK_HOST_IMAGE_COPY_MEMCPY) != 0;
    const bool temp_copy = needs_temp_copy(image, pCopyImageToMemoryInfo->flags);
    void *tmp_mem = NULL;
-   uint64_t tmp_mem_size = 0;
+
+   /* Allocate single tile size memory for temporary copy. */
+   if (temp_copy) {
+      tmp_mem = vk_alloc(&device->vk.alloc, TMP_BUFFER_SIZE, 8,
+                         VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
+      if (!tmp_mem)
+         return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
+   }
 
    for (uint32_t r = 0; r < pCopyImageToMemoryInfo->regionCount; r++) {
       const VkImageToMemoryCopy *region =
@@ -601,30 +608,10 @@ anv_CopyImageToMemory(
       enum isl_format mem_format = use_memcpy ?
          surf->format : anv_plane_format.isl_format;
 
-      uint64_t tmp_copy_row_pitch_B = 0;
-
       if (temp_copy) {
          mem_format =
             anv_get_format_plane(device->physical, image->vk.format, plane,
                                  VK_IMAGE_TILING_LINEAR).isl_format;
-
-         tmp_copy_row_pitch_B =
-            calc_mem_row_pitch_B(surf->format, 0, &region->imageExtent);
-         uint64_t tmp_copy_height_pitch_B =
-            calc_mem_height_pitch_B(surf->format, tmp_copy_row_pitch_B, 0,
-                                    &region->imageExtent);
-
-         uint64_t tmp_mem_needed_size = tmp_copy_row_pitch_B * tmp_copy_height_pitch_B;
-         if (tmp_mem_needed_size > tmp_mem_size) {
-            void *new_tmp_mem = vk_realloc(&device->vk.alloc, tmp_mem, tmp_mem_needed_size, 8,
-                                 VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
-            if (new_tmp_mem == NULL) {
-               vk_free(&device->vk.alloc, tmp_mem);
-               return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
-            }
-            tmp_mem = new_tmp_mem;
-            tmp_mem_size = tmp_mem_needed_size;
-         }
       }
 
       VkOffset3D offset_el =

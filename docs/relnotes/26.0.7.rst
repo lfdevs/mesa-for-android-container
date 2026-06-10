@@ -1,0 +1,217 @@
+Mesa 26.0.7 Release Notes / 2026-05-14
+======================================
+
+Mesa 26.0.7 is a bug fix release which fixes bugs found since the 26.0.6 release.
+
+Mesa 26.0.7 implements the OpenGL 4.6 API, but the version reported by
+glGetString(GL_VERSION) or glGetIntegerv(GL_MAJOR_VERSION) /
+glGetIntegerv(GL_MINOR_VERSION) depends on the particular driver being used.
+Some drivers don't support all the features required in OpenGL 4.6. OpenGL
+4.6 is **only** available if requested at context creation.
+Compatibility contexts may report a lower version depending on each driver.
+
+Mesa 26.0.7 implements the Vulkan 1.4 API, but the version reported by
+the apiVersion property of the VkPhysicalDeviceProperties struct
+depends on the particular driver being used.
+
+SHA checksums
+-------------
+
+::
+
+    SHA256: 0c56bbcf1947e1a6a90ac09b129b0ca0cb52cc31145b94595e57c8804cf02496  mesa-26.0.7.tar.xz
+    SHA512: a60aaed37907bcf9edbd68e2a95e5cc95893215c64e91f8fceffa0d3f67fc63e8eb20877fbe9a59dd9df0b7f8bff4e73392085e11414eed8ae4939c4c8691f93  mesa-26.0.7.tar.xz
+
+
+New features
+------------
+
+- None
+
+
+Bug fixes
+---------
+
+- None
+
+
+Changes
+-------
+
+Adrián Larumbe (2):
+
+- pan/kmod: Fix minor version number check for USER_MMIO_OFFSET ioctl
+- pan/kmod: fix double syncop count sum when populating vm_bind syncs
+
+Ahmed Hesham (1):
+
+- pan/bi: Restore b3210 as a valid swizzle
+
+Caio Oliveira (1):
+
+- brw: Fix max_dispatch_width collection for CS with variable size
+
+Calder Young (3):
+
+- anv: Fix address bit masking for indirect SBTs
+- anv: Fix support for indirect SBTs on Xe3+
+- anv: Fix some usage flags not propagated to ISL for explicit layouts
+
+Christoph Pillmayer (1):
+
+- pan/kmod: Fix uninitialized timestamp info
+
+Connor Abbott (2):
+
+- tu: Fix LRZ+FDM offset+secondaries
+- tu: Disable LRZ when resuming if the GPU doesn't support tracking
+
+Danylo Piliaiev (1):
+
+- tu: Fix CP_CCHE_INVALIDATE not being applied at the right point
+
+Dave Airlie (3):
+
+- gallivm: handle llvm 22 coroutine end change
+- gallivm: handle llvm 22 scatter/gather intrinsic changes.
+- lavapipe: treat NULL pColorAttachmentLocations as no handles
+
+David Rosca (2):
+
+- frontends/va: Fix setting output color properties from color standard
+- frontends/va: Add missing NULL check for additional output surface
+
+Emma Anholt (3):
+
+- ir3: Fix shared IMAD24 lowering.
+- tu: Add capture/replay for sparse buffers and descriptor buffer.
+- screenshot-layer: Fix leftover VK queues in the map at DeviceDestroy.
+
+Eric Engestrom (2):
+
+- docs: add sha sum for 26.0.6
+- .pick_status.json: Update to aee10432272f77fd5979de084f4f64f7374c3278
+
+Eric R. Smith (2):
+
+- panfrost: make sure INDEX_OFFSET is cleared
+- panfrost: add helper function for checking for active queries
+
+Erik Faye-Lund (4):
+
+- mesa/main: remove stale prototypes
+- mesa/main: remove incorrect debug-output
+- Revert "mesa: check for ARB_ES3_compatibility in format checks"
+- mesa/main: remove unused array
+
+Georg Lehmann (2):
+
+- radv: fix amount of sample shading with required sample shaded inputs
+- ac/nir/lower_tex_coords: fix optimizing cube txd to tex
+
+Icenowy Zheng (7):
+
+- pvr: wait for graphics jobs in CopyQueryPoolResults
+- pvr: increase maxPerStageResources for new maxPerStageDescriptorStorageBuffers
+- pvr: do not setup deferred RTA clear for active render targets
+- pvr: properly handle deferred RTA clears for 2D array view of 3D image
+- pvr: add deferred RTA clear command to list after checking it's not NULL
+- pvr: record deferred RTA clears for secondary cmdbuf subcmds
+- pvr: setup viewindex if the shader wants it even when multiview disabled
+
+Job Noorman (4):
+
+- ir3/cf: fix rewriting uses with different dst types
+- ir3/shared_ra: use ir3_cursor instead of instr in reload helpers
+- ir3/shared_ra: insert reloads before tied dst pcopies
+- ir3: don't cache driver param instructions
+
+Jon Turney (1):
+
+- ddebug: Fix use of alloca() without #include "c99_alloca.h"
+
+Jose Maria Casanova Crespo (2):
+
+- broadcom/compiler: move nir_lower_undef_to_zero out of optimization loop
+- v3dv: include mem_offset in vkCmdFillBuffer destination
+
+Karol Herbst (5):
+
+- nir/lower_cl_images: call nir_progress on every function
+- gallivm/nir/soa: use uint for booleans
+- llvmpipe: never pass a NULL function name to LLVMAddFunction
+- ci: install libstdc++-static on fedora
+- rusticl: link the C++ runtime statically
+
+Lionel Landwerlin (3):
+
+- anv: fix null pointer access
+- anv: fix arc artifacts on Farming simulator 2022
+- anv: fixup null address check
+
+Lorenzo Rossi (1):
+
+- panvk/jm: Fix tls_size overwrite in indirect draws
+
+Louis Montagne (1):
+
+- zink: relax build-id length assertion for Mach-O
+
+Marek Olšák (1):
+
+- radeonsi: fix a typo in si_shader_update_spi_shader_formats
+
+Mel Henning (2):
+
+- nvk: Add a wfi for blackwell in CmdDispatchIndirect
+- nvk: Disable compression on Turing
+
+Mike Blumenkrantz (13):
+
+- llvmpipe: fix min_samples + A2C
+- lavapipe: fix indirect memory copies
+- lavapipe: fix pushconst data updating
+- util/format: support 256-bit formats in util_format_get_tilesize()
+- lavapipe: use the right type for DGC mesh draws
+- lavapipe: rework immutable samplers
+- lavapipe: allow fbfetch with shader objects
+- llvmpipe: always set view_index for linear rasterizer
+- lavapipe: update cbuf count when remapping attachments
+- lavapipe: unset attachment remap state if pColorAttachmentLocations==NULL
+- lavapipe: fix setting colormasks when attachments get remapped
+- zink: fix mixing of mesh descriptor bindings with gfx bindings
+- meson: fix renderdoc integration define
+
+Nick Hamilton (1):
+
+- pvr: Revert don't csb emit multi-layer clear attachments without rta support
+
+Paulo Zanoni (2):
+
+- intel/isl: fix assert when surf->size_B is > UINT_MAX
+- intel/isl: warn about excessive num_elements only once
+
+Raviraj Uppal (1):
+
+- driconf: disable allow_rgb16_configs for SPECviewperf
+
+Rohit Athavale (1):
+
+- mediafoundation: Test compile steps v/s step , and set build flag
+
+Samuel Pitoiset (5):
+
+- radv: fix determining needed dynamic states when rasterization is disabled
+- radv: allow DGC+multiview by default
+- radv: do not fallback to compute for image->buffer copies with emulated formats
+- spirv: preserve the explicit stride for untyped pointers with matrices
+- radv: fix another case of VRS with mipmaps on GFX10.3
+
+Vinson Lee (2):
+
+- st/mesa: fix implicit conversion warning in st_atom_framebuffer
+- vulkan/screenshot-layer: initialize info to NULL
+
+llyyr (1):
+
+- vulkan/wsi/wayland: use mtx helpers in wait_for_present2

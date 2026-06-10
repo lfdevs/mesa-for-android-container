@@ -114,7 +114,7 @@ lower_color(nir_builder *b, lower_drawpixels_state *state, nir_intrinsic_instr *
    /* Apply the scale and bias. */
    if (state->options->scale_and_bias) {
       /* MAD def, def, scale, bias; */
-      def = nir_ffma(b, def, get_scale(b, state), get_bias(b, state));
+      def = nir_ffma_weak(b, def, get_scale(b, state), get_bias(b, state));
    }
 
    if (state->options->pixel_maps) {

@@ -72,11 +72,14 @@ bool msl_lower_textures(nir_shader *s);
 bool msl_lower_static_sample_mask(nir_shader *nir, uint32_t sample_mask);
 bool msl_ensure_depth_write(nir_shader *nir);
 bool msl_ensure_vertex_position_output(nir_shader *nir);
+bool msl_ensure_vertex_point_size_output(nir_shader *nir);
 bool msl_nir_fs_io_types(nir_shader *nir);
 bool msl_nir_vs_io_types(nir_shader *nir);
 bool msl_nir_fake_guard_for_discards(struct nir_shader *nir);
 bool msl_nir_lower_sample_shading(nir_shader *nir);
-void msl_lower_nir_late(nir_shader *nir);
+void msl_nir_lower_clip_cull_distance(nir_shader *nir,
+                                      unsigned num_cull_distances);
+bool msl_nir_lower_instance_id(nir_shader *nir);
 
 bool msl_gather_uses_per_draw_data(nir_shader *nir);
 
@@ -84,17 +87,19 @@ static const nir_shader_compiler_options kk_nir_options = {
    .lower_fdph = true,
    .has_fsub = true,
    .has_isub = true,
+   .float_mul_add16 = nir_float_muladd_support_has_ffma,
+   .float_mul_add32 = nir_float_muladd_support_has_ffma,
    .lower_extract_word = true,
    .lower_extract_byte = true,
    .lower_insert_word = true,
    .lower_insert_byte = true,
    .lower_fmod = true,
    .discard_is_demote = true,
-   .instance_id_includes_base_index = true,
    .lower_device_index_to_zero = true,
    .lower_pack_64_2x32_split = true,
    .lower_unpack_64_2x32_split = true,
    .lower_pack_64_2x32 = true,
+   .lower_pack_64_4x16 = true,
    .lower_pack_half_2x16 = true,
    .lower_pack_split = true,
    .lower_unpack_half_2x16 = true,
@@ -108,6 +113,7 @@ static const nir_shader_compiler_options kk_nir_options = {
    .lower_mul_2x32_64 = true,
    .lower_uadd_carry = true,
    .lower_usub_borrow = true,
+   .compact_arrays = true,
    /* Metal does not support double. */
    .lower_doubles_options = (nir_lower_doubles_options)(~0),
    .lower_int64_options = nir_lower_ufind_msb64 | nir_lower_subgroup_shuffle64,

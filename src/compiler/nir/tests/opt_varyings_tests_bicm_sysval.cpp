@@ -6,6 +6,8 @@
 
 #include "nir_opt_varyings_test.h"
 
+namespace {
+
 static bool
 shader_contains_sysval(nir_builder *b, nir_intrinsic_op op)
 {

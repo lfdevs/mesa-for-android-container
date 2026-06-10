@@ -618,6 +618,16 @@ static VkResult pvr_pds_descriptor_program_create_and_upload(
       };
    }
 
+   /* Pass the 64-bit address (as 2x32-bit regs) of the global shmem buffer. */
+   if (stage == MESA_SHADER_COMPUTE && data->cs.shmem.count > 0 &&
+       data->cs.global_shmem) {
+      program.buffers[program.buffer_count++] = (struct pvr_pds_buffer){
+         .type = PVR_BUFFER_TYPE_GLOBAL_SHMEM,
+         .size_in_dwords = sizeof(uint64_t) / sizeof(uint32_t),
+         .destination = data->cs.shmem.start,
+      };
+   }
+
    pds_info->entries_size_in_bytes = const_entries_size_in_bytes;
 
    pvr_pds_generate_descriptor_upload_program(&program, NULL, pds_info);
@@ -1073,7 +1083,8 @@ static VkResult pvr_compute_pipeline_compile(
    if (result != VK_SUCCESS)
       goto err_free_build_context;
 
-   if (compute_pipeline->cs_data.cs.zero_shmem) {
+   if (compute_pipeline->cs_data.cs.zero_shmem &&
+       !compute_pipeline->cs_data.cs.global_shmem) {
       uint32_t start = compute_pipeline->cs_data.cs.shmem.start;
       uint32_t count = compute_pipeline->cs_data.cs.shmem.count;
       pco_shader *zero_init_shader =
@@ -2016,6 +2027,9 @@ static void pvr_init_fs_outputs_mrt(pco_data *data,
    unsigned u;
    pco_fs_data *fs = &data->fs;
 
+   if (!vk_render_pass_state_has_attachment_info(rp))
+      goto early_exit;
+
    for (u = 0; u < PVR_MAX_COLOR_ATTACHMENTS; u++) {
       if (!(rp->attachments & MESA_VK_RP_ATTACHMENT_COLOR_BIT(u)))
          continue;
@@ -2036,6 +2050,7 @@ static void pvr_init_fs_outputs_mrt(pco_data *data,
       }
    }
 
+early_exit:
    fs->z_replicate = ~0u;
 }
 
@@ -2417,10 +2432,21 @@ static void pvr_alloc_cs_shmem(pco_data *data, nir_shader *nir)
 {
    assert(!nir->info.cs.has_variable_shared_mem);
 
-   data->cs.shmem.start = data->common.coeffs;
-   data->cs.shmem.count = nir->info.shared_size >> 2;
-   data->common.coeffs += data->cs.shmem.count;
    data->cs.zero_shmem = nir->info.zero_initialize_shared_memory;
+   data->cs.shmem.count = nir->info.shared_size;
+
+   if (data->cs.global_shmem) {
+      /* Reserve space for the shared memory buffer base address. */
+      data->cs.shmem.start = data->common.shareds;
+      data->common.shareds += 2;
+   } else {
+      /* Reserve space in coefficients for use as shared memory. */
+      data->cs.shmem.start = data->common.coeffs;
+      data->common.coeffs += data->cs.shmem.count;
+
+      /* DWORD granularity. */
+      data->cs.shmem.count >>= 2;
+   }
 }
 
 static void pvr_init_descriptors(pco_data *data,

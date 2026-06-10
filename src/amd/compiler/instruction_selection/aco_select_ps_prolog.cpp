@@ -64,6 +64,8 @@ overwrite_interp_args(isel_context* ctx, const struct aco_ps_prolog_info* finfo)
       cond = bool_to_vector_condition(ctx, cond);
 
       if (finfo->bc_optimize_for_persp) {
+         assert(finfo->uses_persp_centroid);
+
          Temp center = get_arg(ctx, ctx->args->persp_center);
          Temp centroid = get_arg(ctx, ctx->args->persp_centroid);
 
@@ -73,6 +75,8 @@ overwrite_interp_args(isel_context* ctx, const struct aco_ps_prolog_info* finfo)
       }
 
       if (finfo->bc_optimize_for_linear) {
+         assert(finfo->uses_linear_centroid);
+
          Temp center = get_arg(ctx, ctx->args->linear_center);
          Temp centroid = get_arg(ctx, ctx->args->linear_centroid);
 
@@ -85,25 +89,29 @@ overwrite_interp_args(isel_context* ctx, const struct aco_ps_prolog_info* finfo)
    if (finfo->force_persp_sample_interp) {
       Temp persp_sample = get_arg(ctx, ctx->args->persp_sample);
       ctx->arg_temps[ctx->args->persp_center.arg_index] = persp_sample;
-      ctx->arg_temps[ctx->args->persp_centroid.arg_index] = persp_sample;
+      if (finfo->uses_persp_centroid)
+         ctx->arg_temps[ctx->args->persp_centroid.arg_index] = persp_sample;
    }
 
    if (finfo->force_linear_sample_interp) {
       Temp linear_sample = get_arg(ctx, ctx->args->linear_sample);
       ctx->arg_temps[ctx->args->linear_center.arg_index] = linear_sample;
-      ctx->arg_temps[ctx->args->linear_centroid.arg_index] = linear_sample;
+      if (finfo->uses_linear_centroid)
+         ctx->arg_temps[ctx->args->linear_centroid.arg_index] = linear_sample;
    }
 
    if (finfo->force_persp_center_interp) {
       Temp persp_center = get_arg(ctx, ctx->args->persp_center);
       ctx->arg_temps[ctx->args->persp_sample.arg_index] = persp_center;
-      ctx->arg_temps[ctx->args->persp_centroid.arg_index] = persp_center;
+      if (finfo->uses_persp_centroid)
+         ctx->arg_temps[ctx->args->persp_centroid.arg_index] = persp_center;
    }
 
    if (finfo->force_linear_center_interp) {
       Temp linear_center = get_arg(ctx, ctx->args->linear_center);
       ctx->arg_temps[ctx->args->linear_sample.arg_index] = linear_center;
-      ctx->arg_temps[ctx->args->linear_centroid.arg_index] = linear_center;
+      if (finfo->uses_linear_centroid)
+         ctx->arg_temps[ctx->args->linear_centroid.arg_index] = linear_center;
    }
 }
 
@@ -167,32 +175,6 @@ overwrite_samplemask_arg(isel_context* ctx, const struct aco_ps_prolog_info* fin
                       is_helper_invoc);
    }
 }
-void
-overwrite_pos_xy_args(isel_context* ctx, const struct aco_ps_prolog_info* finfo)
-{
-   if (!finfo->get_frag_coord_from_pixel_coord)
-      return;
-
-   Builder bld(ctx->program, ctx->block);
-   Temp pos_fixed_pt = get_arg(ctx, ctx->args->pos_fixed_pt);
-
-   for (unsigned i = 0; i < 2; i++) {
-      if (!ctx->args->frag_pos[i].used)
-         continue;
-
-      Temp t;
-      if (i)
-         t = bld.vop2(aco_opcode::v_lshrrev_b32, bld.def(v1), Operand::c32(16), pos_fixed_pt);
-      else
-         t = bld.vop2(aco_opcode::v_and_b32, bld.def(v1), Operand::c32(0xffff), pos_fixed_pt);
-
-      t = bld.vop1(aco_opcode::v_cvt_f32_u32, bld.def(v1), t);
-      if (!finfo->pixel_center_integer)
-         t = bld.vop2(aco_opcode::v_add_f32, bld.def(v1), Operand::c32(0x3f000000 /*0.5*/), t);
-
-      ctx->arg_temps[ctx->args->frag_pos[i].arg_index] = t;
-   }
-}
 
 void
 passthrough_all_args(isel_context* ctx, std::vector<Operand>& regs)
@@ -200,12 +182,20 @@ passthrough_all_args(isel_context* ctx, std::vector<Operand>& regs)
    struct ac_arg arg;
    arg.used = true;
 
-   for (arg.arg_index = 0; arg.arg_index < ctx->args->arg_count; arg.arg_index++)
+   for (arg.arg_index = 0; arg.arg_index < ctx->args->arg_count; arg.arg_index++) {
+      /* Don't pass LINE_STIPPLE_TEX_ENA to the next shader binary because it's unused.
+       * This saves 1 VGPR in the prolog.
+       */
+      if (ctx->args->line_stipple_tex_ena.used &&
+          arg.arg_index == ctx->args->line_stipple_tex_ena.arg_index)
+         continue;
+
       regs.emplace_back(Operand(get_arg(ctx, arg), get_arg_reg(ctx->args, arg)));
+   }
 }
 
 Temp
-get_interp_color(isel_context* ctx, int interp_vgpr, unsigned attr_index, unsigned comp)
+get_interp_color(isel_context* ctx, int interp_arg, unsigned attr_index, unsigned comp)
 {
    Builder bld(ctx->program, ctx->block);
 
@@ -213,10 +203,8 @@ get_interp_color(isel_context* ctx, int interp_vgpr, unsigned attr_index, unsign
 
    Temp prim_mask = get_arg(ctx, ctx->args->prim_mask);
 
-   if (interp_vgpr != -1) {
-      /* interp args are all 2 vgprs */
-      int arg_index = ctx->args->persp_sample.arg_index + interp_vgpr / 2;
-      Temp interp_ij = ctx->arg_temps[arg_index];
+   if (interp_arg != -1) {
+      Temp interp_ij = ctx->arg_temps[interp_arg];
 
       emit_interp_instr(ctx, attr_index, comp, interp_ij, dst, prim_mask, false);
    } else {
@@ -245,7 +233,9 @@ interpolate_color_args(isel_context* ctx, const struct aco_ps_prolog_info* finfo
       u_foreach_bit (i, finfo->colors_read) {
          unsigned color_index = i / 4;
          unsigned front_index = finfo->color_attr_index[color_index];
-         int interp_vgpr = finfo->color_interp_vgpr_index[color_index];
+         int interp_arg = finfo->color_interp[color_index] == AC_COLOR_INTERP_FLAT
+                             ? -1
+                             : ac_get_color_interp_arg(ctx->args, finfo->color_interp[color_index]);
 
          /* If BCOLOR0 is used, BCOLOR1 is at offset "num_inputs + 1",
           * otherwise it's at offset "num_inputs".
@@ -254,8 +244,8 @@ interpolate_color_args(isel_context* ctx, const struct aco_ps_prolog_info* finfo
          if (color_index == 1 && finfo->colors_read & 0xf)
             back_index++;
 
-         Temp front = get_interp_color(ctx, interp_vgpr, front_index, i % 4);
-         Temp back = get_interp_color(ctx, interp_vgpr, back_index, i % 4);
+         Temp front = get_interp_color(ctx, interp_arg, front_index, i % 4);
+         Temp back = get_interp_color(ctx, interp_arg, back_index, i % 4);
 
          Temp color =
             bld.vop2(aco_opcode::v_cndmask_b32, bld.def(v1), back, front, is_face_positive);
@@ -266,8 +256,10 @@ interpolate_color_args(isel_context* ctx, const struct aco_ps_prolog_info* finfo
       u_foreach_bit (i, finfo->colors_read) {
          unsigned color_index = i / 4;
          unsigned attr_index = finfo->color_attr_index[color_index];
-         int interp_vgpr = finfo->color_interp_vgpr_index[color_index];
-         Temp color = get_interp_color(ctx, interp_vgpr, attr_index, i % 4);
+         int interp_arg = finfo->color_interp[color_index] == AC_COLOR_INTERP_FLAT
+                             ? -1
+                             : ac_get_color_interp_arg(ctx->args, finfo->color_interp[color_index]);
+         Temp color = get_interp_color(ctx, interp_arg, attr_index, i % 4);
 
          regs.emplace_back(Operand(color, PhysReg{vgpr++}));
       }
@@ -295,7 +287,6 @@ select_ps_prolog(Program* program, void* pinfo, ac_shader_config* config,
 
    overwrite_interp_args(&ctx, finfo);
    overwrite_samplemask_arg(&ctx, finfo);
-   overwrite_pos_xy_args(&ctx, finfo);
 
    std::vector<Operand> regs;
    passthrough_all_args(&ctx, regs);

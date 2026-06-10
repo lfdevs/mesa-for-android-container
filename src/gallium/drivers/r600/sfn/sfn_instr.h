@@ -127,7 +127,7 @@ public:
 
    virtual AluGroup *as_alu_group() { return nullptr;}
 
-   virtual void pin_dest_to_chan() {}
+   virtual void pin_registers() {}
 
 protected:
 
@@ -202,8 +202,13 @@ public:
    void set_type(Type t, r600_chip_class chip_class);
    int32_t remaining_slots() const { return m_remaining_slots;}
 
-   bool try_reserve_kcache(const AluGroup& instr);
-   bool try_reserve_kcache(const AluInstr& group);
+   auto try_reserve_kcache(const AluGroup& instr) const
+      -> std::pair<std::array<KCacheLine, 4>, bool>;
+   auto try_reserve_kcache(const AluInstr& group) const
+      -> std::pair<std::array<KCacheLine, 4>, bool>;
+   void commit_kcache_reservation(const std::array<KCacheLine, 4>& kcache);
+   bool update_kcache_reservation(const AluGroup& instr);
+   bool update_kcache_reservation(const AluInstr& instr);
 
    auto last_lds_instr() { return m_last_lds_instr; }
    void set_last_lds_instr(Instr *instr) { m_last_lds_instr = instr; }
@@ -213,8 +218,6 @@ public:
    bool lds_group_active() { return m_lds_group_start != nullptr; }
 
    size_t size() const { return m_instructions.size(); }
-
-   bool kcache_reservation_failed() const { return m_kcache_alloc_failed; }
 
    int inc_rat_emitted() { return ++m_emitted_rat_instr; }
 
@@ -244,7 +247,6 @@ private:
    uint32_t m_remaining_slots{0xffff};
 
    std::array<KCacheLine, 4> m_kcache;
-   bool m_kcache_alloc_failed{false};
 
    Instr *m_last_lds_instr{nullptr};
 
@@ -347,7 +349,7 @@ public:
 
    void update_indirect_addr(PRegister old_reg, PRegister addr) override;
 
-   void pin_dest_to_chan() override;
+   void pin_registers() override;
 
    virtual Block::Instructions prepare_instr() const { return Block::Instructions(); }
 

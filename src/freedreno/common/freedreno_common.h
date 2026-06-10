@@ -158,6 +158,9 @@ struct BitmaskEnum {
 
 #define BIT(bit) BITFIELD64_BIT(bit)
 
+#define U642VOID(x) ((void *)(unsigned long)(x))
+#define VOID2U64(x) ((uint64_t)(unsigned long)(x))
+
 /**
  * Helper for allocating sequence #s where zero is a non-valid seqno
  */

@@ -9,6 +9,7 @@
 #ifndef RADV_META_H
 #define RADV_META_H
 
+#include "tools/radv_sqtt.h"
 #include "radv_buffer.h"
 #include "radv_buffer_view.h"
 #include "radv_cmd_buffer.h"
@@ -22,7 +23,6 @@
 #include "radv_pipeline_compute.h"
 #include "radv_queue.h"
 #include "radv_shader.h"
-#include "radv_sqtt.h"
 
 #ifdef __cplusplus
 extern "C" {

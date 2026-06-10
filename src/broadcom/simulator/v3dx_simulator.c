@@ -272,13 +272,13 @@ v3dX(simulator_get_param_ioctl)(struct v3d_hw *v3d,
                 args->value = 1;
                 return 0;
         case DRM_V3D_PARAM_SUPPORTS_CSD:
-                args->value = V3D_VERSION >= 42;
+                args->value = 1;
                 return 0;
         case DRM_V3D_PARAM_SUPPORTS_CACHE_FLUSH:
                 args->value = 1;
                 return 0;
         case DRM_V3D_PARAM_SUPPORTS_PERFMON:
-                args->value = V3D_VERSION >= 42;
+                args->value = 1;
                 return 0;
         case DRM_V3D_PARAM_SUPPORTS_MULTISYNC_EXT:
                 args->value = 1;

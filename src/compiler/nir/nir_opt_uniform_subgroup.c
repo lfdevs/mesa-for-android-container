@@ -323,6 +323,12 @@ opt_uniform_subgroup_instr(nir_builder *b, nir_intrinsic_instr *intrin, void *_s
       return false;
    }
 
+
+   /* Divergence shouldn't change from the optimization that we have done,
+    * so preserve it in case another subgroup operation uses the result.
+    */
+   replacement->divergent = intrin->def.divergent;
+
    nir_def_replace(&intrin->def, replacement);
    return true;
 }

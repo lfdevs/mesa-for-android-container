@@ -8,6 +8,8 @@
 
 #include "sfn_instr_export.h"
 #include "sfn_shader_vs.h"
+#include "sfn_nir.h"
+#include "nir.h"
 
 #include <sstream>
 
@@ -245,4 +247,41 @@ TESShader::do_print_properties(std::ostream& os) const
    (void)os;
 }
 
+class LowerTessLevelDefault : public NirLowerInstruction {
+   bool filter(const nir_instr *instr) const override
+   {
+      if (instr->type != nir_instr_type_intrinsic)
+         return false;
+
+      auto intr = nir_instr_as_intrinsic(instr);
+      return intr->intrinsic == nir_intrinsic_load_tess_level_inner_default ||
+             intr->intrinsic == nir_intrinsic_load_tess_level_outer_default;
+   }
+
+   nir_def *lower(nir_instr *instr) override
+   {
+      auto intr = nir_instr_as_intrinsic(instr);
+
+      auto info_buffer = nir_imm_int(b, R600_BUFFER_INFO_CONST_BUFFER);
+
+      switch (intr->intrinsic) {
+      case nir_intrinsic_load_tess_level_inner_default:
+         return  nir_load_ubo(b, 2, 32, info_buffer, nir_imm_int(b, 16),
+                               .range_base = 16, .range = 8);
+      case nir_intrinsic_load_tess_level_outer_default:
+         return nir_load_ubo(b, 4, 32, info_buffer, nir_imm_int(b, 0),
+                             .range_base = 0, .range = 16);
+      default:
+         assert(0);
+         return nullptr;
+      }
+   }
+};
+
 } // namespace r600
+
+int r600_lower_tess_level_default_to_ubo(nir_shader *sh)
+{
+   return r600::LowerTessLevelDefault().run(sh);
+}
+

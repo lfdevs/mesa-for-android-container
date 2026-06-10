@@ -80,6 +80,9 @@ kk_get_blit_queue(VkDevice device)
 {
    /* We only have one queue, so just return that one. */
    VK_FROM_HANDLE(kk_device, dev, device);
+   if (!dev->has_queue)
+      return NULL;
+
    return &dev->queue.vk;
 }
 

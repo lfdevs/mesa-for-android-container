@@ -35,6 +35,8 @@
 #define KK_MAX_MULTIVIEW_VIEW_COUNT    32
 #define KK_TEXTURE_BUFFER_WIDTH        (1u << 14)
 #define KK_MAX_OCCLUSION_QUERIES       (32768)
+#define KK_MIN_SAMPLE_LOCATION         (0.0f)
+#define KK_MAX_SAMPLE_LOCATION         (0.9375f)
 
 #define KK_SPARSE_ADDR_SPACE_SIZE (1ull << 39)
 

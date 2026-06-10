@@ -27,7 +27,6 @@ anv-adl-vk:
     - .lava-acer-cbv514-1h-34uz-brya:x86_64
   variables:
     DEQP_SUITE: anv-adl
-    FDO_CI_CONCURRENT: 6  # We get OOMkills if we go too wide since VKCTS 1.4.4.0
     # Xe regression in 6.19
     # https://gitlab.freedesktop.org/drm/xe/kernel/-/issues/7584
     KERNEL_TAG: "v6.17-mesa-ddf6"
@@ -39,7 +38,6 @@ anv-adl-vk-full:
     - .anv-manual-rules
   variables:
     DEQP_SUITE: anv-adl-full
-    FDO_CI_CONCURRENT: 5  # We get OOMkills if we go too wide since VKCTS 1.4.4.0
   timeout: 1h 40m
   parallel: 3
 
@@ -50,7 +48,7 @@ anv-rpl-vk:
     - .lava-asus-CX3402CVA-brya:x86_64
   variables:
     DEQP_SUITE: anv-rpl
-    FDO_CI_CONCURRENT: 6  # We get OOMkills if we go too wide since VKCTS 1.4.4.0
+    FDO_CI_CONCURRENT: 6  # We get OOMkills if we go too wide since VKCTS 1.4.4.0, persisting in 1.4.5.3.
     # Xe regression in 6.19
     # https://gitlab.freedesktop.org/drm/xe/kernel/-/issues/7584
     KERNEL_TAG: "v6.17-mesa-ddf6"

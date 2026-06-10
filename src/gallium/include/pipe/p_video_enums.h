@@ -336,6 +336,7 @@ enum pipe_video_vpp_blend_mode
 {
    PIPE_VIDEO_VPP_BLEND_MODE_NONE = 0x0,
    PIPE_VIDEO_VPP_BLEND_MODE_GLOBAL_ALPHA = 0x1,
+   PIPE_VIDEO_VPP_BLEND_MODE_PREMULTIPLIED_ALPHA = 0x2,
 };
 
 /* To be used for VPP state*/

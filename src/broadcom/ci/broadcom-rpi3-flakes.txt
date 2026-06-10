@@ -209,13 +209,13 @@ spec@!opengl 1.1@depthstencil-default_fb-drawpixels-24_8 samples=2
 spec@!opengl 1.1@depthstencil-default_fb-drawpixels-24_8 samples=4
 spec@!opengl 1.1@depthstencil-default_fb-drawpixels-float-and-ushort samples=2
 spec@!opengl 1.1@depthstencil-default_fb-drawpixels-float-and-ushort samples=4
-spec@!opengl 1.1@draw-sync
 spec@!opengl 1.1@masked-clear
 spec@arb_color_buffer_float@gl_rgba8-render
 spec@arb_es2_compatibility@arb_es2_compatibility-releaseshadercompiler
 spec@ext_framebuffer_blit@fbo-sys-blit
 spec@ext_framebuffer_blit@fbo-sys-sub-blit
 spec@ext_framebuffer_multisample@accuracy all_samples stencil_draw small depthstencil
+spec@ext_framebuffer_multisample@sample-alpha-to-coverage 2 depth
 spec@ext_framebuffer_object@fbo-flushing-2
 
 gl_discard
@@ -230,3 +230,12 @@ gles_multipicturedraw_rectclip_tiled
 gles_multipicturedraw_sierpinski_simple
 gles_multipicturedraw_sierpinski_tiled
 gles_scaledemojipos
+
+spec@!opengl 1.5@draw-elements-user
+spec@arb_pixel_buffer_object@texsubimage-unpack pbo
+spec@ati_fragment_shader@ati_fragment_shader-render-notexture
+spec@ext_framebuffer_multisample@accuracy 2 stencil_resolve small depthstencil
+spec@glsl-1.10@execution@built-in-functions@vs-op-div-int-ivec3
+spec@glsl-1.10@execution@built-in-functions@vs-op-ne-vec4-vec4-using-if
+spec@glsl-1.10@execution@variable-indexing@fs-varying-array-mat2-col-rd
+spec@glsl-1.10@execution@variable-indexing@vs-varying-mat4-row-rd

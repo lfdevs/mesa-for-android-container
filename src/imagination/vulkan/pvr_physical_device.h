@@ -74,6 +74,22 @@ VK_DEFINE_HANDLE_CASTS(pvr_physical_device,
                        VkPhysicalDevice,
                        VK_OBJECT_TYPE_PHYSICAL_DEVICE)
 
+static void
+pvr_get_render_area_granularity(struct pvr_physical_device *pdevice,
+                                VkExtent2D *granularity)
+{
+   const struct pvr_device_info *dev_info = &pdevice->dev_info;
+
+   /* Granularity does not depend on any settings in the render pass, so return
+    * the tile granularity.
+    *
+    * The default value is based on the minimum value found in all existing
+    * cores.
+    */
+   granularity->width = PVR_GET_FEATURE_VALUE(dev_info, tile_size_x, 16);
+   granularity->height = PVR_GET_FEATURE_VALUE(dev_info, tile_size_y, 16);
+}
+
 VkResult pvr_physical_device_init(struct pvr_physical_device *pdevice,
                                   struct pvr_instance *instance,
                                   drmDevicePtr drm_render_device,

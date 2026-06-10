@@ -593,7 +593,7 @@ class __declspec( uuid( HMFT_GUID ) ) CDX12EncHMFT : CMFD3DManager,
    uint64_t m_CurrentSyncFenceValue = 1;
 
    // Cached encoder capabilities
-   class encoder_capabilities m_EncoderCapabilities = {};
+   class encoder_capabilities m_EncoderCapabilities { this };
 
    // state management
    bool m_bShutdown = false;

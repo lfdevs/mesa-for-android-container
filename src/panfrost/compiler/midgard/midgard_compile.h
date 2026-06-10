@@ -27,9 +27,6 @@ void midgard_compile_shader_nir(nir_shader *nir,
  * solution. */
 
 static const nir_shader_compiler_options midgard_nir_options = {
-   .lower_ffma16 = true,
-   .lower_ffma32 = true,
-   .lower_ffma64 = true,
    .lower_scmp = true,
    .lower_flrp16 = true,
    .lower_flrp32 = true,

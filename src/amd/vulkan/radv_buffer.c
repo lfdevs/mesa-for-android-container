@@ -9,13 +9,13 @@
  */
 
 #include "radv_buffer.h"
+#include "tools/radv_rmv.h"
 #include "radv_device.h"
 #include "radv_device_memory.h"
 #include "radv_dgc.h"
 #include "radv_entrypoints.h"
 #include "radv_instance.h"
 #include "radv_physical_device.h"
-#include "radv_rmv.h"
 
 #include "vk_common_entrypoints.h"
 #include "vk_debug_utils.h"

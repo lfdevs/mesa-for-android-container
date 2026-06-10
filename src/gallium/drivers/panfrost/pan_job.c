@@ -553,9 +553,7 @@ panfrost_batch_to_fb_info(const struct panfrost_batch *batch,
       if (util_format_has_depth(fdesc)) {
          z_rsrc = pan_resource(surf->texture);
 
-         zs->format = surf->format == PIPE_FORMAT_Z32_FLOAT_S8X24_UINT
-                         ? PIPE_FORMAT_Z32_FLOAT
-                         : surf->format;
+         zs->format = z_rsrc->image.props.format;
          zs->dim = MALI_TEXTURE_DIMENSION_2D;
          zs->last_level = zs->first_level = surf->level;
          zs->first_layer = surf->first_layer;

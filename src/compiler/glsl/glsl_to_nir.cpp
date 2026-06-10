@@ -2569,7 +2569,7 @@ nir_visitor::visit(ir_expression *ir)
 
    case ir_binop_ldexp: result = nir_ldexp(&b, srcs[0], srcs[1]); break;
    case ir_triop_fma:
-      result = nir_ffma(&b, srcs[0], srcs[1], srcs[2]);
+      result = nir_ffma_weak(&b, srcs[0], srcs[1], srcs[2]);
       break;
    case ir_triop_lrp:
       result = nir_flrp(&b, srcs[0], srcs[1], srcs[2]);

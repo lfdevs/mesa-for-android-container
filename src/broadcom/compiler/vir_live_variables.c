@@ -34,7 +34,21 @@ struct partial_update_state {
         struct qinst *inst;
         /* Instruction that set the flags for the conditional write */
         struct qinst *flags_inst;
+        /* Track unconditional pack writes (D.l / D.h) within the block.
+         * When both halves have been written, the register is fully defined.
+         */
+        bool has_pack_l;
+        bool has_pack_h;
 };
+
+/* Per-temp flags indicating which register halves are read across the
+ * entire program. Used to determine when a partial pack write is
+ * effectively a full definition (the unwritten half is never read).
+ * A full 32-bit read needs both halves, so it sets both bits.
+ */
+#define TEMP_READ_LO   (1 << 0)                       /* Read via UNPACK_L */
+#define TEMP_READ_HI   (1 << 1)                       /* Read via UNPACK_H */
+#define TEMP_READ_FULL (TEMP_READ_LO | TEMP_READ_HI)  /* Read as full 32-bit */
 
 static int
 vir_reg_to_var(struct qreg reg)
@@ -43,6 +57,46 @@ vir_reg_to_var(struct qreg reg)
                 return reg.index;
 
         return -1;
+}
+
+/* Pre-scan all instructions to build per-temp read-access flags indicating
+ * which halves of each register are actually read by consumers.
+ *
+ * This lets us treat a PACK_L write as a full definition when no consumer
+ * ever reads the high half (and vice versa for PACK_H).
+ */
+static uint8_t *
+vir_compute_temp_read_flags(struct v3d_compile *c)
+{
+        uint8_t *flags = rzalloc_array(c, uint8_t, c->num_temps);
+
+        vir_for_each_block(block, c) {
+                vir_for_each_inst(inst, block) {
+                        int nsrc = vir_get_nsrc(inst);
+                        for (int i = 0; i < nsrc; i++) {
+                                if (inst->src[i].file != QFILE_TEMP)
+                                        continue;
+
+                                int var = inst->src[i].index;
+                                enum v3d_qpu_input_unpack unpack =
+                                        vir_get_unpack(inst, i);
+
+                                switch (unpack) {
+                                case V3D_QPU_UNPACK_L:
+                                        flags[var] |= TEMP_READ_LO;
+                                        break;
+                                case V3D_QPU_UNPACK_H:
+                                        flags[var] |= TEMP_READ_HI;
+                                        break;
+                                default:
+                                        flags[var] |= TEMP_READ_FULL;
+                                        break;
+                                }
+                        }
+                }
+        }
+
+        return flags;
 }
 
 static void
@@ -88,7 +142,8 @@ vir_setup_use(struct v3d_compile *c, struct qblock *block, int ip,
  */
 static void
 vir_setup_def(struct v3d_compile *c, struct qblock *block, int ip,
-              struct partial_update_state *partial_update, struct qinst *inst,
+              struct partial_update_state *partial_update,
+              const uint8_t *temp_read_flags, struct qinst *inst,
               struct qinst *flags_inst)
 {
         if (inst->qpu.type != V3D_QPU_INSTR_TYPE_ALU)
@@ -110,27 +165,75 @@ vir_setup_def(struct v3d_compile *c, struct qblock *block, int ip,
         if (BITSET_TEST(block->use, var) || BITSET_TEST(block->def, var))
                 return;
 
-        /* Easy, common case: unconditional full register update.*/
-        if ((inst->qpu.flags.ac == V3D_QPU_COND_NONE &&
-             inst->qpu.flags.mc == V3D_QPU_COND_NONE) &&
+        bool is_unconditional = (inst->qpu.flags.ac == V3D_QPU_COND_NONE &&
+                                 inst->qpu.flags.mc == V3D_QPU_COND_NONE);
+
+        /* Easy, common case: unconditional full register update. */
+        if (is_unconditional &&
             inst->qpu.alu.add.output_pack == V3D_QPU_PACK_NONE &&
             inst->qpu.alu.mul.output_pack == V3D_QPU_PACK_NONE) {
                 BITSET_SET(block->def, var);
                 return;
         }
 
-        /* Keep track of conditional writes.
+        /* Track partial updates from output packs and conditional writes.
          *
-         * Notice that the dst's live range for a conditional or partial writes
-         * will get extended up the control flow to the top of the program until
-         * we find a full write, making register allocation more difficult, so
-         * we should try our best to keep track of these and figure out if a
-         * combination of them actually writes the entire register so we can
-         * stop that process early and reduce liveness.
+         * The dst's live range for partial writes gets extended up the
+         * control flow to the top of the program until we find a full
+         * write, making register allocation more difficult. We track
+         * these to figure out if a combination actually writes the entire
+         * register so we can stop that process early and reduce liveness.
          *
-         * FIXME: Track partial updates via pack/unpack.
+         * For unconditional pack writes (D.l / D.h), the hardware only
+         * writes the targeted half and leaves the other half untouched.
+         * We can treat these as full definitions when:
+         *
+         *  (a) Both halves have been unconditionally written in this block
+         *      (PACK_L + PACK_H = full register), or
+         *
+         *  (b) Only one half is ever read by any consumer across the entire
+         *      program, and the matching pack writes that half. In this
+         *      case the unwritten half is never read, so the pack write
+         *      is an effective full definition for liveness purposes.
          */
         struct partial_update_state *state = &partial_update[var];
+
+        if (is_unconditional) {
+                enum v3d_qpu_output_pack pack = vir_get_pack(inst);
+
+                if (pack == V3D_QPU_PACK_L)
+                        state->has_pack_l = true;
+                if (pack == V3D_QPU_PACK_H)
+                        state->has_pack_h = true;
+
+                /* Case (a): both halves written in this block. */
+                if (state->has_pack_l && state->has_pack_h) {
+                        BITSET_SET(block->def, var);
+                        return;
+                }
+
+                /* Case (b): the written half covers all reads.
+                 * A full-32-bit read sets both LO and HI in temp_read_flags,
+                 * so checking the single bit captures both "explicit HI
+                 * unpack" and "full read implies HI needed".
+                 */
+                uint8_t rflags = temp_read_flags[var];
+                bool needs_hi = rflags & TEMP_READ_HI;
+                bool needs_lo = rflags & TEMP_READ_LO;
+
+                if (pack == V3D_QPU_PACK_L && !needs_hi) {
+                        BITSET_SET(block->def, var);
+                        return;
+                }
+                if (pack == V3D_QPU_PACK_H && !needs_lo) {
+                        BITSET_SET(block->def, var);
+                        return;
+                }
+        }
+
+        /* Track conditional writes for the existing condition-matching
+         * logic in vir_setup_use.
+         */
         if (inst->qpu.flags.ac != V3D_QPU_COND_NONE ||
             inst->qpu.flags.mc != V3D_QPU_COND_NONE) {
                 state->inst = inst;
@@ -150,6 +253,13 @@ vir_setup_def_use(struct v3d_compile *c)
 {
         struct partial_update_state *partial_update =
                 rzalloc_array(c, struct partial_update_state, c->num_temps);
+
+        /* Pre-compute which halves of each temp are actually read, so we
+         * can treat single-half pack writes as full definitions when the
+         * unwritten half is never read.
+         */
+        uint8_t *temp_read_flags = vir_compute_temp_read_flags(c);
+
         int ip = 0;
 
         vir_for_each_block(block, c) {
@@ -167,7 +277,7 @@ vir_setup_def_use(struct v3d_compile *c)
                         }
 
                         vir_setup_def(c, block, ip, partial_update,
-                                      inst, flags_inst);
+                                      temp_read_flags, inst, flags_inst);
 
                         if (inst->qpu.flags.apf != V3D_QPU_PF_NONE ||
                             inst->qpu.flags.mpf != V3D_QPU_PF_NONE) {
@@ -192,7 +302,7 @@ vir_setup_def_use(struct v3d_compile *c)
                         if (inst->src[0].file == QFILE_REG) {
                                 uint32_t min_payload_r = c->devinfo->ver >= 71 ? 1 : 0;
                                 uint32_t max_payload_r = c->devinfo->ver >= 71 ? 3 : 2;
-                                if (inst->src[0].index >= min_payload_r ||
+                                if (inst->src[0].index >= min_payload_r &&
                                     inst->src[0].index <= max_payload_r) {
                                         c->temp_start[inst->dst.index] = 0;
                                 }
@@ -203,6 +313,7 @@ vir_setup_def_use(struct v3d_compile *c)
                 block->end_ip = ip;
         }
 
+        ralloc_free(temp_read_flags);
         ralloc_free(partial_update);
 }
 

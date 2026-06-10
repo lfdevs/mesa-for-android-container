@@ -369,7 +369,10 @@ parse_output_dir(const char *str)
       output_dir[last_char_index+1] = '/';
    }
    DIR *dir = opendir(output_dir);
-   assert(dir);
+   if (!dir) {
+      LOG(ERROR, "Failed to open output directory `%s': %s\n", output_dir, strerror(errno));
+      return NULL;
+   }
    closedir(dir);
 
    return output_dir;

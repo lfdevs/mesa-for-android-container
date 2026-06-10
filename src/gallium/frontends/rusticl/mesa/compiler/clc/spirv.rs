@@ -58,9 +58,15 @@ impl Debug for CLCHeader<'_> {
 }
 
 unsafe fn callback_impl(data: *mut c_void, msg: *const c_char) {
-    let data = data as *mut Vec<String>;
+    if msg.is_null() {
+        return;
+    }
+
+    let data = data as *mut Vec<CString>;
     let msgs = unsafe { data.as_mut() }.unwrap();
-    msgs.push(c_string_to_string(msg));
+
+    // SAFETY: msg is a valid C string.
+    msgs.push(unsafe { CStr::from_ptr(msg) }.to_owned());
 }
 
 unsafe extern "C" fn spirv_msg_callback(data: *mut c_void, msg: *const c_char) {
@@ -82,12 +88,18 @@ unsafe extern "C" fn spirv_to_nir_msg_callback(
     }
 }
 
-fn create_clc_logger(msgs: &mut Vec<String>) -> clc_logger {
+fn create_clc_logger(msgs: &mut Vec<CString>) -> clc_logger {
     clc_logger {
         priv_: ptr::from_mut(msgs).cast(),
         error: Some(spirv_msg_callback),
         warning: Some(spirv_msg_callback),
     }
+}
+
+pub struct SPIRVToNirOptions<'a> {
+    pub caps: &'a spirv_capabilities,
+    pub address_bits: u32,
+    pub float_controls: float_controls,
 }
 
 impl SPIRVBin {
@@ -99,7 +111,7 @@ impl SPIRVBin {
         features: clc_optional_features,
         spirv_extensions: &[&CStr],
         address_bits: u32,
-    ) -> (Option<Self>, String) {
+    ) -> (Option<Self>, CString) {
         let mut hash_key = None;
         let has_includes = args.iter().any(|a| a.as_bytes()[0..2] == *b"-I");
 
@@ -124,7 +136,7 @@ impl SPIRVBin {
 
                 let mut key = cache.gen_key(&key);
                 if let Some(data) = cache.get(&mut key) {
-                    return (Some(Self::from_bin(&data)), String::from(""));
+                    return (Some(Self::from_bin(&data)), CString::default());
                 }
 
                 hash_key = Some(key);
@@ -157,7 +169,7 @@ impl SPIRVBin {
             c_compatible: false,
             address_bits: address_bits,
         };
-        let mut msgs: Vec<String> = Vec::new();
+        let mut msgs = Vec::new();
         let logger = create_clc_logger(&mut msgs);
         let mut out = clc_binary::default();
 
@@ -181,11 +193,11 @@ impl SPIRVBin {
             None
         };
 
-        (res, msgs.join(""))
+        (res, msgs.join(c""))
     }
 
     // TODO cache linking, parsing is around 25% of link time
-    pub fn link(spirvs: &[&SPIRVBin], library: bool) -> (Option<Self>, String) {
+    pub fn link(spirvs: &[&SPIRVBin], library: bool) -> (Option<Self>, CString) {
         let bins: Vec<_> = spirvs.iter().map(|s| ptr::from_ref(&s.spirv)).collect();
 
         let linker_args = clc_linker_args {
@@ -194,7 +206,7 @@ impl SPIRVBin {
             create_library: library as u32,
         };
 
-        let mut msgs: Vec<String> = Vec::new();
+        let mut msgs = Vec::new();
         let logger = create_clc_logger(&mut msgs);
 
         let mut out = clc_binary::default();
@@ -212,18 +224,18 @@ impl SPIRVBin {
             spirv: out,
             info: info,
         });
-        (res, msgs.join(""))
+        (res, msgs.join(c""))
     }
 
-    pub fn validate(&self, options: &clc_validator_options) -> (bool, String) {
-        let mut msgs: Vec<String> = Vec::new();
+    pub fn validate(&self, options: &clc_validator_options) -> (bool, CString) {
+        let mut msgs = Vec::new();
         let logger = create_clc_logger(&mut msgs);
         let res = unsafe { clc_validate_spirv(&self.spirv, &logger, options) };
 
-        (res, msgs.join(""))
+        (res, msgs.join(c""))
     }
 
-    pub fn clone_on_validate(&self, options: &clc_validator_options) -> (Option<Self>, String) {
+    pub fn clone_on_validate(&self, options: &clc_validator_options) -> (Option<Self>, CString) {
         let (res, msgs) = self.validate(options);
         (res.then(|| self.clone()), msgs)
     }
@@ -237,21 +249,22 @@ impl SPIRVBin {
         }
     }
 
-    pub fn kernel_info(&self, name: &str) -> Option<&clc_kernel_info> {
+    pub fn kernel_info(&self, name: &CStr) -> Option<&clc_kernel_info> {
         self.kernel_infos()
             .iter()
-            .find(|i| c_string_to_string(i.name) == name)
+            // SAFETY: name always points to a valid C string.
+            .find(|i| unsafe { CStr::from_ptr(i.name) } == name)
     }
 
-    pub fn kernels(&self) -> Vec<String> {
+    pub fn kernels(&self) -> Vec<CString> {
         self.kernel_infos()
             .iter()
-            .map(|i| i.name)
-            .map(c_string_to_string)
+            // SAFETY: name always points to a valid C string.
+            .map(|i| unsafe { CStr::from_ptr(i.name) }.to_owned())
             .collect()
     }
 
-    pub fn args(&self, name: &str) -> Vec<SPIRVKernelArg> {
+    pub fn args(&self, name: &CStr) -> Vec<SPIRVKernelArg> {
         match self.kernel_info(name) {
             Some(info) if info.num_args > 0 => {
                 unsafe { slice::from_raw_parts(info.args, info.num_args) }
@@ -281,14 +294,13 @@ impl SPIRVBin {
     fn get_spirv_options(
         library: bool,
         clc_shader: *const nir_shader,
-        address_bits: u32,
-        caps: &spirv_capabilities,
-        log: Option<&mut Vec<String>>,
+        options: SPIRVToNirOptions,
+        log: Option<&mut Vec<CString>>,
     ) -> spirv_to_nir_options {
         let global_addr_format;
         let offset_addr_format;
 
-        if address_bits == 32 {
+        if options.address_bits == 32 {
             global_addr_format = nir_address_format::nir_address_format_32bit_global;
             offset_addr_format = nir_address_format::nir_address_format_32bit_offset;
         } else {
@@ -301,14 +313,13 @@ impl SPIRVBin {
             private_data: ptr::from_mut(log).cast(),
         });
 
-        let float_controls = float_controls::FLOAT_CONTROLS_DENORM_FLUSH_TO_ZERO_FP32 as u32;
         spirv_to_nir_options {
             create_library: library,
             environment: nir_spirv_execution_environment::NIR_SPIRV_OPENCL,
             clc_shader: clc_shader,
-            float_controls_execution_mode: float_controls,
+            float_controls_execution_mode: options.float_controls.0,
             printf: true,
-            capabilities: caps,
+            capabilities: options.caps,
             constant_addr_format: global_addr_format,
             global_addr_format: global_addr_format,
             shared_addr_format: offset_addr_format,
@@ -321,17 +332,15 @@ impl SPIRVBin {
 
     pub fn to_nir(
         &self,
-        entry_point: &str,
+        entry_point: &CStr,
         nir_options: *const nir_shader_compiler_options,
-        spirv_caps: &spirv_capabilities,
+        spirv_to_nir_options: SPIRVToNirOptions,
         libclc: &NirShader,
         spec_constants: &mut nir_spirv_specialization,
-        address_bits: u32,
-        log: Option<&mut Vec<String>>,
+        log: Option<&mut Vec<CString>>,
     ) -> Option<NirShader> {
-        let c_entry = CString::new(entry_point.as_bytes()).unwrap();
         let spirv_options =
-            Self::get_spirv_options(false, libclc.get_nir(), address_bits, spirv_caps, log);
+            Self::get_spirv_options(false, libclc.get_nir(), spirv_to_nir_options, log);
 
         let nir = unsafe {
             spirv_to_nir(
@@ -339,7 +348,7 @@ impl SPIRVBin {
                 self.spirv.size / 4,
                 spec_constants,
                 mesa_shader_stage::MESA_SHADER_KERNEL,
-                c_entry.as_ptr(),
+                entry_point.as_ptr(),
                 &spirv_options,
                 nir_options,
             )
@@ -348,12 +357,11 @@ impl SPIRVBin {
         NirShader::new(nir)
     }
 
-    pub fn get_lib_clc(screen: &PipeScreen, spirv_caps: &spirv_capabilities) -> Option<NirShader> {
+    pub fn get_lib_clc(screen: &PipeScreen, options: SPIRVToNirOptions) -> Option<NirShader> {
         let nir_options =
             screen.nir_shader_compiler_options(mesa_shader_stage::MESA_SHADER_COMPUTE);
         let address_bits = screen.compute_caps().address_bits;
-        let spirv_options =
-            Self::get_spirv_options(false, ptr::null(), address_bits, spirv_caps, None);
+        let spirv_options = Self::get_spirv_options(false, ptr::null(), options, None);
         let shader_cache = DiskCacheBorrowed::as_ptr(&screen.shader_cache());
 
         NirShader::new(unsafe {

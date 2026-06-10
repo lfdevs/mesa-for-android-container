@@ -1,0 +1,20 @@
+# Note: skips lists for CI are just a list of lines that, when
+# non-zero-length and not starting with '#', will regex match to
+# delete lines from the test list.  Be careful.
+
+afbcp-spec@arb_texture_multisample@texelfetch fs sampler2dms 4 1x130-501x130
+afbcp-spec@arb_texture_multisample@texelfetch fs sampler2dms 4 1x71-501x71
+dEQP-VK.api.external.fence.sync_fd.export_multiple_times_temporary
+dEQP-VK.api.external.semaphore.sync_fd.export_multiple_times_temporary
+dEQP-VK.wsi.wayland.swapchain.simulate_oom.image_extent
+glx@glx_arb_sync_control@swapbuffersmsc-return swap_interval 0
+spec@!opengl 1.1@copypixels-draw-sync
+spec@!opengl 1.1@copypixels-sync
+spec@!opengl 1.1@draw-sync
+spec@arb_texture_multisample@texelfetch fs sampler2dms 4 1x130-501x130
+spec@arb_texture_multisample@texelfetch fs sampler2dms 4 1x71-501x71
+spec@arb_texture_multisample@texelfetch fs sampler2dmsarray 4 98x1x9-98x129x9
+spec@egl_khr_gl_colorspace@linear
+spec@ext_framebuffer_blit@fbo-blit-check-limits
+spec@glsl-1.30@execution@texelfetch fs sampler2d 1x281-501x281
+spec@arb_point_parameters@arb_point_parameters-point-attenuation

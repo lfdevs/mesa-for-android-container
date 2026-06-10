@@ -224,7 +224,6 @@ KHR-GLES3.framebuffer_blit.multisampled_to_singlesampled_blit_depth_config_test,
 # GL tests above, Vulkan tests below
 
 # New fails in 1.4.3.3
-dEQP-VK.memory.concurrent_access.shader_and_host,Fail
 dEQP-VK.transform_feedback.simple.draw_indirect_counter_offset_16,Fail
 dEQP-VK.transform_feedback.simple.draw_indirect_counter_offset_244,Fail
 dEQP-VK.transform_feedback.simple.draw_indirect_counter_offset_508,Fail
@@ -245,8 +244,10 @@ dEQP-VK.transform_feedback.simple_optimized_gpl.draw_indirect_multiview_counter_
 dEQP-VK.transform_feedback.simple_optimized_gpl.draw_indirect_multiview_counter_offset_508,Fail
 android-dEQP-VK.transform_feedback.simple_fast_gpl.draw_indirect_counter_offset_244,Fail
 asan-dEQP-VK.transform_feedback.simple_fast_gpl.draw_indirect_counter_offset_244,Fail
-gmem-dEQP-VK.transform_feedback.simple.draw_indirect_multiview_counter_offset_16,Fail
+gmem-dEQP-VK.transform_feedback.simple_fast_gpl.draw_indirect_counter_offset_16,Fail
 gmem-dEQP-VK.transform_feedback.simple_fast_gpl.draw_indirect_multiview_counter_offset_16,Fail
+gmem-dEQP-VK.transform_feedback.simple.draw_indirect_counter_offset_508,Fail
+gmem-dEQP-VK.transform_feedback.simple.draw_indirect_multiview_counter_offset_16,Fail
 nobin-dEQP-VK.transform_feedback.simple.draw_indirect_multiview_counter_offset_16,Fail
 nobin-dEQP-VK.transform_feedback.simple.draw_indirect_counter_offset_244,Fail
 nobin-dEQP-VK.transform_feedback.simple.draw_indirect_counter_offset_508,Fail
@@ -262,7 +263,6 @@ nobin-dEQP-VK.transform_feedback.simple_optimized_gpl.draw_indirect_multiview_co
 nobin-dEQP-VK.transform_feedback.simple_optimized_gpl.draw_indirect_multiview_counter_offset_244,Fail
 
 # New failures with VKCTS 1.4.4.0
-dEQP-VK.pipeline.monolithic.misc.identically_defined_layout,Fail
 dEQP-VK.tessellation.misc_draw.tess_factor_barrier_bug,Crash
 gmem-dEQP-VK.transform_feedback.simple.draw_indirect_counter_offset_16,Fail
 gmem-dEQP-VK.transform_feedback.simple.draw_indirect_multiview_counter_offset_508,Fail
@@ -274,25 +274,6 @@ nobin-dEQP-VK.transform_feedback.simple.draw_indirect_multiview_counter_offset_5
 nobin-dEQP-VK.transform_feedback.simple_fast_gpl.draw_indirect_counter_offset_244,Fail
 nobin-dEQP-VK.transform_feedback.simple_fast_gpl.draw_indirect_counter_offset_508,Fail
 nobin-dEQP-VK.transform_feedback.simple_optimized_gpl.draw_indirect_multiview_counter_offset_508,Fail
-
-dEQP-VK.wsi.direct_drm.incremental_present.scale_none.fifo.identity.opaque.incremental_present,Fail
-dEQP-VK.wsi.direct_drm.incremental_present.scale_none.fifo.identity.opaque.reference,Fail
-dEQP-VK.wsi.direct_drm.maintenance1.deferred_alloc.fifo.basic,Fail
-dEQP-VK.wsi.direct_drm.maintenance1.deferred_alloc.fifo.bind_image_multi_swapchain,Fail
-dEQP-VK.wsi.direct_drm.maintenance1.deferred_alloc.fifo.bind_image,Fail
-dEQP-VK.wsi.direct_drm.maintenance1.present_fence.fifo.basic,Fail
-dEQP-VK.wsi.direct_drm.maintenance1.present_fence.fifo.mult_swapchain_ordering,Fail
-dEQP-VK.wsi.direct_drm.maintenance1.present_fence.fifo.multi_swapchain,Fail
-dEQP-VK.wsi.direct_drm.maintenance1.present_fence.fifo.null_handles,Fail
-dEQP-VK.wsi.direct_drm.maintenance1.present_fence.fifo.ordering,Fail
-dEQP-VK.wsi.direct_drm.maintenance1.present_modes.fifo.change_modes_multi_swapchain,Fail
-dEQP-VK.wsi.direct_drm.maintenance1.present_modes.fifo.change_modes_with_deferred_alloc,Fail
-dEQP-VK.wsi.direct_drm.maintenance1.present_modes.fifo.change_modes,Fail
-dEQP-VK.wsi.direct_drm.maintenance1.release_images.fifo.no_scaling.basic,Fail
-dEQP-VK.wsi.direct_drm.maintenance1.release_images.fifo.no_scaling.release_before_present,Fail
-dEQP-VK.wsi.direct_drm.maintenance1.release_images.fifo.no_scaling.resize_window_after_acquire_release_before_retire,Fail
-dEQP-VK.wsi.direct_drm.maintenance1.release_images.fifo.no_scaling.resize_window_after_acquire,Fail
-dEQP-VK.wsi.direct_drm.maintenance1.release_images.fifo.no_scaling.resize_window,Fail
 
 # OpenCL tests below
 #
@@ -361,6 +342,10 @@ program@execute@vector-conversion,Fail
 
 # Piglit doesn't check subbuffer alignment requirements
 api@clgetmemobjectinfo,Fail
+
+# Piglit checks the pre 3.1 behavior
+api@clsetkernelarg,Fail
+api@clsetkernelarg@Input checks,Fail
 
 # piles of new fails since updating skqp; to be re-evaluated with new upstream
 gl_all_bitmap_configs,Fail
@@ -508,4 +493,25 @@ dEQP-VK.fragment_operations.early_fragment.sample_count_early_fragment_tests_dep
 # Autotune regression
 angle-dEQP-GLES3.functional.fbo.msaa.2_samples.rg8,Fail
 angle-dEQP-GLES3.functional.fbo.msaa.4_samples.rg8,Fail
+
+# VKCTS 1.4.4.2 -> 1.4.5.3 uprev.
+# [  118.945672] *** gpu fault: ttbr0=00000001d0f38000 iova=00000000040ff000 dir=READ type=TRANSLATION source=TP|VFD (0,0,0,1)
+# Not entirely reliable -- which ones crash vs pass may flip around, so clear the flakes entry when it's fixed.
+dEQP-VK.renderpasses.dynamic_rendering.primary_cmd_buff.custom_resolve.fast_lib.fdm_subsampled_pre_resolve_info_frag_out_only_resolve_info_frag_shader_no_formats,Crash
+dEQP-VK.renderpasses.dynamic_rendering.primary_cmd_buff.custom_resolve.fast_lib.fdm_subsampled_resolve_info_frag_shader_no_formats,Crash
+dEQP-VK.renderpasses.dynamic_rendering.primary_cmd_buff.custom_resolve.fast_lib.fdm_subsampled,Crash
+dEQP-VK.renderpasses.renderpass1.custom_resolve.fast_lib.fdm_subsampled,Crash
+dEQP-VK.renderpasses.renderpass1.custom_resolve.monolithic.fdm_subsampled,Crash
+
+# VKCTS 1.4.4.2 -> 1.4.5.3 uprev
+dEQP-VK.sparse_resources.buffer.ssbo.sparse_residency.buffer_size_2_10,Fail
+dEQP-VK.sparse_resources.buffer.ssbo.sparse_residency.buffer_size_2_16,Fail
+dEQP-VK.sparse_resources.buffer.ssbo.sparse_residency.buffer_size_2_17,Fail
+dEQP-VK.sparse_resources.buffer.ssbo.sparse_residency.buffer_size_2_20,Fail
+dEQP-VK.sparse_resources.buffer.ssbo.sparse_residency.buffer_size_2_24,Fail
+gmem-dEQP-VK.sparse_resources.buffer.ssbo.sparse_residency.buffer_size_2_24,Fail
+
+# uprev Piglit in Mesa
+spec@!opengl 1.1@large-tex,Fail
+spec@!opengl 1.1@large-tex@test_image_load_store,Fail
 

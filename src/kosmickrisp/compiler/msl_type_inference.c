@@ -796,6 +796,9 @@ emit_src_component(struct nir_to_msl_ctx *ctx, nir_src *src, unsigned comp)
    case TYPE_GENERIC_INT:
    case TYPE_GENERIC_INT_OR_BOOL:
       switch (src->ssa->bit_size) {
+      case 1:
+         P(ctx, "bool(");
+         break;
       case 8:
          P(ctx, "uchar(");
          break;

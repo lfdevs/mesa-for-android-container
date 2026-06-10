@@ -18,6 +18,7 @@ get_stage_string(mesa_shader_stage stage)
    case MESA_SHADER_FRAGMENT:
       return "fragment";
    case MESA_SHADER_COMPUTE:
+   case MESA_SHADER_TESS_CTRL:
       return "kernel";
    default:
       assert(0);
@@ -59,6 +60,7 @@ static const char *sysval_table[SYSTEM_VALUE_MAX] = {
    [SYSTEM_VALUE_LAYER_ID] = "uint gl_Layer [[render_target_array_index]]",
    [SYSTEM_VALUE_SAMPLE_ID] = "uint gl_SampleID [[sample_id]]",
    [SYSTEM_VALUE_SAMPLE_MASK_IN] = "uint gl_SampleMask [[sample_mask]]",
+   [SYSTEM_VALUE_PRIMITIVE_ID] = "uint gl_PrimitiveID [[primitive_id]]",
    [SYSTEM_VALUE_AMPLIFICATION_ID_KK] =
       "uint mtl_AmplificationID [[amplification_id]]",
    [SYSTEM_VALUE_FIRST_VERTEX] = "uint gl_FirstVertex [[base_vertex]]",
@@ -76,8 +78,7 @@ emit_sysvals(struct nir_to_msl_ctx *ctx, nir_shader *shader)
    unsigned i;
    BITSET_FOREACH_SET(i, shader->info.system_values_read, SYSTEM_VALUE_MAX) {
       const char *sysval;
-      if (is_frag_with_post_depth_coverage &&
-          i == SYSTEM_VALUE_SAMPLE_MASK_IN)
+      if (is_frag_with_post_depth_coverage && i == SYSTEM_VALUE_SAMPLE_MASK_IN)
          sysval = sysval_sample_mask_in_post_depth_coverage;
       else
          sysval = sysval_table[i];
@@ -504,6 +505,10 @@ alu_to_msl(struct nir_to_msl_ctx *ctx, nir_alu_instr *instr)
       P(ctx, " ? 1.0 : 0.0");
       break;
    case nir_op_bcsel:
+      /* KK_WORKAROUND_10 All shaders will have buf0 bound */
+      if (!(ctx->disabled_workarounds & BITFIELD_BIT(10)) &&
+          ctx->shader->info.stage == MESA_SHADER_COMPUTE)
+         P(ctx, "(ulong)&buf0.contents[0] && ");
       alu_src_to_msl(ctx, instr, 0);
       P(ctx, " ? ");
       alu_src_to_msl(ctx, instr, 1);
@@ -757,11 +762,12 @@ src_to_packed_store(struct nir_to_msl_ctx *ctx, nir_src *src,
                     uint32_t num_components)
 {
    if (num_components == 1) {
-      P_IND(ctx, "*(%s %s*)", addressing, type);
+      P_IND(ctx, "(*(%s %s*)", addressing, type);
    } else {
-      P_IND(ctx, "*(%s packed_%s*)", addressing, type);
+      P_IND(ctx, "(*(%s packed_%s*)", addressing, type);
    }
    src_to_msl(ctx, src);
+   P(ctx, ")");
 }
 
 static const char *
@@ -1027,6 +1033,9 @@ intrinsic_to_msl(struct nir_to_msl_ctx *ctx, nir_intrinsic_instr *instr)
    case nir_intrinsic_load_sample_mask_in:
       P(ctx, "gl_SampleMask;\n");
       break;
+   case nir_intrinsic_load_primitive_id:
+      P(ctx, "gl_PrimitiveID;\n");
+      break;
    case nir_intrinsic_load_sample_pos:
       P(ctx, "get_sample_position(gl_SampleID);\n");
       break;
@@ -1231,6 +1240,8 @@ intrinsic_to_msl(struct nir_to_msl_ctx *ctx, nir_intrinsic_instr *instr)
          P(ctx, " = ")
          src_to_packed(ctx, &instr->src[0], type,
                        instr->src[0].ssa->num_components);
+         writemask_to_msl(ctx, nir_intrinsic_write_mask(instr),
+                          instr->num_components);
          P(ctx, ";\n");
       }
       break;
@@ -1473,6 +1484,12 @@ intrinsic_to_msl(struct nir_to_msl_ctx *ctx, nir_intrinsic_instr *instr)
       P(ctx, "); %s t%d = ta%d.x;\n", type, instr->def.index, instr->def.index);
       break;
    }
+   case nir_intrinsic_bindless_image_fence_kk: {
+      P_INDENT(ctx);
+      src_to_msl(ctx, &instr->src[0]);
+      P(ctx, ".fence();\n");
+      break;
+   }
    case nir_intrinsic_ballot:
       P(ctx, "(ulong)simd_ballot(");
       src_to_msl(ctx, &instr->src[0]);
@@ -1491,7 +1508,7 @@ intrinsic_to_msl(struct nir_to_msl_ctx *ctx, nir_intrinsic_instr *instr)
       src_to_msl(ctx, &instr->src[0]);
       P(ctx, ", ");
       src_to_msl(ctx, &instr->src[1]);
-      P(ctx, ");");
+      P(ctx, ");\n");
       break;
    case nir_intrinsic_rotate:
       P(ctx, "simd_shuffle_rotate_down(");
@@ -1611,6 +1628,10 @@ intrinsic_to_msl(struct nir_to_msl_ctx *ctx, nir_intrinsic_instr *instr)
       P_IND(ctx, "out.gl_ClipDistance[%d] = ", nir_intrinsic_base(instr));
       src_to_msl(ctx, &instr->src[0]);
       P(ctx, ";\n");
+      break;
+   case nir_intrinsic_load_ro_sink_address_poly:
+      /* Point to NULL, not really used currently */
+      P(ctx, "0x0;\n");
       break;
    default:
       P_IND(ctx, "Unknown intrinsic %s\n", info->name);
@@ -2012,6 +2033,13 @@ msl_preprocess_nir(struct nir_shader *nir)
    NIR_PASS(_, nir, nir_lower_vars_to_ssa);
    NIR_PASS(_, nir, nir_remove_dead_variables, nir_var_function_temp, NULL);
 
+   nir_move_options move_all = nir_move_const_undef | nir_move_load_ubo |
+                               nir_move_load_input | nir_move_load_frag_coord |
+                               nir_move_comparisons | nir_move_copies |
+                               nir_move_load_ssbo | nir_move_alu;
+   NIR_PASS(_, nir, nir_opt_sink, move_all);
+   NIR_PASS(_, nir, nir_opt_move, move_all);
+
    /* lower_system_values needs to go before is_helper_invocation since it will
     * generate discards. */
    NIR_PASS(_, nir, nir_lower_system_values);
@@ -2028,6 +2056,7 @@ msl_preprocess_nir(struct nir_shader *nir)
    NIR_PASS(_, nir, nir_opt_combine_barriers, NULL, NULL);
    NIR_PASS(_, nir, nir_lower_var_copies);
    NIR_PASS(_, nir, nir_split_var_copies);
+   NIR_PASS(_, nir, nir_lower_memcpy);
 
    NIR_PASS(_, nir, nir_split_array_vars,
             nir_var_function_temp | nir_var_shader_in | nir_var_shader_out);
@@ -2099,16 +2128,17 @@ lower_ballot(nir_builder *b, nir_intrinsic_instr *intrin, void *_unused)
       return false;
 
    b->cursor = nir_before_instr(&intrin->instr);
-   nir_def* invocation = nir_load_subgroup_invocation(b);
-   nir_def* mask = nir_ishl(b, nir_b2i32(b, intrin->src[0].ssa), invocation);
-   nir_def* reduce = nir_reduce(b, mask, .reduction_op = nir_op_ior);
+   nir_def *invocation = nir_load_subgroup_invocation(b);
+   nir_def *mask = nir_ishl(b, nir_b2i32(b, intrin->src[0].ssa), invocation);
+   nir_def *reduce = nir_reduce(b, mask, .reduction_op = nir_op_ior);
    nir_def_rewrite_uses(&intrin->def, reduce);
 
    return true;
 }
 
-void msl_preprocess_nir_workarounds(struct nir_shader *nir,
-                                    uint64_t disabled_workarounds)
+void
+msl_preprocess_nir_workarounds(struct nir_shader *nir,
+                               uint64_t disabled_workarounds)
 {
    /* KK_WORKAROUND_3 */
    if (!(disabled_workarounds & BITFIELD64_BIT(3))) {
@@ -2123,26 +2153,6 @@ void msl_preprocess_nir_workarounds(struct nir_shader *nir,
       NIR_PASS(_, nir, nir_shader_intrinsics_pass, lower_ballot,
                nir_metadata_control_flow, NULL);
    }
-}
-
-/* Scalarize stores to CLIP_DIST* varyings */
-static bool
-scalarize_clip_distance_filter(const nir_intrinsic_instr *intrin,
-                               UNUSED const void *_data)
-{
-   if (intrin->intrinsic != nir_intrinsic_store_output)
-      return false;
-   nir_io_semantics semantics = nir_intrinsic_io_semantics(intrin);
-   return semantics.location == VARYING_SLOT_CLIP_DIST0 ||
-          semantics.location == VARYING_SLOT_CLIP_DIST1;
-}
-
-void
-msl_lower_nir_late(nir_shader *nir)
-{
-   NIR_PASS(_, nir, nir_lower_io_to_scalar, nir_var_shader_out,
-            scalarize_clip_distance_filter, NULL);
-   NIR_PASS(_, nir, msl_nir_lower_clip_distance);
 }
 
 static void
@@ -2250,7 +2260,8 @@ nir_to_msl(nir_shader *shader, struct nir_to_msl_options *options)
    msl_gather_info(&ctx, options);
 
    P(&ctx, "// Generated by Mesa compiler\n");
-   if (shader->info.stage == MESA_SHADER_COMPUTE)
+   if (shader->info.stage == MESA_SHADER_COMPUTE ||
+       shader->info.stage == MESA_SHADER_TESS_CTRL)
       P(&ctx, "#include <metal_compute>\n");
    P(&ctx, "#include <metal_stdlib>\n");
    P(&ctx, "using namespace metal;\n");

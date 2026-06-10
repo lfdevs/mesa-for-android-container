@@ -6,12 +6,12 @@ end
 local r = execute {
   data = data,
   src = [[
-    @id    g1
-    @read  g3 g1
+    @id    r1
+    @read  r3 r1
 
-    add(8) g3<1>UD  g3<8,8,1>UD  0x100UD  { align1 1Q };
+    add (8) r3 r3 0x100
 
-    @write g1 g3
+    @write r1 r3
 
     @eot
   ]],

@@ -1430,17 +1430,20 @@ validate_subdword_operand(amd_gfx_level gfx_level, const aco_ptr<Instruction>& i
 }
 
 bool
-validate_subdword_definition(amd_gfx_level gfx_level, const aco_ptr<Instruction>& instr)
+validate_subdword_definition(Program* program, const aco_ptr<Instruction>& instr, unsigned idx)
 {
-   Definition def = instr->definitions[0];
+   Definition def = instr->definitions[idx];
    unsigned byte = def.physReg().byte();
 
-   if (instr->isPseudo() && gfx_level >= GFX8)
-      return true;
+   if (instr->isPseudo()) {
+      return byte % get_subdword_definition_caps(program, instr.get(), idx, def.regClass())
+                       .placement_stride ==
+             0;
+   }
    if (instr->isSDWA())
       return byte + instr->sdwa().dst_sel.offset() + instr->sdwa().dst_sel.size() <= 4 &&
              byte % instr->sdwa().dst_sel.size() == 0;
-   if (byte == 2 && can_use_opsel(gfx_level, instr->opcode, -1))
+   if (byte == 2 && can_use_opsel(program->gfx_level, instr->opcode, -1))
       return true;
 
    switch (instr->opcode) {
@@ -1469,29 +1472,44 @@ validate_subdword_definition(amd_gfx_level gfx_level, const aco_ptr<Instruction>
    return byte == 0;
 }
 
-unsigned
+struct SubdwordDef {
+   unsigned offset;
+   unsigned bytes;
+};
+
+SubdwordDef
 get_subdword_bytes_written(Program* program, const aco_ptr<Instruction>& instr, unsigned index)
 {
    amd_gfx_level gfx_level = program->gfx_level;
    Definition def = instr->definitions[index];
+   SubdwordDef res;
+   res.offset = def.physReg().byte();
+   res.bytes = def.bytes();
 
    if (instr->isPseudo())
-      return gfx_level >= GFX8 ? def.bytes() : def.size() * 4u;
+      return res;
 
    if (instr->isVALU() || instr->isVINTRP()) {
-      if (instr->isSDWA())
-         return instr->sdwa().dst_sel.size();
+      if (instr->isSDWA()) {
+         res.bytes = instr->sdwa().dst_sel.size();
+         return res;
+      }
 
-      if (instr_is_16bit(gfx_level, instr->opcode))
-         return 2;
+      if (instr_is_16bit(gfx_level, instr->opcode)) {
+         res.bytes = 2;
+         return res;
+      }
 
-      return 4;
+      /* The instruction still might write the upper half. In that case, it's the lower half that
+       * isn't preserved */
+      return {0, 4};
    }
 
-   if (instr->isMIMG()) {
-      assert(instr->mimg().d16);
-      return program->dev.sram_ecc_enabled ? def.size() * 4u : def.bytes();
-   }
+   if (program->dev.sram_ecc_enabled)
+      return {0, def.size() * 4};
+
+   if (instr->isMIMG() && instr->mimg().d16)
+      return res;
 
    switch (instr->opcode) {
    case aco_opcode::buffer_load_ubyte_d16:
@@ -1526,10 +1544,16 @@ get_subdword_bytes_written(Program* program, const aco_ptr<Instruction>& instr, 
    case aco_opcode::global_load_short_d16_hi:
    case aco_opcode::ds_read_u8_d16_hi:
    case aco_opcode::ds_read_i8_d16_hi:
-   case aco_opcode::ds_read_u16_d16_hi: return program->dev.sram_ecc_enabled ? 4 : 2;
+   case aco_opcode::ds_read_u16_d16_hi: {
+      res.bytes = 2;
+      return res;
+   }
    case aco_opcode::buffer_load_format_d16_xyz:
-   case aco_opcode::tbuffer_load_format_d16_xyz: return program->dev.sram_ecc_enabled ? 8 : 6;
-   default: return def.size() * 4;
+   case aco_opcode::tbuffer_load_format_d16_xyz: {
+      res.bytes = 6;
+      return res;
+   }
+   default: return {0, def.size() * 4};
    }
 }
 
@@ -1550,21 +1574,19 @@ validate_instr_defs(Program* program, std::array<unsigned, 2048>& regs,
          if (regs[reg.reg_b + j])
             err |=
                ra_fail(program, loc, assignments[regs[reg.reg_b + j]].defloc,
-                       "Assignment of element %d of %%%d already taken by %%%d from instruction", i,
+                       "Assignment of byte %d of %%%d already taken by %%%d from instruction", j,
                        tmp.id(), regs[reg.reg_b + j]);
          regs[reg.reg_b + j] = tmp.id();
       }
-      if (def.regClass().is_subdword() && def.bytes() < 4) {
-         unsigned written = get_subdword_bytes_written(program, instr, i);
-         /* If written=4, the instruction still might write the upper half. In that case, it's
-          * the lower half that isn't preserved */
-         for (unsigned j = reg.byte() & ~(written - 1); j < written; j++) {
+      if (def.regClass().is_subdword()) {
+         SubdwordDef written = get_subdword_bytes_written(program, instr, i);
+         for (unsigned j = written.offset; j < written.bytes; j++) {
             unsigned written_reg = reg.reg() * 4u + j;
             if (regs[written_reg] && regs[written_reg] != def.tempId())
                err |= ra_fail(program, loc, assignments[regs[written_reg]].defloc,
-                              "Assignment of element %d of %%%d overwrites the full register "
+                              "Assignment of byte %d of %%%d overwrites the full register "
                               "taken by %%%d from instruction",
-                              i, tmp.id(), regs[written_reg]);
+                              j, tmp.id(), regs[written_reg]);
          }
       }
    }
@@ -1705,8 +1727,7 @@ validate_ra(Program* program)
             if (def.physReg() == vcc && !program->needs_vcc)
                err |= ra_fail(program, loc, Location(),
                               "Definition %d fixed to vcc but needs_vcc=false", i);
-            if (def.regClass().is_subdword() &&
-                !validate_subdword_definition(program->gfx_level, instr))
+            if (def.regClass().is_subdword() && !validate_subdword_definition(program, instr, i))
                err |= ra_fail(program, loc, Location(), "Definition %d not aligned correctly", i);
             if (!assignments[def.tempId()].firstloc.block)
                assignments[def.tempId()].firstloc = loc;
@@ -1740,7 +1761,7 @@ validate_ra(Program* program)
          for (unsigned i = 0; i < tmp.bytes(); i++) {
             if (regs[reg.reg_b + i]) {
                err |= ra_fail(program, loc, Location(),
-                              "Assignment of element %d of %%%d already taken by %%%d in live-in",
+                              "Assignment of byte %d of %%%d already taken by %%%d in live-in",
                               i, id, regs[reg.reg_b + i]);
             }
             regs[reg.reg_b + i] = id;

@@ -1337,6 +1337,94 @@ static void print_vcn_msg_buffer_contents(FILE *f, struct ac_ib_parser *ib, uint
    }
 }
 
+static void parse_vcn_dec_ib(FILE *f, struct ac_ib_parser *ib)
+{
+   uint32_t data0 = 0;
+   uint32_t data1 = 0;
+   uint32_t data2 = 0;
+   struct ac_vcn_dec_reg reg;
+   ac_vcn_dec_init_regs(&reg, ib->vcn_version);
+
+   while (ib->cur_dw < ib->num_dw) {
+      const uint32_t dw = ac_ib_get(ib);
+      const uint32_t idx = RDECODE_PKT0_BASE_INDEX_G(dw) << 2;
+      if (dw == 0x81FF) {
+         fprintf(f, "NOP\n");
+      } else if (idx == reg.data0) {
+         fprintf(f, "VCPU_DATA0\n");
+         data0 = ac_ib_get(ib);
+         fprintf(f, "\n");
+      } else if (idx == reg.data1) {
+         fprintf(f, "VCPU_DATA1\n");
+         data1 = ac_ib_get(ib);
+         fprintf(f, "\n");
+      } else if (idx == reg.data2) {
+         fprintf(f, "VCPU_DATA2\n");
+         data2 = ac_ib_get(ib);
+         fprintf(f, "\n");
+      } else if (idx == reg.cmd) {
+         fprintf(f, "VCPU_CMD\n");
+         uint32_t cmd = ac_ib_get(ib) >> 1;
+         const char *name = NULL;
+         switch (cmd) {
+         case RDECODE_CMD_MSG_BUFFER:
+            name = "MSG BUFFER";
+            break;
+         case RDECODE_CMD_DPB_BUFFER:
+            name = "DPB BUFFER";
+            break;
+         case RDECODE_CMD_DECODING_TARGET_BUFFER:
+            name = "DECODING TARGET BUFFER";
+            break;
+         case RDECODE_CMD_FEEDBACK_BUFFER:
+            name = "FEEDBACK BUFFER";
+            break;
+         case RDECODE_CMD_PROB_TBL_BUFFER:
+            name = "PROB TBL BUFFER";
+            break;
+         case RDECODE_CMD_SESSION_CONTEXT_BUFFER:
+            name = "SESSION CONTEXT BUFFER";
+            break;
+         case RDECODE_CMD_BITSTREAM_BUFFER:
+            name = "BITSTREAM BUFFER";
+            break;
+         case RDECODE_CMD_IT_SCALING_TABLE_BUFFER:
+            name = "IT SCALING BUFFER";
+            break;
+         case RDECODE_CMD_CONTEXT_BUFFER:
+            name = "CONTEXT BUFFER";
+            break;
+         case RDECODE_CMD_SUBSAMPLE:
+            name = "SUBSAMPLE BUFFER";
+            break;
+         case RDECODE_CMD_WRITE_MEMORY:
+            name = "WRITE MEMORY";
+            break;
+         default:
+            name = "UNKNOWN";
+            break;
+         }
+         uint64_t va = ((uint64_t)data1 << 32) | data0;
+         fprintf(f, "%s%s%s VA=0x%"PRIx64, O_COLOR_GREEN, name, O_COLOR_RESET, va);
+         if (cmd == RDECODE_CMD_WRITE_MEMORY)
+            fprintf(f, " val=%u", data2);
+         fprintf(f, "\n");
+         if (cmd == RDECODE_CMD_MSG_BUFFER)
+            print_vcn_msg_buffer_contents(f, ib, va);
+      } else if (idx == reg.cntl) {
+         fprintf(f, "VCPU_CNTL\n");
+         uint32_t cntl = ac_ib_get(ib);
+         if (cntl == 1)
+            fprintf(f, "%sDECODE%s", O_COLOR_PURPLE, O_COLOR_RESET);
+         fprintf(f, "\n");
+      } else {
+         fprintf(f, "UNKNOWN\n");
+         ac_ib_get(ib);
+         fprintf(f, "\n");
+      }
+   }
+}
+
 static uint64_t print_vcn_addr(FILE *f, struct ac_ib_parser *ib, bool high_first, const char *prefix_format, ...)
 {
    uint32_t high = ac_ib_get(ib);
@@ -1581,13 +1669,38 @@ static void parse_vcn_enc_ib(FILE *f, struct ac_ib_parser *ib, uint32_t num_dw)
          fprintf(f, "    slice control mode = %s\n",
                  mode == RENCODE_HEVC_SLICE_CONTROL_MODE_FIXED_CTBS ? "FIXED CTBS" :
                  mode == RENCODE_HEVC_SLICE_CONTROL_MODE_FIXED_BITS ? "FIXED BITS" :
+                 mode == RENCODE_HEVC_SLICE_CONTROL_MODE_VARIABLE_CTBS ? "VARIABLE CTBS" :
                  "???");
          uint32_t per_slice = ac_ib_get(ib);
-         fprintf(f, "    num %s per slice = %u\n",
-                 mode == RENCODE_HEVC_SLICE_CONTROL_MODE_FIXED_CTBS ? "ctbs" : "bits", per_slice);
+         if (mode != RENCODE_HEVC_SLICE_CONTROL_MODE_VARIABLE_CTBS)
+            fprintf(f, "    num %s per slice = %u\n",
+                    mode == RENCODE_HEVC_SLICE_CONTROL_MODE_FIXED_CTBS ? "ctbs" : "bits", per_slice);
+         else
+            fprintf(f, "    num ctbs/bits per slice (ignored)\n");
          uint32_t per_slice_segment = ac_ib_get(ib);
-         fprintf(f, "    num %s per slice segment = %u\n",
-                 mode == RENCODE_HEVC_SLICE_CONTROL_MODE_FIXED_CTBS ? "ctbs" : "bits", per_slice_segment);
+         if (mode != RENCODE_HEVC_SLICE_CONTROL_MODE_VARIABLE_CTBS)
+            fprintf(f, "    num %s per slice segment = %u\n",
+                    mode == RENCODE_HEVC_SLICE_CONTROL_MODE_FIXED_CTBS ? "ctbs" : "bits", per_slice_segment);
+         else
+            fprintf(f, "    num ctbs/bits per slice segment (ignored)\n");
+      } else if (op == cmd.slice_info_hevc) {
+         fprintf(f, "%sHEVC_SLICE_INFO%s\n", O_COLOR_GREEN, O_COLOR_RESET);
+         uint32_t num_slice_segments = ac_ib_get(ib);
+         fprintf(f, "    num_slice_segments = %u\n", num_slice_segments);
+         uint32_t i;
+         for (i = 0; i < num_slice_segments; i++) {
+            uint32_t num_ctbs_per_segment = ac_ib_get(ib);
+            fprintf(f, "    num_ctbs_per_segment[%u] = %u\n", i, num_ctbs_per_segment);
+            uint32_t is_independent = ac_ib_get(ib);
+            fprintf(f, "    is_independent[%u] = %u\n", i, is_independent);
+         }
+         while (i < RENCODE_MAX_NUM_SLICES && ib->cur_dw < start_dw + size / 4) {
+            ac_ib_get(ib);
+            fprintf(f, "    num_ctbs_per_segment[%u] (ignored)\n", i);
+            ac_ib_get(ib);
+            fprintf(f, "    is_independent[%u] (ignored)\n", i);
+            i++;
+         }
       } else if (op == cmd.spec_misc_hevc) {
          fprintf(f, "%sHEVC_SPEC_MISC%s\n", O_COLOR_GREEN, O_COLOR_RESET);
          uint32_t min_coding_block_size = ac_ib_get(ib);
@@ -1640,10 +1753,28 @@ static void parse_vcn_enc_ib(FILE *f, struct ac_ib_parser *ib, uint32_t num_dw)
          fprintf(f, "    slice control mode = %s\n",
                  mode == RENCODE_H264_SLICE_CONTROL_MODE_FIXED_MBS ? "FIXED MBS" :
                  mode == RENCODE_H264_SLICE_CONTROL_MODE_FIXED_BITS ? "FIXED BITS" :
+                 mode == RENCODE_H264_SLICE_CONTROL_MODE_VARIABLE_MBS ? "VARIABLE MBS" :
                  "???");
          uint32_t per_slice = ac_ib_get(ib);
-         fprintf(f, "    num %s per slice = %u\n",
-                 mode == RENCODE_H264_SLICE_CONTROL_MODE_FIXED_MBS ? "mbs" : "bits", per_slice);
+         if (mode != RENCODE_H264_SLICE_CONTROL_MODE_VARIABLE_MBS)
+            fprintf(f, "    num %s per slice = %u\n",
+                    mode == RENCODE_H264_SLICE_CONTROL_MODE_FIXED_MBS ? "mbs" : "bits", per_slice);
+         else
+            fprintf(f, "    num mbs/bits per slice (ignored) \n");
+      } else if (op == cmd.slice_info_h264) {
+         fprintf(f, "%sH264_SLICE_INFO%s\n", O_COLOR_GREEN, O_COLOR_RESET);
+         uint32_t num_slices = ac_ib_get(ib);
+         fprintf(f, "    num_slices = %u\n", num_slices);
+         uint32_t i;
+         for (i = 0; i < num_slices; i++) {
+            uint32_t num_mbs_per_slice = ac_ib_get(ib);
+            fprintf(f, "    num_mbs_per_slice[%u] = %u\n", i, num_mbs_per_slice);
+         }
+         while (i < RENCODE_MAX_NUM_SLICES && ib->cur_dw < start_dw + size / 4) {
+            ac_ib_get(ib);
+            fprintf(f, "    num_mbs_per_slice[%u] (ignored)\n", i);
+            i++;
+         }
       } else if (op == cmd.spec_misc_h264) {
          fprintf(f, "%sH264_SPEC_MISC%s\n", O_COLOR_GREEN, O_COLOR_RESET);
          uint32_t constrained_intra = ac_ib_get(ib);
@@ -2214,14 +2345,19 @@ static void parse_vcn_ib(FILE *f, struct ac_ib_parser *ib)
             break;
          }
          case RADEON_VCN_IB_COMMON_OP_WRITEMEMORY: {
-            fprintf(f, "%sOP_WRITEMEMORY%s\n", O_COLOR_CYAN, O_COLOR_RESET);
+            fprintf(f, "%sWRITEMEMORY%s\n", O_COLOR_CYAN, O_COLOR_RESET);
             print_vcn_addr(f, ib, false, "    dest");
             uint32_t data = ac_ib_get(ib);
             fprintf(f, "    data = %u\n", data);
             break;
          }
+         case RADEON_VCN_IB_COMMON_OP_TIMESTAMP: {
+            fprintf(f, "%sTIMESTAMP%s\n", O_COLOR_CYAN, O_COLOR_RESET);
+            print_vcn_addr(f, ib, false, "    dest");
+            break;
+         }
          case RADEON_VCN_IB_COMMON_OP_RESOLVEINPUTPARAMLAYOUT: {
-            fprintf(f, "%sOP_RESOLVEINPUTPARAMLAYOUT%s\n", O_COLOR_CYAN, O_COLOR_RESET);
+            fprintf(f, "%sRESOLVEINPUTPARAMLAYOUT%s\n", O_COLOR_CYAN, O_COLOR_RESET);
             uint32_t type = ac_ib_get(ib);
             fprintf(f, "    map type = %u\n", type);
             uint32_t width = ac_ib_get(ib);
@@ -2381,11 +2517,10 @@ static void parse_vcn_ib(FILE *f, struct ac_ib_parser *ib)
             print_vcn_unrecognized_params(f, ib, start_dw, size);
          }
       }
-   } else {
-      if (ib->ip_type == AMD_IP_VCN_ENC) {
-         parse_vcn_enc_ib(f, ib, 0);
-         return;
-      }
+   } else if (ib->ip_type == AMD_IP_VCN_DEC) {
+      parse_vcn_dec_ib(f, ib);
+   } else if (ib->ip_type == AMD_IP_VCN_ENC) {
+      parse_vcn_enc_ib(f, ib, 0);
    }
 }
 

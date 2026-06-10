@@ -3337,7 +3337,7 @@ do_alu_action(struct lp_build_nir_soa_context *bld,
    case nir_op_ffloor:
       result = lp_build_floor(float_bld, src[0]);
       break;
-   case nir_op_ffma:
+   case nir_op_ffma_weak:
       result = lp_build_fmuladd(builder, src[0], src[1], src[2]);
       break;
    case nir_op_ffract: {

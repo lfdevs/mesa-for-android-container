@@ -374,7 +374,7 @@ update_program(struct gl_context *ctx)
       if (ctx->FragmentProgram._Current)
          ST_SET_STATES(dirty, ctx->FragmentProgram._Current->affected_states);
 
-      if (!ctx->st->needs_texcoord_semantic)
+      if (!ctx->st->screen->caps.tgsi_texcoord)
          ST_SET_STATE(dirty, ST_NEW_RASTERIZER);
    }
 
@@ -455,7 +455,7 @@ update_program(struct gl_context *ctx)
       _mesa_set_active_states(ctx);
 
       /* Some drivers need to clean up previous states too */
-      if (st->validate_all_dirty_states)
+      if (st->screen->caps.validate_all_dirty_states)
          ST_SET_STATES(st->active_states, dirty);
 
       return _NEW_PROGRAM;

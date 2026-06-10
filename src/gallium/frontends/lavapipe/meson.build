@@ -13,9 +13,11 @@ lvp_entrypoints = custom_target(
 
 liblvp_files = files(
     'nir/lvp_nir_lower_cooperative_matrix.c',
+    'nir/lvp_nir_lower_descriptor_heaps.c',
     'nir/lvp_nir_lower_exec_graph.c',
     'nir/lvp_nir_lower_input_attachments.c',
     'nir/lvp_nir_lower_pipeline_layout.c',
+    'nir/lvp_nir_lower_push_constants.c',
     'nir/lvp_nir_lower_ray_queries.c',
     'nir/lvp_nir_lower_sparse_residency.c',
     'nir/lvp_nir_opt_robustness.c',
@@ -54,7 +56,7 @@ endif
 liblavapipe_st = static_library(
   'lavapipe_st',
   [liblvp_files, lvp_entrypoints, sha1_h],
-  c_args : [ c_msvc_compat_args, lvp_flags],
+  c_args : [ c_msvc_compat_args, lvp_flags, soong_compat_c_args],
   gnu_symbol_visibility : 'hidden',
   include_directories : [ inc_include, inc_src, inc_util, inc_gallium, inc_gallium_aux, inc_llvmpipe ],
   dependencies : [ dep_llvm, idep_nir, idep_mesautil, idep_vulkan_util, idep_vulkan_wsi,

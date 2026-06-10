@@ -26,3 +26,25 @@ mtl_new_command_buffer(mtl_command_queue *cmd_queue)
       return [[queue commandBuffer] retain];
    }
 }
+
+void
+mtl_command_queue_add_residency_set(mtl_command_queue *cmd_queue,
+                                    mtl_residency_set *set)
+{
+   @autoreleasepool {
+      id<MTLCommandQueue> queue = (id<MTLCommandQueue>)cmd_queue;
+      id<MTLResidencySet> s = (id<MTLResidencySet>)set;
+      return [queue addResidencySet:s];
+   }
+}
+
+void
+mtl_command_queue_remove_residency_set(mtl_command_queue *cmd_queue,
+                                       mtl_residency_set *set)
+{
+   @autoreleasepool {
+      id<MTLCommandQueue> queue = (id<MTLCommandQueue>)cmd_queue;
+      id<MTLResidencySet> s = (id<MTLResidencySet>)set;
+      return [queue removeResidencySet:s];
+   }
+}

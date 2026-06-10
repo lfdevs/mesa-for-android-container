@@ -63,7 +63,7 @@ MESAPROC void si_gfx_blit(struct pipe_context *ctx, const struct pipe_blit_info 
 bool si_nir_is_output_const_if_tex_is_const(struct nir_shader *shader, float *in, float *out, int *texunit);
 
 /* si_gfx_context.c */
-MESAPROC bool si_init_gfx_context(struct si_screen *sscreen, struct si_context *sctx, unsigned flags) TAILB;
+MESAPROC bool si_init_gfx_context(struct si_screen *sscreen, struct si_context *sctx, unsigned flags) TAILBT;
 MESAPROC void si_fini_gfx_context(struct si_context *sctx) TAILV;
 void si_destroy_llvm_compiler(struct ac_llvm_compiler *compiler);
 void si_init_aux_async_compute_ctx(struct si_screen *sscreen);

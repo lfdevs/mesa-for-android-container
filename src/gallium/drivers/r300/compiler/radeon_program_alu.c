@@ -199,26 +199,6 @@ transform_r300_vertex_DP3(struct radeon_compiler *c, struct rc_instruction *inst
 }
 
 static void
-transform_r300_vertex_fix_LIT(struct radeon_compiler *c, struct rc_instruction *inst)
-{
-   struct rc_dst_register dst = new_dst_reg(c, inst);
-   unsigned constant_swizzle;
-   int constant = rc_constants_add_immediate_scalar(&c->Program.Constants, 0.0000000000000000001,
-                                                    &constant_swizzle);
-
-   /* MOV dst, src */
-   dst.WriteMask = RC_MASK_XYZW;
-   emit1(c, inst->Prev, RC_OPCODE_MOV, NULL, dst, inst->U.I.SrcReg[0]);
-
-   /* MAX dst.y, src, 0.00...001 */
-   emit2(c, inst->Prev, RC_OPCODE_MAX, NULL, dstregtmpmask(dst.Index, RC_MASK_Y),
-         srcreg(RC_FILE_TEMPORARY, dst.Index),
-         srcregswz(RC_FILE_CONSTANT, constant, constant_swizzle));
-
-   inst->U.I.SrcReg[0] = srcreg(RC_FILE_TEMPORARY, dst.Index);
-}
-
-static void
 transform_r300_vertex_SEQ(struct radeon_compiler *c, struct rc_instruction *inst)
 {
    /* x = y  <==>  x >= y && y >= x */
@@ -274,9 +254,6 @@ r300_transform_vertex_alu(struct radeon_compiler *c, struct rc_instruction *inst
       return 1;
    case RC_OPCODE_DP3:
       transform_r300_vertex_DP3(c, inst);
-      return 1;
-   case RC_OPCODE_LIT:
-      transform_r300_vertex_fix_LIT(c, inst);
       return 1;
    case RC_OPCODE_SEQ:
       if (!c->is_r500) {

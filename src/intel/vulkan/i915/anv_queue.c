@@ -65,7 +65,7 @@ anv_i915_create_engine(struct anv_device *device,
       if (pCreateInfo->flags & VK_DEVICE_QUEUE_CREATE_PROTECTED_BIT)
          flags |= INTEL_GEM_CREATE_CONTEXT_EXT_PROTECTED_FLAG;
 
-      if (device->physical->instance->force_guc_low_latency &&
+      if (device->physical->instance->drirc.perf.guc_low_latency &&
           physical->info.supports_low_latency_hint)
 	      flags |= INTEL_GEM_CREATE_CONTEXT_EXT_LOW_LATENCY_FLAG;
 

@@ -11,8 +11,8 @@
 
 #include <stdio.h>
 
+#include "tools/radv_debug.h"
 #include "radv_amdgpu_bo.h"
-#include "radv_debug.h"
 
 #include <inttypes.h>
 #include <pthread.h>
@@ -388,17 +388,48 @@ radv_amdgpu_winsys_bo_destroy(struct radeon_winsys *_ws, struct radeon_winsys_bo
 
    if (bo->base.initial_domain & RADEON_DOMAIN_VRAM) {
       if (bo->base.vram_no_cpu_access) {
-         p_atomic_add(&ws->allocated_vram, -align64(bo->base.size, ws->info.gart_page_size));
+         p_atomic_add(&ws->alloc_tracker->allocated_vram, -align64(bo->base.size, ws->info.gart_page_size));
       } else {
-         p_atomic_add(&ws->allocated_vram_vis, -align64(bo->base.size, ws->info.gart_page_size));
+         p_atomic_add(&ws->alloc_tracker->allocated_vram_vis, -align64(bo->base.size, ws->info.gart_page_size));
       }
    }
 
    if (bo->base.initial_domain & RADEON_DOMAIN_GTT)
-      p_atomic_add(&ws->allocated_gtt, -align64(bo->base.size, ws->info.gart_page_size));
+      p_atomic_add(&ws->alloc_tracker->allocated_gtt, -align64(bo->base.size, ws->info.gart_page_size));
 
    ac_drm_va_range_free(bo->va_handle);
    FREE(bo);
+}
+
+static VkResult
+radv_amdgpu_init_null_prt_bo(struct radv_amdgpu_winsys *ws)
+{
+   VkResult result = VK_SUCCESS;
+
+   if (p_atomic_read(&ws->null_prt_bug.bo))
+      return result;
+
+   simple_mtx_lock(&ws->null_prt_bug.lock);
+   if (!ws->null_prt_bug.bo) {
+      struct radeon_winsys_bo *bo;
+
+      /* Create a zero-allocated 8MiB BO that will be used to map partially resident sparse buffers
+       * at creation or when explicitly unmapped.
+       */
+      result = ws->base.buffer_create(&ws->base, 8 * 1024 * 1024 /* 8MiB */, 4096, RADEON_DOMAIN_VRAM,
+                                      RADEON_FLAG_NO_CPU_ACCESS | RADEON_FLAG_ZERO_VRAM | RADEON_FLAG_READ_ONLY |
+                                         RADEON_FLAG_NO_INTERPROCESS_SHARING | RADEON_FLAG_PREFER_LOCAL_BO,
+                                      RADV_BO_PRIORITY_VIRTUAL, 0, &bo);
+      if (result != VK_SUCCESS) {
+         simple_mtx_unlock(&ws->null_prt_bug.lock);
+         return result;
+      }
+
+      p_atomic_set(&ws->null_prt_bug.bo, bo);
+   }
+   simple_mtx_unlock(&ws->null_prt_bug.lock);
+
+   return result;
 }
 
 static VkResult
@@ -449,8 +480,15 @@ radv_amdgpu_winsys_virtual_bo_create(struct radeon_winsys *_ws, uint64_t size, u
    bo->emulate_sparse_residency = !!(flags & RADEON_FLAG_EMULATE_SPARSE_RESIDENCY);
    bo->base.is_virtual = true;
 
-   if (bo->emulate_sparse_residency)
+   if (bo->emulate_sparse_residency) {
+      result = radv_amdgpu_init_null_prt_bo(ws);
+      if (result != VK_SUCCESS) {
+         fprintf(stderr, "radv/amdgpu: Failed to allocate the BO for the NULL PRT workaround.\n");
+         goto error_ranges_alloc;
+      }
+
       bo->base.va |= 1ull << ws->info.address_prt_wa_control_bit;
+   }
 
    /* Reserve a PRT VA region. */
    r = radv_amdgpu_virtual_bo_init_mapping(ws, bo, va_size);
@@ -565,7 +603,6 @@ radv_amdgpu_winsys_bo_create(struct radeon_winsys *_ws, uint64_t size, unsigned 
       request.flags |= AMDGPU_GEM_CREATE_EXPLICIT_SYNC;
    if ((initial_domain & RADEON_DOMAIN_VRAM_GTT) && (flags & RADEON_FLAG_NO_INTERPROCESS_SHARING) &&
        ((ws->perftest & RADV_PERFTEST_LOCAL_BOS) || (flags & RADEON_FLAG_PREFER_LOCAL_BO))) {
-      assert(ws->info.has_vm_always_valid);
       bo->base.is_local = true;
       request.flags |= AMDGPU_GEM_CREATE_VM_ALWAYS_VALID;
    }
@@ -642,14 +679,14 @@ radv_amdgpu_winsys_bo_create(struct radeon_winsys *_ws, uint64_t size, unsigned 
        * visible counter because they can be mapped.
        */
       if (bo->base.vram_no_cpu_access) {
-         p_atomic_add(&ws->allocated_vram, align64(bo->base.size, ws->info.gart_page_size));
+         p_atomic_add(&ws->alloc_tracker->allocated_vram, align64(bo->base.size, ws->info.gart_page_size));
       } else {
-         p_atomic_add(&ws->allocated_vram_vis, align64(bo->base.size, ws->info.gart_page_size));
+         p_atomic_add(&ws->alloc_tracker->allocated_vram_vis, align64(bo->base.size, ws->info.gart_page_size));
       }
    }
 
    if (initial_domain & RADEON_DOMAIN_GTT)
-      p_atomic_add(&ws->allocated_gtt, align64(bo->base.size, ws->info.gart_page_size));
+      p_atomic_add(&ws->alloc_tracker->allocated_gtt, align64(bo->base.size, ws->info.gart_page_size));
 
    if (ws->debug_all_bos)
       radv_amdgpu_global_bo_list_add(ws, bo);
@@ -817,7 +854,7 @@ radv_amdgpu_winsys_bo_from_ptr(struct radeon_winsys *_ws, void *pointer, uint64_
    bo->cpu_map = NULL;
    bo->base.obj_id = (uintptr_t)(buf_handle.abo);
 
-   p_atomic_add(&ws->allocated_gtt, align64(bo->base.size, ws->info.gart_page_size));
+   p_atomic_add(&ws->alloc_tracker->allocated_gtt, align64(bo->base.size, ws->info.gart_page_size));
 
    if (ws->debug_all_bos)
       radv_amdgpu_global_bo_list_add(ws, bo);
@@ -910,9 +947,9 @@ radv_amdgpu_winsys_bo_from_fd(struct radeon_winsys *_ws, int fd, unsigned priori
    bo->base.obj_id = (uintptr_t)(result.bo.abo);
 
    if (bo->base.initial_domain & RADEON_DOMAIN_VRAM)
-      p_atomic_add(&ws->allocated_vram, align64(bo->base.size, ws->info.gart_page_size));
+      p_atomic_add(&ws->alloc_tracker->allocated_vram, align64(bo->base.size, ws->info.gart_page_size));
    if (bo->base.initial_domain & RADEON_DOMAIN_GTT)
-      p_atomic_add(&ws->allocated_gtt, align64(bo->base.size, ws->info.gart_page_size));
+      p_atomic_add(&ws->alloc_tracker->allocated_gtt, align64(bo->base.size, ws->info.gart_page_size));
 
    if (ws->debug_all_bos)
       radv_amdgpu_global_bo_list_add(ws, bo);

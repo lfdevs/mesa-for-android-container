@@ -152,22 +152,22 @@ pandecode_rt(struct pandecode_context *ctx, unsigned index, uint64_t gpu_va)
 
 }
 
-static void
-pandecode_rts(struct pandecode_context *ctx, uint64_t gpu_va,
-              const struct MALI_FRAMEBUFFER_PARAMETERS *fb)
+void
+GENX(pandecode_rts)(struct pandecode_context *ctx, uint64_t gpu_va,
+                    uint32_t render_target_count)
 {
    pandecode_log(ctx, "Color Render Targets @%" PRIx64 ":\n", gpu_va);
    ctx->indent++;
 
-   for (int i = 0; i < (fb->render_target_count); i++)
+   for (int i = 0; i < render_target_count; i++)
       pandecode_rt(ctx, i, gpu_va);
 
    ctx->indent--;
    pandecode_log(ctx, "\n");
 }
 
-static void
-pandecode_zs_crc_ext(struct pandecode_context *ctx, uint64_t gpu_va)
+void
+GENX(pandecode_zs_crc_ext)(struct pandecode_context *ctx, uint64_t gpu_va)
 {
    const struct mali_zs_crc_extension_packed *PANDECODE_PTR_VAR(
       ctx, zs_crc_packed, (uint64_t)gpu_va);
@@ -183,6 +183,9 @@ pandecode_zs_crc_ext(struct pandecode_context *ctx, uint64_t gpu_va)
 #endif
    case MALI_BLOCK_FORMAT_TILED_U_INTERLEAVED:
    case MALI_BLOCK_FORMAT_LINEAR:
+#if PAN_ARCH >= 10
+   case MALI_BLOCK_FORMAT_INTERLEAVED_64K:
+#endif
       DUMP_UNPACKED(ctx, ZS_TARGET, zs_crc.zs, "ZS:\n");
       break;
 #if PAN_ARCH >= 7
@@ -204,6 +207,9 @@ pandecode_zs_crc_ext(struct pandecode_context *ctx, uint64_t gpu_va)
 #endif
    case MALI_BLOCK_FORMAT_TILED_U_INTERLEAVED:
    case MALI_BLOCK_FORMAT_LINEAR:
+#if PAN_ARCH >= 10
+   case MALI_BLOCK_FORMAT_INTERLEAVED_64K:
+#endif
       DUMP_UNPACKED(ctx, S_TARGET, zs_crc.s, "S:\n");
       break;
 #if PAN_ARCH >= 9
@@ -223,22 +229,65 @@ pandecode_zs_crc_ext(struct pandecode_context *ctx, uint64_t gpu_va)
 
 
 #if PAN_ARCH >= 6
-static void
-pandecode_sample_locations(struct pandecode_context *ctx, const void *fb)
+void
+GENX(pandecode_frame_shader_dcds)(struct pandecode_context *ctx,
+                                  uint64_t dcd_pointer, unsigned pre_frame_0,
+                                  unsigned pre_frame_1, unsigned post_frame,
+                                  unsigned job_type_param, uint64_t gpu_id)
 {
-   pan_section_unpack(fb, FRAMEBUFFER, PARAMETERS, params);
+   const unsigned dcd_size = pan_size(DRAW);
 
-   const uint16_t *PANDECODE_PTR_VAR(ctx, samples, params.sample_locations);
+   if (pre_frame_0 != MALI_PRE_POST_FRAME_SHADER_MODE_NEVER) {
+      const struct mali_draw_packed *PANDECODE_PTR_VAR(
+         ctx, dcd, dcd_pointer + (0 * dcd_size));
+      pan_unpack(dcd, DRAW, draw)
+         ;
+      pandecode_log(ctx, "Pre frame 0 @%" PRIx64 " (mode=%d):\n", dcd_pointer,
+                    pre_frame_0);
+      ctx->indent++;
+      GENX(pandecode_dcd)(ctx, &draw, job_type_param, gpu_id);
+      ctx->indent--;
+   }
 
-   pandecode_log(ctx, "Sample locations @%" PRIx64 ":\n",
-                 params.sample_locations);
+   if (pre_frame_1 != MALI_PRE_POST_FRAME_SHADER_MODE_NEVER) {
+      const struct mali_draw_packed *PANDECODE_PTR_VAR(
+         ctx, dcd, dcd_pointer + (1 * dcd_size));
+      pan_unpack(dcd, DRAW, draw)
+         ;
+      pandecode_log(ctx, "Pre frame 1 @%" PRIx64 ":\n",
+                    dcd_pointer + (1 * dcd_size));
+      ctx->indent++;
+      GENX(pandecode_dcd)(ctx, &draw, job_type_param, gpu_id);
+      ctx->indent--;
+   }
+
+   if (post_frame != MALI_PRE_POST_FRAME_SHADER_MODE_NEVER) {
+      const struct mali_draw_packed *PANDECODE_PTR_VAR(
+         ctx, dcd, dcd_pointer + (2 * dcd_size));
+      pan_unpack(dcd, DRAW, draw)
+         ;
+      pandecode_log(ctx, "Post frame:\n");
+      ctx->indent++;
+      GENX(pandecode_dcd)(ctx, &draw, job_type_param, gpu_id);
+      ctx->indent--;
+   }
+}
+
+void
+GENX(pandecode_sample_locations)(struct pandecode_context *ctx,
+                                 uint64_t sample_locations)
+{
+   const uint16_t *PANDECODE_PTR_VAR(ctx, samples, sample_locations);
+
+   pandecode_log(ctx, "Sample locations @%" PRIx64 ":\n", sample_locations);
    for (int i = 0; i < 33; i++) {
       pandecode_log(ctx, "  (%d, %d),\n", samples[2 * i] - 128,
                     samples[2 * i + 1] - 128);
    }
 }
-#endif
+#endif /* PAN_ARCH >= 6 */
 
+#if PAN_ARCH < 14
 struct pandecode_fbd
 GENX(pandecode_fbd)(struct pandecode_context *ctx, uint64_t gpu_va,
                     bool is_fragment, uint64_t gpu_id)
@@ -248,46 +297,17 @@ GENX(pandecode_fbd)(struct pandecode_context *ctx, uint64_t gpu_va,
    DUMP_UNPACKED(ctx, FRAMEBUFFER_PARAMETERS, params, "Parameters:\n");
 
 #if PAN_ARCH >= 6
-   pandecode_sample_locations(ctx, fb);
+   GENX(pandecode_sample_locations)(ctx, params.sample_locations);
 
-   unsigned dcd_size = pan_size(DRAW);
    unsigned job_type_param = 0;
 
 #if PAN_ARCH <= 9
    job_type_param = MALI_JOB_TYPE_FRAGMENT;
 #endif
 
-   if (params.pre_frame_0 != MALI_PRE_POST_FRAME_SHADER_MODE_NEVER) {
-      const struct mali_draw_packed *PANDECODE_PTR_VAR(
-         ctx, dcd, params.frame_shader_dcds + (0 * dcd_size));
-      pan_unpack(dcd, DRAW, draw);
-      pandecode_log(ctx, "Pre frame 0 @%" PRIx64 " (mode=%d):\n",
-                    params.frame_shader_dcds, params.pre_frame_0);
-      ctx->indent++;
-      GENX(pandecode_dcd)(ctx, &draw, job_type_param, gpu_id);
-      ctx->indent--;
-   }
-
-   if (params.pre_frame_1 != MALI_PRE_POST_FRAME_SHADER_MODE_NEVER) {
-      const struct mali_draw_packed *PANDECODE_PTR_VAR(
-         ctx, dcd, params.frame_shader_dcds + (1 * dcd_size));
-      pan_unpack(dcd, DRAW, draw);
-      pandecode_log(ctx, "Pre frame 1 @%" PRIx64 ":\n",
-                    params.frame_shader_dcds + (1 * dcd_size));
-      ctx->indent++;
-      GENX(pandecode_dcd)(ctx, &draw, job_type_param, gpu_id);
-      ctx->indent--;
-   }
-
-   if (params.post_frame != MALI_PRE_POST_FRAME_SHADER_MODE_NEVER) {
-      const struct mali_draw_packed *PANDECODE_PTR_VAR(
-         ctx, dcd, params.frame_shader_dcds + (2 * dcd_size));
-      pan_unpack(dcd, DRAW, draw);
-      pandecode_log(ctx, "Post frame:\n");
-      ctx->indent++;
-      GENX(pandecode_dcd)(ctx, &draw, job_type_param, gpu_id);
-      ctx->indent--;
-   }
+   GENX(pandecode_frame_shader_dcds)(ctx, params.frame_shader_dcds,
+                                     params.pre_frame_0, params.pre_frame_1,
+                                     params.post_frame, job_type_param, gpu_id);
 #else
    DUMP_SECTION(ctx, FRAMEBUFFER, LOCAL_STORAGE, fb, "Local Storage:\n");
 
@@ -312,13 +332,13 @@ GENX(pandecode_fbd)(struct pandecode_context *ctx, uint64_t gpu_va,
    gpu_va += pan_size(FRAMEBUFFER);
 
    if (params.has_zs_crc_extension) {
-      pandecode_zs_crc_ext(ctx, gpu_va);
+      GENX(pandecode_zs_crc_ext)(ctx, gpu_va);
 
       gpu_va += pan_size(ZS_CRC_EXTENSION);
    }
 
    if (is_fragment)
-      pandecode_rts(ctx, gpu_va, &params);
+      GENX(pandecode_rts)(ctx, gpu_va, params.render_target_count);
 
    return (struct pandecode_fbd){
       .rt_count = params.render_target_count,
@@ -336,6 +356,7 @@ GENX(pandecode_fbd)(struct pandecode_context *ctx, uint64_t gpu_va,
    };
 #endif
 }
+#endif /* PAN_ARCH < 14 */
 
 #if PAN_ARCH >= 5
 uint64_t

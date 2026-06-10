@@ -72,6 +72,7 @@ struct fd_acc_sample_provider {
    void (*result_resource)(struct fd_acc_query *aq, struct fd_ringbuffer *ring,
                            enum pipe_query_value_type result_type, int index,
                            struct fd_resource *dst, unsigned offset);
+   void (*cleanup)(void *query_data);  /* optional cleanup */
 };
 
 struct fd_acc_query {

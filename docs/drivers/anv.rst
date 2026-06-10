@@ -421,12 +421,14 @@ paths in the shaders. To make use of this feature :
 
 3. Exit the application once enough data is captured
 
-4. Untar the ``anv-shaders.mda.tar`` file created in the directory the
-   application was launched
+4. Untar the ``anv-shaders.mda.tar`` file created in the ``NAME_PID_mda``
+   subdirectory, where ``NAME`` is the process name and ``PID`` is the process
+   ID. Set ``MDA_OUTPUT_DIR=.`` to create the file in the directory the
+   application was launched instead.
 
 .. code-block:: sh
 
-   mesa % tar xfv anv-shaders.mda.tar
+   mesa % tar xfv my_app_12345_mda/anv-shaders.mda.tar
 
 5. Look at the hot spots with ``intel_eu_stall_viewer`` :
 

@@ -51,6 +51,7 @@
 #if DETECT_OS_LINUX
 #include <sys/mman.h>
 #include <sys/resource.h>
+#include <sys/sysinfo.h>
 #endif
 
 #if DETECT_OS_ANDROID
@@ -206,6 +207,7 @@ static const struct vk_device_extension_table lvp_device_extensions_supported = 
    .KHR_shader_subgroup_extended_types    = true,
    .KHR_shader_subgroup_rotate            = true,
    .KHR_shader_terminate_invocation       = true,
+   .KHR_shader_untyped_pointers           = true,
    .KHR_spirv_1_4                         = true,
    .KHR_storage_buffer_storage_class      = true,
 #ifdef LVP_USE_WSI_PLATFORM
@@ -231,12 +233,14 @@ static const struct vk_device_extension_table lvp_device_extensions_supported = 
    .EXT_calibrated_timestamps             = true,
    .EXT_color_write_enable                = true,
    .EXT_conditional_rendering             = true,
+   .EXT_debug_marker                      = true,
    .EXT_depth_bias_control                = true,
    .EXT_depth_clip_enable                 = true,
    .EXT_depth_clip_control                = true,
    .EXT_depth_range_unrestricted          = true,
    .EXT_dynamic_rendering_unused_attachments = true,
    .EXT_descriptor_buffer                 = true,
+   .EXT_descriptor_heap                   = true,
    .EXT_descriptor_indexing               = true,
    .EXT_device_generated_commands         = true,
    .EXT_extended_dynamic_state            = true,
@@ -686,6 +690,10 @@ lvp_get_features(const struct lvp_physical_device *pdevice,
       /* VK_EXT_extended_dynamic_state */
       .extendedDynamicState = true,
 
+      /* VK_EXT_descriptor_heap */
+      .descriptorHeap = true,
+      .descriptorHeapCaptureReplay = false,
+
       /* VK_EXT_4444_formats */
       .formatA4R4G4B4 = true,
       .formatA4B4G4R4 = true,
@@ -739,7 +747,7 @@ lvp_get_features(const struct lvp_physical_device *pdevice,
       .extendedDynamicState3LineRasterizationMode = true,
       .extendedDynamicState3LineStippleEnable = true,
       .extendedDynamicState3ProvokingVertexMode = true,
-      .extendedDynamicState3SampleLocationsEnable = false,
+      .extendedDynamicState3SampleLocationsEnable = true,
       .extendedDynamicState3ColorBlendEnable = true,
       .extendedDynamicState3ColorBlendEquation = true,
       .extendedDynamicState3ColorWriteMask = true,
@@ -753,7 +761,7 @@ lvp_get_features(const struct lvp_physical_device *pdevice,
       .extendedDynamicState3CoverageModulationTable = false,
       .extendedDynamicState3CoverageReductionMode = false,
       .extendedDynamicState3RepresentativeFragmentTestEnable = false,
-      .extendedDynamicState3ColorBlendAdvanced = false,
+      .extendedDynamicState3ColorBlendAdvanced = true,
 
       /* VK_EXT_dynamic_rendering_unused_attachments */
       .dynamicRenderingUnusedAttachments = true,
@@ -897,6 +905,9 @@ lvp_get_features(const struct lvp_physical_device *pdevice,
       .cooperativeMatrixConversions = true,
       .cooperativeMatrixReductions = true,
       .cooperativeMatrixPerElementOperations = true,
+
+      /* VK_KHR_shader_untyped_pointers */
+      .shaderUntypedPointers = true,
    };
 }
 
@@ -936,7 +947,6 @@ lvp_get_properties(const struct lvp_physical_device *device, struct vk_propertie
 
    int texel_buffer_alignment = device->pscreen->caps.texture_buffer_offset_alignment;
 
-   STATIC_ASSERT(sizeof(struct lp_descriptor) <= 256);
    *p = (struct vk_properties) {
       /* Vulkan 1.0 */
       .apiVersion = LVP_API_VERSION,
@@ -1241,25 +1251,45 @@ lvp_get_properties(const struct lvp_physical_device *device, struct vk_propertie
       .imageViewCaptureReplayDescriptorDataSize = 0,
       .samplerCaptureReplayDescriptorDataSize = 0,
       .accelerationStructureCaptureReplayDescriptorDataSize = 0,
-      .EDBsamplerDescriptorSize = sizeof(struct lp_descriptor),
-      .combinedImageSamplerDescriptorSize = sizeof(struct lp_descriptor),
-      .sampledImageDescriptorSize = sizeof(struct lp_descriptor),
-      .storageImageDescriptorSize = sizeof(struct lp_descriptor),
-      .uniformTexelBufferDescriptorSize = sizeof(struct lp_descriptor),
-      .robustUniformTexelBufferDescriptorSize = sizeof(struct lp_descriptor),
-      .storageTexelBufferDescriptorSize = sizeof(struct lp_descriptor),
-      .robustStorageTexelBufferDescriptorSize = sizeof(struct lp_descriptor),
-      .uniformBufferDescriptorSize = sizeof(struct lp_descriptor),
-      .robustUniformBufferDescriptorSize = sizeof(struct lp_descriptor),
-      .storageBufferDescriptorSize = sizeof(struct lp_descriptor),
-      .robustStorageBufferDescriptorSize = sizeof(struct lp_descriptor),
-      .inputAttachmentDescriptorSize = sizeof(struct lp_descriptor),
-      .accelerationStructureDescriptorSize = sizeof(struct lp_descriptor),
+      .EDBsamplerDescriptorSize = lvp_get_descriptor_size(VK_DESCRIPTOR_TYPE_SAMPLER),
+      .combinedImageSamplerDescriptorSize = lvp_get_descriptor_size(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER),
+      .sampledImageDescriptorSize = lvp_get_descriptor_size(VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE),
+      .storageImageDescriptorSize = lvp_get_descriptor_size(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE),
+      .uniformTexelBufferDescriptorSize = lvp_get_descriptor_size(VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER),
+      .robustUniformTexelBufferDescriptorSize = lvp_get_descriptor_size(VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER),
+      .storageTexelBufferDescriptorSize = lvp_get_descriptor_size(VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER),
+      .robustStorageTexelBufferDescriptorSize = lvp_get_descriptor_size(VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER),
+      .uniformBufferDescriptorSize = lvp_get_descriptor_size(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER),
+      .robustUniformBufferDescriptorSize = lvp_get_descriptor_size(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER),
+      .storageBufferDescriptorSize = lvp_get_descriptor_size(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER),
+      .robustStorageBufferDescriptorSize = lvp_get_descriptor_size(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER),
+      .inputAttachmentDescriptorSize = lvp_get_descriptor_size(VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT),
+      .accelerationStructureDescriptorSize = lvp_get_descriptor_size(VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR),
       .maxSamplerDescriptorBufferRange = UINT32_MAX,
       .maxResourceDescriptorBufferRange = UINT32_MAX,
       .resourceDescriptorBufferAddressSpaceSize = UINT32_MAX,
       .samplerDescriptorBufferAddressSpaceSize = UINT32_MAX,
       .descriptorBufferAddressSpaceSize = UINT32_MAX,
+
+      /* VK_EXT_descriptor_heap */
+      .samplerHeapAlignment = 4,
+      .resourceHeapAlignment = 4,
+      .maxSamplerHeapSize = 64 * 4080,
+      .maxResourceHeapSize = 64 * MAX_DESCRIPTORS * 2,
+      .minSamplerHeapReservedRange = 0,
+      .minSamplerHeapReservedRangeWithEmbedded = 0,
+      .minResourceHeapReservedRange = 0,
+      .samplerDescriptorSize = sizeof(struct lp_sampler_descriptor),
+      .imageDescriptorSize = sizeof(struct lp_image_descriptor),
+      .bufferDescriptorSize = sizeof(struct lp_buffer_descriptor),
+      .samplerDescriptorAlignment = 4,
+      .imageDescriptorAlignment = 4,
+      .bufferDescriptorAlignment = 4,
+      .maxPushDataSize = 256,
+      .imageCaptureReplayOpaqueDataSize = 0,
+      .maxDescriptorHeapEmbeddedSamplers = (2 << 11),
+      .samplerYcbcrConversionCount = 3,
+      .sparseDescriptorHeaps = true,
 
       /* VK_EXT_graphics_pipeline_library */
       .graphicsPipelineLibraryFastLinking = VK_TRUE,
@@ -1345,7 +1375,7 @@ lvp_get_properties(const struct lvp_physical_device *device, struct vk_propertie
        * alignment is any lower. */
       .shaderGroupBaseAlignment = 32,
       .shaderGroupHandleCaptureReplaySize = 0,
-      .maxRayDispatchInvocationCount = 1024 * 1024 * 64,
+      .maxRayDispatchInvocationCount = 1 << 30,
       .shaderGroupHandleAlignment = 16,
       .maxRayHitAttributeSize = LVP_RAY_HIT_ATTRIBS_SIZE,
 
@@ -1355,6 +1385,14 @@ lvp_get_properties(const struct lvp_physical_device *device, struct vk_propertie
       /* VK_NV_cooperative_matrix2 */
       .cooperativeMatrixFlexibleDimensionsMaxDimension = 1024,
    };
+
+#if DETECT_OS_LINUX
+   struct sysinfo si;
+   sysinfo(&si);
+   /* just let apps yolo it until they oom */
+   p->maxResourceHeapSize = MAX2(p->maxResourceHeapSize, si.totalram / 2);
+   p->maxSamplerHeapSize = MAX2(p->maxSamplerHeapSize, si.totalram / 2);
+#endif
 
    /* Vulkan 1.0 */
    strcpy(p->deviceName, device->pscreen->get_name(device->pscreen));
@@ -1962,8 +2000,12 @@ VKAPI_ATTR VkResult VKAPI_CALL lvp_CreateDevice(
    uint32_t zero = 0;
    device->zero_buffer = pipe_buffer_create_with_data(device->queue.ctx, 0, PIPE_USAGE_IMMUTABLE, sizeof(uint32_t), &zero);
 
+   struct pipe_sampler_state null_sampler = {
+      .seamless_cube_map = 1,
+      .max_lod = 0.25,
+   };
    device->null_texture_handle = (void *)(uintptr_t)device->queue.ctx->create_texture_handle(device->queue.ctx,
-      &(struct pipe_sampler_view){ 0 }, NULL);
+      &(struct pipe_sampler_view){ 0 }, &null_sampler);
    device->null_image_handle = (void *)(uintptr_t)device->queue.ctx->create_image_handle(device->queue.ctx,
       &(struct pipe_image_view){ 0 });
 
@@ -2658,43 +2700,41 @@ VKAPI_ATTR VkResult VKAPI_CALL lvp_ResetEvent(
 }
 
 void
-lvp_sampler_init(struct lvp_device *device, struct lp_descriptor *desc, const VkSamplerCreateInfo *pCreateInfo, const struct vk_sampler *sampler)
+lvp_sampler_init(struct lvp_device *device, struct lp_sampler_descriptor *desc, const struct vk_sampler_state *vk_state)
 {
    struct pipe_sampler_state state = {0};
-   VkClearColorValue border_color =
-      vk_sampler_border_color_value(pCreateInfo, NULL);
-   STATIC_ASSERT(sizeof(state.border_color) == sizeof(border_color));
+   STATIC_ASSERT(sizeof(state.border_color) == sizeof(vk_state->border_color_value));
 
-   state.wrap_s = vk_conv_wrap_mode(pCreateInfo->addressModeU);
-   state.wrap_t = vk_conv_wrap_mode(pCreateInfo->addressModeV);
-   state.wrap_r = vk_conv_wrap_mode(pCreateInfo->addressModeW);
-   state.min_img_filter = pCreateInfo->minFilter == VK_FILTER_LINEAR ? PIPE_TEX_FILTER_LINEAR : PIPE_TEX_FILTER_NEAREST;
-   state.min_mip_filter = pCreateInfo->mipmapMode == VK_SAMPLER_MIPMAP_MODE_LINEAR ? PIPE_TEX_MIPFILTER_LINEAR : PIPE_TEX_MIPFILTER_NEAREST;
-   state.mag_img_filter = pCreateInfo->magFilter == VK_FILTER_LINEAR ? PIPE_TEX_FILTER_LINEAR : PIPE_TEX_FILTER_NEAREST;
-   state.min_lod = pCreateInfo->minLod;
-   state.max_lod = pCreateInfo->maxLod;
-   state.lod_bias = pCreateInfo->mipLodBias;
-   if (pCreateInfo->anisotropyEnable)
-      state.max_anisotropy = pCreateInfo->maxAnisotropy;
+   state.wrap_s = vk_conv_wrap_mode(vk_state->address_mode_u);
+   state.wrap_t = vk_conv_wrap_mode(vk_state->address_mode_v);
+   state.wrap_r = vk_conv_wrap_mode(vk_state->address_mode_w);
+   state.min_img_filter = vk_state->min_filter == VK_FILTER_LINEAR ? PIPE_TEX_FILTER_LINEAR : PIPE_TEX_FILTER_NEAREST;
+   state.min_mip_filter = vk_state->mipmap_mode == VK_SAMPLER_MIPMAP_MODE_LINEAR ? PIPE_TEX_MIPFILTER_LINEAR : PIPE_TEX_MIPFILTER_NEAREST;
+   state.mag_img_filter = vk_state->mag_filter == VK_FILTER_LINEAR ? PIPE_TEX_FILTER_LINEAR : PIPE_TEX_FILTER_NEAREST;
+   state.min_lod = vk_state->min_lod;
+   state.max_lod = vk_state->max_lod;
+   state.lod_bias = vk_state->mip_lod_bias;
+   if (vk_state->anisotropy_enable)
+      state.max_anisotropy = vk_state->max_anisotropy;
    else
       state.max_anisotropy = 1;
-   state.unnormalized_coords = pCreateInfo->unnormalizedCoordinates;
-   state.compare_mode = pCreateInfo->compareEnable ? PIPE_TEX_COMPARE_R_TO_TEXTURE : PIPE_TEX_COMPARE_NONE;
-   state.compare_func = pCreateInfo->compareOp;
-   state.seamless_cube_map = !(pCreateInfo->flags & VK_SAMPLER_CREATE_NON_SEAMLESS_CUBE_MAP_BIT_EXT);
+   state.unnormalized_coords = vk_state->unnormalized_coordinates;
+   state.compare_mode = vk_state->compare_enable ? PIPE_TEX_COMPARE_R_TO_TEXTURE : PIPE_TEX_COMPARE_NONE;
+   state.compare_func = vk_state->compare_op;
+   state.seamless_cube_map = !(vk_state->flags & VK_SAMPLER_CREATE_NON_SEAMLESS_CUBE_MAP_BIT_EXT);
    STATIC_ASSERT((unsigned)VK_SAMPLER_REDUCTION_MODE_WEIGHTED_AVERAGE == (unsigned)PIPE_TEX_REDUCTION_WEIGHTED_AVERAGE);
    STATIC_ASSERT((unsigned)VK_SAMPLER_REDUCTION_MODE_MIN == (unsigned)PIPE_TEX_REDUCTION_MIN);
    STATIC_ASSERT((unsigned)VK_SAMPLER_REDUCTION_MODE_MAX == (unsigned)PIPE_TEX_REDUCTION_MAX);
-   state.reduction_mode = (enum pipe_tex_reduction_mode)sampler->reduction_mode;
-   memcpy(&state.border_color, &border_color, sizeof(border_color));
+   state.reduction_mode = (enum pipe_tex_reduction_mode)vk_state->reduction_mode;
+   memcpy(&state.border_color, &vk_state->border_color_value, sizeof(vk_state->border_color_value));
 
    simple_mtx_lock(&device->queue.lock);
    struct lp_texture_handle *texture_handle = (void *)(uintptr_t)device->queue.ctx->create_texture_handle(device->queue.ctx, NULL, &state);
-   desc->texture.sampler_index = texture_handle->sampler_index;
+   desc->sampler_index = texture_handle->sampler_index;
    device->queue.ctx->delete_texture_handle(device->queue.ctx, (uint64_t)(uintptr_t)texture_handle);
    simple_mtx_unlock(&device->queue.lock);
 
-   lp_jit_sampler_from_pipe(&desc->sampler, &state);
+   lp_jit_sampler_from_pipe(&desc->jit, &state);
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL lvp_CreateSampler(
@@ -2711,7 +2751,9 @@ VKAPI_ATTR VkResult VKAPI_CALL lvp_CreateSampler(
    if (!sampler)
       return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
 
-   lvp_sampler_init(device, &sampler->desc, pCreateInfo, &sampler->vk);
+   struct vk_sampler_state state;
+   vk_sampler_state_init(&state, pCreateInfo);
+   lvp_sampler_init(device, &sampler->desc, &state);
 
    *pSampler = lvp_sampler_to_handle(sampler);
 
@@ -2730,6 +2772,21 @@ VKAPI_ATTR void VKAPI_CALL lvp_DestroySampler(
       return;
 
    vk_sampler_destroy(&device->vk, pAllocator, &sampler->vk);
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL lvp_RegisterCustomBorderColorEXT(
+   VkDevice                                    device,
+   const VkSamplerCustomBorderColorCreateInfoEXT* pBorderColor,
+   VkBool32                                    requestIndex,
+   uint32_t*                                   pIndex)
+{
+   return VK_SUCCESS;
+}
+
+VKAPI_ATTR void VKAPI_CALL lvp_UnregisterCustomBorderColorEXT(
+   VkDevice                                    device,
+   uint32_t                                    index)
+{
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL lvp_CreatePrivateDataSlot(

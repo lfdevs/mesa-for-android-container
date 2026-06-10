@@ -60,7 +60,7 @@ for i = 1, #arg do
     print(HELP_MESSAGE)
     os.exit(0)
   elseif not format_ab then
-    local format = arg[i]:upper()
+    local format = arg[i]:lower()
     format_ab = format:sub(1, format:find("/") - 1)
     format_cd = format:sub(format:find("/") + 1)
   elseif not a_file then a_file = arg[i]
@@ -75,10 +75,10 @@ if not format_ab or not format_cd or not a_file or not b_file then
   os.exit(1)
 end
 
-if not ((format_ab == "HF" and format_cd == "F") or
-        (format_ab == "BF" and format_cd == "F") or
-        (format_ab == "UB" and format_cd == "UD")) then
-  print("Error: format must be 'HF/F', 'BF/F', or 'UB/UD', got '" .. format_ab .. "/" .. format_cd .. "'")
+if not ((format_ab == "hf" and format_cd == "f") or
+        (format_ab == "bf" and format_cd == "f") or
+        (format_ab == "ub" and format_cd == "ud")) then
+  print("Error: format must be 'hf/f', 'bf/f', or 'ub/ud', got '" .. format_ab .. "/" .. format_cd .. "'")
   print("Use --help for more information")
   os.exit(1)
 end
@@ -149,9 +149,9 @@ end
 local exec_size = devinfo.ver >= 20 and 16 or 8
 local packing_factor
 
-if format_ab == "HF" or format_ab == "BF" then
+if format_ab == "hf" or format_ab == "bf" then
   packing_factor = 2
-elseif format_ab == "UB" then
+elseif format_ab == "ub" then
   packing_factor = 4
 end
 
@@ -190,9 +190,9 @@ local exec_size = c.cols
 
 local encode = function(m, fmt)
   local f = nil
-  if     fmt == "HF" then f = fp.encode_f16
-  elseif fmt == "BF" then f = fp.encode_bf16
-  elseif fmt == "F"  then f = fp.encode_f32
+  if     fmt == "hf" then f = fp.encode_f16
+  elseif fmt == "bf" then f = fp.encode_bf16
+  elseif fmt == "f"  then f = fp.encode_f32
   end
 
   if f then
@@ -212,7 +212,7 @@ local buf = execute {
     .. gen.mov_grf(format_cd, 30, c:to_row_major())
     .. string.format([[
 
-    dpas.8x8(%d)  r40<1>%s  r30<1>%s  r20<1>%s  r10<1>%s  {A@1 $1};
+    dpas.8x8 (%d) r40:%s r30:%s r20:%s r10:%s {A@1,$1}
     @syncnop
 
     ]], exec_size, format_cd, format_cd, format_ab, format_ab)
@@ -225,13 +225,13 @@ local buf = execute {
 local d = matrix.from_row_major_buffer(8, exec_size, buf)
 
 local d_print_fmt = nil
-if string.find(format_cd, "F") then
+if string.find(format_cd, "f") then
   d_print_fmt = "%.6f"
 
   local f = nil
-  if     format_cd == "HF" then f = fp.decode_f16
-  elseif format_cd == "BF" then f = fp.decode_bf16
-  elseif format_cd == "F"  then f = fp.decode_f32
+  if     format_cd == "hf" then f = fp.decode_f16
+  elseif format_cd == "bf" then f = fp.decode_bf16
+  elseif format_cd == "f"  then f = fp.decode_f32
   else
     error("unsupported float format")
   end
@@ -282,7 +282,7 @@ if verify_results then
     c_load = string.format("C = single(zeros(%d, %d));", actual_c_rows, actual_c_cols)
   end
 
-  local tolerance = (format_cd == "F") and "1e-3" or "1e-6"
+  local tolerance = (format_cd == "f") and "1e-3" or "1e-6"
 
   -- TODO: Currently values are rounded to what fits in F (32-bit), but for
   -- better results we should have a way to round them to precision based on

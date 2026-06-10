@@ -12,7 +12,10 @@
 
 #include "util/format/u_formats.h"
 
-#include "vulkan/vulkan.h"
+#include "util/format/u_format.h"
+#include "vk_image.h"
+
+#include <stdbool.h>
 
 #define KK_MAX_MIP_LEVELS 16
 
@@ -32,9 +35,15 @@ struct kk_image_layout {
    /** Number of miplevels. 1 if no mipmapping is used. */
    uint8_t levels;
 
+   /** Whether the image has linear tiling */
+   uint8_t linear;
+
+   /** Whether to allow Metal to optimize image contents for the GPU */
    uint8_t optimized_layout;
 
    enum mtl_texture_usage usage;
+
+   VkImageCreateFlags create_flags;
 
    /** Texture format */
    struct {
@@ -131,10 +140,83 @@ struct kk_view_layout {
    uint16_t min_lod_clamp;
 };
 
+static inline bool
+kk_image_layout_layer_stride_defined(const struct kk_image_layout *layout)
+{
+   /* Linear calculations are trivial and always known */
+   if (layout->linear)
+      return true;
+
+   /* If Metal is allowed to transparently optimize the image, we can't be sure
+    * about its subresource layout */
+   if (layout->optimized_layout)
+      return false;
+
+   /* Calculations do not hold up for combined depth-stencil; size change for
+    * increasing layers seems to be non-linear */
+   if (util_format_is_depth_and_stencil(layout->format.pipe))
+      return false;
+
+   return true;
+}
+
+static inline bool
+kk_image_layout_level_offsets_defined(const struct kk_image_layout *layout)
+{
+   /* Linear calculations are trivial and always known */
+   if (layout->linear)
+      return true;
+
+   /* We don't calculate tiled levels if we don't calculate tiled layers */
+   if (!kk_image_layout_layer_stride_defined(layout))
+      return false;
+
+   /* Tiled calculations have not been validated beyond block texel view
+    * compatible images */
+   if (!(layout->create_flags &
+         VK_IMAGE_CREATE_BLOCK_TEXEL_VIEW_COMPATIBLE_BIT))
+      return false;
+
+   return true;
+}
+
+static inline uint32_t
+kk_get_layer_offset_B(const struct kk_image_layout *layout, unsigned z_px)
+{
+   assert(kk_image_layout_layer_stride_defined(layout));
+   return z_px * layout->layer_stride_B;
+}
+
+static inline uint32_t
+kk_get_level_offset_B(const struct kk_image_layout *layout, unsigned level)
+{
+   assert(kk_image_layout_level_offsets_defined(layout));
+   return layout->level_offsets_B[level];
+}
+
+static inline uint32_t
+kk_get_layer_level_B(const struct kk_image_layout *layout, unsigned z_px,
+                     unsigned level)
+{
+   return kk_get_layer_offset_B(layout, z_px) +
+          kk_get_level_offset_B(layout, level);
+}
+
+static inline uint32_t
+kk_get_level_size_B(const struct kk_image_layout *layout, unsigned level)
+{
+   assert(kk_image_layout_level_offsets_defined(layout));
+   assert(level + 1 < ARRAY_SIZE(layout->level_offsets_B));
+   return layout->level_offsets_B[level + 1] - layout->level_offsets_B[level];
+}
+
+bool kk_image_layout_can_optimize(VkImageUsageFlags usage, VkImageTiling tiling,
+                                  VkImageCreateFlags flags,
+                                  enum pipe_format format);
+
 void kk_image_layout_init(const struct kk_device *dev,
-                          const struct VkImageCreateInfo *create_info,
-                          enum pipe_format format, const uint8_t width_scale,
-                          const uint8_t height_scale,
+                          const struct vk_image *image, enum pipe_format format,
+                          const uint8_t width_scale, const uint8_t height_scale,
                           struct kk_image_layout *layout);
 
 #endif /* KK_IMAGE_LAYOUT_H */

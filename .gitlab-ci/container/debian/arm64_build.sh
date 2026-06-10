@@ -53,6 +53,7 @@ DEPS=(
     libexpat1-dev
     libflatbuffers-dev
     "libllvm${LLVM_VERSION}"
+    libpng-dev
     libvulkan-dev
     libx11-dev
     libx11-xcb-dev

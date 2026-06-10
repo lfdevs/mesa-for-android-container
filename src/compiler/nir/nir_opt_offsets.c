@@ -193,11 +193,12 @@ try_fold_load_store_nv(nir_builder *b,
 
    assert(offset_idx >= 0);
    nir_src src = intrin->src[offset_idx];
+   nir_src *uniform_src = nir_get_io_uniform_offset_src(intrin);
 
    int32_t min = 0;
    uint32_t max = BITFIELD_MASK(offset_bits);
 
-   if (!nir_src_is_const(src)) {
+   if (!nir_src_is_const(src) || (uniform_src && !nir_src_is_const(*uniform_src))) {
       max >>= 1;
       min = ~max;
    }
@@ -211,6 +212,11 @@ try_fold_load_store_nv(nir_builder *b,
       return false;
    }
 
+   /* We don't try to fold the offset for the uniform source on purpose,
+    * because we rely on running nir_opt_offsets before moving in the uniform
+    * source. However, we might run this pass again _after_ that, because we
+    * can eliminate a u2u64 on the _non uniform_ source and therefore might be
+    * able to fold in more constants into base. */
    return try_fold_load_store(b, intrin, state, offset_idx, min, max, false);
 }
 

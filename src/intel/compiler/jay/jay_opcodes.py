@@ -62,6 +62,7 @@ def op(name: str, num_srcs: int, types: str | None = None,
                             extra_struct_)
 
 
+op('nop', 0, 'untyped', Props.NO_DEST)
 op('and', 2, 'u1 u16 u32', Props.NEGATE | Props.CMOD | Props.COMMUTATIVE)
 op('or',  2, 'u1 u16 u32', Props.NEGATE | Props.CMOD | Props.COMMUTATIVE)
 op('xor', 2, 'u1 u16 u32', Props.NEGATE | Props.CMOD | Props.COMMUTATIVE)
@@ -97,7 +98,7 @@ op('fbl',        1, 'u32')
 op('lzd',        1, 'u32')
 op('frc',        1, 'f32 f64', Props.NEGATE | Props.CMOD)
 op('mad',        3, 'u32 s32 u16 s16 f32 f64 f16 bf16',
-   Props.NEGATE | Props.SAT | Props.CMOD | Props.COMMUTATIVE)
+   Props.NEGATE | Props.SAT | Props.CMOD)
 op('mac',        3, 'f32', Props.NEGATE | Props.SAT | Props.CMOD |
                            Props.COMMUTATIVE)
 op('max',        2, 'u32 s32 u64 s64 u16 s16 f32 f64 f16 bf16',
@@ -133,32 +134,34 @@ op('schedule_barrier', 0, None, Props.NO_DEST)
 
 for n in ['brd', 'illegal', 'goto', 'join', 'if', 'else',
           'endif', 'while', 'break', 'cont', 'call', 'calla', 'jmpi', 'ret',
-          'loop_once']:
+          'loop_once', 'halt', 'halt_target']:
     op(n, 0, None, Props.NO_DEST)
 
 op('send', 4, None, Props.SIDE_EFFECTS, [
-    'enum brw_sfid sfid',
+    'gen_sfid sfid',
     'uint8_t sbid',
     'bool eot',
     'bool check_tdr',
     'bool uniform',
     'bool bindless',
+    'bool pure',
     'enum jay_type type_0',
     'enum jay_type type_1',
     'uint8_t ex_mlen',
+    'bool pad[2]',
     'uint32_t ex_desc_imm',
 ])
 
 op('reloc',   0, 'u32 u64', 0, ['unsigned param', 'unsigned base'])
 op('preload', 0, 'u32',     0, ['unsigned reg'])
-op('deswizzle', 0, 'u32', Props.NO_DEST, ['unsigned size'])
 op('deswizzle_odd', 2, 'f32', 0, ['bool src2_hi'])
 op('deswizzle_even', 1, 'f32', 0, ['bool src_hi'])
 
-# Calculating the lane ID requires multiple power-of-two steps each involving
-# complex architectural features not modelled in the IR.
+# Return the UGPR[4] vector (0, 1, 2, 3, 4, 5, 6, 7) as packed 16-bit.
 op('lane_id_8', 0, 'u16')
-op('lane_id_expand', 1, 'u16', 0, ['unsigned width'])
+
+# Build a GPR from two UGPR[16] ranges.
+op('zip_ugpr16', 2, 'u32')
 
 # Sample ID calculation
 op('extract_byte_per_8lanes', 2, 'u32')
@@ -171,7 +174,7 @@ op('and_u32_u16', 2, 'u32')
 # 2x16-bit offset within each quad, giving 2x16-bit per-lane coordinates.
 op('expand_quad', 2, 'u32')
 op('offset_packed_pixel_coords', 1, 'u32')
-op('extract_layer', 2, 'u32')
+op('extract_subspan_info', 2, 'u32', Props.CMOD, ['uint16_t mask'])
 
 # Phi function representations
 #
@@ -204,8 +207,8 @@ op('phi_dst', 0, 'u1 u32')
 # Output from a unit test to prevent dead code elimination.
 op('unit_test', 1, 'u32', Props.NO_DEST)
 
-# Produces a stable indeterminate value. Freeze(Poison) in LLVM parlance.
-op('indeterminate', 0, 'u1 u32')
+# Produces a unstable indeterminate value. Undef in LLVM parlance.
+op('undef', 0, 'u1 u32')
 
 op('not', 1, 'u1 u32', Props.CMOD)
 op('cast_canonical_to_flag', 1, 'u1')
@@ -219,6 +222,17 @@ op('shuffle', 2, 'u1 u32')
 # Shuffle with a constant lane index.
 op('broadcast_imm', 1, 'u1 u32', 0, ['unsigned lane'])
 
+# Follows hardware source order: C B A.  Data is already packed u32 slots
+# by NIR, types are used when making the gen_inst.
+op('dpas', 3, 'u32', 0, [
+    'uint8_t sdepth',
+    'uint8_t rcount',
+    'enum jay_type acc_type',
+    'enum jay_type src_type',
+    'uint8_t sbid',
+    'uint8_t pad[3]',
+])
+
 OPCODES = _opcodes
 
 ENUMS: 'Mapping[str, tuple[str, list[str]]]' = {
@@ -226,7 +240,7 @@ ENUMS: 'Mapping[str, tuple[str, list[str]]]' = {
                                               'xyxy', 'zwzw', 'xxzz', 'yyww']),
     'jay_rounding_mode': ('JAY', ['round', 'rne', 'ru', 'rd', 'rtz']),
     'jay_math': ('JAY_MATH', ['_', 'inv', 'log', 'exp', 'sqrt', 'rsq', 'sin', 'cos']),
-    'brw_sfid': ('BRW_SFID', ['null', 'sampler', 'message_gateway',
+    'gen_sfid': ('GEN_SFID', ['null', 'sampler', 'message_gateway',
                               'render_cache', 'urb', 'bindless_thread_dispatch',
                               'ray_trace_accelerator', 'hdc0',
                               'pixel_interpolator', 'tgm', 'slm', 'ugm']),

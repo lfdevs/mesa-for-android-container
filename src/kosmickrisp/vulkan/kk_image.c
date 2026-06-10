@@ -14,6 +14,7 @@
 #include "kk_physical_device.h"
 
 #include "kosmickrisp/bridge/mtl_bridge.h"
+#include "kosmickrisp/bridge/vk_to_mtl_map.h"
 
 #include "vk_enum_defines.h"
 #include "vk_enum_to_str.h"
@@ -91,6 +92,10 @@ kk_get_image_plane_format_features(struct kk_physical_device *pdev,
    if (features != 0) {
       features |= VK_FORMAT_FEATURE_2_TRANSFER_SRC_BIT;
       features |= VK_FORMAT_FEATURE_2_TRANSFER_DST_BIT;
+
+      /* Metal does not allow CPU access to combined depth-stencil */
+      if (!util_format_is_depth_and_stencil(p_format))
+         features |= VK_FORMAT_FEATURE_2_HOST_IMAGE_TRANSFER_BIT;
    }
 
    return features;
@@ -230,17 +235,12 @@ kk_GetPhysicalDeviceImageFormatProperties2(
        pImageFormatInfo->type == VK_IMAGE_TYPE_3D)
       return VK_ERROR_FORMAT_NOT_SUPPORTED;
 
-   /* Metal does not support EAC/ETC formats for 3D textures. */
-   if (util_format_is_etc(vk_format_to_pipe_format(pImageFormatInfo->format)) &&
-       pImageFormatInfo->type == VK_IMAGE_TYPE_3D)
-      return VK_ERROR_FORMAT_NOT_SUPPORTED;
+   const enum pipe_format p_format =
+      vk_format_to_pipe_format(pImageFormatInfo->format);
 
-   /* Metal disallows reading compressed formats as uncompressed format.
-    * VK_IMAGE_CREATE_BLOCK_TEXEL_VIEW_COMPATIBLE_BIT is only used with
-    * compressed formats.
-    */
-   if (pImageFormatInfo->flags &
-       VK_IMAGE_CREATE_BLOCK_TEXEL_VIEW_COMPATIBLE_BIT)
+   /* Metal does not support EAC/ETC formats for 3D textures. */
+   if (util_format_is_etc(p_format) &&
+       pImageFormatInfo->type == VK_IMAGE_TYPE_3D)
       return VK_ERROR_FORMAT_NOT_SUPPORTED;
 
    const struct vk_format_ycbcr_info *ycbcr_info =
@@ -271,10 +271,11 @@ kk_GetPhysicalDeviceImageFormatProperties2(
        pImageFormatInfo->type == VK_IMAGE_TYPE_3D)
       return VK_ERROR_FORMAT_NOT_SUPPORTED;
 
-   /* TODO_KOSMICKRISP We could allow linear images that are used as render
-    * target as long as they are not used as input attachments. Main reason for
-    * this is that we expect arrays when rendering and reading from input
-    * attachments and Metal disallows arrays for linear textures.
+   /* TODO_KOSMICKRISP Linear images cannot be used as color attachments as long
+    * as input attachments are changed to arrays. Vulkan specifies that any
+    * image format supporting the color attachment feature also supports being
+    * used as an input attachment, and Metal disallows arrays for linear
+    * textures.
     */
    if (pImageFormatInfo->tiling == VK_IMAGE_TILING_LINEAR &&
        (pImageFormatInfo->usage &
@@ -363,12 +364,7 @@ kk_GetPhysicalDeviceImageFormatProperties2(
        (features & (VK_FORMAT_FEATURE_2_COLOR_ATTACHMENT_BIT |
                     VK_FORMAT_FEATURE_2_DEPTH_STENCIL_ATTACHMENT_BIT)) &&
        !(pImageFormatInfo->flags & VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT)) {
-      sampleCounts =
-         VK_SAMPLE_COUNT_1_BIT | VK_SAMPLE_COUNT_2_BIT |
-         // TODO_KOSMICKRISP Modify sample count based on what pdev supports
-         VK_SAMPLE_COUNT_4_BIT /* |
-          VK_SAMPLE_COUNT_8_BIT */
-         ;
+      sampleCounts = pdev->supported_sample_counts;
    }
 
    /* From the Vulkan 1.2.199 spec:
@@ -402,6 +398,15 @@ kk_GetPhysicalDeviceImageFormatProperties2(
       case VK_EXTERNAL_MEMORY_HANDLE_TYPE_MTLHEAP_BIT_EXT:
          ext_mem_props = &kk_mtlheap_mem_props;
          break;
+      case VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT:
+      case VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_MAPPED_FOREIGN_MEMORY_BIT_EXT: {
+         if (pImageFormatInfo->tiling != VK_IMAGE_TILING_LINEAR) {
+            return vk_errorf(pdev, VK_ERROR_FORMAT_NOT_SUPPORTED,
+                             "host memory import image must be linear");
+         }
+         ext_mem_props = &kk_host_mem_props;
+         break;
+      }
       default:
          /* From the Vulkan 1.3.256 spec:
           *
@@ -484,8 +489,17 @@ kk_GetPhysicalDeviceImageFormatProperties2(
       }
       case VK_STRUCTURE_TYPE_HOST_IMAGE_COPY_DEVICE_PERFORMANCE_QUERY_EXT: {
          VkHostImageCopyDevicePerformanceQueryEXT *host_props = (void *)s;
-         host_props->optimalDeviceAccess = true;
-         host_props->identicalMemoryLayout = true;
+         /* Optimal device access and identical memory layout if optimization
+          * is the same both with and without host transfer usage */
+         bool with_host_transfer = kk_image_layout_can_optimize(
+            pImageFormatInfo->usage, pImageFormatInfo->tiling,
+            pImageFormatInfo->flags, p_format);
+         bool without_host_transfer = kk_image_layout_can_optimize(
+            pImageFormatInfo->usage & ~VK_IMAGE_USAGE_HOST_TRANSFER_BIT,
+            pImageFormatInfo->tiling, pImageFormatInfo->flags, p_format);
+         host_props->optimalDeviceAccess =
+            with_host_transfer == without_host_transfer;
+         host_props->identicalMemoryLayout = host_props->optimalDeviceAccess;
          break;
       }
       default:
@@ -545,14 +559,9 @@ kk_image_init(struct kk_device *dev, struct kk_image *image,
          ycbcr_info ? ycbcr_info->planes[plane].denominator_scales[0] : 1;
       const uint8_t height_scale =
          ycbcr_info ? ycbcr_info->planes[plane].denominator_scales[1] : 1;
-      kk_image_layout_init(dev, pCreateInfo, vk_format_to_pipe_format(format),
+      kk_image_layout_init(dev, &image->vk, vk_format_to_pipe_format(format),
                            width_scale, height_scale,
                            &image->planes[plane].layout);
-   }
-
-   if (image->vk.format == VK_FORMAT_D32_SFLOAT_S8_UINT) {
-      kk_image_layout_init(dev, pCreateInfo, PIPE_FORMAT_R32_UINT, 1, 1,
-                           &image->stencil_copy_temp.layout);
    }
 
    return VK_SUCCESS;
@@ -585,11 +594,6 @@ kk_image_finish(struct kk_device *dev, struct kk_image *image,
    for (uint8_t plane = 0; plane < image->plane_count; plane++) {
       kk_image_plane_finish(dev, &image->planes[plane], image->vk.create_flags,
                             pAllocator);
-   }
-
-   if (image->stencil_copy_temp.layout.size_B > 0) {
-      kk_image_plane_finish(dev, &image->stencil_copy_temp,
-                            image->vk.create_flags, pAllocator);
    }
 
    vk_image_finish(&image->vk);
@@ -685,11 +689,6 @@ kk_get_image_memory_requirements(struct kk_device *dev, struct kk_image *image,
          kk_image_plane_add_req(dev, image, &image->planes[plane], &size_B,
                                 &align_B);
       }
-   }
-
-   if (image->stencil_copy_temp.layout.size_B > 0) {
-      kk_image_plane_add_req(dev, image, &image->stencil_copy_temp, &size_B,
-                             &align_B);
    }
 
    pMemoryRequirements->memoryRequirements.memoryTypeBits = memory_types;
@@ -793,6 +792,12 @@ kk_get_image_subresource_layout(struct kk_device *dev, struct kk_image *image,
       .arrayPitch = plane->layout.layer_stride_B,
       .depthPitch = 1u,
    };
+
+   VkSubresourceHostMemcpySize *memcpy_size =
+      vk_find_struct(pLayout, SUBRESOURCE_HOST_MEMCPY_SIZE_EXT);
+   if (memcpy_size) {
+      memcpy_size->size = pLayout->subresourceLayout.size;
+   }
 }
 
 VKAPI_ATTR void VKAPI_CALL
@@ -823,6 +828,19 @@ kk_GetDeviceImageSubresourceLayoutKHR(
    kk_image_finish(dev, &image, NULL);
 }
 
+mtl_texture *
+kk_image_plane_create_texture(struct kk_image_plane *plane,
+                              struct kk_image_layout *layout, uint64_t offset_B)
+{
+   uint64_t mem_offset_B = plane->mem_offset_B + offset_B;
+   if (plane->layout.linear)
+      return mtl_new_texture_with_descriptor_linear(plane->mem->bo->map, layout,
+                                                    mem_offset_B);
+
+   return mtl_new_texture_with_descriptor(plane->mem->bo->mtl_handle, layout,
+                                          mem_offset_B);
+}
+
 static VkResult
 kk_image_plane_bind(struct kk_device *dev, struct kk_image *image,
                     struct kk_image_plane *plane, struct kk_device_memory *mem,
@@ -833,13 +851,12 @@ kk_image_plane_bind(struct kk_device *dev, struct kk_image *image,
                                &plane_align_B);
    *offset_B = align64(*offset_B, plane_align_B);
 
+   assert(plane->layout.linear || mem->bo->mtl_handle);
+
    /* Linear textures in Metal need to be allocated through a buffer... */
-   if (plane->layout.optimized_layout)
-      plane->mtl_handle = mtl_new_texture_with_descriptor(
-         mem->bo->mtl_handle, &plane->layout, *offset_B);
-   else
-      plane->mtl_handle = mtl_new_texture_with_descriptor_linear(
-         mem->bo->map, &plane->layout, *offset_B);
+   plane->mem = mem;
+   plane->mem_offset_B = *offset_B;
+   plane->mtl_handle = kk_image_plane_create_texture(plane, &plane->layout, 0u);
    plane->addr = mem->bo->gpu + *offset_B;
 
    /* Create auxiliary 2D array texture for 3D images so we can use 2D views of
@@ -918,13 +935,6 @@ kk_bind_image_memory(struct kk_device *dev, const VkBindImageMemoryInfo *info)
       }
    }
 
-   if (image->stencil_copy_temp.layout.size_B > 0) {
-      result = kk_image_plane_bind(dev, image, &image->stencil_copy_temp, mem,
-                                   &offset_B);
-      if (result != VK_SUCCESS)
-         return result;
-   }
-
    return VK_SUCCESS;
 }
 
@@ -955,5 +965,208 @@ kk_GetImageOpaqueCaptureDescriptorDataEXT(
    VkDevice _device, const VkImageCaptureDescriptorDataInfoEXT *pInfo,
    void *pData)
 {
+   return VK_SUCCESS;
+}
+
+struct kk_host_copy_info {
+   struct mtl_texture_memory_copy mtl_data;
+   size_t buffer_slice_size_B;
+};
+
+static struct kk_host_copy_info
+vk_image_to_memory_copy_to_mtl_texture_memory_copy(
+   const VkImageToMemoryCopy *region, const struct kk_image_plane *plane)
+{
+   struct kk_host_copy_info copy;
+   enum pipe_format p_format = plane->layout.format.pipe;
+   if (region->imageSubresource.aspectMask == VK_IMAGE_ASPECT_DEPTH_BIT)
+      p_format = util_format_get_depth_only(p_format);
+   else if (region->imageSubresource.aspectMask == VK_IMAGE_ASPECT_STENCIL_BIT)
+      p_format = PIPE_FORMAT_S8_UINT;
+
+   const uint32_t buffer_width = region->memoryRowLength
+                                    ? region->memoryRowLength
+                                    : region->imageExtent.width;
+   const uint32_t buffer_height = region->memoryImageHeight
+                                     ? region->memoryImageHeight
+                                     : region->imageExtent.height;
+
+   const uint32_t buffer_stride_B =
+      util_format_get_stride(p_format, buffer_width);
+   const uint32_t buffer_size_2d_B =
+      util_format_get_2d_size(p_format, buffer_stride_B, buffer_height);
+
+   /* Metal requires this value to be 0 for 2D images, otherwise the number of
+    * bytes between each 2D image of a 3D texture */
+   copy.mtl_data.buffer_2d_image_size_B =
+      plane->layout.depth_px == 1u ? 0u : buffer_size_2d_B;
+   copy.mtl_data.buffer_stride_B = buffer_stride_B;
+   copy.mtl_data.image_size = vk_extent_3d_to_mtl_size(&region->imageExtent);
+   copy.mtl_data.image_origin =
+      vk_offset_3d_to_mtl_origin(&region->imageOffset);
+   copy.mtl_data.image_level = region->imageSubresource.mipLevel;
+   copy.buffer_slice_size_B = buffer_size_2d_B * region->imageExtent.depth;
+
+   return copy;
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL
+kk_CopyImageToMemory(UNUSED VkDevice device,
+                     const VkCopyImageToMemoryInfo *pCopyImageToMemoryInfo)
+{
+   VK_FROM_HANDLE(kk_image, image, pCopyImageToMemoryInfo->srcImage);
+
+   for (unsigned r = 0; r < pCopyImageToMemoryInfo->regionCount; r++) {
+      const VkImageToMemoryCopy *region = &pCopyImageToMemoryInfo->pRegions[r];
+
+      const uint8_t plane_index = kk_image_memory_aspects_to_plane(
+         image, region->imageSubresource.aspectMask);
+      struct kk_image_plane *plane = &image->planes[plane_index];
+
+      struct kk_host_copy_info info =
+         vk_image_to_memory_copy_to_mtl_texture_memory_copy(region, plane);
+
+      uint8_t *host_ptr = region->pHostPointer;
+      kk_foreach_slice(slice, image, imageSubresource)
+      {
+         info.mtl_data.image_slice = slice;
+         mtl_texture_get_bytes(plane->mtl_handle, host_ptr, &info.mtl_data);
+         host_ptr += info.buffer_slice_size_B;
+      }
+   }
+
+   return VK_SUCCESS;
+}
+
+static struct kk_host_copy_info
+vk_memory_to_image_copy_to_mtl_texture_memory_copy(
+   const VkMemoryToImageCopy *region, const struct kk_image_plane *plane)
+{
+   /* Prevent code duplication by mapping between structures */
+   const VkImageToMemoryCopy mapped = {
+      .memoryRowLength = region->memoryRowLength,
+      .memoryImageHeight = region->memoryImageHeight,
+      .imageSubresource = region->imageSubresource,
+      .imageOffset = region->imageOffset,
+      .imageExtent = region->imageExtent,
+   };
+   return vk_image_to_memory_copy_to_mtl_texture_memory_copy(&mapped, plane);
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL
+kk_CopyMemoryToImage(UNUSED VkDevice device,
+                     const VkCopyMemoryToImageInfo *pCopyMemoryToImageInfo)
+{
+   VK_FROM_HANDLE(kk_image, image, pCopyMemoryToImageInfo->dstImage);
+
+   for (int r = 0; r < pCopyMemoryToImageInfo->regionCount; r++) {
+      const VkMemoryToImageCopy *region = &pCopyMemoryToImageInfo->pRegions[r];
+
+      const uint8_t plane_index = kk_image_memory_aspects_to_plane(
+         image, region->imageSubresource.aspectMask);
+      struct kk_image_plane *plane = &image->planes[plane_index];
+
+      struct kk_host_copy_info info =
+         vk_memory_to_image_copy_to_mtl_texture_memory_copy(region, plane);
+
+      const uint8_t *host_ptr = region->pHostPointer;
+      kk_foreach_slice(slice, image, imageSubresource)
+      {
+         info.mtl_data.image_slice = slice;
+         mtl_texture_replace_region(plane->mtl_handle, host_ptr,
+                                    &info.mtl_data);
+         host_ptr += info.buffer_slice_size_B;
+      }
+   }
+
+   return VK_SUCCESS;
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL
+kk_CopyImageToImage(VkDevice device,
+                    const VkCopyImageToImageInfo *pCopyImageToImageInfo)
+{
+   VK_FROM_HANDLE(kk_image, src, pCopyImageToImageInfo->srcImage);
+
+   /* Determine the buffer size required to satisfy all copies */
+   uint64_t buffer_size = 0;
+   for (uint32_t i = 0u; i < pCopyImageToImageInfo->regionCount; i++) {
+      const VkImageCopy2 *region = &pCopyImageToImageInfo->pRegions[i];
+
+      uint8_t src_index =
+         kk_image_aspects_to_plane(src, region->srcSubresource.aspectMask);
+      struct kk_image_plane *src_plane = &src->planes[src_index];
+
+      buffer_size = MAX2(buffer_size, src_plane->layout.size_B);
+   }
+
+   /* Metal does not provide a direct image-to-image host copy, so we implement
+    * host image-to-image copy using CopyImageToMemory and CopyMemoryToImage */
+   uint8_t *temp = ralloc_size(NULL, buffer_size);
+   if (!temp)
+      return VK_ERROR_OUT_OF_HOST_MEMORY;
+
+   VkResult result = VK_SUCCESS;
+
+   for (uint32_t i = 0u; i < pCopyImageToImageInfo->regionCount; ++i) {
+      const VkImageCopy2 *region = &pCopyImageToImageInfo->pRegions[i];
+
+      VkImageToMemoryCopy src_copy = {
+         .sType = VK_STRUCTURE_TYPE_IMAGE_TO_MEMORY_COPY,
+         .pNext = NULL,
+         .pHostPointer = temp,
+         .memoryRowLength = 0,
+         .memoryImageHeight = 0,
+         .imageSubresource = region->srcSubresource,
+         .imageOffset = region->srcOffset,
+         .imageExtent = region->extent,
+      };
+      VkCopyImageToMemoryInfo src_copy_info = {
+         .sType = VK_STRUCTURE_TYPE_COPY_IMAGE_TO_MEMORY_INFO,
+         .pNext = NULL,
+         .flags = pCopyImageToImageInfo->flags,
+         .srcImage = pCopyImageToImageInfo->srcImage,
+         .srcImageLayout = pCopyImageToImageInfo->srcImageLayout,
+         .regionCount = 1,
+         .pRegions = &src_copy,
+      };
+      result = kk_CopyImageToMemory(device, &src_copy_info);
+      if (result != VK_SUCCESS)
+         break;
+
+      VkMemoryToImageCopy dst_copy = {
+         .sType = VK_STRUCTURE_TYPE_MEMORY_TO_IMAGE_COPY,
+         .pNext = NULL,
+         .pHostPointer = temp,
+         .memoryRowLength = 0,
+         .memoryImageHeight = 0,
+         .imageSubresource = region->dstSubresource,
+         .imageOffset = region->dstOffset,
+         .imageExtent = region->extent,
+      };
+      VkCopyMemoryToImageInfo dst_copy_info = {
+         .sType = VK_STRUCTURE_TYPE_COPY_MEMORY_TO_IMAGE_INFO,
+         .pNext = NULL,
+         .flags = pCopyImageToImageInfo->flags,
+         .dstImage = pCopyImageToImageInfo->dstImage,
+         .dstImageLayout = pCopyImageToImageInfo->dstImageLayout,
+         .regionCount = 1,
+         .pRegions = &dst_copy,
+      };
+      result = kk_CopyMemoryToImage(device, &dst_copy_info);
+      if (result != VK_SUCCESS)
+         break;
+   }
+
+   ralloc_free(temp);
+   return result;
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL
+kk_TransitionImageLayoutEXT(
+   UNUSED VkDevice device, UNUSED uint32_t transitionCount,
+   UNUSED const VkHostImageLayoutTransitionInfoEXT *transitions)
+{
+   /* We don't do anything with layouts so this should be a no-op */
    return VK_SUCCESS;
 }

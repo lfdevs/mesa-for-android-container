@@ -145,6 +145,9 @@ struct spirv_to_nir_options {
 
    /* If GroupNonUniform capability is used, set this api subgroup size. */
    uint8_t group_non_uniform_subgroup_size;
+
+   /* Don't look at MESA_SPIRV_READ_PATH for replacements */
+   bool ignore_replacement;
 };
 
 enum spirv_verify_result {

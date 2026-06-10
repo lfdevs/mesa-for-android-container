@@ -88,7 +88,7 @@ struct anv_shader_data {
 
    union brw_any_prog_data prog_data;
 
-   uint32_t source_hash;
+   uint64_t source_hash;
 
    const nir_xfb_info *xfb_info;
 
@@ -112,7 +112,7 @@ struct anv_shader_data {
 
    bool uses_bt_for_push_descs;
 
-   unsigned *code;
+   const unsigned *code;
 
    debug_archiver *archiver;
 };

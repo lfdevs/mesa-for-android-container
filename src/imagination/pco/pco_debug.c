@@ -32,6 +32,9 @@ static const struct debug_named_value pco_debug_options[] = {
    { "int_smp",
      PCO_DEBUG_INT_SMP,
      "Enable integer coordinate support for sampler instructions." },
+   { "global_shmem",
+      PCO_DEBUG_GLOBAL_SHMEM,
+      "Force spill shared memory to global memory." },
    DEBUG_NAMED_VALUE_END,
 };
 

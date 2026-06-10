@@ -761,6 +761,13 @@ option(
 )
 
 option(
+  'tu-build-id',
+  type : 'string',
+  value : '',
+  description : 'Override build id for shader cache keys (hex string). '
+)
+
+option(
   'min-windows-version',
   type : 'integer',
   min : 7,
@@ -878,4 +885,11 @@ option(
   type : 'boolean',
   value : false,
   description : 'use experimental virtio backend for intel driver',
+)
+
+option(
+  'panfrost-rust',
+  type : 'boolean',
+  value : false,
+  description : 'Build panfrost Rust components.'
 )

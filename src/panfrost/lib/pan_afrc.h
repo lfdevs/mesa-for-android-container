@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2023 Collabora, Ltd.
+ * Copyright (C) 2026 Arm Ltd.
  * SPDX-License-Identifier: MIT
  */
 
@@ -347,6 +348,25 @@ pan_afrc_format(struct pan_afrc_format_info info, uint64_t modifier,
       return (scan ? MALI_AFRC_FORMAT_R10G10B10A10_SCAN
                    : MALI_AFRC_FORMAT_R10G10B10A10_ROT);
 
+#if PAN_ARCH >= 14
+   case PAN_AFRC_ICHANGE_FORMAT_YUV444:
+   case PAN_AFRC_ICHANGE_FORMAT_YUV422:
+   case PAN_AFRC_ICHANGE_FORMAT_YUV420:
+      if (info.bpc == 8) {
+         if (plane == 0 || info.num_planes == 3)
+            return (scan ? MALI_AFRC_FORMAT_R8_SCAN : MALI_AFRC_FORMAT_R8_ROT);
+
+         return (scan ? MALI_AFRC_FORMAT_R8G8_SCAN : MALI_AFRC_FORMAT_R8G8_ROT);
+      }
+
+      if (plane == 0 || info.num_planes == 3)
+         return (scan ? MALI_AFRC_FORMAT_R10_SCAN : MALI_AFRC_FORMAT_R10_ROT);
+
+      assert(info.ichange_fmt == PAN_AFRC_ICHANGE_FORMAT_YUV422 ||
+             info.ichange_fmt == PAN_AFRC_ICHANGE_FORMAT_YUV420);
+      return (scan ? MALI_AFRC_FORMAT_R10G10_SCAN
+                   : MALI_AFRC_FORMAT_R10G10_ROT);
+#else
    case PAN_AFRC_ICHANGE_FORMAT_YUV444:
       if (info.bpc == 8) {
          if (plane == 0 || info.num_planes == 3)
@@ -394,6 +414,7 @@ pan_afrc_format(struct pan_afrc_format_info info, uint64_t modifier,
 
       return (scan ? MALI_AFRC_FORMAT_R10G10_420_SCAN
                    : MALI_AFRC_FORMAT_R10G10_420_ROT);
+#endif /* PAN_ARCH >= 14 */
 
    default:
       return MALI_AFRC_FORMAT_INVALID;

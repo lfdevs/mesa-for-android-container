@@ -202,3 +202,25 @@ dEQP-GLES31.functional.layout_binding.ssbo.fragment_binding_max,Fail
 dEQP-GLES31.functional.primitive_bounding_box.triangles.global_state.vertex_tessellation_fragment.fbo_bbox_smaller,Fail
 dEQP-GLES31.functional.primitive_bounding_box.triangles.global_state.vertex_tessellation_geometry_fragment.fbo_bbox_equal,Fail
 KHR-GL32.framebuffer_blit.multisampled_to_singlesampled_blit_depth_config_test,Fail
+
+# !41329
+dEQP-GLES3.functional.transform_feedback.random.interleaved.triangles.7,Crash
+dEQP-GLES3.functional.transform_feedback.random.separate.points.4,Crash
+dEQP-GLES3.functional.transform_feedback.random.separate.points.5,Crash
+dEQP-GLES3.functional.transform_feedback.random_full_array_capture.interleaved.triangles.1,Crash
+dEQP-GLES3.functional.transform_feedback.random_full_array_capture.separate.points.4,Crash
+dEQP-GLES3.functional.transform_feedback.random_full_array_capture.separate.triangles.4,Crash
+dEQP-GLES3.functional.transform_feedback.random_full_array_capture.separate.triangles.7,Crash
+dEQP-GLES3.functional.transform_feedback.random.separate.lines.6,Crash
+dEQP-GLES3.functional.transform_feedback.random.separate.points.6,Crash
+dEQP-GLES3.functional.transform_feedback.random.separate.triangles.5,Crash
+dEQP-GLES3.functional.transform_feedback.random_full_array_capture.interleaved.points.5,Crash
+dEQP-GLES3.functional.transform_feedback.random_full_array_capture.separate.lines.6,Crash
+dEQP-GLES3.functional.transform_feedback.random_full_array_capture.separate.points.5,Crash
+dEQP-GLES3.functional.transform_feedback.random.separate.lines.2,Crash
+dEQP-GLES3.functional.transform_feedback.random.separate.lines.8,Crash
+dEQP-GLES3.functional.transform_feedback.random.separate.points.1,Crash
+dEQP-GLES3.functional.transform_feedback.random.separate.triangles.1,Crash
+dEQP-GLES3.functional.transform_feedback.random.separate.triangles.4,Crash
+dEQP-GLES3.functional.transform_feedback.random.separate.triangles.6,Crash
+dEQP-GLES3.functional.transform_feedback.random_full_array_capture.separate.triangles.1,Crash

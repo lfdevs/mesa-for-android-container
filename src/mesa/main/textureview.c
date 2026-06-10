@@ -754,12 +754,6 @@ _mesa_TextureView(GLuint texture, GLenum target, GLuint origtexture,
 
    GET_CURRENT_CONTEXT(ctx);
 
-   if (MESA_VERBOSE & (VERBOSE_API | VERBOSE_TEXTURE))
-      _mesa_debug(ctx, "glTextureView %d %s %d %s %d %d %d %d\n",
-                  texture, _mesa_enum_to_string(target), origtexture,
-                  _mesa_enum_to_string(internalformat),
-                  minlevel, numlevels, minlayer, numlayers);
-
    if (origtexture == 0) {
       _mesa_error(ctx, GL_INVALID_VALUE, "glTextureView(origtexture = %u)",
                   origtexture);

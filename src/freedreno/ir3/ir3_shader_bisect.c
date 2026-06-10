@@ -57,11 +57,17 @@ ir3_shader_bisect_dump_id(struct ir3_shader_variant *v)
    }
 
    FILE *f = fopen(ir3_shader_bisect_dump_ids_path, "a");
+   if (!f) {
+      fprintf(stderr, "Failed to open `%s' for appending: %s\n",
+              ir3_shader_bisect_dump_ids_path, strerror(errno));
+      exit(1);
+   }
    assert(f);
 
    char id[BISECT_ID_SIZE];
    get_shader_bisect_id(v, id);
    fprintf(f, "%s\n", id);
+   fclose(f);
 }
 
 bool

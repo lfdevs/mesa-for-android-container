@@ -1821,9 +1821,7 @@ valid_texture_format_enum(const struct gl_context *ctx, GLenum format)
    case GL_LUMINANCE_ALPHA:
    case GL_LUMINANCE:
    case GL_ALPHA:
-      return _mesa_is_desktop_gl_compat(ctx) ||
-             _mesa_has_ARB_ES3_compatibility(ctx) ||
-             _mesa_is_gles(ctx);
+      return _mesa_is_desktop_gl_compat(ctx) || _mesa_is_gles(ctx);
 
    case GL_SRGB_EXT:
    case GL_SRGB_ALPHA_EXT:
@@ -4178,7 +4176,7 @@ _mesa_tex_format_from_format_and_type(const struct gl_context *ctx,
    if (_mesa_format_is_mesa_array_format(format))
       format = _mesa_format_from_array_format(format);
       
-   if (format == MESA_FORMAT_NONE || !ctx->TextureFormatSupported[format])
+   if (format == MESA_FORMAT_NONE)
       return MESA_FORMAT_NONE;
 
    return format;

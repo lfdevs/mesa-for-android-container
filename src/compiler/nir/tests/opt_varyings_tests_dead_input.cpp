@@ -6,6 +6,8 @@
 
 #include "nir_opt_varyings_test.h"
 
+namespace {
+
 class nir_opt_varyings_test_dead_input : public nir_opt_varyings_test
 {};
 
@@ -16,7 +18,7 @@ TEST_F(nir_opt_varyings_test_dead_input, producer_stage##_##consumer_stage##_##s
    nir_def *input = load_input(b2, VARYING_SLOT_##slot, 0, nir_type_float##bitsize, 0, 0); \
    store_output(b2, VARYING_SLOT_POS, 0, nir_type_float##bitsize, input, 0); \
    \
-   ASSERT_TRUE(opt_varyings() == nir_progress_consumer); \
+   ASSERT_EQ(opt_varyings(), nir_progress_consumer); \
    ASSERT_TRUE(b2->shader->info.inputs_read == 0 && \
                b2->shader->info.patch_inputs_read == 0 && \
                b2->shader->info.inputs_read_16bit == 0); \
@@ -31,7 +33,7 @@ TEST_F(nir_opt_varyings_test_dead_input, producer_stage##_##consumer_stage##_##s
    nir_def *input = load_input(b2, VARYING_SLOT_##slot, comp, nir_type_float##bitsize, 0, 0); \
    store_output(b2, VARYING_SLOT_POS, 0, nir_type_float##bitsize, input, 0); \
    \
-   ASSERT_TRUE(opt_varyings() == nir_progress_consumer); \
+   ASSERT_EQ(opt_varyings(), nir_progress_consumer); \
    ASSERT_TRUE(b2->shader->info.inputs_read == 0 && \
                b2->shader->info.patch_inputs_read == 0 && \
                b2->shader->info.inputs_read_16bit == 0); \
@@ -46,8 +48,8 @@ TEST_F(nir_opt_varyings_test_dead_input, producer_stage##_##consumer_stage##_##s
    nir_def *input = load_input(b2, VARYING_SLOT_##slot, 0, nir_type_float##bitsize, 0, 0); \
    store_output(b2, VARYING_SLOT_POS, 0, nir_type_float##bitsize, input, 0); \
    \
-   ASSERT_TRUE(opt_varyings() == 0); \
-   ASSERT_TRUE(b2->shader->info.inputs_read == VARYING_BIT_##slot); \
+   ASSERT_EQ(opt_varyings(), 0); \
+   ASSERT_EQ(b2->shader->info.inputs_read, VARYING_BIT_##slot); \
    ASSERT_TRUE(shader_contains_def(b2, input)); \
 }
 
@@ -70,9 +72,9 @@ TEST_F(nir_opt_varyings_test_dead_input, \
       cindex--; \
    } \
    \
-   ASSERT_TRUE(opt_varyings() == 0); \
-   ASSERT_TRUE(b1->shader->info.outputs_written == BITFIELD64_BIT(pindex)); \
-   ASSERT_TRUE(b2->shader->info.inputs_read == BITFIELD64_BIT(cindex)); \
+   ASSERT_EQ(opt_varyings(), 0); \
+   ASSERT_EQ(b1->shader->info.outputs_written, BITFIELD64_BIT(pindex)); \
+   ASSERT_EQ(b2->shader->info.inputs_read, BITFIELD64_BIT(cindex)); \
    ASSERT_TRUE(shader_contains_def(b2, input)); \
 }
 

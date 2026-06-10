@@ -7,6 +7,7 @@
  */
 
 #include "tu_query_pool.h"
+#include "perfcntrs/freedreno_perfcntr.h"
 
 #include <fcntl.h>
 
@@ -249,26 +250,32 @@ perfcntr_index(const struct fd_perfcntr_group *group, uint32_t group_count,
    assert(i < group_count);
 }
 
-static uint32_t
-perfcntr_reserved_counters(const struct fd_perfcntr_group *group)
-{
-   /* Keep raw perf queries off the CP slots reserved by autotune latency optimization.
-    * TODO: We need to do this in a more robust way.
-    */
-   return strcmp(group->name, "CP") == 0 ? 2 : 0;
-}
-
-static uint32_t
-perfcntr_available_counters(const struct fd_perfcntr_group *group)
-{
-   return group->num_counters - MIN2(group->num_counters, perfcntr_reserved_counters(group));
-}
-
 static int
 compare_perfcntr_pass(const void *a, const void *b)
 {
    return ((struct tu_perf_query_raw_data *)a)->pass -
           ((struct tu_perf_query_raw_data *)b)->pass;
+}
+
+static void
+tu_query_pool_destroy(struct tu_device *device, struct tu_query_pool *pool,
+                      const VkAllocationCallbacks *pAllocator)
+{
+   if (is_perf_query_raw(pool)) {
+      struct tu_perf_query_raw *perf_query = &pool->perf_query.raw;
+
+      for (uint32_t i = 0; i < perf_query->counter_index_count; i++)
+         fd_perfcntr_release(device->perfcntrs, perf_query->data[i].counter);
+   } else if (is_perf_query_raw(pool)) {
+      struct tu_perf_query_derived *perf_query = &pool->perf_query.derived;
+      struct fd_derived_counter_collection *collection = perf_query->collection;
+
+      fd_release_derived_counter_collection(device->perfcntrs, collection);
+   }
+
+   if (pool->bo)
+      tu_bo_finish(device, pool->bo);
+   vk_query_pool_destroy(&device->vk, pAllocator, &pool->vk);
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL
@@ -353,49 +360,25 @@ tu_CreateQueryPool(VkDevice _device,
 
       perf_query->counter_index_count = perf_query_info->counterIndexCount;
 
-      /* Build all perf counters data that is requested, so we could get
-       * correct group id, countable id, counter register and pass index with
-       * only a counter index provided by applications at each command submit.
-       *
-       * Also, since this built data will be sorted by pass index later, we
-       * should keep the original indices and store perfcntrs results according
-       * to them so apps can get correct results with their own indices.
-       */
-      uint32_t regs[perf_query->perf_group_count], pass[perf_query->perf_group_count];
-      memset(regs, 0x00, perf_query->perf_group_count * sizeof(regs[0]));
-      memset(pass, 0x00, perf_query->perf_group_count * sizeof(pass[0]));
-
       for (uint32_t i = 0; i < perf_query->counter_index_count; i++) {
          uint32_t gid = 0, cid = 0;
 
          perfcntr_index(perf_query->perf_group, perf_query->perf_group_count,
                         perf_query_info->pCounterIndices[i], &gid, &cid);
 
-         perf_query->data[i].gid = gid;
-         perf_query->data[i].cid = cid;
          perf_query->data[i].app_idx = i;
 
          const struct fd_perfcntr_group *group = &perf_query->perf_group[gid];
-         uint32_t reserved_counters = perfcntr_reserved_counters(group);
-         uint32_t available_counters = perfcntr_available_counters(group);
+         const struct fd_perfcntr_countable *countable = &group->countables[cid];
 
-         if (available_counters == 0) {
-            vk_query_pool_destroy(&device->vk, pAllocator, &pool->vk);
+         perf_query->data[i].countable = countable;
+         perf_query->data[i].counter =
+            fd_perfcntr_reserve(device->perfcntrs, group, countable);
+
+         if (!perf_query->data[i].counter) {
+            tu_query_pool_destroy(device, pool, pAllocator);
             return vk_errorf(device, VK_ERROR_FEATURE_NOT_PRESENT, "No raw perf counters available in group %s",
                              group->name);
-         }
-
-         /* When a counter register is over the capacity(num_counters),
-          * reset it for next pass.
-          */
-         if (regs[gid] < available_counters) {
-            perf_query->data[i].cntr_reg = reserved_counters + regs[gid]++;
-            perf_query->data[i].pass = pass[gid];
-         } else {
-            perf_query->data[i].pass = ++pass[gid];
-            perf_query->data[i].cntr_reg = reserved_counters;
-            regs[gid] = 0;
-            regs[gid]++;
          }
       }
 
@@ -422,21 +405,20 @@ tu_CreateQueryPool(VkDevice _device,
          collection->counters[i] = perf_query->derived_counters[counter_index];
       }
 
-      fd_generate_derived_counter_collection(&device->physical_device->dev_id, collection);
+      fd_reserve_derived_counter_collection(device->perfcntrs, collection);
       slot_size += sizeof(struct perfcntr_query_slot) * collection->num_enabled_perfcntrs;
    }
 
    VkResult result = tu_bo_init_new_cached(device, &pool->vk.base, &pool->bo,
          pCreateInfo->queryCount * slot_size, TU_BO_ALLOC_NO_FLAGS, "query pool");
    if (result != VK_SUCCESS) {
-      vk_query_pool_destroy(&device->vk, pAllocator, &pool->vk);
+      tu_query_pool_destroy(device, pool, pAllocator);
       return result;
    }
 
    result = tu_bo_map(device, pool->bo, NULL);
    if (result != VK_SUCCESS) {
-      tu_bo_finish(device, pool->bo);
-      vk_query_pool_destroy(&device->vk, pAllocator, &pool->vk);
+      tu_query_pool_destroy(device, pool, pAllocator);
       return result;
    }
 
@@ -463,8 +445,7 @@ tu_DestroyQueryPool(VkDevice _device,
 
    TU_RMV(resource_destroy, device, pool);
 
-   tu_bo_finish(device, pool->bo);
-   vk_query_pool_destroy(&device->vk, pAllocator, &pool->vk);
+   tu_query_pool_destroy(device, pool, pAllocator);
 }
 
 static uint32_t
@@ -1090,6 +1071,7 @@ emit_begin_occlusion_query(struct tu_cmd_buffer *cmdbuf,
     */
    struct tu_cs *cs = cmdbuf->state.pass ? &cmdbuf->draw_cs : &cmdbuf->cs;
    cmdbuf->state.occlusion_query_may_be_running = true;
+   cmdbuf->state.dirty |= TU_CMD_DIRTY_DISABLE_FS | TU_CMD_DIRTY_LRZ;
 
    uint64_t begin_iova = occlusion_query_iova(pool, query, begin);
 
@@ -1259,7 +1241,7 @@ emit_begin_perf_query_raw(struct tu_cmd_buffer *cmdbuf,
     * changes in perfcounter values should only apply to work done during
     * this query.
     */
-   if (CHIP == A7XX) {
+   if (CHIP >= A7XX) {
       tu_cs_emit_pkt7(cs, CP_SCOPE_CNTL, 1);
       tu_cs_emit(cs, CP_SCOPE_CNTL_0(.disable_preemption = true,
                                      .scope = INTERRUPTS).value);
@@ -1276,13 +1258,15 @@ emit_begin_perf_query_raw(struct tu_cmd_buffer *cmdbuf,
          emit_perfcntrs_pass_start<CHIP>(has_pred_bit, cs, data->pass);
       }
 
-      const struct fd_perfcntr_counter *counter =
-            &perf_query->perf_group[data->gid].counters[data->cntr_reg];
-      const struct fd_perfcntr_countable *countable =
-            &perf_query->perf_group[data->gid].countables[data->cid];
+      tu_cs_emit_pkt4(cs, data->counter->select_reg, 1);
+      tu_cs_emit(cs, data->countable->selector);
 
-      tu_cs_emit_pkt4(cs, counter->select_reg, 1);
-      tu_cs_emit(cs, countable->selector);
+      for (unsigned s = 0; s < ARRAY_SIZE(data->counter->slice_select_regs); s++) {
+         if (!data->counter->slice_select_regs[s])
+            break;
+         tu_cs_emit_pkt4(cs, data->counter->slice_select_regs[s], 1);
+         tu_cs_emit(cs, data->countable->selector);
+      }
    }
    tu_cond_exec_end(cs);
 
@@ -1300,8 +1284,7 @@ emit_begin_perf_query_raw(struct tu_cmd_buffer *cmdbuf,
          emit_perfcntrs_pass_start<CHIP>(has_pred_bit, cs, data->pass);
       }
 
-      const struct fd_perfcntr_counter *counter =
-            &perf_query->perf_group[data->gid].counters[data->cntr_reg];
+      const struct fd_perfcntr_counter *counter = data->counter;
 
       uint64_t begin_iova = perf_query_iova(pool, query, begin, data->app_idx);
 
@@ -1328,7 +1311,7 @@ emit_begin_perf_query_derived(struct tu_cmd_buffer *cmdbuf,
     * changes in perfcounter values should only apply to work done during
     * this query.
     */
-   if (CHIP == A7XX) {
+   if (CHIP >= A7XX) {
       tu_cs_emit_pkt7(cs, CP_SCOPE_CNTL, 1);
       tu_cs_emit(cs, CP_SCOPE_CNTL_0(.disable_preemption = true,
                                      .scope = INTERRUPTS).value);
@@ -1340,6 +1323,13 @@ emit_begin_perf_query_derived(struct tu_cmd_buffer *cmdbuf,
 
       tu_cs_emit_pkt4(cs, counter->select_reg, 1);
       tu_cs_emit(cs, countable);
+
+      for (unsigned s = 0; s < ARRAY_SIZE(counter->slice_select_regs); s++) {
+         if (!counter->slice_select_regs[s])
+            break;
+         tu_cs_emit_pkt4(cs, counter->slice_select_regs[s], 1);
+         tu_cs_emit(cs, countable);
+      }
    }
 
    emit_counter_barrier<CHIP>(cs);
@@ -1588,6 +1578,7 @@ emit_end_occlusion_query(struct tu_cmd_buffer *cmdbuf,
    tu_cs_emit_qw(epilogue_cs, 0x1);
 
    cmdbuf->state.occlusion_query_may_be_running = false;
+   cmdbuf->state.dirty |= TU_CMD_DIRTY_DISABLE_FS | TU_CMD_DIRTY_LRZ;
 }
 
 /* PRIMITIVE_CTRS is used for two distinct queries:
@@ -1749,8 +1740,7 @@ emit_end_perf_query_raw(struct tu_cmd_buffer *cmdbuf,
          emit_perfcntrs_pass_start<CHIP>(has_pred_bit, cs, data->pass);
       }
 
-      const struct fd_perfcntr_counter *counter =
-            &perf_query->perf_group[data->gid].counters[data->cntr_reg];
+      const struct fd_perfcntr_counter *counter = data->counter;
 
       end_iova = perf_query_iova(pool, query, end, data->app_idx);
 
@@ -1799,7 +1789,7 @@ emit_end_perf_query_raw(struct tu_cmd_buffer *cmdbuf,
    /* This reverts the preemption disablement done at the start
     * of the query.
     */
-   if (CHIP == A7XX) {
+   if (CHIP >= A7XX) {
       tu_cs_emit_pkt7(cs, CP_SCOPE_CNTL, 1);
       tu_cs_emit(cs, CP_SCOPE_CNTL_0(.disable_preemption = false,
                                      .scope = INTERRUPTS).value);
@@ -1876,7 +1866,7 @@ emit_end_perf_query_derived(struct tu_cmd_buffer *cmdbuf,
    /* This reverts the preemption disablement done at the start
     * of the query.
     */
-   if (CHIP == A7XX) {
+   if (CHIP >= A7XX) {
       tu_cs_emit_pkt7(cs, CP_SCOPE_CNTL, 1);
       tu_cs_emit(cs, CP_SCOPE_CNTL_0(.disable_preemption = false,
                                      .scope = INTERRUPTS).value);
@@ -2317,9 +2307,12 @@ tu_GetPhysicalDeviceQueueFamilyPerformanceQueryPassesKHR(
       }
 
       for (uint32_t i = 0; i < group_count; i++) {
-         uint32_t available_counters = perfcntr_available_counters(&group[i]);
-         if (available_counters == 0)
-            continue;
+         /* Some counters may be unavailable at the time the query is
+          * created due to runtime factors (pps/fdperf using some counters,
+          * autotune or other queries, etc).  But we don't know that up
+          * front.
+          */
+         uint32_t available_counters = group[i].num_counters;
 
          n_passes = DIV_ROUND_UP(counters_requested[i], available_counters);
          *pNumPasses = MAX2(*pNumPasses, n_passes);

@@ -583,7 +583,7 @@ anv_state_pools_init(struct anv_device *device)
                                    &(struct anv_state_pool_params) {
                                       .name         = "binding table pool",
                                       .base_address = device->physical->va.binding_table_pool.addr,
-                                      .block_size   = device->physical->instance->binding_table_block_size,
+                                      .block_size   = device->physical->instance->drirc.perf.bt_block_size,
                                       .max_size     = device->physical->va.binding_table_pool.size,
                                    });
    } else {
@@ -797,8 +797,7 @@ VkResult anv_CreateDevice(
 
          const unsigned decode_flags = INTEL_BATCH_DECODE_DEFAULT_FLAGS;
 
-         intel_batch_decode_ctx_init_brw(decoder,
-                                         &physical_device->compiler->isa,
+         intel_batch_decode_ctx_init_gen(decoder,
                                          &physical_device->info,
                                          stderr, decode_flags, NULL,
                                          decode_get_bo, NULL, device);
@@ -1180,8 +1179,13 @@ VkResult anv_CreateDevice(
    anv_device_init_descriptors_view(device);
 
    BITSET_ONES(device->gfx_dirty_state);
+   /* Only dirtied when the index buffer is changing */
    BITSET_CLEAR(device->gfx_dirty_state, ANV_GFX_STATE_INDEX_BUFFER);
+   /* Only programmed if streamout is enabled */
    BITSET_CLEAR(device->gfx_dirty_state, ANV_GFX_STATE_SO_DECL_LIST);
+   /* Only programmed when line stipple is enabled, avoids PIPE_CONTROL */
+   BITSET_CLEAR(device->gfx_dirty_state, ANV_GFX_STATE_LINE_STIPPLE);
+
    if (device->info->ver < 11)
       BITSET_CLEAR(device->gfx_dirty_state, ANV_GFX_STATE_VF_SGVS_2);
    if (device->info->ver < 12) {
@@ -1237,7 +1241,7 @@ VkResult anv_CreateDevice(
    if (result != VK_SUCCESS)
       goto fail_meta_device;
 
-   device->vk.disable_lto = device->physical->instance->disable_lto;
+   device->vk.disable_lto = device->physical->instance->drirc.debug.disable_lto;
 
    simple_mtx_init(&device->accel_struct_build.mutex, mtx_plain);
    simple_mtx_init(&device->fp64_mutex, mtx_plain);
@@ -1379,6 +1383,8 @@ void anv_DestroyDevice(
    anv_device_finish_astc_emu(device);
 
    anv_device_finish_internal_kernels(device);
+
+   anv_device_finish_shader_dump(device);
 
    anv_device_finish_descriptors_view(device);
 
@@ -1573,6 +1579,11 @@ anv_vma_alloc(struct anv_device *device,
 
 done:
    pthread_mutex_unlock(&device->vma_mutex);
+
+   if (addr == 0 && client_address) {
+      mesa_logi("Virtual address allocation failed, "
+                "consider running with ANV_DEBUG=no-alloc-oversubscription");
+   }
 
    assert(addr == intel_48b_address(addr));
    return intel_canonical_address(addr);
@@ -1773,7 +1784,7 @@ VkResult anv_AllocateMemory(
           * consumer side relying on implicit fencing can have a fence to
           * wait for render complete.
           */
-         if (pdevice->instance->external_memory_implicit_sync &&
+         if (pdevice->instance->drirc.debug.external_memory_implicit_sync &&
              (image->vk.usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT))
             alloc_flags |= ANV_BO_ALLOC_IMPLICIT_WRITE;
       }

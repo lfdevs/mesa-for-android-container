@@ -132,8 +132,8 @@ brw_shader::emit_cs_terminate()
    /* On Alchemist and later, send an EOT message to the message gateway to
     * terminate a compute shader.  For older GPUs, send to the thread spawner.
     */
-   send->sfid = devinfo->verx10 >= 125 ? BRW_SFID_MESSAGE_GATEWAY
-                                       : BRW_SFID_THREAD_SPAWNER;
+   send->sfid = devinfo->verx10 >= 125 ? GEN_SFID_MESSAGE_GATEWAY
+                                       : GEN_SFID_THREAD_SPAWNER;
    send->mlen = reg_unit(devinfo);
    send->eot = true;
 }
@@ -178,6 +178,7 @@ brw_shader::brw_shader(const brw_shader_params *params)
 
    this->grf_used = 0;
    this->spilled_any_registers = false;
+   this->start_offset = 0;
 
    this->phase = BRW_SHADER_PHASE_INITIAL;
 
@@ -327,8 +328,9 @@ brw_shader::assign_curb_setup()
             continue;
 
          struct brw_reg brw_reg;
-         if (inst->src[i].nr == BRW_INLINE_PARAM_REG) {
+         if (inst->src[i].nr >= BRW_INLINE_PARAM_REG) {
             brw_reg = cs_payload().inline_parameter;
+            brw_reg.nr += inst->src[i].nr - BRW_INLINE_PARAM_REG;
          } else {
             assert(inst->src[i].nr < 64);
             used |= BITFIELD64_BIT(inst->src[i].nr);
@@ -1047,6 +1049,46 @@ brw_reg
 brw_allocate_vgrf_units(brw_shader &s, unsigned units_of_REGSIZE)
 {
    return brw_vgrf(brw_allocate_vgrf_number(s, units_of_REGSIZE), BRW_TYPE_UD);
+}
+
+const unsigned *
+brw_compile(const struct brw_compiler *compiler,
+            struct brw_compile_params *params)
+{
+   assert(params);
+   assert(params->nir);
+   assert(params->key);
+   assert(params->prog_data);
+
+   switch (params->nir->info.stage) {
+   case MESA_SHADER_VERTEX:
+      return brw_compile_vs(compiler, (struct brw_compile_vs_params *)params);
+   case MESA_SHADER_TESS_CTRL:
+      return brw_compile_tcs(compiler, (struct brw_compile_tcs_params *)params);
+   case MESA_SHADER_TESS_EVAL:
+      return brw_compile_tes(compiler, (struct brw_compile_tes_params *)params);
+   case MESA_SHADER_GEOMETRY:
+      return brw_compile_gs(compiler, (struct brw_compile_gs_params *)params);
+   case MESA_SHADER_TASK:
+      return brw_compile_task(compiler, (struct brw_compile_task_params *)params);
+   case MESA_SHADER_MESH:
+      return brw_compile_mesh(compiler, (struct brw_compile_mesh_params *)params);
+   case MESA_SHADER_FRAGMENT:
+      return brw_compile_fs(compiler, (struct brw_compile_fs_params *)params);
+   case MESA_SHADER_COMPUTE:
+   case MESA_SHADER_KERNEL:
+      return brw_compile_cs(compiler, (struct brw_compile_cs_params *)params);
+   case MESA_SHADER_RAYGEN:
+   case MESA_SHADER_ANY_HIT:
+   case MESA_SHADER_CLOSEST_HIT:
+   case MESA_SHADER_MISS:
+   case MESA_SHADER_INTERSECTION:
+   case MESA_SHADER_CALLABLE:
+      return brw_compile_bs(compiler, (struct brw_compile_bs_params *)params);
+   default:
+      UNREACHABLE("Unsupported shader stage");
+      return NULL;
+   }
 }
 
 void brw_prog_data_init(struct brw_stage_prog_data *prog_data,

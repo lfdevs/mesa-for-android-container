@@ -1588,14 +1588,31 @@ assign_reg(struct ir3_instruction *instr, struct ir3_register *reg,
    }
 }
 
+/* True if src is killed and its register can be used to allocate a dst. A src
+ * is killed iff its SSA value is killed and it isn't part of or contains an
+ * interval that isn't killed yet.
+ */
+bool
+ir3_ra_src_is_killed(struct ir3_register *src,
+                     struct ir3_reg_interval *def_interval)
+{
+   return (src->flags & IR3_REG_FIRST_KILL) && !def_interval->parent &&
+          rb_tree_is_empty(&def_interval->children);
+}
+
+static bool
+is_killed(struct ra_ctx *ctx, struct ir3_register *src)
+{
+   struct ra_interval *interval = ra_interval_get(ctx, src->def);
+   return ir3_ra_src_is_killed(src, &interval->interval);
+}
+
 static void
 mark_src_killed(struct ra_ctx *ctx, struct ir3_register *src)
 {
    struct ra_interval *interval = ra_interval_get(ctx, src->def);
 
-   if (!(src->flags & IR3_REG_FIRST_KILL) || interval->is_killed ||
-       interval->interval.parent ||
-       !rb_tree_is_empty(&interval->interval.children))
+   if (interval->is_killed || !is_killed(ctx, src))
       return;
 
    ra_file_mark_killed(ra_get_file(ctx, src), interval);
@@ -2652,7 +2669,9 @@ calc_min_limit_pressure(struct ir3_shader_variant *v,
          cur_pressure = (struct ir3_pressure) {0};
 
          ra_foreach_dst (dst, instr) {
-            if ((dst->tied && !(dst->tied->flags & IR3_REG_KILL)) ||
+            if ((dst->tied &&
+                 !ir3_ra_src_is_killed(dst->tied,
+                                       &intervals[dst->tied->def->name])) ||
                 (dst->flags & IR3_REG_EARLY_CLOBBER))
                add_pressure(&cur_pressure, dst, v->mergedregs);
          }

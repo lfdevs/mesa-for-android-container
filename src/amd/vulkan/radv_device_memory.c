@@ -9,11 +9,12 @@
  */
 
 #include "radv_device_memory.h"
+#include "tools/radv_debug.h"
+#include "tools/radv_rmv.h"
 #include "radv_android.h"
 #include "radv_buffer.h"
 #include "radv_entrypoints.h"
 #include "radv_image.h"
-#include "radv_rmv.h"
 
 #include "vk_debug_utils.h"
 #include "vk_log.h"

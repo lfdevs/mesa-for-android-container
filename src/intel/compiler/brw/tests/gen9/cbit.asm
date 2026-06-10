@@ -1,2 +1,2 @@
-cbit(8)         g9<1>UD         g31<8,8,1>UD                    { align1 1Q };
-cbit(16)        g6<1>UD         g8<8,8,1>UD                     { align1 1H };
+        cbit (8)                  r9            r31<8;8,1>
+        cbit (16)                 r6            r8<8;8,1>

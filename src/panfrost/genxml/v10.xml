@@ -1,5 +1,6 @@
 <!--
   Copyright (C) 2020 Collabora Ltd.
+  Copyright (C) 2026 Arm Ltd.
   SPDX-License-Identifier: MIT
 -->
 
@@ -61,10 +62,14 @@
     <value name="None" value="0"/>
     <value name="Points" value="1"/>
     <value name="Lines" value="2"/>
+    <value name="Lines adjacency" value="3"/>
     <value name="Line strip" value="4"/>
+    <value name="Line strip adjacency" value="5"/>
     <value name="Line loop" value="6"/>
     <value name="Triangles" value="8"/>
+    <value name="Triangles adjacency" value="9"/>
     <value name="Triangle strip" value="10"/>
+    <value name="Triangle strip adjacency" value="11"/>
     <value name="Triangle fan" value="12"/>
     <value name="Polygon" value="13"/>
     <value name="Quads" value="14"/>
@@ -84,6 +89,7 @@
   <enum name="Address Mode">
     <value name="Flat" value="0"/>
     <value name="Packed" value="1"/>
+    <value name="Out of bounds" value="8"/>
   </enum>
 
   <enum name="Format">
@@ -132,6 +138,7 @@
     <value name="A2 YUV10" value="41"/>
     <value name="YUYAAYVYAA" value="42"/>
     <!--- TODO: revisit YUV -->
+    <value name="Y10U10V10_420" value="43"/>
     <value name="YUYV10" value="44"/>
     <value name="VYUY10" value="45"/>
     <value name="Y10 UV10 422" value="46"/>
@@ -499,12 +506,12 @@
     <value name="Invalidate" value="2"/>
   </enum>
 
-  <enum name="CS Sync scope">
+  <enum name="CS Sync Scope">
     <value name="System" value="0"/>
     <value name="CSG" value="2"/>
   </enum>
 
-  <enum name="CS Exception type">
+  <enum name="CS Exception Type">
     <value name="Tiler OOM" value="2"/>
   </enum>
 
@@ -550,6 +557,11 @@
     <value name="SYNC_WAIT64" value="53"/>
   </enum>
 
+  <enum name="CS Progress Increment">
+    <value name="No Increment" value="0"/>
+    <value name="Increment" value="1"/>
+  </enum>
+
   <struct name="CS Base" size="2">
     <field name="Data" size="56" start="0" type="hex"/>
     <field name="Opcode" size="8" start="56" type="CS Opcode"/>
@@ -573,25 +585,25 @@
   </struct>
 
   <struct name="CS WAIT" size="2">
-    <field name="Wait mask" size="8" start="16" type="hex"/>
-    <field name="Progress increment" size="1" start="32" type="bool" default="false"/>
+    <field name="Wait Mask" size="16" start="16" type="hex"/>
+    <field name="Progress Increment" size="1" start="32" type="CS Progress Increment" default="No Increment"/>
     <field name="Opcode" size="8" start="56" type="CS Opcode" default="WAIT"/>
   </struct>
 
   <struct name="CS RUN_COMPUTE" size="2">
-    <field name="Task increment" size="14" start="0" type="uint"/>
-    <field name="Task axis" size="2" start="14" type="Task Axis"/>
-    <field name="Progress increment" size="1" start="32" type="bool" default="false"/>
-    <field name="SRT select" size="2" start="40" type="uint"/>
-    <field name="SPD select" size="2" start="42" type="uint"/>
-    <field name="TSD select" size="2" start="44" type="uint"/>
-    <field name="FAU select" size="2" start="46" type="uint"/>
+    <field name="Task Increment" size="14" start="0" type="uint"/>
+    <field name="Task Axis" size="2" start="14" type="Task Axis"/>
+    <field name="Progress Increment" size="1" start="32" type="CS Progress Increment" default="No Increment"/>
+    <field name="SRT Select" size="2" start="40" type="uint"/>
+    <field name="SPD Select" size="2" start="42" type="uint"/>
+    <field name="TSD Select" size="2" start="44" type="uint"/>
+    <field name="FAU Select" size="2" start="46" type="uint"/>
     <field name="Opcode" size="8" start="56" type="CS Opcode" default="RUN_COMPUTE"/>
   </struct>
 
   <struct name="CS RUN_TILING" size="2">
-    <field name="Flags override" size="32" start="0" type="hex"/>
-    <field name="Progress increment" size="1" start="32" type="bool" default="false"/>
+    <field name="Flags Override" size="32" start="0" type="hex"/>
+    <field name="Progress Increment" size="1" start="32" type="CS Progress Increment" default="No Increment"/>
     <field name="SRT select" size="2" start="40" type="uint"/>
     <field name="SPD select" size="2" start="42" type="uint"/>
     <field name="TSD select" size="2" start="44" type="uint"/>
@@ -600,8 +612,8 @@
   </struct>
 
   <struct name="CS RUN_IDVS" size="2">
-    <field name="Flags override" size="32" start="0" type="hex"/>
-    <field name="Progress increment" size="1" start="32" type="bool" default="false"/>
+    <field name="Flags Override" size="32" start="0" type="hex"/>
+    <field name="Progress Increment" size="1" start="32" type="CS Progress Increment" default="No Increment"/>
     <field name="Malloc enable" size="1" start="33" type="bool"/>
     <field name="Draw ID register enable" size="1" start="34" type="bool"/>
     <field name="Varying SRT select" size="1" start="35" type="bool"/>
@@ -615,29 +627,29 @@
 
   <struct name="CS RUN_FRAGMENT" size="2">
     <field name="Enable TEM" size="1" start="0" type="bool"/>
-    <field name="Tile order" size="4" start="4" type="Tile Render Order" default="Z Order"/>
-    <field name="Progress increment" size="1" start="32" type="bool" default="false"/>
+    <field name="Tile Order" size="4" start="4" type="Tile Render Order"/>
+    <field name="Progress Increment" size="1" start="32" type="CS Progress Increment" default="No Increment"/>
     <field name="Opcode" size="8" start="56" type="CS Opcode" default="RUN_FRAGMENT"/>
   </struct>
 
   <struct name="CS RUN_FULLSCREEN" size="2">
-    <field name="Flags override" size="32" start="0" type="hex"/>
-    <field name="Progress increment" size="1" start="32" type="bool" default="false"/>
+    <field name="Flags Override" size="32" start="0" type="hex"/>
+    <field name="Progress Increment" size="1" start="32" type="CS Progress Increment" default="No Increment"/>
     <field name="DCD" size="8" start="40" type="uint"/>
     <field name="Opcode" size="8" start="56" type="CS Opcode" default="RUN_FULLSCREEN"/>
   </struct>
 
   <struct name="CS FINISH_TILING" size="2">
-    <field name="Progress increment" size="1" start="32" type="bool" default="false"/>
+    <field name="Progress Increment" size="1" start="32" type="CS Progress Increment" default="No Increment"/>
     <field name="Opcode" size="8" start="56" type="CS Opcode" default="FINISH_TILING"/>
   </struct>
 
   <struct name="CS FINISH_FRAGMENT" size="2">
     <field name="Increment Fragment Completed" size="1" start="0" type="bool"/>
-    <field name="Wait mask" size="16" start="16" type="hex"/>
-    <field name="Last Heap Chunk" size="8" start="32" type="hex"/>
-    <field name="First Heap Chunk" size="8" start="40" type="hex"/>
-    <field name="Signal slot" size="4" start="48" type="hex"/>
+    <field name="Wait Mask" size="16" start="16" type="hex"/>
+    <field name="Last Heap Chunk" size="8" start="32" type="uint"/>
+    <field name="First Heap Chunk" size="8" start="40" type="uint"/>
+    <field name="Signal slot" size="4" start="48" type="uint"/>
     <field name="Opcode" size="8" start="56" type="CS Opcode" default="FINISH_FRAGMENT"/>
   </struct>
 
@@ -666,7 +678,7 @@
     <field name="Offset" size="16" start="0" type="int"/>
     <field name="Mask" size="16" start="16" type="hex"/>
     <field name="Address" size="8" start="40" type="uint"/>
-    <field name="Base register" size="8" start="48" type="uint"/>
+    <field name="Base Register" size="8" start="48" type="uint"/>
     <field name="Opcode" size="8" start="56" type="CS Opcode" default="LOAD_MULTIPLE"/>
   </struct>
 
@@ -674,20 +686,20 @@
     <field name="Offset" size="16" start="0" type="int"/>
     <field name="Mask" size="16" start="16" type="hex"/>
     <field name="Address" size="8" start="40" type="uint"/>
-    <field name="Base register" size="8" start="48" type="uint"/>
+    <field name="Base Register" size="8" start="48" type="uint"/>
     <field name="Opcode" size="8" start="56" type="CS Opcode" default="STORE_MULTIPLE"/>
   </struct>
 
   <struct name="CS BRANCH" size="2">
     <field name="Offset" size="16" start="0" type="int"/>
-    <field name="Condition" size="3" start="28" type="CS Condition"/>
+    <field name="Condition" size="4" start="28" type="CS Condition"/>
     <field name="Value" size="8" start="40" type="uint"/>
     <field name="Opcode" size="8" start="56" type="CS Opcode" default="BRANCH"/>
   </struct>
 
   <struct name="CS SET_SB_ENTRY" size="2">
     <field name="Endpoint entry" size="4" start="0" type="uint"/>
-    <field name="Other entry" size="4" start="4" type="uint"/>
+    <field name="Other Entry" size="4" start="4" type="uint"/>
     <field name="Opcode" size="8" start="56" type="CS Opcode" default="SET_SB_ENTRY"/>
   </struct>
 
@@ -698,7 +710,7 @@
   </struct>
 
   <struct name="CS SET_EXCEPTION_HANDLER" size="2">
-    <field name="Exception type" size="8" start="0" type="CS Exception type"/>
+    <field name="Exception Type" size="8" start="0" type="CS Exception Type" default="Tiler OOM"/>
     <field name="Length" size="8" start="32" type="uint"/>
     <field name="Address" size="8" start="40" type="uint"/>
     <field name="Opcode" size="8" start="56" type="CS Opcode" default="SET_EXCEPTION_HANDLER"/>
@@ -725,39 +737,37 @@
   </struct>
 
   <struct name="CS FLUSH_CACHE2" size="2">
-    <field name="L2 flush mode" size="4" start="0" type="CS Flush Mode"/>
-    <field name="LSC flush mode" size="4" start="4" type="CS Flush Mode"/>
-    <field name="Other flush mode" size="4" start="8" type="CS Other Flush Mode"/>
-    <field name="Wait mask" size="16" start="16" type="hex"/>
+    <field name="L2 Flush Mode" size="4" start="0" type="CS Flush Mode"/>
+    <field name="LSC Flush Mode" size="4" start="4" type="CS Flush Mode"/>
+    <field name="Other Flush Mode" size="4" start="8" type="CS Other Flush Mode"/>
+    <field name="Wait Mask" size="16" start="16" type="hex"/>
     <field name="Latest Flush ID" size="8" start="40" type="uint"/>
     <field name="Signal slot" size="4" start="48" type="uint"/>
     <field name="Opcode" size="8" start="56" type="CS Opcode" default="FLUSH_CACHE2"/>
   </struct>
 
   <struct name="CS SYNC_ADD32" size="2">
-    <!-- Iter status is written at [Address + 4], 0 == NO_FAULT, 1 == FAULT -->
-    <field name="Error propagate" size="1" start="0" type="bool"/>
-    <field name="Scope" size="2" start="1" type="CS Sync scope"/>
-    <field name="Wait mask" size="16" start="16" type="hex"/>
+    <field name="Error Propagate" size="1" start="0" type="bool"/>
+    <field name="Scope" size="2" start="1" type="CS Sync Scope"/>
+    <field name="Wait Mask" size="16" start="16" type="hex"/>
     <field name="Data" size="8" start="32" type="uint"/>
     <field name="Address" size="8" start="40" type="uint"/>
-    <field name="Signal slot" size="4" start="48" type="hex"/>
+    <field name="Signal slot" size="4" start="48" type="uint"/>
     <field name="Opcode" size="8" start="56" type="CS Opcode" default="SYNC_ADD32"/>
   </struct>
 
   <struct name="CS SYNC_SET32" size="2">
-    <!-- Iter status is written at [Address + 4], 0 == NO_FAULT, 1 == FAULT -->
-    <field name="Error propagate" size="1" start="0" type="bool"/>
-    <field name="Scope" size="2" start="1" type="CS Sync scope"/>
-    <field name="Wait mask" size="16" start="16" type="hex"/>
+    <field name="Error Propagate" size="1" start="0" type="bool"/>
+    <field name="Scope" size="2" start="1" type="CS Sync Scope"/>
+    <field name="Wait Mask" size="16" start="16" type="hex"/>
     <field name="Data" size="8" start="32" type="uint"/>
     <field name="Address" size="8" start="40" type="uint"/>
-    <field name="Signal slot" size="4" start="48" type="hex"/>
+    <field name="Signal slot" size="4" start="48" type="uint"/>
     <field name="Opcode" size="8" start="56" type="CS Opcode" default="SYNC_SET32"/>
   </struct>
 
   <struct name="CS SYNC_WAIT32" size="2">
-    <field name="Error reject" size="1" start="0" type="bool"/>
+    <field name="Error Reject" size="1" start="0" type="bool"/>
     <field name="Condition" size="4" start="28" type="CS Condition"/>
     <field name="Data" size="8" start="32" type="uint"/>
     <field name="Address" size="8" start="40" type="uint"/>
@@ -765,12 +775,11 @@
   </struct>
 
   <struct name="CS STORE_STATE" size="2">
-    <!-- Iter status is written at [Address + 4], 0 == NO_FAULT, 1 == FAULT -->
     <field name="Offset" size="16" start="0" type="int"/>
-    <field name="Wait mask" size="16" start="16" type="hex"/>
-    <field name="State" size="2" start="32" type="CS State"/>
+    <field name="Wait Mask" size="16" start="16" type="hex"/>
+    <field name="State" size="8" start="32" type="CS State"/>
     <field name="Address" size="8" start="40" type="uint"/>
-    <field name="Signal slot" size="4" start="48" type="hex"/>
+    <field name="Signal slot" size="4" start="48" type="uint"/>
     <field name="Opcode" size="8" start="56" type="CS Opcode" default="STORE_STATE"/>
   </struct>
 
@@ -790,12 +799,12 @@
   </struct>
 
   <struct name="CS RUN_COMPUTE_INDIRECT" size="2">
-    <field name="Workgroups per task" size="16" start="0" type="uint"/>
-    <field name="Progress increment" size="1" start="32" type="bool" default="false"/>
-    <field name="SRT select" size="2" start="40" type="uint"/>
-    <field name="SPD select" size="2" start="42" type="uint"/>
-    <field name="TSD select" size="2" start="44" type="uint"/>
-    <field name="FAU select" size="2" start="46" type="uint"/>
+    <field name="Workgroups Per Task" size="16" start="0" type="uint"/>
+    <field name="Progress Increment" size="1" start="32" type="CS Progress Increment" default="No Increment"/>
+    <field name="SRT Select" size="2" start="40" type="uint"/>
+    <field name="SPD Select" size="2" start="42" type="uint"/>
+    <field name="TSD Select" size="2" start="44" type="uint"/>
+    <field name="FAU Select" size="2" start="46" type="uint"/>
     <field name="Opcode" size="8" start="56" type="CS Opcode" default="RUN_COMPUTE_INDIRECT"/>
   </struct>
 
@@ -809,45 +818,42 @@
   </struct>
 
   <struct name="CS HEAP_OPERATION" size="2">
-    <field name="Wait mask" size="16" start="16" type="hex"/>
-    <field name="Operation" size="2" start="32" type="CS Heap Operation"/>
+    <field name="Wait Mask" size="16" start="16" type="hex"/>
+    <field name="Operation" size="3" start="32" type="CS Heap Operation"/>
     <field name="Signal slot" size="4" start="48" type="uint"/>
     <field name="Opcode" size="8" start="56" type="CS Opcode" default="HEAP_OPERATION"/>
   </struct>
 
   <struct name="CS TRACE_POINT" size="2">
-    <field name="Wait mask" size="16" start="16" type="hex"/>
+    <field name="Wait Mask" size="16" start="16" type="hex"/>
     <field name="Base Register" size="8" start="32" type="uint"/>
-    <field name="Register Count" size="8" start="40" type="uint"/>
-    <field name="Signal slot" size="4" start="48" type="hex"/>
+    <field name="Register count" size="8" start="40" type="uint"/>
+    <field name="Signal slot" size="4" start="48" type="uint"/>
     <field name="Opcode" size="8" start="56" type="CS Opcode" default="TRACE_POINT"/>
   </struct>
 
   <struct name="CS SYNC_ADD64" size="2">
-    <!-- Iter status is written at [Address + 8], 0 == NO_FAULT, 1 == FAULT -->
-    <field name="Error propagate" size="1" start="0" type="bool"/>
-    <!-- Used for inter-queue synchronization (unblocking a queue waiting on a mem-based fence) -->
-    <field name="Scope" size="2" start="1" type="CS Sync scope"/>
-    <field name="Wait mask" size="16" start="16" type="hex"/>
+    <field name="Error Propagate" size="1" start="0" type="bool"/>
+    <field name="Scope" size="2" start="1" type="CS Sync Scope"/>
+    <field name="Wait Mask" size="16" start="16" type="hex"/>
     <field name="Data" size="8" start="32" type="uint"/>
     <field name="Address" size="8" start="40" type="uint"/>
-    <field name="Signal slot" size="4" start="48" type="hex"/>
+    <field name="Signal slot" size="4" start="48" type="uint"/>
     <field name="Opcode" size="8" start="56" type="CS Opcode" default="SYNC_ADD64"/>
   </struct>
 
   <struct name="CS SYNC_SET64" size="2">
-    <!-- Iter status is written at [Address + 8], 0 == NO_FAULT, 1 == FAULT -->
-    <field name="Error propagate" size="1" start="0" type="bool"/>
-    <field name="Scope" size="2" start="1" type="CS Sync scope"/>
-    <field name="Wait mask" size="16" start="16" type="hex"/>
+    <field name="Error Propagate" size="1" start="0" type="bool"/>
+    <field name="Scope" size="2" start="1" type="CS Sync Scope"/>
+    <field name="Wait Mask" size="16" start="16" type="hex"/>
     <field name="Data" size="8" start="32" type="uint"/>
     <field name="Address" size="8" start="40" type="uint"/>
-    <field name="Signal slot" size="4" start="48" type="hex"/>
+    <field name="Signal slot" size="4" start="48" type="uint"/>
     <field name="Opcode" size="8" start="56" type="CS Opcode" default="SYNC_SET64"/>
   </struct>
 
   <struct name="CS SYNC_WAIT64" size="2">
-    <field name="Error reject" size="1" start="0" type="bool"/>
+    <field name="Error Reject" size="1" start="0" type="bool"/>
     <field name="Condition" size="4" start="28" type="CS Condition"/>
     <field name="Data" size="8" start="32" type="uint"/>
     <field name="Address" size="8" start="40" type="uint"/>
@@ -957,7 +963,6 @@
 
     <field name="Divisor D" size="32" start="5:0" type="uint"/>
   </struct>
-
 
   <enum name="Blend Operand A">
     <value name="Zero" value="1"/>
@@ -1078,7 +1083,7 @@
   </enum>
 
   <struct name="Primitive Flags" size="1">
-    <field name="Draw mode" size="8" start="0:0" type="Draw Mode" default="None"/>
+    <field name="Draw mode" size="4" start="0:0" type="Draw Mode" default="None"/>
     <field name="Index type" size="3" start="0:8" type="Index Type" default="None"/>
     <field name="Point size array format" size="2" start="0:11" type="Point Size Array Format"/>
     <field name="Primitive Index Enable" size="1" start="0:13" type="bool"/>
@@ -1163,6 +1168,13 @@
   <enum name="Clump Ordering">
     <value name="Tiled U-Interleaved" value="1"/>
     <value name="Linear" value="2"/>
+
+    <!-- Block-linear interleaved clump orderings are not available on
+         all v10 architectures. -->
+    <value name="Block-linear interleaved 16x16" value="3"/>
+    <value name="Block-linear interleaved 8x16" value="4"/>
+    <value name="Block-linear interleaved 8x8" value="5"/>
+
     <value name="Interleaved 64k" value="8"/>
   </enum>
 
@@ -1650,7 +1662,7 @@
     <value name="Never" value="0"/>
     <value name="Always" value="1"/>
     <value name="Intersect" value="2"/>
-    <value name="Early ZS always" value="3"/>
+    <value name="Early ZS Always" value="3"/>
   </enum>
 
   <enum name="Downscale">
@@ -2031,7 +2043,7 @@
     <field name="Bound Min Y" size="12" start="0:16" type="uint"/>
     <field name="Bound Max X" size="12" start="1:0" type="uint"/>
     <field name="Bound Max Y" size="12" start="1:16" type="uint"/>
-    <field name="Tile render order" size="3" start="1:28" type="Tile Render Order" default="Z Order"/>
+    <field name="Tile render order" size="3" start="1:28" type="Tile Render Order"/>
     <field name="Has Tile Enable Map" size="1" start="1:31" type="bool"/>
     <field name="Framebuffer" size="64" start="2:0" type="address"/>
     <field name="Tile Enable Map" size="64" start="4:0" type="address"/>
@@ -2104,36 +2116,36 @@
   </struct>
 
   <struct name="DCD Flags 0" size="1">
-    <field name="Allow forward pixel to kill" size="1" start="0" type="bool"/>
-    <field name="Allow forward pixel to be killed" size="1" start="1" type="bool"/>
-    <field name="Pixel kill operation" size="2" start="2" type="Pixel Kill"/>
-    <field name="ZS update operation" size="2" start="4" type="Pixel Kill"/>
-    <field name="Allow primitive reorder" size="1" start="6" type="bool"/>
-    <field name="Overdraw alpha0" start="7" size="1" type="bool"/>
-    <field name="Overdraw alpha1" size="1" start="8" type="bool"/>
+    <field name="Allow Forward Pixel To Kill" size="1" start="0" type="bool"/>
+    <field name="Allow Forward Pixel To Be Killed" size="1" start="1" type="bool"/>
+    <field name="Pixel Kill Operation" size="2" start="2" type="Pixel Kill"/>
+    <field name="ZS Update Operation" size="2" start="4" type="Pixel Kill"/>
+    <field name="Allow Primitive Reorder" size="1" start="6" type="bool"/>
+    <field name="Overdraw Alpha0" size="1" start="7" type="bool"/>
+    <field name="Overdraw Alpha1" size="1" start="8" type="bool"/>
     <field name="Clean Fragment Write" size="1" start="9" type="bool"/>
     <field name="Primitive Barrier" size="1" start="10" type="bool"/>
     <field name="Evaluate per-sample" size="1" start="11" type="bool"/>
     <field name="Aligned line-ends" size="1" start="13" type="bool"/>
-    <field name="Occlusion query" size="2" start="14" type="Occlusion Mode" default="Disabled"/>
-    <field name="Front face CCW" size="1" start="16" type="bool"/>
-    <field name="Cull front face" size="1" start="17" type="bool"/>
-    <field name="Cull back face" size="1" start="18" type="bool"/>
-    <field name="Multisample enable" size="1" start="19" type="bool"/>
-    <field name="Shader modifies coverage" size="1" start="20" type="bool"/>
-    <field name="Alpha-to-coverage Invert" size="1" start="21" type="bool"/>
-    <field name="Alpha-to-coverage" size="1" start="22" type="bool"/>
-    <field name="Scissor to bounding box" size="1" start="23" type="bool"/>
+    <field name="Occlusion Query" size="2" start="14" type="Occlusion Mode"/>
+    <field name="Front Face CCW" size="1" start="16" type="bool"/>
+    <field name="Cull Front Face" size="1" start="17" type="bool"/>
+    <field name="Cull Back Face" size="1" start="18" type="bool"/>
+    <field name="Multisample Enable" size="1" start="19" type="bool"/>
+    <field name="Shader Modifies Coverage" size="1" start="20" type="bool"/>
+    <field name="Alpha To Coverage Invert" size="1" start="21" type="bool"/>
+    <field name="Alpha To Coverage" size="1" start="22" type="bool"/>
+    <field name="Scissor To Bounding Box" size="1" start="23" type="bool"/>
   </struct>
 
   <struct name="DCD Flags 1" size="1">
-    <field name="Sample mask" size="16" start="0" type="uint"/>
-    <field name="Render target mask" start="16" size="8" type="hex"/>
+    <field name="Sample Mask" size="16" start="0" type="hex"/>
+    <field name="Render Target Mask" size="8" start="16" type="hex"/>
   </struct>
 
   <struct name="DCD Flags 2" size="1">
-    <field name="Read mask" size="12" start="0" type="hex"/>
-    <field name="Write mask" size="12" start="12" type="hex"/>
+    <field name="Read Mask" size="12" start="0" type="hex"/>
+    <field name="Write Mask" size="12" start="12" type="hex"/>
   </struct>
 
   <struct name="Draw" align="64">

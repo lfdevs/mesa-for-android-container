@@ -21,6 +21,6 @@ libplatform_virtgpu = static_library(
     'platform_virtgpu',
     files_libplatform_virtgpu,
     cpp_args: gfxstream_guest_args,
-    include_directories: [inc_platform_virtgpu, inc_src],
+    include_directories: [inc_platform_virtgpu, inc_src, inc_include],
     link_with: libplatform_virtgpu,
 )

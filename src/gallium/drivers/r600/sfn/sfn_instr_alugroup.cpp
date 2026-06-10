@@ -24,7 +24,7 @@ void
 AluGroup::apply_add_instr(AluInstr *instr)
 {
    instr->set_parent_group(this);
-   instr->pin_dest_to_chan();
+   instr->pin_registers();
    m_has_kill_op |= instr->is_kill();
    m_has_pred_update |= instr->has_alu_flag(alu_update_exec);
    assert(!(m_has_kill_op && m_has_pred_update));

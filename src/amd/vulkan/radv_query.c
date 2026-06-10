@@ -15,13 +15,14 @@
 #include "meta/radv_meta.h"
 #include "nir/nir_builder.h"
 #include "nir/radv_meta_nir.h"
+#include "tools/radv_rmv.h"
 #include "util/u_atomic.h"
 #include "vulkan/vulkan_core.h"
+#include "ac_cmdbuf_video.h"
 #include "radv_cs.h"
 #include "radv_entrypoints.h"
 #include "radv_perfcounter.h"
 #include "radv_query.h"
-#include "radv_rmv.h"
 #include "radv_sdma.h"
 #include "sid.h"
 #include "vk_acceleration_structure.h"
@@ -2367,7 +2368,8 @@ radv_GetQueryPoolResults(VkDevice _device, VkQueryPool queryPool, uint32_t first
          break;
       }
       case VK_QUERY_TYPE_VIDEO_ENCODE_FEEDBACK_KHR: {
-         const bool write_memory = radv_video_write_memory_supported(pdev) == RADV_VIDEO_WRITE_MEMORY_SUPPORT_FULL;
+         const bool write_memory =
+            pdev->info.video_caps.queue[AMD_IP_VCN_ENC].write_memory == AC_VIDEO_WRITE_MEMORY_SUPPORT_FULL;
          uint32_t *src32 = (uint32_t *)src;
          uint32_t ready_idx = write_memory ? RADV_ENC_FEEDBACK_STATUS_IDX : 1;
          uint32_t value;
@@ -2749,8 +2751,6 @@ radv_CmdWriteTimestamp2(VkCommandBuffer commandBuffer, VkPipelineStageFlags2 sta
 
    radv_cs_add_buffer(device->ws, cs->b, pool->bo);
 
-   assert(cmd_buffer->qf != RADV_QUEUE_VIDEO_DEC && cmd_buffer->qf != RADV_QUEUE_VIDEO_ENC);
-
    if (cmd_buffer->qf == RADV_QUEUE_TRANSFER) {
       if (instance->drirc.debug.flush_before_timestamp_write) {
          radv_sdma_emit_nop(device, cs);
@@ -2759,6 +2759,14 @@ radv_CmdWriteTimestamp2(VkCommandBuffer commandBuffer, VkPipelineStageFlags2 sta
       for (unsigned i = 0; i < num_queries; ++i, query_va += pool->stride) {
          radeon_check_space(device->ws, cs->b, 3);
          ac_emit_sdma_write_timestamp(cs->b, query_va);
+      }
+      return;
+   }
+
+   if (cmd_buffer->qf == RADV_QUEUE_VIDEO_DEC || cmd_buffer->qf == RADV_QUEUE_VIDEO_ENC) {
+      for (unsigned i = 0; i < num_queries; ++i, query_va += pool->stride) {
+         radeon_check_space(device->ws, cs->b, 8);
+         ac_emit_video_write_timestamp(cs->b, cs->hw_ip, query_va);
       }
       return;
    }

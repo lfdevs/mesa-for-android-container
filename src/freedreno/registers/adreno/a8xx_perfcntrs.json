@@ -71,7 +71,7 @@
         },
         {
             "name": "UCHE",
-            "num": 12,
+            "num": 24,
             "select": "UCHE_PERFCTR_UCHE_SEL",
             "counter": "RBBM_PERFCTR_UCHE",
             "countable_type": "a8xx_uche_perfcounter_select"
@@ -125,6 +125,7 @@
         },
         {
             "name": "CMP",
+            "pipe": "BR",
             "num": 4,
             "select": "RB_PERFCTR_CMP_SEL",
             "counter": "RBBM_PERFCTR_CMP",

@@ -432,6 +432,9 @@ blorp_exec_on_render(struct blorp_batch *batch,
       BITSET_SET(hw_state->emit_dirty, ANV_GFX_STATE_PS_BLEND);
    }
 
+   /* Add the flagged instructions as emitted */
+   BITSET_OR(hw_state->emitted, hw_state->emitted, hw_state->emit_dirty);
+
    anv_cmd_dirty_mask_t dirty = ~(ANV_CMD_DIRTY_INDEX_BUFFER |
                                   ANV_CMD_DIRTY_XFB_ENABLE |
                                   ANV_CMD_DIRTY_OCCLUSION_QUERY_ACTIVE |
@@ -534,6 +537,8 @@ get_color_aux_op(const struct blorp_params *params)
    case BLORP_OP_SLOW_COLOR_CLEAR:
    case BLORP_OP_BLIT:
    case BLORP_OP_COPY:
+   case BLORP_OP_COPY_INDIRECT:
+   case BLORP_OP_COPY_IMAGE_INDIRECT:
       assert(params->fast_clear_op == ISL_AUX_OP_NONE);
       return ANV_COLOR_AUX_OP_CLASS_NONE;
    }
@@ -595,4 +600,11 @@ void
 genX(blorp_init_dynamic_states)(struct blorp_context *context)
 {
    blorp_init_dynamic_states(context);
+}
+
+static bool *
+blorp_get_write_fencing_status(struct blorp_batch *blorp_batch)
+{
+   struct anv_cmd_buffer *cmd_buffer = blorp_batch->driver_batch;
+   return &cmd_buffer->batch.write_fence_status;
 }

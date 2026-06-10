@@ -26,5 +26,6 @@ VK_DEFINE_NONDISP_HANDLE_CASTS(kk_device_memory, vk.base, VkDeviceMemory,
                                VK_OBJECT_TYPE_DEVICE_MEMORY)
 
 extern const VkExternalMemoryProperties kk_mtlheap_mem_props;
+extern const VkExternalMemoryProperties kk_host_mem_props;
 
 #endif // KK_MEMORY_H

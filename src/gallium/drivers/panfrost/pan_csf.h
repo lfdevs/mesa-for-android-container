@@ -29,7 +29,8 @@ struct pan_csf_tiler_oom_ctx {
    /* Alternative framebuffer descriptors for incremental rendering */
    struct pan_ptr fbds[PAN_INCREMENTAL_RENDERING_PASS_COUNT];
 
-   /* Bounding Box (Register 42 and 43) */
+   /* Bounding Box (Register MALI_FRAGMENT_SR_BBOX_MIN and
+    * MALI_FRAGMENT_SR_BBOX_MAX) */
    uint32_t bbox_min;
    uint32_t bbox_max;
 
@@ -126,5 +127,45 @@ void GENX(csf_emit_write_timestamp)(struct panfrost_batch *batch,
                                     unsigned offset);
 
 #endif /* PAN_ARCH >= 10 */
+
+#if PAN_ARCH >= 14
+/* Framebuffer state. Keep this structure 64-byte aligned, since
+ * we want the adjacent ZS_CRC_EXTENSION and RENDER_TARGET descriptors
+ * aligned. */
+struct pan_fb_state {
+   /** GPU address to the tiler descriptor. */
+   uint64_t tiler;
+
+   /** Frame argument. */
+   uint64_t frame_argument;
+
+   /** An instance of Fragment Flags 0. */
+   struct mali_fragment_flags_0_packed flags0;
+
+   /** An instance of Fragment Flags 2. */
+   struct mali_fragment_flags_2_packed flags2;
+
+   /** Z clear value. */
+   uint32_t z_clear;
+
+   /** GPU address to the draw call descriptors. It may be 0. */
+   uint64_t dcd_pointer;
+
+   /** GPU address to the ZS_CRC_EXTENSION descriptor. It may be 0. */
+   uint64_t dbd_pointer;
+
+   /** GPU address to the RENDER_TARGET descriptors. */
+   uint64_t rtd_pointer;
+
+   /** An instance of Frame Size. */
+   struct mali_frame_size_packed frame_size;
+
+   /** GPU address to the sample position array. */
+   uint64_t sample_positions;
+
+   /** An instance of Fragment Flags 1. */
+   struct mali_fragment_flags_1_packed flags1;
+} __attribute__((aligned(64)));
+#endif /* PAN_ARCH >= 14 */
 
 #endif /* __PAN_CSF_H__ */

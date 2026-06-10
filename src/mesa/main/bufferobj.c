@@ -1527,11 +1527,6 @@ _mesa_BindBuffer(GLenum target, GLuint buffer)
 {
    GET_CURRENT_CONTEXT(ctx);
 
-   if (MESA_VERBOSE & VERBOSE_API) {
-      _mesa_debug(ctx, "glBindBuffer(%s, %u)\n",
-                  _mesa_enum_to_string(target), buffer);
-   }
-
    struct gl_buffer_object **bindTarget = get_buffer_target(ctx, target, false);
    if (!bindTarget) {
       _mesa_error(ctx, GL_INVALID_ENUM, "glBindBufferARB(target %s)",
@@ -1995,12 +1990,8 @@ create_buffers(struct gl_context *ctx, GLsizei n, GLuint *buffers, bool dsa)
 static void
 create_buffers_err(struct gl_context *ctx, GLsizei n, GLuint *buffers, bool dsa)
 {
-   const char *func = dsa ? "glCreateBuffers" : "glGenBuffers";
-
-   if (MESA_VERBOSE & VERBOSE_API)
-      _mesa_debug(ctx, "%s(%d)\n", func, n);
-
    if (n < 0) {
+      const char *func = dsa ? "glCreateBuffers" : "glGenBuffers";
       _mesa_error(ctx, GL_INVALID_VALUE, "%s(n %d < 0)", func, n);
       return;
    }
@@ -2336,14 +2327,6 @@ buffer_data(struct gl_context *ctx, struct gl_buffer_object *bufObj,
             const char *func, bool no_error)
 {
    bool valid_usage;
-
-   if (MESA_VERBOSE & VERBOSE_API) {
-      _mesa_debug(ctx, "%s(%s, %ld, %p, %s)\n",
-                  func,
-                  _mesa_enum_to_string(target),
-                  (long int) size, data,
-                  _mesa_enum_to_string(usage));
-   }
 
    if (!no_error) {
       if (size < 0) {
@@ -4877,12 +4860,6 @@ bind_buffer_range(GLenum target, GLuint index, GLuint buffer, GLintptr offset,
    GET_CURRENT_CONTEXT(ctx);
    struct gl_buffer_object *bufObj;
 
-   if (MESA_VERBOSE & VERBOSE_API) {
-      _mesa_debug(ctx, "glBindBufferRange(%s, %u, %u, %lu, %lu)\n",
-                  _mesa_enum_to_string(target), index, buffer,
-                  (unsigned long) offset, (unsigned long) size);
-   }
-
    if (buffer == 0) {
       bufObj = NULL;
    } else {
@@ -4970,11 +4947,6 @@ _mesa_BindBufferBase(GLenum target, GLuint index, GLuint buffer)
    GET_CURRENT_CONTEXT(ctx);
    struct gl_buffer_object *bufObj;
 
-   if (MESA_VERBOSE & VERBOSE_API) {
-      _mesa_debug(ctx, "glBindBufferBase(%s, %u, %u)\n",
-                  _mesa_enum_to_string(target), index, buffer);
-   }
-
    if (buffer == 0) {
       bufObj = NULL;
    } else {
@@ -5038,12 +5010,6 @@ _mesa_BindBuffersRange(GLenum target, GLuint first, GLsizei count,
 {
    GET_CURRENT_CONTEXT(ctx);
 
-   if (MESA_VERBOSE & VERBOSE_API) {
-      _mesa_debug(ctx, "glBindBuffersRange(%s, %u, %d, %p, %p, %p)\n",
-                  _mesa_enum_to_string(target), first, count,
-                  buffers, offsets, sizes);
-   }
-
    switch (target) {
    case GL_TRANSFORM_FEEDBACK_BUFFER:
       bind_xfb_buffers(ctx, first, count, buffers, true, offsets, sizes,
@@ -5073,11 +5039,6 @@ _mesa_BindBuffersBase(GLenum target, GLuint first, GLsizei count,
                       const GLuint *buffers)
 {
    GET_CURRENT_CONTEXT(ctx);
-
-   if (MESA_VERBOSE & VERBOSE_API) {
-      _mesa_debug(ctx, "glBindBuffersBase(%s, %u, %d, %p)\n",
-                  _mesa_enum_to_string(target), first, count, buffers);
-   }
 
    switch (target) {
    case GL_TRANSFORM_FEEDBACK_BUFFER:

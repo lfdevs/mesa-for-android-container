@@ -18,6 +18,8 @@
 typedef struct {
    /* True if the lowering needs to insert shader query. */
    bool has_query;
+   /* True if the mesh shader is linked with a task shader. */
+   bool has_task_shader;
 } lower_tsms_io_state;
 
 static nir_def *
@@ -264,6 +266,13 @@ lower_taskmesh_payload_load(nir_builder *b,
    unsigned num_components = intrin->def.num_components;
    unsigned bit_size = intrin->def.bit_size;
 
+   /* Lower payload to zeroes when the mesh shader isn't linked with a task
+    * shader because isn't going to be accessed.
+    */
+   if (b->shader->info.stage == MESA_SHADER_MESH && !s->has_task_shader) {
+      return nir_imm_zero(b, num_components, bit_size);
+   }
+
    nir_def *ptr =
       b->shader->info.stage == MESA_SHADER_TASK ?
       task_ring_entry_index(b, s) :
@@ -361,9 +370,11 @@ lower_mesh_intrinsics(nir_builder *b,
 }
 
 bool
-ac_nir_lower_mesh_inputs_to_mem(nir_shader *shader)
+ac_nir_lower_mesh_inputs_to_mem(nir_shader *shader, bool has_task_shader)
 {
    lower_tsms_io_state state = {0};
+
+   state.has_task_shader = has_task_shader;
 
    return nir_shader_lower_instructions(shader,
                                         filter_mesh_input_load,

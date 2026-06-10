@@ -123,8 +123,10 @@ msm_ioctl_get_param(int fd, unsigned long request, void *arg)
       gp->value = 0;
       return 0;
    case MSM_PARAM_VA_START:
-   case MSM_PARAM_VA_SIZE:
       gp->value = 0x100000000ULL;
+      return 0;
+   case MSM_PARAM_VA_SIZE:
+      gp->value = (1ULL << 48) - 0x100000000ULL;
       return 0;
    case MSM_PARAM_RAYTRACING:
       gp->value = 1;
@@ -132,6 +134,24 @@ msm_ioctl_get_param(int fd, unsigned long request, void *arg)
    case MSM_PARAM_UCHE_TRAP_BASE:
       gp->value = 0x1fffffffff000ull;
       return 0;
+
+   case MSM_PARAM_HAS_PRR:
+      gp->value = 1;
+      return 0;
+
+      /* UBWC config values from some GPU, but we don't actually maintain the
+       * device list mapping because it doesn't matter to shader compiles.
+       */
+   case MSM_PARAM_UBWC_SWIZZLE:
+      gp->value = 0x6;
+      return 0;
+   case MSM_PARAM_HIGHEST_BANK_BIT:
+      gp->value = 15;
+      return 0;
+   case MSM_PARAM_MACROTILE_MODE:
+      gp->value = 0;
+      return 0;
+
    default:
       fprintf(stderr, "Unknown DRM_IOCTL_MSM_GET_PARAM %d\n", gp->param);
       return -1;
@@ -145,7 +165,10 @@ msm_ioctl_set_param(int fd, unsigned long request, void *arg)
 
    switch (sp->param) {
    case MSM_PARAM_EN_VM_BIND:
-      return -1;
+      /* Shim doesn't have to do anything with this -- it's binding iovas to
+       * BOs, but since we don't exec the iovas don't matter.
+       */
+      return 0;
    default:
       return 0;
    }
@@ -158,6 +181,14 @@ msm_ioctl_gem_madvise(int fd, unsigned long request, void *arg)
 
    args->retained = true;
 
+   return 0;
+}
+
+static int
+msm_ioctl_vm_bind(int fd, unsigned long request, void *arg)
+{
+   struct drm_msm_vm_bind *vm_bind = arg;
+   vm_bind->fence_fd = -1;
    return 0;
 }
 
@@ -174,6 +205,7 @@ static ioctl_fn_t driver_ioctls[] = {
    [DRM_MSM_SUBMITQUEUE_NEW] = msm_ioctl_noop,
    [DRM_MSM_SUBMITQUEUE_CLOSE] = msm_ioctl_noop,
    [DRM_MSM_SUBMITQUEUE_QUERY] = msm_ioctl_noop,
+   [DRM_MSM_VM_BIND] = msm_ioctl_vm_bind,
 };
 
 #define CHIPID(maj, min, rev, pat)                                             \
@@ -299,8 +331,43 @@ static const struct msm_device_info device_infos[] = {
 };
 
 static void
+print_supported_chips_and_abort(const char *unrecognized_env)
+{
+
+   fprintf(stderr, "%s unrecognized, shim supports:\n", unrecognized_env);
+
+   for (int i = 1; i < ARRAY_SIZE(device_infos); i++) {
+      fprintf(stderr, "- gpu_id=%d, chip_id=0x%lx\n", device_infos[i].gpu_id,
+              device_infos[i].chip_id);
+   }
+
+   abort();
+}
+
+static void
 msm_driver_get_device_info(void)
 {
+   const char *chip_id_env = os_get_option("FD_CHIP_ID");
+
+   if (chip_id_env) {
+      char *endptr;
+      uint64_t chip_id = strtoul(chip_id_env, &endptr, 16);
+
+      if (endptr == chip_id_env || *endptr != '\0') {
+         fprintf(stderr, "Invalid hex value for FD_CHIP_ID\n");
+         abort();
+      }
+
+      for (int i = 0; i < ARRAY_SIZE(device_infos); i++) {
+         if (device_infos[i].chip_id == chip_id) {
+            device_info = &device_infos[i];
+            return;
+         }
+      }
+
+      print_supported_chips_and_abort("FD_CHIP_ID");
+   }
+
    const char *env = os_get_option("FD_GPU_ID");
 
    if (!env) {
@@ -316,12 +383,7 @@ msm_driver_get_device_info(void)
       }
    }
 
-   fprintf(stderr, "FD_GPU_ID unrecognized, shim supports %d",
-           device_infos[0].gpu_id);
-   for (int i = 1; i < ARRAY_SIZE(device_infos); i++)
-      fprintf(stderr, ", %d", device_infos[i].gpu_id);
-   fprintf(stderr, "\n");
-   abort();
+   print_supported_chips_and_abort("FD_GPU_ID");
 }
 
 void

@@ -28,6 +28,7 @@
 #include <stdint.h>
 #include <stdio.h>
 
+#include "util/u_dynarray.h"
 #include "util/macros.h"
 #include "util/u_atomic.h"
 #include "util/u_queue.h"
@@ -115,7 +116,7 @@ typedef void (*u_trace_delete_buffer)(struct u_trace_context *utctx,
  * a fixed rate, even as the GPU freq changes.  The same source used for
  * GL_TIMESTAMP queries should be appropriate.
  */
-typedef void (*u_trace_record_ts)(struct u_trace *ut,
+typedef bool (*u_trace_record_ts)(struct u_trace *ut,
                                   void *cs,
                                   void *timestamps,
                                   uint64_t offset_B,
@@ -252,10 +253,20 @@ struct u_trace_context {
    uint32_t event_nr;
    bool start_of_frame;
 
+   /* State for printing timestamps. */
+   uint32_t indentation;
+
    void *dummy_indirect_data;
 
    /* list of unprocessed trace chunks in fifo order: */
-   struct list_head flushed_trace_chunks;
+   struct util_dynarray flushed_traces;
+};
+
+typedef struct linear_ctx linear_ctx;
+
+struct u_trace_buffer_view {
+   uint32_t buffer_index;
+   uint32_t offset;
 };
 
 /**
@@ -272,10 +283,12 @@ struct u_trace_context {
 struct u_trace {
    struct u_trace_context *utctx;
 
-   uint32_t num_traces;
+   linear_ctx *linear_alloc;
+   struct util_dynarray events;
 
-   struct list_head
-      trace_chunks; /* list of unflushed trace chunks in fifo order */
+   struct u_trace_buffer_view last_timestamp;
+
+   struct util_dynarray buffers[2];
 };
 
 void u_trace_context_init(struct u_trace_context *utctx,
@@ -308,18 +321,36 @@ bool u_trace_is_enabled(enum u_trace_type type);
 
 bool u_trace_has_points(struct u_trace *ut);
 
+uint32_t u_trace_num_events(struct u_trace *ut);
+
 struct u_trace_iterator {
    struct u_trace *ut;
-   struct u_trace_chunk *chunk;
    uint32_t event_idx;
 };
 
-struct u_trace_iterator u_trace_begin_iterator(struct u_trace *ut);
+static inline struct u_trace_iterator
+u_trace_begin_iterator(struct u_trace *ut)
+{
+   struct u_trace_iterator iterator;
+   iterator.ut = ut;
+   iterator.event_idx = 0;
+   return iterator;
+}
 
-struct u_trace_iterator u_trace_end_iterator(struct u_trace *ut);
+static inline struct u_trace_iterator
+u_trace_end_iterator(struct u_trace *ut)
+{
+   struct u_trace_iterator iterator;
+   iterator.ut = ut;
+   iterator.event_idx = u_trace_num_events(ut);
+   return iterator;
+}
 
-bool u_trace_iterator_equal(struct u_trace_iterator a,
-                            struct u_trace_iterator b);
+static inline bool
+u_trace_iterator_equal(struct u_trace_iterator a, struct u_trace_iterator b)
+{
+   return a.ut == b.ut && a.event_idx == b.event_idx;
+}
 
 typedef void (*u_trace_copy_buffer)(struct u_trace_context *utctx,
                                     void *cmdstream,
@@ -345,6 +376,9 @@ void u_trace_clone_append(struct u_trace_iterator begin_it,
                           struct u_trace *into,
                           void *cmdstream,
                           u_trace_copy_buffer copy_buffer);
+
+uint32_t u_trace_clone_append_copy_count(struct u_trace_iterator begin_it,
+                                         struct u_trace_iterator end_it);
 
 void u_trace_disable_event_range(struct u_trace_iterator begin_it,
                                  struct u_trace_iterator end_it);

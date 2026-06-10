@@ -223,6 +223,25 @@ pan_clump_format(enum pipe_format format)
    /* YUV-sampling has special cases */
    if (pan_format_is_yuv(format)) {
       switch (format) {
+#if PAN_ARCH >= 14
+      case PIPE_FORMAT_R8G8_R8B8_UNORM:
+      case PIPE_FORMAT_G8R8_B8R8_UNORM:
+      case PIPE_FORMAT_R8B8_R8G8_UNORM:
+      case PIPE_FORMAT_B8R8_G8R8_UNORM:
+      case PIPE_FORMAT_R8_G8B8_422_UNORM:
+      case PIPE_FORMAT_R8_B8G8_422_UNORM:
+      case PIPE_FORMAT_R8_G8B8_420_UNORM:
+      case PIPE_FORMAT_R8_B8G8_420_UNORM:
+      case PIPE_FORMAT_R8_G8_B8_420_UNORM:
+      case PIPE_FORMAT_R8_B8_G8_420_UNORM:
+      case PIPE_FORMAT_R8G8B8_420_UNORM_PACKED:
+         return MALI_CLUMP_FORMAT_RAW8;
+      case PIPE_FORMAT_R10_G10B10_420_UNORM:
+      case PIPE_FORMAT_R10G10B10_420_UNORM_PACKED:
+      case PIPE_FORMAT_R10_G10B10_422_UNORM:
+      case PIPE_FORMAT_X6R10X6G10_X6R10X6B10_422_UNORM:
+         return MALI_CLUMP_FORMAT_R10_PACKED;
+#else
       case PIPE_FORMAT_R8G8_R8B8_UNORM:
       case PIPE_FORMAT_G8R8_B8R8_UNORM:
       case PIPE_FORMAT_R8B8_R8G8_UNORM:
@@ -242,6 +261,7 @@ pan_clump_format(enum pipe_format format)
       case PIPE_FORMAT_R10_G10B10_422_UNORM:
       case PIPE_FORMAT_X6R10X6G10_X6R10X6B10_422_UNORM:
          return MALI_CLUMP_FORMAT_Y10_UV10_422;
+#endif /* PAN_ARCH >= 14 */
       default:
          UNREACHABLE("unhandled clump format");
       }

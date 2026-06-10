@@ -105,8 +105,9 @@ static struct disk_cache* r300_get_disk_shader_cache(struct pipe_screen* pscreen
 
 #define COMMON_NIR_OPTIONS                    \
    .fdot_replicates = true,                   \
-   .fuse_ffma32 = true,                       \
-   .fuse_ffma64 = true,                       \
+   .float_mul_add32 =                         \
+      nir_float_muladd_support_has_fmad |     \
+      nir_float_muladd_support_fuse,          \
    .lower_bitops = true,                      \
    .lower_extract_byte = true,                \
    .lower_extract_word = true,                \
@@ -419,8 +420,8 @@ static void r300_init_shader_caps(struct r300_screen* r300screen)
        * can't do ints.
        */
       caps->integers = false;
-      /* Even if gallivm NIR can do this, we call nir_to_tgsi manually and
-       * TGSI can't.
+      /* Even if gallivm NIR can do this, right now it calls nir_to_tgsi
+       * manually and TGSI can't.
        */
       caps->int16 = false;
       caps->fp16 = false;
@@ -656,8 +657,8 @@ struct pipe_screen* r300_screen_create(struct radeon_winsys *rws,
     r300_init_debug(r300screen);
     r300_parse_chipset(r300screen->info.pci_id, &r300screen->caps);
 
-    driParseConfigFiles(config->options, config->options_info, 0, "r300", NULL,
-                        NULL, NULL, 0, NULL, 0);
+    driParseConfigFiles(config->options, config->options_info,
+                        &(driConfigFileParseParams) { .driverName = "r300" });
 
 #define OPT_BOOL(name, dflt, description)                                                          \
     r300screen->options.name = driQueryOptionb(config->options, "r300_" #name);

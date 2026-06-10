@@ -80,18 +80,18 @@ blorp_compile_fs_brw(struct blorp_context *blorp, void *mem_ctx,
       .base = {
          .mem_ctx = mem_ctx,
          .nir = nir,
+         .key = &wm_key.base,
+         .prog_data = (struct brw_stage_prog_data *)fs_prog_data,
          .log_data = blorp->driver_ctx,
          .debug_flag = DEBUG_BLORP,
          .archiver = archiver,
       },
-      .key = &wm_key,
-      .prog_data = fs_prog_data,
 
       .use_rep_send = use_repclear,
       .max_polygons = 1,
    };
 
-   const unsigned *kernel = brw_compile_fs(compiler, &params);
+   const unsigned *kernel = brw_compile(compiler, &params.base);
 
    debug_archiver_close(archiver);
 
@@ -132,15 +132,15 @@ blorp_compile_vs_brw(struct blorp_context *blorp, void *mem_ctx,
       .base = {
          .mem_ctx = mem_ctx,
          .nir = nir,
+         .key = &vs_key.base,
+         .prog_data = (struct brw_stage_prog_data *)vs_prog_data,
          .log_data = blorp->driver_ctx,
          .debug_flag = DEBUG_BLORP,
          .archiver = archiver,
       },
-      .key = &vs_key,
-      .prog_data = vs_prog_data,
    };
 
-   const unsigned *kernel = brw_compile_vs(compiler, &params);
+   const unsigned *kernel = brw_compile(compiler, &params.base);
 
    debug_archiver_close(archiver);
 
@@ -239,15 +239,15 @@ blorp_compile_cs_brw(struct blorp_context *blorp, void *mem_ctx,
       .base = {
          .mem_ctx = mem_ctx,
          .nir = nir,
+         .key = &cs_key.base,
+         .prog_data = (struct brw_stage_prog_data *)cs_prog_data,
          .log_data = blorp->driver_ctx,
          .debug_flag = DEBUG_BLORP,
          .archiver = archiver,
       },
-      .key = &cs_key,
-      .prog_data = cs_prog_data,
    };
 
-   const unsigned *kernel = brw_compile_cs(compiler, &params);
+   const unsigned *kernel = brw_compile(compiler, &params.base);
 
    debug_archiver_close(archiver);
 
@@ -279,7 +279,8 @@ blorp_params_get_layer_offset_vs_brw(struct blorp_batch *batch,
 {
    struct blorp_context *blorp = batch->blorp;
    struct layer_offset_vs_key blorp_key = {
-      .base = BLORP_BASE_KEY_INIT(BLORP_SHADER_TYPE_LAYER_OFFSET_VS),
+      .base = BLORP_BASE_KEY_INIT(BLORP_SHADER_TYPE_LAYER_OFFSET_VS,
+                                  BLORP_SHADER_PIPELINE_RENDER),
    };
 
    struct brw_fs_prog_data *fs_prog_data = params->fs_prog_data;

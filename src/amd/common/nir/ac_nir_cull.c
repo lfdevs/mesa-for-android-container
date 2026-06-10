@@ -170,8 +170,8 @@ cull_small_primitive_triangle(nir_builder *b, bool use_point_tri_intersection,
       vp_translate[chan] = nir_channel(b, vp, 2 + chan);
 
       /* Convert the position to screen-space coordinates. */
-      nir_def *min = nir_ffma(b, bbox_min[chan], vp_scale[chan], vp_translate[chan]);
-      nir_def *max = nir_ffma(b, bbox_max[chan], vp_scale[chan], vp_translate[chan]);
+      nir_def *min = nir_ffma_weak(b, bbox_min[chan], vp_scale[chan], vp_translate[chan]);
+      nir_def *max = nir_ffma_weak(b, bbox_max[chan], vp_scale[chan], vp_translate[chan]);
 
       /* Scale the bounding box according to precision. */
       min = nir_fsub(b, min, small_prim_precision);
@@ -251,7 +251,7 @@ cull_small_primitive_triangle(nir_builder *b, bool use_point_tri_intersection,
             /* Transform the coordinates to screen space. */
             for (unsigned vtx = 0; vtx < 3; ++vtx) {
                for (unsigned chan = 0; chan < 2; ++chan)
-                  screen_pos[vtx][chan] = nir_ffma(b, pos[vtx][chan], vp_scale[chan], vp_translate[chan]);
+                  screen_pos[vtx][chan] = nir_ffma_weak(b, pos[vtx][chan], vp_scale[chan], vp_translate[chan]);
             }
 
             /* small_prim_precision is the rasterization precision in X an Y axes, meaning it's the size of
@@ -436,8 +436,8 @@ cull_small_primitive_line(nir_builder *b, nir_def *pos[3][4],
          nir_def *vp_scale = nir_channel(b, vp, chan);
          nir_def *vp_translate = nir_channel(b, vp, 2 + chan);
 
-         v0[chan] = nir_ffma(b, pos[0][chan], vp_scale, vp_translate);
-         v1[chan] = nir_ffma(b, pos[1][chan], vp_scale, vp_translate);
+         v0[chan] = nir_ffma_weak(b, pos[0][chan], vp_scale, vp_translate);
+         v1[chan] = nir_ffma_weak(b, pos[1][chan], vp_scale, vp_translate);
       }
 
       /* Rotate the viewport by 45 degrees, so that diamonds become squares. */

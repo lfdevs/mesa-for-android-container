@@ -24,6 +24,7 @@ nvk_format_supports_atomics(const struct nvk_physical_device *pdev,
    switch (p_format) {
    case PIPE_FORMAT_R32_UINT:
    case PIPE_FORMAT_R32_SINT:
+   case PIPE_FORMAT_R32_FLOAT:
       return true;
    case PIPE_FORMAT_R64_UINT:
    case PIPE_FORMAT_R64_SINT:

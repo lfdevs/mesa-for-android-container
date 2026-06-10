@@ -1,4 +1,4 @@
-From 0ce7ca82289ec3351ccec4b37540d8fdbc8dd095 Mon Sep 17 00:00:00 2001
+From a801d75fcb16db89d2af67dd40040bc7c5f59df0 Mon Sep 17 00:00:00 2001
 From: Valentine Burley <valentine.burley@collabora.com>
 Date: Thu, 23 Apr 2026 11:03:14 +0200
 Subject: [PATCH] android: Implement headless WSI fallback using AImageReader
@@ -11,12 +11,24 @@ ANativeWindow.
 This patch:
 - Implements a headless fallback using the AImageReader NDK API to
   create an off-screen ANativeWindow in tcuAndroidPlatform.cpp.
+- Implements an active "null compositor" via an AImageReader listener
+  that immediately drains and releases acquired images. This ensures the
+  producer never runs out of buffers, fixing intermittent timeouts in
+  tests that require active consumption (e.g. maintenance1 tests).
+- Uses AImageReader_acquireNextImageAsync and AImage_deleteAsync (API 26+)
+  to handle GPU sync fences.
+- Adds thread-safe teardown logic using an atomic flag and a non-blocking
+  mutex lock (std::try_to_lock) to prevent race conditions between the
+  main thread and the background listener callback.
 - Adds ImageReaderNativeWindow (EGL) and ImageReaderVulkanWindow (Vulkan)
-  to manage the AImageReader lifecycle within the framework.
+  to manage the AImageReader and ImageQueue lifecycle.
 - Extracts the AImageReader creation logic into a shared helper
   acquireImageReaderWindow().
 - Links against mediandk in android.cmake to provide AImageReader
   support for Android API levels >= 24.
+- Uses AImageReader_newWithUsage (API 26+) with explicit hardware buffer flags
+  (SAMPLED_IMAGE | COMPOSER_OVERLAY) to mimic SurfaceFlinger allocation
+  constraints.
 - On Android API levels < 24 (where AImageReader is unavailable), window
   acquisition failure now consistently throws ResourceError instead of
   NotSupportedError. This aligns the EGL path with the existing Vulkan
@@ -35,12 +47,12 @@ Change-Id: I462e617ae60e4dc3d9f0aeec11fd1628d0c6ff12
 Signed-off-by: Valentine Burley <valentine.burley@collabora.com>
 ---
  external/openglcts/README.md                  |   7 +-
- .../platform/android/tcuAndroidPlatform.cpp   | 159 +++++++++++++++++-
+ .../platform/android/tcuAndroidPlatform.cpp   | 237 +++++++++++++++++-
  targets/android/android.cmake                 |   5 +
- 3 files changed, 164 insertions(+), 7 deletions(-)
+ 3 files changed, 242 insertions(+), 7 deletions(-)
 
 diff --git a/external/openglcts/README.md b/external/openglcts/README.md
-index 69eb8a5c1e..f464291858 100644
+index 2eae316f58..24b270aee5 100644
 --- a/external/openglcts/README.md
 +++ b/external/openglcts/README.md
 @@ -323,9 +323,10 @@ This is identical to the builds on other platforms and is better for iterative
@@ -58,15 +70,18 @@ index 69eb8a5c1e..f464291858 100644
  
  	cmake <path to openglcts> -GNinja -DCMAKE_BUILD_TYPE=Debug \
 diff --git a/framework/platform/android/tcuAndroidPlatform.cpp b/framework/platform/android/tcuAndroidPlatform.cpp
-index af56dabb83..86984202fb 100644
+index af56dabb83..45861c8aee 100644
 --- a/framework/platform/android/tcuAndroidPlatform.cpp
 +++ b/framework/platform/android/tcuAndroidPlatform.cpp
-@@ -35,6 +35,12 @@
+@@ -35,6 +35,15 @@
  
  // Assume no call translation is needed
  #include <android/native_window.h>
 +#if DE_ANDROID_API >= 24
 +#include <media/NdkImageReader.h>
++#include <media/NdkImage.h>
++#include <mutex>
++#include <atomic>
 +#endif
 +#if DE_ANDROID_API >= 26
 +#include <android/hardware_buffer.h>
@@ -74,27 +89,75 @@ index af56dabb83..86984202fb 100644
  struct egl_native_pixmap_t;
  DE_STATIC_ASSERT(sizeof(eglw::EGLNativeDisplayType) == sizeof(void *));
  DE_STATIC_ASSERT(sizeof(eglw::EGLNativePixmapType) == sizeof(struct egl_native_pixmap_t *));
-@@ -136,6 +142,81 @@ private:
+@@ -136,6 +145,141 @@ private:
      WindowRegistry &m_windowRegistry;
  };
  
 +#if DE_ANDROID_API >= 24
-+static ANativeWindow *acquireImageReaderWindow(int width, int height, int32_t format, AImageReader **outReader)
++struct ImageQueue
++{
++    std::mutex lock;
++    std::atomic<bool> closing{false};
++    AImageReader_ImageListener listener;
++
++    ImageQueue()
++    {
++        listener.context          = this;
++        listener.onImageAvailable = onImageAvailable;
++    }
++
++    ~ImageQueue()
++    {
++    }
++
++    static void onImageAvailable(void *context, AImageReader *reader)
++    {
++        ImageQueue *queue = reinterpret_cast<ImageQueue *>(context);
++
++        std::unique_lock<std::mutex> guard(queue->lock, std::try_to_lock);
++        if (!guard.owns_lock() || queue->closing.load(std::memory_order_acquire))
++            return;
++
++        AImage *image = nullptr;
++
++#if DE_ANDROID_API >= 26
++        int fenceFd = -1;
++        while (AImageReader_acquireNextImageAsync(reader, &image, &fenceFd) == AMEDIA_OK && image != nullptr)
++        {
++            AImage_deleteAsync(image, fenceFd);
++        }
++#else
++        while (AImageReader_acquireNextImage(reader, &image) == AMEDIA_OK && image != nullptr)
++        {
++            AImage_delete(image);
++        }
++#endif
++    }
++};
++
++static ANativeWindow *acquireImageReaderWindow(int width, int height, int32_t format, AImageReader **outReader,
++                                               ImageQueue **outQueue)
 +{
 +    AImageReader *reader = nullptr;
 +#if DE_ANDROID_API >= 26
 +    uint64_t usage        = AHARDWAREBUFFER_USAGE_GPU_SAMPLED_IMAGE | AHARDWAREBUFFER_USAGE_COMPOSER_OVERLAY;
-+    media_status_t status = AImageReader_newWithUsage(width, height, format, usage, 2, &reader);
++    media_status_t status = AImageReader_newWithUsage(width, height, format, usage, 4, &reader);
 +#else
-+    media_status_t status = AImageReader_new(width, height, format, 2, &reader);
++    media_status_t status = AImageReader_new(width, height, format, 4, &reader);
 +#endif
 +    if (status != AMEDIA_OK || !reader)
 +        throw ResourceError("Failed to create AImageReader", nullptr, __FILE__, __LINE__);
++
++    *outQueue = new ImageQueue();
++    AImageReader_setImageListener(reader, &(*outQueue)->listener);
 +
 +    ANativeWindow *nativeWindow = nullptr;
 +    status                      = AImageReader_getWindow(reader, &nativeWindow);
 +    if (status != AMEDIA_OK || !nativeWindow)
 +    {
++        AImageReader_setImageListener(reader, nullptr);
++        delete *outQueue;
++        *outQueue = nullptr;
 +        AImageReader_delete(reader);
 +        throw ResourceError("Failed to get window from AImageReader", nullptr, __FILE__, __LINE__);
 +    }
@@ -106,9 +169,10 @@ index af56dabb83..86984202fb 100644
 +class ImageReaderNativeWindow : public eglu::NativeWindow
 +{
 +public:
-+    ImageReaderNativeWindow(AImageReader *reader, ANativeWindow *window, int width, int height)
++    ImageReaderNativeWindow(AImageReader *reader, ImageQueue *queue, ANativeWindow *window, int width, int height)
 +        : eglu::NativeWindow(WINDOW_CAPABILITIES)
 +        , m_reader(reader)
++        , m_queue(queue)
 +        , m_window(window)
 +        , m_size(width, height)
 +    {
@@ -117,7 +181,17 @@ index af56dabb83..86984202fb 100644
 +    virtual ~ImageReaderNativeWindow(void)
 +    {
 +        if (m_reader)
++        {
++            if (m_queue)
++            {
++                m_queue->closing.store(true, std::memory_order_release);
++                std::lock_guard<std::mutex> guard(m_queue->lock);
++                AImageReader_setImageListener(m_reader, nullptr);
++            }
 +            AImageReader_delete(m_reader);
++        }
++        if (m_queue)
++            delete m_queue;
 +    }
 +
 +    virtual eglw::EGLNativeWindowType getLegacyNative(void)
@@ -148,6 +222,7 @@ index af56dabb83..86984202fb 100644
 +
 +private:
 +    AImageReader *m_reader;
++    ImageQueue *m_queue;
 +    ANativeWindow *m_window;
 +    tcu::IVec2 m_size;
 +};
@@ -156,7 +231,7 @@ index af56dabb83..86984202fb 100644
  // NativeWindow
  
  NativeWindow::NativeWindow(Window *window, int width, int height, int32_t format)
-@@ -197,10 +278,29 @@ eglu::NativeWindow *NativeWindowFactory::createWindow(const eglu::WindowParams &
+@@ -197,10 +341,30 @@ eglu::NativeWindow *NativeWindowFactory::createWindow(const eglu::WindowParams &
  {
      Window *window = m_windowRegistry.tryAcquireWindow();
  
@@ -177,12 +252,13 @@ index af56dabb83..86984202fb 100644
 +        height     = height > 0 ? height : 256;
 +
 +        AImageReader *reader = nullptr;
++        ImageQueue *queue    = nullptr;
 +        // Always use AIMAGE_FORMAT_RGBA_8888: the AImageReader is only used as a
 +        // surface handle provider, and AIMAGE_FORMAT_* constants are not
 +        // interchangeable with ANativeWindow_LegacyFormat values.
-+        ANativeWindow *nativeWindow = acquireImageReaderWindow(width, height, AIMAGE_FORMAT_RGBA_8888, &reader);
++        ANativeWindow *nativeWindow = acquireImageReaderWindow(width, height, AIMAGE_FORMAT_RGBA_8888, &reader, &queue);
 +
-+        return new ImageReaderNativeWindow(reader, nativeWindow, width, height);
++        return new ImageReaderNativeWindow(reader, queue, nativeWindow, width, height);
 +#else
 +        throw ResourceError("Native window is not available", nullptr, __FILE__, __LINE__);
 +#endif
@@ -190,7 +266,7 @@ index af56dabb83..86984202fb 100644
  }
  
  // NativeDisplayFactory
-@@ -279,6 +379,43 @@ private:
+@@ -279,6 +443,55 @@ private:
      tcu::Android::Window &m_window;
  };
  
@@ -198,9 +274,10 @@ index af56dabb83..86984202fb 100644
 +class ImageReaderVulkanWindow : public vk::wsi::AndroidWindowInterface
 +{
 +public:
-+    ImageReaderVulkanWindow(AImageReader *reader, ANativeWindow *window)
++    ImageReaderVulkanWindow(AImageReader *reader, ImageQueue *queue, ANativeWindow *window)
 +        : vk::wsi::AndroidWindowInterface(vk::pt::AndroidNativeWindowPtr(window))
 +        , m_reader(reader)
++        , m_queue(queue)
 +    {
 +    }
 +
@@ -223,18 +300,29 @@ index af56dabb83..86984202fb 100644
 +    ~ImageReaderVulkanWindow(void)
 +    {
 +        if (m_reader)
++        {
++            if (m_queue)
++            {
++                m_queue->closing.store(true, std::memory_order_release);
++                std::lock_guard<std::mutex> guard(m_queue->lock);
++                AImageReader_setImageListener(m_reader, nullptr);
++            }
 +            AImageReader_delete(m_reader);
++        }
++        if (m_queue)
++            delete m_queue;
 +    }
 +
 +private:
 +    AImageReader *m_reader;
++    ImageQueue *m_queue;
 +};
 +#endif
 +
  class VulkanDisplay : public vk::wsi::Display
  {
  public:
-@@ -306,7 +443,21 @@ public:
+@@ -306,7 +519,23 @@ public:
              }
          }
          else
@@ -245,10 +333,12 @@ index af56dabb83..86984202fb 100644
 +            width           = width > 0 ? width : 256;
 +            height          = height > 0 ? height : 256;
 +
-+            AImageReader *reader        = nullptr;
-+            ANativeWindow *nativeWindow = acquireImageReaderWindow(width, height, AIMAGE_FORMAT_RGBA_8888, &reader);
++            AImageReader *reader = nullptr;
++            ImageQueue *queue    = nullptr;
++            ANativeWindow *nativeWindow =
++                acquireImageReaderWindow(width, height, AIMAGE_FORMAT_RGBA_8888, &reader, &queue);
 +
-+            return new ImageReaderVulkanWindow(reader, nativeWindow);
++            return new ImageReaderVulkanWindow(reader, queue, nativeWindow);
 +#else
              TCU_THROW(ResourceError, "Native window is not available");
 +#endif

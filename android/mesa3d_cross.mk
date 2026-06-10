@@ -94,6 +94,7 @@ MESON_GEN_NINJA := \
 	-Dgbm-backends-path=/vendor/$(MESA3D_LIB_DIR)                                \
 	-Degl=$(if $(BOARD_MESA3D_GALLIUM_DRIVERS),enabled,disabled)                 \
 	-Dllvm=$(if $(MESON_GEN_LLVM_STUB),enabled,disabled)                         \
+	-Damdgpu-virtio=$(if $(filter true,$(BOARD_MESA3D_AMDGPU_VIRTIO)),true,false)\
 	-Dcpp_rtti=false                                                             \
 	-Dlmsensors=disabled                                                         \
 	-Dandroid-libbacktrace=disabled                                              \

@@ -217,6 +217,10 @@ def extract_deps_vkCreateImageView(param, access, lenExpr, api, cgen):
     cgen.stmt("mReconstruction.addHandleDependency((const uint64_t*)%s, %s, (uint64_t)(uintptr_t)%s)" % \
               (access, lenExpr, "unboxed_to_boxed_non_dispatchable_VkImage(pCreateInfo->image)"))
 
+def extract_deps_vkCreateBufferView(param, access, lenExpr, api, cgen):
+    cgen.stmt("mReconstruction.addHandleDependency((const uint64_t*)%s, %s, (uint64_t)(uintptr_t)%s)" % \
+              (access, lenExpr, "unboxed_to_boxed_non_dispatchable_VkBuffer(pCreateInfo->buffer)"))
+
 def extract_deps_vkCreateGraphicsPipelines(param, access, lenExpr, api, cgen):
     cgen.beginFor("uint32_t i = 0", "i < createInfoCount", "++i")
     cgen.beginFor("uint32_t j = 0", "j < pCreateInfos[i].stageCount", "++j")
@@ -254,6 +258,7 @@ specialCaseDependencyExtractors = {
     "vkAllocateDescriptorSets" : extract_deps_vkAllocateDescriptorSets,
     "vkAllocateMemory" : extract_deps_vkAllocateMemory,
     "vkCreateImageView" : extract_deps_vkCreateImageView,
+    "vkCreateBufferView" : extract_deps_vkCreateBufferView,
     "vkCreateGraphicsPipelines" : extract_deps_vkCreateGraphicsPipelines,
     "vkCreateFramebuffer" : extract_deps_vkCreateFramebuffer,
     "vkUpdateDescriptorSets" : extract_deps_vkUpdateDescriptorSets,

@@ -6,6 +6,7 @@
  */
 
 #include "radv_cp_reg_shadowing.h"
+#include "tools/radv_debug.h"
 #include "ac_shadowed_regs.h"
 #include "radv_buffer.h"
 #include "radv_cs.h"

@@ -1028,7 +1028,7 @@ fill_memory_accesses(struct ethosu_subgraph *subgraph)
          operation->read_accesses[3].region = operation->conv.weights.region;
          operation->read_accesses[3].address = operation->conv.weights.address;
          operation->read_accesses[3].size = operation->conv.weights.size;
-         /* fall-through */
+         FALLTHROUGH;
       default:
          operation->read_accesses[0].region = IO_REGION;
          operation->read_accesses[0].address = operation->ifm.tiles.addresses[0];

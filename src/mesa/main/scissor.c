@@ -51,6 +51,12 @@ set_scissor_no_notify(struct gl_context *ctx, unsigned idx,
        height == ctx->Scissor.ScissorArray[idx].Height)
       return;
 
+   /* Flush bitmap cache if needed */
+   struct st_context *st_ctx = st_context(ctx);
+   if (st_ctx && st_ctx->bitmap.cache.empty == GL_FALSE && idx == 0) {
+      st_flush_bitmap_cache(st_ctx);
+   }
+
    FLUSH_VERTICES(ctx, 0, GL_SCISSOR_BIT);
    ST_SET_STATE(ctx->NewDriverState, ST_NEW_SCISSOR);
 
@@ -95,9 +101,6 @@ void GLAPIENTRY
 _mesa_Scissor(GLint x, GLint y, GLsizei width, GLsizei height)
 {
    GET_CURRENT_CONTEXT(ctx);
-
-   if (MESA_VERBOSE & VERBOSE_API)
-      _mesa_debug(ctx, "glScissor %d %d %d %d\n", x, y, width, height);
 
    if (width < 0 || height < 0) {
       _mesa_error( ctx, GL_INVALID_VALUE, "glScissor" );
@@ -200,10 +203,6 @@ scissor_indexed_err(struct gl_context *ctx, GLuint index, GLint left,
                     GLint bottom, GLsizei width, GLsizei height,
                     const char *function)
 {
-   if (MESA_VERBOSE & VERBOSE_API)
-      _mesa_debug(ctx, "%s(%d, %d, %d, %d, %d)\n",
-                  function, index, left, bottom, width, height);
-
    if (index >= ctx->Const.MaxViewports) {
       _mesa_error(ctx, GL_INVALID_VALUE,
                   "%s: index (%d) >= MaxViewports (%d)",
@@ -259,10 +258,6 @@ _mesa_WindowRectanglesEXT(GLenum mode, GLsizei count, const GLint *box)
    int i;
    struct gl_scissor_rect newval[MAX_WINDOW_RECTANGLES];
    GET_CURRENT_CONTEXT(ctx);
-
-   if (MESA_VERBOSE & VERBOSE_API)
-      _mesa_debug(ctx, "glWindowRectanglesEXT(%s, %d, %p)\n",
-                  _mesa_enum_to_string(mode), count, box);
 
    if (mode != GL_INCLUSIVE_EXT && mode != GL_EXCLUSIVE_EXT) {
       _mesa_error(ctx, GL_INVALID_ENUM,

@@ -144,9 +144,8 @@ brw_nir_lower_alpha_to_coverage(nir_shader *shader)
    nir_def *dither_mask = build_dither_mask(&b, color0);
    dither_mask = nir_iand(&b, sample_mask, dither_mask);
 
-   nir_def *fs_config = nir_load_fs_config_intel(&b);
-   nir_def *alpha_to_coverage =
-      nir_test_mask(&b, fs_config, INTEL_FS_CONFIG_ALPHA_TO_COVERAGE);
+   nir_def *alpha_to_coverage = nir_test_fs_config_intel(
+      &b, 1, INTEL_FS_CONFIG_ALPHA_TO_COVERAGE);
    dither_mask = nir_bcsel(&b, alpha_to_coverage,
                            dither_mask, sample_mask_write->src[0].ssa);
 

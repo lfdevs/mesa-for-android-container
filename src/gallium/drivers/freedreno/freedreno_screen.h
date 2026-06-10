@@ -69,7 +69,6 @@ struct fd_screen {
    uint32_t gpu_id;  /* 220, 305, etc */
    uint64_t chip_id; /* coreid:8 majorrev:8 minorrev:8 patch:8 */
    uint32_t max_freq;
-   uint32_t ram_size;
    uint32_t max_rts; /* max # of render targets */
    uint32_t priority_mask;
    unsigned prio_low, prio_norm, prio_high;  /* remap low/norm/high priority to kernel priority */
@@ -93,6 +92,8 @@ struct fd_screen {
       /* If "dual_color_blend_by_location" workaround is enabled
        */
       bool dual_color_blend_by_location;
+
+      float heap_memory_percent;
    } driconf;
 
    struct fd_dev_info dev_info;
@@ -106,6 +107,7 @@ struct fd_screen {
 
    unsigned num_perfcntr_groups;
    const struct fd_perfcntr_group *perfcntr_groups;
+   struct fd_perfcntr_state *perfcntrs;
 
    /* generated at startup from the perfcntr groups: */
    unsigned num_perfcntr_queries;

@@ -16,14 +16,6 @@ def dump(args):
     run(args.cmd, extra_env)
 
 
-def was_good():
-    while True:
-        response = input('Was the previous run [g]ood or [b]ad? ')
-
-        if response in ('g', 'b'):
-            return response == 'g'
-
-
 def bisect(args):
     with open(args.input, 'r') as f:
         ids = [l.strip() for l in f.readlines()]
@@ -39,12 +31,18 @@ def bisect(args):
             'IR3_SHADER_BISECT_LO': str(lo),
             'IR3_SHADER_BISECT_HI': str(hi)
         }
+        print(f'Bisecting between {lo} and {hi} ({len(ids)} shaders remaining)')
         run(args.cmd, extra_env)
 
-        if was_good():
-            del ids[lo_id:hi_id + 1]
-        else:
-            del ids[hi_id + 1:]
+        while True:
+            response = input('Was the previous run [g]ood or [b]ad, or [r]etry? ')
+
+            if response in ('g', 'b', 'r'):
+                if response == 'g':
+                    del ids[lo_id:hi_id + 1]
+                elif response == 'b':
+                    del ids[hi_id + 1:]
+                break
 
     print(ids)
 

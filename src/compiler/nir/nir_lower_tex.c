@@ -409,7 +409,7 @@ convert_yuv_to_rgb(nir_builder *b, nir_tex_instr *tex,
    }
 
    nir_def *result =
-      nir_ffma(b, y, m0, nir_ffma(b, u, m1, nir_ffma(b, v, m2, offset)));
+      nir_ffma_weak(b, y, m0, nir_ffma_weak(b, u, m1, nir_ffma_weak(b, v, m2, offset)));
 
    nir_def_rewrite_uses(&tex->def, result);
 }
@@ -1649,69 +1649,71 @@ nir_lower_tex_block(nir_block *block, nir_builder *b,
       } else
          texture_mask = texture_index < 32 ? (1u << texture_index) : 0u;
 
-      if (texture_mask & options->lower_y_uv_external) {
-         lower_y_uv_external(b, tex, options, texture_index);
-         progress = true;
-      }
+      if (!nir_tex_instr_is_query(tex)) {
+         if (texture_mask & options->lower_y_uv_external) {
+            lower_y_uv_external(b, tex, options, texture_index);
+            progress = true;
+         }
 
-      if (texture_mask & options->lower_y_vu_external) {
-         lower_y_vu_external(b, tex, options, texture_index);
-         progress = true;
-      }
+         if (texture_mask & options->lower_y_vu_external) {
+            lower_y_vu_external(b, tex, options, texture_index);
+            progress = true;
+         }
 
-      if (texture_mask & options->lower_y_u_v_external) {
-         lower_y_u_v_external(b, tex, options, texture_index);
-         progress = true;
-      }
+         if (texture_mask & options->lower_y_u_v_external) {
+            lower_y_u_v_external(b, tex, options, texture_index);
+            progress = true;
+         }
 
-      if (texture_mask & options->lower_yx_xuxv_external) {
-         lower_yx_xuxv_external(b, tex, options, texture_index);
-         progress = true;
-      }
+         if (texture_mask & options->lower_yx_xuxv_external) {
+            lower_yx_xuxv_external(b, tex, options, texture_index);
+            progress = true;
+         }
 
-      if (texture_mask & options->lower_yx_xvxu_external) {
-         lower_yx_xvxu_external(b, tex, options, texture_index);
-         progress = true;
-      }
+         if (texture_mask & options->lower_yx_xvxu_external) {
+            lower_yx_xvxu_external(b, tex, options, texture_index);
+            progress = true;
+         }
 
-      if (texture_mask & options->lower_xy_uxvx_external) {
-         lower_xy_uxvx_external(b, tex, options, texture_index);
-         progress = true;
-      }
+         if (texture_mask & options->lower_xy_uxvx_external) {
+            lower_xy_uxvx_external(b, tex, options, texture_index);
+            progress = true;
+         }
 
-      if (texture_mask & options->lower_xy_vxux_external) {
-         lower_xy_vxux_external(b, tex, options, texture_index);
-         progress = true;
-      }
+         if (texture_mask & options->lower_xy_vxux_external) {
+            lower_xy_vxux_external(b, tex, options, texture_index);
+            progress = true;
+         }
 
-      if (texture_mask & options->lower_ayuv_external) {
-         lower_ayuv_external(b, tex, options, texture_index);
-         progress = true;
-      }
+         if (texture_mask & options->lower_ayuv_external) {
+            lower_ayuv_external(b, tex, options, texture_index);
+            progress = true;
+         }
 
-      if (texture_mask & options->lower_xyuv_external) {
-         lower_xyuv_external(b, tex, options, texture_index);
-         progress = true;
-      }
+         if (texture_mask & options->lower_xyuv_external) {
+            lower_xyuv_external(b, tex, options, texture_index);
+            progress = true;
+         }
 
-      if (texture_mask & options->lower_yuv_external) {
-         lower_yuv_external(b, tex, options, texture_index);
-         progress = true;
-      }
+         if (texture_mask & options->lower_yuv_external) {
+            lower_yuv_external(b, tex, options, texture_index);
+            progress = true;
+         }
 
-      if (texture_mask & options->lower_yu_yv_external) {
-         lower_yu_yv_external(b, tex, options, texture_index);
-         progress = true;
-      }
+         if (texture_mask & options->lower_yu_yv_external) {
+            lower_yu_yv_external(b, tex, options, texture_index);
+            progress = true;
+         }
 
-      if (texture_mask & options->lower_yv_yu_external) {
-         lower_yv_yu_external(b, tex, options, texture_index);
-         progress = true;
-      }
+         if (texture_mask & options->lower_yv_yu_external) {
+            lower_yv_yu_external(b, tex, options, texture_index);
+            progress = true;
+         }
 
-      if (texture_mask & options->lower_y41x_external) {
-         lower_y41x_external(b, tex, options, texture_index);
-         progress = true;
+         if (texture_mask & options->lower_y41x_external) {
+            lower_y41x_external(b, tex, options, texture_index);
+            progress = true;
+         }
       }
 
       if (sat_mask) {

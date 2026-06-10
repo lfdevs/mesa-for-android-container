@@ -49,6 +49,82 @@
 
 #include <assert.h>
 
+static const uint32_t blt_conversion_formats[] = {
+   BLT_FORMAT_A8R8G8B8,
+   BLT_FORMAT_X8R8G8B8,
+   BLT_FORMAT_A4R4G4B4,
+   BLT_FORMAT_A1R5G5B5,
+   BLT_FORMAT_R5G6B5,
+   BLT_FORMAT_R8G8,
+   BLT_FORMAT_R8,
+   BLT_FORMAT_A2R10G10B10,
+};
+
+static inline bool
+blt_conversion_needs_channel_swap(uint32_t blt_fmt)
+{
+   /* Not the PE_FORMAT_RB_SWAP property: RB_SWAP formats are stored BGRA and
+    * already match the BGRA-named BLT formats (identity), and R8/R8G8 have no
+    * R/B pair. A2R10G10B10 is the only whitelist format stored RGBA against a
+    * BGRA-named BLT format, so it alone needs the swap.
+    */
+   return blt_fmt == BLT_FORMAT_A2R10G10B10;
+}
+
+struct blt_conv_swizzle {
+   uint8_t src_swizzle[4];
+   uint8_t dst_swizzle[4];
+};
+
+static bool
+find_blt_conversion(enum pipe_format src_pipe, enum pipe_format dst_pipe,
+                    struct blt_conv_swizzle *swizzle)
+{
+   const uint32_t src_blt = translate_blt_format(src_pipe);
+   const uint32_t dst_blt = translate_blt_format(dst_pipe);
+
+   if (src_blt == ETNA_NO_MATCH || dst_blt == ETNA_NO_MATCH)
+      return false;
+
+   bool src_found = false, dst_found = false;
+   for (unsigned i = 0; i < ARRAY_SIZE(blt_conversion_formats); i++) {
+      if (blt_conversion_formats[i] == src_blt) src_found = true;
+      if (blt_conversion_formats[i] == dst_blt) dst_found = true;
+   }
+
+   if (!src_found || !dst_found)
+      return false;
+
+   static const uint8_t ident[] = {0, 1, 2, 3};
+   static const uint8_t rb_swap[] = {2, 1, 0, 3};
+
+   memcpy(swizzle->src_swizzle,
+          blt_conversion_needs_channel_swap(src_blt) ? rb_swap : ident, 4);
+   memcpy(swizzle->dst_swizzle,
+          blt_conversion_needs_channel_swap(dst_blt) ? rb_swap : ident, 4);
+
+   return true;
+}
+
+/* do_blit_framebuffer(..) only sets non-identity swizzle for channels
+ * missing from src - shared channels stay identity.
+ */
+static inline void
+blt_assert_swizzle_compatible(ASSERTED const struct pipe_blit_info *info)
+{
+   if (!info->swizzle_enable)
+      return;
+
+   /* Only channels present in both src and dst must be identity. */
+   ASSERTED unsigned n =
+      MIN2(util_format_get_nr_components(info->src.format),
+           util_format_get_nr_components(info->dst.format));
+
+   assert(info->swizzle[0] == PIPE_SWIZZLE_X);
+   assert(n < 2 || info->swizzle[1] == PIPE_SWIZZLE_Y);
+   assert(n < 3 || info->swizzle[2] == PIPE_SWIZZLE_Z);
+}
+
 static uint32_t
 etna_compatible_blt_format(enum pipe_format fmt)
 {
@@ -83,6 +159,7 @@ blt_compute_dest_img_config_bits(const struct blt_imginfo *img)
           COND(img->use_ts && img->ts_compress_fmt >= 0, BLT_DEST_IMAGE_CONFIG_COMPRESSION) |
           BLT_DEST_IMAGE_CONFIG_COMPRESSION_FORMAT(img->ts_compress_fmt) |
           BLT_DEST_IMAGE_CONFIG_UNK22 |
+          COND(img->srgb, BLT_DEST_IMAGE_CONFIG_SRGB) |
           BLT_DEST_IMAGE_CONFIG_SWIZ_R(img->swizzle[0]) |
           BLT_DEST_IMAGE_CONFIG_SWIZ_G(img->swizzle[1]) |
           BLT_DEST_IMAGE_CONFIG_SWIZ_B(img->swizzle[2]) |
@@ -97,6 +174,7 @@ blt_compute_src_img_config_bits(const struct blt_imginfo *img)
           COND(img->use_ts, BLT_SRC_IMAGE_CONFIG_TS) |
           COND(img->use_ts && img->ts_compress_fmt >= 0, BLT_SRC_IMAGE_CONFIG_COMPRESSION) |
           BLT_SRC_IMAGE_CONFIG_COMPRESSION_FORMAT(img->ts_compress_fmt) |
+          COND(img->srgb, BLT_SRC_IMAGE_CONFIG_SRGB) |
           BLT_SRC_IMAGE_CONFIG_SWIZ_R(img->swizzle[0]) |
           BLT_SRC_IMAGE_CONFIG_SWIZ_G(img->swizzle[1]) |
           BLT_SRC_IMAGE_CONFIG_SWIZ_B(img->swizzle[2]) |
@@ -676,35 +754,46 @@ etna_try_blt_blit(struct pipe_context *pctx,
       return false;
    }
 
-   /* Only support same format (used tiling/detiling) blits for now.
-    * TODO: figure out which different-format blits are possible and test them
-    *  - need to use correct swizzle
-    *  - set sRGB bits correctly
-    *  - avoid trying to convert between float/int formats?
-    */
-   if (blit_info->src.format != blit_info->dst.format) {
-      DBG("non matching formats: %s vs %s",
-          util_format_short_name(blit_info->src.format),
-          util_format_short_name(blit_info->dst.format));
-      return false;
+   struct blt_conv_swizzle conv_swizzle;
+   bool has_conversion = false;
+   enum pipe_format src_fmt = blit_info->src.format;
+   enum pipe_format dst_fmt = blit_info->dst.format;
+
+   if (src_fmt != dst_fmt) {
+      has_conversion = find_blt_conversion(src_fmt, dst_fmt, &conv_swizzle);
+
+      if (!has_conversion) {
+         DBG("format conversion not supported: %s -> %s",
+             util_format_short_name(src_fmt),
+             util_format_short_name(dst_fmt));
+
+         return false;
+      }
+
+      blt_assert_swizzle_compatible(blit_info);
    }
 
-   const enum pipe_format fmt = translate_format_128bit_to_64bit(blit_info->dst.format);
+   src_fmt = translate_format_128bit_to_64bit(src_fmt);
+   dst_fmt = translate_format_128bit_to_64bit(dst_fmt);
 
-   /* try to find a exact format match first */
-   uint32_t format = translate_blt_format(fmt);
+   /* try to find an exact format match first */
+   uint32_t src_format = translate_blt_format(src_fmt);
+   uint32_t dst_format = translate_blt_format(dst_fmt);
    /* When not resolving MSAA, but only doing a layout conversion, we can get
     * away with a fallback format of matching size.
     */
-   if (format == ETNA_NO_MATCH && !downsample_x && !downsample_y)
-      format = etna_compatible_blt_format(fmt);
-   if (format == ETNA_NO_MATCH) {
-      DBG("format not supported: %s", util_format_short_name(fmt));
+   if (src_format == ETNA_NO_MATCH && !downsample_x && !downsample_y)
+      src_format = etna_compatible_blt_format(src_fmt);
+   if (dst_format == ETNA_NO_MATCH && !downsample_x && !downsample_y)
+      dst_format = etna_compatible_blt_format(dst_fmt);
+   if (src_format == ETNA_NO_MATCH || dst_format == ETNA_NO_MATCH) {
+      DBG("format not supported: %s -> %s",
+          util_format_short_name(src_fmt), util_format_short_name(dst_fmt));
       return false;
    }
 
    if (blit_info->scissor_enable ||
-       blit_info->swizzle_enable ||
+       (blit_info->swizzle_enable && !has_conversion) ||
        blit_info->dst.box.depth != blit_info->src.box.depth ||
        blit_info->dst.box.depth != 1) {
       return false;
@@ -756,18 +845,29 @@ etna_try_blt_blit(struct pipe_context *pctx,
    } else {
       /* Copy op */
       struct blt_imgcopy_op op = {};
+      static const uint8_t ident[] = {0, 1, 2, 3};
 
       op.src.addr.bo = src->bo;
       op.src.addr.offset = src_lev->offset + blit_info->src.box.z * src_lev->layer_stride;
       op.src.addr.flags = ETNA_RELOC_READ;
       op.src.bpp = util_format_get_blocksize(blit_info->src.format);
-      op.src.format = format;
+
+      /* Only convert across the sRGB<->linear boundary. A same-encoding copy is
+       * bit-preserving and a decode+encode roundtrip would only lose precision.
+       */
+      const bool src_is_srgb = util_format_is_srgb(src_fmt);
+      const bool dst_is_srgb = util_format_is_srgb(dst_fmt);
+
+      op.src.format = src_format;
+      op.src.srgb = src_is_srgb && !dst_is_srgb;
       op.src.stride = src_lev->stride;
       op.src.tiling = src->layout;
       op.src.downsample_x = downsample_x;
       op.src.downsample_y = downsample_y;
-      for (unsigned x=0; x<4; ++x)
-         op.src.swizzle[x] = x;
+      if (has_conversion)
+         memcpy(op.src.swizzle, conv_swizzle.src_swizzle, 4);
+      else
+         memcpy(op.src.swizzle, ident, 4);
 
       if (etna_resource_level_ts_valid(src_lev)) {
          op.src.use_ts = 1;
@@ -783,11 +883,14 @@ etna_try_blt_blit(struct pipe_context *pctx,
       op.dest.addr.bo = dst->bo;
       op.dest.addr.offset = dst_lev->offset + blit_info->dst.box.z * dst_lev->layer_stride;
       op.dest.addr.flags = ETNA_RELOC_WRITE;
-      op.dest.format = format;
+      op.dest.format = dst_format;
+      op.dest.srgb = dst_is_srgb && !src_is_srgb;
       op.dest.stride = dst_lev->stride;
       op.dest.tiling = dst->layout;
-      for (unsigned x=0; x<4; ++x)
-         op.dest.swizzle[x] = x;
+      if (has_conversion)
+         memcpy(op.dest.swizzle, conv_swizzle.dst_swizzle, 4);
+      else
+         memcpy(op.dest.swizzle, ident, 4);
 
       /* Apply R<->B swizzle when needed:
        * - Transfer blits (CPU access): swap on the linear side to convert

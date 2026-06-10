@@ -85,7 +85,7 @@ lower_pos_write_dynamic(nir_builder *b, nir_intrinsic_instr *intr,
    nir_def *c = nir_load_clip_z_coeff(b);
 
    /* Lerp. If c = 0, reduces to z. If c = 1/2, reduces to (z + w)/2 */
-   nir_def *new_z = nir_ffma(b, nir_fneg(b, z), c, nir_ffma(b, w, c, z));
+   nir_def *new_z = nir_ffma_weak(b, nir_fneg(b, z), c, nir_ffma_weak(b, w, c, z));
    nir_src_rewrite(&intr->src[0], nir_vector_insert_imm(b, pos, new_z, 2));
    return true;
 }

@@ -39,6 +39,7 @@
 #include <stddef.h>
 
 #include "util/detect.h"
+#include "util/u_math.h"
 
 
 #if DETECT_OS_POSIX
@@ -157,6 +158,53 @@ os_unset_option(const char *name)
  */
 bool
 os_get_total_physical_memory(uint64_t *size);
+
+#define OS_GPU_HEAP_SIZE_HEURISTIC (0.0f)
+
+/*
+ * Calculate the gpu heap size based on a percentage of @memory.
+ * If @percent is OS_GPU_HEAP_SIZE_HEURISTIC:
+ *    Use a heuristic.
+ */
+static inline uint64_t
+os_gpu_heap_size_calculate(uint64_t memory, float percent, float *percent_out)
+{
+   if (percent == OS_GPU_HEAP_SIZE_HEURISTIC) {
+      /* We don't want to burn too much ram with the GPU on devices with a small
+       * amount of memory.
+       */
+      if (memory <= 1ull * 1024ull * 1024ull * 1024ull)
+         percent = 0.25f;
+      else if (memory <= 4ull * 1024ull * 1024ull * 1024ull)
+         percent = 0.5f;
+      else
+         percent = 0.75f;
+   }
+
+   if (percent_out)
+      *percent_out = percent;
+
+   return ROUND_DOWN_TO((uint64_t)(memory * percent), 1 << 20);
+}
+
+/*
+ * Calculate the gpu heap size based on a percentage of the system memory.
+ * If @percent is OS_GPU_HEAP_SIZE_HEURISTIC:
+ *    Use a heuristic.
+ *
+ * @percent_out is preserved on failure.
+ */
+static inline uint64_t
+os_get_gpu_heap_size(float percent, float *percent_out)
+{
+   uint64_t memory;
+
+   const bool success = os_get_total_physical_memory(&memory);
+   if (!success)
+      return 0;
+
+   return os_gpu_heap_size_calculate(memory, percent, percent_out);
+}
 
 /*
  * Amount of physical memory available to a process

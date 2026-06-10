@@ -428,14 +428,36 @@ void pvr_get_image_subresource_layout(const struct pvr_image *image,
    layout->size = mip_level->size;
 }
 
-void pvr_GetImageSubresourceLayout(VkDevice device,
-                                   VkImage _image,
-                                   const VkImageSubresource *subresource,
-                                   VkSubresourceLayout *layout)
+void pvr_GetImageSubresourceLayout2(VkDevice device,
+                                    VkImage _image,
+                                    const VkImageSubresource2 *pSubresource,
+                                    VkSubresourceLayout2 *pLayout)
 {
    VK_FROM_HANDLE(pvr_image, image, _image);
 
-   pvr_get_image_subresource_layout(image, subresource, layout);
+   pvr_get_image_subresource_layout(image,
+                                    &pSubresource->imageSubresource,
+                                    &pLayout->subresourceLayout);
+}
+
+void pvr_GetDeviceImageSubresourceLayout(
+   VkDevice _device,
+   const VkDeviceImageSubresourceInfo *pInfo,
+   VkSubresourceLayout2 *pLayout)
+{
+   VK_FROM_HANDLE(pvr_device, device, _device);
+   struct pvr_image image = { 0 };
+
+   vk_image_init(&device->vk, &image.vk, pInfo->pCreateInfo);
+   pvr_image_init(device, pInfo->pCreateInfo, &image);
+
+   pvr_GetImageSubresourceLayout2(_device,
+                                  pvr_image_to_handle(&image),
+                                  pInfo->pSubresource,
+                                  pLayout);
+
+   pvr_image_fini(device, &image);
+   vk_image_finish(&image.vk);
 }
 
 /* Leave this at the very end, to avoid leakage of HW-defs here */

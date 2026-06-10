@@ -522,7 +522,7 @@ lower_rq_load(nir_builder *b, struct hash_table *ht, nir_intrinsic_instr *intr)
  */
 #define TU_BVH_NO_INSTANCE_ROOT 0xfffffffeu
 
-nir_def *
+static nir_def *
 nir_build_vec3_mat_mult(nir_builder *b, nir_def *vec, nir_def *matrix[], bool translation)
 {
    nir_def *result_components[3] = {

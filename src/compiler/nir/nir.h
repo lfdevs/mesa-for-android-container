@@ -1712,6 +1712,43 @@ nir_alu_instr_channel_used(const nir_alu_instr *instr, unsigned src,
 bool
 nir_alu_instr_is_comparison(const nir_alu_instr *instr);
 
+static inline bool
+nir_alu_instr_is_mul_add(const nir_alu_instr *instr)
+{
+   if (!instr)
+      return false;
+
+   switch (instr->op) {
+   case nir_op_ffma:
+   case nir_op_ffma_weak:
+   case nir_op_fmad:
+      return true;
+   default:
+      return false;
+   }
+}
+
+static inline bool
+nir_alu_instr_is_mul_add_z(const nir_alu_instr *instr)
+{
+   if (!instr)
+      return false;
+
+   switch (instr->op) {
+   case nir_op_ffmaz:
+   case nir_op_fmadz:
+      return true;
+   default:
+      return false;
+   }
+}
+
+static inline bool
+nir_alu_instr_is_any_mul_add(const nir_alu_instr *alu)
+{
+   return nir_alu_instr_is_mul_add(alu) || nir_alu_instr_is_mul_add_z(alu);
+}
+
 bool nir_const_value_negative_equal(nir_const_value c1, nir_const_value c2,
                                     nir_alu_type full_type);
 
@@ -4847,7 +4884,7 @@ static inline void
 nir_def_replace(nir_def *def, nir_def *new_ssa)
 {
    nir_def_rewrite_uses(def, new_ssa);
-   nir_instr_remove(nir_def_instr(def));
+   nir_instr_remove_v(nir_def_instr(def));
 }
 
 nir_component_mask_t nir_src_components_read(const nir_src *src);
@@ -5792,11 +5829,13 @@ nir_lower_shader_calls(nir_shader *shader,
                        void *mem_ctx);
 
 int nir_get_io_offset_src_number(const nir_intrinsic_instr *instr);
+int nir_get_io_uniform_offset_src_number(const nir_intrinsic_instr *instr);
 int nir_get_io_index_src_number(const nir_intrinsic_instr *instr);
 int nir_get_io_data_src_number(const nir_intrinsic_instr *instr);
 int nir_get_io_arrayed_index_src_number(const nir_intrinsic_instr *instr);
 
 nir_src *nir_get_io_offset_src(nir_intrinsic_instr *instr);
+nir_src *nir_get_io_uniform_offset_src(nir_intrinsic_instr *instr);
 nir_src *nir_get_io_index_src(nir_intrinsic_instr *instr);
 nir_src *nir_get_io_data_src(nir_intrinsic_instr *instr);
 nir_src *nir_get_io_arrayed_index_src(nir_intrinsic_instr *instr);
@@ -5806,7 +5845,6 @@ static inline unsigned
 nir_get_io_base_size_nv(const nir_intrinsic_instr *intr)
 {
    switch (intr->intrinsic) {
-   case nir_intrinsic_global_atomic_nv:
    case nir_intrinsic_global_atomic_swap_nv:
    case nir_intrinsic_shared_atomic_nv:
    case nir_intrinsic_shared_atomic_swap_nv:
@@ -5819,6 +5857,9 @@ nir_get_io_base_size_nv(const nir_intrinsic_instr *intr)
    case nir_intrinsic_store_shared_nv:
    case nir_intrinsic_store_shared_unlock_nv:
       return 24;
+   case nir_intrinsic_global_atomic_nv:
+      /* TODO: SM100+ only has 23 bits for the UGPR + GPR form */
+      return 23;
    case nir_intrinsic_ldc_nv:
    case nir_intrinsic_ldcx_nv:
       return 16;
@@ -5892,8 +5933,21 @@ typedef enum {
    nir_move_to_entry_block_only = BITFIELD_BIT(0),
 
    /* Instruction options. */
-   nir_move_to_top_input_loads = BITFIELD_BIT(1),
-   nir_move_to_top_load_smem_amd = BITFIELD_BIT(2),
+
+   /* Simple input loads are non-interpolated loads and interpolated loads
+    * with pixel, centroid, and sample barycentrics. Other barycentrics are
+    * excluded.
+    */
+   nir_move_to_top_input_loads_simple = BITFIELD_BIT(1),
+
+   /* Interpolated loads with non-trivial barycentrics, such as at_offset and
+    * at_sample. (this option is not recommended for Control (game) because
+    * it moves at_sample with complex ALU perspective-correct interpolation
+    * out of conditional blocks)
+    */
+   nir_move_to_top_input_loads_complex_baryc = BITFIELD_BIT(2),
+
+   nir_move_to_top_load_smem_amd = BITFIELD_BIT(3),
 } nir_opt_move_to_top_options;
 
 bool nir_opt_move_to_top(nir_shader *nir, nir_opt_move_to_top_options options);
@@ -5955,6 +6009,7 @@ nir_shader *nir_create_passthrough_gs(const nir_shader_compiler_options *options
 
 bool nir_lower_fragcolor(nir_shader *shader, unsigned max_cbufs);
 bool nir_lower_fragcoord_wtrans(nir_shader *shader);
+bool nir_all_uses_of_float_are_integer(nir_def *def, unsigned component_mask);
 bool nir_opt_frag_coord_to_pixel_coord(nir_shader *shader);
 bool nir_lower_frag_coord_to_pixel_coord(nir_shader *shader);
 bool nir_lower_viewport_transform(nir_shader *shader);
@@ -6627,7 +6682,7 @@ void nir_convert_loop_to_lcssa(nir_loop *loop);
 bool nir_convert_to_lcssa(nir_shader *shader, bool skip_invariants, bool skip_bool_invariants);
 void nir_divergence_analysis_impl(nir_function_impl *impl, nir_divergence_options options);
 void nir_divergence_analysis(nir_shader *shader);
-void nir_vertex_divergence_analysis(nir_shader *shader);
+void nir_custom_divergence_analysis(nir_shader *shader, nir_divergence_options options);
 bool nir_has_divergent_loop(nir_shader *shader);
 
 void
@@ -6670,6 +6725,14 @@ typedef struct nir_lower_printf_options {
 } nir_lower_printf_options;
 
 bool nir_lower_printf(nir_shader *nir, const nir_lower_printf_options *options);
+
+typedef struct nir_lower_abort_options {
+   uint64_t buffer_addr;
+   unsigned max_buffer_size;
+   unsigned ptr_bit_size;
+} nir_lower_abort_options;
+
+bool nir_lower_abort(nir_shader *nir, const nir_lower_abort_options *options);
 
 /* This is here for unit tests. */
 bool nir_opt_comparison_pre_impl(nir_function_impl *impl);
@@ -6755,7 +6818,11 @@ bool nir_opt_large_constants(nir_shader *shader,
                              glsl_type_size_align_func size_align,
                              unsigned threshold);
 
-bool nir_opt_licm(nir_shader *shader);
+typedef bool (*nir_opt_licm_filter_cb)(nir_instr *instr, nir_loop *loop,
+                                       bool instr_block_dominates_exit);
+
+bool nir_opt_licm(nir_shader *shader,
+                  nir_opt_licm_filter_cb filter);
 bool nir_opt_loop(nir_shader *shader);
 
 bool nir_opt_loop_unroll(nir_shader *shader);
@@ -7263,6 +7330,37 @@ nir_is_io_compact(nir_shader *nir, bool is_output, unsigned location)
            location == VARYING_SLOT_CULL_DIST1 ||
            (nir->info.stage != MESA_SHADER_MESH && location == VARYING_SLOT_TESS_LEVEL_OUTER) ||
            (nir->info.stage != MESA_SHADER_MESH && location == VARYING_SLOT_TESS_LEVEL_INNER));
+}
+
+static inline nir_float_muladd_support
+nir_float_muladd_for_bitsize(const nir_shader *nir, unsigned bit_size)
+{
+   switch (bit_size) {
+   case 16:
+      return nir->options->float_mul_add16;
+   case 32:
+      return nir->options->float_mul_add32;
+   case 64:
+      return nir->options->float_mul_add64;
+   default:
+      UNREACHABLE("unsupported bit_size");
+      return (nir_float_muladd_support)0;
+   }
+}
+
+static inline bool
+nir_has_ffma(const nir_shader *nir, unsigned bit_size)
+{
+   nir_float_muladd_support muladd = nir_float_muladd_for_bitsize(nir, bit_size);
+   return (muladd & nir_float_muladd_support_has_ffma) != 0;
+}
+
+static inline bool
+nir_prefers_fmad(const nir_shader *nir, unsigned bit_size)
+{
+   nir_float_muladd_support muladd = nir_float_muladd_for_bitsize(nir, bit_size);
+   return  (muladd & nir_float_muladd_support_prefers_split) != 0 ||
+           (muladd & nir_float_muladd_support_has_ffma) == 0;
 }
 
 #ifdef __cplusplus

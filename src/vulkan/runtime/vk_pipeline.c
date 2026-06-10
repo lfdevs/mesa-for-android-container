@@ -278,7 +278,12 @@ vk_pipeline_hash_shader_stage_blake3(VkPipelineCreateFlags2KHR pipeline_flags,
    if (module) {
       _mesa_blake3_update(&ctx, module->hash, sizeof(module->hash));
    } else if (minfo) {
-      _mesa_blake3_update(&ctx, minfo->pCode, minfo->codeSize);
+      /* Hash the code first to ensure we end up with the same final hash as
+       * when the module is passed as VkPipelineShaderStageCreateInfo::module.
+       */
+      blake3_hash module_hash;
+      vk_shader_module_hash(minfo, module_hash);
+      _mesa_blake3_update(&ctx, module_hash, sizeof(module_hash));
    } else {
       /* It is legal to pass in arbitrary identifiers as long as they don't exceed
        * the limit. Shaders with bogus identifiers are more or less guaranteed to fail. */

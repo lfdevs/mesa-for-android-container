@@ -184,8 +184,12 @@ setup_perfcntr_query_info(struct fd_screen *screen)
 {
    unsigned num_queries = 0;
 
-   for (unsigned i = 0; i < screen->num_perfcntr_groups; i++)
-      num_queries += screen->perfcntr_groups[i].num_countables;
+   for (unsigned i = 0; i < screen->num_perfcntr_groups; i++) {
+      const struct fd_perfcntr_group *g = &screen->perfcntr_groups[i];
+      if (g->pipe > PIPE_BR)
+         continue;
+      num_queries += g->num_countables;
+   }
 
    screen->perfcntr_queries =
       calloc(num_queries, sizeof(screen->perfcntr_queries[0]));
@@ -194,6 +198,8 @@ setup_perfcntr_query_info(struct fd_screen *screen)
    unsigned idx = 0;
    for (unsigned i = 0; i < screen->num_perfcntr_groups; i++) {
       const struct fd_perfcntr_group *g = &screen->perfcntr_groups[i];
+      if (g->pipe > PIPE_BR)
+         continue;
       for (unsigned j = 0; j < g->num_countables; j++) {
          struct pipe_driver_query_info *info = &screen->perfcntr_queries[idx];
          const struct fd_perfcntr_countable *c = &g->countables[j];

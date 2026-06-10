@@ -48,3 +48,7 @@ program@execute@vector-conversion,Fail
 
 # Piglit doesn't check subbuffer alignment requirements
 api@clgetmemobjectinfo,Fail
+
+# Piglit checks the pre 3.1 behavior
+api@clsetkernelarg,Fail
+api@clsetkernelarg@Input checks,Fail

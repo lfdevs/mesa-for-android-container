@@ -227,6 +227,13 @@ va_fuse_cmp(bi_context *ctx, bi_instr **lut, const BITSET_WORD *multiple,
    bi_instr *src0_ins = lut[I->src[0].value];
    bi_instr *src1_ins = lut[I->src[1].value];
 
+   /* %1 = FCMP(a, b)
+    * %2 = LSHIFT_X(%1, %1, 0)
+    * We cannot fold that.
+    */
+   if (src0_ins == src1_ins)
+      return false;
+
    enum va_cmp_type cmp_type = va_cmp_opcode_to_cmp_type(src0_ins->op);
 
    /* Expect both side to use the same form type */

@@ -221,14 +221,18 @@ dEQP-GLES2.functional.texture.format.l8_cube_pot
 hiz@hiz-stencil-test-fbo-d0-s8
 shaders@glsl-fs-fragcoord-zw-perspective
 spec@!opengl 1.1@draw-copypixels-sync
+spec@!opengl 1.1@gl-1.1-drawarrays-vertex-count 100000 vbo gl_lines
 spec@!opengl 1.1@gl-1.1-drawarrays-vertex-count 100000 vbo gl_triangle_strip
 spec@!opengl 1.2@levelclamp
 spec@!opengl 1.4@tex-miplevel-selection
 spec@!opengl 2.0@attribs
+spec@!opengl 2.0@incomplete-cubemap-format
 spec@!opengl 2.0@incomplete-texture-glsl
 spec@!opengl 2.0@max-samplers
 spec@!opengl 2.0@stencil-twoside
+spec@arb_clear_texture@arb_clear_texture-simple
 spec@arb_fragment_program@fog-modes
+spec@arb_fragment_program@texturing@tex-2d
 spec@arb_fragment_program_shadow@tex-shadow2drect
 spec@arb_framebuffer_object@arb_framebuffer_object-depth-stencil-blit depth gl_depth_component16
 spec@arb_pixel_buffer_object@texsubimage pbo
@@ -237,9 +241,11 @@ spec@arb_vertex_buffer_object@vbo-subdata-many drawelements
 spec@ati_draw_buffers@arbfp-no-index
 spec@ati_draw_buffers@ati_draw_buffers-arbfp
 spec@ati_fragment_shader@ati_fragment_shader-error04-endshader
+spec@ati_fragment_shader@ati_fragment_shader-render-textargets
 spec@ati_texture_compression_3dc@fbo-generatemipmap-formats
 spec@ati_texture_compression_3dc@fbo-generatemipmap-formats@GL_COMPRESSED_LUMINANCE_ALPHA_3DC_ATI
 spec@ati_texture_compression_3dc@fbo-generatemipmap-formats@GL_COMPRESSED_LUMINANCE_ALPHA_3DC_ATI NPOT
+spec@ext_framebuffer_object@fbo-3d
 spec@ext_framebuffer_object@fbo-alphatest-nocolor
 spec@ext_framebuffer_object@fbo-clear-formats
 spec@ext_framebuffer_object@fbo-clear-formats@3
@@ -251,9 +257,16 @@ spec@ext_framebuffer_object@fbo-clear-formats@GL_RGBA16
 spec@ext_framebuffer_object@fbo-clear-formats@GL_RGBA4
 spec@ext_framebuffer_object@fbo-drawbuffers-arbfp
 spec@ext_framebuffer_object@fbo-flushing-2
+spec@ext_framebuffer_object@fbo-readpixels-depth-formats@GL_DEPTH_COMPONENT/GL_UNSIGNED_BYTE
+spec@ext_framebuffer_object@fbo-readpixels-depth-formats@GL_DEPTH_COMPONENT32/GL_UNSIGNED_BYTE
+spec@ext_framebuffer_object@fbo-readpixels-depth-formats@GL_DEPTH_COMPONENT32/GL_UNSIGNED_SHORT
+spec@ext_framebuffer_object@fbo-readpixels-depth-formats@GL_DEPTH_STENCIL/GL_UNSIGNED_BYTE
+spec@ext_framebuffer_object@fbo-readpixels-depth-formats@GL_DEPTH_STENCIL/GL_UNSIGNED_SHORT
 spec@ext_framebuffer_object@fbo-scissor-bitmap
 spec@ext_packed_depth_stencil@fbo-clear-formats
 spec@ext_packed_depth_stencil@fbo-clear-formats@GL_DEPTH24_STENCIL8
+spec@ext_packed_depth_stencil@fbo-depthstencil-gl_depth24_stencil8-drawpixels-float-and-ushort
+spec@ext_texture_array@fbo-generatemipmap-array s3tc_dxt1
 spec@ext_texture_compression_s3tc@compressedteximage gl_compressed_rgba_s3tc_dxt1_ext
 spec@ext_texture_compression_s3tc@fbo-generatemipmap-formats@GL_COMPRESSED_RGBA_S3TC_DXT1_EXT
 spec@ext_texture_compression_s3tc@fbo-generatemipmap-formats@GL_COMPRESSED_RGBA_S3TC_DXT1_EXT NPOT
@@ -263,6 +276,7 @@ spec@ext_texture_compression_s3tc@fbo-generatemipmap-formats@GL_COMPRESSED_RGBA_
 spec@ext_texture_compression_s3tc@fbo-generatemipmap-formats@GL_COMPRESSED_RGBA_S3TC_DXT5_EXT NPOT
 spec@ext_texture_compression_s3tc@fbo-generatemipmap-formats@GL_COMPRESSED_RGB_S3TC_DXT1_EXT
 spec@ext_texture_compression_s3tc@fbo-generatemipmap-formats@GL_COMPRESSED_RGB_S3TC_DXT1_EXT NPOT
+spec@ext_texture_env_combine@texture-env-combine
 spec@ext_texture_lod_bias@lodbias
 spec@glsl-1.10@execution@built-in-functions@fs-acos-vec3
 spec@glsl-1.10@execution@built-in-functions@fs-lessthanequal-ivec3-ivec3
@@ -271,11 +285,14 @@ spec@glsl-1.10@execution@built-in-functions@fs-op-ne-int-int-using-if
 spec@glsl-1.10@execution@built-in-functions@vs-exp-float
 spec@glsl-1.10@execution@built-in-functions@vs-exp-vec2
 spec@glsl-1.10@execution@built-in-functions@vs-fract-float
+spec@glsl-1.10@execution@built-in-functions@vs-op-gt-int-int
 spec@glsl-1.10@execution@built-in-functions@vs-op-mult-vec4-float
 spec@glsl-1.10@execution@built-in-functions@vs-op-selection-bool-bvec4-bvec4
+spec@glsl-1.10@execution@built-in-functions@vs-sign-vec4
 spec@glsl-1.10@execution@built-in-functions@vs-step-float-vec3
 spec@glsl-1.10@execution@copy-propagation@glsl-fs-copy-propagation-texcoords-2
 spec@glsl-1.10@execution@glsl-fs-convolution-1
+spec@glsl-1.10@execution@glsl-fs-texture-uniforms-share-same-unit
 spec@glsl-1.10@execution@samplers@glsl-fs-shadow2d-bias
 spec@glsl-1.10@execution@samplers@glsl-fs-texture2d-dependent-4
 spec@glsl-1.10@execution@samplers@glsl-fs-texture2d-dependent-5
@@ -286,6 +303,7 @@ spec@glsl-1.20@execution@built-in-functions@fs-op-mult-mat3-mat4x3
 spec@glsl-1.20@execution@built-in-functions@vs-op-sub-float-mat4x2
 spec@glsl-1.20@execution@glsl-vs-arrays-3
 spec@glsl-1.20@execution@uniform-initializer@glsl-uniform-initializer-1
+spec@nv_conditional_render@generatemipmap
 spec@nv_fog_distance@simple draw - gl_eye_radial_nv
 spec@oes_draw_texture@oes_draw_texture
 
@@ -465,3 +483,7 @@ spec@glsl-1.10@execution@built-in-functions@vs-reflect-vec3-vec3
 spec@glsl-1.20@execution@built-in-functions@fs-op-add-mat3x2-mat3x2
 spec@glsl-1.20@execution@built-in-functions@vs-op-add-float-mat4x3
 spec@glsl-1.20@execution@built-in-functions@vs-op-mult-mat2x4-vec2
+spec@ext_framebuffer_object@fbo-readpixels-depth-formats@GL_DEPTH_COMPONENT32/GL_UNSIGNED_INT
+spec@ext_framebuffer_object@fbo-readpixels-depth-formats@GL_DEPTH24_STENCIL8/GL_UNSIGNED_BYTE
+spec@ext_framebuffer_object@fbo-readpixels-depth-formats@GL_DEPTH24_STENCIL8/GL_UNSIGNED_INT
+spec@ext_framebuffer_object@fbo-readpixels-depth-formats@GL_DEPTH24_STENCIL8/GL_UNSIGNED_SHORT

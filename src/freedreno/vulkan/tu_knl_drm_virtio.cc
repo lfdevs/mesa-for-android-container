@@ -443,7 +443,7 @@ out:
    return VK_ERROR_UNKNOWN;
 }
 
-VkResult
+static VkResult
 virtio_queue_wait_fence(struct tu_queue *queue, uint32_t fence,
                         uint64_t timeout_ns)
 {

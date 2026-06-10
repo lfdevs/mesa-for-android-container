@@ -8834,9 +8834,9 @@ iris_upload_indirect_render_state(struct iris_context *ice,
       if (indirect->buffer) {
          struct iris_bo *bo = iris_resource_bo(indirect->buffer);
          ind.ArgumentBufferStartAddress = ro_bo(bo, indirect->offset);
-         ind.MOCS = iris_mocs(bo, &screen->isl_dev, 0);
+         ind.MOCSIndex = MOCS_GET_INDEX(iris_mocs(bo, &screen->isl_dev, 0));
          } else {
-         ind.MOCS = iris_mocs(NULL, &screen->isl_dev, 0);
+         ind.MOCSIndex = MOCS_GET_INDEX(iris_mocs(NULL, &screen->isl_dev, 0));
       }
 
       if (indirect->indirect_draw_count) {
@@ -9207,8 +9207,8 @@ struct GENX(COMPUTE_WALKER_BODY) body = {
          ind.MaxCount                   = 1;
          ind.body                       = body;
          ind.ArgumentBufferStartAddress = indirect_bo;
-         ind.MOCS                       =
-            iris_mocs(indirect_bo.bo, &screen->isl_dev, 0);
+         ind.MOCSIndex                  =
+            MOCS_GET_INDEX(iris_mocs(indirect_bo.bo, &screen->isl_dev, 0));
       }
    } else {
       if (grid->indirect)

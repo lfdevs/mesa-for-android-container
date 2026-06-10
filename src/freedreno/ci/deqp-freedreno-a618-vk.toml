@@ -49,3 +49,14 @@ fraction = 15
 tests_per_group = 5000
 [deqp.env]
 TU_DEBUG = "sysmem"
+
+# force multi queue emulation
+[[deqp]]
+deqp = "/deqp-vk/external/vulkancts/modules/vulkan/deqp-vk"
+caselists = ["/deqp-vk/mustpass/vk-main.txt"]
+include = ["dEQP-VK.synchronization2.op.multi_queue.*", "dEQP-VK.synchronization2.signal_order.*"]
+prefix = "multiq-"
+fraction = 20
+tests_per_group = 10000
+[deqp.env]
+tu_emulate_second_queue = "true"

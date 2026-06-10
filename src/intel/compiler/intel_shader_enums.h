@@ -114,6 +114,9 @@ enum intel_fs_config {
    /** True if we need to apply Wa_18019110168 remapping */
    INTEL_FS_CONFIG_PER_PRIMITIVE_REMAPPING = (1 << 6),
 
+   /** True if conservative rasterization is enabled */
+   INTEL_FS_CONFIG_CONSERVATIVE_RASTER = (1 << 7),
+
    /** True if this shader has been dispatched coarse
     *
     * This is intentionally chose to be bit 15 to correspond to the coarse bit
@@ -543,6 +546,7 @@ struct intel_fs_params {
    uint32_t first_vue_slot;
    uint32_t primitive_id_index;
    bool per_primitive_remapping;
+   bool conservative_raster;
 };
 
 static inline enum intel_fs_config
@@ -587,6 +591,9 @@ intel_fs_config(struct intel_fs_params params)
 
    if (params.per_primitive_remapping)
       fs_config |= INTEL_FS_CONFIG_PER_PRIMITIVE_REMAPPING;
+
+   if (params.conservative_raster)
+      fs_config |= INTEL_FS_CONFIG_CONSERVATIVE_RASTER;
 
    return fs_config;
 }

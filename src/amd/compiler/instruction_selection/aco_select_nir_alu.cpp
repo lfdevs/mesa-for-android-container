@@ -689,87 +689,55 @@ emit_log2(isel_context* ctx, Builder& bld, Definition dst, Temp val)
 }
 
 Temp
-emit_trunc_f64(isel_context* ctx, Builder& bld, Definition dst, Temp val)
+emit_floor_ceil_trunc_f64(isel_context* ctx, Builder& bld, aco_opcode opcode, Definition dst,
+                          Temp val)
 {
    if (ctx->options->gfx_level >= GFX7)
-      return bld.vop1(aco_opcode::v_trunc_f64, Definition(dst), val);
+      return bld.vop1(opcode, Definition(dst), val);
 
-   /* GFX6 doesn't support V_TRUNC_F64, lower it. */
-   /* TODO: create more efficient code! */
-   if (val.type() == RegType::sgpr)
-      val = as_vgpr(ctx, val);
-
-   /* Split the input value. */
-   Temp val_lo = bld.tmp(v1), val_hi = bld.tmp(v1);
-   bld.pseudo(aco_opcode::p_split_vector, Definition(val_lo), Definition(val_hi), val);
-
-   /* Extract the exponent and compute the unbiased value. */
-   Temp exponent =
-      bld.vop3(aco_opcode::v_bfe_u32, bld.def(v1), val_hi, Operand::c32(20u), Operand::c32(11u));
-   exponent = bld.vsub32(bld.def(v1), exponent, Operand::c32(1023u));
-
-   /* Extract the fractional part. */
-   Temp fract_mask = bld.pseudo(aco_opcode::p_create_vector, bld.def(v2), Operand::c32(-1u),
-                                Operand::c32(0x000fffffu));
-   fract_mask = bld.vop3(aco_opcode::v_lshr_b64, bld.def(v2), fract_mask, exponent);
-
-   Temp fract_mask_lo = bld.tmp(v1), fract_mask_hi = bld.tmp(v1);
-   bld.pseudo(aco_opcode::p_split_vector, Definition(fract_mask_lo), Definition(fract_mask_hi),
-              fract_mask);
-
-   Temp fract_lo = bld.tmp(v1), fract_hi = bld.tmp(v1);
-   Temp tmp = bld.vop1(aco_opcode::v_not_b32, bld.def(v1), fract_mask_lo);
-   fract_lo = bld.vop2(aco_opcode::v_and_b32, bld.def(v1), val_lo, tmp);
-   tmp = bld.vop1(aco_opcode::v_not_b32, bld.def(v1), fract_mask_hi);
-   fract_hi = bld.vop2(aco_opcode::v_and_b32, bld.def(v1), val_hi, tmp);
-
-   /* Get the sign bit. */
-   Temp sign = bld.vop2(aco_opcode::v_and_b32, bld.def(v1), Operand::c32(0x80000000u), val_hi);
-
-   /* Decide the operation to apply depending on the unbiased exponent. */
-   Temp exp_lt0 =
-      bld.vopc_e64(aco_opcode::v_cmp_lt_i32, bld.def(bld.lm), exponent, Operand::zero());
-   Temp dst_lo = bld.vop2(aco_opcode::v_cndmask_b32, bld.def(v1), fract_lo,
-                          bld.copy(bld.def(v1), Operand::zero()), exp_lt0);
-   Temp dst_hi = bld.vop2(aco_opcode::v_cndmask_b32, bld.def(v1), fract_hi, sign, exp_lt0);
-   Temp exp_gt51 = bld.vopc_e64(aco_opcode::v_cmp_gt_i32, bld.def(s2), exponent, Operand::c32(51u));
-   dst_lo = bld.vop2(aco_opcode::v_cndmask_b32, bld.def(v1), dst_lo, val_lo, exp_gt51);
-   dst_hi = bld.vop2(aco_opcode::v_cndmask_b32, bld.def(v1), dst_hi, val_hi, exp_gt51);
-
-   return bld.pseudo(aco_opcode::p_create_vector, Definition(dst), dst_lo, dst_hi);
-}
-
-Temp
-emit_floor_f64(isel_context* ctx, Builder& bld, Definition dst, Temp val)
-{
-   if (ctx->options->gfx_level >= GFX7)
-      return bld.vop1(aco_opcode::v_floor_f64, Definition(dst), val);
-
-   /* GFX6 doesn't support V_FLOOR_F64, lower it (note that it's actually
-    * lowered at NIR level for precision reasons). */
+   /* GFX6 only supports fract, use it to lower floor/ceil/trunc.
+    * ffloor(a) -> fadd(a, -fsat(ffract(a)))
+    * fceil(a) -> -fadd(-a, -fsat(ffract(-a))) (the many negs are needed for -0.0)
+    * ftrunc(a) -> copysign(fadd(abs(a), -fsat(ffract(abs(a)))), a)
+    */
    Temp src0 = as_vgpr(ctx, val);
 
-   Temp min_val = bld.pseudo(aco_opcode::p_create_vector, bld.def(s2), Operand::c32(-1u),
-                             Operand::c32(0x3fefffffu));
+   /* Without rtne, we would get a value slightly above -1.0 for floor(-DBL_MIN). */
+   bool force_rtne = ctx->block->fp_mode.round16_64 != fp_round_ne;
+   ctx->program->needs_fp_mode_insertion |= force_rtne;
 
-   Temp isnan = bld.vopc(aco_opcode::v_cmp_neq_f64, bld.def(bld.lm), src0, src0);
-   Temp fract = bld.vop1(aco_opcode::v_fract_f64, bld.def(v2), src0);
-   Temp min = bld.vop3(aco_opcode::v_min_f64_e64, bld.def(v2), fract, min_val);
+   Builder::Result fract = bld.vop1_e64(
+      force_rtne ? aco_opcode::p_v_fract_f64_rtne : aco_opcode::v_fract_f64, bld.def(v2), src0);
+   /* fract(Inf) is NaN, clamp turns it into zero to make the subtract a nop.
+    * For all other values, fract is already in [0.0, 1.0] anyway.
+    */
+   fract->valu().clamp = true;
+   fract->valu().neg[0] = opcode == aco_opcode::v_ceil_f64;
+   fract->valu().abs[0] = opcode == aco_opcode::v_trunc_f64;
 
-   Temp then_lo = bld.tmp(v1), then_hi = bld.tmp(v1);
-   bld.pseudo(aco_opcode::p_split_vector, Definition(then_lo), Definition(then_hi), src0);
-   Temp else_lo = bld.tmp(v1), else_hi = bld.tmp(v1);
-   bld.pseudo(aco_opcode::p_split_vector, Definition(else_lo), Definition(else_hi), min);
+   Temp tmp = opcode == aco_opcode::v_floor_f64 ? dst.getTemp() : bld.tmp(v2);
 
-   Temp dst0 = bld.vop2(aco_opcode::v_cndmask_b32, bld.def(v1), else_lo, then_lo, isnan);
-   Temp dst1 = bld.vop2(aco_opcode::v_cndmask_b32, bld.def(v1), else_hi, then_hi, isnan);
-
-   Temp v = bld.pseudo(aco_opcode::p_create_vector, bld.def(v2), dst0, dst1);
-
-   Instruction* add = bld.vop3(aco_opcode::v_add_f64_e64, Definition(dst), src0, v);
+   Builder::Result add =
+      bld.vop3(force_rtne ? aco_opcode::p_v_add_f64_rtne : aco_opcode::v_add_f64_e64,
+               Definition(tmp), src0, fract);
+   add->valu().neg[0] = opcode == aco_opcode::v_ceil_f64;
+   add->valu().abs[0] = opcode == aco_opcode::v_trunc_f64;
    add->valu().neg[1] = true;
 
-   return add->definitions[0].getTemp();
+   if (opcode == aco_opcode::v_ceil_f64) {
+      bld.vop3(aco_opcode::v_mul_f64_e64, Definition(dst), Operand::c64(0xBFF0000000000000), add);
+   } else if (opcode == aco_opcode::v_trunc_f64) {
+      Temp src_hi = emit_extract_vector(ctx, src0, 1, v1);
+      Temp tmp_lo = bld.tmp(v1), tmp_hi = bld.tmp(v1);
+      bld.pseudo(aco_opcode::p_split_vector, Definition(tmp_lo), Definition(tmp_hi), tmp);
+
+      Temp sign_mask = bld.copy(bld.def(s1), Operand::c32(0x7fffffff));
+
+      Temp res_hi = bld.vop3(aco_opcode::v_bfi_b32, bld.def(v1), sign_mask, tmp_hi, src_hi);
+      bld.pseudo(aco_opcode::p_create_vector, dst, tmp_lo, res_hi);
+   }
+
+   return dst.getTemp();
 }
 
 Temp
@@ -1927,7 +1895,10 @@ visit_alu_instr(isel_context* ctx, nir_alu_instr* instr)
    }
    case nir_op_ffma: {
       if (dst.regClass() == v2b) {
-         emit_vop3a_instruction(ctx, instr, aco_opcode::v_fma_f16, dst, false, 3);
+         if (ctx->options->gfx_level >= GFX9)
+            emit_vop3a_instruction(ctx, instr, aco_opcode::v_fma_f16, dst, false, 3);
+         else
+            emit_vop3a_instruction(ctx, instr, aco_opcode::v_fma_legacy_f16, dst, false, 3);
       } else if (dst.regClass() == v1 && instr->def.bit_size == 16) {
          assert(instr->def.num_components == 2);
 
@@ -1945,8 +1916,7 @@ visit_alu_instr(isel_context* ctx, nir_alu_instr* instr)
          bld.vop3p(aco_opcode::v_pk_fma_f16, Definition(dst), src0, src1, src2, opsel_lo, opsel_hi);
          emit_split_vector(ctx, dst, 2);
       } else if (dst.regClass() == v1) {
-         emit_vop3a_instruction(ctx, instr, aco_opcode::v_fma_f32, dst,
-                                ctx->block->fp_mode.must_flush_denorms32, 3);
+         emit_vop3a_instruction(ctx, instr, aco_opcode::v_fma_f32, dst, false, 3);
       } else if (dst.regClass() == v2) {
          emit_vop3a_instruction(ctx, instr, aco_opcode::v_fma_f64, dst, false, 3);
       } else if (dst.regClass() == s1) {
@@ -1963,8 +1933,7 @@ visit_alu_instr(isel_context* ctx, nir_alu_instr* instr)
    }
    case nir_op_ffmaz: {
       if (dst.regClass() == v1) {
-         emit_vop3a_instruction(ctx, instr, aco_opcode::v_fma_legacy_f32, dst,
-                                ctx->block->fp_mode.must_flush_denorms32, 3);
+         emit_vop3a_instruction(ctx, instr, aco_opcode::v_fma_legacy_f32, dst, false, 3);
       } else {
          isel_err(&instr->instr, "Unimplemented NIR instr bit size");
       }
@@ -2394,7 +2363,7 @@ visit_alu_instr(isel_context* ctx, nir_alu_instr* instr)
          emit_vop1_instruction(ctx, instr, aco_opcode::v_floor_f32, dst);
       } else if (dst.regClass() == v2) {
          Temp src = get_alu_src(ctx, instr->src[0]);
-         emit_floor_f64(ctx, bld, Definition(dst), src);
+         emit_floor_ceil_trunc_f64(ctx, bld, aco_opcode::v_floor_f64, Definition(dst), src);
       } else if (dst.regClass() == s1) {
          Temp src = get_alu_src(ctx, instr->src[0]);
          aco_opcode op =
@@ -2411,27 +2380,8 @@ visit_alu_instr(isel_context* ctx, nir_alu_instr* instr)
       } else if (dst.regClass() == v1) {
          emit_vop1_instruction(ctx, instr, aco_opcode::v_ceil_f32, dst);
       } else if (dst.regClass() == v2) {
-         if (ctx->options->gfx_level >= GFX7) {
-            emit_vop1_instruction(ctx, instr, aco_opcode::v_ceil_f64, dst);
-         } else {
-            /* GFX6 doesn't support V_CEIL_F64, lower it. */
-            /* trunc = trunc(src0)
-             * if (src0 > 0.0 && src0 != trunc)
-             *    trunc += 1.0
-             */
-            Temp src0 = get_alu_src(ctx, instr->src[0]);
-            Temp trunc = emit_trunc_f64(ctx, bld, bld.def(v2), src0);
-            Temp tmp0 =
-               bld.vopc_e64(aco_opcode::v_cmp_gt_f64, bld.def(bld.lm), src0, Operand::zero());
-            Temp tmp1 = bld.vopc(aco_opcode::v_cmp_lg_f64, bld.def(bld.lm), src0, trunc);
-            Temp cond = bld.sop2(aco_opcode::s_and_b64, bld.def(s2), bld.def(s1, scc), tmp0, tmp1);
-            Temp add = bld.vop2(aco_opcode::v_cndmask_b32, bld.def(v1),
-                                bld.copy(bld.def(v1), Operand::zero()),
-                                bld.copy(bld.def(v1), Operand::c32(0x3ff00000u)), cond);
-            add = bld.pseudo(aco_opcode::p_create_vector, bld.def(v2),
-                             bld.copy(bld.def(v1), Operand::zero()), add);
-            bld.vop3(aco_opcode::v_add_f64_e64, Definition(dst), trunc, add);
-         }
+         Temp src = get_alu_src(ctx, instr->src[0]);
+         emit_floor_ceil_trunc_f64(ctx, bld, aco_opcode::v_ceil_f64, Definition(dst), src);
       } else if (dst.regClass() == s1) {
          Temp src = get_alu_src(ctx, instr->src[0]);
          aco_opcode op =
@@ -2449,7 +2399,7 @@ visit_alu_instr(isel_context* ctx, nir_alu_instr* instr)
          emit_vop1_instruction(ctx, instr, aco_opcode::v_trunc_f32, dst);
       } else if (dst.regClass() == v2) {
          Temp src = get_alu_src(ctx, instr->src[0]);
-         emit_trunc_f64(ctx, bld, Definition(dst), src);
+         emit_floor_ceil_trunc_f64(ctx, bld, aco_opcode::v_trunc_f64, Definition(dst), src);
       } else if (dst.regClass() == s1) {
          Temp src = get_alu_src(ctx, instr->src[0]);
          aco_opcode op =
@@ -2469,39 +2419,46 @@ visit_alu_instr(isel_context* ctx, nir_alu_instr* instr)
          if (ctx->options->gfx_level >= GFX7) {
             emit_vop1_instruction(ctx, instr, aco_opcode::v_rndne_f64, dst);
          } else {
-            /* GFX6 doesn't support V_RNDNE_F64, lower it. */
-            Temp src0_lo = bld.tmp(v1), src0_hi = bld.tmp(v1);
-            Temp src0 = get_alu_src(ctx, instr->src[0]);
-            bld.pseudo(aco_opcode::p_split_vector, Definition(src0_lo), Definition(src0_hi), src0);
+            /* GFX6 doesn't support V_RNDNE_F64, lower it.
+             * For small numbers, add 2**52 to the abs(src), then subtract it again.
+             * This rounds off any additional bits. Then reapply the sign bit.
+             */
+            Temp src0 = as_vgpr(ctx, get_alu_src(ctx, instr->src[0]));
 
-            Temp bitmask = bld.sop1(aco_opcode::s_brev_b32, bld.def(s1),
-                                    bld.copy(bld.def(s1), Operand::c32(-2u)));
-            Temp bfi =
-               bld.vop3(aco_opcode::v_bfi_b32, bld.def(v1), bitmask,
-                        bld.copy(bld.def(v1), Operand::c32(0x43300000u)), as_vgpr(ctx, src0_hi));
-            Temp tmp =
-               bld.vop3(aco_opcode::v_add_f64_e64, bld.def(v2), src0,
-                        bld.pseudo(aco_opcode::p_create_vector, bld.def(v2), Operand::zero(), bfi));
-            Instruction* sub =
-               bld.vop3(aco_opcode::v_add_f64_e64, bld.def(v2), tmp,
-                        bld.pseudo(aco_opcode::p_create_vector, bld.def(v2), Operand::zero(), bfi));
+            Temp two_p52_exp = bld.copy(bld.def(s1), Operand::c32(0x43300000u));
+            Temp two_p52 =
+               bld.pseudo(aco_opcode::p_create_vector, bld.def(s2), Operand::c32(0), two_p52_exp);
+
+            /* We need the adds to round towards nearest even to get overall round towards
+             * nearest even behavior.
+             */
+            bool force_rtne = ctx->block->fp_mode.round16_64 != fp_round_ne;
+            ctx->program->needs_fp_mode_insertion |= force_rtne;
+            aco_opcode add_opc =
+               force_rtne ? aco_opcode::p_v_add_f64_rtne : aco_opcode::v_add_f64_e64;
+
+            Builder::Result add = bld.vop3(add_opc, bld.def(v2), src0, two_p52);
+            add->valu().abs[0] = true;
+
+            Builder::Result sub = bld.vop3(add_opc, bld.def(v2), add, two_p52);
             sub->valu().neg[1] = true;
-            tmp = sub->definitions[0].getTemp();
 
-            Temp v = bld.pseudo(aco_opcode::p_create_vector, bld.def(v2), Operand::c32(-1u),
-                                Operand::c32(0x432fffffu));
-            Instruction* vop3 = bld.vopc_e64(aco_opcode::v_cmp_gt_f64, bld.def(bld.lm), src0, v);
-            vop3->valu().abs[0] = true;
-            Temp cond = vop3->definitions[0].getTemp();
+            Builder::Result cond =
+               bld.vopc_e64(aco_opcode::v_cmp_ge_f64, bld.def(bld.lm), src0, two_p52);
+            cond->valu().abs[0] = true;
 
             Temp tmp_lo = bld.tmp(v1), tmp_hi = bld.tmp(v1);
-            bld.pseudo(aco_opcode::p_split_vector, Definition(tmp_lo), Definition(tmp_hi), tmp);
-            Temp dst0 = bld.vop2_e64(aco_opcode::v_cndmask_b32, bld.def(v1), tmp_lo,
-                                     as_vgpr(ctx, src0_lo), cond);
-            Temp dst1 = bld.vop2_e64(aco_opcode::v_cndmask_b32, bld.def(v1), tmp_hi,
-                                     as_vgpr(ctx, src0_hi), cond);
+            Temp src0_lo = bld.tmp(v1), src0_hi = bld.tmp(v1);
+            bld.pseudo(aco_opcode::p_split_vector, Definition(src0_lo), Definition(src0_hi), src0);
+            bld.pseudo(aco_opcode::p_split_vector, Definition(tmp_lo), Definition(tmp_hi), sub);
 
-            bld.pseudo(aco_opcode::p_create_vector, Definition(dst), dst0, dst1);
+            Temp sign_mask = bld.copy(bld.def(s1), Operand::c32(0x7fffffffu));
+            tmp_hi = bld.vop3(aco_opcode::v_bfi_b32, bld.def(v1), sign_mask, tmp_hi, src0_hi);
+
+            Temp dst_lo = bld.vop2(aco_opcode::v_cndmask_b32, bld.def(v1), tmp_lo, src0_lo, cond);
+            Temp dst_hi = bld.vop2(aco_opcode::v_cndmask_b32, bld.def(v1), tmp_hi, src0_hi, cond);
+
+            bld.pseudo(aco_opcode::p_create_vector, Definition(dst), dst_lo, dst_hi);
          }
       } else if (dst.regClass() == s1) {
          Temp src = get_alu_src(ctx, instr->src[0]);

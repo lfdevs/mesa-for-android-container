@@ -79,7 +79,7 @@ command_buffers_count_utraces(struct anv_device *device,
       if (u_trace_has_points(&cmd_buffers[i]->trace)) {
          utraces++;
          if (!(cmd_buffers[i]->usage_flags & VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT))
-            *utrace_copies += list_length(&cmd_buffers[i]->trace.trace_chunks);
+            (*utrace_copies)++;
       }
    }
 
@@ -211,7 +211,7 @@ anv_device_utrace_flush_cmd_buffers(struct anv_queue *queue,
                intel_ds_queue_flush_data(&queue->ds, &cmd_buffers[i]->trace,
                                          &submit->ds, device->vk.current_frame, false);
             } else {
-               num_traces += cmd_buffers[i]->trace.num_traces;
+               num_traces += u_trace_num_events(&cmd_buffers[i]->trace);
                u_trace_clone_append(u_trace_begin_iterator(&cmd_buffers[i]->trace),
                                     u_trace_end_iterator(&cmd_buffers[i]->trace),
                                     &submit->ds.trace,
@@ -245,12 +245,12 @@ anv_device_utrace_flush_cmd_buffers(struct anv_queue *queue,
 
          uint32_t num_traces = 0;
          for (uint32_t i = 0; i < cmd_buffer_count; i++) {
-            num_traces += cmd_buffers[i]->trace.num_traces;
+            num_traces += u_trace_num_events(&cmd_buffers[i]->trace);
             if (cmd_buffers[i]->usage_flags & VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT) {
                intel_ds_queue_flush_data(&queue->ds, &cmd_buffers[i]->trace,
                                          &submit->ds, device->vk.current_frame, false);
             } else {
-               num_traces += cmd_buffers[i]->trace.num_traces;
+               num_traces += u_trace_num_events(&cmd_buffers[i]->trace);
                u_trace_clone_append(u_trace_begin_iterator(&cmd_buffers[i]->trace),
                                     u_trace_end_iterator(&cmd_buffers[i]->trace),
                                     &submit->ds.trace,
@@ -319,7 +319,7 @@ anv_utrace_destroy_buffer(struct u_trace_context *utctx, void *timestamps)
    anv_bo_pool_free(&device->utrace_bo_pool, bo);
 }
 
-static void
+static bool
 anv_utrace_record_ts(struct u_trace *ut, void *cs,
                      void *timestamps, uint64_t offset_B,
                      uint32_t flags)
@@ -374,6 +374,8 @@ anv_utrace_record_ts(struct u_trace *ut, void *cs,
       cmd_buffer->state.last_compute_walker = NULL;
       cmd_buffer->state.last_indirect_dispatch = NULL;
    }
+
+   return true;
 }
 
 static uint64_t

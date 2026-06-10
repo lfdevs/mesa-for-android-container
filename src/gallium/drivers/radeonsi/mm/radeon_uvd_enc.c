@@ -926,8 +926,8 @@ static void radeon_uvd_enc_begin_frame(struct pipe_video_codec *encoder,
    if (enc->dpb_slots < dpb_slots) {
       uint32_t dpb_size = setup_dpb(enc, dpb_slots);
       if (!enc->dpb) {
-         enc->dpb = si_resource(pipe_buffer_create(enc->screen, PIPE_BIND_CUSTOM,
-                                                   PIPE_USAGE_DEFAULT, dpb_size));
+         enc->dpb = si_vid_create_buffer(enc->screen, PIPE_USAGE_DEFAULT,
+                                         PIPE_RESOURCE_FLAG_UNMAPPABLE, dpb_size);
          if (!enc->dpb) {
             RVID_ERR("Can't create DPB buffer.\n");
             return;
@@ -939,7 +939,8 @@ static void radeon_uvd_enc_begin_frame(struct pipe_video_codec *encoder,
    }
 
    if (!enc->si) {
-      enc->si = si_resource(pipe_buffer_create(enc->screen, PIPE_BIND_CUSTOM, PIPE_USAGE_DEFAULT, 128 * 1024));
+      enc->si = si_vid_create_buffer(enc->screen, PIPE_USAGE_DEFAULT,
+                                     PIPE_RESOURCE_FLAG_UNMAPPABLE, 128 * 1024);
       if (!enc->si) {
          RVID_ERR("Can't create session buffer.\n");
          return;
@@ -1033,8 +1034,7 @@ static void radeon_uvd_enc_encode_bitstream(struct pipe_video_codec *encoder,
 
    *fb = enc->fb = CALLOC_STRUCT(radeon_uvd_enc_fb_buffer);
 
-   enc->fb->res = si_resource(pipe_buffer_create(enc->screen, PIPE_BIND_CUSTOM,
-                                                 PIPE_USAGE_STAGING, 4096));
+   enc->fb->res = si_vid_create_buffer(enc->screen, PIPE_USAGE_STAGING, 0, 4096);
    if (!enc->fb->res) {
       RVID_ERR("Can't create feedback buffer.\n");
       return;
@@ -1082,7 +1082,7 @@ static void radeon_uvd_enc_get_feedback(struct pipe_video_codec *encoder, void *
       enc->ws, fb->res->buf, NULL, PIPE_MAP_READ_WRITE | RADEON_MAP_TEMPORARY);
 
    if (!fb_data->status)
-      *size = fb_data->bitstream_size;
+      *size = fb_data->bitstream_size - fb_data->extra_bytes;
    else
       *size = 0;
 

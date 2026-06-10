@@ -6,8 +6,6 @@
 
 #include "compiler/libcl/libcl.h"
 
-#define NVK_QUERY_IS_TIMESTAMP 0x80000000u
-
 struct nvk_query_report {
    uint64_t value;
    uint64_t timestamp;

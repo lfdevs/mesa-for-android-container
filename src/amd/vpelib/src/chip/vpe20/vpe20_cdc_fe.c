@@ -107,7 +107,8 @@ void vpe20_cdc_program_crossbar_config(struct cdc_fe *cdc_fe, enum vpe_surface_p
         format == VPE_SURFACE_PIXEL_FORMAT_GRPH_ABGR16161616 ||
         format == VPE_SURFACE_PIXEL_FORMAT_GRPH_BGRA16161616_UNORM ||
         format == VPE_SURFACE_PIXEL_FORMAT_GRPH_BGRA16161616_SNORM ||
-        format == VPE_SURFACE_PIXEL_FORMAT_VIDEO_AYCbCr8888) {
+        format == VPE_SURFACE_PIXEL_FORMAT_VIDEO_AYCbCr8888 ||
+        format == VPE_SURFACE_PIXEL_FORMAT_GRPH_RGBE) {
         red_bar = MUX_SEL_CB_B;
         blue_bar = MUX_SEL_CR_R;
     }

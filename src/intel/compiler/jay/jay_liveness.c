@@ -6,7 +6,6 @@
 #include "util/bitset.h"
 #include "util/macros.h"
 #include "util/sparse_bitset.h"
-#include "util/u_math.h"
 #include "util/u_worklist.h"
 #include "jay_ir.h"
 #include "jay_opcodes.h"
@@ -69,10 +68,7 @@ jay_compute_liveness(jay_function *f)
    BITSET_WORD *uniform = BITSET_CALLOC(f->ssa_alloc);
 
    jay_foreach_block(f, block) {
-      u_sparse_bitset_free(&block->live_in);
       u_sparse_bitset_free(&block->live_out);
-
-      u_sparse_bitset_init(&block->live_in, f->ssa_alloc, block);
       u_sparse_bitset_init(&block->live_out, f->ssa_alloc, block);
 
       jay_worklist_push_head(&worklist, block);
@@ -94,6 +90,7 @@ jay_compute_liveness(jay_function *f)
        * 1. Assume everything liveout from this block was live_in
        * 2. Clear live_in for anything defined in this block
        */
+      u_sparse_bitset_free(&block->live_in);
       u_sparse_bitset_dup(&block->live_in, &block->live_out);
 
       jay_foreach_inst_in_block_rev(block, inst) {
@@ -102,21 +99,27 @@ jay_compute_liveness(jay_function *f)
 
       /* Propagate block->live_in[] to the live_out[] of predecessors. Since
        * phis are split, they are handled naturally without special cases.
+       *
+       * The physical control flow graph is a subset of the logical control flow
+       * graph. So, edges that are in both can use the fast merge, and other
+       * edges are physical-only and need to merge only UGPRs.
        */
-      for (enum jay_file file = GPR; file <= UGPR; ++file) {
-         jay_foreach_predecessor(block, p, file) {
-            bool progress = false;
+      jay_foreach_predecessor(block, p, UGPR) {
+         bool progress = false;
 
+         if (jay_cfg_has_edge(*p, block, GPR)) {
+            progress = u_sparse_bitset_merge(&(*p)->live_out, &block->live_in);
+         } else {
             U_SPARSE_BITSET_FOREACH_SET(&block->live_in, i) {
-               if ((file == UGPR) == BITSET_TEST(uniform, i)) {
+               if (BITSET_TEST(uniform, i)) {
                   progress |= !u_sparse_bitset_test(&(*p)->live_out, i);
                   u_sparse_bitset_set(&(*p)->live_out, i);
                }
             }
+         }
 
-            if (progress) {
-               jay_worklist_push_tail(&worklist, *p);
-            }
+         if (progress) {
+            jay_worklist_push_tail(&worklist, *p);
          }
       }
    }
@@ -141,7 +144,6 @@ void
 jay_calculate_register_demands(jay_function *func)
 {
    enum jay_file *files = calloc(func->ssa_alloc, sizeof(enum jay_file));
-   BITSET_WORD *killed = BITSET_CALLOC(func->ssa_alloc);
    unsigned *max_demand = func->demand;
    memset(max_demand, 0, sizeof(func->demand));
 
@@ -149,6 +151,20 @@ jay_calculate_register_demands(jay_function *func)
       jay_foreach_dst_index(I, def, index) {
          files[index] = def.file;
       }
+   }
+
+   /* Model the implicit demand from preloading inputs. In a function like:
+    *
+    *    %0 = preload r10
+    *    %1 = add %0, %0
+    *    return %1
+    *
+    * ...the "true" register demand is 1, but we need to clamp the demand to 11
+    * to make sure r10 actually exists.
+    */
+   jay_foreach_preload(func, I) {
+      uint32_t max = jay_preload_reg(I) + jay_num_values(I->dst);
+      max_demand[I->dst.file] = MAX2(max_demand[I->dst.file], max);
    }
 
    jay_foreach_block(func, block) {
@@ -164,20 +180,9 @@ jay_calculate_register_demands(jay_function *func)
       }
 
       jay_foreach_inst_in_block(block, I) {
-         /* We must have enough register file space for the register payload */
-         if (I->op == JAY_OPCODE_PRELOAD) {
-            uint32_t max = jay_preload_reg(I) + jay_num_values(I->dst);
-            max_demand[I->dst.file] = MAX2(max_demand[I->dst.file], max);
-         }
-
-         /* Collect source values to kill */
-         jay_foreach_killed(I, s, c) {
-            BITSET_SET(killed, jay_channel(I->src[s], c));
-         }
-
          /* Make destinations live */
          jay_foreach_dst(I, d) {
-            demands[d.file] += util_next_power_of_two(jay_num_values(d));
+            demands[d.file] += jay_num_values(d);
          }
 
          /* Update maximum demands */
@@ -195,21 +200,12 @@ jay_calculate_register_demands(jay_function *func)
             }
          }
 
-         jay_foreach_dst(I, d) {
-            unsigned n = jay_num_values(d);
-            demands[d.file] -= util_next_power_of_two(n) - n;
-         }
-
-         /* Late-kill sources */
+         /* Late-kill sources. Duplicated sources are only marked killed once,
+          * so we do not need to filter out duplicates.
+          */
          jay_foreach_killed(I, s, c) {
-            uint32_t index = jay_channel(I->src[s], c);
-
-            if (BITSET_TEST(killed, index)) {
-               BITSET_CLEAR(killed, index);
-
-               assert(demands[I->src[s].file] > 0);
-               --demands[I->src[s].file];
-            }
+            assert(demands[I->src[s].file] > 0);
+            --demands[I->src[s].file];
          }
 
          if (jay_debug & JAY_DBG_PRINTDEMAND) {
@@ -217,8 +213,12 @@ jay_calculate_register_demands(jay_function *func)
             jay_print_inst(stdout, I);
          }
       }
+
+      jay_foreach_ssa_file(f) {
+         block->demand_max[f] = max_demand[f];
+         block->demand_out[f] = demands[f];
+      }
    }
 
    free(files);
-   free(killed);
 }

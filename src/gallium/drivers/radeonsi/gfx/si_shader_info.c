@@ -7,7 +7,6 @@
 #include "si_pipe.h"
 #include "si_shader_internal.h"
 #include "util/mesa-blake3.h"
-#include "pipe/p_shader_tokens.h"
 #include "nir.h"
 #include "nir_tcs_info.h"
 #include "nir_xfb_info.h"
@@ -60,39 +59,35 @@ static const nir_src *get_texture_src(nir_tex_instr *instr, nir_tex_src_type typ
 }
 
 static void
-get_interp_info_from_input_load(nir_intrinsic_instr *intr, enum glsl_interp_mode *interp_mode,
+get_color_input_interp_info(nir_intrinsic_instr *intr, enum glsl_interp_mode *interp_mode,
                                 unsigned *interp_location)
 {
    assert(nir_is_input_load(intr));
 
-   *interp_mode = INTERP_MODE_FLAT;
-   *interp_location = TGSI_INTERPOLATE_LOC_CENTER;
-
-   if (intr->intrinsic != nir_intrinsic_load_interpolated_input)
+   if (intr->intrinsic != nir_intrinsic_load_interpolated_input) {
+      *interp_mode = INTERP_MODE_FLAT;
+      *interp_location = SI_INTERPOLATE_LOC_CENTER;
       return;
+   }
 
-   unsigned io_location = nir_intrinsic_io_semantics(intr).location;
+   ASSERTED unsigned io_location = nir_intrinsic_io_semantics(intr).location;
+   assert(io_location == VARYING_SLOT_COL0 || io_location == VARYING_SLOT_COL1);
+
    nir_intrinsic_instr *baryc = nir_def_as_intrinsic(intr->src[0].ssa);
    *interp_mode = nir_intrinsic_interp_mode(baryc);
-   bool is_color = io_location == VARYING_SLOT_COL0 || io_location == VARYING_SLOT_COL1;
 
-   if (*interp_mode == INTERP_MODE_NONE && is_color)
+   if (*interp_mode == INTERP_MODE_NONE)
       *interp_mode = INTERP_MODE_COLOR;
 
    switch (baryc->intrinsic) {
    case nir_intrinsic_load_barycentric_pixel:
-      *interp_location = TGSI_INTERPOLATE_LOC_CENTER;
+      *interp_location = SI_INTERPOLATE_LOC_CENTER;
       break;
    case nir_intrinsic_load_barycentric_centroid:
-      *interp_location = TGSI_INTERPOLATE_LOC_CENTROID;
+      *interp_location = SI_INTERPOLATE_LOC_CENTROID;
       break;
    case nir_intrinsic_load_barycentric_sample:
-      *interp_location = TGSI_INTERPOLATE_LOC_SAMPLE;
-      break;
-   case nir_intrinsic_load_barycentric_at_offset:
-   case nir_intrinsic_load_barycentric_at_sample:
-      assert(!is_color);
-      *interp_location = TGSI_INTERPOLATE_LOC_CENTER;
+      *interp_location = SI_INTERPOLATE_LOC_SAMPLE;
       break;
    default:
       UNREACHABLE("unexpected baryc intrinsic");
@@ -151,7 +146,7 @@ static void gather_io_instrinsic(const nir_shader *nir, struct si_shader_info *i
 
          enum glsl_interp_mode interp_mode;
          unsigned interp_location;
-         get_interp_info_from_input_load(intr, &interp_mode, &interp_location);
+         get_color_input_interp_info(intr, &interp_mode, &interp_location);
 
          /* Both flat and non-flat can occur with nir_io_mix_convergent_flat_with_interpolated,
           * but we want to save only the non-flat interp mode in that case.
@@ -165,19 +160,19 @@ static void gather_io_instrinsic(const nir_shader *nir, struct si_shader_info *i
 
          switch (interp_mode) {
          case INTERP_MODE_SMOOTH:
-            if (interp_location == TGSI_INTERPOLATE_LOC_SAMPLE)
+            if (interp_location == SI_INTERPOLATE_LOC_SAMPLE)
                info->uses_sysval_persp_sample = true;
-            else if (interp_location == TGSI_INTERPOLATE_LOC_CENTROID)
+            else if (interp_location == SI_INTERPOLATE_LOC_CENTROID)
                info->uses_sysval_persp_centroid = true;
-            else if (interp_location == TGSI_INTERPOLATE_LOC_CENTER)
+            else if (interp_location == SI_INTERPOLATE_LOC_CENTER)
                info->uses_sysval_persp_center = true;
             break;
          case INTERP_MODE_NOPERSPECTIVE:
-            if (interp_location == TGSI_INTERPOLATE_LOC_SAMPLE)
+            if (interp_location == SI_INTERPOLATE_LOC_SAMPLE)
                info->uses_sysval_linear_sample = true;
-            else if (interp_location == TGSI_INTERPOLATE_LOC_CENTROID)
+            else if (interp_location == SI_INTERPOLATE_LOC_CENTROID)
                info->uses_sysval_linear_centroid = true;
-            else if (interp_location == TGSI_INTERPOLATE_LOC_CENTER)
+            else if (interp_location == SI_INTERPOLATE_LOC_CENTER)
                info->uses_sysval_linear_center = true;
             break;
          case INTERP_MODE_COLOR:
@@ -185,11 +180,11 @@ static void gather_io_instrinsic(const nir_shader *nir, struct si_shader_info *i
              * in the rasterizer state, otherwise it will be SMOOTH.
              */
             info->uses_interp_color = true;
-            if (interp_location == TGSI_INTERPOLATE_LOC_SAMPLE)
+            if (interp_location == SI_INTERPOLATE_LOC_SAMPLE)
                info->uses_persp_sample_color = true;
-            else if (interp_location == TGSI_INTERPOLATE_LOC_CENTROID)
+            else if (interp_location == SI_INTERPOLATE_LOC_CENTROID)
                info->uses_persp_centroid_color = true;
-            else if (interp_location == TGSI_INTERPOLATE_LOC_CENTER)
+            else if (interp_location == SI_INTERPOLATE_LOC_CENTER)
                info->uses_persp_center_color = true;
             break;
          case INTERP_MODE_FLAT:
@@ -370,7 +365,8 @@ static void gather_instruction(const struct nir_shader *nir, struct si_shader_in
             info->uses_interp_at_sample = true;
          break;
       case nir_intrinsic_load_frag_coord:
-         info->reads_frag_coord_mask |= nir_def_components_read(&intr->def);
+         if (nir_def_components_read(&intr->def) & BITFIELD_BIT(3))
+            info->uses_sysval_frag_coord_w = true;
          break;
       case nir_intrinsic_load_input:
       case nir_intrinsic_load_per_vertex_input:
@@ -525,7 +521,6 @@ void si_nir_gather_info(struct si_screen *sscreen, struct nir_shader *nir,
       info->base.fs.uses_sample_shading = nir->info.fs.uses_sample_shading;
       info->base.fs.early_fragment_tests = nir->info.fs.early_fragment_tests;
       info->base.fs.post_depth_coverage = nir->info.fs.post_depth_coverage;
-      info->base.fs.pixel_center_integer = nir->info.fs.pixel_center_integer;
       info->base.fs.depth_layout = nir->info.fs.depth_layout;
       break;
 
@@ -592,6 +587,13 @@ void si_nir_gather_info(struct si_screen *sscreen, struct nir_shader *nir,
    info->uses_sysval_invocation_id = BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_INVOCATION_ID);
    info->uses_sysval_primitive_id = BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_PRIMITIVE_ID) ||
                                     nir->info.inputs_read & VARYING_BIT_PRIMITIVE_ID;
+   info->uses_sysval_ancillary = BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_SAMPLE_ID) ||
+                                 BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_LAYER_ID) ||
+                                 BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_FRAG_SHADING_RATE) ||
+                                 /* The PS prolog uses LAYER_ID for fbfetch. */
+                                 (nir->info.stage == MESA_SHADER_FRAGMENT && nir->info.fs.uses_fbfetch_output) ||
+                                 /* The PS prolog uses SAMPLE_ID for SAMPLE_MASK_IN. */
+                                 BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_SAMPLE_MASK_IN);
    info->uses_sysval_sample_mask_in = BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_SAMPLE_MASK_IN);
    info->uses_sysval_linear_sample = BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_BARYCENTRIC_LINEAR_SAMPLE);
    info->uses_sysval_linear_centroid = BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_BARYCENTRIC_LINEAR_CENTROID);
@@ -635,6 +637,8 @@ void si_nir_gather_info(struct si_screen *sscreen, struct nir_shader *nir,
    }
 
    if (nir->info.stage == MESA_SHADER_FRAGMENT) {
+      assert(!BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_FRAG_COORD_XY));
+
       info->output_z_equals_input_z &= !info->output_z_is_not_input_z;
       info->allow_flat_shading = !(info->uses_sysval_persp_center || info->uses_sysval_persp_centroid ||
                                    info->uses_sysval_persp_sample || info->uses_sysval_linear_center ||
@@ -642,7 +646,9 @@ void si_nir_gather_info(struct si_screen *sscreen, struct nir_shader *nir,
                                    info->uses_interp_at_sample || nir->info.writes_memory ||
                                    nir->info.fs.uses_fbfetch_output ||
                                    nir->info.fs.needs_coarse_quad_helper_invocations ||
-                                   BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_FRAG_COORD) ||
+                                   BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_FRAG_COORD_Z) ||
+                                   BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_FRAG_COORD_W_RCP) ||
+                                   BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_PIXEL_COORD) ||
                                    BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_POINT_COORD) ||
                                    BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_SAMPLE_ID) ||
                                    BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_SAMPLE_POS) ||

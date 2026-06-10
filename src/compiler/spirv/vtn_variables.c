@@ -2699,9 +2699,20 @@ vtn_cast_pointer(struct vtn_builder *b, struct vtn_pointer *p,
    vtn_assert(pointed == casted->type->pointed);
 
    if (p->deref) {
+      const struct glsl_type *deref_type = pointed->type;
+
+      /* Preserve the explicit stride when casting an untyped pointer to a raw
+       * SPIR-V matrix type because the raw type lacks it.
+       */
+      if (glsl_type_is_matrix(p->deref->type) &&
+          glsl_type_is_matrix(deref_type) &&
+          glsl_get_explicit_stride(p->deref->type) > 0 &&
+          glsl_get_explicit_stride(deref_type) == 0)
+         deref_type = p->deref->type;
+
       casted->deref = nir_build_deref_cast(&b->nb, &p->deref->def,
                                            p->deref->modes,
-                                           pointed->type, 0);
+                                           deref_type, 0);
    } else if (p->desc_index != NULL) {
       /* Nothing to do for descriptor index pointers. */
    } else if (p->var != NULL) {

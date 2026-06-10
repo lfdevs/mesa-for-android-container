@@ -154,7 +154,6 @@ spec@glsl-1.10@execution@loops@glsl-fs-unroll-explosion,Crash
 spec@glsl-1.10@execution@loops@glsl-vs-unroll-explosion,Crash
 spec@glsl-1.20@execution@clipping@vs-clip-vertex-primitives,Fail
 spec@glsl-1.20@execution@fs-underflow-mul-compare-zero,Fail
-spec@glsl-1.30@execution@varying-packing-mixed-types,Crash
 spec@khr_texture_compression_astc@miptree-gles srgb-fp,Fail
 spec@khr_texture_compression_astc@miptree-gles srgb-fp@sRGB decode full precision,Fail
 spec@khr_texture_compression_astc@sliced-3d-miptree-gles srgb-fp,Fail
@@ -209,9 +208,6 @@ spec@nv_image_formats@compiler@declaration-disallow-rgba16-unorm-cube.frag,Fail
 spec@nv_image_formats@compiler@declaration-disallow-rgba16-unorm-cube.vert,Fail
 spec@oes_point_sprite@arb_point_sprite-checkerboard_gles1,Fail
 spec@oes_shader_io_blocks@compiler@layout-location-aliasing.vert,Fail
-
-# https://gitlab.freedesktop.org/mesa/piglit/-/merge_requests/1109
-spec@nv_read_depth@read_depth_gles3,Fail
 
 # A sub-case involving polygon stipple fails because driver doesn't implement
 # stipple
@@ -324,19 +320,12 @@ program@execute@builtin@builtin-float-sign-1.0.generated@sign float16,Fail
 program@execute@builtin@builtin-float-sign-1.0.generated@sign float2,Fail
 program@execute@builtin@builtin-float-sign-1.0.generated@sign float4,Fail
 program@execute@builtin@builtin-float-sign-1.0.generated@sign float8,Fail
-program@execute@builtin@builtin-long-abs-1.0.generated,Crash
-program@execute@builtin@builtin-long-clamp-1.1.generated,Crash
-program@execute@builtin@builtin-long-max-1.1.generated,Crash
-program@execute@builtin@builtin-long-min-1.1.generated,Crash
 program@execute@builtin@builtin-long-popcount-1.2.generated,Fail
 program@execute@builtin@builtin-long-popcount-1.2.generated@popcount long1,Fail
 program@execute@builtin@builtin-long-popcount-1.2.generated@popcount long16,Fail
 program@execute@builtin@builtin-long-popcount-1.2.generated@popcount long2,Fail
 program@execute@builtin@builtin-long-popcount-1.2.generated@popcount long4,Fail
 program@execute@builtin@builtin-long-popcount-1.2.generated@popcount long8,Fail
-program@execute@builtin@builtin-ulong-clamp-1.1.generated,Crash
-program@execute@builtin@builtin-ulong-max-1.1.generated,Crash
-program@execute@builtin@builtin-ulong-min-1.1.generated,Crash
 program@execute@builtin@builtin-ulong-popcount-1.2.generated,Fail
 program@execute@builtin@builtin-ulong-popcount-1.2.generated@popcount ulong1,Fail
 program@execute@builtin@builtin-ulong-popcount-1.2.generated@popcount ulong16,Fail
@@ -353,6 +342,10 @@ program@execute@scalar-load-long,Crash
 program@execute@scalar-load-ulong,Crash
 program@run kernel with max work item sizes,Fail
 
+# Bisected to 626ec83855a ("rusticl: implement CL 3.1 platform features")
+api@clsetkernelarg,Fail
+api@clsetkernelarg@Input checks,Fail
+
 # Bisected to 6bc47e65 ("rusticl: Fix work group size validation")
 program@bitcoin: phatk kernel,Fail
 
@@ -367,19 +360,6 @@ asan-KHR-GL31.transform_feedback3.skip_multiple_buffers,Fail
 
 # This seems to be working with upstream
 program@execute@vector-conversion,Fail
-
-# https://gitlab.khronos.org/Tracker/vk-gl-cts/-/issues/6437
-dEQP-VK.binding_model.unused_invalid_descriptor.copy.combined_image_sampler,Crash
-dEQP-VK.binding_model.unused_invalid_descriptor.copy.sampled_image,Crash
-dEQP-VK.binding_model.unused_invalid_descriptor.copy.storage_buffer,Crash
-dEQP-VK.binding_model.unused_invalid_descriptor.copy.uniform_buffer,Crash
-dEQP-VK.binding_model.unused_invalid_descriptor.write.invalid.combined_image_sampler,Crash
-dEQP-VK.binding_model.unused_invalid_descriptor.write.invalid.sampled_image,Crash
-dEQP-VK.binding_model.unused_invalid_descriptor.write.unused.combined_image_sampler,Crash
-dEQP-VK.binding_model.unused_invalid_descriptor.write.unused.sampled_image,Crash
-dEQP-VK.binding_model.unused_invalid_descriptor.write.unused.storage_buffer,Crash
-dEQP-VK.binding_model.unused_invalid_descriptor.write.unused.uniform_buffer,Crash
-asan-dEQP-VK.binding_model.unused_invalid_descriptor.write.invalid.combined_image_sampler,Crash
 
 # SKQP failing tests
 ES2BlendWithNoTexture,Fail
@@ -517,3 +497,7 @@ vk_xfermodes3,Fail
 
 # Bisected to 08b5876c379 ("v3d: only expose rgba buffer-textures")
 TransferPixelsTest,Fail
+
+# uprev Piglit in Mesa
+spec@glsl-1.30@execution@glsl-packed-back-color,Fail
+

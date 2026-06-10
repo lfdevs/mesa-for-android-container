@@ -633,16 +633,6 @@ _mesa_CopyImageSubData(GLuint srcName, GLenum srcTarget, GLint srcLevel,
    GLuint src_num_samples, dst_num_samples;
    int dstWidth, dstHeight, dstDepth;
 
-   if (MESA_VERBOSE & VERBOSE_API)
-      _mesa_debug(ctx, "glCopyImageSubData(%u, %s, %d, %d, %d, %d, "
-                                          "%u, %s, %d, %d, %d, %d, "
-                                          "%d, %d, %d)\n",
-                  srcName, _mesa_enum_to_string(srcTarget), srcLevel,
-                  srcX, srcY, srcZ,
-                  dstName, _mesa_enum_to_string(dstTarget), dstLevel,
-                  dstX, dstY, dstZ,
-                  srcWidth, srcHeight, srcDepth);
-
    if (!ctx->Extensions.ARB_copy_image) {
       _mesa_error(ctx, GL_INVALID_OPERATION,
                   "glCopyImageSubData(extension not available)");
@@ -790,16 +780,6 @@ _mesa_CopyImageSubDataNV(GLuint srcName, GLenum srcTarget, GLint srcLevel,
    GLuint src_w, src_h, dst_w, dst_h;
    GLuint src_bw, src_bh, dst_bw, dst_bh;
    GLuint src_num_samples, dst_num_samples;
-
-   if (MESA_VERBOSE & VERBOSE_API)
-      _mesa_debug(ctx, "glCopyImageSubDataNV(%u, %s, %d, %d, %d, %d, "
-                                            "%u, %s, %d, %d, %d, %d, "
-                                            "%d, %d, %d)\n",
-                  srcName, _mesa_enum_to_string(srcTarget), srcLevel,
-                  srcX, srcY, srcZ,
-                  dstName, _mesa_enum_to_string(dstTarget), dstLevel,
-                  dstX, dstY, dstZ,
-                  srcWidth, srcHeight, srcDepth);
 
    if (!ctx->Extensions.NV_copy_image) {
       _mesa_error(ctx, GL_INVALID_OPERATION,

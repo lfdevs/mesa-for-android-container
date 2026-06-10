@@ -3,7 +3,6 @@
  */
 
 #include "anv_private.h"
-#include "compiler/brw/brw_disasm.h"
 
 static inline uint32_t
 shader_bo_index(struct anv_shader_heap *heap, uint64_t addr)

@@ -1536,6 +1536,8 @@ unsigned r300_get_num_cs_end_dwords(struct r300_context *r300)
     dwords += r300->hyperz_state.size + 2; /* emit_hyperz_end + zcache flush */
     if (r300->screen->caps.is_r500)
         dwords += 2; /* emit_index_bias */
+    if (!r300->screen->caps.has_tcl && r300->screen->caps.has_hardware_tcl)
+        dwords += 2; /* VAP status reset for other GL users/DDX */
     dwords += 3; /* MSPOS */
 
     return dwords;

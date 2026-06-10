@@ -8,10 +8,20 @@ files_mlw_codec = files(
    'source/mlw_decode.cpp',
 )
 
+# mlw_codec is vendored verbatim from Arm's Regor compiler (Ethos-U Vela).
+# Keep the imported sources pristine for clean re-vendoring and silence their
+# known warnings at build-config level rather than patching vendored code.
+mlw_codec_cpp_args = cpp.get_supported_arguments(
+  '-Wno-unused-but-set-variable',
+  '-Wno-sign-compare',
+  '-Wno-unused-const-variable',
+)
+
 libmlw_codec = static_library(
   'mlw_codec',
   [files_mlw_codec],
   gnu_symbol_visibility : 'hidden',
+  cpp_args : mlw_codec_cpp_args,
 )
 
 inc_libmlw_codec = [include_directories('include')]

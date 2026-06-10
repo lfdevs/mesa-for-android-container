@@ -13,7 +13,7 @@
 #include <libsync.h>
 
 #include <dlfcn.h>
-#include <libdrm/amdgpu.h>
+#include "amdgpu.h"
 
 #include "amdgpu_virtio_private.h"
 #include "drm-uapi/amdgpu_drm.h"

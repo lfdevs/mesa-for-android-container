@@ -407,7 +407,8 @@ find_array_access_via_induction(loop_info_state *state,
 }
 
 static void
-guess_loop_limit_by_intrinsic(loop_info_state *state, nir_intrinsic_instr *intrin, unsigned *min_loop_count)
+guess_loop_limit_by_intrinsic(loop_info_state *state, nir_intrinsic_instr *intrin,
+                              nir_scalar *ind, unsigned *min_loop_count)
 {
    /* Check for arrays variably-indexed by a loop induction variable. */
    if (intrin->intrinsic == nir_intrinsic_load_deref ||
@@ -419,27 +420,40 @@ guess_loop_limit_by_intrinsic(loop_info_state *state, nir_intrinsic_instr *intri
          find_array_access_via_induction(state,
                                          nir_src_as_deref(intrin->src[0]),
                                          &array_idx);
-      if (array_idx)
-         *min_loop_count = MIN2(*min_loop_count, array_size);
+      if (array_idx) {
+         if (*min_loop_count > array_size) {
+            nir_scalar lp_ind = { array_idx->basis, 0 };
+            *ind = lp_ind;
+            *min_loop_count = array_size;
+         }
+      }
 
       if (intrin->intrinsic == nir_intrinsic_copy_deref) {
          array_size =
             find_array_access_via_induction(state,
                                             nir_src_as_deref(intrin->src[1]),
                                             &array_idx);
-         if (array_idx)
-            *min_loop_count = MIN2(*min_loop_count, array_size);
+         if (array_idx) {
+            if (*min_loop_count > array_size) {
+               nir_scalar lp_ind = { array_idx->basis, 0 };
+               *ind = lp_ind;
+               *min_loop_count = array_size;
+            }
+         }
       }
    }
 }
 
 static void
-guess_loop_limit_by_tex(loop_info_state *state, nir_tex_instr *tex, unsigned *min_loop_count)
+guess_loop_limit_by_tex(loop_info_state *state, nir_tex_instr *tex,
+                        nir_scalar *ind, unsigned *min_loop_count)
 {
    nir_def *sample = nir_get_tex_src(tex, nir_tex_src_ms_index);
    if (sample) {
       nir_loop_induction_variable *var = get_loop_var(sample, state);
       if (var) {
+         nir_scalar lp_ind = { var->basis, 0 };
+         *ind = lp_ind;
          const nir_function_impl *impl = nir_cf_node_get_function(&state->loop->cf_node);
          const nir_shader_compiler_options *options = impl->function->shader->options;
          *min_loop_count = MIN2(*min_loop_count, options->max_samples);
@@ -448,7 +462,7 @@ guess_loop_limit_by_tex(loop_info_state *state, nir_tex_instr *tex, unsigned *mi
 }
 
 static unsigned
-guess_loop_limit(loop_info_state *state)
+guess_loop_limit(loop_info_state *state, nir_scalar *ind)
 {
    unsigned min_loop_count = UINT_MAX;
 
@@ -456,10 +470,12 @@ guess_loop_limit(loop_info_state *state)
       nir_foreach_instr(instr, block) {
          switch (instr->type) {
          case nir_instr_type_intrinsic:
-            guess_loop_limit_by_intrinsic(state, nir_instr_as_intrinsic(instr), &min_loop_count);
+            guess_loop_limit_by_intrinsic(state, nir_instr_as_intrinsic(instr),
+                                          ind, &min_loop_count);
             break;
          case nir_instr_type_tex:
-            guess_loop_limit_by_tex(state, nir_instr_as_tex(instr), &min_loop_count);
+            guess_loop_limit_by_tex(state, nir_instr_as_tex(instr), ind,
+                                    &min_loop_count);
             break;
          default:
             break;
@@ -1130,6 +1146,7 @@ find_trip_count(loop_info_state *state, unsigned execution_mode,
 
       bool limit_rhs;
       nir_scalar basic_ind = { NULL, 0 };
+      nir_scalar terminator_ind = { NULL, 0 };
       nir_scalar limit;
 
       if ((alu_op == nir_op_inot || alu_op == nir_op_ieq || alu_op == nir_op_ior) &&
@@ -1183,8 +1200,12 @@ find_trip_count(loop_info_state *state, unsigned execution_mode,
          trip_count_known = false;
 
          if (!try_find_limit(limit, &limit_val, alu_op, invert_cond, terminator, state)) {
-            /* Guess loop limit based on array access */
-            unsigned guessed_loop_limit = guess_loop_limit(state);
+            /* Guess loop limit based on array access, and get the induction
+             * var from the array access which is not necessarily the same
+             * induction var used by the loop terminator.
+             */
+            terminator_ind = basic_ind;
+            unsigned guessed_loop_limit = guess_loop_limit(state, &basic_ind);
             if (guessed_loop_limit) {
                limit_val = nir_const_value_for_uint(guessed_loop_limit,
                                                     basic_ind.def->bit_size);
@@ -1268,13 +1289,27 @@ find_trip_count(loop_info_state *state, unsigned execution_mode,
       }
       nir_const_value step_val = nir_scalar_as_const_value(alu_s);
 
-      int iterations = calculate_iterations(nir_get_scalar(lv->basis, basic_ind.comp), limit,
-                                            initial_val, step_val, limit_val,
-                                            step_alu, cond,
-                                            alu_op, limit_rhs,
-                                            invert_cond,
-                                            execution_mode,
-                                            max_unroll_iterations);
+      int iterations;
+      if (guessed_trip_count && terminator_ind.def != basic_ind.def) {
+         /* TODO: expand to support additional step combinations where needed */
+         if (step_alu->op != nir_op_iadd ||
+             (nir_const_value_as_int(step_val, basic_ind.def->bit_size) <= 0) ||
+             (nir_const_value_as_int(initial_val, basic_ind.def->bit_size) < 0)) {
+            iterations = -1;
+         } else {
+            iterations = get_iteration(nir_op_ilt, initial_val, step_val,
+                                       limit_val, false,
+                                       basic_ind.def->bit_size, execution_mode);
+         }
+      } else {
+         iterations = calculate_iterations(nir_get_scalar(lv->basis, basic_ind.comp), limit,
+                                           initial_val, step_val, limit_val,
+                                           step_alu, cond,
+                                           alu_op, limit_rhs,
+                                           invert_cond,
+                                           execution_mode,
+                                           max_unroll_iterations);
+      }
 
       /* Where we not able to calculate the iteration count */
       if (iterations == -1) {

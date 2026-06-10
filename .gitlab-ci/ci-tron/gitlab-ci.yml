@@ -96,6 +96,21 @@
     - job: debian-x86_64
       artifacts: false
 
+.ci-tron-x86_64-test-vk-asan:
+  extends:
+    - .use-debian/x86_64_test-vk
+    - .ci-tron-x86_64-test
+  variables:
+    S3_ARTIFACT_NAME: "mesa-x86_64-asan-debugoptimized"
+    DEQP_FORCE_ASAN: 1
+    VKD3D_FORCE_ASAN: 1
+  needs:
+    - job: debian/x86_64_test-vk
+      artifacts: false
+      optional: true
+    - job: debian-x86_64-asan
+      artifacts: false
+
 .ci-tron-x86_64-test-vk-manual:
   extends:
     - .use-debian/x86_64_test-vk

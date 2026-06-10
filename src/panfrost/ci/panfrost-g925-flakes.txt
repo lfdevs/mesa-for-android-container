@@ -1,20 +1,25 @@
 dEQP-VK.api.command_buffers.record_many_draws_primary_2
 dEQP-VK.api.command_buffers.record_many_draws_secondary_1
 dEQP-VK.api.command_buffers.record_many_draws_secondary_2
+dEQP-VK.draw.dynamic_rendering.primary_cmd_buff.instanced.dynamic_state_draw_indirect_vk_primitive_topology_triangle_fan_attrib_divisor_1_multiview
+dEQP-VK.image.non_uniform_offset_sample.texel_fetch_offset.single_mip_frag
 dEQP-VK.memory.pipeline_barrier.host_write_uniform_buffer.1048576
 dEQP-VK.memory.pipeline_barrier.host_write_uniform_texel_buffer.1048576
 dEQP-VK.memory.pipeline_barrier.transfer_dst_uniform_buffer.1048576
+dEQP-VK.renderpasses.renderpass2.depth_stencil_resolve.image_2d_17_1.samples_16.s8_uint.depth_zero_stencil_zero_unused_resolve_testing_stencil_samplemask
+dEQP-VK.renderpasses.renderpass2.depth_stencil_resolve.image_2d_17_1.samples_4.d32_sfloat_s8_uint.depth_average_stencil_max_unused_resolve_testing_depth
 dEQP-VK.sparse_resources.buffer.ssbo.sparse_residency.buffer_size_2_24
 dEQP-VK.sparse_resources.buffer.ssbo.sparse_residency.non_resident_buffer_copy_src_alloc_none_16777216
+dEQP-VK.sparse_resources.buffer.ssbo.sparse_residency.non_resident_buffer_copy_src_alloc_partial_16777216
+dEQP-VK.subgroups.arithmetic.graphics.subgroupor_i16vec2
+dEQP-VK.subgroups.arithmetic.graphics.subgroupxor_uvec3
+dEQP-VK.subgroups.shuffle.graphics.subgroupshuffle_u16vec3
+dEQP-VK.subgroups.shuffle.graphics.subgroupshuffledown_uint64_t_constant
+dEQP-VK.texture.explicit_lod.2d.sizes.128x128_nearest_nearest_mipmap_nearest_clamp
 
 # deqp-vk: ../src/panfrost/vulkan/panvk_image.c:346: panvk_image_get_mod_from_list: Assertion `!"Invalid modifier"' failed.
 dEQP-VK.wsi.wayland.swapchain.create.image_extent
 dEQP-VK.wsi.wayland.swapchain.simulate_oom.image_extent
-
-# https://gerrit.khronos.org/c/vk-gl-cts/+/19859
-dEQP-VK.wsi.xcb.maintenance1.present_modes.*
-dEQP-VK.wsi.xcb.maintenance1.present_fence.*
-dEQP-VK.wsi.xcb.maintenance1.deferred_alloc.*
 
 angle-dEQP-GLES3.functional.multisample.fbo_4_samples.proportionality_sample_coverage
 angle-dEQP-GLES3.functional.multisample.fbo_max_samples.constancy_alpha_to_coverage
@@ -27,6 +32,7 @@ angle-multisample-dEQP-GLES31.functional.draw_indirect.compute_interop.large.dra
 angle-multisample-dEQP-GLES31.functional.draw_indirect.compute_interop.large.drawelements_separate_grid_500x500_drawcount_8
 angle-multisample-dEQP-GLES31.functional.draw_indirect.compute_interop.large.drawelements_separate_grid_500x500_drawcount_2500
 angle-multisample-dEQP-GLES31.functional.draw_indirect.compute_interop.large.drawelements_separate_grid_1200x1200_drawcount_1
+angle-multisample-dEQP-GLES31.functional.draw_indirect.compute_interop.large.drawelements_separate_grid_1200x1200_drawcount_8
 angle-multisample-dEQP-GLES31.functional.draw_indirect.compute_interop.large.drawelements_separate_grid_1500x1500_drawcount_1
 
 # Appears just beforehand:
@@ -45,9 +51,11 @@ dEQP-VK.memory.pipeline_barrier.host_write_vertex_buffer.1048576_vertex_buffer_s
 dEQP-VK.pipeline.fast_linked_library.stencil.format.d24_unorm_s8_uint.states.fail_decw.pass_zero.dfail_wrap.comp_greater.any
 dEQP-VK.subgroups.arithmetic.graphics.subgroupexclusiveadd_u64vec2
 dEQP-VK.subgroups.arithmetic.graphics.subgroupinclusivemax_uint8_t
+dEQP-VK.subgroups.arithmetic.graphics.subgroupmin_int16_t
 dEQP-VK.subgroups.ballot_broadcast.graphics.subgroupbroadcastfirst_u8vec2
 dEQP-VK.subgroups.shuffle.graphics.subgroupclusteredrotate_u16vec3_constant
 dEQP-VK.subgroups.shuffle.graphics.subgroupshuffledown_float_constant
+dEQP-VK.subgroups.shuffle.graphics.subgroupshufflexor_i8vec2_dynamically_uniform
 dEQP-VK.subgroups.shuffle.graphics.subgroupshufflexor_ivec2
 dEQP-VK.synchronization.op.single_queue.fence.write_blit_image_read_image_compute.image_128x128_r8g8b8a8_unorm
 dEQP-VK.synchronization.signal_order.timeline_semaphore.write_copy_image_read_image_compute.image_128x128_r16_uint
@@ -67,3 +75,12 @@ dEQP-VK.wsi.xcb.swapchain.create.image_array_layers
 dEQP-VK.wsi.xlib.maintenance1.scaling.demand.one_to_one.center_center.swapchain_taller
 dEQP-VK.wsi.xlib.maintenance1.scaling.resize_window.mailbox.aspect_stretch.center_max.swapchain_smaller_taller_aspect
 dEQP-VK.wsi.xlib.surface.query_capabilities2
+
+# Since the weston intermittently crashes on 925, these xfails from VKCTS
+# 1.4.4.2 -> 1.4.5.3 uprev will sometimes flake into being Skips.
+dEQP-VK.wsi.xcb.present_timing.basic.timing_queue
+dEQP-VK.wsi.xcb.present_timing.query.parallel.parallel
+dEQP-VK.wsi.xlib.present_timing.basic.timing_queue
+
+# Various subgroups tests are intermittently failing. Just ignore them for now.
+dEQP-VK.subgroups.*

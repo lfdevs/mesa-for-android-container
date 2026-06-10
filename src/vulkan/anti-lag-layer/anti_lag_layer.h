@@ -23,16 +23,15 @@ enum frame_state {
 };
 
 typedef struct frame {
-   uint64_t frame_idx;
-   uint64_t frame_start_time;
-   uint64_t min_delay;
-   uint64_t imposed_delay;
+   uint64_t frame_time;
+   int64_t min_delay;
+
    enum frame_state state;
 } frame;
 
 struct query {
-   uint64_t begin_gpu_ts;
-   uint64_t submit_cpu_ts;
+   uint64_t gpu_ts;
+   uint64_t submit_ts;
    VkCommandBuffer cmdbuffer;
 };
 
@@ -82,6 +81,7 @@ typedef struct device_context {
    VkDevice device;
    VkAllocationCallbacks alloc;
    simple_mtx_t mtx;
+   bool enabled;
 
    struct {
       int64_t delta;
@@ -91,8 +91,11 @@ typedef struct device_context {
 
    RINGBUFFER_DECLARE(frames, frame, MAX_FRAMES);
    frame *active_frame;
-   int64_t base_delay;
-   int64_t adaptation;
+
+   uint64_t avg_frame_time;
+   uint64_t delta;
+   uint64_t prev_input_begin;
+   int64_t queuing_delay;
 
    unsigned num_queues;
    queue_context queues[];

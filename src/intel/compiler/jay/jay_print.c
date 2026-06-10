@@ -4,6 +4,9 @@
  */
 
 #include "compiler/brw/brw_eu_defines.h"
+#include "compiler/gen/gen.h"
+#include "compiler/gen/gen_enums.h"
+#include "compiler/gen/gen_names.h"
 #include "util/lut.h"
 #include "util/macros.h"
 #include "jay_ir.h"
@@ -15,26 +18,6 @@
       assert(x < ARRAY_SIZE(arr));                                             \
       arr[x];                                                                  \
    })
-
-static const char *jay_conditional_mod_str[] = {
-   [JAY_CONDITIONAL_EQ] = ".eq", [JAY_CONDITIONAL_NE] = ".ne",
-   [JAY_CONDITIONAL_GT] = ".gt", [JAY_CONDITIONAL_LT] = ".lt",
-   [JAY_CONDITIONAL_GE] = ".ge", [JAY_CONDITIONAL_LE] = ".le",
-   [JAY_CONDITIONAL_OV] = ".ov", [JAY_CONDITIONAL_NAN] = ".nan",
-};
-
-static const char *tgl_pipe_str[] = {
-   [TGL_PIPE_NONE] = "",  [TGL_PIPE_FLOAT] = "F", [TGL_PIPE_INT] = "I",
-   [TGL_PIPE_LONG] = "L", [TGL_PIPE_MATH] = "M",  [TGL_PIPE_SCALAR] = "S",
-   [TGL_PIPE_ALL] = "A",
-};
-
-static const char *jay_arf_str[] = {
-   [JAY_ARF_NULL] = "_",
-   [JAY_ARF_MASK] = "mask",
-   [JAY_ARF_CONTROL] = "ctrl",
-   [JAY_ARF_TIMESTAMP] = "timestamp",
-};
 
 static const char *jay_file_str[JAY_FILE_LAST + 1] = {
    [GPR] = "r",       [UGPR] = "u",      [FLAG] = "f",      [UFLAG] = "uf",
@@ -75,7 +58,7 @@ jay_print_def(FILE *fp, const jay_inst *I, int src)
       has_reg = false;
       fprintf(fp, "_");
    } else if (def.file == J_ARF) {
-      fputs(ENUM_TO_STR(jay_base_index(def), jay_arf_str), fp);
+      fputs(gen_arf_to_string(jay_base_index(def)), fp);
    } else if (def.collect) {
       assert(has_index && "else would be contiguous");
       fprintf(fp, "(");
@@ -179,8 +162,9 @@ jay_print_inst(FILE *fp, jay_inst *I)
       fprintf(fp, ".(%s)", util_lut3_to_str[jay_bfn_ctrl(I)]);
    }
 
-   const char *cmod = ENUM_TO_STR(I->conditional_mod, jay_conditional_mod_str);
-   fprintf(fp, "%s%s ", I->saturate ? ".sat" : "", cmod ? cmod : "");
+   enum gen_condition cmod = I->conditional_mod;
+   fprintf(fp, "%s%s%s ", I->saturate ? ".sat" : "", cmod ? "." : "",
+           cmod ? gen_condition_to_string(cmod) : "");
    sep = "";
 
    for (unsigned i = 0; i < I->num_srcs - I->predication; i++) {
@@ -203,21 +187,7 @@ jay_print_inst(FILE *fp, jay_inst *I)
    if (I->dep.regdist || I->dep.mode) {
       fprintf(fp, "%s%s%s", strlen(sep) ? " {" : "{",
               I->replicate_dep ? "*" : "", I->decrement_dep ? "+" : "");
-      sep = "";
-
-      if (I->dep.regdist) {
-         fprintf(fp, "%s@%d", ENUM_TO_STR(I->dep.pipe, tgl_pipe_str),
-                 I->dep.regdist);
-         sep = " ";
-      }
-
-      if (I->dep.mode) {
-         fprintf(fp, "%s$%d%s", sep, I->dep.sbid,
-                 (I->dep.mode & TGL_SBID_SET ? "" :
-                  I->dep.mode & TGL_SBID_DST ? ".dst" :
-                                               ".src"));
-      }
-
+      gen_print_swsb(NULL, fp, I->dep);
       fprintf(fp, "}");
    }
 
@@ -314,3 +284,21 @@ jay_print(FILE *fp, jay_shader *s)
       jay_print_func(fp, f);
    }
 }
+
+#ifndef NDEBUG
+
+void
+jay_archive(jay_shader *s, const char *name, unsigned idx)
+{
+   if (!s->archiver)
+      return;
+
+   const char *filename =
+      ralloc_asprintf(s, "JAY%u/%02u-%s", s->dispatch_width, idx, name);
+
+   FILE *f = debug_archiver_start_file(s->archiver, filename);
+   jay_print(f, s);
+   debug_archiver_finish_file(s->archiver);
+}
+
+#endif

@@ -35,15 +35,10 @@ enum r300_rs_col_write_type {
 
 static void r300_draw_emit_attrib(struct r300_context* r300,
                                   enum attrib_emit emit,
-                                  int index)
+                                  enum tgsi_semantic sname,
+                                  unsigned sindex)
 {
-    struct r300_vertex_shader_code* vs = r300_vs(r300)->shader;
-    struct tgsi_shader_info* info = &vs->info;
-    int output;
-
-    output = draw_find_shader_output(r300->draw,
-                                     info->output_semantic_name[index],
-                                     info->output_semantic_index[index]);
+    int output = draw_find_shader_output(r300->draw, sname, sindex);
     draw_emit_vertex_attr(&r300->vertex_info, emit, output);
 }
 
@@ -55,27 +50,27 @@ static void r300_draw_emit_all_attribs(struct r300_context* r300)
 
     /* Position. */
     if (vs_outputs->pos != ATTR_UNUSED) {
-        r300_draw_emit_attrib(r300, EMIT_4F, vs_outputs->pos);
+        r300_draw_emit_attrib(r300, EMIT_4F, TGSI_SEMANTIC_POSITION, 0);
     } else {
         assert(0);
     }
 
     /* Point size. */
     if (vs_outputs->psize != ATTR_UNUSED) {
-        r300_draw_emit_attrib(r300, EMIT_1F_PSIZE, vs_outputs->psize);
+        r300_draw_emit_attrib(r300, EMIT_1F_PSIZE, TGSI_SEMANTIC_PSIZE, 0);
     }
 
     /* Colors. */
     for (i = 0; i < ATTR_COLOR_COUNT; i++) {
         if (vs_outputs->color[i] != ATTR_UNUSED) {
-            r300_draw_emit_attrib(r300, EMIT_4F, vs_outputs->color[i]);
+            r300_draw_emit_attrib(r300, EMIT_4F, TGSI_SEMANTIC_COLOR, i);
         }
     }
 
     /* Back-face colors. */
     for (i = 0; i < ATTR_COLOR_COUNT; i++) {
         if (vs_outputs->bcolor[i] != ATTR_UNUSED) {
-            r300_draw_emit_attrib(r300, EMIT_4F, vs_outputs->bcolor[i]);
+            r300_draw_emit_attrib(r300, EMIT_4F, TGSI_SEMANTIC_BCOLOR, i);
         }
     }
 
@@ -86,22 +81,31 @@ static void r300_draw_emit_all_attribs(struct r300_context* r300)
     for (i = 0; i < ATTR_GENERIC_COUNT && gen_count < 8; i++) {
         if (vs_outputs->generic[i] != ATTR_UNUSED &&
             (!(r300->sprite_coord_enable & (1U << i)) || !r300->is_point)) {
-            r300_draw_emit_attrib(r300, EMIT_4F, vs_outputs->generic[i]);
+            r300_draw_emit_attrib(r300, EMIT_4F, TGSI_SEMANTIC_GENERIC, i);
             gen_count++;
         }
     }
 
     /* Fog coordinates. */
     if (gen_count < 8 && vs_outputs->fog != ATTR_UNUSED) {
-        r300_draw_emit_attrib(r300, EMIT_4F, vs_outputs->fog);
+        r300_draw_emit_attrib(r300, EMIT_4F, TGSI_SEMANTIC_FOG, 0);
         gen_count++;
     }
 
     /* WPOS. */
     if (r300_fs(r300)->shader->inputs.wpos != ATTR_UNUSED && gen_count < 8) {
-        DBG(r300, DBG_SWTCL, "draw_emit_attrib: WPOS, index: %i\n",
-            vs_outputs->wpos);
-        r300_draw_emit_attrib(r300, EMIT_4F, vs_outputs->wpos);
+        unsigned wpos_slot = 0;
+
+        for (i = 0; i < ATTR_GENERIC_COUNT; i++) {
+            if (vs_outputs->generic[i] != ATTR_UNUSED)
+                wpos_slot = i + 1;
+        }
+
+        assert(wpos_slot < ATTR_GENERIC_COUNT);
+
+        DBG(r300, DBG_SWTCL, "draw_emit_attrib: WPOS, slot: %u\n",
+            wpos_slot);
+        r300_draw_emit_attrib(r300, EMIT_4F, TGSI_SEMANTIC_GENERIC, wpos_slot);
     }
 }
 
@@ -1051,17 +1055,6 @@ static void r300_pick_vertex_shader(struct r300_context *r300)
     if (r300->vs_state.state) {
         bool wpos = r300_fs(r300)->shader->inputs.wpos != ATTR_UNUSED;
 
-        if (!vs->first) {
-            /* Build the vertex shader for the first time. */
-            vs->first = vs->shader = CALLOC_STRUCT(r300_vertex_shader_code);
-            vs->first->wpos = wpos;
-            r300_translate_vertex_shader(r300, vs);
-            if (!vs->first->dummy) {
-                r300_mark_vs_code_dirty(r300);
-                r300_mark_atom_dirty(r300, &r300->rs_block_state);
-            }
-            return;
-        }
         /* Pick the vertex shader based on whether we need wpos */
         if (vs->first->wpos != wpos) {
             if (vs->first->next && vs->first->next->wpos == wpos) {

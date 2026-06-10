@@ -36,6 +36,7 @@
  * suffixes do not exist and 8 comes before 16.
  */
 static const struct spirv_capabilities implemented_capabilities = {
+   .AbortKHR = true,
    .Addresses = true,
    .AtomicFloat16AddEXT = true,
    .AtomicFloat32AddEXT = true,
@@ -80,6 +81,7 @@ static const struct spirv_capabilities implemented_capabilities = {
    .Float16Buffer = true,
    .Float64 = true,
    .FloatControls2 = true,
+   .FMAKHR = true,
    .FragmentBarycentricKHR = true,
    .FragmentDensityEXT = true,
    .FragmentFullyCoveredEXT = true,
@@ -844,6 +846,7 @@ vtn_handle_debug_printf(struct vtn_builder *b, SpvOp ext_opcode,
 
    if (argc) {
       glsl_struct_field *fields = calloc(argc, sizeof(glsl_struct_field));
+      int next_offset = 0;
       for (uint32_t i = 0; i < argc; i++) {
          struct vtn_ssa_value *arg = vtn_ssa_value(b, w[6 + i]);
 
@@ -852,8 +855,11 @@ vtn_handle_debug_printf(struct vtn_builder *b, SpvOp ext_opcode,
             fields[i].type = glsl_vector_type(fields[i].type->base_type, arg->def->num_components);
 
          fields[i].name = "";
+         fields[i].offset = next_offset;
 
-         info->arg_sizes[i] = arg->def->bit_size / 8;
+         int size = (int) arg->def->bit_size * arg->def->num_components / 8;
+         info->arg_sizes[i] = size;
+         next_offset += size;
       }
 
       nir_variable *packed_args = nir_local_variable_create(
@@ -873,6 +879,20 @@ vtn_handle_debug_printf(struct vtn_builder *b, SpvOp ext_opcode,
    }
 
    /* Do nothing. */
+   return true;
+}
+
+/* From vkd3d-proton */
+#define DXIL_SPV_SHADER_QUIRK_NON_SEMANTIC_SIGNAL_CONCURRENT_WORKGROUP 15
+
+static bool
+vtn_handle_dxil_quirk(struct vtn_builder *b, SpvOp ext_opcode,
+                      const uint32_t *w, unsigned count)
+{
+   if (ext_opcode == DXIL_SPV_SHADER_QUIRK_NON_SEMANTIC_SIGNAL_CONCURRENT_WORKGROUP) {
+      b->shader->info.occupancy_bounded_workgroup_fairness = true;
+   }
+
    return true;
 }
 
@@ -972,6 +992,8 @@ vtn_handle_extension(struct vtn_builder *b, SpvOp opcode,
       } else if (strcmp(ext, "NonSemantic.DebugPrintf") == 0
                 && (b->options && b->options->printf)) {
          val->ext_handler = vtn_handle_debug_printf;
+      } else if (strcmp(ext, "NonSemantic.dxil-spirv.quirks") == 0) {
+         val->ext_handler = vtn_handle_dxil_quirk;
       } else if (strstr(ext, "NonSemantic.") == ext) {
          val->ext_handler = vtn_handle_non_semantic_instruction;
       } else if (strstr(ext, "MesaInternal") == ext) {
@@ -1504,14 +1526,19 @@ array_stride_decoration_cb(struct vtn_builder *b,
       if (type->base_type == vtn_base_type_pointer &&
           type->pointed != NULL &&
           (type->pointed->block || type->pointed->buffer_block)) {
-         vtn_warn("A pointer to a structure decorated with *Block* or "
-                  "*BufferBlock* must not have an *ArrayStride* decoration");
-         /* Ignore the decoration */
+         /* Ignore invalid decoration:
+          *
+          *    A pointer to a structure decorated with *Block* or
+          *    *BufferBlock* must not have an *ArrayStride* decoration
+          */
       } else if (vtn_type_contains_block(b, type)) {
-         vtn_warn("The ArrayStride decoration cannot be applied to an array "
-                  "type which contains a structure type decorated Block "
-                  "or BufferBlock");
-         /* Ignore the decoration */
+         /* Ignore invalid decoration:
+          *
+          *    Each array type must have an ArrayStride decoration,
+          *    unless it is an array that contains a structure decorated
+          *    with Block or BufferBlock, in which case it must not have
+          *    an ArrayStride decoration.
+          */
       } else {
          vtn_fail_if(dec->operands[0] == 0, "ArrayStride must be non-zero");
          type->stride = dec->operands[0];
@@ -5642,21 +5669,6 @@ vtn_handle_preamble_instruction(struct vtn_builder *b, SpvOp opcode,
       vtn_handle_decoration(b, opcode, w, count);
       break;
 
-   case SpvOpExtInst:
-   case SpvOpExtInstWithForwardRefsKHR: {
-      struct vtn_value *val = vtn_value(b, w[3], vtn_value_type_extension);
-      if (val->ext_handler == vtn_handle_non_semantic_instruction) {
-         /* NonSemantic extended instructions are acceptable in preamble. */
-         vtn_handle_non_semantic_instruction(b, w[4], w, count);
-         return true;
-      } else if (val->ext_handler == vtn_handle_non_semantic_debug_info) {
-         vtn_handle_non_semantic_debug_info(b, w[4], w, count);
-         return true;
-      } else {
-         return false; /* End of preamble. */
-      }
-   }
-
    default:
       return false; /* End of preamble */
    }
@@ -6290,8 +6302,9 @@ vtn_handle_variable_or_type_instruction(struct vtn_builder *b, SpvOp opcode,
    case SpvOpExtInstWithForwardRefsKHR: {
       struct vtn_value *val = vtn_value(b, w[3], vtn_value_type_extension);
 
-      if (val->ext_handler == vtn_handle_non_semantic_debug_info)
-         return vtn_handle_non_semantic_debug_info(b, opcode, w, count);
+      if (val->ext_handler == vtn_handle_non_semantic_debug_info ||
+          val->ext_handler == vtn_handle_dxil_quirk)
+         return val->ext_handler(b, w[4], w, count);
 
       /* NonSemantic extended instructions are acceptable in preamble, others
        * will indicate the end of preamble.
@@ -6766,6 +6779,21 @@ vtn_handle_allocate_node_payloads(struct vtn_builder *b, SpvOp opcode,
    nir_initialize_node_payloads(&b->nb, payloads, payload_count, node_index, .execution_scope = scope);
 }
 
+static void
+vtn_handle_abort(struct vtn_builder *b, const uint32_t *w, unsigned count)
+{
+   struct vtn_type *msg_type = vtn_get_type(b, w[1]);
+   struct vtn_ssa_value *msg = vtn_ssa_value(b, w[2]);
+
+   nir_variable *var =
+      nir_local_variable_create(b->nb.impl, msg_type->type, "abort_message");
+   nir_deref_instr *deref = nir_build_deref_var(&b->nb, var);
+
+   vtn_local_store(b, msg, deref, 0);
+
+   nir_abort(&b->nb, &deref->def);
+}
+
 static bool
 vtn_handle_body_instruction(struct vtn_builder *b, SpvOp opcode,
                             const uint32_t *w, unsigned count)
@@ -6979,6 +7007,7 @@ vtn_handle_body_instruction(struct vtn_builder *b, SpvOp opcode,
    case SpvOpFSub:
    case SpvOpIMul:
    case SpvOpFMul:
+   case SpvOpFmaKHR:
    case SpvOpUDiv:
    case SpvOpSDiv:
    case SpvOpFDiv:
@@ -7313,6 +7342,10 @@ vtn_handle_body_instruction(struct vtn_builder *b, SpvOp opcode,
       vtn_handle_cooperative_instruction(b, opcode, w, count);
       break;
 
+   case SpvOpAbortKHR:
+      vtn_handle_abort(b, w, count);
+      break;
+
    default:
       vtn_fail_with_opcode("Unhandled opcode", opcode);
    }
@@ -7616,7 +7649,10 @@ spirv_to_nir(const uint32_t *words, size_t word_count,
    }
 
    const char *read_path = os_get_option_secure("MESA_SPIRV_READ_PATH");
-   if (read_path) {
+   if (!options->ignore_replacement && read_path) {
+      struct spirv_to_nir_options replace_options = *options;
+      replace_options.ignore_replacement = true;
+
       char blake3_str[BLAKE3_HEX_LEN];
       _mesa_blake3_format(blake3_str, b->shader->info.source_blake3);
 
@@ -7642,12 +7678,14 @@ spirv_to_nir(const uint32_t *words, size_t word_count,
       replacement_size = ftell(f);
       if (replacement_size == 0) {
          vtn_info("Replacement SPIR-V shader file %s is empty.", filename);
+         fclose(f);
          goto no_shader_replace;
       }
 
       uint32_t *replacement_words = malloc(replacement_size);
       if (replacement_words == NULL) {
          vtn_err("Failed to allocate memory for replacement SPIR-V shader %s", filename);
+         fclose(f);
          goto no_shader_replace;
       }
 
@@ -7667,7 +7705,7 @@ spirv_to_nir(const uint32_t *words, size_t word_count,
       ralloc_free(b->shader);
       ralloc_free(b);
       nir_shader* result = spirv_to_nir(replacement_words, replacement_size / sizeof(uint32_t),
-                                        spec, stage, entry_point_name, options,
+                                        spec, stage, entry_point_name, &replace_options,
                                         nir_options);
 
       free((void *)replacement_words);

@@ -145,7 +145,7 @@ devices = { llvmpipe = { checksum = "bab025069d7e1f559dc5b5f6a304272323cb8a9312c
 
 [[traces]]
 path = "gputest/furmark-v2.trace"
-devices = { llvmpipe = { checksum = "3b9bda909593ad4e31eaacd76c343ab105c5a793f6d6314b1213983e71f0cc19" } }
+devices = { llvmpipe = { checksum = "9364fbe77efb10aedebba7a47502d9915e7a73e11b4917f82fad744b0b8bc81a" } }
 
 [[traces]]
 path = "gputest/triangle-v2.trace"
@@ -153,7 +153,7 @@ devices = { llvmpipe = { checksum = "83fd0393efbab758382d87e13d75fa55a31059fb4f8
 
 [[traces]]
 path = "humus/Portals-v2.trace"
-devices = { llvmpipe = { checksum = "0b179d1754f3311ee8c86677c40c5b7d46bd6901a92db65a87e0d443fe61b038" } }
+devices = { llvmpipe = { checksum = "0ea207013e51b81729cc1ad1221f68e36abef0e4068c658390e728092b08a5f9" } }
 
 [[traces]]
 path = "jvgs/jvgs-d27fb67-v2.trace"
@@ -163,7 +163,7 @@ devices = { llvmpipe = { checksum = "a941ea07bdcfb11328a39b2f0a940269460d2d06f6c
 
 [[traces]]
 path = "minetest/minetest-high-v3.trace"
-devices = { llvmpipe = { checksum = "6f5b3f7159563f8006adef16c6afa052801fe7d0b6503c0265d7a060d0bf2b18" } }
+devices = { llvmpipe = { checksum = "b809b3fc6ff419219d200f6aaeba3794b89653ef02e82dda73ef6e27da8efb87" } }
 
 # nheko/nheko-colors.trace: 380784 glXMakeContextCurrent() during the trace's teardown fails
 
@@ -227,7 +227,7 @@ devices = { llvmpipe = { checksum = "e24faa84c7be25876719f3ff48e2c65642ce243ab93
 
 [[traces]]
 path = "valve/counterstrike-v2.trace"
-devices = { llvmpipe = { checksum = "b3f44f2dbbbaebe12e4fc60eb12b51effaaa36aaf42df21ddcddc3ae97629f05" } }
+devices = { llvmpipe = { checksum = "a2c1018946b15d1e8c18de8e26acc603a17aef5f1871dfff2be4be9d94b5a8bb" } }
 
 [[traces]]
 path = "valve/portal-2-v2.trace"

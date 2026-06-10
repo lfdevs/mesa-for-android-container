@@ -13,7 +13,6 @@
 #include "util/u_screen.h"
 #include <sys/utsname.h>
 #include "drm-uapi/drm.h"
-#include "aco_interface.h"
 
 static const char *si_get_vendor(struct pipe_screen *pscreen)
 {

@@ -5,3 +5,7 @@ KHR-GL46.texture_swizzle.smoke
 
 # 60s timeout (flake)
 KHR-GL46.gpu_shader_fp64.builtin.inverse_dmat4
+
+# VKCTS 1.4.4.2 -> 1.4.5.3 uprev seems to have bumped this back over
+# the timeout for a few drivers.
+gmem-dEQP-VK.memory.mapping.suballocation.full.variable.implicit_unmap

@@ -77,6 +77,7 @@ struct rc_constant_list {
 struct const_remap {
    int index[4];
    uint8_t swizzle[4];
+   uint8_t negate[4];
 };
 
 void rc_constants_init(struct rc_constant_list *c);
@@ -86,7 +87,7 @@ unsigned rc_constants_add(struct rc_constant_list *c, struct rc_constant *consta
 unsigned rc_constants_add_state(struct rc_constant_list *c, unsigned state1, unsigned state2);
 unsigned rc_constants_add_immediate_vec4(struct rc_constant_list *c, const float *data);
 unsigned rc_constants_add_immediate_scalar(struct rc_constant_list *c, float data,
-                                           unsigned *swizzle);
+                                           unsigned *swizzle, unsigned *negate);
 void rc_constants_print(struct rc_constant_list *c, struct const_remap *r);
 
 /**

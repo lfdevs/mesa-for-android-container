@@ -159,19 +159,6 @@ Struct("intel_device_info_pat_entry",
                This tells KMD what caching mode the CPU mapping should use.
                It has nothing to do with any PAT cache modes."""))])
 
-Enum("intel_cmat_scope",
-     [EnumValue("INTEL_CMAT_SCOPE_NONE", value=0),
-     "INTEL_CMAT_SCOPE_SUBGROUP"])
-
-Enum("intel_cooperative_matrix_component_type",
-     ["INTEL_CMAT_FLOAT16",
-      "INTEL_CMAT_FLOAT32",
-      "INTEL_CMAT_SINT32",
-      "INTEL_CMAT_SINT8",
-      "INTEL_CMAT_UINT32",
-      "INTEL_CMAT_UINT8",
-      "INTEL_CMAT_BFLOAT16"])
-
 Enum("intel_engine_class",
      ["INTEL_ENGINE_CLASS_RENDER",
       "INTEL_ENGINE_CLASS_COPY",
@@ -179,22 +166,6 @@ Enum("intel_engine_class",
       "INTEL_ENGINE_CLASS_VIDEO_ENHANCE",
       "INTEL_ENGINE_CLASS_COMPUTE",
       "INTEL_ENGINE_CLASS_INVALID"])
-
-Struct("intel_cooperative_matrix_configuration",
-   [Member("intel_cmat_scope", "scope",
-           comment=dedent("""\
-           Matrix A is MxK.
-           Matrix B is KxN.
-           Matrix C and Matrix Result are MxN.
-
-           Result = A * B + C;""")),
-    Member("uint8_t", "m"),
-    Member("uint8_t", "n"),
-    Member("uint8_t", "k"),
-    Member("intel_cooperative_matrix_component_type", "a"),
-    Member("intel_cooperative_matrix_component_type", "b"),
-    Member("intel_cooperative_matrix_component_type", "c"),
-    Member("intel_cooperative_matrix_component_type", "result")])
 
 Enum("intel_kmd_type",
      ["INTEL_KMD_TYPE_INVALID",
@@ -485,8 +456,6 @@ Struct("intel_device_info",
         Member("bool", "probe_forced", comment="Device needed INTEL_FORCE_PROBE"),
         Member("intel_device_info_mem_desc", "mem"),
         Member("intel_device_info_pat_desc", "pat"),
-        Member("intel_cooperative_matrix_configuration",
-               "cooperative_matrix_configurations", array=16),
 
         Member("bool", "is_virtio")]
        )

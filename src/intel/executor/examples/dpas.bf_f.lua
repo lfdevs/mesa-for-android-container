@@ -30,7 +30,7 @@ local C = matrix.new(M, N, 0)
 local buf = execute {
   src =
     [[]]
-    .. gen.mov_grf("BF", 10, A:to_row_major())
+    .. gen.mov_grf("bf", 10, A:to_row_major())
 
     -- For `src1`, the source representing the B matrix, DPAS expects
     -- the values to be in a layout that looks like an "interleaved"
@@ -39,18 +39,18 @@ local buf = execute {
     --
     -- See mod/matrix.lua for details on that format.
     --
-    .. gen.mov_grf("BF", 20, B:to_interleaved_row_major(2))
+    .. gen.mov_grf("bf", 20, B:to_interleaved_row_major(2))
 
-    .. gen.mov_grf("F",  30, C:to_row_major())
+    .. gen.mov_grf("f",  30, C:to_row_major())
 
     .. (devinfo.ver >= 20 and [[
 
-    dpas.8x8(16)  r40<1>F  r30<1>F  r20<1>BF  r10<1>BF  {A@1 $1};
+    dpas.8x8 (16) r40:f r30:f r20:bf r10:bf {A@1,$1}
     @syncnop
 
     ]] or [[
 
-    dpas.8x8(8)  r40<1>F  r30<1>F  r20<1>BF  r10<1>BF  {A@1 $1};
+    dpas.8x8 (8) r40:f r30:f r20:bf r10:bf {A@1,$1}
     @syncnop
 
     ]])

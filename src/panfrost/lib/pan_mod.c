@@ -182,27 +182,25 @@ pan_mod_afbc_test_props(const struct pan_kmod_dev_props *dprops,
                         const struct pan_image_props *iprops,
                         const struct pan_image_usage *iusage)
 {
-   /* No image store. */
-   if (iusage && iusage->bind & PAN_BIND_STORAGE_IMAGE)
-      return PAN_MOD_NOT_SUPPORTED;
-
-   /* We don't implement mapping individual tiles with AFBC. */
-   if (iusage && iusage->standard_sparse_mapping_granularity)
-      return PAN_MOD_NOT_SUPPORTED;
-
    /* AFBC not supported. */
    if (!pan_query_afbc(dprops))
       return PAN_MOD_NOT_SUPPORTED;
 
-   unsigned plane_count = util_format_get_num_planes(iprops->format);
-   const struct util_format_description *fdesc =
-      util_format_description(iprops->format);
+   /* Not all architectures support tiled mode */
+   if ((iprops->modifier & AFBC_FORMAT_MOD_TILED) && !pan_afbc_can_tile(PAN_ARCH))
+      return PAN_MOD_NOT_SUPPORTED;
 
-   /* Check if the format is supported first. */
-   enum pan_afbc_mode plane_modes[3];
+   /* ... or split mode */
+   if ((iprops->modifier & AFBC_FORMAT_MOD_SPLIT) && !pan_afbc_can_split(PAN_ARCH))
+      return PAN_MOD_NOT_SUPPORTED;
+
+   /* Check compatibility between formats and parameters */
+   unsigned plane_count = util_format_get_num_planes(iprops->format);
    for (unsigned p = 0; p < plane_count; p++) {
-      plane_modes[p] = pan_afbc_format(PAN_ARCH, iprops->format, p);
-      if (plane_modes[p] == PAN_AFBC_MODE_INVALID)
+      enum pan_afbc_mode mode = pan_afbc_format(PAN_ARCH, iprops->format, p);
+      if (mode == PAN_AFBC_MODE_INVALID)
+         return PAN_MOD_NOT_SUPPORTED;
+      if (!pan_afbc_check_params(mode, iprops->modifier))
          return PAN_MOD_NOT_SUPPORTED;
    }
 
@@ -215,32 +213,23 @@ pan_mod_afbc_test_props(const struct pan_kmod_dev_props *dprops,
        iprops->dim != MALI_TEXTURE_DIMENSION_2D)
       return PAN_MOD_NOT_SUPPORTED;
 
+   /* No image store. */
+   if (iusage && iusage->bind & PAN_BIND_STORAGE_IMAGE)
+      return PAN_MOD_NOT_SUPPORTED;
+
    /* ZS buffer descriptors can't pass split/wide/YTR modifiers. */
    if (iusage && (iusage->bind & PAN_BIND_DEPTH_STENCIL) &&
        (pan_afbc_superblock_width(iprops->modifier) != 16 ||
         (iprops->modifier & (AFBC_FORMAT_MOD_SPLIT | AFBC_FORMAT_MOD_YTR))))
       return PAN_MOD_NOT_SUPPORTED;
 
-   /* YTR is only useful on RGB formats. */
-   if ((iprops->modifier & AFBC_FORMAT_MOD_YTR) &&
-       (pan_format_is_yuv(iprops->format) || fdesc->nr_channels < 3))
+   /* We don't implement mapping individual tiles with AFBC. */
+   if (iusage && iusage->standard_sparse_mapping_granularity)
       return PAN_MOD_NOT_SUPPORTED;
-
-   /* Make sure all planes support split mode. */
-   if ((iprops->modifier & AFBC_FORMAT_MOD_SPLIT)) {
-      for (unsigned p = 0; p < plane_count; p++) {
-         if (!pan_afbc_can_split(PAN_ARCH, plane_modes[p], iprops->modifier))
-            return PAN_MOD_NOT_SUPPORTED;
-      }
-   }
 
    struct pan_image_block_size superblock_extent_px = pan_afbc_superblock_size(iprops->modifier);
 
    if (iprops->modifier & AFBC_FORMAT_MOD_TILED) {
-      /* Make sure tiled mode is supported. */
-      if (!pan_afbc_can_tile(PAN_ARCH))
-         return PAN_MOD_NOT_SUPPORTED;
-
       struct pan_image_block_size tile_extent_px = {
          superblock_extent_px.width * pan_afbc_tile_size(iprops->format, iprops->modifier),
          superblock_extent_px.height * pan_afbc_tile_size(iprops->format, iprops->modifier),
@@ -637,11 +626,11 @@ pan_mod_interleaved_64k_test_props(const struct pan_kmod_dev_props *dprops,
       return PAN_MOD_NOT_SUPPORTED;
 
    /* We don't implement tiling/detiling of this layout on host. */
-   if (iusage->host_copy)
+   if (iusage && iusage->host_copy)
       return PAN_MOD_NOT_SUPPORTED;
 
    /* We don't respect wsi_row_pitch_B so this layout is not usable for WSI. */
-   if (iusage->wsi)
+   if (iusage && iusage->wsi)
       return PAN_MOD_NOT_SUPPORTED;
 
    struct pan_image_block_size tile_extent_el =
@@ -681,24 +670,26 @@ pan_mod_linear_test_props(const struct pan_kmod_dev_props *dprops,
 {
    assert(GENX(pan_format_from_pipe_format)(iprops->format)->hw);
 
+   switch (iprops->format) {
+   case PIPE_FORMAT_R8G8B8_420_UNORM_PACKED:
+   case PIPE_FORMAT_R10G10B10_420_UNORM_PACKED:
+   case PIPE_FORMAT_X6R10X6G10_X6R10X6B10_422_UNORM:
+      /* These formats have no linear representation. */
+      return PAN_MOD_NOT_SUPPORTED;
+   default:
+      break;
+   }
+
    /* We can't implement mapping of tiles at standard sparse granularity using
     * this layout. */
    if (iusage && iusage->standard_sparse_mapping_granularity)
       return PAN_MOD_NOT_SUPPORTED;
 
-   switch (iprops->format) {
-   /* AFBC-only formats. */
-   case PIPE_FORMAT_R8G8B8_420_UNORM_PACKED:
-   case PIPE_FORMAT_R10G10B10_420_UNORM_PACKED:
-   case PIPE_FORMAT_X6R10X6G10_X6R10X6B10_422_UNORM:
-      return PAN_MOD_NOT_SUPPORTED;
-   default:
-      /* We assume that all "better" mods have been tested before linear, and
-       * declare it as optimal so it's always picked when tested, unless it's
-       * not supported.
-       */
-      return PAN_MOD_OPTIMAL;
-   }
+   /* We assume that all "better" mods have been tested before linear, and
+    * declare it as optimal so it's always picked when tested, unless it's
+    * not supported.
+    */
+   return PAN_MOD_OPTIMAL;
 }
 
 static uint32_t

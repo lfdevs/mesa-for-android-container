@@ -700,3 +700,47 @@ ac_sqtt_emit_wait(const struct radeon_info *info, struct ac_pm4_state *pm4,
    ac_pm4_set_reg(pm4, R_030800_GRBM_GFX_INDEX, S_030800_SE_BROADCAST_WRITES(1) |
                   S_030800_SH_BROADCAST_WRITES(1) | S_030800_INSTANCE_BROADCAST_WRITES(1));
 }
+
+bool ac_sqtt_update_bo_size(struct ac_sqtt *sqtt, const char *env_var_prefix)
+{
+   if (strlen(env_var_prefix) > 4)
+      return false;
+
+   if (sqtt->buffer_size == 0) {
+      char envvar[sizeof("xxxx_THREAD_TRACE_BUFFER_SIZE")];
+
+      sprintf(envvar, "%s_THREAD_TRACE_BUFFER_SIZE", env_var_prefix);
+
+      /* Default buffer size set to 32MB per SE. */
+      uint64_t s = debug_get_num_option(envvar, 32 * 1024 * 1024);
+      sqtt->buffer_size = s;
+      if ((uint64_t)sqtt->buffer_size != s) {
+         fprintf(stderr,
+                 "Invalid %s value (must be <= %u).\n",
+                 envvar, UINT32_MAX);
+         return false;
+      }
+
+      return true;
+   }
+   if (sqtt->buffer_size < UINT32_MAX / 2) {
+      /* Double the size of the thread trace buffer per SE. */
+      sqtt->buffer_size *= 2;
+      fprintf(stderr,
+              "Failed to get the thread trace because the buffer "
+              "was too small, resizing to %u kB per se\n",
+              sqtt->buffer_size / 1024);
+   } else {
+      fprintf(stderr,
+              "Failed to get the thread trace because the buffer "
+              "was too small (%u kB per se). Cancelling trace capture.\n",
+               sqtt->buffer_size / 1024);
+      if (sqtt->instruction_timing_enabled)
+         fprintf(stderr,
+                 "Try again with %s_THREAD_TRACE_INSTRUCTION_TIMING=false"
+                 " to reduce the size of the captured data.\n",
+                 env_var_prefix);
+      return false;
+   }
+   return true;
+}

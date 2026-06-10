@@ -70,7 +70,7 @@ unsafe impl CLInfo<cl_program_info> for cl_program {
                 // The spec _requires_ that we don't touch the buffer here.
                 _ => v.write_len_only::<&[u8]>(0),
             },
-            CL_PROGRAM_KERNEL_NAMES => v.write::<&str>(&prog.build_info().kernels().join(";")),
+            CL_PROGRAM_KERNEL_NAMES => v.write::<&CStr>(&prog.build_info().kernels().join(c";")),
             CL_PROGRAM_NUM_DEVICES => v.write::<cl_uint>(prog.devs.len() as cl_uint),
             CL_PROGRAM_NUM_KERNELS => v.write::<usize>(prog.build_info().kernels().len()),
             CL_PROGRAM_REFERENCE_COUNT => v.write::<cl_uint>(Program::refcnt(*self)?),
@@ -100,8 +100,8 @@ unsafe impl CLInfoObj<cl_program_build_info, cl_device_id> for cl_program {
         match q {
             CL_PROGRAM_BINARY_TYPE => v.write::<cl_program_binary_type>(prog.bin_type(dev)),
             CL_PROGRAM_BUILD_GLOBAL_VARIABLE_TOTAL_SIZE => v.write::<usize>(0),
-            CL_PROGRAM_BUILD_LOG => v.write::<&str>(&prog.log(dev)),
-            CL_PROGRAM_BUILD_OPTIONS => v.write::<&str>(&prog.options(dev)),
+            CL_PROGRAM_BUILD_LOG => v.write::<&CStr>(prog.build_info().log(dev)),
+            CL_PROGRAM_BUILD_OPTIONS => v.write::<&CStr>(prog.build_info().options(dev)),
             CL_PROGRAM_BUILD_STATUS => v.write::<cl_build_status>(prog.status(dev)),
             // CL_INVALID_VALUE if param_name is not one of the supported values
             _ => Err(CL_INVALID_VALUE),
@@ -331,7 +331,9 @@ fn build_program(
         return Err(CL_INVALID_OPERATION);
     }
 
-    let options = c_string_to_string(options);
+    // SAFETY: options is a valid C String or NULL.
+    let options = unsafe { CStr::from_ptr_or_empty(&options) };
+    let options = CompileOptions::new(options, CL_INVALID_BUILD_OPTIONS)?;
     program.build(devices, options, callback)
 
     //• CL_INVALID_BINARY if program is created with clCreateProgramWithBinary and devices listed in device_list do not have a valid program binary loaded.
@@ -384,6 +386,12 @@ fn compile_program(
                 return Err(CL_INVALID_OPERATION);
             }
 
+            // CL_INVALID_CONTEXT if the context associated with program and programs in
+            // input_headers are not the same.
+            if header.context != program.context {
+                return Err(CL_INVALID_CONTEXT);
+            }
+
             headers.push(HeaderProgram {
                 // SAFETY: The OpenCL spec requires that there be a
                 // one-to-one correspondence between input_headers and
@@ -413,7 +421,9 @@ fn compile_program(
         return Err(CL_INVALID_OPERATION);
     }
 
-    let options = c_string_to_string(options);
+    // SAFETY: options is a valid C String or NULL.
+    let options = unsafe { CStr::from_ptr_or_empty(&options) };
+    let options = CompileOptions::new(options, CL_INVALID_COMPILER_OPTIONS)?;
     program.compile(devices, options, headers, callback)
 
     // • CL_INVALID_COMPILER_OPTIONS if the compiler options specified by options are invalid.
@@ -446,6 +456,15 @@ pub fn link_program(
     // context.
     if !devices.iter().all(|device| context.devs.contains(device)) {
         return Err(CL_INVALID_DEVICE);
+    }
+
+    // CL_INVALID_CONTEXT if the context associated with programs in input_programs is not the same
+    // as context.
+    if input_programs
+        .iter()
+        .any(|program| program.context != context)
+    {
+        return Err(CL_INVALID_CONTEXT);
     }
 
     // CL_INVALID_OPERATION if the compilation or build of a program executable for any of the

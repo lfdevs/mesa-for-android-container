@@ -12,7 +12,6 @@ KHR-GL46.texture_stencil8.multisample,Fail
 # GL tests above, Vulkan tests below
 
 # New fails in 1.4.3.3
-dEQP-VK.memory.concurrent_access.shader_and_host,Fail
 dEQP-VK.transform_feedback.simple.draw_indirect_counter_offset_16,Fail
 dEQP-VK.transform_feedback.simple.draw_indirect_counter_offset_244,Fail
 dEQP-VK.transform_feedback.simple.draw_indirect_counter_offset_508,Fail
@@ -34,9 +33,9 @@ dEQP-VK.transform_feedback.simple_optimized_gpl.draw_indirect_multiview_counter_
 gmem-dEQP-VK.transform_feedback.simple.draw_indirect_multiview_counter_offset_16,Fail
 gmem-dEQP-VK.transform_feedback.simple.draw_indirect_multiview_counter_offset_244,Fail
 nobin-dEQP-VK.transform_feedback.simple.draw_indirect_multiview_counter_offset_16,Fail
+nobin-dEQP-VK.transform_feedback.simple.draw_indirect_multiview_counter_offset_244,Fail
 
 # New failures with VKCTS 1.4.4.0
-dEQP-VK.pipeline.monolithic.misc.identically_defined_layout,Fail
 dEQP-VK.tessellation.misc_draw.tess_factor_barrier_bug,Crash
 gmem-dEQP-VK.transform_feedback.simple.draw_indirect_counter_offset_16,Fail
 gmem-dEQP-VK.transform_feedback.simple.draw_indirect_multiview_counter_offset_508,Fail
@@ -69,6 +68,10 @@ api@clcompileprogram,Fail
 #Unexpected CL error: CL_SUCCESS 0
 #Expected CL error: CL_KERNEL_ARG_INFO_NOT_AVAILABLE -19
 api@clgetkernelarginfo,Fail
+
+# Piglit checks the pre 3.1 behavior
+api@clsetkernelarg,Fail
+api@clsetkernelarg@Input checks,Fail
 
 #Unexpected CL error: CL_SUCCESS 0
 #Expected CL error: CL_INVALID_LINKER_OPTIONS -67
@@ -124,3 +127,10 @@ program@execute@vector-conversion,Fail
 
 # Initial ANGLE failures
 angle-dEQP-GLES2.functional.shaders.algorithm.rgb_to_hsl_vertex,Fail
+
+# VKCTS 1.4.4.2 -> 1.4.5.3 uprev
+dEQP-VK.sparse_resources.buffer.ssbo.sparse_residency.buffer_size_2_10,Fail
+dEQP-VK.sparse_resources.buffer.ssbo.sparse_residency.buffer_size_2_16,Fail
+dEQP-VK.sparse_resources.buffer.ssbo.sparse_residency.buffer_size_2_17,Fail
+dEQP-VK.sparse_resources.buffer.ssbo.sparse_residency.buffer_size_2_20,Fail
+dEQP-VK.sparse_resources.buffer.ssbo.sparse_residency.buffer_size_2_24,Fail

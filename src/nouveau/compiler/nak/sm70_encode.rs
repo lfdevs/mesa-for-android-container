@@ -10,6 +10,7 @@ use crate::sm70::ShaderModel70;
 use bitview::*;
 
 use rustc_hash::FxHashMap;
+use std::mem;
 use std::ops::Range;
 
 /// A per-op trait that implements Volta+ opcode semantics
@@ -108,11 +109,52 @@ impl SM70Encoder<'_> {
         }
     }
 
+    fn set_reg_addr(
+        &mut self,
+        range: Range<usize>,
+        src: &Src,
+        size_bit: usize,
+    ) {
+        assert!(src.is_unmodified());
+        match src.src_ref {
+            SrcRef::Zero => {
+                self.set_reg(range, self.zero_reg(RegFile::GPR));
+                // We always treat a zero GPR as 32 bits, so the UGPR source
+                // can be 32 bits.
+                self.set_bit(size_bit, false);
+            }
+            SrcRef::Reg(reg) => {
+                self.set_reg(range, reg);
+                assert!(reg.comps() <= 2);
+                self.set_bit(size_bit, reg.comps() == 2);
+            }
+            _ => panic!("Not a register"),
+        }
+    }
+
     fn set_ureg_src(&mut self, start: usize, src: &Src) {
         assert!(src.src_mod.is_none());
         match src.src_ref {
             SrcRef::Zero => self.set_ureg(start, self.zero_reg(RegFile::UGPR)),
             SrcRef::Reg(reg) => self.set_ureg(start, reg),
+            _ => panic!("Not a register"),
+        }
+    }
+
+    fn set_ureg_addr(&mut self, start: usize, src: &Src, size_bit: usize) {
+        assert!(src.src_mod.is_none());
+        match src.src_ref {
+            SrcRef::Zero => {
+                self.set_ureg(start, self.zero_reg(RegFile::UGPR));
+                // We always treat a zero UGPR as 64 bits, so the GPR source
+                // can be 64 bit.
+                self.set_bit(size_bit, true);
+            }
+            SrcRef::Reg(reg) => {
+                self.set_ureg(start, reg);
+                assert!(reg.comps() <= 2);
+                self.set_bit(size_bit, reg.comps() == 2);
+            }
             _ => panic!("Not a register"),
         }
     }
@@ -730,6 +772,60 @@ fn op_gpr(op: &impl DstsAsSlice) -> RegFile {
         RegFile::UGPR
     } else {
         RegFile::GPR
+    }
+}
+
+fn legalize_load_store_address(
+    b: &mut LegalizeBuilder,
+    addr: &mut Src,
+    uniform_addr: &mut Src,
+    stride: Option<&mut OffsetStride>,
+) {
+    let stride_x1_or_none = matches!(stride, Some(OffsetStride::X1) | None);
+    if addr.is_ugpr_reg() {
+        if stride_x1_or_none && uniform_addr.is_zero() {
+            *uniform_addr = mem::replace(addr, Src::ZERO);
+        } else {
+            b.copy_src_if_uniform(addr);
+        }
+    }
+
+    if uniform_addr.is_gpr_reg() {
+        if addr.is_zero() {
+            assert!(stride_x1_or_none);
+            *addr = mem::replace(uniform_addr, Src::ZERO);
+        } else {
+            let uniform_ssa = uniform_addr.as_ssa().unwrap();
+            let mut ssa = addr.as_ssa().unwrap();
+
+            let addr_comps = ssa.comps();
+            if let Some(stride) = stride {
+                if *stride != OffsetStride::X1 {
+                    assert_eq!(addr_comps, 1);
+                    let shift = stride.shift();
+                    let shift = b.copy(shift.into());
+                    *addr = b.shl(addr.clone(), shift.into()).into();
+                    ssa = addr.as_ssa().unwrap();
+                    *stride = OffsetStride::X1;
+                }
+            }
+
+            if uniform_ssa.comps() == 2 {
+                // In case the non uniform address is 32 bits and the uniform one 64,
+                // we need convert it to 64 bits.
+                if uniform_ssa.comps() != addr_comps {
+                    let zero = b.copy(0.into());
+                    *addr = [ssa[0], zero].into();
+                }
+                *addr = b
+                    .iadd64(addr.clone(), uniform_addr.clone(), Src::ZERO)
+                    .into()
+            } else {
+                *addr =
+                    b.iadd(addr.clone(), uniform_addr.clone(), Src::ZERO).into()
+            }
+            *uniform_addr = 0.into();
+        }
     }
 }
 
@@ -3009,13 +3105,6 @@ impl SM70Encoder<'_> {
     }
 
     fn set_mem_access(&mut self, access: &MemAccess) {
-        self.set_field(
-            72..73,
-            match access.space.addr_type() {
-                MemAddrType::A32 => 0_u8,
-                MemAddrType::A64 => 1_u8,
-            },
-        );
         self.set_mem_type(73..76, access.mem_type);
         self.set_mem_order(&access.order);
         self.set_eviction_priority(&access.eviction_priority);
@@ -3131,20 +3220,31 @@ impl SM70Op for OpSuAtom {
 
 impl SM70Op for OpLd {
     fn legalize(&mut self, b: &mut LegalizeBuilder) {
-        b.copy_src_if_uniform(&mut self.addr);
+        legalize_load_store_address(
+            b,
+            &mut self.addr,
+            &mut self.uniform_addr,
+            Some(&mut self.stride),
+        );
         b.copy_src_if_uniform(&mut self.pred);
     }
 
     fn encode(&self, e: &mut SM70Encoder<'_>) {
+        let has_ugpr = e.sm >= 73;
         match self.access.space {
             MemSpace::Global(_) => {
-                e.set_opcode(0x381);
                 assert_eq!(self.stride, OffsetStride::X1);
-                if e.sm >= 73 {
+
+                if has_ugpr {
+                    e.set_opcode(0x981);
+                    e.set_reg_addr(24..32, &self.addr, 90);
+                    e.set_ureg_addr(32, &self.uniform_addr, 72);
                     e.set_rev_pred_src(64..67, 67, &self.pred);
                 } else {
-                    assert!(self.pred.is_true());
+                    e.set_opcode(0x381);
+                    e.set_reg_addr(24..32, &self.addr, 72);
                 }
+
                 e.set_pred_dst(81..84, &Dst::None);
                 e.set_mem_access(&self.access);
             }
@@ -3152,6 +3252,10 @@ impl SM70Op for OpLd {
                 assert!(self.pred.is_true());
                 assert_eq!(self.stride, OffsetStride::X1);
                 e.set_opcode(0x983);
+                e.set_reg_src(24..32, &self.addr);
+                if has_ugpr {
+                    e.set_ureg_src(32, &self.uniform_addr);
+                }
                 e.set_field(84..87, 1_u8);
 
                 e.set_mem_type(73..76, self.access.mem_type);
@@ -3165,6 +3269,10 @@ impl SM70Op for OpLd {
                 e.set_opcode(0x984);
                 assert!(self.pred.is_true());
 
+                e.set_reg_src(24..32, &self.addr);
+                if has_ugpr {
+                    e.set_ureg_src(32, &self.uniform_addr);
+                }
                 e.set_mem_type(73..76, self.access.mem_type);
                 assert!(self.access.order == MemOrder::Strong(MemScope::CTA));
                 assert!(
@@ -3179,8 +3287,11 @@ impl SM70Op for OpLd {
         }
 
         e.set_dst(&self.dst);
-        e.set_reg_src(24..32, &self.addr);
         e.set_field(40..64, self.offset);
+        // We always enable UGPR mode, because the .E bit changes
+        // which source it applies to depending on it.
+        // This way it always applies to the UGPR.
+        e.set_bit(91, has_ugpr);
     }
 }
 
@@ -3276,20 +3387,40 @@ impl SM70Op for OpLdc {
 
 impl SM70Op for OpSt {
     fn legalize(&mut self, b: &mut LegalizeBuilder) {
-        b.copy_src_if_uniform(&mut self.addr);
         b.copy_src_if_uniform(&mut self.data);
+        legalize_load_store_address(
+            b,
+            &mut self.addr,
+            &mut self.uniform_addr,
+            Some(&mut self.stride),
+        );
     }
 
     fn encode(&self, e: &mut SM70Encoder<'_>) {
+        let has_ugpr = e.sm >= 73;
         match self.access.space {
             MemSpace::Global(_) => {
-                e.set_opcode(0x386);
                 assert_eq!(self.stride, OffsetStride::X1);
+                if has_ugpr {
+                    e.set_opcode(0x986);
+                    e.set_reg_addr(24..32, &self.addr, 90);
+                    e.set_ureg_addr(64, &self.uniform_addr, 72);
+                } else {
+                    e.set_opcode(0x386);
+                    e.set_reg_addr(24..32, &self.addr, 72);
+                }
                 e.set_mem_access(&self.access);
             }
             MemSpace::Local => {
-                e.set_opcode(0x387);
                 assert_eq!(self.stride, OffsetStride::X1);
+                if has_ugpr {
+                    e.set_opcode(0x987);
+                    e.set_reg_src(24..32, &self.addr);
+                    e.set_ureg_src(64, &self.uniform_addr);
+                } else {
+                    e.set_opcode(0x387);
+                    e.set_reg_src(24..32, &self.addr);
+                }
                 e.set_field(84..87, 1_u8);
 
                 e.set_mem_type(73..76, self.access.mem_type);
@@ -3300,7 +3431,14 @@ impl SM70Op for OpSt {
                 );
             }
             MemSpace::Shared => {
-                e.set_opcode(0x388);
+                if has_ugpr {
+                    e.set_opcode(0x988);
+                    e.set_reg_src(24..32, &self.addr);
+                    e.set_ureg_src(64, &self.uniform_addr);
+                } else {
+                    e.set_opcode(0x388);
+                    e.set_reg_src(24..32, &self.addr);
+                }
 
                 e.set_mem_type(73..76, self.access.mem_type);
                 assert!(self.access.order == MemOrder::Strong(MemScope::CTA));
@@ -3314,9 +3452,12 @@ impl SM70Op for OpSt {
             }
         }
 
-        e.set_reg_src(24..32, &self.addr);
         e.set_reg_src(32..40, &self.data);
         e.set_field(40..64, self.offset);
+        // We always enable UGPR mode, because the .E bit changes
+        // which source it applies to depending on it.
+        // This way it always applies to the UGPR.
+        e.set_bit(91, has_ugpr);
     }
 }
 
@@ -3385,12 +3526,23 @@ impl SM70Encoder<'_> {
 
 impl SM70Op for OpAtom {
     fn legalize(&mut self, b: &mut LegalizeBuilder) {
-        b.copy_src_if_uniform(&mut self.addr);
-        b.copy_src_if_uniform(&mut self.cmpr);
         b.copy_src_if_uniform(&mut self.data);
+
+        if matches!(self.atom_op, AtomOp::CmpExch(_)) {
+            b.copy_src_if_uniform(&mut self.addr);
+            b.copy_src_if_uniform(&mut self.cmpr);
+        } else {
+            legalize_load_store_address(
+                b,
+                &mut self.addr,
+                &mut self.uniform_address,
+                Some(&mut self.addr_stride),
+            );
+        }
     }
 
     fn encode(&self, e: &mut SM70Encoder<'_>) {
+        let has_ugpr = e.sm >= 73;
         match self.mem_space {
             MemSpace::Global(_) => {
                 if self.dst.is_none() {
@@ -3401,33 +3553,57 @@ impl SM70Op for OpAtom {
                     }
 
                     e.set_reg_src(32..40, &self.data);
+                    e.set_field(40..64, self.addr_offset);
                     e.set_atom_op(87..90, self.atom_op);
+                    if has_ugpr {
+                        e.set_reg_addr(24..32, &self.addr, 90);
+                        e.set_ureg_addr(64, &self.uniform_address, 72);
+                        e.set_bit(91, true);
+                    } else {
+                        e.set_reg_addr(24..32, &self.addr, 72);
+                        assert!(self.uniform_address.is_zero());
+                    }
                 } else if let AtomOp::CmpExch(cmp_src) = self.atom_op {
                     e.set_opcode(0x3a9);
 
                     assert!(cmp_src == AtomCmpSrc::Separate);
+                    assert!(self.uniform_address.is_zero());
+                    e.set_reg_addr(24..32, &self.addr, 72);
                     e.set_reg_src(32..40, &self.cmpr);
+                    e.set_field(40..64, self.addr_offset);
                     e.set_reg_src(64..72, &self.data);
                     e.set_pred_dst(81..84, &Dst::None);
                 } else {
                     if e.sm >= 90 && self.atom_type.is_float() {
-                        e.set_opcode(0x3a3);
+                        e.set_opcode(0x9a3);
+                    } else if has_ugpr {
+                        e.set_opcode(0x9a8);
                     } else {
                         e.set_opcode(0x3a8);
                     }
 
+                    if e.sm >= 100 {
+                        e.set_reg_addr(24..32, &self.addr, 63);
+                        e.set_ureg_addr(64, &self.uniform_address, 72);
+                    } else if has_ugpr {
+                        e.set_reg_addr(24..32, &self.addr, 70);
+                        e.set_ureg_addr(64, &self.uniform_address, 72);
+                    } else {
+                        e.set_reg_addr(24..32, &self.addr, 72);
+                        assert!(self.uniform_address.is_zero());
+                    };
+
+                    if e.sm >= 100 {
+                        e.set_field(40..63, self.addr_offset);
+                    } else {
+                        e.set_field(40..64, self.addr_offset);
+                    };
+
                     e.set_reg_src(32..40, &self.data);
                     e.set_pred_dst(81..84, &Dst::None);
                     e.set_atom_op(87..91, self.atom_op);
+                    e.set_bit(91, has_ugpr);
                 }
-
-                e.set_field(
-                    72..73,
-                    match self.mem_space.addr_type() {
-                        MemAddrType::A32 => 0_u8,
-                        MemAddrType::A64 => 1_u8,
-                    },
-                );
 
                 e.set_mem_order(&self.mem_order);
                 e.set_eviction_priority(&self.mem_eviction_priority);
@@ -3439,10 +3615,17 @@ impl SM70Op for OpAtom {
                     e.set_opcode(0x38d);
 
                     assert!(cmp_src == AtomCmpSrc::Separate);
+                    assert!(self.uniform_address.is_zero());
                     e.set_reg_src(32..40, &self.cmpr);
                     e.set_reg_src(64..72, &self.data);
                 } else {
-                    e.set_opcode(0x38c);
+                    if has_ugpr {
+                        e.set_opcode(0x98c);
+                        e.set_ureg_src(64, &self.uniform_address);
+                        e.set_bit(91, true);
+                    } else {
+                        e.set_opcode(0x38c);
+                    }
 
                     e.set_reg_src(32..40, &self.data);
                     assert!(
@@ -3451,12 +3634,15 @@ impl SM70Op for OpAtom {
                         "64-bit Shared atomics only support CmpExch or Exch"
                     );
                     assert!(
-                        !self.atom_type.is_float(),
-                        "Shared atomics don't support float"
+                        !self.atom_type.is_float()
+                            || self.atom_op == AtomOp::Add,
+                        "Shared float atomics only supports add"
                     );
                     e.set_atom_op(87..91, self.atom_op);
                 }
 
+                e.set_reg_src(24..32, &self.addr);
+                e.set_field(40..64, self.addr_offset);
                 assert!(e.sm >= 75 || self.addr_stride == OffsetStride::X1);
                 e.set_field(78..80, self.addr_stride.encode_sm75());
 
@@ -3468,8 +3654,6 @@ impl SM70Op for OpAtom {
         }
 
         e.set_dst(&self.dst);
-        e.set_reg_src(24..32, &self.addr);
-        e.set_field(40..64, self.addr_offset);
         e.set_atom_type(self.atom_type, false);
     }
 }
@@ -4183,7 +4367,12 @@ impl SM70Op for OpHmma {
 
 impl SM70Op for OpLdsm {
     fn legalize(&mut self, b: &mut LegalizeBuilder) {
-        b.copy_src_if_uniform(&mut self.addr);
+        legalize_load_store_address(
+            b,
+            &mut self.addr,
+            &mut self.uniform_addr,
+            None,
+        );
     }
 
     fn encode(&self, e: &mut SM70Encoder<'_>) {
@@ -4192,6 +4381,7 @@ impl SM70Op for OpLdsm {
         e.set_opcode(0x83b);
         e.set_dst(&self.dst);
         e.set_reg_src(24..32, &self.addr);
+        e.set_ureg_src(32, &self.uniform_addr);
         e.set_field(40..64, self.offset);
         e.set_field(
             72..74,
@@ -4212,6 +4402,7 @@ impl SM70Op for OpLdsm {
                 // LdsmSize::M8N32 => 3,
             },
         );
+        e.set_bit(91, !self.uniform_addr.is_zero());
     }
 }
 

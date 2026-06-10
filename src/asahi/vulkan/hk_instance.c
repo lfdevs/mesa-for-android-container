@@ -14,6 +14,7 @@
 #include "util/build_id.h"
 #include "util/driconf.h"
 #include "util/mesa-blake3.h"
+#include "util/os_misc.h"
 
 VKAPI_ATTR VkResult VKAPI_CALL
 hk_EnumerateInstanceVersion(uint32_t *pApiVersion)
@@ -77,6 +78,9 @@ hk_EnumerateInstanceExtensionProperties(const char *pLayerName,
       &instance_extensions, pPropertyCount, pProperties);
 }
 
+/* Use 1/2 of total size to avoid swapping */
+#define HK_HEAP_MEMORY_PERCENT (0.5f)
+
 /* clang-format off */
 static const driOptionDescription hk_dri_options[] = {
    DRI_CONF_SECTION_PERFORMANCE
@@ -94,6 +98,7 @@ static const driOptionDescription hk_dri_options[] = {
    DRI_CONF_SECTION_END
 
    DRI_CONF_SECTION_MISCELLANEOUS
+      DRI_CONF_HEAP_MEMORY_PERCENT(HK_HEAP_MEMORY_PERCENT)
       DRI_CONF_HK_DISABLE_BORDER_EMULATION(false)
       DRI_CONF_HK_FAKE_MINMAX(false)
       DRI_CONF_HK_IMAGE_VIEW_MIN_LOD(false)
@@ -107,13 +112,22 @@ hk_init_dri_options(struct hk_instance *instance)
 {
    driParseOptionInfo(&instance->available_dri_options, hk_dri_options,
                       ARRAY_SIZE(hk_dri_options));
-   driParseConfigFiles(
-      &instance->dri_options, &instance->available_dri_options, 0, "hk", NULL,
-      NULL, instance->vk.app_info.app_name, instance->vk.app_info.app_version,
-      instance->vk.app_info.engine_name, instance->vk.app_info.engine_version);
+   driParseConfigFiles(&instance->dri_options, &instance->available_dri_options,
+                       &(driConfigFileParseParams) {
+                          .driverName = "hk",
+                          .applicationName = instance->vk.app_info.app_name,
+                          .applicationVersion = instance->vk.app_info.app_version,
+                          .engineName = instance->vk.app_info.engine_name,
+                          .engineVersion = instance->vk.app_info.engine_version,
+                       });
 
    instance->force_vk_vendor =
       driQueryOptioni(&instance->dri_options, "force_vk_vendor");
+
+   instance->heap_memory_percent =
+      driQueryOptionf(&instance->dri_options, "heap_memory_percent");
+   if (instance->heap_memory_percent == OS_GPU_HEAP_SIZE_HEURISTIC)
+      instance->heap_memory_percent = HK_HEAP_MEMORY_PERCENT;
 
    instance->no_border =
       driQueryOptionb(&instance->dri_options, "hk_disable_border_emulation");

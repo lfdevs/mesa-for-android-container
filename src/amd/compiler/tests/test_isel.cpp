@@ -146,10 +146,10 @@ BEGIN_TEST(isel.sparse.clause)
             //! image_sample_lz_o v[#_:#_], [v#_, v#_], @s256(img), @s128(samp) dmask:0xf dim:SQ_RSRC_IMG_2D a16 tfe
             //! image_sample_lz_o v[#_:#_], [v#_, v#_], @s256(img), @s128(samp) dmask:0xf dim:SQ_RSRC_IMG_2D a16 tfe
             //! image_sample_lz_o v[#_:#_], [v#_, v#_], @s256(img), @s128(samp) dmask:0xf dim:SQ_RSRC_IMG_2D a16 tfe
-            code[0] = sparseTextureOffsetARB(tex, vec2(0.5), ivec2(1, 0), res[0]);
-            code[1] = sparseTextureOffsetARB(tex, vec2(0.5), ivec2(2, 0), res[1]);
-            code[2] = sparseTextureOffsetARB(tex, vec2(0.5), ivec2(3, 0), res[2]);
-            code[3] = sparseTextureOffsetARB(tex, vec2(0.5), ivec2(4, 0), res[3]);
+            code[0] = sparseTextureLodOffsetARB(tex, vec2(0.5), 0, ivec2(1, 0), res[0]);
+            code[1] = sparseTextureLodOffsetARB(tex, vec2(0.5), 0, ivec2(2, 0), res[1]);
+            code[2] = sparseTextureLodOffsetARB(tex, vec2(0.5), 0, ivec2(3, 0), res[2]);
+            code[3] = sparseTextureLodOffsetARB(tex, vec2(0.5), 0, ivec2(4, 0), res[3]);
          }
       );
 

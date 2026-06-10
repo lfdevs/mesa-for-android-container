@@ -703,8 +703,10 @@ bi_emit_load_var_buf(bi_builder *b, nir_intrinsic_instr *intr)
    assert(intr->intrinsic == nir_intrinsic_load_var_buf_pan ||
           intr->intrinsic == nir_intrinsic_load_var_buf_flat_pan);
 
+   const unsigned arch = b->shader->arch;
+
    /* These are only available on Valhall+ */
-   assert(b->shader->arch >= 9);
+   assert(arch >= 9);
 
    const bool flat = intr->intrinsic == nir_intrinsic_load_var_buf_flat_pan;
    const nir_alu_type src_type = nir_intrinsic_src_type(intr);
@@ -757,19 +759,36 @@ bi_emit_load_var_buf(bi_builder *b, nir_intrinsic_instr *intr)
    bool use_imm_form = false;
    if (nir_src_is_const(intr->src[0])) {
       imm_offset = nir_src_as_uint(intr->src[0]);
-      assert(imm_offset < pan_ld_var_buf_off_size(b->shader->arch));
+      assert(imm_offset < pan_ld_var_buf_off_size(arch));
 
       use_imm_form = true;
    }
 
+   /* On v14+, flat source formats are removed from LD_VAR_BUF/LD_VAR_BUF_IMM,
+    * so flat buffer varyings must use the dedicated LD_VAR_BUF_FLAT*.
+    */
    if (use_imm_form) {
-      bi_ld_var_buf_imm_to(b, sz, dest, src0, regfmt, sample, source_format,
+      if (arch >= 14 && flat) {
+         bi_ld_var_buf_flat_imm_to(b, dest, regfmt, vecsize, imm_offset);
+      } else {
+         bi_ld_var_buf_imm_to(b, sz, dest, src0, regfmt, sample, source_format,
                            BI_UPDATE_STORE, vecsize, imm_offset);
+      }
    } else {
       bi_index offset = bi_src_index(&intr->src[0]);
-      bi_ld_var_buf_to(b, sz, dest, src0, offset, regfmt, sample,
-                       source_format, BI_UPDATE_STORE, vecsize);
+      if (arch >= 14 && flat) {
+         bi_ld_var_buf_flat_to(b, dest, offset, regfmt, vecsize);
+      } else {
+         bi_ld_var_buf_to(b, sz, dest, src0, offset, regfmt, sample,
+                          source_format, BI_UPDATE_STORE, vecsize);
+      }
    }
+
+   /* LD_VAR_BUF_FLAT* only support register formats F16 and F32. */
+   assert(
+      arch < 14 || !flat ||
+      (regfmt == BI_REGISTER_FORMAT_F16 || regfmt == BI_REGISTER_FORMAT_F32));
+
    bi_split_def(b, &intr->def);
 }
 

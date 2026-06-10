@@ -501,6 +501,15 @@ lower_to_push_data_intel(nir_builder *b,
    }
 }
 
+static inline bool
+stage_has_inline_param(const struct intel_device_info *devinfo, mesa_shader_stage stage)
+{
+   return devinfo->verx10 >= 125 &&
+          (stage == MESA_SHADER_TASK ||
+           stage == MESA_SHADER_MESH ||
+           stage == MESA_SHADER_COMPUTE);
+}
+
 static struct anv_push_range
 compute_final_push_range(const nir_shader *nir,
                          const struct intel_device_info *devinfo,
@@ -539,11 +548,7 @@ compute_final_push_range(const nir_shader *nir,
     * (unlike all Gfx stages) and so we can bound+align the allocation there
     * (see anv_cmd_buffer_cs_push_constants).
     */
-   const bool has_inline_param =
-      devinfo->verx10 >= 125 &&
-      (nir->info.stage == MESA_SHADER_TASK ||
-       nir->info.stage == MESA_SHADER_MESH ||
-       nir->info.stage == MESA_SHADER_COMPUTE);
+   const bool has_inline_param = stage_has_inline_param(devinfo, nir->info.stage);
 
    map->inline_dwords_count = 0;
 
@@ -708,7 +713,10 @@ anv_nir_compute_push_layout(nir_shader *nir,
       map->push_ranges[n_push_ranges++] = push_constant_padding_range;
    }
 
-   assert(n_push_ranges <= 4);
+   if (!stage_has_inline_param(devinfo, nir->info.stage)) {
+      assert(n_push_ranges <= 4);
+      assert(total_push_regs <= max_push_regs);
+   }
 
    struct lower_to_push_data_intel_state lower_state = {
       .devinfo = devinfo,

@@ -12,13 +12,6 @@
 
 #define AC_VIDEO_DEC_MAX_REFS 17
 
-enum ac_video_dec_tier {
-   AC_VIDEO_DEC_TIER0 = 0x0, /* Single Buffer */
-   AC_VIDEO_DEC_TIER1 = 0x1, /* Single Texture */
-   AC_VIDEO_DEC_TIER2 = 0x2, /* Array of Textures */
-   AC_VIDEO_DEC_TIER3 = 0x4, /* Array of Textures + no internal reference */
-};
-
 enum ac_video_dec_protected_content {
    AC_VIDEO_DEC_PROTECTED_CONTENT_NONE = 0,
    AC_VIDEO_DEC_PROTECTED_CONTENT_CENC,

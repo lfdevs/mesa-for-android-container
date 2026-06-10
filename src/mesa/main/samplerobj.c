@@ -202,10 +202,6 @@ static void
 create_samplers_err(struct gl_context *ctx, GLsizei count, GLuint *samplers,
                     const char *caller)
 {
-
-   if (MESA_VERBOSE & VERBOSE_API)
-      _mesa_debug(ctx, "%s(%d)\n", caller, count);
-
    if (count < 0) {
       _mesa_error(ctx, GL_INVALID_VALUE, "%s(n<0)", caller);
       return;

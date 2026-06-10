@@ -80,6 +80,11 @@ macro_rules! qmd_impl_common {
             let w = paste! {$c::[<$s _CTA_RASTER_WIDTH>]};
             let h = paste! {$c::[<$s _CTA_RASTER_HEIGHT>]};
             let d = paste! {$c::[<$s _CTA_RASTER_DEPTH>]};
+
+            let local_w = paste! {$c::[<$s _CTA_THREAD_DIMENSION0>]};
+            let local_h = paste! {$c::[<$s _CTA_THREAD_DIMENSION1>]};
+            let local_d = paste! {$c::[<$s _CTA_THREAD_DIMENSION2>]};
+
             nak_qmd_dispatch_size_layout {
                 x_start: w.start as u16,
                 x_end: w.end as u16,
@@ -87,6 +92,12 @@ macro_rules! qmd_impl_common {
                 y_end: h.end as u16,
                 z_start: d.start as u16,
                 z_end: d.end as u16,
+                local_x_start: local_w.start as u16,
+                local_x_end: local_w.end as u16,
+                local_y_start: local_h.start as u16,
+                local_y_end: local_h.end as u16,
+                local_z_start: local_d.start as u16,
+                local_z_end: local_d.end as u16,
             }
         };
 

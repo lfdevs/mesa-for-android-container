@@ -1079,6 +1079,7 @@ VOP1 = {
    ("v_frexp_exp_i32_f64",        dst(U32), src(F64), op(0x3c, gfx8=0x30, gfx10=0x3c), InstrClass.ValuDouble),
    ("v_frexp_mant_f64",           dst(noMods(F64)), src(F64), op(0x3d, gfx8=0x31, gfx10=0x3d), InstrClass.ValuDouble),
    ("v_fract_f64",                dst(F64), src(F64), op(0x3e, gfx8=0x32, gfx10=0x3e), InstrClass.ValuDouble),
+   ("p_v_fract_f64_rtne",         dst(F64), src(F64), op(-1), InstrClass.ValuDouble), # Used for lowering v_floor_f64 on GFX6
    ("v_frexp_exp_i32_f32",        dst(U32), src(F32), op(0x3f, gfx8=0x33, gfx10=0x3f)),
    ("v_frexp_mant_f32",           dst(noMods(F32)), src(F32), op(0x40, gfx8=0x34, gfx10=0x40)),
    ("v_clrexcp",                  dst(),  src(), op(0x41, gfx8=0x35, gfx10=0x41, gfx11=-1)),
@@ -1334,6 +1335,7 @@ VOP3 = {
    ("v_lshr_b64",              dst(U64), src(U64, U32), op(0x162, gfx8=-1), InstrClass.Valu64),
    ("v_ashr_i64",              dst(I64), src(I64, U32), op(0x163, gfx8=-1), InstrClass.Valu64),
    ("v_add_f64_e64",           dst(F64), src(F64, F64), op(0x164, gfx8=0x280, gfx10=0x164, gfx11=0x327, gfx12=-1), InstrClass.ValuDoubleAdd), # GFX12 is VOP2
+   ("p_v_add_f64_rtne",        dst(F64), src(F64, F64), op(-1), InstrClass.ValuDoubleAdd), # Used for lowering v_floor_f64 on GFX6
    ("v_mul_f64_e64",           dst(F64), src(F64, F64), op(0x165, gfx8=0x281, gfx10=0x165, gfx11=0x328, gfx12=-1), InstrClass.ValuDouble), # GFX12 is VOP2
    ("v_min_f64_e64",           dst(F64), src(F64, F64), op(0x166, gfx8=0x282, gfx10=0x166, gfx11=0x329, gfx12=-1), InstrClass.ValuDouble), # GFX12 is VOP2
    ("v_max_f64_e64",           dst(F64), src(F64, F64), op(0x167, gfx8=0x283, gfx10=0x167, gfx11=0x32a, gfx12=-1), InstrClass.ValuDouble), # GFX12 is VOP2

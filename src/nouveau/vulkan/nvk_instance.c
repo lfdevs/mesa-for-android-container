@@ -13,6 +13,7 @@
 #include "util/detect_os.h"
 #include "util/driconf.h"
 #include "util/mesa-blake3.h"
+#include "util/os_misc.h"
 #include "util/u_debug.h"
 
 VKAPI_ATTR VkResult VKAPI_CALL
@@ -97,6 +98,8 @@ nvk_init_debug_flags(struct nvk_instance *instance)
    instance->debug_flags = parse_debug_string(os_get_option("NVK_DEBUG"), flags);
 }
 
+#define NVK_HEAP_MEMORY_PERCENT (0.75f)
+
 static const driOptionDescription nvk_dri_options[] = {
    DRI_CONF_SECTION_PERFORMANCE
       DRI_CONF_ADAPTIVE_SYNC(true)
@@ -113,18 +116,32 @@ static const driOptionDescription nvk_dri_options[] = {
       DRI_CONF_VK_ZERO_VRAM(false)
       DRI_CONF_NVK_APP_LAYER()
    DRI_CONF_SECTION_END
+
+   DRI_CONF_SECTION_MISCELLANEOUS
+      DRI_CONF_HEAP_MEMORY_PERCENT(NVK_HEAP_MEMORY_PERCENT)
+   DRI_CONF_SECTION_END
 };
 
 static void
 nvk_init_dri_options(struct nvk_instance *instance)
 {
    driParseOptionInfo(&instance->available_dri_options, nvk_dri_options, ARRAY_SIZE(nvk_dri_options));
-   driParseConfigFiles(&instance->dri_options, &instance->available_dri_options, 0, "nvk", NULL, NULL,
-                       instance->vk.app_info.app_name, instance->vk.app_info.app_version,
-                       instance->vk.app_info.engine_name, instance->vk.app_info.engine_version);
+   driParseConfigFiles(&instance->dri_options, &instance->available_dri_options,
+                       &(driConfigFileParseParams) {
+                          .driverName = "nvk",
+                          .applicationName = instance->vk.app_info.app_name,
+                          .applicationVersion = instance->vk.app_info.app_version,
+                          .engineName = instance->vk.app_info.engine_name,
+                          .engineVersion = instance->vk.app_info.engine_version,
+                       });
 
    instance->force_vk_vendor =
       driQueryOptioni(&instance->dri_options, "force_vk_vendor");
+
+   instance->heap_memory_percent =
+      driQueryOptionf(&instance->dri_options, "heap_memory_percent");
+   if (instance->heap_memory_percent == OS_GPU_HEAP_SIZE_HEURISTIC)
+      instance->heap_memory_percent = NVK_HEAP_MEMORY_PERCENT;
 
    if (driQueryOptionb(&instance->dri_options, "vk_zero_vram"))
       instance->debug_flags |= NVK_DEBUG_ZERO_MEMORY;

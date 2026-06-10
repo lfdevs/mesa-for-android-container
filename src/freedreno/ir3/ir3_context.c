@@ -90,7 +90,6 @@ ir3_context_init(struct ir3_compiler *compiler, struct ir3_shader *shader,
    /* nir_opt_algebraic() above would have unfused our ffmas, re-fuse them. */
    if (needs_late_alg) {
       NIR_PASS(progress, ctx->s, nir_opt_algebraic_late);
-      NIR_PASS(progress, ctx->s, ir3_nir_opt_algebraic_late);
       NIR_PASS(progress, ctx->s, nir_opt_dce);
    }
 
@@ -184,7 +183,8 @@ ir3_context_init(struct ir3_compiler *compiler, struct ir3_shader *shader,
       }
    }
 
-   if (shader_debug_enabled(so->type, ctx->s->info.internal)) {
+   if (shader_debug_enabled(so->type, ctx->s->info.internal) ||
+                            ir3_shader_bisect_disasm_select(so)) {
       mesa_logi("NIR (final form) for %s shader %s:", ir3_shader_stage(so),
                 so->name);
       nir_log_shaderi(ctx->s);

@@ -74,8 +74,17 @@ fail_heap:
 void
 kk_destroy_bo(struct kk_device *dev, struct kk_bo *bo)
 {
-   kk_device_remove_heap_from_residency_set(dev, bo->mtl_handle);
+   /* We may only have a mapped buffer, for example if the memory was imported
+    * from a host pointer */
+   if (bo->mtl_handle)
+      kk_device_remove_heap_from_residency_set(dev, bo->mtl_handle);
+   else
+      kk_device_remove_buffer_from_residency_set(dev, bo->map);
+
    mtl_release(bo->map);
-   mtl_release(bo->mtl_handle);
+
+   if (bo->mtl_handle)
+      mtl_release(bo->mtl_handle);
+
    FREE(bo);
 }

@@ -8,15 +8,15 @@ http://0x04.net/cgit/index.cgi/rules-ng-ng
 git clone git://0x04.net/rules-ng-ng
 
 The rules-ng-ng source files this header was generated from are:
-- state.xml     (  30672 bytes, from 2026-01-17 21:18:01)
-- common.xml    (  35664 bytes, from 2026-01-17 21:18:01)
-- common_3d.xml (  15069 bytes, from 2026-01-17 21:18:01)
-- state_hi.xml  (  35909 bytes, from 2026-01-17 21:18:01)
-- copyright.xml (   1597 bytes, from 2024-04-10 16:26:25)
-- state_2d.xml  (  52271 bytes, from 2024-04-10 16:26:25)
-- state_3d.xml  (  92108 bytes, from 2026-01-17 21:18:01)
-- state_blt.xml (  15754 bytes, from 2026-01-17 21:34:52)
-- state_vg.xml  (   5975 bytes, from 2024-04-10 16:26:25)
+- state.xml     (  30672 bytes, from 2026-05-31 19:31:30)
+- common.xml    (  35664 bytes, from 2026-05-31 19:31:30)
+- common_3d.xml (  15069 bytes, from 2026-05-31 19:31:30)
+- state_hi.xml  (  35909 bytes, from 2026-05-31 19:31:30)
+- copyright.xml (   1597 bytes, from 2026-03-02 22:49:28)
+- state_2d.xml  (  52271 bytes, from 2026-03-02 22:49:28)
+- state_3d.xml  (  92217 bytes, from 2026-05-31 19:31:30)
+- state_blt.xml (  15754 bytes, from 2026-05-31 19:31:30)
+- state_vg.xml  (   5975 bytes, from 2026-03-02 22:49:28)
 
 Copyright (C) 2012-2026 by the following authors:
 - Wladimir J. van der Laan <laanwj@gmail.com>
@@ -1466,6 +1466,7 @@ DEALINGS IN THE SOFTWARE.
 #define VIVS_TS_MEM_CONFIG_HDEPTH_AUTO_DISABLE			0x00002000
 #define VIVS_TS_MEM_CONFIG_STENCIL_ENABLE			0x00004000
 #define VIVS_TS_MEM_CONFIG_UNK21				0x00200000
+#define VIVS_TS_MEM_CONFIG_64BPP_FORMAT				0x40000000
 
 #define VIVS_TS_COLOR_STATUS_BASE				0x00001658
 
@@ -1525,6 +1526,7 @@ DEALINGS IN THE SOFTWARE.
 #define VIVS_TS_RT_CONFIG_COMPRESSION_FORMAT__MASK		0x00000078
 #define VIVS_TS_RT_CONFIG_COMPRESSION_FORMAT__SHIFT		3
 #define VIVS_TS_RT_CONFIG_COMPRESSION_FORMAT(x)			(((x) << VIVS_TS_RT_CONFIG_COMPRESSION_FORMAT__SHIFT) & VIVS_TS_RT_CONFIG_COMPRESSION_FORMAT__MASK)
+#define VIVS_TS_RT_CONFIG_64BPP_FORMAT				0x00000080
 
 #define VIVS_TS_RT_STATUS_BASE(i0)			       (0x000017c0 + 0x4*(i0))
 

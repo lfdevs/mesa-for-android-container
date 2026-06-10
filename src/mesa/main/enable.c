@@ -483,12 +483,6 @@ _mesa_set_framebuffer_srgb(struct gl_context *ctx, GLboolean state)
 void
 _mesa_set_enable(struct gl_context *ctx, GLenum cap, GLboolean state)
 {
-   if (MESA_VERBOSE & VERBOSE_API)
-      _mesa_debug(ctx, "%s %s (newstate is %x)\n",
-                  state ? "glEnable" : "glDisable",
-                  _mesa_enum_to_string(cap),
-                  ctx->NewState);
-
    switch (cap) {
       case GL_ALPHA_TEST:
          if (!_mesa_is_desktop_gl_compat(ctx) && !_mesa_is_gles1(ctx))
@@ -1200,7 +1194,7 @@ _mesa_set_enable(struct gl_context *ctx, GLenum cap, GLboolean state)
          if (ctx->VertexProgram.TwoSideEnabled == state)
             return;
          FLUSH_VERTICES(ctx, 0, GL_ENABLE_BIT);
-         if (ctx->st->lower_two_sided_color) {
+         if (!ctx->st->screen->caps.two_sided_color) {
             /* TODO: this could be smaller, but most drivers don't get here */
             ST_SET_STATE3(ctx->NewDriverState, ST_NEW_VS_STATE,
                           ST_NEW_TES_STATE, ST_NEW_GS_STATE);

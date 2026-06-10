@@ -60,6 +60,10 @@ NON_EXISTANT_CAPS = [
 
     # Exclude the one beta cap.
     'ShaderEnqueueAMDX',
+
+    'ImageGatherLinearQCOM',
+    'ImageGatherExtendedModesQCOM',
+    'MultipleWaitQueuesQCOM',
 ]
 
 def process_enable(enab):

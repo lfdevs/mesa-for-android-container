@@ -27,6 +27,7 @@
 #include "pipe/p_screen.h"
 #include "pipe/p_state.h"
 
+#include "util/os_misc.h"
 #include "util/u_debug.h"
 #include "util/u_memory.h"
 #include "util/format/u_format.h"
@@ -199,9 +200,7 @@ vc4_init_screen_caps(struct vc4_screen *screen)
 
         caps->vendor_id = 0x14E4;
 
-        uint64_t system_memory;
-        caps->video_memory = os_get_total_physical_memory(&system_memory) ?
-                system_memory >> 20 : 0;
+        caps->video_memory = os_get_gpu_heap_size(1.0f, NULL) >> 20;
 
         caps->uma = true;
 

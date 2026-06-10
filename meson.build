@@ -825,6 +825,8 @@ endif
 
 _rtti = get_option('cpp_rtti')
 
+with_panfrost_rust = (with_gallium_panfrost or with_panfrost_vk) and get_option('panfrost-rust')
+
 with_gallium_rusticl = get_option('gallium-rusticl')
 if with_gallium_rusticl
   if not with_gallium
@@ -832,16 +834,8 @@ if with_gallium_rusticl
   endif
 endif
 
-# Do built drivers need to include gfx/compute queues support?
-# TODO: add a separate option to allow to build a VA-API driver without the features
-# that depend on these queues. When added a lightweight decode-only VA-API driver could be built
-with_gfx_compute = with_any_opengl or get_option('vulkan-drivers').length() > 0 or with_gallium_rusticl or with_gallium_va
-if with_gfx_compute
-  pre_args += '-DHAVE_GFX_COMPUTE'
-endif
-
 with_virtgpu_kumquat = get_option('virtgpu_kumquat') and with_gfxstream_vk
-if with_gallium_rusticl or with_nouveau_vk or with_tools.contains('etnaviv') or with_virtgpu_kumquat
+if with_gallium_rusticl or with_nouveau_vk or with_tools.contains('etnaviv') or with_virtgpu_kumquat or with_panfrost_rust
   # rust.bindgen() does not pass `--rust-target` to bindgen until 1.7.0.
   if meson.version().version_compare('< 1.7.0')
     error('Mesa Rust support requires Meson 1.7.0 or newer')
@@ -852,8 +846,8 @@ if with_gallium_rusticl or with_nouveau_vk or with_tools.contains('etnaviv') or 
   rust = import('rust')
 
   # Keep this in sync with the `msrv` in clippy.toml
-  if rustc.version().version_compare('< 1.82')
-    error('Mesa requires Rust 1.82.0 or newer')
+  if rustc.version().version_compare('< 1.85')
+    error('Mesa requires Rust 1.85.0 or newer')
   endif
 
   # bindgen 0.71 is the first version that knows about `editions`
@@ -903,6 +897,8 @@ if with_gallium_rusticl or with_nouveau_vk or with_tools.contains('etnaviv') or 
     '-Dkeyword_idents_2024',
     '-Dmissing_unsafe_on_extern',
     '-Dnever_type_fallback_flowing_into_unsafe',
+    '-Drust_2024_guarded_string_incompatible_syntax',
+    '-Drust_2024_incompatible_pat',
     '-Drust_2024_prelude_collisions',
     '-Dstatic_mut_refs',
     '-Dunsafe_op_in_unsafe_fn',
@@ -912,8 +908,6 @@ if with_gallium_rusticl or with_nouveau_vk or with_tools.contains('etnaviv') or 
 
     # 1.83+
     # '-Dif_let_rescope',
-    # '-Drust_2024_guarded_string_incompatible_syntax',
-    # '-Drust_2024_incompatible_pat',
   ]
 endif
 
@@ -953,6 +947,17 @@ with_poly = [
 dep_clc = null_dep
 if with_clc
   dep_clc = dependency('libclc')
+endif
+
+with_gfx_compute = [
+  with_any_opengl,
+  with_any_vk,
+  with_clc,
+  with_gallium_va and with_video_encode,
+  with_gallium_mediafoundation and with_video_encode,
+].contains(true)
+if with_gfx_compute
+  pre_args += '-DHAVE_GFX_COMPUTE'
 endif
 
 gl_pkgconfig_c_flags = []
@@ -1247,6 +1252,8 @@ endif
 c_msvc_compat_args = []
 no_override_init_args = []
 cpp_msvc_compat_args = []
+soong_compat_c_args = []
+soong_compat_cpp_args = []
 ld_args_gc_sections = []
 if cc.get_argument_syntax() == 'msvc'
   _trial = [
@@ -1366,6 +1373,40 @@ else
   ]
   c_msvc_compat_args += cc.get_supported_arguments(_trial_msvc)
   cpp_msvc_compat_args += cpp.get_supported_arguments(_trial_msvc)
+
+  # Check for C and C++ arguments for Soong compatibility.
+  _trial_soong_c = [
+    '-Werror=date-time',
+    '-Werror=gnu-alignof-expression',
+    '-Werror=ignored-qualifiers',
+    '-Werror=implicit-fallthrough',
+    '-Werror=int-conversion',
+    '-Werror=missing-prototypes',
+    '-Werror=pragma-pack',
+    '-Werror=pragma-pack-suspicious-include',
+    '-Werror=sizeof-array-div',
+    '-Werror=string-plus-int',
+    '-Werror=unreachable-code-loop-increment',
+  ]
+  _trial_soong_cpp = [
+    '-D_LIBCPP_ENABLE_THREAD_SAFETY_ANNOTATIONS',
+    '-Werror=date-time',
+    '-Werror=gnu-alignof-expression',
+    '-Werror=ignored-qualifiers',
+    '-Werror=implicit-fallthrough',
+    '-Werror=pragma-pack',
+    '-Werror=pragma-pack-suspicious-include',
+    '-Werror=sizeof-array-div',
+    '-Werror=string-plus-int',
+    '-Werror=unreachable-code-loop-increment',
+  ]
+  if cpp.get_id() == 'gcc'
+    _trial_soong_cpp += '-Werror=missing-declarations'
+  else
+    _trial_soong_cpp += '-Werror=missing-prototypes'
+  endif
+  soong_compat_c_args += cc.get_supported_arguments(_trial_soong_c)
+  soong_compat_cpp_args += cpp.get_supported_arguments(_trial_soong_cpp)
 endif
 
 # set linker arguments
@@ -2053,7 +2094,7 @@ if not with_platform_windows and not dep_elf.found()
 endif
 if dep_elf.found()
   pre_args += '-DUSE_LIBELF'
-elif with_gallium_radeonsi
+elif with_gallium_radeonsi and with_gfx_compute
   error('Gallium driver radeonsi requires libelf')
 endif
 
@@ -2328,7 +2369,7 @@ renderdoc_integration_supported = [
   'linux',
   'android',
 ].contains(host_machine.system())
-pre_args += '-DHAVE_RENDERDOC_INTEGRATION=@0@'.format(renderdoc_integration_supported)
+pre_args += '-DHAVE_RENDERDOC_INTEGRATION=@0@'.format(renderdoc_integration_supported.to_int())
 
 with_teflon = get_option('teflon')
 if with_teflon and with_tests
@@ -2564,6 +2605,7 @@ if with_gallium
   endif
   gallium_summary += {'Frontends': gallium_frontends}
   gallium_summary += {'HUD lm-sensors': dep_lmsensors.found()}
+  gallium_summary += {'GFX/Compute': with_gfx_compute}
 endif
 summary(gallium_summary, section: 'Gallium', bool_yn: true, list_sep: ' ')
 

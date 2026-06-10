@@ -65,7 +65,7 @@ libintel_dev = static_library(
   include_directories : [inc_include, inc_src, inc_intel, inc_intel_dev_virtio],
   dependencies : [dep_libdrm, idep_mesautil, idep_intel_dev_wa,
                   idep_intel_dev_info_gen],
-  c_args : [no_override_init_args],
+  c_args : [no_override_init_args, soong_compat_c_args],
   gnu_symbol_visibility : 'hidden',
   link_with : [link_intel_dev_virtio],
 )

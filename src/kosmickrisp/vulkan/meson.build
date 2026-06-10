@@ -80,6 +80,7 @@ kk_files = files(
   'kk_instance.c',
   'kk_nir_lower_descriptors.c',
   'kk_nir_lower_multiview.c',
+  'kk_nir_lower_null_images.c',
   'kk_nir_lower_textures.c',
   'kk_nir_lower_vbo.h',
   'kk_nir_lower_vbo.c',

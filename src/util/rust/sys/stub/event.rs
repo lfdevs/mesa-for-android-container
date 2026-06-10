@@ -14,11 +14,15 @@ impl Event {
         Err(MesaError::Unsupported)
     }
 
+    pub fn add(&mut self, value: u64) -> MesaResult<()> {
+        Err(MesaError::Unsupported)
+    }
+
     pub fn signal(&mut self) -> MesaResult<()> {
         Err(MesaError::Unsupported)
     }
 
-    pub fn wait(&self) -> MesaResult<()> {
+    pub fn wait(&mut self) -> MesaResult<u64> {
         Err(MesaError::Unsupported)
     }
 

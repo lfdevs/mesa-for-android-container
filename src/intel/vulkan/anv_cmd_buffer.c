@@ -1717,7 +1717,6 @@ bind_graphics_shaders(struct anv_cmd_buffer *cmd_buffer,
                diff_fix_state(VF_SGVS_2,             vs.vf_sgvs_2);
             diff_fix_state(VF_COMPONENT_PACKING,     vs.vf_component_packing);
             diff_var_state(VF_SGVS_INSTANCING,       vs.vf_sgvs_instancing);
-            gfx->vs_source_hash = shader->prog_data->source_hash;
          } else {
             BITSET_SET(hw_state->pack_dirty, ANV_GFX_STATE_VS);
          }
@@ -1773,7 +1772,6 @@ bind_graphics_shaders(struct anv_cmd_buffer *cmd_buffer,
             diff_fix_state(WM,                       ps.wm);
             diff_fix_state(PS,                       ps.ps);
             diff_fix_state(PS_EXTRA,                 ps.ps_extra);
-            gfx->fs_source_hash = shader->prog_data->source_hash;
          } else {
             BITSET_SET(hw_state->pack_dirty, ANV_GFX_STATE_PS_EXTRA);
          }

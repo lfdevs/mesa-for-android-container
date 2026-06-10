@@ -84,6 +84,9 @@ instrs_equal(const void *_i1, const void *_i2)
    bi_foreach_src(i1, s) {
       bi_index s1 = i1->src[s], s2 = i2->src[s];
 
+      /* kill_ssa is a liveness annotation, not part of instruction semantics */
+      s1.kill_ssa = s2.kill_ssa = false;
+
       if (memcmp(&s1, &s2, sizeof(s1)) != 0)
          return false;
    }

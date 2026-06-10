@@ -18,6 +18,7 @@ struct hk_instance {
 
    uint8_t driver_build_sha[BLAKE3_KEY_LEN];
    uint32_t force_vk_vendor;
+   float heap_memory_percent;
 
    bool no_border;
    bool fake_minmax;

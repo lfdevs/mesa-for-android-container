@@ -3,11 +3,14 @@
  * SPDX-License-Identifier: MIT
  */
 
+#include <assert.h>
 #include <ctype.h>
 #include <fcntl.h>
 #include <getopt.h>
+#include <inttypes.h>
 #include <libgen.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
 
@@ -16,13 +19,13 @@
 #include <lauxlib.h>
 
 #include "util/ralloc.h"
+#include "util/u_math.h"
 
 #include <xf86drm.h>
 #include "drm-uapi/i915_drm.h"
 #include "drm-uapi/xe_drm.h"
 
-#include "intel/compiler/brw/brw_asm.h"
-#include "intel/compiler/brw/brw_isa_info.h"
+#include "intel/compiler/gen/gen.h"
 #include "intel/common/intel_gem.h"
 #include "intel/common/xe/intel_engine.h"
 #include "intel/decoder/intel_decoder.h"
@@ -35,12 +38,16 @@ enum {
    EXECUTOR_BO_BATCH_ADDR = 0x10000000,
    EXECUTOR_BO_EXTRA_ADDR = 0x20000000,
    EXECUTOR_BO_DATA_ADDR  = 0x30000000,
+   EXECUTOR_BO_PERF_ADDR  = 0x40000000,
 
    /* Apply to all BOs. */
    EXECUTOR_BO_SIZE = 10 * 1024 * 1024,
 };
 
-const char usage_line[] = "usage: executor [-d DEVICE] FILENAME [ARGS...]";
+const char usage_line[] =
+   "usage: executor [-d DEVICE] FILENAME [ARGS...]\n"
+   "       executor [-d DEVICE] --oa OA [--oa-csv FILE] FILENAME [ARGS...]\n"
+   "       executor [-d DEVICE] --oa list";
 
 static void
 open_manual()
@@ -68,13 +75,17 @@ open_manual()
       "",
       "executor [-d DEVICE] FILENAME [ARGS...]",
       "",
+      "executor [-d DEVICE] --oa OA [--oa-csv FILE] FILENAME [ARGS...]",
+      "",
+      "executor [-d DEVICE] --oa list",
+      "",
       "executor -d list",
       "",
       ".SH DESCRIPTION",
       "",
       "Runs a Lua script that can perform data manipulation",
       "and dispatch execution of compute shaders, written in the same",
-      "assembly format used by the brw_asm assembler or when dumping",
+      "assembly format used by the gen assembler/parser or when dumping",
       "shaders in debug mode.",
       "",
       "The goal is to have a tool to experiment directly with certain",
@@ -84,6 +95,28 @@ open_manual()
       "The program will pick the first available device unless -d is",
       "passed with either the index or a substring of the device to use.",
       "Use \"-d list\" to list available devices.",
+      "",
+      ".SH PERFORMANCE COUNTERS",
+      "",
+      "If --oa OA is passed, executor wraps every execute() call in an OA",
+      "performance query and writes one CSV row per execute().  The first row is",
+      "a header.  By default, CSV is printed to stdout after the script finishes.",
+      "With --oa-csv FILE, CSV is written to FILE as the script runs.",
+      "",
+      "--oa OA selects the OA profile and optional counter filter.  OA has the",
+      "form PROFILE[:COUNTER1,COUNTER2].  If the counter list is omitted, all",
+      "counters in the selected profile are written.  If PROFILE is omitted, or",
+      "OA does not match a profile name, counters are selected from ComputeBasic.",
+      "--oa-csv only selects the output file and must be combined with --oa.",
+      "For example:",
+      "",
+      "  --oa ComputeBasic",
+      "  --oa ComputeBasic:GpuTime,AvgGpuCoreFrequency",
+      "  --oa GpuTime,AvgGpuCoreFrequency",
+      "",
+      "--oa list lists all OA profiles and counters and exits.  For example:",
+      "",
+      "  executor --oa list",
       "",
       ".SH SCRIPTING ENVIRONMENT",
       "",
@@ -161,14 +194,14 @@ open_manual()
       "  local r = execute {",
       "    data={ [42] = 0x100 },",
       "    src=[[",
-      "      @mov     g1      42",
-      "      @read    g2      g1",
+      "      @mov     r1      42",
+      "      @read    r2      r1",
       "",
-      "      @id      g3",
+      "      @id      r3",
       "",
-      "      add(8)   g4<1>UD  g2<8,8,1>UD  g3<8,8,1>UD  { align1 @1 1Q };",
+      "      add (8)  r4      r2      r3      {A@1}",
       "",
-      "      @write   g3       g4",
+      "      @write   r3       r4",
       "      @eot",
       "    ]]",
       "  }",
@@ -221,16 +254,36 @@ print_help()
       "- @read DST_REG OFFSET_REG\n"
       "- @write OFFSET_REG SRC_REG\n"
       "\n"
-      "Use \'executor -d list\' to list available devices.\n"
-      "For more details, use \'executor --help\' to open manual.\n",
+      "PERFORMANCE COUNTERS:\n"
+      "- --oa PROFILE[:COUNTER1,COUNTER2]\n"
+      "- --oa COUNTER1[,COUNTER2]\n"
+      "- --oa PROFILE[:COUNTER1,COUNTER2] --oa-csv FILE\n"
+      "- --oa list\n"
+      "\n"
+      "Use 'executor -d list' to list available devices.\n"
+      "For more details, use 'executor --help' to open manual.\n",
       usage_line);
 }
 
 static struct {
    struct intel_device_info devinfo;
    struct isl_device isl_dev;
-   struct brw_isa_info isa;
    int fd;
+
+   const char *oa_csv_path;
+   const char *oa_spec;
+   const char *oa_metric_name;
+   const char **oa_counter_names;
+   int n_oa_counter_names;
+   int *oa_counter_indices;
+   bool oa_spec_has_colon;
+   bool oa_list;
+   struct intel_perf_config *perf_cfg;
+   int perf_query_index;
+   uint32_t perf_execute_count;
+   FILE *oa_csv_file;
+   char *oa_csv_mem;
+   size_t oa_csv_mem_size;
 } E;
 
 #define genX_call(func, ...)                                \
@@ -348,18 +401,452 @@ executor_alloc_bytes(executor_bo *bo, uint32_t size)
 void *
 executor_alloc_bytes_aligned(executor_bo *bo, uint32_t size, uint32_t alignment)
 {
-   void *r = bo->cursor;
-   if (alignment) {
-      r = (void *)(((uintptr_t)r + alignment-1) & ~((uintptr_t)alignment-1));
-   }
-   bo->cursor = r + size;
-   return r;
+   uintptr_t r = (uintptr_t)bo->cursor;
+   if (alignment)
+      r = (r + alignment - 1) & ~((uintptr_t)alignment - 1);
+
+   uint64_t offset = r - (uintptr_t)bo->map;
+   if (offset > bo->size || size > bo->size - offset)
+      failf("executor BO overflow");
+
+   void *ptr = (void *)r;
+   bo->cursor = ptr + size;
+   return ptr;
 }
 
 executor_address
 executor_address_of_ptr(executor_bo *bo, void *ptr)
 {
    return (executor_address){ptr - bo->map + bo->addr};
+}
+
+static void *
+executor_perf_bo_alloc(void *bufmgr, const char *name, uint64_t size)
+{
+   executor_context *ec = bufmgr;
+
+   executor_bo *bo = rzalloc(ec->mem_ctx, executor_bo);
+   if (!bo)
+      failf("failed to allocate perf BO wrapper");
+
+   /* Sub-allocate from a single BO. */
+   size = align64(size, 4096);
+   void *map = executor_alloc_bytes_aligned(&ec->bo.perf, size, 4096);
+   uint64_t offset = (char *)map - (char *)ec->bo.perf.map;
+
+   *bo = (executor_bo) {
+      .size = size,
+      .handle = ec->bo.perf.handle,
+      .map = map,
+      .cursor = map,
+      .addr = ec->bo.perf.addr + offset,
+   };
+
+   return bo;
+}
+
+/* intel_perf vtbl: executor has no live batch object to inspect and owns the
+ * single real perf BO, so several callbacks are trivial adapters or no-ops.
+ */
+static void
+executor_perf_bo_unreference(void *bo)
+{
+   /* Perf BO is destroyed with executor_context. */
+}
+
+static void *
+executor_perf_bo_map(void *ctx, void *bo, unsigned flags)
+{
+   return ((executor_bo *)bo)->map;
+}
+
+static void
+executor_perf_bo_unmap(void *bo)
+{
+   /* Perf BO slices are persistently mapped as part of ec->bo.perf. */
+}
+
+static bool
+executor_perf_batch_references(void *batch, void *bo)
+{
+   /* Executor has no live batch object for intel_perf to inspect. */
+   return false;
+}
+
+static void
+executor_perf_bo_wait_rendering(void *bo)
+{
+   /* executor_context_dispatch() already waits for batch completion. */
+}
+
+static int
+executor_perf_bo_busy(void *bo)
+{
+   /* Queries are only read after executor_context_dispatch() has waited. */
+   return 0;
+}
+
+static void
+executor_perf_emit_stall_at_pixel_scoreboard(void *ctx)
+{
+   executor_context *ec = ctx;
+   genX_call(emit_perf_stall, ec);
+}
+
+static void
+executor_perf_emit_mi_report_perf_count(void *ctx, void *bo,
+                                        uint32_t offset_in_bytes,
+                                        uint32_t report_id)
+{
+   executor_context *ec = ctx;
+   genX_call(emit_mi_report_perf_count, ec, bo, offset_in_bytes, report_id);
+}
+
+static void
+executor_perf_batchbuffer_flush(void *ctx, const char *file, int line)
+{
+   /* Unused because executor_perf_batch_references() always returns false. */
+}
+
+static void
+executor_perf_store_register_mem(void *ctx, void *bo, uint32_t reg,
+                                 uint32_t reg_size, uint32_t offset)
+{
+   executor_context *ec = ctx;
+   genX_call(store_register_mem, ec, bo, reg, reg_size, offset);
+}
+
+static const __typeof__(((struct intel_perf_config *)0)->vtbl)
+executor_perf_vtbl = {
+   .bo_alloc = executor_perf_bo_alloc,
+   .bo_unreference = executor_perf_bo_unreference,
+   .bo_map = executor_perf_bo_map,
+   .bo_unmap = executor_perf_bo_unmap,
+   .batch_references = executor_perf_batch_references,
+   .bo_wait_rendering = executor_perf_bo_wait_rendering,
+   .bo_busy = executor_perf_bo_busy,
+   .emit_stall_at_pixel_scoreboard =
+      executor_perf_emit_stall_at_pixel_scoreboard,
+   .emit_mi_report_perf_count = executor_perf_emit_mi_report_perf_count,
+   .batchbuffer_flush = executor_perf_batchbuffer_flush,
+   .store_register_mem = executor_perf_store_register_mem,
+};
+
+static bool
+executor_perf_query_name_matches(const struct intel_perf_query_info *query,
+                                 const char *name)
+{
+   return (query->symbol_name && !strcmp(query->symbol_name, name)) ||
+          (query->name && !strcmp(query->name, name));
+}
+
+static bool
+executor_perf_counter_name_matches(const struct intel_perf_query_counter *counter,
+                                   const char *name)
+{
+   return (counter->symbol_name && !strcmp(counter->symbol_name, name)) ||
+          (counter->name && !strcmp(counter->name, name));
+}
+
+static void
+executor_perf_print_query_name(FILE *f, const char *prefix,
+                               const struct intel_perf_query_info *query)
+{
+   fprintf(f, "%s%s%s%s\n", prefix,
+           query->symbol_name ? query->symbol_name : query->name,
+           query->symbol_name && query->name ? " - " : "",
+           query->symbol_name && query->name ? query->name : "");
+}
+
+static void
+executor_perf_print_available_queries(FILE *f)
+{
+   fprintf(f, "Available OA metric sets:\n");
+   for (int i = 0; i < E.perf_cfg->n_queries; i++) {
+      const struct intel_perf_query_info *query = &E.perf_cfg->queries[i];
+      if (query->kind == INTEL_PERF_QUERY_TYPE_OA)
+         executor_perf_print_query_name(f, "  ", query);
+   }
+}
+
+static int
+executor_perf_count_selected_counters(const struct intel_perf_query_info *query)
+{
+   return E.n_oa_counter_names > 0 ? E.n_oa_counter_names : query->n_counters;
+}
+
+static void
+executor_perf_validate_counters(void *mem_ctx,
+                                const struct intel_perf_query_info *query)
+{
+   E.oa_counter_indices =
+      ralloc_array(mem_ctx, int, E.n_oa_counter_names);
+   if (E.n_oa_counter_names > 0 && !E.oa_counter_indices)
+      failf("failed to allocate OA counter index map");
+
+   for (int i = 0; i < E.n_oa_counter_names; i++) {
+      int idx = -1;
+      for (int j = 0; j < query->n_counters; j++) {
+         if (executor_perf_counter_name_matches(&query->counters[j],
+                                                E.oa_counter_names[i])) {
+            idx = j;
+            break;
+         }
+      }
+
+      if (idx < 0)
+         failf("OA counter '%s' not found in metric set '%s'",
+               E.oa_counter_names[i],
+               query->symbol_name ? query->symbol_name : query->name);
+
+      E.oa_counter_indices[i] = idx;
+   }
+
+   if (executor_perf_count_selected_counters(query) == 0)
+      failf("OA metric set '%s' has no selected counters",
+            query->symbol_name ? query->symbol_name : query->name);
+}
+
+static int
+executor_find_named_perf_query(const char *metric_name)
+{
+   for (int i = 0; i < E.perf_cfg->n_queries; i++) {
+      const struct intel_perf_query_info *query = &E.perf_cfg->queries[i];
+      if (query->kind == INTEL_PERF_QUERY_TYPE_OA &&
+          executor_perf_query_name_matches(query, metric_name))
+         return i;
+   }
+
+   return -1;
+}
+
+static const char *
+executor_default_perf_query_name(void)
+{
+   return "ComputeBasic";
+}
+
+static int
+executor_find_perf_query(const char *metric_name)
+{
+   int query_index = executor_find_named_perf_query(metric_name);
+   if (query_index >= 0)
+      return query_index;
+
+   executor_perf_print_available_queries(stderr);
+   failf("OA metric set '%s' not found", metric_name);
+   return -1;
+}
+
+static void
+executor_add_oa_counter(void *mem_ctx, const char *counter)
+{
+   E.oa_counter_names = reralloc(mem_ctx, E.oa_counter_names,
+                                 const char *, E.n_oa_counter_names + 1);
+   if (!E.oa_counter_names)
+      failf("failed to allocate OA counter filter");
+   E.oa_counter_names[E.n_oa_counter_names++] = counter;
+}
+
+static void
+executor_parse_oa_counter_list(void *mem_ctx, const char *counter_list,
+                               const char *spec)
+{
+   char *counters = ralloc_strdup(mem_ctx, counter_list);
+   while (counters && counters[0]) {
+      char *counter = counters;
+      char *comma = strchr(counters, ',');
+      if (comma) {
+         *comma = '\0';
+         counters = comma + 1;
+      } else {
+         counters = NULL;
+      }
+
+      if (!counter[0])
+         failf("empty OA counter name in '%s'", spec);
+
+      executor_add_oa_counter(mem_ctx, counter);
+   }
+}
+
+static void
+executor_parse_oa_spec(void *mem_ctx, const char *spec)
+{
+   if (!spec)
+      return;
+
+   char *oa = ralloc_strdup(mem_ctx, spec);
+   char *counter_list = strchr(oa, ':');
+   if (counter_list) {
+      E.oa_spec_has_colon = true;
+      *counter_list++ = '\0';
+      E.oa_metric_name = oa[0] ? oa : executor_default_perf_query_name();
+      executor_parse_oa_counter_list(mem_ctx, counter_list, spec);
+   } else if (oa[0]) {
+      E.oa_metric_name = oa;
+   } else {
+      failf("missing OA metric set name in '%s'", spec);
+   }
+}
+
+static void
+executor_perf_list_query(const struct intel_perf_query_info *query)
+{
+   executor_perf_print_query_name(stdout, "", query);
+   if (query->guid)
+      printf("  guid: %s\n", query->guid);
+   printf("  counters:\n");
+
+   for (int i = 0; i < query->n_counters; i++) {
+      const struct intel_perf_query_counter *counter = &query->counters[i];
+      printf("    %s%s%s [%s, %s, %s]",
+             counter->symbol_name ? counter->symbol_name : counter->name,
+             counter->symbol_name && counter->name ? " - " : "",
+             counter->symbol_name && counter->name ? counter->name : "",
+             intel_perf_counter_type_name(counter->type),
+             intel_perf_counter_data_type_name(counter->data_type),
+             intel_perf_counter_units_name(counter->units));
+      if (counter->category)
+         printf(" category=%s", counter->category);
+      printf("\n");
+      if (counter->desc)
+         printf("      %s\n", counter->desc);
+   }
+}
+
+static void
+executor_perf_list(void)
+{
+   for (int i = 0; i < E.perf_cfg->n_queries; i++) {
+      const struct intel_perf_query_info *query = &E.perf_cfg->queries[i];
+      if (query->kind == INTEL_PERF_QUERY_TYPE_OA)
+         executor_perf_list_query(query);
+   }
+}
+
+static void
+executor_perf_create_query(executor_context *ec)
+{
+   if (!ec->perf_enabled)
+      return;
+
+   ec->perf_query.ctx = intel_perf_new_context(ec->mem_ctx);
+   if (!ec->perf_query.ctx)
+      failf("failed to allocate Intel perf context");
+
+   const uint32_t hw_ctx = ec->devinfo->kmd_type == INTEL_KMD_TYPE_I915 ?
+      ec->i915.ctx_id : ec->xe.queue_id;
+   intel_perf_init_context(ec->perf_query.ctx, E.perf_cfg, ec->mem_ctx,
+                           ec, ec, ec->devinfo, hw_ctx, ec->fd);
+
+   ec->perf_query.obj = intel_perf_new_query(ec->perf_query.ctx, E.perf_query_index);
+   if (!ec->perf_query.obj)
+      failf("failed to create OA performance query");
+}
+
+static void
+executor_perf_print_counter_value(FILE *f,
+                                  const struct intel_perf_query_counter *counter,
+                                  const uint8_t *data)
+{
+   const uint8_t *p = data + counter->offset;
+
+   switch (counter->data_type) {
+   case INTEL_PERF_COUNTER_DATA_TYPE_BOOL32:
+   case INTEL_PERF_COUNTER_DATA_TYPE_UINT32: {
+      uint32_t value;
+      assert((counter->offset & 3) == 0);
+      memcpy(&value, p, sizeof(value));
+      fprintf(f, "%"PRIu32, value);
+      break;
+   }
+   case INTEL_PERF_COUNTER_DATA_TYPE_UINT64: {
+      uint64_t value;
+      assert((counter->offset & 7) == 0);
+      memcpy(&value, p, sizeof(value));
+      fprintf(f, "%"PRIu64, value);
+      break;
+   }
+   case INTEL_PERF_COUNTER_DATA_TYPE_FLOAT: {
+      float value;
+      assert((counter->offset & 3) == 0);
+      memcpy(&value, p, sizeof(value));
+      fprintf(f, "%.9g", value);
+      break;
+   }
+   case INTEL_PERF_COUNTER_DATA_TYPE_DOUBLE: {
+      double value;
+      assert((counter->offset & 7) == 0);
+      memcpy(&value, p, sizeof(value));
+      fprintf(f, "%.17g", value);
+      break;
+   }
+   default:
+      failf("unhandled OA counter data type %d", counter->data_type);
+   }
+}
+
+static void
+executor_perf_finish_query(executor_context *ec)
+{
+   if (!ec->perf_query.obj)
+      return;
+
+   const struct intel_perf_query_info *query =
+      &E.perf_cfg->queries[E.perf_query_index];
+   const bool write_header = E.perf_execute_count++ == 0;
+   if (!E.oa_csv_file) {
+      if (E.oa_csv_path) {
+         E.oa_csv_file = fopen(E.oa_csv_path, "w");
+         if (!E.oa_csv_file)
+            failf("failed to open '%s' for writing", E.oa_csv_path);
+      } else {
+         E.oa_csv_file = open_memstream(&E.oa_csv_mem, &E.oa_csv_mem_size);
+         if (!E.oa_csv_file)
+            failf("failed to open memory stream for OA CSV output");
+      }
+   }
+
+   /* When --oa specifies counters, columns follow the user-supplied order;
+    * otherwise they follow the profile-defined order.
+    */
+   const int n_cols = executor_perf_count_selected_counters(query);
+
+   if (write_header) {
+      for (int i = 0; i < n_cols; i++) {
+         const int idx = E.n_oa_counter_names > 0 ? E.oa_counter_indices[i] : i;
+         const struct intel_perf_query_counter *counter = &query->counters[idx];
+         if (i > 0)
+            putc(',', E.oa_csv_file);
+         fprintf(E.oa_csv_file, "%s",
+                 counter->symbol_name ? counter->symbol_name : counter->name);
+      }
+      putc('\n', E.oa_csv_file);
+   }
+
+   uint8_t *data = calloc(1, query->data_size);
+   if (!data)
+      failf("failed to allocate OA query result buffer");
+
+   intel_perf_wait_query(ec->perf_query.ctx, ec->perf_query.obj, NULL);
+   intel_perf_get_query_data(ec->perf_query.ctx, ec->perf_query.obj, NULL,
+                             query->data_size, (unsigned *)data, NULL);
+
+   for (int i = 0; i < n_cols; i++) {
+      const int idx = E.n_oa_counter_names > 0 ? E.oa_counter_indices[i] : i;
+      const struct intel_perf_query_counter *counter = &query->counters[idx];
+      if (i > 0)
+         putc(',', E.oa_csv_file);
+      executor_perf_print_counter_value(E.oa_csv_file, counter, data);
+   }
+   putc('\n', E.oa_csv_file);
+   fflush(E.oa_csv_file);
+
+   free(data);
+
+   intel_perf_delete_query(ec->perf_query.ctx, ec->perf_query.obj);
+   intel_perf_free_context(ec->perf_query.ctx);
 }
 
 static bool
@@ -468,6 +955,11 @@ decode_get_bo(void *_ec, bool ppgtt, uint64_t address)
       bo.addr = ec->bo.data.addr;
       bo.size = ec->bo.data.size;
       bo.map  = ec->bo.data.map;
+   } else if (address >= ec->bo.perf.addr &&
+              address < ec->bo.perf.addr + ec->bo.perf.size) {
+      bo.addr = ec->bo.perf.addr;
+      bo.size = ec->bo.perf.size;
+      bo.map  = ec->bo.perf.map;
    }
 
    return bo;
@@ -589,6 +1081,9 @@ executor_context_setup(executor_context *ec)
    executor_create_bo(ec, &ec->bo.batch, EXECUTOR_BO_BATCH_ADDR, EXECUTOR_BO_SIZE);
    executor_create_bo(ec, &ec->bo.extra, EXECUTOR_BO_EXTRA_ADDR, EXECUTOR_BO_SIZE);
    executor_create_bo(ec, &ec->bo.data,  EXECUTOR_BO_DATA_ADDR, EXECUTOR_BO_SIZE);
+   if (ec->perf_enabled)
+      executor_create_bo(ec, &ec->bo.perf, EXECUTOR_BO_PERF_ADDR,
+                         EXECUTOR_BO_SIZE);
 
    uint32_t *data = ec->bo.data.map;
    for (int i = 0; i < EXECUTOR_BO_SIZE / 4; i++)
@@ -599,6 +1094,7 @@ static void
 executor_context_dispatch(executor_context *ec)
 {
    if (ec->devinfo->kmd_type == INTEL_KMD_TYPE_I915) {
+      const uint32_t buffer_count = 3 + ec->perf_enabled;
       struct drm_i915_gem_exec_object2 objs[] = {
          {
             .handle = ec->bo.batch.handle,
@@ -615,11 +1111,19 @@ executor_context_dispatch(executor_context *ec)
             .offset = ec->bo.data.addr,
             .flags  = EXEC_OBJECT_PINNED | EXEC_OBJECT_WRITE,
          },
+         {},
       };
+      if (ec->perf_enabled) {
+         objs[3] = (struct drm_i915_gem_exec_object2) {
+            .handle = ec->bo.perf.handle,
+            .offset = ec->bo.perf.addr,
+            .flags  = EXEC_OBJECT_PINNED | EXEC_OBJECT_WRITE,
+         };
+      }
 
       struct drm_i915_gem_execbuffer2 exec = {0};
       exec.buffers_ptr = (uintptr_t)objs;
-      exec.buffer_count = ARRAY_SIZE(objs);
+      exec.buffer_count = buffer_count;
       exec.batch_start_offset = ec->batch_start - ec->bo.batch.addr;
       exec.flags = I915_EXEC_BATCH_FIRST;
       exec.rsvd1 = ec->i915.ctx_id;
@@ -653,6 +1157,7 @@ executor_context_dispatch(executor_context *ec)
          sync_handles[i] = sync_create.handle;
       }
 
+      const uint32_t num_binds = 3 + ec->perf_enabled;
       struct drm_xe_vm_bind_op bind_ops[] = {
          {
             .op        = DRM_XE_VM_BIND_OP_MAP,
@@ -675,7 +1180,17 @@ executor_context_dispatch(executor_context *ec)
             .range     = EXECUTOR_BO_SIZE,
             .pat_index = ec->devinfo->pat.cached_coherent.index,
          },
+         {},
       };
+      if (ec->perf_enabled) {
+         bind_ops[3] = (struct drm_xe_vm_bind_op) {
+            .op        = DRM_XE_VM_BIND_OP_MAP,
+            .obj       = ec->bo.perf.handle,
+            .addr      = ec->bo.perf.addr,
+            .range     = ec->bo.perf.size,
+            .pat_index = ec->devinfo->pat.cached_coherent.index,
+         };
+      }
 
       struct drm_xe_sync bind_syncs[] = {
          {
@@ -688,7 +1203,7 @@ executor_context_dispatch(executor_context *ec)
 
       struct drm_xe_vm_bind bind = {
          .vm_id           = ec->xe.vm_id,
-         .num_binds       = ARRAY_SIZE(bind_ops),
+         .num_binds       = num_binds,
          .vector_of_binds = (uintptr_t)bind_ops,
          .num_syncs       = 1,
          .syncs           = (uintptr_t)bind_syncs,
@@ -746,6 +1261,9 @@ executor_context_dispatch(executor_context *ec)
 static void
 executor_context_teardown(executor_context *ec)
 {
+   if (ec->perf_enabled)
+      executor_destroy_bo(ec, &ec->bo.perf);
+
    executor_destroy_bo(ec, &ec->bo.batch);
    executor_destroy_bo(ec, &ec->bo.extra);
    executor_destroy_bo(ec, &ec->bo.data);
@@ -776,6 +1294,82 @@ executor_context_teardown(executor_context *ec)
    }
 }
 
+static void
+executor_print_gen_program(executor_context *ec,
+                           gen_inst *insts,
+                           int num_insts,
+                           const gen_error *errors,
+                           int num_errors)
+{
+   gen_print_params print = {
+      .devinfo = ec->devinfo,
+      .fp = stderr,
+      .insts = insts,
+      .num_insts = num_insts,
+      .errors = errors,
+      .num_errors = num_errors,
+   };
+
+   gen_print(&print);
+}
+
+static bool
+executor_assemble(executor_context *ec, const char *src, executor_params *params)
+{
+   const bool dump = INTEL_DEBUG(DEBUG_CS);
+
+   gen_parse_params parse = {
+      .devinfo = ec->devinfo,
+      .text = src,
+      .text_size = (int)strlen(src),
+      .mem_ctx = ec->mem_ctx,
+   };
+
+   if (!gen_parse(&parse)) {
+      for (int i = 0; i < parse.num_errors; i++) {
+         fprintf(stderr, "<executor>:%u: %s\n",
+                 parse.errors[i].index, parse.errors[i].msg);
+      }
+      return false;
+   }
+
+   if (parse.num_insts == 0) {
+      fprintf(stderr, "no instructions to assemble\n");
+      return false;
+   }
+
+   if (!gen_finish_structured_cf(parse.insts, parse.num_insts, -1)) {
+      executor_print_gen_program(ec, parse.insts, parse.num_insts, NULL, 0);
+      fprintf(stderr, "Failed to finalize structured control flow.\n");
+      return false;
+   }
+
+   if (dump)
+      executor_print_gen_program(ec, parse.insts, parse.num_insts, NULL, 0);
+
+   const int raw_bytes_size = parse.num_insts * (int)sizeof(gen_raw_inst);
+
+   gen_encode_params encode = {
+      .devinfo = ec->devinfo,
+      .mem_ctx = ec->mem_ctx,
+      .insts = parse.insts,
+      .num_insts = parse.num_insts,
+      .raw_bytes = rzalloc_size(ec->mem_ctx, raw_bytes_size),
+      .raw_bytes_size = raw_bytes_size,
+   };
+
+   if (!gen_encode(&encode)) {
+      executor_print_gen_program(ec, parse.insts, parse.num_insts,
+                                 encode.errors, encode.num_errors);
+      fprintf(stderr, "Invalid instructions.\n");
+      return false;
+   }
+
+   params->kernel_bin = encode.raw_bytes;
+   params->kernel_size = encode.raw_bytes_size;
+   return true;
+}
+
 static int
 l_execute(lua_State *L)
 {
@@ -784,11 +1378,13 @@ l_execute(lua_State *L)
       .devinfo = &E.devinfo,
       .isl_dev = &E.isl_dev,
       .fd      = E.fd,
+      .perf_enabled = E.oa_csv_path != NULL || E.oa_spec != NULL,
    };
 
    executor_context_setup(&ec);
 
    executor_params params = {0};
+   executor_perf_create_query(&ec);
 
    {
       if (lua_gettop(L) != 1)
@@ -798,25 +1394,14 @@ l_execute(lua_State *L)
 
       const char *src = executor_apply_macros(&ec, params.original_src);
 
-      FILE *f = fmemopen((void *)src, strlen(src), "r");
-
-      brw_assemble_flags flags = 0;
-
       if (INTEL_DEBUG(DEBUG_CS)) {
          printf("=== Processed assembly source ===\n"
                 "%s"
                 "=================================\n\n", src);
-         flags = BRW_ASSEMBLE_DUMP;
       }
 
-      brw_assemble_result asm = brw_assemble(ec.mem_ctx, ec.devinfo, f, "", flags);
-      fclose(f);
-
-      if (!asm.bin)
+      if (!executor_assemble(&ec, src, &params))
          failf("assembler failure");
-
-      params.kernel_bin = asm.bin;
-      params.kernel_size = asm.bin_size;
    }
 
    genX_call(emit_execute, &ec, &params);
@@ -827,7 +1412,7 @@ l_execute(lua_State *L)
       if (INTEL_DEBUG(DEBUG_COLOR))
          flags |= INTEL_BATCH_DECODE_IN_COLOR;
 
-      intel_batch_decode_ctx_init_brw(&decoder, &E.isa, &E.devinfo, stdout,
+      intel_batch_decode_ctx_init_gen(&decoder, &E.devinfo, stdout,
                                       flags, NULL, decode_get_bo, decode_get_state_size, &ec);
 
       assert(ec.bo.batch.cursor > ec.bo.batch.map);
@@ -841,6 +1426,8 @@ l_execute(lua_State *L)
    }
 
    executor_context_dispatch(&ec);
+
+   executor_perf_finish_query(&ec);
 
    {
       /* TODO: Use userdata to return a wrapped C array instead of building
@@ -900,9 +1487,16 @@ main(int argc, char *argv[])
    int opt;
    const char *device_pattern = NULL;
 
+   enum {
+      OPT_OA_CSV = 1000,
+      OPT_OA,
+   };
+
    static const struct option long_options[] = {
-       {"help",   no_argument,       0, 'H'},
-       {"device", required_argument, 0, 'd'},
+       {"help",    no_argument,       0, 'H'},
+       {"device",  required_argument, 0, 'd'},
+       {"oa-csv", required_argument, 0, OPT_OA_CSV},
+       {"oa",     required_argument, 0, OPT_OA},
        {},
    };
 
@@ -924,13 +1518,36 @@ main(int argc, char *argv[])
       case 'H':
          open_manual();
          return 0;
+      case OPT_OA_CSV:
+         E.oa_csv_path = optarg;
+         break;
+      case OPT_OA:
+         E.oa_spec = optarg;
+         break;
       default:
          fprintf(stderr, "%s\n", usage_line);
          return 1;
       }
    }
 
-   if (optind >= argc) {
+   if (E.oa_spec && !strcmp(E.oa_spec, "list")) {
+      E.oa_list = true;
+      E.oa_spec = NULL;
+   }
+
+   if (E.oa_list && E.oa_csv_path) {
+      fprintf(stderr, "%s\n", usage_line);
+      fprintf(stderr, "--oa list cannot be combined with --oa-csv\n");
+      return 1;
+   }
+
+   if (E.oa_csv_path && !E.oa_spec) {
+      fprintf(stderr, "%s\n", usage_line);
+      fprintf(stderr, "--oa-csv requires --oa\n");
+      return 1;
+   }
+
+   if (!E.oa_list && optind >= argc) {
       fprintf(stderr, "%s\n", usage_line);
       fprintf(stderr, "expected FILENAME after options\n");
       return 1;
@@ -938,7 +1555,9 @@ main(int argc, char *argv[])
 
    void *mem_ctx = ralloc_context(NULL);
 
-   const char *filename = argv[optind];
+   const char *filename = optind < argc ? argv[optind] : NULL;
+
+   executor_parse_oa_spec(mem_ctx, E.oa_spec);
 
    process_intel_debug_variable();
 
@@ -949,9 +1568,58 @@ main(int argc, char *argv[])
    fprintf(stderr, "Using device: %s\n", E.devinfo.name);
 
    isl_device_init(&E.isl_dev, &E.devinfo);
-   brw_init_isa_info(&E.isa, &E.devinfo);
    assert(E.devinfo.kmd_type == INTEL_KMD_TYPE_I915 ||
           E.devinfo.kmd_type == INTEL_KMD_TYPE_XE);
+
+   if (E.oa_csv_path || E.oa_spec || E.oa_list) {
+      E.perf_cfg = intel_perf_new(NULL);
+      if (!E.perf_cfg)
+         failf("failed to allocate Intel perf config");
+
+      E.perf_cfg->vtbl = executor_perf_vtbl;
+      intel_perf_init_metrics(E.perf_cfg, &E.devinfo, E.fd,
+                              false /* include_pipeline_statistics */,
+                              true /* use_register_snapshots */);
+
+      if (!E.oa_list) {
+         if (!E.oa_spec_has_colon &&
+             executor_find_named_perf_query(E.oa_metric_name) < 0) {
+            executor_parse_oa_counter_list(mem_ctx, E.oa_metric_name, E.oa_spec);
+            E.oa_metric_name = executor_default_perf_query_name();
+         }
+
+         E.perf_query_index = executor_find_perf_query(E.oa_metric_name);
+      }
+
+      if (E.perf_query_index < 0) {
+         if (E.perf_cfg->features_supported & INTEL_PERF_FEATURE_OA_BLOCKED_BY_POLICY) {
+            const char *sysctl = E.devinfo.kmd_type == INTEL_KMD_TYPE_XE ?
+               "/proc/sys/dev/xe/observation_paranoid" :
+               "/proc/sys/dev/i915/perf_stream_paranoid";
+            failf("no OA metric sets available for %s; access is blocked by %s",
+                  E.devinfo.name, sysctl);
+         }
+         failf("no OA metric sets available for %s", E.devinfo.name);
+      }
+
+      if (E.oa_list) {
+         executor_perf_list();
+         close(E.fd);
+         intel_perf_free(E.perf_cfg);
+         ralloc_free(mem_ctx);
+         return 0;
+      }
+
+      const struct intel_perf_query_info *query =
+         &E.perf_cfg->queries[E.perf_query_index];
+      executor_perf_validate_counters(mem_ctx, query);
+
+      fprintf(stderr, "Using OA profile: %s%s%s (%d/%d counters)\n",
+              query->symbol_name ? query->symbol_name : query->name,
+              query->symbol_name && query->name ? " - " : "",
+              query->symbol_name && query->name ? query->name : "",
+              executor_perf_count_selected_counters(query), query->n_counters);
+   }
 
    lua_State *L = luaL_newstate();
 
@@ -1000,7 +1668,7 @@ main(int argc, char *argv[])
       lua_pushinteger(L, E.devinfo.verx10);
       lua_setfield(L, -2, "verx10");
 
-      lua_pushboolean(L, E.devinfo.cooperative_matrix_configurations[0].scope != INTEL_CMAT_SCOPE_NONE);
+      lua_pushboolean(L, E.devinfo.has_systolic);
       lua_setfield(L, -2, "has_dpas");
 
       lua_pushboolean(L, E.devinfo.has_bfloat16);
@@ -1023,7 +1691,18 @@ main(int argc, char *argv[])
       failf("failed to run script: %s", lua_tostring(L, -1));
 
    lua_close(L);
+
+   if (E.oa_csv_file) {
+      fclose(E.oa_csv_file);
+      if (!E.oa_csv_path && E.oa_csv_mem_size > 0)
+         fwrite(E.oa_csv_mem, 1, E.oa_csv_mem_size, stdout);
+      free(E.oa_csv_mem);
+   }
+
    close(E.fd);
+
+   if (E.perf_cfg)
+      intel_perf_free(E.perf_cfg);
 
    ralloc_free(mem_ctx);
 

@@ -120,6 +120,17 @@ util_get_narrow_range_coeffs(float out[3][2], const unsigned bpc[3])
 }
 
 static inline void
+util_get_narrow_range_rgb_coeffs(float out[3][2], const unsigned bpc[3])
+{
+   float factor = util_get_narrow_range_luma_factor(bpc[0]);
+   float bias = -16.0f / 219;
+
+   out[0][0] = factor; out[0][1] = bias;
+   out[1][0] = factor; out[1][1] = bias;
+   out[2][0] = factor; out[2][1] = bias;
+}
+
+static inline void
 util_get_identity_range_coeffs(float out[3][2])
 {
    out[0][0] = out[1][0] = out[2][0] = 1.0f;
@@ -151,7 +162,7 @@ util_ycbcr_adjust_to_range(float mat[3][4],
       mat[i][0] = mat[i][0] * tmp;
       mat[i][1] = mat[i][1] * tmp;
       mat[i][2] = mat[i][2] * tmp;
-      mat[i][3] -= range[i][1] * tmp;
+      mat[i][3] = mat[i][3] * tmp - range[i][1] * tmp;
    }
 }
 

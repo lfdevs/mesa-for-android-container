@@ -213,6 +213,7 @@ lower_alu_instr(nir_builder *b, nir_alu_instr *instr, UNUSED void *cb_data)
       /* Fallback on the emulation */
       if (!lowered) {
          nir_def *iminmax = max ? nir_imax(b, s0, s1) : nir_imin(b, s0, s1);
+         iminmax = nir_fcanonicalize(b, iminmax);
          lowered = nir_bcsel(b, nir_feq(b, s0, s1), iminmax, fminmax);
       }
 

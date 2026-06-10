@@ -909,7 +909,7 @@ pub struct InstrBuilder<'a> {
 impl<'a> InstrBuilder<'a> {
     pub fn new(sm: &'a ShaderModelInfo) -> Self {
         Self {
-            instrs: MappedInstrs::None,
+            instrs: Default::default(),
             sm,
         }
     }
@@ -917,11 +917,7 @@ impl<'a> InstrBuilder<'a> {
 
 impl InstrBuilder<'_> {
     pub fn into_vec(self) -> Vec<Instr> {
-        match self.instrs {
-            MappedInstrs::None => Vec::new(),
-            MappedInstrs::One(i) => vec![i],
-            MappedInstrs::Many(v) => v,
-        }
+        self.instrs.into()
     }
 
     pub fn into_mapped_instrs(self) -> MappedInstrs {
@@ -931,8 +927,7 @@ impl InstrBuilder<'_> {
 
 impl Builder for InstrBuilder<'_> {
     fn push_instr(&mut self, instr: Instr) -> &mut Instr {
-        self.instrs.push(instr);
-        self.instrs.last_mut().unwrap()
+        self.instrs.push_mut(instr)
     }
 
     fn sm(&self) -> u8 {

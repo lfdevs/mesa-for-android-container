@@ -148,6 +148,9 @@ brw_blorp_get_urb_length(const struct brw_fs_prog_data *prog_data)
    return MAX2((prog_data->num_varying_inputs + 1) / 2, 1);
 }
 
+static bool *
+blorp_get_write_fencing_status(struct blorp_batch *batch);
+
 /***** BEGIN blorp_exec implementation ******/
 
 static uint64_t
@@ -164,9 +167,25 @@ _blorp_combine_address(struct blorp_batch *batch, void *location,
 #define __gen_address_type struct blorp_address
 #define __gen_user_data struct blorp_batch
 #define __gen_combine_address _blorp_combine_address
+#define __gen_get_write_fencing_status(b) blorp_get_write_fencing_status(b)
+#define __gen_get_batch_dwords(b, d) blorp_emit_dwords((b), (d))
+
+static inline struct blorp_address
+__gen_address_offset(struct blorp_address addr, uint64_t offset)
+{
+   addr.offset += offset;
+   return addr;
+}
+
+static inline struct blorp_address
+__gen_get_batch_address(struct blorp_batch *batch, void *location)
+{
+   UNREACHABLE("Not supported by blorp");
+}
 
 #include "genxml/genX_pack.h"
 #include "common/intel_genX_state_brw.h"
+#include "common/mi_builder.h"
 
 #define _blorp_cmd_length(cmd) cmd ## _length
 #define _blorp_cmd_length_bias(cmd) cmd ## _length_bias
@@ -1361,6 +1380,10 @@ blorp_setup_binding_table(struct blorp_batch *batch,
    uint32_t surface_offsets[BLORP_NUM_BT_ENTRIES], bind_offset = 0;
    void *surface_maps[BLORP_NUM_BT_ENTRIES];
 
+   /* There's nothing to bind here. */
+   if (params->op == BLORP_OP_COPY_INDIRECT)
+      return 0;
+
    if (params->use_pre_baked_binding_table) {
       bind_offset = params->pre_baked_binding_table_offset;
    } else {
@@ -1766,6 +1789,170 @@ blorp_get_compute_push_const(struct blorp_batch *batch,
 }
 
 static void
+blorp_indirect_buffer_get_dispatch_size(struct blorp_batch *batch,
+                                        const struct blorp_params *params,
+                                        struct mi_builder *b,
+                                        struct mi_value *size_x,
+                                        struct mi_value *size_y,
+                                        struct mi_value *size_z)
+{
+   struct blorp_context *blorp = batch->blorp;
+   const struct brw_cs_prog_data *cs_prog_data = params->cs_prog_data;
+
+   uint64_t indirect_buf_addr = params->wm_inputs.indirect.indirect_buf_addr;
+   uint64_t stride = params->wm_inputs.indirect.indirect_buf_stride;
+   uint32_t copy_count = params->wm_inputs.indirect.copy_count;
+
+   size_t size_offset = 16; /* offsetof(VkCopyMemoryIndirectCommandKHR, size) */
+
+   struct mi_value biggest_copy_size;
+   for (int c = 0; c < copy_count; c++) {
+      struct blorp_address copy_size_addr = {
+         .buffer = NULL,
+         .offset = indirect_buf_addr + c * stride + size_offset,
+         .reloc_flags = 0,
+         .mocs = isl_mocs(blorp->isl_dev, ISL_SURF_USAGE_STORAGE_BIT, false),
+         .local_hint = false, /* We don't have a way to know this. */
+      };
+
+      struct mi_value this_copy_size = mi_mem32(copy_size_addr);
+      if (c == 0)
+         biggest_copy_size = this_copy_size;
+      else
+         biggest_copy_size = mi_umax2(b, this_copy_size, biggest_copy_size);
+   }
+
+   /* Each shader invocation writes an uint32_t. */
+   int divisor = cs_prog_data->local_size[0] * sizeof(uint32_t);
+   *size_x = mi_udiv32_imm(b, mi_iadd_imm(b, biggest_copy_size, divisor - 1),
+                           divisor);
+
+   assert(cs_prog_data->local_size[1] == 1);
+   assert(cs_prog_data->local_size[2] == 1);
+   *size_y = mi_imm(1);
+   *size_z = mi_imm(1);
+}
+
+static void
+blorp_indirect_buf2img_get_dispatch_size(struct blorp_batch *batch,
+                                         const struct blorp_params *params,
+                                         struct mi_builder *b,
+                                         struct mi_value *size_x,
+                                         struct mi_value *size_y,
+                                         struct mi_value *size_z)
+{
+   struct blorp_context *blorp = batch->blorp;
+   const struct brw_cs_prog_data *cs_prog_data = params->cs_prog_data;
+
+   uint64_t indirect_buf_addr = params->wm_inputs.indirect.indirect_buf_addr;
+   uint64_t stride = params->wm_inputs.indirect.indirect_buf_stride;
+   uint32_t copy_idx = params->wm_inputs.indirect.copy_idx;
+   bool is_forced_layer = params->wm_inputs.indirect.forced_layer_or_z != -1;
+   bool is_3d = params->wm_inputs.indirect.dimensions == 3;
+
+   /* These are all offsetof(VkCopyMemoryToImageIndirectCommandKHR, x). */
+   const size_t img_extent_x_offset = 44;
+   const size_t img_extent_y_offset = 48;
+   const size_t img_extent_z_offset = 52;
+
+   struct blorp_address x_extent_addr = {
+      .buffer = NULL,
+      .offset = indirect_buf_addr + copy_idx * stride + img_extent_x_offset,
+      .reloc_flags = 0,
+      .mocs = isl_mocs(blorp->isl_dev, ISL_SURF_USAGE_STORAGE_BIT, false),
+      .local_hint = false, /* We don't have a way to know this. */
+   };
+   struct blorp_address y_extent_addr = {
+      .buffer = NULL,
+      .offset = indirect_buf_addr + copy_idx * stride + img_extent_y_offset,
+      .reloc_flags = 0,
+      .mocs = isl_mocs(blorp->isl_dev, ISL_SURF_USAGE_STORAGE_BIT, false),
+      .local_hint = false, /* We don't have a way to know this. */
+   };
+   struct blorp_address z_extent_addr = {
+      .buffer = NULL,
+      .offset = indirect_buf_addr + copy_idx * stride + img_extent_z_offset,
+      .reloc_flags = 0,
+      .mocs = isl_mocs(blorp->isl_dev, ISL_SURF_USAGE_STORAGE_BIT, false),
+      .local_hint = false, /* We don't have a way to know this. */
+   };
+
+   /* Notes on the 'params->num_layers' usage below:
+    *
+    * - Please see how we handle this in function
+    *   blorp_copy_memory_to_image_indirect().
+    *
+    * - If we're using forced layers (see
+    *   params.wm_inputs.indirect.forced_layer_or_z), then we can just set
+    *   size_z to 1 and don't even look at the indirect buffer: each shader
+    *   call operates on a single layer.
+    *
+    * - The information on the number of layers for each copy is not truly
+    *   indirect: it has to be passed to during command creation, so we
+    *   have already processed it. See 'max_layer_count' in
+    *   blorp_copy_memory_to_image_indirect(). We don't want to be looking
+    *   at the indirect buffer if we don't need to.
+    *
+    * - For 3D images, the applications can use the Z axis as either an
+    *   actual axis (offset.z + extent.z) or pretend the Z axis is layers
+    *   (base_layer + layer_count), so would have to check both places.
+    *   Fortunately, base_layer + layer_count was already checked (see
+    *   above) and recorded in params->num_layers. If params->num_layers is
+    *   bigger than 1, then we don't even bother looking at extent.z.
+    */
+   struct mi_value x_extent = mi_mem32(x_extent_addr);
+   struct mi_value y_extent = mi_mem32(y_extent_addr);
+   struct mi_value z_extent;
+   if (is_forced_layer) {
+      z_extent = mi_imm(1);
+   } else {
+      if (is_3d && params->num_layers == 1)
+         z_extent = mi_mem32(z_extent_addr);
+      else
+         z_extent = mi_imm(params->num_layers);
+   }
+
+   int divisor_x = cs_prog_data->local_size[0];
+   int divisor_y = cs_prog_data->local_size[1];
+   int divisor_z = cs_prog_data->local_size[2];
+
+   assert(divisor_x != 1 && divisor_y != 1 && divisor_z == 1);
+   *size_x = mi_udiv32_imm(b, mi_iadd_imm(b, x_extent, divisor_x - 1),
+                           divisor_x);
+   *size_y = mi_udiv32_imm(b, mi_iadd_imm(b, y_extent, divisor_y - 1),
+                           divisor_y);
+   *size_z = z_extent;
+}
+
+static void
+blorp_indirect_write_gpgpu_dispatch_regs(struct blorp_batch *batch,
+                                         const struct blorp_params *params)
+{
+   struct blorp_context *blorp = batch->blorp;
+   const struct intel_device_info *devinfo = blorp->compiler->brw->devinfo;
+
+   struct mi_builder b;
+   mi_builder_init(&b, devinfo, batch);
+   mi_builder_set_mocs(&b, isl_mocs(blorp->isl_dev, 0, false));
+
+   struct mi_value size_x, size_y, size_z;
+
+   if (params->op == BLORP_OP_COPY_INDIRECT) {
+      blorp_indirect_buffer_get_dispatch_size(batch, params, &b, &size_x,
+                                              &size_y, &size_z);
+   } else {
+      assert(params->op == BLORP_OP_COPY_IMAGE_INDIRECT);
+
+      blorp_indirect_buf2img_get_dispatch_size(batch, params, &b, &size_x,
+                                               &size_y, &size_z);
+   }
+
+   mi_store(&b, mi_reg32(GENX(GPGPU_DISPATCHDIMX_num)), size_x);
+   mi_store(&b, mi_reg32(GENX(GPGPU_DISPATCHDIMY_num)), size_y);
+   mi_store(&b, mi_reg32(GENX(GPGPU_DISPATCHDIMZ_num)), size_z);
+}
+
+static void
 blorp_exec_compute(struct blorp_batch *batch, const struct blorp_params *params)
 {
    assert(!(batch->flags & BLORP_BATCH_PREDICATE_ENABLE));
@@ -1778,6 +1965,11 @@ blorp_exec_compute(struct blorp_batch *batch, const struct blorp_params *params)
    const struct brw_stage_prog_data *prog_data = &cs_prog_data->base;
    const struct intel_cs_dispatch_info dispatch =
       brw_cs_get_dispatch_info(devinfo, cs_prog_data, NULL);
+
+   bool use_indirect = blorp_op_type_is_indirect(params->op);
+
+   if (use_indirect)
+      blorp_indirect_write_gpgpu_dispatch_regs(batch, params);
 
    uint32_t group_x0 = params->x0 / cs_prog_data->local_size[0];
    uint32_t group_y0 = params->y0 / cs_prog_data->local_size[1];
@@ -1892,6 +2084,7 @@ blorp_exec_compute(struct blorp_batch *batch, const struct blorp_params *params)
 
    assert(cs_prog_data->push.per_thread.regs == 0);
    blorp_emit(batch, GENX(COMPUTE_WALKER), cw) {
+      cw.IndirectParameterEnable = use_indirect,
       cw.body = body;
    }
 #else /* GFX_VERx10 >= 125 */
@@ -1961,6 +2154,7 @@ blorp_exec_compute(struct blorp_batch *batch, const struct blorp_params *params)
    }
 
    blorp_emit(batch, GENX(GPGPU_WALKER), ggw) {
+      ggw.IndirectParameterEnable      = use_indirect,
       ggw.SIMDSize                     = dispatch.simd_size / 16;
       ggw.ThreadDepthCounterMaximum    = 0;
       ggw.ThreadHeightCounterMaximum   = 0;

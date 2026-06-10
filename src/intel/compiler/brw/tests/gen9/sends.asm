@@ -1,268 +1,134 @@
-sends(8)        nullUD          g34UD           g36UD           0x04035001                0x00000100
-                            hdc1 MsgDesc: ( DC typed surface write, Surface = 1, SIMD16, Mask = 0x0) mlen 2 ex_mlen 4 rlen 0 { align1 1Q };
-sends(8)        nullUD          g1UD            g3UD            0x04036001                0x00000100
-                            hdc1 MsgDesc: ( DC typed surface write, Surface = 1, SIMD8, Mask = 0x0) mlen 2 ex_mlen 4 rlen 0 { align1 2Q };
-sends(8)        nullUD          g21UD           g23UD           0x04035001                0x00000100
-                            hdc1 MsgDesc: ( DC typed surface write, Surface = 1, SIMD16, Mask = 0x0) mlen 2 ex_mlen 4 rlen 0 { align1 1Q };
-(+f1.0) sends(8) g9UD           g2UD            g3UD            0x0210b201                0x00000040
-                            hdc1 MsgDesc: ( DC untyped atomic op, Surface = 1, SIMD8, or) mlen 1 ex_mlen 1 rlen 1 { align1 1Q };
-(+f1.0) sends(16) g11UD         g2UD            g6UD            0x0420a201                0x00000080
-                            hdc1 MsgDesc: ( DC untyped atomic op, Surface = 1, SIMD16, or) mlen 2 ex_mlen 2 rlen 2 { align1 1H };
-sends(16)       nullUD          g6UD            g8UD            0x04025efe                0x00000080
-                            hdc1 MsgDesc: ( DC untyped surface write, Surface = 254, SIMD16, Mask = 0xe) mlen 2 ex_mlen 2 rlen 0 { align1 1H };
-sends(16)       nullUD          g10UD           g12UD           0x040087fe                0x00000080
-                            hdc1 MsgDesc: ( DC untyped atomic op, Surface = 254, SIMD16, add) mlen 2 ex_mlen 2 rlen 0 { align1 1H };
-(+f1.0) sends(8) nullUD         g11UD           g5UD            0x04035002                0x00000100
-                            hdc1 MsgDesc: ( DC typed surface write, Surface = 2, SIMD16, Mask = 0x0) mlen 2 ex_mlen 4 rlen 0 { align1 1Q };
-(+f1.0) sends(8) nullUD         g2UD            g11UD           0x04036002                0x00000100
-                            hdc1 MsgDesc: ( DC typed surface write, Surface = 2, SIMD8, Mask = 0x0) mlen 2 ex_mlen 4 rlen 0 { align1 2Q };
-(+f1.0) sends(8) nullUD         g3UD            g4UD            0x02026001                0x00000100
-                            hdc1 MsgDesc: ( DC untyped surface write, Surface = 1, SIMD8, Mask = 0x0) mlen 1 ex_mlen 4 rlen 0 { align1 1Q };
-(+f1.0) sends(16) nullUD        g3UD            g5UD            0x04025001                0x00000200
-                            hdc1 MsgDesc: ( DC untyped surface write, Surface = 1, SIMD16, Mask = 0x0) mlen 2 ex_mlen 8 rlen 0 { align1 1H };
-sends(8)        nullUD          g2UD            g3UD            0x02009b00                0x00000040
-                            hdc1 MsgDesc: ( DC untyped atomic op, Surface = 0, SIMD8, imin) mlen 1 ex_mlen 1 rlen 0 { align1 1Q };
-(+f1.0) sends(8) nullUD         g2UD            g4UD            0x04035e01                0x00000040
-                            hdc1 MsgDesc: ( DC typed surface write, Surface = 1, SIMD16, Mask = 0xe) mlen 2 ex_mlen 1 rlen 0 { align1 1Q };
-(+f1.0) sends(8) nullUD         g45UD           g41UD           0x04036e01                0x00000040
-                            hdc1 MsgDesc: ( DC typed surface write, Surface = 1, SIMD8, Mask = 0xe) mlen 2 ex_mlen 1 rlen 0 { align1 2Q };
-(+f1.0) sends(8) nullUD         g2UD            g4UD            0x04018c01                0x00000040
-                            hdc1 MsgDesc: ( DC typed atomic, Surface = 1, SIMD16, umax) mlen 2 ex_mlen 1 rlen 0 { align1 1Q };
-(+f1.0) sends(8) nullUD         g45UD           g41UD           0x04019c01                0x00000040
-                            hdc1 MsgDesc: ( DC typed atomic, Surface = 1, SIMD8, umax) mlen 2 ex_mlen 1 rlen 0 { align1 2Q };
-(+f1.0) sends(8) nullUD         g2UD            g4UD            0x04018401                0x00000040
-                            hdc1 MsgDesc: ( DC typed atomic, Surface = 1, SIMD16, mov) mlen 2 ex_mlen 1 rlen 0 { align1 1Q };
-(+f1.0) sends(8) nullUD         g45UD           g41UD           0x04019401                0x00000040
-                            hdc1 MsgDesc: ( DC typed atomic, Surface = 1, SIMD8, mov) mlen 2 ex_mlen 1 rlen 0 { align1 2Q };
-(+f1.0) sends(8) nullUD         g2UD            g4UD            0x04018e01                0x00000080
-                            hdc1 MsgDesc: ( DC typed atomic, Surface = 1, SIMD16, cmpwr) mlen 2 ex_mlen 2 rlen 0 { align1 1Q };
-(+f1.0) sends(8) nullUD         g11UD           g13UD           0x04019e01                0x00000080
-                            hdc1 MsgDesc: ( DC typed atomic, Surface = 1, SIMD8, cmpwr) mlen 2 ex_mlen 2 rlen 0 { align1 2Q };
-sends(16)       nullUD          g3UD            g1UD            0x04008dfe                0x00000080
-                            hdc1 MsgDesc: ( DC untyped atomic op, Surface = 254, SIMD16, umin) mlen 2 ex_mlen 2 rlen 0 { align1 1H };
-sends(16)       nullUD          g5UD            g1UD            0x04008bfe                0x00000080
-                            hdc1 MsgDesc: ( DC untyped atomic op, Surface = 254, SIMD16, imin) mlen 2 ex_mlen 2 rlen 0 { align1 1H };
-sends(16)       nullUD          g3UD            g1UD            0x04008cfe                0x00000080
-                            hdc1 MsgDesc: ( DC untyped atomic op, Surface = 254, SIMD16, umax) mlen 2 ex_mlen 2 rlen 0 { align1 1H };
-sends(16)       nullUD          g5UD            g1UD            0x04008afe                0x00000080
-                            hdc1 MsgDesc: ( DC untyped atomic op, Surface = 254, SIMD16, imax) mlen 2 ex_mlen 2 rlen 0 { align1 1H };
-sends(16)       nullUD          g3UD            g1UD            0x040081fe                0x00000080
-                            hdc1 MsgDesc: ( DC untyped atomic op, Surface = 254, SIMD16, and) mlen 2 ex_mlen 2 rlen 0 { align1 1H };
-sends(16)       nullUD          g3UD            g1UD            0x040082fe                0x00000080
-                            hdc1 MsgDesc: ( DC untyped atomic op, Surface = 254, SIMD16, or) mlen 2 ex_mlen 2 rlen 0 { align1 1H };
-sends(16)       nullUD          g3UD            g1UD            0x040083fe                0x00000080
-                            hdc1 MsgDesc: ( DC untyped atomic op, Surface = 254, SIMD16, xor) mlen 2 ex_mlen 2 rlen 0 { align1 1H };
-sends(16)       nullUD          g3UD            g1UD            0x040084fe                0x00000080
-                            hdc1 MsgDesc: ( DC untyped atomic op, Surface = 254, SIMD16, mov) mlen 2 ex_mlen 2 rlen 0 { align1 1H };
-sends(16)       nullUD          g3UD            g7UD            0x04008efe                0x00000100
-                            hdc1 MsgDesc: ( DC untyped atomic op, Surface = 254, SIMD16, cmpwr) mlen 2 ex_mlen 4 rlen 0 { align1 1H };
-sends(16)       g1UD            g19UD           g21UD           0x0420a4fe                0x00000080
-                            hdc1 MsgDesc: ( DC untyped atomic op, Surface = 254, SIMD16, mov) mlen 2 ex_mlen 2 rlen 2 { align1 1H };
-sends(16)       g13UD           g23UD           g25UD           0x0420a2fe                0x00000080
-                            hdc1 MsgDesc: ( DC untyped atomic op, Surface = 254, SIMD16, or) mlen 2 ex_mlen 2 rlen 2 { align1 1H };
-sends(8)        nullUD          g14UD           g10UD           0x02026000                0x00000100
-                            hdc1 MsgDesc: ( DC untyped surface write, Surface = 0, SIMD8, Mask = 0x0) mlen 1 ex_mlen 4 rlen 0 { align1 1Q };
-sends(8)        nullUD          g4UD            g2UD            0x02026efe                0x00000040
-                            hdc1 MsgDesc: ( DC untyped surface write, Surface = 254, SIMD8, Mask = 0xe) mlen 1 ex_mlen 1 rlen 0 { align1 1Q };
-sends(8)        g7UD            g19UD           g20UD           0x0210bdfe                0x00000040
-                            hdc1 MsgDesc: ( DC untyped atomic op, Surface = 254, SIMD8, umin) mlen 1 ex_mlen 1 rlen 1 { align1 1Q };
-sends(8)        g11UD           g25UD           g26UD           0x0210b4fe                0x00000040
-                            hdc1 MsgDesc: ( DC untyped atomic op, Surface = 254, SIMD8, mov) mlen 1 ex_mlen 1 rlen 1 { align1 1Q };
-sends(16)       g1UD            g14UD           g16UD           0x0420a7fe                0x00000080
-                            hdc1 MsgDesc: ( DC untyped atomic op, Surface = 254, SIMD16, add) mlen 2 ex_mlen 2 rlen 2 { align1 1H };
-(+f1.0) sends(8) nullUD         g2UD            g13UD           a0<0>UD                   0x00000100
-                            hdc1 MsgDesc: indirect ex_mlen 4           { align1 1Q };
-(+f1.0) sends(8) nullUD         g5UD            g6UD            0x02026e01                0x00000040
-                            hdc1 MsgDesc: ( DC untyped surface write, Surface = 1, SIMD8, Mask = 0xe) mlen 1 ex_mlen 1 rlen 0 { align1 1Q };
-(+f1.0) sends(8) nullUD         g5UD            g6UD            0x02026e02                0x00000040
-                            hdc1 MsgDesc: ( DC untyped surface write, Surface = 2, SIMD8, Mask = 0xe) mlen 1 ex_mlen 1 rlen 0 { align1 1Q };
-(+f1.0) sends(16) nullUD        g6UD            g8UD            0x04025e01                0x00000080
-                            hdc1 MsgDesc: ( DC untyped surface write, Surface = 1, SIMD16, Mask = 0xe) mlen 2 ex_mlen 2 rlen 0 { align1 1H };
-(+f1.0) sends(16) nullUD        g6UD            g8UD            0x04025e02                0x00000080
-                            hdc1 MsgDesc: ( DC untyped surface write, Surface = 2, SIMD16, Mask = 0xe) mlen 2 ex_mlen 2 rlen 0 { align1 1H };
-(+f1.0) sends(8) g3UD           g8UD            g9UD            0x0210b702                0x00000040
-                            hdc1 MsgDesc: ( DC untyped atomic op, Surface = 2, SIMD8, add) mlen 1 ex_mlen 1 rlen 1 { align1 1Q };
-(+f1.0) sends(16) g4UD          g11UD           g13UD           0x0420a702                0x00000080
-                            hdc1 MsgDesc: ( DC untyped atomic op, Surface = 2, SIMD16, add) mlen 2 ex_mlen 2 rlen 2 { align1 1H };
-(+f1.0) sends(8) nullUD         g5UD            g3UD            0x02026c01                0x00000080
-                            hdc1 MsgDesc: ( DC untyped surface write, Surface = 1, SIMD8, Mask = 0xc) mlen 1 ex_mlen 2 rlen 0 { align1 1Q };
-(+f1.0) sends(16) nullUD        g19UD           g21UD           0x04025c01                0x00000100
-                            hdc1 MsgDesc: ( DC untyped surface write, Surface = 1, SIMD16, Mask = 0xc) mlen 2 ex_mlen 4 rlen 0 { align1 1H };
-sends(8)        nullUD          g14UD           g15UD           0x02026e00                0x00000040
-                            hdc1 MsgDesc: ( DC untyped surface write, Surface = 0, SIMD8, Mask = 0xe) mlen 1 ex_mlen 1 rlen 0 { align1 1Q };
-sends(8)        nullUD          g16UD           g9UD            0x02026c00                0x00000080
-                            hdc1 MsgDesc: ( DC untyped surface write, Surface = 0, SIMD8, Mask = 0xc) mlen 1 ex_mlen 2 rlen 0 { align1 1Q };
-(+f1.0) sends(8) nullUD         g15UD           g18UD           0x06035001                0x00000100
-                            hdc1 MsgDesc: ( DC typed surface write, Surface = 1, SIMD16, Mask = 0x0) mlen 3 ex_mlen 4 rlen 0 { align1 1Q };
-(+f1.0) sends(8) nullUD         g34UD           g11UD           0x06036001                0x00000100
-                            hdc1 MsgDesc: ( DC typed surface write, Surface = 1, SIMD8, Mask = 0x0) mlen 3 ex_mlen 4 rlen 0 { align1 2Q };
-(+f1.0) sends(8) g13UD          g18UD           g19UD           0x0210bb02                0x00000040
-                            hdc1 MsgDesc: ( DC untyped atomic op, Surface = 2, SIMD8, imin) mlen 1 ex_mlen 1 rlen 1 { align1 1Q };
-(+f1.0) sends(8) g16UD          g25UD           g30UD           0x0210b402                0x00000040
-                            hdc1 MsgDesc: ( DC untyped atomic op, Surface = 2, SIMD8, mov) mlen 1 ex_mlen 1 rlen 1 { align1 1Q };
-(+f1.0) sends(16) g22UD         g27UD           g29UD           0x0420ab02                0x00000080
-                            hdc1 MsgDesc: ( DC untyped atomic op, Surface = 2, SIMD16, imin) mlen 2 ex_mlen 2 rlen 2 { align1 1H };
-(+f1.0) sends(16) g25UD         g37UD           g2UD            0x0420a402                0x00000080
-                            hdc1 MsgDesc: ( DC untyped atomic op, Surface = 2, SIMD16, mov) mlen 2 ex_mlen 2 rlen 2 { align1 1H };
-sends(16)       nullUD          g8UD            g10UD           0x04025c02                0x00000100
-                            hdc1 MsgDesc: ( DC untyped surface write, Surface = 2, SIMD16, Mask = 0xc) mlen 2 ex_mlen 4 rlen 0 { align1 1H };
-(+f1.0) sends(8) g127UD         g2UD            g9UD            0x0411a401                0x00000040
-                            hdc1 MsgDesc: ( DC typed atomic, Surface = 1, SIMD16, mov) mlen 2 ex_mlen 1 rlen 1 { align1 1Q };
-(+f1.0) sends(8) g127UD         g2UD            g4UD            0x0411b401                0x00000040
-                            hdc1 MsgDesc: ( DC typed atomic, Surface = 1, SIMD8, mov) mlen 2 ex_mlen 1 rlen 1 { align1 2Q };
-(+f1.0) sends(8) nullUD         g14UD           g15UD           0x02009201                0x00000040
-                            hdc1 MsgDesc: ( DC untyped atomic op, Surface = 1, SIMD8, or) mlen 1 ex_mlen 1 rlen 0 { align1 1Q };
-(+f1.0) sends(16) nullUD        g24UD           g26UD           0x04008201                0x00000080
-                            hdc1 MsgDesc: ( DC untyped atomic op, Surface = 1, SIMD16, or) mlen 2 ex_mlen 2 rlen 0 { align1 1H };
-sends(8)        nullUD          g124UD          g11UD           0x04035000                0x00000100
-                            hdc1 MsgDesc: ( DC typed surface write, Surface = 0, SIMD16, Mask = 0x0) mlen 2 ex_mlen 4 rlen 0 { align1 1Q };
-(+f1.0) sends(8) nullUD         g5UD            g6UD            0x02035e02                0x00000040
-                            hdc1 MsgDesc: ( DC typed surface write, Surface = 2, SIMD16, Mask = 0xe) mlen 1 ex_mlen 1 rlen 0 { align1 1Q };
-(+f1.0) sends(8) nullUD         g7UD            g9UD            0x02036e02                0x00000040
-                            hdc1 MsgDesc: ( DC typed surface write, Surface = 2, SIMD8, Mask = 0xe) mlen 1 ex_mlen 1 rlen 0 { align1 2Q };
-sends(8)        nullUD          g11UD           g21UD           0x04035e00                0x00000040
-                            hdc1 MsgDesc: ( DC typed surface write, Surface = 0, SIMD16, Mask = 0xe) mlen 2 ex_mlen 1 rlen 0 { align1 1Q };
-sends(8)        nullUD          g15UD           g27UD           0x04035e02                0x00000040
-                            hdc1 MsgDesc: ( DC typed surface write, Surface = 2, SIMD16, Mask = 0xe) mlen 2 ex_mlen 1 rlen 0 { align1 1Q };
-sends(8)        nullUD          g16UD           g28UD           0x04036e02                0x00000040
-                            hdc1 MsgDesc: ( DC typed surface write, Surface = 2, SIMD8, Mask = 0xe) mlen 2 ex_mlen 1 rlen 0 { align1 2Q };
-(+f1.0) sends(8) g13UD          g19UD           g20UD           0x0210bd02                0x00000040
-                            hdc1 MsgDesc: ( DC untyped atomic op, Surface = 2, SIMD8, umin) mlen 1 ex_mlen 1 rlen 1 { align1 1Q };
-(+f1.0) sends(16) g22UD         g28UD           g30UD           0x0420ad02                0x00000080
-                            hdc1 MsgDesc: ( DC untyped atomic op, Surface = 2, SIMD16, umin) mlen 2 ex_mlen 2 rlen 2 { align1 1H };
-(+f1.0) sends(8) nullUD         g2UD            g4UD            0x04035c02                0x00000080
-                            hdc1 MsgDesc: ( DC typed surface write, Surface = 2, SIMD16, Mask = 0xc) mlen 2 ex_mlen 2 rlen 0 { align1 1Q };
-(+f1.0) sends(8) nullUD         g38UD           g40UD           0x04036c02                0x00000080
-                            hdc1 MsgDesc: ( DC typed surface write, Surface = 2, SIMD8, Mask = 0xc) mlen 2 ex_mlen 2 rlen 0 { align1 2Q };
-sends(8)        nullUD          g17UD           g6UD            0x02035000                0x00000100
-                            hdc1 MsgDesc: ( DC typed surface write, Surface = 0, SIMD16, Mask = 0x0) mlen 1 ex_mlen 4 rlen 0 { align1 1Q };
-sends(8)        g124UD          g20UD           g21UD           0x0211a700                0x00000040
-                            hdc1 MsgDesc: ( DC typed atomic, Surface = 0, SIMD16, add) mlen 1 ex_mlen 1 rlen 1 { align1 1Q };
-sends(8)        g124UD          g20UD           g21UD           0x0211ad00                0x00000040
-                            hdc1 MsgDesc: ( DC typed atomic, Surface = 0, SIMD16, umin) mlen 1 ex_mlen 1 rlen 1 { align1 1Q };
-sends(8)        g124UD          g20UD           g21UD           0x0211ac00                0x00000040
-                            hdc1 MsgDesc: ( DC typed atomic, Surface = 0, SIMD16, umax) mlen 1 ex_mlen 1 rlen 1 { align1 1Q };
-sends(8)        g124UD          g20UD           g21UD           0x0211a100                0x00000040
-                            hdc1 MsgDesc: ( DC typed atomic, Surface = 0, SIMD16, and) mlen 1 ex_mlen 1 rlen 1 { align1 1Q };
-sends(8)        g124UD          g20UD           g21UD           0x0211a200                0x00000040
-                            hdc1 MsgDesc: ( DC typed atomic, Surface = 0, SIMD16, or) mlen 1 ex_mlen 1 rlen 1 { align1 1Q };
-sends(8)        g124UD          g20UD           g21UD           0x0211a300                0x00000040
-                            hdc1 MsgDesc: ( DC typed atomic, Surface = 0, SIMD16, xor) mlen 1 ex_mlen 1 rlen 1 { align1 1Q };
-sends(8)        g124UD          g20UD           g21UD           0x0211a400                0x00000040
-                            hdc1 MsgDesc: ( DC typed atomic, Surface = 0, SIMD16, mov) mlen 1 ex_mlen 1 rlen 1 { align1 1Q };
-sends(8)        g124UD          g21UD           g6UD            0x0211ae00                0x00000080
-                            hdc1 MsgDesc: ( DC typed atomic, Surface = 0, SIMD16, cmpwr) mlen 1 ex_mlen 2 rlen 1 { align1 1Q };
-(+f1.0) sends(8) nullUD         g16UD           g2UD            0x02035001                0x00000100
-                            hdc1 MsgDesc: ( DC typed surface write, Surface = 1, SIMD16, Mask = 0x0) mlen 1 ex_mlen 4 rlen 0 { align1 1Q };
-(+f1.0) sends(8) nullUD         g29UD           g8UD            0x02036001                0x00000100
-                            hdc1 MsgDesc: ( DC typed surface write, Surface = 1, SIMD8, Mask = 0x0) mlen 1 ex_mlen 4 rlen 0 { align1 2Q };
-(+f1.0) sends(8) nullUD         g14UD           g18UD           0x02035e01                0x00000040
-                            hdc1 MsgDesc: ( DC typed surface write, Surface = 1, SIMD16, Mask = 0xe) mlen 1 ex_mlen 1 rlen 0 { align1 1Q };
-(+f1.0) sends(8) nullUD         g23UD           g7UD            0x02036e01                0x00000040
-                            hdc1 MsgDesc: ( DC typed surface write, Surface = 1, SIMD8, Mask = 0xe) mlen 1 ex_mlen 1 rlen 0 { align1 2Q };
-(+f1.0) sends(8) nullUD         g17UD           g2UD            0x02035002                0x00000100
-                            hdc1 MsgDesc: ( DC typed surface write, Surface = 2, SIMD16, Mask = 0x0) mlen 1 ex_mlen 4 rlen 0 { align1 1Q };
-(+f1.0) sends(8) nullUD         g28UD           g3UD            0x02036002                0x00000100
-                            hdc1 MsgDesc: ( DC typed surface write, Surface = 2, SIMD8, Mask = 0x0) mlen 1 ex_mlen 4 rlen 0 { align1 2Q };
-(+f1.0) sends(8) nullUD         g17UD           g2UD            0x02035003                0x00000100
-                            hdc1 MsgDesc: ( DC typed surface write, Surface = 3, SIMD16, Mask = 0x0) mlen 1 ex_mlen 4 rlen 0 { align1 1Q };
-(+f1.0) sends(8) nullUD         g23UD           g6UD            0x02036003                0x00000100
-                            hdc1 MsgDesc: ( DC typed surface write, Surface = 3, SIMD8, Mask = 0x0) mlen 1 ex_mlen 4 rlen 0 { align1 2Q };
-(+f1.0) sends(8) nullUD         g12UD           g13UD           0x02009701                0x00000040
-                            hdc1 MsgDesc: ( DC untyped atomic op, Surface = 1, SIMD8, add) mlen 1 ex_mlen 1 rlen 0 { align1 1Q };
-(+f1.0) sends(16) nullUD        g20UD           g22UD           0x04008701                0x00000080
-                            hdc1 MsgDesc: ( DC untyped atomic op, Surface = 1, SIMD16, add) mlen 2 ex_mlen 2 rlen 0 { align1 1H };
-sends(8)        g7UD            g18UD           g19UD           0x0210bbfe                0x00000040
-                            hdc1 MsgDesc: ( DC untyped atomic op, Surface = 254, SIMD8, imin) mlen 1 ex_mlen 1 rlen 1 { align1 1Q };
-sends(8)        nullUD          g6UD            g1UD            0x04035003                0x00000100
-                            hdc1 MsgDesc: ( DC typed surface write, Surface = 3, SIMD16, Mask = 0x0) mlen 2 ex_mlen 4 rlen 0 { align1 1Q };
-sends(8)        nullUD          g8UD            g10UD           0x04036003                0x00000100
-                            hdc1 MsgDesc: ( DC typed surface write, Surface = 3, SIMD8, Mask = 0x0) mlen 2 ex_mlen 4 rlen 0 { align1 2Q };
-(+f1.0) sends(8) g3UD           g21UD           g20UD           0x0210b701                0x00000040
-                            hdc1 MsgDesc: ( DC untyped atomic op, Surface = 1, SIMD8, add) mlen 1 ex_mlen 1 rlen 1 { align1 1Q };
-(+f1.0) sends(8) g5UD           g21UD           g20UD           0x0210bd01                0x00000040
-                            hdc1 MsgDesc: ( DC untyped atomic op, Surface = 1, SIMD8, umin) mlen 1 ex_mlen 1 rlen 1 { align1 1Q };
-(+f1.0) sends(8) g6UD           g21UD           g20UD           0x0210bc01                0x00000040
-                            hdc1 MsgDesc: ( DC untyped atomic op, Surface = 1, SIMD8, umax) mlen 1 ex_mlen 1 rlen 1 { align1 1Q };
-(+f1.0) sends(8) g7UD           g21UD           g20UD           0x0210b101                0x00000040
-                            hdc1 MsgDesc: ( DC untyped atomic op, Surface = 1, SIMD8, and) mlen 1 ex_mlen 1 rlen 1 { align1 1Q };
-(+f1.0) sends(8) g9UD           g21UD           g20UD           0x0210b301                0x00000040
-                            hdc1 MsgDesc: ( DC untyped atomic op, Surface = 1, SIMD8, xor) mlen 1 ex_mlen 1 rlen 1 { align1 1Q };
-(+f1.0) sends(8) g10UD          g21UD           g20UD           0x0210b401                0x00000040
-                            hdc1 MsgDesc: ( DC untyped atomic op, Surface = 1, SIMD8, mov) mlen 1 ex_mlen 1 rlen 1 { align1 1Q };
-(+f1.0) sends(8) g11UD          g21UD           g11UD           0x0210be01                0x00000080
-                            hdc1 MsgDesc: ( DC untyped atomic op, Surface = 1, SIMD8, cmpwr) mlen 1 ex_mlen 2 rlen 1 { align1 1Q };
-(+f1.0) sends(16) g3UD          g38UD           g36UD           0x0420a701                0x00000080
-                            hdc1 MsgDesc: ( DC untyped atomic op, Surface = 1, SIMD16, add) mlen 2 ex_mlen 2 rlen 2 { align1 1H };
-(+f1.0) sends(16) g7UD          g38UD           g36UD           0x0420ad01                0x00000080
-                            hdc1 MsgDesc: ( DC untyped atomic op, Surface = 1, SIMD16, umin) mlen 2 ex_mlen 2 rlen 2 { align1 1H };
-(+f1.0) sends(16) g9UD          g38UD           g36UD           0x0420ac01                0x00000080
-                            hdc1 MsgDesc: ( DC untyped atomic op, Surface = 1, SIMD16, umax) mlen 2 ex_mlen 2 rlen 2 { align1 1H };
-(+f1.0) sends(16) g11UD         g38UD           g36UD           0x0420a101                0x00000080
-                            hdc1 MsgDesc: ( DC untyped atomic op, Surface = 1, SIMD16, and) mlen 2 ex_mlen 2 rlen 2 { align1 1H };
-(+f1.0) sends(16) g15UD         g38UD           g36UD           0x0420a301                0x00000080
-                            hdc1 MsgDesc: ( DC untyped atomic op, Surface = 1, SIMD16, xor) mlen 2 ex_mlen 2 rlen 2 { align1 1H };
-(+f1.0) sends(16) g17UD         g38UD           g36UD           0x0420a401                0x00000080
-                            hdc1 MsgDesc: ( DC untyped atomic op, Surface = 1, SIMD16, mov) mlen 2 ex_mlen 2 rlen 2 { align1 1H };
-(+f1.0) sends(16) g19UD         g38UD           g21UD           0x0420ae01                0x00000100
-                            hdc1 MsgDesc: ( DC untyped atomic op, Surface = 1, SIMD16, cmpwr) mlen 2 ex_mlen 4 rlen 2 { align1 1H };
-sends(8)        nullUD          g4UD            g12UD           0x04035e09                0x00000040
-                            hdc1 MsgDesc: ( DC typed surface write, Surface = 9, SIMD16, Mask = 0xe) mlen 2 ex_mlen 1 rlen 0 { align1 1Q };
-sends(8)        nullUD          g5UD            g13UD           0x04036e09                0x00000040
-                            hdc1 MsgDesc: ( DC typed surface write, Surface = 9, SIMD8, Mask = 0xe) mlen 2 ex_mlen 1 rlen 0 { align1 2Q };
-(+f1.0) sends(8) nullUD         g14UD           g18UD           0x02009d01                0x00000040
-                            hdc1 MsgDesc: ( DC untyped atomic op, Surface = 1, SIMD8, umin) mlen 1 ex_mlen 1 rlen 0 { align1 1Q };
-(+f1.0) sends(8) nullUD         g17UD           g19UD           0x02009c01                0x00000040
-                            hdc1 MsgDesc: ( DC untyped atomic op, Surface = 1, SIMD8, umax) mlen 1 ex_mlen 1 rlen 0 { align1 1Q };
-(+f1.0) sends(8) nullUD         g19UD           g20UD           0x02009101                0x00000040
-                            hdc1 MsgDesc: ( DC untyped atomic op, Surface = 1, SIMD8, and) mlen 1 ex_mlen 1 rlen 0 { align1 1Q };
-(+f1.0) sends(8) nullUD         g27UD           g22UD           0x02009301                0x00000040
-                            hdc1 MsgDesc: ( DC untyped atomic op, Surface = 1, SIMD8, xor) mlen 1 ex_mlen 1 rlen 0 { align1 1Q };
-(+f1.0) sends(8) nullUD         g29UD           g23UD           0x02009401                0x00000040
-                            hdc1 MsgDesc: ( DC untyped atomic op, Surface = 1, SIMD8, mov) mlen 1 ex_mlen 1 rlen 0 { align1 1Q };
-(+f1.0) sends(8) nullUD         g32UD           g2UD            0x02009e01                0x00000080
-                            hdc1 MsgDesc: ( DC untyped atomic op, Surface = 1, SIMD8, cmpwr) mlen 1 ex_mlen 2 rlen 0 { align1 1Q };
-(+f1.0) sends(16) nullUD        g18UD           g32UD           0x04008d01                0x00000080
-                            hdc1 MsgDesc: ( DC untyped atomic op, Surface = 1, SIMD16, umin) mlen 2 ex_mlen 2 rlen 0 { align1 1H };
-(+f1.0) sends(16) nullUD        g24UD           g33UD           0x04008c01                0x00000080
-                            hdc1 MsgDesc: ( DC untyped atomic op, Surface = 1, SIMD16, umax) mlen 2 ex_mlen 2 rlen 0 { align1 1H };
-(+f1.0) sends(16) nullUD        g30UD           g34UD           0x04008101                0x00000080
-                            hdc1 MsgDesc: ( DC untyped atomic op, Surface = 1, SIMD16, and) mlen 2 ex_mlen 2 rlen 0 { align1 1H };
-(+f1.0) sends(16) nullUD        g46UD           g36UD           0x04008301                0x00000080
-                            hdc1 MsgDesc: ( DC untyped atomic op, Surface = 1, SIMD16, xor) mlen 2 ex_mlen 2 rlen 0 { align1 1H };
-(+f1.0) sends(16) nullUD        g49UD           g37UD           0x04008401                0x00000080
-                            hdc1 MsgDesc: ( DC untyped atomic op, Surface = 1, SIMD16, mov) mlen 2 ex_mlen 2 rlen 0 { align1 1H };
-(+f1.0) sends(16) nullUD        g56UD           g2UD            0x04008e01                0x00000100
-                            hdc1 MsgDesc: ( DC untyped atomic op, Surface = 1, SIMD16, cmpwr) mlen 2 ex_mlen 4 rlen 0 { align1 1H };
-(+f1.0) sends(8) nullUD         g20UD           g21UD           0x02018101                0x00000040
-                            hdc1 MsgDesc: ( DC typed atomic, Surface = 1, SIMD16, and) mlen 1 ex_mlen 1 rlen 0 { align1 1Q };
-(+f1.0) sends(8) nullUD         g3UD            g38UD           0x02019101                0x00000040
-                            hdc1 MsgDesc: ( DC typed atomic, Surface = 1, SIMD8, and) mlen 1 ex_mlen 1 rlen 0 { align1 2Q };
-(+f1.0) sends(8) nullUD         g19UD           g20UD           0x02018201                0x00000040
-                            hdc1 MsgDesc: ( DC typed atomic, Surface = 1, SIMD16, or) mlen 1 ex_mlen 1 rlen 0 { align1 1Q };
-(+f1.0) sends(8) nullUD         g3UD            g36UD           0x02019201                0x00000040
-                            hdc1 MsgDesc: ( DC typed atomic, Surface = 1, SIMD8, or) mlen 1 ex_mlen 1 rlen 0 { align1 2Q };
-(+f1.0) sends(8) nullUD         g19UD           g20UD           0x02018301                0x00000040
-                            hdc1 MsgDesc: ( DC typed atomic, Surface = 1, SIMD16, xor) mlen 1 ex_mlen 1 rlen 0 { align1 1Q };
-(+f1.0) sends(8) nullUD         g3UD            g36UD           0x02019301                0x00000040
-                            hdc1 MsgDesc: ( DC typed atomic, Surface = 1, SIMD8, xor) mlen 1 ex_mlen 1 rlen 0 { align1 2Q };
-(+f1.0) sends(8) nullUD         g2UD            g18UD           0x04018701                0x00000040
-                            hdc1 MsgDesc: ( DC typed atomic, Surface = 1, SIMD16, add) mlen 2 ex_mlen 1 rlen 0 { align1 1Q };
-(+f1.0) sends(8) nullUD         g2UD            g4UD            0x04019701                0x00000040
-                            hdc1 MsgDesc: ( DC typed atomic, Surface = 1, SIMD8, add) mlen 2 ex_mlen 1 rlen 0 { align1 2Q };
-(+f1.0) sends(8) nullUD         g2UD            g18UD           0x04018d01                0x00000040
-                            hdc1 MsgDesc: ( DC typed atomic, Surface = 1, SIMD16, umin) mlen 2 ex_mlen 1 rlen 0 { align1 1Q };
-(+f1.0) sends(8) nullUD         g2UD            g4UD            0x04019d01                0x00000040
-                            hdc1 MsgDesc: ( DC typed atomic, Surface = 1, SIMD8, umin) mlen 2 ex_mlen 1 rlen 0 { align1 2Q };
-(+f1.0) sends(8) nullUD         g2UD            g18UD           0x04018101                0x00000040
-                            hdc1 MsgDesc: ( DC typed atomic, Surface = 1, SIMD16, and) mlen 2 ex_mlen 1 rlen 0 { align1 1Q };
-(+f1.0) sends(8) nullUD         g2UD            g4UD            0x04019101                0x00000040
-                            hdc1 MsgDesc: ( DC typed atomic, Surface = 1, SIMD8, and) mlen 2 ex_mlen 1 rlen 0 { align1 2Q };
-(+f1.0) sends(8) nullUD         g2UD            g18UD           0x04018201                0x00000040
-                            hdc1 MsgDesc: ( DC typed atomic, Surface = 1, SIMD16, or) mlen 2 ex_mlen 1 rlen 0 { align1 1Q };
-(+f1.0) sends(8) nullUD         g2UD            g4UD            0x04019201                0x00000040
-                            hdc1 MsgDesc: ( DC typed atomic, Surface = 1, SIMD8, or) mlen 2 ex_mlen 1 rlen 0 { align1 2Q };
-(+f1.0) sends(8) nullUD         g2UD            g18UD           0x04018301                0x00000040
-                            hdc1 MsgDesc: ( DC typed atomic, Surface = 1, SIMD16, xor) mlen 2 ex_mlen 1 rlen 0 { align1 1Q };
-(+f1.0) sends(8) nullUD         g2UD            g4UD            0x04019301                0x00000040
-                            hdc1 MsgDesc: ( DC typed atomic, Surface = 1, SIMD8, xor) mlen 2 ex_mlen 1 rlen 0 { align1 2Q };
+        sends.hdc1 (8)            null    r34:2  r36:4   0x00000100  0x04035001  // typed_write.hdc1.xyzw.simd16.bti[1]
+        sends.hdc1 (8|M8)         null    r1:2   r3:4    0x00000100  0x04036001  // typed_write.hdc1.xyzw.bti[1]
+        sends.hdc1 (8)            null    r21:2  r23:4   0x00000100  0x04035001  // typed_write.hdc1.xyzw.simd16.bti[1]
+(f1.0)  sends.hdc1 (8)            r9      r2:1   r3:1    0x00000040  0x0210B201  // untyped_atomic_or.hdc1.bti[1]
+(f1.0)  sends.hdc1 (16)           r11     r2:2   r6:2    0x00000080  0x0420A201  // untyped_atomic_or.hdc1.bti[1]
+        sends.hdc1 (16)           null    r6:2   r8:2    0x00000080  0x04025EFE  // untyped_write.hdc1.x.bti[254]
+        sends.hdc1 (16)           null    r10:2  r12:2   0x00000080  0x040087FE  // untyped_atomic_add.hdc1.bti[254]
+(f1.0)  sends.hdc1 (8)            null    r11:2  r5:4    0x00000100  0x04035002  // typed_write.hdc1.xyzw.simd16.bti[2]
+(f1.0)  sends.hdc1 (8|M8)         null    r2:2   r11:4   0x00000100  0x04036002  // typed_write.hdc1.xyzw.bti[2]
+(f1.0)  sends.hdc1 (8)            null    r3:1   r4:4    0x00000100  0x02026001  // untyped_write.hdc1.xyzw.bti[1]
+(f1.0)  sends.hdc1 (16)           null    r3:2   r5:8    0x00000200  0x04025001  // untyped_write.hdc1.xyzw.bti[1]
+        sends.hdc1 (8)            null    r2:1   r3:1    0x00000040  0x02009B00  // untyped_atomic_imin.hdc1.bti[0]
+(f1.0)  sends.hdc1 (8)            null    r2:2   r4:1    0x00000040  0x04035E01  // typed_write.hdc1.x.simd16.bti[1]
+(f1.0)  sends.hdc1 (8|M8)         null    r45:2  r41:1   0x00000040  0x04036E01  // typed_write.hdc1.x.bti[1]
+(f1.0)  sends.hdc1 (8)            null    r2:2   r4:1    0x00000040  0x04018C01  // typed_atomic_umax.hdc1.simd16.bti[1]
+(f1.0)  sends.hdc1 (8|M8)         null    r45:2  r41:1   0x00000040  0x04019C01  // typed_atomic_umax.hdc1.bti[1]
+(f1.0)  sends.hdc1 (8)            null    r2:2   r4:1    0x00000040  0x04018401  // typed_atomic_mov.hdc1.simd16.bti[1]
+(f1.0)  sends.hdc1 (8|M8)         null    r45:2  r41:1   0x00000040  0x04019401  // typed_atomic_mov.hdc1.bti[1]
+(f1.0)  sends.hdc1 (8)            null    r2:2   r4:2    0x00000080  0x04018E01  // typed_atomic_cmpwr.hdc1.simd16.bti[1]
+(f1.0)  sends.hdc1 (8|M8)         null    r11:2  r13:2   0x00000080  0x04019E01  // typed_atomic_cmpwr.hdc1.bti[1]
+        sends.hdc1 (16)           null    r3:2   r1:2    0x00000080  0x04008DFE  // untyped_atomic_umin.hdc1.bti[254]
+        sends.hdc1 (16)           null    r5:2   r1:2    0x00000080  0x04008BFE  // untyped_atomic_imin.hdc1.bti[254]
+        sends.hdc1 (16)           null    r3:2   r1:2    0x00000080  0x04008CFE  // untyped_atomic_umax.hdc1.bti[254]
+        sends.hdc1 (16)           null    r5:2   r1:2    0x00000080  0x04008AFE  // untyped_atomic_imax.hdc1.bti[254]
+        sends.hdc1 (16)           null    r3:2   r1:2    0x00000080  0x040081FE  // untyped_atomic_and.hdc1.bti[254]
+        sends.hdc1 (16)           null    r3:2   r1:2    0x00000080  0x040082FE  // untyped_atomic_or.hdc1.bti[254]
+        sends.hdc1 (16)           null    r3:2   r1:2    0x00000080  0x040083FE  // untyped_atomic_xor.hdc1.bti[254]
+        sends.hdc1 (16)           null    r3:2   r1:2    0x00000080  0x040084FE  // untyped_atomic_mov.hdc1.bti[254]
+        sends.hdc1 (16)           null    r3:2   r7:4    0x00000100  0x04008EFE  // untyped_atomic_cmpwr.hdc1.bti[254]
+        sends.hdc1 (16)           r1      r19:2  r21:2   0x00000080  0x0420A4FE  // untyped_atomic_mov.hdc1.bti[254]
+        sends.hdc1 (16)           r13     r23:2  r25:2   0x00000080  0x0420A2FE  // untyped_atomic_or.hdc1.bti[254]
+        sends.hdc1 (8)            null    r14:1  r10:4   0x00000100  0x02026000  // untyped_write.hdc1.xyzw.bti[0]
+        sends.hdc1 (8)            null    r4:1   r2:1    0x00000040  0x02026EFE  // untyped_write.hdc1.x.bti[254]
+        sends.hdc1 (8)            r7      r19:1  r20:1   0x00000040  0x0210BDFE  // untyped_atomic_umin.hdc1.bti[254]
+        sends.hdc1 (8)            r11     r25:1  r26:1   0x00000040  0x0210B4FE  // untyped_atomic_mov.hdc1.bti[254]
+        sends.hdc1 (16)           r1      r14:2  r16:2   0x00000080  0x0420A7FE  // untyped_atomic_add.hdc1.bti[254]
+(f1.0)  sends.hdc1 (8)            null    r2     r13:4   0x00000100  a0.0
+(f1.0)  sends.hdc1 (8)            null    r5:1   r6:1    0x00000040  0x02026E01  // untyped_write.hdc1.x.bti[1]
+(f1.0)  sends.hdc1 (8)            null    r5:1   r6:1    0x00000040  0x02026E02  // untyped_write.hdc1.x.bti[2]
+(f1.0)  sends.hdc1 (16)           null    r6:2   r8:2    0x00000080  0x04025E01  // untyped_write.hdc1.x.bti[1]
+(f1.0)  sends.hdc1 (16)           null    r6:2   r8:2    0x00000080  0x04025E02  // untyped_write.hdc1.x.bti[2]
+(f1.0)  sends.hdc1 (8)            r3      r8:1   r9:1    0x00000040  0x0210B702  // untyped_atomic_add.hdc1.bti[2]
+(f1.0)  sends.hdc1 (16)           r4      r11:2  r13:2   0x00000080  0x0420A702  // untyped_atomic_add.hdc1.bti[2]
+(f1.0)  sends.hdc1 (8)            null    r5:1   r3:2    0x00000080  0x02026C01  // untyped_write.hdc1.xy.bti[1]
+(f1.0)  sends.hdc1 (16)           null    r19:2  r21:4   0x00000100  0x04025C01  // untyped_write.hdc1.xy.bti[1]
+        sends.hdc1 (8)            null    r14:1  r15:1   0x00000040  0x02026E00  // untyped_write.hdc1.x.bti[0]
+        sends.hdc1 (8)            null    r16:1  r9:2    0x00000080  0x02026C00  // untyped_write.hdc1.xy.bti[0]
+(f1.0)  sends.hdc1 (8)            null    r15:3  r18:4   0x00000100  0x06035001  // typed_write.hdc1.xyzw.simd16.bti[1]
+(f1.0)  sends.hdc1 (8|M8)         null    r34:3  r11:4   0x00000100  0x06036001  // typed_write.hdc1.xyzw.bti[1]
+(f1.0)  sends.hdc1 (8)            r13     r18:1  r19:1   0x00000040  0x0210BB02  // untyped_atomic_imin.hdc1.bti[2]
+(f1.0)  sends.hdc1 (8)            r16     r25:1  r30:1   0x00000040  0x0210B402  // untyped_atomic_mov.hdc1.bti[2]
+(f1.0)  sends.hdc1 (16)           r22     r27:2  r29:2   0x00000080  0x0420AB02  // untyped_atomic_imin.hdc1.bti[2]
+(f1.0)  sends.hdc1 (16)           r25     r37:2  r2:2    0x00000080  0x0420A402  // untyped_atomic_mov.hdc1.bti[2]
+        sends.hdc1 (16)           null    r8:2   r10:4   0x00000100  0x04025C02  // untyped_write.hdc1.xy.bti[2]
+(f1.0)  sends.hdc1 (8)            r127    r2:2   r9:1    0x00000040  0x0411A401  // typed_atomic_mov.hdc1.simd16.bti[1]
+(f1.0)  sends.hdc1 (8|M8)         r127    r2:2   r4:1    0x00000040  0x0411B401  // typed_atomic_mov.hdc1.bti[1]
+(f1.0)  sends.hdc1 (8)            null    r14:1  r15:1   0x00000040  0x02009201  // untyped_atomic_or.hdc1.bti[1]
+(f1.0)  sends.hdc1 (16)           null    r24:2  r26:2   0x00000080  0x04008201  // untyped_atomic_or.hdc1.bti[1]
+        sends.hdc1 (8)            null    r124:2 r11:4   0x00000100  0x04035000  // typed_write.hdc1.xyzw.simd16.bti[0]
+(f1.0)  sends.hdc1 (8)            null    r5:1   r6:1    0x00000040  0x02035E02  // typed_write.hdc1.x.simd16.bti[2]
+(f1.0)  sends.hdc1 (8|M8)         null    r7:1   r9:1    0x00000040  0x02036E02  // typed_write.hdc1.x.bti[2]
+        sends.hdc1 (8)            null    r11:2  r21:1   0x00000040  0x04035E00  // typed_write.hdc1.x.simd16.bti[0]
+        sends.hdc1 (8)            null    r15:2  r27:1   0x00000040  0x04035E02  // typed_write.hdc1.x.simd16.bti[2]
+        sends.hdc1 (8|M8)         null    r16:2  r28:1   0x00000040  0x04036E02  // typed_write.hdc1.x.bti[2]
+(f1.0)  sends.hdc1 (8)            r13     r19:1  r20:1   0x00000040  0x0210BD02  // untyped_atomic_umin.hdc1.bti[2]
+(f1.0)  sends.hdc1 (16)           r22     r28:2  r30:2   0x00000080  0x0420AD02  // untyped_atomic_umin.hdc1.bti[2]
+(f1.0)  sends.hdc1 (8)            null    r2:2   r4:2    0x00000080  0x04035C02  // typed_write.hdc1.xy.simd16.bti[2]
+(f1.0)  sends.hdc1 (8|M8)         null    r38:2  r40:2   0x00000080  0x04036C02  // typed_write.hdc1.xy.bti[2]
+        sends.hdc1 (8)            null    r17:1  r6:4    0x00000100  0x02035000  // typed_write.hdc1.xyzw.simd16.bti[0]
+        sends.hdc1 (8)            r124    r20:1  r21:1   0x00000040  0x0211A700  // typed_atomic_add.hdc1.simd16.bti[0]
+        sends.hdc1 (8)            r124    r20:1  r21:1   0x00000040  0x0211AD00  // typed_atomic_umin.hdc1.simd16.bti[0]
+        sends.hdc1 (8)            r124    r20:1  r21:1   0x00000040  0x0211AC00  // typed_atomic_umax.hdc1.simd16.bti[0]
+        sends.hdc1 (8)            r124    r20:1  r21:1   0x00000040  0x0211A100  // typed_atomic_and.hdc1.simd16.bti[0]
+        sends.hdc1 (8)            r124    r20:1  r21:1   0x00000040  0x0211A200  // typed_atomic_or.hdc1.simd16.bti[0]
+        sends.hdc1 (8)            r124    r20:1  r21:1   0x00000040  0x0211A300  // typed_atomic_xor.hdc1.simd16.bti[0]
+        sends.hdc1 (8)            r124    r20:1  r21:1   0x00000040  0x0211A400  // typed_atomic_mov.hdc1.simd16.bti[0]
+        sends.hdc1 (8)            r124    r21:1  r6:2    0x00000080  0x0211AE00  // typed_atomic_cmpwr.hdc1.simd16.bti[0]
+(f1.0)  sends.hdc1 (8)            null    r16:1  r2:4    0x00000100  0x02035001  // typed_write.hdc1.xyzw.simd16.bti[1]
+(f1.0)  sends.hdc1 (8|M8)         null    r29:1  r8:4    0x00000100  0x02036001  // typed_write.hdc1.xyzw.bti[1]
+(f1.0)  sends.hdc1 (8)            null    r14:1  r18:1   0x00000040  0x02035E01  // typed_write.hdc1.x.simd16.bti[1]
+(f1.0)  sends.hdc1 (8|M8)         null    r23:1  r7:1    0x00000040  0x02036E01  // typed_write.hdc1.x.bti[1]
+(f1.0)  sends.hdc1 (8)            null    r17:1  r2:4    0x00000100  0x02035002  // typed_write.hdc1.xyzw.simd16.bti[2]
+(f1.0)  sends.hdc1 (8|M8)         null    r28:1  r3:4    0x00000100  0x02036002  // typed_write.hdc1.xyzw.bti[2]
+(f1.0)  sends.hdc1 (8)            null    r17:1  r2:4    0x00000100  0x02035003  // typed_write.hdc1.xyzw.simd16.bti[3]
+(f1.0)  sends.hdc1 (8|M8)         null    r23:1  r6:4    0x00000100  0x02036003  // typed_write.hdc1.xyzw.bti[3]
+(f1.0)  sends.hdc1 (8)            null    r12:1  r13:1   0x00000040  0x02009701  // untyped_atomic_add.hdc1.bti[1]
+(f1.0)  sends.hdc1 (16)           null    r20:2  r22:2   0x00000080  0x04008701  // untyped_atomic_add.hdc1.bti[1]
+        sends.hdc1 (8)            r7      r18:1  r19:1   0x00000040  0x0210BBFE  // untyped_atomic_imin.hdc1.bti[254]
+        sends.hdc1 (8)            null    r6:2   r1:4    0x00000100  0x04035003  // typed_write.hdc1.xyzw.simd16.bti[3]
+        sends.hdc1 (8|M8)         null    r8:2   r10:4   0x00000100  0x04036003  // typed_write.hdc1.xyzw.bti[3]
+(f1.0)  sends.hdc1 (8)            r3      r21:1  r20:1   0x00000040  0x0210B701  // untyped_atomic_add.hdc1.bti[1]
+(f1.0)  sends.hdc1 (8)            r5      r21:1  r20:1   0x00000040  0x0210BD01  // untyped_atomic_umin.hdc1.bti[1]
+(f1.0)  sends.hdc1 (8)            r6      r21:1  r20:1   0x00000040  0x0210BC01  // untyped_atomic_umax.hdc1.bti[1]
+(f1.0)  sends.hdc1 (8)            r7      r21:1  r20:1   0x00000040  0x0210B101  // untyped_atomic_and.hdc1.bti[1]
+(f1.0)  sends.hdc1 (8)            r9      r21:1  r20:1   0x00000040  0x0210B301  // untyped_atomic_xor.hdc1.bti[1]
+(f1.0)  sends.hdc1 (8)            r10     r21:1  r20:1   0x00000040  0x0210B401  // untyped_atomic_mov.hdc1.bti[1]
+(f1.0)  sends.hdc1 (8)            r11     r21:1  r11:2   0x00000080  0x0210BE01  // untyped_atomic_cmpwr.hdc1.bti[1]
+(f1.0)  sends.hdc1 (16)           r3      r38:2  r36:2   0x00000080  0x0420A701  // untyped_atomic_add.hdc1.bti[1]
+(f1.0)  sends.hdc1 (16)           r7      r38:2  r36:2   0x00000080  0x0420AD01  // untyped_atomic_umin.hdc1.bti[1]
+(f1.0)  sends.hdc1 (16)           r9      r38:2  r36:2   0x00000080  0x0420AC01  // untyped_atomic_umax.hdc1.bti[1]
+(f1.0)  sends.hdc1 (16)           r11     r38:2  r36:2   0x00000080  0x0420A101  // untyped_atomic_and.hdc1.bti[1]
+(f1.0)  sends.hdc1 (16)           r15     r38:2  r36:2   0x00000080  0x0420A301  // untyped_atomic_xor.hdc1.bti[1]
+(f1.0)  sends.hdc1 (16)           r17     r38:2  r36:2   0x00000080  0x0420A401  // untyped_atomic_mov.hdc1.bti[1]
+(f1.0)  sends.hdc1 (16)           r19     r38:2  r21:4   0x00000100  0x0420AE01  // untyped_atomic_cmpwr.hdc1.bti[1]
+        sends.hdc1 (8)            null    r4:2   r12:1   0x00000040  0x04035E09  // typed_write.hdc1.x.simd16.bti[9]
+        sends.hdc1 (8|M8)         null    r5:2   r13:1   0x00000040  0x04036E09  // typed_write.hdc1.x.bti[9]
+(f1.0)  sends.hdc1 (8)            null    r14:1  r18:1   0x00000040  0x02009D01  // untyped_atomic_umin.hdc1.bti[1]
+(f1.0)  sends.hdc1 (8)            null    r17:1  r19:1   0x00000040  0x02009C01  // untyped_atomic_umax.hdc1.bti[1]
+(f1.0)  sends.hdc1 (8)            null    r19:1  r20:1   0x00000040  0x02009101  // untyped_atomic_and.hdc1.bti[1]
+(f1.0)  sends.hdc1 (8)            null    r27:1  r22:1   0x00000040  0x02009301  // untyped_atomic_xor.hdc1.bti[1]
+(f1.0)  sends.hdc1 (8)            null    r29:1  r23:1   0x00000040  0x02009401  // untyped_atomic_mov.hdc1.bti[1]
+(f1.0)  sends.hdc1 (8)            null    r32:1  r2:2    0x00000080  0x02009E01  // untyped_atomic_cmpwr.hdc1.bti[1]
+(f1.0)  sends.hdc1 (16)           null    r18:2  r32:2   0x00000080  0x04008D01  // untyped_atomic_umin.hdc1.bti[1]
+(f1.0)  sends.hdc1 (16)           null    r24:2  r33:2   0x00000080  0x04008C01  // untyped_atomic_umax.hdc1.bti[1]
+(f1.0)  sends.hdc1 (16)           null    r30:2  r34:2   0x00000080  0x04008101  // untyped_atomic_and.hdc1.bti[1]
+(f1.0)  sends.hdc1 (16)           null    r46:2  r36:2   0x00000080  0x04008301  // untyped_atomic_xor.hdc1.bti[1]
+(f1.0)  sends.hdc1 (16)           null    r49:2  r37:2   0x00000080  0x04008401  // untyped_atomic_mov.hdc1.bti[1]
+(f1.0)  sends.hdc1 (16)           null    r56:2  r2:4    0x00000100  0x04008E01  // untyped_atomic_cmpwr.hdc1.bti[1]
+(f1.0)  sends.hdc1 (8)            null    r20:1  r21:1   0x00000040  0x02018101  // typed_atomic_and.hdc1.simd16.bti[1]
+(f1.0)  sends.hdc1 (8|M8)         null    r3:1   r38:1   0x00000040  0x02019101  // typed_atomic_and.hdc1.bti[1]
+(f1.0)  sends.hdc1 (8)            null    r19:1  r20:1   0x00000040  0x02018201  // typed_atomic_or.hdc1.simd16.bti[1]
+(f1.0)  sends.hdc1 (8|M8)         null    r3:1   r36:1   0x00000040  0x02019201  // typed_atomic_or.hdc1.bti[1]
+(f1.0)  sends.hdc1 (8)            null    r19:1  r20:1   0x00000040  0x02018301  // typed_atomic_xor.hdc1.simd16.bti[1]
+(f1.0)  sends.hdc1 (8|M8)         null    r3:1   r36:1   0x00000040  0x02019301  // typed_atomic_xor.hdc1.bti[1]
+(f1.0)  sends.hdc1 (8)            null    r2:2   r18:1   0x00000040  0x04018701  // typed_atomic_add.hdc1.simd16.bti[1]
+(f1.0)  sends.hdc1 (8|M8)         null    r2:2   r4:1    0x00000040  0x04019701  // typed_atomic_add.hdc1.bti[1]
+(f1.0)  sends.hdc1 (8)            null    r2:2   r18:1   0x00000040  0x04018D01  // typed_atomic_umin.hdc1.simd16.bti[1]
+(f1.0)  sends.hdc1 (8|M8)         null    r2:2   r4:1    0x00000040  0x04019D01  // typed_atomic_umin.hdc1.bti[1]
+(f1.0)  sends.hdc1 (8)            null    r2:2   r18:1   0x00000040  0x04018101  // typed_atomic_and.hdc1.simd16.bti[1]
+(f1.0)  sends.hdc1 (8|M8)         null    r2:2   r4:1    0x00000040  0x04019101  // typed_atomic_and.hdc1.bti[1]
+(f1.0)  sends.hdc1 (8)            null    r2:2   r18:1   0x00000040  0x04018201  // typed_atomic_or.hdc1.simd16.bti[1]
+(f1.0)  sends.hdc1 (8|M8)         null    r2:2   r4:1    0x00000040  0x04019201  // typed_atomic_or.hdc1.bti[1]
+(f1.0)  sends.hdc1 (8)            null    r2:2   r18:1   0x00000040  0x04018301  // typed_atomic_xor.hdc1.simd16.bti[1]
+(f1.0)  sends.hdc1 (8|M8)         null    r2:2   r4:1    0x00000040  0x04019301  // typed_atomic_xor.hdc1.bti[1]

@@ -1,10 +1,10 @@
-pln(8)          g124<1>F        g4<0,1,0>F      g2<8,8,1>F      { align1 1Q };
-pln(16)         g120<1>F        g6<0,1,0>F      g2<8,8,1>F      { align1 1H };
-pln.sat(8)      g9<1>F          g5<0,1,0>F      g2<8,8,1>F      { align1 1Q };
-pln.sat(16)     g12<1>F         g7<0,1,0>F      g2<8,8,1>F      { align1 1H };
-pln.g.f0.0(8)   g7<1>F          g4<0,1,0>F      g2<8,8,1>F      { align1 1Q };
-pln.g.f0.0(16)  g11<1>F         g6<0,1,0>F      g2<8,8,1>F      { align1 1H };
-pln.l.f0.0(8)   g8<1>F          g4<0,1,0>F      g2<8,8,1>F      { align1 1Q };
-pln.l.f0.0(16)  g11<1>F         g6<0,1,0>F      g2<8,8,1>F      { align1 1H };
-pln.nz.f0.0(8)  g18<1>F         g5<0,1,0>F      g2<8,8,1>F      { align1 1Q };
-pln.nz.f0.0(16) g14<1>F         g7<0,1,0>F      g2<8,8,1>F      { align1 1H };
+        pln (8)                   r124:f        r4<0>:f           r2<8;8,1>:f
+        pln (16)                  r120:f        r6<0>:f           r2<8;8,1>:f
+        pln.sat (8)               r9:f          r5<0>:f           r2<8;8,1>:f
+        pln.sat (16)              r12:f         r7<0>:f           r2<8;8,1>:f
+        pln (8)        (gt)f0.0   r7:f          r4<0>:f           r2<8;8,1>:f
+        pln (16)       (gt)f0.0   r11:f         r6<0>:f           r2<8;8,1>:f
+        pln (8)        (lt)f0.0   r8:f          r4<0>:f           r2<8;8,1>:f
+        pln (16)       (lt)f0.0   r11:f         r6<0>:f           r2<8;8,1>:f
+        pln (8)        (ne)f0.0   r18:f         r5<0>:f           r2<8;8,1>:f
+        pln (16)       (ne)f0.0   r14:f         r7<0>:f           r2<8;8,1>:f

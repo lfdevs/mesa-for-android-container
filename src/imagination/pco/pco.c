@@ -38,14 +38,18 @@ static void pco_ctx_destructor(UNUSED void *ptr)
  * \brief Allocates and sets up a PCO compiler context.
  *
  * \param[in] dev_info Device info.
+ * \param[in] dev_runtime_info Device runtime info.
  * \param[in] mem_ctx Ralloc memory allocation context.
  * \return The PCO compiler context, or NULL on failure.
  */
-pco_ctx *pco_ctx_create(const struct pvr_device_info *dev_info, void *mem_ctx)
+pco_ctx *pco_ctx_create(const struct pvr_device_info *dev_info,
+                        const struct pvr_device_runtime_info *dev_runtime_info,
+                        void *mem_ctx)
 {
    pco_ctx *ctx = rzalloc_size(mem_ctx, sizeof(*ctx));
 
    ctx->dev_info = dev_info;
+   ctx->dev_runtime_info = dev_runtime_info;
 
    pco_debug_init();
 

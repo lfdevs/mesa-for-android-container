@@ -186,10 +186,6 @@ matrix_ortho(struct gl_matrix_stack* stack,
 {
    GET_CURRENT_CONTEXT(ctx);
 
-   if (MESA_VERBOSE & VERBOSE_API)
-      _mesa_debug(ctx, "%s(%f, %f, %f, %f, %f, %f)\n", caller,
-                  left, right, bottom, top, nearval, farval);
-
    if (left == right ||
        bottom == top ||
        nearval == farval)
@@ -350,10 +346,6 @@ _mesa_PushMatrix( void )
    GET_CURRENT_CONTEXT(ctx);
    struct gl_matrix_stack *stack = ctx->CurrentStack;
 
-   if (MESA_VERBOSE&VERBOSE_API)
-      _mesa_debug(ctx, "glPushMatrix %s\n",
-                  _mesa_enum_to_string(ctx->Transform.MatrixMode));
-
    push_matrix(ctx, stack, ctx->Transform.MatrixMode, "glPushMatrix");
 }
 
@@ -408,10 +400,6 @@ _mesa_PopMatrix( void )
 {
    GET_CURRENT_CONTEXT(ctx);
    struct gl_matrix_stack *stack = ctx->CurrentStack;
-
-   if (MESA_VERBOSE&VERBOSE_API)
-      _mesa_debug(ctx, "glPopMatrix %s\n",
-                  _mesa_enum_to_string(ctx->Transform.MatrixMode));
 
    if (!pop_matrix(ctx, stack)) {
       if (ctx->Transform.MatrixMode == GL_TEXTURE) {
@@ -475,9 +463,6 @@ _mesa_LoadIdentity( void )
 {
    GET_CURRENT_CONTEXT(ctx);
 
-   if (MESA_VERBOSE & VERBOSE_API)
-      _mesa_debug(ctx, "glLoadIdentity()\n");
-
    _mesa_load_identity_matrix(ctx, ctx->CurrentStack);
 }
 
@@ -513,14 +498,6 @@ matrix_load(struct gl_context *ctx, struct gl_matrix_stack *stack,
             const GLfloat *m, const char* caller)
 {
    if (!m) return;
-   if (MESA_VERBOSE & VERBOSE_API)
-      _mesa_debug(ctx,
-          "%s(%f %f %f %f, %f %f %f %f, %f %f %f %f, %f %f %f %f\n",
-          caller,
-          m[0], m[4], m[8], m[12],
-          m[1], m[5], m[9], m[13],
-          m[2], m[6], m[10], m[14],
-          m[3], m[7], m[11], m[15]);
 
    _mesa_load_matrix(ctx, stack, m);
 }
@@ -574,15 +551,6 @@ matrix_mult(struct gl_matrix_stack *stack, const GLfloat *m, const char* caller)
    /* glthread filters out identity matrices, so don't do it again. */
    if (!m || (!ctx->GLThread.enabled && _mesa_matrix_is_identity(m)))
       return;
-
-   if (MESA_VERBOSE & VERBOSE_API)
-      _mesa_debug(ctx,
-          "%s(%f %f %f %f, %f %f %f %f, %f %f %f %f, %f %f %f %f\n",
-          caller,
-          m[0], m[4], m[8], m[12],
-          m[1], m[5], m[9], m[13],
-          m[2], m[6], m[10], m[14],
-          m[3], m[7], m[11], m[15]);
 
    FLUSH_VERTICES(ctx, 0, 0);
    _math_matrix_mul_floats(stack->Top, m);

@@ -77,6 +77,7 @@
 
 
 #include "util/glheader.h"
+#include "util/u_thread.h"
 
 #include "accum.h"
 #include "arrayobj.h"
@@ -860,7 +861,7 @@ _mesa_alloc_dispatch_tables(gl_api api, struct gl_dispatch *d, bool glthread)
          return false;
    }
 
-   d->Current = d->Exec = d->OutsideBeginEnd;
+   d->RealPublished = d->Current = d->Exec = d->OutsideBeginEnd;
    return true;
 }
 
@@ -872,6 +873,22 @@ _mesa_free_dispatch_tables(struct gl_dispatch *d)
    free(d->HWSelectModeBeginEnd);
    free(d->Save);
    free(d->ContextLost);
+}
+
+void
+_mesa_set_dispatch(struct gl_context *ctx, struct _glapi_table *t)
+{
+   /* On the glthread worker, the user-thread wrapper already logged the
+    * call; bypass Trace and don't touch RealPublished (main-thread state).
+    */
+   if (ctx->GLThread.enabled &&
+       u_thread_is_self(ctx->GLThread.queue.threads[0])) {
+      _mesa_glapi_set_dispatch(t);
+      return;
+   }
+
+   ctx->Dispatch.RealPublished = t;
+   _mesa_glapi_set_dispatch(ctx->Dispatch.Trace ? ctx->Dispatch.Trace : t);
 }
 
 bool
@@ -888,6 +905,10 @@ _mesa_initialize_dispatch_tables(struct gl_context *ctx)
       _mesa_init_dispatch_save(ctx);
       _mesa_init_dispatch_save_begin_end(ctx);
    }
+
+   if ((MESA_VERBOSE & VERBOSE_API) &&
+       !_mesa_init_dispatch_trace(ctx))
+      return false;
 
    /* This binds the dispatch table to the context, but MakeCurrent will
     * bind it for the user. If glthread is enabled, it will override it.
@@ -1003,13 +1024,6 @@ _mesa_initialize_context(struct gl_context *ctx,
       ctx->Const.ContextFlags |= GL_CONTEXT_FLAG_NO_ERROR_BIT_KHR;
 
    _mesa_reset_vertex_processing_mode(ctx);
-
-   /* Mesa core handles all the formats that mesa core knows about.
-    * Drivers will want to override this list with just the formats
-    * they can handle.
-    */
-   memset(&ctx->TextureFormatSupported, GL_TRUE,
-          sizeof(ctx->TextureFormatSupported));
 
    switch (ctx->API) {
    case API_OPENGL_COMPAT:
@@ -1408,15 +1422,6 @@ handle_first_current(struct gl_context *ctx)
                                        || (_mesa_is_desktop_gl_compat(ctx)
                                            && !is_forward_compatible_context));
    }
-
-   /* We can use this to help debug user's problems.  Tell them to set
-    * the MESA_INFO env variable before running their app.  Then the
-    * first time each context is made current we'll print some useful
-    * information.
-    */
-   if (os_get_option("MESA_INFO")) {
-      _mesa_print_info(ctx);
-   }
 }
 
 /**
@@ -1439,9 +1444,6 @@ _mesa_make_current( struct gl_context *newCtx,
                     struct gl_framebuffer *readBuffer )
 {
    GET_CURRENT_CONTEXT(curCtx);
-
-   if (MESA_VERBOSE & VERBOSE_API)
-      _mesa_debug(newCtx, "_mesa_make_current()\n");
 
    /* Check that the context's and framebuffer's visuals are compatible.
     */
@@ -1487,7 +1489,7 @@ _mesa_make_current( struct gl_context *newCtx,
    else {
       _mesa_glapi_set_context((void *) newCtx);
       assert(_mesa_get_current_context() == newCtx);
-      _mesa_glapi_set_dispatch(newCtx->GLApi);
+      _mesa_set_dispatch(newCtx, newCtx->GLApi);
 
       if (drawBuffer && readBuffer) {
          assert(_mesa_is_winsys_fbo(drawBuffer));

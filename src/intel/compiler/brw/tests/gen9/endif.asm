@@ -1,4 +1,4 @@
-endif(8)        JIP: LABEL0                                     { align1 1Q };
-endif(16)       JIP: LABEL0                                     { align1 1H };
-endif(32)       JIP: LABEL0                                     { align1 };
-LABEL0:
+        endif (8)                             L0
+        endif (16)                            L0
+        endif (32)                            L0
+L0:

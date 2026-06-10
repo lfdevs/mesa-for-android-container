@@ -78,10 +78,9 @@ nvk_meta_begin(struct nvk_cmd_buffer *cmd,
 {
    const struct nvk_descriptor_state *desc = &cmd->state.gfx.descriptors;
 
-   struct nv_push *p = nvk_cmd_buffer_push(cmd, 6);
-
+   struct nv_push *p = nvk_cmd_buffer_push(cmd, 10);
+   P_IMMD(p, NV9097, SET_MME_SHADOW_RAM_CONTROL, MODE_METHOD_PASSTHROUGH);
    P_IMMD(p, NV9097, SET_RENDER_ENABLE_OVERRIDE, MODE_ALWAYS_RENDER);
-
    P_IMMD(p, NV9097, SET_STATISTICS_COUNTER, {
       .da_vertices_generated_enable = false,
       .da_primitives_generated_enable = false,
@@ -99,8 +98,8 @@ nvk_meta_begin(struct nvk_cmd_buffer *cmd,
       .total_streaming_primitives_needed_succeeded_enable = false,
       .vtg_primitives_out_enable = false,
    });
-
-   P_IMMD(p, NV9097, SET_ZPASS_PIXEL_COUNT, false);
+   P_IMMD(p, NV9097, SET_ZPASS_PIXEL_COUNT, ENABLE_FALSE);
+   P_IMMD(p, NV9097, SET_MME_SHADOW_RAM_CONTROL, MODE_METHOD_TRACK_WITH_FILTER);
 
    save->dynamic = cmd->vk.dynamic_graphics_state;
    save->_dynamic_vi = cmd->state.gfx._dynamic_vi;
@@ -189,29 +188,13 @@ nvk_meta_end(struct nvk_cmd_buffer *cmd,
    nvk_descriptor_state_set_root_array(cmd, desc, push, 0, sizeof(save->push),
                                        save->push);
 
-   struct nv_push *p = nvk_cmd_buffer_push(cmd, 6);
-
-   P_IMMD(p, NV9097, SET_ZPASS_PIXEL_COUNT, true);
-
-   P_IMMD(p, NV9097, SET_STATISTICS_COUNTER, {
-      .da_vertices_generated_enable = true,
-      .da_primitives_generated_enable = true,
-      .vs_invocations_enable = true,
-      .gs_invocations_enable = true,
-      .gs_primitives_generated_enable = true,
-      .streaming_primitives_succeeded_enable = true,
-      .streaming_primitives_needed_enable = true,
-      .clipper_invocations_enable = true,
-      .clipper_primitives_generated_enable = true,
-      .ps_invocations_enable = true,
-      .ti_invocations_enable = true,
-      .ts_invocations_enable = true,
-      .ts_primitives_generated_enable = true,
-      .total_streaming_primitives_needed_succeeded_enable = true,
-      .vtg_primitives_out_enable = true,
-   });
-
+   /* Replay the previous state from shadow RAM */
+   struct nv_push *p = nvk_cmd_buffer_push(cmd, 10);
+   P_IMMD(p, NV9097, SET_MME_SHADOW_RAM_CONTROL, MODE_METHOD_REPLAY);
+   P_IMMD(p, NV9097, SET_ZPASS_PIXEL_COUNT, ENABLE_FALSE);
+   P_IMMD(p, NV9097, SET_STATISTICS_COUNTER, {});
    P_IMMD(p, NV9097, SET_RENDER_ENABLE_OVERRIDE, MODE_USE_RENDER_ENABLE);
+   P_IMMD(p, NV9097, SET_MME_SHADOW_RAM_CONTROL, MODE_METHOD_TRACK_WITH_FILTER);
 }
 
 VKAPI_ATTR void VKAPI_CALL

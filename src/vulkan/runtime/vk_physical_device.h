@@ -23,8 +23,11 @@
 #ifndef VK_PHYSICAL_DEVICE_H
 #define VK_PHYSICAL_DEVICE_H
 
+#include <stdbool.h>
+
 #include "vk_dispatch_table.h"
 #include "vk_extensions.h"
+#include "vk_log.h"
 #include "vk_object.h"
 #include "vk_physical_device_features.h"
 #include "vk_physical_device_properties.h"
@@ -32,6 +35,7 @@
 #include "compiler/spirv/spirv_info.h"
 
 #include "util/list.h"
+#include "util/os_misc.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -149,6 +153,71 @@ vk_physical_device_check_device_features(struct vk_physical_device *physical_dev
 
 struct spirv_capabilities
 vk_physical_device_get_spirv_capabilities(const struct vk_physical_device *pdev);
+
+/** Calculate GPU heap budget based on the provided available memory
+ *
+ * :param available_memory:  |in| Total available memory
+ * :param available_percent: |in| Percentage to apply to the available memory
+ * :param heap_size:         |in| Size of the system memory exposed as a GPU
+ *                                heap
+ * :param used:              |in| Heap memory used up. Can be `0` if the driver
+ *                                doesn't track allocations and relies on just
+ *                                the available system memory
+ */
+static inline uint64_t
+vk_physical_device_heap_budget(uint64_t available_memory,
+                               float available_percent,
+                               uint64_t heap_size,
+                               uint64_t used)
+{
+   available_memory *= available_percent;
+
+   /* From the Vulkan 1.3.278 spec:
+    *
+    *    "heapBudget is an array of VK_MAX_MEMORY_HEAPS VkDeviceSize
+    *    values in which memory budgets are returned, with one
+    *    element for each memory heap. A heap’s budget is a rough
+    *    estimate of how much memory the process can allocate from
+    *    that heap before allocations may fail or cause performance
+    *    degradation. The budget includes any currently allocated
+    *    device memory."
+    *
+    * and
+    *
+    *    "The heapBudget value must be less than or equal to
+    *    VkMemoryHeap::size for each heap."
+    *
+    * available (queried above) is the total amount free memory
+    * system-wide and does not include our allocations so we need
+    * to add that in.
+    */
+   available_memory += used;
+   available_memory = MIN2(heap_size, available_memory);
+
+   return ROUND_DOWN_TO(available_memory, 1 << 20);
+}
+
+static inline uint64_t
+vk_physical_device_heap_budget_from_system(struct vk_physical_device *physical_device,
+                                           float available_percent,
+                                           uint64_t heap_size,
+                                           uint64_t used)
+{
+   uint64_t available_memory;
+
+   const bool success = os_get_available_system_memory(&available_memory);
+   if (!success) {
+      const void *log_objs[] = { (const void *)physical_device };
+      __vk_log(VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT,
+               VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT,
+               1, log_objs, __FILE__, __LINE__,
+               "Failed to query available system memory");
+      return 0;
+   }
+
+   return vk_physical_device_heap_budget(available_memory, available_percent,
+                                         heap_size, used);
+}
 
 #ifdef __cplusplus
 }

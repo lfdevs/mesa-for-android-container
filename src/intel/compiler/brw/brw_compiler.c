@@ -29,6 +29,8 @@ const struct nir_shader_compiler_options brw_scalar_nir_options = {
    .has_pack_32_4x8 = true,
    .has_uclz = true,
    .has_pixel_coord = true,
+   .float_mul_add16 = nir_float_muladd_support_has_ffma,
+   .float_mul_add32 = nir_float_muladd_support_has_ffma,
    .lower_base_vertex = true,
    .lower_bitfield_extract = true,
    .lower_bitfield_extract8 = true,
@@ -206,6 +208,7 @@ brw_compiler_create(void *mem_ctx, const struct intel_device_info *devinfo)
       stage_options->force_indirect_unrolling |= brw_nir_no_indirect_mask(i);
       stage_options->has_find_msb_rev = jay;
       stage_options->lower_ifind_msb = jay;
+      stage_options->avoid_ternary_with_two_constants = !jay;
    }
 
    /* Build a list of storage format compatible in component bit size &
@@ -365,7 +368,7 @@ brw_write_shader_relocs(const struct brw_isa_info *isa,
                *(uint32_t *)dst = value;
                break;
             case INTEL_SHADER_RELOC_TYPE_MOV_IMM:
-               brw_update_reloc_imm(isa, dst, value);
+               gen_update_reloc_imm(isa->devinfo, dst, value);
                break;
             default:
                UNREACHABLE("Invalid relocation type");

@@ -18,12 +18,12 @@ devices = { lvp = { checksum = "555efa5bcc89a638ed58df874aa13d0727bc7e798bfd9b42
 [[traces]]
 path = "unigine/heaven-scene1-low-d3d11.trace-dxgi"
 nonloopable = true
-devices = { lvp = { checksum = "677a16bd71e309d6de1669c23dff262392da52252e4728b819e887dfedabec89" } }
+devices = { lvp = { checksum = "9ab7ad92594c3ec45ebdea32c28f21c3b5f05518d56468be53ecd31fb4c2e2e8" } }
 
 [[traces]]
 path = "unigine/heaven-scene1-ultra-d3d11.trace-dxgi"
 nonloopable = true
-devices = { lvp = { checksum = "348c4c0edefb518a373fd971c64d359730731367133413ab91beebaac273ee71" } }
+devices = { lvp = { checksum = "aa114d950a0f32ea729e71c772b704f5b2d4b5063c7ab3a44c7a919b32d52066" } }
 
 [[traces]]
 path = "unigine/heaven-scene12-low-d3d9.trace-dxgi"
@@ -33,8 +33,8 @@ devices = { lvp = { checksum = "9f6586cd18b7add22d8d17b283b03e0e669b5cbcb3199d2c
 [[traces]]
 path = "unigine/heaven-scene12-ultra-d3d11.trace-dxgi"
 nonloopable = true
-devices = { lvp = { checksum = "95c5d1f7d1fae05f5e535f445f6f5b2b4b6efa9cafb717edfb38acbf4cb97134" } }
+devices = { lvp = { checksum = "e742c05cdabcbaa634fe2607b642fbd16edc944e820009271fd70edd7ace46dd" } }
 
 [[traces]]
 path = "./LunarG-VulkanSamples/amd/polaris10/Hologram:-w:640:-h:480.gfxr"
-devices = { lvp = { checksum = "bb58e7dda75590080b338911de972168933155c6efa9fab8b088d139b4d3ae6e" } }
+devices = { lvp = { checksum = "13a59c0dc941b1ef954d6b55b43bc458791c41fd7056d98a1f5bb9bb74b9e0a6" } }

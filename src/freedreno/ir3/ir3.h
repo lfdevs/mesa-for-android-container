@@ -885,6 +885,9 @@ unsigned ir3_get_reg_dependent_max_waves(const struct ir3_compiler *compiler,
 unsigned ir3_get_reg_independent_max_waves(struct ir3_shader_variant *v,
                                            bool double_threadsize);
 
+unsigned ir3_get_min_reg_count(const struct ir3_shader_variant *v,
+                               bool double_threadsize);
+
 bool ir3_should_double_threadsize(struct ir3_shader_variant *v,
                                   unsigned regs_count);
 
@@ -2140,7 +2143,7 @@ needs_ss(const struct ir3_compiler *compiler, struct ir3_instruction *producer,
 static inline bool
 supports_ss(struct ir3_instruction *instr)
 {
-   return opc_cat(instr->opc) < 5 || instr->opc == OPC_ALIAS;
+   return opc_cat(instr->opc) < 5 || opc_cat(instr->opc) == 7;
 }
 
 /* The soft delay for approximating the cost of (ss). */

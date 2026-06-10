@@ -56,10 +56,12 @@ lower_ldcx_to_global(nir_builder *b, nir_intrinsic_instr *load,
     * simple less-than check here.
     */
    nir_def *cond = nir_ilt(b, offset, size);
+   nir_def *zero_addr = nir_imm_zero(b, addr->num_components,
+                                        addr->bit_size);
    nir_def *val = nir_load_global_nv(b,
       load->def.num_components, load->def.bit_size,
       nir_iadd(b, addr, nir_u2u64(b, offset)),
-      cond,
+      zero_addr, cond,
       .align_mul = nir_intrinsic_align_mul(load),
       .align_offset = nir_intrinsic_align_offset(load),
       .access = ACCESS_CAN_REORDER,

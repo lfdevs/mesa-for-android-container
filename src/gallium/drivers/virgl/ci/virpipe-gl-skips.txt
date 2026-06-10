@@ -21,4 +21,3 @@ spec@ext_framebuffer_object@fbo-blending-formats
 
 # uprev Piglit in Mesa
 spec@egl_ext_protected_content@conformance
-

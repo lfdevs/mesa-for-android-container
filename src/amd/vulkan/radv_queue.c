@@ -9,14 +9,14 @@
  */
 
 #include "radv_queue.h"
+#include "tools/radv_debug_hang.h"
+#include "tools/radv_debug_nir.h"
+#include "tools/radv_rmv.h"
 #include "radv_buffer.h"
 #include "radv_cp_reg_shadowing.h"
 #include "radv_cs.h"
-#include "radv_debug.h"
-#include "radv_debug_nir.h"
 #include "radv_device_memory.h"
 #include "radv_image.h"
-#include "radv_rmv.h"
 #include "vk_semaphore.h"
 #include "vk_sync.h"
 
@@ -1060,6 +1060,9 @@ radv_update_preamble_cs(struct radv_queue_state *queue, struct radv_device *devi
             radeon_end();
          }
 
+         if (mesh_scratch_ring_bo)
+            radv_cs_add_buffer(device->ws, cs->b, mesh_scratch_ring_bo);
+
          radv_emit_gs_ring_sizes(device, cs, esgs_ring_bo, needs->esgs_ring_size, gsvs_ring_bo, needs->gsvs_ring_size);
          radv_emit_tess_factor_ring(device, cs, tess_rings_bo);
          radv_emit_task_rings(device, cs, task_rings_bo, false);
@@ -1383,15 +1386,15 @@ radv_create_gang_wait_preambles_postambles(struct radv_queue *queue)
    if (r != VK_SUCCESS)
       goto fail;
 
-   radv_create_cmd_stream(device, ip, false, &leader_post_cs);
+   r = radv_create_cmd_stream(device, ip, false, &leader_post_cs);
    if (r != VK_SUCCESS)
       goto fail;
 
-   radv_create_cmd_stream(device, AMD_IP_COMPUTE, false, &ace_pre_cs);
+   r = radv_create_cmd_stream(device, AMD_IP_COMPUTE, false, &ace_pre_cs);
    if (r != VK_SUCCESS)
       goto fail;
 
-   radv_create_cmd_stream(device, AMD_IP_COMPUTE, false, &ace_post_cs);
+   r = radv_create_cmd_stream(device, AMD_IP_COMPUTE, false, &ace_post_cs);
    if (r != VK_SUCCESS)
       goto fail;
 
@@ -1789,7 +1792,7 @@ radv_queue_submit_normal(struct radv_queue *queue, struct vk_queue_submit *submi
 
    queue->last_shader_upload_seq = MAX2(queue->last_shader_upload_seq, shader_upload_seq);
 
-   radv_dump_printf_data(device, stderr);
+   radv_dump_printf_data(device, stderr, true);
 
 fail:
    free(cs_array);

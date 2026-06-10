@@ -19,9 +19,9 @@ static const nir_shader_compiler_options options = {
    .lower_fmod = true,
    .lower_fdiv = true,
    .lower_fceil = true,
-   .fuse_ffma16 = true,
-   .fuse_ffma32 = true,
-   .fuse_ffma64 = true,
+   .float_mul_add16 = nir_float_muladd_support_has_fmad | nir_float_muladd_support_fuse,
+   .float_mul_add32 = nir_float_muladd_support_has_fmad | nir_float_muladd_support_fuse,
+   .float_mul_add64 = nir_float_muladd_support_has_fmad | nir_float_muladd_support_fuse,
    /* .fdot_replicates = true, it is replicated, but it makes things worse */
    .vertex_id_zero_based = true, /* its not implemented anyway */
    .lower_bitops = true,
@@ -309,7 +309,7 @@ instr_create_alu(struct ir2_context *ctx, nir_op opcode, unsigned ncomp)
       [nir_op_fadd] = {ADDs, ADDv},
       [nir_op_fsub] = {ADDs, ADDv},
       [nir_op_fmul] = {MULs, MULv},
-      [nir_op_ffma] = {-1, MULADDv},
+      [nir_op_fmad] = {-1, MULADDv},
       [nir_op_fmax] = {MAXs, MAXv},
       [nir_op_fmin] = {MINs, MINv},
       [nir_op_ffloor] = {FLOORs, FLOORv},
@@ -748,7 +748,7 @@ emit_tex(struct ir2_context *ctx, nir_tex_instr *tex)
       rcp->src[0] = ir2_src(reg_idx, IR2_SWIZZLE_Z, IR2_SRC_REG);
       rcp->src[0].abs = true;
 
-      coord_xy = instr_create_alu_reg(ctx, nir_op_ffma, 3, instr);
+      coord_xy = instr_create_alu_reg(ctx, nir_op_fmad, 3, instr);
       coord_xy->src[0] = ir2_src(reg_idx, 0, IR2_SRC_REG);
       coord_xy->src[1] = ir2_src(rcp->idx, IR2_SWIZZLE_XXXX, IR2_SRC_SSA);
       coord_xy->src[2] = load_const(ctx, (float[]){1.5f}, 1);
@@ -868,7 +868,7 @@ extra_position_exports(struct ir2_context *ctx, bool binning)
    sc->src[0] = ctx->position;
    sc->src[1] = ir2_src(rcp->idx, IR2_SWIZZLE_XXXX, IR2_SRC_SSA);
 
-   wincoord = instr_create_alu(ctx, nir_op_ffma, 4);
+   wincoord = instr_create_alu(ctx, nir_op_fmad, 4);
    wincoord->src[0] = ir2_src(66, 0, IR2_SRC_CONST);
    wincoord->src[1] = ir2_src(sc->idx, 0, IR2_SRC_SSA);
    wincoord->src[2] = ir2_src(65, 0, IR2_SRC_CONST);
@@ -895,13 +895,13 @@ extra_position_exports(struct ir2_context *ctx, bool binning)
 
    /* 8 max set in freedreno_screen.. unneeded instrs patched out */
    for (int i = 0; i < 8; i++) {
-      instr = instr_create_alu(ctx, nir_op_ffma, 4);
+      instr = instr_create_alu(ctx, nir_op_fmad, 4);
       instr->src[0] = ir2_src(1, IR2_SWIZZLE_WYWW, IR2_SRC_CONST);
       instr->src[1] = ir2_src(off->idx, IR2_SWIZZLE_XXXX, IR2_SRC_SSA);
       instr->src[2] = ir2_src(3 + i, 0, IR2_SRC_CONST);
       instr->alu.export = 32;
 
-      instr = instr_create_alu(ctx, nir_op_ffma, 4);
+      instr = instr_create_alu(ctx, nir_op_fmad, 4);
       instr->src[0] = ir2_src(68 + i * 2, 0, IR2_SRC_CONST);
       instr->src[1] = ir2_src(wincoord->idx, 0, IR2_SRC_SSA);
       instr->src[2] = ir2_src(67 + i * 2, 0, IR2_SRC_CONST);

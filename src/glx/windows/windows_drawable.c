@@ -27,6 +27,7 @@
 #include "wgl.h"
 
 #include <stdio.h>
+#include <stdbool.h>
 
 /*
  * Window drawable

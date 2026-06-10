@@ -122,8 +122,10 @@ init_options()
 {
    const char *driver_name = stw_dev->stw_winsys->get_name ? stw_dev->stw_winsys->get_name() : NULL;
    driParseOptionInfo(&stw_dev->option_info, gallium_driconf, ARRAY_SIZE(gallium_driconf));
-   driParseConfigFiles(&stw_dev->option_cache, &stw_dev->option_info, 0,
-      driver_name ? driver_name : "", NULL, NULL, NULL, 0, NULL, 0);
+   driParseConfigFiles(&stw_dev->option_cache, &stw_dev->option_info,
+                       &(driConfigFileParseParams) {
+                          .driverName = driver_name ? driver_name : "",
+                       });
    
    u_driconf_fill_st_options(&stw_dev->st_options, &stw_dev->option_cache);
 

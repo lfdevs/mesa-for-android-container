@@ -550,7 +550,7 @@ panvk_per_arch(create_device)(struct panvk_physical_device *physical_device,
       goto err_free_precomp;
    }
 
-#if PAN_ARCH >= 10
+#if PAN_ARCH >= 10 && PAN_ARCH < 14
    result = panvk_per_arch(device_draw_context_init)(device);
    if (result != VK_SUCCESS)
       goto err_free_mem_cache;
@@ -616,7 +616,7 @@ err_finish_queues:
    panvk_meta_cleanup(device);
 
 err_free_draw_ctx:
-#if PAN_ARCH >= 10
+#if PAN_ARCH >= 10 && PAN_ARCH < 14
    panvk_per_arch(device_draw_context_cleanup)(device);
 err_free_mem_cache:
 #endif
@@ -679,7 +679,7 @@ panvk_per_arch(destroy_device)(struct panvk_device *device,
    }
 
    panvk_precomp_cleanup(device);
-#if PAN_ARCH >= 10
+#if PAN_ARCH >= 10 && PAN_ARCH < 14
    panvk_per_arch(device_draw_context_cleanup)(device);
 #endif
    panvk_meta_cleanup(device);

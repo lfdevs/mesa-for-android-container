@@ -10,7 +10,6 @@
 #include "util/ralloc.h"
 #include "util/sparse_bitset.h"
 #include "util/u_dynarray.h"
-#include "util/u_math.h"
 #include "util/u_qsort.h"
 #include "util/u_worklist.h"
 #include "jay_builder.h"
@@ -476,26 +475,20 @@ min_algorithm(struct spill_ctx *ctx,
       /* Any source that is not in W needs to be reloaded. Gather the set R of
        * such values, and add them to the register file.
        */
-      unsigned R[JAY_MAX_SRCS], nR = 0;
+      unsigned R[JAY_MAX_SRCS * JAY_MAX_DEF_LENGTH], nR = 0;
 
       jay_foreach_src_index(I, s, c, v) {
          if (I->src[s].file == GPR && !u_sparse_bitset_test(&ctx->W, v)) {
+            assert(nR < ARRAY_SIZE(R) && "maximum source count");
+            assert(u_sparse_bitset_test(&ctx->S, v) && "must have spilled");
+
             R[nR++] = v;
             insert_W(ctx, v);
-
-            assert(u_sparse_bitset_test(&ctx->S, v) && "must have spilled");
-            assert(nR <= ARRAY_SIZE(R) && "maximum source count");
          }
       }
 
-      /* Limit W to make space for the operands.
-       *
-       * We need to round up to power-of-two destination sizes to match the
-       * rounding in demand calculation.
-       */
-      bool has_dst = I->dst.file == GPR;
-      unsigned dst_size = util_next_power_of_two(jay_num_values(I->dst));
-      limit(ctx, I, ctx->k - (has_dst ? dst_size : 0));
+      /* Limit W to make space for the operands. */
+      limit(ctx, I, ctx->k - (I->dst.file == GPR ? jay_num_values(I->dst) : 0));
 
       /* Add destinations to the register file */
       if (I->dst.file == GPR) {

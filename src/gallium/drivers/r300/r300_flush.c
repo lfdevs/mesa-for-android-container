@@ -29,6 +29,15 @@ static void r300_flush_and_cleanup(struct r300_context *r300, unsigned flags,
     /* The DDX doesn't set these regs. */
     {
         CS_LOCALS(r300);
+        if (!r300->screen->caps.has_tcl && r300->screen->caps.has_hardware_tcl) {
+            /* Clear only the TCL bypass semantic while preserving the
+             * platform's normal VAP byte-swap mode. */
+#if UTIL_ARCH_LITTLE_ENDIAN
+            OUT_CS_REG(R300_VAP_CNTL_STATUS, R300_VC_NO_SWAP);
+#else
+            OUT_CS_REG(R300_VAP_CNTL_STATUS, R300_VC_32BIT_SWAP);
+#endif
+        }
         OUT_CS_REG_SEQ(R300_GB_MSPOS0, 2);
         OUT_CS(0x66666666);
         OUT_CS(0x6666666);

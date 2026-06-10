@@ -13,7 +13,6 @@
 #include "radv_physical_device.h"
 
 #if DETECT_OS_ANDROID
-#include <libsync.h>
 #include <vulkan/vk_android_native_buffer.h>
 #endif /* DETECT_OS_ANDROID */
 
@@ -37,18 +36,17 @@ radv_image_from_gralloc(VkDevice device_h, const VkImageCreateInfo *base_info,
    struct radv_image *image = NULL;
    VkResult result;
 
-   if (gralloc_info->handle->numFds < 1) {
-      return vk_errorf(device, VK_ERROR_INVALID_EXTERNAL_HANDLE,
-                       "VkNativeBufferANDROID::handle::numFds is %d, "
-                       "expected >= 1",
-                       gralloc_info->handle->numFds);
-   }
-
-   /* Do not close the gralloc handle's dma_buf. The lifetime of the dma_buf
+   /* 1) handle->numFds is about the number of plane(s) and metadata(optional) fd in a
+    * gralloc buf handle. amdgpu backend of gralloc should make sure all plane bufs
+    * in same dma_buf fd but different offset. Meanwhile, metadata fd is not necessary
+    * till radv needs to support U_GRALLOC_TYPE_GRALLOC4 or higher version GRALLOC.
+    *
+    * 2) Do not close the gralloc handle's dma_buf. The lifetime of the dma_buf
     * must exceed that of the gralloc handle, and we do not own the gralloc
     * handle.
     */
    int dma_buf = gralloc_info->handle->data[0];
+   assert(dma_buf >= 0);
 
    VkDeviceMemory memory_h;
 

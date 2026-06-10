@@ -250,3 +250,16 @@ index_size_in_bytes_to_mtl_index_type(unsigned bytes)
       UNREACHABLE("Unsupported byte size for index");
    }
 }
+
+unsigned
+mtl_index_type_to_size_B(enum mtl_index_type type)
+{
+   switch (type) {
+   case MTL_INDEX_TYPE_UINT16:
+      return 2u;
+   case MTL_INDEX_TYPE_UINT32:
+      return 4u;
+   default:
+      UNREACHABLE("Unhandled index type");
+   }
+}

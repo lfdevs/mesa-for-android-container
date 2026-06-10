@@ -62,6 +62,9 @@ before_conversion(nir_builder *bld, nir_alu_type type, unsigned bit_size, nir_de
    case nir_op_ishl:
    case nir_op_isub:
    case nir_op_ixor:
+   case nir_op_inot:
+   case nir_op_bcsel:
+   case nir_op_bitfield_select:
    case nir_op_mov:
       break;
    default:
@@ -88,6 +91,7 @@ lower_alu_instr(nir_builder *bld, nir_alu_instr *alu, unsigned bit_size)
    unsigned dst_bit_size = alu->def.bit_size;
 
    bld->cursor = nir_before_instr(&alu->instr);
+   bld->fp_math_ctrl = alu->fp_math_ctrl;
 
    /* Convert each source to the requested bit-size */
    nir_def *srcs[NIR_MAX_VEC_COMPONENTS] = { NULL };
@@ -168,9 +172,9 @@ lower_alu_instr(nir_builder *bld, nir_alu_instr *alu, unsigned bit_size)
        dst_bit_size != bit_size) {
       nir_alu_type type = nir_op_infos[op].output_type;
       nir_def *dst = nir_convert_to_bit_size(bld, lowered_dst, type, dst_bit_size);
-      nir_def_rewrite_uses(&alu->def, dst);
+      nir_def_replace(&alu->def, dst);
    } else {
-      nir_def_rewrite_uses(&alu->def, lowered_dst);
+      nir_def_replace(&alu->def, lowered_dst);
    }
 }
 
@@ -268,7 +272,7 @@ lower_intrinsic_instr(nir_builder *b, nir_intrinsic_instr *intrin,
 
       res = nir_convert_to_bit_size(b, res, type, old_bit_size);
 
-      nir_def_rewrite_uses(&intrin->def, res);
+      nir_def_replace(&intrin->def, res);
       break;
    }
 
@@ -323,6 +327,7 @@ lower_impl(nir_function_impl *impl,
            void *callback_data)
 {
    nir_builder b = nir_builder_create(impl);
+   b.constant_fold_alu = true;
    bool progress = false;
 
    nir_foreach_block(block, impl) {

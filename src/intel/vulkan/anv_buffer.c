@@ -91,7 +91,7 @@ anv_get_buffer_memory_requirements(struct anv_device *device,
       memory_types = device->physical->memory.protected_mem_types;
    else if (need_dynamic_visible_buffer)
       memory_types = device->physical->memory.dynamic_visible_mem_types;
-   else if (device->physical->instance->enable_buffer_comp)
+   else if (device->physical->instance->drirc.debug.enable_buffer_comp)
       memory_types = device->physical->memory.default_buffer_mem_types |
                      device->physical->memory.compressed_mem_types;
    else

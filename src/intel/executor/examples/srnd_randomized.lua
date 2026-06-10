@@ -15,20 +15,20 @@ for i = 0, N-1 do
 end
 
 src = [[
-  @id        g10
-  @mov       g20 ]] .. F32_VALUE .. [[
+  @id        r10
+  @mov       r20 ]] .. F32_VALUE .. [[
 
 ]]
 
 for i = 0, (N/16)-1 do
   src = src .. [[
-    @read      g30        g10
-    @mov       g40        0
-    srnd(16)   g40<2>HF   g20<1,1,0>F   g30<1,1,0>F   {nomask};
+    @read      r30        r10
+    @mov       r40        0
+    (W) srnd (16) r40<2>:hf r20:f r30:f {A@1}
 
-    // Change g30 to g40 to see the random values.
-    @write     g10        g40
-    add(16)    g10<1>UD   g10<1,1,0>UD  0x10UD        {A@1};
+    // Change r30 to r40 to see the random values.
+    @write     r10        r40
+    add (16) r10 r10 0x10 {A@1}
   ]]
 end
 

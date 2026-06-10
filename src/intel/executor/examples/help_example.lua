@@ -3,14 +3,14 @@
 local r = execute {
   data={ [42] = 0x100 },
   src=[[
-    @mov     g1      42
-    @read    g2      g1
+    @mov     r1      42
+    @read    r2      r1
 
-    @id      g3
+    @id      r3
 
-    add(8)   g4<1>UD  g2<8,8,1>UD  g3<8,8,1>UD  { align1 @1 1Q };
+    add (8)  r4      r2      r3      {A@1}
 
-    @write   g3       g4
+    @write   r3       r4
     @eot
   ]]
 }

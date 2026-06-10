@@ -3003,7 +3003,6 @@ agx_launch_internal(struct agx_batch *batch, struct agx_grid grid,
    struct agx_context *ctx = batch->ctx;
    struct agx_device *dev = agx_device(ctx->base.screen);
 
-   /* TODO: Ensure space if we allow multiple kernels in a batch */
    uint32_t *out = (uint32_t *)batch->cdm.current;
 
    out = agx_cdm_launch(out, dev->chip, grid, wg, launch, usc);
@@ -3012,6 +3011,19 @@ agx_launch_internal(struct agx_batch *batch, struct agx_grid grid,
    batch->cdm.current = (void *)out;
    assert(batch->cdm.current <= batch->cdm.end &&
           "Failed to reserve sufficient space in encoder");
+
+   /* If the next dispatch might overflow, flush now. TODO: If this is ever hit
+    * in practice, we can use CDM stream links.
+    */
+   size_t dispatch_upper_bound =
+      AGX_CDM_LAUNCH_WORD_0_LENGTH + AGX_CDM_LAUNCH_WORD_1_LENGTH +
+      AGX_CDM_UNK_G14X_LENGTH + AGX_CDM_INDIRECT_LENGTH +
+      AGX_CDM_GLOBAL_SIZE_LENGTH + AGX_CDM_LOCAL_SIZE_LENGTH +
+      AGX_CDM_BARRIER_LENGTH;
+
+   if (batch->cdm.current + dispatch_upper_bound >= batch->cdm.end)
+      agx_flush_batch_for_reason(ctx, batch, "CDM overfull");
+
 }
 
 void
@@ -5408,18 +5420,6 @@ agx_launch_grid(struct pipe_context *pipe, const struct pipe_grid_info *info)
    agx_dirty_all(ctx);
 
    batch->uniforms.tables[AGX_SYSVAL_TABLE_GRID] = 0;
-
-   /* If the next dispatch might overflow, flush now. TODO: If this is ever hit
-    * in practice, we can use CDM stream links.
-    */
-   size_t dispatch_upper_bound =
-      AGX_CDM_LAUNCH_WORD_0_LENGTH + AGX_CDM_LAUNCH_WORD_1_LENGTH +
-      AGX_CDM_UNK_G14X_LENGTH + AGX_CDM_INDIRECT_LENGTH +
-      AGX_CDM_GLOBAL_SIZE_LENGTH + AGX_CDM_LOCAL_SIZE_LENGTH +
-      AGX_CDM_BARRIER_LENGTH;
-
-   if (batch->cdm.current + dispatch_upper_bound >= batch->cdm.end)
-      agx_flush_batch_for_reason(ctx, batch, "CDM overfull");
 }
 
 static void

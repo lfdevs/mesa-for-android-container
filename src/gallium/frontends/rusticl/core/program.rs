@@ -7,6 +7,7 @@ use crate::core::context::*;
 use crate::core::device::*;
 use crate::core::kernel::*;
 use crate::core::platform::Platform;
+use crate::core::version::CLVersion;
 use crate::impl_cl_type_trait;
 
 use mesa_rust::compiler::clc::spirv::SPIRVBin;
@@ -14,11 +15,15 @@ use mesa_rust::compiler::clc::*;
 use mesa_rust::compiler::nir::*;
 use mesa_rust::util::disk_cache::*;
 use mesa_rust_gen::*;
+use mesa_rust_util::string::CStrExt;
+use mesa_rust_util::string::CStringExt;
+use mesa_rust_util::string::Join;
 use rusticl_llvm_gen::*;
 use rusticl_opencl_gen::*;
 
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::ffi::CStr;
 use std::ffi::CString;
 use std::ptr::addr_of;
 use std::slice;
@@ -95,13 +100,13 @@ impl_cl_type_trait!(cl_program, Program, CL_INVALID_PROGRAM);
 
 pub struct ProgramBuild {
     pub builds_by_device: HashMap<&'static Device, DeviceProgramBuild>,
-    pub kernel_info: HashMap<String, Arc<KernelInfo>>,
+    pub kernel_info: HashMap<CString, Arc<KernelInfo>>,
     spec_constants: HashMap<u32, Vec<u8>>,
-    kernels: Vec<String>,
+    kernels: Vec<CString>,
 }
 
 impl ProgramBuild {
-    fn args(&self, dev: &Device, kernel: &str) -> Option<Vec<spirv::SPIRVKernelArg>> {
+    fn args(&self, dev: &Device, kernel: &CStr) -> Option<Vec<spirv::SPIRVKernelArg>> {
         self.dev_build(dev).spirv.as_ref().map(|s| s.args(kernel))
     }
 
@@ -137,14 +142,24 @@ impl ProgramBuild {
                     continue;
                 }
 
-                let build_result =
-                    convert_spirv_to_nir(build, kernel_name, &args, &mut self.spec_constants, dev);
+                let Some(build_result) =
+                    convert_spirv_to_nir(build, kernel_name, &args, &mut self.spec_constants, dev)
+                else {
+                    build.status = CL_BUILD_ERROR;
+                    build.log = c"Internal compilation error".to_owned();
+                    return;
+                };
                 kernel_info_set.insert(build_result.kernel_info);
 
                 self.builds_by_device.get_mut(dev).unwrap().kernels.insert(
                     kernel_name.clone(),
                     Arc::new(build_result.nir_kernel_builds),
                 );
+            }
+
+            // If all devices failed to rebuilt their kernels we simply return here.
+            if kernel_info_set.is_empty() {
+                return;
             }
 
             // we want the same (internal) args for every compiled kernel, for now
@@ -170,12 +185,20 @@ impl ProgramBuild {
         self.builds_by_device.get_mut(dev).unwrap()
     }
 
-    pub fn kernels(&self) -> &[String] {
+    pub fn kernels(&self) -> &[CString] {
         &self.kernels
     }
 
     pub fn has_successful_build(&self) -> bool {
         self.builds_by_device.values().any(|b| b.is_success())
+    }
+
+    pub fn options(&self, dev: &Device) -> &CStr {
+        &self.dev_build(dev).options.raw_string
+    }
+
+    pub fn log(&self, dev: &Device) -> &CStr {
+        &self.dev_build(dev).log
     }
 }
 
@@ -183,17 +206,17 @@ impl ProgramBuild {
 pub struct DeviceProgramBuild {
     spirv: Option<spirv::SPIRVBin>,
     status: cl_build_status,
-    options: String,
-    log: String,
+    options: ParsedCompileOptions,
+    log: CString,
     bin_type: cl_program_binary_type,
-    pub kernels: HashMap<String, Arc<NirKernelBuilds>>,
+    pub kernels: HashMap<CString, Arc<NirKernelBuilds>>,
 }
 
 impl DeviceProgramBuild {
     pub fn hash_key(
         &self,
         cache: Option<&DiskCacheBorrowed>,
-        name: &str,
+        name: &CStr,
         spec_constants: &HashMap<u32, Vec<u8>>,
     ) -> Option<cache_key> {
         if let Some(cache) = cache {
@@ -201,7 +224,7 @@ impl DeviceProgramBuild {
 
             let spirv = self.spirv.as_ref().unwrap();
             let mut bin = spirv.to_bin().to_vec();
-            bin.extend_from_slice(name.as_bytes());
+            bin.extend_from_slice(name.to_bytes());
 
             for (k, v) in spec_constants {
                 bin.extend_from_slice(&k.to_ne_bytes());
@@ -214,16 +237,16 @@ impl DeviceProgramBuild {
         }
     }
 
-    pub fn kernel_info(&self, kernel_name: &str) -> Option<&clc_kernel_info> {
+    pub fn kernel_info(&self, kernel_name: &CStr) -> Option<&clc_kernel_info> {
         self.spirv.as_ref()?.kernel_info(kernel_name)
     }
 
     pub fn to_nir(
         &self,
-        kernel: &str,
+        kernel: &CStr,
         device: &Device,
         spec_constants: &mut HashMap<u32, Vec<u8>>,
-    ) -> NirShader {
+    ) -> Option<NirShader> {
         assert_eq!(self.status, CL_BUILD_SUCCESS as cl_build_status);
 
         let mut spec_constants: Vec<_> = spec_constants
@@ -247,20 +270,19 @@ impl DeviceProgramBuild {
             device
                 .screen
                 .nir_shader_compiler_options(mesa_shader_stage::MESA_SHADER_COMPUTE),
-            &device.spirv_caps,
+            device.spirv_to_nir_opts(),
             &device.lib_clc,
             &mut spec_constants,
-            device.address_bits(),
             log.as_mut(),
         );
 
         if let Some(log) = log {
             for line in log {
-                eprintln!("{}", line);
+                eprintln!("{line:?}");
             }
         };
 
-        nir.unwrap()
+        nir
     }
 
     fn is_success(&self) -> bool {
@@ -273,52 +295,129 @@ pub struct HeaderProgram {
     pub program: Arc<Program>,
 }
 
-fn prepare_options(options: &str, dev: &Device) -> Vec<CString> {
-    let mut options = options.to_owned();
-    if !options.contains("-cl-std=") {
-        options.push_str(" -cl-std=CL");
-        options.push_str(dev.clc_version.api_str());
+#[derive(Default, Clone)]
+struct ParsedCompileOptions {
+    raw_string: CString,
+    clc_target: Option<CLVersion>,
+    create_lib: bool,
+}
+
+impl ParsedCompileOptions {
+    fn from_option_str(options: &CStr) -> Self {
+        Self {
+            raw_string: options.to_owned(),
+            ..Default::default()
+        }
     }
-    options.push_str(" -D__OPENCL_VERSION__=");
-    options.push_str(dev.cl_version.clc_str());
+}
 
-    let mut res = Vec::new();
+pub struct CompileOptions {
+    clang_args: Vec<CString>,
+    parsed: ParsedCompileOptions,
+}
 
-    // we seperate on a ' ' unless we hit a "
-    let mut sep = ' ';
-    let mut old = 0;
-    for (i, c) in options.char_indices() {
-        if c == '"' {
-            if sep == ' ' {
-                sep = '"';
-            } else {
-                sep = ' ';
+impl CompileOptions {
+    pub fn new(options: &CStr, err: cl_int) -> CLResult<Self> {
+        let mut parsed_options = ParsedCompileOptions::from_option_str(options);
+        if options.is_empty() {
+            return Ok(CompileOptions {
+                parsed: parsed_options,
+                clang_args: Vec::new(),
+            });
+        }
+
+        let options = options.to_str().unwrap();
+        let mut res = Vec::new();
+
+        // we seperate on a ' ' unless we hit a "
+        let mut sep = ' ';
+        let mut old = 0;
+        for (i, c) in options.char_indices() {
+            if c == '"' {
+                if sep == ' ' {
+                    sep = '"';
+                } else {
+                    sep = ' ';
+                }
+            }
+
+            if c == '"' || c == sep {
+                // beware of double seps
+                if old != i {
+                    res.push(&options[old..i]);
+                }
+                old = i + c.len_utf8();
+            }
+        }
+        // add end of the string
+        res.push(&options[old..]);
+
+        let mut strings = Vec::new();
+        for a in res.into_iter() {
+            match a {
+                "-cl-std=CL1.0" => parsed_options.clc_target = Some(CLVersion::Cl1_0),
+                "-cl-std=CL1.1" => parsed_options.clc_target = Some(CLVersion::Cl1_1),
+                "-cl-std=CL1.2" => parsed_options.clc_target = Some(CLVersion::Cl1_2),
+                "-cl-std=CL2.0" => parsed_options.clc_target = Some(CLVersion::Cl2_0),
+                "-cl-std=CL3.0" => parsed_options.clc_target = Some(CLVersion::Cl3_0),
+                "-cl-std=CL3.1" => parsed_options.clc_target = Some(CLVersion::Cl3_1),
+                "-cl-denorms-are-zero" => {
+                    strings.push(c"-fdenormal-fp-math=positive-zero".to_owned())
+                }
+                "-create-library" => {
+                    parsed_options.create_lib = true;
+                    strings.push(c"-create-library".to_owned());
+                }
+                // We can ignore it as long as we don't support ifp
+                "-cl-no-subgroup-ifp" => {}
+                // This indicates how many registers per thread should be used, we just ignore it.
+                "-cl-intel-256-GRF-per-thread" => {}
+                // Some applications use this argument when they detect Intel hardware.
+                "-cl-intel-greater-than-4GB-buffer-required" => {}
+                // Some applications use this when they detect QC hardware
+                "-qcom-accelerate-16-bit" => {}
+                // We ignore empty tokens
+                "" => {}
+                _ => {
+                    // Valid values are already covered above
+                    if a.starts_with("-cl-std=") {
+                        return Err(err);
+                    }
+                    strings.push(CString::new(a).unwrap());
+                }
             }
         }
 
-        if c == '"' || c == sep {
-            // beware of double seps
-            if old != i {
-                res.push(&options[old..i]);
-            }
-            old = i + c.len_utf8();
-        }
-    }
-    // add end of the string
-    res.push(&options[old..]);
-
-    res.iter()
-        .filter_map(|&a| match a {
-            "-cl-denorms-are-zero" => Some("-fdenormal-fp-math=positive-zero"),
-            // We can ignore it as long as we don't support ifp
-            "-cl-no-subgroup-ifp" => None,
-            // Some applications use this argument when they detect Intel hardware.
-            "-cl-intel-greater-than-4GB-buffer-required" => None,
-            _ => Some(a),
+        Ok(Self {
+            parsed: parsed_options,
+            clang_args: strings,
         })
-        .map(CString::new)
-        .map(Result::unwrap)
-        .collect()
+    }
+
+    fn get_clang_args(&self, dev: &Device) -> Vec<CString> {
+        let mut args = self.clang_args.clone();
+        args.push(c"-D__OPENCL_VERSION__=".concat(dev.cl_version.clc_str()));
+
+        let clc_ver = self.parsed.clc_target.unwrap_or(dev.clc_version);
+        match clc_ver {
+            CLVersion::Cl3_1 => {
+                // CL3.1 doesn't add anything that's not already supported in clang, so just replace
+                // the argument with 3.0 so we'll be fine with an older version of clang.
+                args.push(c"-cl-std=CL3.0".to_owned());
+            }
+            ver => args.push(c"-cl-std=CL".concat(ver.api_cstr())),
+        }
+
+        // We set this define ourselves, so that we don't rely on clang to set it properly as 3.1
+        // is still quite new and we can't rely on users having a clang that supports this.
+        if clc_ver >= CLVersion::Cl3_1 {
+            args.push(c"-U__OPENCL_C_VERSION__".to_owned());
+            args.push(c"-D__OPENCL_C_VERSION__=".concat(clc_ver.clc_str()));
+            args.push(c"-DCL_VERSION_3_1=310".to_owned());
+        }
+
+        args
+    }
 }
 
 impl Program {
@@ -487,16 +586,8 @@ impl Program {
         self.build_info().dev_build(dev).status
     }
 
-    pub fn log(&self, dev: &Device) -> String {
-        self.build_info().dev_build(dev).log.clone()
-    }
-
     pub fn bin_type(&self, dev: &Device) -> cl_program_binary_type {
         self.build_info().dev_build(dev).bin_type
-    }
-
-    pub fn options(&self, dev: &Device) -> String {
-        self.build_info().dev_build(dev).options.clone()
     }
 
     // we need to precalculate the size
@@ -566,7 +657,7 @@ impl Program {
 
     // TODO: at the moment we do not support compiling programs with different signatures across
     // devices. If we do in the future, this needs to be properly implemented.
-    pub fn has_unique_kernel_signatures(&self, _kernel_name: &str) -> bool {
+    pub fn has_unique_kernel_signatures(&self, _kernel_name: &CStr) -> bool {
         true
     }
 
@@ -580,7 +671,7 @@ impl Program {
     pub fn build(
         self: Arc<Self>,
         devices: Vec<&'static Device>,
-        options: String,
+        options: CompileOptions,
         callback: Option<ProgramCB>,
     ) -> CLResult<()> {
         self.set_builds_in_progress(&devices)?;
@@ -619,7 +710,7 @@ impl Program {
     fn do_compile(
         &self,
         device: &Device,
-        options: &str,
+        options: &CompileOptions,
         headers: &[HeaderProgram],
         build_info: &mut MutexGuard<ProgramBuild>,
     ) -> bool {
@@ -629,13 +720,13 @@ impl Program {
         let (spirv, log) = match &self.src {
             ProgramSourceType::Il(spirv) => {
                 if Platform::dbg().allow_invalid_spirv {
-                    (Some(spirv.clone()), String::new())
+                    (Some(spirv.clone()), CString::default())
                 } else {
                     spirv.clone_on_validate(&val_options)
                 }
             }
             ProgramSourceType::Src(src) => {
-                let args = prepare_options(options, device);
+                let clang_args = options.get_clang_args(device);
                 let headers: Vec<_> = headers
                     .iter()
                     .map(|header| {
@@ -654,8 +745,9 @@ impl Program {
 
                 if Platform::dbg().clc {
                     let src = src.to_string_lossy();
+
                     eprintln!("dumping compilation inputs:");
-                    eprintln!("compilation arguments: {args:?}");
+                    eprintln!("compilation arguments: {clang_args:?}");
                     if !headers.is_empty() {
                         eprintln!("headers: {headers:#?}");
                     }
@@ -664,7 +756,7 @@ impl Program {
 
                 let (spirv, msgs) = spirv::SPIRVBin::from_clc(
                     src,
-                    &args,
+                    &clang_args,
                     &headers,
                     get_disk_cache(),
                     device.cl_features(),
@@ -675,7 +767,7 @@ impl Program {
                 if Platform::dbg().validate_spirv {
                     if let Some(spirv) = spirv {
                         let (res, spirv_msgs) = spirv.validate(&val_options);
-                        (res.then_some(spirv), format!("{}\n{}", msgs, spirv_msgs))
+                        (res.then_some(spirv), [msgs, spirv_msgs].join(c"\n"))
                     } else {
                         (None, msgs)
                     }
@@ -691,7 +783,7 @@ impl Program {
 
         device_build.spirv = spirv;
         device_build.log = log;
-        options.clone_into(&mut device_build.options);
+        device_build.options = options.parsed.clone();
 
         if device_build.spirv.is_some() {
             device_build.status = CL_BUILD_SUCCESS as cl_build_status;
@@ -706,7 +798,7 @@ impl Program {
     pub fn compile(
         self: Arc<Self>,
         devices: Vec<&'static Device>,
-        options: String,
+        options: CompileOptions,
         headers: Vec<HeaderProgram>,
         callback: Option<ProgramCB>,
     ) -> CLResult<()> {
@@ -837,7 +929,7 @@ impl Program {
             if let Some(spirv) = spirv {
                 let val_options = clc_validator_options(device);
                 let (res, spirv_msgs) = spirv.validate(&val_options);
-                (res.then_some(spirv), format!("{}\n{}", log, spirv_msgs))
+                (res.then_some(spirv), [log, spirv_msgs].join(c"\n"))
             } else {
                 (None, log)
             }
@@ -846,7 +938,7 @@ impl Program {
         };
 
         build.spirv = spirv;
-        build.log.push_str(&log);
+        build.log.push_cstr(&log);
 
         if build.spirv.is_some() {
             build.status = CL_BUILD_SUCCESS as cl_build_status;
@@ -923,9 +1015,10 @@ impl Program {
 fn debug_logging(p: &Program, devs: &[&Device]) {
     if Platform::dbg().program {
         for dev in devs {
-            let msg = p.log(dev);
+            let build_info = p.build_info();
+            let msg = build_info.log(dev);
             if !msg.is_empty() {
-                eprintln!("{}", msg);
+                eprintln!("{}", msg.to_string_lossy());
             }
         }
     }
@@ -938,11 +1031,11 @@ fn debug_logging(p: &Program, devs: &[&Device]) {
 fn create_build_closure(
     program: Arc<Program>,
     devices: Vec<&'static Device>,
-    options: String,
+    options: CompileOptions,
     mut callback: Option<ProgramCB>,
 ) -> impl FnMut() + Send + Sync + 'static {
     move || {
-        let is_lib = options.contains("-create-library");
+        let is_lib = options.parsed.create_lib;
         let mut build_info = program.build_info();
 
         for &device in &devices {
@@ -989,7 +1082,7 @@ fn create_build_closure(
 fn create_compile_closure(
     program: Arc<Program>,
     devices: Vec<&'static Device>,
-    options: String,
+    options: CompileOptions,
     headers: Vec<HeaderProgram>,
     mut callback: Option<ProgramCB>,
 ) -> impl FnMut() + Send + Sync + 'static {

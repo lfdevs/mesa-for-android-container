@@ -91,7 +91,7 @@ isl_tiled_memcpy = static_library(
   ],
 
   dependencies : [idep_mesautil, idep_intel_dev],
-  c_args : [no_override_init_args, sse2_arg],
+  c_args : [no_override_init_args, soong_compat_c_args, sse2_arg],
   gnu_symbol_visibility : 'hidden',
   extra_files : ['isl_tiled_memcpy.c']
 )

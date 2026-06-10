@@ -8,93 +8,23 @@
 
 #include "r300_context.h"
 #include "r300_screen.h"
-#include "r300_tgsi_to_rc.h"
 #include "r300_reg.h"
 
-#include "tgsi/tgsi_dump.h"
-
+#include "compiler/nir_to_rc.h"
 #include "compiler/radeon_compiler.h"
+#include "nir/nir.h"
 
-/* Convert info about VS output semantics into r300_shader_semantics. */
-static void r300_shader_read_vs_outputs(
-    struct r300_context *r300,
-    struct tgsi_shader_info* info,
-    struct r300_shader_semantics* vs_outputs)
-{
-    int i;
-    unsigned index;
-
-    r300_shader_semantics_reset(vs_outputs);
-
-    for (i = 0; i < info->num_outputs; i++) {
-        index = info->output_semantic_index[i];
-
-        switch (info->output_semantic_name[i]) {
-            case TGSI_SEMANTIC_POSITION:
-                assert(index == 0);
-                vs_outputs->pos = i;
-                break;
-
-            case TGSI_SEMANTIC_PSIZE:
-                assert(index == 0);
-                vs_outputs->psize = i;
-                break;
-
-            case TGSI_SEMANTIC_COLOR:
-                assert(index < ATTR_COLOR_COUNT);
-                vs_outputs->color[index] = i;
-                break;
-
-            case TGSI_SEMANTIC_BCOLOR:
-                assert(index < ATTR_COLOR_COUNT);
-                vs_outputs->bcolor[index] = i;
-                break;
-
-            case TGSI_SEMANTIC_GENERIC:
-                assert(index < ATTR_GENERIC_COUNT);
-                vs_outputs->generic[index] = i;
-                vs_outputs->num_generic++;
-                break;
-
-            case TGSI_SEMANTIC_FOG:
-                assert(index == 0);
-                vs_outputs->fog = i;
-                break;
-
-            case TGSI_SEMANTIC_EDGEFLAG:
-                assert(index == 0);
-                fprintf(stderr, "r300 VP: cannot handle edgeflag output.\n");
-                break;
-
-            case TGSI_SEMANTIC_CLIPVERTEX:
-                assert(index == 0);
-                /* Draw does clip vertex for us. */
-                if (r300->screen->caps.has_tcl) {
-                    UNREACHABLE("");
-                }
-                break;
-
-            default:
-                fprintf(stderr, "r300 VP: unknown vertex output semantic: %i.\n",
-                        info->output_semantic_name[i]);
-        }
-    }
-
-    /* WPOS is a straight copy of POSITION */
-    vs_outputs->wpos = i;
-}
 
 static void set_vertex_inputs_outputs(struct r300_vertex_program_compiler * c)
 {
     struct r300_vertex_shader_code * vs = c->UserData;
     struct r300_shader_semantics* outputs = &vs->outputs;
-    struct tgsi_shader_info* info = &vs->info;
     int i, reg = 0;
     bool any_bcolor_used = outputs->bcolor[0] != ATTR_UNUSED ||
                            outputs->bcolor[1] != ATTR_UNUSED;
 
     /* Fill in the input mapping */
-    for (i = 0; i < info->num_inputs; i++)
+    for (i = 0; i < vs->num_inputs; i++)
         c->code->inputs[i] = i;
 
     /* Position. */
@@ -152,75 +82,73 @@ static void set_vertex_inputs_outputs(struct r300_vertex_program_compiler * c)
         c->code->outputs[outputs->wpos] = reg++;
 }
 
-void r300_init_vs_outputs(struct r300_context *r300,
-                          struct r300_vertex_shader *vs)
+static void r300_setup_vs_compiler(struct r300_context *r300,
+                            struct r300_vertex_program_compiler *compiler,
+                            struct r300_vertex_shader_code *vs)
 {
-    tgsi_scan_shader(vs->state.tokens, &vs->shader->info);
-    r300_shader_read_vs_outputs(r300, &vs->shader->info, &vs->shader->outputs);
+    /* Setup the compiler */
+    memset(compiler, 0, sizeof(*compiler));
+    rc_init(&compiler->Base, &r300->vs_regalloc_state);
+
+    DBG_ON(r300, DBG_VP) ? compiler->Base.Debug |= RC_DBG_LOG : 0;
+    compiler->code = &vs->code;
+    compiler->UserData = vs;
+    compiler->Base.debug = &r300->context.debug;
+    compiler->Base.is_r400 = r300->screen->caps.is_r400;
+    compiler->Base.is_r500 = r300->screen->caps.is_r500;
+    compiler->Base.disable_optimizations = DBG_ON(r300, DBG_NO_OPT);
+    /* Only R500 has few IEEE math opcodes. */
+    if (r300->screen->options.ieeemath && r300->screen->caps.is_r500) {
+        compiler->Base.math_rules = RC_MATH_IEEE;
+    } else if (r300->screen->options.ffmath) {
+        compiler->Base.math_rules = RC_MATH_FF;
+    }
+    compiler->Base.has_half_swizzles = false;
+    compiler->Base.has_presub = false;
+    compiler->Base.has_omod = false;
+    compiler->Base.max_temp_regs = 32;
+    compiler->Base.max_constants = 256;
+    compiler->Base.max_alu_insts = r300->screen->caps.is_r500 ? 1024 : 256;
 }
 
 void r300_translate_vertex_shader(struct r300_context *r300,
                                   struct r300_vertex_shader *shader)
 {
     struct r300_vertex_program_compiler compiler;
-    struct tgsi_to_rc ttr;
     unsigned i;
-    struct r300_vertex_shader_code *vs = shader->shader;
 
-    r300_init_vs_outputs(r300, shader);
+    struct r300_vertex_shader_code *vs = shader->shader;
+    r300_shader_semantics_reset(&vs->outputs);
+
+    union r300_shader_code code;
+    code.v = vs;
+
+    r300_setup_vs_compiler(r300, &compiler, vs);
+
+    nir_shader *clone = nir_shader_clone(NULL, shader->state.ir.nir);
+    struct r300_fragment_program_external_state external_state = {};
+    nir_to_rc(clone, (struct pipe_screen *)r300->screen,
+              external_state, code, &compiler.Base);
+    vs->outputs.wpos = vs->outputs.num_total;
 
     /* Nothing to do if the shader does not write gl_Position. */
     if (vs->outputs.pos == ATTR_UNUSED) {
         vs->dummy = true;
-        return;
+        goto cleanup;
     }
 
-    /* Setup the compiler */
-    memset(&compiler, 0, sizeof(compiler));
-    rc_init(&compiler.Base, &r300->vs_regalloc_state);
-
-    DBG_ON(r300, DBG_VP) ? compiler.Base.Debug |= RC_DBG_LOG : 0;
-    compiler.code = &vs->code;
-    compiler.UserData = vs;
-    compiler.Base.debug = &r300->context.debug;
-    compiler.Base.is_r400 = r300->screen->caps.is_r400;
-    compiler.Base.is_r500 = r300->screen->caps.is_r500;
-    compiler.Base.disable_optimizations = DBG_ON(r300, DBG_NO_OPT);
-    /* Only R500 has few IEEE math opcodes. */
-    if (r300->screen->options.ieeemath && r300->screen->caps.is_r500) {
-        compiler.Base.math_rules = RC_MATH_IEEE;
-    } else if (r300->screen->options.ffmath) {
-        compiler.Base.math_rules = RC_MATH_FF;
-    }
-    compiler.Base.has_half_swizzles = false;
-    compiler.Base.has_presub = false;
-    compiler.Base.has_omod = false;
-    compiler.Base.max_temp_regs = 32;
-    compiler.Base.max_constants = 256;
-    compiler.Base.max_alu_insts = r300->screen->caps.is_r500 ? 1024 : 256;
-
-    if (compiler.Base.Debug & RC_DBG_LOG) {
-        DBG(r300, DBG_VP, "r300: Initial vertex program\n");
-        tgsi_dump(shader->state.tokens, 0);
-    }
-
-    /* Translate TGSI to our internal representation */
-    ttr.compiler = &compiler.Base;
-    ttr.info = &vs->info;
-
-    r300_tgsi_to_rc(&ttr, shader->state.tokens);
-
-    if (ttr.error) {
-        vs->error = strdup("Cannot translate shader from TGSI");
+    if (compiler.Base.Error) {
+        vs->error = strdup(compiler.Base.ErrorMsg ? compiler.Base.ErrorMsg
+                                                  : "Cannot translate shader from NIR");
         vs->dummy = true;
-        return;
+        goto cleanup;
     }
 
     if (compiler.Base.Program.Constants.Count > 200) {
         compiler.Base.remove_unused_constants = true;
     }
 
-    compiler.RequiredOutputs = ~(~0U << (vs->info.num_outputs + (vs->wpos ? 1 : 0)));
+    compiler.RequiredOutputs = ~(~0U << (vs->outputs.num_total + (vs->wpos ? 1 : 0)));
     compiler.SetHwInputOutput = &set_vertex_inputs_outputs;
 
     /* Insert the WPOS output. */
@@ -231,9 +159,8 @@ void r300_translate_vertex_shader(struct r300_context *r300,
     r3xx_compile_vertex_program(&compiler);
     if (compiler.Base.Error) {
         vs->error = strdup(compiler.Base.ErrorMsg);
-        rc_destroy(&compiler.Base);
         vs->dummy = true;
-        return;
+        goto cleanup;
     }
 
     /* Initialize numbers of constants for each type. */
@@ -249,5 +176,6 @@ void r300_translate_vertex_shader(struct r300_context *r300,
     vs->immediates_count = vs->code.constants.Count - vs->externals_count;
 
     /* And, finally... */
+cleanup:
     rc_destroy(&compiler.Base);
 }

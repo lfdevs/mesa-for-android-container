@@ -149,7 +149,7 @@ tu_get_subsampled_coordinates(nir_builder *b,
    nir_def *hdr_scale = nir_channels(b, hdr0, 0x3);
    nir_def *hdr_offset = nir_channels(b, hdr0, 0xc);
 
-   nir_def *bin = nir_f2u16(b, nir_ffma(b, coords, hdr_scale, hdr_offset));
+   nir_def *bin = nir_f2u16(b, nir_ffma_weak(b, coords, hdr_scale, hdr_offset));
    nir_def *bin_idx = nir_iadd(b, nir_imul(b, nir_channel(b, bin, 1),
                                            nir_u2u16(b, bin_stride)),
                                nir_channel(b, bin, 0));
@@ -166,7 +166,7 @@ tu_get_subsampled_coordinates(nir_builder *b,
    nir_def *bin_scale = nir_channels(b, bin_data, 0x3);
    nir_def *bin_offset = nir_channels(b, bin_data, 0xc);
 
-   return nir_ffma(b, coords, bin_scale, bin_offset);
+   return nir_ffma_weak(b, coords, bin_scale, bin_offset);
 }
 
 /* Calculate the y coordinate in subsampled space of a given number of tiles

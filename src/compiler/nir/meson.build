@@ -78,7 +78,7 @@ nir_intrinsics_c = custom_target(
   depend_files : files('nir_intrinsics.py'),
 )
 
-with_nir_headers_only = (
+with_nir_headers_only = not with_gfx_compute or (
   gallium_drivers == ['d3d12'] and
   get_option('gallium-d3d12-graphics').disabled() and
   not [
@@ -141,6 +141,7 @@ else
   'nir_liveness.c',
   'nir_loop_analyze.c',
   'nir_loop_analyze.h',
+  'nir_lower_abort.c',
   'nir_lower_alu.c',
   'nir_lower_alu_width.c',
   'nir_lower_alpha.c',
@@ -376,7 +377,7 @@ _libnir = static_library(
   'nir',
   [files_libnir, custom_targets_libnir],
   include_directories : [inc_include, inc_src],
-  c_args : [c_msvc_compat_args, no_override_init_args, no_misleading_indentation],
+  c_args : [c_msvc_compat_args, soong_compat_c_args, no_override_init_args, no_misleading_indentation],
   gnu_symbol_visibility : 'hidden',
   dependencies : [idep_compiler, dep_valgrind, idep_mesautil],
   build_by_default : false,
@@ -450,6 +451,7 @@ if with_tests
           'tests/nir_algebraic_pattern_test.cpp',
           'tests/opt_if_tests.cpp',
           'tests/opt_large_constants_tests.cpp',
+          'tests/opt_licm_tests.cpp',
           'tests/opt_loop_tests.cpp',
           'tests/opt_peephole_select.cpp',
           'tests/opt_shrink_vectors_tests.cpp',
@@ -458,6 +460,7 @@ if with_tests
           'tests/opt_varyings_tests_dead_input.cpp',
           'tests/opt_varyings_tests_dead_output.cpp',
           'tests/opt_varyings_tests_dedup.cpp',
+          'tests/opt_varyings_tests_dedup_multiple.cpp',
           'tests/opt_varyings_tests_prop_const.cpp',
           'tests/opt_varyings_tests_prop_ubo.cpp',
           'tests/opt_varyings_tests_prop_uniform.cpp',

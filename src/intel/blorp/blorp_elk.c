@@ -202,7 +202,8 @@ blorp_ensure_sf_program_elk(struct blorp_batch *batch,
       return true;
 
    struct blorp_sf_key key = {
-      .base = BLORP_BASE_KEY_INIT(BLORP_SHADER_TYPE_GFX4_SF),
+      .base = BLORP_BASE_KEY_INIT(BLORP_SHADER_TYPE_GFX4_SF,
+                                  BLORP_SHADER_PIPELINE_RENDER),
    };
 
    /* Everything gets compacted in vertex setup, so we just need a
@@ -269,7 +270,8 @@ blorp_params_get_layer_offset_vs_elk(struct blorp_batch *batch,
 {
    struct blorp_context *blorp = batch->blorp;
    struct layer_offset_vs_key blorp_key = {
-      .base = BLORP_BASE_KEY_INIT(BLORP_SHADER_TYPE_LAYER_OFFSET_VS),
+      .base = BLORP_BASE_KEY_INIT(BLORP_SHADER_TYPE_LAYER_OFFSET_VS,
+                                  BLORP_SHADER_PIPELINE_RENDER),
    };
 
    struct elk_fs_prog_data *fs_prog_data = params->fs_prog_data;

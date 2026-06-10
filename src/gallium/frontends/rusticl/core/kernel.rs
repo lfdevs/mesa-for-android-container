@@ -29,6 +29,7 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::convert::TryInto;
 use std::ffi::CStr;
+use std::ffi::CString;
 use std::fmt::Debug;
 use std::fmt::Display;
 use std::ops::Index;
@@ -556,7 +557,7 @@ impl NirKernelBuild {
 pub struct Kernel {
     pub base: CLObjectBase<CL_INVALID_KERNEL>,
     pub prog: Arc<Program>,
-    pub name: String,
+    pub name: CString,
     values: Vec<Option<KernelArgValue>>,
     pub bdas: Vec<cl_mem_device_address_ext>,
     pub svms: HashSet<usize>,
@@ -698,13 +699,6 @@ fn compile_nir_to_args(
     args: &[spirv::SPIRVKernelArg],
     lib_clc: &NirShader,
 ) -> (Vec<KernelArg>, NirShader) {
-    // this is a hack until we support fp16 properly and check for denorms inside vstore/vload_half
-    nir.preserve_fp16_denorms();
-
-    // Set to rtne for now until drivers are able to report their preferred rounding mode, that also
-    // matches what we report via the API.
-    nir.set_fp_rounding_mode_rtne();
-
     nir_pass!(nir, nir_scale_fdiv);
     nir.structurize();
     nir_pass!(
@@ -826,7 +820,7 @@ fn compile_nir_variant(
     dev: &Device,
     variant: NirKernelVariant,
     args: &[KernelArg],
-    name: &str,
+    name: &CStr,
 ) {
     let mut lower_state = rusticl_lower_state::default();
     let compiled_args = &mut res.compiled_args;
@@ -1071,16 +1065,14 @@ fn compile_nir_variant(
     }));
 
     if Platform::dbg().nir {
-        eprintln!("=== Printing nir variant '{variant}' for '{name}' before driver finalization");
+        eprintln!("=== Printing nir variant {variant} for {name:?} before driver finalization");
         nir.print();
     }
 
     #[allow(clippy::collapsible_if)]
     if dev.screen.finalize_nir(nir) {
         if Platform::dbg().nir {
-            eprintln!(
-                "=== Printing nir variant '{variant}' for '{name}' after driver finalization"
-            );
+            eprintln!("=== Printing nir variant {variant} for {name:?} after driver finalization");
             nir.print();
         }
     }
@@ -1093,7 +1085,7 @@ fn compile_nir_remaining(
     dev: &Device,
     mut nir: NirShader,
     args: &[KernelArg],
-    name: &str,
+    name: &CStr,
 ) -> (CompilationResult, Option<CompilationResult>) {
     // add all API kernel args
     let mut compiled_args: Vec<_> = (0..args.len())
@@ -1106,7 +1098,7 @@ fn compile_nir_remaining(
 
     compile_nir_prepare_for_variants(dev, &mut nir, &mut compiled_args);
     if Platform::dbg().nir {
-        eprintln!("=== Printing nir for '{name}' before specialization");
+        eprintln!("=== Printing nir for {name:?} before specialization");
         nir.print();
     }
 
@@ -1223,11 +1215,11 @@ impl SPIRVToNirResult {
 
 pub(super) fn convert_spirv_to_nir(
     build: &DeviceProgramBuild,
-    name: &str,
+    name: &CStr,
     args: &[spirv::SPIRVKernelArg],
     spec_constants: &mut HashMap<u32, Vec<u8>>,
     dev: &'static Device,
-) -> SPIRVToNirResult {
+) -> Option<SPIRVToNirResult> {
     let cache = dev.screen().shader_cache();
     let key = build.hash_key(cache.as_ref(), name, spec_constants);
     let spirv_info = build.kernel_info(name).unwrap();
@@ -1236,11 +1228,11 @@ pub(super) fn convert_spirv_to_nir(
         .as_ref()
         .and_then(|cache| cache.get(&mut key?))
         .and_then(|entry| SPIRVToNirResult::deserialize(&entry, dev, spirv_info))
-        .unwrap_or_else(|| {
-            let nir = build.to_nir(name, dev, spec_constants);
+        .or_else(|| {
+            let nir = build.to_nir(name, dev, spec_constants)?;
 
             if Platform::dbg().nir {
-                eprintln!("=== Printing nir for '{name}' after spirv_to_nir");
+                eprintln!("=== Printing nir for {name:?} after spirv_to_nir");
                 nir.print();
             }
 
@@ -1270,7 +1262,13 @@ pub(super) fn convert_spirv_to_nir(
                 }
             }
 
-            SPIRVToNirResult::new(dev, spirv_info, args, default_build, optimized)
+            Some(SPIRVToNirResult::new(
+                dev,
+                spirv_info,
+                args,
+                default_build,
+                optimized,
+            ))
         })
 }
 
@@ -1379,7 +1377,7 @@ impl<'a> KernelExecBuilder<'a> {
 }
 
 impl Kernel {
-    pub fn new(name: String, prog: Arc<Program>, prog_build: &ProgramBuild) -> Arc<Kernel> {
+    pub fn new(name: CString, prog: Arc<Program>, prog_build: &ProgramBuild) -> Arc<Kernel> {
         let kernel_info = Arc::clone(prog_build.kernel_info.get(&name).unwrap());
         let builds = prog_build
             .builds_by_device

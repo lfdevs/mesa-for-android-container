@@ -4,7 +4,6 @@
  */
 
 #include "brw_shader.h"
-#include "brw_generator.h"
 #include "brw_eu.h"
 #include "brw_nir.h"
 #include "brw_private.h"
@@ -47,8 +46,10 @@ brw_compile_vs(const struct brw_compiler *compiler,
                struct brw_compile_vs_params *params)
 {
    struct nir_shader *nir = params->base.nir;
-   const struct brw_vs_prog_key *key = params->key;
-   struct brw_vs_prog_data *prog_data = params->prog_data;
+   const struct brw_vs_prog_key *key =
+      (const struct brw_vs_prog_key *)params->base.key;
+   struct brw_vs_prog_data *prog_data =
+      (struct brw_vs_prog_data *)params->base.prog_data;
    const bool debug_enabled =
       brw_should_print_shader(nir, params->base.debug_flag ?
                                    params->base.debug_flag : DEBUG_VS,
@@ -194,20 +195,11 @@ brw_compile_vs(const struct brw_compiler *compiler,
       v.payload().num_regs / reg_unit(compiler->devinfo);
    prog_data->base.base.grf_used = v.grf_used;
 
-   brw_generator g(compiler, &params->base,
-                  &prog_data->base.base,
-                  MESA_SHADER_VERTEX);
-   if (unlikely(debug_enabled)) {
-      const char *debug_name =
-         ralloc_asprintf(params->base.mem_ctx, "%s vertex shader %s",
-                         nir->info.label ? nir->info.label :
-                            "unnamed",
-                         nir->info.name);
-
-      g.enable_debug(debug_name);
-   }
-   g.generate_code(v, params->base.stats);
-   g.add_const_data(nir->constant_data, nir->constant_data_size);
-
-   return g.get_assembly();
+   const brw_to_binary_params to_binary_params = {
+      .compiler = compiler,
+      .params = &params->base,
+      .prog_data = &prog_data->base.base,
+      .shaders = { &v },
+   };
+   return brw_to_binary(&to_binary_params);
 }

@@ -30,7 +30,7 @@ typedef void mtl_sampler;
 typedef void mtl_compute_pipeline_state;
 typedef void mtl_library;
 typedef void mtl_render_pipeline_state;
-typedef void mtl_function;
+typedef void mtl_function_descriptor;
 typedef void mtl_resource;
 typedef void mtl_render_pass_descriptor;
 typedef void mtl_render_pipeline_descriptor;
@@ -41,6 +41,7 @@ typedef void mtl_depth_stencil_state;
 typedef void mtl_render_pass_attachment_descriptor;
 typedef void mtl_residency_set;
 typedef void mtl_allocation;
+typedef void mtl_compiler;
 
 /** ENUMS */
 enum mtl_cpu_cache_mode {
@@ -220,6 +221,12 @@ enum mtl_depth_clip_mode {
    MTL_DEPTH_CLIP_MODE_CLAMP = 1,
 };
 
+enum mtl_barrier_scope {
+   MTL_BARRIER_SCOPE_BUFFERS = 1 << 0,
+   MTL_BARRIER_SCOPE_TEXTURES = 1 << 1,
+   MTL_BARRIER_SCOPE_RENDER_TARGETS = 1 << 2,
+};
+
 /** STRUCTURES */
 struct mtl_range {
    size_t offset;
@@ -232,6 +239,10 @@ struct mtl_origin {
 
 struct mtl_size {
    size_t x, y, z;
+};
+
+struct mtl_sample_position {
+   float x, y;
 };
 
 struct mtl_viewport {
@@ -269,6 +280,15 @@ struct mtl_buffer_image_copy {
    size_t image_slice;
    size_t image_level;
    enum mtl_blit_options options;
+};
+
+struct mtl_texture_memory_copy {
+   struct mtl_size image_size;
+   struct mtl_origin image_origin;
+   size_t buffer_stride_B;
+   size_t buffer_2d_image_size_B;
+   size_t image_slice;
+   size_t image_level;
 };
 
 #endif /* KK_MTL_TYPES_H */

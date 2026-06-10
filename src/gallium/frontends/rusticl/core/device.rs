@@ -9,6 +9,7 @@ use crate::core::util::*;
 use crate::core::version::*;
 use crate::impl_cl_type_trait_base;
 
+use mesa_rust::compiler::clc::spirv::SPIRVToNirOptions;
 use mesa_rust::compiler::clc::*;
 use mesa_rust::compiler::nir::*;
 use mesa_rust::pipe::context::*;
@@ -497,7 +498,17 @@ impl DeviceBase {
     // TODO add CLC checks
     fn check_version(&mut self) {
         let exts: Vec<&str> = self.extension_string.split(' ').collect();
-        let mut res = CLVersion::Cl3_0;
+        let mut res = CLVersion::Cl3_1;
+
+        // CL 3.1 requires a bit more than we check here, but those are all features we support on
+        // every device anyway.
+        if !self.subgroup_shuffle_supported()
+            || !self.subgroup_shuffle_relative_supported()
+            || !self.subgroup_rotate_supported()
+            || !self.uuid_supported()
+        {
+            res = CLVersion::Cl3_0;
+        }
 
         #[allow(clippy::collapsible_if)]
         if self.embedded {
@@ -559,6 +570,11 @@ impl DeviceBase {
 
         if let Some(val) = Self::parse_env_version() {
             res = val;
+        }
+
+        if res >= CLVersion::Cl3_1 {
+            self.clc_versions
+                .push(mk_cl_version_ext(3, 1, 0, "OpenCL C"));
         }
 
         if res >= CLVersion::Cl3_0 {
@@ -732,7 +748,7 @@ impl DeviceBase {
             add_ext(1, 0, 0, "cl_khr_priority_hints");
         }
 
-        if self.screen().device_uuid().is_some() && self.screen().driver_uuid().is_some() {
+        if self.uuid_supported() {
             static_assert!(PIPE_UUID_SIZE == CL_UUID_SIZE_KHR);
             static_assert!(PIPE_LUID_SIZE == CL_LUID_SIZE_KHR);
 
@@ -1367,6 +1383,29 @@ impl DeviceBase {
     pub fn are_semaphores_supported(&self) -> bool {
         self.screen().caps().fence_signal && self.screen().has_semaphore_create()
     }
+
+    pub fn uuid_supported(&self) -> bool {
+        self.screen().device_uuid().is_some() && self.screen().driver_uuid().is_some()
+    }
+
+    pub fn spirv_to_nir_opts(&self) -> SPIRVToNirOptions {
+        let mut spirv_float_controls = float_controls::FLOAT_CONTROLS_DENORM_FLUSH_TO_ZERO_FP32
+            | float_controls::FLOAT_CONTROLS_ROUNDING_MODE_RTE_FP16
+            | float_controls::FLOAT_CONTROLS_ROUNDING_MODE_RTE_FP32
+            | float_controls::FLOAT_CONTROLS_ROUNDING_MODE_RTE_FP64;
+
+        if self.shader_caps().fp16_no_denorms {
+            spirv_float_controls |= float_controls::FLOAT_CONTROLS_DENORM_FLUSH_TO_ZERO_FP16;
+        } else {
+            spirv_float_controls |= float_controls::FLOAT_CONTROLS_DENORM_PRESERVE_FP16;
+        }
+
+        SPIRVToNirOptions {
+            caps: &self.spirv_caps,
+            address_bits: self.address_bits(),
+            float_controls: spirv_float_controls,
+        }
+    }
 }
 
 impl Device {
@@ -1392,8 +1431,8 @@ impl Device {
             caps: DeviceCaps::new(&screen, &helper_ctx),
             helper_ctx: Mutex::new(helper_ctx),
             screen: screen,
-            cl_version: CLVersion::Cl3_0,
-            clc_version: CLVersion::Cl3_0,
+            cl_version: CLVersion::Cl3_1,
+            clc_version: CLVersion::Cl3_1,
             clc_versions: Vec::new(),
             device_type: 0,
             embedded: false,
@@ -1422,11 +1461,15 @@ impl Device {
 
         // Libclc depends on a few caps which must always be enabled. At runtime we should never
         // actually pass relevant functionality down to drivers, so this should be fine.
-        let mut spirv_caps = dev_base.spirv_caps;
+        let mut spirv_to_nir_opts = dev_base.spirv_to_nir_opts();
+
+        let mut spirv_caps = *spirv_to_nir_opts.caps;
         spirv_caps.Float64 = true;
         spirv_caps.Int64 = true;
+        spirv_caps.GenericPointer = true;
+        spirv_to_nir_opts.caps = &spirv_caps;
 
-        let lib_clc = spirv::SPIRVBin::get_lib_clc(dev_base.screen(), &spirv_caps);
+        let lib_clc = spirv::SPIRVBin::get_lib_clc(dev_base.screen(), spirv_to_nir_opts);
         if lib_clc.is_none() {
             eprintln!("Libclc failed to load. Please make sure it is installed and provides spirv-mesa3d-.spv and/or spirv64-mesa3d-.spv");
         }

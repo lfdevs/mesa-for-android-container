@@ -48,7 +48,14 @@
 static inline uint32_t hash_shader_for_sqtt(XXH64_state_t* xh, struct si_shader *shader)
 {
    /* Hash the key. */
-   XXH64_update(xh, &shader->key, sizeof(shader->key));
+   if (shader->selector->stage == MESA_SHADER_FRAGMENT) {
+      XXH64_update(xh, &shader->key.ps, sizeof(shader->key.ps));
+   } else {
+      const unsigned key_size =
+         sizeof(shader->key.ge) - sizeof(shader->key.ge.opt.inlined_uniform_values) +
+         shader->key.ge.opt.inline_uniforms * sizeof(shader->key.ge.opt.inlined_uniform_values[0]);
+      XXH64_update(xh, &shader->key.ge, key_size);
+   }
    /* Hash the main part binary. */
    XXH64_update(xh, shader->binary.code_buffer, shader->binary.code_size);
 

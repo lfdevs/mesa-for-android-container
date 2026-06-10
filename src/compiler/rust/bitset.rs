@@ -23,8 +23,8 @@
 use std::cmp::{max, min};
 use std::marker::PhantomData;
 use std::ops::{
-    BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, RangeFull,
-    Sub, SubAssign,
+    Add, AddAssign, BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor,
+    BitXorAssign, Range, RangeFull, Sub, SubAssign,
 };
 
 /// Converts a value into a bit index
@@ -43,12 +43,6 @@ pub trait IntoBitIndex {
     fn into_bit_index(self) -> usize;
 }
 
-impl IntoBitIndex for usize {
-    fn into_bit_index(self) -> usize {
-        self
-    }
-}
-
 /// Converts a bit index back into a value
 ///
 /// The implementation must ensure that
@@ -58,11 +52,354 @@ pub trait FromBitIndex: IntoBitIndex {
     fn from_bit_index(i: usize) -> Self;
 }
 
-impl FromBitIndex for usize {
-    fn from_bit_index(i: usize) -> Self {
-        i
+/// Implements IntoBitIndex and FromBitIndex for the given basic data type.
+///
+/// This can only be used on data types with less than or fewer bits than
+/// usize, guaranteeing that the conversion in both directions is lossless.
+/// See also the invariant specified on FromBitIndex.
+macro_rules! impl_into_from_bit_index {
+    ($t:ident) => {
+        impl IntoBitIndex for $t {
+            fn into_bit_index(self) -> usize {
+                usize::from(self)
+            }
+        }
+
+        impl FromBitIndex for $t {
+            fn from_bit_index(i: usize) -> Self {
+                // We know i will alweays have come from into_bit_index() so
+                // it's safe to do an `as` cast here.
+                i as $t
+            }
+        }
+    };
+}
+
+impl_into_from_bit_index!(u8);
+impl_into_from_bit_index!(u16);
+impl_into_from_bit_index!(usize);
+
+#[derive(Clone, Copy)]
+struct BitIndex {
+    word: usize,
+    bit: u8,
+}
+
+impl BitIndex {
+    const ZERO: BitIndex = BitIndex { word: 0, bit: 0 };
+
+    const fn flatten(self) -> usize {
+        self.word * 32 + (self.bit as usize)
+    }
+
+    const fn from_flat_index(idx: usize) -> BitIndex {
+        BitIndex {
+            word: idx / 32,
+            bit: (idx % 32) as u8,
+        }
+    }
+
+    const fn from_word(word: usize) -> BitIndex {
+        BitIndex { word, bit: 0 }
     }
 }
+
+impl<K: IntoBitIndex> From<K> for BitIndex {
+    fn from(key: K) -> BitIndex {
+        BitIndex::from_flat_index(key.into_bit_index())
+    }
+}
+
+impl From<BitIndex> for usize {
+    fn from(idx: BitIndex) -> usize {
+        idx.flatten()
+    }
+}
+
+impl AddAssign<usize> for BitIndex {
+    fn add_assign(&mut self, rhs: usize) {
+        let bit = usize::from(self.bit) + rhs;
+        self.bit = (bit % 32) as u8;
+        self.word += bit / 32;
+    }
+}
+
+impl Add<usize> for BitIndex {
+    type Output = BitIndex;
+
+    fn add(mut self, rhs: usize) -> BitIndex {
+        self += rhs;
+        self
+    }
+}
+
+#[inline]
+fn find_next_set(words: &[u32], start: BitIndex) -> Option<BitIndex> {
+    if start.word >= words.len() {
+        return None;
+    }
+
+    let mut word = start.word;
+    let mut mask = u32::MAX << start.bit;
+    while word < words.len() {
+        let bit = (words[word] & mask).trailing_zeros();
+        if bit < 32 {
+            return Some(BitIndex {
+                word,
+                bit: bit as u8,
+            });
+        }
+        mask = u32::MAX;
+        word += 1;
+    }
+
+    None
+}
+
+#[inline]
+fn find_next_unset(words: &[u32], start: BitIndex) -> BitIndex {
+    if start.word >= words.len() {
+        return start;
+    }
+
+    let mut word = start.word;
+    let mut mask = !(u32::MAX << start.bit);
+    while word < words.len() {
+        let bit = (words[word] | mask).trailing_ones();
+        if bit < 32 {
+            return BitIndex {
+                word,
+                bit: bit as u8,
+            };
+        }
+        mask = 0;
+        word += 1;
+    }
+
+    BitIndex::from_word(words.len())
+}
+
+/// A set implemented as an array of bits, able to be used as constant data
+///
+/// The fixed size W is in units of 32-bit words.  This is due to a Rust
+/// restriction which prevents us from doing math on constants which size
+/// arrays.
+#[derive(Clone, Copy)]
+pub struct ConstBitSet<const W: usize, K = usize> {
+    words: [u32; W],
+    phantom: PhantomData<K>,
+}
+
+impl<const W: usize, K> ConstBitSet<W, K> {
+    pub const fn new() -> Self {
+        ConstBitSet {
+            words: [0_u32; W],
+            phantom: PhantomData,
+        }
+    }
+
+    pub const fn clear(&mut self) {
+        let mut w = 0_usize;
+        while w < W {
+            self.words[w] = 0;
+            w += 1;
+        }
+    }
+
+    pub const fn is_empty(&self) -> bool {
+        let mut w = 0_usize;
+        while w < W {
+            if self.words[w] != 0 {
+                return false;
+            }
+            w += 1;
+        }
+        true
+    }
+}
+
+macro_rules! impl_const_bit_set_binop {
+    (
+        $K:ident,
+        $BinOp:ident,
+        $bin_op:ident,
+        $AssignBinOp:ident,
+        $assign_bin_op:ident,
+        |$a:ident, $b:ident| $impl:expr,
+    ) => {
+        impl<const W: usize> $AssignBinOp<&ConstBitSet<W, $K>>
+            for ConstBitSet<W, $K>
+        {
+            fn $assign_bin_op(&mut self, rhs: &ConstBitSet<W, $K>) {
+                for w in 0..W {
+                    let $a = self.words[w];
+                    let $b = rhs.words[w];
+                    self.words[w] = $impl;
+                }
+            }
+        }
+
+        impl<const W: usize> $AssignBinOp<ConstBitSet<W, $K>>
+            for ConstBitSet<W, $K>
+        {
+            fn $assign_bin_op(&mut self, rhs: ConstBitSet<W, $K>) {
+                self.$assign_bin_op(&rhs);
+            }
+        }
+
+        impl<const W: usize> $BinOp<&ConstBitSet<W, $K>>
+            for ConstBitSet<W, $K>
+        {
+            type Output = ConstBitSet<W, $K>;
+
+            fn $bin_op(
+                mut self,
+                rhs: &ConstBitSet<W, $K>,
+            ) -> ConstBitSet<W, $K> {
+                self.$assign_bin_op(rhs);
+                self
+            }
+        }
+
+        impl<const W: usize> $BinOp<ConstBitSet<W, $K>> for ConstBitSet<W, $K> {
+            type Output = ConstBitSet<W, $K>;
+
+            fn $bin_op(
+                mut self,
+                rhs: ConstBitSet<W, $K>,
+            ) -> ConstBitSet<W, $K> {
+                self.$assign_bin_op(rhs);
+                self
+            }
+        }
+    };
+}
+
+macro_rules! impl_const_bit_set {
+    ($K:ident) => {
+        impl<const W: usize> ConstBitSet<W, $K> {
+            pub const fn contains(&self, key: $K) -> bool {
+                let idx = BitIndex::from_flat_index(key as usize);
+                if idx.word < self.words.len() {
+                    self.words[idx.word] & (1_u32 << idx.bit) != 0
+                } else {
+                    false
+                }
+            }
+
+            pub const fn insert(&mut self, key: $K) -> bool {
+                let idx = BitIndex::from_flat_index(key as usize);
+                assert!(idx.word < W, "ConstBitSet index out of bounds");
+                let exists = self.contains(key);
+                self.words[idx.word] |= 1_u32 << idx.bit;
+                !exists
+            }
+
+            pub const fn insert_range(&mut self, range: Range<$K>) {
+                assert!(
+                    range.end as usize <= W * 32,
+                    "ConstBitSet index out of bounds",
+                );
+
+                if range.start >= range.end {
+                    return;
+                }
+
+                let start = BitIndex::from_flat_index(range.start as usize);
+                let end = BitIndex::from_flat_index(range.end as usize);
+
+                let mut word = start.word;
+                let mut mask = u32::MAX << start.bit;
+                while word < end.word {
+                    self.words[word] |= mask;
+                    mask = u32::MAX;
+                    word += 1;
+                }
+
+                debug_assert!(word == end.word);
+                mask &= !(u32::MAX << end.bit);
+                self.words[word] |= mask;
+            }
+
+            pub const fn remove(&mut self, key: $K) -> bool {
+                let idx = BitIndex::from_flat_index(key as usize);
+                if idx.word < self.words.len() {
+                    let exists = self.contains(key);
+                    self.words[idx.word] &= !(1_u32 << idx.bit);
+                    exists
+                } else {
+                    false
+                }
+            }
+
+            pub const fn from_array<const N: usize>(arr: [$K; N]) -> Self {
+                let mut set = ConstBitSet::<W, $K>::new();
+                let mut i = 0_usize;
+                while i < N {
+                    set.insert(arr[i]);
+                    i += 1;
+                }
+                set
+            }
+
+            pub const fn from_range(range: Range<$K>) -> Self {
+                let mut set = ConstBitSet::<W, $K>::new();
+                set.insert_range(range);
+                set
+            }
+
+            pub fn iter(&self) -> impl '_ + Iterator<Item = $K> {
+                BitSetIter::new(&self.words)
+            }
+        }
+
+        impl<const W: usize> From<Range<$K>> for ConstBitSet<W, $K> {
+            fn from(range: Range<$K>) -> ConstBitSet<W, $K> {
+                ConstBitSet::<W, $K>::from_range(range)
+            }
+        }
+
+        impl_const_bit_set_binop!(
+            $K,
+            BitAnd,
+            bitand,
+            BitAndAssign,
+            bitand_assign,
+            |a, b| a & b,
+        );
+
+        impl_const_bit_set_binop!(
+            $K,
+            BitOr,
+            bitor,
+            BitOrAssign,
+            bitor_assign,
+            |a, b| a | b,
+        );
+
+        impl_const_bit_set_binop!(
+            $K,
+            BitXor,
+            bitxor,
+            BitXorAssign,
+            bitxor_assign,
+            |a, b| a ^ b,
+        );
+
+        impl_const_bit_set_binop!(
+            $K,
+            Sub,
+            sub,
+            SubAssign,
+            sub_assign,
+            |a, b| a & !b,
+        );
+    };
+}
+
+impl_const_bit_set!(u8);
+impl_const_bit_set!(u16);
+impl_const_bit_set!(usize);
 
 /// A set implemented as an array of bits
 ///
@@ -115,60 +452,43 @@ impl<K> BitSet<K> {
 
 impl<K: IntoBitIndex> BitSet<K> {
     pub fn contains(&self, key: K) -> bool {
-        let idx = key.into_bit_index();
-        let w = idx / 32;
-        let b = idx % 32;
-        if w < self.words.len() {
-            self.words[w] & (1_u32 << b) != 0
+        let idx = BitIndex::from(key);
+        if idx.word < self.words.len() {
+            self.words[idx.word] & (1_u32 << idx.bit) != 0
         } else {
             false
         }
     }
 
     pub fn insert(&mut self, key: K) -> bool {
-        let idx = key.into_bit_index();
-        let w = idx / 32;
-        let b = idx % 32;
-        self.reserve_words(w + 1);
-        let exists = self.words[w] & (1_u32 << b) != 0;
-        self.words[w] |= 1_u32 << b;
+        let idx = BitIndex::from(key);
+        self.reserve_words(idx.word + 1);
+        let exists = self.words[idx.word] & (1_u32 << idx.bit) != 0;
+        self.words[idx.word] |= 1_u32 << idx.bit;
         !exists
     }
 
     pub fn remove(&mut self, key: K) -> bool {
-        let idx = key.into_bit_index();
-        let w = idx / 32;
-        let b = idx % 32;
-        self.reserve_words(w + 1);
-        let exists = self.words[w] & (1_u32 << b) != 0;
-        self.words[w] &= !(1_u32 << b);
-        exists
+        let idx = BitIndex::from(key);
+        if idx.word < self.words.len() {
+            let exists = self.words[idx.word] & (1_u32 << idx.bit) != 0;
+            self.words[idx.word] &= !(1_u32 << idx.bit);
+            exists
+        } else {
+            false
+        }
     }
 }
 
 impl<K: FromBitIndex> BitSet<K> {
     pub fn iter(&self) -> impl '_ + Iterator<Item = K> {
-        BitSetIter::new(self)
+        BitSetIter::new(&self.words)
     }
 }
 
 impl BitSet<usize> {
     pub fn next_unset(&self, start: usize) -> usize {
-        if start >= self.words.len() * 32 {
-            return start;
-        }
-
-        let mut w = start / 32;
-        let mut mask = !(u32::MAX << (start % 32));
-        while w < self.words.len() {
-            let b = (self.words[w] | mask).trailing_ones();
-            if b < 32 {
-                return w * 32 + usize::try_from(b).unwrap();
-            }
-            mask = 0;
-            w += 1;
-        }
-        self.words.len() * 32
+        find_next_unset(&self.words, start.into()).into()
     }
 
     /// Search for a set of `count` consecutive elements that are not present in
@@ -467,17 +787,17 @@ binop!(
 );
 
 struct BitSetIter<'a, K> {
-    set: &'a BitSet<K>,
-    w: usize,
-    mask: u32,
+    words: &'a [u32],
+    idx: BitIndex,
+    phantom: PhantomData<K>,
 }
 
 impl<'a, K> BitSetIter<'a, K> {
-    fn new(set: &'a BitSet<K>) -> Self {
+    fn new(words: &'a [u32]) -> Self {
         Self {
-            set,
-            w: 0,
-            mask: u32::MAX,
+            words,
+            idx: BitIndex::ZERO,
+            phantom: PhantomData,
         }
     }
 }
@@ -486,17 +806,13 @@ impl<'a, K: FromBitIndex> Iterator for BitSetIter<'a, K> {
     type Item = K;
 
     fn next(&mut self) -> Option<K> {
-        while self.w < self.set.words.len() {
-            let b = (self.set.words[self.w] & self.mask).trailing_zeros();
-            if b < 32 {
-                self.mask &= !(1 << b);
-                let idx = self.w * 32 + usize::try_from(b).unwrap();
-                return Some(K::from_bit_index(idx));
-            }
-            self.mask = u32::MAX;
-            self.w += 1;
+        if let Some(idx) = find_next_set(self.words, self.idx) {
+            self.idx = idx + 1;
+            Some(K::from_bit_index(idx.into()))
+        } else {
+            self.idx = BitIndex::from_word(self.words.len());
+            None
         }
-        None
     }
 }
 

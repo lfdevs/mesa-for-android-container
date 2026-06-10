@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2026 Collabora, Ltd.
+ * Copyright (C) 2026 Arm Ltd.
  * SPDX-License-Identifier: MIT
  */
 
@@ -480,8 +481,16 @@ struct pan_fb_desc_info {
 void GENX(pan_fill_fb_info)(const struct pan_fb_desc_info *info,
                             struct pan_fb_info *fbinfo);
 
+struct pan_fb_descs {
+#if PAN_ARCH <= 13
+   struct mali_framebuffer_packed *fbd;
+#endif
+   struct mali_zs_crc_extension_packed *zs_crc;
+   struct mali_rgb_render_target_packed *rts;
+};
+
 uint32_t GENX(pan_emit_fb_desc)(const struct pan_fb_desc_info *info,
-                                void *out);
+                                const struct pan_fb_descs *out);
 #endif
 
 enum ENUM_PACKED pan_fb_shader_op {
@@ -609,15 +618,48 @@ bool GENX(pan_fb_load_shader_key_fill)(struct pan_fb_shader_key *key,
                                        const struct pan_fb_load *load,
                                        bool zs_prepass);
 
+#if PAN_ARCH >= 5
+struct pan_fb_clean_tile {
+   uint8_t rts;
+   bool zs, s;
+};
+
+struct pan_fb_clean_tile
+   GENX(pan_fb_get_clean_tile)(const struct pan_fb_desc_info *info);
+
+static inline bool
+pan_target_has_clear(const struct pan_fb_load_target *target)
+{
+   return target->in_bounds_load == PAN_FB_LOAD_CLEAR ||
+          target->border_load == PAN_FB_LOAD_CLEAR;
+}
+#endif /* PAN_ARCH >= 5 */
+
 #if PAN_ARCH >= 6
 bool GENX(pan_fb_resolve_shader_key_fill)(struct pan_fb_shader_key *key,
                                           const struct pan_fb_layout *fb,
                                           const struct pan_fb_resolve *resolve);
-#endif
+#endif /* PAN_ARCH >= 6 */
 
 struct nir_shader *
 GENX(pan_get_fb_shader)(const struct pan_fb_shader_key *key,
                         const struct nir_shader_compiler_options *nir_options);
+
+#if PAN_ARCH >= 13
+/**
+ * Returns true if there's enough space in the tile buffer for at least two
+ * Z/S tiles.
+ */
+static inline bool
+pan_fb_can_pipeline_zs(const struct pan_fb_layout *fb)
+{
+   const uint32_t z_B_per_px = sizeof(float) * fb->sample_count;
+   const uint32_t z_B_per_tile = z_B_per_px * fb->tile_size_px;
+
+   /* The budget is already half the available Z space */
+   return z_B_per_tile < fb->tile_z_budget_B;
+}
 #endif
+#endif /* PAN_ARCH */
 
 #endif /* __PAN_FB_H */

@@ -20,13 +20,16 @@
 
 /* Driver-specific forward-declarations. */
 struct pvr_device_info;
+struct pvr_device_runtime_info;
 
 /* Compiler-specific forward-declarations. */
 typedef struct _pco_shader pco_shader;
 typedef struct _pco_ctx pco_ctx;
 typedef struct _pco_data pco_data;
 
-pco_ctx *pco_ctx_create(const struct pvr_device_info *dev_info, void *mem_ctx);
+pco_ctx *pco_ctx_create(const struct pvr_device_info *dev_info,
+                        const struct pvr_device_runtime_info *dev_runtime_info,
+                        void *mem_ctx);
 void pco_ctx_setup_usclib(pco_ctx *ctx, const void *data, unsigned size);
 void pco_ctx_update_dev_info(pco_ctx *ctx,
                              const struct pvr_device_info *dev_info);

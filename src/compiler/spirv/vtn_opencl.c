@@ -639,24 +639,11 @@ handle_special(struct vtn_builder *b, uint32_t opcode,
        *
        *    Implemented either as a correctly rounded fma or as a multiply
        *    followed by an add both of which are correctly rounded
-       *
-       * So lower to fmul+fadd if we have to, but fuse to an ffma if the backend
-       * supports that. This can be significantly faster.
        */
-      bool lower =
-         ((nb->shader->options->lower_ffma16 && srcs[0]->bit_size == 16) ||
-          (nb->shader->options->lower_ffma32 && srcs[0]->bit_size == 32) ||
-          (nb->shader->options->lower_ffma64 && srcs[0]->bit_size == 64));
 
       const unsigned save_math_ctrl = nb->fp_math_ctrl;
-      nir_def *res;
-
-      nb->fp_math_ctrl |= nir_fp_exact;
-      if (lower)
-         res = nir_fmad(nb, srcs[0], srcs[1], srcs[2]);
-      else
-         res = nir_ffma(nb, srcs[0], srcs[1], srcs[2]);
-
+      nb->fp_math_ctrl |= nir_fp_no_contract | nir_fp_no_transform;
+      nir_def *res = nir_ffma_weak(nb, srcs[0], srcs[1], srcs[2]);
       nb->fp_math_ctrl = save_math_ctrl;
       return res;
    }
@@ -696,12 +683,11 @@ handle_special(struct vtn_builder *b, uint32_t opcode,
       return nir_ldexp(nb, srcs[0], srcs[1]);
    case OpenCLstd_Fma: {
       /* FIXME: the software implementation only supports fp32 for now. */
-      if ((nb->shader->options->lower_ffma32 && srcs[0]->bit_size == 32) ||
-          (nb->shader->options->lower_ffma16 && srcs[0]->bit_size == 16))
+      if (srcs[0]->bit_size != 64 && !nir_has_ffma(nb->shader, srcs[0]->bit_size))
          break;
 
       /* OpenCL FMA is not allowed to be split. */
-      const bool save_math_ctrl = nb->fp_math_ctrl;
+      const unsigned save_math_ctrl = nb->fp_math_ctrl;
       nb->fp_math_ctrl |= nir_fp_exact;
       nir_def *res = nir_ffma(nb, srcs[0], srcs[1], srcs[2]);
       nb->fp_math_ctrl = save_math_ctrl;
@@ -717,11 +703,46 @@ handle_special(struct vtn_builder *b, uint32_t opcode,
    if (!ret)
       vtn_fail("No NIR equivalent");
 
+   switch (opcode) {
    /* libclc's cbrt() implementation fails to flush subnormal numbers to zero
     * even when flush-to-zero is required. Manually flush its output.
     */
-   if (opcode == OpenCLstd_Cbrt) {
+   case OpenCLstd_Cbrt:
       ret = nir_fcanonicalize(nb, ret);
+      break;
+
+   /* Cospi is always expected to return +0.0 instead of -0.0 */
+   case OpenCLstd_Cospi: {
+      if (nb->fp_math_ctrl & nir_fp_preserve_signed_zero)
+         ret = nir_fadd_imm(nb, ret, 0.0);
+      break;
+   }
+
+   /* Sinpi expects a resulting zero to be of the same sign as the input */
+   case OpenCLstd_Sinpi: {
+      if (nb->fp_math_ctrl & nir_fp_preserve_signed_zero) {
+         ret = nir_bcsel(nb, nir_feq_imm(nb, ret, 0.0), nir_copysign(nb, ret, srcs[0]), ret);
+      }
+      break;
+   }
+
+   case OpenCLstd_Tanpi: {
+      if (nb->fp_math_ctrl & nir_fp_preserve_signed_zero) {
+         nir_def *remainder = nir_fmod(nb, nir_fabs(nb, srcs[0]), nir_imm_floatN_t(nb, 2.0, ret->bit_size));
+         nir_def *is_odd = nir_feq_imm(nb, remainder, 1.0);
+         nir_def *is_even = nir_feq_imm(nb, remainder, 0.0);
+
+         /* tanpi(n) is copysign(0.0, - n) for odd integers n. */
+         ret = nir_bcsel(nb, is_odd, nir_copysign(nb, ret, nir_fneg(nb, srcs[0])), ret);
+
+         /* tanpi(n) is copysign(0.0, n) for even integers n. */
+         ret = nir_bcsel(nb, is_even, nir_copysign(nb, ret, srcs[0]), ret);
+      }
+      break;
+   }
+
+   default:
+      break;
    }
 
    return ret;

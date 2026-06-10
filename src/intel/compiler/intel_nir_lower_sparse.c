@@ -152,13 +152,14 @@ split_tex_residency(nir_builder *b, nir_tex_instr *tex, bool jay)
     * out unwanted color components, using fewer registers.
     */
    if (tex->op == nir_texop_tg4) {
-      if (!sparse_tex->is_gather_implicit_lod) {
+      if (sparse_tex->is_gather_implicit_lod) {
+         assert(nir_tex_instr_src_index(sparse_tex, nir_tex_src_lod) == -1);
+      } else if (nir_tex_instr_src_index(sparse_tex, nir_tex_src_lod) == -1 &&
+                 nir_tex_instr_src_index(sparse_tex, nir_tex_src_bias) == -1) {
          /* Add explicit LOD 0 */
          nir_builder bb = nir_builder_at(nir_after_instr(&tex->instr));
          nir_tex_instr_add_src(sparse_tex, nir_tex_src_lod,
-                               nir_imm_int(&bb, 0));
-      } else {
-         assert(nir_tex_instr_src_index(sparse_tex, nir_tex_src_lod) == -1);
+                            nir_imm_int(&bb, 0));
       }
 
       if (jay)

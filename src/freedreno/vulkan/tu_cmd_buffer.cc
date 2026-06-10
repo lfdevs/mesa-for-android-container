@@ -98,6 +98,26 @@ tu_cmd_buffer_status_gpu_write(struct tu_cmd_buffer *cmd_buffer,
    tu_cs_emit(cs, (uint32_t)status);
 }
 
+static void
+tu_wait_for_rb_done(struct tu_cs *cs, uint32_t onchip_addr, uint32_t seqno)
+{
+   tu_cs_emit_pkt7(cs, CP_EVENT_WRITE7, 4);
+   tu_cs_emit(cs, CP_EVENT_WRITE7_0(
+      .event = RB_DONE_TS,
+      .write_src = EV_WRITE_USER_32B,
+      .write_dst = EV_DST_ONCHIP,
+      .write_enabled = true).value);
+   tu_cs_emit_qw(cs, onchip_addr);
+   tu_cs_emit(cs, seqno);
+
+   tu_cs_emit_pkt7(cs, CP_WAIT_REG_MEM, 6);
+   tu_cs_emit(cs, CP_WAIT_REG_MEM_0_FUNCTION(WRITE_EQ) | CP_WAIT_REG_MEM_0_POLL(POLL_ON_CHIP));
+   tu_cs_emit_qw(cs, onchip_addr);
+   tu_cs_emit(cs, CP_WAIT_REG_MEM_3_REF(seqno));
+   tu_cs_emit(cs, CP_WAIT_REG_MEM_4_MASK(~0u));
+   tu_cs_emit(cs, CP_WAIT_REG_MEM_5_DELAY_LOOP_CYCLES(2));
+}
+
 template <chip CHIP>
 static void
 tu_clone_trace_range(struct tu_cmd_buffer *cmd, struct tu_cs *cs,
@@ -117,21 +137,14 @@ tu_clone_trace_range(struct tu_cmd_buffer *cmd, struct tu_cs *cs,
       static uint32_t seqno = 0;
       uint32_t value = p_atomic_add_return(&seqno, 1);
 
-      tu_cs_emit_pkt7(cs, CP_EVENT_WRITE7, 4);
-      tu_cs_emit(cs, CP_EVENT_WRITE7_0(
-         .event = RB_DONE_TS,
-         .write_src = EV_WRITE_USER_32B,
-         .write_dst = EV_DST_ONCHIP,
-         .write_enabled = true).value);
-      tu_cs_emit_qw(cs, TU_ONCHIP_U_TRACE_BARRIER);
-      tu_cs_emit(cs, value);
+      /* BV can race BR so we cannot wait on the same addr in both since it can be overwritten. */
+      tu_cond_exec_start(cs, CP_COND_REG_EXEC_0_MODE(THREAD_MODE) | CP_COND_REG_EXEC_0_BR);
+      tu_wait_for_rb_done(cs, TU_ONCHIP_BR_U_TRACE_BARRIER, value);
+      tu_cond_exec_end(cs);
 
-      tu_cs_emit_pkt7(cs, CP_WAIT_REG_MEM, 6);
-      tu_cs_emit(cs, CP_WAIT_REG_MEM_0_FUNCTION(WRITE_EQ) | CP_WAIT_REG_MEM_0_POLL(POLL_ON_CHIP));
-      tu_cs_emit_qw(cs, TU_ONCHIP_U_TRACE_BARRIER);
-      tu_cs_emit(cs, CP_WAIT_REG_MEM_3_REF(value));
-      tu_cs_emit(cs, CP_WAIT_REG_MEM_4_MASK(~0u));
-      tu_cs_emit(cs, CP_WAIT_REG_MEM_5_DELAY_LOOP_CYCLES(2));
+      tu_cond_exec_start(cs, CP_COND_REG_EXEC_0_MODE(THREAD_MODE) | CP_COND_REG_EXEC_0_BV);
+      tu_wait_for_rb_done(cs, TU_ONCHIP_BV_U_TRACE_BARRIER, value);
+      tu_cond_exec_end(cs);
    }
 
    tu_cs_emit_wfi(cs);
@@ -247,6 +260,7 @@ tu6_lazy_init_vsc(struct tu_cmd_buffer *cmd)
    cmd->vsc_draw_strm_offset = prim_strm_size;
    cmd->vsc_draw_strm_size_offset = cmd->vsc_draw_strm_offset + draw_strm_size;
    cmd->vsc_state_offset = cmd->vsc_draw_strm_size_offset + draw_strm_size_size;
+   cmd->vsc_initialized = true;
 }
 
 static void
@@ -284,8 +298,6 @@ tu_emit_vsc(struct tu_cmd_buffer *cmd, struct tu_cs *cs)
       tu_cs_emit(cs, A6XX_CP_SET_PSEUDO_REG__0_PSEUDO_REG(VSC_PIPE_DATA_PRIM_BASE));
       tu_emit_vis_stream_patchpoint(cmd, cs, cmd->vsc_prim_strm_offset);
    }
-
-   cmd->vsc_initialized = true;
 }
 
 struct tu_set_render_mode {
@@ -492,7 +504,7 @@ tu_emit_cache_flush(struct tu_cmd_buffer *cmd_buffer)
 
    if ((flushes & TU_CMD_FLAG_WAIT_FOR_BR) && CHIP >= A7XX &&
        !(cmd_buffer->state.pass && cmd_buffer->state.renderpass_cb_disabled) &&
-       !TU_DEBUG(NO_CONCURRENT_BINNING)) {
+       cmd_buffer->device->instance->drirc.perf.allow_concurrent_binning) {
       trace_start_concurrent_binning_barrier(&cmd_buffer->trace, cs, cmd_buffer);
 
       /* Wait-for-BR when repeated a lot of times per frame can add up
@@ -2162,6 +2174,7 @@ tu6_init_static_regs(struct tu_device *dev, struct tu_cs *cs)
                     (phys_dev->info->props.enable_tp_ubwc_flag_hint
                         ? A6XX_TPL1_DBG_ECO_CNTL1_TP_UBWC_FLAG_HINT
                         : 0);
+            break;
          case REG_A6XX_SP_CHICKEN_BITS:
             value = (value & ~A6XX_SP_CHICKEN_BITS_EOLM_ENABLE) |
                     (phys_dev->info->props.has_eolm_eogm
@@ -2240,7 +2253,7 @@ tu6_init_static_regs(struct tu_device *dev, struct tu_cs *cs)
    }
 
    tu_cs_emit_regs(cs, TPL1_MODE_CNTL(CHIP, .isammode = ISAMMODE_GL,
-                                            .texcoordroundmode = dev->instance->use_tex_coord_round_nearest_even_mode
+                                            .texcoordroundmode = dev->instance->drirc.misc.use_tex_coord_round_nearest_even_mode
                                                ? COORD_ROUND_NEAREST_EVEN
                                                : COORD_TRUNCATE,
                                             .nearestmipsnap = CLAMP_ROUND_TRUNCATE,
@@ -2254,8 +2267,8 @@ tu6_init_static_regs(struct tu_device *dev, struct tu_cs *cs)
    if (CHIP >= A8XX)
       tu_cs_emit_regs(cs, SP_ALPHA_TEST_CNTL(CHIP));
 
-   tu_cs_emit_regs(cs, A6XX_TPL1_GFX_BORDER_COLOR_BASE(.qword = dev->global_bo->iova + gb_offset(bcolor)));
-   tu_cs_emit_regs(cs, A6XX_TPL1_CS_BORDER_COLOR_BASE(.qword = dev->global_bo->iova + gb_offset(bcolor)));
+   tu_cs_emit_regs(cs, A6XX_TPL1_GFX_BORDER_COLOR_BASE(.qword = dev->global_bo->iova + gb_offset(bcolor_builtin)));
+   tu_cs_emit_regs(cs, A6XX_TPL1_CS_BORDER_COLOR_BASE(.qword = dev->global_bo->iova + gb_offset(bcolor_builtin)));
 
    /* BR-only registers */
    /* non-ctx regs programmed by KMD (and blocked from UMD) on gen8+ */
@@ -2402,7 +2415,7 @@ tu_init_hw_rp(struct tu_cs *cs)
 {
    if (CHIP >= A7XX) {
       tu_cs_emit_regs(cs, VPC_UNKNOWN_CNTL(CHIP));
-      tu_cs_emit_regs(cs, RB_A2D_UNKNOWN_8C34(CHIP));
+      tu_cs_emit_regs(cs, RB_A2D_DEST_BUFFER_ARRAY_PITCH(CHIP));
    }
 }
 TU_GENX(tu_init_hw_rp);
@@ -3112,8 +3125,8 @@ tu7_emit_concurrent_binning_start(struct tu_cmd_buffer *cmd,
        tu7_cb_disable_reason(
           (!cmd->state.lrz.fast_clear && cmd->state.lrz.image_view), cmd,
           "LRZ fast clear disabled") ||
-       tu7_cb_disable_reason(TU_DEBUG(NO_CONCURRENT_BINNING), cmd,
-                             "TU_DEBUG(NO_CONCURRENT_BINNING)")) {
+       tu7_cb_disable_reason(!cmd->device->instance->drirc.perf.allow_concurrent_binning, cmd,
+                             "globally disabled")) {
      tu_cs_emit_pkt7(cs, CP_THREAD_CONTROL, 1);
      tu_cs_emit(cs, CP_THREAD_CONTROL_0_THREAD(CP_SET_THREAD_BR) |
                     CP_THREAD_CONTROL_0_CONCURRENT_BIN_DISABLE);
@@ -3519,11 +3532,11 @@ tu6_tile_render_begin(struct tu_cmd_buffer *cmd, struct tu_cs *cs,
       tu_cs_emit_regs(cs, RB_BIN_FOVEAT(CHIP));
    }
 
-   if (use_binning) {
-      if (!cmd->vsc_initialized) {
-         tu6_lazy_init_vsc(cmd);
-      }
+   if (!cmd->vsc_initialized) {
+      tu6_lazy_init_vsc(cmd);
+   }
 
+   if (use_binning) {
       /* We always emit VSC before each renderpass, because due to
        * skipsaverestore the underlying VSC registers may have become
        * invalid. Normally we'd need to WFI before setting these non-context
@@ -3584,13 +3597,6 @@ tu6_tile_render_begin(struct tu_cmd_buffer *cmd, struct tu_cs *cs,
    }
 
    if (vsc->binning_possible) {
-      /* On a7xx we always need VSC allocated because the VSC state has to go
-       * together with other stream data. We could allocate just the VSC state
-       * if binning is disabled but it doesn't seem worth it.
-       */
-      if (CHIP >= A7XX && !cmd->vsc_initialized)
-         tu6_lazy_init_vsc(cmd);
-
       /* Upload state regs to memory to be restored on skipsaverestore
        * preemption. On a7xx this is considered part of the vis stream that
        * requires a patchpoint.
@@ -5502,7 +5508,7 @@ tu_CmdBindPipeline(VkCommandBuffer commandBuffer,
    if (pipeline->disable_fs.valid) {
       if (cmd->state.disable_fs != pipeline->disable_fs.disable_fs) {
          cmd->state.disable_fs = pipeline->disable_fs.disable_fs;
-         cmd->state.dirty |= TU_CMD_DIRTY_DISABLE_FS;
+         cmd->state.dirty |= TU_CMD_DIRTY_RAST | TU_CMD_DIRTY_LRZ;
       }
    }
    cmd->state.pipeline_disable_fs = pipeline->disable_fs.valid;
@@ -8301,7 +8307,7 @@ tu6_draw_common(struct tu_cmd_buffer *cmd,
    }
 
    bool dirty_lrz =
-      (dirty & TU_CMD_DIRTY_LRZ) ||
+      (dirty & (TU_CMD_DIRTY_LRZ | TU_CMD_DIRTY_DISABLE_FS)) ||
       BITSET_TEST(cmd->vk.dynamic_graphics_state.dirty,
                   MESA_VK_DYNAMIC_DS_DEPTH_TEST_ENABLE) ||
       BITSET_TEST(cmd->vk.dynamic_graphics_state.dirty,

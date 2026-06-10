@@ -72,6 +72,29 @@ get_new_program_id(struct iris_screen *screen)
    return p_atomic_inc_return(&screen->program_id);
 }
 
+static const unsigned *
+iris_backend_compile(const struct iris_screen *screen,
+                     void *mem_ctx,
+                     struct brw_compile_params *params)
+{
+   assert(screen->brw);
+
+   const struct intel_device_info *devinfo = screen->devinfo;
+   nir_shader *nir = params->nir;
+
+   if (intel_use_jay(devinfo, nir->info.stage)) {
+      struct jay_shader_bin *bin =
+         jay_compile(devinfo, mem_ctx, nir,
+                     (union brw_any_prog_data *)params->prog_data,
+                     (union brw_any_prog_key *)params->key,
+                     params->archiver);
+
+      return bin->kernel;
+   } else {
+      return brw_compile(screen->brw, params);
+   }
+}
+
 static void
 iris_apply_brw_fs_prog_data(struct iris_compiled_shader *shader,
                             const struct brw_fs_prog_data *brw)
@@ -1918,25 +1941,15 @@ iris_compile_vs(struct iris_screen *screen,
          .base = {
             .mem_ctx = mem_ctx,
             .nir = nir,
+            .key = &brw_key.base,
+            .prog_data = (struct brw_stage_prog_data *)brw_prog_data,
             .log_data = dbg,
             .source_hash = ish->source_hash,
             .archiver = debug_archiver,
          },
-         .key = &brw_key,
-         .prog_data = brw_prog_data,
       };
 
-      if (intel_use_jay(devinfo, nir->info.stage)) {
-         struct jay_shader_bin *bin =
-            jay_compile(devinfo, mem_ctx, nir,
-                        (union brw_any_prog_data *) brw_prog_data,
-                        (union brw_any_prog_key *) &brw_key);
-
-         program = bin->kernel;
-      } else {
-         program = brw_compile_vs(screen->brw, &params);
-      }
-
+      program = iris_backend_compile(screen, mem_ctx, &params.base);
       error = params.base.error_str;
       if (program) {
          iris_debug_recompile(dbg, ish, key);
@@ -2165,14 +2178,14 @@ iris_compile_tcs(struct iris_screen *screen,
       options = screen->elk->nir_options[MESA_SHADER_TESS_CTRL];
    struct elk_tcs_prog_key elk_key = iris_to_elk_tcs_key(screen, key);
 #endif
-   uint32_t source_hash;
+   uint64_t source_hash;
 
    if (ish) {
       nir = nir_shader_clone(mem_ctx, ish->nir);
       source_hash = ish->source_hash;
    } else {
       nir = iris_create_passthrough_tcs(mem_ctx, options, key);
-      source_hash = *(uint32_t*)nir->info.source_blake3;
+      source_hash = *(uint64_t*)nir->info.source_blake3;
    }
 
    debug_archiver *debug_archiver =
@@ -2196,15 +2209,15 @@ iris_compile_tcs(struct iris_screen *screen,
          .base = {
             .mem_ctx = mem_ctx,
             .nir = nir,
+            .key = &brw_key.base,
+            .prog_data = (struct brw_stage_prog_data *)brw_prog_data,
             .log_data = dbg,
             .source_hash = source_hash,
             .archiver = debug_archiver,
          },
-         .key = &brw_key,
-         .prog_data = brw_prog_data,
       };
 
-      program = brw_compile_tcs(screen->brw, &params);
+      program = iris_backend_compile(screen, mem_ctx, &params.base);
       error = params.base.error_str;
 
       if (program) {
@@ -2406,16 +2419,16 @@ iris_compile_tes(struct iris_screen *screen,
          .base = {
             .mem_ctx = mem_ctx,
             .nir = nir,
+            .key = &brw_key.base,
+            .prog_data = (struct brw_stage_prog_data *)brw_prog_data,
             .log_data = dbg,
             .source_hash = ish->source_hash,
             .archiver = debug_archiver,
          },
-         .key = &brw_key,
-         .prog_data = brw_prog_data,
          .input_vue_map = &input_vue_map,
       };
 
-      program = brw_compile_tes(screen->brw, &params);
+      program = iris_backend_compile(screen, mem_ctx, &params.base);
       error = params.base.error_str;
 
       if (program) {
@@ -2601,15 +2614,15 @@ iris_compile_gs(struct iris_screen *screen,
          .base = {
             .mem_ctx = mem_ctx,
             .nir = nir,
+            .key = &brw_key.base,
+            .prog_data = (struct brw_stage_prog_data *)brw_prog_data,
             .log_data = dbg,
             .source_hash = ish->source_hash,
             .archiver = debug_archiver,
          },
-         .key = &brw_key,
-         .prog_data = brw_prog_data,
       };
 
-      program = brw_compile_gs(screen->brw, &params);
+      program = iris_backend_compile(screen, mem_ctx, &params.base);
       error = params.base.error_str;
       if (program) {
          iris_debug_recompile(dbg, ish, key);
@@ -2804,29 +2817,19 @@ iris_compile_fs(struct iris_screen *screen,
          .base = {
             .mem_ctx = mem_ctx,
             .nir = nir,
+            .key = &brw_key.base,
+            .prog_data = (struct brw_stage_prog_data *)brw_prog_data,
             .log_data = dbg,
             .source_hash = ish->source_hash,
             .archiver = debug_archiver,
          },
-         .key = &brw_key,
-         .prog_data = brw_prog_data,
 
          .allow_spilling = true,
          .max_polygons = UCHAR_MAX,
          .vue_map = vue_map,
       };
 
-      if (intel_use_jay(devinfo, nir->info.stage)) {
-         struct jay_shader_bin *bin =
-            jay_compile(devinfo, mem_ctx, nir,
-                        (union brw_any_prog_data *) brw_prog_data,
-                        (union brw_any_prog_key *) &brw_key);
-
-         program = bin->kernel;
-      } else {
-         program = brw_compile_fs(screen->brw, &params);
-      }
-
+      program = iris_backend_compile(screen, mem_ctx, &params.base);
       error = params.base.error_str;
       if (program) {
          iris_debug_recompile(dbg, ish, key);
@@ -3168,25 +3171,15 @@ iris_compile_cs(struct iris_screen *screen,
          .base = {
             .mem_ctx = mem_ctx,
             .nir = nir,
+            .key = &brw_key.base,
+            .prog_data = (struct brw_stage_prog_data *)brw_prog_data,
             .log_data = dbg,
             .source_hash = ish->source_hash,
             .archiver = debug_archiver,
          },
-         .key = &brw_key,
-         .prog_data = brw_prog_data,
       };
 
-      if (intel_use_jay(devinfo, nir->info.stage)) {
-         struct jay_shader_bin *bin =
-            jay_compile(devinfo, mem_ctx, nir,
-                        (union brw_any_prog_data *) brw_prog_data,
-                        (union brw_any_prog_key *) &brw_key);
-
-         program = bin->kernel;
-      } else {
-         program = brw_compile_cs(screen->brw, &params);
-      }
-
+      program = iris_backend_compile(screen, mem_ctx, &params.base);
       error = params.base.error_str;
       if (program) {
          iris_debug_recompile(dbg, ish, key);

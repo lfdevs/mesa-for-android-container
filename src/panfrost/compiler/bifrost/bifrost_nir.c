@@ -17,6 +17,19 @@
 #include "bifrost_compile.h"
 #include "bifrost_nir.h"
 #include "compiler.h"
+#include "../kraid/kraid.h"
+
+DEBUG_GET_ONCE_BOOL_OPTION(use_kraid, "PAN_USE_KRAID", false)
+
+static bool
+bi_use_kraid(void)
+{
+#ifdef WITH_PANFROST_RUST
+   return debug_get_option_use_kraid();
+#else
+   return false;
+#endif
+}
 
 /*
  * Some operations are only available as 32-bit instructions. 64-bit floats are
@@ -124,7 +137,8 @@ bi_vectorize_filter(const nir_instr *instr, const void *data)
    case nir_op_ball_iequal4:
    case nir_op_bany_inequal2:
    case nir_op_bany_inequal3:
-   case nir_op_bany_inequal4: return 1;
+   case nir_op_bany_inequal4:
+      return 1;
    case nir_op_pack_uvec2_to_uint:
    case nir_op_pack_uvec4_to_uint:
       return 0;
@@ -137,12 +151,16 @@ bi_vectorize_filter(const nir_instr *instr, const void *data)
    case nir_op_extract_i16:
    case nir_op_insert_u16:
       return 1;
-   /* On v11+, we lost all packed F16 conversions */
    case nir_op_f2f16:
    case nir_op_f2f16_rtz:
    case nir_op_f2f16_rtne:
    case nir_op_u2f16:
    case nir_op_i2f16:
+      /* On v10 and earlier we can take 2 32-bit floats as srcs, while on v11+
+       * we lost all packed F16 conversions.
+       */
+      return (pan_arch(gpu_id) >= 11) ? 1 : 2;
+   /* On v11+, we lost packed 16-bit frexp_*  */
    case nir_op_frexp_sig:
    case nir_op_frexp_exp:
       if (pan_arch(gpu_id) >= 11)
@@ -944,6 +962,7 @@ bifrost_postprocess_nir(nir_shader *nir,
    NIR_PASS(_, nir, pan_nir_lower_tex, gpu_id);
    NIR_PASS(_, nir, pan_nir_lower_image, gpu_id);
 
+   NIR_PASS(_, nir, pan_nir_fuse_io_cvt, gpu_id, &info->varyings.formats);
    /* Our OpenCL compiler (src/panfrost/clc/pan_compile.c) has a very weird and
     * suboptimal optimization pipeline that results in a lot of unoptimized
     * memcpys and sparse scratch space.  That code is still being used for
@@ -978,8 +997,13 @@ bifrost_postprocess_nir(nir_shader *nir,
        */
       NIR_PASS(_, nir, nir_lower_vars_to_explicit_types, nir_var_function_temp,
                glsl_get_natural_size_align_bytes);
+
+      nir_address_format scratch_addr_format =
+         nir_get_ptr_bitsize(nir) == 64 ? nir_address_format_32bit_offset_as_64bit
+                                        : nir_address_format_32bit_offset;
+
       NIR_PASS(_, nir, nir_lower_explicit_io, nir_var_function_temp,
-               nir_address_format_32bit_offset);
+               scratch_addr_format);
    }
 
    nir_lower_mem_access_bit_sizes_options mem_size_options = {
@@ -1262,7 +1286,11 @@ bifrost_compile_shader_nir(nir_shader *nir,
    info->tls_size = nir->scratch_size;
    info->stage = nir->info.stage;
 
-   if (nir->info.stage == MESA_SHADER_VERTEX && info->vs.idvs) {
+   if (bi_use_kraid()) {
+#ifdef WITH_PANFROST_RUST
+      kraid_compile_nir(nir, inputs, binary, info);
+#endif
+   } else if (nir->info.stage == MESA_SHADER_VERTEX && info->vs.idvs) {
       /* On 5th Gen, IDVS is only in one binary */
       if (pan_arch(inputs->gpu_id) >= 12)
          bi_compile_variant(nir, inputs, binary, info, BI_IDVS_ALL);

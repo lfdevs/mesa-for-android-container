@@ -1,43 +1,43 @@
-mad(8)          g26<1>F         g22<4,4,1>F     g2.4<0,1,0>F    g5<4,4,1>F { align16 1Q };
-mad(16)         g14<1>F         g12<4,4,1>F     g4<4,4,1>F      g4<4,4,1>F { align16 1H };
-mad(8)          g64<1>DF        g62<4,4,1>DF    g40<4,4,1>DF    g92<4,4,1>DF { align16 1Q };
-mad(8)          g80<1>DF        -g50<4,4,1>DF   g24<4,4,1>DF    g80<4,4,1>DF { align16 1Q };
-mad(8)          g27<1>DF        g48<4,4,1>DF    g106<4,4,1>DF   g25<4,4,1>DF { align16 2Q };
-mad(8)          g13<1>F         -g14.0<0,1,0>F  g11<4,4,1>F     g6<4,4,1>F { align16 1Q };
-mad(16)         g29<1>F         -g33.0<0,1,0>F  g25<4,4,1>F     g15<4,4,1>F { align16 1H };
-mad(8)          g29<1>DF        g23<4,4,1>DF    g27<4,4,1>DF    -g25<4,4,1>DF { align16 1Q };
-mad.le.f0.0(8)  g5<1>F          g3<4,4,1>F      g4.2<0,1,0>F    g64<4,4,1>F { align16 1Q };
-mad.le.f0.0(16) g7<1>F          g4<4,4,1>F      g6.2<0,1,0>F    g16<4,4,1>F { align16 1H };
-mad(8)          g32<1>F         g31<4,4,1>F     g2.3<0,1,0>F    -g15<4,4,1>F { align16 1Q };
-mad(16)         g56<1>F         g54<4,4,1>F     g2.3<0,1,0>F    -g5<4,4,1>F { align16 1H };
-mad.sat(8)      g12<1>F         g4.1<0,1,0>F    g4.0<0,1,0>F    g8<4,4,1>F { align16 1Q };
-mad.sat(16)     g18<1>F         g6.1<0,1,0>F    g6.0<0,1,0>F    g10<4,4,1>F { align16 1H };
-mad(8)          g86<1>F         g88.6<0,1,0>F   -g88.7<0,1,0>F  g77<4,4,1>F { align16 1Q };
-mad(8)          g85<1>DF        g28<4,4,1>DF    g83<4,4,1>DF    -g81<4,4,1>DF { align16 2Q };
-mad(8)          g11<1>F         -g2.0<0,1,0>F   g10<4,4,1>F     (abs)g5.6<0,1,0>F { align16 1Q };
-mad(8)          g15<1>F         g2.1<0,1,0>F    g11<4,4,1>F     (abs)g5.6<0,1,0>F { align16 1Q };
-mad.l.f0.0(8)   g2<1>F          g22<4,4,1>F     g5.7<0,1,0>F    g6.3<0,1,0>F { align16 1Q };
-mad(8)          g79<1>DF        -g39<4,4,1>DF   g21<4,4,1>DF    g79<4,4,1>DF { align16 2Q };
-mad(8)          g117<1>F        -g116<4,4,1>F   g9.0<0,1,0>F    -g113<4,4,1>F { align16 1Q };
-mad.ge.f0.0(8)  g13<1>F         g28.0<0,1,0>F   g9<4,4,1>F      -g2.4<0,1,0>F { align16 1Q };
-mad.ge.f0.0(16) g23<1>F         g17.0<0,1,0>F   g6<4,4,1>F      -g3.0<0,1,0>F { align16 1H };
-mad(8)          g26<1>F         g2.0<0,1,0>F    -g2.1<0,1,0>F   (abs)g5.6<0,1,0>F { align16 1Q };
-mad(8)          g70<1>F         -g13<4,4,1>F    -g2.1<0,1,0>F   -g47<4,4,1>F { align16 1Q };
-mad(16)         g95<1>F         -g93<4,4,1>F    g85<4,4,1>F     -g85<4,4,1>F { align16 1H };
-mad(16)         g5<1>F          -g21<4,4,1>F    -g2.1<0,1,0>F   -g85<4,4,1>F { align16 1H };
-mad(16)         g56<1>F         g6.4<0,1,0>F    -g6.5<0,1,0>F   g51<4,4,1>F { align16 1H };
-mad.sat(8)      g124<1>F        -g7<4,4,1>F     g2.6<0,1,0>F    g2.1<0,1,0>F { align16 1Q };
-mad(16)         g71<1>F         g55.0<0,1,0>F   -g55.1<0,1,0>F  (abs)g1.0<0,1,0>F { align16 1H };
-mad(16)         g77<1>F         -g55.2<0,1,0>F  g71<4,4,1>F     (abs)g1.0<0,1,0>F { align16 1H };
-mad(16)         g37<1>F         g55.3<0,1,0>F   g77<4,4,1>F     (abs)g1.0<0,1,0>F { align16 1H };
-mad(8)          g43<1>DF        g42<4,4,1>DF    -g34<4,4,1>DF   g7<4,4,1>DF { align16 1Q };
-mad(8)          g3<1>DF         g2<4,4,1>DF     -g111<4,4,1>DF  g39<4,4,1>DF { align16 2Q };
-mad(8)          g12<1>F         -g17<4,4,1>F    (abs)g7<4,4,1>F g4.0<0,1,0>F { align16 1Q };
-mad(16)         g27<1>F         -g22<4,4,1>F    (abs)g19<4,4,1>F g29.0<0,1,0>F { align16 1H };
-mad.sat(8)      g125<1>F        g9<4,4,1>F      g6<4,4,1>F      -g64.0<0,1,0>F { align16 1Q };
-mad.l.f0.0(16)  g5<1>F          g9<4,4,1>F      g2.7<0,1,0>F    g3.3<0,1,0>F { align16 1H };
-mad(8)          g6<1>DF         -g55<4,4,1>DF   g2<4,4,1>DF     -g47<4,4,1>DF { align16 1Q };
-mad.z.f0.0(8)   g8<1>F          g3.2<0,1,0>F    g3.1<0,1,0>F    g3.0<0,1,0>F { align16 1Q };
-mad(8)          g63<1>DF        -g48<4,4,1>DF   g56<4,4,1>DF    -g44<4,4,1>DF { align16 2Q };
-mad.nz.f0.0(8)  g10<1>F         -g12.0<0,1,0>F  g7<4,4,1>F      g10<4,4,1>F { align16 1Q };
-mad.nz.f0.0(16) g15<1>F         -g33.0<0,1,0>F  g9<4,4,1>F      g17<4,4,1>F { align16 1H };
+        mad (8)                   r26<0>:f      r22<0;0>:f        r2.4<0;0>.r:f     r5<0>:f {Align16}
+        mad (16)                  r14<0>:f      r12<0;0>:f        r4<0;0>:f         r4<0>:f {Align16}
+        mad (8)                   r64<0>:df     r62<0;0>:df       r40<0;0>:f        r92<0>:f {Align16}
+        mad (8)                   r80<0>:df     -r50<0;0>:df      r24<0;0>:f        r80<0>:f {Align16}
+        mad (8|M8)                r27<0>:df     r48<0;0>:df       r106<0;0>:f       r25<0>:f {Align16}
+        mad (8)                   r13<0>:f      -r14<0;0>.r:f     r11<0;0>:f        r6<0>:f {Align16}
+        mad (16)                  r29<0>:f      -r33<0;0>.r:f     r25<0;0>:f        r15<0>:f {Align16}
+        mad (8)                   r29<0>:df     r23<0;0>:df       r27<0;0>:f        -r25<0>:f {Align16}
+        mad (8)        (le)f0.0   r5<0>:f       r3<0;0>:f         r4.2<0;0>.r:f     r64<0>:f {Align16}
+        mad (16)       (le)f0.0   r7<0>:f       r4<0;0>:f         r6.2<0;0>.r:f     r16<0>:f {Align16}
+        mad (8)                   r32<0>:f      r31<0;0>:f        r2.3<0;0>.r:f     -r15<0>:f {Align16}
+        mad (16)                  r56<0>:f      r54<0;0>:f        r2.3<0;0>.r:f     -r5<0>:f {Align16}
+        mad.sat (8)               r12<0>:f      r4.1<0;0>.r:f     r4<0;0>.r:f       r8<0>:f {Align16}
+        mad.sat (16)              r18<0>:f      r6.1<0;0>.r:f     r6<0;0>.r:f       r10<0>:f {Align16}
+        mad (8)                   r86<0>:f      r88.6<0;0>.r:f    -r88.7<0;0>.r:f   r77<0>:f {Align16}
+        mad (8|M8)                r85<0>:df     r28<0;0>:df       r83<0;0>:f        -r81<0>:f {Align16}
+        mad (8)                   r11<0>:f      -r2<0;0>.r:f      r10<0;0>:f        (abs)r5.6<0>.r:f {Align16}
+        mad (8)                   r15<0>:f      r2.1<0;0>.r:f     r11<0;0>:f        (abs)r5.6<0>.r:f {Align16}
+        mad (8)        (lt)f0.0   r2<0>:f       r22<0;0>:f        r5.7<0;0>.r:f     r6.3<0>.r:f {Align16}
+        mad (8|M8)                r79<0>:df     -r39<0;0>:df      r21<0;0>:f        r79<0>:f {Align16}
+        mad (8)                   r117<0>:f     -r116<0;0>:f      r9<0;0>.r:f       -r113<0>:f {Align16}
+        mad (8)        (ge)f0.0   r13<0>:f      r28<0;0>.r:f      r9<0;0>:f         -r2.4<0>.r:f {Align16}
+        mad (16)       (ge)f0.0   r23<0>:f      r17<0;0>.r:f      r6<0;0>:f         -r3<0>.r:f {Align16}
+        mad (8)                   r26<0>:f      r2<0;0>.r:f       -r2.1<0;0>.r:f    (abs)r5.6<0>.r:f {Align16}
+        mad (8)                   r70<0>:f      -r13<0;0>:f       -r2.1<0;0>.r:f    -r47<0>:f {Align16}
+        mad (16)                  r95<0>:f      -r93<0;0>:f       r85<0;0>:f        -r85<0>:f {Align16}
+        mad (16)                  r5<0>:f       -r21<0;0>:f       -r2.1<0;0>.r:f    -r85<0>:f {Align16}
+        mad (16)                  r56<0>:f      r6.4<0;0>.r:f     -r6.5<0;0>.r:f    r51<0>:f {Align16}
+        mad.sat (8)               r124<0>:f     -r7<0;0>:f        r2.6<0;0>.r:f     r2.1<0>.r:f {Align16}
+        mad (16)                  r71<0>:f      r55<0;0>.r:f      -r55.1<0;0>.r:f   (abs)r1<0>.r:f {Align16}
+        mad (16)                  r77<0>:f      -r55.2<0;0>.r:f   r71<0;0>:f        (abs)r1<0>.r:f {Align16}
+        mad (16)                  r37<0>:f      r55.3<0;0>.r:f    r77<0;0>:f        (abs)r1<0>.r:f {Align16}
+        mad (8)                   r43<0>:df     r42<0;0>:df       -r34<0;0>:f       r7<0>:f {Align16}
+        mad (8|M8)                r3<0>:df      r2<0;0>:df        -r111<0;0>:f      r39<0>:f {Align16}
+        mad (8)                   r12<0>:f      -r17<0;0>:f       (abs)r7<0;0>:f       r4<0>.r:f {Align16}
+        mad (16)                  r27<0>:f      -r22<0;0>:f       (abs)r19<0;0>:f      r29<0>.r:f {Align16}
+        mad.sat (8)               r125<0>:f     r9<0;0>:f         r6<0;0>:f         -r64<0>.r:f {Align16}
+        mad (16)       (lt)f0.0   r5<0>:f       r9<0;0>:f         r2.7<0;0>.r:f     r3.3<0>.r:f {Align16}
+        mad (8)                   r6<0>:df      -r55<0;0>:df      r2<0;0>:f         -r47<0>:f {Align16}
+        mad (8)        (eq)f0.0   r8<0>:f       r3.2<0;0>.r:f     r3.1<0;0>.r:f     r3<0>.r:f {Align16}
+        mad (8|M8)                r63<0>:df     -r48<0;0>:df      r56<0;0>:f        -r44<0>:f {Align16}
+        mad (8)        (ne)f0.0   r10<0>:f      -r12<0;0>.r:f     r7<0;0>:f         r10<0>:f {Align16}
+        mad (16)       (ne)f0.0   r15<0>:f      -r33<0;0>.r:f     r9<0;0>:f         r17<0>:f {Align16}

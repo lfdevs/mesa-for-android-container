@@ -68,12 +68,17 @@ void vl_csc_get_rgbyuv_matrix(enum pipe_video_vpp_matrix_coefficients coefficien
 
    float in_range[3][2];
    /* Convert input to full range, chroma to [-0.5,0.5]. */
-   if (in_color_range == PIPE_VIDEO_VPP_CHROMA_COLOR_RANGE_REDUCED)
-      util_get_narrow_range_coeffs(in_range, bpcs);
-   else if (in_yuv)
-      util_get_full_range_coeffs(in_range, bpcs);
-   else
-      util_get_identity_range_coeffs(in_range);
+   if (in_yuv) {
+      if (in_color_range == PIPE_VIDEO_VPP_CHROMA_COLOR_RANGE_REDUCED)
+         util_get_narrow_range_coeffs(in_range, bpcs);
+      else
+         util_get_full_range_coeffs(in_range, bpcs);
+   } else {
+      if (in_color_range == PIPE_VIDEO_VPP_CHROMA_COLOR_RANGE_REDUCED)
+         util_get_narrow_range_rgb_coeffs(in_range, bpcs);
+      else
+         util_get_identity_range_coeffs(in_range);
+   }
 
    if (in_yuv != out_yuv) {
       const float *ycbcr_coeffs;
@@ -104,12 +109,17 @@ void vl_csc_get_rgbyuv_matrix(enum pipe_video_vpp_matrix_coefficients coefficien
    util_ycbcr_adjust_from_range(*matrix, in_range);
 
    float out_range[3][2];
-   if (out_color_range == PIPE_VIDEO_VPP_CHROMA_COLOR_RANGE_REDUCED)
-      util_get_narrow_range_coeffs(out_range, bpcs);
-   else if (out_yuv)
-      util_get_full_range_coeffs(out_range, bpcs);
-   else
-      util_get_identity_range_coeffs(out_range);
+   if (out_yuv) {
+      if (out_color_range == PIPE_VIDEO_VPP_CHROMA_COLOR_RANGE_REDUCED)
+         util_get_narrow_range_coeffs(out_range, bpcs);
+      else
+         util_get_full_range_coeffs(out_range, bpcs);
+   } else {
+      if (out_color_range == PIPE_VIDEO_VPP_CHROMA_COLOR_RANGE_REDUCED)
+         util_get_narrow_range_rgb_coeffs(out_range, bpcs);
+      else
+         util_get_identity_range_coeffs(out_range);
+   }
 
    util_ycbcr_adjust_to_range(*matrix, out_range);
 }

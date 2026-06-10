@@ -9,19 +9,19 @@
  */
 
 #include "radv_image.h"
+#include "tools/radv_debug.h"
+#include "tools/radv_rmv.h"
 #include "util/u_atomic.h"
 #include "ac_drm_fourcc.h"
 #include "ac_formats.h"
 #include "radv_android.h"
 #include "radv_buffer.h"
 #include "radv_buffer_view.h"
-#include "radv_debug.h"
 #include "radv_device_memory.h"
 #include "radv_entrypoints.h"
 #include "radv_formats.h"
 #include "radv_image_view.h"
 #include "radv_radeon_winsys.h"
-#include "radv_rmv.h"
 #include "radv_video.h"
 #include "radv_wsi.h"
 #include "vk_debug_utils.h"
@@ -1610,7 +1610,7 @@ radv_layout_is_htile_compressed(const struct radv_device *device, const struct r
        * the number of decompressions from/to GENERAL.
        */
       if (radv_tc_compat_htile_enabled(image, level) && queue_mask & (1u << RADV_QUEUE_GENERAL) &&
-          !instance->drirc.debug.disable_tc_compat_htile_in_general) {
+          !instance->drirc.debug.disable_tc_compat_htile_general) {
          return true;
       } else {
          return false;

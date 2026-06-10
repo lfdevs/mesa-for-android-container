@@ -18,12 +18,61 @@
 #include "si_video_dec.h"
 #include "ac_uvd_dec.h"
 
+enum ac_video_codec si_pipe_video_profile_to_codec(enum pipe_video_profile profile)
+{
+   switch (u_reduce_video_profile(profile)) {
+   case PIPE_VIDEO_FORMAT_MPEG12:
+      return AC_VIDEO_CODEC_MPEG2;
+   case PIPE_VIDEO_FORMAT_VC1:
+      return AC_VIDEO_CODEC_VC1;
+   case PIPE_VIDEO_FORMAT_MPEG4_AVC:
+      return AC_VIDEO_CODEC_AVC;
+   case PIPE_VIDEO_FORMAT_HEVC:
+      return AC_VIDEO_CODEC_HEVC;
+   case PIPE_VIDEO_FORMAT_JPEG:
+      return AC_VIDEO_CODEC_MJPEG;
+   case PIPE_VIDEO_FORMAT_VP9:
+      return AC_VIDEO_CODEC_VP9;
+   case PIPE_VIDEO_FORMAT_AV1:
+      return AC_VIDEO_CODEC_AV1;
+   default:
+      return AC_VIDEO_CODEC_MAX;
+   }
+}
+
 unsigned si_vid_alloc_stream_handle()
 {
    static struct ac_uvd_stream_handle stream_handle;
    if (!stream_handle.base)
       ac_uvd_init_stream_handle(&stream_handle);
    return ac_uvd_alloc_stream_handle(&stream_handle);
+}
+
+struct si_resource *si_vid_create_buffer(struct pipe_screen *screen,
+                                         enum pipe_resource_usage usage,
+                                         unsigned flags, unsigned size)
+{
+   struct si_screen *sscreen = (struct si_screen *)screen;
+   unsigned bind = 0;
+
+   /* Disable suballocation for UVD/VCE with no VM support */
+   if (sscreen->info.family < CHIP_STONEY)
+      bind |= PIPE_BIND_CUSTOM;
+
+   if (flags & PIPE_RESOURCE_FLAG_ENCRYPTED)
+      bind |= PIPE_BIND_PROTECTED;
+
+   return si_resource(screen->resource_create(screen, &(struct pipe_resource){
+      .width0 = size,
+      .height0 = 1,
+      .depth0 = 1,
+      .array_size = 1,
+      .format = PIPE_FORMAT_R8_UNORM,
+      .target = PIPE_BUFFER,
+      .usage = usage,
+      .bind = bind,
+      .flags = flags,
+   }));
 }
 
 bool si_vid_resize_buffer(struct pipe_context *context,
@@ -37,7 +86,8 @@ bool si_vid_resize_buffer(struct pipe_context *context,
    struct si_resource *old_buf = new_buf;
    void *src = NULL, *dst = NULL;
 
-   new_buf = si_resource(pipe_buffer_create(context->screen, old_buf->b.b.bind, old_buf->b.b.usage, new_size));
+   new_buf = si_vid_create_buffer(context->screen, old_buf->b.b.usage,
+                                  old_buf->b.b.flags, new_size);
    if (!new_buf)
       goto error;
 
@@ -179,11 +229,6 @@ static bool si_vcn_need_context(struct si_context *ctx)
    /* Kernel does VCN instance scheduling per context, so when we have
     * multiple instances we should use new context to be able to utilize
     * all of them.
-    * Another issue is with AV1, VCN 3 and VCN 4 only support AV1 on
-    * first instance. Kernel parses IBs and switches to first instance when
-    * it detects AV1, but this only works for first submitted IB in context.
-    * The CS would be rejected if we first decode/encode other codecs, kernel
-    * schedules on second instance (default) and then we try to decode/encode AV1.
     */
    return ctx->screen->info.ip[AMD_IP_VCN_ENC].num_instances > 1;
 }

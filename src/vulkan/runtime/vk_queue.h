@@ -166,6 +166,19 @@ struct vk_queue {
 
    /* VK_KHR_internally_synchronized_queues */
    simple_mtx_t lock;
+
+   /** For queue emulation: the real underlying hardware queue.
+    *
+    * Always points to the queue that owns the hardware resources:
+    *   - On a real (non-emulated) queue that has emulated aliases, points
+    *     to itself.
+    *   - On an emulated queue, points to the real queue.
+    *   - NULL if this queue does not participate in emulation.
+    *
+    * Submissions on emulated queues are forwarded to real_queue's
+    * driver_submit, serialized via real_queue->lock.
+    */
+   struct vk_queue *real_queue;
 };
 
 VK_DEFINE_HANDLE_CASTS(vk_queue, base, VkQueue, VK_OBJECT_TYPE_QUEUE)
@@ -177,6 +190,31 @@ vk_queue_init(struct vk_queue *queue, struct vk_device *device,
 
 void
 vk_queue_finish(struct vk_queue *queue);
+
+/** Mark a queue as an emulated alias of another queue.
+ *
+ * The emulated queue shares the same underlying hardware queue as the
+ * real queue. Submissions to the emulated queue are redirected to the
+ * real queue's driver_submit(). All submissions (from both the real and
+ * emulated queues) are serialized through a shared mutex.
+ *
+ * The emulated queue does not need driver_submit set, it will use the
+ * real queue's driver_submit and hardware resources.
+ *
+ * Must be called from device-init context (i.e. single-threaded with
+ * respect to other queue setup on the same device). The real queue must
+ * outlive all of its emulated aliases: vk_queue_finish() destroys the
+ * lock when called on the real queue.
+ */
+void
+vk_queue_set_emulated(struct vk_queue *emulated, struct vk_queue *real);
+
+/** Returns true if this queue is an emulated alias (not the real queue) */
+static inline bool
+vk_queue_is_emulated(const struct vk_queue *queue)
+{
+   return queue->real_queue != NULL && queue->real_queue != queue;
+}
 
 static inline bool
 vk_queue_is_empty(struct vk_queue *queue)

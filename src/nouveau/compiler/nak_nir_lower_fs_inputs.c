@@ -237,7 +237,8 @@ lower_fs_input_intrin(nir_builder *b, nir_intrinsic_instr *intrin, void *data)
       break;
    }
 
-   case nir_intrinsic_load_input: {
+   case nir_intrinsic_load_input:
+   case nir_intrinsic_load_per_primitive_input: {
       const uint16_t addr = fs_input_intrin_addr(intrin, ctx->nak);
       res = load_fs_input(b, intrin->def.num_components, addr, ctx->nak);
       break;

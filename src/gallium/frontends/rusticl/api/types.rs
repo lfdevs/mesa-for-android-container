@@ -378,7 +378,7 @@ where
 #[allow(non_snake_case)]
 pub mod IdpAccelProps {
     use rusticl_opencl_gen::cl_bool;
-    use rusticl_opencl_gen::cl_device_integer_dot_product_acceleration_properties_khr;
+    use rusticl_opencl_gen::cl_device_integer_dot_product_acceleration_properties;
     pub fn new(
         signed_accelerated: cl_bool,
         unsigned_accelerated: cl_bool,
@@ -386,8 +386,8 @@ pub mod IdpAccelProps {
         accumulating_saturating_signed_accelerated: cl_bool,
         accumulating_saturating_unsigned_accelerated: cl_bool,
         accumulating_saturating_mixed_signedness_accelerated: cl_bool,
-    ) -> cl_device_integer_dot_product_acceleration_properties_khr {
-        cl_device_integer_dot_product_acceleration_properties_khr {
+    ) -> cl_device_integer_dot_product_acceleration_properties {
+        cl_device_integer_dot_product_acceleration_properties {
             signed_accelerated,
             unsigned_accelerated,
             mixed_signedness_accelerated,

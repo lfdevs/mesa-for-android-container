@@ -23,6 +23,27 @@
 #define CMAC_SIZE AES_BLOCK_SIZE
 #define MAX_SUBSAMPLES 288 /* Maximum subsamples in a sample */
 
+#define RDECODE_VCN1_GPCOM_VCPU_CMD   0x2070c
+#define RDECODE_VCN1_GPCOM_VCPU_DATA0 0x20710
+#define RDECODE_VCN1_GPCOM_VCPU_DATA1 0x20714
+#define RDECODE_VCN1_ENGINE_CNTL      0x20718
+
+#define RDECODE_VCN2_GPCOM_VCPU_CMD       (0x503 << 2)
+#define RDECODE_VCN2_GPCOM_VCPU_DATA0     (0x504 << 2)
+#define RDECODE_VCN2_GPCOM_VCPU_DATA1     (0x505 << 2)
+#define RDECODE_VCN2_GPCOM_VCPU_DATA2     (0x54C << 2)
+#define RDECODE_VCN2_ENGINE_CNTL          (0x506 << 2)
+
+#define RDECODE_VCN2_5_GPCOM_VCPU_CMD       0x3c
+#define RDECODE_VCN2_5_GPCOM_VCPU_DATA0     0x40
+#define RDECODE_VCN2_5_GPCOM_VCPU_DATA1     0x44
+#define RDECODE_VCN2_5_GPCOM_VCPU_DATA2     0x1A0
+#define RDECODE_VCN2_5_ENGINE_CNTL          0x9b4
+
+#define RDECODE_SESSION_CONTEXT_SIZE (128 * 1024)
+#define RDECODE_MAX_SUBSAMPLE_SIZE   (2048 * 2 * 4)
+#define RDECODE_IT_SCALING_TABLE_SIZE       992
+
 typedef struct PACKED _secure_buffer_header
 {
    uint8_t cookie[8];     /* 8-byte cookie with value 'wvcencsb' */
@@ -119,12 +140,7 @@ struct ac_vcn_decoder {
    uint32_t feedback_offset;
    uint32_t subsample_offset;
 
-   struct {
-      uint32_t data0;
-      uint32_t data1;
-      uint32_t cmd;
-      uint32_t cntl;
-   } reg;
+   struct ac_vcn_dec_reg reg;
    uint32_t addr_mode;
 };
 
@@ -935,29 +951,6 @@ stream_type(enum ac_video_codec codec)
 }
 
 static void
-sq_header(struct ac_cmdbuf *cs, struct rvcn_sq_var *sq)
-{
-   ac_cmdbuf_begin(cs);
-   ac_cmdbuf_emit(RADEON_VCN_ENGINE_INFO_SIZE);
-   ac_cmdbuf_emit(RADEON_VCN_ENGINE_INFO);
-   ac_cmdbuf_emit(RADEON_VCN_ENGINE_TYPE_DECODE);
-   ac_cmdbuf_emit(0);
-   ac_cmdbuf_end();
-
-   sq->engine_ib_size_of_packages = &cs->buf[cs->cdw - 1];
-}
-
-static void
-sq_tail(struct ac_cmdbuf *cs, struct rvcn_sq_var *sq)
-{
-   uint32_t *end = &cs->buf[cs->cdw];
-   uint32_t size_in_dw = end - sq->engine_ib_size_of_packages + 3;
-
-   assert(cs->cdw <= cs->max_dw);
-   *sq->engine_ib_size_of_packages = size_in_dw * sizeof(uint32_t);
-}
-
-static void
 send_cmd(struct cmd_buffer *cmd_buf, uint32_t cmd, uint64_t va)
 {
    if (cmd_buf->dec->base.ip_type == AMD_IP_VCN_DEC) {
@@ -1091,7 +1084,7 @@ vcn_build_create_cmd(struct ac_video_dec *decoder, struct ac_video_dec_create_cm
    };
 
    if (decoder->ip_type == AMD_IP_VCN_UNIFIED) {
-      sq_header(&cmd_buf.cs, &cmd_buf.sq);
+      ac_vcn_sq_header(&cmd_buf.cs, &cmd_buf.sq, RADEON_VCN_ENGINE_TYPE_DECODE);
       cmd_buf.decode_buffer = add_ib_decode_buffer(&cmd_buf.cs);
    }
 
@@ -1100,7 +1093,7 @@ vcn_build_create_cmd(struct ac_video_dec *decoder, struct ac_video_dec_create_cm
 
    if (decoder->ip_type == AMD_IP_VCN_UNIFIED) {
       cmd_buf.decode_buffer->valid_buf_flag = cmd_buf.decode_buffer_flags;
-      sq_tail(&cmd_buf.cs, &cmd_buf.sq);
+      ac_vcn_sq_tail(&cmd_buf.cs, &cmd_buf.sq);
    }
 
    cmd->out.cmd_dw = cmd_buf.cs.cdw;
@@ -1956,7 +1949,7 @@ vcn_build_decode_cmd(struct ac_video_dec *decoder, struct ac_video_dec_decode_cm
    };
 
    if (decoder->ip_type == AMD_IP_VCN_UNIFIED) {
-      sq_header(&cmd_buf.cs, &cmd_buf.sq);
+      ac_vcn_sq_header(&cmd_buf.cs, &cmd_buf.sq, RADEON_VCN_ENGINE_TYPE_DECODE);
       cmd_buf.decode_buffer = add_ib_decode_buffer(&cmd_buf.cs);
    }
 
@@ -2188,7 +2181,7 @@ vcn_build_decode_cmd(struct ac_video_dec *decoder, struct ac_video_dec_decode_cm
 
    if (decoder->ip_type == AMD_IP_VCN_UNIFIED) {
       cmd_buf.decode_buffer->valid_buf_flag = cmd_buf.decode_buffer_flags;
-      sq_tail(&cmd_buf.cs, &cmd_buf.sq);
+      ac_vcn_sq_tail(&cmd_buf.cs, &cmd_buf.sq);
    } else {
       ac_cmdbuf_begin(&cmd_buf.cs);
       ac_cmdbuf_emit(RDECODE_PKT0(dec->reg.cntl >> 2, 0));
@@ -2206,6 +2199,30 @@ vcn_dec_destroy(struct ac_video_dec *decoder)
    struct ac_vcn_decoder *dec = (struct ac_vcn_decoder *)decoder;
 
    FREE(dec);
+}
+
+void
+ac_vcn_dec_init_regs(struct ac_vcn_dec_reg *reg, enum vcn_version version)
+{
+   if (version >= VCN_2_5_0) {
+      reg->data0 = RDECODE_VCN2_5_GPCOM_VCPU_DATA0;
+      reg->data1 = RDECODE_VCN2_5_GPCOM_VCPU_DATA1;
+      reg->data2 = RDECODE_VCN2_5_GPCOM_VCPU_DATA2;
+      reg->cmd = RDECODE_VCN2_5_GPCOM_VCPU_CMD;
+      reg->cntl = RDECODE_VCN2_5_ENGINE_CNTL;
+   } else if (version >= VCN_2_0_0) {
+      reg->data0 = RDECODE_VCN2_GPCOM_VCPU_DATA0;
+      reg->data1 = RDECODE_VCN2_GPCOM_VCPU_DATA1;
+      reg->data2 = RDECODE_VCN2_GPCOM_VCPU_DATA2;
+      reg->cmd = RDECODE_VCN2_GPCOM_VCPU_CMD;
+      reg->cntl = RDECODE_VCN2_ENGINE_CNTL;
+   } else if (version >= VCN_1_0_0) {
+      reg->data0 = RDECODE_VCN1_GPCOM_VCPU_DATA0;
+      reg->data1 = RDECODE_VCN1_GPCOM_VCPU_DATA1;
+      reg->data2 = 0;
+      reg->cmd = RDECODE_VCN1_GPCOM_VCPU_CMD;
+      reg->cntl = RDECODE_VCN1_ENGINE_CNTL;
+   }
 }
 
 uint32_t
@@ -2300,20 +2317,10 @@ ac_vcn_create_video_decoder(const struct radeon_info *info, struct ac_video_dec_
    switch (dec->vcn_version) {
    case VCN_1_0_0:
    case VCN_1_0_1:
-      dec->reg.data0 = RDECODE_VCN1_GPCOM_VCPU_DATA0;
-      dec->reg.data1 = RDECODE_VCN1_GPCOM_VCPU_DATA1;
-      dec->reg.cmd = RDECODE_VCN1_GPCOM_VCPU_CMD;
-      dec->reg.cntl = RDECODE_VCN1_ENGINE_CNTL;
-      break;
    case VCN_2_0_0:
    case VCN_2_0_2:
    case VCN_2_0_3:
    case VCN_2_2_0:
-      dec->reg.data0 = RDECODE_VCN2_GPCOM_VCPU_DATA0;
-      dec->reg.data1 = RDECODE_VCN2_GPCOM_VCPU_DATA1;
-      dec->reg.cmd = RDECODE_VCN2_GPCOM_VCPU_CMD;
-      dec->reg.cntl = RDECODE_VCN2_ENGINE_CNTL;
-      break;
    case VCN_2_5_0:
    case VCN_2_6_0:
    case VCN_3_0_0:
@@ -2322,10 +2329,8 @@ ac_vcn_create_video_decoder(const struct radeon_info *info, struct ac_video_dec_
    case VCN_3_0_33:
    case VCN_3_1_1:
    case VCN_3_1_2:
-      dec->reg.data0 = RDECODE_VCN2_5_GPCOM_VCPU_DATA0;
-      dec->reg.data1 = RDECODE_VCN2_5_GPCOM_VCPU_DATA1;
-      dec->reg.cmd = RDECODE_VCN2_5_GPCOM_VCPU_CMD;
-      dec->reg.cntl = RDECODE_VCN2_5_ENGINE_CNTL;
+      dec->addr_mode = RDECODE_ARRAY_MODE_ADDRLIB_SEL_GFX10;
+      ac_vcn_dec_init_regs(&dec->reg, dec->vcn_version);
       break;
    case VCN_4_0_3:
       dec->addr_mode = RDECODE_ARRAY_MODE_ADDRLIB_SEL_GFX9;

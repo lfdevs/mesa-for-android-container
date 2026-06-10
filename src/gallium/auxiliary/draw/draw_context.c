@@ -1055,7 +1055,7 @@ draw_set_sampler_views(struct draw_context *draw,
                        struct pipe_sampler_view **views,
                        unsigned num)
 {
-   assert(shader_stage < DRAW_MAX_SHADER_STAGE);
+   assert(shader_stage >= 0 && shader_stage < DRAW_MAX_SHADER_STAGE);
    assert(num <= PIPE_MAX_SHADER_SAMPLER_VIEWS);
 
    draw_do_flush(draw, DRAW_FLUSH_STATE_CHANGE);

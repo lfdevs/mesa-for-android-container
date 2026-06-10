@@ -955,7 +955,7 @@ __fmul64(uint64_t a, uint64_t b)
 }
 
 uint64_t
-__ffma64(uint64_t a, uint64_t b, uint64_t c)
+__fmad64(uint64_t a, uint64_t b, uint64_t c)
 {
    return __fadd64(__fmul64(a, b), c);
 }

@@ -24,6 +24,15 @@ struct kk_bo {
    void *cpu;    // CPU address
 };
 
+struct kk_ptr {
+   void *cpu;
+   uint64_t gpu;
+
+   /* Pointer in terms of a Metal buffer and offset */
+   mtl_buffer *buffer;
+   uint32_t offset;
+};
+
 VkResult kk_alloc_bo(struct kk_device *dev, struct vk_object_base *log_obj,
                      uint64_t size_B, uint64_t align_B, struct kk_bo **bo_out);
 

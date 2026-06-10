@@ -267,8 +267,12 @@ void pvr_rogue_CmdBlitImage2(VkCommandBuffer commandBuffer,
    for (uint32_t i = 0U; i < pBlitImageInfo->regionCount; i++) {
       const VkImageBlit2 *region = &pBlitImageInfo->pRegions[i];
 
-      assert(region->srcSubresource.layerCount ==
-             region->dstSubresource.layerCount);
+      const uint32_t layer_count =
+         vk_image_subresource_layer_count(&src->vk, &region->srcSubresource);
+      assert(
+         layer_count ==
+         vk_image_subresource_layer_count(&dst->vk, &region->dstSubresource));
+
       const bool inverted_dst_z =
          (region->dstOffsets[1].z < region->dstOffsets[0].z);
       const bool inverted_src_z =
@@ -363,7 +367,7 @@ void pvr_rogue_CmdBlitImage2(VkCommandBuffer commandBuffer,
       initial_depth_offset =
          (inverted_dst_z ? max_src_z : min_src_z) + (0.5f * z_slice_stride);
 
-      for (uint32_t j = 0U; j < region->srcSubresource.layerCount; j++) {
+      for (uint32_t j = 0U; j < layer_count; j++) {
          struct pvr_transfer_cmd_surface src_surface = { 0 };
          struct pvr_transfer_cmd_surface dst_surface = { 0 };
          VkRect2D src_rect;
@@ -748,7 +752,9 @@ VkResult pvr_copy_or_resolve_depth_stencil_region(
                                            &transfer_cmd);
 }
 
-static bool pvr_can_merge_ds_regions(const VkImageCopy2 *pRegionA,
+static bool pvr_can_merge_ds_regions(const struct pvr_image *src_image,
+                                     const struct pvr_image *dst_image,
+                                     const VkImageCopy2 *pRegionA,
                                      const VkImageCopy2 *pRegionB)
 {
    assert(pRegionA->srcSubresource.aspectMask != 0U);
@@ -776,8 +782,10 @@ static bool pvr_can_merge_ds_regions(const VkImageCopy2 *pRegionA,
             pRegionB->srcSubresource.mipLevel &&
          pRegionA->srcSubresource.baseArrayLayer ==
             pRegionB->srcSubresource.baseArrayLayer &&
-         pRegionA->srcSubresource.layerCount ==
-            pRegionB->srcSubresource.layerCount)) {
+         vk_image_subresource_layer_count(&src_image->vk,
+                                          &pRegionA->srcSubresource) ==
+            vk_image_subresource_layer_count(&src_image->vk,
+                                             &pRegionB->srcSubresource))) {
       return false;
    }
 
@@ -785,8 +793,10 @@ static bool pvr_can_merge_ds_regions(const VkImageCopy2 *pRegionA,
             pRegionB->dstSubresource.mipLevel &&
          pRegionA->dstSubresource.baseArrayLayer ==
             pRegionB->dstSubresource.baseArrayLayer &&
-         pRegionA->dstSubresource.layerCount ==
-            pRegionB->dstSubresource.layerCount)) {
+         vk_image_subresource_layer_count(&dst_image->vk,
+                                          &pRegionA->dstSubresource) ==
+            vk_image_subresource_layer_count(&dst_image->vk,
+                                             &pRegionB->dstSubresource))) {
       return false;
    }
 
@@ -839,7 +849,9 @@ void pvr_rogue_CmdCopyImage2(VkCommandBuffer commandBuffer,
        */
       if (can_merge_ds && i != (pCopyImageInfo->regionCount - 1)) {
          const bool ret =
-            pvr_can_merge_ds_regions(&pCopyImageInfo->pRegions[i],
+            pvr_can_merge_ds_regions(src,
+                                     dst,
+                                     &pCopyImageInfo->pRegions[i],
                                      &pCopyImageInfo->pRegions[i + 1]);
          if (ret) {
             VkImageCopy2 region = pCopyImageInfo->pRegions[i];
@@ -890,6 +902,7 @@ pvr_copy_buffer_to_image_region_format(struct pvr_cmd_buffer *const cmd_buffer,
    uint32_t buffer_layer_size;
    uint32_t height_in_blks;
    uint32_t row_length;
+   uint32_t layer_count;
 
    if (region->bufferRowLength == 0)
       row_length_in_texels = region->imageExtent.width;
@@ -916,10 +929,13 @@ pvr_copy_buffer_to_image_region_format(struct pvr_cmd_buffer *const cmd_buffer,
    buffer_slice_size = height_in_blks * row_length;
    buffer_layer_size = buffer_slice_size * region->imageExtent.depth;
 
+   layer_count =
+      vk_image_subresource_layer_count(&image->vk, &region->imageSubresource);
+
    for (uint32_t i = 0; i < region->imageExtent.depth; i++) {
       const uint32_t depth = i + (uint32_t)region->imageOffset.z;
 
-      for (uint32_t j = 0; j < region->imageSubresource.layerCount; j++) {
+      for (uint32_t j = 0; j < layer_count; j++) {
          const VkDeviceSize buffer_offset = region->bufferOffset +
                                             (j * buffer_layer_size) +
                                             (i * buffer_slice_size);

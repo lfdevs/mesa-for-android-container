@@ -131,7 +131,9 @@ brw_nir_fs_needs_null_rt(const struct intel_device_info *devinfo,
                                     BITFIELD64_BIT(FRAG_RESULT_SAMPLE_MASK)))
       return true;
 
-   return alpha_to_coverage;
+   return alpha_to_coverage &&
+          (nir->info.outputs_written &
+           BITFIELD_RANGE(FRAG_RESULT_DATA0, 8)) != 0;
 }
 
 void brw_preprocess_nir(const struct brw_compiler *compiler,
@@ -155,9 +157,13 @@ bool brw_nir_lower_cs_subgroup_id(nir_shader *nir,
 bool brw_nir_lower_alpha_to_coverage(nir_shader *shader);
 bool brw_needs_vertex_attributes_bypass(const nir_shader *shader);
 void brw_nir_lower_fs_barycentrics(nir_shader *shader);
+bool brw_nir_lower_fully_covered(nir_shader *nir);
 
 struct brw_lower_urb_cb_data {
    const struct intel_device_info *devinfo;
+
+   /** Input URB read length (returned by lowering) */
+   unsigned *push_input_read_length;
 
    /** Maximum amount of pushed data in bytes */
    unsigned max_push_bytes;
@@ -220,7 +226,8 @@ void brw_nir_lower_gs_inputs(nir_shader *nir,
                              unsigned *out_urb_read_length);
 void brw_nir_lower_tes_inputs(nir_shader *nir,
                               const struct intel_device_info *devinfo,
-                              const struct intel_vue_map *vue);
+                              const struct intel_vue_map *vue,
+                              unsigned *out_urb_read_length);
 void brw_nir_lower_fs_inputs(nir_shader *nir,
                              const struct intel_device_info *devinfo,
                              const struct brw_fs_prog_key *key);
@@ -237,6 +244,9 @@ void brw_nir_lower_mesh_outputs(nir_shader *nir,
 void brw_nir_lower_fs_outputs(nir_shader *nir);
 bool brw_nir_lower_fs_load_output(nir_shader *shader,
                                   const struct brw_fs_prog_key *key);
+bool brw_nir_lower_fs_config_intel(nir_shader *nir,
+                                   const struct brw_fs_prog_key *key,
+                                   const struct brw_fs_prog_data *prog_data);
 
 bool brw_nir_lower_frag_coord_z(nir_shader *nir,
                                 const struct intel_device_info *devinfo);
@@ -300,6 +310,8 @@ bool brw_nir_apply_trig_workarounds(nir_shader *nir);
 bool brw_nir_limit_trig_input_range_workaround(nir_shader *nir);
 
 bool brw_nir_apply_sqrt_workarounds(nir_shader *nir);
+
+bool brw_nir_apply_sampler_undef_derivatives_workaround(nir_shader *nir);
 
 bool brw_nir_lower_fsign(nir_shader *nir);
 

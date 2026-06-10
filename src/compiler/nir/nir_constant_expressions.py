@@ -101,6 +101,33 @@ get_float_source(nir_const_value value, unsigned execution_mode, unsigned bit_si
 }
 
 /**
+ * Properly rounds and handles denorms for intermediate results. Useful for
+ * fused opcodes that want to behave exactly like the unfused variants, e.g.
+ * fmad.
+ */
+static double
+handle_intermediate_float_result(double value, unsigned execution_mode, unsigned bit_size)
+{
+    nir_const_value const_val;
+    switch(bit_size) {
+    case 64:
+        const_val.f64 = value;
+        break;
+    case 32:
+        const_val.f32 = value;
+        break;
+    case 16:
+        if (nir_is_rounding_mode_rtz(execution_mode, 16)) {
+            const_val.u16 = _mesa_float_to_float16_rtz(value);
+        } else {
+            const_val.u16 = _mesa_float_to_float16_rtne(value);
+        }
+    }
+
+    return get_float_source(const_val, execution_mode, bit_size);
+}
+
+/**
  * Evaluate one component of packSnorm4x8.
  */
 static uint8_t

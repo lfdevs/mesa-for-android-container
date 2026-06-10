@@ -2151,6 +2151,7 @@ struct pipe_av1_picture_desc
 
 struct pipe_vpp_blend
 {
+   bool enabled;
    enum pipe_video_vpp_blend_mode mode;
    /* To be used with PIPE_VIDEO_VPP_BLEND_MODE_GLOBAL_ALPHA */
    float global_alpha;

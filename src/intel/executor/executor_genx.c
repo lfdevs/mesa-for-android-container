@@ -45,6 +45,45 @@ emit_pipe_control(executor_context *ec)
    }
 }
 
+void
+genX(emit_perf_stall)(executor_context *ec)
+{
+   executor_batch_emit(GENX(PIPE_CONTROL), pc) {
+#if GFX_VER >= 12
+      pc.HDCPipelineFlushEnable     = true;
+#endif
+      pc.PipeControlFlushEnable     = true;
+      pc.CommandStreamerStallEnable = true;
+      pc.StallAtPixelScoreboard     = true;
+   }
+}
+
+void
+genX(emit_mi_report_perf_count)(executor_context *ec, executor_bo *bo,
+                                 uint32_t offset_in_bytes,
+                                 uint32_t report_id)
+{
+   executor_batch_emit(GENX(MI_REPORT_PERF_COUNT), mi_rpc) {
+      mi_rpc.MemoryAddress = (executor_address){bo->addr + offset_in_bytes};
+      mi_rpc.ReportID = report_id;
+   }
+}
+
+void
+genX(store_register_mem)(executor_context *ec, executor_bo *bo,
+                         uint32_t reg, uint32_t reg_size,
+                         uint32_t offset_in_bytes)
+{
+   assert(reg_size == 4 || reg_size == 8);
+
+   for (uint32_t i = 0; i < reg_size; i += 4) {
+      executor_batch_emit(GENX(MI_STORE_REGISTER_MEM), srm) {
+         srm.RegisterAddress = reg + i;
+         srm.MemoryAddress = (executor_address){bo->addr + offset_in_bytes + i};
+      }
+   }
+}
+
 static void
 emit_state_base_address(executor_context *ec, uint32_t mocs)
 {
@@ -89,6 +128,19 @@ emit_state_base_address(executor_context *ec, uint32_t mocs)
       sba.L1CacheControl = L1CC_WB;
 #endif
    };
+}
+
+static void
+executor_perf_begin(executor_context *ec)
+{
+   if (!intel_perf_begin_query(ec->perf_query.ctx, ec->perf_query.obj))
+      failf("failed to begin OA performance query");
+}
+
+static void
+executor_perf_end(executor_context *ec)
+{
+   intel_perf_end_query(ec->perf_query.ctx, ec->perf_query.obj);
 }
 
 void
@@ -158,9 +210,15 @@ genX(emit_execute)(executor_context *ec, const executor_params *params)
 #endif
 
 #if GFX_VERx10 >= 125
+   if (ec->perf_enabled)
+      executor_perf_begin(ec);
+
    executor_batch_emit(GENX(COMPUTE_WALKER), cw) {
       cw.body = body;
    };
+
+   if (ec->perf_enabled)
+      executor_perf_end(ec);
 #else
    uint32_t *idd = executor_alloc_bytes_aligned(&ec->bo.extra, 8 * 4, 256);
    GENX(INTERFACE_DESCRIPTOR_DATA_pack)(NULL, idd, &desc);
@@ -172,6 +230,9 @@ genX(emit_execute)(executor_context *ec, const executor_params *params)
       load.InterfaceDescriptorTotalLength = 8 * 4;
    }
 
+   if (ec->perf_enabled)
+      executor_perf_begin(ec);
+
    executor_batch_emit(GENX(GPGPU_WALKER), gw) {
       gw.ThreadGroupIDXDimension = 1;
       gw.ThreadGroupIDYDimension = 1;
@@ -181,6 +242,9 @@ genX(emit_execute)(executor_context *ec, const executor_params *params)
    }
 
    executor_batch_emit(GENX(MEDIA_STATE_FLUSH), msf);
+
+   if (ec->perf_enabled)
+      executor_perf_end(ec);
 #endif
 
    emit_pipe_control(ec);

@@ -40,6 +40,7 @@ import docutils.utils
 import docutils.parsers.rst.states as states
 
 CURRENT_GL_VERSION = '4.6'
+CURRENT_CL_VERSION = '3.1'
 CURRENT_VK_VERSION = '1.4'
 
 TEMPLATE = Template(textwrap.dedent("""\
@@ -60,6 +61,10 @@ TEMPLATE = Template(textwrap.dedent("""\
     Some drivers don't support all the features required in OpenGL ${gl_version}. OpenGL
     ${gl_version} is **only** available if requested at context creation.
     Compatibility contexts may report a lower version depending on each driver.
+
+    Mesa ${this_version} implements the OpenCL ${cl_version} API, but the version reported by
+    the CL_DEVICE_VERSION, CL_DEVICE_NUMERIC_VERSION and CL_DEVICE_OPENCL_C_ALL_VERSIONS
+    clGetDeviceInfo queries depends on the particular driver being used.
 
     Mesa ${this_version} implements the Vulkan ${vk_version} API, but the version reported by
     the apiVersion property of the VkPhysicalDeviceProperties struct
@@ -365,6 +370,7 @@ async def main() -> None:
                 changes=walk_shortlog(shortlog),
                 features=get_features(is_point_release),
                 gl_version=CURRENT_GL_VERSION,
+                cl_version=CURRENT_CL_VERSION,
                 this_version=this_version,
                 header=header,
                 header_underline=header_underline,

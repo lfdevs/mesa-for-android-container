@@ -105,9 +105,9 @@ Linux, FreeBSD, and other operating systems.
    sourcetree
    utilities
    helpwanted
-   devinfo
    codingstyle
    submittingpatches
+   developing-extensions
    rust
    releasing
    release-calendar

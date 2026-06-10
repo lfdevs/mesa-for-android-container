@@ -154,4 +154,6 @@
 /* Number of descriptor heaps */
 #define RADV_MAX_HEAPS (RADV_HEAP_SAMPLER + 1)
 
+#define RADV_MAX_SHADER_ABORT_MESSAGE_SIZE 65536
+
 #endif /* RADV_CONSTANTS_H */

@@ -728,10 +728,18 @@ static VkResult pvr_process_event_cmd(struct pvr_device *device,
    };
 }
 
+struct pvr_suspended_data {
+   struct pvr_rt_dataset **rts;
+   bool frag_uses_atomic_ops;
+   bool disable_compute_overlap;
+   bool get_vis_results;
+   const struct pvr_query_pool *query_pool;
+};
+
 static VkResult pvr_process_cmd_buffer(struct pvr_device *device,
                                        struct pvr_queue *queue,
                                        struct pvr_cmd_buffer *cmd_buffer,
-                                       struct pvr_rt_dataset ***suspended_rts)
+                                       struct pvr_suspended_data *suspended_data)
 {
    VkResult result;
 
@@ -766,14 +774,36 @@ static VkResult pvr_process_cmd_buffer(struct pvr_device *device,
                break;
          }
 
-         if (*suspended_rts) {
-            sub_cmd->gfx.job.view_state.rt_datasets = *suspended_rts;
+         if (sub_cmd->is_resume) {
+            sub_cmd->gfx.job.view_state.rt_datasets = suspended_data->rts;
+            sub_cmd->gfx.job.frag_uses_atomic_ops |=
+               suspended_data->frag_uses_atomic_ops;
+            sub_cmd->gfx.job.disable_compute_overlap |=
+               suspended_data->disable_compute_overlap;
+            sub_cmd->gfx.job.get_vis_results |= suspended_data->get_vis_results;
+            if (!sub_cmd->gfx.query_pool) {
+               sub_cmd->gfx.query_pool = suspended_data->query_pool;
+            } else if (suspended_data->query_pool &&
+                       sub_cmd->gfx.query_pool != suspended_data->query_pool) {
+               pvr_finishme(
+                  "Emit a barrier between suspending and resuming jobs with different query pools");
+            }
+         }
 
-            if (sub_cmd->gfx.job.geometry_terminate)
-               *suspended_rts = NULL;
-
-         } else if (!sub_cmd->gfx.job.geometry_terminate) {
-            *suspended_rts = sub_cmd->gfx.job.view_state.rt_datasets;
+         if (sub_cmd->is_suspend) {
+            suspended_data->rts = sub_cmd->gfx.job.view_state.rt_datasets;
+            suspended_data->frag_uses_atomic_ops =
+               sub_cmd->gfx.job.frag_uses_atomic_ops;
+            suspended_data->disable_compute_overlap =
+               sub_cmd->gfx.job.disable_compute_overlap;
+            suspended_data->get_vis_results = sub_cmd->gfx.job.get_vis_results;
+            suspended_data->query_pool = sub_cmd->gfx.query_pool;
+         } else {
+            suspended_data->rts = NULL;
+            suspended_data->frag_uses_atomic_ops = false;
+            suspended_data->disable_compute_overlap = false;
+            suspended_data->get_vis_results = false;
+            suspended_data->query_pool = NULL;
          }
 
          assert(sub_cmd->gfx.job.view_state.rt_datasets);
@@ -1011,19 +1041,19 @@ static VkResult pvr_driver_queue_submit(struct vk_queue *queue,
          return result;
    }
 
-   struct pvr_rt_dataset **suspended_rts = NULL;
+   struct pvr_suspended_data suspended_data = {0};
 
    for (uint32_t i = 0U; i < submit->command_buffer_count; i++) {
       result = pvr_process_cmd_buffer(
          device,
          driver_queue,
          container_of(submit->command_buffers[i], struct pvr_cmd_buffer, vk),
-         &suspended_rts);
+         &suspended_data);
       if (result != VK_SUCCESS)
          return result;
    }
 
-   assert(suspended_rts == NULL && "suspended graphics job never resumed");
+   assert(suspended_data.rts == NULL && "suspended graphics job never resumed");
 
    result = pvr_process_queue_signals(driver_queue,
                                       submit->signals,

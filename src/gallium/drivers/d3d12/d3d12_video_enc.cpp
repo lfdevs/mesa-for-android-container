@@ -5149,7 +5149,7 @@ int d3d12_video_encoder_get_encode_headers([[maybe_unused]] struct pipe_video_co
                                            [[maybe_unused]] void* bitstream_buf,
                                            [[maybe_unused]] unsigned *bitstream_buf_size)
 {
-#if (VIDEO_CODEC_H264ENC || VIDEO_CODEC_H265ENC)
+#if (VIDEO_CODEC_H264ENC || VIDEO_CODEC_H265ENC || VIDEO_CODEC_AV1ENC)
    struct d3d12_video_encoder *pD3D12Enc = (struct d3d12_video_encoder *) codec;
    D3D12_VIDEO_SAMPLE srcTextureDesc = {};
    srcTextureDesc.Width = pD3D12Enc->base.width;
@@ -5166,6 +5166,10 @@ int d3d12_video_encoder_get_encode_headers([[maybe_unused]] struct pipe_video_co
 #if VIDEO_CODEC_H265ENC
       if (u_reduce_video_profile(pD3D12Enc->base.profile) == PIPE_VIDEO_FORMAT_HEVC)
          pD3D12Enc->m_upBitstreamBuilder = std::make_unique<d3d12_video_bitstream_builder_hevc>();
+#endif
+#if VIDEO_CODEC_AV1ENC
+      if (u_reduce_video_profile(pD3D12Enc->base.profile) == PIPE_VIDEO_FORMAT_AV1)
+         pD3D12Enc->m_upBitstreamBuilder = std::make_unique<d3d12_video_bitstream_builder_av1>();
 #endif
    }
    bool postEncodeHeadersNeeded = false;

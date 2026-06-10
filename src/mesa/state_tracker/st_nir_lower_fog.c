@@ -41,9 +41,9 @@ fog_result(nir_builder *b, nir_def *color, enum gl_fog_mode fog_mode,
        * gl_MesaFogParamsOptimized gives us (-1 / (end - start)) and
        * (end / (end - start)) so we can generate a single MAD.
        */
-      f = nir_fmad(b, fogc,
-                   nir_channel(b, params, 0),
-                   nir_channel(b, params, 1));
+      f = nir_ffma_weak(b, fogc,
+                        nir_channel(b, params, 0),
+                        nir_channel(b, params, 1));
       break;
   case FOG_EXP:
       /* f = e^(-(density * fogcoord))
@@ -74,7 +74,7 @@ fog_result(nir_builder *b, nir_def *color, enum gl_fog_mode fog_mode,
    /* Not using flrp because we may end up lowering fog after driver lowering
     * that meant to remove all lrps.
     */
-   return nir_fmad(b, color, f, nir_fmul(b, fog_color, nir_fsub_imm(b, 1.0, f)));
+   return nir_ffma_weak(b, color, f, nir_fmul(b, fog_color, nir_fsub_imm(b, 1.0, f)));
 }
 
 struct lower_fog_state {

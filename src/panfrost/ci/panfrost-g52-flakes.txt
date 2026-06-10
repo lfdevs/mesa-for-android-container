@@ -6,7 +6,6 @@ spec@arb_texture_gather@texturegather@fs-r-none-float-cube
 spec@arb_texture_gather@texturegather@fs-r-none-float-cubearray
 spec@arb_texture_gather@texturegatheroffset@vs-rgba-zero-unorm-2darray
 spec@ext_framebuffer_object@fbo-flushing-2
-spec@!opengl 1.2@tex3d-maxsize
 spec@!opengl 1.1@teximage-colors
 spec@!opengl 1.1@teximage-colors gl_luminance8_alpha8
 spec@!opengl 1.1@teximage-colors gl_rgb8_snorm
@@ -77,10 +76,12 @@ dEQP-VK.glsl.operator.binary_operator.div.mediump_float_vec3_vertex
 # Nightly run expectations update
 glx@glx-visuals-stencil
 
-# https://gerrit.khronos.org/c/vk-gl-cts/+/19859
-dEQP-VK.wsi.xcb.maintenance1.present_modes.*
-dEQP-VK.wsi.xcb.maintenance1.present_fence.*
-dEQP-VK.wsi.xcb.maintenance1.deferred_alloc.*
-
 # New timeout flakes since wsi maintenance1 support
 dEQP-VK.wsi.xcb.maintenance1.release_images.mailbox.no_scaling.basic
+
+# passes every now and then
+spec@ext_image_dma_buf_import@ext_image_dma_buf_import-refcount-multithread
+afbcp-spec@ext_image_dma_buf_import@ext_image_dma_buf_import-refcount-multithread
+
+# Job timeout
+dEQP-VK.graphicsfuzz.spv-composites

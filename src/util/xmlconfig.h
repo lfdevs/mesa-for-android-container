@@ -128,16 +128,23 @@ driGetOptionsXml(const driOptionDescription *configOptions, unsigned numOptions)
 void driParseOptionInfo(driOptionCache *info,
                         const driOptionDescription *configOptions,
                         unsigned numOptions);
+typedef struct {
+   int screenNum;
+   const char *driverName;
+   const char *kernelDriverName;
+   const char *deviceName;
+   const char *applicationName;
+   uint32_t applicationVersion;
+   const char *engineName;
+   uint32_t engineVersion;
+} driConfigFileParseParams;
+
 /** \brief Initialize option cache from info and parse configuration files
  *
- * To be called in <driver>CreateContext. screenNum, driverName,
- * kernelDriverName, applicationName and engineName select device sections. */
+ * To be called in <driver>CreateContext. Fields in driConfigFileParseParams
+ * select which device/application/engine sections apply. */
 void driParseConfigFiles(driOptionCache *cache, const driOptionCache *info,
-                         int screenNum, const char *driverName,
-                         const char *kernelDriverName,
-                         const char *deviceName,
-                         const char *applicationName, uint32_t applicationVersion,
-                         const char *engineName, uint32_t engineVersion);
+                         const driConfigFileParseParams *params);
 /** \brief Destroy option info
  *
  * To be called in <driver>DestroyScreen */

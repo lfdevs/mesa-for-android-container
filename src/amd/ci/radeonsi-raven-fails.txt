@@ -45,6 +45,8 @@ api@clgetcommandqueueinfo,Fail
 api@clgetdeviceinfo,Fail
 api@clgetextensionfunctionaddressforplatform,Fail
 api@clgetkernelarginfo,Fail
+api@clsetkernelarg,Fail
+api@clsetkernelarg@Input checks,Fail
 api@cllinkprogram,Fail
 program@build@vector-data-types,Fail
 program@execute@builtin@builtin-float-nextafter-1.0.generated,Fail

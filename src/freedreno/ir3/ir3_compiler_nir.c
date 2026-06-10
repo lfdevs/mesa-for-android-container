@@ -726,7 +726,7 @@ emit_alu(struct ir3_context *ctx, nir_alu_instr *alu)
    case nir_op_fsub:
       dst = ir3_ADD_F_rpt(b, dst_sz, src[0], 0, src[1], IR3_REG_FNEG);
       break;
-   case nir_op_ffma:
+   case nir_op_fmad:
       /* The scalar ALU doesn't support mad, so expand to mul+add so that we
        * don't unnecessarily fall back to non-earlypreamble. This is safe
        * because at least on a6xx+ mad is unfused.
@@ -1247,7 +1247,7 @@ emit_intrinsic_copy_global_to_uniform(struct ir3_context *ctx,
 
    struct ir3_instruction *a1 = NULL;
    unsigned dst_imm = dst;
-   if (dst > 256) {
+   if (dst >= 256) {
       a1 = ir3_create_addr1(&ctx->build, dst);
       dst_imm = 0;
    }
@@ -3028,28 +3028,16 @@ emit_intrinsic(struct ir3_context *ctx, nir_intrinsic_instr *intr)
       break;
    case nir_intrinsic_load_base_vertex:
    case nir_intrinsic_load_first_vertex:
-      if (!ctx->basevertex) {
-         ctx->basevertex = create_driver_param(ctx, IR3_DP_VS(vtxid_base));
-      }
-      dst[0] = ctx->basevertex;
+      dst[0] = create_driver_param(ctx, IR3_DP_VS(vtxid_base));
       break;
    case nir_intrinsic_load_is_indexed_draw:
-      if (!ctx->is_indexed_draw) {
-         ctx->is_indexed_draw = create_driver_param(ctx, IR3_DP_VS(is_indexed_draw));
-      }
-      dst[0] = ctx->is_indexed_draw;
+      dst[0] = create_driver_param(ctx, IR3_DP_VS(is_indexed_draw));
       break;
    case nir_intrinsic_load_draw_id:
-      if (!ctx->draw_id) {
-         ctx->draw_id = create_driver_param(ctx, IR3_DP_VS(draw_id));
-      }
-      dst[0] = ctx->draw_id;
+      dst[0] = create_driver_param(ctx, IR3_DP_VS(draw_id));
       break;
    case nir_intrinsic_load_base_instance:
-      if (!ctx->base_instance) {
-         ctx->base_instance = create_driver_param(ctx, IR3_DP_VS(instid_base));
-      }
-      dst[0] = ctx->base_instance;
+      dst[0] = create_driver_param(ctx, IR3_DP_VS(instid_base));
       break;
    case nir_intrinsic_load_view_index:
       if (!ctx->view_index) {
@@ -3506,8 +3494,6 @@ emit_intrinsic(struct ir3_context *ctx, nir_intrinsic_instr *intr)
       break;
    }
    case nir_intrinsic_prefetch_ubo_ir3: {
-      if (!ir3_bindless_resource(intr->src[0]))
-         break;
       struct ir3_instruction *offset = create_immed(b, 0);
       struct ir3_instruction *idx = ir3_get_src(ctx, &intr->src[0])[0];
       struct ir3_instruction *ldc = ir3_LDC(b, idx, 0, offset, 0);
@@ -6239,9 +6225,9 @@ ir3_compile_shader_nir(struct ir3_compiler *compiler,
    if (so->type == MESA_SHADER_FRAGMENT) {
       so->empty = is_empty(ir) && so->outputs_count == 0 &&
                   so->num_sampler_prefetch == 0;
-      so->writes_only_color = !ctx->s->info.writes_memory && !so->has_kill &&
-                              !so->writes_pos && !so->writes_smask &&
-                              !so->writes_stencilref;
+      so->has_no_side_effects = !ctx->s->info.writes_memory;
+      so->has_no_ds_effects = !so->has_kill && !so->writes_pos &&
+                              !so->writes_smask && !so->writes_stencilref;
    }
 
    if (mesa_shader_stage_is_compute(so->type)) {

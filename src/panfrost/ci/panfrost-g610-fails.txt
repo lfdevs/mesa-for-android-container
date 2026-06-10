@@ -1,13 +1,6 @@
 dEQP-VK.glsl.loops.special.do_while_dynamic_iterations.dowhile_trap_vertex,Crash
 asan-dEQP-VK.glsl.loops.special.do_while_dynamic_iterations.dowhile_trap_vertex,Crash
 
-# New failures with VKCTS 1.4.4.0
-dEQP-VK.binding_model.unused_invalid_descriptor.write.invalid.combined_image_sampler,Crash
-dEQP-VK.binding_model.unused_invalid_descriptor.write.invalid.sampled_image,Crash
-asan-dEQP-VK.binding_model.unused_invalid_descriptor.write.invalid.combined_image_sampler,Crash
-asan-dEQP-VK.binding_model.unused_invalid_descriptor.write.invalid.sampled_image,Crash
-
-
 afbcp-spec@arb_shader_texture_lod@execution@arb_shader_texture_lod-texgradcube,Fail
 afbcp-spec@arb_shader_texture_lod@execution@arb_shader_texture_lod-texgrad,Fail
 afbcp-spec@arb_shader_texture_lod@execution@tex-miplevel-selection *gradarb 1d,Fail
@@ -300,5 +293,7 @@ spec@!opengl es 3.0@gles-3.0-transform-feedback-uniform-buffer-object,Fail
 
 # uprev Piglit in Mesa
 afbcp-spec@arb_texture_view@tex-view,Fail
+KHR-GLES31.core.draw_indirect.advanced-twoPass-transformFeedback-arrays,Fail
+spec@!opengl 1.1@large-tex,Fail
 spec@arb_texture_view@tex-view,Fail
-
+spec@glsl-1.30@execution@glsl-packed-back-color,Fail

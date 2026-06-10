@@ -572,8 +572,18 @@ nvk_CmdDispatchIndirect(VkCommandBuffer commandBuffer,
    struct nv_push *p;
    if (nvk_cmd_buffer_compute_cls(cmd) >= TURING_COMPUTE_A) {
       p = nvk_cmd_buffer_push(cmd, 14);
-      if (nvk_cmd_buffer_compute_cls(cmd) < BLACKWELL_COMPUTE_A)
+      if (nvk_cmd_buffer_compute_cls(cmd) < BLACKWELL_COMPUTE_A) {
          P_IMMD(p, NVC597, SET_MME_DATA_FIFO_CONFIG, FIFO_SIZE_SIZE_4KB);
+      } else {
+         /* The line in the other side of the if causes an implicit wfi
+          * due to the subc switch which we apparently rely on for
+          * correctness (!?). Anyway, to prevent issues on blackwell
+          * we need to wfi here too.
+          * TODO: delete this
+          */
+         P_IMMD(p, NVC86F, WFI, 0);
+      }
+
       if (nvk_cmd_buffer_compute_cls(cmd) >= AMPERE_COMPUTE_B)
          P_1INC(p, NVC7C0, CALL_MME_MACRO(NVK_MME_DISPATCH_INDIRECT));
       else

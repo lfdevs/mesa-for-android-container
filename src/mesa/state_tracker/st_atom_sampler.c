@@ -77,7 +77,7 @@ st_convert_sampler(const struct st_context *st,
       sampler->mag_img_filter = PIPE_TEX_FILTER_NEAREST;
    }
 
-   if (texobj->Target == GL_TEXTURE_RECTANGLE_ARB && !st->lower_rect_tex)
+   if (texobj->Target == GL_TEXTURE_RECTANGLE_ARB && st->screen->caps.texrect)
       sampler->unnormalized_coords = 1;
 
    /*

@@ -71,7 +71,11 @@ void ac_llvm_run_atexit_for_destructors(void)
 bool ac_is_llvm_processor_supported(LLVMTargetMachineRef tm, const char *processor)
 {
    TargetMachine *TM = reinterpret_cast<TargetMachine *>(tm);
-   return TM->getMCSubtargetInfo()->isCPUStringValid(processor);
+   #if LLVM_VERSION_MAJOR >= 23
+      return TM->getMCSubtargetInfo().isCPUStringValid(processor);
+   #else
+      return TM->getMCSubtargetInfo()->isCPUStringValid(processor);
+   #endif
 }
 
 void ac_reset_llvm_all_options_occurrences()

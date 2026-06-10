@@ -549,7 +549,7 @@ struct iris_uncompiled_shader {
    unsigned char nir_blake3[BLAKE3_KEY_LEN];
 
    /* Hash value based on shader source program */
-   unsigned source_hash;
+   uint64_t source_hash;
 
    unsigned program_id;
 

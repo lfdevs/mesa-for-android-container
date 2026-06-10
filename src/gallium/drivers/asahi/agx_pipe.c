@@ -30,6 +30,7 @@
 #include "util/format/u_formats.h"
 #include "util/half_float.h"
 #include "util/macros.h"
+#include "util/os_misc.h"
 #include "util/simple_mtx.h"
 #include "util/timespec.h"
 #include "util/u_drm.h"
@@ -1887,10 +1888,9 @@ static void
 agx_query_memory_info(struct pipe_screen *pscreen,
                       struct pipe_memory_info *info)
 {
-   uint64_t mem_B = 0;
-   os_get_total_physical_memory(&mem_B);
-
-   uint64_t mem_kB = mem_B / 1024;
+   struct agx_screen *screen = agx_screen(pscreen);
+   uint64_t mem_kB =
+      os_get_gpu_heap_size(screen->heap_memory_percent, NULL) / 1024;
 
    *info = (struct pipe_memory_info){
       .total_device_memory = mem_kB,
@@ -1967,6 +1967,7 @@ agx_init_compute_caps(struct pipe_screen *pscreen)
 {
    struct pipe_compute_caps *caps =
       (struct pipe_compute_caps *)&pscreen->compute_caps;
+   struct agx_screen *screen = agx_screen(pscreen);
    struct agx_device *dev = agx_device(pscreen);
 
    caps->address_bits = 64;
@@ -1981,10 +1982,8 @@ agx_init_compute_caps(struct pipe_screen *pscreen)
 
    caps->max_threads_per_block = 1024;
 
-   uint64_t system_memory;
-   if (os_get_total_physical_memory(&system_memory)) {
-      caps->max_global_size = caps->max_mem_alloc_size = system_memory;
-   }
+   caps->max_global_size = caps->max_mem_alloc_size =
+      os_get_gpu_heap_size(screen->heap_memory_percent, NULL);
 
    caps->max_local_size = 32768;
 
@@ -2001,6 +2000,7 @@ static void
 agx_init_screen_caps(struct pipe_screen *pscreen)
 {
    struct pipe_caps *caps = (struct pipe_caps *)&pscreen->caps;
+   struct agx_screen *screen = agx_screen(pscreen);
 
    u_init_pipe_screen_caps(pscreen, 1);
 
@@ -2148,9 +2148,8 @@ agx_init_screen_caps(struct pipe_screen *pscreen)
 
    caps->max_viewports = AGX_MAX_VIEWPORTS;
 
-   uint64_t system_memory;
    caps->video_memory =
-      os_get_total_physical_memory(&system_memory) ? (system_memory >> 20) : 0;
+      os_get_gpu_heap_size(screen->heap_memory_percent, NULL) >> 20;
 
    caps->device_reset_status_query = true;
    caps->robust_buffer_access_behavior = true;
@@ -2429,8 +2428,8 @@ agx_screen_create(int fd, struct renderonly *ro,
    screen = &agx_screen->pscreen;
 
    /* parse driconf configuration now for device specific overrides */
-   driParseConfigFiles(config->options, config->options_info, 0, "asahi", NULL,
-                       NULL, NULL, 0, NULL, 0);
+   driParseConfigFiles(config->options, config->options_info,
+                       &(driConfigFileParseParams) { .driverName = "asahi" });
 
    agx_screen->dev.fd = fd;
    agx_screen->dev.ro = ro;
@@ -2445,7 +2444,7 @@ agx_screen_create(int fd, struct renderonly *ro,
    /* Forward no16 flag from driconf. This must happen after opening the device,
     * since agx_open_device sets debug.
     */
-   if (driQueryOptionb(config->options, "no_fp16"))
+   if (driQueryOptionb(config->options, "asahi_no_fp16"))
       agx_screen->dev.debug |= AGX_DBG_NO16;
 
    int ret =
@@ -2453,6 +2452,11 @@ agx_screen_create(int fd, struct renderonly *ro,
    assert(!ret);
 
    simple_mtx_init(&agx_screen->flush_seqid_lock, mtx_plain);
+
+   agx_screen->heap_memory_percent =
+      driQueryOptionf(config->options, "heap_memory_percent");
+   if (agx_screen->heap_memory_percent == OS_GPU_HEAP_SIZE_HEURISTIC)
+      agx_screen->heap_memory_percent = 1.0f;
 
    screen->destroy = agx_destroy_screen;
    screen->get_screen_fd = agx_screen_get_fd;

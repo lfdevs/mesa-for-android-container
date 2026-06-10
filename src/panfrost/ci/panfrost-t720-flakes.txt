@@ -1,4 +1,4 @@
-dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.add_one_minus_dst_alpha_one_minus_dst_colo
+dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.add_one_minus_dst_alpha_one_minus_constant_color
 dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.add_one_minus_dst_alpha_one_minus_dst_color
 dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.add_src_color_one_minus_constant_alpha
 dEQP-GLES2.functional.fragment_ops.blend.equation_src_func_dst_func.subtract_src_alpha_constant_alpha
@@ -6,6 +6,7 @@ dEQP-GLES2.functional.fragment_ops.blend.rgb_func_alpha_func.dst.one_minus_src_c
 dEQP-GLES2.functional.fragment_ops.blend.rgb_func_alpha_func.src.one_minus_constant_color_one_minus_dst_alphar
 dEQP-GLES2.functional.fragment_ops.random.49
 dEQP-GLES2.functional.fragment_ops.random.54
+dEQP-GLES2.functional.fragment_ops.random.93
 
 # Some of these fail almost every nightly CI job
 dEQP-GLES2.functional.fbo.render.shared_colorbuffer.rbo_bgra_depth_component16
@@ -14,3 +15,6 @@ dEQP-GLES2.functional.fbo.render.shared_colorbuffer.rbo_rgb5_a1_depth_component1
 dEQP-GLES2.functional.fbo.render.shared_colorbuffer.rbo_rgba4_depth_component16
 dEQP-GLES2.functional.fbo.render.shared_colorbuffer.tex2d_bgra_depth_component16
 dEQP-GLES2.functional.fbo.render.shared_colorbuffer.tex2d_rgb_depth_component16
+
+# fails often on nightly CI
+dEQP-GLES3.functional.draw_buffers_indexed.random.max_implementation_draw_buffers.11

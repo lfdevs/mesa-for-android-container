@@ -106,8 +106,7 @@ lower_load_constant(nir_builder *b, nir_intrinsic_instr *load,
    offsetof(struct kk_root_descriptor_table, member)
 
 /* helper macro for computing per-draw data byte offsets */
-#define kk_per_draw_offset(member)                                             \
-   offsetof(struct kk_per_draw_data, member)
+#define kk_per_draw_offset(member) offsetof(struct kk_per_draw_data, member)
 
 static nir_def *
 load_descriptor_set_addr(nir_builder *b, uint32_t set,
@@ -130,7 +129,8 @@ load_dynamic_buffer_start(nir_builder *b, uint32_t set,
          break;
       }
 
-      dynamic_buffer_start_imm += ctx->set_layouts[s]->vk.dynamic_descriptor_count;
+      dynamic_buffer_start_imm +=
+         ctx->set_layouts[s]->vk.dynamic_descriptor_count;
    }
 
    if (dynamic_buffer_start_imm >= 0) {
@@ -296,9 +296,9 @@ _lower_sysval_to_per_draw(nir_builder *b, nir_intrinsic_instr *intrin,
    b->cursor = nir_instr_remove(&intrin->instr);
    assert((per_draw_offset & 3) == 0 && "aligned");
 
-   nir_def *val = load_per_draw(b, intrin->def.num_components,
-                                intrin->def.bit_size,
-                                nir_imm_int(b, per_draw_offset), 4);
+   nir_def *val =
+      load_per_draw(b, intrin->def.num_components, intrin->def.bit_size,
+                    nir_imm_int(b, per_draw_offset), 4);
 
    nir_def_rewrite_uses(&intrin->def, val);
 
@@ -775,10 +775,10 @@ kk_nir_lower_descriptors(nir_shader *nir,
    struct lower_descriptors_ctx ctx = {
       .clamp_desc_array_bounds =
          rs->storage_buffers !=
-            VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_DISABLED_EXT ||
+            VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_DISABLED ||
          rs->uniform_buffers !=
-            VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_DISABLED_EXT ||
-         rs->images != VK_PIPELINE_ROBUSTNESS_IMAGE_BEHAVIOR_DISABLED_EXT,
+            VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_DISABLED ||
+         rs->images != VK_PIPELINE_ROBUSTNESS_IMAGE_BEHAVIOR_DISABLED,
       .ssbo_addr_format = kk_buffer_addr_format(rs->storage_buffers),
       .ubo_addr_format = kk_buffer_addr_format(rs->uniform_buffers),
    };
@@ -801,4 +801,61 @@ kk_nir_lower_descriptors(nir_shader *nir,
       nir, lower_ssbo_descriptor, nir_metadata_control_flow, &ctx);
 
    return pass_lower_descriptors || pass_lower_ssbo;
+}
+
+static bool
+lower_poly(struct nir_builder *b, nir_intrinsic_instr *intrin, void *data)
+{
+   switch (intrin->intrinsic) {
+   case nir_intrinsic_load_vs_outputs_poly:
+      return lower_sysval_to_per_draw(b, intrin, vertex_outputs);
+   case nir_intrinsic_load_vertex_param_buffer_poly:
+      return lower_sysval_to_per_draw(b, intrin, vertex_params);
+   case nir_intrinsic_load_tess_param_buffer_poly:
+      return lower_sysval_to_per_draw(b, intrin, tess_params);
+   case nir_intrinsic_load_index_size_poly:
+      return lower_sysval_to_per_draw(b, intrin, index_size);
+   case nir_intrinsic_load_first_vertex:
+      /* Lower only compute shaders */
+      if (*(bool *)data) {
+         uint32_t root_table_offset = kk_per_draw_offset(base_vertex_addr);
+         b->cursor = nir_instr_remove(&intrin->instr);
+         assert((root_table_offset & 3) == 0 && "aligned");
+
+         nir_def *addr = load_per_draw(b, intrin->def.num_components, 64u,
+                                       nir_imm_int(b, root_table_offset), 4);
+
+         nir_def *val = nir_load_global(b, 1u, intrin->def.bit_size, addr);
+
+         nir_def_rewrite_uses(&intrin->def, val);
+         return true;
+      }
+      return false;
+   case nir_intrinsic_load_base_instance:
+      /* Lower only compute shaders */
+      if (*(bool *)data) {
+         uint32_t root_table_offset = kk_per_draw_offset(base_instance_addr);
+         b->cursor = nir_instr_remove(&intrin->instr);
+         assert((root_table_offset & 3) == 0 && "aligned");
+
+         nir_def *addr = load_per_draw(b, intrin->def.num_components, 64u,
+                                       nir_imm_int(b, root_table_offset), 4);
+
+         nir_def *val = nir_load_global(b, 1u, intrin->def.bit_size, addr);
+
+         nir_def_rewrite_uses(&intrin->def, val);
+         return true;
+      }
+      return false;
+   default:
+      return false;
+   }
+}
+
+bool
+kk_nir_lower_poly(struct nir_shader *nir)
+{
+   bool is_compute = nir->info.stage == MESA_SHADER_COMPUTE;
+   return nir_shader_intrinsics_pass(nir, lower_poly, nir_metadata_control_flow,
+                                     &is_compute);
 }

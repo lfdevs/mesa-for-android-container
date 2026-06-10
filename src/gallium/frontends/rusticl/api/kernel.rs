@@ -12,7 +12,6 @@ use crate::core::program::*;
 use crate::core::queue::*;
 
 use mesa_rust_util::ptr::*;
-use mesa_rust_util::string::*;
 use rusticl_opencl_gen::*;
 use rusticl_proc_macros::cl_entrypoint;
 use rusticl_proc_macros::cl_info_entrypoint;
@@ -34,7 +33,7 @@ unsafe impl CLInfo<cl_kernel_info> for cl_kernel {
                 let ptr = Arc::as_ptr(&kernel.prog.context);
                 v.write::<cl_context>(cl_context::from_ptr(ptr))
             }
-            CL_KERNEL_FUNCTION_NAME => v.write::<&str>(&kernel.name),
+            CL_KERNEL_FUNCTION_NAME => v.write::<&CStr>(&kernel.name),
             CL_KERNEL_NUM_ARGS => v.write::<cl_uint>(kernel.kernel_info.args.len() as cl_uint),
             CL_KERNEL_PROGRAM => {
                 let ptr = Arc::as_ptr(&kernel.prog);
@@ -280,12 +279,14 @@ fn create_kernel(
     kernel_name: *const ::std::os::raw::c_char,
 ) -> CLResult<cl_kernel> {
     let p = Program::arc_from_raw(program)?;
-    let name = c_string_to_string(kernel_name);
 
     // CL_INVALID_VALUE if kernel_name is NULL.
     if kernel_name.is_null() {
         return Err(CL_INVALID_VALUE);
     }
+
+    // SAFETY: kernel_name is pointing to a valid C string.
+    let name = unsafe { CStr::from_ptr(kernel_name) }.to_owned();
 
     let build = p.build_info();
     // CL_INVALID_PROGRAM_EXECUTABLE if there is no successfully built executable for program.
@@ -389,11 +390,7 @@ fn set_kernel_arg(
         // arg_size != sizeof(cl_mem) or if arg_size is zero and the argument is declared with the
         // local qualifier or if the argument is a sampler and arg_size != sizeof(cl_sampler).
         match arg.kind {
-            KernelArgType::MemLocal => {
-                if arg_size == 0 {
-                    return Err(CL_INVALID_ARG_SIZE);
-                }
-            }
+            KernelArgType::MemLocal => {}
             KernelArgType::MemGlobal
             | KernelArgType::MemConstant
             | KernelArgType::Image
@@ -602,8 +599,8 @@ fn set_kernel_exec_info(
     let k = unsafe { Kernel::mut_ref_from_raw(kernel) }?;
     let devs = &k.prog.devs;
 
-    // CL_INVALID_OPERATION for CL_KERNEL_EXEC_INFO_DEVICE_PTRS_EXT if no device in the context
-    // associated with kernel support the cl_ext_buffer_device_address extension.
+    // CL_INVALID_OPERATION if param_name is CL_KERNEL_EXEC_INFO_DEVICE_PTRS_EXT and no devices in
+    // the context associated with kernel support the cl_ext_buffer_device_address extension.
     let check_bda_support = || {
         if devs.iter().all(|dev| !dev.bda_supported()) {
             Err(CL_INVALID_OPERATION)
@@ -612,9 +609,8 @@ fn set_kernel_exec_info(
         }
     };
 
-    // CL_INVALID_OPERATION for CL_KERNEL_EXEC_INFO_SVM_PTRS and
-    // CL_KERNEL_EXEC_INFO_SVM_FINE_GRAIN_SYSTEM if no devices in the context associated with kernel
-    // support SVM.
+    // CL_INVALID_OPERATION if param_name is CL_KERNEL_EXEC_INFO_SVM_PTRS and no devices in the
+    // context associated with kernel support SVM.
     let check_svm_support = || {
         if devs.iter().all(|dev| !dev.api_svm_supported()) {
             Err(CL_INVALID_OPERATION)
@@ -670,7 +666,6 @@ fn set_kernel_exec_info(
         }
         CL_KERNEL_EXEC_INFO_SVM_FINE_GRAIN_SYSTEM
         | CL_KERNEL_EXEC_INFO_SVM_FINE_GRAIN_SYSTEM_ARM => {
-            check_svm_support()?;
             let val = unsafe {
                 cl_slice::from_raw_parts_bytes_len::<cl_bool>(param_value, param_value_size)?
             };
@@ -681,7 +676,7 @@ fn set_kernel_exec_info(
             }
 
             // CL_INVALID_OPERATION if param_name is CL_KERNEL_EXEC_INFO_SVM_FINE_GRAIN_SYSTEM and
-            // param_value is CL_TRUE but no devices in context associated with kernel support
+            // param_value is CL_TRUE and no devices in the context associated with kernel support
             // fine-grain system SVM allocations.
             if val[0] == CL_TRUE && devs.iter().all(|dev| !dev.system_svm_supported()) {
                 return Err(CL_INVALID_OPERATION);
@@ -701,7 +696,7 @@ fn enqueue_ndrange_kernel(
     work_dim: cl_uint,
     global_work_offset: *const usize,
     global_work_size: *const usize,
-    local_work_size: *const usize,
+    local_work_size_ptr: *const usize,
     num_events_in_wait_list: cl_uint,
     event_wait_list: *const cl_event,
     event: *mut cl_event,
@@ -734,8 +729,14 @@ fn enqueue_ndrange_kernel(
 
     // we assume the application gets it right and doesn't pass shorter arrays then actually needed.
     let global_work_size = unsafe { kernel_work_arr_or_default(global_work_size, work_dim) };
-    let local_work_size = unsafe { kernel_work_arr_or_default(local_work_size, work_dim) };
+    let local_work_size = unsafe { kernel_work_arr_or_default(local_work_size_ptr, work_dim) };
     let global_work_offset = unsafe { kernel_work_arr_or_default(global_work_offset, work_dim) };
+
+    // CL_INVALID_WORK_GROUP_SIZE if local_work_size is not NULL and if the total number of
+    // work-items in the work-group is zero
+    if !local_work_size_ptr.is_null() && local_work_size.iter().any(|&l| l == 0) {
+        return Err(CL_INVALID_WORK_GROUP_SIZE);
+    }
 
     let device_bits = q.device.address_bits();
     let device_max = u64::MAX >> (u64::BITS - device_bits);
@@ -852,8 +853,8 @@ fn clone_kernel(source_kernel: cl_kernel) -> CLResult<cl_kernel> {
     Ok(Arc::new(k.clone()).into_cl())
 }
 
-#[cl_entrypoint(clGetKernelSuggestedLocalWorkSizeKHR)]
-fn get_kernel_suggested_local_work_size_khr(
+#[cl_entrypoint(clGetKernelSuggestedLocalWorkSize)]
+fn get_kernel_suggested_local_work_size(
     command_queue: cl_command_queue,
     kernel: cl_kernel,
     work_dim: cl_uint,

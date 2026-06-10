@@ -65,6 +65,9 @@ struct pan_tiler_context {
          /* A tiler descriptor can only handle a limited amount of layers.
           * If the number of layers is bigger than this, several tiler
           * descriptors will be issued, each with a different layer_offset.
+          *
+          * Note: on v14+, only up to one tiler descriptor is supported and
+          * layer_offset is deprecated.
           */
          uint8_t layer_offset;
       } valhall;
@@ -181,6 +184,26 @@ pan_clean_tile_write_any_set(struct pan_clean_tile clean_tile)
    return clean_tile.write_rt_mask || clean_tile.write_zs;
 }
 
+static unsigned
+pan_zsbuf_bytes_per_pixel(const struct pan_fb_info *fb)
+{
+   unsigned samples = fb->nr_samples;
+
+   const struct pan_image_view *zs_view = fb->zs.view.zs;
+   if (zs_view)
+      samples = zs_view->nr_samples;
+
+   const struct pan_image_view *s_view = fb->zs.view.s;
+   if (s_view)
+      samples = MAX2(samples, s_view->nr_samples);
+
+   /* Depth is always stored in a 32-bit float. Stencil requires depth to
+    * be allocated, but doesn't have it's own budget; it's tied to the
+    * depth buffer.
+    */
+   return sizeof(float) * samples;
+}
+
 static inline unsigned
 pan_wls_instances(const struct pan_compute_dim *dim)
 {
@@ -286,10 +309,34 @@ pan_effective_tile_block_size(unsigned tile_size)
    return (struct pan_image_block_size){w, h};
 }
 
+#if PAN_ARCH >= 6
+/* All GPUs starting from Bifrost are affected by issue TSIX-2033:
+ *
+ *      Forcing clean_tile_writes breaks INTERSECT readbacks
+ *
+ * To workaround, use the pre-frame shader mode ALWAYS instead of INTERSECT if
+ * clean_tile_write_enable is set on either one of the color, depth or stencil
+ * buffers. Since INTERSECT is a hint that the hardware may ignore, this
+ * cannot affect correctness, only performance. */
+
+static enum mali_pre_post_frame_shader_mode
+pan_fix_frame_shader_mode(enum mali_pre_post_frame_shader_mode mode,
+                          bool force_clean_tile)
+{
+   if (force_clean_tile && mode == MALI_PRE_POST_FRAME_SHADER_MODE_INTERSECT)
+      return MALI_PRE_POST_FRAME_SHADER_MODE_ALWAYS;
+   else
+      return mode;
+}
+#endif
+
 void GENX(pan_select_tile_size)(struct pan_fb_info *fb);
 
 bool GENX(pan_force_clean_write_on)(const struct pan_image *image,
                                     unsigned fb_tile_size_px);
+
+struct pan_clean_tile
+   GENX(pan_get_clean_tile_info)(const struct pan_fb_info *fb);
 
 void GENX(pan_emit_tls)(const struct pan_tls_info *info,
                         struct mali_local_storage_packed *out);
@@ -338,10 +385,20 @@ void GENX(pan_emit_afrc_color_attachment)(const struct pan_attachment_info *att,
                                           void *payload);
 #endif
 
+struct pan_fbd_descs {
+#if PAN_ARCH <= 13
+   struct mali_framebuffer_packed *fbd;
+#endif
+#if PAN_ARCH >= 5
+   struct mali_zs_crc_extension_packed *zs_crc;
+   struct mali_render_target_packed *rts;
+#endif
+};
+
 unsigned GENX(pan_emit_fbd)(const struct pan_fb_info *fb, unsigned layer_idx,
                             const struct pan_tls_info *tls,
                             const struct pan_tiler_context *tiler_ctx,
-                            void *out);
+                            const struct pan_fbd_descs *out);
 
 #if PAN_ARCH >= 6
 unsigned GENX(pan_select_tiler_hierarchy_mask)(uint32_t width, uint32_t height,

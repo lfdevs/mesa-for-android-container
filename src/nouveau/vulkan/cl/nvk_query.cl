@@ -21,24 +21,12 @@ nvk_copy_queries(uint64_t pool_addr, uint available_stride,
    bool write_results = available || (flags & VK_QUERY_RESULT_PARTIAL_BIT);
 
    uint64_t report_offs = reports_start + (uint64_t)query * (uint64_t)query_stride;
-   global struct nvk_query_report *report =
-      (global void *)(pool_addr + report_offs);
+   global uint64_t *report = (global uint64_t *)(pool_addr + report_offs);
 
    uint64_t dst_offset = dst_stride * (uint64_t)i;
 
-   if (flags & NVK_QUERY_IS_TIMESTAMP) {
-      /* Timestamp queries are the only ones use a single report */
-      if (write_results) {
-         vk_write_query(dst_addr + dst_offset, 0, flags, report->timestamp);
-      }
-   } else {
-      if (write_results) {
-         for (uint r = 0; r < report_count; ++r) {
-            uint delta = report[(r * 2) + 1].value - report[r * 2].value;
-
-            vk_write_query(dst_addr + dst_offset, r, flags, delta);
-         }
-      }
+   for (uint r = 0; r < report_count; ++r) {
+      vk_write_query(dst_addr + dst_offset, r, flags, report[r * 2]);
    }
 
    if (flags & VK_QUERY_RESULT_WITH_AVAILABILITY_BIT) {

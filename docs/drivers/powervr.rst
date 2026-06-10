@@ -4,7 +4,7 @@ PowerVR
 PowerVR is an open source Vulkan driver for Imagination Technologies PowerVR
 GPUs, starting with those based on the Rogue architecture.
 
-The driver is conformant to Vulkan 1.0 on `BXS-4-64 <https://www.khronos.org/conformance/adopters/conformant-products#submission_936>`__,
+The driver is conformant to Vulkan 1.2 on `BXS-4-64 <https://www.khronos.org/conformance/adopters/conformant-products#submission_981>`__,
 but **not yet on other GPUs and Vulkan versions**, so it requires exporting
 ``PVR_I_WANT_A_BROKEN_VULKAN_DRIVER=1`` to the environment for GPUs that aren't
 conformant to any Vulkan version before running any Vulkan content.

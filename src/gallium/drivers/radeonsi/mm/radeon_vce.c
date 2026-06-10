@@ -713,7 +713,7 @@ static void rvce_destroy(struct pipe_video_codec *encoder)
    struct rvce_encoder *enc = (struct rvce_encoder *)encoder;
    if (enc->stream_handle) {
       struct rvce_fb_buffer fb = {
-         .res = si_resource(pipe_buffer_create(enc->screen, 0, PIPE_USAGE_STAGING, 512)),
+         .res = si_vid_create_buffer(enc->screen, PIPE_USAGE_STAGING, 0, 512),
       };
       enc->fb = &fb;
       session(enc);
@@ -803,7 +803,7 @@ static void rvce_begin_frame(struct pipe_video_codec *encoder, struct pipe_video
 
       dpb_size = get_dpb_size(enc, dpb_slots);
       if (!enc->dpb) {
-         enc->dpb = si_resource(pipe_buffer_create(enc->screen, PIPE_BIND_CUSTOM, PIPE_USAGE_DEFAULT, dpb_size));
+         enc->dpb = si_vid_create_buffer(enc->screen, PIPE_USAGE_DEFAULT, PIPE_RESOURCE_FLAG_UNMAPPABLE, dpb_size);
          if (!enc->dpb) {
             RVID_ERR("Can't create DPB buffer.\n");
             return;
@@ -817,7 +817,7 @@ static void rvce_begin_frame(struct pipe_video_codec *encoder, struct pipe_video
    if (!enc->stream_handle) {
       enc->stream_handle = si_vid_alloc_stream_handle();
       struct rvce_fb_buffer fb = {
-         .res = si_resource(pipe_buffer_create(enc->screen, 0, PIPE_USAGE_STAGING, 512)),
+         .res = si_vid_create_buffer(enc->screen, PIPE_USAGE_STAGING, 0, 512),
       };
       enc->fb = &fb;
       session(enc);
@@ -920,7 +920,7 @@ static void rvce_encode_bitstream(struct pipe_video_codec *encoder,
    enc->bs_offset = 0;
 
    *fb = enc->fb = CALLOC_STRUCT(rvce_fb_buffer);
-   enc->fb->res = si_resource(pipe_buffer_create(enc->screen, 0, PIPE_USAGE_STAGING, 512));
+   enc->fb->res = si_vid_create_buffer(enc->screen, PIPE_USAGE_STAGING, 0, 512);
    if (!enc->fb->res) {
       RVID_ERR("Can't create feedback buffer.\n");
       return;

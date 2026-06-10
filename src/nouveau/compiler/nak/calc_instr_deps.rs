@@ -634,9 +634,9 @@ fn insert_texture_barriers(f: &mut Function, sm: &ShaderModelInfo) {
         block.map_instrs(|instr| {
             if let Some(textures_left) = sim.visit_instr(&instr) {
                 let bar = Instr::new(OpTexDepBar { textures_left });
-                MappedInstrs::Many(vec![bar, instr])
+                [bar, instr].into()
             } else {
-                MappedInstrs::One(instr)
+                [instr].into()
             }
         });
     }
@@ -1032,17 +1032,17 @@ fn calc_delays(f: &mut Function, sm: &ShaderModelInfo) -> u64 {
         if instr.deps.delay > max_instr_delay {
             let mut delay = instr.deps.delay - max_instr_delay;
             instr.deps.set_delay(max_instr_delay);
-            let mut instrs = vec![instr];
+            let mut instrs = MappedInstrs::from([instr]);
             while delay > 0 {
                 let mut nop = Instr::new(OpNop { label: None });
                 nop.deps.set_delay(delay.min(max_instr_delay));
                 delay -= nop.deps.delay;
                 instrs.push(nop);
             }
-            MappedInstrs::Many(instrs)
+            instrs
         } else if matches!(instr.op, Op::SrcBar(_)) {
             instr.op = Op::Nop(OpNop { label: None });
-            MappedInstrs::One(instr)
+            [instr].into()
         } else if sm.exec_latency(&instr.op) > 1 {
             // It's unclear exactly why but the blob inserts a Nop with a delay
             // of 2 after every instruction which has an exec latency.  Perhaps
@@ -1050,9 +1050,9 @@ fn calc_delays(f: &mut Function, sm: &ShaderModelInfo) -> u64 {
             // cycles aren't worth the chance of weird bugs.
             let mut nop = Instr::new(OpNop { label: None });
             nop.deps.set_delay(2);
-            MappedInstrs::Many(vec![instr, nop])
+            [instr, nop].into()
         } else {
-            MappedInstrs::One(instr)
+            [instr].into()
         }
     });
 

@@ -994,12 +994,10 @@ spec@glsl-1.10@execution@glsl-vs-vectorize-between-basic-blocks-loop,Fail
 spec@glsl-1.10@execution@loops@glsl-fs-loop-vec4-counter,Fail
 spec@glsl-1.10@execution@loops@glsl-vs-loop-break,Fail
 spec@glsl-1.10@execution@temp-array-indexing@glsl-fs-vec4-indexing-temp-dst-in-nested-loop-combined,Fail
-spec@glsl-1.10@execution@temp-array-indexing@glsl-fs-vec4-indexing-temp-src-in-loop,Fail
 spec@glsl-1.10@execution@temp-array-indexing@glsl-fs-vec4-indexing-temp-src-in-nested-loop-combined,Fail
 spec@glsl-1.10@execution@temp-array-indexing@glsl-fs-vec4-indexing-temp-src-in-nested-loop-inner,Fail
 spec@glsl-1.10@execution@temp-array-indexing@glsl-fs-vec4-indexing-temp-src-in-nested-loop-outer,Fail
 spec@glsl-1.10@execution@temp-array-indexing@glsl-vs-vec4-indexing-temp-dst-in-nested-loop-combined,Fail
-spec@glsl-1.10@execution@temp-array-indexing@glsl-vs-vec4-indexing-temp-src-in-loop,Fail
 spec@glsl-1.10@execution@temp-array-indexing@glsl-vs-vec4-indexing-temp-src-in-nested-loop-combined,Fail
 spec@glsl-1.10@execution@temp-array-indexing@glsl-vs-vec4-indexing-temp-src-in-nested-loop-inner,Fail
 spec@glsl-1.10@execution@temp-array-indexing@glsl-vs-vec4-indexing-temp-src-in-nested-loop-outer,Fail
@@ -1216,3 +1214,14 @@ glx@glx-visuals-stencil,Fail
 glx@glx_arb_sync_control@waitformsc,Fail
 spec@egl 1.4@largest possible eglcreatepbuffersurface and then glclear,Fail
 spec@egl_mesa_configless_context@basic,Fail
+
+# dEQP-EGL x11
+dEQP-EGL.functional.color_clears.multi_context.gles2.rgba8888_pbuffer,Fail
+dEQP-EGL.functional.color_clears.multi_context.gles2.rgba8888_window,Fail
+dEQP-EGL.functional.color_clears.multi_thread.gles2.rgba8888_pbuffer,Fail
+dEQP-EGL.functional.color_clears.multi_thread.gles2.rgba8888_window,Fail
+dEQP-EGL.functional.create_context.no_config,Fail
+dEQP-EGL.functional.render.multi_context.gles2.rgba8888_pbuffer,Fail
+dEQP-EGL.functional.render.multi_context.gles2.rgba8888_window,Fail
+dEQP-EGL.functional.render.multi_thread.gles2.rgba8888_pbuffer,Fail
+dEQP-EGL.functional.render.multi_thread.gles2.rgba8888_window,Fail

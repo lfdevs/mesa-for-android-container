@@ -1,0 +1,6 @@
+# CTS bug? Fails on all drivers with "This device must support the ABP 2021", but not clear what's missing
+arm64-v8a CtsGraphicsTestCases android.graphics.cts.VulkanFeaturesTest#testAndroidBaselineProfile2021Support
+
+# Failed due to non-gfx issues
+arm64-v8a CtsGraphicsTestCases android.graphics.fonts.SystemFontsTest#testFontsFallbackUnreadable[0]
+arm64-v8a CtsGraphicsTestCases android.graphics.fonts.SystemFontsTest#testAvailableFonts_ReadOnlyFile[0]

@@ -655,6 +655,11 @@ struct v3dv_cmd_buffer {
          /* The current descriptor pool for the copy query results output buffer */
          VkDescriptorPool dspool;
       } query;
+      struct {
+         /* Cached TFU stride-0 fill source BO. */
+         struct v3dv_bo *src_bo;
+         uint32_t data;
+      } tfu_fill;
    } meta;
 
    /* List of jobs in the command buffer. For primary command buffers it
@@ -706,13 +711,16 @@ void v3dv_cmd_buffer_copy_query_results(struct v3dv_cmd_buffer *cmd_buffer,
 void v3dv_cmd_buffer_add_tfu_job(struct v3dv_cmd_buffer *cmd_buffer,
                                  struct drm_v3d_submit_tfu *tfu);
 
-void v3dv_cmd_buffer_rewrite_indirect_csd_job(struct v3dv_device *device,
-                                              struct v3dv_csd_indirect_cpu_job_info *info,
-                                              const uint32_t *wg_counts);
-
 void v3dv_cmd_buffer_add_private_obj(struct v3dv_cmd_buffer *cmd_buffer,
                                      uint64_t obj,
                                      v3dv_cmd_buffer_private_obj_destroy_cb destroy_cb);
+
+/* Generic destroy callback for v3dv_bo private objects added via
+ * v3dv_cmd_buffer_add_private_obj.
+ */
+void v3dv_cmd_buffer_destroy_bo_cb(VkDevice _device,
+                                   uint64_t pobj,
+                                   VkAllocationCallbacks *alloc);
 
 void v3dv_merge_barrier_state(struct v3dv_barrier_state *dst,
                               struct v3dv_barrier_state *src);

@@ -41,10 +41,10 @@ nir_cross3(nir_builder *b, nir_def *x, nir_def *y)
    unsigned yzx[3] = { 1, 2, 0 };
    unsigned zxy[3] = { 2, 0, 1 };
 
-   return nir_ffma(b, nir_swizzle(b, x, yzx, 3),
-                   nir_swizzle(b, y, zxy, 3),
-                   nir_fneg(b, nir_fmul(b, nir_swizzle(b, x, zxy, 3),
-                                        nir_swizzle(b, y, yzx, 3))));
+   return nir_ffma_weak(b, nir_swizzle(b, x, yzx, 3),
+                           nir_swizzle(b, y, zxy, 3),
+                           nir_fneg(b, nir_fmul(b, nir_swizzle(b, x, zxy, 3),
+                                                   nir_swizzle(b, y, yzx, 3))));
 }
 
 nir_def *
@@ -199,12 +199,12 @@ build_asin(nir_builder *b, nir_def *x, bool piecewise)
    }
    nir_def *abs_x = nir_fabs(b, x);
 
-   nir_def *p0_plus_xp1 = nir_ffma_imm12(b, abs_x, -0.0187293, 0.0742610);
+   nir_def *p0_plus_xp1 = nir_ffma_weak_imm12(b, abs_x, -0.0187293, 0.0742610);
 
    nir_def *expr_tail =
-      nir_ffma_imm2(b, abs_x,
-                       nir_ffma_imm2(b, abs_x, p0_plus_xp1, -0.2121144),
-                       1.5707288);
+      nir_ffma_weak_imm2(b, abs_x,
+                            nir_ffma_weak_imm2(b, abs_x, p0_plus_xp1, -0.2121144),
+                            1.5707288);
 
    nir_def *result0 = nir_fmul(b, nir_fsign(b, x),
                       nir_a_minus_bc(b, nir_imm_floatN_t(b, M_PI_2f, x->bit_size),
@@ -217,7 +217,7 @@ build_asin(nir_builder *b, nir_def *x, bool piecewise)
       nir_def *x2 = nir_fmul(b, x, x);
       nir_def *result1 = nir_fmul(b,
                                   x,
-                                  nir_ffma_imm12(b, x2, (1.0/6.0), 1.0));
+                                  nir_ffma_weak_imm12(b, x2, (1.0/6.0), 1.0));
       return nir_bcsel(b,
                        nir_flt_imm(b, abs_x, 0.21502245),
                        result1,
@@ -277,7 +277,7 @@ nir_atan(nir_builder *b, nir_def *y_over_x)
    nir_def *res = nir_imm_floatN_t(b, coeffs[0], bit_size);
 
    for (unsigned i = 1; i < ARRAY_SIZE(coeffs); ++i) {
-      res = nir_ffma_imm2(b, res, x_2, coeffs[i]);
+      res = nir_ffma_weak_imm2(b, res, x_2, coeffs[i]);
    }
 
    /* range-reduction fixup value */
@@ -285,7 +285,7 @@ nir_atan(nir_builder *b, nir_def *y_over_x)
                              nir_imm_floatN_t(b, -M_PI_2, bit_size));
 
    /* multiply through by x while fixing up the range reduction */
-   nir_def *tmp = nir_ffma(b, nir_fabs(b, u), res, bias);
+   nir_def *tmp = nir_ffma_weak(b, nir_fabs(b, u), res, bias);
 
    /* sign fixup */
    return nir_copysign(b, tmp, y_over_x);
@@ -296,6 +296,15 @@ nir_atan2(nir_builder *b, nir_def *y, nir_def *x)
 {
    assert(y->bit_size == x->bit_size);
    const uint32_t bit_size = x->bit_size;
+
+   /* For zero inputs, we end up with intermediate infinities from
+    * frcp(0.0). The final output is not infinity though, so this has to
+    * be well defined even when applications don't request preserving infinities
+    * on their own. Also preserve signed zeros to make the sign of the infinities
+    * well defined.
+    */
+   unsigned old_fp_math_ctrl = b->fp_math_ctrl;
+   b->fp_math_ctrl |= nir_fp_preserve_signed_zero | nir_fp_preserve_inf;
 
    nir_def *zero = nir_imm_floatN_t(b, 0, bit_size);
    nir_def *one = nir_imm_floatN_t(b, 1, bit_size);
@@ -359,7 +368,7 @@ nir_atan2(nir_builder *b, nir_def *y, nir_def *x)
     * coordinate system.
     */
    nir_def *arc =
-      nir_ffma_imm1(b, nir_b2fN(b, flip, bit_size), M_PI_2, nir_atan(b, tan));
+      nir_ffma_weak_imm1(b, nir_b2fN(b, flip, bit_size), M_PI_2, nir_atan(b, tan));
 
    /* Rather convoluted calculation of the sign of the result.  When x < 0 we
     * cannot use fsign because we need to be able to distinguish between
@@ -370,8 +379,11 @@ nir_atan2(nir_builder *b, nir_def *y, nir_def *x)
     * continuous along the whole positive y = 0 half-line, so it won't affect
     * the result significantly.
     */
-   return nir_bcsel(b, nir_flt(b, nir_fmin(b, y, rcp_scaled_t), zero),
-                    nir_fneg(b, arc), arc);
+   nir_def *result = nir_bcsel(b, nir_flt(b, nir_fmin(b, y, rcp_scaled_t), zero),
+                               nir_fneg(b, arc), arc);
+
+   b->fp_math_ctrl = old_fp_math_ctrl;
+   return result;
 }
 
 nir_def *

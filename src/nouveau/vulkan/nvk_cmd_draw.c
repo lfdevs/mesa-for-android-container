@@ -399,8 +399,24 @@ nvk_push_draw_state_init(struct nvk_queue *queue, struct nv_push *p)
       .output7 = OUTPUT7_FALSE,
    });
 
-   /* The blob driver just always leaves this on. */
-   P_IMMD(p, NV9097, SET_ZPASS_PIXEL_COUNT, ENABLE_TRUE);
+   P_IMMD(p, NV9097, SET_ZPASS_PIXEL_COUNT, ENABLE_FALSE);
+   P_IMMD(p, NV9097, SET_STATISTICS_COUNTER, {
+      .da_vertices_generated_enable = false,
+      .da_primitives_generated_enable = false,
+      .vs_invocations_enable = false,
+      .gs_invocations_enable = false,
+      .gs_primitives_generated_enable = false,
+      .streaming_primitives_succeeded_enable = false,
+      .streaming_primitives_needed_enable = false,
+      .clipper_invocations_enable = false,
+      .clipper_primitives_generated_enable = false,
+      .ps_invocations_enable = false,
+      .ti_invocations_enable = false,
+      .ts_invocations_enable = false,
+      .ts_primitives_generated_enable = false,
+      .total_streaming_primitives_needed_succeeded_enable = false,
+      .vtg_primitives_out_enable = false,
+   });
 
    P_IMMD(p, NV9097, SET_POINT_SIZE, fui(1.0));
    P_IMMD(p, NV9097, SET_ATTRIBUTE_POINT_SIZE, { .enable = ENABLE_TRUE });
@@ -677,6 +693,9 @@ nvk_push_draw_state_init(struct nvk_queue *queue, struct nv_push *p)
    P_IMMD(p, NV9097, SET_GLOBAL_BASE_INSTANCE_INDEX, 0);
    P_MTHD(p, NV9097, SET_MME_SHADOW_SCRATCH(NVK_MME_SCRATCH_CB0_FIRST_VERTEX));
    P_NV9097_SET_MME_SHADOW_SCRATCH(p, NVK_MME_SCRATCH_CB0_FIRST_VERTEX, 0);
+   P_NV9097_SET_MME_SHADOW_SCRATCH(p, NVK_MME_SCRATCH_CB0_MESH_GROUP_COUNT_X, 0);
+   P_NV9097_SET_MME_SHADOW_SCRATCH(p, NVK_MME_SCRATCH_CB0_MESH_GROUP_COUNT_Y, 0);
+   P_NV9097_SET_MME_SHADOW_SCRATCH(p, NVK_MME_SCRATCH_CB0_MESH_GROUP_COUNT_Z, 0);
    P_NV9097_SET_MME_SHADOW_SCRATCH(p, NVK_MME_SCRATCH_CB0_DRAW_INDEX, 0);
    P_NV9097_SET_MME_SHADOW_SCRATCH(p, NVK_MME_SCRATCH_CB0_VIEW_INDEX, 0);
 
@@ -1877,6 +1896,15 @@ nvk_cmd_bind_graphics_shader(struct nvk_cmd_buffer *cmd,
    if (cmd->state.gfx.shaders[stage] == shader)
       return;
 
+   /* IA state changes depending on whether a mesh shader is bound (see
+    * nvk_flush_ia_state) */
+   if (stage == MESA_SHADER_MESH &&
+       (cmd->state.gfx.shaders[stage] == NULL) != (shader == NULL)) {
+      struct vk_dynamic_graphics_state *dyn = &cmd->vk.dynamic_graphics_state;
+      BITSET_SET(dyn->dirty, MESA_VK_DYNAMIC_IA_PRIMITIVE_TOPOLOGY);
+      BITSET_SET(dyn->dirty, MESA_VK_DYNAMIC_IA_PRIMITIVE_RESTART_ENABLE);
+   }
+
    cmd->state.gfx.shaders[stage] = shader;
    cmd->state.gfx.shaders_dirty |= mesa_to_vk_shader_stage(stage);
 }
@@ -2203,10 +2231,15 @@ nvk_cmd_flush_gfx_shaders(struct nvk_cmd_buffer *cmd)
    struct nvk_shader *type_shader[6] = { NULL, };
    uint32_t types_dirty = 0;
 
+   const struct nvk_shader *mesh_shader =
+      cmd->state.gfx.shaders[MESA_SHADER_MESH];
+   const bool has_task_shader =
+      mesh_shader != NULL && mesh_shader->info.mesh.has_task_shader;
+
    u_foreach_bit(s, cmd->state.gfx.shaders_dirty &
                     NVK_SHADER_STAGE_GRAPHICS_BITS) {
       mesa_shader_stage stage = vk_to_mesa_shader_stage(1 << s);
-      uint32_t type = mesa_to_nv9097_shader_type(stage);
+      uint32_t type = mesa_to_nv9097_shader_type(stage, has_task_shader);
       types_dirty |= BITFIELD_BIT(type);
 
       /* Only copy non-NULL shaders because mesh/task alias with vertex and
@@ -2218,9 +2251,14 @@ nvk_cmd_flush_gfx_shaders(struct nvk_cmd_buffer *cmd)
          assert(type_shader[type] == NULL);
          type_shader[type] = shader;
 
+         /* In case of passthrough GS with mesh, we already handled binding of the geometry stage */
+         if (stage == MESA_SHADER_MESH && shader->info.mesh.has_gs_sph)
+            types_dirty &= ~BITFIELD_BIT(NV9097_SET_PIPELINE_SHADER_TYPE_GEOMETRY);
+
          const struct nvk_cbuf_map *cbuf_map = &shader->cbuf_map;
          struct nvk_cbuf_group *cbuf_group =
-            &cmd->state.gfx.cbuf_groups[nvk_cbuf_binding_for_stage(stage)];
+            &cmd->state.gfx.cbuf_groups[nvk_cbuf_binding_for_stage(
+               stage, has_task_shader)];
          for (uint32_t i = 0; i < cbuf_map->cbuf_count; i++) {
             if (memcmp(&cbuf_group->cbufs[i], &cbuf_map->cbufs[i],
                        sizeof(cbuf_group->cbufs[i])) != 0) {
@@ -2229,6 +2267,20 @@ nvk_cmd_flush_gfx_shaders(struct nvk_cmd_buffer *cmd)
             }
          }
       }
+
+      if (stage == MESA_SHADER_MESH) {
+         /* If we change the mesh stage, this could also affect the tesselation
+          * stage */
+         types_dirty |=
+            BITFIELD_BIT(NV9097_SET_PIPELINE_SHADER_TYPE_TESSELLATION);
+
+         /* If we unbind the mesh stage, this could also affect the geometry
+          * stage (for per primitive passthrough header) */
+         if (shader == NULL)
+            types_dirty |=
+               BITFIELD_BIT(NV9097_SET_PIPELINE_SHADER_TYPE_GEOMETRY);
+      }
+
    }
 
    u_foreach_bit(type, types_dirty) {
@@ -2438,16 +2490,26 @@ nvk_flush_ia_state(struct nvk_cmd_buffer *cmd)
    const struct vk_dynamic_graphics_state *dyn =
       &cmd->vk.dynamic_graphics_state;
 
+   /* Mesh shaders are affected by IA state:
+    * - SET_PRIMITIVE_TOPOLOGY takes precedence over SET_MESH_SHADER_A topology.
+    * - SET_DA_PRIMITIVE_RESTART affects mesh shaders.
+    *
+    * So in case we have mesh shader enabled, we disable primitive restart and
+    * force point list like what the proprietary driver does.
+    */
+   const bool has_mesh_shader = cmd->state.gfx.shaders[MESA_SHADER_MESH];
    if (BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_IA_PRIMITIVE_TOPOLOGY)) {
+      uint8_t topology = has_mesh_shader ? VK_PRIMITIVE_TOPOLOGY_POINT_LIST
+                                         : dyn->ia.primitive_topology;
       struct nv_push *p = nvk_cmd_buffer_push(cmd, 2);
       P_MTHD(p, NV9097, SET_PRIMITIVE_TOPOLOGY);
-      P_INLINE_DATA(p, vk_to_nv9097_primitive_topology(dyn->ia.primitive_topology));
+      P_INLINE_DATA(p, vk_to_nv9097_primitive_topology(topology));
    }
 
    if (BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_IA_PRIMITIVE_RESTART_ENABLE)) {
       struct nv_push *p = nvk_cmd_buffer_push(cmd, 2);
       P_IMMD(p, NV9097, SET_DA_PRIMITIVE_RESTART,
-             dyn->ia.primitive_restart_enable);
+             dyn->ia.primitive_restart_enable && !has_mesh_shader);
    }
 }
 
@@ -4188,14 +4250,19 @@ nvk_cmd_flush_gfx_cbufs(struct nvk_cmd_buffer *cmd)
    const uint32_t min_cbuf_alignment = nvk_min_cbuf_alignment(&pdev->info);
    struct nvk_descriptor_state *desc = &cmd->state.gfx.descriptors;
 
+   const struct nvk_shader *mesh_shader =
+      cmd->state.gfx.shaders[MESA_SHADER_MESH];
+   const bool has_task_shader =
+      mesh_shader != NULL && mesh_shader->info.mesh.has_task_shader;
+
    /* Find cbuf maps for the 5 cbuf groups */
    const struct nvk_shader *cbuf_shaders[5] = { NULL, };
-   for (mesa_shader_stage stage = 0; stage < MESA_SHADER_STAGES; stage++) {
+   for (mesa_shader_stage stage = 0; stage < MESA_SHADER_MESH_STAGES; stage++) {
       const struct nvk_shader *shader = cmd->state.gfx.shaders[stage];
       if (shader == NULL)
          continue;
 
-      uint32_t group = nvk_cbuf_binding_for_stage(stage);
+      uint32_t group = nvk_cbuf_binding_for_stage(stage, has_task_shader);
       assert(group < ARRAY_SIZE(cbuf_shaders));
       cbuf_shaders[group] = shader;
    }
@@ -4611,10 +4678,10 @@ static void
 nvk_mme_build_set_draw_params(struct mme_builder *b,
                               const struct mme_draw_params *p)
 {
-   nvk_mme_set_cb0_scratch(b, nvk_root_descriptor_offset(draw.base_vertex),
+   nvk_mme_set_cb0_scratch(b, nvk_root_descriptor_offset(draw.vs.base_vertex),
                            NVK_MME_SCRATCH_CB0_FIRST_VERTEX,
                            p->first_vertex);
-   nvk_mme_set_cb0_mthd(b, nvk_root_descriptor_offset(draw.base_instance),
+   nvk_mme_set_cb0_mthd(b, nvk_root_descriptor_offset(draw.vs.base_instance),
                         NV9097_SET_GLOBAL_BASE_INSTANCE_INDEX,
                         p->first_instance);
    nvk_mme_set_cb0_scratch(b, nvk_root_descriptor_offset(draw.draw_index),
@@ -5458,6 +5525,261 @@ nvk_CmdDrawIndirectByteCountEXT(VkCommandBuffer commandBuffer,
       nv_push_update_count(p, 1);
       nvk_cmd_buffer_push_indirect(cmd, counter_addr, 4);
    }
+}
+
+struct mme_draw_mesh_params {
+   struct mme_value group_count_x;
+   struct mme_value group_count_y;
+   struct mme_value group_count_z;
+   struct mme_value draw_index;
+};
+
+static void
+nvk_mme_build_set_draw_mesh_params(struct mme_builder *b,
+                                   const struct mme_draw_mesh_params *p)
+{
+   nvk_mme_set_cb0_scratch(b, nvk_root_descriptor_offset(draw.mesh.group_count[0]),
+                           NVK_MME_SCRATCH_CB0_MESH_GROUP_COUNT_X,
+                           p->group_count_x);
+   nvk_mme_set_cb0_scratch(b, nvk_root_descriptor_offset(draw.mesh.group_count[1]),
+                           NVK_MME_SCRATCH_CB0_MESH_GROUP_COUNT_Y,
+                           p->group_count_y);
+   nvk_mme_set_cb0_scratch(b, nvk_root_descriptor_offset(draw.mesh.group_count[2]),
+                           NVK_MME_SCRATCH_CB0_MESH_GROUP_COUNT_Z,
+                           p->group_count_z);
+   nvk_mme_set_cb0_scratch(b, nvk_root_descriptor_offset(draw.draw_index),
+                           NVK_MME_SCRATCH_CB0_DRAW_INDEX,
+                           p->draw_index);
+   nvk_mme_set_cb0_scratch(b, nvk_root_descriptor_offset(draw.view_index),
+                           NVK_MME_SCRATCH_CB0_VIEW_INDEX,
+                           mme_zero());
+}
+
+
+static void
+nvk_mme_build_set_draw_control_mesh(struct mme_builder *b,
+                                    struct mme_value task_count)
+{
+   assert(b->devinfo->cls_eng3d >= TURING_A);
+
+   uint32_t draw_control_a_flags;
+
+   V_NVC597_SET_DRAW_CONTROL_A(draw_control_a_flags, {
+      .topology = TOPOLOGY_POINTS,
+      .primitive_id = PRIMITIVE_ID_FIRST,
+      .instance_id = INSTANCE_ID_FIRST,
+      .split_mode = SPLIT_MODE_NORMAL_BEGIN_NORMAL_END,
+      .instance_iterate_enable = false,
+      .ignore_global_base_vertex_index = true,
+      .ignore_global_base_instance_index = true,
+   });
+   mme_mthd(b, NVC597_SET_DRAW_CONTROL_A);
+   mme_emit(b, mme_imm(draw_control_a_flags));
+
+   mme_mthd(b, NVC597_DRAW_VERTEX_ARRAY_BEGIN_END_A);
+   mme_emit(b, mme_imm(0));
+   mme_emit(b, task_count);
+}
+
+static void
+nvk_mme_build_draw_mesh(struct mme_builder *b,
+                        struct mme_value draw_index)
+{
+   assert(b->devinfo->cls_eng3d >= TURING_A);
+
+   /* These are in VkDrawMeshTasksIndirectCommandEXT order */
+   struct mme_value group_count_x = mme_load(b);
+   struct mme_value group_count_y = mme_load(b);
+   struct mme_value group_count_z = mme_load(b);
+
+   struct mme_draw_mesh_params params = {
+      .group_count_x = group_count_x,
+      .group_count_y = group_count_y,
+      .group_count_z = group_count_z,
+      .draw_index = draw_index,
+   };
+   nvk_mme_build_set_draw_mesh_params(b, &params);
+
+   /* Ensure the vertex id base is 0 as this affect mesh shaders */
+   mme_mthd(b, NV9097_SET_VERTEX_ID_BASE);
+   mme_emit(b, mme_imm(0));
+
+   struct mme_value tmp = mme_mul(b, group_count_x, group_count_y);
+   struct mme_value task_count = mme_mul(b, tmp, group_count_z);
+   mme_free_reg(b, tmp);
+   mme_free_reg(b, group_count_x);
+   mme_free_reg(b, group_count_y);
+   mme_free_reg(b, group_count_z);
+
+   struct mme_value view_mask = nvk_mme_load_scratch(b, VIEW_MASK);
+   mme_if(b, ieq, view_mask, mme_zero()) {
+      mme_free_reg(b, view_mask);
+
+      nvk_mme_build_set_draw_control_mesh(b, task_count);
+   }
+
+   view_mask = nvk_mme_load_scratch(b, VIEW_MASK);
+   mme_if(b, ine, view_mask, mme_zero()) {
+      mme_free_reg(b, view_mask);
+
+      struct mme_value view = mme_mov(b, mme_zero());
+      mme_while(b, ine, view, mme_imm(32)) {
+         view_mask = nvk_mme_load_scratch(b, VIEW_MASK);
+         struct mme_value has_view = mme_bfe(b, view_mask, view, 1);
+         mme_free_reg(b, view_mask);
+         mme_if(b, ine, has_view, mme_zero()) {
+            mme_free_reg(b, has_view);
+            nvk_mme_emit_view_index(b, view);
+            nvk_mme_build_set_draw_control_mesh(b, task_count);
+         }
+
+         mme_add_to(b, view, view, mme_imm(1));
+      }
+      mme_free_reg(b, view);
+   }
+
+   mme_free_reg(b, task_count);
+}
+
+void
+nvk_mme_draw_mesh(struct mme_builder *b)
+{
+   if (b->devinfo->cls_eng3d < TURING_A)
+      return;
+
+   nvk_mme_build_draw_mesh(b, mme_zero());
+}
+
+VKAPI_ATTR void VKAPI_CALL
+nvk_CmdDrawMeshTasksEXT(VkCommandBuffer commandBuffer, uint32_t x, uint32_t y, uint32_t z)
+{
+   VK_FROM_HANDLE(nvk_cmd_buffer, cmd, commandBuffer);
+
+   assert(nvk_cmd_buffer_3d_cls(cmd) >= TURING_A);
+
+   nvk_cmd_flush_gfx_state(cmd);
+
+   struct nv_push *p = nvk_cmd_buffer_push(cmd, 4);
+   P_1INC(p, NV9097, CALL_MME_MACRO(NVK_MME_DRAW_MESH));
+   P_INLINE_DATA(p, x);
+   P_INLINE_DATA(p, y);
+   P_INLINE_DATA(p, z);
+}
+
+void
+nvk_mme_draw_mesh_indirect(struct mme_builder *b)
+{
+   if (b->devinfo->cls_eng3d < TURING_A)
+      return;
+
+   struct mme_value64 draw_addr = mme_load_addr64(b);
+   struct mme_value draw_count = mme_load(b);
+   struct mme_value stride = mme_load(b);
+
+   struct mme_value draw = mme_mov(b, mme_zero());
+   mme_while(b, ult, draw, draw_count) {
+      mme_tu104_read_fifoed(b, draw_addr, mme_imm(3));
+
+      nvk_mme_build_draw_mesh(b, draw);
+
+      mme_add_to(b, draw, draw, mme_imm(1));
+      mme_add64_to(b, draw_addr, draw_addr, mme_value64(stride, mme_zero()));
+   }
+}
+
+VKAPI_ATTR void VKAPI_CALL
+nvk_CmdDrawMeshTasksIndirectEXT(VkCommandBuffer commandBuffer, VkBuffer _buffer, VkDeviceSize offset,
+                                uint32_t drawCount, uint32_t stride)
+{
+   VK_FROM_HANDLE(nvk_cmd_buffer, cmd, commandBuffer);
+   VK_FROM_HANDLE(nvk_buffer, buffer, _buffer);
+
+   assert(nvk_cmd_buffer_3d_cls(cmd) >= TURING_A);
+
+   /* From the Vulkan 1.3.272 spec:
+    *
+    *    VUID-vkCmdDrawMeshTasksIndirectEXT-drawCount-07088
+    *
+    *    "If drawCount is greater than 1, stride must be a multiple of 4 and
+    *     must be greater than or equal to sizeof(VkDrawMeshTasksIndirectCommandEXT)"
+    *
+    * and
+    *
+    *    "If drawCount is less than or equal to one, stride is ignored."
+    */
+   if (drawCount > 1) {
+      assert(stride % 4 == 0);
+      assert(stride >= sizeof(VkDrawMeshTasksIndirectCommandEXT));
+   } else {
+      stride = sizeof(VkDrawMeshTasksIndirectCommandEXT);
+   }
+
+   nvk_cmd_flush_gfx_state(cmd);
+
+   struct nv_push *p = nvk_cmd_buffer_push(cmd, 5);
+   P_1INC(p, NV9097, CALL_MME_MACRO(NVK_MME_DRAW_MESH_INDIRECT));
+   uint64_t draw_addr = vk_buffer_address(&buffer->vk, offset);
+   P_INLINE_DATA(p, draw_addr >> 32);
+   P_INLINE_DATA(p, draw_addr);
+   P_INLINE_DATA(p, drawCount);
+   P_INLINE_DATA(p, stride);
+}
+
+void
+nvk_mme_draw_mesh_indirect_count(struct mme_builder *b)
+{
+   if (b->devinfo->cls_eng3d < TURING_A)
+      return;
+
+   struct mme_value64 draw_addr = mme_load_addr64(b);
+   struct mme_value64 draw_count_addr = mme_load_addr64(b);
+   struct mme_value draw_max = mme_load(b);
+   struct mme_value stride = mme_load(b);
+
+   mme_tu104_read_fifoed(b, draw_count_addr, mme_imm(1));
+   mme_free_reg64(b, draw_count_addr);
+   struct mme_value draw_count_buf = mme_load(b);
+
+   mme_if(b, ule, draw_count_buf, draw_max) {
+      mme_mov_to(b, draw_max, draw_count_buf);
+   }
+   mme_free_reg(b, draw_count_buf);
+
+   struct mme_value draw = mme_mov(b, mme_zero());
+   mme_while(b, ult, draw, draw_max) {
+      mme_tu104_read_fifoed(b, draw_addr, mme_imm(3));
+
+      nvk_mme_build_draw_mesh(b, draw);
+
+      mme_add_to(b, draw, draw, mme_imm(1));
+      mme_add64_to(b, draw_addr, draw_addr, mme_value64(stride, mme_zero()));
+   }
+}
+
+VKAPI_ATTR void VKAPI_CALL
+nvk_CmdDrawMeshTasksIndirectCountEXT(VkCommandBuffer commandBuffer, VkBuffer _buffer, VkDeviceSize offset,
+                                     VkBuffer _countBuffer, VkDeviceSize countBufferOffset, uint32_t maxDrawCount,
+                                     uint32_t stride)
+{
+   VK_FROM_HANDLE(nvk_cmd_buffer, cmd, commandBuffer);
+   VK_FROM_HANDLE(nvk_buffer, buffer, _buffer);
+   VK_FROM_HANDLE(nvk_buffer, count_buffer, _countBuffer);
+
+   assert(nvk_cmd_buffer_3d_cls(cmd) >= TURING_A);
+
+   nvk_cmd_flush_gfx_state(cmd);
+
+   struct nv_push *p = nvk_cmd_buffer_push(cmd, 7);
+   P_1INC(p, NV9097, CALL_MME_MACRO(NVK_MME_DRAW_MESH_INDIRECT_COUNT));
+   uint64_t draw_addr = vk_buffer_address(&buffer->vk, offset);
+   P_INLINE_DATA(p, draw_addr >> 32);
+   P_INLINE_DATA(p, draw_addr);
+   uint64_t draw_count_addr = vk_buffer_address(&count_buffer->vk,
+                                                countBufferOffset);
+   P_INLINE_DATA(p, draw_count_addr >> 32);
+   P_INLINE_DATA(p, draw_count_addr);
+   P_INLINE_DATA(p, maxDrawCount);
+   P_INLINE_DATA(p, stride);
 }
 
 VKAPI_ATTR void VKAPI_CALL

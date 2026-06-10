@@ -111,6 +111,15 @@ main_unmarshal_table_c = custom_target(
   capture : true,
 )
 
+main_api_trace_c = custom_target(
+  'api_trace.c',
+  input : ['api_trace_c.py', 'gl_and_es_API.xml'],
+  output : 'api_trace.c',
+  command : [prog_python, '@INPUT0@', '-f', '@INPUT1@'],
+  depend_files : glapi_xml_py_deps,
+  capture : true,
+)
+
 main_marshal_generated_c = []
 foreach x : ['0', '1', '2', '3', '4', '5', '6', '7']
   main_marshal_generated_c += custom_target(

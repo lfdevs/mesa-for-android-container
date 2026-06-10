@@ -130,7 +130,7 @@ pan_image_view_get_layer_count(const struct pan_image_view *iview)
                         : iview->last_layer - iview->first_layer + 1;
 }
 
-static inline const struct pan_image_plane_ref
+static inline struct pan_image_plane_ref
 pan_image_view_get_color_plane(const struct pan_image_view *iview)
 {
    /* We only support rendering to plane 0 */
@@ -209,9 +209,13 @@ pan_image_view_check(const struct pan_image_view *iview)
          util_format_get_plane_format(pref.image->props.format, pref.plane_idx);
 
       /* View-based pixel re-interpretation only allowed if the formats
-       * blocksize match. */
-      assert(util_format_get_blocksize(view_format) ==
-             util_format_get_blocksize(img_format));
+       * blocksize match. Exception is for Z24X8 with AFBC enabled since then
+       * we can lower it to Z24 packed format internally. */
+      assert((util_format_get_blocksize(view_format) ==
+              util_format_get_blocksize(img_format)) ||
+             (view_format == PIPE_FORMAT_Z24X8_UNORM &&
+              img_format == PIPE_FORMAT_Z24_UNORM_PACKED &&
+              drm_is_afbc(pref.image->props.modifier)));
    }
 #endif
 }

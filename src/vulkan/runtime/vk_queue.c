@@ -632,9 +632,22 @@ vk_queue_submit_final(struct vk_queue *queue,
          result = vk_queue_set_lost(queue, "Failed to unwrap sync signal");
    }
 
-   vk_queue_lock(queue);
-   result = queue->driver_submit(queue, submit);
-   vk_queue_unlock(queue);
+   /* For queues participating in emulation, redirect the submission to the
+    * real underlying queue so that driver_submit always sees the queue with
+    * actual hardware resources. The lock on the real queue unconditionally
+    * serializes submissions across all aliases.
+    */
+   if (queue->real_queue) {
+      struct vk_queue *real_queue = queue->real_queue;
+
+      simple_mtx_lock(&real_queue->lock);
+      result = real_queue->driver_submit(real_queue, submit);
+      simple_mtx_unlock(&real_queue->lock);
+   } else {
+      vk_queue_lock(queue);
+      result = queue->driver_submit(queue, submit);
+      vk_queue_unlock(queue);
+   }
 
    if (unlikely(result != VK_SUCCESS))
       return result;
@@ -1241,6 +1254,21 @@ vk_queue_finish(struct vk_queue *queue)
 
    simple_mtx_destroy(&queue->lock);
    vk_object_base_finish(&queue->base);
+}
+
+void
+vk_queue_set_emulated(struct vk_queue *emulated, struct vk_queue *real)
+{
+   assert(emulated != real);
+   assert(emulated->driver_submit == NULL);
+   assert(real->real_queue == NULL || real->real_queue == real);
+
+   /* Mark the real queue as owning emulated aliases. Runs at device-init
+    * time, single-threaded with respect to other queue setup, so no
+    * synchronization is needed here.
+    */
+   real->real_queue = real;
+   emulated->real_queue = real;
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL

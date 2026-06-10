@@ -607,7 +607,7 @@ nir_def_set_name(nir_shader *shader, nir_def *def, char *name)
       return;
 
    nir_instr_debug_info *debug_info = nir_instr_get_debug_info(nir_def_instr(def));
-   debug_info->variable_name = name;
+   debug_info->variable_name = ralloc_strdup(shader, name);
 }
 
 /* Performs variable renaming

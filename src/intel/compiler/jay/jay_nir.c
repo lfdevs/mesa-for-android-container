@@ -11,6 +11,10 @@
 #include "nir.h"
 #include "nir_builder.h"
 #include "nir_intrinsics.h"
+#include "shader_enums.h"
+
+#define JAY_NIR_SNAPSHOT(name)  BRW_NIR_SNAPSHOT(name)
+#define JAY_NIR_PASS(pass, ...) BRW_NIR_PASS(pass, ##__VA_ARGS__)
 
 /*
  * Jay-to-NIR relies on a careful indexing of defs: every 32-bit word has
@@ -51,7 +55,7 @@ lower_helper_invocation(nir_builder *b, nir_intrinsic_instr *intr, void *_)
    /* TODO: Is this right for multisampling? */
    b->cursor = nir_before_instr(&intr->instr);
    nir_def *active =
-      nir_inot(b, nir_inverse_ballot(b, nir_load_sample_mask_in(b)));
+      nir_inot(b, nir_inverse_ballot(b, nir_load_dispatch_mask_intel(b)));
 
    nir_def_replace(&intr->def, active);
    return true;
@@ -124,6 +128,7 @@ jay_nir_lower_simd(nir_builder *b, nir_intrinsic_instr *intr, void *simd_)
 
 struct frag_out_ctx {
    nir_def *colour[8], *depth, *stencil, *sample_mask;
+   bool dual_blend;
 };
 
 static bool
@@ -141,19 +146,19 @@ collect_fragment_output(nir_builder *b, nir_intrinsic_instr *intr, void *ctx_)
    /* TODO: Optimize with write mask? */
 
    gl_frag_result loc = nir_intrinsic_io_semantics(intr).location;
-   assert(!nir_intrinsic_io_semantics(intr).dual_source_blend_index && "todo");
    nir_def **out;
    if (loc == FRAG_RESULT_COLOR) {
       out = &ctx->colour[0];
    } else if (loc >= FRAG_RESULT_DATA0 && loc <= FRAG_RESULT_DATA7) {
       out = &ctx->colour[loc - FRAG_RESULT_DATA0];
+   } else if (loc == FRAG_RESULT_DUAL_SRC_BLEND) {
+      out = &ctx->colour[1];
+      ctx->dual_blend = true;
    } else if (loc == FRAG_RESULT_DEPTH) {
       out = &ctx->depth;
    } else if (loc == FRAG_RESULT_STENCIL) {
-      UNREACHABLE("todo");
       out = &ctx->stencil;
    } else if (loc == FRAG_RESULT_SAMPLE_MASK) {
-      UNREACHABLE("todo");
       out = &ctx->sample_mask;
    } else {
       UNREACHABLE("invalid location");
@@ -165,43 +170,24 @@ collect_fragment_output(nir_builder *b, nir_intrinsic_instr *intr, void *ctx_)
    nir_instr_remove(&intr->instr);
    return true;
 }
-
-static void
-append_payload(nir_builder *b,
-               nir_def **payload,
-               unsigned *len,
-               unsigned max_len,
-               nir_def *value)
-{
-   if (value != NULL) {
-      for (unsigned i = 0; i < value->num_components; ++i) {
-         payload[*len] = nir_channel(b, value, i);
-         (*len)++;
-         assert((*len) <= max_len);
-      }
-   }
-}
-
 static void
 insert_rt_store(nir_builder *b,
-                const struct intel_device_info *devinfo,
                 signed target,
-                bool last,
                 nir_def *colour,
-                nir_def *src0_alpha,
+                nir_def *dual_colour,
+                nir_def *src0_colour,
                 nir_def *depth,
                 nir_def *stencil,
-                nir_def *sample_mask,
-                unsigned dispatch_width)
+                nir_def *sample_mask)
 {
    bool null_rt = target < 0;
-   target = MAX2(target, 0);
+   bool eot_only = null_rt &&
+                   !colour &&
+                   nir_def_is_undef(depth) &&
+                   nir_def_is_undef(stencil);
 
-   if (!colour) {
-      colour = nir_undef(b, 4, 32);
-   }
-
-   colour = nir_pad_vec4(b, colour);
+   colour = nir_pad_vec4(b, colour ?: nir_undef(b, 4, 32));
+   dual_colour = nir_pad_vec4(b, dual_colour ?: nir_undef(b, 4, 32));
 
    if (null_rt) {
       /* Even if we don't write a RT, we still need to write alpha for
@@ -211,42 +197,15 @@ insert_rt_store(nir_builder *b,
                                      nir_channel(b, colour, 3), 3);
    }
 
-   /* TODO: Not sure I like this. We'll see what 2src looks like. */
-   unsigned op = dispatch_width == 32 ?
-                    XE2_DATAPORT_RENDER_TARGET_WRITE_SIMD32_SINGLE_SOURCE :
-                    BRW_DATAPORT_RENDER_TARGET_WRITE_SIMD16_SINGLE_SOURCE;
-   uint64_t desc =
-      brw_fb_write_desc(devinfo, target, op, last, false /* coarse write */);
+   nir_def *src0_alpha = nir_channel_or_undef(b, src0_colour ?: colour, 3);
 
-   uint64_t ex_desc = 0;
-   if (devinfo->ver >= 20) {
-      ex_desc = target << 21 |
-                null_rt << 20 |
-                (src0_alpha ? (1 << 15) : 0) |
-                (stencil ? (1 << 14) : 0) |
-                (depth ? (1 << 13) : 0) |
-                (sample_mask ? (1 << 12) : 0);
-   } else if (devinfo->ver >= 11) {
-      /* Set the "Render Target Index" and "Src0 Alpha Present" fields
-       * in the extended message descriptor, in lieu of using a header.
-       */
-      ex_desc = target << 12 | null_rt << 20 | (src0_alpha ? (1 << 15) : 0);
-   }
-
-   /* Build the payload */
-   nir_def *payload[8] = { NULL };
-   unsigned len = 0;
-   append_payload(b, payload, &len, ARRAY_SIZE(payload), colour);
-   append_payload(b, payload, &len, ARRAY_SIZE(payload), depth);
-   /* TODO */
-
-   nir_def *disable = b->shader->info.fs.uses_discard ?
+   nir_def *disable = b->shader->info.fs.uses_discard && !eot_only ?
                          nir_is_helper_invocation(b, 1) :
                          nir_imm_false(b);
 
-   nir_store_render_target_intel(b, nir_vec(b, payload, len),
-                                 nir_imm_ivec2(b, desc, ex_desc), disable,
-                                 .eot = last);
+   nir_store_render_target_intel(b, colour, dual_colour, src0_alpha,
+                                 sample_mask, depth, stencil, disable,
+                                 .target = target);
 }
 
 static void
@@ -262,50 +221,114 @@ lower_fragment_outputs(nir_function_impl *impl,
    nir_builder *b = &b_;
    assert(nr_color_regions <= ARRAY_SIZE(ctx.colour));
 
-   signed first = -1;
-   for (unsigned i = 0; i < ARRAY_SIZE(ctx.colour); ++i) {
+   nir_def *undef = nir_undef(b, 1, 32);
+
+   if (ctx.dual_blend) {
+      insert_rt_store(b, 0, ctx.colour[0], ctx.colour[1], NULL,
+                      ctx.depth ?: undef, ctx.stencil ?: undef,
+                      ctx.sample_mask ?: undef);
+      return;
+   }
+
+   signed last = -1;
+   for (signed i = nr_color_regions - 1; i >= 0; --i) {
       if (ctx.colour[i]) {
-         first = i;
+         last = i;
          break;
       }
    }
 
-   /* Do the later render targets first */
-   for (unsigned i = first + 1; i < nr_color_regions; ++i) {
+   for (signed i = 0; i < last; ++i) {
       if (ctx.colour[i]) {
-         insert_rt_store(b, devinfo, i, false, ctx.colour[i], NULL, NULL, NULL,
-                         NULL, dispatch_width);
+         insert_rt_store(b, i, ctx.colour[i], NULL,
+                         i > 0 ? ctx.colour[0] : NULL, ctx.depth ?: undef,
+                         ctx.stencil ?: undef, ctx.sample_mask ?: undef);
       }
    }
 
-   /* Finally do render target zero attaching all the sideband things and
-    * setting the LastRT bit. This needs to exist even if nothing is written
-    * since it also signals end-of-thread.
-    */
-   insert_rt_store(b, devinfo, first < nr_color_regions ? first : -1, true,
-                   first >= 0 ? ctx.colour[first] : NULL, NULL, ctx.depth,
-                   ctx.stencil, ctx.sample_mask, dispatch_width);
+   insert_rt_store(b, last, last >= 0 ? ctx.colour[last] : NULL, NULL,
+                   last > 0 ? ctx.colour[0] : NULL, ctx.depth ?: undef,
+                   ctx.stencil ?: undef, ctx.sample_mask ?: undef);
+}
+
+/**
+ * Drop render target stores with unconditional discards.
+ */
+static bool
+opt_unconditional_discards(nir_shader *nir)
+{
+   nir_function_impl *impl = nir_shader_get_entrypoint(nir);
+   nir_block *block = nir_impl_last_block(impl);
+
+   bool progress = false;
+   bool any_remaining_rt_writes = false;
+
+   nir_foreach_instr_reverse_safe(instr, block) {
+      if (instr->type != nir_instr_type_intrinsic)
+         continue;
+
+      nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
+
+      if (intr->intrinsic == nir_intrinsic_store_render_target_intel) {
+         nir_scalar discard = nir_scalar_resolved(intr->src[6].ssa, 0);
+         if (nir_scalar_is_const(discard) && nir_scalar_as_bool(discard)) {
+            /* Drop store with unconditional discard */
+            nir_instr_remove(instr);
+            progress = true;
+         } else {
+            /* This RT store might actually happen */
+            any_remaining_rt_writes = true;
+         }
+      } else if ((intr->intrinsic == nir_intrinsic_demote ||
+                  intr->intrinsic == nir_intrinsic_terminate) &&
+                 !any_remaining_rt_writes) {
+         /* Delete unconditional demotes/terminates in the end block... */
+         nir_instr_remove(instr);
+         progress = true;
+      } else {
+         /* ...but stop if we find an intrinsic that has a side-effect */
+         const nir_intrinsic_info *info = &nir_intrinsic_infos[intr->intrinsic];
+         if (!(info->flags & NIR_INTRINSIC_CAN_ELIMINATE))
+            break;
+      }
+   }
+
+   /* See if discards still exist in the program and flag accordingly */
+   nir->info.fs.uses_discard = false;
+
+   nir_foreach_block(block, impl) {
+      nir_foreach_instr(instr, block) {
+         if (instr->type == nir_instr_type_intrinsic) {
+            nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
+            if (intr->intrinsic == nir_intrinsic_demote ||
+                intr->intrinsic == nir_intrinsic_demote_if ||
+                intr->intrinsic == nir_intrinsic_terminate ||
+                intr->intrinsic == nir_intrinsic_terminate_if)
+               nir->info.fs.uses_discard = true;
+         }
+      }
+   }
+
+   /* If we eliminated all RT stores, add a Null RT store to end the thread. */
+   if (!any_remaining_rt_writes) {
+      nir_builder b = nir_builder_at(nir_after_impl(impl));
+      nir_def *undef = nir_undef(&b, 1, 32);
+      insert_rt_store(&b, -1, NULL, NULL, NULL, undef, undef, undef);
+   }
+
+   return nir_progress(progress, impl, nir_metadata_control_flow);
 }
 
 unsigned
 jay_process_nir(const struct intel_device_info *devinfo,
                 nir_shader *nir,
                 union brw_any_prog_data *prog_data,
-                union brw_any_prog_key *key)
+                union brw_any_prog_key *key,
+                debug_archiver *archiver)
 {
    enum mesa_shader_stage stage = nir->info.stage;
    struct brw_compiler compiler = { .devinfo = devinfo };
    unsigned nr_packed_regs = 0;
-
-   brw_pass_tracker pt_ = {
-      .nir = nir,
-      .key = &key->base,
-      .dispatch_width = 0,
-      .compiler = &compiler,
-      .archiver = NULL, //params->base.archiver,
-   }, *pt = &pt_;
-
-   BRW_NIR_SNAPSHOT("first");
 
    prog_data->base.ray_queries = nir->info.ray_queries;
    prog_data->base.stage = stage;
@@ -316,7 +339,36 @@ jay_process_nir(const struct intel_device_info *devinfo,
    /* TODO: Real heuristic */
    bool do_simd32 = INTEL_SIMD(FS, 32);
    do_simd32 &= stage == MESA_SHADER_COMPUTE || stage == MESA_SHADER_FRAGMENT;
+
+   /* The 'Render Target Write message' section of the docs says:
+    *
+    *    "Output Stencil is not supported with SIMD16 Render Target
+    *     Write Messages."
+    *
+    * Likewise for Xe2 at SIMD32.
+    */
+   if (stage == MESA_SHADER_FRAGMENT &&
+       (nir->info.outputs_written & BITFIELD64_BIT(FRAG_RESULT_STENCIL)))
+      do_simd32 = false;
+
+   if (stage == MESA_SHADER_FRAGMENT && nir->info.fs.color_is_dual_source)
+      do_simd32 = false;
+
+   /* SIMD splitting of ray queries is inefficient, avoid it when possible */
+   if (prog_data->base.ray_queries && nir->info.min_subgroup_size < 32)
+      do_simd32 = false;
+
    unsigned simd_width = do_simd32 ? (nir->info.api_subgroup_size ?: 32) : 16;
+
+   brw_pass_tracker pt_ = {
+      .nir = nir,
+      .key = &key->base,
+      .dispatch_width = simd_width,
+      .compiler = &compiler,
+      .archiver = archiver,
+   }, *pt = &pt_;
+
+   JAY_NIR_SNAPSHOT("first");
 
    if (stage == MESA_SHADER_VERTEX) {
       /* We only expect slot compaction to be disabled when using device
@@ -349,7 +401,7 @@ jay_process_nir(const struct intel_device_info *devinfo,
 
       brw_nir_lower_vs_inputs(nir);
       brw_nir_lower_vue_outputs(nir);
-      BRW_NIR_SNAPSHOT("after_lower_io");
+      JAY_NIR_SNAPSHOT("after_lower_io");
 
       memset(prog_data->vs.vf_component_packing, 0,
              sizeof(prog_data->vs.vf_component_packing));
@@ -358,30 +410,75 @@ jay_process_nir(const struct intel_device_info *devinfo,
       }
 
       /* Get constant offsets out of the way for proper clip/cull handling */
-      BRW_NIR_PASS(nir_lower_io_to_scalar, nir_var_shader_out, NULL, NULL);
-      BRW_NIR_PASS(nir_opt_constant_folding);
+      JAY_NIR_PASS(nir_lower_io_to_scalar, nir_var_shader_out, NULL, NULL);
+      /* Unroll multiview loops */
+      JAY_NIR_PASS(nir_opt_loop_unroll);
+      JAY_NIR_PASS(nir_opt_constant_folding);
+      JAY_NIR_PASS(brw_nir_lower_deferred_urb_writes, devinfo,
+                   &prog_data->vue.vue_map, 0, 0);
+   } else if (stage == MESA_SHADER_TESS_EVAL) {
+      const uint32_t pos_slots =
+         (nir->info.per_view_outputs & VARYING_BIT_POS) ?
+            MAX2(1, util_bitcount(key->base.view_mask)) :
+            1;
+
+      brw_compute_vue_map(devinfo, &prog_data->vue.vue_map,
+                          nir->info.outputs_written, key->base.vue_layout,
+                          pos_slots);
+
+      struct intel_vue_map input_vue_map;
+
+      brw_compute_tess_vue_map(&input_vue_map, nir->info.inputs_read,
+                               nir->info.patch_inputs_read,
+                               key->tes.separate_tess_vue_layout);
+
+      brw_nir_apply_key(pt, &key->base, simd_width);
+      brw_nir_lower_tes_inputs(nir, devinfo, &input_vue_map,
+                               &prog_data->vue.urb_read_length);
+      brw_nir_lower_vue_outputs(nir);
+      BRW_NIR_SNAPSHOT("after_lower_io");
+
+      brw_nir_opt_vectorize_urb(pt);
+      BRW_NIR_PASS(intel_nir_lower_patch_vertices_tes);
+
       BRW_NIR_PASS(brw_nir_lower_deferred_urb_writes, devinfo,
                    &prog_data->vue.vue_map, 0, 0);
+
+      unsigned output_size_bytes = prog_data->vue.vue_map.num_slots * 4 * 4;
+
+      assert(output_size_bytes >= 1);
+      assert(output_size_bytes <= GFX7_MAX_DS_URB_ENTRY_SIZE_BYTES);
+
+      prog_data->tes.include_primitive_id =
+         BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_PRIMITIVE_ID);
+
+      /* URB entry sizes are stored as a multiple of 64 bytes. */
+      prog_data->vue.urb_entry_size = align(output_size_bytes, 64) / 64;
+
+      brw_fill_tess_info_from_shader_info(&prog_data->tes.tess_info,
+                                          &nir->info);
    } else if (stage == MESA_SHADER_FRAGMENT) {
       assert(key->fs.mesh_input == INTEL_NEVER && "todo");
-      brw_nir_apply_key(pt, &key->base, 32);
+      brw_nir_apply_key(pt, &key->base, simd_width);
       brw_nir_lower_fs_inputs(nir, devinfo, &key->fs);
       brw_nir_lower_fs_outputs(nir);
-      NIR_PASS(_, nir, nir_lower_io_to_scalar, nir_var_shader_in, NULL, NULL);
+      JAY_NIR_SNAPSHOT("after_lower_io");
+      JAY_NIR_PASS(nir_lower_io_to_scalar, nir_var_shader_in, NULL, NULL);
 
       if (!brw_can_coherent_fb_fetch(devinfo))
-         NIR_PASS(_, nir, brw_nir_lower_fs_load_output, &key->fs);
+         JAY_NIR_PASS(brw_nir_lower_fs_load_output, &key->fs);
 
-      NIR_PASS(_, nir, nir_opt_frag_coord_to_pixel_coord);
-      NIR_PASS(_, nir, nir_shader_intrinsics_pass, lower_frag_coord,
+      JAY_NIR_PASS(nir_opt_frag_coord_to_pixel_coord);
+      JAY_NIR_PASS(nir_shader_intrinsics_pass, lower_frag_coord,
                nir_metadata_control_flow, NULL);
-      NIR_PASS(_, nir, nir_opt_barycentric, true);
+      JAY_NIR_PASS(nir_opt_barycentric, true);
+      JAY_NIR_PASS(nir_opt_constant_folding);
 
       lower_fragment_outputs(nir_shader_get_entrypoint(nir), devinfo,
                              key->fs.nr_color_regions, simd_width);
-      NIR_PASS(_, nir, nir_lower_helper_writes, true);
-      NIR_PASS(_, nir, nir_lower_is_helper_invocation);
-      NIR_PASS(_, nir, nir_shader_intrinsics_pass, lower_helper_invocation,
+      JAY_NIR_PASS(nir_lower_helper_writes, true);
+      JAY_NIR_PASS(nir_lower_is_helper_invocation);
+      JAY_NIR_PASS(nir_shader_intrinsics_pass, lower_helper_invocation,
                nir_metadata_control_flow, NULL);
 
       if (key->fs.alpha_to_coverage != INTEL_NEVER) {
@@ -389,54 +486,48 @@ jay_process_nir(const struct intel_device_info *devinfo,
           * offset to determine render target 0 store instruction in
           * emit_alpha_to_coverage pass.
           */
-         NIR_PASS(_, nir, nir_opt_constant_folding);
-         NIR_PASS(_, nir, brw_nir_lower_alpha_to_coverage);
+         JAY_NIR_PASS(nir_opt_constant_folding);
+         JAY_NIR_PASS(brw_nir_lower_alpha_to_coverage);
       }
+
+      /* We want to run the standard opt loop after lowering but before
+       * gathering prog data, so we have accurate information about which system
+       * values are actually used (vs DCE'd away).
+       */
+      brw_nir_optimize(pt);
+
+      NIR_PASS(_, nir, opt_unconditional_discards);
 
       // TODO
-      // NIR_PASS(_, nir, brw_nir_move_interpolation_to_top);
+      // JAY_NIR_PASS(brw_nir_move_interpolation_to_top);
 
-      if (!brw_fs_prog_key_is_dynamic(&key->fs)) {
-         uint32_t f = 0;
+      /* Do this before lower_fs_config_intel so that the pass has the right
+       * information.
+       */
+      jay_populate_prog_data(devinfo, nir, prog_data, key, 0);
 
-         if (key->fs.multisample_fbo == INTEL_ALWAYS)
-            f |= INTEL_FS_CONFIG_MULTISAMPLE_FBO;
-
-         if (key->fs.alpha_to_coverage == INTEL_ALWAYS)
-            f |= INTEL_FS_CONFIG_ALPHA_TO_COVERAGE;
-
-         if (key->fs.provoking_vertex_last == INTEL_ALWAYS)
-            f |= INTEL_FS_CONFIG_PROVOKING_VERTEX_LAST;
-
-         if (key->fs.persample_interp == INTEL_ALWAYS) {
-            f |= INTEL_FS_CONFIG_PERSAMPLE_DISPATCH |
-                 INTEL_FS_CONFIG_PERSAMPLE_INTERP;
-         }
-
-         NIR_PASS(_, nir, nir_inline_sysval, nir_intrinsic_load_fs_config_intel,
-                  f);
-      }
+      JAY_NIR_PASS(brw_nir_lower_fs_config_intel, &key->fs, &prog_data->fs);
    } else {
       brw_nir_apply_key(pt, &key->base, simd_width);
    }
 
    brw_postprocess_nir_opts(pt);
 
-   NIR_PASS(_, nir, nir_shader_intrinsics_pass, jay_nir_lower_simd,
+   JAY_NIR_PASS(nir_shader_intrinsics_pass, jay_nir_lower_simd,
             nir_metadata_control_flow, &simd_width);
-   NIR_PASS(_, nir, nir_opt_algebraic_late);
-   NIR_PASS(_, nir, intel_nir_opt_peephole_imul32x16);
+   JAY_NIR_PASS(nir_opt_algebraic_late);
+   JAY_NIR_PASS(intel_nir_opt_peephole_imul32x16);
 
    /* Late postprocess while remaining in SSA */
    /* Run fsign lowering again after the last time brw_nir_optimize is called.
     * As is the case with conversion lowering (below), brw_nir_optimize can
     * create additional fsign instructions.
     */
-   NIR_PASS(_, nir, jay_nir_lower_fsign);
-   NIR_PASS(_, nir, jay_nir_lower_bool);
-   NIR_PASS(_, nir, nir_opt_cse);
-   NIR_PASS(_, nir, nir_opt_dce);
-   NIR_PASS(_, nir, jay_nir_opt_sel_zero);
+   JAY_NIR_PASS(jay_nir_lower_fsign);
+   JAY_NIR_PASS(jay_nir_lower_bool);
+   JAY_NIR_PASS(nir_opt_cse);
+   JAY_NIR_PASS(nir_opt_dce);
+   JAY_NIR_PASS(jay_nir_opt_sel_zero);
 
    /* Run nir_split_conversions only after the last tiem
     * brw_nir_optimize is called. Various optimizations invoked there can
@@ -445,30 +536,31 @@ jay_process_nir(const struct intel_device_info *devinfo,
    const nir_split_conversions_options split_conv_opts = {
       .callback = intel_nir_split_conversions_cb,
    };
-   NIR_PASS(_, nir, nir_split_conversions, &split_conv_opts);
+   JAY_NIR_PASS(nir_split_conversions, &split_conv_opts);
 
    /* Do this only after the last opt_gcm. GCM will undo this lowering. */
    if (stage == MESA_SHADER_FRAGMENT) {
-      NIR_PASS(_, nir, intel_nir_lower_non_uniform_barycentric_at_sample);
+      JAY_NIR_PASS(intel_nir_lower_non_uniform_barycentric_at_sample);
    }
 
-   NIR_PASS(_, nir, nir_opt_constant_folding);
-   NIR_PASS(_, nir, nir_lower_load_const_to_scalar);
-   NIR_PASS(_, nir, nir_lower_all_phis_to_scalar);
-   NIR_PASS(_, nir, nir_opt_copy_prop);
-   NIR_PASS(_, nir, nir_opt_dce);
+   JAY_NIR_PASS(nir_opt_constant_folding);
+   JAY_NIR_PASS(nir_lower_load_const_to_scalar);
+   JAY_NIR_PASS(nir_lower_all_phis_to_scalar);
+   JAY_NIR_PASS(nir_opt_copy_prop);
+   JAY_NIR_PASS(nir_opt_dce);
 
    /* Jay requires LCSSA for correctness reading convergent loop-dependent
     * values outside of a divergent loop. Converting to LCSSA inserts the
     * required divergent 1-source phi after the loop.
     */
-   NIR_PASS(_, nir, nir_convert_to_lcssa, true, true);
+   JAY_NIR_PASS(nir_convert_to_lcssa, true, true);
 
    /* Run divergence analysis at the end */
    nir_sweep(nir);
    nj_index_ssa_defs(nir);
    nir_divergence_analysis(nir);
 
-   jay_populate_prog_data(devinfo, nir, prog_data, key, nr_packed_regs);
+   if (stage != MESA_SHADER_FRAGMENT)
+      jay_populate_prog_data(devinfo, nir, prog_data, key, nr_packed_regs);
    return simd_width;
 }

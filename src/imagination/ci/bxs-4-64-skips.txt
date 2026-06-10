@@ -5,10 +5,3 @@ dEQP-VK.memory.mapping.dedicated_alloc.buffer.full.variable.implicit_unmap
 dEQP-VK.memory.mapping.dedicated_alloc.buffer.full.variable.implicit_unmap_map2
 dEQP-VK.memory.mapping.dedicated_alloc.image.full.variable.implicit_unmap
 dEQP-VK.memory.mapping.dedicated_alloc.image.full.variable.implicit_unmap_map2
-dEQP-VK.renderpasses.dynamic_rendering.primary_cmd_buff.random.seed13_multiview
-dEQP-VK.renderpasses.dynamic_rendering.primary_cmd_buff.random.seed16_multiview
-dEQP-VK.renderpasses.dynamic_rendering.primary_cmd_buff.random.seed21_multiview
-dEQP-VK.renderpasses.dynamic_rendering.primary_cmd_buff.random.seed25_multiview
-dEQP-VK.renderpasses.dynamic_rendering.primary_cmd_buff.random.seed39_multiview
-dEQP-VK.renderpasses.dynamic_rendering.primary_cmd_buff.random.seed41_multiview
-dEQP-VK.renderpasses.dynamic_rendering.primary_cmd_buff.random.seed7_multiview

@@ -121,7 +121,12 @@ clear_image(struct kk_cmd_buffer *cmd, struct kk_image *image,
             render.pStencilAttachment = &vk_att;
 
          kk_CmdBeginRendering(kk_cmd_buffer_to_handle(cmd), &render);
-         kk_CmdEndRendering(kk_cmd_buffer_to_handle(cmd));
+
+         static const VkRenderingEndInfoKHR end_info = {
+            .sType = VK_STRUCTURE_TYPE_RENDERING_END_INFO_KHR,
+            .pNext = NULL,
+         };
+         kk_CmdEndRendering2KHR(kk_cmd_buffer_to_handle(cmd), &end_info);
       }
    }
 }

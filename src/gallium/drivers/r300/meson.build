@@ -36,8 +36,6 @@ files_r300 = files(
   'r300_texture_desc.c',
   'r300_texture_desc.h',
   'r300_texture.h',
-  'r300_tgsi_to_rc.c',
-  'r300_tgsi_to_rc.h',
   'r300_transfer.c',
   'r300_transfer.h',
   'r300_vs.c',

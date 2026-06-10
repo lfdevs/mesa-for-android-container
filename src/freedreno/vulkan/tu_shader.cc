@@ -130,7 +130,7 @@ static const uint32_t float32_spv[] = {
 
 #include "float64_spv.h"
 
-void
+static void
 tu_init_softfloat32(struct tu_device *dev)
 {
    if (dev->float32_shader)
@@ -144,7 +144,7 @@ tu_init_softfloat32(struct tu_device *dev)
    mtx_unlock(&dev->softfloat_mutex);
 }
 
-void
+static void
 tu_init_softfloat64(struct tu_device *dev)
 {
    if (dev->float64_shader)
@@ -217,6 +217,10 @@ tu_spirv_to_nir(struct tu_device *dev,
     */
    nir->info.num_ubos = 0;
    nir->info.num_ssbos = 0;
+
+   if (TU_DEBUG(COMPUTE_ROUND_ROBIN)) {
+      nir->info.occupancy_bounded_workgroup_fairness = true;
+   }
 
    if (TU_DEBUG(NIR)) {
       fprintf(stderr, "translated nir:\n");
@@ -446,7 +450,7 @@ lower_ssbo_ubo_intrinsic(struct tu_device *dev,
    nir_def *descriptor_idx = nir_channel(b, intrin->src[buffer_src].ssa, 1);
 
    if (intrin->intrinsic == nir_intrinsic_load_ubo &&
-       dev->instance->allow_oob_indirect_ubo_loads) {
+       dev->instance->drirc.misc.allow_oob_indirect_ubo_loads) {
       nir_scalar offset = nir_scalar_resolved(intrin->src[1].ssa, 0);
       if (!nir_scalar_is_const(offset)) {
          nir_intrinsic_set_range(intrin, ~0);
@@ -1750,6 +1754,7 @@ tu6_emit_xs(struct tu_crb &crb,
                                 .fullregfootprint = xs->info.max_reg + 1,
                                 .branchstack = ir3_shader_branchstack_hw(xs),
                                 .threadsize = thrsz,
+                                .computerrmodeen = xs->cs.round_robin_mode,
                                 .earlypreamble = xs->early_preamble,
                                 .mergedregs = xs->mergedregs, ));
       crb.add(A6XX_SP_CS_INSTR_SIZE(xs->instrlen));
@@ -2158,7 +2163,8 @@ tu6_emit_fs_inputs(struct tu_cs *cs, const struct ir3_shader_variant *fs)
    enum a6xx_threadsize thrsz = fs->info.double_threadsize ? THREAD128 : THREAD64;
    tu_cs_emit_regs(cs, SP_PS_WAVE_CNTL(CHIP, .threadsize = thrsz, .varyings = enable_varyings));
 
-   bool need_size = fs->frag_face || fs->fragcoord_compmask != 0;
+   bool need_size = !cs->device->physical_device->info->props.has_implicit_fragface_fragcoord_ij_linear &&
+                    (fs->frag_face || fs->fragcoord_compmask != 0);
    bool need_size_persamp = false;
    if (VALIDREG(ij_regid[IJ_PERSP_CENTER_RHW])) {
       if (sample_shading)
@@ -2176,6 +2182,8 @@ tu6_emit_fs_inputs(struct tu_cs *cs, const struct ir3_shader_variant *fs)
          .ij_linear_centroid    = VALIDREG(ij_regid[IJ_LINEAR_CENTROID]),
          .ij_linear_sample      = VALIDREG(ij_regid[IJ_LINEAR_SAMPLE]) || need_size_persamp,
          .coord_mask            = fs->fragcoord_compmask,
+         .faceness              = fs->frag_face,
+         .centerrhw             = VALIDREG(ij_regid[IJ_PERSP_CENTER_RHW]),
       )
    );
 
@@ -3471,7 +3479,7 @@ tu_shader_key_subgroup_size(struct tu_shader_key *key,
                             struct tu_device *dev)
 {
    enum ir3_wavesize_option api_wavesize, real_wavesize;
-   if (!dev->physical_device->info->props.supports_double_threadsize) {
+   if (!dev->physical_device->expose_double_threadsize) {
       api_wavesize = IR3_SINGLE_ONLY;
       real_wavesize = IR3_SINGLE_ONLY;
    } else {

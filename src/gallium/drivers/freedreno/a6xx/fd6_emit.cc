@@ -926,7 +926,7 @@ fd6_emit_static_non_context_regs(struct fd_context *ctx, fd_cs &cs)
       ncrb.add(RB_UNKNOWN_8E09(CHIP, 0x7));
 
    if (CHIP >= A7XX)
-      ncrb.add(RB_A2D_UNKNOWN_8C34(CHIP));
+      ncrb.add(RB_A2D_DEST_BUFFER_ARRAY_PITCH(CHIP));
 }
 
 /**

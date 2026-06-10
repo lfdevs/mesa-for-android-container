@@ -230,6 +230,7 @@ emit_shader_regs(struct fd_screen *screen, fd_cs &cs, const struct ir3_shader_va
          .fullregfootprint = so->info.max_reg + 1,
          .branchstack = ir3_shader_branchstack_hw(so),
          .threadsize = thrsz,
+         .computerrmodeen = so->cs.round_robin_mode,
          .earlypreamble = so->early_preamble,
          .mergedregs = so->mergedregs,
       ));
@@ -1178,7 +1179,9 @@ emit_fs_inputs(fd_crb &crb, const struct program_builder *b)
       .varyings = enable_varyings,
    ));
 
-   bool need_size = fs->frag_face || fs->fragcoord_compmask != 0;
+   bool need_size =
+      !b->ctx->screen->info->props.has_implicit_fragface_fragcoord_ij_linear &&
+      (fs->frag_face || fs->fragcoord_compmask != 0);
    bool need_size_persamp = false;
    if (VALIDREG(ij_regid[IJ_PERSP_CENTER_RHW])) {
       if (sample_shading)
@@ -1195,6 +1198,8 @@ emit_fs_inputs(fd_crb &crb, const struct program_builder *b)
       .ij_linear_centroid    = VALIDREG(ij_regid[IJ_LINEAR_CENTROID]),
       .ij_linear_sample      = VALIDREG(ij_regid[IJ_LINEAR_SAMPLE]) || need_size_persamp,
       .coord_mask            = fs->fragcoord_compmask,
+      .faceness              = fs->frag_face,
+      .centerrhw             = VALIDREG(ij_regid[IJ_PERSP_CENTER_RHW]),
    ));
    crb.add(A6XX_RB_INTERP_CNTL(
       .ij_persp_pixel        = VALIDREG(ij_regid[IJ_PERSP_PIXEL]),

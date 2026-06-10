@@ -78,6 +78,8 @@ class MesaRenderpassDataSource
     : public perfetto::DataSource<DataSourceType, DataSourceTraits> {
 
  public:
+   constexpr static perfetto::BufferExhaustedPolicy kBufferExhaustedPolicy =
+      perfetto::BufferExhaustedPolicy::kStall;
    typedef typename perfetto::DataSource<DataSourceType,
                                          DataSourceTraits>::TraceContext
       TraceContext;

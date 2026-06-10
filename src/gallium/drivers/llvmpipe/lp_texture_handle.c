@@ -455,10 +455,11 @@ compile_image_function(struct llvmpipe_context *ctx, struct lp_static_texture_st
       if (!outdata[i])
          outdata[i] = outdata[0];
 
-   if (outdata[4])
-      outdata[4] = LLVMBuildZExt(gallivm->builder, outdata[4], lp_build_int_vec_type(gallivm, lp_int_type(type)), "");
-   else
-      outdata[4] = lp_build_one(gallivm, lp_int_type(type));
+   if (!outdata[4]) {
+      struct lp_type residency_type = lp_int_type(type);
+      residency_type.width = 1;
+      outdata[4] = lp_build_one(gallivm, residency_type);
+   }
 
    if (params.img_op != LP_IMG_STORE)
       LLVMBuildAggregateRet(gallivm->builder, outdata, params.img_op == LP_IMG_LOAD_SPARSE ? 5 : 4);
@@ -623,10 +624,11 @@ compile_sample_function(struct llvmpipe_context *ctx, struct lp_texture_handle_s
       lp_build_sample_nop(gallivm, lp_build_texel_type(type, util_format_description(texture->static_state.format)), coords, texel_out);
    }
 
-   if (texel_out[4])
-      texel_out[4] = LLVMBuildZExt(gallivm->builder, texel_out[4], lp_build_int_vec_type(gallivm, lp_int_type(type)), "");
-   else
-      texel_out[4] = lp_build_one(gallivm, lp_int_type(type));
+   if (!texel_out[4]) {
+      struct lp_type residency_type = lp_int_type(type);
+      residency_type.width = 1;
+      texel_out[4] = lp_build_one(gallivm, residency_type);
+   }
 
    LLVMBuildAggregateRet(gallivm->builder, texel_out, 5);
 
@@ -728,8 +730,8 @@ static uint64_t
 get_sample_function(uint64_t _matrix, uint64_t _texture_functions, uint64_t _sampler_desc, uint32_t sample_key)
 {
    struct lp_sampler_matrix *matrix = (void *)(uintptr_t)_matrix;
-   struct lp_descriptor *sampler_desc = (void *)(uintptr_t)_sampler_desc;
-   uint32_t sampler_index = sampler_desc->texture.sampler_index;
+   struct lp_sampler_descriptor *sampler_desc = (void *)(uintptr_t)_sampler_desc;
+   uint32_t sampler_index = sampler_desc->sampler_index;
 
    struct lp_texture_functions *texture_functions = (void *)(uintptr_t)_texture_functions;
    struct sample_function_cache_key key = {
@@ -908,7 +910,7 @@ compile_jit_sample_function(struct llvmpipe_context *ctx, uint32_t sample_key)
    LLVMPositionBuilderAtEnd(gallivm->builder, block);
 
    LLVMValueRef functions_offset =
-      lp_build_const_int64(gallivm, offsetof(struct lp_descriptor, functions));
+      lp_build_const_int64(gallivm, offsetof(struct lp_image_descriptor, functions));
    LLVMValueRef functions_ptr =
       LLVMBuildAdd(builder, texture_descriptor, functions_offset, "");
 
@@ -1027,7 +1029,7 @@ compile_jit_fetch_function(struct llvmpipe_context *ctx, uint32_t sample_key)
    LLVMPositionBuilderAtEnd(gallivm->builder, block);
 
    LLVMValueRef functions_offset =
-      lp_build_const_int64(gallivm, offsetof(struct lp_descriptor, functions));
+      lp_build_const_int64(gallivm, offsetof(struct lp_image_descriptor, functions));
    LLVMValueRef functions_ptr =
       LLVMBuildAdd(builder, texture_descriptor, functions_offset, "");
 
@@ -1151,7 +1153,7 @@ compile_jit_size_function(struct llvmpipe_context *ctx, bool samples)
    LLVMPositionBuilderAtEnd(gallivm->builder, block);
 
    LLVMValueRef functions_offset =
-      lp_build_const_int64(gallivm, offsetof(struct lp_descriptor, functions));
+      lp_build_const_int64(gallivm, offsetof(struct lp_image_descriptor, functions));
    LLVMValueRef functions_ptr =
       LLVMBuildAdd(builder, texture_descriptor, functions_offset, "");
 
@@ -1294,30 +1296,23 @@ llvmpipe_register_texture(struct llvmpipe_context *ctx, struct lp_texture_handle
    simple_mtx_lock(&matrix->lock);
 
    if (entry->sampled) {
-      if (matrix->sampler_count > 0) {
-         if (entry->sample_functions) {
-            entry->sample_functions = realloc(entry->sample_functions, matrix->sampler_count * sizeof(void **));
-            memset(entry->sample_functions + entry->sampler_count, 0,
-                   (matrix->sampler_count - entry->sampler_count) * sizeof(void **));
-         } else {
-            entry->sample_functions = calloc(matrix->sampler_count, sizeof(void **));
-         }
-      }
       entry->sampler_count = matrix->sampler_count;
+      if (matrix->sampler_count && !entry->sample_functions) {
+         entry->sample_functions = calloc(matrix->sampler_count, sizeof(void **));
 
-      if (state->static_state.format == PIPE_FORMAT_NONE) {
-         if (matrix->sampler_count) {
+         if (state->static_state.format == PIPE_FORMAT_NONE) {
             entry->sample_functions[0] = calloc(LP_SAMPLE_KEY_COUNT, sizeof(void *));
             compile_sample_functions(ctx, state, NULL, entry->sample_functions[0]);
             for (uint32_t i = 1; i < matrix->sampler_count; i++)
                entry->sample_functions[i] = entry->sample_functions[0];
+         } else {
+            for (uint32_t i = 0; i < matrix->sampler_count; i++)
+               entry->sample_functions[i] = matrix->jit_sample_functions;
          }
-      } else {
-         for (uint32_t i = 0; i < matrix->sampler_count; i++)
-            entry->sample_functions[i] = matrix->jit_sample_functions;
       }
 
-      entry->fetch_functions = matrix->jit_fetch_functions;
+      if (!entry->fetch_functions)
+         entry->fetch_functions = matrix->jit_fetch_functions;
 
       if (!entry->size_function)
          entry->size_function = matrix->jit_size_functions[0];

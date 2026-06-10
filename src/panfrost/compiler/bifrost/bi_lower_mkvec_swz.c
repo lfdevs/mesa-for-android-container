@@ -190,8 +190,13 @@ build_mkvec_v4i8_to(bi_builder *b, bi_index dst, const bi_index src[4])
       if (bi_is_zero(src[2]) && bi_is_zero(src[3]))
          return bi_mkvec_v2i8_to(b, dst, src[0], src[1], bi_zero());
 
-      if (bi_is_word_equiv(src[2], src[3]) && bytes[2] == 0 && bytes[3] == 1)
-         return bi_mkvec_v2i8_to(b, dst, src[0], src[1], src[2]);
+      if (bi_is_word_equiv(src[2], src[3]) && bytes[2] == 0 && bytes[3] == 1) {
+         /* src2 is implicitly read as .b01 by MKVEC.v2i8. */
+         bi_index src2 = src[2];
+         src2.swizzle = BI_SWIZZLE_H01;
+
+         return bi_mkvec_v2i8_to(b, dst, src[0], src[1], src2);
+      }
 
       bi_index acc = bi_mkvec_v2i8(b, src[2], src[3], bi_zero());
       return bi_mkvec_v2i8_to(b, dst, src[0], src[1], acc);

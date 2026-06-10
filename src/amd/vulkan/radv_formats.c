@@ -6,8 +6,8 @@
  */
 
 #include "radv_formats.h"
+#include "tools/radv_debug.h"
 #include "radv_android.h"
-#include "radv_debug.h"
 #include "radv_entrypoints.h"
 #include "radv_image.h"
 

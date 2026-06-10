@@ -1,4 +1,4 @@
-From 8a9b46a0fd740679ff576ae70e5ac4bae12ac8b0 Mon Sep 17 00:00:00 2001
+From 7d13c48a3d9d679d499f91e066e36340e72255bf Mon Sep 17 00:00:00 2001
 From: Daniel Stone <daniels@collabora.com>
 Date: Wed, 29 Jan 2025 12:50:33 +0000
 Subject: [PATCH] Build: Don't build Vulkan utilities for GL builds
@@ -7,14 +7,14 @@ Change-Id: Ie412f914bb6264ffbd502deea57d80cc11a9948e
 Signed-off-by: Daniel Stone <daniels@collabora.com>
 ---
  framework/platform/CMakeLists.txt             |   9 -
- .../platform/android/tcuAndroidPlatform.cpp   | 177 +-----------------
+ .../platform/android/tcuAndroidPlatform.cpp   | 191 +-----------------
  .../platform/android/tcuAndroidPlatform.hpp   |  14 +-
  framework/platform/lnx/tcuLnxPlatform.cpp     |   9 +-
- .../surfaceless/tcuSurfacelessPlatform.cpp    |  54 ------
- 5 files changed, 3 insertions(+), 260 deletions(-)
+ .../surfaceless/tcuSurfacelessPlatform.cpp    |  52 -----
+ 5 files changed, 3 insertions(+), 272 deletions(-)
 
 diff --git a/framework/platform/CMakeLists.txt b/framework/platform/CMakeLists.txt
-index 64d248b30f..833df5a08a 100644
+index 8f6e0c5847..a675b815a9 100644
 --- a/framework/platform/CMakeLists.txt
 +++ b/framework/platform/CMakeLists.txt
 @@ -15,8 +15,6 @@ if (NOT DEFINED TCUTIL_PLATFORM_SRCS)
@@ -35,7 +35,7 @@ index 64d248b30f..833df5a08a 100644
  		)
  
  		include_directories(lnx)
-@@ -168,8 +164,6 @@ if (NOT DEFINED TCUTIL_PLATFORM_SRCS)
+@@ -170,8 +166,6 @@ if (NOT DEFINED TCUTIL_PLATFORM_SRCS)
  		set(TCUTIL_PLATFORM_SRCS
  			osx/tcuOSXPlatform.cpp
  			osx/tcuOSXPlatform.hpp
@@ -44,7 +44,7 @@ index 64d248b30f..833df5a08a 100644
  			osx/tcuOSXMetalView.mm
  			osx/tcuOSXMetalView.hpp
  			)
-@@ -195,9 +189,6 @@ if (DEQP_USE_WAYLAND)
+@@ -197,9 +191,6 @@ if (DEQP_USE_WAYLAND)
  	add_dependencies(tcutil-platform deqp-xdg-shell)
  endif()
  
@@ -55,7 +55,7 @@ index 64d248b30f..833df5a08a 100644
  
  # Always link to glutil as some platforms such as Win32 always support GL
 diff --git a/framework/platform/android/tcuAndroidPlatform.cpp b/framework/platform/android/tcuAndroidPlatform.cpp
-index 9b117f50c6..b007c783cf 100644
+index 45861c8aee..c1054656ed 100644
 --- a/framework/platform/android/tcuAndroidPlatform.cpp
 +++ b/framework/platform/android/tcuAndroidPlatform.cpp
 @@ -31,7 +31,6 @@
@@ -66,7 +66,7 @@ index 9b117f50c6..b007c783cf 100644
  
  // Assume no call translation is needed
  #include <android/native_window.h>
-@@ -309,153 +308,6 @@ eglu::NativeDisplay *NativeDisplayFactory::createDisplay(const EGLAttrib *attrib
+@@ -381,167 +380,6 @@ eglu::NativeDisplay *NativeDisplayFactory::createDisplay(const EGLAttrib *attrib
      return new NativeDisplay();
  }
  
@@ -136,9 +136,10 @@ index 9b117f50c6..b007c783cf 100644
 -class ImageReaderVulkanWindow : public vk::wsi::AndroidWindowInterface
 -{
 -public:
--    ImageReaderVulkanWindow(AImageReader *reader, ANativeWindow *window)
+-    ImageReaderVulkanWindow(AImageReader *reader, ImageQueue *queue, ANativeWindow *window)
 -        : vk::wsi::AndroidWindowInterface(vk::pt::AndroidNativeWindowPtr(window))
 -        , m_reader(reader)
+-        , m_queue(queue)
 -    {
 -    }
 -
@@ -161,11 +162,22 @@ index 9b117f50c6..b007c783cf 100644
 -    ~ImageReaderVulkanWindow(void)
 -    {
 -        if (m_reader)
+-        {
+-            if (m_queue)
+-            {
+-                m_queue->closing.store(true, std::memory_order_release);
+-                std::lock_guard<std::mutex> guard(m_queue->lock);
+-                AImageReader_setImageListener(m_reader, nullptr);
+-            }
 -            AImageReader_delete(m_reader);
+-        }
+-        if (m_queue)
+-            delete m_queue;
 -    }
 -
 -private:
 -    AImageReader *m_reader;
+-    ImageQueue *m_queue;
 -};
 -#endif
 -
@@ -203,10 +215,12 @@ index 9b117f50c6..b007c783cf 100644
 -            width           = width > 0 ? width : 256;
 -            height          = height > 0 ? height : 256;
 -
--            AImageReader *reader        = nullptr;
--            ANativeWindow *nativeWindow = acquireImageReaderWindow(width, height, AIMAGE_FORMAT_RGBA_8888, &reader);
+-            AImageReader *reader = nullptr;
+-            ImageQueue *queue    = nullptr;
+-            ANativeWindow *nativeWindow =
+-                acquireImageReaderWindow(width, height, AIMAGE_FORMAT_RGBA_8888, &reader, &queue);
 -
--            return new ImageReaderVulkanWindow(reader, nativeWindow);
+-            return new ImageReaderVulkanWindow(reader, queue, nativeWindow);
 -#else
 -            TCU_THROW(ResourceError, "Native window is not available");
 -#endif
@@ -220,7 +234,7 @@ index 9b117f50c6..b007c783cf 100644
  static size_t getTotalSystemMemory(ANativeActivity *activity)
  {
      const size_t MiB = (size_t)(1 << 20);
-@@ -484,8 +336,7 @@ static size_t getTotalSystemMemory(ANativeActivity *activity)
+@@ -570,8 +408,7 @@ static size_t getTotalSystemMemory(ANativeActivity *activity)
  // Platform
  
  Platform::Platform(NativeActivity &activity)
@@ -230,7 +244,7 @@ index 9b117f50c6..b007c783cf 100644
  {
      m_nativeDisplayFactoryRegistry.registerFactory(new NativeDisplayFactory(m_windowRegistry));
      m_contextFactoryRegistry.registerFactory(new eglu::GLContextFactory(m_nativeDisplayFactoryRegistry));
-@@ -501,16 +352,6 @@ bool Platform::processEvents(void)
+@@ -587,16 +424,6 @@ bool Platform::processEvents(void)
      return true;
  }
  
@@ -247,7 +261,7 @@ index 9b117f50c6..b007c783cf 100644
  void Platform::getMemoryLimits(tcu::PlatformMemoryLimits &limits) const
  {
      // Worst-case estimates
-@@ -544,22 +385,6 @@ void Platform::getMemoryLimits(tcu::PlatformMemoryLimits &limits) const
+@@ -630,22 +457,6 @@ void Platform::getMemoryLimits(tcu::PlatformMemoryLimits &limits) const
      limits.devicePageTableHierarchyLevels    = 3;
  }
  
@@ -360,7 +374,7 @@ index 8c0a3ef06e..6b1a4985a1 100644
  #if defined(DEQP_SUPPORT_GLX)
      m_glPlatform.registerFactory(x11::glx::createContextFactory(m_eventState));
 diff --git a/framework/platform/surfaceless/tcuSurfacelessPlatform.cpp b/framework/platform/surfaceless/tcuSurfacelessPlatform.cpp
-index 2224f4164e..c9f044b130 100644
+index 2224f4164e..713c4ee9e2 100644
 --- a/framework/platform/surfaceless/tcuSurfacelessPlatform.cpp
 +++ b/framework/platform/surfaceless/tcuSurfacelessPlatform.cpp
 @@ -43,7 +43,6 @@
@@ -424,7 +438,7 @@ index 2224f4164e..c9f044b130 100644
  bool isEGLExtensionSupported(const eglw::Library &egl, eglw::EGLDisplay, const std::string &extName)
  {
      const vector<string> exts = eglu::getClientExtensions(egl);
-@@ -191,13 +144,6 @@ public:
+@@ -191,13 +144,8 @@ public:
      {
          return *this;
      }
@@ -432,8 +446,8 @@ index 2224f4164e..c9f044b130 100644
 -    {
 -        return m_vkPlatform;
 -    }
--
--private:
+ 
+ private:
 -    VulkanPlatform m_vkPlatform;
  };
  

@@ -457,7 +457,7 @@ extern "C" {
 
 static once_flag tu_perfetto_init_once_flag = ONCE_FLAG_INIT;
 
-void
+static void
 tu_perfetto_init_once()
 {
    {

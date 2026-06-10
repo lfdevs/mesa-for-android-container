@@ -186,7 +186,6 @@ struct radv_shader_info {
       bool early_fragment_test : 1;
       bool post_depth_coverage : 1;
       uint8_t reads_frag_coord_mask;
-      uint8_t reads_sample_pos_mask;
       uint8_t depth_layout;
       bool reads_sample_mask_in : 1;
       bool reads_front_face : 1;
@@ -214,6 +213,8 @@ struct radv_shader_info {
       bool load_rasterization_prim : 1;
       bool force_sample_iter_shading_rate : 1;
       bool allow_flat_shading : 1;
+      bool selects_frag_coord_xy_dynamically : 1;
+      bool selects_sample_mask_in_dynamically : 1;
 
       bool has_epilog : 1;
    } ps;

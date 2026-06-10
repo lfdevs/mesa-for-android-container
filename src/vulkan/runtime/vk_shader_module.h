@@ -55,6 +55,9 @@ void vk_shader_module_init(struct vk_device *device,
                            struct vk_shader_module *module,
                            const VkShaderModuleCreateInfo *create_info);
 
+void vk_shader_module_hash(const VkShaderModuleCreateInfo *create_info,
+                           blake3_hash hash);
+
 uint32_t vk_shader_module_spirv_version(const struct vk_shader_module *mod);
 
 /* this should only be used for stack-allocated, temporary objects */

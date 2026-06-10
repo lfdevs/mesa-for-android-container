@@ -319,6 +319,9 @@ brw_opt_register_coalesce(brw_shader &s)
       if (channels_remaining)
          continue;
 
+      for (int i = 0; i < src_size; i++)
+         assert(mov[i]);
+
       bool can_coalesce = true;
       for (int i = 0; i < src_size; i++) {
          if (dst_reg_offset[i] != dst_reg_offset[0] + i) {
@@ -344,9 +347,9 @@ brw_opt_register_coalesce(brw_shader &s)
 
       progress = true;
 
-      for (int i = 0; i < src_size; i += regs_written(mov[i])) {
-         if (!mov[i])
-            continue;
+      for (int i = 0; i < src_size; ) {
+         assert(mov[i]);
+         const unsigned written = regs_written(mov[i]);
 
          if (mov[i]->conditional_mod == BRW_CONDITIONAL_NONE) {
             mov[i] = brw_transform_inst(s, mov[i], BRW_OPCODE_NOP);
@@ -366,22 +369,44 @@ brw_opt_register_coalesce(brw_shader &s)
             mov[i]->src[0] = mov[i]->dst;
             mov[i]->dst = retype(brw_null_reg(), mov[i]->dst.type);
          }
+
+         i += written;
       }
 
-      foreach_block_and_inst(block, brw_inst, scan_inst, s.cfg) {
-         if (scan_inst->dst.file == VGRF &&
-             scan_inst->dst.nr == src_reg) {
-            scan_inst->dst.nr = dst_reg;
-            scan_inst->dst.offset = scan_inst->dst.offset % REG_SIZE +
-               dst_reg_offset[scan_inst->dst.offset / REG_SIZE] * REG_SIZE;
-         }
+      brw_range rewrite_range = { 0, 0 };
+      for (int i = 0; i < src_size; i++)
+         rewrite_range = merge(rewrite_range, live.vars_range[src_var[i]]);
+      assert(!rewrite_range.is_empty());
 
-         for (int j = 0; j < scan_inst->sources; j++) {
-            if (scan_inst->src[j].file == VGRF &&
-                scan_inst->src[j].nr == src_reg) {
-               scan_inst->src[j].nr = dst_reg;
-               scan_inst->src[j].offset = scan_inst->src[j].offset % REG_SIZE +
-                  dst_reg_offset[scan_inst->src[j].offset / REG_SIZE] * REG_SIZE;
+      foreach_block(block, s.cfg) {
+         if (ips.range(block).last() < rewrite_range.start)
+            continue;
+         if (ips.range(block).start > rewrite_range.last())
+            break;
+
+         int scan_ip = ips.range(block).start - 1;
+         foreach_inst_in_block(brw_inst, scan_inst, block) {
+            scan_ip++;
+
+            if (scan_ip < rewrite_range.start)
+               continue;
+            if (scan_ip > rewrite_range.last())
+               break;
+
+            if (scan_inst->dst.file == VGRF &&
+                scan_inst->dst.nr == src_reg) {
+               scan_inst->dst.nr = dst_reg;
+               scan_inst->dst.offset = scan_inst->dst.offset % REG_SIZE +
+                  dst_reg_offset[scan_inst->dst.offset / REG_SIZE] * REG_SIZE;
+            }
+
+            for (int j = 0; j < scan_inst->sources; j++) {
+               if (scan_inst->src[j].file == VGRF &&
+                   scan_inst->src[j].nr == src_reg) {
+                  scan_inst->src[j].nr = dst_reg;
+                  scan_inst->src[j].offset = scan_inst->src[j].offset % REG_SIZE +
+                     dst_reg_offset[scan_inst->src[j].offset / REG_SIZE] * REG_SIZE;
+               }
             }
          }
       }

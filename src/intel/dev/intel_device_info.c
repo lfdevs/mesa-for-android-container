@@ -530,35 +530,8 @@ static const struct intel_device_info intel_device_info_chv = {
    .simulator_id = 13,
 };
 
-#define CMAT_PRE_XEHP_CONFIGURATIONS                                                                                            \
-   .cooperative_matrix_configurations = {                                                                                       \
-    { INTEL_CMAT_SCOPE_SUBGROUP, 8, 8, 16, INTEL_CMAT_FLOAT16, INTEL_CMAT_FLOAT16, INTEL_CMAT_FLOAT16, INTEL_CMAT_FLOAT16 },    \
-    { INTEL_CMAT_SCOPE_SUBGROUP, 8, 8, 16, INTEL_CMAT_FLOAT16, INTEL_CMAT_FLOAT16, INTEL_CMAT_FLOAT32, INTEL_CMAT_FLOAT32 },    \
-    { INTEL_CMAT_SCOPE_SUBGROUP, 8, 8, 32, INTEL_CMAT_SINT8, INTEL_CMAT_SINT8, INTEL_CMAT_SINT32, INTEL_CMAT_SINT32 },          \
-    { INTEL_CMAT_SCOPE_SUBGROUP, 8, 8, 32, INTEL_CMAT_UINT8, INTEL_CMAT_UINT8, INTEL_CMAT_UINT32, INTEL_CMAT_UINT32 },          \
-   }
-
-#define CMAT_XEHP_CONFIGURATIONS                                                                                                \
-   .cooperative_matrix_configurations = {                                                                                       \
-    { INTEL_CMAT_SCOPE_SUBGROUP, 8, 8, 16, INTEL_CMAT_FLOAT16, INTEL_CMAT_FLOAT16, INTEL_CMAT_FLOAT32, INTEL_CMAT_FLOAT32 },    \
-    { INTEL_CMAT_SCOPE_SUBGROUP, 8, 8, 16, INTEL_CMAT_BFLOAT16, INTEL_CMAT_BFLOAT16, INTEL_CMAT_FLOAT32, INTEL_CMAT_FLOAT32 },  \
-    { INTEL_CMAT_SCOPE_SUBGROUP, 8, 8, 32, INTEL_CMAT_SINT8, INTEL_CMAT_SINT8, INTEL_CMAT_SINT32, INTEL_CMAT_SINT32 },          \
-    { INTEL_CMAT_SCOPE_SUBGROUP, 8, 8, 32, INTEL_CMAT_UINT8, INTEL_CMAT_UINT8, INTEL_CMAT_UINT32, INTEL_CMAT_UINT32 },          \
-   }
-
-#define CMAT_XE2_CONFIGURATIONS                                                                                                 \
-   .cooperative_matrix_configurations = {                                                                                       \
-    { INTEL_CMAT_SCOPE_SUBGROUP, 8, 16, 16, INTEL_CMAT_FLOAT16, INTEL_CMAT_FLOAT16, INTEL_CMAT_FLOAT16, INTEL_CMAT_FLOAT16 },   \
-    { INTEL_CMAT_SCOPE_SUBGROUP, 8, 16, 16, INTEL_CMAT_FLOAT16, INTEL_CMAT_FLOAT16, INTEL_CMAT_FLOAT32, INTEL_CMAT_FLOAT32 },   \
-    { INTEL_CMAT_SCOPE_SUBGROUP, 8, 16, 16, INTEL_CMAT_BFLOAT16, INTEL_CMAT_BFLOAT16, INTEL_CMAT_BFLOAT16, INTEL_CMAT_BFLOAT16 }, \
-    { INTEL_CMAT_SCOPE_SUBGROUP, 8, 16, 16, INTEL_CMAT_BFLOAT16, INTEL_CMAT_BFLOAT16, INTEL_CMAT_FLOAT32, INTEL_CMAT_FLOAT32 }, \
-    { INTEL_CMAT_SCOPE_SUBGROUP, 8, 16, 32, INTEL_CMAT_SINT8, INTEL_CMAT_SINT8, INTEL_CMAT_SINT32, INTEL_CMAT_SINT32 },         \
-    { INTEL_CMAT_SCOPE_SUBGROUP, 8, 16, 32, INTEL_CMAT_UINT8, INTEL_CMAT_UINT8, INTEL_CMAT_UINT32, INTEL_CMAT_UINT32 },         \
-   }
-
 #define GFX9_FEATURES                               \
    GFX8_FEATURES,                                   \
-   CMAT_PRE_XEHP_CONFIGURATIONS,                    \
    .ver = 9,                                        \
    .has_sample_with_hiz = true,                     \
    .timestamp_frequency = 12000000
@@ -1049,20 +1022,24 @@ static const struct intel_device_info intel_device_info_sg1 = {
       .size = 768, /* For intel_stub_gpu */                \
       .min_entries = {                                     \
          [MESA_SHADER_VERTEX]    = 64,                     \
+         [MESA_SHADER_TESS_CTRL] = 0,                      \
          [MESA_SHADER_TESS_EVAL] = 34,                     \
          [MESA_SHADER_GEOMETRY]  = 2,                      \
+         [MESA_SHADER_TASK]      = 0,                      \
+         [MESA_SHADER_MESH]      = 0,                      \
       },                                                   \
       .max_entries = {                                     \
          [MESA_SHADER_VERTEX]    = 3832, /* BSpec 47138 */ \
          [MESA_SHADER_TESS_CTRL] = 1548, /* BSpec 47137 */ \
          [MESA_SHADER_TESS_EVAL] = 3576, /* BSpec 47135 */ \
          [MESA_SHADER_GEOMETRY]  = 1548, /* BSpec 47136 */ \
+         [MESA_SHADER_TASK]      = 1548, /* BSpec 47133 */ \
+         [MESA_SHADER_MESH]      = 1548, /* Bspec 47132 */ \
       }                                                    \
    }
 
 #define XEHP_FEATURES                                           \
    GFX12_FEATURES,                                              \
-   CMAT_XEHP_CONFIGURATIONS,                                    \
    .verx10 = 125,                                               \
    .has_lsc = true,                                             \
    .has_llc = false,                                            \
@@ -1131,7 +1108,6 @@ static const struct intel_device_info intel_device_info_atsm_g11 = {
 
 #define MTL_CONFIG(platform_suffix)                             \
    XEHP_FEATURES, XEHP_PLACEHOLDER_THREADS_AND_URB,             \
-   CMAT_PRE_XEHP_CONFIGURATIONS,                                \
    .platform = INTEL_PLATFORM_ ## platform_suffix,              \
    .has_64bit_float = true,                                     \
    .has_64bit_float_via_math_pipe = true,                       \
@@ -1165,14 +1141,13 @@ static const struct intel_device_info intel_device_info_arl_u = {
 static const struct intel_device_info intel_device_info_arl_h = {
    MTL_CONFIG(ARL_H),
    .has_bfloat16 = true,
+   .has_indirect_unroll = true,
    /* BSpec 55414 (r53716). */
    .has_systolic = true,
-   CMAT_XEHP_CONFIGURATIONS,
 };
 
 #define XE2_FEATURES                                            \
    XEHP_FEATURES,                                               \
-   CMAT_XE2_CONFIGURATIONS,                                     \
    .ver = 20,                                                   \
    .verx10 = 200,                                               \
    .grf_size = 64,                                              \
@@ -1204,9 +1179,31 @@ static const struct intel_device_info intel_device_info_arl_h = {
       .compressed = PAT_ENTRY(9, INVALID)                            \
    }
 
+#define XE2_URB_MIN_MAX_ENTRIES  \
+   .urb = {                                                \
+      .size = 768, /* For intel_stub_gpu */                \
+      .min_entries = {                                     \
+         [MESA_SHADER_VERTEX]    = 64,                     \
+         [MESA_SHADER_TESS_CTRL] = 0,                      \
+         [MESA_SHADER_TESS_EVAL] = 50,                     \
+         [MESA_SHADER_GEOMETRY]  = 2,                      \
+         [MESA_SHADER_TASK]      = 0,                      \
+         [MESA_SHADER_MESH]      = 1,                      \
+      },                                                   \
+      .max_entries = {                                     \
+         [MESA_SHADER_VERTEX]    = 4800, /* BSpec 56268 */ \
+         [MESA_SHADER_TESS_CTRL] = 1548, /* BSpec 56265 */ \
+         [MESA_SHADER_TESS_EVAL] = 4480, /* BSpec 56263 */ \
+         [MESA_SHADER_GEOMETRY]  = 1952, /* BSpec 56264 */ \
+         [MESA_SHADER_TASK]      = 1548, /* BSpec 56267 */ \
+         [MESA_SHADER_MESH]      = 1952, /* BSpec 56266 */ \
+      }                                                    \
+   }
+
 #define XE2_CONFIG(platform_suffix)                             \
    XE2_FEATURES, XE2_PAT_ENTRIES,                               \
    XEHP_PLACEHOLDER_THREADS_AND_URB,                            \
+   XE2_URB_MIN_MAX_ENTRIES,                                     \
    .platform = INTEL_PLATFORM_ ## platform_suffix
 
 static const struct intel_device_info intel_device_info_bmg = {
@@ -1225,7 +1222,7 @@ static const struct intel_device_info intel_device_info_lnl = {
    .verx10 = 300
 
 #define XE3_URB_MIN_MAX_ENTRIES                                 \
-   XEHP_URB_MIN_MAX_ENTRIES
+   XE2_URB_MIN_MAX_ENTRIES
 
 #define XE3_PLACEHOLDER_THREADS_AND_URB                         \
    XEHP_PLACEHOLDER_THREADS_AND_URB,                            \

@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2021 Collabora, Ltd.
+ * Copyright (C) 2026 Arm Ltd.
  * SPDX-License-Identifier: MIT
  */
 
@@ -384,6 +385,8 @@ GENX(pan_emit_afbc_zs_attachment)(const struct pan_attachment_info *att,
 
    pan_cast_and_pack(payload, AFBC_ZS_TARGET, cfg) {
       cfg.write_format = translate_zs_format(zs->format);
+      /* With AFBC, D24X8 should already have been lowered to D24. */
+      assert(PAN_ARCH < 9 || cfg.write_format != MALI_ZS_FORMAT_D24X8);
       cfg.block_format = get_afbc_block_format(pref.image->props.modifier);
 #if PAN_ARCH >= 7
       cfg.reverse_issue_order =
@@ -577,26 +580,6 @@ pan_cbuf_bytes_per_pixel(const struct pan_fb_info *fb)
    }
 
    return sum;
-}
-
-static unsigned
-pan_zsbuf_bytes_per_pixel(const struct pan_fb_info *fb)
-{
-   unsigned samples = fb->nr_samples;
-
-   const struct pan_image_view *zs_view = fb->zs.view.zs;
-   if (zs_view)
-      samples = zs_view->nr_samples;
-
-   const struct pan_image_view *s_view = fb->zs.view.s;
-   if (s_view)
-      samples = MAX2(samples, s_view->nr_samples);
-
-   /* Depth is always stored in a 32-bit float. Stencil requires depth to
-    * be allocated, but doesn't have it's own budget; it's tied to the
-    * depth buffer.
-    */
-   return sizeof(float) * samples;
 }
 
 /*
@@ -1064,27 +1047,6 @@ pan_emit_rt(const struct pan_fb_info *fb, unsigned layer_idx, unsigned idx,
    *out = desc;
 }
 
-#if PAN_ARCH >= 6
-/* All GPUs starting from Bifrost are affected by issue TSIX-2033:
- *
- *      Forcing clean_tile_writes breaks INTERSECT readbacks
- *
- * To workaround, use the pre-frame shader mode ALWAYS instead of INTERSECT if
- * clean_tile_write_enable is set on either one of the color, depth or stencil
- * buffers. Since INTERSECT is a hint that the hardware may ignore, this
- * cannot affect correctness, only performance. */
-
-static enum mali_pre_post_frame_shader_mode
-pan_fix_frame_shader_mode(enum mali_pre_post_frame_shader_mode mode,
-                          bool force_clean_tile)
-{
-   if (force_clean_tile && mode == MALI_PRE_POST_FRAME_SHADER_MODE_INTERSECT)
-      return MALI_PRE_POST_FRAME_SHADER_MODE_ALWAYS;
-   else
-      return mode;
-}
-#endif
-
 /* Clean tiles must be written back for AFBC buffers (color, z/s) when either
  * one of the effective tile size dimension is smaller than the superblock
  * dimension.
@@ -1111,8 +1073,8 @@ GENX(pan_force_clean_write_on)(const struct pan_image *image,
 #endif
 }
 
-static struct pan_clean_tile
-pan_get_clean_tile_info(const struct pan_fb_info *fb)
+struct pan_clean_tile
+GENX(pan_get_clean_tile_info)(const struct pan_fb_info *fb)
 {
    struct pan_clean_tile clean_tile = { 0, };
    const struct pan_image *img;
@@ -1172,27 +1134,72 @@ check_fb_attachments(const struct pan_fb_info *fb)
 #endif
 }
 
+static void
+pan_emit_rts(const struct pan_fb_info *fb, unsigned layer_idx, int crc_rt,
+             struct mali_render_target_packed *rts,
+             struct pan_clean_tile clean_tile)
+{
+   const unsigned rt_count = MAX2(fb->rt_count, 1);
+   unsigned cbuf_offset = 0;
+
+   for (unsigned i = 0; i < rt_count; i++) {
+      pan_emit_rt(fb, layer_idx, i, cbuf_offset, rts, clean_tile);
+      rts++;
+      if (!fb->rts[i].view)
+         continue;
+
+      cbuf_offset += pan_bytes_per_pixel_tib(fb->rts[i].view->format) *
+                     fb->tile_size *
+                     pan_image_view_get_nr_samples(fb->rts[i].view);
+
+      if (i != crc_rt && fb->rts[i].crc_valid != NULL)
+         *(fb->rts[i].crc_valid) = false;
+   }
+}
+
+#if PAN_ARCH >= 14
 unsigned
 GENX(pan_emit_fbd)(const struct pan_fb_info *fb, unsigned layer_idx,
                    const struct pan_tls_info *tls,
-                   const struct pan_tiler_context *tiler_ctx, void *out)
+                   const struct pan_tiler_context *tiler_ctx,
+                   const struct pan_fbd_descs *out)
 {
    PAN_TRACE_FUNC(PAN_TRACE_LIB_DESC);
 
    check_fb_attachments(fb);
 
-   void *fbd = out;
-   void *rtd = out + pan_size(FRAMEBUFFER);
+   const int crc_rt = GENX(pan_select_crc_rt)(fb, fb->tile_size);
+   const bool has_zs_crc_ext = (fb->zs.view.zs || fb->zs.view.s || crc_rt >= 0);
+   const struct pan_clean_tile clean_tile = GENX(pan_get_clean_tile_info)(fb);
+
+   if (has_zs_crc_ext) {
+      pan_emit_zs_crc_ext(fb, layer_idx, crc_rt, out->zs_crc, clean_tile);
+   }
+
+   pan_emit_rts(fb, layer_idx, crc_rt, out->rts, clean_tile);
+
+   return 0;
+}
+#else
+unsigned
+GENX(pan_emit_fbd)(const struct pan_fb_info *fb, unsigned layer_idx,
+                   const struct pan_tls_info *tls,
+                   const struct pan_tiler_context *tiler_ctx,
+                   const struct pan_fbd_descs *out)
+{
+   PAN_TRACE_FUNC(PAN_TRACE_LIB_DESC);
+
+   check_fb_attachments(fb);
 
 #if PAN_ARCH <= 5
-   GENX(pan_emit_tls)(tls, pan_section_ptr(fbd, FRAMEBUFFER, LOCAL_STORAGE));
+   GENX(pan_emit_tls)(tls, pan_section_ptr(out->fbd, FRAMEBUFFER, LOCAL_STORAGE));
 #endif
 
    int crc_rt = GENX(pan_select_crc_rt)(fb, fb->tile_size);
    bool has_zs_crc_ext = (fb->zs.view.zs || fb->zs.view.s || crc_rt >= 0);
-   struct pan_clean_tile clean_tile = pan_get_clean_tile_info(fb);
+   struct pan_clean_tile clean_tile = GENX(pan_get_clean_tile_info)(fb);
 
-   pan_section_pack(fbd, FRAMEBUFFER, PARAMETERS, cfg) {
+   pan_section_pack(out->fbd, FRAMEBUFFER, PARAMETERS, cfg) {
 #if PAN_ARCH >= 6
       cfg.sample_locations = fb->sample_positions;
       cfg.pre_frame_0 = pan_fix_frame_shader_mode(fb->bifrost.pre_post.modes[0],
@@ -1309,40 +1316,22 @@ GENX(pan_emit_fbd)(const struct pan_fb_info *fb, unsigned layer_idx,
    }
 
 #if PAN_ARCH >= 6
-   pan_section_pack(fbd, FRAMEBUFFER, PADDING, padding)
+   pan_section_pack(out->fbd, FRAMEBUFFER, PADDING, padding)
       ;
 #else
    pan_emit_midgard_tiler(fb, tiler_ctx,
-                          pan_section_ptr(fbd, FRAMEBUFFER, TILER));
+                          pan_section_ptr(out->fbd, FRAMEBUFFER, TILER));
 
    /* All weights set to 0, nothing to do here */
-   pan_section_pack(fbd, FRAMEBUFFER, TILER_WEIGHTS, w)
+   pan_section_pack(out->fbd, FRAMEBUFFER, TILER_WEIGHTS, w)
       ;
 #endif
 
    if (has_zs_crc_ext) {
-      struct mali_zs_crc_extension_packed *zs_crc_ext =
-         out + pan_size(FRAMEBUFFER);
-
-      pan_emit_zs_crc_ext(fb, layer_idx, crc_rt, zs_crc_ext, clean_tile);
-      rtd += pan_size(ZS_CRC_EXTENSION);
+      pan_emit_zs_crc_ext(fb, layer_idx, crc_rt, out->zs_crc, clean_tile);
    }
 
-   unsigned rt_count = MAX2(fb->rt_count, 1);
-   unsigned cbuf_offset = 0;
-   for (unsigned i = 0; i < rt_count; i++) {
-      pan_emit_rt(fb, layer_idx, i, cbuf_offset, rtd, clean_tile);
-      rtd += pan_size(RENDER_TARGET);
-      if (!fb->rts[i].view)
-         continue;
-
-      cbuf_offset += pan_bytes_per_pixel_tib(fb->rts[i].view->format) *
-                     fb->tile_size *
-                     pan_image_view_get_nr_samples(fb->rts[i].view);
-
-      if (i != crc_rt && fb->rts[i].crc_valid != NULL)
-         *(fb->rts[i].crc_valid) = false;
-   }
+   pan_emit_rts(fb, layer_idx, crc_rt, out->rts, clean_tile);
 
    struct mali_framebuffer_pointer_packed tag;
    pan_pack(&tag, FRAMEBUFFER_POINTER, cfg) {
@@ -1351,6 +1340,7 @@ GENX(pan_emit_fbd)(const struct pan_fb_info *fb, unsigned layer_idx,
    }
    return tag.opaque[0];
 }
+#endif /* PAN_ARCH >= 14 */
 #else /* PAN_ARCH == 4 */
 static enum mali_color_format
 pan_sfbd_raw_format(unsigned bits)
@@ -1378,14 +1368,15 @@ GENX(pan_select_tile_size)(struct pan_fb_info *fb)
 unsigned
 GENX(pan_emit_fbd)(const struct pan_fb_info *fb, unsigned layer_idx,
                    const struct pan_tls_info *tls,
-                   const struct pan_tiler_context *tiler_ctx, void *fbd)
+                   const struct pan_tiler_context *tiler_ctx,
+                   const struct pan_fbd_descs *out)
 {
    PAN_TRACE_FUNC(PAN_TRACE_LIB_DESC);
 
    assert(fb->rt_count <= 1);
 
-   GENX(pan_emit_tls)(tls, pan_section_ptr(fbd, FRAMEBUFFER, LOCAL_STORAGE));
-   pan_section_pack(fbd, FRAMEBUFFER, PARAMETERS, cfg) {
+   GENX(pan_emit_tls)(tls, pan_section_ptr(out->fbd, FRAMEBUFFER, LOCAL_STORAGE));
+   pan_section_pack(out->fbd, FRAMEBUFFER, PARAMETERS, cfg) {
       cfg.bound_max_x = fb->width - 1;
       cfg.bound_max_y = fb->height - 1;
       cfg.dithering_enable = true;
@@ -1499,15 +1490,15 @@ GENX(pan_emit_fbd)(const struct pan_fb_info *fb, unsigned layer_idx,
    }
 
    pan_emit_midgard_tiler(fb, tiler_ctx,
-                          pan_section_ptr(fbd, FRAMEBUFFER, TILER));
+                          pan_section_ptr(out->fbd, FRAMEBUFFER, TILER));
 
    /* All weights set to 0, nothing to do here */
-   pan_section_pack(fbd, FRAMEBUFFER, TILER_WEIGHTS, w)
+   pan_section_pack(out->fbd, FRAMEBUFFER, TILER_WEIGHTS, w)
       ;
 
-   pan_section_pack(fbd, FRAMEBUFFER, PADDING_1, padding)
+   pan_section_pack(out->fbd, FRAMEBUFFER, PADDING_1, padding)
       ;
-   pan_section_pack(fbd, FRAMEBUFFER, PADDING_2, padding)
+   pan_section_pack(out->fbd, FRAMEBUFFER, PADDING_2, padding)
       ;
    return 0;
 }

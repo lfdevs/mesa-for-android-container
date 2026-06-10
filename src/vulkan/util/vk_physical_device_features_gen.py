@@ -50,6 +50,8 @@ RENAMED_FEATURES = {
 
     ('FaultFeaturesEXT', 'deviceFault'): 'deviceFaultEXT',
     ('FaultFeaturesEXT', 'deviceFaultVendorBinary'): 'deviceFaultVendorBinaryEXT',
+
+    ('OpacityMicromapFeaturesEXT', 'micromap'): 'micromapEXT',
 }
 
 KNOWN_ALIASES = [

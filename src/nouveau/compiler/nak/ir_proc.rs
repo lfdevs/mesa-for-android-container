@@ -149,3 +149,8 @@ pub fn enum_derive_display_op(input: TokenStream) -> TokenStream {
 pub fn derive_from_variants(input: TokenStream) -> TokenStream {
     compiler_proc::from_variants::derive_from_variants(input)
 }
+
+#[proc_macro_derive(EnumAsU8)]
+pub fn derive_enum_as_u8(input: TokenStream) -> TokenStream {
+    compiler_proc::enum_as_u8::derive_enum_as_u8(input)
+}

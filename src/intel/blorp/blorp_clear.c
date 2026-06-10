@@ -70,8 +70,8 @@ blorp_params_get_clear_kernel_fs(struct blorp_batch *batch,
    struct blorp_context *blorp = batch->blorp;
 
    const struct blorp_const_color_prog_key blorp_key = {
-      .base = BLORP_BASE_KEY_INIT(BLORP_SHADER_TYPE_CLEAR),
-      .base.shader_pipeline = BLORP_SHADER_PIPELINE_RENDER,
+      .base = BLORP_BASE_KEY_INIT(BLORP_SHADER_TYPE_CLEAR,
+                                  BLORP_SHADER_PIPELINE_RENDER),
       .is_fast_clear = is_fast_clear,
       .use_simd16_replicated_data = use_replicated_data,
       .clear_rgb_as_red = clear_rgb_as_red,
@@ -121,6 +121,7 @@ blorp_params_get_clear_kernel_fs(struct blorp_batch *batch,
                            p.kernel, p.kernel_size,
                            p.prog_data, p.prog_data_size,
                            &params->wm_prog_kernel, &params->fs_prog_data);
+   assert(result);
 
    ralloc_free(mem_ctx);
    return result;
@@ -134,8 +135,8 @@ blorp_params_get_clear_kernel_cs(struct blorp_batch *batch,
    struct blorp_context *blorp = batch->blorp;
 
    const struct blorp_const_color_prog_key blorp_key = {
-      .base = BLORP_BASE_KEY_INIT(BLORP_SHADER_TYPE_CLEAR),
-      .base.shader_pipeline = BLORP_SHADER_PIPELINE_COMPUTE,
+      .base = BLORP_BASE_KEY_INIT(BLORP_SHADER_TYPE_CLEAR,
+                                  BLORP_SHADER_PIPELINE_COMPUTE),
       .use_simd16_replicated_data = false,
       .clear_rgb_as_red = clear_rgb_as_red,
       .local_y = blorp_get_cs_local_y(params),
@@ -213,6 +214,7 @@ blorp_params_get_clear_kernel_cs(struct blorp_batch *batch,
                            p.kernel, p.kernel_size,
                            p.prog_data, p.prog_data_size,
                            &params->cs_prog_kernel, &params->cs_prog_data);
+   assert(result);
 
    ralloc_free(mem_ctx);
    return result;
@@ -531,8 +533,10 @@ fast_clear_surf(struct blorp_batch *batch,
    else
       params.op = BLORP_OP_MCS_COLOR_CLEAR;
 
-   if (!blorp_params_get_clear_kernel(batch, &params, true, true, false))
+   if (!blorp_params_get_clear_kernel(batch, &params, true, true, false)) {
+      mesa_loge("%s: failed to get kernel", __func__);
       return;
+   }
 
    batch->blorp->exec(batch, &params);
 }
@@ -872,8 +876,10 @@ blorp_clear(struct blorp_batch *batch,
 
    if (!blorp_params_get_clear_kernel(batch, &params, false,
                                       use_simd16_replicated_data,
-                                      clear_rgb_as_red))
+                                      clear_rgb_as_red)) {
+      mesa_loge("%s: failed to get kernel", __func__);
       return;
+   }
 
    if (!compute && !blorp_ensure_sf_program(batch, &params))
       return;
@@ -1036,8 +1042,10 @@ blorp_clear_stencil_as_rgba(struct blorp_batch *batch,
    blorp_params_init(&params);
    params.op = BLORP_OP_FAST_STENCIL_CLEAR;
 
-   if (!blorp_params_get_clear_kernel(batch, &params, false, true, false))
+   if (!blorp_params_get_clear_kernel(batch, &params, false, true, false)) {
+      mesa_loge("%s: failed to get kernel", __func__);
       return false;
+   }
 
    memset(&params.wm_inputs.clear.clear_color, stencil_value,
           sizeof(params.wm_inputs.clear.clear_color));
@@ -1131,8 +1139,10 @@ blorp_clear_depth_stencil(struct blorp_batch *batch,
        * we disable statistics in 3DSTATE_WM.  Give it the usual clear shader
        * to work around the issue.
        */
-      if (!blorp_params_get_clear_kernel(batch, &params, false, false, false))
+      if (!blorp_params_get_clear_kernel(batch, &params, false, false, false)) {
+         mesa_loge("%s: failed to get kernel", __func__);
          return;
+      }
    }
 
    while (num_layers > 0) {
@@ -1331,8 +1341,10 @@ blorp_clear_attachments(struct blorp_batch *batch,
        * is tiled or not, we have to assume it may be linear.  This means no
        * SIMD16_REPDATA for us. :-(
        */
-      if (!blorp_params_get_clear_kernel(batch, &params, false, false, false))
+      if (!blorp_params_get_clear_kernel(batch, &params, false, false, false)) {
+         mesa_loge("%s: failed to get kernel", __func__);
          return;
+      }
    }
 
    if (clear_depth) {
@@ -1461,8 +1473,10 @@ blorp_ccs_resolve(struct blorp_batch *batch,
     * color" message.
     */
 
-   if (!blorp_params_get_clear_kernel(batch, &params, false, true, false))
+   if (!blorp_params_get_clear_kernel(batch, &params, false, true, false)) {
+      mesa_loge("%s: failed to get kernel", __func__);
       return;
+   }
 
    batch->blorp->exec(batch, &params);
 
@@ -1502,7 +1516,8 @@ blorp_params_get_mcs_partial_resolve_kernel(struct blorp_batch *batch,
 {
    struct blorp_context *blorp = batch->blorp;
    const struct blorp_mcs_partial_resolve_key blorp_key = {
-      .base = BLORP_BASE_KEY_INIT(BLORP_SHADER_TYPE_MCS_PARTIAL_RESOLVE),
+      .base = BLORP_BASE_KEY_INIT(BLORP_SHADER_TYPE_MCS_PARTIAL_RESOLVE,
+                                  BLORP_SHADER_PIPELINE_RENDER),
       .indirect_clear_color = params->dst.clear_color_addr.buffer != NULL,
       .int_format = isl_format_has_int_channel(params->dst.view.format),
       .num_samples = params->num_samples,
@@ -1563,6 +1578,7 @@ blorp_params_get_mcs_partial_resolve_kernel(struct blorp_batch *batch,
                            p.kernel, p.kernel_size,
                            p.prog_data, p.prog_data_size,
                            &params->wm_prog_kernel, &params->fs_prog_data);
+   assert(result);
 
    ralloc_free(mem_ctx);
    return result;
@@ -1597,8 +1613,10 @@ blorp_mcs_partial_resolve(struct blorp_batch *batch,
    memcpy(&params.wm_inputs.clear.clear_color,
           surf->clear_color.f32, sizeof(float) * 4);
 
-   if (!blorp_params_get_mcs_partial_resolve_kernel(batch, &params))
+   if (!blorp_params_get_mcs_partial_resolve_kernel(batch, &params)) {
+      mesa_loge("%s: failed to get kernel", __func__);
       return;
+   }
 
    batch->blorp->exec(batch, &params);
 }
@@ -1702,8 +1720,10 @@ blorp_mcs_ambiguate(struct blorp_batch *batch,
    params.wm_inputs.clear.clear_color[0] = pixel & 0xFFFFFFFF;
    params.wm_inputs.clear.clear_color[1] = pixel >> 32;
 
-   if (!blorp_params_get_clear_kernel(batch, &params, false, true, false))
+   if (!blorp_params_get_clear_kernel(batch, &params, false, true, false)) {
+      mesa_loge("%s: failed to get kernel", __func__);
       return;
+   }
 
    batch->blorp->exec(batch, &params);
 }
@@ -1861,8 +1881,10 @@ blorp_ccs_ambiguate(struct blorp_batch *batch,
    memset(&params.wm_inputs.clear.clear_color, 0,
           sizeof(params.wm_inputs.clear.clear_color));
 
-   if (!blorp_params_get_clear_kernel(batch, &params, false, true, false))
+   if (!blorp_params_get_clear_kernel(batch, &params, false, true, false)) {
+      mesa_loge("%s: failed to get kernel", __func__);
       return;
+   }
 
    batch->blorp->exec(batch, &params);
 }

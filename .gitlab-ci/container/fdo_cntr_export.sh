@@ -52,6 +52,7 @@ buildah_export() {
     rm -rf "${mountpoint}/cuttlefish"
     rm -rf "${mountpoint}/fluster/resources"
     rm -rf "${mountpoint}/usr/lib/*/wine"
+    rm -rf "${mountpoint}/renderdoc-win64"
     rm -rf "${mountpoint}/vkd3d-proton-tests"
     rm -rf "${mountpoint}/wineprefix"
 

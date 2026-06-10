@@ -146,6 +146,7 @@ gather_intrinsic(struct access_state *state, nir_intrinsic_instr *instr)
       break;
 
    case nir_intrinsic_load_deref:
+   case nir_intrinsic_load_deref_transpose_amd:
    case nir_intrinsic_store_deref:
    case nir_intrinsic_deref_atomic:
    case nir_intrinsic_deref_atomic_swap: {
@@ -154,9 +155,11 @@ gather_intrinsic(struct access_state *state, nir_intrinsic_instr *instr)
          break;
 
       bool ssbo = nir_deref_mode_is(deref, nir_var_mem_ssbo);
+      bool is_write = instr->intrinsic != nir_intrinsic_load_deref &&
+                      instr->intrinsic != nir_intrinsic_load_deref_transpose_amd;
       gather_buffer_access(state, ssbo ? instr->src[0].ssa : NULL,
                            instr->intrinsic != nir_intrinsic_store_deref,
-                           instr->intrinsic != nir_intrinsic_load_deref);
+                           is_write);
       break;
    }
 
@@ -296,6 +299,7 @@ process_intrinsic(struct access_state *state, nir_intrinsic_instr *instr)
                            false);
 
    case nir_intrinsic_load_deref:
+   case nir_intrinsic_load_deref_transpose_amd:
    case nir_intrinsic_store_deref: {
       if (nir_deref_mode_is(nir_src_as_deref(instr->src[0]), nir_var_mem_global))
          return update_access(state, instr, nir_var_mem_global, false, true);

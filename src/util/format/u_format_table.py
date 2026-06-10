@@ -597,7 +597,7 @@ def write_format_table(formats):
         print("ATTRIBUTE_RETURNS_NONNULL const struct util_format_%sdescription *" % type)
         print("util_format_%sdescription%s(enum pipe_format format)" % (type, suffix))
         print("{")
-        print("   assert(format < PIPE_FORMAT_COUNT);")
+        print("   assert(format >= 0 && format < PIPE_FORMAT_COUNT);")
         print("   return &util_format_%sdescriptions[format];" % (type))
         print("}")
         print()

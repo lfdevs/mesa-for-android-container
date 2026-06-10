@@ -204,6 +204,7 @@ static const driOptionDescription panvk_dri_options[] = {
    DRI_CONF_SECTION_END
 
    DRI_CONF_SECTION_MISCELLANEOUS
+      DRI_CONF_HEAP_MEMORY_PERCENT(OS_GPU_HEAP_SIZE_HEURISTIC)
       DRI_CONF_PAN_COMPUTE_CORE_MASK(~0ull)
       DRI_CONF_PAN_FRAGMENT_CORE_MASK(~0ull)
       DRI_CONF_PAN_ENABLE_VERTEX_PIPELINE_STORES_ATOMICS(false)
@@ -215,12 +216,19 @@ static void
 panvk_init_dri_options(struct panvk_instance *instance)
 {
    driParseOptionInfo(&instance->available_dri_options, panvk_dri_options, ARRAY_SIZE(panvk_dri_options));
-   driParseConfigFiles(&instance->dri_options, &instance->available_dri_options, 0, "panvk", NULL, NULL,
-                       instance->vk.app_info.app_name, instance->vk.app_info.app_version,
-                       instance->vk.app_info.engine_name, instance->vk.app_info.engine_version);
+   driParseConfigFiles(&instance->dri_options, &instance->available_dri_options,
+                       &(driConfigFileParseParams) {
+                          .driverName = "panvk",
+                          .applicationName = instance->vk.app_info.app_name,
+                          .applicationVersion = instance->vk.app_info.app_version,
+                          .engineName = instance->vk.app_info.engine_name,
+                          .engineVersion = instance->vk.app_info.engine_version,
+                       });
 
    instance->force_vk_vendor =
       driQueryOptioni(&instance->dri_options, "force_vk_vendor");
+   instance->heap_memory_percent =
+      driQueryOptionf(&instance->dri_options, "heap_memory_percent");
 
    instance->enable_vertex_pipeline_stores_atomics = driQueryOptionb(
       &instance->dri_options, "pan_enable_vertex_pipeline_stores_atomics");

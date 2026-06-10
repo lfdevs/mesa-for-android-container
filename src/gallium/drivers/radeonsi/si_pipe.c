@@ -162,18 +162,20 @@ void si_destroy_screen(struct pipe_screen *pscreen)
       return;
 
    for (unsigned i = 0; i < ARRAY_SIZE(sscreen->aux_contexts); i++) {
-      if (!sscreen->aux_contexts[i].ctx)
-         continue;
+      mtx_lock(&sscreen->aux_contexts[i].lock);
 
-      struct si_context *saux = si_get_aux_context(sscreen, &sscreen->aux_contexts[i]);
-      struct u_log_context *aux_log = saux->log;
-      if (aux_log) {
-         saux->b.set_log_context(&saux->b, NULL);
-         u_log_context_destroy(aux_log);
-         FREE(aux_log);
+      if (sscreen->aux_contexts[i].ctx) {
+         struct si_context *saux = (struct si_context*)sscreen->aux_contexts[i].ctx;
+         struct u_log_context *aux_log = saux->log;
+         if (aux_log) {
+            saux->b.set_log_context(&saux->b, NULL);
+            u_log_context_destroy(aux_log);
+            FREE(aux_log);
+         }
+
+         saux->b.destroy(&saux->b);
       }
 
-      saux->b.destroy(&saux->b);
       mtx_unlock(&sscreen->aux_contexts[i].lock);
       mtx_destroy(&sscreen->aux_contexts[i].lock);
    }
@@ -276,8 +278,8 @@ struct pipe_screen *radeonsi_screen_create(int fd, const struct pipe_screen_conf
    ac_init_llvm_once();
 #endif
 
-   driParseConfigFiles(config->options, config->options_info, 0, "radeonsi",
-                       NULL, NULL, NULL, 0, NULL, 0);
+   driParseConfigFiles(config->options, config->options_info,
+                       &(driConfigFileParseParams) { .driverName = "radeonsi" });
 
 #ifdef HAVE_AMDGPU_VIRTIO
    if (strcmp(version->name, "virtio_gpu") == 0) {

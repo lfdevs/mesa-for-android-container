@@ -97,7 +97,7 @@ addrlib_create(const struct amdgpu_device *dev)
    return lib.hLib;
 }
 
-#define DIPLAYABLE BITFIELD_BIT(5)
+#define DISPLAYABLE BITFIELD_BIT(5)
 
 typedef struct {
    unsigned tile_mode_index;
@@ -121,6 +121,9 @@ get_tile_size(ADDR_HANDLE hlib, unsigned gfx_version, unsigned bpp, unsigned swi
       break;
    case 64:
       format = ADDR_FMT_16_16_16_16;
+      break;
+   case 128:
+      format = ADDR_FMT_32_32_32_32;
       break;
    default:
       UNREACHABLE("invalid bpp");
@@ -179,8 +182,8 @@ get_tile_size(ADDR_HANDLE hlib, unsigned gfx_version, unsigned bpp, unsigned swi
       *tile_height = out.blockHeight;
       assert(out.blockSlices == 1);
    } else {
-      AddrTileMode mode = swizzle_mode & ~DIPLAYABLE;
-      bool display = !!(swizzle_mode & DIPLAYABLE);
+      AddrTileMode mode = swizzle_mode & ~DISPLAYABLE;
+      bool display = !!(swizzle_mode & DISPLAYABLE);
       ADDR_TILEINFO tile_info = {0};
       ADDR_COMPUTE_SURFACE_INFO_INPUT in = {
          .size = sizeof(in),
@@ -195,8 +198,7 @@ get_tile_size(ADDR_HANDLE hlib, unsigned gfx_version, unsigned bpp, unsigned swi
          .flags = {
             .color = 1,
             .display = display,
-            .prt = mode == ADDR_TM_PRT_TILED_THIN1 ||
-                   mode == ADDR_TM_PRT_2D_TILED_THIN1,
+            .prt = mode == ADDR_TM_PRT_TILED_THIN1,
          },
          .numFrags = 1,
          .tileType = display ? ADDR_DISPLAYABLE : ADDR_NON_DISPLAYABLE,
@@ -308,26 +310,31 @@ print_tiling_layouts(const struct amdgpu_device *dev)
    static const unsigned gfx6_array_modes_2D[] = {
       ADDR_TM_LINEAR_ALIGNED,
       ADDR_TM_1D_TILED_THIN1,
-      ADDR_TM_1D_TILED_THIN1 | DIPLAYABLE,
-#if 0 /* Layouts with XORs are commented out for now. */
+      ADDR_TM_1D_TILED_THIN1 | DISPLAYABLE,
       ADDR_TM_2D_TILED_THIN1,
-      ADDR_TM_2D_TILED_THIN1 | DIPLAYABLE,
+      ADDR_TM_2D_TILED_THIN1 | DISPLAYABLE,
+   };
+   static const unsigned gfx7_array_modes_2D[] = {
+      ADDR_TM_LINEAR_ALIGNED,
+      ADDR_TM_1D_TILED_THIN1,
+      ADDR_TM_1D_TILED_THIN1 | DISPLAYABLE,
+      ADDR_TM_2D_TILED_THIN1,
+      ADDR_TM_2D_TILED_THIN1 | DISPLAYABLE,
       ADDR_TM_PRT_TILED_THIN1,
-#endif
-      /* ADDR_TM_PRT_2D_TILED_THIN1 is not supported by gfx7-8 */
+      ADDR_TM_PRT_TILED_THIN1 | DISPLAYABLE,
    };
-   /* Note: Layouts with XORs are commented out for now. */
-   static const unsigned gfx9_swizzle_mode_2D[] = {
-      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, /*16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27,*/
+
+   static const unsigned gfx9_swizzle_modes_2D[] = {
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27,
    };
-   static const unsigned gfx10_swizzle_mode_2D[] = {
-      0, 1, 2, 5, 6, 9, 10, /*17, 18, 21, 22, 23, 24, 25, 26, 27*/
+   static const unsigned gfx10_swizzle_modes_2D[] = {
+      0, 1, 2, 5, 6, 9, 10, 17, 18, 21, 22, 24, 25, 26, 27,
    };
-   static const unsigned gfx11_swizzle_mode_2D[] = {
-      0, 2, 6, 10, /*18, 21, 22, 24, 25, 26, 27, 28, 29, 30, 31*/
+   static const unsigned gfx11_swizzle_modes_2D[] = {
+      0, 2, 6, 10, 18, 22, 24, 26, 27, 28, 30, 31,
    };
    static const unsigned gfx12_swizzle_modes_2D[] = {
-      0, 1, 2, 3, 4
+      0, 1, 2, 3, 4,
    };
    const unsigned *swizzle_modes_2D = NULL;
    unsigned num_swizzle_modes_2D = 0;
@@ -336,68 +343,88 @@ print_tiling_layouts(const struct amdgpu_device *dev)
       swizzle_modes_2D = gfx12_swizzle_modes_2D;
       num_swizzle_modes_2D = ARRAY_SIZE(gfx12_swizzle_modes_2D);
    } else if (gfx_version >= 11) {
-      swizzle_modes_2D = gfx11_swizzle_mode_2D;
-      num_swizzle_modes_2D = ARRAY_SIZE(gfx11_swizzle_mode_2D);
+      swizzle_modes_2D = gfx11_swizzle_modes_2D;
+      num_swizzle_modes_2D = ARRAY_SIZE(gfx11_swizzle_modes_2D);
    } else if (gfx_version >= 10) {
-      swizzle_modes_2D = gfx10_swizzle_mode_2D;
-      num_swizzle_modes_2D = ARRAY_SIZE(gfx10_swizzle_mode_2D);
+      swizzle_modes_2D = gfx10_swizzle_modes_2D;
+      num_swizzle_modes_2D = ARRAY_SIZE(gfx10_swizzle_modes_2D);
    } else if (gfx_version >= 9) {
-      swizzle_modes_2D = gfx9_swizzle_mode_2D;
-      num_swizzle_modes_2D = ARRAY_SIZE(gfx9_swizzle_mode_2D);
+      swizzle_modes_2D = gfx9_swizzle_modes_2D;
+      num_swizzle_modes_2D = ARRAY_SIZE(gfx9_swizzle_modes_2D);
+   } else if (gfx_version >= 7) {
+      swizzle_modes_2D = gfx7_array_modes_2D;
+      num_swizzle_modes_2D = ARRAY_SIZE(gfx7_array_modes_2D);
    } else {
       swizzle_modes_2D = gfx6_array_modes_2D;
       num_swizzle_modes_2D = ARRAY_SIZE(gfx6_array_modes_2D);
    }
 
-   for (unsigned bpp = 8; bpp <= 64; bpp *= 2) {
+   for (unsigned bpp = 8; bpp <= 128; bpp *= 2) {
       for (unsigned sw_index = 0; sw_index < num_swizzle_modes_2D; sw_index++) {
          unsigned swizzle_mode = swizzle_modes_2D[sw_index];
 
+         /* Reject invalid combinations. */
+         if (gfx_version == 9 && bpp == 128 && swizzle_mode &&
+             (swizzle_mode % 4 == ADDR_SW_Z || swizzle_mode % 4 == ADDR_SW_R))
+            continue;
+
+         if ((gfx_version == 10 || gfx_version == 11) && bpp == 128 && swizzle_mode &&
+             swizzle_mode % 4 == ADDR_SW_Z)
+            continue;
+
+         /* Determine the tile size. */
          unsigned tile_width = 0, tile_height = 0;
          legacy_tile_info legacy_info = {0};
          get_tile_size(lib, gfx_version, bpp, swizzle_mode, &tile_width, &tile_height, &legacy_info);
 
          unsigned num_x_bits = util_logbase2(tile_width);
          unsigned num_y_bits = util_logbase2(tile_height);
+         unsigned num_addr_bits = util_logbase2(bpp / 8) + num_x_bits + num_y_bits;
 
-         ADDR_EQUATION equation = {
-            .numBits = util_logbase2(bpp / 8) + num_x_bits + num_y_bits,
-            .numBitComponents = 1,
-         };
+         /* Precompute which address bits are flipped by each coordinate bit. */
+         uint32_t coord_bit_flips_addr_bits[2][32] = {0};
+
+         assert(num_x_bits < 32 && num_y_bits < 32);
 
          for (unsigned coord = 0; coord < 2; coord++) {
-            for (unsigned bit = 0; bit < (coord ? num_y_bits : num_x_bits); bit++) {
-               unsigned x = coord == 0 ? BITFIELD_BIT(bit) : 0;
-               unsigned y = coord == 1 ? BITFIELD_BIT(bit) : 0;
-               unsigned addr = addr_from_coord(lib, gfx_version, &legacy_info, bpp, swizzle_mode, x, y);
-               unsigned addr_pos = u_bit_scan(&addr);
-               assert(addr == 0 && "layout with XORs are unhandled");
-#if 0
-               printf("bpp %u, sw %u, %cbit %u (%u,%u), pos %u\n", bpp, swizzle_mode, "xy"[coord], bit, x, y, bit_pos);
-#endif
-               assert(addr_pos < equation.numBits);
-               assert(!equation.addr[addr_pos].valid);
+            for (unsigned coord_bit = 0; coord_bit < (coord ? num_y_bits : num_x_bits); coord_bit++) {
+               unsigned x = coord == 0 ? BITFIELD_BIT(coord_bit) : 0;
+               unsigned y = coord == 1 ? BITFIELD_BIT(coord_bit) : 0;
 
-               equation.addr[addr_pos].valid = true;
-               equation.addr[addr_pos].channel = coord;
-               equation.addr[addr_pos].index = bit;
+               coord_bit_flips_addr_bits[coord][coord_bit] =
+                  addr_from_coord(lib, gfx_version, &legacy_info, bpp, swizzle_mode, x, y);
             }
          }
 
-         /* Print the equation. */
-         printf("%s, bpe %u, sw %2u, {", dev->name, bpp / 8, swizzle_mode);
-         for (unsigned bit = 0; bit < equation.numBits; bit++) {
-            for (unsigned comp = 0; comp < equation.numBitComponents; comp++) {
-               ADDR_CHANNEL_SETTING swizzle = equation.comps[comp][bit];
+         /* Print inputs. */
+         if (gfx_version >= 9) {
+            printf("%-17s, bpe %2u, sw %2u, %3ux%-3u, {", dev->name, bpp / 8, swizzle_mode,
+                   tile_width, tile_height);
+         } else {
+            unsigned mode = swizzle_mode & ~DISPLAYABLE;
+            bool display = swizzle_mode & DISPLAYABLE;
 
-               if (swizzle.valid) {
-                  printf("%c%u", "XYZS"[swizzle.channel], swizzle.index);
-               } else {
-                  printf(" 0");
+            printf("%-17s, bpe %2u, sw%*s%u, %3ux%-3u, {", dev->name, bpp / 8,
+                   mode < 10 ? 2 : 1, display ? "D" : "", mode, tile_width, tile_height);
+         }
+
+         /* Print the layout. */
+         for (unsigned addr_bit = 0; addr_bit < num_addr_bits; addr_bit++) {
+            bool found = false; /* multiple matches are XOR'd */
+
+            for (unsigned coord = 0; coord < 2; coord++) {
+               for (unsigned coord_bit = 0; coord_bit < (coord ? num_y_bits : num_x_bits); coord_bit++) {
+                  if (coord_bit_flips_addr_bits[coord][coord_bit] & BITFIELD_BIT(addr_bit)) {
+                     printf("%s%c%u", found ? "^" : "", "XYZS"[coord], coord_bit);
+                     found = true;
+                  }
                }
             }
 
-            if (bit < equation.numBits - 1)
+            if (!found)
+               printf("0");
+
+            if (addr_bit < num_addr_bits - 1)
                printf(", ");
          }
          printf("}\n");

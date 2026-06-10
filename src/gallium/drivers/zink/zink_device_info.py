@@ -85,6 +85,9 @@ EXTENSIONS = [
     Extension("VK_KHR_maintenance10",
               alias="maint10",
               features=True, properties=True),
+    Extension("VK_KHR_maintenance11",
+              alias="maint11",
+              features=True),
     Extension("VK_KHR_unified_image_layouts", alias="unified_layouts", features=True),
     Extension("VK_KHR_external_memory"),
     Extension("VK_KHR_external_memory_fd"),
@@ -355,6 +358,9 @@ EXTENSIONS = [
               features=True,
               conditions=["$feats.shaderFloatControls2"]),
     Extension("VK_KHR_format_feature_flags2"),
+    Extension("VK_KHR_shader_fma",
+              alias="fma",
+              features=True),
 ]
 
 # constructor: Versions(device_version(major, minor, patch), struct_version(major, minor))

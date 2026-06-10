@@ -1389,7 +1389,7 @@ spill_vgpr(spill_ctx& ctx, Block& block, std::vector<aco_ptr<Instruction>>& inst
          create_instruction(aco_opcode::p_split_vector, Format::PSEUDO, 1, temp.size())};
       split->operands[0] = Operand(temp);
       for (unsigned i = 0; i < temp.size(); i++)
-         split->definitions[i] = bld.def(v1);
+         split->definitions[i] = bld.def(v1.resize(MIN2(temp.bytes() - i * 4, 4)));
       bld.insert(split);
       for (unsigned i = 0; i < temp.size(); i++) {
          Temp elem = split->definitions[i].getTemp();
@@ -1454,7 +1454,7 @@ reload_vgpr(spill_ctx& ctx, Block& block, std::vector<aco_ptr<Instruction>>& ins
          create_instruction(aco_opcode::p_create_vector, Format::PSEUDO, def.size(), 1)};
       vec->definitions[0] = def;
       for (unsigned i = 0; i < def.size(); i++) {
-         Temp tmp = bld.tmp(v1);
+         Temp tmp = bld.tmp(v1.resize(MIN2(def.bytes() - i * 4, 4)));
          vec->operands[i] = Operand(tmp);
          if (i < lds_slots) {
             bld.ds(aco_opcode::ds_read_addtid_b32, Definition(tmp), bld.m0(ctx.lds_m0_zero),

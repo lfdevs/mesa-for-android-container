@@ -334,8 +334,6 @@ llvmpipe_resource_create_all(struct pipe_screen *_screen,
 
             madvise(lpr->tex_data, lpr->size_required, MADV_DONTNEED);
 #endif
-
-            lpr->residency = calloc(DIV_ROUND_UP(lpr->size_required, 64 * 1024 * sizeof(uint32_t) * 8), sizeof(uint32_t));
          }
       }
    } else {
@@ -383,6 +381,12 @@ llvmpipe_resource_create_all(struct pipe_screen *_screen,
          madvise(lpr->data, lpr->size_required, MADV_DONTNEED);
 #endif
       }
+   }
+
+   if (templat->flags & PIPE_RESOURCE_FLAG_SPARSE) {
+      uint64_t residency_granularity = 64;
+      os_get_page_size(&residency_granularity);
+      lpr->residency = calloc(DIV_ROUND_UP(lpr->size_required, residency_granularity * sizeof(uint32_t) * 8), sizeof(uint32_t));
    }
 
    lpr->id = id_counter++;
@@ -1671,11 +1675,17 @@ llvmpipe_resource_bind_sparse(struct llvmpipe_resource *lpr,
    if (!ok)
       return false;
 
-   if (is_texture) {
+   if (lpr->residency) {
+      uint64_t residency_granularity = 64;
+      os_get_page_size(&residency_granularity);
+
+      uint32_t start = offset / residency_granularity;
+      uint32_t end = start + size / residency_granularity - 1;
+
       if (mem)
-         BITSET_SET(lpr->residency, offset / (64 * 1024));
+         BITSET_SET_RANGE(lpr->residency, start, end);
       else
-         BITSET_CLEAR(lpr->residency, offset / (64 * 1024));
+         BITSET_CLEAR_RANGE(lpr->residency, start, end);
    }
 
    return true;
