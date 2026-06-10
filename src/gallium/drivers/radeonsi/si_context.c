@@ -252,25 +252,21 @@ struct pipe_context *si_create_context(struct pipe_screen *screen, unsigned flag
 
       /* Check if the aux_context needs to be recreated */
       for (unsigned i = 0; i < ARRAY_SIZE(sscreen->aux_contexts); i++) {
-         if (!sscreen->aux_contexts[i].ctx)
-            continue;
+         mtx_lock(&sscreen->aux_contexts[i].lock);
 
-         struct si_context *saux = si_get_aux_context(sscreen, &sscreen->aux_contexts[i]);
-         enum pipe_reset_status status =
-            sctx->ws->ctx_query_reset_status(saux->ctx, true, NULL, NULL);
+         if (sscreen->aux_contexts[i].ctx) {
+            struct si_context *saux = (struct si_context*)sscreen->aux_contexts[i].ctx;
+            enum pipe_reset_status status =
+               sctx->ws->ctx_query_reset_status(saux->ctx, true, NULL, NULL);
 
-         if (status != PIPE_NO_RESET) {
-            /* We lost the aux_context, create a new one */
-            unsigned context_flags = saux->context_flags;
-            saux->b.destroy(&saux->b);
-
-            saux = (struct si_context *)si_create_context(&sscreen->b, context_flags);
-            if (sscreen->options.aux_debug)
-               saux->b.set_log_context(&saux->b, &sscreen->aux_contexts[i].log);
-
-            sscreen->aux_contexts[i].ctx = &saux->b;
+            if (status != PIPE_NO_RESET) {
+               /* We lost the aux_context, destroy it. */
+               saux->b.destroy(&saux->b);
+               sscreen->aux_contexts[i].ctx = NULL;
+            }
          }
-         si_put_aux_context_flush(&sscreen->aux_contexts[i]);
+
+         mtx_unlock(&sscreen->aux_contexts[i].lock);
       }
 
       simple_mtx_lock(&sscreen->async_compute_context_lock);

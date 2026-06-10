@@ -1248,7 +1248,16 @@ void r300_blitter_draw_rectangle(struct blitter_context *blitter,
     r300->context.bind_vs_state(&r300->context, get_vs(blitter));
 
     if (type == UTIL_BLITTER_ATTRIB_TEXCOORD_XY) {
-        r300->sprite_coord_enable = 1;
+        /* The blitter's passthrough VS outputs GENERIC[0], which u_blitter
+         * encodes here as sprite_coord_enable bit 0. After
+         * ntr_fixup_varying_slots in nir_to_rc, the corresponding FS input
+         * lands at index 9 in fs_inputs->generic[] (VAR0 -> VAR9 from the
+         * +9 shift that leaves room for TEX0..TEX7 and PNTC). Match that
+         * by setting bit 9 instead of bit 0; the rest of the rasterizer
+         * setup (r300_state_derived.c) walks generic[i] and tests
+         * sprite_coord_enable & (1 << i) so the indices need to agree.
+         */
+        r300->sprite_coord_enable = 1 << 9;
         r300->is_point = true;
     }
 

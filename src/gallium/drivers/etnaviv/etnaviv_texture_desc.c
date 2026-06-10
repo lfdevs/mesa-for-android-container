@@ -140,7 +140,7 @@ etna_create_sampler_view_desc(struct pipe_context *pctx, struct pipe_resource *p
    const struct util_format_description *desc = util_format_description(so->format);
    struct etna_sampler_view_desc *sv = CALLOC_STRUCT(etna_sampler_view_desc);
    struct etna_context *ctx = etna_context(pctx);
-   uint32_t format = translate_texture_format(so->format);
+   uint32_t format = translate_texture_format(so->format, ctx->screen);
 
    /* For RB_SWAP formats, pre-compute the alternative texture format for when
     * shared resources hold data in native byte order (RGBA). */

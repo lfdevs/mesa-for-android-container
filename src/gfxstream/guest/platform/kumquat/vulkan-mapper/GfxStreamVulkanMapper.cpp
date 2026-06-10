@@ -154,8 +154,23 @@ bool GfxStreamVulkanMapper::initialize(DeviceId& deviceId) {
 #elif DETECT_OS_LINUX
         externalMemoryDeviceExtNames.push_back(VK_KHR_EXTERNAL_MEMORY_FD_EXTENSION_NAME);
 
+        uint32_t extensionCount = 0;
+        mVk.EnumerateDeviceExtensionProperties(physicalDevices[i], nullptr, &extensionCount,
+                                               nullptr);
+        std::vector<VkExtensionProperties> availableExtensions(extensionCount);
+        mVk.EnumerateDeviceExtensionProperties(physicalDevices[i], nullptr, &extensionCount,
+                                               availableExtensions.data());
+
+        bool dmaBufSupported = false;
+        for (const auto& ext : availableExtensions) {
+            if (strcmp(ext.extensionName, VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME) == 0) {
+                dmaBufSupported = true;
+                break;
+            }
+        }
+
         // Tesla V-100 doesn't work with dma-buf
-        if (deviceProps.properties.vendorID != kNvidiaVendorId) {
+        if (dmaBufSupported && deviceProps.properties.vendorID != kNvidiaVendorId) {
             externalMemoryDeviceExtNames.push_back(VK_EXT_EXTERNAL_MEMORY_DMA_BUF_EXTENSION_NAME);
         }
 #endif

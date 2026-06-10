@@ -6,16 +6,12 @@
  * SPDX-License-Identifier: MIT
  */
 
-#ifndef _WIN32
-#include "drm-uapi/amdgpu_drm.h"
-#endif
-
 #include "util/vl_zscan_data.h"
 #include "ac_vcn_dec.h"
 
+#include "tools/radv_debug.h"
 #include "radv_buffer.h"
 #include "radv_cs.h"
-#include "radv_debug.h"
 #include "radv_device_memory.h"
 #include "radv_entrypoints.h"
 #include "radv_image.h"

@@ -313,8 +313,8 @@ cmd_dispatch(struct panvk_cmd_buffer *cmdbuf, struct panvk_dispatch_info *info)
    cs_load64_to(b, sync_addr, cs_subqueue_ctx_reg(b),
                 offsetof(struct panvk_cs_subqueue_context, syncobjs));
 
-   cs_add64(b, sync_addr, sync_addr,
-            PANVK_SUBQUEUE_COMPUTE * sizeof(struct panvk_cs_sync64));
+   cs_add_imm64(b, sync_addr, sync_addr,
+                PANVK_SUBQUEUE_COMPUTE * sizeof(struct panvk_cs_sync64));
    cs_move64_to(b, add_val, 1);
    panvk_instr_sync64_add(cmdbuf, PANVK_SUBQUEUE_COMPUTE, true,
                           MALI_CS_SYNC_SCOPE_CSG, add_val, sync_addr,
@@ -329,8 +329,8 @@ cmd_dispatch(struct panvk_cmd_buffer *cmdbuf, struct panvk_dispatch_info *info)
               BITFIELD_MASK(3),
               offsetof(struct panvk_cs_subqueue_context, syncobjs));
 
-   cs_add64(b, sync_addr, sync_addr,
-            PANVK_SUBQUEUE_COMPUTE * sizeof(struct panvk_cs_sync64));
+   cs_add_imm64(b, sync_addr, sync_addr,
+                PANVK_SUBQUEUE_COMPUTE * sizeof(struct panvk_cs_sync64));
    cs_move64_to(b, add_val, 1);
 
    cs_match_iter_sb(b, x, iter_sb, cmp_scratch) {

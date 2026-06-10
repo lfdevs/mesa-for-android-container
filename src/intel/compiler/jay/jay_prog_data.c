@@ -95,7 +95,7 @@ gather_fs_info(nir_builder *b, nir_intrinsic_instr *intr, void *data)
       break;
 
    case nir_intrinsic_load_pixel_coord_intel:
-      BITSET_SET(b->shader->info.system_values_read, SYSTEM_VALUE_FRAG_COORD);
+      prog_data->uses_src_xy = true;
       break;
 
    default:
@@ -332,6 +332,9 @@ populate_fs_prog_data(nir_shader *shader,
    prog_data->computed_depth_mode = computed_depth_mode(shader);
    prog_data->computed_stencil =
       shader->info.outputs_written & BITFIELD64_BIT(FRAG_RESULT_STENCIL);
+
+   prog_data->dual_src_blend =
+      shader->info.outputs_written & BITFIELD64_BIT(FRAG_RESULT_DUAL_SRC_BLEND);
 
    prog_data->sample_shading = shader->info.fs.uses_sample_shading;
    prog_data->api_sample_shading = key->api_sample_shading;

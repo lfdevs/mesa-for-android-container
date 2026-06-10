@@ -124,15 +124,16 @@ needs_dummy_fence(const intel_device_info *devinfo, const brw_inst *inst)
    /* This workaround is about making sure that any instruction writing
     * through UGM has completed before we hit EOT.
     */
-   if (send->sfid != BRW_SFID_UGM)
+   if (send->sfid != GEN_SFID_UGM)
       return false;
 
    /* Any UGM, non-Scratch-surface Stores (not including Atomic) messages,
     * where the L1-cache override is NOT among {WB, WS, WT}
     */
-   enum lsc_opcode opcode = lsc_msg_desc_opcode(devinfo, send->desc);
+   const gen_lsc_desc desc = gen_lsc_desc_decode(devinfo, send->desc);
+   enum lsc_opcode opcode = desc.op;
    if (lsc_opcode_is_store(opcode)) {
-      switch (lsc_msg_desc_cache_ctrl(devinfo, send->desc)) {
+      switch (desc.cache_ctrl) {
       case LSC_CACHE_STORE_L1STATE_L3MOCS:
       case LSC_CACHE_STORE_L1WB_L3WB:
       case LSC_CACHE_STORE_L1S_L3UC:
@@ -197,7 +198,7 @@ brw_workaround_memory_fence_before_eot(brw_shader &s)
       dummy_fence->dst = dst;
       dummy_fence->mlen = reg_unit(s.devinfo);
       dummy_fence->ex_mlen = 0;
-      dummy_fence->sfid = BRW_SFID_UGM;
+      dummy_fence->sfid = GEN_SFID_UGM;
       dummy_fence->size_written = REG_SIZE * reg_unit(s.devinfo);
       dummy_fence->desc = lsc_fence_msg_desc(s.devinfo, LSC_FENCE_TILE,
                                              LSC_FLUSH_TYPE_NONE_6, false) |

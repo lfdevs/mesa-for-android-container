@@ -193,6 +193,12 @@ class UtilPerfettoObserver : public perfetto::TrackEventSessionObserver {
     */
 };
 
+void
+util_perfetto_thread_flush(void)
+{
+   perfetto::TrackEvent::Flush();
+}
+
 static void
 util_perfetto_fini(void)
 {
@@ -205,6 +211,7 @@ util_perfetto_init_once(void)
    // Connects to the system tracing service
    perfetto::TracingInitArgs args;
    args.backends = perfetto::kSystemBackend;
+   args.shmem_size_hint_kb = 2000;
    perfetto::Tracing::Initialize(args);
 
    static UtilPerfettoObserver observer;

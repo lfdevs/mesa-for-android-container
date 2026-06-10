@@ -412,8 +412,8 @@ static uint64_t
 jm_emit_tiler_desc(struct panfrost_batch *batch)
 {
    struct panfrost_device *dev = pan_device(batch->ctx->base.screen);
-   uint64_t tiler_desc = PAN_ARCH >= 9 ? batch->tiler_ctx.bifrost.desc
-                                       : batch->tiler_ctx.valhall.desc;
+   uint64_t tiler_desc = PAN_ARCH >= 9 ? batch->tiler_ctx.valhall.desc
+                                       : batch->tiler_ctx.bifrost.desc;
 
    if (tiler_desc)
       return tiler_desc;

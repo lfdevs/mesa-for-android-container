@@ -36,9 +36,9 @@ struct kk_root_descriptor_table {
          uint32_t buffer_strides[KK_MAX_VBUFS];
          uint64_t attrib_base[KK_MAX_ATTRIBS];
          uint32_t attrib_clamps[KK_MAX_ATTRIBS];
+
          float blend_constant[4];
          float clip_z_coeff;
-         uint32_t draw_id;
       } draw;
       struct {
          uint32_t base_group[3];
@@ -70,10 +70,19 @@ struct kk_descriptor_state {
 };
 
 struct kk_per_draw_data {
-   /* Mask of stages that need per-draw data uploaded */
-   uint32_t upload_mask;
-
    uint32_t draw_id;
+   uint32_t index_size;
+   /* Mask of outputs flowing VS->TCS, VS->GS, or TES->GS . */
+   uint64_t vertex_outputs;
+
+   /* Address of vertex param buffer if geom/tess is used, else 0 */
+   uint64_t vertex_params;
+
+   /* Address of tessellation param buffer if tessellation used, else 0 */
+   uint64_t tess_params;
+
+   uint64_t base_vertex_addr;
+   uint64_t base_instance_addr;
 };
 
 struct kk_attachment {
@@ -102,6 +111,11 @@ struct kk_rendering_state {
    struct kk_attachment depth_att;
    struct kk_attachment stencil_att;
    struct kk_attachment fsr_att;
+
+   bool ms_bresenham_lines;
+   bool sample_locations_enable;
+   uint32_t sample_locations_count;
+   VkSampleLocationEXT sample_locations[KK_MAX_SAMPLES];
 };
 
 /* Dirty tracking bits for state not tracked by vk_dynamic_graphics_state or
@@ -115,12 +129,12 @@ enum kk_dirty {
 struct kk_graphics_state {
    struct kk_rendering_state render;
    struct kk_descriptor_state descriptors;
+   struct kk_per_draw_data per_draw_data;
 
    mtl_depth_stencil_state *depth_stencil_state;
    mtl_render_pass_descriptor *render_pass_descriptor;
    bool is_depth_stencil_dynamic;
    bool is_cull_front_and_back;
-   bool is_ms_bresenham_lines;
    bool need_to_start_render_pass;
 
    enum kk_dirty dirty;
@@ -139,9 +153,8 @@ struct kk_graphics_state {
    struct {
       mtl_buffer *handle;
       uint64_t buffer_size;
-      uint32_t range;
-      uint32_t offset;
-      uint32_t restart;
+      uint64_t range;
+      uint64_t offset;
       uint8_t bytes_per_index;
    } index;
 
@@ -151,6 +164,16 @@ struct kk_graphics_state {
       mtl_buffer *handles[KK_MAX_VBUFS];
    } vb;
 
+   /* Tessellation state */
+   struct {
+      /* Grid buffer for when the draw is indirect */
+      struct kk_ptr indirect_ptr;
+      mtl_buffer *out_draws_buffer;
+      uint64_t out_draws_offset;
+      struct kk_tess_info info;
+      enum mesa_prim prim;
+   } tess;
+
    /* Needed by vk_command_buffer::dynamic_graphics_state */
    struct vk_vertex_input_state _dynamic_vi;
    struct vk_sample_locations_state _dynamic_sl;
@@ -158,6 +181,12 @@ struct kk_graphics_state {
 
 struct kk_compute_state {
    struct kk_descriptor_state descriptors;
+};
+
+struct kk_conditional_rendering_state {
+   uint64_t address;
+   bool inverted;
+   bool enabled;
 };
 
 struct kk_encoder;
@@ -180,6 +209,7 @@ struct kk_cmd_buffer {
    struct {
       struct kk_graphics_state gfx;
       struct kk_compute_state cs;
+      struct kk_conditional_rendering_state cond_render;
       struct kk_shader *shaders[MESA_SHADER_STAGES];
       /* Only tracks graphics shaders since compute is always bound for now. */
       uint32_t dirty_shaders;
@@ -268,7 +298,59 @@ uint64_t kk_upload_descriptor_root(struct kk_cmd_buffer *cmd,
 void kk_cmd_buffer_flush_push_descriptors(struct kk_cmd_buffer *cmd,
                                           struct kk_descriptor_state *desc);
 
-void kk_dispatch_precomp(struct kk_cmd_buffer *cmd, struct mtl_size grid,
+enum kk_grid_mode {
+   KK_GRID_DIRECT = 0u,
+   KK_GRID_INDIRECT,
+};
+struct kk_grid {
+   enum kk_grid_mode mode;
+   union {
+      struct {
+         uint32_t offset;
+         mtl_buffer *indirect;
+      };
+      struct mtl_size size;
+   };
+};
+
+static struct kk_grid
+kk_grid_3d(uint32_t x, uint32_t y, uint32_t z)
+{
+   return (struct kk_grid){
+      .mode = KK_GRID_DIRECT,
+      .size = {x, y, z},
+   };
+}
+
+static struct kk_grid
+kk_grid_2d(uint32_t x, uint32_t y)
+{
+   return kk_grid_3d(x, y, 1u);
+}
+
+static struct kk_grid
+kk_grid_1d(uint32_t x)
+{
+   return kk_grid_3d(x, 1u, 1u);
+}
+
+static struct kk_grid
+kk_grid_indirect(mtl_buffer *indirect, uint32_t offset)
+{
+   return (struct kk_grid){
+      .mode = KK_GRID_INDIRECT,
+      .indirect = indirect,
+      .offset = offset,
+   };
+}
+
+static bool
+kk_grid_is_indirect(struct kk_grid grid)
+{
+   return grid.mode == KK_GRID_INDIRECT;
+}
+
+void kk_dispatch_precomp(struct kk_cmd_buffer *cmd, struct kk_grid grid,
                          bool pre_gfx, enum libkk_program idx, void *data,
                          size_t data_size);
 

@@ -38,21 +38,34 @@
     CI_TRON_TIMEOUT__FIRST_CONSOLE_ACTIVITY__MINUTES: 0.5
     CI_TRON_TIMEOUT__FIRST_CONSOLE_ACTIVITY__RETRIES: 3
     CI_TRON_DUT_SETUP_TAGS: $GPU_VENDOR_TAG,$GPU_MODEL_TAG
+    B2C_VERSION: v0.9.18
+    CI_TRON_INITRAMFS__FIRMWARE__URL: 'https://${S3_BASE_PATH}/${FIRMWARE_REPO}/powervr-${FIRMWARE_TAG}.tar'
+    CI_TRON_INITRAMFS__FIRMWARE__FORMAT__0__ARCHIVE__EXTENSION: 'cpio'
+    CI_TRON_INITRAMFS__FIRMWARE__FORMAT__0__ARCHIVE__KEEP__0__PATH: './lib/firmware/powervr/.*'
+    CI_TRON_INITRAMFS__GPU__FORMAT__0__ARCHIVE__EXTENSION: 'cpio'
+    CI_TRON_INITRAMFS__GPU__FORMAT__0__ARCHIVE__KEEP__0__PATH: '\./(lib/modules/.*)'
+    CI_TRON_INITRAMFS__GPU__FORMAT__0__ARCHIVE__KEEP__0__REWRITE: '\1'
+    CI_TRON_KERNEL_CMDLINE__LOAD_MODULES: 'modules_load=powervr'
   tags:
     - ci-tron:priority:$CI_TRON_JOB_PRIORITY
     - $GPU_VENDOR_TAG
     - $GPU_MODEL_TAG
 
+.imagination-ci-tron-arm64:
+  extends:
+    - .imagination-ci-tron
+  variables:
+    CI_TRON_KERNEL__URL: '$KERNEL_IMAGE_BASE/arm64/Image.gz'
+    CI_TRON__B2C_DISKLESS_IMAGESTORE_PLATFORM: linux/arm64/v8
+    CI_TRON_INITRAMFS__GPU__URL: '$KERNEL_IMAGE_BASE/arm64/modules.tar'
+
 # 12 devices
 .imagination-ti-am68-sk:arm64:
   extends:
-    - .imagination-ci-tron
+    - .imagination-ci-tron-arm64
   parallel: 12
   variables:
-    B2C_VERSION: v0.9.18
-    CI_TRON_DTB__0__URL: 'https://gitlab.freedesktop.org/gfx-ci/boot2container/-/releases/$B2C_VERSION/downloads/linux-arm64.dtbs.cpio.xz'
-    CI_TRON_DTB__0__FORMAT__0__ARCHIVE__MATCH: boot/dtbs/ti/k3-am68-sk-base-board.dtb
-    CI_TRON__B2C_DISKLESS_IMAGESTORE_PLATFORM: linux/arm64/v8
+    CI_TRON_DTB__0__URL: '$KERNEL_IMAGE_BASE/arm64/k3-am68-sk-base-board.dtb'
     GPU_VENDOR_TAG: dt_gpu:vendor:ti
     GPU_MODEL_TAG: dt_gpu:model:j721s2-gpu
     GPU_VERSION: bxs-4-64

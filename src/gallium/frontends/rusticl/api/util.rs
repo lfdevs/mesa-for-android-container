@@ -569,7 +569,6 @@ pub fn check_copy_overlap(
 
 pub mod cl_slice {
     use crate::api::util::CLResult;
-    use mesa_rust_util::ptr::addr;
     use rusticl_opencl_gen::CL_INVALID_VALUE;
     use std::ffi::c_void;
     use std::slice;
@@ -644,6 +643,6 @@ pub mod cl_slice {
         data.is_null()
             || !data.is_aligned()
             || total_size > isize::MAX as usize
-            || addr(data).checked_add(total_size).is_none()
+            || data.addr().checked_add(total_size).is_none()
     }
 }

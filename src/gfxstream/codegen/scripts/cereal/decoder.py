@@ -692,9 +692,11 @@ custom_decodes = {
 
     "vkCreateImage" : emit_global_state_wrapped_decoding,
     "vkCreateImageView" : emit_global_state_wrapped_decoding,
+    "vkCreateBufferView" : emit_global_state_wrapped_decoding,
     "vkCreateSampler" : emit_global_state_wrapped_decoding,
     "vkDestroyImage" : emit_global_state_wrapped_decoding,
     "vkDestroyImageView" : emit_global_state_wrapped_decoding,
+    "vkDestroyBufferView" : emit_global_state_wrapped_decoding,
     "vkDestroySampler" : emit_global_state_wrapped_decoding,
     "vkCmdCopyBufferToImage" : emit_global_state_wrapped_decoding_with_context,
     "vkCmdCopyImage" : emit_global_state_wrapped_decoding,

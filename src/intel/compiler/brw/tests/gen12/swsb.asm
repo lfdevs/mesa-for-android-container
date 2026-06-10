@@ -1,40 +1,38 @@
-cmp.l.f0.0(8)   g55<1>UD        g54<8,8,1>UD    0x00000290UD    { align1 1Q @1 };
-mov(16)         g6<1>D          g20<8,8,1>W                     { align1 2H @2 };
-add(16)         g122<1>F        g98<8,8,1>F     (abs)g102<8,8,1>F { align1 1H @3 };
-shl(8)          g75<1>D         g122<8,8,1>D    0x00000002UD    { align1 1Q @4 };
-sel.l(4)        g90.4<1>D       g90.3<0,1,0>D   g90.4<4,4,1>D   { align1 WE_all 1N @5 };
-and(16)         g58<1>UD        g16<8,8,1>UD    g56<8,8,1>UD    { align1 1H @6 };
-or.nz.f0.0(16)  nullUD          g105<8,8,1>UD   g103<8,8,1>UD   { align1 1H @7 };
-
-math cos(16)    g17<1>F         g15<8,8,1>F     nullUD          { align1 1H @1 $0 };
-math exp(16)    g1<1>F          g29<8,8,1>F     nullUD          { align1 1H @5 $2 };
-math sqrt(8)    g9<1>HF         g6<8,8,1>HF     nullUD          { align1 1Q @1 $3 };
-math intdiv(8)  g103<1>D        g101<8,8,1>D    g35<8,8,1>D     { align1 1Q @4 $4 };
-math intmod(8)  g101<1>D        g97<8,8,1>D     g76<8,8,1>D     { align1 2Q @2 $5 };
-math inv(16)    g10<1>F         g8<8,8,1>F      nullUD          { align1 2H @2 $6 };
-math log(16)    g102<1>F        g100<8,8,1>F    nullUD          { align1 2H @1 $7 };
-math rsq(16)    g76<1>F         g74<8,8,1>F     nullUD          { align1 1H @7 $8 };
-math sin(16)    g123<1>F        g121<8,8,1>F    nullUD          { align1 1H @4 $9 };
-math sqrt(16)   g43<1>F         g47<8,8,1>F     nullUD          { align1 2H @7 $10 };
-math cos(8)     g103<1>HF       g98<8,8,1>HF    nullUD          { align1 1Q @3 $11 };
-math exp(8)     g54<1>HF        g52<8,8,1>HF    nullUD          { align1 1Q @1 $12 };
-math intdiv(8)  g35<1>D         g31<8,8,1>D     g33<8,8,1>D     { align1 4Q @2 $13 };
-math intmod(8)  g101<1>D        g97<8,8,1>D     g99<8,8,1>D     { align1 2Q @4 $14 };
-math inv(8)     g102<1>HF       g92<8,8,1>HF    nullUD          { align1 1Q @6 $15 };
-
-sel.ge(16)      g7<1>UW         g7<16,16,1>UW   g89<16,8,2>UW   { align1 1H @7 $0.dst };
-mov(16)         a0<1>UW         0x03e0UW                        { align1 WE_all 1H @3 $1.dst };
-add(16)         g100<1>D        g102<8,8,1>D    -2114D          { align1 1H @3 $2.dst };
-add(16)         g100<1>D        g105<8,8,1>D    (abs)g18<8,8,1>D { align1 1H @3 $3.dst };
-add(16)         g36<1>D         g36<8,8,1>D     g106<8,8,1>D    { align1 1H @7 $4.dst };
-and(16)         g49<1>UD        g45<8,8,1>UD    g47<8,8,1>UD    { align1 1H @3 $5.dst };
-asr(16)         g102<2>W        g41<16,8,2>W    g28<8,8,1>UD    { align1 2H @6 $6.dst };
-cmp.l.f0.0(8)   g97<1>F         (abs)g96<8,8,1>F 0x3d4ccccdF  /* 0.05F */ { align1 1Q @3 $7.dst };
-cmp.nz.f0.0(8)  g100<1>F        g98<8,8,1>F     g99<8,8,1>F     { align1 1Q @1 $8.dst };
-(+f0.0) sel(8)  g64<1>D         -g15<8,8,1>D    g15<8,8,1>D     { align1 1Q @1 $9.dst };
-mov(16)         g15<1>UD        g13<8,8,1>D                     { align1 1H @1 $10.dst };
-mul(8)          acc0<1>UD       g10<8,4,2>UD    g101<16,8,2>UW  { align1 1Q @7 $11.dst };
-or(16)          g51<1>UW        g51<16,16,1>UW  g75<16,8,2>UW   { align1 1H @7 $12.dst };
-sel.ge(16)      g28<1>W         g28<16,16,1>W   g92<16,8,2>W    { align1 2H @7 $13.dst };
-xor(16)         g10<1>UD        g10<8,8,1>UD    g100<8,8,1>UD   { align1 1H @7 $14.dst };
-and(16)         g39<1>UD        g35<8,8,1>UD    g37<8,8,1>UD    { align1 2H @5 $15.dst };
+        cmp (8)        (lt)f0.0   r55           r54<8;8,1>        0x00000290      {@1}
+        mov (16|M16)              r6:d          r20<8;8,1>:w                      {@2}
+        add (16)                  r122:f        r98<8;8,1>:f      (abs)r102<8;8,1>:f {@3}
+        shl (8)                   r75:d         r122<8;8,1>:d     0x00000002      {@4}
+(W)     sel (4)        (lt)f0.0   r90.4:d       r90.3<0>:d        r90.4<4;4,1>:d  {@5}
+        and (16)                  r58           r16<8;8,1>        r56<8;8,1>      {@6}
+        or (16)        (ne)f0.0   null          r105<8;8,1>       r103<8;8,1>     {@7}
+        math.cos (16)             r17:f         r15<8;8,1>:f      null            {@1,$0}
+        math.exp (16)             r1:f          r29<8;8,1>:f      null            {@5,$2}
+        math.sqt (8)              r9:hf         r6<8;8,1>:hf      null            {@1,$3}
+        math.intdiv_q (8)         r103:d        r101<8;8,1>:d     r35<8;8,1>:d    {@4,$4}
+        math.intdiv_r (8|M8)      r101:d        r97<8;8,1>:d      r76<8;8,1>:d    {@2,$5}
+        math.inv (16|M16)         r10:f         r8<8;8,1>:f       null            {@2,$6}
+        math.log (16|M16)         r102:f        r100<8;8,1>:f     null            {@1,$7}
+        math.rsq (16)             r76:f         r74<8;8,1>:f      null            {@7,$8}
+        math.sin (16)             r123:f        r121<8;8,1>:f     null            {@4,$9}
+        math.sqt (16|M16)         r43:f         r47<8;8,1>:f      null            {@7,$10}
+        math.cos (8)              r103:hf       r98<8;8,1>:hf     null            {@3,$11}
+        math.exp (8)              r54:hf        r52<8;8,1>:hf     null            {@1,$12}
+        math.intdiv_q (8|M24)     r35:d         r31<8;8,1>:d      r33<8;8,1>:d    {@2,$13}
+        math.intdiv_r (8|M8)      r101:d        r97<8;8,1>:d      r99<8;8,1>:d    {@4,$14}
+        math.inv (8)              r102:hf       r92<8;8,1>:hf     null            {@6,$15}
+        sel (16)       (ge)f0.0   r7:uw         r7<16;16,1>:uw    r89<16;8,2>:uw  {@7,$0.dst}
+(W)     mov (16)                  a0:uw         992:uw                            {@3,$1.dst}
+        add (16)                  r100:d        r102<8;8,1>:d     -2114:d         {@3,$2.dst}
+        add (16)                  r100:d        r105<8;8,1>:d     (abs)r18<8;8,1>:d  {@3,$3.dst}
+        add (16)                  r36:d         r36<8;8,1>:d      r106<8;8,1>:d   {@7,$4.dst}
+        and (16)                  r49           r45<8;8,1>        r47<8;8,1>      {@3,$5.dst}
+        asr (16|M16)              r102<2>:w     r41<16;8,2>:w     r28<8;8,1>      {@6,$6.dst}
+        cmp (8)        (lt)f0.0   r97:f         (abs)r96<8;8,1>:f    0x3d4ccccd:f    {@3,$7.dst}
+        cmp (8)        (ne)f0.0   r100:f        r98<8;8,1>:f      r99<8;8,1>:f    {@1,$8.dst}
+(f0.0)  sel (8)                   r64:d         -r15<8;8,1>:d     r15<8;8,1>:d    {@1,$9.dst}
+        mov (16)                  r15           r13<8;8,1>:d                      {@1,$10.dst}
+        mul (8)                   acc0          r10<8;4,2>        r101<16;8,2>:uw {@7,$11.dst}
+        or (16)                   r51:uw        r51<16;16,1>:uw   r75<16;8,2>:uw  {@7,$12.dst}
+        sel (16|M16)   (ge)f0.0   r28:w         r28<16;16,1>:w    r92<16;8,2>:w   {@7,$13.dst}
+        xor (16)                  r10           r10<8;8,1>        r100<8;8,1>     {@7,$14.dst}
+        and (16|M16)              r39           r35<8;8,1>        r37<8;8,1>      {@5,$15.dst}

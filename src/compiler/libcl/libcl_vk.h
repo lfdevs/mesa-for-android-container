@@ -11,6 +11,7 @@ typedef uint32_t VkBool32;
 typedef uint64_t VkDeviceAddress;
 typedef uint64_t VkDeviceSize;
 typedef uint32_t VkFlags;
+typedef VkFlags VkImageAspectFlags;
 
 typedef enum VkQueryType {
     VK_QUERY_TYPE_OCCLUSION = 0,
@@ -126,6 +127,25 @@ typedef enum VkDepthBiasRepresentationEXT {
     VK_DEPTH_BIAS_REPRESENTATION_MAX_ENUM_EXT = 0x7FFFFFFF
 } VkDepthBiasRepresentationEXT;
 
+typedef struct VkOffset3D {
+    int32_t    x;
+    int32_t    y;
+    int32_t    z;
+} VkOffset3D __attribute__((aligned(4)));
+
+typedef struct VkExtent3D {
+    uint32_t    width;
+    uint32_t    height;
+    uint32_t    depth;
+} VkExtent3D __attribute__((aligned(4)));
+
+typedef struct VkImageSubresourceLayers {
+    VkImageAspectFlags    aspectMask;
+    uint32_t              mipLevel;
+    uint32_t              baseArrayLayer;
+    uint32_t              layerCount;
+} VkImageSubresourceLayers __attribute__((aligned(4)));
+
 typedef struct VkDispatchIndirectCommand {
     uint32_t    x;
     uint32_t    y;
@@ -186,4 +206,13 @@ typedef struct VkCopyMemoryIndirectCommandKHR {
     VkDeviceAddress    srcAddress;
     VkDeviceAddress    dstAddress;
     VkDeviceSize       size;
-} VkCopyMemoryIndirectCommandKHR;
+} VkCopyMemoryIndirectCommandKHR __attribute__((aligned(4)));
+
+typedef struct VkCopyMemoryToImageIndirectCommandKHR {
+    VkDeviceAddress             srcAddress;
+    uint32_t                    bufferRowLength;
+    uint32_t                    bufferImageHeight;
+    VkImageSubresourceLayers    imageSubresource;
+    VkOffset3D                  imageOffset;
+    VkExtent3D                  imageExtent;
+} VkCopyMemoryToImageIndirectCommandKHR __attribute__((aligned(4)));

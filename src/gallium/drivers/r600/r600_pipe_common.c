@@ -1083,10 +1083,12 @@ bool r600_common_screen_init(struct r600_common_screen *rscreen,
 		printf("max_alignment = %u\n", (unsigned)rscreen->info.max_alignment);
 	}
 
+	const bool fp64_emulation = rscreen->info.gfx_level < CAYMAN;
+
 	const struct nir_shader_compiler_options nir_options = {
 		.float_mul_add16 = nir_float_muladd_support_has_fmad | nir_float_muladd_support_fuse,
 		.float_mul_add32 = nir_float_muladd_support_has_fmad | nir_float_muladd_support_fuse,
-		.float_mul_add64 = nir_float_muladd_support_has_ffma | nir_float_muladd_support_fuse,
+		.float_mul_add64 = fp64_emulation ? 0 : nir_float_muladd_support_has_ffma | nir_float_muladd_support_fuse,
 		.lower_flrp32 = true,
 		.lower_flrp64 = true,
 		.lower_fdiv = true,
@@ -1152,7 +1154,7 @@ bool r600_common_screen_init(struct r600_common_screen *rscreen,
 		rscreen->nir_options.lower_bitfield_reverse = true;
 	}
 
-	if (rscreen->info.gfx_level < CAYMAN) {
+	if (fp64_emulation) {
 		rscreen->nir_options.lower_atomic_offset_to_range_base = true;
 
 		rscreen->nir_options.lower_doubles_options =

@@ -182,6 +182,7 @@ if with_gfx_compute
     'nir/ac_nir_lower_ngg_mesh.c',
     'nir/ac_nir_lower_ps_early.c',
     'nir/ac_nir_lower_ps_late.c',
+    'nir/ac_nir_lower_sample_mask_in.c',
     'nir/ac_nir_lower_tex_coords.c',
     'nir/ac_nir_meta.h',
     'nir/ac_nir_meta_cs_blit.c',

@@ -3247,6 +3247,9 @@ struct gl_dispatch
     * - ContextLost
     */
    struct _glapi_table *Current;
+
+   struct _glapi_table *Trace;
+   struct _glapi_table *RealPublished;
 };
 
 /**
@@ -3670,6 +3673,7 @@ enum _verbose
 {
    VERBOSE_STATE        = 0x0001,
    VERBOSE_DISPLAY_LIST = 0x0002,
+   VERBOSE_API          = 0x0004,
 };
 
 

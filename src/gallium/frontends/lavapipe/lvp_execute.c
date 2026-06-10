@@ -100,6 +100,7 @@ struct rendering_state {
    bool rs_dirty;
    bool dsa_dirty;
    bool dsa_no_stencil;
+   bool dsa_no_depth;
    bool stencil_ref_dirty;
    bool clip_state_dirty;
    bool blend_color_dirty;
@@ -181,6 +182,7 @@ struct rendering_state {
    uint8_t push_constants[128 * 4];
    uint16_t push_size[LVP_PIPELINE_TYPE_COUNT];
    uint16_t gfx_push_sizes[LVP_SHADER_STAGES];
+   uint16_t emitted_push_size[LVP_PIPELINE_TYPE_COUNT];
 
    VkRect2D render_area;
    bool suspending;
@@ -237,6 +239,24 @@ struct rendering_state {
    void *advanced_blend_fs_variant;  /* cached lowered FS for cleanup */
    struct lvp_shader *advanced_blend_fs_shader; /* shader used to build variant */
 };
+
+static void
+handle_set_stage_buffer(struct rendering_state *state,
+                        struct pipe_resource *bo,
+                        size_t offset,
+                        mesa_shader_stage stage,
+                        uint32_t index)
+{
+   state->const_buffer[stage][index].buffer = bo;
+   state->const_buffer[stage][index].buffer_offset = offset;
+   state->const_buffer[stage][index].buffer_size = bo->width0;
+   state->const_buffer[stage][index].user_buffer = NULL;
+
+   state->constbuf_dirty[stage] = true;
+
+   if (state->num_const_bufs[stage] <= index)
+      state->num_const_bufs[stage] = index + 1;
+}
 
 static struct pipe_resource *
 get_buffer_resource(struct pipe_context *ctx, void *mem)
@@ -333,19 +353,14 @@ static void finish_fence(struct rendering_state *state)
                                         &handle, NULL);
 }
 
-static unsigned
-get_pcbuf_size(struct rendering_state *state, mesa_shader_stage pstage)
-{
-   enum lvp_pipeline_type type =
-      ffs(lvp_pipeline_types_from_shader_stages(mesa_to_vk_shader_stage(pstage))) - 1;
-   return state->has_pcbuf[pstage] ? state->push_size[type] : 0;
-}
-
 static void
 update_pcbuf(struct rendering_state *state, mesa_shader_stage pstage,
              mesa_shader_stage api_stage)
 {
-   unsigned size = get_pcbuf_size(state, api_stage);
+   enum lvp_pipeline_type type =
+      ffs(lvp_pipeline_types_from_shader_stages(mesa_to_vk_shader_stage(api_stage))) - 1;
+   unsigned size = state->has_pcbuf[api_stage] ? state->push_size[type] : 0;
+
    if (size) {
       uint8_t *mem;
       struct pipe_constant_buffer cbuf;
@@ -361,6 +376,7 @@ update_pcbuf(struct rendering_state *state, mesa_shader_stage pstage,
       state->pctx->set_constant_buffer(state->pctx, pstage, 0, &cbuf);
    }
    state->pcbuf_dirty[api_stage] = false;
+   state->emitted_push_size[type] = size;
 }
 
 static void emit_compute_state(struct rendering_state *state)
@@ -584,14 +600,18 @@ static void emit_state(struct rendering_state *state)
    if (state->dsa_dirty) {
       bool s0_enabled = state->dsa_state.stencil[0].enabled;
       bool s1_enabled = state->dsa_state.stencil[1].enabled;
+      bool d_enabled = state->dsa_state.depth_enabled;
       if (state->dsa_no_stencil) {
          state->dsa_state.stencil[0].enabled = false;
          state->dsa_state.stencil[1].enabled = false;
       }
+      if (state->dsa_no_depth)
+         state->dsa_state.depth_enabled = false;
       cso_set_depth_stencil_alpha(state->cso, &state->dsa_state);
       state->dsa_dirty = false;
       state->dsa_state.stencil[0].enabled = s0_enabled;
       state->dsa_state.stencil[1].enabled = s1_enabled;
+      state->dsa_state.depth_enabled = d_enabled;
    }
 
    if (state->sample_mask_dirty) {
@@ -678,6 +698,9 @@ handle_compute_shader(struct rendering_state *state, struct lvp_shader *shader)
    state->dispatch_info.block[1] = shader->pipeline_nir->nir->info.workgroup_size[1];
    state->dispatch_info.block[2] = shader->pipeline_nir->nir->info.workgroup_size[2];
    state->compute_shader_dirty = true;
+
+   if (shader->heaps && shader->embedded_samplers)
+      handle_set_stage_buffer(state, shader->embedded_samplers, 0, MESA_SHADER_COMPUTE, LVP_DESCRIPTOR_HEAP_EMBEDDED);
 }
 
 static void handle_compute_pipeline(struct vk_cmd_queue_entry *cmd,
@@ -705,6 +728,9 @@ static void handle_ray_tracing_pipeline(struct vk_cmd_queue_entry *cmd,
    state->trace_rays_info.block[0] = shader->pipeline_nir->nir->info.workgroup_size[0];
    state->trace_rays_info.block[1] = shader->pipeline_nir->nir->info.workgroup_size[1];
    state->trace_rays_info.block[2] = shader->pipeline_nir->nir->info.workgroup_size[2];
+
+   if (shader->heaps && shader->embedded_samplers)
+      handle_set_stage_buffer(state, shader->embedded_samplers, 0, MESA_SHADER_RAYGEN, LVP_DESCRIPTOR_HEAP_EMBEDDED);
 }
 
 static void
@@ -807,6 +833,9 @@ handle_graphics_stages(struct rendering_state *state, VkShaderStageFlagBits shad
          assert(0);
          break;
       }
+      struct lvp_shader *shader = state->shaders[stage];
+      if (shader->heaps && shader->embedded_samplers)
+         handle_set_stage_buffer(state, shader->embedded_samplers, 0, stage, LVP_DESCRIPTOR_HEAP_EMBEDDED);
    }
 }
 
@@ -1025,6 +1054,19 @@ static void handle_graphics_pipeline(struct lvp_pipeline *pipeline,
          if (!BITSET_TEST(ps->dynamic, MESA_VK_DYNAMIC_CB_BLEND_ENABLES))
             state->blend_state.rt[i].blend_enable = att->blend_enable;
 
+         /* An advanced blend op with dynamic advanced state is lowered in the
+          * fragment shader at draw time. Track the enable for that lowering and
+          * keep HW blending as passthrough. The advanced op must not reach
+          * vk_blend_op_to_pipe() below.
+          */
+         if (att->color_blend_op >= VK_BLEND_OP_ZERO_EXT) {
+            if (!BITSET_TEST(ps->dynamic, MESA_VK_DYNAMIC_CB_BLEND_ENABLES))
+               state->advanced_blend[i].blend_enable = att->blend_enable;
+
+            state->blend_state.rt[i].blend_enable = false;
+            continue;
+         }
+
          if (!att->blend_enable) {
             state->blend_state.rt[i].rgb_func = 0;
             state->blend_state.rt[i].rgb_src_factor = 0;
@@ -1218,14 +1260,17 @@ static void handle_pipeline(struct vk_cmd_queue_entry *cmd,
    } else if (pipeline->type == LVP_PIPELINE_EXEC_GRAPH) {
       state->exec_graph = pipeline;
    }
-   if (pipeline->layout) {
+
+   state->push_size[pipeline->type] = 0;
+   if (pipeline->layout)
       state->push_size[pipeline->type] = pipeline->layout->push_constant_size;
-   } else {
+
+   for (unsigned i = 0; i < ARRAY_SIZE(pipeline->shaders); i++)
+      state->push_size[pipeline->type] = MAX2(state->push_size[pipeline->type], pipeline->shaders[i].push_constant_size);
+
+   if (state->push_size[pipeline->type] != state->emitted_push_size[pipeline->type]) {
       for (unsigned i = 0; i < ARRAY_SIZE(pipeline->shaders); i++)
-         if (pipeline->shaders[i].push_constant_size) {
-            state->push_size[pipeline->type] = pipeline->shaders[i].push_constant_size;
-            break;
-         }
+         state->pcbuf_dirty[i] = true;
    }
 }
 
@@ -1299,24 +1344,6 @@ static void handle_vertex_buffers3(struct vk_cmd_queue_entry *cmd,
    state->vb_dirty = true;
 }
 
-static void
-handle_set_stage_buffer(struct rendering_state *state,
-                        struct pipe_resource *bo,
-                        size_t offset,
-                        mesa_shader_stage stage,
-                        uint32_t index)
-{
-   state->const_buffer[stage][index].buffer = bo;
-   state->const_buffer[stage][index].buffer_offset = offset;
-   state->const_buffer[stage][index].buffer_size = bo->width0;
-   state->const_buffer[stage][index].user_buffer = NULL;
-
-   state->constbuf_dirty[stage] = true;
-
-   if (state->num_const_bufs[stage] <= index)
-      state->num_const_bufs[stage] = index + 1;
-}
-
 static void handle_set_stage(struct rendering_state *state,
                              struct lvp_descriptor_set *set,
                              enum lvp_pipeline_type pipeline_type,
@@ -1350,15 +1377,13 @@ apply_dynamic_offsets(struct lvp_descriptor_set **out_set, const uint32_t *offse
       if (!vk_descriptor_type_is_dynamic(binding->type))
          continue;
 
-      struct lp_descriptor *desc = set->map;
-      desc += binding->descriptor_index;
-
+      struct lp_buffer_descriptor *desc = (struct lp_buffer_descriptor *)(set->map + binding->offset);
       for (uint32_t j = 0; j < binding->array_size; j++) {
          uint32_t offset_index = binding->dynamic_index + j;
          if (offset_index >= offset_count)
             return;
 
-         desc[j].buffer.u = (uint32_t *)((uint8_t *)desc[j].buffer.u + offsets[offset_index]);
+         desc[j].jit.u = (uint32_t *)((uint8_t *)desc[j].jit.u + offsets[offset_index]);
       }
    }
 }
@@ -1959,6 +1984,7 @@ handle_begin_rendering(struct vk_cmd_queue_entry *cmd,
 
    render_att_init(&state->depth_att, info->pDepthAttachment, state->poison_mem, false);
    render_att_init(&state->stencil_att, info->pStencilAttachment, state->poison_mem, true);
+   state->dsa_no_depth = !state->depth_att.imgv;
    state->dsa_no_stencil = !state->stencil_att.imgv;
    state->dsa_dirty = true;
    if (state->depth_att.imgv || state->stencil_att.imgv) {
@@ -3144,7 +3170,14 @@ static void handle_execute_commands(struct vk_cmd_queue_entry *cmd,
 {
    for (unsigned i = 0; i < cmd->u.execute_commands.command_buffer_count; i++) {
       VK_FROM_HANDLE(lvp_cmd_buffer, secondary_buf, cmd->u.execute_commands.command_buffers[i]);
+      bool dsa_no_depth = !secondary_buf->rendering_info.depthAttachmentFormat;
+      bool dsa_no_stencil = !secondary_buf->rendering_info.stencilAttachmentFormat;
+      state->dsa_dirty |= dsa_no_depth != state->dsa_no_depth || dsa_no_stencil != state->dsa_no_stencil;
+      state->dsa_no_depth = dsa_no_depth;
+      state->dsa_no_stencil = dsa_no_stencil;
       lvp_execute_cmd_buffer(&secondary_buf->vk.cmd_queue.cmds, state, print_cmds);
+      state->dsa_no_depth = !state->depth_att.imgv;
+      state->dsa_no_stencil = !state->stencil_att.imgv;
    }
 }
 
@@ -4388,10 +4421,12 @@ handle_shaders(struct vk_cmd_queue_entry *cmd, struct rendering_state *state)
       }
 
       if (stage != MESA_SHADER_COMPUTE) {
-         state->gfx_push_sizes[stage] = shader ? shader->layout->push_constant_size : 0;
+         state->gfx_push_sizes[stage] = shader ? shader->push_constant_size : 0;
          gfx = true;
       } else {
-         state->push_size[1] = shader ? shader->layout->push_constant_size : 0;
+         state->push_size[LVP_PIPELINE_COMPUTE] = shader ? shader->push_constant_size : 0;
+         if (state->push_size[LVP_PIPELINE_COMPUTE] != state->emitted_push_size[LVP_PIPELINE_COMPUTE])
+            state->pcbuf_dirty[MESA_SHADER_COMPUTE] = true;
       }
    }
 
@@ -4409,9 +4444,16 @@ handle_shaders(struct vk_cmd_queue_entry *cmd, struct rendering_state *state)
    }
 
    if (gfx) {
-      state->push_size[0] = 0;
+      state->push_size[LVP_PIPELINE_GRAPHICS] = 0;
       for (unsigned i = 0; i < ARRAY_SIZE(state->gfx_push_sizes); i++)
-         state->push_size[0] += state->gfx_push_sizes[i];
+         state->push_size[LVP_PIPELINE_GRAPHICS] += state->gfx_push_sizes[i];
+
+      if (state->push_size[LVP_PIPELINE_GRAPHICS] != state->emitted_push_size[LVP_PIPELINE_GRAPHICS]) {
+         for (unsigned i = 0; i < bind->stage_count; i++) {
+            mesa_shader_stage stage = vk_to_mesa_shader_stage(bind->stages[i]);
+            state->pcbuf_dirty[stage] = true;
+         }
+      }
    }
 }
 
@@ -4525,7 +4567,9 @@ process_sequence_ext(struct rendering_state *state,
          break;
       }
       case VK_INDIRECT_COMMANDS_TOKEN_TYPE_PUSH_CONSTANT_EXT:
-      case VK_INDIRECT_COMMANDS_TOKEN_TYPE_SEQUENCE_INDEX_EXT: {
+      case VK_INDIRECT_COMMANDS_TOKEN_TYPE_SEQUENCE_INDEX_EXT:
+      case VK_INDIRECT_COMMANDS_TOKEN_TYPE_PUSH_DATA_EXT:
+      case VK_INDIRECT_COMMANDS_TOKEN_TYPE_PUSH_DATA_SEQUENCE_INDEX_EXT: {
          uint32_t *data = input;
          const VkIndirectCommandsPushConstantTokenEXT *info = token->data.pPushConstant;
          cmd->u.push_constants2.push_constants_info = (void*)cmdptr;
@@ -4535,7 +4579,8 @@ process_sequence_ext(struct rendering_state *state,
          pci->offset = info->updateRange.offset;
          pci->size = info->updateRange.size;
          pci->pValues = (void*)((uint8_t*)cmdptr + sizeof(VkPushConstantsInfoKHR));
-         if (token->type == VK_INDIRECT_COMMANDS_TOKEN_TYPE_PUSH_CONSTANT_EXT)
+         if (token->type == VK_INDIRECT_COMMANDS_TOKEN_TYPE_PUSH_CONSTANT_EXT ||
+             token->type == VK_INDIRECT_COMMANDS_TOKEN_TYPE_PUSH_DATA_EXT)
             memcpy((void*)pci->pValues, data, info->updateRange.size);
          else
             memcpy((void*)pci->pValues, &seq, info->updateRange.size);
@@ -4770,13 +4815,10 @@ bind_db_samplers(struct rendering_state *state, enum lvp_pipeline_type pipeline_
       if (!bind_layout->immutable_samplers)
          continue;
 
-      struct lp_descriptor *desc = (void*)db;
-      desc += bind_layout->descriptor_index;
+      struct lp_sampler_descriptor *desc = (struct lp_sampler_descriptor *)(db + bind_layout->offset);
 
       for (uint32_t sampler_index = 0; sampler_index < bind_layout->array_size; sampler_index++) {
-         struct lp_descriptor *immutable_desc = &bind_layout->immutable_samplers[sampler_index];
-         desc[sampler_index].sampler = immutable_desc->sampler;
-         desc[sampler_index].texture.sampler_index = immutable_desc->texture.sampler_index;
+         desc[sampler_index] = bind_layout->immutable_samplers[sampler_index];
          if (pipeline_type == LVP_PIPELINE_RAY_TRACING) {
             did_update |= BITFIELD_BIT(MESA_SHADER_RAYGEN);
          } else {
@@ -4833,6 +4875,42 @@ handle_descriptor_buffer_offsets(struct vk_cmd_queue_entry *cmd, struct renderin
          bind_db_samplers(state, pipeline_type, idx);
       }
    }
+}
+
+static void
+handle_heap(struct vk_cmd_queue_entry *cmd, struct rendering_state *state, enum lvp_descriptor_heap heap)
+{
+   VkBindHeapInfoEXT *bind = cmd->u.bind_sampler_heap_ext.bind_info;
+   pipe_resource_reference(&state->desc_buffers[heap], NULL);
+   state->desc_buffer_addrs[heap] = (void *)(uintptr_t)bind->heapRange.address;
+   state->desc_buffers[heap] = get_buffer_resource(state->pctx, state->desc_buffer_addrs[heap]);
+   for (unsigned i = 0; i < MESA_SHADER_RAYGEN + 1; i++)
+      if (state->desc_buffers[heap])
+         handle_set_stage_buffer(state, state->desc_buffers[heap], 0, i, heap);
+   memset(state->pcbuf_dirty, 1, sizeof(state->pcbuf_dirty));
+   memset(state->constbuf_dirty, 1, sizeof(state->constbuf_dirty));
+
+   // uint32_t *data = (uint32_t *)state->desc_buffer_addrs[heap];
+   // printf("heap[%u]:\n", heap);
+   // for (uint32_t i = 0; i < bind->heapRange.size / 4; i++)
+   //    printf("   %p(0x%x): 0x%x\n", data + i, i * 4, data[i]);
+}
+
+static void
+handle_push_data(struct vk_cmd_queue_entry *cmd, struct rendering_state *state)
+{
+   VkPushDataInfoEXT *push = cmd->u.push_data_ext.push_data_info;
+   memcpy(state->push_constants + push->offset, push->data.address, push->data.size);
+
+   state->pcbuf_dirty[MESA_SHADER_VERTEX] |= true;
+   state->pcbuf_dirty[MESA_SHADER_FRAGMENT] |= true;
+   state->pcbuf_dirty[MESA_SHADER_GEOMETRY] |= true;
+   state->pcbuf_dirty[MESA_SHADER_TESS_CTRL] |= true;
+   state->pcbuf_dirty[MESA_SHADER_TESS_EVAL] |= true;
+   state->pcbuf_dirty[MESA_SHADER_COMPUTE] |= true;
+   state->pcbuf_dirty[MESA_SHADER_TASK] |= true;
+   state->pcbuf_dirty[MESA_SHADER_MESH] |= true;
+   state->pcbuf_dirty[MESA_SHADER_RAYGEN] |= true;
 }
 
 static void *
@@ -5180,7 +5258,8 @@ handle_trace_rays_indirect2(struct vk_cmd_queue_entry *cmd, struct rendering_sta
 static void
 handle_write_buffer_cp(struct vk_cmd_queue_entry *cmd, struct rendering_state *state)
 {
-   struct lvp_cmd_write_buffer_cp *write = (struct lvp_cmd_write_buffer_cp *)cmd;
+   struct lvp_cmd_write_buffer_cp *write =
+      (struct lvp_cmd_write_buffer_cp *)((uint8_t *)cmd + offsetof(struct vk_cmd_queue_entry, u));
 
    finish_fence(state);
 
@@ -5216,7 +5295,8 @@ handle_dispatch_unaligned(struct vk_cmd_queue_entry *cmd, struct rendering_state
 static void
 handle_fill_buffer_addr(struct vk_cmd_queue_entry *cmd, struct rendering_state *state)
 {
-   struct lvp_cmd_fill_buffer_addr *fill = (struct lvp_cmd_fill_buffer_addr *)cmd;
+   struct lvp_cmd_fill_buffer_addr *fill =
+      (struct lvp_cmd_fill_buffer_addr *)((uint8_t *)cmd + offsetof(struct vk_cmd_queue_entry, u));
 
    finish_fence(state);
 
@@ -5229,7 +5309,8 @@ handle_fill_buffer_addr(struct vk_cmd_queue_entry *cmd, struct rendering_state *
 static void
 handle_encode_as(struct vk_cmd_queue_entry *cmd, struct rendering_state *state)
 {
-   struct lvp_cmd_encode_as *encode = (struct lvp_cmd_encode_as *)cmd;
+   struct lvp_cmd_encode_as *encode =
+      (struct lvp_cmd_encode_as *)((uint8_t *)cmd + offsetof(struct vk_cmd_queue_entry, u));
 
    finish_fence(state);
 
@@ -5370,6 +5451,11 @@ void lvp_add_enqueue_cmd_entrypoints(struct vk_device_dispatch_table *disp)
    ENQUEUE_CMD(CmdSetColorBlendEnableEXT)
    ENQUEUE_CMD(CmdSetColorBlendEquationEXT)
    ENQUEUE_CMD(CmdSetColorWriteMaskEXT)
+
+   /* VK_EXT_descriptor_heap */
+   ENQUEUE_CMD(CmdBindSamplerHeapEXT)
+   ENQUEUE_CMD(CmdBindResourceHeapEXT)
+   ENQUEUE_CMD(CmdPushDataEXT)
 
    ENQUEUE_CMD(CmdBindShadersEXT)
    /* required for EXT_shader_object */
@@ -5877,6 +5963,15 @@ static void lvp_execute_cmd_buffer(struct list_head *cmds,
          break;
       case VK_CMD_BIND_DESCRIPTOR_BUFFER_EMBEDDED_SAMPLERS2_EXT:
          handle_descriptor_buffer_embedded_samplers(cmd, state);
+         break;
+      case VK_CMD_BIND_SAMPLER_HEAP_EXT:
+         handle_heap(cmd, state, LVP_DESCRIPTOR_HEAP_SAMPLER);
+         break;
+      case VK_CMD_BIND_RESOURCE_HEAP_EXT:
+         handle_heap(cmd, state, LVP_DESCRIPTOR_HEAP_RESOURCE);
+         break;
+      case VK_CMD_PUSH_DATA_EXT:
+         handle_push_data(cmd, state);
          break;
 #ifdef VK_ENABLE_BETA_EXTENSIONS
       case VK_CMD_INITIALIZE_GRAPH_SCRATCH_MEMORY_AMDX:

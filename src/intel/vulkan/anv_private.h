@@ -1554,8 +1554,10 @@ struct anv_physical_device {
 
     bool                                        has_scratch_page;
 
-    /** Whether we allow the application to control compression */
+    /** Whether the device can support compression control */
     bool                                        has_compression_control;
+    /** Whether the device expose support for compression control */
+    bool                                        expose_compression_control;
 
     struct {
       uint32_t                                  family_count;
@@ -6656,6 +6658,7 @@ struct anv_vid_mem {
 #define ANV_MB_WIDTH 16
 #define ANV_MB_HEIGHT 16
 #define ANV_VIDEO_H264_MAX_DPB_SLOTS 17
+#define ANV_VIDEO_AV1_MAX_DPB_SLOTS 9 /* STD_VIDEO_AV1_NUM_REF_FRAMES + 1 */
 #define ANV_VIDEO_H264_MAX_NUM_REF_FRAME 16
 #define ANV_VIDEO_H265_MAX_NUM_REF_FRAME 16
 #define ANV_VIDEO_H265_HCP_NUM_REF_FRAME 8
@@ -6752,6 +6755,7 @@ struct anv_av1_video_refs_info {
    const struct anv_image_view *iv;
    uint32_t array_layer;
    uint8_t default_cdf_index;
+   uint32_t coded_width;
 };
 
 struct anv_vp9_last_frame_info {
@@ -6771,7 +6775,7 @@ struct anv_video_session {
 
    /* the decoder needs some private memory allocations */
    struct anv_vid_mem vid_mem[ANV_VID_MEM_AV1_MAX];
-   struct anv_av1_video_refs_info prev_refs[STD_VIDEO_AV1_NUM_REF_FRAMES];
+   struct anv_av1_video_refs_info prev_refs[ANV_VIDEO_AV1_MAX_DPB_SLOTS];
 
    /* For VP9 decoding from here */
    struct anv_vp9_last_frame_info vp9_last_frame;

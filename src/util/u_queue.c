@@ -27,6 +27,7 @@
 #include "u_queue.h"
 
 #include "c11/threads.h"
+#include "perf/u_perfetto.h"
 #include "util/u_cpu_detect.h"
 #include "util/os_time.h"
 #include "util/u_string.h"
@@ -271,8 +272,10 @@ util_queue_thread_func(void *input)
       assert(queue->num_queued >= 0 && queue->num_queued <= queue->max_jobs);
 
       /* wait if the queue is empty */
-      while (thread_index < queue->num_threads && queue->num_queued == 0)
+      while (thread_index < queue->num_threads && queue->num_queued == 0) {
+         util_perfetto_thread_flush();
          cnd_wait(&queue->has_queued_cond, &queue->lock);
+      }
 
       /* only kill threads that are above "num_threads" */
       if (thread_index >= queue->num_threads) {
@@ -604,8 +607,10 @@ util_queue_add_job_locked(struct util_queue *queue,
          queue->max_jobs = new_max_jobs;
       } else {
          /* Wait until there is a free slot. */
-         while (queue->num_queued == queue->max_jobs)
+         while (queue->num_queued == queue->max_jobs) {
+            util_perfetto_thread_flush();
             cnd_wait(&queue->has_space_cond, &queue->lock);
+         }
       }
    }
 

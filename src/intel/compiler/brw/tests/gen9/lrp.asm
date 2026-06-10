@@ -1,5 +1,5 @@
-lrp(8)          g4<1>F          g16<4,4,1>F     g7.2<0,1,0>F    g6.6<0,1,0>F { align16 1Q };
-lrp(16)         g4<1>F          g2.4<0,1,0>F    g2.2<0,1,0>F    g2.0<0,1,0>F { align16 1H };
-lrp.z.f0.0(8)   g8<1>F          g3.2<0,1,0>F    g3.1<0,1,0>F    g3.0<0,1,0>F { align16 1Q };
-lrp.sat(8)      g7<1>F          g10<4,4,1>F     g13<4,4,1>F     g16<4,4,1>F { align16 1Q };
-lrp.sat(16)     g18<1>F         g20<4,4,1>F     g26<4,4,1>F     g32<4,4,1>F { align16 1H };
+        lrp (8)                   r4<0>:f       r16<0;0>:f        r7.2<0;0>.r:f     r6.6<0>.r:f {Align16}
+        lrp (16)                  r4<0>:f       r2.4<0;0>.r:f     r2.2<0;0>.r:f     r2<0>.r:f {Align16}
+        lrp (8)        (eq)f0.0   r8<0>:f       r3.2<0;0>.r:f     r3.1<0;0>.r:f     r3<0>.r:f {Align16}
+        lrp.sat (8)               r7<0>:f       r10<0;0>:f        r13<0;0>:f        r16<0>:f {Align16}
+        lrp.sat (16)              r18<0>:f      r20<0;0>:f        r26<0;0>:f        r32<0>:f {Align16}

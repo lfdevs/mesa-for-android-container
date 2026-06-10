@@ -12,6 +12,7 @@
 
 #include "util/format/u_format.h"
 #include "util/format/u_format_s3tc.h"
+#include "util/os_misc.h"
 #include "util/u_debug.h"
 #include "util/u_inlines.h"
 #include "util/u_memory.h"
@@ -25,7 +26,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include "drm-uapi/drm_fourcc.h"
-#include <sys/sysinfo.h>
 
 #include "freedreno_fence.h"
 #include "freedreno_perfetto.h"
@@ -165,6 +165,8 @@ fd_screen_destroy(struct pipe_screen *pscreen)
    if (screen->ro)
       screen->ro->destroy(screen->ro);
 
+   fd_perfcntr_state_free(screen->perfcntrs);
+
    fd_bc_fini(&screen->batch_cache);
    fd_gmem_screen_fini(pscreen);
 
@@ -186,18 +188,21 @@ fd_screen_destroy(struct pipe_screen *pscreen)
 static uint64_t
 get_memory_size(struct fd_screen *screen)
 {
-   uint64_t system_memory;
+   float percent = screen->driconf.heap_memory_percent;
+   uint64_t va_size = 0;
 
-   if (!os_get_total_physical_memory(&system_memory))
-      return 0;
-   if (fd_device_version(screen->dev) >= FD_VERSION_VA_SIZE) {
-      uint64_t va_size;
-      if (!fd_pipe_get_param(screen->pipe, FD_VA_SIZE, &va_size)) {
-         system_memory = MIN2(system_memory / 2, va_size);
-      }
-   }
+   if (fd_device_version(screen->dev) >= FD_VERSION_VA_SIZE)
+      fd_pipe_get_param(screen->pipe, FD_VA_SIZE, &va_size);
 
-   return system_memory;
+   if (percent == OS_GPU_HEAP_SIZE_HEURISTIC)
+      percent = va_size ? 0.5f : 1.0f;
+
+   uint64_t memory = os_get_gpu_heap_size(percent, NULL);
+
+   if (va_size)
+      memory = MIN2(memory, va_size);
+
+   return memory;
 }
 
 static void
@@ -352,11 +357,11 @@ fd_init_compute_caps(struct fd_screen *screen)
 
    caps->max_threads_per_block = options->max_workgroup_invocations;
 
-   caps->max_global_size = screen->ram_size;
+   caps->max_global_size = os_get_gpu_heap_size(1.0f, NULL);
 
    caps->max_local_size = screen->info->cs_shared_mem_size;
 
-   caps->max_mem_alloc_size = screen->ram_size;
+   caps->max_mem_alloc_size = caps->max_global_size;
 
    caps->max_clock_frequency = screen->max_freq / 1000000;
 
@@ -1031,6 +1036,8 @@ fd_screen_create(int fd,
                           .deviceName = fd_dev_name(screen->dev_id),
                        });
 
+   screen->driconf.heap_memory_percent =
+         driQueryOptionf(config->options, "heap_memory_percent");
    screen->driconf.conservative_lrz =
          !driQueryOptionb(config->options, "disable_conservative_lrz");
    screen->driconf.enable_throttling =
@@ -1039,10 +1046,6 @@ fd_screen_create(int fd,
          driQueryOptionb(config->options, "dual_color_blend_by_location");
    if (driQueryOptionb(config->options, "disable_explicit_sync_heuristic"))
       fd_device_disable_explicit_sync_heuristic(dev);
-
-   struct sysinfo si;
-   sysinfo(&si);
-   screen->ram_size = si.totalram;
 
    DBG("Pipe Info:");
    DBG(" GPU-id:          %s", fd_dev_name(screen->dev_id));
@@ -1088,7 +1091,10 @@ fd_screen_create(int fd,
       if (screen->primtypes[i])
          screen->primtypes_mask |= (1 << i);
 
-   if (FD_DBG(PERFC)) {
+   screen->perfcntrs = fd_perfcntr_state_alloc(screen->dev_id, fd);
+
+   if (FD_DBG(PERFC) ||
+       (screen->perfcntrs && fd_perfcntr_has_reservation(screen->perfcntrs))) {
       screen->perfcntr_groups =
          fd_perfcntrs(screen->dev_id, &screen->num_perfcntr_groups);
    }

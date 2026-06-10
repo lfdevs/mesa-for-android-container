@@ -271,6 +271,17 @@ if with_gfx_compute
     'util/u_simple_shaders.c',
     'util/u_tests.c',
   )
+
+  files_libgallium += custom_target(
+    'draw_nir_lower_opcodes.c',
+    input : 'draw/draw_nir_lower_opcodes.py',
+    output : 'draw_nir_lower_opcodes.c',
+    command : [
+      prog_python, '@INPUT@', '-p', dir_compiler_nir,
+    ],
+    capture : true,
+    depend_files : nir_algebraic_depends,
+  )
 endif
 
 if dep_libdrm.found()

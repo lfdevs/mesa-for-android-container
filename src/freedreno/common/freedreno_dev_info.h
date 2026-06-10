@@ -332,6 +332,12 @@ struct fd_dev_info {
       /* True if PC_DGEN_SO_CNTL is present. */
       bool has_pc_dgen_so_cntl;
 
+      /* Some GPUs have an errata where fair scheduling in round-robin mode is
+       * not guaranteed unless at most 8 waves are resident, out of a maximum
+       * of 16.
+       */
+      bool round_robin_errata;
+
       /*
        * A7XX / gen7
        */
@@ -474,6 +480,11 @@ struct fd_dev_info {
 
       /* The amount of valid draw state IDs. */
       uint32_t max_draw_states;
+
+      /* Whether GRAS_CL_INTERP_CNTL has FACENESS/CENTERRHW and thus
+       * being able to avoid setting ij_linear_sample for FragFace/FragCoord.
+       */
+      bool has_implicit_fragface_fragcoord_ij_linear;
    } props;
 };
 

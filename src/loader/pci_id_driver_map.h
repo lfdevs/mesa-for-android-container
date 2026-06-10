@@ -44,6 +44,7 @@ static const int vmwgfx_chip_ids[] = {
 #undef CHIPSET
 };
 
+bool amd_predicate(int fd, const char *driver);
 bool iris_predicate(int fd, const char *driver);
 bool nouveau_zink_predicate(int fd, const char *driver);
 
@@ -59,7 +60,7 @@ static const struct {
    { 0x8086, "iris", NULL, -1, iris_predicate },
    { 0x1002, "r300", r300_chip_ids, ARRAY_SIZE(r300_chip_ids) },
    { 0x1002, "r600", r600_chip_ids, ARRAY_SIZE(r600_chip_ids) },
-   { 0x1002, "radeonsi", NULL, -1 },
+   { 0x1002, "radeonsi", NULL, -1, amd_predicate },
    { 0x10de, "nouveau", NULL, -1, nouveau_zink_predicate },
    { 0x10de, "zink", NULL, -1, nouveau_zink_predicate },
    { 0x1af4, "virtio_gpu", virtio_gpu_chip_ids, ARRAY_SIZE(virtio_gpu_chip_ids) },

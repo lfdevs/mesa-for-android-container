@@ -34,7 +34,9 @@ struct vk_shader_module;
    (VK_SHADER_STAGE_VERTEX_BIT | \
     VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT | \
     VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT | \
-    VK_SHADER_STAGE_GEOMETRY_BIT)
+    VK_SHADER_STAGE_GEOMETRY_BIT | \
+    VK_SHADER_STAGE_TASK_BIT_EXT | \
+    VK_SHADER_STAGE_MESH_BIT_EXT)
 
 #define NVK_SHADER_STAGE_GRAPHICS_BITS \
    (NVK_SHADER_STAGE_VTGM_BITS | VK_SHADER_STAGE_FRAGMENT_BIT)
@@ -48,8 +50,15 @@ nvk_last_vtgm_shader_stage(VkShaderStageFlags stages)
 }
 
 static inline uint32_t
-nvk_cbuf_binding_for_stage(mesa_shader_stage stage)
+nvk_cbuf_binding_for_stage(mesa_shader_stage stage, bool has_task_shader)
 {
+   if (stage == MESA_SHADER_MESH && !has_task_shader)
+      return MESA_SHADER_VERTEX;
+   else if (stage == MESA_SHADER_MESH)
+      return MESA_SHADER_TESS_EVAL;
+   else if (stage == MESA_SHADER_TASK)
+      return MESA_SHADER_VERTEX;
+
    return stage;
 }
 
@@ -112,6 +121,11 @@ struct nvk_shader {
     */
    uint64_t hdr_addr;
 
+   /* Address of the GS shader header (or 0 if not present) for mesh
+    * shaders.
+    */
+   uint64_t gs_hdr_addr;
+
    /* Address of the start of the shader data section */
    uint64_t data_addr;
 
@@ -144,12 +158,15 @@ nvk_nir_lower_descriptors(nir_shader *nir,
                           struct vk_descriptor_set_layout * const *set_layouts,
                           struct nvk_cbuf_map *cbuf_map_out);
 
+bool nvk_nir_lower_mesh_shader(nir_shader *nir, VkShaderCreateFlagsEXT shader_flags);
+bool nvk_nir_lower_task_shader(nir_shader *nir);
+
 VkResult
 nvk_compile_nir_shader(struct nvk_device *dev, nir_shader *nir,
                        const VkAllocationCallbacks *alloc,
                        struct nvk_shader **shader_out);
 
-uint32_t mesa_to_nv9097_shader_type(mesa_shader_stage stage);
-uint32_t nvk_pipeline_bind_group(mesa_shader_stage stage);
+uint32_t mesa_to_nv9097_shader_type(mesa_shader_stage stage, bool has_task_shader);
+uint32_t nvk_pipeline_bind_group(mesa_shader_stage stage, bool has_task_shader);
 
 #endif

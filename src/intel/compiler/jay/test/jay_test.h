@@ -8,7 +8,6 @@
 #include <inttypes.h>
 #include "jay_builder.h"
 #include "jay_ir.h"
-#include "jay_private.h"
 #include "shader_enums.h"
 
 static inline jay_block *
@@ -25,12 +24,16 @@ jay_test_builder(void *memctx)
 {
    jay_shader *s = jay_new_shader(memctx, MESA_SHADER_COMPUTE);
    jay_function *f = jay_new_function(s);
-   s->partition.base8 = 8;
 
    struct intel_device_info *devinfo =
       rzalloc(memctx, struct intel_device_info);
    s->devinfo = devinfo;
    s->dispatch_width = 32;
+
+   s->partition.blocks[GPR][s->partition.nr_blocks[GPR]++] = {
+      .len_gpr = 32,
+      .stride = JAY_STRIDE_4,
+   };
 
    unsigned verx10 = 200;
    devinfo->verx10 = verx10;

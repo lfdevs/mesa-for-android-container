@@ -1131,7 +1131,7 @@ tu6_calculate_lrz_state(struct tu_cmd_buffer *cmd,
     */
    if (!disable_lrz_due_to_fs && fs->variant->writes_pos &&
        !fs->variant->fs.early_fragment_tests &&
-       !cmd->device->instance->ignore_frag_depth_direction) {
+       !cmd->device->instance->drirc.misc.ignore_frag_depth_direction) {
       if (fs->variant->fs.depth_layout == FRAG_DEPTH_LAYOUT_NONE ||
           fs->variant->fs.depth_layout == FRAG_DEPTH_LAYOUT_ANY) {
          disable_lrz_due_to_fs = true;
@@ -1295,7 +1295,7 @@ tu6_calculate_lrz_state(struct tu_cmd_buffer *cmd,
     * fragments from draw A which should be visible due to draw B.
     */
    if (blend_status == TU_LRZ_BLEND_READS_DEST_OR_PARTIAL_WRITE &&
-       z_write_enable && cmd->device->instance->conservative_lrz) {
+       z_write_enable && !cmd->device->instance->drirc.misc.disable_conservative_lrz) {
       tu_lrz_disable_write_for_rp(cmd, "Depth write + blending");
    }
 
@@ -1304,7 +1304,7 @@ tu6_calculate_lrz_state(struct tu_cmd_buffer *cmd,
     * of them, but also has color attachments.
     */
    if (blend_status == TU_LRZ_BLEND_ALL_COLOR_WRITES_SKIPPED &&
-       z_write_enable && cmd->device->instance->conservative_lrz) {
+       z_write_enable && !cmd->device->instance->drirc.misc.disable_conservative_lrz) {
       if (cmd->state.lrz.color_written_with_z_test) {
          tu_lrz_disable_write_for_rp(cmd, "Depth write + no color writes");
       }

@@ -441,6 +441,7 @@ msl_emit_io_blocks(struct nir_to_msl_ctx *ctx, nir_shader *shader)
       fs_output_block(shader, ctx);
       break;
    case MESA_SHADER_COMPUTE:
+   case MESA_SHADER_TESS_CTRL:
       break;
    default:
       assert(0);

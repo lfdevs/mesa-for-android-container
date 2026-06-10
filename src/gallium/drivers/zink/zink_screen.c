@@ -3113,6 +3113,7 @@ init_driver_workarounds(struct zink_screen *screen)
    case VK_DRIVER_ID_MESA_LLVMPIPE:
    case VK_DRIVER_ID_MESA_PANVK:
    case VK_DRIVER_ID_ARM_PROPRIETARY:
+   case VK_DRIVER_ID_QUALCOMM_PROPRIETARY:
       screen->driver_workarounds.can_do_invalid_linear_modifier = true;
       break;
    default:
@@ -3186,6 +3187,10 @@ init_driver_workarounds(struct zink_screen *screen)
 
    if (!screen->resizable_bar)
       screen->info.have_EXT_host_image_copy = false;
+
+   /* required for SSO usage */
+   if (!screen->info.have_KHR_maintenance11)
+      screen->info.have_EXT_shader_object = false;
 
    /* msrtss being enabled for all singlesampled images has a massive memory usage implication on this
     * driver. temporary, could be removed after the driver handles shadow images better. */

@@ -11,9 +11,6 @@
  * This file defines struct brw_reg, which is our representation for EU
  * registers.  They're not a hardware specific format, just an abstraction
  * that intends to capture the full flexibility of the hardware registers.
- *
- * The brw_eu_emit.c layer's brw_set_dest/brw_set_src[01] functions encode
- * the abstract brw_reg type into the actual hardware instruction encoding.
  */
 
 #pragma once

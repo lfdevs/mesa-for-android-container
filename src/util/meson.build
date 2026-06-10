@@ -213,9 +213,33 @@ endif
 
 files_drirc = files('00-mesa-defaults.conf')
 
-if with_amd_vk
-  files_drirc += files('00-radv-defaults.conf')
-endif
+foreach i : [
+  [with_amd_vk, '00-radv-defaults.conf'],
+  [with_intel_vk, '00-anv-defaults.conf'],
+  [with_intel_hasvk, '00-hasvk-defaults.conf'],
+  [with_nouveau_vk, '00-nvk-defaults.conf'],
+  [with_microsoft_vk, '00-dzn-defaults.conf'],
+  [with_freedreno_vk, '00-turnip-defaults.conf'],
+  [with_gallium_r300, '00-r300-defaults.conf'],
+  [with_gallium_iris, '00-iris-defaults.conf'],
+  [with_gallium_crocus, '00-crocus-defaults.conf'],
+  [with_gallium_asahi, '00-asahi-defaults.conf'],
+  [with_gallium_v3d, '00-v3d-defaults.conf'],
+  [with_asahi_vk, '00-hk-defaults.conf'],
+  [with_panfrost_vk, '00-panvk-defaults.conf'],
+  [with_gallium_virgl, '00-virtio_gpu-defaults.conf'],
+  [with_gallium_panfrost, '00-panfrost-defaults.conf'],
+  [with_gallium_radeonsi, '00-radeonsi-defaults.conf'],
+  [with_gallium_zink, '00-zink-defaults.conf'],
+  [with_gallium_r600, '00-r600-defaults.conf'],
+  [with_gallium_freedreno, '00-msm-defaults.conf'],
+  [with_gallium_d3d12, '00-d3d12-defaults.conf'],
+  [with_gallium_svga, '00-vmwgfx-defaults.conf'],
+]
+  if i[0]
+    files_drirc += files(i[1])
+  endif
+endforeach
 
 drirc_gen = files('drirc_gen.py')
 
@@ -225,7 +249,7 @@ if with_tests
     test(
       'drirc xml validation',
       prog_xmllint,
-      args : ['--noout', '--valid', files_drirc],
+      args : ['--noout', '--dtdvalid', files('driconf.dtd'), files_drirc],
       suite : ['util'],
     )
   endif

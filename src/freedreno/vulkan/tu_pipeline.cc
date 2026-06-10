@@ -359,7 +359,7 @@ sp_xs_config(const struct ir3_shader_variant *v)
 static bool
 push_shared_consts(const struct ir3_shader_variant *v)
 {
-   return v && v->shader_options.push_consts_type == IR3_PUSH_CONSTS_SHARED_PREAMBLE;
+   return v && v->const_state->push_consts_type == IR3_PUSH_CONSTS_SHARED_PREAMBLE;
 }
 
 template <chip CHIP>
@@ -1777,6 +1777,9 @@ tu_pipeline_builder_compile_shaders(struct tu_pipeline_builder *builder,
    struct tu_shader_key keys[ARRAY_SIZE(stage_infos)] = { };
    for (mesa_shader_stage stage = MESA_SHADER_VERTEX;
         stage < ARRAY_SIZE(keys); stage = (mesa_shader_stage) (stage+1)) {
+      keys[stage].version =
+         builder->device->instance->drirc.misc.override_graphics_shader_version;
+
       const VkPipelineShaderStageRequiredSubgroupSizeCreateInfo *subgroup_info = NULL;
       if (stage_infos[stage])
          subgroup_info = vk_find_struct_const(stage_infos[stage],
@@ -1849,7 +1852,7 @@ tu_pipeline_builder_compile_shaders(struct tu_pipeline_builder *builder,
       keys[MESA_SHADER_FRAGMENT].custom_resolve =
          builder->graphics_state.rp->custom_resolve;
 
-      if (builder->device->physical_device->instance->emulate_alpha_to_coverage) {
+      if (builder->device->physical_device->instance->drirc.misc.emulate_alpha_to_coverage) {
          keys[MESA_SHADER_FRAGMENT].emulate_alpha_to_coverage = true;
 
          /* Don't emulate if we know it won't be enabled. */
@@ -3148,30 +3151,42 @@ static const enum mesa_vk_dynamic_graphics_state tu_disable_fs_state[] = {
 };
 
 static bool
+tu_fs_disable_safe_for_occlusion_query(const struct tu_shader *fs)
+{
+   return !fs || !(fs->variant->has_kill || fs->variant->writes_smask);
+}
+
+static bool
 tu_calc_disable_fs(const struct vk_color_blend_state *cb,
                    const struct vk_render_pass_state *rp,
                    bool alpha_to_coverage_enable,
-                   const struct tu_shader *fs)
+                   const struct tu_shader *fs,
+                   bool occlusion_query_may_be_running)
 {
    if (alpha_to_coverage_enable)
       return false;
-   if (fs && !fs->variant->writes_only_color)
+   if (fs && !fs->variant->has_no_side_effects)
+      return false;
+   if (occlusion_query_may_be_running && !tu_fs_disable_safe_for_occlusion_query(fs))
       return false;
 
-   bool has_enabled_attachments = false;
+   bool has_enabled_color_attachments = false;
    for (unsigned i = 0; i < cb->attachment_count; i++) {
       if (rp->color_attachment_formats[i] == VK_FORMAT_UNDEFINED)
          continue;
 
       const struct vk_color_blend_attachment_state *att = &cb->attachments[i];
       if ((cb->color_write_enables & (1u << i)) && att->write_mask != 0) {
-         has_enabled_attachments = true;
+         has_enabled_color_attachments = true;
          break;
       }
    }
 
+   bool has_enabled_ds_attachment =
+      rp->attachments & (MESA_VK_RP_ATTACHMENT_DEPTH_BIT | MESA_VK_RP_ATTACHMENT_STENCIL_BIT);
+
    return !fs || fs->variant->empty ||
-          (fs->variant->writes_only_color && !has_enabled_attachments);
+          (!has_enabled_color_attachments && (!has_enabled_ds_attachment || fs->variant->has_no_ds_effects));
 }
 
 static void
@@ -3182,7 +3197,7 @@ tu_emit_disable_fs(struct tu_disable_fs *disable_fs,
                    const struct tu_shader *fs)
 {
    disable_fs->disable_fs =
-      tu_calc_disable_fs(cb, rp, alpha_to_coverage_enable, fs);
+      tu_calc_disable_fs(cb, rp, alpha_to_coverage_enable, fs, false);
    disable_fs->valid = true;
 }
 
@@ -3293,7 +3308,7 @@ tu6_emit_blend(struct tu_cs *cs,
 {
    bool rop_reads_dst = cb->logic_op_enable && tu_logic_op_reads_dst((VkLogicOp)cb->logic_op);
    enum a3xx_rop_code rop = tu6_rop((VkLogicOp)cb->logic_op);
-   if (cs->device->physical_device->instance->emulate_alpha_to_coverage)
+   if (cs->device->physical_device->instance->drirc.misc.emulate_alpha_to_coverage)
       alpha_to_coverage_enable = false;
 
    uint32_t blend_enable_mask = 0;
@@ -3985,7 +4000,8 @@ tu_pipeline_builder_emit_state(struct tu_pipeline_builder *builder,
                         builder->graphics_state.rp);
    if (EMIT_STATE(
           disable_fs,
-          attachments_valid && pipeline_contains_all_shader_state(pipeline)))
+          attachments_valid && pipeline_contains_all_shader_state(pipeline) &&
+             tu_fs_disable_safe_for_occlusion_query(pipeline->shaders[MESA_SHADER_FRAGMENT])))
       tu_emit_disable_fs(&pipeline->disable_fs, cb,
                          builder->graphics_state.rp,
                          builder->graphics_state.ms->alpha_to_coverage_enable,
@@ -4245,15 +4261,17 @@ tu_emit_draw_state(struct tu_cmd_buffer *cmd)
 
    if (!cmd->state.pipeline_disable_fs &&
        (EMIT_STATE(disable_fs) ||
-        (cmd->state.dirty & (TU_CMD_DIRTY_SUBPASS | TU_CMD_DIRTY_FS)))) {
+        (cmd->state.dirty & (TU_CMD_DIRTY_SUBPASS | TU_CMD_DIRTY_FS |
+                             TU_CMD_DIRTY_DISABLE_FS)))) {
       bool disable_fs = tu_calc_disable_fs(
          &cmd->vk.dynamic_graphics_state.cb, &cmd->state.vk_rp,
          cmd->vk.dynamic_graphics_state.ms.alpha_to_coverage_enable,
-         cmd->state.shaders[MESA_SHADER_FRAGMENT]);
+         cmd->state.shaders[MESA_SHADER_FRAGMENT],
+         cmd->state.occlusion_query_may_be_running);
 
       if (disable_fs != cmd->state.disable_fs) {
          cmd->state.disable_fs = disable_fs;
-         cmd->state.dirty |= TU_CMD_DIRTY_DISABLE_FS;
+         cmd->state.dirty |= TU_CMD_DIRTY_RAST | TU_CMD_DIRTY_LRZ;
       }
    }
 
@@ -4272,7 +4290,7 @@ tu_emit_draw_state(struct tu_cmd_buffer *cmd)
    DRAW_STATE_COND(rast, TU_DYNAMIC_STATE_RAST,
                    cmd->state.dirty & (TU_CMD_DIRTY_SUBPASS |
                                        TU_CMD_DIRTY_PER_VIEW_VIEWPORT |
-                                       TU_CMD_DIRTY_DISABLE_FS),
+                                       TU_CMD_DIRTY_RAST),
                    &cmd->vk.dynamic_graphics_state.rs,
                    &cmd->vk.dynamic_graphics_state.vp,
                    cmd->state.vk_mv.view_mask != 0,
@@ -4919,6 +4937,7 @@ tu_compute_pipeline_create(VkDevice device,
    pipeline->base.active_stages = VK_SHADER_STAGE_COMPUTE_BIT;
 
    struct tu_shader_key key = { };
+   key.version = dev->instance->drirc.misc.override_compute_shader_version;
    bool allow_varying_subgroup_size =
       (stage_info->flags &
        VK_PIPELINE_SHADER_STAGE_CREATE_ALLOW_VARYING_SUBGROUP_SIZE_BIT_EXT);

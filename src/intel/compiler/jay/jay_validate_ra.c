@@ -58,31 +58,45 @@ print_regfile(struct regfile *rf, FILE *fp)
 }
 
 static bool
-validate_src(struct jay_partition *partition,
-             jay_inst *I,
-             unsigned s,
-             struct regfile *rf,
-             jay_def def)
+validate_regblock(jay_shader *shader, jay_def x)
+{
+   if (x.file < JAY_NUM_GRF_FILES) {
+      struct jay_partition *p = &shader->partition;
+      struct jay_register_block B = jay_lookup_block(p, x.reg, x.file);
+
+      jay_foreach_comp(x, c) {
+         struct jay_register_block A = jay_lookup_block(p, x.reg + c, x.file);
+         if (memcmp(&A, &B, sizeof(A))) {
+            fprintf(stderr, "cannot cross partition blocks\n");
+            return false;
+         }
+      }
+
+      if (B.type == JAY_BLOCK_SPILL) {
+         fprintf(stderr, "cannot access reserved spill registers\n");
+         return false;
+      }
+   }
+
+   return true;
+}
+
+static bool
+validate_src(
+   jay_shader *shader, jay_inst *I, unsigned s, struct regfile *rf, jay_def def)
 {
    jay_foreach_comp(def, c) {
       uint32_t actual = *def_reg(rf, def, c);
 
-      if (def.file == GPR) {
-         assert(jay_gpr_to_stride(partition, def.reg) ==
-                jay_gpr_to_stride(partition, def.reg + c));
-      }
-
       if (actual == 0 || actual != jay_channel(def, c)) {
          fprintf(stderr, "invalid RA for source %u, channel %u.\n", s, c);
-
          fprintf(stderr, "expected index %u but", jay_channel(def, c));
+
          if (actual)
             fprintf(stderr, " got index %u\n", actual);
          else
             fprintf(stderr, " register is undefined\n");
 
-         jay_print_inst(stderr, I);
-         print_regfile(rf, stderr);
          return false;
       }
    }
@@ -93,8 +107,9 @@ validate_src(struct jay_partition *partition,
 static bool
 validate_block(jay_function *func, jay_block *block, struct regfile *blocks)
 {
+   jay_shader *shader = func->shader;
    struct regfile *rf = &blocks[block->index];
-   bool success = true;
+   bool all_ok = true;
 
    /* Pathological shaders can end up with loop headers that have only a
     * single predecessor and act like normal blocks. Validate them as such,
@@ -135,25 +150,24 @@ validate_block(jay_function *func, jay_block *block, struct regfile *blocks)
    }
 
    jay_foreach_inst_in_block(block, I) {
+      bool ok = true;
+
       /* Validate sources */
       jay_foreach_ssa_src(I, s) {
+         ok &= validate_regblock(shader, I->src[s]);
+
          if (jay_channel(I->src[s], 0) != JAY_SENTINEL) {
-            success &=
-               validate_src(&func->shader->partition, I, s, rf, I->src[s]);
+            ok &= validate_src(shader, I, s, rf, I->src[s]);
          }
       }
 
       /* Record destinations */
       jay_foreach_dst(I, dst) {
+         ok &= validate_regblock(shader, dst);
+
          if (jay_channel(dst, 0) != JAY_SENTINEL) {
             jay_foreach_comp(dst, c) {
                *def_reg(rf, dst, c) = jay_channel(dst, c);
-
-               if (dst.file == GPR) {
-                  struct jay_partition *p = &func->shader->partition;
-                  assert(jay_gpr_to_stride(p, dst.reg) ==
-                         jay_gpr_to_stride(p, dst.reg + c));
-               }
             }
          }
       }
@@ -170,9 +184,16 @@ validate_block(jay_function *func, jay_block *block, struct regfile *blocks)
             *def_reg(rf, I->dst, c) = *def_reg(rf, I->src[0], c);
          }
       }
+
+      if (!ok) {
+         jay_print_inst(stderr, I);
+         print_regfile(rf, stderr);
+      }
+
+      all_ok &= ok;
    }
 
-   return success;
+   return all_ok;
 }
 
 void

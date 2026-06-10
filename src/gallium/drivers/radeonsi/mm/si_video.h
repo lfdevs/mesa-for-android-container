@@ -18,6 +18,10 @@ enum ac_video_codec si_pipe_video_profile_to_codec(enum pipe_video_profile profi
 /* generate a stream handle */
 unsigned si_vid_alloc_stream_handle(void);
 
+struct si_resource *si_vid_create_buffer(struct pipe_screen *screen,
+                                         enum pipe_resource_usage usage,
+                                         unsigned flags, unsigned size);
+
 /* reallocate a buffer, preserving its content */
 bool si_vid_resize_buffer(struct pipe_context *context,
                           struct si_resource **buf, unsigned new_size);

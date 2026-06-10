@@ -72,6 +72,8 @@ struct llvmpipe_screen
 
    char renderer_string[100];
 
+   unsigned char empty_mesh_payload[16384];
+
    struct disk_cache *disk_shader_cache;
 
 #if defined(HAVE_LIBDRM) && defined(HAVE_LINUX_UDMABUF_H)

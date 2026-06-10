@@ -113,6 +113,12 @@ zink_batch_usage_exists(const struct zink_batch_usage *u)
    return u && (u->usage || u->unflushed);
 }
 
+static ALWAYS_INLINE unsigned
+zink_batch_submit_count_diff(unsigned a, unsigned b)
+{
+   return llabs((int64_t)a - (int64_t)b);
+}
+
 static ALWAYS_INLINE void
 zink_batch_state_append(struct zink_batch_state **list, struct zink_batch_state **last, struct zink_batch_state *bs)
 {

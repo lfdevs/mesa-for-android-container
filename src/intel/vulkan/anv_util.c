@@ -677,7 +677,7 @@ anv_ensure_fp64_shader(struct anv_device *device)
    if (device->fp64_nir)
       return device->fp64_nir;
 
-   simple_mtx_unlock(&device->fp64_mutex);
+   simple_mtx_lock(&device->fp64_mutex);
 
    if (!device->fp64_nir) {
       const nir_shader_compiler_options *nir_options =

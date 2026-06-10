@@ -1147,6 +1147,15 @@ system_value("user_data_amd", 8)
 intrinsic("load_use_float_frag_coord_xy_amd", dest_comp=1, bit_sizes=[1],
           flags=[CAN_ELIMINATE, CAN_REORDER])
 
+# If true, derive sample_mask_in from helper_invocation because sample_mask_in
+# is uninitialized.
+intrinsic("load_use_sample_mask_in_amd", dest_comp=1, bit_sizes=[1],
+          flags=[CAN_ELIMINATE, CAN_REORDER])
+
+# The result of ac_get_ps_iter_mask from dynamic state.
+intrinsic("load_ps_iter_mask_amd", dest_comp=1, bit_sizes=[32],
+          flags=[CAN_ELIMINATE, CAN_REORDER])
+
 # Loads for gl_Color, for radeonsi which interpolates these in the shader
 # prolog to handle flatshading and front/back color selection without
 # recompiles and therefore doesn't handle them like normal varyings.
@@ -1413,6 +1422,12 @@ system_value("printf_buffer_size", 1, bit_sizes=[32])
 # printf. After lowering, the intrinsic will set an aborted? bit in the printf
 # buffer. This avoids a separate abort buffer.
 intrinsic("printf_abort")
+
+# SPV_KHR_abort
+# The source is a deref to the message type.
+intrinsic("abort", src_comp=[1])
+system_value("abort_buffer_address", 1, bit_sizes=[32,64])
+system_value("abort_buffer_size", 1, bit_sizes=[32])
 
 # Mesh shading MultiView intrinsics
 system_value("mesh_view_count", 1)
@@ -2291,7 +2306,22 @@ intrinsic("strict_wqm_coord_amd", src_comp=[0], dest_comp=0, bit_sizes=[32], ind
           flags=[CAN_ELIMINATE])
 
 intrinsic("cmat_muladd_amd", src_comp=[-1, -1, 0], dest_comp=0, bit_sizes=src2,
-          indices=[SATURATE, NEG_LO_AMD, NEG_HI_AMD, SRC_BASE_TYPE, SRC_BASE_TYPE2], flags=[CAN_ELIMINATE])
+          indices=[SATURATE, NEG_LO_AMD, NEG_HI_AMD, SRC_BASE_TYPE, SRC_BASE_TYPE2], flags=SUBGROUP_FLAGS)
+
+# Global cooperative matrix load with combined cooperative matrix transpose.
+# This corresponds to RDNA4's global_load_tr_b{64,128}. Like typical cooperative matrix operations,
+# this has to be in subgroup uniform control flow with all invocations active.
+# The definition's component size may be 8-bit or 16-bit and matches the type of matrix to load.
+# The result has 8 components (wave32) or 4 components (wave64). The address is ignored for lanes
+# 32-63, and the actual address that's loaded from is probably offset from the values in lanes 0-31.
+# src[] = { address }.
+intrinsic("load_deref_transpose_amd", bit_sizes=[8, 16], dest_comp=0, src_comp=[1],
+          indices=[ACCESS], flags=SUBGROUP_FLAGS)
+intrinsic("load_global_transpose_amd", bit_sizes=[8, 16], dest_comp=0, src_comp=[1],
+          indices=[ACCESS, ALIGN_MUL, ALIGN_OFFSET], flags=SUBGROUP_FLAGS)
+# src[] = { address, unsigned 32-bit offset }.
+intrinsic("load_global_tr_amd", bit_sizes=[8, 16], dest_comp=0, src_comp=[1, 1],
+          indices=[BASE, ACCESS, ALIGN_MUL, ALIGN_OFFSET], flags=SUBGROUP_FLAGS)
 
 # Get the debug log buffer descriptor.
 intrinsic("load_debug_log_desc_amd", bit_sizes=[32], dest_comp=4, flags=[CAN_ELIMINATE, CAN_REORDER])
@@ -2668,8 +2698,8 @@ intrinsic("load_reloc_const_intel", dest_comp=1, bit_sizes=[32],
           indices=[PARAM_IDX, BASE], flags=[CAN_ELIMINATE, CAN_REORDER])
 
 # Write a render target
-# src[] = { color, src0_alpha, omask, depth, stencil, predicate }
-intrinsic("store_render_target_intel", [4, 1, 1, 1, 1, 1], indices=[TARGET], bit_sizes=[32, 32, 32, 32, 32, 1])
+# src[] = { color, dual_color, src0_alpha, omask, depth, stencil, predicate }
+intrinsic("store_render_target_intel", [4, 4, 1, 1, 1, 1, 1], indices=[TARGET], bit_sizes=[32, 32, 32, 32, 32, 32, 1])
 
 # Shuffle with an offset in bytes instead of a lane index.
 # src[] = { payload, lane offset in bytes }
@@ -2821,9 +2851,10 @@ intrinsic("test_fs_config_intel", dest_comp=1, src_comp=[],
 # The (linear) local invocation index provided in the payload of mesh/task shaders.
 system_value("local_invocation_index_intel", 1)
 
+# The raw value of SR0.0, the contents vary from generation to generation
+system_value("topology_id_intel", 1)
+
 # Intrinsics for Intel bindless thread dispatch
-# BASE=brw_topoloy_id
-system_value("topology_id_intel", 1, indices=[BASE])
 system_value("btd_stack_id_intel", 1)
 system_value("btd_global_arg_addr_intel", 1, bit_sizes=[64])
 system_value("btd_local_arg_addr_intel", 1, bit_sizes=[64])
@@ -2836,8 +2867,8 @@ intrinsic("btd_stack_push_intel", indices=[STACK_SIZE])
 intrinsic("btd_retire_intel")
 
 # Intel-specific ray-tracing intrinsic
-# src[] = { globals, level, operation } SYNCHRONOUS=synchronous
-intrinsic("trace_ray_intel", src_comp=[1, 1, 1], indices=[SYNCHRONOUS])
+# src[] = { globals, payload } SYNCHRONOUS=synchronous
+intrinsic("trace_ray_intel", src_comp=[1, 1], indices=[SYNCHRONOUS])
 
 # System values used for ray-tracing on Intel
 system_value("ray_base_mem_addr_intel", 1, bit_sizes=[64])
@@ -2927,6 +2958,8 @@ intrinsic("ipa_nv", dest_comp=1, src_comp=[1, 1], bit_sizes=[32],
 # FLAGS indicate if we load vertex_id == 2
 intrinsic("ldtram_nv", dest_comp=2, bit_sizes=[32],
           indices=[BASE, FLAGS], flags=[CAN_ELIMINATE, CAN_REORDER])
+# Gives the mask of active threads matching the same source value
+intrinsic("match_any_nv", src_comp=[0], dest_comp=1, flags=SUBGROUP_FLAGS)
 
 # NVIDIA-specific Image intrinsics
 # only used for kepler address calculations.
@@ -3167,4 +3200,7 @@ load("depth_texture_kk", [1], [IMAGE_DIM, IMAGE_ARRAY], [CAN_ELIMINATE])
 intrinsic("load_sampler_handle_kk", [1], 1, [],
           flags=[CAN_ELIMINATE, CAN_REORDER],
           bit_sizes=[16])
+# Texture fence to ensure writes.
+image("fence_kk")
+# Store clip distance to vertex output.
 store("clip_distance_kk", [], [BASE])

@@ -577,50 +577,51 @@ bool
 TexInstr::emit_buf_txf(nir_tex_instr *tex, Inputs& src, Shader& shader)
 {
    auto& vf = shader.value_factory();
-   auto dst = vf.dest_vec4(tex->def, pin_group);
 
    PRegister tex_offset = nullptr;
    if (src.sampler_offset)
       tex_offset = shader.emit_load_to_register(src.sampler_offset);
 
-   auto *real_dst = &dst;
-   RegisterVec4 tmp = vf.temp_vec4(pin_group);
+   RegisterVec4 buf_dest = shader.chip_class() >= ISA_CC_EVERGREEN ?
+                         vf.dest_vec4(tex->def, pin_group) :
+                         vf.temp_vec4(pin_group);
 
-   if (shader.chip_class() < ISA_CC_EVERGREEN) {
-      real_dst = &tmp;
-   }
-
-   auto ir = new LoadFromBuffer(*real_dst,
+   auto ir = new LoadFromBuffer(buf_dest,
                                 {0, 1, 2, 3},
                                 src.coord[0],
                                 0,
                                 tex->texture_index + R600_MAX_CONST_BUFFERS,
                                 tex_offset,
                                 fmt_invalid);
+
    ir->set_fetch_flag(FetchInstr::use_const_field);
-   shader.emit_instruction(ir);
    shader.set_flag(Shader::sh_uses_tex_buffer);
+
+
+   shader.emit_instruction(ir);
 
    if (shader.chip_class() < ISA_CC_EVERGREEN) {
       auto tmp_w = vf.temp_register();
       int buf_sel = R600_SHADER_BUFFER_INFO_SEL + 2 * tex->texture_index;
-      AluInstr *ir = nullptr;
       for (int i = 0; i < 4; ++i) {
-         auto d = i < 3 ? dst[i] : tmp_w;
-         ir = new AluInstr(op2_and_int,
-                           d,
-                           tmp[i],
-                           vf.uniform(buf_sel, i, R600_BUFFER_INFO_CONST_BUFFER),
-                           AluInstr::write);
-         shader.emit_instruction(ir);
-      }
+         auto dst  = vf.dest(tex->def, i, pin_free);
 
-      shader.emit_instruction(
-         new AluInstr(op2_or_int,
-                      dst[3],
-                      tmp_w,
-                      vf.uniform(buf_sel + 1, 0, R600_BUFFER_INFO_CONST_BUFFER),
-                      AluInstr::write));
+         auto d = i < 3 ? dst : tmp_w;
+         shader.emit_instruction(
+            new AluInstr(op2_and_int,
+                         d,
+                         buf_dest[i],
+                         vf.uniform(buf_sel, i, R600_BUFFER_INFO_CONST_BUFFER),
+                               AluInstr::write));
+
+         if (i == 3)
+            shader.emit_instruction(
+               new AluInstr(op2_or_int,
+                            dst,
+                            tmp_w,
+                            vf.uniform(buf_sel + 1, 0, R600_BUFFER_INFO_CONST_BUFFER),
+                            AluInstr::write));
+      }
    }
 
    return true;

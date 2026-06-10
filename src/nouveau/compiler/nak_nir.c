@@ -69,6 +69,14 @@ nak_nir_workgroup_has_one_subgroup(const nir_shader *nir)
        */
       return true;
 
+   case MESA_SHADER_TASK:
+   case MESA_SHADER_MESH:
+      /*
+       * Task and Mesh runs on the Vertex and Tesselation stage and follows the
+       * same rules.
+       */
+      return true;
+
    case MESA_SHADER_COMPUTE:
    case MESA_SHADER_KERNEL: {
       if (nir->info.workgroup_size_variable)
@@ -414,6 +422,7 @@ nak_varying_attr_addr(const struct nak_compiler *nak, gl_varying_slot slot)
       case VARYING_SLOT_POS:              return NAK_ATTR_POSITION;
       case VARYING_SLOT_CLIP_DIST0:       return NAK_ATTR_CLIP_CULL_DIST_0;
       case VARYING_SLOT_CLIP_DIST1:       return NAK_ATTR_CLIP_CULL_DIST_4;
+      case VARYING_SLOT_VIEWPORT_MASK:    return NAK_ATTR_VIEWPORT_MASK;
       case VARYING_SLOT_PRIMITIVE_SHADING_RATE:
          return nak->sm >= 86 ? NAK_ATTR_VPRS_TABLE_INDEX
                               : NAK_ATTR_VIEWPORT_INDEX;
@@ -421,6 +430,23 @@ nak_varying_attr_addr(const struct nak_compiler *nak, gl_varying_slot slot)
       }
    }
 }
+
+uint16_t
+nak_varying_mesh_skew_attr_addr(const struct nak_compiler *nak, gl_varying_slot slot)
+{
+   switch (slot) {
+   /* Don't map to anything in SPH */
+   case VARYING_SLOT_PRIMITIVE_COUNT:
+   case VARYING_SLOT_PRIMITIVE_INDICES:
+      return 0;
+   case VARYING_SLOT_VIEWPORT:
+   case VARYING_SLOT_CULL_PRIMITIVE:
+      UNREACHABLE("Should have been lowered by nak_nir_lower_mesh_emulated_attributes");
+
+   default: return nak_varying_attr_addr(nak, slot);
+   }
+}
+
 
 static uint16_t
 nak_fs_out_addr(gl_frag_result slot, uint32_t blend_idx)
@@ -552,6 +578,9 @@ nak_nir_lower_system_value_intrin(nir_builder *b, nir_intrinsic_instr *intrin,
    }
 
    case nir_intrinsic_load_local_invocation_id: {
+      /* Should have been lowered earlier */
+      assert(!mesa_shader_stage_is_mesh(b->shader->info.stage));
+
       nir_def *x = nak_nir_load_sysval(b, NAK_SV_TID_X,
                                        ACCESS_CAN_REORDER);
       nir_def *y = nak_nir_load_sysval(b, NAK_SV_TID_Y,
@@ -606,6 +635,15 @@ nak_nir_lower_system_value_intrin(nir_builder *b, nir_intrinsic_instr *intrin,
          val = nir_udiv_imm(b, tid, 32);
       }
       break;
+
+   case nir_intrinsic_load_local_invocation_index: {
+      if (b->shader->info.stage != MESA_SHADER_TASK &&
+          b->shader->info.stage != MESA_SHADER_MESH)
+         return false;
+
+      val = nak_nir_load_sysval(b, NAK_SV_LANE_ID, ACCESS_CAN_REORDER);
+      break;
+   }
 
    case nir_intrinsic_is_helper_invocation:
    case nir_intrinsic_load_helper_invocation: {
@@ -964,6 +1002,31 @@ nak_mem_access_size_align(nir_intrinsic_op intrin,
    }
 }
 
+static nir_mem_access_size_align
+nak_mesh_mem_access_size_align(nir_intrinsic_op intrin,
+                               uint8_t bytes, uint8_t bit_size,
+                               uint32_t align_mul, uint32_t align_offset,
+                               bool offset_is_const, enum gl_access_qualifier access,
+                               const void *cb_data)
+{
+   switch (intrin) {
+   case nir_intrinsic_load_shared:
+   case nir_intrinsic_load_task_payload:
+   case nir_intrinsic_store_shared:
+      return (nir_mem_access_size_align) {
+         .bit_size = 32,
+         .num_components = 1,
+         .align = 4,
+         .shift = nir_mem_access_shift_method_scalar,
+      };
+
+   default:
+      return nak_mem_access_size_align(intrin, bytes, bit_size, align_mul,
+                                       align_offset, offset_is_const, access,
+                                       cb_data);
+   }
+}
+
 static bool
 nir_shader_has_local_variables(const nir_shader *nir)
 {
@@ -986,8 +1049,10 @@ atomic_supported(const nir_instr *instr, const void *data)
 {
    /* Shared atomics don't support 64-bit arithmetic */
    const nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
+   nir_atomic_op atomic_op = nir_intrinsic_atomic_op(intr);
    return !(intr->intrinsic == nir_intrinsic_shared_atomic &&
-            intr->def.bit_size == 64);
+            (intr->def.bit_size == 64 ||
+            (intr->def.bit_size == 32 && atomic_op == nir_atomic_op_fadd)));
 }
 
 static unsigned
@@ -1282,13 +1347,107 @@ nak_nir_max_imm_offset(nir_intrinsic_instr *intrin, const void *data)
    }
 }
 
+static void
+nak_mesh_skew_attr_mark_used(struct lower_mesh_intrinsics_ctx *ctx,
+                             uint32_t base_addr,
+                             uint32_t range,
+                             bool per_primitive)
+{
+   if (base_addr == 0)
+      return;
+
+   const uint32_t start_bit_idx = nak_mesh_skew_attr_used_index(base_addr);
+   const uint32_t end_bit_idx = nak_mesh_skew_attr_used_index(base_addr + range);
+
+   if (per_primitive)
+      BITSET_SET_RANGE(ctx->skew_prim_attr_used, start_bit_idx, end_bit_idx - 1);
+   else
+      BITSET_SET_RANGE(ctx->skew_vert_attr_used, start_bit_idx, end_bit_idx - 1);
+}
+
+static bool
+nak_nir_gather_mesh_outputs(nir_shader *nir, struct lower_mesh_intrinsics_ctx *ctx)
+{
+   bool progress = false;
+
+   nir_foreach_function(func, nir) {
+      nir_foreach_block_safe(block, func->impl) {
+         nir_foreach_instr_safe(instr, block) {
+            if (instr->type != nir_instr_type_intrinsic)
+               continue;
+
+            nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
+
+            if (intrin->intrinsic != nir_intrinsic_store_per_primitive_output &&
+                intrin->intrinsic != nir_intrinsic_store_per_vertex_output)
+               continue;
+
+            nir_def *offset = intrin->src[2].ssa;
+            nir_io_semantics sem = nir_intrinsic_io_semantics(intrin);
+            uint32_t component = nir_intrinsic_component(intrin);
+            uint32_t base_addr = nak_varying_mesh_skew_attr_addr(ctx->nak, sem.location);
+
+            /* Skip non SPH attributes */
+            if (base_addr == 0)
+               continue;
+
+            base_addr += 4 * component;
+
+            uint32_t range;
+            if (nir_src_is_const(nir_src_for_ssa(offset))) {
+               uint32_t const_offset = nir_src_as_uint(nir_src_for_ssa(offset));
+
+               /* Tighten the range */
+               base_addr += const_offset * 16;
+               range = 4 * intrin->num_components;
+            } else {
+               range = (sem.num_slots - 1) * 16 + intrin->num_components * 4;
+            }
+
+            const bool is_per_primitive = intrin->intrinsic == nir_intrinsic_store_per_primitive_output;
+
+            nak_mesh_skew_attr_mark_used(ctx, base_addr, range, is_per_primitive);
+         }
+      }
+   }
+
+   return progress;
+}
+
 void
 nak_postprocess_nir(nir_shader *nir,
                     const struct nak_compiler *nak,
                     nir_variable_mode robust2_modes,
-                    const struct nak_fs_key *fs_key)
+                    const struct nak_fs_key *fs_key,
+                    bool has_task_shader)
 {
    UNUSED bool progress = false;
+
+   const bool is_mesh_stage = nir->info.stage == MESA_SHADER_TASK ||
+                              nir->info.stage == MESA_SHADER_MESH;
+
+   if (is_mesh_stage) {
+      const uint32_t wg_size = nir->info.workgroup_size[0] *
+                               nir->info.workgroup_size[1] *
+                               nir->info.workgroup_size[2];
+
+      /* As the mesh stages run as vertex or tessellation stages, we only have
+       * 32 local invocations in hardware, so if the user requests more than 32
+       * local invocations, we need to lower them. */
+      if (wg_size > 32) {
+         /* Make sure that all system values are lowered and no halt/return/goto
+          * are present for nir_lower_workgroup_size. */
+         OPT(nir, nir_lower_system_values);
+         OPT(nir, nir_lower_halt_to_return);
+         OPT(nir, nir_lower_returns);
+         OPT(nir, nir_lower_workgroup_size, 32);
+
+         nak_optimize_nir(nir, nak);
+         nir_shader_gather_info(nir, nir_shader_get_entrypoint(nir));
+      }
+
+      OPT(nir, nak_nir_lower_mesh_stages_shared_atomics);
+   }
 
    nak_optimize_nir(nir, nak);
 
@@ -1331,14 +1490,17 @@ nak_postprocess_nir(nir_shader *nir,
    vectorize_opts.modes = nir_var_mem_global |
                           nir_var_mem_ssbo |
                           nir_var_mem_shared |
+                          nir_var_mem_task_payload |
                           nir_var_shader_temp;
    vectorize_opts.callback = nak_mem_vectorize_cb;
    vectorize_opts.robust_modes = robust2_modes;
    OPT(nir, nir_opt_load_store_vectorize, &vectorize_opts);
 
    nir_lower_mem_access_bit_sizes_options mem_bit_size_options = {
-      .modes = nir_var_mem_constant | nir_var_mem_ubo | nir_var_mem_generic,
-      .callback = nak_mem_access_size_align,
+      .modes = nir_var_mem_constant | nir_var_mem_ubo | nir_var_mem_generic |
+               nir_var_mem_task_payload,
+      .callback = is_mesh_stage ? nak_mesh_mem_access_size_align
+                                : nak_mem_access_size_align,
    };
    OPT(nir, nir_lower_mem_access_bit_sizes, &mem_bit_size_options);
    OPT(nir, nir_lower_bit_size, lower_bit_size_cb, (void *)nak);
@@ -1414,6 +1576,30 @@ nak_postprocess_nir(nir_shader *nir,
       /* system value lowering can leave constant address chains around */
       OPT(nir, nir_opt_constant_folding);
       break;
+
+   case MESA_SHADER_TASK: {
+      OPT(nir, nak_nir_lower_task_intrinsics);
+      OPT(nir, nir_opt_constant_folding);
+      break;
+   }
+   case MESA_SHADER_MESH: {
+      OPT(nir, nir_lower_io, nir_var_shader_in | nir_var_shader_out,
+          type_size_vec4, nir_lower_io_lower_64bit_to_32);
+      OPT(nir, nir_opt_constant_folding);
+
+      OPT(nir, nak_nir_lower_mesh_emulated_attributes);
+
+      struct lower_mesh_intrinsics_ctx ctx = {
+         .nak = nak,
+         .max_vertices_out = nir->info.mesh.max_vertices_out,
+         .max_primitives_out = nir->info.mesh.max_primitives_out,
+         .has_task_shader = has_task_shader,
+      };
+      OPT(nir, nak_nir_gather_mesh_outputs, &ctx);
+      OPT(nir, nak_nir_lower_mesh_intrinsics, &ctx);
+      OPT(nir, nir_opt_constant_folding);
+      break;
+   }
 
    default:
       UNREACHABLE("Unsupported shader stage");

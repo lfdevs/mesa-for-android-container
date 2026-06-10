@@ -829,6 +829,8 @@ endif
 
 _rtti = get_option('cpp_rtti')
 
+with_panfrost_rust = (with_gallium_panfrost or with_panfrost_vk) and get_option('panfrost-rust')
+
 with_gallium_rusticl = get_option('gallium-rusticl')
 if with_gallium_rusticl
   if not with_gallium
@@ -837,7 +839,7 @@ if with_gallium_rusticl
 endif
 
 with_virtgpu_kumquat = get_option('virtgpu_kumquat') and with_gfxstream_vk
-if with_gallium_rusticl or with_nouveau_vk or with_tools.contains('etnaviv') or with_virtgpu_kumquat
+if with_gallium_rusticl or with_nouveau_vk or with_tools.contains('etnaviv') or with_virtgpu_kumquat or with_panfrost_rust
   # rust.bindgen() does not pass `--rust-target` to bindgen until 1.7.0.
   if meson.version().version_compare('< 1.7.0')
     error('Mesa Rust support requires Meson 1.7.0 or newer')
@@ -848,8 +850,8 @@ if with_gallium_rusticl or with_nouveau_vk or with_tools.contains('etnaviv') or 
   rust = import('rust')
 
   # Keep this in sync with the `msrv` in clippy.toml
-  if rustc.version().version_compare('< 1.82')
-    error('Mesa requires Rust 1.82.0 or newer')
+  if rustc.version().version_compare('< 1.85')
+    error('Mesa requires Rust 1.85.0 or newer')
   endif
 
   # bindgen 0.71 is the first version that knows about `editions`
@@ -899,6 +901,8 @@ if with_gallium_rusticl or with_nouveau_vk or with_tools.contains('etnaviv') or 
     '-Dkeyword_idents_2024',
     '-Dmissing_unsafe_on_extern',
     '-Dnever_type_fallback_flowing_into_unsafe',
+    '-Drust_2024_guarded_string_incompatible_syntax',
+    '-Drust_2024_incompatible_pat',
     '-Drust_2024_prelude_collisions',
     '-Dstatic_mut_refs',
     '-Dunsafe_op_in_unsafe_fn',
@@ -908,8 +912,6 @@ if with_gallium_rusticl or with_nouveau_vk or with_tools.contains('etnaviv') or 
 
     # 1.83+
     # '-Dif_let_rescope',
-    # '-Drust_2024_guarded_string_incompatible_syntax',
-    # '-Drust_2024_incompatible_pat',
   ]
 endif
 
@@ -956,6 +958,7 @@ with_gfx_compute = [
   with_any_vk,
   with_clc,
   with_gallium_va and with_video_encode,
+  with_gallium_mediafoundation and with_video_encode,
 ].contains(true)
 if with_gfx_compute
   pre_args += '-DHAVE_GFX_COMPUTE'
@@ -2095,7 +2098,7 @@ if not with_platform_windows and not dep_elf.found()
 endif
 if dep_elf.found()
   pre_args += '-DUSE_LIBELF'
-elif with_gallium_radeonsi
+elif with_gallium_radeonsi and with_gfx_compute
   error('Gallium driver radeonsi requires libelf')
 endif
 

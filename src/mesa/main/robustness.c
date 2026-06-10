@@ -104,7 +104,7 @@ _mesa_set_context_lost_dispatch(struct gl_context *ctx)
    }
 
    ctx->Dispatch.Current = ctx->Dispatch.ContextLost;
-   _mesa_glapi_set_dispatch(ctx->Dispatch.Current);
+   _mesa_set_dispatch(ctx, ctx->Dispatch.Current);
 }
 
 /**

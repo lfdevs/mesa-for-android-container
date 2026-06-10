@@ -175,6 +175,7 @@ meson_subprojects=(
   thiserror-impl-2-rs
   ucd-trie-0.1-rs
   unicode-ident-1-rs
+  xml-rs
   zerocopy-derive-0.8-rs
   ${FORCE_FALLBACK_FOR:-}
 )

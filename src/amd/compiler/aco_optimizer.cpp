@@ -3256,6 +3256,7 @@ backpropagate_input_modifiers(opt_ctx& ctx, alu_opt_info& info, const alu_opt_op
    case aco_opcode::s_add_f32:
    case aco_opcode::s_add_f16:
    case aco_opcode::v_pk_add_f16:
+   case aco_opcode::p_v_add_f64_rtne:
    case aco_opcode::v_fma_f64:
    case aco_opcode::v_fma_f32:
    case aco_opcode::v_fma_f16:

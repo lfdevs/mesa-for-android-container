@@ -23,6 +23,7 @@
 
 #include "util/format/u_format.h"
 #include "util/half_float.h"
+#include "util/u_viewport.h"
 #include "v3d_context.h"
 #include "broadcom/common/v3d_macros.h"
 #include "broadcom/cle/v3dx_pack.h"
@@ -392,9 +393,11 @@ v3dX(emit_state)(struct pipe_context *pctx)
                         }
 
 #if V3D_VERSION >= 71
+                        uint32_t z_clip_mode = v3d->rasterizer->base.clip_halfz ?
+                           V3D_Z_CLIP_MODE_ZERO_TO_ONE : V3D_Z_CLIP_MODE_MIN_ONE_TO_ONE;
                         config.z_clipping_mode = v3d->rasterizer->base.depth_clip_near ||
                            v3d->rasterizer->base.depth_clip_far ?
-                           V3D_Z_CLIP_MODE_MIN_ONE_TO_ONE : V3D_Z_CLIP_MODE_NONE;
+                           z_clip_mode : V3D_Z_CLIP_MODE_NONE;
 
                         config.z_clamp_mode = v3d->rasterizer->base.depth_clamp;
 #endif
@@ -458,19 +461,35 @@ v3dX(emit_state)(struct pipe_context *pctx)
 #endif
 
 
-                cl_emit(&job->bcl, CLIPPER_Z_SCALE_AND_OFFSET, clip) {
-                        clip.viewport_z_offset_zc_to_zs =
-                                v3d->viewport.translate[2];
-                        clip.viewport_z_scale_zc_to_zs =
-                                v3d->viewport.scale[2];
+#if V3D_VERSION >= 71
+                /* If the Z scale is too small the guardband clipping
+                 * may not clip correctly, so we use the
+                 * NO_GUARDBAND variant instead.
+                 */
+                if (fabsf(v3d->viewport.scale[2]) < 0.01f) {
+                        cl_emit(&job->bcl,
+                                CLIPPER_Z_SCALE_AND_OFFSET_NO_GUARDBAND,
+                                clip) {
+                                clip.viewport_z_offset_zc_to_zs =
+                                        v3d->viewport.translate[2];
+                                clip.viewport_z_scale_zc_to_zs =
+                                        v3d->viewport.scale[2];
+                        }
+                } else
+#endif
+                {
+                        cl_emit(&job->bcl,
+                                CLIPPER_Z_SCALE_AND_OFFSET, clip) {
+                                clip.viewport_z_offset_zc_to_zs =
+                                        v3d->viewport.translate[2];
+                                clip.viewport_z_scale_zc_to_zs =
+                                        v3d->viewport.scale[2];
+                        }
                 }
                 cl_emit(&job->bcl, CLIPPER_Z_MIN_MAX_CLIPPING_PLANES, clip) {
-                        float z1 = (v3d->viewport.translate[2] -
-                                    v3d->viewport.scale[2]);
-                        float z2 = (v3d->viewport.translate[2] +
-                                    v3d->viewport.scale[2]);
-                        clip.minimum_zw = MIN2(z1, z2);
-                        clip.maximum_zw = MAX2(z1, z2);
+                        util_viewport_zmin_zmax(&v3d->viewport,
+                                v3d->rasterizer->base.clip_halfz,
+                                &clip.minimum_zw, &clip.maximum_zw);
                 }
 
                 cl_emit(&job->bcl, VIEWPORT_OFFSET, vp) {

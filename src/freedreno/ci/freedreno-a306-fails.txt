@@ -1112,16 +1112,6 @@ dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_out_of_bounds_mag,Fail
 dEQP-GLES2.functional.polygon_offset.fixed16_render_with_units,Fail
 
 # Regressions while the device was offline
-dEQP-GLES3.functional.state_query.texture.texture_2d_array_texture_immutable_levels_gettexparameterf,Fail
-dEQP-GLES3.functional.state_query.texture.texture_2d_array_texture_immutable_levels_gettexparameteri,Fail
-dEQP-GLES3.functional.state_query.texture.texture_2d_texture_immutable_levels_gettexparameterf,Fail
-dEQP-GLES3.functional.state_query.texture.texture_2d_texture_immutable_levels_gettexparameteri,Fail
-dEQP-GLES3.functional.state_query.texture.texture_3d_texture_immutable_levels_gettexparameterf,Fail
-dEQP-GLES3.functional.state_query.texture.texture_3d_texture_immutable_levels_gettexparameteri,Fail
-dEQP-GLES3.functional.state_query.texture.texture_cube_map_texture_immutable_levels_gettexparameterf,Fail
-dEQP-GLES3.functional.state_query.texture.texture_cube_map_texture_immutable_levels_gettexparameteri,Fail
-
-# Regressions while the device was offline
 spec@!opengl es 3.0@texture-immutable-levels,Fail
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_argb8888,Fail
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_ayuv,Fail

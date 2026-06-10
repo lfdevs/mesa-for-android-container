@@ -10,7 +10,3 @@ dEQP-GLES31.functional.ssbo.layout.random.nested_structs_arrays_instance_arrays.
 
 # Sometimes crashes, e.g. https://gitlab.freedesktop.org/kusma/mesa/-/jobs/4109419
 dEQP-GLES31.functional.compute.basic.empty
-
-# !41455
-dEQP-GLES2.functional.shaders.struct.uniform.equal_fragment
-dEQP-GLES2.functional.shaders.struct.uniform.not_equal_fragment

@@ -358,6 +358,12 @@ fn flush_events(
     CL_SUCCESS as cl_int
 }
 
+fn flush_perfetto() {
+    unsafe {
+        util_perfetto_thread_flush();
+    }
+}
+
 impl Queue {
     pub fn new(
         context: Arc<Context>,
@@ -417,8 +423,19 @@ impl Queue {
                     loop {
                         debug_assert!(flushed.is_empty());
 
-                        let Ok(new_events) = rx_t.recv() else {
-                            break;
+                        let new_events = match rx_t.try_recv() {
+                            Ok(evs) => evs,
+                            Err(_) => {
+                                // Flush thread's track events before blocking:
+                                flush_perfetto();
+
+                                // break out of the loop when we get an error as this
+                                // indicates the sender has disconnected.
+                                let Ok(new_events) = rx_t.recv() else {
+                                    break;
+                                };
+                                new_events
+                            }
                         };
 
                         let new_events = QueueEvents::new(new_events);
@@ -478,21 +495,36 @@ impl Queue {
                         let flush_err = flush_events(&mut flushed, &ctx, &tx_q2);
                         last_err = cmp::min(last_err, flush_err);
                     }
+                    flush_perfetto();
                 })
                 .unwrap(),
             _thrd_signal: thread::Builder::new()
                 .name("rusticl queue signal thread".into())
-                .spawn(move || loop {
-                    let Ok((fence, events)) = rx_t2.recv() else {
-                        break;
-                    };
+                .spawn(move || {
+                    loop {
+                        let (fence, events) = match rx_t2.try_recv() {
+                            Ok((fence, events)) => (fence, events),
+                            Err(_) => {
+                                // Flush thread's track events before blocking:
+                                flush_perfetto();
 
-                    let evs = events.iter();
-                    if fence.wait() {
-                        evs.for_each(|e| e.signal());
-                    } else {
-                        evs.for_each(|e| e.set_user_status(CL_OUT_OF_RESOURCES));
+                                // break out of the loop when we get an error as this
+                                // indicates the sender has disconnected.
+                                let Ok((fence, events)) = rx_t2.recv() else {
+                                    break;
+                                };
+                                (fence, events)
+                            }
+                        };
+
+                        let evs = events.iter();
+                        if fence.wait() {
+                            evs.for_each(|e| e.signal());
+                        } else {
+                            evs.for_each(|e| e.set_user_status(CL_OUT_OF_RESOURCES));
+                        }
                     }
+                    flush_perfetto();
                 })
                 .unwrap(),
         }))

@@ -12,7 +12,6 @@ use crate::core::program::*;
 use crate::core::queue::*;
 
 use mesa_rust_util::ptr::*;
-use mesa_rust_util::string::*;
 use rusticl_opencl_gen::*;
 use rusticl_proc_macros::cl_entrypoint;
 use rusticl_proc_macros::cl_info_entrypoint;
@@ -34,7 +33,7 @@ unsafe impl CLInfo<cl_kernel_info> for cl_kernel {
                 let ptr = Arc::as_ptr(&kernel.prog.context);
                 v.write::<cl_context>(cl_context::from_ptr(ptr))
             }
-            CL_KERNEL_FUNCTION_NAME => v.write::<&str>(&kernel.name),
+            CL_KERNEL_FUNCTION_NAME => v.write::<&CStr>(&kernel.name),
             CL_KERNEL_NUM_ARGS => v.write::<cl_uint>(kernel.kernel_info.args.len() as cl_uint),
             CL_KERNEL_PROGRAM => {
                 let ptr = Arc::as_ptr(&kernel.prog);
@@ -280,12 +279,14 @@ fn create_kernel(
     kernel_name: *const ::std::os::raw::c_char,
 ) -> CLResult<cl_kernel> {
     let p = Program::arc_from_raw(program)?;
-    let name = c_string_to_string(kernel_name);
 
     // CL_INVALID_VALUE if kernel_name is NULL.
     if kernel_name.is_null() {
         return Err(CL_INVALID_VALUE);
     }
+
+    // SAFETY: kernel_name is pointing to a valid C string.
+    let name = unsafe { CStr::from_ptr(kernel_name) }.to_owned();
 
     let build = p.build_info();
     // CL_INVALID_PROGRAM_EXECUTABLE if there is no successfully built executable for program.

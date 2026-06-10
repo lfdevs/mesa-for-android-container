@@ -331,7 +331,9 @@ anv_image_choose_isl_surf_usage(struct anv_physical_device *device,
       isl_usage |= ISL_SURF_USAGE_RENDER_TARGET_BIT;
    }
 
-   if (comp_flags & VK_IMAGE_COMPRESSION_DISABLED_EXT) {
+   if (device->has_compression_control &&
+       device->expose_compression_control &&
+       (comp_flags & VK_IMAGE_COMPRESSION_DISABLED_EXT)) {
       anv_perf_warn(VK_LOG_OBJS(&device->vk.base),
                     "Disabling aux: "
                     "image compression disabled via create flags");
@@ -746,9 +748,11 @@ add_aux_surface_if_supported(struct anv_device *device,
       }
 
       if (!isl_surf_supports_ccs(&device->isl_dev, main_surf)) {
-         anv_perf_warn(VK_LOG_OBJS(&device->vk.base),
-                       "Depth surface does not support CCS, "
-                       "falling back to HIZ without compression");
+         if (device->info->ver >= 12) {
+            anv_perf_warn(VK_LOG_OBJS(&device->vk.base),
+                          "Depth surface does not support CCS, "
+                          "falling back to HIZ without compression");
+         }
          image->planes[plane].aux_usage = ISL_AUX_USAGE_HIZ;
       } else if (want_hiz_wt_for_image(device->info, image)) {
          assert(device->info->ver >= 12);
@@ -780,9 +784,11 @@ add_aux_surface_if_supported(struct anv_device *device,
       }
    } else if (main_surf->usage & (ISL_SURF_USAGE_STENCIL_BIT | ISL_SURF_USAGE_CPB_BIT)) {
       if (!isl_surf_supports_ccs(&device->isl_dev, main_surf)) {
-         anv_perf_warn(VK_LOG_OBJS(&device->vk.base),
-                       "Skipping aux surface creation: "
-                       "stencil/cpb surface does not support CCS");
+         if (device->info->ver >= 12) {
+            anv_perf_warn(VK_LOG_OBJS(&device->vk.base),
+                          "Skipping aux surface creation: "
+                          "stencil/cpb surface does not support CCS");
+         }
          return VK_SUCCESS;
       }
 
@@ -876,9 +882,11 @@ add_aux_surface_if_supported(struct anv_device *device,
       if (isl_surf_supports_ccs(&device->isl_dev, main_surf)) {
          image->planes[plane].aux_usage = ISL_AUX_USAGE_MCS_CCS;
       } else {
-         anv_perf_warn(VK_LOG_OBJS(&device->vk.base),
-                       "MSAA color surface does not support CCS, "
-                       "falling back to MCS without compression");
+         if (device->info->ver >= 12) {
+            anv_perf_warn(VK_LOG_OBJS(&device->vk.base),
+                          "MSAA color surface does not support CCS, "
+                          "falling back to MCS without compression");
+         }
          image->planes[plane].aux_usage = ISL_AUX_USAGE_MCS;
       }
 
@@ -3467,7 +3475,7 @@ anv_get_image_subresource_layout(struct anv_device *device,
 
    VkImageCompressionPropertiesEXT *comp_props =
       vk_find_struct(layout->pNext, IMAGE_COMPRESSION_PROPERTIES_EXT);
-   if (comp_props) {
+   if (comp_props && device->physical->expose_compression_control) {
       comp_props->imageCompressionFixedRateFlags =
          VK_IMAGE_COMPRESSION_FIXED_RATE_NONE_EXT;
       comp_props->imageCompressionFlags = VK_IMAGE_COMPRESSION_DISABLED_EXT;
@@ -4235,7 +4243,7 @@ anv_can_hiz_clear_image(struct anv_cmd_buffer *cmd_buffer,
                   "HiZ CCS WT + MSAA unsupported before Xe2. "
                   "Slow depth clearing.");
       return false;
-      }
+   }
 
    /* If we're just clearing stencil, we can always HiZ clear */
    if (!(clear_aspects & VK_IMAGE_ASPECT_DEPTH_BIT))
@@ -4252,7 +4260,7 @@ anv_can_hiz_clear_image(struct anv_cmd_buffer *cmd_buffer,
       return false;
    }
 
-   if (isl_aux_usage_has_ccs(clear_aux_usage)) {
+   if (device->info->ver == 12 && isl_aux_usage_has_ccs(clear_aux_usage)) {
       /* From the TGL PRM, Vol 9, "Compressed Depth Buffers" (under the
        * "Texture performant" and "ZCS" columns):
        *
@@ -4261,14 +4269,32 @@ anv_can_hiz_clear_image(struct anv_cmd_buffer *cmd_buffer,
        *
        * Although alignment requirements are only listed for the texture
        * performant mode, test results indicate that requirements exist for
-       * the non-texture performant mode as well. Disable partial clears.
+       * the non-texture performant mode as well. Require 8x4 alignment for
+       * partial clears.
+       *
+       * According to Bspec page 56461 (r74422), the alignment restriction is
+       * gone on gfx20+.
+       *
+       * XXX: Does the framework allow us to view UNDEFINED layouts which will
+       * be cleared? If so, we could make use of this to partial clear texture
+       * if the rectangle overlaps with all HiZ blocks. HSD 22011236099 also
+       * states that Xe2+ is able to initialize the HiZ blocks touched by a
+       * partial clear as needed. See can_use_attachment_initial_layout().
+       *
+       * TODO: We could set the
+       * 3DSTATE_WM_HZ_OP::FullSurfaceDepthandStencilClear flag for
+       * depth-only clears which are aligned to the HIZ block size.
        */
-      if (render_area.offset.x > 0 ||
-          render_area.offset.y > 0 ||
-          render_area.extent.width !=
-          u_minify(image->vk.extent.width, level) ||
-          render_area.extent.height !=
-          u_minify(image->vk.extent.height, level)) {
+      const uint32_t level_w = u_minify(image->vk.extent.width, level);
+      const uint32_t level_h = u_minify(image->vk.extent.height, level);
+      if ((render_area.offset.x > 0 ||
+           render_area.offset.y > 0 ||
+           render_area.extent.width < level_w ||
+           render_area.extent.height < level_h) &&
+          (!util_is_aligned(render_area.offset.x, 8) ||
+           !util_is_aligned(render_area.offset.y, 4) ||
+           !util_is_aligned(render_area.extent.width, 8) ||
+           !util_is_aligned(render_area.extent.height, 4))) {
           anv_perf_warn(VK_LOG_OBJS(&image->vk.base),
                         "partial depth clear rect unsupported for "
                         "fast clear. Slow clearing.");

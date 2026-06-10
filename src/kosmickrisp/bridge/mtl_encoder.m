@@ -234,6 +234,16 @@ mtl_dispatch_threadgroups_with_indirect_buffer(mtl_compute_encoder *encoder,
    }
 }
 
+void
+mtl_memory_barrier_with_scope(mtl_compute_encoder *encoder,
+                              enum mtl_barrier_scope scope)
+{
+   @autoreleasepool {
+      id<MTLComputeCommandEncoder> enc = (id<MTLComputeCommandEncoder>)encoder;
+      [enc memoryBarrierWithScope:(MTLBarrierScope)scope];
+   }
+}
+
 /* MTLRenderEncoder */
 
 /* Encoder commands */

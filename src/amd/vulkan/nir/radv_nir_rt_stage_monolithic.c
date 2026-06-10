@@ -278,6 +278,8 @@ radv_build_recursive_case(nir_builder *b, nir_def *idx, struct radv_ray_tracing_
    nir_inline_function_impl(b, nir_shader_get_entrypoint(shader), NULL, var_remap);
    nir_pop_if(b, NULL);
    ralloc_free(shader);
+
+   _mesa_hash_table_destroy(var_remap, NULL);
 }
 
 struct lower_rt_instruction_monolithic_state {

@@ -193,7 +193,7 @@ impl Push {
         }
     }
 
-    pub fn push_method<M: Mthd>(&mut self, mthd: M) {
+    pub fn push_mthd<M: Mthd>(&mut self, mthd: M) {
         self.push_mthd_bits(class_to_subc(M::CLASS), M::ADDR, mthd.to_bits());
     }
 
@@ -222,7 +222,7 @@ impl Push {
         self.mem.push(mthd.to_bits());
     }
 
-    pub fn push_array_method<M: ArrayMthd>(&mut self, i: usize, mthd: M) {
+    pub fn push_array_mthd<M: ArrayMthd>(&mut self, i: usize, mthd: M) {
         self.push_mthd_bits(
             class_to_subc(M::CLASS),
             M::addr(i),

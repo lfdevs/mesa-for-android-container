@@ -12,6 +12,14 @@ use crate::TubeType;
 pub struct Tube;
 pub struct Listener;
 
+impl TryFrom<OwnedDescriptor> for Tube {
+    type Error = MesaError;
+
+    fn try_from(_socket: OwnedDescriptor) -> Result<Self, Self::Error> {
+        Err(MesaError::Unsupported)
+    }
+}
+
 impl Tube {
     pub fn new<P: AsRef<Path>>(_path: P, _kind: TubeType) -> MesaResult<Tube> {
         Err(MesaError::Unsupported)

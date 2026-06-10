@@ -103,7 +103,7 @@ static const struct sampler_opcode_desc {
 } sampler_opcode_descs[] = {
    [BRW_SAMPLER_OPCODE_SAMPLE] = {
       .name = "sample",
-      .hw_opcode = GFX5_SAMPLER_MESSAGE_SAMPLE,
+      .hw_opcode = GEN_SAMPLER_MESSAGE_SAMPLE,
       .nir_src_mask = N(coord) | N(min_lod) | N(offset),
       .payload = {
          .sources = {
@@ -113,7 +113,7 @@ static const struct sampler_opcode_desc {
    },
    [BRW_SAMPLER_OPCODE_SAMPLE_B] = {
       .name = "sample_b",
-      .hw_opcode = GFX5_SAMPLER_MESSAGE_SAMPLE_BIAS,
+      .hw_opcode = GEN_SAMPLER_MESSAGE_SAMPLE_BIAS,
       .nir_src_mask = N(coord) | N(bias) | N(min_lod) | N(offset),
       .payload = {
          .sources = {
@@ -123,7 +123,7 @@ static const struct sampler_opcode_desc {
    },
    [BRW_SAMPLER_OPCODE_SAMPLE_B_PACKED] = {
       .name = "sample_b (packed)",
-      .hw_opcode = GFX5_SAMPLER_MESSAGE_SAMPLE_BIAS,
+      .hw_opcode = GEN_SAMPLER_MESSAGE_SAMPLE_BIAS,
       .nir_src_mask = N(coord) | N(bias) | N(min_lod) | N(offset),
       .payload = {
          .sources = {
@@ -133,7 +133,7 @@ static const struct sampler_opcode_desc {
    },
    [BRW_SAMPLER_OPCODE_SAMPLE_B_REDUCED] = {
       .name = "sample_b (reduced)",
-      .hw_opcode = GFX5_SAMPLER_MESSAGE_SAMPLE_BIAS,
+      .hw_opcode = GEN_SAMPLER_MESSAGE_SAMPLE_BIAS,
       .nir_src_mask = N(coord) | N(bias) | N(min_lod) | N(offset),
       .payload = {
          .sources = {
@@ -143,7 +143,7 @@ static const struct sampler_opcode_desc {
    },
    [BRW_SAMPLER_OPCODE_SAMPLE_L] = {
       .name = "sample_l",
-      .hw_opcode = GFX5_SAMPLER_MESSAGE_SAMPLE_LOD,
+      .hw_opcode = GEN_SAMPLER_MESSAGE_SAMPLE_LOD,
       .nir_src_mask = N(coord) | N(lod) | N(offset),
       .payload = {
          .sources = {
@@ -153,7 +153,7 @@ static const struct sampler_opcode_desc {
    },
    [BRW_SAMPLER_OPCODE_SAMPLE_L_PACKED] = {
       .name = "sample_l (packed)",
-      .hw_opcode = GFX5_SAMPLER_MESSAGE_SAMPLE_LOD,
+      .hw_opcode = GEN_SAMPLER_MESSAGE_SAMPLE_LOD,
       .nir_src_mask = N(coord) | N(lod) | N(offset),
       .payload = {
          .sources = {
@@ -163,7 +163,7 @@ static const struct sampler_opcode_desc {
    },
    [BRW_SAMPLER_OPCODE_SAMPLE_L_REDUCED] = {
       .name = "sample_l (reduced)",
-      .hw_opcode = GFX5_SAMPLER_MESSAGE_SAMPLE_LOD,
+      .hw_opcode = GEN_SAMPLER_MESSAGE_SAMPLE_LOD,
       .nir_src_mask = N(coord) | N(lod) | N(offset),
       .payload = {
          .sources = {
@@ -173,7 +173,7 @@ static const struct sampler_opcode_desc {
    },
    [BRW_SAMPLER_OPCODE_SAMPLE_C] = {
       .name = "sample_c",
-      .hw_opcode = GFX5_SAMPLER_MESSAGE_SAMPLE_COMPARE,
+      .hw_opcode = GEN_SAMPLER_MESSAGE_SAMPLE_COMPARE,
       .nir_src_mask = N(comparator) | N(coord) | N(min_lod) | N(offset),
       .payload = {
          .sources = {
@@ -183,7 +183,7 @@ static const struct sampler_opcode_desc {
    },
    [BRW_SAMPLER_OPCODE_SAMPLE_D] = {
       .name = "sample_d",
-      .hw_opcode = GFX5_SAMPLER_MESSAGE_SAMPLE_DERIVS,
+      .hw_opcode = GEN_SAMPLER_MESSAGE_SAMPLE_DERIVS,
       .nir_src_mask = N(coord) | N(min_lod) | N(ddx) | N(ddy) | N(offset),
       .payload = {
          .sources = {
@@ -193,7 +193,7 @@ static const struct sampler_opcode_desc {
    },
    [BRW_SAMPLER_OPCODE_SAMPLE_D_REDUCED] = {
       .name = "sample_d (reduced)",
-      .hw_opcode = GFX5_SAMPLER_MESSAGE_SAMPLE_DERIVS,
+      .hw_opcode = GEN_SAMPLER_MESSAGE_SAMPLE_DERIVS,
       .nir_src_mask = N(coord) | N(min_lod) | N(ddx) | N(ddy) | N(offset),
       .payload = {
          .sources = {
@@ -203,7 +203,7 @@ static const struct sampler_opcode_desc {
    },
    [BRW_SAMPLER_OPCODE_SAMPLE_B_C] = {
       .name = "sample_b_c",
-      .hw_opcode = GFX5_SAMPLER_MESSAGE_SAMPLE_BIAS_COMPARE,
+      .hw_opcode = GEN_SAMPLER_MESSAGE_SAMPLE_BIAS_COMPARE,
       .nir_src_mask = N(comparator) | N(bias) | N(coord) | N(offset),
       .payload = {
          .sources = {
@@ -213,7 +213,7 @@ static const struct sampler_opcode_desc {
    },
    [BRW_SAMPLER_OPCODE_SAMPLE_B_C_PACKED] = {
       .name = "sample_b_c (packed)",
-      .hw_opcode = GFX5_SAMPLER_MESSAGE_SAMPLE_BIAS_COMPARE,
+      .hw_opcode = GEN_SAMPLER_MESSAGE_SAMPLE_BIAS_COMPARE,
       .nir_src_mask = N(comparator) | N(bias) | N(coord) | N(offset),
       .payload = {
          .sources = {
@@ -223,7 +223,7 @@ static const struct sampler_opcode_desc {
    },
    [BRW_SAMPLER_OPCODE_SAMPLE_D_C] = {
       .name = "sample_d_c",
-      .hw_opcode = HSW_SAMPLER_MESSAGE_SAMPLE_DERIV_COMPARE,
+      .hw_opcode = GEN_SAMPLER_MESSAGE_SAMPLE_DERIV_COMPARE,
       .nir_src_mask = N(comparator) | N(coord) | N(ddx) | N(ddy) | N(offset),
       .payload = {
          .sources = {
@@ -233,7 +233,7 @@ static const struct sampler_opcode_desc {
    },
    [BRW_SAMPLER_OPCODE_SAMPLE_D_C_PACKED] = {
       .name = "sample_d_c (packed)",
-      .hw_opcode = HSW_SAMPLER_MESSAGE_SAMPLE_DERIV_COMPARE,
+      .hw_opcode = GEN_SAMPLER_MESSAGE_SAMPLE_DERIV_COMPARE,
       .nir_src_mask = N(comparator) | N(coord) | N(ddx) | N(ddy) | N(offset),
       .payload = {
          .sources = {
@@ -243,7 +243,7 @@ static const struct sampler_opcode_desc {
    },
    [BRW_SAMPLER_OPCODE_SAMPLE_L_C] = {
       .name = "sample_l_c",
-      .hw_opcode = GFX5_SAMPLER_MESSAGE_SAMPLE_LOD_COMPARE,
+      .hw_opcode = GEN_SAMPLER_MESSAGE_SAMPLE_LOD_COMPARE,
       .nir_src_mask = N(comparator) | N(lod) | N(coord) | N(offset),
       .payload = {
          .sources = {
@@ -253,7 +253,7 @@ static const struct sampler_opcode_desc {
    },
    [BRW_SAMPLER_OPCODE_SAMPLE_L_C_PACKED] = {
       .name = "sample_l_c (packed)",
-      .hw_opcode = GFX5_SAMPLER_MESSAGE_SAMPLE_LOD_COMPARE,
+      .hw_opcode = GEN_SAMPLER_MESSAGE_SAMPLE_LOD_COMPARE,
       .nir_src_mask = N(comparator) | N(lod) | N(coord) | N(offset),
       .payload = {
          .sources = {
@@ -263,7 +263,7 @@ static const struct sampler_opcode_desc {
    },
    [BRW_SAMPLER_OPCODE_SAMPLE_LZ] = {
       .name = "sample_lz",
-      .hw_opcode = GFX9_SAMPLER_MESSAGE_SAMPLE_LZ,
+      .hw_opcode = GEN_SAMPLER_MESSAGE_SAMPLE_LZ,
       .nir_src_mask = N(coord) | N(lod) | N(offset),
       .lod_zero = true,
       .payload = {
@@ -274,7 +274,7 @@ static const struct sampler_opcode_desc {
    },
    [BRW_SAMPLER_OPCODE_SAMPLE_C_LZ] = {
       .name = "sample_c_lz",
-      .hw_opcode = GFX9_SAMPLER_MESSAGE_SAMPLE_C_LZ,
+      .hw_opcode = GEN_SAMPLER_MESSAGE_SAMPLE_C_LZ,
       .nir_src_mask = N(comparator) | N(coord) | N(lod) | N(offset),
       .lod_zero = true,
       .payload = {
@@ -285,7 +285,7 @@ static const struct sampler_opcode_desc {
    },
    [BRW_SAMPLER_OPCODE_SAMPLE_PO] = {
       .name = "sample_po",
-      .hw_opcode = XE2_SAMPLER_MESSAGE_SAMPLE_PO,
+      .hw_opcode = GEN_XE2_SAMPLER_MESSAGE_SAMPLE_PO,
       .nir_src_mask = N(coord) | N(offset) | N(min_lod),
       .has_offset_payload = true,
       .payload = {
@@ -296,7 +296,7 @@ static const struct sampler_opcode_desc {
    },
    [BRW_SAMPLER_OPCODE_SAMPLE_PO_B] = {
       .name = "sample_po_b",
-      .hw_opcode = XE2_SAMPLER_MESSAGE_SAMPLE_PO_BIAS,
+      .hw_opcode = GEN_XE2_SAMPLER_MESSAGE_SAMPLE_PO_BIAS,
       .nir_src_mask = N(bias) | N(coord) | N(offset) | N(min_lod),
       .has_offset_payload = true,
       .payload = {
@@ -307,7 +307,7 @@ static const struct sampler_opcode_desc {
    },
    [BRW_SAMPLER_OPCODE_SAMPLE_PO_C] = {
       .name = "sample_po_c",
-      .hw_opcode = XE2_SAMPLER_MESSAGE_SAMPLE_PO_COMPARE,
+      .hw_opcode = GEN_XE2_SAMPLER_MESSAGE_SAMPLE_PO_COMPARE,
       .nir_src_mask = N(comparator) | N(coord) | N(offset) | N(min_lod),
       .has_offset_payload = true,
       .payload = {
@@ -318,7 +318,7 @@ static const struct sampler_opcode_desc {
    },
    [BRW_SAMPLER_OPCODE_SAMPLE_PO_C_LZ] = {
       .name = "sample_po_c_lz",
-      .hw_opcode = XE2_SAMPLER_MESSAGE_SAMPLE_PO_C_LZ,
+      .hw_opcode = GEN_XE2_SAMPLER_MESSAGE_SAMPLE_PO_C_LZ,
       .nir_src_mask = N(comparator) | N(lod) | N(coord) | N(offset),
       .has_offset_payload = true,
       .lod_zero = true,
@@ -330,7 +330,7 @@ static const struct sampler_opcode_desc {
    },
    [BRW_SAMPLER_OPCODE_SAMPLE_PO_C_L] = {
       .name = "sample_po_c_l",
-      .hw_opcode = XE2_SAMPLER_MESSAGE_SAMPLE_PO_LOD_COMPARE,
+      .hw_opcode = GEN_XE2_SAMPLER_MESSAGE_SAMPLE_PO_LOD_COMPARE,
       .nir_src_mask = N(comparator) | N(lod) | N(coord) | N(offset),
       .has_offset_payload = true,
       .payload = {
@@ -341,7 +341,7 @@ static const struct sampler_opcode_desc {
    },
    [BRW_SAMPLER_OPCODE_SAMPLE_PO_D] = {
       .name = "sample_po_d",
-      .hw_opcode = XE2_SAMPLER_MESSAGE_SAMPLE_PO_DERIVS,
+      .hw_opcode = GEN_XE2_SAMPLER_MESSAGE_SAMPLE_PO_DERIVS,
       .nir_src_mask = N(ddx) | N(ddy) | N(coord) | N(offset) | N(min_lod),
       .has_offset_payload = true,
       .payload = {
@@ -352,7 +352,7 @@ static const struct sampler_opcode_desc {
    },
    [BRW_SAMPLER_OPCODE_SAMPLE_PO_L] = {
       .name = "sample_po_l",
-      .hw_opcode = XE2_SAMPLER_MESSAGE_SAMPLE_PO_LOD,
+      .hw_opcode = GEN_XE2_SAMPLER_MESSAGE_SAMPLE_PO_LOD,
       .nir_src_mask = N(lod) | N(coord) | N(offset),
       .has_offset_payload = true,
       .payload = {
@@ -363,7 +363,7 @@ static const struct sampler_opcode_desc {
    },
    [BRW_SAMPLER_OPCODE_SAMPLE_PO_LZ] = {
       .name = "sample_po_lz",
-      .hw_opcode = XE2_SAMPLER_MESSAGE_SAMPLE_PO_LZ,
+      .hw_opcode = GEN_XE2_SAMPLER_MESSAGE_SAMPLE_PO_LZ,
       .nir_src_mask = N(lod) | N(coord) | N(offset),
       .has_offset_payload = true,
       .lod_zero = true,
@@ -375,7 +375,7 @@ static const struct sampler_opcode_desc {
    },
    [BRW_SAMPLER_OPCODE_LD] = {
       .name = "ld",
-      .hw_opcode = GFX5_SAMPLER_MESSAGE_SAMPLE_LD,
+      .hw_opcode = GEN_SAMPLER_MESSAGE_SAMPLE_LD,
       .nir_src_mask = N(lod) | N(coord) | N(offset),
       .is_fetch = true,
       .payload = {
@@ -386,7 +386,7 @@ static const struct sampler_opcode_desc {
    },
    [BRW_SAMPLER_OPCODE_LD_LZ] = {
       .name = "ld_lz",
-      .hw_opcode = GFX9_SAMPLER_MESSAGE_SAMPLE_LD_LZ,
+      .hw_opcode = GEN_SAMPLER_MESSAGE_SAMPLE_LD_LZ,
       .nir_src_mask = N(coord) | N(lod) | N(offset),
       .lod_zero = true,
       .is_fetch = true,
@@ -398,7 +398,7 @@ static const struct sampler_opcode_desc {
    },
    [BRW_SAMPLER_OPCODE_LOD] = {
       .name = "lod",
-      .hw_opcode = GFX5_SAMPLER_MESSAGE_LOD,
+      .hw_opcode = GEN_SAMPLER_MESSAGE_LOD,
       .nir_src_mask = N(coord),
       .payload = {
          .sources = {
@@ -408,7 +408,7 @@ static const struct sampler_opcode_desc {
    },
    [BRW_SAMPLER_OPCODE_RESINFO] = {
       .name = "resinfo",
-      .hw_opcode = GFX5_SAMPLER_MESSAGE_SAMPLE_RESINFO,
+      .hw_opcode = GEN_SAMPLER_MESSAGE_SAMPLE_RESINFO,
       .nir_src_mask = N(lod),
       .payload = {
          .sources = {
@@ -418,11 +418,11 @@ static const struct sampler_opcode_desc {
    },
    [BRW_SAMPLER_OPCODE_SAMPLEINFO] = {
       .name = "sampleinfo",
-      .hw_opcode = GFX6_SAMPLER_MESSAGE_SAMPLE_SAMPLEINFO,
+      .hw_opcode = GEN_SAMPLER_MESSAGE_SAMPLE_SAMPLEINFO,
    },
    [BRW_SAMPLER_OPCODE_GATHER4] = {
       .name = "gather4",
-      .hw_opcode = GFX7_SAMPLER_MESSAGE_SAMPLE_GATHER4,
+      .hw_opcode = GEN_SAMPLER_MESSAGE_SAMPLE_GATHER4,
       .nir_src_mask = N(coord) | N(offset),
       .is_gather = true,
       .payload = {
@@ -433,7 +433,7 @@ static const struct sampler_opcode_desc {
    },
    [BRW_SAMPLER_OPCODE_GATHER4_B] = {
       .name = "gather4_b",
-      .hw_opcode = XE2_SAMPLER_MESSAGE_SAMPLE_GATHER4_B,
+      .hw_opcode = GEN_XE2_SAMPLER_MESSAGE_SAMPLE_GATHER4_B,
       .nir_src_mask = N(bias) | N(coord) | N(offset),
       .is_gather = true,
       .payload = {
@@ -444,7 +444,7 @@ static const struct sampler_opcode_desc {
    },
    [BRW_SAMPLER_OPCODE_GATHER4_C] = {
       .name = "gather4_c",
-      .hw_opcode = GFX7_SAMPLER_MESSAGE_SAMPLE_GATHER4_C,
+      .hw_opcode = GEN_SAMPLER_MESSAGE_SAMPLE_GATHER4_C,
       .nir_src_mask = N(comparator) | N(coord) | N(offset),
       .is_gather = true,
       .payload = {
@@ -455,7 +455,7 @@ static const struct sampler_opcode_desc {
    },
    [BRW_SAMPLER_OPCODE_GATHER4_I] = {
       .name = "gather4_i",
-      .hw_opcode = XE2_SAMPLER_MESSAGE_SAMPLE_GATHER4_I,
+      .hw_opcode = GEN_XE2_SAMPLER_MESSAGE_SAMPLE_GATHER4_I,
       .nir_src_mask = N(coord) | N(offset),
       .is_gather = true,
       .payload = {
@@ -466,7 +466,7 @@ static const struct sampler_opcode_desc {
    },
    [BRW_SAMPLER_OPCODE_GATHER4_I_C] = {
       .name = "gather4_i_c",
-      .hw_opcode = XE2_SAMPLER_MESSAGE_SAMPLE_GATHER4_I_C,
+      .hw_opcode = GEN_XE2_SAMPLER_MESSAGE_SAMPLE_GATHER4_I_C,
       .nir_src_mask = N(comparator) | N(coord) | N(offset),
       .is_gather = true,
       .payload = {
@@ -477,7 +477,7 @@ static const struct sampler_opcode_desc {
    },
    [BRW_SAMPLER_OPCODE_GATHER4_L] = {
       .name = "gather4_l",
-      .hw_opcode = XE2_SAMPLER_MESSAGE_SAMPLE_GATHER4_L,
+      .hw_opcode = GEN_XE2_SAMPLER_MESSAGE_SAMPLE_GATHER4_L,
       .nir_src_mask = N(lod) | N(coord) | N(offset),
       .is_gather = true,
       .payload = {
@@ -488,7 +488,7 @@ static const struct sampler_opcode_desc {
    },
    [BRW_SAMPLER_OPCODE_GATHER4_L_C] = {
       .name = "gather4_l_c",
-      .hw_opcode = XE2_SAMPLER_MESSAGE_SAMPLE_GATHER4_L_C,
+      .hw_opcode = GEN_XE2_SAMPLER_MESSAGE_SAMPLE_GATHER4_L_C,
       .nir_src_mask = N(comparator) | N(lod) | N(coord) | N(offset),
       .is_gather = true,
       .payload = {
@@ -499,7 +499,7 @@ static const struct sampler_opcode_desc {
    },
    [BRW_SAMPLER_OPCODE_GATHER4_PO] = {
       .name = "gather4_po",
-      .hw_opcode = GFX7_SAMPLER_MESSAGE_SAMPLE_GATHER4_PO,
+      .hw_opcode = GEN_SAMPLER_MESSAGE_SAMPLE_GATHER4_PO,
       .nir_src_mask = N(coord) | N(offset),
       .is_gather = true,
       .has_offset_payload = true,
@@ -511,7 +511,7 @@ static const struct sampler_opcode_desc {
    },
    [BRW_SAMPLER_OPCODE_GATHER4_PO_PACKED] = {
       .name = "gather4_po (packed)",
-      .hw_opcode = GFX7_SAMPLER_MESSAGE_SAMPLE_GATHER4_PO,
+      .hw_opcode = GEN_SAMPLER_MESSAGE_SAMPLE_GATHER4_PO,
       .nir_src_mask = N(coord) | N(offset),
       .is_gather = true,
       .has_offset_payload = true,
@@ -523,7 +523,7 @@ static const struct sampler_opcode_desc {
    },
    [BRW_SAMPLER_OPCODE_GATHER4_PO_B] = {
       .name = "gather4_po_b",
-      .hw_opcode = XE2_SAMPLER_MESSAGE_SAMPLE_GATHER4_PO_B,
+      .hw_opcode = GEN_XE2_SAMPLER_MESSAGE_SAMPLE_GATHER4_PO_B,
       .nir_src_mask = N(bias) | N(coord) | N(offset),
       .is_gather = true,
       .has_offset_payload = true,
@@ -535,7 +535,7 @@ static const struct sampler_opcode_desc {
    },
    [BRW_SAMPLER_OPCODE_GATHER4_PO_C] = {
       .name = "gather4_po_c",
-      .hw_opcode = GFX7_SAMPLER_MESSAGE_SAMPLE_GATHER4_PO_C,
+      .hw_opcode = GEN_SAMPLER_MESSAGE_SAMPLE_GATHER4_PO_C,
       .nir_src_mask = N(comparator) | N(coord) | N(offset),
       .is_gather = true,
       .has_offset_payload = true,
@@ -547,7 +547,7 @@ static const struct sampler_opcode_desc {
    },
    [BRW_SAMPLER_OPCODE_GATHER4_PO_C_PACKED] = {
       .name = "gather4_po_c (packed)",
-      .hw_opcode = GFX7_SAMPLER_MESSAGE_SAMPLE_GATHER4_PO_C,
+      .hw_opcode = GEN_SAMPLER_MESSAGE_SAMPLE_GATHER4_PO_C,
       .nir_src_mask = N(comparator) | N(coord) | N(offset),
       .is_gather = true,
       .has_offset_payload = true,
@@ -559,7 +559,7 @@ static const struct sampler_opcode_desc {
    },
    [BRW_SAMPLER_OPCODE_GATHER4_I] = {
       .name = "gather4_i",
-      .hw_opcode = XE2_SAMPLER_MESSAGE_SAMPLE_GATHER4_I,
+      .hw_opcode = GEN_XE2_SAMPLER_MESSAGE_SAMPLE_GATHER4_I,
       .nir_src_mask = N(coord) | N(offset),
       .is_gather = true,
       .is_gather_implicit_lod = true,
@@ -571,7 +571,7 @@ static const struct sampler_opcode_desc {
    },
    [BRW_SAMPLER_OPCODE_GATHER4_PO_I] = {
       .name = "gather4_po_i",
-      .hw_opcode = XE2_SAMPLER_MESSAGE_SAMPLE_GATHER4_PO_I,
+      .hw_opcode = GEN_XE2_SAMPLER_MESSAGE_SAMPLE_GATHER4_PO_I,
       .nir_src_mask = N(comparator) | N(coord) | N(offset),
       .is_gather = true,
       .is_gather_implicit_lod = true,
@@ -584,7 +584,7 @@ static const struct sampler_opcode_desc {
    },
    [BRW_SAMPLER_OPCODE_GATHER4_PO_I_C] = {
       .name = "gather4_po_i_c",
-      .hw_opcode = XE2_SAMPLER_MESSAGE_SAMPLE_GATHER4_PO_I_C,
+      .hw_opcode = GEN_XE2_SAMPLER_MESSAGE_SAMPLE_GATHER4_PO_I_C,
       .nir_src_mask = N(comparator) | N(coord) | N(offset),
       .is_gather = true,
       .is_gather_implicit_lod = true,
@@ -597,7 +597,7 @@ static const struct sampler_opcode_desc {
    },
    [BRW_SAMPLER_OPCODE_GATHER4_PO_L] = {
       .name = "gather4_po_l",
-      .hw_opcode = XE2_SAMPLER_MESSAGE_SAMPLE_GATHER4_PO_L,
+      .hw_opcode = GEN_XE2_SAMPLER_MESSAGE_SAMPLE_GATHER4_PO_L,
       .nir_src_mask = N(coord) | N(lod) | N(offset),
       .is_gather = true,
       .has_offset_payload = true,
@@ -609,7 +609,7 @@ static const struct sampler_opcode_desc {
    },
    [BRW_SAMPLER_OPCODE_GATHER4_PO_L_C] = {
       .name = "gather4_po_l_c",
-      .hw_opcode = XE2_SAMPLER_MESSAGE_SAMPLE_GATHER4_PO_L_C,
+      .hw_opcode = GEN_XE2_SAMPLER_MESSAGE_SAMPLE_GATHER4_PO_L_C,
       .nir_src_mask = N(comparator) | N(coord) | N(offset),
       .is_gather = true,
       .has_offset_payload = true,
@@ -621,7 +621,7 @@ static const struct sampler_opcode_desc {
    },
    [BRW_SAMPLER_OPCODE_LD2DMS_W] = {
       .name = "ld2dms_w",
-      .hw_opcode = GFX9_SAMPLER_MESSAGE_SAMPLE_LD2DMS_W,
+      .hw_opcode = GEN_SAMPLER_MESSAGE_SAMPLE_LD2DMS_W,
       .nir_src_mask = N(ms_index) | N(ms_mcs_intel) | N(coord) | N(lod) | N(offset),
       .is_fetch = true,
       .payload = {
@@ -632,7 +632,7 @@ static const struct sampler_opcode_desc {
    },
    [BRW_SAMPLER_OPCODE_LD2DMS_W_GFX125] = {
       .name = "ld2dms_w (gfx125)",
-      .hw_opcode = GFX9_SAMPLER_MESSAGE_SAMPLE_LD2DMS_W,
+      .hw_opcode = GEN_SAMPLER_MESSAGE_SAMPLE_LD2DMS_W,
       .nir_src_mask = N(ms_index) | N(ms_mcs_intel) | N(coord) | N(lod) | N(offset),
       .is_fetch = true,
       .payload = {
@@ -643,7 +643,7 @@ static const struct sampler_opcode_desc {
    },
    [BRW_SAMPLER_OPCODE_LD_MCS] = {
       .name = "ld_mcs",
-      .hw_opcode = GFX7_SAMPLER_MESSAGE_SAMPLE_LD_MCS,
+      .hw_opcode = GEN_SAMPLER_MESSAGE_SAMPLE_LD_MCS,
       .nir_src_mask = 0 /* internal */,
       .is_fetch = true,
       .payload = {
@@ -654,7 +654,7 @@ static const struct sampler_opcode_desc {
    },
    [BRW_SAMPLER_OPCODE_LD2DMS] = {
       .name = "ld2dms",
-      .hw_opcode = GFX7_SAMPLER_MESSAGE_SAMPLE_LD2DMS,
+      .hw_opcode = GEN_SAMPLER_MESSAGE_SAMPLE_LD2DMS,
       .nir_src_mask = 0 /* internal */,
       .is_fetch = true,
       .payload = {
@@ -665,7 +665,7 @@ static const struct sampler_opcode_desc {
    },
    [BRW_SAMPLER_OPCODE_LD2DSS] = {
       .name = "ld2dss",
-      .hw_opcode = GFX7_SAMPLER_MESSAGE_SAMPLE_LD2DSS,
+      .hw_opcode = GEN_SAMPLER_MESSAGE_SAMPLE_LD2DSS,
       .nir_src_mask = 0 /* internal */,
       .is_fetch = true,
       .payload = {

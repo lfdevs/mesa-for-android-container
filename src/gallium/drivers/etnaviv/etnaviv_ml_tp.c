@@ -367,21 +367,11 @@ split_reshuffle(struct etna_ml_subgraph *subgraph, const struct etna_operation *
       unsigned pad_y = 0;
 
       if (operation->padding_same) {
-         if (operation->weight_width == 5) {
-            if (i == 0 || dim_to_split != 0)
-               pad_x++;
+         if (i == 0 || dim_to_split != 0)
+            pad_x += (operation->weight_width - 2 + operation->input_width % 2) / 2;
 
-            if (i == 0 || dim_to_split != 1)
-               pad_y++;
-         }
-
-         if (operation->input_width % 2)
-            if (i == 0 || dim_to_split != 0)
-               pad_x++;
-
-         if (operation->input_height % 2)
-            if (i == 0 || dim_to_split != 1)
-               pad_y++;
+         if (i == 0 || dim_to_split != 1)
+            pad_y += (operation->weight_height - 2 + operation->input_height % 2) / 2;
       }
 
       if (i < tp_cores_used - 1) {
@@ -980,13 +970,8 @@ etna_ml_lower_reshuffle(struct etna_ml_subgraph *subgraph,
    operation->weight_height = convolution->conv.weight_tensor->dims[2];
 
    if (operation->padding_same) {
-      if (operation->weight_width == 5) {
-         operation->output_width += 2;
-         operation->output_height += 2;
-      } else {
-         operation->output_width += 1;
-         operation->output_height += 1;
-      }
+      operation->output_width += operation->weight_width / 2;
+      operation->output_height += operation->weight_height / 2;
    }
 }
 

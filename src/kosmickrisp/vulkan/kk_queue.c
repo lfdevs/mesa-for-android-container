@@ -121,8 +121,12 @@ kk_queue_init(struct kk_device *dev, struct kk_queue *queue,
 
    queue->main.mtl_handle =
       mtl_new_command_queue(dev->mtl_handle, KK_MAX_CMD_BUFFERS);
+   mtl_command_queue_add_residency_set(queue->main.mtl_handle,
+                                       dev->residency_set.handle);
    queue->pre_gfx.mtl_handle =
       mtl_new_command_queue(dev->mtl_handle, KK_MAX_CMD_BUFFERS);
+   mtl_command_queue_add_residency_set(queue->pre_gfx.mtl_handle,
+                                       dev->residency_set.handle);
 
    queue->vk.driver_submit = kk_queue_submit;
 
@@ -132,6 +136,10 @@ kk_queue_init(struct kk_device *dev, struct kk_queue *queue,
 void
 kk_queue_finish(struct kk_device *dev, struct kk_queue *queue)
 {
+   mtl_command_queue_remove_residency_set(queue->main.mtl_handle,
+                                          dev->residency_set.handle);
+   mtl_command_queue_remove_residency_set(queue->pre_gfx.mtl_handle,
+                                          dev->residency_set.handle);
    if (queue->wait_fence)
       mtl_release(queue->wait_fence);
    mtl_release(queue->pre_gfx.mtl_handle);

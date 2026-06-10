@@ -495,7 +495,7 @@ kk_cmd_buffer_flush_push_descriptors(struct kk_cmd_buffer *cmd,
 }
 
 void
-kk_dispatch_precomp(struct kk_cmd_buffer *cmd, struct mtl_size grid,
+kk_dispatch_precomp(struct kk_cmd_buffer *cmd, struct kk_grid grid,
                     bool pre_gfx, enum libkk_program idx, void *data,
                     size_t data_size)
 {
@@ -505,7 +505,7 @@ kk_dispatch_precomp(struct kk_cmd_buffer *cmd, struct mtl_size grid,
    mtl_compute_encoder *encoder =
       pre_gfx ? kk_encoder_pre_gfx_encoder(cmd) : kk_compute_encoder(cmd);
 
-   struct kk_ptr data_gpu = kk_pool_upload(cmd, data, data_size, 4u);
+   struct kk_ptr data_gpu = kk_pool_upload(cmd, data, data_size, 8u);
    if (unlikely(!data_gpu.gpu))
       return;
 
@@ -517,7 +517,12 @@ kk_dispatch_precomp(struct kk_cmd_buffer *cmd, struct mtl_size grid,
       .y = prog->info.workgroup_size[1],
       .z = prog->info.workgroup_size[2],
    };
-   mtl_dispatch_threads(encoder, grid, local_size);
+
+   if (grid.mode == KK_GRID_DIRECT)
+      mtl_dispatch_threads(encoder, grid.size, local_size);
+   else
+      mtl_dispatch_threadgroups_with_indirect_buffer(encoder, grid.indirect,
+                                                     grid.offset, local_size);
 }
 
 void
@@ -549,4 +554,26 @@ kk_CmdPushDescriptorSetWithTemplate2KHR(
    kk_push_descriptor_set_update_template(
       push_set, set_layout, template,
       pPushDescriptorSetWithTemplateInfo->pData);
+}
+
+VKAPI_ATTR void VKAPI_CALL
+kk_CmdBeginConditionalRendering2EXT(
+   VkCommandBuffer commandBuffer,
+   const VkConditionalRenderingBeginInfo2EXT *pConditionalRenderingBegin)
+{
+   VK_FROM_HANDLE(kk_cmd_buffer, cmd, commandBuffer);
+
+   cmd->state.cond_render.address =
+      pConditionalRenderingBegin->addressRange.address;
+   cmd->state.cond_render.inverted = pConditionalRenderingBegin->flags &
+                                     VK_CONDITIONAL_RENDERING_INVERTED_BIT_EXT;
+   cmd->state.cond_render.enabled = true;
+}
+
+VKAPI_ATTR void VKAPI_CALL
+kk_CmdEndConditionalRenderingEXT(VkCommandBuffer commandBuffer)
+{
+   VK_FROM_HANDLE(kk_cmd_buffer, cmd, commandBuffer);
+
+   cmd->state.cond_render.enabled = false;
 }

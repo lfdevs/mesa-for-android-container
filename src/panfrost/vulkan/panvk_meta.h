@@ -123,8 +123,14 @@ panvk_meta_copy_get_image_properties(struct panvk_image *img,
          }
          break;
       case VK_FORMAT_X8_D24_UNORM_PACK32:
-         props.depth.view_format =
-            prefer_blendable ? VK_FORMAT_R8G8B8A8_UNORM : VK_FORMAT_R8G8B8A8_UINT;
+         if (img->planes[0].image.props.format == PIPE_FORMAT_Z24_UNORM_PACKED) {
+            props.depth.view_format = prefer_blendable ? VK_FORMAT_R8G8B8_UNORM
+                                                       : VK_FORMAT_R8G8B8_UINT;
+         } else {
+            props.depth.view_format = prefer_blendable
+                                         ? VK_FORMAT_R8G8B8A8_UNORM
+                                         : VK_FORMAT_R8G8B8A8_UINT;
+         }
          props.depth.component_mask = BITFIELD_MASK(3);
          break;
       case VK_FORMAT_D32_SFLOAT_S8_UINT:
@@ -207,12 +213,4 @@ VkResult panvk_per_arch(meta_get_copy_desc_job)(
    const struct panvk_shader_desc_state *shader_desc_state,
    uint32_t attrib_buf_idx_offset, struct pan_ptr *job_desc);
 #endif
-
-void panvk_per_arch(transition_image_layout_sync_scope)(
-   const VkImageMemoryBarrier2 *barrier,
-   VkPipelineStageFlags2 *out_stages, VkAccessFlags2 *out_access);
-void panvk_per_arch(cmd_transition_image_layout)(
-   VkCommandBuffer _cmdbuf,
-   const VkImageMemoryBarrier2 *barrier);
-
 #endif

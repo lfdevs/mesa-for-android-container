@@ -357,6 +357,11 @@ CDX12EncHMFT::PrepareForEncodeHelper( LPDX12EncodeContext pDX12EncodeContext,
          pPicInfo->ref_list0[i] = cur_frame_desc->l0_reference_list[i];
    }
 
+   if( !m_EncoderCapabilities.m_bHWSupportsAppControlledSlicePartitioning && m_EncoderCapabilities.m_bHWSupportSliceModeAuto )
+   {
+      pPicInfo->slice_mode = PIPE_VIDEO_SLICE_MODE_AUTO;
+   }
+
    if( m_uiDirtyRectEnabled )
    {
       if( dirtyRectFrameNumSet )

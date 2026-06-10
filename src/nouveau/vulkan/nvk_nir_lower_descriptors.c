@@ -60,6 +60,7 @@ struct lower_descriptors_ctx {
    bool use_edb_buffer_views;
    bool clamp_desc_array_bounds;
    bool indirect_bind;
+   bool has_task_shader;
    nir_address_format ubo_addr_format;
    nir_address_format ssbo_addr_format;
 
@@ -1122,6 +1123,8 @@ static bool
 try_lower_intrin(nir_builder *b, nir_intrinsic_instr *intrin,
                  const struct lower_descriptors_ctx *ctx)
 {
+   const mesa_shader_stage stage = b->shader->info.stage;
+
    switch (intrin->intrinsic) {
    case nir_intrinsic_load_constant:
       return lower_load_constant(b, intrin, ctx);
@@ -1133,20 +1136,30 @@ try_lower_intrin(nir_builder *b, nir_intrinsic_instr *intrin,
       UNREACHABLE("Should have been lowered by nir_lower_cs_intrinsics()");
 
    case nir_intrinsic_load_num_workgroups:
+      /* We use ISBE.ATTR to pass this from task. */
+      if (stage == MESA_SHADER_MESH && ctx->has_task_shader)
+         return false;
+
+      if (stage == MESA_SHADER_MESH || stage == MESA_SHADER_TASK)
+         return lower_sysval_to_root_table(b, intrin, draw.mesh.group_count, ctx);
+
       return lower_sysval_to_root_table(b, intrin, cs.group_count, ctx);
 
    case nir_intrinsic_load_base_workgroup_id:
-      return lower_sysval_to_root_table(b, intrin, cs.base_group, ctx);
+      if (stage == MESA_SHADER_COMPUTE)
+         return lower_sysval_to_root_table(b, intrin, cs.base_group, ctx);
+
+      return false;
 
    case nir_intrinsic_load_push_constant:
       return lower_load_push_constant(b, intrin, ctx);
 
    case nir_intrinsic_load_base_vertex:
    case nir_intrinsic_load_first_vertex:
-      return lower_sysval_to_root_table(b, intrin, draw.base_vertex, ctx);
+      return lower_sysval_to_root_table(b, intrin, draw.vs.base_vertex, ctx);
 
    case nir_intrinsic_load_base_instance:
-      return lower_sysval_to_root_table(b, intrin, draw.base_instance, ctx);
+      return lower_sysval_to_root_table(b, intrin, draw.vs.base_instance, ctx);
 
    case nir_intrinsic_load_draw_id:
       return lower_sysval_to_root_table(b, intrin, draw.draw_index, ctx);
@@ -1548,6 +1561,7 @@ nvk_nir_lower_descriptors(nir_shader *nir,
          rs->images != VK_PIPELINE_ROBUSTNESS_IMAGE_BEHAVIOR_DISABLED_EXT,
       .indirect_bind =
          shader_flags & VK_SHADER_CREATE_INDIRECT_BINDABLE_BIT_EXT,
+      .has_task_shader = (shader_flags & VK_SHADER_CREATE_NO_TASK_SHADER_BIT_EXT) == 0,
       .ssbo_addr_format = nvk_ssbo_addr_format(pdev, rs),
       .ubo_addr_format = nvk_ubo_addr_format(pdev, rs),
    };

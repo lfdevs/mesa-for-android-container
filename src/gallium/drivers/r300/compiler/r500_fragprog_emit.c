@@ -25,9 +25,9 @@
 
 #define PROG_CODE struct r500_fragment_program_code *code = &c->code->code.r500
 
-#define error(fmt, args...)                                                  \
-   do {                                                                      \
-      rc_error(&c->Base, "%s::%s(): " fmt "\n", __FILE__, __func__, ##args); \
+#define error(fmt, args...)                                             \
+   do {                                                                 \
+      rc_error(&c->Base, "%s::%s(): " fmt, __FILE__, __func__, ##args); \
    } while (0)
 
 struct branch_info {

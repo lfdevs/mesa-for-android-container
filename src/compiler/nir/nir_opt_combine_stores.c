@@ -344,7 +344,8 @@ combine_stores_block(struct combine_stores_state *state, nir_block *block)
       }
 
       case nir_intrinsic_load_deref_block_intel:
-      case nir_intrinsic_store_deref_block_intel: {
+      case nir_intrinsic_store_deref_block_intel:
+      case nir_intrinsic_load_deref_transpose_amd: {
          /* Combine all the stores that may alias with the whole variable (or
           * cast).
           */

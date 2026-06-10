@@ -1,6 +1,6 @@
-asr(8)          g19<1>D         g7<8,8,1>D      0x00000001UD    { align1 1Q };
-asr(16)         g20<1>D         g2.7<0,1,0>D    0x0000001fUD    { align1 1H };
-asr.nz.f0.0(8)  nullUD          -g0<0,1,0>W     15D             { align1 1Q };
-asr.nz.f0.0(16) nullUD          -g0<0,1,0>W     15D             { align1 1H };
-asr(8)          g2<1>D          -g0<0,1,0>W     15D             { align1 1Q };
-asr(16)         g2<1>D          -g0<0,1,0>W     15D             { align1 1H };
+        asr (8)                   r19:d         r7<8;8,1>:d       0x00000001
+        asr (16)                  r20:d         r2.7<0>:d         0x0000001f
+        asr (8)        (ne)f0.0   null          -r0<0>:w          15:d
+        asr (16)       (ne)f0.0   null          -r0<0>:w          15:d
+        asr (8)                   r2:d          -r0<0>:w          15:d
+        asr (16)                  r2:d          -r0<0>:w          15:d

@@ -1,8 +1,8 @@
-shr(8)          g20<1>UD        g19<8,8,1>UD    0x00000001UD    { align1 1Q };
-shr(16)         g43<1>UD        g41<8,8,1>UD    0x00000001UD    { align1 1H };
-shr.z.f0.0(8)   g3<1>UD         g1<8,8,1>UD     0x0000001bUD    { align1 1Q };
-shr(16)         g8<1>UW         g1<1,8,0>UB     0x44440000V     { align1 1H };
-shr.z.f0.0(8)   nullUD          g1<8,8,1>UD     0x0000001bUD    { align1 1Q };
-shr(8)          g3<1>UW         g1.28<1,8,0>UB  0x76543210V     { align1 1Q };
-shr(8)          g3<2>UW         g5<8,8,1>UD     g4<8,8,1>UW     { align1 1Q };
-shr(16)         g20<2>UW        g15<8,8,1>UD    g13<8,8,1>UW    { align1 1H };
+        shr (8)                   r20           r19<8;8,1>        0x00000001
+        shr (16)                  r43           r41<8;8,1>        0x00000001
+        shr (8)        (eq)f0.0   r3            r1<8;8,1>         0x0000001b
+        shr (16)                  r8:uw         r1<1;8,0>:ub      0x44440000:v
+        shr (8)        (eq)f0.0   null          r1<8;8,1>         0x0000001b
+        shr (8)                   r3:uw         r1.28<1;8,0>:ub   0x76543210:v
+        shr (8)                   r3<2>:uw      r5<8;8,1>         r4<8;8,1>:uw
+        shr (16)                  r20<2>:uw     r15<8;8,1>        r13<8;8,1>:uw

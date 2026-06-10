@@ -242,13 +242,11 @@ struct tu_autotune {
    std::mutex rp_latency_mutex; /* Protects rp_latency_tracking */
    uint64_t last_latency_cleanup_ts = 0;
 
-   uint32_t preemption_latency_selector_reg;
-   uint32_t preemption_latency_selector;
-   uint32_t preemption_latency_counter_reg_lo;
+   const struct fd_perfcntr_counter *preemption_latency_counter;
+   const struct fd_perfcntr_countable *preemption_latency_countable;
 
-   uint32_t always_count_selector_reg;
-   uint32_t always_count_selector;
-   uint32_t always_count_counter_reg_lo;
+   const struct fd_perfcntr_counter *always_count_counter;
+   const struct fd_perfcntr_countable *always_count_countable;
 
    struct tu_draw_state reset_rp_hash_draw_state;
 

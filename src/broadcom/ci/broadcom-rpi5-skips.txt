@@ -18,6 +18,14 @@ spec@glsl-es-3.20.*
 
 # Slow CTS tests (> 1 minute to run)
 asan-dEQP-VK.ssbo.phys.layout.random.scalar.3
+# Slow GS compile: register allocator spills heavily on these f16 vec4 shuffles.
+dEQP-VK.spirv_assembly.instruction.graphics.float16.opvectorshuffle.244_geom
+dEQP-VK.spirv_assembly.instruction.graphics.float16.opvectorshuffle.334_geom
+dEQP-VK.spirv_assembly.instruction.graphics.float16.opvectorshuffle.343_geom
+dEQP-VK.spirv_assembly.instruction.graphics.float16.opvectorshuffle.344_geom
+dEQP-VK.spirv_assembly.instruction.graphics.float16.opvectorshuffle.434_geom
+dEQP-VK.spirv_assembly.instruction.graphics.float16.opvectorshuffle.443_geom
+dEQP-VK.spirv_assembly.instruction.graphics.float16.opvectorshuffle.444_geom
 dEQP-VK.ssbo.layout.random.8bit.all_per_block_buffers.5
 dEQP-VK.ssbo.layout.random.8bit.scalar.78
 dEQP-VK.ssbo.layout.random.nested_structs_arrays.17

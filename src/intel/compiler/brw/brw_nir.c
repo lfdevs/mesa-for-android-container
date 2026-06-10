@@ -437,12 +437,15 @@ try_load_push_input(nir_builder *b,
       return NULL;
 
    const unsigned offset_unit = cb_data->vec4_access ? 16 : 4;
-   uint32_t byte_offset =
+   const uint32_t byte_offset =
       16 * io_base_slot(io, cb_data) + 4 * io_component(io, cb_data) +
       offset_unit * nir_src_as_uint(nir_src_for_ssa(offset));
    assert((byte_offset % 4) == 0);
 
-   if (byte_offset >= cb_data->max_push_bytes)
+   const uint32_t byte_end_offset =
+      byte_offset + (io->def.bit_size / 8) * io->def.num_components;
+
+   if (byte_end_offset > cb_data->max_push_bytes)
       return NULL;
 
    if (stage == MESA_SHADER_GEOMETRY) {
@@ -459,6 +462,9 @@ try_load_push_input(nir_builder *b,
       nir_intrinsic_set_component(io, io_component(io, cb_data));
       return &io->def;
    }
+
+   *cb_data->push_input_read_length = MAX2(*cb_data->push_input_read_length,
+                                           DIV_ROUND_UP(byte_end_offset, 32));
 
    return load_push_input(b, io, byte_offset);
 }
@@ -633,7 +639,7 @@ brw_nir_lower_deferred_urb_writes(nir_shader *nir,
             const nir_io_semantics sem = nir_intrinsic_io_semantics(intrin);
             const unsigned slot =
                vue_map->varying_to_slot[sem.location] +
-               (view_index ? nir_src_as_uint(*view_index) : 0);
+               (view_index ? nir_src_as_uint(*view_index) : 0) +
                nir_src_as_uint(*offset);
             const unsigned c = io_component(intrin, NULL);
             const unsigned mask = nir_intrinsic_write_mask(intrin);
@@ -1290,7 +1296,8 @@ brw_nir_lower_gs_inputs(nir_shader *nir,
 void
 brw_nir_lower_tes_inputs(nir_shader *nir,
                          const struct intel_device_info *devinfo,
-                         const struct intel_vue_map *vue_map)
+                         const struct intel_vue_map *vue_map,
+                         unsigned *out_urb_read_length)
 {
    NIR_PASS(_, nir, nir_lower_tess_level_array_vars_to_vec);
 
@@ -1307,9 +1314,14 @@ brw_nir_lower_tes_inputs(nir_shader *nir,
    NIR_PASS(_, nir, remap_tess_levels, devinfo,
             nir->info.tess._primitive_mode);
 
+   *out_urb_read_length =
+      (nir->info.inputs_read & (VARYING_BIT_TESS_LEVEL_INNER |
+                                VARYING_BIT_TESS_LEVEL_OUTER)) ? 1 : 0;
+
    const struct brw_lower_urb_cb_data cb_data = {
       .devinfo = devinfo,
       .vec4_access = true,
+      .push_input_read_length = out_urb_read_length,
       .max_push_bytes = 32 * 16, /* 32 vec4s */
       .varying_to_slot = vue_map->varying_to_slot,
       .per_vertex_stride = vue_map->num_per_vertex_slots * 16,
@@ -1742,6 +1754,9 @@ brw_nir_lower_vue_outputs(nir_shader *nir)
             nir_lower_io_lower_64bit_to_32);
 
    NIR_PASS(_, nir, brw_nir_lower_16bit_io, nir_var_shader_out);
+
+   /* Fold constant offset srcs for IO. */
+   NIR_PASS(_, nir, nir_opt_constant_folding);
 }
 
 void
@@ -1955,7 +1970,6 @@ brw_nir_optimize(brw_pass_tracker *pt)
       LOOP_OPT(nir_opt_intrinsics);
       LOOP_OPT_NOT_IDEMPOTENT(nir_opt_algebraic);
 
-      LOOP_OPT(nir_lower_constant_convert_alu_types);
       LOOP_OPT(nir_opt_constant_folding);
 
       LOOP_OPT(nir_opt_dead_cf);
@@ -2203,6 +2217,7 @@ brw_preprocess_nir(const struct brw_compiler *compiler, nir_shader *nir,
    OPT(nir_normalize_cubemap_coords);
 
    OPT(nir_lower_global_vars_to_local);
+   OPT(nir_lower_constant_convert_alu_types);
 
    OPT(nir_split_var_copies);
    OPT(nir_split_struct_vars, nir_var_function_temp);

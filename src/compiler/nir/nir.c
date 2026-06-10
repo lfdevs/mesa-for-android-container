@@ -2914,6 +2914,12 @@ nir_image_intrinsic_coord_components(const nir_intrinsic_instr *instr)
 bool
 nir_intrinsic_can_reorder(nir_intrinsic_instr *instr)
 {
+   /* Subgroup operations can't be reordered because they might then read inactive
+    * invocations. load_global_transpose_amd is an example of one which also has ACCESS.
+    */
+   if (nir_intrinsic_has_semantic(instr, NIR_INTRINSIC_SUBGROUP | NIR_INTRINSIC_QUADGROUP))
+      return false;
+
    if (nir_intrinsic_has_access(instr)) {
       enum gl_access_qualifier access = nir_intrinsic_access(instr);
       if (access & ACCESS_VOLATILE)

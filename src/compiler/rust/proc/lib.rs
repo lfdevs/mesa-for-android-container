@@ -8,4 +8,5 @@ extern crate quote;
 extern crate syn;
 
 pub mod as_slice;
+pub mod enum_as_u8;
 pub mod from_variants;

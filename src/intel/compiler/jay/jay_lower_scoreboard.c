@@ -5,6 +5,7 @@
 
 #include <limits.h>
 #include "compiler/brw/brw_eu_defines.h"
+#include "compiler/gen/gen.h"
 #include "util/bitscan.h"
 #include "util/bitset.h"
 #include "util/list.h"
@@ -18,7 +19,7 @@
 #define MAX_KEYS   (JAY_NUM_PHYS_GRF + JAY_NUM_UGPR)
 #define NUM_TOKENS (16)
 
-/** SEND scoreboarding */
+/** SBID scoreboarding */
 struct key {
    unsigned base, width;
 };
@@ -40,18 +41,48 @@ def_to_key(jay_function *func, jay_inst *I, jay_def x)
 }
 
 static inline void
-sync_sbids(jay_builder *b, uint32_t mask, enum tgl_sbid_mode mode)
+sync_sbids(jay_builder *b, uint32_t mask, gen_sbid_mode mode)
 {
    if (util_is_power_of_two_nonzero(mask)) {
       jay_SYNC(b, jay_null(), TGL_SYNC_NOP)->dep =
-         tgl_swsb_sbid(mode, util_logbase2(mask));
+         gen_swsb_sbid(mode, util_logbase2(mask));
    } else if (mask) {
-      jay_SYNC(b, mask, mode == TGL_SBID_DST ? TGL_SYNC_ALLWR : TGL_SYNC_ALLRD);
+      jay_SYNC(b, mask, mode == GEN_SBID_DST ? TGL_SYNC_ALLWR : TGL_SYNC_ALLRD);
    }
 }
 
+static inline bool
+jay_inst_is_unordered(const jay_inst *I)
+{
+   return I->op == JAY_OPCODE_SEND ||
+          I->op == JAY_OPCODE_DPAS;
+}
+
+static inline bool
+jay_inst_has_sbid(const jay_inst *I)
+{
+   return jay_inst_is_unordered(I) &&
+          !(I->op == JAY_OPCODE_SEND && jay_send_eot(I));
+}
+
+static inline unsigned
+jay_inst_sbid(const jay_inst *I)
+{
+   return I->op == JAY_OPCODE_SEND ? jay_send_sbid(I)
+                                   : jay_dpas_sbid(I);
+}
+
+static inline void
+jay_inst_set_sbid(jay_inst *I, unsigned sbid)
+{
+   if (I->op == JAY_OPCODE_SEND)
+      jay_set_send_sbid(I, sbid);
+   else
+      jay_set_dpas_sbid(I, sbid);
+}
+
 static void
-lower_send_local(jay_function *func, jay_block *block)
+lower_sbid_local(jay_function *func, jay_block *block)
 {
    struct {
       BITSET_DECLARE(reading, MAX_KEYS);
@@ -92,9 +123,9 @@ lower_send_local(jay_function *func, jay_block *block)
          }
       }
 
-      if (I->op == JAY_OPCODE_SEND && !jay_send_eot(I)) {
+      if (jay_inst_has_sbid(I)) {
          unsigned sbid = (roundrobin++) % NUM_TOKENS;
-         jay_set_send_sbid(I, sbid);
+         jay_inst_set_sbid(I, sbid);
 
          if (!(busy & BITFIELD_BIT(sbid))) {
             busy |= BITFIELD_BIT(sbid);
@@ -115,7 +146,8 @@ lower_send_local(jay_function *func, jay_block *block)
          }
 
          /* Barriers are non-EOT gateway messages. Insert the needed SYNC */
-         if (jay_send_sfid(I) == BRW_SFID_MESSAGE_GATEWAY) {
+         if (I->op == JAY_OPCODE_SEND &&
+             jay_send_sfid(I) == GEN_SFID_MESSAGE_GATEWAY) {
             b.cursor = jay_after_inst(I);
             jay_SYNC(&b, jay_null(), TGL_SYNC_BAR);
          }
@@ -127,8 +159,8 @@ lower_send_local(jay_function *func, jay_block *block)
       assert(((sbid_dst & sbid_src) == 0) && "by construction");
 
       busy &= ~sbid_dst;
-      sync_sbids(&b, sbid_dst, TGL_SBID_DST);
-      sync_sbids(&b, sbid_src, TGL_SBID_SRC);
+      sync_sbids(&b, sbid_dst, GEN_SBID_DST);
+      sync_sbids(&b, sbid_src, GEN_SBID_SRC);
 
       if (I->op == JAY_OPCODE_SCHEDULE_BARRIER) {
          /* Lowered above into a sync, but removed late to keep the cursor */
@@ -138,8 +170,8 @@ lower_send_local(jay_function *func, jay_block *block)
 
    /* Sync on block boundaries. */
    if (block != jay_last_block(func)) {
-      jay_builder b = jay_init_builder(func, jay_before_jump(block));
-      sync_sbids(&b, busy, TGL_SBID_DST);
+      jay_builder b = jay_init_builder(func, jay_after_block_logical(block));
+      sync_sbids(&b, busy, GEN_SBID_DST);
    }
 }
 
@@ -151,54 +183,57 @@ lower_send_local(jay_function *func, jay_block *block)
  */
 #define make_writer(pipe, ip) (((uint32_t) ip << 3) | (uint32_t) (pipe))
 #define writer_ip(writer)     (writer >> 3)
-#define writer_pipe(writer)   (enum tgl_pipe)(writer & BITFIELD_MASK(3))
+#define writer_pipe(writer)   (gen_pipe)(writer & BITFIELD_MASK(3))
 
-#define TGL_NUM_PIPES (TGL_PIPE_ALL)
-typedef uint32_t u32_per_pipe[TGL_NUM_PIPES];
+#define GEN_NUM_PIPES (GEN_PIPE_ALL)
+typedef uint32_t u32_per_pipe[GEN_NUM_PIPES];
 
 struct swsb_state {
    uint32_t nr_keys;
-   unsigned ip[TGL_NUM_PIPES];
-   unsigned last_shape[TGL_NUM_PIPES];
+   unsigned ip[GEN_NUM_PIPES];
+   unsigned last_shape[GEN_NUM_PIPES];
 
-   /* finished_ip[X / TGL_NUM_PIPES + SBID][Y] = ip means from the perspective
+   /* finished_ip[X / GEN_NUM_PIPES + SBID][Y] = ip means from the perspective
     * of pipe X or send SBID X, ip on pipe Y has already been waited on.
     */
-   unsigned finished_ip[TGL_NUM_PIPES + NUM_TOKENS][TGL_NUM_PIPES];
+   unsigned finished_ip[GEN_NUM_PIPES + NUM_TOKENS][GEN_NUM_PIPES];
    u32_per_pipe *access;
 
    jay_inst *last_sync;
 };
 
-static enum tgl_pipe
+static gen_pipe
 inst_exec_pipe(const struct intel_device_info *devinfo, jay_inst *I)
 {
-   return I->op == JAY_OPCODE_SEND       ? TGL_PIPE_NONE :
-          I->op == JAY_OPCODE_MATH       ? TGL_PIPE_MATH :
-          I->type == JAY_TYPE_F64        ? TGL_PIPE_LONG :
-          jay_type_is_any_float(I->type) ? TGL_PIPE_FLOAT :
-                                           TGL_PIPE_INT;
+   return jay_inst_is_unordered(I)       ? GEN_PIPE_NONE :
+          I->op == JAY_OPCODE_MATH       ? GEN_PIPE_MATH :
+          I->type == JAY_TYPE_F64        ? GEN_PIPE_LONG :
+          jay_type_is_any_float(I->type) ? GEN_PIPE_FLOAT :
+                                           GEN_PIPE_INT;
 }
 
 /**
  * Return the RegDist pipeline the hardware will synchronize with if no
  * pipeline information is provided in the SWSB annotation of an
- * instruction (e.g. when TGL_PIPE_NONE is specified in tgl_swsb).
+ * instruction (e.g. when GEN_PIPE_NONE is specified in gen_swsb).
  */
-static enum tgl_pipe
+static gen_pipe
 inferred_sync_pipe(const struct intel_device_info *devinfo, const jay_inst *I)
 {
    enum jay_type type = I->num_srcs ? jay_src_type(I, 0) : JAY_TYPE_UNTYPED;
 
    if (I->op == JAY_OPCODE_SEND) {
-      return TGL_PIPE_NONE;
+      return GEN_PIPE_NONE;
+   } else if (I->op == JAY_OPCODE_DPAS) {
+      return jay_type_is_any_float(jay_dpas_acc_type(I)) ? GEN_PIPE_FLOAT
+                                                         : GEN_PIPE_INT;
    } else if (devinfo->verx10 >= 125 && type == JAY_TYPE_F64) {
       /* Avoid emitting (RegDist, SWSB) annotations for long instructions on
        * platforms where they are unordered as they may not be allowed.
        */
-      return devinfo->has_64bit_float ? TGL_PIPE_LONG : TGL_PIPE_NONE;
+      return devinfo->has_64bit_float ? GEN_PIPE_LONG : GEN_PIPE_NONE;
    } else {
-      return jay_type_is_any_float(type) ? TGL_PIPE_FLOAT : TGL_PIPE_INT;
+      return jay_type_is_any_float(type) ? GEN_PIPE_FLOAT : GEN_PIPE_INT;
    }
 }
 
@@ -217,11 +252,11 @@ inferred_sync_pipe(const struct intel_device_info *devinfo, const jay_inst *I)
  * be lower on some platforms but for now we match IGC to be safe.
  */
 static inline unsigned
-max_dependence(enum tgl_pipe pipe)
+max_dependence(gen_pipe pipe)
 {
-   return pipe == TGL_PIPE_SCALAR ? 2 :
-          pipe == TGL_PIPE_MATH   ? 18 :
-          pipe == TGL_PIPE_LONG   ? 15 :
+   return pipe == GEN_PIPE_SCALAR ? 2 :
+          pipe == GEN_PIPE_MATH   ? 18 :
+          pipe == GEN_PIPE_LONG   ? 15 :
                                     11;
 }
 
@@ -229,13 +264,13 @@ static void
 depend_on_writer(struct swsb_state *state,
                  struct key r,
                  unsigned *dep,
-                 enum tgl_pipe exec,
+                 gen_pipe exec,
                  bool except_exec)
 {
    for (unsigned i = 0; i < r.width; ++i) {
       assert(r.base + i < state->nr_keys);
       uint32_t w = state->access[r.base + i][0];
-      enum tgl_pipe write = writer_pipe(w);
+      gen_pipe write = writer_pipe(w);
 
       /* We omit write-after-{read,write} dependencies (except_exec) within a
        * single execution pipe, since each pipe is internally in-order. We also
@@ -251,7 +286,7 @@ depend_on_writer(struct swsb_state *state,
 }
 
 #define jay_foreach_pipe(pipe)                                                 \
-   for (unsigned pipe = 1; pipe < TGL_NUM_PIPES; ++pipe)
+   for (unsigned pipe = 1; pipe < GEN_NUM_PIPES; ++pipe)
 
 static void
 lower_regdist(jay_function *func, jay_inst *I, struct swsb_state *ctx)
@@ -260,6 +295,10 @@ lower_regdist(jay_function *func, jay_inst *I, struct swsb_state *ctx)
       ctx->last_sync = I;
       uint32_t sbid_mask = 0;
       if (jay_sync_op(I) == TGL_SYNC_NOP) {
+         /* The SYNC.nops added by this function that are RegDist-only, are
+          * added *before* the instruction so are not seen here.
+          */
+         assert(I->dep.mode != GEN_SBID_NULL);
          sbid_mask = BITFIELD_BIT(I->dep.sbid);
       } else if (jay_sync_op(I) == TGL_SYNC_ALLRD ||
                  jay_sync_op(I) == TGL_SYNC_ALLWR) {
@@ -274,7 +313,7 @@ lower_regdist(jay_function *func, jay_inst *I, struct swsb_state *ctx)
             jay_foreach_pipe(q) {
                ctx->finished_ip[p][q] =
                   MAX2(ctx->finished_ip[p][q],
-                       ctx->finished_ip[TGL_NUM_PIPES + sbid][q]);
+                       ctx->finished_ip[GEN_NUM_PIPES + sbid][q]);
             }
          }
       }
@@ -282,8 +321,8 @@ lower_regdist(jay_function *func, jay_inst *I, struct swsb_state *ctx)
       return;
    }
 
-   enum tgl_pipe exec_pipe = inst_exec_pipe(func->shader->devinfo, I);
-   unsigned dep[TGL_NUM_PIPES] = { 0 };
+   gen_pipe exec_pipe = inst_exec_pipe(func->shader->devinfo, I);
+   unsigned dep[GEN_NUM_PIPES] = { 0 };
    jay_def dsts[3] = { I->dst, I->cond_flag };
 
    /* MUL_32 is a macro implicitly clobbering acc0/acc1 */
@@ -338,7 +377,7 @@ lower_regdist(jay_function *func, jay_inst *I, struct swsb_state *ctx)
    unsigned min_delta = 7;
 
    jay_foreach_pipe(p) {
-      if (dep[p] && (exec_pipe == TGL_PIPE_NONE ||
+      if (dep[p] && (exec_pipe == GEN_PIPE_NONE ||
                      dep[p] > ctx->finished_ip[exec_pipe][p])) {
 
          min_delta = MIN2(min_delta, ctx->ip[p] - dep[p] + 1);
@@ -346,10 +385,12 @@ lower_regdist(jay_function *func, jay_inst *I, struct swsb_state *ctx)
       }
    }
 
-   /* SENDs are modelled as a pipe per SBID for finished_ip purposes */
+   /* Unordered instructions are modelled as a pipe per SBID for
+    * finished_ip purposes.
+    */
    unsigned generalized_pipe = exec_pipe;
-   if (I->op == JAY_OPCODE_SEND) {
-      generalized_pipe = TGL_NUM_PIPES + jay_send_sbid(I);
+   if (jay_inst_is_unordered(I)) {
+      generalized_pipe = GEN_NUM_PIPES + jay_inst_sbid(I);
    }
 
    /* We'll wait on the unioned dependency. Update the tracking for that. */
@@ -374,34 +415,53 @@ lower_regdist(jay_function *func, jay_inst *I, struct swsb_state *ctx)
       I->decrement_dep = last_pipe != exec_pipe;
    }
 
-   bool has_sbid = I->op == JAY_OPCODE_SEND && !jay_send_eot(I);
-   I->dep = (struct tgl_swsb) {
-      .sbid = has_sbid ? jay_send_sbid(I) : 0,
-      .mode = has_sbid ? TGL_SBID_SET : TGL_SBID_NULL,
+   bool has_sbid = jay_inst_has_sbid(I);
+   I->dep = (gen_swsb) {
+      .sbid = has_sbid ? jay_inst_sbid(I) : 0,
+      .mode = has_sbid ? GEN_SBID_SET : GEN_SBID_NULL,
       .regdist = wait_pipes ? min_delta : 0,
       .pipe = single_wait && (!has_sbid ||
-                              last_pipe == TGL_PIPE_FLOAT ||
-                              last_pipe == TGL_PIPE_INT) ?
+                              last_pipe == GEN_PIPE_FLOAT ||
+                              last_pipe == GEN_PIPE_INT) ?
                  last_pipe :
-                 TGL_PIPE_ALL,
+              wait_pipes ? GEN_PIPE_ALL :
+                           GEN_PIPE_NONE,
    };
 
+   /* DPAS can only represent in-order dependency for its inferred pipe,
+    * so if it depends on something else, add an extra SYNC.nop for that.
+    */
+   if (I->op == JAY_OPCODE_DPAS &&
+       wait_pipes &&
+       (!single_wait ||
+        last_pipe != inferred_sync_pipe(func->shader->devinfo, I))) {
+      assert(I->dep.regdist > 0);
+      jay_builder b = jay_init_builder(func, jay_before_inst(I));
+
+      jay_inst *sync = jay_SYNC(&b, jay_null(), TGL_SYNC_NOP);
+      sync->dep.regdist = I->dep.regdist;
+      sync->dep.pipe = I->dep.pipe;
+
+      I->dep.regdist = 0;
+      I->dep.pipe = GEN_PIPE_NONE;
+   }
+
    /* Fold the immediate preceding SYNC.nop into this instruction, allowing
-    * us to wait on both ALU and a SEND in the same annotation. We cannot do
+    * us to wait on both ALU and a SBID in the same annotation. We cannot do
     * this safely in the presence of predication or SIMD splitting that could
     * cause any part of the instruction to get shot down, skipping the sync
     * for future instructions (at least not without more tricky logic).
     */
    if (ctx->last_sync &&
        jay_sync_op(ctx->last_sync) == TGL_SYNC_NOP &&
-       I->dep.mode == TGL_SBID_NULL &&
+       I->dep.mode == GEN_SBID_NULL &&
        !I->predication &&
        !jay_simd_split(func->shader, I) &&
        (I->dep.regdist == 0 ||
         inferred_sync_pipe(func->shader->devinfo, I) == I->dep.pipe)) {
 
       assert(ctx->last_sync->dep.regdist == 0);
-      assert(ctx->last_sync->dep.pipe == TGL_PIPE_NONE);
+      assert(ctx->last_sync->dep.pipe == GEN_PIPE_NONE);
 
       I->dep.mode = ctx->last_sync->dep.mode;
       I->dep.sbid = ctx->last_sync->dep.sbid;
@@ -409,7 +469,7 @@ lower_regdist(jay_function *func, jay_inst *I, struct swsb_state *ctx)
       jay_remove_instruction(ctx->last_sync);
    }
 
-   if (exec_pipe != TGL_PIPE_NONE) {
+   if (exec_pipe != GEN_PIPE_NONE) {
       /* Advance the IP by the number of physical instructions emitted */
       ctx->ip[exec_pipe] +=
          jay_macro_length(I) << jay_simd_split(func->shader, I);
@@ -445,15 +505,22 @@ void
 jay_lower_scoreboard_trivial(jay_shader *shader)
 {
    jay_foreach_inst_in_shader_safe(shader, func, I) {
-      if (I->op == JAY_OPCODE_SEND && !jay_send_eot(I)) {
-         I->dep = tgl_swsb_dst_dep(tgl_swsb_sbid(TGL_SBID_SET, 0), 1);
+      if (jay_inst_has_sbid(I)) {
+         if (I->op == JAY_OPCODE_DPAS) {
+            /* DPAS can't have an A@1, so insert an extra SYNC.nop. */
+            jay_builder before = jay_init_builder(func, jay_before_inst(I));
+            jay_SYNC(&before, jay_null(), TGL_SYNC_NOP)->dep = gen_swsb_regdist(1);
+            I->dep = gen_swsb_sbid(GEN_SBID_SET, 0);
+         } else {
+            I->dep = gen_swsb_dst_dep(gen_swsb_sbid(GEN_SBID_SET, 0), 1);
+         }
 
          jay_builder b = jay_init_builder(func, jay_after_inst(I));
-         sync_sbids(&b, BITFIELD_BIT(0), TGL_SBID_DST);
+         sync_sbids(&b, BITFIELD_BIT(0), GEN_SBID_DST);
       } else if (I->op == JAY_OPCODE_SCHEDULE_BARRIER) {
          jay_remove_instruction(I);
       } else {
-         I->dep = tgl_swsb_regdist(1);
+         I->dep = gen_swsb_regdist(1);
       }
    }
 }
@@ -471,7 +538,7 @@ jay_lower_scoreboard(jay_shader *shader)
       struct swsb_state state = { .nr_keys = nr_keys, .access = access };
 
       jay_foreach_block(f, block) {
-         lower_send_local(f, block);
+         lower_sbid_local(f, block);
       }
 
       /* RegDist scoreboarding is global but requires no dataflow analysis,

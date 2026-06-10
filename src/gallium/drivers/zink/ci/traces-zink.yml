@@ -142,9 +142,9 @@ traces:
     gl-zink-anv-tgl:
       checksum: 56f11d133f72712a6df13855ec00cdb0
     zink-radv-vangogh:
-      checksum: 97f929220cf05c7782c6f9ecc94b76f0
+      checksum: 2917b73e030ac8b6be92b9bf3a1574ea
     zink-radv-gfx1201:
-      checksum: a291560e348925432e968ba520b97eb3
+      checksum: 6d4ece4f35de001bd5e25876e8ed96df
 
   gputest/tessmark-v2.trace:
     gl-zink-anv-adl:

@@ -233,6 +233,7 @@ enum vpe_version {
    VPE_1_0,
    VPE_1_1,
    VPE_2_0,
+   VPE_2_2,
 };
 
 #define SDMA_VERSION_VALUE(major, minor) (((major) << 8) | (minor))

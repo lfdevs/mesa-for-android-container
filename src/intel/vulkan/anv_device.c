@@ -797,8 +797,7 @@ VkResult anv_CreateDevice(
 
          const unsigned decode_flags = INTEL_BATCH_DECODE_DEFAULT_FLAGS;
 
-         intel_batch_decode_ctx_init_brw(decoder,
-                                         &physical_device->compiler->isa,
+         intel_batch_decode_ctx_init_gen(decoder,
                                          &physical_device->info,
                                          stderr, decode_flags, NULL,
                                          decode_get_bo, NULL, device);
@@ -1384,6 +1383,8 @@ void anv_DestroyDevice(
    anv_device_finish_astc_emu(device);
 
    anv_device_finish_internal_kernels(device);
+
+   anv_device_finish_shader_dump(device);
 
    anv_device_finish_descriptors_view(device);
 

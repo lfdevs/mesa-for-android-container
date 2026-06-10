@@ -315,6 +315,9 @@ gather_intrinsic_info(const nir_shader *nir, const nir_intrinsic_instr *instr, s
    case nir_intrinsic_load_use_float_frag_coord_xy_amd:
       info->ps.selects_frag_coord_xy_dynamically = true;
       break;
+   case nir_intrinsic_load_use_sample_mask_in_amd:
+      info->ps.selects_sample_mask_in_dynamically = true;
+      break;
    default:
       break;
    }

@@ -20,7 +20,11 @@ libfreedreno_perfcntrs = static_library(
   c_args : [no_override_init_args, soong_compat_c_args],
   gnu_symbol_visibility : 'hidden',
   link_with : [libfreedreno_common],
-  dependencies : idep_nir_headers,
+  dependencies : [
+    dep_libdrm,
+    idep_mesautil,
+    idep_nir_headers,
+  ],
   build_by_default : false,
 )
 

@@ -14,21 +14,21 @@ function BFI(a, b, c, d)
   local r = execute {
     data = { [0] = a, b, c, d },
     src = [[
-      @id   g9
-      @mov  g11  0
-      @mov  g12  1
-      @mov  g13  2
-      @mov  g14  3
+      @id   r9
+      @mov  r11  0
+      @mov  r12  1
+      @mov  r13  2
+      @mov  r14  3
 
-      @read g1 g11
-      @read g2 g12
-      @read g3 g13
-      @read g4 g14
+      @read r1 r11
+      @read r2 r12
+      @read r3 r13
+      @read r4 r14
 
-      bfi1(8)  g5<1>UD  g1<8,8,1>UD  g2<8,8,1>UD               { align1 @1 1Q };
-      bfi2(8)  g6<1>UD  g5<8,8,1>UD  g3<8,8,1>UD  g4<8,8,1>UD  { align1 @1 1Q };
+      bfi1 (8) r5      r1      r2              {A@1}
+      bfi2 (8) r6      r5      r3      r4      {A@1}
 
-      @write g9 g6
+      @write r9 r6
       @eot
     ]],
   }

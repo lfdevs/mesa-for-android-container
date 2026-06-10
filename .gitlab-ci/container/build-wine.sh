@@ -124,6 +124,38 @@ wineserver -k
 
 section_end DXVK
 
+section_start Renderdoc "Installing Renderdoc"
+
+renderdoc_install_upstream() {
+    local RDC_VERSION=${1:?}
+
+    curl -L --retry 4 -f --retry-all-errors --retry-delay 60 \
+	-O "https://renderdoc.org/stable/${RDC_VERSION}/RenderDoc_${RDC_VERSION}_64.zip"
+    unzip "RenderDoc_${RDC_VERSION}_64.zip"
+    mv "RenderDoc_${RDC_VERSION}_64/" /renderdoc-win64
+}
+
+# renderdoc doesn't have ARM64 binaries, so grab a snapshot of a build from a Linaro dev.
+renderdoc_install_arm() {
+    # anholt's copy is a snapshot of the google drive link from https://linaro.atlassian.net/wiki/spaces/WOAR/pages/30353719316/RenderDoc
+    curl -L --retry 4 -f --retry-all-errors --retry-delay 60 \
+        -o renderdoc_arm64.7z \
+	-O "https://people.freedesktop.org/~anholt/renderdoc-arm64-anthony-linaro-snapshot.7z"
+
+    mkdir /renderdoc-win64
+    7z -o/renderdoc-win64 x renderdoc_arm64.7z
+}
+if [ "$DEBIAN_ARCH" != arm64 ]; then
+  renderdoc_install_upstream "1.43"
+else
+  renderdoc_install_arm
+fi
+# Clean up large binaries we won't use.
+rm /renderdoc-win64/qrenderdoc.exe
+
+section_end Renderdoc
+
+
 # Archive and upload wine for use as a LAVA overlay, if the archive doesn't exist yet
 WINE_S3_ARTIFACT="wine.tar.zst"
 ARTIFACT_PATH="${DATA_STORAGE_PATH}/wine/${DEBIAN_TEST_VK_TAG}-${WINE_TAG}/${CI_JOB_NAME}/${WINE_S3_ARTIFACT}"
@@ -134,6 +166,7 @@ else
   tar --zstd -cf "$WINE_S3_ARTIFACT" -C / \
     "${WINEPREFIX#/}" \
     /apitrace-msvc-win64 \
+    /renderdoc-win64 \
     /usr/lib/*/wine
   ci-fairy s3cp --token-file "${S3_JWT_FILE}" "$WINE_S3_ARTIFACT" \
     "https://${S3_BASE_PATH}/${CI_PROJECT_PATH}/${ARTIFACT_PATH}"

@@ -196,19 +196,27 @@ copy_through_buffer(struct kk_cmd_buffer *cmd, struct kk_image *src,
    info.mtl_data.buffer_stride_B = buffer_stride_B;
    info.mtl_data.buffer = buffer;
    info.buffer_slice_size_B = buffer_size_2d_B;
+
    struct mtl_size src_size = vk_extent_3d_to_mtl_size(&region->extent);
    struct mtl_size dst_size = vk_extent_3d_to_mtl_size(&region->extent);
    /* Need to adjust size to block dimensions */
    if (is_src_compressed) {
-      dst_size.x /= util_format_get_blockwidth(src_format);
-      dst_size.y /= util_format_get_blockheight(src_format);
-      dst_size.z /= util_format_get_blockdepth(src_format);
+      dst_size.x = util_format_get_nblocksx(src_format, dst_size.x);
+      dst_size.y = util_format_get_nblocksy(src_format, dst_size.y);
+      dst_size.z = util_format_get_nblocksz(src_format, dst_size.z);
    }
    if (is_dst_compressed) {
       dst_size.x *= util_format_get_blockwidth(dst_format);
       dst_size.y *= util_format_get_blockheight(dst_format);
       dst_size.z *= util_format_get_blockdepth(dst_format);
    }
+
+   /* After adjusting for compression, sanitize destination extents for 1D/2D */
+   if (dst_plane->layout.height_px == 1)
+      dst_size.y = 1;
+   if (dst_plane->layout.depth_px == 1)
+      dst_size.z = 1;
+
    struct mtl_origin src_origin =
       vk_offset_3d_to_mtl_origin(&region->srcOffset);
    struct mtl_origin dst_origin =
@@ -254,6 +262,23 @@ can_do_image_to_image_copy(struct kk_image *src, uint32_t src_index,
    struct kk_image_plane *dst_plane = &dst->planes[dst_index];
    enum pipe_format src_format = src_plane->layout.format.pipe;
    enum pipe_format dst_format = dst_plane->layout.format.pipe;
+
+   /* Metal validation fails for image-to-image copies if the dimension is
+    * relevant to the image type and not a multiple of the block dimension.
+    * Since 1D textures are emulated as 2D, this causes problems with
+    * compressed 1D textures.
+    *
+    * However, Metal documentation also states:
+    *
+    *    If the block extends outside the bounds of the texture, clamp
+    *    sourceSize to the edge of the texture.
+    *
+    * So this may be a bug in the validation layer. Routing to the buffer copy
+    * path avoids it.
+    */
+   if (src->vk.image_type == VK_IMAGE_TYPE_1D &&
+       util_format_is_compressed(src_format))
+      return false;
 
    return src_format == dst_format && src_plane->layout.sample_count_sa ==
                                          dst_plane->layout.sample_count_sa;

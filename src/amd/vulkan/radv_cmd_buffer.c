@@ -10,19 +10,19 @@
 
 #include "radv_cmd_buffer.h"
 #include "meta/radv_meta.h"
+#include "tools/radv_debug_hang.h"
+#include "tools/radv_rmv.h"
+#include "tools/radv_rra.h"
 #include "ac_formats.h"
 #include "ac_shader_util.h"
 #include "radv_cp_dma.h"
 #include "radv_cs.h"
-#include "radv_debug.h"
 #include "radv_descriptor_update_template.h"
 #include "radv_dgc.h"
 #include "radv_event.h"
 #include "radv_pipeline_layout.h"
 #include "radv_pipeline_rt.h"
 #include "radv_radeon_winsys.h"
-#include "radv_rmv.h"
-#include "radv_rra.h"
 #include "radv_sdma.h"
 #include "radv_shader.h"
 #include "radv_shader_object.h"
@@ -2021,15 +2021,11 @@ radv_is_sample_shading_enabled(struct radv_cmd_buffer *cmd_buffer, float *min_sa
 static ALWAYS_INLINE unsigned
 radv_get_ps_iter_samples(struct radv_cmd_buffer *cmd_buffer)
 {
-   const struct radv_rendering_state *render = &cmd_buffer->state.render;
    unsigned ps_iter_samples = 1;
    float min_sample_shading;
 
    if (radv_is_sample_shading_enabled(cmd_buffer, &min_sample_shading)) {
-      unsigned rasterization_samples = cmd_buffer->state.num_rast_samples;
-      unsigned color_samples = MAX2(render->color_samples, rasterization_samples);
-
-      ps_iter_samples = ceilf(min_sample_shading * color_samples);
+      ps_iter_samples = ceilf(min_sample_shading * cmd_buffer->state.num_rast_samples);
       ps_iter_samples = util_next_power_of_two(ps_iter_samples);
    }
 
@@ -9171,6 +9167,7 @@ radv_bind_graphics_pipeline(struct radv_cmd_buffer *cmd_buffer, struct radv_grap
    /* Prefetch all pipeline shaders at first draw time. */
    cmd_buffer->state.prefetch_L2_mask |= RADV_PREFETCH_GFX_SHADERS;
 
+   const struct radv_physical_device *pdev = radv_device_physical(radv_cmd_buffer_device(cmd_buffer));
    const struct radv_shader *ps = radv_get_shader(graphics_pipeline->base.shaders, MESA_SHADER_FRAGMENT);
 
    radv_bind_fragment_output_state(cmd_buffer, ps, NULL, graphics_pipeline->custom_blend_mode);
@@ -9180,7 +9177,8 @@ radv_bind_graphics_pipeline(struct radv_cmd_buffer *cmd_buffer, struct radv_grap
    radv_bind_custom_blend_mode(cmd_buffer, graphics_pipeline->custom_blend_mode);
 
    if (cmd_buffer->state.uses_out_of_order_rast != graphics_pipeline->uses_out_of_order_rast ||
-       cmd_buffer->state.uses_vrs_attachment != graphics_pipeline->uses_vrs_attachment) {
+       (pdev->info.gfx_level >= GFX11 &&
+        cmd_buffer->state.uses_vrs_attachment != graphics_pipeline->uses_vrs_attachment)) {
       cmd_buffer->state.uses_out_of_order_rast = graphics_pipeline->uses_out_of_order_rast;
       cmd_buffer->state.uses_vrs_attachment = graphics_pipeline->uses_vrs_attachment;
       cmd_buffer->state.dirty |= RADV_CMD_DIRTY_RAST_SAMPLES_STATE;
@@ -10489,15 +10487,14 @@ radv_CmdBeginRendering(VkCommandBuffer commandBuffer, const VkRenderingInfo *pRe
    render->vrs_texel_size = vrs_texel_size;
    cmd_buffer->state.dirty |= RADV_CMD_DIRTY_BINNING_STATE | RADV_CMD_DIRTY_DEPTH_BIAS_STATE |
                               RADV_CMD_DIRTY_DEPTH_STENCIL_STATE | RADV_CMD_DIRTY_CB_RENDER_STATE |
-                              RADV_CMD_DIRTY_MSAA_STATE | RADV_CMD_DIRTY_RAST_SAMPLES_STATE | RADV_CMD_DIRTY_PS_STATE |
-                              RADV_CMD_DIRTY_PS_EPILOG_SHADER;
+                              RADV_CMD_DIRTY_MSAA_STATE | RADV_CMD_DIRTY_PS_STATE | RADV_CMD_DIRTY_PS_EPILOG_SHADER;
 
    if (pdev->info.rbplus_allowed)
       cmd_buffer->state.dirty |= RADV_CMD_DIRTY_RBPLUS;
    if (pdev->info.gfx_level >= GFX10_3)
       cmd_buffer->state.dirty |= RADV_CMD_DIRTY_FSR_STATE;
    if (pdev->info.gfx_level >= GFX12)
-      cmd_buffer->state.dirty |= RADV_CMD_DIRTY_GFX12_HIZ_WA_STATE;
+      cmd_buffer->state.dirty |= RADV_CMD_DIRTY_GFX12_HIZ_WA_STATE | RADV_CMD_DIRTY_RAST_SAMPLES_STATE;
 
    radv_emit_fb_mip_change_flush(cmd_buffer);
 
@@ -11699,30 +11696,49 @@ radv_emit_ps_state(struct radv_cmd_buffer *cmd_buffer)
    const struct radv_physical_device *pdev = radv_device_physical(device);
    const struct radv_shader *ps = cmd_buffer->state.shaders[MESA_SHADER_FRAGMENT];
 
-   if (!ps)
+   if (!ps) {
+      radeon_begin(cmd_buffer->cs);
+      if (pdev->info.gfx_level >= GFX12)
+         radeon_opt_set_context_reg(R_02865C_SPI_PS_INPUT_ENA, AC_TRACKED_SPI_PS_INPUT_ENA, 0);
+      else
+         radeon_opt_set_context_reg(R_0286CC_SPI_PS_INPUT_ENA, AC_TRACKED_SPI_PS_INPUT_ENA, 0);
+      radeon_end();
       return;
+   }
 
    uint32_t spi_ps_input_ena = ps->config.spi_ps_input_ena;
+   bool vrs_enabled = false;
    bool use_float_frag_coord_xy = false;
+   bool use_sample_mask_in = false;
+
+   if (ps->info.ps.selects_frag_coord_xy_dynamically || ps->info.ps.selects_sample_mask_in_dynamically) {
+      /* Whether VRS can be other than 1x1. */
+      vrs_enabled = cmd_buffer->state.dynamic.vk.fsr.fragment_size.width != 1 ||
+                    cmd_buffer->state.dynamic.vk.fsr.fragment_size.height != 1 ||
+                    cmd_buffer->state.render.vrs_att.iview ||
+                    cmd_buffer->state.last_vgt_shader->info.outinfo.writes_primitive_shading_rate ||
+                    cmd_buffer->state.last_vgt_shader->info.outinfo.writes_primitive_shading_rate_per_primitive;
+   }
 
    if (ps->info.ps.selects_frag_coord_xy_dynamically) {
       /* The shader selects frag_coord_xy/pixel_coord dynamically depending on a flag in PS_STATE
        * that depends on the following dynamic state while preferring pixel_coord (POS_FIXED_PT)
        * if possible due to lower VGPR initialization cost.
        */
-      use_float_frag_coord_xy =
-         /* Whether VRS can be other than 1x1. */
-         cmd_buffer->state.dynamic.vk.fsr.fragment_size.width != 1 ||
-         cmd_buffer->state.dynamic.vk.fsr.fragment_size.height != 1 || cmd_buffer->state.render.vrs_att.iview ||
-         cmd_buffer->state.last_vgt_shader->info.outinfo.writes_primitive_shading_rate ||
-         cmd_buffer->state.last_vgt_shader->info.outinfo.writes_primitive_shading_rate_per_primitive ||
-         radv_is_sample_shading_enabled(cmd_buffer, NULL);
+      use_float_frag_coord_xy = vrs_enabled || radv_is_sample_shading_enabled(cmd_buffer, NULL);
 
       /* Disable the initialized PS VGPRs that the shader doesn't use. */
       if (use_float_frag_coord_xy)
          spi_ps_input_ena &= C_0286CC_POS_FIXED_PT_ENA;
       else
          spi_ps_input_ena &= C_0286CC_POS_X_FLOAT_ENA & C_0286CC_POS_Y_FLOAT_ENA;
+   }
+
+   if (ps->info.ps.selects_sample_mask_in_dynamically) {
+      use_sample_mask_in = vrs_enabled || cmd_buffer->state.num_rast_samples != 1;
+
+      if (!use_sample_mask_in)
+         spi_ps_input_ena &= C_0286CC_SAMPLE_COVERAGE_ENA;
    }
 
    struct radv_cmd_stream *cs = cmd_buffer->cs;
@@ -11745,7 +11761,8 @@ radv_emit_ps_state(struct radv_cmd_buffer *cmd_buffer)
                                 SET_SGPR_FIELD(PS_STATE_PS_ITER_MASK, ps_iter_mask) |
                                 SET_SGPR_FIELD(PS_STATE_LINE_RAST_MODE, line_rast_mode) |
                                 SET_SGPR_FIELD(PS_STATE_RAST_PRIM, vgt_outprim_type) |
-                                SET_SGPR_FIELD(PS_STATE_USE_FLOAT_FRAG_COORD_XY, use_float_frag_coord_xy);
+                                SET_SGPR_FIELD(PS_STATE_USE_FLOAT_FRAG_COORD_XY, use_float_frag_coord_xy) |
+                                SET_SGPR_FIELD(PS_STATE_USE_SAMPLE_MASK_IN, use_sample_mask_in);
 
       if (pdev->info.gfx_level >= GFX12) {
          gfx12_push_sh_reg(ps_state_offset, ps_state);
@@ -14601,7 +14618,7 @@ radv_trace_rays(struct radv_cmd_buffer *cmd_buffer, VkTraceRaysIndirectCommand2K
 
    radv_suspend_conditional_rendering(cmd_buffer);
 
-   if (unlikely(device->rra_trace.ray_history_buffer))
+   if (unlikely(device->rra_trace.ray_history_addr))
       radv_trace_trace_rays(cmd_buffer, tables, indirect_va);
 
    struct radv_shader *rt_prolog = cmd_buffer->state.rt_prolog;

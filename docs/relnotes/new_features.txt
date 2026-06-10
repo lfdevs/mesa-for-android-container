@@ -17,3 +17,11 @@ VK_KHR_workgroup_memory_explicit_layout on pvr
 VK_KHR_maintenance5 on pvr
 VK_KHR_shader_fma on RADV
 VK_KHR_shader_fma on nvk
+Support for G1-Ultra, G1-Premium and G1-Pro GPUs on Panfrost and PanVK
+VK_EXT_shader_atomic_float on nvk
+VK_{KHR,EXT}_index_type_uint8 on pvr
+VK_EXT_debug_marker in vulkan runtime
+VK_EXT_mesh_shader on NVK
+VK_KHR_device_fault on RADV
+VK_GOOGLE_display_timing for KHR_display on anv, pvr, radv, tu, v3dv
+VK_KHR_shader_abort on RADV

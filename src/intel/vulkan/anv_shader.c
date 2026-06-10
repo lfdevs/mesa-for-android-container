@@ -7,7 +7,7 @@
 
 #include "nir/nir_serialize.h"
 
-#include "compiler/brw/brw_disasm.h"
+#include "compiler/gen/gen.h"
 #include "mda/debug_archiver.h"
 #include "util/shader_stats.h"
 
@@ -43,15 +43,42 @@ anv_device_finish_shader_dump(struct anv_device *device)
 }
 
 static void
+anv_dump_shader_assembly(FILE *fp,
+                         const struct intel_device_info *devinfo,
+                         const void *assembly,
+                         int start,
+                         int end_bound,
+                         gen_print_flags flags,
+                         uint64_t address_base)
+{
+   const int size = gen_find_shader_size(devinfo, assembly, start, end_bound);
+   if (size <= 0)
+      return;
+
+   gen_print_params print = {
+      .devinfo = devinfo,
+      .fp = fp,
+      .flags = flags,
+      .raw_bytes = (const uint8_t *)assembly + start,
+      .raw_bytes_size = size,
+      .validate = true,
+      .address_base = address_base + start,
+   };
+   gen_print(&print);
+}
+
+static void
 anv_device_dump_shader_variant(struct anv_device *device,
                                struct anv_shader *shader,
                                const char *variant,
                                uint32_t code_offset)
 {
-   FILE *f = stderr;
+   const struct intel_device_info *devinfo =
+      device->physical->compiler->isa.devinfo;
 
    simple_mtx_lock(&device->shader_dump.mutex);
 
+   FILE *f;
    if (device->shader_dump.archive != NULL) {
       char filename[80];
       snprintf(filename, sizeof(filename), "0x%016"PRIx64"-%s%s",
@@ -59,19 +86,19 @@ anv_device_dump_shader_variant(struct anv_device *device,
                _mesa_shader_stage_to_abbrev(shader->vk.stage),
                variant);
       f = debug_archiver_start_file(device->shader_dump.archive, filename);
-      int64_t _offset = shader->kernel.offset;
-      brw_disassemble_with_errors(&device->physical->compiler->isa,
-                                  shader->code, code_offset,
-                                  &_offset, f);
-      debug_archiver_finish_file(device->shader_dump.archive);
    } else {
-      brw_disassemble_with_lineno(&device->physical->compiler->isa,
-                                  shader->vk.stage, -1,
-                                  shader->prog_data->source_hash,
-                                  shader->code, code_offset,
-                                  shader->kernel.offset,
-                                  stderr);
+      f = stderr;
+      fprintf(f, "\nDumping shader asm for %s (src_hash 0x%"PRIx64"):\n\n",
+              _mesa_shader_stage_to_abbrev(shader->vk.stage),
+              shader->prog_data->source_hash);
    }
+
+   anv_dump_shader_assembly(f, devinfo, shader->code, code_offset,
+                            shader->prog_data->program_size,
+                            GEN_PRINT_BYTE_OFFSETS, shader->kernel.offset);
+
+   if (device->shader_dump.archive != NULL)
+      debug_archiver_finish_file(device->shader_dump.archive);
 
    simple_mtx_unlock(&device->shader_dump.mutex);
 }
@@ -448,6 +475,10 @@ get_shader_isa_text(struct anv_device *device,
    size_t stream_size = 0;
    FILE *stream = open_memstream(&stream_data, &stream_size);
 
+   const struct intel_device_info *devinfo =
+      device->physical->compiler->isa.devinfo;
+   const int program_size = shader->prog_data->program_size;
+
    if (shader->vk.stage == MESA_SHADER_FRAGMENT) {
       const struct brw_fs_prog_data *fs_prog_data = get_shader_fs_prog_data(shader);
 
@@ -456,20 +487,20 @@ get_shader_isa_text(struct anv_device *device,
       int simd32_index = fs_prog_data->dispatch_32 ? (MAX2(simd8_index, simd16_index) + 1) : -1;
 
       if (executable_index == simd8_index) {
-         brw_disassemble_with_errors(&device->physical->compiler->isa,
-                                     shader->code, 0, NULL, stream);
+         anv_dump_shader_assembly(stream, devinfo, shader->code, 0,
+                                  program_size, 0, 0);
       } else if (executable_index == simd16_index) {
-         brw_disassemble_with_errors(&device->physical->compiler->isa,
-                                     shader->code,
-                                     fs_prog_data->prog_offset_16, NULL, stream);
+         anv_dump_shader_assembly(stream, devinfo, shader->code,
+                                  fs_prog_data->prog_offset_16,
+                                  program_size, 0, 0);
       } else if (executable_index == simd32_index) {
-         brw_disassemble_with_errors(&device->physical->compiler->isa,
-                                     shader->code,
-                                     fs_prog_data->prog_offset_32, NULL, stream);
+         anv_dump_shader_assembly(stream, devinfo, shader->code,
+                                  fs_prog_data->prog_offset_32,
+                                  program_size, 0, 0);
       }
    } else {
-      brw_disassemble_with_errors(&device->physical->compiler->isa,
-                                  shader->code, 0, NULL, stream);
+      anv_dump_shader_assembly(stream, devinfo, shader->code, 0,
+                               program_size, 0, 0);
    }
 
    fclose(stream);

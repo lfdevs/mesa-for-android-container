@@ -242,41 +242,6 @@ ei_cmp(struct r300_vertex_program_code *vp, struct rc_sub_instruction *vpi, unsi
 }
 
 static void
-ei_lit(struct r300_vertex_program_code *vp, struct rc_sub_instruction *vpi, unsigned int *inst)
-{
-   // LIT TMP 1.Y Z TMP 1{} {X W Z Y} TMP 1{} {Y W Z X} TMP 1{} {Y X Z W}
-
-   inst[0] = PVS_OP_DST_OPERAND(ME_LIGHT_COEFF_DX, 1, 0, t_dst_index(vp, &vpi->DstReg),
-                                t_dst_mask(vpi->DstReg.WriteMask), t_dst_class(vpi->DstReg.File),
-                                vpi->SaturateMode == RC_SATURATE_ZERO_ONE);
-   /* NOTE: Users swizzling might not work. */
-   inst[1] = PVS_SRC_OPERAND(t_src_index(vp, &vpi->SrcReg[0]),
-                             t_swizzle(GET_SWZ(vpi->SrcReg[0].Swizzle, 0)), // X
-                             t_swizzle(GET_SWZ(vpi->SrcReg[0].Swizzle, 3)), // W
-                             PVS_SRC_SELECT_FORCE_0,                        // Z
-                             t_swizzle(GET_SWZ(vpi->SrcReg[0].Swizzle, 1)), // Y
-                             t_src_class(vpi->SrcReg[0].File),
-                             vpi->SrcReg[0].Negate ? RC_MASK_XYZW : RC_MASK_NONE) |
-             (vpi->SrcReg[0].RelAddr << 4);
-   inst[2] = PVS_SRC_OPERAND(t_src_index(vp, &vpi->SrcReg[0]),
-                             t_swizzle(GET_SWZ(vpi->SrcReg[0].Swizzle, 1)), // Y
-                             t_swizzle(GET_SWZ(vpi->SrcReg[0].Swizzle, 3)), // W
-                             PVS_SRC_SELECT_FORCE_0,                        // Z
-                             t_swizzle(GET_SWZ(vpi->SrcReg[0].Swizzle, 0)), // X
-                             t_src_class(vpi->SrcReg[0].File),
-                             vpi->SrcReg[0].Negate ? RC_MASK_XYZW : RC_MASK_NONE) |
-             (vpi->SrcReg[0].RelAddr << 4);
-   inst[3] = PVS_SRC_OPERAND(t_src_index(vp, &vpi->SrcReg[0]),
-                             t_swizzle(GET_SWZ(vpi->SrcReg[0].Swizzle, 1)), // Y
-                             t_swizzle(GET_SWZ(vpi->SrcReg[0].Swizzle, 0)), // X
-                             PVS_SRC_SELECT_FORCE_0,                        // Z
-                             t_swizzle(GET_SWZ(vpi->SrcReg[0].Swizzle, 3)), // W
-                             t_src_class(vpi->SrcReg[0].File),
-                             vpi->SrcReg[0].Negate ? RC_MASK_XYZW : RC_MASK_NONE) |
-             (vpi->SrcReg[0].RelAddr << 4);
-}
-
-static void
 ei_mad(struct r300_vertex_program_code *vp, struct rc_sub_instruction *vpi, unsigned int *inst)
 {
    unsigned int i;
@@ -472,9 +437,6 @@ translate_vertex_program(struct radeon_compiler *c, void *user)
       case RC_OPCODE_LG2:
          ei_math1_select(compiler->code, compiler->Base.math_rules, ME_LOG_BASE2_IEEE,
                          ME_LOG_BASE2_FULL_DX, ME_LOG_BASE2_FULL_DX, vpi, inst);
-         break;
-      case RC_OPCODE_LIT:
-         ei_lit(compiler->code, vpi, inst);
          break;
       case RC_OPCODE_LOG:
          ei_math1(compiler->code, ME_LOG_BASE2_DX, vpi, inst);

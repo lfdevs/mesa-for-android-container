@@ -20,5 +20,3 @@ test_undefined_structured_raw_read_typed_dxil,Fail
 
 test_copy_subresource_depth_stencil_batch,Fail
 test_uav_clear_exhaustive_descriptors,Crash
-
-test_raytracing_huge_dispatch,Fail

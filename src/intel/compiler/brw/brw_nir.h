@@ -162,6 +162,9 @@ bool brw_nir_lower_fully_covered(nir_shader *nir);
 struct brw_lower_urb_cb_data {
    const struct intel_device_info *devinfo;
 
+   /** Input URB read length (returned by lowering) */
+   unsigned *push_input_read_length;
+
    /** Maximum amount of pushed data in bytes */
    unsigned max_push_bytes;
 
@@ -223,7 +226,8 @@ void brw_nir_lower_gs_inputs(nir_shader *nir,
                              unsigned *out_urb_read_length);
 void brw_nir_lower_tes_inputs(nir_shader *nir,
                               const struct intel_device_info *devinfo,
-                              const struct intel_vue_map *vue);
+                              const struct intel_vue_map *vue,
+                              unsigned *out_urb_read_length);
 void brw_nir_lower_fs_inputs(nir_shader *nir,
                              const struct intel_device_info *devinfo,
                              const struct brw_fs_prog_key *key);
@@ -306,6 +310,8 @@ bool brw_nir_apply_trig_workarounds(nir_shader *nir);
 bool brw_nir_limit_trig_input_range_workaround(nir_shader *nir);
 
 bool brw_nir_apply_sqrt_workarounds(nir_shader *nir);
+
+bool brw_nir_apply_sampler_undef_derivatives_workaround(nir_shader *nir);
 
 bool brw_nir_lower_fsign(nir_shader *nir);
 

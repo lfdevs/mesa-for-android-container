@@ -504,7 +504,7 @@ tu_emit_cache_flush(struct tu_cmd_buffer *cmd_buffer)
 
    if ((flushes & TU_CMD_FLAG_WAIT_FOR_BR) && CHIP >= A7XX &&
        !(cmd_buffer->state.pass && cmd_buffer->state.renderpass_cb_disabled) &&
-       cmd_buffer->device->instance->allow_concurrent_binning) {
+       cmd_buffer->device->instance->drirc.perf.allow_concurrent_binning) {
       trace_start_concurrent_binning_barrier(&cmd_buffer->trace, cs, cmd_buffer);
 
       /* Wait-for-BR when repeated a lot of times per frame can add up
@@ -2253,7 +2253,7 @@ tu6_init_static_regs(struct tu_device *dev, struct tu_cs *cs)
    }
 
    tu_cs_emit_regs(cs, TPL1_MODE_CNTL(CHIP, .isammode = ISAMMODE_GL,
-                                            .texcoordroundmode = dev->instance->use_tex_coord_round_nearest_even_mode
+                                            .texcoordroundmode = dev->instance->drirc.misc.use_tex_coord_round_nearest_even_mode
                                                ? COORD_ROUND_NEAREST_EVEN
                                                : COORD_TRUNCATE,
                                             .nearestmipsnap = CLAMP_ROUND_TRUNCATE,
@@ -2415,7 +2415,7 @@ tu_init_hw_rp(struct tu_cs *cs)
 {
    if (CHIP >= A7XX) {
       tu_cs_emit_regs(cs, VPC_UNKNOWN_CNTL(CHIP));
-      tu_cs_emit_regs(cs, RB_A2D_UNKNOWN_8C34(CHIP));
+      tu_cs_emit_regs(cs, RB_A2D_DEST_BUFFER_ARRAY_PITCH(CHIP));
    }
 }
 TU_GENX(tu_init_hw_rp);
@@ -3125,7 +3125,7 @@ tu7_emit_concurrent_binning_start(struct tu_cmd_buffer *cmd,
        tu7_cb_disable_reason(
           (!cmd->state.lrz.fast_clear && cmd->state.lrz.image_view), cmd,
           "LRZ fast clear disabled") ||
-       tu7_cb_disable_reason(!cmd->device->instance->allow_concurrent_binning, cmd,
+       tu7_cb_disable_reason(!cmd->device->instance->drirc.perf.allow_concurrent_binning, cmd,
                              "globally disabled")) {
      tu_cs_emit_pkt7(cs, CP_THREAD_CONTROL, 1);
      tu_cs_emit(cs, CP_THREAD_CONTROL_0_THREAD(CP_SET_THREAD_BR) |
@@ -5508,7 +5508,7 @@ tu_CmdBindPipeline(VkCommandBuffer commandBuffer,
    if (pipeline->disable_fs.valid) {
       if (cmd->state.disable_fs != pipeline->disable_fs.disable_fs) {
          cmd->state.disable_fs = pipeline->disable_fs.disable_fs;
-         cmd->state.dirty |= TU_CMD_DIRTY_DISABLE_FS;
+         cmd->state.dirty |= TU_CMD_DIRTY_RAST | TU_CMD_DIRTY_LRZ;
       }
    }
    cmd->state.pipeline_disable_fs = pipeline->disable_fs.valid;
@@ -8307,7 +8307,7 @@ tu6_draw_common(struct tu_cmd_buffer *cmd,
    }
 
    bool dirty_lrz =
-      (dirty & TU_CMD_DIRTY_LRZ) ||
+      (dirty & (TU_CMD_DIRTY_LRZ | TU_CMD_DIRTY_DISABLE_FS)) ||
       BITSET_TEST(cmd->vk.dynamic_graphics_state.dirty,
                   MESA_VK_DYNAMIC_DS_DEPTH_TEST_ENABLE) ||
       BITSET_TEST(cmd->vk.dynamic_graphics_state.dirty,

@@ -5,8 +5,8 @@
 
 #include "intel_tools.h"
 
-#include "compiler/brw/brw_disasm.h"
 #include "compiler/brw/brw_isa_info.h"
+#include "compiler/gen/gen.h"
 #ifdef INTEL_USE_ELK
 #include "compiler/elk/elk_disasm.h"
 #include "compiler/elk/elk_isa_info.h"
@@ -25,19 +25,29 @@ void
 intel_disassemble(const struct intel_device_info *devinfo,
                   const void *assembly, int start, FILE *out)
 {
-      if (devinfo->ver >= 9) {
-         struct brw_isa_info isa;
-         brw_init_isa_info(&isa, devinfo);
-         brw_disassemble_with_errors(&isa, assembly, start, NULL, out);
-      } else {
+   if (devinfo->ver >= 9) {
+      const uint8_t *shader = (const uint8_t *)assembly + start;
+      const int size = gen_find_shader_size(devinfo, shader, 0, 0);
+      if (size <= 0)
+         return;
+
+      gen_print_params print = {
+         .devinfo = devinfo,
+         .fp = out,
+         .raw_bytes = shader,
+         .raw_bytes_size = size,
+         .validate = true,
+      };
+      gen_print(&print);
+   } else {
 #ifdef INTEL_USE_ELK
          struct elk_isa_info isa;
          elk_init_isa_info(&isa, devinfo);
          elk_disassemble_with_errors(&isa, assembly, start, out);
 #else
-         not_supported(devinfo);
+      not_supported(devinfo);
 #endif
-      }
+   }
 }
 
 void
@@ -51,9 +61,7 @@ intel_decoder_init(struct intel_batch_decode_ctx *ctx,
                    void *user_data)
 {
    if (devinfo->ver >= 9) {
-      struct brw_isa_info *isa = &isa_info->brw_isa;
-      brw_init_isa_info(isa, devinfo);
-      intel_batch_decode_ctx_init_brw(ctx, isa, devinfo, fp,
+      intel_batch_decode_ctx_init_gen(ctx, devinfo, fp,
                                       flags, xml_path, get_bo, get_state_size, user_data);
    } else {
 #ifdef INTEL_USE_ELK

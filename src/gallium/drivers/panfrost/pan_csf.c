@@ -338,7 +338,6 @@ csf_oom_handler_init(struct panfrost_context *ctx)
 #if PAN_ARCH >= 14
       cs_emit_fragment_state(&b, fbd_pointer);
 #endif
-      cs_wait_slot(&b, 0);
 
       /* Run the fragment job and wait */
       cs_select_endpoint_sb(&b, 3);
@@ -350,7 +349,7 @@ csf_oom_handler_init(struct panfrost_context *ctx)
       cs_wait_slot(&b, 3);
 
       /* Increment counter */
-      cs_add32(&b, counter, counter, 1);
+      cs_add_imm32(&b, counter, counter, 1);
       cs_store32(&b, counter, tiler_oom_ctx, FIELD_OFFSET(counter));
 
       /* Load completed chunks */
@@ -741,8 +740,8 @@ update_reset_status(struct panfrost_context *ctx,
    }
 }
 
-static void
-csf_check_ctx_state_and_reinit(struct panfrost_context *ctx)
+static enum pipe_reset_status
+csf_sync_ctx_state(struct panfrost_context *ctx)
 {
    struct panfrost_device *dev = pan_device(ctx->base.screen);
    struct drm_panthor_group_get_state state = {
@@ -750,19 +749,22 @@ csf_check_ctx_state_and_reinit(struct panfrost_context *ctx)
    };
    int ret;
 
+   if (!ctx->csf.is_init)
+      return PIPE_NO_RESET;
+
    ret = pan_kmod_ioctl(panfrost_device_fd(dev),
                         DRM_IOCTL_PANTHOR_GROUP_GET_STATE, &state);
    if (ret) {
       update_reset_status(ctx, PIPE_UNKNOWN_CONTEXT_RESET);
       mesa_loge("DRM_IOCTL_PANTHOR_GROUP_GET_STATE failed (err=%d)", errno);
-      return;
+      return PIPE_UNKNOWN_CONTEXT_RESET;
    }
 
    /* Context is still usable. This was a transient error. */
    if (!(state.state & (DRM_PANTHOR_GROUP_STATE_FATAL_FAULT |
                         DRM_PANTHOR_GROUP_STATE_TIMEDOUT))) {
       update_reset_status(ctx, PIPE_NO_RESET);
-      return;
+      return PIPE_NO_RESET;
    }
 
    /* If the VM is unusable, we can't do much, as this is shared between all
@@ -777,9 +779,24 @@ csf_check_ctx_state_and_reinit(struct panfrost_context *ctx)
     * means we consider all resets as guilty until that point, but that
     * should be fine.
     */
-   update_reset_status(ctx, state.state & DRM_PANTHOR_GROUP_STATE_INNOCENT
-                               ? PIPE_INNOCENT_CONTEXT_RESET
-                               : PIPE_GUILTY_CONTEXT_RESET);
+   enum pipe_reset_status reset_status =
+      state.state & DRM_PANTHOR_GROUP_STATE_INNOCENT
+         ? PIPE_INNOCENT_CONTEXT_RESET
+         : PIPE_GUILTY_CONTEXT_RESET;
+
+   update_reset_status(ctx, reset_status);
+
+   return reset_status;
+}
+
+static void
+csf_check_ctx_state_and_reinit(struct panfrost_context *ctx)
+{
+   enum pipe_reset_status reset_status = csf_sync_ctx_state(ctx);
+
+   if (reset_status != PIPE_GUILTY_CONTEXT_RESET &&
+       reset_status != PIPE_INNOCENT_CONTEXT_RESET)
+      return;
 
    mesa_loge("Group became unusable, re-initializing context");
    panfrost_context_reinit(ctx);
@@ -975,8 +992,9 @@ emit_ir_fbd(struct pan_csf_tiler_oom_ctx *ctx, enum pan_rendering_pass pass,
 
 #if PAN_ARCH <= 13
    ir_descs.fbd = desc_addr;
-   desc_addr += fb_sz;
 #endif
+
+   desc_addr += fb_sz;
 
    const int crc_rt = GENX(pan_select_crc_rt)(fb, fb->tile_size);
    const bool has_zs_ext = (fb->zs.view.zs || fb->zs.view.s || crc_rt >= 0);
@@ -1137,7 +1155,6 @@ GENX(csf_emit_fragment_job)(struct panfrost_batch *batch,
    /* Run the fragment job and wait */
 #if PAN_ARCH >= 14
    cs_emit_fragment_state(b, fbd_pointer);
-   cs_wait_slot(b, 0);
    cs_run_fragment2(b, false, MALI_TILE_RENDER_ORDER_Z_ORDER);
 #else
    cs_run_fragment(b, false, MALI_TILE_RENDER_ORDER_Z_ORDER);
@@ -1719,10 +1736,10 @@ GENX(csf_launch_draw_indirect)(struct panfrost_batch *batch,
                   cs_shader_res_sel(2, 2, 2, 0), drawid);
 #endif
 
-      cs_add64(b, address, address, indirect->stride);
-      cs_add32(b, counter, counter, (unsigned int)-1);
+      cs_add_imm64(b, address, address, indirect->stride);
+      cs_add_imm32(b, counter, counter, (unsigned int)-1);
       if (drawid.type != CS_INDEX_UNDEF)
-         cs_add32(b, drawid, drawid, 1);
+         cs_add_imm32(b, drawid, drawid, 1);
    }
 }
 
@@ -1745,7 +1762,10 @@ static enum pipe_reset_status
 get_device_reset_status(struct pipe_context *pctx)
 {
    struct panfrost_context *ctx = pan_context(pctx);
-   enum pipe_reset_status reset_status = ctx->csf.reset_status;
+
+   /* Probe for an asynchronous group fault/timeout that the submit and fence
+    * paths don't observe, so it's reported instead of silently dropped. */
+   enum pipe_reset_status reset_status = csf_sync_ctx_state(ctx);
 
    /* Reset the status before returning. */
    ctx->csf.reset_status = PIPE_NO_RESET;

@@ -64,11 +64,15 @@ TEST( MediaFoundationEntrypoint, VerifyBasicCodecAPI )
       VARIANT vMin;
       VARIANT vMax;
       VARIANT vDelta;
-      CHECKHR_GOTO( spCodecAPI->GetParameterRange( &CODECAPI_AVEncSliceControlMode, &vMin, &vMax, &vDelta ), done );
-      ASSERT_TRUE( vMin.vt == VT_UI4 && vMax.vt == VT_UI4 && vDelta.vt == VT_UI4 );
-      ASSERT_TRUE( vMin.ulVal <= 2u && vMax.ulVal <= 2u );
-      ASSERT_TRUE( vMin.ulVal <= vMax.ulVal );
-      ASSERT_TRUE( vDelta.ulVal >= 1u && vDelta.ulVal <= 2u );
+      hr = spCodecAPI->IsSupported( &CODECAPI_AVEncSliceControlMode );
+      if( SUCCEEDED( hr ) )
+      {
+         CHECKHR_GOTO( spCodecAPI->GetParameterRange( &CODECAPI_AVEncSliceControlMode, &vMin, &vMax, &vDelta ), done );
+         ASSERT_TRUE( vMin.vt == VT_UI4 && vMax.vt == VT_UI4 && vDelta.vt == VT_UI4 );
+         ASSERT_TRUE( vMin.ulVal <= 2u && vMax.ulVal <= 2u );
+         ASSERT_TRUE( vMin.ulVal <= vMax.ulVal );
+         ASSERT_TRUE( vDelta.ulVal >= 1u && vDelta.ulVal <= 2u );
+      }
    }
 
 done:

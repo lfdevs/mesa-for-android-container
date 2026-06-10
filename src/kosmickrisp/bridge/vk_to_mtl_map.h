@@ -76,4 +76,6 @@ enum mtl_cull_mode vk_front_face_to_mtl_cull_mode(enum VkCullModeFlagBits mode);
 
 enum mtl_index_type index_size_in_bytes_to_mtl_index_type(unsigned bytes);
 
+unsigned mtl_index_type_to_size_B(enum mtl_index_type type);
+
 #endif /* KK_MTL_TO_VK_MAP_H */

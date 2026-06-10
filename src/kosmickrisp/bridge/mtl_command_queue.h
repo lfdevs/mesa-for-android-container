@@ -16,4 +16,10 @@ mtl_command_queue *mtl_new_command_queue(mtl_device *device,
 
 mtl_command_buffer *mtl_new_command_buffer(mtl_command_queue *cmd_queue);
 
+void mtl_command_queue_add_residency_set(mtl_command_queue *cmd_queue,
+                                         mtl_residency_set *set);
+
+void mtl_command_queue_remove_residency_set(mtl_command_queue *cmd_queue,
+                                            mtl_residency_set *set);
+
 #endif /* MTL_COMMAND_QUEUE_H */

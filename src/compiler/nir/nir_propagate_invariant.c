@@ -178,6 +178,7 @@ propagate_invariant_instr(nir_instr *instr, struct set *invariants, uint8_t *var
          break;
 
       case nir_intrinsic_load_deref:
+      case nir_intrinsic_load_deref_transpose_amd:
          if (def_is_invariant(&intrin->def, invariants))
             add_var(nir_src_as_deref(intrin->src[0]), invariants, var_invariant);
          break;

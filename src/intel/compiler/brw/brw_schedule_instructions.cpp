@@ -250,11 +250,11 @@ schedule_node::set_latency(const struct brw_isa_info *isa)
       brw_send_inst *send = inst->as_send();
 
       switch (send->sfid) {
-      case BRW_SFID_SAMPLER: {
+      case GEN_SFID_SAMPLER: {
          unsigned msg_type = (send->desc >> 12) & 0x1f;
          switch (msg_type) {
-         case GFX5_SAMPLER_MESSAGE_SAMPLE_RESINFO:
-         case GFX6_SAMPLER_MESSAGE_SAMPLE_SAMPLEINFO:
+         case GEN_SAMPLER_MESSAGE_SAMPLE_RESINFO:
+         case GEN_SAMPLER_MESSAGE_SAMPLE_SAMPLEINFO:
             /* Testing textureSize(sampler2D, 0), one load was 420 +/- 41
              * cycles (n=15):
              * mov(8)   g114<1>UD  0D                  { align1 WE_normal 1Q };
@@ -338,12 +338,12 @@ schedule_node::set_latency(const struct brw_isa_info *isa)
          break;
       }
 
-      case BRW_SFID_HDC_READ_ONLY:
+      case GEN_SFID_HDC_READ_ONLY:
          /* See FS_OPCODE_UNIFORM_PULL_CONSTANT_LOAD */
          latency = 200;
          break;
 
-      case BRW_SFID_RENDER_CACHE:
+      case GEN_SFID_RENDER_CACHE:
          switch (brw_fb_desc_msg_type(isa->devinfo, send->desc)) {
          case GFX7_DATAPORT_RC_TYPED_SURFACE_WRITE:
          case GFX7_DATAPORT_RC_TYPED_SURFACE_READ:
@@ -357,7 +357,7 @@ schedule_node::set_latency(const struct brw_isa_info *isa)
             latency = 14000;
             break;
 
-         case GFX6_DATAPORT_WRITE_MESSAGE_RENDER_TARGET_WRITE:
+         case GEN_DATAPORT_WRITE_MESSAGE_RENDER_TARGET_WRITE:
             /* completely fabricated number */
             latency = 600;
             break;
@@ -367,10 +367,10 @@ schedule_node::set_latency(const struct brw_isa_info *isa)
          }
          break;
 
-      case BRW_SFID_HDC0:
+      case GEN_SFID_HDC0:
          switch ((send->desc >> 14) & 0x1f) {
          case BRW_DATAPORT_READ_MESSAGE_OWORD_BLOCK_READ:
-         case GFX7_DATAPORT_DC_UNALIGNED_OWORD_BLOCK_READ:
+         case GEN_DATAPORT_DC_UNALIGNED_OWORD_BLOCK_READ:
          case GFX6_DATAPORT_WRITE_MESSAGE_OWORD_BLOCK_WRITE:
             /* We have no data for this but assume it's a little faster than
              * untyped surface read/write.
@@ -378,7 +378,7 @@ schedule_node::set_latency(const struct brw_isa_info *isa)
             latency = 200;
             break;
 
-         case GFX7_DATAPORT_DC_DWORD_SCATTERED_READ:
+         case GEN_DATAPORT_DC_DWORD_SCATTERED_READ:
          case GFX6_DATAPORT_WRITE_MESSAGE_DWORD_SCATTERED_WRITE:
          case HSW_DATAPORT_DC_PORT0_BYTE_SCATTERED_READ:
          case HSW_DATAPORT_DC_PORT0_BYTE_SCATTERED_WRITE:
@@ -388,8 +388,8 @@ schedule_node::set_latency(const struct brw_isa_info *isa)
             latency = 300;
             break;
 
-         case GFX7_DATAPORT_DC_UNTYPED_SURFACE_READ:
-         case GFX7_DATAPORT_DC_UNTYPED_SURFACE_WRITE:
+         case GEN_DATAPORT_DC_UNTYPED_SURFACE_READ:
+         case GEN_DATAPORT_DC_UNTYPED_SURFACE_WRITE:
             /* Test code:
              *   mov(8)    g112<1>UD       0x00000000UD       { align1 WE_all 1Q };
              *   mov(1)    g112.7<1>UD     g1.7<0,1,0>UD      { align1 WE_all };
@@ -412,7 +412,7 @@ schedule_node::set_latency(const struct brw_isa_info *isa)
             latency = 600;
             break;
 
-         case GFX7_DATAPORT_DC_UNTYPED_ATOMIC_OP:
+         case GEN_DATAPORT_DC_UNTYPED_ATOMIC_OP:
             /* Test code:
              *   mov(8)    g112<1>ud       0x00000000ud       { align1 WE_all 1Q };
              *   mov(1)    g112.7<1>ud     g1.7<0,1,0>ud      { align1 WE_all };
@@ -430,7 +430,7 @@ schedule_node::set_latency(const struct brw_isa_info *isa)
             latency = 14000;
             break;
 
-         case GFX7_DATAPORT_DC_MEMORY_FENCE:
+         case GEN_DATAPORT_DC_MEMORY_FENCE:
             latency = 14000;
             break;
 
@@ -439,32 +439,32 @@ schedule_node::set_latency(const struct brw_isa_info *isa)
          }
          break;
 
-      case BRW_SFID_HDC1:
+      case GEN_SFID_HDC1:
          switch (brw_dp_desc_msg_type(isa->devinfo, send->desc)) {
-         case HSW_DATAPORT_DC_PORT1_UNTYPED_SURFACE_READ:
-         case HSW_DATAPORT_DC_PORT1_UNTYPED_SURFACE_WRITE:
-         case HSW_DATAPORT_DC_PORT1_TYPED_SURFACE_READ:
-         case HSW_DATAPORT_DC_PORT1_TYPED_SURFACE_WRITE:
-         case GFX8_DATAPORT_DC_PORT1_A64_UNTYPED_SURFACE_WRITE:
-         case GFX8_DATAPORT_DC_PORT1_A64_UNTYPED_SURFACE_READ:
-         case GFX8_DATAPORT_DC_PORT1_A64_SCATTERED_WRITE:
-         case GFX9_DATAPORT_DC_PORT1_A64_SCATTERED_READ:
-         case GFX9_DATAPORT_DC_PORT1_A64_OWORD_BLOCK_READ:
-         case GFX9_DATAPORT_DC_PORT1_A64_OWORD_BLOCK_WRITE:
-            /* See also GFX7_DATAPORT_DC_UNTYPED_SURFACE_READ */
+         case GEN_DATAPORT_DC_PORT1_UNTYPED_SURFACE_READ:
+         case GEN_DATAPORT_DC_PORT1_UNTYPED_SURFACE_WRITE:
+         case GEN_DATAPORT_DC_PORT1_TYPED_SURFACE_READ:
+         case GEN_DATAPORT_DC_PORT1_TYPED_SURFACE_WRITE:
+         case GEN_DATAPORT_DC_PORT1_A64_UNTYPED_SURFACE_WRITE:
+         case GEN_DATAPORT_DC_PORT1_A64_UNTYPED_SURFACE_READ:
+         case GEN_DATAPORT_DC_PORT1_A64_SCATTERED_WRITE:
+         case GEN_DATAPORT_DC_PORT1_A64_SCATTERED_READ:
+         case GEN_DATAPORT_DC_PORT1_A64_OWORD_BLOCK_READ:
+         case GEN_DATAPORT_DC_PORT1_A64_OWORD_BLOCK_WRITE:
+            /* See also GEN_DATAPORT_DC_UNTYPED_SURFACE_READ */
             latency = 300;
             break;
 
-         case HSW_DATAPORT_DC_PORT1_UNTYPED_ATOMIC_OP:
-         case HSW_DATAPORT_DC_PORT1_UNTYPED_ATOMIC_OP_SIMD4X2:
-         case HSW_DATAPORT_DC_PORT1_TYPED_ATOMIC_OP_SIMD4X2:
-         case HSW_DATAPORT_DC_PORT1_TYPED_ATOMIC_OP:
-         case GFX9_DATAPORT_DC_PORT1_UNTYPED_ATOMIC_FLOAT_OP:
-         case GFX8_DATAPORT_DC_PORT1_A64_UNTYPED_ATOMIC_OP:
-         case GFX9_DATAPORT_DC_PORT1_A64_UNTYPED_ATOMIC_FLOAT_OP:
-         case GFX12_DATAPORT_DC_PORT1_A64_UNTYPED_ATOMIC_HALF_INT_OP:
-         case GFX12_DATAPORT_DC_PORT1_A64_UNTYPED_ATOMIC_HALF_FLOAT_OP:
-            /* See also GFX7_DATAPORT_DC_UNTYPED_ATOMIC_OP */
+         case GEN_DATAPORT_DC_PORT1_UNTYPED_ATOMIC_OP:
+         case GEN_DATAPORT_DC_PORT1_UNTYPED_ATOMIC_OP_SIMD4X2:
+         case GEN_DATAPORT_DC_PORT1_TYPED_ATOMIC_OP_SIMD4X2:
+         case GEN_DATAPORT_DC_PORT1_TYPED_ATOMIC_OP:
+         case GEN_DATAPORT_DC_PORT1_UNTYPED_ATOMIC_FLOAT_OP:
+         case GEN_DATAPORT_DC_PORT1_A64_UNTYPED_ATOMIC_OP:
+         case GEN_DATAPORT_DC_PORT1_A64_UNTYPED_ATOMIC_FLOAT_OP:
+         case GEN_GFX12_DATAPORT_DC_PORT1_A64_UNTYPED_ATOMIC_HALF_INT_OP:
+         case GEN_GFX12_DATAPORT_DC_PORT1_A64_UNTYPED_ATOMIC_HALF_FLOAT_OP:
+            /* See also GEN_DATAPORT_DC_UNTYPED_ATOMIC_OP */
             latency = 14000;
             break;
 
@@ -473,13 +473,13 @@ schedule_node::set_latency(const struct brw_isa_info *isa)
          }
          break;
 
-      case BRW_SFID_PIXEL_INTERPOLATOR:
+      case GEN_SFID_PIXEL_INTERPOLATOR:
          latency = 50; /* TODO */
          break;
 
-      case BRW_SFID_UGM:
-      case BRW_SFID_TGM:
-      case BRW_SFID_SLM:
+      case GEN_SFID_UGM:
+      case GEN_SFID_TGM:
+      case GEN_SFID_SLM:
          switch (lsc_msg_desc_opcode(isa->devinfo, send->desc)) {
          case LSC_OP_LOAD:
          case LSC_OP_STORE:
@@ -516,9 +516,9 @@ schedule_node::set_latency(const struct brw_isa_info *isa)
          }
          break;
 
-      case BRW_SFID_MESSAGE_GATEWAY:
-      case BRW_SFID_BINDLESS_THREAD_DISPATCH: /* or THREAD_SPAWNER */
-      case BRW_SFID_RAY_TRACE_ACCELERATOR:
+      case GEN_SFID_MESSAGE_GATEWAY:
+      case GEN_SFID_BINDLESS_THREAD_DISPATCH: /* or THREAD_SPAWNER */
+      case GEN_SFID_RAY_TRACE_ACCELERATOR:
          /* TODO.
           *
           * We'll assume for the moment that this is pretty quick as it
@@ -527,7 +527,7 @@ schedule_node::set_latency(const struct brw_isa_info *isa)
          latency = 200;
          break;
 
-      case BRW_SFID_URB:
+      case GEN_SFID_URB:
          latency = 200;
          break;
 

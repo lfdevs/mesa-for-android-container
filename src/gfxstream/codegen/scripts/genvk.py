@@ -15,13 +15,17 @@ sys.path.append(os.path.abspath(os.path.dirname(__file__)))
 
 from cgenerator import CGeneratorOptions, COutputGenerator
 
-from generator import write
+from generator import write, regSortFeatures
 from reg import Registry
 
 # gfxstream + cereal modules
-from cerealgenerator import CerealGenerator
+from cerealgenerator import CerealGenerator, SUPPORTED_FEATURES
 
 from typing import Optional
+
+def cerealSortFeatures(featureList):
+    regSortFeatures(featureList)
+    featureList.sort(key=lambda f: 0 if f.name in SUPPORTED_FEATURES else 1)
 
 def makeREstring(strings, default=None, strings_are_regex=False):
     """Turn a list of strings into a regexp string matching exactly those strings."""
@@ -85,7 +89,8 @@ def makeGenOpts(args):
                 prefixText        = prefixStrings + vkPrefixStrings,
                 apientry          = 'VKAPI_CALL ',
                 apientryp         = 'VKAPI_PTR *',
-                alignFuncParam    = 48)
+                alignFuncParam    = 48,
+                sortProcedure     = cerealSortFeatures)
         ]
 
     gfxstreamPrefixStrings = [

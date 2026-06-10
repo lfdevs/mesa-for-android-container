@@ -24,11 +24,13 @@
 #include "lvp_private.h"
 #include "vk_blend.h"
 #include "vk_nir_convert_ycbcr.h"
+#include "vk_nir_lower_descriptor_heaps.h"
 #include "vk_pipeline.h"
 #include "vk_render_pass.h"
 #include "vk_util.h"
 #include "glsl_types.h"
 #include "util/os_time.h"
+#include "util/u_inlines.h"
 #include "spirv/nir_spirv.h"
 #include "nir/nir_builder.h"
 #include "nir/nir_serialize.h"
@@ -57,6 +59,12 @@ shader_destroy(struct lvp_device *device, struct lvp_shader *shader, bool locked
       device->queue.ctx->delete_ts_state,
       device->queue.ctx->delete_ms_state,
    };
+
+   if (shader->heaps && shader->embedded_samplers) {
+      pipe_resource_reference(&shader->embedded_samplers, NULL);
+      device->pscreen->unmap_memory(device->pscreen, shader->embedded_samplers_memory);
+      device->pscreen->free_memory(device->pscreen, shader->embedded_samplers_memory);
+   }
 
    if (!locked)
       simple_mtx_lock(&device->queue.lock);
@@ -139,8 +147,12 @@ lvp_needs_advanced_blend_lowering(struct lvp_pipeline *pipeline)
    if (!cb)
       return false;
 
+   if (BITSET_TEST(pipeline->graphics_state.dynamic, MESA_VK_DYNAMIC_CB_BLEND_ADVANCED))
+      return false;
+
    for (uint32_t i = 0; i < cb->attachment_count; i++)
-      if (cb->attachments[i].color_blend_op >= VK_BLEND_OP_ZERO_EXT)
+      if (cb->attachments[i].blend_enable &&
+          cb->attachments[i].color_blend_op >= VK_BLEND_OP_ZERO_EXT)
          return true;
 
    return false;
@@ -177,7 +189,7 @@ lvp_lower_advanced_blend(struct lvp_pipeline *pipeline)
       const struct vk_color_blend_attachment_state *att = &cb->attachments[rt];
 
       /* Advanced blend ops start at VK_BLEND_OP_ZERO_EXT */
-      if (att->color_blend_op < VK_BLEND_OP_ZERO_EXT)
+      if (!att->blend_enable || att->color_blend_op < VK_BLEND_OP_ZERO_EXT)
          continue;
 
       const bool write_enable = cb->color_write_enables & BITFIELD_BIT(rt);
@@ -272,6 +284,8 @@ optimize(nir_shader *nir)
       NIR_PASS(progress, nir, nir_opt_deref);
       NIR_PASS(progress, nir, nir_lower_vars_to_ssa);
 
+      NIR_PASS(progress, nir, nir_opt_memcpy);
+
       NIR_PASS(progress, nir, nir_opt_copy_prop_vars);
 
       NIR_PASS(progress, nir, nir_opt_copy_prop);
@@ -340,6 +354,28 @@ lvp_create_pipeline_nir(nir_shader *nir)
    return pipeline_nir;
 }
 
+static void
+lvp_shader_alloc_embedded_samplers(struct lvp_shader *shader, struct lvp_device *device, uint32_t size)
+{
+   struct pipe_resource template = {
+      .bind = PIPE_BIND_CONSTANT_BUFFER,
+      .screen = device->pscreen,
+      .target = PIPE_BUFFER,
+      .format = PIPE_FORMAT_R8_UNORM,
+      .width0 = size,
+      .height0 = 1,
+      .depth0 = 1,
+      .array_size = 1,
+      .flags = PIPE_RESOURCE_FLAG_DONT_OVER_ALLOCATE,
+   };
+
+   uint64_t embedded_samplers_size = 0;
+   shader->embedded_samplers = device->pscreen->resource_create_unbacked(device->pscreen, &template, &embedded_samplers_size);
+   shader->embedded_samplers_memory = device->pscreen->allocate_memory(device->pscreen, embedded_samplers_size);
+   shader->embedded_samplers_map = device->pscreen->map_memory(device->pscreen, shader->embedded_samplers_memory);
+   device->pscreen->resource_bind_backing(device->pscreen, shader->embedded_samplers, shader->embedded_samplers_memory, 0, 0, 0);
+}
+
 static VkResult
 compile_spirv(struct lvp_device *pdevice,
               VkPipelineCreateFlags2KHR pipeline_flags,
@@ -375,23 +411,55 @@ compile_spirv(struct lvp_device *pdevice,
    return result;
 }
 
+struct lvp_ycbcr_conversion_lookup_info {
+   const struct lvp_shader *shader;
+   const VkShaderDescriptorSetAndBindingMappingInfoEXT *mapping;
+   struct vk_sampler_state_array *embedded_samplers;
+};
+
 static const struct vk_ycbcr_conversion_state *
 lvp_ycbcr_conversion_lookup(const void *data, uint32_t set, uint32_t binding, uint32_t array_index)
 {
-   const struct lvp_pipeline_layout *layout = data;
+   const struct lvp_ycbcr_conversion_lookup_info *info = data;
 
-   const struct lvp_descriptor_set_layout *set_layout = container_of(layout->vk.set_layouts[set], struct lvp_descriptor_set_layout, vk);
-   const struct lvp_descriptor_set_binding_layout *binding_layout = &set_layout->binding[binding];
-   if (!binding_layout->immutable_samplers)
-      return NULL;
+   if (!info->shader->heaps) {
+      const struct lvp_descriptor_set_layout *set_layout =
+         container_of(info->shader->layout->vk.set_layouts[set], struct lvp_descriptor_set_layout, vk);
+      const struct lvp_descriptor_set_binding_layout *binding_layout = &set_layout->binding[binding];
+      if (!binding_layout->immutable_samplers)
+         return NULL;
 
-   return binding_layout->immutable_ycbcr[array_index].format ? &binding_layout->immutable_ycbcr[array_index] : NULL;
+      return binding_layout->immutable_ycbcr[array_index].format ? &binding_layout->immutable_ycbcr[array_index] : NULL;
+   }
+
+   if (set == VK_NIR_YCBCR_SET_IMMUTABLE_SAMPLERS) {
+      assert(binding < info->embedded_samplers->sampler_count);
+      return &info->embedded_samplers->samplers[binding].ycbcr_conversion;
+   }
+
+   if (info->embedded_samplers) {
+      const VkDescriptorSetAndBindingMappingEXT *mapping = vk_descriptor_heap_mapping(
+         info->mapping, set, binding, nir_resource_type_combined_sampled_image);
+      if (!mapping)
+         return NULL;
+
+      const VkSamplerCreateInfo *sampler_info = vk_descriptor_heap_embedded_sampler(mapping);
+      if (!sampler_info)
+         return NULL;
+
+      struct vk_sampler sampler = {0};
+      vk_sampler_init(info->shader->base.device, &sampler, sampler_info);
+      return sampler.ycbcr_conversion ? &sampler.ycbcr_conversion->state : NULL;
+   }
+
+   return NULL;
 }
 
 /* pipeline is NULL for shader objects. */
 static void
-lvp_shader_lower(struct lvp_device *pdevice, nir_shader *nir, struct lvp_pipeline_layout *layout,
-                 struct vk_pipeline_robustness_state *robustness)
+lvp_shader_lower(struct lvp_device *pdevice, nir_shader *nir, struct lvp_shader *shader,
+                 struct vk_pipeline_robustness_state *robustness,
+                 const VkShaderDescriptorSetAndBindingMappingInfoEXT *mapping)
 {
    if (nir->info.stage != MESA_SHADER_TESS_CTRL)
       NIR_PASS(_, nir, remove_barriers, nir->info.stage == MESA_SHADER_COMPUTE || nir->info.stage == MESA_SHADER_MESH || nir->info.stage == MESA_SHADER_TASK);
@@ -447,10 +515,20 @@ lvp_shader_lower(struct lvp_device *pdevice, nir_shader *nir, struct lvp_pipelin
    optimize(nir);
    nir_shader_gather_info(nir, nir_shader_get_entrypoint(nir));
 
+   struct vk_sampler_state_array embedded_samplers;
+   if (shader->heaps) {
+      vk_nir_lower_descriptor_heaps_options heaps_options = {
+         .lower_shader_record_index_to_non_uniform = true,
+      };
+      NIR_PASS(_, nir, vk_nir_lower_descriptor_heaps, mapping, &heaps_options, &embedded_samplers);
+   }
+
    NIR_PASS(_, nir, nir_lower_io_vars_to_temporaries, nir_shader_get_entrypoint(nir),
             nir_var_shader_out | nir_var_shader_in);
    NIR_PASS(_, nir, nir_split_var_copies);
    NIR_PASS(_, nir, nir_lower_global_vars_to_local);
+
+   NIR_PASS(_, nir, nir_lower_memcpy);
 
    NIR_PASS(_, nir, nir_lower_explicit_io, nir_var_mem_push_const,
             nir_address_format_32bit_offset);
@@ -463,15 +541,34 @@ lvp_shader_lower(struct lvp_device *pdevice, nir_shader *nir, struct lvp_pipelin
             nir_var_mem_global | nir_var_mem_constant,
             nir_address_format_64bit_global);
 
-   NIR_PASS(_, nir, nir_vk_lower_ycbcr_tex, lvp_ycbcr_conversion_lookup, layout);
+   struct lvp_ycbcr_conversion_lookup_info ycbcr_info = {
+      .shader = shader,
+      .mapping = mapping,
+      .embedded_samplers = &embedded_samplers,
+   };
+   NIR_PASS(_, nir, nir_vk_lower_ycbcr_tex, lvp_ycbcr_conversion_lookup, &ycbcr_info);
 
    nir_lower_non_uniform_access_options options = {
       .types = nir_lower_non_uniform_ubo_access | nir_lower_non_uniform_texture_access | nir_lower_non_uniform_image_access |
                nir_lower_non_uniform_texture_query | nir_lower_non_uniform_image_query,
    };
-   NIR_PASS(_, nir, nir_lower_non_uniform_access, &options);
 
-   lvp_lower_pipeline_layout(pdevice, layout, nir);
+   if (shader->heaps) {
+      NIR_PASS(_, nir, lvp_nir_lower_desciptor_heaps, mapping);
+
+      NIR_PASS(_, nir, lvp_nir_lower_push_constants, &shader->push_constant_size);
+      NIR_PASS(_, nir, nir_lower_non_uniform_access, &options);
+
+      if (embedded_samplers.sampler_count) {
+         lvp_shader_alloc_embedded_samplers(shader, pdevice, embedded_samplers.sampler_count * sizeof(struct lp_sampler_descriptor));
+         for (uint32_t i = 0; i < embedded_samplers.sampler_count; i++)
+            lvp_sampler_init(pdevice, &shader->embedded_samplers_map[i], &embedded_samplers.samplers[i]);
+      }
+   } else {
+      NIR_PASS(_, nir, nir_lower_non_uniform_access, &options);
+      lvp_lower_pipeline_layout(pdevice, shader->layout, nir);
+      NIR_PASS(_, nir, lvp_nir_lower_push_constants, &shader->push_constant_size);
+   }
 
    NIR_PASS(_, nir, lvp_nir_lower_ray_queries);
 
@@ -548,13 +645,22 @@ lvp_spirv_to_nir(struct lvp_pipeline *pipeline, const void *pipeline_pNext,
    struct lvp_device *device = lvp_pipeline_device(pipeline);
    VkResult result = compile_spirv(device, pipeline->flags, sinfo, out_nir);
    if (result == VK_SUCCESS) {
+      struct lvp_shader *shader = &pipeline->shaders[(*out_nir)->info.stage];
+      shader->heaps = pipeline->heaps;
+      shader->layout = pipeline->layout;
+      if (pipeline->layout)
+         shader->push_constant_size = pipeline->layout->push_constant_size;
+
       if (pipeline->type == LVP_PIPELINE_EXEC_GRAPH)
          lvp_lower_exec_graph(pipeline, *out_nir);
 
       struct vk_pipeline_robustness_state robustness;
       vk_pipeline_robustness_state_fill(&device->vk.robustness_state, &robustness, pipeline_pNext, sinfo->pNext);
 
-      lvp_shader_lower(device, *out_nir, pipeline->layout, &robustness);
+      const VkShaderDescriptorSetAndBindingMappingInfoEXT *mapping =
+         vk_find_struct_const(sinfo, SHADER_DESCRIPTOR_SET_AND_BINDING_MAPPING_INFO_EXT);
+
+      lvp_shader_lower(device, *out_nir, shader, &robustness, mapping);
    }
 
    return result;
@@ -577,7 +683,6 @@ lvp_shader_compile_to_ir(struct lvp_pipeline *pipeline, const void *pipeline_pNe
    if (result == VK_SUCCESS) {
       struct lvp_shader *shader = &pipeline->shaders[stage];
       lvp_shader_init(shader, nir);
-      shader->push_constant_size = pipeline->layout->push_constant_size;
    }
    return result;
 }
@@ -749,7 +854,7 @@ layouts_equal(const struct lvp_descriptor_set_layout *a, const struct lvp_descri
    }
    if (!a->immutable_sampler_count)
       return true;
-   if (memcmp(la->immutable_samplers, lb->immutable_samplers, a->immutable_sampler_count * sizeof(struct lp_descriptor)))
+   if (memcmp(la->immutable_samplers, lb->immutable_samplers, a->immutable_sampler_count * sizeof(struct lp_sampler_descriptor)))
       return false;
    return !memcmp(la->immutable_ycbcr, lb->immutable_ycbcr, a->immutable_sampler_count * sizeof(struct vk_ycbcr_conversion_state));
 }
@@ -843,6 +948,7 @@ lvp_graphics_pipeline_init(struct lvp_pipeline *pipeline,
                                                                                 GRAPHICS_PIPELINE_LIBRARY_CREATE_INFO_EXT);
    const VkPipelineLibraryCreateInfoKHR *libstate = vk_find_struct_const(pCreateInfo,
                                                                          PIPELINE_LIBRARY_CREATE_INFO_KHR);
+
    const VkGraphicsPipelineLibraryFlagsEXT layout_stages = VK_GRAPHICS_PIPELINE_LIBRARY_PRE_RASTERIZATION_SHADERS_BIT_EXT |
                                                            VK_GRAPHICS_PIPELINE_LIBRARY_FRAGMENT_SHADER_BIT_EXT;
    if (libinfo)
@@ -857,17 +963,20 @@ lvp_graphics_pipeline_init(struct lvp_pipeline *pipeline,
       pipeline->library = true;
 
    struct lvp_pipeline_layout *layout = lvp_pipeline_layout_from_handle(pCreateInfo->layout);
-
-   if (!layout || !(layout->vk.create_flags & VK_PIPELINE_LAYOUT_CREATE_INDEPENDENT_SETS_BIT_EXT))
-      /* this is a regular pipeline with no partials: directly reuse */
-      pipeline->layout = layout ? (void*)vk_pipeline_layout_ref(&layout->vk) : NULL;
-   else if (pipeline->stages & layout_stages) {
-      if ((pipeline->stages & layout_stages) == layout_stages)
-         /* this has all the layout stages: directly reuse */
-         pipeline->layout = (void*)vk_pipeline_layout_ref(&layout->vk);
-      else {
-         /* this is a partial: copy for later merging to avoid modifying another layout */
-         merge_layouts(&device->vk, pipeline, layout);
+   if (flags & VK_PIPELINE_CREATE_2_DESCRIPTOR_HEAP_BIT_EXT) {
+      pipeline->heaps = true;
+   } else {
+      if (!layout || !(layout->vk.create_flags & VK_PIPELINE_LAYOUT_CREATE_INDEPENDENT_SETS_BIT_EXT))
+         /* this is a regular pipeline with no partials: directly reuse */
+         pipeline->layout = layout ? (void*)vk_pipeline_layout_ref(&layout->vk) : NULL;
+      else if (pipeline->stages & layout_stages) {
+         if ((pipeline->stages & layout_stages) == layout_stages)
+            /* this has all the layout stages: directly reuse */
+            pipeline->layout = (void*)vk_pipeline_layout_ref(&layout->vk);
+         else {
+            /* this is a partial: copy for later merging to avoid modifying another layout */
+            merge_layouts(&device->vk, pipeline, layout);
+         }
       }
    }
 
@@ -892,7 +1001,7 @@ lvp_graphics_pipeline_init(struct lvp_pipeline *pipeline,
             pipeline->force_min_sample = p->force_min_sample;
             copy_shader_sanitized(&pipeline->shaders[MESA_SHADER_FRAGMENT], &p->shaders[MESA_SHADER_FRAGMENT]);
          }
-         if (p->stages & layout_stages) {
+         if (p->stages & layout_stages && p->layout) {
             if (!layout || (layout->vk.create_flags & VK_PIPELINE_LAYOUT_CREATE_INDEPENDENT_SETS_BIT_EXT)) {
                merge_layouts(&device->vk, pipeline, p->layout);
                lvp_forall_gfx_stage(i) {
@@ -991,8 +1100,9 @@ lvp_graphics_pipeline_init(struct lvp_pipeline *pipeline,
       }
    }
 
-   if (!libstate && !pipeline->library)
+   if (!libstate && !pipeline->library) {
       lvp_pipeline_shaders_compile(pipeline, false);
+   }
 
    return VK_SUCCESS;
 
@@ -1114,8 +1224,12 @@ lvp_compute_pipeline_init(struct lvp_pipeline *pipeline,
                           VkPipelineCreateFlagBits2KHR flags)
 {
    pipeline->flags = flags;
-   pipeline->layout = lvp_pipeline_layout_from_handle(pCreateInfo->layout);
-   vk_pipeline_layout_ref(&pipeline->layout->vk);
+   if (flags & VK_PIPELINE_CREATE_2_DESCRIPTOR_HEAP_BIT_EXT) {
+      pipeline->heaps = true;
+   } else {
+      pipeline->layout = lvp_pipeline_layout_from_handle(pCreateInfo->layout);
+      vk_pipeline_layout_ref(&pipeline->layout->vk);
+   }
    pipeline->force_min_sample = false;
 
    pipeline->type = LVP_PIPELINE_COMPUTE;
@@ -1127,8 +1241,6 @@ lvp_compute_pipeline_init(struct lvp_pipeline *pipeline,
    struct lvp_shader *shader = &pipeline->shaders[MESA_SHADER_COMPUTE];
    shader->shader_cso = lvp_shader_compile(device, shader, nir_shader_clone(NULL, shader->pipeline_nir->nir), false);
    pipeline->compiled = true;
-   if (pipeline->layout)
-      shader->push_constant_size = pipeline->layout->push_constant_size;
    return VK_SUCCESS;
 }
 
@@ -1234,6 +1346,7 @@ create_shader_object(struct lvp_device *device, const VkShaderCreateInfoEXT *pCr
    nir_shader *nir = NULL;
    mesa_shader_stage stage = vk_to_mesa_shader_stage(pCreateInfo->stage);
    assert(stage <= LVP_SHADER_STAGES && stage != MESA_SHADER_NONE);
+
    if (pCreateInfo->codeType == VK_SHADER_CODE_TYPE_SPIRV_EXT) {
       VkShaderModuleCreateInfo minfo = {
          VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
@@ -1264,7 +1377,7 @@ create_shader_object(struct lvp_device *device, const VkShaderCreateInfoEXT *pCr
       assert(pCreateInfo->codeType == VK_SHADER_CODE_TYPE_BINARY_EXT);
       if (pCreateInfo->codeSize < BLAKE3_KEY_LEN + VK_UUID_SIZE + 1)
          return VK_NULL_HANDLE;
-      struct blob_reader blob;
+
       const uint8_t *data = pCreateInfo->pCode;
       uint8_t uuid[VK_UUID_SIZE];
       lvp_device_get_cache_uuid(uuid);
@@ -1279,18 +1392,12 @@ create_shader_object(struct lvp_device *device, const VkShaderCreateInfoEXT *pCr
       _mesa_blake3_final(&sctx, blake3);
       if (memcmp(blake3, data + VK_UUID_SIZE, BLAKE3_KEY_LEN))
          return VK_NULL_HANDLE;
-
-      blob_reader_init(&blob, data + BLAKE3_KEY_LEN + VK_UUID_SIZE, size);
-      nir = nir_deserialize(NULL, device->pscreen->nir_options[stage], &blob);
-      if (!nir)
-         goto fail;
    }
-   if (!nir_shader_get_entrypoint(nir))
-      goto fail;
+
    struct lvp_shader *shader = vk_object_zalloc(&device->vk, pAllocator, sizeof(struct lvp_shader), VK_OBJECT_TYPE_SHADER_EXT);
    if (!shader)
       goto fail;
-   blob_init(&shader->blob);
+
    VkPipelineLayoutCreateInfo pci = {
       VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
       NULL,
@@ -1303,8 +1410,36 @@ create_shader_object(struct lvp_device *device, const VkShaderCreateInfoEXT *pCr
    shader->layout = lvp_pipeline_layout_create(device, &pci, pAllocator);
    shader->push_constant_size = shader->layout->push_constant_size;
 
-   if (pCreateInfo->codeType == VK_SHADER_CODE_TYPE_SPIRV_EXT)
-      lvp_shader_lower(device, nir, shader->layout, NULL);
+   if (pCreateInfo->codeType == VK_SHADER_CODE_TYPE_BINARY_EXT) {
+      const uint8_t *data = pCreateInfo->pCode;
+      size_t size = pCreateInfo->codeSize - BLAKE3_KEY_LEN - VK_UUID_SIZE;
+
+      struct blob_reader blob;
+      blob_reader_init(&blob, data + BLAKE3_KEY_LEN + VK_UUID_SIZE, size);
+      nir = nir_deserialize(NULL, device->pscreen->nir_options[stage], &blob);
+      if (!nir)
+         goto fail;
+
+      shader->push_constant_size = blob_read_uint32(&blob);
+
+      uint32_t embedded_samplers_size = blob_read_uint32(&blob);
+      if (embedded_samplers_size) {
+         lvp_shader_alloc_embedded_samplers(shader, device, embedded_samplers_size);
+         memcpy(shader->embedded_samplers_map, blob_read_bytes(&blob, embedded_samplers_size), embedded_samplers_size);
+      }
+   }
+   if (!nir_shader_get_entrypoint(nir))
+      goto fail;
+
+   blob_init(&shader->blob);
+
+   shader->heaps = pCreateInfo->flags & VK_SHADER_CREATE_DESCRIPTOR_HEAP_BIT_EXT;
+
+   if (pCreateInfo->codeType == VK_SHADER_CODE_TYPE_SPIRV_EXT) {
+      const VkShaderDescriptorSetAndBindingMappingInfoEXT *mapping =
+         vk_find_struct_const(pCreateInfo, SHADER_DESCRIPTOR_SET_AND_BINDING_MAPPING_INFO_EXT);
+      lvp_shader_lower(device, nir, shader, NULL, mapping);
+   }
 
    lvp_shader_init(shader, nir);
 
@@ -1317,6 +1452,14 @@ create_shader_object(struct lvp_device *device, const VkShaderCreateInfoEXT *pCr
       shader->tess_ccw_cso = lvp_shader_compile(device, shader, nir_shader_clone(NULL, shader->tess_ccw->nir), false);
    }
    nir_serialize(&shader->blob, nir, true);
+
+   blob_write_uint32(&shader->blob, shader->push_constant_size);
+
+   uint32_t embedded_samplers_size = shader->embedded_samplers ? shader->embedded_samplers->width0 : 0;
+   blob_write_uint32(&shader->blob, embedded_samplers_size);
+   if (shader->embedded_samplers)
+      blob_write_bytes(&shader->blob, shader->embedded_samplers_map, embedded_samplers_size);
+
    shader->shader_cso = lvp_shader_compile(device, shader, nir_shader_clone(NULL, nir), false);
    return lvp_shader_to_handle(shader);
 fail:

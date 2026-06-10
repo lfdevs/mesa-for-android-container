@@ -80,49 +80,6 @@ void mtl_render_pass_descriptor_set_sample_positions(
 void mtl_render_pass_descriptor_set_visibility_buffer(
    mtl_render_pass_descriptor *descriptor, mtl_buffer *visibility_buffer);
 
-/* Render pipeline descriptor */
-mtl_render_pipeline_descriptor *mtl_new_render_pipeline_descriptor(void);
-
-void mtl_render_pipeline_descriptor_set_vertex_shader(
-   mtl_render_pass_descriptor *descriptor, mtl_function *shader);
-
-void mtl_render_pipeline_descriptor_set_fragment_shader(
-   mtl_render_pass_descriptor *descriptor, mtl_function *shader);
-
-void mtl_render_pipeline_descriptor_set_input_primitive_topology(
-   mtl_render_pass_descriptor *descriptor,
-   enum mtl_primitive_topology_class topology_class);
-
-void mtl_render_pipeline_descriptor_set_color_attachment_format(
-   mtl_render_pass_descriptor *descriptor, uint8_t index,
-   enum mtl_pixel_format format);
-
-void mtl_render_pipeline_descriptor_set_depth_attachment_format(
-   mtl_render_pass_descriptor *descriptor, enum mtl_pixel_format format);
-
-void mtl_render_pipeline_descriptor_set_stencil_attachment_format(
-   mtl_render_pass_descriptor *descriptor, enum mtl_pixel_format format);
-
-void mtl_render_pipeline_descriptor_set_raster_sample_count(
-   mtl_render_pass_descriptor *descriptor, uint32_t sample_count);
-
-void mtl_render_pipeline_descriptor_set_alpha_to_coverage(
-   mtl_render_pass_descriptor *descriptor, bool enabled);
-
-void mtl_render_pipeline_descriptor_set_alpha_to_one(
-   mtl_render_pass_descriptor *descriptor, bool enabled);
-
-void mtl_render_pipeline_descriptor_set_rasterization_enabled(
-   mtl_render_pass_descriptor *descriptor, bool enabled);
-
-void mtl_render_pipeline_descriptor_set_max_vertex_amplification_count(
-   mtl_render_pass_descriptor *descriptor, uint32_t count);
-
-/* Render pipeline */
-mtl_render_pipeline_state *
-mtl_new_render_pipeline(mtl_device *device,
-                        mtl_render_pass_descriptor *descriptor);
-
 /* Stencil descriptor */
 mtl_stencil_descriptor *mtl_new_stencil_descriptor(void);
 

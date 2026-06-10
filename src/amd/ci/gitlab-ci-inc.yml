@@ -372,6 +372,12 @@
   variables:
     DEQP_SUITE: radv
 
+.ci-tron-test-radv-vk-asan:
+  extends:
+    - .ci-tron-x86_64-test-vk-asan
+    - .radv-valve-rules
+    - .ci-tron-test-radv
+
 .ci-tron-test-radv-vk-nightly:
   extends:
     - .ci-tron-x86_64-test-vk

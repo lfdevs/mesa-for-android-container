@@ -5,27 +5,21 @@
 import argparse
 import sys
 
-def declare_options():
-    from drirc_gen import DrircBool      as B
-    from drirc_gen import DrircInt       as I
-    from drirc_gen import DrircString    as S
+VALID_COMMON_VK_OPTIONS = {
+    "vk_lower_terminate_to_discard",
+    "vk_zero_vram",
+    "vk_require_etc2",
+    "vk_require_astc",
+}
 
-    from drirc_gen import DrircSection   as Section
+def declare_options():
+    import drirc_gen
+
+    B = drirc_gen.DrircBool
+    I = drirc_gen.DrircInt
+    S = drirc_gen.DrircString
 
     debug_options = [
-        # WSI options.
-        B("vk_wsi_force_bgra8_unorm_first", False,
-          "Force vkGetPhysicalDeviceSurfaceFormatsKHR to return VK_FORMAT_B8G8R8A8_UNORM as the first format"),
-        B("vk_wsi_force_swapchain_to_current_extent", False,
-          "Force VkSwapchainCreateInfoKHR::imageExtent to be VkSurfaceCapabilities2KHR::currentExtent"),
-        B("vk_wsi_disable_unordered_submits", False,
-          "Disable unordered WSI submits to workaround application synchronization bugs"),
-        B("vk_x11_ignore_suboptimal", False,
-          "Force the X11 WSI to never report VK_SUBOPTIMAL_KHR"),
-
-        B("vk_zero_vram", False,
-          "Initialize to zero all VRAM allocations",
-          c_name="zero_vram"),
         B("radv_disable_aniso_single_level", False,
           "Disable anisotropic filtering for single level images",
           c_name="disable_aniso_single_level"),
@@ -62,9 +56,6 @@ def declare_options():
         B("radv_invariant_geom", False,
           "Mark geometry-affecting outputs as invariant",
           c_name="invariant_geom"),
-        B("vk_lower_terminate_to_discard", False,
-          "Lower terminate to discard (which is implicitly demote)",
-          c_name="lower_terminate_to_discard"),
         B("radv_no_dynamic_bounds", False,
           "Disabling bounds checking for dynamic buffer descriptors",
           c_name="no_dynamic_bounds"),
@@ -101,18 +92,6 @@ def declare_options():
     ]
 
     performance_options = [
-        # WSI options.
-        B("adaptive_sync", True,
-          "Adapt the monitor sync to the application performance (when possible)"),
-        I("vk_x11_override_min_image_count", 0, 0, 999,
-          "Override the VkSurfaceCapabilitiesKHR::minImageCount (0 = no override)"),
-        B("vk_x11_strict_image_count", False,
-          "Force the X11 WSI to create exactly the number of image specified by the application in VkSwapchainCreateInfoKHR::minImageCount"),
-        B("vk_x11_ensure_min_image_count", False,
-          "Force the X11 WSI to create at least the number of image specified by the driver in VkSurfaceCapabilitiesKHR::minImageCount"),
-        B("vk_xwayland_wait_ready", False,
-          "Wait for fences before submitting buffers to Xwayland"),
-
         B("radv_disable_ngg_gs", False,
           "Disable NGG GS on GFX10/GFX10.3.",
           c_name="disable_ngg_gs"),
@@ -140,12 +119,6 @@ def declare_options():
         B("radv_enable_float16_gfx8", False,
           "Expose float16 on GFX8, where it's supported but usually not beneficial.",
           c_name="enable_float16_gfx8"),
-        B("vk_require_etc2", False,
-          "Implement emulated ETC2 on HW that does not support it",
-          c_name="require_etc2"),
-        B("vk_require_astc", False,
-          "Implement emulated ASTC on HW that does not support it",
-          c_name="require_astc"),
     ]
 
     misc_options = [
@@ -171,11 +144,14 @@ def declare_options():
           c_name="override_ray_tracing_shader_version"),
     ]
 
+    drirc_gen.add_common_vk_options(debug_options, features_options, valid_options=VALID_COMMON_VK_OPTIONS)
+    drirc_gen.add_common_vk_wsi_options(debug_options, performance_options)
+
     return [
-        Section("Debugging", debug_options, c_name="debug"),
-        Section("Performance", performance_options, c_name="performance"),
-        Section("Features", features_options, c_name="features"),
-        Section("Miscellaneous", misc_options, c_name="misc"),
+        drirc_gen.DrircSection("Debugging", debug_options, c_name="debug"),
+        drirc_gen.DrircSection("Performance", performance_options, c_name="performance"),
+        drirc_gen.DrircSection("Features", features_options, c_name="features"),
+        drirc_gen.DrircSection("Miscellaneous", misc_options, c_name="misc"),
     ]
 
 def main():
@@ -185,13 +161,13 @@ def main():
     parser.add_argument('--drirc-hdr', required=True)
     parser.add_argument('--validate', required=True)
     args = parser.parse_args()
+
     sys.path.insert(0, args.import_path)
+    import drirc_gen
 
-    from drirc_gen import drirc_validate
-    drirc_validate([args.validate], declare_options())
+    drirc_gen.drirc_validate([args.validate], declare_options())
 
-    from drirc_gen import drirc_generate
-    drirc_generate(args.drirc_src, args.drirc_hdr, "radv", declare_options())
+    drirc_gen.drirc_generate(args.drirc_src, args.drirc_hdr, "radv", declare_options())
 
 if __name__ == '__main__':
     main()

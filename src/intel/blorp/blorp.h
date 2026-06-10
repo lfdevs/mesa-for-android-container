@@ -41,6 +41,8 @@ typedef struct nir_shader nir_shader;
 enum blorp_op {
    BLORP_OP_BLIT,
    BLORP_OP_COPY,
+   BLORP_OP_COPY_INDIRECT,
+   BLORP_OP_COPY_IMAGE_INDIRECT,
    BLORP_OP_CCS_AMBIGUATE,
    BLORP_OP_CCS_COLOR_CLEAR,
    BLORP_OP_CCS_PARTIAL_RESOLVE,
@@ -298,6 +300,22 @@ blorp_buffer_copy(struct blorp_batch *batch,
                   struct blorp_address src,
                   struct blorp_address dst,
                   uint64_t size);
+
+void
+blorp_copy_memory_indirect(struct blorp_batch *batch,
+                           uint64_t indirect_buf_addr,
+                           uint32_t copy_count,
+                           uint64_t stride);
+
+void
+blorp_copy_memory_to_image_indirect(struct blorp_batch *batch,
+                                    const struct blorp_surf *img_blorp_surf,
+                                    uint64_t indirect_buf_addr,
+                                    uint64_t indirect_buf_stride,
+                                    uint32_t first_copy_idx,
+                                    uint32_t img_mip_level,
+                                    int layer_count,
+                                    int forced_layer_or_z);
 
 void
 blorp_fast_clear(struct blorp_batch *batch,

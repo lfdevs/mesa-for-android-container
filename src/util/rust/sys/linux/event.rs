@@ -27,14 +27,19 @@ impl Event {
         })
     }
 
-    pub fn signal(&mut self) -> MesaResult<()> {
-        let _ = write(&self.descriptor, &1u64.to_ne_bytes())?;
+    pub fn add(&mut self, value: u64) -> MesaResult<()> {
+        let _ = write(&self.descriptor, &value.to_le_bytes())?;
         Ok(())
     }
 
-    pub fn wait(&self) -> MesaResult<()> {
-        read(&self.descriptor, &mut 1u64.to_ne_bytes())?;
-        Ok(())
+    pub fn signal(&mut self) -> MesaResult<()> {
+        self.add(1)
+    }
+
+    pub fn wait(&mut self) -> MesaResult<u64> {
+        let mut buf = [0; 8];
+        read(&self.descriptor, &mut buf)?;
+        Ok(u64::from_le_bytes(buf))
     }
 
     pub fn try_clone(&self) -> MesaResult<Event> {

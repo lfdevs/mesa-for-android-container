@@ -862,7 +862,7 @@ _mesa_Begin(GLenum mode)
          ctx->Dispatch.Current = ctx->Dispatch.Exec;
    } else if (ctx->GLApi == ctx->Dispatch.OutsideBeginEnd) {
       ctx->GLApi = ctx->Dispatch.Current = ctx->Dispatch.Exec;
-      _mesa_glapi_set_dispatch(ctx->GLApi);
+      _mesa_set_dispatch(ctx, ctx->GLApi);
    } else {
       assert(ctx->GLApi == ctx->Dispatch.Save);
    }
@@ -925,7 +925,7 @@ _mesa_End(void)
    } else if (ctx->GLApi == ctx->Dispatch.BeginEnd ||
               ctx->GLApi == ctx->Dispatch.HWSelectModeBeginEnd) {
       ctx->GLApi = ctx->Dispatch.Current = ctx->Dispatch.Exec;
-      _mesa_glapi_set_dispatch(ctx->GLApi);
+      _mesa_set_dispatch(ctx, ctx->GLApi);
    }
 
    if (exec->vtx.prim_count > 0) {

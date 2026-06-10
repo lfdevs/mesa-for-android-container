@@ -35,10 +35,14 @@ struct kk_image_view {
       /* Cached handle so we don't have to retrieve it from the image when we
        * render */
       mtl_texture *mtl_handle_render;
+      bool render_is_view;
 
       /* Input attachment handle. Required since input attachments needs to be
        * arrays, and sampled may not be */
       mtl_texture *mtl_handle_input;
+
+      /* Used if view has to create its own alias of a specific subresource */
+      mtl_texture *mtl_handle_subres;
 
       uint64_t sampled_gpu_resource_id;
       uint64_t storage_gpu_resource_id;

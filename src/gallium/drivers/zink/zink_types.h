@@ -701,8 +701,15 @@ struct bo_export {
    struct list_head link;
 };
 
+enum zink_bo_type {
+   ZINK_BO_REAL,
+   ZINK_BO_SLAB,
+   ZINK_BO_SPARSE,
+};
+
 struct zink_bo {
-   struct pb_buffer base;
+   struct pb_buffer_lean base;
+   enum zink_bo_type type;
 
    union {
       struct {
@@ -749,7 +756,7 @@ struct zink_bo {
 };
 
 static inline struct zink_bo *
-zink_bo(struct pb_buffer *pbuf)
+zink_bo(struct pb_buffer_lean *pbuf)
 {
    return (struct zink_bo*)pbuf;
 }
@@ -1435,8 +1442,7 @@ struct zink_screen {
 
    struct {
       struct pb_cache bo_cache;
-      struct pb_slabs bo_slabs[NUM_SLAB_ALLOCATORS];
-      unsigned min_alloc_size;
+      struct pb_slabs bo_slabs;
       uint32_t next_bo_unique_id;
    } pb;
    uint8_t heap_map[ZINK_HEAP_MAX][VK_MAX_MEMORY_TYPES];  // mapping from zink heaps to memory type indices

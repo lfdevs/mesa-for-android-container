@@ -417,6 +417,7 @@ struct v3d_key {
         bool robust_storage_access;
         bool robust_image_access;
         bool robust_image_access_2;
+        bool null_descriptor;
 };
 
 struct v3d_fs_key {
@@ -1181,6 +1182,8 @@ void vir_set_uf(struct v3d_compile *c, struct qinst *inst, enum v3d_qpu_uf uf);
 void vir_set_unpack(struct qinst *inst, int src,
                     enum v3d_qpu_input_unpack unpack);
 void vir_set_pack(struct qinst *inst, enum v3d_qpu_output_pack pack);
+enum v3d_qpu_input_unpack vir_get_unpack(struct qinst *inst, int src);
+enum v3d_qpu_output_pack vir_get_pack(struct qinst *inst);
 
 struct qreg vir_get_temp(struct v3d_compile *c);
 void vir_calculate_live_intervals(struct v3d_compile *c);
@@ -1229,6 +1232,7 @@ bool v3d_nir_lower_logic_ops(nir_shader *s, struct v3d_compile *c);
 bool v3d_nir_lower_scratch(nir_shader *s);
 bool v3d_nir_lower_txf_ms(nir_shader *s);
 bool v3d_nir_lower_image_load_store(nir_shader *s, struct v3d_compile *c);
+bool v3d_nir_lower_null_descriptors(nir_shader *s);
 bool v3d_nir_lower_global_2x32(nir_shader *s);
 bool v3d_nir_lower_load_store_bitsize(nir_shader *s);
 bool v3d_nir_lower_algebraic(struct nir_shader *shader, const struct v3d_compile *c);
@@ -1393,9 +1397,17 @@ vir_##name##_dest(struct v3d_compile *c, struct qreg dest,               \
 #define VIR_A_NODST_0(name) VIR_NODST_0(name, vir_add_inst, V3D_QPU_A_##name)
 
 VIR_A_ALU2(FADD)
+VIR_A_ALU2(VFADD)
 VIR_A_ALU2(VFPACK)
 VIR_A_ALU2(FSUB)
+VIR_A_ALU2(VFSUB)
+VIR_A_ALU2(VFCMP)
+VIR_A_ALU1(VFMOV)
+VIR_A_ALU1(VFABS)
+VIR_A_ALU1(VFNEG)
+VIR_A_ALU1(VFNAB)
 VIR_A_ALU2(FMIN)
+VIR_A_ALU2(VFMIN)
 VIR_A_ALU2(FMAX)
 
 VIR_A_ALU2(ADD)
@@ -1467,6 +1479,7 @@ VIR_A_ALU1(UTOF)
 VIR_M_ALU2(UMUL24)
 VIR_M_ALU2(UMUL24_RTOP0)
 VIR_M_ALU2(FMUL)
+VIR_M_ALU2(VFMUL)
 VIR_M_ALU2(SMUL24)
 VIR_M_NODST_2(MULTOP)
 

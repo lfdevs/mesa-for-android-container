@@ -10,6 +10,10 @@
 #include "nir/nir.h"
 #include "nir/nir_builder.h"
 
+#include <vulkan/vulkan_core.h>
+
+#include "vk_nir_lower_descriptor_heaps.h"
+
 nir_def *lvp_mul_vec3_mat(nir_builder *b, nir_def *vec, nir_def *matrix[], bool translation);
 
 void lvp_load_wto_matrix(nir_builder *b, nir_def *instance_addr, nir_def **node_data, nir_def **out);
@@ -106,6 +110,8 @@ struct lvp_pipeline;
 struct lvp_pipeline_layout;
 struct vk_pipeline_robustness_state;
 
+bool lvp_nir_lower_desciptor_heaps(nir_shader *shader, const VkShaderDescriptorSetAndBindingMappingInfoEXT *mapping);
+
 bool lvp_lower_exec_graph(struct lvp_pipeline *pipeline, nir_shader *nir);
 
 bool lvp_lower_input_attachments(nir_shader *shader, bool use_fragcoord_sysval);
@@ -113,6 +119,8 @@ bool lvp_lower_input_attachments(nir_shader *shader, bool use_fragcoord_sysval);
 void lvp_lower_pipeline_layout(const struct lvp_device *device,
                                struct lvp_pipeline_layout *layout,
                                nir_shader *shader);
+
+bool lvp_nir_lower_push_constants(nir_shader *shader, uint32_t *push_counstants_size);
 
 bool lvp_nir_lower_ray_queries(struct nir_shader *shader);
 

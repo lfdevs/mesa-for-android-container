@@ -13,16 +13,16 @@
 #include "nir/nir_serialize.h"
 #include "nir/nir_xfb_info.h"
 #include "nir/radv_nir.h"
+#include "tools/radv_rmv.h"
 #include "util/mesa-blake3.h"
 #include "util/os_time.h"
 #include "util/u_atomic.h"
-#include "radv_debug.h"
+#include "radv_device.h"
 #include "radv_entrypoints.h"
 #include "radv_formats.h"
 #include "radv_physical_device.h"
 #include "radv_pipeline_binary.h"
 #include "radv_pipeline_cache.h"
-#include "radv_rmv.h"
 #include "radv_shader.h"
 #include "radv_shader_args.h"
 #include "shader_enums.h"
@@ -1690,9 +1690,16 @@ radv_generate_graphics_state_key(const struct radv_compiler_info *compiler_info,
 
    if (state->ms) {
       key.ms.sample_shading_enable = state->ms->sample_shading_enable;
+      key.ms.max_sample_shading_enable = state->ms->sample_shading_enable && state->ms->min_sample_shading == 1;
+
       if (!BITSET_TEST(state->dynamic, MESA_VK_DYNAMIC_MS_RASTERIZATION_SAMPLES) &&
           state->ms->rasterization_samples > 1) {
          key.ms.rasterization_samples = state->ms->rasterization_samples;
+
+         if (state->ms->sample_shading_enable) {
+            key.ms.ps_iter_samples =
+               util_next_power_of_two(ceilf(state->ms->rasterization_samples * state->ms->min_sample_shading));
+         }
       }
    }
 
@@ -2568,6 +2575,22 @@ radv_graphics_shaders_compile(const struct radv_compiler_info *compiler_info, st
       NIR_PASS(_, stages[MESA_SHADER_FRAGMENT].nir, radv_nir_lower_opt_fs_frag_pos,
                !gfx_state->vrs_may_be_enabled && !gfx_state->ms.sample_shading_enable &&
                   !stages[MESA_SHADER_FRAGMENT].nir->info.fs.uses_sample_shading);
+
+      ac_nir_lower_sample_mask_in_options lower_sample_mask_in_options = {0};
+
+      if (stages[MESA_SHADER_FRAGMENT].nir->info.fs.uses_sample_shading || gfx_state->ms.max_sample_shading_enable) {
+         lower_sample_mask_in_options.behavior = ac_nir_lower_samplemask_sample_shading_max;
+      } else if (gfx_state->ms.sample_shading_enable) {
+         lower_sample_mask_in_options.behavior = ac_nir_lower_samplemask_sample_shading_partial;
+         lower_sample_mask_in_options.ps_iter_samples = gfx_state->ms.ps_iter_samples;
+      } else if (!gfx_state->vrs_may_be_enabled && !gfx_state->dynamic_rasterization_samples &&
+                 gfx_state->ms.rasterization_samples == 0) {
+         lower_sample_mask_in_options.behavior = ac_nir_lower_samplemask_1sample_no_vrs;
+      } else {
+         lower_sample_mask_in_options.behavior = ac_nir_lower_samplemask_unknown_states_no_sample_shading;
+      }
+
+      NIR_PASS(_, stages[MESA_SHADER_FRAGMENT].nir, ac_nir_lower_sample_mask_in, &lower_sample_mask_in_options);
 
       /* Lower the view index to map on the layer. */
       NIR_PASS(_, stages[MESA_SHADER_FRAGMENT].nir, radv_nir_lower_view_index);

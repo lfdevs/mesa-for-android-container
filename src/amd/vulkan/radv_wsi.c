@@ -18,7 +18,7 @@
 #include "radv_queue.h"
 #include "radv_shader.h"
 
-#include "radv_debug.h"
+#include "tools/radv_debug.h"
 #include "wsi_common.h"
 
 static VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL
@@ -97,7 +97,7 @@ radv_init_wsi(struct radv_physical_device *pdev)
 
    VkResult result =
       wsi_device_init(&pdev->wsi_device, radv_physical_device_to_handle(pdev), radv_wsi_proc_addr, &instance->vk.alloc,
-                      pdev->master_fd, &instance->drirc.options, &(struct wsi_device_options){.sw_device = false});
+                      pdev->wsi_master_fd, &instance->drirc.options, &(struct wsi_device_options){.sw_device = false});
    if (result != VK_SUCCESS)
       return result;
 

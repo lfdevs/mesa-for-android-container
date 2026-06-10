@@ -31,10 +31,10 @@
 class encoder_capabilities
 {
  public:
-   encoder_capabilities() { };
+   encoder_capabilities( void *logId ) : m_logId { logId } { };
    ~encoder_capabilities() { };
 
-   void initialize( pipe_screen *pScreen, pipe_video_profile profile );
+   HRESULT initialize( pipe_screen *pScreen, pipe_video_profile profile );
    // Cached underlying backend pipe caps (avoid querying on each frame)
 
    // PIPE_VIDEO_CAP_MAX_WIDTH
@@ -125,6 +125,7 @@ class encoder_capabilities
    union pipe_enc_cap_motion_vector_map m_HWSupportMotionGPUMaps = {};
 
    // Supported slice mode
+   bool m_bHWSupportsAppControlledSlicePartitioning = false;
    bool m_bHWSupportSliceModeMB = false;
    bool m_bHWSupportSliceModeBits = false;
    bool m_bHWSupportSliceModeMBRow = false;
@@ -144,4 +145,7 @@ class encoder_capabilities
 
    // PIPE_VIDEO_CAP_ENC_READABLE_RECONSTRUCTED_PICTURE
    bool m_bHWSupportReadableReconstructedPicture = false;
+
+ private:
+   const void *m_logId = {};
 };

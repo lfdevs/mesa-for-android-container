@@ -2,7 +2,7 @@
 # shellcheck disable=SC2086 # we want word splitting
 
 if [[ -z "$STRACEDIR" ]]; then
-    STRACEDIR=meson-logs/strace/$(for i in "$@"; do basename -z -- $i; echo -n _; done).$$
+    STRACEDIR=meson-logs/strace/$(for i in "$@"; do basename -z -- $i; echo -n _; done |  head -c100).$$
 fi
 
 mkdir -p $STRACEDIR

@@ -16,11 +16,14 @@ use std::os::unix::io::RawFd;
 
 use rustix::fs::fcntl_get_seals;
 use rustix::fs::fcntl_getfl;
+use rustix::fs::fstat;
 use rustix::fs::seek;
+use rustix::fs::FileType;
 use rustix::fs::OFlags;
 use rustix::fs::SealFlags;
 use rustix::fs::SeekFrom;
 use rustix::io::Errno;
+use rustix::net::sockopt::socket_type;
 
 use crate::descriptor::AsRawDescriptor;
 use crate::descriptor::FromRawDescriptor;
@@ -52,6 +55,15 @@ impl OwnedDescriptor {
             let path_str = fd_path.to_string_lossy();
             if path_str.starts_with("anon_inode:[eventfd]") {
                 return Ok(DescriptorType::Event);
+            }
+        }
+
+        if let Ok(fd_stat) = fstat(&self.owned) {
+            let fd_type = FileType::from_raw_mode(fd_stat.st_mode);
+            if fd_type == FileType::Socket {
+                return Ok(DescriptorType::Socket(
+                    socket_type(&self.owned)?.try_into()?,
+                ));
             }
         }
 

@@ -6,7 +6,6 @@
 #include "brw_cfg.h"
 #include "brw_eu.h"
 #include "brw_shader.h"
-#include "brw_generator.h"
 #include "brw_nir.h"
 #include "brw_private.h"
 #include "intel_nir.h"
@@ -109,7 +108,8 @@ brw_compile_tes(const struct brw_compiler *compiler,
                        key->base.vue_layout, pos_slots);
 
    brw_nir_apply_key(pt, &key->base, dispatch_width);
-   brw_nir_lower_tes_inputs(nir, devinfo, &input_vue_map);
+   brw_nir_lower_tes_inputs(nir, devinfo, &input_vue_map,
+                            &prog_data->base.urb_read_length);
    brw_nir_lower_vue_outputs(nir);
    BRW_NIR_SNAPSHOT("after_lower_io");
 
@@ -135,8 +135,6 @@ brw_compile_tes(const struct brw_compiler *compiler,
 
    /* URB entry sizes are stored as a multiple of 64 bytes. */
    prog_data->base.urb_entry_size = align(output_size_bytes, 64) / 64;
-
-   prog_data->base.urb_read_length = 0;
 
    brw_fill_tess_info_from_shader_info(&prog_data->tess_info,
                                        &nir->info);
@@ -173,18 +171,11 @@ brw_compile_tes(const struct brw_compiler *compiler,
    prog_data->base.base.grf_used = v.grf_used;
    prog_data->base.dispatch_mode = INTEL_DISPATCH_MODE_SIMD8;
 
-   brw_generator g(compiler, &params->base,
-                  &prog_data->base.base, MESA_SHADER_TESS_EVAL);
-   if (unlikely(debug_enabled)) {
-      g.enable_debug(ralloc_asprintf(params->base.mem_ctx,
-                                     "%s tessellation evaluation shader %s",
-                                     nir->info.label ? nir->info.label
-                                                     : "unnamed",
-                                     nir->info.name));
-   }
-
-   g.generate_code(v, params->base.stats);
-   g.add_const_data(nir->constant_data, nir->constant_data_size);
-
-   return g.get_assembly();
+   const brw_to_binary_params to_binary_params = {
+      .compiler = compiler,
+      .params = &params->base,
+      .prog_data = &prog_data->base.base,
+      .shaders = { &v },
+   };
+   return brw_to_binary(&to_binary_params);
 }

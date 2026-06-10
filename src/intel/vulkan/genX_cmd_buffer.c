@@ -1191,14 +1191,16 @@ transition_color_buffer(struct anv_cmd_buffer *cmd_buffer,
     * of acquire/release direction.
     */
    if (private_binding_acquire) {
-      initial_aux_usage = isl_drm_modifier_has_aux(isl_mod_info->modifier) ?
+      initial_aux_usage = isl_mod_info &&
+         isl_drm_modifier_has_aux(isl_mod_info->modifier) ?
          image->planes[plane].aux_usage : ISL_AUX_USAGE_NONE;
-      initial_fast_clear = isl_mod_info->supports_clear_color ?
+      initial_fast_clear = isl_mod_info && isl_mod_info->supports_clear_color ?
          initial_fast_clear : ANV_FAST_CLEAR_NONE;
    } else if (private_binding_release) {
-      final_aux_usage = isl_drm_modifier_has_aux(isl_mod_info->modifier) ?
+      final_aux_usage = isl_mod_info &&
+      isl_drm_modifier_has_aux(isl_mod_info->modifier) ?
          image->planes[plane].aux_usage : ISL_AUX_USAGE_NONE;
-      final_fast_clear = isl_mod_info->supports_clear_color ?
+      final_fast_clear = isl_mod_info && isl_mod_info->supports_clear_color ?
          final_fast_clear : ANV_FAST_CLEAR_NONE;
    }
 

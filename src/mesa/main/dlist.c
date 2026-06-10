@@ -13204,7 +13204,7 @@ _mesa_NewList(GLuint name, GLenum mode)
    vbo_save_NewList(ctx, name, mode);
 
    ctx->Dispatch.Current = ctx->Dispatch.Save;
-   _mesa_glapi_set_dispatch(ctx->Dispatch.Current);
+   _mesa_set_dispatch(ctx, ctx->Dispatch.Current);
    if (!ctx->GLThread.enabled) {
       ctx->GLApi = ctx->Dispatch.Current;
    }
@@ -13423,7 +13423,7 @@ _mesa_EndList(void)
    ctx->CompileFlag = GL_FALSE;
 
    ctx->Dispatch.Current = ctx->Dispatch.Exec;
-   _mesa_glapi_set_dispatch(ctx->Dispatch.Current);
+   _mesa_set_dispatch(ctx, ctx->Dispatch.Current);
    if (!ctx->GLThread.enabled) {
       ctx->GLApi = ctx->Dispatch.Current;
    }

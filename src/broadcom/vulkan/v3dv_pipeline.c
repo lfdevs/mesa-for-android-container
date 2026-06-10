@@ -192,6 +192,7 @@ v3dv_pipeline_get_nir_options(const struct v3d_device_info *devinfo)
       .lower_mul_2x32_64 = true,
       .lower_fdiv = true,
       .lower_find_lsb = true,
+      .lower_flrp16 = true,
       .lower_flrp32 = true,
       .lower_fpow = true,
       .lower_fsqrt = true,
@@ -365,8 +366,6 @@ preprocess_nir(nir_shader *nir)
    NIR_PASS(_, nir, nir_lower_array_deref_of_vec,
             nir_var_mem_ubo | nir_var_mem_ssbo, NULL,
             nir_lower_direct_array_deref_of_vec_load);
-
-   NIR_PASS(_, nir, nir_lower_frexp);
 
    /* Get rid of split copies */
    v3d_optimize_nir(NULL, nir);
@@ -1046,6 +1045,8 @@ pipeline_populate_v3d_key(struct v3d_key *key,
       p_stage->robustness.images == robust_image_enabled;
    key->robust_image_access_2 =
       p_stage->robustness.images == robust_image2_enabled;
+   key->null_descriptor =
+      p_stage->pipeline->device->vk.enabled_features.nullDescriptor;
 }
 
 uint32_t

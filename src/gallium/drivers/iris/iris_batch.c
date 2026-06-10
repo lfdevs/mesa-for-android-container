@@ -217,7 +217,7 @@ iris_init_batch(struct iris_context *ice,
          (INTEL_DEBUG(DEBUG_COLOR) ? INTEL_BATCH_DECODE_IN_COLOR : 0);
 
       if (screen->brw) {
-         intel_batch_decode_ctx_init_brw(&batch->decoder, &screen->brw->isa,
+         intel_batch_decode_ctx_init_gen(&batch->decoder,
                                          screen->devinfo,
                                          stderr, decode_flags, NULL,
                                          decode_get_bo, decode_get_state_size, batch);

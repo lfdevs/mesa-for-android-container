@@ -89,6 +89,48 @@ const struct fd_perfcntr_group *fd_perfcntrs(const struct fd_dev_id *id, unsigne
       .countables = _countables,                                               \
    }
 
+static inline const struct fd_perfcntr_group *
+fd_perfcntrs_group(const struct fd_dev_id *id, const char *name)
+{
+   const struct fd_perfcntr_group *groups;
+   unsigned count;
+
+   groups = fd_perfcntrs(id, &count);
+   if (!groups)
+      return NULL;
+
+   for (unsigned i = 0; i < count; i++)
+      if (!strcmp(groups[i].name, name))
+         return &groups[i];
+
+   return NULL;
+}
+
+static inline const struct fd_perfcntr_countable *
+fd_perfcntrs_countable(const struct fd_perfcntr_group *group, const char *name)
+{
+   for (unsigned i = 0; i < group->num_countables; i++)
+      if (!strcmp(group->countables[i].name, name))
+         return &group->countables[i];
+
+   return NULL;
+}
+
+struct fd_perfcntr_state;
+
+struct fd_perfcntr_state *
+fd_perfcntr_state_alloc(const struct fd_dev_id *id, int fd);
+void fd_perfcntr_state_free(struct fd_perfcntr_state *perfcntrs);
+
+bool fd_perfcntr_has_reservation(struct fd_perfcntr_state *perfcntrs);
+
+const struct fd_perfcntr_counter *
+fd_perfcntr_reserve(struct fd_perfcntr_state *perfcntrs,
+                    const struct fd_perfcntr_group *group,
+                    const struct fd_perfcntr_countable *countable);
+void fd_perfcntr_release(struct fd_perfcntr_state *perfcntrs,
+                         const struct fd_perfcntr_counter *counter);
+
 #define FD_DERIVED_COUNTER_MAX_PERFCNTRS 8
 
 struct fd_derivation_context {
@@ -108,6 +150,11 @@ struct fd_derived_counter {
    uint8_t perfcntrs[FD_DERIVED_COUNTER_MAX_PERFCNTRS];
 
    uint64_t (*derive)(struct fd_derivation_context *context, uint64_t *values);
+};
+
+struct fd_derived_counter_perfcntr {
+   const char *countable;
+   const char *group;
 };
 
 const struct fd_derived_counter **fd_derived_counters(const struct fd_dev_id *id, unsigned *count);
@@ -130,7 +177,8 @@ struct fd_derived_counter_collection {
    struct fd_derivation_context derivation_context;
 };
 
-void fd_generate_derived_counter_collection(const struct fd_dev_id *id, struct fd_derived_counter_collection *collection);
+void fd_reserve_derived_counter_collection(struct fd_perfcntr_state *perfcntrs, struct fd_derived_counter_collection *collection);
+void fd_release_derived_counter_collection(struct fd_perfcntr_state *perfcntrs, struct fd_derived_counter_collection *collection);
 
 #ifdef __cplusplus
 } /* end of extern "C" */

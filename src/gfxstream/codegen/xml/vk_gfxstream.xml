@@ -10,6 +10,7 @@ This file, vk_gfxstream.xml, is the Vulkan API Registry for gfxstream
 specific entries.
     </comment>
         <types comment="Vulkan type definitions">
+
         <!-- b/295587347 VkNativeBufferANDROID diverged from upstream -->
         <type category="struct" name="VkNativeBufferANDROID" structextends="VkImageCreateInfo">
             <member values="VK_STRUCTURE_TYPE_NATIVE_BUFFER_ANDROID"><type>VkStructureType</type> <name>sType</name></member>
@@ -20,6 +21,8 @@ specific entries.
             <member><type>int</type> <name>usage</name></member>
             <member><type>VkNativeBufferUsage2ANDROID</type> <name>usage2</name></member>
         </type>
+
+        <!-- VK_GOOGLE_gfxstream -->
         <type category="struct" name="VkImportColorBufferGOOGLE" structextends="VkMemoryAllocateInfo">
             <member values="VK_STRUCTURE_TYPE_IMPORT_COLOR_BUFFER_GOOGLE"><type>VkStructureType</type> <name>sType</name></member>
             <member><type>void</type>*                  <name>pNext</name></member>
@@ -61,6 +64,16 @@ specific entries.
             <member optional="true">const <type>void</type>* <name>pNext</name></member>
             <member><type>uint64_t</type>                    <name>id</name></member>
         </type>
+
+        <!-- b/519606352: removes `optional` from `pUserData` to avoid a backwards incompatible guest to host protocol change. -->
+        <type category="struct" name="VkDeviceDeviceMemoryReportCreateInfoEXT" allowduplicate="true" structextends="VkDeviceCreateInfo">
+            <member values="VK_STRUCTURE_TYPE_DEVICE_DEVICE_MEMORY_REPORT_CREATE_INFO_EXT"><type>VkStructureType</type> <name>sType</name></member>
+            <member optional="true">const <type>void</type>*         <name>pNext</name></member>
+            <member><type>VkDeviceMemoryReportFlagsEXT</type>        <name>flags</name></member>
+            <member><type>PFN_vkDeviceMemoryReportCallbackEXT</type> <name>pfnUserCallback</name></member>
+            <member><type>void</type>*               <name>pUserData</name></member>
+        </type>
+
     </types>
 
     <commands comment="Vulkan command definitions">

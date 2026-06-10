@@ -885,6 +885,9 @@ unsigned ir3_get_reg_dependent_max_waves(const struct ir3_compiler *compiler,
 unsigned ir3_get_reg_independent_max_waves(struct ir3_shader_variant *v,
                                            bool double_threadsize);
 
+unsigned ir3_get_min_reg_count(const struct ir3_shader_variant *v,
+                               bool double_threadsize);
+
 bool ir3_should_double_threadsize(struct ir3_shader_variant *v,
                                   unsigned regs_count);
 

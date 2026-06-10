@@ -40,6 +40,7 @@ nir_loop_analyze_test::nir_loop_analyze_test()
    static nir_shader_compiler_options options = { };
 
    options.max_unroll_iterations = 32;
+   options.max_samples = 8;
 
    b = nir_builder_init_simple_shader(MESA_SHADER_VERTEX, &options,
                                       "loop analyze");
@@ -2009,3 +2010,135 @@ TWO_TERMINATOR_INEXACT_COUNT_TEST(input_unsigned_limit_j_limit, false, true, fal
  *    }
  */
 TWO_TERMINATOR_INEXACT_COUNT_TEST(input_unsigned_j_limit2, false, true, true, false, uge, 4, 30, 6, 4)
+
+static nir_loop *
+loop_builder_guessed_trip_count(nir_builder *b, bool array_access)
+{
+   nir_def *unknown_limit =
+      nir_load_input(b, 1, 32, nir_imm_int(b, 0));
+
+   nir_def *zero = nir_imm_int(b, 0);
+   nir_def *one = nir_imm_int(b, 1);
+   nir_def *four = nir_imm_int(b, 4);
+
+   nir_variable *var =
+      nir_local_variable_create(b->impl,
+                                glsl_array_type(glsl_float_type(), 8, 0),
+                                "tmp");
+
+   nir_phi_instr *phi = nir_phi_instr_create(b->shader);
+   nir_phi_instr *phi2 = nir_phi_instr_create(b->shader);
+
+   nir_loop *loop = nir_push_loop(b);
+   {
+      /* Loop terminator induction variable */
+      nir_def_init(&phi->instr, &phi->def, 1, 32);
+      nir_phi_instr_add_src(phi, nir_def_block(zero), zero);
+
+      /* Array/sample access induction variable */
+      nir_def_init(&phi2->instr, &phi2->def, 1, 32);
+      nir_phi_instr_add_src(phi2, nir_def_block(zero), zero);
+
+      nir_def *i = &phi->def;
+      nir_def *i_arr = &phi2->def;
+
+      nir_def *cond = nir_ige(b, i, unknown_limit);
+
+      nir_if *nif = nir_push_if(b, cond);
+      {
+         nir_jump_instr *jump =
+            nir_jump_instr_create(b->shader, nir_jump_break);
+         nir_builder_instr_insert(b, &jump->instr);
+      }
+      nir_pop_if(b, nif);
+
+      if (array_access) {
+         nir_deref_instr *var_deref = nir_build_deref_var(b, var);
+         nir_deref_instr *arr_deref =
+            nir_build_deref_array(b, var_deref, i_arr);
+
+         nir_store_deref(b, arr_deref, nir_imm_float(b, 1.0f), 0x1);
+      } else {
+         nir_tex_instr *tex = nir_tex_instr_create(b->shader, 1);
+         nir_def_init(&tex->instr, &tex->def, 4, 32);
+         tex->op = nir_texop_txf_ms;
+         tex->sampler_dim = GLSL_SAMPLER_DIM_MS;
+         tex->coord_components = 2;
+
+         tex->src[0].src_type = nir_tex_src_ms_index;
+         tex->src[0].src = nir_src_for_ssa(i_arr);
+
+         nir_builder_instr_insert(b, &tex->instr);
+      }
+
+      /* Increment i by 1 and array index/sample by 4 */
+      nir_def *next = nir_iadd(b, i, one);
+      nir_def *next_idx = nir_iadd(b, i_arr, four);
+
+      nir_phi_instr_add_src(phi, nir_def_block(next), next);
+      nir_phi_instr_add_src(phi2, nir_def_block(next_idx), next_idx);
+   }
+   nir_pop_loop(b, loop);
+
+   b->cursor = nir_before_block(nir_loop_first_block(loop));
+   nir_builder_instr_insert(b, &phi->instr);
+   nir_builder_instr_insert(b, &phi2->instr);
+
+   return loop;
+}
+
+TEST_F(nir_loop_analyze_test, guessed_trip_count_array_access)
+{
+   /* Test that we use the correct induction variable when calculating the
+    * guessed trip count based on array access.
+    *
+    *    in uint unknown_limit;
+    *    uint i = 0;
+    *    uint iarr = 0;
+    *    float tmp[8];
+    *    while (true) {
+    *       if (i >= unknown_limit)
+    *          break;
+    *
+    *       tmp[i_arr] = 1.0;
+    *       i++;
+    *       i_arr += 4;
+    *    }
+    */
+   nir_loop *loop = loop_builder_guessed_trip_count(&b, true);
+
+   nir_validate_shader(b.shader, "input");
+
+   nir_loop_analyze_impl(b.impl, nir_var_all, false);
+
+   ASSERT_NE((void *)0, loop->info);
+
+   EXPECT_FALSE(loop->info->exact_trip_count_known);
+   EXPECT_EQ(2u, loop->info->guessed_trip_count);
+
+   EXPECT_EQ((void *)0, loop->info->limiting_terminator);
+   EXPECT_EQ(0, loop->info->max_trip_count);
+
+   ASSERT_NE((void *)0, loop->info->induction_vars);
+   EXPECT_GE(_mesa_hash_table_num_entries(loop->info->induction_vars), 4);
+}
+
+TEST_F(nir_loop_analyze_test, guessed_trip_count_sampler_access)
+{
+   nir_loop *loop = loop_builder_guessed_trip_count(&b, false);
+
+   nir_validate_shader(b.shader, "input");
+
+   nir_loop_analyze_impl(b.impl, nir_var_all, false);
+
+   ASSERT_NE((void *)0, loop->info);
+
+   EXPECT_FALSE(loop->info->exact_trip_count_known);
+   EXPECT_EQ(2u, loop->info->guessed_trip_count);
+
+   EXPECT_EQ((void *)0, loop->info->limiting_terminator);
+   EXPECT_EQ(0, loop->info->max_trip_count);
+
+   ASSERT_NE((void *)0, loop->info->induction_vars);
+   EXPECT_GE(_mesa_hash_table_num_entries(loop->info->induction_vars), 4);
+}

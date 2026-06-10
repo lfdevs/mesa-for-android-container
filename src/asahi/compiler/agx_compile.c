@@ -3619,8 +3619,6 @@ agx_preprocess_nir(nir_shader *nir)
             nir_metadata_control_flow, NULL);
    NIR_PASS(_, nir, agx_nir_lower_subgroups);
    NIR_PASS(_, nir, nir_lower_all_phis_to_scalar);
-   NIR_PASS(_, nir, nir_shader_alu_pass, agx_nir_lower_fdiv,
-            nir_metadata_control_flow, NULL);
 
    /* After lowering, run through the standard suite of NIR optimizations. We
     * will run through the loop later, once we have the shader key, but if we
@@ -3638,6 +3636,11 @@ agx_preprocess_nir(nir_shader *nir)
    };
 
    NIR_PASS(_, nir, nir_lower_idiv, &idiv_options);
+
+   /* Has to run after nir_lower_idiv */
+   NIR_PASS(_, nir, nir_shader_alu_pass, agx_nir_lower_fdiv,
+            nir_metadata_control_flow, NULL);
+
    NIR_PASS(_, nir, nir_opt_deref);
    NIR_PASS(_, nir, nir_lower_vars_to_ssa);
 

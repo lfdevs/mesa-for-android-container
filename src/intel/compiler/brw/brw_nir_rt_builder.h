@@ -51,29 +51,164 @@ brw_nir_rt_load_const(nir_builder *b, unsigned components, nir_def *addr)
 }
 
 static inline nir_def *
-brw_load_btd_dss_id(nir_builder *b)
+brw_load_btd_dss_id(nir_builder *b,
+                    const struct intel_device_info *devinfo)
 {
-   return nir_load_topology_id_intel(b, .base = BRW_TOPOLOGY_ID_DSS);
+   assert(devinfo->ver >= 12 && devinfo->ver <= 30);
+   unsigned slice_stride = devinfo->max_subslices_per_slice;
+
+   /* Xe3: Engine 3D and GPGPU Programs, EU Overview, Registers and
+    * Register Regions, ARF Registers, State Register.
+    * Bspec 56623 (r55736)
+    *
+    *   [17:14] : Slice ID.
+    *   [11:8]  : SubSlice ID
+    *
+    * Xe2: Engine 3D and GPGPU Programs, EU Overview, Registers and
+    * Register Regions, ARF Registers, State Register,
+    * https://gfxspecs.intel.com/Predator/Home/Index/56623
+    *
+    *   [15:11] : Slice ID.
+    *   [9:8]   : SubSlice ID
+    *
+    * Gfx12: Engine 3D and GPGPU Programs, EU Overview, Registers and
+    * Register Regions, ARF Registers, State Register,
+    * https://gfxspecs.intel.com/Predator/Home/Index/47256
+    *
+    *   [13:11] : Slice ID.
+    *   [10:9]  : Dual-SubSlice ID
+    */
+   nir_def *sr0 = nir_load_topology_id_intel(b);
+
+   if (devinfo->ver == 12 && slice_stride == 4) {
+      /* TODO: This could be handled by nir_opt_algebraic (its not atm) */
+      return nir_ubfe_imm(b, sr0, 9, 5);
+   }
+
+   nir_def *slice_id, *subslice_id;
+   if (devinfo->ver >= 30) {
+      slice_id = nir_ubfe_imm(b, sr0, 14, 4);
+      subslice_id = nir_ubfe_imm(b, sr0, 8, 4);
+   } else if (devinfo->ver >= 20) {
+      slice_id = nir_ubfe_imm(b, sr0, 11, 5);
+      subslice_id = nir_ubfe_imm(b, sr0, 8, 2);
+   } else {
+      slice_id = nir_ubfe_imm(b, sr0, 11, 3);
+      subslice_id = nir_ubfe_imm(b, sr0, 9, 2);
+   }
+
+   /* Xe2+: 3D and GPGPU Programs, Shared Functions, Ray Tracing:
+    * https://gfxspecs.intel.com/Predator/Home/Index/56936
+    *
+    * Note: DSSID in all formulas below is a logical identifier of an
+    * XeCore (a value that goes from 0 to (number_of_slices *
+    * number_of_XeCores_per_slice -1). SW can get this value from
+    * either:
+    *
+    *  - Message Control Register LogicalSSID field (only in shaders
+    *    eligible for Mid-Thread Preemption).
+    *  - Calculated based of State Register with the following formula:
+    *    DSSID = StateRegister.SliceID * GT_ARCH_SS_PER_SLICE +
+    *    StateRRegister.SubSliceID where GT_SS_PER_SLICE is an
+    *    architectural parameter defined per product SKU.
+    *
+    * We are using the state register to calculate the DSSID.
+    */
+   if (IS_POT(slice_stride)) {
+      /* TODO: This could be handled by nir_opt_algebraic (its not atm) */
+      return nir_bfi(b, nir_imm_int(b, ~(slice_stride - 1)),
+                     slice_id, subslice_id);
+   } else {
+      return nir_iadd(b, subslice_id,
+                      nir_imul_imm(b, slice_id, slice_stride));
+   }
 }
 
 static inline nir_def *
-brw_load_eu_thread_simd(nir_builder *b)
+brw_load_eu_thread_simd(nir_builder *b,
+                        const struct intel_device_info *devinfo)
 {
-   return nir_load_topology_id_intel(b, .base = BRW_TOPOLOGY_ID_EU_THREAD_SIMD);
+   assert(devinfo->ver >= 12 && devinfo->ver <= 30);
+
+   /* Xe3: Engine 3D and GPGPU Programs, EU Overview, Registers and
+    * Register Regions, ARF Registers, State Register.
+    * Bspec 56623 (r55736)
+    *
+    *   [6:4]   : EUID
+    *   [3:0]   : Thread ID
+    *
+    * Xe2: Engine 3D and GPGPU Programs, EU Overview, Registers and
+    * Register Regions, ARF Registers, State Register,
+    * https://gfxspecs.intel.com/Predator/Home/Index/56623
+    *
+    *   [6:4]   : EUID
+    *   [3]     : MBZ
+    *   [2:0]   : Thread ID
+    *
+    * Gfx12: Engine 3D and GPGPU Programs, EU Overview, Registers and
+    * Register Regions, ARF Registers, State Register,
+    * https://gfxspecs.intel.com/Predator/Home/Index/47256
+    *
+    *   [8]     : EUID[2] (aka SubSlice ID)
+    *   [7]     : EUID[3] (aka EU Row ID)
+    *   [6]     : Reserved
+    *   [5:4]   : EUID[1:0]
+    *   [3]     : MBZ
+    *   [2:0]   : Thread ID
+    */
+   nir_def *sr0 = nir_load_topology_id_intel(b);
+
+   if (devinfo->ver == 12) {
+      /* Shift the EUID into place so it looks like Xe2 */
+      nir_def *euid_0_3 = nir_ushr_imm(b, sr0, 4);
+      nir_def *euid_2 = nir_ushr_imm(b, sr0, 8);
+      sr0 = nir_bfi(b,
+                    nir_imm_int(b, INTEL_MASK(6, 3)),
+                    euid_0_3,
+                    sr0);
+      sr0 = nir_bfi(b,
+                    nir_imm_int(b, BITFIELD_BIT(5)),
+                    euid_2,
+                    sr0);
+   }
+
+   /* Xe3: Graphics Engine, 3D and GPGPU Programs, Shared Functions
+    * Ray Tracing, (Bspec 56936 (r56740))
+    *
+    * SyncStackID = (EUID[2:0] << 8) | (ThreadID[3:0] << 4) |
+    *               SIMDLaneID[3:0];
+    *
+    * Xe2+: Graphics Engine, 3D and GPGPU Programs, Shared Functions
+    * Ray Tracing,
+    * https://gfxspecs.intel.com/Predator/Home/Index/56936
+    *
+    * SyncStackID = (EUID[2:0] <<  8) | (ThreadID[2:0] << 4) |
+    *               SIMDLaneID[3:0];
+    *
+    * We can basically just take bits 6:0 of sr0 to get the upper part
+    * for Xe2+, then shift it by 4 bits and OR with the bottom 4 bits
+    * of the subgroup invocation id to get SyncStackID.
+    */
+   return nir_bfi(b,
+                  nir_imm_int(b, INTEL_MASK(6, 0) << 4),
+                  sr0,
+                  nir_load_subgroup_invocation(b));
 }
 
 static inline nir_def *
-brw_nir_rt_async_stack_id(nir_builder *b)
+brw_nir_rt_async_stack_id(nir_builder *b,
+                          const struct intel_device_info *devinfo)
 {
    return nir_iadd(b, nir_umul_32x16(b, nir_load_ray_num_dss_rt_stacks_intel(b),
-                                        brw_load_btd_dss_id(b)),
+                                        brw_load_btd_dss_id(b, devinfo)),
                       nir_load_btd_stack_id_intel(b));
 }
 
 static inline nir_def *
-brw_nir_rt_sync_stack_id(nir_builder *b)
+brw_nir_rt_sync_stack_id(nir_builder *b,
+                         const struct intel_device_info *devinfo)
 {
-   return brw_load_eu_thread_simd(b);
+   return brw_load_eu_thread_simd(b, devinfo);
 }
 
 /* We have our own load/store scratch helpers because they emit a global
@@ -127,6 +262,22 @@ brw_nir_btd_return(struct nir_builder *b)
 }
 
 static inline void
+brw_nir_trace_ray(nir_builder *b,
+                  nir_def *globals,
+                  nir_def *bvh_level,
+                  nir_def *trace_ray_control,
+                  bool synchronous)
+{
+   nir_trace_ray_intel(b,
+                       globals,
+                       nir_bfi(b,
+                               nir_imm_int(b, INTEL_MASK(10, 8)),
+                               nir_u2u32(b, trace_ray_control),
+                               nir_u2u32(b, bvh_level)),
+                       .synchronous = synchronous);
+}
+
+static inline void
 assert_def_size(nir_def *def, unsigned num_components, unsigned bit_size)
 {
    assert(def->num_components == num_components);
@@ -146,7 +297,7 @@ brw_nir_rt_sw_hotzone_addr(nir_builder *b,
                            const struct intel_device_info *devinfo)
 {
    nir_def *offset32 =
-      nir_imul_imm(b, brw_nir_rt_async_stack_id(b),
+      nir_imul_imm(b, brw_nir_rt_async_stack_id(b, devinfo),
                       BRW_RT_SIZEOF_HOTZONE);
 
    offset32 = nir_iadd(b, offset32, nir_ineg(b,
@@ -160,7 +311,8 @@ brw_nir_rt_sw_hotzone_addr(nir_builder *b,
 static inline nir_def *
 brw_nir_rt_sync_stack_addr(nir_builder *b,
                            nir_def *base_mem_addr,
-                           nir_def *num_dss_rt_stacks)
+                           nir_def *num_dss_rt_stacks,
+                           const struct intel_device_info *devinfo)
 {
    /* Bspec 47547 (Xe) and 56936 (Xe2+) say:
     *    For Ray queries (Synchronous Ray Tracing), the formula is similar but
@@ -179,15 +331,16 @@ brw_nir_rt_sync_stack_addr(nir_builder *b,
    nir_def *offset32 =
       nir_imul(b,
                nir_iadd(b,
-                        nir_imul(b, brw_load_btd_dss_id(b),
+                        nir_imul(b, brw_load_btd_dss_id(b, devinfo),
                                     num_dss_rt_stacks),
-                        nir_iadd_imm(b, brw_nir_rt_sync_stack_id(b), 1)),
+                        nir_iadd_imm(b, brw_nir_rt_sync_stack_id(b, devinfo), 1)),
                nir_imm_int(b, BRW_RT_SIZEOF_RAY_QUERY));
    return nir_isub(b, base_mem_addr, nir_u2u64(b, offset32));
 }
 
 static inline nir_def *
-brw_nir_rt_stack_addr(nir_builder *b)
+brw_nir_rt_stack_addr(nir_builder *b,
+                      const struct intel_device_info *devinfo)
 {
    /* From the BSpec "Address Computation for Memory Based Data Structures:
     * Ray and TraversalStack (Async Ray Tracing)":
@@ -200,7 +353,7 @@ brw_nir_rt_stack_addr(nir_builder *b)
     * to the 64-bit base address at the end.
     */
    nir_def *offset32 =
-      nir_imul(b, brw_nir_rt_async_stack_id(b),
+      nir_imul(b, brw_nir_rt_async_stack_id(b, devinfo),
                   nir_load_ray_hw_stack_size_intel(b));
    return nir_iadd(b, nir_load_ray_base_mem_addr_intel(b),
                       nir_u2u64(b, offset32));
@@ -215,16 +368,19 @@ brw_nir_rt_mem_hit_addr_from_addr(nir_builder *b,
 }
 
 static inline nir_def *
-brw_nir_rt_mem_hit_addr(nir_builder *b, bool committed)
+brw_nir_rt_mem_hit_addr(nir_builder *b,
+                        bool committed,
+                        const struct intel_device_info *devinfo)
 {
-   return nir_iadd_imm(b, brw_nir_rt_stack_addr(b),
+   return nir_iadd_imm(b, brw_nir_rt_stack_addr(b, devinfo),
                           committed ? 0 : BRW_RT_SIZEOF_HIT_INFO);
 }
 
 static inline nir_def *
-brw_nir_rt_hit_attrib_data_addr(nir_builder *b)
+brw_nir_rt_hit_attrib_data_addr(nir_builder *b,
+                                const struct intel_device_info *devinfo)
 {
-   return nir_iadd_imm(b, brw_nir_rt_stack_addr(b),
+   return nir_iadd_imm(b, brw_nir_rt_stack_addr(b, devinfo),
                           BRW_RT_OFFSETOF_HIT_ATTRIB_DATA);
 }
 
@@ -257,7 +413,7 @@ brw_nir_rt_sw_stack_addr(nir_builder *b,
    addr = nir_iadd(b, addr, nir_u2u64(b, offset32));
 
    nir_def *offset_in_stack =
-      nir_imul(b, nir_u2u64(b, brw_nir_rt_async_stack_id(b)),
+      nir_imul(b, nir_u2u64(b, brw_nir_rt_async_stack_id(b, devinfo)),
                   nir_u2u64(b, nir_load_ray_sw_stack_size_intel(b)));
 
    return nir_iadd(b, addr, offset_in_stack);
@@ -538,7 +694,7 @@ brw_nir_rt_load_mem_hit(nir_builder *b,
                         bool committed,
                         const struct intel_device_info *devinfo)
 {
-   brw_nir_rt_load_mem_hit_from_addr(b, defs, brw_nir_rt_stack_addr(b),
+   brw_nir_rt_load_mem_hit_from_addr(b, defs, brw_nir_rt_stack_addr(b, devinfo),
                                      committed, devinfo);
 }
 
@@ -646,9 +802,10 @@ brw_nir_rt_commit_hit_addr(nir_builder *b, nir_def *stack_addr)
 }
 
 static inline void
-brw_nir_rt_commit_hit(nir_builder *b)
+brw_nir_rt_commit_hit(nir_builder *b,
+                      const struct intel_device_info *devinfo)
 {
-   nir_def *stack_addr = brw_nir_rt_stack_addr(b);
+   nir_def *stack_addr = brw_nir_rt_stack_addr(b, devinfo);
    brw_nir_rt_commit_hit_addr(b, stack_addr);
 }
 
@@ -806,7 +963,7 @@ brw_nir_rt_store_mem_ray(nir_builder *b,
                          const struct intel_device_info *devinfo)
 {
    nir_def *ray_addr =
-      brw_nir_rt_mem_ray_addr(b, brw_nir_rt_stack_addr(b), bvh_level);
+      brw_nir_rt_mem_ray_addr(b, brw_nir_rt_stack_addr(b, devinfo), bvh_level);
 
    assert_def_size(defs->orig, 3, 32);
    assert_def_size(defs->dir, 3, 32);
@@ -1018,7 +1175,7 @@ brw_nir_rt_load_mem_ray(nir_builder *b,
                         enum brw_rt_bvh_level bvh_level,
                         const struct intel_device_info *devinfo)
 {
-   brw_nir_rt_load_mem_ray_from_addr(b, defs, brw_nir_rt_stack_addr(b),
+   brw_nir_rt_load_mem_ray_from_addr(b, defs, brw_nir_rt_stack_addr(b, devinfo),
                                      bvh_level, devinfo);
 }
 

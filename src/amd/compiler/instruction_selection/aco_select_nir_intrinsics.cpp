@@ -2413,6 +2413,43 @@ visit_load_global(isel_context* ctx, nir_intrinsic_instr* instr)
 }
 
 void
+visit_load_global_tr(isel_context* ctx, nir_intrinsic_instr* instr)
+{
+   Builder bld(ctx->program, ctx->block);
+   unsigned access = nir_intrinsic_access(instr);
+   memory_sync_info sync = get_memory_sync_info(instr, storage_buffer, 0);
+
+   Temp addr, offset;
+   uint32_t const_offset;
+   parse_global(ctx, instr, &addr, &const_offset, &offset);
+   Format format = lower_global_address(ctx, bld, 0, &addr, &const_offset, &offset, &instr->src[1]);
+   assert(format == Format::GLOBAL);
+
+   Temp dst = get_ssa_temp(ctx, &instr->def);
+   /* Note that _b128/_b64 relates to the bit size, not the number of VGPRs written. */
+   aco_opcode op =
+      instr->def.bit_size == 16 ? aco_opcode::global_load_tr_b128 : aco_opcode::global_load_tr_b64;
+   aco_ptr<Instruction> load{create_instruction(op, format, 2, 1)};
+   load->definitions[0] = Definition(dst);
+   if (addr.regClass() == s2) {
+      assert(offset.id() && offset.type() == RegType::vgpr);
+      load->operands[0] = Operand(offset);
+      load->operands[1] = Operand(addr);
+   } else {
+      assert(addr.type() == RegType::vgpr && !offset.id());
+      load->operands[0] = Operand(addr);
+      load->operands[1] = Operand(s1);
+   }
+   load->flatlike().offset = const_offset;
+   load->flatlike().cache = get_cache_flags(ctx, access, ac_access_type_load);
+   load->flatlike().sync = sync;
+   bld.insert(std::move(load));
+   set_wqm(ctx);
+
+   emit_split_vector(ctx, dst, instr->def.num_components);
+}
+
+void
 visit_store_global(isel_context* ctx, nir_intrinsic_instr* instr)
 {
    Builder bld(ctx->program, ctx->block);
@@ -4005,6 +4042,7 @@ visit_intrinsic(isel_context* ctx, nir_intrinsic_instr* instr)
    case nir_intrinsic_load_buffer_amd: visit_load_buffer(ctx, instr); break;
    case nir_intrinsic_store_buffer_amd: visit_store_buffer(ctx, instr); break;
    case nir_intrinsic_load_global_amd: visit_load_global(ctx, instr); break;
+   case nir_intrinsic_load_global_tr_amd: visit_load_global_tr(ctx, instr); break;
    case nir_intrinsic_store_global_amd: visit_store_global(ctx, instr); break;
    case nir_intrinsic_global_atomic_amd:
    case nir_intrinsic_global_atomic_swap_amd: visit_global_atomic(ctx, instr); break;

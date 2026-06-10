@@ -37,6 +37,7 @@
 #include "pipe/p_state.h"
 #include "pipe/p_context.h"
 #include "pipe/p_screen.h"
+#include "util/os_misc.h"
 #include "util/u_debug.h"
 #include "util/u_inlines.h"
 #include "util/format/u_format.h"
@@ -383,8 +384,9 @@ crocus_init_screen_caps(struct crocus_screen *screen)
    const unsigned gpu_mappable_megabytes =
       (screen->aperture_threshold) / (1024 * 1024);
 
-   uint64_t system_memory_bytes;
-   if (!os_get_total_physical_memory(&system_memory_bytes)) {
+   uint64_t system_memory_bytes =
+      os_get_gpu_heap_size(screen->driconf.heap_memory_percent, NULL);
+   if (!system_memory_bytes) {
       caps->video_memory = -1;
    } else {
       const unsigned system_memory_megabytes =
@@ -603,6 +605,11 @@ crocus_screen_create(int fd, const struct pipe_screen_config *config)
       driQueryOptionb(config->options, "limit_trig_input_range");
    screen->driconf.lower_depth_range_rate =
       driQueryOptionf(config->options, "lower_depth_range_rate");
+
+   screen->driconf.heap_memory_percent =
+      driQueryOptionf(config->options, "heap_memory_percent");
+   if (screen->driconf.heap_memory_percent == OS_GPU_HEAP_SIZE_HEURISTIC)
+      screen->driconf.heap_memory_percent = 1.0f;
 
    screen->precompile = debug_get_bool_option("shader_precompile", true);
 

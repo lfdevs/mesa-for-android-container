@@ -17,3 +17,15 @@ mtl_new_command_buffer(mtl_command_queue *cmd_queue)
 {
    return NULL;
 }
+
+void
+mtl_command_queue_add_residency_set(mtl_command_queue *cmd_queue,
+                                    mtl_residency_set *set)
+{
+}
+
+void
+mtl_command_queue_remove_residency_set(mtl_command_queue *cmd_queue,
+                                       mtl_residency_set *set)
+{
+}

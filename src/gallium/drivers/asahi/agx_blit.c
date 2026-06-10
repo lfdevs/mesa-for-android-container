@@ -111,6 +111,13 @@ asahi_blit_compute_shader(struct pipe_context *ctx, struct asahi_blit_key *key)
          nir_iand(b, in_bounds, nir_ilt(b, logical_id_el_2d, dimensions_el_2d));
    }
 
+   unsigned bit_size = 32;
+   nir_alu_type dst_type = nir_type_uint32;
+   if (util_format_is_float16(key->dst_format)) {
+      bit_size = 16;
+      dst_type = nir_type_float16;
+   }
+
    nir_def *colour0, *colour1;
    nir_push_if(b, nir_ball(b, in_bounds));
    {
@@ -127,15 +134,15 @@ asahi_blit_compute_shader(struct pipe_context *ctx, struct asahi_blit_key *key)
       colour0 = nir_tex(b, coords_el_nd, .texture_index = 0, .sampler_index = 0,
                         .backend_flags = AGX_TEXTURE_FLAG_NO_CLAMP,
                         .dim = GLSL_SAMPLER_DIM_2D, .is_array = key->array,
-                        .dest_type = nir_type_uint32);
+                        .dest_type = dst_type);
    }
    nir_push_else(b, NULL);
    {
       /* For out-of-bounds pixels, copy in the destination */
       colour1 = nir_image_load(
-         b, 4, 32, nir_imm_int(b, 0), nir_pad_vec4(b, image_pos_nd), zero, zero,
+         b, 4, bit_size, nir_imm_int(b, 0), nir_pad_vec4(b, image_pos_nd), zero, zero,
          .image_array = key->array, .image_dim = GLSL_SAMPLER_DIM_2D,
-         .access = ACCESS_IN_BOUNDS, .dest_type = nir_type_uint32);
+         .access = ACCESS_IN_BOUNDS, .dest_type = dst_type);
    }
    nir_pop_if(b, NULL);
    nir_def *color = nir_if_phi(b, colour0, colour1);
@@ -619,11 +626,12 @@ agx_resource_copy_region(struct pipe_context *pctx, struct pipe_resource *dst,
       assert(dst->format == src->format);
       unsigned bs = util_format_get_blocksize(dst->format);
       unsigned size = bs * src_box->width;
-      uint64_t dst_addr = agx_map_gpu(agx_resource(dst)) + dstx * bs;
+      unsigned dst_offset = dstx * bs;
+      uint64_t dst_addr = agx_map_gpu(agx_resource(dst)) + dst_offset;
       uint64_t src_addr = agx_map_gpu(agx_resource(src)) + src_box->x * bs;
 
       agx_batch_reads(batch, agx_resource(src));
-      agx_batch_writes_range(batch, agx_resource(dst), dst_addr, size);
+      agx_batch_writes_range(batch, agx_resource(dst), dst_offset, size);
       /* Use vectorized copies for as much of the buffer as possible. This requires
        * that dst, src, and size are all properly aligned. Failing to check for
        * alignment on the buffers causes subtle and hard-to-debug issues!

@@ -210,7 +210,7 @@ impl BarPropPass {
                             *src = bar.into();
                         }
                     }
-                    MappedInstrs::One(instr)
+                    [instr].into()
                 }
                 Op::PhiDsts(op) => {
                     let mut bmovs = Vec::new();
@@ -232,7 +232,7 @@ impl BarPropPass {
                         }
                     }
                     if bmovs.is_empty() {
-                        MappedInstrs::One(instr)
+                        [instr].into()
                     } else {
                         if DEBUG.annotate() {
                             bmovs.insert(
@@ -244,7 +244,7 @@ impl BarPropPass {
                             );
                         }
                         bmovs.insert(1, instr);
-                        MappedInstrs::Many(bmovs)
+                        bmovs.into()
                     }
                 }
                 _ => {
@@ -259,7 +259,7 @@ impl BarPropPass {
                             }
                         };
                     }
-                    MappedInstrs::One(instr)
+                    [instr].into()
                 }
             }
         });

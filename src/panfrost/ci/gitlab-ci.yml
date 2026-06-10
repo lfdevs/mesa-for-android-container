@@ -9,6 +9,8 @@ panfrost-t720-gles2:arm64:
     - .panfrost-midgard-manual-rules
     - .panfrost-test
     - .lava-sun50i-h6-pine-h64:arm64
+  variables:
+    DRIVER_NAME: panfrost
 
 # We only have two machines, which we share with KernelCI.
 # Keep the second t760 job manual.
@@ -19,10 +21,12 @@ panfrost-t760-gles:arm32:
     - .panfrost-test
     - .lava-rk3288-veyron-jaq:arm32
   timeout: 1h 30m
+  variables:
+    DRIVER_NAME: panfrost
 
 panfrost-t760-traces:arm32:
   extends:
-    - .lava-arm32-piglit-traces
+    - .lava-arm32-test-gl
     - .panfrost-midgard-manual-rules
     - .panfrost-test
     - .lava-rk3288-veyron-jaq:arm32
@@ -50,6 +54,7 @@ panfrost-t860-gl:arm64:
     - .panfrost-test
     - .lava-rk3399-rock-pi-4b:arm64
   variables:
+    DRIVER_NAME: panfrost
     FDO_CI_CONCURRENT: 6
     DEQP_SUITE: panfrost-t860
 
@@ -60,12 +65,13 @@ panfrost-t860-egl:arm64:
     - .panfrost-test
     - .lava-rk3399-rock-pi-4b:arm64
   variables:
+    DRIVER_NAME: panfrost
     HWCI_START_WESTON: 1
     DEQP_SUITE: panfrost-t860-egl
 
 panfrost-t860-traces:arm64:
   extends:
-    - .lava-arm64-piglit-traces
+    - .lava-arm64-test-gl
     - .panfrost-midgard-manual-rules
     - .panfrost-test
     - .lava-rk3399-rock-pi-4b:arm64
@@ -79,6 +85,7 @@ panfrost-g52-gl:arm64:
     - .panfrost-test
     - .lava-meson-g12b-a311d-khadas-vim3:arm64
   variables:
+    DRIVER_NAME: panfrost
     FDO_CI_CONCURRENT: 6
     DEQP_SUITE: panfrost-g52
 
@@ -106,6 +113,7 @@ panfrost-g52-piglit:arm64:
     - .test-piglit
     - .lava-meson-g12b-a311d-khadas-vim3:arm64
   variables:
+    DRIVER_NAME: panfrost
     HWCI_START_WESTON: 1
     DEQP_SUITE: panfrost-g52-piglit
 
@@ -117,6 +125,7 @@ panfrost-g72-gl:arm64:
     - .panfrost-test
     - .lava-mt8183-kukui-jacuzzi-juniper-sku16:arm64
   variables:
+    DRIVER_NAME: panfrost
     DEQP_SUITE: panfrost-g72
 
 panfrost-g57-gl:arm64:
@@ -127,6 +136,7 @@ panfrost-g57-gl:arm64:
     - .lava-mt8195-cherry-tomato-r2:arm64
   parallel: 3
   variables:
+    DRIVER_NAME: panfrost
     DEQP_SUITE: panfrost-g57
     # Oversubscribing by one thread helps deqp, but hurts piglit
     FDO_CI_CONCURRENT: 9
@@ -139,6 +149,7 @@ panfrost-g57-piglit:arm64:
     - .test-piglit
     - .lava-mt8195-cherry-tomato-r2:arm64
   variables:
+    DRIVER_NAME: panfrost
     HWCI_START_WESTON: 1
     DEQP_SUITE: panfrost-g57-piglit
     # Undersubscribing by one thread prevents test timeouts and speeds up
@@ -153,6 +164,7 @@ panfrost-g610-gl:arm64:
     - .panfrost-test
     - .lava-rk3588-rock-5b:arm64
   variables:
+    DRIVER_NAME: panfrost
     DEQP_SUITE: panfrost-g610
     LAVA_TAGS: 4gb
 
@@ -164,6 +176,7 @@ panfrost-g610-piglit:arm64:
     - .test-piglit
     - .lava-rk3588-rock-5b:arm64
   variables:
+    DRIVER_NAME: panfrost
     DEQP_SUITE: panfrost-g610-piglit
     HWCI_START_WESTON: 1
     LAVA_TAGS: 4gb

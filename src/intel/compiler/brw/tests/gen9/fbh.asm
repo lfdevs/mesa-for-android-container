@@ -1,2 +1,2 @@
-fbh(8)          g15<1>D         g35<8,8,1>D                     { align1 1Q };
-fbh(16)         g8<1>D          g4<8,8,1>D                      { align1 1H };
+        fbh (8)                   r15:d         r35<8;8,1>:d
+        fbh (16)                  r8:d          r4<8;8,1>:d

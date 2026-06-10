@@ -241,7 +241,7 @@ main(int argc, char *argv[])
 {
    int c, i;
    bool help = false;
-   const char *shaders_directory = NULL, *stall_csv_filename;
+   const char *shaders_directory = NULL, *stall_csv_filename = NULL;
    const struct option aubinator_opts[] = {
       { "shaders",       required_argument, NULL,                          's'  },
       { "stall-csv",     required_argument, NULL,                          'c'  },

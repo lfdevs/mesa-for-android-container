@@ -1830,23 +1830,6 @@ needs_resolve(struct pipe_surface *psurf)
           (psurf->nr_samples != psurf->texture->nr_samples);
 }
 
-/**
- * Returns the UNKNOWN_8C01 value for handling partial depth/stencil
- * clear/stores to Z24S8.
- */
-static uint32_t
-fd6_unknown_8c01(enum pipe_format format, unsigned buffers)
-{
-   buffers &= FD_BUFFER_DEPTH | FD_BUFFER_STENCIL;
-   if (format == PIPE_FORMAT_Z24_UNORM_S8_UINT) {
-      if (buffers == FD_BUFFER_DEPTH)
-         return 0x08000041;
-      else if (buffers == FD_BUFFER_STENCIL)
-         return 0x00084001;
-   }
-   return 0;
-}
-
 template <chip CHIP>
 static void
 emit_resolve_blit(struct fd_batch *batch, fd_cs &cs,
@@ -1867,12 +1850,12 @@ emit_resolve_blit(struct fd_batch *batch, fd_cs &cs,
     */
    if (needs_resolve(psurf) && !blit_can_resolve(psurf->format) &&
        (buffer != FD_BUFFER_STENCIL)) {
-      /* We could potentially use fd6_unknown_8c01() to handle partial z/s
+      /* We could potentially use RB_A2D_PIXEL_CNTL to handle partial z/s
        * resolve to packed z/s, but we would need a corresponding ability in the
        * !resolve case below, so batch_draw_tracking_for_dirty_bits() has us
        * just do a restore of the other channel for partial packed z/s writes.
        */
-      fd6_resolve_tile<CHIP>(batch, cs, base, psurf, 0);
+      fd6_resolve_tile<CHIP>(batch, cs, base, psurf, FD_BUFFER_ALL);
       return;
    }
 
@@ -2064,7 +2047,7 @@ emit_sysmem_clears(fd_cs &cs, struct fd_batch *batch, struct fd_batch_subpass *s
          value.f[0] = subpass->clear_depth;
          value.ui[1] = subpass->clear_stencil;
          fd6_clear_surface<CHIP>(ctx, cs, &pfb->zsbuf, &box2d,
-                                 &value, fd6_unknown_8c01(pfb->zsbuf.format, buffers));
+                                 &value, buffers);
       }
 
       if (separate_stencil && (buffers & PIPE_CLEAR_STENCIL)) {
@@ -2074,7 +2057,7 @@ emit_sysmem_clears(fd_cs &cs, struct fd_batch *batch, struct fd_batch_subpass *s
          stencil_surf.format = PIPE_FORMAT_S8_UINT;
          stencil_surf.texture = separate_stencil;
 
-         fd6_clear_surface<CHIP>(ctx, cs, &stencil_surf, &box2d, &value, 0);
+         fd6_clear_surface<CHIP>(ctx, cs, &stencil_surf, &box2d, &value, buffers);
       }
    }
 

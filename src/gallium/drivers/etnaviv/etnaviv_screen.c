@@ -579,7 +579,7 @@ etna_screen_is_format_supported(struct pipe_screen *pscreen,
    }
 
    if (usage & PIPE_BIND_SAMPLER_VIEW) {
-      uint32_t fmt = translate_texture_format(format);
+      uint32_t fmt = translate_texture_format(format, screen);
 
       if (!gpu_supports_texture_format(screen, fmt, format))
          fmt = ETNA_NO_MATCH;

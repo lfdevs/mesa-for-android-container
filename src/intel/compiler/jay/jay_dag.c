@@ -81,5 +81,3 @@ jay_dag_prune_head(struct jay_dag *dag, uint32_t head)
       }
    }
 }
-
-

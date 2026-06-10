@@ -63,6 +63,8 @@ struct kk_physical_device {
 
    struct kk_queue_family queue_families[3];
    uint8_t queue_family_count;
+
+   VkSampleCountFlags supported_sample_counts;
 };
 
 static inline uint32_t

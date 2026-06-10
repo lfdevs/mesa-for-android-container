@@ -3,6 +3,7 @@
 
 use std::ffi::NulError;
 use std::io::Error as IoError;
+use std::num::ParseIntError;
 use std::num::TryFromIntError;
 use std::str::Utf8Error;
 
@@ -23,6 +24,9 @@ pub enum MesaError {
     /// Nul crate error.
     #[error("Nul Error occurred {0}")]
     NulError(NulError),
+    /// An attempted integer parsing failed.
+    #[error("int parsing failed: {0}")]
+    ParseIntError(ParseIntError),
     /// Rustix crate error.
     #[error("The errno is {0}")]
     RustixError(RustixError),
@@ -40,6 +44,7 @@ pub enum MesaError {
     WithContext(&'static str),
 }
 
+#[cfg(any(target_os = "android", target_os = "linux"))]
 impl From<RustixError> for MesaError {
     fn from(e: RustixError) -> MesaError {
         MesaError::RustixError(e)
@@ -55,6 +60,12 @@ impl From<NulError> for MesaError {
 impl From<IoError> for MesaError {
     fn from(e: IoError) -> MesaError {
         MesaError::IoError(e)
+    }
+}
+
+impl From<ParseIntError> for MesaError {
+    fn from(e: ParseIntError) -> MesaError {
+        MesaError::ParseIntError(e)
     }
 }
 

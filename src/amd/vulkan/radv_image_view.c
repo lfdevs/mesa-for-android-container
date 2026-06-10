@@ -10,9 +10,9 @@
 
 #include "vk_log.h"
 
+#include "tools/radv_debug.h"
 #include "radv_buffer.h"
 #include "radv_buffer_view.h"
-#include "radv_debug.h"
 #include "radv_entrypoints.h"
 #include "radv_formats.h"
 #include "radv_image.h"

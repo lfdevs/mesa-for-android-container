@@ -534,3 +534,10 @@ blorp_emit_post_draw(struct blorp_batch *blorp_batch, const struct blorp_params 
    genX(maybe_emit_breakpoint)(batch, false);
    blorp_measure_end(blorp_batch, params);
 }
+
+static bool *
+blorp_get_write_fencing_status(struct blorp_batch *blorp_batch)
+{
+   struct iris_batch *batch = blorp_batch->driver_batch;
+   return &batch->write_fence_status;
+}

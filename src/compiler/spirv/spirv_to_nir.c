@@ -36,6 +36,7 @@
  * suffixes do not exist and 8 comes before 16.
  */
 static const struct spirv_capabilities implemented_capabilities = {
+   .AbortKHR = true,
    .Addresses = true,
    .AtomicFloat16AddEXT = true,
    .AtomicFloat32AddEXT = true,
@@ -881,6 +882,20 @@ vtn_handle_debug_printf(struct vtn_builder *b, SpvOp ext_opcode,
    return true;
 }
 
+/* From vkd3d-proton */
+#define DXIL_SPV_SHADER_QUIRK_NON_SEMANTIC_SIGNAL_CONCURRENT_WORKGROUP 15
+
+static bool
+vtn_handle_dxil_quirk(struct vtn_builder *b, SpvOp ext_opcode,
+                      const uint32_t *w, unsigned count)
+{
+   if (ext_opcode == DXIL_SPV_SHADER_QUIRK_NON_SEMANTIC_SIGNAL_CONCURRENT_WORKGROUP) {
+      b->shader->info.occupancy_bounded_workgroup_fairness = true;
+   }
+
+   return true;
+}
+
 static bool
 vtn_handle_non_semantic_instruction(struct vtn_builder *b, SpvOp ext_opcode,
                                     const uint32_t *w, unsigned count)
@@ -977,6 +992,8 @@ vtn_handle_extension(struct vtn_builder *b, SpvOp opcode,
       } else if (strcmp(ext, "NonSemantic.DebugPrintf") == 0
                 && (b->options && b->options->printf)) {
          val->ext_handler = vtn_handle_debug_printf;
+      } else if (strcmp(ext, "NonSemantic.dxil-spirv.quirks") == 0) {
+         val->ext_handler = vtn_handle_dxil_quirk;
       } else if (strstr(ext, "NonSemantic.") == ext) {
          val->ext_handler = vtn_handle_non_semantic_instruction;
       } else if (strstr(ext, "MesaInternal") == ext) {
@@ -5652,21 +5669,6 @@ vtn_handle_preamble_instruction(struct vtn_builder *b, SpvOp opcode,
       vtn_handle_decoration(b, opcode, w, count);
       break;
 
-   case SpvOpExtInst:
-   case SpvOpExtInstWithForwardRefsKHR: {
-      struct vtn_value *val = vtn_value(b, w[3], vtn_value_type_extension);
-      if (val->ext_handler == vtn_handle_non_semantic_instruction) {
-         /* NonSemantic extended instructions are acceptable in preamble. */
-         vtn_handle_non_semantic_instruction(b, w[4], w, count);
-         return true;
-      } else if (val->ext_handler == vtn_handle_non_semantic_debug_info) {
-         vtn_handle_non_semantic_debug_info(b, w[4], w, count);
-         return true;
-      } else {
-         return false; /* End of preamble. */
-      }
-   }
-
    default:
       return false; /* End of preamble */
    }
@@ -6300,8 +6302,9 @@ vtn_handle_variable_or_type_instruction(struct vtn_builder *b, SpvOp opcode,
    case SpvOpExtInstWithForwardRefsKHR: {
       struct vtn_value *val = vtn_value(b, w[3], vtn_value_type_extension);
 
-      if (val->ext_handler == vtn_handle_non_semantic_debug_info)
-         return vtn_handle_non_semantic_debug_info(b, opcode, w, count);
+      if (val->ext_handler == vtn_handle_non_semantic_debug_info ||
+          val->ext_handler == vtn_handle_dxil_quirk)
+         return val->ext_handler(b, w[4], w, count);
 
       /* NonSemantic extended instructions are acceptable in preamble, others
        * will indicate the end of preamble.
@@ -6774,6 +6777,21 @@ vtn_handle_allocate_node_payloads(struct vtn_builder *b, SpvOp opcode,
    nir_def *node_index = vtn_ssa_value(b, w[4])->def;
 
    nir_initialize_node_payloads(&b->nb, payloads, payload_count, node_index, .execution_scope = scope);
+}
+
+static void
+vtn_handle_abort(struct vtn_builder *b, const uint32_t *w, unsigned count)
+{
+   struct vtn_type *msg_type = vtn_get_type(b, w[1]);
+   struct vtn_ssa_value *msg = vtn_ssa_value(b, w[2]);
+
+   nir_variable *var =
+      nir_local_variable_create(b->nb.impl, msg_type->type, "abort_message");
+   nir_deref_instr *deref = nir_build_deref_var(&b->nb, var);
+
+   vtn_local_store(b, msg, deref, 0);
+
+   nir_abort(&b->nb, &deref->def);
 }
 
 static bool
@@ -7322,6 +7340,10 @@ vtn_handle_body_instruction(struct vtn_builder *b, SpvOp opcode,
    case SpvOpCooperativeMatrixReduceNV:
    case SpvOpCooperativeMatrixPerElementOpNV:
       vtn_handle_cooperative_instruction(b, opcode, w, count);
+      break;
+
+   case SpvOpAbortKHR:
+      vtn_handle_abort(b, w, count);
       break;
 
    default:

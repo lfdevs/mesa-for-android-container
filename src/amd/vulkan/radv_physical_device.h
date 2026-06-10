@@ -81,7 +81,7 @@ struct radv_physical_device {
 
    struct ac_addrlib *addrlib;
 
-   int master_fd;
+   int wsi_master_fd;
    struct wsi_device wsi_device;
 
    /* Whether DCC should be enabled for MSAA textures. */
@@ -256,8 +256,6 @@ bool radv_is_dcc_disabled(const struct radv_physical_device *pdev);
 bool radv_are_dcc_stores_disabled(const struct radv_physical_device *pdev);
 
 bool radv_are_dcc_mips_disabled(const struct radv_physical_device *pdev);
-
-uint32_t radv_find_memory_index(const struct radv_physical_device *pdev, VkMemoryPropertyFlags flags);
 
 VkResult create_drm_physical_device(struct vk_instance *vk_instance, struct _drmDevice *device,
                                     struct vk_physical_device **out);

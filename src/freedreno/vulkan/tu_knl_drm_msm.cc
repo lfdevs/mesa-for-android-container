@@ -847,20 +847,10 @@ tu_bo_init(struct tu_device *dev,
 /**
  * Sets the name in the kernel so that the contents of /debug/dri/0/gem are more
  * useful.
- *
- * We skip this on release builds (when we're also not doing BO debugging) to
- * reduce overhead.
  */
 static void
 tu_bo_set_kernel_name(struct tu_device *dev, struct tu_bo *bo, const char *name)
 {
-   bool kernel_bo_names = dev->bo_sizes != NULL;
-#if MESA_DEBUG
-   kernel_bo_names = true;
-#endif
-   if (!kernel_bo_names)
-      return;
-
    struct drm_msm_gem_info req = {
       .handle = bo->gem_handle,
       .info = MSM_INFO_SET_NAME,

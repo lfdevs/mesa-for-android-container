@@ -61,6 +61,9 @@ void mtl_dispatch_threadgroups_with_indirect_buffer(
    mtl_compute_encoder *encoder, mtl_buffer *buffer, uint32_t offset,
    struct mtl_size local_size);
 
+void mtl_memory_barrier_with_scope(mtl_compute_encoder *encoder,
+                                   enum mtl_barrier_scope scope);
+
 /* MTLRenderEncoder */
 mtl_render_encoder *mtl_new_render_command_encoder_with_descriptor(
    mtl_command_buffer *command_buffer, mtl_render_pass_descriptor *descriptor);

@@ -1,4 +1,4 @@
-mach(8)         g19<1>UD        g17<8,8,1>UD    0xaaaaaaabUD    { align1 1Q AccWrEnable };
-mach(8)         g23<1>D         g17<8,8,1>D     1431655766D     { align1 1Q AccWrEnable };
-mach(8)         g42<1>UD        g39<8,8,1>UD    0xaaaaaaabUD    { align1 2Q AccWrEnable };
-mach(8)         g50<1>D         g39<8,8,1>D     1431655766D     { align1 2Q AccWrEnable };
+        mach (8)                  r19           r17<8;8,1>        0xaaaaaaab      {AccWrEn}
+        mach (8)                  r23:d         r17<8;8,1>:d      1431655766:d    {AccWrEn}
+        mach (8|M8)               r42           r39<8;8,1>        0xaaaaaaab      {AccWrEn}
+        mach (8|M8)               r50:d         r39<8;8,1>:d      1431655766:d    {AccWrEn}

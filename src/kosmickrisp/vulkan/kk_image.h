@@ -30,6 +30,8 @@ uint32_t kk_image_max_dimension(VkImageType image_type);
 
 struct kk_image_plane {
    struct kk_image_layout layout;
+   struct kk_device_memory *mem;
+   uint64_t mem_offset_B;
    // TODO_KOSMICKRISP Only have one handle since we will only create 2D arrays
    // anyway
    /* Metal handle with original handle type */
@@ -127,5 +129,9 @@ kk_image_memory_aspects_to_plane(ASSERTED const struct kk_image *image,
       return kk_image_aspects_to_plane(image, aspectMask);
    }
 }
+
+mtl_texture *kk_image_plane_create_texture(struct kk_image_plane *plane,
+                                           struct kk_image_layout *layout,
+                                           uint64_t offset_B);
 
 #endif

@@ -744,7 +744,7 @@
   </struct>
 
   <struct name="Multisample, Misc" size="1">
-    <field name="Sample mask" size="16" start="0" type="uint"/>
+    <field name="Sample mask" size="16" start="0" type="hex"/>
     <field name="Multisample enable" size="1" start="16" type="bool"/>
     <field name="Multisample late coverage" size="1" start="17" type="bool"/>
     <field name="Evaluate per-sample" size="1" start="18" type="bool"/>
@@ -761,8 +761,8 @@
   </struct>
 
   <struct name="Stencil Mask, Misc" size="1">
-    <field name="Stencil mask front" size="8" start="0" type="uint"/>
-    <field name="Stencil mask back" size="8" start="8" type="uint"/>
+    <field name="Stencil mask front" size="8" start="0" type="hex"/>
+    <field name="Stencil mask back" size="8" start="8" type="hex"/>
     <field name="Stencil enable" size="1" start="16" type="bool"/>
     <field name="Alpha-to-coverage" size="1" start="17" type="bool"/>
     <field name="Alpha-to-coverage Invert" size="1" start="18" type="bool"/>

@@ -17,6 +17,7 @@
 #include "util/lut.h"
 #include "compiler/glsl_types.h"
 
+#include <cassert>
 #include <optional>
 
 struct brw_bind_info {
@@ -2953,13 +2954,6 @@ brw_from_nir_emit_tes_intrinsic(nir_to_brw_state &ntb,
       bld.MOV(retype(dest, BRW_TYPE_UD), s.tes_payload().urb_output);
       break;
 
-   case nir_intrinsic_load_attribute_payload_intel:
-      tes_prog_data->base.urb_read_length =
-         MAX2(tes_prog_data->base.urb_read_length,
-              DIV_ROUND_UP(nir_src_as_uint(instr->src[0]) + 1, 8));
-      brw_from_nir_emit_intrinsic(ntb, bld, instr);
-      break;
-
    case nir_intrinsic_load_tess_config_intel:
       bld.MOV(retype(dest, BRW_TYPE_UD),
               byte_offset(
@@ -4366,7 +4360,7 @@ emit_rt_lsc_fence(const brw_builder &bld,
    send->src[SEND_SRC_PAYLOAD1] = brw_vec8_grf(0, 0);
    send->src[SEND_SRC_PAYLOAD2] = brw_reg();
 
-   send->sfid = BRW_SFID_UGM;
+   send->sfid = GEN_SFID_UGM;
    send->desc = lsc_fence_msg_desc(devinfo, scope, flush_type, true);
    send->mlen = reg_unit(devinfo); /* g0 header */
    send->ex_mlen = 0;
@@ -4523,7 +4517,7 @@ emit_fence(const brw_builder &bld, enum opcode opcode,
 
 static uint32_t
 lsc_fence_descriptor_for_intrinsic(const struct intel_device_info *devinfo,
-                                   nir_intrinsic_instr *instr)
+                                   nir_intrinsic_instr *instr, bool is_tgm)
 {
    assert(devinfo->has_lsc);
 
@@ -4549,8 +4543,17 @@ lsc_fence_descriptor_for_intrinsic(const struct intel_device_info *devinfo,
             flush_type = LSC_FLUSH_TYPE_EVICT;
             break;
          case SCOPE_WORKGROUP:
-            scope = LSC_FENCE_THREADGROUP;
-            flush_type = LSC_FLUSH_TYPE_NONE;
+            /* On Xe2 and Xe3 we need the eviction due to aliasing of TGM data
+             * in L1 (HSD 14020414266). On Xe3p we need this due to how data
+             * post-format conversion happens (HSD 22020984324).
+             * Also, we have to upgrade the scope to TILE since flush_type is
+             * ignored for threadgroup fences, which means we'll use the
+             * values alaready initialized.
+             */
+            if (devinfo->ver < 20 || !is_tgm) {
+               scope = LSC_FENCE_THREADGROUP;
+               flush_type = LSC_FLUSH_TYPE_NONE;
+            }
             break;
          case SCOPE_SHADER_CALL:
          case SCOPE_INVOCATION:
@@ -4999,16 +5002,16 @@ brw_from_nir_emit_intrinsic(nir_to_brw_state &ntb,
       if (devinfo->has_lsc) {
          assert(devinfo->verx10 >= 125);
          uint32_t desc =
-            lsc_fence_descriptor_for_intrinsic(devinfo, instr);
+            lsc_fence_descriptor_for_intrinsic(devinfo, instr, tgm_fence);
          if (ugm_fence) {
             fence_regs[fence_regs_count++] =
-               emit_fence(ubld1, opcode, BRW_SFID_UGM, desc,
+               emit_fence(ubld1, opcode, GEN_SFID_UGM, desc,
                           true /* commit_enable */);
          }
 
          if (tgm_fence) {
             fence_regs[fence_regs_count++] =
-               emit_fence(ubld1, opcode, BRW_SFID_TGM, desc,
+               emit_fence(ubld1, opcode, GEN_SFID_TGM, desc,
                           true /* commit_enable */);
          }
 
@@ -5023,20 +5026,20 @@ brw_from_nir_emit_intrinsic(nir_to_brw_state &ntb,
                ubld1.SYNC(TGL_SYNC_ALLWR);
             }
             fence_regs[fence_regs_count++] =
-               emit_fence(ubld1, opcode, BRW_SFID_SLM, desc,
+               emit_fence(ubld1, opcode, GEN_SFID_SLM, desc,
                           true /* commit_enable */);
          }
 
          if (urb_fence) {
             assert(opcode == SHADER_OPCODE_MEMORY_FENCE);
             fence_regs[fence_regs_count++] =
-               emit_fence(ubld1, opcode, BRW_SFID_URB, desc,
+               emit_fence(ubld1, opcode, GEN_SFID_URB, desc,
                           true /* commit_enable */);
          }
       } else if (devinfo->ver >= 11) {
          if (tgm_fence || ugm_fence || urb_fence) {
             fence_regs[fence_regs_count++] =
-               emit_fence(ubld1, opcode, BRW_SFID_HDC0, 0,
+               emit_fence(ubld1, opcode, GEN_SFID_HDC0, 0,
                           true /* commit_enable HSD ES # 1404612949 */);
          }
 
@@ -5047,7 +5050,7 @@ brw_from_nir_emit_intrinsic(nir_to_brw_state &ntb,
              * special binding table index and the normal DATA_CACHE SFID.
              */
             fence_regs[fence_regs_count++] =
-               emit_fence(ubld1, opcode, BRW_SFID_SLM, 0,
+               emit_fence(ubld1, opcode, GEN_SFID_SLM, 0,
                           true /* commit_enable HSD ES # 1404612949 */);
          }
       } else {
@@ -5059,7 +5062,7 @@ brw_from_nir_emit_intrinsic(nir_to_brw_state &ntb,
 
          if (tgm_fence || ugm_fence || slm_fence || urb_fence) {
             fence_regs[fence_regs_count++] =
-               emit_fence(ubld1, opcode, BRW_SFID_HDC0, 0, commit_enable);
+               emit_fence(ubld1, opcode, GEN_SFID_HDC0, 0, commit_enable);
          }
       }
 
@@ -5527,165 +5530,9 @@ brw_from_nir_emit_intrinsic(nir_to_brw_state &ntb,
       break;
    }
 
-   case nir_intrinsic_load_topology_id_intel: {
-      /* These move around basically every hardware generation, so don't
-       * do any unbounded checks and fail if the platform hasn't explicitly
-       * been enabled here.
-       */
-      assert(devinfo->ver >= 12 && devinfo->ver <= 30);
-
-      /* Here is what the layout of SR0 looks like on Gfx12
-       * https://gfxspecs.intel.com/Predator/Home/Index/47256
-       *   [13:11] : Slice ID.
-       *   [10:9]  : Dual-SubSlice ID
-       *   [8]     : SubSlice ID
-       *   [7]     : EUID[2] (aka EU Row ID)
-       *   [6]     : Reserved
-       *   [5:4]   : EUID[1:0]
-       *   [2:0]   : Thread ID
-       *
-       * Xe2: Engine 3D and GPGPU Programs, EU Overview, Registers and
-       * Register Regions, ARF Registers, State Register,
-       * https://gfxspecs.intel.com/Predator/Home/Index/56623
-       *   [15:11] : Slice ID.
-       *   [9:8]   : SubSlice ID
-       *   [6:4]   : EUID
-       *   [2:0]   : Thread ID
-       *
-       * Xe3: Engine 3D and GPGPU Programs, EU Overview, Registers and
-       * Register Regions, ARF Registers, State Register.
-       * Bspec 56623 (r55736)
-       *
-       *   [17:14] : Slice ID.
-       *   [11:8]  : SubSlice ID
-       *   [6:4]   : EUID
-       *   [3:0]   : Thread ID
-       */
-      brw_reg raw_id = bld.vgrf(BRW_TYPE_UD);
-      bld.UNDEF(raw_id);
-      bld.emit(SHADER_OPCODE_READ_ARCH_REG, raw_id, retype(brw_sr0_reg(0),
-                                                           BRW_TYPE_UD));
-      switch (nir_intrinsic_base(instr)) {
-      case BRW_TOPOLOGY_ID_DSS:
-         if (devinfo->ver >= 20) {
-            /* Xe2+: 3D and GPGPU Programs, Shared Functions, Ray Tracing:
-             * https://gfxspecs.intel.com/Predator/Home/Index/56936
-             *
-             * Note: DSSID in all formulas below is a logical identifier of an
-             * XeCore (a value that goes from 0 to (number_of_slices *
-             * number_of_XeCores_per_slice -1). SW can get this value from
-             * either:
-             *
-             *  - Message Control Register LogicalSSID field (only in shaders
-             *    eligible for Mid-Thread Preemption).
-             *  - Calculated based of State Register with the following formula:
-             *    DSSID = StateRegister.SliceID * GT_ARCH_SS_PER_SLICE +
-             *    StateRRegister.SubSliceID where GT_SS_PER_SLICE is an
-             *    architectural parameter defined per product SKU.
-             *
-             * We are using the state register to calculate the DSSID.
-             */
-            const uint32_t slice_id_mask = devinfo->ver >= 30 ?
-                                           INTEL_MASK(17, 14) :
-                                           INTEL_MASK(15, 11);
-            const uint32_t slice_id_shift = devinfo->ver >= 30 ? 14 : 11;
-
-            const uint32_t subslice_id_mask = devinfo->ver >= 30 ?
-                                              INTEL_MASK(11, 8) :
-                                              INTEL_MASK(9, 8);
-            brw_reg slice_id =
-               bld.SHR(bld.AND(raw_id, brw_imm_ud(slice_id_mask)),
-                       brw_imm_ud(slice_id_shift));
-
-            /* Assert that max subslices covers at least 2 bits that we use for
-             * subslices.
-             */
-            unsigned slice_stride = devinfo->max_subslices_per_slice;
-            assert(slice_stride >= (1 << 2));
-            brw_reg subslice_id =
-               bld.SHR(bld.AND(raw_id, brw_imm_ud(subslice_id_mask)),
-                       brw_imm_ud(8));
-            bld.ADD(retype(dest, BRW_TYPE_UD),
-                    bld.MUL(slice_id, brw_imm_ud(slice_stride)), subslice_id);
-         } else {
-            /* Get rid of anything below dualsubslice */
-            bld.SHR(retype(dest, BRW_TYPE_UD),
-                    bld.AND(raw_id, brw_imm_ud(0x3fff)), brw_imm_ud(9));
-         }
-         break;
-      case BRW_TOPOLOGY_ID_EU_THREAD_SIMD: {
-         brw_reg dst = retype(dest, BRW_TYPE_UD);
-         brw_reg eu;
-
-         if (devinfo->ver >= 20) {
-            /* Xe2+: Graphics Engine, 3D and GPGPU Programs, Shared Functions
-             * Ray Tracing,
-             * https://gfxspecs.intel.com/Predator/Home/Index/56936
-             *
-             * SyncStackID = (EUID[2:0] <<  8) | (ThreadID[2:0] << 4) |
-             *               SIMDLaneID[3:0];
-             *
-             * This section just deals with the EUID part.
-             *
-             * The 3bit EU[2:0] we need to build for ray query memory addresses
-             * computations is a bit odd :
-             *
-             *   EU[2:0] = raw_id[6:4] (identified as EUID[2:0])
-             */
-            eu = bld.SHL(bld.AND(raw_id, brw_imm_ud(INTEL_MASK(6, 4))),
-                         brw_imm_ud(4));
-         } else {
-            /* EU[3:0] << 7
-             *
-             * The 4bit EU[3:0] we need to build for ray query memory addresses
-             * computations is a bit odd :
-             *
-             *   EU[1:0] = raw_id[5:4] (identified as EUID[1:0])
-             *   EU[2]   = raw_id[8]   (identified as SubSlice ID)
-             *   EU[3]   = raw_id[7]   (identified as EUID[2] or Row ID)
-             */
-            brw_reg raw5_4 = bld.AND(raw_id, brw_imm_ud(INTEL_MASK(5, 4)));
-            brw_reg raw7   = bld.AND(raw_id, brw_imm_ud(INTEL_MASK(7, 7)));
-            brw_reg raw8   = bld.AND(raw_id, brw_imm_ud(INTEL_MASK(8, 8)));
-            eu = bld.OR(bld.SHL(raw5_4, brw_imm_ud(3)),
-                        bld.OR(bld.SHL(raw7, brw_imm_ud(3)),
-                               bld.SHL(raw8, brw_imm_ud(1))));
-         }
-
-         brw_reg tid;
-         /* Xe3: Graphics Engine, 3D and GPGPU Programs, Shared Functions
-          * Ray Tracing, (Bspec 56936 (r56740))
-          *
-          * SyncStackID = (EUID[2:0] << 8) | (ThreadID[3:0] << 4) |
-          * SIMDLaneID[3:0];
-          *
-          * ThreadID[3:0] << 4 (ThreadID comes from raw_id[3:0])
-          *
-          * On older platforms (< Xe3):
-          * ThreadID[2:0] << 4 (ThreadID comes from raw_id[2:0])
-          */
-         const uint32_t raw_id_mask = devinfo->ver >= 30 ?
-                                      INTEL_MASK(3, 0) :
-                                      INTEL_MASK(2, 0);
-         tid = bld.SHL(bld.AND(raw_id, brw_imm_ud(raw_id_mask)),
-                       brw_imm_ud(4));
-
-         /* LaneID[0:3] << 0 (Use subgroup invocation) */
-
-         const brw_builder ubld = bld.group(MIN2(16, bld.dispatch_width()), 0).exec_all();
-         brw_reg uinvocation = ubld.LOAD_SUBGROUP_INVOCATION();
-         brw_reg invocation = bld.vgrf(BRW_TYPE_D);
-         ubld.MOV(invocation, uinvocation);
-         if (bld.dispatch_width() > 16)
-            ubld.MOV(byte_offset(invocation, 2 * REG_SIZE), uinvocation);
-         bld.ADD(dst, bld.OR(eu, tid), invocation);
-         break;
-      }
-      default:
-         UNREACHABLE("Invalid topology id type");
-      }
+   case nir_intrinsic_load_topology_id_intel:
+      bld.MOV(retype(dest, BRW_TYPE_UD), brw_sr0_reg(0));
       break;
-   }
 
    case nir_intrinsic_load_btd_stack_id_intel:
       if (s.stage == MESA_SHADER_COMPUTE) {
@@ -5743,8 +5590,7 @@ brw_from_nir_emit_intrinsic(nir_to_brw_state &ntb,
 
       brw_reg globals = get_nir_src(ntb, instr->src[0], -1);
       srcs[RT_LOGICAL_SRC_GLOBALS] = bld.emit_uniformize(globals);
-      srcs[RT_LOGICAL_SRC_BVH_LEVEL] = get_nir_src(ntb, instr->src[1], 0);
-      srcs[RT_LOGICAL_SRC_TRACE_RAY_CONTROL] = get_nir_src(ntb, instr->src[2], 0);
+      srcs[RT_LOGICAL_SRC_PAYLOADS] = get_nir_src(ntb, instr->src[1], 0);
       srcs[RT_LOGICAL_SRC_SYNCHRONOUS] = brw_imm_ud(synchronous);
 
       /* Bspec 57508, 47937: Structure_SIMD16TraceRayMessage:: RayQuery Enable
@@ -5993,8 +5839,14 @@ brw_from_nir_emit_memory_access(nir_to_brw_state &ntb,
    }
 
    int data_src = nir_get_io_data_src_number(instr);
-   unsigned components = is_store ? instr->src[data_src].ssa->num_components
-                                  : instr->def.num_components;
+   unsigned components;
+   if (is_store) {
+      assert(data_src >= 0);
+      components = instr->src[data_src].ssa->num_components;
+   } else {
+      components = instr->def.num_components;
+   }
+
    if (components == 0)
       components = instr->num_components;
 

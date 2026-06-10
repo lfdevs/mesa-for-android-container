@@ -70,8 +70,16 @@
 	(((__u64)(value) & AMDGPU_TILING_##field##_MASK) << AMDGPU_TILING_##field##_SHIFT)
 #define AMDGPU_TILING_GET(value, field) \
 	(((__u64)(value) >> AMDGPU_TILING_##field##_SHIFT) & AMDGPU_TILING_##field##_MASK)
+
+static char *
+drmGetFormatModifierName(uint64_t modifier)
+{
+   return NULL;
+}
+
 #else
 #include "drm-uapi/amdgpu_drm.h"
+#include <xf86drm.h>
 #endif
 
 #ifndef CIASICIDGFXENGINE_SOUTHERNISLAND
@@ -4879,6 +4887,12 @@ void ac_surface_print_info(FILE *out, const struct radeon_info *info,
               1 << surf->surf_alignment_log2, surf->u.gfx9.swizzle_mode, surf->tile_swizzle,
               surf->u.gfx9.epitch, surf->u.gfx9.surf_pitch,
               surf->blk_w, surf->blk_h, surf->bpe, surf->flags);
+
+      if (surf->modifier != DRM_FORMAT_MOD_INVALID) {
+         char *name = drmGetFormatModifierName(surf->modifier);
+         fprintf(out, "    Modifier: %s\n", name);
+         free(name);
+      }
 
       if (surf->fmask_offset)
          fprintf(out,

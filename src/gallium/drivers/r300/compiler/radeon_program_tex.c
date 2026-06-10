@@ -174,7 +174,7 @@ radeonTransformTEX(struct radeon_compiler *c, struct rc_instruction *inst, void 
          inst_frc->U.I.SrcReg[0].Index = temp_mul;
          inst_frc->U.I.SrcReg[0].Swizzle = RC_SWIZZLE_XYZ0;
 
-         two = rc_constants_add_immediate_scalar(&c->Program.Constants, 2, &two_swizzle);
+         two = rc_constants_add_immediate_scalar(&c->Program.Constants, 2, &two_swizzle, NULL);
          inst_mad = rc_insert_new_instruction(c, inst->Prev);
          unsigned temp_mad = rc_find_free_temporary(c);
 

@@ -1,6 +1,12 @@
 # Copyright © 2024 Google
 # SPDX-License-Identifier: MIT
 
+dep_log = dependency('log',
+  version: '>= 0.4.22',
+  fallback: ['log-0.4-rs', 'dep_log'],
+  required: true,
+)
+
 dep_cfg_if = dependency('cfg-if',
   version: '>= 1.0.0',
   fallback: ['cfg-if-1-rs', 'dep_cfg_if'],
@@ -25,7 +31,8 @@ dep_zerocopy = dependency('zerocopy',
   required: true,
 )
 
-dep_mesa3d_util = [dep_cfg_if, dep_thiserror, dep_remain, dep_zerocopy]
+dep_mesa3d_util = [dep_cfg_if, dep_thiserror, dep_remain, dep_zerocopy,
+                   dep_log]
 
 supported_systems = ['linux', 'windows', 'darwin', 'macos']
 supported_host_machine = host_machine.system() in supported_systems

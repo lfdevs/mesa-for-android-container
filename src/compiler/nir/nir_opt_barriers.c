@@ -212,6 +212,7 @@ nir_opt_acquire_release_barriers_impl(nir_function_impl *impl,
          switch (intrin->intrinsic) {
          case nir_intrinsic_load_deref:
          case nir_intrinsic_load_deref_block_intel:
+         case nir_intrinsic_load_deref_transpose_amd:
          case nir_intrinsic_store_deref:
          case nir_intrinsic_store_deref_block_intel:
             if (last_atomic) {

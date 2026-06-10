@@ -203,7 +203,6 @@ struct panvk_cs_deps {
       enum mali_cs_condition cond;
       struct cs_index cond_value;
    } dst[PANVK_SUBQUEUE_COUNT];
-   bool needs_layout_transitions;
 };
 
 enum panvk_sb_ids {
@@ -697,8 +696,8 @@ cs_iter_sb_update_start(struct panvk_cmd_buffer *cmdbuf,
                 offsetof(struct panvk_cs_subqueue_context, iter_sb));
 
    /* Select next scoreboard entry and wrap around if we get past the limit */
-   cs_add32(b, next_sb, next_sb, 1);
-   cs_add32(b, cmp_scratch, next_sb, -SB_ITER(dev->csf.sb.iter_count));
+   cs_add_imm32(b, next_sb, next_sb, 1);
+   cs_add_imm32(b, cmp_scratch, next_sb, -SB_ITER(dev->csf.sb.iter_count));
 
    cs_if(b, MALI_CS_CONDITION_GEQUAL, cmp_scratch) {
       cs_move32_to(b, next_sb, SB_ITER(0));
@@ -774,14 +773,8 @@ cs_next_iter_sb(struct panvk_cmd_buffer *cmdbuf,
    }
 }
 
-enum panvk_barrier_stage {
-   PANVK_BARRIER_STAGE_FIRST,
-   PANVK_BARRIER_STAGE_AFTER_LAYOUT_TRANSITION,
-};
-
 void panvk_per_arch(add_cs_deps)(
    struct panvk_cmd_buffer *cmdbuf,
-   enum panvk_barrier_stage barrier_stage,
    const VkDependencyInfo *in,
    struct panvk_cs_deps *out,
    bool is_set_event);
@@ -943,8 +936,6 @@ cs_emit_layer_fragment_state(struct cs_builder *b, struct cs_index fbd_ptr)
                 offsetof(struct panvk_fb_layer_state, frame_argument));
    cs_load64_to(b, cs_sr_reg64(b, FRAGMENT, FRAME_SHADER_DCD_POINTER), fbd_ptr,
                 offsetof(struct panvk_fb_layer_state, dcd_pointer));
-
-   cs_flush_loads(b);
 }
 #endif /* PAN_ARCH >= 14 */
 

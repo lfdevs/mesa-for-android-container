@@ -60,7 +60,7 @@ tu_CreateSampler(VkDevice _device,
          pCreateInfo->borderColor == VK_BORDER_COLOR_INT_CUSTOM_EXT);
       border_color += TU_BORDER_COLOR_BUILTIN;
    } else if (sampler->vk.format != VK_FORMAT_UNDEFINED ||
-              device->instance->enable_fast_border_color_for_undefined_formats) {
+              device->instance->drirc.misc.enable_fast_border_color_for_undefined_formats) {
       fast_border_color_enable = true;
       switch (pCreateInfo->borderColor) {
          case VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK:

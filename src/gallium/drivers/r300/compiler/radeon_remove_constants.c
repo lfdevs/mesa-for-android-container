@@ -7,6 +7,7 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include "util/bitscan.h"
+#include "radeon_code.h"
 #include "radeon_dataflow.h"
 
 struct const_remap_state {
@@ -39,6 +40,10 @@ remap_regs(struct rc_instruction *inst, struct const_remap *inv_remap_table)
             inst->U.I.SrcReg[src].Index = inv_remap_table[old_index].index[old_swz];
             SET_SWZ(inst->U.I.SrcReg[src].Swizzle, chan,
                     inv_remap_table[old_index].swizzle[old_swz]);
+            if (inv_remap_table[old_index].negate[old_swz]) {
+               assert(!inst->U.I.SrcReg[src].Abs);
+               inst->U.I.SrcReg[src].Negate ^= 1 << chan;
+            }
          }
       }
    }
@@ -96,19 +101,109 @@ place_immediate_in_free_slot(struct const_remap_state *s, unsigned i)
    assert(util_bitcount(s->is_used_as_vector[i]) > 1);
 
    unsigned count = s->new_constants.Count;
-
+   bool remapped = count != i;
    s->new_constants.Constants[count] = s->constants[i];
-   s->new_constants.Constants[count].UseMask = s->is_used_as_vector[i];
+   s->new_constants.Constants[count].UseMask = 0;
+
+   /* Deduplicate repeated values within the immediate, leaving
+    * free channels for later merging via try_merge_vec_immediate. */
    for (unsigned chan = 0; chan < 4; chan++) {
-      if (s->constants[i].UseMask & 1 << chan & s->is_used_as_vector[i]) {
+      if (!(s->is_used_as_vector[i] & (1 << chan)))
+         continue;
+      float val = s->constants[i].u.Immediate[chan];
+      bool found = false;
+      for (unsigned slot_chan = 0; slot_chan < 4; slot_chan++) {
+         if ((s->new_constants.Constants[count].UseMask & (1 << slot_chan)) &&
+             s->new_constants.Constants[count].u.Immediate[slot_chan] == val) {
+            s->inv_remap_table[i].index[chan] = count;
+            s->inv_remap_table[i].swizzle[chan] = slot_chan;
+            remapped |= slot_chan != chan;
+            found = true;
+            break;
+         }
+      }
+      if (!found) {
+         unsigned new_chan = ffs(~s->new_constants.Constants[count].UseMask) - 1;
+         s->new_constants.Constants[count].u.Immediate[new_chan] = val;
+         s->new_constants.Constants[count].UseMask |= (1 << new_chan);
          s->inv_remap_table[i].index[chan] = count;
-         s->inv_remap_table[i].swizzle[chan] = chan;
+         s->inv_remap_table[i].swizzle[chan] = new_chan;
+         remapped |= new_chan != chan;
       }
    }
-   if (count != i) {
+   if (remapped)
       s->is_identity = false;
-   }
    s->new_constants.Count++;
+}
+
+/* Try to merge a vec-used immediate into an already-placed slot by matching
+ * values and filling free channels. */
+static bool
+try_merge_vec_immediate(struct const_remap_state *s, unsigned i)
+{
+   uint8_t vec_mask = s->is_used_as_vector[i];
+
+   for (unsigned j = 0; j < s->new_constants.Count; j++) {
+      if (s->new_constants.Constants[j].Type != RC_CONSTANT_IMMEDIATE)
+         continue;
+
+      /* Work on a local copy so we don't corrupt state on failure. */
+      uint8_t new_chan[4];
+      uint8_t slot_used = s->new_constants.Constants[j].UseMask;
+      float slot_vals[4];
+      memcpy(slot_vals, s->new_constants.Constants[j].u.Immediate, sizeof(slot_vals));
+
+      bool ok = true;
+      for (unsigned chan = 0; chan < 4; chan++) {
+         new_chan[chan] = 4;
+         if (!(vec_mask & (1 << chan)))
+            continue;
+
+         float val = s->constants[i].u.Immediate[chan];
+
+         /* First look for an existing (or tentatively placed) channel with
+          * the same value. */
+         bool found = false;
+         for (unsigned slot_chan = 0; slot_chan < 4; slot_chan++) {
+            if ((slot_used & (1 << slot_chan)) && slot_vals[slot_chan] == val) {
+               new_chan[chan] = slot_chan;
+               found = true;
+               break;
+            }
+         }
+         if (!found) {
+            /* Put the value in a free channel. */
+            uint8_t free_chan = ffs(~slot_used) - 1;
+            if (free_chan > 3) {
+               ok = false;
+               break;
+            }
+
+            new_chan[chan] = free_chan;
+            slot_vals[free_chan] = val;
+            slot_used |= (1 << free_chan);
+         }
+      }
+
+      if (!ok)
+         continue;
+
+      /* Write newly-claimed channels and update remap tables. */
+      for (unsigned chan = 0; chan < 4; chan++) {
+         if (!(vec_mask & (1 << chan)))
+            continue;
+         if (!(s->new_constants.Constants[j].UseMask & (1 << new_chan[chan]))) {
+            s->new_constants.Constants[j].u.Immediate[new_chan[chan]] =
+               s->constants[i].u.Immediate[chan];
+            s->new_constants.Constants[j].UseMask |= (1 << new_chan[chan]);
+         }
+         s->inv_remap_table[i].index[chan] = j;
+         s->inv_remap_table[i].swizzle[chan] = new_chan[chan];
+      }
+      s->is_identity = false;
+      return true;
+   }
+   return false;
 }
 
 static void
@@ -147,8 +242,8 @@ init_constant_remap_state(struct radeon_compiler *c, struct const_remap_state *s
    s->constants = c->Program.Constants.Constants;
    memset(s->is_used_as_vector, 0, c->Program.Constants.Count);
 
-   s->remap_table = malloc(c->Program.Constants.Count * sizeof(struct const_remap));
-   s->inv_remap_table = malloc(c->Program.Constants.Count * sizeof(struct const_remap));
+   s->remap_table = calloc(c->Program.Constants.Count, sizeof(struct const_remap));
+   s->inv_remap_table = calloc(c->Program.Constants.Count, sizeof(struct const_remap));
    for (unsigned i = 0; i < c->Program.Constants.Count; i++) {
       /* Clear the UseMask, we will update it later. */
       s->constants[i].UseMask = 0;
@@ -202,7 +297,7 @@ rc_remove_unused_constants(struct radeon_compiler *c, void *user)
       }
    }
 
-   /* Now iterate over scalarar externals and put them into empty slots. */
+   /* Now iterate over scalar externals and put them into empty slots. */
    for (unsigned i = 0; i < c->Program.Constants.Count; i++) {
       if (constants[i].Type != RC_CONSTANT_EXTERNAL)
          continue;
@@ -210,42 +305,58 @@ rc_remove_unused_constants(struct radeon_compiler *c, void *user)
          try_merge_constants_external(s, i);
    }
 
-   /* Now put immediates which are used as vectors. */
+   /* Place state constants before immediates so the immediate-packing budget
+    * accounts for state slots that cannot be packed with immediates. */
+   for (unsigned i = 0; i < c->Program.Constants.Count; i++) {
+      if (constants[i].Type != RC_CONSTANT_STATE)
+         continue;
+      if (util_bitcount(s->constants[i].UseMask) > 0) {
+         place_constant_in_free_slot(s, i);
+      }
+   }
+
+   /* Count vec-used immediates to estimate whether aggressive packing (specifically
+    * packing which can produce invalid swizzles) is needed. */
+   unsigned num_vec_imm = 0;
+   for (unsigned i = 0; i < c->Program.Constants.Count; i++) {
+      if (constants[i].Type == RC_CONSTANT_IMMEDIATE &&
+          util_bitcount(s->constants[i].UseMask) > 0 &&
+          util_bitcount(s->is_used_as_vector[i]) > 0)
+         num_vec_imm++;
+   }
+   bool aggressive = c->type == RC_VERTEX_PROGRAM ||
+                     (!c->is_r500 &&
+                      s->new_constants.Count + num_vec_imm > R300_PFS_NUM_CONST_REGS);
+
+   /* Place vec-used immediates first. Place_immediate_in_free_slot deduplicates
+    * repeated values within the immediate, leaving free channels in the new slot.
+    * Subsequent vec immediates can then merge into those free channels via
+    * try_merge_vec_immediate, naturally building a shared value palette. */
    for (unsigned i = 0; i < c->Program.Constants.Count; i++) {
       if (constants[i].Type == RC_CONSTANT_IMMEDIATE &&
           util_bitcount(s->constants[i].UseMask) > 0 &&
           util_bitcount(s->is_used_as_vector[i]) > 0) {
+         if (aggressive && try_merge_vec_immediate(s, i))
+            continue;
          place_immediate_in_free_slot(s, i);
       }
    }
 
-   /* Now walk over scalar immediates and try to:
-    *  a) check for duplicates,
-    *  b) find free slot.
-    *  All of this is already done by rc_constants_add_immediate_scalar,
-    *  so just use it.
-    */
+   /* Scalar-only channels fill the remaining free channels of already-placed
+    * slots or create new ones via rc_constants_add_immediate_scalar. */
    for (unsigned i = 0; i < c->Program.Constants.Count; i++) {
       if (constants[i].Type != RC_CONSTANT_IMMEDIATE)
          continue;
       for (unsigned chan = 0; chan < 4; chan++) {
          if ((s->constants[i].UseMask) & (1 << chan) &&
              (~(s->is_used_as_vector[i]) & (1 << chan))) {
-            unsigned swz;
+            unsigned swz, neg;
             s->inv_remap_table[i].index[chan] = rc_constants_add_immediate_scalar(
-               &s->new_constants, constants[i].u.Immediate[chan], &swz);
+               &s->new_constants, constants[i].u.Immediate[chan], &swz, &neg);
             s->inv_remap_table[i].swizzle[chan] = GET_SWZ(swz, 0);
+            s->inv_remap_table[i].negate[chan] = GET_BIT(neg, 0);
             s->is_identity = false;
          }
-      }
-   }
-
-   /* Finally place state constants. */
-   for (unsigned i = 0; i < c->Program.Constants.Count; i++) {
-      if (constants[i].Type != RC_CONSTANT_STATE)
-         continue;
-      if (util_bitcount(s->constants[i].UseMask) > 0) {
-         place_constant_in_free_slot(s, i);
       }
    }
 
@@ -267,6 +378,9 @@ rc_remove_unused_constants(struct radeon_compiler *c, void *user)
    rc_constants_destroy(&c->Program.Constants);
    c->Program.Constants = s->new_constants;
 
+   if (c->Debug & RC_DBG_LOG)
+      rc_constants_print(&c->Program.Constants, s->remap_table);
+
    if (s->are_externals_remapped) {
       *out_remap_table = s->remap_table;
    } else {
@@ -276,7 +390,4 @@ rc_remove_unused_constants(struct radeon_compiler *c, void *user)
 
    free(s->inv_remap_table);
    free(s->is_used_as_vector);
-
-   if (c->Debug & RC_DBG_LOG)
-      rc_constants_print(&c->Program.Constants, s->remap_table);
 }

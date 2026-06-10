@@ -319,6 +319,7 @@ visit_intrinsic(nir_intrinsic_instr *instr, struct divergence_state *state)
    case nir_intrinsic_load_btd_local_arg_addr_intel:
    case nir_intrinsic_load_simd_width_intel:
    case nir_intrinsic_load_ray_num_dss_rt_stacks_intel:
+   case nir_intrinsic_load_topology_id_intel:
    case nir_intrinsic_load_lshs_vertex_stride_amd:
    case nir_intrinsic_load_esgs_vertex_stride_amd:
    case nir_intrinsic_load_hs_out_patch_data_offset_amd:
@@ -352,9 +353,13 @@ visit_intrinsic(nir_intrinsic_instr *instr, struct divergence_state *state)
    case nir_intrinsic_load_fbfetch_image_desc_amd:
    case nir_intrinsic_load_polygon_stipple_buffer_amd:
    case nir_intrinsic_load_use_float_frag_coord_xy_amd:
+   case nir_intrinsic_load_ps_iter_mask_amd:
+   case nir_intrinsic_load_use_sample_mask_in_amd:
    case nir_intrinsic_load_tcs_mem_attrib_stride:
    case nir_intrinsic_load_printf_buffer_address:
    case nir_intrinsic_load_printf_buffer_size:
+   case nir_intrinsic_load_abort_buffer_address:
+   case nir_intrinsic_load_abort_buffer_size:
    case nir_intrinsic_load_samples_log2_agx:
    case nir_intrinsic_load_active_subgroup_count_agx:
    case nir_intrinsic_load_root_agx:
@@ -994,7 +999,6 @@ visit_intrinsic(nir_intrinsic_instr *instr, struct divergence_state *state)
    case nir_intrinsic_load_intersection_opaque_amd:
    case nir_intrinsic_load_vector_arg_amd:
    case nir_intrinsic_load_btd_stack_id_intel:
-   case nir_intrinsic_load_topology_id_intel:
    case nir_intrinsic_load_scratch_base_ptr:
    case nir_intrinsic_ordered_xfb_counter_add_gfx11_amd:
    case nir_intrinsic_ordered_add_loop_gfx12_amd:
@@ -1042,6 +1046,7 @@ visit_intrinsic(nir_intrinsic_instr *instr, struct divergence_state *state)
    case nir_intrinsic_ldtram_nv:
    case nir_intrinsic_cmat_muladd_nv:
    case nir_intrinsic_printf:
+   case nir_intrinsic_abort:
    case nir_intrinsic_load_gs_header_ir3:
    case nir_intrinsic_load_tcs_header_ir3:
    case nir_intrinsic_load_rel_patch_id_ir3:
@@ -1060,6 +1065,7 @@ visit_intrinsic(nir_intrinsic_instr *instr, struct divergence_state *state)
    case nir_intrinsic_load_agx:
    case nir_intrinsic_load_shared_lock_nv:
    case nir_intrinsic_store_shared_unlock_nv:
+   case nir_intrinsic_match_any_nv:
    case nir_intrinsic_bvh_stack_rtn_amd:
    case nir_intrinsic_cmat_load_shared_nv:
    case nir_intrinsic_cmat_mov_transpose_nv:
@@ -1072,6 +1078,9 @@ visit_intrinsic(nir_intrinsic_instr *instr, struct divergence_state *state)
    case nir_intrinsic_zs_emit_pan:
    case nir_intrinsic_load_return_param_amd:
    case nir_intrinsic_load_local_invocation_index_intel:
+   case nir_intrinsic_load_global_transpose_amd:
+   case nir_intrinsic_load_deref_transpose_amd:
+   case nir_intrinsic_load_global_tr_amd:
       is_divergent = true;
       break;
 

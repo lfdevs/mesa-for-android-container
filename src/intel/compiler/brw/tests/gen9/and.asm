@@ -1,29 +1,29 @@
-and(8)          g3<1>UD         g2<0,1,0>UD     ~g2.2<0,1,0>D   { align1 1Q };
-and(16)         g3<1>UD         g2<0,1,0>UD     ~g2.2<0,1,0>D   { align1 1H };
-and(8)          g8<1>UD         g0.1<0,1,0>UW   0x07ffUW        { align1 1Q };
-and(16)         g18<1>UD        g0.1<0,1,0>UW   0x07ffUW        { align1 1H };
-and(1)          g7<1>UD         g5<0,1,0>UD     0x000000f0UD    { align1 WE_all 1N };
-and.nz.f0.0(8)  nullUD          g36<8,8,1>UD    g37<8,8,1>UD    { align1 1Q };
-and.nz.f0.0(16) nullUD          g70<8,8,1>UD    g72<8,8,1>UD    { align1 1H };
-and.z.f0.0(16)  g21<1>UD        g19<8,8,1>UD    g17<8,8,1>UD    { align1 1H };
-and(8)          g61<1>UD        g79<8,8,1>UD    g32.1<8,4,2>UD  { align1 2Q };
-and(8)          g96<1>D         ~g94<8,8,1>D    ~g95<8,8,1>D    { align1 1Q };
-and(16)         g24<1>D         ~g20<8,8,1>D    ~g22<8,8,1>D    { align1 1H };
-and(1)          a0<1>UD         g4<0,1,0>UD     0x000000ffUD    { align1 WE_all 1N };
-and(16)         g118<1>UD       g114<8,8,1>UD   0x0000003fUD    { align1 2H };
-and(1)          g4<1>UD         g20<0,1,0>UD    0x000000ffUD    { align1 WE_all 3N };
-and.z.f0.0(8)   nullUD          g13<8,8,1>UD    0x0000001fUD    { align1 1Q };
-and(8)          g21<1>UD        g15<8,8,1>UD    0x00000003UD    { align1 WE_all 1Q };
-and.z.f0.0(8)   nullUD          g20<8,8,1>UD    0x00000001UD    { align1 1Q };
-and.z.f0.0(16)  nullUD          g45<8,8,1>UD    0x00000001UD    { align1 1H };
-and(8)          g4<1>UW         g3<8,8,1>UW     0xfffcUW        { align1 1Q };
-and(16)         g13<1>UW        g19<16,8,2>UW   0xfffcUW        { align1 1H };
-and.nz.f0.0(8)  nullUD          ~g2.2<0,1,0>D   g9<8,8,1>UD     { align1 1Q };
-and(8)          g18<1>UD        ~g2.2<0,1,0>D   g7<8,8,1>UD     { align1 1Q };
-and.nz.f0.0(16) nullUD          ~g2.2<0,1,0>D   g14<8,8,1>UD    { align1 1H };
-and(16)         g30<1>UD        ~g2.2<0,1,0>D   g10<8,8,1>UD    { align1 1H };
-and.nz.f0.0(8)  g10<1>UD        g9<8,8,1>UD     0x00000001UD    { align1 1Q };
-and.nz.f0.0(16) g16<1>UD        g14<8,8,1>UD    0x00000001UD    { align1 1H };
-and.z.f0.0(8)   g9<1>UD         g8<8,8,1>UD     0x00000003UD    { align1 1Q };
-and(8)          g12<1>UQ        g9<4,4,1>UQ     g11<4,4,1>UQ    { align1 1Q };
-and(8)          g26<1>UQ        g18<4,4,1>UQ    g22<4,4,1>UQ    { align1 2Q };
+        and (8)                   r3            r2<0>             -r2.2<0>:d
+        and (16)                  r3            r2<0>             -r2.2<0>:d
+        and (8)                   r8            r0.1<0>:uw        2047:uw
+        and (16)                  r18           r0.1<0>:uw        2047:uw
+(W)     and (1)                   r7            r5<0>             0x000000f0
+        and (8)        (ne)f0.0   null          r36<8;8,1>        r37<8;8,1>
+        and (16)       (ne)f0.0   null          r70<8;8,1>        r72<8;8,1>
+        and (16)       (eq)f0.0   r21           r19<8;8,1>        r17<8;8,1>
+        and (8|M8)                r61           r79<8;8,1>        r32.1<8;4,2>
+        and (8)                   r96:d         -r94<8;8,1>:d     -r95<8;8,1>:d
+        and (16)                  r24:d         -r20<8;8,1>:d     -r22<8;8,1>:d
+(W)     and (1)                   a0            r4<0>             0x000000ff
+        and (16|M16)              r118          r114<8;8,1>       0x0000003f
+(W)     and (1|M8)                r4            r20<0>            0x000000ff
+        and (8)        (eq)f0.0   null          r13<8;8,1>        0x0000001f
+(W)     and (8)                   r21           r15<8;8,1>        0x00000003
+        and (8)        (eq)f0.0   null          r20<8;8,1>        0x00000001
+        and (16)       (eq)f0.0   null          r45<8;8,1>        0x00000001
+        and (8)                   r4:uw         r3<8;8,1>:uw      65532:uw
+        and (16)                  r13:uw        r19<16;8,2>:uw    65532:uw
+        and (8)        (ne)f0.0   null          -r2.2<0>:d        r9<8;8,1>
+        and (8)                   r18           -r2.2<0>:d        r7<8;8,1>
+        and (16)       (ne)f0.0   null          -r2.2<0>:d        r14<8;8,1>
+        and (16)                  r30           -r2.2<0>:d        r10<8;8,1>
+        and (8)        (ne)f0.0   r10           r9<8;8,1>         0x00000001
+        and (16)       (ne)f0.0   r16           r14<8;8,1>        0x00000001
+        and (8)        (eq)f0.0   r9            r8<8;8,1>         0x00000003
+        and (8)                   r12:uq        r9<4;4,1>:uq      r11<4;4,1>:uq
+        and (8|M8)                r26:uq        r18<4;4,1>:uq     r22<4;4,1>:uq

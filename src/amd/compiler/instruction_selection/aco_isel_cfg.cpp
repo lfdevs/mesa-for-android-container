@@ -159,6 +159,17 @@ end_loop(isel_context* ctx)
 }
 
 void
+emit_halt(isel_context* ctx)
+{
+   Builder bld(ctx->program, ctx->block);
+
+   bld.barrier(aco_opcode::p_barrier,
+               memory_sync_info(storage_buffer, semantic_release, scope_device));
+
+   bld.sopp(aco_opcode::s_sethalt, 0x1); /* set HALT */
+}
+
+void
 begin_uniform_if_then(isel_context* ctx, Temp cond)
 {
    assert(!cond.id() || cond.regClass() == s1);

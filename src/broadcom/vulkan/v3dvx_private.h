@@ -306,6 +306,8 @@ uint32_t v3dX(combined_image_sampler_texture_state_offset)(uint8_t plane);
 
 uint32_t v3dX(combined_image_sampler_sampler_state_offset)(uint8_t plane);
 
+void v3dX(pack_null_texture_state)(struct v3dv_device *device, void *map);
+
 /* General utils */
 
 void

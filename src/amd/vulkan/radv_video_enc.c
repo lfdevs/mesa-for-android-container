@@ -25,9 +25,9 @@
  * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  *
  **************************************************************************/
+#include "tools/radv_debug.h"
 #include "radv_buffer.h"
 #include "radv_cs.h"
-#include "radv_debug.h"
 #include "radv_device_memory.h"
 #include "radv_entrypoints.h"
 #include "radv_image_view.h"

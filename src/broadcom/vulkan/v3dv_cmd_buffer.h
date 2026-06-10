@@ -711,10 +711,6 @@ void v3dv_cmd_buffer_copy_query_results(struct v3dv_cmd_buffer *cmd_buffer,
 void v3dv_cmd_buffer_add_tfu_job(struct v3dv_cmd_buffer *cmd_buffer,
                                  struct drm_v3d_submit_tfu *tfu);
 
-void v3dv_cmd_buffer_rewrite_indirect_csd_job(struct v3dv_device *device,
-                                              struct v3dv_csd_indirect_cpu_job_info *info,
-                                              const uint32_t *wg_counts);
-
 void v3dv_cmd_buffer_add_private_obj(struct v3dv_cmd_buffer *cmd_buffer,
                                      uint64_t obj,
                                      v3dv_cmd_buffer_private_obj_destroy_cb destroy_cb);

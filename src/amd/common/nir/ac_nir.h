@@ -258,7 +258,7 @@ ac_nir_lower_task_outputs_to_mem(nir_shader *shader,
                                  bool has_query);
 
 bool
-ac_nir_lower_mesh_inputs_to_mem(nir_shader *shader);
+ac_nir_lower_mesh_inputs_to_mem(nir_shader *shader, bool has_task_shader);
 
 bool
 ac_nir_lower_global_access(nir_shader *shader);
@@ -304,39 +304,19 @@ ac_nir_lower_legacy_gs(nir_shader *nir, ac_nir_lower_legacy_gs_options *options,
 typedef struct {
    /* System values. */
    bool msaa_disabled; /* true if MSAA is disabled, false may mean that the state is unknown */
-   bool uses_vrs_coarse_shading;
-   bool load_sample_positions_always_loads_current_ones;
-   bool dynamic_rasterization_samples;
+   bool load_sample_positions_always_loads_current_ones; /* TODO: unify with RADV or remove */
+   bool dynamic_rasterization_samples; /* TODO: unify with RADV or remove */
    int force_front_face; /* 0 -> keep, 1 -> set to true, -1 -> set to false */
-   bool frag_coord_is_center; /* GL requirement for sample shading */
+   bool sample_shading;
 
-   /* frag_coord/pixel_coord:
-    *    allow_pixel_coord && (frag_coord_is_center || ps_iter_samples == 1 || msaa_disabled ||
-    *                          the fractional part of frag_coord.xy isn't used):
-    *       * frag_coord.xy is replaced by u2f(pixel_coord) + 0.5.
-    *    else:
-    *       * pixel_coord is replaced by f2u16(frag_coord.xy)
-    *       * ps_iter_samples == 0 means the state is unknown.
-    *
-    * barycentrics:
+   /* barycentrics:
     *    msaa_disabled:
     *       * All barycentrics including at_sample but excluding at_offset are changed to
     *         barycentric_pixel
-    *    ps_iter_samples >= 2:
+    *    sample_shading:
     *       * All barycentrics are changed to per-sample interpolation except at_offset/at_sample.
     *       * barycentric_at_sample(sample_id) is replaced by barycentric_sample.
-    *
-    * sample_mask_in:
-    *    msaa_disabled && !uses_vrs_coarse_shading:
-    *       * sample_mask_in is replaced by b2i32(!helper_invocation)
-    *    ps_iter_samples == 2, 4:
-    *       * sample_mask_in is changed to (sample_mask_in & (ps_iter_mask << sample_id))
-    *    ps_iter_samples == 8:
-    *       * sample_mask_in is replaced by 1 << sample_id.
-    *
-    * When ps_iter_samples is equal to rasterization samples, set ps_iter_samples = 8 for this pass.
     */
-   unsigned ps_iter_samples;
 
    /* fbfetch_output */
    bool fbfetch_is_1D;
@@ -360,6 +340,54 @@ typedef struct {
 
 bool
 ac_nir_lower_ps_early(nir_shader *nir, const ac_nir_lower_ps_early_options *options);
+
+typedef enum {
+   /* sample_mask_in is replaced with b2i32(inot(load_helper_invocation)).
+    *
+    * API VRS can't use this because its sample mask is the combined sample mask of all pixels
+    * in the fragment area. Driver-internal forced VRS can use this if such VRS is also allowed
+    * to be enabled with helper_invocation.
+    */
+   ac_nir_lower_samplemask_1sample_no_vrs,
+
+   /* sample_mask_in is replaced with:
+    *    nir_load_use_sample_mask_in_amd ? load_sample_mask_in : b2i32(inot(load_helper_invocation))
+    *
+    * Sample shading can't use this.
+    */
+   ac_nir_lower_samplemask_unknown_states_no_sample_shading,
+
+   /* ps_iter_samples == 0 means that the value is unknown (dependent on dynamic rasterization
+    * samples), and the real value is one of: 1, 2, 4. That requires loading PS_ITER_MASK from
+    * a user SGPR to compute sample_mask_in.
+    *
+    * If (ps_iter_samples)
+    *    sample_mask_in is ANDed with (nir_imm_int(ac_get_ps_iter_mask(num_samples)) << sample_id);
+    * else
+    *    sample_mask_in is ANDed with (load_ps_iter_mask_amd << sample_id);
+    *
+    * This is only used with min_sample_shading < 1.
+    */
+   ac_nir_lower_samplemask_sample_shading_partial,
+
+   /* sample_mask_in is replaced with b2i32(inot(load_helper_invocation)) << sample_id.
+    *
+    * This is only used with min_sample_shading == 1.
+    */
+   ac_nir_lower_samplemask_sample_shading_max,
+} ac_nir_lower_sample_mask_in_behavior;
+
+typedef struct {
+   ac_nir_lower_sample_mask_in_behavior behavior;
+
+   /* The number of sample shading samples. Only for ac_nir_lower_samplemask_sample_shading_partial.
+    * Set to 0 if unknown.
+    */
+   unsigned ps_iter_samples;
+} ac_nir_lower_sample_mask_in_options;
+
+bool
+ac_nir_lower_sample_mask_in(nir_shader *nir, const ac_nir_lower_sample_mask_in_options *options);
 
 /* This is a post-link pass. It shouldn't eliminate any code and it shouldn't affect shader_info
  * (those should be done in the early pass).

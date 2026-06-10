@@ -17,9 +17,6 @@
 
 struct ctx {
    struct kk_attribute *attribs;
-   bool requires_vertex_id;
-   bool requires_instance_id;
-   bool requires_base_instance;
    bool requires_robustness2;
 };
 
@@ -165,22 +162,19 @@ pass(struct nir_builder *b, nir_intrinsic_instr *intr, void *data)
    nir_def *el;
    if (attrib.instanced) {
       if (attrib.divisor > 0) {
-         /* Metal's instance_id has base_instance included */
-         nir_def *instance_id =
-            nir_isub(b, nir_load_instance_id(b), nir_load_base_instance(b));
-         el = nir_udiv_imm(b, instance_id, attrib.divisor);
-         ctx->requires_instance_id = true;
+         el = nir_udiv_imm(b, nir_load_instance_id(b), attrib.divisor);
+         BITSET_SET(b->shader->info.system_values_read,
+                    SYSTEM_VALUE_INSTANCE_ID);
       } else
          el = nir_imm_int(b, 0);
 
       el = nir_iadd(b, el, nir_load_base_instance(b));
-      ctx->requires_base_instance = true;
 
       BITSET_SET(b->shader->info.system_values_read,
                  SYSTEM_VALUE_BASE_INSTANCE);
    } else {
       el = nir_load_vertex_id(b);
-      ctx->requires_vertex_id = true;
+      BITSET_SET(b->shader->info.system_values_read, SYSTEM_VALUE_VERTEX_ID);
    }
 
    /* Load the pointer of the buffer from the argument buffer */
@@ -283,14 +277,6 @@ kk_nir_lower_vbo(nir_shader *nir, struct kk_attribute *attribs,
       .attribs = attribs,
       .requires_robustness2 = robustness2,
    };
-   bool progress =
-      nir_shader_intrinsics_pass(nir, pass, nir_metadata_control_flow, &ctx);
-
-   if (ctx.requires_instance_id)
-      BITSET_SET(nir->info.system_values_read, SYSTEM_VALUE_INSTANCE_ID);
-   if (ctx.requires_base_instance)
-      BITSET_SET(nir->info.system_values_read, SYSTEM_VALUE_BASE_INSTANCE);
-   if (ctx.requires_vertex_id)
-      BITSET_SET(nir->info.system_values_read, SYSTEM_VALUE_VERTEX_ID);
-   return progress;
+   return nir_shader_intrinsics_pass(nir, pass, nir_metadata_control_flow,
+                                     &ctx);
 }

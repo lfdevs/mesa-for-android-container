@@ -1871,24 +1871,24 @@ fn test_render_enable() -> io::Result<()> {
         let mut p = NvPush::new();
 
         let in_gpu_addr = bo.addr + in_offset;
-        p.push_method(cl90b5::SetRenderEnableA {
+        p.push_mthd(cl90b5::SetRenderEnableA {
             upper: (in_gpu_addr >> 32) as u32,
         });
-        p.push_method(cl90b5::SetRenderEnableB {
+        p.push_mthd(cl90b5::SetRenderEnableB {
             lower: in_gpu_addr as u32,
         });
-        p.push_method(cl90b5::SetRenderEnableC { mode });
+        p.push_mthd(cl90b5::SetRenderEnableC { mode });
 
         let out_gpu_addr = bo.addr + out_offset;
-        p.push_method(cl90b5::OffsetOutUpper {
+        p.push_mthd(cl90b5::OffsetOutUpper {
             upper: (out_gpu_addr >> 32) as u32,
         });
-        p.push_method(cl90b5::OffsetOutLower {
+        p.push_mthd(cl90b5::OffsetOutLower {
             value: out_gpu_addr as u32,
         });
-        p.push_method(cl90b5::LineLengthIn { value: 1 });
-        p.push_method(cl90b5::SetRemapConstA { v: WRITE_VAL });
-        p.push_method(cl90b5::SetRemapComponents {
+        p.push_mthd(cl90b5::LineLengthIn { value: 1 });
+        p.push_mthd(cl90b5::SetRemapConstA { v: WRITE_VAL });
+        p.push_mthd(cl90b5::SetRemapComponents {
             component_size: cl90b5::SetRemapComponentsComponentSize::Four,
             dst_x: cl90b5::SetRemapComponentsDstX::ConstA,
             dst_y: cl90b5::SetRemapComponentsDstY::NoWrite,
@@ -1897,7 +1897,7 @@ fn test_render_enable() -> io::Result<()> {
             num_src_components: cl90b5::SetRemapComponentsNumSrcComponents::One,
             num_dst_components: cl90b5::SetRemapComponentsNumDstComponents::One,
         });
-        p.push_method(cl90b5::LaunchDma {
+        p.push_mthd(cl90b5::LaunchDma {
             data_transfer_type: cl90b5::LaunchDmaDataTransferType::NonPipelined,
             flush_enable: true,
             semaphore_type: cl90b5::LaunchDmaSemaphoreType::None,
@@ -1908,7 +1908,7 @@ fn test_render_enable() -> io::Result<()> {
             remap_enable: true,
         });
 
-        p.push_method(cl90b5::SetRenderEnableC {
+        p.push_mthd(cl90b5::SetRenderEnableC {
             mode: cl90b5::SetRenderEnableCMode::True,
         });
 

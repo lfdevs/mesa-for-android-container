@@ -125,6 +125,16 @@ loader_get_kernel_driver_name(int fd)
 }
 
 bool
+amd_predicate(int fd, const char *driver)
+{
+   char *kernel_driver = loader_get_kernel_driver_name(fd);
+   bool ret = kernel_driver && (strcmp(kernel_driver, "amdgpu") == 0);
+
+   free(kernel_driver);
+   return ret;
+}
+
+bool
 iris_predicate(int fd, const char *driver)
 {
    char *kernel_driver = loader_get_kernel_driver_name(fd);

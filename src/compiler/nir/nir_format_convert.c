@@ -446,7 +446,7 @@ nir_format_unpack_r9g9b9e5(nir_builder *b, nir_def *packed)
    exp = nir_iadd_imm(b, exp, 127 - RGB9E5_EXP_BIAS - RGB9E5_MANTISSA_BITS);
    nir_def *scale = nir_ishl_imm(b, exp, 23);
 
-   return nir_fmul(b, rgb, scale);
+   return nir_fmul(b, nir_u2f32(b, rgb), scale);
 }
 
 nir_def *

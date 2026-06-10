@@ -45,6 +45,7 @@ debian-x86_64:
       -D tools=drm-shim
       -D valgrind=disabled
       -D perfetto=true
+      -D vulkan-layers=screenshot
     S3_ARTIFACT_NAME: mesa-x86_64-default-${BUILDTYPE}
     RUN_MESON_TESTS: "false"  # debian-build-x86_64 already runs these
   artifacts:
@@ -136,6 +137,7 @@ debian-x86_64-msan:
       -D precomp-compiler=enabled
       -D install-precomp-compiler=true
       -D tools=panfrost
+      -D panfrost-rust=true
 
 debian-x86_64-ubsan:
   extends:
@@ -192,6 +194,7 @@ debian-build-x86_64:
     EXTRA_OPTION: >
       -D spirv-to-dxil=true
       -D tools=drm-shim,etnaviv,freedreno,glsl,intel,intel-ui,nir,nouveau,lima,panfrost,asahi
+      -D panfrost-rust=true
       -D perfetto=true
     S3_ARTIFACT_NAME: debian-build-x86_64
 
@@ -223,6 +226,7 @@ debian-release:
       -D spirv-to-dxil=true
       -D tools=all
       -D mesa-clc=enabled
+      -D panfrost-rust=true
       -D precomp-compiler=enabled
       -D intel-rt=enabled
       -D imagination-srv=true
@@ -471,6 +475,8 @@ debian-arm64:
       -D freedreno-kmds=msm,virtio
       -D teflon=true
       -D perfetto=true
+      -D vulkan-layers=screenshot
+      -D panfrost-rust=true
     GALLIUM_ST:
       -D gallium-rusticl=true
       -D legacy-wayland=bind-wayland-display
@@ -492,6 +498,7 @@ debian-arm64-asan:
       -D valgrind=disabled
       -D tools=dlclose-skip
       -D gallium-rusticl=false
+      -D panfrost-rust=true
     ARTIFACTS_DEBUG_SYMBOLS: 1
     RUN_MESON_TESTS: "false"  # just too slow
     S3_ARTIFACT_NAME: mesa-arm64-asan-${BUILDTYPE}
@@ -526,6 +533,7 @@ debian-arm64-build-test:
       -D glvnd=disabled
     EXTRA_OPTION: >
       -D tools=panfrost,imagination
+      -D panfrost-rust=true
       -D perfetto=true
 
 debian-arm64-release:
@@ -596,6 +604,7 @@ debian-clang:
       -D spirv-to-dxil=true
       -D imagination-srv=true
       -D tools=drm-shim,etnaviv,freedreno,glsl,intel,intel-ui,nir,nouveau,lima,panfrost,asahi,imagination
+      -D panfrost-rust=true
       -D vulkan-layers=device-select,overlay
       -D build-radv-tests=true
       -D build-aco-tests=true
@@ -683,6 +692,7 @@ debian-vulkan:
       -D build-aco-tests=true
       -D intel-rt=disabled
       -D imagination-srv=true
+      -D panfrost-rust=true
 
 debian-x86_32:
   extends:
@@ -716,6 +726,7 @@ debian-x86_32:
       -D platforms=
       -D mesa-clc=enabled
       -D install-mesa-clc=true
+      -D panfrost-rust=true
 
 # In case of issues with this job, contact @frankbinns
 .debian-riscv64:

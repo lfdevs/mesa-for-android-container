@@ -1,104 +1,104 @@
-cmp.z.f0.0(8)   nullUD          g20<8,8,1>F     0xbf800000F  /* -1F */ { align1 1Q };
-cmp.nz.f0.0(8)  g59<1>DF        g2.1<0,1,0>DF   g59<4,4,1>DF    { align1 1Q };
-cmp.nz.f0.0(8)  g49<1>F         g47<8,8,1>F     g14.1<0,1,0>F   { align1 1Q };
-cmp.nz.f0.0(8)  nullUD          g7<8,8,1>D      0D              { align1 1Q };
-cmp.z.f0.0(8)   g5<1>D          g4<8,8,1>D      g2.5<0,1,0>D    { align1 1Q };
-cmp.z.f0.0(16)  g7<1>D          g5<8,8,1>D      g2.5<0,1,0>D    { align1 1H };
-cmp.l.f0.0(16)  g28<1>F         g26<8,8,1>F     g24<8,8,1>F     { align1 1H };
-cmp.ge.f0.0(16) g30<1>F         g26<8,8,1>F     g24<8,8,1>F     { align1 1H };
-cmp.nz.f0.0(8)  g43<1>D         g42<8,8,1>D     g2.1<0,1,0>D    { align1 1Q };
-cmp.z.f0.0(8)   g86<1>DF        (abs)g6.2<0,1,0>DF g68<4,4,1>DF { align1 1Q };
-cmp.le.f0.0(8)  g108<1>D        g106<8,8,1>D    0D              { align1 1Q };
-cmp.nz.f0.0(8)  null<2>UD       g6.2<0,1,0>DF   g66<4,4,1>DF    { align1 1Q };
-cmp.l.f0.0(8)   g5<1>DF         g36<4,4,1>DF    g53<4,4,1>DF    { align1 1Q };
-cmp.ge.f0.0(8)  g18<1>DF        g36<4,4,1>DF    g53<4,4,1>DF    { align1 1Q };
-cmp.z.f0.0(8)   g34<1>DF        (abs)g106<4,4,1>DF g52<4,4,1>DF { align1 2Q };
-cmp.le.f0.0(16) g35<1>D         g21<8,8,1>D     0D              { align1 1H };
-cmp.nz.f0.0(8)  null<2>UD       g106<4,4,1>DF   g50<4,4,1>DF    { align1 2Q };
-cmp.nz.f0.0(8)  g113<1>DF       g3.1<0,1,0>DF   g59<4,4,1>DF    { align1 2Q };
-cmp.l.f0.0(8)   nullUD          g12<8,8,1>UD    0x00000004UD    { align1 1Q };
-cmp.l.f0.0(8)   g53<1>F         g52<8,8,1>F     g51<8,8,1>F     { align1 1Q };
-cmp.ge.f0.0(8)  g55<1>F         g52<8,8,1>F     g51<8,8,1>F     { align1 1Q };
-cmp.ge.f0.0(8)  g15<1>D         (abs)g12<8,8,1>D 1D             { align1 1Q };
-cmp.l.f0.0(8)   nullUD          g6<0,1,0>D      2D              { align1 1Q };
-(+f0.1) cmp.z.f0.1(8) nullUD    g8<8,8,1>D      0D              { align1 1Q };
-cmp.nz.f0.0(16) g11<1>D         g9<8,8,1>D      3D              { align1 1H };
-(+f0.1) cmp.z.f0.1(16) nullUD   g11<8,8,1>D     0D              { align1 1H };
-cmp.z.f0.0(8)   nullUD          g22<8,8,1>D     1D              { align1 1Q };
-cmp.z.f0.0(16)  nullUD          g47<8,8,1>D     1D              { align1 1H };
-cmp.ge.f0.0(8)  g30<1>UD        g29<8,8,1>UD    g5.7<0,1,0>UD   { align1 1Q };
-cmp.l.f0.0(8)   g31<1>UD        g29<8,8,1>UD    g5.3<0,1,0>UD   { align1 1Q };
-cmp.ge.f0.0(16) g50<1>UD        g48<8,8,1>UD    g7.7<0,1,0>UD   { align1 1H };
-cmp.l.f0.0(16)  g52<1>UD        g48<8,8,1>UD    g7.3<0,1,0>UD   { align1 1H };
-cmp.nz.f0.0(16) g9<1>F          g2.5<0,1,0>F    g1.1<0,1,0>F    { align1 1H };
-cmp.ge.f0.0(8)  nullUD          g38<8,8,1>D     32D             { align1 1Q };
-cmp.ge.f0.0(8)  null<2>UD       g21<4,4,1>DF    g13<4,4,1>DF    { align1 1Q };
-cmp.ge.f0.0(16) g3<1>D          g1.1<0,1,0>D    g1<0,1,0>D      { align1 1H };
-cmp.l.f0.0(16)  g5<1>D          g1.1<0,1,0>D    g1<0,1,0>D      { align1 1H };
-cmp.z.f0.0(8)   g25<1>F         g4.3<0,1,0>F    g4.1<0,1,0>F    { align1 1Q };
-cmp.l.f0.0(8)   g33<1>D         g5<0,1,0>D      1D              { align1 1Q };
-cmp.l.f0.0(8)   g43<1>DF        g39<4,4,1>DF    g37<4,4,1>DF    { align1 2Q };
-cmp.ge.f0.0(8)  g46<1>DF        g39<4,4,1>DF    g37<4,4,1>DF    { align1 2Q };
-cmp.l.f0.0(16)  nullUD          g6<0,1,0>D      1D              { align1 1H };
-cmp.z.f0.0(16)  g62<1>F         g12<8,8,1>F     g6.3<0,1,0>F    { align1 1H };
-cmp.nz.f0.0(8)  nullUD          g2<0,1,0>F      0x0F  /* 0F */  { align1 1Q };
-cmp.nz.f0.0(16) nullUD          g2<0,1,0>F      0x0F  /* 0F */  { align1 1H };
-cmp.ge.f0.0(16) nullUD          g46<8,8,1>UD    0x00000040UD    { align1 1H };
-cmp.z.f0.0(16)  nullUD          g14<8,8,1>F     g6.1<0,1,0>F    { align1 1H };
-cmp.nz.f0.0(16) nullUD          g6<0,1,0>D      0D              { align1 1H };
-cmp.l.f0.0(16)  nullUD          g39<8,8,1>UD    0x00000004UD    { align1 1H };
-cmp.le.f0.0(8)  nullUD          g2<8,8,1>F      0x3f000000F  /* 0.5F */ { align1 1Q };
-cmp.le.f0.0(16) nullUD          g2<8,8,1>F      0x3f000000F  /* 0.5F */ { align1 1H };
-cmp.le.f0.0(8)  g20<1>F         g5.3<0,1,0>F    0x0F  /* 0F */  { align1 1Q };
-cmp.ge.f0.0(8)  nullUD          (abs)g26<8,8,1>F 0x5d5e0b6bF  /* 1e+18F */ { align1 1Q };
-cmp.g.f0.0(8)   g80<1>F         (abs)g44<8,8,1>F 0x3f800000F  /* 1F */ { align1 1Q };
-cmp.ge.f0.0(16) nullUD          g67<8,8,1>D     32D             { align1 1H };
-cmp.g.f0.0(8)   nullUD          g124<8,8,1>F    0x0F  /* 0F */  { align1 1Q };
-cmp.z.f0.0(8)   g4<1>F          g13<8,4,2>F     g2.5<0,1,0>F    { align1 2Q };
-cmp.g.f0.0(16)  nullUD          g120<8,8,1>F    0x0F  /* 0F */  { align1 1H };
-cmp.g.f0.0(16)  g2<1>F          (abs)g17<8,8,1>F 0x3f800000F  /* 1F */ { align1 1H };
-cmp.l.f0.0(8)   null<2>UD       (abs)g5<0,1,0>DF g20<4,4,1>DF   { align1 1Q };
-cmp.nz.f0.0(8)  g29<1>D         g22.1<8,4,2>D   g3.2<0,1,0>D    { align1 2Q };
-cmp.l.f0.0(8)   null<2>UD       g11<4,4,1>DF    g8<4,4,1>DF     { align1 2Q };
-cmp.nz.f0.0(8)  g73<1>F         g6.1<0,1,0>F    g14<8,4,2>F     { align1 2Q };
-cmp.g.f0.0(8)   g7<1>D          g2<0,1,0>D      0D              { align1 1Q };
-cmp.l.f0.0(8)   nullUD          g4.4<0,1,0>F    0x0F  /* 0F */  { align1 1Q };
-cmp.l.f0.0(16)  nullUD          g6.4<0,1,0>F    0x0F  /* 0F */  { align1 1H };
-cmp.le.f0.0(8)  nullUD          g2<8,8,1>D      50D             { align1 1Q };
-cmp.le.f0.0(16) nullUD          g2<8,8,1>D      50D             { align1 1H };
-cmp.ge.f0.0(16) nullUD          g35<8,8,1>F     0x3f000000F  /* 0.5F */ { align1 1H };
-cmp.le.f0.0(8)  g4<1>UD         g2<0,1,0>UD     0x00000001UD    { align1 1Q };
-cmp.g.f0.0(8)   g5<1>UD         g2<0,1,0>UD     0x00000001UD    { align1 1Q };
-cmp.le.f0.0(16) g5<1>UD         g2<0,1,0>UD     0x00000001UD    { align1 1H };
-cmp.g.f0.0(16)  g7<1>UD         g2<0,1,0>UD     0x00000001UD    { align1 1H };
-cmp.le.f0.0(16) g121<1>F        g27<8,8,1>F     0x461c3f9aF  /* 9999.9F */ { align1 1H };
-cmp.z.f0.0(8)   g5<1>D          g14<8,4,2>D     g3.1<0,1,0>D    { align1 2Q };
-cmp.g.f0.0(8)   nullUD          g5.2<0,1,0>D    31D             { align1 1Q };
-cmp.g.f0.0(8)   nullUD          g4.2<0,1,0>UD   0x0000001fUD    { align1 1Q };
-(+f0.1) cmp.nz.f0.1(8) nullUD    g0<8,8,1>UW    g0<8,8,1>UW     { align1 1Q };
-(+f0.1) cmp.nz.f0.1(16) nullUD    g0<8,8,1>UW   g0<8,8,1>UW     { align1 1H };
-cmp.z.f0.0(16)  nullUD          g1<8,8,1>D      1024D           { align1 2H };
-cmp.l.f0.0(16)  nullUD          g118<8,8,1>D    32D             { align1 2H };
-cmp.nz.f0.0(8)  nullUD          g3<8,8,1>UD     0x00000000UD    { align1 1Q };
-cmp.nz.f0.0(16) nullUD          g3<8,8,1>UD     0x00000000UD    { align1 1H };
-cmp.g.f0.0(16)  nullUD          g2.1<0,1,0>D    0D              { align1 1H };
-cmp.nz.f0.0(8)  null<2>UD       g6<4,4,1>Q      g3<4,4,1>Q      { align1 1Q };
-cmp.z.f0.0(8)   g8<1>Q          g5<4,4,1>Q      g3<4,4,1>Q      { align1 1Q };
-cmp.nz.f0.0(8)  g2<1>Q          g5<4,4,1>Q      g3<4,4,1>Q      { align1 1Q };
-cmp.nz.f0.0(8)  null<2>UD       g9<4,4,1>Q      g4<4,4,1>Q      { align1 2Q };
-cmp.z.f0.0(8)   g17<1>Q         g11<4,4,1>Q     g4<4,4,1>Q      { align1 2Q };
-cmp.nz.f0.0(8)  g20<1>Q         g11<4,4,1>Q     g4<4,4,1>Q      { align1 2Q };
-cmp.z.f0.0(8)   nullUD          g5<8,8,1>UD     0x00000000UD    { align1 1Q };
-cmp.z.f0.0(16)  nullUD          g15<8,8,1>UD    0x00000000UD    { align1 1H };
-cmp.g.f0.0(16)  g1<1>D          g8<8,8,1>D      0D              { align1 1H };
-cmp.ge.f0.0(8)  nullUD          g10<8,8,1>UD    g8<8,8,1>UD     { align1 1Q };
-cmp.ge.f0.0(8)  null<2>UD       g37<4,4,1>DF    g26<4,4,1>DF    { align1 2Q };
-cmp.l.f0.0(8)   null<2>UD       g20<4,4,1>Q     g25<4,4,1>Q     { align1 1Q };
-cmp.l.f0.0(8)   null<2>UD       g2<4,4,1>Q      g12<4,4,1>Q     { align1 2Q };
-cmp.ge.f0.0(8)  null<2>UD       g20<4,4,1>Q     g27<4,4,1>Q     { align1 1Q };
-cmp.ge.f0.0(8)  null<2>UD       g2<4,4,1>Q      g8<4,4,1>Q      { align1 2Q };
-cmp.le.f0.0(8)  nullUD          g18<8,8,1>UD    0x000000ffUD    { align1 1Q };
-cmp.le.f0.0(16) nullUD          g32<8,8,1>UD    0x000000ffUD    { align1 1H };
-cmp.z.f0.0(8)   null<2>UD       g12<4,4,1>Q     g7<4,4,1>Q      { align1 1Q };
-cmp.z.f0.0(8)   null<2>UD       g26<4,4,1>Q     g12<4,4,1>Q     { align1 2Q };
-cmp.g.f0.0(16)  nullUD          g4.2<0,1,0>UD   0x0000001fUD    { align1 1H };
+        cmp (8)        (eq)f0.0   null          r20<8;8,1>:f      0xbf800000:f
+        cmp (8)        (ne)f0.0   r59:df        r2.1<0>:df        r59<4;4,1>:df
+        cmp (8)        (ne)f0.0   r49:f         r47<8;8,1>:f      r14.1<0>:f
+        cmp (8)        (ne)f0.0   null          r7<8;8,1>:d       0:d
+        cmp (8)        (eq)f0.0   r5:d          r4<8;8,1>:d       r2.5<0>:d
+        cmp (16)       (eq)f0.0   r7:d          r5<8;8,1>:d       r2.5<0>:d
+        cmp (16)       (lt)f0.0   r28:f         r26<8;8,1>:f      r24<8;8,1>:f
+        cmp (16)       (ge)f0.0   r30:f         r26<8;8,1>:f      r24<8;8,1>:f
+        cmp (8)        (ne)f0.0   r43:d         r42<8;8,1>:d      r2.1<0>:d
+        cmp (8)        (eq)f0.0   r86:df        (abs)r6.2<0>:df      r68<4;4,1>:df
+        cmp (8)        (le)f0.0   r108:d        r106<8;8,1>:d     0:d
+        cmp (8)        (ne)f0.0   null<2>       r6.2<0>:df        r66<4;4,1>:df
+        cmp (8)        (lt)f0.0   r5:df         r36<4;4,1>:df     r53<4;4,1>:df
+        cmp (8)        (ge)f0.0   r18:df        r36<4;4,1>:df     r53<4;4,1>:df
+        cmp (8|M8)     (eq)f0.0   r34:df        (abs)r106<4;4,1>:df  r52<4;4,1>:df
+        cmp (16)       (le)f0.0   r35:d         r21<8;8,1>:d      0:d
+        cmp (8|M8)     (ne)f0.0   null<2>       r106<4;4,1>:df    r50<4;4,1>:df
+        cmp (8|M8)     (ne)f0.0   r113:df       r3.1<0>:df        r59<4;4,1>:df
+        cmp (8)        (lt)f0.0   null          r12<8;8,1>        0x00000004
+        cmp (8)        (lt)f0.0   r53:f         r52<8;8,1>:f      r51<8;8,1>:f
+        cmp (8)        (ge)f0.0   r55:f         r52<8;8,1>:f      r51<8;8,1>:f
+        cmp (8)        (ge)f0.0   r15:d         (abs)r12<8;8,1>:d    1:d
+        cmp (8)        (lt)f0.0   null          r6<0>:d           2:d
+(f0.1)  cmp (8)        (eq)f0.1   null          r8<8;8,1>:d       0:d
+        cmp (16)       (ne)f0.0   r11:d         r9<8;8,1>:d       3:d
+(f0.1)  cmp (16)       (eq)f0.1   null          r11<8;8,1>:d      0:d
+        cmp (8)        (eq)f0.0   null          r22<8;8,1>:d      1:d
+        cmp (16)       (eq)f0.0   null          r47<8;8,1>:d      1:d
+        cmp (8)        (ge)f0.0   r30           r29<8;8,1>        r5.7<0>
+        cmp (8)        (lt)f0.0   r31           r29<8;8,1>        r5.3<0>
+        cmp (16)       (ge)f0.0   r50           r48<8;8,1>        r7.7<0>
+        cmp (16)       (lt)f0.0   r52           r48<8;8,1>        r7.3<0>
+        cmp (16)       (ne)f0.0   r9:f          r2.5<0>:f         r1.1<0>:f
+        cmp (8)        (ge)f0.0   null          r38<8;8,1>:d      32:d
+        cmp (8)        (ge)f0.0   null<2>       r21<4;4,1>:df     r13<4;4,1>:df
+        cmp (16)       (ge)f0.0   r3:d          r1.1<0>:d         r1<0>:d
+        cmp (16)       (lt)f0.0   r5:d          r1.1<0>:d         r1<0>:d
+        cmp (8)        (eq)f0.0   r25:f         r4.3<0>:f         r4.1<0>:f
+        cmp (8)        (lt)f0.0   r33:d         r5<0>:d           1:d
+        cmp (8|M8)     (lt)f0.0   r43:df        r39<4;4,1>:df     r37<4;4,1>:df
+        cmp (8|M8)     (ge)f0.0   r46:df        r39<4;4,1>:df     r37<4;4,1>:df
+        cmp (16)       (lt)f0.0   null          r6<0>:d           1:d
+        cmp (16)       (eq)f0.0   r62:f         r12<8;8,1>:f      r6.3<0>:f
+        cmp (8)        (ne)f0.0   null          r2<0>:f           0x00000000:f
+        cmp (16)       (ne)f0.0   null          r2<0>:f           0x00000000:f
+        cmp (16)       (ge)f0.0   null          r46<8;8,1>        0x00000040
+        cmp (16)       (eq)f0.0   null          r14<8;8,1>:f      r6.1<0>:f
+        cmp (16)       (ne)f0.0   null          r6<0>:d           0:d
+        cmp (16)       (lt)f0.0   null          r39<8;8,1>        0x00000004
+        cmp (8)        (le)f0.0   null          r2<8;8,1>:f       0x3f000000:f
+        cmp (16)       (le)f0.0   null          r2<8;8,1>:f       0x3f000000:f
+        cmp (8)        (le)f0.0   r20:f         r5.3<0>:f         0x00000000:f
+        cmp (8)        (ge)f0.0   null          (abs)r26<8;8,1>:f    0x5d5e0b6b:f
+        cmp (8)        (gt)f0.0   r80:f         (abs)r44<8;8,1>:f    0x3f800000:f
+        cmp (16)       (ge)f0.0   null          r67<8;8,1>:d      32:d
+        cmp (8)        (gt)f0.0   null          r124<8;8,1>:f     0x00000000:f
+        cmp (8|M8)     (eq)f0.0   r4:f          r13<8;4,2>:f      r2.5<0>:f
+        cmp (16)       (gt)f0.0   null          r120<8;8,1>:f     0x00000000:f
+        cmp (16)       (gt)f0.0   r2:f          (abs)r17<8;8,1>:f    0x3f800000:f
+        cmp (8)        (lt)f0.0   null<2>       (abs)r5<0>:df        r20<4;4,1>:df
+        cmp (8|M8)     (ne)f0.0   r29:d         r22.1<8;4,2>:d    r3.2<0>:d
+        cmp (8|M8)     (lt)f0.0   null<2>       r11<4;4,1>:df     r8<4;4,1>:df
+        cmp (8|M8)     (ne)f0.0   r73:f         r6.1<0>:f         r14<8;4,2>:f
+        cmp (8)        (gt)f0.0   r7:d          r2<0>:d           0:d
+        cmp (8)        (lt)f0.0   null          r4.4<0>:f         0x00000000:f
+        cmp (16)       (lt)f0.0   null          r6.4<0>:f         0x00000000:f
+        cmp (8)        (le)f0.0   null          r2<8;8,1>:d       50:d
+        cmp (16)       (le)f0.0   null          r2<8;8,1>:d       50:d
+        cmp (16)       (ge)f0.0   null          r35<8;8,1>:f      0x3f000000:f
+        cmp (8)        (le)f0.0   r4            r2<0>             0x00000001
+        cmp (8)        (gt)f0.0   r5            r2<0>             0x00000001
+        cmp (16)       (le)f0.0   r5            r2<0>             0x00000001
+        cmp (16)       (gt)f0.0   r7            r2<0>             0x00000001
+        cmp (16)       (le)f0.0   r121:f        r27<8;8,1>:f      0x461c3f9a:f
+        cmp (8|M8)     (eq)f0.0   r5:d          r14<8;4,2>:d      r3.1<0>:d
+        cmp (8)        (gt)f0.0   null          r5.2<0>:d         31:d
+        cmp (8)        (gt)f0.0   null          r4.2<0>           0x0000001f
+(f0.1)  cmp (8)        (ne)f0.1   null          r0<8;8,1>:uw      r0<8;8,1>:uw
+(f0.1)  cmp (16)       (ne)f0.1   null          r0<8;8,1>:uw      r0<8;8,1>:uw
+        cmp (16|M16)   (eq)f0.0   null          r1<8;8,1>:d       1024:d
+        cmp (16|M16)   (lt)f0.0   null          r118<8;8,1>:d     32:d
+        cmp (8)        (ne)f0.0   null          r3<8;8,1>         0x00000000
+        cmp (16)       (ne)f0.0   null          r3<8;8,1>         0x00000000
+        cmp (16)       (gt)f0.0   null          r2.1<0>:d         0:d
+        cmp (8)        (ne)f0.0   null<2>       r6<4;4,1>:q       r3<4;4,1>:q
+        cmp (8)        (eq)f0.0   r8:q          r5<4;4,1>:q       r3<4;4,1>:q
+        cmp (8)        (ne)f0.0   r2:q          r5<4;4,1>:q       r3<4;4,1>:q
+        cmp (8|M8)     (ne)f0.0   null<2>       r9<4;4,1>:q       r4<4;4,1>:q
+        cmp (8|M8)     (eq)f0.0   r17:q         r11<4;4,1>:q      r4<4;4,1>:q
+        cmp (8|M8)     (ne)f0.0   r20:q         r11<4;4,1>:q      r4<4;4,1>:q
+        cmp (8)        (eq)f0.0   null          r5<8;8,1>         0x00000000
+        cmp (16)       (eq)f0.0   null          r15<8;8,1>        0x00000000
+        cmp (16)       (gt)f0.0   r1:d          r8<8;8,1>:d       0:d
+        cmp (8)        (ge)f0.0   null          r10<8;8,1>        r8<8;8,1>
+        cmp (8|M8)     (ge)f0.0   null<2>       r37<4;4,1>:df     r26<4;4,1>:df
+        cmp (8)        (lt)f0.0   null<2>       r20<4;4,1>:q      r25<4;4,1>:q
+        cmp (8|M8)     (lt)f0.0   null<2>       r2<4;4,1>:q       r12<4;4,1>:q
+        cmp (8)        (ge)f0.0   null<2>       r20<4;4,1>:q      r27<4;4,1>:q
+        cmp (8|M8)     (ge)f0.0   null<2>       r2<4;4,1>:q       r8<4;4,1>:q
+        cmp (8)        (le)f0.0   null          r18<8;8,1>        0x000000ff
+        cmp (16)       (le)f0.0   null          r32<8;8,1>        0x000000ff
+        cmp (8)        (eq)f0.0   null<2>       r12<4;4,1>:q      r7<4;4,1>:q
+        cmp (8|M8)     (eq)f0.0   null<2>       r26<4;4,1>:q      r12<4;4,1>:q
+        cmp (16)       (gt)f0.0   null          r4.2<0>           0x0000001f

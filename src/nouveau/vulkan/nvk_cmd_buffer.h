@@ -34,12 +34,18 @@ struct vk_shader;
 struct nvk_root_descriptor_table {
    union {
       struct {
-         uint32_t base_vertex;
-         uint32_t base_instance;
+         struct {
+            uint32_t base_vertex;
+            uint32_t base_instance;
+         } vs;
+         struct {
+            uint32_t group_count[3];
+         } mesh;
          uint32_t draw_index;
          uint32_t view_index;
          struct nak_sample_location sample_locations[NVK_MAX_SAMPLES];
          struct nak_sample_mask sample_masks[NVK_MAX_SAMPLES];
+         uint32_t __padding;
       } draw;
       struct {
          uint32_t base_group[3];
@@ -58,7 +64,7 @@ struct nvk_root_descriptor_table {
    uint64_t printf_buffer_addr;
 
    /* enfore total structure alignment to 0x100 as needed pre pascal */
-   uint8_t __padding[0xb0];
+   uint8_t __padding[0xa0];
 
    /*
     * Arrays with dynamic (shader-provided) indices need to fit in a single

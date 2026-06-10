@@ -22,8 +22,6 @@
  * IN THE SOFTWARE.
  */
 
-#include <sys/sysinfo.h>
-
 #include "common/v3d_device_info.h"
 #include "common/v3d_limits.h"
 #include "util/os_misc.h"
@@ -218,10 +216,10 @@ v3d_init_compute_caps(struct v3d_screen *screen)
         /* GL_MAX_COMPUTE_SHARED_MEMORY_SIZE */
         caps->max_local_size = V3D_MAX_COMPUTE_SHARED_MEMORY_SIZE;
 
-        struct sysinfo si;
-        sysinfo(&si);
-        caps->max_global_size = si.totalram;
-        caps->max_mem_alloc_size = MIN2(V3D_MAX_BUFFER_RANGE, si.totalram);
+        caps->max_global_size =
+                os_get_gpu_heap_size(screen->heap_memory_percent, NULL);
+        caps->max_mem_alloc_size =
+                MIN2(V3D_MAX_BUFFER_RANGE, caps->max_global_size);
 
         caps->max_compute_units = 1;
         caps->subgroup_sizes = 16;
@@ -338,9 +336,8 @@ v3d_init_screen_caps(struct v3d_screen *screen)
 
         caps->vendor_id = 0x14E4;
 
-        uint64_t system_memory;
-        caps->video_memory = os_get_total_physical_memory(&system_memory) ?
-                system_memory >> 20 : 0;
+        caps->video_memory =
+                os_get_gpu_heap_size(screen->heap_memory_percent, NULL) >> 20;
 
         caps->uma = true;
 
@@ -372,6 +369,7 @@ v3d_init_screen_caps(struct v3d_screen *screen)
 
         caps->clip_planes = 0;
         caps->depth_clip_disable = screen->devinfo.ver >= 71;
+        caps->clip_halfz = screen->devinfo.ver >= 71;
 
         caps->min_line_width =
         caps->min_line_width_aa =
@@ -595,13 +593,17 @@ v3d_screen_get_compiler_options(struct pipe_screen *pscreen,
                 .lower_interpolate_at = true,
                 .lower_int64_options =
                         nir_lower_bcsel64 |
+                        nir_lower_bit_count64 |
                         nir_lower_conv64 |
+                        nir_lower_divmod64 |
+                        nir_lower_iabs64 |
                         nir_lower_iadd64 |
                         nir_lower_icmp64 |
                         nir_lower_imul_2x32_64 |
                         nir_lower_imul64 |
                         nir_lower_ineg64 |
                         nir_lower_logic64 |
+                        nir_lower_minmax64 |
                         nir_lower_shift64 |
                         nir_lower_ufind_msb64,
                 .lower_fquantize2f16 = true,
@@ -813,6 +815,11 @@ v3d_screen_create(int fd, const struct pipe_screen_config *config,
         screen->nonmsaa_texture_size_limit =
                 driCheckOption(config->options, nonmsaa_name, DRI_BOOL) &&
                 driQueryOptionb(config->options, nonmsaa_name);
+
+        screen->heap_memory_percent =
+                driQueryOptionf(config->options, "heap_memory_percent");
+        if (screen->heap_memory_percent == OS_GPU_HEAP_SIZE_HEURISTIC)
+                screen->heap_memory_percent = 1.0f;
 
         slab_create_parent(&screen->transfer_pool, sizeof(struct v3d_transfer), 16);
 

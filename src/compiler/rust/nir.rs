@@ -2,8 +2,10 @@
 // SPDX-License-Identifier: MIT
 
 use crate::bindings::*;
+use crate::memstream::MemStream;
 
 use std::ffi::{c_void, CStr};
+use std::io;
 use std::marker::PhantomData;
 use std::mem::offset_of;
 use std::str;
@@ -221,6 +223,14 @@ impl nir_alu_instr {
 
     pub fn get_src(&self, idx: usize) -> &nir_alu_src {
         &self.srcs_as_slice()[idx]
+    }
+
+    pub fn output_type(&self) -> ALUType {
+        ALUType(self.info().output_type)
+    }
+
+    pub fn input_type(&self, src_idx: usize) -> ALUType {
+        ALUType(self.info().input_types[src_idx])
     }
 }
 
@@ -524,6 +534,16 @@ impl nir_block {
     pub fn parent(&self) -> &nir_cf_node {
         self.cf_node.parent().unwrap()
     }
+
+    pub fn cf_tree_next(&self) -> Option<&nir_block> {
+        let self_ptr = self as *const _ as *mut _;
+        unsafe { nir_block_cf_tree_next(self_ptr).as_ref() }
+    }
+
+    pub fn cf_tree_prev(&self) -> Option<&nir_block> {
+        let self_ptr = self as *const _ as *mut _;
+        unsafe { nir_block_cf_tree_prev(self_ptr).as_ref() }
+    }
 }
 
 impl nir_if {
@@ -607,9 +627,57 @@ impl nir_cf_node {
     }
 }
 
+struct BlockFwdIter<'a> {
+    block: Option<&'a nir_block>,
+}
+
+impl<'a> Iterator for BlockFwdIter<'a> {
+    type Item = &'a nir_block;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(block) = self.block {
+            self.block = block.cf_tree_next();
+            Some(block)
+        } else {
+            None
+        }
+    }
+}
+
+struct BlockRevIter<'a> {
+    block: Option<&'a nir_block>,
+}
+
+impl<'a> Iterator for BlockRevIter<'a> {
+    type Item = &'a nir_block;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(block) = self.block {
+            self.block = block.cf_tree_prev();
+            Some(block)
+        } else {
+            None
+        }
+    }
+}
+
 impl nir_function_impl {
     pub fn iter_body(&self) -> ExecListIter<'_, nir_cf_node> {
         ExecListIter::new(&self.body, offset_of!(nir_cf_node, node))
+    }
+
+    pub fn iter_blocks(&self) -> impl Iterator<Item = &nir_block> {
+        let self_ptr = self as *const _ as *mut _;
+        BlockFwdIter {
+            block: unsafe { nir_start_block(self_ptr).as_ref() },
+        }
+    }
+
+    pub fn iter_blocks_rev(&self) -> impl Iterator<Item = &nir_block> {
+        let self_ptr = self as *const _ as *mut _;
+        BlockRevIter {
+            block: unsafe { nir_impl_last_block(self_ptr).as_ref() },
+        }
     }
 
     pub fn end_block(&self) -> &nir_block {
@@ -634,5 +702,15 @@ impl nir_shader {
 
     pub fn iter_variables(&self) -> ExecListIter<'_, nir_variable> {
         ExecListIter::new(&self.variables, offset_of!(nir_variable, node))
+    }
+
+    pub fn get_entrypoint(&self) -> Option<&nir_function_impl> {
+        unsafe { nir_shader_get_entrypoint(self).as_ref() }
+    }
+
+    pub fn to_string(&mut self) -> io::Result<String> {
+        let mut stream = MemStream::new()?;
+        unsafe { nir_print_shader(self, stream.c_file()) };
+        stream.take_utf8_string_lossy()
     }
 }

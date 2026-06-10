@@ -27,11 +27,11 @@ build_ex_desc(const brw_builder &bld, unsigned reg_size, bool unspill)
       ubld.SHR(ex_desc, ex_desc, brw_imm_ud(4));
    } else {
       if (unspill) {
-         ubld.OR(ex_desc, ex_desc, brw_imm_ud(BRW_SFID_UGM));
+         ubld.OR(ex_desc, ex_desc, brw_imm_ud(GEN_SFID_UGM));
       } else {
          ubld.OR(ex_desc,
                  ex_desc,
-                 brw_imm_ud(brw_message_ex_desc(devinfo, reg_size) | BRW_SFID_UGM));
+                 brw_imm_ud(brw_message_ex_desc(devinfo, reg_size) | GEN_SFID_UGM));
       }
    }
 
@@ -75,7 +75,7 @@ brw_lower_lsc_fill(const intel_device_info *devinfo, brw_shader &s,
    unspill_inst->src[SEND_SRC_PAYLOAD1] = offset;
    unspill_inst->src[SEND_SRC_PAYLOAD2] = brw_reg();
 
-   unspill_inst->sfid = BRW_SFID_UGM;
+   unspill_inst->sfid = GEN_SFID_UGM;
    unspill_inst->header_size = 0;
    unspill_inst->mlen = brw_lsc_msg_addr_len(devinfo, LSC_ADDR_SIZE_A32,
                                          unspill_inst->exec_size);
@@ -122,7 +122,7 @@ brw_lower_lsc_spill(const intel_device_info *devinfo, brw_inst *inst)
    spill_inst->src[SEND_SRC_PAYLOAD1] = offset;
    spill_inst->src[SEND_SRC_PAYLOAD2] = src;
 
-   spill_inst->sfid = BRW_SFID_UGM;
+   spill_inst->sfid = GEN_SFID_UGM;
    uint32_t desc = lsc_msg_desc(devinfo, LSC_OP_STORE,
                                 LSC_ADDR_SURFTYPE_SS,
                                 LSC_ADDR_SIZE_A32,

@@ -1,6 +1,6 @@
 execute {
   src = [[
-    nop;
+    nop (8)
     @eot
   ]],
 }

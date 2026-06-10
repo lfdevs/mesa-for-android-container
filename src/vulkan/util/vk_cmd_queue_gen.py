@@ -131,13 +131,6 @@ struct ${to_struct_name(c.name)} {
 
 struct vk_cmd_queue_entry;
 
-/* this ordering must match vk_cmd_queue_entry */
-struct vk_cmd_queue_entry_base {
-   struct list_head cmd_link;
-   enum vk_cmd_type type;
-};
-
-/* this ordering must match vk_cmd_queue_entry_base */
 struct vk_cmd_queue_entry {
    struct list_head cmd_link;
    enum vk_cmd_type type;
@@ -251,7 +244,7 @@ size_t vk_cmd_queue_type_sizes[] = {
 % if len(c.params) > 1:
    sizeof(struct ${to_struct_name(c.name)}) +
 % endif
-   sizeof(struct vk_cmd_queue_entry_base),
+   offsetof(struct vk_cmd_queue_entry, u),
 % if c.guard is not None:
 #endif // ${c.guard}
 % endif
@@ -579,9 +572,30 @@ class ParamCategory(Enum):
     NULL = auto()
     PNEXT = auto()
     STRUCT = auto()
+    INLINE_STRUCT = auto()
     DESCRIPTOR_UPDATE_TEMPLATE_DATA = auto()
     DESCRIPTOR_UPDATE_TEMPLATE = auto()
     PIPELINE_LAYOUT = auto()
+
+class StructInfo:
+    def __init__(self):
+        self.has_explicit_copy = False
+        self.needs_member_copy = False
+        self.additional_code = []
+
+def get_struct_info(command, param, types, src=""):
+    info = StructInfo()
+    info.has_explicit_copy = param.type in EXPLICIT_PARAM_COPIES
+    info.needs_member_copy = info.has_explicit_copy
+    for member in types[param.type].members:
+        match categorize_param(command, types, param.type, member):
+            case ParamCategory.PNEXT | ParamCategory.STRUCT | ParamCategory.STRING | ParamCategory.INLINE_STRUCT:
+                info.needs_member_copy = True
+            case ParamCategory.PIPELINE_LAYOUT:
+                info.additional_code.append("enqueue_pipeline_layout(queue, %s->%s);" % (src, member.name))
+            case ParamCategory.DESCRIPTOR_UPDATE_TEMPLATE:
+                info.additional_code.append("enqueue_descriptor_template(queue, %s->%s);" % (src, member.name))
+    return info
 
 def categorize_param(command, types, parent_type, param):
     if param.name == 'pNext':
@@ -606,6 +620,11 @@ def categorize_param(command, types, parent_type, param):
         return ParamCategory.DESCRIPTOR_UPDATE_TEMPLATE
 
     if "*" not in param.decl:
+        if param.type in types:
+            struct_info = get_struct_info(command, param, types)
+            # If no member needs special handling, the assign/memcpy is enough
+            if struct_info.needs_member_copy:
+                return ParamCategory.INLINE_STRUCT
         return ParamCategory.ASSIGNABLE
     
     return ParamCategory.STRUCT
@@ -648,7 +667,8 @@ def get_param_copy(builder, command, types, src_parent_access, dst_parent_access
     src = src_parent_access + param.name
     dst = dst_parent_access + (to_field_name(param.name) if dst_snake_case else param.name)
 
-    match categorize_param(command, types, None, param):
+    param_category = categorize_param(command, types, None, param)
+    match param_category:
         case ParamCategory.ASSIGNABLE:
             builder.add("%s = %s;" % (dst, src))
         case ParamCategory.FLAT_ARRAY:
@@ -665,7 +685,11 @@ def get_param_copy(builder, command, types, src_parent_access, dst_parent_access
         case ParamCategory.PIPELINE_LAYOUT:
                 builder.add("%s = %s;" % (dst, src))
                 builder.add("enqueue_pipeline_layout(queue, %s);" % (src))
-        case ParamCategory.STRUCT:
+        case ParamCategory.STRUCT | ParamCategory.INLINE_STRUCT:
+            if param_category == ParamCategory.INLINE_STRUCT:
+                nullable = False
+                src = "&%s" % (src)
+                dst = "&%s" % (dst)
 
             if nullable:
                 builder.add("if (%s) {" % (src))
@@ -680,9 +704,11 @@ def get_param_copy(builder, command, types, src_parent_access, dst_parent_access
             if param.len and param.len != "struct-ptr" and not is_ndarray:
                 size = "%s * ceil(%s%s)" % (size, src_parent_access, param.len)
 
-            builder.add("%s = linear_alloc_child(queue->ctx, %s);" % (dst, size))
-            builder.add("if (%s == NULL) return NULL;" % (dst))
-            builder.add("memcpy((void *)%s, %s, %s);" % (dst, src, size))
+            if param_category != ParamCategory.INLINE_STRUCT:
+                builder.add("%s = linear_alloc_child(queue->ctx, %s);" % (dst, size))
+                builder.add("if (%s == NULL) return NULL;" % (dst))
+                builder.add("memcpy((void *)%s, %s, %s);" % (dst, src, size))
+
             if param.type == 'VkDescriptorSetLayout':
                 array_index = builder.get_variable_name("i")
                 builder.add("for (unsigned %s = 0; %s < %s%s; %s++) {" % (array_index, array_index, src_parent_access, param.len, array_index))
@@ -692,18 +718,11 @@ def get_param_copy(builder, command, types, src_parent_access, dst_parent_access
                 builder.add("}")
 
             if param.type in types:
-                has_explicit_copy = param.type in EXPLICIT_PARAM_COPIES
-                needs_member_copy = has_explicit_copy
-                for member in types[param.type].members:
-                    match categorize_param(command, types, param.type, member):
-                        case ParamCategory.PNEXT | ParamCategory.STRUCT | ParamCategory.STRING:
-                            needs_member_copy = True
-                        case ParamCategory.PIPELINE_LAYOUT:
-                            builder.add("enqueue_pipeline_layout(queue, %s->%s);" % (src, member.name))
-                        case ParamCategory.DESCRIPTOR_UPDATE_TEMPLATE:
-                            builder.add("enqueue_descriptor_template(queue, %s->%s);" % (src, member.name))
+                struct_info = get_struct_info(command, param, types, src)
+                for code in struct_info.additional_code:
+                    builder.add(code);
 
-                if needs_member_copy:
+                if struct_info.needs_member_copy:
                     tmp_dst_name = builder.get_variable_name("tmp_dst")
                     tmp_src_name = builder.get_variable_name("tmp_src")
 
@@ -729,12 +748,12 @@ def get_param_copy(builder, command, types, src_parent_access, dst_parent_access
                         elif category == ParamCategory.DESCRIPTOR_UPDATE_TEMPLATE_DATA:
                             get_param_copy(builder, command, types, "%s->" % (tmp_src_name), "%s->" % (tmp_dst_name), member, dst_initialized=True)
 
-                    if has_explicit_copy:
+                    if struct_info.has_explicit_copy:
                         builder.add("enqueue_%s(queue, %s, %s);" % (param.type, tmp_dst_name, tmp_src_name))
                     else:
                         for member in types[param.type].members:
                             category = categorize_param(command, types, param.type, member)
-                            if category == ParamCategory.STRUCT or category == ParamCategory.STRING:
+                            if category == ParamCategory.STRUCT or category == ParamCategory.STRING or category == ParamCategory.INLINE_STRUCT:
                                 get_param_copy(builder, command, types, "%s->" % (tmp_src_name), "%s->" % (tmp_dst_name), member, dst_initialized=True)
 
                     if struct_array_copy:

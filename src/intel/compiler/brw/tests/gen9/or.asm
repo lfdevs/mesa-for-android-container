@@ -1,23 +1,23 @@
-or(8)           g53<1>UD        g49<8,8,1>UD    g21<8,8,1>UD    { align1 1Q };
-or.nz.f0.0(8)   nullUD          g21<8,8,1>UD    g2<8,8,1>UD     { align1 1Q };
-or.nz.f0.0(8)   g5<1>UD         g62<8,8,1>UD    g67<8,8,1>UD    { align1 1Q };
-or(8)           g5<1>UD         g106.1<8,4,2>UD 0x7ff00000UD    { align1 2Q };
-or.nz.f0.0(16)  nullUD          g35<8,8,1>UD    g32<8,8,1>UD    { align1 1H };
-or(16)          g36<1>UD        g34<8,8,1>UD    g20<8,8,1>UD    { align1 1H };
-or.nz.f0.0(16)  g53<1>UD        g51<8,8,1>UD    g49<8,8,1>UD    { align1 1H };
-or(1)           g8<1>UD         g8<0,1,0>UD     g4<0,1,0>UD     { align1 WE_all 1N };
-or(1)           a0<1>UD         g8<0,1,0>UD     0x060ba000UD    { align1 WE_all 1N };
-(+f0.0) or(8)   g3<1>UD         g3<8,8,1>UD     0x3f800000UD    { align1 1Q };
-(+f0.0) or(16)  g3<1>UD         g3<8,8,1>UD     0x3f800000UD    { align1 1H };
-or(1)           a0<1>UD         a0<0,1,0>UD     0x02280300UD    { align1 WE_all 1N };
-or(1)           a0<1>UD         g4<0,1,0>UD     0x04036000UD    { align1 WE_all 3N };
-(+f0.0) or(8)   g17.1<2>UD      g17.1<8,4,2>UD  0x3ff00000UD    { align1 2Q };
-or(8)           g4<1>UW         g4<8,8,1>UW     g6<8,8,1>UW     { align1 1Q };
-or(16)          g16<1>UW        g14<16,16,1>UW  g15<16,16,1>UW  { align1 1H };
-or(8)           g22<1>UD        ~g2.2<0,1,0>D   g21<8,8,1>UD    { align1 1Q };
-or(16)          g37<1>UD        ~g2.2<0,1,0>D   g35<8,8,1>UD    { align1 1H };
-or(8)           g9<1>D          ~g8<8,8,1>D     ~g7<8,8,1>D     { align1 1Q };
-or(16)          g13<1>D         ~g11<8,8,1>D    ~g9<8,8,1>D     { align1 1H };
-or(1)           g14<1>UD        g14<0,1,0>UD    g19<0,1,0>UD    { align1 WE_all 3N };
-or.z.f0.0(8)    nullUD          g5<8,8,1>UD     g6<8,8,1>UD     { align1 1Q };
-or.z.f0.0(16)   nullUD          g17<8,8,1>UD    g19<8,8,1>UD    { align1 1H };
+        or (8)                    r53           r49<8;8,1>        r21<8;8,1>
+        or (8)         (ne)f0.0   null          r21<8;8,1>        r2<8;8,1>
+        or (8)         (ne)f0.0   r5            r62<8;8,1>        r67<8;8,1>
+        or (8|M8)                 r5            r106.1<8;4,2>     0x7ff00000
+        or (16)        (ne)f0.0   null          r35<8;8,1>        r32<8;8,1>
+        or (16)                   r36           r34<8;8,1>        r20<8;8,1>
+        or (16)        (ne)f0.0   r53           r51<8;8,1>        r49<8;8,1>
+(W)     or (1)                    r8            r8<0>             r4<0>
+(W)     or (1)                    a0            r8<0>             0x060ba000
+(f0.0)  or (8)                    r3            r3<8;8,1>         0x3f800000
+(f0.0)  or (16)                   r3            r3<8;8,1>         0x3f800000
+(W)     or (1)                    a0            a0<0>             0x02280300
+(W)     or (1|M8)                 a0            r4<0>             0x04036000
+(f0.0)  or (8|M8)                 r17.1<2>      r17.1<8;4,2>      0x3ff00000
+        or (8)                    r4:uw         r4<8;8,1>:uw      r6<8;8,1>:uw
+        or (16)                   r16:uw        r14<16;16,1>:uw   r15<16;16,1>:uw
+        or (8)                    r22           -r2.2<0>:d        r21<8;8,1>
+        or (16)                   r37           -r2.2<0>:d        r35<8;8,1>
+        or (8)                    r9:d          -r8<8;8,1>:d      -r7<8;8,1>:d
+        or (16)                   r13:d         -r11<8;8,1>:d     -r9<8;8,1>:d
+(W)     or (1|M8)                 r14           r14<0>            r19<0>
+        or (8)         (eq)f0.0   null          r5<8;8,1>         r6<8;8,1>
+        or (16)        (eq)f0.0   null          r17<8;8,1>        r19<8;8,1>

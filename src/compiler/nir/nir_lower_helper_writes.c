@@ -55,6 +55,10 @@ lower(nir_builder *b, nir_intrinsic_instr *intr, void *data)
       return false;
    }
 
+   if (nir_intrinsic_has_access(intr) &&
+       (nir_intrinsic_access(intr) & ACCESS_INCLUDE_HELPERS))
+      return false;
+
    b->cursor = nir_before_instr(&intr->instr);
    bool has_dest = nir_intrinsic_infos[intr->intrinsic].has_dest;
    nir_def *undef = NULL;

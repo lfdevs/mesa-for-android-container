@@ -276,6 +276,9 @@ anv_shader_init_uuid(struct anv_physical_device *device)
    const bool cbv_push_buffer = device->instance->drirc.perf.promote_cbv_push_buffer;
    _mesa_blake3_update(&ctx, &cbv_push_buffer, sizeof(cbv_push_buffer));
 
+   const bool fs_sample_d_wa = device->instance->drirc.debug.fs_sampler_undef_derivatives_workaround;
+   _mesa_blake3_update(&ctx, &fs_sample_d_wa, sizeof(fs_sample_d_wa));
+
    uint8_t blake3[BLAKE3_KEY_LEN];
    _mesa_blake3_final(&ctx, blake3);
    memcpy(device->shader_binary_uuid, blake3, sizeof(device->shader_binary_uuid));
@@ -1256,7 +1259,8 @@ anv_shader_lower_nir(struct anv_device *device,
    nir_shader *nir = shader_data->info->nir;
 
    /* Workaround for apps that need fp64 support */
-   if (device->fp64_nir) {
+   if (!devinfo->has_64bit_float && (nir->info.bit_sizes_float & 64) &&
+       pdevice->instance->drirc.debug.fp64_emu) {
       nir_shader *fp64_nir = anv_ensure_fp64_shader(device);
 
       NIR_PASS(_, nir, nir_lower_doubles, fp64_nir,
@@ -1509,6 +1513,10 @@ anv_shader_lower_nir(struct anv_device *device,
       NIR_PASS(_, nir, intel_nir_cleanup_resource_intel);
       NIR_PASS(_, nir, nir_opt_dce);
    }
+
+   if (nir->info.stage == MESA_SHADER_FRAGMENT &&
+       pdevice->instance->drirc.debug.fs_sampler_undef_derivatives_workaround)
+      NIR_PASS(_, nir, brw_nir_apply_sampler_undef_derivatives_workaround);
 
    if (mesa_shader_stage_uses_workgroup(nir->info.stage)) {
       NIR_PASS(_, nir, nir_lower_vars_to_explicit_types,
@@ -2067,13 +2075,14 @@ anv_shader_compile(struct vk_device *vk_device,
          struct jay_shader_bin *bin =
             jay_compile(devinfo, mem_ctx, nir,
                         (union brw_any_prog_data *)compile_params->prog_data,
-                        (union brw_any_prog_key *)compile_params->key);
+                        (union brw_any_prog_key *)compile_params->key,
+                        shader_data->archiver);
          shader_data->code = bin->kernel;
+         shader_data->stats[0] = bin->stats;
 
          if (mesa_shader_stage_uses_workgroup(nir->info.stage)) {
             struct brw_cs_prog_data *prog_data =
                (struct brw_cs_prog_data *)compile_params->prog_data;
-            shader_data->stats[0] = bin->stats;
             prog_data->local_size[0] = nir->info.workgroup_size[0];
             prog_data->local_size[1] = nir->info.workgroup_size[1];
             prog_data->local_size[2] = nir->info.workgroup_size[2];

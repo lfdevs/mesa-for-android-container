@@ -91,7 +91,7 @@ libiris = static_library(
   dependencies : [dep_libdrm, dep_valgrind, idep_genxml, idep_nir_headers,
                   idep_libintel_common, idep_intel_driver_ds, idep_intel_dev,
                   idep_intel_blorp_elk, idep_intel_decoder_elk,
-                  idep_intel_blorp, idep_intel_decoder_brw,
+                  idep_intel_blorp, idep_intel_decoder_gen,
                   idep_intel_compiler_elk, idep_intel_compiler_brw,
                   idep_intel_compiler_jay, idep_mesautil],
   link_with : [

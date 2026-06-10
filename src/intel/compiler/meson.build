@@ -51,6 +51,7 @@ endif
 
 endif
 
+subdir('gen')
 subdir('brw')
 subdir('jay')
 

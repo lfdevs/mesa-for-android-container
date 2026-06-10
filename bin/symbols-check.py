@@ -42,6 +42,7 @@ PLATFORM_SYMBOLS = [
     '__cxa_uncaught_exception',
     '__cxa_uncaught_exceptions',
     '__cxa_unexpected_handler',
+    '__cxa_thread_atexit_impl',
     '__deregister_frame_info',
     '__deregister_frame_info_bases',
     '__dynamic_cast',
@@ -61,9 +62,16 @@ PLATFORM_SYMBOLS = [
     '_fini',
     '_ftext',
     '_init',
+    'copy_file_range',
+    'gettid',
+    'pidfd_getpid',
+    'pidfd_spawnp',
+    'posix_spawn_file_actions_addchdir',
+    'posix_spawn_file_actions_addchdir_np',
     'pthread_mutexattr_destroy',
     'pthread_mutexattr_init',
     'pthread_mutexattr_settype',
+    'statx',
 ]
 
 

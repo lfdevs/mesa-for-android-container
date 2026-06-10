@@ -6,7 +6,6 @@
 #include "util/bitset.h"
 #include "util/macros.h"
 #include "util/sparse_bitset.h"
-#include "util/u_math.h"
 #include "util/u_worklist.h"
 #include "jay_ir.h"
 #include "jay_opcodes.h"
@@ -154,6 +153,20 @@ jay_calculate_register_demands(jay_function *func)
       }
    }
 
+   /* Model the implicit demand from preloading inputs. In a function like:
+    *
+    *    %0 = preload r10
+    *    %1 = add %0, %0
+    *    return %1
+    *
+    * ...the "true" register demand is 1, but we need to clamp the demand to 11
+    * to make sure r10 actually exists.
+    */
+   jay_foreach_preload(func, I) {
+      uint32_t max = jay_preload_reg(I) + jay_num_values(I->dst);
+      max_demand[I->dst.file] = MAX2(max_demand[I->dst.file], max);
+   }
+
    jay_foreach_block(func, block) {
       unsigned demands[JAY_NUM_SSA_FILES] = {};
 
@@ -167,15 +180,9 @@ jay_calculate_register_demands(jay_function *func)
       }
 
       jay_foreach_inst_in_block(block, I) {
-         /* We must have enough register file space for the register payload */
-         if (I->op == JAY_OPCODE_PRELOAD) {
-            uint32_t max = jay_preload_reg(I) + jay_num_values(I->dst);
-            max_demand[I->dst.file] = MAX2(max_demand[I->dst.file], max);
-         }
-
          /* Make destinations live */
          jay_foreach_dst(I, d) {
-            demands[d.file] += util_next_power_of_two(jay_num_values(d));
+            demands[d.file] += jay_num_values(d);
          }
 
          /* Update maximum demands */
@@ -191,11 +198,6 @@ jay_calculate_register_demands(jay_function *func)
                assert(demands[d.file] > 0);
                --demands[d.file];
             }
-         }
-
-         jay_foreach_dst(I, d) {
-            unsigned n = jay_num_values(d);
-            demands[d.file] -= util_next_power_of_two(n) - n;
          }
 
          /* Late-kill sources. Duplicated sources are only marked killed once,

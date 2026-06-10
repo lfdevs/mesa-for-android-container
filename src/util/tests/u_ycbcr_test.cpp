@@ -304,6 +304,47 @@ TEST(u_ycbcr_test, narrow_range)
    }
 }
 
+TEST(u_ycbcr_test, narrow_range_rgb)
+{
+   float range[3][2];
+   unsigned bpc[3] = {8, 8, 8};
+   util_get_narrow_range_rgb_coeffs(range, bpc);
+
+   const struct {
+      uint8_t input[3];
+      float expected[3];
+   } test_data[] = { {
+         { 16, 16, 16 },
+         { 0.0f, 0.0f, 0.0f },
+      },  {
+         { 235, 235, 235 },
+         { 1.0f, 1.0f, 1.0f },
+      },  {
+         { 16, 89, 89 },
+         { 0.0f, 1/3.0f, 1/3.0f },
+      },  {
+         { 89, 16, 16 },
+         { 1/3.0f, 0.0f, 0.0f },
+      }
+   };
+
+   for (size_t i = 0; i < ARRAY_SIZE(test_data); ++i) {
+      float input[3] = {
+         test_data[i].input[0] / 255.0f,
+         test_data[i].input[1] / 255.0f,
+         test_data[i].input[2] / 255.0f,
+      };
+
+      float result[3];
+      for (int c = 0; c < 3; ++c)
+         result[c] = input[c] * range[c][0] + range[c][1];
+
+      EXPECT_NEAR(test_data[i].expected[0], result[0], 1e-7);
+      EXPECT_NEAR(test_data[i].expected[1], result[1], 1e-7);
+      EXPECT_NEAR(test_data[i].expected[2], result[2], 1e-7);
+   }
+}
+
 static void
 test_to_rgb_narrow_range_coeffs(const float coeffs[3])
 {
@@ -517,4 +558,61 @@ TEST(u_ycbcr_test, to_ycbcr_range_and_back)
    test_to_ycbcr_range_and_back_coeffs(util_ycbcr_bt601_coeffs);
    test_to_ycbcr_range_and_back_coeffs(util_ycbcr_bt709_coeffs);
    test_to_ycbcr_range_and_back_coeffs(util_ycbcr_bt2020_coeffs);
+}
+
+static void
+test_narrow_ycbcr_to_narrow_rgb_coeffs(const float coeffs[3])
+{
+   const unsigned bpc[3] = {8, 8, 8};
+
+   float in_range[3][2], out_range[3][2];
+   util_get_narrow_range_coeffs(in_range, bpc);
+   util_get_narrow_range_rgb_coeffs(out_range, bpc);
+
+   float mat[3][4];
+   util_get_ycbcr_to_rgb_matrix(mat, coeffs);
+   util_ycbcr_adjust_from_range(mat, in_range);
+   util_ycbcr_adjust_to_range(mat, out_range);
+
+   const struct {
+      uint8_t input[3];
+      uint8_t expected[3];
+   } test_data[] = {
+      { {  16, 128, 128 }, {  16,  16,  16 } },
+      { { 235, 128, 128 }, { 235, 235, 235 } },
+      { { 126, 128, 128 }, { 126, 126, 126 } },
+   };
+
+   for (size_t i = 0; i < ARRAY_SIZE(test_data); ++i) {
+      float input[3] = {
+         test_data[i].input[0] / 255.0f,
+         test_data[i].input[1] / 255.0f,
+         test_data[i].input[2] / 255.0f,
+      };
+
+      float result[3];
+      for (int c = 0; c < 3; ++c) {
+         result[c] = input[0] * mat[c][0] +
+                     input[1] * mat[c][1] +
+                     input[2] * mat[c][2] +
+                                mat[c][3];
+      }
+
+      float expected[3] = {
+         test_data[i].expected[0] / 255.0f,
+         test_data[i].expected[1] / 255.0f,
+         test_data[i].expected[2] / 255.0f,
+      };
+
+      EXPECT_NEAR(expected[0], result[0], 1e-6);
+      EXPECT_NEAR(expected[1], result[1], 1e-6);
+      EXPECT_NEAR(expected[2], result[2], 1e-6);
+   }
+}
+
+TEST(u_ycbcr_test, narrow_ycbcr_to_narrow_rgb)
+{
+   test_narrow_ycbcr_to_narrow_rgb_coeffs(util_ycbcr_bt601_coeffs);
+   test_narrow_ycbcr_to_narrow_rgb_coeffs(util_ycbcr_bt709_coeffs);
+   test_narrow_ycbcr_to_narrow_rgb_coeffs(util_ycbcr_bt2020_coeffs);
 }

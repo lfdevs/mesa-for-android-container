@@ -25,8 +25,10 @@ predicate_block(jay_builder *b,
     */
    jay_foreach_inst_in_block(block, I) {
       if (jay_uses_flag(I) ||
-          (I->op == JAY_OPCODE_MIN || I->op == JAY_OPCODE_MAX) ||
+          I->op == JAY_OPCODE_MIN ||
+          I->op == JAY_OPCODE_MAX ||
           I->op == JAY_OPCODE_CSEL ||
+          I->op == JAY_OPCODE_DPAS ||
           (condition.file != UFLAG && jay_is_no_mask(I)) ||
           (--limit) < 0)
          return false;

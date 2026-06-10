@@ -3843,10 +3843,7 @@ wsi_wl_surface_create_swapchain(VkIcdSurfaceBase *icd_surface,
    chain->base.set_present_mode = wsi_wl_swapchain_set_present_mode;
    chain->base.set_timing_request = wsi_wl_swapchain_set_timing_request;
    chain->base.poll_timing_request = wsi_wl_swapchain_poll_timing_request;
-   if (pCreateInfo->flags & VK_SWAPCHAIN_CREATE_PRESENT_TIMING_BIT_EXT) {
-      chain->base.present_timing.time_domain =
-            clock_id_to_vk_time_domain(wsi_wl_surface->display->presentation_clock_id);
-   }
+   chain->base.present_timing.time_domain = clock_id_to_vk_time_domain(wsi_wl_surface->display->presentation_clock_id);
    chain->base.wait_for_present = wsi_wl_swapchain_wait_for_present;
    chain->base.wait_for_present2 = wsi_wl_swapchain_wait_for_present2;
    chain->base.present_mode = present_mode;

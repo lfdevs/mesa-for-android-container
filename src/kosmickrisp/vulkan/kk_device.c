@@ -23,6 +23,83 @@
 
 #include <time.h>
 
+struct kk_mtl_compiler {
+   mtl_compiler *handle;
+   uint32_t refcount;
+};
+
+static struct hash_table compilers_ht;
+static simple_mtx_t compilers_ht_lock;
+static once_flag compilers_ht_once = ONCE_FLAG_INIT;
+
+static void
+kk_init_compiler_table()
+{
+   _mesa_pointer_hash_table_init(&compilers_ht, NULL);
+   simple_mtx_init(&compilers_ht_lock, mtx_plain);
+}
+
+static mtl_compiler *
+kk_acquire_compiler(struct kk_device *dev)
+{
+   /* KK_WORKAROUND_11 */
+   if (dev->disabled_workarounds & BITFIELD64_BIT(11)) {
+      return mtl_new_compiler(dev->mtl_handle);
+   }
+
+   call_once(&compilers_ht_once, kk_init_compiler_table);
+   simple_mtx_lock(&compilers_ht_lock);
+
+   struct hash_entry *ent =
+      _mesa_hash_table_search(&compilers_ht, dev->mtl_handle);
+
+   struct kk_mtl_compiler *compiler;
+   if (ent == NULL) {
+      compiler = ralloc(NULL, struct kk_mtl_compiler);
+      if (compiler == NULL) {
+         simple_mtx_unlock(&compilers_ht_lock);
+         return NULL;
+      }
+
+      compiler->handle = mtl_new_compiler(dev->mtl_handle);
+      compiler->refcount = 1;
+      _mesa_hash_table_insert(&compilers_ht, dev->mtl_handle, compiler);
+   } else {
+      compiler = ent->data;
+      compiler->refcount++;
+   }
+
+   simple_mtx_unlock(&compilers_ht_lock);
+   return compiler->handle;
+}
+
+static void
+kk_release_compiler(struct kk_device *dev)
+{
+   /* KK_WORKAROUND_11 */
+   if (dev->disabled_workarounds & BITFIELD64_BIT(11)) {
+      mtl_release(dev->mtl_compiler_handle);
+      return;
+   }
+
+   simple_mtx_lock(&compilers_ht_lock);
+
+   struct hash_entry *ent =
+      _mesa_hash_table_search(&compilers_ht, dev->mtl_handle);
+   if (ent != NULL) {
+      struct kk_mtl_compiler *compiler = ent->data;
+      --compiler->refcount;
+
+      if (compiler->refcount == 0) {
+         _mesa_hash_table_remove(&compilers_ht, ent);
+         mtl_release(compiler->handle);
+         ralloc_free(compiler);
+      }
+   }
+
+   simple_mtx_unlock(&compilers_ht_lock);
+}
+
 DERIVE_HASH_TABLE(mtl_sampler_packed);
 
 static VkResult
@@ -215,11 +292,18 @@ kk_CreateDevice(VkPhysicalDevice physicalDevice,
    dev->vk.command_dispatch_table = &dev->vk.dispatch_table;
    dev->vk.get_timestamp = kk_get_timestamp;
 
+   kk_parse_device_environment_options(dev);
+
+   /* Create a new Metal pipeline compiler for the device */
+   dev->mtl_compiler_handle = kk_acquire_compiler(dev);
+   if (dev->mtl_compiler_handle == NULL)
+      goto fail_init;
+
    /* We need to initialize the device residency set before any bo is created. */
    simple_mtx_init(&dev->residency_set.mutex, mtx_plain);
    dev->residency_set.handle = mtl_new_residency_set(dev->mtl_handle);
    if (dev->residency_set.handle == NULL)
-      goto fail_init;
+      goto fail_compiler;
 
    if (pCreateInfo->queueCreateInfoCount > 0) {
       result =
@@ -246,8 +330,6 @@ kk_CreateDevice(VkPhysicalDevice physicalDevice,
    if (result != VK_SUCCESS)
       goto fail_sampler_heap;
 
-   kk_parse_device_environment_options(dev);
-
    *pDevice = kk_device_to_handle(dev);
 
    return VK_SUCCESS;
@@ -266,6 +348,8 @@ fail_mem_cache:
 fail_vab_memory:
    mtl_release(dev->residency_set.handle);
    simple_mtx_destroy(&dev->residency_set.mutex);
+fail_compiler:
+   kk_release_compiler(dev);
 fail_init:
    vk_device_finish(&dev->vk);
 fail_alloc:
@@ -297,14 +381,16 @@ kk_DestroyDevice(VkDevice _device, const VkAllocationCallbacks *pAllocator)
    if (dev->heap)
       kk_destroy_bo(dev, dev->heap);
 
-   /* Release the residency set last once all BOs are released. */
-   mtl_release(dev->residency_set.handle);
-   simple_mtx_destroy(&dev->residency_set.mutex);
-
    if (dev->has_queue) {
       kk_queue_finish(dev, &dev->queue);
       dev->has_queue = false;
    }
+
+   /* Release the residency set last once all BOs are released. */
+   mtl_release(dev->residency_set.handle);
+   simple_mtx_destroy(&dev->residency_set.mutex);
+
+   kk_release_compiler(dev);
 
    vk_device_finish(&dev->vk);
 
@@ -345,6 +431,23 @@ kk_device_remove_heap_from_residency_set(struct kk_device *dev, mtl_heap *heap)
 {
    simple_mtx_lock(&dev->residency_set.mutex);
    mtl_residency_set_remove_allocation(dev->residency_set.handle, heap);
+   simple_mtx_unlock(&dev->residency_set.mutex);
+}
+
+void
+kk_device_add_buffer_to_residency_set(struct kk_device *dev, mtl_buffer *buffer)
+{
+   simple_mtx_lock(&dev->residency_set.mutex);
+   mtl_residency_set_add_allocation(dev->residency_set.handle, buffer);
+   simple_mtx_unlock(&dev->residency_set.mutex);
+}
+
+void
+kk_device_remove_buffer_from_residency_set(struct kk_device *dev,
+                                           mtl_buffer *buffer)
+{
+   simple_mtx_lock(&dev->residency_set.mutex);
+   mtl_residency_set_remove_allocation(dev->residency_set.handle, buffer);
    simple_mtx_unlock(&dev->residency_set.mutex);
 }
 

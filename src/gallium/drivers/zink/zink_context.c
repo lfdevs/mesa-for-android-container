@@ -1173,7 +1173,8 @@ init_sampler_view(struct zink_context *ctx, struct zink_sampler_view *sv)
 
    bool red_depth_sampler_view = false;
    if (sv->ivci.subresourceRange.aspectMask == VK_IMAGE_ASPECT_DEPTH_BIT ||
-       screen->driver_compiler_workarounds.needs_zs_shader_swizzle) {
+       ((sv->ivci.subresourceRange.aspectMask & (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT)) &&
+        screen->driver_compiler_workarounds.needs_zs_shader_swizzle)) {
       VkComponentSwizzle *swizzle = (VkComponentSwizzle*)&sv->ivci.components;
       for (unsigned i = 0; i < 4; i++) {
          if (swizzle[i] == VK_COMPONENT_SWIZZLE_ONE ||
@@ -3064,6 +3065,8 @@ begin_rendering(struct zink_context *ctx, bool check_attachment_shadow)
 {
    unsigned clear_buffers = 0;
    struct zink_screen *screen = zink_screen(ctx->base.screen);
+   if (screen->base.caps.programmable_sample_locations)
+      ctx->sample_locations_changed = true;
    if (ctx->has_swapchain)
       zink_render_fixup_swapchain(ctx);
    bool has_depth = false;
@@ -3684,6 +3687,41 @@ void
 zink_init_vk_sample_locations(struct zink_context *ctx, VkSampleLocationsInfoEXT *loc)
 {
    struct zink_screen *screen = zink_screen(ctx->base.screen);
+   static const VkSampleLocationEXT ms_disabled[] = {
+      {0.5, 0.5},
+      {0.5, 0.5},
+      {0.5, 0.5},
+      {0.5, 0.5},
+      {0.5, 0.5},
+      {0.5, 0.5},
+      {0.5, 0.5},
+      {0.5, 0.5},
+      {0.5, 0.5},
+      {0.5, 0.5},
+      {0.5, 0.5},
+      {0.5, 0.5},
+      {0.5, 0.5},
+      {0.5, 0.5},
+      {0.5, 0.5},
+      {0.5, 0.5},
+      {0.5, 0.5},
+      {0.5, 0.5},
+      {0.5, 0.5},
+      {0.5, 0.5},
+      {0.5, 0.5},
+      {0.5, 0.5},
+      {0.5, 0.5},
+      {0.5, 0.5},
+      {0.5, 0.5},
+      {0.5, 0.5},
+      {0.5, 0.5},
+      {0.5, 0.5},
+      {0.5, 0.5},
+      {0.5, 0.5},
+      {0.5, 0.5},
+      {0.5, 0.5},
+   };
+
    if (ctx->sample_locations_changed)
       zink_update_vk_sample_locations(ctx);
    unsigned idx = util_logbase2_ceil(MAX2(ctx->gfx_pipeline_state.rast_samples + 1, 1));
@@ -3692,7 +3730,7 @@ zink_init_vk_sample_locations(struct zink_context *ctx, VkSampleLocationsInfoEXT
    loc->sampleLocationGridSize = screen->maxSampleLocationGridSize[idx];
    loc->sampleLocationsPerPixel = ctx->gfx_pipeline_state.rast_samples + 1;
    loc->sampleLocationsCount = loc->sampleLocationGridSize.width * loc->sampleLocationGridSize.height * loc->sampleLocationsPerPixel;
-   loc->pSampleLocations = ctx->vk_sample_locations;
+   loc->pSampleLocations = ctx->sample_locations_enabled ? ctx->vk_sample_locations : ms_disabled;
 }
 
 static void

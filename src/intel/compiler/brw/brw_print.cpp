@@ -4,11 +4,89 @@
  */
 
 #include "brw_cfg.h"
-#include "brw_disasm.h"
 #include "brw_shader.h"
 #include "brw_private.h"
 #include "dev/intel_debug.h"
 #include "util/half_float.h"
+
+static const char *
+conditional_modifier_to_string(unsigned mod)
+{
+   switch (mod) {
+   case BRW_CONDITIONAL_NONE: return "";
+   case BRW_CONDITIONAL_Z:    return ".z";
+   case BRW_CONDITIONAL_NZ:   return ".nz";
+   case BRW_CONDITIONAL_G:    return ".g";
+   case BRW_CONDITIONAL_GE:   return ".ge";
+   case BRW_CONDITIONAL_L:    return ".l";
+   case BRW_CONDITIONAL_LE:   return ".le";
+   case BRW_CONDITIONAL_R:    return ".r";
+   case BRW_CONDITIONAL_O:    return ".o";
+   case BRW_CONDITIONAL_U:    return ".u";
+   default:                   return "";
+   }
+}
+
+static const char *
+brw_lsc_op_to_string(unsigned op)
+{
+   switch (op) {
+   case LSC_OP_LOAD:             return "load";
+   case LSC_OP_LOAD_CMASK:       return "load_cmask";
+   case LSC_OP_STORE:            return "store";
+   case LSC_OP_STORE_CMASK:      return "store_cmask";
+   case LSC_OP_FENCE:            return "fence";
+   case LSC_OP_ATOMIC_INC:       return "atomic_inc";
+   case LSC_OP_ATOMIC_DEC:       return "atomic_dec";
+   case LSC_OP_ATOMIC_LOAD:      return "atomic_load";
+   case LSC_OP_ATOMIC_STORE:     return "atomic_store";
+   case LSC_OP_ATOMIC_ADD:       return "atomic_add";
+   case LSC_OP_ATOMIC_SUB:       return "atomic_sub";
+   case LSC_OP_ATOMIC_MIN:       return "atomic_min";
+   case LSC_OP_ATOMIC_MAX:       return "atomic_max";
+   case LSC_OP_ATOMIC_UMIN:      return "atomic_umin";
+   case LSC_OP_ATOMIC_UMAX:      return "atomic_umax";
+   case LSC_OP_ATOMIC_CMPXCHG:   return "atomic_cmpxchg";
+   case LSC_OP_ATOMIC_FADD:      return "atomic_fadd";
+   case LSC_OP_ATOMIC_FSUB:      return "atomic_fsub";
+   case LSC_OP_ATOMIC_FMIN:      return "atomic_fmin";
+   case LSC_OP_ATOMIC_FMAX:      return "atomic_fmax";
+   case LSC_OP_ATOMIC_FCMPXCHG:  return "atomic_fcmpxchg";
+   case LSC_OP_ATOMIC_AND:       return "atomic_and";
+   case LSC_OP_ATOMIC_OR:        return "atomic_or";
+   case LSC_OP_ATOMIC_XOR:       return "atomic_xor";
+   case LSC_OP_LOAD_CMASK_MSRT:  return "load_cmask_msrt";
+   case LSC_OP_STORE_CMASK_MSRT: return "store_cmask_msrt";
+   default:                      return "<invalid lsc op>";
+   }
+}
+
+static const char *
+brw_lsc_addr_surftype_to_string(unsigned t)
+{
+   switch (t) {
+   case LSC_ADDR_SURFTYPE_FLAT: return "flat";
+   case LSC_ADDR_SURFTYPE_BSS:  return "bss";
+   case LSC_ADDR_SURFTYPE_SS:   return "ss";
+   case LSC_ADDR_SURFTYPE_BTI:  return "bti";
+   default:                     return "<invalid lsc surface>";
+   }
+}
+
+static const char *
+brw_lsc_data_size_to_string(unsigned s)
+{
+   switch (s) {
+   case LSC_DATA_SIZE_D8:      return "d8";
+   case LSC_DATA_SIZE_D16:     return "d16";
+   case LSC_DATA_SIZE_D32:     return "d32";
+   case LSC_DATA_SIZE_D64:     return "d64";
+   case LSC_DATA_SIZE_D8U32:   return "d8u32";
+   case LSC_DATA_SIZE_D16U32:  return "d16u32";
+   case LSC_DATA_SIZE_D16BF32: return "d16bf32";
+   default:                    return "<invalid lsc data size>";
+   }
+}
 
 void
 brw_print_instructions(const brw_shader &s, FILE *file)
@@ -326,7 +404,7 @@ brw_print_instruction(const brw_shader &s, const brw_inst *inst, FILE *file, con
    if (inst->saturate)
       fprintf(file, ".sat");
    if (inst->conditional_mod) {
-      fprintf(file, "%s", conditional_modifier[inst->conditional_mod]);
+      fprintf(file, "%s", conditional_modifier_to_string(inst->conditional_mod));
       if (!inst->predicate &&
           (inst->opcode != BRW_OPCODE_SEL &&
            inst->opcode != BRW_OPCODE_CSEL &&
@@ -668,7 +746,7 @@ brw_print_instruction(const brw_shader &s, const brw_inst *inst, FILE *file, con
 
    if (inst->sched.regdist || inst->sched.mode) {
       fprintf(file, " { ");
-      brw_print_swsb(file, s.devinfo, inst->sched);
+      gen_print_swsb(s.devinfo, file, inst->sched);
       fprintf(file, " }");
    }
 
@@ -676,27 +754,3 @@ brw_print_instruction(const brw_shader &s, const brw_inst *inst, FILE *file, con
 }
 
 
-void
-brw_print_swsb(FILE *f, const struct intel_device_info *devinfo, const tgl_swsb swsb)
-{
-   if (swsb.regdist) {
-      fprintf(f, "%s@%d",
-              (devinfo && devinfo->verx10 < 125 ? "" :
-               swsb.pipe == TGL_PIPE_FLOAT ? "F" :
-               swsb.pipe == TGL_PIPE_INT ? "I" :
-               swsb.pipe == TGL_PIPE_LONG ? "L" :
-               swsb.pipe == TGL_PIPE_ALL ? "A"  :
-               swsb.pipe == TGL_PIPE_MATH ? "M" :
-               swsb.pipe == TGL_PIPE_SCALAR ? "S" : "" ),
-              swsb.regdist);
-   }
-
-   if (swsb.mode) {
-      if (swsb.regdist)
-          fprintf(f, " ");
-
-      fprintf(f, "$%d%s", swsb.sbid,
-              (swsb.mode & TGL_SBID_SET ? "" :
-               swsb.mode & TGL_SBID_DST ? ".dst" : ".src"));
-   }
-}

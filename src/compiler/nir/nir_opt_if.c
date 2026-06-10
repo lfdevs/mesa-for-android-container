@@ -514,13 +514,7 @@ opt_split_alu_of_phi(nir_builder *b, nir_loop *loop, nir_opt_if_options options)
       /* Modify all readers of the original ALU instruction to read the
        * result of the phi.
        */
-      nir_def_rewrite_uses(&alu->def,
-                           &phi->def);
-
-      /* Since the original ALU instruction no longer has any readers, just
-       * remove it.
-       */
-      nir_instr_remove_v(&alu->instr);
+      nir_def_replace(&alu->def, &phi->def);
       nir_instr_free(&alu->instr);
 
       progress = true;
@@ -679,13 +673,7 @@ opt_simplify_bcsel_of_phi(nir_builder *b, nir_loop *loop)
       /* Modify all readers of the bcsel instruction to read the result of
        * the phi.
        */
-      nir_def_rewrite_uses(&bcsel->def,
-                           &phi->def);
-
-      /* Since the original bcsel instruction no longer has any readers,
-       * just remove it.
-       */
-      nir_instr_remove_v(&bcsel->instr);
+      nir_def_replace(&bcsel->def, &phi->def);
       nir_instr_free(&bcsel->instr);
 
       progress = true;
@@ -834,11 +822,11 @@ opt_if_phi_is_condition(nir_builder *b, nir_if *nif)
             break;
       }
       if (then_val == T && else_val == F) {
-         nir_def_rewrite_uses(&phi->def, cond);
+         nir_def_replace(&phi->def, cond);
          progress = true;
       } else if (then_val == F && else_val == T) {
          b->cursor = nir_before_cf_node(&nif->cf_node);
-         nir_def_rewrite_uses(&phi->def, nir_inot(b, cond));
+         nir_def_replace(&phi->def, nir_inot(b, cond));
          progress = true;
       }
    }
@@ -1291,12 +1279,16 @@ opt_if_phi_src_unused(nir_builder *b, nir_if *nif)
 }
 
 static void
-rewrite_phi_uses(nir_phi_instr *phi, nir_if *prev_if, nir_if *next_if)
+rewrite_phi_uses(nir_phi_instr *phi, nir_if *prev_if, nir_if *next_if,
+                 bool inverse)
 {
    nir_def *then_src =
       nir_phi_get_src_from_block(phi, nir_if_last_then_block(prev_if))->src.ssa;
    nir_def *else_src =
       nir_phi_get_src_from_block(phi, nir_if_last_else_block(prev_if))->src.ssa;
+
+   if (inverse)
+      SWAP(then_src, else_src);
 
    /* Rewrite all uses inside the next IF with either then_src or else_src. */
    nir_foreach_use_including_if_safe(use, &phi->def) {
@@ -1326,6 +1318,30 @@ rewrite_phi_uses(nir_phi_instr *phi, nir_if *prev_if, nir_if *next_if)
 }
 
 static bool
+srcs_equal_or_logical_inverse(nir_src src1, nir_src src2, bool *inverse)
+{
+   *inverse = false;
+   if (nir_srcs_equal(src1, src2))
+      return true;
+
+   nir_alu_instr *alu;
+
+   alu = nir_src_as_alu(src1);
+   if (alu != NULL && alu->op == nir_op_inot) {
+      *inverse = nir_srcs_equal(alu->src[0].src, src2);
+      return *inverse;
+   }
+
+   alu = nir_src_as_alu(src2);
+   if (alu != NULL && alu->op == nir_op_inot) {
+      *inverse = nir_srcs_equal(alu->src[0].src, src1);
+      return *inverse;
+   }
+
+   return false;
+}
+
+static bool
 opt_if_merge(nir_if *nif)
 {
    nir_block *next_blk = nir_cf_node_cf_tree_next(&nif->cf_node);
@@ -1333,7 +1349,9 @@ opt_if_merge(nir_if *nif)
       return false;
 
    nir_if *next_if = nir_block_get_following_if(next_blk);
-   if (!next_if || !nir_srcs_equal(nif->condition, next_if->condition))
+   bool inverse = false;
+   if (!next_if || !srcs_equal_or_logical_inverse(nif->condition,
+                                                  next_if->condition, &inverse))
       return false;
 
    /* This optimization isn't made to work in this case and
@@ -1367,7 +1385,7 @@ opt_if_merge(nir_if *nif)
        * with the phi source from the respective branch leg of the
        * previous IF.
        */
-      rewrite_phi_uses(phi, nif, next_if);
+      rewrite_phi_uses(phi, nif, next_if, inverse);
    }
 
    /* Here we merge two consecutive ifs that have the same condition e.g:
@@ -1386,14 +1404,17 @@ opt_if_merge(nir_if *nif)
     * Note: This only merges if-statements when the block between them is
     * empty except for phis.
     */
-   simple_merge_if(nif, next_if, true, true);
-   simple_merge_if(nif, next_if, false, false);
+   simple_merge_if(nif, next_if, true, !inverse);
+   simple_merge_if(nif, next_if, false, inverse);
 
    nir_block *new_then_block = nir_if_last_then_block(nif);
    nir_block *new_else_block = nir_if_last_else_block(nif);
 
    nir_block *old_then_block = nir_if_last_then_block(next_if);
    nir_block *old_else_block = nir_if_last_else_block(next_if);
+
+   if (inverse)
+      SWAP(new_then_block, new_else_block);
 
    /* Rewrite the predecessor block for any phis following the second
     * if-statement.

@@ -24,15 +24,20 @@ panvk_memory_emit_report(struct panvk_device *device,
                          const VkMemoryAllocateInfo *alloc_info,
                          VkResult result)
 {
+   struct panvk_physical_device *pdev =
+      to_panvk_physical_device(device->vk.physical);
+
    if (likely(!device->vk.memory_reports))
       return;
 
    if (result != VK_SUCCESS) {
+      const uint32_t heap_index =
+         pdev->memory.types[alloc_info->memoryTypeIndex].heapIndex;
       vk_emit_device_memory_report(
          &device->vk, VK_DEVICE_MEMORY_REPORT_EVENT_TYPE_ALLOCATION_FAILED_EXT,
          /* mem_obj_id */ 0, alloc_info->allocationSize,
          VK_OBJECT_TYPE_DEVICE_MEMORY,
-         /* obj_handle */ 0, alloc_info->memoryTypeIndex);
+         /* obj_handle */ 0, heap_index);
       return;
    }
 
@@ -47,9 +52,11 @@ panvk_memory_emit_report(struct panvk_device *device,
                 : VK_DEVICE_MEMORY_REPORT_EVENT_TYPE_FREE_EXT;
    }
 
+   const uint32_t heap_index =
+      pdev->memory.types[mem->vk.memory_type_index].heapIndex;
    vk_emit_device_memory_report(&device->vk, type, mem->bo->handle,
                                 mem->bo->size, VK_OBJECT_TYPE_DEVICE_MEMORY,
-                                (uintptr_t)(mem), mem->vk.memory_type_index);
+                                (uintptr_t)(mem), heap_index);
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL

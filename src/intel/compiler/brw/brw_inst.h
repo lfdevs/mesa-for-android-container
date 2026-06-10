@@ -9,6 +9,7 @@
 #include <assert.h>
 #include "brw_reg.h"
 #include "compiler/brw_list.h"
+#include "compiler/gen/gen.h"
 #include "brw_sampler.h"
 
 #define MAX_SAMPLER_MESSAGE_SIZE 11
@@ -196,7 +197,7 @@ struct brw_inst : brw_exec_node {
       uint16_t bits;
    };
 
-   tgl_swsb sched; /**< Scheduling info. */
+   gen_swsb sched; /**< Scheduling info. */
 
    bblock_t *block;
 
@@ -514,7 +515,7 @@ bool is_coalescing_payload(const struct brw_shader &s, const brw_inst *inst);
 bool has_bank_conflict(const struct brw_isa_info *isa, const brw_inst *inst);
 
 /* Helper from brw_lower_scoreboard.cpp. */
-tgl_pipe
+gen_pipe
 inferred_exec_pipe(const struct intel_device_info *devinfo,
                    const brw_inst *inst);
 

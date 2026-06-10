@@ -2499,7 +2499,7 @@ get_tex_parameterfv(struct gl_context *ctx,
          break;
 
       case GL_TEXTURE_IMMUTABLE_LEVELS:
-         if (_mesa_has_texture_view(ctx))
+         if (_mesa_is_gles3(ctx) || _mesa_has_texture_view(ctx))
             *params = (GLfloat) obj->Attrib.ImmutableLevels;
          else
             goto invalid_pname;
@@ -2792,7 +2792,7 @@ get_tex_parameteriv(struct gl_context *ctx,
          break;
 
       case GL_TEXTURE_IMMUTABLE_LEVELS:
-         if (_mesa_has_texture_view(ctx))
+         if (_mesa_is_gles3(ctx) || _mesa_has_texture_view(ctx))
             *params = obj->Attrib.ImmutableLevels;
          else
             goto invalid_pname;

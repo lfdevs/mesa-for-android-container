@@ -263,6 +263,19 @@ Register::can_switch_to_chan(int c)
 }
 
 void
+Register::pin_to_chan()
+{
+   auto p = pin();
+   if (p == pin_fully || p == pin_chan || p == pin_chgr || p == pin_array)
+      return;
+
+   if (p != pin_group)
+      set_pin(pin_chan);
+   else
+      set_pin(pin_chgr);
+}
+
+void
 Register::print(std::ostream& os) const
 {
    if (m_flags.test(addr_or_idx)) {

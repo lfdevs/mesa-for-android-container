@@ -39,6 +39,7 @@ static const struct debug_named_value shader_debug_options[] = {
    {"noaliastex", IR3_DBG_NOALIASTEX, "Don't use alias.tex"},
    {"noaliasrt",  IR3_DBG_NOALIASRT,  "Don't use alias.rt"},
    {"asmroundtrip", IR3_DBG_ASM_ROUNDTRIP, "Disassemble, reassemble and compare every shader"},
+   {"thread64",   IR3_DBG_THREAD64,   "Prefer 64-thread wave size (when available)"},
 #if MESA_DEBUG
    /* MESA_DEBUG-only options: */
    {"schedmsgs",  IR3_DBG_SCHEDMSGS,  "Enable scheduler debug messages"},

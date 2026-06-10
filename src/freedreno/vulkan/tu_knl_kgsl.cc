@@ -355,6 +355,8 @@ kgsl_bo_init(struct tu_device *dev,
       .base = base,
    };
 
+   tu_dump_bo_init(dev, bo);
+
    VkResult result = VK_SUCCESS;
 
    if (lazy_vma) {
@@ -365,8 +367,6 @@ kgsl_bo_init(struct tu_device *dev,
 
    if (result != VK_SUCCESS)
       return result;
-
-   tu_dump_bo_init(dev, bo);
 
    *out_bo = bo;
 
@@ -1759,6 +1759,12 @@ kgsl_device_check_status(struct tu_device *device)
 {
    for (unsigned i = 0; i < TU_MAX_QUEUE_FAMILIES; i++) {
       for (unsigned q = 0; q < device->queue_count[i]; q++) {
+         /* Emulated queues share the real queue's context and have no
+          * kernel submitqueue of their own, so skip them.
+          */
+         if (vk_queue_is_emulated(&device->queues[i][q].vk))
+            continue;
+
          /* KGSL's KGSL_PROP_GPU_RESET_STAT takes the u32 msm_queue_id and returns a
          * KGSL_CTX_STAT_* for the worst reset that happened since the last time it
          * was queried on that queue.

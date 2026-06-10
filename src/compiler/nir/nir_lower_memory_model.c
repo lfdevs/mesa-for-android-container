@@ -65,6 +65,7 @@ get_intrinsic_info(nir_intrinsic_instr *intrin, nir_variable_mode *modes,
       *writes = true;
       break;
    case nir_intrinsic_load_global:
+   case nir_intrinsic_load_global_transpose_amd:
       *modes = nir_var_mem_global;
       *reads = true;
       break;
@@ -79,6 +80,7 @@ get_intrinsic_info(nir_intrinsic_instr *intrin, nir_variable_mode *modes,
       *writes = true;
       break;
    case nir_intrinsic_load_deref:
+   case nir_intrinsic_load_deref_transpose_amd:
       *modes = nir_src_as_deref(intrin->src[0])->modes;
       *reads = true;
       break;

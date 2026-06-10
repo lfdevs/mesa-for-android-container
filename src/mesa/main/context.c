@@ -77,6 +77,7 @@
 
 
 #include "util/glheader.h"
+#include "util/u_thread.h"
 
 #include "accum.h"
 #include "arrayobj.h"
@@ -860,7 +861,7 @@ _mesa_alloc_dispatch_tables(gl_api api, struct gl_dispatch *d, bool glthread)
          return false;
    }
 
-   d->Current = d->Exec = d->OutsideBeginEnd;
+   d->RealPublished = d->Current = d->Exec = d->OutsideBeginEnd;
    return true;
 }
 
@@ -872,6 +873,22 @@ _mesa_free_dispatch_tables(struct gl_dispatch *d)
    free(d->HWSelectModeBeginEnd);
    free(d->Save);
    free(d->ContextLost);
+}
+
+void
+_mesa_set_dispatch(struct gl_context *ctx, struct _glapi_table *t)
+{
+   /* On the glthread worker, the user-thread wrapper already logged the
+    * call; bypass Trace and don't touch RealPublished (main-thread state).
+    */
+   if (ctx->GLThread.enabled &&
+       u_thread_is_self(ctx->GLThread.queue.threads[0])) {
+      _mesa_glapi_set_dispatch(t);
+      return;
+   }
+
+   ctx->Dispatch.RealPublished = t;
+   _mesa_glapi_set_dispatch(ctx->Dispatch.Trace ? ctx->Dispatch.Trace : t);
 }
 
 bool
@@ -888,6 +905,10 @@ _mesa_initialize_dispatch_tables(struct gl_context *ctx)
       _mesa_init_dispatch_save(ctx);
       _mesa_init_dispatch_save_begin_end(ctx);
    }
+
+   if ((MESA_VERBOSE & VERBOSE_API) &&
+       !_mesa_init_dispatch_trace(ctx))
+      return false;
 
    /* This binds the dispatch table to the context, but MakeCurrent will
     * bind it for the user. If glthread is enabled, it will override it.
@@ -1468,7 +1489,7 @@ _mesa_make_current( struct gl_context *newCtx,
    else {
       _mesa_glapi_set_context((void *) newCtx);
       assert(_mesa_get_current_context() == newCtx);
-      _mesa_glapi_set_dispatch(newCtx->GLApi);
+      _mesa_set_dispatch(newCtx, newCtx->GLApi);
 
       if (drawBuffer && readBuffer) {
          assert(_mesa_is_winsys_fbo(drawBuffer));

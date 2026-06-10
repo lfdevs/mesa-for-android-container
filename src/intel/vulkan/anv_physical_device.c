@@ -134,8 +134,8 @@ static void
 get_device_extensions(const struct anv_physical_device *device,
                       struct vk_device_extension_table *ext)
 {
-   const bool rt_enabled = ANV_SUPPORT_RT && device->info.has_ray_tracing &&
-                           !intel_use_jay_any_stage(&device->info);
+   const struct anv_instance *instance = device->instance;
+   const bool rt_enabled = ANV_SUPPORT_RT && device->info.has_ray_tracing;
    const bool hw_video_encode_supported = device->info.verx10 < 125;
    const bool video_encode_enabled = hw_video_encode_supported &&
                                      ANV_DEBUG(VIDEO_ENCODE);
@@ -143,7 +143,7 @@ get_device_extensions(const struct anv_physical_device *device,
 
    *ext = (struct vk_device_extension_table) {
       .KHR_8bit_storage                      = true,
-      .KHR_16bit_storage                     = !device->instance->drirc.debug.no_16bit,
+      .KHR_16bit_storage                     = !instance->drirc.debug.no_16bit,
       .KHR_acceleration_structure            = rt_enabled,
       .KHR_bind_memory2                      = true,
       .KHR_buffer_device_address             = true,
@@ -152,6 +152,7 @@ get_device_extensions(const struct anv_physical_device *device,
       .KHR_cooperative_matrix                = device->has_cooperative_matrix,
       .NV_cooperative_matrix2                = device->has_cooperative_matrix,
       .KHR_copy_commands2                    = true,
+      .KHR_copy_memory_indirect              = true,
       .KHR_create_renderpass2                = true,
       .KHR_dedicated_allocation              = true,
       .KHR_deferred_host_operations          = true,
@@ -227,7 +228,7 @@ get_device_extensions(const struct anv_physical_device *device,
       .KHR_shader_constant_data              = true,
       .KHR_shader_draw_parameters            = true,
       .KHR_shader_expect_assume              = true,
-      .KHR_shader_float16_int8               = !device->instance->drirc.debug.no_16bit,
+      .KHR_shader_float16_int8               = !instance->drirc.debug.no_16bit,
       .KHR_shader_float_controls             = true,
       .KHR_shader_float_controls2            = true,
       .KHR_shader_integer_dot_product        = true,
@@ -286,6 +287,7 @@ get_device_extensions(const struct anv_physical_device *device,
        */
       .EXT_conservative_rasterization        = device->info.platform != INTEL_PLATFORM_SKL,
       .EXT_custom_border_color               = true,
+      .EXT_debug_marker                      = true,
       .EXT_depth_bias_control                = true,
       .EXT_depth_clamp_control               = true,
       .EXT_depth_clamp_zero_one              = true,
@@ -328,7 +330,7 @@ get_device_extensions(const struct anv_physical_device *device,
       .EXT_host_image_copy                   = true,
       .EXT_host_query_reset                  = true,
       .EXT_image_2d_view_of_3d               = true,
-      .EXT_image_compression_control         = device->has_compression_control,
+      .EXT_image_compression_control         = device->expose_compression_control,
       .EXT_image_drm_format_modifier         = true,
       .EXT_image_robustness                  = true,
       .EXT_image_sliced_view_of_3d           = true,
@@ -387,7 +389,7 @@ get_device_extensions(const struct anv_physical_device *device,
       .EXT_shader_uniform_buffer_unsized_array = true,
       .EXT_subgroup_size_control             = !device->brw_disable_subgroup_size_control,
 #ifdef ANV_USE_WSI_PLATFORM
-      .EXT_image_compression_control_swapchain = device->has_compression_control,
+      .EXT_image_compression_control_swapchain = device->expose_compression_control,
       .EXT_swapchain_maintenance1            = true,
 #endif
       .EXT_texel_buffer_alignment            = true,
@@ -400,6 +402,9 @@ get_device_extensions(const struct anv_physical_device *device,
       .AMD_buffer_marker                     = true,
       .AMD_texture_gather_bias_lod           = device->info.ver >= 20,
       .GOOGLE_decorate_string                = true,
+#ifdef ANV_USE_WSI_PLATFORM
+      .GOOGLE_display_timing = wsi_instance_supports_google_display_timing(&device->instance->vk),
+#endif
       .GOOGLE_hlsl_functionality1            = true,
       .GOOGLE_user_type                      = true,
       .INTEL_performance_query               = device->perf &&
@@ -422,7 +427,8 @@ static void
 get_features(const struct anv_physical_device *pdevice,
              struct vk_features *features)
 {
-   struct vk_app_info *app_info = &pdevice->instance->vk.app_info;
+   const struct anv_instance *instance = pdevice->instance;
+   const struct vk_app_info *app_info = &instance->vk.app_info;
 
    const bool rt_enabled = ANV_SUPPORT_RT && pdevice->info.has_ray_tracing;
 
@@ -469,7 +475,7 @@ get_features(const struct anv_physical_device *pdevice,
        * read/writes, on Gfx11 & Gfx12.0 we emulate for 3 formats.
        */
       .shaderStorageImageReadWithoutFormat      = pdevice->info.verx10 >= 125 ||
-                                                  pdevice->instance->drirc.debug.read_without_format_emu,
+                                                  instance->drirc.debug.read_without_format_emu,
       .shaderStorageImageWriteWithoutFormat     = true,
       .shaderUniformBufferArrayDynamicIndexing  = true,
       .shaderSampledImageArrayDynamicIndexing   = true,
@@ -478,7 +484,7 @@ get_features(const struct anv_physical_device *pdevice,
       .shaderClipDistance                       = true,
       .shaderCullDistance                       = true,
       .shaderFloat64                            = pdevice->info.has_64bit_float ||
-                                                  pdevice->instance->drirc.debug.fp64_emu,
+                                                  instance->drirc.debug.fp64_emu,
       .shaderInt64                              = true,
       .shaderInt16                              = true,
       .shaderResourceMinLod                     = true,
@@ -499,8 +505,8 @@ get_features(const struct anv_physical_device *pdevice,
       .inheritedQueries                         = true,
 
       /* Vulkan 1.1 */
-      .storageBuffer16BitAccess            = !pdevice->instance->drirc.debug.no_16bit,
-      .uniformAndStorageBuffer16BitAccess  = !pdevice->instance->drirc.debug.no_16bit,
+      .storageBuffer16BitAccess            = !instance->drirc.debug.no_16bit,
+      .uniformAndStorageBuffer16BitAccess  = !instance->drirc.debug.no_16bit,
       .storagePushConstant16               = true,
       .storageInputOutput16                = true,
       .multiview                           = true,
@@ -520,8 +526,8 @@ get_features(const struct anv_physical_device *pdevice,
       .storagePushConstant8                = true,
       .shaderBufferInt64Atomics            = true,
       .shaderSharedInt64Atomics            = false,
-      .shaderFloat16                       = !pdevice->instance->drirc.debug.no_16bit,
-      .shaderInt8                          = !pdevice->instance->drirc.debug.no_16bit,
+      .shaderFloat16                       = !instance->drirc.debug.no_16bit,
+      .shaderInt8                          = !instance->drirc.debug.no_16bit,
 
       .descriptorIndexing                                 = true,
       .shaderInputAttachmentArrayDynamicIndexing          = false,
@@ -619,7 +625,7 @@ get_features(const struct anv_physical_device *pdevice,
       /* VK_EXT_custom_border_color */
       .customBorderColors = true,
       .customBorderColorWithoutFormat =
-         pdevice->instance->drirc.debug.custom_border_colors_without_format,
+         instance->drirc.debug.custom_border_colors_without_format,
 
       /* VK_KHR_depth_clamp_zero_one */
       .depthClampZeroOne = true,
@@ -947,7 +953,7 @@ get_features(const struct anv_physical_device *pdevice,
       .videoDecodeVP9 = true,
 
       /* VK_EXT_image_compression_control */
-      .imageCompressionControl = pdevice->has_compression_control,
+      .imageCompressionControl = pdevice->expose_compression_control,
 
       /* VK_KHR_shader_float_controls2 */
       .shaderFloatControls2 = true,
@@ -1019,6 +1025,10 @@ get_features(const struct anv_physical_device *pdevice,
       /* VK_KHR_pipeline_binary */
       .pipelineBinaries = true,
 
+      /* VK_KHR_copy_memory_indirect */
+      .indirectMemoryCopy = true,
+      .indirectMemoryToImageCopy = pdevice->info.verx10 >= 125,
+
 #ifdef ANV_USE_WSI_PLATFORM
       /* VK_EXT_present_timing */
       .presentTiming = true,
@@ -1053,7 +1063,7 @@ get_features(const struct anv_physical_device *pdevice,
       .deviceAddressCommands = true,
 
       /* VK_EXT_swapchain_compression_control */
-      .imageCompressionControlSwapchain = pdevice->has_compression_control,
+      .imageCompressionControlSwapchain = pdevice->expose_compression_control,
    };
 
    /* The new DOOM and Wolfenstein games require depthBounds without
@@ -2212,6 +2222,11 @@ get_properties(const struct anv_physical_device *pdevice,
        */
       props->shaderBinaryVersion = 0;
    }
+
+   /* VK_KHR_copy_memory_indirect */
+   {
+      props->supportedQueues = VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT;
+   }
 }
 
 /* This function restricts the maximum size of system memory heap. The
@@ -2868,7 +2883,7 @@ anv_physical_device_try_create(struct vk_instance *vk_instance,
    device->has_astc_ldr =
       isl_format_supports_sampling(&device->info,
                                    ISL_FORMAT_ASTC_LDR_2D_4X4_FLT16);
-   if (!device->has_astc_ldr && instance->drirc.debug.vk_require_astc)
+   if (!device->has_astc_ldr && instance->drirc.features.require_astc)
       device->emu_astc_ldr = true;
    if (devinfo.ver == 9 && !intel_device_info_is_9lp(&devinfo)) {
       device->flush_astc_ldr_void_extent_denorms =
@@ -2885,17 +2900,23 @@ anv_physical_device_try_create(struct vk_instance *vk_instance,
       goto fail_base;
 
    device->has_cooperative_matrix =
-      (device->info.has_systolic ||
-       debug_get_bool_option("INTEL_LOWER_DPAS", false)) &&
-      !intel_use_jay_any_stage(&device->info);
+      device->info.has_systolic || debug_get_bool_option("INTEL_LOWER_DPAS", false);
 
    /* Because of Xe2 PAT selected compression and the Vulkan spec requirement
     * to always return the same memory types for Images with same properties
     * we can't support EXT_image_compression_control on Xe2+.
     */
-   device->has_compression_control =
-      instance->drirc.debug.compression_control_enabled &&
-      device->info.ver < 20;
+   device->has_compression_control = device->info.ver < 20;
+
+   /* Whether we want to expose the extension depends on DRIRC (for platforms
+    * that support this or fake on Xe2+ due to Android VP17 profile
+    * requirement).
+    */
+   device->expose_compression_control =
+      (instance->drirc.features.fake_image_compression_control_xe2_plus &&
+       device->info.ver >= 20) ||
+      (instance->drirc.features.compression_control_enabled &&
+       device->has_compression_control);
 
    if (is_virtio) {
       struct util_sync_provider *sync = intel_virtio_sync_provider(fd);
@@ -2941,7 +2962,7 @@ anv_physical_device_try_create(struct vk_instance *vk_instance,
       }
    }
    if (device->sparse_type == ANV_SPARSE_TYPE_NOT_SUPPORTED) {
-      if (instance->drirc.debug.fake_sparse)
+      if (instance->drirc.features.fake_sparse)
          device->sparse_type = ANV_SPARSE_TYPE_FAKE;
    }
 

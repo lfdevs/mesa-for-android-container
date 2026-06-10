@@ -2700,6 +2700,16 @@ assign_consumer_var_io(mesa_shader_stage stage, nir_variable *var, struct io_slo
    }
    uint8_t *slot_map = var->data.patch ? io->patch_slot_map : io->slot_map;
    if (slot_map[slot] == (unsigned char)-1) {
+      switch (slot) {
+      case VARYING_SLOT_COL0:
+      case VARYING_SLOT_COL1:
+         slot += VARYING_SLOT_BFC0 - 1;
+         break;
+      default:
+         break;
+      }
+   }
+   if (slot_map[slot] == (unsigned char)-1) {
       /* texcoords can't be eliminated in fs due to GL_COORD_REPLACE,
          * so keep for now and eliminate later
          */
@@ -3495,8 +3505,9 @@ zink_shader_spirv_compile(struct zink_screen *screen, struct zink_shader *zs, st
    }
 
    sci.sType = VK_STRUCTURE_TYPE_SHADER_CREATE_INFO_EXT;
+   sci.flags = VK_SHADER_CREATE_INDEPENDENT_SETS_BIT_KHR;
    if (zs->info.stage == MESA_SHADER_MESH && zs->info.prev_stage != MESA_SHADER_TASK)
-      sci.flags = VK_SHADER_CREATE_NO_TASK_SHADER_BIT_EXT;
+      sci.flags |= VK_SHADER_CREATE_NO_TASK_SHADER_BIT_EXT;
    sci.stage = mesa_to_vk_shader_stage(zs->info.stage);
    sci.nextStage = zink_get_next_stage(zs->info.stage);
    sci.codeType = VK_SHADER_CODE_TYPE_SPIRV_EXT;

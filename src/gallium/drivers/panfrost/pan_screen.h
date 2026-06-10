@@ -106,6 +106,8 @@ struct panfrost_screen {
    struct panfrost_vtable vtbl;
    struct disk_cache *disk_cache;
 
+   float heap_memory_percent;
+
    /* Use AFBC tiled layout whenever possible */
    bool afbc_tiled;
 

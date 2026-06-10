@@ -30,6 +30,14 @@ const VkExternalMemoryProperties kk_mtlheap_mem_props = {
    .compatibleHandleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_MTLHEAP_BIT_EXT,
 };
 
+const VkExternalMemoryProperties kk_host_mem_props = {
+   .externalMemoryFeatures = VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT,
+   .exportFromImportedHandleTypes = 0,
+   .compatibleHandleTypes =
+      VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT |
+      VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_MAPPED_FOREIGN_MEMORY_BIT_EXT,
+};
+
 #ifdef VK_USE_PLATFORM_METAL_EXT
 VKAPI_ATTR VkResult VKAPI_CALL
 kk_GetMemoryMetalHandlePropertiesEXT(
@@ -56,6 +64,28 @@ kk_GetMemoryMetalHandlePropertiesEXT(
 #endif /* VK_USE_PLATFORM_METAL_EXT */
 
 VKAPI_ATTR VkResult VKAPI_CALL
+kk_GetMemoryHostPointerPropertiesEXT(
+   VkDevice device, VkExternalMemoryHandleTypeFlagBits handleType,
+   UNUSED const void *pHandle,
+   VkMemoryHostPointerPropertiesEXT *pMemoryHostPointerProperties)
+{
+   VK_FROM_HANDLE(kk_device, dev, device);
+   struct kk_physical_device *pdev = kk_device_physical(dev);
+
+   switch (handleType) {
+   case VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT:
+   case VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_MAPPED_FOREIGN_MEMORY_BIT_EXT:
+      break;
+   default:
+      return vk_error(dev, VK_ERROR_INVALID_EXTERNAL_HANDLE);
+   }
+   pMemoryHostPointerProperties->memoryTypeBits =
+      BITFIELD_MASK(pdev->mem_type_count);
+
+   return VK_SUCCESS;
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL
 kk_AllocateMemory(VkDevice device, const VkMemoryAllocateInfo *pAllocateInfo,
                   const VkAllocationCallbacks *pAllocator, VkDeviceMemory *pMem)
 {
@@ -64,6 +94,8 @@ kk_AllocateMemory(VkDevice device, const VkMemoryAllocateInfo *pAllocateInfo,
    VkResult result = VK_SUCCESS;
    const VkImportMemoryMetalHandleInfoEXT *metal_info = vk_find_struct_const(
       pAllocateInfo->pNext, IMPORT_MEMORY_METAL_HANDLE_INFO_EXT);
+   const VkImportMemoryHostPointerInfoEXT *host_info = vk_find_struct_const(
+      pAllocateInfo->pNext, IMPORT_MEMORY_HOST_POINTER_INFO_EXT);
 
    // TODO_KOSMICKRISP Do the actual memory allocation with alignment requirements
    uint32_t alignment = (1ULL << 12);
@@ -76,9 +108,10 @@ kk_AllocateMemory(VkDevice device, const VkMemoryAllocateInfo *pAllocateInfo,
    if (!mem)
       return vk_error(dev, VK_ERROR_OUT_OF_HOST_MEMORY);
 
-   if (metal_info && metal_info->handleType) {
-      /* We only support heaps since that's the backing for all our memory and
-       * simplifies implementation */
+   bool import_metal = metal_info && metal_info->handleType;
+   bool import_host = host_info && host_info->handleType;
+
+   if (import_metal || import_host) {
       assert(metal_info->handleType ==
              VK_EXTERNAL_MEMORY_HANDLE_TYPE_MTLHEAP_BIT_EXT);
       mem->bo = CALLOC_STRUCT(kk_bo);
@@ -86,13 +119,26 @@ kk_AllocateMemory(VkDevice device, const VkMemoryAllocateInfo *pAllocateInfo,
          result = vk_errorf(&dev->vk.base, VK_ERROR_OUT_OF_DEVICE_MEMORY, "%m");
          goto fail_alloc;
       }
-      mem->bo->mtl_handle = mtl_retain(metal_info->handle);
-      mem->bo->map =
-         mtl_new_buffer_with_length(mem->bo->mtl_handle, mem->vk.size, 0u);
+
+      if (import_metal) {
+         /* We only support heaps since that's the backing for all our memory
+          * and simplifies implementation */
+         mem->bo->mtl_handle = mtl_retain(metal_info->handle);
+         mem->bo->map =
+            mtl_new_buffer_with_length(mem->bo->mtl_handle, mem->vk.size, 0u);
+         mem->bo->size_B = mtl_heap_get_size(mem->bo->mtl_handle);
+         kk_device_add_heap_to_residency_set(dev, mem->bo->mtl_handle);
+      } else if (import_host) {
+         /* We can't create a heap from a host pointer. The imported memory will
+          * only be usable for buffers */
+         mem->bo->map = mtl_new_buffer_with_bytes_no_copy(
+            dev->mtl_handle, host_info->pHostPointer, mem->vk.size);
+         mem->bo->size_B = mtl_buffer_get_length(mem->bo->map);
+         kk_device_add_buffer_to_residency_set(dev, mem->bo->map);
+      }
+
       mem->bo->gpu = mtl_buffer_get_gpu_address(mem->bo->map);
       mem->bo->cpu = mtl_get_contents(mem->bo->map);
-      mem->bo->size_B = mtl_heap_get_size(mem->bo->mtl_handle);
-      kk_device_add_heap_to_residency_set(dev, mem->bo->mtl_handle);
    } else {
       result =
          kk_alloc_bo(dev, &dev->vk.base, aligned_size, alignment, &mem->bo);
@@ -224,6 +270,10 @@ kk_GetMemoryMetalHandleEXT(
    assert(pGetMetalHandleInfo->handleType ==
           VK_EXTERNAL_MEMORY_HANDLE_TYPE_MTLHEAP_BIT_EXT);
    VK_FROM_HANDLE(kk_device_memory, mem, pGetMetalHandleInfo->memory);
+
+   /* In some cases, such as host pointer imports, we don't have a MTLHeap */
+   if (!mem->bo->mtl_handle)
+      return vk_error(device, VK_ERROR_INVALID_EXTERNAL_HANDLE);
 
    /* From the Vulkan spec of vkGetMemoryMetalHandleEXT:
     *

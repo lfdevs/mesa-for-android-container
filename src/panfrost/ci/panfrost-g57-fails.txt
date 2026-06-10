@@ -3,7 +3,6 @@ glx@glx-copy-sub-buffer,Fail
 glx@glx-make-current,Fail
 glx@glx-multi-window-single-context,Fail
 glx@glx-swap-pixmap-bad,Fail
-glx@glx-visuals-depth -pixmap,Crash
 glx@glx-visuals-stencil -pixmap,Crash
 shaders@point-vertex-id divisor,Fail
 shaders@point-vertex-id gl_instanceid divisor,Fail
@@ -15,8 +14,6 @@ shaders@point-vertex-id gl_vertexid gl_instanceid,Fail
 spec@arb_point_sprite@arb_point_sprite-mipmap,Fail
 spec@arb_shader_texture_lod@execution@arb_shader_texture_lod-texgradcube,Fail
 spec@arb_shader_texture_lod@execution@arb_shader_texture_lod-texgrad,Fail
-spec@arb_texture_buffer_object@texture-buffer-size-clamp,Crash
-spec@arb_texture_float@fbo-alphatest-formats,Crash
 spec@arb_texture_multisample@arb_texture_multisample-dsa-texelfetch@Texture type: GL_R16I,Fail
 spec@arb_texture_multisample@arb_texture_multisample-dsa-texelfetch@Texture type: GL_R16_SNORM,Fail
 spec@arb_texture_multisample@arb_texture_multisample-dsa-texelfetch@Texture type: GL_R32I,Fail
@@ -48,9 +45,6 @@ spec@arb_texture_multisample@arb_texture_multisample-dsa-texelfetch@Texture type
 spec@arb_texture_multisample@arb_texture_multisample-dsa-texelfetch@Texture type: GL_RGBA8,Fail
 spec@arb_texture_multisample@arb_texture_multisample-dsa-texelfetch@Texture type: GL_RGBA8I,Fail
 spec@arb_texture_multisample@arb_texture_multisample-dsa-texelfetch@Texture type: GL_SRGB8_ALPHA8,Fail
-spec@arb_texture_rectangle@tex-miplevel-selection gl2:textureproj 2drect,Crash
-spec@arb_texture_rectangle@tex-miplevel-selection gl2:textureproj 2drect_projvec4,Crash
-spec@arb_texture_rectangle@tex-miplevel-selection gl2:textureproj 2drectshadow,Crash
 spec@arb_transform_feedback_instanced@draw-auto instanced,Fail
 spec@egl 1.4@eglterminate then unbind context,Fail
 spec@egl_khr_gl_image@egl_khr_gl_renderbuffer_image-clear-shared-image gl_depth_component24,Fail
@@ -63,8 +57,6 @@ spec@ext_transform_feedback@change-size base-shrink,Fail
 spec@ext_transform_feedback@change-size offset-shrink,Fail
 spec@ext_transform_feedback@change-size range-grow,Fail
 spec@ext_transform_feedback@change-size range-shrink,Fail
-spec@ext_transform_feedback@immediate-reuse-index-buffer,Crash
-spec@ext_transform_feedback@immediate-reuse-uniform-buffer,Crash
 spec@ext_transform_feedback@interleaved-attribs,Fail
 spec@ext_transform_feedback@intervening-read output,Fail
 spec@ext_transform_feedback@intervening-read prims_written,Fail
@@ -110,24 +102,6 @@ spec@ext_transform_feedback@tessellation triangle_strip flat_last,Fail
 spec@ext_transform_feedback@tessellation triangle_strip monochrome,Fail
 spec@ext_transform_feedback@tessellation triangle_strip smooth,Fail
 spec@ext_transform_feedback@tessellation triangle_strip wireframe,Fail
-spec@glsl-1.30@execution@tex-miplevel-selection texturegrad 2drect,Crash
-spec@glsl-1.30@execution@tex-miplevel-selection texturegrad 2drectshadow,Crash
-spec@glsl-1.30@execution@tex-miplevel-selection texturegradoffset 2drect,Crash
-spec@glsl-1.30@execution@tex-miplevel-selection texturegradoffset 2drectshadow,Crash
-spec@glsl-1.30@execution@tex-miplevel-selection textureoffset 2drect,Crash
-spec@glsl-1.30@execution@tex-miplevel-selection textureoffset 2drectshadow,Crash
-spec@glsl-1.30@execution@tex-miplevel-selection textureproj 2drect,Crash
-spec@glsl-1.30@execution@tex-miplevel-selection textureproj 2drect_projvec4,Crash
-spec@glsl-1.30@execution@tex-miplevel-selection textureproj 2drectshadow,Crash
-spec@glsl-1.30@execution@tex-miplevel-selection textureprojgrad 2drect,Crash
-spec@glsl-1.30@execution@tex-miplevel-selection textureprojgrad 2drect_projvec4,Crash
-spec@glsl-1.30@execution@tex-miplevel-selection textureprojgrad 2drectshadow,Crash
-spec@glsl-1.30@execution@tex-miplevel-selection textureprojgradoffset 2drect,Crash
-spec@glsl-1.30@execution@tex-miplevel-selection textureprojgradoffset 2drect_projvec4,Crash
-spec@glsl-1.30@execution@tex-miplevel-selection textureprojgradoffset 2drectshadow,Crash
-spec@glsl-1.30@execution@tex-miplevel-selection textureprojoffset 2drect,Crash
-spec@glsl-1.30@execution@tex-miplevel-selection textureprojoffset 2drect_projvec4,Crash
-spec@glsl-1.30@execution@tex-miplevel-selection textureprojoffset 2drectshadow,Crash
 spec@khr_texture_compression_astc@miptree-gles srgb-fp,Fail
 spec@khr_texture_compression_astc@miptree-gles srgb-fp@sRGB decode full precision,Fail
 spec@khr_texture_compression_astc@miptree-gl srgb-fp,Fail
@@ -140,7 +114,6 @@ spec@!opengl 1.0@gl-1.0-edgeflag-const,Fail
 spec@!opengl 1.0@gl-1.0-edgeflag,Fail
 spec@!opengl 1.0@gl-1.0-edgeflag-quads,Fail
 spec@!opengl 1.0@gl-1.0-no-op-paths,Fail
-spec@!opengl 1.0@rasterpos,Crash
 spec@!opengl 1.1@linestipple@Factor 2x,Fail
 spec@!opengl 1.1@linestipple@Factor 3x,Fail
 spec@!opengl 1.1@linestipple,Fail
@@ -254,8 +227,6 @@ afbcp-shaders@point-vertex-id gl_vertexid gl_instanceid,Fail
 afbcp-spec@arb_point_sprite@arb_point_sprite-mipmap,Fail
 afbcp-spec@arb_shader_texture_lod@execution@arb_shader_texture_lod-texgradcube,Fail
 afbcp-spec@arb_shader_texture_lod@execution@arb_shader_texture_lod-texgrad,Fail
-afbcp-spec@arb_texture_buffer_object@texture-buffer-size-clamp,Crash
-afbcp-spec@arb_texture_float@fbo-alphatest-formats,Crash
 afbcp-spec@arb_texture_multisample@arb_texture_multisample-dsa-texelfetch@Texture type: GL_R16I,Fail
 afbcp-spec@arb_texture_multisample@arb_texture_multisample-dsa-texelfetch@Texture type: GL_R16_SNORM,Fail
 afbcp-spec@arb_texture_multisample@arb_texture_multisample-dsa-texelfetch@Texture type: GL_R32I,Fail
@@ -287,9 +258,6 @@ afbcp-spec@arb_texture_multisample@arb_texture_multisample-dsa-texelfetch@Textur
 afbcp-spec@arb_texture_multisample@arb_texture_multisample-dsa-texelfetch@Texture type: GL_RGBA8,Fail
 afbcp-spec@arb_texture_multisample@arb_texture_multisample-dsa-texelfetch@Texture type: GL_RGBA8I,Fail
 afbcp-spec@arb_texture_multisample@arb_texture_multisample-dsa-texelfetch@Texture type: GL_SRGB8_ALPHA8,Fail
-afbcp-spec@arb_texture_rectangle@tex-miplevel-selection gl2:textureproj 2drect,Crash
-afbcp-spec@arb_texture_rectangle@tex-miplevel-selection gl2:textureproj 2drect_projvec4,Crash
-afbcp-spec@arb_texture_rectangle@tex-miplevel-selection gl2:textureproj 2drectshadow,Crash
 afbcp-spec@arb_transform_feedback_instanced@draw-auto instanced,Fail
 afbcp-spec@egl 1.4@eglterminate then unbind context,Fail
 afbcp-spec@egl_khr_gl_image@egl_khr_gl_renderbuffer_image-clear-shared-image gl_depth_component24,Fail
@@ -350,24 +318,6 @@ afbcp-spec@ext_transform_feedback@tessellation triangle_strip flat_last,Fail
 afbcp-spec@ext_transform_feedback@tessellation triangle_strip monochrome,Fail
 afbcp-spec@ext_transform_feedback@tessellation triangle_strip smooth,Fail
 afbcp-spec@ext_transform_feedback@tessellation triangle_strip wireframe,Fail
-afbcp-spec@glsl-1.30@execution@tex-miplevel-selection texturegrad 2drect,Crash
-afbcp-spec@glsl-1.30@execution@tex-miplevel-selection texturegrad 2drectshadow,Crash
-afbcp-spec@glsl-1.30@execution@tex-miplevel-selection texturegradoffset 2drect,Crash
-afbcp-spec@glsl-1.30@execution@tex-miplevel-selection texturegradoffset 2drectshadow,Crash
-afbcp-spec@glsl-1.30@execution@tex-miplevel-selection textureoffset 2drect,Crash
-afbcp-spec@glsl-1.30@execution@tex-miplevel-selection textureoffset 2drectshadow,Crash
-afbcp-spec@glsl-1.30@execution@tex-miplevel-selection textureproj 2drect,Crash
-afbcp-spec@glsl-1.30@execution@tex-miplevel-selection textureproj 2drect_projvec4,Crash
-afbcp-spec@glsl-1.30@execution@tex-miplevel-selection textureproj 2drectshadow,Crash
-afbcp-spec@glsl-1.30@execution@tex-miplevel-selection textureprojgrad 2drect,Crash
-afbcp-spec@glsl-1.30@execution@tex-miplevel-selection textureprojgrad 2drect_projvec4,Crash
-afbcp-spec@glsl-1.30@execution@tex-miplevel-selection textureprojgrad 2drectshadow,Crash
-afbcp-spec@glsl-1.30@execution@tex-miplevel-selection textureprojgradoffset 2drect,Crash
-afbcp-spec@glsl-1.30@execution@tex-miplevel-selection textureprojgradoffset 2drect_projvec4,Crash
-afbcp-spec@glsl-1.30@execution@tex-miplevel-selection textureprojgradoffset 2drectshadow,Crash
-afbcp-spec@glsl-1.30@execution@tex-miplevel-selection textureprojoffset 2drect,Crash
-afbcp-spec@glsl-1.30@execution@tex-miplevel-selection textureprojoffset 2drect_projvec4,Crash
-afbcp-spec@glsl-1.30@execution@tex-miplevel-selection textureprojoffset 2drectshadow,Crash
 afbcp-spec@khr_texture_compression_astc@miptree-gles srgb-fp,Fail
 afbcp-spec@khr_texture_compression_astc@miptree-gles srgb-fp@sRGB decode full precision,Fail
 afbcp-spec@khr_texture_compression_astc@miptree-gl srgb-fp,Fail

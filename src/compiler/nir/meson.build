@@ -141,6 +141,7 @@ else
   'nir_liveness.c',
   'nir_loop_analyze.c',
   'nir_loop_analyze.h',
+  'nir_lower_abort.c',
   'nir_lower_alu.c',
   'nir_lower_alu_width.c',
   'nir_lower_alpha.c',

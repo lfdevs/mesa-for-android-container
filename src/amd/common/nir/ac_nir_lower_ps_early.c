@@ -50,19 +50,19 @@ get_baryc_var(nir_builder *b, nir_intrinsic_op baryc_op, enum glsl_interp_mode m
    switch (baryc_op) {
    case nir_intrinsic_load_barycentric_pixel:
       if (mode == INTERP_MODE_NOPERSPECTIVE) {
-         return get_baryc_var_common(b, s->options->ps_iter_samples > 1, &s->linear_center,
+         return get_baryc_var_common(b, s->options->sample_shading, &s->linear_center,
                                      "linear_center");
       } else {
-         return get_baryc_var_common(b, s->options->ps_iter_samples > 1, &s->persp_center,
+         return get_baryc_var_common(b, s->options->sample_shading, &s->persp_center,
                                      "persp_center");
       }
    case nir_intrinsic_load_barycentric_centroid:
       if (mode == INTERP_MODE_NOPERSPECTIVE) {
-         return get_baryc_var_common(b, s->options->ps_iter_samples > 1 ||
+         return get_baryc_var_common(b, s->options->sample_shading ||
                                      s->options->msaa_disabled, &s->linear_centroid,
                                      "linear_centroid");
       } else {
-         return get_baryc_var_common(b, s->options->ps_iter_samples > 1 ||
+         return get_baryc_var_common(b, s->options->sample_shading ||
                                      s->options->msaa_disabled, &s->persp_centroid,
                                      "persp_centroid");
       }
@@ -93,7 +93,7 @@ init_interp_param(nir_builder *b, lower_ps_early_state *s)
 {
    b->cursor = nir_before_cf_list(&b->impl->body);
 
-   if (s->options->ps_iter_samples > 1) {
+   if (s->options->sample_shading) {
       set_interp_vars(b, nir_load_barycentric_sample(b, 32, .interp_mode = INTERP_MODE_SMOOTH),
                       s->persp_center, s->persp_centroid);
       set_interp_vars(b, nir_load_barycentric_sample(b, 32, .interp_mode = INTERP_MODE_NOPERSPECTIVE),
@@ -242,47 +242,6 @@ get_load_helper_invocation(nir_function_impl *impl, lower_ps_early_state *s)
    return s->load_helper_invoc_at_top;
 }
 
-static bool
-lower_ps_load_sample_mask_in(nir_builder *b, nir_intrinsic_instr *intrin, lower_ps_early_state *s)
-{
-   /* Section 15.2.2 (Shader Inputs) of the OpenGL 4.5 (Core Profile) spec
-    * says:
-    *
-    *    "When per-sample shading is active due to the use of a fragment
-    *     input qualified by sample or due to the use of the gl_SampleID
-    *     or gl_SamplePosition variables, only the bit for the current
-    *     sample is set in gl_SampleMaskIn. When state specifies multiple
-    *     fragment shader invocations for a given fragment, the sample
-    *     mask for any single fragment shader invocation may specify a
-    *     subset of the covered samples for the fragment. In this case,
-    *     the bit corresponding to each covered sample will be set in
-    *     exactly one fragment shader invocation."
-    *
-    * The samplemask loaded by hardware is always the coverage of the
-    * entire pixel/fragment, so mask bits out based on the sample ID.
-    */
-   nir_def *replacement = NULL;
-
-   /* Set ps_iter_samples=8 if full sample shading is enabled even for 2x and 4x MSAA
-    * to get this fast path that fully replaces sample_mask_in with sample_id.
-    */
-   if (s->options->msaa_disabled && !s->options->uses_vrs_coarse_shading) {
-      replacement = nir_b2i32(b, nir_inot(b, get_load_helper_invocation(b->impl, s)));
-   } else if (s->options->ps_iter_samples == 8) {
-      replacement = nir_bcsel(b, get_load_helper_invocation(b->impl, s), nir_imm_int(b, 0),
-                              nir_ishl(b, nir_imm_int(b, 1), nir_load_sample_id(b)));
-   } else if (s->options->ps_iter_samples > 1) {
-      uint32_t ps_iter_mask = ac_get_ps_iter_mask(s->options->ps_iter_samples);
-      nir_def *submask = nir_ishl(b, nir_imm_int(b, ps_iter_mask), nir_load_sample_id(b));
-      replacement = nir_iand(b, nir_load_sample_mask_in(b), submask);
-   } else {
-      return false;
-   }
-
-   nir_def_replace(&intrin->def, replacement);
-   return true;
-}
-
 static nir_def *
 lower_load_barycentric_at_offset(nir_builder *b, nir_def *offset, enum glsl_interp_mode mode)
 {
@@ -405,8 +364,6 @@ lower_ps_intrinsic(nir_builder *b, nir_intrinsic_instr *intrin, void *state)
    case nir_intrinsic_load_barycentric_centroid:
    case nir_intrinsic_load_barycentric_sample:
       return rewrite_ps_load_barycentric(b, intrin, s);
-   case nir_intrinsic_load_sample_mask_in:
-      return lower_ps_load_sample_mask_in(b, intrin, s);
    case nir_intrinsic_load_front_face:
       if (s->options->force_front_face) {
          nir_def_replace(&intrin->def, nir_imm_bool(b, s->options->force_front_face == 1));
@@ -422,15 +379,12 @@ lower_ps_intrinsic(nir_builder *b, nir_intrinsic_instr *intrin, void *state)
    case nir_intrinsic_load_sample_pos:
       if (s->options->msaa_disabled) {
          nir_def_replace(&intrin->def, nir_imm_vec2(b, 0.5, 0.5));
-      } else if (s->options->frag_coord_is_center) {
+      } else {
          /* We have to use the alternative way to get sample_pos. */
          nir_def *num_samples = s->options->load_sample_positions_always_loads_current_ones ?
                                    nir_undef(b, 1, 32) : nir_load_rasterization_samples_amd(b);
          nir_def_replace(&intrin->def, nir_load_sample_positions_amd(b, 32, nir_load_sample_id(b),
                                                                      num_samples));
-      } else {
-         /* sample_pos = ffract(frag_coord.xy); */
-         nir_def_replace(&intrin->def, nir_ffract(b, nir_build_frag_coord(b, 2)));
       }
       return true;
    case nir_intrinsic_load_sample_id:
@@ -453,7 +407,7 @@ lower_ps_intrinsic(nir_builder *b, nir_intrinsic_instr *intrin, void *state)
          return true;
       }
 
-      if (s->options->ps_iter_samples >= 2 &&
+      if (s->options->sample_shading &&
           nir_def_is_intrinsic(sample_id) &&
           nir_def_as_intrinsic(sample_id)->intrinsic == nir_intrinsic_load_sample_id) {
          nir_def_replace(&intrin->def, nir_load_barycentric_sample(b, 32, .interp_mode = mode));

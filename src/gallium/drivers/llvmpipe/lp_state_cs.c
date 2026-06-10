@@ -2228,10 +2228,9 @@ llvmpipe_draw_mesh_tasks(struct pipe_context *pipe,
       }
 
       for (unsigned i = 0; i < num_mesh_invocs; i++) {
-         if (payload) {
+         if (lp->tss) {
             void *this_payload = (char *)payload + (payload_stride * i);
             uint32_t *payload_grid = (uint32_t *)this_payload;
-            assert(lp->tss);
             job_info.grid_size[0] = payload_grid[0];
             job_info.grid_size[1] = payload_grid[1];
             job_info.grid_size[2] = payload_grid[2];
@@ -2239,6 +2238,8 @@ llvmpipe_draw_mesh_tasks(struct pipe_context *pipe,
             job_info.block_size[0] = mhs_shader->info.workgroup_size[0];
             job_info.block_size[1] = mhs_shader->info.workgroup_size[1];
             job_info.block_size[2] = mhs_shader->info.workgroup_size[2];
+         } else {
+            job_info.payload = screen->empty_mesh_payload;
          }
 
          job_info.req_local_mem = lp->mhs->req_local_mem + info->variable_shared_mem;

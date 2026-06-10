@@ -16,8 +16,9 @@
         - src/panfrost/ci/$GPU_VERSION-flakes.txt
         - src/panfrost/ci/$GPU_VERSION-skips.txt
         - src/panfrost/ci/$GPU_VERSION-gles2-extensions.txt
+        - src/panfrost/ci/$DRIVER_NAME-flakes.txt
         - src/panfrost/ci/$DRIVER_NAME-skips.txt
-        - src/panfrost/ci/$PIGLIT_TRACES_FILE
+        - src/panfrost/ci/REPLAY_CONFIG
         - src/panfrost/clc/*
         - src/panfrost/compiler/*
         - src/panfrost/genxml/*
@@ -151,13 +152,15 @@
     HWCI_FREQ_MAX: "true"
 
 .panfrost-traces:
+  extends:
+    - .traces-test
   variables:
     PAN_MESA_DEBUG: "deqp,sync"
     MESA_GLES_VERSION_OVERRIDE: "3.1"
     MESA_GL_VERSION_OVERRIDE: "3.3"
     MESA_GLSL_VERSION_OVERRIDE: 330
-    EGL_PLATFORM: surfaceless
-    PIGLIT_TRACES_FILE: traces-panfrost.yml
+    REPLAY_CONFIG: traces-panfrost.toml
+    HWCI_START_WESTON: 1
 
 # https://lava.collabora.dev/scheduler/device_type/meson-g12b-a311d-khadas-vim3
 .lava-meson-g12b-a311d-khadas-vim3:arm64:

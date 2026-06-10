@@ -851,8 +851,15 @@ etna_try_blt_blit(struct pipe_context *pctx,
       op.src.addr.offset = src_lev->offset + blit_info->src.box.z * src_lev->layer_stride;
       op.src.addr.flags = ETNA_RELOC_READ;
       op.src.bpp = util_format_get_blocksize(blit_info->src.format);
+
+      /* Only convert across the sRGB<->linear boundary. A same-encoding copy is
+       * bit-preserving and a decode+encode roundtrip would only lose precision.
+       */
+      const bool src_is_srgb = util_format_is_srgb(src_fmt);
+      const bool dst_is_srgb = util_format_is_srgb(dst_fmt);
+
       op.src.format = src_format;
-      op.src.srgb = util_format_is_srgb(src_fmt);
+      op.src.srgb = src_is_srgb && !dst_is_srgb;
       op.src.stride = src_lev->stride;
       op.src.tiling = src->layout;
       op.src.downsample_x = downsample_x;
@@ -877,7 +884,7 @@ etna_try_blt_blit(struct pipe_context *pctx,
       op.dest.addr.offset = dst_lev->offset + blit_info->dst.box.z * dst_lev->layer_stride;
       op.dest.addr.flags = ETNA_RELOC_WRITE;
       op.dest.format = dst_format;
-      op.dest.srgb = util_format_is_srgb(dst_fmt);
+      op.dest.srgb = dst_is_srgb && !src_is_srgb;
       op.dest.stride = dst_lev->stride;
       op.dest.tiling = dst->layout;
       if (has_conversion)

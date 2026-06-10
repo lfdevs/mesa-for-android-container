@@ -322,6 +322,12 @@ static VkResult pvr_mrt_load_op_init(struct pvr_device *device,
       if (image->vk.samples > VK_SAMPLE_COUNT_1_BIT)
          load_op->clears_loads_state.unresolved_msaa_mask |= BITFIELD_BIT(i);
 
+      if (rp_info->attachments[color_init->index]->vk.view_type ==
+             VK_IMAGE_VIEW_TYPE_2D &&
+          image->vk.image_type == VK_IMAGE_TYPE_3D) {
+         load_op->clears_loads_state.rt_2d_view_3d_mask |= BITFIELD_BIT(i);
+      }
+
       switch (color_init->op) {
       case VK_ATTACHMENT_LOAD_OP_CLEAR:
          load_op->clears_loads_state.rt_clear_mask |= BITFIELD_BIT(i);

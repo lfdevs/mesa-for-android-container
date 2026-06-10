@@ -358,17 +358,6 @@ panvk_per_arch(CmdPipelineBarrier2)(VkCommandBuffer commandBuffer,
       panvk_per_arch(cmd_close_batch)(cmdbuf);
       panvk_per_arch(cmd_open_batch)(cmdbuf);
    }
-
-   for (uint32_t i = 0; i < pDependencyInfo->imageMemoryBarrierCount; i++) {
-      const VkImageMemoryBarrier2 *barrier = &pDependencyInfo->pImageMemoryBarriers[i];
-
-      panvk_per_arch(cmd_transition_image_layout)(commandBuffer, barrier);
-   }
-
-   /* If we had any layout transition dispatches, the batch will be closed at
-    * this point, therefore establishing the sync between itself and the
-    * commands that follow.
-    */
 }
 
 static void

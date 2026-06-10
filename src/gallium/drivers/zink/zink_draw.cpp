@@ -449,8 +449,9 @@ emit_dynamic_state(struct zink_context *ctx, bool pipeline_changed, unsigned num
    }
 
    if ((BATCH_CHANGED && (screen->base.caps.programmable_sample_locations || uses_shobj)) || ctx->sample_locations_changed) {
-      VKCTX(CmdSetSampleLocationsEnableEXT)(bs->cmdbuf, ctx->sample_locations_enabled);
-      if (ctx->sample_locations_enabled) {
+      bool enabled = ctx->sample_locations_enabled || (!rast_state->base.multisample && ctx->gfx_pipeline_state.rast_samples);
+      VKCTX(CmdSetSampleLocationsEnableEXT)(bs->cmdbuf, enabled);
+      if (enabled) {
          VkSampleLocationsInfoEXT loc;
          zink_init_vk_sample_locations(ctx, &loc);
          VKCTX(CmdSetSampleLocationsEXT)(bs->cmdbuf, &loc);

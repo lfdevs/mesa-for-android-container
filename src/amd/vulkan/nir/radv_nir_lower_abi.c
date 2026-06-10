@@ -444,6 +444,12 @@ lower_abi_instr(nir_builder *b, nir_intrinsic_instr *intrin, void *state)
    case nir_intrinsic_load_use_float_frag_coord_xy_amd:
       replacement = nir_ine_imm(b, GET_SGPR_FIELD_NIR(s->args->ps_state, PS_STATE_USE_FLOAT_FRAG_COORD_XY), 0);
       break;
+   case nir_intrinsic_load_ps_iter_mask_amd:
+      replacement = GET_SGPR_FIELD_NIR(s->args->ps_state, PS_STATE_PS_ITER_MASK);
+      break;
+   case nir_intrinsic_load_use_sample_mask_in_amd:
+      replacement = nir_ine_imm(b, GET_SGPR_FIELD_NIR(s->args->ps_state, PS_STATE_USE_SAMPLE_MASK_IN), 0);
+      break;
    default:
       progress = false;
       break;

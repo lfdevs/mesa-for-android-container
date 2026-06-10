@@ -34,6 +34,8 @@
 #include "vpe20_resource.h"
 #include "multi_pipe_segmentation.h"
 
+#include "vpe22_resource.h"
+
 static const struct vpe_debug_options debug_defaults = {
     .flags                   = {0},
     .cm_in_bypass            = 0,
@@ -101,6 +103,9 @@ enum vpe_ip_level vpe_resource_parse_ip_version(
     case VPE_VERSION(7, 0, 0): // to be removed when caller switches to new convention
         ip_level = VPE_IP_LEVEL_2_0;
         break;
+    case VPE_VERSION(2, 2, 0):
+        ip_level = VPE_IP_LEVEL_2_2;
+        break;
     default:
         ip_level = VPE_IP_LEVEL_UNKNOWN;
         break;
@@ -122,6 +127,9 @@ enum vpe_status vpe_construct_resource(
         break;
     case VPE_IP_LEVEL_2_0:
         status = vpe20_construct_resource(vpe_priv, res);
+        break;
+    case VPE_IP_LEVEL_2_2:
+        status = vpe22_construct_resource(vpe_priv, res);
         break;
     default:
         status = VPE_STATUS_NOT_SUPPORTED;
@@ -147,6 +155,9 @@ void vpe_destroy_resource(struct vpe_priv *vpe_priv, struct resource *res)
         vpe11_destroy_resource(vpe_priv, res);
         break;
     case VPE_IP_LEVEL_2_0:
+        vpe20_destroy_resource(vpe_priv, res);
+        break;
+    case VPE_IP_LEVEL_2_2:
         vpe20_destroy_resource(vpe_priv, res);
         break;
     default:
@@ -1012,6 +1023,9 @@ const struct vpe_caps *vpe_get_capability(enum vpe_ip_level ip_level)
     case VPE_IP_LEVEL_2_0:
         caps = vpe20_get_capability();
         break;
+    case VPE_IP_LEVEL_2_2:
+        caps = vpe22_get_capability();
+        break;
 
     default:
         caps = NULL;
@@ -1030,6 +1044,9 @@ void vpe_setup_check_funcs(struct vpe_check_support_funcs *funcs, enum vpe_ip_le
         break;
     case VPE_IP_LEVEL_2_0:
         vpe20_setup_check_funcs(funcs);
+        break;
+    case VPE_IP_LEVEL_2_2:
+        vpe22_setup_check_funcs(funcs);
         break;
     default:
         break;

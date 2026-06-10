@@ -394,11 +394,16 @@ d3d12_video_encode_supported_tile_structures(const D3D12_VIDEO_ENCODER_CODEC &co
                                              ID3D12VideoDevice3 *pD3D12VideoDevice,
                                              D3D12_VIDEO_ENCODER_PICTURE_RESOLUTION_DESC maxRes,
                                              uint32_t& supportedSliceStructures, // out
-                                             D3D12_VIDEO_ENCODER_AV1_FRAME_SUBREGION_LAYOUT_CONFIG_SUPPORT& av1TileSupport // out
+                                             D3D12_VIDEO_ENCODER_AV1_FRAME_SUBREGION_LAYOUT_CONFIG_SUPPORT& av1TileSupport, // out
+                                             D3D12_VIDEO_ENCODER_FRAME_SUBREGION_LAYOUT_MODE& outMostGeneralSubregionMode // out
 )
 {
    // Assume no support and then add as queries succeed
    supportedSliceStructures = PIPE_VIDEO_CAP_SLICE_STRUCTURE_NONE;
+   bool uniformGridSupported = false;
+   bool configurableGridSupported = false;
+   bool fullFrameSupported = false;
+   bool autoSupported = false;
 
    // Only codecs supporting tiles should use this method. For slices related info, use d3d12_video_encode_supported_slice_structures
    assert (codec == D3D12_VIDEO_ENCODER_CODEC_AV1);
@@ -447,10 +452,12 @@ d3d12_video_encode_supported_tile_structures(const D3D12_VIDEO_ENCODER_CODEC &co
          capDataTilesSupport.FrameResolution = oldRes;
       }
 
-      if(SUCCEEDED(hr) && capDataTilesSupport.IsSupported)
+      if(SUCCEEDED(hr) && capDataTilesSupport.IsSupported) {
+         uniformGridSupported = true;
          supportedSliceStructures |= (PIPE_VIDEO_CAP_SLICE_STRUCTURE_POWER_OF_TWO_ROWS |
                                       PIPE_VIDEO_CAP_SLICE_STRUCTURE_EQUAL_ROWS |
                                       PIPE_VIDEO_CAP_SLICE_STRUCTURE_EQUAL_MULTI_ROWS);
+      }
    }
 
    {
@@ -481,22 +488,61 @@ d3d12_video_encode_supported_tile_structures(const D3D12_VIDEO_ENCODER_CODEC &co
                                                   sizeof(capDataTilesSupport));
       }
 
-      if(SUCCEEDED(hr) && capDataTilesSupport.IsSupported)
+      if(SUCCEEDED(hr) && capDataTilesSupport.IsSupported) {
+         configurableGridSupported = true;
          supportedSliceStructures |= (PIPE_VIDEO_CAP_SLICE_STRUCTURE_ARBITRARY_MACROBLOCKS |
                                       PIPE_VIDEO_CAP_SLICE_STRUCTURE_ARBITRARY_ROWS);
+      }
    }
+
+   {
+      capDataTilesSupport.SubregionMode = D3D12_VIDEO_ENCODER_FRAME_SUBREGION_LAYOUT_MODE_FULL_FRAME;
+      HRESULT hr = pD3D12VideoDevice->CheckFeatureSupport(D3D12_FEATURE_VIDEO_ENCODER_FRAME_SUBREGION_LAYOUT_CONFIG,
+                                                          &capDataTilesSupport,
+                                                          sizeof(capDataTilesSupport));
+      if (SUCCEEDED(hr) && capDataTilesSupport.IsSupported) {
+         fullFrameSupported = true;
+         supportedSliceStructures |= PIPE_VIDEO_CAP_SLICE_STRUCTURE_ARBITRARY_ROWS;
+      }
+   }
+
+   {
+      capDataTilesSupport.SubregionMode = D3D12_VIDEO_ENCODER_FRAME_SUBREGION_LAYOUT_MODE_AUTO;
+      HRESULT hr = pD3D12VideoDevice->CheckFeatureSupport(D3D12_FEATURE_VIDEO_ENCODER_FRAME_SUBREGION_LAYOUT_CONFIG,
+                                                          &capDataTilesSupport,
+                                                          sizeof(capDataTilesSupport));
+      if (SUCCEEDED(hr) && capDataTilesSupport.IsSupported) {
+         autoSupported = true;
+         supportedSliceStructures |= PIPE_VIDEO_CAP_SLICE_STRUCTURE_AUTO;
+      }
+   }
+
+   /* Pick the most general supported D3D12 subregion mode. Preference order:
+    * CONFIGURABLE_GRID_PARTITION > UNIFORM_GRID_PARTITION > FULL_FRAME > AUTO. */
+   if (configurableGridSupported)
+      outMostGeneralSubregionMode = D3D12_VIDEO_ENCODER_FRAME_SUBREGION_LAYOUT_MODE_CONFIGURABLE_GRID_PARTITION;
+   else if (uniformGridSupported)
+      outMostGeneralSubregionMode = D3D12_VIDEO_ENCODER_FRAME_SUBREGION_LAYOUT_MODE_UNIFORM_GRID_PARTITION;
+   else if (fullFrameSupported)
+      outMostGeneralSubregionMode = D3D12_VIDEO_ENCODER_FRAME_SUBREGION_LAYOUT_MODE_FULL_FRAME;
+   else if (autoSupported)
+      outMostGeneralSubregionMode = D3D12_VIDEO_ENCODER_FRAME_SUBREGION_LAYOUT_MODE_AUTO;
 }
 
 static uint32_t
 d3d12_video_encode_supported_slice_structures(const D3D12_VIDEO_ENCODER_CODEC &codec,
                                               D3D12_VIDEO_ENCODER_PROFILE_DESC profile,
                                               D3D12_VIDEO_ENCODER_LEVEL_SETTING level,
-                                              ID3D12VideoDevice3 *pD3D12VideoDevice)
+                                              ID3D12VideoDevice3 *pD3D12VideoDevice,
+                                              D3D12_VIDEO_ENCODER_FRAME_SUBREGION_LAYOUT_MODE& outMostGeneralSubregionMode)
 {
    // Only codecs supporting slices should use this method. For tile related info, use d3d12_video_encode_supported_tile_structures
    assert ((codec == D3D12_VIDEO_ENCODER_CODEC_H264) || (codec == D3D12_VIDEO_ENCODER_CODEC_HEVC));
 
    uint32_t supportedSliceStructuresBitMask = PIPE_VIDEO_CAP_SLICE_STRUCTURE_NONE;
+   bool realPartitioningSupported = false;
+   bool fullFrameSupported = false;
+   bool autoSupported = false;
 
    D3D12_FEATURE_DATA_VIDEO_ENCODER_FRAME_SUBREGION_LAYOUT_MODE capDataSubregionLayout = {};
    capDataSubregionLayout.NodeIndex = 0;
@@ -529,6 +575,7 @@ d3d12_video_encode_supported_slice_structures(const D3D12_VIDEO_ENCODER_CODEC &c
    if (FAILED(hr)) {
       debug_printf("CheckFeatureSupport failed with HR %x\n", (unsigned)hr);
    } else if (capDataSubregionLayout.IsSupported) {
+      realPartitioningSupported = true;
       /* This would be setting N subregions per frame in this D3D12 mode where N = (height/blocksize) / K */
       supportedSliceStructuresBitMask |= PIPE_VIDEO_CAP_SLICE_STRUCTURE_EQUAL_MULTI_ROWS;
       /* Assuming height/blocksize >= max_supported_slices, which is reported
@@ -547,6 +594,7 @@ d3d12_video_encode_supported_slice_structures(const D3D12_VIDEO_ENCODER_CODEC &c
    if (FAILED(hr)) {
       debug_printf("CheckFeatureSupport failed with HR %x\n", (unsigned)hr);
    } else if (capDataSubregionLayout.IsSupported) {
+      realPartitioningSupported = true;
       /* This would be setting K rows per subregions in this D3D12 mode */
       supportedSliceStructuresBitMask |= PIPE_VIDEO_CAP_SLICE_STRUCTURE_EQUAL_MULTI_ROWS;
       /* Assuming height/blocksize >= max_supported_slices, which is reported
@@ -565,6 +613,7 @@ d3d12_video_encode_supported_slice_structures(const D3D12_VIDEO_ENCODER_CODEC &c
    if (FAILED(hr)) {
       debug_printf("CheckFeatureSupport failed with HR %x\n", (unsigned)hr);
    } else if (capDataSubregionLayout.IsSupported) {
+      realPartitioningSupported = true;
       /* This would be setting K rows per subregions in this D3D12 mode */
       supportedSliceStructuresBitMask |= PIPE_VIDEO_CAP_SLICE_STRUCTURE_EQUAL_MULTI_ROWS;
       /* Assuming height/blocksize >= max_supported_slices, which is reported
@@ -584,6 +633,7 @@ d3d12_video_encode_supported_slice_structures(const D3D12_VIDEO_ENCODER_CODEC &c
    if (FAILED(hr)) {
       debug_printf("CheckFeatureSupport failed with HR %x\n", (unsigned)hr);
    } else if (capDataSubregionLayout.IsSupported) {
+      realPartitioningSupported = true;
       supportedSliceStructuresBitMask |= PIPE_VIDEO_CAP_SLICE_STRUCTURE_MAX_SLICE_SIZE;
    }
 
@@ -594,8 +644,29 @@ d3d12_video_encode_supported_slice_structures(const D3D12_VIDEO_ENCODER_CODEC &c
    if (FAILED(hr)) {
       debug_printf("CheckFeatureSupport failed with HR %x\n", (unsigned)hr);
    } else if (capDataSubregionLayout.IsSupported) {
+      autoSupported = true;
       supportedSliceStructuresBitMask |= PIPE_VIDEO_CAP_SLICE_STRUCTURE_AUTO;
    }
+
+   capDataSubregionLayout.SubregionMode = D3D12_VIDEO_ENCODER_FRAME_SUBREGION_LAYOUT_MODE_FULL_FRAME;
+   hr = pD3D12VideoDevice->CheckFeatureSupport(D3D12_FEATURE_VIDEO_ENCODER_FRAME_SUBREGION_LAYOUT_MODE,
+                                                         &capDataSubregionLayout,
+                                                         sizeof(capDataSubregionLayout));
+   if (FAILED(hr)) {
+      debug_printf("CheckFeatureSupport failed with HR %x\n", (unsigned)hr);
+   } else if (capDataSubregionLayout.IsSupported) {
+      fullFrameSupported = true;
+      supportedSliceStructuresBitMask |= PIPE_VIDEO_CAP_SLICE_STRUCTURE_ARBITRARY_ROWS;
+   }
+
+   /* Pick the most general supported D3D12 subregion mode. Preference order:
+    * UNIFORM_PARTITIONING_SUBREGIONS_PER_FRAME > FULL_FRAME > AUTO. */
+   if (realPartitioningSupported)
+      outMostGeneralSubregionMode = D3D12_VIDEO_ENCODER_FRAME_SUBREGION_LAYOUT_MODE_UNIFORM_PARTITIONING_SUBREGIONS_PER_FRAME;
+   else if (fullFrameSupported)
+      outMostGeneralSubregionMode = D3D12_VIDEO_ENCODER_FRAME_SUBREGION_LAYOUT_MODE_FULL_FRAME;
+   else if (autoSupported)
+      outMostGeneralSubregionMode = D3D12_VIDEO_ENCODER_FRAME_SUBREGION_LAYOUT_MODE_AUTO;
 
    return supportedSliceStructuresBitMask;
 }
@@ -1497,7 +1568,8 @@ d3d12_has_video_encode_support(struct pipe_screen *pscreen,
                                union pipe_enc_cap_two_pass &two_pass_support,
                                union pipe_enc_cap_gpu_stats_psnr& psnr_support,
                                union pipe_enc_cap_spatial_adaptive_quantization &saqSupport,
-                               uint32_t &readableReconstructedPictureSupport)
+                               uint32_t &readableReconstructedPictureSupport,
+                               D3D12_VIDEO_ENCODER_FRAME_SUBREGION_LAYOUT_MODE &mostGeneralSubregionMode)
 {
    ComPtr<ID3D12VideoDevice3> spD3D12VideoDevice;
    struct d3d12_screen *pD3D12Screen = (struct d3d12_screen *) pscreen;
@@ -1557,12 +1629,12 @@ d3d12_has_video_encode_support(struct pipe_screen *pscreen,
             supportedSliceStructures = d3d12_video_encode_supported_slice_structures(codecDesc,
                                                                                      profile,
                                                                                      level,
-                                                                                     spD3D12VideoDevice.Get());
+                                                                                     spD3D12VideoDevice.Get(),
+                                                                                     mostGeneralSubregionMode);
             D3D12_FEATURE_DATA_VIDEO_ENCODER_SUPPORT2 capEncoderSupportData = {};
             D3D12_FEATURE_DATA_VIDEO_ENCODER_RESOLUTION_SUPPORT_LIMITS1 resolutionDepCaps;
-            capEncoderSupportData.SubregionFrameEncoding = (supportedSliceStructures == PIPE_VIDEO_CAP_SLICE_STRUCTURE_NONE) ?
-                                                             D3D12_VIDEO_ENCODER_FRAME_SUBREGION_LAYOUT_MODE_FULL_FRAME :
-                                                             D3D12_VIDEO_ENCODER_FRAME_SUBREGION_LAYOUT_MODE_UNIFORM_PARTITIONING_SUBREGIONS_PER_FRAME;
+            supportsProfile = supportsProfile && (supportedSliceStructures != PIPE_VIDEO_CAP_SLICE_STRUCTURE_NONE);
+            capEncoderSupportData.SubregionFrameEncoding = mostGeneralSubregionMode;
             D3D12_VIDEO_ENCODER_PICTURE_CONTROL_SUBREGIONS_LAYOUT_DATA_SLICES sliceData = { };
             capEncoderSupportData.SubregionFrameEncodingData.DataSize = sizeof(sliceData);
             capEncoderSupportData.SubregionFrameEncodingData.pSlicesPartition_H264 = &sliceData;
@@ -1578,8 +1650,9 @@ d3d12_has_video_encode_support(struct pipe_screen *pscreen,
                                                                                  cap_allocations,
                                                                                  saqSupport);
             bVideoEncodeRequiresTextureArray = (capEncoderSupportData.SupportFlags & D3D12_VIDEO_ENCODER_SUPPORT_FLAG_RECONSTRUCTED_FRAMES_REQUIRE_TEXTURE_ARRAYS) != 0;
-            if (supportedSliceStructures == PIPE_VIDEO_CAP_SLICE_STRUCTURE_NONE)
-               maxSlices = 0;
+            if ((mostGeneralSubregionMode == D3D12_VIDEO_ENCODER_FRAME_SUBREGION_LAYOUT_MODE_FULL_FRAME) ||
+                (mostGeneralSubregionMode == D3D12_VIDEO_ENCODER_FRAME_SUBREGION_LAYOUT_MODE_AUTO))
+               maxSlices = 0; /* No real multi-subregion partitioning available. */
             else
                maxSlices = resolutionDepCaps.MaxSubregionsNumber;
 
@@ -1599,9 +1672,9 @@ d3d12_has_video_encode_support(struct pipe_screen *pscreen,
             roi_support.bits.num_roi_regions = roi_support.bits.roi_rc_qp_delta_support ? PIPE_ENC_ROI_REGION_NUM_MAX : 0;
             roi_support.bits.log2_roi_min_block_pixel_size = static_cast<uint32_t>(std::log2(capEncoderSupportData.pResolutionDependentSupport[0].QPMapRegionPixelsSize));
 
-            supportsProfile = d3d12_video_encode_get_h264_codec_support(profDesc,
-                                                                        spD3D12VideoDevice.Get(),
-                                                                        codecSupport.h264_support.d3d12_caps);
+            supportsProfile = supportsProfile && d3d12_video_encode_get_h264_codec_support(profDesc,
+                                                                                            spD3D12VideoDevice.Get(),
+                                                                                            codecSupport.h264_support.d3d12_caps);
 
             D3D12_VIDEO_ENCODER_INPUT_MAP_SESSION_INFO sessionInfo =
             {
@@ -1661,6 +1734,7 @@ d3d12_has_video_encode_support(struct pipe_screen *pscreen,
          profDesc.DataSize = sizeof(profHEVC);
          profDesc.pHEVCProfile = &profHEVC;
          D3D12_VIDEO_ENCODER_CODEC codecDesc = d3d12_video_encoder_convert_codec_to_d3d12_enc_codec(profile);
+         supportsProfile = true;
          D3D12_VIDEO_ENCODER_LEVEL_TIER_CONSTRAINTS_HEVC minLvlSettingHEVC = { };
          D3D12_VIDEO_ENCODER_LEVEL_TIER_CONSTRAINTS_HEVC maxLvlSettingHEVC = { };
          D3D12_VIDEO_ENCODER_LEVEL_SETTING minLvl = {};
@@ -1686,7 +1760,8 @@ d3d12_has_video_encode_support(struct pipe_screen *pscreen,
             supportedSliceStructures = d3d12_video_encode_supported_slice_structures(codecDesc,
                                                                                      d3d12_profile,
                                                                                      level,
-                                                                                     spD3D12VideoDevice.Get());
+                                                                                     spD3D12VideoDevice.Get(),
+                                                                                     mostGeneralSubregionMode);
 
             maxReferencesPerFrame =
                d3d12_video_encode_supported_references_per_frame_structures(codecDesc,
@@ -1696,10 +1771,10 @@ d3d12_has_video_encode_support(struct pipe_screen *pscreen,
                                                                             maxLongTermReferences,
                                                                             maxDPBCapacity);
 
-            supportsProfile = d3d12_video_encode_get_hevc_codec_support(codecDesc,
-                                                                        profDesc,
-                                                                        spD3D12VideoDevice.Get(),
-                                                                        codecSupport.hevc_support.d3d12_caps);
+            supportsProfile = supportsProfile && d3d12_video_encode_get_hevc_codec_support(codecDesc,
+                                                                                            profDesc,
+                                                                                            spD3D12VideoDevice.Get(),
+                                                                                            codecSupport.hevc_support.d3d12_caps);
             if (supportsProfile) {
                d3d12_codec_support.DataSize = sizeof(codecSupport.hevc_support.d3d12_caps);
                d3d12_codec_support.pHEVCSupport1 = &codecSupport.hevc_support.d3d12_caps;
@@ -1891,9 +1966,8 @@ d3d12_has_video_encode_support(struct pipe_screen *pscreen,
 
                D3D12_FEATURE_DATA_VIDEO_ENCODER_SUPPORT2 capEncoderSupportData = {};
                D3D12_FEATURE_DATA_VIDEO_ENCODER_RESOLUTION_SUPPORT_LIMITS1 resolutionDepCaps;
-               capEncoderSupportData.SubregionFrameEncoding = (supportedSliceStructures == PIPE_VIDEO_CAP_SLICE_STRUCTURE_NONE) ?
-                                                                D3D12_VIDEO_ENCODER_FRAME_SUBREGION_LAYOUT_MODE_FULL_FRAME :
-                                                                D3D12_VIDEO_ENCODER_FRAME_SUBREGION_LAYOUT_MODE_UNIFORM_PARTITIONING_SUBREGIONS_PER_FRAME;
+               supportsProfile = supportsProfile && (supportedSliceStructures != PIPE_VIDEO_CAP_SLICE_STRUCTURE_NONE);
+               capEncoderSupportData.SubregionFrameEncoding = mostGeneralSubregionMode;
                D3D12_VIDEO_ENCODER_PICTURE_CONTROL_SUBREGIONS_LAYOUT_DATA_SLICES sliceData = { };
                capEncoderSupportData.SubregionFrameEncodingData.DataSize = sizeof(sliceData);
                capEncoderSupportData.SubregionFrameEncodingData.pSlicesPartition_HEVC = &sliceData;
@@ -1909,8 +1983,9 @@ d3d12_has_video_encode_support(struct pipe_screen *pscreen,
                                                                                     cap_allocations,
                                                                                     saqSupport);
                bVideoEncodeRequiresTextureArray = (capEncoderSupportData.SupportFlags & D3D12_VIDEO_ENCODER_SUPPORT_FLAG_RECONSTRUCTED_FRAMES_REQUIRE_TEXTURE_ARRAYS) != 0;
-               if (supportedSliceStructures == PIPE_VIDEO_CAP_SLICE_STRUCTURE_NONE)
-                  maxSlices = 0;
+               if ((mostGeneralSubregionMode == D3D12_VIDEO_ENCODER_FRAME_SUBREGION_LAYOUT_MODE_FULL_FRAME) ||
+                   (mostGeneralSubregionMode == D3D12_VIDEO_ENCODER_FRAME_SUBREGION_LAYOUT_MODE_AUTO))
+                  maxSlices = 0; /* No real multi-subregion partitioning available. */
                else
                   maxSlices = resolutionDepCaps.MaxSubregionsNumber;
 
@@ -1979,6 +2054,7 @@ d3d12_has_video_encode_support(struct pipe_screen *pscreen,
                                                                 maxLvl,
                                                                 spD3D12VideoDevice.Get())) {
             d3d12_video_encoder_convert_d3d12_to_spec_level_av1(maxLvlSettingAV1.Level, maxLvlSpec);
+            supportsProfile = true;
 
             D3D12_VIDEO_ENCODER_PROFILE_DESC d3d12_profile;
             d3d12_profile.pAV1Profile = &profAV1;
@@ -1992,10 +2068,10 @@ d3d12_has_video_encode_support(struct pipe_screen *pscreen,
                                                                             maxLongTermReferences,
                                                                             maxDPBCapacity);
 
-            supportsProfile = d3d12_video_encode_get_av1_codec_support(codecDesc,
-                                                                        profDesc,
-                                                                        spD3D12VideoDevice.Get(),
-                                                                        codecSupport.av1_support.d3d12_caps);
+            supportsProfile = supportsProfile && d3d12_video_encode_get_av1_codec_support(codecDesc,
+                                                                                           profDesc,
+                                                                                           spD3D12VideoDevice.Get(),
+                                                                                           codecSupport.av1_support.d3d12_caps);
             if (supportsProfile) {
                d3d12_codec_support.DataSize = sizeof(codecSupport.av1_support.d3d12_caps);
                d3d12_codec_support.pAV1Support = &codecSupport.av1_support.d3d12_caps;
@@ -2178,7 +2254,8 @@ d3d12_has_video_encode_support(struct pipe_screen *pscreen,
                                                             spD3D12VideoDevice.Get(),
                                                             maxRes,
                                                             supportedSliceStructures,
-                                                            av1TileSupport // out
+                                                            av1TileSupport, // out
+                                                            mostGeneralSubregionMode // out
                                                          );
                // Cannot pass pipe 2 bit-field as reference, use aux variable instead.
                codecSupport.av1_support.features_ext2.bits.tile_size_bytes_minus1 = av1TileSupport.TileSizeBytesMinus1;
@@ -2189,9 +2266,8 @@ d3d12_has_video_encode_support(struct pipe_screen *pscreen,
 
                D3D12_FEATURE_DATA_VIDEO_ENCODER_SUPPORT2 capEncoderSupportData = {};
                D3D12_FEATURE_DATA_VIDEO_ENCODER_RESOLUTION_SUPPORT_LIMITS1 resolutionDepCaps;
-               capEncoderSupportData.SubregionFrameEncoding = (supportedSliceStructures == PIPE_VIDEO_CAP_SLICE_STRUCTURE_NONE) ?
-                                                                D3D12_VIDEO_ENCODER_FRAME_SUBREGION_LAYOUT_MODE_FULL_FRAME :
-                                                                D3D12_VIDEO_ENCODER_FRAME_SUBREGION_LAYOUT_MODE_UNIFORM_GRID_PARTITION;
+               supportsProfile = supportsProfile && (supportedSliceStructures != PIPE_VIDEO_CAP_SLICE_STRUCTURE_NONE);
+               capEncoderSupportData.SubregionFrameEncoding = mostGeneralSubregionMode;
 
                capEncoderSupportData.SubregionFrameEncodingData.DataSize = sizeof(av1TileSupport.TilesConfiguration);
                capEncoderSupportData.SubregionFrameEncodingData.pTilesPartition_AV1 = &av1TileSupport.TilesConfiguration;
@@ -2207,13 +2283,14 @@ d3d12_has_video_encode_support(struct pipe_screen *pscreen,
                                                                                     cap_allocations,
                                                                                     saqSupport);
                bVideoEncodeRequiresTextureArray = (capEncoderSupportData.SupportFlags & D3D12_VIDEO_ENCODER_SUPPORT_FLAG_RECONSTRUCTED_FRAMES_REQUIRE_TEXTURE_ARRAYS) != 0;
-               if (supportedSliceStructures == PIPE_VIDEO_CAP_SLICE_STRUCTURE_NONE)
-                  maxSlices = 0;
+               if ((mostGeneralSubregionMode == D3D12_VIDEO_ENCODER_FRAME_SUBREGION_LAYOUT_MODE_FULL_FRAME) ||
+                   (mostGeneralSubregionMode == D3D12_VIDEO_ENCODER_FRAME_SUBREGION_LAYOUT_MODE_AUTO))
+                  maxSlices = 0; /* No real multi-subregion partitioning available. */
                else
                   maxSlices = resolutionDepCaps.MaxSubregionsNumber;
 
                maxIRDuration = resolutionDepCaps.MaxIntraRefreshFrameDuration;
-               codecSupport.av1_support.features_ext2.bits.max_tile_num_minus1 = maxSlices - 1;
+               codecSupport.av1_support.features_ext2.bits.max_tile_num_minus1 = (maxSlices > 0) ? (maxSlices - 1) : 0;
 
                isRCMaxFrameSizeSupported = ((capEncoderSupportData.SupportFlags & D3D12_VIDEO_ENCODER_SUPPORT_FLAG_RATE_CONTROL_MAX_FRAME_SIZE_AVAILABLE) != 0) ? 1 : 0;
                readableReconstructedPictureSupport = ((capEncoderSupportData.SupportFlags & D3D12_VIDEO_ENCODER_SUPPORT_FLAG_READABLE_RECONSTRUCTED_PICTURE_LAYOUT_AVAILABLE) != 0) ? 1 : 0;
@@ -2451,6 +2528,7 @@ d3d12_screen_get_video_param_encode(struct pipe_screen *pscreen,
    memset(&codec_specific_support, 0, sizeof(codec_specific_support));
    union pipe_enc_cap_spatial_adaptive_quantization saqSupport = {};
    uint32_t readableReconstructedPictureSupport = 0u;
+   D3D12_VIDEO_ENCODER_FRAME_SUBREGION_LAYOUT_MODE mostGeneralSubregionMode = {};
    switch (param) {
       case PIPE_VIDEO_CAP_REQUIRES_FLUSH_ON_END_FRAME:
          return 1;
@@ -2554,7 +2632,8 @@ d3d12_screen_get_video_param_encode(struct pipe_screen *pscreen,
                                             two_pass_support,
                                             psnr_support,
                                             saqSupport,
-                                            readableReconstructedPictureSupport)) {
+                                            readableReconstructedPictureSupport,
+                                            mostGeneralSubregionMode)) {
 
             DXGI_FORMAT format = d3d12_convert_pipe_video_profile_to_dxgi_format(profile);
             auto pipeFmt = d3d12_get_pipe_format(format);
@@ -2589,8 +2668,12 @@ d3d12_screen_get_video_param_encode(struct pipe_screen *pscreen,
                } else if (param == PIPE_VIDEO_CAP_ENC_INTRA_REFRESH_MAX_DURATION) {
                   return maxIRDuration;
                } else if (param == PIPE_VIDEO_CAP_ENC_INTRA_REFRESH) {
-                  bool bSupportsNSlicedIntraRefresh = (supportedSliceStructures != PIPE_VIDEO_CAP_SLICE_STRUCTURE_NONE) && // IR requires N slices as per DX12 spec
-                                                      (maxIRDuration != 0);
+                  /* DX12 IR requires real >1 subregion partitioning */
+                  bool bSupportsNSlicedIntraRefresh =
+                     (mostGeneralSubregionMode != D3D12_VIDEO_ENCODER_FRAME_SUBREGION_LAYOUT_MODE_FULL_FRAME) &&
+                     (mostGeneralSubregionMode != D3D12_VIDEO_ENCODER_FRAME_SUBREGION_LAYOUT_MODE_AUTO) &&
+                     (supportedSliceStructures != PIPE_VIDEO_CAP_SLICE_STRUCTURE_NONE) &&
+                     (maxIRDuration != 0);
                   return bSupportsNSlicedIntraRefresh ?
                          (PIPE_VIDEO_ENC_INTRA_REFRESH_ROW |
                           PIPE_VIDEO_ENC_INTRA_REFRESH_ADAPTIVE |
@@ -2740,6 +2823,7 @@ d3d12_video_encode_requires_texture_array_dpb(struct d3d12_screen* pScreen, enum
    union pipe_enc_cap_gpu_stats_psnr psnr_support = {};
    union pipe_enc_cap_spatial_adaptive_quantization saqSupport = {};
    uint32_t readableReconstructedPictureSupport = 0u;
+   D3D12_VIDEO_ENCODER_FRAME_SUBREGION_LAYOUT_MODE mostGeneralSubregionMode = {};
    if (d3d12_has_video_encode_support(&pScreen->base,
                                       profile,
                                       maxLvlEncode,
@@ -2771,7 +2855,8 @@ d3d12_video_encode_requires_texture_array_dpb(struct d3d12_screen* pScreen, enum
                                       two_pass_support,
                                       psnr_support,
                                       saqSupport,
-                                      readableReconstructedPictureSupport))
+                                      readableReconstructedPictureSupport,
+                                      mostGeneralSubregionMode))
    {
       return bVideoEncodeRequiresTextureArray;
    }

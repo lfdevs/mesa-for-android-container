@@ -896,7 +896,19 @@ ntq_get_alu_src(struct v3d_compile *c, nir_alu_instr *instr,
 static struct qreg
 ntq_minify(struct v3d_compile *c, struct qreg size, struct qreg level)
 {
-        return vir_MAX(c, vir_SHR(c, size, level), vir_uniform_ui(c, 1));
+        /* For valid textures, a minified level is at least 1.
+         * However, with VK_KHR_robustness2 nullDescriptor we represent null
+         * resources with a base size of 0.
+         */
+        struct qreg minified = vir_MAX(c, vir_SHR(c, size, level),
+                                       vir_uniform_ui(c, 1));
+
+        if (!c->key->null_descriptor)
+                return minified;
+
+        vir_set_pf(c, vir_MOV_dest(c, vir_nop_reg(), size), V3D_QPU_PF_PUSHZ);
+        return vir_MOV(c, vir_SEL(c, V3D_QPU_COND_IFNA, minified,
+                       vir_uniform_ui(c, 0)));
 }
 
 static void
@@ -1384,26 +1396,57 @@ ntq_emit_alu(struct v3d_compile *c, nir_alu_instr *instr)
                 break;
 
         case nir_op_fneg:
-                result = vir_XOR(c, src[0], vir_uniform_ui(c, UINT32_C(1) << 31));
+                if (c->devinfo->ver >= 71 &&
+                    instr->def.bit_size == 16) {
+                        result = vir_VFNEG(c, src[0]);
+                } else {
+                        result = vir_XOR(c, src[0],
+                                         vir_uniform_ui(c, UINT32_C(1) << 31));
+                }
                 break;
         case nir_op_ineg:
                 result = vir_NEG(c, src[0]);
                 break;
 
         case nir_op_fmul:
-                result = vir_FMUL(c, src[0], src[1]);
+                if (c->devinfo->ver >= 71 &&
+                    instr->def.bit_size == 16) {
+                        result = vir_VFMUL(c, src[0], src[1]);
+                } else {
+                        result = vir_FMUL(c, src[0], src[1]);
+                }
                 break;
         case nir_op_fadd:
-                result = vir_FADD(c, src[0], src[1]);
+                if (c->devinfo->ver >= 71 &&
+                    instr->def.bit_size == 16) {
+                        result = vir_VFADD(c, src[0], src[1]);
+                } else {
+                        result = vir_FADD(c, src[0], src[1]);
+                }
                 break;
         case nir_op_fsub:
-                result = vir_FSUB(c, src[0], src[1]);
+                if (c->devinfo->ver >= 71 &&
+                    instr->def.bit_size == 16) {
+                        result = vir_VFSUB(c, src[0], src[1]);
+                } else {
+                        result = vir_FSUB(c, src[0], src[1]);
+                }
                 break;
         case nir_op_fmin:
-                result = vir_FMIN(c, src[0], src[1]);
+                if (c->devinfo->ver >= 71 &&
+                    instr->def.bit_size == 16) {
+                        result = vir_VFMIN(c, src[0], src[1]);
+                } else {
+                        result = vir_FMIN(c, src[0], src[1]);
+                }
                 break;
         case nir_op_fmax:
-                result = vir_FMAX(c, src[0], src[1]);
+                if (c->devinfo->ver >= 71 &&
+                    instr->def.bit_size == 16) {
+                        result = vir_VFMAX(c, src[0], src[1]);
+                } else {
+                        result = vir_FMAX(c, src[0], src[1]);
+                }
                 break;
 
         case nir_op_f2i32: {
@@ -1734,8 +1777,14 @@ ntq_emit_alu(struct v3d_compile *c, nir_alu_instr *instr)
                 break;
 
         case nir_op_fabs: {
-                result = vir_FMOV(c, src[0]);
-                vir_set_unpack(c->defs[result.index], 0, V3D_QPU_UNPACK_ABS);
+                if (c->devinfo->ver >= 71 &&
+                    instr->def.bit_size == 16) {
+                        result = vir_VFABS(c, src[0]);
+                } else {
+                        result = vir_FMOV(c, src[0]);
+                        vir_set_unpack(c->defs[result.index], 0,
+                                       V3D_QPU_UNPACK_ABS);
+                }
                 break;
         }
 

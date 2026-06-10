@@ -646,3 +646,57 @@ brw_nir_lower_mcs_fetch(nir_shader *shader,
                               nir_metadata_control_flow,
                               (void *)devinfo);
 }
+
+static bool
+brw_nir_apply_sampler_undef_derivatives_workaround_instr(nir_builder *b,
+                                                         nir_tex_instr *tex,
+                                                         void *cb_data)
+{
+   if (!tex->instr.block->divergent)
+      return false;
+
+   if (tex->op != nir_texop_tex)
+      return false;
+
+   b->cursor = nir_before_instr(&tex->instr);
+
+   const int coord_index = nir_tex_instr_src_index(tex, nir_tex_src_coord);
+   assert(coord_index >= 0);
+
+   nir_def *disabled_lanes =
+      nir_inot(b, nir_ballot(b, 1, 32, nir_imm_true(b)));
+   nir_def *disabled_quad =
+      nir_ishl(b, disabled_lanes,
+                  nir_iand_imm(b, nir_load_subgroup_invocation(b), ~3));
+
+   nir_def *coord = tex->src[coord_index].src.ssa;
+   nir_def *zero = nir_imm_zero(b, coord->num_components, coord->bit_size);
+
+   /* Calculate DDX_COARSE, or zero if lanes 0 or 1 are disabled */
+   nir_def *ddx =
+      nir_bcsel(b, nir_i2b(b, nir_iand_imm(b, disabled_quad, 0b0011)),
+                   zero, nir_ddx_coarse(b, coord));
+
+   /* Calculate DDY_COARSE, or zero if lanes 0 or 2 are disabled */
+   nir_def *ddy =
+      nir_bcsel(b, nir_i2b(b, nir_iand_imm(b, disabled_quad, 0b0101)),
+                   zero, nir_ddy_coarse(b, coord));
+
+   /* Convert the texture instruction to a sample_d with the sanitized DDX/DDY */
+   tex->op = nir_texop_txd;
+   nir_tex_instr_add_src(tex, nir_tex_src_ddx, ddx);
+   nir_tex_instr_add_src(tex, nir_tex_src_ddy, ddy);
+
+   return true;
+}
+
+bool brw_nir_apply_sampler_undef_derivatives_workaround(nir_shader *nir)
+{
+   nir_function_impl *impl = nir_shader_get_entrypoint(nir);
+   nir_metadata_require(impl, nir_metadata_divergence);
+
+   return nir_shader_tex_pass(nir,
+                              brw_nir_apply_sampler_undef_derivatives_workaround_instr,
+                              nir_metadata_control_flow,
+                              NULL);
+}

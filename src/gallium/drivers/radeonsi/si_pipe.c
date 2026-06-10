@@ -162,18 +162,20 @@ void si_destroy_screen(struct pipe_screen *pscreen)
       return;
 
    for (unsigned i = 0; i < ARRAY_SIZE(sscreen->aux_contexts); i++) {
-      if (!sscreen->aux_contexts[i].ctx)
-         continue;
+      mtx_lock(&sscreen->aux_contexts[i].lock);
 
-      struct si_context *saux = si_get_aux_context(sscreen, &sscreen->aux_contexts[i]);
-      struct u_log_context *aux_log = saux->log;
-      if (aux_log) {
-         saux->b.set_log_context(&saux->b, NULL);
-         u_log_context_destroy(aux_log);
-         FREE(aux_log);
+      if (sscreen->aux_contexts[i].ctx) {
+         struct si_context *saux = (struct si_context*)sscreen->aux_contexts[i].ctx;
+         struct u_log_context *aux_log = saux->log;
+         if (aux_log) {
+            saux->b.set_log_context(&saux->b, NULL);
+            u_log_context_destroy(aux_log);
+            FREE(aux_log);
+         }
+
+         saux->b.destroy(&saux->b);
       }
 
-      saux->b.destroy(&saux->b);
       mtx_unlock(&sscreen->aux_contexts[i].lock);
       mtx_destroy(&sscreen->aux_contexts[i].lock);
    }

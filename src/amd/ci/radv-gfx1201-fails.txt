@@ -487,3 +487,13 @@ GStreamer-H.265-Vulkan-Gst1.0@WPP_HIGH_TP_444_8BIT_RExt_Apple_2,Crash
 GStreamer-H.265-Vulkan-Gst1.0@WP_A_MAIN10_Toshiba_3,Crash
 GStreamer-H.265-Vulkan-Gst1.0@WP_MAIN10_B_Toshiba_3,Crash
 GStreamer-H.265-Vulkan-Gst1.0@Zero_and_One_Palette_Size_A_Canon_2,Crash
+
+# CTS is missing -frounding-math: https://gitlab.khronos.org/Tracker/vk-gl-cts/-/issues/6580
+dEQP-VK.spirv_assembly.instruction.compute.opfma.fp64.scalar.rte.denorm_flush.directed,Fail
+dEQP-VK.spirv_assembly.instruction.compute.opfma.fp64.scalar.rte.denorm_flush.float_controls,Fail
+dEQP-VK.spirv_assembly.instruction.compute.opfma.fp64.vec2.rte.denorm_flush.directed,Fail
+dEQP-VK.spirv_assembly.instruction.compute.opfma.fp64.vec2.rte.denorm_flush.float_controls,Fail
+dEQP-VK.spirv_assembly.instruction.compute.opfma.fp64.vec3.rte.denorm_flush.directed,Fail
+dEQP-VK.spirv_assembly.instruction.compute.opfma.fp64.vec3.rte.denorm_flush.float_controls,Fail
+dEQP-VK.spirv_assembly.instruction.compute.opfma.fp64.vec4.rte.denorm_flush.directed,Fail
+dEQP-VK.spirv_assembly.instruction.compute.opfma.fp64.vec4.rte.denorm_flush.float_controls,Fail

@@ -3634,8 +3634,9 @@ impl SM70Op for OpAtom {
                         "64-bit Shared atomics only support CmpExch or Exch"
                     );
                     assert!(
-                        !self.atom_type.is_float(),
-                        "Shared atomics don't support float"
+                        !self.atom_type.is_float()
+                            || self.atom_op == AtomOp::Add,
+                        "Shared float atomics only supports add"
                     );
                     e.set_atom_op(87..91, self.atom_op);
                 }

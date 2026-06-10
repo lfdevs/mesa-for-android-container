@@ -591,11 +591,11 @@ namespace {
       case SHADER_OPCODE_SEND:
       case SHADER_OPCODE_SEND_GATHER:
          switch (info.sfid) {
-         case BRW_SFID_HDC_READ_ONLY:
+         case GEN_SFID_HDC_READ_ONLY:
             /* See FS_OPCODE_UNIFORM_PULL_CONSTANT_LOAD */
             return calculate_desc(info, EU_UNIT_DP_CC, 2, 0, 0, 0, 16 /* XXX */,
                                   10 /* XXX */, 100 /* XXX */, 0, 0, 0, 0);
-         case BRW_SFID_RENDER_CACHE:
+         case GEN_SFID_RENDER_CACHE:
             switch (brw_dp_desc_msg_type(devinfo, info.desc)) {
             case GFX7_DATAPORT_RC_TYPED_ATOMIC_OP:
                return calculate_desc(info, EU_UNIT_DP_RC, 2, 0, 0,
@@ -618,13 +618,13 @@ namespace {
                                         10 /* XXX */, 300 /* XXX */, 0, 0,
                                         0, 0);
             }
-         case BRW_SFID_SAMPLER: {
+         case GEN_SFID_SAMPLER: {
             return calculate_desc(info, EU_UNIT_SAMPLER, 2, 0, 0, 0, 16,
                                   8, 750, 0, 0, 2, 0);
          }
-         case BRW_SFID_HDC0:
+         case GEN_SFID_HDC0:
             switch (brw_dp_desc_msg_type(devinfo, info.desc)) {
-            case GFX7_DATAPORT_DC_MEMORY_FENCE:
+            case GEN_DATAPORT_DC_MEMORY_FENCE:
                return calculate_desc(info, EU_UNIT_DP_DC, 2, 0, 0,
                                      30 /* XXX */, 0,
                                      10 /* XXX */, 100 /* XXX */, 0, 0, 0, 0);
@@ -635,12 +635,12 @@ namespace {
                                      0, 0);
             }
 
-         case BRW_SFID_HDC1:
+         case GEN_SFID_HDC1:
             switch (brw_dp_desc_msg_type(devinfo, info.desc)) {
-            case HSW_DATAPORT_DC_PORT1_UNTYPED_ATOMIC_OP:
-            case HSW_DATAPORT_DC_PORT1_UNTYPED_ATOMIC_OP_SIMD4X2:
-            case HSW_DATAPORT_DC_PORT1_TYPED_ATOMIC_OP_SIMD4X2:
-            case HSW_DATAPORT_DC_PORT1_TYPED_ATOMIC_OP:
+            case GEN_DATAPORT_DC_PORT1_UNTYPED_ATOMIC_OP:
+            case GEN_DATAPORT_DC_PORT1_UNTYPED_ATOMIC_OP_SIMD4X2:
+            case GEN_DATAPORT_DC_PORT1_TYPED_ATOMIC_OP_SIMD4X2:
+            case GEN_DATAPORT_DC_PORT1_TYPED_ATOMIC_OP:
                return calculate_desc(info, EU_UNIT_DP_DC, 2, 0, 0,
                                      30 /* XXX */, 400 /* XXX */,
                                      10 /* XXX */, 100 /* XXX */, 0, 0,
@@ -653,13 +653,13 @@ namespace {
                                      0, 0);
             }
 
-         case BRW_SFID_PIXEL_INTERPOLATOR:
+         case GEN_SFID_PIXEL_INTERPOLATOR:
             return calculate_desc(info, EU_UNIT_PI, 2, 0, 0, 14 /* XXX */, 0,
                                   0, 90 /* XXX */, 0, 0, 0, 0);
 
-         case BRW_SFID_UGM:
-         case BRW_SFID_TGM:
-         case BRW_SFID_SLM:
+         case GEN_SFID_UGM:
+         case GEN_SFID_TGM:
+         case GEN_SFID_SLM:
             switch (lsc_msg_desc_opcode(devinfo, info.desc)) {
             case LSC_OP_LOAD:
             case LSC_OP_STORE:
@@ -704,15 +704,15 @@ namespace {
                abort();
             }
 
-         case BRW_SFID_MESSAGE_GATEWAY:
-         case BRW_SFID_BINDLESS_THREAD_DISPATCH: /* or THREAD_SPAWNER */
-         case BRW_SFID_RAY_TRACE_ACCELERATOR:
+         case GEN_SFID_MESSAGE_GATEWAY:
+         case GEN_SFID_BINDLESS_THREAD_DISPATCH: /* or THREAD_SPAWNER */
+         case GEN_SFID_RAY_TRACE_ACCELERATOR:
             return calculate_desc(info, EU_UNIT_SPAWNER, 2, 0, 0, 0 /* XXX */, 0,
                                   10 /* XXX */, 0, 0, 0, 0, 0);
 
-         case BRW_SFID_URB:
+         case GEN_SFID_URB:
             if (brw_urb_desc_msg_type(devinfo, info.desc) ==
-                GFX125_URB_OPCODE_FENCE) {
+                GEN_GFX125_URB_OPCODE_FENCE) {
                return calculate_desc(info, EU_UNIT_DP_DC, 2, 0, 0,
                                      30 /* XXX */, 0,
                                      10 /* XXX */, 100 /* XXX */, 0, 0, 0, 0);
@@ -850,7 +850,7 @@ namespace {
     * condition of a Gfx12+ SWSB.
     */
    enum intel_eu_dependency_id
-   tgl_swsb_rd_dependency_id(tgl_swsb swsb)
+   gen_swsb_rd_dependency_id(gen_swsb swsb)
    {
       if (swsb.mode) {
          assert(swsb.sbid < EU_DEPENDENCY_ID_GRF0 - EU_DEPENDENCY_ID_SBID_RD0);
@@ -865,7 +865,7 @@ namespace {
     * condition of a Gfx12+ SWSB.
     */
    enum intel_eu_dependency_id
-   tgl_swsb_wr_dependency_id(tgl_swsb swsb)
+   gen_swsb_wr_dependency_id(gen_swsb swsb)
    {
       if (swsb.mode) {
          assert(swsb.sbid <
@@ -950,10 +950,10 @@ namespace {
       }
 
       /* Stall on any SBID dependencies. */
-      if (inst->sched.mode & (TGL_SBID_SET | TGL_SBID_DST))
-         stall_on_dependency(st, tgl_swsb_wr_dependency_id(inst->sched));
-      else if (inst->sched.mode & TGL_SBID_SRC)
-         stall_on_dependency(st, tgl_swsb_rd_dependency_id(inst->sched));
+      if (inst->sched.mode & (GEN_SBID_SET | GEN_SBID_DST))
+         stall_on_dependency(st, gen_swsb_wr_dependency_id(inst->sched));
+      else if (inst->sched.mode & GEN_SBID_SRC)
+         stall_on_dependency(st, gen_swsb_rd_dependency_id(inst->sched));
 
       /* Execute the instruction. */
       execute_instruction(st, perf);
@@ -995,9 +995,9 @@ namespace {
       }
 
       /* Mark any SBID dependencies. */
-      if (inst->sched.mode & TGL_SBID_SET) {
-         mark_read_dependency(st, perf, tgl_swsb_rd_dependency_id(inst->sched));
-         mark_write_dependency(st, perf, tgl_swsb_wr_dependency_id(inst->sched));
+      if (inst->sched.mode & GEN_SBID_SET) {
+         mark_read_dependency(st, perf, gen_swsb_rd_dependency_id(inst->sched));
+         mark_write_dependency(st, perf, gen_swsb_wr_dependency_id(inst->sched));
       }
    }
 

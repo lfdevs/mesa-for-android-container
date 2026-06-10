@@ -25,6 +25,7 @@ c_args_vpe += [
   '-DVPE_BUILD_1_X',
   '-DVPE_BUILD_1_1',
   '-DVPE_BUILD_2_0',
+  '-DVPE_BUILD_2_2',
 ]
 
 vpe_files = files(
@@ -142,6 +143,8 @@ vpe_files = files(
   'src/chip/vpe20/vpe20_plane_desc_writer.c',
   'src/chip/vpe20/vpe20_resource.c',
   'src/chip/vpe20/vpe20_vpe_desc_writer.c',
+  'src/chip/vpe22/inc/vpe22_resource.h',
+  'src/chip/vpe22/vpe22_resource.c',
   'src/imported/SPL/dc_spl.c',
   'src/imported/SPL/dc_spl.h',
   'src/imported/SPL/dc_spl_filters.c',
@@ -161,6 +164,7 @@ inc_amd_vpe = include_directories(
   'src/chip/vpe10/inc',
   'src/chip/vpe11/inc',
   'src/chip/vpe20/inc',
+  'src/chip/vpe22/inc',
   'src/imported/SPL',
   'src/imported',
 )

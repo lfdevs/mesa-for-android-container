@@ -148,10 +148,6 @@
  */
 #define DRI_CONF_SECTION_DEBUG DRI_CONF_SECTION("Debugging")
 
-#define DRI_CONF_ALWAYS_FLUSH_BATCH(def) \
-   DRI_CONF_OPT_B(always_flush_batch, def,                              \
-                  "Enable flushing batchbuffer after each draw call")
-
 #define DRI_CONF_ALWAYS_FLUSH_CACHE(def) \
    DRI_CONF_OPT_B(always_flush_cache, def, \
                   "Enable flushing GPU caches with each draw call")
@@ -330,10 +326,6 @@
    DRI_CONF_OPT_B(ignore_map_unsynchronized, def, \
                   "Ignore GL_MAP_UNSYNCHRONIZED_BIT, workaround for games that use it incorrectly")
 
-#define DRI_CONF_VK_DONT_CARE_AS_LOAD(def) \
-   DRI_CONF_OPT_B(vk_dont_care_as_load, def, \
-                  "Treat VK_ATTACHMENT_LOAD_OP_DONT_CARE as LOAD_OP_LOAD, workaround on tiler GPUs for games that confuse these two load ops")
-
 #define DRI_CONF_VK_LOWER_TERMINATE_TO_DISCARD(def) \
    DRI_CONF_OPT_B(vk_lower_terminate_to_discard, def, \
                   "Lower terminate to discard (which is implicitly demote)")
@@ -388,22 +380,10 @@
 #define DRI_CONF_INTEL_DISABLE_THREADED_CONTEXT(def) \
    DRI_CONF_OPT_B(intel_disable_threaded_context, def, "Disable threaded context")
 
-#define DRI_CONF_VK_REQUIRE_ETC2(def) \
-  DRI_CONF_OPT_B(vk_require_etc2, def, \
-                 "Implement emulated ETC2 on HW that does not support it")
-
-#define DRI_CONF_VK_REQUIRE_ASTC(def) \
-   DRI_CONF_OPT_B(vk_require_astc, def, \
-                  "Implement emulated ASTC on HW that does not support it")
-
 /**
  * \brief Image quality-related options
  */
 #define DRI_CONF_SECTION_QUALITY DRI_CONF_SECTION("Image Quality")
-
-#define DRI_CONF_PRECISE_TRIG(def) \
-   DRI_CONF_OPT_B(precise_trig, def, \
-                  "Prefer accuracy over performance in trig functions")
 
 #define DRI_CONF_PP_LOWER_DEPTH_RANGE_RATE() \
    DRI_CONF_OPT_F(lower_depth_range_rate, 1.0, 0.0, 1.0, \
@@ -506,10 +486,6 @@
    DRI_CONF_OPT_B(allow_rgb16_configs, def, \
                   "Allow exposure of visuals and fbconfigs with rgb16 and rgba16 formats")
 
-#define DRI_CONF_ALLOW_RGB565_CONFIGS(def) \
-   DRI_CONF_OPT_B(allow_rgb565_configs, def, \
-                  "Allow exposure of visuals and fbconfigs with rgb565 formats")
-
 #define DRI_CONF_FORCE_INTEGER_TEX_NEAREST(def) \
    DRI_CONF_OPT_B(force_integer_tex_nearest, def, \
                   "Force integer textures to use nearest filtering")
@@ -525,9 +501,9 @@
    DRI_CONF_OPT_B(vertex_program_default_out, def, \
                   "Initialize outputs of vertex program to a default value vec4(0, 0, 0, 1)")
 
-#define DRI_CONF_NO_FP16(def) \
-   DRI_CONF_OPT_B(no_fp16, def, \
-                  "Disable 16-bit float support")
+#define DRI_CONF_HEAP_MEMORY_PERCENT(def) \
+   DRI_CONF_OPT_F(heap_memory_percent, def, 0.0, 1.0, \
+                  "Percentage of total system memory to report as gpu heap memory (0 = driver default)")
 
 #define DRI_CONF_VK_ZERO_VRAM(def) \
    DRI_CONF_OPT_B(vk_zero_vram, def, \
@@ -621,54 +597,6 @@
                   "Enable fragmentStoresAndAtomics and vertexPipelineStoresAndAtomics on any architecture. (This may not work reliably and is for debug purposes only!)")
 
 /**
- * \brief Turnip specific configuration options
- */
-
-#define DRI_CONF_TU_DONT_RESERVE_DESCRIPTOR_SET(def) \
-   DRI_CONF_OPT_B(tu_dont_reserve_descriptor_set, def, \
-                  "Don't internally reserve one of the HW descriptor sets for descriptor set dynamic offset support, this frees up an extra descriptor set at the cost of that feature")
-
-#define DRI_CONF_TU_ALLOW_OOB_INDIRECT_UBO_LOADS(def) \
-   DRI_CONF_OPT_B(tu_allow_oob_indirect_ubo_loads, def, \
-                  "Some D3D11 games rely on out-of-bounds indirect UBO loads to return real values from underlying bound descriptor, this prevents us from lowering indirectly accessed UBOs to consts")
-
-#define DRI_CONF_TU_ENABLE_D24S8_BORDER_COLOR_WORKAROUND(def) \
-   DRI_CONF_OPT_B(tu_enable_d24s8_border_color_workaround, def, \
-                  "Disable UBWC for D24S8 images with VK_IMAGE_USAGE_SAMPLED_BIT when customBorderColorWithoutFormat is enabled")
-
-#define DRI_CONF_TU_ENABLE_FAST_BORDER_COLOR_FOR_UNDEFINED_FORMATS(def) \
-   DRI_CONF_OPT_B(tu_enable_fast_border_color_for_undefined_formats, def, \
-                  "Enables fast border color HW feature for VK_FORMAT_UNDEFINED sampler formats.")
-
-#define DRI_CONF_TU_USE_TEX_COORD_ROUND_NEAREST_EVEN_MODE(def) \
-   DRI_CONF_OPT_B(tu_use_tex_coord_round_nearest_even_mode, def, \
-                  "Use D3D-compliant round-to-nearest-even mode for texture coordinates")
-
-#define DRI_CONF_TU_IGNORE_FRAG_DEPTH_DIRECTION(def) \
-   DRI_CONF_OPT_B(tu_ignore_frag_depth_direction, def, \
-                  "Ignore direction specified for gl_FragDepth output")
-
-#define DRI_CONF_TU_ENABLE_SOFTFLOAT32(def) \
-   DRI_CONF_OPT_B(tu_enable_softfloat32, def, \
-                  "Enable softfloat emulation for float32 denormals")
-
-#define DRI_CONF_TU_EMULATE_ALPHA_TO_COVERAGE(def) \
-   DRI_CONF_OPT_B(tu_emulate_alpha_to_coverage, def, \
-                  "Enable emulation of alpha-to-coverage")
-
-#define DRI_CONF_TU_AUTOTUNE_ALGORITHM() \
-   DRI_CONF_OPT_S_NODEF(tu_autotune_algorithm, \
-                        "Set the preferred autotune algorithm")
-
-#define DRI_CONF_TU_OVERRIDE_UNCACHED_AS_CACHE_COHERENT(def) \
-   DRI_CONF_OPT_B(tu_override_uncached_as_cache_coherent, def, \
-                  "Replaces uncached-host allocations with cached-coherent-host when possible. Only useful under x86 emulation where memory accesses tend to be atomic")
-
-#define DRI_CONF_TU_ALLOW_CONCURRENT_BINNING(def) \
-   DRI_CONF_OPT_B(tu_allow_concurrent_binning, def, \
-                  "Allow concurrent binning on A7XX+, the CB is disabled by default because it regresses performance on desktop games")
-
-/**
  * \brief Honeykrisp specific configuration options
  */
 
@@ -733,5 +661,12 @@
  */
 
  #define DRI_CONF_NVK_APP_LAYER() DRI_CONF_OPT_S_NODEF(nvk_app_layer, "Select an application layer.")
+
+/**
+ * \brief Asahi specific configuration options
+ */
+#define DRI_CONF_ASAHI_NO_FP16(def) \
+   DRI_CONF_OPT_B(asahi_no_fp16, def, \
+                  "Disable 16-bit float support")
 
 #endif

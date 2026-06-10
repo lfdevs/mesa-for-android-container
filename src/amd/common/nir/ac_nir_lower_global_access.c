@@ -99,6 +99,9 @@ process_instr(nir_builder *b, nir_intrinsic_instr *intrin, void *state)
    case nir_intrinsic_load_global:
       op = nir_intrinsic_load_global_amd;
       break;
+   case nir_intrinsic_load_global_transpose_amd:
+      op = nir_intrinsic_load_global_tr_amd;
+      break;
    case nir_intrinsic_global_atomic:
       op = nir_intrinsic_global_atomic_amd;
       break;

@@ -1,41 +1,20 @@
-send(16)        g113UD          g12UD           nullUD          a0<0>UD         0x00000000
-                            hdc1 MsgDesc: indirect ex_mlen 0           { align1 1H @1 $6 };
-(+f1.0) send(16) nullUD         g15UD           g17UD           a0<0>UD         0x00000080
-                            hdc1 MsgDesc: indirect ex_mlen 2           { align1 1H @1 $4 };
-send(8)         g104UD          g119UD          nullUD          0x04116e13                0x00000000
-                            hdc1 MsgDesc: (DC typed surface read, Surface = 19, SIMD8, Mask = 0xe)  mlen 2 ex_mlen 0 rlen 1 { align1 2Q $8 };
-send(8)         nullUD          g92UD           g117UD          0x020350fc                a0.1<0>UD
-                            hdc1 MsgDesc: (DC typed surface write, Surface = 252, SIMD16, Mask = 0x0)  mlen 1 rlen 0 { align1 1Q @1 $8 };
-(+f0.0.any8h) send(8) g55UD     g118UD          nullUD          0x02184201                0x00000000
-                            hdc0 MsgDesc: (DC unaligned OWORD block read, bti 1, 2)  mlen 1 ex_mlen 0 rlen 1 { align1 WE_all 1Q @3 $9 };
-send(8)         nullUD          g126UD          nullUD          0x02000000                0x00000000
-                            ts/btd MsgDesc:  mlen 1 ex_mlen 0 rlen 0 { align1 WE_all 1Q @1 EOT };
-send(8)         g18UD           g24UD           nullUD          0x04115e10                0x00000000
-                            hdc1 MsgDesc: (DC typed surface read, Surface = 16, SIMD16, Mask = 0xe)  mlen 2 ex_mlen 0 rlen 1 { align1 1Q $1 };
-send(8)         g19UD           g28UD           nullUD          0x04116e10                0x00000000
-                            hdc1 MsgDesc: (DC typed surface read, Surface = 16, SIMD8, Mask = 0xe)  mlen 2 ex_mlen 0 rlen 1 { align1 2Q @7 $2 };
-send(16)        g50UD           g36UD           nullUD          a0<0>UD         0x00000000
-                            sampler MsgDesc: indirect ex_mlen 0             { align1 1H @1 $3 };
-send(8)         nullUD          g25UD           g21UD           0x02035001                0x00000100
-                            hdc1 MsgDesc: (DC typed surface write, Surface = 1, SIMD16, Mask = 0x0)  mlen 1 ex_mlen 4 rlen 0 { align1 1Q $9 };
-send(8)         g5UD            g25UD           nullUD          0x02415001                0x00000000
-                            hdc1 MsgDesc: (DC typed surface read, Surface = 1, SIMD16, Mask = 0x0)  mlen 1 ex_mlen 0 rlen 4 { align1 1Q $10 };
-send(8)         g27UD           g35UD           nullUD          0x04146efd                0x00000000
-                            hdc1 MsgDesc: (DC A64 untyped surface read, Surface = 253, SIMD8, Mask = 0xe)  mlen 2 ex_mlen 0 rlen 1 { align1 1Q @1 $0 };
-send(8)         nullUD          g36UD           g38UD           0x04035001                0x00000100
-                            hdc1 MsgDesc: (DC typed surface write, Surface = 1, SIMD16, Mask = 0x0)  mlen 2 ex_mlen 4 rlen 0 { align1 1Q @1 $1 };
-send(8)         nullUD          g126UD          g118UD          0x02080007                0x00000200
-                            urb MsgDesc: offset 0 SIMD8 write  mlen 1 ex_mlen 8 rlen 0 { align1 1Q @1 EOT };
-send(8)         g14UD           g37UD           nullUD          0x02110401                0x00000000
-                            hdc0 MsgDesc: (DC byte scattered read, bti 1, 4)  mlen 1 ex_mlen 0 rlen 1 { align1 1Q @1 $0 };
-send(1)         g100UD          g0UD            nullUD          0x0219e000                0x00000000
-                            hdc0 MsgDesc: (DC mfence, bti 0, 32)  mlen 1 ex_mlen 0 rlen 1 { align1 WE_all 1N $1 };
-send(1)         g15UD           g0UD            nullUD          0x0219e000                0x00000000
-                            hdc0 MsgDesc: (DC mfence, bti 0, 32)  mlen 1 ex_mlen 0 rlen 1 { align1 WE_all 1N $5 };
-
-sendc(16)       nullUD          g119UD          nullUD          0x10031000                0x00000000
-                            render MsgDesc: RT write SIMD16 LastRT Surface = 0  mlen 8 ex_mlen 0 rlen 0 { align1 1H @1 EOT };
-sendc(8)        nullUD          g125UD          g123UD          0x04031400                0x00000080
-                            render MsgDesc: RT write SIMD8 LastRT Surface = 0  mlen 2 ex_mlen 2 rlen 0 { align1 1Q @1 EOT };
-sendc(16)       nullUD          g123UD          g119UD          0x08031000                0x00000100
-                            render MsgDesc: RT write SIMD16 LastRT Surface = 0  mlen 4 ex_mlen 4 rlen 0 { align1 1H @1 EOT };
+        send.hdc1 (16)            r113    r12    null    0x00000000  a0.0         {@1,$6}
+(f1.0)  send.hdc1 (16)            null    r15    r17:2   0x00000080  a0.0         {@1,$4}
+        send.hdc1 (8|M8)          r104    r119:2 null    0x00000000  0x04116E13   {$8}  // typed_read.hdc1.x.bti[19]
+        send.hdc1 (8)             null    r92:1  r117    a0.2        0x020350FC   {@1,$8}
+(W&f0.0.any8h) send.hdc0 (8)      r55     r118:1 null    0x00000000  0x02184201   {@3,$9}  // oword_unaligned_block_read.hdc0.owords2.bti[1]
+(W)     send.ts (8)               null    r126:1 null    0x00000000  0x02000000   {EOT,@1}
+        send.hdc1 (8)             r18     r24:2  null    0x00000000  0x04115E10   {$1}  // typed_read.hdc1.x.simd16.bti[16]
+        send.hdc1 (8|M8)          r19     r28:2  null    0x00000000  0x04116E10   {@7,$2}  // typed_read.hdc1.x.bti[16]
+        send.smpl (16)         r50     r36    null    0x00000000  a0.0         {@1,$3}
+        send.hdc1 (8)             null    r25:1  r21:4   0x00000100  0x02035001   {$9}  // typed_write.hdc1.xyzw.simd16.bti[1]
+        send.hdc1 (8)             r5      r25:1  null    0x00000000  0x02415001   {$10}  // typed_read.hdc1.xyzw.simd16.bti[1]
+        send.hdc1 (8)             r27     r35:2  null    0x00000000  0x04146EFD   {@1,$0}  // a64_untyped_read.hdc1.x
+        send.hdc1 (8)             null    r36:2  r38:4   0x00000100  0x04035001   {@1,$1}  // typed_write.hdc1.xyzw.simd16.bti[1]
+        send.urb (8)              null    r126:1 r118:8  0x00000200  0x02080007   {EOT,@1}  // simd8_write.urb
+        send.hdc0 (8)             r14     r37:1  null    0x00000000  0x02110401   {@1,$0}  // byte_scattered_read.hdc0.d16.bti[1]
+(W)     send.hdc0 (1)             r100    r0:1   null    0x00000000  0x0219E000   {$1}  // memory_fence.hdc0
+(W)     send.hdc0 (1)             r15     r0:1   null    0x00000000  0x0219E000   {$5}  // memory_fence.hdc0
+        sendc.render (16)         null    r119:8 null    0x00000000  0x10031000   {EOT,@1}  // rt_write.render.last_rt.bti[0]
+        sendc.render (8)          null    r125:2 r123:2  0x00000080  0x04031400   {EOT,@1}  // rt_write.render.last_rt.bti[0]
+        sendc.render (16)         null    r123:4 r119:4  0x00000100  0x08031000   {EOT,@1}  // rt_write.render.last_rt.bti[0]

@@ -1,5 +1,5 @@
-rndd(8)         g22<1>F         g17<0,1,0>F                     { align1 1Q };
-rndd(16)        g7<1>F          g5<8,8,1>F                      { align1 1H };
-rndd.z.f0.0(8)  nullUD          g17<8,8,1>F                     { align1 1Q };
-rndd.z.f0.0(16) nullUD          g39<8,8,1>F                     { align1 1H };
-rndd.sat(8)     g124<1>F        g10<8,8,1>F                     { align1 1Q };
+        rndd (8)                  r22:f         r17<0>:f
+        rndd (16)                 r7:f          r5<8;8,1>:f
+        rndd (8)       (eq)f0.0   null          r17<8;8,1>:f
+        rndd (16)      (eq)f0.0   null          r39<8;8,1>:f
+        rndd.sat (8)              r124:f        r10<8;8,1>:f

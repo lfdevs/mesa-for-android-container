@@ -318,8 +318,8 @@ drm_shim_ioctl(int fd, unsigned long request, void *arg)
 
    if (nr >= DRM_COMMAND_BASE && nr < DRM_COMMAND_END) {
       fprintf(stderr,
-              "DRM_SHIM: unhandled driver DRM ioctl %d (0x%08lx)\n",
-              nr - DRM_COMMAND_BASE, request);
+              "DRM_SHIM: unhandled driver DRM ioctl %d (0x%x) (0x%08lx)\n",
+              nr - DRM_COMMAND_BASE, nr - DRM_COMMAND_BASE, request);
    } else {
       fprintf(stderr,
               "DRM_SHIM: unhandled core DRM ioctl 0x%X (0x%08lx)\n",

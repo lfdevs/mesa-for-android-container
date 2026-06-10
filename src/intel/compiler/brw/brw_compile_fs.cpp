@@ -7,7 +7,6 @@
 #include "brw_shader.h"
 #include "brw_analysis.h"
 #include "brw_builder.h"
-#include "brw_generator.h"
 #include "brw_nir.h"
 #include "brw_cfg.h"
 #include "brw_private.h"
@@ -531,7 +530,7 @@ brw_emit_repclear_shader(brw_shader &s)
       write->header_size = i == 0 ? 0 : 2;
       write->mlen = 1 + write->header_size;
 
-      write->sfid = BRW_SFID_RENDER_CACHE;
+      write->sfid = GEN_SFID_RENDER_CACHE;
       write->src[SEND_SRC_DESC] = brw_imm_ud(
          brw_fb_write_desc(
             s.devinfo, i,
@@ -1862,52 +1861,50 @@ brw_compile_fs(const struct brw_compiler *compiler,
    if (reqd_dispatch_width == 16)
       v8.reset();
 
-   brw_generator g(compiler, &params->base, &prog_data->base,
-                  MESA_SHADER_FRAGMENT);
+   brw_to_binary_params to_binary_params = {
+      .compiler = compiler,
+      .params = &params->base,
+      .prog_data = &prog_data->base,
+   };
 
-   if (unlikely(debug_enabled)) {
-      g.enable_debug(ralloc_asprintf(params->base.mem_ctx,
-                                     "%s fragment shader %s",
-                                     nir->info.label ?
-                                        nir->info.label : "unnamed",
-                                     nir->info.name));
-   }
-
-   struct genisa_stats *stats = params->base.stats;
    uint32_t max_dispatch_width = 0;
+   unsigned num_variants = 0;
 
    if (vmulti) {
       prog_data->dispatch_multi = vmulti->dispatch_width;
       prog_data->max_polygons = vmulti->max_polygons;
-      g.generate_code(*vmulti, stats);
-      stats = stats ? stats + 1 : NULL;
+      to_binary_params.shaders[num_variants++] = vmulti.get();
       max_dispatch_width = vmulti->dispatch_width;
    } else if (v8) {
       prog_data->dispatch_8 = true;
-      g.generate_code(*v8, stats);
-      stats = stats ? stats + 1 : NULL;
+      to_binary_params.shaders[num_variants++] = v8.get();
       max_dispatch_width = 8;
    }
 
    if (v16) {
       prog_data->dispatch_16 = true;
-      prog_data->prog_offset_16 = g.generate_code(*v16, stats);
-      stats = stats ? stats + 1 : NULL;
+      to_binary_params.shaders[num_variants++] = v16.get();
       max_dispatch_width = 16;
    }
 
    if (v32) {
       prog_data->dispatch_32 = true;
-      prog_data->prog_offset_32 = g.generate_code(*v32, stats);
-      stats = stats ? stats + 1 : NULL;
+      to_binary_params.shaders[num_variants++] = v32.get();
       max_dispatch_width = 32;
    }
 
-   for (struct genisa_stats *s = params->base.stats; s != NULL && s != stats; s++)
-      s->max_dispatch_width = max_dispatch_width;
+   const unsigned *assembly = brw_to_binary(&to_binary_params);
 
-   g.add_const_data(nir->constant_data, nir->constant_data_size);
-   return g.get_assembly();
+   if (v16)
+      prog_data->prog_offset_16 = v16->start_offset;
+   if (v32)
+      prog_data->prog_offset_32 = v32->start_offset;
+
+   /* Override per-variant max_dispatch_width to make reports more useful. */
+   for (unsigned i = 0; i < num_variants && params->base.stats; i++)
+      params->base.stats[i].max_dispatch_width = max_dispatch_width;
+
+   return assembly;
 }
 
 extern "C" void

@@ -629,6 +629,39 @@ anv_get_format_aspect(const struct anv_physical_device *device,
    return anv_get_format_plane(device, vk_format, plane, tiling);
 }
 
+static bool
+anv_format_supports_indirect_copies(const struct anv_physical_device *pdevice,
+                                    const struct anv_format *anv_format)
+{
+   const struct isl_format_layout *fmtl =
+      isl_format_get_layout(anv_format->planes[0].isl_format);
+
+   /* CTS insists on it even when we say we don't support it. */
+   if (!pdevice->vk.supported_features.indirectMemoryToImageCopy)
+      return false;
+
+   /* TODO: implement support for this in the copy shader. */
+   if (!util_is_power_of_two_or_zero(fmtl->bpb))
+      return false;
+
+   /* TODO: we use compute for indirect copies, and compute cannot write HiZ,
+    * we could try to support that if we see that applications want it.
+    */
+   if (vk_format_is_depth_or_stencil(anv_format->vk_format))
+      return false;
+
+   /* Let's leave YCbCr and multi-planar formats out until we have proper
+    * tests to verify they work.
+    */
+   if (isl_format_is_yuv(anv_format->planes[0].isl_format))
+      return false;
+
+   if (anv_format->n_planes > 1)
+      return false;
+
+   return true;
+}
+
 // Format capabilities
 
 static bool
@@ -941,6 +974,10 @@ anv_get_color_format_features(const struct anv_physical_device *physical_device,
       flags |= VK_FORMAT_FEATURE_2_TRANSFER_SRC_BIT |
                VK_FORMAT_FEATURE_2_TRANSFER_DST_BIT;
    }
+
+   if ((flags & VK_FORMAT_FEATURE_2_TRANSFER_DST_BIT) &&
+       anv_format_supports_indirect_copies(physical_device, anv_format))
+      flags |= VK_FORMAT_FEATURE_2_COPY_IMAGE_INDIRECT_DST_BIT_KHR;
 
    /* XXX: We handle 3-channel formats by switching them out for RGBX or
     * RGBA formats behind-the-scenes.  This works fine for textures

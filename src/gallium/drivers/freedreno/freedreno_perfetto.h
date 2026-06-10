@@ -17,6 +17,7 @@ extern "C" {
  */
 enum fd_stage_id {
    SURFACE_STAGE_ID, /* Surface is a sort of meta-stage for render-target info */
+   NONDRAW_STAGE_ID,
    BINNING_STAGE_ID,
    GMEM_STAGE_ID,
    BYPASS_STAGE_ID,
@@ -37,6 +38,7 @@ static const struct {
    const char *desc;
 } stages[] = {
    [SURFACE_STAGE_ID] = {"Surface"},
+   [NONDRAW_STAGE_ID] = {"Non-draw"},
    [BINNING_STAGE_ID] = {"Binning", "Perform Visibility pass and determine target bins"},
    [GMEM_STAGE_ID]    = {"Render", "Rendering to GMEM"},
    [BYPASS_STAGE_ID]  = {"Render", "Rendering to system memory"},

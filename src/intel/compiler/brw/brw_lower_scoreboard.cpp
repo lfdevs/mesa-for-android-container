@@ -43,10 +43,10 @@
 
 /**
  * Return the RegDist pipeline that will execute an instruction, or
- * TGL_PIPE_NONE if the instruction is out-of-order and doesn't use the
+ * GEN_PIPE_NONE if the instruction is out-of-order and doesn't use the
  * RegDist synchronization mechanism.
  */
-tgl_pipe
+gen_pipe
 inferred_exec_pipe(const struct intel_device_info *devinfo, const brw_inst *inst)
 {
    const brw_reg_type t = get_exec_type(inst);
@@ -59,9 +59,9 @@ inferred_exec_pipe(const struct intel_device_info *devinfo, const brw_inst *inst
              brw_type_size_bytes(inst->src[2].type)) >= 4));
 
    if (is_unordered(devinfo, inst))
-      return TGL_PIPE_NONE;
+      return GEN_PIPE_NONE;
    else if (devinfo->verx10 < 125)
-      return TGL_PIPE_FLOAT;
+      return GEN_PIPE_FLOAT;
    else if (devinfo->ver >= 30 &&
             inst->exec_size == 1 &&
             brw_reg_is_arf(inst->dst, BRW_ARF_SCALAR) &&
@@ -69,30 +69,30 @@ inferred_exec_pipe(const struct intel_device_info *devinfo, const brw_inst *inst
       /* Scalar pipe has a very narrow usage.  See Bspec 56701 (r60146),
        * in the SWSB description entry.
        */
-      return TGL_PIPE_SCALAR;
+      return GEN_PIPE_SCALAR;
    } else if (inst->is_math() && devinfo->ver >= 20)
-      return TGL_PIPE_MATH;
+      return GEN_PIPE_MATH;
    else if (inst->opcode == SHADER_OPCODE_MOV_INDIRECT ||
             inst->opcode == SHADER_OPCODE_BROADCAST ||
             inst->opcode == SHADER_OPCODE_SHUFFLE)
-      return TGL_PIPE_INT;
+      return GEN_PIPE_INT;
    else if (inst->opcode == FS_OPCODE_PACK_HALF_2x16_SPLIT)
-      return TGL_PIPE_FLOAT;
+      return GEN_PIPE_FLOAT;
    else if (devinfo->ver >= 20 &&
             brw_type_size_bytes(inst->dst.type) >= 8 &&
             brw_type_is_float(inst->dst.type)) {
       assert(devinfo->has_64bit_float);
-      return TGL_PIPE_LONG;
+      return GEN_PIPE_LONG;
    } else if (devinfo->ver < 20 &&
               (brw_type_size_bytes(inst->dst.type) >= 8 ||
                brw_type_size_bytes(t) >= 8 || is_dword_multiply)) {
       assert(devinfo->has_64bit_float || devinfo->has_64bit_int ||
              devinfo->has_integer_dword_mul);
-      return TGL_PIPE_LONG;
+      return GEN_PIPE_LONG;
    } else if (brw_type_is_float_or_bfloat(inst->dst.type))
-      return TGL_PIPE_FLOAT;
+      return GEN_PIPE_FLOAT;
    else
-      return TGL_PIPE_INT;
+      return GEN_PIPE_INT;
 }
 
 namespace {
@@ -104,9 +104,9 @@ namespace {
    /**
     * Return the RegDist pipeline the hardware will synchronize with if no
     * pipeline information is provided in the SWSB annotation of an
-    * instruction (e.g. when TGL_PIPE_NONE is specified in tgl_swsb).
+    * instruction (e.g. when GEN_PIPE_NONE is specified in gen_swsb).
     */
-   tgl_pipe
+   gen_pipe
    inferred_sync_pipe(const struct intel_device_info *devinfo, const brw_inst *inst)
    {
       if (devinfo->verx10 >= 125) {
@@ -114,7 +114,7 @@ namespace {
          const bool has_long_pipe = !devinfo->has_64bit_float_via_math_pipe;
 
          if (inst->is_send())
-            return TGL_PIPE_NONE;
+            return GEN_PIPE_NONE;
 
          for (unsigned i = 0; i < inst->sources; i++) {
             if (inst->src[i].file != BAD_FILE &&
@@ -133,14 +133,14 @@ namespace {
           * trying to emit these annotations.
           */
          if (!has_long_pipe && has_long_src)
-            return TGL_PIPE_NONE;
+            return GEN_PIPE_NONE;
 
-         return has_long_src ? TGL_PIPE_LONG :
-                has_int_src ? TGL_PIPE_INT :
-                TGL_PIPE_FLOAT;
+         return has_long_src ? GEN_PIPE_LONG :
+                has_int_src ? GEN_PIPE_INT :
+                GEN_PIPE_FLOAT;
 
       } else {
-         return TGL_PIPE_FLOAT;
+         return GEN_PIPE_FLOAT;
       }
    }
 
@@ -148,7 +148,7 @@ namespace {
     * Index of the \p p pipeline counter in the ordered_address vector defined
     * below.
     */
-#define IDX(p) (p >= TGL_PIPE_FLOAT ? unsigned(p - TGL_PIPE_FLOAT) :    \
+#define IDX(p) (p >= GEN_PIPE_FLOAT ? unsigned(p - GEN_PIPE_FLOAT) :    \
                 (abort(), ~0u))
 
    /**
@@ -182,7 +182,7 @@ namespace {
           */
          if (!is_unordered(devinfo, inst) &&
              (p == IDX(inferred_exec_pipe(devinfo, inst)) ||
-              p == IDX(TGL_PIPE_ALL)))
+              p == IDX(GEN_PIPE_ALL)))
             return 1;
          else
             return 0;
@@ -199,23 +199,23 @@ namespace {
    struct ordered_address {
       /**
        * Construct the ordered address of a dependency known to execute on a
-       * single specified pipeline \p p (unless TGL_PIPE_NONE or TGL_PIPE_ALL
+       * single specified pipeline \p p (unless GEN_PIPE_NONE or GEN_PIPE_ALL
        * is provided), in which case the vector counter will be initialized
        * with all components equal to INT_MIN (always satisfied) except for
        * component IDX(p).
        */
-      ordered_address(tgl_pipe p = TGL_PIPE_NONE, int jp0 = INT_MIN) {
-         for (unsigned q = 0; q < IDX(TGL_PIPE_ALL); q++)
-            jp[q] = (p == TGL_PIPE_NONE || (IDX(p) != q && p != TGL_PIPE_ALL) ?
+      ordered_address(gen_pipe p = GEN_PIPE_NONE, int jp0 = INT_MIN) {
+         for (unsigned q = 0; q < IDX(GEN_PIPE_ALL); q++)
+            jp[q] = (p == GEN_PIPE_NONE || (IDX(p) != q && p != GEN_PIPE_ALL) ?
                      INT_MIN : jp0);
       }
 
-      int jp[IDX(TGL_PIPE_ALL)];
+      int jp[IDX(GEN_PIPE_ALL)];
 
       friend bool
       operator==(const ordered_address &jp0, const ordered_address &jp1)
       {
-         for (unsigned p = 0; p < IDX(TGL_PIPE_ALL); p++) {
+         for (unsigned p = 0; p < IDX(GEN_PIPE_ALL); p++) {
             if (jp0.jp[p] != jp1.jp[p])
                return false;
          }
@@ -229,10 +229,10 @@ namespace {
     * all pipelines except potentially for the specified pipeline \p p.
     */
    bool
-   is_single_pipe(const ordered_address &jp, tgl_pipe p)
+   is_single_pipe(const ordered_address &jp, gen_pipe p)
    {
-      for (unsigned q = 0; q < IDX(TGL_PIPE_ALL); q++) {
-         if ((p == TGL_PIPE_NONE || IDX(p) != q) && jp.jp[q] > INT_MIN)
+      for (unsigned q = 0; q < IDX(GEN_PIPE_ALL); q++) {
+         if ((p == GEN_PIPE_NONE || IDX(p) != q) && jp.jp[q] > INT_MIN)
             return false;
       }
 
@@ -258,11 +258,11 @@ namespace {
       std::vector<ordered_address> jps;
       jps.reserve(num_instructions(shader));
 
-      ordered_address jp(TGL_PIPE_ALL, 0);
+      ordered_address jp(GEN_PIPE_ALL, 0);
 
       foreach_block_and_inst(block, brw_inst, inst, shader->cfg) {
          jps.push_back(jp);
-         for (unsigned p = 0; p < IDX(TGL_PIPE_ALL); p++)
+         for (unsigned p = 0; p < IDX(GEN_PIPE_ALL); p++)
             jp.jp[p] += ordered_unit(shader->devinfo, inst, p);
       }
 
@@ -410,7 +410,7 @@ namespace {
        * No dependency information.
        */
       dependency() : ordered(TGL_REGDIST_NULL), jp(),
-                     unordered(TGL_SBID_NULL), id(0),
+                     unordered(GEN_SBID_NULL), id(0),
                      exec_all(false) {}
 
       /**
@@ -419,14 +419,14 @@ namespace {
        */
       dependency(tgl_regdist_mode mode, const ordered_address &jp,
                  bool exec_all) :
-         ordered(mode), jp(jp), unordered(TGL_SBID_NULL), id(0),
+         ordered(mode), jp(jp), unordered(GEN_SBID_NULL), id(0),
          exec_all(exec_all) {}
 
       /**
        * Construct a dependency on the out-of-order instruction with the
        * specified synchronization token.
        */
-      dependency(tgl_sbid_mode mode, unsigned id, bool exec_all) :
+      dependency(gen_sbid_mode mode, unsigned id, bool exec_all) :
          ordered(TGL_REGDIST_NULL), jp(), unordered(mode), id(id),
          exec_all(exec_all) {}
 
@@ -455,7 +455,7 @@ namespace {
        * Synchronization mode of unordered dependency, or zero if no unordered
        * dependency is present.
        */
-      tgl_sbid_mode unordered;
+      gen_sbid_mode unordered;
 
       /** Synchronization token of out-of-order dependency. */
       unsigned id;
@@ -522,7 +522,7 @@ namespace {
 
       if (dep0.ordered || dep1.ordered) {
          dep.ordered = dep0.ordered | dep1.ordered;
-         for (unsigned p = 0; p < IDX(TGL_PIPE_ALL); p++)
+         for (unsigned p = 0; p < IDX(GEN_PIPE_ALL); p++)
             dep.jp.jp[p] = MAX2(dep0.jp.jp[p], dep1.jp.jp[p]);
       }
 
@@ -544,7 +544,7 @@ namespace {
    shadow(const dependency &dep0, const dependency &dep1)
    {
       if (dep0.ordered == TGL_REGDIST_SRC &&
-          is_valid(dep1) && !(dep1.unordered & TGL_SBID_DST) &&
+          is_valid(dep1) && !(dep1.unordered & GEN_SBID_DST) &&
                             !(dep1.ordered & TGL_REGDIST_DST)) {
          /* As an optimization (see dependency_for_read()),
           * instructions with a RaR dependency don't synchronize
@@ -566,7 +566,7 @@ namespace {
          dependency dep = dep1;
 
          dep.ordered |= dep0.ordered;
-         for (unsigned p = 0; p < IDX(TGL_PIPE_ALL); p++)
+         for (unsigned p = 0; p < IDX(GEN_PIPE_ALL); p++)
                dep.jp.jp[p] = MAX2(dep.jp.jp[p], dep0.jp.jp[p]);
 
          return dep;
@@ -586,10 +586,10 @@ namespace {
     * the end of the origin block.
     */
    dependency
-   transport(dependency dep, int delta[IDX(TGL_PIPE_ALL)])
+   transport(dependency dep, int delta[IDX(GEN_PIPE_ALL)])
    {
       if (dep.ordered) {
-         for (unsigned p = 0; p < IDX(TGL_PIPE_ALL); p++) {
+         for (unsigned p = 0; p < IDX(GEN_PIPE_ALL); p++) {
             if (dep.jp.jp[p] > INT_MIN)
                dep.jp.jp[p] += delta[p];
          }
@@ -708,7 +708,7 @@ namespace {
        * object.  \sa transport().
        */
       friend scoreboard
-      transport(const scoreboard &sb0, int delta[IDX(TGL_PIPE_ALL)])
+      transport(const scoreboard &sb0, int delta[IDX(GEN_PIPE_ALL)])
       {
          scoreboard sb;
 
@@ -811,12 +811,12 @@ namespace {
              * into the instruction we want to allocate an SBID for.
              */
             if (deps[i].exec_all != dep.exec_all &&
-                (!deps[i].exec_all || (dep.unordered & TGL_SBID_SET)) &&
-                (!dep.exec_all || (deps[i].unordered & TGL_SBID_SET)))
+                (!deps[i].exec_all || (dep.unordered & GEN_SBID_SET)) &&
+                (!dep.exec_all || (deps[i].unordered & GEN_SBID_SET)))
                continue;
 
             if (dep.ordered && deps[i].ordered) {
-               for (unsigned p = 0; p < IDX(TGL_PIPE_ALL); p++)
+               for (unsigned p = 0; p < IDX(GEN_PIPE_ALL); p++)
                   deps[i].jp.jp[p] = MAX2(deps[i].jp.jp[p], dep.jp.jp[p]);
 
                deps[i].ordered |= dep.ordered;
@@ -827,7 +827,7 @@ namespace {
             if (dep.unordered && deps[i].unordered && deps[i].id == dep.id) {
                deps[i].unordered |= dep.unordered;
                deps[i].exec_all |= dep.exec_all;
-               dep.unordered = TGL_SBID_NULL;
+               dep.unordered = GEN_SBID_NULL;
             }
          }
 
@@ -838,28 +838,28 @@ namespace {
    }
 
    /**
-    * Construct a tgl_swsb annotation encoding any ordered dependencies from
+    * Construct a gen_swsb annotation encoding any ordered dependencies from
     * the dependency list \p deps of an instruction with ordered_address \p
     * jp.  If \p exec_all is false only dependencies known to be executed with
     * channel masking applied will be considered in the calculation.
     */
-   tgl_swsb
+   gen_swsb
    ordered_dependency_swsb(const std::vector<dependency> &deps,
                            const ordered_address &jp,
                            bool exec_all)
    {
-      tgl_pipe p = TGL_PIPE_NONE;
+      gen_pipe p = GEN_PIPE_NONE;
       unsigned min_dist = ~0u;
 
       for (unsigned i = 0; i < deps.size(); i++) {
          if (deps[i].ordered && exec_all >= deps[i].exec_all) {
-            for (unsigned q = 0; q < IDX(TGL_PIPE_ALL); q++) {
+            for (unsigned q = 0; q < IDX(GEN_PIPE_ALL); q++) {
                const unsigned dist = jp.jp[q] - int64_t(deps[i].jp.jp[q]);
-               const unsigned max_dist = (q == IDX(TGL_PIPE_LONG) ? 14 : 10);
+               const unsigned max_dist = (q == IDX(GEN_PIPE_LONG) ? 14 : 10);
                assert(jp.jp[q] > deps[i].jp.jp[q]);
                if (dist <= max_dist) {
-                  p = (p && IDX(p) != q ? TGL_PIPE_ALL :
-                       tgl_pipe(TGL_PIPE_FLOAT + q));
+                  p = (p && IDX(p) != q ? GEN_PIPE_ALL :
+                       gen_pipe(GEN_PIPE_FLOAT + q));
                   min_dist = MIN3(min_dist, dist, 7);
                }
             }
@@ -890,9 +890,9 @@ namespace {
     * dependencies known to be executed with channel masking applied will be
     * considered in the calculation.
     */
-   tgl_sbid_mode
+   gen_sbid_mode
    find_unordered_dependency(const std::vector<dependency> &deps,
-                             tgl_sbid_mode unordered,
+                             gen_sbid_mode unordered,
                              bool exec_all)
    {
       if (unordered) {
@@ -903,7 +903,7 @@ namespace {
          }
       }
 
-      return TGL_SBID_NULL;
+      return GEN_SBID_NULL;
    }
 
    /**
@@ -912,7 +912,7 @@ namespace {
     * instruction without additional SYNC instructions, or zero if no such
     * dependency is present.
     */
-   tgl_sbid_mode
+   gen_sbid_mode
    baked_unordered_dependency_mode(const struct intel_device_info *devinfo,
                                    const brw_inst *inst,
                                    const std::vector<dependency> &deps,
@@ -921,22 +921,22 @@ namespace {
       const bool exec_all = inst->force_writemask_all ||
                             !needs_nomask_workaround(devinfo);
       const bool has_ordered = find_ordered_dependency(deps, jp, exec_all);
-      const tgl_pipe ordered_pipe = ordered_dependency_swsb(deps, jp,
+      const gen_pipe ordered_pipe = ordered_dependency_swsb(deps, jp,
                                                             exec_all).pipe;
 
-      if (find_unordered_dependency(deps, TGL_SBID_SET, exec_all))
-         return find_unordered_dependency(deps, TGL_SBID_SET, exec_all);
+      if (find_unordered_dependency(deps, GEN_SBID_SET, exec_all))
+         return find_unordered_dependency(deps, GEN_SBID_SET, exec_all);
       else if (has_ordered && is_unordered(devinfo, inst))
-         return TGL_SBID_NULL;
+         return GEN_SBID_NULL;
       else if (inst->is_send() && devinfo->ver >= 20)
-         return TGL_SBID_NULL;
-      else if (find_unordered_dependency(deps, TGL_SBID_DST, exec_all) &&
+         return GEN_SBID_NULL;
+      else if (find_unordered_dependency(deps, GEN_SBID_DST, exec_all) &&
                (!has_ordered || ordered_pipe == inferred_sync_pipe(devinfo, inst)))
-         return find_unordered_dependency(deps, TGL_SBID_DST, exec_all);
+         return find_unordered_dependency(deps, GEN_SBID_DST, exec_all);
       else if (!has_ordered)
-         return find_unordered_dependency(deps, TGL_SBID_SRC, exec_all);
+         return find_unordered_dependency(deps, GEN_SBID_SRC, exec_all);
       else
-         return TGL_SBID_NULL;
+         return GEN_SBID_NULL;
    }
 
    /**
@@ -953,11 +953,11 @@ namespace {
       const bool exec_all = inst->force_writemask_all ||
                             !needs_nomask_workaround(devinfo);
       const bool has_ordered = find_ordered_dependency(deps, jp, exec_all);
-      const tgl_pipe ordered_pipe = ordered_dependency_swsb(deps, jp,
+      const gen_pipe ordered_pipe = ordered_dependency_swsb(deps, jp,
                                                             exec_all).pipe;
-      const tgl_sbid_mode unordered_mode =
+      const gen_sbid_mode unordered_mode =
          baked_unordered_dependency_mode(devinfo, inst, deps, jp);
-      const tgl_pipe inferred_pipe = inferred_sync_pipe(devinfo, inst);
+      const gen_pipe inferred_pipe = inferred_sync_pipe(devinfo, inst);
 
       if (!has_ordered)
          return false;
@@ -965,19 +965,19 @@ namespace {
          return true;
       else if (devinfo->ver < 20)
          return ordered_pipe == inferred_pipe &&
-                unordered_mode & (is_unordered(devinfo, inst) ? TGL_SBID_SET :
-                                                                TGL_SBID_DST);
+                unordered_mode & (is_unordered(devinfo, inst) ? GEN_SBID_SET :
+                                                                GEN_SBID_DST);
       else if (inst->is_send())
-         return unordered_mode & TGL_SBID_SET &&
-                (ordered_pipe == TGL_PIPE_FLOAT ||
-                 ordered_pipe == TGL_PIPE_INT ||
-                 ordered_pipe == TGL_PIPE_ALL);
+         return unordered_mode & GEN_SBID_SET &&
+                (ordered_pipe == GEN_PIPE_FLOAT ||
+                 ordered_pipe == GEN_PIPE_INT ||
+                 ordered_pipe == GEN_PIPE_ALL);
       else if (inst->opcode == BRW_OPCODE_DPAS)
          return ordered_pipe == inferred_pipe;
       else
-         return (unordered_mode & TGL_SBID_DST && ordered_pipe == inferred_pipe) ||
-                (unordered_mode & TGL_SBID_SRC && ordered_pipe == inferred_pipe) ||
-                (unordered_mode & TGL_SBID_DST && ordered_pipe == TGL_PIPE_ALL);
+         return (unordered_mode & GEN_SBID_DST && ordered_pipe == inferred_pipe) ||
+                (unordered_mode & GEN_SBID_SRC && ordered_pipe == inferred_pipe) ||
+                (unordered_mode & GEN_SBID_DST && ordered_pipe == GEN_PIPE_ALL);
    }
 
    /** @} */
@@ -998,10 +998,10 @@ namespace {
    {
       const bool exec_all = inst->force_writemask_all;
       const struct intel_device_info *devinfo = shader->devinfo;
-      const tgl_pipe p = inferred_exec_pipe(devinfo, inst);
+      const gen_pipe p = inferred_exec_pipe(devinfo, inst);
       const ordered_address jp = p ? ordered_address(p, jps[ip].jp[IDX(p)]) :
                                      ordered_address();
-      const bool is_ordered = ordered_unit(devinfo, inst, IDX(TGL_PIPE_ALL));
+      const bool is_ordered = ordered_unit(devinfo, inst, IDX(GEN_PIPE_ALL));
       const bool is_unordered_math =
          (inst->is_math() && devinfo->ver < 20) ||
          (devinfo->has_64bit_float_via_math_pipe &&
@@ -1016,7 +1016,7 @@ namespace {
          const dependency rd_dep =
             (inst->is_payload(i) ||
              inst->opcode == BRW_OPCODE_DPAS ||
-             is_unordered_math) ? dependency(TGL_SBID_SRC, ip, exec_all) :
+             is_unordered_math) ? dependency(GEN_SBID_SRC, ip, exec_all) :
             is_ordered ? dependency(TGL_REGDIST_SRC, jp, exec_all) :
             dependency::done;
 
@@ -1051,7 +1051,7 @@ namespace {
 
       /* Track any destination registers of this instruction. */
       const dependency wr_dep =
-         is_unordered(devinfo, inst) ? dependency(TGL_SBID_DST, ip, exec_all) :
+         is_unordered(devinfo, inst) ? dependency(GEN_SBID_DST, ip, exec_all) :
          is_ordered ? dependency(TGL_REGDIST_DST, jp, exec_all) :
          dependency();
 
@@ -1125,9 +1125,9 @@ namespace {
                brw_foreach_list_typed(bblock_link, child_link, link,
                                   &block->children) {
                   scoreboard &in_sb = in_sbs[child_link->block->num];
-                  int delta[IDX(TGL_PIPE_ALL)];
+                  int delta[IDX(GEN_PIPE_ALL)];
 
-                  for (unsigned p = 0; p < IDX(TGL_PIPE_ALL); p++)
+                  for (unsigned p = 0; p < IDX(GEN_PIPE_ALL); p++)
                      delta[p] = jps[ips.range(child_link->block).start].jp[p]
                         - jps[ips.range(block).last()].jp[p]
                         - ordered_unit(shader->devinfo,
@@ -1165,7 +1165,7 @@ namespace {
       foreach_block_and_inst(block, brw_inst, inst, shader->cfg) {
          const bool exec_all = inst->force_writemask_all ||
                                !needs_nomask_workaround(devinfo);
-         const tgl_pipe p = inferred_exec_pipe(devinfo, inst);
+         const gen_pipe p = inferred_exec_pipe(devinfo, inst);
          scoreboard &sb = sbs[block->num];
          std::vector<dependency> inst_deps;
 
@@ -1212,7 +1212,7 @@ namespace {
 
          if (is_unordered(devinfo, inst) && !inst->eot)
             add_dependency(ids, inst_deps,
-                           dependency(TGL_SBID_SET, ip, exec_all));
+                           dependency(GEN_SBID_SET, ip, exec_all));
 
          if (inst->dst.file != BAD_FILE && !inst->dst.is_null() &&
              !inst->dst.is_accumulator() &&
@@ -1269,7 +1269,7 @@ namespace {
          /* Indexed by exec_all.  Some IDs might been resolved for regular
           * (masked) instructions but still not by exec_all.
           */
-         tgl_sbid_mode mode[2] = {TGL_SBID_NULL, TGL_SBID_NULL};
+         gen_sbid_mode mode[2] = {GEN_SBID_NULL, GEN_SBID_NULL};
       };
 
       std::vector<resolved_id_state> resolved_ids(num_instructions(shader));
@@ -1294,7 +1294,7 @@ namespace {
 
             /* First trim any dependencies that were already resolved. */
             for (auto dep : inst_deps0) {
-               if (dep.unordered & (TGL_SBID_DST | TGL_SBID_SRC)) {
+               if (dep.unordered & (GEN_SBID_DST | GEN_SBID_SRC)) {
                   resolved_id_state &resolved = resolved_ids[dep.id];
                   dep.unordered &= ~resolved.mode[exec_all];
                }
@@ -1318,12 +1318,12 @@ namespace {
                resolved_id_state &resolved = resolved_ids[dep.id];
 
                for (int m = 0; m <= exec_all; m++) {
-                  if (dep.unordered & TGL_SBID_SET)
+                  if (dep.unordered & GEN_SBID_SET)
                      resolved = {};
-                  else if (dep.unordered & TGL_SBID_DST)
-                     resolved.mode[m] |= TGL_SBID_DST | TGL_SBID_SRC;
-                  else if (dep.unordered & TGL_SBID_SRC)
-                     resolved.mode[m] |= TGL_SBID_SRC;
+                  else if (dep.unordered & GEN_SBID_DST)
+                     resolved.mode[m] |= GEN_SBID_DST | GEN_SBID_SRC;
+                  else if (dep.unordered & GEN_SBID_SRC)
+                     resolved.mode[m] |= GEN_SBID_SRC;
                }
             }
 
@@ -1399,9 +1399,9 @@ namespace {
                                !needs_nomask_workaround(devinfo);
          const bool ordered_mode =
             baked_ordered_dependency_mode(devinfo, inst, deps[ip], jps[ip]);
-         const tgl_sbid_mode unordered_mode =
+         const gen_sbid_mode unordered_mode =
             baked_unordered_dependency_mode(devinfo, inst, deps[ip], jps[ip]);
-         tgl_swsb swsb = !ordered_mode ? tgl_swsb() :
+         gen_swsb swsb = !ordered_mode ? gen_swsb() :
             ordered_dependency_swsb(deps[ip], jps[ip], exec_all);
 
          if (deps[ip].size())
@@ -1429,7 +1429,7 @@ namespace {
                   brw_inst *sync = ubld.SYNC(TGL_SYNC_NOP);
                   sync->sched.sbid = dep.id;
                   sync->sched.mode = dep.unordered;
-                  assert(!(sync->sched.mode & TGL_SBID_SET));
+                  assert(!(sync->sched.mode & GEN_SBID_SET));
                }
             }
          }

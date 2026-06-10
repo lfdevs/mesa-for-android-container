@@ -13,7 +13,7 @@ if not dep_expat.found()
   libintel_decoder_files += files(
     'intel_batch_decoder_stub.c',
   )
-  libintel_decoder_brw_files = files()
+  libintel_decoder_gen_files = files()
   libintel_decoder_elk_files = files()
 else
   libintel_decoder_deps += dep_expat
@@ -21,7 +21,7 @@ else
     'intel_decoder.c',
     'intel_batch_decoder.c',
   )
-  libintel_decoder_brw_files = files('intel_batch_decoder_brw.c')
+  libintel_decoder_gen_files = files('intel_batch_decoder_gen.c')
   libintel_decoder_elk_files = files('intel_batch_decoder_elk.c')
 endif
 
@@ -40,19 +40,19 @@ idep_intel_decoder = declare_dependency(
   dependencies : libintel_decoder_deps,
 )
 
-libintel_decoder_brw = static_library(
-  'intel_decoder_brw',
-  [libintel_decoder_brw_files, genX_xml_h, sha1_h],
+libintel_decoder_gen = static_library(
+  'intel_decoder_gen',
+  [libintel_decoder_gen_files, genX_xml_h, sha1_h],
   include_directories : [inc_include, inc_src, inc_intel],
   c_args : [no_override_init_args, soong_compat_c_args, sse2_args],
   gnu_symbol_visibility : 'hidden',
-  dependencies : idep_intel_decoder,
+  dependencies : [idep_intel_decoder, idep_intel_compiler_gen],
   build_by_default : false,
 )
 
-idep_intel_decoder_brw = declare_dependency(
-  link_with : [libintel_decoder_brw],
-  dependencies : idep_intel_decoder,
+idep_intel_decoder_gen = declare_dependency(
+  link_with : [libintel_decoder_gen],
+  dependencies : [idep_intel_decoder, idep_intel_compiler_gen],
 )
 
 if with_intel_elk
@@ -101,7 +101,7 @@ if with_tests and not with_platform_android
       ],
       dependencies : [
         idep_libintel_common,
-        idep_intel_decoder_brw,
+        idep_intel_decoder_gen,
         idep_intel_decoder_elk,
         idep_mesautil,
         idep_intel_dev,

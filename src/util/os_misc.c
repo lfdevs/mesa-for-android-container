@@ -33,6 +33,7 @@
 #include "ralloc.h"
 #include "simple_mtx.h"
 #include "u_debug.h"
+#include "u_math.h"
 
 #include <stdarg.h>
 

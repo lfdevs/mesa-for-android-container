@@ -244,8 +244,7 @@ emit_zero_queries(struct kk_cmd_buffer *cmd, struct kk_query_pool *pool,
       .reports_per_query = kk_reports_per_query(pool),
       .set_available = set_available,
    };
-   struct mtl_size grid = {.x = num_queries, .y = 1u, .z = 1u};
-   libkk_reset_query_struct(cmd, grid, false, info);
+   libkk_reset_query_struct(cmd, kk_grid_1d(num_queries), false, info);
 }
 
 VKAPI_ATTR void VKAPI_CALL

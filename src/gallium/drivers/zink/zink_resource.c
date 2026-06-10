@@ -1217,9 +1217,9 @@ update_obj_info(struct zink_screen *screen, struct zink_resource_object *obj,
       obj->size = zink_bo_get_size(obj->bo);
    }
 
-   obj->coherent = screen->info.mem_props.memoryTypes[obj->bo->base.base.placement].propertyFlags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+   obj->coherent = screen->info.mem_props.memoryTypes[obj->bo->base.placement].propertyFlags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
    if (!(templ->flags & PIPE_RESOURCE_FLAG_SPARSE)) {
-      obj->host_visible = screen->info.mem_props.memoryTypes[obj->bo->base.base.placement].propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
+      obj->host_visible = screen->info.mem_props.memoryTypes[obj->bo->base.placement].propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
    }
 }
 
@@ -2260,10 +2260,7 @@ zink_resource_get_handle(struct pipe_screen *pscreen,
          int fd;
          fd_info.sType = VK_STRUCTURE_TYPE_MEMORY_GET_FD_INFO_KHR;
          fd_info.memory = zink_bo_get_mem(obj->bo);
-         if (whandle->type == WINSYS_HANDLE_TYPE_FD)
-            fd_info.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT;
-         else
-            fd_info.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT;
+         fd_info.handleType = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT;
          VkResult result = VKSCR(GetMemoryFdKHR)(screen->dev, &fd_info, &fd);
          if (result != VK_SUCCESS) {
             mesa_loge("ZINK: vkGetMemoryFdKHR failed");
@@ -2678,7 +2675,7 @@ zink_buffer_map(struct pipe_context *pctx,
 
    unsigned map_offset = box->x;
    /* ideally never ever read or write to non-cached mem */
-   bool is_cached_mem = (screen->info.mem_props.memoryTypes[res->obj->bo->base.base.placement].propertyFlags & VK_STAGING_RAM) == VK_STAGING_RAM;
+   bool is_cached_mem = (screen->info.mem_props.memoryTypes[res->obj->bo->base.placement].propertyFlags & VK_STAGING_RAM) == VK_STAGING_RAM;
    /* but this is only viable with a certain amount of vram since it may fully duplicate lots of large buffers */
    bool host_mem_type_check = res->obj->host_visible;
    if (screen->always_cached_upload)

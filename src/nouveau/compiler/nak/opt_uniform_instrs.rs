@@ -58,16 +58,16 @@ impl Shader<'_> {
                 | Op::PhiSrcs(_)
                 | Op::Pin(_)
                 | Op::Unpin(_)
-                | Op::Vote(_) => MappedInstrs::One(instr),
+                | Op::Vote(_) => [instr].into(),
                 Op::Bra(bra) if sm.sm() >= 80 => match &instr.pred.pred_ref {
                     PredRef::SSA(ssa) if ssa.file() == RegFile::UPred => {
                         let bra_u = OpBra {
                             target: bra.target,
                             cond: instr.pred.into(),
                         };
-                        MappedInstrs::One(Instr::new(bra_u))
+                        [Instr::new(bra_u)].into()
                     }
-                    _ => MappedInstrs::One(instr),
+                    _ => [instr].into(),
                 },
                 _ if instr.is_uniform() => {
                     let mut b = InstrBuilder::new(sm);
@@ -84,7 +84,7 @@ impl Shader<'_> {
                         });
                         let mut v = b.into_vec();
                         v.insert(0, instr);
-                        MappedInstrs::Many(v)
+                        v.into()
                     } else {
                         // We may have non-uniform sources
                         instr.for_each_ssa_use_mut(|ssa| {
@@ -104,7 +104,7 @@ impl Shader<'_> {
                 }
                 _ => {
                     propagated_r2ur |= propagate_r2ur(&mut instr, &r2ur);
-                    MappedInstrs::One(instr)
+                    [instr].into()
                 }
             }
         });

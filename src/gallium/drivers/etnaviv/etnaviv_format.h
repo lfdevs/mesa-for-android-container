@@ -35,8 +35,10 @@
 #define EXT_FORMAT (1 << 31)
 #define ASTC_FORMAT (1 << 30)
 
+struct etna_screen;
+
 uint32_t
-translate_texture_format(enum pipe_format fmt);
+translate_texture_format(enum pipe_format fmt, const struct etna_screen *screen);
 
 bool
 texture_use_int_filter(const struct pipe_sampler_view *sv,

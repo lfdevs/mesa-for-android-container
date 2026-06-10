@@ -1,23 +1,21 @@
-mul(8)          g37<1>D         g99<8,8,1>D     g36<16,8,2>UW   { align1 1Q I@1 };
-mul(8)          g37<1>D         g99<8,8,1>D     g36<16,8,2>UW   { align1 1Q I@2 };
-mul(8)          g37<1>D         g99<8,8,1>D     g36<16,8,2>UW   { align1 1Q I@3 };
-mul(8)          g37<1>D         g99<8,8,1>D     g36<16,8,2>UW   { align1 1Q I@4 };
-mul(8)          g37<1>D         g99<8,8,1>D     g36<16,8,2>UW   { align1 1Q I@5 };
-mul(8)          g37<1>D         g99<8,8,1>D     g36<16,8,2>UW   { align1 1Q I@6 };
-mul(8)          g37<1>D         g99<8,8,1>D     g36<16,8,2>UW   { align1 1Q I@7 };
-
-mov(8)          g36<1>UD        g35<8,8,1>F                     { align1 1Q F@1 };
-mov(8)          g36<1>UD        g35<8,8,1>F                     { align1 1Q F@2 };
-mov(8)          g36<1>UD        g35<8,8,1>F                     { align1 1Q F@3 };
-mov(8)          g36<1>UD        g35<8,8,1>F                     { align1 1Q F@4 };
-mov(8)          g36<1>UD        g35<8,8,1>F                     { align1 1Q F@5 };
-mov(8)          g36<1>UD        g35<8,8,1>F                     { align1 1Q F@6 };
-mov(8)          g36<1>UD        g35<8,8,1>F                     { align1 1Q F@7 };
-
-add(1)          a0<1>UD         a0<0,1,0>UD     0x00000800UD    { align1 WE_all 1N A@1 };
-add(1)          a0<1>UD         a0<0,1,0>UD     0x00000800UD    { align1 WE_all 1N A@2 };
-add(1)          a0<1>UD         a0<0,1,0>UD     0x00000800UD    { align1 WE_all 1N A@3 };
-add(1)          a0<1>UD         a0<0,1,0>UD     0x00000800UD    { align1 WE_all 1N A@4 };
-add(1)          a0<1>UD         a0<0,1,0>UD     0x00000800UD    { align1 WE_all 1N A@5 };
-add(1)          a0<1>UD         a0<0,1,0>UD     0x00000800UD    { align1 WE_all 1N A@6 };
-add(1)          a0<1>UD         a0<0,1,0>UD     0x00000800UD    { align1 WE_all 1N A@7 };
+        mul (8)                   r37:d         r99<8;8,1>:d      r36<16;8,2>:uw  {I@1}
+        mul (8)                   r37:d         r99<8;8,1>:d      r36<16;8,2>:uw  {I@2}
+        mul (8)                   r37:d         r99<8;8,1>:d      r36<16;8,2>:uw  {I@3}
+        mul (8)                   r37:d         r99<8;8,1>:d      r36<16;8,2>:uw  {I@4}
+        mul (8)                   r37:d         r99<8;8,1>:d      r36<16;8,2>:uw  {I@5}
+        mul (8)                   r37:d         r99<8;8,1>:d      r36<16;8,2>:uw  {I@6}
+        mul (8)                   r37:d         r99<8;8,1>:d      r36<16;8,2>:uw  {I@7}
+        mov (8)                   r36           r35<8;8,1>:f                      {F@1}
+        mov (8)                   r36           r35<8;8,1>:f                      {F@2}
+        mov (8)                   r36           r35<8;8,1>:f                      {F@3}
+        mov (8)                   r36           r35<8;8,1>:f                      {F@4}
+        mov (8)                   r36           r35<8;8,1>:f                      {F@5}
+        mov (8)                   r36           r35<8;8,1>:f                      {F@6}
+        mov (8)                   r36           r35<8;8,1>:f                      {F@7}
+(W)     add (1)                   a0            a0<0>             0x00000800      {A@1}
+(W)     add (1)                   a0            a0<0>             0x00000800      {A@2}
+(W)     add (1)                   a0            a0<0>             0x00000800      {A@3}
+(W)     add (1)                   a0            a0<0>             0x00000800      {A@4}
+(W)     add (1)                   a0            a0<0>             0x00000800      {A@5}
+(W)     add (1)                   a0            a0<0>             0x00000800      {A@6}
+(W)     add (1)                   a0            a0<0>             0x00000800      {A@7}

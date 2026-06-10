@@ -609,14 +609,3 @@ dEQP-GLES3.functional.transform_feedback.random_full_array_capture.interleaved.p
 dEQP-GLES3.functional.transform_feedback.random_full_array_capture.interleaved.triangles.1,Crash
 dEQP-GLES3.functional.transform_feedback.random_full_array_capture.separate.lines.6,Crash
 dEQP-GLES3.functional.transform_feedback.random_full_array_capture.separate.triangles.4,Crash
-
-# !41455
-dEQP-GLES3.functional.shaders.struct.uniform.equal_fragment,Fail
-dEQP-GLES3.functional.shaders.switch.default_label_dynamic_fragment,Fail
-dEQP-GLES3.functional.shaders.switch.default_not_last_dynamic_vertex,Fail
-dEQP-GLES3.functional.shaders.switch.do_while_loop_in_switch_dynamic_vertex,Fail
-dEQP-GLES3.functional.shaders.switch.no_default_label_dynamic_vertex,Fail
-dEQP-GLES3.functional.shaders.switch.switch_in_do_while_loop_dynamic_vertex,Fail
-dEQP-GLES3.functional.shaders.switch.switch_in_for_loop_dynamic_vertex,Fail
-dEQP-GLES3.functional.shaders.switch.switch_in_switch_dynamic_vertex,Fail
-dEQP-GLES3.functional.shaders.switch.while_loop_in_switch_dynamic_vertex,Fail

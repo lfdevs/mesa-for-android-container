@@ -95,14 +95,14 @@ endif
 
 libanv_drirc_files = custom_target(
   'libanv_drirc',
-  input : ['anv_dricrc_gen.py', drirc_gen],
+  input : ['anv_drirc_gen.py', drirc_gen, join_paths(dir_source_root, 'src/util/00-anv-defaults.conf')],
   output : ['anv_drirc.c', 'anv_drirc.h'],
   command : [prog_python, '@INPUT0@',
              '-p', join_paths(dir_source_root, 'src/util/'),
              libanv_drirc_args,
              '--drirc-src', '@OUTPUT0@',
              '--drirc-hdr', '@OUTPUT1@',
-             '--validate', join_paths(dir_source_root, 'src/util/00-mesa-defaults.conf')],
+             '--validate', '@INPUT2@'],
 )
 
 libanv_drirc = static_library(
@@ -316,7 +316,7 @@ libvulkan_intel = shared_library(
     idep_nir, idep_genxml, idep_vulkan_util, idep_vulkan_wsi,
     idep_vulkan_runtime, idep_mesautil, idep_xmlconfig,
     idep_intel_driver_ds, idep_intel_dev, idep_intel_blorp,
-    idep_intel_compiler_brw, idep_intel_decoder_brw,
+    idep_intel_compiler_brw, idep_intel_decoder_gen,
     idep_intel_compiler_jay,
   ],
   c_args : anv_flags,
@@ -355,7 +355,7 @@ if with_tests
       dep_thread, dep_dl, dep_m, anv_deps,
       idep_nir, idep_vulkan_util, idep_vulkan_wsi, idep_vulkan_runtime,
       idep_mesautil, idep_intel_dev, idep_intel_blorp,
-      idep_intel_compiler_brw, idep_intel_compiler_jay, idep_intel_decoder_brw,
+      idep_intel_compiler_brw, idep_intel_compiler_jay, idep_intel_decoder_gen,
     ],
     c_args : anv_flags,
     gnu_symbol_visibility : 'hidden',

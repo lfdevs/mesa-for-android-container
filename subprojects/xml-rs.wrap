@@ -1,0 +1,6 @@
+[wrap-file]
+directory = xml-1.2.1
+source_url = https://crates.io/api/v1/crates/xml/1.2.1/download
+source_filename = xml-1.2.1.tar.gz
+source_hash = b8aa498d22c9bbaf482329839bc5620c46be275a19a812e9a22a2b07529a642a
+patch_directory = xml-rs

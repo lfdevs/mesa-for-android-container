@@ -19,6 +19,7 @@ static const struct debug_named_value test_options[] = {
    {"testvmfaultshader", DBG(TEST_VMFAULT_SHADER), "Invoke a shader VM fault test and exit."},
    {"dmaperf", DBG(TEST_DMA_PERF), "Test DMA performance"},
    {"testmemperf", DBG(TEST_MEM_PERF), "Test map + memcpy perf using the winsys."},
+   {"testoa", DBG(TEST_OA_BANDWIDTH), "Test ordered append bandwidth"},
 
    DEBUG_NAMED_VALUE_END /* must be last */
 };
@@ -47,6 +48,9 @@ void si_run_tests(struct si_screen *sscreen)
 
    if (test_flags & (DBG(TEST_VMFAULT_CP) | DBG(TEST_VMFAULT_SHADER)))
       si_test_vmfault(sscreen, test_flags);
+
+   if (test_flags & (DBG(TEST_OA_BANDWIDTH)))
+      si_test_oa_bandwidth(sscreen);
 
    if (test_flags)
       exit(0);

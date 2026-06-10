@@ -401,6 +401,15 @@ emit_set_mode_block(fp_mode_ctx* ctx, Block* block)
             instr->opcode = aco_opcode::v_fma_mixlo_f16;
          else
             instr->opcode = aco_opcode::v_fma_mixhi_f16;
+      } else if (instr->opcode == aco_opcode::p_v_add_f64_rtne ||
+                 instr->opcode == aco_opcode::p_v_fract_f64_rtne) {
+         instr_state.require(mode_round16_64, fp_round_ne);
+         instr_state.require(mode_denorm16_64, default_state.fields[mode_denorm16_64]);
+
+         if (instr->opcode == aco_opcode::p_v_add_f64_rtne)
+            instr->opcode = aco_opcode::v_add_f64_e64;
+         else
+            instr->opcode = aco_opcode::v_fract_f64;
       } else {
          mode_mask default_needs = instr_default_needs(ctx, instr);
          u_foreach_bit (i, default_needs)

@@ -1,0 +1,233 @@
+Mesa 26.1.2 Release Notes / 2026-06-03
+======================================
+
+Mesa 26.1.2 is a bug fix release which fixes bugs found since the 26.1.1 release.
+
+Mesa 26.1.2 implements the OpenGL 4.6 API, but the version reported by
+glGetString(GL_VERSION) or glGetIntegerv(GL_MAJOR_VERSION) /
+glGetIntegerv(GL_MINOR_VERSION) depends on the particular driver being used.
+Some drivers don't support all the features required in OpenGL 4.6. OpenGL
+4.6 is **only** available if requested at context creation.
+Compatibility contexts may report a lower version depending on each driver.
+
+Mesa 26.1.2 implements the Vulkan 1.4 API, but the version reported by
+the apiVersion property of the VkPhysicalDeviceProperties struct
+depends on the particular driver being used.
+
+SHA checksums
+-------------
+
+::
+
+    SHA256: bac2bca9121897a2b8162e79636b50ac998fca799c8e6cf914edd85962babdf0  mesa-26.1.2.tar.xz
+    SHA512: 08e7b6357c27bf6e13f59e6fb0f84b73ec25c2d1a01cd09ffcc35ab263f278f10f3bd36fde419f60e78e781abcb315a432d0d5ceb3bab0bca26b8a2a39758e03  mesa-26.1.2.tar.xz
+
+
+New features
+------------
+
+- None
+
+
+Bug fixes
+---------
+
+- ANV: dEQP ASTC tests crash w/ FPE_INTDIV on Xe3
+- intel/blorp: VK_ANDROID_external_format regression on buildtype=debug
+- the new mesa 26.1.0-1 is causing mutliple graphical issues on intel i5-2400 and higher (integrated graphics)
+
+
+Changes
+-------
+
+Ahmed Hesham (2):
+
+- pan/nir: Fix 8 and 16 bool reduction lowering
+- pan/bi: Fix MKVEC.v2i8 src2 swizzle lowering
+
+Benjamin Cheng (4):
+
+- radeonsi/mm: Disable variable slices when bad input is found
+- util/ycbcr: Fix adjust_to_range
+- util/ycbcr: Add a narrow range RGB coeff helper
+- gallium/vl: Fix RGB narrow range conversions
+
+Benjamin Otte (1):
+
+- Revert "lavapipe: Don't advertise support for multiplane drm formats"
+
+Caio Oliveira (1):
+
+- nir: Add print for other cmat_description slots
+
+Christian Gmeiner (7):
+
+- etnaviv: Bypass BGRA-internal optimization for shared resources
+- etnaviv: Convert PE-internal BGRA to RGBA when flushing shared resources
+- etnaviv: Select texture format dynamically for shared RB_SWAP resources
+- etnaviv: Add per-RT frag_rb_swap shader key and NIR lowering
+- etnaviv: Use shader R/B swap for LINEAR_PE shared resources
+- lavapipe: Skip advanced blend lowering when blending is disabled
+- lavapipe: Lower advanced blend at draw time when its state is dynamic
+
+Danylo Piliaiev (2):
+
+- tu: Start/End occlusion query should force depth state recalculation
+- tu: Change of disable_fs state should force depth state recalculation
+
+Emma Anholt (1):
+
+- tu: Disable 128-wide subgroups on No Man's Sky.
+
+Eric Engestrom (2):
+
+- docs: add sha sum for 26.1.1
+- .pick_status.json: Update to f1c30d65e155effa4a746b89e038fc246ae3a23e
+
+Erik Faye-Lund (2):
+
+- pan/genxml: correct size of field
+- pan/genxml: add missing modifier
+
+Faith Ekstrand (1):
+
+- panvk/csf: fix VERTEX_SPD dirty tracking when topology changes
+
+Georg Lehmann (7):
+
+- radv: use radv_get_sampled_image_desc_size instead of open coding it
+- radv: add radv_force_64_byte_sampled_image dri conf option
+- radv: enable radv_force_64_byte_sampled_image for Forza Horizon 6
+- nir/deref: consider atomics that store derefs as complex use
+- aco/gfx6: fix fp64 floor lowering
+- aco/gfx6: fix fceil lowering
+- aco/gfx6: fix fround_even(-0.0)
+
+Gert Wollny (1):
+
+- r600/sfn: Avoid creating group-tagged registers for ALU dests
+
+Icenowy Zheng (5):
+
+- llvmpipe: stub other functions inside compute shaders for ORCJIT
+- pvr: ignore DS attachment's D or S when it's unused in dynamic rendering
+- Revert "pipe-loader: fallback to zink instead of kmsro for render nodes"
+- pipe-loader: use zink for powervr device nodes
+- zink: check Z/S aspect before creating Z/S image view
+
+Iván Briano (2):
+
+- anv: fix return of cmd_buffer_set_indirect_stride() function
+- anv, iris: fix MOCS Index setting of EXECUTE_INDIRECT_* commands
+
+Jakob Sinclair (1):
+
+- gallium: fix type size in z24_unorm_packed_pack_z_32unorm
+
+Job Noorman (3):
+
+- ir3: mark __alias_n as UNUSED in foreach_src_in_alias_group_n
+- ir3/spill: extract child intervals for live-in reloads
+- ir3: use a1.x addressing for ldg.k with dst 256
+
+Jose Maria Casanova Crespo (1):
+
+- v3dv: avoid 16F TLB usage for B10G11R11_UFLOAT copies
+
+José Roberto de Souza (1):
+
+- intel/brw: Fix nir_intrinsic_load_inline_data_intel register offset calculation
+
+Karol Herbst (3):
+
+- nir/lower_alu: fix lower_fminmax_signed_zero for denorms
+- asahi: fix dst range in buffer copy region
+- asahi: fix fdiv lowering
+
+Kenneth Graunke (2):
+
+- brw: Fix URB read length for tessellation evaluation shaders
+- brw: Fix mistake in brw_nir_lower_deferred_urb_writes
+
+Lionel Landwerlin (3):
+
+- anv: fix missing bindless flag hashing
+- anv: fix render target remapping tracking at the beginning of render passes
+- spirv: fixup infinite recursion with shader replacement
+
+Lorenzo Rossi (1):
+
+- pan/valhall: fuse_cmp skip when fusing the same instruction
+
+Luigi Santivetti (1):
+
+- pvr: re-use texture state words for each load op
+
+Mary Guillemard (2):
+
+- nak: Allow YY swizzle for SM20 and SM32 asserts
+- nir/nir_format_convert: Add missing u2f32 in nir_format_unpack_r9g9b9e5
+
+Michael Cheng (1):
+
+- brw: Fix ordered dependency exec_all handling on Xe2+
+
+Michel Dänzer (1):
+
+- egl/gbm: Do not destroy BO of current front buffer
+
+Mike Blumenkrantz (5):
+
+- zink: fix unbinding vertex buffers from null VS state
+- zink: create views for samplers lazily
+- lavapipe: correctly disable depth/stencil in secondaries
+- zink: link up vs COLx vars -> fs BFCx
+- zink/bo: check for usage before completion when reclaiming bos
+
+Nanley Chery (5):
+
+- intel/blorp: Halve max bpp for some redescribed blits
+- anv: Add transfer_src usage for ANDROID_external_format_resolve
+- anv: Flush previous aux-mode changes
+- intel/isl: Define a CMF for ASTC formats
+- intel/isl: Fix the initial state HiZ state for Xe2+
+
+Olivia Lee (1):
+
+- panvk: fix executable properties handling for IDVS varying shaders
+
+Patrick Lerda (1):
+
+- i915: fix emit_hw_vertex() unbounded memory access
+
+Pavel Ondračka (1):
+
+- nir/algebraic: prevent ffract optimization on lowered ffloor
+
+Samuel Pitoiset (3):
+
+- ac/nir,radv: lower task payload to zeroes when the mesh shader has no task
+- radv: enable radv_force_64_byte_sampled_image for Crimson Desert
+- radv: fix DGC with conditional rendering and task+mesh shaders
+
+Timothy Arceri (1):
+
+- mesa: flush bitmap cache when scissor box changes
+
+UMUTech (1):
+
+- wsi: correct the erroneous assertion
+
+Utku Iseri (1):
+
+- v3dv: close display_fd on incompatible_driver path
+
+Valentine Burley (2):
+
+- ci: Disable debian-riscv64
+- tu/kgsl: Fix memory type support detection for unsupported flags
+
+Yiwei Zhang (2):
+
+- panvk: fix to report device memory with heapIndex
+- tu: fix to report device memory with heapIndex

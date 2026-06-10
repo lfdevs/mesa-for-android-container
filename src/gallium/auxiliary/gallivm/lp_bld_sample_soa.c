@@ -80,8 +80,11 @@ lp_build_gather_resident(struct lp_build_context *bld,
    LLVMValueRef residency =
       dynamic_state->residency(gallivm, resources_type, resources_ptr, 0, NULL);
 
+   uint64_t residency_granularity = 64;
+   os_get_page_size(&residency_granularity);
+
    LLVMValueRef tile_size_log2 =
-      lp_build_const_int_vec(gallivm, type, util_logbase2(64 * 1024));
+      lp_build_const_int_vec(gallivm, type, util_logbase2(residency_granularity));
    LLVMValueRef tile_index = LLVMBuildLShr(builder, offset, tile_size_log2, "");
 
    LLVMValueRef dword_bitsize_log2 =
@@ -221,6 +224,13 @@ lp_build_sample_texel_soa(struct lp_build_sample_context *bld,
          if (use_border)
             real_offset = lp_build_andnot(&bld->int_coord_bld, real_offset, use_border);
       }
+
+      LLVMValueRef base_offset =
+         bld->dynamic_state->base_offset(bld->gallivm, bld->resources_type,
+                                         bld->resources_ptr, 0, NULL);
+      base_offset = lp_build_broadcast_scalar(&bld->int_coord_bld, base_offset);
+
+      real_offset = LLVMBuildAdd(bld->gallivm->builder, base_offset, real_offset, "");
 
       lp_build_gather_resident(&bld->float_vec_bld, bld->dynamic_state,
                                bld->resources_type, bld->resources_ptr,
@@ -3057,9 +3067,16 @@ lp_build_fetch_texel(struct lp_build_sample_context *bld,
    }
 
    if (bld->residency) {
+      LLVMValueRef base_offset =
+         bld->dynamic_state->base_offset(bld->gallivm, bld->resources_type,
+                                         bld->resources_ptr, 0, NULL);
+      base_offset = lp_build_broadcast_scalar(&bld->int_coord_bld, base_offset);
+
+      LLVMValueRef full_offset = LLVMBuildAdd(bld->gallivm->builder, base_offset, offset, "");
+
       lp_build_gather_resident(&bld->float_vec_bld, bld->dynamic_state,
                                bld->resources_type, bld->resources_ptr,
-                               offset, &bld->resident);
+                               full_offset, &bld->resident);
    }
 
    offset = lp_build_andnot(int_coord_bld, offset, out_of_bounds);

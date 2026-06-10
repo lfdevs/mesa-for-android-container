@@ -125,6 +125,7 @@ struct pvr_load_op {
    struct {
       uint16_t rt_clear_mask;
       uint16_t rt_load_mask;
+      uint16_t rt_2d_view_3d_mask;
 
       uint16_t unresolved_msaa_mask;
 

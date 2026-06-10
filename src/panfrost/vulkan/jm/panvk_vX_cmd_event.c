@@ -106,19 +106,7 @@ panvk_per_arch(CmdWaitEvents2)(VkCommandBuffer commandBuffer,
 
    for (uint32_t i = 0; i < eventCount; i++) {
       VK_FROM_HANDLE(panvk_event, event, pEvents[i]);
-      const VkDependencyInfo *info = &pDependencyInfos[i];
 
       panvk_add_wait_event_operation(cmdbuf, event);
-
-      for (uint32_t i = 0; i < info->imageMemoryBarrierCount; i++) {
-         const VkImageMemoryBarrier2 *barrier = &info->pImageMemoryBarriers[i];
-
-         panvk_per_arch(cmd_transition_image_layout)(commandBuffer, barrier);
-      }
-
-      /* We don't need to do anything here to establish the sync between layout
-       * transition dispatches and the commands following the barrier. See the
-       * comment in ./panvk_vX_cmd_buffer.c:CmdPipelineBarrier2 for details.
-       */
    }
 }

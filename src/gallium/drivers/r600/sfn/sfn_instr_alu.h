@@ -112,7 +112,7 @@ public:
 
    int dest_chan() const { return m_dest ? m_dest->chan() : m_fallback_chan; }
 
-   void pin_dest_to_chan() override;
+   void pin_registers() override;
 
    const VirtualValue *psrc(unsigned i) const { return i < m_src.size() ? m_src[i] : nullptr; }
    PVirtualValue psrc(unsigned i) { return i < m_src.size() ? m_src[i] : nullptr; }

@@ -2,6 +2,17 @@
 # Copyright (C) 2026 Valve Corporation
 # SPDX-License-Identifier: MIT
 
+# Generates the C header and source files for parsing a driver's list of
+# supported DRI config options and their default values into a struct of values
+# for the config options.  This generates the old DRI_CONF_SECTION /
+# DRI_CONF_OPT_* macros internally, and supports validation that the driver
+# config files don't refer to options that the driver doesn't use (e.g. due to
+# typos).
+#
+# To use it, call <driver>_parse_dri_options() with the appropriate
+# driConfigFileParseParams, and destroy it at teardown with
+# driDestroyOptionCache() and driDestroyOptionInfo().
+
 import argparse
 import os
 import re
@@ -135,6 +146,10 @@ TEMPLATE_H = """\
 #ifndef ${driver_prefix.upper()}_DRIRC_H
 #define ${driver_prefix.upper()}_DRIRC_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #include "util/driconf.h"
 
 struct ${driver_prefix}_drirc {
@@ -154,6 +169,10 @@ struct ${driver_prefix}_drirc {
 
 void ${driver_prefix}_parse_dri_options(struct ${driver_prefix}_drirc *drirc,
                                         const driConfigFileParseParams *params);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* ${driver_prefix.upper()}_DRIRC_H */
 """
@@ -243,3 +262,59 @@ def drirc_generate(cpath, hpath, driver_prefix, sections):
             from mako import exceptions
             print(exceptions.text_error_template().render(), file=sys.stderr)
             sys.exit(1)
+
+def add_common_vk_options(debug_options, features_options, valid_options, defaults=None):
+    B = DrircBool
+    I = DrircInt
+
+    if defaults is None:
+        defaults = {}
+
+    debug_options.extend([opt for opt in [
+        I("force_vk_vendor", defaults.get("force_vk_vendor", 0), -1, 2147483647,
+          "Override GPU vendor id",
+          c_name="force_vk_vendor"),
+        B("vk_lower_terminate_to_discard", defaults.get("vk_lower_terminate_to_discard", False),
+          "Lower terminate to discard (which is implicitly demote)",
+          c_name="lower_terminate_to_discard"),
+        B("vk_zero_vram", defaults.get("vk_zero_vram", False),
+          "Initialize to zero all VRAM allocations",
+          c_name="zero_vram"),
+    ] if opt.name in valid_options])
+
+    features_options.extend([opt for opt in [
+        B("vk_require_etc2", defaults.get("vk_require_etc2", False),
+          "Implement emulated ETC2 on HW that does not support it",
+          c_name="require_etc2"),
+        B("vk_require_astc", defaults.get("vk_require_astc", False),
+          "Implement emulated ASTC on HW that does not support it",
+          c_name="require_astc"),
+    ] if opt.name in valid_options])
+
+def add_common_vk_wsi_options(debug_options, performance_options):
+    B = DrircBool
+    I = DrircInt
+
+    performance_options.extend([
+        B("adaptive_sync", True,
+          "Adapt the monitor sync to the application performance (when possible)"),
+        I("vk_x11_override_min_image_count", 0, 0, 999,
+          "Override the VkSurfaceCapabilitiesKHR::minImageCount (0 = no override)"),
+        B("vk_x11_strict_image_count", False,
+          "Force the X11 WSI to create exactly the number of image specified by the application in VkSwapchainCreateInfoKHR::minImageCount"),
+        B("vk_x11_ensure_min_image_count", False,
+          "Force the X11 WSI to create at least the number of image specified by the driver in VkSurfaceCapabilitiesKHR::minImageCount"),
+        B("vk_xwayland_wait_ready", False,
+          "Wait for fences before submitting buffers to Xwayland"),
+    ])
+
+    debug_options.extend([
+        B("vk_wsi_force_bgra8_unorm_first", False,
+          "Force vkGetPhysicalDeviceSurfaceFormatsKHR to return VK_FORMAT_B8G8R8A8_UNORM as the first format"),
+        B("vk_wsi_force_swapchain_to_current_extent", False,
+          "Force VkSwapchainCreateInfoKHR::imageExtent to be VkSurfaceCapabilities2KHR::currentExtent"),
+        B("vk_wsi_disable_unordered_submits", False,
+          "Disable unordered WSI submits to workaround application synchronization bugs"),
+        B("vk_x11_ignore_suboptimal", False,
+          "Force the X11 WSI to never report VK_SUBOPTIMAL_KHR"),
+    ])

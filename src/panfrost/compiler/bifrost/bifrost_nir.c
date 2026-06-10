@@ -17,6 +17,19 @@
 #include "bifrost_compile.h"
 #include "bifrost_nir.h"
 #include "compiler.h"
+#include "../kraid/kraid.h"
+
+DEBUG_GET_ONCE_BOOL_OPTION(use_kraid, "PAN_USE_KRAID", false)
+
+static bool
+bi_use_kraid(void)
+{
+#ifdef WITH_PANFROST_RUST
+   return debug_get_option_use_kraid();
+#else
+   return false;
+#endif
+}
 
 /*
  * Some operations are only available as 32-bit instructions. 64-bit floats are
@@ -984,8 +997,13 @@ bifrost_postprocess_nir(nir_shader *nir,
        */
       NIR_PASS(_, nir, nir_lower_vars_to_explicit_types, nir_var_function_temp,
                glsl_get_natural_size_align_bytes);
+
+      nir_address_format scratch_addr_format =
+         nir_get_ptr_bitsize(nir) == 64 ? nir_address_format_32bit_offset_as_64bit
+                                        : nir_address_format_32bit_offset;
+
       NIR_PASS(_, nir, nir_lower_explicit_io, nir_var_function_temp,
-               nir_address_format_32bit_offset);
+               scratch_addr_format);
    }
 
    nir_lower_mem_access_bit_sizes_options mem_size_options = {
@@ -1268,7 +1286,11 @@ bifrost_compile_shader_nir(nir_shader *nir,
    info->tls_size = nir->scratch_size;
    info->stage = nir->info.stage;
 
-   if (nir->info.stage == MESA_SHADER_VERTEX && info->vs.idvs) {
+   if (bi_use_kraid()) {
+#ifdef WITH_PANFROST_RUST
+      kraid_compile_nir(nir, inputs, binary, info);
+#endif
+   } else if (nir->info.stage == MESA_SHADER_VERTEX && info->vs.idvs) {
       /* On 5th Gen, IDVS is only in one binary */
       if (pan_arch(inputs->gpu_id) >= 12)
          bi_compile_variant(nir, inputs, binary, info, BI_IDVS_ALL);

@@ -12,6 +12,7 @@
 #include "pipe/p_screen.h"
 #include "util/format/u_format.h"
 #include "util/format/u_format_s3tc.h"
+#include "util/os_misc.h"
 #include "util/os_time.h"
 #include "util/u_debug.h"
 #include "util/u_memory.h"
@@ -634,18 +635,8 @@ panfrost_init_compute_caps(struct panfrost_screen *screen)
     */
    caps->max_threads_per_block = dev->arch >= 6 ? 256 : 128;
 
-   uint64_t total_ram;
-   if (!os_get_total_physical_memory(&total_ram))
-      total_ram = 0;
-
-   /* We don't want to burn too much ram with the GPU. If the user has 4GiB
-    * or less, we use at most half. If they have more than 4GiB, we use 3/4.
-    */
-   uint64_t available_ram;
-   if (total_ram <= 4ull * 1024 * 1024 * 1024)
-      available_ram = total_ram / 2;
-   else
-      available_ram = total_ram * 3 / 4;
+   const uint64_t available_ram =
+      os_get_gpu_heap_size(screen->heap_memory_percent, NULL);
 
    /* 48bit address space max, with the lower 32MB reserved. We clamp
     * things so it matches kmod VA range limitations.
@@ -844,9 +835,8 @@ panfrost_init_screen_caps(struct panfrost_screen *screen)
 
    caps->max_texture_gather_offset = 7;
 
-   uint64_t system_memory;
-   caps->video_memory = os_get_total_physical_memory(&system_memory) ?
-      system_memory >> 20 : 0;
+   caps->video_memory =
+      os_get_gpu_heap_size(screen->heap_memory_percent, NULL) >> 20;
 
    caps->shader_stencil_export = true;
    caps->conditional_render = true;
@@ -1063,6 +1053,9 @@ panfrost_create_screen(int fd, const struct pipe_screen_config *config,
 
    snprintf(screen->renderer_string, sizeof(screen->renderer_string),
             "%s MC%u (Panfrost)", dev->model->name, core_count);
+
+   screen->heap_memory_percent =
+      driQueryOptionf(config->options, "heap_memory_percent");
 
    screen->afbc_tiled = driQueryOptionb(config->options, "pan_afbc_tiled");
 

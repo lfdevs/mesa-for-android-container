@@ -177,4 +177,10 @@ if with_glx != 'disabled' and not with_glvnd
   )
 endif
 
+# Used by bin/drm-shim.py to calculate paths
+devenv.prepend(
+  'DRM_SHIM_PATH',
+  meson.project_build_root()
+)
+
 subdir('tool')

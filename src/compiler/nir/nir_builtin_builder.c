@@ -297,6 +297,15 @@ nir_atan2(nir_builder *b, nir_def *y, nir_def *x)
    assert(y->bit_size == x->bit_size);
    const uint32_t bit_size = x->bit_size;
 
+   /* For zero inputs, we end up with intermediate infinities from
+    * frcp(0.0). The final output is not infinity though, so this has to
+    * be well defined even when applications don't request preserving infinities
+    * on their own. Also preserve signed zeros to make the sign of the infinities
+    * well defined.
+    */
+   unsigned old_fp_math_ctrl = b->fp_math_ctrl;
+   b->fp_math_ctrl |= nir_fp_preserve_signed_zero | nir_fp_preserve_inf;
+
    nir_def *zero = nir_imm_floatN_t(b, 0, bit_size);
    nir_def *one = nir_imm_floatN_t(b, 1, bit_size);
 
@@ -370,8 +379,11 @@ nir_atan2(nir_builder *b, nir_def *y, nir_def *x)
     * continuous along the whole positive y = 0 half-line, so it won't affect
     * the result significantly.
     */
-   return nir_bcsel(b, nir_flt(b, nir_fmin(b, y, rcp_scaled_t), zero),
-                    nir_fneg(b, arc), arc);
+   nir_def *result = nir_bcsel(b, nir_flt(b, nir_fmin(b, y, rcp_scaled_t), zero),
+                               nir_fneg(b, arc), arc);
+
+   b->fp_math_ctrl = old_fp_math_ctrl;
+   return result;
 }
 
 nir_def *

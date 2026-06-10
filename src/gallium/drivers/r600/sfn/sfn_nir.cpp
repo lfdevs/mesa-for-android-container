@@ -976,18 +976,18 @@ r600_finalize_and_optimize_shader(r600::Shader *shader)
       }
    }
 
-   split_address_loads(*shader);
-   
-   if (r600::sfn_log.has_debug_flag(r600::SfnLog::steps)) {
-      std::cerr << "Shader after splitting address loads\n";
-      shader->print(std::cerr);
-   }
-   
-   if (!skip_shader_opt) {
-      optimize(*shader);
+   if (split_address_loads(*shader)) {
       if (r600::sfn_log.has_debug_flag(r600::SfnLog::steps)) {
-         std::cerr << "Shader after optimization\n";
+         std::cerr << "Shader after splitting address loads\n";
          shader->print(std::cerr);
+      }
+
+      if (!skip_shader_opt) {
+         optimize(*shader);
+         if (r600::sfn_log.has_debug_flag(r600::SfnLog::steps)) {
+            std::cerr << "Shader after optimization\n";
+            shader->print(std::cerr);
+         }
       }
    }
 }

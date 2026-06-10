@@ -23,6 +23,7 @@ static const struct debug_named_value ethosu_debug_options[] = {
    {"disable_nhcwb16", ETHOSU_DBG_DISABLE_NHCWB16, "Disable NHCWB16"},
    {"disable_sram", ETHOSU_DBG_DISABLE_SRAM, "Disable SRAM"},
    {"force_u85", ETHOSU_DBG_FORCE_U85, "Force U85 behavior even on U65 hardware"},
+   {"dump_perf", ETHOSU_DBG_DUMP_PERF, "Dump performance counters for each submit"},
    DEBUG_NAMED_VALUE_END};
 
 DEBUG_GET_ONCE_FLAGS_OPTION(ethosu_debug, "ETHOSU_DEBUG", ethosu_debug_options, 0)

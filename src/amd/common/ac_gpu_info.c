@@ -875,6 +875,9 @@ ac_identify_chip(struct radeon_info *info, const struct drm_amdgpu_info_device *
    case VPE_VERSION_VALUE(2, 0, 0):
       info->vpe_ip_version = VPE_2_0;
       break;
+   case VPE_VERSION_VALUE(2, 2, 0):
+      info->vpe_ip_version = VPE_2_2;
+      break;
    default:
       info->vpe_ip_version = VPE_UNKNOWN;
       break;

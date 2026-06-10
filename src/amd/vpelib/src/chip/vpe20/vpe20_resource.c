@@ -2538,6 +2538,8 @@ uint32_t vpe20_get_hw_surface_format(enum vpe_surface_pixel_format format)
         surf_format = 298;
         break;
     case VPE_SURFACE_PIXEL_FORMAT_GRPH_RGBE:
+        surf_format = 116;
+        break;
     default:
         VPE_ASSERT("Invalid pixel format");
         break;

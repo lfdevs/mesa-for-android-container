@@ -548,6 +548,7 @@ get_register_queries_function(const struct intel_device_info *devinfo)
    case INTEL_PLATFORM_BMG:
       return intel_oa_register_queries_bmg;
    case INTEL_PLATFORM_PTL:
+   case INTEL_PLATFORM_WCL:
       return intel_oa_register_queries_ptl;
    default:
       return NULL;

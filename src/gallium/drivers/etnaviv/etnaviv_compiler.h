@@ -101,7 +101,6 @@ struct etna_shader_variant {
 
    mesa_shader_stage stage;
    uint32_t code_size; /* code size in uint32 words */
-   unsigned num_loops;
    unsigned num_temps;
 
    /* ETNA_DIRTY_* flags that, when set in context dirty, mean that the

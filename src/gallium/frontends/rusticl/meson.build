@@ -281,6 +281,7 @@ rusticl_mesa_bindings = rust.bindgen(
     '--allowlist-function',     'util_queue_.*',
     '--allowlist-function',     'util_vma_.*',
     '--allowlist-function',     'util_get_cpu_caps',
+    '--allowlist-function',     'util_perfetto_thread_flush',
     '--no-copy',                'util_vma_heap', # it's a linked list
     '--no-copy',                'util_queue',
     '--no-copy',                'util_queue_fence',

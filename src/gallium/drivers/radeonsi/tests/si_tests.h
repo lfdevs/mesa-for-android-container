@@ -20,6 +20,7 @@ enum
    DBG_TEST_VMFAULT_SHADER,
    DBG_TEST_DMA_PERF,
    DBG_TEST_MEM_PERF,
+   DBG_TEST_OA_BANDWIDTH,
 };
 
 struct si_screen;

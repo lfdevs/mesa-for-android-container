@@ -297,6 +297,3 @@ KHR-GLES31.core.draw_indirect.advanced-twoPass-transformFeedback-arrays,Fail
 spec@!opengl 1.1@large-tex,Fail
 spec@arb_texture_view@tex-view,Fail
 spec@glsl-1.30@execution@glsl-packed-back-color,Fail
-
-# VKCTS 1.4.4.2 -> 1.4.5.3 uprev
-dEQP-VK.wsi.xlib.present_timing.query.parallel.parallel,Fail

@@ -632,7 +632,8 @@ init_context(isel_context* ctx, nir_shader* shader)
                case nir_intrinsic_ddy_fine:
                case nir_intrinsic_ddx_coarse:
                case nir_intrinsic_ddy_coarse:
-               case nir_intrinsic_load_return_param_amd: {
+               case nir_intrinsic_load_return_param_amd:
+               case nir_intrinsic_load_global_tr_amd: {
                   type = RegType::vgpr;
                   break;
                }

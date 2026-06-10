@@ -73,6 +73,8 @@ files_r600 = files(
   'sfn/sfn_defines.h',
   'sfn/sfn_debug.cpp',
   'sfn/sfn_debug.h',
+  'sfn/sfn_fill_bytecode.cpp',
+  'sfn/sfn_fill_bytecode.h',
   'sfn/sfn_instr.cpp',
   'sfn/sfn_instr.h',
   'sfn/sfn_instr_alu.cpp',

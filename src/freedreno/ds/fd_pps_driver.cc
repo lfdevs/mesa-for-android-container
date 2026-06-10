@@ -7,9 +7,16 @@
 
 #include <cstring>
 #include <iostream>
-#include <perfetto.h>
 
+#include <err.h>
+#include <perfetto.h>
+#include <poll.h>
+
+#include <xf86drm.h>
+
+#include "common/freedreno_common.h"
 #include "common/freedreno_dev_info.h"
+#include "drm-uapi/msm_drm.h"
 #include "drm/freedreno_drmif.h"
 #include "drm/freedreno_ringbuffer.h"
 #include "perfcntrs/freedreno_dt.h"
@@ -46,6 +53,8 @@ FreedrenoDriver::configure_counters(bool reset, bool wait)
       (enum fd_ringbuffer_flags)(FD_RINGBUFFER_PRIMARY | FD_RINGBUFFER_GROWABLE);
    struct fd_ringbuffer *ring = fd_submit_new_ringbuffer(submit, 0x1000, flags);
 
+   assert(io);  /* This is legacy path only */
+
    for (const auto &countable : countables)
       countable.configure(ring, reset);
 
@@ -67,10 +76,83 @@ FreedrenoDriver::configure_counters(bool reset, bool wait)
 void
 FreedrenoDriver::collect_countables()
 {
+   assert(io);  /* This is legacy path only */
+
    last_dump_ts = gpu_timestamp();
 
    for (const auto &countable : countables)
       countable.collect();
+}
+
+int
+FreedrenoDriver::configure_counters_stream()
+{
+   if (perfcntr_stream_fd >= 0) {
+      close(perfcntr_stream_fd);
+      perfcntr_stream_fd = -1;
+   }
+
+   unsigned sample_size = sizeof(uint64_t) * (2 + countables.size());
+   unsigned bufsz = 2 * sample_size;
+   unsigned bufsz_shift = ffs(util_next_power_of_two(bufsz)) - 1;
+
+   struct drm_msm_perfcntr_group groups[num_perfcntrs];
+   memset(groups, 0, sizeof(groups));
+
+   struct drm_msm_perfcntr_config req = {
+      .flags = MSM_PERFCNTR_STREAM,
+      .groups = VOID2U64(groups),
+      .period = sampling_period_ns_,
+      .bufsz_shift = bufsz_shift,
+      .group_stride = sizeof(struct drm_msm_perfcntr_group),
+   };
+
+   assert(req.period);
+
+   for (const auto &countable : countables)
+      countable.configure_stream(&req);
+
+   /* Now that the groups are fully populated, resolve the sample indices: */
+   for (const auto &countable : countables)
+      countable.resolve_sample_idx(&req);
+
+   int fd = drmIoctl(fd_device_fd(dev), DRM_IOCTL_MSM_PERFCNTR_CONFIG, &req);
+   if (fd < 0)
+      return fd;
+
+   sample_buf = malloc(sample_size);
+
+   perfcntr_stream_fd = fd;
+
+   /* Unlike the legacy path, the kernel handles reconfiguring counters
+    * after power collapse for us, so we won't need to configure the
+    * stream again.  So cleanup allocated memory now:
+    */
+   for (unsigned i = 0; i < num_perfcntrs; i++) {
+      if (!groups[i].countables)
+         break;
+      free(U642VOID(groups[i].countables));
+   }
+
+   return 0;
+}
+
+static bool
+perfcntr_stream_ready(int perfcntr_stream_fd)
+{
+   struct pollfd pfd;
+
+   pfd.fd = perfcntr_stream_fd;
+   pfd.events = POLLIN;
+   pfd.revents = 0;
+
+   if (poll(&pfd, 1, 0) < 0)
+      return false;
+
+   if (!(pfd.revents & POLLIN))
+      return false;
+
+   return true;
 }
 
 static uint64_t
@@ -80,6 +162,61 @@ ticks_to_ns(uint64_t ticks)
    constexpr double GPU_TICKS_PER_NS = ALWAYS_ON_FREQUENCY_HZ / 1000000000.0;
 
    return ticks / GPU_TICKS_PER_NS;
+}
+
+bool
+FreedrenoDriver::collect_countables_stream()
+{
+   unsigned nsamples = 0;
+   bool discontinuity = false;
+
+   assert(perfcntr_stream_fd >= 0);
+
+   while (perfcntr_stream_ready(perfcntr_stream_fd)) {
+      unsigned sample_size = sizeof(uint64_t) * (2 + countables.size());
+      size_t sz = sample_size;
+      void *ptr = sample_buf;
+
+      while (sz > 0) {
+         ssize_t ret = read(perfcntr_stream_fd, ptr, sz);
+
+         if (ret < 0)
+            ret = -errno;
+
+         if (ret == -EINTR || ret == -EAGAIN)
+            continue;
+
+         if (ret < 0)
+            errx(ret, "read failed");
+
+         sz -= ret;
+         ptr = static_cast<char *>(ptr) + ret;
+      }
+
+      uint64_t *buf = (uint64_t *)sample_buf;
+      uint64_t ts = buf[0];
+      uint32_t seqno = buf[1] & 0xffffffff;
+
+      discontinuity = seqno == 0;
+
+      /* Capture the timestamp from the *start* of the sampling period: */
+      last_capture_ts = last_dump_ts;
+      last_dump_ts = ts;
+
+      auto elapsed_time_ns = ticks_to_ns(last_dump_ts - last_capture_ts);
+
+      time = (float)elapsed_time_ns / 1000000000.0;
+
+      /* advance past header: */
+      buf += 2;
+
+      for (const auto &countable : countables)
+         countable.collect_stream(buf);
+
+      nsamples++;
+   }
+
+   return (nsamples > 0) && !discontinuity;
 }
 
 bool
@@ -107,9 +244,7 @@ FreedrenoDriver::init_perfcnt()
       has_suspend_count = true;
    }
 
-   fd_pipe_set_param(pipe, FD_SYSPROF, 1);
-
-   perfcntrs = fd_perfcntrs(fd_pipe_dev_id(pipe), &num_perfcntrs);
+   perfcntrs = fd_perfcntrs(dev_id, &num_perfcntrs);
    if (num_perfcntrs == 0) {
       PERFETTO_FATAL("No hw counters available");
       return false;
@@ -127,6 +262,9 @@ FreedrenoDriver::init_perfcnt()
    case 7:
       setup_a7xx_counters();
       break;
+   case 8:
+      setup_a8xx_counters();
+      break;
    default:
       PERFETTO_FATAL("Unsupported GPU: a%03u", fd_dev_gpu_id(dev_id));
       return false;
@@ -137,11 +275,19 @@ FreedrenoDriver::init_perfcnt()
    for (const auto &countable : countables)
       countable.resolve();
 
+   if (!configure_counters_stream()) {
+      close(perfcntr_stream_fd);
+      perfcntr_stream_fd = -1;
+      return true;
+   }
+
    io = fd_dt_find_io();
    if (!io) {
       PERFETTO_FATAL("Could not map GPU I/O space");
       return false;
    }
+
+   fd_pipe_set_param(pipe, FD_SYSPROF, 1);
 
    configure_counters(true, true);
    collect_countables();
@@ -165,14 +311,26 @@ FreedrenoDriver::enable_all_counters()
 }
 
 void
-FreedrenoDriver::enable_perfcnt(const uint64_t /* sampling_period_ns */)
+FreedrenoDriver::enable_perfcnt(const uint64_t sampling_period_ns)
 {
+   sampling_period_ns_ = sampling_period_ns;
+
+   if (!io) {
+      /* reconfigure counter stream: */
+      configure_counters_stream();
+      collect_countables_stream();
+   }
 }
 
 bool
 FreedrenoDriver::dump_perfcnt()
 {
-   if (has_suspend_count) {
+   /* Note, when using perfcntr stream instead of mmio basec counter
+    * reads, we can skip this (since the seqno in the data read from
+    * the stream will tell us if there is a discontinuity, and the
+    * kernel will handle reconfiguring counters on resume)
+    */
+   if (has_suspend_count && io) {
       uint64_t val;
 
       fd_pipe_get_param(pipe, FD_SUSPEND_COUNT, &val);
@@ -192,6 +350,9 @@ FreedrenoDriver::dump_perfcnt()
          return false;
       }
    }
+
+   if (!io)
+      return collect_countables_stream();
 
    auto last_ts = last_dump_ts;
 
@@ -223,11 +384,13 @@ uint64_t FreedrenoDriver::next()
    return ret;
 }
 
-void FreedrenoDriver::disable_perfcnt()
+void
+FreedrenoDriver::disable_perfcnt()
 {
-   /* There isn't really any disable, only reconfiguring which countables
-    * get muxed to which counters
-    */
+   if (perfcntr_stream_fd >= 0) {
+      close(perfcntr_stream_fd);
+      perfcntr_stream_fd = -1;
+   }
 }
 
 /*
@@ -278,6 +441,80 @@ FreedrenoDriver::Countable::configure(struct fd_ringbuffer *ring, bool reset) co
    }
 }
 
+void
+FreedrenoDriver::Countable::configure_stream(struct drm_msm_perfcntr_config *req) const
+{
+   const struct fd_perfcntr_countable *countable = d->state[id].countable;
+   struct drm_msm_perfcntr_group *groups =
+      (struct drm_msm_perfcntr_group *)U642VOID(req->groups);
+
+   /* Find group: */
+   struct drm_msm_perfcntr_group *g = NULL;
+
+   for (unsigned i = 0; i < req->nr_groups; i++) {
+      if (!strcmp(groups[i].group_name, group.c_str())) {
+         g = &groups[i];
+         break;
+      }
+   }
+
+   /* If not found, append a new group: */
+   if (!g) {
+      g = &groups[req->nr_groups++];
+      strcpy(g->group_name, group.c_str());
+
+      /* allocate countables for max # of counters in the group */
+      for (unsigned i = 0; i < d->num_perfcntrs; i++) {
+         if (!strcmp(d->perfcntrs[i].name, group.c_str())) {
+            void *countables = calloc(sizeof(uint32_t), d->perfcntrs[i].num_counters);
+            g->countables = VOID2U64(countables);
+            break;
+         }
+      }
+
+      assert(g->countables);
+   }
+
+   /* Initially, just store the index within the group, since earlier groups
+    * are not yet fully populated (ie. we don't yet know the offset of the
+    * first sample in the group)
+    */
+   d->state[id].idx = g->nr_countables;
+
+   /* And last, append the countable: */
+   uint32_t *countables = (uint32_t *)U642VOID(g->countables);
+   countables[g->nr_countables++] = countable->selector;
+}
+
+static unsigned
+find_group_offset(const struct drm_msm_perfcntr_config *req, const char *group)
+{
+   struct drm_msm_perfcntr_group *groups =
+      (struct drm_msm_perfcntr_group *)U642VOID(req->groups);
+   unsigned off = 0;
+
+   for (unsigned i = 0; i < req->nr_groups; i++) {
+      if (!strcmp(groups[i].group_name, group))
+         break;
+      off += groups[i].nr_countables;
+   }
+
+   return off;
+}
+
+void
+FreedrenoDriver::Countable::resolve_sample_idx(const struct drm_msm_perfcntr_config *req) const
+{
+   d->state[id].idx += find_group_offset(req, group.c_str());
+}
+
+void
+FreedrenoDriver::Countable::collect_stream(const uint64_t *buf) const
+{
+   d->state[id].last_value = d->state[id].value;
+   d->state[id].value = buf[d->state[id].idx];
+}
+
 /* Collect current counter value and calculate delta since last sample: */
 void
 FreedrenoDriver::Countable::collect() const
@@ -302,11 +539,10 @@ FreedrenoDriver::Countable::resolve() const
       if (group != g->name)
          continue;
 
-      for (unsigned j = 0; j < g->num_countables; j++) {
-         const struct fd_perfcntr_countable *c = &g->countables[j];
-         if (name != c->name)
-            continue;
+      const struct fd_perfcntr_countable *c =
+         fd_perfcntrs_countable(g, name.c_str());
 
+      if (c) {
          d->state[id].countable = c;
 
          /* Assign counters from high to low to reduce conflicts with UMD-owned

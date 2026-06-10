@@ -131,6 +131,7 @@ enum vpe_ip_level {
     VPE_IP_LEVEL_1_0, /**< vpe 1.0 */
     VPE_IP_LEVEL_1_1, /**< vpe 1.1 */
     VPE_IP_LEVEL_2_0, /**< vpe 2.0 */
+    VPE_IP_LEVEL_2_2, /**< vpe 2.2 */
 };
 
 enum vpe_mps_mode {

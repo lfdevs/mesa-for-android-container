@@ -151,10 +151,10 @@ TEST_F(CsBuilderTest, loop_ls_tracker_unrelated_inside)
 
    cs_load32_to(&b, r0, addr, 0x0);
    cs_while(&b, MALI_CS_CONDITION_ALWAYS, cs_undef()) {
-      cs_add32(&b, r1, r1, 0x0);
+      cs_add_imm32(&b, r1, r1, 0x0);
       cs_break(&b);
    }
-   cs_add32(&b, r0, r0, 0xab);
+   cs_add_imm32(&b, r0, r0, 0xab);
    cs_end(&b);
 
    uint64_t expected_patched[] = {
@@ -182,7 +182,7 @@ TEST_F(CsBuilderTest, loop_ls_tracker_load_only_inside_if)
       }
       cs_break(&b);
    }
-   cs_add32(&b, r0, r0, 0xab);
+   cs_add_imm32(&b, r0, r0, 0xab);
    cs_end(&b);
 
    uint64_t expected_patched[] = {
@@ -207,7 +207,7 @@ TEST_F(CsBuilderTest, loop_ls_tracker_load_only_continue_inside_if)
    struct cs_index r0 = cs_reg32(&b, 0);
    struct cs_index addr = cs_reg64(&b, 10);
 
-   cs_add32(&b, r0, r0, 0x0);
+   cs_add_imm32(&b, r0, r0, 0x0);
    cs_while(&b, MALI_CS_CONDITION_ALWAYS, cs_undef()) {
       cs_if(&b, MALI_CS_CONDITION_LESS, cs_reg32(&b, 1)) {
          cs_load32_to(&b, r0, addr, 0x0);
@@ -215,7 +215,7 @@ TEST_F(CsBuilderTest, loop_ls_tracker_load_only_continue_inside_if)
       }
       cs_break(&b);
    }
-   cs_add32(&b, r0, r0, 0xab);
+   cs_add_imm32(&b, r0, r0, 0xab);
    cs_end(&b);
 
    uint64_t expected_patched[] = {
@@ -240,14 +240,14 @@ TEST_F(CsBuilderTest, loop_ls_tracker_load_only_break_inside_if)
    struct cs_index r0 = cs_reg32(&b, 0);
    struct cs_index addr = cs_reg64(&b, 10);
 
-   cs_add32(&b, r0, r0, 0x0);
+   cs_add_imm32(&b, r0, r0, 0x0);
    cs_while(&b, MALI_CS_CONDITION_ALWAYS, cs_undef()) {
       cs_if(&b, MALI_CS_CONDITION_LESS, cs_reg32(&b, 1)) {
          cs_load32_to(&b, r0, addr, 0x0);
          cs_break(&b);
       }
    }
-   cs_add32(&b, r0, r0, 0xab);
+   cs_add_imm32(&b, r0, r0, 0xab);
    cs_end(&b);
 
    uint64_t expected_patched[] = {
@@ -275,13 +275,13 @@ TEST_F(CsBuilderTest, loop_ls_tracker_load_same_inside)
 
    cs_load32_to(&b, r0, addr, 0x0);
    cs_while(&b, MALI_CS_CONDITION_ALWAYS, cs_undef()) {
-      cs_add32(&b, r0, r0, 0x0);
+      cs_add_imm32(&b, r0, r0, 0x0);
       cs_load32_to(&b, r0, addr, 0x0);
       cs_if(&b, MALI_CS_CONDITION_LESS, cs_reg32(&b, 1)) {
          cs_break(&b);
       }
    }
-   cs_add32(&b, r0, r0, 0xab);
+   cs_add_imm32(&b, r0, r0, 0xab);
    cs_end(&b);
 
    uint64_t expected_patched[] = {
@@ -310,13 +310,13 @@ TEST_F(CsBuilderTest, loop_ls_tracker_load_same_inside_use_as_cond)
 
    cs_load32_to(&b, r0, addr, 0x0);
    cs_while(&b, MALI_CS_CONDITION_LESS, r0) {
-      cs_add32(&b, r0, r0, 0x0);
+      cs_add_imm32(&b, r0, r0, 0x0);
       cs_load32_to(&b, r0, addr, 0x0);
       cs_if(&b, MALI_CS_CONDITION_LESS, cs_reg32(&b, 1)) {
          cs_break(&b);
       }
    }
-   cs_add32(&b, r0, r0, 0xab);
+   cs_add_imm32(&b, r0, r0, 0xab);
    cs_end(&b);
 
    uint64_t expected_patched[] = {
@@ -350,10 +350,10 @@ TEST_F(CsBuilderTest, maybe_flush_outer_load)
    cs_load32_to(&b, reg1, addr, 0);
    cs_maybe(&b, &maybe) {
       /* This should flush the load to reg */
-      cs_add32(&b, reg2, reg1, 0);
+      cs_add_imm32(&b, reg2, reg1, 0);
    }
    /* This should also flush the load to reg */
-   cs_add32(&b, reg2, reg1, 0);
+   cs_add_imm32(&b, reg2, reg1, 0);
    cs_patch_maybe(&b, maybe);
    cs_end(&b);
 
@@ -382,10 +382,10 @@ TEST_F(CsBuilderTest, maybe_flush_inner_load)
    cs_maybe(&b, &maybe) {
       cs_load32_to(&b, reg1, addr, 0);
       /* This should flush the load to reg */
-      cs_add32(&b, reg2, reg1, 0);
+      cs_add_imm32(&b, reg2, reg1, 0);
    }
    /* This should not flush the load to reg */
-   cs_add32(&b, reg2, reg1, 0);
+   cs_add_imm32(&b, reg2, reg1, 0);
    cs_patch_maybe(&b, maybe);
    cs_end(&b);
 

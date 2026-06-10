@@ -27,8 +27,8 @@ lower_non_tied_default(jay_builder *b, jay_inst *I, jay_def default_)
       jay_remove_instruction(I);
    } else {
       jay_foreach_comp(I->dst, c) {
-         jay_def dst = jay_extract_post_ra(I->dst, c);
-         jay_def src = jay_extract_post_ra(default_, c);
+         jay_def dst = jay_extract_range_post_ra(I->dst, c, 1);
+         jay_def src = jay_extract_range_post_ra(default_, c, 1);
 
          jay_inst *mov = jay_MOV(b, dst, src);
          mov->type = I->type;
@@ -98,6 +98,11 @@ lower(jay_builder *b, jay_inst *I)
          JAY_TYPE_U32;
       return true;
    }
+
+   case JAY_OPCODE_LOOP_ONCE:
+      jay_BREAK(b);
+      jay_WHILE(b);
+      return true;
 
    default:
       return false;

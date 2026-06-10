@@ -226,6 +226,9 @@ typedef struct shader_info {
    /* Whether texture size, levels, or samples is queried. */
    bool uses_resource_info_query:1;
 
+   /* Whether a shader abort instruction is used. */
+   bool uses_abort:1;
+
    /* Bitmask of bit-sizes used with ALU instructions. */
    uint8_t bit_sizes_float;
    uint8_t bit_sizes_int;
@@ -362,6 +365,16 @@ typedef struct shader_info {
     * is set when the Vulkan memory model is used.
     */
    bool assume_no_data_races:1;
+
+   /* This shader requires occupancy-bounded forward progress guarantees
+    * between workgroups in order to be executed correctly. This means that
+    * each workgroup which has already executed at least one step (here
+    * defined as an atomic memory operation) must eventually execute another
+    * step or terminate. Algorithms that require this guarantee include
+    * spin-loops where each workgroup only waits for workgroups with a lower
+    * index and indices are assigned via atomicAdd() of a counter.
+    */
+   bool occupancy_bounded_workgroup_fairness:1;
 
    union {
       struct {

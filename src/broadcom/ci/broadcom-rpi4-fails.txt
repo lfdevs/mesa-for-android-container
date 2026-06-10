@@ -452,19 +452,12 @@ program@execute@builtin@builtin-float-sign-1.0.generated@sign float16,Fail
 program@execute@builtin@builtin-float-sign-1.0.generated@sign float2,Fail
 program@execute@builtin@builtin-float-sign-1.0.generated@sign float4,Fail
 program@execute@builtin@builtin-float-sign-1.0.generated@sign float8,Fail
-program@execute@builtin@builtin-long-abs-1.0.generated,Crash
-program@execute@builtin@builtin-long-clamp-1.1.generated,Crash
-program@execute@builtin@builtin-long-max-1.1.generated,Crash
-program@execute@builtin@builtin-long-min-1.1.generated,Crash
 program@execute@builtin@builtin-long-popcount-1.2.generated,Fail
 program@execute@builtin@builtin-long-popcount-1.2.generated@popcount long1,Fail
 program@execute@builtin@builtin-long-popcount-1.2.generated@popcount long16,Fail
 program@execute@builtin@builtin-long-popcount-1.2.generated@popcount long2,Fail
 program@execute@builtin@builtin-long-popcount-1.2.generated@popcount long4,Fail
 program@execute@builtin@builtin-long-popcount-1.2.generated@popcount long8,Fail
-program@execute@builtin@builtin-ulong-clamp-1.1.generated,Crash
-program@execute@builtin@builtin-ulong-max-1.1.generated,Crash
-program@execute@builtin@builtin-ulong-min-1.1.generated,Crash
 program@execute@builtin@builtin-ulong-popcount-1.2.generated,Fail
 program@execute@builtin@builtin-ulong-popcount-1.2.generated@popcount ulong1,Fail
 program@execute@builtin@builtin-ulong-popcount-1.2.generated@popcount ulong16,Fail

@@ -1,0 +1,7 @@
+# Note: skips lists for CI are just a list of lines that, when
+# non-zero-length and not starting with '#', will regex match to
+# delete lines from the test list.  Be careful.
+
+dEQP-VK.api.external.fence.sync_fd.export_multiple_times_temporary
+dEQP-VK.api.external.semaphore.sync_fd.export_multiple_times_temporary
+dEQP-VK.wsi.wayland.swapchain.simulate_oom.image_extent

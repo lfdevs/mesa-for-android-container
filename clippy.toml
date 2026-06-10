@@ -1,2 +1,2 @@
 # Keep this in sync with the `rustc.version()` check in meson.build
-msrv = "1.82.0"
+msrv = "1.85.0"

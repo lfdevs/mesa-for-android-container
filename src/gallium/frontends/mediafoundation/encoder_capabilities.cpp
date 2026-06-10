@@ -24,10 +24,16 @@
 #include "gallium/drivers/d3d12/d3d12_interop_public.h"
 #include <encoder_capabilities.h>
 
+#include "wpptrace.h"
+
+#include "encoder_capabilities.tmh"
+
 // Initializes encoder capabilities by querying hardware-specific parameters from pipe given the video profile.
-void
+HRESULT
 encoder_capabilities::initialize( pipe_screen *pScreen, pipe_video_profile videoProfile )
 {
+   HRESULT hr = S_OK;
+
    m_uiMaxWidth = pScreen->get_video_param( pScreen, videoProfile, PIPE_VIDEO_ENTRYPOINT_ENCODE, PIPE_VIDEO_CAP_MAX_WIDTH );
 
    m_uiMaxHeight = pScreen->get_video_param( pScreen, videoProfile, PIPE_VIDEO_ENTRYPOINT_ENCODE, PIPE_VIDEO_CAP_MAX_HEIGHT );
@@ -146,6 +152,17 @@ encoder_capabilities::initialize( pipe_screen *pScreen, pipe_video_profile video
    uint32_t supportedSliceStructures =
       pScreen->get_video_param( pScreen, videoProfile, PIPE_VIDEO_ENTRYPOINT_ENCODE, PIPE_VIDEO_CAP_ENC_SLICES_STRUCTURE );
 
+   /* App-controlled slice/tile partitioning: any mode where the application picks the
+    * partitioning (including a single subregion via FULL_FRAME), as opposed to AUTO where the
+    * driver decides. Covers all PIPE_VIDEO_CAP_SLICE_STRUCTURE_* bits except AUTO. */
+   constexpr uint32_t appControlledPartitioningMask =
+      PIPE_VIDEO_CAP_SLICE_STRUCTURE_POWER_OF_TWO_ROWS |
+      PIPE_VIDEO_CAP_SLICE_STRUCTURE_EQUAL_ROWS |
+      PIPE_VIDEO_CAP_SLICE_STRUCTURE_EQUAL_MULTI_ROWS |
+      PIPE_VIDEO_CAP_SLICE_STRUCTURE_ARBITRARY_MACROBLOCKS |
+      PIPE_VIDEO_CAP_SLICE_STRUCTURE_ARBITRARY_ROWS |
+      PIPE_VIDEO_CAP_SLICE_STRUCTURE_MAX_SLICE_SIZE;
+   m_bHWSupportsAppControlledSlicePartitioning = ( ( supportedSliceStructures & appControlledPartitioningMask ) != 0 );
    m_bHWSupportSliceModeMB = ( ( supportedSliceStructures & PIPE_VIDEO_CAP_SLICE_STRUCTURE_ARBITRARY_MACROBLOCKS ) != 0 );
    m_bHWSupportSliceModeBits = ( ( supportedSliceStructures & PIPE_VIDEO_CAP_SLICE_STRUCTURE_MAX_SLICE_SIZE ) != 0 );
    m_bHWSupportSliceModeMBRow = ( ( supportedSliceStructures & PIPE_VIDEO_CAP_SLICE_STRUCTURE_EQUAL_MULTI_ROWS ) != 0 );
@@ -171,4 +188,11 @@ encoder_capabilities::initialize( pipe_screen *pScreen, pipe_video_profile video
                                                                         videoProfile,
                                                                         PIPE_VIDEO_ENTRYPOINT_ENCODE,
                                                                         PIPE_VIDEO_CAP_ENC_READABLE_RECONSTRUCTED_PICTURE ) != 0;
+
+   if( !m_bHWSupportsAppControlledSlicePartitioning && !m_bHWSupportSliceModeAuto )
+   {
+      MFE_ERROR( "[dx12 hmft 0x%p] HW supports neither app-controlled slice partitioning nor AUTO slice mode (check agility sdk)\n", m_logId );
+      hr = E_NOTIMPL;
+   }
+   return hr;
 }

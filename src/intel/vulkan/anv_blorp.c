@@ -2811,3 +2811,135 @@ anv_image_ccs_op(struct anv_cmd_buffer *cmd_buffer,
 
    anv_blorp_batch_finish(&batch);
 }
+
+void
+anv_CmdCopyMemoryIndirectKHR(
+      VkCommandBuffer                     commandBuffer,
+      const VkCopyMemoryIndirectInfoKHR*  pCopyMemoryIndirectInfo)
+{
+   ANV_FROM_HANDLE(anv_cmd_buffer, cmd_buffer, commandBuffer);
+
+   if (pCopyMemoryIndirectInfo->copyCount == 0)
+      return;
+
+   const uint64_t indirect_buf_addr =
+      pCopyMemoryIndirectInfo->copyAddressRange.address;
+   const uint32_t copy_count = pCopyMemoryIndirectInfo->copyCount;
+   const uint64_t stride = pCopyMemoryIndirectInfo->copyAddressRange.stride;
+
+   /* These are all restrictions by the spec. */
+   assert((pCopyMemoryIndirectInfo->srcCopyFlags &
+           VK_ADDRESS_COPY_PROTECTED_BIT_KHR) == 0);
+   assert((pCopyMemoryIndirectInfo->dstCopyFlags &
+           VK_ADDRESS_COPY_PROTECTED_BIT_KHR) == 0);
+   assert(pCopyMemoryIndirectInfo->copyAddressRange.size >=
+          pCopyMemoryIndirectInfo->copyCount *
+          pCopyMemoryIndirectInfo->copyAddressRange.stride);
+
+   assert(!anv_cmd_buffer_is_blitter_queue(cmd_buffer));
+
+   enum blorp_batch_flags blorp_flags = BLORP_BATCH_USE_COMPUTE;
+
+   struct blorp_batch batch;
+   anv_blorp_batch_init(cmd_buffer, &batch, blorp_flags);
+
+   blorp_copy_memory_indirect(&batch, indirect_buf_addr, copy_count, stride);
+
+   anv_blorp_batch_finish(&batch);
+}
+
+void
+anv_CmdCopyMemoryToImageIndirectKHR(
+      VkCommandBuffer                           commandBuffer,
+      const VkCopyMemoryToImageIndirectInfoKHR* pCopyMemoryToImageIndirectInfo)
+{
+   ANV_FROM_HANDLE(anv_cmd_buffer, cmd_buffer, commandBuffer);
+   ANV_FROM_HANDLE(anv_image, anv_image,
+                   pCopyMemoryToImageIndirectInfo->dstImage);
+
+   if (pCopyMemoryToImageIndirectInfo->copyCount == 0)
+      return;
+
+   const uint64_t indirect_buf_addr =
+      pCopyMemoryToImageIndirectInfo->copyAddressRange.address;
+   const uint32_t copy_count = pCopyMemoryToImageIndirectInfo->copyCount;
+   const uint64_t stride =
+      pCopyMemoryToImageIndirectInfo->copyAddressRange.stride;
+   const VkImageLayout img_layout =
+      pCopyMemoryToImageIndirectInfo->dstImageLayout;
+
+   assert((pCopyMemoryToImageIndirectInfo->srcCopyFlags &
+           VK_ADDRESS_COPY_PROTECTED_BIT_KHR) == 0);
+   assert(pCopyMemoryToImageIndirectInfo->copyAddressRange.size >=
+          pCopyMemoryToImageIndirectInfo->copyCount *
+          pCopyMemoryToImageIndirectInfo->copyAddressRange.stride);
+
+   assert(!anv_cmd_buffer_is_blitter_queue(cmd_buffer));
+
+   enum blorp_batch_flags blorp_flags = BLORP_BATCH_USE_COMPUTE;
+   struct blorp_batch batch;
+   anv_blorp_batch_init(cmd_buffer, &batch, blorp_flags);
+
+   for (int c = 0; c < copy_count; c++) {
+      const VkImageSubresourceLayers *img_subresource =
+         &pCopyMemoryToImageIndirectInfo->pImageSubresources[c];
+      VkImageAspectFlags aspect_mask = img_subresource->aspectMask;
+      uint32_t mip_level = img_subresource->mipLevel;
+      uint32_t base_layer = img_subresource->baseArrayLayer;
+      uint32_t layer_count = img_subresource->layerCount;
+
+      assert(mip_level != VK_REMAINING_MIP_LEVELS);
+      if (layer_count == VK_REMAINING_ARRAY_LAYERS)
+         layer_count = anv_image->vk.array_layers - base_layer;
+
+      const unsigned plane =
+         anv_image_aspect_to_plane(anv_image, aspect_mask);
+      struct isl_surf *img_isl_surf =
+         &anv_image->planes[plane].primary_surface.isl;
+      enum isl_format format = img_isl_surf->format;
+      bool format_is_compressed = isl_format_is_compressed(format);
+
+      struct blorp_surf img_blorp_surf;
+      get_blorp_surf_for_anv_image(cmd_buffer, anv_image,
+                                   aspect_mask, VK_IMAGE_USAGE_STORAGE_BIT,
+                                   img_layout,
+                                   anv_image->planes[plane].aux_usage,
+                                   format, false /* cross_aspect */,
+                                   &img_blorp_surf);
+
+      anv_cmd_buffer_mark_image_written(cmd_buffer, anv_image,
+                                        img_subresource->aspectMask,
+                                        img_blorp_surf.aux_usage, mip_level,
+                                        base_layer, layer_count);
+
+      /* If the format is compressed, we will pretend the format is one where
+       * each pixel is the size of the compressed block, so image stores can
+       * work. Unfortunately, that translation only works if we do it for one
+       * mip level of a specific layer, as the complete layout of, say, BC4
+       * and R32G32 formats are not compatible: so we loop through all layers
+       * here.
+       */
+      if (format_is_compressed) {
+         int min_l_or_z, top_l_or_z;
+         if (img_blorp_surf.surf->dim == ISL_SURF_DIM_3D) {
+            min_l_or_z = 0;
+            top_l_or_z = img_isl_surf->logical_level0_px.depth >> mip_level;
+         } else {
+            min_l_or_z = base_layer;
+            top_l_or_z = base_layer + layer_count;
+         }
+         for (int l_or_z = min_l_or_z; l_or_z < top_l_or_z; l_or_z++) {
+            blorp_copy_memory_to_image_indirect(&batch, &img_blorp_surf,
+                                                indirect_buf_addr,
+                                                stride, c, mip_level,
+                                                layer_count, l_or_z);
+         }
+      } else {
+         blorp_copy_memory_to_image_indirect(&batch, &img_blorp_surf,
+                                             indirect_buf_addr, stride, c,
+                                             mip_level, layer_count, -1);
+      }
+   }
+
+   anv_blorp_batch_finish(&batch);
+}

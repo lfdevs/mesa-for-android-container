@@ -1971,9 +1971,8 @@ panvk_shader_get_executable_properties(
                           executable_count);
 
    panvk_shader_foreach_variant(shader, variant) {
-      /* Ignore absent variants but always add vertex on IDVS */
-      if (variant->bin_size == 0 &&
-          (variant->info.stage != MESA_SHADER_VERTEX || !variant->info.vs.idvs))
+      /* Ignore absent variants */
+      if (variant->bin_size == 0)
          continue;
 
       const char *variant_name = panvk_shader_variant_name(shader, variant);
@@ -1994,14 +1993,24 @@ panvk_shader_get_executable_properties(
          }
       }
 
-      if (variant->info.stage == MESA_SHADER_VERTEX && variant->info.vs.idvs) {
+      if (variant->info.stage == MESA_SHADER_VERTEX &&
+          variant->info.vs.secondary_offset) {
          vk_outarray_append_typed(VkPipelineExecutablePropertiesKHR, &out,
                                   props)
          {
             props->stages = mesa_to_vk_shader_stage(shader->vk.stage);
             props->subgroupSize = pan_subgroup_size(PAN_ARCH);
-            VK_COPY_STR(props->name, "varying");
-            VK_COPY_STR(props->description, "varying shader");
+
+            if (variant_name != NULL) {
+               VK_PRINT_STR(props->name, "%s %s varying", variant_name,
+                            stage_name);
+               VK_PRINT_STR(props->description, "%s %s varying shader",
+                            variant_name, stage_name);
+            } else {
+               VK_PRINT_STR(props->name, "%s varying", stage_name);
+               VK_PRINT_STR(props->description, "%s varying shader",
+                            stage_name);
+            }
          }
       }
    }
@@ -2011,20 +2020,35 @@ panvk_shader_get_executable_properties(
 
 static const struct panvk_shader_variant *
 get_variant_from_executable_index(struct panvk_shader *shader,
-                                  uint32_t executable_index)
+                                  uint32_t executable_index,
+                                  bool *idvs_varying)
 {
+   *idvs_varying = false;
    uint32_t i = 0;
 
    panvk_shader_foreach_variant(shader, variant) {
-      /* Ignore absent variants but always add vertex on IDVS */
-      if (variant->bin_size == 0 &&
-          (variant->info.stage != MESA_SHADER_VERTEX || !variant->info.vs.idvs))
+      /* Ignore absent variants */
+      if (variant->bin_size == 0)
          continue;
 
       if (i == executable_index)
          return variant;
 
       i++;
+
+      /* VS variants that have a separate IDVS varying shader get two indices,
+       * the first for the position shader and the second for the varying
+       * shader
+       */
+      if (variant->info.stage == MESA_SHADER_VERTEX &&
+          variant->info.vs.secondary_offset) {
+         if (i == executable_index) {
+            *idvs_varying = true;
+            return variant;
+         }
+
+         i++;
+      }
    }
 
    return NULL;
@@ -2040,25 +2064,14 @@ panvk_shader_get_executable_statistics(
       container_of(vk_shader, struct panvk_shader, vk);
 
    bool needs_vary = false;
-   if (shader->vk.stage == MESA_SHADER_VERTEX) {
-      assert(executable_index == 0 || executable_index == 1);
 
-      needs_vary = executable_index == 1;
-
-      /* Readjust index to skip embedded varying variant */
-      if (executable_index >= 1)
-         executable_index--;
-   }
-
-   assert(executable_index < panvk_shader_num_variants(shader->vk.stage));
    const struct panvk_shader_variant *variant =
-      get_variant_from_executable_index(shader, executable_index);
+      get_variant_from_executable_index(shader, executable_index, &needs_vary);
    assert(variant != NULL);
 
    VK_OUTARRAY_MAKE_TYPED(VkPipelineExecutableStatisticKHR, out, statistics,
                           statistic_count);
 
-   assert(executable_index == 0 || executable_index == 1);
    const struct pan_stats *stats =
       needs_vary ? &variant->info.stats_idvs_varying : &variant->info.stats;
 
@@ -2101,24 +2114,14 @@ panvk_shader_get_executable_internal_representations(
                           internal_representation_count);
 
    bool needs_vary = false;
-   if (shader->vk.stage == MESA_SHADER_VERTEX) {
-      assert(executable_index == 0 || executable_index == 1);
 
-      needs_vary = executable_index == 1;
-
-      /* Readjust index to skip embedded varying variant */
-      if (executable_index >= 1)
-         executable_index--;
-   }
+   const struct panvk_shader_variant *variant =
+      get_variant_from_executable_index(shader, executable_index, &needs_vary);
+   assert(variant != NULL);
 
    /* XXX: Varying shader assembly */
    if (needs_vary)
       return vk_outarray_status(&out);
-
-   assert(executable_index < panvk_shader_num_variants(shader->vk.stage));
-   const struct panvk_shader_variant *variant =
-      get_variant_from_executable_index(shader, executable_index);
-   assert(variant != NULL);
 
    bool incomplete_text = false;
 

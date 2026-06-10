@@ -141,6 +141,7 @@ gitlab-ci*.yml @eric
 /include/drm-uapi/i915_drm.h @kwg @llandwerlin @idr
 /include/pci_ids/i*_pci_ids.h @kwg @llandwerlin @idr
 /src/intel/ @kwg @llandwerlin @idr
+/src/intel/compiler/jay/ @alyssa @kwg
 /src/gallium/winsys/iris/ @kwg @llandwerlin @idr
 /src/gallium/drivers/iris/ @kwg @llandwerlin @idr
 /src/gallium/drivers/i915/ @anholt

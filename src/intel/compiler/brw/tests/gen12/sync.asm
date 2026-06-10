@@ -1,33 +1,33 @@
-sync nop(16)                    nullUD                          { align1 WE_all 1H @1 };
-sync nop(1)                     nullUD                          { align1 WE_all 1N @1 };
-sync nop(1)                     nullUD                          { align1 WE_all 1N @2 };
-sync nop(1)                     nullUD                          { align1 WE_all 1N @3 };
-sync nop(1)                     nullUD                          { align1 WE_all 1N @4 };
-sync nop(1)                     nullUD                          { align1 WE_all 1N @5 };
-sync nop(1)                     nullUD                          { align1 WE_all 1N @6 };
-sync nop(1)                     nullUD                          { align1 WE_all 1N @7 };
-sync nop(1)                     nullUD                          { align1 WE_all 3N @1 };
-sync nop(1)                     nullUD                          { align1 WE_all 3N @2 };
-sync nop(1)                     nullUD                          { align1 WE_all 3N @3 };
-sync nop(1)                     nullUD                          { align1 WE_all 3N @4 };
-sync nop(1)                     nullUD                          { align1 WE_all 3N @5 };
-sync nop(1)                     nullUD                          { align1 WE_all 3N @6 };
-sync nop(1)                     nullUD                          { align1 WE_all 3N @7 };
-sync nop(1)                     nullUD                          { align1 WE_all 5N @1 };
-sync nop(1)                     nullUD                          { align1 WE_all 5N @2 };
-sync nop(1)                     nullUD                          { align1 WE_all 5N @3 };
-sync nop(1)                     nullUD                          { align1 WE_all 5N @4 };
-sync nop(1)                     nullUD                          { align1 WE_all 5N @5 };
-sync nop(1)                     nullUD                          { align1 WE_all 5N @6 };
-sync nop(1)                     nullUD                          { align1 WE_all 5N @7 };
-sync nop(1)                     nullUD                          { align1 WE_all 7N @1 };
-sync nop(1)                     nullUD                          { align1 WE_all 7N @2 };
-sync nop(1)                     nullUD                          { align1 WE_all 7N @3 };
-sync nop(1)                     nullUD                          { align1 WE_all 7N @4 };
-sync nop(1)                     nullUD                          { align1 WE_all 7N @5 };
-sync nop(1)                     nullUD                          { align1 WE_all 7N @6 };
-sync nop(1)                     nullUD                          { align1 WE_all 7N @7 };
-sync nop(32)                    nullUD                          { align1 WE_all @1 };
-sync nop(8)                     nullUD                          { align1 WE_all 1Q @1 };
-sync allwr(16)                  nullUD                          { align1 1H };
-sync allwr(8)                   nullUD                          { align1 1Q };
+(W)     sync.nop (16)                           null                              {@1}
+(W)     sync.nop (1)                            null                              {@1}
+(W)     sync.nop (1)                            null                              {@2}
+(W)     sync.nop (1)                            null                              {@3}
+(W)     sync.nop (1)                            null                              {@4}
+(W)     sync.nop (1)                            null                              {@5}
+(W)     sync.nop (1)                            null                              {@6}
+(W)     sync.nop (1)                            null                              {@7}
+(W)     sync.nop (1|M8)                         null                              {@1}
+(W)     sync.nop (1|M8)                         null                              {@2}
+(W)     sync.nop (1|M8)                         null                              {@3}
+(W)     sync.nop (1|M8)                         null                              {@4}
+(W)     sync.nop (1|M8)                         null                              {@5}
+(W)     sync.nop (1|M8)                         null                              {@6}
+(W)     sync.nop (1|M8)                         null                              {@7}
+(W)     sync.nop (1|M16)                        null                              {@1}
+(W)     sync.nop (1|M16)                        null                              {@2}
+(W)     sync.nop (1|M16)                        null                              {@3}
+(W)     sync.nop (1|M16)                        null                              {@4}
+(W)     sync.nop (1|M16)                        null                              {@5}
+(W)     sync.nop (1|M16)                        null                              {@6}
+(W)     sync.nop (1|M16)                        null                              {@7}
+(W)     sync.nop (1|M24)                        null                              {@1}
+(W)     sync.nop (1|M24)                        null                              {@2}
+(W)     sync.nop (1|M24)                        null                              {@3}
+(W)     sync.nop (1|M24)                        null                              {@4}
+(W)     sync.nop (1|M24)                        null                              {@5}
+(W)     sync.nop (1|M24)                        null                              {@6}
+(W)     sync.nop (1|M24)                        null                              {@7}
+(W)     sync.nop (32)                           null                              {@1}
+(W)     sync.nop (8)                            null                              {@1}
+        sync.allwr (16)                         null
+        sync.allwr (8)                          null

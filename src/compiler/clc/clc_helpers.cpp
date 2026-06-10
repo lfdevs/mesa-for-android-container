@@ -1186,15 +1186,14 @@ llvm_mod_to_spirv(std::unique_ptr<::llvm::Module> mod,
    if (args->use_llvm_spirv_target) {
       const char *triple = args->address_bits == 32 ? "spirv-unknown-unknown" : "spirv64-unknown-unknown";
       std::string error_msg("");
-      auto target = TargetRegistry::lookupTarget(triple, error_msg);
-      if (target) {
-         auto TM = target->createTargetMachine(
 #if LLVM_VERSION_MAJOR >= 21
-            llvm::Triple(triple),
+      auto temp_triple = llvm::Triple(triple);
 #else
-            triple,
+      auto temp_triple = triple;
 #endif
-            "", "", {}, std::nullopt, std::nullopt,
+      auto target = TargetRegistry::lookupTarget(temp_triple, error_msg);
+      if (target) {
+         auto TM = target->createTargetMachine(temp_triple, "", "", {}, std::nullopt, std::nullopt,
 #if LLVM_VERSION_MAJOR >= 18
             ::llvm::CodeGenOptLevel::None
 #else

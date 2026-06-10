@@ -203,8 +203,30 @@ unsigned int radeon_enc_write_sps(struct radeon_encoder *enc, uint8_t nal_byte, 
 unsigned int radeon_enc_write_sps_hevc(struct radeon_encoder *enc, uint8_t *out)
 {
    struct pipe_h265_enc_seq_param sps = enc->enc_pic.hevc.desc->seq;
-   sps.pic_width_in_luma_samples = enc->enc_pic.session_init.aligned_picture_width;
-   sps.pic_height_in_luma_samples = enc->enc_pic.session_init.aligned_picture_height;
+
+   int width_correction = enc->enc_pic.session_init.aligned_picture_width - sps.pic_width_in_luma_samples;
+   int height_correction = enc->enc_pic.session_init.aligned_picture_height - sps.pic_height_in_luma_samples;
+   sps.pic_width_in_luma_samples += width_correction;
+   sps.pic_height_in_luma_samples += height_correction;
+
+   if (width_correction != 0 ||
+       height_correction != 0) {
+      const int chroma_idc_div = 2;
+      int wcrop_correction = width_correction / chroma_idc_div;
+      int hcrop_correction = height_correction / chroma_idc_div;
+
+      if (sps.conformance_window_flag) {
+         sps.conf_win_right_offset += wcrop_correction;
+         sps.conf_win_bottom_offset += hcrop_correction;
+      } else {
+         sps.conformance_window_flag = 1;
+         sps.conf_win_left_offset = 0;
+         sps.conf_win_right_offset = wcrop_correction;
+         sps.conf_win_top_offset = 0;
+         sps.conf_win_bottom_offset = hcrop_correction;
+      }
+   }
+
    sps.log2_min_luma_coding_block_size_minus3 =
       enc->enc_pic.hevc_spec_misc.log2_min_luma_coding_block_size_minus3;
    sps.log2_diff_max_min_luma_coding_block_size = 6 - (sps.log2_min_luma_coding_block_size_minus3 + 3);
@@ -223,6 +245,7 @@ unsigned int radeon_enc_write_sps_hevc(struct radeon_encoder *enc, uint8_t *out)
 unsigned int radeon_enc_write_pps(struct radeon_encoder *enc, uint8_t nal_byte, uint8_t *out)
 {
    struct pipe_h264_enc_pic_control pps = enc->enc_pic.h264.desc->pic_ctrl;
+   pps.num_ref_idx_l0_default_active_minus1 = 0;
    pps.weighted_bipred_idc = enc->enc_pic.spec_misc.weighted_bipred_idc;
    pps.transform_8x8_mode_flag = enc->enc_pic.spec_misc.transform_8x8_mode;
 
@@ -333,15 +356,17 @@ static void radeon_enc_slice_header(struct radeon_encoder *enc)
 
    if (enc->enc_pic.picture_type == PIPE_H2645_ENC_PICTURE_TYPE_P ||
        enc->enc_pic.picture_type == PIPE_H2645_ENC_PICTURE_TYPE_B) {
-      radeon_bs_code_fixed_bits(&bs, slice->num_ref_idx_active_override_flag, 1);
-      if (slice->num_ref_idx_active_override_flag) {
-         radeon_bs_code_ue(&bs, slice->num_ref_idx_l0_active_minus1);
+      uint32_t num_l0 =
+         enc->enc_pic.h264_enc_params.l0_reference_picture1_index != 0xffffffff ? 2 : 1;
+      radeon_bs_code_fixed_bits(&bs, num_l0 == 2 ? 1 : 0, 1); /* num_ref_idx_active_override_flag */
+      if (num_l0 == 2) {
+         radeon_bs_code_ue(&bs, 1); /* num_ref_idx_l0_active_minus1 */
          if (enc->enc_pic.picture_type == PIPE_H2645_ENC_PICTURE_TYPE_B)
             radeon_bs_code_ue(&bs, slice->num_ref_idx_l1_active_minus1);
       }
       radeon_bs_code_fixed_bits(&bs, slice->ref_pic_list_modification_flag_l0, 1);
       if (slice->ref_pic_list_modification_flag_l0) {
-         for (unsigned i = 0; i < slice->num_ref_list0_mod_operations; i++) {
+         for (unsigned i = 0; i < MIN2(num_l0, slice->num_ref_list0_mod_operations); i++) {
             struct pipe_h264_ref_list_mod_entry *op =
                &slice->ref_list0_mod_operations[i];
             radeon_bs_code_ue(&bs, op->modification_of_pic_nums_idc);

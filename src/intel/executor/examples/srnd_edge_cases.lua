@@ -4,27 +4,27 @@ end
 
 local r = execute {
   src = [[
-    @id      g1
+    @id      r1
 
-    // Prepare F32 input data in g2
-    mov(8)   g2<1>UD    0x00000000UD    {A@1};   // 0.0f
-    mov(8)   g2.1<1>UD  0x80000000UD    {A@1};   // -0.0f
-    mov(8)   g2.2<1>UD  0x7f7fffffUD    {A@1};   // FLT_MAX
-    mov(8)   g2.3<1>UD  0xff7fffffUD    {A@1};   // -FLT_MAX
-    mov(8)   g2.4<1>UD  0x00800000UD    {A@1};   // smallest normal
-    mov(8)   g2.5<1>UD  0x7fc00000UD    {A@1};   // NaN
-    mov(8)   g2.6<1>UD  0x7f800000UD    {A@1};   // +inf
-    mov(8)   g2.7<1>UD  0xff800000UD    {A@1};   // -inf
+    // Prepare F32 input data in r2
+    mov (8) r2.0 0x00000000 {A@1}   // 0.0f
+    mov (8) r2.1 0x80000000 {A@1}   // -0.0f
+    mov (8) r2.2 0x7f7fffff {A@1}   // FLT_MAX
+    mov (8) r2.3 0xff7fffff {A@1}   // -FLT_MAX
+    mov (8) r2.4 0x00800000 {A@1}   // smallest normal
+    mov (8) r2.5 0x7fc00000 {A@1}   // NaN
+    mov (8) r2.6 0x7f800000 {A@1}   // +inf
+    mov (8) r2.7 0xff800000 {A@1}   // -inf
 
-    mov(8)   g3<2>UW   42UW                      {A@1};
+    mov (8) r3<2>:uw 42:uw {A@1}
 
-    // Stochastic rounding: F32 -> HF16 using g3 as random, packed
-    srnd(8)  g4<2>HF   g2<1,1,0>F   g3<1,1,0>F   {nomask};
+    // Stochastic rounding: F32 -> HF16 using r3 as random, packed
+    (W) srnd (8) r4<2>:hf r2:f r3:f {A@1}
 
     // Convert back to F32 for checking, using supported regioning
-    mov(8)   g5<1>F    g4<2,1,0>HF               {A@1};
+    mov (8) r5:f r4<2>:hf {A@1}
 
-    @write   g1        g5
+    @write   r1        r5
 
     @eot
   ]],

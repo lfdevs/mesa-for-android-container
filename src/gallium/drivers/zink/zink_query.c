@@ -10,16 +10,19 @@
 #include "util/u_inlines.h"
 #include "util/u_memory.h"
 
-#define NUM_QUERIES 500
+#define MAX_NUM_QUERIES 512
 #define NOWAIT_CHECK_THRESHOLD 10 //prevent spinning
 
 #define ZINK_QUERY_RENDER_PASSES (PIPE_QUERY_DRIVER_SPECIFIC + 0)
+
+static unsigned NUM_QUERIES = 16;
 
 struct zink_query_pool {
    struct list_head list;
    VkQueryType vk_query_type;
    VkQueryPipelineStatisticFlags pipeline_stats;
    VkQueryPool query_pool;
+   unsigned num_results;
    unsigned last_range;
    unsigned refcount;
 };
@@ -224,6 +227,7 @@ find_or_allocate_qp(struct zink_context *ctx, struct zink_query *q, unsigned idx
       FREE(new_pool);
       return NULL;
    }
+   new_pool->num_results = pool_create.queryCount;
 
    list_addtail(&new_pool->list, &ctx->query_pools);
    return new_pool;
@@ -479,8 +483,10 @@ query_pool_get_range(struct zink_context *ctx, struct zink_query *q)
          vkq->pool->refcount++;
       } else {
          struct zink_query_pool *pool = find_or_allocate_qp(ctx, q, pool_idx, &vkq_needs_reset);
-         if (pool->last_range == NUM_QUERIES) {
+         if (pool->last_range == pool->num_results) {
             list_del(&pool->list);
+            if (pool->num_results == NUM_QUERIES && NUM_QUERIES < MAX_NUM_QUERIES)
+               NUM_QUERIES *= 2;
             pool = find_or_allocate_qp(ctx, q, pool_idx, &vkq_needs_reset);
          }
          vkq = CALLOC_STRUCT(zink_vk_query);

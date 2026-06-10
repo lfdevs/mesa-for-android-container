@@ -76,6 +76,8 @@ enum ENUM_PACKED nak_attr {
    NAK_ATTR_INSTANCE_ID       = 0x2f8,
    NAK_ATTR_VERTEX_ID         = 0x2fc,
 
+   /* System values D */
+   NAK_ATTR_VIEWPORT_MASK         = 0x3a0,
    NAK_ATTR_BARY_COORD_NO_PERSP_X = 0x3a8,
    NAK_ATTR_BARY_COORD_NO_PERSP_Y = 0x3ac,
    NAK_ATTR_BARY_COORD_NO_PERSP_Z = 0x3b0,
@@ -84,7 +86,8 @@ enum ENUM_PACKED nak_attr {
    NAK_ATTR_BARY_COORD_X = 0x3b4,
    NAK_ATTR_BARY_COORD_Y = 0x3b8,
    NAK_ATTR_BARY_COORD_Z = 0x3bc,
-   NAK_ATTR_BARY_COORD = NAK_ATTR_BARY_COORD_X,
+   NAK_ATTR_BARY_COORD   = NAK_ATTR_BARY_COORD_X,
+   NAK_ATTR_SPH_END      = NAK_ATTR_BARY_COORD_Z + 4,
 
    /* Not in SPH */
    NAK_ATTR_FRONT_FACE        = 0x3fc,
@@ -100,6 +103,8 @@ nak_attribute_attr_addr(UNUSED const struct nak_compiler *nak,
 
 uint16_t nak_varying_attr_addr(const struct nak_compiler *nak,
                                gl_varying_slot slot);
+uint16_t nak_varying_mesh_skew_attr_addr(const struct nak_compiler *nak,
+                                         gl_varying_slot slot);
 uint16_t nak_sysval_attr_addr(const struct nak_compiler *nak,
                               gl_system_value sysval);
 
@@ -200,6 +205,7 @@ bool nak_nir_lower_tex(nir_shader *nir, const struct nak_compiler *nak);
 bool nak_nir_lower_gs_intrinsics(nir_shader *shader);
 bool nak_nir_lower_algebraic_late(nir_shader *nir, const struct nak_compiler *nak);
 bool nak_nir_lower_kepler_shared_atomics(nir_shader *shader);
+bool nak_nir_lower_mesh_stages_shared_atomics(nir_shader *nir);
 
 struct nak_nir_attr_io_flags {
    bool output : 1;
@@ -272,6 +278,81 @@ struct nak_nir_isbe_flags {
    bool per_primitive : 1;
    uint32_t pad : 27;
 };
+
+struct lower_mesh_intrinsics_ctx {
+   const struct nak_compiler *nak;
+
+   uint32_t max_vertices_out;
+   uint32_t max_primitives_out;
+   bool has_task_shader;
+
+   BITSET_DECLARE(skew_vert_attr_used, NAK_ATTR_SPH_END);
+   BITSET_DECLARE(skew_prim_attr_used, NAK_ATTR_SPH_END);
+};
+
+#define NAK_MESH_SKEW_GROUP_COUNT 32
+
+static uint32_t
+nak_mesh_skew_attr_used_index(uint32_t base_addr)
+{
+   assert(base_addr < NAK_ATTR_SPH_END);
+
+   return base_addr / 4;
+}
+
+static uint32_t
+nak_mesh_skew_vert_group_size(const struct lower_mesh_intrinsics_ctx *ctx)
+{
+   return BITSET_COUNT(ctx->skew_vert_attr_used) * 4 * NAK_MESH_SKEW_GROUP_COUNT;
+}
+
+static uint32_t
+nak_mesh_skew_vert_total_size(const struct lower_mesh_intrinsics_ctx *ctx)
+{
+   return nak_mesh_skew_vert_group_size(ctx) * DIV_ROUND_UP(ctx->max_vertices_out, NAK_MESH_SKEW_GROUP_COUNT);
+}
+
+static uint32_t
+nak_mesh_skew_prim_group_size(const struct lower_mesh_intrinsics_ctx *ctx)
+{
+   return BITSET_COUNT(ctx->skew_prim_attr_used) * 4 * NAK_MESH_SKEW_GROUP_COUNT;
+}
+
+static uint32_t
+nak_mesh_skew_prim_total_size(const struct lower_mesh_intrinsics_ctx *ctx)
+{
+   return nak_mesh_skew_prim_group_size(ctx) * DIV_ROUND_UP(ctx->max_primitives_out, NAK_MESH_SKEW_GROUP_COUNT);
+}
+
+static uint32_t
+nak_mesh_skew_total_size(const struct lower_mesh_intrinsics_ctx *ctx)
+{
+   return nak_mesh_skew_vert_total_size(ctx) + nak_mesh_skew_prim_total_size(ctx);
+}
+
+static uint32_t
+nak_mesh_skew_offset(const struct lower_mesh_intrinsics_ctx *ctx,
+                     gl_varying_slot slot,
+                     uint32_t base_addr,
+                     bool per_primitive)
+{
+   const uint32_t bit_idx = nak_mesh_skew_attr_used_index(base_addr);
+
+   uint32_t bit_count;
+
+   if (per_primitive)
+      bit_count = BITSET_PREFIX_SUM(ctx->skew_prim_attr_used, bit_idx);
+   else
+      bit_count = BITSET_PREFIX_SUM(ctx->skew_vert_attr_used, bit_idx);
+
+   uint32_t size = bit_count * 4 * NAK_MESH_SKEW_GROUP_COUNT;
+
+   return size;
+}
+
+bool nak_nir_lower_mesh_emulated_attributes(nir_shader *nir);
+bool nak_nir_lower_mesh_intrinsics(nir_shader *nir, struct lower_mesh_intrinsics_ctx *ctx);
+bool nak_nir_lower_task_intrinsics(nir_shader *nir);
 
 enum nak_interp_mode {
    NAK_INTERP_MODE_PERSPECTIVE,

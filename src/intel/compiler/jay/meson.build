@@ -62,6 +62,7 @@ libintel_compiler_jay_files = files(
   'jay_opt_dead_code.c',
   'jay_opt_predicate.c',
   'jay_opt_propagate.c',
+  'jay_partition.c',
   'jay_print.c',
   'jay_private.h',
   'jay_prog_data.c',
@@ -69,6 +70,7 @@ libintel_compiler_jay_files = files(
   'jay_register_allocate.c',
   'jay_simd_width.c',
   'jay_schedule.c',
+  'jay_stride.c',
   'jay_spill.c',
   'jay_to_binary.c',
   'jay_validate.c',
@@ -81,7 +83,7 @@ libintel_compiler_jay = static_library(
   include_directories : [inc_include, inc_src, inc_intel],
   c_args : [no_override_init_args, soong_compat_c_args, '-Wno-c23-extensions', '-Wno-array-bounds'],
   gnu_symbol_visibility : 'hidden',
-  dependencies : [idep_nir_headers, idep_jay_opcodes_h, idep_jay_builder_opcodes_h, idep_jay_extra_info_h, idep_mesautil, idep_intel_dev],
+  dependencies : [idep_nir_headers, idep_jay_opcodes_h, idep_jay_builder_opcodes_h, idep_jay_extra_info_h, idep_mesautil, idep_intel_dev, idep_intel_compiler_gen, idep_mda],
   build_by_default : false,
 )
 
@@ -90,6 +92,7 @@ idep_intel_compiler_jay = declare_dependency(
   dependencies : [
     idep_nir,
     idep_vtn,
+    idep_intel_compiler_gen,
   ],
 )
 
@@ -106,7 +109,7 @@ if with_tests
       c_args : [c_msvc_compat_args, no_override_init_args, soong_compat_c_args],
       gnu_symbol_visibility : 'hidden',
       include_directories : [inc_include, inc_src, inc_intel],
-      dependencies: [idep_gtest, idep_nir, idep_jay_opcodes_h, idep_jay_builder_opcodes_h, idep_jay_extra_info_h, idep_mesautil, idep_intel_dev],
+      dependencies: [idep_gtest, idep_nir, idep_jay_opcodes_h, idep_jay_builder_opcodes_h, idep_jay_extra_info_h, idep_mesautil, idep_intel_dev, idep_intel_compiler_gen],
       link_with : [libintel_compiler_jay],
     ),
     suite : ['intel'],

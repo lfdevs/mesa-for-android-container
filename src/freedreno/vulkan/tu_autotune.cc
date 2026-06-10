@@ -279,8 +279,8 @@ tu_autotune::get_env_config()
 
       if (algo_str)
          algo_strv = algo_str;
-      else if (device->instance->autotune_algo)
-         algo_strv = device->instance->autotune_algo;
+      else if (device->instance->drirc.perf.autotune_algo)
+         algo_strv = device->instance->drirc.perf.autotune_algo;
 
       if (!algo_strv.empty()) {
          if (algo_strv == "bandwidth") {
@@ -1633,41 +1633,20 @@ tu_autotune::tu_autotune(struct tu_device *device, VkResult &result)
    tu_bo_suballocator_init(&suballoc, device, 128 * 1024, TU_BO_ALLOC_INTERNAL_RESOURCE, "autotune_suballoc");
 
    if (supports_preempt_latency_tracking()) {
-      uint32_t group_count;
-      const struct fd_perfcntr_group *groups = fd_perfcntrs(&device->physical_device->dev_id, &group_count);
       const char *fail_reason = nullptr;
 
-      const fd_perfcntr_group *cp_group = nullptr;
-      for (uint32_t i = 0; i < group_count; i++) {
-         if (strcmp(groups[i].name, "CP") == 0) {
-            cp_group = &groups[i];
-            break;
-         }
-      }
+      const fd_perfcntr_group *cp_group = fd_perfcntrs_group(&device->physical_device->dev_id, "CP");
 
       if (cp_group) {
-         auto get_perfcntr_countable = [](const struct fd_perfcntr_group *group,
-                                          const char *name) -> const struct fd_perfcntr_countable * {
-            for (uint32_t i = 0; i < group->num_countables; i++) {
-               if (strcmp(group->countables[i].name, name) == 0)
-                  return &group->countables[i];
-            }
-
-            return nullptr;
-         };
-
-         auto preemption_latency_countable = get_perfcntr_countable(cp_group, "PERF_CP_PREEMPTION_REACTION_DELAY");
-         auto always_count_countable = get_perfcntr_countable(cp_group, "PERF_CP_ALWAYS_COUNT");
+         preemption_latency_countable = fd_perfcntrs_countable(cp_group, "PERF_CP_PREEMPTION_REACTION_DELAY");
+         always_count_countable = fd_perfcntrs_countable(cp_group, "PERF_CP_ALWAYS_COUNT");
          if (preemption_latency_countable && always_count_countable) {
-            if (cp_group->num_counters >= 2) {
-               preemption_latency_selector_reg = cp_group->counters[0].select_reg;
-               preemption_latency_selector = preemption_latency_countable->selector;
-               preemption_latency_counter_reg_lo = cp_group->counters[0].counter_reg_lo;
+            preemption_latency_counter =
+               fd_perfcntr_reserve(device->perfcntrs, cp_group, preemption_latency_countable);
+            always_count_counter =
+               fd_perfcntr_reserve(device->perfcntrs, cp_group, always_count_countable);
 
-               always_count_selector_reg = cp_group->counters[1].select_reg;
-               always_count_selector = always_count_countable->selector;
-               always_count_counter_reg_lo = cp_group->counters[1].counter_reg_lo;
-            } else {
+            if (!preemption_latency_counter || !always_count_counter) {
                fail_reason = "not enough counters in CP group for preemption latency tracking";
             }
          } else {
@@ -1700,6 +1679,9 @@ tu_autotune::~tu_autotune()
 
    active_batches.clear();
    tu_bo_suballocator_finish(&suballoc);
+
+   fd_perfcntr_release(device->perfcntrs, preemption_latency_counter);
+   fd_perfcntr_release(device->perfcntrs, always_count_counter);
 }
 
 tu_autotune::cmd_buf_ctx::cmd_buf_ctx(struct tu_autotune &autotune): batch(autotune.create_batch())
@@ -1953,22 +1935,22 @@ tu_autotune::write_preempt_counters_to_iova(struct tu_cs *cs,
                                             uint64_t aon_iova) const
 {
    if (emit_selector) {
-      tu_cs_emit_pkt4(cs, preemption_latency_selector_reg, 1);
-      tu_cs_emit(cs, preemption_latency_selector);
+      tu_cs_emit_pkt4(cs, preemption_latency_counter->select_reg, 1);
+      tu_cs_emit(cs, preemption_latency_countable->selector);
 
-      tu_cs_emit_pkt4(cs, always_count_selector_reg, 1);
-      tu_cs_emit(cs, always_count_selector);
+      tu_cs_emit_pkt4(cs, always_count_counter->select_reg, 1);
+      tu_cs_emit(cs, always_count_countable->selector);
    }
 
    if (emit_wfi)
       tu_cs_emit_wfi(cs);
 
    tu_cs_emit_pkt7(cs, CP_REG_TO_MEM, 3);
-   tu_cs_emit(cs, CP_REG_TO_MEM_0_REG(preemption_latency_counter_reg_lo) | CP_REG_TO_MEM_0_64B);
+   tu_cs_emit(cs, CP_REG_TO_MEM_0_REG(preemption_latency_counter->counter_reg_lo) | CP_REG_TO_MEM_0_64B);
    tu_cs_emit_qw(cs, latency_iova);
 
    tu_cs_emit_pkt7(cs, CP_REG_TO_MEM, 3);
-   tu_cs_emit(cs, CP_REG_TO_MEM_0_REG(always_count_counter_reg_lo) | CP_REG_TO_MEM_0_64B);
+   tu_cs_emit(cs, CP_REG_TO_MEM_0_REG(always_count_counter->counter_reg_lo) | CP_REG_TO_MEM_0_64B);
    tu_cs_emit_qw(cs, always_count_iova);
 
    tu_cs_emit_pkt7(cs, CP_REG_TO_MEM, 3);
@@ -2061,11 +2043,11 @@ tu_autotune::emit_switch_away_amble(struct tu_cs *cs) const
 
    static size_t counter = 0;
    if (counter++ % 2 == 0) {
-      tu_cs_emit_pkt4(cs, preemption_latency_selector_reg, 1);
-      tu_cs_emit(cs, preemption_latency_selector);
+      tu_cs_emit_pkt4(cs, preemption_latency_counter->select_reg, 1);
+      tu_cs_emit(cs, preemption_latency_countable->selector);
 
-      tu_cs_emit_pkt4(cs, always_count_selector_reg, 1);
-      tu_cs_emit(cs, always_count_selector);
+      tu_cs_emit_pkt4(cs, always_count_counter->select_reg, 1);
+      tu_cs_emit(cs, always_count_countable->selector);
    }
 
    tu_cond_exec_end(cs);

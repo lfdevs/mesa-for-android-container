@@ -97,107 +97,104 @@ enum {
 
 static_assert(DERIVED_COUNTER_PERFCNTR_MAX_VALUE <= FD_DERIVED_COUNTER_COLLECTION_MAX_ENABLED_PERFCNTRS, "");
 
-#define DERIVED_COUNTER_PERFCNTR(_enum, _counter) \
-   [DERIVED_COUNTER_PERFCNTR_##_enum] = { .counter = _counter, .countable = A7XX_PERF_##_enum }
-#define DERIVED_COUNTER_PERFCNTR_BV(_enum, _counter) \
-   [DERIVED_COUNTER_PERFCNTR_BV_##_enum] = { .counter = _counter, .countable = A7XX_PERF_##_enum }
+#define DERIVED_COUNTER_PERFCNTR(_countable, _group) \
+   [DERIVED_COUNTER_PERFCNTR_##_countable] = { .countable = "PERF_" #_countable, .group = #_group }
+#define DERIVED_COUNTER_PERFCNTR_BV(_countable, _group) \
+   [DERIVED_COUNTER_PERFCNTR_BV_##_countable] = { .countable = "PERF_" #_countable, .group = "BV_" #_group }
 
-static const struct {
-   const struct fd_perfcntr_counter *counter;
-   unsigned countable;
-} a7xx_derived_counter_perfcntrs[] = {
+const struct fd_derived_counter_perfcntr a7xx_derived_counter_perfcntrs[] = {
    /* CP: 3/14 counters */
-   DERIVED_COUNTER_PERFCNTR(CP_ALWAYS_COUNT,              &cp_counters[0]),
-   DERIVED_COUNTER_PERFCNTR(CP_NUM_PREEMPTIONS,           &cp_counters[1]),
-   DERIVED_COUNTER_PERFCNTR(CP_PREEMPTION_REACTION_DELAY, &cp_counters[2]),
+   DERIVED_COUNTER_PERFCNTR(CP_ALWAYS_COUNT,              CP),
+   DERIVED_COUNTER_PERFCNTR(CP_NUM_PREEMPTIONS,           CP),
+   DERIVED_COUNTER_PERFCNTR(CP_PREEMPTION_REACTION_DELAY, CP),
 
    /* RBBM: 1/4 counters */
-   DERIVED_COUNTER_PERFCNTR(RBBM_STATUS_MASKED, &rbbm_counters[0]),
+   DERIVED_COUNTER_PERFCNTR(RBBM_STATUS_MASKED, RBBM),
 
    /* PC: 3/8 counters */
-   DERIVED_COUNTER_PERFCNTR(PC_STALL_CYCLES_VFD, &pc_counters[0]),
-   DERIVED_COUNTER_PERFCNTR(PC_VERTEX_HITS,      &pc_counters[1]),
-   DERIVED_COUNTER_PERFCNTR(PC_VS_INVOCATIONS,   &pc_counters[2]),
+   DERIVED_COUNTER_PERFCNTR(PC_STALL_CYCLES_VFD, PC),
+   DERIVED_COUNTER_PERFCNTR(PC_VERTEX_HITS,      PC),
+   DERIVED_COUNTER_PERFCNTR(PC_VS_INVOCATIONS,   PC),
 
    /* TSE: 4/4 counters */
-   DERIVED_COUNTER_PERFCNTR(TSE_INPUT_PRIM,          &tse_counters[0]),
-   DERIVED_COUNTER_PERFCNTR(TSE_TRIVAL_REJ_PRIM,     &tse_counters[1]),
-   DERIVED_COUNTER_PERFCNTR(TSE_CLIPPED_PRIM,        &tse_counters[2]),
-   DERIVED_COUNTER_PERFCNTR(TSE_OUTPUT_VISIBLE_PRIM, &tse_counters[3]),
+   DERIVED_COUNTER_PERFCNTR(TSE_INPUT_PRIM,          TSE),
+   DERIVED_COUNTER_PERFCNTR(TSE_TRIVAL_REJ_PRIM,     TSE),
+   DERIVED_COUNTER_PERFCNTR(TSE_CLIPPED_PRIM,        TSE),
+   DERIVED_COUNTER_PERFCNTR(TSE_OUTPUT_VISIBLE_PRIM, TSE),
 
    /* UCHE: 5/12 counters */
-   DERIVED_COUNTER_PERFCNTR(UCHE_STALL_CYCLES_ARBITER, &uche_counters[0]),
-   DERIVED_COUNTER_PERFCNTR(UCHE_VBIF_READ_BEATS_TP,   &uche_counters[1]),
-   DERIVED_COUNTER_PERFCNTR(UCHE_VBIF_READ_BEATS_VFD,  &uche_counters[2]),
-   DERIVED_COUNTER_PERFCNTR(UCHE_VBIF_READ_BEATS_SP,   &uche_counters[3]),
-   DERIVED_COUNTER_PERFCNTR(UCHE_READ_REQUESTS_TP,     &uche_counters[4]),
+   DERIVED_COUNTER_PERFCNTR(UCHE_STALL_CYCLES_ARBITER, UCHE),
+   DERIVED_COUNTER_PERFCNTR(UCHE_VBIF_READ_BEATS_TP,   UCHE),
+   DERIVED_COUNTER_PERFCNTR(UCHE_VBIF_READ_BEATS_VFD,  UCHE),
+   DERIVED_COUNTER_PERFCNTR(UCHE_VBIF_READ_BEATS_SP,   UCHE),
+   DERIVED_COUNTER_PERFCNTR(UCHE_READ_REQUESTS_TP,     UCHE),
 
    /* TP: 7/12 counters */
-   DERIVED_COUNTER_PERFCNTR(TP_BUSY_CYCLES,            &tp_counters[0]),
-   DERIVED_COUNTER_PERFCNTR(TP_L1_CACHELINE_REQUESTS,  &tp_counters[1]),
-   DERIVED_COUNTER_PERFCNTR(TP_L1_CACHELINE_MISSES,    &tp_counters[2]),
-   DERIVED_COUNTER_PERFCNTR(TP_OUTPUT_PIXELS,          &tp_counters[3]),
-   DERIVED_COUNTER_PERFCNTR(TP_OUTPUT_PIXELS_POINT,    &tp_counters[4]),
-   DERIVED_COUNTER_PERFCNTR(TP_OUTPUT_PIXELS_BILINEAR, &tp_counters[5]),
-   DERIVED_COUNTER_PERFCNTR(TP_OUTPUT_PIXELS_ANISO,    &tp_counters[6]),
+   DERIVED_COUNTER_PERFCNTR(TP_BUSY_CYCLES,            TP),
+   DERIVED_COUNTER_PERFCNTR(TP_L1_CACHELINE_REQUESTS,  TP),
+   DERIVED_COUNTER_PERFCNTR(TP_L1_CACHELINE_MISSES,    TP),
+   DERIVED_COUNTER_PERFCNTR(TP_OUTPUT_PIXELS,          TP),
+   DERIVED_COUNTER_PERFCNTR(TP_OUTPUT_PIXELS_POINT,    TP),
+   DERIVED_COUNTER_PERFCNTR(TP_OUTPUT_PIXELS_BILINEAR, TP),
+   DERIVED_COUNTER_PERFCNTR(TP_OUTPUT_PIXELS_ANISO,    TP),
 
    /* SP: 24/24 counters */
-   DERIVED_COUNTER_PERFCNTR(SP_BUSY_CYCLES,                    &sp_counters[ 0]),
-   DERIVED_COUNTER_PERFCNTR(SP_ALU_WORKING_CYCLES,             &sp_counters[ 1]),
-   DERIVED_COUNTER_PERFCNTR(SP_EFU_WORKING_CYCLES,             &sp_counters[ 2]),
-   DERIVED_COUNTER_PERFCNTR(SP_STALL_CYCLES_TP,                &sp_counters[ 3]),
-   DERIVED_COUNTER_PERFCNTR(SP_NON_EXECUTION_CYCLES,           &sp_counters[ 4]),
-   DERIVED_COUNTER_PERFCNTR(SP_VS_STAGE_TEX_INSTRUCTIONS,      &sp_counters[ 5]),
-   DERIVED_COUNTER_PERFCNTR(SP_VS_STAGE_EFU_INSTRUCTIONS,      &sp_counters[ 6]),
-   DERIVED_COUNTER_PERFCNTR(SP_VS_STAGE_FULL_ALU_INSTRUCTIONS, &sp_counters[ 7]),
-   DERIVED_COUNTER_PERFCNTR(SP_FS_STAGE_EFU_INSTRUCTIONS,      &sp_counters[ 8]),
-   DERIVED_COUNTER_PERFCNTR(SP_FS_STAGE_FULL_ALU_INSTRUCTIONS, &sp_counters[ 9]),
-   DERIVED_COUNTER_PERFCNTR(SP_FS_STAGE_HALF_ALU_INSTRUCTIONS, &sp_counters[10]),
-   DERIVED_COUNTER_PERFCNTR(SP_ICL1_REQUESTS,                  &sp_counters[11]),
-   DERIVED_COUNTER_PERFCNTR(SP_ICL1_MISSES,                    &sp_counters[12]),
-   DERIVED_COUNTER_PERFCNTR(SP_ANY_EU_WORKING_FS_STAGE,        &sp_counters[13]),
-   DERIVED_COUNTER_PERFCNTR(SP_ANY_EU_WORKING_VS_STAGE,        &sp_counters[14]),
-   DERIVED_COUNTER_PERFCNTR(SP_ANY_EU_WORKING_CS_STAGE,        &sp_counters[15]),
-   DERIVED_COUNTER_PERFCNTR(SP_PIXELS,                         &sp_counters[16]),
-   DERIVED_COUNTER_PERFCNTR(SP_RAY_QUERY_INSTRUCTIONS,         &sp_counters[17]),
-   DERIVED_COUNTER_PERFCNTR(SP_RTU_BUSY_CYCLES,                &sp_counters[18]),
-   DERIVED_COUNTER_PERFCNTR(SP_RTU_BVH_FETCH_LATENCY_CYCLES,   &sp_counters[19]),
-   DERIVED_COUNTER_PERFCNTR(SP_RTU_BVH_FETCH_LATENCY_SAMPLES,  &sp_counters[20]),
-   DERIVED_COUNTER_PERFCNTR(SP_RTU_RAY_BOX_INTERSECTIONS,      &sp_counters[21]),
-   DERIVED_COUNTER_PERFCNTR(SP_RTU_RAY_TRIANGLE_INTERSECTIONS, &sp_counters[22]),
-   DERIVED_COUNTER_PERFCNTR(SP_SCH_STALL_CYCLES_RTU,           &sp_counters[23]),
+   DERIVED_COUNTER_PERFCNTR(SP_BUSY_CYCLES,                    SP),
+   DERIVED_COUNTER_PERFCNTR(SP_ALU_WORKING_CYCLES,             SP),
+   DERIVED_COUNTER_PERFCNTR(SP_EFU_WORKING_CYCLES,             SP),
+   DERIVED_COUNTER_PERFCNTR(SP_STALL_CYCLES_TP,                SP),
+   DERIVED_COUNTER_PERFCNTR(SP_NON_EXECUTION_CYCLES,           SP),
+   DERIVED_COUNTER_PERFCNTR(SP_VS_STAGE_TEX_INSTRUCTIONS,      SP),
+   DERIVED_COUNTER_PERFCNTR(SP_VS_STAGE_EFU_INSTRUCTIONS,      SP),
+   DERIVED_COUNTER_PERFCNTR(SP_VS_STAGE_FULL_ALU_INSTRUCTIONS, SP),
+   DERIVED_COUNTER_PERFCNTR(SP_FS_STAGE_EFU_INSTRUCTIONS,      SP),
+   DERIVED_COUNTER_PERFCNTR(SP_FS_STAGE_FULL_ALU_INSTRUCTIONS, SP),
+   DERIVED_COUNTER_PERFCNTR(SP_FS_STAGE_HALF_ALU_INSTRUCTIONS, SP),
+   DERIVED_COUNTER_PERFCNTR(SP_ICL1_REQUESTS,                  SP),
+   DERIVED_COUNTER_PERFCNTR(SP_ICL1_MISSES,                    SP),
+   DERIVED_COUNTER_PERFCNTR(SP_ANY_EU_WORKING_FS_STAGE,        SP),
+   DERIVED_COUNTER_PERFCNTR(SP_ANY_EU_WORKING_VS_STAGE,        SP),
+   DERIVED_COUNTER_PERFCNTR(SP_ANY_EU_WORKING_CS_STAGE,        SP),
+   DERIVED_COUNTER_PERFCNTR(SP_PIXELS,                         SP),
+   DERIVED_COUNTER_PERFCNTR(SP_RAY_QUERY_INSTRUCTIONS,         SP),
+   DERIVED_COUNTER_PERFCNTR(SP_RTU_BUSY_CYCLES,                SP),
+   DERIVED_COUNTER_PERFCNTR(SP_RTU_BVH_FETCH_LATENCY_CYCLES,   SP),
+   DERIVED_COUNTER_PERFCNTR(SP_RTU_BVH_FETCH_LATENCY_SAMPLES,  SP),
+   DERIVED_COUNTER_PERFCNTR(SP_RTU_RAY_BOX_INTERSECTIONS,      SP),
+   DERIVED_COUNTER_PERFCNTR(SP_RTU_RAY_TRIANGLE_INTERSECTIONS, SP),
+   DERIVED_COUNTER_PERFCNTR(SP_SCH_STALL_CYCLES_RTU,           SP),
 
    /* CMP: 1/4 counters */
-   DERIVED_COUNTER_PERFCNTR(CMPDECMP_VBIF_READ_DATA, &cmp_counters[0]),
+   DERIVED_COUNTER_PERFCNTR(CMPDECMP_VBIF_READ_DATA, CMP),
 
    /* BV_PC: 3/8 counters */
-   DERIVED_COUNTER_PERFCNTR_BV(PC_STALL_CYCLES_VFD, &bv_pc_counters[0]),
-   DERIVED_COUNTER_PERFCNTR_BV(PC_VERTEX_HITS,      &bv_pc_counters[1]),
-   DERIVED_COUNTER_PERFCNTR_BV(PC_VS_INVOCATIONS,   &bv_pc_counters[2]),
+   DERIVED_COUNTER_PERFCNTR_BV(PC_STALL_CYCLES_VFD, PC),
+   DERIVED_COUNTER_PERFCNTR_BV(PC_VERTEX_HITS,      PC),
+   DERIVED_COUNTER_PERFCNTR_BV(PC_VS_INVOCATIONS,   PC),
 
    /* BV_TP: 6/6 counters */
-   DERIVED_COUNTER_PERFCNTR_BV(TP_L1_CACHELINE_REQUESTS,  &bv_tp_counters[0]),
-   DERIVED_COUNTER_PERFCNTR_BV(TP_L1_CACHELINE_MISSES,    &bv_tp_counters[1]),
-   DERIVED_COUNTER_PERFCNTR_BV(TP_OUTPUT_PIXELS,          &bv_tp_counters[2]),
-   DERIVED_COUNTER_PERFCNTR_BV(TP_OUTPUT_PIXELS_POINT,    &bv_tp_counters[3]),
-   DERIVED_COUNTER_PERFCNTR_BV(TP_OUTPUT_PIXELS_BILINEAR, &bv_tp_counters[4]),
-   DERIVED_COUNTER_PERFCNTR_BV(TP_OUTPUT_PIXELS_ANISO,    &bv_tp_counters[5]),
+   DERIVED_COUNTER_PERFCNTR_BV(TP_L1_CACHELINE_REQUESTS,  TP),
+   DERIVED_COUNTER_PERFCNTR_BV(TP_L1_CACHELINE_MISSES,    TP),
+   DERIVED_COUNTER_PERFCNTR_BV(TP_OUTPUT_PIXELS,          TP),
+   DERIVED_COUNTER_PERFCNTR_BV(TP_OUTPUT_PIXELS_POINT,    TP),
+   DERIVED_COUNTER_PERFCNTR_BV(TP_OUTPUT_PIXELS_BILINEAR, TP),
+   DERIVED_COUNTER_PERFCNTR_BV(TP_OUTPUT_PIXELS_ANISO,    TP),
 
    /* GP: 8/12 counters */
-   DERIVED_COUNTER_PERFCNTR_BV(SP_STALL_CYCLES_TP,                &bv_sp_counters[0]),
-   DERIVED_COUNTER_PERFCNTR_BV(SP_VS_STAGE_TEX_INSTRUCTIONS,      &bv_sp_counters[1]),
-   DERIVED_COUNTER_PERFCNTR_BV(SP_VS_STAGE_EFU_INSTRUCTIONS,      &bv_sp_counters[2]),
-   DERIVED_COUNTER_PERFCNTR_BV(SP_VS_STAGE_FULL_ALU_INSTRUCTIONS, &bv_sp_counters[3]),
-   DERIVED_COUNTER_PERFCNTR_BV(SP_ICL1_REQUESTS,                  &bv_sp_counters[4]),
-   DERIVED_COUNTER_PERFCNTR_BV(SP_ICL1_MISSES,                    &bv_sp_counters[5]),
-   DERIVED_COUNTER_PERFCNTR_BV(SP_ANY_EU_WORKING_FS_STAGE,        &bv_sp_counters[6]),
-   DERIVED_COUNTER_PERFCNTR_BV(SP_ANY_EU_WORKING_VS_STAGE,        &bv_sp_counters[7]),
+   DERIVED_COUNTER_PERFCNTR_BV(SP_STALL_CYCLES_TP,                SP),
+   DERIVED_COUNTER_PERFCNTR_BV(SP_VS_STAGE_TEX_INSTRUCTIONS,      SP),
+   DERIVED_COUNTER_PERFCNTR_BV(SP_VS_STAGE_EFU_INSTRUCTIONS,      SP),
+   DERIVED_COUNTER_PERFCNTR_BV(SP_VS_STAGE_FULL_ALU_INSTRUCTIONS, SP),
+   DERIVED_COUNTER_PERFCNTR_BV(SP_ICL1_REQUESTS,                  SP),
+   DERIVED_COUNTER_PERFCNTR_BV(SP_ICL1_MISSES,                    SP),
+   DERIVED_COUNTER_PERFCNTR_BV(SP_ANY_EU_WORKING_FS_STAGE,        SP),
+   DERIVED_COUNTER_PERFCNTR_BV(SP_ANY_EU_WORKING_VS_STAGE,        SP),
 
    /* LRZ: 4/4 counters */
-   DERIVED_COUNTER_PERFCNTR(LRZ_TOTAL_PIXEL, &lrz_counters[0]),
-   DERIVED_COUNTER_PERFCNTR(LRZ_VISIBLE_PIXEL_AFTER_LRZ, &lrz_counters[1]),
-   DERIVED_COUNTER_PERFCNTR(LRZ_TILE_KILLED, &lrz_counters[2]),
-   DERIVED_COUNTER_PERFCNTR(LRZ_PRIM_KILLED_BY_LRZ, &lrz_counters[3]),
+   DERIVED_COUNTER_PERFCNTR(LRZ_TOTAL_PIXEL, LRZ),
+   DERIVED_COUNTER_PERFCNTR(LRZ_VISIBLE_PIXEL_AFTER_LRZ, LRZ),
+   DERIVED_COUNTER_PERFCNTR(LRZ_TILE_KILLED, LRZ),
+   DERIVED_COUNTER_PERFCNTR(LRZ_PRIM_KILLED_BY_LRZ, LRZ),
 };
 
 static uint64_t
@@ -985,50 +982,3 @@ const struct fd_derived_counter *a7xx_derived_counters[] = {
 
 const unsigned a7xx_num_derived_counters = ARRAY_SIZE(a7xx_derived_counters);
 static_assert(ARRAY_SIZE(a7xx_derived_counters) <= FD_DERIVED_COUNTER_COLLECTION_MAX_DERIVED_COUNTERS, "");
-
-/* Prototype for linking purposes. */
-void
-a7xx_generate_derived_counter_collection(const struct fd_dev_id *id, struct fd_derived_counter_collection *collection);
-
-void
-a7xx_generate_derived_counter_collection(const struct fd_dev_id *id, struct fd_derived_counter_collection *collection)
-{
-   /* The provided collection should already specify the derived counters that will be measured.
-    * This function will set up enabled_perfcntrs_map and enabled_perfcntrs array so that each
-    * used DERIVED_COUNTER_PERFCNTR_* enum value will map to the corresponding index in the
-    * array where the relevant fd_perfcntr_counter and fd_perfcntr_countable are stored.
-    */
-
-   collection->num_enabled_perfcntrs = 0;
-   memset(collection->enabled_perfcntrs_map, 0xff, ARRAY_SIZE(collection->enabled_perfcntrs_map));
-
-   for (unsigned i = 0; i < collection->num_counters; ++i) {
-      const struct fd_derived_counter *counter = collection->counters[i];
-
-      for (unsigned j = 0; j < counter->num_perfcntrs; ++j) {
-         uint8_t perfcntr = counter->perfcntrs[j];
-         collection->enabled_perfcntrs_map[perfcntr] = 0x00;
-      }
-   }
-
-   /* Note if CP_ALWAYS_COUNT is enabled. This is the zero-index perfcntr. */
-   collection->cp_always_count_enabled = !collection->enabled_perfcntrs_map[0];
-
-   for (unsigned i = 0; i < ARRAY_SIZE(collection->enabled_perfcntrs_map); ++i) {
-      if (collection->enabled_perfcntrs_map[i] == 0xff)
-         continue;
-
-      uint8_t enabled_perfcntr_index = collection->num_enabled_perfcntrs++;
-      collection->enabled_perfcntrs_map[i] = enabled_perfcntr_index;
-
-      collection->enabled_perfcntrs[enabled_perfcntr_index].counter =
-         a7xx_derived_counter_perfcntrs[i].counter;
-      collection->enabled_perfcntrs[enabled_perfcntr_index].countable =
-         a7xx_derived_counter_perfcntrs[i].countable;
-   }
-
-   const struct fd_dev_info *info = fd_dev_info_raw(id);
-   collection->derivation_context.a7xx.number_of_usptp = info->num_sp_cores * 2;
-   collection->derivation_context.a7xx.number_of_alus_per_usptp = 128;
-}
-

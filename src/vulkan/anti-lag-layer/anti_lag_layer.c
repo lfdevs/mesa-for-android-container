@@ -5,7 +5,6 @@
  */
 
 #include "anti_lag_layer.h"
-#include <string.h>
 #include "util/os_time.h"
 #include "util/simple_mtx.h"
 #include "util/u_atomic.h"
@@ -14,24 +13,24 @@
 #include "vk_alloc.h"
 #include "vk_util.h"
 
+#define ONE_MS INT64_C(1000000)
+
 static bool
 evaluate_frame(device_context *ctx, frame *frame, bool force_wait)
 {
-   if (frame->state != FRAME_PRESENT) {
-      /* This frame is not finished yet. */
-      assert(!force_wait);
+   /* This frame is not finished yet. */
+   if (frame->state != FRAME_PRESENT)
       return false;
-   }
 
-   int query_flags = VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WAIT_BIT;
    const uint32_t frame_idx = ringbuffer_index(ctx->frames, frame);
 
    /* Before we commit to completing a frame, all submits on all queues must have completed. */
    for (unsigned i = 0; i < ctx->num_queues; i++) {
       queue_context *queue_ctx = &ctx->queues[i];
       ringbuffer_lock(queue_ctx->queries);
-      uint64_t expected_signal_value = queue_ctx->semaphore_value - queue_ctx->queries.size +
-                                       queue_ctx->submissions_per_frame[frame_idx];
+      uint64_t expected_signal_value = queue_ctx->semaphore_value - queue_ctx->queries.size / 2 +
+                                       queue_ctx->submissions_per_frame[frame_idx] / 2;
+
       ringbuffer_unlock(queue_ctx->queries);
 
       if (force_wait) {
@@ -52,6 +51,11 @@ evaluate_frame(device_context *ctx, frame *frame, bool force_wait)
       }
    }
 
+   uint64_t cpu_start_time = UINT64_MAX;
+   uint64_t gpu_start_time = UINT64_MAX;
+   uint64_t gpu_end_time = 0;
+   int64_t min_delay = INT64_MAX;
+
    /* For each queue, retrieve timestamp query results. */
    for (unsigned i = 0; i < ctx->num_queues; i++) {
       queue_context *queue_ctx = &ctx->queues[i];
@@ -67,21 +71,29 @@ evaluate_frame(device_context *ctx, frame *frame, bool force_wait)
       while (num_timestamps > 0) {
          /* Retreive timestamp results from this queue. */
          ctx->vtable.GetQueryPoolResults(ctx->device, queue_ctx->queryPool, query_idx,
-                                         num_timestamps,
-                                         sizeof(struct query) * num_timestamps,
-                                         &query->begin_gpu_ts, sizeof(struct query),
-                                         query_flags);
+                                         num_timestamps, sizeof(struct query) * num_timestamps,
+                                         &query->gpu_ts, sizeof(struct query),
+                                         VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WAIT_BIT);
 
          ringbuffer_lock(queue_ctx->queries);
-         for (unsigned j = 0; j < num_timestamps; j++) {
+         gpu_start_time = MIN2(gpu_start_time, query->gpu_ts);
+         cpu_start_time = MIN2(cpu_start_time, query->submit_ts);
 
-            /* Calibrate device timestamps. */
-            query->begin_gpu_ts =
-               ctx->calibration.delta +
-               (uint64_t)(query->begin_gpu_ts * ctx->calibration.timestamp_period);
-            if (query->begin_gpu_ts > query->submit_cpu_ts)
-               frame->min_delay =
-                  MIN2(frame->min_delay, query->begin_gpu_ts - query->submit_cpu_ts);
+         for (unsigned j = 0; j < num_timestamps; j++) {
+            /* Even timestamps mark the begin and odd timestamps mark the end
+             * of each submission.
+             */
+            if (j % 2 == 0) {
+               /* Calibrate device timestamps. */
+               query->gpu_ts = ctx->calibration.delta +
+                               (uint64_t)(query->gpu_ts * ctx->calibration.timestamp_period);
+
+               /* This value might be negative due to timestamp inaccuracies. */
+               int64_t submission_delay = query->gpu_ts - query->submit_ts;
+               min_delay = MIN2(min_delay, submission_delay);
+            } else {
+               gpu_end_time = MAX2(gpu_end_time, query->gpu_ts);
+            }
 
             /* Check if we can reset half of the query pool at once. */
             uint32_t next_idx = ringbuffer_index(queue_ctx->queries, query) + 1;
@@ -114,7 +126,10 @@ evaluate_frame(device_context *ctx, frame *frame, bool force_wait)
       }
    }
 
-   frame->min_delay++; /* wrap UINT64_MAX in case we didn't have any submissions. */
+   if (gpu_end_time) {
+      frame->frame_time = (gpu_end_time - gpu_start_time) * ctx->calibration.timestamp_period;
+      frame->min_delay = min_delay;
+   }
 
    return true;
 }
@@ -149,7 +164,7 @@ calibrate_timestamps(device_context *ctx)
       }
 
       /* Take a new calibrated timestamp every second. */
-      ctx->calibration.recalibrate_when = ts[0] + 1000000000ull;
+      ctx->calibration.recalibrate_when = ts[0] + ONE_SECOND_IN_NS;
    }
 
    return result == VK_SUCCESS;
@@ -179,20 +194,25 @@ begin_next_frame(device_context *ctx)
 static void
 anti_lag_disable(device_context *ctx)
 {
+   ctx->avg_frame_time = ONE_MS;
+
    ringbuffer_lock(ctx->frames);
-   while (ctx->frames.size) {
-      /* Set force-wait=true, so that all pending timestamp queries get completed. */
-      begin_next_frame(ctx);
-      frame *frame = ringbuffer_first(ctx->frames);
-      evaluate_frame(ctx, frame, true);
-      frame->state = FRAME_INVALID;
-      ringbuffer_free(ctx->frames, frame);
+   {
+      while (ctx->frames.size) {
+         /* Set force-wait=true, so that all pending timestamp queries get completed. */
+         begin_next_frame(ctx);
+         frame *frame = ringbuffer_first(ctx->frames);
+         evaluate_frame(ctx, frame, true);
+         frame->state = FRAME_INVALID;
+         ringbuffer_free(ctx->frames, frame);
+      }
+
+      assert(!ctx->active_frame);
+      ctx->enabled = false;
    }
-   assert(!ctx->active_frame);
    ringbuffer_unlock(ctx->frames);
 }
 
-#define TARGET_DELAY 4000000ll /* 4 ms */
 /**
  * Returns the amount of time that we want the next frame to be delayed.
  *
@@ -200,79 +220,70 @@ anti_lag_disable(device_context *ctx)
  * to minimize the delay between calls to vkQueueSubmit or vkQueueSubmit2
  * and the begin of the execution of the submission.
  */
-static int64_t
+static uint64_t
 get_wait_time(device_context *ctx)
 {
-   /* Take the previous evaluated frame's delay as baseline. */
-   int64_t imposed_delay = ctx->base_delay;
-   int64_t adaptation = 0;
-
-   ringbuffer_lock(ctx->frames);
-   /* In case our ringbuffer is completely full and no frame is in PRESENT stage,
-    * just move the oldest frame to PRESENT stage, and force-wait.
+   /* If we have at least 3 frames, then 2 frames must already have been
+    * submitted to the GPU. It is safe to wait for one to complete.
     */
-   bool force_wait = ctx->frames.size == MAX_FRAMES;
    frame *next_frame = ringbuffer_first(ctx->frames);
-   if (force_wait && next_frame->state != FRAME_PRESENT)
-      begin_next_frame(ctx);
+   bool force_wait = ctx->frames.size >= 3;
 
-   /* Also force-wait for the oldest frame if there is already 2 frames in PRESENT stage. */
-   force_wait |= ringbuffer_next(ctx->frames, next_frame)->state == FRAME_PRESENT;
-   ringbuffer_unlock(ctx->frames);
-
-   /* Take new evaluated frames into consideration. */
    while (evaluate_frame(ctx, next_frame, force_wait)) {
 
-      if (next_frame->min_delay < TARGET_DELAY / 2 && ctx->adaptation <= 0) {
-         /* If there is no delay between submission and GPU start, halve the base delay and
-          * set the delay for this frame to zero, in order to account for sudden changes.
-          */
-         ctx->base_delay = ctx->base_delay / 2;
-         adaptation = -ctx->base_delay;
-      } else {
-         /* We use some kind of exponential weighted moving average function here,
-          * in order to determine a base-delay. We use a smoothing-factor of roughly
-          * 3%, but don't discount the previous value. This helps keeping the delay
-          * slightly below the target of 5 ms, most of the time.
-          */
-         int64_t diff = (int64_t)next_frame->min_delay - TARGET_DELAY;
-         ctx->base_delay = MAX2(0, ctx->base_delay + diff / 32); /* corresponds to ~3 % */
+      if (next_frame->frame_time) {
+         /* Calculate average absolute deviation as exponential moving average with alpha = 0.125. */
+         int64_t delta = ctx->queuing_delay + ctx->avg_frame_time - next_frame->min_delay -
+                         next_frame->frame_time;
+         int64_t diff = (delta < 0 ? -delta : delta) - ctx->delta;
+         ctx->delta += diff / 8;
 
-         /* As the base-delay gets adjusted rather slowly, we additionally use the half of the
-          * diff as adaptation delay to account for sudden changes. A quarter of the adaptation
-          * is then subtracted for the next frame, so that we can avoid overcompensation.
-          */
-         adaptation = diff / 2 - ctx->adaptation / 4;
+         /* Update frame time: Use an exponential moving average with alpha = 0.5. */
+         ctx->avg_frame_time = (ctx->avg_frame_time + next_frame->frame_time) / 2;
       }
 
-      /* We only need space for one frame. */
-      force_wait = false;
+      /* Update queuing delay: Just delay the next frame by half of it. */
+      ctx->queuing_delay = next_frame->min_delay / 2;
 
       ringbuffer_lock(ctx->frames);
-      next_frame->state = FRAME_INVALID;
-      ringbuffer_free(ctx->frames, next_frame);
-      next_frame = ringbuffer_first(ctx->frames);
+      {
+         next_frame->state = FRAME_INVALID;
+         ringbuffer_free(ctx->frames, next_frame);
+         next_frame = ringbuffer_first(ctx->frames);
+      }
       ringbuffer_unlock(ctx->frames);
-   }
-   imposed_delay = ctx->base_delay + adaptation;
-   ctx->adaptation = adaptation;
 
-   if (imposed_delay > 100000000) {
+      /* If we successfully evaluated one frame, only attempt to evaluate the next one,
+       * if the completion is clearly expected before the next deadline.
+       * Also, don't use force-wait in this case.
+       */
+      force_wait = false;
+      if (ctx->frames.size <= 2)
+         break;
+   }
+
+   /* Start the next input sampling after the period of one frame.
+    * We add half the queuing delay as that's what we try to minimize.
+    * Subtract the average frame time deviation as slack time, so that
+    * we don't drain the GPU from work.
+    */
+   int64_t delay = ctx->avg_frame_time + ctx->queuing_delay - MIN2(ctx->delta, ONE_MS);
+
+   if (delay > 100 * ONE_MS) {
       /* This corresponds to <10 FPS. Something might have gone wrong. */
       calibrate_timestamps(ctx);
-      ctx->base_delay = ctx->adaptation = imposed_delay = 0;
+      delay = 0;
    }
 
-   return MAX2(0, imposed_delay);
+   return MAX2(0, delay);
 }
 
 static void
 reset_frame(frame *frame)
 {
    assert(frame->state == FRAME_INVALID);
-   frame->frame_idx = 0;
-   frame->frame_start_time = 0;
-   frame->min_delay = UINT64_MAX;
+   frame->frame_time = 0;
+   frame->min_delay = 0;
    frame->state = FRAME_INPUT;
 }
 
@@ -291,10 +302,8 @@ anti_lag_AntiLagUpdateAMD(VkDevice device, const VkAntiLagDataAMD *pData)
       return;
    }
 
-   uint64_t frame_idx = 0;
-   int64_t now = os_time_get_nano();
-   int64_t imposed_delay = 0;
-   int64_t last_frame_begin = 0;
+   UNUSED uint64_t frame_idx = 0;
+   p_atomic_set(&ctx->enabled, true);
 
    if (pData->pPresentationInfo) {
       /* The same frameIndex value should be used with VK_ANTI_LAG_STAGE_INPUT_AMD before
@@ -302,36 +311,28 @@ anti_lag_AntiLagUpdateAMD(VkDevice device, const VkAntiLagDataAMD *pData)
        */
       frame_idx = pData->pPresentationInfo->frameIndex;
 
-      /* This marks the end of the current frame. */
-      if (pData->pPresentationInfo->stage == VK_ANTI_LAG_STAGE_PRESENT_AMD) {
-         /* If there is already a new frame pending, any submission that happens afterwards
-          * gets associated with the new frame.
-          */
-         ringbuffer_lock(ctx->frames);
-         /* Check that the currently active frame is indeed the frame we are ending now. */
-         while (ctx->active_frame && ctx->active_frame->frame_idx <= frame_idx) {
-            begin_next_frame(ctx);
-         }
-         ringbuffer_unlock(ctx->frames);
+      /* This marks the end of the input stage of the current frame. */
+      // TODO: If available, this can be used to calculate the simulation time
+      if (pData->pPresentationInfo->stage == VK_ANTI_LAG_STAGE_PRESENT_AMD)
          return;
-      }
    }
 
-   /* Lock this function, in order to avoid race conditions on frame allocation. */
+   /* Lock this function, in order to avoid race conditions on frame evaluation. */
    simple_mtx_lock(&ctx->mtx);
 
    /* VK_ANTI_LAG_STAGE_INPUT_AMD: This marks the begin of a new frame.
     * Evaluate previous frames in order to determine the wait time.
     */
-   imposed_delay = get_wait_time(ctx);
-   int64_t next_deadline = now + imposed_delay;
+   uint64_t delay = get_wait_time(ctx);
 
    /* Ensure maxFPS adherence. */
    if (pData->maxFPS) {
-      int64_t frametime_period = 1000000000u / pData->maxFPS;
-      last_frame_begin = ringbuffer_last(ctx->frames)->frame_start_time;
-      next_deadline = MAX2(next_deadline, last_frame_begin + frametime_period);
+      uint64_t frametime_period = ONE_SECOND_IN_NS / pData->maxFPS;
+      delay = MAX2(delay, frametime_period);
    }
+
+   uint64_t next_deadline = ctx->prev_input_begin + delay;
+   uint64_t now = os_time_get_nano();
 
    /* Recalibrate every now and then. */
    if (next_deadline > ctx->calibration.recalibrate_when)
@@ -340,19 +341,8 @@ anti_lag_AntiLagUpdateAMD(VkDevice device, const VkAntiLagDataAMD *pData)
    /* Sleep until deadline is met. */
    os_time_nanosleep_until(next_deadline);
 
-   /* Initialize new frame. */
-   ringbuffer_lock(ctx->frames);
-   frame *new_frame = ringbuffer_alloc(ctx->frames);
-   reset_frame(new_frame);
-   new_frame->frame_start_time = next_deadline;
-   new_frame->imposed_delay = imposed_delay;
-   new_frame->frame_idx = frame_idx;
+   ctx->prev_input_begin = MAX2(now, next_deadline);
 
-   /* Immediately set the frame active if there is no other frame already active. */
-   if (!ctx->active_frame)
-      begin_next_frame(ctx);
-
-   ringbuffer_unlock(ctx->frames);
    simple_mtx_unlock(&ctx->mtx);
 }
 
@@ -392,8 +382,9 @@ allocate_query(queue_context *queue_ctx, uint32_t frame_idx)
 }
 
 static bool
-get_commandbuffer(device_context *ctx, queue_context *queue_ctx, VkCommandBuffer *cmdbuffer,
-                  bool has_command_buffer, bool has_wait_before_cmdbuffer, bool *early_submit)
+get_commandbuffer(device_context *ctx, queue_context *queue_ctx, VkCommandBuffer *timestamp_begin,
+                  VkCommandBuffer *timestamp_end, bool has_command_buffer,
+                  bool has_wait_before_cmdbuffer, bool *early_submit)
 {
    uint64_t now = os_time_get_nano();
 
@@ -427,16 +418,22 @@ get_commandbuffer(device_context *ctx, queue_context *queue_ctx, VkCommandBuffer
       return false;
    }
 
-   query->submit_cpu_ts = now;
+   query->submit_ts = now;
 
    /* Assign commandBuffer for timestamp. */
-   *cmdbuffer = query->cmdbuffer;
+   *timestamp_begin = query->cmdbuffer;
+
+   /* Allocate a second query to mark the end of GPU work. */
+   query = allocate_query(queue_ctx, frame_idx);
+   assert(query);
+   query->submit_ts = now;
+   *timestamp_end = query->cmdbuffer;
 
    /* Increment timeline semaphore count. */
    queue_ctx->semaphore_value++;
 
    /* Add new submission entry for the current frame */
-   queue_ctx->submissions_per_frame[frame_idx]++;
+   queue_ctx->submissions_per_frame[frame_idx] += 2;
 
    ringbuffer_unlock(queue_ctx->queries);
    ringbuffer_unlock(ctx->frames);
@@ -453,7 +450,9 @@ queue_submit2(device_context *ctx, VkQueue queue, uint32_t submitCount,
 
    bool has_wait_before_cmdbuffer = false;
    int first = -1;
-   VkCommandBuffer timestamp_cmdbuffer;
+   VkCommandBuffer timestamp_begin;
+   VkCommandBuffer timestamp_end;
+
    /* Check if any submission contains commandbuffers. */
    for (unsigned i = 0; i < submitCount; i++) {
       if (pSubmits[i].waitSemaphoreInfoCount != 0)
@@ -467,28 +466,37 @@ queue_submit2(device_context *ctx, VkQueue queue, uint32_t submitCount,
 
    /* Get timestamp commandbuffer. */
    bool early_submit;
-   if (!get_commandbuffer(ctx, queue_ctx, &timestamp_cmdbuffer, first >= 0,
+   if (!get_commandbuffer(ctx, queue_ctx, &timestamp_begin, &timestamp_end, first >= 0,
                           has_wait_before_cmdbuffer, &early_submit)) {
       return queueSubmit2(queue, submitCount, pSubmits, fence);
    }
 
    VkSubmitInfo2 *submits;
-   VkCommandBufferSubmitInfo *cmdbuffers;
+   VkCommandBufferSubmitInfo *cmdbuffers_begin;
+   VkCommandBufferSubmitInfo *cmdbuffers_end;
    VkSemaphoreSubmitInfo *semaphores;
    VK_MULTIALLOC(ma);
 
    if (early_submit) {
       vk_multialloc_add(&ma, &submits, VkSubmitInfo2, submitCount + 1);
-      vk_multialloc_add(&ma, &cmdbuffers, VkCommandBufferSubmitInfo, 1);
-      vk_multialloc_add(&ma, &semaphores, VkSemaphoreSubmitInfo, 1);
+      vk_multialloc_add(&ma, &cmdbuffers_begin, VkCommandBufferSubmitInfo, 1);
+      vk_multialloc_add(&ma, &cmdbuffers_end, VkCommandBufferSubmitInfo,
+                        pSubmits[submitCount - 1].commandBufferInfoCount + 1);
       first = 0;
    } else {
       vk_multialloc_add(&ma, &submits, VkSubmitInfo2, submitCount);
-      vk_multialloc_add(&ma, &cmdbuffers, VkCommandBufferSubmitInfo,
-                        pSubmits[first].commandBufferInfoCount + 1);
-      vk_multialloc_add(&ma, &semaphores, VkSemaphoreSubmitInfo,
-                        pSubmits[first].signalSemaphoreInfoCount + 1);
+      if (first == submitCount - 1) {
+         vk_multialloc_add(&ma, &cmdbuffers_begin, VkCommandBufferSubmitInfo,
+                           pSubmits[first].commandBufferInfoCount + 2);
+      } else {
+         vk_multialloc_add(&ma, &cmdbuffers_begin, VkCommandBufferSubmitInfo,
+                           pSubmits[first].commandBufferInfoCount + 1);
+         vk_multialloc_add(&ma, &cmdbuffers_end, VkCommandBufferSubmitInfo,
+                           pSubmits[submitCount - 1].commandBufferInfoCount + 1);
+      }
    }
+   vk_multialloc_add(&ma, &semaphores, VkSemaphoreSubmitInfo,
+                     pSubmits[submitCount - 1].signalSemaphoreInfoCount + 1);
 
    void *buf = vk_multialloc_zalloc(&ma, &ctx->alloc, VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
    if (!buf)
@@ -505,16 +513,34 @@ queue_submit2(device_context *ctx, VkQueue queue, uint32_t submitCount,
    VkSubmitInfo2 *submit_info = &submits[first];
 
    /* Add commandbuffer to submission. */
-   cmdbuffers[0] = (VkCommandBufferSubmitInfo){
+   cmdbuffers_begin[0] = (VkCommandBufferSubmitInfo){
       .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
-      .commandBuffer = timestamp_cmdbuffer,
+      .commandBuffer = timestamp_begin,
    };
-   memcpy(&cmdbuffers[1], submit_info->pCommandBufferInfos,
+   memcpy(&cmdbuffers_begin[1], submit_info->pCommandBufferInfos,
           sizeof(VkCommandBufferSubmitInfo) * submit_info->commandBufferInfoCount);
-   submit_info->pCommandBufferInfos = cmdbuffers;
+   submit_info->pCommandBufferInfos = cmdbuffers_begin;
    submit_info->commandBufferInfoCount++;
 
-   /* Add timeline semaphore to submission. */
+   /* Add commandbuffer to submission. */
+   submit_info = &submits[submitCount - 1];
+   if (first == submitCount - 1) {
+      cmdbuffers_begin[submit_info->commandBufferInfoCount] = (VkCommandBufferSubmitInfo){
+         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
+         .commandBuffer = timestamp_end,
+      };
+   } else {
+      memcpy(&cmdbuffers_end[0], submit_info->pCommandBufferInfos,
+             sizeof(VkCommandBufferSubmitInfo) * submit_info->commandBufferInfoCount);
+      cmdbuffers_end[submit_info->commandBufferInfoCount] = (VkCommandBufferSubmitInfo){
+         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
+         .commandBuffer = timestamp_end,
+      };
+      submit_info->pCommandBufferInfos = cmdbuffers_end;
+   }
+   submit_info->commandBufferInfoCount++;
+
+   /* Add timeline semaphore to last submission. */
    memcpy(semaphores, submit_info->pSignalSemaphoreInfos,
           sizeof(VkSemaphoreSubmitInfo) * submit_info->signalSemaphoreInfoCount);
    semaphores[submit_info->signalSemaphoreInfoCount] = (VkSemaphoreSubmitInfo){
@@ -559,7 +585,9 @@ anti_lag_QueueSubmit(VkQueue queue, uint32_t submitCount, const VkSubmitInfo *pS
 
    bool has_wait_before_cmdbuffer = false;
    int first = -1;
-   VkCommandBuffer timestamp_cmdbuffer;
+   VkCommandBuffer timestamp_begin;
+   VkCommandBuffer timestamp_end;
+
    /* Check if any submission contains commandbuffers or waits before those. */
    for (unsigned i = 0; i < submitCount; i++) {
       if (pSubmits[i].waitSemaphoreCount != 0)
@@ -573,13 +601,14 @@ anti_lag_QueueSubmit(VkQueue queue, uint32_t submitCount, const VkSubmitInfo *pS
 
    /* Get timestamp commandbuffer. */
    bool early_submit;
-   if (!get_commandbuffer(ctx, queue_ctx, &timestamp_cmdbuffer, first >= 0,
+   if (!get_commandbuffer(ctx, queue_ctx, &timestamp_begin, &timestamp_end, first >= 0,
                           has_wait_before_cmdbuffer, &early_submit)) {
       return ctx->vtable.QueueSubmit(queue, submitCount, pSubmits, fence);
    }
 
    VkSubmitInfo *submits;
-   VkCommandBuffer *cmdbuffers;
+   VkCommandBuffer *cmdbuffers_begin;
+   VkCommandBuffer *cmdbuffers_end;
    VkSemaphore *semaphores;
    VkTimelineSemaphoreSubmitInfo *semaphore_info;
    uint64_t *semaphore_values;
@@ -587,18 +616,28 @@ anti_lag_QueueSubmit(VkQueue queue, uint32_t submitCount, const VkSubmitInfo *pS
 
    if (early_submit) {
       vk_multialloc_add(&ma, &submits, VkSubmitInfo, submitCount + 1);
-      vk_multialloc_add(&ma, &cmdbuffers, VkCommandBuffer, 1);
-      vk_multialloc_add(&ma, &semaphores, VkSemaphore, 1);
-      vk_multialloc_add(&ma, &semaphore_info, VkTimelineSemaphoreSubmitInfo, 1);
-      vk_multialloc_add(&ma, &semaphore_values, uint64_t, 1);
+      vk_multialloc_add(&ma, &cmdbuffers_begin, VkCommandBuffer, 1);
+      vk_multialloc_add(&ma, &cmdbuffers_end, VkCommandBuffer,
+                        pSubmits[submitCount - 1].commandBufferCount + 1);
       first = 0;
    } else {
       vk_multialloc_add(&ma, &submits, VkSubmitInfo, submitCount);
-      vk_multialloc_add(&ma, &cmdbuffers, VkCommandBuffer, pSubmits[first].commandBufferCount + 1);
-      vk_multialloc_add(&ma, &semaphores, VkSemaphore, pSubmits[first].signalSemaphoreCount + 1);
-      vk_multialloc_add(&ma, &semaphore_info, VkTimelineSemaphoreSubmitInfo, 1);
-      vk_multialloc_add(&ma, &semaphore_values, uint64_t, pSubmits[first].signalSemaphoreCount + 1);
+      if (first == submitCount - 1) {
+         vk_multialloc_add(&ma, &cmdbuffers_begin, VkCommandBuffer,
+                           pSubmits[first].commandBufferCount + 2);
+      } else {
+         vk_multialloc_add(&ma, &cmdbuffers_begin, VkCommandBuffer,
+                           pSubmits[first].commandBufferCount + 1);
+         vk_multialloc_add(&ma, &cmdbuffers_end, VkCommandBuffer,
+                           pSubmits[submitCount - 1].commandBufferCount + 1);
+      }
    }
+   vk_multialloc_add(&ma, &semaphores, VkSemaphore,
+                     pSubmits[submitCount - 1].signalSemaphoreCount + 1);
+   vk_multialloc_add(&ma, &semaphore_info, VkTimelineSemaphoreSubmitInfo, 1);
+   vk_multialloc_add(&ma, &semaphore_values, uint64_t,
+                     pSubmits[submitCount - 1].signalSemaphoreCount + 1);
+
    void *buf = vk_multialloc_zalloc(&ma, &ctx->alloc, VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
    if (!buf)
       return VK_ERROR_OUT_OF_HOST_MEMORY;
@@ -614,21 +653,34 @@ anti_lag_QueueSubmit(VkQueue queue, uint32_t submitCount, const VkSubmitInfo *pS
    VkSubmitInfo *submit_info = &submits[first];
 
    /* Add commandbuffer to submission. */
-   cmdbuffers[0] = timestamp_cmdbuffer;
-   memcpy(&cmdbuffers[1], submit_info->pCommandBuffers,
+   cmdbuffers_begin[0] = timestamp_begin;
+   memcpy(&cmdbuffers_begin[1], submit_info->pCommandBuffers,
           sizeof(VkCommandBuffer) * submit_info->commandBufferCount);
-   submit_info->pCommandBuffers = cmdbuffers;
+   submit_info->pCommandBuffers = cmdbuffers_begin;
+   submit_info->commandBufferCount++;
+
+   submit_info = &submits[submitCount - 1];
+
+   /* Add commandbuffer to submission. */
+   if (first == submitCount - 1) {
+      cmdbuffers_begin[submit_info->commandBufferCount] = timestamp_end;
+   } else {
+      memcpy(&cmdbuffers_end[0], submit_info->pCommandBuffers,
+             sizeof(VkCommandBuffer) * submit_info->commandBufferCount);
+      cmdbuffers_end[submit_info->commandBufferCount] = timestamp_end;
+      submit_info->pCommandBuffers = cmdbuffers_end;
+   }
    submit_info->commandBufferCount++;
 
    /* Add timeline semaphore to submission. */
    const VkTimelineSemaphoreSubmitInfo *tlssi =
       vk_find_struct_const(submit_info->pNext, TIMELINE_SEMAPHORE_SUBMIT_INFO);
-   semaphores[0] = queue_ctx->semaphore;
-   memcpy(&semaphores[1], submit_info->pSignalSemaphores,
+   memcpy(&semaphores[0], submit_info->pSignalSemaphores,
           sizeof(VkSemaphore) * submit_info->signalSemaphoreCount);
+   semaphores[submit_info->signalSemaphoreCount] = queue_ctx->semaphore;
+   semaphore_values[submit_info->signalSemaphoreCount] = queue_ctx->semaphore_value;
    submit_info->pSignalSemaphores = semaphores;
    submit_info->signalSemaphoreCount++;
-   semaphore_values[0] = queue_ctx->semaphore_value;
    if (tlssi) {
       *semaphore_info = *tlssi; /* save original values */
       memcpy(&semaphore_values[1], tlssi->pSignalSemaphoreValues,
@@ -657,16 +709,32 @@ anti_lag_QueueSubmit(VkQueue queue, uint32_t submitCount, const VkSubmitInfo *pS
 VKAPI_ATTR VkResult VKAPI_CALL
 anti_lag_QueuePresentKHR(VkQueue queue, const VkPresentInfoKHR *pPresentInfo)
 {
-   /* When multiple queues are in flight, the min-delay approach
-    * has problems. An async compute queue could be submitted to
-    * with very low delay while the main graphics queue would be swamped with work.
-    * If we take a global min-delay over all queues, the algorithm would
-    * assume that there is very low delay and thus sleeps are disabled, but
-    * unless the graphics work depends directly on the async compute work,
-    * this is a false assumption. */
+
    device_context *ctx = get_device_context(queue);
-   queue_context *queue_ctx = get_queue_context(ctx, queue);
-   p_atomic_set(&queue_ctx->latency_sensitive, true);
+
+   if (ctx->enabled) {
+      /* When multiple queues are in flight, the min-delay approach
+       * has problems. An async compute queue could be submitted to
+       * with very low delay while the main graphics queue would be swamped with work.
+       * If we take a global min-delay over all queues, the algorithm would
+       * assume that there is very low delay and thus sleeps are disabled, but
+       * unless the graphics work depends directly on the async compute work,
+       * this is a false assumption.
+       */
+      queue_context *queue_ctx = get_queue_context(ctx, queue);
+      p_atomic_set(&queue_ctx->latency_sensitive, true);
+
+      /* Initialize new frame. */
+      ringbuffer_lock(ctx->frames);
+      {
+         if (ctx->enabled) {
+            frame *new_frame = ringbuffer_alloc(ctx->frames);
+            reset_frame(new_frame);
+            begin_next_frame(ctx);
+         }
+      }
+      ringbuffer_unlock(ctx->frames);
+   }
 
    return ctx->vtable.QueuePresentKHR(queue, pPresentInfo);
 }

@@ -8,7 +8,6 @@ use std::{
         BTreeMap,
     },
     hash::{Hash, Hasher},
-    mem,
     ops::{Add, Deref},
     ptr::NonNull,
 };
@@ -124,26 +123,7 @@ impl<T> CheckedPtr<T> for *mut T {
 #[must_use]
 #[inline]
 pub fn is_aligned_to<T>(ptr: *const T, align: usize) -> bool {
-    addr(ptr) & (align - 1) == 0
-}
-
-// Adapted from libstd since std::ptr::addr isn't stable until 1.84.0
-// See https://github.com/rust-lang/rust/issues/95228
-#[must_use]
-#[inline(always)]
-pub fn addr<T>(ptr: *const T) -> usize {
-    // The libcore implementations of `addr` and `expose_addr` suggest that, while both transmuting
-    // and casting to usize will give you the address of a ptr in the end, they are not identical
-    // in their side-effects.
-    // A cast "exposes" a ptr, which can potentially cause the compiler to optimize less
-    // aggressively around it.
-    // Let's trust the libcore devs over clippy on whether a transmute also exposes a ptr.
-    #[allow(clippy::transmutes_expressible_as_ptr_casts)]
-    // SAFETY: Pointer-to-integer transmutes are valid outside of const contexts (if you are okay
-    // with losing the provenance).
-    unsafe {
-        mem::transmute(ptr.cast::<()>())
-    }
+    ptr.addr() & (align - 1) == 0
 }
 
 pub trait AllocSize<P> {

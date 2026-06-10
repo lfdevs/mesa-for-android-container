@@ -150,6 +150,7 @@ static enum pipe_format
 select_depth_plane_pfmt(struct panvk_image *image, uint64_t mod)
 {
    switch (image->vk.format) {
+   case VK_FORMAT_X8_D24_UNORM_PACK32:
    case VK_FORMAT_D24_UNORM_S8_UINT:
       /* We only use packed Z24 when AFBC is involved, to simplify copies on on
        * AFBC resources.
@@ -178,9 +179,15 @@ select_stencil_plane_pfmt(struct panvk_image *image)
 static enum pipe_format
 select_plane_pfmt(struct panvk_image *image, uint64_t mod, unsigned plane)
 {
+   struct panvk_physical_device *phys_dev =
+      to_panvk_physical_device(image->vk.base.device->physical);
+   unsigned arch = pan_arch(phys_dev->kmod.dev->props.gpu_id);
    if (panvk_image_is_planar_depth_stencil(image)) {
       return plane > 0 ? select_stencil_plane_pfmt(image)
                        : select_depth_plane_pfmt(image, mod);
+   } else if (image->vk.format == VK_FORMAT_X8_D24_UNORM_PACK32 && arch >= 9) {
+      /* X8_D24 can be lowered to D24 on Valhall if AFBC is enabled. */
+      return select_depth_plane_pfmt(image, mod);
    }
 
    VkFormat plane_format = vk_format_get_plane_format(image->vk.format, plane);

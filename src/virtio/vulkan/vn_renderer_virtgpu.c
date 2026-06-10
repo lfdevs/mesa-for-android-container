@@ -629,6 +629,7 @@ virtgpu_ioctl_context_init(struct virtgpu *gpu, uint32_t capset_id)
 
 static uint32_t
 virtgpu_ioctl_resource_create_blob(struct virtgpu *gpu,
+                                   struct vn_renderer_submit_batch *batch,
                                    uint32_t blob_mem,
                                    uint32_t blob_flags,
                                    size_t blob_size,
@@ -643,6 +644,8 @@ virtgpu_ioctl_resource_create_blob(struct virtgpu *gpu,
       .blob_mem = blob_mem,
       .blob_flags = blob_flags,
       .size = blob_size,
+      .cmd_size = batch ? batch->cs_size : 0,
+      .cmd = batch ? (uintptr_t)batch->cs_data : 0,
       .blob_id = blob_id,
    };
 
@@ -1298,6 +1301,7 @@ fail:
 static VkResult
 virtgpu_bo_create_from_device_memory(
    struct vn_renderer *renderer,
+   struct vn_renderer_submit_batch *batch,
    VkDeviceSize size,
    vn_object_id mem_id,
    VkMemoryPropertyFlags flags,
@@ -1310,7 +1314,7 @@ virtgpu_bo_create_from_device_memory(
 
    uint32_t res_id;
    uint32_t gem_handle = virtgpu_ioctl_resource_create_blob(
-      gpu, gpu->bo_blob_mem, blob_flags, size, mem_id, &res_id);
+      gpu, batch, gpu->bo_blob_mem, blob_flags, size, mem_id, &res_id);
    if (!gem_handle)
       return VK_ERROR_OUT_OF_DEVICE_MEMORY;
 
@@ -1394,7 +1398,7 @@ virtgpu_shmem_create(struct vn_renderer *renderer, size_t size)
 
    uint32_t res_id;
    uint32_t gem_handle = virtgpu_ioctl_resource_create_blob(
-      gpu, gpu->shmem_blob_mem, VIRTGPU_BLOB_FLAG_USE_MAPPABLE, size, 0,
+      gpu, NULL, gpu->shmem_blob_mem, VIRTGPU_BLOB_FLAG_USE_MAPPABLE, size, 0,
       &res_id);
    if (!gem_handle)
       return NULL;

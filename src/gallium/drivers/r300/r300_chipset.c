@@ -128,5 +128,6 @@ void r300_parse_chipset(uint32_t pci_id, struct r300_capabilities* caps)
     caps->z_compress = caps->is_rv350 ? R300_ZCOMP_8X8 : R300_ZCOMP_4X4;
     caps->dxtc_swizzle = caps->is_r400 || caps->is_r500;
     caps->has_us_format = caps->family == CHIP_R520;
-    caps->has_tcl = caps->num_vert_fpus > 0;
+    caps->has_hardware_tcl = caps->num_vert_fpus > 0;
+    caps->has_tcl = caps->has_hardware_tcl;
 }

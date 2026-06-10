@@ -320,6 +320,23 @@ prepare_for_submission(struct ethosu_subgraph *subgraph,
       }
    }
 
+   subgraph->perfmon_id = 0;
+   if (DBG_ENABLED(ETHOSU_DBG_DUMP_PERF)) {
+
+      struct drm_ethosu_perfmon_create perfmon_create = {
+         .counters = { 32, 35 }, /* npu-idle, npu-active */
+         .ncounters = 2,
+      };
+      ret = drmIoctl(screen->fd, DRM_IOCTL_ETHOSU_PERFMON_CREATE, &perfmon_create);
+      DBG("Perfmon create returned %d\n", ret);
+      if (ret == 0) {
+         subgraph->perfmon_id = perfmon_create.id;
+      } else {
+         DBG("Could not create perfmon: ret=%d errno=%d (%s)\n",
+             ret, errno, strerror(errno));
+      }
+   }
+
    DBG("subgraph->io_used %d\n", subgraph->io_used);
    subgraph->io_rsrc = pipe_buffer_create(pcontext->screen, 0,
                                           PIPE_USAGE_DEFAULT,
@@ -447,6 +464,7 @@ ethosu_ml_subgraph_invoke(struct pipe_context *pcontext,
 
    submit.jobs = (uintptr_t)&job;
    submit.job_count = 1;
+   submit.perfmon_id = subgraph->perfmon_id;
 
    if (DBG_ENABLED(ETHOSU_DBG_MSGS))
       clock_gettime(CLOCK_MONOTONIC_RAW, &start);
@@ -493,6 +511,25 @@ ethosu_ml_subgraph_read_outputs(struct pipe_context *pcontext,
 
       pipe_buffer_read(pcontext, subgraph->io_rsrc, output->offset, output->size, outputs[i]);
    }
+
+   if (DBG_ENABLED(ETHOSU_DBG_DUMP_PERF)) {
+      struct ethosu_screen *screen = ethosu_screen(pcontext->screen);
+      uint64_t values[9];
+      struct drm_ethosu_perfmon_get_values get_values = {
+         .id = subgraph->perfmon_id,
+         .values_ptr = (uintptr_t)values,
+      };
+      int ret;
+
+      ret = drmIoctl(screen->fd, DRM_IOCTL_ETHOSU_PERFMON_GET_VALUES, &get_values);
+      if (ret == 0) {
+         mesa_logi("PMU: cycles=%lu, npu-active=%lu, npu-idle=%lu\n",
+                   values[2], values[1], values[0]);
+      } else {
+         DBG("Could not read perfmon values: ret=%d errno=%d (%s)\n",
+             ret, errno, strerror(errno));
+      }
+   }
 }
 
 void
@@ -500,10 +537,10 @@ ethosu_ml_subgraph_destroy(struct pipe_ml_device *pdevice,
                            struct pipe_ml_subgraph *psubgraph)
 {
    struct ethosu_subgraph *subgraph = (struct ethosu_subgraph *)(psubgraph);
+   struct ethosu_screen *screen = subgraph->screen;
 
    if (subgraph->io_rsrc) {
       /* Post-submission state: cleanup DRM resources */
-      struct ethosu_screen *screen = subgraph->screen;
       struct drm_gem_close arg = {0};
       int ret;
 
@@ -519,6 +556,13 @@ ethosu_ml_subgraph_destroy(struct pipe_ml_device *pdevice,
       /* Pre-submission state: cleanup raw buffers */
       free(subgraph->cmdstream);
       free(subgraph->coefs);
+   }
+
+   if (DBG_ENABLED(ETHOSU_DBG_DUMP_PERF)) {
+      struct drm_ethosu_perfmon_destroy destroy = {
+         .id = subgraph->perfmon_id,
+      };
+      drmIoctl(screen->fd, DRM_IOCTL_ETHOSU_PERFMON_DESTROY, &destroy);
    }
 
    util_dynarray_fini(&subgraph->tensors);

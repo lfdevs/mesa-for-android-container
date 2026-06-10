@@ -444,12 +444,18 @@ static void radeon_vcn_enc_h264_get_slice_ctrl_param(struct radeon_encoder *enc,
                                                 enc->enc_pic.quality_modes.pre_encode_mode) &&
        pic->num_slice_descriptors <= RENCODE_MAX_NUM_SLICES)
    {
-      enc->enc_pic.slice_ctrl.slice_control_mode = RENCODE_H264_SLICE_CONTROL_MODE_VARIABLE_MBS;
+      uint32_t cumulative_mbs = 0;
       enc->enc_pic.h264_slice_info_var.num_slices = pic->num_slice_descriptors;
       for (unsigned i = 0; i < pic->num_slice_descriptors; i++) {
          enc->enc_pic.h264_slice_info_var.slice_info[i].num_mbs_per_slice =
             pic->slices_descriptors[i].num_macroblocks;
+         cumulative_mbs += pic->slices_descriptors[i].num_macroblocks;
       }
+
+      /* If the app input does not fill the frame, override it by not using
+       * variable slice mode. */
+      if (cumulative_mbs == num_mbs_total)
+         enc->enc_pic.slice_ctrl.slice_control_mode = RENCODE_H264_SLICE_CONTROL_MODE_VARIABLE_MBS;
    }
 }
 
@@ -549,6 +555,21 @@ static void radeon_vcn_enc_h264_get_param(struct radeon_encoder *enc,
          pic->dpb[ref_l0].is_ltr;
    } else {
       enc->enc_pic.enc_params.reference_picture_index = 0xffffffff;
+   }
+
+   if (pic->ref_list1[0] == PIPE_H2645_LIST_REF_INVALID_ENTRY &&
+       pic->ref_list0[1] != PIPE_H2645_LIST_REF_INVALID_ENTRY) {
+      uint8_t ref_l0_1 = pic->ref_list0[1];
+
+      enc->enc_pic.h264_enc_params.l0_reference_picture1_index = ref_l0_1;
+      enc->enc_pic.h264_enc_params.picture_info_l0_reference_picture1.pic_type =
+         radeon_enc_h2645_picture_type(pic->dpb[ref_l0_1].picture_type);
+      enc->enc_pic.h264_enc_params.picture_info_l0_reference_picture1.pic_order_cnt =
+         pic->dpb[ref_l0_1].pic_order_cnt;
+      enc->enc_pic.h264_enc_params.picture_info_l0_reference_picture1.is_long_term =
+         pic->dpb[ref_l0_1].is_ltr;
+   } else {
+      enc->enc_pic.h264_enc_params.l0_reference_picture1_index = 0xffffffff;
    }
 
    if (pic->ref_list1[0] != PIPE_H2645_LIST_REF_INVALID_ENTRY) {
@@ -813,13 +834,19 @@ static void radeon_vcn_enc_hevc_get_slice_ctrl_param(struct radeon_encoder *enc,
                                                 enc->enc_pic.quality_modes.pre_encode_mode) &&
        pic->num_slice_descriptors <= RENCODE_MAX_NUM_SLICES)
    {
-      enc->enc_pic.hevc_slice_ctrl.slice_control_mode = RENCODE_HEVC_SLICE_CONTROL_MODE_VARIABLE_CTBS;
+      uint32_t cumulative_ctbs = 0;
       enc->enc_pic.hevc_slice_info_var.num_slice_segments = pic->num_slice_descriptors;
       for (unsigned i = 0; i < pic->num_slice_descriptors; i++) {
          enc->enc_pic.hevc_slice_info_var.slice_segment_info[i].num_ctbs_per_segment =
             pic->slices_descriptors[i].num_ctu_in_slice;
          enc->enc_pic.hevc_slice_info_var.slice_segment_info[i].is_independent = 1;
+         cumulative_ctbs += pic->slices_descriptors[i].num_ctu_in_slice;
       }
+
+      /* If the app input does not fill the frame, override it by not using
+       * variable slice mode. */
+      if (cumulative_ctbs == num_ctbs_total)
+         enc->enc_pic.slice_ctrl.slice_control_mode = RENCODE_HEVC_SLICE_CONTROL_MODE_VARIABLE_CTBS;
    }
 }
 
@@ -1246,8 +1273,7 @@ static int setup_cdf(struct radeon_encoder *enc)
 {
    unsigned char *p_cdf = NULL;
 
-   enc->cdf = si_resource(pipe_buffer_create(enc->screen, 0, PIPE_USAGE_DEFAULT,
-                                             VCN_ENC_AV1_DEFAULT_CDF_SIZE));
+   enc->cdf = si_vid_create_buffer(enc->screen, PIPE_USAGE_DEFAULT, 0, VCN_ENC_AV1_DEFAULT_CDF_SIZE);
    if (!enc->cdf) {
       RADEON_ENC_ERR("Can't create CDF buffer.\n");
       goto error;
@@ -1614,7 +1640,8 @@ static void radeon_enc_begin_frame(struct pipe_video_codec *encoder,
 
    radeon_vcn_enc_get_param(enc, picture);
    if (enc->first_frame && setup_dpb(enc, dpb_slots)) {
-      enc->dpb = si_resource(pipe_buffer_create(enc->screen, 0, PIPE_USAGE_DEFAULT, enc->dpb_size));
+      enc->dpb = si_vid_create_buffer(enc->screen, PIPE_USAGE_DEFAULT,
+                                      PIPE_RESOURCE_FLAG_UNMAPPABLE, enc->dpb_size);
       if (!enc->dpb) {
          RADEON_ENC_ERR("Can't create DPB buffer.\n");
          goto error;
@@ -1622,7 +1649,8 @@ static void radeon_enc_begin_frame(struct pipe_video_codec *encoder,
    }
 
    if ((sscreen->info.vcn_ip_version >= VCN_5_0_0) && enc->metadata_size && !enc->meta) {
-      enc->meta = si_resource(pipe_buffer_create(enc->screen, 0, PIPE_USAGE_DEFAULT, enc->metadata_size));
+      enc->meta = si_vid_create_buffer(enc->screen, PIPE_USAGE_DEFAULT,
+                                       PIPE_RESOURCE_FLAG_UNMAPPABLE, enc->metadata_size);
       if (!enc->meta) {
          RADEON_ENC_ERR("Can't create meta buffer.\n");
          goto error;
@@ -1646,7 +1674,7 @@ static void radeon_enc_begin_frame(struct pipe_video_codec *encoder,
    if (enc->enc_pic.enc_qp_map.qp_map_type != RENCODE_QP_MAP_TYPE_NONE) {
       if (!enc->roi) {
          enc->roi_size = roi_buffer_size(enc);
-         enc->roi = si_resource(pipe_buffer_create(enc->screen, 0, PIPE_USAGE_STAGING, enc->roi_size));
+         enc->roi = si_vid_create_buffer(enc->screen, PIPE_USAGE_STAGING, 0, enc->roi_size);
          if (!enc->roi) {
             RADEON_ENC_ERR("Can't create ROI buffer.\n");
             goto error;
@@ -1674,7 +1702,8 @@ static void radeon_enc_begin_frame(struct pipe_video_codec *encoder,
    enc->need_feedback = false;
 
    if (!enc->si) {
-      enc->si = si_resource(pipe_buffer_create(enc->screen, 0, PIPE_USAGE_DEFAULT, 128 * 1024));
+      enc->si = si_vid_create_buffer(enc->screen, PIPE_USAGE_DEFAULT,
+                                     PIPE_RESOURCE_FLAG_UNMAPPABLE, 128 * 1024);
       if (!enc->si) {
          RADEON_ENC_ERR("Can't create session buffer.\n");
          goto error;
@@ -1838,7 +1867,7 @@ static void radeon_enc_encode_bitstream(struct pipe_video_codec *encoder,
 
    *fb = enc->fb = CALLOC_STRUCT(radeon_enc_fb_buffer);
 
-   enc->fb->res = si_resource(pipe_buffer_create(enc->screen, 0, PIPE_USAGE_STAGING, 4096));
+   enc->fb->res = si_vid_create_buffer(enc->screen, PIPE_USAGE_STAGING, 0, 4096);
    if (!enc->fb->res) {
       RADEON_ENC_ERR("Can't create feedback buffer.\n");
       return;
@@ -2105,7 +2134,8 @@ void radeon_enc_create_dpb_aux_buffers(struct radeon_encoder *enc, struct radeon
 
    uint32_t fcb_size = radeon_enc_frame_context_buffer_size(enc);
 
-   buf->fcb = si_resource(pipe_buffer_create(enc->screen, 0, PIPE_USAGE_DEFAULT, fcb_size));
+   buf->fcb = si_vid_create_buffer(enc->screen, PIPE_USAGE_DEFAULT,
+                                   PIPE_RESOURCE_FLAG_UNMAPPABLE, fcb_size);
    if (!buf->fcb) {
       RADEON_ENC_ERR("Can't create fcb buffer!\n");
       return;
@@ -2123,7 +2153,8 @@ void radeon_enc_create_dpb_aux_buffers(struct radeon_encoder *enc, struct radeon
       buf->pre_luma = (struct si_texture *)((struct vl_video_buffer *)buf->pre)->resources[0];
       buf->pre_chroma = (struct si_texture *)((struct vl_video_buffer *)buf->pre)->resources[1];
 
-      buf->pre_fcb = si_resource(pipe_buffer_create(enc->screen, 0, PIPE_USAGE_DEFAULT, fcb_size));
+      buf->pre_fcb = si_vid_create_buffer(enc->screen, PIPE_USAGE_DEFAULT,
+                                          PIPE_RESOURCE_FLAG_UNMAPPABLE, fcb_size);
       if (!buf->pre_fcb) {
          RADEON_ENC_ERR("Can't create preenc fcb buffer!\n");
          return;

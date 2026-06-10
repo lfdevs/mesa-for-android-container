@@ -16,6 +16,77 @@
 #include "util/u_math.h"
 #include "util/format/u_format.h"
 
+#define ZBOUND_TO_FLOAT(x) ((x) / (float)0x3FFF)
+
+static void
+decode_zbound(char *decoded_zbound, size_t maxlen, unsigned zbase, unsigned zdelta, bool zrange_precision)
+{
+   if (zdelta == 0) {
+      snprintf(decoded_zbound, maxlen, "0x%x (%f)", zbase, ZBOUND_TO_FLOAT(zbase));
+   } else {
+      /* TODO: decode the other bound of the Z range from zbase and zdelta if possible */
+      snprintf(decoded_zbound, maxlen, "(derive from zbase = 0x%x, zdelta = 0x%x)", zbase, zdelta);
+   }
+}
+
+void
+ac_print_htile_dword(uint32_t htile_code, bool has_stencil, bool vrs, bool zrange_precision, FILE *f)
+{
+   ac_htile_dword d = {.dword = htile_code};
+
+   /* TODO: fill the meaning of ZMASK and SMEM values if possible */
+   static const char *zmask_str[16] = {
+      [0] = "cleared",
+      [15] = "uncompressed",
+   };
+   static const char *smem_str[4] = {
+      [0] = "cleared",
+      [3] = "uncompressed",
+   };
+
+   if (has_stencil) {
+      printf("HTILE 0x%08x (Z/S, zrange_precision = %u):\n", htile_code, zrange_precision);
+      printf("  Z:\n");
+      printf("    zmask = 0x%x (%s)\n", d.zs.zmask,
+             zmask_str[d.zs.zmask] ? zmask_str[d.zs.zmask] : "unknown");
+
+      char decoded_zbound[64];
+      decode_zbound(decoded_zbound, ARRAY_SIZE(decoded_zbound), d.zs.zbase, d.zs.zdelta, zrange_precision);
+
+      if (zrange_precision) {
+         printf("    zmin = %s\n", decoded_zbound);
+         printf("    zmax = 0x%x (%f)\n", d.zs.zbase, ZBOUND_TO_FLOAT(d.zs.zbase));
+      } else {
+         printf("    zmin = 0x%x (%f)\n", d.zs.zbase, ZBOUND_TO_FLOAT(d.zs.zbase));
+         printf("    zmax = %s\n", decoded_zbound);
+      }
+
+      if (d.zs.zmask)
+         printf("    shader_sees (only TC-compatible) = non-cleared\n");
+      else if (d.zs.zbase & BITFIELD_BIT(13))
+         printf("    shader_sees (only TC-compatible) = cleared to 1.0\n");
+      else
+         printf("    shader_sees (only TC-compatible) = cleared to 0.0\n");
+
+      printf("  Stencil:\n");
+      printf("    smem = 0x%x (%s)\n", d.zs.smem, smem_str[d.zs.smem] ? smem_str[d.zs.smem] : "unknown");
+      printf("    sr0 = 0x%x\n", d.zs.sr0);
+      if (!vrs)
+         printf("    sr1 = 0x%x\n", d.zs.sr1);
+
+      if (vrs)
+         printf("  VRS: %ux%u\n", 1 << d.zs_vrs.vrs_x, 1 << d.zs_vrs.vrs_y);
+   } else {
+      assert(!vrs);
+
+      printf("HTILE 0x%08x (Z only):\n", htile_code);
+      printf("  zmask = 0x%x (%s)\n", d.z.zmask,
+             zmask_str[d.z.zmask] ? zmask_str[d.z.zmask] : "unknown");
+      printf("  minz = 0x%x (%f)\n", d.z.minz, ZBOUND_TO_FLOAT(d.z.minz));
+      printf("  maxz = 0x%x (%f)\n", d.z.maxz, ZBOUND_TO_FLOAT(d.z.maxz));
+   }
+}
+
 unsigned
 ac_map_swizzle(unsigned swizzle)
 {

@@ -1,31 +1,31 @@
-math sqrt(16)   g20<1>F         g18<8,8,1>F     nullUD          { align1 1H };
-math inv(8)     g95<1>F         g94<8,8,1>F     nullUD          { align1 1Q };
-math inv(16)    g10<1>F         g8<8,8,1>F      nullUD          { align1 1H };
-math intmod(8)  g3<1>UD         g1<0,1,0>UD     g1.2<0,1,0>UD   { align1 1Q };
-math intmod(8)  g4<1>UD         g1<0,1,0>UD     g1.2<0,1,0>UD   { align1 2Q };
-math sqrt(8)    g24<1>F         g23<8,8,1>F     nullUD          { align1 1Q };
-math rsq(8)     g5<1>F          g2<8,8,1>F      nullUD          { align1 1Q };
-math pow(8)     g11<1>F         g10<8,8,1>F     0x42fc6666F  /* 126.2F */ { align1 1Q };
-math pow(16)    g18<1>F         g16<8,8,1>F     0x42fc6666F  /* 126.2F */ { align1 1H };
-math log(8)     g7<1>F          g6<8,8,1>F      nullUD          { align1 1Q };
-math log(16)    g11<1>F         g9<8,8,1>F      nullUD          { align1 1H };
-math cos(8)     g3<1>F          g2<8,8,1>F      nullUD          { align1 1Q };
-math cos(16)    g4<1>F          g2<8,8,1>F      nullUD          { align1 1H };
-math intdiv(8)  g4<1>UD         g1<0,1,0>UD     g1.4<0,1,0>UD   { align1 1Q };
-math intdiv(8)  g5<1>UD         g1<0,1,0>UD     g1.4<0,1,0>UD   { align1 2Q };
-math intdiv(8)  g24<1>D         g4<0,1,0>D      g2.2<0,1,0>D    { align1 1Q };
-math sin(8)     g10<1>F         g9<8,8,1>F      nullUD          { align1 1Q };
-math rsq(16)    g68<1>F         g66<8,8,1>F     nullUD          { align1 1H };
-math exp(8)     g124<1>F        g10<8,8,1>F     nullUD          { align1 1Q };
-math exp(16)    g120<1>F        g7<8,8,1>F      nullUD          { align1 1H };
-math intdiv(8)  g5<1>D          g2<0,1,0>D      g2.4<0,1,0>D    { align1 2Q };
-math sin(16)    g3<1>F          g2<0,1,0>F      nullUD          { align1 1H };
-math.sat pow(8) g3<1>F          g2<0,1,0>F      g2.4<0,1,0>F    { align1 1Q };
-math.sat pow(16) g3<1>F         g2<0,1,0>F      g2.4<0,1,0>F    { align1 1H };
-math.sat sqrt(8) g3<1>F         g2<0,1,0>F      nullUD          { align1 1Q };
-math.sat sqrt(16) g3<1>F        g2<0,1,0>F      nullUD          { align1 1H };
-math.sat exp(8) g3<1>F          g2<0,1,0>F      nullUD          { align1 1Q };
-math.sat exp(16) g3<1>F         g2<0,1,0>F      nullUD          { align1 1H };
-math.sat rsq(8) g127<1>F        (abs)g7<8,8,1>F nullUD          { align1 1Q };
-math.sat inv(8) g124<1>F        g2<0,1,0>F      nullUD          { align1 1Q };
-math.sat log(8) g127<1>F        g7<8,8,1>F      nullUD          { align1 1Q };
+        math.sqt (16)             r20:f         r18<8;8,1>:f      null
+        math.inv (8)              r95:f         r94<8;8,1>:f      null
+        math.inv (16)             r10:f         r8<8;8,1>:f       null
+        math.intdiv_r (8)         r3            r1<0>             r1.2<0>
+        math.intdiv_r (8|M8)      r4            r1<0>             r1.2<0>
+        math.sqt (8)              r24:f         r23<8;8,1>:f      null
+        math.rsq (8)              r5:f          r2<8;8,1>:f       null
+        math.pow (8)              r11:f         r10<8;8,1>:f      0x42fc6666:f
+        math.pow (16)             r18:f         r16<8;8,1>:f      0x42fc6666:f
+        math.log (8)              r7:f          r6<8;8,1>:f       null
+        math.log (16)             r11:f         r9<8;8,1>:f       null
+        math.cos (8)              r3:f          r2<8;8,1>:f       null
+        math.cos (16)             r4:f          r2<8;8,1>:f       null
+        math.intdiv_q (8)         r4            r1<0>             r1.4<0>
+        math.intdiv_q (8|M8)      r5            r1<0>             r1.4<0>
+        math.intdiv_q (8)         r24:d         r4<0>:d           r2.2<0>:d
+        math.sin (8)              r10:f         r9<8;8,1>:f       null
+        math.rsq (16)             r68:f         r66<8;8,1>:f      null
+        math.exp (8)              r124:f        r10<8;8,1>:f      null
+        math.exp (16)             r120:f        r7<8;8,1>:f       null
+        math.intdiv_q (8|M8)      r5:d          r2<0>:d           r2.4<0>:d
+        math.sin (16)             r3:f          r2<0>:f           null
+        math.pow.sat (8)          r3:f          r2<0>:f           r2.4<0>:f
+        math.pow.sat (16)         r3:f          r2<0>:f           r2.4<0>:f
+        math.sqt.sat (8)          r3:f          r2<0>:f           null
+        math.sqt.sat (16)         r3:f          r2<0>:f           null
+        math.exp.sat (8)          r3:f          r2<0>:f           null
+        math.exp.sat (16)         r3:f          r2<0>:f           null
+        math.rsq.sat (8)          r127:f        (abs)r7<8;8,1>:f     null
+        math.inv.sat (8)          r124:f        r2<0>:f           null
+        math.log.sat (8)          r127:f        r7<8;8,1>:f       null

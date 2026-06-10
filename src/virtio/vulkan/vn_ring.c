@@ -418,22 +418,18 @@ vn_ring_get_id(struct vn_ring *ring)
 static struct vn_ring_submit *
 vn_ring_get_submit(struct vn_ring *ring, uint32_t shmem_count)
 {
-   const uint32_t min_shmem_count = 2;
-   struct vn_ring_submit *submit;
-
-   /* TODO this could be simplified if we could omit shmem_count */
-   if (shmem_count <= min_shmem_count &&
-       !list_is_empty(&ring->free_submits)) {
-      submit =
-         list_first_entry(&ring->free_submits, struct vn_ring_submit, head);
-      list_del(&submit->head);
-   } else {
-      const size_t submit_size = offsetof(
-         struct vn_ring_submit, shmems[MAX2(shmem_count, min_shmem_count)]);
-      submit = malloc(submit_size);
+   list_for_each_entry_safe(struct vn_ring_submit, submit,
+                            &ring->free_submits, head) {
+      if (submit->shmem_count >= shmem_count) {
+         list_del(&submit->head);
+         return submit;
+      }
    }
 
-   return submit;
+   const uint32_t min_shmem_count = 2;
+   const size_t submit_size = offsetof(
+      struct vn_ring_submit, shmems[MAX2(shmem_count, min_shmem_count)]);
+   return malloc(submit_size);
 }
 
 static bool

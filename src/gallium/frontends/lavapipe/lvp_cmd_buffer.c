@@ -23,6 +23,7 @@
 
 #include "lvp_private.h"
 #include "pipe/p_context.h"
+#include "vk_render_pass.h"
 #include "vk_util.h"
 
 #include "vk_common_entrypoints.h"
@@ -80,6 +81,12 @@ VKAPI_ATTR VkResult VKAPI_CALL lvp_BeginCommandBuffer(
    VK_FROM_HANDLE(lvp_cmd_buffer, cmd_buffer, commandBuffer);
 
    vk_command_buffer_begin(&cmd_buffer->vk, pBeginInfo);
+   if (cmd_buffer->vk.level == VK_COMMAND_BUFFER_LEVEL_SECONDARY) {
+      const VkCommandBufferInheritanceRenderingInfo *rendering_info =
+         vk_get_command_buffer_inheritance_rendering_info(VK_COMMAND_BUFFER_LEVEL_SECONDARY, pBeginInfo);
+      if (rendering_info)
+         cmd_buffer->rendering_info = *rendering_info;
+   }
 
    return VK_SUCCESS;
 }

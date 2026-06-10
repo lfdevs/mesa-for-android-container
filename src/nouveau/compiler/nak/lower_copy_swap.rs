@@ -292,7 +292,7 @@ impl LowerCopySwap {
                     self.lower_swap(&mut b, *swap);
                     b.into_mapped_instrs()
                 }
-                _ => MappedInstrs::One(instr),
+                _ => [instr].into(),
             }
         });
     }

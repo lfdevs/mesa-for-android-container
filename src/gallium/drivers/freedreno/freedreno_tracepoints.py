@@ -102,6 +102,10 @@ begin_end_tp('render_pass',
           TracepointArg(type='uint16_t',         var='binh',          c_format='%u')],
 )
 
+begin_end_tp('nondraw',
+    args=[TracepointArg(type='uint32_t',         var='submit_id',     c_format='%u')],
+)
+
 begin_end_tp('binning_ib')
 begin_end_tp('vsc_overflow_test')
 begin_end_tp('prologue')

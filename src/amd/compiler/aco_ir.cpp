@@ -253,6 +253,9 @@ is_atomic_or_control_instr(Program* program, const Instruction* instr, memory_sy
       if (is_pops_end_export(program, instr) || is_ordered_ps_done_sendmsg(instr) ||
           instr->opcode == aco_opcode::p_pops_gfx9_ordered_section_done)
          return cls & ~storage_shared;
+
+      if (instr->opcode == aco_opcode::s_sethalt)
+         return cls & ~storage_shared;
    }
    return (instr->isBarrier() && instr->barrier().exec_scope > scope_invocation) ? cls : 0;
 }

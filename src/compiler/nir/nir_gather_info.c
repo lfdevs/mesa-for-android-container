@@ -906,6 +906,10 @@ gather_intrinsic_info(nir_intrinsic_instr *instr, nir_shader *shader)
       break;
    }
 
+   case nir_intrinsic_abort:
+      shader->info.uses_abort = true;
+      break;
+
    default:
       shader->info.uses_bindless |= intrinsic_is_bindless(instr);
       if (nir_intrinsic_writes_external_memory(instr))

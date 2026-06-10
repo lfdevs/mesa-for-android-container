@@ -167,7 +167,12 @@ if with_tools.contains('etnaviv')
     gnu_symbol_visibility : 'hidden',
     rust_abi : 'c',
     rust_args : rust_global_args,
-    dependencies: [dep_indexmap, dep_roxmltree, dep_pest],
+    dependencies: [
+      dep_indexmap,
+      dep_roxmltree,
+      dep_pest,
+      idep_compiler_rs,
+    ],
     link_with: [_libetnaviv_isa_bindings_gen, _libetnaviv_isa_proc_rs],
   )
 
@@ -175,7 +180,11 @@ if with_tools.contains('etnaviv')
     'etnaviv-assembler',
     ['assembler.c'],
     gnu_symbol_visibility: 'hidden',
-    dependencies: [ idep_libetnaviv_decode, idep_etnaviv_enums_h ],
+    dependencies: [
+      idep_nir,
+      idep_libetnaviv_decode,
+      idep_etnaviv_enums_h
+    ],
     link_with: [libetnaviv_encode, libetnaviv_isa_rs],
   )
 else

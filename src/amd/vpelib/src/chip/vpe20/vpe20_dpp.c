@@ -330,6 +330,10 @@ void vpe20_dpp_program_cnv(
     case VPE_SURFACE_PIXEL_FORMAT_VIDEO_CrYCbA1010102: /* Y410 */
         pixel_format = 115;
         break;
+    case VPE_SURFACE_PIXEL_FORMAT_GRPH_RGBE:
+        pixel_format = 116;
+        alpha_en     = 0;
+        break;
     case VPE_SURFACE_PIXEL_FORMAT_GRPH_R8: // use crossbar
         pixel_format = 120;
         alpha_en     = 0;
@@ -343,6 +347,7 @@ void vpe20_dpp_program_cnv(
     }
 
     REG_SET(VPCNVC_SURFACE_PIXEL_FORMAT, 0, VPCNVC_SURFACE_PIXEL_FORMAT, pixel_format);
+    // RGBE default set VPCNVC_FORMAT_CROSSBAR_R/G/B to 0x0/0x1/0x2
     REG_SET_7(VPCNVC_FORMAT_CONTROL, REG_DEFAULT(VPCNVC_FORMAT_CONTROL), FORMAT_EXPANSION_MODE,
         hw_expansion_mode, FORMAT_CNV16, 0, FORMAT_CONTROL__ALPHA_EN, alpha_en, VPCNVC_BYPASS,
         dpp->vpe_priv->init.debug.vpcnvc_bypass, VPCNVC_BYPASS_MSB_ALIGN, 0, CLAMP_POSITIVE, 0,

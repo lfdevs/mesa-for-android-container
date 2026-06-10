@@ -235,3 +235,22 @@ v3dX(pack_texture_shader_state_from_buffer_view)(struct v3dv_device *device,
 #endif
    }
 }
+
+void
+v3dX(pack_null_texture_state)(struct v3dv_device *device, void *map)
+{
+   assert(device->null_bo);
+   const uint32_t base_offset = device->null_bo->offset;
+
+   v3dvx_pack(map, TEXTURE_SHADER_STATE, tex) {
+      tex.image_width = 1;
+      tex.image_height = 1;
+      tex.image_depth = 1;
+      tex.texture_base_pointer = v3dv_cl_address(NULL, base_offset);
+#if V3D_VERSION >= 71
+      /* See comment in XML field definition for rationale of the shifts */
+      tex.texture_base_pointer_cb = base_offset >> 6;
+      tex.texture_base_pointer_cr = base_offset >> 6;
+#endif
+   }
+}

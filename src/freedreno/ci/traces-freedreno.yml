@@ -248,13 +248,13 @@ traces:
 
   gputest/plot3d-v2.trace:
     freedreno-a306:
-      checksum: f6ecd9b8afc692b0cdb459b9b30db8d4
+      checksum: 4e9d4eae83618e47b655de9fd8536e84
     freedreno-a530:
-      checksum: 4faafe5fab0d8ec6d7b549c94f663c92
+      checksum: 512da39a517434eaaf9d8daaf7b736ea
     freedreno-a618:
-      checksum: 0a6a16c394a413f02ec2ebcc3251e366
+      checksum: 361926f700dac2db7e95a983f1d63e62
     zink-a618:
-      checksum: 0a6a16c394a413f02ec2ebcc3251e366
+      checksum: 361926f700dac2db7e95a983f1d63e62
 
   gputest/tessmark-v2.trace:
     freedreno-a306:

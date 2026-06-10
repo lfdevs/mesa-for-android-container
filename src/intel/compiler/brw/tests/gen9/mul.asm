@@ -1,31 +1,31 @@
-mul(8)          g22<1>F         g4<8,8,1>F      g2<0,1,0>F      { align1 1Q };
-mul(16)         g26<1>F         g2<0,1,0>F      g2<0,1,0>F      { align1 1H };
-mul(8)          g36<1>DF        g8<0,1,0>DF     g8<0,1,0>DF     { align1 1Q };
-mul(8)          g9<1>UD         g86<8,8,1>UD    0x00000004UD    { align1 1Q };
-mul(8)          acc0<1>UD       g17<8,8,1>UD    0xaaabUW        { align1 1Q };
-mul(8)          acc0<1>D        g17<8,8,1>D     0x5556UW        { align1 1Q };
-mul(8)          g21<1>D         g20<8,8,1>D     3D              { align1 1Q };
-mul(8)          acc0<1>UD       g39<8,8,1>UD    0xaaabUW        { align1 2Q };
-mul(16)         g45<1>D         g43<8,8,1>D     3D              { align1 1H };
-mul(8)          acc0<1>D        g39<8,8,1>D     0x5556UW        { align1 2Q };
-mul.z.f0.0(8)   g10<1>F         g5<0,1,0>F      g9<8,8,1>F      { align1 1Q };
-mul(8)          g39<1>DF        g3.3<0,1,0>DF   g3.3<0,1,0>DF   { align1 2Q };
-mul.z.f0.0(16)  g6<1>F          g2<0,1,0>F      g4<8,8,1>F      { align1 1H };
-mul.sat(8)      g17<1>F         g4<8,8,1>F      g16<8,8,1>F     { align1 1Q };
-mul.sat(16)     g9<1>F          g3<8,8,1>F      g7<8,8,1>F      { align1 1H };
-mul.l.f0.0(8)   nullUD          g6<0,1,0>F      g5.7<0,1,0>F    { align1 1Q };
-mul.sat(8)      g8<1>DF         g34<4,4,1>DF    g5<4,4,1>DF     { align1 1Q };
-mul(8)          g4<1>UQ         g8<4,4,1>UD     g12<4,4,1>UD    { align1 1Q };
-mul(8)          g20<1>UQ        g5<4,4,1>UD     g13<4,4,1>UD    { align1 2Q };
-mul(8)          g5<1>Q          g9<4,4,1>D      g13<4,4,1>D     { align1 1Q };
-mul.sat(8)      g10<1>DF        g10<4,4,1>DF    g16<4,4,1>DF    { align1 2Q };
-mul.l.f0.0(8)   g20<1>F         g2<8,8,1>F      0x42700000F  /* 60F */ { align1 1Q };
-mul.l.f0.0(16)  g32<1>F         g2<8,8,1>F      0x42700000F  /* 60F */ { align1 1H };
-mul(1)          g6<1>UD         g12<0,1,0>UD    0x00000101UD    { align1 WE_all 1N };
-mul(8)          g21<1>Q         g6<4,4,1>D      g14<4,4,1>D     { align1 2Q };
-mul.l.f0.0(16)  nullUD          g2.2<0,1,0>F    g2.1<0,1,0>F    { align1 1H };
-mul(8)          g6<1>UW         g6<8,8,1>UW     0x0808UW        { align1 1Q };
-mul(16)         g15<1>UW        g14<16,16,1>UW  0x0808UW        { align1 1H };
-mul.nz.f0.0(8)  g6<1>F          g12<8,8,1>F     0x3f808000F  /* 1.00391F */ { align1 1Q };
-mul.nz.f0.0(16) g9<1>F          g7<8,8,1>F      0x3f808000F  /* 1.00391F */ { align1 1H };
-mul(1)          g4<1>UD         g4<0,1,0>UD     0x00000101UD    { align1 WE_all 3N };
+        mul (8)                   r22:f         r4<8;8,1>:f       r2<0>:f
+        mul (16)                  r26:f         r2<0>:f           r2<0>:f
+        mul (8)                   r36:df        r8<0>:df          r8<0>:df
+        mul (8)                   r9            r86<8;8,1>        0x00000004
+        mul (8)                   acc0          r17<8;8,1>        43691:uw
+        mul (8)                   acc0:d        r17<8;8,1>:d      21846:uw
+        mul (8)                   r21:d         r20<8;8,1>:d      3:d
+        mul (8|M8)                acc0          r39<8;8,1>        43691:uw
+        mul (16)                  r45:d         r43<8;8,1>:d      3:d
+        mul (8|M8)                acc0:d        r39<8;8,1>:d      21846:uw
+        mul (8)        (eq)f0.0   r10:f         r5<0>:f           r9<8;8,1>:f
+        mul (8|M8)                r39:df        r3.3<0>:df        r3.3<0>:df
+        mul (16)       (eq)f0.0   r6:f          r2<0>:f           r4<8;8,1>:f
+        mul.sat (8)               r17:f         r4<8;8,1>:f       r16<8;8,1>:f
+        mul.sat (16)              r9:f          r3<8;8,1>:f       r7<8;8,1>:f
+        mul (8)        (lt)f0.0   null          r6<0>:f           r5.7<0>:f
+        mul.sat (8)               r8:df         r34<4;4,1>:df     r5<4;4,1>:df
+        mul (8)                   r4:uq         r8<4;4,1>         r12<4;4,1>
+        mul (8|M8)                r20:uq        r5<4;4,1>         r13<4;4,1>
+        mul (8)                   r5:q          r9<4;4,1>:d       r13<4;4,1>:d
+        mul.sat (8|M8)            r10:df        r10<4;4,1>:df     r16<4;4,1>:df
+        mul (8)        (lt)f0.0   r20:f         r2<8;8,1>:f       0x42700000:f
+        mul (16)       (lt)f0.0   r32:f         r2<8;8,1>:f       0x42700000:f
+(W)     mul (1)                   r6            r12<0>            0x00000101
+        mul (8|M8)                r21:q         r6<4;4,1>:d       r14<4;4,1>:d
+        mul (16)       (lt)f0.0   null          r2.2<0>:f         r2.1<0>:f
+        mul (8)                   r6:uw         r6<8;8,1>:uw      2056:uw
+        mul (16)                  r15:uw        r14<16;16,1>:uw   2056:uw
+        mul (8)        (ne)f0.0   r6:f          r12<8;8,1>:f      0x3f808000:f
+        mul (16)       (ne)f0.0   r9:f          r7<8;8,1>:f       0x3f808000:f
+(W)     mul (1|M8)                r4            r4<0>             0x00000101

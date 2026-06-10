@@ -2443,6 +2443,10 @@ void genX(CmdEndTransformFeedback2EXT)(
                              "end transform feedback");
    genX(cmd_buffer_apply_pipe_flushes)(cmd_buffer);
 
+   /* No address provided, nothing to write. */
+   if (!pCounterInfos)
+      goto end_xfb;
+
    for (uint32_t cb_idx = 0; cb_idx < counterRangeCount; cb_idx++) {
       unsigned idx = firstCounterRange + cb_idx;
 
@@ -2460,6 +2464,7 @@ void genX(CmdEndTransformFeedback2EXT)(
       }
    }
 
+end_xfb:
    trace_intel_end_xfb(&cmd_buffer->trace);
 
    cmd_buffer->state.xfb_enabled = false;

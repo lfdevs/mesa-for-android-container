@@ -144,14 +144,7 @@ isl_aux_get_initial_state(const struct intel_device_info *devinfo,
    case ISL_AUX_USAGE_HIZ:
    case ISL_AUX_USAGE_HIZ_CCS:
    case ISL_AUX_USAGE_HIZ_CCS_WT:
-      if (devinfo->ver >= 20) {
-         /* According to HSD 22011236099, there are no illegal values for HiZ.
-          * As neither the main and aux surfaces contain anything of interest,
-          * treat them as being in sync. This state can avoid the need to
-          * ambiguate in some cases.
-          */
-         return ISL_AUX_STATE_RESOLVED;
-      } else if (zeroed && devinfo->ver <= 11) {
+      if (zeroed && devinfo->ver <= 11) {
          /* On ICL and prior, fast-clearing a HiZ block fills it with zeroes.
           * On gfx12+, it is filled with a non-zero value.
           */

@@ -420,8 +420,8 @@ static void r300_init_shader_caps(struct r300_screen* r300screen)
        * can't do ints.
        */
       caps->integers = false;
-      /* Even if gallivm NIR can do this, we call nir_to_tgsi manually and
-       * TGSI can't.
+      /* Even if gallivm NIR can do this, right now it calls nir_to_tgsi
+       * manually and TGSI can't.
        */
       caps->int16 = false;
       caps->fp16 = false;

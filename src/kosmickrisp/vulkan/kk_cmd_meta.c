@@ -80,6 +80,7 @@ struct kk_meta_save {
          } gfx;
       };
    } pipeline;
+   struct kk_conditional_rendering_state cond_render;
    struct kk_descriptor_set *desc0;
    struct kk_push_descriptor_set *push_desc0;
    mtl_buffer *vb0_handle;
@@ -118,6 +119,9 @@ kk_meta_begin(struct kk_cmd_buffer *cmd, struct kk_meta_save *save,
       save->shaders[MESA_SHADER_COMPUTE] =
          cmd->state.shaders[MESA_SHADER_COMPUTE];
    }
+
+   save->cond_render = cmd->state.cond_render;
+   cmd->state.cond_render.enabled = false;
 
    save->vb0_handle = cmd->state.gfx.vb.handles[0];
    save->vb0 = cmd->state.gfx.vb.addr_range[0];
@@ -182,6 +186,8 @@ kk_meta_end(struct kk_cmd_buffer *cmd, struct kk_meta_save *save,
    } else {
       kk_cmd_bind_compute_shader(cmd, save->shaders[MESA_SHADER_COMPUTE]);
    }
+
+   cmd->state.cond_render = save->cond_render;
 
    memcpy(desc->root.push, save->push, sizeof(save->push));
 }
@@ -278,8 +284,12 @@ kk_CmdClearAttachments(VkCommandBuffer commandBuffer, uint32_t attachmentCount,
    uint32_t layer_ids[KK_MAX_MULTIVIEW_VIEW_COUNT] = {};
    mtl_set_vertex_amplification_count(encoder->main.encoder, layer_ids, 1u);
 
+   /* Preserve conditional rendering state for clearing attachments */
+   struct kk_conditional_rendering_state cond_render = cmd->state.cond_render;
+
    struct kk_meta_save save;
    kk_meta_begin(cmd, &save, VK_PIPELINE_BIND_POINT_GRAPHICS);
+   cmd->state.cond_render = cond_render;
    vk_meta_clear_attachments(&cmd->vk, &dev->meta, &render_info,
                              attachmentCount, pAttachments, rectCount, pRects);
    kk_meta_end(cmd, &save, VK_PIPELINE_BIND_POINT_GRAPHICS);

@@ -744,10 +744,10 @@ brw_opt_send_gather_to_send(brw_shader &s)
        *
        * TODO: Pass LSC address length or infer it so valid splits can work.
        */
-      if (payload2_len && (send->sfid == BRW_SFID_UGM ||
-                           send->sfid == BRW_SFID_TGM ||
-                           send->sfid == BRW_SFID_SLM ||
-                           send->sfid == BRW_SFID_URB)) {
+      if (payload2_len && (send->sfid == GEN_SFID_UGM ||
+                           send->sfid == GEN_SFID_TGM ||
+                           send->sfid == GEN_SFID_SLM ||
+                           send->sfid == GEN_SFID_URB)) {
          enum lsc_opcode lsc_op = lsc_msg_desc_opcode(devinfo, send->desc);
          if (lsc_op_num_data_values(lsc_op) > 0)
             continue;

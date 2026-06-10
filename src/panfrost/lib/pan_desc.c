@@ -385,6 +385,8 @@ GENX(pan_emit_afbc_zs_attachment)(const struct pan_attachment_info *att,
 
    pan_cast_and_pack(payload, AFBC_ZS_TARGET, cfg) {
       cfg.write_format = translate_zs_format(zs->format);
+      /* With AFBC, D24X8 should already have been lowered to D24. */
+      assert(PAN_ARCH < 9 || cfg.write_format != MALI_ZS_FORMAT_D24X8);
       cfg.block_format = get_afbc_block_format(pref.image->props.modifier);
 #if PAN_ARCH >= 7
       cfg.reverse_issue_order =

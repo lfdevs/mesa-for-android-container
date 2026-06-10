@@ -289,6 +289,14 @@ vertex_element_comp_control(enum isl_format format, unsigned comp)
    }
 }
 
+static inline uint32_t
+vertex_element_slot(uint32_t elements, uint32_t elements_double, uint32_t a)
+{
+   return __builtin_popcount(elements & ((1 << a) - 1)) -
+          DIV_ROUND_UP(__builtin_popcount(elements_double &
+                                         ((1 << a) - 1)), 2);
+}
+
 static void
 emit_ves_vf_instancing(struct anv_batch *batch,
                        uint32_t *vertex_element_dws,
@@ -323,19 +331,12 @@ emit_ves_vf_instancing(struct anv_batch *batch,
        *
        * TODO: Compact vertex elements so we never end up with holes.
        */
-      struct GENX(VERTEX_ELEMENT_STATE) element = {
-         .Valid = true,
-         .Component0Control = VFCOMP_STORE_0,
-         .Component1Control = VFCOMP_STORE_0,
-         .Component2Control = VFCOMP_STORE_0,
-         .Component3Control = VFCOMP_STORE_0,
-      };
-      GENX(VERTEX_ELEMENT_STATE_pack)(NULL,
-                                      &vertex_element_dws[i * 2],
-                                      &element);
+      memcpy(&vertex_element_dws[i * 2],
+             device->physical->gfx_default.empty_vs_input,
+             sizeof(device->physical->gfx_default.empty_vs_input));
    }
 
-   u_foreach_bit(a, vi->attributes_valid) {
+   u_foreach_bit(a, vi->attributes_valid & elements) {
       enum isl_format format = anv_get_vbo_format(
          device->physical, vi->attributes[a].format);
       assume(format < ISL_NUM_FORMATS);
@@ -343,13 +344,7 @@ emit_ves_vf_instancing(struct anv_batch *batch,
       uint32_t binding = vi->attributes[a].binding;
       assert(binding < get_max_vbs(device->info));
 
-      if ((elements & (1 << a)) == 0)
-         continue; /* Binding unused */
-
-      uint32_t slot =
-         __builtin_popcount(elements & ((1 << a) - 1)) -
-         DIV_ROUND_UP(__builtin_popcount(elements_double &
-                                        ((1 << a) -1)), 2);
+      uint32_t slot = vertex_element_slot(elements, elements_double, a);
 
       struct GENX(VERTEX_ELEMENT_STATE) element = {
          .VertexBufferIndex = vi->attributes[a].binding,
@@ -365,11 +360,14 @@ emit_ves_vf_instancing(struct anv_batch *batch,
       GENX(VERTEX_ELEMENT_STATE_pack)(NULL,
                                       &vertex_element_dws[slot * 2],
                                       &element);
+   }
 
-      /* On Broadwell and later, we have a separate VF_INSTANCING packet
-       * that controls instancing.  On Haswell and prior, that's part of
-       * VERTEX_BUFFER_STATE which we emit later.
-       */
+   u_foreach_bit(a, vi->attributes_valid & elements) {
+      uint32_t binding = vi->attributes[a].binding;
+      assert(binding < get_max_vbs(device->info));
+
+      uint32_t slot = vertex_element_slot(elements, elements_double, a);
+
       anv_batch_emit(batch, GENX(3DSTATE_VF_INSTANCING), vfi) {
          bool per_instance = vi->bindings[binding].input_rate ==
             VK_VERTEX_INPUT_RATE_INSTANCE;
@@ -401,12 +399,13 @@ genX(batch_emit_vertex_input)(struct anv_batch *batch,
       memcpy(p + 1, device->physical->gfx_default.empty_vs_input,
              sizeof(device->physical->gfx_default.empty_vs_input));
    } else {
-      /* Use dyn->vi to emit the dynamic VERTEX_ELEMENT_STATE input. */
-      emit_ves_vf_instancing(batch, p + 1, device, shader, vi);
-      /* Then append the VERTEX_ELEMENT_STATE for the draw parameters */
+      /* Fill the system values VERTEX_ELEMENT_STATE entries for the draw parameters. */
       memcpy(p + 1 + 2 * shader->vs.input_elements,
              shader->vs.sgvs_elements,
              4 * 2 * shader->vs.sgvs_count);
+
+      /* Use dyn->vi to emit the dynamic VERTEX_ELEMENT_STATE input. */
+      emit_ves_vf_instancing(batch, p + 1, device, shader, vi);
    }
 }
 
@@ -735,15 +734,7 @@ emit_ds_shader(struct anv_batch *batch,
       ds.DispatchGRFStartRegisterForURBData =
          tes_prog_data->base.base.dispatch_grf_start_reg;
 
-#if GFX_VER < 11
-      ds.DispatchMode =
-         tes_prog_data->base.dispatch_mode == DISPATCH_MODE_SIMD8 ?
-         DISPATCH_MODE_SIMD8_SINGLE_PATCH :
-         DISPATCH_MODE_SIMD4X2;
-#else
-      assert(tes_prog_data->base.dispatch_mode == INTEL_DISPATCH_MODE_SIMD8);
       ds.DispatchMode = DISPATCH_MODE_SIMD8_SINGLE_PATCH;
-#endif
 
       ds.UserClipDistanceClipTestEnableBitmask =
          tes_prog_data->base.clip_distance_mask;

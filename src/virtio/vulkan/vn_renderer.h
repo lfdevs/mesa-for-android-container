@@ -148,6 +148,7 @@ struct vn_renderer_shmem_ops {
 struct vn_renderer_bo_ops {
    VkResult (*create_from_device_memory)(
       struct vn_renderer *renderer,
+      struct vn_renderer_submit_batch *batch,
       VkDeviceSize size,
       vn_object_id mem_id,
       VkMemoryPropertyFlags flags,
@@ -315,6 +316,7 @@ vn_renderer_shmem_unref(struct vn_renderer *renderer,
 static inline VkResult
 vn_renderer_bo_create_from_device_memory(
    struct vn_renderer *renderer,
+   struct vn_renderer_submit_batch *batch,
    VkDeviceSize size,
    vn_object_id mem_id,
    VkMemoryPropertyFlags flags,
@@ -323,7 +325,7 @@ vn_renderer_bo_create_from_device_memory(
 {
    struct vn_renderer_bo *bo;
    VkResult result = renderer->bo_ops.create_from_device_memory(
-      renderer, size, mem_id, flags, external_handles, &bo);
+      renderer, batch, size, mem_id, flags, external_handles, &bo);
    if (result != VK_SUCCESS)
       return result;
 

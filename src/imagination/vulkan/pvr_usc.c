@@ -1203,6 +1203,7 @@ pco_shader *pvr_uscgen_loadop(pco_ctx *ctx, struct pvr_load_op *load_op)
 
       u_foreach_bit (rt_idx, load_op->clears_loads_state.rt_load_mask) {
          nir_def *tex_state = nir_load_preamble(&b, 4, 32, .base = shared_regs);
+         nir_def *tex_meta = nir_load_preamble(&b, PCO_IMAGE_META_COUNT, 32, .base = (shared_regs + ROGUE_NUM_TEXSTATE_DWORDS));
          shared_regs += sizeof(struct pvr_image_descriptor) / sizeof(uint32_t);
 
          nir_def *smp_state = nir_load_preamble(&b, 4, 32, .base = shared_regs);
@@ -1229,6 +1230,13 @@ pco_shader *pvr_uscgen_loadop(pco_ctx *ctx, struct pvr_load_op *load_op)
 
             .ms_index = msaa ? nir_load_sample_id(&b) : NULL,
          };
+
+         if (load_op->clears_loads_state.rt_2d_view_3d_mask & BITFIELD_BIT(rt_idx)) {
+            params.sampler_dim = GLSL_SAMPLER_DIM_3D;
+            params.coords = nir_pad_vector(&b, params.coords, 3);
+            nir_def *z_slice = nir_channel(&b, tex_meta, PCO_IMAGE_META_Z_SLICE);
+            params.coords = nir_vector_insert_imm(&b, params.coords, z_slice, 2);
+         }
 
          nir_intrinsic_instr *smp = pco_emit_nir_smp(&b, &params);
          nir_def *smp_data =

@@ -28,6 +28,7 @@
 #include "drm-uapi/v3d_drm.h"
 #include "drm-shim/drm_shim.h"
 #include "util/log.h"
+#include "util/u_debug.h"
 
 bool drm_shim_driver_prefers_first_render_node = true;
 
@@ -35,6 +36,40 @@ struct v3d_bo {
         struct shim_bo base;
         uint32_t offset;
 };
+
+struct v3d_shim_gpu {
+        const char *name;
+        const uint32_t *reg_map;
+};
+
+static const struct v3d_shim_gpu gpus[] = {
+        {
+                .name = "71",
+                .reg_map = (const uint32_t[]) {
+                        [DRM_V3D_PARAM_V3D_UIFCFG]       = 0x00000045,
+                        [DRM_V3D_PARAM_V3D_HUB_IDENT1]   = 0x00081117,
+                        [DRM_V3D_PARAM_V3D_HUB_IDENT2]   = 0x00001900,
+                        [DRM_V3D_PARAM_V3D_HUB_IDENT3]   = 0x00000700,
+                        [DRM_V3D_PARAM_V3D_CORE0_IDENT0] = 0x07443356,
+                        [DRM_V3D_PARAM_V3D_CORE0_IDENT1] = 0x81001441,
+                        [DRM_V3D_PARAM_V3D_CORE0_IDENT2] = 0xc0078101,
+                }
+        },
+        {
+                .name = "42",
+                .reg_map = (const uint32_t[]) {
+                        [DRM_V3D_PARAM_V3D_UIFCFG]       = 0x00000045,
+                        [DRM_V3D_PARAM_V3D_HUB_IDENT1]   = 0x000e1124,
+                        [DRM_V3D_PARAM_V3D_HUB_IDENT2]   = 0x00000100,
+                        [DRM_V3D_PARAM_V3D_HUB_IDENT3]   = 0x00000e00,
+                        [DRM_V3D_PARAM_V3D_CORE0_IDENT0] = 0x04443356,
+                        [DRM_V3D_PARAM_V3D_CORE0_IDENT1] = 0x81001422,
+                        [DRM_V3D_PARAM_V3D_CORE0_IDENT2] = 0x40078121,
+                }
+        },
+};
+
+static const struct v3d_shim_gpu *shim_gpu = &gpus[0];
 
 static struct v3d_bo *
 v3d_bo(struct shim_bo *bo)
@@ -109,15 +144,6 @@ static int
 v3d_ioctl_get_param(int fd, unsigned long request, void *arg)
 {
         struct drm_v3d_get_param *gp = arg;
-        static const uint32_t v3d42_reg_map[] = {
-                [DRM_V3D_PARAM_V3D_UIFCFG] = 0x00000045,
-                [DRM_V3D_PARAM_V3D_HUB_IDENT1] = 0x000e1124,
-                [DRM_V3D_PARAM_V3D_HUB_IDENT2] = 0x00000100,
-                [DRM_V3D_PARAM_V3D_HUB_IDENT3] = 0x00000e00,
-                [DRM_V3D_PARAM_V3D_CORE0_IDENT0] = 0x04443356,
-                [DRM_V3D_PARAM_V3D_CORE0_IDENT1] = 0x81001422,
-                [DRM_V3D_PARAM_V3D_CORE0_IDENT2] = 0x40078121,
-        };
 
         switch (gp->param) {
         case DRM_V3D_PARAM_SUPPORTS_TFU:
@@ -135,12 +161,24 @@ v3d_ioctl_get_param(int fd, unsigned long request, void *arg)
         case DRM_V3D_PARAM_SUPPORTS_MULTISYNC_EXT:
                 gp->value = 1;
                 return 0;
+	case DRM_V3D_PARAM_SUPPORTS_CPU_QUEUE:
+		gp->value = 1;
+                return 0;
+	case DRM_V3D_PARAM_MAX_PERF_COUNTERS:
+		gp->value = 0;
+                return 0;
+        case DRM_V3D_PARAM_GLOBAL_RESET_COUNTER:
+                gp->value = 0;
+                return 0;
+        case DRM_V3D_PARAM_CONTEXT_RESET_COUNTER:
+                gp->value = 0;
+                return 0;
         default:
                 break;
         }
 
-        if (gp->param < ARRAY_SIZE(v3d42_reg_map) && v3d42_reg_map[gp->param]) {
-                gp->value = v3d42_reg_map[gp->param];
+        if (gp->param <= DRM_V3D_PARAM_V3D_CORE0_IDENT2) {
+                gp->value = shim_gpu->reg_map[gp->param];
                 return 0;
         }
 
@@ -151,6 +189,13 @@ v3d_ioctl_get_param(int fd, unsigned long request, void *arg)
 static ioctl_fn_t driver_ioctls[] = {
         [DRM_V3D_SUBMIT_CL] = v3d_ioctl_noop,
         [DRM_V3D_SUBMIT_TFU] = v3d_ioctl_noop,
+        [DRM_V3D_SUBMIT_CSD] = v3d_ioctl_noop,
+        [DRM_V3D_SUBMIT_CPU] = v3d_ioctl_noop,
+        [DRM_V3D_PERFMON_CREATE] = v3d_ioctl_noop,
+        [DRM_V3D_PERFMON_DESTROY] = v3d_ioctl_noop,
+        [DRM_V3D_PERFMON_GET_VALUES] = v3d_ioctl_noop,
+        [DRM_V3D_PERFMON_GET_COUNTER] = v3d_ioctl_noop,
+        [DRM_V3D_PERFMON_SET_GLOBAL] = v3d_ioctl_noop,
         [DRM_V3D_WAIT_BO] = v3d_ioctl_noop,
         [DRM_V3D_CREATE_BO] = v3d_ioctl_create_bo,
         [DRM_V3D_GET_PARAM] = v3d_ioctl_get_param,
@@ -171,4 +216,14 @@ drm_shim_driver_init(void)
                                "OF_COMPATIBLE_0=brcm,2711-v3d\n",
                                "/sys/dev/char/%d:%d/device/uevent",
                                DRM_MAJOR, render_node_minor);
+
+        /* Select the GPU to emulate */
+        const char *gpu = debug_get_option("V3D_GPU_ID", "71");
+
+        for (unsigned i = 0; i < ARRAY_SIZE(gpus); i++) {
+                if (strncasecmp(gpu, gpus[i].name, strlen(gpus[i].name)) == 0) {
+                        shim_gpu = &gpus[i];
+                        break;
+                }
+        }
 }

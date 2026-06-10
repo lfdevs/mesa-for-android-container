@@ -20,11 +20,3 @@ dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.vec4.rte.denorm_flush.dire
 dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.vec4.rte.denorm_flush.float_controls,Fail
 dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.vec4.rte.denorm_none.directed,Fail
 dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.vec4.rte.denorm_none.float_controls,Fail
-dEQP-VK.spirv_assembly.instruction.compute.opfma.fp64.scalar.rte.denorm_flush.directed,Fail
-dEQP-VK.spirv_assembly.instruction.compute.opfma.fp64.scalar.rte.denorm_flush.float_controls,Fail
-dEQP-VK.spirv_assembly.instruction.compute.opfma.fp64.vec2.rte.denorm_flush.directed,Fail
-dEQP-VK.spirv_assembly.instruction.compute.opfma.fp64.vec2.rte.denorm_flush.float_controls,Fail
-dEQP-VK.spirv_assembly.instruction.compute.opfma.fp64.vec3.rte.denorm_flush.directed,Fail
-dEQP-VK.spirv_assembly.instruction.compute.opfma.fp64.vec3.rte.denorm_flush.float_controls,Fail
-dEQP-VK.spirv_assembly.instruction.compute.opfma.fp64.vec4.rte.denorm_flush.directed,Fail
-dEQP-VK.spirv_assembly.instruction.compute.opfma.fp64.vec4.rte.denorm_flush.float_controls,Fail

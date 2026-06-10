@@ -11,6 +11,7 @@
 #include <stdlib.h>
 #include "drm-uapi/amdgpu_drm.h"
 
+#include "tools/radv_debug.h"
 #include "util/detect_os.h"
 #include "util/os_time.h"
 #include "util/u_memory.h"
@@ -20,7 +21,6 @@
 #include "radv_amdgpu_bo.h"
 #include "radv_amdgpu_cs.h"
 #include "radv_amdgpu_winsys.h"
-#include "radv_debug.h"
 #include "radv_radeon_winsys.h"
 #include "sid.h"
 #include "vk_drm_syncobj.h"
@@ -203,8 +203,8 @@ radv_amdgpu_cs_domain(const struct radeon_winsys *_ws)
 {
    const struct radv_amdgpu_winsys *ws = (const struct radv_amdgpu_winsys *)_ws;
 
-   bool enough_vram = ws->info.all_vram_visible ||
-                      p_atomic_read_relaxed(&ws->allocated_vram_vis) * 2 <= (uint64_t)ws->info.vram_vis_size_kb * 1024;
+   bool enough_vram = ws->info.all_vram_visible || p_atomic_read_relaxed(&ws->alloc_tracker->allocated_vram_vis) * 2 <=
+                                                      (uint64_t)ws->info.vram_vis_size_kb * 1024;
 
    /* Bandwidth should be equivalent to at least PCIe 3.0 x8.
     * If there is no PCIe info, assume there is enough bandwidth.

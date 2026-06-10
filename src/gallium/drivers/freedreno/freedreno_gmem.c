@@ -708,14 +708,11 @@ fd_gmem_render_tiles(struct fd_batch *batch)
    if (!(batch->cleared || batch->num_draws))
       sysmem = true;
 
-   if (!batch->nondraw) {
 #if HAVE_PERFETTO
-      /* For non-draw batches, we don't really have a good place to
-       * match up the api event submit-id to the on-gpu rendering,
-       * so skip this for non-draw batches.
-       */
-      fd_perfetto_submit(ctx);
+   fd_perfetto_submit(ctx);
 #endif
+
+   if (!batch->nondraw) {
       trace_flush_batch(&batch->trace, batch->gmem, batch, batch->cleared,
                         batch->gmem_reason, batch->num_draws);
       trace_framebuffer_state(&batch->trace, batch->gmem, pfb);
@@ -760,8 +757,11 @@ fd_gmem_render_tiles(struct fd_batch *batch)
 
    if (batch->nondraw) {
       DBG("%p: rendering non-draw", batch);
-      if (!fd_ringbuffer_empty(batch->draw))
+      if (!fd_ringbuffer_empty(batch->draw)) {
+         trace_start_nondraw(&batch->trace, batch->gmem, ctx->submit_count);
          render_sysmem(batch);
+         trace_end_nondraw(&batch->trace, batch->gmem);
+      }
       ctx->stats.batch_nondraw++;
    } else if (sysmem) {
       trace_render_sysmem(&batch->trace, batch->gmem);

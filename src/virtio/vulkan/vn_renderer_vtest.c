@@ -746,6 +746,7 @@ vtest_bo_blob_flags(VkMemoryPropertyFlags flags,
 static VkResult
 vtest_bo_create_from_device_memory(
    struct vn_renderer *renderer,
+   struct vn_renderer_submit_batch *batch,
    VkDeviceSize size,
    vn_object_id mem_id,
    VkMemoryPropertyFlags flags,
@@ -756,6 +757,14 @@ vtest_bo_create_from_device_memory(
    const uint32_t blob_flags = vtest_bo_blob_flags(flags, external_handles);
 
    mtx_lock(&vtest->sock_mutex);
+   if (batch) {
+      const struct vn_renderer_submit submit = {
+         .batches = batch,
+         .batch_count = 1,
+      };
+      vtest_vcmd_submit_cmd2(vtest, &submit);
+   }
+
    int res_fd;
    uint32_t res_id = vtest_vcmd_resource_create_blob(
       vtest, VCMD_BLOB_TYPE_HOST3D, blob_flags, size, mem_id, &res_fd);

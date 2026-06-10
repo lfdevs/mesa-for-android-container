@@ -4884,7 +4884,7 @@ static inline void
 nir_def_replace(nir_def *def, nir_def *new_ssa)
 {
    nir_def_rewrite_uses(def, new_ssa);
-   nir_instr_remove(nir_def_instr(def));
+   nir_instr_remove_v(nir_def_instr(def));
 }
 
 nir_component_mask_t nir_src_components_read(const nir_src *src);
@@ -6725,6 +6725,14 @@ typedef struct nir_lower_printf_options {
 } nir_lower_printf_options;
 
 bool nir_lower_printf(nir_shader *nir, const nir_lower_printf_options *options);
+
+typedef struct nir_lower_abort_options {
+   uint64_t buffer_addr;
+   unsigned max_buffer_size;
+   unsigned ptr_bit_size;
+} nir_lower_abort_options;
+
+bool nir_lower_abort(nir_shader *nir, const nir_lower_abort_options *options);
 
 /* This is here for unit tests. */
 bool nir_opt_comparison_pre_impl(nir_function_impl *impl);

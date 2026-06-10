@@ -224,6 +224,9 @@ etna_set_framebuffer_state(struct pipe_context *pctx,
 
             pe_mem_config |= VIVS_PE_MEM_CONFIG_COLOR_TS_MODE(level->ts_mode);
 
+            if (util_format_get_blocksizebits(surf->format) == 64)
+               ts_mem_config |= VIVS_TS_MEM_CONFIG_64BPP_FORMAT;
+
             if (level->ts_compress_fmt >= 0) {
                /* overwrite bit breaks v1/v2 compression */
                if (!screen->specs.v4_compression)
@@ -249,7 +252,8 @@ etna_set_framebuffer_state(struct pipe_context *pctx,
          if (level->ts_size) {
             cs->RT_TS_MEM_CONFIG[rt - 1] =
                COND(level->ts_compress_fmt >= 0, VIVS_TS_RT_CONFIG_COMPRESSION) |
-               COND(level->ts_compress_fmt >= 0, VIVS_TS_RT_CONFIG_COMPRESSION_FORMAT(level->ts_compress_fmt));
+               COND(level->ts_compress_fmt >= 0, VIVS_TS_RT_CONFIG_COMPRESSION_FORMAT(level->ts_compress_fmt)) |
+               COND(util_format_get_blocksizebits(surf->format) == 64, VIVS_TS_RT_CONFIG_64BPP_FORMAT);
 
             cs->RT_TS_COLOR_CLEAR_VALUE[rt - 1] = level->clear_value;
             cs->RT_TS_COLOR_CLEAR_VALUE_EXT[rt - 1] = level->clear_value >> 32;

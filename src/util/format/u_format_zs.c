@@ -274,7 +274,7 @@ util_format_z24_unorm_packed_pack_z_32unorm(uint8_t *restrict dst_row, unsigned 
    unsigned x, y;
    for(y = 0; y < height; ++y) {
       const uint32_t *src = src_row;
-      uint16_t *dst = (uint16_t *)dst_row;
+      uint8_t *dst = dst_row;
       for(x = 0; x < width; ++x) {
          uint32_t tmp = z32_unorm_to_z24_unorm(*src++);
 

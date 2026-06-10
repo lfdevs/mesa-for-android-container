@@ -241,6 +241,7 @@ can_sink_instr(nir_instr *instr, nir_move_options options, bool *can_mov_out_of_
       case nir_intrinsic_load_ubo_vec4:
       case nir_intrinsic_load_global_constant_offset:
       case nir_intrinsic_load_global_constant_bounded:
+      case nir_intrinsic_load_global_constant_uniform_block_intel:
          *can_mov_out_of_loop =
             intrin->intrinsic == nir_intrinsic_load_global_constant_offset ||
             intrin->intrinsic == nir_intrinsic_load_global_constant_bounded;
@@ -248,6 +249,7 @@ can_sink_instr(nir_instr *instr, nir_move_options options, bool *can_mov_out_of_
 
       case nir_intrinsic_load_ssbo:
       case nir_intrinsic_load_ssbo_intel:
+      case nir_intrinsic_load_ssbo_uniform_block_intel:
       case nir_intrinsic_load_global_bounded:
          *can_mov_out_of_loop =
             intrin->intrinsic == nir_intrinsic_load_global_bounded;

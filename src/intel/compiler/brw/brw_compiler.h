@@ -560,6 +560,7 @@ struct brw_fs_prog_data {
    bool uses_pos_offset;
    bool uses_omask;
    bool uses_kill;
+   bool uses_src_xy;
    bool uses_src_depth;
    bool uses_src_w;
    bool uses_depth_w_coefficients;

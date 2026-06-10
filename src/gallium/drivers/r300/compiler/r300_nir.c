@@ -265,6 +265,17 @@ r300_optimize_nir(struct nir_shader *s, struct r300_screen *screen)
 
    NIR_PASS(_, s, nir_lower_var_copies);
    NIR_PASS(_, s, nir_remove_dead_variables, nir_var_function_temp, NULL);
+
+   /* FIXME: this could be probably moved earlier... */
+   if (s->info.stage == MESA_SHADER_FRAGMENT) {
+      if (is_r500) {
+         NIR_PASS(_, s, r300_transform_fs_trig_input);
+      }
+   } else if (screen->caps.has_tcl) {
+      if (is_r500 || screen->caps.is_r400) {
+         NIR_PASS(_, s, r300_transform_vs_trig_input);
+      }
+   }
 }
 
 char *
@@ -288,4 +299,55 @@ r300_check_control_flow(nir_shader *s)
    }
 
    return NULL;
+}
+
+/* Add a generic output that mirrors gl_Position, is placed in the first free VAR slot
+ * and used as WPOS by the r300 fragment shader.
+ */
+bool
+r300_nir_add_wpos(nir_shader *nir, nir_variable **wpos_var_out)
+{
+   nir_function_impl *impl = nir_shader_get_entrypoint(nir);
+
+   nir_variable *pos_var = nir_find_variable_with_location(nir, nir_var_shader_out,
+                                                           VARYING_SLOT_POS);
+   if (!pos_var)
+      return nir_no_progress(impl);
+
+   int last_var = -1;
+   nir_foreach_shader_out_variable(var, nir) {
+      if (var->data.location >= VARYING_SLOT_VAR0 &&
+          var->data.location < VARYING_SLOT_PATCH0) {
+         int slot = var->data.location - VARYING_SLOT_VAR0;
+         last_var = MAX2(last_var, slot);
+      }
+   }
+
+   nir_variable *wpos_var = nir_variable_create(nir, nir_var_shader_out,
+                                                glsl_vec4_type(), "r300_wpos");
+   wpos_var->data.location = VARYING_SLOT_VAR0 + last_var + 1;
+   wpos_var->data.interpolation = INTERP_MODE_SMOOTH;
+
+   if (wpos_var_out)
+      *wpos_var_out = wpos_var;
+
+   nir_builder b = nir_builder_create(impl);
+
+   nir_foreach_block(block, impl) {
+      nir_foreach_instr_safe(instr, block) {
+         if (instr->type != nir_instr_type_intrinsic)
+            continue;
+         nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
+         if (intrin->intrinsic != nir_intrinsic_store_deref)
+            continue;
+         nir_deref_instr *deref = nir_src_as_deref(intrin->src[0]);
+         if (nir_deref_instr_get_variable(deref) != pos_var)
+            continue;
+         b.cursor = nir_after_instr(instr);
+         nir_store_var(&b, wpos_var, intrin->src[1].ssa,
+                       nir_intrinsic_write_mask(intrin));
+      }
+   }
+
+   return nir_progress(true, impl, nir_metadata_control_flow);
 }

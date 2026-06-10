@@ -79,6 +79,7 @@ bool msl_nir_fake_guard_for_discards(struct nir_shader *nir);
 bool msl_nir_lower_sample_shading(nir_shader *nir);
 void msl_nir_lower_clip_cull_distance(nir_shader *nir,
                                       unsigned num_cull_distances);
+bool msl_nir_lower_instance_id(nir_shader *nir);
 
 bool msl_gather_uses_per_draw_data(nir_shader *nir);
 
@@ -94,7 +95,6 @@ static const nir_shader_compiler_options kk_nir_options = {
    .lower_insert_byte = true,
    .lower_fmod = true,
    .discard_is_demote = true,
-   .instance_id_includes_base_index = true,
    .lower_device_index_to_zero = true,
    .lower_pack_64_2x32_split = true,
    .lower_unpack_64_2x32_split = true,

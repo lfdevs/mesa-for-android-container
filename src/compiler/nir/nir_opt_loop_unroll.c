@@ -830,7 +830,9 @@ is_indirect_load(nir_instr *instr)
          return true;
       }
 
-      if (intrin->intrinsic == nir_intrinsic_load_global)
+      if (intrin->intrinsic == nir_intrinsic_load_global ||
+          intrin->intrinsic == nir_intrinsic_load_global_transpose_amd ||
+          intrin->intrinsic == nir_intrinsic_load_deref_transpose_amd)
          return true;
 
       if (intrin->intrinsic == nir_intrinsic_load_deref ||

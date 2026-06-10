@@ -145,6 +145,7 @@ dzn_physical_device_get_extensions(struct dzn_physical_device *pdev)
       .KHR_timeline_semaphore                = true,
       .KHR_uniform_buffer_standard_layout    = true,
       .EXT_buffer_device_address             = pdev->shader_model >= D3D_SHADER_MODEL_6_6,
+      .EXT_debug_marker                      = true,
       .EXT_descriptor_indexing               = pdev->shader_model >= D3D_SHADER_MODEL_6_6,
 #if defined(_WIN32)
       .EXT_external_memory_host              = pdev->dev13,

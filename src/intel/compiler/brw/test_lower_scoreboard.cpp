@@ -58,19 +58,19 @@ emit_SEND(const brw_builder &bld, const brw_reg &dst,
    return send;
 }
 
-bool operator ==(const tgl_swsb &a, const tgl_swsb &b)
+bool operator ==(const gen_swsb &a, const gen_swsb &b)
 {
    return a.mode == b.mode &&
           a.pipe == b.pipe &&
           a.regdist == b.regdist &&
-          (a.mode == TGL_SBID_NULL || a.sbid == b.sbid);
+          (a.mode == GEN_SBID_NULL || a.sbid == b.sbid);
 }
 
 /* Parse SWSB for setting test expected results. */
-static tgl_swsb
+static gen_swsb
 SWSB(const char *input)
 {
-   struct tgl_swsb swsb = {};
+   struct gen_swsb swsb = {};
 
    bool seen_sbid    = false;
    bool seen_regdist = false;
@@ -106,16 +106,16 @@ SWSB(const char *input)
          if (*s == '.') {
             s++;
             if (!strncmp(s, "src", 3)) {
-               swsb.mode = TGL_SBID_SRC;
+               swsb.mode = GEN_SBID_SRC;
                s += 3;
             } else if (!strncmp(s, "dst", 3)) {
-               swsb.mode = TGL_SBID_DST;
+               swsb.mode = GEN_SBID_DST;
                s += 3;
             } else {
                goto invalid;
             }
          } else {
-            swsb.mode = TGL_SBID_SET;
+            swsb.mode = GEN_SBID_SET;
          }
 
          seen_sbid = true;
@@ -126,17 +126,17 @@ SWSB(const char *input)
 
          if (*s != '@') {
             switch (*s) {
-            case 'F': swsb.pipe = TGL_PIPE_FLOAT;  break;
-            case 'I': swsb.pipe = TGL_PIPE_INT;    break;
-            case 'L': swsb.pipe = TGL_PIPE_LONG;   break;
-            case 'A': swsb.pipe = TGL_PIPE_ALL;    break;
-            case 'M': swsb.pipe = TGL_PIPE_MATH;   break;
-            case 'S': swsb.pipe = TGL_PIPE_SCALAR; break;
+            case 'F': swsb.pipe = GEN_PIPE_FLOAT;  break;
+            case 'I': swsb.pipe = GEN_PIPE_INT;    break;
+            case 'L': swsb.pipe = GEN_PIPE_LONG;   break;
+            case 'A': swsb.pipe = GEN_PIPE_ALL;    break;
+            case 'M': swsb.pipe = GEN_PIPE_MATH;   break;
+            case 'S': swsb.pipe = GEN_PIPE_SCALAR; break;
             default: goto invalid;
             }
             s++;
          } else {
-            swsb.pipe = TGL_PIPE_NONE;
+            swsb.pipe = GEN_PIPE_NONE;
          }
          if (*s != '@')
             goto invalid;
@@ -161,19 +161,19 @@ TEST_F(scoreboard_test, parse_swsb)
 {
    struct {
       const char *input;
-      tgl_swsb    output;
+      gen_swsb    output;
    } tests[] = {
       { "",            {                                                                         } },
       { "@1",          { .regdist = 1                                                            } },
-      { "A@6",         { .regdist = 6, .pipe = TGL_PIPE_ALL                                      } },
-      { "$3",          {                                        .sbid = 3,  .mode = TGL_SBID_SET } },
-      { "$0.src",      {                                        .sbid = 0,  .mode = TGL_SBID_SRC } },
-      { "@1 $4.dst",   { .regdist = 1,                          .sbid = 4,  .mode = TGL_SBID_DST } },
-      { "F@2 $11.src", { .regdist = 2, .pipe = TGL_PIPE_FLOAT,  .sbid = 11, .mode = TGL_SBID_SRC } },
-      { "S@5 $22",     { .regdist = 5, .pipe = TGL_PIPE_SCALAR, .sbid = 22, .mode = TGL_SBID_SET } },
-      { "M@1",         { .regdist = 1, .pipe = TGL_PIPE_MATH                                     } },
-      { "$1 I@1",      { .regdist = 1, .pipe = TGL_PIPE_INT,    .sbid = 1,  .mode = TGL_SBID_SET } },
-      { "$31.src L@4", { .regdist = 4, .pipe = TGL_PIPE_LONG,   .sbid = 31, .mode = TGL_SBID_SRC } },
+      { "A@6",         { .regdist = 6, .pipe = GEN_PIPE_ALL                                      } },
+      { "$3",          {                                        .sbid = 3,  .mode = GEN_SBID_SET } },
+      { "$0.src",      {                                        .sbid = 0,  .mode = GEN_SBID_SRC } },
+      { "@1 $4.dst",   { .regdist = 1,                          .sbid = 4,  .mode = GEN_SBID_DST } },
+      { "F@2 $11.src", { .regdist = 2, .pipe = GEN_PIPE_FLOAT,  .sbid = 11, .mode = GEN_SBID_SRC } },
+      { "S@5 $22",     { .regdist = 5, .pipe = GEN_PIPE_SCALAR, .sbid = 22, .mode = GEN_SBID_SET } },
+      { "M@1",         { .regdist = 1, .pipe = GEN_PIPE_MATH                                     } },
+      { "$1 I@1",      { .regdist = 1, .pipe = GEN_PIPE_INT,    .sbid = 1,  .mode = GEN_SBID_SET } },
+      { "$31.src L@4", { .regdist = 4, .pipe = GEN_PIPE_LONG,   .sbid = 31, .mode = GEN_SBID_SRC } },
    };
 
    for (auto &t : tests)

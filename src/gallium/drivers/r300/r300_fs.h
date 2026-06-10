@@ -9,13 +9,13 @@
 #define R300_FS_H
 
 #include "pipe/p_state.h"
-#include "tgsi/tgsi_scan.h"
 #include "compiler/radeon_code.h"
 #include "r300_shader_semantics.h"
 
+struct r300_context;
+
 struct r300_fragment_shader_code {
     struct rX00_fragment_program_code code;
-    struct tgsi_shader_info info;
     struct r300_shader_semantics inputs;
 
     /* Whether the shader was replaced by a dummy one due to a shader
@@ -39,6 +39,7 @@ struct r300_fragment_shader_code {
     struct r300_fragment_shader_code* next;
 
     bool write_all;
+    bool uses_discard;
 
     /* Error message in case compilation failed. */
     char *error;
@@ -55,9 +56,6 @@ struct r300_fragment_shader {
      * states. */
     struct r300_fragment_shader_code* first;
 };
-
-void r300_shader_read_fs_inputs(struct tgsi_shader_info* info,
-                                struct r300_shader_semantics* fs_inputs);
 
 /* Return TRUE if the shader was switched and should be re-emitted. */
 bool r300_pick_fragment_shader(struct r300_context *r300,

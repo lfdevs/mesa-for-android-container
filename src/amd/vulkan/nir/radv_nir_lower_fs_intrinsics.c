@@ -25,28 +25,9 @@ pass(nir_builder *b, nir_intrinsic_instr *intrin, void *data)
 
    const struct ctx *ctx = data;
    const struct radv_graphics_state_key *gfx_state = ctx->gfx_state;
-   const struct radv_shader_info *info = &ctx->fs_stage->info;
    const struct radv_shader_args *args = &ctx->fs_stage->args;
 
    switch (intrin->intrinsic) {
-   case nir_intrinsic_load_sample_mask_in: {
-      nir_def *sample_coverage = nir_load_vector_arg_amd(b, 1, .base = args->ac.sample_coverage.arg_index);
-
-      nir_def *def = NULL;
-      if (info->ps.uses_sample_shading || gfx_state->ms.sample_shading_enable) {
-         /* gl_SampleMaskIn[0] = (SampleCoverage & (PsIterMask << gl_SampleID)). */
-         nir_def *ps_state = nir_load_scalar_arg_amd(b, 1, .base = args->ps_state.arg_index);
-         nir_def *ps_iter_mask =
-            nir_ubfe_imm(b, ps_state, PS_STATE_PS_ITER_MASK__SHIFT, util_bitcount(PS_STATE_PS_ITER_MASK__MASK));
-         nir_def *sample_id = nir_load_sample_id(b);
-         def = nir_iand(b, sample_coverage, nir_ishl(b, ps_iter_mask, sample_id));
-      } else {
-         def = sample_coverage;
-      }
-
-      nir_def_replace(&intrin->def, def);
-      return true;
-   }
    case nir_intrinsic_load_frag_coord_z: {
       if (!gfx_state->adjust_frag_coord_z)
          return false;

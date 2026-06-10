@@ -109,7 +109,7 @@ pan_nir_load_va_tex_size(nir_builder *b, nir_def *handle,
    nir_def *size, *zero;
    nir_if *nif = nir_push_if(b, nir_inot(b, is_null));
    {
-      nir_def *comps[4] = {};
+      nir_def *comps[4] = {0};
       unsigned nr_comps = 0;
 
       comps[nr_comps++] = nir_channel(b, dw01, 2);

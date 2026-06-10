@@ -1,139 +1,139 @@
-mov(8)          g123<1>UD       g1<8,8,1>UD                     { align1 WE_all 1Q };
-mov(8)          g124<1>F        0x40c00000F      /* 6F */       { align1 1Q };
-mov(8)          g14<1>UD        0x00000000UD                    { align1 1Q };
-mov(8)          g17<1>F         g12<8,8,1>F                     { align1 1Q };
-mov.sat(8)      g124<1>F        g8<8,8,1>F                      { align1 1Q };
-mov(8)          g61<2>D         g22<8,8,1>D                     { align1 1Q };
-mov(8)          g21<1>D         g59<8,4,2>UD                    { align1 1Q };
-mov(8)          g4<1>D          -1D                             { align1 1Q };
-mov.nz.f0.0(8)  nullUD          g4<8,8,1>D                      { align1 1Q };
-mov(1)          g2.2<1>UD       0x00000000UD                    { align1 WE_all 1N };
-mov(4)          g114<1>F        g2.3<8,2,4>F                    { align1 WE_all 1N };
-mov(8)          g126<1>F        g4<8,8,1>D                      { align1 1Q };
-mov(16)         g124<1>F        g4<8,8,1>D                      { align1 1H };
-mov(16)         g120<1>F        g124<8,8,1>F                    { align1 1H };
-mov(16)         g124<1>F        0x0F             /* 0F */       { align1 1H };
-mov(16)         g124<1>D        1065353216D                     { align1 1H };
-mov.nz.f0.0(16) nullUD          g2<0,1,0>D                      { align1 1H };
-mov(8)          g3<1>UW         0x76543210V                     { align1 WE_all 1Q };
-mov(16)         g20<1>UD        g0.1<0,1,0>UD                   { align1 1H };
-mov(16)         g6<1>D          g3<8,8,1>UW                     { align1 1H };
-mov(8)          g1<1>D          g4<8,8,1>D                      { align1 2Q };
-mov(8)          g5<1>D          0D                              { align1 2Q };
-mov(8)          g2<1>F          g6<8,4,1>UW                     { align1 1Q };
-mov(8)          g7<1>D          g2<8,8,1>F                      { align1 1Q };
-mov(16)         g2<1>F          g10<8,4,1>UW                    { align1 1H };
-mov(16)         g11<1>D         g2<8,8,1>F                      { align1 1H };
-mov(8)          g80<1>DF        g5<0,1,0>DF                     { align1 1Q };
-mov(8)          g92<2>UD        g6.4<0,1,0>UD                   { align1 1Q };
-mov(8)          g62<1>Q         0xbff0000000000000Q             { align1 1Q };
-mov(8)          g92<2>F         g92<4,4,1>DF                    { align1 1Q };
-mov(8)          g92<1>DF        g95<4,4,1>F                     { align1 1Q };
-mov(8)          g106<1>DF       g2<0,1,0>F                      { align1 2Q };
-mov(8)          g48<1>Q         0xbff0000000000000Q             { align1 2Q };
-mov(8)          g127<1>UD       g106.1<8,4,2>UD                 { align1 2Q };
-mov(8)          g11<2>F         g7<4,4,1>DF                     { align1 2Q };
-mov(8)          g33<1>D         g34<8,4,2>UD                    { align1 2Q };
-mov(8)          g6<2>UD         0x00000000UD                    { align1 2Q };
-mov(8)          g2<1>UW         0x76543210UV                    { align1 1Q };
-mov(8)          g12<1>UD        g2<8,8,1>UW                     { align1 1Q };
-mov(8)          g7<1>UD         0x00080000UD                    { align1 WE_all 1Q };
-mov(1)          g2<1>F          0x3e800000F      /* 0.25F */    { align1 WE_all 1N };
-mov(8)          g15<1>F         g11<8,8,1>UD                    { align1 1Q };
-mov(1)          f0.1<1>UW       g1.14<0,1,0>UW                  { align1 WE_all 1N };
-mov(8)          g18<1>UD        g2<8,8,1>D                      { align1 1Q };
-mov(16)         g18<1>UD        g26<8,8,1>D                     { align1 1H };
-mov(16)         g120<1>D        g34<8,8,1>D                     { align1 1H };
-mov(8)          g8<1>Q          g13<4,4,1>Q                     { align1 1Q };
-mov(8)          g21<1>UD        g0<8,8,1>UD                     { align1 WE_all 2Q };
-mov(8)          g23<1>F         g6<0,1,0>F                      { align1 2Q };
-mov(1)          g21.2<1>UD      0x000003f2UD                    { align1 WE_all 3N };
-mov.nz.f0.0(8)  g19<1>D         g3<8,4,2>UD                     { align1 1Q };
-mov(1)          f1<1>UD         g1.7<0,1,0>UD                   { align1 WE_all 1N };
-mov.sat(8)      g126<1>F        0x0F             /* 0F */       { align1 1Q };
-mov.sat(8)      g124<1>F        -g36<8,8,1>D                    { align1 1Q };
-mov(8)          g41<1>F         0x0F             /* 0F */       { align1 2Q };
-mov(8)          g42<1>UD        g11<8,8,1>D                     { align1 2Q };
-mov(16)         g86<1>UD        g88<8,8,1>UD                    { align1 WE_all 1H };
-mov.sat(16)     g120<1>F        g2<0,1,0>F                      { align1 1H };
-mov(16)         g2<1>F          g18<8,8,1>UD                    { align1 1H };
-mov(8)          g4<1>UD         0x0F             /* 0F */       { align1 1Q };
-mov(8)          g8<1>DF         g2<0,1,0>D                      { align1 1Q };
-mov(16)         g8<1>UD         0x00000000UD                    { align1 1H };
-mov.nz.f0.0(8)  g4<1>F          -(abs)g2<0,1,0>F                { align1 1Q };
-(+f0.0) mov(8)  g4<1>F          0xbf800000F      /* -1F */      { align1 1Q };
-mov.nz.f0.0(16) g4<1>F          -(abs)g2<0,1,0>F                { align1 1H };
-(+f0.0) mov(16) g4<1>F          0xbf800000F      /* -1F */      { align1 1H };
-mov(1)          f1<1>UD         g1.7<0,1,0>UD                   { align1 WE_all 3N };
-mov(8)          g32<1>DF        g2<0,1,0>DF                     { align1 2Q };
-mov(8)          g5<1>F          g2<0,1,0>HF                     { align1 1Q };
-mov(16)         g6<1>F          g2<0,1,0>HF                     { align1 1H };
-mov(8)          g7<1>UD         g2<0,1,0>F                      { align1 1Q };
-mov(16)         g15<1>UD        g11<8,8,1>F                     { align1 1H };
-mov(16)         g19<1>UD        g15<16,8,2>UW                   { align1 1H };
-mov(1)          g19<1>UD        g[a0 64]<0,1,0>UD               { align1 WE_all 1N };
-mov(16)         g23<1>UD        g21<32,8,4>UB                   { align1 1H };
-mov(8)          g7<1>DF         0x0000000000000000DF /* 0DF */  { align1 1Q };
-mov(8)          g5<1>F          0x0F             /* 0F */       { align1 WE_all 1Q };
-mov(16)         g4<1>UD         0x00000000UD                    { align1 WE_all 1H };
-mov(8)          g5<2>UD         g2<0,1,0>DF                     { align1 1Q };
-mov(8)          g10<2>UD        g2<0,1,0>DF                     { align1 2Q };
-mov(8)          g3<1>DF         g2<0,1,0>UD                     { align1 1Q };
-mov(8)          g3<1>DF         g2<0,1,0>UD                     { align1 2Q };
-mov(1)          f0<1>UW         0x0000UW                        { align1 WE_all 1N };
-mov(1)          g1<1>D          0D                              { align1 WE_all 1N };
-(+f0.0.any16h) mov(1) g1<1>D    -1D                             { align1 WE_all 1N };
-mov(8)          g9<1>F          g2<0,1,0>W                      { align1 1Q };
-mov(8)          g7<1>UQ         g4<4,4,1>UQ                     { align1 1Q };
-mov(16)         g11<1>UD        0x0F             /* 0F */       { align1 1H };
-mov(8)          g5<2>D          g2<0,1,0>DF                     { align1 1Q };
-mov(8)          g10<2>D         g2<0,1,0>DF                     { align1 2Q };
-mov(1)          f1<1>UW         f0.1<0,1,0>UW                   { align1 WE_all 1N };
-mov(1)          f1<1>UW         f0.1<0,1,0>UW                   { align1 WE_all 3N };
-mov(16)         g4<1>D          0D                              { align1 2H };
-mov(8)          g14<1>UD        g13<32,8,4>UB                   { align1 1Q };
-mov(16)         g124<1>UD       g15<8,8,1>UD                    { align1 2H };
-mov(16)         g118<1>D        g122<8,8,1>UW                   { align1 2H };
-mov(16)         g101<1>UD       0x00000001UD                    { align1 2H };
-mov(1)          g4<2>UW         0x00000000UD                    { align1 WE_all 1N };
-mov(8)          g4<1>UD         f0<0,1,0>UW                     { align1 1Q };
-mov(8)          g8<1>D          g2<8,8,1>UW                     { align1 1Q };
-mov(16)         g4<1>UD         f0<0,1,0>UW                     { align1 1H };
-mov(8)          g3<1>DF         -g2<0,1,0>D                     { align1 2Q };
-mov(8)          g5<1>F          g2<0,1,0>B                      { align1 1Q };
-mov(16)         g6<1>F          g2<0,1,0>B                      { align1 1H };
-mov(8)          g4<1>DF         0x0000000000000000DF /* 0DF */  { align1 2Q };
-mov.nz.f0.0(8)  g16<1>D         g17<8,4,2>UD                    { align1 2Q };
-mov(8)          g34<1>UW        0x76543210V                     { align1 1Q };
-mov(8)          g8<1>UD         48D                             { align1 1Q };
-mov(16)         g8<1>UD         0D                              { align1 1H };
-mov(8)          g7<2>HF         g2.1<0,1,0>F                    { align1 1Q };
-mov(1)          g5<1>D          g[a0 96]<0,1,0>D                { align1 WE_all 1N };
-(+f0.0.any8h) mov(1) g2<1>D     -1D                             { align1 WE_all 1N };
-mov(8)          g9<1>UD         0D                              { align1 WE_all 1Q };
-mov(8)          g2<2>UW         g9<8,8,1>F                      { align1 1Q };
-mov(8)          g3<1>UW         g2<16,8,2>UW                    { align1 1Q };
-mov(8)          g12<1>UW        g8<16,8,2>UW                    { align1 WE_all 1Q };
-mov.sat(16)     g13<1>F         0x3f800000F      /* 1F */       { align1 1H };
-mov(16)         g19<2>UW        g17<8,8,1>F                     { align1 1H };
-mov(16)         g4<1>UW         g13<16,8,2>UW                   { align1 WE_all 1H };
-mov.nz.f0.0(8)  nullUD          0x00000000UD                    { align1 1Q };
-mov.nz.f0.0(16) nullUD          0x00000000UD                    { align1 1H };
-mov(4)          g3<1>UD         tm0<4,4,1>UD                    { align1 WE_all 1N };
-(+f0.0.all16h) mov(1) g1<1>D    -1D                             { align1 WE_all 1N };
-mov(8)          g9<1>F          g2<0,1,0>UB                     { align1 1Q };
-mov(16)         g6<1>F          g2<0,1,0>UB                     { align1 1H };
-mov(16)         g10<2>HF        g4<8,8,1>F                      { align1 1H };
-mov.z.f0.0(8)   nullUD          g2<8,8,1>UD                     { align1 1Q };
-mov.sat(8)      g125<1>F        g9<8,8,1>UD                     { align1 1Q };
-mov.z.f0.0(16)  g1<1>UD         g0.7<0,1,0>UD                   { align1 1H };
-mov.z.f0.0(8)   g18<1>D         g17<8,8,1>F                     { align1 1Q };
-mov(16)         g35<1>F         g15<16,8,2>W                    { align1 1H };
-mov(8)          g23<1>Q         g26<4,4,1>Q                     { align1 2Q };
-mov(8)          g2<1>D          0x00000000UD                    { align1 1Q };
-mov(16)         g2<1>D          0x00000000UD                    { align1 1H };
-(+f0.0.all8h) mov(1) g7<1>D     -1D                             { align1 WE_all 1N };
-mov(8)          g127<1>UB       g2<0,1,0>UB                     { align1 WE_all 1Q };
-mov.z.f0.0(8)   nullUD          g24<8,8,1>F                     { align1 1Q };
-mov.z.f0.0(16)  nullUD          g76<8,8,1>F                     { align1 1H };
-mov(16)         g7<1>D          g2<16,8,2>B                     { align1 1H };
+(W)     mov (8)                   r123          r1<8;8,1>
+        mov (8)                   r124:f        0x40c00000:f
+        mov (8)                   r14           0x00000000
+        mov (8)                   r17:f         r12<8;8,1>:f
+        mov.sat (8)               r124:f        r8<8;8,1>:f
+        mov (8)                   r61<2>:d      r22<8;8,1>:d
+        mov (8)                   r21:d         r59<8;4,2>
+        mov (8)                   r4:d          -1:d
+        mov (8)        (ne)f0.0   null          r4<8;8,1>:d
+(W)     mov (1)                   r2.2          0x00000000
+(W)     mov (4)                   r114:f        r2.3<8;2,4>:f
+        mov (8)                   r126:f        r4<8;8,1>:d
+        mov (16)                  r124:f        r4<8;8,1>:d
+        mov (16)                  r120:f        r124<8;8,1>:f
+        mov (16)                  r124:f        0x00000000:f
+        mov (16)                  r124:d        1065353216:d
+        mov (16)       (ne)f0.0   null          r2<0>:d
+(W)     mov (8)                   r3:uw         0x76543210:v
+        mov (16)                  r20           r0.1<0>
+        mov (16)                  r6:d          r3<8;8,1>:uw
+        mov (8|M8)                r1:d          r4<8;8,1>:d
+        mov (8|M8)                r5:d          0:d
+        mov (8)                   r2:f          r6<8;4,1>:uw
+        mov (8)                   r7:d          r2<8;8,1>:f
+        mov (16)                  r2:f          r10<8;4,1>:uw
+        mov (16)                  r11:d         r2<8;8,1>:f
+        mov (8)                   r80:df        r5<0>:df
+        mov (8)                   r92<2>        r6.4<0>
+        mov (8)                   r62:q         0xbff0000000000000:q
+        mov (8)                   r92<2>:f      r92<4;4,1>:df
+        mov (8)                   r92:df        r95<4;4,1>:f
+        mov (8|M8)                r106:df       r2<0>:f
+        mov (8|M8)                r48:q         0xbff0000000000000:q
+        mov (8|M8)                r127          r106.1<8;4,2>
+        mov (8|M8)                r11<2>:f      r7<4;4,1>:df
+        mov (8|M8)                r33:d         r34<8;4,2>
+        mov (8|M8)                r6<2>         0x00000000
+        mov (8)                   r2:uw         0x76543210:uv
+        mov (8)                   r12           r2<8;8,1>:uw
+(W)     mov (8)                   r7            0x00080000
+(W)     mov (1)                   r2:f          0x3e800000:f
+        mov (8)                   r15:f         r11<8;8,1>
+(W)     mov (1)                   f0.2:uw       r1.14<0>:uw
+        mov (8)                   r18           r2<8;8,1>:d
+        mov (16)                  r18           r26<8;8,1>:d
+        mov (16)                  r120:d        r34<8;8,1>:d
+        mov (8)                   r8:q          r13<4;4,1>:q
+(W)     mov (8|M8)                r21           r0<8;8,1>
+        mov (8|M8)                r23:f         r6<0>:f
+(W)     mov (1|M8)                r21.2         0x000003f2
+        mov (8)        (ne)f0.0   r19:d         r3<8;4,2>
+(W)     mov (1)                   f1            r1.7<0>
+        mov.sat (8)               r126:f        0x00000000:f
+        mov.sat (8)               r124:f        -r36<8;8,1>:d
+        mov (8|M8)                r41:f         0x00000000:f
+        mov (8|M8)                r42           r11<8;8,1>:d
+(W)     mov (16)                  r86           r88<8;8,1>
+        mov.sat (16)              r120:f        r2<0>:f
+        mov (16)                  r2:f          r18<8;8,1>
+        mov (8)                   r4            0x00000000:f
+        mov (8)                   r8:df         r2<0>:d
+        mov (16)                  r8            0x00000000
+        mov (8)        (ne)f0.0   r4:f          -(abs)r2<0>:f
+(f0.0)  mov (8)                   r4:f          0xbf800000:f
+        mov (16)       (ne)f0.0   r4:f          -(abs)r2<0>:f
+(f0.0)  mov (16)                  r4:f          0xbf800000:f
+(W)     mov (1|M8)                f1            r1.7<0>
+        mov (8|M8)                r32:df        r2<0>:df
+        mov (8)                   r5:f          r2<0>:hf
+        mov (16)                  r6:f          r2<0>:hf
+        mov (8)                   r7            r2<0>:f
+        mov (16)                  r15           r11<8;8,1>:f
+        mov (16)                  r19           r15<16;8,2>:uw
+(W)     mov (1)                   r19           r[a0.0 + 64]<0>
+        mov (16)                  r23           r21<32;8,4>:ub
+        mov (8)                   r7:df         0x0000000000000000:df
+(W)     mov (8)                   r5:f          0x00000000:f
+(W)     mov (16)                  r4            0x00000000
+        mov (8)                   r5<2>         r2<0>:df
+        mov (8|M8)                r10<2>        r2<0>:df
+        mov (8)                   r3:df         r2<0>
+        mov (8|M8)                r3:df         r2<0>
+(W)     mov (1)                   f0:uw         0:uw
+(W)     mov (1)                   r1:d          0:d
+(W&f0.0.any16h) mov (1)           r1:d          -1:d
+        mov (8)                   r9:f          r2<0>:w
+        mov (8)                   r7:uq         r4<4;4,1>:uq
+        mov (16)                  r11           0x00000000:f
+        mov (8)                   r5<2>:d       r2<0>:df
+        mov (8|M8)                r10<2>:d      r2<0>:df
+(W)     mov (1)                   f1:uw         f0.2<0>:uw
+(W)     mov (1|M8)                f1:uw         f0.2<0>:uw
+        mov (16|M16)              r4:d          0:d
+        mov (8)                   r14           r13<32;8,4>:ub
+        mov (16|M16)              r124          r15<8;8,1>
+        mov (16|M16)              r118:d        r122<8;8,1>:uw
+        mov (16|M16)              r101          0x00000001
+(W)     mov (1)                   r4<2>:uw      0x00000000
+        mov (8)                   r4            f0<0>:uw
+        mov (8)                   r8:d          r2<8;8,1>:uw
+        mov (16)                  r4            f0<0>:uw
+        mov (8|M8)                r3:df         -r2<0>:d
+        mov (8)                   r5:f          r2<0>:b
+        mov (16)                  r6:f          r2<0>:b
+        mov (8|M8)                r4:df         0x0000000000000000:df
+        mov (8|M8)     (ne)f0.0   r16:d         r17<8;4,2>
+        mov (8)                   r34:uw        0x76543210:v
+        mov (8)                   r8            48:d
+        mov (16)                  r8            0:d
+        mov (8)                   r7<2>:hf      r2.1<0>:f
+(W)     mov (1)                   r5:d          r[a0.0 + 96]<0>:d
+(W&f0.0.any8h) mov (1)            r2:d          -1:d
+(W)     mov (8)                   r9            0:d
+        mov (8)                   r2<2>:uw      r9<8;8,1>:f
+        mov (8)                   r3:uw         r2<16;8,2>:uw
+(W)     mov (8)                   r12:uw        r8<16;8,2>:uw
+        mov.sat (16)              r13:f         0x3f800000:f
+        mov (16)                  r19<2>:uw     r17<8;8,1>:f
+(W)     mov (16)                  r4:uw         r13<16;8,2>:uw
+        mov (8)        (ne)f0.0   null          0x00000000
+        mov (16)       (ne)f0.0   null          0x00000000
+(W)     mov (4)                   r3            tm0<4;4,1>
+(W&f0.0.all16h) mov (1)           r1:d          -1:d
+        mov (8)                   r9:f          r2<0>:ub
+        mov (16)                  r6:f          r2<0>:ub
+        mov (16)                  r10<2>:hf     r4<8;8,1>:f
+        mov (8)        (eq)f0.0   null          r2<8;8,1>
+        mov.sat (8)               r125:f        r9<8;8,1>
+        mov (16)       (eq)f0.0   r1            r0.7<0>
+        mov (8)        (eq)f0.0   r18:d         r17<8;8,1>:f
+        mov (16)                  r35:f         r15<16;8,2>:w
+        mov (8|M8)                r23:q         r26<4;4,1>:q
+        mov (8)                   r2:d          0x00000000
+        mov (16)                  r2:d          0x00000000
+(W&f0.0.all8h) mov (1)            r7:d          -1:d
+(W)     mov (8)                   r127:ub       r2<0>:ub
+        mov (8)        (eq)f0.0   null          r24<8;8,1>:f
+        mov (16)       (eq)f0.0   null          r76<8;8,1>:f
+        mov (16)                  r7:d          r2<16;8,2>:b

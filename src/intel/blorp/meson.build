@@ -37,6 +37,7 @@ files_libblorp = files(
   'blorp.h',
   'blorp_blit.c',
   'blorp_clear.c',
+  'blorp_indirect_copy.c',
   'blorp_nir_builder.h',
   'blorp_priv.h',
 )

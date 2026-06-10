@@ -13,9 +13,11 @@ lvp_entrypoints = custom_target(
 
 liblvp_files = files(
     'nir/lvp_nir_lower_cooperative_matrix.c',
+    'nir/lvp_nir_lower_descriptor_heaps.c',
     'nir/lvp_nir_lower_exec_graph.c',
     'nir/lvp_nir_lower_input_attachments.c',
     'nir/lvp_nir_lower_pipeline_layout.c',
+    'nir/lvp_nir_lower_push_constants.c',
     'nir/lvp_nir_lower_ray_queries.c',
     'nir/lvp_nir_lower_sparse_residency.c',
     'nir/lvp_nir_opt_robustness.c',

@@ -65,7 +65,7 @@ traces:
       checksum: 03571165f80f971a30a5d9c41d61df4e
   gputest/plot3d-v2.trace:
     gl-radeonsi-stoney:
-      checksum: 2832d2190df232bcbde71a4b720303e1
+      checksum: 252c5010d6f7547b42db81f1eaaf5e08
   gputest/tessmark-v2.trace:
     gl-radeonsi-stoney:
       checksum: dd3b850cae31a4d0c007377f67c54757

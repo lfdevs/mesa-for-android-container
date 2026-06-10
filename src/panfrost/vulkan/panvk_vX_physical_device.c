@@ -141,6 +141,7 @@ panvk_per_arch(get_physical_device_extensions)(
       .EXT_color_write_enable = true,
       .EXT_conservative_rasterization = PAN_ARCH >= 11,
       .EXT_custom_border_color = true,
+      .EXT_debug_marker = true,
       .EXT_depth_bias_control = true,
       .EXT_depth_clamp_control = true,
       .EXT_depth_clamp_zero_one = true,

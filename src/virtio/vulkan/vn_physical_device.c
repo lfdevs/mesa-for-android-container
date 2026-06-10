@@ -1406,6 +1406,7 @@ vn_physical_device_get_passthrough_extensions(
       .EXT_conditional_rendering = true,
       .EXT_conservative_rasterization = true,
       .EXT_custom_border_color = true,
+      .EXT_debug_marker = true,
       .EXT_depth_bias_control = true,
       .EXT_depth_clamp_control = true,
       .EXT_depth_clamp_zero_one = true,

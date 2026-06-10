@@ -32,6 +32,7 @@
 #include <pipe/p_state.h>
 #include <si_pipe.h>
 #include "si_vpe.h"
+#include "si_video.h"
 #include "gmlib/tonemap_adaptor.h"
 #include "lanczoslib/lanczos_adaptor.h"
 
@@ -263,7 +264,7 @@ si_vpe_get_format_str(enum vpe_surface_pixel_format format)
    case VPE_SURFACE_PIXEL_FORMAT_VIDEO_420_YCrCb:
       return "NV12(420 YCrCb)";
    case VPE_SURFACE_PIXEL_FORMAT_VIDEO_420_YCbCr:
-      return "NV21(420 YCrCb)";
+      return "NV21(420 YCbCr)";
    case VPE_SURFACE_PIXEL_FORMAT_VIDEO_420_10bpc_YCrCb:
       return "P010(420 10bpc YCrCb)";
    case VPE_SURFACE_PIXEL_FORMAT_VIDEO_420_12bpc_YCrCb:
@@ -275,7 +276,7 @@ si_vpe_get_format_str(enum vpe_surface_pixel_format format)
    case VPE_SURFACE_PIXEL_FORMAT_VIDEO_422_YCrYCb:
       return "UYVY(422 YCrYCb)";
    case VPE_SURFACE_PIXEL_FORMAT_VIDEO_422_YCbYCr:
-      return "VYUY(422 YCrYCb)";
+      return "VYUY(422 YCbYCr)";
    case VPE_SURFACE_PIXEL_FORMAT_VIDEO_422_10bpc_CrYCbY:
       return "Y210(422 10bpc YCrYCb)";
    case VPE_SURFACE_PIXEL_FORMAT_VIDEO_422_12bpc_YCrYCb:
@@ -2052,7 +2053,7 @@ si_vpe_create_processor(struct pipe_context *context, const struct pipe_video_co
       SIVPE_INFO(vpeproc->log_level, "Number of emb_buf is %d\n", vpeproc->bufs_num);
 
    for (i = 0; i < vpeproc->bufs_num; i++) {
-      vpeproc->emb_buffers[i] = si_resource(pipe_buffer_create(vpeproc->screen, 0, PIPE_USAGE_DEFAULT, VPE_EMBBUF_SIZE));
+      vpeproc->emb_buffers[i] = si_vid_create_buffer(vpeproc->screen, PIPE_USAGE_DEFAULT, 0, VPE_EMBBUF_SIZE);
       if (!vpeproc->emb_buffers[i]) {
           SIVPE_ERR("Can't allocated emb_buf buffers.\n");
           goto fail;
@@ -2070,7 +2071,7 @@ si_vpe_create_processor(struct pipe_context *context, const struct pipe_video_co
        * It finally calls into si_buffer_create(screen, templ, 256) to create 256-alignment buffer
        */
       if (vpeproc->vpe_handle->level == VPE_IP_LEVEL_2_0) {
-         vpeproc->fl3dlut_buf = si_resource(pipe_buffer_create(vpeproc->screen, 0, PIPE_USAGE_DEFAULT, VPE_FASTLOAD_SIZE));
+         vpeproc->fl3dlut_buf = si_vid_create_buffer(vpeproc->screen, PIPE_USAGE_DEFAULT, 0, VPE_FASTLOAD_SIZE);
          if (!vpeproc->fl3dlut_buf) {
             vpeproc->fl3dlut_buf = NULL;
             SIVPE_DBG(vpeproc->log_level, "Can't allocated fast loading buffers, can't support fast loading feature\n");

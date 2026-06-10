@@ -774,4 +774,3 @@ angle-dEQP-GLES3.functional.texture.wrap.rgba8.repeat_repeat_nearest_npot,Fail
 dEQP-VK.wsi.xcb.present_timing.basic.timing_queue,Fail
 dEQP-VK.wsi.xcb.present_timing.query.parallel.parallel,Fail
 dEQP-VK.wsi.xlib.present_timing.basic.timing_queue,Fail
-dEQP-VK.wsi.xlib.present_timing.query.parallel.parallel,Fail

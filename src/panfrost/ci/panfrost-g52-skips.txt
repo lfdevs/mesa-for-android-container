@@ -2,39 +2,14 @@
 # non-zero-length and not starting with '#', will regex match to
 # delete lines from the test list.  Be careful.
 
-# Some compute jobs take more 0.5s, the maximum allowed by the
-# kernel driver
-dEQP-GLES31.functional.draw_indirect.compute_interop.large.*
-
-# fail seen here and in others
-# https://gitlab.freedesktop.org/mesa/mesa/-/jobs/19776551
-dEQP-GLES31.functional.ssbo.layout.random.all_shared_buffer.36
-
 # Huge render, which eventually times out
 dEQP-GLES31.functional.fbo.no_attachments.maximums.all
-
-# Seems to timeout occasionally
-dEQP-VK.api.object_management.max_concurrent.query_pool
-
-# Causes a GPU timeout
-spec@!opengl 1.1@longprim
-
-# OOMs
-tex3d-maxsize
-
-# Takes absurdly long, sometimes flaking due to the 60s timeout
-glx@glx-make-current
 
 # These Piglits cause crashes, at least when run with PAN_MESA_DEBUG=sync. For
 # many, the crashes are due to faults. Although Piglits are nominally
 # process-isolated, faults can leak across processes to subpar recovery, meaning
 # these crashes are liable to cause robust passing tests to flakes.
 # So, skip any tests known to crash to make sure the coverage is solid.
-glx@glx-visuals-depth -pixmap
-glx@glx-visuals-stencil -pixmap
-spec@arb_texture_buffer_object@texture-buffer-size-clamp
-spec@arb_texture_float@fbo-alphatest-formats
-spec@arb_texture_float@fbo-blending-formats
 spec@arb_texture_rectangle@tex-miplevel-selection gl2:texture() 2drect
 spec@arb_texture_rectangle@tex-miplevel-selection gl2:texture() 2drectshadow
 spec@arb_texture_rectangle@tex-miplevel-selection gl2:textureproj 2drect
@@ -62,31 +37,8 @@ spec@glsl-1.30@execution@tex-miplevel-selection textureprojgradoffset 2drectshad
 spec@glsl-1.30@execution@tex-miplevel-selection textureprojoffset 2drect
 spec@glsl-1.30@execution@tex-miplevel-selection textureprojoffset 2drect_projvec4
 spec@glsl-1.30@execution@tex-miplevel-selection textureprojoffset 2drectshadow
-spec@!opengl 1.0@rasterpos
-spec@!opengl es 3.0@gles-3.0-transform-feedback-uniform-buffer-object
 
-# uprev Piglit in Mesa
 glx@glx_arb_sync_control@swapbuffersmsc-return
-spec@arb_texture_multisample@arb_texture_multisample-dsa-texelfetch
-shaders@glsl-bug-110796
-
-dEQP-VK.dynamic_rendering.primary_cmd_buff.random.seed*
-
-# VKCTS bug?
-# Jump to 0x0 (XXX: need more research)
-dEQP-VK.glsl.shader_expect_assume.*
-
-# Generate page fault at address 0x0
-dEQP-VK.memory.pipeline_barrier.host_write_storage_texel_buffer.1024
-dEQP-VK.memory.pipeline_barrier.transfer_dst_storage_texel_buffer.1024
-dEQP-VK.memory.pipeline_barrier.host_write_storage_texel_buffer.1048576
-dEQP-VK.memory.pipeline_barrier.host_write_storage_texel_buffer.65536
-dEQP-VK.memory.pipeline_barrier.host_write_storage_texel_buffer.8192
-dEQP-VK.memory.pipeline_barrier.transfer_dst_storage_texel_buffer.1048576
-dEQP-VK.memory.pipeline_barrier.transfer_dst_storage_texel_buffer.65536
-dEQP-VK.memory.pipeline_barrier.transfer_dst_storage_texel_buffer.8192
-dEQP-VK.memory.pipeline_barrier.all.1024_vertex_buffer_stride_2
-dEQP-VK.memory.pipeline_barrier.all.1024_vertex_buffer_stride_4
 
 # New with VK_KHR_zero_initialize_workgroup_memory
 # Generate a INSTR_BARRIER_FAULT
@@ -100,47 +52,8 @@ dEQP-VK.compute.pipeline.zero_initialize_workgroup_memory.max_workgroup_memory.6
 dEQP-VK.compute.pipeline.zero_initialize_workgroup_memory.types.f32mat3x3
 dEQP-VK.compute.pipeline.zero_initialize_workgroup_memory.types.f32mat4x4
 
-# Job timeout
-dEQP-VK.graphicsfuzz.spv-composites
-
-# Cause OOM when running with alloacation tests
-dEQP-VK.api.command_buffers.many_indirect_draws_on_secondary
-
-# Slow tests (>= 30s)
-afbcp-spec@arb_texture_multisample@texelfetch fs sampler2dms 4 1x130-501x130
-afbcp-spec@arb_texture_multisample@texelfetch fs sampler2dms 4 1x71-501x71
-dEQP-VK.api.external.fence.sync_fd.export_multiple_times_temporary
-dEQP-VK.api.external.semaphore.sync_fd.export_multiple_times_temporary
-dEQP-VK.wsi.wayland.swapchain.simulate_oom.image_extent
-glx@glx_arb_sync_control@swapbuffersmsc-return swap_interval 0
-spec@!opengl 1.1@copypixels-draw-sync
-spec@!opengl 1.1@copypixels-sync
-spec@!opengl 1.1@draw-sync
-spec@arb_texture_multisample@texelfetch fs sampler2dms 4 1x130-501x130
-spec@arb_texture_multisample@texelfetch fs sampler2dms 4 1x71-501x71
-spec@arb_texture_multisample@texelfetch fs sampler2dmsarray 4 98x1x9-98x129x9
-spec@egl_khr_gl_colorspace@linear
-spec@ext_framebuffer_blit@fbo-blit-check-limits
-spec@glsl-1.30@execution@texelfetch fs sampler2d 1x281-501x281
-
-# Those are failures on G52 but skipped on "G52 r1"
-dEQP-VK.api.copy_and_blit.dedicated_allocation.resolve_image.whole_copy_before_resolving_no_cab.8_bit
-dEQP-VK.api.copy_and_blit.dedicated_allocation.resolve_image.copy_with_regions_before_resolving.8_bit
-dEQP-VK.api.copy_and_blit.core.resolve_image.whole_copy_before_resolving_no_cab.8_bit
-dEQP-VK.api.copy_and_blit.core.resolve_image.whole_copy_before_resolving_no_cab.8_bit_bind_offset
-dEQP-VK.api.copy_and_blit.core.resolve_image.copy_with_regions_before_resolving.8_bit
-dEQP-VK.api.copy_and_blit.core.resolve_image.copy_with_regions_before_resolving.8_bit_bind_offset
-dEQP-VK.api.copy_and_blit.copy_commands2.resolve_image.whole_copy_before_resolving_no_cab.8_bit
-dEQP-VK.api.copy_and_blit.copy_commands2.resolve_image.copy_with_regions_before_resolving.8_bit
-dEQP-VK.rasterization.rasterization_order_attachment_access.depth.samples_8.multi_draw_barriers
-dEQP-VK.rasterization.rasterization_order_attachment_access.stencil.samples_8.multi_draw_barriers
-
-# New timeouts with VKCTS 1.4.4.0
-dEQP-VK.draw.renderpass.instanced.dynamic_state_draw_indirect_vk_primitive_topology_triangle_list_attrib_divisor_2_multiview
-dEQP-VK.glsl.conversions.vector_combine.vec2_ivec2_to_vec4_vertex
-dEQP-VK.image.store.without_format.3d.e5b9g9r9_ufloat_pack32_linear
-dEQP-VK.texture.shadow.cube_array.nearest.less_d16_unorm
-dEQP-VK.synchronization.op.single_queue.timeline_semaphore.write_image_compute_indirect_read_image_tess_control.image_128x128_r16_uint
+# tests are broken with Vulkan 1.0: https://gerrit.khronos.org/c/vk-gl-cts/+/19823
+dEQP-VK.wsi.direct_drm.*
 
 # more tests broken on Vulkan 1.0: https://gitlab.khronos.org/Tracker/vk-gl-cts/-/issues/6409
 dEQP-VK.wsi.*.maintenance1.*.bind_image*

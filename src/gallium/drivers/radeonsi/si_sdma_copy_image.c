@@ -35,7 +35,6 @@ static unsigned minify_as_blocks(unsigned width, unsigned level, unsigned blk_w)
 static bool si_sdma_v4_v5_copy_texture(struct si_context *sctx, struct si_texture *sdst,
                                        struct si_texture *ssrc)
 {
-   bool is_v5 = sctx->gfx_level >= GFX10;
    bool is_v7 = sctx->gfx_level >= GFX12;
    unsigned bpp = sdst->surface.bpe;
    uint64_t dst_address = sdst->buffer.gpu_address + sdst->surface.u.gfx9.surf_offset;
@@ -97,8 +96,7 @@ static bool si_sdma_v4_v5_copy_texture(struct si_context *sctx, struct si_textur
                copy_width <= (1 << 16) && copy_height <= (1 << 16)))
             return false;
       } else {
-         /* Only SDMA 5 supports DCC with SDMA */
-         dcc = is_v5 && vi_dcc_enabled(tiled, 0);
+         dcc = vi_dcc_enabled(tiled, 0) && sctx->screen->info.sdma_supports_compression;
 
          /* Check if everything fits into the bitfields */
          if (!(tiled_width <= (1 << 14) && tiled_height <= (1 << 14) &&
@@ -216,7 +214,6 @@ bool cik_sdma_copy_texture(struct si_context *sctx, struct si_texture *sdst, str
                .y = 0,
                .z = 0,
             },
-         .bpp = bpp,
          .pitch = src_pitch,
          .slice_pitch = src_slice_pitch,
       };
@@ -232,7 +229,6 @@ bool cik_sdma_copy_texture(struct si_context *sctx, struct si_texture *sdst, str
                .y = 0,
                .z = 0,
             },
-         .bpp = bpp,
          .pitch = dst_pitch,
          .slice_pitch = dst_slice_pitch,
       };
@@ -416,7 +412,7 @@ bool si_sdma_copy_image(struct si_context *sctx, struct si_texture *dst, struct 
       return false;
 
    /* Decompress DCC on older chips where SDMA can't read it. */
-   if (vi_dcc_enabled(src, 0) && sctx->gfx_level < GFX10)
+   if (vi_dcc_enabled(src, 0) && !sctx->screen->info.sdma_supports_compression)
       si_decompress_dcc(sctx, src);
 
    /* Always flush the gfx queue to get the winsys to handle the dependencies for us. */

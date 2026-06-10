@@ -172,6 +172,29 @@ lower_image(nir_builder *b, nir_instr *instr)
    return false;
 }
 
+static bool
+fence_image(struct nir_builder *b, nir_intrinsic_instr *intr, void *data)
+{
+   b->cursor = nir_after_instr(&intr->instr);
+
+   /* If the image is write-only, there is no fencing needed */
+   if (nir_intrinsic_has_access(intr) &&
+       (nir_intrinsic_access(intr) & ACCESS_NON_READABLE)) {
+      return false;
+   }
+
+   switch (intr->intrinsic) {
+   case nir_intrinsic_bindless_image_store:
+   case nir_intrinsic_bindless_image_atomic:
+   case nir_intrinsic_bindless_image_atomic_swap:
+      nir_bindless_image_fence_kk(b, intr->src[0].ssa);
+      return true;
+
+   default:
+      return false;
+   }
+}
+
 /* Must go after descriptor lowering to ensure the instr we introduce are also
  * lowered */
 bool
@@ -189,5 +212,9 @@ kk_nir_lower_textures(nir_shader *nir)
             nir_progress(progress_impl, impl, nir_metadata_control_flow);
       }
    }
+
+   NIR_PASS(progress, nir, nir_shader_intrinsics_pass, fence_image,
+            nir_metadata_control_flow, NULL);
+
    return progress;
 }

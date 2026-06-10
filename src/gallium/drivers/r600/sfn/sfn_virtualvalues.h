@@ -164,6 +164,7 @@ public:
    void del_use(Instr *instr);
    bool has_uses() const { return !m_uses.empty() || pin() == pin_array; }
    void set_chan(int c) { do_set_chan(c); }
+   void pin_to_chan();
 
    bool can_switch_to_chan(int c);
 

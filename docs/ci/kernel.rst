@@ -113,3 +113,24 @@ Sometimes a job may turn to red for reasons unrelated to the kernel update, e.g.
 LAVA ``tftp`` timeout, problems with the freedesktop servers etc.
 So it is important to see the reason why the job turned red, and retry it if an
 infrastructure error has happened.
+
+Try your own kernel out
+^^^^^^^^^^^^^^^^^^^^^^^
+
+Trying out your own kernel is pretty straightforward. First, take the tree you
+want to test, and cherry-pick the closest -for-mesa-ci branch from gfx-ci/linux.
+For example, if you're based against 7.1 and the newest gfx-ci kernel is 6.19,
+you'll want to cherry-pick every commit in the v6.19-for-mesa-ci branch that
+isn't in the stable kernels. These commits are a mix of adding CI pipeline
+support, and fixups required to run on our devices. Push this to your fork on
+gitlab.freedesktop.org. Push a unique tag as well, e.g. fix-gpu-reset-abc1234.
+The tag is important so that you can iterate without getting defeated by
+caching.
+
+Once your kernel is built (i.e. the pipeline in your branch has completed),
+change ``KERNEL_TAG`` and ``KERNEL_REPO`` in Mesa's
+``.gitlab-ci/image-tags.yml`` to refer to this, e.g.
+``KERNEL_TAG: "fix-gpu-reset-abc1234"`` and
+``KERNEL_REPO: "hopeless-optimist/linux"``.
+
+Push this Mesa branch, and run your pipeline as usual.

@@ -571,7 +571,8 @@ zink_descriptor_program_init(struct zink_context *ctx, struct zink_program *pg)
    }
    pg->dd.binding_usage = has_bindings;
    if (!has_bindings && !push_count && !pg->dd.bindless) {
-      pg->layout = zink_pipeline_layout_create(screen, pg->dsl, pg->num_dsl, pg->is_compute, 0);
+      pg->layout = zink_pipeline_layout_create(screen, pg->dsl, pg->num_dsl, pg->is_compute,
+                                               pg->uses_shobj ? VK_PIPELINE_LAYOUT_CREATE_INDEPENDENT_SETS_BIT_EXT : 0);
       if (pg->layout)
          pg->compat_id = _mesa_hash_data(pg->dsl, pg->num_dsl * sizeof(pg->dsl[0]));
       return !!pg->layout;
@@ -640,7 +641,8 @@ zink_descriptor_program_init(struct zink_context *ctx, struct zink_program *pg)
       pg->dd.binding_usage |= BITFIELD_MASK(ZINK_DESCRIPTOR_BASE_TYPES);
    }
 
-   pg->layout = zink_pipeline_layout_create(screen, pg->dsl, pg->num_dsl, pg->is_compute, 0);
+   pg->layout = zink_pipeline_layout_create(screen, pg->dsl, pg->num_dsl, pg->is_compute,
+                                            pg->uses_shobj ? VK_PIPELINE_LAYOUT_CREATE_INDEPENDENT_SETS_BIT_EXT : 0);
    if (!pg->layout)
       return false;
    pg->compat_id = _mesa_hash_data(pg->dsl, pg->num_dsl * sizeof(pg->dsl[0]));

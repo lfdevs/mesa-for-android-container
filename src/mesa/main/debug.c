@@ -103,6 +103,7 @@ set_verbose_flags(const char *str)
    static const struct option opts[] = {
       { "state",     VERBOSE_STATE },
       { "list",      VERBOSE_DISPLAY_LIST },
+      { "api",       VERBOSE_API },
    };
    GLuint i;
 

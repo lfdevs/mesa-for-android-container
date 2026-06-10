@@ -1,10 +1,16 @@
 [traces_db]
 download_url = "https://s3.freedesktop.org/mesa-tracie-private/"
 
+[devices]
+# HDK 8350 (a660) and 8650 (a750) are 12GB devices.  Subtract off 9 slots of
+# minimum ~400MB sysmem+RSS traces, and we should avoid hitting swap.
+freedreno-a660 = { sysmem = 8000 }
+freedreno-a750 = { sysmem = 8000 }
+
 [[traces]]
 path = "angle/angle_trace_tests/among_us"
 [traces.devices]
-freedreno-a660 = { checksum = "b3a711b88161fc7a02fa2eaf06f06c5953f2c71c191bf2d2827ac1777c11c949" }
+freedreno-a660 = { checksum = "76c6a3606ca690d78bb545a2a4e6d736a518bcc6c5653738b9d22fd144fcf4e8" }
 
 [[traces]]
 path = "angle/angle_trace_tests/asphalt_9"
@@ -186,12 +192,16 @@ freedreno-a750 = { checksum = "4881e457239cf97c5beb529ecfe4d6e828cc374d1c86cac69
 path = "steam-d3d8/hod3pc_unkown_dx8_unknown_unknown_none.trace"
 [traces.devices]
 # a660: vc-win64\bin\d3dretrace.exe:
+# "Validation Error: [ VUID-VkCopyBufferToImageInfo2-dstImage-07973 ] | MessageID = 0xbb970c9d
+#  vkCmdCopyBufferToImage2(): pCopyBufferToImageInfo->dstImage VkImage 0x170000000017 was created with a sample count of VK_SAMPLE_COUNT_2_BIT but must be VK_SAMPLE_COUNT_1_BIT.
+#  The Vulkan spec states: dstImage must have a sample count equal to VK_SAMPLE_COUNT_1_BIT (https://docs.vulkan.org/spec/latest/chapters/copies.html#VUID-VkCopyBufferToImageInfo2-dstImage-07973)
+#
 #  ../src/freedreno/vulkan/tu_clear_blit.cc:553: void r2d_setup(tu_cmd_buffer*,
 #  tu_cs*, pipe_format, pipe_format, VkImageAspectFlags, unsigned int, bool,
 #  bool, VkSampleCountFlagBits, VkSampleCountFlagBits) [with chip CHIP = A6XX;
 #  VkImageAspectFlags = unsigned int; VkSampleCountFlagBits =
 #  VkSampleCountFlagBits]: Assertion `dst_samples == VK_SAMPLE_COUNT_1_BIT'
-#  failed.
+#  failed."
 freedreno-a750 = { checksum = "4a74817ec7271b26251a1f0a678cae95b6e3cf140b1bf7b0e882256e740683aa" }
 
 [[traces]]
@@ -388,6 +398,7 @@ freedreno-a750 = { checksum = "73d3efdd6c98bb18d40c6648fc86654b902497b08c9991f1e
 
 [[traces]]
 path = "steam-d3d9/FalloutNewVegas_unknown_dx9_unknown_unknown_none.trace"
+sysmem = 900
 [traces.devices]
 freedreno-a660 = { checksum = "67073a8b127eef1050a2d62726bdc17e5b59664ca381be32a4b431b232eb1088" }
 freedreno-a750 = { checksum = "67073a8b127eef1050a2d62726bdc17e5b59664ca381be32a4b431b232eb1088" }
@@ -433,6 +444,7 @@ freedreno-a750 = { checksum = "e8a7637edb80f67f56c9e3c20215556445f7041bbdd377af8
 [[traces]]
 path = "steam-d3d9/FrozenSynapse2_unknown_dx9_Skirmish_none_720p.trace"
 nonloopable = true
+sysmem = 600
 [traces.devices]
 freedreno-a660 = { checksum = "244ddbbf6b8356cbd2955ea750f77b592a7c93a8cc838d657651b4337ecad0df" }
 freedreno-a750 = { checksum = "244ddbbf6b8356cbd2955ea750f77b592a7c93a8cc838d657651b4337ecad0df" }
@@ -506,6 +518,7 @@ freedreno-a750 = { checksum = "c2a8d2d714545808b0006f3079f1bffb784083a06d583dadc
 
 [[traces]]
 path = "steam-d3d9/KoAReckoning_unknown_dx9_unknown_unknown_none.trace"
+sysmem = 600
 [traces.devices]
 freedreno-a660 = { checksum = "cf25aae7ef02da66152c9312e46478c176c684fe8bab74a686e86d26e6c6abe2" }
 freedreno-a750 = { checksum = "cf25aae7ef02da66152c9312e46478c176c684fe8bab74a686e86d26e6c6abe2" }
@@ -567,7 +580,9 @@ freedreno-a750 = { checksum = "3b418d97d0e5213f4acc19fa083cca9475fd1afd49d323dca
 [[traces]]
 path = "steam-d3d9/MirrorsEdge_unknown_dx9_unknown_unknown_none.trace"
 nonloopable = true
+sysmem = 600
 [traces.devices]
+# About 1.5 min to run the 5 loops
 freedreno-a660 = { checksum = "66854c4c188d6c31b7eee767785096313295a09a8ca3c71eae819d50dec38bd9" }
 freedreno-a750 = { checksum = "66854c4c188d6c31b7eee767785096313295a09a8ca3c71eae819d50dec38bd9" }
 
@@ -592,6 +607,7 @@ freedreno-a750 = { checksum = "a28182b470cd243e8fb3b8838589fcb3e0b291edee297b4eb
 
 [[traces]]
 path = "steam-d3d9/Payday2_unknown_dx9_AlaskanDeal_ultra-approx_720p.trace"
+sysmem = 1400
 [traces.devices]
 freedreno-a660 = { checksum = "3f6cf9fd7c50c9832524b296dff053e620230ff8c5bc39bd06db4bc6c5bf9c84" }
 freedreno-a750 = { checksum = "3f6cf9fd7c50c9832524b296dff053e620230ff8c5bc39bd06db4bc6c5bf9c84" }
@@ -610,6 +626,7 @@ freedreno-a750 = { checksum = "239cb1099dcc4e14b2ae4addf8c9cb7750266117de1ecb951
 
 [[traces]]
 path = "steam-d3d9/Payday2_unknown_dx9_SafeHouse_ultra-approx_1080p.trace"
+sysmem = 1400
 [traces.devices]
 freedreno-a660 = { checksum = "926a91e0cca7c97ca93832c3b7bba119dff970963f50855a165cdb087ca7bf5f" }
 freedreno-a750 = { checksum = "926a91e0cca7c97ca93832c3b7bba119dff970963f50855a165cdb087ca7bf5f" }
@@ -683,24 +700,28 @@ freedreno-a750 = { checksum = "cfbe62e3f4a359f692a0218d752f1187366e50de5335cabf9
 
 [[traces]]
 path = "steam-d3d9/ResidentEvil6_unknown_dx9_unknown_unknown_none.trace"
+sysmem = 700
 [traces.devices]
 freedreno-a660 = { checksum = "ad598592879ad4a8d68be0b6f7c70c03dc250c34dd27f2aa4b4f6280b4d41331" }
 freedreno-a750 = { checksum = "ad598592879ad4a8d68be0b6f7c70c03dc250c34dd27f2aa4b4f6280b4d41331" }
 
 [[traces]]
 path = "steam-d3d9/Silence_unknown_dx9_Cutscene_high_1080p.trace"
+sysmem = 700
 [traces.devices]
 freedreno-a660 = { checksum = "0cd12018c94082411e6e0a0d6e7ccaae34e4c6d4a44a31420cedb4129caa091c" }
 freedreno-a750 = { checksum = "0cd12018c94082411e6e0a0d6e7ccaae34e4c6d4a44a31420cedb4129caa091c" }
 
 [[traces]]
 path = "steam-d3d9/Silence_unknown_dx9_Cutscene_low_1080p.trace"
+sysmem = 600
 [traces.devices]
 freedreno-a660 = { checksum = "7dcdf1206915af5d9567cb7026ed40dc352a6b1528f471cc23a07990e5090bf7" }
 freedreno-a750 = { checksum = "7dcdf1206915af5d9567cb7026ed40dc352a6b1528f471cc23a07990e5090bf7" }
 
 [[traces]]
 path = "steam-d3d9/Silence_unknown_dx9_Cutscene_medium_1080p.trace"
+sysmem = 700
 [traces.devices]
 freedreno-a660 = { checksum = "71b513a7dd34770e56750749bfde664eac64cf8600c55f3a416d796e05f47572" }
 freedreno-a750 = { checksum = "71b513a7dd34770e56750749bfde664eac64cf8600c55f3a416d796e05f47572" }
@@ -765,6 +786,7 @@ freedreno-a750 = { checksum = "ad4fa227ff0e422e5a453c24dbf0bfb5f1a6371afd1cd3425
 
 [[traces]]
 path = "steam-d3d9/TFT_unknown_dx9_unknown_unknown_none.trace"
+sysmem = 1000
 [traces.devices]
 freedreno-a660 = { checksum = "79e75752d9a0367ea26ac722952cf3005f15809888cdd11a414aba32af5ae303" }
 freedreno-a750 = { checksum = "3f725b121801e399006f09bd4efff759d8a605983689945191f3a15ac85d8f52" }
@@ -777,6 +799,7 @@ freedreno-a750 = { checksum = "9290858b7c2960939d64ae1dee323aa42a6d07ec1221092a4
 
 [[traces]]
 path = "steam-d3d9/TheSlormancer_unknown_dx9_unknown_unknown_none.trace"
+sysmem = 3100
 [traces.devices]
 freedreno-a660 = { checksum = "fe500930ba70924e138a3ada99a7b665d9f0616741214c38a287b53d9ef44ff5" }
 freedreno-a750 = { checksum = "fe500930ba70924e138a3ada99a7b665d9f0616741214c38a287b53d9ef44ff5" }
@@ -793,3 +816,477 @@ path = "steam-d3d9/WarofTheRing_unknown_dx9_unknown_unknown_none.trace"
 freedreno-a660 = { checksum = "7f4ccdc57c47d4dc6cddb00223e96410b19493cef900db946ee8b80b27a06bf0" }
 freedreno-a750 = { checksum = "7f4ccdc57c47d4dc6cddb00223e96410b19493cef900db946ee8b80b27a06bf0" }
 
+[[traces]]
+path = "steam-d3d11/ActOfAggression-high.rdc"
+[traces.devices]
+freedreno-a660 = { checksum = "b079139846446dc42d9b9b3c3b750296f7757045c8d08439d6de6e1da7760813" }
+
+[[traces]]
+path = "steam-d3d11/ActOfAggression-mid3.rdc"
+[traces.devices]
+freedreno-a660 = { checksum = "6ffd3d82aa07cc8bafa4b0aea544e5dd74506ce7f7641f43414d0f2c5b4141ec" }
+
+[[traces]]
+path = "steam-d3d11/AlbinoLullaby-high4.rdc"
+[traces.devices]
+# occasional flaky rendering within a run, not diagnosed
+# freedreno-a660 = { checksum = "b74365b37bfce6985001e76ccba2612e209cc943e417fe7f1202e1dc78ccc28e" }
+
+[[traces]]
+path = "steam-d3d11/AlbinoLullaby-medium.rdc"
+[traces.devices]
+# occasional flaky rendering within a run, not diagnosed
+# freedreno-a660 = { checksum = "664ebed19476473762afed542d903e654bbea597181530628128d1c38c8739b1" }
+
+[[traces]]
+path = "steam-d3d11/alien-isolation-high2.rdc"
+[traces.devices]
+# intermittent: "Fatal glibc error: malloc.c:2601 (sysmalloc): assertion failed: (old_top == initial_top (av) && old_size == 0) || ((unsigned long) (old_size) >= MINSIZE && prev_inuse (old_top) && ((unsigned long) old_end & (pagesize - 1)) == 0)"
+# freedreno-a660 = { checksum = "f5986a735c9c4cecb800d8587671f97b6d351214b2ec4104eed17001451d154b" }
+
+[[traces]]
+path = "steam-d3d11/alien-isolation-low3.rdc"
+sysmem = 1000
+[traces.devices]
+freedreno-a660 = { checksum = "cb4a43398b1b8cf5a50fbb24121a2bd8ef1d220c94995daaefbb0b3d5b0ecb31" }
+
+[[traces]]
+path = "steam-d3d11/anno5-high-2.rdc"
+sysmem = 900
+[traces.devices]
+freedreno-a660 = { checksum = "7ee7a8dcf70c430aad12aa223da8f5177423ae479a811951830f26dca8b56d93" }
+
+[[traces]]
+path = "steam-d3d11/anno5-low.rdc"
+sysmem = 600
+[traces.devices]
+freedreno-a660 = { checksum = "4ed664f5d05fec922678f14af4be7ba6f499b991a1d66ce123a6f808ec85e3d6" }
+
+[[traces]]
+path = "steam-d3d11/anno-medium.rdc"
+sysmem = 600
+[traces.devices]
+freedreno-a660 = { checksum = "b15e76f9d42e8653cd913677d990ca39ac18b773420e67a521f9a13c925ecddc" }
+
+[[traces]]
+path = "steam-d3d11/arma-low.rdc"
+sysmem = 600
+[traces.devices]
+freedreno-a660 = { checksum = "28fcc8c0ca32dcf705d3c2d97d13dd952a9b042fb22d28743f9f2f5bb4c0b87e" }
+
+[[traces]]
+path = "steam-d3d11/arma-medium.rdc"
+sysmem = 600
+[traces.devices]
+freedreno-a660 = { checksum = "e8bdd157b066dde4ae0ce800f920b0ade683c4a947cba62a4e0ab431242daeae" }
+
+[[traces]]
+path = "steam-d3d11/assasins_creed_rogue_mid_1.rdc"
+[traces.devices]
+# inconsistent rendering
+# freedreno-a660 = { checksum = "6808bcb651d9aa8baf440c64a224be676c61112a7862b0ef6d006ca1c00948fa" }
+
+[[traces]]
+path = "steam-d3d11/barnfinders_high_1.rdc"
+[traces.devices]
+# inconsistent rendering within a single run
+# freedreno-a660 = { checksum = "e54c6fb9da9ed0615d9548ceca709284332c38deb8150dfca99a0b9d685995bd" }
+
+[[traces]]
+path = "steam-d3d11/barnfinders_low_2.rdc"
+[traces.devices]
+# inconsistent rendering between runs
+# freedreno-a660 = { checksum = "ad38859d6c9704a891c57ffb080fd584b7406524a0e082b0b35ab922120f7c83" }
+
+[[traces]]
+path = "steam-d3d11/BatmanArkhamCity-high.rdc"
+[traces.devices]
+# Requires RGB32F texture support.
+# freedreno-a660 = { checksum = "7f4ccdc57c47d4dc6cddb00223e96410b19493cef900db946ee8b80b27a06bf0" }
+
+[[traces]]
+path = "steam-d3d11/BatmanArkhamCity-medium.rdc"
+[traces.devices]
+# Requires RGB32F texture support.
+# freedreno-a660 = { checksum = "7f4ccdc57c47d4dc6cddb00223e96410b19493cef900db946ee8b80b27a06bf0" }
+
+[[traces]]
+path = "steam-d3d11/CompanyOfHeroes2.rdc"
+sysmem = 1100
+[traces.devices]
+freedreno-a660 = { checksum = "8ba5c51d541bb30158a8ed6ac51b12a6af91061acaf91d8faef8ef96f3e52b77" }
+
+[[traces]]
+path = "steam-d3d11/competizione_low_3.rdc"
+sysmem = 1700
+[traces.devices]
+# Right about 60s of runtime, so intermittently times out
+# freedreno-a660 = { checksum = "0c0b031a85411ec5dfa909438d07b7340c2474b29e267552841f48a1be446b5b" }
+
+[[traces]]
+path = "steam-d3d11/CyberHook_1.rdc"
+sysmem = 1100
+[traces.devices]
+freedreno-a660 = { checksum = "4d5c737e57ede36c35a8a4e0180b5598d65175ff14cf17f4a20e5d8cca3e39c7" }
+
+[[traces]]
+path = "steam-d3d11/DevilMayCry5_high_1.rdc"
+sysmem = 1900
+[traces.devices]
+freedreno-a660 = { checksum = "29cf453dc175596f650259b369f7ae66e5318a652ea32991982078320fbef2ae" }
+
+[[traces]]
+path = "steam-d3d11/digital_combat_simulator_low_2.rdc"
+sysmem = 2600
+[traces.devices]
+# Appears to trigger unrecoverable GPU hang on a660.
+#freedreno-a660 = { checksum = "7f4ccdc57c47d4dc6cddb00223e96410b19493cef900db946ee8b80b27a06bf0" }
+
+[[traces]]
+path = "steam-d3d11/dirt4_low_4.rdc"
+sysmem = 1200
+[traces.devices]
+# occasional flakes, no visible change
+# freedreno-a660 = { checksum = "484f151f8d02836c35dff601f538e76a59aa9f408613f0d164b966feab60c00f" }
+
+[[traces]]
+path = "steam-d3d11/dirtrally2_low_3.rdc"
+sysmem = 1400
+[traces.devices]
+freedreno-a660 = { checksum = "3280f821e875db2dac7f2f5c9d6fe568c88b1d74ea38205f421111ed1e4399fe" }
+
+[[traces]]
+path = "steam-d3d11/disco_elysium_high_1.rdc"
+sysmem = 3000
+[traces.devices]
+freedreno-a660 = { checksum = "f552b774330776be8482606e75fd80e63569daca54939ecc48394ac26265b218" }
+
+[[traces]]
+path = "steam-d3d11/Divinity_Original_Sin_2_high_3.rdc"
+sysmem = 1700
+[traces.devices]
+freedreno-a660 = { checksum = "14caf3ae610f57b33139a5c497ef64c0b76f7763ec390161904734bd1eba68cc" }
+
+[[traces]]
+path = "steam-d3d11/DyingLight-low3.rdc"
+[traces.devices]
+# no recovery from "adreno 3d00000.gpu: [drm:a6xx_irq] *ERROR* gpu fault ring 0 fence 730 status 00C105E5 rb 13ba/1445 ib1 0000000127EC4000/0760 ib2 000000010D7EB000/0000"
+# Runs fine locally on a740
+# freedreno-a660 = { checksum = "7f4ccdc57c47d4dc6cddb00223e96410b19493cef900db946ee8b80b27a06bf0" }
+
+[[traces]]
+path = "steam-d3d11/DyingLight-medium2.rdc"
+[traces.devices]
+# no hangcheck recovery, runs fine locally on a740
+# freedreno-a660 = { checksum = "7f4ccdc57c47d4dc6cddb00223e96410b19493cef900db946ee8b80b27a06bf0" }
+
+[[traces]]
+path = "steam-d3d11/Dying_Light_mid_2.rdc"
+[traces.devices]
+# no hangcheck recovery, runs fine locally on a740
+# freedreno-a660 = { checksum = "7f4ccdc57c47d4dc6cddb00223e96410b19493cef900db946ee8b80b27a06bf0" }
+
+[[traces]]
+path = "steam-d3d11/earth_defense_force_unknown_1.rdc"
+[traces.devices]
+# timeout
+# freedreno-a660 = { checksum = "7f4ccdc57c47d4dc6cddb00223e96410b19493cef900db946ee8b80b27a06bf0" }
+
+[[traces]]
+path = "steam-d3d11/EliteDangerous2.rdc"
+sysmem = 1200
+[traces.devices]
+freedreno-a660 = { checksum = "12d868c9c2eace2a4d3d41940a43858d6ae6cacbd42b24689d0d88d9a915d7e6" }
+
+[[traces]]
+path = "steam-d3d11/enter_the_gungeon_1.rdc"
+[traces.devices]
+# timeout
+# freedreno-a660 = { checksum = "7f4ccdc57c47d4dc6cddb00223e96410b19493cef900db946ee8b80b27a06bf0" }
+
+[[traces]]
+path = "steam-d3d11/eurotrucks2_high_3.rdc"
+sysmem = 2000
+[traces.devices]
+freedreno-a660 = { checksum = "3741c94476e0dab45d7d0980accbba802131103c5400737852f290df0f888684" }
+
+[[traces]]
+path = "steam-d3d11/eurotrucks2_low_2.rdc"
+sysmem = 1200
+[traces.devices]
+freedreno-a660 = { checksum = "46bbe6e7546daf000a77a2d3affdbdd680e040257a7a7f4fdcc93e3ffb0126f8" }
+
+[[traces]]
+path = "steam-d3d11/f1_2019_low_1.rdc"
+[traces.devices]
+# timeout
+# freedreno-a660 = { checksum = "60474c933d3b29f0efeed1512ad09ea6e9d168c2e3f294255fbb91cea20c60b3" }
+
+[[traces]]
+path = "steam-d3d11/fallout4_low3.rdc"
+[traces.devices]
+# inconsistent rendering
+# freedreno-a660 = { checksum = "57db5991fc59bfaa5ed5827fed388dc02f94b764a94ac9de67bb8a18dfeec9ee" }
+
+[[traces]]
+path = "steam-d3d11/final_fantasy_type_0_1.rdc"
+sysmem = 900
+[traces.devices]
+freedreno-a660 = { checksum = "6f5cad4a85c45bd8a26dce96ababb483e0ef6e5b947497f0d630d13e7eea511b" }
+
+[[traces]]
+path = "steam-d3d11/final_fantasy_x_1.rdc"
+sysmem = 800
+[traces.devices]
+freedreno-a660 = { checksum = "834a8d143389f9040828d296702478ba725e554f957223a16c67652b6cf15732" }
+
+[[traces]]
+path = "steam-d3d11/gow_high_1.rdc"
+[traces.devices]
+# timeout
+# freedreno-a660 = { checksum = "7f4ccdc57c47d4dc6cddb00223e96410b19493cef900db946ee8b80b27a06bf0" }
+
+[[traces]]
+path = "steam-d3d11/GTAV_high_2.rdc"
+[traces.devices]
+# No recovery from "adreno 3d00000.gpu: [drm:a6xx_irq] *ERROR* gpu fault ring 0 fence 1e3f status 00C105E5 rb 10c3/10d2 ib1 00000001287E4000/3912 ib2 00000001285E4000/09f4"
+# freedreno-a660 = { checksum = "7f4ccdc57c47d4dc6cddb00223e96410b19493cef900db946ee8b80b27a06bf0" }
+
+[[traces]]
+path = "steam-d3d11/GTAV_normal_4.rdc"
+sysmem = 1300
+[traces.devices]
+freedreno-a660 = { checksum = "2473bed3017e5803e72a81573c609927ba47b217f26ab9d3524b51ea77c86417" }
+
+[[traces]]
+path = "steam-d3d11/injustice2_high_1.rdc"
+sysmem = 1300
+[traces.devices]
+freedreno-a660 = { checksum = "98309c0a847ad615d121cbd9a11e956f1a328c2943b0a82118ece634b5886d4e" }
+
+[[traces]]
+path = "steam-d3d11/killer_instinct_unknown_1.rdc"
+[traces.devices]
+# adreno 3d00000.gpu: [drm:a6xx_irq] *ERROR* gpu fault ring 0 fence ffffffc5 status 00C105E5 rb 179b/1803 ib1 000000010CD3A000/4480 ib2 000000010D0BD000/0000
+# freedreno-a660 = { checksum = "7f4ccdc57c47d4dc6cddb00223e96410b19493cef900db946ee8b80b27a06bf0" }
+
+[[traces]]
+path = "steam-d3d11/mad_max_high_1.rdc"
+[traces.devices]
+# flaky rendering, even within a run.
+# freedreno-a660 = { checksum = "16942380ecac4df278d955b3e39d15ee19cf8a372166d808545303ea516ab3a2" }
+
+[[traces]]
+path = "steam-d3d11/metro2033Redux-high.rdc"
+sysmem = 1300
+[traces.devices]
+# occasional flakes, no visible change
+# freedreno-a660 = { checksum = "92b7b2d78c01e82ccfa5b4695bf76829f0369080ee80f09ce2c3e44b8f58e765" }
+
+[[traces]]
+path = "steam-d3d11/metro2033Redux-low.rdc"
+sysmem = 1300
+[traces.devices]
+# occasional flakes, no visible change
+# freedreno-a660 = { checksum = "1edb5fbfcebdd73b35ac2f32f15dcbb02df24667be7e54b59dea173282ce3b2f" }
+
+[[traces]]
+path = "steam-d3d11/metro2033Redux-medium3.rdc"
+sysmem = 1600
+[traces.devices]
+# If the other two were flaky, surely this one is, too.
+# freedreno-a660 = { checksum = "80cbb47578bd72f224d8f5c40ba4e2c3c1050a765a970eaf834c6c35806bc5c6" }
+
+[[traces]]
+path = "steam-d3d11/metro_benchmark_low2.rdc"
+sysmem = 1300
+[traces.devices]
+freedreno-a660 = { checksum = "f868669ef6c3800cb8012be5f08bcc9d32e0fdef5c3ed8769b7a2cff8da92792" }
+
+[[traces]]
+path = "steam-d3d11/metro_benchmark_medium3.rdc"
+sysmem = 1400
+[traces.devices]
+freedreno-a660 = { checksum = "80a9c7772cb24856fca4b07432debc5ac7c5439b93f660e783656a4b814a1570" }
+
+[[traces]]
+path = "steam-d3d11/MetroLastLightRedux-low3.rdc"
+sysmem = 1200
+[traces.devices]
+# occasional flakes within a run
+# freedreno-a660 = { checksum = "f357642614123b31dc05aa161db9d59b888129a599dafaa4ba81147ef18156d1" }
+
+[[traces]]
+path = "steam-d3d11/MetroLastLightRedux-medium2.rdc"
+sysmem = 1200
+[traces.devices]
+# If the other one flakes, this one probably does, too.
+# freedreno-a660 = { checksum = "cedb118bfe15484bdf72191b829c1de52dcadbddc847fc05000954eda34287cd" }
+
+[[traces]]
+path = "steam-d3d11/need_for_speed_most_wanted_mid_2.rdc"
+sysmem = 700
+[traces.devices]
+freedreno-a660 = { checksum = "c6962d56f4d92fb93ea852191f96996652fe12d0084a865d9d4b250cfcb50fd1" }
+
+[[traces]]
+path = "steam-d3d11/neon_noir_bench_high_1.rdc"
+sysmem = 2500
+[traces.devices]
+freedreno-a660 = { checksum = "31f7d4de2f8c46d5f39173ad3fa31fe2e53e631d9719f0c4f19ad5aa5ba35d55" }
+
+[[traces]]
+path = "steam-d3d11/neon_noir_bench_ultra_2.rdc"
+sysmem = 2600
+[traces.devices]
+freedreno-a660 = { checksum = "915f80fce20fd17277bc0d3f22c3dfa28ed5f4c4c4a3ff4fef0600caae2d09a8" }
+
+[[traces]]
+path = "steam-d3d11/neon_white_high_2.rdc"
+[traces.devices]
+# "adreno 3d00000.gpu: [drm:a6xx_irq] *ERROR* gpu fault ring 0 fence 1b1 status 00C105E5 rb 0355/03bd ib1 0000000100C77000/33d9 ib2 0000000100C9D000/0000"
+# freedreno-a660 = { checksum = "7f4ccdc57c47d4dc6cddb00223e96410b19493cef900db946ee8b80b27a06bf0" }
+
+[[traces]]
+path = "steam-d3d11/nfs_the_run_1.rdc"
+sysmem = 1300
+[traces.devices]
+freedreno-a660 = { checksum = "e6c122c94e549ca9d66fc4a3534ebce11ed0fcebb400d85db64a10c3b2c536d4" }
+
+[[traces]]
+path = "steam-d3d11/ni_no_kuni_remastered_unknown_1.rdc"
+sysmem = 1000
+[traces.devices]
+freedreno-a660 = { checksum = "290ad8148fa17815c9a3391017cd47609f18c21ce582395a2832895d3cfa6a17" }
+
+[[traces]]
+path = "steam-d3d11/path_of_exile_2.rdc"
+[traces.devices]
+freedreno-a660 = { checksum = "8986091d14d2f51e196eb12f2fed12f7540ac7c2a75ebc93feb3ae44bdb4e163" }
+
+[[traces]]
+path = "steam-d3d11/pcars2_high_2.rdc"
+sysmem = 1800
+[traces.devices]
+freedreno-a660 = { checksum = "798640dd80f9d599141760b8b976ef6994f63e0682b88f0406ce41f3085a5768" }
+
+[[traces]]
+path = "steam-d3d11/pcars2_low_1.rdc"
+sysmem = 1200
+[traces.devices]
+freedreno-a660 = { checksum = "b206dfa5fea810b132f45678e05ac56d98278c1b272fd8071d34e55e4e590b35" }
+
+[[traces]]
+path = "steam-d3d11/planet_zoo_1.rdc"
+sysmem = 1300
+[traces.devices]
+freedreno-a660 = { checksum = "02e4600bfc8b45b8ef8d30f6be97211eaeecc9b0665f3a9ca0635ef7f5eb80dd" }
+
+[[traces]]
+path = "steam-d3d11/risk_of_rain_2_high_2.rdc"
+[traces.devices]
+# flaky rendering, not debugged
+# freedreno-a660 = { checksum = "d1dd47e06df465776a89f9097555bf979505673e1a4fdcfea6a5fe58ca77cbf3" }
+
+[[traces]]
+path = "steam-d3d11/samurai_warriors_spirit_of_sanada_unknown_3.rdc"
+sysmem = 1600
+[traces.devices]
+freedreno-a660 = { checksum = "077e9f1aea087e7e02306230698a99695f0206eedf4043bc3339996ccfb95242" }
+
+[[traces]]
+path = "steam-d3d11/sekiro_shadows_die_twice_high_1.rdc"
+[traces.devices]
+# Crashed with "adreno 3d00000.gpu: [drm:a6xx_irq] *ERROR* gpu fault ring 0 fence 5d4 status 00C115E5 rb 1e4d/1e5c ib1 000000010B574000/0258 ib2 000000010B83E000/00a7"
+# Maybe wedged the rest of the run, didn't have the same "cx gdsc didn't collapse" signature as others.
+#freedreno-a660 = { checksum = "7f4ccdc57c47d4dc6cddb00223e96410b19493cef900db946ee8b80b27a06bf0" }
+
+[[traces]]
+path = "steam-d3d11/shadow_warrior_2013_unknown_1.rdc"
+sysmem = 700
+[traces.devices]
+freedreno-a660 = { checksum = "0286515033594b8f96b9eec5d2a32ec7291e7b0bc75e8a70dd52383560a44ad6" }
+
+[[traces]]
+path = "steam-d3d11/SlimeRancher_high_1.rdc"
+[traces.devices]
+# Requires 8x MSAA
+#freedreno-a660 = { checksum = "7f4ccdc57c47d4dc6cddb00223e96410b19493cef900db946ee8b80b27a06bf0" }
+
+[[traces]]
+path = "steam-d3d11/snake_pass_high_1.rdc"
+sysmem = 1900
+[traces.devices]
+# inconsistent rendering
+# freedreno-a660 = { checksum = "132a3acf43879bd9fad4ed5211a0462fe2b8af1ca0dc910e213e5092a69a7e51" }
+
+[[traces]]
+path = "steam-d3d11/space_engineers_low_2.rdc"
+sysmem = 1400
+[traces.devices]
+# intermittent: "Fatal glibc error: malloc.c:2601 (sysmalloc): assertion failed: (old_top == initial_top (av) && old_size == 0) || ((unsigned long) (old_size) >= MINSIZE && prev_inuse (old_top) && ((unsigned long) old_end & (pagesize - 1)) == 0)"
+# freedreno-a660 = { checksum = "bd9f9c94a076e37b124db90c2c2048f6a9e711818ac108ee4a0fbe00505022eb" }
+
+[[traces]]
+path = "steam-d3d11/SuperCloudBuilt_2.rdc"
+sysmem = 1000
+[traces.devices]
+# occasional flakes, no visible change
+# freedreno-a660 = { checksum = "82b6ddc3c147d4d3467177222b746017e220c133211dea0d798d680fd8b6a97d" }
+
+[[traces]]
+path = "steam-d3d11/Tropico5.rdc"
+[traces.devices]
+freedreno-a660 = { checksum = "f0d675d0b779ce30616a535ee957e9778ef53744e1176cbbcae2691e77200524" }
+
+[[traces]]
+path = "steam-d3d11/ultrakill_1.rdc"
+[traces.devices]
+freedreno-a660 = { checksum = "8be08d609a38c2410a4abcb79c421b89df0b149bd4a7c3a72d9ad87f4e3d9dfb" }
+
+[[traces]]
+path = "steam-d3d11/unigine_heaven_1.rdc"
+sysmem = 800
+[traces.devices]
+freedreno-a660 = { checksum = "9f773449f8a418a80ba28fd2c8242b2f31bdcae484fb170fcebfee54afcdb0b7" }
+
+[[traces]]
+path = "steam-d3d11/unigine_superposition_1.rdc"
+sysmem = 1200
+[traces.devices]
+freedreno-a660 = { checksum = "bd52725704864cfbcba2d9bf2730bd457f22478e8e24c3c0e2b60348d082bdca" }
+
+[[traces]]
+path = "steam-d3d11/vecter_1.rdc"
+sysmem = 700
+[traces.devices]
+freedreno-a660 = { checksum = "b5f172a9dc1f7ffd444d52cc2cefcc06e5fe2b4b2b8e2a8fa1abff3fd39ed0bc" }
+
+[[traces]]
+path = "steam-d3d11/warriors_orochi_4_unknown_1.rdc"
+sysmem = 1800
+[traces.devices]
+freedreno-a660 = { checksum = "94c5519d806ff470f4cec76b889af83c28a729dcaad7cc121ec4af8e232a63d1" }
+
+[[traces]]
+path = "steam-d3d11/warthunder_high_2.rdc"
+sysmem = 1000
+[traces.devices]
+freedreno-a660 = { checksum = "f3e7af1ef34c81d65110924c597052f7a9477aed67c119ebc26d7cc500f5c90c" }
+
+[[traces]]
+path = "steam-d3d11/warthunder_low_1.rdc"
+sysmem = 500
+[traces.devices]
+freedreno-a660 = { checksum = "8d41576e47df060237b8c02c8d81c0b0ff2199ffb5e1ae5566c0dd05f4186d64" }
+
+[[traces]]
+path = "steam-d3d11/witness_1.rdc"
+[traces.devices]
+freedreno-a660 = { checksum = "8a7853e8fe2a51d4de6b95fd3820e539a08a90baf82a89cb8ab68f8b1ef7fe5c" }
+
+[[traces]]
+path = "steam-d3d11/WRC_5_low_settings_race_2.rdc"
+sysmem = 1900
+[traces.devices]
+freedreno-a660 = { checksum = "9a29f9f8ee34b522a4daa5b6ab5c9354cd203d9505725a5a43de165c12a03489" }

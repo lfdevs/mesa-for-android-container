@@ -13,7 +13,6 @@ Models.Op/yolox_yolox_nano_full_integer_quant,Fail
 
 Models.Op/efficientdet_efficientdet_tflite_lite0_int8_v1,Fail
 
-Models.Op/inception_000,Fail
 Models.Op/inception_inception_v1_224_quant,Fail
 
 Models.Op/movenetlightning_093,Fail

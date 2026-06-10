@@ -340,14 +340,22 @@ CDX12EncHMFT::IsSupported( const GUID *Api )
        *Api == CODECAPI_AVEncVideoEncodeQP || *Api == CODECAPI_AVEncVideoMinQP || *Api == CODECAPI_AVEncVideoForceKeyFrame ||
        *Api == CODECAPI_AVEncH264SPSID || *Api == CODECAPI_AVEncH264PPSID || *Api == CODECAPI_AVEncVideoTemporalLayerCount ||
        *Api == CODECAPI_AVEncVideoSelectLayer || *Api == CODECAPI_AVEncVideoEncodeFrameTypeQP ||
-       *Api == CODECAPI_AVEncSliceControlMode || *Api == CODECAPI_AVEncSliceControlSize ||
        *Api == CODECAPI_AVEncVideoMaxNumRefFrame || *Api == CODECAPI_AVEncVideoMeanAbsoluteDifference ||
        *Api == CODECAPI_AVEncVideoMaxQP || *Api == CODECAPI_AVScenarioInfo || *Api == CODECAPI_AVEncVideoROIEnabled ||
        *Api == CODECAPI_AVEncVideoLTRBufferControl || *Api == CODECAPI_AVEncVideoMarkLTRFrame ||
-       *Api == CODECAPI_AVEncVideoUseLTRFrame || *Api == CODECAPI_AVEncSliceGenerationMode )
+       *Api == CODECAPI_AVEncVideoUseLTRFrame )
    {
       hr = S_OK;
       return hr;
+   }
+
+   if( m_EncoderCapabilities.m_bHWSupportsAppControlledSlicePartitioning )
+   {
+      if( *Api == CODECAPI_AVEncSliceControlMode || *Api == CODECAPI_AVEncSliceControlSize )
+      {
+         hr = S_OK;
+         return hr;
+      }   
    }
 
    if( m_EncoderCapabilities.m_HWSupportsIntraRefreshModes != PIPE_VIDEO_ENC_INTRA_REFRESH_NONE )

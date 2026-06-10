@@ -99,7 +99,7 @@ extern "C" {
 
 #define LVP_NUM_QUEUES 1
 #define MAX_SETS 8
-#define MAX_DESCRIPTORS 1000000 /* Required by vkd3d-proton */
+#define MAX_DESCRIPTORS ((1<<20) - (1<<15)) /* Required by VK_EXT_descriptor_heap */
 #define MAX_PUSH_CONSTANTS_SIZE 256
 #define MAX_PUSH_DESCRIPTORS 32
 #define MAX_DESCRIPTOR_UNIFORM_BLOCK_SIZE MAX_DESCRIPTORS
@@ -149,6 +149,13 @@ void __lvp_finishme(const char *file, int line, const char *format, ...)
            __tmp = (mesa_shader_stage)(LVP_STAGE_MASK_GFX);            \
         stage = ffs(__tmp) - 1, __tmp;                               \
         __tmp &= ~(1 << (stage)))
+
+enum lvp_descriptor_heap {
+   LVP_DESCRIPTOR_HEAP_RESOURCE,
+   LVP_DESCRIPTOR_HEAP_SAMPLER,
+   LVP_DESCRIPTOR_HEAP_EMBEDDED,
+   LVP_DESCRIPTOR_HEAP_COUNT,
+};
 
 struct lvp_physical_device {
    struct vk_physical_device vk;
@@ -311,14 +318,15 @@ struct lvp_image_view {
 
 struct lvp_sampler {
    struct vk_sampler vk;
-   struct lp_descriptor desc;
+   struct lp_sampler_descriptor desc;
 };
 
 struct lvp_descriptor_set_binding_layout {
-   uint32_t descriptor_index;
+   uint32_t offset;
    /* Number of array elements in this binding */
    VkDescriptorType type;
    uint32_t stride; /* used for planar samplers */
+   uint32_t max_plane_count;
    uint32_t array_size;
    bool valid;
 
@@ -328,7 +336,7 @@ struct lvp_descriptor_set_binding_layout {
    uint32_t uniform_block_size;
 
    /* Immutable samplers (or NULL if no immutable samplers) */
-   struct lp_descriptor *immutable_samplers;
+   struct lp_sampler_descriptor *immutable_samplers;
    struct vk_ycbcr_conversion_state *immutable_ycbcr;
 };
 
@@ -372,7 +380,7 @@ struct lvp_descriptor_set {
    /* Buffer holding the descriptors. */
    struct pipe_memory_allocation *pmem;
    struct pipe_resource *bo;
-   void *map;
+   uint8_t *map;
 };
 
 struct lvp_descriptor_pool {
@@ -396,6 +404,15 @@ void
 lvp_descriptor_set_update_with_template(VkDevice _device, VkDescriptorSet descriptorSet,
                                         VkDescriptorUpdateTemplate descriptorUpdateTemplate,
                                         const void *pData);
+
+struct lvp_image_sampler_descriptor {
+   struct lp_image_descriptor image;
+   struct lp_sampler_descriptor sampler;
+};
+
+uint32_t lvp_get_descriptor_size(VkDescriptorType type);
+
+uint32_t lvp_get_sampler_descriptor_offset(VkDescriptorType type);
 
 struct lvp_pipeline_layout {
    struct vk_pipeline_layout vk;
@@ -437,6 +454,9 @@ lvp_pipeline_nir_ref(struct lvp_pipeline_nir **dst, struct lvp_pipeline_nir *src
 struct lvp_shader {
    struct vk_object_base base;
    struct lvp_pipeline_layout *layout;
+   struct pipe_memory_allocation *embedded_samplers_memory;
+   struct lp_sampler_descriptor *embedded_samplers_map;
+   struct pipe_resource *embedded_samplers;
    struct lvp_pipeline_nir *pipeline_nir;
    struct lvp_pipeline_nir *tess_ccw;
    void *shader_cso;
@@ -444,6 +464,7 @@ struct lvp_shader {
    struct pipe_stream_output_info stream_output;
    struct blob blob; //preserved for GetShaderBinaryDataEXT
    uint32_t push_constant_size;
+   bool heaps;
 };
 
 enum lvp_pipeline_type {
@@ -522,6 +543,7 @@ struct lvp_pipeline {
    bool library;
    bool compiled;
    bool used;
+   bool heaps;
 
    struct {
       const char *name;
@@ -607,6 +629,7 @@ struct lvp_query_pool {
 struct lvp_cmd_buffer {
    struct vk_command_buffer vk;
    uint8_t push_constants[MAX_PUSH_CONSTANTS_SIZE];
+   VkCommandBufferInheritanceRenderingInfo rendering_info; //for secondaries
 };
 
 static inline struct lvp_device *
@@ -755,7 +778,7 @@ void
 lvp_nir_lower_blend(nir_shader *nir, const nir_lower_blend_options *opts);
 
 void
-lvp_sampler_init(struct lvp_device *device, struct lp_descriptor *desc, const VkSamplerCreateInfo *pCreateInfo, const struct vk_sampler *sampler);
+lvp_sampler_init(struct lvp_device *device, struct lp_sampler_descriptor *desc, const struct vk_sampler_state *vk_state);
 
 static inline uint8_t
 lvp_image_aspects_to_plane(ASSERTED const struct lvp_image *image,
@@ -823,14 +846,12 @@ size_t
 lvp_ext_dgc_token_size(const struct lvp_indirect_command_layout_ext *elayout, const VkIndirectCommandsLayoutTokenEXT *token);
 
 struct lvp_cmd_write_buffer_cp {
-   struct vk_cmd_queue_entry_base base;
    VkDeviceAddress addr;
    void *data;
    uint32_t size;
 };
 
 struct lvp_cmd_fill_buffer_addr {
-   struct vk_cmd_queue_entry_base base;
    VkDeviceAddress addr;
    VkDeviceSize size;
    uint32_t data;
@@ -842,7 +863,6 @@ lvp_encode_as(struct vk_acceleration_structure *dst, VkDeviceAddress intermediat
               VkGeometryTypeKHR geometry_type);
 
 struct lvp_cmd_encode_as {
-   struct vk_cmd_queue_entry_base base;
    struct vk_acceleration_structure *dst;
    VkDeviceAddress intermediate_as_addr;
    VkDeviceAddress intermediate_header_addr;

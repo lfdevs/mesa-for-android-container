@@ -690,7 +690,7 @@ static void si_preprocess_nir(struct si_nir_shader_ctx *ctx)
    if (nir->info.stage == MESA_SHADER_TASK) {
       NIR_PASS(progress, nir, ac_nir_lower_task_outputs_to_mem, false);
    } else if (nir->info.stage == MESA_SHADER_MESH) {
-      NIR_PASS(progress, nir, ac_nir_lower_mesh_inputs_to_mem);
+      NIR_PASS(progress, nir, ac_nir_lower_mesh_inputs_to_mem, true);
    }
 
    if (mesa_shader_stage_is_compute(nir->info.stage)) {
@@ -841,21 +841,35 @@ static void si_preprocess_nir(struct si_nir_shader_ctx *ctx)
          if (key->ps.mono.point_smoothing)
             NIR_PASS(progress, nir, nir_lower_point_smooth, true);
 
+         bool msaa_disabled = key->ps.part.prolog.force_persp_center_interp ||
+                              key->ps.part.prolog.force_linear_center_interp ||
+                              key->ps.part.prolog.force_samplemask_to_helper_invocation ||
+                              key->ps.mono.interpolate_at_sample_force_center;
+         bool sample_shading = key->ps.part.prolog.samplemask_log_ps_iter ||
+                               key->ps.part.prolog.force_persp_sample_interp ||
+                               key->ps.part.prolog.force_linear_sample_interp;
+         ac_nir_lower_sample_mask_in_options lower_sample_mask_in_options = {0};
+
+         /* samplemask_log_ps_iter is always 3 with maximum sample shading */
+         if (nir->info.fs.uses_sample_shading || key->ps.part.prolog.samplemask_log_ps_iter == 3) {
+            lower_sample_mask_in_options.behavior = ac_nir_lower_samplemask_sample_shading_max;
+         } else if (sample_shading) {
+            lower_sample_mask_in_options.behavior = ac_nir_lower_samplemask_sample_shading_partial;
+            lower_sample_mask_in_options.ps_iter_samples = 1 << key->ps.part.prolog.samplemask_log_ps_iter;
+         } else if (msaa_disabled) {
+            lower_sample_mask_in_options.behavior = ac_nir_lower_samplemask_1sample_no_vrs;
+         } else {
+            lower_sample_mask_in_options.behavior = ac_nir_lower_samplemask_unknown_states_no_sample_shading;
+         }
+
+         NIR_PASS(progress, nir, ac_nir_lower_sample_mask_in, &lower_sample_mask_in_options);
+
          /* This eliminates system values and unused shader output components. */
          ac_nir_lower_ps_early_options early_options = {
-            .msaa_disabled = key->ps.part.prolog.force_persp_center_interp ||
-                             key->ps.part.prolog.force_linear_center_interp ||
-                             key->ps.part.prolog.force_samplemask_to_helper_invocation ||
-                             key->ps.mono.interpolate_at_sample_force_center,
+            .msaa_disabled = msaa_disabled,
             .load_sample_positions_always_loads_current_ones = true,
             .force_front_face = key->ps.opt.force_front_face_input,
-            .frag_coord_is_center = true,
-            /* This does a lot of things. See the description in ac_nir_lower_ps_early_options. */
-            .ps_iter_samples = nir->info.fs.uses_sample_shading ? 8 :
-                                  key->ps.part.prolog.samplemask_log_ps_iter ?
-                                     (1 << key->ps.part.prolog.samplemask_log_ps_iter) :
-                                     (key->ps.part.prolog.force_persp_sample_interp ||
-                                      key->ps.part.prolog.force_linear_sample_interp ? 2 : 0),
+            .sample_shading = sample_shading,
 
             .fbfetch_is_1D = key->ps.mono.fbfetch_is_1D,
             .fbfetch_layered = key->ps.mono.fbfetch_layered,
@@ -887,9 +901,18 @@ static void si_preprocess_nir(struct si_nir_shader_ctx *ctx)
          if (key->ps.part.prolog.poly_stipple)
             NIR_PASS(progress, nir, si_nir_lower_polygon_stipple);
       } else {
+         ac_nir_lower_sample_mask_in_options lower_sample_mask_in_options = {0};
+
+         /* Sample shading with the sample mask used always uses monolithic shader compilation. */
+         if (nir->info.fs.uses_sample_shading)
+            lower_sample_mask_in_options.behavior = ac_nir_lower_samplemask_sample_shading_max;
+         else
+            lower_sample_mask_in_options.behavior = ac_nir_lower_samplemask_unknown_states_no_sample_shading;
+
+         NIR_PASS(progress, nir, ac_nir_lower_sample_mask_in, &lower_sample_mask_in_options);
+
          ac_nir_lower_ps_early_options early_options = {
-            .frag_coord_is_center = true,
-            .ps_iter_samples = nir->info.fs.uses_sample_shading ? 8 : 0,
+            .sample_shading = nir->info.fs.uses_sample_shading,
             .lower_color_inputs_to_load_color01 = true,
             .alpha_func = COMPARE_FUNC_ALWAYS,
             .spi_shader_col_format_hint = ~0,

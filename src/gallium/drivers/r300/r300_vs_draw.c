@@ -1,355 +1,179 @@
-/* 
+/*
  * Copyright 2009 Marek Olšák <maraeo@gmail.com>
+ * Copyright 2026 Pavel Ondračka <pavel.ondracka@gmail.com>
  * SPDX-License-Identifier: MIT
  */
 
-/* This file contains the vertex shader transformations for SW TCL needed
- * to overcome the limitations of the r300 rasterizer.
+/* Vertex shader setup for the swtcl (draw-based) path.
  *
- * Transformations:
- * 1) If the secondary color output is present, the primary color must be
- *    present too.
- * 2) If any back-face color output is present, there must be all 4 color
- *    outputs and missing ones must be inserted.
- * 3) Insert a trailing texcoord output containing a copy of POS, for WPOS.
- *
- * I know this code is cumbersome, but I don't know of any nicer way
- * of transforming TGSI shaders. ~ M.
+ * NIR transforms applied before handing to the draw module:
+ * 1) Secondary color output requires primary color — insert zero primary if absent.
+ * 2) Any back-face color requires all 4 color outputs — insert zeros for missing ones.
+ * 3) Append a generic output containing a copy of gl_Position, used as WPOS
+ *    by the hardware fragment shader.
  */
 
 #include "r300_vs.h"
 
-#include <stdio.h>
-
-#include "tgsi/tgsi_transform.h"
-#include "tgsi/tgsi_dump.h"
+#include "nir/nir.h"
+#include "nir/nir_builder.h"
+#include "compiler/nir_to_rc.h"
+#include "compiler/r300_nir.h"
 
 #include "draw/draw_context.h"
 
-struct vs_transform_context {
-    struct tgsi_transform_context base;
-
-    bool color_used[2];
-    bool bcolor_used[2];
-
-    /* Index of the pos output, typically 0. */
-    unsigned pos_output;
-    /* Index of the pos temp where all writes of pos are redirected to. */
-    unsigned pos_temp;
-    /* The index of the last generic output, after which we insert a new
-     * output for WPOS. */
-    int last_generic;
-
-    unsigned num_outputs;
-    /* Used to shift output decl. indices when inserting new ones. */
-    unsigned decl_shift;
-    /* Used to remap writes to output decls if their indices changed. */
-    unsigned out_remap[32];
-
-    /* First instruction processed? */
-    bool first_instruction;
-    /* End instruction processed? */
-    bool end_instruction;
-
-    bool temp_used[1024];
-};
-
-static void emit_temp(struct tgsi_transform_context *ctx, unsigned reg)
+static nir_variable *
+r300_draw_find_shader_out(nir_shader *nir, unsigned location)
 {
-    struct tgsi_full_declaration decl;
-
-    decl = tgsi_default_full_declaration();
-    decl.Declaration.File = TGSI_FILE_TEMPORARY;
-    decl.Range.First = decl.Range.Last = reg;
-    ctx->emit_declaration(ctx, &decl);
+    nir_foreach_shader_out_variable(var, nir) {
+        if (var->data.location == location)
+            return var;
+    }
+    return NULL;
 }
 
-static void emit_output(struct tgsi_transform_context *ctx,
-                        unsigned name, unsigned index, unsigned interp,
-                        unsigned reg)
+/* Add a missing output variable and write zeros to it. */
+static void
+r300_draw_add_zero_output(nir_shader *nir, nir_builder *b, unsigned location,
+                          const char *name)
 {
-    struct vs_transform_context *vsctx = (struct vs_transform_context *)ctx;
-    struct tgsi_full_declaration decl;
-
-    decl = tgsi_default_full_declaration();
-    decl.Declaration.File = TGSI_FILE_OUTPUT;
-    decl.Declaration.Interpolate = 1;
-    decl.Declaration.Semantic = true;
-    decl.Semantic.Name = name;
-    decl.Semantic.Index = index;
-    decl.Range.First = decl.Range.Last = reg;
-    decl.Interp.Interpolate = interp;
-    ctx->emit_declaration(ctx, &decl);
-    ++vsctx->num_outputs;
+    nir_variable *var = nir_variable_create(nir, nir_var_shader_out,
+                                            glsl_vec4_type(), name);
+    var->data.location = location;
+    var->data.interpolation = INTERP_MODE_NOPERSPECTIVE;
+    nir_store_var(b, var, nir_imm_zero(b, 4, 32), 0xf);
 }
 
-static void insert_output_before(struct tgsi_transform_context *ctx,
-                                 struct tgsi_full_declaration *before,
-                                 unsigned name, unsigned index, unsigned interp)
+/* Ensure that the color output layout satisfies the r300 hardware rules:
+ *   - COL1 (secondary front color) requires COL0
+ *   - Any back-face color requires all four color outputs (COL0/COL1/BFC0/BFC1) */
+static bool
+r300_nir_add_missing_color_outputs(nir_shader *nir)
 {
-    struct vs_transform_context *vsctx = (struct vs_transform_context *)ctx;
-    unsigned i;
+    bool color_used[2] = {false, false};
+    bool bcolor_used[2] = {false, false};
 
-    /* Make a place for the new output. */
-    for (i = before->Range.First; i < ARRAY_SIZE(vsctx->out_remap); i++) {
-        ++vsctx->out_remap[i];
+    nir_foreach_shader_out_variable(var, nir) {
+        switch (var->data.location) {
+        case VARYING_SLOT_COL0: color_used[0] = true; break;
+        case VARYING_SLOT_COL1: color_used[1] = true; break;
+        case VARYING_SLOT_BFC0: bcolor_used[0] = true; break;
+        case VARYING_SLOT_BFC1: bcolor_used[1] = true; break;
+        default: break;
+        }
     }
 
-    /* Insert the new output. */
-    emit_output(ctx, name, index, interp,
-                before->Range.First + vsctx->decl_shift);
+    nir_function_impl *impl = nir_shader_get_entrypoint(nir);
+    nir_builder b = nir_builder_create(impl);
+    b.cursor = nir_after_impl(impl);
+    bool progress = false;
 
-    ++vsctx->decl_shift;
+    if (color_used[1] && !color_used[0]) {
+        r300_draw_add_zero_output(nir, &b, VARYING_SLOT_COL0, "gl_FrontColor");
+        color_used[0] = true;
+        progress = true;
+    }
+
+    if (bcolor_used[0] || bcolor_used[1]) {
+        if (!color_used[0]) {
+            r300_draw_add_zero_output(nir, &b, VARYING_SLOT_COL0, "gl_FrontColor");
+            progress = true;
+        }
+        if (!color_used[1]) {
+            r300_draw_add_zero_output(nir, &b, VARYING_SLOT_COL1, "gl_FrontSecondaryColor");
+            progress = true;
+        }
+        if (!bcolor_used[0]) {
+            r300_draw_add_zero_output(nir, &b, VARYING_SLOT_BFC0, "gl_BackColor");
+            progress = true;
+        }
+        if (!bcolor_used[1]) {
+            r300_draw_add_zero_output(nir, &b, VARYING_SLOT_BFC1, "gl_BackSecondaryColor");
+            progress = true;
+        }
+    }
+
+    return nir_progress(progress, impl, nir_metadata_control_flow);
 }
 
-static void insert_output_after(struct tgsi_transform_context *ctx,
-                                struct tgsi_full_declaration *after,
-                                unsigned name, unsigned index, unsigned interp)
+/* Assign driver_location to the variable at the given slot (if present)
+ * and update the outputs field. */
+static void
+r300_draw_assign_output(nir_shader *nir, unsigned location, int *field,
+                        unsigned *driver_location)
 {
-    struct vs_transform_context *vsctx = (struct vs_transform_context *)ctx;
-    unsigned i;
-
-    /* Make a place for the new output. */
-    for (i = after->Range.First+1; i < ARRAY_SIZE(vsctx->out_remap); i++) {
-        ++vsctx->out_remap[i];
-    }
-
-    /* Insert the new output. */
-    emit_output(ctx, name, index, interp,
-                after->Range.First + 1);
-
-    ++vsctx->decl_shift;
-}
-
-static void transform_decl(struct tgsi_transform_context *ctx,
-                           struct tgsi_full_declaration *decl)
-{
-    struct vs_transform_context *vsctx = (struct vs_transform_context *)ctx;
-    unsigned i;
-
-    if (decl->Declaration.File == TGSI_FILE_OUTPUT) {
-        switch (decl->Semantic.Name) {
-            case TGSI_SEMANTIC_POSITION:
-                vsctx->pos_output = decl->Range.First;
-                break;
-
-            case TGSI_SEMANTIC_COLOR:
-                assert(decl->Semantic.Index < 2);
-
-                /* We must rasterize the first color if the second one is
-                 * used, otherwise the rasterizer doesn't do the color
-                 * selection correctly. Declare it, but don't write to it. */
-                if (decl->Semantic.Index == 1 && !vsctx->color_used[0]) {
-                    insert_output_before(ctx, decl, TGSI_SEMANTIC_COLOR, 0,
-                                         TGSI_INTERPOLATE_LINEAR);
-                    vsctx->color_used[0] = true;
-                }
-                break;
-
-            case TGSI_SEMANTIC_BCOLOR:
-                assert(decl->Semantic.Index < 2);
-
-                /* We must rasterize all 4 colors if back-face colors are
-                 * used, otherwise the rasterizer doesn't do the color
-                 * selection correctly. Declare it, but don't write to it. */
-                if (!vsctx->color_used[0]) {
-                    insert_output_before(ctx, decl, TGSI_SEMANTIC_COLOR, 0,
-                                         TGSI_INTERPOLATE_LINEAR);
-                    vsctx->color_used[0] = true;
-                }
-                if (!vsctx->color_used[1]) {
-                    insert_output_before(ctx, decl, TGSI_SEMANTIC_COLOR, 1,
-                                         TGSI_INTERPOLATE_LINEAR);
-                    vsctx->color_used[1] = true;
-                }
-                if (decl->Semantic.Index == 1 && !vsctx->bcolor_used[0]) {
-                    insert_output_before(ctx, decl, TGSI_SEMANTIC_BCOLOR, 0,
-                                         TGSI_INTERPOLATE_LINEAR);
-                    vsctx->bcolor_used[0] = true;
-                }
-                break;
-
-            case TGSI_SEMANTIC_GENERIC:
-                vsctx->last_generic = MAX2(vsctx->last_generic, decl->Semantic.Index);
-                break;
-        }
-
-        /* Since we're inserting new outputs in between, the following outputs
-         * should be moved to the right so that they don't overlap with
-         * the newly added ones. */
-        decl->Range.First += vsctx->decl_shift;
-        decl->Range.Last += vsctx->decl_shift;
-
-        ++vsctx->num_outputs;
-    } else if (decl->Declaration.File == TGSI_FILE_TEMPORARY) {
-        for (i = decl->Range.First; i <= decl->Range.Last; i++) {
-           vsctx->temp_used[i] = true;
-        }
-    }
-
-    ctx->emit_declaration(ctx, decl);
-
-    /* Insert BCOLOR1 if needed. */
-    if (decl->Declaration.File == TGSI_FILE_OUTPUT &&
-        decl->Semantic.Name == TGSI_SEMANTIC_BCOLOR &&
-        !vsctx->bcolor_used[1]) {
-        insert_output_after(ctx, decl, TGSI_SEMANTIC_BCOLOR, 1,
-                            TGSI_INTERPOLATE_LINEAR);
-    }
-}
-
-static void transform_inst(struct tgsi_transform_context *ctx,
-                           struct tgsi_full_instruction *inst)
-{
-    struct vs_transform_context *vsctx = (struct vs_transform_context *) ctx;
-    struct tgsi_full_instruction new_inst;
-    unsigned i;
-
-    if (!vsctx->first_instruction) {
-        vsctx->first_instruction = true;
-
-        /* Insert the generic output for WPOS. */
-        emit_output(ctx, TGSI_SEMANTIC_GENERIC, vsctx->last_generic + 1,
-                    TGSI_INTERPOLATE_PERSPECTIVE, vsctx->num_outputs);
-
-        /* Find a free temp for POSITION. */
-        for (i = 0; i < ARRAY_SIZE(vsctx->temp_used); i++) {
-            if (!vsctx->temp_used[i]) {
-                emit_temp(ctx, i);
-                vsctx->pos_temp = i;
-                break;
-            }
-        }
-    }
-
-    if (inst->Instruction.Opcode == TGSI_OPCODE_END) {
-        /* MOV OUT[pos_output], TEMP[pos_temp]; */
-        new_inst = tgsi_default_full_instruction();
-        new_inst.Instruction.Opcode = TGSI_OPCODE_MOV;
-        new_inst.Instruction.NumDstRegs = 1;
-        new_inst.Dst[0].Register.File = TGSI_FILE_OUTPUT;
-        new_inst.Dst[0].Register.Index = vsctx->pos_output;
-        new_inst.Dst[0].Register.WriteMask = TGSI_WRITEMASK_XYZW;
-        new_inst.Instruction.NumSrcRegs = 1;
-        new_inst.Src[0].Register.File = TGSI_FILE_TEMPORARY;
-        new_inst.Src[0].Register.Index = vsctx->pos_temp;
-        ctx->emit_instruction(ctx, &new_inst);
-
-        /* MOV OUT[n-1], TEMP[pos_temp]; */
-        new_inst = tgsi_default_full_instruction();
-        new_inst.Instruction.Opcode = TGSI_OPCODE_MOV;
-        new_inst.Instruction.NumDstRegs = 1;
-        new_inst.Dst[0].Register.File = TGSI_FILE_OUTPUT;
-        new_inst.Dst[0].Register.Index = vsctx->num_outputs - 1;
-        new_inst.Dst[0].Register.WriteMask = TGSI_WRITEMASK_XYZW;
-        new_inst.Instruction.NumSrcRegs = 1;
-        new_inst.Src[0].Register.File = TGSI_FILE_TEMPORARY;
-        new_inst.Src[0].Register.Index = vsctx->pos_temp;
-        ctx->emit_instruction(ctx, &new_inst);
-
-        vsctx->end_instruction = true;
-    } else {
-        /* Not an END instruction. */
-        /* Fix writes to outputs. */
-        for (i = 0; i < inst->Instruction.NumDstRegs; i++) {
-            struct tgsi_full_dst_register *dst = &inst->Dst[i];
-            if (dst->Register.File == TGSI_FILE_OUTPUT) {
-                if (dst->Register.Index == vsctx->pos_output) {
-                    /* Replace writes to OUT[pos_output] with TEMP[pos_temp]. */
-                    dst->Register.File = TGSI_FILE_TEMPORARY;
-                    dst->Register.Index = vsctx->pos_temp;
-                } else {
-                    /* Not a position, good...
-                     * Since we were changing the indices of output decls,
-                     * we must redirect writes into them too. */
-                    dst->Register.Index = vsctx->out_remap[dst->Register.Index];
-                }
-            }
-        }
-
-        /* Inserting 2 instructions before the END opcode moves all following
-         * labels by 2. Subroutines are always after the END opcode so
-         * they're always moved. */
-        if (inst->Instruction.Opcode == TGSI_OPCODE_CAL) {
-            inst->Label.Label += 2;
-        }
-        /* The labels of the following opcodes are moved only after
-         * the END opcode. */
-        if (vsctx->end_instruction &&
-            (inst->Instruction.Opcode == TGSI_OPCODE_IF ||
-             inst->Instruction.Opcode == TGSI_OPCODE_ELSE ||
-             inst->Instruction.Opcode == TGSI_OPCODE_BGNLOOP ||
-             inst->Instruction.Opcode == TGSI_OPCODE_ENDLOOP)) {
-            inst->Label.Label += 2;
-        }
-    }
-
-    ctx->emit_instruction(ctx, inst);
-}
-
-void r300_draw_init_vertex_shader(struct r300_context *r300,
-                                  struct r300_vertex_shader *vs)
-{
-    struct draw_context *draw = r300->draw;
-    struct tgsi_shader_info info;
-    struct vs_transform_context transform;
-    const uint newLen = tgsi_num_tokens(vs->state.tokens) + 100;
-    struct pipe_shader_state new_vs = {
-        .type = PIPE_SHADER_IR_TGSI,
-        .tokens = tgsi_alloc_tokens(newLen)
-    };
-    unsigned i;
-
-    tgsi_scan_shader(vs->state.tokens, &info);
-
-    memset(&transform, 0, sizeof(transform));
-    for (i = 0; i < ARRAY_SIZE(transform.out_remap); i++) {
-        transform.out_remap[i] = i;
-    }
-    transform.last_generic = -1;
-    transform.base.transform_instruction = transform_inst;
-    transform.base.transform_declaration = transform_decl;
-
-    for (i = 0; i < info.num_outputs; i++) {
-        unsigned index = info.output_semantic_index[i];
-
-        switch (info.output_semantic_name[i]) {
-            case TGSI_SEMANTIC_COLOR:
-                assert(index < 2);
-                transform.color_used[index] = true;
-                break;
-
-            case TGSI_SEMANTIC_BCOLOR:
-                assert(index < 2);
-                transform.bcolor_used[index] = true;
-                break;
-        }
-    }
-
-    new_vs.tokens = tgsi_transform_shader(vs->state.tokens, newLen, &transform.base);
-    if (!new_vs.tokens)
+    nir_variable *var = r300_draw_find_shader_out(nir, location);
+    if (!var)
         return;
+    *field = *driver_location;
+    var->data.driver_location = (*driver_location)++;
+}
 
-#if 0
-    printf("----------------------------------------------\norig shader:\n");
-    tgsi_dump(vs->state.tokens, 0);
-    printf("----------------------------------------------\nnew shader:\n");
-    tgsi_dump(new_vs.tokens, 0);
-    printf("----------------------------------------------\n");
-#endif
+/* Build vs->outputs from the (transformed) NIR and assign driver_locations.
+ * The WPOS output is identified by wpos_var and placed last. */
+static void
+r300_draw_fill_vs_outputs(nir_shader *nir, nir_variable *wpos_var,
+                          struct r300_vertex_shader_code *vs)
+{
+    struct r300_shader_semantics *outputs = &vs->outputs;
+    unsigned driver_location = 0;
 
-    /* Free old tokens. */
-    FREE((void*)vs->state.tokens);
+    r300_shader_semantics_reset(outputs);
 
-    vs->draw_vs = draw_create_vertex_shader(draw, &new_vs);
+    r300_draw_assign_output(nir, VARYING_SLOT_POS, &outputs->pos, &driver_location);
+    r300_draw_assign_output(nir, VARYING_SLOT_PSIZ, &outputs->psize, &driver_location);
+    r300_draw_assign_output(nir, VARYING_SLOT_COL0, &outputs->color[0], &driver_location);
+    r300_draw_assign_output(nir, VARYING_SLOT_COL1, &outputs->color[1], &driver_location);
+    r300_draw_assign_output(nir, VARYING_SLOT_BFC0, &outputs->bcolor[0], &driver_location);
+    r300_draw_assign_output(nir, VARYING_SLOT_BFC1, &outputs->bcolor[1], &driver_location);
 
-    /* Instead of duplicating and freeing the tokens, copy the pointer directly. */
-    vs->state.tokens = new_vs.tokens;
+    for (unsigned g = 0; g < ATTR_GENERIC_COUNT; g++) {
+        unsigned loc = VARYING_SLOT_VAR0 + g;
+        nir_variable *var = r300_draw_find_shader_out(nir, loc);
+        if (!var || var == wpos_var)
+            continue;
+        outputs->generic[g] = driver_location;
+        outputs->num_generic++;
+        var->data.driver_location = driver_location++;
+    }
 
-    /* Init the VS output table for the rasterizer. */
-    r300_init_vs_outputs(r300, vs);
+    r300_draw_assign_output(nir, VARYING_SLOT_FOGC, &outputs->fog, &driver_location);
 
-    /* Make the last generic be WPOS. */
-    vs->shader->outputs.wpos = vs->shader->outputs.generic[transform.last_generic + 1];
-    vs->shader->outputs.generic[transform.last_generic + 1] = ATTR_UNUSED;
+    /* Draw still needs these non-rasterized outputs in its shader info. */
+    nir_variable *edge_var = r300_draw_find_shader_out(nir, VARYING_SLOT_EDGE);
+    if (edge_var)
+        edge_var->data.driver_location = driver_location++;
+    nir_variable *clip_vertex_var =
+        r300_draw_find_shader_out(nir, VARYING_SLOT_CLIP_VERTEX);
+    if (clip_vertex_var)
+        clip_vertex_var->data.driver_location = driver_location++;
+
+    if (wpos_var) {
+        outputs->wpos = driver_location;
+        wpos_var->data.driver_location = driver_location;
+    }
+}
+
+void
+r300_draw_init_vertex_shader(struct r300_context *r300,
+                             struct r300_vertex_shader *vs)
+{
+    /* Clone the NIR and apply the +9 varying shift to align VS outputs with
+     * FS inputs (which get the same shift in nir_to_rc). */
+    nir_shader *nir = nir_shader_clone(NULL, vs->state.ir.nir);
+    ntr_fixup_varying_slots(nir, nir_var_shader_out);
+
+    NIR_PASS(_, nir, r300_nir_add_missing_color_outputs);
+    nir_variable *wpos_var = NULL;
+    NIR_PASS(_, nir, r300_nir_add_wpos, &wpos_var);
+
+    /* Fill in the r300 rasterizer outputs and assign driver locations. */
+    r300_draw_fill_vs_outputs(nir, wpos_var, vs->shader);
+
+    /* Hand the transformed NIR off to the draw module. */
+    struct pipe_shader_state new_vs = {
+        .type = PIPE_SHADER_IR_NIR,
+        .ir.nir = nir,
+    };
+    vs->draw_vs = draw_create_vertex_shader(r300->draw, &new_vs);
 }
