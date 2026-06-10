@@ -15,6 +15,15 @@
 
 #include "tu_device.h"
 
+#include <string.h>
+
+static bool
+tu_wsi_is_kgsl(const struct tu_physical_device *pdevice)
+{
+   return pdevice->instance->knl &&
+          strcmp(pdevice->instance->knl->name, "kgsl") == 0;
+}
+
 static VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL
 tu_wsi_proc_addr(VkPhysicalDevice physicalDevice, const char *pName)
 {
@@ -27,6 +36,11 @@ tu_wsi_can_present_on_device(VkPhysicalDevice physicalDevice, int fd)
 {
 #ifdef HAVE_LIBDRM
    VK_FROM_HANDLE(tu_physical_device, pdevice, physicalDevice);
+   const bool is_kgsl = tu_wsi_is_kgsl(pdevice);
+
+   if (is_kgsl)
+      return true;
+
    return wsi_common_drm_devices_equal(fd, pdevice->local_fd);
 #else
    return true;
