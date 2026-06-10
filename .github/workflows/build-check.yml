@@ -642,3 +642,103 @@ jobs:
             ~/mesa-for-android-container/*.tar.gz
             ~/mesa-for-android-container/sha256sums.txt
           retention-days: 90
+
+  alpine-324:
+    runs-on: ubuntu-24.04-arm
+
+    steps:
+      - name: Cache ccache
+        uses: actions/cache@v5
+        with:
+          path: ~/.ccache
+          key: ccache-${{ runner.os }}-${{ runner.arch }}-alpine-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            ccache-${{ runner.os }}-${{ runner.arch }}-alpine-
+
+      - name: Clone repository
+        run: |
+          cd ~
+          git config --global user.email "actions@github.com"
+          git config --global user.name "GitHub Actions"
+          git clone -b ${{ github.event.pull_request.head.ref }} --depth 1 ${{ github.event.pull_request.head.repo.html_url }}.git mesa-for-android-container
+
+      - name: Set release name suffix
+        shell: bash
+        run: |
+          cd ~/mesa-for-android-container
+          version=$(grep -v '^[[:space:]]*$' VERSION | head -n1)
+          short_hash=$(git rev-parse --short HEAD)
+          echo "MESA_RELEASE_NAME_SUFFIX=${version}-${short_hash}_alpine_3.24_arm64" >> "$GITHUB_ENV"
+
+      - name: Build and Package Mesa in Alpine Container
+        run: |
+          mkdir -p ~/.ccache
+          docker run --privileged --rm \
+            -v /home/runner/mesa-for-android-container:/mesa-for-android-container \
+            -v /home/runner/.ccache:/root/.ccache \
+            -e CCACHE_DIR=/root/.ccache \
+            -e MESA_RELEASE_NAME_SUFFIX=${{ env.MESA_RELEASE_NAME_SUFFIX }} \
+            alpine:3.24 \
+            sh -c "
+              apk update && \
+              apk add --no-cache \
+                bash build-base git ccache ninja pkgconfig \
+                libxcb-dev libxext-dev libarchive-dev libffi-dev tar \
+                libdrm-dev libxdamage-dev libxshmfence-dev binutils bison cbindgen \
+                elfutils-dev eudev-dev expat-dev findutils flex gettext glslang-dev \
+                libdisplay-info-dev libtool libva-dev libx11-dev libxfixes-dev \
+                libxml2-dev libxrandr-dev libxxf86vm-dev llvm22-dev meson \
+                py3-cparser py3-mako py3-packaging py3-ply py3-yaml python3 \
+                vulkan-loader-dev wayland-dev wayland-protocols xorgproto zlib-dev \
+                zstd-dev clang22-dev \"libclc-dev~22\" rust rust-bindgen \
+                spirv-llvm-translator-dev && \
+              cd /mesa-for-android-container && \
+              ccache --max-size=2G && \
+              ccache --zero-stats && \
+              ccache --show-config && \
+              meson setup build/ \
+                --prefix=/usr \
+                -Dplatforms=x11,wayland \
+                -Dgallium-drivers=freedreno,zink,virgl,llvmpipe \
+                -Dgallium-va=disabled \
+                -Dgallium-mediafoundation=disabled \
+                -Dvulkan-drivers=freedreno \
+                -Dvulkan-layers= \
+                -Degl=enabled \
+                -Dgles2=enabled \
+                -Dglvnd=disabled \
+                -Dglx=dri \
+                -Dlibunwind=disabled \
+                -Dintel-rt=disabled \
+                -Dmicrosoft-clc=disabled \
+                -Dvalgrind=disabled \
+                -Dgles1=disabled \
+                -Dfreedreno-kmds=kgsl \
+                -Dbuildtype=release && \
+              ninja -C build/ && \
+              ccache --show-stats && \
+              echo 'Packaging Mesa...' && \
+              mkdir -p /tmp/mesa-install-tmp && \
+              DESTDIR=/tmp/mesa-install-tmp meson install -C build/ && \
+              tar -zcvf mesa_\${MESA_RELEASE_NAME_SUFFIX}.tar.gz -C /tmp/mesa-install-tmp . && \
+              rm -rf /tmp/mesa-install-tmp && \
+              echo 'Calculating sha256 checksums...' && \
+              find . -maxdepth 1 \( -name '*.tar.gz' \) -type f -printf '%P\0' | xargs -0 sha256sum | sort -k2 > sha256sums.txt && \
+              cat sha256sums.txt
+            "
+
+      - name: Save ccache
+        uses: actions/cache/save@v5
+        if: always()
+        with:
+          path: ~/.ccache
+          key: ccache-${{ runner.os }}-${{ runner.arch }}-alpine-${{ github.run_id }}-${{ github.run_attempt }}
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: mesa_${{ env.MESA_RELEASE_NAME_SUFFIX }}
+          path: |
+            ~/mesa-for-android-container/*.tar.gz
+            ~/mesa-for-android-container/sha256sums.txt
+          retention-days: 90
