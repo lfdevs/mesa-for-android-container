@@ -7,6 +7,11 @@
 
 #include <errno.h>
 #include <stdarg.h>
+#include <stdio.h>
+
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <unistd.h>
 
 #include "util/os_file.h"
 #include "util/os_file_notify.h"
@@ -58,6 +63,7 @@ static const struct debug_control tu_debug_options[] = {
    { "computeroundrobin", TU_DEBUG_COMPUTE_ROUND_ROBIN },
    { "gmem_warmup", TU_DEBUG_GMEM_WARMUP },
    { "deck_emu", TU_DEBUG_DECK_EMU },
+   { "logsocket", TU_DEBUG_LOGSOCKET },
    { NULL, 0 }
 };
 
@@ -546,6 +552,90 @@ tu_framebuffer_init_tiling_config(struct tu_framebuffer *fb,
    fb->initd_divisor = 1;
 }
 
+#ifndef MESA_TU_LOG_SOCKET_PATH
+#define MESA_TU_LOG_SOCKET_PATH "/tmp/mesa_tu_log.sock"
+#endif
+
+#define MESA_TU_LOG_SOCKET_MAX_WRITE_SIZE 16383
+
+bool
+tu_debug_socket_enabled()
+{
+   bool has_logsocket = TU_DEBUG(LOGSOCKET);
+   //bool has_log_socket_env = !!os_get_option("TU_LOG_SOCKET");
+   return has_logsocket;
+}
+
+static const sockaddr_un &
+tu_debug_socket_addr()
+{
+   static const sockaddr_un addr = [] {
+      sockaddr_un a = {};
+      a.sun_family = AF_UNIX;
+      static_assert(sizeof(MESA_TU_LOG_SOCKET_PATH) <= sizeof(a.sun_path));
+      memcpy(a.sun_path, MESA_TU_LOG_SOCKET_PATH, sizeof(MESA_TU_LOG_SOCKET_PATH));
+      return a;
+   }();
+
+   return addr;
+}
+
+static int
+tu_debug_socket_open()
+{
+   static const int fd = socket(AF_UNIX, SOCK_DGRAM | SOCK_CLOEXEC | SOCK_NONBLOCK, 0);
+   return fd;
+}
+
+void
+tu_debug_socket_write(const char *buf, int len)
+{
+   if (len <= 0)
+      return;
+
+   int fd = tu_debug_socket_open();
+   if (fd < 0)
+      return;
+
+   len = MIN2(len, MESA_TU_LOG_SOCKET_MAX_WRITE_SIZE);
+
+   (void)sendto(fd,buf,len,MSG_DONTWAIT | MSG_NOSIGNAL,
+        reinterpret_cast<const sockaddr *>(&tu_debug_socket_addr()), sizeof(sockaddr_un));
+}
+
+static void
+tu_debug_socket_printf(const char *fmt, ...) PRINTFLIKE(1, 2);
+
+static void
+tu_debug_socket_printf(const char *fmt, ...)
+{
+   if( ! tu_debug_socket_enabled() )
+      return;
+
+   static const pid_t pid = getpid();
+
+   char buf[512];
+
+   int off = snprintf(buf, sizeof(buf), "pid=%ld ", (long)pid);
+   if (off < 0)
+      return;
+
+   off = MIN2(off, (int)sizeof(buf) - 1);
+
+   va_list ap;
+   va_start(ap, fmt);
+   int len = vsnprintf(buf + off, sizeof(buf) - off, fmt, ap);
+   va_end(ap);
+
+   if (len < 0)
+      return;
+
+   int total = off + len;
+   total = MIN2(total, (int)sizeof(buf) - 1);
+
+   tu_debug_socket_write(buf, total);
+}
+
 const struct tu_tiling_config *
 tu_framebuffer_get_tiling_config(struct tu_framebuffer *fb,
                                  const struct tu_device *device,
@@ -575,10 +665,24 @@ tu_framebuffer_get_tiling_config(struct tu_framebuffer *fb,
          fdm_offset_vsc->tile_count = (VkExtent2D) { ~1, ~1 };
       }
 
-      if (!tiling->possible ||                               /* If tiling is no longer possible, this is pointless. */
-          (vsc->binning_useful && !vsc->binning_possible) || /* Dividing further without HW binning is a bad idea.  */
-          (vsc->tile_count.width * vsc->tile_count.height > 100) /* 100 tiles are too many, even with HW binning.   */
-      ) {
+      const VkExtent2D try_tile = tiling->tile0;
+      const VkExtent2D try_grid = vsc->tile_count;
+      const bool revert =
+         !tiling->possible ||                               /* If tiling is no longer possible, this is pointless. */
+         (vsc->binning_useful && !vsc->binning_possible) || /* Dividing further without HW binning is a bad idea.  */
+         (vsc->tile_count.width * vsc->tile_count.height > 100); /* 100 tiles are too many, even with HW binning.  */
+
+      tu_debug_socket_printf("tiling fb=%ux%u layout=%d div=%u align=%ux%u base_tile=%ux%u base_grid=%ux%u "
+                             "try_tile=%ux%u try_grid=%ux%u possible=%d binning_useful=%d binning_possible=%d "
+                             "verdict=%s",
+                             fb->width, fb->height, gmem_layout, divisor, pass->tile_align_w,
+                             device->physical_device->info->tile_align_h, base_tiling->tile0.width,
+                             base_tiling->tile0.height, base_tiling->vsc.tile_count.width,
+                             base_tiling->vsc.tile_count.height, try_tile.width, try_tile.height, try_grid.width,
+                             try_grid.height, tiling->possible, vsc->binning_useful, vsc->binning_possible,
+                             revert ? "revert" : "kept");
+
+      if (revert) {
          /* Revert to the previous level's tiling configuration. */
          const struct tu_tiling_config *prev_tiling = &fb->tiling[(TU_GMEM_LAYOUT_COUNT * (d - 2)) + gmem_layout];
          *tiling = *prev_tiling;

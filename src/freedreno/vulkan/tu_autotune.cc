@@ -11,6 +11,12 @@
 #include <cmath>
 #include <string>
 #include <string_view>
+#include <cstdio>
+#include <cstring>
+
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <unistd.h>
 
 #include "util/perf/cpu_trace.h"
 #include "util/rand_xor.h"
@@ -529,6 +535,8 @@ struct tu_autotune::rp_entry {
    bool sysmem;
    uint32_t tile_count;
    uint32_t draw_count;
+   /* Layout in effect at record time, only used for debug-socket logging. */
+   rp_debug_layout dbg = {};
 
    rp_entry(struct tu_device *device, rp_history_handle &&history, config_t config, uint32_t draw_count)
        : device(device), map(nullptr), history(std::move(history)), config(config), draw_count(draw_count)
@@ -649,6 +657,99 @@ struct tu_autotune::rp_entry {
       assert(config.test(metric_flag::TS));
       rp_gpu_data &gpu = get_gpu_data();
       return (gpu.ts_end - gpu.ts_start) + (gpu.ts_binning_end - gpu.ts_binning_start);
+   }
+
+   /* Send one datagram describing this RP's results to tu_debug_socket
+    *
+    *   pid=%d [hash] gmem ts=<us> dur_us=<us> draws=<n> grid=<w>x<h> div=<d> max_tile_us=<us> tiles=[a,b,c,]
+    *   pid=%d [hash] sysmem ts=<us> dur_us=<us> draws=<n>
+    *
+    * ts is the RP's GPU start timestamp, so the receiver can order samples on a
+    * GPU timebase. tiles= is in tile_idx order (y * grid_w + x), so combined
+    * with grid= it maps onto framebuffer positions. The list is truncated if it
+    * exceeds the buffer; the receiver detects that as fewer entries than w*h.
+    */
+   void log_debug_socket(uint64_t hash)
+   {
+
+      if( ! tu_debug_socket_enabled() ) 
+         return;
+      
+      static const pid_t pid = getpid();
+
+      rp_gpu_data &gpu = get_gpu_data();
+      char buf[16384];
+
+      int len = snprintf(buf, sizeof(buf),
+                        "pid=%ld [%" PRIu64 "] %s ts=%" PRIu64
+                        " dur_us=%" PRIu64 " draws=%" PRIu32,
+                        (long)pid,
+                        hash,
+                        sysmem ? "sysmem" : "gmem",
+                        ticks_to_us(gpu.ts_start),
+                        ticks_to_us(gpu.ts_end - gpu.ts_start),
+                        draw_count);
+      if (len < 0)
+         return;
+
+      len = MIN2(len, (int)sizeof(buf) - 1);
+
+      if (!sysmem && config.test(metric_flag::TS_TILE)) {
+         uint64_t max_duration = 0;
+
+         for (uint32_t i = 0; i < tile_count; i++) {
+            tile_gpu_data &tile = get_tile_gpu_data(i);
+            max_duration = MAX2(max_duration, tile.ts_end - tile.ts_start);
+         }
+
+         int n = snprintf(buf + len, sizeof(buf) - len,
+                        " grid=%" PRIu16 "x%" PRIu16
+                        " div=%" PRIu32
+                        " fb=%" PRIu16 "x%" PRIu16
+                        " tile0=%" PRIu16 "x%" PRIu16
+                        " layers=%" PRIu16
+                        " max_tile_us=%" PRIu64
+                        " tiles=[",
+                        dbg.grid_w, dbg.grid_h,
+                        dbg.divisor,
+                        dbg.fb_w, dbg.fb_h,
+                        dbg.tile0_w, dbg.tile0_h,
+                        dbg.layers,
+                        ticks_to_us(max_duration));
+
+         if (n < 0)
+            return;
+
+         len += n;
+         len = MIN2(len, (int)sizeof(buf) - 1);
+
+         for (uint32_t i = 0; i < tile_count; i++) {
+            if (len + 16 >= (int)sizeof(buf))
+               break;
+
+            tile_gpu_data &tile = get_tile_gpu_data(i);
+
+            n = snprintf(buf + len, sizeof(buf) - len,
+                        "%" PRIu64 ",",
+                        ticks_to_us(tile.ts_end - tile.ts_start));
+
+            if (n < 0)
+               return;
+
+            len += n;
+            len = MIN2(len, (int)sizeof(buf) - 1);
+         }
+
+         if (len + 2 < (int)sizeof(buf)) {
+            int n = snprintf(buf + len, sizeof(buf) - len, "]");
+            if (n > 0) {
+               len += n;
+               len = MIN2(len, (int)sizeof(buf) - 1);
+            }
+         }
+      }
+
+      tu_debug_socket_write(buf, len);
    }
 
    /* The amount of cycles spent in the longest tile. This is used to calculate the average draw duration for
@@ -1380,6 +1481,8 @@ struct tu_autotune::rp_history {
       if (entry_config.test(metric_flag::SAMPLES) && at_config.is_enabled(algorithm::BANDWIDTH))
          bandwidth.update(entry.get_samples_passed());
       if (entry_config.test(metric_flag::TS)) {
+         entry.log_debug_socket(entry.history.history->hash);
+
          if (entry.sysmem) {
             uint64_t rp_duration = entry.get_rp_duration();
 
@@ -2139,11 +2242,15 @@ tu_autotune::init_renderpass(rp_ctx_t rp_ctx, bool sysmem, uint32_t tile_count)
 }
 
 void
-tu_autotune::begin_renderpass(struct tu_cmd_buffer *cmd, struct tu_cs *cs, rp_ctx_t rp_ctx)
+tu_autotune::begin_renderpass(struct tu_cmd_buffer *cmd, struct tu_cs *cs, rp_ctx_t rp_ctx,
+                              rp_debug_layout debug_layout)
 {
    if (!rp_ctx)
       return;
 
+   assert(rp_ctx->tile_count == (uint32_t) debug_layout.grid_w * debug_layout.grid_h);
+
+   rp_ctx->dbg = debug_layout;
    rp_ctx->emit_rp_start(cmd, cs);
 }
 
