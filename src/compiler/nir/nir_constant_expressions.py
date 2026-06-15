@@ -73,6 +73,35 @@ template = """\
 #include "nir_constant_expressions.h"
 #include "nir.h"
 
+#if defined(__clang__) && !defined(_MSC_VER)
+
+#pragma STDC FENV_ACCESS ON
+#pragma STDC FP_CONTRACT OFF
+#pragma clang fp reassociate(off)
+#pragma clang fp contract(off)
+// #pragma clang fp reciprocal(off)
+#pragma clang fp exceptions(strict)
+// #pragma clang fp eval_method(source)
+
+#elif defined(_MSC_VER)
+
+#pragma float_control(precise, on)
+#pragma fenv_access(on)
+#pragma float_control(except, on)
+#pragma fp_contract(off)
+
+#elif defined(__GNUC__)
+
+#pragma STDC FP_CONTRACT OFF
+#pragma GCC optimize ("no-fast-math")
+#pragma GCC optimize ("no-associative-math")
+#pragma GCC optimize ("no-reciprocal-math")
+#pragma GCC optimize ("no-unsafe-math-optimizations")
+#pragma GCC optimize ("fp-contract=off")
+#pragma GCC optimize ("excess-precision=standard")
+
+#endif
+
 /**
  * Checks if the provided value is a denorm and flushes it to zero.
  */
