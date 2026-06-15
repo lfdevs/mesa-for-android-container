@@ -1684,9 +1684,25 @@ zink_destroy_screen(struct pipe_screen *pscreen)
    glsl_type_singleton_decref();
 }
 
+/* On the kgsl-backed turnip stack the GBM/DRI3 fd points at the display
+ * device (msm_drm) while the GPU is exposed through kgsl, so the render-node
+ * DRM major/minor never matches turnip's pdev and device selection fails
+ * (-> llvmpipe fallback). When this env is set, skip the DRM-based matching
+ * for the DRI3 path and let zink take the default (first) physical device. */
+static bool
+zink_force_default_device_dri3(uint64_t adapter_luid)
+{
+   return !adapter_luid &&
+          debug_get_bool_option("MESA_VK_DEVICE_SELECT_FORCE_DEFAULT_DEVICE_DRI3",
+                                false);
+}
+
 static bool
 zink_picks_device(int dev_major, uint64_t adapter_luid)
 {
+   if (zink_force_default_device_dri3(adapter_luid))
+      return false;
+
    return (dev_major > 0 && dev_major < 255) || adapter_luid;
 }
 
