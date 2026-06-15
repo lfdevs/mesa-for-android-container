@@ -3451,6 +3451,23 @@ tu_GetInstanceProcAddr(VkInstance _instance, const char *pName)
                                     pName);
 }
 
+VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL
+tu_GetDeviceProcAddr(VkDevice _device, const char *pName)
+{
+   VK_FROM_HANDLE(tu_device, device, _device);
+   return vk_device_get_proc_addr(&device->vk, pName);
+}
+
+/* Required ICD entrypoint for the loader */
+PUBLIC VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL
+vk_icdGetDeviceProcAddr(VkDevice device, const char *pName);
+
+PUBLIC VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL
+vk_icdGetDeviceProcAddr(VkDevice device, const char *pName)
+{
+   return tu_GetDeviceProcAddr(device, pName);
+}
+
 /* The loader wants us to expose a second GetInstanceProcAddr function
  * to work around certain LD_PRELOAD issues seen in apps.
  */
