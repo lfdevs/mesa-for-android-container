@@ -99,6 +99,12 @@ kgsl_pipe_get_param(struct fd_pipe *pipe, enum fd_param_id param,
       return -1;
    case FD_TIMESTAMP:
       return -1;
+   case FD_UCHE_TRAP_BASE:
+      /* KGSL doesn't expose the UCHE trap base; return failure quietly so the
+       * gallium screen falls back to its built-in default (see
+       * freedreno_screen.c) instead of aborting device-info retrieval with a
+       * noisy "invalid param id" error. */
+      return -1;
    default:
       ERROR_MSG("invalid param id: %d", param);
       return -1;

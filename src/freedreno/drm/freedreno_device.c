@@ -6,6 +6,7 @@
  *    Rob Clark <robclark@freedesktop.org>
  */
 
+#include <fcntl.h>
 #include <unistd.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -36,8 +37,42 @@ fd_device_new(int fd)
    drmVersionPtr version = NULL;
    bool use_heap = false;
    bool support_use_heap = true;
+   /* The fd used for GPU submission. Defaults to the fd we were handed, but on
+    * the kgsl stack it is redirected to the kgsl GPU node while the original fd
+    * is retained as the device control/identity fd (see below). */
+   int gpu_fd = fd;
 
    os_get_page_size(&os_page_size);
+
+#if HAVE_FREEDRENO_KGSL
+   /* On the kgsl stack the Adreno GPU is reachable only through the
+    * /dev/kgsl-3d0 char device, never through a DRM render node.  EGL/GBM may
+    * hand us the display controller's DRM node (sde-kms renderD128), which
+    * drmGetVersion reports as "msm" even though it drives no GPU at all -
+    * taking the msm path there yields a half-initialised screen that crashes
+    * on the first capability query.  When kgsl is forced (the whole kgsl stack
+    * exports FD_FORCE_KGSL=1), ignore the fd we were handed and open the kgsl
+    * GPU node directly for rendering.  The fd we were handed is kept as the
+    * device control/identity fd (dev->control_fd, returned by fd_device_fd):
+    * it still identifies the screen for u_pipe_screen_lookup_or_create()'s
+    * fd-keyed cache (which compares file descriptions, so dev->fd MUST stay a
+    * dup of the cache key - a freshly opened kgsl fd is a different file
+    * description and would break cache eviction -> use-after-free) and is the
+    * fd handed to DRI3 clients.  Only GPU submission uses the kgsl fd. */
+   if (debug_get_bool_option("FD_FORCE_KGSL", false)) {
+      int kgsl_fd = open("/dev/kgsl-3d0", O_RDWR | O_CLOEXEC);
+      if (kgsl_fd >= 0) {
+         dev = kgsl_device_new(kgsl_fd);
+         if (dev) {
+            /* Userspace fences are not supported with KGSL */
+            support_use_heap = false;
+            gpu_fd = kgsl_fd;   /* render on kgsl, keep fd as control_fd */
+            goto out;
+         }
+         close(kgsl_fd);
+      }
+   }
+#endif
 
 #ifdef HAVE_LIBDRM
    /* figure out if we are kgsl or msm drm driver: */
@@ -81,8 +116,32 @@ fd_device_new(int fd)
 #endif
    }
 
+#if HAVE_FREEDRENO_KGSL
+   /* On the kgsl stack the Adreno GPU is reachable only through the
+    * /dev/kgsl-3d0 char device, never through a DRM render node.  When EGL is
+    * driven via GBM (e.g. Xwayland glamor) the fd handed to us is the display
+    * controller's DRM node (sde-kms renderD128) or some other non-kgsl fd, so
+    * neither the msm path nor kgsl-on-this-fd above can produce a device.
+    * Open the kgsl GPU node directly as a last resort so native freedreno GL
+    * still comes up instead of failing dri2 screen creation. */
    if (!dev) {
-      INFO_MSG("unsupported device: %s", version->name);
+      int kgsl_fd = open("/dev/kgsl-3d0", O_RDWR | O_CLOEXEC);
+      if (kgsl_fd >= 0) {
+         dev = kgsl_device_new(kgsl_fd);
+         if (dev) {
+            support_use_heap = false;
+            /* Render on the kgsl GPU node; keep the fd we were handed as the
+             * control/identity fd (see the FD_FORCE_KGSL block above). */
+            gpu_fd = kgsl_fd;
+         } else {
+            close(kgsl_fd);
+         }
+      }
+   }
+#endif
+
+   if (!dev) {
+      INFO_MSG("unsupported device: %s", version ? version->name : "(none)");
       goto out;
    }
 
@@ -98,7 +157,11 @@ out:
    fd_rd_output_init(&dev->rd, util_get_process_name());
 
    p_atomic_set(&dev->refcnt, 1);
-   dev->fd = fd;
+   dev->fd = gpu_fd;
+   /* control_fd identifies the screen for the fd-keyed screen cache and DRI3;
+    * it is a dup of the cache key. It equals fd unless rendering was redirected
+    * to a separate kgsl GPU node above, in which case fd != gpu_fd. */
+   dev->control_fd = fd;
    dev->handle_table =
       _mesa_hash_table_create(NULL, _mesa_hash_u32, _mesa_key_u32_equal);
    dev->name_table =
@@ -218,8 +281,14 @@ fd_device_del(struct fd_device *dev)
    if (fd_device_threaded_submit(dev))
       util_queue_destroy(&dev->submit_queue);
 
-   if (dev->closefd)
+   if (dev->closefd) {
       close(dev->fd);
+      /* On the kgsl stack control_fd is a distinct fd from the kgsl GPU fd;
+       * close it too so it does not leak (guard against double-close when they
+       * are the same fd, the common case). */
+      if (dev->control_fd >= 0 && dev->control_fd != dev->fd)
+         close(dev->control_fd);
+   }
 
    free(dev);
 }
@@ -227,7 +296,10 @@ fd_device_del(struct fd_device *dev)
 int
 fd_device_fd(struct fd_device *dev)
 {
-   return dev->fd;
+   /* Return the control/identity fd, not the GPU submission fd. On the kgsl
+    * stack these differ: the screen cache and DRI3 must see the fd we were
+    * handed (a dup of the cache key), while GPU submission uses dev->fd. */
+   return dev->control_fd;
 }
 
 enum fd_version
