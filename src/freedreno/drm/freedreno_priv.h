@@ -188,7 +188,8 @@ submit_offset(struct fd_bo *bo, uint32_t offset)
 }
 
 struct fd_device {
-   int fd;
+   int fd;          /* GPU submission fd (kgsl GPU node on the kgsl stack) */
+   int control_fd;  /* screen-cache / DRI3 identity fd; == fd unless redirected */
    enum fd_version version;
    int32_t refcnt;
    uint32_t features;

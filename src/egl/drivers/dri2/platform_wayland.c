@@ -2704,6 +2704,18 @@ dri2_initialize_wayland_drm(_EGLDisplay *disp)
          goto cleanup;
    }
 
+   /* On the kgsl stack the compositor advertises neither wl_drm nor a v4
+    * dma-buf feedback main device, so the paths above can leave us without a
+    * render GPU fd even though _extensions() "succeeded" (v3 dma-buf only).
+    * Open the kgsl GPU node directly as a last resort so the native freedreno
+    * GL driver still comes up instead of leaving fd = -1 (-> dri2 screen
+    * creation fails, black window). */
+   if (dri2_dpy->fd_render_gpu == -1) {
+      dri2_dpy->fd_render_gpu = loader_open_device("/dev/kgsl-3d0");
+      if (dri2_dpy->fd_render_gpu == -1)
+         goto cleanup;
+   }
+
    loader_get_user_preferred_fd(&dri2_dpy->fd_render_gpu,
                                 &dri2_dpy->fd_display_gpu);
 
