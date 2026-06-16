@@ -423,6 +423,125 @@ jobs:
             ~/mesa-for-android-container/sha256sums.txt
           retention-days: 90
 
+  archlinux:
+    runs-on: ubuntu-24.04-arm
+    container:
+      image: lfdevs/archlinuxarm:base-devel
+      options: --privileged --user root
+
+    steps:
+      - name: Install dependencies
+        run: |
+          retry() {
+            local max_attempts="$1"
+            local delay_seconds="$2"
+            shift 2
+            local attempt=1
+
+            until "$@"; do
+              if [ "$attempt" -ge "$max_attempts" ]; then
+                echo "Command failed after ${max_attempts} attempts: $*"
+                return 1
+              fi
+              echo "Attempt ${attempt}/${max_attempts} failed: $*"
+              echo "Retrying in ${delay_seconds}s..."
+              sleep "$delay_seconds"
+              attempt=$((attempt + 1))
+            done
+          }
+          
+          retry 5 30 pacman -Syyu --noconfirm
+          retry 5 30 pacman -S --noconfirm base-devel git ccache clang directx-headers expat glibc libdisplay-info libdrm libelf libgcc libglvnd libpng libstdc++ libva libx11 libxcb libxext libxml2 libxrandr libxshmfence libxxf86vm llvm llvm-libs lm_sensors rust spirv-llvm-translator spirv-tools systemd-libs vulkan-icd-loader wayland xcb-util-keysyms zlib zstd cbindgen clang cmake elfutils glslang libclc meson python-mako python-packaging python-ply python-pycparser python-yaml rust-bindgen wayland-protocols xorgproto libsysprof-capture valgrind python-sphinx python-sphinx-hawkmoth byacc flex wayland wayland-protocols
+
+      - name: Cache ccache
+        uses: actions/cache@v5
+        with:
+          path: /root/.ccache
+          key: ccache-${{ runner.os }}-${{ runner.arch }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            ccache-${{ runner.os }}-${{ runner.arch }}-
+
+      - name: Configure ccache
+        run: |
+          export CCACHE_DIR=/root/.ccache
+          ccache --max-size=2G
+          ccache --show-config
+          ccache --zero-stats
+          ccache --show-stats
+
+      - name: Clone repository
+        run: |
+          cd ~
+          git config --global user.email "actions@github.com"
+          git config --global user.name "GitHub Actions"
+          git clone -b ${{ github.event.pull_request.head.ref }} --depth 1 ${{ github.event.pull_request.head.repo.html_url }}.git mesa-for-android-container
+
+      - name: Set release name suffix
+        shell: bash
+        run: |
+          cd ~/mesa-for-android-container
+          version=$(grep -v '^[[:space:]]*$' VERSION | head -n1)
+          short_hash=$(git rev-parse --short HEAD)
+          echo "MESA_RELEASE_NAME_SUFFIX=${version}-${short_hash}_archlinux_arm64" >> "$GITHUB_ENV"
+
+      - name: Build Mesa
+        shell: bash
+        run: |
+          export CCACHE_DIR=/root/.ccache
+          echo "Building Mesa..."
+          cd ~/mesa-for-android-container
+          meson setup build/ \
+            --prefix=/usr \
+            -Dplatforms=x11,wayland \
+            -Dgallium-drivers=freedreno,zink,virgl,llvmpipe \
+            -Dgallium-va=disabled \
+            -Dgallium-mediafoundation=disabled \
+            -Dvulkan-drivers=freedreno \
+            -Dvulkan-layers= \
+            -Degl=enabled \
+            -Dgles2=enabled \
+            -Dglvnd=enabled \
+            -Dglx=dri \
+            -Dlibunwind=disabled \
+            -Dintel-rt=disabled \
+            -Dmicrosoft-clc=disabled \
+            -Dvalgrind=disabled \
+            -Dgles1=disabled \
+            -Dfreedreno-kmds=kgsl \
+            -Dbuildtype=release
+          ninja -C build/
+          echo "Mesa build completed successfully!"
+
+      - name: Save ccache
+        uses: actions/cache/save@v5
+        if: always()
+        with:
+          path: /root/.ccache
+          key: ccache-${{ runner.os }}-${{ runner.arch }}-${{ github.run_id }}-${{ github.run_attempt }}
+
+      - name: Package Mesa
+        shell: bash
+        run: |
+          echo "Packaging Mesa..."
+          cd ~/mesa-for-android-container
+          mkdir /tmp/mesa-install-tmp
+          DESTDIR=/tmp/mesa-install-tmp meson install -C build/
+          tar -zcvf mesa_${MESA_RELEASE_NAME_SUFFIX}.tar.gz -C /tmp/mesa-install-tmp .
+          rm -rf /tmp/mesa-install-tmp
+          echo "Calculating sha256 checksums..."
+          find . -maxdepth 1 \( -name "*.tar.gz" \) -type f -printf "%P\0" | xargs -0 sha256sum | sort -k2 > sha256sums.txt
+          cat sha256sums.txt && echo
+          echo "Packaging completed successfully!"
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: mesa_${{ env.MESA_RELEASE_NAME_SUFFIX }}
+          path: |
+            ~/mesa-for-android-container/*.tar.gz
+            ~/mesa-for-android-container/sha256sums.txt
+          retention-days: 90
+
   fedora-43:
     runs-on: ubuntu-24.04-arm
     container:
