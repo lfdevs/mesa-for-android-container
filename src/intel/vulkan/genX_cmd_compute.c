@@ -514,7 +514,7 @@ emit_indirect_compute_walker(struct anv_cmd_buffer *cmd_buffer,
    uint64_t indirect_addr64 = anv_address_physical(indirect_addr);
 
    uint64_t push_addr64 = anv_address_physical(
-      anv_state_pool_state_address(&cmd_buffer->device->general_state_pool,
+      anv_state_pool_state_address(anv_device_get_general_state_pool(cmd_buffer->device),
                                    comp_state->base.push_constants_state));
    struct compute_walker_inline_params_val inline_value = {
       .bind_map = &comp_state->shader->bind_map,
@@ -573,7 +573,7 @@ emit_compute_walker(struct anv_cmd_buffer *cmd_buffer,
    compute_update_async_threads_limit(cmd_buffer, prog_data, &dispatch);
 
    uint64_t push_addr64 = anv_address_physical(
-      anv_state_pool_state_address(&cmd_buffer->device->general_state_pool,
+      anv_state_pool_state_address(anv_device_get_general_state_pool(cmd_buffer->device),
                                    comp_state->base.push_constants_state));
    struct compute_walker_inline_params_val inline_value = {
       .bind_map = &comp_state->shader->bind_map,
@@ -916,8 +916,7 @@ genX(cmd_buffer_ray_query_globals)(struct anv_cmd_buffer *cmd_buffer)
             .bo = device->ray_query_bo[idx],
             .offset = (i + 1) * (device->ray_query_bo[idx]->size / 2),
          },
-         .AsyncRTStackSize =
-            cmd_buffer->state.rt.scratch.layout.ray_stack_stride / 64,
+         .AsyncRTStackSize = BRW_RT_SIZEOF_RAY_QUERY / 64,
          .NumDSSRTStacks = stack_ids_per_dss,
          .MaxBVHLevels = BRW_RT_MAX_BVH_LEVELS,
          .Flags = RT_DEPTH_TEST_LESS_EQUAL,

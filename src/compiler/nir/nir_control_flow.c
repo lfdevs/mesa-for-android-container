@@ -178,7 +178,7 @@ replace_pred_succs(nir_block *block, nir_block *new_block, nir_block *exclude)
 static nir_block *
 split_block_beginning(nir_block *block)
 {
-   nir_block *new_block = nir_block_create(ralloc_parent(block));
+   nir_block *new_block = nir_block_create(block->impl);
    new_block->cf_node.parent = block->cf_node.parent;
    exec_node_insert_node_before(&block->cf_node.node, &new_block->cf_node.node);
 
@@ -212,7 +212,7 @@ rewrite_phi_preds(nir_block *block, nir_block *old_pred, nir_block *new_pred)
 void
 nir_insert_phi_undef(nir_block *block, nir_block *pred)
 {
-   nir_function_impl *impl = nir_cf_node_get_function(&block->cf_node);
+   nir_function_impl *impl = block->impl;
    nir_foreach_phi(phi, block) {
       nir_undef_instr *undef =
          nir_undef_instr_create(impl->function->shader,
@@ -306,7 +306,7 @@ block_add_normal_succs(nir_block *block)
 static nir_block *
 split_block_end(nir_block *block)
 {
-   nir_block *new_block = nir_block_create(ralloc_parent(block));
+   nir_block *new_block = nir_block_create(block->impl);
    new_block->cf_node.parent = block->cf_node.parent;
    exec_node_insert_after(&block->cf_node.node, &new_block->cf_node.node);
 
@@ -420,13 +420,13 @@ void
 nir_loop_add_continue_construct(nir_loop *loop)
 {
    assert(!nir_loop_has_continue_construct(loop));
+   nir_block *header = nir_loop_first_block(loop);
 
-   nir_block *cont = nir_block_create(ralloc_parent(loop));
+   nir_block *cont = nir_block_create(header->impl);
    exec_list_push_tail(&loop->continue_list, &cont->cf_node.node);
    cont->cf_node.parent = &loop->cf_node;
 
    /* change predecessors and successors */
-   nir_block *header = nir_loop_first_block(loop);
    nir_block *preheader = nir_block_cf_tree_prev(header);
    assert(nir_block_num_preds(header) <= 2);
    replace_pred_succs(header, cont, preheader);
@@ -479,12 +479,13 @@ nir_handle_add_jump(nir_block *block)
       remove_phi_src(block->successors[1], block);
    unlink_block_successors(block);
 
-   nir_function_impl *impl = nir_cf_node_get_function(&block->cf_node);
+   nir_function_impl *impl = block->impl;
    nir_progress(true, impl, nir_metadata_none);
 
    switch (jump_instr->type) {
    case nir_jump_return:
    case nir_jump_halt:
+   case nir_jump_abort:
       link_blocks(block, impl->end_block, NULL);
       break;
 
@@ -538,8 +539,7 @@ nir_handle_remove_jump(nir_block *block, nir_jump_type type)
 {
    unlink_jump(block, type, true);
 
-   nir_function_impl *impl = nir_cf_node_get_function(&block->cf_node);
-   nir_progress(true, impl, nir_metadata_none);
+   nir_progress(true, block->impl, nir_metadata_none);
 }
 
 static void
@@ -732,7 +732,7 @@ nir_cf_extract(nir_cf_list *extracted, nir_cursor begin, nir_cursor end)
    if (block_begin == block_after)
       block_begin = block_end;
 
-   extracted->impl = nir_cf_node_get_function(&block_begin->cf_node);
+   extracted->impl = block_begin->impl;
    exec_list_make_empty(&extracted->list);
 
    /* Dominance and other block-related information is toast. */
@@ -763,6 +763,8 @@ relink_jump_halt_cf_node(nir_cf_node *node, nir_block *end_block)
    case nir_cf_node_block: {
       nir_block *block = nir_cf_node_as_block(node);
       nir_instr *last_instr = nir_block_last_instr(block);
+
+      block->impl = end_block->impl;
       if (last_instr == NULL || last_instr->type != nir_instr_type_jump)
          break;
 
@@ -817,8 +819,7 @@ nir_cf_reinsert(nir_cf_list *cf_list, nir_cursor cursor)
    if (exec_list_is_empty(&cf_list->list))
       return cursor;
 
-   nir_function_impl *cursor_impl =
-      nir_cf_node_get_function(&nir_cursor_current_block(cursor)->cf_node);
+   nir_function_impl *cursor_impl = nir_cursor_current_block(cursor)->impl;
    if (cf_list->impl != cursor_impl) {
       foreach_list_typed(nir_cf_node, node, node, &cf_list->list)
          relink_jump_halt_cf_node(node, cursor_impl->end_block);
@@ -856,9 +857,8 @@ nir_remove_after_cf_node(nir_cf_node *node)
    nir_cursor begin = nir_after_cf_node(node);
    if (begin.option == nir_cursor_before_block) {
       /* nir_cf_extract() would ignore these phis */
-      nir_function_impl *impl = nir_cf_node_get_function(node);
       nir_foreach_phi_safe(phi, begin.block) {
-         replace_ssa_def_uses(&phi->def, impl);
+         replace_ssa_def_uses(&phi->def, begin.block->impl);
          nir_instr_remove_v(&phi->instr);
       }
    }

@@ -1175,6 +1175,7 @@ v3d_create_sampler_view(struct pipe_context *pctx, struct pipe_resource *prsc,
                  */
                 prsc = v3d_resource_create(pctx->screen, &tmpl);
                 if (!prsc) {
+                        pipe_resource_reference(&so->base.texture, NULL);
                         free(so);
                         return NULL;
                 }

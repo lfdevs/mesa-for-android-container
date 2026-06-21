@@ -3,64 +3,13 @@
  * SPDX-License-Identifier: MIT
  */
 
-#include "nir.h"
 #include "nir_builder.h"
-#include "nir_builder_opcodes.h"
+#include "nir_range_analysis.h"
 
 /**
  * If load_frag_coord.xy is only used by conversions to integer,
  * replace it with load_pixel_coord.
  */
-
-/* Return true if all uses of component_mask components ignore the fractional
- * part.
- *
- * Return false if any uses of components outside component_mask exist.
- */
-bool
-nir_all_uses_of_float_are_integer(nir_def *def, unsigned component_mask)
-{
-   /* Check if xy are only used by casts to integers. */
-   nir_foreach_use(use, def) {
-      /* Ifs aren't expected to source float. */
-      assert(!nir_src_is_if(use));
-
-      unsigned mask = nir_src_components_read(use);
-      if (!(mask & component_mask))
-         continue;
-
-      /* Reject instructions that use more components than expected.
-       *
-       * (e.g. frag_coord that has zw uses is always pessimistically treated
-       * as having no integer use)
-       */
-      if (mask & ~component_mask)
-         return false;
-
-      nir_instr *use_instr = nir_src_use_instr(use);
-
-      if (use_instr->type != nir_instr_type_alu)
-         return false;
-
-      switch (nir_instr_as_alu(use_instr)->op) {
-      case nir_op_f2i8:
-      case nir_op_f2i16:
-      case nir_op_f2i32:
-      case nir_op_f2i64:
-      case nir_op_f2u8:
-      case nir_op_f2u16:
-      case nir_op_f2u32:
-      case nir_op_f2u64:
-      case nir_op_ftrunc:
-      case nir_op_ffloor:
-         continue;
-      default:
-         return false;
-      }
-   }
-
-   return true;
-}
 
 static bool
 opt_frag_pos(nir_builder *b, nir_intrinsic_instr *intr, UNUSED void *data)
@@ -73,22 +22,23 @@ opt_frag_pos(nir_builder *b, nir_intrinsic_instr *intr, UNUSED void *data)
    if (intr->def.bit_size != 32)
       return false;
 
-   if (!nir_all_uses_of_float_are_integer(&intr->def, 0x3))
+   nir_component_mask_t float_uses = 0, integer_uses = 0;
+   nir_gather_type_uses_of_float_def(&intr->def, &float_uses, &integer_uses,
+                                     NULL, false);
+
+   /* If XY float uses are present, return.
+    * If XY uses are missing, return.
+    * If ZW uses are present, give up.
+    */
+   uint8_t all_uses = float_uses | integer_uses;
+   if (float_uses & 0x3 || !(all_uses & 0x3) || all_uses & ~0x3)
       return false;
 
    b->cursor = nir_before_instr(&intr->instr);
    nir_def *pixel_coord = nir_load_pixel_coord(b);
 
    nir_foreach_use_safe(use, &intr->def) {
-      if (intr->intrinsic == nir_intrinsic_load_frag_coord) {
-         unsigned mask = nir_src_components_read(use);
-
-         if (!(mask & 0x3))
-            continue;
-
-         /* This is implied by nir_all_uses_of_float_are_integer. */
-         assert(!(mask & ~0x3));
-      }
+      assert(nir_src_components_read(use) & 0x3);
 
       nir_src_rewrite(use, pixel_coord);
 

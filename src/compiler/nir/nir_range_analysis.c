@@ -20,7 +20,7 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
  * IN THE SOFTWARE.
  */
-#include "nir.h"
+
 #include "nir_range_analysis.h"
 #include <float.h>
 #include <math.h>
@@ -909,7 +909,7 @@ process_fp_query(struct analysis_state *state, struct analysis_query *aq, uint32
       if (alu->src[0].src.ssa->bit_size > alu->def.bit_size) {
          bool rtz = alu->op == nir_op_f2f16_rtz;
          if (alu->op != nir_op_f2f16_rtne && alu->op != nir_op_f2f16_rtz) {
-            nir_shader *shader = nir_cf_node_get_function(&alu->instr.block->cf_node)->function->shader;
+            nir_shader *shader = alu->instr.block->impl->function->shader;
             unsigned execution_mode = shader->info.float_controls_execution_mode;
             rtz = nir_is_rounding_mode_rtz(execution_mode, alu->def.bit_size);
          }
@@ -2170,22 +2170,12 @@ nir_addition_might_overflow(nir_shader *shader, struct hash_table *range_ht,
 }
 
 static uint64_t
-ssa_def_bits_used(const nir_def *def, int recur)
+ssa_def_bits_used(const nir_def *def, unsigned comp, int recur)
 {
    uint64_t bits_used = 0;
    uint64_t all_bits = BITFIELD64_MASK(def->bit_size);
 
-   /* Querying the bits used from a vector is too hard of a question to
-    * answer.  Return the conservative answer that all bits are used.  To
-    * handle this, the function would need to be extended to be a query of a
-    * single component of the vector.  That would also necessary to fully
-    * handle the 'num_components > 1' inside the loop below.
-    *
-    * FINISHME: This restriction will eventually need to be restricted to be
-    * useful for hardware that uses u16vec2 as the native 16-bit integer type.
-    */
-   if (def->num_components > 1)
-      return all_bits;
+   assert(comp < def->num_components);
 
    /* Limit recursion */
    if (recur-- <= 0)
@@ -2197,21 +2187,25 @@ ssa_def_bits_used(const nir_def *def, int recur)
          nir_alu_instr *use_alu = nir_instr_as_alu(nir_src_use_instr(src));
          unsigned src_idx = container_of(src, nir_alu_src, src) - use_alu->src;
 
-         /* If a user of the value produces a vector result, return the
-          * conservative answer that all bits are used.  It is possible to
-          * answer this query by looping over the components used.  For example,
-          *
-          * vec4 32 ssa_5 = load_const(0x0000f000, 0x00000f00, 0x000000f0, 0x0000000f)
-          * ...
-          * vec4 32 ssa_8 = iand ssa_7.xxxx, ssa_5
-          *
-          * could conceivably return 0x0000ffff when queyring the bits used of
-          * ssa_7.  This is unlikely to be worth the effort because the
-          * question can eventually answered after the shader has been
-          * scalarized.
-          */
-         if (use_alu->def.num_components > 1)
+         /* Only look at scalar or trivial ALU. */
+         if (use_alu->def.num_components == 1 && use_alu->src[src_idx].swizzle[0] == comp) {
+            comp = 0;
+         } else if (!nir_alu_has_trivial_src(use_alu, src_idx)) {
+            /* If a user of the value produces a vector result and swizzles the source,
+             * return the conservative answer that all bits are used. It is possible to
+             * answer this query by looping over the components used. For example,
+             *
+             * vec4 32 ssa_5 = load_const(0x0000f000, 0x00000f00, 0x000000f0, 0x0000000f)
+             * ...
+             * vec4 32 ssa_8 = iand ssa_7.xxxx, ssa_5
+             *
+             * could conceivably return 0x0000ffff when queyring the bits used of
+             * ssa_7.  This is unlikely to be worth the effort because the
+             * question can eventually answered after the shader has been
+             * scalarized.
+             */
             return all_bits;
+        }
 
          switch (use_alu->op) {
          case nir_op_u2u8:
@@ -2222,7 +2216,7 @@ ssa_def_bits_used(const nir_def *def, int recur)
          case nir_op_i2i32:
          case nir_op_u2u64:
          case nir_op_i2i64: {
-            uint64_t def_bits_used = ssa_def_bits_used(&use_alu->def, recur);
+            uint64_t def_bits_used = ssa_def_bits_used(&use_alu->def, comp, recur);
 
             /* If one of the sign-extended bits is used, set the last src bit
              * as used.
@@ -2239,10 +2233,12 @@ ssa_def_bits_used(const nir_def *def, int recur)
          case nir_op_extract_u8:
          case nir_op_extract_i8:
          case nir_op_extract_u16:
-         case nir_op_extract_i16:
-            if (src_idx == 0 && nir_src_is_const(use_alu->src[1].src)) {
-               unsigned chunk = nir_alu_src_as_uint(use_alu->src[1]);
-               uint64_t defs_bits_used = ssa_def_bits_used(&use_alu->def, recur);
+         case nir_op_extract_i16: {
+            uint64_t chunk;
+
+            if (src_idx == 0 && nir_alu_src_comp_get_uint(use_alu->src[1],
+                                                          comp, &chunk)) {
+               uint64_t defs_bits_used = ssa_def_bits_used(&use_alu->def, comp, recur);
                unsigned field_bits = use_alu->op == nir_op_extract_u8 ||
                                      use_alu->op == nir_op_extract_i8 ? 8 : 16;
                uint64_t field_bitmask = BITFIELD64_MASK(field_bits);
@@ -2261,14 +2257,18 @@ ssa_def_bits_used(const nir_def *def, int recur)
             } else {
                return all_bits;
             }
+         }
 
          case nir_op_ishl:
          case nir_op_ishr:
-         case nir_op_ushr:
-            if (src_idx == 0 && nir_src_is_const(use_alu->src[1].src)) {
+         case nir_op_ushr: {
+            uint64_t shift;
+
+            if (src_idx == 0 && nir_alu_src_comp_get_uint(use_alu->src[1],
+                                                          comp, &shift)) {
                unsigned bit_size = def->bit_size;
-               unsigned shift = nir_alu_src_as_uint(use_alu->src[1]) & (bit_size - 1);
-               uint64_t def_bits_used = ssa_def_bits_used(&use_alu->def, recur);
+               shift &= bit_size - 1;
+               uint64_t def_bits_used = ssa_def_bits_used(&use_alu->def, comp, recur);
 
                /* If one of the sign-extended bits is used, set the "last src
                 * bit before shifting" as used.
@@ -2289,31 +2289,44 @@ ssa_def_bits_used(const nir_def *def, int recur)
             } else {
                return all_bits;
             }
+         }
 
          case nir_op_iand:
-         case nir_op_ior:
+         case nir_op_ior: {
+            uint64_t other_src;
+
             assert(src_idx < 2);
-            if (nir_src_is_const(use_alu->src[1 - src_idx].src)) {
-               uint64_t other_src = nir_alu_src_as_uint(use_alu->src[1 - src_idx]);
+            if (nir_alu_src_comp_get_uint(use_alu->src[1 - src_idx], comp,
+                                          &other_src)) {
                if (use_alu->op == nir_op_iand)
-                  bits_used |= ssa_def_bits_used(&use_alu->def, recur) & other_src;
+                  bits_used |= ssa_def_bits_used(&use_alu->def, comp, recur) & other_src;
                else
-                  bits_used |= ssa_def_bits_used(&use_alu->def, recur) & ~other_src;
+                  bits_used |= ssa_def_bits_used(&use_alu->def, comp, recur) & ~other_src;
                break;
             } else {
                return all_bits;
             }
+         }
 
          case nir_op_ibfe:
-         case nir_op_ubfe:
-            if (src_idx == 0 && nir_src_is_const(use_alu->src[1].src)) {
-               uint64_t def_bits_used = ssa_def_bits_used(&use_alu->def, recur);
+         case nir_op_ubfe: {
+            uint64_t offset;
+
+            if (src_idx == 0 && nir_alu_src_comp_get_uint(use_alu->src[1], comp, &offset)) {
+               uint64_t def_bits_used = ssa_def_bits_used(&use_alu->def, comp, recur);
                unsigned bit_size = use_alu->def.bit_size;
-               unsigned offset = nir_alu_src_as_uint(use_alu->src[1]) & (bit_size - 1);
-               unsigned bits = nir_src_is_const(use_alu->src[2].src) ?
-                                  nir_alu_src_as_uint(use_alu->src[2]) & (bit_size - 1) :
-                                  /* Worst case if bits is not constant. */
-                                  (bit_size - offset);
+               offset &= bit_size - 1;
+
+               nir_scalar bits_src = nir_scalar_resolved(use_alu->src[2].src.ssa,
+                                                         use_alu->src[2].swizzle[comp]);
+               bool bits_is_const = nir_scalar_is_const(bits_src);
+               uint64_t bits;
+
+               if (bits_is_const)
+                  bits = nir_scalar_as_uint(bits_src) & (bit_size - 1);
+               else
+                  bits = bit_size - offset; /* Worst case if bits is not constant. */
+
                uint64_t field_bitmask = BITFIELD64_MASK(bits);
 
                /* If one of the sign-extended bits is used, set the last src
@@ -2321,8 +2334,8 @@ ssa_def_bits_used(const nir_def *def, int recur)
                 * If bits is not constant, all bits can be the last one.
                 */
                if (use_alu->op == nir_op_ibfe &&
-                   (def_bits_used >> offset) & ~field_bitmask) {
-                  if (nir_alu_src_as_uint(use_alu->src[2]))
+                   (def_bits_used & ~(bits_is_const ? field_bitmask : 1u))) {
+                  if (bits_is_const)
                      def_bits_used |= BITFIELD64_BIT(bits - 1);
                   else
                      def_bits_used |= field_bitmask;
@@ -2336,6 +2349,7 @@ ssa_def_bits_used(const nir_def *def, int recur)
             } else {
                return all_bits;
             }
+         }
 
          case nir_op_imul24:
          case nir_op_umul24:
@@ -2343,14 +2357,14 @@ ssa_def_bits_used(const nir_def *def, int recur)
             break;
 
          case nir_op_mov:
-            bits_used |= ssa_def_bits_used(&use_alu->def, recur);
+            bits_used |= ssa_def_bits_used(&use_alu->def, comp, recur);
             break;
 
          case nir_op_bcsel:
             if (src_idx == 0)
                bits_used |= 0x1;
             else
-               bits_used |= ssa_def_bits_used(&use_alu->def, recur);
+               bits_used |= ssa_def_bits_used(&use_alu->def, comp, recur);
             break;
 
          default:
@@ -2369,7 +2383,7 @@ ssa_def_bits_used(const nir_def *def, int recur)
          case nir_intrinsic_shuffle_up_intel:
          case nir_intrinsic_shuffle_down_intel:
             if (src_idx == 0 || src_idx == 1) {
-               bits_used |= ssa_def_bits_used(&use_intrin->def, recur);
+               bits_used |= ssa_def_bits_used(&use_intrin->def, comp, recur);
             } else {
                /* Subgroups larger than 128 are not a thing */
                bits_used |= 127;
@@ -2386,7 +2400,7 @@ ssa_def_bits_used(const nir_def *def, int recur)
          case nir_intrinsic_quad_swap_vertical:
          case nir_intrinsic_quad_swap_diagonal:
             if (src_idx == 0) {
-               bits_used |= ssa_def_bits_used(&use_intrin->def, recur);
+               bits_used |= ssa_def_bits_used(&use_intrin->def, comp, recur);
             } else {
                if (use_intrin->intrinsic == nir_intrinsic_quad_broadcast) {
                   bits_used |= 3;
@@ -2407,7 +2421,7 @@ ssa_def_bits_used(const nir_def *def, int recur)
             case nir_op_ior:
             case nir_op_iand:
             case nir_op_ixor:
-               bits_used |= ssa_def_bits_used(&use_intrin->def, recur);
+               bits_used |= ssa_def_bits_used(&use_intrin->def, comp, recur);
                break;
 
             default:
@@ -2424,7 +2438,7 @@ ssa_def_bits_used(const nir_def *def, int recur)
 
       case nir_instr_type_phi: {
          nir_phi_instr *use_phi = nir_instr_as_phi(nir_src_use_instr(src));
-         bits_used |= ssa_def_bits_used(&use_phi->def, recur);
+         bits_used |= ssa_def_bits_used(&use_phi->def, comp, recur);
          break;
       }
 
@@ -2442,9 +2456,9 @@ ssa_def_bits_used(const nir_def *def, int recur)
 }
 
 uint64_t
-nir_def_bits_used(const nir_def *def)
+nir_def_bits_used(nir_scalar def)
 {
-   return ssa_def_bits_used(def, 2);
+   return ssa_def_bits_used(def.def, def.comp, 2);
 }
 
 static void
@@ -2562,4 +2576,79 @@ nir_def_num_lsb_zero(struct hash_table *numlsb_ht, nir_scalar def)
    push_scalar_query(&state, def);
 
    return perform_analysis(&state);
+}
+
+/* Return the following:
+ * - float_uses: the component mask of def used as float
+ * - integer_uses: the component mask of def used as integer
+ * - integer_bits_used: if non-NULL, it will have those bits set to 1
+ *   that are used by integer uses of def, e.g. (f2u32(def.y) & mask) sets
+ *   integer_bits_used[1] |= mask;
+ *
+ * The function only accumulates 1 bits in the parameters, preserving all
+ * bits set by the caller.
+ *
+ * If stop_on_float_use is true and *float_uses != 0, the function terminates
+ * immediately and all masks may be incomplete.
+ */
+void
+nir_gather_type_uses_of_float_def(nir_def *def,
+                                  nir_component_mask_t *float_uses,
+                                  nir_component_mask_t *integer_uses,
+                                  uint64_t integer_bits_used[NIR_MAX_VEC_COMPONENTS],
+                                  bool stop_on_float_use)
+{
+   nir_foreach_use(use, def) {
+      if (stop_on_float_use && *float_uses)
+         return;
+
+      nir_component_mask_t src_mask = nir_src_components_read(use);
+      nir_instr *use_instr = nir_src_use_instr(use);
+
+      if (use_instr->type != nir_instr_type_alu) {
+         *float_uses |= src_mask;
+         continue;
+      }
+
+      nir_alu_instr *alu = nir_instr_as_alu(use_instr);
+
+      /* Trivially handle non-component-wise ALU. */
+      if (nir_op_infos[alu->op].output_size) {
+         *float_uses |= src_mask;
+         continue;
+      }
+
+      /* Only component-wise ALU. */
+      for (unsigned i = 0; i < alu->def.num_components; i++) {
+         uint8_t src0_comp = alu->src[0].swizzle[i];
+
+         switch (alu->op) {
+         case nir_op_f2i8:
+         case nir_op_f2i16:
+         case nir_op_f2i32:
+         case nir_op_f2i64:
+         case nir_op_f2u8:
+         case nir_op_f2u16:
+         case nir_op_f2u32:
+         case nir_op_f2u64:
+            *integer_uses |= src_mask;
+            if (integer_bits_used) {
+               integer_bits_used[src0_comp] |=
+                  nir_def_bits_used(nir_get_scalar(&alu->def, i));
+            }
+            break;
+
+         case nir_op_ftrunc:
+         case nir_op_ffloor:
+            *integer_uses |= src_mask;
+            if (integer_bits_used)
+               integer_bits_used[src0_comp] = ~0ull;
+            break;
+
+         default:
+            *float_uses |= src_mask;
+            break;
+         }
+      }
+   }
 }

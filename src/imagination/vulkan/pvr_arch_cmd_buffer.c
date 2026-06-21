@@ -7994,29 +7994,45 @@ pvr_emit_dirty_ppp_state(struct pvr_cmd_buffer *const cmd_buffer,
 
    pvr_setup_isp_depth_bias_scissor_state(cmd_buffer);
 
+   /* Viewports are also abused to implement FRONT_AND_BACK culling */
    if (BITSET_TEST(dynamic_state->dirty, MESA_VK_DYNAMIC_VP_VIEWPORTS) ||
-       BITSET_TEST(dynamic_state->dirty, MESA_VK_DYNAMIC_VP_VIEWPORT_COUNT))
+       BITSET_TEST(dynamic_state->dirty, MESA_VK_DYNAMIC_VP_VIEWPORT_COUNT) ||
+       BITSET_TEST(dynamic_state->dirty,
+                   MESA_VK_DYNAMIC_IA_PRIMITIVE_TOPOLOGY) ||
+       BITSET_TEST(dynamic_state->dirty, MESA_VK_DYNAMIC_RS_CULL_MODE)) {
       pvr_setup_viewport(cmd_buffer);
+   }
 
    pvr_setup_ppp_control(cmd_buffer);
 
    /* The hardware doesn't have an explicit mode for this so we use a
-    * negative viewport to make sure all objects are culled out early.
+    * negative viewport to make sure all triangles are culled out early.
     */
-   if (dynamic_state->rs.cull_mode == VK_CULL_MODE_FRONT_AND_BACK) {
-      /* Shift the viewport out of the guard-band culling everything. */
-      const uint32_t negative_vp_val = fui(-2.0f);
+   switch (dynamic_state->ia.primitive_topology) {
+   case VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST:
+   case VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP:
+   case VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN:
+   case VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST_WITH_ADJACENCY:
+   case VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP_WITH_ADJACENCY:
+      if (dynamic_state->rs.cull_mode == VK_CULL_MODE_FRONT_AND_BACK) {
+         /* Shift the viewport out of the guard-band culling everything. */
+         const uint32_t negative_vp_val = fui(-2.0f);
 
-      state->ppp_state.viewports[0].a0 = negative_vp_val;
-      state->ppp_state.viewports[0].m0 = 0;
-      state->ppp_state.viewports[0].a1 = negative_vp_val;
-      state->ppp_state.viewports[0].m1 = 0;
-      state->ppp_state.viewports[0].a2 = negative_vp_val;
-      state->ppp_state.viewports[0].m2 = 0;
+         state->ppp_state.viewports[0].a0 = negative_vp_val;
+         state->ppp_state.viewports[0].m0 = 0;
+         state->ppp_state.viewports[0].a1 = negative_vp_val;
+         state->ppp_state.viewports[0].m1 = 0;
+         state->ppp_state.viewports[0].a2 = negative_vp_val;
+         state->ppp_state.viewports[0].m2 = 0;
 
-      state->ppp_state.viewport_count = 1;
+         state->ppp_state.viewport_count = 1;
 
-      state->emit_header.pres_viewport = true;
+         state->emit_header.pres_viewport = true;
+      }
+      break;
+   default:
+      /* Points or lines shouldn't be culled out even in such case. */
+      break;
    }
 
    result = pvr_emit_ppp_state(cmd_buffer, sub_cmd);

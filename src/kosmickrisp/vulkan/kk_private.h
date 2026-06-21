@@ -49,8 +49,6 @@
       MTL_RESOURCE_CPU_CACHE_MODE_DEFAULT_CACHE |                              \
       MTL_RESOURCE_TRACKING_MODE_UNTRACKED
 
-#define KK_MAX_CMD_BUFFERS 256
-
 struct kk_addr_range {
    uint64_t addr;
    uint64_t range;

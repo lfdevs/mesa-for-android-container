@@ -795,6 +795,7 @@ class ResourceTracker {
         zx_handle_t eventHandle = ZX_HANDLE_INVALID;
         zx_koid_t eventKoid = ZX_KOID_INVALID;
         std::optional<int> syncFd = {};
+        bool isTimeline = false;
     };
 
     struct VkDescriptorUpdateTemplate_Info {

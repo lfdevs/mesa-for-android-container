@@ -40,7 +40,7 @@ bool vpe10_dpp_dscl_is_ycbcr(const enum vpe_surface_pixel_format format)
            format <= VPE_SURFACE_PIXEL_FORMAT_VIDEO_END;
 }
 
-static bool dpp1_dscl_is_video_subsampled(const enum vpe_surface_pixel_format format)
+bool vpe10_dpp_dscl_is_video_subsampled(const enum vpe_surface_pixel_format format)
 {
     return (format >= VPE_SURFACE_PIXEL_FORMAT_VIDEO_BEGIN &&
             format <= VPE_SURFACE_PIXEL_FORMAT_SUBSAMPLE_END);
@@ -58,7 +58,7 @@ enum vpe10_dscl_mode_sel vpe10_dpp_dscl_get_dscl_mode(const struct scaler_data *
     if (!vpe10_dpp_dscl_is_ycbcr(data->format))
         return DSCL_MODE_SCALING_444_RGB_ENABLE;
 
-    if (!dpp1_dscl_is_video_subsampled(data->format))
+    if (!vpe10_dpp_dscl_is_video_subsampled(data->format))
         return DSCL_MODE_SCALING_444_YCBCR_ENABLE;
 
     if (data->ratios.horz.value == one && data->ratios.vert.value == one)

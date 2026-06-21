@@ -255,6 +255,13 @@ struct intel_batch_decode_bo {
    const void *map;
 };
 
+struct intel_batch_decode_hash {
+   /* Record the previous parsed command for cross-instruction tracking.
+    */
+   const struct intel_group *last_inst;
+   uint64_t hash;
+};
+
 struct intel_batch_decode_ctx {
    /**
     * Return information about the buffer containing the given address.
@@ -297,6 +304,7 @@ struct intel_batch_decode_ctx {
    struct hash_table *commands;
    struct hash_table *filters;
    struct hash_table *stats;
+   struct intel_batch_decode_hash shader_hash;
 
    void (*disassemble_program)(struct intel_batch_decode_ctx *ctx,
                                uint32_t ksp,

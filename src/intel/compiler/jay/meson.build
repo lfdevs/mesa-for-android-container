@@ -54,6 +54,7 @@ libintel_compiler_jay_files = files(
   'jay_ir.h',
   'jay_insert_fp_mode.c',
   'jay_liveness.c',
+  'jay_lower_helpers.c',
   'jay_lower_post_ra.c',
   'jay_lower_pre_ra.c',
   'jay_lower_scoreboard.c',

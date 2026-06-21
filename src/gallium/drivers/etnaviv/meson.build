@@ -40,6 +40,7 @@ files_etnaviv = files(
   'etnaviv_ml_nn.h',
   'etnaviv_ml_tp.c',
   'etnaviv_ml_tp.h',
+  'etnaviv_nir_lower_128bit.c',
   'etnaviv_nir_lower_source_mods.c',
   'etnaviv_nir_lower_texture.c',
   'etnaviv_nir_lower_ubo_to_uniform.c',

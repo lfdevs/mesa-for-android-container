@@ -192,6 +192,7 @@ struct wsi_image {
 
    VkQueryPool query_pool;
    VkCommandBuffer *timestamp_cmd_buffers;
+   uint32_t query_pool_busy;
 };
 
 struct wsi_presentation_timing {
@@ -214,6 +215,7 @@ struct wsi_image_timing_request {
    uint64_t                    serial;
    uint64_t                    time;
    VkPresentTimingInfoFlagsEXT flags;
+   VkPresentStageFlagsEXT      feedback;
 };
 
 struct wsi_swapchain {

@@ -218,8 +218,13 @@ lower_offset_for_ssbo(nir_intrinsic_instr *intrinsic, nir_builder *b,
 
    nir_intrinsic_copy_const_indices(new_intrinsic, intrinsic);
 
-   new_intrinsic->num_components = intrinsic->num_components;
-
+   if (ir3_ssbo_opcode == nir_intrinsic_ssbo_atomic_ir3 ||
+       ir3_ssbo_opcode == nir_intrinsic_ssbo_atomic_swap_ir3) {
+      assert(intrinsic->num_components == 1);
+      new_intrinsic->num_components = 0;
+   } else {
+      new_intrinsic->num_components = intrinsic->num_components;
+   }
    int cur_shift = nir_intrinsic_offset_shift(intrinsic);
    int extra_shift = shift - cur_shift;
 

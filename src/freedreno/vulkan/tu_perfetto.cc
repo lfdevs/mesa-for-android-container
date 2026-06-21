@@ -5,7 +5,10 @@
 
 #include "tu_perfetto.h"
 
-#include <perfetto.h>
+#include "util/perf/u_perfetto.h"
+#ifdef ANDROID_LIBPERFETTO
+#include <perfetto/trace/gpu/vulkan_memory_event.pbzero.h>
+#endif
 
 #include "util/u_process.h"
 #include "util/perf/u_perfetto_renderpass.h"

@@ -1633,7 +1633,7 @@ v3dX(cmd_buffer_emit_blend)(struct v3dv_cmd_buffer *cmd_buffer)
       return;
 
    const struct v3d_device_info *devinfo = &cmd_buffer->device->devinfo;
-   const uint32_t max_color_rts = V3D_MAX_RENDER_TARGETS(devinfo->ver);
+   const uint32_t max_color_rts = devinfo->max_render_targets;
 
    const uint32_t blend_packets_size =
       cl_packet_length(BLEND_ENABLES) +

@@ -45,6 +45,12 @@
 #define ETNA_MAX_CONST_BUF 16
 #define ETNA_MAX_PIXELPIPES 2
 
+/* 128-bit color emulation reserves the upper half of the render targets for
+ * companion targets, so at most this many color RTs can be bound (and be
+ * 128-bit). It bounds the per-RT rt_is_128bit mask and rt_companion table.
+ */
+#define ETNA_MAX_128BIT_RTS (PIPE_MAX_COLOR_BUFS / 2)
+
 /* All RS operations must have width%16 = 0 */
 #define ETNA_RS_WIDTH_MASK (16 - 1)
 /* RS tiled operations must have height%4 = 0 */

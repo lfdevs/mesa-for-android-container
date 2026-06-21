@@ -133,6 +133,13 @@ lp_sampler_static_texture_state(struct lp_static_texture_state *state,
    if (state->tiled)
       state->tiled_samples = texture->nr_samples;
 
+   /* VK_EXT_image_view_min_lod: bake "apply view min-lod" into the static state
+    * so views without a clamp don't pay any shader cost. The actual clamp value
+    * lives in the texture descriptor (dynamic state).
+    */
+   state->apply_view_min_lod = texture->target != PIPE_BUFFER &&
+                               view->u.tex.min_lod_clamp > 0.0f;
+
    /*
     * the layer / element / level parameters are all either dynamic
     * state or handled transparently wrt execution.
@@ -1158,6 +1165,16 @@ lp_build_lod_selector(struct lp_build_sample_context *bld,
                                 bld->resources_ptr, sampler_unit);
 
       lod = lp_build_broadcast_scalar(lodf_bld, min_lod);
+
+      /* VK_EXT_image_view_min_lod applies even when min == max lod. */
+      if (bld->static_texture_state->apply_view_min_lod &&
+          dynamic_state->view_min_lod) {
+         LLVMValueRef view_min_lod =
+            dynamic_state->view_min_lod(bld->gallivm, bld->resources_type,
+                                        bld->resources_ptr, sampler_unit, NULL);
+         view_min_lod = lp_build_broadcast_scalar(lodf_bld, view_min_lod);
+         lod = lp_build_max(lodf_bld, lod, view_min_lod);
+      }
    } else {
       if (explicit_lod) {
          if (bld->num_lods != bld->coord_type.length) {
@@ -1272,6 +1289,17 @@ lp_build_lod_selector(struct lp_build_sample_context *bld,
          desc_min_lod = lp_build_broadcast_scalar(lodf_bld, desc_min_lod);
 
          lod = lp_build_max(lodf_bld, lod, desc_min_lod);
+      }
+
+      /* VK_EXT_image_view_min_lod: clamp lod to the per-view minimum. */
+      if (bld->static_texture_state->apply_view_min_lod &&
+          dynamic_state->view_min_lod) {
+         LLVMValueRef view_min_lod =
+            dynamic_state->view_min_lod(bld->gallivm, bld->resources_type,
+                                        bld->resources_ptr, sampler_unit, NULL);
+         view_min_lod = lp_build_broadcast_scalar(lodf_bld, view_min_lod);
+
+         lod = lp_build_max(lodf_bld, lod, view_min_lod);
       }
 
       if (min_lod) {

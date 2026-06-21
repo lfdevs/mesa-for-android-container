@@ -40,6 +40,7 @@
 #include "stw_pixelformat.h"
 #include "stw_winsys.h"
 
+#include "d3d12/d3d12_bufmgr.h"
 #include "d3d12/d3d12_format.h"
 #include "d3d12/d3d12_resource.h"
 #include "d3d12/d3d12_screen.h"
@@ -228,6 +229,11 @@ d3d12_wgl_framebuffer_resize(stw_winsys_framebuffer *fb,
       }
 
       d3d12_wgl_framebuffer_drain_queue(framebuffer);
+
+      /* The flush + fence_finish above guarantees all GPU work is done, but
+       * reclaim_completed must be called explicitly to drop references on
+       * swapchain buffers before resizing. */
+      d3d12_screen_reclaim_completed(framebuffer->screen);
 
       for (uint32_t i = 0; i < num_buffers; ++i) {
          if (framebuffer->buffers[i]) {

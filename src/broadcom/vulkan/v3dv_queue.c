@@ -29,12 +29,11 @@
 #include <xf86drm.h>
 
 #include "broadcom/clif/clif_dump.h"
+#include "broadcom/common/v3d_submit_util.h"
 #include "util/libsync.h"
-#include "util/os_time.h"
 #include "util/perf/cpu_trace.h"
 #include "vk_drm_syncobj.h"
 
-#include <errno.h>
 #include <time.h>
 
 static void
@@ -77,25 +76,17 @@ v3dv_clif_dump(struct v3dv_device *device,
    mesa_log_stream_destroy(stream);
 }
 
-static void
-multisync_free(struct v3dv_device *device,
-               struct drm_v3d_multi_sync *ms)
+static uint32_t
+gather_in_syncs(struct v3dv_queue *queue,
+                struct v3dv_job *job,
+                enum v3dv_queue_type queue_sync,
+                struct vk_sync_wait *waits,
+                unsigned wait_count,
+                struct v3dv_submit_sync_info *sync_info,
+                uint32_t *handles)
 {
-   vk_free(&device->vk.alloc, (void *)(uintptr_t)ms->out_syncs);
-   vk_free(&device->vk.alloc, (void *)(uintptr_t)ms->in_syncs);
-}
-
-static struct drm_v3d_sem *
-set_in_syncs(struct v3dv_queue *queue,
-             struct v3dv_job *job,
-             enum v3dv_queue_type queue_sync,
-             uint32_t *count,
-             struct vk_sync_wait *waits,
-             unsigned wait_count,
-             struct v3dv_submit_sync_info *sync_info)
-{
-   struct v3dv_device *device = queue->device;
    uint32_t n_syncs = 0;
+   uint32_t idx = 0;
 
    /* If this is the first job submitted to a given GPU queue in this cmd buf
     * batch, it has to wait on wait semaphores (if any) before running.
@@ -116,107 +107,70 @@ set_in_syncs(struct v3dv_queue *queue,
                                       V3DV_BARRIER_TRANSFER_BIT);
    bool sync_cpu  = job->serialize & V3DV_BARRIER_CPU_BIT;
 
-   *count = n_syncs;
+   /* first job waits */
+   for (uint32_t i = 0; i < n_syncs; i++)
+      handles[idx++] = vk_sync_as_drm_syncobj(sync_info->waits[i].sync)->syncobj;
+
+   /* explicit call-site waits */
+   for (unsigned i = 0; i < wait_count; i++)
+      handles[idx++] = vk_sync_as_drm_syncobj(waits[i].sync)->syncobj;
+
+
+   /* internal serialization barriers */
    if (sync_cl)
-      (*count)++;
-   if (sync_tfu)
-      (*count)++;
+      handles[idx++] = queue->last_job_syncs.syncs[V3DV_QUEUE_CL];
    if (sync_csd)
-      (*count)++;
-   if (sync_cpu)
-      (*count)++;
-
-   *count += wait_count;
-
-   if (!*count)
-      return NULL;
-
-   struct drm_v3d_sem *syncs =
-      vk_zalloc(&device->vk.alloc, *count * sizeof(struct drm_v3d_sem),
-                8, VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
-
-   if (!syncs)
-      return NULL;
-
-   for (int i = 0; i < n_syncs; i++) {
-      syncs[i].handle =
-         vk_sync_as_drm_syncobj(sync_info->waits[i].sync)->syncobj;
-   }
-
-   for (int i = 0; i < wait_count; i++) {
-      syncs[n_syncs++].handle =
-         vk_sync_as_drm_syncobj(waits[i].sync)->syncobj;
-   }
-
-   if (sync_cl)
-      syncs[n_syncs++].handle = queue->last_job_syncs.syncs[V3DV_QUEUE_CL];
-
-   if (sync_csd)
-      syncs[n_syncs++].handle = queue->last_job_syncs.syncs[V3DV_QUEUE_CSD];
-
+      handles[idx++] = queue->last_job_syncs.syncs[V3DV_QUEUE_CSD];
    if (sync_tfu)
-      syncs[n_syncs++].handle = queue->last_job_syncs.syncs[V3DV_QUEUE_TFU];
-
+      handles[idx++] = queue->last_job_syncs.syncs[V3DV_QUEUE_TFU];
    if (sync_cpu)
-      syncs[n_syncs++].handle = queue->last_job_syncs.syncs[V3DV_QUEUE_CPU];
+      handles[idx++] = queue->last_job_syncs.syncs[V3DV_QUEUE_CPU];
 
-   assert(n_syncs == *count);
-   return syncs;
+   return idx;
 }
 
-static struct drm_v3d_sem *
-set_out_syncs(struct v3dv_queue *queue,
-              struct v3dv_job *job,
-              enum v3dv_queue_type queue_sync,
-              uint32_t *count,
-              struct v3dv_submit_sync_info *sync_info,
-              bool signal_syncs)
+static uint32_t
+gather_out_syncs(struct v3dv_queue *queue,
+                 enum v3dv_queue_type queue_sync,
+                 struct v3dv_submit_sync_info *sync_info,
+                 bool signal_syncs,
+                 uint32_t *handles)
 {
-   struct v3dv_device *device = queue->device;
-
    uint32_t n_vk_syncs = signal_syncs ? sync_info->signal_count : 0;
+   uint32_t idx = 0;
+
+   for (unsigned i = 0; i < n_vk_syncs; i++)
+      handles[idx++] = vk_sync_as_drm_syncobj(sync_info->signals[i].sync)->syncobj;
 
    /* We always signal the syncobj from `device->last_job_syncs` related to
     * this v3dv_queue_type to track the last job submitted to this queue.
     */
-   (*count) = n_vk_syncs + 1;
+   handles[idx++] = queue->last_job_syncs.syncs[queue_sync];
 
-   struct drm_v3d_sem *syncs =
-      vk_zalloc(&device->vk.alloc, *count * sizeof(struct drm_v3d_sem),
-                8, VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
+   return idx;
+}
 
-   if (!syncs)
-      return NULL;
-
-   if (n_vk_syncs) {
-      for (unsigned i = 0; i < n_vk_syncs; i++) {
-         syncs[i].handle =
-            vk_sync_as_drm_syncobj(sync_info->signals[i].sync)->syncobj;
-      }
-   }
-
-   syncs[n_vk_syncs].handle = queue->last_job_syncs.syncs[queue_sync];
-
-   return syncs;
+/* helpers for multisync common code */
+static void *
+multisync_zalloc(void *mem_ctx, size_t size)
+{
+   struct v3dv_device *device = mem_ctx;
+   return vk_zalloc(&device->vk.alloc, size, 8, VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
 }
 
 static void
-set_ext(struct drm_v3d_extension *ext,
-	struct drm_v3d_extension *next,
-	uint32_t id,
-	uintptr_t flags)
+multisync_free(void *mem_ctx, void *ptr)
 {
-   ext->next = (uintptr_t)(void *)next;
-   ext->id = id;
-   ext->flags = flags;
+   struct v3dv_device *device = mem_ctx;
+   vk_free(&device->vk.alloc, ptr);
 }
 
 /* This function sets the extension for multiple in/out syncobjs. When it is
  * successful, it sets the extension id to DRM_V3D_EXT_ID_MULTI_SYNC.
  * Otherwise, the extension id is 0, which means an out-of-memory error.
  */
-static void
-set_multisync(struct drm_v3d_multi_sync *ms,
+static bool
+set_multisync(struct v3d_multisync *ms,
               struct v3dv_submit_sync_info *sync_info,
               struct vk_sync_wait *waits,
               unsigned wait_count,
@@ -229,37 +183,52 @@ set_multisync(struct drm_v3d_multi_sync *ms,
               bool signal_syncs)
 {
    struct v3dv_device *device = queue->device;
-   uint32_t out_sync_count = 0, in_sync_count = 0;
-   struct drm_v3d_sem *out_syncs = NULL, *in_syncs = NULL;
+   bool ret = false;
 
-   in_syncs = set_in_syncs(queue, job, in_queue_sync,
-                           &in_sync_count, waits, wait_count, sync_info);
-   if (!in_syncs && in_sync_count)
+   /* Max input handles includes:
+    * - All API waits that apply on the first job we submit to each queue.
+    * - Any additional waits (i.e. pipeline barriers or dependencies between jobs)
+    * - All the last_syncs we track per queue (if we need to drain all queues for a barrier)
+    */
+   uint32_t max_in_syncs = (sync_info ? sync_info->wait_count : 0) + wait_count +
+                            V3DV_QUEUE_COUNT;
+
+   /* max output handles includes all syncs requested for signaling
+    * plus one extra for the queue's internal last_sync.
+    */
+   uint32_t max_out_syncs = (sync_info ? sync_info->signal_count : 0) + 1;
+
+   assert(ms);
+   ms->ops.zalloc = multisync_zalloc;
+   ms->ops.free = multisync_free;
+   ms->ops.mem_ctx = device;
+
+   STACK_ARRAY(uint32_t, in_sync_handles, max_in_syncs);
+   STACK_ARRAY(uint32_t, out_sync_handles, max_out_syncs);
+
+   if (!in_sync_handles || !out_sync_handles)
       goto fail;
 
-   out_syncs = set_out_syncs(queue, job, out_queue_sync,
-                             &out_sync_count, sync_info, signal_syncs);
+   uint32_t total_in_syncs = gather_in_syncs(queue, job, in_queue_sync,
+                                       waits, wait_count, sync_info, in_sync_handles);
 
-   assert(out_sync_count > 0);
+   uint32_t total_out_syncs = gather_out_syncs(queue, out_queue_sync,
+                                         sync_info, signal_syncs, out_sync_handles);
 
-   if (!out_syncs)
-      goto fail;
+   assert(total_in_syncs <= max_in_syncs);
+   assert(total_out_syncs <= max_out_syncs);
 
-   set_ext(&ms->base, next, DRM_V3D_EXT_ID_MULTI_SYNC, 0);
-   ms->wait_stage = wait_stage;
-   ms->out_sync_count = out_sync_count;
-   ms->out_syncs = (uintptr_t)(void *)out_syncs;
-   ms->in_sync_count = in_sync_count;
-   ms->in_syncs = (uintptr_t)(void *)in_syncs;
-
-   return;
+   ret = v3d_multisync_init(ms, wait_stage,
+                            in_sync_handles, total_in_syncs,
+                            out_sync_handles, total_out_syncs, next);
+   if (!ret)
+      mesa_loge("Multisync Set Failed");
 
 fail:
-   if (in_syncs)
-      vk_free(&device->vk.alloc, in_syncs);
-   assert(!out_syncs);
+   STACK_ARRAY_FINISH(in_sync_handles);
+   STACK_ARRAY_FINISH(out_sync_handles);
 
-   return;
+   return ret;
 }
 
 static VkResult
@@ -277,7 +246,7 @@ handle_reset_query_cpu_job(struct v3dv_queue *queue,
    assert(info->first + info->count <= info->pool->query_count);
 
    struct drm_v3d_submit_cpu submit = {0};
-   struct drm_v3d_multi_sync ms = {0};
+   struct v3d_multisync ms = {0};
 
    uint32_t *syncs = (uint32_t *) malloc(sizeof(uint32_t) * info->count);
    uintptr_t *kperfmon_ids = NULL;
@@ -288,7 +257,7 @@ handle_reset_query_cpu_job(struct v3dv_queue *queue,
 
       struct drm_v3d_reset_timestamp_query reset = {0};
 
-      set_ext(&reset.base, NULL, DRM_V3D_EXT_ID_CPU_RESET_TIMESTAMP_QUERY, 0);
+      v3d_submit_ext_set(&reset.base, NULL, DRM_V3D_EXT_ID_CPU_RESET_TIMESTAMP_QUERY, 0);
 
       reset.count = info->count;
       reset.offset = info->pool->queries[info->first].timestamp.offset;
@@ -300,9 +269,8 @@ handle_reset_query_cpu_job(struct v3dv_queue *queue,
 
       reset.syncs = (uintptr_t)(void *)syncs;
 
-      set_multisync(&ms, sync_info, NULL, 0, (void *)&reset, queue, job,
-                     V3DV_QUEUE_CPU, V3DV_QUEUE_CPU, V3D_CPU, signal_syncs);
-      if (!ms.base.id) {
+      if (!set_multisync(&ms, sync_info, NULL, 0, (void *)&reset, queue, job,
+                        V3DV_QUEUE_CPU, V3DV_QUEUE_CPU, V3D_CPU, signal_syncs)) {
          free(syncs);
          return vk_error(device->instance, VK_ERROR_OUT_OF_HOST_MEMORY);
       }
@@ -310,7 +278,7 @@ handle_reset_query_cpu_job(struct v3dv_queue *queue,
       assert(info->pool->query_type == VK_QUERY_TYPE_PERFORMANCE_QUERY_KHR);
       struct drm_v3d_reset_performance_query reset = {0};
 
-      set_ext(&reset.base, NULL, DRM_V3D_EXT_ID_CPU_RESET_PERFORMANCE_QUERY, 0);
+      v3d_submit_ext_set(&reset.base, NULL, DRM_V3D_EXT_ID_CPU_RESET_PERFORMANCE_QUERY, 0);
 
       struct vk_sync_wait waits[info->count];
       unsigned wait_count = 0;
@@ -342,9 +310,8 @@ handle_reset_query_cpu_job(struct v3dv_queue *queue,
       reset.syncs = (uintptr_t)(void *)syncs;
       reset.kperfmon_ids = (uintptr_t)(void *)kperfmon_ids;
 
-      set_multisync(&ms, sync_info, waits, wait_count, (void *)&reset, queue, job,
-                     V3DV_QUEUE_CPU, V3DV_QUEUE_CPU, V3D_CPU, signal_syncs);
-      if (!ms.base.id) {
+      if (!set_multisync(&ms, sync_info, waits, wait_count, (void *)&reset, queue, job,
+                        V3DV_QUEUE_CPU, V3DV_QUEUE_CPU, V3D_CPU, signal_syncs)) {
          free(syncs);
          free(kperfmon_ids);
          return vk_error(device->instance, VK_ERROR_OUT_OF_HOST_MEMORY);
@@ -374,7 +341,7 @@ handle_reset_query_cpu_job(struct v3dv_queue *queue,
 
    free(syncs);
    free(kperfmon_ids);
-   multisync_free(device, &ms);
+   v3d_multisync_free(&ms);
 
    queue->last_job_syncs.first[V3DV_QUEUE_CPU] = false;
 
@@ -491,7 +458,7 @@ handle_copy_query_results_cpu_job(struct v3dv_queue *queue,
    struct v3dv_bo *bo = info->dst->mem->bo;
 
    struct drm_v3d_submit_cpu submit = {0};
-   struct drm_v3d_multi_sync ms = {0};
+   struct v3d_multisync ms = {0};
 
    uint32_t *offsets = (uint32_t *) malloc(sizeof(uint32_t) * info->count);
    uint32_t *syncs = (uint32_t *) malloc(sizeof(uint32_t) * info->count);
@@ -514,7 +481,7 @@ handle_copy_query_results_cpu_job(struct v3dv_queue *queue,
 
       struct drm_v3d_copy_timestamp_query copy = {0};
 
-      set_ext(&copy.base, NULL, DRM_V3D_EXT_ID_CPU_COPY_TIMESTAMP_QUERY, 0);
+      v3d_submit_ext_set(&copy.base, NULL, DRM_V3D_EXT_ID_CPU_COPY_TIMESTAMP_QUERY, 0);
 
       copy.do_64bit = info->flags & VK_QUERY_RESULT_64_BIT;
       copy.do_partial = info->flags & VK_QUERY_RESULT_PARTIAL_BIT;
@@ -535,9 +502,8 @@ handle_copy_query_results_cpu_job(struct v3dv_queue *queue,
       copy.offsets = (uintptr_t)(void *)offsets;
       copy.syncs = (uintptr_t)(void *)syncs;
 
-      set_multisync(&ms, sync_info, NULL, 0, (void *)&copy, queue, job,
-                     V3DV_QUEUE_CPU, V3DV_QUEUE_CPU, V3D_CPU, signal_syncs);
-      if (!ms.base.id) {
+      if (!set_multisync(&ms, sync_info, NULL, 0, (void *)&copy, queue, job,
+                        V3DV_QUEUE_CPU, V3DV_QUEUE_CPU, V3D_CPU, signal_syncs)) {
          free(bo_handles);
          free(offsets);
          free(syncs);
@@ -551,7 +517,7 @@ handle_copy_query_results_cpu_job(struct v3dv_queue *queue,
 
       struct drm_v3d_copy_performance_query copy = {0};
 
-      set_ext(&copy.base, NULL, DRM_V3D_EXT_ID_CPU_COPY_PERFORMANCE_QUERY, 0);
+      v3d_submit_ext_set(&copy.base, NULL, DRM_V3D_EXT_ID_CPU_COPY_PERFORMANCE_QUERY, 0);
 
       /* If the queryPool was created with VK_QUERY_TYPE_PERFORMANCE_QUERY_KHR,
        * results for each query are written as an array of the type indicated
@@ -592,9 +558,8 @@ handle_copy_query_results_cpu_job(struct v3dv_queue *queue,
       copy.syncs = (uintptr_t)(void *)syncs;
       copy.kperfmon_ids = (uintptr_t)(void *)kperfmon_ids;
 
-      set_multisync(&ms, sync_info, waits, wait_count, (void *)&copy, queue, job,
-                     V3DV_QUEUE_CPU, V3DV_QUEUE_CPU, V3D_CPU, signal_syncs);
-      if (!ms.base.id) {
+      if (!set_multisync(&ms, sync_info, waits, wait_count, (void *)&copy, queue, job,
+                        V3DV_QUEUE_CPU, V3DV_QUEUE_CPU, V3D_CPU, signal_syncs)) {
          free(kperfmon_ids);
          free(bo_handles);
          free(offsets);
@@ -613,7 +578,7 @@ handle_copy_query_results_cpu_job(struct v3dv_queue *queue,
    free(bo_handles);
    free(offsets);
    free(syncs);
-   multisync_free(device, &ms);
+   v3d_multisync_free(&ms);
 
    queue->last_job_syncs.first[V3DV_QUEUE_CPU] = false;
 
@@ -642,7 +607,7 @@ handle_timestamp_query_cpu_job(struct v3dv_queue *queue,
 
    struct drm_v3d_timestamp_query timestamp = {0};
 
-   set_ext(&timestamp.base, NULL, DRM_V3D_EXT_ID_CPU_TIMESTAMP_QUERY, 0);
+   v3d_submit_ext_set(&timestamp.base, NULL, DRM_V3D_EXT_ID_CPU_TIMESTAMP_QUERY, 0);
 
    timestamp.count = info->count;
 
@@ -663,30 +628,29 @@ handle_timestamp_query_cpu_job(struct v3dv_queue *queue,
    timestamp.offsets = (uintptr_t)(void *)offsets;
    timestamp.syncs = (uintptr_t)(void *)syncs;
 
-   struct drm_v3d_multi_sync ms = {0};
+   struct v3d_multisync ms = {0};
 
    /* The CPU job should be serialized so it only executes after all previously
     * submitted work has completed
     */
    job->serialize = V3DV_BARRIER_ALL;
 
-   set_multisync(&ms, sync_info, NULL, 0, (void *)&timestamp, queue, job,
-	         V3DV_QUEUE_CPU, V3DV_QUEUE_CPU, V3D_CPU, signal_syncs);
-   if (!ms.base.id) {
+   if (!set_multisync(&ms, sync_info, NULL, 0, (void *)&timestamp, queue, job,
+                     V3DV_QUEUE_CPU, V3DV_QUEUE_CPU, V3D_CPU, signal_syncs)) {
       free(offsets);
       free(syncs);
       return vk_error(device->instance, VK_ERROR_OUT_OF_HOST_MEMORY);
    }
 
    submit.flags |= DRM_V3D_SUBMIT_EXTENSION;
-   submit.extensions = (uintptr_t)(void *)&ms;
+   submit.extensions = (uintptr_t)(void *)&ms.ext;
 
    int ret = v3d_ioctl(device->pdevice->render_fd,
 			DRM_IOCTL_V3D_SUBMIT_CPU, &submit);
 
    free(offsets);
    free(syncs);
-   multisync_free(device, &ms);
+   v3d_multisync_free(&ms);
 
    queue->last_job_syncs.first[V3DV_QUEUE_CPU] = false;
 
@@ -732,7 +696,7 @@ handle_csd_indirect_cpu_job(struct v3dv_queue *queue,
 
    struct drm_v3d_indirect_csd indirect = {0};
 
-   set_ext(&indirect.base, NULL, DRM_V3D_EXT_ID_CPU_INDIRECT_CSD, 0);
+   v3d_submit_ext_set(&indirect.base, NULL, DRM_V3D_EXT_ID_CPU_INDIRECT_CSD, 0);
 
    indirect.submit = csd_job->csd.submit;
    indirect.offset = info->buffer->mem_offset + info->offset;
@@ -749,25 +713,25 @@ handle_csd_indirect_cpu_job(struct v3dv_queue *queue,
 
    indirect.indirect = csd_job->indirect.bo->handle;
 
-   struct drm_v3d_multi_sync ms = {0};
+   struct v3d_multisync ms = {0};
 
    /* We need to configure the semaphores of this job with the indirect
     * CSD job, as the CPU job must obey to the CSD job synchronization
     * demands, such as barriers.
     */
-   set_multisync(&ms, sync_info, NULL, 0, (void *)&indirect, queue, csd_job,
-	         V3DV_QUEUE_CPU, V3DV_QUEUE_CSD, V3D_CPU, signal_syncs);
-   if (!ms.base.id)
+   if (!set_multisync(&ms, sync_info, NULL, 0, (void *)&indirect, queue, csd_job,
+                     V3DV_QUEUE_CPU, V3DV_QUEUE_CSD, V3D_CPU, signal_syncs)) {
       return vk_error(device->instance, VK_ERROR_OUT_OF_HOST_MEMORY);
+   }
 
    submit.flags |= DRM_V3D_SUBMIT_EXTENSION;
-   submit.extensions = (uintptr_t)(void *)&ms;
+   submit.extensions = (uintptr_t)(void *)&ms.ext;
 
    int ret = v3d_ioctl(device->pdevice->render_fd,
 			DRM_IOCTL_V3D_SUBMIT_CPU, &submit);
 
    free(bo_handles);
-   multisync_free(device, &ms);
+   v3d_multisync_free(&ms);
 
    queue->last_job_syncs.first[V3DV_QUEUE_CPU] = false;
    queue->last_job_syncs.first[V3DV_QUEUE_CSD] = false;
@@ -891,17 +855,16 @@ handle_cl_job(struct v3dv_queue *queue,
    /* Replace single semaphore settings whenever our kernel-driver supports
     * multiple semaphores extension.
     */
-   struct drm_v3d_multi_sync ms = { 0 };
+   struct v3d_multisync ms = { 0 };
    enum v3d_queue wait_stage = needs_rcl_sync ? V3D_RENDER : V3D_BIN;
-   set_multisync(&ms, sync_info, NULL, 0, NULL, queue, job,
-                 V3DV_QUEUE_CL, V3DV_QUEUE_CL, wait_stage, signal_syncs);
-   if (!ms.base.id) {
+   if (!set_multisync(&ms, sync_info, NULL, 0, NULL, queue, job,
+                     V3DV_QUEUE_CL, V3DV_QUEUE_CL, wait_stage, signal_syncs)) {
       free(bo_handles);
       return vk_error(device->instance, VK_ERROR_OUT_OF_HOST_MEMORY);
    }
 
    submit.flags |= DRM_V3D_SUBMIT_EXTENSION;
-   submit.extensions = (uintptr_t)(void *)&ms;
+   submit.extensions = (uintptr_t)(void *)&ms.ext;
 
    /* We are using multisync so disable legacy single-sync interface */
    submit.in_sync_rcl = 0;
@@ -920,7 +883,7 @@ handle_cl_job(struct v3dv_queue *queue,
    }
 
    free(bo_handles);
-   multisync_free(device, &ms);
+   v3d_multisync_free(&ms);
 
    queue->last_job_syncs.first[V3DV_QUEUE_CL] = false;
 
@@ -944,14 +907,13 @@ handle_tfu_job(struct v3dv_queue *queue,
    /* Replace single semaphore settings whenever our kernel-driver supports
     * multiple semaphore extension.
     */
-   struct drm_v3d_multi_sync ms = { 0 };
-   set_multisync(&ms, sync_info, NULL, 0, NULL, queue, job,
-                 V3DV_QUEUE_TFU, V3DV_QUEUE_TFU, V3D_TFU, signal_syncs);
-   if (!ms.base.id)
+   struct v3d_multisync ms = { 0 };
+   if (!set_multisync(&ms, sync_info, NULL, 0, NULL, queue, job,
+                     V3DV_QUEUE_TFU, V3DV_QUEUE_TFU, V3D_TFU, signal_syncs)) {
       return vk_error(device->instance, VK_ERROR_OUT_OF_HOST_MEMORY);
-
+   }
    job->tfu.flags |= DRM_V3D_SUBMIT_EXTENSION;
-   job->tfu.extensions = (uintptr_t)(void *)&ms;
+   job->tfu.extensions = (uintptr_t)(void *)&ms.ext;
 
    /* We are using multisync so disable legacy single-sync interface */
    job->tfu.in_sync = 0;
@@ -960,7 +922,7 @@ handle_tfu_job(struct v3dv_queue *queue,
    int ret = v3d_ioctl(device->pdevice->render_fd,
                        DRM_IOCTL_V3D_SUBMIT_TFU, &job->tfu);
 
-   multisync_free(device, &ms);
+   v3d_multisync_free(&ms);
    queue->last_job_syncs.first[V3DV_QUEUE_TFU] = false;
 
    if (ret != 0)
@@ -1001,14 +963,13 @@ handle_csd_job(struct v3dv_queue *queue,
    /* Replace single semaphore settings whenever our kernel-driver supports
     * multiple semaphore extension.
     */
-   struct drm_v3d_multi_sync ms = { 0 };
-   set_multisync(&ms, sync_info, NULL, 0, NULL, queue, job,
-                 V3DV_QUEUE_CSD, V3DV_QUEUE_CSD, V3D_CSD, signal_syncs);
-   if (!ms.base.id)
+   struct v3d_multisync ms = { 0 };
+   if (!set_multisync(&ms, sync_info, NULL, 0, NULL, queue, job,
+                     V3DV_QUEUE_CSD, V3DV_QUEUE_CSD, V3D_CSD, signal_syncs)) {
       return vk_error(device->instance, VK_ERROR_OUT_OF_HOST_MEMORY);
-
+   }
    submit->flags |= DRM_V3D_SUBMIT_EXTENSION;
-   submit->extensions = (uintptr_t)(void *)&ms;
+   submit->extensions = (uintptr_t)(void *)&ms.ext;
 
    /* We are using multisync so disable legacy single-sync interface */
    submit->in_sync = 0;
@@ -1032,7 +993,7 @@ handle_csd_job(struct v3dv_queue *queue,
 
    free(bo_handles);
 
-   multisync_free(device, &ms);
+   v3d_multisync_free(&ms);
    queue->last_job_syncs.first[V3DV_QUEUE_CSD] = false;
 
    if (ret)

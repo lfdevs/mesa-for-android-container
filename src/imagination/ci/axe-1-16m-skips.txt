@@ -1,0 +1,11 @@
+# Timeout
+dEQP-VK.api.object_management.max_concurrent.compute_pipeline
+dEQP-VK.api.object_management.max_concurrent.graphics_pipeline
+dEQP-VK.graphicsfuzz.cov-loop-large-array-index-clamp-negative-value
+dEQP-VK.reconvergence.subgroup_uniform_control_flow_ballot.compute.nesting4.7.10
+dEQP-VK.reconvergence.subgroup_uniform_control_flow_elect.compute.nesting4.0.40
+dEQP-VK.reconvergence.subgroup_uniform_control_flow_elect.compute.nesting4.7.10
+dEQP-VK.reconvergence.workgroup_uniform_control_flow_ballot.compute.nesting4.7.10
+dEQP-VK.reconvergence.workgroup_uniform_control_flow_elect.compute.nesting4.7.10
+dEQP-VK.spirv_assembly.instruction.compute.opphi.wide
+dEQP-VK.subgroups.ballot_broadcast.compute.subgroupbroadcast_bvec4

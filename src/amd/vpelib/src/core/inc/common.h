@@ -60,6 +60,7 @@ extern "C" {
 bool vpe_find_color_space_from_table(
     const struct vpe_color_space *table, int table_size, const struct vpe_color_space *cs);
 
+bool vpe_is_video_format(enum vpe_surface_pixel_format format);
 bool vpe_is_subsampled_format(enum vpe_surface_pixel_format format);
 bool vpe_is_dual_plane_format(enum vpe_surface_pixel_format format);
 
@@ -69,6 +70,7 @@ bool vpe_is_rgb8(enum vpe_surface_pixel_format format);
 bool vpe_is_rgb10(enum vpe_surface_pixel_format format);
 bool vpe_is_rgb16(enum vpe_surface_pixel_format format);
 bool vpe_is_planar_format(enum vpe_surface_pixel_format format);
+bool vpe_is_single_plane_format(enum vpe_surface_pixel_format format);
 bool vpe_is_fp16(enum vpe_surface_pixel_format format);
 
 bool vpe_is_yuv8(enum vpe_surface_pixel_format format);

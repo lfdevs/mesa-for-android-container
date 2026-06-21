@@ -704,7 +704,7 @@ r600_finalize_nir_common(nir_shader *nir, enum amd_gfx_level gfx_level)
 
    NIR_PASS(_, nir, r600_nir_lower_trigen, gfx_level);
    NIR_PASS(_, nir, nir_lower_phis_to_scalar, NULL, NULL);
-   NIR_PASS(_, nir, nir_lower_undef_to_zero);
+   NIR_PASS(_, nir, nir_lower_undef_to_zero, NULL);
 
    struct nir_lower_tex_options lower_tex_options = {0};
    lower_tex_options.lower_txp = ~0u;

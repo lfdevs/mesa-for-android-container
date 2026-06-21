@@ -131,18 +131,23 @@ void vpe20_cdc_program_p2b_config(struct cdc_be *cdc_be, enum vpe_surface_pixel_
         p2b_format_sel = 20;
         break;
     case VPE_SURFACE_PIXEL_FORMAT_GRPH_RGBA16161616:
+    case VPE_SURFACE_PIXEL_FORMAT_GRPH_BGRA16161616:
         p2b_format_sel = 21;
         break;
     case VPE_SURFACE_PIXEL_FORMAT_GRPH_ABGR16161616_UNORM:
+    case VPE_SURFACE_PIXEL_FORMAT_GRPH_ARGB16161616_UNORM:
         p2b_format_sel = 26;
         break;
     case VPE_SURFACE_PIXEL_FORMAT_GRPH_BGRA16161616_UNORM:
+    case VPE_SURFACE_PIXEL_FORMAT_GRPH_RGBA16161616_UNORM:
         p2b_format_sel = 27;
         break;
     case VPE_SURFACE_PIXEL_FORMAT_GRPH_BGRA16161616_SNORM:
+    case VPE_SURFACE_PIXEL_FORMAT_GRPH_RGBA16161616_SNORM:
         p2b_format_sel = 28;
         break;
     case VPE_SURFACE_PIXEL_FORMAT_GRPH_ABGR16161616_SNORM:
+    case VPE_SURFACE_PIXEL_FORMAT_GRPH_ARGB16161616_SNORM:
         p2b_format_sel = 29;
         break;
     case VPE_SURFACE_PIXEL_FORMAT_GRPH_ARGB16161616F:
@@ -307,6 +312,8 @@ void vpe20_cdc_program_p2b_config(struct cdc_be *cdc_be, enum vpe_surface_pixel_
     case VPE_SURFACE_PIXEL_FORMAT_GRPH_RGBX8888:
     case VPE_SURFACE_PIXEL_FORMAT_GRPH_RGBA1010102:
     case VPE_SURFACE_PIXEL_FORMAT_GRPH_RGBA16161616:
+    case VPE_SURFACE_PIXEL_FORMAT_GRPH_RGBA16161616_UNORM:
+    case VPE_SURFACE_PIXEL_FORMAT_GRPH_RGBA16161616_SNORM:
     case VPE_SURFACE_PIXEL_FORMAT_GRPH_RGBA16161616F:
     case VPE_SURFACE_PIXEL_FORMAT_VIDEO_CrYCbA1010102:
     case VPE_SURFACE_PIXEL_FORMAT_VIDEO_CrYCbA12121212:
@@ -318,6 +325,7 @@ void vpe20_cdc_program_p2b_config(struct cdc_be *cdc_be, enum vpe_surface_pixel_
     case VPE_SURFACE_PIXEL_FORMAT_GRPH_ABGR8888:
     case VPE_SURFACE_PIXEL_FORMAT_GRPH_XBGR8888:
     case VPE_SURFACE_PIXEL_FORMAT_GRPH_ABGR2101010:
+    case VPE_SURFACE_PIXEL_FORMAT_GRPH_ABGR16161616:
     case VPE_SURFACE_PIXEL_FORMAT_GRPH_ABGR16161616F:
     case VPE_SURFACE_PIXEL_FORMAT_GRPH_ABGR16161616_UNORM:
     case VPE_SURFACE_PIXEL_FORMAT_GRPH_ABGR16161616_SNORM:
@@ -329,6 +337,7 @@ void vpe20_cdc_program_p2b_config(struct cdc_be *cdc_be, enum vpe_surface_pixel_
     case VPE_SURFACE_PIXEL_FORMAT_GRPH_BGRA8888:
     case VPE_SURFACE_PIXEL_FORMAT_GRPH_BGRX8888:
     case VPE_SURFACE_PIXEL_FORMAT_GRPH_BGRA1010102:
+    case VPE_SURFACE_PIXEL_FORMAT_GRPH_BGRA16161616:
     case VPE_SURFACE_PIXEL_FORMAT_GRPH_BGRA16161616F:
     case VPE_SURFACE_PIXEL_FORMAT_GRPH_BGRA16161616_UNORM:
     case VPE_SURFACE_PIXEL_FORMAT_GRPH_BGRA16161616_SNORM:
@@ -338,16 +347,12 @@ void vpe20_cdc_program_p2b_config(struct cdc_be *cdc_be, enum vpe_surface_pixel_
         bar_sel0 = (uint32_t)MUX_SEL_ALPHA;
         break;
     case VPE_SURFACE_PIXEL_FORMAT_GRPH_ARGB16161616:
+    case VPE_SURFACE_PIXEL_FORMAT_GRPH_ARGB16161616_UNORM:
+    case VPE_SURFACE_PIXEL_FORMAT_GRPH_ARGB16161616_SNORM:
         bar_sel3 = (uint32_t)MUX_SEL_ALPHA;
         bar_sel2 = (uint32_t)MUX_SEL_CR_R;
         bar_sel1 = (uint32_t)MUX_SEL_Y_G;
         bar_sel0 = (uint32_t)MUX_SEL_CB_B;
-        break;
-    case VPE_SURFACE_PIXEL_FORMAT_GRPH_ABGR16161616:
-        bar_sel3 = (uint32_t)MUX_SEL_ALPHA;
-        bar_sel2 = (uint32_t)MUX_SEL_CB_B;
-        bar_sel1 = (uint32_t)MUX_SEL_Y_G;
-        bar_sel0 = (uint32_t)MUX_SEL_CR_R;
         break;
     case VPE_SURFACE_PIXEL_FORMAT_VIDEO_CrYCbA8888:
         bar_sel3 = (uint32_t)MUX_SEL_CR_R;

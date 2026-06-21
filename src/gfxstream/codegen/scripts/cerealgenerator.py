@@ -72,6 +72,7 @@ SUPPORTED_FEATURES = [
     "VK_EXT_load_store_op_none",
     "VK_EXT_swapchain_colorspace",
     "VK_EXT_custom_border_color",
+    "VK_EXT_border_color_swizzle",
     "VK_EXT_shader_stencil_export",
     "VK_KHR_image_format_list",
     "VK_KHR_incremental_present",

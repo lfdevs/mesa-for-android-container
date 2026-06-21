@@ -54,6 +54,38 @@ _dev_icd = custom_target(
 
 devenv.append('VK_DRIVER_FILES', _dev_icd.full_path())
 
+anv_flags = [
+  no_override_init_args,
+  sse2_args,
+]
+
+anv_hasvk_drirc = custom_target(
+  'anv_hasvk_drirc',
+  input  : [files('anv_drirc_gen.py'), drirc_gen, join_paths(dir_source_root, 'src/util/00-hasvk-defaults.conf')],
+  output : ['hasvk_drirc.c', 'hasvk_drirc.h'],
+  command : [
+    prog_python, '@INPUT0@',
+    '--import-path', join_paths(dir_source_root, 'src/util'),
+    '--drirc-src', '@OUTPUT0@',
+    '--drirc-hdr', '@OUTPUT1@',
+    '--validate', '@INPUT2@',
+  ],
+)
+
+libanv_hasvk_drirc = static_library(
+  'anv_hasvk_drirc',
+  anv_hasvk_drirc,
+  include_directories : [inc_include, inc_src, inc_intel],
+  c_args : anv_flags,
+  gnu_symbol_visibility : 'hidden',
+  dependencies : idep_mesautil,
+)
+
+idep_anv_hasvk_drirc = declare_dependency(
+  sources : anv_hasvk_drirc[1],
+  link_with : libanv_hasvk_drirc,
+)
+
 libanv_per_hw_ver_libs = []
 anv_per_hw_ver_files = files(
   'genX_blorp_exec.c',
@@ -82,7 +114,7 @@ foreach g : [['70', ['gfx7_cmd_buffer.c']],
       dep_libdrm, dep_valgrind, idep_nir_headers, idep_genxml,
       idep_vulkan_util_headers, idep_vulkan_wsi_headers,
       idep_vulkan_runtime_headers, idep_intel_driver_ds_headers,
-      idep_intel_blorp_elk, idep_mesautil,
+      idep_intel_blorp_elk, idep_mesautil, idep_anv_hasvk_drirc,
     ],
   )
 endforeach
@@ -126,10 +158,7 @@ anv_deps = [
   idep_vulkan_util_headers,
   idep_vulkan_runtime_headers,
   idep_vulkan_wsi_headers,
-]
-anv_flags = [
-  no_override_init_args,
-  sse2_args,
+  idep_anv_hasvk_drirc,
 ]
 
 anv_cpp_flags = []
@@ -253,6 +282,7 @@ if with_tests and host_machine.cpu_family().startswith('x86')
         idep_gtest, dep_libdrm, dep_thread, dep_m, dep_valgrind,
         idep_vulkan_util, idep_vulkan_wsi_headers,
         idep_vulkan_runtime, idep_intel_driver_ds, idep_intel_dev,
+        idep_anv_hasvk_drirc,
       ],
       include_directories : [
         inc_include, inc_src, inc_intel,

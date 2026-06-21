@@ -2613,7 +2613,7 @@ impl MemAccess {
 #[allow(dead_code)]
 #[derive(Clone, Copy, Eq, Hash, PartialEq)]
 pub enum AtomType {
-    F16x2,
+    F16v2,
     U32,
     I32,
     F32,
@@ -2623,11 +2623,11 @@ pub enum AtomType {
 }
 
 impl AtomType {
-    pub fn F(bits: u8) -> AtomType {
-        match bits {
-            16 => panic!("16-bit float atomics not yet supported"),
-            32 => AtomType::F32,
-            64 => AtomType::F64,
+    pub fn F(bits: u8, comps: u8) -> AtomType {
+        match (bits, comps) {
+            (16, 2) => AtomType::F16v2,
+            (32, 1) => AtomType::F32,
+            (64, 1) => AtomType::F64,
             _ => panic!("Invalid float atomic type"),
         }
     }
@@ -2650,7 +2650,7 @@ impl AtomType {
 
     pub fn bits(&self) -> usize {
         match self {
-            AtomType::F16x2 | AtomType::F32 => 32,
+            AtomType::F16v2 | AtomType::F32 => 32,
             AtomType::U32 | AtomType::I32 => 32,
             AtomType::U64 | AtomType::I64 | AtomType::F64 => 64,
         }
@@ -2658,7 +2658,7 @@ impl AtomType {
 
     pub fn is_float(&self) -> bool {
         match self {
-            AtomType::F16x2 | AtomType::F32 | AtomType::F64 => true,
+            AtomType::F16v2 | AtomType::F32 | AtomType::F64 => true,
             AtomType::U32 | AtomType::I32 | AtomType::U64 | AtomType::I64 => {
                 false
             }
@@ -2669,7 +2669,7 @@ impl AtomType {
 impl fmt::Display for AtomType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            AtomType::F16x2 => write!(f, ".f16x2"),
+            AtomType::F16v2 => write!(f, ".f16v2"),
             AtomType::U32 => write!(f, ".u32"),
             AtomType::I32 => write!(f, ".i32"),
             AtomType::F32 => write!(f, ".f32"),

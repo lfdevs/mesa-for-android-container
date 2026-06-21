@@ -574,7 +574,8 @@ template <chip CHIP>
 void
 fdl6_buffer_view_init(uint32_t *descriptor, enum pipe_format format,
                       const uint8_t (&swiz)[4], uint64_t iova, uint32_t size,
-                      uint32_t struct_size_texels)
+                      uint32_t struct_size_texels,
+                      enum fdl_ssbo_emulation_mode ssbo_emulation)
 {
    unsigned elem_size = util_format_get_blocksize(format);
    unsigned elements = size / elem_size;
@@ -609,6 +610,19 @@ fdl6_buffer_view_init(uint32_t *descriptor, enum pipe_format format,
                      A6XX_TEX_MEMOBJ_2_TYPE(A6XX_TEX_BUFFER);
       descriptor[4] = base_iova;
       descriptor[5] = base_iova >> 32;
+
+      if (ssbo_emulation == FDL_SSBO_EMULATION_ENABLED) {
+         /* resbase returns 0 if size is 0 */
+         if (descriptor[1] == 0) {
+            descriptor[1] = A6XX_TEX_MEMOBJ_1_WIDTH(1);
+         }
+
+         uint64_t encoded_size = (uint64_t) size << 6ull;
+         descriptor[7] = A6XX_TEX_MEMOBJ_7_FLAG_LO(encoded_size & 0x7FFFFFF);
+         descriptor[8] = A6XX_TEX_MEMOBJ_8_FLAG_HI(encoded_size >> 26);
+         descriptor[11] = iova;
+         descriptor[12] = iova >> 32;
+      }
    } else if (CHIP >= A8XX) {
       descriptor[0] = A8XX_TEX_MEMOBJ_0_INSTANCE_DESC_BASE_LO(iova);
       descriptor[1] = A8XX_TEX_MEMOBJ_1_BASE_HI(iova >> 32) |

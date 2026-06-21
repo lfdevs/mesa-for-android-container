@@ -464,6 +464,7 @@ validate_instr(struct ir3_validate_ctx *ctx, struct ir3_instruction *instr)
       switch (instr->opc) {
       case OPC_RESINFO:
       case OPC_RESFMT:
+      case OPC_RESBASE:
          if (instr->dsts_count > 0)
             validate_reg_size(ctx, instr->dsts[0], instr->cat6.type);
          validate_reg_size(ctx, instr->srcs[0], instr->cat6.type);

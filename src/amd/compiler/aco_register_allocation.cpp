@@ -2988,6 +2988,10 @@ vop3_can_use_vop2acc(ra_ctx& ctx, Instruction* instr)
       return false;
 
    if (instr->isVOP3P()) {
+      /* opsel_hi is implicitly 1 except for inline constant operands of v_pk_fmac_f16 on gfx11+ */
+      bool inline_implicit_opsel_hi =
+         instr->opcode != aco_opcode::v_pk_fma_f16 || ctx.program->gfx_level < GFX11;
+
       for (unsigned i = 0; i < 3; i++) {
          if (instr->operands[i].isLiteral())
             continue;
@@ -2995,9 +2999,8 @@ vop3_can_use_vop2acc(ra_ctx& ctx, Instruction* instr)
          if (instr->valu().opsel_lo[i])
             return false;
 
-         /* v_pk_fmac_f16 inline constants are replicated to hi bits starting with gfx11. */
          if (instr->valu().opsel_hi[i] ==
-             (instr->operands[i].isConstant() && ctx.program->gfx_level >= GFX11))
+             (instr->operands[i].isConstant() && !inline_implicit_opsel_hi))
             return false;
       }
    } else {

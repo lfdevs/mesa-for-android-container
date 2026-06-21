@@ -1232,6 +1232,27 @@ decode_load_register_imm(struct intel_batch_decode_ctx *ctx, const uint32_t *p)
 }
 
 static void
+decode_store_data_imm(struct intel_batch_decode_ctx *ctx, const uint32_t *p)
+{
+   /* Record a _potential_ shader hash. (We won't know if the data is a hash
+    * from a dummy MI_STORE_DATA_IMM or a real case of the same command until
+    * the next command gets parsed.)
+    *
+    * Since shader hash injection is supported, a hash was 32 bit and then
+    * is extended to 64 bit. There is a chance that a decoder supporting 64
+    * bit hash is used to parse an older dump generated with 32 bit hash. We
+    * have to look into the dword length field (bits 9:0 of BG 0) to
+    * determine the width of the hash.
+    *
+    * So far, dword 3 and 4 of MI_STORE_DATA_IMM are defined same way among
+    * all GFX generations, so we simply use the hard-coded indexes to get
+    * their values.
+    */
+   uint64_t hash_hi = (*p & 0x3ff) == 2 ? 0 : p[4];
+   ctx->shader_hash.hash = (hash_hi << 32) + p[3];
+}
+
+static void
 disasm_program_from_group(struct intel_batch_decode_ctx *ctx,
                           struct intel_group *strct, const void *map,
                           const char *short_name, const char *type)
@@ -1515,6 +1536,7 @@ struct custom_decoder custom_decoders[] = {
    { "3DSTATE_SCISSOR_STATE_POINTERS", decode_3dstate_scissor_state_pointers },
    { "3DSTATE_SLICE_TABLE_STATE_POINTERS", decode_3dstate_slice_table_state_pointers },
    { "MI_LOAD_REGISTER_IMM", decode_load_register_imm },
+   { "MI_STORE_DATA_IMM", decode_store_data_imm },
    { "3DSTATE_PIPELINED_POINTERS", decode_pipelined_pointers },
    { "3DSTATE_CPS_POINTERS", decode_cps_pointers },
    { "CONSTANT_BUFFER", decode_gfx4_constant_buffer },
@@ -1745,6 +1767,8 @@ intel_print_batch(struct intel_batch_decode_ctx *ctx,
       } else if (strcmp(inst->name, "MI_BATCH_BUFFER_END") == 0) {
          break;
       }
+
+      ctx->shader_hash.last_inst = inst;
    }
 
    ctx->n_batch_buffer_start--;

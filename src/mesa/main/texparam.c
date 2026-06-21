@@ -475,6 +475,7 @@ set_tex_parameteri(struct gl_context *ctx,
 
    case GL_TEXTURE_COMPARE_MODE_ARB:
       if (_mesa_has_ARB_shadow(ctx)
+          || _mesa_has_EXT_shadow_samplers(ctx)
           || _mesa_is_desktop_gl_core(ctx)
           || _mesa_is_gles3(ctx)) {
 
@@ -495,6 +496,7 @@ set_tex_parameteri(struct gl_context *ctx,
 
    case GL_TEXTURE_COMPARE_FUNC_ARB:
       if (_mesa_has_ARB_shadow(ctx)
+          || _mesa_has_EXT_shadow_samplers(ctx)
           || _mesa_is_desktop_gl_core(ctx)
           || _mesa_is_gles3(ctx)) {
 
@@ -2430,6 +2432,7 @@ get_tex_parameterfv(struct gl_context *ctx,
          break;
       case GL_TEXTURE_COMPARE_MODE_ARB:
          if (!_mesa_has_ARB_shadow(ctx)
+             && !_mesa_has_EXT_shadow_samplers(ctx)
              && !_mesa_is_desktop_gl_core(ctx)
              && !_mesa_is_gles3(ctx))
             goto invalid_pname;
@@ -2437,6 +2440,7 @@ get_tex_parameterfv(struct gl_context *ctx,
          break;
       case GL_TEXTURE_COMPARE_FUNC_ARB:
          if (!_mesa_has_ARB_shadow(ctx)
+             && !_mesa_has_EXT_shadow_samplers(ctx)
              && !_mesa_is_desktop_gl_core(ctx)
              && !_mesa_is_gles3(ctx))
             goto invalid_pname;
@@ -2718,6 +2722,7 @@ get_tex_parameteriv(struct gl_context *ctx,
          break;
       case GL_TEXTURE_COMPARE_MODE_ARB:
          if (!_mesa_has_ARB_shadow(ctx)
+             && !_mesa_has_EXT_shadow_samplers(ctx)
              && !_mesa_is_desktop_gl_core(ctx)
              && !_mesa_is_gles3(ctx))
             goto invalid_pname;
@@ -2725,6 +2730,7 @@ get_tex_parameteriv(struct gl_context *ctx,
          break;
       case GL_TEXTURE_COMPARE_FUNC_ARB:
          if (!_mesa_has_ARB_shadow(ctx)
+             && !_mesa_has_EXT_shadow_samplers(ctx)
              && !_mesa_is_desktop_gl_core(ctx)
              && !_mesa_is_gles3(ctx))
             goto invalid_pname;

@@ -168,6 +168,8 @@ static void pvr_physical_device_get_supported_extensions(
       .KHR_shader_non_semantic_info = true,
       .KHR_shader_relaxed_extended_instruction = true,
       .KHR_shader_subgroup_extended_types = true,
+      .KHR_shader_subgroup_rotate = true,
+      .KHR_shader_subgroup_uniform_control_flow = true,
       .KHR_shader_terminate_invocation = true,
       .KHR_spirv_1_4 = true,
       .KHR_storage_buffer_storage_class = true,
@@ -203,6 +205,9 @@ static void pvr_physical_device_get_supported_extensions(
       .EXT_separate_stencil_usage = true,
       .EXT_shader_demote_to_helper_invocation = true,
       .EXT_shader_replicated_composites = true,
+      .EXT_shader_subgroup_ballot = true,
+      .EXT_shader_subgroup_vote = true,
+      .EXT_subgroup_size_control = true,
       .EXT_texel_buffer_alignment = false,
       .EXT_tooling_info = true,
       .EXT_vertex_attribute_divisor = true,
@@ -361,6 +366,13 @@ static void pvr_physical_device_get_supported_features(
       /* Vulkan 1.2 / VK_KHR_shader_subgroup_extended_types */
       .shaderSubgroupExtendedTypes = true,
 
+      /* Vulkan 1.4 / VK_KHR_shader_subgroup_rotate */
+      .shaderSubgroupRotate = true,
+      .shaderSubgroupRotateClustered = true,
+
+      /* VK_KHR_shader_subgroup_uniform_control_flow */
+      .shaderSubgroupUniformControlFlow = true,
+
       /* Vulkan 1.1 / VK_KHR_robustness2 */
       .robustBufferAccess2 = false,
       .robustImageAccess2 = false,
@@ -457,6 +469,10 @@ static void pvr_physical_device_get_supported_features(
 
       /* VK_KHR_shader_terminate_invocation */
       .shaderTerminateInvocation = true,
+
+      /* Vulkan 1.3 / VK_EXT_subgroup_size_control */
+      .subgroupSizeControl = true,
+      .computeFullSubgroups = true,
 
       /* VK_KHR_present_id2 */
       .presentId2 = PVR_USE_WSI_PLATFORM,
@@ -574,8 +590,8 @@ static bool pvr_physical_device_get_properties(
       /* Vulkan 1.0 */
       .apiVersion = get_api_version(),
       .driverVersion = vk_get_driver_version(),
-      .vendorID = pdevice->instance->force_vk_vendor ?
-                  pdevice->instance->force_vk_vendor : VK_VENDOR_ID_IMAGINATION,
+      .vendorID = pdevice->instance->drirc.debug.force_vk_vendor ?
+                  pdevice->instance->drirc.debug.force_vk_vendor : VK_VENDOR_ID_IMAGINATION,
       .deviceID = dev_info->ident.device_id,
       .deviceType = VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU,
       /* deviceName and pipelineCacheUUID are filled below .*/
@@ -730,9 +746,17 @@ static bool pvr_physical_device_get_properties(
       .nonCoherentAtomSize = 1U,
 
       /* Vulkan 1.1 */
-      .subgroupSize = 1,
+      .subgroupSize = ROGUE_MAX_INSTANCES_PER_TASK,
       .subgroupSupportedStages = VK_SHADER_STAGE_COMPUTE_BIT,
-      .subgroupSupportedOperations = VK_SUBGROUP_FEATURE_BASIC_BIT,
+      .subgroupSupportedOperations = VK_SUBGROUP_FEATURE_BASIC_BIT |
+                                     VK_SUBGROUP_FEATURE_VOTE_BIT |
+                                     VK_SUBGROUP_FEATURE_ARITHMETIC_BIT |
+                                     VK_SUBGROUP_FEATURE_BALLOT_BIT |
+                                     VK_SUBGROUP_FEATURE_SHUFFLE_BIT |
+                                     VK_SUBGROUP_FEATURE_SHUFFLE_RELATIVE_BIT |
+                                     VK_SUBGROUP_FEATURE_CLUSTERED_BIT |
+                                     VK_SUBGROUP_FEATURE_ROTATE_BIT |
+                                     VK_SUBGROUP_FEATURE_ROTATE_CLUSTERED_BIT,
       .subgroupQuadOperationsInAllStages = false,
       .protectedNoFault = false,
 
@@ -853,6 +877,12 @@ static bool pvr_physical_device_get_properties(
       .integerDotProductAccumulatingSaturating64BitUnsignedAccelerated = false,
       .integerDotProductAccumulatingSaturating64BitSignedAccelerated = false,
       .integerDotProductAccumulatingSaturating64BitMixedSignednessAccelerated = false,
+
+      /* Vulkan 1.3 / VK_EXT_subgroup_size_control */
+      .minSubgroupSize = ROGUE_MAX_INSTANCES_PER_TASK,
+      .maxSubgroupSize = ROGUE_MAX_INSTANCES_PER_TASK,
+      .maxComputeWorkgroupSubgroups = 128U / ROGUE_MAX_INSTANCES_PER_TASK,
+      .requiredSubgroupSizeStages = VK_SHADER_STAGE_COMPUTE_BIT,
 
       /* Vulkan 1.2 / VK_KHR_timeline_semaphore */
       .maxTimelineSemaphoreValueDifference = UINT64_MAX,
@@ -1016,7 +1046,7 @@ static bool pvr_device_is_conformant(const struct pvr_device_info *info)
 static inline uint64_t pvr_compute_heap_size(struct pvr_instance *instance)
 {
    uint64_t available_ram =
-      os_get_gpu_heap_size(instance->heap_memory_percent, NULL);
+      os_get_gpu_heap_size(instance->drirc.misc.heap_memory_percent, NULL);
    return MAX2(available_ram, PVR_MAX_MEMORY_ALLOCATION_SIZE);
 }
 

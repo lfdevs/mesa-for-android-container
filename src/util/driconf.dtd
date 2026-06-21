@@ -1,5 +1,5 @@
 <!ELEMENT driconf      (device+)>
-<!ELEMENT device       (application | engine)+>
+<!ELEMENT device       (application | engine)*>
 <!ATTLIST device       driver CDATA #IMPLIED
                        device CDATA #IMPLIED>
 <!ELEMENT application  (option+)>

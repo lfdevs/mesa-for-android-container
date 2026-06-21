@@ -176,6 +176,8 @@ wsi_device_init(struct wsi_device *wsi,
 
    wsi->has_timeline_semaphore =
       supported_extensions->KHR_timeline_semaphore;
+   wsi->has_host_query_reset =
+      supported_extensions->EXT_host_query_reset;
 
    /* We cannot expose KHR_present_wait without timeline semaphores. */
    assert(!wsi->has_present_wait || wsi->has_timeline_semaphore);
@@ -193,6 +195,7 @@ wsi_device_init(struct wsi_device *wsi,
    WSI_GET_CB(CmdCopyImage);
    WSI_GET_CB(CmdCopyImageToBuffer);
    WSI_GET_CB(CmdResetQueryPool);
+   WSI_GET_CB(ResetQueryPoolEXT);
    WSI_GET_CB(CmdWriteTimestamp);
    WSI_GET_CB(CreateBuffer);
    WSI_GET_CB(CreateCommandPool);
@@ -749,6 +752,9 @@ wsi_configure_image(const struct wsi_swapchain *chain,
       .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
    };
 
+   if (pCreateInfo->flags & VK_SWAPCHAIN_CREATE_MULTISAMPLED_RENDER_TO_SINGLE_SAMPLED_BIT_EXT)
+      info->create.flags |= VK_IMAGE_CREATE_MULTISAMPLED_RENDER_TO_SINGLE_SAMPLED_BIT_EXT;
+
    info->color_space = pCreateInfo->imageColorSpace;
 
    if (handle_types != 0) {
@@ -919,6 +925,8 @@ wsi_image_init_timestamp(const struct wsi_swapchain *chain,
    if (result != VK_SUCCESS)
       goto fail;
 
+   image->query_pool_busy = 0;
+
    uint32_t family_count = chain->blit.queue ? 1 : wsi->queue_family_count;
 
    if (!image->timestamp_cmd_buffers) {
@@ -955,9 +963,11 @@ wsi_image_init_timestamp(const struct wsi_swapchain *chain,
             .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
          });
 
-      wsi->CmdResetQueryPool(image->timestamp_cmd_buffers[i],
-                             image->query_pool,
-                             0, 1);
+      if (!wsi->has_host_query_reset) {
+         wsi->CmdResetQueryPool(image->timestamp_cmd_buffers[i],
+                                image->query_pool,
+                                0, 1);
+      }
 
       wsi->CmdWriteTimestamp(image->timestamp_cmd_buffers[i],
                              VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
@@ -1574,7 +1584,7 @@ wsi_swapchain_present_convert_device_to_cpu(struct wsi_swapchain *chain,
    }
 }
 
-static void
+static bool
 wsi_swapchain_present_timing_sample_query_pool(struct wsi_swapchain *chain,
                                                struct wsi_presentation_timing *timing,
                                                struct wsi_image *image,
@@ -1584,7 +1594,7 @@ wsi_swapchain_present_timing_sample_query_pool(struct wsi_swapchain *chain,
    /* Application can query for stages which are not supported. We need to return 0 here. */
    if (!(timing->requested_feedback & VK_PRESENT_STAGE_QUEUE_OPERATIONS_END_BIT_EXT) ||
        !(chain->present_timing.supported_query_stages & VK_PRESENT_STAGE_QUEUE_OPERATIONS_END_BIT_EXT))
-      return;
+      return true;
 
    /* The GPU really should be done by now, and we should be able to read the timestamp,
     * but it's possible that the present was discarded and we have a 0 timestamp here for the present.
@@ -1606,6 +1616,10 @@ wsi_swapchain_present_timing_sample_query_pool(struct wsi_swapchain *chain,
 
       if (want_host_timedomain && timing->queue_done_time > upper_bound)
          timing->queue_done_time = upper_bound;
+
+      return true;
+   } else {
+      return false;
    }
 }
 
@@ -1650,6 +1664,21 @@ static VkResult wsi_common_allocate_timing_request(
       }
    }
 
+   /* It's possible that wsi_swapchain_present_timing_notify_completion needs to block on a query.
+    * This can only happen in rare situations on native X11 in windowed mode when transitioning from FLIP to COPY.
+    *
+    * To avoid temporarily blocking progress of QueuePresentKHR which would manifest as a stutter,
+    * we will drop the present timing lock while waiting for the query to complete.
+    *
+    * When we hit this code path we have already waited for the fence,
+    * so the actual time we block here is infinitesimal. At the same time the fence is signaled,
+    * the query pool should get signaled too, and we expect the blocking operation completes immediately as well.
+    * We just spin here to avoid a race condition
+    * where this thread clobbers the query pool before the present thread has a chance to complete its blocking wait.
+    * A full condition variable was considered a bit overkill to deal with this very rare edge case.
+    */
+   while (p_atomic_read(&image->query_pool_busy)) {}
+
    wsi_swapchain_present_timing_notify_recycle_locked(swapchain, image);
 
    struct wsi_presentation_timing *wsi_timing =
@@ -1664,6 +1693,11 @@ static VkResult wsi_common_allocate_timing_request(
    wsi_timing->requested_feedback = timing->presentStageQueries;
 
    wsi_timing->image = image;
+
+   /* Allows timestamp queries to fail if GPU is not done with current submission.
+    * Resetting on queue will not work. */
+   if (swapchain->wsi->has_host_query_reset)
+      swapchain->wsi->ResetQueryPoolEXT(swapchain->device, image->query_pool, 0, 1);
 
    /* Ignore the time domain since we have a static domain. */
 
@@ -1711,6 +1745,15 @@ wsi_google_display_timing_process(struct wsi_swapchain *chain,
    wsi_timing->present_margin = earliest_time - render_time;
 }
 
+static struct wsi_presentation_timing *
+wsi_swapchain_find_present_timing_serial_locked(struct wsi_swapchain *chain, uint64_t timing_serial)
+{
+   for (size_t i = 0; i < chain->present_timing.timings_count; i++)
+      if (chain->present_timing.timings[i].serial == timing_serial)
+         return &chain->present_timing.timings[i];
+   return NULL;
+}
+
 void
 wsi_swapchain_present_timing_notify_completion(struct wsi_swapchain *chain,
                                                uint64_t timing_serial,
@@ -1720,38 +1763,69 @@ wsi_swapchain_present_timing_notify_completion(struct wsi_swapchain *chain,
    assert(chain->present_timing.active);
    mtx_lock(&chain->present_timing.lock);
 
-   for (size_t i = 0; i < chain->present_timing.timings_count; i++) {
-      if (chain->present_timing.timings[i].serial == timing_serial) {
-         /* Prevent re-processing old records if same timing_serial is passed in multiple times. This
-          * is prep for future work and a safe-guard that should not get hit in the current state of
-          * things.
-          */
-         if (chain->present_timing.timings[i].complete)
-            break;
+   struct wsi_presentation_timing *timings = wsi_swapchain_find_present_timing_serial_locked(chain, timing_serial);
 
-         chain->present_timing.timings[i].complete_time = timestamp;
-         chain->present_timing.timings[i].complete = VK_TRUE;
+   /* Prevent re-processing old records if same timing_serial is passed in multiple times. This
+    * is prep for future work and a safe-guard that should not get hit in the current state of
+    * things.
+    */
+   if (timings && !timings->complete) {
+      timings->complete_time = timestamp;
 
-         /* It's possible that QueuePresentKHR already handled the queue done timestamp for us,
-          * since the image was recycled before presentation could fully complete.
-          * In this case, we no longer own the timestamp query pool index, so just skip. */
-         if (chain->present_timing.timings[i].image != image)
-            break;
+      /* It's possible that QueuePresentKHR already handled the queue done timestamp for us,
+       * since the image was recycled before presentation could fully complete.
+       * In this case, we no longer own the timestamp query pool index, so just skip. */
 
-         /* 0 means unknown. Application can probably fall back to its own timestamps if it wants to. */
-         chain->present_timing.timings[i].queue_done_time = 0;
-         wsi_swapchain_present_timing_sample_query_pool(chain, &chain->present_timing.timings[i], image,
-                                                        timestamp, chain->present_timing.google_timing_mode);
-         chain->present_timing.timings[i].image = NULL;
+      if (timings->image == image) {
+         timings->queue_done_time = 0;
 
-         /* Compute additional fields needed for GOOGLE_display_timing. */
-         if (chain->present_timing.google_timing_mode) {
-            wsi_google_display_timing_process(chain, &chain->present_timing.timings[i],
-                                              timestamp, chain->present_timing.refresh_duration);
+         bool success = wsi_swapchain_present_timing_sample_query_pool(
+            chain, timings, image, timestamp, chain->present_timing.google_timing_mode);
+
+         if (!success) {
+            /* This can happen on native X11 in windowed mode in some cases.
+             * We try to mitigate this effect as much as possible, but transitions between FLIP and COPY can trigger this.
+             * While returning a 0 timestamp in this situation should be legal in EXT_present_timing,
+             * it likely is not compatible with GOOGLE_display_timing, and if we can get the timestamp,
+             * we should go the extra mile to not surprise applications. */
+            p_atomic_set(&image->query_pool_busy, 1);
+            mtx_unlock(&chain->present_timing.lock);
+
+            /* Block until the GPU is done. We cannot block on the present fence,
+             * since we would violate external-sync rules. */
+            uint64_t dummy_ts;
+            chain->wsi->GetQueryPoolResults(
+               chain->device, image->query_pool, 0, 1, sizeof(uint64_t),
+               &dummy_ts, sizeof(uint64_t),
+               VK_QUERY_RESULT_WAIT_BIT | VK_QUERY_RESULT_64_BIT);
+
+            /* Need to release this before taking the present lock since QueuePresentKHR() might
+             * be spinning on this while holding the present timing lock. */
+            p_atomic_set(&image->query_pool_busy, 0);
+
+            /* wsi_common_allocate_timing_request can be unblocked in this window and complete the timestamp query. */
+            mtx_lock(&chain->present_timing.lock);
+
+            /* After retaking the lock, the struct might have moved around, but it cannot have been removed. */
+            timings = wsi_swapchain_find_present_timing_serial_locked(chain, timing_serial);
+            assert(timings);
+
+            if (timings->image == image) {
+               /* If this still fails somehow, then something has gone very wrong, and we just let the 0 result through. */
+               wsi_swapchain_present_timing_sample_query_pool(
+                  chain, timings, image, timestamp, chain->present_timing.google_timing_mode);
+            }
          }
 
-         break;
+         timings->image = NULL;
       }
+
+      /* Compute additional fields needed for GOOGLE_display_timing. */
+      if (chain->present_timing.google_timing_mode)
+         wsi_google_display_timing_process(chain, timings, timestamp, chain->present_timing.refresh_duration);
+
+      /* Don't mark the present complete until we have properly observed the timing. */
+      timings->complete = VK_TRUE;
    }
 
    /* Keep track of timestamp of latest presented frame, regardless if it was a
@@ -2397,7 +2471,13 @@ wsi_common_queue_present(const struct wsi_device *wsi,
 
                /* All other fields in google_timing_info beyond the following must be zero. */
                google_timing_info.targetTime = present_time->desiredPresentTime;
-               google_timing_info.presentStageQueries = VK_PRESENT_STAGE_QUEUE_OPERATIONS_END_BIT_EXT;
+
+               /* We don't support PIXEL_VISIBLE_BIT on any backend, so flag the output stage that is relevant.
+                * Xwl would report in DEQUEUED stage currently, but the backend doesn't change its behavior
+                * based on what feedback we're requesting, and GOOGLE_display_timing cannot be exposed by
+                * default on any backend that's not KHR_display anyway. */
+               google_timing_info.presentStageQueries = VK_PRESENT_STAGE_QUEUE_OPERATIONS_END_BIT_EXT |
+                   VK_PRESENT_STAGE_IMAGE_FIRST_PIXEL_OUT_BIT_EXT;
             }
          } else {
             /* VK_EXT_present_timing mode, and present_timings_info->pTimingInfos is valid. */
@@ -2439,6 +2519,7 @@ wsi_common_queue_present(const struct wsi_device *wsi,
                .serial = swapchain->present_timing.serial,
                .time = target_time,
                .flags = info->flags,
+               .feedback = info->presentStageQueries,
             });
 
             if (info->presentStageQueries & swapchain->present_timing.supported_query_stages &
@@ -3530,7 +3611,7 @@ wsi_device_supports_explicit_sync(struct wsi_device *device)
  * (since the device extension lacks per-surface feature flags)
  */
 bool
-wsi_instance_supports_google_display_timing(struct vk_instance *instance)
+wsi_instance_supports_google_display_timing(const struct vk_instance *instance)
 {
    return instance->enabled_extensions.KHR_display &&
           !(instance->enabled_extensions.EXT_headless_surface ||

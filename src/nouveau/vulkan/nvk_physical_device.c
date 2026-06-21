@@ -314,8 +314,11 @@ nvk_get_device_extensions(const struct nvk_instance *instance,
       .GOOGLE_user_type = true,
       .MESA_image_alignment_control = true,
       .NV_compute_shader_derivatives = info->cls_eng3d >= TURING_A,
+      .NV_shader_atomic_float16_vector = info->cls_eng3d >= TURING_A,
       .NV_shader_sm_builtins = true,
       .NVX_image_view_handle = info->cls_eng3d >= MAXWELL_A, /* needs true bindless descriptors */
+      .NVX_binary_import = info->cls_eng3d >= MAXWELL_A &&
+         instance->experimental_flags & NVK_EXPERIMENTAL_DLSS,
       .VALVE_mutable_descriptor_type = true,
    };
 }
@@ -785,6 +788,9 @@ nvk_get_device_features(const struct nv_device_info *info,
       /* VK_MESA_image_alignment_control */
       .imageAlignmentControl = true,
 
+      /* VK_NV_shader_atomic_float16_vector */
+      .shaderFloat16VectorAtomics = info->cls_eng3d >= TURING_A,
+
       /* VK_NV_shader_sm_builtins */
       .shaderSMBuiltins = true,
 
@@ -834,8 +840,8 @@ nvk_get_device_properties(const struct nvk_instance *instance,
    *properties = (struct vk_properties) {
       .apiVersion = nvk_get_vk_version(info),
       .driverVersion = vk_get_driver_version(),
-      .vendorID = instance->force_vk_vendor != 0 ?
-                  instance->force_vk_vendor : NVIDIA_VENDOR_ID,
+      .vendorID = instance->drirc.debug.force_vk_vendor != 0 ?
+                  instance->drirc.debug.force_vk_vendor : NVIDIA_VENDOR_ID,
       .deviceID = info->device_id,
       .deviceType = info->type == NV_DEVICE_TYPE_DIS ?
                     VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU :
@@ -849,7 +855,7 @@ nvk_get_device_properties(const struct nvk_instance *instance,
       .maxImageArrayLayers = 2048,
       .maxTexelBufferElements = 128 * 1024 * 1024,
       .maxUniformBufferRange = 65536,
-      .maxStorageBufferRange = 1ull << 31,
+      .maxStorageBufferRange = UINT32_MAX,
       .maxPushConstantsSize = NVK_MAX_PUSH_SIZE,
       .maxMemoryAllocationCount = 4096,
       .maxSamplerAllocationCount = 4000,
@@ -1560,8 +1566,8 @@ nvk_create_drm_physical_device(struct vk_instance *_instance,
    nvk_physical_device_init_pipeline_cache(pdev);
 
    uint64_t heap_size =
-      os_get_gpu_heap_size(instance->heap_memory_percent,
-                           &instance->heap_memory_percent);
+      os_get_gpu_heap_size(instance->drirc.misc.heap_memory_percent,
+                           &instance->drirc.misc.heap_memory_percent);
    if (heap_size == 0) {
       result = vk_errorf(instance, VK_ERROR_INITIALIZATION_FAILED,
                          "Failed to query total system memory");
@@ -1756,7 +1762,7 @@ nvk_GetPhysicalDeviceMemoryProperties2(
 
                if (heap->available == nvk_get_sysmem_heap_available) {
                   /* Scale the budget the same way the heap was scaled. */
-                  percent *= instance->heap_memory_percent;
+                  percent *= instance->drirc.misc.heap_memory_percent;
                }
             }
 
@@ -1802,10 +1808,11 @@ nvk_GetPhysicalDeviceQueueFamilyProperties2(
       vk_outarray_append_typed(VkQueueFamilyProperties2, &out, p) {
          p->queueFamilyProperties.queueFlags = queue_family->queue_flags;
          p->queueFamilyProperties.queueCount = queue_family->queue_count;
-         if (queue_family->queue_flags & VK_QUEUE_GRAPHICS_BIT) {
+         if (queue_family->queue_flags &
+             (VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT |
+              VK_QUEUE_TRANSFER_BIT)) {
             p->queueFamilyProperties.timestampValidBits = 64;
          } else {
-            /* TODO: Timestamps on non-graphics queues */
             p->queueFamilyProperties.timestampValidBits = 0;
          }
          p->queueFamilyProperties.minImageTransferGranularity =

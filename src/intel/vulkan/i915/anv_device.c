@@ -334,7 +334,9 @@ fail_context:
 }
 
 static VkResult
-anv_gem_context_get_reset_stats(struct anv_device *device, int context)
+anv_gem_context_get_reset_stats(struct anv_device *device,
+                                struct anv_queue *queue,
+                                int context)
 {
    struct drm_i915_reset_stats stats = {
       .ctx_id = context,
@@ -343,13 +345,13 @@ anv_gem_context_get_reset_stats(struct anv_device *device, int context)
    int ret = intel_ioctl(device->fd, DRM_IOCTL_I915_GET_RESET_STATS, &stats);
    if (ret == -1) {
       /* We don't know the real error. */
-      return vk_device_set_lost(&device->vk, "get_reset_stats failed: %m");
+      return anv_queue_set_lost(queue, errno, "get_reset_stats failed: %m");
    }
 
    if (stats.batch_active) {
-      return vk_device_set_lost(&device->vk, "GPU hung on one of our command buffers");
+      return anv_queue_set_lost(queue, ECANCELED, "GPU hung on one of our command buffers");
    } else if (stats.batch_pending) {
-      return vk_device_set_lost(&device->vk, "GPU hung with commands in-flight");
+      return anv_queue_set_lost(queue, ECANCELED, "GPU hung with commands in-flight");
    }
 
    return VK_SUCCESS;
@@ -364,19 +366,23 @@ anv_i915_device_check_status(struct vk_device *vk_device)
    if (device->physical->has_vm_control) {
       for (uint32_t i = 0; i < device->queue_count; i++) {
          result = anv_gem_context_get_reset_stats(device,
+                                                  &device->queues[i],
                                                   device->queues[i].context_id);
          if (result != VK_SUCCESS)
             goto done;
 
          if (device->queues[i].companion_rcs_id != 0) {
-            uint32_t context_id = device->queues[i].companion_rcs_id;
-            result = anv_gem_context_get_reset_stats(device, context_id);
+            result = anv_gem_context_get_reset_stats(device,
+                                                     &device->queues[i],
+                                                     device->queues[i].companion_rcs_id);
             if (result != VK_SUCCESS)
                goto done;
          }
       }
    } else {
-      result = anv_gem_context_get_reset_stats(device, device->context_id);
+      result = anv_gem_context_get_reset_stats(device,
+                                               &device->queues[0],
+                                               device->context_id);
    }
 
  done:

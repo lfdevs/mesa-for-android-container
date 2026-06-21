@@ -65,7 +65,8 @@ radv_write_buffer_descriptor(struct radv_device *device, VkDescriptorType descri
     * we return from vkGetBufferMemoryRequirements) and this allows the shader compiler to create
     * more efficient 8/16-bit buffer accesses.
     */
-   ac_build_raw_buffer_descriptor(pdev->info.gfx_level, va, align(range, 4), dst);
+   ac_build_raw_buffer_descriptor(pdev->info.gfx_level, pdev->info.compiler_info.has_desc_resource_level, va,
+                                  align(range, 4), dst);
 }
 
 static ALWAYS_INLINE void

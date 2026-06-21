@@ -254,7 +254,7 @@ sync_update(struct ir3_legalize_state *state, struct ir3_compiler *compiler,
 
    if (is_tex_or_prefetch(n) && !has_dummy_dst(n)) {
       regmask_set(&state->needs_sy, n->dsts[0]);
-   } else if (n->opc == OPC_RESINFO && !has_dummy_dst(n)) {
+   } else if ((n->opc == OPC_RESINFO || n->opc == OPC_RESBASE) && !has_dummy_dst(n)) {
       regmask_set(&state->needs_ss, n->dsts[0]);
    } else if (is_load(n)) {
       if (is_local_mem_load(n))

@@ -3541,6 +3541,7 @@ void si_make_buffer_descriptor(struct si_screen *screen, struct si_resource *buf
          },
       .stride = stride,
       .gfx10_oob_select = V_008F0C_OOB_SELECT_STRUCTURED_WITH_OFFSET,
+      .has_desc_resource_level = screen->info.compiler_info.has_desc_resource_level,
    };
 
    ac_build_buffer_descriptor(screen->info.gfx_level, &buffer_state, &state[0]);
@@ -3623,6 +3624,7 @@ static void cdna_emu_make_image_descriptor(struct si_screen *screen, struct si_t
          },
       .stride = stride,
       .gfx10_oob_select = V_008F0C_OOB_SELECT_STRUCTURED_WITH_OFFSET,
+      .has_desc_resource_level = screen->info.compiler_info.has_desc_resource_level,
    };
 
    ac_build_buffer_descriptor(screen->info.gfx_level, &buffer_state, &state[0]);
@@ -4467,6 +4469,7 @@ static void *si_create_vertex_elements(struct pipe_context *ctx, unsigned count,
           */
          .gfx10_oob_select = v->elem[i].stride ? V_008F0C_OOB_SELECT_STRUCTURED
                                                : V_008F0C_OOB_SELECT_RAW,
+         .has_desc_resource_level = sscreen->info.compiler_info.has_desc_resource_level,
       };
 
       ac_set_buf_desc_word3(sscreen->info.gfx_level, &buffer_state, &v->elem[i].rsrc_word3);

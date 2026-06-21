@@ -1175,7 +1175,7 @@ CDX12EncHMFT::SetValue( const GUID *Api, VARIANT *Value )
          {
             CHECKHR_GOTO( E_INVALIDARG, done );
          }
-         m_bLowLatency = Value->boolVal;
+         m_bLowLatency = Value->boolVal == VARIANT_TRUE ? TRUE : FALSE;
          if( ( m_eScenarioInfo == eAVScenarioInfo_DisplayRemoting ) ||
              ( m_eScenarioInfo == eAVScenarioInfo_DisplayRemotingWithFeatureMap ) ||
              ( m_eScenarioInfo == eAVScenarioInfo_CameraRecord ) || ( m_eScenarioInfo == eAVScenarioInfo_VideoConference ) ||
@@ -1201,7 +1201,7 @@ CDX12EncHMFT::SetValue( const GUID *Api, VARIANT *Value )
       {
          CHECKHR_GOTO( E_INVALIDARG, done );
       }
-      m_bCabacEnable = Value->boolVal;
+      m_bCabacEnable = Value->boolVal == VARIANT_TRUE ? TRUE : FALSE;
    }
    else if( *Api == CODECAPI_AVEnableInLoopDeblockFilter )
    {

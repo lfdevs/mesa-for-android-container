@@ -37,7 +37,7 @@
 #include "common/v3d_device_info.h"
 #include "wsi_common.h"
 #include "util/sparse_array.h"
-#include "util/xmlconfig.h"
+#include "v3dv_drirc.h"
 
 struct v3dv_event;
 struct v3dv_format;
@@ -116,15 +116,7 @@ struct v3dv_physical_device {
     */
    struct util_sparse_array bo_map;
 
-   struct {
-      bool merge_jobs;
-   } options;
-
-   struct {
-      bool multisync;
-      bool perfmon;
-   } caps;
-
+   bool merge_jobs;
    bool is_shim;
 };
 
@@ -146,6 +138,8 @@ void v3dv_meta_blit_finish(struct v3dv_device *device);
 void v3dv_meta_texel_buffer_copy_init(struct v3dv_device *device);
 void v3dv_meta_texel_buffer_copy_finish(struct v3dv_device *device);
 
+bool v3dv_webgpu_override_enabled(void);
+
 bool v3dv_meta_can_use_tlb(struct v3dv_image *image,
                            uint8_t plane,
                            uint8_t miplevel,
@@ -156,10 +150,7 @@ bool v3dv_meta_can_use_tlb(struct v3dv_image *image,
 struct v3dv_instance {
    struct vk_instance vk;
 
-   struct driOptionCache dri_options;
-   struct driOptionCache available_dri_options;
-
-   float heap_memory_percent;
+   struct v3dv_drirc drirc;
 
    bool pipeline_cache_enabled;
    bool default_pipeline_cache_enabled;

@@ -59,8 +59,6 @@ v3d_blitter_save(struct v3d_context *v3d, enum v3d_blitter_op op)
         util_blitter_save_depth_stencil_alpha(v3d->blitter, v3d->zsa);
         util_blitter_save_stencil_ref(v3d->blitter, &v3d->stencil_ref);
         util_blitter_save_sample_mask(v3d->blitter, v3d->sample_mask, 0);
-        util_blitter_save_so_targets(v3d->blitter, v3d->streamout.num_targets,
-                                     v3d->streamout.targets, MESA_PRIM_UNKNOWN);
 
         if (op & V3D_SAVE_FRAMEBUFFER)
                 util_blitter_save_framebuffer(v3d->blitter, &v3d->framebuffer);
@@ -129,6 +127,7 @@ v3d_render_blit(struct pipe_context *ctx, struct pipe_blit_info *info)
                 mesa_loge("Blit unsupported %s -> %s",
                           util_format_short_name(info->src.format),
                           util_format_short_name(info->dst.format));
+                pipe_resource_reference(&tiled, NULL);
                 return;
         }
 

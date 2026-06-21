@@ -1,10 +1,3 @@
-# Failed (error code: CL_BUILD_PROGRAM_FAILURE): Trigger CL_INVALID_BUILD_OPTIONS if the build options specified by options are invalid.
-api@clbuildprogram,Fail
-
-# Failed (error code: CL_COMPILE_PROGRAM_FAILURE): Trigger CL_INVALID_COMPILER_OPTIONS if the build options specified by options are invalid.
-# Failed (error code: CL_INVALID_OPERATION): CL_SUCCESS when compiling an empty string..
-api@clcompileprogram,Fail
-
 # Failed: return NULL if platform is not a valid platform
 api@clgetextensionfunctionaddressforplatform,Fail
 

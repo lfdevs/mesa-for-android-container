@@ -487,6 +487,13 @@ v3dX(format_supports_blending)(const struct v3dv_format *format)
    if (!format->plane_count || format->plane_count > 1)
       return false;
 
+   /* Software-emulated UNORM16/SNORM16 RTs use 16-bit-integer storage which
+    * HW can't blend, but the compiler lowers blending in NIR for them, so
+    * we still expose VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT.
+    */
+   if (format->planes[0].sw_unorm || format->planes[0].sw_snorm)
+      return true;
+
    /* Hardware blending is only supported on render targets that are configured
     * 4x8-bit unorm, 2x16-bit float or 4x16-bit float.
     */

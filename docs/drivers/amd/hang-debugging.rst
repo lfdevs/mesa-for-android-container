@@ -51,10 +51,6 @@ there are a couple of files:
   including register values.
 * ``vm_fault.log``: The page fault address if a page fault occurred.
 
-Note: By default, the backend IR (ACO or LLVM) and the disassembly should be
-dumped to ``pipeline.log``. But due to shaders caching, you might need
-``RADV_DEBUG=hang,nocache`` to get SPIR-V and NIR in the GPU hang report.
-
 Debugging Steam games
 ---------------------
 

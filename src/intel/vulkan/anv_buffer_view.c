@@ -95,12 +95,12 @@ anv_DestroyBufferView(VkDevice _device, VkBufferView bufferView,
       return;
 
    if (view->general.state.alloc_size > 0) {
-      anv_state_pool_free(&device->bindless_surface_state_pool,
+      anv_state_pool_free(anv_device_get_bindless_surface_state_pool(device),
                           view->general.state);
    }
 
    if (view->storage.state.alloc_size > 0) {
-      anv_state_pool_free(&device->bindless_surface_state_pool,
+      anv_state_pool_free(anv_device_get_bindless_surface_state_pool(device),
                           view->storage.state);
    }
 

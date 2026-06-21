@@ -22,6 +22,8 @@
  */
 
 #include "v3d_query.h"
+#include "broadcom/common/v3d_submit_util.h"
+#include "util/ralloc.h"
 
 int
 v3d_get_driver_query_group_info(struct pipe_screen *pscreen, unsigned index,
@@ -149,88 +151,41 @@ v3d_render_condition(struct pipe_context *pipe,
         v3d->cond_mode = mode;
 }
 
-static void
-extension_set(struct drm_v3d_extension *ext, struct drm_v3d_extension *next,
-              uint32_t id, uintptr_t flags)
+/* helpers for multisync common code */
+static void *
+multisync_zalloc(void *mem_ctx, size_t size)
 {
-        ext->next = (uintptr_t)(void *)next;
-        ext->id = id;
-        ext->flags = flags;
-}
-
-static struct drm_v3d_sem *
-in_syncs_set(struct v3d_context *v3d, uint32_t *count,
-             struct v3d_submit_sync_info *sync_info)
-{
-        uint32_t nsyncs = sync_info->wait_count;
-
-        *count = nsyncs;
-
-        struct drm_v3d_sem *syncs =
-             rzalloc_array(v3d, struct drm_v3d_sem, *count);
-
-        if (!syncs) return NULL;
-
-        for (int i = 0; i < nsyncs; i++) {
-           syncs[i].handle = sync_info->waits[i];
-        }
-
-        assert(*count == nsyncs);
-
-        return syncs;
-}
-
-static struct drm_v3d_sem *
-out_syncs_set(struct v3d_context *v3d, uint32_t *count,
-              struct v3d_submit_sync_info *sync_info)
-{
-        (*count) = sync_info->signal_count;
-
-        struct drm_v3d_sem *syncs =
-             rzalloc_array(v3d, struct drm_v3d_sem, *count);
-
-        if (!syncs) return NULL;
-
-        for (unsigned i = 0; i < *count; i++) {
-           syncs[i].handle = sync_info->signals[i];
-        }
-
-        return syncs;
+        struct v3d_context *v3d = mem_ctx;
+        return rzalloc_size(v3d, size);
 }
 
 static void
-multisync_set(struct v3d_context *v3d, struct drm_v3d_multi_sync *ms,
+multisync_free(void *mem_ctx, void *ptr)
+{
+        ralloc_free(ptr);
+}
+
+static bool
+multisync_set(struct v3d_context *v3d, struct v3d_multisync *ms,
               struct v3d_submit_sync_info *sync_info,
-              struct drm_v3d_extension *next, uint32_t wait_stage)
+              struct drm_v3d_extension *next, enum v3d_queue wait_stage)
 {
-        uint32_t ocount = 0, icount = 0;
-        struct drm_v3d_sem *out_syncs = NULL, *in_syncs = NULL;
+        assert(ms);
+        ms->ops.zalloc = multisync_zalloc;
+        ms->ops.free = multisync_free;
+        ms->ops.mem_ctx = NULL;
 
-        in_syncs = in_syncs_set(v3d, &icount, sync_info);
-        if (!in_syncs && icount) goto out;
+        bool ret = v3d_multisync_init(ms, wait_stage,
+                                      sync_info->waits,
+                                      sync_info->wait_count,
+                                      sync_info->signals,
+                                      sync_info->signal_count,
+                                      next);
 
-        out_syncs = out_syncs_set(v3d, &ocount, sync_info);
-        if (!out_syncs) goto out;
+        if (!ret)
+                mesa_loge("Multisync Set Failed");
 
-        extension_set(&ms->base, next, DRM_V3D_EXT_ID_MULTI_SYNC, 0);
-        ms->wait_stage = wait_stage;
-        ms->out_sync_count = ocount;
-        ms->out_syncs = (uintptr_t)(void *)out_syncs;
-        ms->in_sync_count = icount;
-        ms->in_syncs = (uintptr_t)(void *)in_syncs;
-
-        return;
-
-out:
-        mesa_loge("Multisync Set Failed");
-        free(in_syncs);
-}
-
-static void
-multisync_free(struct drm_v3d_multi_sync *ms)
-{
-        ralloc_free((void *)(uintptr_t)ms->out_syncs);
-        ralloc_free((void *)(uintptr_t)ms->in_syncs);
+        return ret;
 }
 
 uint64_t
@@ -246,7 +201,7 @@ v3d_get_timestamp(struct pipe_context *pctx)
         return os_time_get_nano();
 }
 
-void
+int
 v3d_submit_timestamp_query(struct pipe_context *pctx, struct v3d_bo *bo,
                            uint32_t sync, uint32_t offset)
 {
@@ -265,7 +220,7 @@ v3d_submit_timestamp_query(struct pipe_context *pctx, struct v3d_bo *bo,
 
         struct drm_v3d_timestamp_query timestamp = {0};
 
-        extension_set(&timestamp.base, NULL, DRM_V3D_EXT_ID_CPU_TIMESTAMP_QUERY, 0);
+        v3d_submit_ext_set(&timestamp.base, NULL, DRM_V3D_EXT_ID_CPU_TIMESTAMP_QUERY, 0);
 
         timestamp.count = 1;
         timestamp.offsets = (uintptr_t)(void *)&offset;
@@ -278,22 +233,24 @@ v3d_submit_timestamp_query(struct pipe_context *pctx, struct v3d_bo *bo,
            .signals = &v3d->out_sync,
         };
 
-        struct drm_v3d_multi_sync ms = {0};
+        struct v3d_multisync ms = {0};
 
-        multisync_set(v3d, &ms, &sync_info, (void *)&timestamp, V3D_CPU);
+        if (!multisync_set(v3d, &ms, &sync_info, (void *)&timestamp, V3D_CPU))
+           return -ENOMEM;
 
         struct drm_v3d_submit_cpu submit = {0};
 
         submit.bo_handle_count = 1;
         submit.bo_handles = (uintptr_t)(void *)&bo->handle;
         submit.flags |= DRM_V3D_SUBMIT_EXTENSION;
-        submit.extensions = (uintptr_t)(void *)&ms;
+        submit.extensions = (uintptr_t)(void *)&ms.ext;
 
         ret = v3d_ioctl(screen->fd, DRM_IOCTL_V3D_SUBMIT_CPU, &submit);
         if (ret)
            mesa_loge("Failed to submit cpu job: %s", strerror(errno));
 
-        multisync_free(&ms);
+        v3d_multisync_free(&ms);
+        return ret;
 }
 
 void

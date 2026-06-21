@@ -206,7 +206,7 @@ async def parse_issues(commits: str) -> typing.List[str]:
                 # Avoid parsing "merge_requests" URL. Note that a valid issue
                 # URL may or may not contain the "/-/" text, so we check if
                 # the word "issues" is contained in URL.
-                and '/issues' in bug):
+                and ('/issues/' in bug or '/work_items/' in bug)):
                 # This means we have a bug in the form "Closes: https://..."
                 issues.append(os.path.basename(urllib.parse.urlparse(bug).path))
             elif ',' in bug:

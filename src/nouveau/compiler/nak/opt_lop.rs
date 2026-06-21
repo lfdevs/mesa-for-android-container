@@ -194,6 +194,14 @@ impl LopPass {
             if !op.op.src_used(i) {
                 // Replace unused sources with RZ
                 *src = SrcRef::Zero.into();
+            } else if let Some(c) = src.as_u32(SrcType::B32) {
+                // If the high bit is set we normalize the constant to have it
+                // not set. This helps with lop3 merging as we detect inverse
+                // constant sources as equal now.
+                if c & 0x80000000 != 0 {
+                    *src = (!c).into();
+                    op.op.invert_src(i);
+                }
             }
         }
 

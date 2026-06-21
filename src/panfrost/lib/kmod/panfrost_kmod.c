@@ -211,6 +211,8 @@ panfrost_dev_query_props(struct panfrost_kmod_dev *panfrost_dev)
       props->is_io_coherent =
          selected_coherency != DRM_PANFROST_GPU_COHERENCY_NONE;
    }
+
+   props->pgsize_bitmap = PAN_PGSIZE_4K | PAN_PGSIZE_2M;
 }
 
 static struct pan_kmod_dev *
@@ -504,7 +506,7 @@ panfrost_kmod_vm_create(struct pan_kmod_dev *dev, uint32_t flags,
       return NULL;
    }
 
-   pan_kmod_vm_init(&vm->base, dev, 0, flags, PAN_PGSIZE_4K);
+   pan_kmod_vm_init(&vm->base, dev, 0, flags);
    panfrost_dev->vm = vm;
    return &vm->base;
 }
@@ -516,6 +518,7 @@ panfrost_kmod_vm_destroy(struct pan_kmod_vm *vm)
       container_of(vm->dev, struct panfrost_kmod_dev, base);
 
    panfrost_dev->vm = NULL;
+   pan_kmod_vm_cleanup(vm);
    pan_kmod_dev_free(vm->dev, vm);
 }
 
@@ -553,6 +556,12 @@ panfrost_kmod_vm_bind(struct pan_kmod_vm *vm, enum pan_kmod_vm_op_mode mode,
          if (ops[i].map.bo_offset != 0 ||
              ops[i].va.size != ops[i].map.bo->size) {
             mesa_loge("panfrost_kmod doesn't support partial BO mapping");
+            assert(0);
+            return -1;
+         }
+
+         if (ops[i].flags & PAN_KMOD_VM_OP_OP_MAP_SPARSE) {
+            mesa_loge("panfrost_kmod doesn't support sparse mappings");
             assert(0);
             return -1;
          }

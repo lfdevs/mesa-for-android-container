@@ -202,7 +202,7 @@ init_app_workarounds_entrypoints(struct nvk_device *device, struct dispatch_tabl
    struct vk_device_entrypoint_table table = {0};
 
 #define SET_ENTRYPOINT(app_layer, entrypoint) table.entrypoint = app_layer##_##entrypoint;
-   if (!strcmp(instance->app_layer, "metroexodus")) {
+   if (!strcmp(instance->drirc.debug.app_layer, "metroexodus")) {
       SET_ENTRYPOINT(metro_exodus, GetSemaphoreCounterValue);
    }
 #undef SET_ENTRYPOINT

@@ -89,6 +89,7 @@ Bug fixes
 ---------
 
 - 26.0.1 fails to build: \`create_context.c: error: 'struct glx_screen' has no member named 'frontend_screen'`
+- 9070XT AMD ring gfx_0.0.0 timeout when a specific location in the Resident Evil 2 Remake.
 - A770: Counter-Strike 2 visual glitches (regression)
 - ACO: assertion in insert_exec_mask()
 - ANV: SkQP regression in Android CTS
@@ -98,6 +99,10 @@ Bug fixes
 - Anv: implement transfer operations on buffers without render targets
 - Bisected regression: Assertion texObj->pt == view->texture failed.
 - Compile failure on gentoo since !40305
+- Crash when playing video in Discord (AMD RX 7700XT, Mesa 26.1.0-devel e34fa5951d)
+- DaVinci Resolve 20.2 opencl-mesa crash
+- Does freedreno support Adreno 829(SD8gen5)?
+- GUN GODZ crash on launch [Regression]
 - Intel BDW regression due to load_push_data_intel intrinsic
 - Is maxFragmentCombinedOutputResources=16 in Honeykrisp reflects an actual HW limit?
 - KHR-GL46.geometry_shader.limits.max_output_components
@@ -107,16 +112,22 @@ Bug fixes
 - Mesa 25.3 amdgpu memory issue
 - Mesa LLVMpipe Memory Leak
 - Missing Haswell case after a097a3d214eda7fb7b9ff63176754b7260e09e03 leads to bogus assert in intel_perf_mdapi.c
+- NIR/aco: Strange optimization bug with multiple texture arrays
+- NVK The Surge 2 misrendering near text
+- NVK: Rendering corruption in Shadow of the Tomb Raider
 - OpenGL 4.1 VRAM Memory Leak with setting uniform variables
 - Panfrost Bifrost compiler assertion failure: wrong vectorization in bi_alu_src_index (Mesa 26.0.0)
 - Portal hard locks the machine on rv350.
 - Question: Does building Lavapipe on Windows require building "microsoft-experimental" as well?
+- RADV triggers an assert while decoding instruction during processing of GPU hang
 - RADV: Invalid hitAttributeEXT value when using function-call RT pipelines
 - RADV: RDNA4 visual corruption in DX11 (DXVK) – Mafia III character model glitches, AMDVLK renders correctly (9070XT)
+- RADV_PERFTEST=transfer_queue causes assertion failure in prime scenario
 - Segmentation fault in gm200_validate_sample_locations with Firefox on GTX 1070 Ti (nouveau)
 - Sekiro: Shadows Die Twice lighting corruption on RX 7900 XT
 - Shader inputs/outputs for vertex/pixel shaders that have the integer (int) type are broken on RDNA 3 and 4 graphics cards
 - Support for timeline semaphores in radeonsi
+- The Crew Motorfest not working on Intel Arc A770
 - The End is Nigh (Wine): No lighting in The Hollows
 - Transcoding mpeg2video with ffmpeg h264_vulkan on Intel cause Conversion failed!
 - Turnip crash with lazy depth textures: GPUMEM_BIND_RANGES failed (Not a typewriter)
@@ -129,12 +140,18 @@ Bug fixes
 - [ANV][BMG] Building Mesa with Clang causes Missing Skin Textures in UE games - Tekken 8
 - [ANV][BMG] Dying Light The Beast graphics artifacts
 - [ANV][BMG] Regression - Broken lighting and flickering in Kingdom Come: Deliverance II
+- [ANV][BMG] Regression - Flickering objects in Resident Evil Village
 - [ANV][DG2][Regression]: Flickering water "boxes" in Civilization VII
 - [ANV][LNL] - Elden Ring (1245620) - Vertex explosions with ray tracing enabled
 - [ANV][PTL] R.E.P.O. GPU Hang
 - [ANV][Xe2+] Resource Barriers Invalid Signal Stage
+- [Arc B580][Baldurs Gate 3] Hang on opening inventory
+- [BMG] regression: Artifacts in GTK applications in 26.0.x
 - [NVL-S] deqp-vk failures within 2d_array and cubemap tests
+- [PTL] dEQP-VK.synchronization2.op.single_queue.event.write_fill_buffer_read_ubo_tess_control.buffer_16384_maintenance9 fails
 - [RADV] Killer7 has a blue tint with RDNA3/4
+- [RADV][RDNA3][regression] GPU context lost in Sushi Ben (Steam 2419240) when using in-game camera
+- [Xe][ARC770][Baldurs Gate 3] Hang during shader compilation
 - [anv] Intel ARC B390 | Horizon Forbidden West | DX12 | Flashing effects
 - [anv][ptl] valheim gpu hang and visual corruption
 - [bisected] Xe3 regression with piglit tess/barrier-patch.shader_test after cmod prop change
@@ -142,18 +159,23 @@ Bug fixes
 - [hasvk] Regressions from enabling VK_KHR_maintenance6
 - [radeonsi] Missing ground texture in Lethis Path of the Progress
 - [radeonsi] Regression: GL_FEEDBACK returns 0.0 for X-coordinates (Legacy GL)
+- [radv] ACO bug when compiling phi + constant fold
+- [radv] Potentially lurking rendering glitch in Helldivers 2
 - [radv] Regression causes glitches in Strange Brigade (Vulkan renderer)
 - [radv][bisected][regression] GhostwireTokyo RT gpu hangs with HPLOC commit
+- [radv][vk] graphics pipeline library + dynamic rendering should not require VkPipelineRenderingCreateInfo when creating vertex/fragment pipeline library
 - [regression] Left 4 Dead 2 crashing when joining or starting survival with "Official Dedicated" servers
 - amdgpu reset/crash when simulating stereo camera
 - amdgpu_device_initialize: amdgpu_query_info(ACCEL_WORKING) failed (-13)
 - anv, bisected: Genshin Impact wrong shadows, flickering grass
+- anv: Assertion failure in dysonsphereprogram_1366540_planetsurface_high_720p
 - anv: Implement BTI switching for fast-clears
 - anv: Implement multi-layer fast-clear
 - anv: Suballocate indirect clear colors
 - anv: missing implementation of vkGetPhysicalDeviceCooperativeMatrixFlexibleDimensionsPropertiesNV
 - anv: optimize descriptor buffer binding
 - anv: ycbcr CTS tests asserts
+- asahi: broken image? rendering in firefox with active hw-acceleration since mesa-26.0.5
 - building mesa_clc on ubutu-26.04 with gcc-16 fails link
 - ci: Wayland issues after 6641c891fdaa15923f0b61a5fef4b9d9ed91ac0e
 - freedreno/avx2 build failure
@@ -162,21 +184,28 @@ Bug fixes
 - glsl: spec\@glsl-es-1.00\@linker\@glsl-mismatched-uniform-precision-unused broken
 - gnome-control-center hitting assert
 - intel/isl: Support CCS on Ys-tiled images
+- ir3: ir3_cf brokenness
 - ir3: ir3_get_predicate() vs &ctx->build
 - isl: Prefer Tile64 when it saves space
 - lavapipe: crash in caselist
+- mediafoundation: error C2039: 'step': is not a member of '_inputQPSettings'
 - mesa: deleting a buffer bound only to an index also undoes the associated general target binding
 - nir/rusticl: optimize 64b sys vals
 - nir: possible exactness bug in reassociate
 - nvk: Enable ZCULL
+- nvk: Figure out ROOT_TABLE stuff
+- nvk: linear texture sampling causes page fault
 - nvk: shader does unnecesary move to local
 - panvk: VK_KHR_present_id, VK_KHR_present_wait not implemented
 - r300 , regression , bisected : Glitches with Sauerbraten
+- r300 bisected : Broken rendering with applications using MSAA visuals
 - r300: HiZ related dEQP failures
 - radv, regression : Crysis 2 Remastered raytracing blocky reflections
+- radv: GPU hard reset when using Magnesis in BotW on Cemu (NAVI23, Mesa 26.0.1)
 - radv: Port si_emit_guardband to RADV
 - radv: enable rdna3 bfloat16 support
 - regression, bisect: commit a8272bf0f1f9229d73252b03d0fb32d563396a9c breaks KWin through NVK & Zink
+- rusticl/radeonsi OpenCL behavior regression after 5a298f3560629943e9140c74547183da1635352e
 - static linking regression since !37495 - spirv-tools shared library required at runtime if exists at build time
 - tu,ir3: Lowering IO before unrolling loops broke forced loop unrolling heuristic, breaking at least multiview
 - tu: GPU faults during LRZ clears on unallocated transient attachments in gmem mode
@@ -186,6 +215,7 @@ Bug fixes
 - util/hash_table: regression: use after free on 32-bit platforms
 - util: Build regression with MSYS2 MinGW-W64 x64 clang 21 on 26.0.0-rc3
 - venus crashes in vn_CreateDevice() with latest mesa/main [bisected]
+- venus: CTS \`dEQP-VK-experimental.postmortem.shader_timeout.compute_4096x4096` crashed
 - virgl: Trace scripts timeout with Linux 6.17
 - virtio/vulkan: vkcube fails to run when calling the libvulkan_virtio dynamic library
 - wsi: \`assert(chain->dxgi);` may failed under venus for win32

@@ -292,10 +292,10 @@ gfx6_init_graphics_preamble_state(const struct ac_preamble_state *state,
    }
 
    if (info->gfx_level >= GFX7) {
-      ac_pm4_set_reg_idx3(pm4, R_00B01C_SPI_SHADER_PGM_RSRC3_PS,
-                          ac_apply_cu_en(S_00B01C_CU_EN(0xffffffff) |
-                                         S_00B01C_WAVE_LIMIT_GFX7(0x3F),
-                                         C_00B01C_CU_EN, 0, info));
+      ac_pm4_set_reg(pm4, R_00B01C_SPI_SHADER_PGM_RSRC3_PS,
+                     ac_apply_cu_en(S_00B01C_CU_EN(0xffffffff) |
+                                    S_00B01C_WAVE_LIMIT_GFX7(0x3F),
+                                    C_00B01C_CU_EN, 0, info));
    }
 
    if (info->gfx_level <= GFX8) {
@@ -375,9 +375,9 @@ gfx6_init_graphics_preamble_state(const struct ac_preamble_state *state,
 
       ac_pm4_set_reg(pm4, R_028060_DB_DFSM_CONTROL, S_028060_PUNCHOUT_MODE(V_028060_FORCE_OFF));
 
-      ac_pm4_set_reg_idx3(pm4, R_00B41C_SPI_SHADER_PGM_RSRC3_HS,
-                          ac_apply_cu_en(S_00B41C_CU_EN(0xffff) | S_00B41C_WAVE_LIMIT(0x3F),
-                                         C_00B41C_CU_EN, 0, info));
+      ac_pm4_set_reg(pm4, R_00B41C_SPI_SHADER_PGM_RSRC3_HS,
+                     ac_apply_cu_en(S_00B41C_CU_EN(0xffff) | S_00B41C_WAVE_LIMIT(0x3F),
+                                    C_00B41C_CU_EN, 0, info));
 
       ac_pm4_set_reg(pm4, R_028C48_PA_SC_BINNER_CNTL_1,
                      S_028C48_MAX_ALLOC_COUNT(info->pbb_max_alloc_count - 1) |
@@ -436,11 +436,11 @@ gfx10_init_graphics_preamble_state(const struct ac_preamble_state *state,
    }
 
    const unsigned cu_mask_ps = info->gfx_level >= GFX10_3 ? ac_gfx103_get_cu_mask_ps(info) : ~0u;
-   ac_pm4_set_reg_idx3(pm4, R_00B01C_SPI_SHADER_PGM_RSRC3_PS,
-                       ac_apply_cu_en(S_00B01C_CU_EN(cu_mask_ps) |
-                                      S_00B01C_WAVE_LIMIT_GFX7(0x3F) |
-                                      S_00B01C_LDS_GROUP_SIZE_GFX11(info->gfx_level >= GFX11),
-                                      C_00B01C_CU_EN, 0, info));
+   ac_pm4_set_reg(pm4, R_00B01C_SPI_SHADER_PGM_RSRC3_PS,
+                  ac_apply_cu_en(S_00B01C_CU_EN(cu_mask_ps) |
+                                 S_00B01C_WAVE_LIMIT_GFX7(0x3F) |
+                                 S_00B01C_LDS_GROUP_SIZE_GFX11(info->gfx_level >= GFX11),
+                                 C_00B01C_CU_EN, 0, info));
    ac_pm4_set_reg(pm4, R_00B0C0_SPI_SHADER_REQ_CTRL_PS,
                   S_00B0C0_SOFT_GROUPING_EN(1) |
                   S_00B0C0_NUMBER_OF_REQUESTS_PER_CU(4 - 1));
@@ -451,9 +451,9 @@ gfx10_init_graphics_preamble_state(const struct ac_preamble_state *state,
 
    if (info->gfx_level < GFX11) {
       /* Shader registers - VS. */
-      ac_pm4_set_reg_idx3(pm4, R_00B104_SPI_SHADER_PGM_RSRC4_VS,
-                          ac_apply_cu_en(S_00B104_CU_EN(0xffff), /* CUs 16-31 */
-                                         C_00B104_CU_EN, 16, info));
+      ac_pm4_set_reg(pm4, R_00B104_SPI_SHADER_PGM_RSRC4_VS,
+                     ac_apply_cu_en(S_00B104_CU_EN(0xffff), /* CUs 16-31 */
+                                    C_00B104_CU_EN, 16, info));
       ac_pm4_set_reg(pm4, R_00B1C0_SPI_SHADER_REQ_CTRL_VS, 0);
       ac_pm4_set_reg(pm4, R_00B1C8_SPI_SHADER_USER_ACCUM_VS_0, 0);
       ac_pm4_set_reg(pm4, R_00B1CC_SPI_SHADER_USER_ACCUM_VS_1, 0);
@@ -462,14 +462,14 @@ gfx10_init_graphics_preamble_state(const struct ac_preamble_state *state,
 
       /* Shader registers - PS. */
       unsigned cu_mask_ps = info->gfx_level >= GFX10_3 ? ac_gfx103_get_cu_mask_ps(info) : ~0u;
-      ac_pm4_set_reg_idx3(pm4, R_00B004_SPI_SHADER_PGM_RSRC4_PS,
-                          ac_apply_cu_en(S_00B004_CU_EN(cu_mask_ps >> 16), /* CUs 16-31 */
-                                            C_00B004_CU_EN, 16, info));
+      ac_pm4_set_reg(pm4, R_00B004_SPI_SHADER_PGM_RSRC4_PS,
+                     ac_apply_cu_en(S_00B004_CU_EN(cu_mask_ps >> 16), /* CUs 16-31 */
+                                    C_00B004_CU_EN, 16, info));
 
       /* Shader registers - HS. */
-      ac_pm4_set_reg_idx3(pm4, R_00B404_SPI_SHADER_PGM_RSRC4_HS,
-                          ac_apply_cu_en(S_00B404_CU_EN(0xffff), /* CUs 16-31 */
-                                         C_00B404_CU_EN, 16, info));
+      ac_pm4_set_reg(pm4, R_00B404_SPI_SHADER_PGM_RSRC4_HS,
+                     ac_apply_cu_en(S_00B404_CU_EN(0xffff), /* CUs 16-31 */
+                                    C_00B404_CU_EN, 16, info));
    }
 
    /* Shader registers - GS. */
@@ -480,9 +480,9 @@ gfx10_init_graphics_preamble_state(const struct ac_preamble_state *state,
    ac_pm4_set_reg(pm4, R_00B324_SPI_SHADER_PGM_HI_ES,
                   S_00B324_MEM_BASE(info->address32_hi >> 8));
 
-   ac_pm4_set_reg_idx3(pm4, R_00B41C_SPI_SHADER_PGM_RSRC3_HS,
-                       ac_apply_cu_en(S_00B41C_CU_EN(0xffff) | S_00B41C_WAVE_LIMIT(0x3F),
-                                      C_00B41C_CU_EN, 0, info));
+   ac_pm4_set_reg(pm4, R_00B41C_SPI_SHADER_PGM_RSRC3_HS,
+                  ac_apply_cu_en(S_00B41C_CU_EN(0xffff) | S_00B41C_WAVE_LIMIT(0x3F),
+                                 C_00B41C_CU_EN, 0, info));
    ac_pm4_set_reg(pm4, R_00B4C8_SPI_SHADER_USER_ACCUM_LSHS_0, 0);
    ac_pm4_set_reg(pm4, R_00B4CC_SPI_SHADER_USER_ACCUM_LSHS_1, 0);
    ac_pm4_set_reg(pm4, R_00B4D0_SPI_SHADER_USER_ACCUM_LSHS_2, 0);
@@ -655,9 +655,9 @@ gfx12_init_graphics_preamble_state(const struct ac_preamble_state *state,
    }
 
    /* Shader registers - PS */
-   ac_pm4_set_reg_idx3(pm4, R_00B018_SPI_SHADER_PGM_RSRC3_PS,
-                       ac_apply_cu_en(S_00B018_CU_EN(0xffff),
-                                      C_00B018_CU_EN, 0, info));
+   ac_pm4_set_reg(pm4, R_00B018_SPI_SHADER_PGM_RSRC3_PS,
+                  ac_apply_cu_en(S_00B018_CU_EN(0xffff),
+                                 C_00B018_CU_EN, 0, info));
    ac_pm4_set_reg(pm4, R_00B0C0_SPI_SHADER_REQ_CTRL_PS,
                   S_00B0C0_SOFT_GROUPING_EN(1) |
                   S_00B0C0_NUMBER_OF_REQUESTS_PER_CU(4 - 1));
@@ -669,8 +669,8 @@ gfx12_init_graphics_preamble_state(const struct ac_preamble_state *state,
    /* Shader registers - GS */
    ac_pm4_set_reg(pm4, R_00B218_SPI_SHADER_PGM_HI_ES,
                   S_00B324_MEM_BASE(info->address32_hi >> 8));
-   ac_pm4_set_reg_idx3(pm4, R_00B21C_SPI_SHADER_PGM_RSRC3_GS,
-                       ac_apply_cu_en(0xfffffdfd, 0, 0, info));
+   ac_pm4_set_reg(pm4, R_00B21C_SPI_SHADER_PGM_RSRC3_GS,
+                  ac_apply_cu_en(0xfffffdfd, 0, 0, info));
    ac_pm4_set_reg(pm4, R_00B2C8_SPI_SHADER_USER_ACCUM_ESGS_0, 0);
    ac_pm4_set_reg(pm4, R_00B2CC_SPI_SHADER_USER_ACCUM_ESGS_1, 0);
    ac_pm4_set_reg(pm4, R_00B2D0_SPI_SHADER_USER_ACCUM_ESGS_2, 0);
@@ -679,8 +679,8 @@ gfx12_init_graphics_preamble_state(const struct ac_preamble_state *state,
    /* Shader registers - HS */
    ac_pm4_set_reg(pm4, R_00B418_SPI_SHADER_PGM_HI_LS,
                   S_00B524_MEM_BASE(info->address32_hi >> 8));
-   ac_pm4_set_reg_idx3(pm4, R_00B41C_SPI_SHADER_PGM_RSRC3_HS,
-                       ac_apply_cu_en(0xffffffff, 0, 0, info));
+   ac_pm4_set_reg(pm4, R_00B41C_SPI_SHADER_PGM_RSRC3_HS,
+                  ac_apply_cu_en(0xffffffff, 0, 0, info));
    ac_pm4_set_reg(pm4, R_00B4C8_SPI_SHADER_USER_ACCUM_LSHS_0, 0);
    ac_pm4_set_reg(pm4, R_00B4CC_SPI_SHADER_USER_ACCUM_LSHS_1, 0);
    ac_pm4_set_reg(pm4, R_00B4D0_SPI_SHADER_USER_ACCUM_LSHS_2, 0);

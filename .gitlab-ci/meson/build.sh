@@ -148,7 +148,7 @@ fi
 # these projects and making them warning-free is not our goal.
 # shellcheck disable=2206
 meson_subprojects=(
-  perfetto
+  perfetto-sdk
   syn-2-rs
   paste-1-rs
   pest-2-rs

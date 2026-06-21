@@ -306,6 +306,23 @@ where
     }
 }
 
+impl<const MIN_U32: u32, const MAX_ARR_IDX: usize>
+    FromIterator<LowerBoundedU32<MIN_U32>>
+    for LowerBoundedU32Array<MIN_U32, MAX_ARR_IDX>
+{
+    fn from_iter<T: IntoIterator<Item = LowerBoundedU32<MIN_U32>>>(
+        iter: T,
+    ) -> Self {
+        let mut arr = LowerBoundedU32Array::new();
+
+        for elem in iter {
+            arr.try_push(elem).expect("Iterator does not fit");
+        }
+
+        arr
+    }
+}
+
 struct AssertArraySize<const MAX_ARR_IDX: usize, const N: usize> {}
 
 impl<const MAX_ARR_IDX: usize, const N: usize> AssertArraySize<MAX_ARR_IDX, N> {

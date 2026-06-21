@@ -500,7 +500,7 @@ void si_get_late_shader_variant_info(struct si_shader *shader, struct si_shader_
             assert(args->vs_state_bits.used);
 
             /* Gather which VS_STATE and GS_STATE user SGPR bits are used. */
-            uint32_t bits_used = nir_def_bits_used(nir_instr_def(instr));
+            uint32_t bits_used = nir_def_bits_used(nir_get_scalar(&intr->def, 0));
 
             if (nir->info.stage == MESA_SHADER_VERTEX &&
                 bits_used & ENCODE_FIELD(VS_STATE_INDEXED, ~0))

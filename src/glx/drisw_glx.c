@@ -160,6 +160,7 @@ get_drawable_geometry(struct dri_drawable * draw,
 
    drawable = pdraw->xDrawable;
 
+   uw = uh = 0;
    XGetGeometry(dpy, drawable, &root, x, y, &uw, &uh, &bw, &depth);
    *w = uw;
    *h = uh;
@@ -642,7 +643,7 @@ driswCreateScreen(int screen, struct glx_display *priv, enum glx_driver glx_driv
    if (glx_driver)
       loader_extensions_local = kopper_extensions_noshm;
 #ifdef HAVE_SYS_SHM_H
-   else if (!x11_xcb_display_supports_xshm(XGetXCBConnection(priv->dpy)))
+   else if (!x11_xcb_display_supports_xshm(XGetXCBConnection(priv->dpy), &xshm_opcode))
       loader_extensions_local = loader_extensions_noshm;
 #endif
    else

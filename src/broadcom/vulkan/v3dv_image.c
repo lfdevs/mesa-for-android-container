@@ -552,6 +552,27 @@ create_image(struct v3dv_device *device,
    VkResult result;
    struct v3dv_image *image = NULL;
 
+   /* With V3D_WEBGPU_OVERRIDE=1 we advertise maxImageDimension2D=8192
+    * (and larger limits for 1D/3D/Cube), but the real HW rendering
+    * limit is V3D_MAX_FRAMEBUFFER_DIMENSION (7680 on RPi5, 4096 on
+    * RPi4). Storage/sampled images above that limit work fine (TMU
+    * supports up to 16384), but framebuffer attachments will fail.
+    * Only warn for images that could be used as render targets.
+    */
+   const uint32_t max_hw_fb_size = device->devinfo.max_framebuffer_size;
+   const bool is_attachment = pCreateInfo->usage &
+      (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+       VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
+   if (is_attachment &&
+       (pCreateInfo->extent.width > max_hw_fb_size ||
+        pCreateInfo->extent.height > max_hw_fb_size)) {
+      mesa_loge("V3D_WEBGPU_OVERRIDE: vkCreateImage %ux%u with attachment "
+                "usage exceeds real HW framebuffer limit %ux%u",
+                pCreateInfo->extent.width,
+                pCreateInfo->extent.height,
+                max_hw_fb_size, max_hw_fb_size);
+   }
+
    image = vk_image_create(&device->vk, pCreateInfo, pAllocator, sizeof(*image));
    if (image == NULL)
       return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);

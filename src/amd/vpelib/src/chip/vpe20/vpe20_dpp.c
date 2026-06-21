@@ -35,8 +35,6 @@
 #define CTX      vpe20_dpp
 
 static struct dpp_funcs vpe20_dpp_funcs = {
-    .enable_clocks = vpe20_dpp_enable_clocks,
-
     // cnv
     .program_cnv            = vpe20_dpp_program_cnv,
     .program_pre_dgam       = vpe10_dpp_cnv_program_pre_dgam,
@@ -48,9 +46,9 @@ static struct dpp_funcs vpe20_dpp_funcs = {
     // cm
     .program_input_transfer_func = vpe20_dpp_program_input_transfer_func,
     .program_gamut_remap         = NULL,
-    .program_post_csc   = vpe10_dpp_program_post_csc,
-    .set_hdr_multiplier = vpe10_dpp_set_hdr_multiplier,
-    .program_histogram  = vpe20_dpp_program_histo,
+    .program_post_csc            = vpe10_dpp_program_post_csc,
+    .set_hdr_multiplier          = vpe10_dpp_set_hdr_multiplier,
+
     // scaler
     .get_optimal_number_of_taps  = vpe10_dpp_get_optimal_number_of_taps,
     .dscl_calc_lb_num_partitions = vpe10_dscl_calc_lb_num_partitions,
@@ -59,10 +57,12 @@ static struct dpp_funcs vpe20_dpp_funcs = {
     .set_frame_scaler            = vpe20_dpp_set_frame_scaler,
     .get_line_buffer_size        = vpe10_get_line_buffer_size,
     .validate_number_of_taps     = vpe10_dpp_validate_number_of_taps,
+    .enable_clocks               = vpe20_dpp_enable_clocks,
+    .dscl_program_easf           = vpe20_dscl_program_easf,
+    .dscl_disable_easf           = vpe20_dscl_disable_easf,
+    .dscl_program_isharp         = vpe20_dscl_program_isharp,
+    .program_histogram           = vpe20_dpp_program_histo,
 
-    .dscl_program_easf   = vpe20_dscl_program_easf,
-    .dscl_disable_easf   = vpe20_dscl_disable_easf,
-    .dscl_program_isharp = vpe20_dscl_program_isharp,
 };
 
 void vpe20_construct_dpp(struct vpe_priv *vpe_priv, struct dpp *dpp)
@@ -225,6 +225,7 @@ void vpe20_dpp_program_cnv(
         alpha_en     = 0;
         break;
     case VPE_SURFACE_PIXEL_FORMAT_GRPH_RGBA16161616:
+    case VPE_SURFACE_PIXEL_FORMAT_GRPH_BGRA16161616: /* use crossbar */
         pixel_format = 21;
         break;
     case VPE_SURFACE_PIXEL_FORMAT_PLANAR_16bpc_RGB_FLOAT:
@@ -260,15 +261,19 @@ void vpe20_dpp_program_cnv(
         pixel_format = 15;
         break;
     case VPE_SURFACE_PIXEL_FORMAT_GRPH_ABGR16161616_UNORM:
+    case VPE_SURFACE_PIXEL_FORMAT_GRPH_ARGB16161616_UNORM:
         pixel_format = 26;
         break;
     case VPE_SURFACE_PIXEL_FORMAT_GRPH_BGRA16161616_UNORM:
+    case VPE_SURFACE_PIXEL_FORMAT_GRPH_RGBA16161616_UNORM:
         pixel_format = 27;
         break;
     case VPE_SURFACE_PIXEL_FORMAT_GRPH_BGRA16161616_SNORM:
+    case VPE_SURFACE_PIXEL_FORMAT_GRPH_RGBA16161616_SNORM:
         pixel_format = 28;
         break;
     case VPE_SURFACE_PIXEL_FORMAT_GRPH_ABGR16161616_SNORM:
+    case VPE_SURFACE_PIXEL_FORMAT_GRPH_ARGB16161616_SNORM:
         pixel_format = 29;
         break;
     case VPE_SURFACE_PIXEL_FORMAT_PLANAR_16bpc_YCbCr:

@@ -1332,7 +1332,7 @@ framebuffer_size_for_pixel_count(uint32_t num_pixels,
 {
    assert(num_pixels > 0);
 
-   const uint32_t max_dim_pixels = V3D_MAX_IMAGE_DIMENSION;
+   const uint32_t max_dim_pixels = V3D_MAX_FRAMEBUFFER_SIZE(V3D_VERSION);
    const uint32_t max_pixels = max_dim_pixels * max_dim_pixels;
 
    uint32_t w, h;
@@ -1345,6 +1345,16 @@ framebuffer_size_for_pixel_count(uint32_t num_pixels,
       while (w > max_dim_pixels || ((w % 2) == 0 && w > 2 * h)) {
          w >>= 1;
          h <<= 1;
+      }
+      /* max_dim_pixels need not be a power of two (7680 on V3D 7.1), while h
+       * above only takes power-of-two values. The smallest power-of-two
+       * height that brings w within the limit can therefore exceed the limit
+       * itself (e.g. h steps 4096 -> 8192, past 7680). Pin h to the limit and
+       * re-derive w by integer division, keeping w * h <= num_pixels.
+       */
+      if (h > max_dim_pixels) {
+         h = max_dim_pixels;
+         w = num_pixels / h;
       }
    }
    assert(w <= max_dim_pixels && h <= max_dim_pixels);

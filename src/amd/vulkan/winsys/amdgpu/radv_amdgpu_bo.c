@@ -187,10 +187,9 @@ radv_amdgpu_virtual_bo_init_mapping(struct radv_amdgpu_winsys *ws, struct radv_a
 static int
 radv_amdgpu_virtual_bo_clear_mapping(struct radv_amdgpu_winsys *ws, struct radv_amdgpu_winsys_bo *bo)
 {
-   const uint64_t va_size = radv_amdgpu_bo_va_size(bo->base.size, bo->flags);
    int r;
 
-   r = radv_amdgpu_bo_va_op(ws, 0, 0, va_size, bo->base.va, 0, 0, AMDGPU_VA_OP_CLEAR);
+   r = radv_amdgpu_bo_va_op(ws, 0, 0, bo->base.size, bo->base.va, 0, 0, AMDGPU_VA_OP_CLEAR);
    if (r)
       return r;
 
@@ -198,7 +197,7 @@ radv_amdgpu_virtual_bo_clear_mapping(struct radv_amdgpu_winsys *ws, struct radv_
       /* Clear the "LOW" address space mapping when it's released. */
       const uint64_t low_va = radv_amdgpu_virtual_bo_get_low_addr(ws, bo);
 
-      r = radv_amdgpu_bo_va_op(ws, 0, 0, va_size, low_va, 0, 0, AMDGPU_VA_OP_CLEAR);
+      r = radv_amdgpu_bo_va_op(ws, 0, 0, bo->base.size, low_va, 0, 0, AMDGPU_VA_OP_CLEAR);
    }
 
    return r;
@@ -210,7 +209,8 @@ radv_amdgpu_virtual_bo_map(struct radv_amdgpu_winsys *ws, struct radv_amdgpu_win
 {
    int r;
 
-   r = radv_amdgpu_bo_va_op(ws, bo->bo_handle, bo_offset, size, parent->base.va + offset, 0, 0, AMDGPU_VA_OP_REPLACE);
+   r = radv_amdgpu_bo_va_op(ws, bo->bo_handle, bo_offset, size, parent->base.va + offset,
+                            bo->flags & RADEON_FLAG_GL2_BYPASS, 0, AMDGPU_VA_OP_REPLACE);
    if (r)
       return r;
 
@@ -218,7 +218,8 @@ radv_amdgpu_virtual_bo_map(struct radv_amdgpu_winsys *ws, struct radv_amdgpu_win
       /* Bind the "LOW" address space to the same BO. */
       const uint64_t low_va = radv_amdgpu_virtual_bo_get_low_addr(ws, parent);
 
-      r = radv_amdgpu_bo_va_op(ws, bo->bo_handle, bo_offset, size, low_va + offset, 0, 0, AMDGPU_VA_OP_REPLACE);
+      r = radv_amdgpu_bo_va_op(ws, bo->bo_handle, bo_offset, size, low_va + offset, bo->flags & RADEON_FLAG_GL2_BYPASS,
+                               0, AMDGPU_VA_OP_REPLACE);
       if (r)
          return r;
    }
@@ -462,12 +463,11 @@ radv_amdgpu_winsys_virtual_bo_create(struct radeon_winsys *_ws, uint64_t size, u
    if (flags & RADEON_FLAG_EMULATE_SPARSE_RESIDENCY)
       replay_address &= ~(1ull << ws->info.address_prt_wa_control_bit);
 
-   const uint64_t va_size = radv_amdgpu_bo_va_size(size, flags);
    const uint64_t va_flags = AMDGPU_VA_RANGE_HIGH | (flags & RADEON_FLAG_32BIT ? AMDGPU_VA_RANGE_32_BIT : 0) |
                              (flags & RADEON_FLAG_REPLAYABLE ? AMDGPU_VA_RANGE_REPLAYABLE : 0);
    const uint64_t va_gap_size = ws->debug_vm ? MAX2(4 * virt_alignment, 64 * 1024) : 0;
 
-   r = ac_drm_va_range_alloc(ws->dev, amdgpu_gpu_va_range_general, va_size + va_gap_size, virt_alignment, replay_address,
+   r = ac_drm_va_range_alloc(ws->dev, amdgpu_gpu_va_range_general, size + va_gap_size, virt_alignment, replay_address,
                              &va, &va_handle, va_flags);
    if (r) {
       result = replay_address ? VK_ERROR_INVALID_OPAQUE_CAPTURE_ADDRESS : VK_ERROR_OUT_OF_DEVICE_MEMORY;
@@ -491,7 +491,7 @@ radv_amdgpu_winsys_virtual_bo_create(struct radeon_winsys *_ws, uint64_t size, u
    }
 
    /* Reserve a PRT VA region. */
-   r = radv_amdgpu_virtual_bo_init_mapping(ws, bo, va_size);
+   r = radv_amdgpu_virtual_bo_init_mapping(ws, bo, size);
    if (r) {
       fprintf(stderr, "radv/amdgpu: Failed to reserve a PRT VA region (%d).\n", r);
       result = VK_ERROR_OUT_OF_DEVICE_MEMORY;

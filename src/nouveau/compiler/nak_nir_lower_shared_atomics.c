@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: MIT
  */
 
+#include "util/macros.h"
 #include "nak_private.h"
 #include "nir.h"
 #include "nir_builder.h"
@@ -141,7 +142,7 @@ build_mesh_atomic(nir_builder *b, nir_intrinsic_instr *intrin)
       nir_if *if_body =
          nir_push_if(b, nir_ieq(b, elected_thread, current_invocation));
       {
-         current_value = nir_load_shared(b, 1, intrin->def.bit_size, offset,
+         current_value = nir_load_shared(b, intrin->def.num_components, intrin->def.bit_size, offset,
                                          .base = nir_intrinsic_base(intrin));
          nir_def *new_value = lower_atomic_op(b, intrin, current_value);
          nir_store_shared(b, new_value, offset,
@@ -184,4 +185,106 @@ nak_nir_lower_mesh_stages_shared_atomics(nir_shader *nir)
    return nir_shader_intrinsics_pass(
       nir, nak_nir_lower_mesh_stages_shared_atomics_intrin, nir_metadata_none,
       NULL);
+}
+
+static nir_def *
+build_f16vec2_cas_atomic(nir_builder *b, nir_intrinsic_instr *intr)
+{
+   nir_def *addr = intr->src[0].ssa;
+   nir_def *data = intr->src[1].ssa;
+   nir_atomic_op atomic_op = nir_intrinsic_atomic_op(intr);
+
+   /* We treat the f16vec2 as a single u32 for the CAS loop */
+   unsigned bit_size = 32;
+
+   /* FAST PATH: xchg blindly overwrites data, so it doesn't need a CAS loop.
+    * We can just pack to u32, run a 32-bit atomic exchange, and unpack.
+    */
+   if (atomic_op == nir_atomic_op_xchg) {
+      nir_def *packed_data = nir_pack_bits(b, data, bit_size);
+      nir_def *res = nir_shared_atomic(b, bit_size, addr, packed_data,
+                                       .atomic_op = nir_atomic_op_xchg);
+      return nir_unpack_bits(b, res, 16);
+   }
+
+   nir_def *initial_val = nir_load_shared(b, 1, bit_size, addr,
+                                          .align_mul = 4,
+                                          .access = ACCESS_ATOMIC);
+
+   nir_loop *loop = nir_push_loop(b);
+   {
+      /* phi node to track the value in memory through loop iterations */
+      nir_phi_instr *phi = nir_phi_instr_create(b->shader);
+      nir_def_init(&phi->instr, &phi->def, 1, bit_size);
+      nir_phi_instr_add_src(phi, nir_def_block(initial_val), initial_val);
+      nir_def *before = &phi->def;
+
+      /* unpack u32 -> f16vec2 */
+      nir_def *before_f16 = nir_unpack_bits(b, before, 16);
+      nir_def *calculated_f16 = NULL;
+
+      switch (atomic_op) {
+         case nir_atomic_op_cmpxchg:
+            UNREACHABLE("f16vec2 cmpxchg is not supported");
+
+         default: {
+            /* standard arithmetic atomics (add, min, max, etc.) */
+            nir_op alu_op = nir_atomic_op_to_alu(atomic_op);
+
+            /* ensure we don't accidentally pass nir_num_opcodes again */
+            assert(alu_op != nir_num_opcodes && "Unsupported atomic opcode!");
+
+            calculated_f16 = nir_build_alu2(b, alu_op, before_f16, data);
+
+            if (nir_op_infos[alu_op].output_type & nir_type_float) {
+               nir_alu_instr *alu = nir_def_as_alu(calculated_f16);
+               alu->fp_math_ctrl = nir_op_valid_fp_math_ctrl(alu->op, nir_fp_no_fast_math);
+            }
+            break;
+         }
+      }
+
+      /* pack f16vec2 -> u32 */
+      nir_def *new_val = nir_pack_bits(b, calculated_f16, bit_size);
+
+      /* attempt CAS: shared_atomic_swap with cmpxchg */
+      nir_def *cas_val = nir_shared_atomic_swap(b, bit_size, addr, before, new_val,
+                                                .atomic_op = nir_atomic_op_cmpxchg);
+
+      nir_break_if(b, nir_ieq(b, cas_val, before));
+
+      nir_phi_instr_add_src(phi, nir_loop_last_block(loop), cas_val);
+      b->cursor = nir_before_block(nir_loop_first_block(loop));
+      nir_builder_instr_insert(b, &phi->instr);
+
+      nir_pop_loop(b, loop);
+      return nir_unpack_bits(b, cas_val, 16);
+   }
+}
+
+static bool
+nak_nir_lower_f16vec2_shared_atomics_intrin(nir_builder *b,
+                                            nir_intrinsic_instr *intrin,
+                                            UNUSED void *_data)
+{
+   if (intrin->intrinsic != nir_intrinsic_shared_atomic &&
+      intrin->intrinsic != nir_intrinsic_shared_atomic_swap)
+      return false;
+
+   /* Only target f16vec2 (2 components of 16-bit) */
+   if (intrin->def.bit_size != 16 || intrin->def.num_components != 2)
+      return false;
+
+   b->cursor = nir_before_instr(&intrin->instr);
+   nir_def_replace(&intrin->def, build_f16vec2_cas_atomic(b, intrin));
+   return true;
+}
+
+bool
+nak_nir_lower_f16vec2_shared_atomics(nir_shader *nir)
+{
+   return nir_shader_intrinsics_pass(nir,
+                                     nak_nir_lower_f16vec2_shared_atomics_intrin,
+                                     nir_metadata_none,
+                                     NULL);
 }

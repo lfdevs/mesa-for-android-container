@@ -47,21 +47,6 @@ nj_index_ssa_defs(nir_shader *nir)
 }
 
 static bool
-lower_helper_invocation(nir_builder *b, nir_intrinsic_instr *intr, void *_)
-{
-   if (intr->intrinsic != nir_intrinsic_load_helper_invocation)
-      return false;
-
-   /* TODO: Is this right for multisampling? */
-   b->cursor = nir_before_instr(&intr->instr);
-   nir_def *active =
-      nir_inot(b, nir_inverse_ballot(b, nir_load_dispatch_mask_intel(b)));
-
-   nir_def_replace(&intr->def, active);
-   return true;
-}
-
-static bool
 lower_frag_coord(nir_builder *b, nir_intrinsic_instr *intr, void *simd_)
 {
    if (intr->intrinsic != nir_intrinsic_load_frag_coord &&
@@ -181,10 +166,6 @@ insert_rt_store(nir_builder *b,
                 nir_def *sample_mask)
 {
    bool null_rt = target < 0;
-   bool eot_only = null_rt &&
-                   !colour &&
-                   nir_def_is_undef(depth) &&
-                   nir_def_is_undef(stencil);
 
    colour = nir_pad_vec4(b, colour ?: nir_undef(b, 4, 32));
    dual_colour = nir_pad_vec4(b, dual_colour ?: nir_undef(b, 4, 32));
@@ -199,13 +180,8 @@ insert_rt_store(nir_builder *b,
 
    nir_def *src0_alpha = nir_channel_or_undef(b, src0_colour ?: colour, 3);
 
-   nir_def *disable = b->shader->info.fs.uses_discard && !eot_only ?
-                         nir_is_helper_invocation(b, 1) :
-                         nir_imm_false(b);
-
    nir_store_render_target_intel(b, colour, dual_colour, src0_alpha,
-                                 sample_mask, depth, stencil, disable,
-                                 .target = target);
+                                 sample_mask, depth, stencil, .target = target);
 }
 
 static void
@@ -251,80 +227,13 @@ lower_fragment_outputs(nir_function_impl *impl,
                    ctx.stencil ?: undef, ctx.sample_mask ?: undef);
 }
 
-/**
- * Drop render target stores with unconditional discards.
- */
-static bool
-opt_unconditional_discards(nir_shader *nir)
-{
-   nir_function_impl *impl = nir_shader_get_entrypoint(nir);
-   nir_block *block = nir_impl_last_block(impl);
-
-   bool progress = false;
-   bool any_remaining_rt_writes = false;
-
-   nir_foreach_instr_reverse_safe(instr, block) {
-      if (instr->type != nir_instr_type_intrinsic)
-         continue;
-
-      nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
-
-      if (intr->intrinsic == nir_intrinsic_store_render_target_intel) {
-         nir_scalar discard = nir_scalar_resolved(intr->src[6].ssa, 0);
-         if (nir_scalar_is_const(discard) && nir_scalar_as_bool(discard)) {
-            /* Drop store with unconditional discard */
-            nir_instr_remove(instr);
-            progress = true;
-         } else {
-            /* This RT store might actually happen */
-            any_remaining_rt_writes = true;
-         }
-      } else if ((intr->intrinsic == nir_intrinsic_demote ||
-                  intr->intrinsic == nir_intrinsic_terminate) &&
-                 !any_remaining_rt_writes) {
-         /* Delete unconditional demotes/terminates in the end block... */
-         nir_instr_remove(instr);
-         progress = true;
-      } else {
-         /* ...but stop if we find an intrinsic that has a side-effect */
-         const nir_intrinsic_info *info = &nir_intrinsic_infos[intr->intrinsic];
-         if (!(info->flags & NIR_INTRINSIC_CAN_ELIMINATE))
-            break;
-      }
-   }
-
-   /* See if discards still exist in the program and flag accordingly */
-   nir->info.fs.uses_discard = false;
-
-   nir_foreach_block(block, impl) {
-      nir_foreach_instr(instr, block) {
-         if (instr->type == nir_instr_type_intrinsic) {
-            nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
-            if (intr->intrinsic == nir_intrinsic_demote ||
-                intr->intrinsic == nir_intrinsic_demote_if ||
-                intr->intrinsic == nir_intrinsic_terminate ||
-                intr->intrinsic == nir_intrinsic_terminate_if)
-               nir->info.fs.uses_discard = true;
-         }
-      }
-   }
-
-   /* If we eliminated all RT stores, add a Null RT store to end the thread. */
-   if (!any_remaining_rt_writes) {
-      nir_builder b = nir_builder_at(nir_after_impl(impl));
-      nir_def *undef = nir_undef(&b, 1, 32);
-      insert_rt_store(&b, -1, NULL, NULL, NULL, undef, undef, undef);
-   }
-
-   return nir_progress(progress, impl, nir_metadata_control_flow);
-}
-
 unsigned
 jay_process_nir(const struct intel_device_info *devinfo,
                 nir_shader *nir,
                 union brw_any_prog_data *prog_data,
                 union brw_any_prog_key *key,
-                debug_archiver *archiver)
+                debug_archiver *archiver,
+                bool *track_helpers)
 {
    enum mesa_shader_stage stage = nir->info.stage;
    struct brw_compiler compiler = { .devinfo = devinfo };
@@ -470,16 +379,20 @@ jay_process_nir(const struct intel_device_info *devinfo,
 
       JAY_NIR_PASS(nir_opt_frag_coord_to_pixel_coord);
       JAY_NIR_PASS(nir_shader_intrinsics_pass, lower_frag_coord,
-               nir_metadata_control_flow, NULL);
+                   nir_metadata_control_flow, NULL);
       JAY_NIR_PASS(nir_opt_barycentric, true);
       JAY_NIR_PASS(nir_opt_constant_folding);
 
       lower_fragment_outputs(nir_shader_get_entrypoint(nir), devinfo,
                              key->fs.nr_color_regions, simd_width);
-      JAY_NIR_PASS(nir_lower_helper_writes, true);
-      JAY_NIR_PASS(nir_lower_is_helper_invocation);
-      JAY_NIR_PASS(nir_shader_intrinsics_pass, lower_helper_invocation,
-               nir_metadata_control_flow, NULL);
+
+      /* nir_lower_terminate_to_demote will hamper our ability to schedule
+       * terminates (since it turns them into real control flow), so run
+       * nir_opt_move_discards_to_top first as a prepass. That should help
+       * scheduling demotes too (which is more important).
+       */
+      JAY_NIR_PASS(nir_opt_move_discards_to_top);
+      JAY_NIR_PASS(nir_lower_terminate_to_demote);
 
       if (key->fs.alpha_to_coverage != INTEL_NEVER) {
          /* Run constant fold optimization in order to get the correct source
@@ -495,8 +408,6 @@ jay_process_nir(const struct intel_device_info *devinfo,
        * values are actually used (vs DCE'd away).
        */
       brw_nir_optimize(pt);
-
-      NIR_PASS(_, nir, opt_unconditional_discards);
 
       // TODO
       // JAY_NIR_PASS(brw_nir_move_interpolation_to_top);
@@ -514,7 +425,7 @@ jay_process_nir(const struct intel_device_info *devinfo,
    brw_postprocess_nir_opts(pt);
 
    JAY_NIR_PASS(nir_shader_intrinsics_pass, jay_nir_lower_simd,
-            nir_metadata_control_flow, &simd_width);
+                nir_metadata_control_flow, &simd_width);
    JAY_NIR_PASS(nir_opt_algebraic_late);
    JAY_NIR_PASS(intel_nir_opt_peephole_imul32x16);
 
@@ -557,10 +468,31 @@ jay_process_nir(const struct intel_device_info *devinfo,
 
    /* Run divergence analysis at the end */
    nir_sweep(nir);
-   nj_index_ssa_defs(nir);
    nir_divergence_analysis(nir);
 
-   if (stage != MESA_SHADER_FRAGMENT)
+   if (stage == MESA_SHADER_FRAGMENT) {
+      /* Certain features require tracking helpers for correctness */
+      nir_shader_gather_info(nir, nir_shader_get_entrypoint(nir));
+      *track_helpers |= nir->info.fs.uses_discard || nir->info.writes_memory;
+      *track_helpers |= BITSET_TEST(nir->info.system_values_read,
+                                    SYSTEM_VALUE_HELPER_INVOCATION);
+
+      /* ...but this is more subtle. nir_opt_load_skip_helpers flags texturing
+       * operations that we can skip for bandwidth savings.  We need divergence
+       * info for this, so we run late.
+       *
+       * We may or may not want to force track_helpers on if this makes
+       * progress. Possibly driconf'ing on furmark makes sense.
+       */
+      struct nir_opt_load_skip_helpers_options skip_helpers = {
+         .no_add_divergence = true
+      };
+      JAY_NIR_PASS(nir_opt_load_skip_helpers, &skip_helpers);
+   } else {
       jay_populate_prog_data(devinfo, nir, prog_data, key, nr_packed_regs);
+   }
+
+   /* This must be the very last pass since nir_print itself will reindex! */
+   nj_index_ssa_defs(nir);
    return simd_width;
 }

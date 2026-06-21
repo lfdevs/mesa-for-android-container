@@ -22,8 +22,6 @@
 #include "radv_instance.h"
 #include "radv_wsi.h"
 
-#include "util/driconf.h"
-
 #include "vk_instance.h"
 #include "vk_log.h"
 

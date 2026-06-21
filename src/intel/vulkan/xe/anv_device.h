@@ -27,13 +27,16 @@
 #include "vulkan/vulkan_core.h"
 #include "vk_device.h"
 
+#include "common/intel_pagefault.h"
+
 struct anv_device;
 struct anv_physical_device;
 
 bool anv_xe_device_destroy_vm(struct anv_device *device);
 VkResult anv_xe_device_setup_vm(struct anv_device *device);
 VkResult anv_xe_device_check_status(struct vk_device *vk_device);
-
+struct intel_pagefault_buffer *
+anv_xe_device_alloc_get_vm_faults(struct anv_device *device);
 VkResult
 anv_xe_physical_device_get_parameters(struct anv_physical_device *device);
 VkResult

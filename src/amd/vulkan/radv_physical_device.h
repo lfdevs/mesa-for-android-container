@@ -32,6 +32,8 @@
 #include <xf86drm.h>
 #endif
 
+typedef struct ac_drm_device ac_drm_device;
+
 struct radv_binning_settings {
    unsigned context_states_per_bin;    /* allowed range: [1, 6] */
    unsigned persistent_states_per_bin; /* allowed range: [1, 32] */
@@ -65,10 +67,15 @@ enum radv_gfx12_hiz_wa {
    RADV_GFX12_HIZ_WA_FULL,
 };
 
+enum radv_drm_device_type {
+   RADV_DRM_DEVICE_AMDGPU,
+   RADV_DRM_DEVICE_AMDGPU_VPIPE,
+   RADV_DRM_DEVICE_VIRTIO,
+};
+
 struct radv_physical_device {
    struct vk_physical_device vk;
 
-   struct radeon_winsys *ws;
    struct radeon_info info;
    char name[VK_MAX_PHYSICAL_DEVICE_NAME_SIZE];
    char marketing_name[VK_MAX_PHYSICAL_DEVICE_NAME_SIZE];
@@ -82,6 +89,7 @@ struct radv_physical_device {
    struct ac_addrlib *addrlib;
 
    int wsi_master_fd;
+   int wsi_syncobj_fd;
    struct wsi_device wsi_device;
 
    /* Whether DCC should be enabled for MSAA textures. */
@@ -191,6 +199,13 @@ struct radv_physical_device {
    struct vk_sync_type syncobj_sync_type;
    struct vk_sync_timeline_type emulated_timeline_sync_type;
    const struct vk_sync_type *sync_types[3];
+
+   /* Type of DRM device. */
+   enum radv_drm_device_type drm_device_type;
+
+   /* Cached device used to query heap info. */
+   simple_mtx_t drm_device_mtx;
+   ac_drm_device *drm_device;
 };
 
 VK_DEFINE_HANDLE_CASTS(radv_physical_device, vk.base, VkPhysicalDevice, VK_OBJECT_TYPE_PHYSICAL_DEVICE)

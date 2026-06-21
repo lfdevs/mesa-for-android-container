@@ -69,7 +69,7 @@ libpanfrost_lib = static_library(
 )
 
 libpanfrost_dep = declare_dependency(
-  link_with: [libpanfrost_lib, libpanfrost_decode, libpanfrost_compiler, libpanfrost_pixel_format, libpanfrost_per_arch],
+  link_with: [libpanfrost_lib, libpanfrost_decode, libpanfrost_pixel_format, libpanfrost_per_arch],
   include_directories: [inc_include, inc_src, inc_panfrost],
   dependencies: [deps_for_libpanfrost, libpankmod_dep, idep_nir],
 )

@@ -5,7 +5,7 @@
 
 #include "v3d_pps_driver.h"
 
-#include <perfetto.h>
+#include "util/perf/u_perfetto.h"
 #include <string.h>
 #include <string>
 

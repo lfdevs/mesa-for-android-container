@@ -1,0 +1,8 @@
+[wrap-file]
+directory = perfetto-sdk
+lead_directory_missing = true
+
+source_url = https://github.com/google/perfetto/releases/download/v56.1/perfetto-cpp-sdk-src.zip
+source_filename = perfetto-cpp-sdk-src-v56.1.zip
+source_hash = 9138dad1ab39048a61d3333e0c2ebf32a7497ed45e3b7daa5f3a02c14748af38
+patch_directory = perfetto-sdk

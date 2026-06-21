@@ -5,11 +5,7 @@
  */
 
 #include <ctype.h>
-#include "compiler/nir/nir.h"
-#include "ac_nir.h"
-#include "ac_shader_util.h"
 #include "si_pipe.h"
-#include "util/u_cpu_detect.h"
 #include "util/u_screen.h"
 #include <sys/utsname.h>
 #include "drm-uapi/drm.h"

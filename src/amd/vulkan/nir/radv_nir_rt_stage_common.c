@@ -279,8 +279,7 @@ radv_build_rt_prolog(const struct radv_compiler_info *compiler_info, struct radv
    for (unsigned i = 0; i < 3; i++)
       stage->info.cs.uses_block_id[i] = true;
 
-   radv_declare_shader_args(compiler_info, NULL, &stage->info, MESA_SHADER_COMPUTE, MESA_SHADER_NONE, &stage->args,
-                            debug);
+   radv_declare_shader_args(compiler_info, NULL, stage, MESA_SHADER_NONE, debug);
    stage->info.user_sgprs_locs = stage->args.user_sgprs_locs;
 
    b.shader->info.workgroup_size[0] = compiler_info->key.rt_wave_size;

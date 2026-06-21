@@ -27,6 +27,7 @@
 #include <string.h>
 
 #include "common/v3d_device_info.h"
+#include "common/v3d_limits.h"
 #include "drm-uapi/v3d_drm.h"
 #include "util/log.h"
 #include "util/os_misc.h"
@@ -78,6 +79,8 @@ v3d_get_device_info(int fd, struct v3d_device_info* devinfo, v3d_ioctl_fun drm_i
     os_get_page_size(&os_page_size);
     assert(os_page_size <= UINT32_MAX);
     devinfo->page_size = (uint32_t)os_page_size;
+    devinfo->max_render_targets = V3D_MAX_RENDER_TARGETS(devinfo->ver);
+    devinfo->max_framebuffer_size = V3D_MAX_FRAMEBUFFER_SIZE(devinfo->ver);
 
     switch (devinfo->ver) {
     case 42:

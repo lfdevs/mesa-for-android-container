@@ -56,7 +56,7 @@ x11_xlib_display_is_thread_safe(Display *dpy)
 
 #ifdef HAVE_SYS_SHM_H
 bool
-x11_xcb_display_supports_xshm(xcb_connection_t *con)
+x11_xcb_display_supports_xshm(xcb_connection_t *con, int *xshm_opcode)
 {
    xcb_generic_error_t *error;
    xcb_query_extension_cookie_t shm_cookie;
@@ -66,11 +66,14 @@ x11_xcb_display_supports_xshm(xcb_connection_t *con)
    void *shm_addr = (void *) -1;
    xcb_shm_seg_t shm_seg;
    bool ret = true;
+   int xshm_opcode_val = -1;
 
    shm_cookie = xcb_query_extension(con, 7, "MIT-SHM");
    shm_reply = xcb_query_extension_reply(con, shm_cookie, NULL);
 
    has_mit_shm = shm_reply && shm_reply->present;
+   if (has_mit_shm)
+      xshm_opcode_val = shm_reply->major_opcode;
    free(shm_reply);
    if (!has_mit_shm)
       return false;
@@ -117,6 +120,10 @@ x11_xcb_display_supports_xshm(xcb_connection_t *con)
 
    /* Only detach if it was attached successfully */
    xcb_shm_detach(con, shm_seg);
+
+   /* Only set xshm_opcode if attach was successful */
+   if (xshm_opcode)
+      *xshm_opcode = xshm_opcode_val;
 
 check_xshm_cleanup:
    if (shm_addr != (void *) -1)

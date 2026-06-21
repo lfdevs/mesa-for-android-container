@@ -305,6 +305,11 @@ anv_image_choose_isl_surf_usage(struct anv_physical_device *device,
    switch (aspect) {
    case VK_IMAGE_ASPECT_DEPTH_BIT:
       isl_usage |= ISL_SURF_USAGE_DEPTH_BIT;
+      if (device->instance->drirc.debug.disable_hiz) {
+         anv_perf_warn(VK_LOG_OBJS(&device->vk.base),
+                       "Disabling aux: HiZ disabled via drirc");
+         isl_usage |= ISL_SURF_USAGE_DISABLE_AUX_BIT;
+      }
       break;
    case VK_IMAGE_ASPECT_STENCIL_BIT:
       isl_usage |= ISL_SURF_USAGE_STENCIL_BIT;

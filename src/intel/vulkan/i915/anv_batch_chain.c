@@ -407,31 +407,31 @@ setup_execbuf_for_cmd_buffers(struct anv_execbuf *execbuf,
    }
 
    /* Add all the global BOs to the object list for softpin case. */
-   result = pin_state_pool(device, execbuf, &device->scratch_surface_state_pool);
+   result = pin_state_pool(device, execbuf, anv_device_get_scratch_surface_state_pool(device));
    if (result != VK_SUCCESS)
       return result;
 
-   if (device->physical->va.bindless_surface_state_pool.size > 0) {
-      result = pin_state_pool(device, execbuf, &device->bindless_surface_state_pool);
+   if (anv_physical_device_get_bindless_surface_state_pool_va(device->physical)->size > 0) {
+      result = pin_state_pool(device, execbuf, anv_device_get_bindless_surface_state_pool(device));
       if (result != VK_SUCCESS)
          return result;
    }
 
-   if (device->physical->va.indirect_push_descriptor_pool.size > 0) {
-      result = pin_state_pool(device, execbuf, &device->indirect_push_descriptor_pool);
+   if (anv_physical_device_get_indirect_push_descriptor_pool_va(device->physical)->size > 0) {
+      result = pin_state_pool(device, execbuf, anv_device_get_indirect_push_descriptor_pool(device));
       if (result != VK_SUCCESS)
          return result;
    }
 
-   result = pin_state_pool(device, execbuf, &device->internal_surface_state_pool);
+   result = pin_state_pool(device, execbuf, anv_device_get_internal_surface_state_pool(device));
    if (result != VK_SUCCESS)
       return result;
 
-   result = pin_state_pool(device, execbuf, &device->dynamic_state_pool);
+   result = pin_state_pool(device, execbuf, anv_device_get_dynamic_state_pool(device));
    if (result != VK_SUCCESS)
       return result;
 
-   result = pin_state_pool(device, execbuf, &device->general_state_pool);
+   result = pin_state_pool(device, execbuf, anv_device_get_general_state_pool(device));
    if (result != VK_SUCCESS)
       return result;
 
@@ -439,18 +439,18 @@ setup_execbuf_for_cmd_buffers(struct anv_execbuf *execbuf,
    if (result != VK_SUCCESS)
       return result;
 
-   result = pin_state_pool(device, execbuf, &device->binding_table_pool);
+   result = pin_state_pool(device, execbuf, anv_device_get_binding_table_pool(device));
    if (result != VK_SUCCESS)
       return result;
 
-   if (device->physical->va.aux_tt_pool.size > 0) {
-      result = pin_state_pool(device, execbuf, &device->aux_tt_pool);
+   if (anv_physical_device_get_aux_tt_pool_va(device->physical)->size > 0) {
+      result = pin_state_pool(device, execbuf, anv_device_get_aux_tt_pool(device));
       if (result != VK_SUCCESS)
          return result;
    }
 
-   if (device->physical->va.push_descriptor_buffer_pool.size > 0) {
-      result = pin_state_pool(device, execbuf, &device->push_descriptor_buffer_pool);
+   if (anv_physical_device_get_push_descriptor_buffer_pool_va(device->physical)->size > 0) {
+      result = pin_state_pool(device, execbuf, anv_device_get_push_descriptor_buffer_pool(device));
       if (result != VK_SUCCESS)
          return result;
    }
@@ -701,8 +701,9 @@ anv_gem_execbuffer_impl(struct anv_queue *queue,
    struct anv_device *device = queue->device;
 
    int ret = i915_gem_execbuf_ioctl(device->fd, device->info, execbuf);
-   if (ret)
-      return vk_queue_set_lost(&queue->vk, "%s(%d) failed: %m", func, line);
+   if (ret) {
+      return anv_queue_set_lost(queue, errno, "%s(%d) failed: %m", func, line);
+   }
 
    return VK_SUCCESS;
 }

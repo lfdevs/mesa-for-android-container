@@ -9,6 +9,7 @@
 #include "util/format/u_format_s3tc.h"
 #include "util/u_screen.h"
 #include "util/u_memory.h"
+#include "util/u_endian.h"
 #include "util/hex.h"
 #include "util/os_time.h"
 #include "util/xmlconfig.h"
@@ -21,6 +22,9 @@
 #include "r300_public.h"
 
 #include "draw/draw_context.h"
+
+#include <assert.h>
+#include <stdio.h>
 
 /* Return the identifier behind whom the brave coders responsible for this
  * amalgamation of code, sweat, and duct tape, routinely obscure their names.
@@ -657,6 +661,11 @@ struct pipe_screen* r300_screen_create(struct radeon_winsys *rws,
     r300_init_debug(r300screen);
     r300_parse_chipset(r300screen->info.pci_id, &r300screen->caps);
 
+#if UTIL_ARCH_BIG_ENDIAN
+    /* All known big-endian r300 systems should have hardware TCL. */
+    assert(r300screen->caps.has_tcl);
+#endif
+
     driParseConfigFiles(config->options, config->options_info,
                         &(driConfigFileParseParams) { .driverName = "r300" });
 
@@ -670,8 +679,13 @@ struct pipe_screen* r300_screen_create(struct radeon_winsys *rws,
     if (SCREEN_DBG_ON(r300screen, DBG_NO_HIZ) ||
         r300screen->options.nohiz)
         r300screen->caps.hiz_ram = 0;
-    if (SCREEN_DBG_ON(r300screen, DBG_NO_TCL))
+    if (SCREEN_DBG_ON(r300screen, DBG_NO_TCL)) {
+#if UTIL_ARCH_BIG_ENDIAN
+        fprintf(stderr, "r300: RADEON_DEBUG=notcl is unsupported on big-endian, ignoring.\n");
+#else
         r300screen->caps.has_tcl = false;
+#endif
+    }
 
     if (SCREEN_DBG_ON(r300screen, DBG_IEEEMATH))
         r300screen->options.ieeemath = true;

@@ -1371,6 +1371,7 @@ nir_visitor::visit(ir_call *ir)
 
          /* Atomic result */
          assert(ir->return_deref);
+         instr->num_components = 1;
          if (glsl_type_is_integer_64(ir->return_deref->type)) {
             nir_def_init(&instr->instr, &instr->def,
                          ir->return_deref->type->vector_elements, 64);
@@ -1438,6 +1439,7 @@ nir_visitor::visit(ir_call *ir)
          if (op == nir_intrinsic_image_deref_atomic ||
              op == nir_intrinsic_image_deref_atomic_swap) {
             nir_intrinsic_set_atomic_op(instr, atomic_op);
+            instr->num_components = 1;
          }
 
          instr->src[0] = nir_src_for_ssa(&deref->def);

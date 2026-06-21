@@ -33,7 +33,7 @@ enum pco_cursor_option {
 };
 
 /** Cursor for PCO instructions/groups and basic blocks. */
-typedef struct pco_cursor {
+typedef struct _pco_cursor {
    enum pco_cursor_option option; /** Cursor pointer option. */
    union {
       pco_cf_node *cf_node;
@@ -43,7 +43,7 @@ typedef struct pco_cursor {
 } pco_cursor;
 
 /** PCO builder context. */
-typedef struct pco_builder {
+typedef struct _pco_builder {
    pco_func *func; /** Target function. */
    pco_cursor cursor; /** Current position in the function. */
 } pco_builder;

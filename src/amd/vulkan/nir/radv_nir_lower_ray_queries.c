@@ -514,7 +514,7 @@ lower_rq_proceed(nir_builder *b, nir_intrinsic_instr *instr, struct ray_query_va
    nir_deref_instr *closest = rq_deref(b, rq, closest);
    nir_deref_instr *candidate = rq_deref(b, rq, candidate);
 
-   nir_metadata_require(nir_cf_node_get_function(&instr->instr.block->cf_node), nir_metadata_dominance);
+   nir_metadata_require(instr->instr.block->impl, nir_metadata_dominance);
 
    bool ignore_cull_mask = false;
    if (vars->initialize && nir_block_dominates(vars->initialize->instr.block, instr->instr.block)) {

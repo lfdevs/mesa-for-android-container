@@ -34,12 +34,13 @@ unsigned jay_process_nir(const struct intel_device_info *devinfo,
                          nir_shader *nir,
                          union brw_any_prog_data *prog_data,
                          union brw_any_prog_key *key,
-                         debug_archiver *archiver);
+                         debug_archiver *archiver,
+                         bool *track_helpers);
 
 void jay_compute_liveness(jay_function *f);
 void jay_calculate_register_demands(jay_function *f);
 
-void jay_spill(jay_function *func, unsigned limit);
+void jay_spill(jay_function *func, enum jay_file file, unsigned limit);
 void jay_partition_grf(jay_shader *shader);
 void jay_print_partition(struct jay_partition *p);
 void jay_register_allocate(jay_shader *s);
@@ -84,6 +85,7 @@ void jay_schedule_pressure(jay_shader *s);
 
 void jay_lower_pre_ra(jay_shader *s);
 void jay_lower_post_ra(jay_shader *s);
+void jay_lower_helpers(jay_shader *s);
 void jay_lower_spill(jay_function *func);
 void jay_lower_simd_width(jay_shader *s);
 void jay_lower_scoreboard(jay_shader *s);

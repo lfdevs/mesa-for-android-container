@@ -132,6 +132,8 @@ struct tc_batch_rp_info {
    struct tc_renderpass_info info;
    /* determines whether the info can be "safely" read by drivers or if it may still be in use */
    struct util_queue_fence ready;
+   /* the call that set 'ended' (increment info after) */
+   void *end_call;
    /* when a batch is full, the rp info rollsover onto 'next' */
    struct tc_batch_rp_info *next;
    /* when rp info has rolled over onto this struct, 'prev' is used to update pointers for realloc */
@@ -310,6 +312,7 @@ tc_batch_increment_renderpass_info(struct threaded_context *tc, unsigned batch_i
    util_queue_fence_reset(&tc_info[batch->renderpass_info_idx].ready);
    /* guard against deadlock scenario */
    assert(tc->renderpass_info_recording != &tc_info[batch->renderpass_info_idx].info);
+   tc_info[batch->renderpass_info_idx].end_call = NULL;
    /* this is now the current recording renderpass info */
    tc->renderpass_info_recording = &tc_info[batch->renderpass_info_idx].info;
    batch->max_renderpass_info_idx = batch->renderpass_info_idx;
@@ -323,13 +326,13 @@ tc_get_renderpass_info(struct threaded_context *tc)
    return tc->renderpass_info_recording;
 }
 
-static void
+static bool
 tc_check_fb_access(struct threaded_context *tc, struct pipe_resource *src, struct pipe_resource *dst)
 {
    bool fb_access = false;
 
    if (tc->renderpass_info_recording->ended)
-      return;
+      return false;
 
    for (unsigned i = 0; i < tc->nr_cbufs; i++) {
       fb_access |= tc->fb_resources[i] && (tc->fb_resources[i] == src || tc->fb_resources[i] == dst);
@@ -340,7 +343,9 @@ tc_check_fb_access(struct threaded_context *tc, struct pipe_resource *src, struc
       tc->in_renderpass = false;
       tc->renderpass_info_recording->ended = true;
       tc_signal_renderpass_info_ready(tc);
+      return true;
    }
+   return false;
 }
 
 /* update metadata at draw time */
@@ -3295,8 +3300,9 @@ tc_texture_subdata(struct pipe_context *_pipe,
    if (!size)
       return;
 
+   bool ended = false;
    if (tc->options.parse_renderpass_info && tc->in_renderpass)
-      tc_check_fb_access(tc, NULL, resource);
+      ended = tc_check_fb_access(tc, NULL, resource);
 
    /* Small uploads can be enqueued, big uploads must sync. */
    if (size <= TC_MAX_SUBDATA_BYTES) {
@@ -3311,6 +3317,8 @@ tc_texture_subdata(struct pipe_context *_pipe,
       p->stride = stride;
       p->layer_stride = layer_stride;
       memcpy(p->slot, data, size);
+      if (ended)
+         tc_batch_rp_info(tc->renderpass_info_recording)->end_call = p;
    } else {
       struct pipe_context *pipe = tc->pipe;
       struct threaded_resource *tres = threaded_resource(resource);
@@ -4499,8 +4507,9 @@ tc_image_copy_buffer(struct pipe_context *_pipe,
 
    if (dst->target == PIPE_BUFFER)
       tc_buffer_disable_cpu_storage(&tbuf->b);
+   bool ended = false;
    if (tc->options.parse_renderpass_info && tc->in_renderpass)
-      tc_check_fb_access(tc, NULL, &timg->b);
+      ended = tc_check_fb_access(tc, NULL, &timg->b);
 
    tc_set_resource_batch_usage(tc, dst);
    tc_set_resource_reference(&p->dst, dst);
@@ -4509,6 +4518,8 @@ tc_image_copy_buffer(struct pipe_context *_pipe,
    p->buffer_layer_stride = buffer_layer_stride;
    p->level = level;
    p->box = *box;
+   if (ended)
+      tc_batch_rp_info(tc->renderpass_info_recording)->end_call = p;
    tc_set_resource_batch_usage(tc, src);
    tc_set_resource_reference(&p->src, src);
 
@@ -4546,10 +4557,11 @@ tc_resource_copy_region(struct pipe_context *_pipe,
       tc_add_call(tc, TC_CALL_resource_copy_region,
                   tc_resource_copy_region);
 
+   bool ended = false;
    if (dst->target == PIPE_BUFFER)
       tc_buffer_disable_cpu_storage(dst);
    else if (tc->options.parse_renderpass_info && tc->in_renderpass)
-      tc_check_fb_access(tc, src, dst);
+      ended = tc_check_fb_access(tc, src, dst);
 
    tc_set_resource_batch_usage(tc, dst);
    tc_set_resource_reference(&p->dst, dst);
@@ -4561,6 +4573,8 @@ tc_resource_copy_region(struct pipe_context *_pipe,
    tc_set_resource_reference(&p->src, src);
    p->src_level = src_level;
    p->src_box = *src_box;
+   if (ended)
+      tc_batch_rp_info(tc->renderpass_info_recording)->end_call = p;
 
    if (dst->target == PIPE_BUFFER) {
       struct tc_buffer_list *next = &tc->buffer_lists[tc->next_buf_list];
@@ -4642,15 +4656,19 @@ tc_blit(struct pipe_context *_pipe, const struct pipe_blit_info *info)
 #endif
        (info->dst.resource->array_size && info->dst.resource->array_size != tc->fb_layers) ||
        (!tc->renderpass_info_recording->has_draw && !tc->renderpass_info_recording->cbuf_clear && !tc->renderpass_info_recording->zsbuf_clear)) {
+      bool ended = false;
       if (tc->options.parse_renderpass_info && tc->in_renderpass)
-         tc_check_fb_access(tc, info->src.resource, info->dst.resource);
-      tc_blit_enqueue(tc, info);
+         ended = tc_check_fb_access(tc, info->src.resource, info->dst.resource);
+      struct tc_blit_call *blit = tc_blit_enqueue(tc, info);
+      if (ended)
+         tc_batch_rp_info(tc->renderpass_info_recording)->end_call = blit;
       return;
    }
 
    bool is_depth = util_format_is_depth_or_stencil(info->src.format);
    struct pipe_resource *src = !is_depth ? tc->fb_resources[0] : tc->fb_resources[PIPE_MAX_COLOR_BUFS];
    bool is_resolve = false;
+   bool ended = tc->renderpass_info_recording->ended;
    if (tc->fb_resolve == info->dst.resource) {
 #if TC_DEBUG >= 3
       tc_printf("WSI RESOLVE MERGE");
@@ -4679,6 +4697,8 @@ tc_blit(struct pipe_context *_pipe, const struct pipe_blit_info *info)
       tc_check_fb_access(tc, info->src.resource, info->dst.resource);
    }
    struct tc_blit_call *blit = tc_blit_enqueue(tc, info);
+   if (ended != tc->renderpass_info_recording->ended)
+      tc_batch_rp_info(tc->renderpass_info_recording)->end_call = blit;
    if (is_resolve)
       blit->base.call_id = TC_CALL_resolve;
 }
@@ -5298,6 +5318,7 @@ batch_execute(struct tc_batch *batch, struct pipe_context *pipe, bool parsing)
     * begin incrementing renderpass info on the first set_framebuffer_state call
     */
    bool increment_rp_info_on_fb = batch->increment_rp_info_on_fb;
+   bool increment_rp_info_on_draw_clear = false;
    uint64_t *iter = batch->slots;
 
    while (1) {
@@ -5326,6 +5347,7 @@ batch_execute(struct tc_batch *batch, struct pipe_context *pipe, bool parsing)
          if (call->call_id == TC_CALL_flush) {
             /* always increment renderpass info for non-deferred flushes */
             batch->tc->renderpass_info = incr_rp_info(batch->tc->renderpass_info);
+            increment_rp_info_on_draw_clear = false;
          } else if (call->call_id == TC_CALL_set_framebuffer_state) {
             /* the renderpass info pointer is already set at the start of the batch,
              * so don't increment on the first set_framebuffer_state call
@@ -5334,11 +5356,22 @@ batch_execute(struct tc_batch *batch, struct pipe_context *pipe, bool parsing)
                batch->tc->renderpass_info = incr_rp_info(batch->tc->renderpass_info);
             /* only ever keep base rp info if set_framebuffer_state is the literal first call in a batch */
             increment_rp_info_on_fb = true;
-         } else if (call->call_id == TC_CALL_draw_single ||
-                    call->call_id == TC_CALL_draw_multi ||
-                    call->call_id == TC_CALL_clear ||
-                    (call->call_id >= TC_CALL_draw_single_drawid &&
-                     call->call_id <= TC_CALL_draw_vstate_multi)) {
+            increment_rp_info_on_draw_clear = false;
+         } else if (call == tc_batch_rp_info(batch->tc->renderpass_info)->end_call) {
+            increment_rp_info_on_draw_clear = true;
+         } else if (increment_rp_info_on_draw_clear) {
+            switch (call->call_id) {
+            case TC_CALL_clear:
+            case TC_CALL_draw_single:
+            case TC_CALL_draw_multi:
+            case TC_CALL_draw_single_drawid:
+            case TC_CALL_draw_vstate_multi:
+               batch->tc->renderpass_info = incr_rp_info(batch->tc->renderpass_info);
+               increment_rp_info_on_draw_clear = false;
+               break;
+            default:
+               break;
+            }
          }
       }
    }

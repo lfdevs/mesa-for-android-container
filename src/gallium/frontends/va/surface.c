@@ -35,6 +35,7 @@
 #include "util/u_sampler.h"
 #include "util/u_video.h"
 #include "util/set.h"
+#include "util/os_file.h"
 
 #include "vl/vl_compositor.h"
 #include "vl/vl_video_buffer.h"
@@ -679,6 +680,13 @@ surface_from_prime(VADriverContextP ctx, vlVaSurface *surface,
       result = VA_STATUS_ERROR_ALLOCATION_FAILED;
       goto fail;
    }
+
+   surface->buffer->contiguous_planes = true;
+   for (uint32_t i = 1; i < desc->num_objects; i++) {
+      if (os_same_file_description(desc->objects[0].fd, desc->objects[i].fd) != 0)
+         surface->buffer->contiguous_planes = false;
+   }
+
    return VA_STATUS_SUCCESS;
 
 fail:

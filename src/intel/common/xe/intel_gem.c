@@ -29,6 +29,9 @@
 
 #include "util/os_time.h"
 #include "util/timespec.h"
+#include "util/compiler.h"
+#include "util/macros.h"
+#include "util/stack_array.h"
 
 bool
 xe_gem_read_render_timestamp(int fd, uint64_t *value)
@@ -122,4 +125,93 @@ xe_gem_supports_protected_exec_queue(int fd)
     * initialization is completed
     */
    return intel_ioctl(fd, DRM_IOCTL_XE_DEVICE_QUERY, &query) == 0;
+}
+
+bool xe_gem_supports_get_vm_faults(int fd)
+{
+   struct drm_xe_vm_get_property prop = {
+      .vm_id = -1,
+      .property = DRM_XE_VM_GET_PROPERTY_FAULTS,
+   };
+   /* FIXME: Get a proper kernel api to detect this */
+   int ret = intel_ioctl(fd, DRM_IOCTL_XE_VM_GET_PROPERTY, &prop);
+   return ret == -1 && errno == ENOENT;
+}
+
+static inline enum intel_pagefault_access
+xe_vm_fault_get_access(const struct xe_vm_fault *vm_fault)
+{
+   switch (vm_fault->access_type) {
+   default: UNREACHABLE("not handled"); FALLTHROUGH;
+   case FAULT_ACCESS_TYPE_READ: return INTEL_PAGEFAULT_ACCESS_READ;
+   case FAULT_ACCESS_TYPE_WRITE: return INTEL_PAGEFAULT_ACCESS_WRITE;
+   case FAULT_ACCESS_TYPE_ATOMIC: return INTEL_PAGEFAULT_ACCESS_ATOMIC;
+   }
+}
+
+static inline enum intel_pagefault_type
+xe_vm_fault_get_type(const struct xe_vm_fault *vm_fault)
+{
+   switch (vm_fault->fault_type) {
+   default: UNREACHABLE("not handled"); FALLTHROUGH;
+   case FAULT_TYPE_NOT_PRESENT: return INTEL_PAGEFAULT_TYPE_NOT_PRESENT;
+   case FAULT_TYPE_WRITE_ACCESS: return INTEL_PAGEFAULT_TYPE_WRITE_ACCESS;
+   case FAULT_TYPE_ATOMIC_ACCESS: return INTEL_PAGEFAULT_TYPE_ATOMIC_ACCESS;
+   }
+}
+
+static inline enum intel_pagefault_level
+xe_vm_fault_get_level(const struct xe_vm_fault *vm_fault)
+{
+   switch (vm_fault->fault_level) {
+   default: UNREACHABLE("not handled"); FALLTHROUGH;
+   case FAULT_LEVEL_PTE: return INTEL_PAGEFAULT_LEVEL_PTE;
+   case FAULT_LEVEL_PDE: return INTEL_PAGEFAULT_LEVEL_PDE;
+   case FAULT_LEVEL_PDP: return INTEL_PAGEFAULT_LEVEL_PDP;
+   case FAULT_LEVEL_PML4: return INTEL_PAGEFAULT_LEVEL_PML4;
+   case FAULT_LEVEL_PML5: return INTEL_PAGEFAULT_LEVEL_PML5;
+   }
+}
+
+struct intel_pagefault_buffer *
+xe_gem_alloc_get_vm_faults(int fd, int vm_id)
+{
+   struct drm_xe_vm_get_property prop = {
+      .vm_id = vm_id,
+      .property = DRM_XE_VM_GET_PROPERTY_FAULTS,
+   };
+
+   int ret = intel_ioctl(fd, DRM_IOCTL_XE_VM_GET_PROPERTY, &prop);
+   if (ret)
+      return NULL;
+
+   unsigned size = (unsigned) (prop.size / sizeof(struct xe_vm_fault));
+
+   STACK_ARRAY(struct xe_vm_fault, kmd_faults, size);
+   prop.size = size * sizeof(struct xe_vm_fault);
+   prop.data = (uintptr_t) kmd_faults;
+
+   struct intel_pagefault_buffer *result = NULL;
+
+   if (size != 0)
+      ret = intel_ioctl(fd, DRM_IOCTL_XE_VM_GET_PROPERTY, &prop);
+
+   if (ret == 0) {
+      size = MIN2(size, (unsigned) (prop.size / sizeof(struct xe_vm_fault)));
+      result = malloc(sizeof(*result) + sizeof(result->items[0]) * size);
+      if (result) {
+         result->size = size;
+         for (unsigned i = 0; i < size; ++i) {
+            result->items[i].address = kmd_faults[i].address;
+            result->items[i].precision = kmd_faults[i].address_precision;
+            result->items[i].access = xe_vm_fault_get_access(&kmd_faults[i]);
+            result->items[i].type = xe_vm_fault_get_type(&kmd_faults[i]);
+            result->items[i].level = xe_vm_fault_get_level(&kmd_faults[i]);
+         }
+      }
+   }
+
+   STACK_ARRAY_FINISH(kmd_faults);
+
+   return result;
 }

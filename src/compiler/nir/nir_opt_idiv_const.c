@@ -29,8 +29,12 @@
 static nir_def *
 build_udiv(nir_builder *b, nir_def *n, uint64_t d)
 {
+   uint64_t uint_max = u_uintN_max(n->bit_size);
+
    if (d == 0) {
       return nir_imm_intN_t(b, 0, n->bit_size);
+   } else if (d == uint_max) {
+      return nir_b2iN(b, nir_ieq_imm(b, n, uint_max), n->bit_size);
    } else if (util_is_power_of_two_or_zero64(d)) {
       return nir_ushr_imm(b, n, util_logbase2_64(d));
    } else {

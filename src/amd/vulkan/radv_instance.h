@@ -12,7 +12,6 @@
 #define RADV_INSTANCE_H
 
 #include "util/simple_mtx.h"
-#include "util/xmlconfig.h"
 #include "radv_drirc.h"
 #include "radv_radeon_winsys.h"
 #include "vk_instance.h"

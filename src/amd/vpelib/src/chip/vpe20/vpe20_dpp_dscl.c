@@ -540,11 +540,11 @@ void vpe20_dpp_set_frame_scaler(struct dpp *dpp, const struct scaler_data *scl_d
 {
     PROGRAM_ENTRY();
 
-    enum vpe10_dscl_mode_sel dscl_mode = vpe20_dpp_dscl_get_dscl_mode(scl_data);
-    bool                     ycbcr     = vpe10_dpp_dscl_is_ycbcr(scl_data->format);
+    enum vpe10_dscl_mode_sel dscl_mode     = vpe20_dpp_dscl_get_dscl_mode(scl_data);
+    bool                     is_subsampled = vpe10_dpp_dscl_is_video_subsampled(scl_data->format);
 
     if (dscl_mode == DSCL_MODE_DSCL_BYPASS) {
-        dpp2_dscl_set_scl_filter_and_dscl_mode(dpp, scl_data, dscl_mode, ycbcr);
+        dpp2_dscl_set_scl_filter_and_dscl_mode(dpp, scl_data, dscl_mode, is_subsampled);
         vpe20_dscl_program_isharp(dpp, scl_data);
         vpe20_dscl_disable_easf(dpp, scl_data);
         vpe10_dpp_power_on_dscl(dpp, false);
@@ -553,7 +553,7 @@ void vpe20_dpp_set_frame_scaler(struct dpp *dpp, const struct scaler_data *scl_d
         vpe10_dpp_dscl_set_lb(dpp, &scl_data->lb_params, LB_MEMORY_CONFIG_0);
         dpp2_dscl_set_scale_ratio(dpp, scl_data);
         dpp2_dscl_set_taps(dpp, scl_data);
-        dpp2_dscl_set_scl_filter_and_dscl_mode(dpp, scl_data, dscl_mode, ycbcr);
+        dpp2_dscl_set_scl_filter_and_dscl_mode(dpp, scl_data, dscl_mode, is_subsampled);
         vpe20_dscl_program_isharp(dpp, scl_data);
 
         if (dscl_mode == DSCL_MODE_SCALING_444_BYPASS ||

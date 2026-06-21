@@ -317,18 +317,9 @@ pub struct CompileOptions {
 }
 
 impl CompileOptions {
-    pub fn new(options: &CStr, err: cl_int) -> CLResult<Self> {
-        let mut parsed_options = ParsedCompileOptions::from_option_str(options);
-        if options.is_empty() {
-            return Ok(CompileOptions {
-                parsed: parsed_options,
-                clang_args: Vec::new(),
-            });
-        }
-
-        let options = options.to_str().unwrap();
+    /// Tokenizes an options string, splitting on spaces but respecting double-quoted strings.
+    fn tokenize(options: &str) -> Vec<&str> {
         let mut res = Vec::new();
-
         // we seperate on a ' ' unless we hit a "
         let mut sep = ' ';
         let mut old = 0;
@@ -351,10 +342,49 @@ impl CompileOptions {
         }
         // add end of the string
         res.push(&options[old..]);
+        res
+    }
+
+    pub fn new(options: &CStr, err: cl_int) -> CLResult<Self> {
+        let mut parsed_options = ParsedCompileOptions::from_option_str(options);
+        if options.is_empty() {
+            return Ok(CompileOptions {
+                parsed: parsed_options,
+                clang_args: Vec::new(),
+            });
+        }
+
+        let options = options.to_str().map_err(|_| err)?;
+        let res = Self::tokenize(options);
 
         let mut strings = Vec::new();
-        for a in res.into_iter() {
-            match a {
+        let mut iter = res.into_iter();
+        while let Some(token) = iter.next() {
+            match token {
+                // Math Intrinsics Options
+                "-cl-single-precision-constant"
+                | "-cl-fp32-correctly-rounded-divide-sqrt"
+                // Optimization Options
+                | "-cl-opt-disable"
+                | "-cl-strict-aliasing"
+                | "-cl-mad-enable"
+                | "-cl-no-signed-zeros"
+                | "-cl-unsafe-math-optimizations"
+                | "-cl-finite-math-only"
+                | "-cl-fast-relaxed-math"
+                | "-cl-uniform-work-group-size"
+                // Warning Options
+                | "-w"
+                | "-Werror"
+                // Debug Options
+                | "-g"
+                // Query Options
+                | "-cl-kernel-arg-info"
+                // Accepted for compatibility
+                | "-enable-link-options" => {
+                    strings.push(CString::new(token).unwrap());
+                }
+                // OpenCL C Version
                 "-cl-std=CL1.0" => parsed_options.clc_target = Some(CLVersion::Cl1_0),
                 "-cl-std=CL1.1" => parsed_options.clc_target = Some(CLVersion::Cl1_1),
                 "-cl-std=CL1.2" => parsed_options.clc_target = Some(CLVersion::Cl1_2),
@@ -362,7 +392,7 @@ impl CompileOptions {
                 "-cl-std=CL3.0" => parsed_options.clc_target = Some(CLVersion::Cl3_0),
                 "-cl-std=CL3.1" => parsed_options.clc_target = Some(CLVersion::Cl3_1),
                 "-cl-denorms-are-zero" => {
-                    strings.push(c"-fdenormal-fp-math=positive-zero".to_owned())
+                    strings.push(c"-fdenormal-fp-math=positive-zero".to_owned());
                 }
                 "-create-library" => {
                     parsed_options.create_lib = true;
@@ -376,14 +406,27 @@ impl CompileOptions {
                 "-cl-intel-greater-than-4GB-buffer-required" => {}
                 // Some applications use this when they detect QC hardware
                 "-qcom-accelerate-16-bit" => {}
+                // Preprocessor: -D name / -D name=definition / -I dir
+                "-D" | "-I" => {
+                    let arg = iter.next().ok_or(err)?;
+                    if arg.is_empty() {
+                        return Err(err);
+                    }
+                    strings.push(CString::new(token).unwrap());
+                    strings.push(CString::new(arg).unwrap());
+                }
                 // We ignore empty tokens
                 "" => {}
                 _ => {
-                    // Valid values are already covered above
-                    if a.starts_with("-cl-std=") {
+                    // Implementation-defined: accept -Dname / -Dname=value / -Idir
+                    // without a space. The spec requires a space between -D/-I and
+                    // the argument, but allows implementations to accept this form,
+                    // following common C compiler practice.
+                    if token.starts_with("-D") || token.starts_with("-I") {
+                        strings.push(CString::new(token).unwrap());
+                    } else {
                         return Err(err);
                     }
-                    strings.push(CString::new(a).unwrap());
                 }
             }
         }
@@ -417,6 +460,43 @@ impl CompileOptions {
         }
 
         args
+    }
+}
+
+/// Parsed and validated link options.
+struct LinkOptions {
+    create_lib: bool,
+}
+
+impl LinkOptions {
+    /// Parses and validates link options according to the OpenCL 3.0 specification
+    /// (Section 5.8.7). Returns CL_INVALID_LINKER_OPTIONS if any option is invalid.
+    fn new(options: &CStr) -> CLResult<Self> {
+        let mut create_lib = false;
+
+        if options.is_empty() {
+            return Ok(Self { create_lib });
+        }
+
+        let options = options.to_str().map_err(|_| CL_INVALID_LINKER_OPTIONS)?;
+
+        for token in options.split_whitespace() {
+            match token {
+                "-create-library" => {
+                    create_lib = true;
+                }
+                "-enable-link-options"
+                | "-cl-denorms-are-zero"
+                | "-cl-no-signed-zeros"
+                | "-cl-unsafe-math-optimizations"
+                | "-cl-finite-math-only"
+                | "-cl-fast-relaxed-math"
+                | "-cl-no-subgroup-ifp" => {}
+                _ => return Err(CL_INVALID_LINKER_OPTIONS),
+            }
+        }
+
+        Ok(Self { create_lib })
     }
 }
 
@@ -842,9 +922,13 @@ impl Program {
         context: Arc<Context>,
         devices: Vec<&'static Device>,
         input_programs: Vec<Arc<Self>>,
-        options: String,
+        options: &CStr,
         callback: Option<ProgramCB>,
     ) -> CLResult<(Arc<Self>, cl_int)> {
+        // Validate options before starting the link.
+        // clLinkProgram must return CL_INVALID_LINKER_OPTIONS if options are invalid.
+        let options = LinkOptions::new(options)?;
+
         // Link can begin, so we must return a valid program object.
         let builds_by_device = devices
             .iter()
@@ -1115,12 +1199,12 @@ fn create_link_closure(
     program: Arc<Program>,
     devices: Vec<&'static Device>,
     input_programs: Vec<Arc<Program>>,
-    options: String,
+    options: LinkOptions,
     mut callback: Option<ProgramCB>,
 ) -> impl FnMut() + Send + Sync + 'static {
     move || {
         let mut locks: Vec<_> = input_programs.iter().map(|p| p.build_info()).collect();
-        let is_lib = options.contains("-create-library");
+        let is_lib = options.create_lib;
 
         let mut build_info = program.build_info();
 

@@ -43,8 +43,7 @@ void radv_compute_pipeline_init(struct radv_compute_pipeline *pipeline, const st
                                 struct radv_shader *shader);
 
 struct radv_shader_binary *radv_compile_cs(const struct radv_compiler_info *compiler_info,
-                                           struct radv_shader_stage *cs_stage, bool keep_executable_info,
-                                           bool keep_statistic_info, bool is_internal,
+                                           struct radv_shader_stage *cs_stage, bool is_internal,
                                            struct radv_shader_debug_info *dbg);
 
 VkResult radv_compute_pipeline_create(VkDevice _device, VkPipelineCache _cache,

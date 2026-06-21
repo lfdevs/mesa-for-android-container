@@ -301,6 +301,7 @@ ac_sqtt_get_trace(struct ac_sqtt *data, const struct radeon_info *info,
 
    sqtt_trace->trace_shader_core_clock = data->trace_shader_core_clock;
    sqtt_trace->trace_memory_clock = data->trace_memory_clock;
+   sqtt_trace->instruction_timing_se_mask = data->instruction_timing_se_mask;
 
    /* Use maximum clocks when they aren't sampled. */
    if (!sqtt_trace->trace_shader_core_clock)
@@ -374,6 +375,9 @@ ac_sqtt_emit_start(const struct radeon_info *info, struct ac_pm4_state *pm4,
       if (ac_sqtt_se_is_disabled(info, se))
          continue;
 
+      const bool instruction_timing_enabled =
+         sqtt->instruction_timing_enabled && (sqtt->instruction_timing_se_mask & (1u << se));
+
       /* Target SEx and SH0. */
       ac_pm4_set_reg(pm4, R_030800_GRBM_GFX_INDEX, S_030800_SE_INDEX(se) |
                      S_030800_SH_INDEX(0) | S_030800_INSTANCE_BROADCAST_WRITES(1));
@@ -406,7 +410,7 @@ ac_sqtt_emit_start(const struct radeon_info *info, struct ac_pm4_state *pm4,
          /* Performance counters with SQTT are considered deprecated. */
          uint32_t token_exclude = 0;
 
-         if (!sqtt->instruction_timing_enabled) {
+         if (!instruction_timing_enabled) {
             /* Reduce SQTT traffic when instruction timing isn't enabled. */
             token_exclude |= V_0367B8_TOKEN_EXCLUDE_VMEMEXEC | V_0367B8_TOKEN_EXCLUDE_ALUEXEC |
                              V_0367B8_TOKEN_EXCLUDE_VALUINST | V_0367B8_TOKEN_EXCLUDE_IMMEDIATE |
@@ -447,7 +451,7 @@ ac_sqtt_emit_start(const struct radeon_info *info, struct ac_pm4_state *pm4,
          /* Performance counters with SQTT are considered deprecated. */
          uint32_t token_exclude = V_008D18_TOKEN_EXCLUDE_PERF;
 
-         if (!sqtt->instruction_timing_enabled) {
+         if (!instruction_timing_enabled) {
             /* Reduce SQTT traffic when instruction timing isn't enabled. */
             token_exclude |= V_008D18_TOKEN_EXCLUDE_VMEMEXEC | V_008D18_TOKEN_EXCLUDE_ALUEXEC |
                              V_008D18_TOKEN_EXCLUDE_VALUINST | V_008D18_TOKEN_EXCLUDE_IMMEDIATE |

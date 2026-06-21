@@ -87,14 +87,15 @@ brw_do_emit_fb_writes(brw_shader &s, int nr_color_regions, bool replicate_alpha)
    }
 
    if (write == NULL) {
-      /* Disable null_rt if the shader doesn't write any relevant output.
+      struct brw_fs_prog_data *prog_data = brw_fs_prog_data(s.prog_data);
+      /* Enable null_rt if the shader doesn't write any relevant output.
        */
       const bool use_null_rt =
+         prog_data->alpha_to_coverage == INTEL_NEVER &&
+         !prog_data->uses_omask &&
          (s.nir->info.outputs_written &
-          (BITFIELD_RANGE(FRAG_RESULT_DATA0, 8) |
-           BITFIELD_BIT(FRAG_RESULT_DEPTH) |
-           BITFIELD_BIT(FRAG_RESULT_STENCIL) |
-           BITFIELD64_BIT(FRAG_RESULT_SAMPLE_MASK))) == 0;
+          (BITFIELD64_BIT(FRAG_RESULT_DEPTH) |
+           BITFIELD64_BIT(FRAG_RESULT_STENCIL))) == 0;
 
       /* Even if there's no color buffers enabled, we still need to send alpha
        * out the pipeline to our null renderbuffer to support alpha-testing,
@@ -140,7 +141,6 @@ brw_emit_interpolation_setup(brw_shader &s)
    const struct intel_device_info *devinfo = s.devinfo;
    const brw_builder bld = brw_builder(&s);
    brw_builder abld = bld.annotate("compute pixel centers");
-   const struct brw_fs_prog_key *wm_key = (brw_fs_prog_key*) s.key;
    struct brw_fs_prog_data *fs_prog_data = brw_fs_prog_data(s.prog_data);
 
    brw_reg ub_cps_width, ub_cps_height;
@@ -157,8 +157,7 @@ brw_emit_interpolation_setup(brw_shader &s)
          ubld.MOV(cps_size, brw_imm_ud(0x00000101));
          break;
       case INTEL_SOMETIMES:
-         brw_check_dynamic_fs_config(ubld, fs_prog_data,
-                                     INTEL_FS_CONFIG_COARSE_RT_WRITES);
+         brw_check_dynamic_fs_config(ubld, INTEL_FS_CONFIG_COARSE_RT_WRITES);
 
          set_predicate_inv(BRW_PREDICATE_NORMAL, false,
                            ubld.MOV(cps_size, r1_0));
@@ -290,8 +289,7 @@ brw_emit_interpolation_setup(brw_shader &s)
       const brw_builder dbld =
          abld.exec_all().group(MIN2(16, s.dispatch_width) * 2, 0);
 
-      brw_check_dynamic_fs_config(dbld, fs_prog_data,
-                                  INTEL_FS_CONFIG_COARSE_RT_WRITES);
+      brw_check_dynamic_fs_config(dbld, INTEL_FS_CONFIG_COARSE_RT_WRITES);
 
       int_pixel_offset_x = dbld.vgrf(BRW_TYPE_UW);
       set_predicate(BRW_PREDICATE_NORMAL,
@@ -433,53 +431,6 @@ brw_emit_interpolation_setup(brw_shader &s)
       s.pixel_w = brw_fetch_payload_reg(abld, payload.source_w_reg);
       s.wpos_w = bld.vgrf(BRW_TYPE_F);
       abld.emit(SHADER_OPCODE_RCP, s.wpos_w, s.pixel_w);
-   }
-
-   if (wm_key->persample_interp == INTEL_SOMETIMES) {
-      const brw_builder ubld = bld.exec_all().group(16, 0);
-      bool loaded_flag = false;
-
-      for (int i = 0; i < INTEL_BARYCENTRIC_MODE_COUNT; ++i) {
-         if (!(fs_prog_data->barycentric_interp_modes & BITFIELD_BIT(i)))
-            continue;
-
-         /* The sample mode will always be the top bit set in the perspective
-          * or non-perspective section.  In the case where no SAMPLE mode was
-          * requested, fs_prog_data_barycentric_modes() will swap out the top
-          * mode for SAMPLE so this works regardless of whether SAMPLE was
-          * requested or not.
-          */
-         int sample_mode;
-         if (BITFIELD_BIT(i) & INTEL_BARYCENTRIC_NONPERSPECTIVE_BITS) {
-            sample_mode = util_last_bit(fs_prog_data->barycentric_interp_modes &
-                                        INTEL_BARYCENTRIC_NONPERSPECTIVE_BITS) - 1;
-         } else {
-            sample_mode = util_last_bit(fs_prog_data->barycentric_interp_modes &
-                                        INTEL_BARYCENTRIC_PERSPECTIVE_BITS) - 1;
-         }
-         assert(fs_prog_data->barycentric_interp_modes &
-                BITFIELD_BIT(sample_mode));
-
-         if (i == sample_mode)
-            continue;
-
-         uint8_t *barys = payload.barycentric_coord_reg[i];
-
-         uint8_t *sample_barys = payload.barycentric_coord_reg[sample_mode];
-         assert(barys[0] && sample_barys[0]);
-
-         if (!loaded_flag) {
-            brw_check_dynamic_fs_config(ubld, fs_prog_data,
-                                        INTEL_FS_CONFIG_PERSAMPLE_INTERP);
-         }
-
-         for (unsigned j = 0; j < s.dispatch_width / 8; j++) {
-            set_predicate(
-               BRW_PREDICATE_NORMAL,
-               ubld.MOV(brw_vec8_grf(barys[j / 2] + (j % 2) * 2, 0),
-                        brw_vec8_grf(sample_barys[j / 2] + (j % 2) * 2, 0)));
-         }
-      }
    }
 
    for (int i = 0; i < INTEL_BARYCENTRIC_MODE_COUNT; ++i) {
@@ -706,12 +657,19 @@ calculate_urb_setup(const struct intel_device_info *devinfo,
  * variables so that we catch interpolateAtCentroid() messages too, which
  * also need the INTEL_BARYCENTRIC_[NON]PERSPECTIVE_CENTROID mode set up.
  */
-static unsigned
-brw_compute_barycentric_interp_modes(const struct intel_device_info *devinfo,
-                                     const struct brw_fs_prog_key *key,
-                                     const nir_shader *shader)
+/**
+ * Return a bitfield where bit n is set if barycentric interpolation
+ * mode n (see enum intel_barycentric_mode) is needed by the fragment
+ * shader barycentric intrinsics that take an explicit offset or
+ * sample as argument.
+ */
+static void
+brw_compute_barycentric_interp_modes(const nir_shader *shader,
+                                     unsigned *out_interp_modes,
+                                     unsigned *out_offset_interp_modes)
 {
-   unsigned barycentric_interp_modes = 0;
+   *out_interp_modes = 0;
+   *out_offset_interp_modes = 0;
 
    nir_foreach_function_impl(impl, shader) {
       nir_foreach_block(block, impl) {
@@ -723,52 +681,25 @@ brw_compute_barycentric_interp_modes(const struct intel_device_info *devinfo,
             switch (intrin->intrinsic) {
             case nir_intrinsic_load_barycentric_pixel:
             case nir_intrinsic_load_barycentric_centroid:
-            case nir_intrinsic_load_barycentric_sample:
-            case nir_intrinsic_load_barycentric_at_sample:
-            case nir_intrinsic_load_barycentric_at_offset:
+            case nir_intrinsic_load_barycentric_sample: {
+               enum intel_barycentric_mode bary = brw_barycentric_mode(intrin);
+               *out_interp_modes |= 1 << bary;
                break;
-            default:
-               continue;
             }
 
-            enum intel_barycentric_mode bary =
-               brw_barycentric_mode(key, intrin);
+            case nir_intrinsic_load_barycentric_at_sample:
+            case nir_intrinsic_load_barycentric_at_offset: {
+               enum intel_barycentric_mode bary = brw_barycentric_mode(intrin);
+               *out_offset_interp_modes |= 1 << bary;
+               break;
+            }
 
-            barycentric_interp_modes |= 1 << bary;
+            default:
+               break;
+            }
          }
       }
    }
-
-   return barycentric_interp_modes;
-}
-
-/**
- * Return a bitfield where bit n is set if barycentric interpolation
- * mode n (see enum intel_barycentric_mode) is needed by the fragment
- * shader barycentric intrinsics that take an explicit offset or
- * sample as argument.
- */
-static unsigned
-brw_compute_offset_barycentric_interp_modes(const struct brw_fs_prog_key *key,
-                                            const nir_shader *shader)
-{
-   unsigned barycentric_interp_modes = 0;
-
-   nir_foreach_function_impl(impl, shader) {
-      nir_foreach_block(block, impl) {
-         nir_foreach_instr(instr, block) {
-            if (instr->type != nir_instr_type_intrinsic)
-               continue;
-
-            nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
-            if (intrin->intrinsic == nir_intrinsic_load_barycentric_at_offset ||
-                intrin->intrinsic == nir_intrinsic_load_barycentric_at_sample)
-               barycentric_interp_modes |= 1 << brw_barycentric_mode(key, intrin);
-         }
-      }
-   }
-
-   return barycentric_interp_modes;
 }
 
 static void
@@ -833,6 +764,18 @@ brw_nir_populate_fs_prog_data(nir_shader *shader,
                               const struct brw_mue_map *mue_map,
                               int *per_primitive_offsets)
 {
+   unsigned interp_modes, offset_interp_modes;
+   brw_compute_barycentric_interp_modes(shader, &interp_modes, &offset_interp_modes);
+
+   /* Prior to Gfx20, HW has a pixel interpolator which needs to be configured
+    * appropriately for interpolation at offset/sample. Gfx20+ does that
+    * calculation in software so we only need to look at offset_interp_modes.
+    */
+   if (devinfo->ver < 20)
+      interp_modes |= offset_interp_modes;
+
+   assert(key->multisample_fbo != INTEL_NEVER || !key->persample_interp);
+
    prog_data->uses_kill = shader->info.fs.uses_discard;
    prog_data->uses_omask = !key->ignore_sample_mask_out &&
       (shader->info.outputs_written & BITFIELD64_BIT(FRAG_RESULT_SAMPLE_MASK));
@@ -845,31 +788,47 @@ brw_nir_populate_fs_prog_data(nir_shader *shader,
       shader->info.outputs_written & BITFIELD64_BIT(FRAG_RESULT_DUAL_SRC_BLEND);
    assert(!prog_data->dual_src_blend || key->nr_color_regions == 1);
 
-   prog_data->sample_shading =
-      shader->info.fs.uses_sample_shading ||
-      shader->info.outputs_read;
-   prog_data->api_sample_shading = key->api_sample_shading;
-   prog_data->min_sample_shading = key->min_sample_shading;
+   const bool sample_shading = shader->info.fs.uses_sample_shading;
 
-   assert(key->multisample_fbo != INTEL_NEVER ||
-          key->persample_interp == INTEL_NEVER);
-
-   prog_data->persample_dispatch = key->persample_interp;
-   if (prog_data->sample_shading)
-      prog_data->persample_dispatch = INTEL_ALWAYS;
-
-   /* We can only persample dispatch if we have a multisample FBO */
-   prog_data->persample_dispatch = MIN2(prog_data->persample_dispatch,
-                                        key->multisample_fbo);
-
-   /* Currently only the Vulkan API allows alpha_to_coverage to be dynamic. If
-    * persample_dispatch & multisample_fbo are not dynamic, Anv should be able
-    * to definitively tell whether alpha_to_coverage is on or off.
+   prog_data->persample_interp = sample_shading || key->persample_interp;
+   /* If we have both pixel & sample interpolation we need to enable persample
+    * dispatch, otherwise spec allows us to fallback to pixel in non MSAA
+    * cases.
     */
-   prog_data->alpha_to_coverage = key->alpha_to_coverage;
+   const unsigned interp_at_pixel_and_sample_bits =
+      BITFIELD_BIT(INTEL_BARYCENTRIC_PERSPECTIVE_PIXEL) |
+      BITFIELD_BIT(INTEL_BARYCENTRIC_PERSPECTIVE_SAMPLE);
+   const bool interp_at_pixel_and_sample =
+      (interp_modes & interp_at_pixel_and_sample_bits) ==
+      interp_at_pixel_and_sample_bits;
+   prog_data->persample_dispatch =
+      ((prog_data->persample_interp && key->multisample_fbo >= INTEL_SOMETIMES) ||
+       interp_at_pixel_and_sample) ?
+      INTEL_ALWAYS : INTEL_NEVER;
+
+   /* Move sample barycentric modes to pixel when persample dispatch is always
+    * disabled.
+    */
+   {
+      unsigned tmp = 0;
+      u_foreach_bit(b, interp_modes) {
+         tmp |= BITFIELD_BIT(
+            intel_fs_barycentric_mode_for_persample_dispatch(
+               prog_data->persample_dispatch,
+               (enum intel_barycentric_mode) b));
+      }
+      interp_modes = tmp;
+   }
+
+   /* Gate alpha to coverage with the draw buffer 0 being written.
+    */
+   prog_data->alpha_to_coverage =
+      (shader->info.outputs_written &
+       (BITFIELD64_BIT(FRAG_RESULT_COLOR) |
+        BITFIELD64_BIT(FRAG_RESULT_DATA0))) != 0 ?
+      key->alpha_to_coverage : INTEL_NEVER;
 
    assert(devinfo->verx10 >= 125 || key->mesh_input == INTEL_NEVER);
-   prog_data->mesh_input = key->mesh_input;
 
    assert(devinfo->verx10 >= 200 || key->provoking_vertex_last == INTEL_NEVER);
    prog_data->provoking_vertex_last = key->provoking_vertex_last;
@@ -899,49 +858,29 @@ brw_nir_populate_fs_prog_data(nir_shader *shader,
    prog_data->post_depth_coverage = shader->info.fs.post_depth_coverage;
    prog_data->inner_coverage = shader->info.fs.inner_coverage;
 
-   prog_data->barycentric_interp_modes =
-      brw_compute_barycentric_interp_modes(devinfo, key, shader);
-
-   /* From the BDW PRM documentation for 3DSTATE_WM:
-    *
-    *    "MSDISPMODE_PERSAMPLE is required in order to select Perspective
-    *     Sample or Non- perspective Sample barycentric coordinates."
-    *
-    * So cleanup any potentially set sample barycentric mode when not in per
-    * sample dispatch.
-    */
-   if (prog_data->persample_dispatch == INTEL_NEVER) {
-      prog_data->barycentric_interp_modes &=
-         ~BITFIELD_BIT(INTEL_BARYCENTRIC_PERSPECTIVE_SAMPLE);
-   }
+   prog_data->barycentric_interp_modes = interp_modes;
 
    if (devinfo->ver >= 20) {
-      const unsigned offset_bary_modes =
-         brw_compute_offset_barycentric_interp_modes(key, shader);
-
       prog_data->vertex_attributes_bypass = brw_needs_vertex_attributes_bypass(shader);
 
       prog_data->uses_npc_bary_coefficients =
-         offset_bary_modes & INTEL_BARYCENTRIC_NONPERSPECTIVE_BITS;
+         offset_interp_modes & INTEL_BARYCENTRIC_NONPERSPECTIVE_BITS;
       prog_data->uses_pc_bary_coefficients =
-         offset_bary_modes & ~INTEL_BARYCENTRIC_NONPERSPECTIVE_BITS;
+         offset_interp_modes & ~INTEL_BARYCENTRIC_NONPERSPECTIVE_BITS;
       prog_data->uses_sample_offsets =
-         offset_bary_modes & ((1 << INTEL_BARYCENTRIC_PERSPECTIVE_SAMPLE) |
-                              (1 << INTEL_BARYCENTRIC_NONPERSPECTIVE_SAMPLE));
+         offset_interp_modes & ((1 << INTEL_BARYCENTRIC_PERSPECTIVE_SAMPLE) |
+                                (1 << INTEL_BARYCENTRIC_NONPERSPECTIVE_SAMPLE));
    }
 
    prog_data->uses_nonperspective_interp_modes =
       (prog_data->barycentric_interp_modes & INTEL_BARYCENTRIC_NONPERSPECTIVE_BITS) ||
       prog_data->uses_npc_bary_coefficients;
 
-   /* The current VK_EXT_graphics_pipeline_library specification requires
-    * coarse to specified at compile time. But per sample interpolation can be
-    * dynamic. So we should never be in a situation where coarse &
-    * persample_interp are both respectively true & INTEL_ALWAYS.
-    *
-    * Coarse will dynamically turned off when persample_interp is active.
+   /* Variable rate shading & sample shading are 2 features that are known at
+    * compile time in Vulkan GPL & ESO scenarios, so a driver should not be
+    * setting both at the same time.
     */
-   assert(!key->coarse_pixel || key->persample_interp != INTEL_ALWAYS);
+   assert(!key->coarse_pixel || !key->persample_interp);
 
    prog_data->coarse_pixel_dispatch =
       intel_sometimes_invert(prog_data->persample_dispatch);
@@ -952,7 +891,7 @@ brw_nir_populate_fs_prog_data(nir_shader *shader,
        (devinfo->verx10 < 200 &&
         (prog_data->uses_omask ||
          prog_data->uses_sample_mask)) ||
-       prog_data->sample_shading ||
+       sample_shading ||
        (prog_data->computed_depth_mode != BRW_PSCDEPTH_OFF) ||
        prog_data->computed_stencil ||
        devinfo->ver < 11) {

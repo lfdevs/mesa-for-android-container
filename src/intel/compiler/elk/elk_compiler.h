@@ -930,24 +930,6 @@ static inline bool
 elk_fs_prog_data_is_persample(const struct elk_fs_prog_data *prog_data,
                               enum intel_fs_config pushed_fs_config)
 {
-   if (pushed_fs_config & INTEL_FS_CONFIG_ENABLE_DYNAMIC) {
-      if (!(pushed_fs_config & INTEL_FS_CONFIG_MULTISAMPLE_FBO))
-         return false;
-
-      if (prog_data->sample_shading)
-         assert(pushed_fs_config & INTEL_FS_CONFIG_PERSAMPLE_DISPATCH);
-
-      if (pushed_fs_config & INTEL_FS_CONFIG_PERSAMPLE_DISPATCH)
-         assert(prog_data->persample_dispatch != ELK_NEVER);
-      else
-         assert(prog_data->persample_dispatch != ELK_ALWAYS);
-
-      return (pushed_fs_config & INTEL_FS_CONFIG_PERSAMPLE_DISPATCH) != 0;
-   }
-
-   assert(prog_data->persample_dispatch == ELK_ALWAYS ||
-          prog_data->persample_dispatch == ELK_NEVER);
-
    return prog_data->persample_dispatch;
 }
 
@@ -963,10 +945,7 @@ elk_fs_prog_data_barycentric_modes(const struct elk_fs_prog_data *prog_data,
    if (!(pushed_fs_config & INTEL_FS_CONFIG_ENABLE_DYNAMIC))
       return modes;
 
-   if (pushed_fs_config & INTEL_FS_CONFIG_PERSAMPLE_INTERP) {
-      assert(prog_data->persample_dispatch == ELK_ALWAYS ||
-             (pushed_fs_config & INTEL_FS_CONFIG_PERSAMPLE_DISPATCH));
-
+   if (prog_data->persample_dispatch == ELK_ALWAYS) {
       /* Making dynamic per-sample interpolation work is a bit tricky.  The
        * hardware will hang if SAMPLE is requested but per-sample dispatch is
        * not enabled.  This means we can't preemptively add SAMPLE to the
@@ -1001,6 +980,7 @@ elk_fs_prog_data_barycentric_modes(const struct elk_fs_prog_data *prog_data,
          modes |= BITFIELD_BIT(ELK_BARYCENTRIC_NONPERSPECTIVE_SAMPLE);
       }
    } else {
+      assert(prog_data->persample_dispatch == ELK_NEVER);
       /* If we're not using per-sample interpolation, we need to disable the
        * per-sample bits.
        *

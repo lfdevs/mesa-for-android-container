@@ -23,5 +23,18 @@ VK_{KHR,EXT}_index_type_uint8 on pvr
 VK_EXT_debug_marker in vulkan runtime
 VK_EXT_mesh_shader on NVK
 VK_KHR_device_fault on RADV
-VK_GOOGLE_display_timing for KHR_display on anv, pvr, radv, tu, v3dv
+VK_GOOGLE_display_timing for KHR_display on anv, panvk, pvr, radv, tu, v3dv
 VK_KHR_shader_abort on RADV
+VK_KHR_shader_fma on panvk
+VK_NV_shader_atomic_float16_vector on NVK
+VK_KHR_compute_shader_derivatives on panvk
+VK_EXT_shader_subgroup_ballot on pvr
+VK_EXT_shader_subgroup_vote on pvr
+VK_KHR_shader_subgroup_rotate on pvr
+VK_KHR_shader_subgroup_uniform_control_flow on pvr
+VK_EXT_subgroup_size_control on pvr
+VK_EXT_rasterization_order_attachment_access on panvk
+VK_ARM_rasterization_order_attachment_access on panvk
+GL_OES_texture_float on etnaviv/HALF_FLOAT
+GL_ARB_texture_float on etnaviv/HALF_FLOAT
+VK_NVX_binary_import on NVK

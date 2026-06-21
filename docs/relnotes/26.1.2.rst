@@ -32,9 +32,20 @@ New features
 Bug fixes
 ---------
 
+- 7900XT, hardware acceleration crashes chromium-based apps unless LIBVA_DRIVER_NAME=null
 - ANV: dEQP ASTC tests crash w/ FPE_INTDIV on Xe3
+- Dishonored 2 flickering menus on BMG and DG2
+- SIGABRT: Invalid free in zink_destroy_resource_surface_cache()
+- Uplink text rendering still bugged out
+- [radeonsi/VCN] RX 9070 XT (Navi 48, gfx1201): VCN unified ring timeout during VAAPI HEVC encode from Steam Game Recording
+- [radv] Regression causes GPU page faults in Crimson Desert
+- gallium/vl: scale_vaapi limited range RGB to limited range YUV broken with red tint
 - intel/blorp: VK_ANDROID_external_format regression on buildtype=debug
+- ir3: THREAD64→THREAD128 heuristic change in 25.2.0 causes vertical line artifacts in No Man's Sky on Adreno 740 (a7xx)
+- r300: dEQP-GLES2.functional.shaders.struct.uniform.(not\_)equal_fragment regression
+- r600, sfn: Lowering to assembly failed on R700 while running ShooterGame demo
 - the new mesa 26.1.0-1 is causing mutliple graphical issues on intel i5-2400 and higher (integrated graphics)
+- wsi: Suspicious assertion in wsi_create_buffer_blit_context
 
 
 Changes

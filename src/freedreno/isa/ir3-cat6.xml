@@ -1311,7 +1311,8 @@ TODO rename UAV src to "UAV" so disasm_field_cb can find it easily?
 
 <bitset name="resbase" extends="#instruction-cat6-a6xx-ibo-1src">
 	<doc>
-		RESourceBASE - returns the address of the bindless descriptor
+		RESourceBASE - returns the value encoded into TEX_CONST_7_FLAG_LO/HI
+		of the given descriptor. Returns 0 if NUM_ELEMENTS == 0.
 	</doc>
 	<pattern low="14" high="19">001100</pattern>   <!-- OPC -->
 </bitset>

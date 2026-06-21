@@ -216,7 +216,7 @@ populate_base_prog_key(const struct anv_device *device,
 {
    key->robust_flags = robust_flags;
    key->limit_trig_input_range =
-      device->physical->instance->limit_trig_input_range;
+      device->physical->instance->drirc.debug.limit_trig_input_range;
 
    populate_sampler_prog_key(device->info, &key->tex);
 }
@@ -317,7 +317,7 @@ populate_fs_prog_key(const struct anv_graphics_pipeline *pipeline,
          key->multisample_fbo = ELK_ALWAYS;
       }
 
-      if (device->physical->instance->sample_mask_out_opengl_behaviour)
+      if (device->physical->instance->drirc.performance.sample_mask_out_opengl_behaviour)
          key->ignore_sample_mask_out = !key->multisample_fbo;
    }
 }
@@ -409,7 +409,7 @@ anv_pipeline_hash_compute(struct anv_compute_pipeline *pipeline,
    const bool rba = device->vk.enabled_features.robustBufferAccess;
    _mesa_blake3_update(&ctx, &rba, sizeof(rba));
 
-   const uint8_t afs = device->physical->instance->assume_full_subgroups;
+   const uint8_t afs = device->physical->instance->drirc.performance.assume_full_subgroups;
    _mesa_blake3_update(&ctx, &afs, sizeof(afs));
 
    _mesa_blake3_update(&ctx, stage->shader_blake3,
@@ -1509,7 +1509,7 @@ anv_pipeline_compile_cs(struct anv_compute_pipeline *pipeline,
        * which can cause bugs, as they may expect bigger size of the
        * subgroup than we choose for the execution.
        */
-      if (device->physical->instance->assume_full_subgroups &&
+      if (device->physical->instance->drirc.performance.assume_full_subgroups &&
           stage.nir->info.uses_wide_subgroup_intrinsics &&
           stage.nir->info.api_subgroup_size == ELK_SUBGROUP_SIZE &&
           local_size &&

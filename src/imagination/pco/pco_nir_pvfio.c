@@ -1041,9 +1041,10 @@ bool pco_nir_point_size(nir_shader *shader)
                                   VARYING_SLOT_PSIZ,
                                   glsl_float_type());
 
+   nir_function_impl *entrypoint = nir_shader_get_entrypoint(shader);
    /* Add a point size write. */
    nir_builder b = nir_builder_at(
-      nir_after_block(nir_impl_last_block(nir_shader_get_entrypoint(shader))));
+      nir_after_block(nir_impl_last_block(entrypoint)));
 
    nir_store_output(&b,
                     nir_imm_float(&b, PVR_POINT_SIZE_RANGE_MIN),
@@ -1058,7 +1059,8 @@ bool pco_nir_point_size(nir_shader *shader)
                        .num_slots = 1,
                     });
 
-   return true;
+   return nir_progress(true, entrypoint,
+                nir_metadata_control_flow);
 }
 
 static bool lower_front_face(nir_builder *b, nir_intrinsic_instr *intr)
@@ -1133,15 +1135,15 @@ bool pco_nir_lower_vs_intrinsics(nir_shader *shader)
                                      NULL);
 }
 
-bool pco_nir_lower_clip_cull_vars(nir_shader *shader)
+void pco_nir_lower_clip_cull_vars(nir_shader *shader)
 {
    if (shader->info.internal)
-      return false;
+      return;
 
    unsigned clip_cull_comps = shader->info.clip_distance_array_size +
                               shader->info.cull_distance_array_size;
    if (!clip_cull_comps)
-      return false;
+      return;
 
    /* Remove the old variables. */
    const gl_varying_slot clip_cull_locations[] = {
@@ -1171,10 +1173,6 @@ bool pco_nir_lower_clip_cull_vars(nir_shader *shader)
                                         VARYING_SLOT_CLIP_DIST1,
                                         glsl_vec_type(clip_cull_comps - 4));
    }
-
-   nir_metadata_invalidate(shader);
-
-   return true;
 }
 
 static bool
@@ -1264,7 +1262,7 @@ bool pco_nir_link_clip_cull_vars(nir_shader *producer, nir_shader *consumer)
 
    nir_shader_intrinsics_pass(producer,
                               clone_clip_cull_stores,
-                              nir_metadata_block_index | nir_metadata_dominance,
+                              nir_metadata_control_flow,
                               clone_var);
 
    clone_var =
@@ -1466,7 +1464,7 @@ bool pco_nir_link_multiview(nir_shader *producer,
    /* Lower view index loads in the consumer. */
    nir_shader_intrinsics_pass(consumer,
                               lower_load_view_index_fs,
-                              nir_metadata_all,
+                              nir_metadata_control_flow,
                               view_index_var);
 
    return true;

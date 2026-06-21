@@ -65,7 +65,7 @@
 #include "util/u_vector.h"
 #include "util/u_math.h"
 #include "util/vma.h"
-#include "util/xmlconfig.h"
+#include "hasvk_drirc.h"
 #include "vk_alloc.h"
 #include "vk_buffer.h"
 #include "vk_command_buffer.h"
@@ -923,20 +923,7 @@ struct anv_physical_device {
 struct anv_instance {
     struct vk_instance                          vk;
 
-    struct driOptionCache                       dri_options;
-    struct driOptionCache                       available_dri_options;
-
-    /**
-     * Workarounds for game bugs.
-     */
-    uint8_t                                     assume_full_subgroups;
-    bool                                        limit_trig_input_range;
-    bool                                        sample_mask_out_opengl_behaviour;
-    float                                       lower_depth_range_rate;
-    bool                                        report_vk_1_3;
-
-    /* HW workarounds */
-    bool                                        no_16bit;
+    struct hasvk_drirc                          drirc;
 };
 
 VkResult anv_init_wsi(struct anv_physical_device *physical_device);

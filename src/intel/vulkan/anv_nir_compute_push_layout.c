@@ -348,7 +348,7 @@ load_push_data_from_ptr(nir_builder *b,
     */
    if (nir_src_is_const(offset)) {
       nir_block *block = nir_cursor_current_block(b->cursor);
-      nir_function_impl *impl = nir_cf_node_get_function(&block->cf_node);
+      nir_function_impl *impl = block->impl;
       b->cursor = nir_before_impl(impl);
    }
 

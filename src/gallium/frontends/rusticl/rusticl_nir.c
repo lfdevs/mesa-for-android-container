@@ -156,3 +156,52 @@ rusticl_lower_inputs(nir_shader *shader)
    shader->info.first_ubo_is_default_ubo = true;
    return progress;
 }
+
+static void
+create_libclc_config_func_impl(nir_shader *shader, const char *name, bool value)
+{
+    nir_function *fma = nir_function_create(shader, name);
+
+    fma->num_params = 1;
+    fma->params = ralloc_array(fma, nir_parameter, 1);
+    fma->params[0] = (struct nir_parameter) {
+        .num_components = 1,
+        .bit_size = shader->info.cs.ptr_size,
+        .is_return = true,
+        .type = glsl_uintN_t_type(shader->info.cs.ptr_size),
+    };
+
+    nir_function_impl_create(fma);
+    nir_builder b = nir_builder_at(nir_before_impl(fma->impl));
+    nir_def *param = nir_load_param(&b, 0);
+    nir_deref_instr *deref = nir_build_deref_cast(&b, param, nir_var_function_temp, glsl_bool_type(), 0);
+    nir_store_deref(&b, deref, nir_imm_bool(&b, value), 0x1);
+}
+
+bool
+rusticl_insert_libclc_config(nir_shader *shader)
+{
+    nir_foreach_function_impl(impl, shader)
+        nir_no_progress(impl);
+
+    bool has_fma = nir_has_ffma(shader, 32);
+    bool daz16 = nir_is_denorm_flush_to_zero(shader->info.float_controls_execution_mode, 16);
+    bool daz32 = nir_is_denorm_flush_to_zero(shader->info.float_controls_execution_mode, 32);
+    bool daz64 = nir_is_denorm_flush_to_zero(shader->info.float_controls_execution_mode, 64);
+    bool dp16 = nir_is_denorm_preserve(shader->info.float_controls_execution_mode, 16);
+    bool dp32 = nir_is_denorm_preserve(shader->info.float_controls_execution_mode, 32);
+    bool dp64 = nir_is_denorm_preserve(shader->info.float_controls_execution_mode, 64);
+
+    create_libclc_config_func_impl(shader, "__clc_runtime_has_hw_fma32", has_fma);
+
+    create_libclc_config_func_impl(shader, "__clc_fp16_subnormals_supported", dp16);
+    create_libclc_config_func_impl(shader, "__clc_fp32_subnormals_supported", dp32);
+    create_libclc_config_func_impl(shader, "__clc_fp64_subnormals_supported", dp64);
+
+    /* LLVM-23 renamed the denorm ones and reversed their meaning */
+    create_libclc_config_func_impl(shader, "__clc_denormals_are_zero_fp16", daz16);
+    create_libclc_config_func_impl(shader, "__clc_denormals_are_zero_fp32", daz32);
+    create_libclc_config_func_impl(shader, "__clc_denormals_are_zero_fp64", daz64);
+
+    return true;
+}

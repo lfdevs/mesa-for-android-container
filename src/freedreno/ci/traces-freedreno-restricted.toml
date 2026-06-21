@@ -590,8 +590,8 @@ freedreno-a750 = { checksum = "66854c4c188d6c31b7eee767785096313295a09a8ca3c71ea
 path = "steam-d3d9/Oblivion_unknown_dx9_unknown_unknown_none2.trace"
 nonloopable = true
 [traces.devices]
-freedreno-a660 = { checksum = "a329851d66e946d5b5eeffca4d81e3984a421dd6dab97b50a177a9a420ede165" }
-freedreno-a750 = { checksum = "a329851d66e946d5b5eeffca4d81e3984a421dd6dab97b50a177a9a420ede165" }
+freedreno-a660 = { checksum = "2830bf18501492f5b453fb15874c438810b08d025dfce5a26f9be845d558081a" }
+freedreno-a750 = { checksum = "2830bf18501492f5b453fb15874c438810b08d025dfce5a26f9be845d558081a" }
 
 [[traces]]
 path = "steam-d3d9/Oblivion_unknown_dx9_unknown_unknown_none.trace"
@@ -1248,7 +1248,7 @@ freedreno-a660 = { checksum = "8be08d609a38c2410a4abcb79c421b89df0b149bd4a7c3a72
 path = "steam-d3d11/unigine_heaven_1.rdc"
 sysmem = 800
 [traces.devices]
-freedreno-a660 = { checksum = "9f773449f8a418a80ba28fd2c8242b2f31bdcae484fb170fcebfee54afcdb0b7" }
+freedreno-a660 = { checksum = "6dcde8a286917af66f23ecdd81eecfc7e412d7e305d6e6657e639802eac159ef" }
 
 [[traces]]
 path = "steam-d3d11/unigine_superposition_1.rdc"

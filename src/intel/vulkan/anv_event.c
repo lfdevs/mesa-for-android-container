@@ -21,7 +21,7 @@ VkResult anv_CreateEvent(
       return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
 
    event->flags = pCreateInfo->flags;
-   event->state = anv_state_pool_alloc(&device->dynamic_state_pool,
+   event->state = anv_state_pool_alloc(anv_device_get_dynamic_state_pool(device),
                                        sizeof(uint64_t), 8);
    *(uint64_t *)event->state.map = 0;
 
@@ -45,7 +45,7 @@ void anv_DestroyEvent(
 
    ANV_RMV(resource_destroy, device, event);
 
-   anv_state_pool_free(&device->dynamic_state_pool, event->state);
+   anv_state_pool_free(anv_device_get_dynamic_state_pool(device), event->state);
 
    vk_object_free(&device->vk, pAllocator, event);
 }

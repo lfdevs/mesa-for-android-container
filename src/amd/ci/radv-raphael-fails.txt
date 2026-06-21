@@ -59,8 +59,8 @@ dEQP-VK.api.copy_and_blit.core.use_after_copy.d32_sfloat_s8_uint.transfer_dst_op
 dEQP-VK.api.copy_and_blit.core.use_after_copy.d32_sfloat_s8_uint.transfer_dst_optimal.64x64x2_tq_img2img,Fail
 dEQP-VK.api.copy_and_blit.core.use_after_copy.d32_sfloat_s8_uint.transfer_dst_optimal.64x64x2_tq_regions,Fail
 dEQP-VK.api.copy_and_blit.core.use_after_copy.d32_sfloat_s8_uint.transfer_dst_optimal.64x64x2_tq_regions_img2img,Fail
-dEQP-VK.api.copy_and_blit.core.use_after_copy.e5b9g9r9_ufloat_pack32.transfer_dst_optimal.1024x1024x1_tq_color_att_flag,Fail
 
+dEQP-VK.api.copy_and_blit.core.use_after_copy.e5b9g9r9_ufloat_pack32.transfer_dst_optimal.1024x1024x1_tq_color_att_flag,Fail
 dEQP-VK.api.copy_and_blit.core.use_after_copy.e5b9g9r9_ufloat_pack32.transfer_dst_optimal.1024x1024x1_tq_regions_color_att_flag,Fail
 dEQP-VK.api.copy_and_blit.core.use_after_copy.e5b9g9r9_ufloat_pack32.transfer_dst_optimal.1024x1024x2_tq_color_att_flag,Fail
 dEQP-VK.api.copy_and_blit.core.use_after_copy.e5b9g9r9_ufloat_pack32.transfer_dst_optimal.1024x1024x2_tq_color_att_flag_img2img,Fail

@@ -1636,7 +1636,7 @@
     <field name="Layer index enable" size="1" start="0:20" type="bool"/>
     <field name="Scissor array enable" size="1" start="0:21" type="bool"/>
     <field name="Position FIFO format" size="2" start="0:22" type="FIFO format"/>
-    <field name="View mask" size="8" start="0:24" type="hex"/>
+    <field name="Layer index" size="8" start="0:24" type="uint"/>
   </struct>
 
   <enum name="VRS Draw Rate">
@@ -1663,6 +1663,7 @@
     <field name="VRS Draw Rate" size="4" start="0:0" type="VRS Draw Rate" default="1x1"/>
     <field name="VRS Combiner 0" size="3" start="0:4" type="VRS Combiner" default="Keep"/>
     <field name="VRS Combiner 1" size="3" start="0:7" type="VRS Combiner" default="Keep"/>
+    <field name="View mask" size="16" start="0:16" type="hex"/>
   </struct>
 
   <struct name="Primitive">

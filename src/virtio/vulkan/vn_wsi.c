@@ -178,7 +178,7 @@ vn_wsi_init(struct vn_physical_device *physical_dev)
       &physical_dev->instance->base.vk.alloc;
    VkResult result = wsi_device_init(
       &physical_dev->wsi_device, vn_physical_device_to_handle(physical_dev),
-      vn_wsi_proc_addr, alloc, -1, &physical_dev->instance->dri_options,
+      vn_wsi_proc_addr, alloc, -1, &physical_dev->instance->drirc.options,
       &(struct wsi_device_options){
          .sw_device = use_sw_device,
          .extra_xwayland_image = true,
@@ -368,7 +368,7 @@ vn_wsi_validate_image_format_info(struct vn_physical_device *physical_dev,
     * both plane counts to 1 while virgl may be involved.
     */
    if (modifier_info &&
-       !physical_dev->instance->enable_wsi_multi_plane_modifiers &&
+       !physical_dev->instance->drirc.performance.enable_wsi_multi_plane_modifiers &&
        modifier_info->drmFormatModifier != DRM_FORMAT_MOD_LINEAR) {
       const uint32_t plane_count = vn_modifier_plane_count(
          physical_dev, info->format, modifier_info->drmFormatModifier);

@@ -68,7 +68,7 @@ mod result {
     pub type Result<T> = std::result::Result<T, Error>;
 }
 
-pub use result::{err, Error, Result};
+pub use result::{Error, Result, err};
 
 pub fn is_data_type_name(s: &str) -> bool {
     let mut s = s.as_bytes();
@@ -159,13 +159,17 @@ impl ArchSet {
         ((self.bits >> arch) & 1) != 0
     }
 
+    pub fn contains_range(&self, arch: Range<u8>) -> bool {
+        self.contains_set(arch.into())
+    }
+
+    pub fn contains_set(&self, other: ArchSet) -> bool {
+        other.bits & !self.bits == 0
+    }
+
     pub fn first(&self) -> Option<u8> {
         let first = self.bits.trailing_zeros();
-        if first < 32 {
-            Some(first as u8)
-        } else {
-            None
-        }
+        if first < 32 { Some(first as u8) } else { None }
     }
 
     pub fn insert(&mut self, arch: u8) -> bool {

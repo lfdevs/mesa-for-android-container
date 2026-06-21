@@ -19,11 +19,19 @@ void
 wsi_metal_layer_size(const CAMetalLayer *metal_layer,
    uint32_t *width, uint32_t *height);
 
+void
+wsi_metal_layer_set_immediate(const CAMetalLayer *metal_layer,
+                              bool enable_immediate);
+
 VkResult
 wsi_metal_layer_configure(const CAMetalLayer *metal_layer,
    uint32_t width, uint32_t height, uint32_t image_count,
    VkFormat format, VkColorSpaceKHR color_space,
    bool enable_opaque, bool enable_immediate);
+
+void
+wsi_metal_layer_set_hdr_metadata(const CAMetalLayer *metal_layer,
+                                 const VkHdrMetadataEXT *metadata);
 
 CAMetalDrawable *
 wsi_metal_layer_acquire_drawable(const CAMetalLayer *metal_layer);

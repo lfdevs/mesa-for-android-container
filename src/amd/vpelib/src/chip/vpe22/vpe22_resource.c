@@ -65,7 +65,7 @@
 #define BYTES_PER_ENTRY                    (4)
 #define SHAPER_LUT_CHANNELS                (3)
 #define SHAPER_LUT_DATA_POINTS_PER_CHANNEL (256)
-#define SHAPER_LUT_CONFIG_ENTRIES          (28)
+#define SHAPER_LUT_CONFIG_ENTRIES          (29)
 #define SHAPER_LUT_DMA_DATA_SIZE                                                                   \
     (SHAPER_LUT_DATA_POINTS_PER_CHANNEL * SHAPER_LUT_CHANNELS * BYTES_PER_ENTRY)
 #define SHAPER_LUT_DMA_CONFIG_SIZE                                                                 \
@@ -246,7 +246,7 @@ static struct vpe_caps
                                         .dma_dim_33  = 1,
                                         .alignment   = LUT_3D_DMA_ALIGNMENT,
                                     },
-                                .lut_3d_compound = 0,
+                                .lut_3d_compound = 1,
                             },
                     }},
             .plane_caps =
@@ -255,6 +255,7 @@ static struct vpe_caps
                     .input_pixel_format_support =
                         {
                             .argb_packed_32b = 1,
+                            .argb_packed_64b = 1,
                             .nv12            = 1,
                             .fp16            = 1,
                             .p010            = 1, /**< planar 4:2:0 10-bit */
@@ -263,13 +264,17 @@ static struct vpe_caps
                             .yuy2            = 1, /**< packed 4:2:2 */
                             .y210            = 1, /**< packed 4:2:2 10-bit */
                             .y216            = 1, /**< packed 4:2:2 16-bit */
+                            .y410            = 1, /**< packed 4:4:4 10-bit */
+                            .y416            = 1, /**< packed 4:4:4 16-bit */
                             .p210            = 1, /**< planar 4:2:2 10-bit */
                             .p216            = 1, /**< planar 4:2:2 16-bit */
+                            .r8              = 0, /**< single channel RGB 8-bit */
+                            .r16             = 0, /**< single channel RGB 16-bit */
                             .rgb8_planar     = 1, /**< planar RGB 8-bit */
                             .rgb16_planar    = 1, /**< planar RGB 16-bit */
-                            .yuv8_planar     = 1, /**< planar YUV 16-bit */
+                            .yuv8_planar     = 1, /**< planar YUV 8-bit */
                             .yuv16_planar    = 1, /**< planar YUV 16-bit */
-                            .fp16_planar     = 1, /**< planar RGB 8-bit */
+                            .fp16_planar     = 1, /**< planar float 16-bit */
                             .rgbe            = 1, /**< shared exponent R9G9B9E5 */
                             .rgb111110_fix   = 0, /**< fixed R11G11B10 */
                             .rgb111110_float = 0, /**< float R11G11B10 */
@@ -277,6 +282,7 @@ static struct vpe_caps
                     .output_pixel_format_support =
                         {
                             .argb_packed_32b = 1,
+                            .argb_packed_64b = 1,
                             .nv12            = 1,
                             .fp16            = 1,
                             .p010            = 1, /**< planar 4:2:0 10-bit */
@@ -285,13 +291,17 @@ static struct vpe_caps
                             .yuy2            = 1, /**< packed 4:2:2 */
                             .y210            = 1, /**< packed 4:2:2 10-bit */
                             .y216            = 1, /**< packed 4:2:2 16-bit */
+                            .y410            = 1, /**< packed 4:4:4 10-bit */
+                            .y416            = 1, /**< packed 4:4:4 16-bit */
                             .p210            = 1, /**< planar 4:2:2 10-bit */
                             .p216            = 1, /**< planar 4:2:2 16-bit */
+                            .r8              = 0, /**< single channel RGB 8-bit */
+                            .r16             = 0, /**< single channel RGB 16-bit */
                             .rgb8_planar     = 1, /**< planar RGB 8-bit */
                             .rgb16_planar    = 1, /**< planar RGB 16-bit */
-                            .yuv8_planar     = 1, /**< planar YUV 16-bit */
+                            .yuv8_planar     = 1, /**< planar YUV 8-bit */
                             .yuv16_planar    = 1, /**< planar YUV 16-bit */
-                            .fp16_planar     = 1, /**< planar RGB 8-bit */
+                            .fp16_planar     = 1, /**< planar float 16-bit */
                             .rgbe            = 0, /**< shared exponent R9G9B9E5 */
                             .rgb111110_fix   = 0, /**< fixed R11G11B10 */
                             .rgb111110_float = 0, /**< float R11G11B10 */
@@ -316,11 +326,9 @@ static struct vpe_caps
                             .step = 1,
                         },
                 },
-            .easf_support           = 1,
-            .input_dcc_support      = 1,
-            .input_internal_dcc     = 1,
-            .output_dcc_support     = 0,
-            .output_internal_dcc    = 0,
+            .easf_support                = 1,
+            .input_internal_dcc_support  = 1,
+            .output_internal_dcc_support = 0,
             .histogram_support      = 1,
             .frod_support           = 1,
             .alpha_blending_support = 1,
@@ -473,7 +481,10 @@ enum vpe_status vpe22_construct_resource(struct vpe_priv *vpe_priv, struct resou
     res->find_bg_gaps                       = vpe_find_bg_gaps;
     res->create_bg_segments                 = vpe20_create_bg_segments;
     res->populate_cmd_info                  = vpe20_populate_cmd_info;
-    res->program_frontend                   = vpe20_program_frontend;
+    res->program_frontend                   = NULL;
+    res->program_frontend_frame             = vpe20_program_frontend_frame;
+    res->program_frontend_segment           = vpe20_program_frontend_segment;
+    res->program_stream_op_config           = vpe20_program_stream_ops_config;
     res->program_backend                    = vpe20_program_backend;
     res->get_bufs_req                       = vpe20_get_bufs_req;
     res->check_bg_color_support             = vpe20_check_bg_color_support;
@@ -489,10 +500,11 @@ enum vpe_status vpe22_construct_resource(struct vpe_priv *vpe_priv, struct resou
     res->get_num_pipes_available            = vpe20_get_num_pipes_available;
     res->set_frod_output_viewport           = vpe20_set_frod_output_viewport;
     res->check_alpha_fill_support           = vpe10_check_alpha_fill_support;
-    res->reset_pipes                        = vpe20_reset_pipes;
     res->populate_frod_param                = vpe20_populate_frod_param;
     res->set_lls_pref                       = vpe20_set_lls_pref;
     res->program_fastload     = vpe20_program_3dlut_fl;
+    res->pipe_setup           = vpe20_pipe_setup;
+    res->mpc_reset            = vpe20_mpc_reset;
     res->calculate_shaper     = vpe10_calculate_shaper;
     res->check_lut3d_compound = vpe20_check_lut3d_compound;
 
@@ -546,6 +558,4 @@ void vpe22_setup_check_funcs(struct vpe_check_support_funcs *funcs)
     funcs->check_output_format            = vpe20_check_output_format;
     funcs->check_input_color_space        = vpe10_check_input_color_space;
     funcs->check_output_color_space       = vpe20_check_output_color_space;
-    funcs->get_dcc_compression_input_cap  = vpe20_get_dcc_compression_input_cap;
-    funcs->get_dcc_compression_output_cap = vpe20_get_dcc_compression_output_cap;
 }

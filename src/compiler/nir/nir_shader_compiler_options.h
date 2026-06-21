@@ -90,6 +90,13 @@ typedef enum {
     * convergent are divergent).
     */
    nir_divergence_across_subgroups = (1 << 12),
+
+   /* Whether local_invocation_id.z is considered uniform, to be set
+    * by the driver based on the subgroup size when the hardware's
+    * walk order guarantees that its Z component will be uniform
+    * across the desired set of invocations.
+    */
+   nir_divergence_uniform_local_invocation_id_z = (1 << 13),
 } nir_divergence_options;
 
 /** An instruction filtering callback

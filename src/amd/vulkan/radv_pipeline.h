@@ -71,10 +71,6 @@ VK_DEFINE_NONDISP_HANDLE_CASTS(radv_pipeline, base, VkPipeline, VK_OBJECT_TYPE_P
       return (struct radv_##pipe_type##_pipeline *)pipeline;                                                           \
    }
 
-bool radv_pipeline_capture_shaders(const struct radv_compiler_info *compiler_info, VkPipelineCreateFlags2 flags);
-
-bool radv_pipeline_capture_shader_stats(const struct radv_compiler_info *compiler_info, VkPipelineCreateFlags2 flags);
-
 bool radv_pipeline_skip_shaders_cache(const struct radv_device *device, const struct radv_pipeline *pipeline);
 
 void radv_pipeline_init(struct radv_device *device, struct radv_pipeline *pipeline, enum radv_pipeline_type type);
@@ -85,6 +81,8 @@ void radv_pipeline_destroy(struct radv_device *device, struct radv_pipeline *pip
 struct radv_shader_stage_key radv_pipeline_get_shader_key(const struct radv_compiler_info *compiler_info,
                                                           const VkPipelineShaderStageCreateInfo *stage,
                                                           VkPipelineCreateFlags2 flags, const void *pNext);
+
+void radv_merge_shader_stage_key(struct radv_shader_stage_key *dst, const struct radv_shader_stage_key *src);
 
 void radv_pipeline_stage_init(VkPipelineCreateFlags2 pipeline_flags, const VkPipelineShaderStageCreateInfo *sinfo,
                               const struct radv_pipeline_layout *layout, const struct radv_shader_stage_key *stage_key,

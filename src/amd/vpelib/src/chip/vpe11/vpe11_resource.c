@@ -224,11 +224,9 @@ static struct vpe_caps
                             .step = 0,
                         },
                 },
-            .easf_support           = 0,
-            .input_dcc_support      = 0,
-            .input_internal_dcc     = 0,
-            .output_dcc_support     = 0,
-            .output_internal_dcc    = 0,
+            .easf_support                = 0,
+            .input_internal_dcc_support  = 0,
+            .output_internal_dcc_support = 0,
             .histogram_support      = 0,
             .frod_support           = 0,
             .alpha_blending_support = 0,
@@ -297,7 +295,6 @@ enum vpe_status vpe11_construct_resource(struct vpe_priv *vpe_priv, struct resou
     res->update_output_gamma               = vpe10_update_output_gamma;
     res->validate_cached_param             = vpe11_validate_cached_param;
     res->check_alpha_fill_support          = vpe10_check_alpha_fill_support;
-    res->reset_pipes          = NULL;
     res->populate_frod_param  = NULL;
     res->check_lut3d_compound = NULL;
     res->calculate_shaper = vpe10_calculate_shaper;
@@ -418,6 +415,4 @@ void vpe11_setup_check_funcs(struct vpe_check_support_funcs *funcs)
     funcs->check_output_format            = vpe10_check_output_format;
     funcs->check_input_color_space        = vpe10_check_input_color_space;
     funcs->check_output_color_space       = vpe10_check_output_color_space;
-    funcs->get_dcc_compression_input_cap  = vpe10_get_dcc_compression_input_cap;
-    funcs->get_dcc_compression_output_cap = vpe10_get_dcc_compression_output_cap;
 }

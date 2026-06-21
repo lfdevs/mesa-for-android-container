@@ -260,7 +260,11 @@ nvk_push_draw_state_init(struct nvk_queue *queue, struct nv_push *p)
 
    /* Initialize tessellation parameters */
    P_IMMD(p, NV9097, SET_MME_SHADOW_SCRATCH(NVK_MME_SCRATCH_TESS_PARAMS), 0);
-   P_IMMD(p, NV9097, SET_TESSELLATION_PARAMETERS, {});
+   P_IMMD(p, NV9097, SET_TESSELLATION_PARAMETERS, {
+      .domain_type = DOMAIN_TYPE_ISOLINE,
+      .spacing = SPACING_INTEGER,
+      .output_primitives = OUTPUT_PRIMITIVES_LINES,
+   });
 
    P_IMMD(p, NV9097, SET_RENDER_ENABLE_C, MODE_TRUE);
 
@@ -1022,6 +1026,15 @@ nvk_GetRenderingAreaGranularityKHR(
    *pGranularity = (VkExtent2D) { .width = 1, .height = 1 };
 }
 
+bool
+nvk_image_plane_aligned_for_linear_attachment(const struct nvk_image_plane *plane,
+                                              const struct nil_image_level *level)
+{
+   assert(level->tiling.gob_type == NIL_GOB_TYPE_LINEAR);
+   uint64_t addr = nvk_image_plane_base_address(plane) + level->offset_B;
+   return addr % 128 == 0 && level->row_stride_B % 128 == 0;
+}
+
 static bool
 nvk_rendering_linear(const struct nvk_rendering_state *render)
 {
@@ -1046,8 +1059,7 @@ nvk_rendering_linear(const struct nvk_rendering_state *render)
       /* We can't render to a linear image unless the address and row stride
        * are multiples of 128B.  Fall back to tiled shadows in this case.
        */
-      uint64_t addr = nvk_image_plane_base_address(plane) + level->offset_B;
-      if (addr % 128 != 0 || level->row_stride_B % 128 != 0)
+      if (!nvk_image_plane_aligned_for_linear_attachment(plane, level))
          return false;
    }
 
@@ -2219,7 +2231,37 @@ const struct nvk_mme_test_case nvk_mme_set_tess_params_tests[] = {{
       },
       { }
    },
-}, {}};
+},
+{
+   /* Test expected default state */
+   .init = (struct nvk_mme_mthd_data[]) {
+      {
+         NVK_SET_MME_SCRATCH(TESS_PARAMS),
+         NVK_MME_TESS_STATE(TRIANGLE, INTEGER, 0)
+      },
+      { }
+   },
+   .params = (uint32_t[]) {
+      NVK_MME_VAL_MASK(0, 0xffff)
+   },
+   .expected = (struct nvk_mme_mthd_data[]) {
+      {
+         NVK_SET_MME_SCRATCH(TESS_PARAMS),
+         NVK_MME_FULL_TESS_STATE(
+            NVDEF(NV9097, SET_TESSELLATION_PARAMETERS, DOMAIN_TYPE, ISOLINE) |
+            NVDEF(NV9097, SET_TESSELLATION_PARAMETERS, SPACING, INTEGER),
+            NVDEF(NV9097, SET_TESSELLATION_PARAMETERS, DOMAIN_TYPE, ISOLINE) |
+            NVDEF(NV9097, SET_TESSELLATION_PARAMETERS, SPACING, INTEGER)
+         )
+      },
+      {
+         NV9097_SET_TESSELLATION_PARAMETERS,
+         NVK_MME_TESS_PARAMS(ISOLINE, INTEGER, LINES)
+      },
+      { }
+   },
+},
+{}};
 
 void
 nvk_cmd_flush_gfx_shaders(struct nvk_cmd_buffer *cmd)

@@ -17,7 +17,9 @@ fn try_lower_src(src: &mut Src, sc_table: &[SmallConstant]) -> bool {
     let SrcRef::Imm32(imm32) = src.src_ref else {
         return false;
     };
-    let imm_bytes_read = src.swizzle.bytes_read();
+    let imm32 = u32::from(imm32);
+
+    let imm_bytes_read = src.swizzle.bytes_read(4);
 
     if imm_bytes_read.count_ones() == 1 {
         let imm_byte = imm_bytes_read.trailing_zeros();

@@ -144,6 +144,14 @@ visit_alu(nir_alu_instr *instr, struct divergence_state *state)
    unsigned num_src = nir_op_infos[instr->op].num_inputs;
 
    for (unsigned i = 0; i < num_src; i++) {
+      if ((state->options & nir_divergence_uniform_local_invocation_id_z) &&
+          nir_src_is_intrinsic(instr->src[i].src) &&
+          nir_src_as_intrinsic(instr->src[i].src)->intrinsic == nir_intrinsic_load_local_invocation_id &&
+          instr->src[i].swizzle[0] == 2 &&
+          nir_is_same_comp_swizzle(instr->src[i].swizzle,
+                                   nir_ssa_alu_instr_src_components(instr, i)))
+         continue;
+
       if (src_divergent(instr->src[i].src, state)) {
          instr->def.divergent = true;
          return true;
@@ -646,6 +654,7 @@ visit_intrinsic(nir_intrinsic_instr *instr, struct divergence_state *state)
       break;
 
    case nir_intrinsic_load_global:
+   case nir_intrinsic_load_global_intel:
    case nir_intrinsic_load_global_2x32:
    case nir_intrinsic_load_global_ir3:
    case nir_intrinsic_load_global_nv:
@@ -829,6 +838,7 @@ visit_intrinsic(nir_intrinsic_instr *instr, struct divergence_state *state)
    case nir_intrinsic_load_gmem_frag_offset_ir3:
    case nir_intrinsic_bindless_resource_ir3:
    case nir_intrinsic_ray_intersection_ir3:
+   case nir_intrinsic_resbase_ir3:
    case nir_intrinsic_load_attribute_payload_intel:
    case nir_intrinsic_load_urb_vec4_intel:
    case nir_intrinsic_load_urb_lsc_intel:
@@ -1030,7 +1040,6 @@ visit_intrinsic(nir_intrinsic_instr *instr, struct divergence_state *state)
    case nir_intrinsic_dpas_intel:
    case nir_intrinsic_convert_cmat_intel:
    case nir_intrinsic_load_coverage_mask_intel:
-   case nir_intrinsic_load_dispatch_mask_intel:
    case nir_intrinsic_isberd_nv:
    case nir_intrinsic_isbewr_nv:
    case nir_intrinsic_vild_nv:
@@ -1171,6 +1180,7 @@ nir_variable_mode_is_uniform(nir_variable_mode mode)
    switch (mode) {
    case nir_var_uniform:
    case nir_var_mem_ubo:
+   case nir_var_mem_push_const:
    case nir_var_mem_ssbo:
    case nir_var_mem_shared:
    case nir_var_mem_task_payload:
@@ -1271,6 +1281,7 @@ visit_jump(nir_jump_instr *jump, struct divergence_state *state)
          state->divergent_loop_break = true;
       return state->divergent_loop_break;
    case nir_jump_halt:
+   case nir_jump_abort:
       /* This totally kills invocations so it doesn't add divergence */
       break;
    case nir_jump_return:

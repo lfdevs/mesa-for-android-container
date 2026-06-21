@@ -238,6 +238,7 @@ struct lp_jit_bindless_texture
    const void *base;
    const void *residency;
    uint32_t base_offset;
+   float view_min_lod; /* VK_EXT_image_view_min_lod, relative to first_level */
 };
 
 struct lp_image_descriptor {

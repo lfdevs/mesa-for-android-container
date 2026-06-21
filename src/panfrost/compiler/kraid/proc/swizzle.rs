@@ -70,6 +70,7 @@ pub fn derive_asm_swizzle_widen(input: TokenStream) -> TokenStream {
     const BIT_SIZES: [u8; 4] = [8, 16, 32, 64];
 
     let mut from_swizzle_dt_cases = TokenStream2::new();
+    let mut to_swizzle_dt_cases = TokenStream2::new();
     let mut swizzle_consts = TokenStream2::new();
 
     for &dt_comps in &NUM_COMPS {
@@ -101,6 +102,9 @@ pub fn derive_asm_swizzle_widen(input: TokenStream) -> TokenStream {
 
                 let mut from_swizzle_cases = quote! {
                     Swizzle::NONE => Some(#enum_type::None),
+                };
+                let mut to_swizzle_cases = quote! {
+                    #enum_type::None => Some(Swizzle::NONE),
                 };
                 for v in &e.variants {
                     if v.ident == "None" {
@@ -160,6 +164,9 @@ pub fn derive_asm_swizzle_widen(input: TokenStream) -> TokenStream {
                     from_swizzle_cases.extend(quote! {
                         Self::#const_ident => Some(#enum_type::#v_ident),
                     });
+                    to_swizzle_cases.extend(quote! {
+                        #enum_type::#v_ident => Some(Self::#const_ident),
+                    });
                 }
 
                 from_swizzle_dt_cases.extend(quote! {
@@ -168,29 +175,24 @@ pub fn derive_asm_swizzle_widen(input: TokenStream) -> TokenStream {
                         _ => None,
                     }
                 });
+                to_swizzle_dt_cases.extend(quote! {
+                    #dt_case => match self {
+                        #to_swizzle_cases
+                        _ => None,
+                    }
+                });
             }
         }
     }
 
-    let mut to_swizzle_cases = TokenStream2::new();
     let mut display_cases = TokenStream2::new();
     for v in &e.variants {
         if v.ident == "None" {
-            to_swizzle_cases.extend(quote! {
-                #enum_type::None => Swizzle::NONE,
-            });
             display_cases.extend(quote! {
                 #enum_type::None => Ok(()),
             });
         } else {
-            let widen =
-                widen_call_for_asm_swizzle(&v.ident, quote! { data_type });
-
             let v_ident = &v.ident;
-            to_swizzle_cases.extend(quote! {
-                #enum_type::#v_ident => #widen,
-            });
-
             let v_disp = format!(".{v_ident}").to_lowercase();
             display_cases.extend(quote! {
                 #enum_type::#v_ident => write!(f, #v_disp),
@@ -205,7 +207,7 @@ pub fn derive_asm_swizzle_widen(input: TokenStream) -> TokenStream {
             pub fn from_swizzle(
                 src_type: DataType,
                 swizzle: Swizzle,
-            ) -> Option<AsmSwizzleWiden> {
+            ) -> Option<#enum_type> {
                 if swizzle == Swizzle::NONE {
                     Some(#enum_type::None)
                 } else {
@@ -216,9 +218,14 @@ pub fn derive_asm_swizzle_widen(input: TokenStream) -> TokenStream {
                 }
             }
 
-            pub fn to_swizzle(self, data_type: DataType) -> Swizzle {
-                match self {
-                    #to_swizzle_cases
+            pub fn to_swizzle(self, src_type: DataType) -> Option<Swizzle> {
+                if self == #enum_type::None {
+                    Some(Swizzle::NONE)
+                } else {
+                    match src_type {
+                        #to_swizzle_dt_cases
+                        _ => None,
+                    }
                 }
             }
         }

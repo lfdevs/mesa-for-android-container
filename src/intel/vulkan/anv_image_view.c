@@ -295,17 +295,17 @@ anv_image_view_finish(struct anv_image_view *iview)
    if (!iview->use_surface_state_stream) {
       for (uint32_t plane = 0; plane < iview->n_planes; plane++) {
          if (iview->planes[plane].optimal_sampler.state.alloc_size) {
-            anv_state_pool_free(&device->bindless_surface_state_pool,
+            anv_state_pool_free(anv_device_get_bindless_surface_state_pool(device),
                   iview->planes[plane].optimal_sampler.state);
          }
 
          if (iview->planes[plane].general_sampler.state.alloc_size) {
-            anv_state_pool_free(&device->bindless_surface_state_pool,
+            anv_state_pool_free(anv_device_get_bindless_surface_state_pool(device),
                   iview->planes[plane].general_sampler.state);
          }
 
          if (iview->planes[plane].storage.state.alloc_size) {
-            anv_state_pool_free(&device->bindless_surface_state_pool,
+            anv_state_pool_free(anv_device_get_bindless_surface_state_pool(device),
                   iview->planes[plane].storage.state);
          }
       }

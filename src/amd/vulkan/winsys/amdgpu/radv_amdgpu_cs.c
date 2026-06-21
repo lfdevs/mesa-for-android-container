@@ -1510,29 +1510,12 @@ radv_amdgpu_winsys_cs_annotate(struct ac_cmdbuf *_cs, const char *annotation)
    }
 }
 
-static uint32_t
-radv_to_amdgpu_priority(enum radeon_ctx_priority radv_priority)
-{
-   switch (radv_priority) {
-   case RADEON_CTX_PRIORITY_REALTIME:
-      return AMDGPU_CTX_PRIORITY_VERY_HIGH;
-   case RADEON_CTX_PRIORITY_HIGH:
-      return AMDGPU_CTX_PRIORITY_HIGH;
-   case RADEON_CTX_PRIORITY_MEDIUM:
-      return AMDGPU_CTX_PRIORITY_NORMAL;
-   case RADEON_CTX_PRIORITY_LOW:
-      return AMDGPU_CTX_PRIORITY_LOW;
-   default:
-      UNREACHABLE("Invalid context priority");
-   }
-}
-
 static VkResult
 radv_amdgpu_ctx_create(struct radeon_winsys *_ws, enum radeon_ctx_priority priority, struct radeon_winsys_ctx **rctx)
 {
    struct radv_amdgpu_winsys *ws = radv_amdgpu_winsys(_ws);
    struct radv_amdgpu_ctx *ctx = CALLOC_STRUCT(radv_amdgpu_ctx);
-   uint32_t amdgpu_priority = radv_to_amdgpu_priority(priority);
+   uint32_t amdgpu_priority = radeon_to_amdgpu_priority(priority);
    VkResult result;
    int r;
 
@@ -1583,25 +1566,6 @@ radv_amdgpu_ctx_destroy(struct radeon_winsys_ctx *rwctx)
    ctx->ws->base.buffer_destroy(&ctx->ws->base, ctx->fence_bo);
    ac_drm_cs_ctx_free(ctx->ws->dev, ctx->ctx_handle);
    FREE(ctx);
-}
-
-static VkResult
-radv_amdgpu_ctx_is_priority_permitted(struct radeon_winsys *_ws, enum radeon_ctx_priority priority)
-{
-   struct radv_amdgpu_winsys *ws = radv_amdgpu_winsys(_ws);
-   uint32_t amdgpu_priority = radv_to_amdgpu_priority(priority);
-   uint32_t ctx_handle;
-   int r;
-
-   r = ac_drm_cs_ctx_create2(ws->dev, amdgpu_priority, &ctx_handle);
-   if (r && r == -EACCES) {
-      return VK_ERROR_NOT_PERMITTED;
-   } else if (r) {
-      return VK_ERROR_OUT_OF_HOST_MEMORY;
-   }
-
-   ac_drm_cs_ctx_free(ws->dev, ctx_handle);
-   return VK_SUCCESS;
 }
 
 static uint32_t
@@ -1920,7 +1884,6 @@ radv_amdgpu_cs_init_functions(struct radv_amdgpu_winsys *ws)
 {
    ws->base.ctx_create = radv_amdgpu_ctx_create;
    ws->base.ctx_destroy = radv_amdgpu_ctx_destroy;
-   ws->base.ctx_is_priority_permitted = radv_amdgpu_ctx_is_priority_permitted;
    ws->base.ctx_wait_idle = radv_amdgpu_ctx_wait_idle;
    ws->base.ctx_set_pstate = radv_amdgpu_ctx_set_pstate;
    ws->base.cs_domain = radv_amdgpu_cs_domain;

@@ -2500,7 +2500,7 @@ impl SM20Op for OpAtom {
         e.set_field(5..9, op);
 
         let typ = match self.atom_type {
-            AtomType::F16x2 => panic!("Unsupported atomic type"),
+            AtomType::F16v2 => panic!("Unsupported atomic type"),
             // AtomType::U8 => 0x0_u8,
             // AtomType::I8 => 0x1_u8,
             // AtomType::U16 => 0x2_u8,

@@ -112,12 +112,21 @@ pan_kmod_bo_cleanup(struct pan_kmod_bo *bo)
 
 static inline void
 pan_kmod_vm_init(struct pan_kmod_vm *vm, struct pan_kmod_dev *dev,
-                 uint32_t handle, uint32_t flags, uint64_t pgsize_bitmap)
+                 uint32_t handle, uint32_t flags)
 {
    vm->dev = dev;
    vm->handle = handle;
    vm->flags = flags;
-   vm->pgsize_bitmap = pgsize_bitmap;
+   vm->pgsize_bitmap = dev->props.pgsize_bitmap;
+
+   simple_mtx_init(&vm->sparse_dummy.lock, mtx_plain);
+}
+
+static inline void
+pan_kmod_vm_cleanup(struct pan_kmod_vm *vm)
+{
+   pan_kmod_bo_put(vm->sparse_dummy.bo);
+   simple_mtx_destroy(&vm->sparse_dummy.lock);
 }
 
 static inline int
@@ -125,7 +134,8 @@ pan_kmod_vm_op_check(struct pan_kmod_vm *vm, enum pan_kmod_vm_op_mode mode,
                      struct pan_kmod_vm_op *op)
 {
    /* We should only have sync operations on an async VM bind request. */
-   if (mode != PAN_KMOD_VM_OP_MODE_ASYNC && op->syncs.count) {
+   if (mode != PAN_KMOD_VM_OP_MODE_ASYNC &&
+       (op->signal.count || op->wait.count)) {
       mesa_loge("only PAN_KMOD_VM_OP_MODE_ASYNC can be passed sync operations");
       return -1;
    }
@@ -135,6 +145,22 @@ pan_kmod_vm_op_check(struct pan_kmod_vm *vm, enum pan_kmod_vm_op_mode mode,
        !!(vm->flags & PAN_KMOD_VM_FLAG_AUTO_VA) !=
           (op->va.start == PAN_KMOD_VM_MAP_AUTO_VA)) {
       mesa_loge("op->va.start and vm->flags don't match");
+      return -1;
+   }
+
+   if ((op->flags & ~vm->dev->props.supported_vm_op_flags) != 0) {
+      mesa_loge("incompatible VM operation flags");
+      return -1;
+   }
+
+   if ((op->flags & PAN_KMOD_VM_OP_OP_MAP_SPARSE) && op->map.bo) {
+      mesa_loge("sparse operations cannot have attached BOs");
+      return -1;
+   }
+
+   if ((op->flags & PAN_KMOD_VM_OP_OP_MAP_SPARSE) &&
+       op->va.start == PAN_KMOD_VM_MAP_AUTO_VA) {
+      mesa_loge("sparse operations cannot have an automatic VA assigned");
       return -1;
    }
 

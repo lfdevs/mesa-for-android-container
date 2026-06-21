@@ -10,7 +10,6 @@
 #include "kk_bo.h"
 #include "kk_buffer.h"
 #include "kk_device.h"
-#include "kk_encoder.h"
 #include "kk_entrypoints.h"
 #include "kk_physical_device.h"
 
@@ -27,12 +26,12 @@ kk_CmdCopyBuffer2(VkCommandBuffer commandBuffer,
    VK_FROM_HANDLE(kk_buffer, src, pCopyBufferInfo->srcBuffer);
    VK_FROM_HANDLE(kk_buffer, dst, pCopyBufferInfo->dstBuffer);
 
-   mtl_blit_encoder *blit = kk_blit_encoder(cmd);
+   mtl_compute_encoder *encoder = cs_get_compute(cmd, true);
    for (uint32_t i = 0; i < pCopyBufferInfo->regionCount; i++) {
       const VkBufferCopy2 *region = &pCopyBufferInfo->pRegions[i];
-      mtl_copy_from_buffer_to_buffer(blit, src->mtl_handle, region->srcOffset,
-                                     dst->mtl_handle, region->dstOffset,
-                                     region->size);
+      mtl_copy_from_buffer_to_buffer(encoder, src->mtl_handle,
+                                     region->srcOffset, dst->mtl_handle,
+                                     region->dstOffset, region->size);
    }
 }
 
@@ -91,7 +90,7 @@ kk_CmdCopyBufferToImage2(VkCommandBuffer commandBuffer,
    VK_FROM_HANDLE(kk_buffer, buffer, pCopyBufferToImageInfo->srcBuffer);
    VK_FROM_HANDLE(kk_image, image, pCopyBufferToImageInfo->dstImage);
 
-   mtl_blit_encoder *blit = kk_blit_encoder(cmd);
+   mtl_compute_encoder *encoder = cs_get_compute(cmd, true);
    for (int r = 0; r < pCopyBufferToImageInfo->regionCount; r++) {
       const VkBufferImageCopy2 *region = &pCopyBufferToImageInfo->pRegions[r];
       const uint8_t plane_index = kk_image_memory_aspects_to_plane(
@@ -107,7 +106,7 @@ kk_CmdCopyBufferToImage2(VkCommandBuffer commandBuffer,
       {
          info.mtl_data.image_slice = slice;
          info.mtl_data.buffer_offset_B = buffer_offset;
-         mtl_copy_from_buffer_to_texture(blit, &info.mtl_data);
+         mtl_copy_from_buffer_to_texture(encoder, &info.mtl_data);
          buffer_offset += info.buffer_slice_size_B;
       }
    }
@@ -121,7 +120,7 @@ kk_CmdCopyImageToBuffer2(VkCommandBuffer commandBuffer,
    VK_FROM_HANDLE(kk_image, image, pCopyImageToBufferInfo->srcImage);
    VK_FROM_HANDLE(kk_buffer, buffer, pCopyImageToBufferInfo->dstBuffer);
 
-   mtl_blit_encoder *blit = kk_blit_encoder(cmd);
+   mtl_compute_encoder *encoder = cs_get_compute(cmd, true);
    for (unsigned r = 0; r < pCopyImageToBufferInfo->regionCount; r++) {
       const VkBufferImageCopy2 *region = &pCopyImageToBufferInfo->pRegions[r];
       const uint8_t plane_index = kk_image_memory_aspects_to_plane(
@@ -137,7 +136,7 @@ kk_CmdCopyImageToBuffer2(VkCommandBuffer commandBuffer,
       {
          info.mtl_data.image_slice = slice;
          info.mtl_data.buffer_offset_B = buffer_offset;
-         mtl_copy_from_texture_to_buffer(blit, &info.mtl_data);
+         mtl_copy_from_texture_to_buffer(encoder, &info.mtl_data);
          buffer_offset += info.buffer_slice_size_B;
       }
    }
@@ -180,7 +179,7 @@ copy_through_buffer(struct kk_cmd_buffer *cmd, struct kk_image *src,
    bool is_src_compressed = util_format_is_compressed(src_format);
    bool is_dst_compressed = util_format_is_compressed(dst_format);
 
-   mtl_blit_encoder *blit = kk_blit_encoder(cmd);
+   mtl_compute_encoder *encoder = cs_get_compute(cmd, true);
 
    const uint32_t buffer_stride_B =
       util_format_get_stride(src_format, region->extent.width);
@@ -223,8 +222,14 @@ copy_through_buffer(struct kk_cmd_buffer *cmd, struct kk_image *src,
       vk_offset_3d_to_mtl_origin(&region->dstOffset);
 
    /* Texture->Buffer->Texture */
-   // TODO_KOSMICKRISP We don't handle 3D to 2D array nor vice-versa in this
-   // path. Unsure if it's even needed, can compressed textures be 3D?
+   /* TODO_KOSMICKRISP:
+    *
+    * 1. We don't handle 3D to 2D array nor vice-versa in this path. Unsure if
+    * it's even needed, can compressed textures be 3D?
+    *
+    * 2. Split into texture to buffer then buffers to texture to reduce
+    * dependencies.
+    */
    for (uint32_t slice_idx = 0;
         slice_idx <
         vk_image_subresource_layer_count(&src->vk, &region->srcSubresource);
@@ -237,7 +242,9 @@ copy_through_buffer(struct kk_cmd_buffer *cmd, struct kk_image *src,
       info.mtl_data.image_level = region->srcSubresource.mipLevel;
       info.mtl_data.buffer_offset_B = buffer_offset;
       info.mtl_data.options = src_options;
-      mtl_copy_from_texture_to_buffer(blit, &info.mtl_data);
+      mtl_copy_from_texture_to_buffer(encoder, &info.mtl_data);
+
+      mtl_barrier_after_encoder_stages(encoder, MTL_STAGE_BLIT, MTL_STAGE_BLIT);
 
       info.mtl_data.image = dst_plane->mtl_handle;
       info.mtl_data.image_size = dst_size;
@@ -246,7 +253,7 @@ copy_through_buffer(struct kk_cmd_buffer *cmd, struct kk_image *src,
          region->dstSubresource.baseArrayLayer + slice_idx;
       info.mtl_data.image_level = region->dstSubresource.mipLevel;
       info.mtl_data.options = dst_options;
-      mtl_copy_from_buffer_to_texture(blit, &info.mtl_data);
+      mtl_copy_from_buffer_to_texture(encoder, &info.mtl_data);
 
       buffer_offset += info.buffer_slice_size_B;
    }
@@ -289,7 +296,7 @@ static void
 copy_image(struct kk_cmd_buffer *cmd, struct kk_image *src, uint32_t src_index,
            struct kk_image *dst, uint32_t dst_index, const VkImageCopy2 *region)
 {
-   mtl_blit_encoder *blit = kk_blit_encoder(cmd);
+   mtl_compute_encoder *encoder = cs_get_compute(cmd, true);
    struct kk_image_plane *src_plane = &src->planes[src_index];
    struct kk_image_plane *dst_plane = &dst->planes[dst_index];
 
@@ -335,7 +342,7 @@ copy_image(struct kk_cmd_buffer *cmd, struct kk_image *src, uint32_t src_index,
    for (uint32_t l = 0; l < layer_count;
         ++l, ++(*src_increase), ++(*dst_increase)) {
       mtl_copy_from_texture_to_texture(
-         blit, src_plane->mtl_handle, src_slice, src_level, src_origin, size,
+         encoder, src_plane->mtl_handle, src_slice, src_level, src_origin, size,
          dst_plane->mtl_handle, dst_slice, dst_level, dst_origin);
    }
 }

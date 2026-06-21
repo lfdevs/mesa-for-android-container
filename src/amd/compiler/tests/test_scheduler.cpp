@@ -403,3 +403,24 @@ BEGIN_TEST(vopd_sched.dot2acc_from_vop3p)
 
    finish_schedule_vopd_test();
 END_TEST
+
+BEGIN_TEST(vopd_sched.dot2acc_from_vop2_inline)
+   if (!setup_cs(NULL, GFX11, CHIP_UNKNOWN, "", 32))
+      return;
+
+   PhysReg reg_v0{256};
+   PhysReg reg_v1{257};
+   PhysReg reg_v2{258};
+   PhysReg reg_v3{259};
+   PhysReg reg_s0{0};
+
+   //>> p_unit_test 0
+   //! v1: %0:v[1] = v_dual_dot2acc_f32_f16 %0:s[0], %0:v[3], %0:v[1] :: v1: %0:v[0] = v_dual_dot2acc_f32_f16 0x4000, %0:v[2], %0:v[0]
+   bld.pseudo(aco_opcode::p_unit_test, Operand::zero());
+   bld.vop2(aco_opcode::v_dot2c_f32_f16, Definition(reg_v0, v1), Operand::c16(0x4000),
+            Operand(reg_v2, v1), Operand(reg_v0, v1));
+   bld.vop2(aco_opcode::v_dot2c_f32_f16, Definition(reg_v1, v1), Operand(reg_s0, s1),
+            Operand(reg_v3, v1), Operand(reg_v1, v1));
+
+   finish_schedule_vopd_test();
+END_TEST

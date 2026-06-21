@@ -13,6 +13,19 @@ dzn_entrypoints = custom_target(
   depend_files : vk_entrypoints_gen_depend_files,
 )
 
+dzn_drirc = custom_target(
+  'dzn_drirc',
+  input  : [files('dzn_drirc_gen.py'), drirc_gen, join_paths(dir_source_root, 'src/util/00-dzn-defaults.conf')],
+  output : ['dzn_drirc.c', 'dzn_drirc.h'],
+  command : [
+    prog_python, '@INPUT0@',
+    '--import-path', join_paths(dir_source_root, 'src/util'),
+    '--drirc-src', '@OUTPUT0@',
+    '--drirc-hdr', '@OUTPUT1@',
+    '--validate', '@INPUT2@',
+  ],
+)
+
 libdzn_files = files(
   'dzn_cmd_buffer.c',
   'dzn_descriptor_set.c',
@@ -61,7 +74,7 @@ endif
 
 libvulkan_dzn = shared_library(
   'vulkan_dzn',
-  [libdzn_files, dzn_entrypoints, sha1_h],
+  [libdzn_files, dzn_entrypoints, dzn_drirc, sha1_h],
   vs_module_defs : vulkan_api_def,
   include_directories : [inc_include, inc_src, inc_util],
   dependencies : [dzn_deps, idep_vulkan_wsi, idep_xmlconfig],

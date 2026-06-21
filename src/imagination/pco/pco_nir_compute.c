@@ -82,5 +82,5 @@ bool pco_nir_compute_instance_check(nir_shader *shader)
    /* Re-insert the entrypoint inside the instance check. */
    nir_cf_reinsert(&cf_list, cursor);
 
-   return true;
+   return nir_progress(true, entrypoint, nir_metadata_none);
 }

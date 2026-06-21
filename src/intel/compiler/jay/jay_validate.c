@@ -33,7 +33,9 @@ block_state_for_inst(jay_inst *I)
    if (I->op == JAY_OPCODE_PHI_DST || I->op == JAY_OPCODE_PRELOAD) {
       return STATE_PHI_DST;
    } else if (I->op == JAY_OPCODE_PHI_SRC ||
-              (jay_op_is_control_flow(I->op) && I->op != JAY_OPCODE_ELSE)) {
+              (jay_op_is_control_flow(I->op) &&
+               I->op != JAY_OPCODE_ELSE &&
+               I->op != JAY_OPCODE_HALT_TARGET)) {
       return STATE_LATE;
    } else {
       return STATE_NORMAL;
@@ -105,15 +107,24 @@ get_src_words(struct validate_state *validate, jay_inst *I, unsigned s)
 
       unsigned bytes;
       switch (s) {
-      case 0: bytes = jay_dpas_rcount(I) * dpas_exec_size * acc_size_B; break;
-      case 1: bytes = jay_dpas_sdepth(I) * grf_size;                    break;
-      case 2: bytes = jay_dpas_rcount(I) * jay_dpas_sdepth(I) * 4;      break;
+      case 0:
+         bytes = jay_dpas_rcount(I) * dpas_exec_size * acc_size_B;
+         break;
+      case 1:
+         bytes = jay_dpas_sdepth(I) * grf_size;
+         break;
+      case 2:
+         bytes = jay_dpas_rcount(I) * jay_dpas_sdepth(I) * 4;
+         break;
       default:
          UNREACHABLE("invalid DPAS source");
       }
 
       return bytes / (shader->dispatch_width * 4);
    }
+
+   if (I->op == JAY_OPCODE_SLICE_REPACK && !jay_slice_repack_unpack(I))
+      return 1 << jay_slice_repack_factor_log2(I);
 
    unsigned simd_width = jay_simd_width_logical(validate->func->shader, I);
    unsigned elsize = jay_type_vector_length(jay_src_type(I, s));
@@ -154,7 +165,10 @@ validate_ssa(struct validate_state *validate, jay_inst *I)
  * Validate the invariants of jay_def.
  */
 static void
-validate_def(struct validate_state *validate, jay_def def, const char *kind)
+validate_def(struct validate_state *validate,
+             jay_inst *I,
+             jay_def def,
+             const char *kind)
 {
    CHECK(!jay_is_null(def) || !def.reg);
 
@@ -188,6 +202,14 @@ validate_def(struct validate_state *validate, jay_def def, const char *kind)
    }
 
    CHECK(jay_num_values(def) == 1 || !jay_is_flag(def));
+
+   /* With some exceptions we cannot access GPRs from SIMD1 instructions */
+   CHECK((jay_is_null(def) ||
+          jay_is_uniform(def) ||
+          def.file == FLAG ||
+          jay_simd_width_logical(validate->func->shader, I) > 1) ||
+         I->op == JAY_OPCODE_SHUFFLE ||
+         I->op == JAY_OPCODE_BROADCAST_IMM);
 }
 
 /**
@@ -205,11 +227,11 @@ validate_inst(struct validate_state *validate, jay_inst *I)
 
    const struct jay_opcode_info *opinfo = &jay_opcode_infos[I->op];
 
-   validate_def(validate, I->dst, "dst");
-   validate_def(validate, I->cond_flag, "cond_flag");
+   validate_def(validate, I, I->dst, "dst");
+   validate_def(validate, I, I->cond_flag, "cond_flag");
 
    jay_foreach_src(I, s) {
-      validate_def(validate, I->src[s], "source");
+      validate_def(validate, I, I->src[s], "source");
    }
 
    if (!validate->post_ra) {
@@ -220,10 +242,6 @@ validate_inst(struct validate_state *validate, jay_inst *I)
 
    validate_flagness(validate, I->dst, I->type, "destination");
    validate_flagness(validate, I->cond_flag, JAY_TYPE_U1, "cond_flag");
-
-   CHECK(!I->conditional_mod ||
-         !jay_is_null(I->cond_flag) ||
-         I->op == JAY_OPCODE_CSEL);
 
    /* These assumptions are baked into the definition of broadcast_flag and
     * required to ensure correctness with the lane masking.
@@ -239,8 +257,10 @@ validate_inst(struct validate_state *validate, jay_inst *I)
    CHECK(I->cond_flag.file != FLAG || I->dst.file != UGPR);
 
    /* Standard modifiers only allowed on some instructions */
-   CHECK(!I->conditional_mod || opinfo->cmod || I->op == JAY_OPCODE_CSEL);
    CHECK(!I->saturate || opinfo->sat);
+   CHECK(!I->conditional_mod ||
+         (I->op == JAY_OPCODE_CSEL || I->op == JAY_OPCODE_DEMOTE) ||
+         (!jay_is_null(I->cond_flag) && opinfo->cmod));
 
    unsigned num_srcs = I->num_srcs;
 
@@ -294,6 +314,11 @@ validate_inst(struct validate_state *validate, jay_inst *I)
       CHECK(jay_num_values(I->src[0]) == 16);
       CHECK(jay_num_values(I->src[1]) == 16);
       CHECK(jay_grf_per_gpr(validate->func->shader) == 2);
+   } else if (I->op == JAY_OPCODE_SLICE_REPACK) {
+      const bool unpack = jay_slice_repack_unpack(I);
+      const unsigned pf = 1 << jay_slice_repack_factor_log2(I);
+      CHECK(pf == 1 || pf == 2 || pf == 4);
+      CHECK(jay_num_values(I->dst) == (unpack ? pf : 1));
    }
 }
 

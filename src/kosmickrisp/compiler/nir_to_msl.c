@@ -1861,7 +1861,8 @@ jump_instr_to_msl(struct nir_to_msl_ctx *ctx, nir_jump_instr *jump)
 {
    switch (jump->type) {
    case nir_jump_halt:
-      P_IND(ctx, "TODO: halt\n");
+   case nir_jump_abort:
+      P_IND(ctx, "TODO: halt/abort\n");
       assert(!"Unimplemented");
       break;
    case nir_jump_break:

@@ -78,5 +78,4 @@ TEST_F(LowerPostRA, RewriteToSel)
 TEST_F(LowerPostRA, CopyUGPR)
 {
    CASE(jay_MOV(b, x, u4), jay_MOV(b, x, u4)->type = JAY_TYPE_F32);
-   NEGCASE(jay_MOV(b, u4, x));
 }

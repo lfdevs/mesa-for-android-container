@@ -4,9 +4,10 @@ import ctypes
 import sys
 import json
 
+ANV_RT_BVH_HEADER_SIZE = 256;
+
 def get_header_properties(header):
     return {
-        'rootNodeOffset': header.rootNodeOffset,
         'aabb': {
             'min_x': header.aabb.min_x,
             'min_y': header.aabb.min_y,
@@ -190,7 +191,6 @@ class VkAabb(ctypes.Structure):
 
 class AnvAccelStructHeader(ctypes.Structure):
     _fields_ = (
-        ('rootNodeOffset', ctypes.c_uint64),
         ('aabb', VkAabb),
         ('instance_flags', ctypes.c_uint32),
         ('copy_dispatch_size', ctypes.c_uint32 * 3),
@@ -200,7 +200,7 @@ class AnvAccelStructHeader(ctypes.Structure):
         ('instance_count', ctypes.c_uint64),
         ('self_ptr', ctypes.c_uint64),
         ('enable_64b_rt', ctypes.c_uint32),
-        ('padding', ctypes.c_uint32 * 41),
+        ('padding', ctypes.c_uint32 * 42),
     )
 
 class ChildData(ctypes.Structure):
@@ -315,7 +315,7 @@ class BVHInterpreter:
         # Interpret the header
         header = self.interpret_structure(offset, AnvAccelStructHeader)
         self.enable_64b_rt = header.enable_64b_rt
-        offset += header.rootNodeOffset
+        offset += ANV_RT_BVH_HEADER_SIZE
 
         # Interpret the rootNode
         self.dfs_interpret_node(offset, AnvInternalNode)

@@ -360,6 +360,11 @@ OM_ALU = [OM_OLCHK, OM_EXEC_CND, OM_END, OM_ATOM, OM_RPT]
 OM_ALU_RPT1 = [OM_OLCHK, OM_EXEC_CND, OM_END, OM_ATOM]
 OM_ALU_ATOMEXT = [OM_OLCHK, OM_EXEC_CND, OM_END, OM_RPT]
 
+OM_VOTE_OP = op_mod_enum('vote_op', [
+   'all',
+   'any',
+])
+
 ## Main.
 O_FADD = hw_op('fadd', OM_ALU + [OM_SAT], 1, 2, [], [[RM_ABS, RM_NEG, RM_FLR], [RM_ABS]])
 O_FMUL = hw_op('fmul', OM_ALU + [OM_SAT], 1, 2, [], [[RM_ABS, RM_NEG, RM_FLR], [RM_ABS]])
@@ -429,6 +434,8 @@ O_SAVMSK = hw_op('savmsk', OM_ALU_RPT1 + [OM_SAVMSK_MODE], 2)
 
 O_EMITPIX = hw_op('emitpix', OM_ALU_RPT1 + [OM_FREEP], 0, 2)
 
+O_SETL = hw_op('setl', [OM_EXEC_CND], 0, 1)
+
 ## Bitwise.
 O_MOVI32 = hw_op('movi32', OM_ALU, 1, 1)
 
@@ -472,7 +479,11 @@ O_BR = hw_op('br', [OM_EXEC_CND, OM_BRANCH_CND, OM_LINK], has_target_cf_node=Tru
 
 O_BR_NEXT = hw_op('br.next', [OM_EXEC_CND])
 
+O_BR_SKIP_NEXT = hw_op('br.skip_next', [OM_EXEC_CND, OM_BRANCH_CND])
+
 O_MUTEX = hw_op('mutex', [OM_MUTEX_OP], 0, 1)
+
+O_SAVL = hw_op('savl', [OM_EXEC_CND], 1, 0)
 
 # Combination (> 1 instructions per group).
 O_SCMP = hw_op('scmp', OM_ALU + [OM_TST_OP_MAIN], 1, 2, [], [[RM_ABS, RM_NEG], [RM_ABS, RM_NEG]])
@@ -527,3 +538,5 @@ O_OP_ATOMIC_OFFSET = pseudo_op('op.atomic.offset', OM_ALU_ATOMEXT + [OM_ATOM_OP]
 
 O_BREAK = pseudo_op('break', [OM_EXEC_CND])
 O_CONTINUE = pseudo_op('continue', [OM_EXEC_CND])
+
+O_VOTE = pseudo_op('vote', [OM_EXEC_CND, OM_VOTE_OP], 1, 1)

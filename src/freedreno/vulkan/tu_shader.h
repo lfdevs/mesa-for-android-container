@@ -50,10 +50,13 @@ struct tu_const_state
    uint32_t dynamic_offset_loc;
    unsigned num_inline_ubos;
    struct tu_inline_ubo ubos[MAX_INLINE_UBOS];
+   uint32_t num_bindless_base_addresses;
+   uint32_t bindless_base_const_offset_vec4;
 
    struct ir3_driver_ubo fdm_ubo;
    struct ir3_driver_ubo dynamic_offsets_ubo;
    struct ir3_driver_ubo inline_uniforms_ubo;
+   struct ir3_driver_ubo bindless_base_addrs_ubo;
 };
 
 struct tu_shader

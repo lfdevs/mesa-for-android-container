@@ -21,12 +21,22 @@
 
 #include "vk_command_buffer.h"
 #include "vk_format.h"
+#include "vk_meta.h"
 #include "util/u_tristate.h"
 
 #include "pan_fb.h"
 #include "pan_props.h"
 
 #define MAX_VBS 16
+
+#if PAN_ARCH < 10
+#define MAX_FRAMEBUFFER_DIMENSION (1 << 14)
+#elif PAN_ARCH < 11
+#define MAX_FRAMEBUFFER_DIMENSION (1 << 15)
+#else
+#define MAX_FRAMEBUFFER_DIMENSION (1 << 16)
+#endif
+
 #define MAX_FRAMEBUFFER_LAYERS 256
 
 struct panvk_cmd_buffer;
@@ -424,7 +434,8 @@ struct panvk_draw_info {
 
 void
 panvk_per_arch(cmd_prepare_draw_sysvals)(struct panvk_cmd_buffer *cmdbuf,
-                                         const struct panvk_draw_info *info);
+                                         const struct panvk_draw_info *info,
+                                         const struct panvk_shader_variant *fs);
 
 static inline uint32_t
 color_attachment_written_mask(
@@ -497,5 +508,17 @@ s_attachment_read(const struct panvk_shader_variant *fs,
 
    return stencil_mask & fs->fs.input_attachment_read;
 }
+
+#if PAN_ARCH >= 10
+void panvk_per_arch(cmd_draw_rects)(struct vk_command_buffer *cmd,
+                                    struct vk_meta_device *meta,
+                                    uint32_t rect_count,
+                                    const struct vk_meta_rect *rects);
+
+void panvk_per_arch(cmd_draw_volume)(struct vk_command_buffer *cmd,
+                                     struct vk_meta_device *meta,
+                                     const struct vk_meta_rect *rect,
+                                     uint32_t layer_count);
+#endif
 
 #endif

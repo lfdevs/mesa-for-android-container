@@ -442,7 +442,7 @@ struct radv_cmd_state {
    bool uses_out_of_order_rast;
    bool uses_vrs;
    bool uses_vrs_attachment;
-   bool uses_vrs_coarse_shading;
+   bool uses_vrs_flat_shading;
 
    uint64_t shader_query_buf_va; /* GFX12+ */
 

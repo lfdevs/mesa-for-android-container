@@ -249,13 +249,18 @@ static struct vpe_caps
                             .yuy2            = 0, /**< packed 4:2:2 */
                             .y210            = 0, /**< packed 4:2:2 10-bit */
                             .y216            = 0, /**< packed 4:2:2 16-bit */
+                            .y410            = 0, /**< packed 4:4:4 10-bit */
+                            .y416            = 0, /**< packed 4:4:4 16-bit */
+                            .p208            = 0, /**< planar 4:2:2 8-bit */
                             .p210            = 0, /**< planar 4:2:2 10-bit */
                             .p216            = 0, /**< planar 4:2:2 16-bit */
+                            .r8              = 0, /**< single channel RGB 8-bit */
+                            .r16             = 0, /**< single channel RGB 16-bit */
                             .rgb8_planar     = 0, /**< planar RGB 8-bit */
                             .rgb16_planar    = 0, /**< planar RGB 16-bit */
-                            .yuv8_planar     = 0, /**< planar YUV 16-bit */
+                            .yuv8_planar     = 0, /**< planar YUV 8-bit */
                             .yuv16_planar    = 0, /**< planar YUV 16-bit */
-                            .fp16_planar     = 0, /**< planar RGB 8-bit */
+                            .fp16_planar     = 0, /**< planar float 16-bit */
                             .rgbe            = 0, /**< shared exponent R9G9B9E5 */
                             .rgb111110_fix   = 0, /**< fixed R11G11B10 */
                             .rgb111110_float = 0, /**< float R11G11B10 */
@@ -272,13 +277,18 @@ static struct vpe_caps
                             .yuy2            = 0, /**< packed 4:2:2 */
                             .y210            = 0, /**< packed 4:2:2 10-bit */
                             .y216            = 0, /**< packed 4:2:2 16-bit */
+                            .y410            = 0, /**< packed 4:4:4 10-bit */
+                            .y416            = 0, /**< packed 4:4:4 16-bit */
+                            .p208            = 0, /**< planar 4:2:2 8-bit */
                             .p210            = 0, /**< planar 4:2:2 10-bit */
                             .p216            = 0, /**< planar 4:2:2 16-bit */
+                            .r8              = 0, /**< single channel RGB 8-bit */
+                            .r16             = 0, /**< single channel RGB 16-bit */
                             .rgb8_planar     = 0, /**< planar RGB 8-bit */
                             .rgb16_planar    = 0, /**< planar RGB 16-bit */
-                            .yuv8_planar     = 0, /**< planar YUV 16-bit */
+                            .yuv8_planar     = 0, /**< planar YUV 8-bit */
                             .yuv16_planar    = 0, /**< planar YUV 16-bit */
-                            .fp16_planar     = 0, /**< planar RGB 8-bit */
+                            .fp16_planar     = 0, /**< planar float 16-bit */
                             .rgbe            = 0, /**< shared exponent R9G9B9E5 */
                             .rgb111110_fix   = 0, /**< fixed R11G11B10 */
                             .rgb111110_float = 0, /**< float R11G11B10 */
@@ -307,11 +317,9 @@ static struct vpe_caps
                             .step = 0,
                         },
                 },
-            .easf_support           = 0,
-            .input_dcc_support      = 0,
-            .input_internal_dcc     = 0,
-            .output_dcc_support     = 0,
-            .output_internal_dcc    = 0,
+            .easf_support                = 0,
+            .input_internal_dcc_support  = 0,
+            .output_internal_dcc_support = 0,
             .histogram_support      = 0,
             .frod_support           = 0,
             .alpha_blending_support = 0,
@@ -390,20 +398,6 @@ enum vpe_status vpe10_set_num_segments(struct vpe_priv *vpe_priv, struct stream_
     }
 
     return res;
-}
-
-bool vpe10_get_dcc_compression_output_cap(
-    const struct vpe_dcc_surface_param *params, struct vpe_surface_dcc_cap *cap)
-{
-    cap->capable = false;
-    return cap->capable;
-}
-
-bool vpe10_get_dcc_compression_input_cap(
-    const struct vpe_dcc_surface_param *params, struct vpe_surface_dcc_cap *cap)
-{
-    cap->capable = false;
-    return cap->capable;
 }
 
 struct cdc_fe *vpe10_cdc_fe_create(struct vpe_priv *vpe_priv, int inst)
@@ -543,7 +537,6 @@ enum vpe_status vpe10_construct_resource(struct vpe_priv *vpe_priv, struct resou
     res->update_output_gamma               = vpe10_update_output_gamma;
     res->validate_cached_param             = vpe10_validate_cached_param;
     res->check_alpha_fill_support          = vpe10_check_alpha_fill_support;
-    res->reset_pipes          = NULL;
     res->populate_frod_param  = NULL;
     res->check_lut3d_compound = NULL;
     res->update_opp_adjust_and_boundary = NULL;
@@ -637,6 +630,9 @@ bool vpe10_check_output_color_space(
         return false;
 
     if (vpe_is_fp16(format) && tf != TRANSFER_FUNC_LINEAR)
+        return false;
+
+    if ((cs == COLOR_SPACE_CUSTOM) || (tf == TRANSFER_FUNC_CUSTOM))
         return false;
 
     return true;
@@ -771,6 +767,11 @@ enum vpe_status vpe10_calculate_segments(
     struct dpp         *dpp                  = vpe_priv->resource.dpp[0];
     const uint32_t      max_lb_size          = dpp->funcs->get_line_buffer_size();
     uint16_t            alignment            = 1;
+    struct vpe_rect     target_rect          = params->target_rect;
+
+    if (vpe_is_zero_rect(&target_rect)) {
+        return VPE_STATUS_VIEWPORT_SIZE_NOT_SUPPORTED;
+    }
 
     for (stream_idx = 0; stream_idx < (uint16_t)vpe_priv->num_streams; stream_idx++) {
         stream_ctx = &vpe_priv->stream_ctx[stream_idx];
@@ -780,7 +781,7 @@ enum vpe_status vpe10_calculate_segments(
         if (stream_ctx->stream_type == VPE_STREAM_TYPE_BG_GEN)
             continue;
 
-        if (dst_rect->width == 0 && dst_rect->height == 0) {
+        if (vpe_is_zero_rect(dst_rect)) {
             stream_ctx->num_segments = 0;
             continue;
         }
@@ -998,7 +999,7 @@ int32_t vpe10_program_frontend(struct vpe_priv *vpe_priv, uint32_t pipe_idx, uin
     /* start segment specific programming */
     vpe_priv->fe_cb_ctx.stream_sharing    = false;
     vpe_priv->fe_cb_ctx.stream_op_sharing = false;
-    vpe_priv->fe_cb_ctx.cmd_type          = VPE_CMD_TYPE_COMPOSITING;
+    vpe_priv->fe_cb_ctx.cmd_type          = VPE_CMD_OPS_COMPOSITING;
 
     cdc_fe->funcs->program_viewport(
         cdc_fe, &cmd_input->scaler_data.viewport, &cmd_input->scaler_data.viewport_c);
@@ -1147,29 +1148,22 @@ void vpe10_create_stream_ops_config(struct vpe_priv *vpe_priv, uint32_t pipe_idx
     struct mpcc_blnd_cfg blndcfg  = {0};
     struct dpp          *dpp      = vpe_priv->resource.dpp[pipe_idx];
     struct mpc          *mpc      = vpe_priv->resource.mpc[pipe_idx];
-    enum vpe_cmd_type    cmd_type = VPE_CMD_TYPE_COUNT;
     struct vpe_vector   *config_vector;
 
     vpe_priv->fe_cb_ctx.stream_op_sharing = true;
     vpe_priv->fe_cb_ctx.stream_sharing    = false;
 
-    if (ops == VPE_CMD_OPS_BG) {
-        cmd_type = VPE_CMD_TYPE_BG;
-    } else if (ops == VPE_CMD_OPS_COMPOSITING) {
-        cmd_type = VPE_CMD_TYPE_COMPOSITING;
-    } else if (ops == VPE_CMD_OPS_BG_VSCF_INPUT) {
-        cmd_type = VPE_CMD_TYPE_BG_VSCF_INPUT;
-    } else if (ops == VPE_CMD_OPS_BG_VSCF_OUTPUT) {
-        cmd_type = VPE_CMD_TYPE_BG_VSCF_OUTPUT;
-    } else
+    if (!((ops == VPE_CMD_OPS_BG) || (ops == VPE_CMD_OPS_COMPOSITING) ||
+            (ops == VPE_CMD_OPS_BG_VSCF_INPUT) || (ops == VPE_CMD_OPS_BG_VSCF_OUTPUT))) {
         return;
+    }
 
     // return if already generated
-    config_vector = stream_ctx->stream_op_configs[pipe_idx][cmd_type];
+    config_vector = stream_ctx->stream_op_configs[pipe_idx][ops];
     if (config_vector->num_elements)
         return;
 
-    vpe_priv->fe_cb_ctx.cmd_type = cmd_type;
+    vpe_priv->fe_cb_ctx.cmd_type = ops;
 
     dpp->funcs->set_frame_scaler(dpp, &cmd_input->scaler_data);
 
@@ -1215,8 +1209,8 @@ void vpe10_create_stream_ops_config(struct vpe_priv *vpe_priv, uint32_t pipe_idx
         blndcfg.global_alpha = 0xff;
     }
 
-    if (cmd_type == VPE_CMD_TYPE_BG || cmd_type == VPE_CMD_TYPE_BG_VSCF_INPUT ||
-        cmd_type == VPE_CMD_TYPE_BG_VSCF_OUTPUT) {
+    if ((ops == VPE_CMD_OPS_BG) || (ops == VPE_CMD_OPS_BG_VSCF_INPUT) ||
+        (ops == VPE_CMD_OPS_BG_VSCF_OUTPUT)) {
         // for bg commands, make top layer transparent
         // as global alpha only works when global alpha mode, set global alpha mode as well
         blndcfg.global_alpha = 0;
@@ -1619,8 +1613,6 @@ void vpe10_setup_check_funcs(struct vpe_check_support_funcs *funcs)
     funcs->check_output_format            = vpe10_check_output_format;
     funcs->check_input_color_space        = vpe10_check_input_color_space;
     funcs->check_output_color_space       = vpe10_check_output_color_space;
-    funcs->get_dcc_compression_input_cap  = vpe10_get_dcc_compression_input_cap;
-    funcs->get_dcc_compression_output_cap = vpe10_get_dcc_compression_output_cap;
 }
 
 enum vpe_status vpe10_calculate_shaper(struct vpe_priv *vpe_priv, struct stream_ctx *stream_ctx)

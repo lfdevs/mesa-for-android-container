@@ -1578,7 +1578,8 @@ nir_lower_tex_block(nir_block *block, nir_builder *b,
          continue;
       } else if (instr->type == nir_instr_type_jump) {
          if (nir_instr_as_jump(instr)->type == nir_jump_halt ||
-             nir_instr_as_jump(instr)->type == nir_jump_return)
+             nir_instr_as_jump(instr)->type == nir_jump_return ||
+             nir_instr_as_jump(instr)->type == nir_jump_abort)
             *prev_terminate_return = instr->index;
          continue;
       } else if (instr->type != nir_instr_type_tex) {

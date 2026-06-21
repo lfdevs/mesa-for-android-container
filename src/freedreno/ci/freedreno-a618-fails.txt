@@ -279,14 +279,6 @@ nobin-dEQP-VK.transform_feedback.simple_optimized_gpl.draw_indirect_multiview_co
 #
 ## rusticl-core issues:
 #
-#Unexpected CL error: CL_BUILD_PROGRAM_FAILURE -11
-#Expected CL error: CL_INVALID_BUILD_OPTIONS -43
-api@clbuildprogram,Fail
-
-#Unexpected CL error: CL_COMPILE_PROGRAM_FAILURE -15
-#Expected CL error: CL_INVALID_COMPILER_OPTIONS -66
-api@clcompileprogram,Fail
-
 #Unexpected CL error: CL_SUCCESS 0
 #Expected CL error: CL_KERNEL_ARG_INFO_NOT_AVAILABLE -19
 api@clgetkernelarginfo,Fail

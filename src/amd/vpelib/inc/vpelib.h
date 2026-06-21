@@ -1,4 +1,4 @@
-/* Copyright 2022 Advanced Micro Devices, Inc.
+﻿/* Copyright 2022-2026 Advanced Micro Devices, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -101,6 +101,33 @@ enum vpe_status vpe_check_support(
  * @return status
  */
 enum vpe_status vpe_build_noops(struct vpe *vpe, uint32_t num_dwords, uint32_t **ppcmd_space);
+
+/**
+ * @brief
+ * Build a NOP command descriptor with a firmware message signature
+ *
+ * This function writes a NOP command containing a firmware message signature that
+ * can be recognized by the VPE firmware pipeline. The signature format is:
+ * - High 16 bits: 0xBEEF (fixed signature)
+ * - Low 16 bits: fw_msg_type (message type from vpe_fw_msg_type enum)
+ *
+ * The command consists of VPE_FW_MSG_SIGNATURE_DW_COUNT dwords and is used
+ * to send various notifications to the VPE firmware pipeline.
+ *
+ * Common use cases:
+ * - VPE_FW_MSG_NEW_CONTEXT: Indicates a new context is being processed
+ *
+ * @param[in,out]  bufs         [in]  Pointer to vpe_build_bufs structure containing the command
+ * buffer. The cmd_buf.size must be sufficient for the signature dwords. [out] Updates
+ * cmd_buf.cpu_va, cmd_buf.gpu_va to the next write address and decrements cmd_buf.size by the
+ * written amount.
+ * @param[in]      fw_msg_type  Firmware message type (see enum vpe_fw_msg_type)
+ *                              Valid range: 0x0000 - 0xFFFF
+ * @return VPE_STATUS_OK if successful,
+ *         VPE_STATUS_BUFFER_OVERFLOW if buffer size is insufficient,
+ *         VPE_STATUS_ERROR if parameters are invalid
+ */
+enum vpe_status vpe_build_fw_msg(struct vpe_build_bufs *cur_bufs, uint16_t fw_msg_type);
 
 /**
  * build the command descriptors for the given param.

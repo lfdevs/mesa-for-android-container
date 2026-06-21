@@ -40,6 +40,7 @@
 #define PER_ARCH_FUNCS(_ver)                                                   \
    void panvk_v##_ver##_get_physical_device_extensions(                        \
       const struct panvk_physical_device *device,                              \
+      const struct panvk_instance *instance,                                   \
       struct vk_device_extension_table *ext);                                  \
                                                                                \
    void panvk_v##_ver##_get_physical_device_features(                          \
@@ -192,10 +193,10 @@ free_disk_cache(struct panvk_physical_device *device)
 static VkResult
 get_core_mask(struct panvk_physical_device *device,
               const struct panvk_instance *instance, const char *option_name,
-              uint64_t *mask)
+              uint64_t opt_mask, uint64_t *mask)
 {
    uint64_t present = device->kmod.dev->props.shader_present;
-   *mask = driQueryOptionu64(&instance->dri_options, option_name) & present;
+   *mask = opt_mask & present;
 
    if (!*mask)
       return panvk_errorf(instance, VK_ERROR_INITIALIZATION_FAILED,
@@ -213,10 +214,12 @@ get_core_masks(struct panvk_physical_device *device,
    VkResult result;
 
    result = get_core_mask(device, instance, "pan_compute_core_mask",
+                          instance->drirc.misc.compute_core_mask,
                           &device->compute_core_mask);
    if (result != VK_SUCCESS)
       return result;
    result = get_core_mask(device, instance, "pan_fragment_core_mask",
+                          instance->drirc.misc.fragment_core_mask,
                           &device->fragment_core_mask);
 
    return result;
@@ -229,8 +232,9 @@ get_device_heaps(struct panvk_physical_device *device,
    int host_coherent_not_cached_idx = -1;
    int host_cached_not_coherent_idx = -1;
 
-   const uint64_t heap_size = os_get_gpu_heap_size(
-      instance->heap_memory_percent, &instance->heap_memory_percent);
+   const uint64_t heap_size =
+      os_get_gpu_heap_size(instance->drirc.misc.heap_memory_percent,
+                           &instance->drirc.misc.heap_memory_percent);
 
    device->memory.heap_count = 1;
    device->memory.heaps[0] = (VkMemoryHeap){
@@ -454,7 +458,7 @@ panvk_physical_device_init(struct panvk_physical_device *device,
       vk_warn_non_conformant_implementation("panvk");
 
    struct vk_device_extension_table supported_extensions;
-   panvk_arch_dispatch(arch, get_physical_device_extensions, device,
+   panvk_arch_dispatch(arch, get_physical_device_extensions, device, instance,
                        &supported_extensions);
 
    struct vk_features supported_features;

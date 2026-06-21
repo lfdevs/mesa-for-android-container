@@ -218,54 +218,7 @@ elk_fs_visitor::emit_interpolation_setup_gfx6()
    if (fs_prog_data->uses_src_depth)
       this->pixel_z = fetch_payload_reg(bld, fs_payload().source_depth_reg);
 
-   if (wm_key->persample_interp == ELK_SOMETIMES) {
-      assert(!elk_needs_unlit_centroid_workaround(devinfo));
-
-      const fs_builder ubld = bld.exec_all().group(16, 0);
-      bool loaded_flag = false;
-
-      for (int i = 0; i < ELK_BARYCENTRIC_MODE_COUNT; ++i) {
-         if (!(fs_prog_data->barycentric_interp_modes & BITFIELD_BIT(i)))
-            continue;
-
-         /* The sample mode will always be the top bit set in the perspective
-          * or non-perspective section.  In the case where no SAMPLE mode was
-          * requested, elk_fs_prog_data_barycentric_modes() will swap out the top
-          * mode for SAMPLE so this works regardless of whether SAMPLE was
-          * requested or not.
-          */
-         int sample_mode;
-         if (BITFIELD_BIT(i) & ELK_BARYCENTRIC_NONPERSPECTIVE_BITS) {
-            sample_mode = util_last_bit(fs_prog_data->barycentric_interp_modes &
-                                        ELK_BARYCENTRIC_NONPERSPECTIVE_BITS) - 1;
-         } else {
-            sample_mode = util_last_bit(fs_prog_data->barycentric_interp_modes &
-                                        ELK_BARYCENTRIC_PERSPECTIVE_BITS) - 1;
-         }
-         assert(fs_prog_data->barycentric_interp_modes &
-                BITFIELD_BIT(sample_mode));
-
-         if (i == sample_mode)
-            continue;
-
-         uint8_t *barys = fs_payload().barycentric_coord_reg[i];
-
-         uint8_t *sample_barys = fs_payload().barycentric_coord_reg[sample_mode];
-         assert(barys[0] && sample_barys[0]);
-
-         if (!loaded_flag) {
-            check_dynamic_fs_config(ubld, fs_prog_data,
-                                    INTEL_FS_CONFIG_PERSAMPLE_INTERP);
-         }
-
-         for (unsigned j = 0; j < dispatch_width / 8; j++) {
-            set_predicate(
-               ELK_PREDICATE_NORMAL,
-               ubld.MOV(elk_vec8_grf(barys[j / 2] + (j % 2) * 2, 0),
-                        elk_vec8_grf(sample_barys[j / 2] + (j % 2) * 2, 0)));
-         }
-      }
-   }
+   assert(wm_key->persample_interp != ELK_SOMETIMES);
 
    for (int i = 0; i < ELK_BARYCENTRIC_MODE_COUNT; ++i) {
       this->delta_xy[i] = fetch_barycentric_reg(

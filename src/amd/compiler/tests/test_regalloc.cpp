@@ -1729,3 +1729,62 @@ BEGIN_TEST(regalloc.move_phi_operand_for_def)
 
    finish_ra_test(ra_test_policy());
 END_TEST
+
+BEGIN_TEST(regalloc.pk_fmac_inline)
+   for (unsigned i = GFX10_3; i <= GFX11; i++) {
+      //>> v1: %a:v[0],  v1: %b:v[1],  v1: %c:v[2] = p_startpgm
+      if (!setup_cs("v1 v1 v1", (amd_gfx_level)i))
+         continue;
+
+      Temp a = inputs[0];
+      Temp b = inputs[1];
+      Temp c = inputs[2];
+
+      //~gfx10_3! v1: %res0:v[1] = v_pk_fma_f16 1.0.xx, %a:v[0], %b:v[1]
+      //~gfx11! v1: %res0:v[1] = v_pk_fmac_f16 1.0, %a:v[0], %b:v[1]
+      //! p_unit_test 0, %res0:v[1]
+      Builder::Result fma =
+         bld.vop3p(aco_opcode::v_pk_fma_f16, bld.def(v1), Operand::c16(0x3c00), a, b, 0x0, 0x6);
+      writeout(0, fma);
+
+      //~gfx10_3! v1: %res1:v[2] = v_pk_fmac_f16 1.0, %a:v[0], %c:v[2]
+      //~gfx11! v1: %res1:v[2] = v_pk_fma_f16 1.0, %a:v[0], %c:v[2]
+      //! p_unit_test 1, %res1:v[2]
+      fma = bld.vop3p(aco_opcode::v_pk_fma_f16, bld.def(v1), Operand::c16(0x3c00), a, c, 0x0, 0x7);
+      writeout(1, fma);
+
+      //! p_unit_test 2, %a:v[0]
+      writeout(2, a);
+
+      finish_ra_test(ra_test_policy());
+   }
+END_TEST
+
+BEGIN_TEST(regalloc.dot2c_inline)
+   for (unsigned i = GFX10_3; i <= GFX11; i++) {
+      //>> v1: %a:v[0],  v1: %b:v[1],  v1: %c:v[2] = p_startpgm
+      if (!setup_cs("v1 v1 v1", (amd_gfx_level)i))
+         continue;
+
+      Temp a = inputs[0];
+      Temp b = inputs[1];
+      Temp c = inputs[2];
+
+      //! v1: %res0:v[1] = v_dot2_f32_f16 1.0.xx, %a:v[0], %b:v[1]
+      //! p_unit_test 0, %res0:v[1]
+      Builder::Result dot =
+         bld.vop3p(aco_opcode::v_dot2_f32_f16, bld.def(v1), Operand::c16(0x3c00), a, b, 0x0, 0x6);
+      writeout(0, dot);
+
+      //! v1: %res1:v[2] = v_dot2c_f32_f16 1.0, %a:v[0], %c:v[2]
+      //! p_unit_test 1, %res1:v[2]
+      dot =
+         bld.vop3p(aco_opcode::v_dot2_f32_f16, bld.def(v1), Operand::c16(0x3c00), a, c, 0x0, 0x7);
+      writeout(1, dot);
+
+      //! p_unit_test 2, %a:v[0]
+      writeout(2, a);
+
+      finish_ra_test(ra_test_policy());
+   }
+END_TEST

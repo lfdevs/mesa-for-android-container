@@ -603,12 +603,6 @@ populate_fs_prog_key(struct brw_fs_prog_key *key,
          BITSET_TEST(state->dynamic, MESA_VK_DYNAMIC_MS_RASTERIZATION_SAMPLES) ?
          INTEL_SOMETIMES :
          state->ms->rasterization_samples > 1 ? INTEL_ALWAYS : INTEL_NEVER;
-      key->persample_interp =
-         BITSET_TEST(state->dynamic, MESA_VK_DYNAMIC_MS_RASTERIZATION_SAMPLES) ?
-         INTEL_SOMETIMES :
-         (state->ms->sample_shading_enable &&
-          (state->ms->min_sample_shading * state->ms->rasterization_samples) > 1) ?
-         INTEL_ALWAYS : INTEL_NEVER;
       key->alpha_to_coverage =
          BITSET_TEST(state->dynamic, MESA_VK_DYNAMIC_MS_ALPHA_TO_COVERAGE_ENABLE) ?
          INTEL_SOMETIMES :
@@ -623,8 +617,27 @@ populate_fs_prog_key(struct brw_fs_prog_key *key,
 
       key->alpha_to_coverage = INTEL_SOMETIMES;
       key->multisample_fbo = INTEL_SOMETIMES;
-      key->persample_interp = INTEL_SOMETIMES;
    }
+
+   /* Per sample interpolation is about the only thing we can also determine
+    * using the create info. With GPL, it is required to be specified if
+    * sample shading is to be enabled. So if we can't to that field, it means
+    * it's disabled.
+    *
+    * In the case where MSAA is dynamic we assume persample interpolation is
+    * active if enabled, otherwise we can double check the number of samples
+    * matches the requirement for it.
+    *
+    * With ESO, there is no way to enable/disable this at the API level, it's
+    * only possible with shader code (the backend will deal with this by
+    * looking at shader_info).
+    */
+   key->persample_interp =
+      key->multisample_fbo != INTEL_NEVER &&
+      state != NULL && state->ms != NULL &&
+      state->ms->sample_shading_enable &&
+      (BITSET_TEST(state->dynamic, MESA_VK_DYNAMIC_MS_RASTERIZATION_SAMPLES) ||
+       (state->ms->min_sample_shading * state->ms->rasterization_samples) > 1);
 
    if (pdevice->info.verx10 >= 200) {
       if (state != NULL && state->rs != NULL) {
@@ -657,11 +670,6 @@ populate_fs_prog_key(struct brw_fs_prog_key *key,
       (link_stages & VK_SHADER_STAGE_VERTEX_BIT) ? INTEL_NEVER :
       (link_stages & VK_SHADER_STAGE_MESH_BIT_EXT) ? INTEL_ALWAYS :
       pdevice->info.has_mesh_shading ? INTEL_SOMETIMES : INTEL_NEVER;
-
-   if (state && state->ms) {
-      key->min_sample_shading = state->ms->min_sample_shading;
-      key->api_sample_shading = state->ms->sample_shading_enable;
-   }
 
    key->coarse_pixel = pipeline_has_coarse_pixel(state);
 }

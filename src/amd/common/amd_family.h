@@ -127,6 +127,7 @@ enum radeon_family
    CHIP_STRIX_HALO,     /* Ryzen AI MAX */
    CHIP_KRACKAN1,       /* Ryzen AI 330-350 */
    CHIP_GFX1153,
+   CHIP_GFX1156,
    /* GFX11.7 */
    CHIP_GFX1170,
    /* GFX12 (RDNA 4) */

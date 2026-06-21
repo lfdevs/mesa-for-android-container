@@ -67,7 +67,7 @@ void vpe10_plane_desc_writer_init(
 void vpe10_plane_desc_writer_add_source(
     struct plane_desc_writer *writer, void *p_source, bool is_plane0)
 {
-    uint32_t *cmd_space, *cmd_start;
+    uint32_t                    *cmd_space;
     uint32_t  num_wd = is_plane0 ? 6 : 5;
     uint64_t  size   = num_wd * sizeof(uint32_t);
     struct vpe10_plane_desc_src *src    = (struct vpe10_plane_desc_src *)p_source;
@@ -80,7 +80,7 @@ void vpe10_plane_desc_writer_add_source(
         writer->status = VPE_STATUS_BUFFER_OVERFLOW;
         return;
     }
-    cmd_start = cmd_space = (uint32_t *)(uintptr_t)writer->buf->cpu_va;
+    cmd_space = (uint32_t *)(uintptr_t)writer->buf->cpu_va;
 
     if (is_plane0) {
         *cmd_space++ = VPEC_FIELD_VALUE(VPE_PLANE_CFG_TMZ, src->tmz) |
@@ -112,7 +112,7 @@ void vpe10_plane_desc_writer_add_source(
 void vpe10_plane_desc_writer_add_destination(
     struct plane_desc_writer *writer, void *p_destination, bool is_plane0)
 {
-    uint32_t *cmd_space, *cmd_start;
+    uint32_t                    *cmd_space;
     uint32_t  num_wd = is_plane0 ? 6 : 5;
     uint64_t  size   = num_wd * sizeof(uint32_t);
     struct vpe10_plane_desc_dst *dst    = (struct vpe10_plane_desc_dst *)p_destination;
@@ -126,7 +126,7 @@ void vpe10_plane_desc_writer_add_destination(
         return;
     }
 
-    cmd_start = cmd_space = (uint32_t *)(uintptr_t)writer->buf->cpu_va;
+    cmd_space = (uint32_t *)(uintptr_t)writer->buf->cpu_va;
 
     if (is_plane0) {
         *cmd_space++ = VPEC_FIELD_VALUE(VPE_PLANE_CFG_TMZ, dst->tmz) |

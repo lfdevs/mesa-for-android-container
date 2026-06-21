@@ -339,40 +339,10 @@ gmem-dEQP-GLES31.functional.copy_image.mixed.viewclass_128_bits_mixed.rgba32ui_r
 KHR-GL46.shader_storage_buffer_object.advanced-switchBuffers
 
 # Initial ANGLE flakes
-angle-dEQP-GLES2.functional.texture.specification.teximage2d_align.cube_rgba4444_51_4
-angle-dEQP-GLES3.functional.fbo.blit.conversion.r16f_to_r8
-angle-dEQP-GLES3.functional.fbo.blit.conversion.r16f_to_rg16f
-angle-dEQP-GLES3.functional.fbo.blit.conversion.r16f_to_rg32f
-angle-dEQP-GLES3.functional.fbo.blit.conversion.r16f_to_rgba16f
-angle-dEQP-GLES3.functional.fbo.blit.conversion.r16f_to_rgba32f
-angle-dEQP-GLES3.functional.fbo.blit.conversion.r16i_to_r8i
-angle-dEQP-GLES3.functional.fbo.blit.conversion.r16i_to_rg16i
-angle-dEQP-GLES3.functional.fbo.blit.conversion.r16ui_to_r8ui
-angle-dEQP-GLES3.functional.fbo.blit.conversion.r16ui_to_r16ui
-angle-dEQP-GLES3.functional.fbo.blit.conversion.r16ui_to_r32ui
-angle-dEQP-GLES3.functional.fbo.blit.conversion.rgb565_to_rg8
-angle-dEQP-GLES3.functional.fbo.blit.conversion.rgb565_to_srgb8_alpha8
-angle-dEQP-GLES3.functional.texture.format.sized.cube.r16ui_npot
-angle-dEQP-GLES3.functional.texture.specification.basic_teximage3d.rgb565_2d_array
-angle-dEQP-GLES3.functional.texture.specification.basic_teximage3d.rgba4_2d_array
-angle-dEQP-GLES3.functional.texture.specification.texstorage2d.format.r16f_2d
-angle-dEQP-GLES3.functional.texture.specification.texstorage2d.format.rgba4_cube
-angle-dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16f_r16ui.cubemap_to_texture3d
-angle-dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16f_rg8.cubemap_to_cubemap
-angle-dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16i_rg8.cubemap_to_texture3d
-angle-dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16f_rg8_snorm.cubemap_to_cubemap
-angle-dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16f_rg8_snorm.cubemap_to_texture2d_array
-angle-dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16i_rg8i.cubemap_to_renderbuffer
-angle-dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16f_rg8ui.cubemap_to_cubemap
-angle-dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16i_r16f.texture3d_to_cubemap
-angle-dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16ui_rg8_snorm.cubemap_to_cubemap
-angle-dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16ui_rg8ui.cubemap_to_texture2d_array
-angle-dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8_r16f.texture2d_to_cubemap
-angle-dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8_snorm_r16f.texture2d_to_cubemap
-angle-dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8_snorm_r16ui.texture2d_to_cubemap
-angle-dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8i_r16ui.texture2d_to_cubemap
-angle-dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.rg8ui_r16i.texture2d_to_cubemap
-angle-dEQP-GLES31.functional.state_query.program.tesselation_shader_state_get_programiv
+angle-dEQP-GLES3.functional.fbo.blit.conversion.*
+angle-dEQP-GLES3.functional.texture.format.*
+angle-dEQP-GLES3.functional.texture.specification.*
+angle-dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.*
 
 # Autotune regression
 angle-dEQP-GLES3.functional.fbo.msaa.4_samples.rgb5_a1

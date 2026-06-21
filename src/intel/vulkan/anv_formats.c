@@ -1227,7 +1227,7 @@ get_buffer_format_features2(const struct anv_physical_device *physical_device,
           (anv_format->flags & ANV_FORMAT_FLAG_STORAGE_FORMAT_EMULATED) == 0)
          flags |= VK_FORMAT_FEATURE_2_UNIFORM_TEXEL_BUFFER_BIT;
 
-      if (isl_is_storage_image_format(devinfo, img_format))
+      if (isl_format_supports_typed_writes(devinfo, img_format))
          flags |= VK_FORMAT_FEATURE_2_STORAGE_TEXEL_BUFFER_BIT;
 
       if (anv_format_supports_atomics(physical_device, vk_format, false, NULL))

@@ -1,13 +1,14 @@
 // Copyright © 2026 Collabora, Ltd.
 // SPDX-License-Identifier: MIT
 
+use crate::ident;
 use crate::isa::xml::XmlElement;
 use crate::isa::*;
 use proc_macro2::TokenStream as TokenStream2;
 use proc_macro2::{Ident, Span};
 use std::cell::OnceCell;
-use std::collections::{btree_map, BTreeMap, HashSet};
-use std::rc::Rc;
+use std::collections::{BTreeMap, HashSet, btree_map};
+use std::rc::{Rc, Weak};
 
 pub struct EnumValue {
     pub name: String,
@@ -59,12 +60,16 @@ pub struct Enum {
     pub is_bool: bool,
     pub is_data_type: bool,
     pub values: BTreeMap<String, EnumValue>,
-    meta: OnceCell<String>,
+    meta: OnceCell<Weak<MetaEnum>>,
 }
 
 impl Enum {
     pub fn get_value(&self, name: &str) -> Option<&EnumValue> {
         self.values.get(name)
+    }
+
+    pub fn get_meta(&self) -> Option<Rc<MetaEnum>> {
+        self.meta.get()?.upgrade()
     }
 
     fn from_xml(xml: xml::XmlElement, arch: Range<u8>) -> Result<Enum> {
@@ -546,18 +551,25 @@ impl MetaEnum {
         name: &str,
         enums: Vec<Rc<Enum>>,
         none_values: HashSet<String>,
-    ) -> MetaEnum {
+    ) -> Rc<MetaEnum> {
         let camel_name = to_camel_case(&name);
         let ident = Ident::new(&camel_name, Span::call_site());
         let has_none = enums.iter().find(|e| e.has_none).is_some();
         assert!(has_none || none_values.is_empty());
-        MetaEnum {
+        let me = MetaEnum {
             name: name.to_string(),
             ident,
             has_none,
             enums,
             none_values,
-        }
+        };
+        Rc::new_cyclic(|weak| {
+            for e in &me.enums {
+                // We should have checked this before we created the MetaEnum
+                e.meta.set(weak.clone()).unwrap();
+            }
+            me
+        })
     }
 
     pub fn declare(&self, ts: &mut TokenStream2) {
@@ -583,12 +595,24 @@ impl MetaEnum {
             });
         }
 
-        ts.extend(quote! {
-            #[derive(Clone, Copy, Hash, PartialEq)]
-            pub enum #me_ident {
-                #values_ts
-            }
+        if self.name == "src_swizzle" || self.name == "dst_lanes" {
+            ts.extend(quote! {
+                #[repr(u8)]
+                #[derive(Clone, Copy, EnumAsU8, Hash, PartialEq)]
+                pub enum #me_ident {
+                    #values_ts
+                }
+            });
+        } else {
+            ts.extend(quote! {
+                #[derive(Clone, Copy, Hash, PartialEq)]
+                pub enum #me_ident {
+                    #values_ts
+                }
+            });
+        }
 
+        ts.extend(quote! {
             impl std::fmt::Display for #me_ident {
                 fn fmt(
                     &self,
@@ -660,6 +684,68 @@ impl MetaEnum {
     }
 }
 
+#[derive(Clone)]
+pub enum EnumType {
+    Enum(Rc<Enum>),
+    Meta(Rc<MetaEnum>),
+}
+
+impl EnumType {
+    fn ident(&self) -> &Ident {
+        match self {
+            EnumType::Enum(e) => &e.ident,
+            EnumType::Meta(m) => &m.ident,
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct EnumLiteral {
+    pub enum_type: EnumType,
+    pub value_name: String,
+    pub value_ident: Ident,
+}
+
+impl EnumLiteral {
+    pub fn new(e: &Rc<Enum>, v: &EnumValue) -> EnumLiteral {
+        EnumLiteral {
+            enum_type: EnumType::Enum(e.clone()),
+            value_name: v.name.clone(),
+            value_ident: v.ident.clone(),
+        }
+    }
+
+    pub fn to_meta(&self) -> Option<EnumLiteral> {
+        let e = match &self.enum_type {
+            EnumType::Enum(e) => e,
+            EnumType::Meta(_) => return Some(self.clone()),
+        };
+        let m = e.get_meta()?;
+
+        let (v_name, v_ident) = if m.none_values.contains(&self.value_name) {
+            ("none".to_string(), ident!("None"))
+        } else {
+            (self.value_name.clone(), self.value_ident.clone())
+        };
+
+        Some(EnumLiteral {
+            enum_type: EnumType::Meta(m),
+            value_name: v_name,
+            value_ident: v_ident,
+        })
+    }
+}
+
+impl ToTokens for EnumLiteral {
+    fn to_tokens(&self, ts: &mut TokenStream2) {
+        let e_ident = self.enum_type.ident();
+        let v_ident = &self.value_ident;
+        ts.extend(quote! {
+            #e_ident::#v_ident
+        });
+    }
+}
+
 #[derive(Default)]
 pub struct EnumSet {
     enums: BTreeMap<String, Rc<Enum>>,
@@ -677,10 +763,6 @@ impl EnumSet {
 
     pub fn get_meta_enum(&self, name: &str) -> Option<&Rc<MetaEnum>> {
         self.meta_enums.get(name)
-    }
-
-    pub fn get_meta_for_enum(&self, name: &str) -> Option<&Rc<MetaEnum>> {
-        self.get_meta_enum(self.get_enum(name)?.meta.get().as_deref()?)
     }
 
     pub fn get_ident(&self, name: &str) -> Option<&Ident> {
@@ -732,16 +814,16 @@ impl EnumSet {
         let mut enum_vec = Vec::new();
         for e_name in enums {
             let e = self.enums.get(e_name).ok_or(err("Unknown enum name"))?;
-            e.meta
-                .set(name.to_string())
-                .map_err(|_| err("Cannot add an enum to two metas"))?;
+            if e.meta.get().is_some() {
+                return Err(err("Cannot add an enum to two metas"));
+            }
             enum_vec.push(e.clone());
         }
 
         let none_values = none_values.into_iter().map(str::to_string).collect();
 
         let me = MetaEnum::new(name, enum_vec, none_values);
-        self.meta_enums.insert(name.to_string(), Rc::new(me));
+        self.meta_enums.insert(name.to_string(), me);
         Ok(())
     }
 

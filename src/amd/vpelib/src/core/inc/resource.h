@@ -102,6 +102,15 @@ struct resource {
     int32_t (*program_frontend)(struct vpe_priv *vpe_priv, uint32_t pipe_idx, uint32_t cmd_idx,
         uint32_t cmd_input_idx, bool seg_only);
 
+    int32_t (*program_frontend_frame)(
+        struct vpe_priv *vpe_priv, uint32_t pipe_idx, uint32_t cmd_idx, uint32_t cmd_input_idx);
+
+    int32_t (*program_frontend_segment)(
+        struct vpe_priv *vpe_priv, uint32_t pipe_idx, uint32_t cmd_idx, uint32_t cmd_input_idx);
+
+    int32_t (*program_stream_op_config)(struct vpe_priv *vpe_priv, uint32_t pipe_idx,
+        uint32_t cmd_input_idx, struct stream_ctx *stream_ctx, struct vpe_cmd_info *cmd_info);
+
     int32_t (*program_backend)(
         struct vpe_priv *vpe_priv, uint32_t pipe_idx, uint32_t cmd_idx, bool seg_only);
 
@@ -143,14 +152,14 @@ struct resource {
         struct vpe_cmd_output *src_output, uint32_t viewport_divider,
         enum vpe_surface_pixel_format format);
 
-    void (*reset_pipes)(struct vpe_priv *vpe_priv);
-
     enum vpe_status (*check_lut3d_compound)(
         const struct vpe_stream *stream, const struct vpe_build_param *param);
 
     void (*set_lls_pref)(struct vpe_priv *vpe_priv, struct spl_in *spl_input,
         enum color_transfer_func tf, enum vpe_surface_pixel_format pixel_format);
     void (*program_fastload)(struct vpe_priv *vpe_priv, uint32_t cmd_idx);
+    void (*pipe_setup)(struct vpe_priv *vpe_priv, uint32_t cmd_idx);
+    void (*mpc_reset)(struct vpe_priv *vpe_priv, uint32_t cmd_idx);
 
     enum vpe_status (*calculate_shaper)(struct vpe_priv *vpe_priv, struct stream_ctx *stream_ctx);
 

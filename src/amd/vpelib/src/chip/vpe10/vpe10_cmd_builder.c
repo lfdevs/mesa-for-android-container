@@ -99,7 +99,6 @@ enum vpe_status vpe10_build_vpe_cmd(
     for (pipe_idx = 0; pipe_idx < cmd_info->num_inputs; pipe_idx++) {
         bool               reuse;
         struct stream_ctx *stream_ctx;
-        enum vpe_cmd_type  cmd_type = VPE_CMD_TYPE_COUNT;
 
         // keep using the same pipe whenever possible
         // this would allow reuse of the previous register configs
@@ -116,21 +115,6 @@ enum vpe_status vpe10_build_vpe_cmd(
                 reuse = false;
 
             stream_ctx = &vpe_priv->stream_ctx[cmd_info->inputs[pipe_idx].stream_idx];
-
-            // frame specific for same type of command
-            if (cmd_info->ops == VPE_CMD_OPS_BG)
-                cmd_type = VPE_CMD_TYPE_BG;
-            else if (cmd_info->ops == VPE_CMD_OPS_COMPOSITING)
-                cmd_type = VPE_CMD_TYPE_COMPOSITING;
-            else if (cmd_info->ops == VPE_CMD_OPS_BG_VSCF_INPUT)
-                cmd_type = VPE_CMD_TYPE_BG_VSCF_INPUT;
-            else if (cmd_info->ops == VPE_CMD_OPS_BG_VSCF_OUTPUT)
-                cmd_type = VPE_CMD_TYPE_BG_VSCF_OUTPUT;
-            else {
-                VPE_ASSERT(0);
-                status = VPE_STATUS_ERROR;
-                break;
-            }
 
             // follow the same order of config generation in "non-reuse" case
             // stream sharing
@@ -151,7 +135,7 @@ enum vpe_status vpe10_build_vpe_cmd(
                 break;
 
             // stream-op sharing
-            config_vector = stream_ctx->stream_op_configs[pipe_idx][cmd_type];
+            config_vector = stream_ctx->stream_op_configs[pipe_idx][cmd_info->ops];
             for (config_idx = 0; config_idx < config_vector->num_elements; config_idx++) {
                 config = (struct config_record *)vpe_vector_get(config_vector, config_idx);
                 VPE_ASSERT(config);

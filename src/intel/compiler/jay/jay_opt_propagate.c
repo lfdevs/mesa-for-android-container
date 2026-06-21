@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: MIT
  */
 
+#include "compiler/gen/gen_enums.h"
 #include "util/bitset.h"
 #include "util/lut.h"
 #include "jay_builder.h"
@@ -121,6 +122,30 @@ propagate_not(jay_inst *I, unsigned s, jay_inst *mod)
    }
 }
 
+/**
+ * Fuse demote(cmp(x, y) != 0) to demote(x CMP y).
+ */
+static void
+fuse_demote(jay_inst *demote, jay_inst **defs)
+{
+   if (!(jay_is_ssa(demote->src[0]) &&
+         jay_is_zero(demote->src[1]) &&
+         demote->type == JAY_TYPE_U1 &&
+         demote->conditional_mod == GEN_CONDITION_NE)) {
+      return;
+   }
+
+   jay_inst *cmp = defs[jay_index(demote->src[0])];
+   if (cmp->op != JAY_OPCODE_CMP || cmp->predication) {
+      return;
+   }
+
+   demote->conditional_mod = cmp->conditional_mod;
+   demote->src[0] = cmp->src[0];
+   demote->src[1] = cmp->src[1];
+   demote->type = cmp->type;
+}
+
 static void
 propagate_forwards(jay_function *f)
 {
@@ -156,6 +181,11 @@ propagate_forwards(jay_function *f)
       if (I->op == JAY_OPCODE_PHI_SRC || I->op == JAY_OPCODE_SEND)
          continue;
 
+      /* We fuse demote forwards & upfront to avoid fighting cmod prop */
+      if (I->op == JAY_OPCODE_DEMOTE) {
+         fuse_demote(I, defs);
+      }
+
       jay_foreach_ssa_src(I, s) {
          /* Copy propagate whole vectors */
          jay_def src = I->src[s];
@@ -175,6 +205,8 @@ propagate_forwards(jay_function *f)
              * Only source 0 can read ARF (i.e. ballotted flags). Furthermore,
              * we may only propagate ballots locally as the ballot is implicitly
              * execmask'd which changes throughout the CFG.
+             *
+             * ISA restrictions forbid 8-bit immediates, don't even try.
              */
             if ((I->src[s].file == def->src[0].file) ||
                 ((!jay_inst_has_default(I) ||
@@ -184,7 +216,9 @@ propagate_forwards(jay_function *f)
                  (!jay_is_flag(def->src[0]) ||
                   (s == 0 && def_block[jay_base_index(src)] == block->index)) &&
                  !(def->src[0].file == J_ARF && s != 0) &&
-                 !(jay_is_imm(def->src[0]) && I->src[s].negate))) {
+                 !(jay_is_imm(def->src[0]) && I->src[s].negate) &&
+                 !(jay_is_imm(def->src[0]) &&
+                   jay_type_size_bits(jay_src_type(I, s)) == 8))) {
 
                jay_replace_src(&I->src[s], def->src[0]);
             }

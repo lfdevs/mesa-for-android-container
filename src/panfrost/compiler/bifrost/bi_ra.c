@@ -733,7 +733,7 @@ bi_compute_reg_alignment(bi_context *ctx)
    bi_foreach_instr_global(ctx, I) {
       bi_foreach_ssa_dest(I, d) {
          idx = I->dest[d].value;
-         count = bi_count_write_registers(I, d);
+         count = bi_count_write_registers(I, d) + I->dest[d].offset;
          if (count == 3) count = 4;
          assert(idx < ctx->ssa_alloc);
          ctx->reg_alignment[idx] = MAX2(count*4, ctx->reg_alignment[idx]);
@@ -755,18 +755,16 @@ bi_spill_register(bi_context *ctx, bi_index index, uint32_t offset,
                   bi_index spill_point)
 {
    bi_builder b = {.shader = ctx};
-   unsigned alignment = 4;
-   unsigned channels = 0;
+   if (!ctx->reg_alignment)
+      bi_compute_reg_alignment(ctx);
+   assert(index.value < ctx->ssa_alloc);
+   unsigned channels = ctx->reg_alignment[index.value] / 4;
+   assert(channels > 0);
+   unsigned alignment = (ctx->arch >= 9) ? ctx->reg_alignment[index.value] : 4;
 
    /* first figure out the alignment we will need, based on the
     * maximum count we see
     */
-   if (ctx->arch >= 9) {
-      if (!ctx->reg_alignment)
-         bi_compute_reg_alignment(ctx);
-      assert(index.value < ctx->ssa_alloc);
-      alignment = ctx->reg_alignment[index.value];
-   }
    offset = ALIGN_POT(offset, alignment);
 
    /* Spill after every store, fill before every load */
@@ -782,20 +780,18 @@ bi_spill_register(bi_context *ctx, bi_index index, uint32_t offset,
             if (!bi_is_equiv(I->dest[d], index))
                continue;
 
+            I->no_spill = true;
             unsigned count = bi_count_write_registers(I, d);
             unsigned extra = I->dest[d].offset;
+            bi_index src = index;
+            src.offset = extra;
 
-            channels = MAX2(channels, extra + count);
-            I->no_spill = true;
+            b.cursor = bi_after_instr(I);
+            bi_store_tl(&b, count * 32, src, offset + (extra * 4));
 
-            if (channels == extra + count) {
-               b.cursor = bi_after_instr(I);
-               bi_store_tl(&b, channels * 32, index, offset);
-
-               ctx->spills++;
-               /* Don't disable filling if spill_point is before index. */
-               fill = found_spill_point;
-            }
+            ctx->spills++;
+            /* Don't disable filling if spill_point is before index. */
+            fill = found_spill_point;
          }
 
          if (bi_has_arg(I, index) && fill) {
@@ -980,6 +976,20 @@ squeeze_index(bi_context *ctx)
    ralloc_free(map);
 }
 
+static void
+bi_mov_words_to(bi_builder *b, bi_index dst, bi_index src, unsigned words)
+{
+   assert(words >= 1 && words <= 4);
+
+   for (unsigned i = 0; i < words; ++i) {
+      bi_index word_dst = dst, word_src = src;
+      word_dst.offset += i;
+      word_src.offset += i;
+
+      bi_mov_i32_to(b, word_dst, word_src);
+   }
+}
+
 /*
  * Brainless out-of-SSA pass. The eventual goal is to go out-of-SSA after RA and
  * coalesce implicitly with biased colouring in a tree scan allocator. For now,
@@ -997,6 +1007,9 @@ bi_out_of_ssa(bi_context *ctx)
       bi_foreach_instr_in_block_safe(block, I) {
          if (I->op != BI_OPCODE_PHI)
             break;
+
+         unsigned words = I->table ? I->table : 1;
+         assert(words >= 1 && words <= 4);
 
          /* Assign a register for the phi */
          bi_index reg = bi_temp(ctx);
@@ -1016,12 +1029,17 @@ bi_out_of_ssa(bi_context *ctx)
 
             if (I->src[i].memory)
                /* spilled register, need to un-spill */
-               bi_load_tl(&b, 32, reg, I->src[i].value);
-            else if (ctx->arch >= 9 && I->src[i].type == BI_INDEX_CONSTANT)
+               bi_load_tl(&b, words * 32, reg, I->src[i].value);
+            else if (ctx->arch >= 9 && I->src[i].type == BI_INDEX_CONSTANT) {
                /* MOV of immediate needs lowering on Valhall */
-               bi_iadd_imm_i32_to(&b, reg, zero, I->src[i].value);
-            else
-               bi_mov_i32_to(&b, reg, I->src[i]);
+               for (unsigned w = 0; w < words; ++w) {
+                  bi_index word_reg = reg;
+                  word_reg.offset += w;
+                  bi_iadd_imm_i32_to(&b, word_reg, zero,
+                                     w == 0 ? I->src[i].value : 0);
+               }
+            } else
+               bi_mov_words_to(&b, reg, I->src[i], words);
          }
 
          /* Replace the phi with a move */
@@ -1029,13 +1047,13 @@ bi_out_of_ssa(bi_context *ctx)
          bi_builder b = bi_init_builder(ctx, bi_before_instr(I));
          if (I->dest[0].memory) {
             /* dest was spilled to memory */
-            bi_store_tl(&b, 32, reg, I->dest[0].value);
+            bi_store_tl(&b, words * 32, reg, I->dest[0].value);
             allow_propagate = false;
          } else if (ctx->arch >= 9 && reg.type == BI_INDEX_CONSTANT)
             /* MOV of immediate needs lowering on Valhall */
             bi_iadd_imm_i32_to(&b, I->dest[0], zero, reg.value);
          else
-            bi_mov_i32_to(&b, I->dest[0], reg);
+            bi_mov_words_to(&b, I->dest[0], reg, words);
          bi_remove_instruction(I);
 
          /* Propagate that move within the block. The destination

@@ -17,6 +17,8 @@ namespace pps
 struct GpuIncrementalState {
    bool was_cleared = true;
    std::unordered_map<uint32_t, double> last_counter_vals;
+   bool has_prev_sample_end_timestamp = false;
+   uint64_t prev_sample_end_timestamp = 0;
 };
 
 struct GpuDataSourceTraits : public perfetto::DefaultDataSourceTraits {

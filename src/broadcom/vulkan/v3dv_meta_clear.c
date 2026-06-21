@@ -1238,7 +1238,7 @@ v3dv_CmdClearAttachments(VkCommandBuffer commandBuffer,
 
    /* We can have at most max_color_RTs + 1 D/S attachments */
    assert(attachmentCount <=
-          V3D_MAX_RENDER_TARGETS(cmd_buffer->device->devinfo.ver) + 1);
+          cmd_buffer->device->devinfo.max_render_targets + 1);
 
    /* We can only clear attachments in the current subpass */
    struct v3dv_render_pass *pass = cmd_buffer->state.pass;

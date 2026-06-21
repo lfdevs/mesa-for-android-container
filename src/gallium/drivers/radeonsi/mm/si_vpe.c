@@ -761,12 +761,9 @@ si_vpe_set_surface_info(struct vpe_video_processor *vpeproc,
 
    struct vpe_plane_dcc_param *dcc_param = &surface_info->dcc;
    dcc_param->enable                     = false;
-   dcc_param->src.meta_pitch             = 0;
-   dcc_param->src.independent_64b_blks   = false;
-   dcc_param->src.dcc_ind_blk            = 0;
-   dcc_param->src.meta_pitch_c           = 0;
-   dcc_param->src.independent_64b_blks_c = false;
-   dcc_param->src.dcc_ind_blk_c          = 0;
+   dcc_param->internal_dcc.dcc_indp_blk  = 0;
+   dcc_param->internal_dcc.meta_pitch    = 0;
+   dcc_param->internal_dcc.meta_offset   = 0;
 
    return VPE_STATUS_OK;
 }

@@ -29,7 +29,7 @@ lib_pps = static_library(
 
 dep_pps = declare_dependency(
   link_with: lib_pps,
-  include_directories: [include_pps, inc_src]
+  include_directories: [include_pps, inc_src, inc_include]
 )
 
 producer_sources = [

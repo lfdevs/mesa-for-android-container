@@ -34,6 +34,7 @@ public:
    void disable_perfcnt() override;
    bool dump_perfcnt() override;
    uint64_t next() override;
+   bool sample_timestamps_are_interval_starts() const override { return true; }
    uint32_t gpu_clock_id() const override;
    uint64_t gpu_timestamp() const override;
    bool cpu_gpu_timestamp(uint64_t &cpu_timestamp,

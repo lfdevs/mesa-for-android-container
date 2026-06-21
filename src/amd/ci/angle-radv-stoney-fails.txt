@@ -951,3 +951,7 @@ KHR-GLES3.framebuffer_blit.framebuffer_blit_functionality_multisampled_to_single
 
 # New failures with ES CTS 3.2.12.0
 KHR-GLES3.framebuffer_blit.multisampled_to_singlesampled_blit_depth_config_test,Crash
+dEQP-GLES3.functional.shader_api.program_binary.binary_persistence.recompile_shader_fragment,Fail
+dEQP-GLES3.functional.shader_api.program_binary.binary_persistence.recompile_shader_vertex,Fail
+dEQP-GLES3.functional.shader_api.program_binary.binary_persistence.replace_source_fragment,Fail
+dEQP-GLES3.functional.shader_api.program_binary.binary_persistence.replace_source_vertex,Fail

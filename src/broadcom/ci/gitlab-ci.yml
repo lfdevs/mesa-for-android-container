@@ -10,6 +10,8 @@ vc4-rpi3-gl:arm64:
   timeout: 25m
   parallel: 3
   variables:
+    # Use an old kernel because VC4 is not loaded correctly with newer kernels
+    BM_BOOTFS: /boot/raspberrypi_arm64_20250916
     DEQP_SUITE: broadcom-rpi3-gl
     HWCI_START_WESTON: 1
 

@@ -156,6 +156,9 @@ lower_instr(nir_intrinsic_instr *instr, unsigned ssbo_offset, nir_builder *b, un
        * best to take this from the dest:
        */
       new_instr->num_components = instr->def.num_components;
+   } else {
+      /* This pass doesn't create multi-component SSBO atomics */
+      new_instr->num_components = 1;
    }
 
    nir_def_init(&new_instr->instr, &new_instr->def,

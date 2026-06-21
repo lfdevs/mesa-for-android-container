@@ -289,9 +289,9 @@ genX(cmd_buffer_emit_indirect_generated_draws_inplace)(struct anv_cmd_buffer *cm
       genX(cmd_buffer_set_binding_for_gfx8_vb_flush)(
          cmd_buffer, 0,
          (struct anv_address) {
-            .offset = device->physical->va.dynamic_state_pool.addr,
+            .offset = anv_physical_device_get_dynamic_state_pool_va(device->physical)->addr,
          },
-         device->physical->va.dynamic_state_pool.size);
+         anv_physical_device_get_dynamic_state_pool_va(device->physical)->size);
    }
 
    const struct anv_cmd_graphics_state *gfx = &cmd_buffer->state.gfx;

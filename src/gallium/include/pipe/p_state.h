@@ -509,6 +509,7 @@ struct pipe_sampler_view
          unsigned last_layer:16;   /**< last layer to use for array textures */
          unsigned first_level:8;   /**< first mipmap level to use */
          unsigned last_level:8;    /**< last mipmap level to use */
+         float min_lod_clamp;      /**< absolute mip-level LOD lower bound, 0 = none (VK_EXT_image_view_min_lod) */
       } tex;
       struct {
          unsigned offset;   /**< offset in bytes */
