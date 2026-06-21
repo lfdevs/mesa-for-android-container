@@ -9,7 +9,6 @@
 #include "kk_buffer.h"
 #include "kk_cmd_buffer.h"
 #include "kk_device.h"
-#include "kk_encoder.h"
 #include "kk_physical_device.h"
 #include "kk_sync.h"
 
@@ -26,62 +25,65 @@ kk_queue_submit(struct vk_queue *vk_queue, struct vk_queue_submit *submit)
    if (vk_queue_is_lost(&queue->vk))
       return VK_ERROR_DEVICE_LOST;
 
-   struct kk_encoder *encoder;
-   VkResult result = kk_encoder_init(dev->mtl_handle, queue, &encoder);
-   if (result != VK_SUCCESS)
-      return result;
-
-   /* Chain with previous sumbission */
-   if (queue->wait_fence) {
-      util_dynarray_append(&encoder->main.fences, queue->wait_fence);
-      encoder->main.wait_fence = true;
-   }
-
    for (struct vk_sync_wait *wait = submit->waits,
                             *end = submit->waits + submit->wait_count;
         wait != end; ++wait) {
       struct kk_sync_timeline *sync =
          container_of(wait->sync, struct kk_sync_timeline, base);
-      mtl_encode_wait_for_event(encoder->main.cmd_buffer, sync->mtl_handle,
-                                wait->wait_value);
+      mtl_wait_for_event(queue->mtl_handle, sync->mtl_handle, wait->wait_value);
    }
 
    for (uint32_t i = 0; i < submit->command_buffer_count; ++i) {
       struct kk_cmd_buffer *cmd_buffer =
          container_of(submit->command_buffers[i], struct kk_cmd_buffer, vk);
-      cmd_buffer->encoder = encoder;
-      /* TODO_KOSMICKRISP We need to release command buffer resources here for
-       * the following case: User records command buffers once and then reuses
-       * them multiple times. The resource release should be done at
-       * vkBeginCommandBuffer, but because we are recording all commands to
-       * later execute them at queue submission, the recording does not record
-       * the begin/end commands and jumps straight to the actual commands. */
-      kk_cmd_release_resources(dev, cmd_buffer);
+
+      /* TODO_KOSMICKRISP Command buffer enqueueing does not record being/end
+       * commands, so they will not be replayed when we execute them. Ensure we
+       * fake the being before recording and end after it. For the begin case
+       * it's just resetting the command buffer. */
+      kk_reset_cmd_buffer_internal(cmd_buffer);
 
       vk_cmd_queue_execute(&cmd_buffer->vk.cmd_queue,
                            kk_cmd_buffer_to_handle(cmd_buffer),
                            &dev->vk.dispatch_table);
-      kk_encoder_end(cmd_buffer);
-      cmd_buffer->encoder = NULL;
+
+      /* TODO_KOSMICKRISP For the end it's ensuring we don't have any command
+       * buffer active. */
+      cs_end(cmd_buffer);
+      cs_end(cmd_buffer);
+
+      /* TODO_KOSMICKRISP If we can ensure one time submission, we can just do
+       * the upload here and record live without having to replay at queue
+       * submission. */
+      mtl_command_buffer **cmds =
+         util_dynarray_begin(&cmd_buffer->submit_cmd_bufs);
+      uint32_t count = util_dynarray_num_elements(&cmd_buffer->submit_cmd_bufs,
+                                                  mtl_command_buffer *);
+
+      /* Ensure any changes to residency are propagated before we submit any
+       * work. All resources should have been allocated before submission.
+       * Otherwise, users are playing with fire. */
+      kk_device_make_resources_resident(dev);
+
+      /* Metal complains with empty submissions. */
+      if (count > 0u)
+         mtl_command_queue_commit(queue->mtl_handle, cmds, count);
+
+      if (cmd_buffer->drawable) {
+         mtl_command_queue_signal_drawable(queue->mtl_handle,
+                                           cmd_buffer->drawable);
+         mtl_drawable_present(cmd_buffer->drawable);
+         cmd_buffer->drawable = NULL;
+      }
    }
 
    for (uint32_t i = 0u; i < submit->signal_count; ++i) {
       struct vk_sync_signal *signal = &submit->signals[i];
       struct kk_sync_timeline *sync =
          container_of(signal->sync, struct kk_sync_timeline, base);
-      mtl_encode_signal_event(encoder->main.cmd_buffer, sync->mtl_handle,
-                              signal->signal_value);
+      mtl_signal_event(queue->mtl_handle, sync->mtl_handle,
+                       signal->signal_value);
    }
-
-   /* Ensure any changes to residency are propagated before we submit any work.
-    * All resources should have been allocated before submission. Otherwise,
-    * users are playing with fire. */
-   kk_device_make_resources_resident(dev);
-
-   /* Steal the last fence to chain with the next submission */
-   if (util_dynarray_num_elements(&encoder->main.fences, mtl_fence *) > 0)
-      queue->wait_fence = util_dynarray_pop(&encoder->main.fences, mtl_fence *);
-   kk_encoder_submit(encoder);
 
    return VK_SUCCESS;
 }
@@ -119,13 +121,8 @@ kk_queue_init(struct kk_device *dev, struct kk_queue *queue,
    if (result != VK_SUCCESS)
       return result;
 
-   queue->main.mtl_handle =
-      mtl_new_command_queue(dev->mtl_handle, KK_MAX_CMD_BUFFERS);
-   mtl_command_queue_add_residency_set(queue->main.mtl_handle,
-                                       dev->residency_set.handle);
-   queue->pre_gfx.mtl_handle =
-      mtl_new_command_queue(dev->mtl_handle, KK_MAX_CMD_BUFFERS);
-   mtl_command_queue_add_residency_set(queue->pre_gfx.mtl_handle,
+   queue->mtl_handle = mtl_new_command_queue(dev->mtl_handle);
+   mtl_command_queue_add_residency_set(queue->mtl_handle,
                                        dev->residency_set.handle);
 
    queue->vk.driver_submit = kk_queue_submit;
@@ -136,13 +133,8 @@ kk_queue_init(struct kk_device *dev, struct kk_queue *queue,
 void
 kk_queue_finish(struct kk_device *dev, struct kk_queue *queue)
 {
-   mtl_command_queue_remove_residency_set(queue->main.mtl_handle,
+   mtl_command_queue_remove_residency_set(queue->mtl_handle,
                                           dev->residency_set.handle);
-   mtl_command_queue_remove_residency_set(queue->pre_gfx.mtl_handle,
-                                          dev->residency_set.handle);
-   if (queue->wait_fence)
-      mtl_release(queue->wait_fence);
-   mtl_release(queue->pre_gfx.mtl_handle);
-   mtl_release(queue->main.mtl_handle);
+   mtl_release(queue->mtl_handle);
    vk_queue_finish(&queue->vk);
 }

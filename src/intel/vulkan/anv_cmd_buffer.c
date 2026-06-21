@@ -153,15 +153,15 @@ anv_create_cmd_buffer(struct vk_command_pool *pool,
       goto fail_vk;
 
    anv_state_stream_init(&cmd_buffer->surface_state_stream,
-                         &device->internal_surface_state_pool, 4096);
+                         anv_device_get_internal_surface_state_pool(device), 4096);
    anv_state_stream_init(&cmd_buffer->dynamic_state_stream,
-                         &device->dynamic_state_pool, 16384);
+                         anv_device_get_dynamic_state_pool(device), 16384);
    anv_state_stream_init(&cmd_buffer->general_state_stream,
-                         &device->general_state_pool, 16384);
+                         anv_device_get_general_state_pool(device), 16384);
    anv_state_stream_init(&cmd_buffer->indirect_push_descriptor_stream,
-                         &device->indirect_push_descriptor_pool, 4096);
+                         anv_device_get_indirect_push_descriptor_pool(device), 4096);
    anv_state_stream_init(&cmd_buffer->push_descriptor_buffer_stream,
-                         &device->push_descriptor_buffer_pool, 4096);
+                         anv_device_get_push_descriptor_buffer_pool(device), 4096);
 
    int success = u_vector_init_pow2(&cmd_buffer->dynamic_bos, 8,
                                     sizeof(struct anv_bo *));
@@ -277,24 +277,24 @@ reset_cmd_buffer(struct anv_cmd_buffer *cmd_buffer,
 
    anv_state_stream_finish(&cmd_buffer->surface_state_stream);
    anv_state_stream_init(&cmd_buffer->surface_state_stream,
-                         &cmd_buffer->device->internal_surface_state_pool, 4096);
+                         anv_device_get_internal_surface_state_pool(cmd_buffer->device), 4096);
 
    anv_state_stream_finish(&cmd_buffer->dynamic_state_stream);
    anv_state_stream_init(&cmd_buffer->dynamic_state_stream,
-                         &cmd_buffer->device->dynamic_state_pool, 16384);
+                         anv_device_get_dynamic_state_pool(cmd_buffer->device), 16384);
 
    anv_state_stream_finish(&cmd_buffer->general_state_stream);
    anv_state_stream_init(&cmd_buffer->general_state_stream,
-                         &cmd_buffer->device->general_state_pool, 16384);
+                         anv_device_get_general_state_pool(cmd_buffer->device), 16384);
 
    anv_state_stream_finish(&cmd_buffer->indirect_push_descriptor_stream);
    anv_state_stream_init(&cmd_buffer->indirect_push_descriptor_stream,
-                         &cmd_buffer->device->indirect_push_descriptor_pool,
+                         anv_device_get_indirect_push_descriptor_pool(cmd_buffer->device),
                          4096);
 
    anv_state_stream_finish(&cmd_buffer->push_descriptor_buffer_stream);
    anv_state_stream_init(&cmd_buffer->push_descriptor_buffer_stream,
-                         &cmd_buffer->device->push_descriptor_buffer_pool, 4096);
+                         anv_device_get_push_descriptor_buffer_pool(cmd_buffer->device), 4096);
 
    while (u_vector_length(&cmd_buffer->dynamic_bos) > 0) {
       struct anv_bo **bo = u_vector_remove(&cmd_buffer->dynamic_bos);
@@ -666,13 +666,13 @@ anv_cmd_buffer_bind_descriptor_set(struct anv_cmd_buffer *cmd_buffer,
             struct anv_push_constants *push = &pipe_state->push_constants;
             uint64_t offset =
                anv_address_physical(set->desc_surface_addr) -
-               cmd_buffer->device->physical->va.internal_surface_state_pool.addr;
+               anv_physical_device_get_internal_surface_state_pool_va(cmd_buffer->device->physical)->addr;
             assert((offset & ~ANV_DESCRIPTOR_SET_OFFSET_MASK) == 0);
             push->desc_surface_offsets[set_index] &= ~ANV_DESCRIPTOR_SET_OFFSET_MASK;
             push->desc_surface_offsets[set_index] |= offset;
             push->desc_sampler_offsets[set_index] =
                anv_address_physical(set->desc_sampler_addr) -
-               cmd_buffer->device->physical->va.dynamic_state_pool.addr;
+               anv_physical_device_get_dynamic_state_pool_va(cmd_buffer->device->physical)->addr;
          }
       }
 
@@ -800,9 +800,9 @@ void anv_CmdBindDescriptorBuffersEXT(
    struct anv_cmd_state *state = &cmd_buffer->state;
 
    for (uint32_t i = 0; i < bufferCount; i++) {
-      assert(pBindingInfos[i].address >= cmd_buffer->device->physical->va.dynamic_visible_pool.addr &&
-             pBindingInfos[i].address < (cmd_buffer->device->physical->va.dynamic_visible_pool.addr +
-                                         cmd_buffer->device->physical->va.dynamic_visible_pool.size));
+      assert(pBindingInfos[i].address >= anv_physical_device_get_dynamic_visible_pool_va(cmd_buffer->device->physical)->addr &&
+             pBindingInfos[i].address < (anv_physical_device_get_dynamic_visible_pool_va(cmd_buffer->device->physical)->addr +
+                                         anv_physical_device_get_dynamic_visible_pool_va(cmd_buffer->device->physical)->size));
 
       if (state->descriptor_buffers.address[i] != pBindingInfos[i].address) {
          state->descriptor_buffers.address[i] = pBindingInfos[i].address;

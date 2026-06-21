@@ -380,6 +380,8 @@ insn("p_cbranch_z", format=Format.PSEUDO_BRANCH)
 insn("p_cbranch_nz", format=Format.PSEUDO_BRANCH)
 
 insn("p_barrier", format=Format.PSEUDO_BARRIER)
+insn("p_barrier_signal", format=Format.PSEUDO_BARRIER)
+insn("p_barrier_wait", format=Format.PSEUDO_BARRIER)
 
 insn("p_call", format=Format.PSEUDO_CALL)
 

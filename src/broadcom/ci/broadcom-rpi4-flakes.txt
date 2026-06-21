@@ -52,7 +52,6 @@ dEQP-GLES31.functional.synchronization.inter_invocation.image_read_write
 dEQP-GLES31.functional.synchronization.inter_invocation.ssbo_alias_overwrite
 dEQP-GLES31.functional.synchronization.inter_invocation.ssbo_atomic_alias_write
 dEQP-GLES31.functional.synchronization.inter_invocation.ssbo_atomic_read_write
-dEQP-GLES31.functional.ubo.random.all_per_block_buffers.20
 
 fast_color_clear@fcc-front-buffer-distraction
 glx@glx-multi-context-front

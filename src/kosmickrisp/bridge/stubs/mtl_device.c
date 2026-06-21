@@ -132,3 +132,15 @@ mtl_new_buffer_with_bytes_no_copy(mtl_device *device, void *ptr,
 {
    return NULL;
 }
+
+mtl_command_allocator *
+mtl_new_command_allocator(mtl_device *device)
+{
+   return NULL;
+}
+
+mtl_command_buffer *
+mtl_new_command_buffer(mtl_device *device)
+{
+   return NULL;
+}

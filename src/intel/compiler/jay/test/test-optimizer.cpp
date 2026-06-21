@@ -6,6 +6,7 @@
 #include "compiler/gen/gen_enums.h"
 #include "util/lut.h"
 #include "jay_builder.h"
+#include "jay_builder_opcodes.h"
 #include "jay_ir.h"
 #include "jay_private.h"
 #include "jay_test.h"
@@ -176,9 +177,13 @@ TEST_F(Optimizer, FusedSat)
 TEST_F(Optimizer, InverseBallotPropagate)
 {
    CASEB({
+      jay_def tx = jay_alloc_def(b, UGPR, 1);
+      jay_def ty = jay_alloc_def(b, UGPR, 1);
       jay_def x = jay_alloc_def(b, UGPR, 1);
       jay_def f = jay_alloc_def(b, FLAG, 1);
-      jay_ADD(b, JAY_TYPE_U32, after ? f : x, wx, wy);
+      jay_BROADCAST_IMM(b, tx, wx, 0);
+      jay_BROADCAST_IMM(b, ty, wy, 0);
+      jay_ADD(b, JAY_TYPE_U32, after ? f : x, tx, ty);
       if (!after) {
          jay_MOV(b, f, x);
       }

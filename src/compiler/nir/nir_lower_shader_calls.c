@@ -831,7 +831,7 @@ duplicate_loop_bodies(nir_function_impl *impl, nir_instr *resume_instr)
       nir_cf_list cf_list;
       nir_cf_list_extract(&cf_list, &loop->body);
 
-      nir_if *_if = nir_if_create(impl->function->shader);
+      nir_if *_if = nir_if_create(impl);
       b.cursor = nir_after_cf_list(&loop->body);
       _if->condition = nir_src_for_ssa(nir_load_reg(&b, resume_reg));
       nir_cf_node_insert(nir_after_cf_list(&loop->body), &_if->cf_node);

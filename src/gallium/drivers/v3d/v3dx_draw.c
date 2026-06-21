@@ -1454,7 +1454,6 @@ v3d_launch_grid(struct pipe_context *pctx, const struct pipe_grid_info *info)
          *   so we want to keep them small if one is present.
          */
         struct drm_v3d_submit_csd submit = { 0 };
-        struct v3d_job *job = v3d_job_create(v3d);
 
         /* Set up the actual number of workgroups, synchronously mapping the
          * indirect buffer if necessary to get the dimensions.
@@ -1528,6 +1527,7 @@ v3d_launch_grid(struct pipe_context *pctx, const struct pipe_grid_info *info)
         /* Make sure we didn't accidentally underflow. */
         assert(submit.cfg[4] != ~0);
 
+        struct v3d_job *job = v3d_job_create(v3d);
         v3d_job_add_bo(job, v3d_resource(v3d->prog.compute->resource)->bo);
         submit.cfg[5] = (v3d_resource(v3d->prog.compute->resource)->bo->offset +
                          v3d->prog.compute->offset);

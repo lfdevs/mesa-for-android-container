@@ -199,7 +199,7 @@ nir_remove_single_src_phis_block(nir_block *block)
       }
 
       if (!def) {
-         nir_builder b = nir_builder_create(nir_cf_node_get_function(&block->cf_node));
+         nir_builder b = nir_builder_create(block->impl);
          b.cursor = nir_after_phis(block);
          def = nir_undef(&b, phi->def.num_components, phi->def.bit_size);
       }

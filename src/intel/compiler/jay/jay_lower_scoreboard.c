@@ -54,8 +54,7 @@ sync_sbids(jay_builder *b, uint32_t mask, gen_sbid_mode mode)
 static inline bool
 jay_inst_is_unordered(const jay_inst *I)
 {
-   return I->op == JAY_OPCODE_SEND ||
-          I->op == JAY_OPCODE_DPAS;
+   return I->op == JAY_OPCODE_SEND || I->op == JAY_OPCODE_DPAS;
 }
 
 static inline bool
@@ -68,8 +67,7 @@ jay_inst_has_sbid(const jay_inst *I)
 static inline unsigned
 jay_inst_sbid(const jay_inst *I)
 {
-   return I->op == JAY_OPCODE_SEND ? jay_send_sbid(I)
-                                   : jay_dpas_sbid(I);
+   return I->op == JAY_OPCODE_SEND ? jay_send_sbid(I) : jay_dpas_sbid(I);
 }
 
 static inline void
@@ -225,8 +223,8 @@ inferred_sync_pipe(const struct intel_device_info *devinfo, const jay_inst *I)
    if (I->op == JAY_OPCODE_SEND) {
       return GEN_PIPE_NONE;
    } else if (I->op == JAY_OPCODE_DPAS) {
-      return jay_type_is_any_float(jay_dpas_acc_type(I)) ? GEN_PIPE_FLOAT
-                                                         : GEN_PIPE_INT;
+      return jay_type_is_any_float(jay_dpas_acc_type(I)) ? GEN_PIPE_FLOAT :
+                                                           GEN_PIPE_INT;
    } else if (devinfo->verx10 >= 125 && type == JAY_TYPE_F64) {
       /* Avoid emitting (RegDist, SWSB) annotations for long instructions on
        * platforms where they are unordered as they may not be allowed.
@@ -509,7 +507,8 @@ jay_lower_scoreboard_trivial(jay_shader *shader)
          if (I->op == JAY_OPCODE_DPAS) {
             /* DPAS can't have an A@1, so insert an extra SYNC.nop. */
             jay_builder before = jay_init_builder(func, jay_before_inst(I));
-            jay_SYNC(&before, jay_null(), TGL_SYNC_NOP)->dep = gen_swsb_regdist(1);
+            jay_SYNC(&before, jay_null(), TGL_SYNC_NOP)->dep =
+               gen_swsb_regdist(1);
             I->dep = gen_swsb_sbid(GEN_SBID_SET, 0);
          } else {
             I->dep = gen_swsb_dst_dep(gen_swsb_sbid(GEN_SBID_SET, 0), 1);

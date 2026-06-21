@@ -71,77 +71,28 @@ unsigned
 gen_inst_num_sources(const struct intel_device_info *devinfo,
                      const gen_inst *inst)
 {
-   switch (gen_inst_format(inst->opcode)) {
-   case GEN_FORMAT_BASIC_ONE_SRC:
-   case GEN_FORMAT_BRANCH_ONE_SRC:
-      return 1;
-
-   case GEN_FORMAT_BASIC_TWO_SRC:
-   case GEN_FORMAT_BRANCH_TWO_SRC:
-      return 2;
-
-   case GEN_FORMAT_BASIC_THREE_SRC:
-   case GEN_FORMAT_DPAS_THREE_SRC:
-      return 3;
-
-   case GEN_FORMAT_SEND:
+   if (gen_inst_is_send(inst))
       return gen_inst_is_split_send(devinfo, inst) ? 2 : 1;
 
-   case GEN_FORMAT_NOP:
-   case GEN_FORMAT_ILLEGAL:
-      return 0;
-   }
-
-   UNREACHABLE("invalid gen inst");
+   return gen_opcode_num_srcs(inst->opcode);
 }
 
 bool
 gen_has_uip(gen_opcode op)
 {
-   return op == GEN_OP_IF ||
-          op == GEN_OP_ELSE ||
-          op == GEN_OP_BREAK ||
-          op == GEN_OP_CONTINUE ||
-          op == GEN_OP_HALT ||
-          op == GEN_OP_GOTO;
+   return gen_opcode_has_prop(op, GEN_OPCODE_PROP_HAS_UIP);
 }
 
 bool
 gen_has_jip(gen_opcode op)
 {
-   return op == GEN_OP_IF ||
-          op == GEN_OP_ELSE ||
-          op == GEN_OP_ENDIF ||
-          op == GEN_OP_WHILE ||
-          op == GEN_OP_BREAK ||
-          op == GEN_OP_CONTINUE ||
-          op == GEN_OP_HALT ||
-          op == GEN_OP_GOTO ||
-          op == GEN_OP_JOIN;
+   return gen_opcode_has_prop(op, GEN_OPCODE_PROP_HAS_JIP);
 }
 
 bool
 gen_has_branch_ctrl(gen_opcode opcode)
 {
-   switch (opcode) {
-   case GEN_OP_IF:
-   case GEN_OP_ELSE:
-   case GEN_OP_GOTO:
-   case GEN_OP_BREAK:
-   case GEN_OP_CALL:
-   case GEN_OP_CALLA:
-   case GEN_OP_CONTINUE:
-   case GEN_OP_ENDIF:
-   case GEN_OP_HALT:
-   case GEN_OP_JMPI:
-   case GEN_OP_RET:
-   case GEN_OP_WHILE:
-   case GEN_OP_BRC:
-   case GEN_OP_BRD:
-      return true;
-   default:
-      return false;
-   }
+   return gen_opcode_has_prop(opcode, GEN_OPCODE_PROP_BRANCH_CTRL);
 }
 
 static bool
@@ -617,7 +568,7 @@ struct gen_encoder {
 
       set(E::HW_OPCODE,      desc->hw_opcode);
       set(E::SWSB,           gen_swsb_encode(devinfo, inst->swsb, inst->opcode));
-      set(E::EXEC_SIZE,      cvt(inst->exec_size) - 1);
+      set(E::EXEC_SIZE,      inst->exec_size ? cvt(inst->exec_size) - 1 : 0);
       set(E::FLAG_SUBNR,     inst->flag_subnr);
       set(E::FLAG_NR,        inst->flag_nr);
       set(E::PRED_CONTROL,   inst->pred_control);
@@ -754,8 +705,7 @@ struct gen_encoder {
             encode_direct_operand(E::THREE_SRC0_OPERAND, inst->src[0]);
 
             const unsigned src0_vstride = ENCODE_VSTRIDE_3SRC(inst->src[0].region.vstride);
-            set(E::THREE_SRC0_VSTRIDE_LO, (src0_vstride >> 0) & 1);
-            set(E::THREE_SRC0_VSTRIDE_HI, (src0_vstride >> 1) & 1);
+            set(E::THREE_SRC0_VSTRIDE, src0_vstride);
 
             set(E::THREE_SRC0_HSTRIDE, encode_hstride(inst->src[0].region.hstride));
          }
@@ -763,8 +713,7 @@ struct gen_encoder {
          encode_direct_operand(E::THREE_SRC1_OPERAND, inst->src[1]);
 
          const unsigned src1_vstride = ENCODE_VSTRIDE_3SRC(inst->src[1].region.vstride);
-         set(E::THREE_SRC1_VSTRIDE_LO, (src1_vstride >> 0) & 1);
-         set(E::THREE_SRC1_VSTRIDE_HI, (src1_vstride >> 1) & 1);
+         set(E::THREE_SRC1_VSTRIDE, src1_vstride);
 
          set(E::THREE_SRC1_HSTRIDE, encode_hstride(inst->src[1].region.hstride));
 
@@ -784,8 +733,7 @@ struct gen_encoder {
             set(E::THREE_SRC1_ABS,    inst->src[1].abs);
             set(E::THREE_SRC2_ABS,    inst->src[2].abs);
          } else {
-            set(E::BFN_FUNC_CONTROL_LO, (inst->boolean_func_ctrl >> 0) & 0xF);
-            set(E::BFN_FUNC_CONTROL_HI, (inst->boolean_func_ctrl >> 4) & 0xF);
+            set(E::BFN_FUNC_CONTROL, inst->boolean_func_ctrl);
          }
 
          break;
@@ -948,6 +896,23 @@ private:
       assert((value & (mask >> low)) == value);
 
       raw->data[word] = (raw->data[word] & ~mask) | (value << low);
+   }
+
+   inline void
+   set(const gen_ranges<1> &ranges, uint64_t value)
+   {
+      set(ranges[0], value);
+   }
+
+   inline void
+   set(const gen_ranges<2> &ranges, uint64_t value)
+   {
+      unsigned num_bits = (ranges[1].hi - ranges[1].lo + 1);
+      assume(num_bits <= 64);
+      uint64_t mask = ~0ull >> (64 - num_bits);
+      set(ranges[1], value & mask);
+      value >>= num_bits;
+      set(ranges[0], value);
    }
 
    inline void
@@ -1317,9 +1282,7 @@ struct gen_decoder {
          } else {
             decode_direct_operand(E::THREE_SRC0_OPERAND, inst->src[0]);
 
-            const unsigned encoded_src0_vstride =
-               (get(E::THREE_SRC0_VSTRIDE_LO) << 0)|
-               (get(E::THREE_SRC0_VSTRIDE_HI) << 1);
+            const unsigned encoded_src0_vstride = get(E::THREE_SRC0_VSTRIDE);
             inst->src[0].region.vstride = DECODE_VSTRIDE_3SRC(encoded_src0_vstride);
 
             inst->src[0].region.hstride = decode_hstride(get(E::THREE_SRC0_HSTRIDE));
@@ -1328,9 +1291,7 @@ struct gen_decoder {
 
          decode_direct_operand(E::THREE_SRC1_OPERAND, inst->src[1]);
 
-         const unsigned encoded_src1_vstride =
-            (get(E::THREE_SRC1_VSTRIDE_LO) << 0)|
-            (get(E::THREE_SRC1_VSTRIDE_HI) << 1);
+         const unsigned encoded_src1_vstride = get(E::THREE_SRC1_VSTRIDE);
          inst->src[1].region.vstride = DECODE_VSTRIDE_3SRC(encoded_src1_vstride);
 
          inst->src[1].region.hstride = decode_hstride(get(E::THREE_SRC1_HSTRIDE));
@@ -1354,8 +1315,7 @@ struct gen_decoder {
             inst->src[1].abs    = get(E::THREE_SRC1_ABS);
             inst->src[2].abs    = get(E::THREE_SRC2_ABS);
          } else {
-            inst->boolean_func_ctrl = (get(E::BFN_FUNC_CONTROL_LO) << 0) |
-                                      (get(E::BFN_FUNC_CONTROL_HI) << 4);
+            inst->boolean_func_ctrl = get(E::BFN_FUNC_CONTROL);
          }
 
          break;
@@ -1549,6 +1509,20 @@ private:
       return (raw->data[word] >> low) & mask;
    }
 
+   inline uint64_t
+   get(const gen_ranges<1> &ranges) const
+   {
+      return get(ranges[0]);
+   }
+
+   inline uint64_t
+   get(const gen_ranges<2> &ranges) const
+   {
+      return
+         (get(ranges[0]) << (ranges[1].hi - ranges[1].lo + 1)) |
+         get(ranges[1]) ;
+   }
+
    inline void
    decode_direct_operand(const gen_range &bits, gen_operand &o, bool skip_subnr = false)
    {
@@ -1658,7 +1632,7 @@ gen_find_shader_size_xe(const uint64_t *raw,
       if (!compact &&
           (hw_opcode == E::gen_to_description[GEN_OP_SEND].hw_opcode ||
            hw_opcode == E::gen_to_description[GEN_OP_SENDC].hw_opcode) &&
-          (raw - inst_words)[0] & (UINT64_C(1) << E::SEND_EOT.lo))
+          (raw - inst_words)[0] & (UINT64_C(1) << ((gen_range)E::SEND_EOT).lo))
          break;
    }
 
@@ -1772,8 +1746,15 @@ gen_scan_raw_layout(gen_scan_raw_layout_params *params)
 
       if (raw + inst_words > raw_end)
          break;
-      if (count == max_insts)
+      if (count == max_insts) {
+         /* When compacting we pad with a compact-nop to align program to an
+          * uncompacted instruction boundary. We can ignore this
+          * instruction.
+          */
+         if (compact && (raw + inst_words) == raw_end)
+            break;
          return false;
+      }
 
       if (params->layouts) {
          params->layouts[count].offset = (raw - raw_start) * sizeof(*raw);

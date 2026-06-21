@@ -104,7 +104,13 @@ struct v3dv_image {
    struct {
       uint32_t cpp;
 
-      struct v3d_resource_slice slices[V3D_MAX_MIP_LEVELS];
+      /* Sized at V3D_MAX_MIP_LEVELS + 2 (= 15) to support the
+       * V3D_WEBGPU_OVERRIDE=1 path: it advertises maxImageDimension2D = 8192
+       * (14 mip levels, 0..13) and maxImageDimension1D/3D = 16384 (15 mip
+       * levels, 0..14), two more than the default V3D_MAX_MIP_LEVELS (13
+       * levels, 0..12 for the 4096 HW limit).
+       */
+      struct v3d_resource_slice slices[V3D_MAX_MIP_LEVELS + 2];
       /* Total size of the plane in bytes. */
       uint64_t size;
       uint32_t cube_map_stride;

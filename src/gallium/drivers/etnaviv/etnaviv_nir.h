@@ -35,6 +35,9 @@ bool
 etna_lower_alu(nir_shader *shader, bool has_new_transcendentals);
 
 bool
+etna_nir_lower_128bit(nir_shader *s, struct etna_shader_key *key);
+
+bool
 etna_nir_lower_texture(nir_shader *s, struct etna_shader_key *key, const struct etna_core_info *info);
 
 bool

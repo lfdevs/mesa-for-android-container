@@ -21,9 +21,9 @@ fedora/x86_64_build:
     - .fdo.container-build@fedora
     - .container
   variables:
-    FDO_DISTRIBUTION_VERSION: 42
+    FDO_DISTRIBUTION_VERSION: 44
     MESA_IMAGE_TAG: &fedora-x86_64_build ${FEDORA_X86_64_BUILD_TAG}
-    LLVM_VERSION: &fedora-x86_64-llvm 20
+    LLVM_VERSION: &fedora-x86_64-llvm 22
 
 .use-fedora/x86_64_build:
   tags:

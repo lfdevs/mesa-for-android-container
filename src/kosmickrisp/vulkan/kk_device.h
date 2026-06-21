@@ -99,6 +99,9 @@ struct kk_device {
 
    struct vk_meta_device meta;
 
+   // /* Indirected for common secondary emulation */
+   // struct vk_device_dispatch_table cmd_dispatch;
+
    /* Geomtry heap */
    struct kk_bo *heap;
    util_once_flag heap_init_once;

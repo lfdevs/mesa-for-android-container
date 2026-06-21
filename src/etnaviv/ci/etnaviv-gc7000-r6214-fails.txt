@@ -18,3 +18,5 @@ dEQP-GLES2.functional.texture.vertex.cube.filtering.nearest_mipmap_nearest_linea
 KHR-GLES2.core.internalformat.texture2d.depth_component_unsigned_int_depth_component16,Fail
 KHR-GLES2.core.internalformat.texture2d.depth_component_unsigned_int_depth_component24,Fail
 KHR-GLES2.core.internalformat.texture2d.depth_component_unsigned_short_depth_component16,Fail
+KHR-GLES2.core.internalformat.texture2d.rgb_float_rgb32f,Fail
+KHR-GLES2.core.internalformat.texture2d.rgba_float_rgba32f,Fail

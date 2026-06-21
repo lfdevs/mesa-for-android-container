@@ -37,7 +37,7 @@ TEST_F(nir_cf_test, delete_break_in_loop)
     *
     * while (...) { break; }
     */
-   nir_loop *loop = nir_loop_create(b->shader);
+   nir_loop *loop = nir_loop_create(b->impl);
    nir_cf_node_insert(nir_after_cf_list(&b->impl->body), &loop->cf_node);
 
    b->cursor = nir_after_cf_list(&loop->body);

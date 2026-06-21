@@ -67,6 +67,8 @@ enum pco_debug {
    PCO_DEBUG_ALLOC_EXTRA_VTXINS = BITFIELD64_BIT(3),
    PCO_DEBUG_INT_SMP = BITFIELD64_BIT(4),
    PCO_DEBUG_GLOBAL_SHMEM = BITFIELD64_BIT(5),
+   PCO_DEBUG_RA_FORCE_SPILL = BITFIELD64_BIT(6),
+   PCO_DEBUG_RA_SKIP_OPT = BITFIELD64_BIT(7),
 };
 
 extern uint64_t pco_debug;
@@ -103,6 +105,7 @@ typedef struct _pco_cf_node pco_cf_node;
 typedef struct _pco_func pco_func;
 typedef struct _pco_block pco_block;
 typedef struct _pco_instr pco_instr;
+typedef struct _pco_builder pco_builder;
 
 #define PCO_REF_VAL_BITS (32U)
 
@@ -1805,7 +1808,7 @@ bool pco_nir_lower_algebraic_late(nir_shader *shader);
 bool pco_nir_lower_alpha_to_coverage(nir_shader *shader);
 bool pco_nir_lower_atomics(nir_shader *shader, pco_data *data);
 bool pco_nir_lower_barriers(nir_shader *shader, pco_data *data);
-bool pco_nir_lower_clip_cull_vars(nir_shader *shader);
+void pco_nir_lower_clip_cull_vars(nir_shader *shader);
 bool pco_nir_lower_fs_intrinsics(nir_shader *shader);
 bool pco_nir_lower_vs_intrinsics(nir_shader *shader);
 bool pco_nir_lower_images(nir_shader *shader, pco_data *data, pco_ctx *ctx);
@@ -3115,10 +3118,15 @@ static inline unsigned pco_branch_rel_offset(pco_igrp *br, pco_cf_node *cf_node)
    return pco_cf_node_offset(cf_node) - pco_igrp_offset(br);
 }
 
-static inline unsigned pco_branch_rel_offset_next_igrp(pco_igrp *br)
+static inline unsigned pco_branch_rel_offset_next_igrp(pco_igrp *br, bool skip_next)
 {
    pco_igrp *next_igrp = pco_next_igrp(br);
    assert(next_igrp);
+
+   if (skip_next) {
+      next_igrp = pco_next_igrp(next_igrp);
+      assert(next_igrp);
+   }
 
    return pco_igrp_offset(next_igrp) - pco_igrp_offset(br);
 }
@@ -3151,8 +3159,9 @@ static inline bool pco_should_skip_pass(const char *pass)
 
 /* Common hw constants/references. */
 
-/** Integer/float zero. */
+/** Integer/float zero/false. */
 #define pco_zero pco_ref_hwreg(0, PCO_REG_CLASS_CONST)
+#define pco_false pco_zero
 
 /** Integer one. */
 #define pco_one pco_ref_hwreg(1, PCO_REG_CLASS_CONST)
@@ -3228,5 +3237,15 @@ pco_unpack_desc(uint32_t packed, unsigned *desc_set, unsigned *binding)
    *desc_set = packed & 0xffff;
    *binding = packed >> 16;
 }
+
+/**
+ * \brief Returns a reference to the execution mask counter,
+ *        allocating and initialising one if it doesn't exist.
+ *
+ * \param[in,out] func The PCO function.
+ * \param[in,out] b The PCO builder.
+ * \return The execution mask counter reference.
+ */
+pco_ref pco_emc_ref(pco_func *func, pco_builder *b);
 
 #endif /* PCO_INTERNAL_H */

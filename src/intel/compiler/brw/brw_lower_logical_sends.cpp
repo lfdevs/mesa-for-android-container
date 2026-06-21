@@ -258,7 +258,7 @@ setup_color_payload(const brw_builder &bld, brw_reg *dst, brw_reg color,
 
 static void
 lower_fb_write_logical_send(const brw_builder &bld, brw_fb_write_inst *write,
-                            const struct brw_fs_prog_data *prog_data,
+                            struct brw_fs_prog_data *prog_data,
                             const brw_fs_prog_key *key,
                             const brw_fs_thread_payload &fs_payload)
 {
@@ -484,8 +484,7 @@ lower_fb_write_logical_send(const brw_builder &bld, brw_fb_write_inst *write,
    send->has_side_effects = true;
 
    if (double_rt_writes) {
-      brw_check_dynamic_fs_config(bld, prog_data,
-                                  INTEL_FS_CONFIG_COARSE_RT_WRITES);
+      brw_check_dynamic_fs_config(bld, INTEL_FS_CONFIG_COARSE_RT_WRITES);
       bld.IF(BRW_PREDICATE_NORMAL);
       {
          brw_send_inst *coarse_inst = brw_clone_inst(*bld.shader, send)->as_send();
@@ -1872,24 +1871,6 @@ lower_interpolator_logical_send(const brw_builder &bld, brw_inst *inst,
                             inst->src[INTERP_SRC_NOPERSPECTIVE].ud,
                             false /* coarse_pixel_rate */,
                             inst->exec_size, inst->group);
-
-   if (fs_prog_data->coarse_pixel_dispatch == INTEL_ALWAYS) {
-      desc_imm |= (1 << 15);
-   } else if (fs_prog_data->coarse_pixel_dispatch == INTEL_SOMETIMES) {
-      STATIC_ASSERT(INTEL_FS_CONFIG_COARSE_PI_MSG == (1 << 15));
-      brw_reg orig_desc = desc;
-      const brw_builder &ubld = bld.exec_all().group(8, 0);
-      desc = ubld.vgrf(BRW_TYPE_UD);
-      ubld.AND(desc, brw_dynamic_fs_config(fs_prog_data),
-               brw_imm_ud(INTEL_FS_CONFIG_COARSE_PI_MSG));
-
-      /* And, if it's AT_OFFSET, we might have a non-trivial descriptor */
-      if (orig_desc.file == IMM) {
-         desc_imm |= orig_desc.ud;
-      } else {
-         ubld.OR(desc, desc, orig_desc);
-      }
-   }
 
    /* If persample_dispatch is dynamic, select the interpolation mode
     * dynamically and OR into the descriptor to complete the static part

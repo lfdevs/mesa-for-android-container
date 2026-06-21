@@ -25,6 +25,33 @@
 #include "nir_worklist.h"
 
 static bool
+intr_always_needs_helpers(nir_intrinsic_instr *intr)
+{
+   /* Subgroup ops might access data from helper lanes */
+   if (nir_intrinsic_has_semantic(intr, NIR_INTRINSIC_SUBGROUP))
+      return true;
+
+   /* We don't know how scratch data is used without more complex tracking. */
+   if (intr->intrinsic == nir_intrinsic_store_scratch ||
+       intr->intrinsic == nir_intrinsic_store_scratch_intel ||
+       intr->intrinsic == nir_intrinsic_store_scratch_nv)
+      return true;
+
+   if (nir_intrinsic_has_access(intr) && (nir_intrinsic_access(intr) & ACCESS_INCLUDE_HELPERS))
+      return true;
+
+   /* Unlike demote, terminate disables invocations completely.
+    * For example, a subgroup operation after terminate should
+    * include helpers, but not the invocations that were terminated.
+    * So the condition must be correct for helpers too.
+    */
+   if (intr->intrinsic == nir_intrinsic_terminate_if)
+      return true;
+
+   return false;
+}
+
+static bool
 instr_never_needs_helpers(nir_instr *instr)
 {
    if (instr->type != nir_instr_type_intrinsic)
@@ -32,10 +59,7 @@ instr_never_needs_helpers(nir_instr *instr)
 
    nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
 
-   if (intr->intrinsic == nir_intrinsic_store_scratch)
-      return false;
-
-   if (nir_intrinsic_has_access(intr) && (nir_intrinsic_access(intr) & ACCESS_INCLUDE_HELPERS))
+   if (intr_always_needs_helpers(intr))
       return false;
 
    bool is_store = !nir_intrinsic_infos[intr->intrinsic].has_dest;
@@ -161,48 +185,55 @@ nir_opt_load_skip_helpers(nir_shader *shader, nir_opt_load_skip_helpers_options 
 
          case nir_instr_type_intrinsic: {
             nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
-            if (nir_intrinsic_has_semantic(intr, NIR_INTRINSIC_SUBGROUP) ||
-                intr->intrinsic == nir_intrinsic_store_scratch) {
-               /* Subgroup ops might access data from helper lanes and we don't
-                * know how scratch data is used without more complex tracking.
-                */
-               nir_foreach_src(instr, set_src_needs_helpers, &hs);
-            } else if (intr->intrinsic == nir_intrinsic_terminate_if) {
-               /* Unlike demote, terminate disables invocations completely.
-                * For example, a subgroup operation after terminate should
-                * include helpers, but not the invocations that were terminated.
-                * So the condition must be correct for helpers too.
-                */
-               set_src_needs_helpers(&intr->src[0], &hs);
-            } else if (instr_never_needs_helpers(instr)) {
-               continue;
-            } else if (hs.options->intrinsic_cb &&
-                       hs.options->intrinsic_cb(intr, hs.options->intrinsic_cb_data) &&
-                       add_load_to_worklist(&hs, instr)) {
-               switch (intr->intrinsic) {
-               case nir_intrinsic_load_global_amd:
-                  break;
-               default: {
-                  /* Even if this load is skipped for helpers, the handle must
-                   * still be uniform.
-                   */
-                  nir_src *io_index_src = nir_get_io_index_src(intr);
-                  if (io_index_src != NULL)
-                     set_src_needs_helpers(io_index_src, &hs);
-                  break;
-               }
-               }
 
-               /* We don't need to set the offset/address sources as needing
-                * helpers if this load is skipped for helpers.
-                */
-            } else {
-               /* All I/O addresses need helpers because getting them wrong
-                * may cause a fault.
-                */
+            if (intr_always_needs_helpers(intr)) {
+               nir_foreach_src(instr, set_src_needs_helpers, &hs);
+               continue;
+            }
+
+            bool may_skip_helper = instr_never_needs_helpers(instr);
+
+            if (!may_skip_helper &&
+                hs.options->intrinsic_cb &&
+                hs.options->intrinsic_cb(intr, hs.options->intrinsic_cb_data) &&
+                add_load_to_worklist(&hs, instr)) {
+               may_skip_helper = true;
+            }
+
+            /* Even if this load is skipped for helpers, the handle must
+             * still be uniform.
+             */
+            bool index_must_be_uniform = true;
+
+            switch (intr->intrinsic) {
+            case nir_intrinsic_load_global_amd:
+            case nir_intrinsic_store_global_amd:
+            case nir_intrinsic_global_atomic_amd:
+            case nir_intrinsic_global_atomic_swap_amd:
+               index_must_be_uniform = false;
+               break;
+            default:
+               if (nir_intrinsic_has_access(intr) &&
+                   (nir_intrinsic_access(intr) & ACCESS_NON_UNIFORM)) {
+                  index_must_be_uniform = false;
+               }
+               break;
+            }
+
+            /* All used I/O addresses need helpers because getting them wrong
+             * may cause a fault. Even if this accesss is skipped for helpers,
+             * we might still need helpers to keep the descriptor handle uniform.
+             */
+            if (!may_skip_helper || index_must_be_uniform) {
                nir_src *io_index_src = nir_get_io_index_src(intr);
                if (io_index_src != NULL)
                   set_src_needs_helpers(io_index_src, &hs);
+            }
+
+            /* We don't need to set the offset/address sources as needing
+             * helpers if this access is skipped for helpers.
+             */
+            if (!may_skip_helper) {
                nir_src *io_offset_src = nir_get_io_offset_src(intr);
                if (io_offset_src != NULL)
                   set_src_needs_helpers(io_offset_src, &hs);

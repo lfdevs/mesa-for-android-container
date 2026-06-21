@@ -1676,6 +1676,11 @@ RADV driver environment variables
 
    enable/disable SQTT/RGP instruction timing (enabled by default)
 
+.. envvar:: RADV_THREAD_TRACE_INSTRUCTION_TIMING_SE_MASK
+
+   set the SQTT/RGP instruction timing SE mask (default value is 0xFFFFFFFF,
+   which means all SE are included)
+
 .. envvar:: RADV_THREAD_TRACE_QUEUE_EVENTS
 
    enable/disable SQTT/RGP queue events (enabled by default)
@@ -2213,6 +2218,12 @@ PowerVR driver environment variables
 
    ``global_shmem``
       Force spill shared memory to global memory.
+
+   ``ra_force_spill``
+      Force spilling of temps during register allocation.
+
+   ``ra_skip_opt``
+      Skip attempting to allocate temps with the optimal amount during RA.
 
 .. envvar:: PCO_SKIP_PASSES
 

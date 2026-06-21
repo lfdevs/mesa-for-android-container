@@ -524,6 +524,7 @@ st_create_texture_sampler_view_from_stobj(struct st_context *st,
    }
    assert(templ.u.tex.first_layer <= templ.u.tex.last_layer);
    assert(templ.u.tex.first_level <= templ.u.tex.last_level);
+   templ.u.tex.min_lod_clamp = 0.0f;
    templ.target = gl_target_to_pipe(texObj->Target);
 
    templ.swizzle_r = GET_SWZ(swizzle, 0);

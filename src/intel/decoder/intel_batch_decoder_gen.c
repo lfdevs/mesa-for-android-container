@@ -21,7 +21,25 @@ ctx_disassemble_program_gen(struct intel_batch_decode_ctx *ctx,
    if (!bo.map)
       return;
 
-   fprintf(ctx->fp, "\nReferenced %s:\n", name);
+   fprintf(ctx->fp, "\nReferenced %s (ksp: 0x%" PRIx32, name, ksp);
+   if (ctx->shader_hash.last_inst &&
+       !strcmp(ctx->shader_hash.last_inst->name, "MI_STORE_DATA_IMM")) {
+      /* We only consider a recorded hash valid when the previously parsed
+       * instruction is the token.
+       */
+      fprintf(ctx->fp, " hash: 0x%" PRIx64 "): \n", ctx->shader_hash.hash);
+      /* FIXME: Only the hash of the first shader is available now.
+       *
+       * For a targeted shader submission command which can have more than
+       * one shader, the dummy MI_STORE_DATA_IMM token instruction only
+       * contains the hash of the first shader. In this case, we invalidate
+       * the last instruction here so that the following shaders won't be
+       * printed out with the hash of the first.
+       */
+      ctx->shader_hash.last_inst = NULL;
+   } else {
+      fprintf(ctx->fp, "):\n");
+   }
 
    const int size = gen_find_shader_size(&ctx->devinfo, bo.map, 0, bo.size);
    if (size > 0) {

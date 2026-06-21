@@ -36,6 +36,35 @@ typedef clockid_t perfetto_clock_id;
 typedef int32_t perfetto_clock_id;
 #endif
 
+#if defined(__cplusplus) && defined(HAVE_PERFETTO)
+/* perfetto's use of STL triggers GCC warnings
+ * in libstdc++ that appear to be spurious. See:
+ * https://gcc.gnu.org/bugzilla/show_bug.cgi?id=109717
+ * https://gcc.gnu.org/bugzilla/show_bug.cgi?id=106093
+ */
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Warray-bounds"
+#if defined(__has_warning)
+   #if __has_warning("-Wstringop-overflow")
+      // warning group not present on Android NDK
+      #pragma GCC diagnostic ignored "-Wstringop-overflow"
+   #endif
+#else
+   #pragma GCC diagnostic ignored "-Wstringop-overflow"
+#endif
+
+#ifndef ANDROID_LIBPERFETTO
+#pragma push_macro("minor")
+#undef minor
+#include <perfetto.h>
+#pragma pop_macro("minor")
+#else
+#include <perfetto/tracing.h>
+#endif
+
+#pragma GCC diagnostic pop
+#endif /* __cplusplus && HAVE_PERFETTO */
+
 #ifdef __cplusplus
 extern "C" {
 #endif

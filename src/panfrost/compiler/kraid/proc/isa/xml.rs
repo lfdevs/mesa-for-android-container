@@ -72,7 +72,7 @@ impl XmlElement {
                         name,
                         attributes,
                         &mut events,
-                    )
+                    );
                 }
                 _ => (),
             }

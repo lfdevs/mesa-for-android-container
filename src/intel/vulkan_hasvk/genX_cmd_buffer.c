@@ -2992,8 +2992,8 @@ cmd_buffer_emit_viewport(struct anv_cmd_buffer *cmd_buffer)
       };
 
       /* Fix depth test misrenderings by lowering translated depth range */
-      if (instance->lower_depth_range_rate != 1.0f)
-         sfv.ViewportMatrixElementm32 *= instance->lower_depth_range_rate;
+      if (instance->drirc.quality.lower_depth_range_rate != 1.0f)
+         sfv.ViewportMatrixElementm32 *= instance->drirc.quality.lower_depth_range_rate;
 
       const uint32_t fb_size_max = 1 << 14;
       uint32_t x_min = 0, x_max = fb_size_max;

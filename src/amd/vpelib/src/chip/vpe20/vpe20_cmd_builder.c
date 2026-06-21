@@ -58,7 +58,6 @@ enum vpe_status vpe20_build_vpe_cmd(
     struct vpe_desc_writer *vpe_desc_writer = &vpe_priv->vpe_desc_writer;
     struct vpe_buf         *emb_buf         = &cur_bufs->emb_buf;
     struct output_ctx      *output_ctx;
-    struct pipe_ctx        *pipe_ctx = NULL;
     uint32_t                pipe_idx, config_idx;
     struct vpe_vector      *config_vector;
     struct config_record   *config;
@@ -82,66 +81,28 @@ enum vpe_status vpe20_build_vpe_cmd(
 
     config_writer_init(&vpe_priv->config_writer, emb_buf);
 
-    vpe_priv->resource.reset_pipes(vpe_priv);
-
-    /* 3D LUT FL programming */
-    vpe_priv->resource.program_fastload(vpe_priv, cmd_idx);
+    /*Pipe Setup: 3DLUT FL programming, RMCM detachment, and MPCC Mux disable*/
+    vpe_priv->resource.pipe_setup(vpe_priv, cmd_idx);
 
     // frontend programming
     for (pipe_idx = 0; pipe_idx < cmd_info->num_inputs; pipe_idx++) {
-        bool               reuse;
-        struct stream_ctx *stream_ctx;
-        uint16_t           stream_idx;
-        enum vpe_cmd_type  cmd_type = VPE_CMD_TYPE_COUNT;
 
-        // keep using the same pipe whenever possible
-        // this would allow reuse of the previous register configs
-        stream_idx = cmd_info->inputs[pipe_idx].stream_idx;
-        pipe_ctx   = &vpe_priv->pipe_ctx[pipe_idx];
+        struct stream_ctx *stream_ctx =
+            &vpe_priv->stream_ctx[cmd_info->inputs[pipe_idx].stream_idx];
+        uint16_t         stream_idx = cmd_info->inputs[pipe_idx].stream_idx;
+        struct pipe_ctx *pipe_ctx   = &vpe_priv->pipe_ctx[pipe_idx];
 
-        reuse = (pipe_ctx->owner == stream_idx);
-        VPE_ASSERT(pipe_ctx->owner == PIPE_CTX_NO_OWNER || pipe_ctx->owner == stream_idx);
-        pipe_ctx->owner = stream_idx;
-        stream_ctx      = &vpe_priv->stream_ctx[cmd_info->inputs[pipe_idx].stream_idx];
+        bool reuse_stream    = (pipe_ctx->owner == stream_idx);
+        bool reuse_stream_op = reuse_stream && (pipe_ctx->cmd_type == cmd_info->ops);
+        pipe_ctx->owner      = stream_idx;
+        pipe_ctx->cmd_type   = cmd_info->ops;
 
-        if (!reuse) {
-            vpe_priv->resource.program_frontend(
-                vpe_priv, pipe_ctx->pipe_idx, cmd_idx, pipe_idx, false);
+        if (!reuse_stream) {
+            vpe_priv->resource.program_frontend_frame(
+                vpe_priv, pipe_ctx->pipe_idx, cmd_idx, pipe_idx);
         } else {
             if (vpe_priv->init.debug.disable_reuse_bit)
-                reuse = false;
-
-            // frame specific for same type of command
-            switch (cmd_info->ops) {
-            case VPE_CMD_OPS_BG:
-                cmd_type = VPE_CMD_TYPE_BG;
-                break;
-            case VPE_CMD_OPS_COMPOSITING:
-                cmd_type = VPE_CMD_TYPE_COMPOSITING;
-                break;
-            case VPE_CMD_OPS_BLENDING:
-                cmd_type = VPE_CMD_TYPE_BLENDING;
-                break;
-            case VPE_CMD_OPS_BG_VSCF_INPUT:
-                cmd_type = VPE_CMD_TYPE_BG_VSCF_INPUT;
-                break;
-            case VPE_CMD_OPS_BG_VSCF_OUTPUT:
-                cmd_type = VPE_CMD_TYPE_BG_VSCF_OUTPUT;
-                break;
-            case VPE_CMD_OPS_BG_VSCF_PIPE0:
-                cmd_type = VPE_CMD_TYPE_BG_VSCF_PIPE0;
-                break;
-            case VPE_CMD_OPS_BG_VSCF_PIPE1:
-                cmd_type = VPE_CMD_TYPE_BG_VSCF_PIPE1;
-                break;
-            case VPE_CMD_OPS_ALPHA_THROUGH_LUMA:
-                cmd_type = VPE_CMD_TYPE_ALPHA_THROUGH_LUMA;
-                break;
-            default:
-                VPE_ASSERT(0);
-                status = VPE_STATUS_ERROR;
-                break;
-            }
+                reuse_stream = false;
 
             // follow the same order of config generation in "non-reuse" case
             // stream sharing
@@ -155,14 +116,18 @@ enum vpe_status vpe20_build_vpe_cmd(
                 }
 
                 vpe_desc_writer->add_config_desc(
-                    vpe_desc_writer, config->config_base_addr, reuse, (uint8_t)emb_buf->tmz);
+                    vpe_desc_writer, config->config_base_addr, reuse_stream, (uint8_t)emb_buf->tmz);
             }
 
             if (status != VPE_STATUS_OK)
                 break;
+        }
 
-            // stream-op sharing
-            config_vector = stream_ctx->stream_op_configs[pipe_idx][cmd_type];
+        if (!reuse_stream_op) {
+            vpe_priv->resource.program_stream_op_config(
+                vpe_priv, pipe_ctx->pipe_idx, pipe_idx, stream_ctx, cmd_info);
+        } else {
+            config_vector = stream_ctx->stream_op_configs[pipe_idx][cmd_info->ops];
             for (config_idx = 0; config_idx < config_vector->num_elements; config_idx++) {
                 config = (struct config_record *)vpe_vector_get(config_vector, config_idx);
                 if (!config) {
@@ -176,11 +141,10 @@ enum vpe_status vpe20_build_vpe_cmd(
 
             if (status != VPE_STATUS_OK)
                 break;
-
-            // command specific
-            vpe_priv->resource.program_frontend(
-                vpe_priv, pipe_ctx->pipe_idx, cmd_idx, pipe_idx, true);
         }
+
+        vpe_priv->resource.program_frontend_segment(
+            vpe_priv, pipe_ctx->pipe_idx, cmd_idx, pipe_idx);
     }
 
     // If config writer has been crashed due to buffer overflow
@@ -321,11 +285,14 @@ enum vpe_status vpe20_build_plane_descriptor(
             src.base_addr_hi = (uint32_t)addrloc->u.high_part;
             src.pitch        = (uint16_t)surface_info->plane_size.surface_pitch;
 
-            addrloc               = &surface_info->address.video_progressive.luma_meta_addr;
-            src.meta_base_addr_lo = addrloc->u.low_part;
-            src.meta_base_addr_hi = (uint32_t)addrloc->u.high_part;
-            src.meta_pitch        = (uint16_t)surface_info->dcc.src.meta_pitch;
-            src.dcc_ind_blk       = surface_info->dcc.src.dcc_ind_blk_c;
+            src.meta_base_addr_lo =
+                (uint32_t)surface_info->dcc.internal_dcc.meta_offset + addrloc->u.low_part;
+            src.meta_base_addr_hi = (uint32_t)addrloc->u.high_part +
+                                    (uint32_t)((surface_info->dcc.internal_dcc.meta_offset +
+                                                   (uint64_t)addrloc->u.low_part) >>
+                                               32);
+            src.meta_pitch        = (uint16_t)surface_info->dcc.internal_dcc.meta_pitch;
+            src.dcc_ind_blk       = surface_info->dcc.internal_dcc.dcc_indp_blk;
             src.comp_mode         = surface_info->dcc.enable;
 
             src.viewport_x = (uint16_t)dscl_data->viewport.x;
@@ -433,20 +400,25 @@ enum vpe_status vpe20_build_plane_descriptor(
         }
     }
 
-    if (plane_desc_writer->add_meta && (header.dcomp0 || header.dcomp1)) {
+    if (plane_desc_writer->add_src_internal_dcc && (header.dcomp0 || header.dcomp1)) {
         for (int i = 0; i < cmd_info->num_inputs && i < MAX_INPUT_PIPE; i++) {
-            if ((header.dcomp0 && i == 0) || (header.dcomp1 && i == 1)) {
-                stream_idx            = cmd_info->inputs[i].stream_idx;
-                stream_ctx            = &vpe_priv->stream_ctx[stream_idx];
-                surface_info          = &stream_ctx->stream.surface_info;
-                addrloc               = &surface_info->address.video_progressive.luma_meta_addr;
-                src.meta_base_addr_lo = addrloc->u.low_part;
-                src.meta_base_addr_hi = (uint32_t)addrloc->u.high_part;
-                src.meta_pitch        = (uint16_t)surface_info->dcc.src.meta_pitch;
-                src.dcc_ind_blk       = surface_info->dcc.src.dcc_ind_blk_c;
+            if ((header.dcomp0 && (i == 0)) || (header.dcomp1 && (i == 1))) {
+                stream_idx   = cmd_info->inputs[i].stream_idx;
+                stream_ctx   = &vpe_priv->stream_ctx[stream_idx];
+                surface_info = &stream_ctx->stream.surface_info;
+                addrloc      = &surface_info->address.grph.addr;
+
+                src.meta_base_addr_lo =
+                    (uint32_t)surface_info->dcc.internal_dcc.meta_offset + addrloc->u.low_part;
+                src.meta_base_addr_hi = (uint32_t)addrloc->u.high_part +
+                                        (uint32_t)((surface_info->dcc.internal_dcc.meta_offset +
+                                                       (uint64_t)addrloc->u.low_part) >>
+                                                   32);
+                src.meta_pitch        = (uint16_t)surface_info->dcc.internal_dcc.meta_pitch;
+                src.dcc_ind_blk       = surface_info->dcc.internal_dcc.dcc_indp_blk;
                 src.comp_mode         = surface_info->dcc.enable;
                 src.format            = vpe20_get_hw_surface_format(surface_info->format);
-                plane_desc_writer->add_meta(&vpe_priv->plane_desc_writer, &src);
+                plane_desc_writer->add_src_internal_dcc(&vpe_priv->plane_desc_writer, &src);
             }
         }
     }
@@ -483,7 +455,7 @@ enum vpe_status vpe20_build_plane_descriptor(
             log_plane_desc_event(
                 vpe_priv, cmd_info, &header, &src, &dst, cmd_idx, i, 0, LOG_OUTPUT_PLANE);
             if (vpe_is_dual_plane_format(surface_info->format)) {
-                addrloc = &surface_info->address.video_progressive.chroma_addr;
+                addrloc     = &surface_info->address.video_progressive.chroma_addr;
                 dst.tmz     = surface_info->address.tmz_surface;
                 dst.swizzle = surface_info->swizzle;
 
@@ -546,7 +518,7 @@ enum vpe_status vpe20_build_plane_descriptor(
             log_plane_desc_event(
                 vpe_priv, cmd_info, &header, &src, &dst, cmd_idx, i, 2, LOG_OUTPUT_PLANE);
         } else {
-            addrloc = &surface_info->address.grph.addr;
+            addrloc     = &surface_info->address.grph.addr;
             dst.tmz     = surface_info->address.tmz_surface;
             dst.swizzle = surface_info->swizzle;
 
@@ -723,15 +695,20 @@ static enum VPE_PLANE_CFG_ELEMENT_SIZE vpe_get_element_size(
     case VPE_SURFACE_PIXEL_FORMAT_VIDEO_422_12bpc_CbYCrY:
     case VPE_SURFACE_PIXEL_FORMAT_GRPH_ARGB16161616: /* RGB 16BPE */
     case VPE_SURFACE_PIXEL_FORMAT_GRPH_RGBA16161616:
+    case VPE_SURFACE_PIXEL_FORMAT_GRPH_BGRA16161616:
     case VPE_SURFACE_PIXEL_FORMAT_GRPH_ABGR16161616:
     case VPE_SURFACE_PIXEL_FORMAT_GRPH_ARGB16161616F:
     case VPE_SURFACE_PIXEL_FORMAT_GRPH_ABGR16161616F:
     case VPE_SURFACE_PIXEL_FORMAT_GRPH_RGBA16161616F:
     case VPE_SURFACE_PIXEL_FORMAT_GRPH_BGRA16161616F:
     case VPE_SURFACE_PIXEL_FORMAT_GRPH_BGRA16161616_UNORM:
+    case VPE_SURFACE_PIXEL_FORMAT_GRPH_RGBA16161616_UNORM:
     case VPE_SURFACE_PIXEL_FORMAT_GRPH_ABGR16161616_UNORM:
+    case VPE_SURFACE_PIXEL_FORMAT_GRPH_ARGB16161616_UNORM:
     case VPE_SURFACE_PIXEL_FORMAT_GRPH_BGRA16161616_SNORM:
+    case VPE_SURFACE_PIXEL_FORMAT_GRPH_RGBA16161616_SNORM:
     case VPE_SURFACE_PIXEL_FORMAT_GRPH_ABGR16161616_SNORM:
+    case VPE_SURFACE_PIXEL_FORMAT_GRPH_ARGB16161616_SNORM:
     case VPE_SURFACE_PIXEL_FORMAT_VIDEO_ACrYCb12121212: /* Packed YUV444 16BPE (Y416) */
     case VPE_SURFACE_PIXEL_FORMAT_VIDEO_CrYCbA12121212:
         return VPE_PLANE_CFG_ELEMENT_SIZE_64BPE;

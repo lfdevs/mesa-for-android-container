@@ -9,8 +9,8 @@ layout(local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
 
 #include "anv_build_helpers.h"
 #include "anv_build_interface.h"
+#include "encode.h"
 
-#define ULP 1.1920928955078125e-7f
 #define READY_TO_WRITE(offset) ((offset) < VK_NULL_BVH_OFFSET)
 #define ASSIGNED_NODE_TO_ENCODE (gl_GlobalInvocationID.x < DEREF(args.header).ir_internal_node_count)
 
@@ -24,12 +24,6 @@ layout(local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
 #define IR_NODE uint32_t
 #define NODE_OFFSET(node) (OFFSET(args.intermediate_bvh, ir_id_to_offset(node)))
 
-/* An offset in 64B blocks from args.output_bvh that points to output of
- * encoded nodes. Can be a leaf or internal node.
- */
-#define BLOCK uint32_t
-#define BLOCK_OFFSET(block) (OFFSET(args.output_bvh, ANV_RT_BLOCK_SIZE * block))
-
 layout(push_constant) uniform CONSTS {
    encode_args args;
 };
@@ -39,12 +33,6 @@ debug_dump(uint32_t offset, uint32_t value)
 {
    REF(uint32_t) msg = REF(uint32_t)(OFFSET(args.output_bvh, offset));
    DEREF(msg) = value;
-}
-
-uint32_t
-get_instance_flag(uint32_t src)
-{
-   return ((src >> 24) & 0xff);
 }
 
 struct anv_cluster {
@@ -77,186 +65,27 @@ encode_leaf_node(uint32_t type, IR_NODE child, uint64_t dst_node, REF(anv_accel_
 
    if (DEBUG_EXIT_EARLY(type))
       return;
+
    switch (type) {
    case vk_ir_node_triangle: {
-      REF(anv_quad_leaf_node) quad_leaf = REF(anv_quad_leaf_node)(dst_node);
-
       vk_ir_triangle_node src = DEREF(REF(vk_ir_triangle_node)(src_node));
-      uint32_t geometry_id_and_flags = src.geometry_id_and_flags & 0xffffff;
-
-      /* sub-type (4-bit) encoded on 24-bit index */
-      geometry_id_and_flags |= (ANV_SUB_TYPE_QUAD & 0xF) << 24;
-
-      if ((src.geometry_id_and_flags & VK_GEOMETRY_OPAQUE) != 0) {
-         /* Geometry opqaue (1-bit) is encoded on 30-bit index */
-         geometry_id_and_flags |= (ANV_GEOMETRY_FLAG_OPAQUE << 30);
-      }
-
-      /* Disable the second triangle */
-      uint32_t prim_index1_delta = 0;
-      /* For now, blockIncr are all 1, so every quad leaf has its "last" bit set. */
-      prim_index1_delta |= (1 << 22);
-
-      DEREF(quad_leaf).prim_index1_delta = prim_index1_delta;
-      DEREF(quad_leaf).prim_index0 = src.triangle_id;
-      DEREF(quad_leaf).leaf_desc.geometry_id_and_flags = geometry_id_and_flags;
-
-      /* shaderIndex is typically set to match geomIndex
-       * Geom mask is default to 0xFF
-       */
-      DEREF(quad_leaf).leaf_desc.shader_index_and_geom_mask = 0xFF000000 | (geometry_id_and_flags & 0xffffff);
-
-      /* Setup single triangle */
-      for (uint32_t i = 0; i < 3; i++) {
-         for (uint32_t j = 0; j < 3; j++) {
-            DEREF(quad_leaf).v[i][j] = src.coords[i][j];
-         }
-      }
+      anv_encode_triangle(dst_node, src);
       break;
    }
    case vk_ir_node_aabb: {
-      REF(anv_procedural_leaf_node) aabb_leaf = REF(anv_procedural_leaf_node)(dst_node);
-
       vk_ir_aabb_node src = DEREF(REF(vk_ir_aabb_node)(src_node));
-      uint32_t geometry_id_and_flags = src.geometry_id_and_flags & 0xffffff;
-
-      /* sub-type (4-bit) encoded on 24-bit index */
-      geometry_id_and_flags |= (ANV_SUB_TYPE_PROCEDURAL & 0xF) << 24;
-
-      if ((src.geometry_id_and_flags & VK_GEOMETRY_OPAQUE) != 0) {
-         geometry_id_and_flags |= (ANV_GEOMETRY_FLAG_OPAQUE << 30);
-      }
-
-      DEREF(aabb_leaf).leaf_desc.geometry_id_and_flags = geometry_id_and_flags;
-
-      /* shaderIndex is typically set to match geomIndex
-       * Geom mask is default to 0xFF
-       */
-      DEREF(aabb_leaf).leaf_desc.shader_index_and_geom_mask = 0xFF000000 | (geometry_id_and_flags & 0xffffff);
-
-      /* num primitives = 1 */
-      uint32_t dw1 = 1;
-      /* "last" has only 1 bit, and it is set. */
-      dw1 |= (1 << 31);
-
-      DEREF(aabb_leaf).DW1 = dw1;
-      DEREF(aabb_leaf).primIndex[0] = src.primitive_id;
+      anv_encode_aabb(dst_node, src);
       break;
    }
    case vk_ir_node_instance: {
       vk_ir_instance_node src = DEREF(REF(vk_ir_instance_node)(src_node));
-
-      REF(anv_instance_leaf) dst_instance = REF(anv_instance_leaf)(dst_node);
-      REF(anv_accel_struct_header) blas_header = REF(anv_accel_struct_header)(src.base_ptr);
-      uint64_t start_node_ptr = uint64_t(src.base_ptr) + args.output_bvh_offset;
-
-#if GFX_VERx10 >= 300
-      DEREF(dst_instance).part0.QW_startNodePtr = start_node_ptr;
-      uint32_t instance_contribution_and_geom_mask = 0;
-      instance_contribution_and_geom_mask |= src.sbt_offset_and_flags & 0xffffff;
-      instance_contribution_and_geom_mask |= (src.custom_instance_and_mask & 0xff000000);
-      DEREF(dst_instance).part0.DW0 = instance_contribution_and_geom_mask;
-
-      uint32_t inst_flags_and_the_rest = 0;
-      inst_flags_and_the_rest |= get_instance_flag(src.sbt_offset_and_flags);
-      inst_flags_and_the_rest |=
-         ((get_instance_flag(src.sbt_offset_and_flags) & ANV_INSTANCE_FLAG_FORCE_OPAQUE) != 0 ?
-          ANV_GEOMETRY_FLAG_OPAQUE : 0) << 30;
-
-      DEREF(dst_instance).part0.DW1 = inst_flags_and_the_rest;
-
-#else
-      uint32_t shader_index_and_geom_mask = 0;
-      shader_index_and_geom_mask |= (src.custom_instance_and_mask & 0xff000000);
-      DEREF(dst_instance).part0.DW0 = shader_index_and_geom_mask;
-
-      uint32_t instance_contribution_and_geom_flags = 0;
-      instance_contribution_and_geom_flags |= src.sbt_offset_and_flags & 0xffffff;
-      instance_contribution_and_geom_flags |=
-         ((get_instance_flag(src.sbt_offset_and_flags) & ANV_INSTANCE_FLAG_FORCE_OPAQUE) != 0 ?
-         ANV_GEOMETRY_FLAG_OPAQUE : 0) << 30;
-      DEREF(dst_instance).part0.DW1 = instance_contribution_and_geom_flags;
-
-      DEREF(dst_instance).part0.QW_startNodePtr =
-         (start_node_ptr & ((1ul << 48) - 1)) |
-         (uint64_t(get_instance_flag(src.sbt_offset_and_flags)) << 48);
-#endif
-
-      mat4 transform = mat4(src.otw_matrix);
-
-      mat4 inv_transform = transpose(inverse(transpose(transform)));
-      mat3x4 wto_matrix = mat3x4(inv_transform);
-      mat3x4 otw_matrix = mat3x4(transform);
-
-      /* Arrange WTO transformation matrix in column-major order */
-      DEREF(dst_instance).part0.world2obj_vx_x = wto_matrix[0][0];
-      DEREF(dst_instance).part0.world2obj_vx_y = wto_matrix[1][0];
-      DEREF(dst_instance).part0.world2obj_vx_z = wto_matrix[2][0];
-      DEREF(dst_instance).part0.obj2world_p_x =  otw_matrix[0][3];
-
-      DEREF(dst_instance).part0.world2obj_vy_x = wto_matrix[0][1];
-      DEREF(dst_instance).part0.world2obj_vy_y = wto_matrix[1][1];
-      DEREF(dst_instance).part0.world2obj_vy_z = wto_matrix[2][1];
-      DEREF(dst_instance).part0.obj2world_p_y =  otw_matrix[1][3];
-
-      DEREF(dst_instance).part0.world2obj_vz_x = wto_matrix[0][2];
-      DEREF(dst_instance).part0.world2obj_vz_y = wto_matrix[1][2];
-      DEREF(dst_instance).part0.world2obj_vz_z = wto_matrix[2][2];
-      DEREF(dst_instance).part0.obj2world_p_z =  otw_matrix[2][3];
-
-      /* Arrange OTW transformation matrix in column-major order */
-      DEREF(dst_instance).part1.obj2world_vx_x = otw_matrix[0][0];
-      DEREF(dst_instance).part1.obj2world_vx_y = otw_matrix[1][0];
-      DEREF(dst_instance).part1.obj2world_vx_z = otw_matrix[2][0];
-      DEREF(dst_instance).part1.world2obj_p_x =  wto_matrix[0][3];
-
-      DEREF(dst_instance).part1.obj2world_vy_x = otw_matrix[0][1];
-      DEREF(dst_instance).part1.obj2world_vy_y = otw_matrix[1][1];
-      DEREF(dst_instance).part1.obj2world_vy_z = otw_matrix[2][1];
-      DEREF(dst_instance).part1.world2obj_p_y =  wto_matrix[1][3];
-
-      DEREF(dst_instance).part1.obj2world_vz_x = otw_matrix[0][2];
-      DEREF(dst_instance).part1.obj2world_vz_y = otw_matrix[1][2];
-      DEREF(dst_instance).part1.obj2world_vz_z = otw_matrix[2][2];
-      DEREF(dst_instance).part1.world2obj_p_z =  wto_matrix[2][3];
-
-      DEREF(dst_instance).part1.bvh_ptr = src.base_ptr;
-      DEREF(dst_instance).part1.instance_index = src.instance_id;
-      DEREF(dst_instance).part1.instance_id = src.custom_instance_and_mask & 0xffffff;
-
+      anv_encode_instance(dst_node, src);
       uint64_t instance_leaves_addr_base = args.instance_leaves_addr;
       uint64_t slot = ir_id_to_offset(child) / SIZEOF(vk_ir_instance_node);
       DEREF(INDEX(uint64_t, instance_leaves_addr_base, slot)) = dst_node;
       break;
    }
    }
-}
-
-vk_aabb
-conservative_aabb(vk_aabb input_aabb)
-{
-   vk_aabb out_aabb;
-
-   vec3 reduce_value = max(abs(input_aabb.min), abs(input_aabb.max));
-   float err = ULP * max(reduce_value.x, max(reduce_value.y, reduce_value.z));
-
-   out_aabb.min = input_aabb.min - vec3(err);
-   out_aabb.max = input_aabb.max + vec3(err);
-
-   return out_aabb;
-}
-
-void
-aabb_extend(inout vk_aabb v1, vk_aabb v2)
-{
-   v1.min = min(v1.min, v2.min);
-   v1.max = max(v1.max, v2.max);
-}
-
-vec3
-aabb_size(vk_aabb input_aabb)
-{
-   return input_aabb.max - input_aabb.min;
 }
 
 /* Determine the node_type based on type of its children.
@@ -353,6 +182,11 @@ encode_internal_node(uint32_t child, uint32_t child_block_offset_from_internal_n
       DEREF(dst_node).exp_z = exp_i8[2];
       DEREF(dst_node).node_mask = uint8_t(0xff);
       DEREF(dst_node).node_type = node_type;
+
+      /* Note: This is not a real field, it's unused byte padding, which is not
+       * required to be MBZ. We're just using it to store the child count.
+       */
+      DEREF(dst_node).child_count = uint8_t(child_count);
    }
 
    child_aabb = conservative_aabb(child_aabb);
@@ -524,12 +358,16 @@ main()
    bool is_root_node = gl_GlobalInvocationID.x == 0;
 
    REF(anv_accel_struct_header) header =
-      REF(anv_accel_struct_header)(args.output_bvh - args.output_bvh_offset);
+      REF(anv_accel_struct_header)(args.output_bvh - ANV_RT_BVH_HEADER_SIZE);
 
    if (is_root_node) {
       /* Tracks BLOCK where the next children should be encoded. */
       DEREF(args.header).dst_node_offset = 1;
       DEREF(header).instance_count = 0;
+      if (VK_BUILD_FLAG(ANV_BUILD_FLAG_WRITE_LOOKUP_MAPS_FOR_UPDATE) &&
+          args.parent_child_map != 0) {
+         DEREF(INDEX(uint32_t, args.parent_child_map, 0)) = VK_NULL_BVH_OFFSET;
+      }
    }
 
    IR_NODE children[6] = {VK_BVH_INVALID_NODE, VK_BVH_INVALID_NODE,
@@ -612,7 +450,6 @@ main()
                   REF(vk_ir_box_node)NODE_OFFSET(children[i]);
                DEREF(child_node).bvh_offset = child_offset;
             }
-
             child_offset += (type == vk_ir_node_instance) ? 2 : 1;
          }
 
@@ -653,6 +490,11 @@ main()
                child = anv_shuffle(cluster, idx, children[i]);
                if (i == cluster.idx)
                   break;
+
+               /* Invalid node should not contribute to child_block count */
+               if (child == VK_BVH_INVALID_NODE)
+                  continue;
+
                uint32_t type = ir_id_to_type(child);
                child_block += (type == vk_ir_node_instance) ? 2 : 1;
             }
@@ -661,9 +503,32 @@ main()
                child_aabb = DEREF(REF(vk_ir_node)NODE_OFFSET(child)).aabb;
 
             uint32_t type = ir_id_to_type(child);
-            if (child != VK_BVH_INVALID_NODE && type != vk_ir_node_internal)
+            if (VK_BUILD_FLAG(ANV_BUILD_FLAG_WRITE_LOOKUP_MAPS_FOR_UPDATE) &&
+                child != VK_BVH_INVALID_NODE &&
+                args.parent_child_map != 0 &&
+                args.leaf_block_offset_map != 0) {
+	       if (type == vk_ir_node_triangle || type == vk_ir_node_aabb) {
+                  uint32_t ir_offset = ir_id_to_offset(child);
+                  uint32_t leaf_id = ir_offset / intermediate_leaf_node_size;
+                  /* Block offset 0 is assigned to root, so avoid accidental
+                   * assignment.
+                   */
+                  DEREF(INDEX(uint32_t, args.leaf_block_offset_map, leaf_id)) =
+                     (child_block != 0) ? child_block : VK_NULL_BVH_OFFSET;
+               }
+
+               /* Track each children's parent in the map. */
+               if (type != vk_ir_node_instance && child_block != 0) {
+                  uint32_t pcm = 0;
+                  pcm = internal_node_block | (cluster.idx << 26);
+                  DEREF(INDEX(uint32_t, args.parent_child_map, child_block)) = pcm;
+               }
+            }
+
+            if (child != VK_BVH_INVALID_NODE && type != vk_ir_node_internal) {
                encode_leaf_node(type, child, BLOCK_OFFSET(child_block),
                                 header);
+            }
          }
 
          BLOCK child_block_offset =
@@ -680,6 +545,5 @@ main()
 
    if (is_root_node) {
       DEREF(header).aabb = src.base.aabb;
-      DEREF(header).rootNodeOffset = args.output_bvh_offset;
    }
 }

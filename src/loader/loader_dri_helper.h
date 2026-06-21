@@ -29,36 +29,7 @@
 #include <c11/threads.h>
 #include "util/format/u_formats.h"
 
-#ifdef HAVE_X11_PLATFORM
-#include <xcb/xcb.h>
-#include <xcb/dri3.h>
-#include <xcb/present.h>
-
-struct loader_crtc_info {
-   xcb_randr_crtc_t id;
-   xcb_timestamp_t timestamp;
-
-   int16_t x, y;
-   uint16_t width, height;
-
-   unsigned refresh_numerator;
-   unsigned refresh_denominator;
-};
-
-struct loader_screen_resources {
-   mtx_t mtx;
-
-   xcb_connection_t *conn;
-   xcb_screen_t *screen;
-
-   xcb_timestamp_t config_timestamp;
-
-   /* Number of CRTCs with an active mode set */
-   unsigned num_crtcs;
-   struct loader_crtc_info *crtcs;
-};
-#endif
-
+#include "loader_dri_helper_screen.h"
 
 /**
  * These formats are endian independent they result in the same layout
@@ -109,17 +80,5 @@ loader_pipe_format_to_fourcc(enum pipe_format pipe);
 
 enum pipe_format
 loader_fourcc_to_pipe_format(uint32_t fourcc);
-
-#ifdef HAVE_X11_PLATFORM
-void
-loader_init_screen_resources(struct loader_screen_resources *res,
-                             xcb_connection_t *conn,
-                             xcb_screen_t *screen);
-bool
-loader_update_screen_resources(struct loader_screen_resources *res);
-
-void
-loader_destroy_screen_resources(struct loader_screen_resources *res);
-#endif
 
 #endif /* LOADER_DRI_HELPER_H */

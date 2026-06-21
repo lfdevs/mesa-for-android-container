@@ -1274,7 +1274,14 @@ variable_size_sort(const void *a, const void *b)
    uint32_t size_b, align_b;
    ir3_get_ra_size_align_bytes(var_b->type, &size_b, &align_b);
 
-   return size_a - size_b;
+   if (size_a != size_b) {
+      return size_a - size_b;
+   }
+
+   /* Use the unique index as a tiebreaker to ensure a stable sort for
+    * determinism.
+    */
+   return var_a->index - var_b->index;
 }
 
 /* Filters out variables from the set that might go to ir3 RA, in order to avoid
@@ -1285,7 +1292,8 @@ variable_size_sort(const void *a, const void *b)
  * unspilling)
  */
 static void
-ir3_filter_vars_to_scratch_single_instr_limit(struct set *set, uint32_t limit,
+ir3_filter_vars_to_scratch_single_instr_limit(struct util_dynarray *vars,
+                                              uint32_t limit,
                                               bool limit_for_half)
 {
    struct util_dynarray candidate_nonspilled;
@@ -1294,8 +1302,12 @@ ir3_filter_vars_to_scratch_single_instr_limit(struct set *set, uint32_t limit,
    /* Create an array of vars to potentially not spill sorted by increasing
     * size.
     */
-   set_foreach(set, entry) {
-      const nir_variable *var = entry->key;
+   util_dynarray_foreach (vars, nir_variable *, var_ptr) {
+      const nir_variable *var = *var_ptr;
+
+      if (var->data.pass_flags) {
+         continue;
+      }
 
       /* If it's definitely a 32/64-bit array that will be stored in full regs,
        * then don't consider it while we're limiting for half-reg accesses. This
@@ -1343,21 +1355,29 @@ ir3_filter_vars_to_scratch_single_instr_limit(struct set *set, uint32_t limit,
 
       nir_variable *var =
          util_dynarray_pop(&candidate_nonspilled, nir_variable *);
-      _mesa_set_remove_key(set, var);
+      var->data.pass_flags = true;
    }
 
    util_dynarray_fini(&candidate_nonspilled);
 }
 
 static void
-ir3_vars_to_scratch_cb(struct set *set, void *data)
+ir3_vars_to_scratch_cb(struct util_dynarray *vars, void *data)
 {
    struct ir3_pressure *limit_pressure = data;
 
-   struct set *nonspilled = _mesa_pointer_set_create(NULL);
-   set_foreach(set, entry) {
-      _mesa_set_add(nonspilled, entry->key);
+   struct util_dynarray nonspilled;
+   util_dynarray_init(&nonspilled, NULL);
+
+   util_dynarray_foreach(vars, nir_variable *, var_ptr) {
+      nir_variable *var = *var_ptr;
+
+      if (var->data.pass_flags) {
+         util_dynarray_append(&nonspilled, var);
+         var->data.pass_flags = false;
+      }
    }
+
    /* Filter for the half vars first, which may let the full limit (which
     * considers all vars) succeed on vars it wouldn't otherwise.
     *
@@ -1366,17 +1386,11 @@ ir3_vars_to_scratch_cb(struct set *set, void *data)
     * present, so we can't have the whole register file taken up by an array.
     */
    ir3_filter_vars_to_scratch_single_instr_limit(
-      nonspilled, (limit_pressure->half * 2) - 16, true);
+      &nonspilled, (limit_pressure->half * 2) - 16, true);
    ir3_filter_vars_to_scratch_single_instr_limit(
-      nonspilled, (limit_pressure->full * 2) - 16, false);
+      &nonspilled, (limit_pressure->full * 2) - 16, false);
 
-   set_foreach(set, entry) {
-      const nir_variable *var = entry->key;
-      if (_mesa_set_search(nonspilled, var))
-         _mesa_set_remove_key(set, var);
-   }
-
-   _mesa_set_destroy(nonspilled, NULL);
+   util_dynarray_fini(&nonspilled);
 }
 
 /**

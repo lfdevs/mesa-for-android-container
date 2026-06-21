@@ -65,7 +65,7 @@
 #define BYTES_PER_ENTRY                    (4)
 #define SHAPER_LUT_CHANNELS                (3)
 #define SHAPER_LUT_DATA_POINTS_PER_CHANNEL (256)
-#define SHAPER_LUT_CONFIG_ENTRIES          (28)
+#define SHAPER_LUT_CONFIG_ENTRIES          (29)
 #define SHAPER_LUT_DMA_DATA_SIZE                                                                   \
     (SHAPER_LUT_DATA_POINTS_PER_CHANNEL * SHAPER_LUT_CHANNELS * BYTES_PER_ENTRY)
 #define SHAPER_LUT_DMA_CONFIG_SIZE                                                                 \
@@ -232,8 +232,8 @@ static struct vpe_caps
                             {
                                 .lut_shaper_caps =
                                     {
-                                        .dma_data             = 0,
-                                        .dma_config           = 0,
+                                        .dma_data             = 1,
+                                        .dma_config           = 1,
                                         .non_monotonic        = 0,
                                         .data_alignment       = SHAPER_LUT_DMA_DATA_ALIGNMENT,
                                         .config_alignment     = SHAPER_LUT_DMA_CONFIG_ALIGNMENT,
@@ -252,7 +252,7 @@ static struct vpe_caps
                                         .dma_dim_33  = 1,
                                         .alignment   = LUT_3D_DMA_ALIGNMENT,
                                     },
-                                .lut_3d_compound = 0,
+                                .lut_3d_compound = 1,
                             },
                     }},
             .plane_caps =
@@ -270,13 +270,18 @@ static struct vpe_caps
                             .yuy2            = 1, /**< packed 4:2:2 */
                             .y210            = 1, /**< packed 4:2:2 10-bit */
                             .y216            = 1, /**< packed 4:2:2 16-bit */
+                            .y410            = 1, /**< packed 4:4:4 10-bit */
+                            .y416            = 1, /**< packed 4:4:4 16-bit */
+                            .p208            = 1, /**< planar 4:2:2 8-bit */
                             .p210            = 1, /**< planar 4:2:2 10-bit */
                             .p216            = 1, /**< planar 4:2:2 16-bit */
+                            .r8              = 0, /**< single channel RGB 8-bit */
+                            .r16             = 0, /**< single channel RGB 16-bit */
                             .rgb8_planar     = 1, /**< planar RGB 8-bit */
                             .rgb16_planar    = 1, /**< planar RGB 16-bit */
-                            .yuv8_planar     = 1, /**< planar YUV 16-bit */
+                            .yuv8_planar     = 1, /**< planar YUV 8-bit */
                             .yuv16_planar    = 1, /**< planar YUV 16-bit */
-                            .fp16_planar     = 1, /**< planar RGB 8-bit */
+                            .fp16_planar     = 1, /**< planar float 16-bit */
                             .rgbe            = 0, /**< shared exponent R9G9B9E5 */
                             .rgb111110_fix   = 0, /**< fixed R11G11B10 */
                             .rgb111110_float = 0, /**< float R11G11B10 */
@@ -293,13 +298,18 @@ static struct vpe_caps
                             .yuy2            = 1, /**< packed 4:2:2 */
                             .y210            = 1, /**< packed 4:2:2 10-bit */
                             .y216            = 1, /**< packed 4:2:2 16-bit */
+                            .y410            = 1, /**< packed 4:4:4 10-bit */
+                            .y416            = 1, /**< packed 4:4:4 16-bit */
+                            .p208            = 1, /**< planar 4:2:2 8-bit */
                             .p210            = 1, /**< planar 4:2:2 10-bit */
                             .p216            = 1, /**< planar 4:2:2 16-bit */
+                            .r8              = 0, /**< single channel RGB 8-bit */
+                            .r16             = 0, /**< single channel RGB 16-bit */
                             .rgb8_planar     = 1, /**< planar RGB 8-bit */
                             .rgb16_planar    = 1, /**< planar RGB 16-bit */
-                            .yuv8_planar     = 1, /**< planar YUV 16-bit */
+                            .yuv8_planar     = 1, /**< planar YUV 8-bit */
                             .yuv16_planar    = 1, /**< planar YUV 16-bit */
-                            .fp16_planar     = 1, /**< planar RGB 8-bit */
+                            .fp16_planar     = 1, /**< planar float 16-bit */
                             .rgbe            = 0, /**< shared exponent R9G9B9E5 */
                             .rgb111110_fix   = 0, /**< fixed R11G11B10 */
                             .rgb111110_float = 0, /**< float R11G11B10 */
@@ -324,11 +334,9 @@ static struct vpe_caps
                             .step = 1,
                         },
                 },
-            .easf_support           = 1,
-            .input_dcc_support      = 1,
-            .input_internal_dcc     = 1,
-            .output_dcc_support     = 0,
-            .output_internal_dcc    = 0,
+            .easf_support                = 1,
+            .input_internal_dcc_support  = 1,
+            .output_internal_dcc_support = 0,
             .histogram_support      = 1,
             .frod_support           = 1,
             .alpha_blending_support = 1,
@@ -695,6 +703,19 @@ static void set_dst_cmd_boundary_mode_and_opp_adjust(struct vpe_priv *vpe_priv,
             output_boundary_mode->bottom = FMT_SUBSAMPLING_BOUNDARY_REPEAT;
             output_opp_adjust->height -= bottom_seam;
         }
+    }
+}
+
+static void opp_bg_reset(struct vpe_priv *vpe_priv)
+{
+    struct opp      *opp;
+    struct vpe_rect  zero_dim_rect = {0, 0, 0, 0};
+    struct vpe_color bg_color      = {.is_ycbcr = false, .rgba = {0, 0, 0}};
+
+    for (uint32_t opp_idx = 0; opp_idx < vpe_priv->pub.caps->resource_caps.num_opp; opp_idx++) {
+        opp = vpe_priv->resource.opp[opp_idx];
+        opp->funcs->set_bg(
+            opp, zero_dim_rect, zero_dim_rect, VPE_SURFACE_PIXEL_FORMAT_INVALID, bg_color);
     }
 }
 
@@ -1336,7 +1357,10 @@ enum vpe_status vpe20_construct_resource(struct vpe_priv *vpe_priv, struct resou
     res->find_bg_gaps                       = vpe_find_bg_gaps;
     res->create_bg_segments                 = vpe20_create_bg_segments;
     res->populate_cmd_info                  = vpe20_populate_cmd_info;
-    res->program_frontend                   = vpe20_program_frontend;
+    res->program_frontend                   = NULL;
+    res->program_frontend_frame             = vpe20_program_frontend_frame;
+    res->program_frontend_segment           = vpe20_program_frontend_segment;
+    res->program_stream_op_config           = vpe20_program_stream_ops_config;
     res->program_backend                    = vpe20_program_backend;
     res->get_bufs_req                       = vpe20_get_bufs_req;
     res->check_bg_color_support             = vpe20_check_bg_color_support;
@@ -1352,11 +1376,12 @@ enum vpe_status vpe20_construct_resource(struct vpe_priv *vpe_priv, struct resou
     res->get_num_pipes_available            = vpe20_get_num_pipes_available;
     res->set_frod_output_viewport           = vpe20_set_frod_output_viewport;
     res->check_alpha_fill_support           = vpe10_check_alpha_fill_support;
-    res->reset_pipes                        = vpe20_reset_pipes;
     res->populate_frod_param                = vpe20_populate_frod_param;
     res->check_lut3d_compound               = vpe20_check_lut3d_compound;
     res->set_lls_pref                       = vpe20_set_lls_pref;
     res->program_fastload = vpe20_program_3dlut_fl;
+    res->mpc_reset        = vpe20_mpc_reset;
+    res->pipe_setup       = vpe20_pipe_setup;
     res->calculate_shaper = vpe10_calculate_shaper;
     res->set_dst_cmd_info_scaler        = vpe20_set_dst_cmd_info_scaler;
     res->update_opp_adjust_and_boundary = vpe20_update_opp_adjust_and_boundary;
@@ -1540,8 +1565,8 @@ int32_t vpe20_program_backend(
     struct stream_ctx       *stream_ctx   = vpe_priv->stream_ctx;
     struct cdc_be           *cdc_be       = vpe_priv->resource.cdc_be[pipe_idx];
     struct vpe_cmd_info     *cmd_info     = vpe_vector_get(vpe_priv->vpe_cmd_vector, cmd_idx);
-    struct opp              *opp          = vpe_priv->resource.opp[pipe_idx];
     struct mpc              *mpc          = vpe_priv->resource.mpc[pipe_idx];
+    struct opp              *opp          = vpe_priv->resource.opp[pipe_idx];
 
     struct bit_depth_reduction_params         fmt_bit_depth;
     struct clamping_and_pixel_encoding_params clamp_param;
@@ -1556,6 +1581,8 @@ int32_t vpe20_program_backend(
         return -1;
 
     vpe_priv->be_cb_ctx.vpe_priv = vpe_priv;
+    vpe_priv->be_cb_ctx.share    = false;
+
     config_writer_set_callback(
         &vpe_priv->config_writer, &vpe_priv->be_cb_ctx, vpe_backend_config_callback);
 
@@ -1593,7 +1620,19 @@ int32_t vpe20_program_backend(
     }
 
     // Segment Specific programming
-    vpe_priv->be_cb_ctx.share = false;
+    vpe_priv->be_cb_ctx.vpe_priv = vpe_priv;
+    vpe_priv->be_cb_ctx.share    = false;
+
+    /*
+     * Because we only touch the back end of the output pipes associated with the current command,
+     * and the number of output pipes can vary between commands, there is a need to reset certain
+     * registers in the back end that may have been leftover from a previous job. Specfically the
+     * OPP BG Gen registers need to be reset because this block can generate its own signal. This
+     * is not the case for the other back end blocks, so we don't need to reset them.
+     */
+    if ((pipe_idx == 0) && (vpe_priv->init.debug.opp_background_gen == 1)) {
+        opp_bg_reset(vpe_priv);
+    }
 
     // Segment specific programming that should be skipped for FROD.
     //  In the blending case there is only one output so the entire back end programming is skipped
@@ -1717,184 +1756,139 @@ void vpe20_destroy_resource(struct vpe_priv *vpe_priv, struct resource *res)
     }
 }
 
-void vpe20_create_stream_ops_config(struct vpe_priv *vpe_priv, uint32_t pipe_idx,
-    uint32_t cmd_input_idx, struct stream_ctx *stream_ctx, struct vpe_cmd_info *cmd_info)
+static void build_blend_cnfg(struct vpe_priv *vpe_priv, struct stream_ctx *stream_ctx,
+    struct vpe_cmd_input *cmd_input, enum vpe_cmd_ops ops, enum mpcc_blend_mode blend_mode,
+    uint32_t pipe_idx, struct mpcc_blnd_cfg *blend_cfg)
 {
-    /* put all hw programming that can be shared according to the cmd type within a stream here */
-    struct mpcc_blnd_cfg blndcfg  = {0};
-
-    struct dpp          *dpp      = vpe_priv->resource.dpp[pipe_idx];
-    struct mpc          *mpc      = vpe_priv->resource.mpc[pipe_idx];
-    enum vpe_cmd_type    cmd_type = VPE_CMD_TYPE_COUNT;
-    struct vpe_vector   *config_vector;
-    struct vpe_cmd_input *cmd_input = &cmd_info->inputs[cmd_input_idx];
-
-    // MPCC programming
-    enum mpc_mpccid      mpccid = pipe_idx;
-    enum mpc_mux_topsel  topsel;
-    enum mpc_mux_outmux  outmux;
-    enum mpc_mux_botsel  botsel;
-    enum mpc_mux_oppid   oppid;
-    enum mpcc_blend_mode blend_mode;
-
-    vpe_priv->fe_cb_ctx.stream_op_sharing = true;
-    vpe_priv->fe_cb_ctx.stream_sharing    = false;
-
-    switch (cmd_info->ops) {
-    case VPE_CMD_OPS_BG:
-        cmd_type = VPE_CMD_TYPE_BG;
-        break;
-    case VPE_CMD_OPS_COMPOSITING:
-        cmd_type = VPE_CMD_TYPE_COMPOSITING;
-        break;
-    case VPE_CMD_OPS_BLENDING:
-        cmd_type = VPE_CMD_TYPE_BLENDING;
-        break;
-    case VPE_CMD_OPS_BG_VSCF_INPUT:
-        cmd_type = VPE_CMD_TYPE_BG_VSCF_INPUT;
-        break;
-    case VPE_CMD_OPS_BG_VSCF_OUTPUT:
-        cmd_type = VPE_CMD_TYPE_BG_VSCF_OUTPUT;
-        break;
-    case VPE_CMD_OPS_BG_VSCF_PIPE0:
-        cmd_type = VPE_CMD_TYPE_BG_VSCF_PIPE0;
-        break;
-    case VPE_CMD_OPS_BG_VSCF_PIPE1:
-        cmd_type = VPE_CMD_TYPE_BG_VSCF_PIPE1;
-        break;
-    case VPE_CMD_OPS_ALPHA_THROUGH_LUMA:
-        cmd_type = VPE_CMD_TYPE_ALPHA_THROUGH_LUMA;
-        break;
-    default:
-        return;
-        break;
-    }
-
-    // return if already generated
-    config_vector = stream_ctx->stream_op_configs[pipe_idx][cmd_type];
-
-    // mps blend can have any stream generate BG, so blend cfg must be programmed every time
-    if (config_vector->num_elements && stream_ctx->mps_parent_stream == NULL)
-        return;
-
-    vpe_priv->fe_cb_ctx.cmd_type = cmd_type;
-
-    // out mux depends on cmd type (blend vs composition)
-    vpe20_build_mpcc_mux_params(vpe_priv, cmd_info->ops, pipe_idx, cmd_info->num_inputs, &topsel,
-        &botsel, &outmux, &oppid, &blend_mode);
-
-    mpc->funcs->program_mpcc_mux(mpc, mpccid, topsel, botsel, outmux, oppid);
-
-    dpp->funcs->set_frame_scaler(dpp, &cmd_input->scaler_data);
-
-    if (cmd_info->ops == VPE_CMD_OPS_BG_VSCF_INPUT) {
-        blndcfg.bg_color = vpe_get_visual_confirm_color(vpe_priv,
+    if (ops == VPE_CMD_OPS_BG_VSCF_INPUT) {
+        blend_cfg->bg_color = vpe_get_visual_confirm_color(vpe_priv,
             stream_ctx->stream.surface_info.format, stream_ctx->stream.surface_info.cs,
             vpe_priv->output_ctx.cs, vpe_priv->output_ctx.output_tf,
             vpe_priv->output_ctx.surface.format,
             (stream_ctx->stream.tm_params.UID != 0 || stream_ctx->stream.tm_params.enable_3dlut));
-    } else if (cmd_info->ops == VPE_CMD_OPS_BG_VSCF_OUTPUT) {
-        blndcfg.bg_color =
+    } else if (ops == VPE_CMD_OPS_BG_VSCF_OUTPUT) {
+        blend_cfg->bg_color =
             vpe_get_visual_confirm_color(vpe_priv, vpe_priv->output_ctx.surface.format,
                 vpe_priv->output_ctx.surface.cs, vpe_priv->output_ctx.cs,
                 vpe_priv->output_ctx.output_tf, vpe_priv->output_ctx.surface.format,
                 false); // 3DLUT should only affect input visual confirm
-    } else if (cmd_info->ops == VPE_CMD_OPS_BG_VSCF_PIPE0) {
-        blndcfg.bg_color.is_ycbcr = false;
-        blndcfg.bg_color.rgba.r   = 1.0f;
-        blndcfg.bg_color.rgba.g   = 1.0f;
-        blndcfg.bg_color.rgba.b   = 0.0f;
-        blndcfg.bg_color.rgba.a   = 0.0f;
-    } else if (cmd_info->ops == VPE_CMD_OPS_BG_VSCF_PIPE1) {
-        blndcfg.bg_color.is_ycbcr = false;
-        blndcfg.bg_color.rgba.r   = 0.0f;
-        blndcfg.bg_color.rgba.g   = 1.0f;
-        blndcfg.bg_color.rgba.b   = 1.0f;
-        blndcfg.bg_color.rgba.a   = 0.0f;
+    } else if (ops == VPE_CMD_OPS_BG_VSCF_PIPE0) {
+        blend_cfg->bg_color.is_ycbcr = false;
+        blend_cfg->bg_color.rgba.r   = 1.0f;
+        blend_cfg->bg_color.rgba.g   = 1.0f;
+        blend_cfg->bg_color.rgba.b   = 0.0f;
+        blend_cfg->bg_color.rgba.a   = 0.0f;
+    } else if (ops == VPE_CMD_OPS_BG_VSCF_PIPE1) {
+        blend_cfg->bg_color.is_ycbcr = false;
+        blend_cfg->bg_color.rgba.r   = 0.0f;
+        blend_cfg->bg_color.rgba.g   = 1.0f;
+        blend_cfg->bg_color.rgba.b   = 1.0f;
+        blend_cfg->bg_color.rgba.a   = 0.0f;
     } else {
-        blndcfg.bg_color = vpe_priv->output_ctx.mpc_bg_color;
+        blend_cfg->bg_color = vpe_priv->output_ctx.mpc_bg_color;
     }
-    blndcfg.global_gain          = 0xfff;
-    blndcfg.pre_multiplied_alpha = false;
+    blend_cfg->global_gain          = 0xfff;
+    blend_cfg->pre_multiplied_alpha = false;
 
-    if (cmd_type == VPE_CMD_TYPE_ALPHA_THROUGH_LUMA) {
+    if (ops == VPE_CMD_OPS_ALPHA_THROUGH_LUMA) {
         if (pipe_idx == 0) { // Alpha plane goes through pipe 1 and blending happens here
-            blndcfg.alpha_mode   = MPCC_ALPHA_BLEND_MODE_ALPHA_THROUGH_LUMA;
-            blndcfg.global_alpha = 0xfff;
+            blend_cfg->alpha_mode   = MPCC_ALPHA_BLEND_MODE_ALPHA_THROUGH_LUMA;
+            blend_cfg->global_alpha = 0xfff;
         } else {
-            blndcfg.alpha_mode           = MPCC_ALPHA_BLEND_MODE_GLOBAL_ALPHA;
-            blndcfg.global_alpha         = 0xfff;
-            blndcfg.pre_multiplied_alpha = 1;
+            blend_cfg->alpha_mode           = MPCC_ALPHA_BLEND_MODE_GLOBAL_ALPHA;
+            blend_cfg->global_alpha         = 0xfff;
+            blend_cfg->pre_multiplied_alpha = 1;
         }
     } else if (stream_ctx->stream.blend_info.blending ||
                (stream_ctx->stream_type == VPE_STREAM_TYPE_DESTINATION &&
                    pipe_idx == 0)) { // Top stream as destination means bg replace
         if (stream_ctx->per_pixel_alpha) {
-            blndcfg.alpha_mode = MPCC_ALPHA_BLEND_MODE_PER_PIXEL_ALPHA_COMBINED_GLOBAL_GAIN;
+            blend_cfg->alpha_mode = MPCC_ALPHA_BLEND_MODE_PER_PIXEL_ALPHA_COMBINED_GLOBAL_GAIN;
 
-            blndcfg.pre_multiplied_alpha = stream_ctx->stream.blend_info.pre_multiplied_alpha;
+            blend_cfg->pre_multiplied_alpha = stream_ctx->stream.blend_info.pre_multiplied_alpha;
             if (stream_ctx->stream.blend_info.global_alpha) {
-                blndcfg.global_gain =
+                blend_cfg->global_gain =
                     (uint16_t)(stream_ctx->stream.blend_info.global_alpha_value * 0xfff);
             }
         } else {
-            blndcfg.alpha_mode = MPCC_ALPHA_BLEND_MODE_GLOBAL_ALPHA;
+            blend_cfg->alpha_mode = MPCC_ALPHA_BLEND_MODE_GLOBAL_ALPHA;
             if (stream_ctx->stream.blend_info.global_alpha == true) {
                 VPE_ASSERT(stream_ctx->stream.blend_info.global_alpha_value <= 1.0f);
-                blndcfg.global_alpha =
+                blend_cfg->global_alpha =
                     (uint16_t)(stream_ctx->stream.blend_info.global_alpha_value * 0xfff);
             } else {
                 // Global alpha not enabled, make top layer opaque
-                blndcfg.global_alpha = 0xfff;
+                blend_cfg->global_alpha = 0xfff;
             }
         }
     } else {
-        blndcfg.alpha_mode   = MPCC_ALPHA_BLEND_MODE_GLOBAL_ALPHA;
-        blndcfg.global_alpha = 0xfff;
+        blend_cfg->alpha_mode   = MPCC_ALPHA_BLEND_MODE_GLOBAL_ALPHA;
+        blend_cfg->global_alpha = 0xfff;
     }
 
-    if (cmd_type == VPE_CMD_TYPE_BG || cmd_type == VPE_CMD_TYPE_BG_VSCF_INPUT ||
-        cmd_type == VPE_CMD_TYPE_BG_VSCF_OUTPUT ||
+    if (ops == VPE_CMD_OPS_BG || ops == VPE_CMD_OPS_BG_VSCF_INPUT ||
+        ops == VPE_CMD_OPS_BG_VSCF_OUTPUT ||
         (stream_ctx->mps_parent_stream != NULL &&
             cmd_input->scaler_data.recout.width == VPE_MIN_VIEWPORT_SIZE &&
             cmd_input->scaler_data.recout.height == VPE_MIN_VIEWPORT_SIZE)) {
         // for bg commands, make top layer transparent
         // as global alpha only works when global alpha mode, set global alpha mode as well
-        blndcfg.global_alpha = 0;
-        blndcfg.global_gain  = 0xfff;
-        blndcfg.alpha_mode   = MPCC_ALPHA_BLEND_MODE_GLOBAL_ALPHA;
+        blend_cfg->global_alpha = 0;
+        blend_cfg->global_gain  = 0xfff;
+        blend_cfg->alpha_mode   = MPCC_ALPHA_BLEND_MODE_GLOBAL_ALPHA;
     }
 
-    blndcfg.overlap_only     = false;
-    blndcfg.bottom_gain_mode = 0;
+    blend_cfg->overlap_only     = false;
+    blend_cfg->bottom_gain_mode = 0;
 
     switch (vpe_priv->init.debug.bg_bit_depth) {
     case 8:
-        blndcfg.background_color_bpc = 0;
+        blend_cfg->background_color_bpc = 0;
         break;
     case 9:
-        blndcfg.background_color_bpc = 1;
+        blend_cfg->background_color_bpc = 1;
         break;
     case 10:
-        blndcfg.background_color_bpc = 2;
+        blend_cfg->background_color_bpc = 2;
         break;
     case 11:
-        blndcfg.background_color_bpc = 3;
+        blend_cfg->background_color_bpc = 3;
         break;
     case 12:
     default:
-        blndcfg.background_color_bpc = 4; // 12 bit. DAL's choice;
+        blend_cfg->background_color_bpc = 4; // 12 bit. DAL's choice;
         break;
     }
 
-    blndcfg.top_gain            = 0x1f000;
-    blndcfg.bottom_inside_gain  = 0x1f000;
-    blndcfg.bottom_outside_gain = 0x1f000;
-    blndcfg.blend_mode          = blend_mode;
+    blend_cfg->top_gain            = 0x1f000;
+    blend_cfg->bottom_inside_gain  = 0x1f000;
+    blend_cfg->bottom_outside_gain = 0x1f000;
+    blend_cfg->blend_mode          = blend_mode;
 
-    mpc->funcs->program_mpcc_blending(mpc, pipe_idx, &blndcfg);
+}
+
+int32_t vpe20_program_stream_ops_config(struct vpe_priv *vpe_priv, uint32_t pipe_idx,
+    uint32_t cmd_input_idx, struct stream_ctx *stream_ctx, struct vpe_cmd_info *cmd_info)
+{
+
+    struct dpp           *dpp       = vpe_priv->resource.dpp[pipe_idx];
+    struct vpe_cmd_input *cmd_input = &cmd_info->inputs[cmd_input_idx];
+
+    vpe_priv->fe_cb_ctx.vpe_priv          = vpe_priv;
+    vpe_priv->fe_cb_ctx.stream_idx        = cmd_input->stream_idx;
+    vpe_priv->fe_cb_ctx.cmd_type          = cmd_info->ops;
+    vpe_priv->fe_cb_ctx.stream_sharing    = false;
+    vpe_priv->fe_cb_ctx.stream_op_sharing = true;
+
+    config_writer_set_callback(
+        &vpe_priv->config_writer, &vpe_priv->fe_cb_ctx, vpe_frontend_config_callback);
+    config_writer_set_type(&vpe_priv->config_writer, CONFIG_TYPE_DIRECT, pipe_idx);
+
+    dpp->funcs->set_frame_scaler(dpp, &cmd_input->scaler_data);
 
     config_writer_complete(&vpe_priv->config_writer);
+
+    return 0;
 }
 
 void vpe20_set_lls_pref(struct vpe_priv *vpe_priv, struct spl_in *spl_input,
@@ -1907,31 +1901,76 @@ void vpe20_set_lls_pref(struct vpe_priv *vpe_priv, struct spl_in *spl_input,
     }
 }
 
-void vpe20_program_3dlut_fl(struct vpe_priv *vpe_priv, uint32_t cmd_idx)
+void vpe20_pipe_setup(struct vpe_priv *vpe_priv, uint32_t cmd_idx)
+{
+    if (vpe_priv->resource.mpc_reset != NULL) {
+        vpe_priv->resource.mpc_reset(vpe_priv, cmd_idx);
+    }
+
+    if (vpe_priv->resource.program_fastload != NULL) {
+        vpe_priv->resource.program_fastload(vpe_priv, cmd_idx);
+    }
+}
+
+void vpe20_mpc_reset(struct vpe_priv *vpe_priv, uint32_t cmd_idx)
 {
     struct vpe_cmd_info *cmd_info = vpe_vector_get(vpe_priv->vpe_cmd_vector, cmd_idx);
+    struct mpc          *mpc;
     VPE_ASSERT(cmd_info);
     if (!cmd_info)
         return;
 
+    vpe_priv->fe_cb_ctx.vpe_priv          = vpe_priv;
+    vpe_priv->fe_cb_ctx.stream_sharing    = false;
+    vpe_priv->fe_cb_ctx.stream_op_sharing = false;
+    vpe_priv->fe_cb_ctx.cmd_type          = cmd_info->ops;
+
+    /* There is no mechanism to detach RMCM at the end of each VPE descriptor.
+    This is why we detach RMCM at the beginning of every job to reset the leftover
+    programming, otherwise the RMCM stays attached to the previous pipe.*/
+
+    config_writer_set_callback(
+        &vpe_priv->config_writer, &vpe_priv->fe_cb_ctx, vpe_frontend_config_callback);
+    config_writer_set_type(&vpe_priv->config_writer, CONFIG_TYPE_DIRECT, 0);
+
+    for (uint32_t rmcm_idx = 0; rmcm_idx < vpe_priv->pub.caps->resource_caps.num_mpc_3dlut;
+         rmcm_idx++) {
+
+        mpc = vpe_priv->resource.mpc[rmcm_idx];
+        mpc->funcs->attach_3dlut_to_mpc_inst(mpc, RMCM_MPCC_DISCONNECTED);
+        mpc->funcs->program_shaper(mpc, NULL);
+        mpc->funcs->program_3dlut(mpc, NULL);
+    }
+
+    // Visual confirm requires the MPCC Mux to be disabled as well before frontend programming
+    for (uint32_t opp_idx = 0; opp_idx < vpe_priv->pub.caps->resource_caps.num_opp; opp_idx++) {
+        mpc = vpe_priv->resource.mpc[opp_idx];
+        mpc->funcs->program_mpcc_mux(mpc, opp_idx, MPC_MUX_TOPSEL_DISABLE, MPC_MUX_BOTSEL_DISABLE,
+            MPC_MUX_OUTMUX_DISABLE, MPC_MUX_OPPID_DISABLE);
+    }
+
+    config_writer_complete(&vpe_priv->config_writer);
+}
+
+void vpe20_program_3dlut_fl(struct vpe_priv *vpe_priv, uint32_t cmd_idx)
+{
+    struct vpe_cmd_info *cmd_info = vpe_vector_get(vpe_priv->vpe_cmd_vector, cmd_idx);
+    struct mpc          *mpc;
+    VPE_ASSERT(cmd_info);
+    if (!cmd_info)
+        return;
     uint32_t num_3dluts =
         min(vpe_priv->pub.caps->resource_caps.num_mpc_3dlut, cmd_info->num_inputs);
     uint32_t used_3dluts = 0;
     uint32_t pipe_idx    = 0;
 
-    config_writer_set_callback(
-        &vpe_priv->config_writer, &vpe_priv->fe_cb_ctx, vpe_frontend_config_callback);
-
-    vpe_priv->fe_cb_ctx.stream_sharing    = false;
-    vpe_priv->fe_cb_ctx.stream_op_sharing = false;
-
-    // Program CDC & mpc for 3DLUT FL
+    // Program CDC & mpc fast load registers
     for (pipe_idx = 0; pipe_idx < cmd_info->num_inputs; pipe_idx++) {
 
         struct stream_ctx *stream_ctx =
             &vpe_priv->stream_ctx[cmd_info->inputs[pipe_idx].stream_idx];
-        struct cdc_fe           *cdc_fe       = vpe_priv->resource.cdc_fe[pipe_idx];
-        struct mpc              *mpc          = vpe_priv->resource.mpc[pipe_idx];
+        struct cdc_fe *cdc_fe                 = vpe_priv->resource.cdc_fe[pipe_idx];
+        mpc                                   = vpe_priv->resource.mpc[pipe_idx];
         struct vpe_surface_info *surface_info = &stream_ctx->stream.surface_info;
         struct vpe_cmd_input    *cmd_input    = &cmd_info->inputs[pipe_idx];
         uint16_t                 lut3d_bias   = 0x0;
@@ -1940,13 +1979,13 @@ void vpe20_program_3dlut_fl(struct vpe_priv *vpe_priv, uint32_t cmd_idx)
         vpe_priv->fe_cb_ctx.stream_idx = cmd_input->stream_idx;
         vpe_priv->fe_cb_ctx.vpe_priv   = vpe_priv;
 
-        config_writer_set_type(&vpe_priv->config_writer, CONFIG_TYPE_DIRECT, pipe_idx);
-
         if ((stream_ctx->stream.tm_params.UID != 0 || stream_ctx->stream.tm_params.enable_3dlut) &&
             (stream_ctx->stream.tm_params.lut_type > VPE_LUT_TYPE_CPU) &&
             stream_ctx->lut3d_func->state.bits.is_dma) { // FL enabled
 
             VPE_ASSERT(used_3dluts < num_3dluts);
+
+            config_writer_set_type(&vpe_priv->config_writer, CONFIG_TYPE_DIRECT, pipe_idx);
 
             /* Fast Load Programming. Always force LUT_DIM_33 */
             used_3dluts++;
@@ -1965,7 +2004,29 @@ void vpe20_program_3dlut_fl(struct vpe_priv *vpe_priv, uint32_t cmd_idx)
             mpc->funcs->program_mpc_3dlut_fl(
                 mpc, LUT_DIM_33, stream_ctx->lut3d_func->lut_3d.use_12bits);
 
-            config_writer_complete(&vpe_priv->config_writer);
+        } else {
+            if (mpc->funcs->program_mpc_3dlut_fl_config != NULL) {
+                mpc->funcs->program_mpc_3dlut_fl_config(mpc, VPE_3DLUT_MEM_LAYOUT_DISABLE,
+                    VPE_3DLUT_MEM_FORMAT_16161616_UNORM_12MSB, false);
+            }
+        }
+    }
+    config_writer_complete(&vpe_priv->config_writer);
+
+    // Program 3DLUT Descriptors
+    for (pipe_idx = 0; pipe_idx < cmd_info->num_inputs; pipe_idx++) {
+
+        struct stream_ctx *stream_ctx =
+            &vpe_priv->stream_ctx[cmd_info->inputs[pipe_idx].stream_idx];
+        struct vpe_surface_info *surface_info = &stream_ctx->stream.surface_info;
+        struct vpe_cmd_input    *cmd_input    = &cmd_info->inputs[pipe_idx];
+
+        vpe_priv->fe_cb_ctx.stream_idx = cmd_input->stream_idx;
+        vpe_priv->fe_cb_ctx.vpe_priv   = vpe_priv;
+
+        if ((stream_ctx->stream.tm_params.UID != 0 || stream_ctx->stream.tm_params.enable_3dlut) &&
+            (stream_ctx->stream.tm_params.lut_type > VPE_LUT_TYPE_CPU) &&
+            stream_ctx->lut3d_func->state.bits.is_dma) {
 
             // Start 3dlut Config
             config_writer_set_type(&vpe_priv->config_writer, CONFIG_TYPE_3DLUT_FL, pipe_idx);
@@ -1974,19 +2035,98 @@ void vpe20_program_3dlut_fl(struct vpe_priv *vpe_priv, uint32_t cmd_idx)
                 (uint64_t)stream_ctx->stream.dma_info.lut3d.data,
                 stream_ctx->lut3d_func->dma_params.addr_mode,
                 stream_ctx->stream.dma_info.lut3d.mem_align, LUT_FL_SIZE_33X33X33, false,
-                stream_ctx->stream.dma_info.lut3d.tmz);
-        } else {
-            if (mpc->funcs->program_mpc_3dlut_fl_config != NULL) {
-                mpc->funcs->program_mpc_3dlut_fl_config(mpc, VPE_3DLUT_MEM_LAYOUT_DISABLE,
-                    VPE_3DLUT_MEM_FORMAT_16161616_UNORM_12MSB, false);
-                config_writer_complete(&vpe_priv->config_writer);
-            }
+                stream_ctx->stream.surface_info.address.tmz_surface);
+            config_writer_complete(&vpe_priv->config_writer);
         }
     }
 }
 
-int32_t vpe20_program_frontend(struct vpe_priv* vpe_priv, uint32_t pipe_idx, uint32_t cmd_idx,
-    uint32_t cmd_input_idx, bool seg_only)
+int32_t vpe20_program_frontend_segment(
+    struct vpe_priv *vpe_priv, uint32_t pipe_idx, uint32_t cmd_idx, uint32_t cmd_input_idx)
+{
+
+    struct vpe_cmd_info *cmd_info = vpe_vector_get(vpe_priv->vpe_cmd_vector, cmd_idx);
+    VPE_ASSERT(cmd_info);
+    if (!cmd_info)
+        return -1;
+
+    struct vpe_cmd_input    *cmd_input         = &cmd_info->inputs[cmd_input_idx];
+    struct stream_ctx       *stream_ctx        = &vpe_priv->stream_ctx[cmd_input->stream_idx];
+    struct output_ctx       *output_ctx        = &vpe_priv->output_ctx;
+    struct vpe_surface_info *surface_info      = &stream_ctx->stream.surface_info;
+    struct cdc_fe           *cdc_fe            = vpe_priv->resource.cdc_fe[pipe_idx];
+    struct dpp              *dpp               = vpe_priv->resource.dpp[pipe_idx];
+    struct mpc              *mpc               = vpe_priv->resource.mpc[pipe_idx];
+    enum input_csc_select    select            = INPUT_CSC_SELECT_BYPASS;
+    uint32_t                 hw_mult           = 0;
+    enum lut3d_type          lut3d_type        = vpe_get_stream_lut3d_type(stream_ctx);
+    bool                     is_enabled_precsc = false;
+
+    struct mpcc_blnd_cfg blndcfg = {0};
+    enum mpc_mpccid      mpccid  = pipe_idx;
+    enum mpc_mux_topsel  topsel;
+    enum mpc_mux_outmux  outmux;
+    enum mpc_mux_botsel  botsel;
+    enum mpc_mux_oppid   oppid;
+    enum mpcc_blend_mode blend_mode;
+
+    vpe_priv->fe_cb_ctx.vpe_priv          = vpe_priv;
+    vpe_priv->fe_cb_ctx.stream_idx        = cmd_input->stream_idx;
+    vpe_priv->fe_cb_ctx.cmd_type          = cmd_info->ops;
+    vpe_priv->fe_cb_ctx.stream_sharing    = false;
+    vpe_priv->fe_cb_ctx.stream_op_sharing = false;
+
+    config_writer_set_callback(
+        &vpe_priv->config_writer, &vpe_priv->fe_cb_ctx, vpe_frontend_config_callback);
+    config_writer_set_type(&vpe_priv->config_writer, CONFIG_TYPE_DIRECT, pipe_idx);
+
+    // out mux depends on cmd type (blend vs composition)
+    vpe20_build_mpcc_mux_params(vpe_priv, cmd_info->ops, pipe_idx, cmd_info->num_inputs, &topsel,
+        &botsel, &outmux, &oppid, &blend_mode);
+    build_blend_cnfg(
+        vpe_priv, stream_ctx, cmd_input, cmd_info->ops, blend_mode, pipe_idx, &blndcfg);
+
+    // Due to MPS algorithm, you may have two streams in a single build command,
+    // where one of the streams requires tone mapping and the pipe processing that
+    // stream has changed since the previous command. Thus there is a need for per
+    // segment RMCM programming.
+    // RMCM LOCATION MUST BE SET BEFORE PROGRAMMING RMCM COMPONENTS
+    // program shaper, 3dlut and 1dlut in MPC for stream before blend
+    if (stream_ctx->enable_3dlut) {
+        mpc->funcs->attach_3dlut_to_mpc_inst(mpc, pipe_idx);
+        mpc->funcs->shaper_bypass(mpc, false);
+    }
+
+    mpc->funcs->program_mpcc_mux(mpc, mpccid, topsel, botsel, outmux, oppid);
+    mpc->funcs->program_mpcc_blending(mpc, pipe_idx, &blndcfg);
+
+    cdc_fe->funcs->program_viewport(
+        cdc_fe, &cmd_input->scaler_data.viewport, &cmd_input->scaler_data.viewport_c);
+
+    dpp->funcs->set_segment_scaler(dpp, &cmd_input->scaler_data);
+
+    if (cmd_info->num_inputs > 1) {
+        if (pipe_idx < (uint32_t)(cmd_info->num_inputs - 1)) {
+            // Need to enable next pipes dpp clocks before starting programming, so enable at
+            // end of previous (current) pipe
+
+            // This if statement required to avoid warning compilation error
+            if (pipe_idx + 1 < MAX_INPUT_PIPE)
+                vpe_priv->resource.dpp[pipe_idx + 1]->funcs->enable_clocks(
+                    vpe_priv->resource.dpp[pipe_idx + 1], true);
+        }
+        if (pipe_idx != 0) {
+            // After finishing the pipe programming, we can disable the clock of the current pipe.
+            dpp->funcs->enable_clocks(dpp, false);
+        }
+    }
+
+    config_writer_complete(&vpe_priv->config_writer);
+    return 0;
+}
+
+int32_t vpe20_program_frontend_frame(
+    struct vpe_priv *vpe_priv, uint32_t pipe_idx, uint32_t cmd_idx, uint32_t cmd_input_idx)
 {
     struct vpe_cmd_info *cmd_info = vpe_vector_get(vpe_priv->vpe_cmd_vector, cmd_idx);
     VPE_ASSERT(cmd_info);
@@ -2014,166 +2154,119 @@ int32_t vpe20_program_frontend(struct vpe_priv* vpe_priv, uint32_t pipe_idx, uin
     enum mpc_mux_oppid   oppid;
     enum mpcc_blend_mode blend_mode;
 
-    vpe_priv->fe_cb_ctx.stream_idx = cmd_input->stream_idx;
-    vpe_priv->fe_cb_ctx.vpe_priv = vpe_priv;
+    vpe_priv->fe_cb_ctx.vpe_priv          = vpe_priv;
+    vpe_priv->fe_cb_ctx.stream_idx        = cmd_input->stream_idx;
+    vpe_priv->fe_cb_ctx.cmd_type          = cmd_info->ops;
+    vpe_priv->fe_cb_ctx.stream_sharing    = true;
+    vpe_priv->fe_cb_ctx.stream_op_sharing = false;
 
     config_writer_set_callback(
         &vpe_priv->config_writer, &vpe_priv->fe_cb_ctx, vpe_frontend_config_callback);
-
     config_writer_set_type(&vpe_priv->config_writer, CONFIG_TYPE_DIRECT, pipe_idx);
 
     vpe20_build_mpcc_mux_params(vpe_priv, cmd_info->ops, pipe_idx, cmd_info->num_inputs, &topsel,
         &botsel, &outmux, &oppid, &blend_mode);
 
-    if (!seg_only) {
-        /* start front-end programming that can be shared among segments */
-        vpe_priv->fe_cb_ctx.stream_sharing = true;
+    cdc_fe->funcs->program_surface_config(cdc_fe, surface_info->format, stream_ctx->stream.rotation,
+        stream_ctx->stream.horizontal_mirror, surface_info->swizzle);
+    cdc_fe->funcs->program_crossbar_config(cdc_fe, surface_info->format);
 
-        config_writer_set_type(&vpe_priv->config_writer, CONFIG_TYPE_DIRECT, pipe_idx);
+    dpp->funcs->program_cnv(dpp, surface_info->format, vpe_priv->expansion_mode);
+    dpp->funcs->build_keyer_params(dpp, stream_ctx, &keyer_params);
+    dpp->funcs->program_alpha_keyer(dpp, &keyer_params);
 
-        cdc_fe->funcs->program_surface_config(cdc_fe, surface_info->format,
-            stream_ctx->stream.rotation, stream_ctx->stream.horizontal_mirror,
-            surface_info->swizzle);
-        cdc_fe->funcs->program_crossbar_config(cdc_fe, surface_info->format);
+    if (stream_ctx->bias_scale)
+        dpp->funcs->program_cnv_bias_scale(dpp, stream_ctx->bias_scale);
 
-        dpp->funcs->program_cnv(dpp, surface_info->format, vpe_priv->expansion_mode);
-        dpp->funcs->build_keyer_params(dpp, stream_ctx, &keyer_params);
-        dpp->funcs->program_alpha_keyer(dpp, &keyer_params);
-
-        if (stream_ctx->bias_scale)
-            dpp->funcs->program_cnv_bias_scale(dpp, stream_ctx->bias_scale);
-
-        /* If input adjustment exists, program the ICSC with those values. */
-        if (stream_ctx->input_cs) {
-            if (!is_enabled_precsc)
-                select = INPUT_CSC_SELECT_ICSC;
-            dpp->funcs->program_post_csc(dpp, stream_ctx->cs, select, stream_ctx->input_cs);
-        } else {
-            dpp->funcs->program_post_csc(dpp, stream_ctx->cs, select, NULL);
-        }
-        dpp->funcs->program_input_transfer_func(dpp, stream_ctx->input_tf);
-
-        // RMCM LOCATION MUST BE SET BEFORE PROGRAMMING RMCM COMPONENTS
-        // program shaper, 3dlut and 1dlut in MPC for stream before blend
-        if (stream_ctx->enable_3dlut) {
-            mpc->funcs->attach_3dlut_to_mpc_inst(mpc, pipe_idx);
-        }
-
-        if (stream_ctx->stream.hist_params.hist_dsets > 0)
-        {
-            dpp->funcs->program_histogram(dpp, &stream_ctx->stream.hist_params, stream_ctx->cs);
-        }
-
-        // top mux has to be set first before mpc programming
-        mpc->funcs->program_mpcc_mux(mpc, mpccid, topsel, botsel, outmux, oppid);
-        /** VPE2.0 Gamut Remaps
-         *  4 gamut remaps in the pipe available.
-         *  1 in RMCM before 3dlut + Shaper. Only 1 RMCM shared for all pipes
-         *  2 in MCM (Gamut-First -> BlndGamma -> Gamut Second). Each pipe has an MCM.
-         *  1 post blend. Each pipe has one.
-         */
-        struct colorspace_transform *gamut_matrix_mcm1 = stream_ctx->gamut_remap;
-        struct colorspace_transform *gamut_matrix_rmcm = NULL;
-        struct vpe_3dlut            *lut3d_func        = NULL;
-        struct transfer_func        *func_shaper       = NULL;
-
-        if (stream_ctx->stream.tm_params.enable_3dlut) {
-            // RMCM Programming. Only Programmed Once.
-            func_shaper       = stream_ctx->in_shaper_func;
-            lut3d_func        = stream_ctx->lut3d_func;
-            gamut_matrix_rmcm = stream_ctx->gamut_remap;
-            gamut_matrix_mcm1 = NULL;
-
-            mpc->funcs->set_gamut_remap2(mpc, gamut_matrix_rmcm, VPE_MPC_RMCM_GAMUT_REMAP);
-        }
-
-        // Always Pre-Blend. RMCM (RMCM_GAMUT + 3dLUT + Shaper)
-        mpc->funcs->program_movable_cm(mpc, func_shaper, lut3d_func, stream_ctx->blend_tf, false);
-
-        // Program if RMCM is not used
-        mpc->funcs->set_gamut_remap2(mpc, gamut_matrix_mcm1, VPE_MPC_MCM_FIRST_GAMUT_REMAP);
-
-        // Always Program Pre-Blend Gamut
-        mpc->funcs->set_gamut_remap2(mpc, output_ctx->gamut_remap, VPE_MPC_MCM_SECOND_GAMUT_REMAP);
-
-        // Always Bypass Post-Blend Gamut Remap
-        mpc->funcs->set_gamut_remap2(mpc, NULL, VPE_MPC_GAMUT_REMAP);
-
-        // program hdr_mult
-        fmt.exponenta_bits = 6;
-        fmt.mantissa_bits = 12;
-        fmt.sign = true;
-        if (stream_ctx->stream.tm_params.UID || stream_ctx->stream.tm_params.enable_3dlut) {
-            if (!vpe_convert_to_custom_float_format(
-                    stream_ctx->lut3d_func->hdr_multiplier, &fmt, &hw_mult)) {
-                VPE_ASSERT(0);
-            }
-        } else {
-            if (!vpe_convert_to_custom_float_format(stream_ctx->white_point_gain, &fmt, &hw_mult)) {
-                VPE_ASSERT(0);
-            }
-        }
-        dpp->funcs->set_hdr_multiplier(dpp, hw_mult);
-
-        if (vpe_priv->init.debug.dpp_crc_ctrl)
-            dpp->funcs->program_crc(dpp, true);
-
-        if (vpe_priv->init.debug.mpc_crc_ctrl)
-            mpc->funcs->program_crc(mpc, true);
-
-        config_writer_complete(&vpe_priv->config_writer);
-        // put other hw programming for stream specific that can be shared here
-    } else if (stream_ctx->mps_parent_stream != NULL) {
-        vpe_priv->fe_cb_ctx.stream_sharing = false;
-        mpc->funcs->program_mpcc_mux(mpc, mpccid, topsel, botsel, outmux, oppid);
-
-        config_writer_complete(&vpe_priv->config_writer);
+    /* If input adjustment exists, program the ICSC with those values. */
+    if (stream_ctx->input_cs) {
+        if (!is_enabled_precsc)
+            select = INPUT_CSC_SELECT_ICSC;
+        dpp->funcs->program_post_csc(dpp, stream_ctx->cs, select, stream_ctx->input_cs);
+    } else {
+        dpp->funcs->program_post_csc(dpp, stream_ctx->cs, select, NULL);
     }
+    dpp->funcs->program_input_transfer_func(dpp, stream_ctx->input_tf);
 
-    vpe20_create_stream_ops_config(vpe_priv, pipe_idx, cmd_input_idx, stream_ctx, cmd_info);
-
-    /* start segment specific programming */
-    vpe_priv->fe_cb_ctx.stream_sharing    = false;
-    vpe_priv->fe_cb_ctx.stream_op_sharing = false;
-    vpe_priv->fe_cb_ctx.cmd_type          = VPE_CMD_TYPE_COMPOSITING;
-
-    // Due to MPS algorithm, you may have two streams in a single build command,
-    // where one of the streams requires tone mapping and the pipe processing that
-    // stream has changed since the previous command. Thus there is a need for per
-    // segment RMCM programming.
     // RMCM LOCATION MUST BE SET BEFORE PROGRAMMING RMCM COMPONENTS
     // program shaper, 3dlut and 1dlut in MPC for stream before blend
-    // if !seg_only, this would be programmed before
-    if (seg_only) {
-        if (stream_ctx->enable_3dlut) {
-            mpc->funcs->attach_3dlut_to_mpc_inst(mpc, pipe_idx);
-            mpc->funcs->shaper_bypass(mpc, false);
-        }
+    if (stream_ctx->enable_3dlut) {
+        mpc->funcs->attach_3dlut_to_mpc_inst(mpc, pipe_idx);
     }
 
+    if (stream_ctx->stream.hist_params.hist_dsets > 0) {
+        dpp->funcs->program_histogram(dpp, &stream_ctx->stream.hist_params, stream_ctx->cs);
+    }
 
-    cdc_fe->funcs->program_viewport(
-        cdc_fe, &cmd_input->scaler_data.viewport, &cmd_input->scaler_data.viewport_c);
+    // top mux has to be set first before mpc programming
+    mpc->funcs->program_mpcc_mux(mpc, mpccid, topsel, botsel, outmux, oppid);
 
-    dpp->funcs->set_segment_scaler(dpp, &cmd_input->scaler_data);
+    /** VPE2.0 Gamut Remaps
+     *  4 gamut remaps in the pipe available.
+     *  1 in RMCM before 3dlut + Shaper. Only 1 RMCM shared for all pipes
+     *  2 in MCM (Gamut-First -> BlndGamma -> Gamut Second). Each pipe has an MCM.
+     *  1 post blend. Each pipe has one.
+     */
+    struct colorspace_transform *gamut_matrix_mcm1 = stream_ctx->gamut_remap;
+    struct colorspace_transform *gamut_matrix_rmcm = NULL;
+    struct vpe_3dlut            *lut3d_func        = NULL;
+    struct transfer_func        *func_shaper       = NULL;
 
-    if (cmd_info->num_inputs > 1) {
-        if (pipe_idx < (uint32_t)(cmd_info->num_inputs - 1)) {
-            // Need to enable next pipes dpp clocks before starting programming, so enable at
-            // end of previous (current) pipe
+    if (stream_ctx->stream.tm_params.enable_3dlut) {
+        // RMCM Programming. Only Programmed Once.
+        func_shaper       = stream_ctx->in_shaper_func;
+        lut3d_func        = stream_ctx->lut3d_func;
+        gamut_matrix_rmcm = stream_ctx->gamut_remap;
+        gamut_matrix_mcm1 = NULL;
 
-            // This if statement required to avoid warning compilation error
-            if (pipe_idx + 1 < MAX_INPUT_PIPE)
-                vpe_priv->resource.dpp[pipe_idx + 1]->funcs->enable_clocks(
-                    vpe_priv->resource.dpp[pipe_idx + 1], true);
+        mpc->funcs->set_gamut_remap2(mpc, gamut_matrix_rmcm, VPE_MPC_RMCM_GAMUT_REMAP);
+    }
+
+    // Always Pre-Blend. RMCM (RMCM_GAMUT + 3dLUT + Shaper)
+    mpc->funcs->program_movable_cm(mpc, func_shaper, lut3d_func, stream_ctx->blend_tf, false);
+
+    // indirect config if user provide dma shaper lut
+    if ((stream_ctx->stream.dma_info.shaper.enabled) && (stream_ctx->stream.lut_compound.enabled) &&
+        (mpc->funcs->program_shaper_indirect != NULL)) {
+        mpc->funcs->program_shaper_indirect(mpc, &stream_ctx->stream.dma_info.shaper);
+    }
+
+    // Program if RMCM is not used
+    mpc->funcs->set_gamut_remap2(mpc, gamut_matrix_mcm1, VPE_MPC_MCM_FIRST_GAMUT_REMAP);
+
+    // Always Program Pre-Blend Gamut
+    mpc->funcs->set_gamut_remap2(mpc, output_ctx->gamut_remap, VPE_MPC_MCM_SECOND_GAMUT_REMAP);
+
+    // Always Bypass Post-Blend Gamut Remap
+    mpc->funcs->set_gamut_remap2(mpc, NULL, VPE_MPC_GAMUT_REMAP);
+
+    // Disable unused gamma blocks to prevent corruption
+    mpc->funcs->set_output_gamma(mpc, NULL);
+
+    // program hdr_mult
+    fmt.exponenta_bits = 6;
+    fmt.mantissa_bits  = 12;
+    fmt.sign           = true;
+    if (stream_ctx->stream.tm_params.UID || stream_ctx->stream.tm_params.enable_3dlut) {
+        if (!vpe_convert_to_custom_float_format(
+                stream_ctx->lut3d_func->hdr_multiplier, &fmt, &hw_mult)) {
+            VPE_ASSERT(0);
         }
-        if (pipe_idx != 0) {
-            // After finishing the pipe programming, we can disable the clock of the current pipe.
-            dpp->funcs->enable_clocks(dpp, false);
+    } else {
+        if (!vpe_convert_to_custom_float_format(stream_ctx->white_point_gain, &fmt, &hw_mult)) {
+            VPE_ASSERT(0);
         }
     }
+    dpp->funcs->set_hdr_multiplier(dpp, hw_mult);
+
+    if (vpe_priv->init.debug.dpp_crc_ctrl)
+        dpp->funcs->program_crc(dpp, true);
+
+    if (vpe_priv->init.debug.mpc_crc_ctrl)
+        mpc->funcs->program_crc(mpc, true);
 
     config_writer_complete(&vpe_priv->config_writer);
+    // put other hw programming for stream specific that can be shared here
 
     return 0;
 }
@@ -2288,7 +2381,7 @@ bool vpe20_check_output_color_space(
     if (cs == COLOR_SPACE_UNKNOWN || tf == TRANSFER_FUNC_UNKNOWN)
         return false;
 
-    if (vpe_is_fp16(format) && tf != TRANSFER_FUNC_LINEAR)
+    if ((cs == COLOR_SPACE_CUSTOM) || (tf == TRANSFER_FUNC_CUSTOM))
         return false;
 
     return true;
@@ -2419,6 +2512,7 @@ uint32_t vpe20_get_hw_surface_format(enum vpe_surface_pixel_format format)
         surf_format = 20;
         break;
     case VPE_SURFACE_PIXEL_FORMAT_GRPH_RGBA16161616:
+    case VPE_SURFACE_PIXEL_FORMAT_GRPH_BGRA16161616:
         surf_format = 21;
         break;
     case VPE_SURFACE_PIXEL_FORMAT_GRPH_ARGB16161616F:
@@ -2430,15 +2524,19 @@ uint32_t vpe20_get_hw_surface_format(enum vpe_surface_pixel_format format)
         surf_format = 25;
         break;
     case VPE_SURFACE_PIXEL_FORMAT_GRPH_ABGR16161616_UNORM:
+    case VPE_SURFACE_PIXEL_FORMAT_GRPH_ARGB16161616_UNORM:
         surf_format = 26;
         break;
     case VPE_SURFACE_PIXEL_FORMAT_GRPH_BGRA16161616_UNORM:
+    case VPE_SURFACE_PIXEL_FORMAT_GRPH_RGBA16161616_UNORM:
         surf_format = 27;
         break;
     case VPE_SURFACE_PIXEL_FORMAT_GRPH_ABGR16161616_SNORM:
+    case VPE_SURFACE_PIXEL_FORMAT_GRPH_ARGB16161616_SNORM:
         surf_format = 28;
         break;
     case VPE_SURFACE_PIXEL_FORMAT_GRPH_BGRA16161616_SNORM:
+    case VPE_SURFACE_PIXEL_FORMAT_GRPH_RGBA16161616_SNORM:
         surf_format = 29;
         break;
     case VPE_SURFACE_PIXEL_FORMAT_VIDEO_ACrYCb12121212:
@@ -2547,34 +2645,14 @@ uint32_t vpe20_get_hw_surface_format(enum vpe_surface_pixel_format format)
     return surf_format;
 }
 
-bool vpe20_get_dcc_compression_output_cap(
-    const struct vpe_dcc_surface_param *params, struct vpe_surface_dcc_cap *cap)
-{
-    cap->capable = false;
-    return cap->capable;
-}
-
-bool vpe20_get_dcc_compression_input_cap(
-    const struct vpe_dcc_surface_param *params, struct vpe_surface_dcc_cap *cap)
-{
-    if (!vpe_is_dual_plane_format(params->format) && !vpe_is_planar_format(params->format)) {
-        cap->capable = true;
-        cap->is_internal_dcc = true;
-    } else {
-        cap->capable = false;
-        cap->is_internal_dcc = false;
-    }
-    return cap->capable;
-}
-
 //(BYTES_IN_DWORD * (HEADER_DWORD + (CONFIG_DWORD * NUM_CONFIG_PER_PIPE * NUM_PIPE))
 // WORST_CASE_ALIGNMENT PER CONFIG IS 60 BYTES
-#define VPE20_GENERAL_VPE_DESC_SIZE                288   // 4 * (4 + (2 * MAX_NUM_SAVED_CONFIG * 2))
-#define VPE20_GENERAL_EMB_USAGE_FRAME_SHARED       6400  // 4876(max recorded) + round up margin
-#define VPE20_GENERAL_EMB_USAGE_3DLUT_FRAME_SHARED 40960 // currently max 35192 is recorded
-#define VPE20_GENERAL_EMB_USAGE_BG_SHARED          4000
-#define VPE20_GENERAL_EMB_USAGE_SEG_NON_SHARED     6400 // 3820 (max recorded) + round up margin
-
+#define VPE20_GENERAL_VPE_DESC_SIZE                  288 // 4 * (4 + (2 * MAX_NUM_SAVED_CONFIG * 2))
+#define VPE20_GENERAL_EMB_USAGE_FRAME_SHARED         6400  // 4876(max recorded) + round up margin
+#define VPE20_GENERAL_EMB_USAGE_3DLUT_FRAME_SHARED   40960 // currently max 35192 is recorded
+#define VPE20_GENERAL_EMB_USAGE_BG_SHARED            4000
+#define VPE20_GENERAL_EMB_USAGE_SEG_NON_SHARED       6400  // 3820 (max recorded) + round up margin
+#define VPE20_GENERAL_EMB_USAGE_INDIRECT_SHAPER_SIZE 6400
 void vpe20_get_bufs_req(struct vpe_priv *vpe_priv, struct vpe_bufs_req *req)
 {
     uint32_t             i;
@@ -2589,6 +2667,7 @@ void vpe20_get_bufs_req(struct vpe_priv *vpe_priv, struct vpe_bufs_req *req)
 
     for (i = 0; i < vpe_priv->vpe_cmd_vector->num_elements; i++) {
         uint32_t per_pipe_size = 0;
+        emb_req                = 0;
 
         cmd_info = vpe_vector_get(vpe_priv->vpe_cmd_vector, i);
         VPE_ASSERT(cmd_info);
@@ -2647,6 +2726,10 @@ void vpe20_get_bufs_req(struct vpe_priv *vpe_priv, struct vpe_bufs_req *req)
         req->emb_buf_size += emb_req;
     }
 
+    if (vpe_priv->num_input_streams > 0 && vpe_priv->stream_ctx[0].stream.dma_info.shaper.enabled) {
+        req->cmd_buf_size += VPE20_GENERAL_VPE_DESC_SIZE;
+        req->emb_buf_size += VPE20_GENERAL_EMB_USAGE_INDIRECT_SHAPER_SIZE;
+    }
     req->cmd_buf_size += VPE_PREDICATION_CMD_SIZE;
 }
 
@@ -2744,6 +2827,12 @@ enum vpe_status vpe20_update_blnd_gamma(struct vpe_priv *vpe_priv,
             if (lut3d_enabled) {
                 vpe_color_build_tm_cs(tm_params, &param->dst_surface, &tm_out_cs);
                 vpe_color_get_color_space_and_tf(&tm_out_cs, &cs, &tf);
+
+                // For HLG final output, use Linear TF to apply scaling without additional curve
+                if (output_ctx->tf == TRANSFER_FUNC_HLG) {
+                    tf = TRANSFER_FUNC_LINEAR;
+                }
+
             } else {
                 can_bypass = true;
             }
@@ -2781,14 +2870,14 @@ enum vpe_status vpe20_update_output_gamma(struct vpe_priv *vpe_priv,
     enum vpe_status    status     = VPE_STATUS_OK;
     struct fixed31_32  y_scale    = vpe_fixpt_one;
 
-    if (vpe_is_fp16(param->dst_surface.format)) {
-        y_scale = vpe_fixpt_mul_int(y_scale, CCCS_NORM);
+    if ((vpe_is_fp16(param->dst_surface.format) == true) &&
+        (param->dst_surface.cs.tf == VPE_TF_G10)) {
+        y_scale = vpe_fixpt_mul_int(vpe_fixpt_one, CCCS_NORM);
     }
 
-    if (!geometric_scaling && vpe_is_HDR(output_ctx->tf))
-        can_bypass = false;
-    else
+    if ((geometric_scaling == true) || (vpe_is_HDR(output_ctx->tf) == false)) {
         can_bypass = true;
+    }
 
     vpe_color_update_regamma_tf(
         vpe_priv, output_ctx->tf, vpe_fixpt_one, y_scale, vpe_fixpt_zero, can_bypass, output_tf);
@@ -2847,7 +2936,7 @@ static bool rect_contained_in_rect(struct vpe_rect inside_rect, struct vpe_rect 
 static enum vpe_status segment_stream(struct vpe_priv *vpe_priv, struct stream_ctx *stream_ctx,
     struct vpe_rect target_rect, bool dst_subsampled, bool enable_frod, uint32_t recout_alignment)
 {
-    uint16_t                      seg_idx;
+    uint16_t                      seg_idx, stream_idx;
     struct segment_ctx *segment_ctx;
     struct scaler_data  scl_data;
     struct vpe_rect     src_rect;
@@ -2859,6 +2948,8 @@ static enum vpe_status segment_stream(struct vpe_priv *vpe_priv, struct stream_c
     struct dpp     *dpp              = vpe_priv->resource.dpp[0];
     enum vpe_status res              = VPE_STATUS_OK;
     bool            skip_program_scl = false;
+    uint16_t max_num_mps_streams;
+    struct stream_ctx *mps_stream_ctx[MAX_INPUT_PIPE] = {0};
 
     if (!needs_segmentation(stream_ctx->stream_type))
         return res;
@@ -2873,7 +2964,11 @@ static enum vpe_status segment_stream(struct vpe_priv *vpe_priv, struct stream_c
     max_seg_width    = vpe_priv->resource.get_max_seg_width(
         &vpe_priv->output_ctx, stream_ctx->stream.surface_info.format, stream_ctx->scan);
 
-    if (dst_rect.width == 0 && dst_rect.height == 0) {
+    if (vpe_is_zero_rect(&target_rect)) {
+        return VPE_STATUS_VIEWPORT_SIZE_NOT_SUPPORTED;
+    }
+
+    if (vpe_is_zero_rect(&dst_rect)) {
         stream_ctx->num_segments = 0;
         return VPE_STATUS_OK;
     }
@@ -2911,11 +3006,16 @@ static enum vpe_status segment_stream(struct vpe_priv *vpe_priv, struct stream_c
         return VPE_STATUS_SCALING_RATIO_NOT_SUPPORTED;
     if (stream_ctx->mps_parent_stream == NULL && stream_ctx->stream_idx == 0 &&
         vpe_priv->num_input_streams > 1) {
-        struct stream_ctx *mps_stream_ctx[2] = {&vpe_priv->stream_ctx[0], &vpe_priv->stream_ctx[1]};
+        max_num_mps_streams =
+            (uint16_t)min(vpe_priv->pub.caps->resource_caps.num_dpp, vpe_priv->num_input_streams);
 
-        if (vpe_is_mps_possible(vpe_priv, mps_stream_ctx, 2, recout_alignment))
-            if (vpe_init_mps_ctx(vpe_priv, mps_stream_ctx, 2) != VPE_STATUS_OK)
+        for (stream_idx = 0; stream_idx < max_num_mps_streams; stream_idx++)
+            mps_stream_ctx[stream_idx] = &vpe_priv->stream_ctx[stream_idx];
+
+        if (vpe_is_mps_possible(vpe_priv, mps_stream_ctx, max_num_mps_streams, recout_alignment)) {
+            if (vpe_init_mps_ctx(vpe_priv, mps_stream_ctx, max_num_mps_streams) != VPE_STATUS_OK)
                 return VPE_STATUS_ERROR;
+        }
     }
 
     res = vpe_priv->resource.set_num_segments(vpe_priv, stream_ctx, &scl_data,
@@ -3160,10 +3260,12 @@ void vpe20_create_bg_segments(
     struct vpe_priv *vpe_priv, struct vpe_rect *gaps, uint16_t gaps_cnt, enum vpe_cmd_ops ops)
 {
     uint16_t            gap_index;
-    uint16_t            bg_index    = vpe_priv->resource.get_bg_stream_idx(vpe_priv);
     struct vpe_cmd_info cmd_info    = {0};
-    struct scaler_data *scaler_data = &(cmd_info.inputs[bg_index].scaler_data);
-    struct stream_ctx  *stream_ctx  = &(vpe_priv->stream_ctx[bg_index]);
+    struct scaler_data *scaler_data = &(cmd_info.inputs[0].scaler_data);
+
+    // For background gen, we just need a valid memory address for the input so we just take the
+    // first stream
+    struct stream_ctx *stream_ctx = &(vpe_priv->stream_ctx[0]);
 
     for (gap_index = 0; gap_index < gaps_cnt; gap_index++) {
 
@@ -3254,58 +3356,6 @@ void vpe20_set_frod_output_viewport(struct vpe_cmd_output *dst_output,
     }
 }
 
-/*
- * Because we only touch the back end of the output pipes associated with the current command,
- * and the number of output pipes can vary between commands, there is a need to reset certain
- * registers in the back end that may have been leftover from a previous job. Specfically the
- * OPP BG Gen registers need to be reset because this block can generate its own signal. This
- * is not the case for the other back end blocks, so we don't need to reset them.
- */
-void vpe20_reset_pipes(struct vpe_priv *vpe_priv)
-{
-    struct mpc      *mpc;
-    struct opp      *opp;
-    struct vpe_rect  zero_dim_rect = {0, 0, 0, 0};
-    struct vpe_color bg_color      = {.is_ycbcr = false, .rgba = {0, 0, 0}};
-
-    // Reset necessary frontend registers
-    vpe_priv->fe_cb_ctx.vpe_priv          = vpe_priv;
-    vpe_priv->fe_cb_ctx.stream_sharing    = false;
-    vpe_priv->fe_cb_ctx.stream_op_sharing = false;
-    config_writer_set_callback(
-        &vpe_priv->config_writer, &vpe_priv->fe_cb_ctx, vpe_frontend_config_callback);
-
-    for (uint32_t rmcm_idx = 0; rmcm_idx < vpe_priv->pub.caps->resource_caps.num_mpc_3dlut;
-         rmcm_idx++) {
-        config_writer_set_type(&vpe_priv->config_writer, CONFIG_TYPE_DIRECT, rmcm_idx);
-        mpc = vpe_priv->resource.mpc[rmcm_idx];
-        mpc->funcs->attach_3dlut_to_mpc_inst(mpc, RMCM_MPCC_DISCONNECTED);
-        mpc->funcs->shaper_bypass(mpc, true);
-        mpc->funcs->program_3dlut(mpc, NULL);
-    }
-
-    config_writer_complete(&vpe_priv->config_writer);
-
-    // Reset necessary backend registers
-    vpe_priv->be_cb_ctx.vpe_priv = vpe_priv;
-    vpe_priv->be_cb_ctx.share    = false;
-    config_writer_set_callback(
-        &vpe_priv->config_writer, &vpe_priv->be_cb_ctx, vpe_backend_config_callback);
-
-    for (uint32_t pipe_idx = 0; pipe_idx < vpe_priv->pub.caps->resource_caps.num_opp; pipe_idx++) {
-        config_writer_set_type(&vpe_priv->config_writer, CONFIG_TYPE_DIRECT, pipe_idx);
-        opp = vpe_priv->resource.opp[pipe_idx];
-        opp->funcs->set_bg(
-            opp, zero_dim_rect, zero_dim_rect, VPE_SURFACE_PIXEL_FORMAT_INVALID, bg_color);
-
-        mpc = vpe_priv->resource.mpc[pipe_idx];
-        mpc->funcs->program_mpcc_mux(mpc, pipe_idx, MPC_MUX_TOPSEL_DISABLE, MPC_MUX_BOTSEL_DISABLE,
-            MPC_MUX_OUTMUX_DISABLE, MPC_MUX_OPPID_DISABLE);
-    }
-
-    config_writer_complete(&vpe_priv->config_writer);
-}
-
 enum vpe_status vpe20_populate_frod_param(
     struct vpe_priv *vpe_priv, const struct vpe_build_param *param)
 {
@@ -3339,8 +3389,6 @@ void vpe20_setup_check_funcs(struct vpe_check_support_funcs *funcs)
     funcs->check_output_format            = vpe20_check_output_format;
     funcs->check_input_color_space        = vpe10_check_input_color_space;
     funcs->check_output_color_space       = vpe20_check_output_color_space;
-    funcs->get_dcc_compression_input_cap  = vpe20_get_dcc_compression_input_cap;
-    funcs->get_dcc_compression_output_cap = vpe20_get_dcc_compression_output_cap;
 }
 
 enum vpe_status vpe20_check_lut3d_compound(

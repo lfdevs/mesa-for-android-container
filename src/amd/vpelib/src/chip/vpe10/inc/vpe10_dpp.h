@@ -958,6 +958,8 @@ void vpe10_dpp_dscl_set_scaler_filter(struct dpp *dpp, uint32_t taps,
 
 bool vpe10_dpp_dscl_is_ycbcr(const enum vpe_surface_pixel_format format);
 
+bool vpe10_dpp_dscl_is_video_subsampled(const enum vpe_surface_pixel_format format);
+
 void vpe10_dpp_program_gamcor_lut(struct dpp *dpp, const struct pwl_params *params);
 
 uint32_t vpe10_get_line_buffer_size(void);

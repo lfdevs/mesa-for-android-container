@@ -1,6 +1,0 @@
-[wrap-git]
-directory = perfetto
-
-url = https://github.com/google/perfetto
-revision = v47.0
-depth = 1

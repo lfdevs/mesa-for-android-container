@@ -117,7 +117,7 @@ libnvidia_headers = static_library(
 
 idep_nvidia_headers = declare_dependency(
   include_directories : include_directories('.', 'nvidia/classes'),
-  sources : cl_generated,
+  sources : ['nv_push.c', cl_generated, nv_push_class_dump_h],
   link_with : libnvidia_headers,
 )
 

@@ -29,11 +29,11 @@
 
 void vpe20_construct_plane_desc_writer(struct plane_desc_writer *writer)
 {
-    writer->init            = vpe20_plane_desc_writer_init;
-    writer->add_source      = vpe20_plane_desc_writer_add_source;
-    writer->add_destination = vpe20_plane_desc_writer_add_destination;
-    writer->add_meta        = vpe20_plane_desc_writer_add_meta;
-    writer->add_histo       = vpe20_plane_desc_writer_add_hist_destination;
+    writer->init                 = vpe20_plane_desc_writer_init;
+    writer->add_source           = vpe20_plane_desc_writer_add_source;
+    writer->add_destination      = vpe20_plane_desc_writer_add_destination;
+    writer->add_src_internal_dcc = vpe20_plane_desc_writer_add_src_internal_dcc;
+    writer->add_histo            = vpe20_plane_desc_writer_add_hist_destination;
 }
 
 void vpe20_plane_desc_writer_init(
@@ -84,7 +84,7 @@ void vpe20_plane_desc_writer_init(
 void vpe20_plane_desc_writer_add_source(
     struct plane_desc_writer *writer, void *p_source, bool is_plane0)
 {
-    uint32_t *cmd_space, *cmd_start;
+    uint32_t                    *cmd_space;
     uint32_t  num_wd = is_plane0 ? 6 : 5;
     uint64_t  size   = num_wd * sizeof(uint32_t);
     struct vpe20_plane_desc_src *src    = (struct vpe20_plane_desc_src *)p_source;
@@ -97,7 +97,7 @@ void vpe20_plane_desc_writer_add_source(
         writer->status = VPE_STATUS_BUFFER_OVERFLOW;
         return;
     }
-    cmd_start = cmd_space = (uint32_t *)(uintptr_t)writer->buf->cpu_va;
+    cmd_space = (uint32_t *)(uintptr_t)writer->buf->cpu_va;
 
     if (is_plane0) {
         *cmd_space++ = VPEC_FIELD_VALUE(VPE_PLANE_CFG_TMZ, src->tmz) |
@@ -126,7 +126,7 @@ void vpe20_plane_desc_writer_add_source(
 void vpe20_plane_desc_writer_add_destination(
     struct plane_desc_writer *writer, void *p_destination, bool write_header)
 {
-    uint32_t *cmd_space, *cmd_start;
+    uint32_t                    *cmd_space;
     uint32_t  num_wd = write_header ? 6 : 5;
     uint64_t  size   = num_wd * sizeof(uint32_t);
     struct vpe20_plane_desc_dst *dst    = (struct vpe20_plane_desc_dst *)p_destination;
@@ -140,7 +140,7 @@ void vpe20_plane_desc_writer_add_destination(
         return;
     }
 
-    cmd_start = cmd_space = (uint32_t *)(uintptr_t)writer->buf->cpu_va;
+    cmd_space = (uint32_t *)(uintptr_t)writer->buf->cpu_va;
 
     if (write_header) {
         *cmd_space++ = VPEC_FIELD_VALUE(VPE_PLANE_CFG_TMZ, dst->tmz) |
@@ -166,9 +166,9 @@ void vpe20_plane_desc_writer_add_destination(
     writer->buf->size -= size;
 }
 
-void vpe20_plane_desc_writer_add_meta(struct plane_desc_writer *writer, void *p_source)
+void vpe20_plane_desc_writer_add_src_internal_dcc(struct plane_desc_writer *writer, void *p_source)
 {
-    uint32_t *cmd_space, *cmd_start;
+    uint32_t                    *cmd_space;
     uint32_t  num_wd = 3;
     uint64_t  size   = num_wd * sizeof(uint32_t);
     struct vpe20_plane_desc_src *src    = (struct vpe20_plane_desc_src *)p_source;
@@ -184,7 +184,7 @@ void vpe20_plane_desc_writer_add_meta(struct plane_desc_writer *writer, void *p_
         writer->status = VPE_STATUS_BUFFER_OVERFLOW;
         return;
     }
-    cmd_start = cmd_space = (uint32_t *)(uintptr_t)writer->buf->cpu_va;
+    cmd_space = (uint32_t *)(uintptr_t)writer->buf->cpu_va;
 
     *cmd_space++ = src->meta_base_addr_lo | VPEC_FIELD_VALUE(VPE_PLANE_CFG_META_TMZ, src->tmz);
     *cmd_space++ = src->meta_base_addr_hi;
@@ -200,7 +200,7 @@ void vpe20_plane_desc_writer_add_meta(struct plane_desc_writer *writer, void *p_
 void vpe20_plane_desc_writer_add_hist_destination(struct plane_desc_writer *writer,
     void *p_destination, uint32_t hist_idx, uint8_t hist_dsets_array[])
 {
-    uint32_t* cmd_space, * cmd_start;
+    uint32_t                    *cmd_space;
     uint32_t  num_wd = (hist_idx == 0) ? 3 : 2;
     uint64_t  size = num_wd * sizeof(uint32_t);
     struct vpe20_plane_desc_dst *dst    = (struct vpe20_plane_desc_dst *)p_destination;
@@ -214,7 +214,7 @@ void vpe20_plane_desc_writer_add_hist_destination(struct plane_desc_writer *writ
         return;
     }
 
-    cmd_start = cmd_space = (uint32_t*)(uintptr_t)writer->buf->cpu_va;
+    cmd_space = (uint32_t *)(uintptr_t)writer->buf->cpu_va;
 
     if (hist_idx == 0) {
         *cmd_space++ = 2; // Number of bytes of each data set 2^(8+2) = 1024 

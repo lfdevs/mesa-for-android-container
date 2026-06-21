@@ -8,10 +8,10 @@ http://0x04.net/cgit/index.cgi/rules-ng-ng
 git clone git://0x04.net/rules-ng-ng
 
 The rules-ng-ng source files this header was generated from are:
-- texdesc_3d.xml (   3183 bytes, from 2026-05-31 19:31:30)
+- texdesc_3d.xml (   3183 bytes, from 2026-06-11 21:02:17)
 - copyright.xml  (   1597 bytes, from 2026-03-02 22:49:28)
-- common.xml     (  35664 bytes, from 2026-05-31 19:31:30)
-- common_3d.xml  (  15069 bytes, from 2026-05-31 19:31:30)
+- common.xml     (  35664 bytes, from 2026-06-11 21:02:17)
+- common_3d.xml  (  15069 bytes, from 2026-06-11 21:02:17)
 
 Copyright (C) 2012-2026 by the following authors:
 - Wladimir J. van der Laan <laanwj@gmail.com>

@@ -22,7 +22,7 @@ caselists = [ "/data/deqp/vk-main.txt" ]
 tests_per_group = 10000
 skips = ["/data/deqp/android-skips.txt"]
 timeout = 120
-fraction = 100
+fraction = 30
 
 # EGL test set
 [[deqp]]

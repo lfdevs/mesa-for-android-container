@@ -23,9 +23,7 @@
 #ifndef _NIR_RANGE_ANALYSIS_H_
 #define _NIR_RANGE_ANALYSIS_H_
 
-#include "util/bitset.h"
-#include "util/u_hash_table.h"
-#include "nir_defines.h"
+#include "nir.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -77,9 +75,16 @@ typedef uint16_t fp_class_mask;
 
 fp_class_mask nir_analyze_fp_class(nir_fp_analysis_state *state, const nir_def *def);
 
-uint64_t nir_def_bits_used(const nir_def *def);
+uint64_t nir_def_bits_used(nir_scalar def);
 
 unsigned nir_def_num_lsb_zero(struct hash_table *numlsb_ht, nir_scalar def);
+
+void
+nir_gather_type_uses_of_float_def(nir_def *def,
+                                  nir_component_mask_t *float_uses,
+                                  nir_component_mask_t *integer_uses,
+                                  uint64_t integer_bits_used[NIR_MAX_VEC_COMPONENTS],
+                                  bool stop_on_float_use);
 
 #ifdef __cplusplus
 }

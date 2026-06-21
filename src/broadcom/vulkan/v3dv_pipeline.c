@@ -570,8 +570,12 @@ lower_vulkan_resource_index(nir_builder *b,
          pipeline_get_descriptor_map(state->pipeline, binding_layout->type,
                                      b->shader->info.stage, false);
 
-      if (!const_val)
+      if (!const_val) {
+         mesa_loge("V3D_WEBGPU_OVERRIDE: Dawn shader uses dynamic descriptor "
+                   "indexing (type=%d) which is not implemented — expect "
+                   "corruption", binding_layout->type);
          UNREACHABLE("non-constant vulkan_resource_index array index");
+      }
 
       /* At compile-time we will need to know if we are processing a UBO load
        * for an inline or a regular UBO so we can handle inline loads like
@@ -2913,7 +2917,7 @@ pipeline_init_dynamic_state(struct v3dv_device *device,
    }
 
    v3dv_dyn->color_write_enable =
-      (1ull << (4 * V3D_MAX_RENDER_TARGETS(device->devinfo.ver))) - 1;
+      (1ull << (4 * device->devinfo.max_render_targets)) - 1;
    if (pipeline_state->cb) {
       const uint8_t color_writes = pipeline_state->cb->color_write_enables;
       v3dv_dyn->color_write_enable = 0;

@@ -8,6 +8,7 @@ coredumpdec = executable(
   gnu_symbol_visibility : 'hidden',
   include_directories : [inc_include, inc_src],
   dependencies: [libpanfrost_dep],
+  link_with: [libpanfrost_compiler],
   build_by_default : true,
   install: true
 )

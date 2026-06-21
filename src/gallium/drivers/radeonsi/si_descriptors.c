@@ -994,6 +994,7 @@ static void si_init_buffer_resources(struct si_context *sctx,
             PIPE_SWIZZLE_W,
          },
       .gfx10_oob_select = V_008F0C_OOB_SELECT_RAW,
+      .has_desc_resource_level = sctx->screen->info.compiler_info.has_desc_resource_level,
    };
 
    /* Initialize buffer descriptors, so that we don't have to do it at bind time. */
@@ -1441,6 +1442,7 @@ void si_set_ring_buffer(struct si_context *sctx, uint slot, struct pipe_resource
          .stride = stride,
          .swizzle_enable = swizzle_enable,
          .gfx10_oob_select = V_008F0C_OOB_SELECT_DISABLED,
+         .has_desc_resource_level = sctx->screen->info.compiler_info.has_desc_resource_level,
          .index_stride = index_stride,
          .element_size = element_size,
          .add_tid = add_tid,

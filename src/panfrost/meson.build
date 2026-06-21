@@ -33,12 +33,16 @@ endif
 
 subdir('shared')
 subdir('model')
-subdir('compiler')
 
 if with_gallium_panfrost or with_panfrost_vk or with_tools.contains('panfrost')
    subdir('genxml')
    subdir('lib')
-   subdir('clc')
+endif
+
+subdir('compiler')
+
+if with_gallium_panfrost or with_panfrost_vk or with_tools.contains('panfrost')
+  subdir('clc')
 endif
 
 if with_gallium_panfrost or with_panfrost_vk

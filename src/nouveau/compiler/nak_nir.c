@@ -234,7 +234,7 @@ nak_optimize_nir(nir_shader *nir, const struct nak_compiler *nak)
       LOOP_OPT_NOT_IDEMPOTENT(nir, nir_opt_gcm, false);
       LOOP_OPT(nir, nir_opt_undef);
    } while (progress);
-   OPT(nir, nir_lower_undef_to_zero);
+   OPT(nir, nir_lower_undef_to_zero, NULL);
 
    OPT(nir, nir_remove_dead_variables, nir_var_function_temp, NULL);
 
@@ -909,6 +909,126 @@ nak_nir_remove_barriers(nir_shader *nir)
 }
 
 static bool
+nak_nir_lower_f16vec4_atomic_intrin(nir_builder *b, nir_intrinsic_instr *atom,
+                                    UNUSED void *_data)
+{
+   /* From the SPV_NV_shader_atomic_fp16_vector spec:
+    *
+    *    "Modify each of the instructions OpAtomicFAddEXT, OpAtomicFMinEXT,
+    *    OpAtomicFMaxEXT, and OpAtomicExchange to allow the Result Type to be
+    *    a vector of float16 with two or four components. Atomic operations on
+    *    vectors only guarantee atomicity of each component."
+    *
+    * This pass lowers f16vec4 atomics to 2x f16vec2.
+    */
+   switch (atom->intrinsic) {
+   case nir_intrinsic_bindless_image_atomic: {
+      if (atom->num_components == 1)
+         return false;
+
+      assert(atom->def.bit_size == 16);
+      assert(atom->num_components == 2 || atom->num_components == 4);
+      if (atom->num_components == 2)
+         return false;
+
+      nir_intrinsic_instr *atom2 =
+         nir_instr_as_intrinsic(nir_instr_clone(b->shader, &atom->instr));
+      nir_instr_insert(nir_after_instr(&atom->instr), &atom2->instr);
+
+      b->cursor = nir_before_instr(&atom->instr);
+
+      /* Image atomics are treated as 2x as wide and we need to adjust the x
+       * coordinate accordingly.
+       */
+      nir_def *coord = atom->src[1].ssa;
+      assert(coord->num_components == 4);
+      nir_def *x = nir_channel(b, coord, 0);
+      nir_def *x1 = nir_imul_imm(b, x, 2);
+      nir_def *x2 = nir_iadd_imm(b, x1, 1);
+      nir_def *coord1 = nir_vector_insert_imm(b, coord, x1, 0);
+      nir_def *coord2 = nir_vector_insert_imm(b, coord, x2, 0);
+      nir_src_rewrite(&atom->src[1], coord1);
+      nir_src_rewrite(&atom2->src[1], coord2);
+
+      nir_def *data = atom->src[3].ssa;
+      assert(data->num_components == 4);
+      nir_def *data1 = nir_channels(b, data, 0x3);
+      nir_def *data2 = nir_channels(b, data, 0xc);
+      nir_src_rewrite(&atom->src[3], data1);
+      nir_src_rewrite(&atom2->src[3], data2);
+
+      b->cursor = nir_after_instr(&atom2->instr);
+
+      atom->num_components = 2;
+      atom->def.num_components = 2;
+      atom2->num_components = 2;
+      atom2->def.num_components = 2;
+
+      nir_def *res = nir_vec4(b, nir_channel(b, &atom->def, 0),
+                                 nir_channel(b, &atom->def, 1),
+                                 nir_channel(b, &atom2->def, 0),
+                                 nir_channel(b, &atom2->def, 1));
+      nir_def_rewrite_uses_after(&atom->def, res);
+      return true;
+   }
+
+   case nir_intrinsic_global_atomic:
+   case nir_intrinsic_shared_atomic: {
+      if (atom->num_components == 1)
+         return false;
+
+      assert(atom->def.bit_size == 16);
+      assert(atom->num_components == 2 || atom->num_components == 4);
+      if (atom->num_components == 2)
+         return false;
+
+      nir_intrinsic_instr *atom2 =
+         nir_instr_as_intrinsic(nir_instr_clone(b->shader, &atom->instr));
+      nir_instr_insert(nir_after_instr(&atom->instr), &atom2->instr);
+
+      b->cursor = nir_before_instr(&atom->instr);
+
+      nir_def *addr = atom->src[0].ssa;
+      assert(addr->num_components == 1);
+      nir_def *addr2 = nir_iadd_imm(b, addr, 4);
+      nir_src_rewrite(&atom2->src[0], addr2);
+
+      nir_def *data = atom->src[1].ssa;
+      assert(data->num_components == 4);
+      nir_def *data1 = nir_channels(b, data, 0x3);
+      nir_def *data2 = nir_channels(b, data, 0xc);
+      nir_src_rewrite(&atom->src[1], data1);
+      nir_src_rewrite(&atom2->src[1], data2);
+
+      b->cursor = nir_after_instr(&atom2->instr);
+
+      atom->num_components = 2;
+      atom->def.num_components = 2;
+      atom2->num_components = 2;
+      atom2->def.num_components = 2;
+
+      nir_def *res = nir_vec4(b, nir_channel(b, &atom->def, 0),
+                                 nir_channel(b, &atom->def, 1),
+                                 nir_channel(b, &atom2->def, 0),
+                                 nir_channel(b, &atom2->def, 1));
+      nir_def_rewrite_uses_after(&atom->def, res);
+      return true;
+   }
+
+   default:
+      return false;
+   }
+}
+
+static bool
+nak_nir_lower_f16vec4_atomics(nir_shader *nir, const struct nak_compiler *nak)
+{
+   return nir_shader_intrinsics_pass(nir, nak_nir_lower_f16vec4_atomic_intrin,
+                                     nir_metadata_none,
+                                     NULL);
+}
+
+static bool
 nak_mem_vectorize_cb(unsigned align_mul, unsigned align_offset,
                      unsigned bit_size, unsigned num_components,
                      int64_t hole_size, nir_intrinsic_instr *low,
@@ -1047,12 +1167,16 @@ type_size_vec4(const struct glsl_type *type, bool bindless)
 static bool
 atomic_supported(const nir_instr *instr, const void *data)
 {
-   /* Shared atomics don't support 64-bit arithmetic */
+   /* Shared atomics don't support and need lowering for:
+    * - 64-bit arithmetic
+    * - float32 adds
+    * - f16vec2 */
    const nir_intrinsic_instr *intr = nir_instr_as_intrinsic(instr);
    nir_atomic_op atomic_op = nir_intrinsic_atomic_op(intr);
    return !(intr->intrinsic == nir_intrinsic_shared_atomic &&
             (intr->def.bit_size == 64 ||
-            (intr->def.bit_size == 32 && atomic_op == nir_atomic_op_fadd)));
+            (intr->def.bit_size == 32 && atomic_op == nir_atomic_op_fadd) ||
+            (intr->def.bit_size == 16 && intr->def.num_components == 2)));
 }
 
 static unsigned
@@ -1467,6 +1591,8 @@ nak_postprocess_nir(nir_shader *nir,
    };
    OPT(nir, nir_opt_uniform_subgroup, &subgroups_options);
    OPT(nir, nir_lower_subgroups, &subgroups_options);
+   OPT(nir, nak_nir_lower_f16vec4_atomics, nak);
+   OPT(nir, nak_nir_lower_f16vec2_shared_atomics);
    if (nak->sm >= 50) {
       // On Maxwell+ we need to lower shared 64-bit atomics into
       // compare-and-swap loops

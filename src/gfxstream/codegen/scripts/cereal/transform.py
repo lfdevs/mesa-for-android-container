@@ -19,7 +19,7 @@ def deviceMemoryTransform(resourceTrackerVarName, structOrApiInfo, getExpr, getL
             "size",
             "typeIndex",
             "typeBits",]
-        
+
         casts = {
             "handle" : "VkDeviceMemory*",
             "offset" : "VkDeviceSize*",

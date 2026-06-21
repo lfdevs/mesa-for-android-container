@@ -392,12 +392,6 @@ gpu_supports_texture_format(struct etna_screen *screen, uint32_t fmt,
 {
    bool supported = true;
 
-   /* Requires split sampler support, which the driver doesn't support, yet. */
-   if (!DBG_ENABLED(ETNA_DBG_DEQP) &&
-       !util_format_is_compressed(format) &&
-       util_format_get_blocksizebits(format) > 64)
-      return false;
-
    if (fmt == TEXTURE_FORMAT_ETC1)
       supported = VIV_FEATURE(screen, ETNA_FEATURE_ETC1_TEXTURE_COMPRESSION);
 
@@ -420,6 +414,14 @@ gpu_supports_texture_format(struct etna_screen *screen, uint32_t fmt,
    if (format != PIPE_FORMAT_S8_UINT_Z24_UNORM &&
        (util_format_is_pure_integer(format) || util_format_is_float(format)))
       supported = VIV_FEATURE(screen, ETNA_FEATURE_HALTI2);
+
+   /* 128-bit formats sample as paired planes: G32R32F via the half-float pipe,
+    * G32R32I only on halti5+.
+    */
+   if (format_is_128bit(format))
+      supported = util_format_is_pure_integer(format)
+         ? VIV_FEATURE(screen, ETNA_FEATURE_HALTI5)
+         : VIV_FEATURE(screen, ETNA_FEATURE_HALF_FLOAT);
 
    if (format == PIPE_FORMAT_S8_UINT)
       supported = VIV_FEATURE(screen, ETNA_FEATURE_S8);
@@ -468,11 +470,6 @@ gpu_supports_render_format(struct etna_screen *screen, enum pipe_format format,
    if (fmt == ETNA_NO_MATCH)
       return false;
 
-   /* Requires split target support, which the driver doesn't support, yet. */
-   if (!DBG_ENABLED(ETNA_DBG_DEQP) &&
-       util_format_get_blocksizebits(format) > 64)
-      return false;
-
    if (sample_count > 1) {
       /* BLT/RS supports the format. */
       if (screen->specs.use_blt) {
@@ -493,6 +490,10 @@ gpu_supports_render_format(struct etna_screen *screen, enum pipe_format format,
 
    if (util_format_is_srgb(format))
       return VIV_FEATURE(screen, ETNA_FEATURE_HALTI3);
+
+   /* 128-bit formats render as paired G32R32F targets via the half-float pipe. */
+   if (format_is_128bit(format))
+      return VIV_FEATURE(screen, ETNA_FEATURE_HALF_FLOAT);
 
    if (util_format_is_pure_integer(format) || util_format_is_float(format))
       return VIV_FEATURE(screen, ETNA_FEATURE_HALTI2);
@@ -1114,6 +1115,8 @@ etna_screen_create(struct etna_device *dev, struct etna_gpu *gpu,
 
    etna_init_shader_caps(screen);
    etna_init_screen_caps(screen);
+
+   screen->compiler->max_render_targets = screen->base.caps.max_render_targets;
 
    screen->supported_pm_queries = UTIL_DYNARRAY_INIT;
    slab_create_parent(&screen->transfer_pool, sizeof(struct etna_transfer), 16);

@@ -158,10 +158,9 @@ nir_dominance_lca(nir_block *b1, nir_block *b2)
    if (b2 == NULL || !nir_block_is_reachable(b2))
       return block_return_if_reachable(b1);
 
-   assert(nir_cf_node_get_function(&b1->cf_node) ==
-          nir_cf_node_get_function(&b2->cf_node));
+   assert(b1->impl == b2->impl);
 
-   nir_function_impl *impl = nir_cf_node_get_function(&b1->cf_node);
+   nir_function_impl *impl = b1->impl;
    assert(impl->valid_metadata & nir_metadata_dominance_lca);
 
    uint32_t i1 = dom_lca_representative(b1);

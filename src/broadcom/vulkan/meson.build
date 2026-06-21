@@ -1,6 +1,19 @@
 # Copyright © 2019 Raspberry Pi Ltd
 # SPDX-License-Identifier: MIT
 
+v3dv_drirc = custom_target(
+  'v3dv_drirc',
+  input  : [files('v3dv_drirc_gen.py'), drirc_gen, join_paths(dir_source_root, 'src/util/00-v3dv-defaults.conf')],
+  output : ['v3dv_drirc.c', 'v3dv_drirc.h'],
+  command : [
+    prog_python, '@INPUT0@',
+    '--import-path', join_paths(dir_source_root, 'src/util'),
+    '--drirc-src', '@OUTPUT0@',
+    '--drirc-hdr', '@OUTPUT1@',
+    '--validate', '@INPUT2@',
+  ],
+)
+
 v3dv_entrypoints = custom_target(
   'v3dv_entrypoints',
   input : [vk_entrypoints_gen, vk_api_xml],
@@ -92,7 +105,7 @@ per_version_libs = []
 foreach ver : v3d_versions
   per_version_libs += static_library(
     'v3dv-v' + ver,
-    [files_per_version, v3d_xml_pack, v3dv_entrypoints[0]],
+    [files_per_version, v3d_xml_pack, v3dv_entrypoints[0], v3dv_drirc[1]],
     include_directories : [
       inc_src, inc_include, inc_broadcom,
       inc_util,
@@ -105,7 +118,7 @@ endforeach
 
 libvulkan_broadcom = shared_library(
   'vulkan_broadcom',
-  [libv3dv_files, v3dv_entrypoints, sha1_h],
+  [libv3dv_files, v3dv_entrypoints, v3dv_drirc, sha1_h],
   include_directories : [
     inc_include, inc_src, inc_broadcom, inc_util,
   ],

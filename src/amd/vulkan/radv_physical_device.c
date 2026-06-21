@@ -9,6 +9,7 @@
  */
 
 #include <fcntl.h>
+#include "util/os_file.h"
 #include "util/os_misc.h"
 #include "vulkan/vulkan_core.h"
 
@@ -2464,9 +2465,9 @@ radv_physical_device_try_create(struct radv_instance *instance, drmDevicePtr drm
 #else
    VkResult result;
    int fd = -1;
-   int wsi_master_fd = -1;
-   bool is_virtio = false;
+   int wsi_master_fd = -1, wsi_syncobj_fd = -1;
    const char *path = drm_device->nodes[DRM_NODE_RENDER];
+   enum radv_drm_device_type drm_device_type;
    drmVersionPtr version;
 
    fd = open(path, O_RDWR | O_CLOEXEC);
@@ -2483,9 +2484,10 @@ radv_physical_device_try_create(struct radv_instance *instance, drmDevicePtr drm
    }
 
    if (!strcmp(version->name, "amdgpu")) {
+      drm_device_type = RADV_DRM_DEVICE_AMDGPU;
 #ifdef HAVE_AMDGPU_VIRTIO
       if (debug_get_bool_option("AMD_FORCE_VPIPE", false)) {
-         is_virtio = true;
+         drm_device_type = RADV_DRM_DEVICE_AMDGPU_VPIPE;
          close(fd);
          fd = -1;
       }
@@ -2493,7 +2495,7 @@ radv_physical_device_try_create(struct radv_instance *instance, drmDevicePtr drm
    } else
 #ifdef HAVE_AMDGPU_VIRTIO
       if (!strcmp(version->name, "virtio_gpu")) {
-      is_virtio = true;
+      drm_device_type = RADV_DRM_DEVICE_VIRTIO;
    } else
 #endif
    {
@@ -2524,15 +2526,26 @@ radv_physical_device_try_create(struct radv_instance *instance, drmDevicePtr drm
       goto fail_alloc;
    }
 
-   result = radv_amdgpu_winsys_create(fd, instance->debug_flags, instance->perftest_flags, is_virtio, &pdev->ws);
+   pdev->drm_device_type = drm_device_type;
+
+   const bool is_virtio =
+      pdev->drm_device_type == RADV_DRM_DEVICE_AMDGPU_VPIPE || pdev->drm_device_type == RADV_DRM_DEVICE_VIRTIO;
+
+   struct radeon_winsys_info winsys_info;
+
+   result = radv_amdgpu_winsys_query_info(fd, instance->debug_flags, is_virtio, &winsys_info);
    if (result != VK_SUCCESS) {
-      result = vk_errorf(instance, result, "failed to initialize winsys");
+      result = vk_errorf(instance, result, "failed to query GPU info");
       goto fail_base;
    }
 
-   pdev->ws->query_info(pdev->ws, &pdev->info);
+   memcpy(&pdev->info, &winsys_info.base, sizeof(pdev->info));
+   memcpy(&pdev->syncobj_sync_type, &winsys_info.syncobj_sync_type, sizeof(pdev->syncobj_sync_type));
 
-   pdev->syncobj_sync_type = vk_drm_syncobj_get_type(pdev->ws->get_fd(pdev->ws));
+   for (uint32_t p = RADEON_CTX_PRIORITY_LOW; p <= RADEON_CTX_PRIORITY_REALTIME; p++) {
+      if (winsys_info.global_priority_mask & BITFIELD_BIT(p))
+         pdev->global_priority_mask |= radeon_to_vk_priority(p);
+   }
 
    int num_sync_types = 0;
    if (pdev->syncobj_sync_type.features) {
@@ -2549,13 +2562,6 @@ radv_physical_device_try_create(struct radv_instance *instance, drmDevicePtr drm
    pdev->sync_types[num_sync_types++] = NULL;
    pdev->vk.supported_sync_types = pdev->sync_types;
 
-   for (uint32_t p = VK_QUEUE_GLOBAL_PRIORITY_LOW; p <= VK_QUEUE_GLOBAL_PRIORITY_REALTIME; p <<= 1) {
-      if (pdev->ws->ctx_is_priority_permitted(pdev->ws, vk_to_radeon_priority(p)) != VK_SUCCESS)
-         continue;
-
-      pdev->global_priority_mask |= p;
-   }
-
    if (instance->vk.enabled_extensions.KHR_display) {
       wsi_master_fd = open(drm_device->nodes[DRM_NODE_PRIMARY], O_RDWR | O_CLOEXEC);
       if (wsi_master_fd >= 0) {
@@ -2570,6 +2576,9 @@ radv_physical_device_try_create(struct radv_instance *instance, drmDevicePtr drm
             wsi_master_fd = -1;
          }
       }
+
+      if (fd != -1)
+         wsi_syncobj_fd = os_dupfd_cloexec(fd);
    }
 
    /* Allow all devices on a virtual winsys, otherwise do a basic support check. */
@@ -2587,6 +2596,7 @@ radv_physical_device_try_create(struct radv_instance *instance, drmDevicePtr drm
    }
 
    pdev->wsi_master_fd = wsi_master_fd;
+   pdev->wsi_syncobj_fd = wsi_syncobj_fd;
 
    pdev->use_llvm = instance->debug_flags & RADV_DEBUG_LLVM;
 #if !AMD_LLVM_AVAILABLE
@@ -2774,9 +2784,12 @@ radv_physical_device_try_create(struct radv_instance *instance, drmDevicePtr drm
       pdev->tess_distribution_mode = V_028B6C_NO_DIST;
    }
 
+   simple_mtx_init(&pdev->drm_device_mtx, mtx_plain);
+
    *pdev_out = pdev;
 
-   close(fd);
+   if (fd != -1)
+      close(fd);
    fd = -1;
 
    return VK_SUCCESS;
@@ -2788,8 +2801,6 @@ fail_perfcounters:
 fail_wsi:
    if (pdev->addrlib)
       ac_addrlib_destroy(pdev->addrlib);
-   if (pdev->ws)
-      pdev->ws->destroy(pdev->ws);
 fail_base:
    vk_physical_device_finish(&pdev->vk);
 fail_alloc:
@@ -2799,6 +2810,8 @@ fail_fd:
       close(fd);
    if (wsi_master_fd != -1)
       close(wsi_master_fd);
+   if (wsi_syncobj_fd != -1)
+      close(wsi_syncobj_fd);
    return result;
 #endif
 }
@@ -2840,12 +2853,17 @@ radv_physical_device_destroy(struct vk_physical_device *vk_device)
    free(pdev->perfcounters);
    if (pdev->addrlib)
       ac_addrlib_destroy(pdev->addrlib);
-   if (pdev->ws)
-      pdev->ws->destroy(pdev->ws);
    disk_cache_destroy(pdev->vk.disk_cache);
    disk_cache_destroy(pdev->disk_cache_meta);
    if (pdev->wsi_master_fd != -1)
       close(pdev->wsi_master_fd);
+   if (pdev->wsi_syncobj_fd != -1)
+      close(pdev->wsi_syncobj_fd);
+   simple_mtx_destroy(&pdev->drm_device_mtx);
+#ifndef _WIN32
+   if (pdev->drm_device)
+      ac_drm_device_deinitialize(pdev->drm_device);
+#endif
    vk_physical_device_finish(&pdev->vk);
    vk_free(&instance->vk.alloc, pdev);
 }
@@ -3072,7 +3090,8 @@ radv_GetPhysicalDeviceQueueFamilyProperties2(VkPhysicalDevice physicalDevice, ui
    }
 }
 
-struct radv_heap_budget {
+#ifdef _WIN32
+struct radeon_winsys_heap_info {
    uint64_t allocated_vram;
    uint64_t vram_usage;
    uint64_t allocated_vram_vis;
@@ -3082,17 +3101,69 @@ struct radv_heap_budget {
 };
 
 static void
-radv_get_heap_budget(struct radv_physical_device *pdev, struct radv_heap_budget *budget)
+radv_query_heap_info(struct radv_physical_device *pdev, struct radeon_winsys_heap_info *heap_info)
 {
-   memset(budget, 0, sizeof(*budget));
-
-   budget->allocated_vram = pdev->ws->query_value(pdev->ws, RADEON_ALLOCATED_VRAM);
-   budget->vram_usage = pdev->ws->query_value(pdev->ws, RADEON_VRAM_USAGE);
-   budget->allocated_vram_vis = pdev->ws->query_value(pdev->ws, RADEON_ALLOCATED_VRAM_VIS);
-   budget->vram_vis_usage = pdev->ws->query_value(pdev->ws, RADEON_VRAM_VIS_USAGE);
-   budget->allocated_gtt = pdev->ws->query_value(pdev->ws, RADEON_ALLOCATED_GTT);
-   budget->gtt_usage = pdev->ws->query_value(pdev->ws, RADEON_GTT_USAGE);
+   memset(heap_info, 0, sizeof(*heap_info));
 }
+#else
+static void
+radv_create_drm_device_locked(struct radv_physical_device *pdev)
+{
+   if (pdev->drm_device)
+      return;
+
+   UNUSED uint32_t drm_major, drm_minor;
+   drmDevicePtr drm_device;
+   ac_drm_device *dev;
+   int fd = -1;
+   int r;
+
+   if (pdev->drm_device_type == RADV_DRM_DEVICE_AMDGPU || pdev->drm_device_type == RADV_DRM_DEVICE_VIRTIO) {
+      r = drmGetDeviceFromDevId(pdev->render_devid, 0, &drm_device);
+      if (r)
+         return;
+
+      const char *path = drm_device->nodes[DRM_NODE_RENDER];
+
+      fd = open(path, O_RDWR | O_CLOEXEC);
+      drmFreeDevice(&drm_device);
+      if (fd < 0)
+         return;
+   }
+
+   const bool is_virtio =
+      pdev->drm_device_type == RADV_DRM_DEVICE_AMDGPU_VPIPE || pdev->drm_device_type == RADV_DRM_DEVICE_VIRTIO;
+
+   r = ac_drm_device_initialize(fd, is_virtio, &drm_major, &drm_minor, &dev);
+   if (fd != -1)
+      close(fd);
+   if (r)
+      return;
+
+   pdev->drm_device = dev;
+}
+
+static void
+radv_query_heap_info(struct radv_physical_device *pdev, struct radeon_winsys_heap_info *heap_info)
+{
+   int r;
+
+   memset(heap_info, 0, sizeof(*heap_info));
+
+   simple_mtx_lock(&pdev->drm_device_mtx);
+   radv_create_drm_device_locked(pdev);
+   simple_mtx_unlock(&pdev->drm_device_mtx);
+
+   if (!pdev->drm_device) {
+      fprintf(stderr, "radv: Failed to create the DRM device for querying heap info.\n");
+      return;
+   }
+
+   r = radv_amdgpu_winsys_query_heap_info(pdev->drm_device, heap_info);
+   if (r)
+      fprintf(stderr, "radv: Failed to query heap info.\n");
+}
+#endif
 
 static void
 radv_get_memory_budget_properties(VkPhysicalDevice physicalDevice,
@@ -3101,9 +3172,9 @@ radv_get_memory_budget_properties(VkPhysicalDevice physicalDevice,
    VK_FROM_HANDLE(radv_physical_device, pdev, physicalDevice);
    const struct radv_instance *instance = radv_physical_device_instance(pdev);
    VkPhysicalDeviceMemoryProperties *memory_properties = &pdev->memory_properties;
-   struct radv_heap_budget budget;
+   struct radeon_winsys_heap_info heap_info;
 
-   radv_get_heap_budget(pdev, &budget);
+   radv_query_heap_info(pdev, &heap_info);
 
    /* For all memory heaps, the computation of budget is as follow:
     *	heap_budget = heap_size - global_heap_usage + app_heap_usage
@@ -3125,10 +3196,10 @@ radv_get_memory_budget_properties(VkPhysicalDevice physicalDevice,
          uint64_t total_heap_size = pdev->memory_properties.memoryHeaps[vram_vis_heap_idx].size;
 
          /* Get the different memory usages. */
-         uint64_t vram_vis_internal_usage = budget.allocated_vram_vis + budget.allocated_vram;
-         uint64_t gtt_internal_usage = budget.allocated_gtt;
+         uint64_t vram_vis_internal_usage = heap_info.allocated_vram_vis + heap_info.allocated_vram;
+         uint64_t gtt_internal_usage = heap_info.allocated_gtt;
          uint64_t total_internal_usage = vram_vis_internal_usage + gtt_internal_usage;
-         uint64_t total_system_usage = budget.vram_vis_usage + budget.gtt_usage;
+         uint64_t total_system_usage = heap_info.vram_vis_usage + heap_info.gtt_usage;
          uint64_t total_usage = MAX2(total_internal_usage, total_system_usage);
 
          /* Compute the total free space that can be allocated for this process across all heaps. */
@@ -3149,13 +3220,13 @@ radv_get_memory_budget_properties(VkPhysicalDevice physicalDevice,
          uint64_t gtt_heap_size = pdev->memory_properties.memoryHeaps[gtt_heap_idx].size;
          uint64_t vram_vis_heap_size = pdev->memory_properties.memoryHeaps[vram_vis_heap_idx].size;
 
-         uint64_t vram_vis_internal_usage = budget.allocated_vram_vis + budget.allocated_vram;
-         uint64_t gtt_internal_usage = budget.allocated_gtt;
+         uint64_t vram_vis_internal_usage = heap_info.allocated_vram_vis + heap_info.allocated_vram;
+         uint64_t gtt_internal_usage = heap_info.allocated_gtt;
 
          /* Compute the total heap size, internal and system usage. */
          uint64_t total_heap_size = vram_vis_heap_size + gtt_heap_size;
          uint64_t total_internal_usage = vram_vis_internal_usage + gtt_internal_usage;
-         uint64_t total_system_usage = budget.vram_vis_usage + budget.gtt_usage;
+         uint64_t total_system_usage = heap_info.vram_vis_usage + heap_info.gtt_usage;
 
          uint64_t total_usage = MAX2(total_internal_usage, total_system_usage);
 
@@ -3187,17 +3258,17 @@ radv_get_memory_budget_properties(VkPhysicalDevice physicalDevice,
          const uint8_t vram_heap_idx = 0, gtt_heap_idx = 1, vram_vis_heap_idx = 2;
 
          /* GTT */
-         const uint64_t gtt_internal_usage = budget.allocated_gtt;
-         const uint64_t gtt_system_usage = budget.gtt_usage;
+         const uint64_t gtt_internal_usage = heap_info.allocated_gtt;
+         const uint64_t gtt_system_usage = heap_info.gtt_usage;
          const uint64_t gtt_total_usage = MAX2(gtt_internal_usage, gtt_system_usage);
 
          const uint64_t gtt_free_space = pdev->memory_properties.memoryHeaps[gtt_heap_idx].size -
                                          MIN2(pdev->memory_properties.memoryHeaps[gtt_heap_idx].size, gtt_total_usage);
 
          /* VRAM visible/invisible */
-         const uint64_t vram_internal_usage = budget.allocated_vram;
-         const uint64_t vram_vis_internal_usage = budget.allocated_vram_vis;
-         uint64_t vram_system_usage = budget.vram_usage;
+         const uint64_t vram_internal_usage = heap_info.allocated_vram;
+         const uint64_t vram_vis_internal_usage = heap_info.allocated_vram_vis;
+         uint64_t vram_system_usage = heap_info.vram_usage;
          const uint64_t vram_vis_system_usage =
             MIN2(vram_system_usage, pdev->memory_properties.memoryHeaps[vram_vis_heap_idx].size);
 
@@ -3228,18 +3299,18 @@ radv_get_memory_budget_properties(VkPhysicalDevice physicalDevice,
 
             switch (type) {
             case RADV_HEAP_VRAM:
-               internal_usage = budget.allocated_vram;
-               system_usage = budget.vram_usage;
+               internal_usage = heap_info.allocated_vram;
+               system_usage = heap_info.vram_usage;
                break;
             case RADV_HEAP_VRAM_VIS:
-               internal_usage = budget.allocated_vram_vis;
+               internal_usage = heap_info.allocated_vram_vis;
                if (!(pdev->heaps & RADV_HEAP_VRAM))
-                  internal_usage += budget.allocated_vram;
-               system_usage = budget.vram_vis_usage;
+                  internal_usage += heap_info.allocated_vram;
+               system_usage = heap_info.vram_vis_usage;
                break;
             case RADV_HEAP_GTT:
-               internal_usage = budget.allocated_gtt;
-               system_usage = budget.gtt_usage;
+               internal_usage = heap_info.allocated_gtt;
+               system_usage = heap_info.gtt_usage;
                break;
             }
 

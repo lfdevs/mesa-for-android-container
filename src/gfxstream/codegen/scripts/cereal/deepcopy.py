@@ -8,6 +8,11 @@ from .common.vulkantypes import \
 from .wrapperdefs import VulkanWrapperGenerator
 from .wrapperdefs import STRUCT_EXTENSION_PARAM, STRUCT_EXTENSION_PARAM_FOR_WRITE, EXTENSION_SIZE_API_NAME
 
+
+VULKAN_TYPES_THAT_ARE_NEVER_TRANSMITTED = [
+    "VkAllocationCallbacks",
+]
+
 class DeepcopyCodegen(VulkanTypeIterator):
     def __init__(self, cgen, inputVars, poolVarName, rootVarName, prefix, skipValues=False):
         self.cgen = cgen
@@ -41,7 +46,7 @@ class DeepcopyCodegen(VulkanTypeIterator):
         self.checked = False
 
     def needSkip(self, vulkanType):
-        return False
+        return vulkanType.typeName in VULKAN_TYPES_THAT_ARE_NEVER_TRANSMITTED
 
     def makeCastExpr(self, vulkanType):
         return "(%s)" % (
@@ -75,7 +80,7 @@ class DeepcopyCodegen(VulkanTypeIterator):
     def onCompoundType(self, vulkanType):
 
         if self.needSkip(vulkanType):
-            self.cgen.line("// TODO: Unsupported : %s" %
+            self.cgen.line("// Deepcopy intentionally skipped for `%s`" %
                            self.cgen.makeCTypeDecl(vulkanType))
             return
 
@@ -200,7 +205,7 @@ class DeepcopyCodegen(VulkanTypeIterator):
         self.cgen.stmt("%s = %s(%s, %s)" % (
             sizeVar, EXTENSION_SIZE_API_NAME, self.rootVarName, nextVar))
         self.cgen.endWhile()
-        
+
         self.cgen.stmt("%s = nullptr" % rhs)
 
         self.cgen.beginIf(sizeVar)

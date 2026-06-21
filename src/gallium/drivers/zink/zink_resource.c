@@ -3049,6 +3049,8 @@ zink_image_subdata(struct pipe_context *pctx,
    /* fallback case for per-resource unsupported or device-level unsupported */
    u_default_texture_subdata(pctx, pres, level, usage, box, data, stride, layer_stride);
    res->subdata = false;
+   if (res->fb_bind_count)
+      ctx->rp_tc_info_updated = true;
 }
 
 static void

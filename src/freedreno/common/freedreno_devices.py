@@ -148,6 +148,8 @@ a6xx_base = GPUProps(
         line_width_max = 1.0,
         mov_half_shared_quirk = True,
         max_draw_states = 32,
+        max_texel_buffer_range_elements = 1 << 27,
+        max_storage_buffer_range_bytes = 1 << 27,
     )
 
 
@@ -800,6 +802,8 @@ a7xx_base = GPUProps(
         has_eolm_eogm = True,
 
         round_robin_errata = True,
+        max_texel_buffer_range_elements = 1 << 27,
+        max_storage_buffer_range_bytes = 1 << 27,
     )
 
 a7xx_gen1 = GPUProps(
@@ -1303,6 +1307,8 @@ a8xx_base = GPUProps(
         supports_double_threadsize = False,
         has_dual_wave_dispatch = True,
         round_robin_errata = False,
+        max_texel_buffer_range_elements = (1 << 29) - 1,
+        max_storage_buffer_range_bytes = (1 << 31) - 1,
     )
 
 # For a8xx, the chicken bit and most other non-ctx reg

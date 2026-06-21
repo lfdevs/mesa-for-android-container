@@ -2873,6 +2873,30 @@
         <op val="0x000" start="24" mask="0x703"/> <!-- opcode2 -->
       </opcode>
     </ins>
+    <ins name="ARSHIFT_AND.i32">
+      <opcode>
+        <op val="0xB4" start="48" mask="0x1FF"/>
+        <op val="0x400" start="24" mask="0x703"/> <!-- opcode2 -->
+      </opcode>
+    </ins>
+    <ins name="ARSHIFT_AND.v2i16">
+      <opcode>
+        <op val="0xB5" start="48" mask="0x1FF"/>
+        <op val="0x400" start="24" mask="0x703"/> <!-- opcode2 -->
+      </opcode>
+    </ins>
+    <ins name="ARSHIFT_AND.v4i8">
+      <opcode>
+        <op val="0xB6" start="48" mask="0x1FF"/>
+        <op val="0x400" start="24" mask="0x703"/> <!-- opcode2 -->
+      </opcode>
+    </ins>
+    <ins name="ARSHIFT_AND.i64">
+      <opcode>
+        <op val="0x1B7" start="48" mask="0x1FF"/>
+        <op val="0x400" start="24" mask="0x703"/> <!-- opcode2 -->
+      </opcode>
+    </ins>
     <desc>
       Right shifts its first source by a specified amount and bitwise ANDs it with the
       second source, optionally inverting the second source or the result. If
@@ -2946,6 +2970,30 @@
         <op val="0x001" start="24" mask="0x703"/> <!-- opcode2 -->
       </opcode>
     </ins>
+    <ins name="ARSHIFT_OR.i32">
+      <opcode>
+        <op val="0xB4" start="48" mask="0x1FF"/>
+        <op val="0x401" start="24" mask="0x703"/> <!-- opcode2 -->
+      </opcode>
+    </ins>
+    <ins name="ARSHIFT_OR.v2i16">
+      <opcode>
+        <op val="0xB5" start="48" mask="0x1FF"/>
+        <op val="0x401" start="24" mask="0x703"/> <!-- opcode2 -->
+      </opcode>
+    </ins>
+    <ins name="ARSHIFT_OR.v4i8">
+      <opcode>
+        <op val="0xB6" start="48" mask="0x1FF"/>
+        <op val="0x401" start="24" mask="0x703"/> <!-- opcode2 -->
+      </opcode>
+    </ins>
+    <ins name="ARSHIFT_OR.i64">
+      <opcode>
+        <op val="0x1B7" start="48" mask="0x1FF"/>
+        <op val="0x401" start="24" mask="0x703"/> <!-- opcode2 -->
+      </opcode>
+    </ins>
     <desc>
       Right shifts its first source by a specified amount and bitwise ORs it with the
       second source, optionally inverting the second source or the result. If
@@ -3017,6 +3065,30 @@
       <opcode>
         <op val="0x1B7" start="48" mask="0x1FF"/>
         <op val="0x002" start="24" mask="0x703"/> <!-- opcode2 -->
+      </opcode>
+    </ins>
+    <ins name="ARSHIFT_XOR.i32">
+      <opcode>
+        <op val="0xB4" start="48" mask="0x1FF"/>
+        <op val="0x402" start="24" mask="0x703"/> <!-- opcode2 -->
+      </opcode>
+    </ins>
+    <ins name="ARSHIFT_XOR.v2i16">
+      <opcode>
+        <op val="0xB5" start="48" mask="0x1FF"/>
+        <op val="0x402" start="24" mask="0x703"/> <!-- opcode2 -->
+      </opcode>
+    </ins>
+    <ins name="ARSHIFT_XOR.v4i8">
+      <opcode>
+        <op val="0xB6" start="48" mask="0x1FF"/>
+        <op val="0x402" start="24" mask="0x703"/> <!-- opcode2 -->
+      </opcode>
+    </ins>
+    <ins name="ARSHIFT_XOR.i64">
+      <opcode>
+        <op val="0x1B7" start="48" mask="0x1FF"/>
+        <op val="0x402" start="24" mask="0x703"/> <!-- opcode2 -->
       </opcode>
     </ins>
     <desc>

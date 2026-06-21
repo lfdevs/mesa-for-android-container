@@ -1172,6 +1172,7 @@ radv_trap_handler_init(struct radv_device *device)
          },
       .gfx10_oob_select = V_008F0C_OOB_SELECT_RAW,
       .stride = 4, /* Used for VGPRs dump. */
+      .has_desc_resource_level = pdev->info.compiler_info.has_desc_resource_level,
    };
 
    ac_build_buffer_descriptor(pdev->info.gfx_level, &ac_state, desc);

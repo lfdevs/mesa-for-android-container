@@ -221,6 +221,8 @@ struct lp_static_texture_state
    unsigned level_zero_only:1;
    unsigned tiled:1;
    unsigned tiled_samples:5;
+   /**< view min lod clamp (VK_EXT_image_view_min_lod): apply lod = max(lod, view_min_lod) */
+   unsigned apply_view_min_lod:1;
 };
 
 
@@ -376,6 +378,13 @@ struct lp_sampler_dynamic_state
                    LLVMTypeRef resources_type,
                    LLVMValueRef resources_ptr,
                    unsigned sampler_unit);
+
+   /* Obtain the per-view min-lod clamp (returns float, relative to first_level) */
+   LLVMValueRef
+   (*view_min_lod)(struct gallivm_state *gallivm,
+                   LLVMTypeRef resources_type,
+                   LLVMValueRef resources_ptr,
+                   unsigned texture_unit, LLVMValueRef texture_unit_offset);
 
    /**
     * Obtain texture cache (returns ptr to lp_build_format_cache).

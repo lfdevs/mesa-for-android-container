@@ -7,7 +7,6 @@
 #include "panvk_device.h"
 #include "panvk_device_memory.h"
 #include "panvk_entrypoints.h"
-#include "panvk_sparse.h"
 
 #include "pan_props.h"
 
@@ -130,10 +129,19 @@ panvk_CreateBuffer(VkDevice _device, const VkBufferCreateInfo *pCreateInfo,
          /* Map last so that we don't have a possibility of getting any more
           * errors, in which case we'd have to unmap.
           */
-         result = panvk_map_to_blackhole(device, buffer->vk.device_address,
-                                         va_range);
-         if (result != VK_SUCCESS) {
-            result = panvk_error(device, result);
+         struct pan_kmod_vm_op map = {
+            .type = PAN_KMOD_VM_OP_TYPE_MAP,
+            .va = {
+               .start = buffer->vk.device_address,
+               .size = va_range,
+            },
+            .flags = PAN_KMOD_VM_OP_OP_MAP_SPARSE,
+         };
+
+         int ret = pan_kmod_vm_bind(device->kmod.vm,
+                                    PAN_KMOD_VM_OP_MODE_IMMEDIATE, &map, 1);
+         if (ret) {
+            result = panvk_error(device, VK_ERROR_OUT_OF_DEVICE_MEMORY);
             goto err_free_va;
          }
       }

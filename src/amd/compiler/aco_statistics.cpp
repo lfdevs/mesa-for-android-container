@@ -42,6 +42,10 @@ public:
    int32_t reg_available[512] = {0};
    std::deque<int32_t> mem_ops[wait_type_num];
 
+   int32_t total_cycles_since_barrier = 0;
+   int32_t res_usage_since_barrier[(int)BlockCycleEstimator::resource_count] = {0};
+   int32_t prev_signal_cost = 0;
+
    void add(aco_ptr<Instruction>& instr);
    void join(const BlockCycleEstimator& other);
    double get_freq() const;
@@ -258,11 +262,13 @@ BlockCycleEstimator::use_resources(aco_ptr<Instruction>& instr)
    if (perf.rsrc0 != resource_count) {
       res_available[(int)perf.rsrc0] = cur_cycle + perf.cost0;
       res_usage[(int)perf.rsrc0] += perf.cost0;
+      res_usage_since_barrier[(int)perf.rsrc0] += perf.cost0;
    }
 
    if (perf.rsrc1 != resource_count) {
       res_available[(int)perf.rsrc1] = cur_cycle + perf.cost1;
       res_usage[(int)perf.rsrc1] += perf.cost1;
+      res_usage_since_barrier[(int)perf.rsrc1] += perf.cost1;
    }
 }
 
@@ -413,6 +419,7 @@ BlockCycleEstimator::add(aco_ptr<Instruction>& instr)
 {
    perf_info perf = get_perf_info(*program, *instr);
 
+   int32_t prev_cur_cycle = cur_cycle;
    cur_cycle += get_dependency_cost(instr);
 
    unsigned start;
@@ -427,6 +434,38 @@ BlockCycleEstimator::add(aco_ptr<Instruction>& instr)
 
       /* GCN is in-order and doesn't begin the next instruction until the current one finishes */
       cur_cycle += program->gfx_level >= GFX10 ? 1 : perf.latency;
+   }
+
+   total_cycles_since_barrier += cur_cycle - prev_cur_cycle;
+
+   /* This is a bit nonsense, but so is everything in this file. It's probably better than a random
+    * number, at least. */
+   if (instr->opcode == aco_opcode::s_barrier || instr->opcode == aco_opcode::s_barrier_signal ||
+       instr->opcode == aco_opcode::s_barrier_signal_isfirst) {
+      double parallelism = program->num_waves;
+      for (unsigned i = 0; i < (unsigned)BlockCycleEstimator::resource_count; i++) {
+         if (res_usage_since_barrier[i] > 0) {
+            parallelism =
+               MIN2(parallelism, (double)total_cycles_since_barrier / res_usage_since_barrier[i]);
+         }
+      }
+
+      /* program->min_waves is the number of waves per workgroup divided by the number of SIMDs.
+       * We try to estimate the time it takes for all waves to reach this signal, then we subtract
+       * the time it takes for this wave to reach the signal. */
+      int32_t cost = total_cycles_since_barrier * program->min_waves / parallelism;
+      cost = MAX2(cost - total_cycles_since_barrier, 0);
+
+      if (instr->opcode == aco_opcode::s_barrier)
+         cur_cycle += cost;
+      else
+         prev_signal_cost = cost;
+
+      total_cycles_since_barrier = 0;
+      memset(res_usage_since_barrier, 0, sizeof(res_usage_since_barrier));
+   } else if (instr->opcode == aco_opcode::s_barrier_wait) {
+      cur_cycle += MAX2(prev_signal_cost - total_cycles_since_barrier, 0);
+      prev_signal_cost = 0;
    }
 
    wait_imm imm = get_wait_imm(program, instr);
@@ -460,6 +499,8 @@ BlockCycleEstimator::join(const BlockCycleEstimator& pred)
    for (unsigned i = 0; i < (unsigned)resource_count; i++) {
       assert(res_usage[i] == 0);
       res_available[i] = MAX2(res_available[i], (pred.res_available[i] - pred.cur_cycle) * mul);
+      res_usage_since_barrier[i] =
+         MAX2(res_usage_since_barrier[i], pred.res_usage_since_barrier[i] * mul);
    }
 
    for (unsigned i = 0; i < 512; i++)
@@ -473,6 +514,10 @@ BlockCycleEstimator::join(const BlockCycleEstimator& pred)
       for (int j = pred_ops.size() - ops.size() - 1; j >= 0; j--)
          ops.push_front((pred_ops[j] - pred.cur_cycle) * mul);
    }
+
+   total_cycles_since_barrier =
+      MAX2(total_cycles_since_barrier, pred.total_cycles_since_barrier * mul);
+   prev_signal_cost = MAX2(prev_signal_cost, pred.prev_signal_cost * mul);
 }
 
 double

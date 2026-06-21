@@ -59,7 +59,7 @@ _mesa_float_to_e4m3fn(float val)
    }
 
 
-   if (!is_denorm)
+   if (e > 0)
       res |= (e << 3);
    res |= (m >> 20);
 
@@ -143,7 +143,7 @@ _mesa_float_to_e5m2(float val)
    }
 
 
-   if (!is_denorm)
+   if (e > 0)
       res |= (e << 2);
    res |= (m >> 21);
 

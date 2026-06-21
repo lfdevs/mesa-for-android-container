@@ -184,7 +184,7 @@ fn find_next_unset(words: &[u32], start: BitIndex) -> BitIndex {
 /// The fixed size W is in units of 32-bit words.  This is due to a Rust
 /// restriction which prevents us from doing math on constants which size
 /// arrays.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Eq, PartialEq)]
 pub struct ConstBitSet<const W: usize, K = usize> {
     words: [u32; W],
     phantom: PhantomData<K>,

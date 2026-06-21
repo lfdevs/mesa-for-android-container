@@ -734,7 +734,7 @@ anv_rmv_log_event_create(struct anv_device *device,
 
    vk_rmv_emit_token(&device->vk.memory_trace_data, VK_RMV_TOKEN_TYPE_RESOURCE_CREATE, &create_token);
    log_state_pool_bind_locked(device, create_token.resource_id,
-                              &device->dynamic_state_pool,
+                              anv_device_get_dynamic_state_pool(device),
                               &event->state);
    simple_mtx_unlock(&device->vk.memory_trace_data.token_mtx);
 }

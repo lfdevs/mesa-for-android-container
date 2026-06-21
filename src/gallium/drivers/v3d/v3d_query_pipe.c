@@ -113,8 +113,11 @@ v3d_begin_query_pipe(struct v3d_context *v3d, struct v3d_query *query)
                 v3d_flush(&v3d->base);
 
                 /* submit time elapsed query to cpu queue */
-                v3d_submit_timestamp_query(&v3d->base, pquery->bo,
-                                           pquery->sync[0], 0);
+                int ret = v3d_submit_timestamp_query(&v3d->base, pquery->bo,
+                                                     pquery->sync[0], 0);
+
+                if (ret)
+                        return false;
                 break;
         case PIPE_QUERY_TIMESTAMP_DISJOINT:
                 break;
@@ -173,8 +176,10 @@ v3d_end_query_pipe(struct v3d_context *v3d, struct v3d_query *query)
                 uint32_t offset = pquery->type == PIPE_QUERY_TIME_ELAPSED ?
                         sizeof(uint64_t) : 0;
                 uint32_t sync = pquery->type == PIPE_QUERY_TIMESTAMP ? 0 : 1;
-                v3d_submit_timestamp_query(&v3d->base, pquery->bo,
-                                           pquery->sync[sync], offset);
+                int ret = v3d_submit_timestamp_query(&v3d->base, pquery->bo,
+                                                     pquery->sync[sync], offset);
+                if (ret)
+                        return false;
                 break;
         case PIPE_QUERY_TIMESTAMP_DISJOINT:
                 break;

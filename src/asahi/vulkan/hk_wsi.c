@@ -48,7 +48,7 @@ hk_init_wsi(struct hk_physical_device *pdev)
    result = wsi_device_init(
       &pdev->wsi_device, hk_physical_device_to_handle(pdev), hk_wsi_proc_addr,
       &pdev->vk.instance->alloc, pdev->master_fd,
-      &hk_physical_device_instance(pdev)->dri_options, &wsi_options);
+      &hk_physical_device_instance(pdev)->drirc.options, &wsi_options);
    if (result != VK_SUCCESS)
       return result;
 

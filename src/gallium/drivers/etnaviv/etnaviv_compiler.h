@@ -50,6 +50,7 @@
  * setup.
  */
 struct etna_compiler {
+   unsigned max_render_targets;
    uint32_t shader_count;
    struct ra_regs *regs;
 

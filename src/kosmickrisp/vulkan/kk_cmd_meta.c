@@ -11,7 +11,6 @@
 
 #include "kk_buffer.h"
 #include "kk_cmd_buffer.h"
-#include "kk_encoder.h"
 
 #include "kosmickrisp/bridge/mtl_bridge.h"
 
@@ -83,7 +82,6 @@ struct kk_meta_save {
    struct kk_conditional_rendering_state cond_render;
    struct kk_descriptor_set *desc0;
    struct kk_push_descriptor_set *push_desc0;
-   mtl_buffer *vb0_handle;
    struct kk_addr_range vb0;
    struct kk_buffer_address desc0_set_addr;
    bool has_push_desc0;
@@ -123,7 +121,6 @@ kk_meta_begin(struct kk_cmd_buffer *cmd, struct kk_meta_save *save,
    save->cond_render = cmd->state.cond_render;
    cmd->state.cond_render.enabled = false;
 
-   save->vb0_handle = cmd->state.gfx.vb.handles[0];
    save->vb0 = cmd->state.gfx.vb.addr_range[0];
 
    save->desc0 = desc->sets[0];
@@ -176,7 +173,6 @@ kk_meta_end(struct kk_cmd_buffer *cmd, struct kk_meta_save *save,
          save->pipeline.gfx.is_ds_dynamic;
 
       cmd->state.gfx.vb.addr_range[0] = save->vb0;
-      cmd->state.gfx.vb.handles[0] = save->vb0_handle;
       cmd->state.gfx.dirty |= KK_DIRTY_VB;
 
       cmd->state.gfx.occlusion.mode = save->pipeline.gfx.occlusion;
@@ -280,9 +276,8 @@ kk_CmdClearAttachments(VkCommandBuffer commandBuffer, uint32_t attachmentCount,
    kk_meta_init_render(cmd, &render_info);
 
    uint32_t view_mask = cmd->state.gfx.render.view_mask;
-   struct kk_encoder *encoder = cmd->encoder;
    uint32_t layer_ids[KK_MAX_MULTIVIEW_VIEW_COUNT] = {};
-   mtl_set_vertex_amplification_count(encoder->main.encoder, layer_ids, 1u);
+   mtl_set_vertex_amplification_count(cmd->cs.gfx, layer_ids, 1u);
 
    /* Preserve conditional rendering state for clearing attachments */
    struct kk_conditional_rendering_state cond_render = cmd->state.cond_render;
@@ -300,7 +295,7 @@ kk_CmdClearAttachments(VkCommandBuffer commandBuffer, uint32_t attachmentCount,
    if (view_mask == 0u) {
       layer_ids[count++] = 0;
    }
-   mtl_set_vertex_amplification_count(encoder->main.encoder, layer_ids, count);
+   mtl_set_vertex_amplification_count(cmd->cs.gfx, layer_ids, count);
 }
 
 void

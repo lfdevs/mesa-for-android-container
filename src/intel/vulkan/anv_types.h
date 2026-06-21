@@ -90,7 +90,10 @@
  * and we can't put anything else there we use 64b.
  */
 #define ANV_SURFACE_STATE_SIZE (64)
+
 #define ANV_SAMPLER_STATE_SIZE (32)
+#define ANV_SAMPLER_STATE_DWORDS (ANV_SAMPLER_STATE_SIZE / sizeof(uint32_t))
+#define ANV_SAMPLER_STATE_GPU_SIZE(verx10) (16)
 
 /* For gfx12 we set the streamout buffers using 4 separate commands
  * (3DSTATE_SO_BUFFER_INDEX_*) instead of 3DSTATE_SO_BUFFER. However the layout

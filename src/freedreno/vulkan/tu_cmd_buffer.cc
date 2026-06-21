@@ -4740,6 +4740,9 @@ tu_bind_descriptor_sets(struct tu_cmd_buffer *cmd,
       descriptors_state->set_iova[idx] = set ?
          (set->va | BINDLESS_DESCRIPTOR_64B) : 0;
 
+      if (cmd->device->physical_device->enable_ssbo_emulation)
+         cmd->state.dirty |= TU_CMD_DIRTY_SHADER_CONSTS;
+
       if (!set)
          continue;
 
@@ -4805,6 +4808,12 @@ tu_bind_descriptor_sets(struct tu_cmd_buffer *cmd,
 
                         va += desc_offset << offset_shift;
                         va += offset;
+
+                        if (cmd->device->physical_device->enable_ssbo_emulation) {
+                           dst_desc[11] = va;
+                           dst_desc[12] = va >> 32;
+                        }
+
                         unsigned new_offset = (va & 0x3f) >> offset_shift;
                         va &= ~0x3full;
                         dst_desc[2] =
@@ -4907,7 +4916,8 @@ tu_set_descriptor_buffer_offsets(
           info->pOffsets[i]) |
          BINDLESS_DESCRIPTOR_64B;
 
-      if (set_layout->has_inline_uniforms)
+      if (cmd->device->physical_device->enable_ssbo_emulation ||
+          set_layout->has_inline_uniforms)
          cmd->state.dirty |= TU_CMD_DIRTY_SHADER_CONSTS;
    }
 
@@ -7420,6 +7430,7 @@ TU_GENX(tu_CmdBeginCustomResolveEXT);
 static uint32_t
 tu6_user_consts_size(const struct tu_const_state *const_state,
                      bool ldgk,
+                     bool load_shader_consts_via_preamble,
                      mesa_shader_stage type)
 {
    uint32_t dwords = 0;
@@ -7434,6 +7445,15 @@ tu6_user_consts_size(const struct tu_const_state *const_state,
       dwords += 6 + (2 * const_state->num_inline_ubos + 4);
    } else {
       dwords += 8 * const_state->num_inline_ubos;
+   }
+
+   if (const_state->num_bindless_base_addresses > 0) {
+      if (load_shader_consts_via_preamble) {
+         if (const_state->bindless_base_addrs_ubo.idx != -1)
+            dwords += 6 + (2 * const_state->num_bindless_base_addresses + 4);
+      } else {
+         dwords += 4 + align(const_state->num_bindless_base_addresses * 2, 4);
+      }
    }
 
    return dwords;
@@ -7616,15 +7636,114 @@ tu6_const_size(struct tu_cmd_buffer *cmd,
    }
 
    bool ldgk = cmd->device->physical_device->info->props.load_inline_uniforms_via_preamble_ldgk;
+   bool load_shader_consts_via_preamble =
+      cmd->device->physical_device->info->props.load_shader_consts_via_preamble;
    if (compute) {
       dwords +=
-         tu6_user_consts_size(&cmd->state.shaders[MESA_SHADER_COMPUTE]->const_state, ldgk, MESA_SHADER_COMPUTE);
+         tu6_user_consts_size(&cmd->state.shaders[MESA_SHADER_COMPUTE]->const_state,
+                              ldgk,
+                              load_shader_consts_via_preamble,
+                              MESA_SHADER_COMPUTE);
    } else {
       for (uint32_t type = MESA_SHADER_VERTEX; type <= MESA_SHADER_FRAGMENT; type++)
-         dwords += tu6_user_consts_size(&cmd->state.shaders[type]->const_state, ldgk, (mesa_shader_stage) type);
+         dwords += tu6_user_consts_size(&cmd->state.shaders[type]->const_state,
+                                        ldgk,
+                                        load_shader_consts_via_preamble,
+                                        (mesa_shader_stage) type);
    }
 
    return dwords;
+}
+
+static void
+fill_bindless_base_addresses(const struct tu_const_state *const_state,
+                             struct tu_descriptor_state *descriptors,
+                             uint64_t *addresses)
+{
+   assert(const_state->num_bindless_base_addresses <= MAX_SETS);
+
+   for (unsigned i = 0; i < const_state->num_bindless_base_addresses; i++)
+      addresses[i] = descriptors->set_iova[i] & ~0x3f;
+}
+
+static void
+tu6_emit_bindless_base_addresses(struct tu_cs *cs,
+                                 const struct tu_const_state *const_state,
+                                 const struct ir3_const_state *ir_const_state,
+                                 mesa_shader_stage type,
+                                 struct tu_descriptor_state *descriptors)
+{
+   uint64_t addresses[MAX_SETS] = {0};
+   fill_bindless_base_addresses(const_state, descriptors, addresses);
+
+   uint32_t offset =
+      ir_const_state->allocs.consts[IR3_CONST_ALLOC_BINDLESS_BASE_ADDRS]
+         .offset_vec4;
+   unsigned num_dwords = align(const_state->num_bindless_base_addresses * 2, 4);
+
+   tu_cs_emit_pkt7(cs, tu6_stage2opcode(type), 3 + num_dwords);
+   tu_cs_emit(cs, CP_LOAD_STATE6_0_DST_OFF(offset) |
+            CP_LOAD_STATE6_0_STATE_TYPE(ST6_CONSTANTS) |
+            CP_LOAD_STATE6_0_STATE_SRC(SS6_DIRECT) |
+            CP_LOAD_STATE6_0_STATE_BLOCK(tu6_stage2shadersb(type)) |
+            CP_LOAD_STATE6_0_NUM_UNIT(num_dwords / 4));
+   tu_cs_emit(cs, 0);
+   tu_cs_emit(cs, 0);
+
+   for (unsigned i = 0; i < const_state->num_bindless_base_addresses; i++)
+      tu_cs_emit_qw(cs, addresses[i]);
+
+   for (unsigned i = const_state->num_bindless_base_addresses * 2;
+        i < num_dwords; i++)
+      tu_cs_emit(cs, 0);
+}
+
+static void
+tu7_emit_bindless_base_addresses(struct tu_cs *cs,
+                                 const struct tu_const_state *const_state,
+                                 mesa_shader_stage type,
+                                 struct tu_descriptor_state *descriptors)
+{
+   uint64_t addresses[MAX_SETS] = {0};
+   int ubo_offset = const_state->bindless_base_addrs_ubo.idx;
+   if (ubo_offset < 0)
+      return;
+
+   fill_bindless_base_addresses(const_state, descriptors, addresses);
+
+   /* A7XX TODO: Emit data via sub_cs instead of NOP */
+   uint64_t iova = tu_cs_emit_data_nop(
+      cs, (uint32_t *) addresses, const_state->num_bindless_base_addresses * 2, 4);
+   unsigned size_vec4s =
+      DIV_ROUND_UP(const_state->num_bindless_base_addresses * 2, 4);
+
+   tu_cs_emit_pkt7(cs, tu6_stage2opcode(type), 5);
+   tu_cs_emit(cs, CP_LOAD_STATE6_0_DST_OFF(ubo_offset) |
+            CP_LOAD_STATE6_0_STATE_TYPE(ST6_UBO) |
+            CP_LOAD_STATE6_0_STATE_SRC(SS6_DIRECT) |
+            CP_LOAD_STATE6_0_STATE_BLOCK(tu6_stage2shadersb(type)) |
+            CP_LOAD_STATE6_0_NUM_UNIT(1));
+   tu_cs_emit(cs, CP_LOAD_STATE6_1_EXT_SRC_ADDR(0));
+   tu_cs_emit(cs, CP_LOAD_STATE6_2_EXT_SRC_ADDR_HI(0));
+   tu_cs_emit_qw(cs, iova | ((uint64_t) A6XX_UBO_1_SIZE(size_vec4s) << 32));
+}
+
+static void
+tu_emit_bindless_base_addresses(struct tu_cs *cs,
+                                const struct tu_const_state *const_state,
+                                const struct ir3_const_state *ir_const_state,
+                                mesa_shader_stage type,
+                                struct tu_descriptor_state *descriptors)
+{
+   if (!const_state->num_bindless_base_addresses)
+      return;
+
+   if (cs->device->physical_device->info->props.load_shader_consts_via_preamble) {
+      tu7_emit_bindless_base_addresses(cs, const_state, type, descriptors);
+   } else {
+      tu6_emit_bindless_base_addresses(cs, const_state, ir_const_state, type,
+                                       descriptors);
+   }
 }
 
 template <chip CHIP>
@@ -7661,6 +7780,11 @@ tu_emit_consts(struct tu_cmd_buffer *cmd, bool compute)
          cmd->state.shaders[MESA_SHADER_COMPUTE]->variant->constlen,
          MESA_SHADER_COMPUTE,
          tu_get_descriptors_state(cmd, VK_PIPELINE_BIND_POINT_COMPUTE));
+      tu_emit_bindless_base_addresses(
+         &cs, &cmd->state.shaders[MESA_SHADER_COMPUTE]->const_state,
+         cmd->state.shaders[MESA_SHADER_COMPUTE]->variant->const_state,
+         MESA_SHADER_COMPUTE,
+         tu_get_descriptors_state(cmd, VK_PIPELINE_BIND_POINT_COMPUTE));
    } else {
       struct tu_descriptor_state *descriptors =
          tu_get_descriptors_state(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS);
@@ -7674,6 +7798,10 @@ tu_emit_consts(struct tu_cmd_buffer *cmd, bool compute)
          tu_emit_inline_ubo(&cs, &link->tu_const_state,
                             &link->const_state, link->constlen,
                             (mesa_shader_stage) type, descriptors);
+         tu_emit_bindless_base_addresses(&cs, &link->tu_const_state,
+                                         &link->const_state,
+                                         (mesa_shader_stage) type,
+                                         descriptors);
       }
    }
 

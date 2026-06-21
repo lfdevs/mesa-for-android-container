@@ -290,7 +290,7 @@ struct gen_parser {
 
       format = gen_inst_format(inst.opcode);
       num_sources = gen_inst_num_sources(devinfo, &inst);
-      has_dst = gen_inst_has_dst(format, inst.opcode);
+      has_dst = gen_inst_has_dst(inst.opcode);
 
       if (!parse_execution())
          return false;

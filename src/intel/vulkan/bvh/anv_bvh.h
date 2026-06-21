@@ -27,16 +27,8 @@ typedef struct instance_leaf_part1 instance_leaf_part1;
 /* This header is stored at the beginning of ANV BVH, i.e. the return value of
  * vk_acceleration_structure_get_va(). The compiler will look for a specific location
  * defined in this header, so the order in which the members are defined is important.
- * Eg. The first qword is currently rootNodeOffset, where the compiler uses to find the
- * TLAS and provide it for the shader.
  */
 struct anv_accel_struct_header {
-   /* 64-bit offset from the start of this header to the location where the
-    * root node resides. That is, the address of root node can be calculated
-    * as address of header + header.rootNodeOffset.
-    */
-   uint64_t rootNodeOffset;
-
    /* The bounding box that encloses this bvh. */
    vk_aabb aabb;
 
@@ -76,7 +68,7 @@ struct anv_accel_struct_header {
 
    uint32_t instance_leaves_offset;
 
-   uint32_t padding[40];
+   uint32_t padding[42];
 };
 
 /* Mixed internal node with type per child */
@@ -132,7 +124,9 @@ struct anv_quad_leaf_node {
     * Reserved (9-bits)
     */
    uint32_t prim_index1_delta;
-   float v[4][3];
+   float v[3][3];
+   /* Second triangle coords */
+   float v1[3];
 };
 
 struct anv_procedural_leaf_node {
@@ -170,7 +164,10 @@ struct anv_internal_node {
     */
    uint8_t node_type;
 
-   uint8_t reserved;
+   /* Note: This is not a real field, it's unused byte padding, which is not
+    * required to be MBZ. We're just using it to store the child count.
+    */
+   uint8_t child_count;
 
    /* 2^exp_x is the size of the grid in x dimension */
    int8_t exp_x;
@@ -325,13 +322,14 @@ struct anv_instance_leaf {
 | start with root node,         |
 | followed by interleaving      |
 | internal nodes and leaves     |
-|-------------------------------|
-| padding to align to           |
-| 64 bytes boundary             |
 |-------------------------------| bvh_layout.instance_leaves_offset
 | For a TLAS, the pointers      |
 | to all anv_instance_leaves    |
 | For a BLAS, nothing here      |
+|-------------------------------| bvh_layout.parent_child_map_offset
+| Parent - child map            |
+|-------------------------------| bvh_layout.leaf_block_map_offset
+| Leaf block offset map         |
 |-------------------------------|
 | padding to align to           |
 | 64 bytes boundary             | bvh_layout.size
@@ -344,13 +342,23 @@ struct bvh_layout {
     */
    uint64_t bvh_offset;
 
+   /* This tracks pointers to all anv_instance_leaves for BLAS. */
+   uint64_t instance_leaves_offset;
+
+   /* This map stores parent BVH offset for each child
+    *
+    * Lower 26bits - parent block index
+    * upper 6bits  - parent child slot index
+    * */
+   uint64_t parent_child_map_offset;
+
+   /* This map stores BVH block index for each leaf id (IR ID) */
+   uint64_t leaf_block_map_offset;
+
    /* Total size = bvh_offset + leaves + internal_nodes (assuming there's no
     * internal node collpased)
     */
    uint64_t size;
-
-   /* This tracks pointers to all anv_instance_leaves for BLAS. */
-   uint64_t instance_leaves_offset;
 };
 
 #endif

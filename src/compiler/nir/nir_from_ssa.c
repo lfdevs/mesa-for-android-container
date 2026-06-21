@@ -1074,7 +1074,7 @@ place_phi_read(nir_builder *b, nir_def *reg,
 bool
 nir_lower_phis_to_regs_block(nir_block *block, bool place_writes_in_imm_preds)
 {
-   nir_builder b = nir_builder_create(nir_cf_node_get_function(&block->cf_node));
+   nir_builder b = nir_builder_create(block->impl);
    struct set *visited_blocks = NULL;
    if (!place_writes_in_imm_preds)
       visited_blocks = _mesa_pointer_set_create(NULL);
@@ -1162,7 +1162,7 @@ instr_is_load_new_reg(nir_instr *instr, unsigned old_num_ssa)
 bool
 nir_lower_ssa_defs_to_regs_block(nir_block *block)
 {
-   nir_function_impl *impl = nir_cf_node_get_function(&block->cf_node);
+   nir_function_impl *impl = block->impl;
    nir_builder b = nir_builder_create(impl);
 
    struct ssa_def_to_reg_state state = {

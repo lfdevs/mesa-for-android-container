@@ -571,6 +571,10 @@ TEST(float8_test, float_to_e4m3fn_rtne)
    EXPECT_EQ(_mesa_float_to_e4m3fn(uif(0x3ba00000)), 2);
    EXPECT_EQ(_mesa_float_to_e4m3fn(uif(0x3ba00001)), 3);
 
+   /* rounding up from max denorm to min normal */
+   EXPECT_EQ(_mesa_float_to_e4m3fn(uif(0x3c700000)), 0x08);
+   EXPECT_EQ(_mesa_float_to_e4m3fn(uif(0xbc700000)), 0x88);
+
    /* rounding up border, normal */
    EXPECT_EQ(_mesa_float_to_e4m3fn(uif(0x4017ffff)), 0x41);
    EXPECT_EQ(_mesa_float_to_e4m3fn(uif(0x40180000)), 0x42);
@@ -597,6 +601,10 @@ TEST(float8_test, float_to_e5m2_rtne)
    /* rounding down border, denorm */
    EXPECT_EQ(_mesa_float_to_e5m2(uif(0x38200000)), 2);
    EXPECT_EQ(_mesa_float_to_e5m2(uif(0x38200001)), 3);
+
+   /* rounding up from max denorm to min normal */
+   EXPECT_EQ(_mesa_float_to_e5m2(uif(0x38600000)), 0x04);
+   EXPECT_EQ(_mesa_float_to_e5m2(uif(0xb8600000)), 0x84);
 
    /* rounding up border, normal */
    EXPECT_EQ(_mesa_float_to_e5m2(uif(0x402fffff)), 0x41);

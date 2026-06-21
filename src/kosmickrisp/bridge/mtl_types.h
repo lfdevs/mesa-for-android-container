@@ -18,6 +18,7 @@ typedef void mtl_heap;
 typedef void mtl_buffer;
 typedef void mtl_texture;
 typedef void mtl_command_queue;
+typedef void mtl_command_allocator;
 typedef void mtl_command_buffer;
 typedef void mtl_command_encoder;
 typedef void mtl_blit_encoder;
@@ -42,6 +43,8 @@ typedef void mtl_render_pass_attachment_descriptor;
 typedef void mtl_residency_set;
 typedef void mtl_allocation;
 typedef void mtl_compiler;
+typedef void mtl_argument_table_descriptor;
+typedef void mtl_argument_table;
 
 /** ENUMS */
 enum mtl_cpu_cache_mode {
@@ -225,6 +228,33 @@ enum mtl_barrier_scope {
    MTL_BARRIER_SCOPE_BUFFERS = 1 << 0,
    MTL_BARRIER_SCOPE_TEXTURES = 1 << 1,
    MTL_BARRIER_SCOPE_RENDER_TARGETS = 1 << 2,
+};
+
+enum mtl_stages {
+   MTL_STAGE_VERTEX = 1 << 0,
+   MTL_STAGE_FRAGMENT = 1 << 1,
+   MTL_STAGE_TILE = 1 << 2,
+   MTL_STAGE_OBJECTS = 1 << 3,
+   MTL_STAGE_MESH = 1 << 4,
+   MTL_STAGE_RESOURCE_STATE = 1 << 26,
+   MTL_STAGE_DISPATCH = 1 << 27,
+   MTL_STAGE_BLIT = 1 << 28,
+   MTL_STAGE_ACCELERATION_STRUCTURE = 1 << 29,
+   MTL_STAGE_MACHINE_LEARNING = 1 << 30,
+   MTL_STAGE_ALL =
+      (MTL_STAGE_VERTEX | MTL_STAGE_FRAGMENT | MTL_STAGE_TILE |
+       MTL_STAGE_OBJECTS | MTL_STAGE_MESH | MTL_STAGE_RESOURCE_STATE |
+       MTL_STAGE_DISPATCH | MTL_STAGE_BLIT | MTL_STAGE_ACCELERATION_STRUCTURE |
+       MTL_STAGE_MACHINE_LEARNING),
+
+};
+
+enum mtl_render_stages {
+   MTL_RENDER_STAGE_VERTEX = (1UL << 0),
+   MTL_RENDER_STAGE_FRAGMENT = (1UL << 1),
+   MTL_RENDER_STAGE_TILE = (1UL << 2),
+   MTL_RENDER_STAGE_OBJECT = (1UL << 3),
+   MTL_RENDER_STAGE_MESH = (1UL << 4),
 };
 
 /** STRUCTURES */

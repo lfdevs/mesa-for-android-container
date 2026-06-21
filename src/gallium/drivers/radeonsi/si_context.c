@@ -7,9 +7,9 @@
 
 #include "si_pipe.h"
 
-#include "compiler/nir/nir.h"
 #include "gfx/si_gfx.h"
 #include "mm/si_mm.h"
+#include "util/hash_table.h"
 
 static void decref_implicit_resource(struct hash_entry *entry)
 {

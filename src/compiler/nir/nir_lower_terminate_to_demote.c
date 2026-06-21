@@ -40,13 +40,18 @@ nir_lower_terminate_cf_list(nir_builder *b, struct exec_list *cf_list)
             }
 
             case nir_intrinsic_terminate_if:
-               b->cursor = nir_before_instr(&intrin->instr);
+               /* We use demote_if instead of putting a demote in the if, since
+                * the backend can likely optimize if { halt } via jump threading
+                * or predication while an intervening demote may require real
+                * control flow.
+                */
+               intrin->intrinsic = nir_intrinsic_demote_if;
+               b->cursor = nir_after_instr(&intrin->instr);
+
                nir_push_if(b, intrin->src[0].ssa);
                {
-                  nir_demote(b);
                   nir_jump(b, nir_jump_halt);
                }
-               nir_instr_remove(&intrin->instr);
                progress = true;
                break;
 

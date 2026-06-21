@@ -952,7 +952,7 @@ struct gen_compact_accessor {
    gen_raw_compact_inst c_raw;
 
    inline uint64_t
-   c_get(const gen_range &bits)
+   c_get(const gen_range &bits) const
    {
       unsigned high = bits.hi;
       unsigned low = bits.lo;
@@ -963,6 +963,20 @@ struct gen_compact_accessor {
       const uint64_t mask = (~0ull >> (64 - (high - low + 1)));
 
       return (c_raw.data >> low) & mask;
+   }
+
+   inline uint64_t
+   c_get(const gen_ranges<1> &ranges) const
+   {
+      return c_get(ranges[0]);
+   }
+
+   inline uint64_t
+   c_get(const gen_ranges<2> &ranges) const
+   {
+      return
+         (c_get(ranges[0]) << (ranges[1].hi - ranges[1].lo + 1)) |
+         c_get(ranges[1]) ;
    }
 
    inline void
@@ -980,6 +994,23 @@ struct gen_compact_accessor {
       assert((value & (mask >> low)) == value);
 
       c_raw.data = (c_raw.data & ~mask) | (value << low);
+   }
+
+   inline void
+   c_set(const gen_ranges<1> &ranges, uint64_t value)
+   {
+      c_set(ranges[0], value);
+   }
+
+   inline void
+   c_set(const gen_ranges<2> &ranges, uint64_t value)
+   {
+      unsigned num_bits = ranges[1].hi - ranges[1].lo + 1;
+      assume(num_bits <= 64);
+      uint64_t mask = ~0ull >> (64 - num_bits);
+      c_set(ranges[1], value & mask);
+      value >>= num_bits;
+      c_set(ranges[0], value);
    }
 
    inline void
@@ -1004,6 +1035,32 @@ struct gen_compact_accessor {
       uc_raw.data[word] = (uc_raw.data[word] & ~mask) | (value << low);
    }
 
+   template <int N, int I>
+   inline void
+   uc_set_unroll(const gen_ranges<N> &ranges, uint64_t &value)
+   {
+      if constexpr((I + 1) < N) {
+         /* Recurse up front to set least significant bits first */
+         uc_set_unroll<N, I + 1>(ranges, value);
+      }
+
+      /* Set least significant bits first, and then shift them out of `value`
+       * so the bits for the next range are in the lowest bits of `value`.
+       */
+      unsigned num_bits = ranges[I].hi - ranges[I].lo + 1;
+      uint64_t mask = ~0ull >> (64 - num_bits);
+      uc_set(ranges[I], (value & mask));
+      value = value >> num_bits;
+   }
+
+   template <int N>
+   inline void
+   uc_set(const gen_ranges<N> &ranges, uint64_t value)
+   {
+      uc_set_unroll<N, 0>(ranges, value);
+      assert(value == 0);
+   }
+
    inline uint64_t
    uc_get(const gen_range &bits) const
    {
@@ -1022,6 +1079,29 @@ struct gen_compact_accessor {
       const uint64_t mask = (~0ull >> (64 - (high - low + 1)));
 
       return (uc_raw.data[word] >> low) & mask;
+   }
+
+   template <int N, int I>
+   inline void
+   uc_get_unroll(const gen_ranges<N> &ranges, uint64_t &output) const
+   {
+      /* Read most significant bits first, and merge into `output` */
+      unsigned num_bits = ranges[I].hi - ranges[I].lo + 1;
+      output = output << num_bits | uc_get(ranges[I]);
+
+      if constexpr((I + 1) < N) {
+         /* Read remaining bits from other bit ranges */
+         uc_get_unroll<N, I + 1>(ranges, output);
+      }
+   }
+
+   template <int N>
+   inline uint64_t
+   uc_get(const gen_ranges<N> &ranges) const
+   {
+      uint64_t output = 0;
+      uc_get_unroll<N, 0>(ranges, output);
+      return output;
    }
 
    int32_t
@@ -1240,37 +1320,7 @@ private:
    set_control_index()
    {
       const compact_table_info &table = compact_tables.control;
-      gen_range bits = { 127, 0 };
-      uint32_t uncompacted; /* 19b/IVB+; 21b/TGL+ */
-
-      if constexpr (E::TYPE >= GEN_ENCODING_XE2) {
-         uncompacted = (uc_get(bits(95, 92)) << 14) | /*  4b */
-            (uc_get(bits(34, 34)) << 13) | /*  1b */
-            (uc_get(bits(32, 32)) << 12) | /*  1b */
-            (uc_get(bits(31, 31)) << 11) | /*  1b */
-            (uc_get(bits(28, 28)) << 10) | /*  1b */
-            (uc_get(bits(27, 26)) <<  8) | /*  2b */
-            (uc_get(bits(25, 24)) <<  6) | /*  2b */
-            (uc_get(bits(23, 21)) <<  3) | /*  3b */
-            (uc_get(bits(20, 18)));        /*  3b */
-      } else if constexpr (E::TYPE >= GEN_ENCODING_XE) {
-         uncompacted = (uc_get(bits(95, 92)) << 17) | /*  4b */
-            (uc_get(bits(34, 34)) << 16) | /*  1b */
-            (uc_get(bits(33, 33)) << 15) | /*  1b */
-            (uc_get(bits(32, 32)) << 14) | /*  1b */
-            (uc_get(bits(31, 31)) << 13) | /*  1b */
-            (uc_get(bits(28, 28)) << 12) | /*  1b */
-            (uc_get(bits(27, 24)) <<  8) | /*  4b */
-            (uc_get(bits(23, 22)) <<  6) | /*  2b */
-            (uc_get(bits(21, 19)) <<  3) | /*  3b */
-            (uc_get(bits(18, 16)));        /*  3b */
-      } else {
-         uncompacted = (uc_get(bits(33, 31)) << 16) | /*  3b */
-            (uc_get(bits(23, 12)) <<  4) | /* 12b */
-            (uc_get(bits(10,  9)) <<  2) | /*  2b */
-            (uc_get(bits(34, 34)) <<  1) | /*  1b */
-            (uc_get(bits( 8,  8)));        /*  1b */
-      }
+      uint32_t uncompacted = uc_get(E::UNCOMP_CONTROL);
 
       for (unsigned i = 0; i < table.length; i++) {
          if (table.read(i) == uncompacted) {
@@ -1286,40 +1336,19 @@ private:
    set_datatype_index(bool is_immediate)
    {
       const compact_table_info &table = compact_tables.datatype;
-      gen_range bits = { 127, 0 };
-      uint32_t uncompacted; /* 18b/G45+; 21b/BDW+; 20b/TGL+ */
+      uint32_t uncompacted = uc_get(E::UNCOMP_DATATYPE);
 
       if constexpr (E::TYPE >= GEN_ENCODING_XE) {
-         uncompacted = (uc_get(bits(91, 88)) << 15) | /*  4b */
-            (uc_get(bits(66, 66)) << 14) | /*  1b */
-            (uc_get(bits(50, 50)) << 13) | /*  1b */
-            (uc_get(bits(49, 48)) << 11) | /*  2b */
-            (uc_get(bits(47, 47)) << 10) | /*  1b */
-            (uc_get(bits(46, 46)) <<  9) | /*  1b */
-            (uc_get(bits(43, 40)) <<  5) | /*  4b */
-            (uc_get(bits(39, 36)) <<  1) | /*  4b */
-            (uc_get(bits(35, 35)));        /*  1b */
-
          /* Src1.RegFile overlaps with the immediate, so ignore it if an immediate
           * is present
           */
-         if (!is_immediate) {
-            uncompacted |= uc_get(bits(98, 98)) << 19; /* 1b */
-         }
-      } else {
-         uncompacted = (uc_get(bits(63, 61)) << 18) | /*  3b */
-            (uc_get(bits(94, 89)) << 12) | /*  6b */
-            (uc_get(bits(46, 35)));        /* 12b */
+         if (is_immediate)
+            uncompacted &= ~INTEL_MASK(19, 19);
       }
 
       for (unsigned i = 0; i < table.length; i++) {
          if (table.read(i) == uncompacted) {
-            if constexpr (E::TYPE >= GEN_ENCODING_XE2) {
-               c_set(E::C_DATATYPE_INDEX_LO3, i & 7);
-               c_set(E::C_DATATYPE_INDEX_HI2, i >> 3);
-            } else {
-               c_set(E::C_DATATYPE_INDEX, i);
-            }
+            c_set(E::C_DATATYPE_INDEX, i);
             return true;
          }
       }
@@ -1331,26 +1360,11 @@ private:
    set_subreg_index(bool is_immediate)
    {
       const compact_table_info &table = compact_tables.subreg;
-      gen_range bits = { 127, 0 };
-      uint16_t uncompacted; /* 15b/G45+; 12b/Xe2+ */
+      uint16_t uncompacted = uc_get(E::UNCOMP_SUBREG);
 
-      if constexpr (E::TYPE >= GEN_ENCODING_XE2) {
-         uncompacted = (uc_get(bits(33, 33)) << 0) |    /* 1b */
-            (uc_get(bits(55, 51)) << 1) |    /* 5b */
-            (uc_get(bits(71, 67)) << 6) |    /* 5b */
-            (uc_get(bits(87, 87)) << 11);    /* 1b */
-      } else if constexpr (E::TYPE >= GEN_ENCODING_XE) {
-         uncompacted = (uc_get(bits(55, 51)) << 0) |    /* 5b */
-            (uc_get(bits(71, 67)) << 5);     /* 5b */
-
-         if (!is_immediate)
-            uncompacted |= uc_get(bits(103, 99)) << 10; /* 5b */
-      } else {
-         uncompacted = (uc_get(bits(52, 48)) << 0) |    /* 5b */
-            (uc_get(bits(68, 64)) << 5);     /* 5b */
-
-         if (!is_immediate)
-            uncompacted |= uc_get(bits(100, 96)) << 10; /* 5b */
+      if constexpr (E::TYPE <= GEN_ENCODING_XE) {
+         if (is_immediate)
+            uncompacted &= ~INTEL_MASK(14, 10);
       }
 
       for (unsigned i = 0; i < table.length; i++) {
@@ -1368,20 +1382,7 @@ private:
    set_src0_index()
    {
       const compact_table_info &table = compact_tables.src0;
-      gen_range bits = { 127, 0 };
-      uint16_t uncompacted; /* 12b/G45+; 11b/Xe2+ */
-
-      if constexpr (E::TYPE >= GEN_ENCODING_XE) {
-         uncompacted = (devinfo->ver >= 20 ? 0 :
-                        uc_get(bits(87, 87)) << 11) | /*  1b */
-            (uc_get(bits(86, 84)) << 8) | /*  3b */
-            (uc_get(bits(83, 81)) << 5) | /*  3b */
-            (uc_get(bits(80, 80)) << 4) | /*  1b */
-            (uc_get(bits(65, 64)) << 2) | /*  2b */
-            (uc_get(bits(45, 44)));       /*  2b */
-      } else {
-         uncompacted = uc_get(bits(88, 77));         /* 12b */
-      }
+      uint16_t uncompacted = uc_get(E::UNCOMP_SRC0);
 
       for (unsigned i = 0; i < table.length; i++) {
          if (table.read(i) == uncompacted) {
@@ -1396,7 +1397,6 @@ private:
    bool
    set_src1_index(bool is_immediate, unsigned imm)
    {
-      gen_range bits = { 127, 0 };
       if (is_immediate) {
          if constexpr (E::TYPE >= GEN_ENCODING_XE) {
             /* src1 index takes the low 4 bits of the 12-bit compacted value */
@@ -1408,24 +1408,7 @@ private:
          return true;
       } else {
          const compact_table_info &table = compact_tables.src1;
-         uint16_t uncompacted; /* 12b/G45+ 16b/Xe2+ */
-
-         if constexpr (E::TYPE >= GEN_ENCODING_XE2) {
-            uncompacted = (uc_get(bits(121, 120)) << 14) | /*  2b */
-               (uc_get(bits(118, 116)) << 11) | /*  3b */
-               (uc_get(bits(115, 113)) <<  8) | /*  3b */
-               (uc_get(bits(112, 112)) <<  7) | /*  1b */
-               (uc_get(bits(103,  99)) <<  2) | /*  5b */
-               (uc_get(bits( 97,  96)));        /*  2b */
-         } else if constexpr (E::TYPE >= GEN_ENCODING_XE) {
-            uncompacted = (uc_get(bits(121, 120)) << 10) | /*  2b */
-               (uc_get(bits(119, 116)) <<  6) | /*  4b */
-               (uc_get(bits(115, 113)) <<  3) | /*  3b */
-               (uc_get(bits(112, 112)) <<  2) | /*  1b */
-               (uc_get(bits( 97,  96)));        /*  2b */
-         } else {
-            uncompacted = uc_get(bits(120, 109));          /* 12b */
-         }
+         uint16_t uncompacted = uc_get(E::UNCOMP_SRC1);
 
          for (unsigned i = 0; i < table.length; i++) {
             if (table.read(i) == uncompacted) {
@@ -1441,78 +1424,24 @@ private:
    bool
    set_3src_control_index(bool is_dpas)
    {
-      gen_range bits = { 127, 0 };
-
       const compact_table_info &table =
          is_dpas ? compact_tables.control_dpas_3src :
          compact_tables.control_3src;
 
       uint64_t uncompacted = 0;
-      if constexpr (E::TYPE >= GEN_ENCODING_XE2) {
-         assert(is_dpas || !uc_get(bits(49, 49)));
-
-         uncompacted =        /* 34b/Xe2+ */
-            (uc_get(bits(95, 92)) << 30) | /*  4b */
-            (uc_get(bits(90, 88)) << 27) | /*  3b */
-            (uc_get(bits(82, 80)) << 24) | /*  3b */
-            (uc_get(bits(50, 50)) << 23) | /*  1b */
-            (uc_get(bits(49, 48)) << 21) | /*  2b */
-            (uc_get(bits(42, 40)) << 18) | /*  3b */
-            (uc_get(bits(39, 39)) << 17) | /*  1b */
-            (uc_get(bits(38, 36)) << 14) | /*  3b */
-            (uc_get(bits(34, 34)) << 13) | /*  1b */
-            (uc_get(bits(32, 32)) << 12) | /*  1b */
-            (uc_get(bits(31, 31)) << 11) | /*  1b */
-            (uc_get(bits(28, 28)) << 10) | /*  1b */
-            (uc_get(bits(27, 26)) <<  8) | /*  2b */
-            (uc_get(bits(25, 24)) <<  6) | /*  2b */
-            (uc_get(bits(23, 21)) <<  3) | /*  3b */
-            (uc_get(bits(20, 18)));        /*  3b */
-      } else if (devinfo->verx10 >= 125) {
-         uncompacted =             /* 37b/XeHP+ */
-            (uc_get(bits(95, 92)) << 33) | /*  4b */
-            (uc_get(bits(90, 88)) << 30) | /*  3b */
-            (uc_get(bits(82, 80)) << 27) | /*  3b */
-            (uc_get(bits(50, 50)) << 26) | /*  1b */
-            (uc_get(bits(49, 48)) << 24) | /*  2b */
-            (uc_get(bits(42, 40)) << 21) | /*  3b */
-            (uc_get(bits(39, 39)) << 20) | /*  1b */
-            (uc_get(bits(38, 36)) << 17) | /*  3b */
-            (uc_get(bits(34, 34)) << 16) | /*  1b */
-            (uc_get(bits(33, 33)) << 15) | /*  1b */
-            (uc_get(bits(32, 32)) << 14) | /*  1b */
-            (uc_get(bits(31, 31)) << 13) | /*  1b */
-            (uc_get(bits(28, 28)) << 12) | /*  1b */
-            (uc_get(bits(27, 24)) <<  8) | /*  4b */
-            (uc_get(bits(23, 23)) <<  7) | /*  1b */
-            (uc_get(bits(22, 22)) <<  6) | /*  1b */
-            (uc_get(bits(21, 19)) <<  3) | /*  3b */
-            (uc_get(bits(18, 16)));        /*  3b */
-      } else if constexpr (E::TYPE >= GEN_ENCODING_XE) {
-         uncompacted =             /* 36b/TGL+ */
-            (uc_get(bits(95, 92)) << 32) | /*  4b */
-            (uc_get(bits(90, 88)) << 29) | /*  3b */
-            (uc_get(bits(82, 80)) << 26) | /*  3b */
-            (uc_get(bits(50, 50)) << 25) | /*  1b */
-            (uc_get(bits(48, 48)) << 24) | /*  1b */
-            (uc_get(bits(42, 40)) << 21) | /*  3b */
-            (uc_get(bits(39, 39)) << 20) | /*  1b */
-            (uc_get(bits(38, 36)) << 17) | /*  3b */
-            (uc_get(bits(34, 34)) << 16) | /*  1b */
-            (uc_get(bits(33, 33)) << 15) | /*  1b */
-            (uc_get(bits(32, 32)) << 14) | /*  1b */
-            (uc_get(bits(31, 31)) << 13) | /*  1b */
-            (uc_get(bits(28, 28)) << 12) | /*  1b */
-            (uc_get(bits(27, 24)) <<  8) | /*  4b */
-            (uc_get(bits(23, 23)) <<  7) | /*  1b */
-            (uc_get(bits(22, 22)) <<  6) | /*  1b */
-            (uc_get(bits(21, 19)) <<  3) | /*  3b */
-            (uc_get(bits(18, 16)));        /*  3b */
+      if constexpr (E::TYPE == GEN_ENCODING_XE) {
+         if (devinfo->verx10 == 125) {
+            uncompacted = uc_get(E::UNCOMP_3SRC_CONTROL_125);
+         } else {
+            uncompacted = uc_get(E::UNCOMP_3SRC_CONTROL);
+         }
       } else {
-         uncompacted = /* 26b/SKL+ */
-            (uc_get(bits(36, 35)) << 24) |  /*  2b */
-            (uc_get(bits(34, 32)) << 21) |  /*  3b */
-            (uc_get(bits(28,  8)));         /* 21b */
+         uncompacted = uc_get(E::UNCOMP_3SRC_CONTROL);
+      }
+
+      if constexpr (E::TYPE >= GEN_ENCODING_XE2) {
+         gen_range bits = { 127, 0 };
+         assert(is_dpas || !uc_get(bits(49, 49)));
       }
 
       for (unsigned i = 0; i < table.length; i++) {
@@ -1528,40 +1457,11 @@ private:
    bool
    set_3src_source_index(bool is_dpas)
    {
-      gen_range bits = { 127, 0 };
       const compact_table_info &table =
          is_dpas ? compact_tables.source_dpas_3src :
          compact_tables.source_3src;
 
-      uint64_t uncompacted;
-      if constexpr (E::TYPE >= GEN_ENCODING_XE) {
-         uncompacted =                       /* 21b/TGL+ */
-            (uc_get(bits(114, 114)) << 20) | /*  1b */
-            (uc_get(bits(113, 112)) << 18) | /*  2b */
-            (uc_get(bits( 98,  98)) << 17) | /*  1b */
-            (uc_get(bits( 97,  96)) << 15) | /*  2b */
-            (uc_get(bits( 91,  91)) << 14) | /*  1b */
-            (uc_get(bits( 87,  86)) << 12) | /*  2b */
-            (uc_get(bits( 85,  84)) << 10) | /*  2b */
-            (uc_get(bits( 83,  83)) <<  9) | /*  1b */
-            (uc_get(bits( 66,  66)) <<  8) | /*  1b */
-            (uc_get(bits( 65,  64)) <<  6) | /*  2b */
-            (uc_get(bits( 47,  47)) <<  5) | /*  1b */
-            (uc_get(bits( 46,  46)) <<  4) | /*  1b */
-            (uc_get(bits( 45,  44)) <<  2) | /*  2b */
-            (uc_get(bits( 43,  43)) <<  1) | /*  1b */
-            (uc_get(bits( 35,  35)));        /*  1b */
-      } else {
-         uncompacted =                         /* 49b/SKL+ */
-            (uc_get(bits(126, 125)) << 47) |   /*  2b */
-            (uc_get(bits(105, 104)) << 45) |   /*  2b */
-            (uc_get(bits( 84,  84)) << 44) |   /*  1b */
-            (uc_get(bits( 83,  83)) << 43) |   /*  1b */
-            (uc_get(bits(114, 107)) << 35) |   /*  8b */
-            (uc_get(bits( 93,  86)) << 27) |   /*  8b */
-            (uc_get(bits( 72,  65)) << 19) |   /*  8b */
-            (uc_get(bits( 55,  37)));          /* 19b */
-      }
+      uint64_t uncompacted = uc_get(E::UNCOMP_3SRC_SOURCE);
 
       for (unsigned i = 0; i < table.length; i++) {
          if (table.read(i) == uncompacted) {
@@ -1576,29 +1476,19 @@ private:
    bool
    set_3src_subreg_index()
    {
-      gen_range bits = { 127, 0 };
+      uint32_t uncompacted = 0;
       if constexpr (E::TYPE < GEN_ENCODING_XE) {
          UNREACHABLE("Don't call set_3src_subreg_index() for this device!");
          return false;
+      } else {
+         uncompacted = uc_get(E::UNCOMP_3SRC_SUBREG);
       }
-
-      uint32_t uncompacted =               /* 20b/TGL+ */
-         (uc_get(bits(119, 115)) << 15) | /*  5b */
-         (uc_get(bits(103,  99)) << 10) | /*  5b */
-         (uc_get(bits( 71,  67)) <<  5) | /*  5b */
-         (uc_get(bits( 55,  51)));        /*  5b */
 
       const compact_table_info &table = compact_tables.subreg_3src;
 
       for (unsigned i = 0; i < table.length; i++) {
          if (table.read(i) == uncompacted) {
-            if constexpr (E::TYPE >= GEN_ENCODING_XE2) {
-               assert((i & ~0x1f) == 0);
-               c_set(E::C_3SRC_SUBREG_INDEX_LO3, i & 7);
-               c_set(E::C_3SRC_SUBREG_INDEX_HI2, (i >> 3) & 3);
-            } else {
-               c_set(E::C_3SRC_SUBREG_INDEX, i);
-            }
+            c_set(E::C_3SRC_SUBREG_INDEX, i);
             return true;
          }
       }
@@ -2184,69 +2074,17 @@ private:
       const compact_table_info &table = compact_tables.control;
       auto compacted = c_get(E::C_CONTROL_INDEX);
       auto uncompacted = table.read(compacted);
-      gen_range bits = { 127, 0 };
 
-      if constexpr (E::TYPE >= GEN_ENCODING_XE2) {
-         uc_set(bits(95, 92), (uncompacted >> 14) & 0xf);
-         uc_set(bits(34, 34), (uncompacted >> 13) & 0x1);
-         uc_set(bits(32, 32), (uncompacted >> 12) & 0x1);
-         uc_set(bits(31, 31), (uncompacted >> 11) & 0x1);
-         uc_set(bits(28, 28), (uncompacted >> 10) & 0x1);
-         uc_set(bits(27, 26), (uncompacted >>  8) & 0x3);
-         uc_set(bits(25, 24), (uncompacted >>  6) & 0x3);
-         uc_set(bits(23, 21), (uncompacted >>  3) & 0x7);
-         uc_set(bits(20, 18), (uncompacted >>  0) & 0x7);
-      } else if constexpr (E::TYPE >= GEN_ENCODING_XE) {
-         uc_set(bits(95, 92), (uncompacted >> 17));
-         uc_set(bits(34, 34), (uncompacted >> 16) & 0x1);
-         uc_set(bits(33, 33), (uncompacted >> 15) & 0x1);
-         uc_set(bits(32, 32), (uncompacted >> 14) & 0x1);
-         uc_set(bits(31, 31), (uncompacted >> 13) & 0x1);
-         uc_set(bits(28, 28), (uncompacted >> 12) & 0x1);
-         uc_set(bits(27, 24), (uncompacted >>  8) & 0xf);
-         uc_set(bits(23, 22), (uncompacted >>  6) & 0x3);
-         uc_set(bits(21, 19), (uncompacted >>  3) & 0x7);
-         uc_set(bits(18, 16), (uncompacted >>  0) & 0x7);
-      } else {
-         uc_set(bits(33, 31), (uncompacted >> 16));
-         uc_set(bits(23, 12), (uncompacted >>  4) & 0xfff);
-         uc_set(bits(10,  9), (uncompacted >>  2) & 0x3);
-         uc_set(bits(34, 34), (uncompacted >>  1) & 0x1);
-         uc_set(bits( 8,  8), (uncompacted >>  0) & 0x1);
-      }
+      uc_set(E::UNCOMP_CONTROL, uncompacted);
    }
 
    void
    set_uncompacted_datatype()
    {
       const compact_table_info &table = compact_tables.datatype;
-      uint64_t compacted;
-      if constexpr (E::TYPE >= GEN_ENCODING_XE2) {
-         compacted =
-            (c_get(E::C_DATATYPE_INDEX_HI2) << 3) |
-            (c_get(E::C_DATATYPE_INDEX_LO3) << 0);
-      } else {
-         compacted = c_get(E::C_DATATYPE_INDEX);
-      }
+      uint64_t compacted = c_get(E::C_DATATYPE_INDEX);
       auto uncompacted = table.read(compacted);
-      gen_range bits = { 127, 0 };
-
-      if constexpr (E::TYPE >= GEN_ENCODING_XE) {
-         uc_set(bits(98, 98), (uncompacted >> 19));
-         uc_set(bits(91, 88), (uncompacted >> 15) & 0xf);
-         uc_set(bits(66, 66), (uncompacted >> 14) & 0x1);
-         uc_set(bits(50, 50), (uncompacted >> 13) & 0x1);
-         uc_set(bits(49, 48), (uncompacted >> 11) & 0x3);
-         uc_set(bits(47, 47), (uncompacted >> 10) & 0x1);
-         uc_set(bits(46, 46), (uncompacted >>  9) & 0x1);
-         uc_set(bits(43, 40), (uncompacted >>  5) & 0xf);
-         uc_set(bits(39, 36), (uncompacted >>  1) & 0xf);
-         uc_set(bits(35, 35), (uncompacted >>  0) & 0x1);
-      } else {
-         uc_set(bits(63, 61), (uncompacted >> 18));
-         uc_set(bits(94, 89), (uncompacted >> 12) & 0x3f);
-         uc_set(bits(46, 35), (uncompacted >>  0) & 0xfff);
-      }
+      uc_set(E::UNCOMP_DATATYPE, uncompacted);
    }
 
    void
@@ -2255,22 +2093,7 @@ private:
       const compact_table_info &table = compact_tables.subreg;
       auto compacted = c_get(E::C_SUBREG_INDEX);
       auto uncompacted = table.read(compacted);
-      gen_range bits = { 127, 0 };
-
-      if constexpr (E::TYPE >= GEN_ENCODING_XE2) {
-         uc_set(bits(33, 33), (uncompacted >> 0) & 0x1);
-         uc_set(bits(55, 51), (uncompacted >> 1) & 0x1f);
-         uc_set(bits(71, 67), (uncompacted >> 6) & 0x1f);
-         uc_set(bits(87, 87), (uncompacted >> 11) & 0x1);
-      } else if constexpr (E::TYPE >= GEN_ENCODING_XE) {
-         uc_set(bits(103, 99), (uncompacted >> 10));
-         uc_set(bits( 71, 67), (uncompacted >>  5) & 0x1f);
-         uc_set(bits( 55, 51), (uncompacted >>  0) & 0x1f);
-      } else {
-         uc_set(bits(100, 96), (uncompacted >> 10));
-         uc_set(bits( 68, 64), (uncompacted >>  5) & 0x1f);
-         uc_set(bits( 52, 48), (uncompacted >>  0) & 0x1f);
-      }
+      uc_set(E::UNCOMP_SUBREG, uncompacted);
    }
 
    void
@@ -2279,19 +2102,7 @@ private:
       const compact_table_info &table = compact_tables.src0;
       auto compacted = c_get(E::C_SRC0_INDEX);
       auto uncompacted = table.read(compacted);
-      gen_range bits = { 127, 0 };
-
-      if constexpr (E::TYPE >= GEN_ENCODING_XE) {
-         if constexpr (E::TYPE < GEN_ENCODING_XE2)
-            uc_set(bits(87, 87), (uncompacted >> 11) & 0x1);
-         uc_set(bits(86, 84), (uncompacted >> 8) & 0x7);
-         uc_set(bits(83, 81), (uncompacted >> 5) & 0x7);
-         uc_set(bits(80, 80), (uncompacted >> 4) & 0x1);
-         uc_set(bits(65, 64), (uncompacted >> 2) & 0x3);
-         uc_set(bits(45, 44), (uncompacted >> 0) & 0x3);
-      } else {
-         uc_set(bits(88, 77), uncompacted);
-      }
+      uc_set(E::UNCOMP_SRC0, uncompacted);
    }
 
    void
@@ -2300,24 +2111,7 @@ private:
       const compact_table_info &table = compact_tables.src1;
       auto compacted = c_get(E::C_SRC1_INDEX);
       auto uncompacted = table.read(compacted);
-      gen_range bits = { 127, 0 };
-
-      if constexpr (E::TYPE >= GEN_ENCODING_XE2) {
-         uc_set(bits(121, 120), (uncompacted >> 14) & 0x3);
-         uc_set(bits(118, 116), (uncompacted >> 11) & 0x7);
-         uc_set(bits(115, 113), (uncompacted >>  8) & 0x7);
-         uc_set(bits(112, 112), (uncompacted >>  7) & 0x1);
-         uc_set(bits(103,  99), (uncompacted >>  2) & 0x1f);
-         uc_set(bits( 97,  96), (uncompacted >>  0) & 0x3);
-      } else if constexpr (E::TYPE >= GEN_ENCODING_XE) {
-         uc_set(bits(121, 120), (uncompacted >> 10));
-         uc_set(bits(119, 116), (uncompacted >>  6) & 0xf);
-         uc_set(bits(115, 113), (uncompacted >>  3) & 0x7);
-         uc_set(bits(112, 112), (uncompacted >>  2) & 0x1);
-         uc_set(bits( 97,  96), (uncompacted >>  0) & 0x3);
-      } else {
-         uc_set(bits(120, 109), uncompacted);
-      }
+      uc_set(E::UNCOMP_SRC1, uncompacted);
    }
 
    void
@@ -2329,68 +2123,15 @@ private:
 
       auto compacted = c_get(E::C_3SRC_CONTROL_INDEX);
       auto uncompacted = table.read(compacted);
-      gen_range bits = { 127, 0 };
 
-      if constexpr (E::TYPE >= GEN_ENCODING_XE2) {
-         uc_set(bits(95, 92), (uncompacted >> 30) & 0xf);
-         uc_set(bits(90, 88), (uncompacted >> 27) & 0x7);
-         uc_set(bits(82, 80), (uncompacted >> 24) & 0x7);
-         uc_set(bits(50, 50), (uncompacted >> 23) & 0x1);
-         uc_set(bits(49, 48), (uncompacted >> 21) & 0x3);
-         uc_set(bits(42, 40), (uncompacted >> 18) & 0x7);
-         uc_set(bits(39, 39), (uncompacted >> 17) & 0x1);
-         uc_set(bits(38, 36), (uncompacted >> 14) & 0x7);
-         uc_set(bits(34, 34), (uncompacted >> 13) & 0x1);
-         uc_set(bits(32, 32), (uncompacted >> 12) & 0x1);
-         uc_set(bits(31, 31), (uncompacted >> 11) & 0x1);
-         uc_set(bits(28, 28), (uncompacted >> 10) & 0x1);
-         uc_set(bits(27, 26), (uncompacted >>  8) & 0x3);
-         uc_set(bits(25, 24), (uncompacted >>  6) & 0x3);
-         uc_set(bits(23, 21), (uncompacted >>  3) & 0x7);
-         uc_set(bits(20, 18), (uncompacted >>  0) & 0x7);
-      } else if (devinfo->verx10 >= 125) {
-         uc_set(bits(95, 92), (uncompacted >> 33));
-         uc_set(bits(90, 88), (uncompacted >> 30) & 0x7);
-         uc_set(bits(82, 80), (uncompacted >> 27) & 0x7);
-         uc_set(bits(50, 50), (uncompacted >> 26) & 0x1);
-         uc_set(bits(49, 48), (uncompacted >> 24) & 0x3);
-         uc_set(bits(42, 40), (uncompacted >> 21) & 0x7);
-         uc_set(bits(39, 39), (uncompacted >> 20) & 0x1);
-         uc_set(bits(38, 36), (uncompacted >> 17) & 0x7);
-         uc_set(bits(34, 34), (uncompacted >> 16) & 0x1);
-         uc_set(bits(33, 33), (uncompacted >> 15) & 0x1);
-         uc_set(bits(32, 32), (uncompacted >> 14) & 0x1);
-         uc_set(bits(31, 31), (uncompacted >> 13) & 0x1);
-         uc_set(bits(28, 28), (uncompacted >> 12) & 0x1);
-         uc_set(bits(27, 24), (uncompacted >>  8) & 0xf);
-         uc_set(bits(23, 23), (uncompacted >>  7) & 0x1);
-         uc_set(bits(22, 22), (uncompacted >>  6) & 0x1);
-         uc_set(bits(21, 19), (uncompacted >>  3) & 0x7);
-         uc_set(bits(18, 16), (uncompacted >>  0) & 0x7);
-      } else if constexpr (E::TYPE >= GEN_ENCODING_XE) {
-         uc_set(bits(95, 92), (uncompacted >> 32));
-         uc_set(bits(90, 88), (uncompacted >> 29) & 0x7);
-         uc_set(bits(82, 80), (uncompacted >> 26) & 0x7);
-         uc_set(bits(50, 50), (uncompacted >> 25) & 0x1);
-         uc_set(bits(48, 48), (uncompacted >> 24) & 0x1);
-         uc_set(bits(42, 40), (uncompacted >> 21) & 0x7);
-         uc_set(bits(39, 39), (uncompacted >> 20) & 0x1);
-         uc_set(bits(38, 36), (uncompacted >> 17) & 0x7);
-         uc_set(bits(34, 34), (uncompacted >> 16) & 0x1);
-         uc_set(bits(33, 33), (uncompacted >> 15) & 0x1);
-         uc_set(bits(32, 32), (uncompacted >> 14) & 0x1);
-         uc_set(bits(31, 31), (uncompacted >> 13) & 0x1);
-         uc_set(bits(28, 28), (uncompacted >> 12) & 0x1);
-         uc_set(bits(27, 24), (uncompacted >>  8) & 0xf);
-         uc_set(bits(23, 23), (uncompacted >>  7) & 0x1);
-         uc_set(bits(22, 22), (uncompacted >>  6) & 0x1);
-         uc_set(bits(21, 19), (uncompacted >>  3) & 0x7);
-         uc_set(bits(18, 16), (uncompacted >>  0) & 0x7);
+      if constexpr (E::TYPE == GEN_ENCODING_XE) {
+         if (devinfo->verx10 == 125) {
+            uc_set(E::UNCOMP_3SRC_CONTROL_125, uncompacted);
+         } else {
+            uc_set(E::UNCOMP_3SRC_CONTROL, uncompacted);
+         }
       } else {
-         uc_set(bits(34, 32), (uncompacted >> 21) & 0x7);
-         uc_set(bits(28,  8), (uncompacted >>  0) & 0x1fffff);
-
-         uc_set(bits(36, 35), (uncompacted >> 24) & 0x3);
+         uc_set(E::UNCOMP_3SRC_CONTROL, uncompacted);
       }
    }
 
@@ -2403,35 +2144,7 @@ private:
 
       auto compacted = c_get(E::C_3SRC_SOURCE_INDEX);
       auto uncompacted = table.read(compacted);
-      gen_range bits = { 127, 0 };
-
-      if constexpr (E::TYPE >= GEN_ENCODING_XE) {
-         uc_set(bits(114, 114), (uncompacted >> 20));
-         uc_set(bits(113, 112), (uncompacted >> 18) & 0x3);
-         uc_set(bits( 98,  98), (uncompacted >> 17) & 0x1);
-         uc_set(bits( 97,  96), (uncompacted >> 15) & 0x3);
-         uc_set(bits( 91,  91), (uncompacted >> 14) & 0x1);
-         uc_set(bits( 87,  86), (uncompacted >> 12) & 0x3);
-         uc_set(bits( 85,  84), (uncompacted >> 10) & 0x3);
-         uc_set(bits( 83,  83), (uncompacted >>  9) & 0x1);
-         uc_set(bits( 66,  66), (uncompacted >>  8) & 0x1);
-         uc_set(bits( 65,  64), (uncompacted >>  6) & 0x3);
-         uc_set(bits( 47,  47), (uncompacted >>  5) & 0x1);
-         uc_set(bits( 46,  46), (uncompacted >>  4) & 0x1);
-         uc_set(bits( 45,  44), (uncompacted >>  2) & 0x3);
-         uc_set(bits( 43,  43), (uncompacted >>  1) & 0x1);
-         uc_set(bits( 35,  35), (uncompacted >>  0) & 0x1);
-      } else {
-         uc_set(bits( 83,  83), (uncompacted >> 43) & 0x1);
-         uc_set(bits(114, 107), (uncompacted >> 35) & 0xff);
-         uc_set(bits( 93,  86), (uncompacted >> 27) & 0xff);
-         uc_set(bits( 72,  65), (uncompacted >> 19) & 0xff);
-         uc_set(bits( 55,  37), (uncompacted >>  0) & 0x7ffff);
-
-         uc_set(bits(126, 125), (uncompacted >> 47) & 0x3);
-         uc_set(bits(105, 104), (uncompacted >> 45) & 0x3);
-         uc_set(bits( 84,  84), (uncompacted >> 44) & 0x1);
-      }
+      uc_set(E::UNCOMP_3SRC_SOURCE, uncompacted);
    }
 
    void
@@ -2443,22 +2156,9 @@ private:
       }
 
       const compact_table_info &table = compact_tables.subreg_3src;
-
-      uint64_t compacted;
-      if constexpr (E::TYPE >= GEN_ENCODING_XE2) {
-         compacted =
-            (c_get(E::C_3SRC_SUBREG_INDEX_HI2) << 3) |
-            (c_get(E::C_3SRC_SUBREG_INDEX_LO3) << 0);
-      } else {
-         compacted = c_get(E::C_3SRC_SUBREG_INDEX);
-      }
+      uint64_t compacted = c_get(E::C_3SRC_SUBREG_INDEX);
       auto uncompacted = table.read(compacted);
-      gen_range bits = { 127, 0 };
-
-      uc_set(bits(119, 115), (uncompacted >> 15));
-      uc_set(bits(103,  99), (uncompacted >> 10) & 0x1f);
-      uc_set(bits( 71,  67), (uncompacted >>  5) & 0x1f);
-      uc_set(bits( 55,  51), (uncompacted >>  0) & 0x1f);
+      uc_set(E::UNCOMP_3SRC_SUBREG, uncompacted);
    }
 
    void

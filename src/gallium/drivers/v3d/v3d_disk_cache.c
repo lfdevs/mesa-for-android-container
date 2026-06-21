@@ -131,24 +131,24 @@ v3d_disk_cache_retrieve(struct v3d_context *v3d,
         uint32_t prog_data_size = v3d_prog_data_size(nir->info.stage);
         const void *prog_data = blob_read_bytes(&blob, prog_data_size);
         if (blob.overrun)
-                return NULL;
+                goto fail;
 
         uint32_t ulist_count = blob_read_uint32(&blob);
         uint32_t ulist_contents_size = ulist_count * sizeof(enum quniform_contents);
         const void *ulist_contents = blob_read_bytes(&blob, ulist_contents_size);
         if (blob.overrun)
-                return NULL;
+                goto fail;
 
         uint32_t ulist_data_size = ulist_count * sizeof(uint32_t);
         const void *ulist_data = blob_read_bytes(&blob, ulist_data_size);
         if (blob.overrun)
-                return NULL;
+                goto fail;
 
         uint32_t qpu_size = blob_read_uint32(&blob);
         const void *qpu_insts =
                 blob_read_bytes(&blob, qpu_size);
         if (blob.overrun)
-                return NULL;
+                goto fail;
 
         /* Assemble data */
         struct v3d_compiled_shader *shader = rzalloc(NULL, struct v3d_compiled_shader);
@@ -174,6 +174,10 @@ v3d_disk_cache_retrieve(struct v3d_context *v3d,
         free(buffer);
 
         return shader;
+
+fail:
+        free(buffer);
+        return NULL;
 }
 
 void

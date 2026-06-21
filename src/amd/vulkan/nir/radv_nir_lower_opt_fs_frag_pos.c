@@ -26,6 +26,7 @@
  */
 
 #include "nir_builder.h"
+#include "nir_range_analysis.h"
 #include "radv_nir.h"
 #include "radv_shader_info.h"
 
@@ -56,8 +57,11 @@ gather_fs_frag_pos(nir_builder *b, nir_intrinsic_instr *intr, void *data)
    case nir_intrinsic_load_sample_pos:
       assert(!nir_def_is_unused(&intr->def));
 
-      if (!state->has_frag_coord_xy_float_use && !nir_all_uses_of_float_are_integer(&intr->def, 0x3))
-         state->has_frag_coord_xy_float_use = true;
+      if (!state->has_frag_coord_xy_float_use) {
+         nir_component_mask_t float_uses = 0, integer_uses = 0;
+         nir_gather_type_uses_of_float_def(&intr->def, &float_uses, &integer_uses, NULL, true);
+         state->has_frag_coord_xy_float_use = float_uses != 0;
+      }
 
       state->has_frag_coord_xy |= intr->intrinsic == nir_intrinsic_load_frag_coord_xy;
       state->has_sample_pos |= intr->intrinsic == nir_intrinsic_load_sample_pos;

@@ -20,3 +20,4 @@ struct rusticl_lower_state {
 
 bool rusticl_lower_intrinsics(nir_shader *nir, struct rusticl_lower_state *state);
 bool rusticl_lower_inputs(nir_shader *nir);
+bool rusticl_insert_libclc_config(nir_shader *nir);

@@ -8,33 +8,51 @@ use crate::ssa_value::SSAValueAllocator;
 pub trait Builder {
     fn arch(&self) -> u8;
 
+    fn model(&self) -> &dyn Model;
+
     fn push_instr(&mut self, instr: Instr) -> &mut Instr;
 
     fn push_op(&mut self, op: impl Into<Op>) -> &mut Instr {
         self.push_instr(Instr::from(op))
+    }
+
+    fn copy_to(&mut self, dst: Dst, dst_type: DataType, src: Src) {
+        self.push_op(OpCopy { dst, dst_type, src });
+    }
+
+    fn copy_i8_to(&mut self, dst: Dst, src: Src) {
+        self.copy_to(dst, DataType::I8, src);
+    }
+
+    fn copy_i16_to(&mut self, dst: Dst, src: Src) {
+        self.copy_to(dst, DataType::I16, src);
+    }
+
+    fn copy_i32_to(&mut self, dst: Dst, src: Src) {
+        self.copy_to(dst, DataType::I32, src);
     }
 }
 
 pub trait SSABuilder: Builder {
     fn alloc_ssa(&mut self, bits: u8) -> SSAValue;
 
-    fn mov_i16(&mut self, src: Src) -> SSAValue {
-        let def = self.alloc_ssa(16);
-        self.push_op(OpMov {
-            dst: def.into(),
-            dst_type: DataType::I16,
-            src,
-        });
+    fn alloc_vec(&mut self, comps: u8) -> SSARef;
+
+    fn copy_i8(&mut self, src: Src) -> SSAValue {
+        let def = self.alloc_ssa(8);
+        self.copy_i8_to(def.into(), src);
         def
     }
 
-    fn mov_i32(&mut self, src: Src) -> SSAValue {
+    fn copy_i16(&mut self, src: Src) -> SSAValue {
+        let def = self.alloc_ssa(16);
+        self.copy_i16_to(def.into(), src);
+        def
+    }
+
+    fn copy_i32(&mut self, src: Src) -> SSAValue {
         let def = self.alloc_ssa(32);
-        self.push_op(OpMov {
-            dst: def.into(),
-            dst_type: DataType::I32,
-            src,
-        });
+        self.copy_i32_to(def.into(), src);
         def
     }
 
@@ -66,27 +84,37 @@ pub trait SSABuilder: Builder {
     }
 }
 
-pub struct InstrBuilder {
+pub struct InstrBuilder<'a> {
     arch: u8,
-    instrs: Vec<Instr>,
+    model: &'a dyn Model,
+    instrs: MappedInstrs,
 }
 
-impl InstrBuilder {
-    pub fn new(arch: u8) -> Self {
+impl<'a> InstrBuilder<'a> {
+    pub fn new(model: &'a dyn Model) -> Self {
         InstrBuilder {
-            arch,
+            arch: model.arch(),
+            model: model,
             instrs: Default::default(),
         }
     }
 
-    pub fn into_vec(self) -> Vec<Instr> {
+    pub fn into_mapped(self) -> MappedInstrs {
         self.instrs
+    }
+
+    pub fn into_vec(self) -> Vec<Instr> {
+        self.instrs.into()
     }
 }
 
-impl Builder for InstrBuilder {
+impl<'a> Builder for InstrBuilder<'a> {
     fn arch(&self) -> u8 {
         self.arch
+    }
+
+    fn model(&self) -> &'a dyn Model {
+        self.model
     }
 
     fn push_instr(&mut self, instr: Instr) -> &mut Instr {
@@ -96,19 +124,23 @@ impl Builder for InstrBuilder {
 }
 
 pub struct SSAInstrBuilder<'a> {
-    b: InstrBuilder,
+    b: InstrBuilder<'a>,
     alloc: &'a mut SSAValueAllocator,
 }
 
 impl<'a> SSAInstrBuilder<'a> {
     pub fn new(
-        arch: u8,
+        model: &'a dyn Model,
         alloc: &'a mut SSAValueAllocator,
     ) -> SSAInstrBuilder<'a> {
         SSAInstrBuilder {
-            b: InstrBuilder::new(arch),
+            b: InstrBuilder::new(model),
             alloc,
         }
+    }
+
+    pub fn into_mapped(self) -> MappedInstrs {
+        self.b.into_mapped()
     }
 
     pub fn into_vec(self) -> Vec<Instr> {
@@ -116,9 +148,13 @@ impl<'a> SSAInstrBuilder<'a> {
     }
 }
 
-impl Builder for SSAInstrBuilder<'_> {
+impl<'a> Builder for SSAInstrBuilder<'a> {
     fn arch(&self) -> u8 {
         self.b.arch()
+    }
+
+    fn model(&self) -> &'a dyn Model {
+        self.b.model
     }
 
     fn push_instr(&mut self, instr: Instr) -> &mut Instr {
@@ -129,5 +165,9 @@ impl Builder for SSAInstrBuilder<'_> {
 impl SSABuilder for SSAInstrBuilder<'_> {
     fn alloc_ssa(&mut self, bits: u8) -> SSAValue {
         self.alloc.alloc(bits)
+    }
+
+    fn alloc_vec(&mut self, comps: u8) -> SSARef {
+        self.alloc.alloc_vec(comps)
     }
 }

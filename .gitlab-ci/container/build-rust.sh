@@ -9,15 +9,17 @@ section_start rust "Building Rust toolchain"
 
 # When changing this file, you need to bump the following
 # .gitlab-ci/image-tags.yml tags:
+# ALPINE_X86_64_BUILD_TAG
 # DEBIAN_BUILD_BASE_TAG
 # DEBIAN_TEST_BASE_TAG
+# FEDORA_X86_64_BUILD_TAG
 
 MINIMUM_SUPPORTED_RUST_VERSION=$(python3 -c 'import tomllib; print(tomllib.load(open("clippy.toml", "rb"))["msrv"])')
 
 # This version number can be bumped freely, to benefit from the latest
 # diagnostics in CI `build-only` jobs, and for building external CI
 # components.
-LATEST_RUST_VERSION=1.90.0
+LATEST_RUST_VERSION=1.96.0
 
 # For rust in Mesa, we use rustup to install.  This lets us pick an arbitrary
 # version of the compiler, rather than whatever the container's Debian comes

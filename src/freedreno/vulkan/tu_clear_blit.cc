@@ -28,19 +28,145 @@
 
 static const VkOffset2D blt_no_coord = { ~0, ~0 };
 
+/* The helpers below quantize floats to match shader export behavior and avoid
+ * rounding mismatches between hardware paths (R2D blit engine, 3D pipeline,
+ * etc.).
+ *
+ * Vulkan does not guarantee that values written through different commands
+ * will match. However, "Appendix I: Invariance" encourages implementations to
+ * return the same values for the same operations with the same inputs. We would
+ * otherwise violate that because GMEM and sysmem clears use different paths,
+ * and CmdClearAttachments can use either HW clears or 3D clears.
+ */
+
 static uint32_t
 tu_pack_float32_for_unorm(float val, int bits)
 {
-   return _mesa_lroundevenf(CLAMP(val, 0.0f, 1.0f) * (float) ((1 << bits) - 1));
+   val = CLAMP(val, 0.0f, 1.0f);
+
+   uint32_t m = BITFIELD_MASK(bits < 8 ? 8 : bits);
+
+   if (val >= 1.0f)
+      return BITFIELD_MASK(bits);
+
+   float scaled = nextafterf(val * (float) m, INFINITY) + 0.5f;
+   uint32_t result = MIN2((uint32_t) floorf(scaled), m);
+
+   if (bits < 8)
+      result >>= (8 - bits);
+   return result;
 }
 
-/* Quantize a float to exact UNORMn precision to avoid F32->UNORMn rounding
- * mismatches between different HW paths (R2D blit engine, 3D pipeline, etc).
- */
 static float
-tu_quantize_float_for_unorm(float val, int bits)
+tu_quantize_float32_for_unorm(float val, int bits)
 {
    return (float) tu_pack_float32_for_unorm(val, bits) / (float) ((1 << bits) - 1);
+}
+
+static int32_t
+tu_pack_float32_for_snorm(float val, int bits)
+{
+   val = CLAMP(val, -1.0f, 1.0f);
+
+   int32_t m = BITFIELD_MASK(bits - 1);
+   float scale = nextafterf((float) m, INFINITY);
+
+   if (val >= 0.0f) {
+      double scaled = (double) val * (double) scale + 0.5;
+      return MIN2((int32_t) floor(scaled), m);
+   } else {
+      double scaled = (double) val * (double) scale - 0.5;
+      return MAX2((int32_t) ceil(scaled), -m);
+   }
+}
+
+static float
+tu_quantize_float32_for_snorm(float val, int bits)
+{
+   return (float) tu_pack_float32_for_snorm(val, bits) / (float) BITFIELD_MASK(bits - 1);
+}
+
+static bool
+tu_pack_float32_for_color(enum pipe_format format, const float src[4], uint32_t clear_value[4])
+{
+   const struct util_format_description *desc = util_format_description(format);
+
+   if (desc->layout != UTIL_FORMAT_LAYOUT_PLAIN || desc->block.bits > 64)
+      return false;
+
+   bool is_normalized = desc->is_unorm || desc->is_snorm;
+   bool is_float16 = util_format_is_float16(format);
+   unsigned bits = util_format_get_component_bits(format, UTIL_FORMAT_COLORSPACE_RGB, PIPE_SWIZZLE_X);
+
+   switch (bits) {
+   case 4:
+   case 8:
+      if (!is_normalized)
+         return false;
+      break;
+   case 16:
+      if (!is_normalized && !is_float16)
+         return false;
+      break;
+   default:
+      return false;
+   }
+
+   uint64_t packed = 0;
+   for (unsigned i = 0; i < 4; i++) {
+      if (desc->swizzle[i] > PIPE_SWIZZLE_W)
+         continue;
+
+      const struct util_format_channel_description *ch = &desc->channel[i];
+      uint32_t packed_ch = 0;
+
+      if (is_normalized && ch->type == UTIL_FORMAT_TYPE_UNSIGNED) {
+         packed_ch = tu_pack_float32_for_unorm(src[i], ch->size);
+      } else if (is_normalized && ch->type == UTIL_FORMAT_TYPE_SIGNED) {
+         packed_ch = (uint32_t) tu_pack_float32_for_snorm(src[i], ch->size) & BITFIELD_MASK(ch->size);
+      } else if (is_float16) {
+         packed_ch = _mesa_float_to_float16_rtz(src[i]);
+      } else {
+         UNREACHABLE("unsupported format");
+      }
+      packed |= (uint64_t) packed_ch << ch->shift;
+   }
+
+   clear_value[0] = (uint32_t) packed;
+   clear_value[1] = (uint32_t) (packed >> 32);
+   clear_value[2] = 0;
+   clear_value[3] = 0;
+   return true;
+}
+
+static uint32_t
+tu_pack_float32_for_unorm_depth(float val, unsigned bits)
+{
+   val = CLAMP(val, 0.0f, 1.0f);
+
+   uint32_t m = BITFIELD_MASK(bits);
+
+   if (val >= 1.0f)
+      return m;
+
+   double bias = 1.0 / (double) (m + 1ull);
+   double scaled = (double) val * (double) m + 0.5 + bias;
+   return MIN2((uint32_t) floor(scaled), m);
+}
+
+static float
+tu_quantize_float32_for_unorm_depth(float val, int bits)
+{
+   return (float) tu_pack_float32_for_unorm_depth(val, bits) / (float) BITFIELD_MASK(bits);
+}
+
+static uint32_t
+tu_pack_float32_for_d32(float val)
+{
+   if (!(val > 0.0f) || val < 0x1p-126f)
+      return fui(0.0f);
+
+   return fui(val);
 }
 
 /* r2d_ = BLIT_OP_SCALE operations */
@@ -186,17 +312,17 @@ r2d_clear_value(struct tu_cmd_buffer *cmd,
    case PIPE_FORMAT_Z24_UNORM_S8_UINT:
    case PIPE_FORMAT_Z24X8_UNORM:
       /* cleared as r8g8b8a8_unorm using special format */
-      clear_value[0] = tu_pack_float32_for_unorm(val->depthStencil.depth, 24);
+      clear_value[0] = tu_pack_float32_for_unorm_depth(val->depthStencil.depth, 24);
       clear_value[1] = clear_value[0] >> 8;
       clear_value[2] = clear_value[0] >> 16;
       clear_value[3] = val->depthStencil.stencil;
       break;
    case PIPE_FORMAT_Z16_UNORM:
-      clear_value[0] = fui(tu_quantize_float_for_unorm(val->depthStencil.depth, 16));
+      clear_value[0] = fui(tu_quantize_float32_for_unorm_depth(val->depthStencil.depth, 16));
       break;
    case PIPE_FORMAT_Z32_FLOAT:
       /* R2D_FLOAT32 */
-      clear_value[0] = fui(val->depthStencil.depth);
+      clear_value[0] = tu_pack_float32_for_d32(val->depthStencil.depth);
       break;
    case PIPE_FORMAT_S8_UINT:
       clear_value[0] = val->depthStencil.stencil;
@@ -225,15 +351,24 @@ r2d_clear_value(struct tu_cmd_buffer *cmd,
                linear = util_format_linear_to_srgb_float(val->color.float32[i]);
 
             if (ch->type == UTIL_FORMAT_TYPE_SIGNED)
-               clear_value[i] = _mesa_lroundevenf(CLAMP(linear, -1.0f, 1.0f) * 127.0f);
+               clear_value[i] = tu_pack_float32_for_snorm(linear, 8);
             else
                clear_value[i] = tu_pack_float32_for_unorm(linear, 8);
          } else if (ifmt == R2D_FLOAT16) {
-            clear_value[i] = _mesa_float_to_half(val->color.float32[i]);
+            clear_value[i] = _mesa_float_to_float16_rtz(val->color.float32[i]);
          } else {
             assert(ifmt == R2D_FLOAT32 || ifmt == R2D_INT32 ||
                    ifmt == R2D_INT16 || ifmt == R2D_INT8);
-            clear_value[i] = val->color.uint32[i];
+            if (ifmt == R2D_FLOAT32 && ch->normalized) {
+               if (ch->type == UTIL_FORMAT_TYPE_UNSIGNED)
+                  clear_value[i] = fui(tu_quantize_float32_for_unorm(val->color.float32[i], ch->size));
+               else if (ch->type == UTIL_FORMAT_TYPE_SIGNED)
+                  clear_value[i] = fui(tu_quantize_float32_for_snorm(val->color.float32[i], ch->size));
+               else
+                  clear_value[i] = val->color.uint32[i];
+            } else {
+               clear_value[i] = val->color.uint32[i];
+            }
          }
       }
       break;
@@ -1179,20 +1314,20 @@ r3d_clear_value(struct tu_cmd_buffer *cmd, struct tu_cs *cs, enum pipe_format fo
    case PIPE_FORMAT_Z24X8_UNORM:
    case PIPE_FORMAT_Z24_UNORM_S8_UINT: {
       /* cleared as r8g8b8a8_unorm using special format */
-      uint32_t tmp = tu_pack_float32_for_unorm(val->depthStencil.depth, 24);
+      uint32_t tmp = tu_pack_float32_for_unorm_depth(val->depthStencil.depth, 24);
       coords[0] = fui((tmp & 0xff) / 255.0f);
       coords[1] = fui((tmp >> 8 & 0xff) / 255.0f);
       coords[2] = fui((tmp >> 16 & 0xff) / 255.0f);
       coords[3] = fui((val->depthStencil.stencil & 0xff) / 255.0f);
    } break;
    case PIPE_FORMAT_Z16_UNORM:
-      coords[0] = fui(tu_quantize_float_for_unorm(val->depthStencil.depth, 16));
+      coords[0] = fui(tu_quantize_float32_for_unorm_depth(val->depthStencil.depth, 16));
       coords[1] = 0;
       coords[2] = 0;
       coords[3] = 0;
       break;
    case PIPE_FORMAT_Z32_FLOAT:
-      coords[0] = fui(val->depthStencil.depth);
+      coords[0] = tu_pack_float32_for_d32(val->depthStencil.depth);
       coords[1] = 0;
       coords[2] = 0;
       coords[3] = 0;
@@ -2050,14 +2185,14 @@ pack_blit_event_clear_value(const VkClearValue *val, enum pipe_format format, ui
    switch (format) {
    case PIPE_FORMAT_Z24X8_UNORM:
    case PIPE_FORMAT_Z24_UNORM_S8_UINT:
-      clear_value[0] = tu_pack_float32_for_unorm(val->depthStencil.depth, 24) |
+      clear_value[0] = tu_pack_float32_for_unorm_depth(val->depthStencil.depth, 24) |
                        val->depthStencil.stencil << 24;
       return;
    case PIPE_FORMAT_Z16_UNORM:
-      clear_value[0] = tu_pack_float32_for_unorm(val->depthStencil.depth, 16);
+      clear_value[0] = tu_pack_float32_for_unorm_depth(val->depthStencil.depth, 16);
       return;
    case PIPE_FORMAT_Z32_FLOAT:
-      clear_value[0] = fui(val->depthStencil.depth);
+      clear_value[0] = tu_pack_float32_for_d32(val->depthStencil.depth);
       return;
    case PIPE_FORMAT_S8_UINT:
       clear_value[0] = val->depthStencil.stencil;
@@ -2072,6 +2207,9 @@ pack_blit_event_clear_value(const VkClearValue *val, enum pipe_format format, ui
       for (int i = 0; i < 3; i++)
          tmp[i] = util_format_linear_to_srgb_float(tmp[i]);
    }
+
+   if (tu_pack_float32_for_color(format, tmp, clear_value))
+      return;
 
 #define PACK_F(type) util_format_##type##_pack_rgba_float \
    ( (uint8_t*) &clear_value[0], 0, tmp, 0, 1, 1)
@@ -4370,7 +4508,7 @@ tu_clear_sysmem_attachments(struct tu_cmd_buffer *cmd,
             z_clear = true;
             z_clear_val = attachments[i].clearValue.depthStencil.depth;
             if (cmd->state.pass->attachments[a].format == VK_FORMAT_D16_UNORM)
-               z_clear_val = tu_quantize_float_for_unorm(z_clear_val, 16);
+               z_clear_val = tu_quantize_float32_for_unorm_depth(z_clear_val, 16);
          }
 
          if (attachments[i].aspectMask & VK_IMAGE_ASPECT_STENCIL_BIT) {
@@ -6322,4 +6460,3 @@ tu_blit_subsampled_apron(struct tu_cmd_buffer *cmd,
    }
 }
 TU_GENX(tu_blit_subsampled_apron);
-

@@ -148,6 +148,9 @@ build_partition(jay_shader *shader, struct jay_partition_builder *b, unsigned n)
       for (unsigned b = 0; b < p->nr_blocks[file]; ++b) {
          struct jay_register_block B = p->blocks[file][b];
          unsigned len_grf = (B.len_gpr * 16) / p->units_x16[file];
+         if (B.type == JAY_BLOCK_ACCUM) {
+            continue;
+         }
 
          assert(len_grf > 0 && "no empty partitions");
          assert(B.start_grf + len_grf <= JAY_NUM_PHYS_GRF && "GRF file size");
@@ -254,6 +257,7 @@ jay_partition_grf(jay_shader *shader)
     */
    unsigned grf_8 = align(instr_req.gpr[JAY_STRIDE_8], 2) * grf_per_gpr;
    unsigned grf_2 = instr_req.gpr[JAY_STRIDE_2] * grf_per_gpr;
+   unsigned mapped_accums = grf_per_gpr == 1 ? 2 : 0;
 
    for (unsigned spilling = 0; spilling <= 1; spilling++) {
       /* There is an interdependence between partition choice and spilling,
@@ -296,7 +300,7 @@ jay_partition_grf(jay_shader *shader)
       nonuniform_grfs = JAY_NUM_PHYS_GRF - uniform_grfs;
 
       /* Set the targets for the virtual register file accordingly */
-      shader->num_regs[GPR] = nonuniform_grfs / grf_per_gpr;
+      shader->num_regs[GPR] = (nonuniform_grfs / grf_per_gpr) + mapped_accums;
       shader->num_regs[UGPR] = uniform_grfs * ugpr_per_grf;
 
       /* jay_gpr_limit depends on shader->num_regs[GPR]. If we're under the
@@ -335,6 +339,9 @@ jay_partition_grf(jay_shader *shader)
       /* EOT */
       { UGPR, 0, eot_u, JAY_BLOCK_EOT },
       { GPR, JAY_STRIDE_4, eot_4, JAY_BLOCK_EOT },
+
+      /* Accumulator block */
+      { GPR, JAY_STRIDE_4, mapped_accums * grf_per_gpr, JAY_BLOCK_ACCUM },
    };
 
    build_partition(shader, blocks, ARRAY_SIZE(blocks));
@@ -368,7 +375,8 @@ jay_print_partition(struct jay_partition *p)
             printf("  %u-bit", jay_stride_to_bits(B.stride));
          }
 
-         const char *types[JAY_BLOCK_TYPES] = { "", " EOT", " Spill" };
+         const char *types[JAY_BLOCK_TYPES] = { "", " EOT", " Spill",
+                                                " Accumulator" };
          printf(ANSI_ITALIC "%s" ANSI_END "\n", types[B.type]);
       }
    }

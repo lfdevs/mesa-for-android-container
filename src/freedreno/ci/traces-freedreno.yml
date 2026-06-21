@@ -297,7 +297,7 @@ traces:
     freedreno-a618:
       checksum: b0ac8fb4b2b2268cfb87944730125886
     zink-a618:
-      checksum: bd713b79eaa2a7ebbf4ebebab3577e40
+      checksum: 47c816354d1ea4dcb64827394abf089e
 
   humus/DynamicBranching3-v2.trace:
     freedreno-a306:

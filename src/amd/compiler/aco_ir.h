@@ -66,12 +66,12 @@ enum memory_semantics : uint8_t {
    semantic_none = 0x0,
    /* for loads: don't move any access after this load to before this load (even other loads)
     * for barriers: don't move any access after the barrier to before any
-    * atomic_loads/control_barriers/p_pops_gfx9_add_exiting_wave_id or
+    * atomic_loads/barrier_wait/p_pops_gfx9_add_exiting_wave_id or
     * certain s_wait_event before the barrier */
    semantic_acquire = 0x1,
    /* for stores: don't move any access before this store to after this store
     * for barriers: don't move any access before the barrier to after any
-    * atomic_stores/control_barriers/p_pops_gfx9_ordered_section_done or
+    * atomic_stores/barrier_signal/p_pops_gfx9_ordered_section_done or
     * certain sendmsg/exports after the barrier */
    semantic_release = 0x2,
 
@@ -2028,7 +2028,8 @@ bool is_wait_export_ready(amd_gfx_level gfx_level, const Instruction* instr);
 class Program;
 
 uint16_t is_atomic_or_control_instr(Program* program, const Instruction* instr,
-                                    memory_sync_info sync, unsigned semantic);
+                                    memory_sync_info sync, unsigned semantic,
+                                    sync_scope ignore_scope = scope_invocation);
 
 memory_sync_info get_sync_info(const Instruction* instr);
 
@@ -2303,6 +2304,7 @@ struct DeviceInfo {
    bool sram_ecc_enabled = false;
    bool has_point_sample_accel = false;
    bool has_gfx6_mrt_export_bug = false;
+   bool has_desc_resource_level = false;
 
    int32_t scratch_global_offset_min;
    int32_t scratch_global_offset_max;

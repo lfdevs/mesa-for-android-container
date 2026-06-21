@@ -7,7 +7,7 @@
 
 #include <cstring>
 #include <iostream>
-#include <perfetto.h>
+#include "util/perf/u_perfetto.h"
 
 #include "common/freedreno_dev_info.h"
 #include "drm/freedreno_drmif.h"

@@ -48,6 +48,17 @@ opt_shrink_vectors_image_store(nir_builder *b, nir_intrinsic_instr *instr)
    if (components >= instr->num_components)
       return false;
 
+   if (components == 1) {
+      /* Some platforms split int64 writes into an ivec2 writes. Since the
+       * number of bits is the expected amount, don't trim any components.
+       */
+      const unsigned bits_written = instr->num_components *
+                                    instr->src[3].ssa->bit_size;
+
+      if (util_format_get_blocksizebits(format) == bits_written)
+         return false;
+   }
+
    nir_def *data = nir_trim_vector(b, instr->src[3].ssa, components);
    nir_src_rewrite(&instr->src[3], data);
    instr->num_components = components;

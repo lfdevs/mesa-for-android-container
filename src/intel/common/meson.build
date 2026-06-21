@@ -42,7 +42,9 @@ files_libintel_common = files(
   'intel_uuid.h',
   'intel_measure.c',
   'intel_measure.h',
-  'intel_pixel_hash.h'
+  'intel_pixel_hash.h',
+  'intel_pagefault.c',
+  'intel_pagefault.h',
 )
 
 libintel_common_links = [libisl]

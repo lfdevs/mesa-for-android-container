@@ -1920,6 +1920,14 @@ lp_build_round(struct lp_build_context *bld,
       LLVMTypeRef int_vec_type = bld->int_vec_type;
       LLVMTypeRef vec_type = bld->vec_type;
 
+      /* On altivec/VSX, llvm.nearbyint lowers to vrfin/xvrspic (1 instruction,
+       * round-to-nearest-even) for any vector width. */
+      if (util_get_cpu_caps()->has_altivec) {
+         char intrinsic[64];
+         lp_format_intrinsic(intrinsic, sizeof(intrinsic), "llvm.nearbyint", bld->vec_type);
+         return lp_build_intrinsic_unary(builder, intrinsic, bld->vec_type, a);
+      }
+
       inttype = type;
       inttype.floating = 0;
       lp_build_context_init(&intbld, bld->gallivm, inttype);

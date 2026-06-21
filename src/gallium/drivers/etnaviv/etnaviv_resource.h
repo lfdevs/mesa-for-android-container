@@ -84,6 +84,15 @@ struct etna_resource_level {
    uint32_t seqno;
 };
 
+/* A 128-bit color level is emulated as two stacked G32R32F planes, the second
+ * (BA) plane starts halfway into the level.
+ */
+static inline unsigned
+etna_resource_level_second_plane_offset(const struct etna_resource_level *lvl)
+{
+   return (lvl->size * lvl->depth) / 2;
+}
+
 /* returns TRUE if a is newer than b */
 static inline bool
 etna_resource_level_newer(struct etna_resource_level *a,

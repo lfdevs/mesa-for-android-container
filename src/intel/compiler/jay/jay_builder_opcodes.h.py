@@ -15,8 +15,9 @@ if TYPE_CHECKING:
 
 
 def infer_type(op: 'Opcode') -> bool:
+    no_infer_ops = ['dpas', 'slice_repack']
     return op.has_dest and (set(op.types) <= set(["u1", "u32", "u64"]) or
-                            op.name == 'mov') and op.name != 'dpas'
+                            op.name == 'mov') and op.name not in no_infer_ops
 
 
 def signature(op: 'Opcode', with_dest: bool = True, with_types: bool = False,
@@ -146,7 +147,7 @@ def main() -> int:
                 opcodes=ops,
                 signature=signature,
                 infer_type=infer_type,
-                no_typed_wrappers={'dpas'}))
+                no_typed_wrappers={'dpas', 'slice_repack'}))
     except Exception:
         print(exceptions.text_error_template().render())
         return 1

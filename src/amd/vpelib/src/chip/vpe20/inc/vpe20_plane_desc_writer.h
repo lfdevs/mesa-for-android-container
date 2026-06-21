@@ -99,7 +99,7 @@ void vpe20_plane_desc_writer_add_source(
 void vpe20_plane_desc_writer_add_destination(
     struct plane_desc_writer *writer, void *p_destination, bool is_plane0);
 
-void vpe20_plane_desc_writer_add_meta(struct plane_desc_writer *writer, void *p_source);
+void vpe20_plane_desc_writer_add_src_internal_dcc(struct plane_desc_writer *writer, void *p_source);
 
 /** fill the value to the embedded buffer for histogram collection. */
 void vpe20_plane_desc_writer_add_hist_destination(struct plane_desc_writer *writer,

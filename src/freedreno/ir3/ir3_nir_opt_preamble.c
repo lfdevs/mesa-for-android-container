@@ -807,7 +807,31 @@ ir3_nir_opt_prefetch_descriptors(nir_shader *nir, struct ir3_shader_variant *v)
             preamble = nir_shader_get_preamble(nir);
          }
 
-         b = nir_builder_at(nir_after_impl(preamble));
+         /* When rematerializing defs in the preamble, we make sure to insert
+          * them in a block dominated by all their sources. When inserting a def
+          * that doesn't have any sources we have to make sure to insert them as
+          * early as possible. This important for sequences like this:
+          *
+          * 32      %34 = load_const (0x00000007 = 0.000000)
+          * ...
+          * if ... {
+          *     32     %184 = @load_preamble (base=8)
+          *     32     %185 = @bindless_resource_ir3 (%184) (desc_set=0)
+          *     32     %186 = @bindless_resource_ir3 (%34 (0x7)) (desc_set=1)
+          *     32x4   %187 = (float32)tex %186 (texture_handle), %185 (sampler_handle), ...
+          *     ...
+          *  }
+          *
+          * %185 has to be rematerialized in control flow since its source is
+          * defined there. %186 does not as its source is defined outside
+          * control flow. We used to insert %186 as late as possible
+          * (nir_after_impl(preamble)) but this causes issues as we cannot find
+          * a valid block (i.e., a block that is dominated by both) to insert
+          * the descriptor prefetch for (%185, %186). Therefore, we set the
+          * default block to insert rematerialized defs as the preamble's start
+          * block.
+          */
+         b = nir_builder_at(nir_before_impl(preamble));
 
          /* Materialize descriptors for the prefetch. Note that we deduplicate
           * descriptors so that we don't blow our budget when repeatedly loading
@@ -964,6 +988,7 @@ ir3_nir_lower_preamble(nir_shader *nir, struct ir3_shader_variant *v)
     */
 
    /* @decl_regs need to stay in the first block. */
+   b = &builder_main;
    b->cursor = nir_after_reg_decls(main);
 
    nir_if *outer_if = nir_push_if(b, nir_preamble_start_ir3(b, 1));

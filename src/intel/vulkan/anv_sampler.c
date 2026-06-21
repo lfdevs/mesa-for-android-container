@@ -123,7 +123,7 @@ VkResult anv_CreateSampler(
     * sampler messages on them.
     */
    sampler->bindless_state =
-      anv_state_pool_alloc(&device->dynamic_state_pool,
+      anv_state_pool_alloc(anv_device_get_dynamic_state_pool(device),
                            sampler->state.n_planes * 32, 32);
    if (sampler->bindless_state.map) {
       memcpy(sampler->bindless_state.map, sampler->state.state,
@@ -147,7 +147,7 @@ void anv_DestroySampler(
       return;
 
    if (sampler->bindless_state.map) {
-      anv_state_pool_free(&device->dynamic_state_pool,
+      anv_state_pool_free(anv_device_get_dynamic_state_pool(device),
                           sampler->bindless_state);
    }
 

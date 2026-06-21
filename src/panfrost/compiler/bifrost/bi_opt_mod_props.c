@@ -479,9 +479,20 @@ bi_lower_opt_instruction_helper(bi_builder *b, bi_instr *I)
       repl->clamp = I->clamp;
       return true;
 
-   case BI_OPCODE_DISCARD_B32:
-      bi_discard_f32(b, I->src[0], bi_zero(), BI_CMPF_NE);
+   case BI_OPCODE_DISCARD_B32: {
+      bi_index src1 = bi_zero();
+      /* Bifrost can only encode this if either swizzles are NONE or if both are
+       * h0|h1
+       */
+      if (I->src[0].swizzle != BI_SWIZZLE_NONE) {
+         assert(I->src[0].swizzle == BI_SWIZZLE_H0 ||
+                I->src[0].swizzle == BI_SWIZZLE_H1);
+         src1 = bi_half(src1, false);
+      }
+
+      bi_discard_f32(b, I->src[0], src1, BI_CMPF_NE);
       return true;
+   }
 
    default:
       return false;

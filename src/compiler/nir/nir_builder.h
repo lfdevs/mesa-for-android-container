@@ -62,9 +62,9 @@ nir_builder_create(nir_function_impl *impl)
 static inline nir_builder
 nir_builder_at(nir_cursor cursor)
 {
-   nir_cf_node *current_block = &nir_cursor_current_block(cursor)->cf_node;
+   nir_block *current_block = nir_cursor_current_block(cursor);
 
-   nir_builder b = nir_builder_create(nir_cf_node_get_function(current_block));
+   nir_builder b = nir_builder_create(current_block->impl);
    b.cursor = cursor;
    return b;
 }

@@ -1897,6 +1897,37 @@ static enum pco_pck_fmt pco_pck_format_from_pipe_format(enum pipe_format fmt)
    UNREACHABLE("Unsupported format.");
 }
 
+static pco_instr *trans_subgroup_first_invocation(trans_ctx *tctx, pco_ref dest)
+{
+   /* N.B. link register can only hold 31 bits, but that's plenty for
+    * first_invocation.
+    */
+
+   /* Backup/restore is disabled as nothing else is using the link register. */
+   /* Backup the link register's contents. */
+   /* pco_ref link_backup = pco_ref_new_ssa32(tctx->func); */
+   /* pco_savl(&tctx->b, link_backup); */
+
+   /* With setl only the first valid instance within a slot will write its
+    * instance number to the link register.
+    */
+   pco_ref inst_num = pco_ref_new_ssa32(tctx->func);
+   pco_mov(&tctx->b,
+           inst_num,
+           pco_ref_hwreg(PCO_SR_INST_NUM, PCO_REG_CLASS_SPEC));
+
+   pco_setl(&tctx->b, inst_num);
+
+   /* Retrieve the instance number stored in the link register. */
+   pco_ref inst_num_read = pco_ref_new_ssa32(tctx->func);
+   pco_savl(&tctx->b, inst_num_read);
+
+   /* Restore the link register's previous contents. */
+   /* pco_setl(&tctx->b, link_backup); */
+
+   return pco_mov(&tctx->b, dest, inst_num_read);
+}
+
 /**
  * \brief Translates a NIR intrinsic instruction into PCO.
  *
@@ -2501,6 +2532,24 @@ static pco_instr *trans_intr(trans_ctx *tctx, nir_intrinsic_instr *intr)
                         .scale = scale);
       break;
    }
+
+   case nir_intrinsic_as_uniform:
+      instr = pco_mov(&tctx->b, dest, src[0]);
+      break;
+
+   case nir_intrinsic_first_invocation:
+      instr = trans_subgroup_first_invocation(tctx, dest);
+      break;
+
+   case nir_intrinsic_vote_any:
+   case nir_intrinsic_vote_all:
+      instr = pco_vote(&tctx->b,
+                       dest,
+                       src[0],
+                       .vote_op = intr->intrinsic == nir_intrinsic_vote_all
+                                     ? PCO_VOTE_OP_ALL
+                                     : PCO_VOTE_OP_ANY);
+      break;
 
    default:
       printf("Unsupported intrinsic: \"");

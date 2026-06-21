@@ -89,8 +89,7 @@ compare_is_not_vectorizable(nir_intrinsic_instr *a, nir_intrinsic_instr *b)
          return a->def.bit_size > b->def.bit_size ? 1 : -1;
    }
 
-   nir_shader *shader =
-      nir_cf_node_get_function(&a->instr.block->cf_node)->function->shader;
+   nir_shader *shader = a->instr.block->impl->function->shader;
 
    /* Compare the types. */
    if (!(shader->options->io_options & nir_io_vectorizer_ignores_types)) {

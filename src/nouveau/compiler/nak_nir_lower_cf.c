@@ -91,8 +91,8 @@ pop_scope(nir_builder *b, nir_def *esc_reg, struct scope scope)
        * including a jump to the parent's merge block which has multiple
        * predecessors.
        */
-      nir_block *esc_block = nir_block_create(b->shader);
-      nir_block *next_block = nir_block_create(b->shader);
+      nir_block *esc_block = nir_block_create(b->impl);
+      nir_block *next_block = nir_block_create(b->impl);
       nir_goto_if(b, esc_block, esc, next_block);
       push_block(b, esc_block, false);
       nir_goto(b, parent_merge);
@@ -296,9 +296,9 @@ lower_cf_list(nir_builder *b, nir_def *esc_reg, struct scope *parent_scope,
          bool divergent = nir_src_is_divergent(&nif->condition);
          nir_instr_clear_src(NULL, &nif->condition);
 
-         nir_block *then_block = nir_block_create(b->shader);
-         nir_block *else_block = nir_block_create(b->shader);
-         nir_block *merge_block = nir_block_create(b->shader);
+         nir_block *then_block = nir_block_create(b->impl);
+         nir_block *else_block = nir_block_create(b->impl);
+         nir_block *merge_block = nir_block_create(b->impl);
 
          const bool needs_sync = divergent &&
             block_is_merge(nir_cf_node_as_block(nir_cf_node_next(node))) &&
@@ -327,9 +327,9 @@ lower_cf_list(nir_builder *b, nir_def *esc_reg, struct scope *parent_scope,
       case nir_cf_node_loop: {
          nir_loop *loop = nir_cf_node_as_loop(node);
 
-         nir_block *head_block = nir_block_create(b->shader);
-         nir_block *break_block = nir_block_create(b->shader);
-         nir_block *cont_block = nir_block_create(b->shader);
+         nir_block *head_block = nir_block_create(b->impl);
+         nir_block *break_block = nir_block_create(b->impl);
+         nir_block *cont_block = nir_block_create(b->impl);
 
          /* TODO: We can potentially avoid the break sync for loops when the
           * parent scope syncs for us.  However, we still need to handle the

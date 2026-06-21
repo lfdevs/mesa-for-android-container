@@ -26,9 +26,137 @@
 
 #include "intel_pps_perf.h"
 #include "intel_pps_priv.h"
+#include "util/log.h"
 
 namespace pps
 {
+
+/* Shorthand bits matching pps::Perfettogrp values in pps_counter.h.       */
+#define UNCL  BITFIELD_BIT(UNCLASSIFIED)
+#define SYS   BITFIELD_BIT(SYSTEM)
+#define VTX   BITFIELD_BIT(VERTICES)
+#define FRG   BITFIELD_BIT(FRAGMENTS)
+#define PRM   BITFIELD_BIT(PRIMITIVES)
+#define MEM   BITFIELD_BIT(MEMORY)
+#define CMP   BITFIELD_BIT(COMPUTE)
+#define RT    BITFIELD_BIT(RAYTRACING)
+
+/* Category(mdapi_group string) classification table: mdapi_group string
+ * for perf counter observed in oa-*.xml mapped to a bitmask of
+ * pps::Perfettogrp values.
+ * To extend, add a new row for unknown strings.
+ */
+static const std::unordered_map<std::string_view, uint32_t>
+categoryToPerfettogrpMask = {
+   /* 3D Pipe ---------------------------------------------------------- */
+   { "3D Pipe/Clipper",                       PRM       },
+   { "3D Pipe/Domain Shader",                 VTX       },
+   { "3D Pipe/Fragment Shader",               FRG       },
+   { "3D Pipe/Geometry Shader",               VTX | PRM },
+   { "3D Pipe/Hull Shader",                   VTX       },
+   { "3D Pipe/Input Assembler",               VTX       },
+   { "3D Pipe/Output Merger",                 FRG | MEM },
+   { "3D Pipe/Rasterizer",                    PRM       },
+   { "3D Pipe/Rasterizer/Barycentric Calc",   PRM | FRG },
+   { "3D Pipe/Rasterizer/Early Depth Test",   PRM | FRG },
+   { "3D Pipe/Rasterizer/Hi-Depth Test",      PRM | FRG },
+   { "3D Pipe/Rasterizer/Strip-Fans",         PRM       },
+   { "3D Pipe/Stream Output",                 PRM       },
+   { "3D Pipe/Vertex Shader",                 VTX       },
+
+   /* Misc fixed function --------------------------------------------- */
+   { "AMFS",                                  FRG       },
+   { "Color Pipe",                            FRG | MEM },
+   { "ColorPipe",                             FRG | MEM },
+   { "Depth Pipe",                            FRG | MEM },
+   { "DepthPipe",                             FRG | MEM },
+   { "Copy Engine",                           MEM       },
+   { "Geometry",                              PRM | VTX },
+   { "Rasterizer",                            PRM       },
+   { "Front End",                             SYS       },
+   { "FrontEnd",                              SYS       },
+   { "Media",                                 SYS       },
+   { "VME Pipe",                              SYS       },
+   { "URB",                                   MEM       },
+
+   /* GPU ------------------------------------------------------------ */
+   { "GPU",                                   SYS       },
+   { "GPU/3D Pipe",                           SYS       },
+   { "GPU/3D Pipe/Strip-Fans",                PRM       },
+   { "GPU/Data Port",                         MEM       },
+   { "GPU/Rasterizer",                        PRM       },
+   { "GPU/Rasterizer/Early Depth Test",       PRM | FRG },
+   { "GPU/Sampler",                           MEM       },
+   { "GPU/Stencil Cache",                     FRG | MEM },
+   { "GPU/Thread Dispatcher",                 CMP       },
+
+   /* GTI (GT Interface, memory subsystem boundary) ------------------- */
+   { "GTI",                                   MEM       },
+   { "GTI/3D Pipe",                           SYS       },
+   { "GTI/3D Pipe/Command Streamer",          SYS       },
+   { "GTI/3D Pipe/Resource Streamer",         SYS       },
+   { "GTI/3D Pipe/Stream Output",             PRM | MEM },
+   { "GTI/3D Pipe/Vertex Fetch",              VTX | MEM },
+   { "GTI/Color Cache",                       FRG | MEM },
+   { "GTI/Depth Cache",                       FRG | MEM },
+   { "GTI/L3",                                MEM       },
+
+   /* EU Array --------------------------------------------------------- */
+   { "EU Array",                              CMP             },
+   { "EU Array/Barrier",                      CMP             },
+   { "EU Array/Pipes",                        CMP             },
+   { "EU Array/Pipes/Instructions",           CMP             },
+   { "EU Array/Compute Shader",               CMP             },
+   { "EU Array/Control Shader",               VTX | CMP       },
+   { "EU Array/Domain Shader",                VTX | CMP       },
+   { "EU Array/Evaluation Shader",            VTX | CMP       },
+   { "EU Array/Hull Shader",                  VTX | CMP       },
+   { "EU Array/Vertex Shader",                VTX | CMP       },
+   { "EU Array/Geometry Shader",              VTX | PRM | CMP },
+   { "EU Array/Fragment Shader",              FRG | CMP       },
+   { "EU Array/Pixel Shader",                 FRG | CMP       },
+
+   /* Memory hierarchy ------------------------------------------------ */
+   { "Dataport",                              MEM       },
+   { "Device Cache",                          MEM       },
+   { "L1 Cache",                              MEM       },
+   { "L1Cache",                               MEM       },
+   { "L3",                                    MEM       },
+   { "L3/Data Port",                          MEM       },
+   { "L3/Data Port/Atomics",                  MEM       },
+   { "L3/Data Port/SLM",                      MEM | CMP },
+   { "L3/IC",                                 MEM       },
+   { "L3/Sampler",                            MEM       },
+   { "L3/TAG",                                MEM       },
+   { "L3Cache",                               MEM       },
+   { "LLC",                                   MEM       },
+   { "Memory",                                MEM       },
+   { "Sampler",                               MEM       },
+   { "Sampler/Sampler Cache",                 MEM       },
+   { "Sampler/Sampler Input",                 MEM       },
+
+   /* Compute / dispatch --------------------------------------------- */
+   { "Thread Dispatcher",                     CMP       },
+   { "ThreadDispatcher",                      CMP       },
+   { "Vector Engine",                         CMP       },
+   { "VectorEngine",                          CMP       },
+
+   /* Ray tracing ---------------------------------------------------- */
+   { "Ray Tracing",                           RESERVED  },
+   { "RayTracing",                            RESERVED  },
+
+   /* Diagnostic ----------------------------------------------------- */
+   { "Test",                                  UNCL      },
+};
+
+#undef UNCL
+#undef SYS
+#undef VTX
+#undef FRG
+#undef PRM
+#undef MEM
+#undef CMP
+#undef RT
 
 // The HW sampling period is programmed using period_exponent following this
 // formula:
@@ -121,10 +249,10 @@ bool IntelDriver::init_perfcnt()
    PPS_LOG("Using metric set '%s': %s",
            selected_query->symbol_name, selected_query->name);
 
-   // Create group
-   CounterGroup group = {};
-   group.id = groups.size();
-   group.name = selected_query->symbol_name;
+   // Create Perfetto counter block
+   CounterGroup block = {};
+   block.id = groups.size();
+   block.name = selected_query->symbol_name;
 
    for (int i = 0; i < selected_query->n_counters; ++i) {
       intel_perf_query_counter &counter = selected_query->counters[i];
@@ -134,7 +262,8 @@ bool IntelDriver::init_perfcnt()
       counter_desc.id = counters.size();
       counter_desc.name = counter.symbol_name;
       counter_desc.description = counter.desc;
-      counter_desc.group = group.id;
+      counter_desc.group = block.id;
+      counter_desc.group_mask = classify_perfetto_counter_grp(counter.category);
       counter_desc.getter = [counter, this](
          const Counter &c, const Driver &dri) -> Counter::Value {
          switch (counter.data_type) {
@@ -157,14 +286,14 @@ bool IntelDriver::init_perfcnt()
       };
 
       // Add counter id to the group
-      group.counters.emplace_back(counter_desc.id);
+      block.counters.emplace_back(counter_desc.id);
 
       // Store counter
       counters.emplace_back(std::move(counter_desc));
    }
 
    // Store group
-   groups.emplace_back(std::move(group));
+   groups.emplace_back(std::move(block));
 
    assert(counters.size() && "Failed to query counters");
 
@@ -382,6 +511,28 @@ bool IntelDriver::cpu_gpu_timestamp(uint64_t &cpu_timestamp,
    gpu_timestamp =
       intel_device_info_timebase_scale(&perf->devinfo, gpu_timestamp);
    return true;
+}
+
+uint32_t IntelDriver::classify_perfetto_counter_grp(const char *category)
+{
+   uint32_t grp_mask = BITFIELD_BIT(UNCLASSIFIED);
+   if (!category)
+      return grp_mask;
+
+   std::string_view key(category);
+
+   auto it = categoryToPerfettogrpMask.find(key);
+   if (it != categoryToPerfettogrpMask.end()) {
+      return it->second;
+   }
+
+   static std::unordered_map<std::string_view, bool> warn_new_category_once;
+   if (warn_new_category_once.emplace(key, true).second) {
+         mesa_logw("Unknown category '%s' for counter, classifying as UNCLASSIFIED", category);
+         PPS_LOG_IMPORTANT("Unknown category '%s' for counter, classifying as UNCLASSIFIED", category);
+   }
+
+   return grp_mask;
 }
 
 } // namespace pps

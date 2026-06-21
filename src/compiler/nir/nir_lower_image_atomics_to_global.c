@@ -46,6 +46,7 @@ lower(nir_builder *b, nir_intrinsic_instr *intr, void *data)
    b->cursor = nir_before_instr(&intr->instr);
    nir_atomic_op atomic_op = nir_intrinsic_atomic_op(intr);
    enum pipe_format format = nir_intrinsic_format(intr);
+   unsigned num_comps = intr->def.num_components;
    unsigned bit_size = intr->def.bit_size;
 
    if (state->filter && !state->filter(intr, state->data))
@@ -65,7 +66,7 @@ lower(nir_builder *b, nir_intrinsic_instr *intr, void *data)
       else
          format_type = UTIL_FORMAT_TYPE_UNSIGNED;
 
-      format = util_format_get_array(format_type, bit_size, 1, false,
+      format = util_format_get_array(format_type, bit_size, num_comps, false,
                                      type_ != nir_type_float);
    }
 

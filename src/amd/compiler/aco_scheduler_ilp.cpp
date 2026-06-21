@@ -168,7 +168,18 @@ get_vopd_info(const SchedILPContext& ctx, const Instruction* instr)
       break;
    case aco_opcode::v_max_f32: info.op = aco_opcode::v_dual_max_f32; break;
    case aco_opcode::v_min_f32: info.op = aco_opcode::v_dual_min_f32; break;
-   case aco_opcode::v_dot2c_f32_f16: info.op = aco_opcode::v_dual_dot2acc_f32_f16; break;
+   case aco_opcode::v_dot2c_f32_f16:
+      info.op = aco_opcode::v_dual_dot2acc_f32_f16;
+      if (instr->operands[0].isConstant() && !instr->operands[0].isLiteral()) {
+         /* VOP2 encoded, opsel_hi[0] is implicitly true for inline constants,
+          * for VOPD it is false.
+          * To still read 0 for the high half, use a literal instead.
+          */
+         info.literal = instr->operands[0].constantValue();
+         info.has_literal = true;
+         info.operand_swizzle |= 0b11;
+      }
+      break;
    case aco_opcode::v_add_u32:
       info.op = aco_opcode::v_dual_add_nc_u32;
       info.can_be_opx = false;

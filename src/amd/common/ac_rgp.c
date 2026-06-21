@@ -573,7 +573,8 @@ struct sqtt_file_chunk_api_info {
 static_assert(sizeof(struct sqtt_file_chunk_api_info) == 560,
               "sqtt_file_chunk_api_info doesn't match RGP spec");
 
-static void ac_sqtt_fill_api_info(struct sqtt_file_chunk_api_info *chunk)
+static void ac_sqtt_fill_api_info(struct sqtt_file_chunk_api_info *chunk,
+                                  uint32_t instruction_timing_se_mask)
 {
    chunk->header.chunk_id.type = SQTT_FILE_CHUNK_TYPE_API_INFO;
    chunk->header.chunk_id.index = 0;
@@ -585,7 +586,12 @@ static void ac_sqtt_fill_api_info(struct sqtt_file_chunk_api_info *chunk)
    chunk->major_version = 0;
    chunk->minor_version = 0;
    chunk->profiling_mode = SQTT_PROFILING_MODE_PRESENT;
-   chunk->instruction_trace_mode = SQTT_INSTRUCTION_TRACE_DISABLED;
+   if (instruction_timing_se_mask) {
+      chunk->instruction_trace_mode = SQTT_INSTRUCTION_TRACE_FULL_FRAME;
+      chunk->instruction_trace_data.shader_engine_filter.mask = instruction_timing_se_mask;
+   } else {
+      chunk->instruction_trace_mode = SQTT_INSTRUCTION_TRACE_DISABLED;
+   }
 }
 
 struct sqtt_code_object_database_record {
@@ -1232,7 +1238,7 @@ ac_sqtt_dump_data(const struct radeon_info *rad_info, struct ac_sqtt_trace *sqtt
    fwrite(&asic_info, sizeof(asic_info), 1, output);
 
    /* SQTT api chunk. */
-   ac_sqtt_fill_api_info(&api_info);
+   ac_sqtt_fill_api_info(&api_info, sqtt_trace->instruction_timing_se_mask);
    file_offset += sizeof(api_info);
    fwrite(&api_info, sizeof(api_info), 1, output);
 

@@ -32,7 +32,12 @@ New features
 Bug fixes
 ---------
 
-- None
+- Broken rendering in Isonzo (Unity) since vulkan-radeon 26.1.0
+- [VAAPI] VRAM leak on Polaris, 26.1 regression
+- iris: unhandled -EAGAIN in iris_batch_flush (26.1 regression)
+- llvm23 commit d50631f breaks build of ac_llvm_helper.cpp
+- nvk: various float_controls cts test fails on Turing only
+- tu: assertions in ir3_ra.c: Assertion \`physreg != (physreg_t)~0' failed
 
 
 Changes

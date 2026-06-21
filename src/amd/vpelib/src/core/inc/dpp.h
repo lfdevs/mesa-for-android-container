@@ -74,13 +74,7 @@ enum input_csc_select {
 
 struct dpp_funcs {
 
-    bool (*get_optimal_number_of_taps)(
-        struct vpe_rect *src_rect, struct vpe_rect *dst_rect, struct vpe_scaling_taps *taps);
-
-    void (*dscl_calc_lb_num_partitions)(const struct scaler_data *scl_data,
-        enum lb_memory_config lb_config, uint32_t *num_part_y, uint32_t *num_part_c);
-
-    /** non segment specific */
+    /** non segment specific - CNV */
     void (*program_cnv)(
         struct dpp *dpp, enum vpe_surface_pixel_format format, enum vpe_expansion_mode mode);
 
@@ -93,6 +87,9 @@ struct dpp_funcs {
 
     void (*program_alpha_keyer)(struct dpp *dpp, const struct cnv_keyer_params *keyer_params);
 
+    void (*program_crc)(struct dpp *opp, bool enable);
+
+    /** CM */
     void (*program_input_transfer_func)(struct dpp *dpp, struct transfer_func *input_tf);
 
     void (*program_gamut_remap)(struct dpp *dpp, struct colorspace_transform *gamut_remap);
@@ -104,6 +101,12 @@ struct dpp_funcs {
     void (*set_hdr_multiplier)(struct dpp *dpp, uint32_t multiplier);
 
     /** scaler */
+    bool (*get_optimal_number_of_taps)(
+        struct vpe_rect *src_rect, struct vpe_rect *dst_rect, struct vpe_scaling_taps *taps);
+
+    void (*dscl_calc_lb_num_partitions)(const struct scaler_data *scl_data,
+        enum lb_memory_config lb_config, uint32_t *num_part_y, uint32_t *num_part_c);
+
     void (*set_segment_scaler)(struct dpp *dpp, const struct scaler_data *scl_data);
 
     void (*dscl_set_scaler_position)(struct dpp *dpp, const struct scaler_data *scl_data);
@@ -123,7 +126,6 @@ struct dpp_funcs {
 
     void (*program_histogram)(struct dpp* dpp, struct vpe_histogram_param* hist_param, enum color_space cs);
 
-    void (*program_crc)(struct dpp *opp, bool enable);
 };
 
 struct dpp {

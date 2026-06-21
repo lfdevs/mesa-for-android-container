@@ -639,6 +639,9 @@ def decode_unsupported_api(typeInfo, api, cgen):
     cgen.stmt("__builtin_trap()")
 
 custom_decodes = {
+    "vkGetInstanceProcAddr" : emit_global_state_wrapped_decoding,
+    "vkGetDeviceProcAddr" : emit_global_state_wrapped_decoding,
+
     "vkEnumerateInstanceVersion" : emit_global_state_wrapped_decoding,
     "vkCreateInstance" : emit_global_state_wrapped_decoding,
     "vkDestroyInstance" : emit_global_state_wrapped_decoding,

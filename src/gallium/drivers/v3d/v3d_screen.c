@@ -329,7 +329,7 @@ v3d_init_screen_caps(struct v3d_screen *screen)
         caps->max_texture_3d_levels = V3D_MAX_MIP_LEVELS;
         caps->max_texture_array_layers = V3D_MAX_ARRAY_LAYERS;
 
-        caps->max_render_targets = V3D_MAX_RENDER_TARGETS(screen->devinfo.ver);
+        caps->max_render_targets = screen->devinfo.max_render_targets;
         caps->fbfetch = caps->max_render_targets;
         caps->fbfetch_coherent = true;
         caps->max_dual_source_render_targets = 1;

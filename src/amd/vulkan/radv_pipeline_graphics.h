@@ -153,7 +153,7 @@ struct radv_graphics_pipeline {
    bool uses_vrs_attachment;
 
    /* Whether the pipeline uses VRS coarse shading internally. */
-   bool uses_vrs_coarse_shading;
+   bool uses_vrs_flat_shading;
 
    /* For relocation of shaders with RGP. */
    struct radv_sqtt_shaders_reloc *sqtt_shaders_reloc;
@@ -655,8 +655,7 @@ struct radv_ps_epilog_key radv_generate_ps_epilog_key(const struct radv_compiler
 
 void radv_graphics_shaders_compile(const struct radv_compiler_info *compiler_info, struct vk_pipeline_cache *cache,
                                    struct radv_shader_stage *stages, const struct radv_graphics_state_key *gfx_state,
-                                   bool keep_executable_info, bool keep_statistic_info, bool is_internal,
-                                   struct radv_retained_shaders *retained_shaders, bool noop_fs,
+                                   bool is_internal, struct radv_retained_shaders *retained_shaders, bool noop_fs,
                                    struct radv_shader_debug_info *debug, struct radv_shader_binary **binaries,
                                    struct radv_shader_debug_info *gs_copy_debug,
                                    struct radv_shader_binary **gs_copy_binary);

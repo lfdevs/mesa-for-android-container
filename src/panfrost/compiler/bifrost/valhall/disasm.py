@@ -107,7 +107,7 @@ va_print_dest(FILE *fp, unsigned mask, unsigned value, unsigned size)
 <% no_comma = True %>
       fputs("${op.name}", fp);
 % for mod in op.modifiers:
-% if mod.name not in ["staging_register_count", "staging_register_write_count"]:
+% if mod.name not in ["staging_register_count", "staging_register_write_count"] and not (op.name.startswith("ARSHIFT_") and mod.name == "signed"):
 % if mod.is_enum:
       fputs(valhall_${safe_name(mod.enum)}[(instr >> ${mod.start}) & ${hex((1 << mod.size) - 1)}], fp);
 % else:

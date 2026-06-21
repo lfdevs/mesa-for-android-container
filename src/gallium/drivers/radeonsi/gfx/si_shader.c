@@ -178,19 +178,12 @@ unsigned si_get_max_workgroup_size(const struct si_shader *shader)
 unsigned si_get_shader_prefetch_size(struct si_shader *shader)
 {
    struct si_screen *sscreen = shader->selector->screen;
+
    /* This excludes arrays of constants after instructions. */
-   unsigned exec_size =
-      ac_align_shader_binary_for_prefetch(&sscreen->info,
-                                          shader->complete_shader_binary_size);
+   return ac_get_instr_prefetch_size(sscreen->info.gfx_level,
+                                     sscreen->info.instr_prefetch_distance,
+                                     shader->complete_shader_binary_size);
 
-   /* INST_PREF_SIZE uses 128B granularity.
-    * - GFX11: max 128 * 63 = 8064
-    * - GFX12: max 128 * 255 = 32640
-    */
-   unsigned max_pref_size = shader->selector->screen->info.gfx_level >= GFX12 ? 255 : 63;
-   unsigned exec_size_gran128 = DIV_ROUND_UP(exec_size, 128);
-
-   return MIN2(max_pref_size, exec_size_gran128);
 }
 
 unsigned si_calculate_needed_lds_size(enum amd_gfx_level gfx_level, struct si_shader *shader)

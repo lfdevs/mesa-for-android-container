@@ -15,3 +15,10 @@ install_megadrivers = [
   install_megadrivers_py.full_path(),
   '--libname-suffix', libname_suffix,
 ]
+
+configure_file(
+  input: 'drm-shim.py',
+  output: 'drm-shim',
+  copy: true
+)
+devenv.prepend('PATH', meson.current_build_dir())

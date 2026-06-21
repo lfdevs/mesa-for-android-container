@@ -330,16 +330,6 @@
     HWCI_KERNEL_MODULES: i915
     RUNNER_TAG: mesa-ci-x86-64-lava-dell-latitude-5400-8665U-sarien
 
-# Status: https://lava.collabora.dev/scheduler/device_type/asus-C436FA-Flip-hatch
-.lava-asus-C436FA-Flip-hatch:x86_64:
-  variables:
-    DEVICE_TYPE: asus-C436FA-Flip-hatch
-    FARM: collabora
-    FDO_CI_CONCURRENT: 9
-    GPU_VERSION: iris-cml
-    HWCI_KERNEL_MODULES: i915
-    RUNNER_TAG: mesa-ci-x86-64-lava-asus-C436FA-Flip-hatch
-
 # Status: https://lava.collabora.dev/scheduler/device_type/acer-chromebox-cxi4-puff
 .lava-acer-chromebox-cxi4-puff:x86_64:
   variables:

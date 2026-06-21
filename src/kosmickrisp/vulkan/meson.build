@@ -64,8 +64,6 @@ kk_files = files(
   'kk_device_memory.c',
   'kk_device.h',
   'kk_device.c',
-  'kk_encoder.h',
-  'kk_encoder.c',
   'kk_event.h',
   'kk_event.c',
   'kk_format.h',

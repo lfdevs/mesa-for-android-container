@@ -79,18 +79,7 @@ enum vpe_cmd_ops {
     VPE_CMD_OPS_ALPHA_THROUGH_LUMA,
     VPE_CMD_OPS_BG_VSCF_PIPE0, // For visual confirm pipe 0
     VPE_CMD_OPS_BG_VSCF_PIPE1, // For visual confirm pipe 1
-};
-
-enum vpe_cmd_type {
-    VPE_CMD_TYPE_COMPOSITING,
-    VPE_CMD_TYPE_BG,
-    VPE_CMD_TYPE_BG_VSCF_INPUT,  // For visual confirm input
-    VPE_CMD_TYPE_BG_VSCF_OUTPUT, // For visual confirm output
-    VPE_CMD_TYPE_BLENDING,       // For alpha blending
-    VPE_CMD_TYPE_ALPHA_THROUGH_LUMA,
-    VPE_CMD_TYPE_BG_VSCF_PIPE0,  // For visual confirm pipe 0
-    VPE_CMD_TYPE_BG_VSCF_PIPE1,  // For visual confirm pipe 1
-    VPE_CMD_TYPE_COUNT
+    VPE_CMD_OPS_COUNT
 };
 
 enum vpe_stream_type {
@@ -169,7 +158,7 @@ struct stream_ctx {
 
     // share configs that can be re-used once generated
     struct vpe_vector *configs[MAX_INPUT_PIPE];
-    struct vpe_vector *stream_op_configs[MAX_INPUT_PIPE][VPE_CMD_TYPE_COUNT];
+    struct vpe_vector *stream_op_configs[MAX_INPUT_PIPE][VPE_CMD_OPS_COUNT];
 
     // cached color properties
     bool                     per_pixel_alpha;
@@ -259,10 +248,11 @@ struct output_ctx {
 #define PIPE_CTX_NO_OWNER ((uint32_t)(-1))
 
 struct pipe_ctx {
-    uint32_t pipe_idx;
-    uint32_t owner; // stream_idx
-    bool     is_top_pipe;
-    int32_t  top_pipe_idx;
+    uint32_t         pipe_idx;
+    uint32_t         owner; // stream_idx
+    bool             is_top_pipe;
+    int32_t          top_pipe_idx;
+    enum vpe_cmd_ops cmd_type;
 };
 
 struct config_frontend_cb_ctx {
@@ -270,7 +260,7 @@ struct config_frontend_cb_ctx {
     uint32_t          stream_idx;
     bool              stream_sharing;
     bool              stream_op_sharing;
-    enum vpe_cmd_type cmd_type; // command type, i.e. bg or compositing
+    enum vpe_cmd_ops  cmd_type; // command type, i.e. bg or compositing
 };
 
 struct config_backend_cb_ctx {
@@ -316,7 +306,8 @@ struct vpe_priv {
     struct vpe_stream      *dummy_stream;
     bool scale_yuv_matrix; // this is a flag that forces scaling the yuv->rgb matrix
                            //  when embedding the color adjustments
-
+    bool is_new_context;   // this is a flag for fw detecting if new context comes in,
+                           // used to decide whether to calculate FPS or not.
     // collaborate sync data counter
     int32_t  collaborate_sync_index;
     uint16_t vpe_num_instance;

@@ -124,27 +124,31 @@ pub fn derive_as_slice(
             let attr_type = Ident::new(attr_type, Span::call_site());
             if let Some(first) = first {
                 quote! {
+                    unsafe impl compiler::as_slice::AsArray<#slice_type, #count>
+                        for #ident
+                    {
+                        type Attr = #attr_type;
+                        const ATTRS: [#attr_type; #count] = [#attrs];
+                        const ARRAY_OFFSET: usize =
+                            std::mem::offset_of!(#ident, #first);
+                    }
+
                     impl compiler::as_slice::AsSlice<#slice_type> for #ident {
                         type Attr = #attr_type;
 
                         fn as_slice(&self) -> &[#slice_type] {
-                            unsafe {
-                                let first = &self.#first as *const #slice_type;
-                                std::slice::from_raw_parts(first, #count)
-                            }
+                            use compiler::as_slice::AsArray;
+                            self.as_array()
                         }
 
                         fn as_mut_slice(&mut self) -> &mut [#slice_type] {
-                            unsafe {
-                                let first =
-                                    &mut self.#first as *mut #slice_type;
-                                std::slice::from_raw_parts_mut(first, #count)
-                            }
+                            use compiler::as_slice::AsArray;
+                            self.as_mut_array()
                         }
 
                         fn attrs(&self) -> &'static [Self::Attr] {
-                            static ATTRS: [#attr_type; #count] = [#attrs];
-                            &ATTRS
+                            use compiler::as_slice::AsArray;
+                            &<#ident as AsArray<#slice_type, #count>>::ATTRS
                         }
                     }
                 }

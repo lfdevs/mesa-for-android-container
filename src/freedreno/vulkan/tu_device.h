@@ -152,6 +152,9 @@ struct tu_physical_device
    /* Whether performance counter selector registers can be written by userspace CSes. */
    bool is_perf_cntr_selectable;
 
+   bool enable_texel_buffer_emulation;
+   bool enable_ssbo_emulation;
+
    struct {
       uint32_t non_lazy_type_count;
       uint32_t type_count;

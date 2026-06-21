@@ -67,12 +67,12 @@ To capture a trace with Perfetto you need to take the following steps:
    # Build mesa
    mesa $ meson compile -C build
 
-2. Build Perfetto from sources available at ``subprojects/perfetto``.
+2. Clone and build Perfetto toolkit (``v56.1``).
 
 .. code-block:: sh
 
-   # Within the Mesa repo, build perfetto
-   mesa $ cd subprojects/perfetto
+   src $ git clone --branch v56.1 --depth 1 https://github.com/google/perfetto.git
+   src $ cd perfetto
    perfetto $ ./tools/install-build-deps
    perfetto $ ./tools/gn gen --args='is_debug=false' out/linux
    perfetto $ ./tools/ninja -C out/linux
@@ -87,7 +87,7 @@ More build options can be found in `this guide <https://perfetto.dev/docs/quicks
    ``src/tool/pps/cfg/system.cfg`` which does whole-system including GPU
    profiling for any supported GPUs).  Other configs are available in that
    directory for CPU-only or GPU-only tracing, and more examples of config files
-   can be found in ``subprojects/perfetto/test/configs``.
+   can be found in ``perfetto/test/configs``.
 
 4. Start the PPS producer to capture GPU performance counters.
 
@@ -106,7 +106,7 @@ More build options can be found in `this guide <https://perfetto.dev/docs/quicks
 
 .. code-block:: sh
 
-   mesa $ sudo ./subprojects/perfetto/out/linux/tracebox --system-sockets --txt -c src/tool/pps/cfg/system.cfg -o vkcube.trace
+   mesa $ sudo ./perfetto/out/linux/tracebox --system-sockets --txt -c src/tool/pps/cfg/system.cfg -o vkcube.trace
 
 7.  Go to `ui.perfetto.dev <https://ui.perfetto.dev>`__ and upload
     ``vkcube.trace`` by clicking on **Open trace file**.

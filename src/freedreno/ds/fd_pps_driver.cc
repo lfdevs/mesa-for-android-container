@@ -9,7 +9,7 @@
 #include <iostream>
 
 #include <err.h>
-#include <perfetto.h>
+#include "util/perf/u_perfetto.h"
 #include <poll.h>
 
 #include <xf86drm.h>

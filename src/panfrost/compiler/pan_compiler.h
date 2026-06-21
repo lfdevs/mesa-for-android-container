@@ -133,8 +133,6 @@ enum { PAN_VERTEX_ID = 16, PAN_INSTANCE_ID = 17, PAN_MAX_ATTRIBUTE };
  */
 #define PAN_MAX_PUSH 128
 
-#define PAN_MAX_MULTIVIEW_VIEW_COUNT 8
-
 /* Architectural invariants (Midgard and Bifrost): UBO must be <= 2^16 bytes so
  * an offset to a word must be < 2^16. There are less than 2^8 UBOs */
 
@@ -574,5 +572,11 @@ pan_res_handle(unsigned table, unsigned index)
 
 void pan_disassemble(FILE *fp, const void *code, size_t size, uint64_t gpu_id,
                      bool verbose);
+
+static inline unsigned
+pan_max_multiview_view_count(unsigned arch)
+{
+   return arch >= 14 ? 16 : 8;
+}
 
 #endif /* __PAN_COMPILER_H__ */

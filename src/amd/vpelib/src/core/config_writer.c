@@ -121,7 +121,8 @@ void config_writer_set_type(struct config_writer *writer, enum config_type type,
     }
 }
 
-void config_writer_force_new_with_type(struct config_writer *writer, enum config_type type)
+void config_writer_force_new_with_type(
+    struct config_writer *writer, enum config_type type, uint32_t pipe_idx)
 {
     VPE_ASSERT(type != CONFIG_TYPE_UNKNOWN);
 
@@ -132,10 +133,12 @@ void config_writer_force_new_with_type(struct config_writer *writer, enum config
 
     if (writer->type == CONFIG_TYPE_UNKNOWN) {
         // new header. do not need to fill it yet until completion
+        writer->pipe_idx = pipe_idx;
         config_writer_new(writer);
     } else if (size > 0) {
         // command not empty, close the previous one
         config_writer_complete(writer);
+        writer->pipe_idx = pipe_idx;
         config_writer_new(writer);
     }
     writer->type = type;
@@ -258,11 +261,10 @@ void config_writer_fill_indirect_data_array(
     struct config_writer *writer, const uint64_t data_gpuva, uint32_t size)
 {
     VPE_ASSERT(writer->type == CONFIG_TYPE_INDIRECT);
-    VPE_ASSERT(size > 0);
 
     // the DATA_ARRAY_SIZE is 1-based, hence -1 from actual size
     config_writer_fill(writer, VPEC_FIELD_VALUE(VPE_IND_CFG_DATA_ARRAY_SIZE, size - 1));
-    config_writer_fill(writer, ADDR_LO(data_gpuva));
+    config_writer_fill(writer, (ADDR_LO(data_gpuva) & VPE_IND_CFG_DATA_ARRAY_ADDR_LOW_MASK));
     config_writer_fill(writer, ADDR_HI(data_gpuva));
 }
 

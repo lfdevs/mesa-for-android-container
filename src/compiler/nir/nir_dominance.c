@@ -222,11 +222,9 @@ nir_calc_dominance(nir_shader *shader)
 bool
 nir_block_dominates(nir_block *parent, nir_block *child)
 {
-   assert(nir_cf_node_get_function(&parent->cf_node) ==
-          nir_cf_node_get_function(&child->cf_node));
+   assert(parent->impl == child->impl);
 
-   assert(nir_cf_node_get_function(&parent->cf_node)->valid_metadata &
-          nir_metadata_dominance);
+   assert(parent->impl->valid_metadata & nir_metadata_dominance);
 
    /* If a block is unreachable, then nir_block::dom_pre_index == UINT32_MAX
     * and nir_block::dom_post_index == 0.  This allows us to trivially handle
@@ -239,10 +237,8 @@ nir_block_dominates(nir_block *parent, nir_block *child)
 bool
 nir_block_is_unreachable(nir_block *block)
 {
-   assert(nir_cf_node_get_function(&block->cf_node)->valid_metadata &
-          nir_metadata_dominance);
-   assert(nir_cf_node_get_function(&block->cf_node)->valid_metadata &
-          nir_metadata_block_index);
+   assert(block->impl->valid_metadata & nir_metadata_dominance);
+   assert(block->impl->valid_metadata & nir_metadata_block_index);
 
    /* Unreachable blocks have no dominator.  The only reachable block with no
     * dominator is the start block which has index 0.

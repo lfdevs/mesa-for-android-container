@@ -18,12 +18,12 @@ endif
 subdir('mda')
 subdir('genxml')
 subdir('dev')
-if with_intel_hasvk or with_intel_vk or with_gallium_crocus or with_gallium_iris
-  subdir('blorp')
-endif
 subdir('isl')
 subdir('common')
 subdir('compiler')
+if with_intel_hasvk or with_intel_vk or with_gallium_crocus or with_gallium_iris
+  subdir('blorp')
+endif
 subdir('decoder')
 if with_intel_vk or with_gallium_iris
   subdir('shaders')

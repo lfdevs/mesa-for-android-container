@@ -6,7 +6,7 @@ section_start perfetto "Building perfetto"
 
 BASE_PWD=$PWD
 
-PERFETTO_REVISION=$(grep 'revision =' subprojects/perfetto.wrap | cut -d ' ' -f3)
+PERFETTO_REVISION=$(grep -Po '^source_url = .*/(\Kv\d+\.\d+)(?=/)' subprojects/perfetto-sdk.wrap)
 
 patch_files=(
   "build-perfetto-Fix-C-standard-library-build-errors-with-Debian-13.patch"

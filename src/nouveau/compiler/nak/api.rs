@@ -3,7 +3,8 @@
 
 use crate::from_nir::*;
 use crate::ir::{
-    ShaderInfo, ShaderIoInfo, ShaderModel, ShaderModelInfo, ShaderStageInfo,
+    max_warps_per_sm, ShaderInfo, ShaderIoInfo, ShaderModel, ShaderModelInfo,
+    ShaderStageInfo,
 };
 use crate::sph;
 
@@ -226,6 +227,16 @@ pub extern "C" fn nak_nir_options(
     assert!(!nak.is_null());
     let nak = unsafe { &*nak };
     &nak.nir_options
+}
+
+#[no_mangle]
+pub extern "C" fn nak_max_warps_per_sm(
+    num_gprs: u32,
+    nak: *const nak_compiler,
+) -> u32 {
+    let nak = unsafe { &*nak };
+    let sm = ShaderModelInfo::new(nak.sm, nak.warps_per_sm);
+    max_warps_per_sm(&sm, num_gprs)
 }
 
 #[repr(C)]

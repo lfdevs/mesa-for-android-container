@@ -37,12 +37,6 @@ enum vpe_status vpe10_set_num_segments(struct vpe_priv *vpe_priv, struct stream_
     struct scaler_data *scl_data, struct vpe_rect *src_rect, struct vpe_rect *dst_rect,
     uint32_t *max_seg_width, uint32_t recout_width_alignment);
 
-bool vpe10_get_dcc_compression_output_cap(
-    const struct vpe_dcc_surface_param *params, struct vpe_surface_dcc_cap *cap);
-
-bool vpe10_get_dcc_compression_input_cap(
-    const struct vpe_dcc_surface_param *params, struct vpe_surface_dcc_cap *cap);
-
 bool vpe10_check_input_format(enum vpe_surface_pixel_format format);
 
 bool vpe10_check_output_format(enum vpe_surface_pixel_format format);

@@ -50,7 +50,7 @@ panvk_wsi_init(struct panvk_physical_device *physical_device)
    result = wsi_device_init(&physical_device->wsi_device,
                             panvk_physical_device_to_handle(physical_device),
                             panvk_wsi_proc_addr, &instance->vk.alloc, -1,
-                            &instance->dri_options,
+                            &instance->drirc.options,
                             &(struct wsi_device_options){.sw_device = false});
    if (result != VK_SUCCESS)
       return result;

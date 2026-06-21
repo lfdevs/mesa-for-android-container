@@ -59,6 +59,10 @@ extra_deps_libgl = []
 extra_ld_args_libgl = []
 
 if with_dri_platform == 'drm' or with_dri_platform == 'pseudo-drm'
+  if host_machine.cpu_family() == 'x86' and not with_glx_read_only_text
+    extra_ld_args_libgl += [cc.get_supported_link_arguments('-Wl,--no-error-rwx-segments')]
+  endif
+
   files_libglx += files('dri3_glx.c', 'dri3_priv.h')
 endif
 
@@ -75,7 +79,7 @@ elif with_dri_platform == 'windows'
     meson.get_compiler('c').find_library('gdi32'),
     meson.get_compiler('c').find_library('opengl32')
   ]
-  extra_ld_args_libgl = '-Wl,--disable-stdcall-fixup'
+  extra_ld_args_libgl += ['-Wl,--disable-stdcall-fixup']
 endif
 
 if not with_glvnd

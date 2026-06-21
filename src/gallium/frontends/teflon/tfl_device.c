@@ -934,17 +934,15 @@ PrepareDelegate(TfLiteContext *tf_context, TfLiteDelegate *tf_delegate)
    }
    supported_nodes->size = node_count;
 
-   TfLiteRegistration registration;
+   TfLiteRegistration registration = {};
 
    registration.init = partition_init;
    registration.free = partition_free;
    registration.prepare = partition_prepare;
    registration.invoke = partition_invoke;
 
-   registration.profiling_string = NULL;
    registration.builtin_code = kTfLiteBuiltinDelegate;
    registration.version = 1;
-   registration.registration_external = NULL;
    registration.custom_name = "Teflon Delegate";
 
    // Replace supported subgraphs.

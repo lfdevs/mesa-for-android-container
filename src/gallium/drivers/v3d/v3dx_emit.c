@@ -531,7 +531,7 @@ v3dX(emit_state)(struct pipe_context *pctx)
                         }
 
                         const uint32_t max_rts =
-                                V3D_MAX_RENDER_TARGETS(v3d->screen->devinfo.ver);
+                                v3d->screen->devinfo.max_render_targets;
                         if (blend->base.independent_blend_enable) {
                                 for (int i = 0; i < max_rts; i++)
                                         emit_rt_blend(v3d, job, &blend->base, i,
@@ -572,7 +572,7 @@ v3dX(emit_state)(struct pipe_context *pctx)
                 struct pipe_blend_state *blend = &v3d->blend->base;
 
                 const uint32_t max_rts =
-                        V3D_MAX_RENDER_TARGETS(v3d->screen->devinfo.ver);
+                        v3d->screen->devinfo.max_render_targets;
                 cl_emit(&job->bcl, COLOR_WRITE_MASKS, mask) {
                         for (int i = 0; i < max_rts; i++) {
                                 int rt = blend->independent_blend_enable ? i : 0;

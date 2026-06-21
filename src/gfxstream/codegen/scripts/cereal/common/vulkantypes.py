@@ -553,7 +553,7 @@ class VulkanType(object):
     def getFullName(self) -> str:
         if self.parent is None:
             return self.paramName
-        return f"{self.parent.name}.{self.paramName}" 
+        return f"{self.parent.name}.{self.paramName}"
 
     def getProtectStreamFeature(self) -> Optional[str]:
         key = self.getFullName()

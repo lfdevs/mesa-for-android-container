@@ -1,0 +1,294 @@
+/*
+ * Copyright © 2026 Intel Corporation
+ * SPDX-License-Identifier: MIT
+ */
+
+#version 460
+#include "anv_build_helpers.h"
+#include "anv_build_interface.h"
+#include "encode.h"
+
+/*
+ * Update shader is spawned for number of leaves (leaf_node).
+ *
+ * 1) Each thread (leaf) will calculate the new bounding box and then write it
+ *    into aabb_scratch space on it's leaf index.
+ *
+ * 2) Threads can race to update the parent, so that's why we write updated
+ *    bounding boxes in scratch space to read it later.
+ *
+ * 3) Leaf thread will start walking up towards the root node. It does track
+ *    the arrival counter by doing atomic add.
+ *
+ * 4) Last thread to win, will read all bounding boxes from scratch except it's
+ *    own which gets passed as parameter to function and update the parent
+ *    bounding box accordingly.
+ *
+ * 5) When we hit root node, we compute the final root AABB and update the
+ *    header.
+ */
+layout(local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
+
+layout(push_constant) uniform CONSTS {
+   update_args args;
+};
+
+void
+anv_build_triangle(inout vk_aabb bounds, VOID_REF dst_ptr, vk_bvh_geometry_data geom_data, uint32_t global_id)
+{
+   triangle_indices indices = load_indices(geom_data.indices, geom_data.index_format, global_id);
+
+   triangle_vertices vertices = load_vertices(geom_data.data, indices, geom_data.vertex_format, geom_data.stride);
+
+   if (geom_data.transform != NULL) {
+      mat4 transform = mat4(1.0);
+
+      for (uint32_t col = 0; col < 4; col++) {
+         for (uint32_t row = 0; row < 3; row++) {
+            transform[col][row] = DEREF(INDEX(float, geom_data.transform, col + row * 4));
+         }
+      }
+
+      for (uint32_t i = 0; i < 3; i++) {
+         vertices.vertex[i] = transform * vertices.vertex[i];
+      }
+   }
+
+   vk_ir_triangle_node node;
+
+   bounds.min = vec3(INFINITY);
+   bounds.max = vec3(-INFINITY);
+
+   for (uint32_t coord = 0; coord < 3; coord++) {
+      for (uint32_t comp = 0; comp < 3; comp++) {
+         node.coords[coord][comp] = vertices.vertex[coord][comp];
+         bounds.min[comp] = min(bounds.min[comp], vertices.vertex[coord][comp]);
+         bounds.max[comp] = max(bounds.max[comp], vertices.vertex[coord][comp]);
+      }
+   }
+
+   node.triangle_id = global_id;
+   node.geometry_id_and_flags = geom_data.geometry_id;
+
+   anv_encode_triangle(dst_ptr, node);
+}
+
+void
+anv_build_aabb(inout vk_aabb bounds, VOID_REF src_ptr, VOID_REF dst_ptr, uint32_t geometry_id, uint32_t global_id)
+{
+   for (uint32_t vec = 0; vec < 2; vec++) {
+      for (uint32_t comp = 0; comp < 3; comp++) {
+         float coord = DEREF(INDEX(float, src_ptr, comp + vec * 3));
+
+         if (vec == 0)
+            bounds.min[comp] = coord;
+         else
+            bounds.max[comp] = coord;
+      }
+   }
+
+   vk_ir_aabb_node node;
+   node.base.aabb = bounds;
+   node.primitive_id = global_id;
+   node.geometry_id_and_flags = geometry_id;
+
+   anv_encode_aabb(dst_ptr, node);
+}
+
+vk_aabb
+build_and_encode_leaf(uint32_t leaf_local_idx, BLOCK leaf_block)
+{
+   VOID_REF dst = BLOCK_OFFSET(leaf_block);
+   vk_aabb bounds = vk_aabb(vec3(0.0f), vec3(0.0f));
+
+   switch (args.geom_data.geometry_type) {
+   case VK_GEOMETRY_TYPE_TRIANGLES_KHR:
+      anv_build_triangle(bounds, dst, args.geom_data, leaf_local_idx);
+      break;
+   case VK_GEOMETRY_TYPE_AABBS_KHR: {
+      VOID_REF src_aabb_ptr = OFFSET(args.geom_data.data,
+                                     leaf_local_idx * args.geom_data.stride);
+      anv_build_aabb(bounds, src_aabb_ptr, dst, args.geom_data.geometry_id,
+                     leaf_local_idx);
+      break;
+   }
+   default:
+      /* instances typically not updated */
+      break;
+   }
+
+   return bounds;
+}
+
+vk_aabb
+recompute_parent(BLOCK parent_block, uint32_t updated_idx,
+                 uint32_t child_count, vk_aabb updated_child_bounds)
+{
+   REF(anv_internal_node) parent = REF(anv_internal_node)(BLOCK_OFFSET(parent_block));
+
+   vk_aabb box;
+   box.min = vec3(INFINITY);
+   box.max = vec3(-INFINITY);
+
+   BLOCK current_child_block = parent_block + DEREF(parent).child_block_offset;
+
+   vk_aabb cache_aabb[6];
+   for (uint32_t i = 0; i < child_count; ++i) {
+      cache_aabb[i] = (i == updated_idx) ? updated_child_bounds :
+                      DEREF(INDEX(vk_aabb, args.aabb_scratch, current_child_block + i));
+      aabb_extend(box, cache_aabb[i]);
+   }
+
+   vk_aabb conservative_child_aabb = conservative_aabb(box);
+
+   float up = 1.0 + ULP;
+   ivec3 exp;
+
+   vec3 len = aabb_size(conservative_child_aabb) * up;
+   vec3 mant = frexp(len, exp);
+
+   exp.x += int((mant.x > (255.0f / 256.0f)));
+   exp.y += int((mant.y > (255.0f / 256.0f)));
+   exp.z += int((mant.z > (255.0f / 256.0f)));
+
+   i8vec3 exponent_i8 = i8vec3(exp);
+   i8vec3 exp_i8 = {max(int8_t(-128), exponent_i8.x),
+                    max(int8_t(-128), exponent_i8.y),
+                    max(int8_t(-128), exponent_i8.z)};
+
+   DEREF(parent).lower[0] = conservative_child_aabb.min.x;
+   DEREF(parent).lower[1] = conservative_child_aabb.min.y;
+   DEREF(parent).lower[2] = conservative_child_aabb.min.z;
+   DEREF(parent).exp_x = exp_i8[0];
+   DEREF(parent).exp_y = exp_i8[1];
+   DEREF(parent).exp_z = exp_i8[2];
+
+   vec3 base = conservative_child_aabb.min;
+   vec3 scale = ldexp(vec3(1.0), exp_i8 - 8);
+
+   for (uint32_t i = 0; i < child_count; ++i) {
+      vk_aabb child_bounds = cache_aabb[i];
+
+      vec3 lower = (child_bounds.min - base) / scale;
+      vec3 upper = (child_bounds.max - base) / scale;
+      lower = clamp(floor(lower), vec3(0.0), vec3(255.0));
+      upper = clamp(ceil(upper), vec3(0.0), vec3(255.0));
+
+      DEREF(parent).lower_x[i] = uint8_t(lower.x);
+      DEREF(parent).lower_y[i] = uint8_t(lower.y);
+      DEREF(parent).lower_z[i] = uint8_t(lower.z);
+      DEREF(parent).upper_x[i] = uint8_t(upper.x);
+      DEREF(parent).upper_y[i] = uint8_t(upper.y);
+      DEREF(parent).upper_z[i] = uint8_t(upper.z);
+   }
+
+   return box;
+}
+
+uint32_t
+get_parent_id(uint32_t parent_raw)
+{
+   return parent_raw & 0x03FFFFFF;
+}
+
+uint32_t
+get_child_index(uint32_t parent_raw)
+{
+   return parent_raw >> 26;
+}
+
+void main()
+{
+   uint32_t leaf_local = gl_GlobalInvocationID.x;
+   if (leaf_local >= args.leaf_node_count || leaf_local >= args.primitive_count)
+      return;
+
+   uint32_t leaf_id = args.geom_data.first_id + leaf_local;
+   BLOCK leaf_block = DEREF(INDEX(uint32_t, args.leaf_block_offset_map, leaf_id));
+
+   if (leaf_block == VK_NULL_BVH_OFFSET)
+      return;
+
+   vk_aabb leaf_bounds = build_and_encode_leaf(leaf_local, leaf_block);
+   DEREF(INDEX(vk_aabb, args.aabb_scratch, leaf_block)) = leaf_bounds;
+
+   /* Ensure scratch update and leaf encoding is visible before atomic in
+    * following loop.
+    */
+   memoryBarrierBuffer();
+
+   BLOCK current_block = leaf_block;
+   vk_aabb current_bounds = leaf_bounds;
+
+   while (true) {
+      BLOCK parent_raw = DEREF(INDEX(uint32_t, args.parent_child_map, current_block));
+
+      BLOCK parent = get_parent_id(parent_raw);
+      REF(anv_internal_node) internal_node = REF(anv_internal_node)(BLOCK_OFFSET(parent));
+      /* Note: This is not a real field, it's unused byte padding, which is not
+       * required to be MBZ. We're just using it to store the child count.
+       */
+      uint32_t valid_child_count = uint32_t(DEREF(internal_node).child_count);
+      if (valid_child_count == 0)
+         break;
+
+      /* Last-child-wins atomic */
+      uint32_t ready = atomicAdd(
+         DEREF(INDEX(uint32_t, args.internal_ready_count, parent)), 1,
+         gl_ScopeDevice, gl_StorageSemanticsBuffer,
+         gl_SemanticsAcquireRelease | gl_SemanticsMakeAvailable | gl_SemanticsMakeVisible);
+
+      /* Not the last child */
+      if (ready != valid_child_count - 1)
+         break;
+
+      uint32_t child_idx = get_child_index(parent_raw);
+      /* Encode and quantize parent bounds */
+      vk_aabb parent_bounds = recompute_parent(parent, child_idx, valid_child_count, current_bounds);
+
+      /* Store parent bounds for next level */
+      DEREF(INDEX(vk_aabb, args.aabb_scratch, parent)) = parent_bounds;
+
+      /* Ensure scratch write and parent encoding is visible in the next
+       * iteration of this loop.
+       */
+      memoryBarrierBuffer();
+
+      /* Check whether this parent is the root internal node */
+      uint32_t grandparent_raw = DEREF(INDEX(uint32_t, args.parent_child_map, parent));
+
+      if (grandparent_raw == VK_NULL_BVH_OFFSET) {
+         REF(anv_internal_node) root = REF(anv_internal_node)(BLOCK_OFFSET(parent));
+
+         vec3 base = vec3(DEREF(root).lower[0], DEREF(root).lower[1], DEREF(root).lower[2]);
+         ivec3 exp = ivec3( int(DEREF(root).exp_x), int(DEREF(root).exp_y), int(DEREF(root).exp_z));
+         vec3 scale = ldexp(vec3(1.0), exp - 8);
+
+         vk_aabb root_bounds = vk_aabb(vec3(INFINITY), vec3(-INFINITY));
+
+         for (uint32_t i = 0; i < valid_child_count; ++i) {
+            vec3 lower = vec3(DEREF(root).lower_x[i],
+                              DEREF(root).lower_y[i],
+                              DEREF(root).lower_z[i]);
+
+            vec3 upper = vec3(DEREF(root).upper_x[i],
+                              DEREF(root).upper_y[i],
+                              DEREF(root).upper_z[i]);
+
+            vk_aabb child;
+            child.min = base + lower * scale;
+            child.max = base + upper * scale;
+
+            aabb_extend(root_bounds, child);
+         }
+
+         REF(anv_accel_struct_header) hdr =
+            REF(anv_accel_struct_header)(args.output_bvh - args.output_bvh_offset);
+         DEREF(hdr).aabb = root_bounds;
+         break;
+      }
+
+      current_block = parent;
+      current_bounds = parent_bounds;
+   }
+}

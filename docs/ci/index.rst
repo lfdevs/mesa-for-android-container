@@ -345,6 +345,17 @@ scope permissions.
     and select the ``api`` scope. The token will only be shown once after creation,
     so make sure you store it securely.
 
+Reproducing CI jobs locally
+---------------------------
+
+If you need to debug a CI job failure, you can often reproduce it locally
+without needing the target hardware by using ``drm-shim``.
+
+.. toctree::
+   :maxdepth: 1
+
+   drm-shim
+
 Marge queue
 -----------
 

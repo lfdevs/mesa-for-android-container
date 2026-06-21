@@ -1,5 +1,6 @@
 /*
  * Copyright (C) 2022 Collabora Ltd.
+ * Copyright (C) 2026 Arm Ltd.
  * SPDX-License-Identifier: MIT
  */
 
@@ -111,13 +112,11 @@ bi_is_memory_access(const bi_instr *I)
       break;
    }
 
-   /* UBOs are read-only so there are no ordering constriants */
-   if (I->seg == BI_SEG_UBO)
-      return false;
-
    switch (bi_get_opcode_props(I)->message) {
    case BIFROST_MESSAGE_LOAD:
    case BIFROST_MESSAGE_STORE:
+      /* UBOs are read-only so there are no ordering constraints */
+      return I->seg != BI_SEG_UBO;
    case BIFROST_MESSAGE_ATOMIC:
       return true;
    default:

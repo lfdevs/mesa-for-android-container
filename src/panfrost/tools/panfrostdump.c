@@ -32,6 +32,7 @@
 #include <drm-uapi/panfrost_drm.h>
 
 #include "decode.h"
+#include "pan_compiler.h"
 
 /* Same as panfrost_dump_object_header, but with field
  * entries in host byte order
@@ -236,6 +237,7 @@ main(int argc, char *argv[])
 
    atexit(cleanup);
    struct pandecode_context *ctx = pandecode_create_context(false);
+   pandecode_set_disassemble(ctx, pan_disassemble);
 
    hdr_fp = fopen(argv[optind], "r");
    if (!hdr_fp) {

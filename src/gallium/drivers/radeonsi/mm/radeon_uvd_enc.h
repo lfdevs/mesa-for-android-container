@@ -9,7 +9,8 @@
 #ifndef _RADEON_UVD_ENC_H
 #define _RADEON_UVD_ENC_H
 
-#include "si_video.h"
+#include "si_pipe.h"
+#include "pipe/p_video_codec.h"
 
 #define RENC_UVD_FW_INTERFACE_MAJOR_VERSION 1
 #define RENC_UVD_FW_INTERFACE_MINOR_VERSION 1

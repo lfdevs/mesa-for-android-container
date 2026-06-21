@@ -24,11 +24,18 @@
 
 // TODO: update panwrap
 
+typedef void (*pandecode_shader_disassemble_cb)(FILE *fp, const void *code,
+                                                 size_t size, uint64_t gpu_id,
+                                                 bool verbose);
+
 struct pandecode_context;
 
 struct pandecode_context *pandecode_create_context(bool to_stderr);
 
 void pandecode_next_frame(struct pandecode_context *ctx);
+
+void pandecode_set_disassemble(struct pandecode_context *ctx,
+                               pandecode_shader_disassemble_cb cb);
 
 void pandecode_destroy_context(struct pandecode_context *ctx);
 

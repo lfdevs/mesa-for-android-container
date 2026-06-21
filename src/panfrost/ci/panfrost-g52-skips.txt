@@ -66,5 +66,9 @@ dEQP-VK.wsi.xlib.maintenance1.present_modes.*
 dEQP-VK.wsi.xlib.maintenance1.deferred_alloc.fifo.*
 dEQP-VK.wsi.xlib.maintenance1.present_fence.fifo.*
 
+# https://gitlab.freedesktop.org/mesa/mesa/-/merge_requests/42040
+# Started failing with: "ResourceError (Failed to open display: '' at tcuLnxX11.cpp:83)"
+dEQP-VK.wsi.xlib.incremental_present.scale_none.mailbox.horizontal_mirror.post_multiplied.incremental_present
+
 # Intermittent timeouts
 dEQP-VK.wsi.wayland.swapchain.render.10swapchains.*

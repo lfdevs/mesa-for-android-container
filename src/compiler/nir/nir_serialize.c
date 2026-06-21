@@ -71,6 +71,8 @@ typedef struct {
 typedef struct {
    nir_shader *nir;
 
+   nir_function_impl *impl;
+
    struct blob_reader *blob;
 
    /* the next index to assign to a NIR in-memory object */
@@ -1872,7 +1874,7 @@ write_if(write_ctx *ctx, nir_if *nif)
 static void
 read_if(read_ctx *ctx, struct exec_list *cf_list)
 {
-   nir_if *nif = nir_if_create(ctx->nir);
+   nir_if *nif = nir_if_create(ctx->impl);
 
    read_src(ctx, &nif->condition);
    nif->control = blob_read_uint8(ctx->blob);
@@ -1900,7 +1902,7 @@ write_loop(write_ctx *ctx, nir_loop *loop)
 static void
 read_loop(read_ctx *ctx, struct exec_list *cf_list)
 {
-   nir_loop *loop = nir_loop_create(ctx->nir);
+   nir_loop *loop = nir_loop_create(ctx->impl);
 
    nir_cf_node_insert_end(cf_list, &loop->cf_node);
 
@@ -2000,6 +2002,7 @@ read_function_impl(read_ctx *ctx)
 
    read_var_list(ctx, &fi->locals);
 
+   ctx->impl = fi;
    read_cf_list(ctx, &fi->body);
    read_fixup_phis(ctx);
 

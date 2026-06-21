@@ -328,6 +328,7 @@ rusticl_mesa_bindings = rust.bindgen(
     '--constified-enum-module', 'pipe_tex_wrap',
     '--allowlist-type',         'pipe_swizzle',
     '--constified-enum-module', 'pipe_swizzle',
+    '--blocklist-function',     'pipe_shader_state_from_tgsi',
 
     # rusticl C functions
     '--allowlist-function',     'rusticl_.*',

@@ -6,12 +6,12 @@
 
 #include "nvk_entrypoints.h"
 #include "nvk_physical_device.h"
+#include "nvk_drirc.h"
 
 #include "vulkan/wsi/wsi_common.h"
 
 #include "util/build_id.h"
 #include "util/detect_os.h"
-#include "util/driconf.h"
 #include "util/mesa-blake3.h"
 #include "util/os_misc.h"
 #include "util/u_debug.h"
@@ -98,55 +98,32 @@ nvk_init_debug_flags(struct nvk_instance *instance)
    instance->debug_flags = parse_debug_string(os_get_option("NVK_DEBUG"), flags);
 }
 
-#define NVK_HEAP_MEMORY_PERCENT (0.75f)
+static void
+nvk_init_experimental_flags(struct nvk_instance *instance)
+{
+   const struct debug_control flags[] = {
+      { "dlss", NVK_EXPERIMENTAL_DLSS },
+      { "dlss_backwards_compat", NVK_EXPERIMENTAL_DLSS_BACK_COMPAT },
+      { NULL, 0 },
+   };
 
-static const driOptionDescription nvk_dri_options[] = {
-   DRI_CONF_SECTION_PERFORMANCE
-      DRI_CONF_ADAPTIVE_SYNC(true)
-      DRI_CONF_VK_X11_OVERRIDE_MIN_IMAGE_COUNT(0)
-      DRI_CONF_VK_X11_STRICT_IMAGE_COUNT(false)
-      DRI_CONF_VK_X11_ENSURE_MIN_IMAGE_COUNT(false)
-      DRI_CONF_VK_XWAYLAND_WAIT_READY(false)
-   DRI_CONF_SECTION_END
-
-   DRI_CONF_SECTION_DEBUG
-      DRI_CONF_FORCE_VK_VENDOR()
-      DRI_CONF_VK_WSI_FORCE_SWAPCHAIN_TO_CURRENT_EXTENT(false)
-      DRI_CONF_VK_X11_IGNORE_SUBOPTIMAL(false)
-      DRI_CONF_VK_ZERO_VRAM(false)
-      DRI_CONF_NVK_APP_LAYER()
-   DRI_CONF_SECTION_END
-
-   DRI_CONF_SECTION_MISCELLANEOUS
-      DRI_CONF_HEAP_MEMORY_PERCENT(NVK_HEAP_MEMORY_PERCENT)
-   DRI_CONF_SECTION_END
-};
+   instance->experimental_flags = parse_debug_string(os_get_option("NVK_EXPERIMENTAL"), flags);
+}
 
 static void
 nvk_init_dri_options(struct nvk_instance *instance)
 {
-   driParseOptionInfo(&instance->available_dri_options, nvk_dri_options, ARRAY_SIZE(nvk_dri_options));
-   driParseConfigFiles(&instance->dri_options, &instance->available_dri_options,
-                       &(driConfigFileParseParams) {
-                          .driverName = "nvk",
-                          .applicationName = instance->vk.app_info.app_name,
-                          .applicationVersion = instance->vk.app_info.app_version,
-                          .engineName = instance->vk.app_info.engine_name,
-                          .engineVersion = instance->vk.app_info.engine_version,
-                       });
+   nvk_parse_dri_options(&instance->drirc,
+                         &(driConfigFileParseParams){
+                            .driverName = "nvk",
+                            .applicationName = instance->vk.app_info.app_name,
+                            .applicationVersion = instance->vk.app_info.app_version,
+                            .engineName = instance->vk.app_info.engine_name,
+                            .engineVersion = instance->vk.app_info.engine_version,
+                         });
 
-   instance->force_vk_vendor =
-      driQueryOptioni(&instance->dri_options, "force_vk_vendor");
-
-   instance->heap_memory_percent =
-      driQueryOptionf(&instance->dri_options, "heap_memory_percent");
-   if (instance->heap_memory_percent == OS_GPU_HEAP_SIZE_HEURISTIC)
-      instance->heap_memory_percent = NVK_HEAP_MEMORY_PERCENT;
-
-   if (driQueryOptionb(&instance->dri_options, "vk_zero_vram"))
+   if (instance->drirc.debug.zero_vram)
       instance->debug_flags |= NVK_DEBUG_ZERO_MEMORY;
-
-   instance->app_layer = driQueryOptionstr(&instance->dri_options, "nvk_app_layer");
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL
@@ -179,6 +156,7 @@ nvk_CreateInstance(const VkInstanceCreateInfo *pCreateInfo,
       goto fail_alloc;
 
    nvk_init_debug_flags(instance);
+   nvk_init_experimental_flags(instance);
    nvk_init_dri_options(instance);
 
    instance->vk.physical_devices.try_create_for_drm =
@@ -223,8 +201,8 @@ nvk_DestroyInstance(VkInstance _instance,
    if (!instance)
       return;
 
-   driDestroyOptionCache(&instance->dri_options);
-   driDestroyOptionInfo(&instance->available_dri_options);
+   driDestroyOptionCache(&instance->drirc.options);
+   driDestroyOptionInfo(&instance->drirc.available_options);
 
    vk_instance_finish(&instance->vk);
    vk_free(&instance->vk.alloc, instance);

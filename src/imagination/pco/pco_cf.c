@@ -22,7 +22,7 @@
 #include <assert.h>
 #include <stdbool.h>
 
-static pco_ref emc_ref(pco_func *func, pco_builder *b)
+pco_ref pco_emc_ref(pco_func *func, pco_builder *b)
 {
    if (pco_ref_is_null(func->emc)) {
       /* Allocate and initialize the emc. */
@@ -80,6 +80,10 @@ static inline bool body_has_non_preds(struct list_head *body)
          return true;
 
       if (!pco_instr_has_default_exec(instr))
+         return true;
+
+      /* Vote is implemented using predicates and control flow. */
+      if (instr->op == PCO_OP_VOTE)
          return true;
 
       last_instr = instr;
@@ -171,7 +175,7 @@ lower_if_cond_exec(pco_if *pif, pco_func *func, bool has_else, bool invert_cond)
 
    /* Setup the prologue. */
    pco_builder b = pco_builder_create(func, pco_cursor_after_block(prologue));
-   pco_ref emc = emc_ref(func, &b);
+   pco_ref emc = pco_emc_ref(func, &b);
 
    /* TODO: see if the cond producer can set p0 directly. */
    pco_tstz(&b,
@@ -275,7 +279,7 @@ static inline void lower_loop(pco_loop *loop, pco_func *func)
 
    /* Setup the prologue. */
    pco_builder b = pco_builder_create(func, pco_cursor_after_block(prologue));
-   pco_ref emc = emc_ref(func, &b);
+   pco_ref emc = pco_emc_ref(func, &b);
 
    pco_cndst(&b,
              pco_ref_pred(PCO_PRED_PE),
@@ -331,7 +335,7 @@ static inline void lower_break_continue(pco_instr *instr,
                                         bool is_continue)
 {
    pco_builder b = pco_builder_create(func, pco_cursor_before_instr(instr));
-   pco_ref emc = emc_ref(func, &b);
+   pco_ref emc = pco_emc_ref(func, &b);
    enum pco_exec_cnd exec_cnd = pco_instr_get_exec_cnd(instr);
 
    pco_ref val = pco_ref_new_ssa32(func);

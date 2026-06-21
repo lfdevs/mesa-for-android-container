@@ -420,12 +420,15 @@ ac_fill_compiler_info(struct radeon_info *info, const struct drm_amdgpu_info_dev
     *
     * Only GFX9 works as expected.
     */
-   out->has_smem_with_null_prt_bug = info->gfx_level <= GFX12 && info->gfx_level != GFX9;
+   out->has_smem_with_null_prt_bug = info->gfx_level <= GFX12 && info->gfx_level != GFX9 && info->family != CHIP_GFX1156;
 
    if (compat_mode && info->family == CHIP_REMBRANDT) {
       out->has_ngg_passthru_no_msg = false;
       out->has_vrs_frag_pos_z_bug = true;
    }
+
+   out->has_desc_resource_level = (info->gfx_level >= GFX10 && info->gfx_level < GFX11) ||
+                                  info->family == CHIP_GFX1156;
 }
 
 void
@@ -723,6 +726,7 @@ ac_identify_chip(struct radeon_info *info, const struct drm_amdgpu_info_device *
       case FAMILY_STX:
          identify_chip(STRIX1);
          identify_chip(STRIX_HALO);
+         identify_chip(GFX1156);
          identify_chip(KRACKAN1);
          identify_chip(GFX1153);
          break;
@@ -1027,6 +1031,14 @@ void ac_fill_bug_info(struct radeon_info *info)
    info->never_stop_sq_perf_counters = info->gfx_level == GFX10 ||
                                        info->gfx_level == GFX10_3;
    info->never_send_perfcounter_stop = info->gfx_level == GFX11;
+
+   /* A partially out-of-bounds SMEM load seems to hang if the out-of-bounds
+    * part is unmapped. This was observed on vega10, but not renoir or raven2.
+    * As far as I know, this bug isn't documented anywhere else.
+    */
+   info->has_smem_partial_oob_access_bug = info->gfx_level == GFX9 &&
+                                           info->family != CHIP_RENOIR &&
+                                           info->family != CHIP_RAVEN2;
 }
 
 void ac_fill_feature_info(struct radeon_info *info, const struct drm_amdgpu_info_device *device_info)
@@ -1059,7 +1071,6 @@ void ac_fill_feature_info(struct radeon_info *info, const struct drm_amdgpu_info
 
    info->has_gpuvm_fault_query = info->drm_minor >= 55;
    info->has_tmz_support = device_info->ids_flags & AMDGPU_IDS_FLAGS_TMZ;
-   info->uses_kernel_cu_mask = false; /* Not implemented in the kernel. */
 
    /* On GFX8, the TBA/TMA registers can be configured from the userspace.
     * On GFX9+, they are privileged registers and they need to be configured
@@ -1610,6 +1621,9 @@ ac_query_gpu_info(int fd, void *dev_p, struct radeon_info *info,
    info->pcie_gen = device_info.pcie_gen;
    info->pcie_num_lanes = device_info.pcie_num_lanes;
 
+   info->instr_prefetch_distance = !info->has_graphics && info->family >= CHIP_MI200 ? 16 :
+                                    info->gfx_level >= GFX10 ? 3 : 0;
+
    /* Source: https://en.wikipedia.org/wiki/PCI_Express#History_and_revisions */
    switch (info->pcie_gen) {
    case 1:
@@ -1937,6 +1951,7 @@ void ac_print_gpu_info(FILE *f, const struct radeon_info *info, int fd)
    fprintf(f, "    has_set_sh_pairs = %i\n", info->has_set_sh_pairs);
    fprintf(f, "    has_set_sh_pairs_packed = %i\n", info->has_set_sh_pairs_packed);
    fprintf(f, "    has_set_uconfig_pairs = %i\n", info->has_set_uconfig_pairs);
+   fprintf(f, "    has_smem_partial_oob_access_bug = %i\n", info->has_smem_partial_oob_access_bug);
 
    if (info->gfx_level < GFX12) {
       fprintf(f, "Display features:\n");
@@ -2043,7 +2058,6 @@ void ac_print_gpu_info(FILE *f, const struct radeon_info *info, int fd)
       }
    }
    fprintf(f, "    kernel_has_modifiers = %u\n", info->kernel_has_modifiers);
-   fprintf(f, "    uses_kernel_cu_mask = %u\n", info->uses_kernel_cu_mask);
 
    fprintf(f, "Shader core info:\n");
    for (unsigned i = 0; i < info->max_se; i++) {

@@ -150,7 +150,8 @@ fdl6_lrz_layout_init(struct fdl_lrz_layout *lrz_layout,
             [MSAA_FOUR]  = {  64, 128 },
             [MSAA_EIGHT] = {  64,  64 },
          },
-      }, *lrz_block = &lrz_block_sizes[dev_info->num_slices - 1][ffs(layout->nr_samples) - 1];
+      };
+      const struct lrz_block *lrz_block = &lrz_block_sizes[dev_info->num_slices - 1][ffs(layout->nr_samples) - 1];
 
       const unsigned per_slice_block_width_in_tiles = 8;
       const unsigned per_slice_block_height_in_tiles = 16;

@@ -72,6 +72,12 @@ struct v3d_device_info {
 
         /** OS page size. It's the minimum allocation size for a v3d buffer. */
         uint32_t page_size;
+
+        /** Maximum framebuffer dimension is limited by max clip size */
+        uint32_t max_framebuffer_size;
+
+        /** Max render targets the GPU supports */
+        uint8_t max_render_targets;
 };
 
 /* TFU has a 64-bytes readhead. To avoid the unit reading unmaped memory

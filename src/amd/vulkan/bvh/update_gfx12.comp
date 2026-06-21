@@ -97,8 +97,10 @@ main()
 
    bool is_ready = is_leaf_or_invalid;
    while (true) {
-      if (!is_ready)
-         is_ready = DEREF(INDEX(uint32_t, args.internal_ready_count, child_index)) != 0;
+      if (!is_ready) {
+         is_ready = atomicLoad(DEREF(INDEX(uint32_t, args.internal_ready_count, child_index)),
+                               gl_ScopeDevice, gl_StorageSemanticsBuffer, gl_SemanticsAcquire | gl_SemanticsMakeVisible) != 0;
+      }
 
       if (radv_ballot(cluster, is_ready) != 0xff)
          continue;
@@ -121,13 +123,8 @@ main()
          } else {
             DEREF(INDEX(vk_aabb, args.bounds, node_index - 1)) = total_bounds;
 
-            memoryBarrier(gl_ScopeDevice, gl_StorageSemanticsBuffer,
-                          gl_SemanticsAcquireRelease | gl_SemanticsMakeAvailable | gl_SemanticsMakeVisible);
-
-            DEREF(INDEX(uint32_t, args.internal_ready_count, node_index - 1)) = 1;
-
-            memoryBarrier(gl_ScopeDevice, gl_StorageSemanticsBuffer,
-                          gl_SemanticsAcquireRelease | gl_SemanticsMakeAvailable | gl_SemanticsMakeVisible);
+            atomicStore(DEREF(INDEX(uint32_t, args.internal_ready_count, node_index - 1)), 1u, gl_ScopeDevice,
+                        gl_StorageSemanticsBuffer, gl_SemanticsRelease | gl_SemanticsMakeAvailable);
          }
       }
 

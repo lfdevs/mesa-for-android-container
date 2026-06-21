@@ -60,6 +60,18 @@
     CI_TRON_INITRAMFS__GPU__URL: '$KERNEL_IMAGE_BASE/arm64/modules.tar'
 
 # 12 devices
+.imagination-ti-am62-sk:arm64:
+  extends:
+    - .imagination-ci-tron-arm64
+  parallel: 12
+  variables:
+    CI_TRON_DTB__0__URL: '$KERNEL_IMAGE_BASE/arm64/k3-am625-sk.dtb'
+    GPU_VENDOR_TAG: dt_gpu:vendor:ti
+    GPU_MODEL_TAG: dt_gpu:model:am62-gpu
+    GPU_VERSION: axe-1-16m
+    FDO_CI_CONCURRENT: 3
+
+# 12 devices
 .imagination-ti-am68-sk:arm64:
   extends:
     - .imagination-ci-tron-arm64

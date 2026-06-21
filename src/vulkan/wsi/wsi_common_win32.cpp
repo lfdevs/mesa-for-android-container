@@ -176,7 +176,7 @@ wsi_win32_surface_get_support(VkIcdSurfaceBase *surface,
 static VkResult
 wsi_win32_surface_get_capabilities(VkIcdSurfaceBase *surf,
                                    struct wsi_device *wsi_device,
-                                   VkSurfaceCapabilitiesKHR* caps)
+                                   VkSurfaceCapabilities2KHR* caps)
 {
    VkIcdSurfaceWin32 *surface = (VkIcdSurfaceWin32 *)surf;
 
@@ -184,44 +184,48 @@ wsi_win32_surface_get_capabilities(VkIcdSurfaceBase *surf,
    if (!GetClientRect(surface->hwnd, &win_rect))
       return VK_ERROR_SURFACE_LOST_KHR;
 
-   caps->minImageCount = 1;
+   caps->surfaceCapabilities.minImageCount = 1;
 
    if (!wsi_device->sw && wsi_device->win32.get_d3d12_command_queue) {
       /* DXGI doesn't support random presenting order (images need to
        * be presented in the order they were acquired), so we can't
        * expose more than two image per swapchain.
        */
-      caps->minImageCount = caps->maxImageCount = 2;
+      caps->surfaceCapabilities.minImageCount = caps->surfaceCapabilities.maxImageCount = 2;
    } else {
-      caps->minImageCount = 1;
+      caps->surfaceCapabilities.minImageCount = 1;
       /* Software callbacke, there is no real maximum */
-      caps->maxImageCount = 0;
+      caps->surfaceCapabilities.maxImageCount = 0;
    }
 
-   caps->currentExtent = {
+   caps->surfaceCapabilities.currentExtent = {
       (uint32_t)win_rect.right - (uint32_t)win_rect.left,
       (uint32_t)win_rect.bottom - (uint32_t)win_rect.top
    };
-   caps->minImageExtent = { 1u, 1u };
-   caps->maxImageExtent = {
+   caps->surfaceCapabilities.minImageExtent = { 1u, 1u };
+   caps->surfaceCapabilities.maxImageExtent = {
       wsi_device->maxImageDimension2D,
       wsi_device->maxImageDimension2D,
    };
 
-   caps->supportedTransforms = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
-   caps->currentTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
-   caps->maxImageArrayLayers = 1;
+   caps->surfaceCapabilities.supportedTransforms = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+   caps->surfaceCapabilities.currentTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+   caps->surfaceCapabilities.maxImageArrayLayers = 1;
 
-   caps->supportedCompositeAlpha =
+   caps->surfaceCapabilities.supportedCompositeAlpha =
       VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR |
       VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR |
       VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR;
 
-   caps->supportedUsageFlags = wsi_caps_get_image_usage();
+   caps->surfaceCapabilities.supportedUsageFlags = wsi_caps_get_image_usage();
 
    VK_FROM_HANDLE(vk_physical_device, pdevice, wsi_device->pdevice);
    if (pdevice->supported_extensions.EXT_attachment_feedback_loop_layout)
-      caps->supportedUsageFlags |= VK_IMAGE_USAGE_ATTACHMENT_FEEDBACK_LOOP_BIT_EXT;
+      caps->surfaceCapabilities.supportedUsageFlags |= VK_IMAGE_USAGE_ATTACHMENT_FEEDBACK_LOOP_BIT_EXT;
+
+   VkSwapchainFlagsSurfaceCapabilitiesEXT *surface_caps = vk_find_struct(caps, SWAPCHAIN_FLAGS_SURFACE_CAPABILITIES_EXT);
+   if (surface_caps && pdevice->supported_extensions.EXT_multisampled_render_to_swapchain)
+      surface_caps->swapchainSupportedFlags |= VK_SWAPCHAIN_CREATE_MULTISAMPLED_RENDER_TO_SINGLE_SAMPLED_BIT_EXT;
 
    return VK_SUCCESS;
 }
@@ -239,7 +243,7 @@ wsi_win32_surface_get_capabilities2(VkIcdSurfaceBase *surface,
 
    VkResult result =
       wsi_win32_surface_get_capabilities(surface, wsi_device,
-                                      &caps->surfaceCapabilities);
+                                         caps);
 
    vk_foreach_struct(ext, caps->pNext) {
       switch (ext->sType) {

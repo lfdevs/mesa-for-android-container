@@ -222,6 +222,10 @@ struct emit_memory_barrier {
          *queue_import = true;
       }
       VkAccessFlags src_flags = res->obj->unordered_access_stage ? res->obj->unordered_access_stage : res->obj->access_stage;
+      if (src_flags & VK_PIPELINE_STAGE_TRANSFER_BIT && pipeline & VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT &&
+          imb.srcAccessMask & VK_ACCESS_TRANSFER_WRITE_BIT && imb.dstAccessMask & VK_ACCESS_SHADER_READ_BIT &&
+          !ctx->unordered_blitting && cmdbuf == ctx->bs->cmdbuf)
+         ctx->last_transfer_sync = ctx->rp_counter;
       VKCTX(CmdPipelineBarrier)(
           cmdbuf,
           src_flags ? src_flags : VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
@@ -247,6 +251,10 @@ struct emit_memory_barrier {
       bmb.pNext = NULL;
       bmb.srcAccessMask = src_flags;
       bmb.dstAccessMask = flags;
+      if (stages & VK_PIPELINE_STAGE_TRANSFER_BIT && pipeline & VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT &&
+          bmb.srcAccessMask & VK_ACCESS_TRANSFER_WRITE_BIT && bmb.dstAccessMask & VK_ACCESS_SHADER_READ_BIT &&
+          !ctx->unordered_blitting && cmdbuf == ctx->bs->cmdbuf)
+         ctx->last_transfer_sync = ctx->rp_counter;
       VKCTX(CmdPipelineBarrier)(
           cmdbuf,
           stages,
@@ -287,6 +295,10 @@ struct emit_memory_barrier<barrier_KHR_synchronzation2> {
          1,
          &imb
          };
+      if (imb.srcStageMask & VK_PIPELINE_STAGE_TRANSFER_BIT && imb.dstStageMask & VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT &&
+          imb.srcAccessMask & VK_ACCESS_TRANSFER_WRITE_BIT && imb.dstAccessMask & VK_ACCESS_SHADER_READ_BIT &&
+          !ctx->unordered_blitting && cmdbuf == ctx->bs->cmdbuf)
+         ctx->last_transfer_sync = ctx->rp_counter;
       VKCTX(CmdPipelineBarrier2)(cmdbuf, &dep);
    }
 
@@ -317,6 +329,10 @@ struct emit_memory_barrier<barrier_KHR_synchronzation2> {
           0,
           NULL
       };
+      if (bmb.srcStageMask & VK_PIPELINE_STAGE_TRANSFER_BIT && bmb.dstStageMask & VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT &&
+          bmb.srcAccessMask & VK_ACCESS_TRANSFER_WRITE_BIT && bmb.dstAccessMask & VK_ACCESS_SHADER_READ_BIT &&
+          !ctx->unordered_blitting && cmdbuf == ctx->bs->cmdbuf)
+         ctx->last_transfer_sync = ctx->rp_counter;
       VKCTX(CmdPipelineBarrier2)(cmdbuf, &dep);
    }
 };
@@ -577,8 +593,7 @@ zink_pipeline_flags_from_stage(VkShaderStageFlagBits stage)
 ALWAYS_INLINE static bool
 resource_needs_barrier(struct zink_resource *res, VkAccessFlags flags, VkPipelineStageFlags pipeline, bool unordered)
 {
-   return zink_resource_access_is_write(unordered ? res->obj->unordered_access : res->obj->access) ||
-          zink_resource_access_is_write(flags) ||
+   return zink_resource_access_is_write(flags) ||
           ((unordered ? res->obj->unordered_access_stage : res->obj->access_stage) & pipeline) != pipeline ||
           ((unordered ? res->obj->unordered_access : res->obj->access) & flags) != flags;
 }
@@ -601,6 +616,12 @@ zink_resource_memory_barrier(struct zink_context *ctx, struct zink_resource *res
    bool unordered_usage_matches = res->obj->unordered_access && usage_matches;
    bool unordered = unordered_res_exec(ctx, res, is_write);
    assert(!UNSYNCHRONIZED || !usage_matches);
+   if (res->obj->transfer_rp && res->obj->transfer_rp < ctx->last_transfer_sync && !unordered &&
+       res->obj->access == VK_ACCESS_TRANSFER_WRITE_BIT && res->obj->access_stage == VK_PIPELINE_STAGE_TRANSFER_BIT) {
+      res->obj->transfer_rp = 0;
+      res->obj->access |= VK_ACCESS_SHADER_READ_BIT;
+      res->obj->access_stage |= VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+   }
    if (!resource_needs_barrier(res, flags, pipeline, unordered))
       return;
    if (completed) {

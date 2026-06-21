@@ -29,6 +29,7 @@ predicate_block(jay_builder *b,
           I->op == JAY_OPCODE_MAX ||
           I->op == JAY_OPCODE_CSEL ||
           I->op == JAY_OPCODE_DPAS ||
+          I->op == JAY_OPCODE_SLICE_REPACK ||
           (condition.file != UFLAG && jay_is_no_mask(I)) ||
           (--limit) < 0)
          return false;

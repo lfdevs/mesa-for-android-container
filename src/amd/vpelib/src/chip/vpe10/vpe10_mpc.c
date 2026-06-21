@@ -63,6 +63,7 @@ static struct mpc_funcs mpc_funcs = {
     .program_mpc_3dlut_fl_config = NULL,
     .program_mpc_3dlut_fl        = NULL,
     .shaper_bypass               = NULL,
+    .program_shaper_indirect     = NULL,
 };
 
 void vpe10_construct_mpc(struct vpe_priv *vpe_priv, struct mpc *mpc)

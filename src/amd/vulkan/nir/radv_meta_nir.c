@@ -1043,8 +1043,12 @@ radv_meta_nir_build_expand_depth_stencil_compute_shader(uint8_t samples)
     * creating a vmcnt(0) because it expects the L1 cache to keep memory
     * operations in-order for the same workgroup. The vmcnt(0) seems
     * necessary however. */
+   /* TODO: Because it assumes memory operations within a wave are in-order, ACO only creates a
+    * vmcnt(0) before the stores in multisample shaders because the stores are all part of the same
+    * clause.
+    */
    nir_barrier(&b, .execution_scope = SCOPE_WORKGROUP, .memory_scope = SCOPE_DEVICE,
-               .memory_semantics = NIR_MEMORY_ACQ_REL, .memory_modes = nir_var_mem_ssbo);
+               .memory_semantics = NIR_MEMORY_ACQ_REL, .memory_modes = nir_var_image);
 
    for (uint32_t i = 0; i < samples; i++) {
       nir_image_deref_store(&b, &nir_build_deref_var(&b, output_img)->def, global_id, nir_imm_int(&b, i), data[i],
@@ -1085,7 +1089,7 @@ radv_meta_nir_build_dcc_decompress_compute_shader()
     * operations in-order for the same workgroup. The vmcnt(0) seems
     * necessary however. */
    nir_barrier(&b, .execution_scope = SCOPE_WORKGROUP, .memory_scope = SCOPE_DEVICE,
-               .memory_semantics = NIR_MEMORY_ACQ_REL, .memory_modes = nir_var_mem_ssbo);
+               .memory_semantics = NIR_MEMORY_ACQ_REL, .memory_modes = nir_var_image);
 
    nir_image_deref_store(&b, &nir_build_deref_var(&b, output_img)->def, img_coord, nir_undef(&b, 1, 32), data,
                          nir_imm_int(&b, 0), .image_dim = GLSL_SAMPLER_DIM_2D);

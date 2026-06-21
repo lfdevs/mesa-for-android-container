@@ -98,8 +98,9 @@ radv_create_buffer(struct radv_device *device, const VkBufferCreateInfo *pCreate
           (VK_BUFFER_USAGE_2_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT | VK_BUFFER_USAGE_2_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT))
          flags |= RADEON_FLAG_32BIT;
 
-      VkResult result = radv_bo_create(device, &buffer->vk.base, align64(buffer->vk.size, 4096), 4096, 0, flags,
-                                       RADV_BO_PRIORITY_VIRTUAL, replay_address, is_internal, &buffer->bo);
+      VkResult result = radv_bo_create(device, &buffer->vk.base, align64(buffer->vk.size, RADV_SPARSE_BUFFER_ALIGNMENT),
+                                       RADV_SPARSE_BUFFER_ALIGNMENT, 0, flags, RADV_BO_PRIORITY_VIRTUAL, replay_address,
+                                       is_internal, &buffer->bo);
       if (result != VK_SUCCESS) {
          radv_destroy_buffer(device, pAllocator, buffer);
          return vk_error(device, result);
@@ -201,7 +202,7 @@ radv_get_buffer_memory_requirements(struct radv_device *device, VkDeviceSize siz
       pMemoryRequirements->memoryRequirements.memoryTypeBits &= pdev->memory_types_protected;
 
    if (flags & VK_BUFFER_CREATE_SPARSE_BINDING_BIT) {
-      pMemoryRequirements->memoryRequirements.alignment = 4096;
+      pMemoryRequirements->memoryRequirements.alignment = RADV_SPARSE_BUFFER_ALIGNMENT;
    } else {
       if (usage & VK_BUFFER_USAGE_2_PREPROCESS_BUFFER_BIT_EXT)
          pMemoryRequirements->memoryRequirements.alignment = radv_dgc_get_buffer_alignment(device);
@@ -282,6 +283,9 @@ radv_bo_create(struct radv_device *device, struct vk_object_base *object, uint64
     * This doesn't allocate extra memory, just writes an extra page table entry.
     */
    if (device->compiler_info.key.mitigate_smem_oob && !is_internal)
+      flags |= RADEON_FLAG_VM_PAD_1PAGE;
+
+   if (pdev->info.has_smem_partial_oob_access_bug && !is_internal)
       flags |= RADEON_FLAG_VM_PAD_1PAGE;
 
    result = ws->buffer_create(ws, size, alignment, domain, flags, priority, address, out_bo);

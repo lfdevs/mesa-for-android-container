@@ -394,9 +394,8 @@ flush_denorm_to_zero(float val)
     * denormals as zero (FTZ/DAZ). Not using fpclassify because
     * a) some compilers are stuck at c89 (msvc)
     * b) not sure it reliably works with non-standard ftz/daz mode
-    * And, right now we only disable denorms with jited code on x86/sse
-    * (albeit this should be classified as a bug) so to get results which
-    * match we must only flush them to zero here in that case too.
+    * We disable denorms with jited code on x86/sse and arm/aarch64 (neon)
+    * so to get results which match we must flush them to zero here too.
     */
    union fi fi_val;
 
@@ -404,6 +403,13 @@ flush_denorm_to_zero(float val)
 
 #if DETECT_ARCH_SSE
    if (util_get_cpu_caps()->has_sse) {
+      if ((fi_val.ui & 0x7f800000) == 0) {
+         fi_val.ui &= 0xff800000;
+      }
+   }
+#endif
+#if DETECT_ARCH_ARM || DETECT_ARCH_AARCH64
+   if (util_get_cpu_caps()->has_neon) {
       if ((fi_val.ui & 0x7f800000) == 0) {
          fi_val.ui &= 0xff800000;
       }
@@ -480,6 +486,7 @@ test_unary(unsigned verbose, FILE *fp, const struct unary_test_t *test, unsigned
          }
 
          if (test->ref == &nearbyintf && length == 2 &&
+             !util_get_cpu_caps()->has_altivec &&
              !util_get_cpu_caps()->has_neon &&
              DETECT_ARCH_S390 == false &&
              !util_get_cpu_caps()->has_sse4_1 &&

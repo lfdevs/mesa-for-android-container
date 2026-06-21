@@ -138,9 +138,9 @@ traces:
 
   gputest/plot3d-v2.trace:
     gl-zink-anv-adl:
-      checksum: 56f11d133f72712a6df13855ec00cdb0
+      checksum: 8d32486f770f91a2a7cb13cda9f7da07
     gl-zink-anv-tgl:
-      checksum: 56f11d133f72712a6df13855ec00cdb0
+      checksum: 8d32486f770f91a2a7cb13cda9f7da07
     zink-radv-vangogh:
       checksum: 2917b73e030ac8b6be92b9bf3a1574ea
     zink-radv-gfx1201:
@@ -451,10 +451,10 @@ traces:
 
   warzone2100/warzone2100-default.trace:
     gl-zink-anv-adl:
-      checksum: 56f1f06bdca3d5352b5e6c0c3d572f43
+      checksum: be68b8d39e665a64824ea37703654a8a
     gl-zink-anv-tgl:
       label: [skip, flakes]
-      checksum: 56f1f06bdca3d5352b5e6c0c3d572f43
+      checksum: be68b8d39e665a64824ea37703654a8a
       text: occasional checksum change
     zink-radv-vangogh:
       checksum: 51d4649b2e415cfe595ae0243472fdd7

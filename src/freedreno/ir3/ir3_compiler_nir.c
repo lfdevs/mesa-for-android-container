@@ -3508,6 +3508,20 @@ emit_intrinsic(struct ir3_context *ctx, nir_intrinsic_instr *intr)
       array_insert(ctx->block, ctx->block->keeps, ldc);
       break;
    }
+   case nir_intrinsic_resbase_ir3: {
+      struct ir3_instruction *ibo = ir3_ssbo_to_ibo(ctx, intr->src[0]);
+      struct ir3_instruction *resbase = ir3_RESBASE(b, ibo, 0);
+      resbase->cat6.iim_val = 1;
+      resbase->cat6.d = 1;
+      resbase->cat6.type = TYPE_U32;
+      resbase->cat6.typed = false;
+      /* resbase has no writemask and always writes out 2 components */
+      resbase->dsts[0]->wrmask = MASK(2);
+      ir3_handle_bindless_cat6(resbase, intr->src[0]);
+      ir3_handle_nonuniform(resbase, intr);
+      ir3_split_dest(b, dst, resbase, 0, 2);
+      break;
+   }
    case nir_intrinsic_rotate:
    case nir_intrinsic_shuffle_up_uniform_ir3:
    case nir_intrinsic_shuffle_down_uniform_ir3:

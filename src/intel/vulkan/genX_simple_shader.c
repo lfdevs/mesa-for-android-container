@@ -452,14 +452,14 @@ genX(simple_shader_push_state_address)(struct anv_simple_shader *state,
 {
    if (state->kernel->stage == MESA_SHADER_FRAGMENT) {
       return anv_state_pool_state_address(
-         &state->device->dynamic_state_pool, push_state);
+         anv_device_get_dynamic_state_pool(state->device), push_state);
    } else {
 #if GFX_VERx10 >= 125
       return anv_state_pool_state_address(
-         &state->device->general_state_pool, push_state);
+         anv_device_get_general_state_pool(state->device), push_state);
 #else
       return anv_state_pool_state_address(
-         &state->device->dynamic_state_pool, push_state);
+         anv_device_get_dynamic_state_pool(state->device), push_state);
 #endif
    }
 }
@@ -473,7 +473,7 @@ genX(emit_simple_shader_dispatch)(struct anv_simple_shader *state,
    struct anv_device *device = state->device;
    struct anv_batch *batch = state->batch;
    struct anv_address push_addr =
-      anv_state_pool_state_address(&device->dynamic_state_pool, push_state);
+      anv_state_pool_state_address(anv_device_get_dynamic_state_pool(device), push_state);
 
    if (state->kernel->stage == MESA_SHADER_FRAGMENT) {
       /* At the moment we require a command buffer associated with this
@@ -497,7 +497,7 @@ genX(emit_simple_shader_dispatch)(struct anv_simple_shader *state,
       vertices[6] = x0; vertices[7] = y0; vertices[8] = z; /* v2 */
 
       struct anv_address vs_data_address =
-         anv_state_pool_state_address(&device->dynamic_state_pool, vs_data_state);
+         anv_state_pool_state_address(anv_device_get_dynamic_state_pool(device), vs_data_state);
       uint32_t *dw = anv_batch_emitn(batch,
                                      1 + GENX(VERTEX_BUFFER_STATE_length),
                                      GENX(3DSTATE_VERTEX_BUFFERS));

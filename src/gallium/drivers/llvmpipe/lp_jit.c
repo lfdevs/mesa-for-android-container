@@ -515,8 +515,14 @@ lp_jit_bindless_texture_from_pipe(struct lp_jit_bindless_texture *jit, const str
    assert(!lp_tex->dt);
 
    if (llvmpipe_resource_is_texture(res)) {
+      /* Convert the view's min_lod_clamp to view-relative space for the shader. */
+      float view_relative_min_lod =
+         view->u.tex.min_lod_clamp - (float)view->u.tex.first_level;
+      jit->view_min_lod = view_relative_min_lod > 0.0f ? view_relative_min_lod : 0.0f;
+
       jit->base = lp_tex->tex_data;
    } else {
+      jit->view_min_lod = 0.0f;
       jit->base = lp_tex->data;
    }
    const void *base = jit->base;
@@ -586,6 +592,7 @@ void
 lp_jit_bindless_texture_buffer_from_bda(struct lp_jit_bindless_texture *jit, void *mem)
 {
    jit->base = mem;
+   jit->view_min_lod = 0.0f;
 }
 
 void

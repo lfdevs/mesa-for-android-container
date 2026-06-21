@@ -337,7 +337,6 @@ fn build_program(
     program.build(devices, options, callback)
 
     //• CL_INVALID_BINARY if program is created with clCreateProgramWithBinary and devices listed in device_list do not have a valid program binary loaded.
-    //• CL_INVALID_BUILD_OPTIONS if the build options specified by options are invalid.
     //• CL_INVALID_OPERATION if program was not created with clCreateProgramWithSource, clCreateProgramWithIL or clCreateProgramWithBinary.
 }
 
@@ -425,8 +424,6 @@ fn compile_program(
     let options = unsafe { CStr::from_ptr_or_empty(&options) };
     let options = CompileOptions::new(options, CL_INVALID_COMPILER_OPTIONS)?;
     program.compile(devices, options, headers, callback)
-
-    // • CL_INVALID_COMPILER_OPTIONS if the compiler options specified by options are invalid.
 }
 
 pub fn link_program(
@@ -477,18 +474,32 @@ pub fn link_program(
         return Err(CL_INVALID_OPERATION);
     }
 
-    let (res, code) = Program::link(
-        context,
-        devices,
-        input_programs,
-        c_string_to_string(options),
-        callback,
-    )?;
+    // CL_INVALID_OPERATION if the rules for devices containing compiled binaries
+    // or libraries as described in input_programs argument above are not followed.
+    // For each device, either ALL or NONE of the input programs must contain a
+    // compiled binary or library. Mixed cases are invalid.
+    for device in &devices {
+        let mut has_binary = input_programs.iter().map(|program| {
+            matches!(
+                program.bin_type(device),
+                CL_PROGRAM_BINARY_TYPE_COMPILED_OBJECT | CL_PROGRAM_BINARY_TYPE_LIBRARY
+            )
+        });
+        let all_equal = match has_binary.next() {
+            Some(maybe_binary) => has_binary.all(|v| maybe_binary == v),
+            None => true,
+        };
+        if !all_equal {
+            return Err(CL_INVALID_OPERATION);
+        }
+    }
+
+    // SAFETY: options is a valid C String or NULL.
+    let options = unsafe { CStr::from_ptr_or_empty(&options) };
+
+    let (res, code) = Program::link(context, devices, input_programs, options, callback)?;
 
     Ok((res.into_cl(), code))
-
-    //• CL_INVALID_LINKER_OPTIONS if the linker options specified by options are invalid.
-    //• CL_INVALID_OPERATION if the rules for devices containing compiled binaries or libraries as described in input_programs argument above are not followed.
 }
 
 #[cl_entrypoint(clSetProgramSpecializationConstant)]

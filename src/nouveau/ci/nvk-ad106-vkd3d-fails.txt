@@ -1,20 +1,17 @@
-# nouveau 0000:2d:00.0: gsp: mmu fault queued
-# nouveau 0000:2d:00.0: gsp: rc engn:00000001 chid:24 type:31 scope:1 part:233
-# nouveau 0000:2d:00.0: fifo:c00000:0003:0018:[d3d12[1056]] errored - disabling channel
-# nouveau 0000:2d:00.0: d3d12[1056]: channel 24 killed!
+# Requires SSBO/tex aliasing and triming descriptors to fit the UAV counter (fixed on descriptor heap MR)
 test_uav_counter_null_behavior_dxbc,Crash
 test_uav_counter_null_behavior_dxil,Crash
 
+# With 32-bit handles, we only have 12-bit to fit the sampler index so this will break after 4096 border colors.
+# We should start using 64-bit handles to fix this.
 test_custom_border_color_limits,Fail
+
+# NVIDIA hardware isn't conformant with D3D11.3 16.8.2
+# Upstream vkd3d-proton skips the non conformant cases for NVK now.
 test_derivative_hoisting_dxil,Fail
 
+# Requires SSBO/tex aliasing (fixed on descriptor heap MR)
 test_undefined_structured_raw_alias_dxbc,Fail
 test_undefined_structured_raw_alias_dxil,Fail
 test_undefined_structured_raw_read_typed_dxbc,Fail
 test_undefined_structured_raw_read_typed_dxil,Fail
-
-test_large_buffer_descriptors,Crash
-
-test_line_tessellation_dxbc,Fail
-test_line_tessellation_dxil,Fail
-test_tessellation_read_tesslevel,Fail

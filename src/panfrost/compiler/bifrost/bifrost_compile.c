@@ -235,6 +235,24 @@ bi_collect_v2i32(bi_builder *b, bi_index s0, bi_index s1)
    return dst;
 }
 
+static void
+bi_split_i64_for_shadd(bi_builder *b, bi_index src, bi_index out[2])
+{
+   bi_index tmp[4] = {bi_null(), bi_null(), bi_null(), bi_null()};
+   bi_emit_split_i32(b, tmp, src, 2);
+   out[0] = tmp[0];
+   out[1] = tmp[1];
+}
+
+static bi_index
+bi_materialize_i64_for_shadd(bi_builder *b, bi_index src)
+{
+   bi_index components[2] = {bi_null(), bi_null()};
+   bi_split_i64_for_shadd(b, src, components);
+
+   return bi_collect_v2i32(b, components[0], components[1]);
+}
+
 static inline bi_instr *
 bi_f32_to_f16_to(bi_builder *b, bi_index dest, bi_index src)
 {
@@ -2082,9 +2100,16 @@ bi_emit_intrinsic(bi_builder *b, nir_intrinsic_instr *instr)
       bi_emit_st_tile(b, instr);
       break;
 
-   case nir_intrinsic_demote_if:
-      bi_discard_b32(b, bi_src_index(&instr->src[0]));
+   case nir_intrinsic_demote_if: {
+      bi_index src0 = bi_src_index(&instr->src[0]);
+      unsigned bs = nir_src_bit_size(instr->src[0]);
+      assert(bs == 16 || bs == 32);
+
+      if (bs == 16)
+         src0 = bi_half(src0, false);
+      bi_discard_b32(b, src0);
       break;
+   }
 
    case nir_intrinsic_demote:
       bi_discard_f32(b, bi_zero(), bi_zero(), BI_CMPF_EQ);
@@ -2252,6 +2277,12 @@ bi_emit_intrinsic(bi_builder *b, nir_intrinsic_instr *instr)
       break;
 
    case nir_intrinsic_load_view_index:
+      if (b->shader->arch >= 14 && b->shader->stage == MESA_SHADER_VERTEX) {
+         bi_mov_i32_to(b, dst, bi_preload(b, BI_PRELOAD_VIEW_ID));
+         break;
+      }
+      FALLTHROUGH;
+
    case nir_intrinsic_load_layer_id:
       assert(b->shader->arch >= 9);
       bi_mov_i32_to(
@@ -3441,6 +3472,8 @@ bi_emit_alu(bi_builder *b, nir_alu_instr *instr)
    case nir_op_iadd:
       if (sz == 64) {
          assert(b->shader->arch >= 9);
+         s0 = bi_materialize_i64_for_shadd(b, s0);
+         s1 = bi_materialize_i64_for_shadd(b, s1);
          bi_shaddx_s64_to(b, dst, s0, s1, 0);
          bi_index dsts[4] = {bi_null(), bi_null(), bi_null(), bi_null()};
          bi_emit_split_i32(b, dsts, dst, 2);

@@ -46,9 +46,6 @@ ac_pm4_set_reg_custom(struct ac_pm4_state *state, unsigned reg, uint32_t val,
                       unsigned opcode, unsigned idx);
 
 void
-ac_pm4_set_reg_idx3(struct ac_pm4_state *state, unsigned reg, uint32_t val);
-
-void
 ac_pm4_clear_state(struct ac_pm4_state *state, const struct radeon_info *info,
                    bool debug_sqtt, bool is_compute_queue);
 

@@ -1957,6 +1957,7 @@ ir3_valid_flags(struct ir3_instruction *instr, unsigned n, unsigned flags)
                return false;
             break;
          case OPC_RESINFO:
+         case OPC_RESBASE:
             if (n != 0)
                return false;
             break;

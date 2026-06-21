@@ -1,0 +1,4 @@
+# They cause random kernel NULL pointer dereferences. Seems pretty recent but
+# skipping them is definitely more reliable. Try to not skip them at some
+# point.
+dEQP-VK.wsi.*

@@ -325,6 +325,7 @@ nlwgs_instr_splits_augmented_block(nir_instr *instr)
          return true;
       case nir_jump_halt:
       case nir_jump_return:
+      case nir_jump_abort:
       case nir_jump_goto:
       case nir_jump_goto_if:
          UNREACHABLE("halt/return/goto should have been already lowered");
