@@ -15,10 +15,9 @@
 #include "util/u_screen.h"
 
 #include <sys/utsname.h>
-#include <ctype.h>
 
 #if AMD_LLVM_AVAILABLE
-#include "ac_llvm_util.h"
+#include <llvm-c/TargetMachine.h>
 #endif
 
 #include <xf86drm.h>
@@ -850,8 +849,6 @@ bool si_init_gfx_screen(struct si_screen *sscreen) {
 
    ac_get_task_info(&sscreen->info, &sscreen->task_info);
 
-   si_disk_cache_create(sscreen);
-
    if (sscreen->info.gfx_level >= GFX11) {
       sscreen->use_ngg = true;
       sscreen->use_ngg_culling = sscreen->info.max_render_backends >= 2 &&
@@ -900,6 +897,8 @@ bool si_init_gfx_screen(struct si_screen *sscreen) {
 #else
    sscreen->use_aco = true;
 #endif
+
+   si_disk_cache_create(sscreen);
 
    if (sscreen->use_aco && !support_aco) {
       mesa_loge("ACO does not support this chip yet");

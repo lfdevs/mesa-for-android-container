@@ -563,6 +563,26 @@ void pco_preprocess_nir(pco_ctx *ctx, nir_shader *nir)
                });
    }
 
+   NIR_PASS(_, nir, nir_lower_subgroups, &(nir_lower_subgroups_options){
+         .subgroup_size = ROGUE_MAX_INSTANCES_PER_TASK,
+         .ballot_bit_size = 32,
+         .ballot_components = 1,
+         .lower_to_scalar = true,
+         .lower_vote_feq = true,
+         .lower_vote_ieq = true,
+         .lower_vote_bool_eq = true,
+         .lower_read_first_invocation = true,
+         .lower_subgroup_masks = true,
+         .lower_relative_shuffle = true,
+         .lower_quad_vote = true,
+         .lower_elect = true,
+         .lower_rotate_to_shuffle = true,
+         .lower_rotate_clustered_to_shuffle = true,
+         .lower_inverse_ballot = true,
+         .lower_boolean_reduce = true,
+         .lower_boolean_shuffle = true,
+      });
+
    NIR_PASS(_, nir, pco_nir_lower_subgroups);
 
    NIR_PASS(_,
@@ -625,7 +645,7 @@ void pco_preprocess_nir(pco_ctx *ctx, nir_shader *nir)
 
    NIR_PASS(_, nir, nir_remove_dead_derefs);
    NIR_PASS(_, nir, nir_opt_undef);
-   NIR_PASS(_, nir, nir_lower_undef_to_zero);
+   NIR_PASS(_, nir, nir_lower_undef_to_zero, NULL);
    NIR_PASS(_, nir, nir_opt_cse);
    NIR_PASS(_, nir, nir_opt_dce);
    NIR_PASS(_,
@@ -922,7 +942,7 @@ void pco_lower_nir(pco_ctx *ctx, nir_shader *nir, pco_data *data)
       NIR_PASS(_, nir, nir_unlower_io_to_vars, true);
 
    if (nir->info.stage == MESA_SHADER_VERTEX)
-      NIR_PASS(_, nir, pco_nir_lower_clip_cull_vars);
+      pco_nir_lower_clip_cull_vars(nir);
 
    NIR_PASS(_, nir, pco_nir_lower_images, data, ctx);
    NIR_PASS(_, nir, pco_nir_lower_atomics, data);
@@ -1099,6 +1119,7 @@ void pco_postprocess_nir(pco_ctx *ctx, nir_shader *nir, pco_data *data)
       NIR_PASS(_, nir, pco_nir_lower_algebraic_late);
       NIR_PASS(_, nir, nir_opt_constant_folding);
       NIR_PASS(_, nir, nir_lower_load_const_to_scalar);
+      NIR_PASS(_, nir, nir_lower_all_phis_to_scalar);
       NIR_PASS(_, nir, nir_opt_copy_prop);
       NIR_PASS(_, nir, nir_opt_dce);
       NIR_PASS(_, nir, nir_opt_cse);

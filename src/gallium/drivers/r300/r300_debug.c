@@ -33,7 +33,7 @@ static const struct debug_named_value r300_debug_options[] = {
     { "nozmask", DBG_NO_ZMASK, "Disable zbuffer compression" },
     { "nohiz", DBG_NO_HIZ, "Disable hierarchical zbuffer" },
     { "nocmask", DBG_NO_CMASK, "Disable AA compression and fast AA clear" },
-    { "notcl", DBG_NO_TCL, "Disable hardware accelerated Transform/Clip/Lighting" },
+    { "notcl", DBG_NO_TCL, "Disable hardware accelerated Transform/Clip/Lighting (unsupported on big-endian)" },
     { "ieeemath", DBG_IEEEMATH, "Force IEEE versions of VS math opcodes where applicable and also IEEE handling of multiply by zero (R5xx only)" },
     { "ffmath", DBG_FFMATH, "Force FF versions of VS math opcodes where applicable and 0*anything=0 rules in FS" },
     { "dummysh", DBG_DUMMYSH, "Never report errors when compilation fails, use dummy shaders instead." },

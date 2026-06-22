@@ -850,19 +850,15 @@ update_fs_config(struct anv_gfx_dynamic_state *hw_state,
    if (!fs_prog_data)
       return;
 
-   /* If we have any dynamic bits here, we might need to update the value
-    * in the push constant for the shader.
-    */
-   if (!brw_fs_prog_data_is_dynamic(fs_prog_data))
+   /* Only update the value if the shader uses it. */
+   if (!fs_prog_data->uses_fs_config)
       return;
 
    UNUSED const struct brw_mesh_prog_data *mesh_prog_data = get_gfx_mesh_prog_data(gfx);
 
    enum intel_fs_config fs_config =
       intel_fs_config((struct intel_fs_params) {
-            .shader_sample_shading     = fs_prog_data->sample_shading,
-            .shader_min_sample_shading = fs_prog_data->min_sample_shading,
-            .state_sample_shading      = fs_prog_data->api_sample_shading,
+            .persample_interp          = fs_prog_data->persample_interp,
             .rasterization_samples     = dyn->ms.rasterization_samples,
             .coarse_pixel              = !vk_fragment_shading_rate_is_disabled(&dyn->fsr),
             .alpha_to_coverage         = dyn->ms.alpha_to_coverage_enable,
@@ -1439,7 +1435,19 @@ ALWAYS_INLINE static void
 update_line_width(struct anv_gfx_dynamic_state *hw_state,
                   const struct vk_dynamic_graphics_state *dyn)
 {
-   SET(SF, sf.LineWidth, dyn->rs.line.width);
+   /* The way to enable Bresenham lines is to set LineWith = 0.0f in
+    * 3DSTATE_SF, see SKL PRMs, Volume 7: 3D-Media-GPGPU, Zero-Width
+    * (Cosmetic) Line Rasterization :
+    *
+    *    "When the LineWidth is set to zero, the device will use special rules
+    *     to rasterize “cosmetic” lines. The rasterization rules also comply
+    *     with the OpenGL conformance requirements (for 1-pixel wide non-
+    *     smooth lines)."
+    */
+   SET(SF, sf.LineWidth,
+           (dyn->rs.line.mode == VK_LINE_RASTERIZATION_MODE_BRESENHAM &&
+            dyn->rs.line.width == 1.0f) ?
+           0.0f : dyn->rs.line.width);
 }
 
 ALWAYS_INLINE static void
@@ -2412,7 +2420,8 @@ cmd_buffer_flush_gfx_runtime_state(struct anv_gfx_dynamic_state *hw_state,
       update_primitive_replication(hw_state, gfx);
 #endif
 
-   if (BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_RS_LINE_WIDTH))
+   if (BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_RS_LINE_WIDTH) ||
+       BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_RS_LINE_MODE))
       update_line_width(hw_state, dyn);
 
    if (gfx->dirty & ANV_CMD_DIRTY_PRERASTER_SHADERS)
@@ -2429,6 +2438,7 @@ cmd_buffer_flush_gfx_runtime_state(struct anv_gfx_dynamic_state *hw_state,
 
    if ((gfx->dirty & ANV_CMD_DIRTY_PRERASTER_SHADERS) ||
        (gfx->dirty & ANV_CMD_DIRTY_RENDER_TARGETS) ||
+       BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_MS_RASTERIZATION_SAMPLES) ||
        BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_IA_PRIMITIVE_TOPOLOGY) ||
        BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_RS_CULL_MODE) ||
        BITSET_TEST(dyn->dirty, MESA_VK_DYNAMIC_RS_FRONT_FACE) ||
@@ -3012,6 +3022,7 @@ cmd_buffer_repack_gfx_state(struct anv_gfx_dynamic_state *hw_state,
          SET(sf, sf, DerefBlockSize);
 #endif
          SET(sf, sf, PointWidthSource);
+         SET(sf, sf, LastPixelEnable);
          SET(sf, sf, LineWidth);
          SET(sf, sf, TriangleStripListProvokingVertexSelect);
          SET(sf, sf, LineStripListProvokingVertexSelect);

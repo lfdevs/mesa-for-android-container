@@ -221,8 +221,10 @@ struct tc_unflushed_batch_token;
  * - it's conformant
  * - doesn't cause any known issues
  * - massively improves performance
+ *
+ * update 2026: chromium svg rendering requires this due to skia bugs
  */
-#define TC_RESOLVE_STRICT 0
+#define TC_RESOLVE_STRICT 1
 
 /* This is an internal flag not sent to the driver. */
 #define TC_TRANSFER_MAP_UPLOAD_CPU_STORAGE   (1u << 28)

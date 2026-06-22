@@ -35,6 +35,7 @@
 #define CTX      vpe20_mpc
 #define MPC_RMCM_3DLUT_FL_ENABLE  (0x0)
 #define MPC_RMCM_3DLUT_FL_DISABLE (0xf)
+#define SHAPER_LUT_DMA_CONFIG_ALIGNMENT (64)
 
 static struct mpc_funcs mpc_funcs = {
     .program_mpcc_mux            = vpe20_mpc_program_mpcc_mux,
@@ -46,7 +47,6 @@ static struct mpc_funcs mpc_funcs = {
     .program_output_csc          = vpe10_program_output_csc,
     .set_output_gamma            = vpe10_mpc_set_output_gamma,
     .set_gamut_remap             = NULL,
-    .set_gamut_remap2            = vpe20_mpc_set_gamut_remap2,
     .power_on_1dlut_shaper_3dlut = vpe20_mpc_power_on_1dlut_shaper_3dlut,
     .program_shaper              = vpe20_mpc_program_shaper,
     .program_3dlut               = vpe20_mpc_program_3dlut,
@@ -58,14 +58,16 @@ static struct mpc_funcs mpc_funcs = {
     .program_mpc_out             = vpe10_mpc_program_mpc_out,
     .set_output_transfer_func    = vpe10_mpc_set_output_transfer_func,
     .set_mpc_shaper_3dlut        = vpe20_mpc_set_mpc_shaper_3dlut,
-    .shaper_bypass               = vpe20_mpc_shaper_bypass,
     .set_blend_lut               = vpe10_mpc_set_blend_lut,
     .program_movable_cm          = vpe20_mpc_program_movable_cm,
     .program_crc                 = vpe10_mpc_program_crc,
     .attach_3dlut_to_mpc_inst    = vpe20_attach_3dlut_to_mpc_inst,
+    .set_gamut_remap2            = vpe20_mpc_set_gamut_remap2,
     .update_3dlut_fl_bias_scale  = vpe20_update_3dlut_fl_bias_scale,
     .program_mpc_3dlut_fl_config = vpe20_mpc_program_3dlut_fl_config,
     .program_mpc_3dlut_fl        = vpe20_mpc_program_3dlut_fl,
+    .shaper_bypass               = vpe20_mpc_shaper_bypass,
+    .program_shaper_indirect     = vpe20_mpc_program_shaper_indirect,
 };
 
 void vpe20_construct_mpc(struct vpe_priv *vpe_priv, struct mpc *mpc)
@@ -293,6 +295,232 @@ bool vpe20_mpc_program_shaper(struct mpc *mpc, const struct pwl_params *params)
     vpe20_mpc_program_shaper_luta_settings(mpc, params);
 
     vpe20_mpc_program_shaper_lut(mpc, params->rgb_resulted, params->hw_points_num);
+
+    REG_SET(VPMPC_RMCM_SHAPER_CONTROL, 0, VPMPC_RMCM_SHAPER_LUT_MODE, 1);
+    REG_SET_DEFAULT(VPMPC_RMCM_SHAPER_SCALE_R);
+    REG_SET_DEFAULT(VPMPC_RMCM_SHAPER_SCALE_G_B);
+
+    //? Should we check debug option before turn off shaper? -- should be yes
+    if (vpe_priv->init.debug.enable_mem_low_power.bits.mpc)
+        vpe20_mpc_power_on_1dlut_shaper_3dlut(mpc, false);
+
+    return true;
+}
+
+static void vpe20_mpc_program_shaper_luta_settings_indirect(struct mpc *mpc, const uint64_t data)
+{
+    PROGRAM_ENTRY();
+    uint32_t data_array_size = 1;
+    uint64_t tmp_data        = data;
+
+    // VPMPC_RMCM_SHAPER_OFFSET_R
+    config_writer_force_new_with_type(config_writer, CONFIG_TYPE_INDIRECT, mpc->inst);
+    config_writer_fill_indirect_data_array(config_writer, tmp_data, data_array_size);
+    config_writer_fill_indirect_destination(config_writer, REG_OFFSET(VPMPC_RMCM_SHAPER_LUT_INDEX),
+        0, REG_OFFSET(VPMPC_RMCM_SHAPER_OFFSET_R));
+
+    // VPMPC_RMCM_SHAPER_OFFSET_G
+    config_writer_force_new_with_type(config_writer, CONFIG_TYPE_INDIRECT, mpc->inst);
+    tmp_data += SHAPER_LUT_DMA_CONFIG_ALIGNMENT;
+    config_writer_fill_indirect_data_array(config_writer, tmp_data, data_array_size);
+    config_writer_fill_indirect_destination(config_writer, REG_OFFSET(VPMPC_RMCM_SHAPER_LUT_INDEX),
+        0, REG_OFFSET(VPMPC_RMCM_SHAPER_OFFSET_G));
+
+    // VPMPC_RMCM_SHAPER_OFFSET_B
+    config_writer_force_new_with_type(config_writer, CONFIG_TYPE_INDIRECT, mpc->inst);
+    tmp_data += SHAPER_LUT_DMA_CONFIG_ALIGNMENT;
+    config_writer_fill_indirect_data_array(config_writer, tmp_data, data_array_size);
+    config_writer_fill_indirect_destination(config_writer, REG_OFFSET(VPMPC_RMCM_SHAPER_LUT_INDEX),
+        0, REG_OFFSET(VPMPC_RMCM_SHAPER_OFFSET_B));
+
+    tmp_data += SHAPER_LUT_DMA_CONFIG_ALIGNMENT; // skip VPMPC_RMCM_SHAPER_SCALE_R
+    tmp_data += SHAPER_LUT_DMA_CONFIG_ALIGNMENT; // skip VPMPC_RMCM_SHAPER_SCALE_G
+    tmp_data += SHAPER_LUT_DMA_CONFIG_ALIGNMENT; // skip VPMPC_RMCM_SHAPER_SCALE_B
+
+    // VPMPC_RMCM_SHAPER_RAMA_START_CNTL_B
+    config_writer_force_new_with_type(config_writer, CONFIG_TYPE_INDIRECT, mpc->inst);
+    tmp_data += SHAPER_LUT_DMA_CONFIG_ALIGNMENT;
+    config_writer_fill_indirect_data_array(config_writer, tmp_data, data_array_size);
+    config_writer_fill_indirect_destination(config_writer, REG_OFFSET(VPMPC_RMCM_SHAPER_LUT_INDEX),
+        0, REG_OFFSET(VPMPC_RMCM_SHAPER_RAMA_START_CNTL_R));
+
+    // VPMPC_RMCM_SHAPER_RAMA_START_CNTL_G
+    config_writer_force_new_with_type(config_writer, CONFIG_TYPE_INDIRECT, mpc->inst);
+    tmp_data += SHAPER_LUT_DMA_CONFIG_ALIGNMENT;
+    config_writer_fill_indirect_data_array(config_writer, tmp_data, data_array_size);
+    config_writer_fill_indirect_destination(config_writer, REG_OFFSET(VPMPC_RMCM_SHAPER_LUT_INDEX),
+        0, REG_OFFSET(VPMPC_RMCM_SHAPER_RAMA_START_CNTL_G));
+
+    // VPMPC_RMCM_SHAPER_RAMA_START_CNTL_R
+    config_writer_force_new_with_type(config_writer, CONFIG_TYPE_INDIRECT, mpc->inst);
+    tmp_data += SHAPER_LUT_DMA_CONFIG_ALIGNMENT;
+    config_writer_fill_indirect_data_array(config_writer, tmp_data, data_array_size);
+    config_writer_fill_indirect_destination(config_writer, REG_OFFSET(VPMPC_RMCM_SHAPER_LUT_INDEX),
+        0, REG_OFFSET(VPMPC_RMCM_SHAPER_RAMA_START_CNTL_B));
+
+    // VPMPC_RMCM_SHAPER_RAMA_END_CNTL_B
+    config_writer_force_new_with_type(config_writer, CONFIG_TYPE_INDIRECT, mpc->inst);
+    tmp_data += SHAPER_LUT_DMA_CONFIG_ALIGNMENT;
+    config_writer_fill_indirect_data_array(config_writer, tmp_data, data_array_size);
+    config_writer_fill_indirect_destination(config_writer, REG_OFFSET(VPMPC_RMCM_SHAPER_LUT_INDEX),
+        0, REG_OFFSET(VPMPC_RMCM_SHAPER_RAMA_END_CNTL_R));
+
+    // VPMPC_RMCM_SHAPER_RAMA_END_CNTL_G
+    config_writer_force_new_with_type(config_writer, CONFIG_TYPE_INDIRECT, mpc->inst);
+    tmp_data += SHAPER_LUT_DMA_CONFIG_ALIGNMENT;
+    config_writer_fill_indirect_data_array(config_writer, tmp_data, data_array_size);
+    config_writer_fill_indirect_destination(config_writer, REG_OFFSET(VPMPC_RMCM_SHAPER_LUT_INDEX),
+        0, REG_OFFSET(VPMPC_RMCM_SHAPER_RAMA_END_CNTL_G));
+
+    // VPMPC_RMCM_SHAPER_RAMA_END_CNTL_R
+    config_writer_force_new_with_type(config_writer, CONFIG_TYPE_INDIRECT, mpc->inst);
+    tmp_data += SHAPER_LUT_DMA_CONFIG_ALIGNMENT;
+    config_writer_fill_indirect_data_array(config_writer, tmp_data, data_array_size);
+    config_writer_fill_indirect_destination(config_writer, REG_OFFSET(VPMPC_RMCM_SHAPER_LUT_INDEX),
+        0, REG_OFFSET(VPMPC_RMCM_SHAPER_RAMA_END_CNTL_B));
+
+    // VPMPC_RMCM_SHAPER_RAMA_REGION_0_1
+    config_writer_force_new_with_type(config_writer, CONFIG_TYPE_INDIRECT, mpc->inst);
+    tmp_data += SHAPER_LUT_DMA_CONFIG_ALIGNMENT;
+    config_writer_fill_indirect_data_array(config_writer, tmp_data, data_array_size);
+    config_writer_fill_indirect_destination(config_writer, REG_OFFSET(VPMPC_RMCM_SHAPER_LUT_INDEX),
+        0, REG_OFFSET(VPMPC_RMCM_SHAPER_RAMA_REGION_0_1));
+
+    config_writer_force_new_with_type(config_writer, CONFIG_TYPE_INDIRECT, mpc->inst);
+    tmp_data += SHAPER_LUT_DMA_CONFIG_ALIGNMENT;
+    config_writer_fill_indirect_data_array(config_writer, tmp_data, data_array_size);
+    config_writer_fill_indirect_destination(config_writer, REG_OFFSET(VPMPC_RMCM_SHAPER_LUT_INDEX),
+        0, REG_OFFSET(VPMPC_RMCM_SHAPER_RAMA_REGION_2_3));
+
+    config_writer_force_new_with_type(config_writer, CONFIG_TYPE_INDIRECT, mpc->inst);
+    tmp_data += SHAPER_LUT_DMA_CONFIG_ALIGNMENT;
+    config_writer_fill_indirect_data_array(config_writer, tmp_data, data_array_size);
+    config_writer_fill_indirect_destination(config_writer, REG_OFFSET(VPMPC_RMCM_SHAPER_LUT_INDEX),
+        0, REG_OFFSET(VPMPC_RMCM_SHAPER_RAMA_REGION_4_5));
+
+    config_writer_force_new_with_type(config_writer, CONFIG_TYPE_INDIRECT, mpc->inst);
+    tmp_data += SHAPER_LUT_DMA_CONFIG_ALIGNMENT;
+    config_writer_fill_indirect_data_array(config_writer, tmp_data, data_array_size);
+    config_writer_fill_indirect_destination(config_writer, REG_OFFSET(VPMPC_RMCM_SHAPER_LUT_INDEX),
+        0, REG_OFFSET(VPMPC_RMCM_SHAPER_RAMA_REGION_6_7));
+
+    config_writer_force_new_with_type(config_writer, CONFIG_TYPE_INDIRECT, mpc->inst);
+    tmp_data += SHAPER_LUT_DMA_CONFIG_ALIGNMENT;
+    config_writer_fill_indirect_data_array(config_writer, tmp_data, data_array_size);
+    config_writer_fill_indirect_destination(config_writer, REG_OFFSET(VPMPC_RMCM_SHAPER_LUT_INDEX),
+        0, REG_OFFSET(VPMPC_RMCM_SHAPER_RAMA_REGION_8_9));
+
+    config_writer_force_new_with_type(config_writer, CONFIG_TYPE_INDIRECT, mpc->inst);
+    tmp_data += SHAPER_LUT_DMA_CONFIG_ALIGNMENT;
+    config_writer_fill_indirect_data_array(config_writer, tmp_data, data_array_size);
+    config_writer_fill_indirect_destination(config_writer, REG_OFFSET(VPMPC_RMCM_SHAPER_LUT_INDEX),
+        0, REG_OFFSET(VPMPC_RMCM_SHAPER_RAMA_REGION_10_11));
+
+    config_writer_force_new_with_type(config_writer, CONFIG_TYPE_INDIRECT, mpc->inst);
+    tmp_data += SHAPER_LUT_DMA_CONFIG_ALIGNMENT;
+    config_writer_fill_indirect_data_array(config_writer, tmp_data, data_array_size);
+    config_writer_fill_indirect_destination(config_writer, REG_OFFSET(VPMPC_RMCM_SHAPER_LUT_INDEX),
+        0, REG_OFFSET(VPMPC_RMCM_SHAPER_RAMA_REGION_12_13));
+
+    config_writer_force_new_with_type(config_writer, CONFIG_TYPE_INDIRECT, mpc->inst);
+    tmp_data += SHAPER_LUT_DMA_CONFIG_ALIGNMENT;
+    config_writer_fill_indirect_data_array(config_writer, tmp_data, data_array_size);
+    config_writer_fill_indirect_destination(config_writer, REG_OFFSET(VPMPC_RMCM_SHAPER_LUT_INDEX),
+        0, REG_OFFSET(VPMPC_RMCM_SHAPER_RAMA_REGION_14_15));
+
+    config_writer_force_new_with_type(config_writer, CONFIG_TYPE_INDIRECT, mpc->inst);
+    tmp_data += SHAPER_LUT_DMA_CONFIG_ALIGNMENT;
+    config_writer_fill_indirect_data_array(config_writer, tmp_data, data_array_size);
+    config_writer_fill_indirect_destination(config_writer, REG_OFFSET(VPMPC_RMCM_SHAPER_LUT_INDEX),
+        0, REG_OFFSET(VPMPC_RMCM_SHAPER_RAMA_REGION_16_17));
+
+    config_writer_force_new_with_type(config_writer, CONFIG_TYPE_INDIRECT, mpc->inst);
+    tmp_data += SHAPER_LUT_DMA_CONFIG_ALIGNMENT;
+    config_writer_fill_indirect_data_array(config_writer, tmp_data, data_array_size);
+    config_writer_fill_indirect_destination(config_writer, REG_OFFSET(VPMPC_RMCM_SHAPER_LUT_INDEX),
+        0, REG_OFFSET(VPMPC_RMCM_SHAPER_RAMA_REGION_18_19));
+
+    config_writer_force_new_with_type(config_writer, CONFIG_TYPE_INDIRECT, mpc->inst);
+    tmp_data += SHAPER_LUT_DMA_CONFIG_ALIGNMENT;
+    config_writer_fill_indirect_data_array(config_writer, tmp_data, data_array_size);
+    config_writer_fill_indirect_destination(config_writer, REG_OFFSET(VPMPC_RMCM_SHAPER_LUT_INDEX),
+        0, REG_OFFSET(VPMPC_RMCM_SHAPER_RAMA_REGION_20_21));
+
+    config_writer_force_new_with_type(config_writer, CONFIG_TYPE_INDIRECT, mpc->inst);
+    tmp_data += SHAPER_LUT_DMA_CONFIG_ALIGNMENT;
+    config_writer_fill_indirect_data_array(config_writer, tmp_data, data_array_size);
+    config_writer_fill_indirect_destination(config_writer, REG_OFFSET(VPMPC_RMCM_SHAPER_LUT_INDEX),
+        0, REG_OFFSET(VPMPC_RMCM_SHAPER_RAMA_REGION_22_23));
+
+    config_writer_force_new_with_type(config_writer, CONFIG_TYPE_INDIRECT, mpc->inst);
+    tmp_data += SHAPER_LUT_DMA_CONFIG_ALIGNMENT;
+    config_writer_fill_indirect_data_array(config_writer, tmp_data, data_array_size);
+    config_writer_fill_indirect_destination(config_writer, REG_OFFSET(VPMPC_RMCM_SHAPER_LUT_INDEX),
+        0, REG_OFFSET(VPMPC_RMCM_SHAPER_RAMA_REGION_24_25));
+
+    config_writer_force_new_with_type(config_writer, CONFIG_TYPE_INDIRECT, mpc->inst);
+    tmp_data += SHAPER_LUT_DMA_CONFIG_ALIGNMENT;
+    config_writer_fill_indirect_data_array(config_writer, tmp_data, data_array_size);
+    config_writer_fill_indirect_destination(config_writer, REG_OFFSET(VPMPC_RMCM_SHAPER_LUT_INDEX),
+        0, REG_OFFSET(VPMPC_RMCM_SHAPER_RAMA_REGION_26_27));
+
+    config_writer_force_new_with_type(config_writer, CONFIG_TYPE_INDIRECT, mpc->inst);
+    tmp_data += SHAPER_LUT_DMA_CONFIG_ALIGNMENT;
+    config_writer_fill_indirect_data_array(config_writer, tmp_data, data_array_size);
+    config_writer_fill_indirect_destination(config_writer, REG_OFFSET(VPMPC_RMCM_SHAPER_LUT_INDEX),
+        0, REG_OFFSET(VPMPC_RMCM_SHAPER_RAMA_REGION_28_29));
+
+    config_writer_force_new_with_type(config_writer, CONFIG_TYPE_INDIRECT, mpc->inst);
+    tmp_data += SHAPER_LUT_DMA_CONFIG_ALIGNMENT;
+    config_writer_fill_indirect_data_array(config_writer, tmp_data, data_array_size);
+    config_writer_fill_indirect_destination(config_writer, REG_OFFSET(VPMPC_RMCM_SHAPER_LUT_INDEX),
+        0, REG_OFFSET(VPMPC_RMCM_SHAPER_RAMA_REGION_30_31));
+
+    config_writer_force_new_with_type(config_writer, CONFIG_TYPE_INDIRECT, mpc->inst);
+    tmp_data += SHAPER_LUT_DMA_CONFIG_ALIGNMENT;
+    config_writer_fill_indirect_data_array(config_writer, tmp_data, data_array_size);
+    config_writer_fill_indirect_destination(config_writer, REG_OFFSET(VPMPC_RMCM_SHAPER_LUT_INDEX),
+        0, REG_OFFSET(VPMPC_RMCM_SHAPER_RAMA_REGION_32_33));
+
+    config_writer_complete(config_writer);
+}
+
+static void vpe20_mpc_program_shaper_lut_indirect(struct mpc *mpc, const uint64_t data)
+{
+    PROGRAM_ENTRY();
+
+    // The data size is in byte, need convert to dword for config writer
+    uint32_t data_array_size =
+        vpe_priv->pub.caps->color_caps.mpc.lut_caps.lut_shaper_caps.data_size / 4;
+
+    config_writer_force_new_with_type(config_writer, CONFIG_TYPE_INDIRECT, mpc->inst);
+
+    config_writer_fill_indirect_data_array(config_writer, data, data_array_size);
+
+    config_writer_fill_indirect_destination(config_writer, REG_OFFSET(VPMPC_RMCM_SHAPER_LUT_INDEX),
+        0, REG_OFFSET(VPMPC_RMCM_SHAPER_LUT_DATA));
+
+    config_writer_complete(config_writer);
+}
+
+bool vpe20_mpc_program_shaper_indirect(struct mpc *mpc, struct vpe_dma_shaper *shaper)
+{
+    PROGRAM_ENTRY();
+
+    if ((shaper == NULL) || (shaper->config_data == 0) || (shaper->data == 0)) {
+        REG_SET(VPMPC_RMCM_SHAPER_CONTROL, 0, VPMPC_RMCM_SHAPER_LUT_MODE, 0);
+        return false;
+    }
+
+    vpe20_mpc_configure_shaper_lut(mpc, true); // Always use LUT_RAM_A
+    //  should always turn it on
+    vpe20_mpc_power_on_1dlut_shaper_3dlut(mpc, true);
+
+    vpe20_mpc_program_shaper_luta_settings_indirect(mpc, shaper->config_data);
+
+    vpe20_mpc_program_shaper_lut_indirect(mpc, shaper->data);
+
+    config_writer_set_type(config_writer, CONFIG_TYPE_DIRECT, mpc->inst);
 
     REG_SET(VPMPC_RMCM_SHAPER_CONTROL, 0, VPMPC_RMCM_SHAPER_LUT_MODE, 1);
     REG_SET_DEFAULT(VPMPC_RMCM_SHAPER_SCALE_R);
@@ -658,20 +886,21 @@ void vpe20_mpc_set_mpc_shaper_3dlut(
     bool               bypass;
 
     // get the shaper lut params
-    if (func_shaper) {
-        if (func_shaper->type == TF_TYPE_DISTRIBUTED_POINTS) {
-            vpe10_cm_helper_translate_curve_to_hw_format(func_shaper, &mpc->shaper_params, true,
-                func_shaper->dirty[mpc->inst]);          // should init shaper_params first
-            shaper_lut = &mpc->shaper_params;            // are there shaper prams in dpp instead?
+    if (stream_ctx->stream.lut_compound.enabled == false) {
+        if (func_shaper) {
+            if (func_shaper->type == TF_TYPE_DISTRIBUTED_POINTS) {
+                vpe10_cm_helper_translate_curve_to_hw_format(func_shaper, &mpc->shaper_params, true,
+                    func_shaper->dirty[mpc->inst]); // should init shaper_params first
+                shaper_lut = &mpc->shaper_params;   // are there shaper prams in dpp instead?
+            } else if (func_shaper->type == TF_TYPE_HWPWL) {
+                shaper_lut = &func_shaper->pwl;
+            }
         }
-        else if (func_shaper->type == TF_TYPE_HWPWL) {
-            shaper_lut = &func_shaper->pwl;
-        }
-    }
 
-    bypass = (!shaper_lut || (func_shaper && func_shaper->type == TF_TYPE_BYPASS));
-    CONFIG_CACHE(func_shaper, stream_ctx, vpe_priv->init.debug.disable_lut_caching, bypass,
-        mpc->funcs->program_shaper(mpc, shaper_lut), mpc->inst);
+        bypass = (!shaper_lut || (func_shaper && func_shaper->type == TF_TYPE_BYPASS));
+        CONFIG_CACHE(func_shaper, stream_ctx, vpe_priv->init.debug.disable_lut_caching, bypass,
+            mpc->funcs->program_shaper(mpc, shaper_lut), mpc->inst);
+    }
 
     if (lut3d_func && !lut3d_func->state.bits.is_dma) {
         bypass       = (!lut3d_func || !lut3d_func->state.bits.initialized);

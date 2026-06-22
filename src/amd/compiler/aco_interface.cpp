@@ -217,7 +217,7 @@ aco_compile_shader_part(const struct aco_compiler_options* options,
    if (options->record_asm)
       disasm = get_disasm_string(program.get(), options->family, code, exec_size);
 
-   (*build_binary)(binary, config.num_sgprs, config.num_vgprs, code.data(), code.size(),
+   (*build_binary)(binary, config.num_sgprs, config.num_vgprs, exec_size, code.data(), code.size(),
                    disasm.data(), disasm.size());
 }
 
@@ -296,7 +296,7 @@ aco_compile_vs_prolog(const struct aco_compiler_options* options,
    if (options->record_asm)
       disasm = get_disasm_string(program.get(), options->family, code, exec_size);
 
-   (*build_prolog)(binary, config.num_sgprs, config.num_vgprs, code.data(), code.size(),
+   (*build_prolog)(binary, config.num_sgprs, config.num_vgprs, exec_size, code.data(), code.size(),
                    disasm.data(), disasm.size());
 }
 

@@ -40,6 +40,13 @@
 #define RDECODE_VCN2_5_GPCOM_VCPU_DATA2     0x1A0
 #define RDECODE_VCN2_5_ENGINE_CNTL          0x9b4
 
+#define RDECODE_DITHERING_DISABLED          0x0
+#define RDECODE_DITHERING_TRUNCATE          0x1
+#define RDECODE_DITHERING_ROUND_A           0x2
+#define RDECODE_DITHERING_ROUND_B           0x3
+#define RDECODE_DITHERING_FIXED             0x4
+#define RDECODE_DITHERING_RANDOM            0x5
+
 #define RDECODE_SESSION_CONTEXT_SIZE (128 * 1024)
 #define RDECODE_MAX_SUBSAMPLE_SIZE   (2048 * 2 * 4)
 #define RDECODE_IT_SCALING_TABLE_SIZE       992
@@ -1260,8 +1267,13 @@ build_hevc_msg(struct cmd_buffer *cmd_buf, struct ac_video_dec_decode_cmd *cmd, 
    msg.isNonRef = hevc->pic_flags.is_ref_pic_flag ? 0 : 1;
 
    if (hevc->bit_depth_luma_minus8 || hevc->bit_depth_chroma_minus8) {
-      msg.p010_mode = 1;
-      msg.msb_mode = 1;
+      if (cmd->decode_surface.format == PIPE_FORMAT_NV12) {
+         msg.luma_10to8 = RDECODE_DITHERING_RANDOM;
+         msg.chroma_10to8 = RDECODE_DITHERING_RANDOM;
+      } else {
+         msg.p010_mode = 1;
+         msg.msb_mode = 1;
+      }
    }
 
    for (uint32_t i = 0; i < H265_TILE_COLS_LIST_SIZE; i++)
@@ -1373,8 +1385,13 @@ build_vp9_msg(struct cmd_buffer *cmd_buf, struct ac_video_dec_decode_cmd *cmd, r
    msg.compressed_header_size = vp9->compressed_header_size;
 
    if (vp9->bit_depth_luma_minus8 || vp9->bit_depth_chroma_minus8) {
-      msg.p010_mode = 1;
-      msg.msb_mode = 1;
+      if (cmd->decode_surface.format == PIPE_FORMAT_NV12) {
+         msg.luma_10to8 = RDECODE_DITHERING_RANDOM;
+         msg.chroma_10to8 = RDECODE_DITHERING_RANDOM;
+      } else {
+         msg.p010_mode = 1;
+         msg.msb_mode = 1;
+      }
    }
 
    const int32_t scale = 1 << (vp9->loop_filter.loop_filter_level >> 5);
@@ -1594,8 +1611,13 @@ build_av1_msg(struct cmd_buffer *cmd_buf, struct ac_video_dec_decode_cmd *cmd, r
    msg.bit_depth_chroma_minus8 = av1->bit_depth - 8;
 
    if (av1->bit_depth > 8) {
-      msg.p010_mode = 1;
-      msg.msb_mode = 1;
+      if (cmd->decode_surface.format == PIPE_FORMAT_NV12) {
+         msg.luma_10to8 = RDECODE_DITHERING_RANDOM;
+         msg.chroma_10to8 = RDECODE_DITHERING_RANDOM;
+      } else {
+         msg.p010_mode = 1;
+         msg.msb_mode = 1;
+      }
    }
 
    for (uint32_t i = 0; i < AV1_MAX_TILE_COLS + 1; i++)

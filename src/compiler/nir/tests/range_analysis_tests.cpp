@@ -89,7 +89,7 @@ TEST_F(ssa_def_bits_used_test, iand_with_const_vector)
 
       alu->src[0].swizzle[0] = i;
 
-      const uint64_t bits_used = nir_def_bits_used(alu->src[1].src.ssa);
+      const uint64_t bits_used = nir_def_bits_used(nir_get_scalar(alu->src[1].src.ssa, 0));
 
       /* The answer should be the value swizzled from src0. */
       EXPECT_EQ(src0_imm[i], bits_used);
@@ -119,7 +119,7 @@ TEST_F(ssa_def_bits_used_test, ior_with_const_vector)
 
       alu->src[0].swizzle[0] = i;
 
-      const uint64_t bits_used = nir_def_bits_used(alu->src[1].src.ssa);
+      const uint64_t bits_used = nir_def_bits_used(nir_get_scalar(alu->src[1].src.ssa, 0));
 
       /* The answer should be the value swizzled from ~src0. */
       EXPECT_EQ(~src0_imm[i], bits_used);
@@ -152,7 +152,7 @@ TEST_F(ssa_def_bits_used_test, extract_i16_with_const_index)
 
       alu->src[1].swizzle[0] = i;
 
-      const uint64_t bits_used = nir_def_bits_used(alu->src[0].src.ssa);
+      const uint64_t bits_used = nir_def_bits_used(nir_get_scalar(alu->src[0].src.ssa, 0));
 
       EXPECT_EQ(0xffffu << (16 * src1_imm[i]), bits_used);
    }
@@ -184,7 +184,7 @@ TEST_F(ssa_def_bits_used_test, extract_u16_with_const_index)
 
       alu->src[1].swizzle[0] = i;
 
-      const uint64_t bits_used = nir_def_bits_used(alu->src[0].src.ssa);
+      const uint64_t bits_used = nir_def_bits_used(nir_get_scalar(alu->src[0].src.ssa, 0));
 
       EXPECT_EQ(0xffffu << (16 * src1_imm[i]), bits_used);
    }
@@ -216,7 +216,7 @@ TEST_F(ssa_def_bits_used_test, extract_i8_with_const_index)
 
       alu->src[1].swizzle[0] = i;
 
-      const uint64_t bits_used = nir_def_bits_used(alu->src[0].src.ssa);
+      const uint64_t bits_used = nir_def_bits_used(nir_get_scalar(alu->src[0].src.ssa, 0));
 
       EXPECT_EQ(0xffu << (8 * src1_imm[i]), bits_used);
    }
@@ -248,7 +248,7 @@ TEST_F(ssa_def_bits_used_test, extract_u8_with_const_index)
 
       alu->src[1].swizzle[0] = i;
 
-      const uint64_t bits_used = nir_def_bits_used(alu->src[0].src.ssa);
+      const uint64_t bits_used = nir_def_bits_used(nir_get_scalar(alu->src[0].src.ssa, 0));
 
       EXPECT_EQ(0xffu << (8 * src1_imm[i]), bits_used);
    }
@@ -309,8 +309,8 @@ TEST_F(ssa_def_bits_used_test, ubfe_ibfe)
    nir_store_global(b, alu1, nir_undef(b, 1, 64));
    nir_store_global(b, alu2, nir_undef(b, 1, 64));
 
-   EXPECT_EQ(nir_def_bits_used(load1), BITFIELD_RANGE(14, 3));
-   EXPECT_EQ(nir_def_bits_used(load2), BITFIELD_RANGE(12, 7));
+   EXPECT_EQ(nir_def_bits_used(nir_get_scalar(load1, 0)), BITFIELD_RANGE(14, 3));
+   EXPECT_EQ(nir_def_bits_used(nir_get_scalar(load2, 0)), BITFIELD_RANGE(12, 7));
 }
 
 TEST_F(ssa_def_bits_used_test, ibfe_iand)
@@ -319,7 +319,7 @@ TEST_F(ssa_def_bits_used_test, ibfe_iand)
    nir_def *alu = nir_iand_imm(b, nir_ibfe_imm(b, load, 14, 3), 0x80000000);
    nir_store_global(b, alu, nir_undef(b, 1, 64));
 
-   EXPECT_EQ(nir_def_bits_used(load), BITFIELD_BIT(16));
+   EXPECT_EQ(nir_def_bits_used(nir_get_scalar(load, 0)), BITFIELD_BIT(16));
 }
 
 TEST_F(ssa_def_bits_used_test, ubfe_iand)
@@ -328,7 +328,7 @@ TEST_F(ssa_def_bits_used_test, ubfe_iand)
    nir_def *alu = nir_iand_imm(b, nir_ubfe_imm(b, load, 14, 3), 0x2);
    nir_store_global(b, alu, nir_undef(b, 1, 64));
 
-   EXPECT_EQ(nir_def_bits_used(load), BITFIELD_BIT(15));
+   EXPECT_EQ(nir_def_bits_used(nir_get_scalar(load, 0)), BITFIELD_BIT(15));
 }
 
 TEST_F(ssa_def_bits_used_test, ishr_signed)
@@ -340,8 +340,8 @@ TEST_F(ssa_def_bits_used_test, ishr_signed)
    nir_store_global(b, alu1, nir_undef(b, 1, 64));
    nir_store_global(b, alu2, nir_undef(b, 1, 64));
 
-   EXPECT_EQ(nir_def_bits_used(load1), BITFIELD_BIT(31)); /* last bit */
-   EXPECT_EQ(nir_def_bits_used(load2), BITFIELD_BIT(15 + 13)); /* not last bit */
+   EXPECT_EQ(nir_def_bits_used(nir_get_scalar(load1, 0)), BITFIELD_BIT(31));      /* last bit */
+   EXPECT_EQ(nir_def_bits_used(nir_get_scalar(load2, 0)), BITFIELD_BIT(15 + 13)); /* not last bit */
 }
 
 TEST_F(ssa_def_bits_used_test, ushr_ishr_ishl)
@@ -358,9 +358,9 @@ TEST_F(ssa_def_bits_used_test, ushr_ishr_ishl)
    nir_store_global(b, alu2, nir_undef(b, 1, 64));
    nir_store_global(b, alu3, nir_undef(b, 1, 64));
 
-   EXPECT_EQ(nir_def_bits_used(load1), BITFIELD_RANGE(7, 32 - 7));
-   EXPECT_EQ(nir_def_bits_used(load2), BITFIELD_RANGE(11, 32 - 11));
-   EXPECT_EQ(nir_def_bits_used(load3), BITFIELD_RANGE(0, 32 - 13));
+   EXPECT_EQ(nir_def_bits_used(nir_get_scalar(load1, 0)), BITFIELD_RANGE(7, 32 - 7));
+   EXPECT_EQ(nir_def_bits_used(nir_get_scalar(load2, 0)), BITFIELD_RANGE(11, 32 - 11));
+   EXPECT_EQ(nir_def_bits_used(nir_get_scalar(load3, 0)), BITFIELD_RANGE(0, 32 - 13));
 }
 
 typedef nir_def *(*unary_op)(nir_builder *build, nir_def *src0);
@@ -383,12 +383,12 @@ TEST_F(ssa_def_bits_used_test, u2u_i2i_iand)
       nir_store_global(b, alu, nir_undef(b, 1, 64));
    }
 
-   EXPECT_EQ(nir_def_bits_used(load[0]), 0x80);
-   EXPECT_EQ(nir_def_bits_used(load[1]), 0x80);
-   EXPECT_EQ(nir_def_bits_used(load[2]), 0x7080);
-   EXPECT_EQ(nir_def_bits_used(load[3]), 0x7080);
-   EXPECT_EQ(nir_def_bits_used(load[4]), 0x50607080);
-   EXPECT_EQ(nir_def_bits_used(load[5]), 0x50607080);
+   EXPECT_EQ(nir_def_bits_used(nir_get_scalar(load[0], 0)), 0x80);
+   EXPECT_EQ(nir_def_bits_used(nir_get_scalar(load[1], 0)), 0x80);
+   EXPECT_EQ(nir_def_bits_used(nir_get_scalar(load[2], 0)), 0x7080);
+   EXPECT_EQ(nir_def_bits_used(nir_get_scalar(load[3], 0)), 0x7080);
+   EXPECT_EQ(nir_def_bits_used(nir_get_scalar(load[4], 0)), 0x50607080);
+   EXPECT_EQ(nir_def_bits_used(nir_get_scalar(load[5], 0)), 0x50607080);
 }
 
 TEST_F(ssa_def_bits_used_test, u2u_i2i_upcast_bits)
@@ -411,12 +411,12 @@ TEST_F(ssa_def_bits_used_test, u2u_i2i_upcast_bits)
       nir_store_global(b, alu, nir_undef(b, 1, 64));
    }
 
-   EXPECT_EQ(nir_def_bits_used(load[0]), 0x0);
-   EXPECT_EQ(nir_def_bits_used(load[1]), 0x80);
-   EXPECT_EQ(nir_def_bits_used(load[2]), 0x0);
-   EXPECT_EQ(nir_def_bits_used(load[3]), 0x80);
-   EXPECT_EQ(nir_def_bits_used(load[4]), 0x0);
-   EXPECT_EQ(nir_def_bits_used(load[5]), 0x80);
+   EXPECT_EQ(nir_def_bits_used(nir_get_scalar(load[0], 0)), 0x0);
+   EXPECT_EQ(nir_def_bits_used(nir_get_scalar(load[1], 0)), 0x80);
+   EXPECT_EQ(nir_def_bits_used(nir_get_scalar(load[2], 0)), 0x0);
+   EXPECT_EQ(nir_def_bits_used(nir_get_scalar(load[3], 0)), 0x80);
+   EXPECT_EQ(nir_def_bits_used(nir_get_scalar(load[4], 0)), 0x0);
+   EXPECT_EQ(nir_def_bits_used(nir_get_scalar(load[5], 0)), 0x80);
 }
 
 typedef nir_def *(*binary_op_imm)(nir_builder *build, nir_def *x, uint64_t y);
@@ -435,8 +435,8 @@ TEST_F(ssa_def_bits_used_test, iand_ior_ishl)
       nir_store_global(b, alu, nir_undef(b, 1, 64));
    }
 
-   EXPECT_EQ(nir_def_bits_used(load[0]), 0x345678);
-   EXPECT_EQ(nir_def_bits_used(load[1]), ~0xff345678);
+   EXPECT_EQ(nir_def_bits_used(nir_get_scalar(load[0], 0)), 0x345678);
+   EXPECT_EQ(nir_def_bits_used(nir_get_scalar(load[1], 0)), ~0xff345678);
 }
 
 TEST_F(ssa_def_bits_used_test, mov_iand)
@@ -445,7 +445,7 @@ TEST_F(ssa_def_bits_used_test, mov_iand)
    nir_def *alu = nir_iand_imm(b, nir_mov(b, load), 0x8);
    nir_store_global(b, alu, nir_undef(b, 1, 64));
 
-   EXPECT_EQ(nir_def_bits_used(load), BITFIELD_BIT(3));
+   EXPECT_EQ(nir_def_bits_used(nir_get_scalar(load, 0)), BITFIELD_BIT(3));
 }
 
 TEST_F(ssa_def_bits_used_test, bcsel_iand)
@@ -456,7 +456,7 @@ TEST_F(ssa_def_bits_used_test, bcsel_iand)
    nir_def *alu = nir_iand_imm(b, nir_bcsel(b, load1, load2, load3), 0x8);
    nir_store_global(b, alu, nir_undef(b, 1, 64));
 
-   EXPECT_EQ(nir_def_bits_used(load1), BITFIELD_BIT(0));
-   EXPECT_EQ(nir_def_bits_used(load2), BITFIELD_BIT(3));
-   EXPECT_EQ(nir_def_bits_used(load3), BITFIELD_BIT(3));
+   EXPECT_EQ(nir_def_bits_used(nir_get_scalar(load1, 0)), BITFIELD_BIT(0));
+   EXPECT_EQ(nir_def_bits_used(nir_get_scalar(load2, 0)), BITFIELD_BIT(3));
+   EXPECT_EQ(nir_def_bits_used(nir_get_scalar(load3, 0)), BITFIELD_BIT(3));
 }

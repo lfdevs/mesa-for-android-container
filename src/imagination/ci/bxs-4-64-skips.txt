@@ -5,3 +5,4 @@ dEQP-VK.memory.mapping.dedicated_alloc.buffer.full.variable.implicit_unmap
 dEQP-VK.memory.mapping.dedicated_alloc.buffer.full.variable.implicit_unmap_map2
 dEQP-VK.memory.mapping.dedicated_alloc.image.full.variable.implicit_unmap
 dEQP-VK.memory.mapping.dedicated_alloc.image.full.variable.implicit_unmap_map2
+dEQP-VK.reconvergence.subgroup_uniform_control_flow_ballot.compute.nesting4.7.10

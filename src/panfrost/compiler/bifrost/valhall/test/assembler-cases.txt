@@ -191,6 +191,7 @@ c0 00 00 00 00 c9 10 01    IADD_IMM.i32 r9, 0x0, #0x0
 81 0b 80 33 04 8e 78 00    LD_TILE.v4.f16.slot0 @r14:r15, u0.w1, r11, u0.w0
 0b 00 04 00 00 cc 91 00    CLZ.u32 r12, r11
 82 4c c0 52 00 cc b4 00    RSHIFT_XOR.i32.not_result r12, u1.w0, r12^.b00, 0x0
+02 cf c0 1d 04 c3 b4 00    ARSHIFT_OR.i32 r3, r2, 0x1F1E1D1C.b33, 0x0
 4b c0 4c 10 01 cb b4 08    LSHIFT_AND.i32.wait0 r11, r11^, 0x0.b00, r12^
 4f 49 00 28 00 c9 a5 00    FADD.v2f16 r9, r15^, r9^
 4e 48 00 28 00 c8 a5 00    FADD.v2f16 r8, r14^, r8^

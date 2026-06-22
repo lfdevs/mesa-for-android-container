@@ -238,10 +238,14 @@ foreach gallium_driver : gallium_drivers
   pre_args += '-DHAVE_@0@'.format(gallium_driver.to_upper())
 endforeach
 draw_with_llvm = with_llvm.allowed() and get_option('draw-use-llvm')
+r300_needs_draw = host_machine.cpu_family().startswith('x86')
+if with_gallium_r300 and r300_needs_draw and not draw_with_llvm
+  warning('r300 built without LLVM will be slow on integrated chipsets requiring software vertex processing.')
+endif
 with_llvm = with_llvm \
   .enable_if(with_gallium_i915, error_message : 'i915 Gallium driver requires LLVM for vertex shaders') \
   .enable_if(with_gallium_llvmpipe, error_message : 'LLVMPipe Gallium driver requires LLVM') \
-  .enable_if(with_gallium_r300 and draw_with_llvm, error_message : 'R300 Gallium driver requires LLVM for vertex shaders on IGP parts') \
+  .enable_if(with_gallium_r300 and r300_needs_draw and draw_with_llvm, error_message : 'R300 Gallium driver requires LLVM for vertex shaders on IGP parts') \
   .enable_if(with_gallium_radeonsi and amd_with_llvm, error_message : 'RadeonSI Gallium driver configured to require LLVM')
 
 # compatibility for "swrast" as an internal-ish driver name
@@ -481,7 +485,6 @@ endif
 
 with_platform_android = _platforms.contains('android')
 with_platform_x11 = _platforms.contains('x11')
-with_platform_xcb = _platforms.contains('xcb')
 with_platform_wayland = _platforms.contains('wayland')
 with_platform_haiku = _platforms.contains('haiku')
 with_platform_windows = _platforms.contains('windows')
@@ -856,8 +859,16 @@ if with_gallium_rusticl or with_nouveau_vk or with_tools.contains('etnaviv') or 
 
   # bindgen 0.71 is the first version that knows about `editions`
   bindgen_version = find_program('bindgen').version()
-  # unknown covers buggy 0.69.0, 0.71.0
-  if bindgen_version == 'unknown' or bindgen_version.version_compare('< 0.71.1')
+  bindgen_bad_versions = [
+    # unknown covers buggy 0.69.0, 0.71.0
+    'unknown',
+    '0.72.0',
+  ]
+  if bindgen_version in bindgen_bad_versions
+    error('Your bingden version is known to be buggy, please upgrade it. ' +
+          'If your distribution does not ship a more recent version, ' +
+          'you can install the latest version for your user with `cargo install bindgen-cli`.')
+  elif bindgen_version.version_compare('< 0.71.1')
     error('Mesa requires bindgen 0.71.1 or newer. ' +
           'If your distribution does not ship a recent enough version, ' +
           'you can install the latest version for your user with `cargo install bindgen-cli`.')
@@ -1163,6 +1174,13 @@ endforeach
 
 # Check for GCC overflow intrinsics
 foreach b : ['add_overflow', 'add_overflow_p', 'sub_overflow_p']
+  if cc.has_function('__builtin_' + b)
+    pre_args += '-DHAVE___BUILTIN_@0@'.format(b.to_upper())
+  endif
+endforeach
+
+# Check for ARM FP state builtins
+foreach b : ['arm_get_fpscr', 'arm_set_fpscr', 'aarch64_get_fpcr', 'aarch64_set_fpcr']
   if cc.has_function('__builtin_' + b)
     pre_args += '-DHAVE___BUILTIN_@0@'.format(b.to_upper())
   endif
@@ -1973,10 +1991,6 @@ if dep_llvm.found()
     error('i915 requires LLVM draw support for vertex shaders.')
   endif
 
-  if with_gallium_r300 and not draw_with_llvm and host_machine.cpu_family() == 'x86'
-    error('r300 requires LLVM draw support for vertex shaders.')
-  endif
-
   if host_machine.system() != 'windows'
     # LLVM can be built without rtti, turning off rtti changes the ABI of C++
     # programs, so we need to build all C++ code in mesa without rtti as well to
@@ -2100,6 +2114,8 @@ if dep_elf.found()
   pre_args += '-DUSE_LIBELF'
 elif with_gallium_radeonsi and with_gfx_compute
   error('Gallium driver radeonsi requires libelf')
+elif with_nouveau_vk
+  error('NVK requires libelf')
 endif
 
 dep_valgrind = dependency('valgrind', required : get_option('valgrind'))
@@ -2357,10 +2373,11 @@ with_perfetto = get_option('perfetto')
 with_datasources = get_option('datasources')
 with_any_datasource = with_datasources.length() != 0
 if with_perfetto
-  dep_perfetto = dependency(
+  dep_perfetto_sdk = dependency(
       'perfetto',
-      fallback: allow_fallback_for_perfetto ? ['perfetto', 'dep_perfetto'] : [],
+      fallback: allow_fallback_for_perfetto ? ['perfetto-sdk', 'dep_perfetto_sdk'] : [],
   )
+  dep_perfetto = dep_perfetto_sdk
   pre_args += '-DHAVE_PERFETTO'
 endif
 

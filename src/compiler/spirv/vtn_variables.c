@@ -465,6 +465,14 @@ vtn_pointer_dereference(struct vtn_builder *b,
       }
    }
 
+   /* Negative array indices into UBOs/SSBOs are UB (GLSL/SPIR-V spec), so
+    * we can treat all accesses as in-bounds regardless of whether the shader
+    * used OpInBoundsAccessChain.
+    */
+   const bool in_bounds = deref_chain->in_bounds ||
+                          base->mode == vtn_variable_mode_ubo ||
+                          base->mode == vtn_variable_mode_ssbo;
+
    if (idx == 0 && deref_chain->ptr_as_array) {
       /* We start with a deref cast to get the stride.  Hopefully, we'll be
        * able to delete that cast eventually.
@@ -475,7 +483,7 @@ vtn_pointer_dereference(struct vtn_builder *b,
       nir_def *index = vtn_access_link_as_ssa(b, deref_chain->link[0], 1,
                                                   tail->def.bit_size);
       tail = nir_build_deref_ptr_as_array(&b->nb, tail, index);
-      tail->arr.in_bounds = deref_chain->in_bounds;
+      tail->arr.in_bounds = in_bounds;
       idx++;
    }
 
@@ -498,7 +506,7 @@ vtn_pointer_dereference(struct vtn_builder *b,
             type = type->array_element;
          }
          tail = nir_build_deref_array(&b->nb, tail, arr_index);
-         tail->arr.in_bounds = deref_chain->in_bounds;
+         tail->arr.in_bounds = in_bounds;
       }
 
       access |= type->access;

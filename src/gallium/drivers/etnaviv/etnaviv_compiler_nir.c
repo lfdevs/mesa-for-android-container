@@ -1236,7 +1236,7 @@ etna_compile_shader(struct etna_shader_variant *v)
    v->ps_depth_out_reg = -1;
 
    if (s->info.stage == MESA_SHADER_FRAGMENT)
-      NIR_PASS(_, s, nir_lower_fragcolor, specs->num_rts);
+      NIR_PASS(_, s, nir_lower_fragcolor, v->shader->compiler->max_render_targets);
 
    /*
     * Lower glTexCoord, fixes e.g. neverball point sprite (exit cylinder stars)
@@ -1289,6 +1289,7 @@ etna_compile_shader(struct etna_shader_variant *v)
    NIR_PASS(_, s, nir_lower_indirect_derefs_to_if_else_trees, nir_var_all,
             UINT32_MAX);
    NIR_PASS(_, s, etna_nir_lower_texture, &v->key, v->shader->info);
+   NIR_PASS(_, s, etna_nir_lower_128bit, &v->key);
    NIR_PASS(_, s, nir_lower_alu_width, alu_width_cb, NULL);
 
    NIR_PASS(_, s, nir_lower_alu_to_scalar, etna_alu_to_scalar_filter_cb, c->info);

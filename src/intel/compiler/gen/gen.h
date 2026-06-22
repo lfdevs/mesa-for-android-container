@@ -166,6 +166,11 @@ typedef enum gen_print_flags {
     * implies GEN_PRINT_HEX) into the effective flags.
     */
    GEN_PRINT_IGNORE_ENV = 1 << 4,
+
+   /* Don't synthesize labels for branch targets; print every jip/uip as an
+    * explicit numeric delta.
+    */
+   GEN_PRINT_NO_LABELS = 1 << 5,
 } gen_print_flags;
 
 typedef struct gen_print_params {

@@ -844,7 +844,7 @@ hk_lower_nir(struct hk_device *dev, nir_shader *nir,
    struct hk_instance *instance = hk_physical_device_instance(
       (struct hk_physical_device *)dev->vk.physical);
 
-   if (instance->image_view_min_lod) {
+   if (instance->drirc.misc.image_view_min_lod) {
       NIR_PASS(_, nir, agx_nir_lower_image_view_min_lod);
    }
 

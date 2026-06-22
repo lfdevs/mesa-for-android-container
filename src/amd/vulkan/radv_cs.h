@@ -83,8 +83,6 @@ radeon_check_space(struct radeon_winsys *ws, struct ac_cmdbuf *cs, unsigned need
 
 #define radeon_set_sh_reg(reg, value) ac_cmdbuf_set_sh_reg(reg, value)
 
-#define radeon_set_sh_reg_idx(info, reg, idx, value) ac_cmdbuf_set_sh_reg_idx(info, reg, idx, value)
-
 /* Packet building helpers for UCONFIG registers. */
 #define radeon_set_uconfig_reg_seq(reg, num) ac_cmdbuf_set_ucfg_reg_seq(reg, num)
 

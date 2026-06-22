@@ -16,6 +16,8 @@
 #include <iostream>
 #include <sstream>
 #include <string>
+#include <string_view>
+#include <unordered_map>
 #include <vector>
 
 #include "util/ralloc.h"
@@ -48,13 +50,14 @@ print_top_help(FILE *fp)
            "Usage: gentool COMMAND [OPTIONS] [INPUT]\n"
            "\n"
            "Commands:\n"
-           "  asm      Assemble Gen instructions into binary output\n"
-           "  disasm   Disassemble Gen instruction binaries\n"
-           "  region   Show register-region diagrams for a single instruction\n"
-           "  help     Show help for a command or help topic\n"
+           "  asm              Assemble Gen instructions into binary output\n"
+           "  disasm           Disassemble Gen instruction binaries\n"
+           "  region           Show register-region diagrams for one instruction\n"
+           "  check-roundtrip  Run assemble/disassemble round-trip checks\n"
+           "  help             Show help for a command or help topic\n"
            "\n"
            "Help topics:\n"
-           "  asm, disasm, region, platforms, syntax, lsc\n"
+           "  asm, disasm, region, check-roundtrip, platforms, syntax, lsc\n"
            "\n"
            "Supports Gfx9+ platforms.\n"
            "\n"
@@ -99,11 +102,33 @@ print_disasm_help(FILE *fp)
            "      --translated-sends  Print LSC sends as their translated mnemonic instead of\n"
            "                          a raw SEND instruction\n"
            "      --hex               Prefix each instruction with a hex dump of its encoded bytes\n"
+           "      --program-subset    Decode a fragment of a program; keep jip/uip branch\n"
+           "                          offsets as explicit numeric deltas instead of labels\n"
            "\n"
            "If INPUT is provided positionally, it is used as the input path.\n"
            "\n"
            "Example:\n"
            "  gentool disasm -p tgl shader.bin\n");
+}
+
+static void
+print_check_help(FILE *fp)
+{
+   fprintf(fp,
+           "Usage: gentool check-roundtrip CASES.txt [CASES.txt ...]\n"
+           "\n"
+           "Run assemble/disassemble round-trip checks.\n"
+           "\n"
+           "Each line of a case file is 'platform | bytes | assembly', where the\n"
+           "second separator can be '|' (check both directions), '<' (encode only)\n"
+           "or '>' (decode only).\n"
+           "\n"
+           "The disassembly print mode is chosen by the file-name suffix\n"
+           "(_verbose.txt, _translated.txt).  Mismatches are printed to stdout; the\n"
+           "exit status is non-zero if any case fails.\n"
+           "\n"
+           "Example:\n"
+           "  gentool check-roundtrip tests/basic.txt tests/basic_verbose.txt\n");
 }
 
 static void
@@ -501,8 +526,7 @@ print_regular_region_output(const intel_device_info *devinfo,
                             FILE *fp,
                             const gen_inst *inst)
 {
-   const gen_format format = gen_inst_format(inst->opcode);
-   const bool has_dst = gen_inst_has_dst(format, inst->opcode);
+   const bool has_dst = gen_inst_has_dst(inst->opcode);
    const unsigned num_sources = gen_inst_num_sources(devinfo, inst);
 
    if (inst->align16) {
@@ -754,6 +778,11 @@ cmd_help(int argc, char **argv)
       return 0;
    }
 
+   if (sub == "check-roundtrip") {
+      print_check_help(stdout);
+      return 0;
+   }
+
    if (sub == "platforms") {
       print_platforms_help(stdout);
       return 0;
@@ -770,7 +799,7 @@ cmd_help(int argc, char **argv)
    }
 
    fprintf(stderr, "gentool: unknown help topic '%s'\n", argv[1]);
-   fprintf(stderr, "Available help topics: asm, disasm, region, platforms, syntax, lsc\n");
+   fprintf(stderr, "Available help topics: asm, disasm, region, check-roundtrip, platforms, syntax, lsc\n");
    return 1;
 }
 
@@ -902,9 +931,10 @@ cmd_disasm(int argc, char **argv)
    std::string output_path = "-";
    intel_device_info devinfo = {};
    bool have_devinfo = false;
+   bool program_subset = false;
    gen_print_flags print_flags = GEN_PRINT_NONE;
 
-   enum { OPT_TRANSLATED_SENDS = 1000, OPT_HEX };
+   enum { OPT_TRANSLATED_SENDS = 1000, OPT_HEX, OPT_PROGRAM_SUBSET };
 
    static const struct option long_options[] = {
       {"help",      no_argument,       NULL, 'h'},
@@ -915,6 +945,7 @@ cmd_disasm(int argc, char **argv)
       {"verbose",          no_argument, NULL, 'v'},
       {"translated-sends", no_argument, NULL, OPT_TRANSLATED_SENDS},
       {"hex",              no_argument, NULL, OPT_HEX},
+      {"program-subset",   no_argument, NULL, OPT_PROGRAM_SUBSET},
       {},
    };
 
@@ -949,6 +980,10 @@ cmd_disasm(int argc, char **argv)
          break;
       case OPT_HEX:
          print_flags = (gen_print_flags)(print_flags | GEN_PRINT_HEX);
+         break;
+      case OPT_PROGRAM_SUBSET:
+         program_subset = true;
+         print_flags = (gen_print_flags)(print_flags | GEN_PRINT_NO_LABELS);
          break;
       case '?':
       default:
@@ -996,6 +1031,7 @@ cmd_disasm(int argc, char **argv)
    decode_params.raw_bytes = raw_bytes.data();
    decode_params.raw_bytes_size = (int)raw_bytes.size();
    decode_params.mem_ctx = mem_ctx;
+   decode_params.program_subset = program_subset;
    if (!gen_decode(&decode_params)) {
       ralloc_free(mem_ctx);
       failf("decode failed");
@@ -1116,6 +1152,345 @@ cmd_region(int argc, char **argv)
    return 0;
 }
 
+/* Round-trip checker for the gen assembler and disassembler.
+ *
+ * Each input file holds one test case per line:
+ *
+ *   tgl | 40 00 03 00 20 82 05 05 04 06 10 02 2a 00 00 00 |         add (8)                   r5            r6                0x0000002a
+ *
+ *   1. the 3-letter platform name
+ *   2. the encoded instruction bytes, in little-endian hex (spaces optional).
+ *   3. the expected assembly text
+ *
+ * The platform and bytes are separated by " | ".  The separator between the
+ * bytes and the assembly selects which directions are checked:
+ *
+ *   bytes | asm   both: bytes decode to asm AND asm encodes to bytes,
+ *   bytes < asm   encode only: asm encodes to bytes,
+ *   bytes > asm   decode only: bytes decode to asm.
+ *
+ * A '#' starts a comment to the end of the line.  Blank lines are ignored.
+ *
+ * The disassembly print mode is chosen by the file name suffix: "_verbose.txt"
+ * prints in verbose mode, "_translated.txt" prints SENDs as their translated
+ * LSC opcode, any other name uses the default mode.
+ */
+
+static std::string_view
+rt_trim(std::string_view s)
+{
+   auto first = s.find_first_not_of(" \t\r\n");
+   if (first == std::string_view::npos)
+      return "";
+
+   auto last = s.find_last_not_of(" \t\r\n");
+   return s.substr(first, last - first + 1);
+}
+
+static std::string_view
+rt_rstrip(std::string_view s)
+{
+   auto last = s.find_last_not_of(" \t\r\n");
+   if (last == std::string_view::npos)
+      return "";
+   return s.substr(0, last + 1);
+}
+
+static std::string_view
+rt_strip_comment(std::string_view line)
+{
+   const auto hash = line.find('#');
+   return hash == std::string_view::npos ? line : line.substr(0, hash);
+}
+
+static int
+rt_hex_nibble(char c)
+{
+   if (c >= '0' && c <= '9')
+      return c - '0';
+   if (c >= 'a' && c <= 'f')
+      return 10 + (c - 'a');
+   if (c >= 'A' && c <= 'F')
+      return 10 + (c - 'A');
+   return -1;
+}
+
+static std::vector<uint8_t>
+rt_parse_hex_bytes(std::string_view field, const char *path, unsigned lineno)
+{
+   std::vector<uint8_t> bytes;
+   int hi = -1;
+
+   for (char c : field) {
+      if (c == ' ' || c == '\t')
+         continue;
+
+      const int nibble = rt_hex_nibble(c);
+      if (nibble < 0)
+         failf("%s:%u: invalid hex digit '%c'", path, lineno, c);
+
+      if (hi < 0) {
+         hi = nibble;
+      } else {
+         bytes.push_back((uint8_t)((hi << 4) | nibble));
+         hi = -1;
+      }
+   }
+
+   if (hi >= 0)
+      failf("%s:%u: odd number of hex digits", path, lineno);
+
+   if (bytes.size() != 16)
+      failf("%s:%u: byte count must be 16, got %zu",
+            path, lineno, bytes.size());
+
+   return bytes;
+}
+
+static std::string
+rt_format_hex_bytes(const void *data, size_t size)
+{
+   const uint8_t *bytes = (const uint8_t *)data;
+   std::string out;
+   char buf[4];
+
+   for (size_t i = 0; i < size; i++) {
+      snprintf(buf, sizeof(buf), "%02x", bytes[i]);
+      if (i > 0)
+         out += ' ';
+      out += buf;
+   }
+
+   return out;
+}
+
+struct rt_devinfo_cache {
+   std::unordered_map<std::string, intel_device_info> devinfos;
+
+   const intel_device_info *
+   get(std::string_view name, const char *path, unsigned lineno)
+   {
+      const std::string platform(name);
+
+      const auto existing = devinfos.find(platform);
+      if (existing != devinfos.end())
+         return &existing->second;
+
+      intel_device_info devinfo = {};
+      const int pci_id = intel_device_name_to_pci_device_id(platform.c_str());
+      if (pci_id < 0)
+         failf("%s:%u: unknown platform '%s'", path, lineno, platform.c_str());
+
+      if (!intel_get_device_info_from_pci_id(pci_id, &devinfo))
+         failf("%s:%u: no device info for platform '%s'", path, lineno,
+               platform.c_str());
+
+      const auto inserted = devinfos.emplace(platform, devinfo);
+      return &inserted.first->second;
+   }
+};
+
+static std::string
+rt_disassemble(const intel_device_info *devinfo,
+               const std::vector<uint8_t> &bytes, gen_print_flags flags)
+{
+   void *mem_ctx = ralloc_context(NULL);
+
+   gen_decode_params decode = {};
+   decode.devinfo = devinfo;
+   decode.raw_bytes = bytes.data();
+   decode.raw_bytes_size = (int)bytes.size();
+   decode.mem_ctx = mem_ctx;
+   decode.program_subset = true;
+
+   std::string out;
+   if (!gen_decode(&decode)) {
+      ralloc_free(mem_ctx);
+      return out;
+   }
+
+   char *str = NULL;
+   size_t size = 0;
+   FILE *fp = open_memstream(&str, &size);
+
+   gen_print_params print = {};
+   print.devinfo = devinfo;
+   print.fp = fp;
+   print.flags = (gen_print_flags)(flags | GEN_PRINT_IGNORE_ENV |
+                                   GEN_PRINT_NO_LABELS);
+   print.insts = decode.insts;
+   print.num_insts = decode.num_insts;
+   print.raw_bytes = bytes.data();
+   print.raw_bytes_size = (int)bytes.size();
+   gen_print(&print);
+
+   fclose(fp);
+   out = std::string(rt_rstrip(std::string_view(str ? str : "", size)));
+   free(str);
+
+   ralloc_free(mem_ctx);
+   return out;
+}
+
+static std::vector<uint8_t>
+rt_assemble(const intel_device_info *devinfo, std::string_view text)
+{
+   void *mem_ctx = ralloc_context(NULL);
+
+   gen_parse_params parse = {};
+   parse.devinfo = devinfo;
+   parse.text = text.data();
+   parse.text_size = (int)text.size();
+   parse.mem_ctx = mem_ctx;
+
+   std::vector<uint8_t> bytes;
+   if (!gen_parse(&parse) || parse.num_insts == 0) {
+      ralloc_free(mem_ctx);
+      return bytes;
+   }
+
+   const int raw_bytes_size = parse.num_insts * (int)sizeof(gen_raw_inst);
+
+   gen_encode_params encode = {};
+   encode.devinfo = devinfo;
+   encode.insts = parse.insts;
+   encode.num_insts = parse.num_insts;
+   encode.mem_ctx = mem_ctx;
+   encode.raw_bytes = rzalloc_size(mem_ctx, raw_bytes_size);
+   encode.raw_bytes_size = raw_bytes_size;
+
+   if (gen_encode(&encode)) {
+      const uint8_t *raw = (const uint8_t *)encode.raw_bytes;
+      bytes.assign(raw, raw + encode.raw_bytes_size);
+   }
+
+   ralloc_free(mem_ctx);
+   return bytes;
+}
+
+struct rt_stats {
+   unsigned pass = 0;
+   unsigned fail = 0;
+};
+
+static void
+rt_check_line(const char *path, unsigned lineno, std::string_view line,
+              gen_print_flags flags, rt_devinfo_cache *cache, rt_stats *st)
+{
+   const auto bar1 = line.find('|');
+   const auto sep = bar1 == std::string_view::npos ?
+      std::string_view::npos : line.find_first_of("|<>", bar1 + 1);
+   if (sep == std::string_view::npos)
+      failf("%s:%u: expected 'platform | bytes <|<>> assembly'", path, lineno);
+
+   const bool check_decode = line[sep] != '<';
+   const bool check_encode = line[sep] != '>';
+
+   const auto platform = rt_trim(line.substr(0, bar1));
+   const auto hex = line.substr(bar1 + 1, sep - bar1 - 1);
+
+   auto asm_start = sep + 1;
+   if (asm_start < line.size() && line[asm_start] == ' ')
+      asm_start++;
+   const auto asm_text = rt_rstrip(line.substr(asm_start));
+
+   const intel_device_info *devinfo = cache->get(platform, path, lineno);
+   const std::vector<uint8_t> orig_bytes = rt_parse_hex_bytes(hex, path, lineno);
+
+   bool decode_ok = true, encode_ok = true;
+   std::string decoded;
+   std::vector<uint8_t> encoded;
+
+   if (check_decode) {
+      decoded = rt_disassemble(devinfo, orig_bytes, flags);
+      decode_ok = decoded == asm_text;
+   }
+   if (check_encode) {
+      encoded = rt_assemble(devinfo, asm_text);
+      encode_ok = encoded == orig_bytes;
+   }
+
+   if (decode_ok && encode_ok) {
+      st->pass++;
+      return;
+   }
+
+   st->fail++;
+   printf("%s:%u: round-trip mismatch\n", path, lineno);
+   if (check_encode) {
+      printf("ORIGINAL BYTES: %s\n",
+             rt_format_hex_bytes(orig_bytes.data(), orig_bytes.size()).c_str());
+      printf("ENCODED BYTES:  %s\n",
+             rt_format_hex_bytes(encoded.data(), encoded.size()).c_str());
+      printf("\n");
+   }
+   if (check_decode) {
+      printf("ORIGINAL ASSEMBLY: ");
+      fwrite(asm_text.data(), 1, asm_text.size(), stdout);
+      printf("\nDECODED ASSEMBLY:  %s\n", decoded.c_str());
+      printf("\n");
+   }
+}
+
+static bool
+rt_has_suffix(const char *path, const char *suffix)
+{
+   const size_t plen = strlen(path);
+   const size_t slen = strlen(suffix);
+   return plen >= slen && !strcmp(path + plen - slen, suffix);
+}
+
+static void
+rt_check_file(const char *path, rt_devinfo_cache *cache, rt_stats *st)
+{
+   std::ifstream file(path);
+   if (!file)
+      failf("failed to open '%s': %s", path, strerror(errno));
+
+   gen_print_flags flags = GEN_PRINT_NONE;
+   if (rt_has_suffix(path, "_verbose.txt"))
+      flags = GEN_PRINT_VERBOSE;
+   else if (rt_has_suffix(path, "_translated.txt"))
+      flags = GEN_PRINT_TRANSLATED_SENDS;
+
+   std::string line;
+   unsigned lineno = 0;
+   while (std::getline(file, line)) {
+      lineno++;
+      const auto stripped = rt_strip_comment(line);
+      if (rt_trim(stripped).empty())
+         continue;
+      rt_check_line(path, lineno, stripped, flags, cache, st);
+   }
+}
+
+static int
+cmd_check(int argc, char **argv)
+{
+   std::vector<const char *> paths;
+
+   for (int i = 1; i < argc; i++) {
+      if (!strcmp(argv[i], "-h") || !strcmp(argv[i], "--help")) {
+         print_check_help(stdout);
+         return 0;
+      }
+      if (argv[i][0] == '-')
+         failf("unknown option '%s'", argv[i]);
+      paths.push_back(argv[i]);
+   }
+
+   if (paths.empty())
+      failf("no case files given");
+
+   rt_stats st;
+   rt_devinfo_cache cache;
+   for (const char *path : paths)
+      rt_check_file(path, &cache, &st);
+
+   printf("Passed %u/%u cases.\n", st.pass, st.pass + st.fail);
+   return st.fail ? 1 : 0;
+}
+
 } /* namespace */
 
 int
@@ -1127,9 +1502,10 @@ main(int argc, char **argv)
    };
 
    static const command cmds[] = {
-      { "asm",    cmd_asm },
-      { "disasm", cmd_disasm },
-      { "region", cmd_region },
+      { "asm",             cmd_asm },
+      { "disasm",          cmd_disasm },
+      { "region",          cmd_region },
+      { "check-roundtrip", cmd_check },
       { "help",   cmd_help },
    };
 

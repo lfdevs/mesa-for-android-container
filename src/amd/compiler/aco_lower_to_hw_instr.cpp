@@ -2951,18 +2951,21 @@ lower_to_hw_instr(Program* program)
                            reduce.operands[0], reduce.definitions[0]);
          } else if (instr->isBarrier()) {
             Pseudo_barrier_instruction& barrier = instr->barrier();
+            aco_opcode op = instr->opcode;
 
             /* Anything larger than a workgroup isn't possible. Anything
              * smaller requires no instructions and this pseudo instruction
              * would only be included to control optimizations. */
-            bool emit_s_barrier = barrier.exec_scope == scope_workgroup &&
-                                  program->workgroup_size > program->wave_size;
+            bool emit_s_barrier = barrier.exec_scope == scope_workgroup;
 
             bld.insert(std::move(instr));
             if (emit_s_barrier && ctx.program->gfx_level >= GFX12) {
-               bld.sop1(aco_opcode::s_barrier_signal, Operand::c32(-1));
-               bld.sopp(aco_opcode::s_barrier_wait, UINT16_MAX);
+               if (op != aco_opcode::p_barrier_wait)
+                  bld.sop1(aco_opcode::s_barrier_signal, Operand::c32(-1));
+               if (op != aco_opcode::p_barrier_signal)
+                  bld.sopp(aco_opcode::s_barrier_wait, UINT16_MAX);
             } else if (emit_s_barrier) {
+               assert(op == aco_opcode::p_barrier);
                bld.sopp(aco_opcode::s_barrier);
             }
          } else if (instr->isMIMG() && instr->mimg().strict_wqm) {

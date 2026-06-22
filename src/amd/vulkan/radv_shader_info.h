@@ -264,6 +264,7 @@ struct radv_shader_regs {
    uint32_t pgm_rsrc1;
    uint32_t pgm_rsrc2;
    uint32_t pgm_rsrc3;
+   uint32_t pgm_rsrc4;
 
    union {
       struct {
@@ -302,6 +303,7 @@ struct radv_shader_regs {
          uint32_t spi_ps_in_control;
          uint32_t spi_shader_z_format;
          uint32_t spi_gs_out_config_ps;
+         uint32_t spi_shader_pgm_rsrc4_ps;
          uint32_t pa_sc_hisz_control;
       } ps;
 
@@ -317,7 +319,7 @@ struct radv_shader_regs {
    uint32_t vgt_gs_max_vert_out;
    uint32_t vgt_gs_onchip_cntl;
    uint32_t spi_shader_pgm_rsrc3_gs;
-   uint32_t spi_shader_pgm_rsrc4_gs;
+   uint32_t spi_shader_pgm_rsrc4_gs_hs;
    uint32_t ge_pc_alloc;
    uint32_t pa_cl_vs_out_cntl;
    uint32_t spi_vs_out_config;

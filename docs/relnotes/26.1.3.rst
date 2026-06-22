@@ -1,0 +1,258 @@
+Mesa 26.1.3 Release Notes / 2026-06-18
+======================================
+
+Mesa 26.1.3 is a bug fix release which fixes bugs found since the 26.1.2 release.
+
+Mesa 26.1.3 implements the OpenGL 4.6 API, but the version reported by
+glGetString(GL_VERSION) or glGetIntegerv(GL_MAJOR_VERSION) /
+glGetIntegerv(GL_MINOR_VERSION) depends on the particular driver being used.
+Some drivers don't support all the features required in OpenGL 4.6. OpenGL
+4.6 is **only** available if requested at context creation.
+Compatibility contexts may report a lower version depending on each driver.
+
+Mesa 26.1.3 implements the Vulkan 1.4 API, but the version reported by
+the apiVersion property of the VkPhysicalDeviceProperties struct
+depends on the particular driver being used.
+
+SHA checksums
+-------------
+
+::
+
+    SHA256: 7725004e724b34c6d4fbaf5c48fc6c6223aa9f2741d6d7782c699b049356fc45  mesa-26.1.3.tar.xz
+    SHA512: 6dd452e8c7f2e7e9a26733f53dd0daf4df824f82de3d37c171581854dd419f519e104212aacdf8bdf94042a845d9ba5c45a1605d7cba1dc491570a9e72a91f83  mesa-26.1.3.tar.xz
+
+
+New features
+------------
+
+- None
+
+
+Bug fixes
+---------
+
+- [RADV/ACO]: (Bisected) Regression causes flashing reflections in CyperPunk 2077
+- [RADV] Regression: Infinite loop in NIR compiler during nir_opt_dead_write_vars loading Gemma 4 via llama.cpp on gfx1100
+- [radeonsi] SIGSEGV in gallivm during software fallback for GL_FEEDBACK with lighting
+- anv: NULL deref in anv_AllocateMemory when importing DMA-BUF without VkMemoryDedicatedAllocateInfo on Xe2 (regression)
+- anv: World of Warcraft dx11 CMAA 2 option buggy on a b580
+- anv: atan shader compiler bug leads to negative infinity
+- intel/blorp: shader_pipeline initialization results in incorrect blorp_key values
+- llvm23 breaks build of clc_helpers.cpp
+
+
+Changes
+-------
+
+Ashley Smith (1):
+
+- panfrost: Fix tiler_desc assignment
+
+Benjamin Cheng (4):
+
+- draw: Add lower_opcodes NIR pass
+- mesa/st: run the lower_opcodes pass for draw shaders
+- radv/video: Set accurate minQp/QIndex
+- radv/video: Report MULTIPLE_SLICE_SEGMENTS_PER_TILE_BIT
+
+Caio Oliveira (1):
+
+- util: Fix float8 denorm rounding to min-normal
+
+Caius-Moldovan-img (1):
+
+- nir: Fix trailing comment generation for variable naming
+
+Calder Young (1):
+
+- nir: Do not mask helper lanes of writes if ACCESS_INCLUDE_HELPERS is set
+
+Christian Gmeiner (2):
+
+- mesa: Allow GL_TEXTURE_IMMUTABLE_LEVELS query on GLES3
+- etnaviv: Use integer texture formats for R32/RG32 integer textures
+
+Daniel Stone (1):
+
+- ci/panfrost: Switch T860 jobs to another RK3399 device type
+
+Danylo Piliaiev (2):
+
+- tu: Disable concurrent binning by default due to perf regressions
+- tu: Add allow_oob_indirect_ubo_loads to device cache uuid
+
+Eric Engestrom (6):
+
+- docs: add sha sum for 26.1.2
+- .pick_status.json: Update to 11c903246655184d12fcead8888486c5ae796eef
+- .pick_status.json: Mark 62b90b082916433dd137642ab11f174be14d4c15 as denominated
+- .pick_status.json: Mark fdb9ce608758bd63ff9cde151b31612f38cb3c84 as denominated
+- rusticl: skip bindgen for pipe_shader_state_from_tgsi
+- meson: exclude known buggy versions of bindgen
+
+Georg Lehmann (5):
+
+- nir: preserve infinities and signed zero during atan2
+- radv/gfx12: program SPI_SHADER_PGM_RSRC4_GS for seperately compiled gs
+- aco/ra: fix inline constants with v_dot2c_f32_f16
+- aco/sched_vopd: fix v_dual_dot2acc_f32_f16 created from VOP2 with inline constant
+- radv: fix setting inline push constants when only the last one is used
+
+Jakob Sinclair (1):
+
+- pan/compiler: fix spilling for 64-bit values
+
+Job Noorman (1):
+
+- ir3: fix possible signed overflow in ir3_link_add
+
+Jose Maria Casanova Crespo (1):
+
+- broadcom/compiler: fix payload-register liveness condition
+
+Juan A. Suarez Romero (1):
+
+- Revert "people: update Marek's email"
+
+Karol Herbst (4):
+
+- vtn/opencl: convert libclc workaround handling to a switch statement
+- vtn/opencl: fix edge case behavior for cospi
+- vtn/opencl: fix edge case behavior for sinpi
+- vtn/opencl: fix edge case behavior for tanpi
+
+Lionel Landwerlin (5):
+
+- iris: only call brw_nir_fs_needs_null_rt() with no render targets
+- anv: fix assert/crash in import of compressed local memory on xe2+
+- anv: align storage texel buffer support on image support
+- anv: add missing condition to update 3DSTATE_RASTER
+- anv: fix 3DSTATE_SF line width programming with Bresenham lines
+
+Lone_Wolf (1):
+
+- clc: fix build with LLVM23 (TargetRegistry::lookupTarget)
+
+Lucas Fryzek (1):
+
+- Modify x11_xcb_display_supports_xshm to get xshm opcode
+
+Marek Olšák (1):
+
+- radv,radeonsi: disallow VRS flat shading if SubgroupInvocationID is used
+
+Mario Kleiner (5):
+
+- wsi/display: Improve connector->last_nsec timestamping.
+- wsi/display: Add workaround for all-zero valued pageflip events.
+- wsi/display: Deal with vblank-less systems for VK_EXT_present_timing.
+- wsi/common: Small compliance fixes for VK_EXT_present_timing.
+- wsi/common: Allow VK_EXT_present_timing present without presentStageQueries.
+
+Mary Guillemard (1):
+
+- nvk/nvkmd: Do not merge bind operations across VA mappings
+
+Matt Turner (1):
+
+- util, llvmpipe: flush subnormals to zero on ARM/AArch64
+
+Michel Dänzer (2):
+
+- egl/gbm: Ignore buffers with no BO for destroying excess BOs
+- egl/gbm: Ignore current front buffer in get_back_bo
+
+Mike Blumenkrantz (5):
+
+- zink/clear: fix full_clear condition in texture clear
+- zink/clear: handle texture clears on current fb texture
+- llvmpipe: create a zeroed payload for use without task shaders
+- zink: always return DMA_BUF type handles from resource_get_handle
+- zink: fix import2d sampler view creation
+
+Nanley Chery (1):
+
+- anv: Set TRANSFER_DST_BIT for HiZ operations
+
+Natalie Vock (2):
+
+- radv/rt: Cache stack sizes of ahit/isec shaders from imported NIR
+- radv/rt: Don't overwrite bvh_base at the start of the traversal loop
+
+Nick Hamilton (1):
+
+- pvr: Fix load-op shader when loading from a 2d image view of a 3d image
+
+Paulo Zanoni (1):
+
+- intel/blorp: fix blorp base key initialization
+
+Pierre-Eric Pelloux-Prayer (1):
+
+- radeonsi: fix sdma copy for gfx10
+
+Radu Costas (1):
+
+- pco: Set register classes for vec refs
+
+Rhys Perry (3):
+
+- ac/gpu_info: add has_smem_partial_oob_access_bug
+- radv: workaround has_smem_partial_oob_access_bug
+- radv/bvh: use atomic load/store in update_gfx12.comp
+
+Ryan Zhang (1):
+
+- gfxstream/platform: add missing inc_include to platform_virtgpu build
+
+Samuel Pitoiset (8):
+
+- radv/rt: fix a memory leak with hash tables
+- radv/rt: fix a memory leak with the RT prolog NIR
+- radv/rt: fix a memory leak with ahit/isec group
+- radv: fix a memory leak with perfcounters
+- radv: add the mesh scratch ring BO to the preambles BO list
+- radv: fix REPLAYED shader arena blocks not being marked as holes on free
+- radv/amdgpu: fix padding by one VM page
+- vulkan: fix lowering untyped accel struct with descriptor heap
+
+Tapani Pälli (2):
+
+- iris: align down the max_shader_buffer_size
+- anv: fix a null pointer access with isl_mod_info
+
+Timothy Arceri (1):
+
+- nir: use the correct induction var when guessing loop iterations
+
+Valentine Burley (5):
+
+- tu: Fix vk_queue leak on submitqueue creation failure
+- anv/ci: Disable anv-adl-vk job
+- venus/ci: Move pre-merge ANV coverage from Comet Lake to Alder Lake
+- venus/ci: Retire Intel Comet Lake runner
+- venus/ci: Revert ADL jobs to stable 6.17 kernel
+
+Vinson Lee (3):
+
+- ethosu/mlw_codec: silence warnings in the vendored Regor encoder
+- ethosu/mlw_codec: silence -Wunused-const-variable in vendored encoder
+- radeonsi: remove duplicate '.bpp' initializer in si_sdma_copy_image
+
+Yiwei Zhang (1):
+
+- venus: fix unbound malloc leak in vn_ring_get_submits
+
+gyeyoung (2):
+
+- panvk: fix flags2-only bit leak in legacy format features
+- panvk: report DRM format modifiers through List2EXT
+
+nyanmisaka (1):
+
+- intel/dev: update PTL device names
+
+yserrr (1):
+
+- v3d: fix stencil blit layer selection

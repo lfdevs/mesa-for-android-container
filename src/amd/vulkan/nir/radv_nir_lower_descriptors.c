@@ -23,6 +23,7 @@ typedef struct {
    bool disable_aniso_single_level;
    bool has_image_load_dcc_bug;
    bool disable_tg4_trunc_coord;
+   bool has_desc_resource_level;
 
    const struct radv_shader_args *args;
    const struct radv_shader_info *info;
@@ -189,7 +190,8 @@ load_inline_buffer_descriptor(nir_builder *b, lower_descriptors_state *state, ni
 {
    uint32_t desc[4];
 
-   ac_build_raw_buffer_descriptor(state->gfx_level, (uint64_t)state->address32_hi << 32, 0xffffffff, desc);
+   ac_build_raw_buffer_descriptor(state->gfx_level, state->has_desc_resource_level, (uint64_t)state->address32_hi << 32,
+                                  0xffffffff, desc);
 
    return nir_vec4(b, rsrc, nir_imm_int(b, desc[1]), nir_imm_int(b, desc[2]), nir_imm_int(b, desc[3]));
 }
@@ -688,6 +690,7 @@ radv_nir_lower_descriptors(nir_shader *shader, const struct radv_compiler_info *
          compiler_info->key.disable_aniso_single_level && compiler_info->ac->gfx_level < GFX8,
       .has_image_load_dcc_bug = compiler_info->ac->has_image_load_dcc_bug,
       .disable_tg4_trunc_coord = !compiler_info->ac->conformant_trunc_coord && !compiler_info->key.disable_trunc_coord,
+      .has_desc_resource_level = compiler_info->ac->has_desc_resource_level,
       .args = &stage->args,
       .info = &stage->info,
       .layout = &stage->layout,

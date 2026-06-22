@@ -38,6 +38,12 @@ bool vpe_find_color_space_from_table(
     return false;
 }
 
+bool vpe_is_video_format(enum vpe_surface_pixel_format format)
+{
+    return (format >= VPE_SURFACE_PIXEL_FORMAT_VIDEO_BEGIN &&
+            format <= VPE_SURFACE_PIXEL_FORMAT_VIDEO_END);
+}
+
 bool vpe_is_subsampled_format(enum vpe_surface_pixel_format format)
 {
     return (format >= VPE_SURFACE_PIXEL_FORMAT_VIDEO_BEGIN &&
@@ -144,10 +150,16 @@ bool vpe_is_rgb16(enum vpe_surface_pixel_format format)
     case VPE_SURFACE_PIXEL_FORMAT_GRPH_ABGR16161616:
     case VPE_SURFACE_PIXEL_FORMAT_GRPH_ARGB16161616:
     case VPE_SURFACE_PIXEL_FORMAT_GRPH_RGBA16161616:
+    case VPE_SURFACE_PIXEL_FORMAT_GRPH_BGRA16161616:
     case VPE_SURFACE_PIXEL_FORMAT_GRPH_BGRA16161616_UNORM:
+    case VPE_SURFACE_PIXEL_FORMAT_GRPH_RGBA16161616_UNORM:
     case VPE_SURFACE_PIXEL_FORMAT_GRPH_ABGR16161616_UNORM:
+    case VPE_SURFACE_PIXEL_FORMAT_GRPH_ARGB16161616_UNORM:
     case VPE_SURFACE_PIXEL_FORMAT_GRPH_BGRA16161616_SNORM:
+    case VPE_SURFACE_PIXEL_FORMAT_GRPH_RGBA16161616_SNORM:
     case VPE_SURFACE_PIXEL_FORMAT_GRPH_ABGR16161616_SNORM:
+    case VPE_SURFACE_PIXEL_FORMAT_GRPH_ARGB16161616_SNORM:
+        return true;
     case VPE_SURFACE_PIXEL_FORMAT_PLANAR_16bpc_RGB:
         return true;
     default:
@@ -159,6 +171,11 @@ bool vpe_is_planar_format(enum vpe_surface_pixel_format format)
 {
     return (format >= VPE_SURFACE_PIXEL_FORMAT_PLANAR_BEGIN) &&
            (format <= VPE_SURFACE_PIXEL_FORMAT_PLANAR_END);
+}
+
+bool vpe_is_single_plane_format(enum vpe_surface_pixel_format format)
+{
+    return !vpe_is_planar_format(format) && !vpe_is_dual_plane_format(format);
 }
 
 bool vpe_is_fp16(enum vpe_surface_pixel_format format)
@@ -440,11 +457,16 @@ uint8_t vpe_get_element_size_in_bytes(enum vpe_surface_pixel_format format, int 
     case VPE_SURFACE_PIXEL_FORMAT_GRPH_RGBA16161616F:
     case VPE_SURFACE_PIXEL_FORMAT_GRPH_BGRA16161616F:
     case VPE_SURFACE_PIXEL_FORMAT_GRPH_RGBA16161616:
+    case VPE_SURFACE_PIXEL_FORMAT_GRPH_BGRA16161616:
     case VPE_SURFACE_PIXEL_FORMAT_GRPH_ABGR16161616:
     case VPE_SURFACE_PIXEL_FORMAT_GRPH_BGRA16161616_UNORM:
+    case VPE_SURFACE_PIXEL_FORMAT_GRPH_RGBA16161616_UNORM:
     case VPE_SURFACE_PIXEL_FORMAT_GRPH_ABGR16161616_UNORM:
+    case VPE_SURFACE_PIXEL_FORMAT_GRPH_ARGB16161616_UNORM:
     case VPE_SURFACE_PIXEL_FORMAT_GRPH_BGRA16161616_SNORM:
+    case VPE_SURFACE_PIXEL_FORMAT_GRPH_RGBA16161616_SNORM:
     case VPE_SURFACE_PIXEL_FORMAT_GRPH_ABGR16161616_SNORM:
+    case VPE_SURFACE_PIXEL_FORMAT_GRPH_ARGB16161616_SNORM:
     case VPE_SURFACE_PIXEL_FORMAT_VIDEO_ACrYCb12121212:
     case VPE_SURFACE_PIXEL_FORMAT_VIDEO_CrYCbA12121212:
         return 8;
@@ -527,10 +549,15 @@ enum color_depth vpe_get_color_depth(enum vpe_surface_pixel_format format)
     case VPE_SURFACE_PIXEL_FORMAT_GRPH_BGRA16161616F:
     case VPE_SURFACE_PIXEL_FORMAT_GRPH_ABGR16161616:
     case VPE_SURFACE_PIXEL_FORMAT_GRPH_RGBA16161616:
+    case VPE_SURFACE_PIXEL_FORMAT_GRPH_BGRA16161616:
     case VPE_SURFACE_PIXEL_FORMAT_GRPH_BGRA16161616_UNORM:
+    case VPE_SURFACE_PIXEL_FORMAT_GRPH_RGBA16161616_UNORM:
     case VPE_SURFACE_PIXEL_FORMAT_GRPH_ABGR16161616_UNORM:
+    case VPE_SURFACE_PIXEL_FORMAT_GRPH_ARGB16161616_UNORM:
     case VPE_SURFACE_PIXEL_FORMAT_GRPH_BGRA16161616_SNORM:
+    case VPE_SURFACE_PIXEL_FORMAT_GRPH_RGBA16161616_SNORM:
     case VPE_SURFACE_PIXEL_FORMAT_GRPH_ABGR16161616_SNORM:
+    case VPE_SURFACE_PIXEL_FORMAT_GRPH_ARGB16161616_SNORM:
     case VPE_SURFACE_PIXEL_FORMAT_PLANAR_16bpc_RGB_FLOAT:
     case VPE_SURFACE_PIXEL_FORMAT_GRPH_R16:
     // RGBE is technically 9bpc per component + 5 shared, using 16 here instead of default 8
@@ -640,8 +667,6 @@ enum vpe_status vpe_check_output_support(struct vpe *vpe, const struct vpe_build
     struct dpp                    *dpp;
     struct cdc_be                 *cdc_be;
     const struct vpe_surface_info *surface_info = &param->dst_surface;
-    struct vpe_dcc_surface_param   params;
-    struct vpe_surface_dcc_cap     cap;
     bool                           support;
 
     vpec   = &vpe_priv->resource.vpec;
@@ -698,15 +723,11 @@ enum vpe_status vpe_check_output_support(struct vpe *vpe, const struct vpe_build
     }
 
     // output dcc
+    // interal dcc only support non dual plane formats
     if (surface_info->dcc.enable) {
-
-        params.surface_size.width  = surface_info->plane_size.surface_size.width;
-        params.surface_size.height = surface_info->plane_size.surface_size.height;
-        params.format              = surface_info->format;
-        params.swizzle_mode        = surface_info->swizzle;
-        params.scan                = VPE_SCAN_PATTERN_0_DEGREE;
-        support = vpe_priv->pub.check_funcs.get_dcc_compression_output_cap(&params, &cap);
-        if (!support) {
+        if (!vpe->caps->output_internal_dcc_support ||
+            (vpe->caps->output_internal_dcc_support &&
+                !vpe_is_single_plane_format(surface_info->format))) {
             vpe_log("output dcc not supported\n");
             return VPE_STATUS_OUTPUT_DCC_NOT_SUPPORTED;
         }
@@ -741,8 +762,6 @@ enum vpe_status vpe_check_input_support(struct vpe *vpe, const struct vpe_stream
     struct dpp                    *dpp;
     struct cdc_fe                 *cdc_fe;
     const struct vpe_surface_info *surface_info = &stream->surface_info;
-    struct vpe_dcc_surface_param   params;
-    struct vpe_surface_dcc_cap     cap;
     bool                           support;
     const PHYSICAL_ADDRESS_LOC    *addrloc;
     bool                           use_adj = vpe_use_csc_adjust(&stream->color_adj);
@@ -818,19 +837,13 @@ enum vpe_status vpe_check_input_support(struct vpe *vpe, const struct vpe_stream
     }
 
     // input dcc
+    // interal dcc only support non dual plane formats
+
     if (surface_info->dcc.enable) {
-
-        params.surface_size.width  = surface_info->plane_size.surface_size.width;
-        params.surface_size.height = surface_info->plane_size.surface_size.height;
-        params.format              = surface_info->format;
-        params.swizzle_mode        = surface_info->swizzle;
-
-        params.scan = vpe_get_scan_direction(
-            stream->rotation, stream->horizontal_mirror, stream->vertical_mirror);
-        support = vpe_priv->pub.check_funcs.get_dcc_compression_input_cap(&params, &cap);
-        //only support non dual plane formats
-        if (!support) {
-            vpe_log("input internal dcc not supported\n");
+        if (!vpe->caps->input_internal_dcc_support ||
+            (vpe->caps->input_internal_dcc_support &&
+                !vpe_is_single_plane_format(surface_info->format))) {
+            vpe_log("input dcc not supported\n");
             return VPE_STATUS_INPUT_DCC_NOT_SUPPORTED;
         }
     }
@@ -908,9 +921,15 @@ enum vpe_status vpe_check_tone_map_support(
 
     // Check if Tone Mapping parameters are valid
     if (is_3D_lut_enabled) {
-        if ((stream->tm_params.lut_data == NULL) ||
-            (!input_is_hdr) ||
-            (!is_hlg && !is_in_lum_greater_than_out_lum)) {
+        if (vpe->caps->color_caps.mpc.dma_3d_lut == true) {
+            if (stream->dma_info.lut3d.data == 0)
+                status = VPE_STATUS_BAD_TONE_MAP_PARAMS;
+        } else if (stream->tm_params.lut_data == NULL) {
+            status = VPE_STATUS_BAD_TONE_MAP_PARAMS;
+        }
+
+        if ((!stream->lut_compound.enabled) &&
+            ((!input_is_hdr) || (!is_hlg && !is_in_lum_greater_than_out_lum))) {
             status = VPE_STATUS_BAD_TONE_MAP_PARAMS;
         }
     } else {
@@ -1117,9 +1136,16 @@ enum vpe_status vpe_check_3dlut_compound(
 {
     struct vpe_priv *vpe_priv = container_of(vpe, struct vpe_priv, pub);
 
-    // not enabled, nothing to check, always ok
-    if (stream->lut_compound.enabled == false)
-        return VPE_STATUS_OK;
+    // Lut compound not enabled case
+    // Since we allow CUSTOM cs/tf in check_input_support, and they are only valid with 3dlut
+    // compound we must reject them here, and with the reason "color space value not supported"
+    if (stream->lut_compound.enabled == false) {
+        if ((stream->surface_info.cs.primaries == VPE_PRIMARIES_CUSTOM) ||
+            (stream->surface_info.cs.tf == VPE_TF_CUSTOM))
+            return VPE_STATUS_COLOR_SPACE_VALUE_NOT_SUPPORTED;
+        else
+            return VPE_STATUS_OK;
+    }
 
     // no func ptr means no support at all, so cannot be enabled
     if (!vpe_priv->resource.check_lut3d_compound)

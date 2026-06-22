@@ -49,6 +49,7 @@ struct cs_viewport {
    int blend_enabled;
    int blend_mode;
    float blend_alpha;
+   int skip_prim_trc;
 };
 
 struct cs_shader {
@@ -102,6 +103,7 @@ static nir_def *cs_create_shader(struct vl_compositor *c, struct cs_shader *s)
          int blend_enabled;    // params[17].x
          int blend_mode;       // params[17].y
          float blend_alpha;    // params[17].z
+         int skip_prim_trc;    // params[17].w
       };
 
       void main()
@@ -401,14 +403,19 @@ static nir_def *cs_trc_apply(struct cs_shader *s, nir_def *src, bool in,
 
 static nir_def *cs_prim_trc_conversion(struct cs_shader *s, nir_def *src)
 {
-   nir_def *col[3];
-   nir_def *color = cs_trc_apply(s, src, true, cs_trc_to_linear);
+   nir_push_if(&s->b, nir_ieq_imm(&s->b, nir_channel(&s->b, s->params[17], 3), 0));
+      nir_def *col[3];
+      nir_def *color = cs_trc_apply(s, src, true, cs_trc_to_linear);
 
-   for (unsigned i = 0; i < 3; i++)
-      col[i] = cs_color_conversion(s, color, i, PRIMARIES);
+      for (unsigned i = 0; i < 3; i++)
+         col[i] = cs_color_conversion(s, color, i, PRIMARIES);
 
-   color = nir_vec4(&s->b, col[0], col[1], col[2], s->fone);
-   return cs_trc_apply(s, color, false, cs_trc_from_linear);
+      color = nir_vec4(&s->b, col[0], col[1], col[2], s->fone);
+      color = cs_trc_apply(s, color, false, cs_trc_from_linear);
+   nir_push_else(&s->b, NULL);
+   nir_pop_if(&s->b, NULL);
+
+   return nir_if_phi(&s->b, color, src);
 }
 
 static inline nir_def *cs_fetch_texel(struct cs_shader *s, nir_def *coords, unsigned sampler)
@@ -1004,6 +1011,13 @@ chroma_offset_y(unsigned location)
       return 0.0f;
 }
 
+static bool is_identity(vl_csc_matrix m)
+{
+   return m[0][0] == 1.0 && m[1][1] == 1.0 && m[2][2] == 1.0 &&
+          !m[0][1] && !m[0][2] && !m[0][3] && !m[1][0] && !m[1][2] &&
+          !m[1][3] && !m[2][0] && !m[2][1] && !m[2][3];
+}
+
 static bool
 set_viewport(struct vl_compositor_state *s,
              struct cs_viewport         *drawn,
@@ -1076,6 +1090,8 @@ set_viewport(struct vl_compositor_state *s,
    *ptr_int++ = drawn->blend_mode;
    ptr_float = (float *)ptr_int;
    *ptr_float++ = drawn->blend_alpha;
+   ptr_int = (int *)ptr_float;
+   *ptr_int++ = drawn->skip_prim_trc;
 
    pipe_buffer_unmap(s->pipe, buf_transfer);
 
@@ -1116,6 +1132,8 @@ draw_layers(struct vl_compositor       *c,
             drawn.blend_alpha = layer->blend_alpha;
          else
             drawn.blend_alpha = 1.0f;
+         drawn.skip_prim_trc = is_identity(s->primaries) &&
+            s->in_transfer_characteristic == s->out_transfer_characteristic;
          calc_proj(layer, samplers[0]->texture, drawn.proj);
          calc_proj(layer, sampler1->texture, drawn.chroma_proj);
          set_viewport(s, &drawn, samplers);

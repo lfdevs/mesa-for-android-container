@@ -1376,7 +1376,7 @@ prepare_draw(struct panvk_cmd_buffer *cmdbuf, struct panvk_draw_data *draw)
          return result;
    }
 
-   panvk_per_arch(cmd_prepare_draw_sysvals)(cmdbuf, &draw->info);
+   panvk_per_arch(cmd_prepare_draw_sysvals)(cmdbuf, &draw->info, fs);
 
    /* Viewport emission requires up-to-date {scale,offset}.z for min/max Z,
     * so we need to call it after calling cmd_prepare_draw_sysvals(), but

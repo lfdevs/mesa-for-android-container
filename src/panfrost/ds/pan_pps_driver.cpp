@@ -8,11 +8,7 @@
 #include <cstring>
 #include <xf86drm.h>
 
-#ifndef ANDROID_LIBPERFETTO
-#include <perfetto.h>
-#else
-#include <perfetto/tracing.h>
-#endif
+#include "util/perf/u_perfetto.h"
 
 #include <drm-uapi/panfrost_drm.h>
 #include <perf/pan_perf.h>

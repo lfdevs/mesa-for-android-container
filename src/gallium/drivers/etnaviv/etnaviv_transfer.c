@@ -239,7 +239,7 @@ etna_texture_unmap(struct pipe_context *pctx, struct pipe_transfer *ptrans)
                      trans->staging + z * ptrans->layer_stride,
                      ptrans->box.x, ptrans->box.y,
                      res_level->stride, ptrans->box.width, ptrans->box.height,
-                     ptrans->stride, (res_level->size * res_level->depth) / 2);
+                     ptrans->stride, etna_resource_level_second_plane_offset(res_level));
 
                } else {
                   etna_texture_tile(
@@ -487,7 +487,7 @@ etna_texture_map(struct pipe_context *pctx, struct pipe_resource *prsc,
                                     trans->mapped + (ptrans->box.z + z) * res_level->layer_stride,
                                     ptrans->box.x, ptrans->box.y, res_level->stride,
                                     ptrans->box.width, ptrans->box.height, ptrans->stride,
-                                    (res_level->size * res_level->depth) / 2);
+                                    etna_resource_level_second_plane_offset(res_level));
 
                } else {
                   etna_texture_untile(trans->staging + z * ptrans->layer_stride,

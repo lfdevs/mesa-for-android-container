@@ -397,6 +397,12 @@ process_instr(nir_builder *b, nir_instr *instr, void *s)
       return try_fold_load_store(b, intrin, state, 1, 0, get_max(state, intrin, state->options->global_max), need_nuw);
    case nir_intrinsic_store_global_ir3:
       return try_fold_load_store(b, intrin, state, 2, 0, get_max(state, intrin, state->options->global_max), need_nuw);
+
+   case nir_intrinsic_load_global_intel:
+      return try_fold_load_store(b, intrin, state, 0, 0, UINT32_MAX, false);
+   case nir_intrinsic_store_global_intel:
+      return try_fold_load_store(b, intrin, state, 1, 0, UINT32_MAX, false);
+
    default:
       return false;
    }

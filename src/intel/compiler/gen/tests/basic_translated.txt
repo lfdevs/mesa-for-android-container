@@ -1,0 +1,8 @@
+mtl | 31 00 04 00 00 00 44 0a 14 08 00 ea 00 00 0c 00 |         load.slm.d32x4.a32 (16)   r10:8   r8:2
+bmg | 31 00 10 00 00 00 0c 0a 0c 14 00 6a 00 00 00 00 |         load.urb.d32.a32 (16)     r10:1   r20:1
+mtl | 31 00 03 00 00 00 14 14 a7 0c 04 da 00 00 0c 06 |         load_cmask.tgm.d32.xy.a32.ca.ca.bti[3] (8) r20:2 r12:4
+mtl | 31 00 03 00 00 00 0c 02 0c 00 3e fe 00 00 04 01 |         fence.ugm.gpu.evict.route_to_lsc (8) r2:1 r0:1
+bmg | 31 00 0c 00 00 00 0c 02 0c 00 3e 6e 00 00 04 00 |         fence.urb.gpu.evict (8)   r2:1    r0:1
+
+bmg | 31 00 00 00 00 00 16 06 8c 05 00 fa 00 00 78 02 <         load.ugm.d32x32t.a32.ca.cc.bss[a0.0] (1) r6:2 r5:1
+mtl | 31 00 03 00 00 00 0e 28 8c 23 18 fa 04 08 00 02 <         atomic_add.ugm.d32.a32.wt.wb.bss[a0.0] (8) r40:1 r35:1 r8:1

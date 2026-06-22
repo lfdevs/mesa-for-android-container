@@ -7,6 +7,7 @@ import sys
 
 VALID_COMMON_VK_OPTIONS = {
     "force_vk_vendor",
+    "heap_memory_percent",
 }
 
 def declare_options():
@@ -101,20 +102,24 @@ def declare_options():
           "Provide a second queue for applications that require it, like the Android framework",
           c_name="emulate_second_queue"),
 
-        F("heap_memory_percent", 0.0, 0.0, 1.0, "Percentage of total system memory to report as gpu heap memory (0 = driver default)",
-          c_name="heap_memory_percent"),
-
         I("tu_override_graphics_shader_version", 0, 0, 255,
           "Override graphics shader version to force recompilation when TU_BUILD_ID_OVERRIDE is enabled.",
           c_name="override_graphics_shader_version"),
         I("tu_override_compute_shader_version", 0, 0, 255,
           "Override compute shader version to force recompilation when TU_BUILD_ID_OVERRIDE is enabled.",
           c_name="override_compute_shader_version"),
+
+        B("tu_enable_texel_buffer_emulation", False,
+          "Emulate texel buffers to allow a higher limit for elements that is in line with what some D3D12 games expect",
+          c_name="enable_texel_buffer_emulation"),
+        B("tu_enable_ssbo_emulation", False,
+          "Emulate SSBOs to allow a higher limit for elements that is in line with what some D3D12 games expect",
+          c_name="enable_ssbo_emulation"),
     ]
 
     features_options = []
 
-    drirc_gen.add_common_vk_options(debug_options, features_options, valid_options=VALID_COMMON_VK_OPTIONS)
+    drirc_gen.add_common_vk_options(debug_options, features_options, misc_options, valid_options=VALID_COMMON_VK_OPTIONS)
     drirc_gen.add_common_vk_wsi_options(debug_options, perf_options)
 
     return [drirc_gen.DrircSection("Debugging", debug_options,   c_name="debug"),
@@ -136,7 +141,7 @@ def main():
 
     options = declare_options()
 
-    drirc_gen.drirc_validate([args.validate], options, driver="turnip")
+    drirc_gen.drirc_validate([args.validate], options)
 
     drirc_gen.drirc_generate(args.drirc_src, args.drirc_hdr, "turnip", options)
 

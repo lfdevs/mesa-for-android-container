@@ -757,7 +757,7 @@ void vpe_bg_format_and_limited_conversion(enum color_space output_cs,
         }
 
     int i;
-    int arr_size = 12;
+    int arr_size = sizeof(bgcolor_format_range_inversion) / sizeof(struct format_range_csc_table);
     for (i = 0; i < arr_size; i++)
         if (bgcolor_format_range_inversion[i].cs == cs &&
             bgcolor_format_range_inversion[i].range == range &&

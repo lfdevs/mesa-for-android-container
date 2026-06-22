@@ -76,6 +76,10 @@ jay_dst_stride_minmax(jay_inst *I, bool do_max)
       return JAY_STRIDE_2;
    }
 
+   if (I->op == JAY_OPCODE_SLICE_REPACK && jay_slice_repack_unpack(I)) {
+      return JAY_STRIDE_4;
+   }
+
    /* The src2 restriction quoted above effectively implies we should not stride
     * destinations of 3-source instructions either.
     */
@@ -109,6 +113,9 @@ jay_src_stride_minmax(jay_inst *I, unsigned s, bool do_max)
    if (jay_type_size_bits(I->type) <= 16) {
       max = JAY_STRIDE_4;
    }
+
+   if (jay_src_type(I, s) == JAY_TYPE_BF16)
+      return JAY_STRIDE_2;
 
    if (restrict_mixed_strides(I, s) &&
        jay_type_size_bits(jay_src_type(I, s)) < jay_type_size_bits(I->type)) {

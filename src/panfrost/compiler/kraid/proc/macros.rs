@@ -24,13 +24,13 @@ pub fn derive_opcode(input: TokenStream) -> TokenStream {
         input.clone(),
         "Src",
         "src_type",
-        "DataType",
+        "PartialDataType",
     ));
     s.extend(derive_as_slice(
         input.clone(),
         "Dst",
         "dst_type",
-        "DataType",
+        "PartialDataType",
     ));
     s.extend(ir::derive_opcode(input));
     s

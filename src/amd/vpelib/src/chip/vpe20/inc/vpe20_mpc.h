@@ -677,6 +677,8 @@ void vpe20_mpc_shaper_bypass(struct mpc *mpc, bool bypass);
 
 bool vpe20_mpc_program_shaper(struct mpc *mpc, const struct pwl_params *params);
 
+bool vpe20_mpc_program_shaper_indirect(struct mpc *mpc, struct vpe_dma_shaper *shaper);
+
 // using direct config to program the 3dlut specified in params
 void vpe20_mpc_program_3dlut(struct mpc *mpc, const struct tetrahedral_params *params);
 

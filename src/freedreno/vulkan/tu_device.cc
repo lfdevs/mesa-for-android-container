@@ -101,6 +101,12 @@ tu_device_get_cache_uuid(struct tu_physical_device *device, void *uuid)
    _mesa_blake3_update(&ctx, &chip_id, sizeof(chip_id));
    _mesa_blake3_update(&ctx, &driver_flags, sizeof(driver_flags));
    _mesa_blake3_update(&ctx, &device->uche_trap_base, sizeof(device->uche_trap_base));
+   _mesa_blake3_update(&ctx, &device->instance->drirc.misc.allow_oob_indirect_ubo_loads,
+                       sizeof(device->instance->drirc.misc.allow_oob_indirect_ubo_loads));
+   _mesa_blake3_update(&ctx, &device->enable_texel_buffer_emulation,
+                       sizeof(device->enable_texel_buffer_emulation));
+   _mesa_blake3_update(&ctx, &device->enable_ssbo_emulation,
+                       sizeof(device->enable_ssbo_emulation));
    _mesa_blake3_final(&ctx, blake3);
 
    memcpy(uuid, blake3, VK_UUID_SIZE);
@@ -1147,9 +1153,14 @@ tu_get_properties(struct tu_physical_device *pdevice,
    props->maxImageDimension3D = (1 << 11);
    props->maxImageDimensionCube = (1 << 14);
    props->maxImageArrayLayers = (1 << (pdevice->info->props.is_a702 ? 8 : 11));
-   props->maxTexelBufferElements = MAX_TEXEL_ELEMENTS;
+   props->maxTexelBufferElements = pdevice->enable_texel_buffer_emulation
+                                      ? TU_D3D12_MAX_TEXEL_BUFFER_ELEMENTS
+                                      : pdevice->info->props.max_texel_buffer_range_elements;
    props->maxUniformBufferRange = MAX_UNIFORM_BUFFER_RANGE;
-   props->maxStorageBufferRange = MAX_STORAGE_BUFFER_RANGE;
+   props->maxStorageBufferRange =
+      pdevice->enable_ssbo_emulation
+         ? TU_D3D12_MAX_STORAGE_BUFFER_RANGE_BYTES
+         : pdevice->info->props.max_storage_buffer_range_bytes;
    props->maxPushConstantsSize = MAX_PUSH_CONSTANTS_SIZE;
    props->maxMemoryAllocationCount = UINT32_MAX;
    props->maxSamplerAllocationCount = 64 * 1024;
@@ -1719,6 +1730,19 @@ tu_physical_device_init(struct tu_physical_device *device,
                                  "device %s is unsupported", device->name);
       goto fail_free_name;
    }
+
+   /* D3D12 texel buffer range emulation requires the resbase instruction, which appeared in 7xx. */
+   if (fd_dev_gen(&device->dev_id) >= 7) {
+      if (device->info->props.max_texel_buffer_range_elements < TU_D3D12_MAX_TEXEL_BUFFER_ELEMENTS) {
+         assert(fd_dev_gen(&device->dev_id) == 7);
+         device->enable_texel_buffer_emulation = instance->drirc.misc.enable_texel_buffer_emulation;
+      }
+      if (device->info->props.max_storage_buffer_range_bytes < TU_D3D12_MAX_STORAGE_BUFFER_RANGE_BYTES) {
+         assert(fd_dev_gen(&device->dev_id) == 7);
+         device->enable_ssbo_emulation = instance->drirc.misc.enable_ssbo_emulation;
+      }
+   }
+
    if (tu_device_get_cache_uuid(device, device->cache_uuid)) {
       result = vk_startup_errorf(instance, VK_ERROR_INITIALIZATION_FAILED,
                                  "cannot generate UUID");
@@ -3449,6 +3473,23 @@ tu_GetInstanceProcAddr(VkInstance _instance, const char *pName)
    return vk_instance_get_proc_addr(instance != NULL ? &instance->vk : NULL,
                                     &tu_instance_entrypoints,
                                     pName);
+}
+
+VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL
+tu_GetDeviceProcAddr(VkDevice _device, const char *pName)
+{
+   VK_FROM_HANDLE(tu_device, device, _device);
+   return vk_device_get_proc_addr(&device->vk, pName);
+}
+
+/* Required ICD entrypoint for the loader */
+PUBLIC VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL
+vk_icdGetDeviceProcAddr(VkDevice device, const char *pName);
+
+PUBLIC VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL
+vk_icdGetDeviceProcAddr(VkDevice device, const char *pName)
+{
+   return tu_GetDeviceProcAddr(device, pName);
 }
 
 /* The loader wants us to expose a second GetInstanceProcAddr function

@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MIT
 
 use crate::ir::SmallConstant;
+use compiler::enum_as_u8::*;
 
 #[derive(Debug)]
 pub enum EncodeError {
@@ -86,22 +87,43 @@ pub trait SmallConstantTable: TryDecode<u8> {
     }
 }
 
-pub struct InstructionInfo {
-    pub is_message: bool,
+pub struct InstructionSrcInfo<S: EnumAsU8> {
+    pub allowed_swizzles: U8EnumSet<S, 2>,
+    pub has_abs: bool,
+    pub has_neg: bool,
+    pub has_not: bool,
 }
 
-pub trait Instruction {
+impl<S: EnumAsU8> InstructionSrcInfo<S> {
+    pub fn exists(&self) -> bool {
+        !self.allowed_swizzles.is_empty()
+    }
+}
+
+pub struct InstructionDstInfo<L: EnumAsU8> {
+    pub is_sr: bool,
+    pub allowed_lanes: U8EnumSet<L, 1>,
+}
+
+pub struct InstructionInfo<S: EnumAsU8 + 'static, L: EnumAsU8 + 'static> {
+    pub is_message: bool,
+    pub srcs: &'static [InstructionSrcInfo<S>],
+    pub sr_src: Option<InstructionSrcInfo<S>>,
+    pub dst: Option<InstructionDstInfo<L>>,
+}
+
+pub trait Instruction<S: EnumAsU8 + 'static, L: EnumAsU8 + 'static> {
     type Variant;
 
     fn get_info_for_variant(
         variant: Self::Variant,
         arch: u8,
-    ) -> Option<&'static InstructionInfo>;
+    ) -> Option<&'static InstructionInfo<S, L>>;
 
     fn get_info(
         variant: impl TryInto<Self::Variant>,
         arch: u8,
-    ) -> Option<&'static InstructionInfo> {
+    ) -> Option<&'static InstructionInfo<S, L>> {
         Self::get_info_for_variant(variant.try_into().ok()?, arch)
     }
 
@@ -140,6 +162,6 @@ pub struct SrWrite<L: Copy> {
 }
 
 pub mod v9 {
-    use kraid_proc_macros::gen_isa_encode;
+    use kraid_proc_macros::*;
     gen_isa_encode!("isa-v9-v14.xml", 9..=14);
 }

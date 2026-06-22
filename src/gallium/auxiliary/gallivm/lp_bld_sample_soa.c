@@ -2969,10 +2969,35 @@ lp_build_fetch_texel(struct lp_build_sample_context *bld,
 
       first_level = lp_build_broadcast_scalar(&bld->leveli_bld, first_level);
       last_level = lp_build_broadcast_scalar(&bld->leveli_bld, last_level);
+
+      LLVMValueRef requested_level = ilevel;
       lp_build_nearest_mip_level(bld,
                                  first_level, last_level,
                                  ilevel, &ilevel,
                                  out_of_bound_ret_zero ? &out_of_bounds : NULL);
+
+      /* The Vulkan spec defines an OpImageFetch with LOD below the view's
+       * minLodInteger as reading zero.
+       * Since view_min_lod is view-relative, clamp against its floor.
+       */
+      if (out_of_bound_ret_zero &&
+          bld->static_texture_state->apply_view_min_lod &&
+          bld->dynamic_state->view_min_lod) {
+         LLVMValueRef vml =
+            bld->dynamic_state->view_min_lod(bld->gallivm, bld->resources_type,
+                                             bld->resources_ptr, texture_unit, NULL);
+         LLVMValueRef min_level =
+            lp_build_broadcast_scalar(&bld->leveli_bld,
+                                      lp_build_ifloor(&bld->float_bld, vml));
+         LLVMValueRef below = lp_build_cmp(&bld->leveli_bld, PIPE_FUNC_LESS,
+                                           requested_level, min_level);
+         if (bld->num_mips == 1)
+            below = lp_build_broadcast_scalar(&bld->int_coord_bld, below);
+         else if (bld->num_mips != bld->coord_bld.type.length)
+            below = lp_build_unpack_broadcast_aos_scalars(bld->gallivm,
+                       bld->leveli_bld.type, bld->int_coord_bld.type, below);
+         out_of_bounds = lp_build_or(int_coord_bld, out_of_bounds, below);
+      }
    } else {
       assert(bld->num_mips == 1);
       if (bld->static_texture_state->target != PIPE_BUFFER) {

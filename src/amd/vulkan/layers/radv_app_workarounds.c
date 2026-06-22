@@ -121,3 +121,30 @@ strange_brigade_CmdPipelineBarrier2(VkCommandBuffer commandBuffer, const VkDepen
 
    device->layer_dispatch.app.CmdPipelineBarrier2(commandBuffer, pDependencyInfo);
 }
+
+/* GFXBench 5.0 */
+VKAPI_ATTR void VKAPI_CALL
+gfxbench5_CmdPipelineBarrier2(VkCommandBuffer commandBuffer, const VkDependencyInfo *pDependencyInfo)
+{
+   VK_FROM_HANDLE(radv_cmd_buffer, cmd_buffer, commandBuffer);
+   struct radv_device *device = radv_cmd_buffer_device(cmd_buffer);
+
+   for (uint32_t i = 0; i < pDependencyInfo->imageMemoryBarrierCount; i++) {
+      VkImageMemoryBarrier2 *barrier = (VkImageMemoryBarrier2 *)&pDependencyInfo->pImageMemoryBarriers[i];
+
+      if (barrier->oldLayout == VK_IMAGE_LAYOUT_PREINITIALIZED) {
+         VK_FROM_HANDLE(radv_image, image, barrier->image);
+
+         if (image->vk.tiling != VK_IMAGE_TILING_LINEAR) {
+            /* GFXBench 5.0 uses VK_IMAGE_LAYOUT_PREINITIALIZED as the old layout for optimally-tiled
+             * depth images. PREINITIALIZED is only useful for linear images per the spec, and is
+             * semantically equivalent to UNDEFINED for optimal tiling. Replace it to avoid hitting
+             * unhandled layout cases in the core driver.
+             */
+            barrier->oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+         }
+      }
+   }
+
+   device->layer_dispatch.app.CmdPipelineBarrier2(commandBuffer, pDependencyInfo);
+}

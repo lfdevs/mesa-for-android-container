@@ -91,7 +91,7 @@ struct config_cache {
         if ((obj_cache) && !disable_cache && (obj_cache)->config_cache[inst].p_buffer &&           \
             (obj_cache)->config_cache[inst].cached && !((obj_cache)->dirty[inst]) && !is_bypass) { \
             /* make sure it opens a new config packet */                                           \
-            config_writer_force_new_with_type(config_writer, CONFIG_TYPE_DIRECT);                  \
+            config_writer_force_new_with_type(config_writer, CONFIG_TYPE_DIRECT, inst);            \
                                                                                                    \
             /* reuse the cache */                                                                  \
             if (config_writer->buf->size >= (obj_cache)->config_cache[inst].size) {                \
@@ -115,7 +115,7 @@ struct config_cache {
             if (!is_bypass) {                                                                      \
                 /* make sure it opens a new config packet so we can cache a complete new config */ \
                 /* for bypass we do not do caching, so no need to open a new desc */               \
-                config_writer_force_new_with_type(config_writer, CONFIG_TYPE_DIRECT);              \
+                config_writer_force_new_with_type(config_writer, CONFIG_TYPE_DIRECT, inst);        \
             }                                                                                      \
                                                                                                    \
             start = config_writer->base_cpu_va;                                                    \
@@ -132,7 +132,8 @@ struct config_cache {
                             if ((obj_cache)->config_cache[inst].p_buffer)                          \
                                 vpe_free((obj_cache)->config_cache[inst].p_buffer);                \
                                                                                                    \
-                            (obj_cache)->config_cache[inst].p_buffer = vpe_zalloc((size_t)size);   \
+                            (obj_cache)->config_cache[inst].p_buffer =                             \
+                                (uint8_t *)vpe_zalloc((size_t)size);                               \
                             if ((obj_cache)->config_cache[inst].p_buffer) {                        \
                                 memcpy((obj_cache)->config_cache[inst].p_buffer,                   \
                                     (void *)(uintptr_t)start, (size_t)size);                       \

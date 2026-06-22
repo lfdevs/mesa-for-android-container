@@ -23,11 +23,7 @@
 
 #include "vulkan/runtime/vk_object.h"
 
-#ifndef ANDROID_LIBPERFETTO
-#include <perfetto.h>
-#else
-#include <perfetto/tracing.h>
-#endif
+#include "util/perf/u_perfetto.h"
 
 #include "util/hash_table.h"
 #include "util/perf/u_trace.h"

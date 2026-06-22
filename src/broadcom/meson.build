@@ -61,7 +61,7 @@ libv3d_neon = static_library(
 libbroadcom_v3d = static_library(
   'broadcom_v3d',
   [
-    files('common/v3d_debug.c', 'common/v3d_device_info.c', 'clif/clif_dump.c', 'common/v3d_util.c'),
+    files('common/v3d_debug.c', 'common/v3d_device_info.c', 'common/v3d_submit_util.c', 'clif/clif_dump.c', 'common/v3d_util.c'),
     v3d_xml_pack,
   ],
   include_directories : [inc_include, inc_src, inc_broadcom],

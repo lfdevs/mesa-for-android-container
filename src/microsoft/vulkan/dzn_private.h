@@ -48,7 +48,7 @@
 #include "util/hash_table.h"
 #include "util/u_dynarray.h"
 #include "util/log.h"
-#include "util/xmlconfig.h"
+#include "dzn_drirc.h"
 
 #include "shader_enums.h"
 
@@ -1273,8 +1273,7 @@ struct dzn_instance {
 
    struct vk_sync_binary_type sync_binary_type;
 
-   struct driOptionCache dri_options;
-   struct driOptionCache available_dri_options;
+   struct dzn_drirc drirc;
 };
 
 struct dzn_event {

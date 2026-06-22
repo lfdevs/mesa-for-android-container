@@ -26,6 +26,12 @@ radv_is_instruction_timing_enabled(void)
    return debug_get_bool_option("RADV_THREAD_TRACE_INSTRUCTION_TIMING", true);
 }
 
+static uint32_t
+radv_get_instruction_timing_se_mask(void)
+{
+   return (uint32_t)debug_get_num_option("RADV_THREAD_TRACE_INSTRUCTION_TIMING_SE_MASK", ~0u);
+}
+
 bool
 radv_sqtt_queue_events_enabled(void)
 {
@@ -401,6 +407,8 @@ radv_sqtt_init(struct radv_device *device)
       return false;
 
    device->sqtt.instruction_timing_enabled = radv_is_instruction_timing_enabled();
+   device->sqtt.instruction_timing_se_mask =
+      device->sqtt.instruction_timing_enabled ? radv_get_instruction_timing_se_mask() : 0;
 
    /* Whether to use a staging buffer for faster reads on dGPUs. */
    device->rgp_use_staging_buffer = pdev->info.has_dedicated_vram;

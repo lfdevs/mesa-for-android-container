@@ -150,6 +150,11 @@ blit_resolve(struct zink_context *ctx, const struct pipe_blit_info *info, bool *
                      1, &region);
    zink_cmd_debug_marker_end(ctx, cmdbuf, marker);
 
+   if (cmdbuf == ctx->bs->cmdbuf && ctx->track_renderpasses) {
+      ctx->needs_transfer_sync = true;
+      dst->obj->transfer_rp = ctx->rp_counter;
+   }
+
    return true;
 }
 
@@ -328,6 +333,11 @@ blit_native(struct zink_context *ctx, const struct pipe_blit_info *info, bool *n
 
    zink_cmd_debug_marker_end(ctx, cmdbuf, marker);
 
+   if (cmdbuf == ctx->bs->cmdbuf && ctx->track_renderpasses) {
+      ctx->needs_transfer_sync = true;
+      dst->obj->transfer_rp = ctx->rp_counter;
+   }
+
    return true;
 }
 
@@ -375,9 +385,12 @@ zink_blit(struct pipe_context *pctx,
       if (resolve == info->dst.resource) {
          zink_batch_no_rp_safe(ctx);
          ctx->awaiting_resolve = false;
+         ctx->rp_tc_info_updated = true;
          return;
       }
    }
+   if (dst->fb_bind_count)
+      ctx->rp_tc_info_updated = true;
 
    if (zink_is_swapchain(dst)) {
       if (!zink_kopper_acquire(ctx, dst, UINT64_MAX))
@@ -663,7 +676,9 @@ zink_blit_barriers(struct zink_context *ctx, struct zink_resource *src, struct z
       VkImageLayout layout = !screen->driver_workarounds.general_layout && screen->info.have_EXT_attachment_feedback_loop_layout ?
                              VK_IMAGE_LAYOUT_ATTACHMENT_FEEDBACK_LOOP_OPTIMAL_EXT :
                              VK_IMAGE_LAYOUT_GENERAL;
-      screen->image_barrier(ctx, src, layout, VK_ACCESS_SHADER_READ_BIT | flags, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | pipeline);
+      /* apply read barrier first to avoid "sticky" read+write access flags in resource_needs_barrier() */
+      screen->image_barrier(ctx, src, layout, VK_ACCESS_SHADER_READ_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT);
+      screen->image_barrier(ctx, src, layout, flags, pipeline);
    } else {
       if (src) {
          VkImageLayout layout = screen->driver_workarounds.general_layout ? VK_IMAGE_LAYOUT_GENERAL :

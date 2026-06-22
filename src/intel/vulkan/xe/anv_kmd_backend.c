@@ -343,8 +343,8 @@ xe_vm_bind_op(struct anv_device *device,
       if (errno_ == ENOMEM || errno_ == ENOBUFS)
          result = VK_ERROR_OUT_OF_HOST_MEMORY;
       else
-         result = vk_device_set_lost(&device->vk,
-                                     "vm_bind failed with errno %d", errno_);
+         result = anv_device_set_lost(device, errno_,
+                                      "vm_bind failed with errno %d", errno_);
       goto out_stackarray;
    }
 

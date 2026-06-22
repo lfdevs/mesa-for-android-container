@@ -817,7 +817,8 @@ Temp
 get_mubuf_global_rsrc(Builder& bld, Temp addr)
 {
    uint32_t desc[4];
-   ac_build_raw_buffer_descriptor(bld.program->gfx_level, 0, 0xffffffff, desc);
+   ac_build_raw_buffer_descriptor(bld.program->gfx_level, bld.program->dev.has_desc_resource_level,
+                                  0, 0xffffffff, desc);
 
    if (addr.type() == RegType::vgpr)
       return bld.pseudo(aco_opcode::p_create_vector, bld.def(s4), Operand::zero(), Operand::zero(),
@@ -1592,7 +1593,8 @@ visit_load_constant(isel_context* ctx, nir_intrinsic_instr* instr)
    Builder bld(ctx->program, ctx->block);
 
    uint32_t desc[4];
-   ac_build_raw_buffer_descriptor(ctx->options->gfx_level, 0, 0, desc);
+   ac_build_raw_buffer_descriptor(ctx->options->gfx_level,
+                                  ctx->program->dev.has_desc_resource_level, 0, 0, desc);
 
    unsigned base = nir_intrinsic_base(instr);
    unsigned range = nir_intrinsic_range(instr);
@@ -2895,7 +2897,7 @@ translate_nir_scope(mesa_scope scope)
 }
 
 void
-emit_barrier(isel_context* ctx, nir_intrinsic_instr* instr)
+visit_barrier(isel_context* ctx, nir_intrinsic_instr* instr)
 {
    Builder bld(ctx->program, ctx->block);
 
@@ -2948,9 +2950,9 @@ emit_barrier(isel_context* ctx, nir_intrinsic_instr* instr)
    assert(!(nir_semantics & (NIR_MEMORY_MAKE_AVAILABLE | NIR_MEMORY_MAKE_VISIBLE)));
    assert(exec_scope != scope_workgroup || workgroup_scope_allowed);
 
-   bld.barrier(aco_opcode::p_barrier,
-               memory_sync_info((storage_class)storage, (memory_semantics)semantics, mem_scope),
-               exec_scope);
+   emit_barrier(bld,
+                memory_sync_info((storage_class)storage, (memory_semantics)semantics, mem_scope),
+                exec_scope);
 }
 
 /* The two 32 wide halves of a gfx10+ wave64 LDS instruction might be executed interleaved
@@ -4050,7 +4052,7 @@ visit_intrinsic(isel_context* ctx, nir_intrinsic_instr* instr)
    case nir_intrinsic_ssbo_atomic_swap: visit_atomic_ssbo(ctx, instr); break;
    case nir_intrinsic_load_scratch: visit_load_scratch(ctx, instr); break;
    case nir_intrinsic_store_scratch: visit_store_scratch(ctx, instr); break;
-   case nir_intrinsic_barrier: emit_barrier(ctx, instr); break;
+   case nir_intrinsic_barrier: visit_barrier(ctx, instr); break;
    case nir_intrinsic_ddx:
    case nir_intrinsic_ddy:
    case nir_intrinsic_ddx_fine:

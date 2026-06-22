@@ -10,11 +10,12 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+#include "amd_family.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-struct radeon_info;
 struct ac_compiler_info;
 
 struct ac_shader_config {
@@ -38,7 +39,13 @@ void ac_parse_shader_binary_config(const char *data, size_t nbytes, unsigned wav
                                    const struct ac_compiler_info *compiler_info,
                                    struct ac_shader_config *conf);
 
-unsigned ac_align_shader_binary_for_prefetch(const struct radeon_info *info, unsigned size);
+unsigned ac_align_shader_binary_for_prefetch(enum amd_gfx_level gfx_level,
+                                             unsigned prefetch_distance,
+                                             unsigned size);
+
+unsigned ac_get_instr_prefetch_size(enum amd_gfx_level gfx_level,
+                                    unsigned prefetch_distance,
+                                    unsigned size);
 
 #ifdef __cplusplus
 }

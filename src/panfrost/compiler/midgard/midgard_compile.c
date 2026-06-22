@@ -474,7 +474,7 @@ optimise_nir(nir_shader *nir, unsigned quirks, bool is_blend)
       NIR_PASS(progress, nir, nir_opt_algebraic);
       NIR_PASS(progress, nir, nir_opt_constant_folding);
       NIR_PASS(progress, nir, nir_opt_undef);
-      NIR_PASS(progress, nir, nir_lower_undef_to_zero);
+      NIR_PASS(progress, nir, nir_lower_undef_to_zero, NULL);
 
       NIR_PASS(progress, nir, nir_opt_loop_unroll);
 

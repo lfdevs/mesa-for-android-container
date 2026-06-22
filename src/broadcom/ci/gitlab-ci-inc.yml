@@ -190,8 +190,8 @@
   extends:
     - .ci-tron-b2c-diskless-v1
   variables:
-    RPI_DOWNSTREAM_PACKAGE_VERSION: '1.20260601'
-    RPI_DOWNSTREAM_KERNEL_VERSION: '6.18.33\+rpt-rpi'
+    RPI_DOWNSTREAM_PACKAGE_VERSION: '1.20260609'
+    RPI_DOWNSTREAM_KERNEL_VERSION: '6.18.34\+rpt-rpi'
     # An uprev should only change the two variables above, and technically the
     # kernel version could instead be set to `.*` in the regex below, but
     # having it here documents this information well.

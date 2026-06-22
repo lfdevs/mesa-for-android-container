@@ -73,9 +73,23 @@ radv_shader_deserialize(struct radv_device *device, const void *key_data, size_t
    if (!shader)
       return NULL;
 
+   radv_parse_binary_debug_info(&device->compiler_info, binary, &shader->dbg);
+
    assert(key_size == sizeof(shader->hash));
    memcpy(shader->hash, key_data, key_size);
    blob_skip_bytes(blob, binary->total_size - sizeof(struct radv_shader_binary));
+
+   /* serialize_binary() has a fast path for when this debug information doesn't exist. */
+   if (blob->current != blob->end) {
+      shader->dbg.spirv_size = blob_read_uint32(blob);
+      shader->dbg.spirv = malloc(shader->dbg.spirv_size);
+      blob_copy_bytes(blob, shader->dbg.spirv, shader->dbg.spirv_size);
+
+      const char *nir_string = blob_read_string(blob);
+      const char *args_string = blob_read_string(blob);
+      shader->dbg.nir_string = (nir_string && nir_string[0]) ? strdup(nir_string) : NULL;
+      shader->dbg.args_string = (args_string && args_string[0]) ? strdup(args_string) : NULL;
+   }
 
    return shader;
 }
@@ -92,12 +106,41 @@ radv_shader_cache_deserialize(struct vk_pipeline_cache *cache, const void *key_d
    return shader ? &shader->base : NULL;
 }
 
+static void
+serialize_shader_debug_info(struct blob *blob, const struct radv_shader_debug_info *dbg)
+{
+   blob_write_uint32(blob, dbg->spirv_size);
+   blob_write_bytes(blob, dbg->spirv, dbg->spirv_size);
+   blob_write_string(blob, dbg->nir_string ? dbg->nir_string : "");
+   blob_write_string(blob, dbg->args_string ? dbg->args_string : "");
+}
+
+static void
+serialize_binary(struct blob *blob, const struct radv_shader_binary *binary, const struct radv_shader_debug_info *dbg)
+{
+   if (dbg && (dbg->spirv_size || dbg->nir_string || dbg->args_string)) {
+      blob_init(blob);
+      blob_write_bytes(blob, binary, binary->total_size);
+      serialize_shader_debug_info(blob, dbg);
+      free(dbg->spirv);
+      free(dbg->nir_string);
+      free(dbg->args_string);
+   } else {
+      blob_init_fixed(blob, (void *)binary, binary->total_size);
+      blob_reserve_bytes(blob, binary->total_size);
+   }
+}
+
 void
 radv_shader_serialize(struct radv_shader *shader, struct blob *blob)
 {
    size_t stats_size = shader->dbg.statistics ? sizeof(struct amd_stats) : 0;
+   size_t ir_size = shader->dbg.ir_string ? strlen(shader->dbg.ir_string) + 1 : 0;
+   size_t disasm_size = shader->dbg.disasm_string ? strlen(shader->dbg.disasm_string) + 1 : 0;
+   size_t debug_info_size = shader->dbg.debug_info_count * sizeof(struct ac_shader_debug_info);
    size_t code_size = shader->code_size;
-   uint32_t total_size = sizeof(struct radv_shader_binary_legacy) + code_size + stats_size;
+   uint32_t total_size =
+      sizeof(struct radv_shader_binary_legacy) + code_size + stats_size + ir_size + disasm_size + debug_info_size;
 
    struct radv_shader_binary_legacy binary = {
       .base =
@@ -109,14 +152,21 @@ radv_shader_serialize(struct radv_shader *shader, struct blob *blob)
          },
       .code_size = code_size,
       .exec_size = shader->exec_size,
-      .ir_size = 0,
-      .disasm_size = 0,
+      .ir_size = ir_size,
+      .disasm_size = disasm_size,
       .stats_size = stats_size,
+      .debug_info_size = debug_info_size,
    };
 
    blob_write_bytes(blob, &binary, sizeof(struct radv_shader_binary_legacy));
    blob_write_bytes(blob, shader->dbg.statistics, stats_size);
    blob_write_bytes(blob, shader->code, code_size);
+   blob_write_bytes(blob, shader->dbg.ir_string, binary.ir_size);
+   blob_write_bytes(blob, shader->dbg.disasm_string, binary.disasm_size);
+   blob_write_bytes(blob, shader->dbg.debug_info, binary.debug_info_size);
+
+   if (shader->dbg.spirv_size || shader->dbg.nir_string || shader->dbg.args_string)
+      serialize_shader_debug_info(blob, &shader->dbg);
 }
 
 static bool
@@ -153,6 +203,7 @@ radv_shader_create(struct radv_device *device, struct vk_pipeline_cache *cache, 
    if (radv_is_cache_disabled(&device->compiler_info, cache) || skip_cache || (dbg && dbg->dump_shader)) {
       struct radv_shader *shader;
       radv_shader_create_uncached(device, binary, false, NULL, dbg, &shader);
+      radv_parse_binary_debug_info(&device->compiler_info, binary, &shader->dbg);
       return shader;
    }
 
@@ -162,9 +213,14 @@ radv_shader_create(struct radv_device *device, struct vk_pipeline_cache *cache, 
    blake3_hash hash;
    _mesa_blake3_compute(binary, binary->total_size, hash);
 
+   struct blob blob;
+   serialize_binary(&blob, binary, dbg);
+
    struct vk_pipeline_cache_object *shader_obj;
-   shader_obj = vk_pipeline_cache_create_and_insert_object(cache, hash, sizeof(hash), binary, binary->total_size,
-                                                           &radv_shader_ops);
+   shader_obj =
+      vk_pipeline_cache_create_and_insert_object(cache, hash, sizeof(hash), blob.data, blob.size, &radv_shader_ops);
+
+   blob_finish(&blob);
 
    return shader_obj ? container_of(shader_obj, struct radv_shader, base) : NULL;
 }

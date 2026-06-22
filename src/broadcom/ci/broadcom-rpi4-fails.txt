@@ -87,39 +87,7 @@ spec@arb_texture_buffer_object@texture-buffer-size-clamp,Fail
 spec@arb_texture_buffer_object@texture-buffer-size-clamp@r8ui_texture_buffer_size_via_sampler,Fail
 spec@arb_texture_buffer_object@texture-buffer-size-clamp@rg8ui_texture_buffer_size_via_sampler,Fail
 spec@arb_texture_buffer_object@texture-buffer-size-clamp@rgba8ui_texture_buffer_size_via_sampler,Fail
-spec@arb_texture_float@texwrap formats bordercolor,Fail
-spec@arb_texture_float@texwrap formats bordercolor-swizzled,Fail
-spec@arb_texture_float@texwrap formats bordercolor-swizzled@GL_ALPHA32F_ARB- swizzled- border color only,Fail
-spec@arb_texture_float@texwrap formats bordercolor-swizzled@GL_INTENSITY32F_ARB- swizzled- border color only,Fail
-spec@arb_texture_float@texwrap formats bordercolor-swizzled@GL_LUMINANCE32F_ARB- swizzled- border color only,Fail
-spec@arb_texture_float@texwrap formats bordercolor-swizzled@GL_LUMINANCE_ALPHA32F_ARB- swizzled- border color only,Fail
-spec@arb_texture_float@texwrap formats bordercolor-swizzled@GL_RGB32F- swizzled- border color only,Fail
-spec@arb_texture_float@texwrap formats bordercolor-swizzled@GL_RGBA32F- swizzled- border color only,Fail
-spec@arb_texture_float@texwrap formats bordercolor@GL_ALPHA32F_ARB- border color only,Fail
-spec@arb_texture_float@texwrap formats bordercolor@GL_INTENSITY32F_ARB- border color only,Fail
-spec@arb_texture_float@texwrap formats bordercolor@GL_LUMINANCE32F_ARB- border color only,Fail
-spec@arb_texture_float@texwrap formats bordercolor@GL_LUMINANCE_ALPHA32F_ARB- border color only,Fail
-spec@arb_texture_float@texwrap formats bordercolor@GL_RGB32F- border color only,Fail
-spec@arb_texture_float@texwrap formats bordercolor@GL_RGBA32F- border color only,Fail
 spec@arb_texture_rectangle@1-1-linear-texture,Fail
-spec@arb_texture_rg@texwrap formats bordercolor,Fail
-spec@arb_texture_rg@texwrap formats bordercolor-swizzled,Fail
-spec@arb_texture_rg@texwrap formats bordercolor-swizzled@GL_R16- swizzled- border color only,Fail
-spec@arb_texture_rg@texwrap formats bordercolor-swizzled@GL_RG16- swizzled- border color only,Fail
-spec@arb_texture_rg@texwrap formats bordercolor@GL_R16- border color only,Fail
-spec@arb_texture_rg@texwrap formats bordercolor@GL_RG16- border color only,Fail
-spec@arb_texture_rg@texwrap formats-float bordercolor,Fail
-spec@arb_texture_rg@texwrap formats-float bordercolor-swizzled,Fail
-spec@arb_texture_rg@texwrap formats-float bordercolor-swizzled@GL_R32F- swizzled- border color only,Fail
-spec@arb_texture_rg@texwrap formats-float bordercolor-swizzled@GL_RG32F- swizzled- border color only,Fail
-spec@arb_texture_rg@texwrap formats-float bordercolor@GL_R32F- border color only,Fail
-spec@arb_texture_rg@texwrap formats-float bordercolor@GL_RG32F- border color only,Fail
-spec@arb_texture_rg@texwrap formats-float offset,Fail
-spec@arb_texture_rg@texwrap formats-float offset@GL_R32F- NPOT,Fail
-spec@arb_texture_rg@texwrap formats-float offset@GL_RG32F- NPOT,Fail
-spec@arb_texture_rg@texwrap formats-float,Fail
-spec@arb_texture_rg@texwrap formats-float@GL_R32F- NPOT,Fail
-spec@arb_texture_rg@texwrap formats-float@GL_RG32F- NPOT,Fail
 spec@egl 1.4@eglterminate then unbind context,Fail
 spec@egl_khr_surfaceless_context@viewport,Fail
 spec@egl_mesa_configless_context@basic,Fail
@@ -243,6 +211,40 @@ spec@nv_image_formats@compiler@declaration-disallow-rgba16-unorm-cube.frag,Fail
 spec@nv_image_formats@compiler@declaration-disallow-rgba16-unorm-cube.vert,Fail
 spec@oes_point_sprite@arb_point_sprite-checkerboard_gles1,Fail
 spec@oes_shader_io_blocks@compiler@layout-location-aliasing.vert,Fail
+
+# https://gitlab.freedesktop.org/mesa/piglit/-/merge_requests/1136
+spec@arb_texture_float@texwrap formats bordercolor,Fail
+spec@arb_texture_float@texwrap formats bordercolor-swizzled,Fail
+spec@arb_texture_float@texwrap formats bordercolor-swizzled@GL_ALPHA32F_ARB- swizzled- border color only,Fail
+spec@arb_texture_float@texwrap formats bordercolor-swizzled@GL_INTENSITY32F_ARB- swizzled- border color only,Fail
+spec@arb_texture_float@texwrap formats bordercolor-swizzled@GL_LUMINANCE32F_ARB- swizzled- border color only,Fail
+spec@arb_texture_float@texwrap formats bordercolor-swizzled@GL_LUMINANCE_ALPHA32F_ARB- swizzled- border color only,Fail
+spec@arb_texture_float@texwrap formats bordercolor-swizzled@GL_RGB32F- swizzled- border color only,Fail
+spec@arb_texture_float@texwrap formats bordercolor-swizzled@GL_RGBA32F- swizzled- border color only,Fail
+spec@arb_texture_float@texwrap formats bordercolor@GL_ALPHA32F_ARB- border color only,Fail
+spec@arb_texture_float@texwrap formats bordercolor@GL_INTENSITY32F_ARB- border color only,Fail
+spec@arb_texture_float@texwrap formats bordercolor@GL_LUMINANCE32F_ARB- border color only,Fail
+spec@arb_texture_float@texwrap formats bordercolor@GL_LUMINANCE_ALPHA32F_ARB- border color only,Fail
+spec@arb_texture_float@texwrap formats bordercolor@GL_RGB32F- border color only,Fail
+spec@arb_texture_float@texwrap formats bordercolor@GL_RGBA32F- border color only,Fail
+spec@arb_texture_rg@texwrap formats bordercolor,Fail
+spec@arb_texture_rg@texwrap formats bordercolor-swizzled,Fail
+spec@arb_texture_rg@texwrap formats bordercolor-swizzled@GL_R16- swizzled- border color only,Fail
+spec@arb_texture_rg@texwrap formats bordercolor-swizzled@GL_RG16- swizzled- border color only,Fail
+spec@arb_texture_rg@texwrap formats bordercolor@GL_R16- border color only,Fail
+spec@arb_texture_rg@texwrap formats bordercolor@GL_RG16- border color only,Fail
+spec@arb_texture_rg@texwrap formats-float bordercolor,Fail
+spec@arb_texture_rg@texwrap formats-float bordercolor-swizzled,Fail
+spec@arb_texture_rg@texwrap formats-float bordercolor-swizzled@GL_R32F- swizzled- border color only,Fail
+spec@arb_texture_rg@texwrap formats-float bordercolor-swizzled@GL_RG32F- swizzled- border color only,Fail
+spec@arb_texture_rg@texwrap formats-float bordercolor@GL_R32F- border color only,Fail
+spec@arb_texture_rg@texwrap formats-float bordercolor@GL_RG32F- border color only,Fail
+spec@arb_texture_rg@texwrap formats-float offset,Fail
+spec@arb_texture_rg@texwrap formats-float offset@GL_R32F- NPOT,Fail
+spec@arb_texture_rg@texwrap formats-float offset@GL_RG32F- NPOT,Fail
+spec@arb_texture_rg@texwrap formats-float,Fail
+spec@arb_texture_rg@texwrap formats-float@GL_R32F- NPOT,Fail
+spec@arb_texture_rg@texwrap formats-float@GL_RG32F- NPOT,Fail
 
 # A sub-case involving polygon stipple fails because driver doesn't implement
 # stipple
@@ -430,8 +432,6 @@ spec@arb_texture_barrier@arb_texture_barrier-blending-in-shader 512 42 8 8 7,Fai
 spec@arb_texture_barrier@arb_texture_barrier-blending-in-shader 512 42 8 8 8,Fail
 
 # Piglit OpenCL tests
-api@clbuildprogram,Fail
-api@clcompileprogram,Fail
 api@clgetcommandqueueinfo,Fail
 api@clgetextensionfunctionaddressforplatform,Fail
 api@clgetkernelarginfo,Fail
@@ -651,4 +651,3 @@ TransferPixelsTest,Fail
 # uprev Piglit in Mesa
 spec@arb_texture_view@tex-view,Fail
 spec@glsl-1.30@execution@glsl-packed-back-color,Fail
-

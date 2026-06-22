@@ -52,6 +52,7 @@ typedef struct {
 
    /* new shader object, used as memctx for just about everything else: */
    nir_shader *ns;
+   nir_function_impl *impl;
 } clone_state;
 
 static void
@@ -568,6 +569,7 @@ clone_block(clone_state *state, struct exec_list *cf_list, const nir_block *blk)
    assert(nblk->cf_node.type == nir_cf_node_block);
    assert(exec_list_is_empty(&nblk->instr_list));
 
+   assert(nblk->impl == state->impl);
    /* We need this for phi sources */
    add_remap(state, nblk, blk);
 
@@ -595,7 +597,7 @@ clone_cf_list(clone_state *state, struct exec_list *dst,
 static nir_if *
 clone_if(clone_state *state, struct exec_list *cf_list, const nir_if *i)
 {
-   nir_if *ni = nir_if_create(state->ns);
+   nir_if *ni = nir_if_create(state->impl);
    ni->control = i->control;
 
    __clone_src(state, ni, &ni->condition, &i->condition);
@@ -611,7 +613,7 @@ clone_if(clone_state *state, struct exec_list *cf_list, const nir_if *i)
 static nir_loop *
 clone_loop(clone_state *state, struct exec_list *cf_list, const nir_loop *loop)
 {
-   nir_loop *nloop = nir_loop_create(state->ns);
+   nir_loop *nloop = nir_loop_create(state->impl);
    nloop->control = loop->control;
    nloop->partially_unrolled = loop->partially_unrolled;
    nloop->do_while = loop->do_while;
@@ -684,11 +686,12 @@ nir_cf_list_clone(nir_cf_list *dst, nir_cf_list *src, nir_cf_node *parent,
 
    /* We use the same shader */
    state.ns = src->impl->function->shader;
+   state.impl = dst->impl;
 
    /* The control-flow code assumes that the list of cf_nodes always starts
     * and ends with a block.  We start by adding an empty block.
     */
-   nir_block *nblk = nir_block_create(state.ns);
+   nir_block *nblk = nir_block_create(dst->impl);
    nblk->cf_node.parent = parent;
    exec_list_push_tail(&dst->list, &nblk->cf_node.node);
 
@@ -705,6 +708,7 @@ clone_function_impl(clone_state *state, const nir_function_impl *fi)
 {
    nir_function_impl *nfi = nir_function_impl_create_bare(state->ns);
 
+   state->impl = nfi;
    if (fi->preamble)
       nfi->preamble = remap_global(state, fi->preamble);
 

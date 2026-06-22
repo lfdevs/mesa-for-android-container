@@ -397,12 +397,13 @@ etna_blit_clear_color_blt(struct pipe_context *pctx, unsigned idx,
                       unsigned clear_mask)
 {
    struct etna_context *ctx = etna_context(pctx);
-   struct pipe_surface *dst = &ctx->framebuffer_s.cbufs[idx];
+   struct pipe_surface *dst = &ctx->framebuffer_s.base.cbufs[idx];
    struct etna_resource *dst_res = etna_resource_get_render_compatible(pctx, dst->texture);
    struct etna_resource_level *dst_level = &dst_res->levels[dst->level];
    uint64_t new_clear_value = etna_clear_blit_pack_rgba(dst->format, color);
    const uint64_t clear_bits = etna_calculate_clear_bits(dst->format, clear_mask);
    bool fast_clear = etna_blt_will_fastclear(dst_level, scissor_state, clear_mask, 0xf);
+   bool use_ts = etna_framebuffer_rt_use_ts(ctx, idx);
    int msaa_xscale = 1, msaa_yscale = 1;
    bool is_128bit_format = format_is_128bit(dst->format);
 
@@ -420,7 +421,7 @@ etna_blit_clear_color_blt(struct pipe_context *pctx, unsigned idx,
    clr.dest.stride = dst_level->stride;
    clr.dest.tiling = dst_res->layout;
 
-   if (dst_level->ts_size) {
+   if (use_ts) {
       clr.dest.use_ts = 1;
       clr.dest.ts_addr.bo = dst_res->ts_bo;
       clr.dest.ts_addr.offset = dst_level->ts_offset;
@@ -458,13 +459,13 @@ etna_blit_clear_color_blt(struct pipe_context *pctx, unsigned idx,
    if (is_128bit_format) {
       clr.clear_value[0] = color->ui[2];
       clr.clear_value[1] = color->ui[3];
-      clr.dest.addr.offset += (dst_level->size * dst_level->depth) / 2;
+      clr.dest.addr.offset += etna_resource_level_second_plane_offset(dst_level);
 
       emit_blt_clearimage(ctx->stream, &clr);
    }
 
    /* This made the TS valid */
-   if (dst_level->ts_size) {
+   if (use_ts) {
       if (idx == 0) {
          ctx->framebuffer.TS_COLOR_CLEAR_VALUE = dst_level->clear_value;
          ctx->framebuffer.TS_COLOR_CLEAR_VALUE_EXT = dst_level->clear_value >> 32;
@@ -481,6 +482,9 @@ etna_blit_clear_color_blt(struct pipe_context *pctx, unsigned idx,
       etna_resource_level_mark_unflushed(dst_level);
       ctx->dirty |= ETNA_DIRTY_TS | ETNA_DIRTY_DERIVE_TS;
    }
+
+   if (dst->texture->bind & PIPE_BIND_SAMPLER_VIEW)
+      ctx->dirty |= ETNA_DIRTY_TEXTURE_CACHES;
 
    resource_written(ctx, &dst_res->base);
    etna_resource_level_mark_changed(dst_level);
@@ -574,6 +578,9 @@ etna_blit_clear_zs_blt(struct pipe_context *pctx, struct pipe_surface *dst,
       ctx->dirty |= ETNA_DIRTY_TS | ETNA_DIRTY_DERIVE_TS;
    }
 
+   if (dst->texture->bind & PIPE_BIND_SAMPLER_VIEW)
+      ctx->dirty |= ETNA_DIRTY_TEXTURE_CACHES;
+
    resource_written(ctx, &dst_res->base);
    etna_resource_level_mark_changed(dst_level);
 }
@@ -599,8 +606,8 @@ etna_clear_blt(struct pipe_context *pctx, unsigned buffers,
    etna_set_state(ctx->stream, VIVS_TS_FLUSH_CACHE, VIVS_TS_FLUSH_CACHE_FLUSH);
 
    if (buffers & PIPE_CLEAR_COLOR) {
-      for (int idx = 0; idx < ctx->framebuffer_s.nr_cbufs; ++idx) {
-         struct pipe_surface *psurf = &ctx->framebuffer_s.cbufs[idx];
+      for (int idx = 0; idx < ctx->framebuffer_s.base.nr_cbufs; ++idx) {
+         struct pipe_surface *psurf = &ctx->framebuffer_s.base.cbufs[idx];
 
          if (!psurf->texture)
             continue;
@@ -616,8 +623,8 @@ etna_clear_blt(struct pipe_context *pctx, unsigned buffers,
       }
    }
 
-   if ((buffers & PIPE_CLEAR_DEPTHSTENCIL) && ctx->framebuffer_s.zsbuf.texture != NULL)
-      etna_blit_clear_zs_blt(pctx, &ctx->framebuffer_s.zsbuf, buffers, depth, stencil, scissor_state, stencil_clear_mask);
+   if ((buffers & PIPE_CLEAR_DEPTHSTENCIL) && ctx->framebuffer_s.base.zsbuf.texture != NULL)
+      etna_blit_clear_zs_blt(pctx, &ctx->framebuffer_s.base.zsbuf, buffers, depth, stencil, scissor_state, stencil_clear_mask);
 
    etna_stall(ctx->stream, SYNC_RECIPIENT_RA, SYNC_RECIPIENT_BLT);
 
@@ -945,8 +952,8 @@ etna_try_blt_blit(struct pipe_context *pctx,
       emit_blt_copyimage(ctx->stream, &op);
 
       if (format_is_128bit(blit_info->dst.format)) {
-         op.src.addr.offset += src_lev->layer_stride;
-         op.dest.addr.offset += dst_lev->layer_stride;
+         op.src.addr.offset += etna_resource_level_second_plane_offset(src_lev);
+         op.dest.addr.offset += etna_resource_level_second_plane_offset(dst_lev);
 
          emit_blt_copyimage(ctx->stream, &op);
       }

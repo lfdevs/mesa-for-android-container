@@ -115,7 +115,7 @@ etna_blend_state_create(struct pipe_context *pctx,
 bool
 etna_update_blend(struct etna_context *ctx)
 {
-   struct pipe_framebuffer_state *pfb = &ctx->framebuffer_s;
+   struct pipe_framebuffer_state *pfb = &ctx->framebuffer_s.base;
    struct pipe_blend_state *pblend = ctx->blend;
    struct etna_blend_state *blend = etna_blend_state(pblend);
    unsigned current_rt = 0;
@@ -149,6 +149,19 @@ etna_update_blend(struct etna_context *ctx)
       const struct util_format_description *desc = util_format_description(pfb->cbufs[i].format);
       bool full_overwrite = (blend->rt[i].fo_allowed &&
                             util_format_colormask_full(desc, colormask));
+
+      /* A 128-bit RT's companion holds the user's B,A in its R,G and has no
+       * blend state of its own. Take its mask from the user RT, shifting B,A
+       * down to R,G.
+       */
+      const int src = ctx->framebuffer_s.companion_src[i];
+      if (src >= 0) {
+         const struct pipe_rt_blend_state *user =
+            pblend->independent_blend_enable ? &pblend->rt[src] : &pblend->rt[0];
+
+         colormask = (user->colormask >> 2) & 0x3;
+         full_overwrite = blend->rt[src].fo_allowed && colormask == 0x3;
+      }
 
       if (current_rt == 0) {
          blend->rt[0].PE_COLOR_FORMAT =

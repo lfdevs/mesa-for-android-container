@@ -190,7 +190,7 @@ struct u_sparse_bitset *
 nir_get_live_defs(nir_cursor cursor, void *mem_ctx)
 {
    nir_block *block = nir_cursor_current_block(cursor);
-   ASSERTED nir_function_impl *impl = nir_cf_node_get_function(&block->cf_node);
+   ASSERTED nir_function_impl *impl = block->impl;
    assert(impl->valid_metadata & nir_metadata_live_defs);
 
    switch (cursor.option) {

@@ -126,7 +126,9 @@ static void *pre_upload_binary(struct si_screen *sscreen, struct si_shader *shad
                                unsigned *staging_offset,
                                int64_t bo_offset)
 {
-   unsigned aligned_size = ac_align_shader_binary_for_prefetch(&sscreen->info, binary_size);
+   unsigned aligned_size = ac_align_shader_binary_for_prefetch(sscreen->info.gfx_level,
+                                                               sscreen->info.instr_prefetch_distance,
+                                                               binary_size);
 
    if (bo_offset >= 0) {
       /* sqtt needs to upload shaders as a pipeline, where all shaders

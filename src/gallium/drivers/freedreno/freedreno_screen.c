@@ -383,6 +383,15 @@ fd_init_screen_caps(struct fd_screen *screen)
 
    u_init_pipe_screen_caps(&screen->base, 1);
 
+   /* On the kgsl stack the screen's control fd is the sde-kms display node
+    * (renderD128); drmGetCap(DRM_CAP_PRIME) there does not report the GPU's
+    * real PRIME import/export support, so u_init_pipe_screen_caps() leaves
+    * caps.dmabuf unset and EGL never advertises EGL_EXT_image_dma_buf_import
+    * (which kwin/GL compositors need to import client buffers).  The kgsl
+    * backend does support dmabuf import/export (FD_FEATURE_IMPORT_DMABUF), so
+    * force the cap on. */
+   caps->dmabuf = 0x1 /*DRM_PRIME_CAP_IMPORT*/ | 0x2 /*DRM_PRIME_CAP_EXPORT*/;
+
    /* this is probably not totally correct.. but it's a start: */
 
    /* Supported features (boolean caps). */

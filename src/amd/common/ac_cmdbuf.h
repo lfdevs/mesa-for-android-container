@@ -356,15 +356,6 @@ struct ac_tracked_regs {
 
 #define ac_cmdbuf_set_sh_reg(reg, value) __ac_cmdbuf_set_reg(reg, 0, value, SI_SH, PKT3_SET_SH_REG)
 
-#define ac_cmdbuf_set_sh_reg_idx(info, reg, idx, value)        \
-   do {                                                        \
-      assert((idx));                                           \
-      unsigned __opcode = PKT3_SET_SH_REG_INDEX;               \
-      if ((info)->gfx_level < GFX10)                           \
-         __opcode = PKT3_SET_SH_REG;                           \
-      __ac_cmdbuf_set_reg(reg, idx, value, SI_SH, __opcode);   \
-   } while (0)
-
 #define ac_cmdbuf_emit_32bit_pointer(sh_offset, va, info)         \
    do {                                                           \
       assert((va) == 0 || ((va) >> 32) == (info)->address32_hi);  \

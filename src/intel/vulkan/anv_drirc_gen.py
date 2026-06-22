@@ -113,6 +113,12 @@ def declare_options(android_version):
         B("intel_vf_distribution", True,
           "Enable geometry distribution",
           c_name="vf_distribution"),
+        B("anv_write_lookup_maps_unconditionally", False,
+          "Unconditionally write lookup maps for BLAS update operation",
+          c_name="write_lookup_maps_unconditionally"),
+        B("anv_disable_hiz", False,
+          "Disable HiZ (equivalent to INTEL_DEBUG=nohiz). Should only be used as a temporary solution",
+          c_name="disable_hiz"),
 
         # Workaround command emission
         B("anv_barrier_post_untyped_clear_shader", False,
@@ -228,7 +234,9 @@ def declare_options(android_version):
           c_name="compression_control_enabled"),
     ]
 
-    drirc_gen.add_common_vk_options(debug_options, feature_options,
+    misc_options = []
+
+    drirc_gen.add_common_vk_options(debug_options, feature_options, misc_options,
                                     valid_options=VALID_COMMON_VK_OPTIONS,
                                     defaults={"vk_require_astc": android_version >= 34})
     drirc_gen.add_common_vk_wsi_options(debug_options, perf_options)
@@ -251,7 +259,7 @@ def main():
 
     options = declare_options(args.android_ver)
 
-    drirc_gen.drirc_validate([args.validate], options, driver="anv")
+    drirc_gen.drirc_validate([args.validate], options)
 
     drirc_gen.drirc_generate(args.drirc_src, args.drirc_hdr, "anv", options)
 

@@ -141,9 +141,9 @@ lima_program_optimize_vs_nir(struct nir_shader *s)
       NIR_PASS(progress, s, lima_nir_lower_ftrunc);
       NIR_PASS(progress, s, nir_opt_constant_folding);
       NIR_PASS(progress, s, nir_opt_undef);
-      NIR_PASS(progress, s, nir_lower_undef_to_zero);
+      NIR_PASS(progress, s, nir_lower_undef_to_zero, NULL);
       NIR_PASS(progress, s, nir_opt_loop_unroll);
-      NIR_PASS(progress, s, nir_lower_undef_to_zero);
+      NIR_PASS(progress, s, nir_lower_undef_to_zero, NULL);
    } while (progress);
 
    NIR_PASS(_, s, nir_lower_int_to_float);

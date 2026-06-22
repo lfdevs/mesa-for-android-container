@@ -51,7 +51,7 @@ genX(emit_slice_hashing_state)(struct anv_device *device,
    if (!device->slice_hash.alloc_size) {
       unsigned size = GENX(SLICE_HASH_TABLE_length) * 4;
       device->slice_hash =
-         anv_state_pool_alloc(&device->dynamic_state_pool, size, 64);
+         anv_state_pool_alloc(anv_device_get_dynamic_state_pool(device), size, 64);
 
       const bool flip = device->info->ppipe_subslices[0] <
                      device->info->ppipe_subslices[1];
@@ -131,7 +131,7 @@ genX(emit_slice_hashing_state)(struct anv_device *device,
    if (!device->slice_hash.alloc_size) {
       unsigned size = GENX(SLICE_HASH_TABLE_length) * 4;
       device->slice_hash =
-         anv_state_pool_alloc(&device->dynamic_state_pool, size, 64);
+         anv_state_pool_alloc(anv_device_get_dynamic_state_pool(device), size, 64);
 
       struct GENX(SLICE_HASH_TABLE) table;
 
@@ -263,17 +263,17 @@ init_common_queue_state(struct anv_queue *queue, struct anv_batch *batch)
 
       sba.SurfaceStateBaseAddress =
          (struct anv_address) { .offset =
-         device->physical->va.internal_surface_state_pool.addr,
+         anv_physical_device_get_internal_surface_state_pool_va(device->physical)->addr,
       };
       sba.SurfaceStateMOCS = mocs;
       sba.SurfaceStateBaseAddressModifyEnable = true;
 
       sba.DynamicStateBaseAddress =
          (struct anv_address) { .offset =
-         device->physical->va.dynamic_state_pool.addr,
+         anv_physical_device_get_dynamic_state_pool_va(device->physical)->addr,
       };
-      sba.DynamicStateBufferSize = (device->physical->va.dynamic_state_pool.size +
-                                    device->physical->va.dynamic_visible_pool.size) / 4096;
+      sba.DynamicStateBufferSize = (anv_physical_device_get_dynamic_state_pool_va(device->physical)->size +
+                                    anv_physical_device_get_dynamic_visible_pool_va(device->physical)->size) / 4096;
       sba.DynamicStateMOCS = mocs;
       sba.DynamicStateBaseAddressModifyEnable = true;
       sba.DynamicStateBufferSizeModifyEnable = true;
@@ -305,7 +305,7 @@ init_common_queue_state(struct anv_queue *queue, struct anv_batch *batch)
       if (device->physical->indirect_descriptors) {
          sba.BindlessSurfaceStateBaseAddress =
             (struct anv_address) { .offset =
-            device->physical->va.bindless_surface_state_pool.addr,
+            anv_physical_device_get_bindless_surface_state_pool_va(device->physical)->addr,
          };
          sba.BindlessSurfaceStateSize =
             anv_physical_device_bindless_heap_size(device->physical, false) /
@@ -317,11 +317,11 @@ init_common_queue_state(struct anv_queue *queue, struct anv_batch *batch)
           * same heap
           */
          sba.BindlessSurfaceStateBaseAddress = (struct anv_address) {
-            .offset = device->physical->va.internal_surface_state_pool.addr,
+            .offset = anv_physical_device_get_internal_surface_state_pool_va(device->physical)->addr,
          };
          sba.BindlessSurfaceStateSize =
-            (device->physical->va.internal_surface_state_pool.size +
-             device->physical->va.bindless_surface_state_pool.size) - 1;
+            (anv_physical_device_get_internal_surface_state_pool_va(device->physical)->size +
+             anv_physical_device_get_bindless_surface_state_pool_va(device->physical)->size) - 1;
          sba.BindlessSurfaceStateMOCS = mocs;
          sba.BindlessSurfaceStateBaseAddressModifyEnable = true;
       }
@@ -347,7 +347,7 @@ init_common_queue_state(struct anv_queue *queue, struct anv_batch *batch)
    mi_builder_init(&b, device->info, batch);
 
    mi_store(&b, mi_reg64(ANV_BINDLESS_SURFACE_BASE_ADDR_REG),
-                mi_imm(device->physical->va.internal_surface_state_pool.addr));
+                mi_imm(anv_physical_device_get_internal_surface_state_pool_va(device->physical)->addr));
 #endif /* GFX_VER >= 12 */
 
 #if GFX_VERx10 >= 125
@@ -1459,23 +1459,23 @@ genX(emit_embedded_sampler)(struct anv_device *device,
    memcpy(&sampler->key, &binding->key, sizeof(binding->key));
 
    sampler->border_color_state =
-      anv_state_pool_alloc(&device->dynamic_state_pool,
+      anv_state_pool_alloc(anv_device_get_dynamic_state_pool(device),
                            sizeof(struct gfx8_border_color), 64);
    memcpy(sampler->border_color_state.map,
           binding->key.color,
           sizeof(binding->key.color));
 
    sampler->sampler_state =
-      anv_state_pool_alloc(&device->dynamic_state_pool,
-                           ANV_SAMPLER_STATE_SIZE, 32);
+      anv_state_pool_alloc(anv_device_get_dynamic_state_pool(device),
+                           ANV_SAMPLER_STATE_GPU_SIZE(GFX_VERx10), 32);
 
    struct GENX(SAMPLER_STATE) sampler_state = {
       .BorderColorPointer = sampler->border_color_state.offset,
    };
-   uint32_t dwords[GENX(SAMPLER_STATE_length)];
+   uint32_t dwords[ANV_SAMPLER_STATE_DWORDS];
    GENX(SAMPLER_STATE_pack)(NULL, dwords, &sampler_state);
 
-   for (uint32_t i = 0; i < GENX(SAMPLER_STATE_length); i++) {
+   for (uint32_t i = 0; i < (ANV_SAMPLER_STATE_GPU_SIZE(GFX_VERx10) / sizeof(uint32_t)); i++) {
       ((uint32_t *)sampler->sampler_state.map)[i] =
          dwords[i] | binding->key.sampler[i];
    }

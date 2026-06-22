@@ -47,6 +47,7 @@
 #include "common/intel_l3_config.h"
 #include "common/intel_measure.h"
 #include "common/intel_sample_positions.h"
+#include "common/intel_pagefault.h"
 #include "decoder/intel_decoder.h"
 #include "dev/intel_device_info.h"
 #include "blorp/blorp.h"
@@ -58,6 +59,7 @@
 #include "util/bitset.h"
 #include "util/bitscan.h"
 #include "util/cache_ops.h"
+#include "util/cnd_monotonic.h"
 #include "util/detect_os.h"
 #include "util/macros.h"
 #include "util/hash_table.h"
@@ -74,7 +76,6 @@
 #include "util/u_math.h"
 #include "util/u_tristate.h"
 #include "util/vma.h"
-#include "util/xmlconfig.h"
 #include "vk_acceleration_structure.h"
 #include "vk_alloc.h"
 #include "vk_android.h"
@@ -1044,7 +1045,7 @@ struct anv_embedded_sampler_key {
     * The following struct can be safely hash as it doesn't include in
     * address/offset.
     */
-   uint32_t sampler[4];
+   uint32_t sampler[ANV_SAMPLER_STATE_DWORDS];
    uint32_t color[4];
 };
 
@@ -1554,6 +1555,8 @@ struct anv_physical_device {
 
     bool                                        has_scratch_page;
 
+    bool                                        can_get_vm_faults;
+
     /** Whether the device can support compression control */
     bool                                        has_compression_control;
     /** Whether the device expose support for compression control */
@@ -1714,6 +1717,66 @@ struct anv_physical_device {
     } gfx_default;
 };
 
+static inline const struct anv_va_range *
+anv_physical_device_get_bindless_surface_state_pool_va(const struct anv_physical_device *pdevice)
+{
+   return &pdevice->va.bindless_surface_state_pool;
+}
+
+static inline const struct anv_va_range *
+anv_physical_device_get_indirect_descriptor_pool_va(const struct anv_physical_device *pdevice)
+{
+   return &pdevice->va.indirect_descriptor_pool;
+}
+
+static inline const struct anv_va_range *
+anv_physical_device_get_dynamic_visible_pool_va(const struct anv_physical_device *pdevice)
+{
+   return &pdevice->va.dynamic_visible_pool;
+}
+
+static inline const struct anv_va_range *
+anv_physical_device_get_internal_surface_state_pool_va(const struct anv_physical_device *pdevice)
+{
+   return &pdevice->va.internal_surface_state_pool;
+}
+
+static inline const struct anv_va_range *
+anv_physical_device_get_dynamic_state_pool_va(const struct anv_physical_device *pdevice)
+{
+   return &pdevice->va.dynamic_state_pool;
+}
+
+static inline const struct anv_va_range *
+anv_physical_device_get_indirect_push_descriptor_pool_va(const struct anv_physical_device *pdevice)
+{
+   return &pdevice->va.indirect_push_descriptor_pool;
+}
+
+static inline const struct anv_va_range *
+anv_physical_device_get_push_descriptor_buffer_pool_va(const struct anv_physical_device *pdevice)
+{
+   return &pdevice->va.push_descriptor_buffer_pool;
+}
+
+static inline const struct anv_va_range *
+anv_physical_device_get_aux_tt_pool_va(const struct anv_physical_device *pdevice)
+{
+   return &pdevice->va.aux_tt_pool;
+}
+
+static inline const struct anv_va_range *
+anv_physical_device_get_binding_table_pool_va(const struct anv_physical_device *pdevice)
+{
+   return &pdevice->va.binding_table_pool;
+}
+
+static inline struct anv_va_range
+anv_physical_device_get_scratch_surface_state_pool_va(const struct anv_physical_device *pdevice)
+{
+   return pdevice->va.scratch_surface_state_pool;
+}
+
 VkResult anv_physical_device_try_create(struct vk_instance *vk_instance,
                                         struct _drmDevice *drm_device,
                                         struct vk_physical_device **out);
@@ -1730,8 +1793,8 @@ anv_physical_device_bindless_heap_size(const struct anv_physical_device *device,
     */
    return intel_has_extended_bindless(&device->info) ?
       (descriptor_buffer ?
-       device->va.dynamic_visible_pool.size :
-       device->va.bindless_surface_state_pool.size) :
+       anv_physical_device_get_dynamic_visible_pool_va(device)->size :
+       anv_physical_device_get_bindless_surface_state_pool_va(device)->size) :
       64 * 1024 * 1024 /* 64 MiB */;
 }
 
@@ -2195,6 +2258,7 @@ struct anv_gfx_dynamic_state {
    struct {
       uint32_t DerefBlockSize;
       uint32_t PointWidthSource;
+      bool     LastPixelEnable;
       float    LineWidth;
       uint32_t TriangleStripListProvokingVertexSelect;
       uint32_t LineStripListProvokingVertexSelect;
@@ -2467,12 +2531,15 @@ enum anv_object_key_bvh_type {
    ANV_OBJECT_KEY_BVH_ENCODE = VK_META_OBJECT_KEY_DRIVER_OFFSET,
    ANV_OBJECT_KEY_BVH_HEADER,
    ANV_OBJECT_KEY_BVH_COPY,
+   ANV_OBJECT_KEY_BVH_UPDATE,
 };
 
 enum bvh_dump_type {
    BVH_ANV,
    BVH_IR_HDR,
-   BVH_IR_AS
+   BVH_IR_AS,
+   BVH_ANV_PCREL,
+   BVH_ANV_UPDATE
 };
 
 struct anv_bvh_dump {
@@ -2494,6 +2561,16 @@ struct anv_device_astc_emu {
     VkDescriptorSetLayout ds_layout;
     VkPipelineLayout pipeline_layout;
     VkPipeline pipeline;
+};
+
+struct anv_device_fault_state {
+   int device_status;
+   int queue_status;
+   struct {
+      uint32_t family;
+      uint32_t index;
+      uint32_t flags;
+   } queue;
 };
 
 struct anv_device {
@@ -2771,6 +2848,13 @@ struct anv_device {
    struct vk_meta_device meta_device;
 
    struct pb_slabs bo_slabs[3];
+
+   struct {
+      mtx_t mutex;
+      struct u_cnd_monotonic lost_cnd;
+      struct anv_device_fault_state state;
+      uint32_t num_reported;
+   } fault;
 };
 
 static inline uint32_t
@@ -2793,17 +2877,71 @@ anv_get_first_render_queue_index(struct anv_physical_device *pdevice)
    UNREACHABLE("Graphics capable queue family not found");
 }
 
+static inline struct anv_state_pool *
+anv_device_get_general_state_pool(struct anv_device *device)
+{
+   return &device->general_state_pool;
+}
+
+static inline struct anv_state_pool *
+anv_device_get_aux_tt_pool(struct anv_device *device)
+{
+   return &device->aux_tt_pool;
+}
+
+static inline struct anv_state_pool *
+anv_device_get_dynamic_state_pool(struct anv_device *device)
+{
+   return &device->dynamic_state_pool;
+}
+
+static inline struct anv_state_pool *
+anv_device_get_binding_table_pool(struct anv_device *device)
+{
+   return &device->binding_table_pool;
+}
+
+static inline struct anv_state_pool *
+anv_device_get_scratch_surface_state_pool(struct anv_device *device)
+{
+   return &device->scratch_surface_state_pool;
+}
+
+static inline struct anv_state_pool *
+anv_device_get_internal_surface_state_pool(struct anv_device *device)
+{
+   return &device->internal_surface_state_pool;
+}
+
+static inline struct anv_state_pool *
+anv_device_get_bindless_surface_state_pool(struct anv_device *device)
+{
+   return &device->bindless_surface_state_pool;
+}
+
+static inline struct anv_state_pool *
+anv_device_get_indirect_push_descriptor_pool(struct anv_device *device)
+{
+   return &device->indirect_push_descriptor_pool;
+}
+
+static inline struct anv_state_pool *
+anv_device_get_push_descriptor_buffer_pool(struct anv_device *device)
+{
+   return &device->push_descriptor_buffer_pool;
+}
+
 static inline struct anv_state
 anv_binding_table_pool_alloc(struct anv_device *device)
 {
-   return anv_state_pool_alloc(&device->binding_table_pool,
-                               device->binding_table_pool.block_size, 0);
+   return anv_state_pool_alloc(anv_device_get_binding_table_pool(device),
+                               anv_device_get_binding_table_pool(device)->block_size, 0);
 }
 
 static inline void
 anv_binding_table_pool_free(struct anv_device *device, struct anv_state state)
 {
-   anv_state_pool_free(&device->binding_table_pool, state);
+   anv_state_pool_free(anv_device_get_binding_table_pool(device), state);
 }
 
 static inline uint32_t
@@ -2829,8 +2967,8 @@ anv_null_surface_state_for_binding_table(struct anv_device *device)
 {
    struct anv_state state = device->null_surface_state;
    if (device->physical->indirect_descriptors) {
-      state.offset += device->physical->va.bindless_surface_state_pool.addr -
-                      device->physical->va.internal_surface_state_pool.addr;
+      state.offset += anv_physical_device_get_bindless_surface_state_pool_va(device->physical)->addr -
+                      anv_physical_device_get_internal_surface_state_pool_va(device->physical)->addr;
    }
    return state;
 }
@@ -2839,8 +2977,8 @@ static inline struct anv_state
 anv_bindless_state_for_binding_table(struct anv_device *device,
                                      struct anv_state state)
 {
-   state.offset += device->physical->va.bindless_surface_state_pool.addr -
-                   device->physical->va.internal_surface_state_pool.addr;
+   state.offset += anv_physical_device_get_bindless_surface_state_pool_va(device->physical)->addr -
+                   anv_physical_device_get_internal_surface_state_pool_va(device->physical)->addr;
    return state;
 }
 
@@ -2851,7 +2989,7 @@ anv_device_maybe_alloc_surface_state(struct anv_device *device,
    if (device->physical->indirect_descriptors) {
       if (surface_state_stream)
          return anv_state_stream_alloc(surface_state_stream, 64, 64);
-      return anv_state_pool_alloc(&device->bindless_surface_state_pool, 64, 64);
+      return anv_state_pool_alloc(anv_device_get_bindless_surface_state_pool(device), 64, 64);
    } else {
       return ANV_STATE_NULL;
    }
@@ -3507,9 +3645,6 @@ struct anv_descriptor_set_binding_layout {
 
    /* Computed surface size from data (for one plane) */
    uint16_t descriptor_data_surface_size;
-
-   /* Computed sampler size from data (for one plane) */
-   uint16_t descriptor_data_sampler_size;
 
    /* Index into the descriptor set buffer views */
    int32_t buffer_view_index;
@@ -4998,7 +5133,7 @@ anv_cmd_buffer_dynamic_state_address(struct anv_cmd_buffer *cmd_buffer,
                                      struct anv_state state)
 {
    return anv_state_pool_state_address(
-      &cmd_buffer->device->dynamic_state_pool, state);
+      anv_device_get_dynamic_state_pool(cmd_buffer->device), state);
 }
 
 static inline uint64_t
@@ -5006,7 +5141,7 @@ anv_cmd_buffer_descriptor_buffer_address(struct anv_cmd_buffer *cmd_buffer,
                                          int32_t buffer_index)
 {
    if (buffer_index == -1)
-      return cmd_buffer->device->physical->va.push_descriptor_buffer_pool.addr;
+      return anv_physical_device_get_push_descriptor_buffer_pool_va(cmd_buffer->device->physical)->addr;
 
    return cmd_buffer->state.descriptor_buffers.address[buffer_index];
 }
@@ -5083,7 +5218,7 @@ anv_cmd_buffer_temporary_state_address(struct anv_cmd_buffer *cmd_buffer,
                                        struct anv_state state)
 {
    return anv_state_pool_state_address(
-      &cmd_buffer->device->dynamic_state_pool, state);
+      anv_device_get_dynamic_state_pool(cmd_buffer->device), state);
 }
 
 static inline struct anv_address
@@ -5091,7 +5226,7 @@ anv_cmd_buffer_gfx_push_constants_state_address(struct anv_cmd_buffer *cmd_buffe
                                                 struct anv_state state)
 {
    return anv_state_pool_state_address(
-      &cmd_buffer->device->dynamic_state_pool, state);
+      anv_device_get_dynamic_state_pool(cmd_buffer->device), state);
 }
 
 void
@@ -6488,9 +6623,9 @@ struct anv_sampler_state {
    /* Hashing key for embedded samplers */
    struct anv_embedded_sampler_key embedded_key;
 
-   uint32_t                     state[3][4];
+   uint32_t                     state[3][ANV_SAMPLER_STATE_DWORDS];
    /* Packed SAMPLER_STATE without the border color pointer. */
-   uint32_t                     state_no_bc[3][4];
+   uint32_t                     state_no_bc[3][ANV_SAMPLER_STATE_DWORDS];
    uint32_t                     n_planes;
 };
 
@@ -7022,6 +7157,21 @@ anv_device_utrace_emit_gfx_copy_buffer(struct u_trace_context *utctx,
                                        void *ts_from, uint64_t from_offset_B,
                                        void *ts_to, uint64_t to_offset_B,
                                        uint64_t size_B);
+struct intel_pagefault_buffer *
+anv_device_alloc_get_vm_faults(struct anv_device *device);
+
+void
+anv_device_update_fault_state(struct anv_device *device,
+                              int device_errno);
+#define anv_device_set_lost(device, err, ...)       \
+   (anv_device_update_fault_state((device), (err)), \
+    vk_device_set_lost(&(device)->vk, __VA_ARGS__))
+void
+anv_queue_update_fault_state(struct anv_queue *queue,
+                             int queue_errno);
+#define anv_queue_set_lost(queue, err, ...)         \
+   (anv_queue_update_fault_state((queue), (err)),   \
+    vk_queue_set_lost(&(queue)->vk, __VA_ARGS__))
 
 #define ANV_FROM_HANDLE(__anv_type, __name, __handle) \
    VK_FROM_HANDLE(__anv_type, __name, __handle)

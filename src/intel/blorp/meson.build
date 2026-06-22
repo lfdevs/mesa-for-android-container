@@ -60,13 +60,14 @@ libblorp = static_library(
   gnu_symbol_visibility : 'hidden',
   dependencies : [
     idep_nir_headers, idep_genxml, idep_mesautil, idep_intel_dev,
-    idep_blorp_shaders
+    idep_intel_compiler_gen, idep_blorp_shaders
   ],
   build_by_default: false,
 )
 
 idep_intel_blorp = declare_dependency(
   link_with: libblorp,
+  dependencies: [idep_intel_compiler_gen],
 )
 
 if with_intel_elk

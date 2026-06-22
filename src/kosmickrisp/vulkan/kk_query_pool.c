@@ -13,7 +13,6 @@
 #include "kk_buffer.h"
 #include "kk_cmd_buffer.h"
 #include "kk_device.h"
-#include "kk_encoder.h"
 #include "kk_entrypoints.h"
 #include "kk_physical_device.h"
 #include "kk_query_table.h"
@@ -253,11 +252,6 @@ kk_CmdResetQueryPool(VkCommandBuffer commandBuffer, VkQueryPool queryPool,
 {
    VK_FROM_HANDLE(kk_cmd_buffer, cmd, commandBuffer);
    VK_FROM_HANDLE(kk_query_pool, pool, queryPool);
-   /* Need to flush other availabilities just in case there is a reset after it
-    * was made available but the writes have not propagated yet. Need to avoid
-    * data races in the writes. This is save to do sice vkCmdResetQueryPool
-    * cannot be called when a render pass is active. */
-   upload_queue_writes(cmd);
    emit_zero_queries(cmd, pool, firstQuery, queryCount, false);
 }
 
@@ -407,22 +401,16 @@ kk_CmdCopyQueryPoolResults(VkCommandBuffer commandBuffer, VkQueryPool queryPool,
    VK_FROM_HANDLE(kk_buffer, dst_buf, dstBuffer);
    struct kk_device *dev = kk_cmd_buffer_device(cmd);
 
-   struct kk_copy_query_pool_results_info info = {
+   struct libkk_copy_queries_args args = {
       .availability = kk_has_available(pool) ? pool->bo->gpu : 0,
       .results = pool->oq_queries ? dev->occlusion_queries.bo->gpu
                                   : pool->bo->gpu + pool->query_start,
-      .indices = pool->oq_queries ? pool->bo->gpu + pool->query_start : 0,
+      .oq_index = pool->oq_queries ? pool->bo->gpu + pool->query_start : 0,
       .dst_addr = dst_buf->vk.device_address + dstOffset,
       .dst_stride = stride,
       .first_query = firstQuery,
       .flags = flags,
       .reports_per_query = kk_reports_per_query(pool),
-      .query_count = queryCount,
    };
-
-   util_dynarray_append(&cmd->encoder->copy_query_pool_result_infos, info);
-   /* If we are not mid encoder, just upload the writes */
-   enum kk_encoder_type last_used = cmd->encoder->main.last_used;
-   if (last_used == KK_ENC_NONE || last_used == KK_ENC_COMPUTE)
-      upload_queue_writes(cmd);
+   libkk_copy_queries_struct(cmd, kk_grid_1d(queryCount), false, args);
 }

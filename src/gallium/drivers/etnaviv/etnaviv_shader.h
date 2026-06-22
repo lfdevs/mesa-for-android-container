@@ -29,6 +29,7 @@
 
 #include "mesa/main/config.h"
 #include "etna_core_info.h"
+#include "etnaviv_internal.h"
 #include "nir.h"
 #include "pipe/p_state.h"
 #include "util/disk_cache.h"
@@ -57,6 +58,7 @@ struct etna_shader_key
          unsigned has_sample_tex_compare : 1;
          /* color varyings should be flat shaded */
          unsigned flatshade : 1;
+         unsigned has_128bit_rt : 1;
       };
       uint32_t global;
    };
@@ -64,6 +66,12 @@ struct etna_shader_key
    int num_texture_states;
    nir_lower_tex_shadow_swizzle tex_swizzle[16];
    enum compare_func tex_compare_func[16];
+
+   unsigned tex_is_128bit : 16;
+   unsigned sampler_companion[16];
+
+   unsigned rt_is_128bit : ETNA_MAX_128BIT_RTS;
+   unsigned rt_companion[ETNA_MAX_128BIT_RTS];
 };
 
 static inline bool
@@ -71,7 +79,9 @@ etna_shader_key_equal(const struct etna_shader_key* const a,
                       const struct etna_shader_key* const b)
 {
    /* slow-path if we need to check tex_{swizzle,compare_func} */
-   if (unlikely(a->has_sample_tex_compare || b->has_sample_tex_compare))
+   if (unlikely(a->has_sample_tex_compare || b->has_sample_tex_compare) ||
+       unlikely(a->tex_is_128bit || b->tex_is_128bit) ||
+       unlikely(a->rt_is_128bit || b->rt_is_128bit))
       return memcmp(a, b, sizeof(struct etna_shader_key)) == 0;
    else
       return a->global == b->global;

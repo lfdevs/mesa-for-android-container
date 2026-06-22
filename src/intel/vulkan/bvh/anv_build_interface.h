@@ -6,6 +6,8 @@
 #ifndef ANV_BVH_BUILD_INTERFACE_H
 #define ANV_BVH_BUILD_INTERFACE_H
 
+#include "vk_build_interface.h"
+
 #ifdef VULKAN
 #include "anv_build_helpers.h"
 #else
@@ -14,6 +16,21 @@
 #define REF(type) uint64_t
 #define VOID_REF  uint64_t
 #endif
+
+#define ANV_BUILD_FLAG_WRITE_LOOKUP_MAPS_FOR_UPDATE   (1u << (VK_BUILD_FLAG_COUNT + 0))
+
+struct update_args {
+   VOID_REF output_bvh;
+   REF(uint32_t) internal_ready_count;
+   REF(vk_aabb) aabb_scratch;
+   uint32_t leaf_node_count;
+   uint32_t primitive_count;
+   uint32_t output_bvh_offset;
+   VOID_REF parent_child_map;
+   VOID_REF leaf_block_offset_map;
+
+   vk_bvh_geometry_data geom_data;
+};
 
 struct encode_args {
    /* Address within the IR BVH, marking the start of leaves/internal nodes. */
@@ -24,14 +41,14 @@ struct encode_args {
 
    REF(vk_ir_header) header;
 
-   /* The offset from start of anv header to output_bvh */
-   uint32_t output_bvh_offset;
-
    /* This tracks pointers to all anv_instance_leaves for BLAS */
    VOID_REF instance_leaves_addr;
 
    uint32_t leaf_node_count;
    uint32_t geometry_type;
+
+   VOID_REF parent_child_map;
+   VOID_REF leaf_block_offset_map;
 };
 
 struct header_args {

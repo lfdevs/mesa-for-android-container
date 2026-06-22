@@ -835,7 +835,7 @@ nir_rematerialize_deref_in_use_blocks(nir_deref_instr *instr)
       return true;
 
    struct rematerialize_deref_state state = {
-      .builder = nir_builder_create(nir_cf_node_get_function(&instr->instr.block->cf_node)),
+      .builder = nir_builder_create(instr->instr.block->impl)
    };
 
    nir_foreach_use_safe(use, &instr->def) {

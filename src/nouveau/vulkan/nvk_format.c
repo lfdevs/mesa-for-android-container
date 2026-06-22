@@ -29,6 +29,9 @@ nvk_format_supports_atomics(const struct nvk_physical_device *pdev,
    case PIPE_FORMAT_R64_UINT:
    case PIPE_FORMAT_R64_SINT:
       return pdev->vk.supported_features.shaderImageInt64Atomics;
+   case PIPE_FORMAT_R16G16_FLOAT:
+   case PIPE_FORMAT_R16G16B16A16_FLOAT:
+      return pdev->vk.supported_features.shaderFloat16VectorAtomics;
    default:
       return false;
    }

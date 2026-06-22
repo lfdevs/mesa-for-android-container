@@ -69,109 +69,12 @@ enum ENUM_PACKED gen_format {
    GEN_FORMAT_NOP,
 };
 
-constexpr gen_format
+#include "gen_opcodes_private.h"
+
+inline gen_format
 gen_inst_format(const gen_opcode op)
 {
-   switch (op) {
-   case GEN_OP_CBIT:
-   case GEN_OP_MOV:
-   case GEN_OP_NOT:
-   case GEN_OP_SYNC:
-   case GEN_OP_BFREV:
-   case GEN_OP_FRC:
-   case GEN_OP_FBH:
-   case GEN_OP_FBL:
-   case GEN_OP_RNDU:
-   case GEN_OP_RNDD:
-   case GEN_OP_RNDE:
-   case GEN_OP_RNDZ:
-   case GEN_OP_LZD:
-   case GEN_OP_WAIT:
-      return GEN_FORMAT_BASIC_ONE_SRC;
-
-   case GEN_OP_ADD:
-   case GEN_OP_ADDC:
-   case GEN_OP_AND:
-   case GEN_OP_ASR:
-   case GEN_OP_BFI1:
-   case GEN_OP_CMP:
-   case GEN_OP_MAC:
-   case GEN_OP_MACH:
-   case GEN_OP_MACL:
-   case GEN_OP_MATH:
-   case GEN_OP_MOVI:
-   case GEN_OP_MUL:
-   case GEN_OP_OR:
-   case GEN_OP_SEL:
-   case GEN_OP_SHL:
-   case GEN_OP_SHR:
-   case GEN_OP_SUBB:
-   case GEN_OP_XOR:
-   case GEN_OP_CMPN:
-   case GEN_OP_AVG:
-   case GEN_OP_SMOV:
-   case GEN_OP_DP4:
-   case GEN_OP_DPH:
-   case GEN_OP_DP3:
-   case GEN_OP_DP2:
-   case GEN_OP_LINE:
-   case GEN_OP_SRND:
-      return GEN_FORMAT_BASIC_TWO_SRC;
-
-   case GEN_OP_BFI2:
-   case GEN_OP_BFE:
-   case GEN_OP_BFN:
-   case GEN_OP_MAD:
-   case GEN_OP_CSEL:
-   case GEN_OP_MADM:
-   case GEN_OP_LRP:
-      return GEN_FORMAT_BASIC_THREE_SRC;
-
-   case GEN_OP_ROR:
-   case GEN_OP_ROL:
-      return GEN_FORMAT_BASIC_TWO_SRC;
-
-   case GEN_OP_ADD3:
-   case GEN_OP_DP4A:
-      return GEN_FORMAT_BASIC_THREE_SRC;
-
-   case GEN_OP_PLN:
-      return GEN_FORMAT_BASIC_TWO_SRC;
-
-   case GEN_OP_SEND:
-   case GEN_OP_SENDC:
-   case GEN_OP_SENDS:
-   case GEN_OP_SENDSC:
-      return GEN_FORMAT_SEND;
-
-   case GEN_OP_BRD:
-   case GEN_OP_CALL:
-   case GEN_OP_CALLA:
-   case GEN_OP_ENDIF:
-   case GEN_OP_JMPI:
-   case GEN_OP_JOIN:
-   case GEN_OP_RET:
-   case GEN_OP_WHILE:
-      return GEN_FORMAT_BRANCH_ONE_SRC;
-
-   case GEN_OP_BRC:
-   case GEN_OP_BREAK:
-   case GEN_OP_CONTINUE:
-   case GEN_OP_ELSE:
-   case GEN_OP_GOTO:
-   case GEN_OP_HALT:
-   case GEN_OP_IF:
-      return GEN_FORMAT_BRANCH_TWO_SRC;
-
-   case GEN_OP_DPAS:
-      return GEN_FORMAT_DPAS_THREE_SRC;
-
-   case GEN_OP_NOP:
-      return GEN_FORMAT_NOP;
-
-   default:
-      return GEN_FORMAT_ILLEGAL;
-   }
+   return gen_opcode_format(op);
 }
 
 /* This needs to be applied to a gen_range to be used.
@@ -180,6 +83,27 @@ gen_inst_format(const gen_opcode op)
 struct gen_sub_range {
    unsigned hi;
    unsigned lo;
+};
+
+template <int N>
+struct gen_sub_ranges {
+   gen_sub_range ranges[N];
+
+   constexpr
+   const gen_sub_range&
+   operator[](std::size_t i) const
+   {
+      assert(i < N);
+      return ranges[i];
+   }
+
+   constexpr
+   operator const gen_sub_range&() const
+   {
+      static_assert(N == 1, "split sub ranges cannot be cast to "
+                    "gen_sub_range");
+      return ranges[0];
+   }
 };
 
 struct gen_range {
@@ -205,6 +129,7 @@ struct gen_range {
       return { lo + rel_hi, lo + rel_lo };
    }
 
+   constexpr
    gen_range
    operator()(gen_sub_range rel) const
    {
@@ -215,6 +140,13 @@ struct gen_range {
       return { lo + rel.hi, lo + rel.lo };
    }
 
+   constexpr
+   gen_range
+   operator()(gen_sub_ranges<1> rel) const
+   {
+      return operator()(rel.ranges[0]);
+   }
+
    constexpr bool
    operator==(const gen_range &other) const
    {
@@ -222,18 +154,44 @@ struct gen_range {
    }
 };
 
+template <int N>
+struct gen_ranges {
+   const gen_range ranges[N];
+
+   constexpr
+   const gen_range&
+   operator[](std::size_t i) const
+   {
+      assert(i < N);
+      return ranges[i];
+   }
+
+   constexpr
+   gen_range
+   operator()(unsigned rel_hi, unsigned rel_lo) const
+   {
+      return ((const gen_range&)*this)(rel_hi, rel_lo);
+   }
+
+   constexpr
+   gen_range
+   operator()(gen_sub_ranges<1> rel) const
+   {
+      return ((const gen_range&)*this)(rel);
+   }
+
+   constexpr
+   operator const gen_range&() const
+   {
+      static_assert(N == 1, "split ranges cannot be cast to gen_range");
+      return ranges[0];
+   }
+};
+
 inline bool
 gen_inst_is_send(const gen_inst *inst)
 {
-   switch (inst->opcode) {
-   case GEN_OP_SEND:
-   case GEN_OP_SENDC:
-   case GEN_OP_SENDS:
-   case GEN_OP_SENDSC:
-      return true;
-   default:
-      return false;
-   }
+   return gen_inst_format(inst->opcode) == GEN_FORMAT_SEND;
 }
 
 inline bool
@@ -253,15 +211,10 @@ gen_inst_is_split_send(const intel_device_info *devinfo, const gen_inst *inst)
    }
 }
 
-constexpr inline bool
-gen_inst_has_dst(const gen_format format, const gen_opcode op)
+inline bool
+gen_inst_has_dst(const gen_opcode op)
 {
-   return format != GEN_FORMAT_BRANCH_ONE_SRC &&
-          format != GEN_FORMAT_BRANCH_TWO_SRC &&
-          format != GEN_FORMAT_ILLEGAL &&
-          format != GEN_FORMAT_NOP &&
-          op != GEN_OP_SYNC &&
-          op != GEN_OP_SMOV;
+   return gen_opcode_has_dst(op);
 }
 
 inline bool

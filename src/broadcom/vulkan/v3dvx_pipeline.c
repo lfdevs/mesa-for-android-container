@@ -97,6 +97,7 @@ pack_blend(struct v3dv_pipeline *pipeline,
    uint32_t color_write_masks = 0;
 
    bool needs_dual_src = false;
+   bool needs_software_blend = false;
    for (uint32_t i = 0; i < ri->color_attachment_count; i++) {
       const struct vk_color_blend_attachment_state *b_state =
          &cb->attachments[i];
@@ -118,6 +119,13 @@ pack_blend(struct v3dv_pipeline *pipeline,
        */
       assert(format->plane_count == 1);
       bool dst_alpha_one = (format->planes[0].swizzle[3] == PIPE_SWIZZLE_1);
+
+      /* HW blend cannot operate on render targets configured as 16-bit
+       * integer (used for our software-packed UNORM16/SNORM16 formats).
+       * Fall back to NIR-lowered blending for those attachments.
+       */
+      if (format->planes[0].sw_unorm || format->planes[0].sw_snorm)
+         needs_software_blend = true;
 
       uint8_t rt_mask = 1 << i;
       pipeline->blend.enables |= rt_mask;
@@ -147,10 +155,8 @@ pack_blend(struct v3dv_pipeline *pipeline,
       }
    }
 
-   /* We may want to fallback to software in other cases in the future such
-    * as for formats not supported by the blend hardware.
-    */
-   pipeline->blend.use_software = V3D_DBG(SOFT_BLEND) || needs_dual_src;
+   pipeline->blend.use_software =
+      V3D_DBG(SOFT_BLEND) || needs_dual_src || needs_software_blend;
    pipeline->blend.color_write_masks = color_write_masks;
 }
 

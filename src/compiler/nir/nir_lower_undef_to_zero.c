@@ -35,15 +35,22 @@
  * able to kick in to reduce stuff consuming the zero.
  */
 
+#include "nir.h"
 #include "nir_builder.h"
 
 static bool
-lower_undef_instr_to_zero(nir_builder *b, nir_instr *instr, UNUSED void *_state)
+lower_undef_instr_to_zero(nir_builder *b, nir_instr *instr, void *_state)
 {
+   nir_lower_undef_to_zero_filter filter = _state;
+
    if (instr->type != nir_instr_type_undef)
       return false;
 
    nir_undef_instr *und = nir_instr_as_undef(instr);
+
+   if (filter && !filter(und))
+      return false;
+
    b->cursor = nir_instr_remove(&und->instr);
    nir_def *zero = nir_imm_zero(b, und->def.num_components,
                                 und->def.bit_size);
@@ -52,9 +59,10 @@ lower_undef_instr_to_zero(nir_builder *b, nir_instr *instr, UNUSED void *_state)
 }
 
 bool
-nir_lower_undef_to_zero(nir_shader *shader)
+nir_lower_undef_to_zero(nir_shader *shader,
+                        nir_lower_undef_to_zero_filter filter)
 {
    return nir_shader_instructions_pass(shader, lower_undef_instr_to_zero,
                                        nir_metadata_control_flow,
-                                       NULL);
+                                       filter);
 }

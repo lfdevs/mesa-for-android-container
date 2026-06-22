@@ -15,9 +15,11 @@ gallium_dri_link_whole = []
 
 if with_gallium_va
   gallium_dri_link_with += [libgalliumvlwinsys]
-  if with_gallium_va
-    gallium_dri_link_whole += [libva_st]
-  endif
+  gallium_dri_link_whole += [libva_st]
+endif
+
+if host_machine.cpu_family() == 'x86' and not with_glx_read_only_text
+  gallium_dri_ld_args += [cc.get_supported_link_arguments('-Wl,--no-error-rwx-segments')]
 endif
 
 dri_sym = configure_file(input : 'dri.sym.in', output : 'dri.sym', configuration : sym_config)

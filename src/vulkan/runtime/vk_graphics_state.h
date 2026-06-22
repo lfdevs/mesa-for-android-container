@@ -973,6 +973,9 @@ struct vk_dynamic_graphics_state {
    /** MESA_VK_DYNAMIC_ATTACHMENT_FEEDBACK_LOOP_ENABLE */
    VkImageAspectFlags feedback_loops;
 
+   /** Rasterization order attachment access flags (from pipeline state) */
+   VkImageAspectFlags rasterization_order_access;
+
    /** MESA_VK_DYNAMIC_INPUT_ATTACHMENT_MAP */
    struct vk_input_attachment_location_state ial;
 
@@ -1028,6 +1031,14 @@ struct vk_graphics_pipeline_state {
     * attachments for emulated renderpasses cannot be managed by the driver).
     */
    bool feedback_loop_not_input_only;
+
+   /** Rasterization order attachment access flags.
+    *
+    * Tracks which attachment types require rasterization-order access,
+    * as declared by VK_EXT_rasterization_order_attachment_access pipeline
+    * create flags or subpass description flags.
+    */
+   VkImageAspectFlags rasterization_order_access;
 
    /** Vertex input state */
    const struct vk_vertex_input_state *vi;

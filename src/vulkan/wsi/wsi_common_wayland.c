@@ -185,18 +185,7 @@ struct wsi_wl_surface {
 
    struct zwp_linux_dmabuf_feedback_v1 *wl_dmabuf_feedback;
    struct dmabuf_feedback dmabuf_feedback, pending_dmabuf_feedback;
-
-   struct wp_linux_drm_syncobj_surface_v1 *wl_syncobj_surface;
-
    struct vk_instance *instance;
-
-   struct {
-      struct wp_color_management_surface_v1 *color_surface;
-      int color_surface_refcount;
-      VkColorSpaceKHR colorspace;
-      VkHdrMetadataEXT hdr_metadata;
-      bool has_hdr_metadata;
-   } color;
 };
 
 struct wsi_wl_swapchain {
@@ -206,6 +195,7 @@ struct wsi_wl_swapchain {
    struct wp_tearing_control_v1 *tearing_control;
    struct wp_fifo_v1 *fifo;
    struct wp_commit_timer_v1 *commit_timer;
+   struct wp_linux_drm_syncobj_surface_v1 *wl_syncobj_surface;
 
    struct wl_callback *frame;
 
@@ -250,9 +240,13 @@ struct wsi_wl_swapchain {
    } present_ids;
 
    struct {
+      struct wp_color_management_surface_v1 *color_surface;
       VkColorSpaceKHR colorspace;
-      VkHdrMetadataEXT hdr_metadata;
-      bool has_hdr_metadata;
+      struct {
+         VkHdrMetadataEXT hdr_metadata;
+         bool has_hdr_metadata;
+         bool applied_colorspace;
+      } pending, current;
    } color;
 
    struct wsi_image_timing_request timing_request;
@@ -1197,27 +1191,6 @@ needs_color_surface(struct wsi_wl_display *display, VkColorSpaceKHR colorspace)
    return colorspace != VK_COLOR_SPACE_PASS_THROUGH_EXT;
 }
 
-static void
-wsi_wl_surface_add_color_refcount(struct wsi_wl_surface *wsi_surface)
-{
-   wsi_surface->color.color_surface_refcount++;
-   if (wsi_surface->color.color_surface_refcount == 1) {
-      wsi_surface->color.color_surface =
-         wp_color_manager_v1_get_surface(wsi_surface->display->color_manager,
-					 wsi_surface->wayland_surface.wrapper);
-   }
-}
-
-static void
-wsi_wl_surface_remove_color_refcount(struct wsi_wl_surface *wsi_surface)
-{
-   wsi_surface->color.color_surface_refcount--;
-   if (wsi_surface->color.color_surface_refcount == 0) {
-      wp_color_management_surface_v1_destroy(wsi_surface->color.color_surface);
-      wsi_surface->color.color_surface = NULL;
-   }
-}
-
 struct wayland_hdr_metadata {
    uint32_t min_luminance;
    uint32_t max_luminance;
@@ -1281,32 +1254,21 @@ wsi_wl_swapchain_update_colorspace(struct wsi_wl_swapchain *chain)
 
    /* we need the color management extension for
     * everything except sRGB and PASS_THROUGH */
-   if (!display->color_manager) {
-      if (chain->color.colorspace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR ||
-          chain->color.colorspace == VK_COLOR_SPACE_PASS_THROUGH_EXT) {
-         return VK_SUCCESS;
-      } else {
-         return VK_ERROR_SURFACE_LOST_KHR;
-      }
+   if (chain->color.colorspace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR ||
+       chain->color.colorspace == VK_COLOR_SPACE_PASS_THROUGH_EXT) {
+      return VK_SUCCESS;
    }
 
-   bool new_color_surface = !surface->color.color_surface;
-   bool needs_color_surface_new = needs_color_surface(display, chain->color.colorspace);
-   bool needs_color_surface_old = surface->color.color_surface &&
-      needs_color_surface(display, surface->color.colorspace);
-   if (!needs_color_surface_old && needs_color_surface_new) {
-      wsi_wl_surface_add_color_refcount(surface);
-   } else if (needs_color_surface_old && !needs_color_surface_new) {
-      wsi_wl_surface_remove_color_refcount(surface);
-   }
+   if (!display->color_manager)
+      return VK_ERROR_SURFACE_LOST_KHR;
 
    struct wayland_hdr_metadata wayland_hdr_metadata = {
-      .min_luminance = round(MIN_LUM_FACTOR * chain->color.hdr_metadata.minLuminance),
-      .max_luminance = round(chain->color.hdr_metadata.maxLuminance),
-      .max_fall = round(chain->color.hdr_metadata.maxFrameAverageLightLevel),
-      .max_cll = round(chain->color.hdr_metadata.maxContentLightLevel),
+      .min_luminance = round(MIN_LUM_FACTOR * chain->color.pending.hdr_metadata.minLuminance),
+      .max_luminance = round(chain->color.pending.hdr_metadata.maxLuminance),
+      .max_fall = round(chain->color.pending.hdr_metadata.maxFrameAverageLightLevel),
+      .max_cll = round(chain->color.pending.hdr_metadata.maxContentLightLevel),
    };
-   bool should_use_hdr_metadata = chain->color.has_hdr_metadata;
+   bool should_use_hdr_metadata = chain->color.pending.has_hdr_metadata;
    if (should_use_hdr_metadata) {
       should_use_hdr_metadata &= is_hdr_metadata_legal(&wayland_hdr_metadata);
       if (!should_use_hdr_metadata)
@@ -1319,20 +1281,22 @@ wsi_wl_swapchain_update_colorspace(struct wsi_wl_swapchain *chain)
       }
    }
 
-   if (!new_color_surface &&
-       surface->color.colorspace == chain->color.colorspace &&
-       surface->color.has_hdr_metadata == should_use_hdr_metadata &&
-       compare_hdr_metadata(&surface->color.hdr_metadata, &chain->color.hdr_metadata)) {
+   /* the image description needs to be updated at least once even without metadata */
+   if (chain->color.color_surface && chain->color.current.applied_colorspace &&
+       chain->color.current.has_hdr_metadata == should_use_hdr_metadata &&
+       compare_hdr_metadata(&chain->color.pending.hdr_metadata, &chain->color.current.hdr_metadata)) {
       return VK_SUCCESS;
    }
 
    /* failure is fatal, so this potentially being wrong
       in that case doesn't matter */
-   surface->color.colorspace = chain->color.colorspace;
-   surface->color.hdr_metadata = chain->color.hdr_metadata;
-   surface->color.has_hdr_metadata = should_use_hdr_metadata;
-   if (!needs_color_surface_new)
+   chain->color.current.hdr_metadata = chain->color.pending.hdr_metadata;
+   chain->color.current.has_hdr_metadata = should_use_hdr_metadata;
+   if (!needs_color_surface(display, chain->color.colorspace))
       return VK_SUCCESS;
+
+   if (!chain->color.color_surface)
+      return VK_ERROR_SURFACE_LOST_KHR;
 
    struct wp_image_description_creator_params_v1 *creator =
       wp_color_manager_v1_create_parametric_creator(display->color_manager);
@@ -1358,14 +1322,14 @@ wsi_wl_swapchain_update_colorspace(struct wsi_wl_swapchain *chain)
       wp_image_description_creator_params_v1_set_max_cll(creator, wayland_hdr_metadata.max_cll);
       wp_image_description_creator_params_v1_set_max_fall(creator, wayland_hdr_metadata.max_fall);
       if (display->color_features.mastering_display_primaries) {
-         uint32_t red_x = round(chain->color.hdr_metadata.displayPrimaryRed.x * 1000000);
-         uint32_t red_y = round(chain->color.hdr_metadata.displayPrimaryRed.y * 1000000);
-         uint32_t green_x = round(chain->color.hdr_metadata.displayPrimaryGreen.x * 1000000);
-         uint32_t green_y = round(chain->color.hdr_metadata.displayPrimaryGreen.y * 1000000);
-         uint32_t blue_x = round(chain->color.hdr_metadata.displayPrimaryBlue.x * 1000000);
-         uint32_t blue_y = round(chain->color.hdr_metadata.displayPrimaryBlue.y * 1000000);
-         uint32_t white_x = round(chain->color.hdr_metadata.whitePoint.x * 1000000);
-         uint32_t white_y = round(chain->color.hdr_metadata.whitePoint.y * 1000000);
+         uint32_t red_x = round(chain->color.current.hdr_metadata.displayPrimaryRed.x * 1000000);
+         uint32_t red_y = round(chain->color.current.hdr_metadata.displayPrimaryRed.y * 1000000);
+         uint32_t green_x = round(chain->color.current.hdr_metadata.displayPrimaryGreen.x * 1000000);
+         uint32_t green_y = round(chain->color.current.hdr_metadata.displayPrimaryGreen.y * 1000000);
+         uint32_t blue_x = round(chain->color.current.hdr_metadata.displayPrimaryBlue.x * 1000000);
+         uint32_t blue_y = round(chain->color.current.hdr_metadata.displayPrimaryBlue.y * 1000000);
+         uint32_t white_x = round(chain->color.current.hdr_metadata.whitePoint.x * 1000000);
+         uint32_t white_y = round(chain->color.current.hdr_metadata.whitePoint.y * 1000000);
          wp_image_description_creator_params_v1_set_mastering_display_primaries(creator, red_x, red_y,
                                                                                 green_x, green_y,
                                                                                 blue_x, blue_y,
@@ -1402,14 +1366,15 @@ wsi_wl_swapchain_update_colorspace(struct wsi_wl_swapchain *chain)
       if (!display->color_features.extended_target_volume && should_use_hdr_metadata) {
          /* VK_EXT_hdr_metadata doesn't specify if or how the metadata is used,
           * so it's fine to try again without it. */
-         chain->color.has_hdr_metadata = false;
+         chain->color.pending.has_hdr_metadata = false;
          return wsi_wl_swapchain_update_colorspace(chain);
       } else {
          return VK_ERROR_SURFACE_LOST_KHR;
       }
    }
 
-   wp_color_management_surface_v1_set_image_description(chain->wsi_wl_surface->color.color_surface,
+   chain->color.current.applied_colorspace = true;
+   wp_color_management_surface_v1_set_image_description(chain->color.color_surface,
                                                         image_desc,
                                                         WP_COLOR_MANAGER_V1_RENDER_INTENT_PERCEPTUAL);
    wp_image_description_v1_destroy(image_desc);
@@ -1422,8 +1387,8 @@ wsi_wl_swapchain_set_hdr_metadata(struct wsi_swapchain *wsi_chain,
                                   const VkHdrMetadataEXT* pMetadata)
 {
    struct wsi_wl_swapchain *chain = (struct wsi_wl_swapchain *)wsi_chain;
-   chain->color.hdr_metadata = *pMetadata;
-   chain->color.has_hdr_metadata = true;
+   chain->color.pending.hdr_metadata = *pMetadata;
+   chain->color.pending.has_hdr_metadata = true;
 }
 
 static void
@@ -1805,7 +1770,7 @@ static VkResult
 wsi_wl_surface_get_capabilities(VkIcdSurfaceBase *icd_surface,
                                 struct wsi_device *wsi_device,
                                 const VkSurfacePresentModeKHR *present_mode,
-                                VkSurfaceCapabilitiesKHR* caps)
+                                VkSurfaceCapabilities2KHR* caps)
 {
    VkIcdSurfaceWayland *surface = (VkIcdSurfaceWayland *)icd_surface;
    struct wsi_wl_surface *wsi_wl_surface =
@@ -1821,34 +1786,38 @@ wsi_wl_surface_get_capabilities(VkIcdSurfaceBase *icd_surface,
       display = &temp_display;
    }
 
-   caps->minImageCount = wsi_wl_surface_get_min_image_count(display, present_mode);
+   caps->surfaceCapabilities.minImageCount = wsi_wl_surface_get_min_image_count(display, present_mode);
 
    if (!wsi_wl_surface->display)
       wsi_wl_display_finish(&temp_display);
 
    /* There is no real maximum */
-   caps->maxImageCount = 0;
+   caps->surfaceCapabilities.maxImageCount = 0;
 
-   caps->currentExtent = (VkExtent2D) { UINT32_MAX, UINT32_MAX };
-   caps->minImageExtent = (VkExtent2D) { 1, 1 };
-   caps->maxImageExtent = (VkExtent2D) {
+   caps->surfaceCapabilities.currentExtent = (VkExtent2D) { UINT32_MAX, UINT32_MAX };
+   caps->surfaceCapabilities.minImageExtent = (VkExtent2D) { 1, 1 };
+   caps->surfaceCapabilities.maxImageExtent = (VkExtent2D) {
       wsi_device->maxImageDimension2D,
       wsi_device->maxImageDimension2D,
    };
 
-   caps->supportedTransforms = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
-   caps->currentTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
-   caps->maxImageArrayLayers = 1;
+   caps->surfaceCapabilities.supportedTransforms = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+   caps->surfaceCapabilities.currentTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+   caps->surfaceCapabilities.maxImageArrayLayers = 1;
 
-   caps->supportedCompositeAlpha =
+   caps->surfaceCapabilities.supportedCompositeAlpha =
       VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR |
       VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR;
 
-   caps->supportedUsageFlags = wsi_caps_get_image_usage();
+   caps->surfaceCapabilities.supportedUsageFlags = wsi_caps_get_image_usage();
 
    VK_FROM_HANDLE(vk_physical_device, pdevice, wsi_device->pdevice);
    if (pdevice->supported_extensions.EXT_attachment_feedback_loop_layout)
-      caps->supportedUsageFlags |= VK_IMAGE_USAGE_ATTACHMENT_FEEDBACK_LOOP_BIT_EXT;
+      caps->surfaceCapabilities.supportedUsageFlags |= VK_IMAGE_USAGE_ATTACHMENT_FEEDBACK_LOOP_BIT_EXT;
+
+   VkSwapchainFlagsSurfaceCapabilitiesEXT *surface_caps = vk_find_struct(caps, SWAPCHAIN_FLAGS_SURFACE_CAPABILITIES_EXT);
+   if (surface_caps && pdevice->supported_extensions.EXT_multisampled_render_to_swapchain)
+      surface_caps->swapchainSupportedFlags |= VK_SWAPCHAIN_CREATE_MULTISAMPLED_RENDER_TO_SINGLE_SAMPLED_BIT_EXT;
 
    return VK_SUCCESS;
 }
@@ -1899,7 +1868,7 @@ wsi_wl_surface_get_capabilities2(VkIcdSurfaceBase *surface,
 
    VkResult result =
       wsi_wl_surface_get_capabilities(surface, wsi_device, present_mode,
-                                      &caps->surfaceCapabilities);
+                                      caps);
 
    vk_foreach_struct(ext, caps->pNext) {
       switch (ext->sType) {
@@ -2203,17 +2172,11 @@ wsi_wl_surface_destroy(VkIcdSurfaceBase *icd_surface, VkInstance _instance,
    struct wsi_wl_surface *wsi_wl_surface =
       wl_container_of((VkIcdSurfaceWayland *)icd_surface, wsi_wl_surface, base);
 
-   if (wsi_wl_surface->wl_syncobj_surface)
-      wp_linux_drm_syncobj_surface_v1_destroy(wsi_wl_surface->wl_syncobj_surface);
-
    if (wsi_wl_surface->wl_dmabuf_feedback) {
       zwp_linux_dmabuf_feedback_v1_destroy(wsi_wl_surface->wl_dmabuf_feedback);
       dmabuf_feedback_fini(&wsi_wl_surface->dmabuf_feedback);
       dmabuf_feedback_fini(&wsi_wl_surface->pending_dmabuf_feedback);
    }
-
-   if (wsi_wl_surface->color.color_surface)
-      wp_color_management_surface_v1_destroy(wsi_wl_surface->color.color_surface);
 
    loader_wayland_surface_destroy(&wsi_wl_surface->wayland_surface);
 
@@ -2468,15 +2431,6 @@ static VkResult wsi_wl_surface_init(struct wsi_wl_surface *wsi_wl_surface,
                                  wsi_wl_surface->display->queue);
    }
 
-   if (wsi_wl_use_explicit_sync(wsi_wl_surface->display, wsi_device)) {
-      wsi_wl_surface->wl_syncobj_surface =
-         wp_linux_drm_syncobj_manager_v1_get_surface(wsi_wl_surface->display->wl_syncobj,
-                                                     wsi_wl_surface->wayland_surface.wrapper);
-
-      if (!wsi_wl_surface->wl_syncobj_surface)
-         goto fail;
-   }
-
    return VK_SUCCESS;
 
 fail:
@@ -2511,7 +2465,6 @@ wsi_CreateWaylandSurfaceKHR(VkInstance _instance,
    surface->surface = pCreateInfo->surface;
 
    wsi_wl_surface->instance = instance;
-   wsi_wl_surface->color.colorspace = VK_COLOR_SPACE_PASS_THROUGH_EXT;
 
    *pSurface = VkIcdSurfaceBase_to_handle(&surface->base);
 
@@ -3238,11 +3191,11 @@ wsi_wl_swapchain_queue_present(struct wsi_swapchain *wsi_chain,
       /* Incremented by signal in base queue_present. */
       uint64_t acquire_point = image->base.explicit_sync[WSI_ES_ACQUIRE].timeline;
       uint64_t release_point = image->base.explicit_sync[WSI_ES_RELEASE].timeline;
-      wp_linux_drm_syncobj_surface_v1_set_acquire_point(wsi_wl_surface->wl_syncobj_surface,
+      wp_linux_drm_syncobj_surface_v1_set_acquire_point(chain->wl_syncobj_surface,
                                                         image->wl_syncobj_timeline[WSI_ES_ACQUIRE],
                                                         (uint32_t)(acquire_point >> 32),
                                                         (uint32_t)(acquire_point & 0xffffffff));
-      wp_linux_drm_syncobj_surface_v1_set_release_point(wsi_wl_surface->wl_syncobj_surface,
+      wp_linux_drm_syncobj_surface_v1_set_release_point(chain->wl_syncobj_surface,
                                                         image->wl_syncobj_timeline[WSI_ES_RELEASE],
                                                         (uint32_t)(release_point >> 32),
                                                         (uint32_t)(release_point & 0xffffffff));
@@ -3591,10 +3544,10 @@ wsi_wl_swapchain_chain_free(struct wsi_wl_swapchain *chain,
       wl_callback_destroy(chain->frame);
    if (chain->tearing_control)
       wp_tearing_control_v1_destroy(chain->tearing_control);
-   if (needs_color_surface(wsi_wl_surface->display, chain->color.colorspace) &&
-       wsi_wl_surface->color.color_surface) {
-      wsi_wl_surface_remove_color_refcount(wsi_wl_surface);
-   }
+   if (chain->wl_syncobj_surface)
+      wp_linux_drm_syncobj_surface_v1_destroy(chain->wl_syncobj_surface);
+   if (chain->color.color_surface)
+      wp_color_management_surface_v1_destroy(chain->color.color_surface);
 
    /* Only unregister if we are the non-retired swapchain, or
     * we are a retired swapchain and memory allocation failed,
@@ -3722,6 +3675,19 @@ wsi_wl_surface_create_swapchain(VkIcdSurfaceBase *icd_surface,
          wp_commit_timer_v1_destroy(old_chain->commit_timer);
          old_chain->commit_timer = NULL;
       }
+      if (old_chain->wl_syncobj_surface) {
+         wp_linux_drm_syncobj_surface_v1_destroy(old_chain->wl_syncobj_surface);
+         old_chain->wl_syncobj_surface = NULL;
+      }
+      if (old_chain->color.color_surface) {
+         wp_color_management_surface_v1_destroy(old_chain->color.color_surface);
+         old_chain->color.color_surface = NULL;
+      }
+      /* the old swapchain may have a different wsi_wl_surface for the same app provided wl_surface */
+      if (old_chain->wsi_wl_surface) {
+         struct wsi_wl_display *dpy = old_chain->wsi_wl_surface->display;
+         wl_display_roundtrip_queue(dpy->wl_display, dpy->queue);
+      }
    }
 
    /* Take ownership of the wsi_wl_surface */
@@ -3758,17 +3724,6 @@ wsi_wl_surface_create_swapchain(VkIcdSurfaceBase *icd_surface,
    }
 
    VkPresentModeKHR present_mode = wsi_swapchain_get_present_mode(wsi_device, pCreateInfo);
-   if (present_mode == VK_PRESENT_MODE_IMMEDIATE_KHR) {
-      chain->tearing_control =
-         wp_tearing_control_manager_v1_get_tearing_control(wsi_wl_surface->display->tearing_control_manager,
-                                                           wsi_wl_surface->wayland_surface.wrapper);
-      if (!chain->tearing_control) {
-         result = VK_ERROR_OUT_OF_HOST_MEMORY;
-         goto fail;
-      }
-      wp_tearing_control_v1_set_presentation_hint(chain->tearing_control,
-                                                          WP_TEARING_CONTROL_V1_PRESENTATION_HINT_ASYNC);
-   }
 
    chain->color.colorspace = pCreateInfo->imageColorSpace;
 
@@ -3919,6 +3874,39 @@ wsi_wl_surface_create_swapchain(VkIcdSurfaceBase *icd_surface,
    if (dpy->commit_timing_manager && !chain->present_ids.frame_fallback) {
       chain->commit_timer = wp_commit_timing_manager_v1_get_timer(dpy->commit_timing_manager,
                                                                   chain->wsi_wl_surface->wayland_surface.wrapper);
+   }
+
+   if (present_mode == VK_PRESENT_MODE_IMMEDIATE_KHR) {
+      chain->tearing_control =
+         wp_tearing_control_manager_v1_get_tearing_control(dpy->tearing_control_manager,
+                                                           chain->wsi_wl_surface->wayland_surface.wrapper);
+      if (!chain->tearing_control) {
+         result = VK_ERROR_OUT_OF_HOST_MEMORY;
+         goto fail_free_wl_chain;
+      }
+      wp_tearing_control_v1_set_presentation_hint(chain->tearing_control,
+                                                  WP_TEARING_CONTROL_V1_PRESENTATION_HINT_ASYNC);
+   }
+
+   if (wsi_wl_use_explicit_sync(dpy, wsi_device)) {
+      chain->wl_syncobj_surface =
+         wp_linux_drm_syncobj_manager_v1_get_surface(dpy->wl_syncobj,
+                                                     chain->wsi_wl_surface->wayland_surface.wrapper);
+
+      if (!chain->wl_syncobj_surface) {
+         result = VK_ERROR_OUT_OF_HOST_MEMORY;
+         goto fail_free_wl_chain;
+      }
+   }
+
+   if (needs_color_surface(dpy, chain->color.colorspace)) {
+      chain->color.color_surface =
+         wp_color_manager_v1_get_surface(dpy->color_manager,
+                                         chain->wsi_wl_surface->wayland_surface.wrapper);
+      if (!chain->color.color_surface) {
+         result = VK_ERROR_OUT_OF_HOST_MEMORY;
+         goto fail_free_wl_chain;
+      }
    }
 
    for (uint32_t i = 0; i < chain->base.image_count; i++) {

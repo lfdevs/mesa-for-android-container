@@ -24,7 +24,6 @@ dEQP-VK.wsi.wayland.swapchain.simulate_oom.image_extent
 angle-dEQP-GLES3.functional.multisample.fbo_4_samples.proportionality_sample_coverage
 angle-dEQP-GLES3.functional.multisample.fbo_max_samples.constancy_alpha_to_coverage
 angle-KHR-GLES31.core.compute_shader.sso-case2
-angle-KHR-GLES31.core.shader_image_load_store.basic-allTargets-atomicCS
 angle-KHR-GLES31.core.shader_image_load_store.basic-allTargets-loadStoreVS
 angle-multisample-dEQP-GLES31.functional.draw_indirect.compute_interop.large.drawelements_combined_grid_500x500_drawcount_2500
 angle-multisample-dEQP-GLES31.functional.draw_indirect.compute_interop.large.drawelements_combined_grid_1000x1000_drawcount_1

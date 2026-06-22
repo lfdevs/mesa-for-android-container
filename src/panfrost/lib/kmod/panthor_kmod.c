@@ -84,6 +84,7 @@ struct panthor_kmod_dev {
    struct {
       struct drm_panthor_gpu_info gpu;
       struct drm_panthor_csif_info csif;
+      struct drm_panthor_mmu_info mmu;
       struct drm_panthor_timestamp_info timestamp;
       struct drm_panthor_group_priorities_info group_priorities;
    } props;
@@ -160,6 +161,7 @@ panthor_dev_query_props(struct panthor_kmod_dev *panthor_dev)
       .tiler_features = panthor_dev->props.gpu.tiler_features,
       .mem_features = panthor_dev->props.gpu.mem_features,
       .mmu_features = panthor_dev->props.gpu.mmu_features,
+      .pgsize_bitmap = panthor_dev->props.mmu.page_size_bitmap,
 
       /* This register does not exist because AFBC is no longer optional. */
       .afbc_features = 0,
@@ -185,6 +187,9 @@ panthor_dev_query_props(struct panthor_kmod_dev *panthor_dev)
                               DRM_PANTHOR_GPU_COHERENCY_NONE;
       props->supported_bo_flags |= PAN_KMOD_BO_FLAG_WB_MMAP;
    }
+
+   if (pan_kmod_driver_version_at_least(&panthor_dev->base.driver, 1, 9))
+      props->supported_vm_op_flags |= PAN_KMOD_VM_OP_OP_MAP_SPARSE;
 
    static_assert(sizeof(props->texture_features) ==
                     sizeof(panthor_dev->props.gpu.texture_features),
@@ -231,6 +236,22 @@ panthor_kmod_dev_create(int fd, uint32_t flags,
    if (ret) {
       mesa_loge("DRM_IOCTL_PANTHOR_DEV_QUERY failed (err=%d)", errno);
       goto err_free_dev;
+   }
+
+   if (pan_kmod_driver_version_at_least(drv_info, 1, 9)) {
+      query = (struct drm_panthor_dev_query){
+         .type = DRM_PANTHOR_DEV_QUERY_MMU_INFO,
+         .size = sizeof(panthor_dev->props.mmu),
+         .pointer = (uint64_t)(uintptr_t)&panthor_dev->props.mmu,
+      };
+
+      ret = pan_kmod_ioctl(fd, DRM_IOCTL_PANTHOR_DEV_QUERY, &query);
+      if (ret) {
+         mesa_loge("DRM_IOCTL_PANTHOR_DEV_QUERY failed (err=%d)", errno);
+         goto err_free_dev;
+      }
+   } else {
+      panthor_dev->props.mmu.page_size_bitmap = PAN_PGSIZE_4K | PAN_PGSIZE_2M;
    }
 
    if (pan_kmod_driver_version_at_least(drv_info, 1, 1)) {
@@ -813,7 +834,7 @@ panthor_kmod_vm_create(struct pan_kmod_dev *dev, uint32_t flags,
       goto err_destroy_sync;
    }
 
-   pan_kmod_vm_init(&panthor_vm->base, dev, req.id, flags, PAN_PGSIZE_4K | PAN_PGSIZE_2M);
+   pan_kmod_vm_init(&panthor_vm->base, dev, req.id, flags);
    return &panthor_vm->base;
 
 err_destroy_sync:
@@ -891,6 +912,7 @@ panthor_kmod_vm_destroy(struct pan_kmod_vm *vm)
       simple_mtx_destroy(&panthor_vm->auto_va.lock);
    }
 
+   pan_kmod_vm_cleanup(vm);
    pan_kmod_dev_free(vm->dev, panthor_vm);
 }
 
@@ -985,7 +1007,7 @@ panthor_kmod_vm_bind(struct pan_kmod_vm *vm, enum pan_kmod_vm_op_mode mode,
           ops[i].va.size)
          va_collect_cnt++;
 
-      syncop_cnt += ops[i].syncs.count;
+      syncop_cnt += ops[i].signal.count + ops[i].wait.count;
    }
 
    /* Pre-allocate the VA collection nodes. */
@@ -1057,6 +1079,18 @@ panthor_kmod_vm_bind(struct pan_kmod_vm *vm, enum pan_kmod_vm_op_mode mode,
          };
       }
 
+      for (uint32_t j = 0; j < ops[i].signal.count; j++) {
+         sync_ops[syncop_ptr++] = (struct drm_panthor_sync_op){
+            .flags = DRM_PANTHOR_SYNC_OP_SIGNAL |
+                     (!ops[i].signal.array[j].point
+                         ? DRM_PANTHOR_SYNC_OP_HANDLE_TYPE_SYNCOBJ
+                         : DRM_PANTHOR_SYNC_OP_HANDLE_TYPE_TIMELINE_SYNCOBJ),
+            .handle = ops[i].signal.array[j].handle,
+            .timeline_value = ops[i].signal.array[j].point,
+         };
+      }
+      op_sync_cnt += ops[i].signal.count;
+
       if (mode == PAN_KMOD_VM_OP_MODE_DEFER_TO_NEXT_IDLE_POINT) {
          op_sync_cnt++;
          sync_ops[syncop_ptr++] = (struct drm_panthor_sync_op){
@@ -1081,17 +1115,17 @@ panthor_kmod_vm_bind(struct pan_kmod_vm *vm, enum pan_kmod_vm_op_mode mode,
          }
       }
 
-      for (uint32_t j = 0; j < ops[i].syncs.count; j++) {
+      for (uint32_t j = 0; j < ops[i].wait.count; j++) {
          sync_ops[syncop_ptr++] = (struct drm_panthor_sync_op){
-            .flags = (ops[i].syncs.array[j].type == PAN_KMOD_SYNC_TYPE_WAIT
-                         ? DRM_PANTHOR_SYNC_OP_WAIT
-                         : DRM_PANTHOR_SYNC_OP_SIGNAL) |
-                     DRM_PANTHOR_SYNC_OP_HANDLE_TYPE_TIMELINE_SYNCOBJ,
-            .handle = ops[i].syncs.array[j].handle,
-            .timeline_value = ops[i].syncs.array[j].point,
+            .flags = DRM_PANTHOR_SYNC_OP_WAIT |
+                     (!ops[i].wait.array[j].point
+                         ? DRM_PANTHOR_SYNC_OP_HANDLE_TYPE_SYNCOBJ
+                         : DRM_PANTHOR_SYNC_OP_HANDLE_TYPE_TIMELINE_SYNCOBJ),
+            .handle = ops[i].wait.array[j].handle,
+            .timeline_value = ops[i].wait.array[j].point,
          };
       }
-      op_sync_cnt += ops[i].syncs.count;
+      op_sync_cnt += ops[i].wait.count;
 
       bind_ops[i].syncs = (struct drm_panthor_obj_array)DRM_PANTHOR_OBJ_ARRAY(
          op_sync_cnt, op_sync_cnt ? &sync_ops[syncop_ptr - op_sync_cnt] : NULL);
@@ -1099,8 +1133,10 @@ panthor_kmod_vm_bind(struct pan_kmod_vm *vm, enum pan_kmod_vm_op_mode mode,
       if (ops[i].type == PAN_KMOD_VM_OP_TYPE_MAP) {
          bind_ops[i].flags = DRM_PANTHOR_VM_BIND_OP_TYPE_MAP;
          bind_ops[i].size = ops[i].va.size;
-         bind_ops[i].bo_handle = ops[i].map.bo->handle;
-         bind_ops[i].bo_offset = ops[i].map.bo_offset;
+         if (!(ops[i].flags & PAN_KMOD_VM_OP_OP_MAP_SPARSE)) {
+            bind_ops[i].bo_handle = ops[i].map.bo->handle;
+            bind_ops[i].bo_offset = ops[i].map.bo_offset;
+         }
 
          if (ops[i].va.start == PAN_KMOD_VM_MAP_AUTO_VA) {
             bind_ops[i].va =
@@ -1114,13 +1150,18 @@ panthor_kmod_vm_bind(struct pan_kmod_vm *vm, enum pan_kmod_vm_op_mode mode,
             bind_ops[i].va = ops[i].va.start;
          }
 
-         if (ops[i].map.bo->flags & PAN_KMOD_BO_FLAG_EXECUTABLE)
-            bind_ops[i].flags |= DRM_PANTHOR_VM_BIND_OP_MAP_READONLY;
-         else
-            bind_ops[i].flags |= DRM_PANTHOR_VM_BIND_OP_MAP_NOEXEC;
+         if (!(ops[i].flags & PAN_KMOD_VM_OP_OP_MAP_SPARSE)) {
+            if (ops[i].map.bo->flags & PAN_KMOD_BO_FLAG_EXECUTABLE)
+               bind_ops[i].flags |= DRM_PANTHOR_VM_BIND_OP_MAP_READONLY;
+            else
+               bind_ops[i].flags |= DRM_PANTHOR_VM_BIND_OP_MAP_NOEXEC;
 
-         if (ops[i].map.bo->flags & PAN_KMOD_BO_FLAG_GPU_UNCACHED)
-            bind_ops[i].flags |= DRM_PANTHOR_VM_BIND_OP_MAP_UNCACHED;
+            if (ops[i].map.bo->flags & PAN_KMOD_BO_FLAG_GPU_UNCACHED)
+               bind_ops[i].flags |= DRM_PANTHOR_VM_BIND_OP_MAP_UNCACHED;
+         } else {
+            bind_ops[i].flags |= DRM_PANTHOR_VM_BIND_OP_MAP_NOEXEC;
+            bind_ops[i].flags |= DRM_PANTHOR_VM_BIND_OP_MAP_SPARSE;
+         }
 
       } else if (ops[i].type == PAN_KMOD_VM_OP_TYPE_UNMAP) {
          bind_ops[i].flags = DRM_PANTHOR_VM_BIND_OP_TYPE_UNMAP;

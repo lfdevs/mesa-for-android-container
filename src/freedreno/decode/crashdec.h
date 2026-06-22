@@ -92,7 +92,7 @@ struct a6xx_hfi_state {
    uint64_t iova;
    void *buf;
    uint32_t size;
-   int32_t history[2][8];
+   int32_t history[3][8];
 };
 void dump_gmu_hfi(struct a6xx_hfi_state *hfi);
 

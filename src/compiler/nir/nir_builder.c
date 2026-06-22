@@ -543,7 +543,7 @@ nir_builder_is_inside_cf(nir_builder *build, nir_cf_node *cf_node)
 nir_if *
 nir_push_if(nir_builder *build, nir_def *condition)
 {
-   nir_if *nif = nir_if_create(build->shader);
+   nir_if *nif = nir_if_create(build->impl);
    nif->condition = nir_src_for_ssa(condition);
    nir_builder_cf_insert(build, &nif->cf_node);
    build->cursor = nir_before_cf_list(&nif->then_list);
@@ -598,7 +598,7 @@ nir_if_phi(nir_builder *build, nir_def *then_def, nir_def *else_def)
 nir_loop *
 nir_push_loop(nir_builder *build)
 {
-   nir_loop *loop = nir_loop_create(build->shader);
+   nir_loop *loop = nir_loop_create(build->impl);
    nir_builder_cf_insert(build, &loop->cf_node);
    build->cursor = nir_before_cf_list(&loop->body);
    return loop;

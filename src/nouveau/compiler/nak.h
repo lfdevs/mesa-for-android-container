@@ -30,6 +30,8 @@ uint64_t nak_debug_flags(const struct nak_compiler *nak);
 const struct nir_shader_compiler_options *
 nak_nir_options(const struct nak_compiler *nak);
 
+uint32_t nak_max_warps_per_sm(uint32_t num_gprs, const struct nak_compiler *nak);
+
 void nak_preprocess_nir(nir_shader *nir, const struct nak_compiler *nak);
 
 bool nak_nir_lower_image_addrs(nir_shader *nir, const struct nak_compiler *nak);

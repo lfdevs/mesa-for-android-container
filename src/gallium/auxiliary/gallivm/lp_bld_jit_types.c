@@ -422,6 +422,29 @@ lp_build_llvm_texture_member(struct gallivm_state *gallivm,
 }
 
 static LLVMValueRef
+lp_build_llvm_texture_view_min_lod(struct gallivm_state *gallivm,
+                                   LLVMTypeRef resources_type,
+                                   LLVMValueRef resources_ptr,
+                                   unsigned texture_unit,
+                                   LLVMValueRef texture_unit_offset)
+{
+   /* Only reached in bindless mode, where apply_view_min_lod gates the call. */
+   assert(gallivm->texture_descriptor);
+
+   LLVMBuilderRef builder = gallivm->builder;
+   LLVMTypeRef float_type = LLVMFloatTypeInContext(gallivm->context);
+
+   LLVMValueRef ptr = LLVMBuildAdd(builder, gallivm->texture_descriptor,
+                                   lp_build_const_int64(gallivm,
+                                      offsetof(struct lp_image_descriptor, texture.view_min_lod)),
+                                   "");
+   ptr = LLVMBuildIntToPtr(builder, ptr, LLVMPointerType(float_type, 0), "");
+
+   return LLVMBuildLoad2(builder, float_type, ptr, "view_min_lod");
+}
+
+
+static LLVMValueRef
 lp_build_llvm_texture_residency(struct gallivm_state *gallivm,
                                       LLVMTypeRef resources_type,
                                       LLVMValueRef resources_ptr,
@@ -725,6 +748,8 @@ lp_build_jit_fill_sampler_dynamic_state(struct lp_sampler_dynamic_state *state)
    state->max_lod = lp_build_llvm_sampler_max_lod;
    state->lod_bias = lp_build_llvm_sampler_lod_bias;
    state->border_color = lp_build_llvm_sampler_border_color;
+
+   state->view_min_lod = lp_build_llvm_texture_view_min_lod;
 }
 
 void

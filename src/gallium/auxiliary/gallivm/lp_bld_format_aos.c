@@ -35,6 +35,7 @@
 
 #include "util/format/u_format.h"
 #include "util/bitscan.h"
+#include "util/u_endian.h"
 #include "util/u_pointer.h"
 
 #include "lp_bld_arit.h"
@@ -546,7 +547,7 @@ lp_build_fetch_rgba_aos(struct gallivm_state *gallivm,
 
       packed = lp_build_gather(gallivm, type.length/4,
                                format_desc->block.bits, fetch_type,
-                               aligned, base_ptr, offset, true);
+                               aligned, base_ptr, offset, false);
 
       assert(format_desc->block.bits * type.length / 4 <=
              type.width * type.length);
@@ -585,12 +586,18 @@ lp_build_fetch_rgba_aos(struct gallivm_state *gallivm,
          } else {
             rgba[j] = lp_build_swizzle_soa_channel(&bld_conv, chans, swizzle);
          }
+#if UTIL_ARCH_BIG_ENDIAN
+         unsigned shift = (3 - j) * type.width;
+#else
+         unsigned shift = j * type.width;
+#endif
+         if (shift != 0) {
+            rgba[j] = LLVMBuildShl(builder, rgba[j],
+                                   lp_build_const_int_vec(gallivm, conv_type, shift), "");
+         }
          if (j == 0) {
             res = rgba[j];
          } else {
-            rgba[j] = LLVMBuildShl(builder, rgba[j],
-                                   lp_build_const_int_vec(gallivm, conv_type,
-                                                          j * type.width), "");
             res = LLVMBuildOr(builder, res, rgba[j], "");
          }
       }

@@ -106,6 +106,7 @@ loader_init_screen_resources(struct loader_screen_resources *res,
                              xcb_connection_t *conn,
                              xcb_screen_t *screen)
 {
+   memset(res, 0, sizeof(*res));
    res->conn = conn;
    res->screen = screen;
    res->crtcs = NULL;

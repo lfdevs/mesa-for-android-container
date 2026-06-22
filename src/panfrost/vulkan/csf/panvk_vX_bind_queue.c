@@ -3,8 +3,6 @@
  * SPDX-License-Identifier: MIT
  */
 
-#include "drm-uapi/panthor_drm.h"
-
 #include "genxml/cs_builder.h"
 #include "genxml/decode.h"
 
@@ -14,7 +12,6 @@
 #include "panvk_macros.h"
 #include "panvk_queue.h"
 #include "panvk_utrace.h"
-#include "panvk_sparse.h"
 #include "pan_layout.h"
 
 #include "util/bitscan.h"
@@ -22,21 +19,23 @@
 #include "vk_log.h"
 
 struct panvk_bind_queue_submit_sync_ops {
-   struct drm_panthor_sync_op *all;
+   struct pan_kmod_sync_op *all;
    size_t all_count;
-   struct drm_panthor_sync_op *waits;
+
+   struct pan_kmod_sync_op *waits;
    size_t wait_count;
-   struct drm_panthor_sync_op *signals;
+
+   struct pan_kmod_sync_op *signals;
    size_t signal_count;
 
-   struct drm_panthor_sync_op small_storage[4];
+   struct pan_kmod_sync_op small_storage[4];
 };
 
 static void
 panvk_bind_queue_submit_sync_ops_init(
    struct panvk_bind_queue_submit_sync_ops *sync_ops,
    const struct vk_queue_submit *vk_submit,
-   const struct drm_panthor_sync_op *extra_signal)
+   const struct pan_kmod_sync_op *extra_signal)
 {
    size_t signal_count = vk_submit->signal_count;
    if (extra_signal)
@@ -45,8 +44,8 @@ panvk_bind_queue_submit_sync_ops_init(
    size_t all_count = vk_submit->wait_count + signal_count;
 
    sync_ops->all = all_count <= ARRAY_SIZE(sync_ops->small_storage)
-                         ? sync_ops->small_storage
-                         : malloc(sizeof(*sync_ops->all) * all_count);
+                      ? sync_ops->small_storage
+                      : malloc(sizeof(*sync_ops->all) * all_count);
    sync_ops->all_count = all_count;
 
    sync_ops->waits = sync_ops->all;
@@ -60,13 +59,9 @@ panvk_bind_queue_submit_sync_ops_init(
       const struct vk_drm_syncobj *syncobj = vk_sync_as_drm_syncobj(wait->sync);
       assert(syncobj);
 
-      sync_ops->waits[i] = (struct drm_panthor_sync_op){
-         .flags = (syncobj->base.flags & VK_SYNC_IS_TIMELINE
-                      ? DRM_PANTHOR_SYNC_OP_HANDLE_TYPE_TIMELINE_SYNCOBJ
-                      : DRM_PANTHOR_SYNC_OP_HANDLE_TYPE_SYNCOBJ) |
-                  DRM_PANTHOR_SYNC_OP_WAIT,
+      sync_ops->waits[i] = (struct pan_kmod_sync_op){
          .handle = syncobj->syncobj,
-         .timeline_value = wait->wait_value,
+         .point = wait->wait_value,
       };
    }
 
@@ -77,13 +72,9 @@ panvk_bind_queue_submit_sync_ops_init(
          vk_sync_as_drm_syncobj(signal->sync);
       assert(syncobj);
 
-      sync_ops->signals[signal_idx++] = (struct drm_panthor_sync_op){
-         .flags = (syncobj->base.flags & VK_SYNC_IS_TIMELINE
-                      ? DRM_PANTHOR_SYNC_OP_HANDLE_TYPE_TIMELINE_SYNCOBJ
-                      : DRM_PANTHOR_SYNC_OP_HANDLE_TYPE_SYNCOBJ) |
-                  DRM_PANTHOR_SYNC_OP_SIGNAL,
+      sync_ops->signals[signal_idx++] = (struct pan_kmod_sync_op){
          .handle = syncobj->syncobj,
-         .timeline_value = signal->signal_value,
+         .point = signal->signal_value,
       };
    }
    if (extra_signal)
@@ -105,12 +96,10 @@ struct panvk_bind_queue_submit {
    bool force_sync;
 
    struct panvk_bind_queue_submit_sync_ops sync_ops;
+   struct pan_kmod_vm_op storage[16];
+   struct pan_kmod_vm_op pending_op;
 
-   struct drm_panthor_vm_bind_op *bind_ops;
-   size_t bind_op_count; /* number of bind ops buffered */
-   size_t bind_op_cap;   /* size of the bind op buffer */
-
-   struct drm_panthor_vm_bind_op bind_op_small_storage[16];
+   struct pan_kmod_vm_multi_op_ctx ctx;
 };
 
 static void
@@ -120,6 +109,7 @@ panvk_bind_queue_submit_init(struct panvk_bind_queue_submit *submit,
 {
    struct panvk_bind_queue *queue =
       container_of(vk_queue, struct panvk_bind_queue, vk);
+   struct panvk_device *device = to_panvk_device(queue->vk.base.device);
 
    const bool force_sync = PANVK_DEBUG(SYNC);
 
@@ -128,112 +118,34 @@ panvk_bind_queue_submit_init(struct panvk_bind_queue_submit *submit,
       .force_sync = force_sync,
    };
 
-   struct drm_panthor_sync_op syncobj_signal = {
-      .flags =
-         DRM_PANTHOR_SYNC_OP_HANDLE_TYPE_SYNCOBJ | DRM_PANTHOR_SYNC_OP_SIGNAL,
+   struct pan_kmod_sync_op syncobj_signal = {
       .handle = queue->syncobj_handle,
+      .point = 0,
    };
 
    panvk_bind_queue_submit_sync_ops_init(&submit->sync_ops, vk_submit,
                                          force_sync ? &syncobj_signal : NULL);
 
-   /* TODO: guess how many bind ops we'll need and allocate that much, unless
-    * it's too much
-    */
-   uint32_t bind_op_cap = ARRAY_SIZE(submit->bind_op_small_storage);
+   pan_kmod_vm_multi_op_init(&submit->ctx, device->kmod.vm,
+                             PAN_KMOD_VM_OP_MODE_ASYNC, submit->storage,
+                             ARRAY_SIZE(submit->storage), NULL);
 
-   submit->bind_ops = bind_op_cap <= ARRAY_SIZE(submit->bind_op_small_storage)
-                         ? submit->bind_op_small_storage
-                         : malloc(sizeof(*submit->bind_ops) * bind_op_cap);
-   submit->bind_op_cap = bind_op_cap;
+   /* The pending op always starts as a SYNC_ONLY op with just the waits
+    * and will be upgraded to a MAP when bind operations are processed.
+    */
+   submit->pending_op = (struct pan_kmod_vm_op){
+      .type = PAN_KMOD_VM_OP_TYPE_SYNC_ONLY,
+      .wait = {
+         .count = submit->sync_ops.wait_count,
+         .array = submit->sync_ops.waits,
+      },
+   };
 }
 
 static void
 panvk_bind_queue_submit_cleanup(struct panvk_bind_queue_submit *submit)
 {
    panvk_bind_queue_submit_sync_ops_cleanup(&submit->sync_ops);
-
-   if (submit->bind_ops != submit->bind_op_small_storage)
-      free(submit->bind_ops);
-}
-
-static int
-panvk_bind_queue_submit_flush(struct panvk_bind_queue_submit *submit)
-{
-   struct panvk_device *dev = to_panvk_device(submit->queue->vk.base.device);
-
-   if (submit->bind_op_count == 0)
-      return 0;
-
-   struct drm_panthor_vm_bind req = {
-      .vm_id = dev->kmod.vm->handle,
-      .flags = DRM_PANTHOR_VM_BIND_ASYNC,
-      .ops = DRM_PANTHOR_OBJ_ARRAY(submit->bind_op_count, submit->bind_ops),
-   };
-   int ret = pan_kmod_ioctl(dev->drm_fd, DRM_IOCTL_PANTHOR_VM_BIND, &req);
-   submit->bind_op_count = 0;
-   return ret;
-}
-
-static bool
-panvk_try_merge_vm_bind_ops(struct drm_panthor_vm_bind_op *a,
-                            const struct drm_panthor_vm_bind_op *b)
-{
-   if (a->flags != b->flags)
-      return false;
-
-   /* See panvk_bind_queue_submit_vm_bind */
-   assert(b->syncs.count == 0);
-
-   enum drm_panthor_vm_bind_op_flags op_type = a->flags & DRM_PANTHOR_VM_BIND_OP_TYPE_MASK;
-   if (op_type != DRM_PANTHOR_VM_BIND_OP_TYPE_MAP &&
-       op_type != DRM_PANTHOR_VM_BIND_OP_TYPE_UNMAP)
-      return false;
-
-   if (a->va + a->size != b->va)
-      return false;
-
-   if (op_type == DRM_PANTHOR_VM_BIND_OP_TYPE_MAP &&
-       (a->bo_handle != b->bo_handle ||
-        a->bo_offset + a->size != b->bo_offset))
-      return false;
-
-   a->size += b->size;
-   return true;
-}
-
-static int
-panvk_bind_queue_submit_vm_bind(
-   struct panvk_bind_queue_submit *submit,
-   const struct drm_panthor_vm_bind_op *op)
-{
-   /* We handle all of the syncs here and in
-    * panvk_bind_queue_submit_process_signals */
-   assert(op->syncs.count == 0);
-
-   if (submit->bind_op_count > 0) {
-      struct drm_panthor_vm_bind_op *prev = &submit->bind_ops[submit->bind_op_count - 1];
-      if (panvk_try_merge_vm_bind_ops(prev, op))
-         return 0;
-   }
-
-   if (submit->bind_op_count == submit->bind_op_cap) {
-      int ret = panvk_bind_queue_submit_flush(submit);
-      if (ret)
-         return ret;
-   }
-
-   struct drm_panthor_vm_bind_op tmp = *op;
-   if (submit->sync_ops.wait_count > 0) {
-      tmp.syncs = (struct drm_panthor_obj_array)DRM_PANTHOR_OBJ_ARRAY(
-         submit->sync_ops.wait_count, submit->sync_ops.waits);
-      submit->sync_ops.wait_count = 0;
-   }
-
-   assert(submit->bind_op_count < submit->bind_op_cap);
-   submit->bind_ops[submit->bind_op_count++] = tmp;
-
-   return 0;
 }
 
 static int
@@ -242,40 +154,16 @@ panvk_bind_queue_submit_process_signals(struct panvk_bind_queue_submit *submit)
    struct panvk_bind_queue *queue = submit->queue;
    struct panvk_device *device =
       to_panvk_device(queue->vk.base.device);
+   struct pan_kmod_vm_multi_op_ctx *ctx = &submit->ctx;
 
-   struct drm_panthor_vm_bind_op tmp = {
-      .flags = DRM_PANTHOR_VM_BIND_OP_TYPE_SYNC_ONLY,
-   };
+   submit->pending_op.signal.array = submit->sync_ops.signals;
+   submit->pending_op.signal.count = submit->sync_ops.signal_count;
 
-   struct drm_panthor_vm_bind_op *op = submit->bind_op_count > 0
-      ? &submit->bind_ops[submit->bind_op_count - 1]
-      : &tmp;
+   int ret = pan_kmod_vm_multi_op_push(ctx, &submit->pending_op);
+   if (ret)
+      return ret;
 
-   assert(!op->syncs.array ||
-          (op->syncs.array == (__u64)(uintptr_t)submit->sync_ops.waits &&
-           op->syncs.count > 0));
-
-   /* If we
-    * - have not processed waits (i.e. have not done any bind ops at all), or
-    * - the op we're about to make do signals already waits
-    *
-    * the op will be made to do all the sync ops.
-    */
-   op->syncs = submit->sync_ops.wait_count > 0 || op->syncs.array
-         ? (struct drm_panthor_obj_array)DRM_PANTHOR_OBJ_ARRAY(
-            submit->sync_ops.all_count, submit->sync_ops.all)
-         : (struct drm_panthor_obj_array)DRM_PANTHOR_OBJ_ARRAY(
-            submit->sync_ops.signal_count, submit->sync_ops.signals);
-
-   if (op == &tmp && op->syncs.count > 0) {
-      /* If we were filling out tmp, it wasn't in the bind op buffer. Now is a
-       * good time to plop it into there.
-       */
-      assert(submit->bind_op_count < submit->bind_op_cap);
-      submit->bind_ops[submit->bind_op_count++] = tmp;
-   }
-
-   int ret = panvk_bind_queue_submit_flush(submit);
+   ret = pan_kmod_vm_multi_op_flush(ctx);
    if (ret)
       return ret;
 
@@ -291,37 +179,40 @@ panvk_bind_queue_submit_process_signals(struct panvk_bind_queue_submit *submit)
    return 0;
 }
 
-static int
-panvk_bind_queue_submit_map_to_blackhole(
-   struct panvk_bind_queue_submit *submit,
-   uint64_t base_va, uint64_t size)
+static bool
+can_merge_map_ops(struct pan_kmod_vm_op a, struct pan_kmod_vm_op b,
+                  struct pan_kmod_vm_op *out)
 {
-   struct panvk_device *dev = to_panvk_device(submit->queue->vk.base.device);
+   assert(a.type == PAN_KMOD_VM_OP_TYPE_MAP);
+   assert(b.type == PAN_KMOD_VM_OP_TYPE_MAP);
 
-   struct pan_kmod_bo *blackhole = panvk_get_blackhole(dev);
-   uint64_t blackhole_size = blackhole->size;
+   /* If the flags don't match, we don't merge. */
+   if (a.flags != b.flags)
+      return false;
 
-   uint64_t off = 0;
-   while (off < size) {
-      uint64_t bo_offset = base_va & (blackhole_size - 1);
-      uint64_t va = base_va + off;
-      uint64_t va_range = MIN2(blackhole_size - bo_offset, size - off);
+   if (b.va.start < a.va.start)
+      SWAP(a, b);
 
-      struct drm_panthor_vm_bind_op op = {
-         .flags = DRM_PANTHOR_VM_BIND_OP_TYPE_MAP,
-         .bo_handle = blackhole->handle,
-         .bo_offset = bo_offset,
-         .va = va,
-         .size = va_range,
-      };
-      int ret = panvk_bind_queue_submit_vm_bind(submit, &op);
-      if (!ret)
-         return ret;
+   if (a.va.start + a.va.size != b.va.start)
+      return false;
 
-      off += va_range;
-   }
+   if (!(a.flags & PAN_KMOD_VM_OP_OP_MAP_SPARSE) &&
+       (a.map.bo != b.map.bo || a.map.bo_offset + a.va.size != b.map.bo_offset))
+      return false;
 
-   return 0;
+   *out = (struct pan_kmod_vm_op){
+      .type = PAN_KMOD_VM_OP_TYPE_MAP,
+      .va = {
+         .start = a.va.start,
+         .size = b.va.start + b.va.size - a.va.start,
+      },
+      .map = {
+         .bo = a.map.bo,
+         .bo_offset = a.map.bo_offset,
+      },
+      .flags = a.flags,
+   };
+   return true;
 }
 
 static int
@@ -330,19 +221,37 @@ panvk_bind_queue_submit_sparse_memory_bind(
    VkDeviceAddress resource_va, const VkSparseMemoryBind *in)
 {
    VK_FROM_HANDLE(panvk_device_memory, mem, in->memory);
-
-   if (mem) {
-      struct drm_panthor_vm_bind_op op = {
-         .flags = DRM_PANTHOR_VM_BIND_OP_TYPE_MAP,
-         .bo_handle = mem->bo->handle,
-         .bo_offset = in->memoryOffset,
-         .va = resource_va + in->resourceOffset,
+   struct pan_kmod_vm_op op = {
+      .type = PAN_KMOD_VM_OP_TYPE_MAP,
+      .va = {
+         .start = resource_va + in->resourceOffset,
          .size = in->size,
-      };
-      return panvk_bind_queue_submit_vm_bind(submit, &op);
+      },
+   };
+
+   if (in->memory) {
+      op.map.bo = mem->bo;
+      op.map.bo_offset = in->memoryOffset;
    } else {
-      return panvk_bind_queue_submit_map_to_blackhole(submit, resource_va, in->size);
+      op.flags = PAN_KMOD_VM_OP_OP_MAP_SPARSE;
    }
+
+   /* We can always merge a MAP op with a SYNC_ONLY one. */
+   if (submit->pending_op.type == PAN_KMOD_VM_OP_TYPE_SYNC_ONLY ||
+       can_merge_map_ops(op, submit->pending_op, &op)) {
+      submit->pending_op.type = op.type;
+      submit->pending_op.va = op.va;
+      submit->pending_op.map = op.map;
+      submit->pending_op.flags = op.flags;
+      return 0;
+   }
+
+   /* If we can't merge, flush the pending op and replace it by our new MAP. */
+   int ret = pan_kmod_vm_multi_op_push(&submit->ctx, &submit->pending_op);
+
+   submit->pending_op = op;
+
+   return ret;
 }
 
 struct panvk_sparse_block_memory_bind {
@@ -355,13 +264,10 @@ struct panvk_sparse_block_memory_bind {
    VkDeviceSize mem_offset;
 };
 
-static int
-panvk_bind_queue_submit_sparse_block_memory_bind(
-   struct panvk_bind_queue_submit *submit,
-   const struct panvk_image *image,
-   const struct panvk_sparse_block_memory_bind *in)
+static VkSparseMemoryBind
+image_to_mem_bind(const struct panvk_image *image,
+                  const struct panvk_sparse_block_memory_bind *in)
 {
-   uint64_t resource_va = image->sparse.device_address;
    const struct panvk_image_plane *plane = &image->planes[in->plane_index];
 
    /* Previously, sparse residency was implemented using block U-interleaved
@@ -395,7 +301,8 @@ panvk_bind_queue_submit_sparse_block_memory_bind(
    assert(image->vk.image_type != VK_IMAGE_TYPE_3D || in->layer == 0);
 
    const struct pan_image_slice_layout *slayout = &plane->plane.layout.slices[in->level];
-   VkSparseMemoryBind bind = {
+
+   return (VkSparseMemoryBind){
       .resourceOffset =
          in->layer * plane->plane.layout.array_stride_B +
          slayout->offset_B +
@@ -406,7 +313,6 @@ panvk_bind_queue_submit_sparse_block_memory_bind(
       .memory = in->mem,
       .memoryOffset = in->mem_offset,
    };
-   return panvk_bind_queue_submit_sparse_memory_bind(submit, resource_va, &bind);
 }
 
 static int
@@ -418,13 +324,13 @@ panvk_bind_queue_submit_do(struct panvk_bind_queue_submit *submit,
    for (uint32_t i = 0; i < vk_submit->buffer_bind_count; i++) {
       VK_FROM_HANDLE(panvk_buffer, buf, vk_submit->buffer_binds[i].buffer);
       assert(buf->vk.create_flags & VK_BUFFER_CREATE_SPARSE_BINDING_BIT);
-
       uint64_t resource_va = buf->vk.device_address;
 
       for (uint32_t j = 0; j < vk_submit->buffer_binds[i].bindCount; j++) {
-         const VkSparseMemoryBind *in = &vk_submit->buffer_binds[i].pBinds[j];
+         const VkSparseMemoryBind *mbind = &vk_submit->buffer_binds[i].pBinds[j];
 
-         ret = panvk_bind_queue_submit_sparse_memory_bind(submit, resource_va, in);
+         ret = panvk_bind_queue_submit_sparse_memory_bind(submit, resource_va,
+                                                          mbind);
          if (ret)
             return ret;
       }
@@ -433,15 +339,15 @@ panvk_bind_queue_submit_do(struct panvk_bind_queue_submit *submit,
       VK_FROM_HANDLE(panvk_image, image,
                      vk_submit->image_opaque_binds[i].image);
       assert(image->vk.create_flags & VK_IMAGE_CREATE_SPARSE_BINDING_BIT);
-
       uint64_t resource_va = image->sparse.device_address;
 
       for (uint32_t j = 0; j < vk_submit->image_opaque_binds[i].bindCount;
            j++) {
-         const VkSparseMemoryBind *in =
+         const VkSparseMemoryBind *mbind =
             &vk_submit->image_opaque_binds[i].pBinds[j];
 
-         ret = panvk_bind_queue_submit_sparse_memory_bind(submit, resource_va, in);
+         ret = panvk_bind_queue_submit_sparse_memory_bind(submit, resource_va,
+                                                          mbind);
          if (ret)
             return ret;
       }
@@ -454,32 +360,36 @@ panvk_bind_queue_submit_do(struct panvk_bind_queue_submit *submit,
       struct panvk_sparse_block_desc sblock = panvk_get_sparse_block_desc(image->vk.image_type, image->vk.format);
 
       for (uint32_t j = 0; j < vk_submit->image_binds[i].bindCount; j++) {
-         const VkSparseImageMemoryBind *in =
+         const VkSparseImageMemoryBind *ibind =
             &vk_submit->image_binds[i].pBinds[j];
 
          VkOffset3D max = {
-            in->offset.x + in->extent.width,
-            in->offset.y + in->extent.height,
-            in->offset.z + in->extent.depth,
+            ibind->offset.x + ibind->extent.width,
+            ibind->offset.y + ibind->extent.height,
+            ibind->offset.z + ibind->extent.depth,
          };
          struct panvk_sparse_block_memory_bind bind = {
             /* We only support single-plane images right now. See
              * https://gitlab.freedesktop.org/panfrost/mesa/-/issues/243 details. */
             .plane_index = 0,
-            .level = in->subresource.mipLevel,
-            .layer = in->subresource.arrayLayer,
+            .level = ibind->subresource.mipLevel,
+            .layer = ibind->subresource.arrayLayer,
             .offset = {},
             .extent = sblock.extent,
-            .mem = in->memory,
-            .mem_offset = in->memoryOffset,
+            .mem = ibind->memory,
+            .mem_offset = ibind->memoryOffset,
          };
-         for (bind.offset.z = in->offset.z;
+
+         for (bind.offset.z = ibind->offset.z;
               bind.offset.z < max.z; bind.offset.z += sblock.extent.depth) {
-            for (bind.offset.y = in->offset.y;
+            for (bind.offset.y = ibind->offset.y;
                  bind.offset.y < max.y; bind.offset.y += sblock.extent.height) {
-               for (bind.offset.x = in->offset.x;
+               for (bind.offset.x = ibind->offset.x;
                     bind.offset.x < max.x; bind.offset.x += sblock.extent.width) {
-                  ret = panvk_bind_queue_submit_sparse_block_memory_bind(submit, image, &bind);
+                  VkSparseMemoryBind mbind = image_to_mem_bind(image, &bind);
+
+                  ret = panvk_bind_queue_submit_sparse_memory_bind(
+                     submit, image->sparse.device_address, &mbind);
                   if (ret)
                      return ret;
                   bind.mem_offset += sblock.size_B;

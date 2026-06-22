@@ -39,6 +39,7 @@ static nir_def *load_ubo_desc_fast_path(nir_builder *b, nir_def *addr_lo,
             PIPE_SWIZZLE_W,
          },
       .gfx10_oob_select = V_008F0C_OOB_SELECT_RAW,
+      .has_desc_resource_level = sel->screen->info.compiler_info.has_desc_resource_level,
    };
    uint32_t desc[4];
 

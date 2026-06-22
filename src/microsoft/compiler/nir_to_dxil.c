@@ -6350,7 +6350,7 @@ optimize_nir(struct nir_shader *s, const struct nir_to_dxil_options *opts)
       NIR_PASS(progress, s, nir_opt_algebraic_late);
    } while (progress);
 
-   NIR_PASS(_, s, nir_lower_undef_to_zero);
+   NIR_PASS(_, s, nir_lower_undef_to_zero, NULL);
 }
 
 static

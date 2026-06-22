@@ -246,6 +246,7 @@ v3dX(pack_null_texture_state)(struct v3dv_device *device, void *map)
       tex.image_width = 1;
       tex.image_height = 1;
       tex.image_depth = 1;
+      tex.array_stride_64_byte_aligned = 1;
       tex.texture_base_pointer = v3dv_cl_address(NULL, base_offset);
 #if V3D_VERSION >= 71
       /* See comment in XML field definition for rationale of the shifts */

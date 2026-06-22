@@ -203,8 +203,9 @@ struct ac_compiler_info {
    uint32_t has_cs_regalloc_hang_bug : 1;
    /* GFX6-GFX12, except GFX9: SMEM loads on NULL PRT page don't work. */
    uint32_t has_smem_with_null_prt_bug : 1;
+   uint32_t has_desc_resource_level : 1;
 
-   uint32_t reserved : 3;
+   uint32_t reserved : 2;
 };
 
 struct radeon_info {
@@ -298,6 +299,7 @@ struct radeon_info {
    bool needs_llvm_wait_wa; /* True if the chip needs to workarounds based on s_waitcnt_deptr but
                              * the LLVM version doesn't work with multiparts shaders.
                              */
+   bool has_smem_partial_oob_access_bug;
 
    /* Display features. */
    /* There are 2 display DCC codepaths, because display expects unaligned DCC. */
@@ -390,21 +392,6 @@ struct radeon_info {
    uint32_t userq_ip_mask; /* AMD_IP_* bits */
    uint8_t address_prt_wa_control_bit;
 
-   /* If the kernel driver uses CU reservation for high priority compute on gfx10+, it programs
-    * a global CU mask in the hw that is AND'ed with CU_EN register fields set by userspace.
-    * The packet that does the AND'ing is SET_SH_REG_INDEX(index = 3). If you don't use
-    * SET_SH_REG_INDEX, the global CU mask will not be applied.
-    *
-    * If uses_kernel_cu_mask is true, use SET_SH_REG_INDEX.
-    *
-    * If uses_kernel_cu_mask is false, SET_SH_REG_INDEX shouldn't be used because it only
-    * increases CP overhead and doesn't have any other effect.
-    *
-    * The alternative to this is to set the AMD_CU_MASK environment variable that has the same
-    * effect on radeonsi and RADV and doesn't need SET_SH_REG_INDEX.
-    */
-   bool uses_kernel_cu_mask;
-
    struct ac_compiler_info compiler_info;
 
    /* Shader cores. */
@@ -419,6 +406,7 @@ struct radeon_info {
    uint32_t scratch_wavesize_granularity;
    uint32_t max_scratch_waves;
    bool has_scratch_base_registers;
+   uint32_t instr_prefetch_distance;
 
    /* Pos, prim, and attribute rings. */
    uint32_t attribute_ring_size_per_se;   /* GFX11+ */

@@ -490,6 +490,7 @@ panvk_preprocess_nir(struct vk_physical_device *vk_pdev,
 
    nir_lower_compute_system_values_options options = {
       .has_base_workgroup_id = true,
+      .shuffle_local_ids_for_quad_derivatives = true,
    };
 
    NIR_PASS(_, nir, nir_lower_compute_system_values, &options);
@@ -1368,7 +1369,7 @@ panvk_compile_shader(struct panvk_device *dev,
          nir_shader *nir =
             clone_nir ? nir_shader_clone(NULL, info->nir) : info->nir;
 
-#if PAN_ARCH >= 10
+#if PAN_ARCH >= 10 && PAN_ARCH < 14
          if (inputs.view_mask) {
             nir_lower_multiview_options options = {
                .view_mask = inputs.view_mask,

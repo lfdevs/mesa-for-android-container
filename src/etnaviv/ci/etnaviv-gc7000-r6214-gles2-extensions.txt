@@ -70,6 +70,7 @@ GL_OES_stencil8
 GL_OES_surfaceless_context
 GL_OES_texture_3D
 GL_OES_texture_border_clamp
+GL_OES_texture_float
 GL_OES_texture_half_float
 GL_OES_texture_half_float_linear
 GL_OES_texture_npot

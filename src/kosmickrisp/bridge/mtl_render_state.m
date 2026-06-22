@@ -14,7 +14,7 @@
 /* TODO_KOSMICKRISP Remove */
 #include "vulkan/vulkan.h"
 
-#include <Metal/MTLRenderPass.h>
+#include <Metal/MTL4RenderPass.h>
 #include <Metal/MTLDepthStencil.h>
 
 /* Render pass descriptor */
@@ -22,7 +22,7 @@ mtl_render_pass_descriptor *
 mtl_new_render_pass_descriptor(void)
 {
    @autoreleasepool {
-      return [[MTLRenderPassDescriptor renderPassDescriptor] retain];
+      return [[MTL4RenderPassDescriptor new] init];
    }
 }
 
@@ -31,7 +31,7 @@ mtl_render_pass_descriptor_get_color_attachment(
    mtl_render_pass_descriptor *descriptor, uint32_t index)
 {
    @autoreleasepool {
-      MTLRenderPassDescriptor *desc = (MTLRenderPassDescriptor *)descriptor;
+      MTL4RenderPassDescriptor *desc = (MTL4RenderPassDescriptor *)descriptor;
       return desc.colorAttachments[index];
    }
 }
@@ -41,7 +41,7 @@ mtl_render_pass_descriptor_get_depth_attachment(
    mtl_render_pass_descriptor *descriptor)
 {
    @autoreleasepool {
-      MTLRenderPassDescriptor *desc = (MTLRenderPassDescriptor *)descriptor;
+      MTL4RenderPassDescriptor *desc = (MTL4RenderPassDescriptor *)descriptor;
       return desc.depthAttachment;
    }
 }
@@ -51,7 +51,7 @@ mtl_render_pass_descriptor_get_stencil_attachment(
    mtl_render_pass_descriptor *descriptor)
 {
    @autoreleasepool {
-      MTLRenderPassDescriptor *desc = (MTLRenderPassDescriptor *)descriptor;
+      MTL4RenderPassDescriptor *desc = (MTL4RenderPassDescriptor *)descriptor;
       return desc.stencilAttachment;
    }
 }
@@ -145,7 +145,7 @@ mtl_render_pass_descriptor_set_render_target_array_length(mtl_render_pass_descri
                                                           uint32_t length)
 {
    @autoreleasepool {
-      MTLRenderPassDescriptor *desc = (MTLRenderPassDescriptor *)descriptor;
+      MTL4RenderPassDescriptor *desc = (MTL4RenderPassDescriptor *)descriptor;
       desc.renderTargetArrayLength = length;
    }
 }
@@ -155,7 +155,7 @@ mtl_render_pass_descriptor_set_render_target_width(mtl_render_pass_descriptor *d
                                                    uint32_t width)
 {
    @autoreleasepool {
-      MTLRenderPassDescriptor *desc = (MTLRenderPassDescriptor *)descriptor;
+      MTL4RenderPassDescriptor *desc = (MTL4RenderPassDescriptor *)descriptor;
       desc.renderTargetWidth = width;
    }
 }
@@ -165,7 +165,7 @@ mtl_render_pass_descriptor_set_render_target_height(mtl_render_pass_descriptor *
                                                     uint32_t height)
 {
    @autoreleasepool {
-      MTLRenderPassDescriptor *desc = (MTLRenderPassDescriptor *)descriptor;
+      MTL4RenderPassDescriptor *desc = (MTL4RenderPassDescriptor *)descriptor;
       desc.renderTargetHeight = height;
    }
 }
@@ -175,7 +175,7 @@ mtl_render_pass_descriptor_set_default_raster_sample_count(mtl_render_pass_descr
                                                            uint32_t sample_count)
 {
    @autoreleasepool {
-      MTLRenderPassDescriptor *desc = (MTLRenderPassDescriptor *)descriptor;
+      MTL4RenderPassDescriptor *desc = (MTL4RenderPassDescriptor *)descriptor;
       desc.defaultRasterSampleCount = sample_count;
    }
 }
@@ -187,7 +187,7 @@ mtl_render_pass_descriptor_set_sample_positions(
    uint32_t count)
 {
    @autoreleasepool {
-      MTLRenderPassDescriptor *desc = (MTLRenderPassDescriptor *)descriptor;
+      MTL4RenderPassDescriptor *desc = (MTL4RenderPassDescriptor *)descriptor;
       if (count > 0) {
          MTLSamplePosition pos[count];
          for (uint32_t i = 0; i < count; i++) {
@@ -205,7 +205,7 @@ mtl_render_pass_descriptor_set_visibility_buffer(mtl_render_pass_descriptor *des
                                                  mtl_buffer *visibility_buffer)
 {
    @autoreleasepool {
-      MTLRenderPassDescriptor *desc = (MTLRenderPassDescriptor *)descriptor;
+      MTL4RenderPassDescriptor *desc = (MTL4RenderPassDescriptor *)descriptor;
       id<MTLBuffer> buffer = (id<MTLBuffer>)visibility_buffer;
       desc.visibilityResultBuffer = buffer;
    }

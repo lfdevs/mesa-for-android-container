@@ -2333,13 +2333,16 @@ rewrite_atomic_ssbo_instr(nir_builder *b, nir_instr *instr, struct bo_vars *bo)
    for (unsigned i = 0; i < num_components; i++) {
       nir_deref_instr *deref_arr = nir_build_deref_array(b, deref_struct, offset);
       nir_intrinsic_instr *new_instr = nir_intrinsic_instr_create(b->shader, op);
+      new_instr->num_components = 1;
       nir_def_init(&new_instr->instr, &new_instr->def, 1,
                    intr->def.bit_size);
       nir_intrinsic_set_atomic_op(new_instr, nir_intrinsic_atomic_op(intr));
       new_instr->src[0] = nir_src_for_ssa(&deref_arr->def);
       /* deref ops have no offset src, so copy the srcs after it */
-      for (unsigned j = 2; j < nir_intrinsic_infos[intr->intrinsic].num_srcs; j++)
+      for (unsigned j = 2; j < nir_intrinsic_infos[intr->intrinsic].num_srcs; j++) {
          new_instr->src[j - 1] = nir_src_for_ssa(intr->src[j].ssa);
+         assert(new_instr->src[j - 1].ssa->num_components == 1);
+      }
       nir_builder_instr_insert(b, &new_instr->instr);
 
       result[i] = &new_instr->def;

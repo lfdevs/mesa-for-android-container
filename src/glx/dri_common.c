@@ -925,7 +925,7 @@ dri_bind_tex_image(__GLXDRIdrawable *base, int buffer, const int *attrib_list)
 {
    struct glx_context *gc = __glXGetCurrentContext();
 
-   if (!base)
+   if (!base || !gc || !base->textureTarget)
       return;
 
    if (base->psc->display->driver == GLX_DRIVER_DRI3) {

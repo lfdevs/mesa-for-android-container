@@ -3480,16 +3480,29 @@ impl SM70Encoder<'_> {
         );
     }
 
+    fn set_atom_op_sm90_float(&mut self, range: Range<usize>, atom_op: AtomOp) {
+        assert!(self.sm >= 90);
+        self.set_field(
+            range,
+            match atom_op {
+                AtomOp::Add => 0_u8,
+                AtomOp::Min => 2_u8,
+                AtomOp::Max => 4_u8,
+                _ => panic!("Unsupported float atomic"),
+            },
+        );
+    }
+
     fn set_atom_type(&mut self, atom_type: AtomType, su: bool) {
         if self.sm >= 90 && !su {
             // Float/int is differentiated by opcode
             self.set_field(
                 73..77,
                 match atom_type {
-                    AtomType::F16x2 => 0_u8,
+                    AtomType::F16v2 => 0_u8,
                     // f16x4 => 1
                     // f16x8 => 2
-                    // bf16x2 => 3
+                    // bf16v2 => 3
                     // bf16x4 => 4
                     // bf16x8 => 5
                     AtomType::F32 => 9_u8, // .ftz
@@ -3515,7 +3528,7 @@ impl SM70Encoder<'_> {
                     AtomType::I32 => 1_u8,
                     AtomType::U64 => 2_u8,
                     AtomType::F32 => 3_u8,
-                    AtomType::F16x2 => 4_u8,
+                    AtomType::F16v2 => 4_u8,
                     AtomType::I64 => 5_u8,
                     AtomType::F64 => 6_u8,
                 },
@@ -3548,13 +3561,14 @@ impl SM70Op for OpAtom {
                 if self.dst.is_none() {
                     if e.sm >= 90 && self.atom_type.is_float() {
                         e.set_opcode(0x9a6);
+                        e.set_atom_op_sm90_float(87..90, self.atom_op);
                     } else {
                         e.set_opcode(0x98e);
+                        e.set_atom_op(87..90, self.atom_op);
                     }
 
                     e.set_reg_src(32..40, &self.data);
                     e.set_field(40..64, self.addr_offset);
-                    e.set_atom_op(87..90, self.atom_op);
                     if has_ugpr {
                         e.set_reg_addr(24..32, &self.addr, 90);
                         e.set_ureg_addr(64, &self.uniform_address, 72);
@@ -3576,10 +3590,14 @@ impl SM70Op for OpAtom {
                 } else {
                     if e.sm >= 90 && self.atom_type.is_float() {
                         e.set_opcode(0x9a3);
-                    } else if has_ugpr {
-                        e.set_opcode(0x9a8);
+                        e.set_atom_op_sm90_float(87..91, self.atom_op);
                     } else {
-                        e.set_opcode(0x3a8);
+                        if has_ugpr {
+                            e.set_opcode(0x9a8);
+                        } else {
+                            e.set_opcode(0x3a8);
+                        }
+                        e.set_atom_op(87..91, self.atom_op);
                     }
 
                     if e.sm >= 100 {
@@ -3601,7 +3619,6 @@ impl SM70Op for OpAtom {
 
                     e.set_reg_src(32..40, &self.data);
                     e.set_pred_dst(81..84, &Dst::None);
-                    e.set_atom_op(87..91, self.atom_op);
                     e.set_bit(91, has_ugpr);
                 }
 

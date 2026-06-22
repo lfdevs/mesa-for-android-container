@@ -10,7 +10,6 @@
 #include "kk_bo.h"
 #include "kk_cmd_buffer.h"
 #include "kk_device.h"
-#include "kk_encoder.h"
 #include "kk_entrypoints.h"
 
 #define KK_EVENT_MEM_SIZE sizeof(VkResult)
@@ -97,10 +96,6 @@ kk_CmdSetEvent2(VkCommandBuffer commandBuffer, VkEvent _event,
    VK_FROM_HANDLE(kk_event, event, _event);
    VK_FROM_HANDLE(kk_cmd_buffer, cmd, commandBuffer);
    kk_cmd_write(cmd, (struct libkk_imm_write){event->addr, VK_EVENT_SET});
-
-   /* Can only be called from outside of a render pass, which means we can
-    * directly upload the writes. */
-   upload_queue_writes(cmd);
 }
 
 VKAPI_ATTR void VKAPI_CALL
@@ -110,10 +105,6 @@ kk_CmdResetEvent2(VkCommandBuffer commandBuffer, VkEvent _event,
    VK_FROM_HANDLE(kk_event, event, _event);
    VK_FROM_HANDLE(kk_cmd_buffer, cmd, commandBuffer);
    kk_cmd_write(cmd, (struct libkk_imm_write){event->addr, VK_EVENT_RESET});
-
-   /* Can only be called from outside of a render pass, which means we can
-    * directly upload the writes. */
-   upload_queue_writes(cmd);
 }
 
 VKAPI_ATTR void VKAPI_CALL

@@ -1,8 +1,29 @@
 // Copyright © 2026 Collabora, Ltd.
 // SPDX-License-Identifier: MIT
 
+//! Definition of all opcodes and the [Op] struct linking them together.
+//! This is a superset of what all supported hardware can implement, many
+//! passes in the compiler will lower virtual or unsupported opcodes into
+//! supported ones.
+//!
+//! If you want to add a new Opcode:
+//! - it MUST be repr(C)
+//!
+//! - All Srcs must be consecutive in memory (same for Dsts)
+//!   (this is required for AsSlice and compile-time enforced)
+//!
+//! - If an Opcode has a vector type like V4I8, it should also implement all
+//!   other smaller vector types (both V2I8 and I8) even if they are not
+//!   supported by the hardware, [Shader::widen_alu_ops] will convert them.
+//!   This makes NIR translation easier.
+//!
+//! - Convention for variant ordering is to sort by (component_size, vector_size)
+//!   Ex: [I8, V2I8, V4I8, I16, V2I16, I32, I64]
+
+use crate::data_type::PartialDataType;
+use crate::foldable::{FoldDataView, PerCompFoldable};
 use crate::ir::*;
-use kraid_proc_macros::{variants, FromVariants, Opcode};
+use kraid_proc_macros::{FromVariants, Opcode, variants};
 use std::fmt;
 
 macro_rules! bool_as_mod_str {
@@ -58,7 +79,56 @@ impl fmt::Display for OpBranch {
 
 #[repr(C)]
 #[derive(Clone, Opcode)]
-#[variants(cmp_type in [F32, S32, U32, V2F16, V2S16, V2U16])]
+#[variants(dst_type in [I8, V2I8, V4I8, I16, V2I16, I32, I64])]
+pub struct OpCopy {
+    pub dst: Dst,
+    pub dst_type: DataType,
+    pub src: Src,
+}
+
+impl fmt::Display for OpCopy {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{} = COPY.{} {}",
+            &self.dst,
+            self.dst_type,
+            self.fmt_src(&self.src),
+        )
+    }
+}
+
+impl VirtualOpcode for OpCopy {
+    fn src_supports_imm32(&self, _src: &Src) -> bool {
+        true
+    }
+
+    fn src_supports_swizzle(&self, _src: &Src, swizzle: Swizzle) -> bool {
+        match self.dst_type.bits() {
+            8 => matches!(
+                swizzle,
+                Swizzle::B0000
+                    | Swizzle::B1111
+                    | Swizzle::B2222
+                    | Swizzle::B3333
+            ),
+            16 => matches!(swizzle, Swizzle::H00 | Swizzle::H11),
+            _ => swizzle == Swizzle::NONE,
+        }
+    }
+
+    fn dst_supports_lanes(&self, lanes: DstLanes) -> bool {
+        match self.dst_type.total_bits() {
+            8 => lanes.is_byte(),
+            16 => lanes.is_half(),
+            _ => lanes == DstLanes::All,
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(Clone, Opcode)]
+#[variants(cmp_type in [F16, S16, U16, V2F16, V2S16, V2U16, F32, S32, U32])]
 pub struct OpCSel {
     #[dst_type(VNIN)]
     pub dst: Dst,
@@ -301,6 +371,34 @@ impl fmt::Display for OpIAdd {
 
 #[repr(C)]
 #[derive(Clone, Opcode)]
+#[variants(dst_type in [
+    S8, U8, V2S8, V2U8, V4S8, V4U8,
+    S16, U16, V2S16, V2U16,
+    S32, U32, S64, U64
+])]
+pub struct OpIMul {
+    pub dst: Dst,
+    pub dst_type: DataType,
+    pub saturate: bool,
+    pub srcs: [Src; 2],
+}
+
+impl fmt::Display for OpIMul {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let sat = if self.saturate { ".sat" } else { "" };
+        write!(
+            f,
+            "{} = IMUL.{}{sat} {} {}",
+            &self.dst,
+            self.dst_type,
+            self.fmt_src(&self.srcs[0]),
+            self.fmt_src(&self.srcs[1]),
+        )
+    }
+}
+
+#[repr(C)]
+#[derive(Clone, Opcode)]
 #[variants(src_type in [S16, U16, V2S16, V2U16, S32, U32])]
 pub struct OpICmp {
     pub dst: Dst,
@@ -444,11 +542,75 @@ impl fmt::Display for OpMkVecV2I8 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "{} = MKVEC.v4i8 {} {}",
+            "{} = MKVEC.v2i8 {} {}",
             &self.dst,
             self.fmt_src(&self.srcs[0]),
             self.fmt_src(&self.srcs[1]),
         )
+    }
+}
+
+/// This op should never be emitted directly.  Instead, use one of the other
+/// MKVEC ops and trust lower_mkvec_swz() to lower it if needed.
+#[repr(C)]
+#[derive(Clone, Opcode)]
+pub struct OpMkVecV2I8I16 {
+    #[dst_type(V4I8)]
+    pub dst: Dst,
+
+    #[src_type(I8)]
+    pub srcs: [Src; 2],
+
+    #[src_type(I16)]
+    pub accum: Src,
+}
+
+impl fmt::Display for OpMkVecV2I8I16 {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{} = MKVEC.v2i8+i16 {} {} {}",
+            &self.dst,
+            self.fmt_src(&self.srcs[0]),
+            self.fmt_src(&self.srcs[1]),
+            self.fmt_src(&self.accum),
+        )
+    }
+}
+
+#[repr(C)]
+#[derive(Clone, Opcode)]
+pub struct OpMkVecV2I16 {
+    #[dst_type(V2I16)]
+    pub dst: Dst,
+
+    #[src_type(I16)]
+    pub srcs: [Src; 2],
+}
+
+impl fmt::Display for OpMkVecV2I16 {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{} = MKVEC.v2i16 {} {}",
+            &self.dst,
+            self.fmt_src(&self.srcs[0]),
+            self.fmt_src(&self.srcs[1]),
+        )
+    }
+}
+
+impl VirtualOpcode for OpMkVecV2I8 {
+    fn src_supports_imm32(&self, _src: &Src) -> bool {
+        true
+    }
+
+    fn src_supports_swizzle(&self, _src: &Src, swizzle: Swizzle) -> bool {
+        swizzle.replicates_byte()
+    }
+
+    fn dst_supports_lanes(&self, lanes: DstLanes) -> bool {
+        lanes.is_half()
     }
 }
 
@@ -476,9 +638,23 @@ impl fmt::Display for OpMkVecV4I8 {
     }
 }
 
+impl VirtualOpcode for OpMkVecV4I8 {
+    fn src_supports_imm32(&self, _src: &Src) -> bool {
+        true
+    }
+
+    fn src_supports_swizzle(&self, _src: &Src, swizzle: Swizzle) -> bool {
+        swizzle.replicates_byte()
+    }
+
+    fn dst_supports_lanes(&self, lanes: DstLanes) -> bool {
+        lanes == DstLanes::All
+    }
+}
+
 #[repr(C)]
 #[derive(Clone, Opcode)]
-#[variants(dst_type in [I16, I32])]
+#[variants(dst_type in [V2I16, I32])]
 pub struct OpMov {
     pub dst: Dst,
     pub dst_type: DataType,
@@ -499,6 +675,54 @@ impl fmt::Display for OpMov {
 
 #[repr(C)]
 #[derive(Clone, Opcode)]
+#[variants(dst_type in [I8, I16, I32, I64])]
+pub struct OpRegIn {
+    pub dst: Dst,
+    pub dst_type: DataType,
+    pub reg: RegRef,
+}
+
+impl fmt::Display for OpRegIn {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} = REG_IN.{} {}", &self.dst, self.dst_type, &self.reg)
+    }
+}
+
+impl VirtualOpcode for OpRegIn {
+    fn dst_supports_lanes(&self, lanes: DstLanes) -> bool {
+        lanes == DstLanes::from(self.reg.range)
+    }
+}
+
+#[repr(C)]
+#[derive(Clone, Opcode)]
+#[variants(src_type in [I8, I16, I32, I64])]
+pub struct OpRegOut {
+    pub reg: RegRef,
+    pub src_type: DataType,
+    pub src: Src,
+}
+
+impl fmt::Display for OpRegOut {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{} = REG_OUT.{} {}",
+            &self.reg,
+            self.src_type,
+            self.fmt_src(&self.src),
+        )
+    }
+}
+
+impl VirtualOpcode for OpRegOut {
+    fn src_supports_swizzle(&self, _src: &Src, swizzle: Swizzle) -> bool {
+        swizzle == Swizzle::from(self.reg.range)
+    }
+}
+
+#[repr(C)]
+#[derive(Clone, Opcode)]
 pub struct OpNop {}
 
 impl fmt::Display for OpNop {
@@ -507,8 +731,10 @@ impl fmt::Display for OpNop {
     }
 }
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, Default, PartialEq)]
 pub enum ShiftOp {
+    #[default]
+    None,
     LShift,
     RShift,
     ARShift,
@@ -519,6 +745,7 @@ pub enum ShiftOp {
 impl fmt::Display for ShiftOp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            ShiftOp::None => Ok(()),
             ShiftOp::LShift => write!(f, "LSHIFT"),
             ShiftOp::RShift => write!(f, "RSHIFT"),
             ShiftOp::ARShift => write!(f, "ARSHIFT"),
@@ -528,8 +755,16 @@ impl fmt::Display for ShiftOp {
     }
 }
 
-#[derive(Clone, Copy, PartialEq)]
+impl ShiftOp {
+    pub fn is_none(&self) -> bool {
+        matches!(self, ShiftOp::None)
+    }
+}
+
+#[derive(Clone, Copy, Default, PartialEq)]
 pub enum LogicOp {
+    #[default]
+    None,
     And,
     Or,
     Xor,
@@ -538,6 +773,7 @@ pub enum LogicOp {
 impl fmt::Display for LogicOp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            LogicOp::None => write!(f, "NONE"),
             LogicOp::And => write!(f, "AND"),
             LogicOp::Or => write!(f, "OR"),
             LogicOp::Xor => write!(f, "XOR"),
@@ -545,9 +781,15 @@ impl fmt::Display for LogicOp {
     }
 }
 
+impl LogicOp {
+    pub fn is_none(&self) -> bool {
+        matches!(self, LogicOp::None)
+    }
+}
+
 #[repr(C)]
 #[derive(Clone, Opcode)]
-#[variants(dst_type in [I8, I16, V4I8, V2I16, I32, I64])]
+#[variants(dst_type in [U8, V2U8, V4U8, U16, V2U16, U32, U64])]
 pub struct OpShiftLop {
     pub dst: Dst,
     pub dst_type: DataType,
@@ -564,17 +806,118 @@ pub struct OpShiftLop {
 
 impl fmt::Display for OpShiftLop {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} = ", &self.dst)?;
+        match (self.shift_op, self.logic_op) {
+            (ShiftOp::None, LogicOp::None) => write!(f, "NO_SHIFT")?,
+            (shift_op, LogicOp::None) => write!(f, "{shift_op}")?,
+            (ShiftOp::None, logic_op) => write!(f, "{logic_op}")?,
+            (shift_op, logic_op) => write!(f, "{shift_op}_{logic_op}")?,
+        }
         write!(
             f,
-            "{} = {}_{}.{} {} {} {}",
-            &self.dst,
-            self.shift_op,
-            self.logic_op,
+            ".{} {} {} {}",
             self.dst_type,
             self.fmt_src(&self.src0),
             self.fmt_src(&self.shift),
             self.fmt_src(&self.src2),
         )
+    }
+}
+
+impl PerCompFoldable for OpShiftLop {
+    fn fold_comp(&self, _sm: &dyn Model, f: &mut impl FoldDataView) {
+        let src0 = f.get_src(&self.src0);
+        // Only the last 3-6 bits are useful, unused shift bits are ignored
+        let shift = f.get_src(&self.shift) as u32;
+        let src2 = f.get_src(&self.src2);
+
+        let data = match (self.shift_op, self.dst_type.bits()) {
+            (ShiftOp::None, _) => src0,
+            (ShiftOp::LShift, 64) => src0.wrapping_shl(shift),
+            (ShiftOp::LShift, 32) => (src0 as u32).wrapping_shl(shift) as u64,
+            (ShiftOp::LShift, 16) => (src0 as u16).wrapping_shl(shift) as u64,
+            (ShiftOp::LShift, 8) => (src0 as u8).wrapping_shl(shift) as u64,
+            (ShiftOp::RShift, 64) => src0.wrapping_shr(shift),
+            (ShiftOp::RShift, 32) => (src0 as u32).wrapping_shr(shift) as u64,
+            (ShiftOp::RShift, 16) => (src0 as u16).wrapping_shr(shift) as u64,
+            (ShiftOp::RShift, 8) => (src0 as u8).wrapping_shr(shift) as u64,
+            (ShiftOp::ARShift, 64) => (src0 as i64).wrapping_shr(shift) as u64,
+            (ShiftOp::ARShift, 32) => (src0 as i32).wrapping_shr(shift) as u64,
+            (ShiftOp::ARShift, 16) => (src0 as i16).wrapping_shr(shift) as u64,
+            (ShiftOp::ARShift, 8) => (src0 as i8).wrapping_shr(shift) as u64,
+            (ShiftOp::RRot, 64) => src0.rotate_right(shift),
+            (ShiftOp::RRot, 32) => (src0 as u32).rotate_right(shift) as u64,
+            (ShiftOp::RRot, 16) => (src0 as u16).rotate_right(shift) as u64,
+            (ShiftOp::RRot, 8) => (src0 as u8).rotate_right(shift) as u64,
+            (ShiftOp::LRot, 64) => src0.rotate_left(shift),
+            (ShiftOp::LRot, 32) => (src0 as u32).rotate_left(shift) as u64,
+            (ShiftOp::LRot, 16) => (src0 as u16).rotate_left(shift) as u64,
+            (ShiftOp::LRot, 8) => (src0 as u8).rotate_left(shift) as u64,
+            _ => unreachable!(),
+        };
+
+        let mut data = match self.logic_op {
+            LogicOp::None => data,
+            LogicOp::And => data & src2,
+            LogicOp::Or => data | src2,
+            LogicOp::Xor => data ^ src2,
+        };
+        if self.not_result {
+            data = !data;
+        }
+
+        f.set_dst(&self.dst, data);
+    }
+}
+
+#[repr(C)]
+#[derive(Clone, Opcode)]
+#[variants(src_type in [
+    I8, S8, U8,
+    V2I8, V2S8, V2U8,
+    V4I8, V4S8, V4U8,
+    F16, I16, S16, U16,
+    V2F16, V2I16, V2S16, V2U16,
+    F32, I32, S32, U32,
+    I64, S64, U64,
+])]
+pub struct OpSwz {
+    pub dst: Dst,
+    pub src_type: DataType,
+    pub src: Src,
+}
+
+impl fmt::Display for OpSwz {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{} = SWZ.{} {}",
+            &self.dst,
+            self.src_type,
+            self.fmt_src(&self.src),
+        )
+    }
+}
+
+impl VirtualOpcode for OpSwz {
+    fn src_supports_swizzle(&self, _src: &Src, swizzle: Swizzle) -> bool {
+        if matches!(swizzle, Swizzle::HF0 | Swizzle::HF1) {
+            self.src_type == DataType::F32
+        } else if swizzle == Swizzle::NONE {
+            true
+        } else if swizzle.is_word_swizzle() {
+            self.src_type.bits() == 64
+        } else {
+            self.src_type.bits() <= 32
+        }
+    }
+
+    fn dst_supports_lanes(&self, lanes: DstLanes) -> bool {
+        match self.src_type.total_bits() {
+            8 => lanes.is_byte(),
+            16 => lanes.is_half(),
+            _ => lanes == DstLanes::All,
+        }
     }
 }
 
@@ -609,21 +952,28 @@ impl fmt::Display for OpStore {
 #[derive(Clone, FromVariants, Opcode)]
 pub enum Op {
     Branch(Box<OpBranch>),
+    Copy(Box<OpCopy>),
     CSel(Box<OpCSel>),
     F16ToF32(Box<OpF16ToF32>),
     F32ToF16(Box<OpF32ToF16>),
     FAdd(Box<OpFAdd>),
     FCmp(Box<OpFCmp>),
     IAdd(Box<OpIAdd>),
+    IMul(Box<OpIMul>),
     ICmp(Box<OpICmp>),
     LeaPka(Box<OpLeaPka>),
     LdPka(Box<OpLdPka>),
     Load(Box<OpLoad>),
     MkVecV2I8(Box<OpMkVecV2I8>),
+    MkVecV2I8I16(Box<OpMkVecV2I8I16>),
+    MkVecV2I16(Box<OpMkVecV2I16>),
     MkVecV4I8(Box<OpMkVecV4I8>),
     Nop(OpNop),
     Mov(Box<OpMov>),
+    RegIn(Box<OpRegIn>),
+    RegOut(Box<OpRegOut>),
     ShiftLop(Box<OpShiftLop>),
+    Swz(Box<OpSwz>),
     Store(Box<OpStore>),
 }
 
@@ -631,6 +981,20 @@ pub enum Op {
 const _: () = {
     assert!(size_of::<Op>() == 16);
 };
+
+impl Op {
+    pub fn as_virtual(&self) -> Option<&dyn VirtualOpcode> {
+        match self {
+            Op::Copy(op) => Some(op.as_ref()),
+            Op::MkVecV2I8(op) => Some(op.as_ref()),
+            Op::MkVecV4I8(op) => Some(op.as_ref()),
+            Op::RegIn(op) => Some(op.as_ref()),
+            Op::RegOut(op) => Some(op.as_ref()),
+            Op::Swz(op) => Some(op.as_ref()),
+            _ => None,
+        }
+    }
+}
 
 // The Opcode constraint exists to keep the type system from recursing
 impl<T: Opcode> From<T> for Op

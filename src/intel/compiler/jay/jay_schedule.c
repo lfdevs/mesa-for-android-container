@@ -100,9 +100,17 @@ populate_dag(struct sched_ctx *ctx,
          address = ctx->dag.node;
       }
 
-      /* Serialize side effects for now */
+      /* Serialize side effects for now, including SENDs which need to be
+       * predicated away after a demote.
+       */
       if ((I->op == JAY_OPCODE_SEND && !jay_send_pure(I)) ||
-          I->op == JAY_OPCODE_SCHEDULE_BARRIER) {
+          I->op == JAY_OPCODE_SCHEDULE_BARRIER ||
+          I->op == JAY_OPCODE_INIT_HELPERS ||
+          I->op == JAY_OPCODE_DEMOTE ||
+          I->op == JAY_OPCODE_HELPER_SEL ||
+          (I->op == JAY_OPCODE_SEND &&
+           func->shader->helpers_tracked &&
+           jay_send_skip_helpers(I))) {
 
          jay_dag_add_edge(&ctx->dag, sidefx);
          sidefx = ctx->dag.node;
@@ -321,6 +329,7 @@ pass(jay_function *f)
 
          populate_dag(&sctx, f, block, def);
          pressure_schedule_block(f, block, &schedule, &sctx, memctx);
+         f->prioritize_pressure = true;
       }
    }
 

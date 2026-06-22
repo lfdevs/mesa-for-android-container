@@ -1,6 +1,7 @@
 // Copyright © 2026 Collabora, Ltd.
 // SPDX-License-Identifier: MIT
 
+use crate::debug::*;
 use crate::ir::*;
 use crate::model::model_for_gpu_id;
 use compiler::bindings::*;
@@ -8,6 +9,10 @@ use kraid_bindings::*;
 use std::cmp::max;
 
 fn dump_shader(s: &Shader, suffix: &str) {
+    if !DEBUG.contains(DebugFlags::PRINT) {
+        return;
+    }
+
     let s = format!("{s}");
 
     let mut max_eq_pos = 0_usize;
@@ -67,10 +72,28 @@ pub extern "C" fn kraid_compile_nir(
 ) {
     let model = model_for_gpu_id(inputs.gpu_id).unwrap();
 
-    eprint!("{}", nir.to_string().unwrap());
+    if DEBUG.contains(DebugFlags::PRINT) {
+        eprint!("{}", nir.to_string().unwrap());
+    }
 
     let mut s = Shader::from_nir(model.as_ref(), nir);
     dump_shader(&s, "after translation from NIR");
+    s.validate();
+
+    s.remat_constants();
+    dump_shader(&s, "after re-materializing constants");
+    s.validate();
+
+    s.widen_alu_ops();
+    dump_shader(&s, "after widening ALU ops");
+    s.validate();
+
+    s.legalize_src_swizzles();
+    dump_shader(&s, "after legalizing src swizzles");
+    s.validate();
+
+    s.lower_mkvec_swz();
+    dump_shader(&s, "after lowering MKVEC and SWIZ instructions");
     s.validate();
 
     s.lower_small_constants();
@@ -81,8 +104,8 @@ pub extern "C" fn kraid_compile_nir(
     dump_shader(&s, "after register assignment");
     s.validate();
 
-    s.lower_16bit_alu();
-    dump_shader(&s, "after lowering 16bit ALU ops");
+    s.lower_copy();
+    dump_shader(&s, "after lowering copies");
     s.validate();
 
     s.assign_message_slots();

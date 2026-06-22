@@ -530,10 +530,12 @@ static uint8_t fp16_lowering_supported(enum OpenCLstd_Entrypoints opcode)
    case OpenCLstd_Ldexp:
    case OpenCLstd_Lgamma_r:
    case OpenCLstd_Pown:
-   case OpenCLstd_Remquo:
    case OpenCLstd_Rootn:
       /* second argument shouldn't be touched at all */
       return 0xff ^ (1 << 2);
+   case OpenCLstd_Remquo:
+      /* third argument is the integer quotient pointer. */
+      return 0xff ^ (1 << 3);
    /* the second argument is a pointer to a float
     * a new enough libclc supports it though
     */

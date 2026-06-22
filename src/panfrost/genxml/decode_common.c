@@ -486,6 +486,14 @@ pandecode_cs_trace(struct pandecode_context *ctx, uint64_t trace_gpu_va,
 }
 
 void
+pandecode_set_disassemble(struct pandecode_context *ctx,
+                          pandecode_shader_disassemble_cb cb)
+{
+   assert(ctx->dissassemble == NULL && "pandecode_set_disassemble already called");
+   ctx->dissassemble = cb;
+}
+
+void
 pandecode_shader_disassemble(struct pandecode_context *ctx, uint64_t shader_ptr,
                              uint64_t gpu_id)
 {
@@ -503,7 +511,8 @@ pandecode_shader_disassemble(struct pandecode_context *ctx, uint64_t shader_ptr,
                       code, shader_ptr, sz);
 
    bool verbose = pan_arch(gpu_id) >= 6;
-   pan_disassemble(ctx->dump_stream, code, sz, gpu_id, verbose);
+   if (ctx->dissassemble)
+      ctx->dissassemble(ctx->dump_stream, code, sz, gpu_id, verbose);
 
    pandecode_log_cont(ctx, "\n\n");
 }

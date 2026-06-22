@@ -281,6 +281,14 @@ kk_CreateDevice(VkPhysicalDevice physicalDevice,
    vk_device_dispatch_table_from_entrypoints(&dispatch_table,
                                              &wsi_device_entrypoints, false);
 
+   // /* Populate primary cmd_dispatch table */
+   // vk_device_dispatch_table_from_entrypoints(&dev->cmd_dispatch,
+   //                                           &kk_device_entrypoints, true);
+   // vk_device_dispatch_table_from_entrypoints(&dev->cmd_dispatch,
+   //                                           &wsi_device_entrypoints, false);
+   // vk_device_dispatch_table_from_entrypoints(
+   //    &dev->cmd_dispatch, &vk_common_device_entrypoints, false);
+
    result = vk_device_init(&dev->vk, &pdev->vk, &dispatch_table, pCreateInfo,
                            pAllocator);
    if (result != VK_SUCCESS)
@@ -290,6 +298,7 @@ kk_CreateDevice(VkPhysicalDevice physicalDevice,
    dev->mtl_handle = pdev->mtl_dev_handle;
    dev->vk.command_buffer_ops = &kk_cmd_buffer_ops;
    dev->vk.command_dispatch_table = &dev->vk.dispatch_table;
+   // dev->vk.command_dispatch_table = &dev->cmd_dispatch;
    dev->vk.get_timestamp = kk_get_timestamp;
 
    kk_parse_device_environment_options(dev);

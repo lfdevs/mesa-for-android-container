@@ -5,8 +5,6 @@
 #include "anv_private.h"
 #include "anv_api_version.h"
 
-#include "util/driconf.h"
-
 static const struct debug_control debug_control[] = {
    { "bindless",                  ANV_DEBUG_BINDLESS},
    { "desc-dirty",                ANV_DEBUG_DESCRIPTOR_DIRTY},

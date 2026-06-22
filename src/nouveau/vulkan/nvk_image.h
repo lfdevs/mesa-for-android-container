@@ -225,6 +225,9 @@ nvk_image_memory_aspects_to_plane(ASSERTED const struct nvk_image *image,
    }
 }
 
+bool nvk_image_plane_aligned_for_linear_attachment(const struct nvk_image_plane *plane,
+                                                   const struct nil_image_level *level);
+
 VkResult nvk_queue_image_bind(struct nvk_queue *queue,
                               const VkSparseImageMemoryBindInfo *bind_info);
 

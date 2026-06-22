@@ -193,6 +193,7 @@ struct mpc_funcs {
     void (*program_mpc_3dlut_fl)(struct mpc *mpc, enum lut_dimension lut_dimension, bool use_12bit);
 
     void (*shaper_bypass)(struct mpc *mpc, bool bypass);
+    bool (*program_shaper_indirect)(struct mpc *, struct vpe_dma_shaper *);
 
 };
 

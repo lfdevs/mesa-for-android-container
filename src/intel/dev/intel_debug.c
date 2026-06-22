@@ -108,6 +108,8 @@ static const struct debug_control_bitset debug_control[] = {
    OPT1("bvh_tlas_ir_hdr",   DEBUG_BVH_TLAS_IR_HDR),
    OPT1("bvh_blas_ir_as",    DEBUG_BVH_BLAS_IR_AS),
    OPT1("bvh_tlas_ir_as",    DEBUG_BVH_TLAS_IR_AS),
+   OPT1("bvh_pcrel_map",     DEBUG_BVH_PCREL_MAP),
+   OPT1("bvh_update_as",     DEBUG_BVH_UPDATE_AS),
    OPT1("bvh_no_build",      DEBUG_BVH_NO_BUILD),
    OPT1("task",              DEBUG_TASK),
    OPT1("mesh",              DEBUG_MESH),

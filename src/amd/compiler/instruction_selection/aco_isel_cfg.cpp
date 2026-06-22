@@ -159,7 +159,7 @@ end_loop(isel_context* ctx)
 }
 
 void
-emit_halt(isel_context* ctx)
+emit_abort(isel_context* ctx)
 {
    Builder bld(ctx->program, ctx->block);
 

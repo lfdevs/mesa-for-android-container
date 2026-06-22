@@ -84,8 +84,10 @@ panfrost_open_device(void *memctx, int fd, struct panfrost_device *dev)
       list_inithead(&dev->bo_cache.buckets[i]);
 
    /* Initialize pandecode before we start allocating */
-   if (dev->debug & (PAN_DBG_TRACE | PAN_DBG_SYNC))
+   if (dev->debug & (PAN_DBG_TRACE | PAN_DBG_SYNC)) {
       dev->decode_ctx = pandecode_create_context(!(dev->debug & PAN_DBG_TRACE));
+      pandecode_set_disassemble(dev->decode_ctx, pan_disassemble);
+   }
 
    /* Tiler heap is internally required by the tiler, which can only be
     * active for a single job chain at once, so a single heap can be

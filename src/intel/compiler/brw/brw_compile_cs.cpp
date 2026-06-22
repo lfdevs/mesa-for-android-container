@@ -137,6 +137,17 @@ brw_compile_cs(const struct brw_compiler *compiler,
       prog_data->local_size[0] = nir->info.workgroup_size[0];
       prog_data->local_size[1] = nir->info.workgroup_size[1];
       prog_data->local_size[2] = nir->info.workgroup_size[2];
+
+      if (nir->info.workgroup_size[0] * nir->info.workgroup_size[1] % 32 == 0) {
+         struct nir_shader_compiler_options *options =
+            ralloc(nir, struct nir_shader_compiler_options);
+
+         *options = *nir->options;
+         options->divergence_analysis_options = nir_divergence_options(
+            options->divergence_analysis_options |
+            nir_divergence_uniform_local_invocation_id_z);
+         nir->options = options;
+      }
    }
 
    brw_pass_tracker pt_ = {

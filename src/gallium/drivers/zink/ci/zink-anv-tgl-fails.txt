@@ -47,12 +47,6 @@ spec@!opengl 1.0@rasterpos,Fail
 spec@!opengl 1.0@rasterpos@glsl_vs_gs_linked,Fail
 spec@!opengl 1.0@rasterpos@glsl_vs_tes_linked,Fail
 
-spec@!opengl 1.1@linestipple@Line strip,Fail
-spec@!opengl 1.1@linestipple@Line loop,Fail
-spec@!opengl 1.1@linestipple@Factor 2x,Fail
-spec@!opengl 1.1@linestipple@Factor 3x,Fail
-spec@!opengl 1.1@linestipple,Fail
-
 # polygon-mode: glPolygonMode(front=GL_LINE, back=GL_FILL), glCullMode(GL_NONE/GL_FALSE/GL_NO_ERROR) failed
 # At position 0, found prim GL_FILL instead of GL_LINE
 # polygon-mode: glPolygonMode(front=GL_POINT, back=GL_FILL), glCullMode(GL_NONE/GL_FALSE/GL_NO_ERROR) failed

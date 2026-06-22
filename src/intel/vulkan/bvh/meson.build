@@ -7,6 +7,7 @@ bvh_shaders = [
   'encode.comp',
   'header.comp',
   'copy.comp',
+  'update.comp',
 ]
 
 # A mapping: [filename version, GFX_VERx10 define version]
@@ -23,6 +24,7 @@ anv_bvh_includes = files(
   'anv_build_helpers.h',
   'anv_build_interface.h',
   'anv_bvh.h',
+  'encode.h',
 )
 
 foreach shader : bvh_shaders

@@ -1,1 +1,0 @@
-test_amplification_shader_execute_indirect_state

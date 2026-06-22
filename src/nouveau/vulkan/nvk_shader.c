@@ -302,7 +302,7 @@ lower_load_intrinsic(nir_builder *b, nir_intrinsic_instr *load,
          nir_def *sat_offset =
             nir_umin(b, offset, nir_imm_int(b, UINT32_MAX - (load_size - 1)));
          nir_def *in_bounds =
-            nir_ilt(b, nir_iadd_imm(b, sat_offset, load_size - 1), bound);
+            nir_ult(b, nir_iadd_imm(b, sat_offset, load_size - 1), bound);
 
          nir_push_if(b, in_bounds);
       }

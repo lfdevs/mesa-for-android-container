@@ -474,6 +474,7 @@ struct jayb_send_params {
    bool uniform;
    bool bindless;
    bool pure;
+   bool skip_helpers;
 };
 
 static inline jay_inst *
@@ -588,6 +589,7 @@ _jay_SEND(jay_builder *b, const struct jayb_send_params p)
    info->uniform = p.uniform;
    info->bindless = p.bindless;
    info->pure = p.pure;
+   info->skip_helpers = p.skip_helpers;
    info->ex_desc_imm = p.ex_desc_imm;
    info->ex_mlen = lens[2];
    I->src[0] = jay_imm(((uint32_t) p.msg_desc) |

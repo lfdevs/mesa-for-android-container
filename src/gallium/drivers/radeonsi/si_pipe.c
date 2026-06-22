@@ -12,12 +12,10 @@
 
 #include "driver_ddebug/dd_util.h"
 #include "si_public.h"
-#include "sid.h"
 #include "util/u_memory.h"
 #include "util/u_suballoc.h"
 #include "util/u_upload_mgr.h"
 #include "util/xmlconfig.h"
-#include "si_utrace.h"
 
 #if AMD_LLVM_AVAILABLE
 #include "ac_llvm_util.h"

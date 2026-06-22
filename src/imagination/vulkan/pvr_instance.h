@@ -15,7 +15,7 @@
 #define PVR_INSTANCE_H
 
 #include "vk_instance.h"
-#include "util/xmlconfig.h"
+#include "pvr_drirc.h"
 
 #include <stdint.h>
 
@@ -26,12 +26,9 @@ struct pvr_instance {
 
    uint32_t active_device_count;
 
-   struct driOptionCache dri_options;
-   struct driOptionCache available_dri_options;
+   struct pvr_drirc drirc;
 
    uint8_t driver_build_sha[BLAKE3_KEY_LEN];
-   uint32_t force_vk_vendor;
-   float heap_memory_percent;
 };
 
 VK_DEFINE_HANDLE_CASTS(pvr_instance,

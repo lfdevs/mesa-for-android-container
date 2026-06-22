@@ -205,7 +205,7 @@ static enum vpe_status create_input_config_vector(struct stream_ctx *stream_ctx)
             break;
         }
 
-        for (type_idx = 0; type_idx < VPE_CMD_TYPE_COUNT; type_idx++) {
+        for (type_idx = 0; type_idx < VPE_CMD_OPS_COUNT; type_idx++) {
             stream_ctx->stream_op_configs[pipe_idx][type_idx] =
                 vpe_vector_create(vpe_priv, sizeof(struct config_record), MIN_NUM_CONFIG);
             if (!stream_ctx->stream_op_configs[pipe_idx][type_idx]) {
@@ -234,7 +234,7 @@ static void destroy_input_config_vector(struct stream_ctx *stream_ctx)
             stream_ctx->configs[pipe_idx] = NULL;
         }
 
-        for (type_idx = 0; type_idx < VPE_CMD_TYPE_COUNT; type_idx++) {
+        for (type_idx = 0; type_idx < VPE_CMD_OPS_COUNT; type_idx++) {
             if (stream_ctx->stream_op_configs[pipe_idx][type_idx]) {
                 vpe_vector_free(stream_ctx->stream_op_configs[pipe_idx][type_idx]);
                 stream_ctx->stream_op_configs[pipe_idx][type_idx] = NULL;
@@ -367,6 +367,7 @@ void vpe_pipe_reset(struct vpe_priv *vpe_priv)
         pipe_ctx->is_top_pipe  = true;
         pipe_ctx->owner        = PIPE_CTX_NO_OWNER;
         pipe_ctx->top_pipe_idx = 0xff;
+        pipe_ctx->cmd_type     = VPE_CMD_OPS_COUNT;
     }
 }
 
@@ -901,7 +902,7 @@ void vpe_frontend_config_callback(
     struct config_frontend_cb_ctx *cb_ctx     = (struct config_frontend_cb_ctx *)ctx;
     struct vpe_priv               *vpe_priv   = cb_ctx->vpe_priv;
     struct stream_ctx             *stream_ctx = &vpe_priv->stream_ctx[cb_ctx->stream_idx];
-    enum vpe_cmd_type              cmd_type;
+    enum vpe_cmd_ops               cmd_type;
     struct config_record           record;
 
     if (cb_ctx->stream_sharing) {
@@ -948,7 +949,7 @@ uint32_t vpe_get_recout_width_alignment(const struct vpe_build_param *params)
 
     dst_subsampled = vpe_is_subsampled_format(params->dst_surface.format);
 
-    if (params->frod_param.enable_frod == true)
+    if (params->frod_param.enable_frod)
         recout_alignment = VPE_FROD_ALIGNMENT;
     else if (dst_subsampled == true)
         recout_alignment = VPE_SUBSAMPLED_OUT_ALIGNMENT;

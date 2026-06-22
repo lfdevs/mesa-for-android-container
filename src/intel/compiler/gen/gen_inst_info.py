@@ -13,6 +13,15 @@ import os
 import re
 import sys
 
+from gen_opcodes import OPCODES, Props
+
+
+def c_bool(value):
+    return 'true' if value else 'false'
+
+
+def opcode_has_dst(opcode):
+    return not bool(opcode.props & Props.NO_DST)
 
 
 H_TEMPLATE = """\
@@ -36,21 +45,38 @@ extern "C" {
 struct gen_encoding_${info.name.lower()} {
    static constexpr gen_encoding_type TYPE = GEN_ENCODING_${info.name.upper()};
 
-% for (i, r) in info.fields.items():
-   FIELD(${i}, ${comma_join(r)});
+   /* Instruction fields */
+% for (i, rs) in info.fields.items():
+   static constexpr auto ${i} = gen_ranges<${len(rs)}>({
+% for r in rs:
+      gen_range { ${comma_join(r)} },
 % endfor
-% for (i, r) in info.compact_fields.items():
-   FIELD(C_${i}, ${comma_join(r)});
+   });
 % endfor
-% for (i, r) in info.sub_fields.items():
-   SUB_FIELD(${i}, ${comma_join(r)});
+
+   /* Compact instruction fields */
+% for (i, rs) in info.compact_fields.items():
+   static constexpr auto C_${i} = gen_ranges<${len(rs)}>({
+% for r in rs:
+      gen_range { ${comma_join(r)} },
+% endfor
+   });
+% endfor
+
+   /* Instruction sub fields */
+% for (i, rs) in info.sub_fields.items():
+   static constexpr auto ${i} = gen_sub_ranges<${len(rs)}>({
+% for r in rs:
+      gen_sub_range { ${comma_join(r)} },
+% endfor
+   });
 % endfor
 
    static constexpr std::array<gen_inst_description, 128> gen_to_description =
    []() constexpr {
       std::array<gen_inst_description, 128> r;
-% for (op, brw) in info.gen_op_to_brw.items():
-      r[GEN_OP_${op}] = gen_inst_description(GEN_OP_${op}, ${brw});
+% for (op, hw) in info.gen_op_to_hw:
+      r[GEN_OP_${op.enum_name}] = gen_inst_description(GEN_OP_${op.enum_name}, ${hw}, ${op.format}, ${c_bool(opcode_has_dst(op))});
 % endfor
       return r;
    }();
@@ -58,8 +84,8 @@ struct gen_encoding_${info.name.lower()} {
    static constexpr std::array<gen_inst_description, 128> hw_to_description =
    []() constexpr {
       std::array<gen_inst_description, 128> r;
-% for (op, brw) in info.gen_op_to_brw.items():
-      r[${brw}] = gen_inst_description(GEN_OP_${op}, ${brw});
+% for (op, hw) in info.gen_op_to_hw:
+      r[${hw}] = gen_inst_description(GEN_OP_${op.enum_name}, ${hw}, ${op.format}, ${c_bool(opcode_has_dst(op))});
 % endfor
       return r;
    }();
@@ -79,6 +105,7 @@ class InstructionInfo:
         self.name = name
         self.imported = set()
         self.target = self.__init_with_inheritance(raw_info, name)
+        self.__process_ranges()
         assert name in self.imported
 
     def __init_with_inheritance(self, raw_info, name):
@@ -115,8 +142,7 @@ class InstructionInfo:
                 assert len(set(old_only.keys()).intersection(set(new_target[d].keys()))) == 0
                 new_target[d].update(old_only)
 
-        required_infos = ('fields', 'sub-fields', 'compact-fields',
-                          'gen-op-to-brw')
+        required_infos = ('fields', 'sub-fields', 'compact-fields')
         for info in required_infos:
             if info not in new_target:
                 new_target[info] = {}
@@ -129,11 +155,59 @@ class InstructionInfo:
         self.imported.add(name)
         return new_target
 
+    def __process_ranges(self):
+        """Process ranges in self.target
+
+        On input, the fields are lists of integers. On output, they
+        are list of tuples of length 2 where the first item is the
+        high bit number of the range and the second item is the low
+        bit number of the range.
+
+        Additionally, any adjacent ranges that happen to have bit
+        ranges that can be combined are collapsed into a single range.
+
+        """
+
+        def collapse_ranges(ranges):
+            """Generator that merges compatible ranges."""
+
+            it = iter(ranges)
+            r = next(it)
+            for n in it:
+                if (r[1] - 1) == n[0]:
+                    r = (r[0], n[1])
+                else:
+                    yield r
+                    r = n
+            yield r
+
+        def pair_up(v):
+            if v is None:
+                return None
+            assert (len(v) % 2) == 0
+            ranges = [(v[i], v[i + 1]) for i in range(0, len(v), 2)]
+            return list(collapse_ranges(ranges));
+
+        for field_type in ('fields', 'sub-fields', 'compact-fields'):
+            d = self.target.get(field_type, dict())
+            d = { k: pair_up(v) for k, v in d.items() }
+            self.target[field_type] = d
+
     def __getattr__(self, name):
         dashed_name = name.replace('_', '-')
         if dashed_name in self.target:
             return self.target[dashed_name]
         raise AttributeError
+
+    @property
+    def gen_op_to_hw(self):
+        encoding = self.name.lower()
+        result = []
+        for op in OPCODES:
+            hw = op.hw_opcode[encoding]
+            if hw is not None:
+                result.append((op, hw))
+        return result
 
     def for_mako(self):
         return self.target
@@ -169,6 +243,8 @@ class GenInstructionSources:
         info = InstructionInfo(self.raw_info, name)
         template_input = {
             "info": info,
+            "c_bool": c_bool,
+            "opcode_has_dst": opcode_has_dst,
         }
         filename = self.outdir / f'gen_info_{name.lower()}.h'
         with open(filename, 'w', encoding='utf8') as h:

@@ -10,7 +10,6 @@
 #include "kk_cmd_buffer.h"
 #include "kk_descriptor_set_layout.h"
 #include "kk_device.h"
-#include "kk_encoder.h"
 #include "kk_entrypoints.h"
 #include "kk_shader.h"
 
@@ -21,7 +20,7 @@
 static void
 kk_flush_compute_state(struct kk_cmd_buffer *cmd)
 {
-   mtl_compute_encoder *enc = kk_compute_encoder(cmd);
+   mtl_compute_encoder *encoder = cs_get_compute(cmd, true);
 
    // Fill Metal argument buffer with descriptor set addresses
    struct kk_descriptor_state *desc = &cmd->state.cs.descriptors;
@@ -33,10 +32,10 @@ kk_flush_compute_state(struct kk_cmd_buffer *cmd)
 
    struct kk_ptr root_buffer = desc->root.root_buffer;
    if (root_buffer.gpu)
-      mtl_compute_set_buffer(enc, root_buffer.buffer, root_buffer.offset, 0);
+      kk_cmd_bind_root_to_argument_table(cmd, root_buffer.gpu);
 
    mtl_compute_set_pipeline_state(
-      enc, cmd->state.shaders[MESA_SHADER_COMPUTE]->pipeline.cs);
+      encoder, cmd->state.shaders[MESA_SHADER_COMPUTE]->pipeline.cs);
 }
 
 static void
@@ -82,7 +81,7 @@ kk_CmdDispatchBase(VkCommandBuffer commandBuffer, uint32_t baseGroupX,
    struct kk_shader *cs = cmd->state.shaders[MESA_SHADER_COMPUTE];
    struct mtl_size local_size = cs->info.cs.local_size;
 
-   mtl_compute_encoder *enc = kk_compute_encoder(cmd);
+   mtl_compute_encoder *encoder = cs_get_compute(cmd, true);
    if (cmd->state.cond_render.enabled) {
       /* Convert to indirect for predication */
       VkDispatchIndirectCommand indirect = {
@@ -100,8 +99,8 @@ kk_CmdDispatchBase(VkCommandBuffer commandBuffer, uint32_t baseGroupX,
 
       /* Flush compute state after predication dispatch */
       kk_flush_compute_state(cmd);
-      mtl_dispatch_threadgroups_with_indirect_buffer(
-         enc, patched.buffer, patched.offset, local_size);
+      mtl_dispatch_threadgroups_with_indirect_buffer(encoder, patched.gpu,
+                                                     local_size);
    } else {
       struct mtl_size grid_size = {
          .x = groupCountX * local_size.x,
@@ -110,16 +109,15 @@ kk_CmdDispatchBase(VkCommandBuffer commandBuffer, uint32_t baseGroupX,
       };
 
       kk_flush_compute_state(cmd);
-      mtl_dispatch_threads(enc, grid_size, local_size);
+      mtl_dispatch_threads(encoder, grid_size, local_size);
    }
 }
 
 VKAPI_ATTR void VKAPI_CALL
-kk_CmdDispatchIndirect(VkCommandBuffer commandBuffer, VkBuffer _buffer,
-                       VkDeviceSize offset)
+kk_CmdDispatchIndirect2KHR(VkCommandBuffer commandBuffer,
+                           const VkDispatchIndirect2InfoKHR *pInfo)
 {
    VK_FROM_HANDLE(kk_cmd_buffer, cmd, commandBuffer);
-   VK_FROM_HANDLE(kk_buffer, buffer, _buffer);
 
    struct kk_descriptor_state *desc = &cmd->state.cs.descriptors;
    desc->root_dirty |= desc->root.cs.base_group[0] != 0;
@@ -132,7 +130,7 @@ kk_CmdDispatchIndirect(VkCommandBuffer commandBuffer, VkBuffer _buffer,
    struct kk_shader *cs = cmd->state.shaders[MESA_SHADER_COMPUTE];
    struct mtl_size local_size = cs->info.cs.local_size;
 
-   mtl_compute_encoder *enc = kk_compute_encoder(cmd);
+   mtl_compute_encoder *encoder = cs_get_compute(cmd, true);
    if (cmd->state.cond_render.enabled) {
       struct kk_ptr patched =
          kk_pool_alloc(cmd, sizeof(VkDispatchIndirectCommand), 4u);
@@ -140,16 +138,15 @@ kk_CmdDispatchIndirect(VkCommandBuffer commandBuffer, VkBuffer _buffer,
          return;
       }
 
-      kk_predicate_compute(cmd, patched.gpu,
-                           vk_buffer_address(&buffer->vk, offset));
+      kk_predicate_compute(cmd, patched.gpu, pInfo->addressRange.address);
 
       /* Flush compute state after predication dispatch */
       kk_flush_compute_state(cmd);
-      mtl_dispatch_threadgroups_with_indirect_buffer(
-         enc, patched.buffer, patched.offset, local_size);
+      mtl_dispatch_threadgroups_with_indirect_buffer(encoder, patched.gpu,
+                                                     local_size);
    } else {
       kk_flush_compute_state(cmd);
-      mtl_dispatch_threadgroups_with_indirect_buffer(enc, buffer->mtl_handle,
-                                                     offset, local_size);
+      mtl_dispatch_threadgroups_with_indirect_buffer(
+         encoder, pInfo->addressRange.address, local_size);
    }
 }

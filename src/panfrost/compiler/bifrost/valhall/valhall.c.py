@@ -35,12 +35,27 @@ SKIP = set([
         "ISUB.s64",
         "IMULD.u64",
         "IMULD.u64",
+        "ARSHIFT_AND.i64",
+        "ARSHIFT_OR.i64",
+        "ARSHIFT_XOR.i64",
         "LSHIFT_AND.i64",
         "RSHIFT_AND.i64",
         "LSHIFT_OR.i64",
         "RSHIFT_OR.i64",
         "LSHIFT_XOR.i64",
         "RSHIFT_XOR.i64",
+
+        # Disassembly aliases. The compiler models these as RSHIFT_* with the
+        # arithmetic bit set.
+        "ARSHIFT_AND.i32",
+        "ARSHIFT_AND.v2i16",
+        "ARSHIFT_AND.v4i8",
+        "ARSHIFT_OR.i32",
+        "ARSHIFT_OR.v2i16",
+        "ARSHIFT_OR.v4i8",
+        "ARSHIFT_XOR.i32",
+        "ARSHIFT_XOR.v2i16",
+        "ARSHIFT_XOR.v4i8",
 
         # VAR_TEX
         "VAR_TEX_SINGLE",

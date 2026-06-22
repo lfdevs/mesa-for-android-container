@@ -57,6 +57,18 @@ STATUS_COLORS = defaultdict(lambda: "", {
 COMPLETED_STATUSES = frozenset({"success", "failed"})
 RUNNING_STATUSES = frozenset({"created", "pending", "running"})
 
+PROFILES: dict[str, dict] = {
+    # a750-vk runs both VKCTS and vkd3d together.
+    "uprev_vkd3d": {
+        "target": [".*vkd3d.*|a750-vk"],
+        "stress": 15,
+    },
+    "uprev_vkcts_main": {
+        "target": ["radv-.*-vkcts(-asan|-full)?"],
+        "stress": 25
+    }
+}
+
 if is_gitlab_job():
     console = Console(highlight=False, no_color=False, color_system="truecolor", width=120)
 else:
@@ -445,8 +457,15 @@ def parse_args() -> argparse.Namespace:
         help="Target job regex. For multiple targets, pass multiple values, "
              "eg. `--target foo bar`. Only jobs in the target stage(s) "
              "supplied, and their dependencies, will be considered.",
-        required=True,
+        required=False,
+        default=[],
         nargs=argparse.ONE_OR_MORE,
+    )
+    parser.add_argument(
+        "--profile",
+        metavar="name",
+        choices=PROFILES,
+        help="Use a predefined set of target jobs",
     )
     parser.add_argument(
         "--include-stage",
@@ -496,7 +515,7 @@ def parse_args() -> argparse.Namespace:
         "--stress",
         metavar="n",
         type=int,
-        default=0,
+        default=None,
         help="Stresstest job(s). Specify the number of times to rerun the selected jobs, "
              "or use -1 for indefinite. Defaults to 0. If jobs have already been executed, "
              "this will ensure the total run count respects the specified number.",
@@ -548,6 +567,17 @@ def parse_args() -> argparse.Namespace:
     )
 
     args = parser.parse_args()
+
+    if args.profile:
+        if not args.target:
+            args.target = PROFILES[args.profile]["target"]
+        if args.stress is None:
+            args.stress = PROFILES[args.profile].get("stress", 0)
+    elif not args.target:
+        parser.error("one of --target or --profile is required")
+
+    if args.stress is None:
+        args.stress = 0
 
     # argparse doesn't support groups inside add_mutually_exclusive_group(),
     # which means we can't just put `--project` and `--rev` in a group together,

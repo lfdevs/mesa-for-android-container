@@ -14,6 +14,7 @@ if with_tools.contains('drm-shim')
 endif
 
 if with_nouveau_vk
+  subdir('cubin')
   subdir('mme')
   subdir('vulkan')
 endif

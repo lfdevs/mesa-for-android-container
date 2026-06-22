@@ -144,7 +144,8 @@ def declare_options():
           c_name="override_ray_tracing_shader_version"),
     ]
 
-    drirc_gen.add_common_vk_options(debug_options, features_options, valid_options=VALID_COMMON_VK_OPTIONS)
+    drirc_gen.add_common_vk_options(debug_options, features_options, misc_options,
+                                    valid_options=VALID_COMMON_VK_OPTIONS)
     drirc_gen.add_common_vk_wsi_options(debug_options, performance_options)
 
     return [

@@ -811,11 +811,10 @@ prepare_iam_sysvals(struct panvk_cmd_buffer *cmdbuf, BITSET_WORD *dirty_sysvals)
 
 void
 panvk_per_arch(cmd_prepare_draw_sysvals)(struct panvk_cmd_buffer *cmdbuf,
-                                         const struct panvk_draw_info *info)
+                                         const struct panvk_draw_info *info,
+                                         const struct panvk_shader_variant *fs)
 {
    struct vk_color_blend_state *cb = &cmdbuf->vk.dynamic_graphics_state.cb;
-   const struct panvk_shader_variant *fs =
-      panvk_shader_only_variant(get_fs(cmdbuf));
    uint32_t noperspective_varyings = fs ? fs->info.varyings.noperspective : 0;
    BITSET_DECLARE(dirty_sysvals, MAX_SYSVAL_FAUS) = {0};
 

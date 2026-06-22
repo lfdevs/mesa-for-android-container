@@ -85,11 +85,6 @@ spec@!opengl 1.0@rasterpos@glsl_vs_gs_linked,Fail
 spec@!opengl 1.0@rasterpos@glsl_vs_tes_linked,Fail
 spec@!opengl 1.1@depthstencil-default_fb-blit samples=16,Fail
 spec@!opengl 1.1@line-smooth-stipple,Fail
-spec@!opengl 1.1@linestipple,Fail
-spec@!opengl 1.1@linestipple@Factor 2x,Fail
-spec@!opengl 1.1@linestipple@Factor 3x,Fail
-spec@!opengl 1.1@linestipple@Line loop,Fail
-spec@!opengl 1.1@linestipple@Line strip,Fail
 spec@!opengl 1.1@polygon-mode,Fail
 spec@!opengl 1.1@polygon-mode-facing,Fail
 spec@!opengl 1.1@polygon-mode-offset,Fail

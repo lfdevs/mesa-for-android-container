@@ -20,8 +20,8 @@ static void
 anv_embedded_sampler_free(struct anv_device *device,
                           struct anv_embedded_sampler *sampler)
 {
-   anv_state_pool_free(&device->dynamic_state_pool, sampler->sampler_state);
-   anv_state_pool_free(&device->dynamic_state_pool, sampler->border_color_state);
+   anv_state_pool_free(anv_device_get_dynamic_state_pool(device), sampler->sampler_state);
+   anv_state_pool_free(anv_device_get_dynamic_state_pool(device), sampler->border_color_state);
    vk_free(&device->vk.alloc, sampler);
 }
 

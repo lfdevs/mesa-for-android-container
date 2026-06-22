@@ -226,7 +226,9 @@ enum ir3_const_alloc_type {
    IR3_CONST_ALLOC_PRIMITIVE_PARAM = 10,
    /* Common, mapping from varying location to offset. */
    IR3_CONST_ALLOC_PRIMITIVE_MAP = 11,
-   IR3_CONST_ALLOC_MAX = 12,
+   /* For SSBO emulation */
+   IR3_CONST_ALLOC_BINDLESS_BASE_ADDRS = 12,
+   IR3_CONST_ALLOC_MAX = 13,
 };
 
 struct ir3_const_allocation {
@@ -1351,7 +1353,7 @@ ir3_link_add(struct ir3_shader_linkage *l, uint8_t slot, uint8_t regid_,
 {
    for (unsigned j = 0; j < util_last_bit(compmask); j++) {
       uint8_t comploc = loc + j;
-      l->varmask[comploc / 32] |= 1 << (comploc % 32);
+      l->varmask[comploc / 32] |= UINT32_C(1) << (comploc % 32);
    }
 
    l->max_loc = MAX2(l->max_loc, loc + util_last_bit(compmask));

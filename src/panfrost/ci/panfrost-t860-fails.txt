@@ -72,8 +72,6 @@ dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_out_of_bounds_min,Fail
 
 
 # OpenCL below
-api@clbuildprogram,Fail
-api@clcompileprogram,Fail
 api@clgetcommandqueueinfo,Fail
 api@clgetextensionfunctionaddressforplatform,Fail
 api@clgetkernelarginfo,Fail

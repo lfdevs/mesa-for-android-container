@@ -1,4 +1,4 @@
-/* Copyright 2022 Advanced Micro Devices, Inc.
+﻿/* Copyright 2022-2026 Advanced Micro Devices, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -302,6 +302,7 @@ struct vpe *vpe_create(const struct vpe_init_data *params)
 
     vpe_priv->ops_support      = false;
     vpe_priv->scale_yuv_matrix = true;
+    vpe_priv->is_new_context   = true;
 
     vpe_priv->collaborate_sync_index = 0;
     if (vpe_priv->init.debug.disable_3dlut_fl) /* disable DMA 3D LUT support for debugging */
@@ -828,6 +829,11 @@ enum vpe_status vpe_check_support(
     if (status == VPE_STATUS_OK) {
         // Calculate the buffer needed (worst case)
         vpe_priv->resource.get_bufs_req(vpe_priv, &vpe_priv->bufs_required);
+
+        if (vpe_priv->is_new_context) {
+            vpe_priv->bufs_required.cmd_buf_size += VPE_FW_MSG_NEW_CONTEXT_SIZE;
+        }
+
         *req                  = vpe_priv->bufs_required;
         vpe_priv->ops_support = true;
     }
@@ -861,6 +867,53 @@ enum vpe_status vpe_build_noops(struct vpe *vpe, uint32_t num_dword, uint32_t **
     builder = &vpe_priv->resource.cmd_builder;
 
     status = builder->build_noops(vpe_priv, ppcmd_space, num_dword);
+
+    return status;
+}
+
+static enum vpe_status vpe_build_new_context_fw_msg(struct vpe_buf *buf)
+{
+    uint32_t *cmd_space;
+
+    VPE_ASSERT(buf != NULL);
+
+    if (buf->size < VPE_FW_MSG_NEW_CONTEXT_SIZE) {
+        return VPE_STATUS_BUFFER_OVERFLOW;
+    }
+
+    cmd_space = (uint32_t *)(uintptr_t)buf->cpu_va;
+
+    *cmd_space++ = VPE_NOP_COUNT_DATA(VPE_FW_MSG_NEW_CONTEXT_DW_COUNT - 1) |
+                   VPE_CMD_HEADER(VPE_CMD_OPCODE_NOP, 0);
+
+    *cmd_space++ = VPE_FW_MSG_SIGNATURE_WITH_MSG(VPE_FW_MSG_NEW_CONTEXT);
+
+    buf->cpu_va += VPE_FW_MSG_NEW_CONTEXT_SIZE;
+    buf->gpu_va += VPE_FW_MSG_NEW_CONTEXT_SIZE;
+    buf->size -= VPE_FW_MSG_NEW_CONTEXT_SIZE;
+
+    return VPE_STATUS_OK;
+}
+
+enum vpe_status vpe_build_fw_msg(struct vpe_build_bufs *cur_bufs, uint16_t fw_msg_type)
+{
+    struct vpe_buf *buf    = NULL;
+    enum vpe_status status = VPE_STATUS_OK;
+
+    if (cur_bufs == NULL) {
+        status = VPE_STATUS_ERROR;
+    } else {
+        buf = &cur_bufs->cmd_buf;
+
+        switch (fw_msg_type) {
+        case VPE_FW_MSG_NEW_CONTEXT:
+            status = vpe_build_new_context_fw_msg(buf);
+            break;
+        default:
+            status = VPE_STATUS_ERROR;
+            break;
+        }
+    }
 
     return status;
 }
@@ -939,7 +992,7 @@ enum vpe_status vpe_build_commands(
             if (config_vector)
                 vpe_vector_clear(config_vector);
 
-            for (cmd_type_idx = 0; cmd_type_idx < VPE_CMD_TYPE_COUNT; cmd_type_idx++) {
+            for (cmd_type_idx = 0; cmd_type_idx < VPE_CMD_OPS_COUNT; cmd_type_idx++) {
                 config_vector = stream_ctx->stream_op_configs[pipe_idx][cmd_type_idx];
                 if (config_vector)
                     vpe_vector_clear(config_vector);
@@ -974,6 +1027,19 @@ enum vpe_status vpe_build_commands(
         status = vpe_color_update_whitepoint(vpe_priv, param);
         if (status != VPE_STATUS_OK) {
             vpe_log("failed updating whitepoint gain %d\n", (int)status);
+        }
+    }
+
+    if (status == VPE_STATUS_OK) {
+        // Set up firmware message for new context
+        if (vpe_priv->is_new_context == true) {
+            // Build new context
+            status = vpe_build_fw_msg(&curr_bufs, VPE_FW_MSG_NEW_CONTEXT);
+            if (status != VPE_STATUS_OK) {
+                vpe_log("failed to build firmware message. status %d\n", (int)status);
+            } else {
+                vpe_priv->is_new_context = false;
+            }
         }
     }
 
@@ -1036,6 +1102,16 @@ enum vpe_status vpe_build_commands(
         }
     }
 
+    if (status == VPE_STATUS_OK) {
+        bufs->cmd_buf.size   = cmd_buf_size - curr_bufs.cmd_buf.size; // used cmd buffer size
+        bufs->cmd_buf.gpu_va = cmd_buf_gpu_a;
+        bufs->cmd_buf.cpu_va = cmd_buf_cpu_a;
+
+        bufs->emb_buf.size   = emb_buf_size - curr_bufs.emb_buf.size; // used emb buffer size
+        bufs->emb_buf.gpu_va = emb_buf_gpu_a;
+        bufs->emb_buf.cpu_va = emb_buf_cpu_a;
+    }
+
     if (status == VPE_STATUS_OK && param->predication_info.enable == true) {
         status = vpe_build_set_predication(bufs->cmd_buf.cpu_va, param->predication_info.polarity,
             param->predication_info.gpu_va,
@@ -1045,16 +1121,6 @@ enum vpe_status vpe_build_commands(
         if (status != VPE_STATUS_OK) {
             vpe_log("failed in building vpe predication cmd %d\n", (int)status);
         }
-    }
-
-    if (status == VPE_STATUS_OK) {
-        bufs->cmd_buf.size   = cmd_buf_size - curr_bufs.cmd_buf.size; // used cmd buffer size
-        bufs->cmd_buf.gpu_va = cmd_buf_gpu_a;
-        bufs->cmd_buf.cpu_va = cmd_buf_cpu_a;
-
-        bufs->emb_buf.size   = emb_buf_size - curr_bufs.emb_buf.size; // used emb buffer size
-        bufs->emb_buf.gpu_va = emb_buf_gpu_a;
-        bufs->emb_buf.cpu_va = emb_buf_cpu_a;
     }
 
     vpe_priv->ops_support = false;

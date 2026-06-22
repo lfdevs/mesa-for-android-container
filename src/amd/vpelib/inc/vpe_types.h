@@ -49,6 +49,12 @@ struct vpe;
 #define MAX_NB_POLYPHASE_COEFFS (8 * 33)
 #define VPE_FROD_MAX_STAGE 3
 
+#ifdef VPE_USE_STDCALL
+#define VPE_APIENTRY __stdcall
+#else
+#define VPE_APIENTRY
+#endif
+
 /** @enum vpe_status
  *  @brief The status of VPE to indicate whether it supports the given job or not.
  */
@@ -180,13 +186,18 @@ struct vpe_pixel_format_support {
     uint32_t yuy2            : 1; /**< packed 4:2:2 8-bits */
     uint32_t y210            : 1; /**< packed 4:2:2 10-bit */
     uint32_t y216            : 1; /**< packed 4:2:2 16-bit */
+    uint32_t y410            : 1; /**< packed 4:4:4 10-bit */
+    uint32_t y416            : 1; /**< packed 4:4:4 16-bit */
+    uint32_t p208            : 1; /**< planar 4:2:2 8-bit */
     uint32_t p210            : 1; /**< planar 4:2:2 10-bit */
     uint32_t p216            : 1; /**< planar 4:2:2 16-bit */
+    uint32_t r8              : 1; /**< single channel RGB 8-bit */
+    uint32_t r16             : 1; /**< single channel RGB 16-bit */
     uint32_t rgb8_planar     : 1; /**< planar RGB 8-bit */
     uint32_t rgb16_planar    : 1; /**< planar RGB 16-bit */
-    uint32_t yuv8_planar     : 1; /**< planar YUV 16-bit */
+    uint32_t yuv8_planar     : 1; /**< planar YUV 8-bit */
     uint32_t yuv16_planar    : 1; /**< planar YUV 16-bit */
-    uint32_t fp16_planar     : 1; /**< planar RGB 8-bit */
+    uint32_t fp16_planar     : 1; /**< planar float 16-bit */
     uint32_t rgbe            : 1; /**< shared exponent R9G9B9E5 */
     uint32_t rgb111110_fix   : 1; /**< fixed R11G11B10 */
     uint32_t rgb111110_float : 1; /**< float R11G11B10 */
@@ -356,14 +367,20 @@ struct vpe_caps {
     struct vpe_color_caps color_caps; /**< Color management caps */
     struct vpe_plane_caps plane_caps; /**< Plane capabilities */
 
-    uint32_t input_dcc_support      : 1; /**< Input DCC support */
-    uint32_t input_internal_dcc     : 1; /**< Input internal DCC */
-    uint32_t output_dcc_support     : 1; /**< Output DCC support */
-    uint32_t output_internal_dcc    : 1; /**< Output internal DCC */
     uint32_t histogram_support      : 1; /**< Histogram support */
     uint32_t frod_support           : 1; /**< FROD support */
     uint32_t alpha_blending_support : 1; /**< Alpha blending support */
     uint32_t easf_support           : 1; /**< edge adaptive scaling support */
+
+    // Old dcc flags, required for PAL build
+    uint32_t input_dcc_support   : 1; /**< Old input DCC support */
+    uint32_t input_internal_dcc  : 1; /**< Old input internal DCC */
+    uint32_t output_dcc_support  : 1; /**< Old output DCC support */
+    uint32_t output_internal_dcc : 1; /**< Old output internal DCC */
+
+    // Current flags
+    uint32_t input_internal_dcc_support  : 1;    /**< Input internal DCC support */
+    uint32_t output_internal_dcc_support : 1;    /**< Output internal DCC support */
     struct {
         bool support;      /**< iSharp support */
         struct {
@@ -394,49 +411,6 @@ struct vpe_dcc_surface_param {
     enum vpe_mirror               mirror;       /**< mirror */
 };
 
-/** @struct vpe_dcc_setting
- *  @brief DCC Settings
- */
-struct vpe_dcc_setting {
-    unsigned int max_compressed_blk_size;   /**< max compressed block size */
-    unsigned int max_uncompressed_blk_size; /**< max uncompressed block size */
-    bool         independent_64b_blks;      /**< independent 64b blocks */
-
-    /** DCC controls */
-    struct {
-        uint32_t dcc_256_64_64             : 1; /**< DCC 256 64 64 */
-        uint32_t dcc_128_128_uncontrained  : 1; /**< DCC 128 128 unconstrained */
-        uint32_t dcc_256_128_128           : 1; /**< DCC 256 128 128 */
-        uint32_t dcc_256_256_unconstrained : 1; /**< DCC 256 256 unconstrained */
-    } dcc_controls;
-};
-
-/** @struct vpe_surface_dcc_cap
- *  @brief DCC Capabilities
- */
-struct vpe_surface_dcc_cap {
-    /**
-     * @brief Union of graphics and video dcc settings
-     */
-    union {
-        /** graph dcc setting */
-        struct {
-            struct vpe_dcc_setting rgb; /**< dcc setting for RGB */
-        } grph;
-
-        /** video dcc settings */
-        struct {
-            struct vpe_dcc_setting luma;   /**< dcc setting for luma */
-            struct vpe_dcc_setting chroma; /**< dcc setting for chroma */
-        } video;
-    };
-
-    bool capable;             /**< DCC capable */
-    bool const_color_support; /**< DCC const color support */
-
-    bool is_internal_dcc;
-};
-
 /****************************************
  * VPE Init Param
  ****************************************/
@@ -444,12 +418,12 @@ struct vpe_surface_dcc_cap {
  * @param[in] log_ctx  given in the struct @ref vpe_init_data
  * @param[in] fmt      format string
  */
-typedef void (*vpe_log_func_t)(void *log_ctx, const char *fmt, ...);
+typedef void(VPE_APIENTRY *vpe_log_func_t)(void *log_ctx, const char *fmt, ...);
 
 /** @brief Sys Event function
  * @param[in] event_id event to emit to system log
  */
-typedef void (*vpe_sys_event_func_t)(enum vpe_event_id event_id, ...);
+typedef void(VPE_APIENTRY *vpe_sys_event_func_t)(enum vpe_event_id event_id, ...);
 
 /** @brief system memory zalloc, allocated memory initailized with 0
  *
@@ -457,13 +431,13 @@ typedef void (*vpe_sys_event_func_t)(enum vpe_event_id event_id, ...);
  * @param[in] size     number of bytes
  * @return             allocated memory
  */
-typedef void *(*vpe_zalloc_func_t)(void *mem_ctx, size_t size);
+typedef void *(VPE_APIENTRY *vpe_zalloc_func_t)(void *mem_ctx, size_t size);
 
 /** @brief system memory free
  * @param[in] mem_ctx  given in the struct @ref vpe_init_data
  * @param[in] ptr      number of bytes
  */
-typedef void (*vpe_free_func_t)(void *mem_ctx, void *ptr);
+typedef void(VPE_APIENTRY *vpe_free_func_t)(void *mem_ctx, void *ptr);
 
 /** @struct vpe_callback_funcs
  *  @brief Callback functions.
@@ -799,11 +773,10 @@ struct vpe_surface_info {
         enum vpe_swizzle_mode_values swizzle; /**< Swizzle mode */
     };
 
-    struct vpe_plane_size         plane_size; /**< Pitch */
-    struct vpe_plane_dcc_param    dcc;        /**< DCC parameters */
-    enum vpe_surface_pixel_format format;     /**< Surface pixel format */
-
-    struct vpe_color_space cs;                /**< Surface color space */
+    enum vpe_surface_pixel_format format;       /**< Surface pixel format */
+    struct vpe_plane_size         plane_size;   /**< Pitch */
+    struct vpe_plane_dcc_param    dcc;          /**< DCC parameters */
+    struct vpe_color_space        cs;           /**< Surface color space */
 };
 
 /** @struct vpe_blend_info
@@ -1255,28 +1228,6 @@ struct vpe_check_support_funcs {
      */
     bool (*check_output_color_space)(
         enum vpe_surface_pixel_format format, const struct vpe_color_space *vcs);
-
-    /** @brief
-     * Get DCC support and setting according to the format,
-     * scan direction and swizzle mode for output.
-     *
-     * @param[in]      params        surface properties
-     * @param[in/out]  cap           dcc capable result and related settings
-     * @return true if supported
-     */
-    bool (*get_dcc_compression_output_cap)(
-        const struct vpe_dcc_surface_param *params, struct vpe_surface_dcc_cap *cap);
-
-    /** @brief
-     * Get DCC support and setting according to the format,
-     * scan direction and swizzle mode for input.
-     *
-     * @param[in]      params        surface properties
-     * @param[in/out]  cap           dcc capable result and related settings
-     * @return true if supported
-     */
-    bool (*get_dcc_compression_input_cap)(
-        const struct vpe_dcc_surface_param *params, struct vpe_surface_dcc_cap *cap);
 };
 
 /** @struct vpe

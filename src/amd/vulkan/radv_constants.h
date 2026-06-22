@@ -156,4 +156,7 @@
 
 #define RADV_MAX_SHADER_ABORT_MESSAGE_SIZE 65536
 
+/* Don't use 4K alignment for sparse because 4K pages (both sparse and non-sparse) are super slow. */
+#define RADV_SPARSE_BUFFER_ALIGNMENT (64 * 1024)
+
 #endif /* RADV_CONSTANTS_H */

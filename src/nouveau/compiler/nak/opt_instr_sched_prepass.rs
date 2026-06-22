@@ -276,15 +276,22 @@ const SPILL_FILES: [(RegFile, RegFile, i32); 5] = [
     (RegFile::GPR, RegFile::Mem, 32 + 32),
 ];
 
-/// Models how many gprs will be used after spilling other register files
-fn calc_used_gprs(mut p: PerRegFile<i32>, max_regs: PerRegFile<i32>) -> i32 {
+/// Models how many registers will be used after spilling other register files
+fn calc_used_regs(
+    mut p: PerRegFile<i32>,
+    max_regs: PerRegFile<i32>,
+) -> PerRegFile<i32> {
     for (src, dest, _) in SPILL_FILES {
         if p[src] > max_regs[src] {
             p[dest] += p[src] - max_regs[src];
         }
     }
 
-    p[RegFile::GPR]
+    p
+}
+
+fn calc_used_gprs(p: PerRegFile<i32>, max_regs: PerRegFile<i32>) -> i32 {
+    calc_used_regs(p, max_regs)[RegFile::GPR]
 }
 
 fn calc_score_part(
@@ -373,8 +380,8 @@ impl<'a> GenerateOrder<'a> {
         })
     }
 
-    fn current_used_gprs(&self) -> i32 {
-        calc_used_gprs(
+    fn current_used_regs(&self) -> PerRegFile<i32> {
+        calc_used_regs(
             PerRegFile::new_with(|f| self.live.count(f).try_into().unwrap()),
             self.max_regs,
         )
@@ -445,7 +452,7 @@ impl<'a> GenerateOrder<'a> {
         let mut current_cycle = 0;
         let mut instr_order = Vec::with_capacity(g.nodes.len());
         loop {
-            let used_gprs = self.current_used_gprs();
+            let used_regs = self.current_used_regs();
 
             // Move ready instructions to the ready list
             loop {
@@ -481,7 +488,10 @@ impl<'a> GenerateOrder<'a> {
             }
 
             // Pick an instruction to schedule
-            let next_idx = if used_gprs <= thresholds.heuristic_threshold {
+            let next_idx = if used_regs[RegFile::GPR]
+                <= thresholds.heuristic_threshold
+                && used_regs[RegFile::Pred] < self.max_regs[RegFile::Pred]
+            {
                 let ReadyInstr { index, .. } = ready_instrs.pop_last().unwrap();
                 index
             } else {
@@ -574,7 +584,7 @@ impl<'a> GenerateOrder<'a> {
             current_cycle += 1;
 
             debug_assert_eq!(
-                self.current_used_gprs(),
+                self.current_used_regs()[RegFile::GPR],
                 predicted_new_used_gprs_net
             );
         }

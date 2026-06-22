@@ -338,7 +338,7 @@ cmd_buffer_can_merge_subpass(struct v3dv_cmd_buffer *cmd_buffer,
    if (cmd_buffer->state.job->always_flush)
       return false;
 
-   if (!physical_device->options.merge_jobs)
+   if (!physical_device->merge_jobs)
       return false;
 
    /* Each render pass starts a new job */
@@ -406,6 +406,21 @@ job_compute_frame_tiling(struct v3dv_job *job,
 {
    assert(job);
    struct v3dv_frame_tiling *tiling = &job->frame_tiling;
+
+   /* With V3D_WEBGPU_OVERRIDE=1 the advertised framebuffer width/height
+    * is 8192 (to satisfy Dawn/Chromium) but the actual HW rendering
+    * limit is lower (7680 on RPi5, 4096 on RPi4). Warn when a render
+    * job exceeds the real limit — meta fill/copy paths are already
+    * clamped by framebuffer_size_for_pixel_count, but image blits and
+    * render passes may legitimately use the advertised limit.
+    */
+   const uint32_t max_fb_dim =
+      job->device->devinfo.max_framebuffer_size;
+   if (width > max_fb_dim || height > max_fb_dim) {
+      mesa_loge("V3D_WEBGPU_OVERRIDE:"
+                " job_compute_frame_tiling: %ux%u exceeds real HW limit %ux%u",
+                width, height, max_fb_dim, max_fb_dim);
+   }
 
    tiling->width = width;
    tiling->height = height;
@@ -1082,12 +1097,13 @@ cmd_buffer_begin_render_pass_secondary(
     *     rendering is contained within the render area."
     */
    const struct v3dv_framebuffer *framebuffer = cmd_buffer->state.framebuffer;
+   const uint32_t max_fb_size = cmd_buffer->device->devinfo.max_framebuffer_size;
    cmd_buffer->state.render_area.offset.x = 0;
    cmd_buffer->state.render_area.offset.y = 0;
    cmd_buffer->state.render_area.extent.width =
-      framebuffer ? framebuffer->width : V3D_MAX_IMAGE_DIMENSION;
+      framebuffer ? framebuffer->width : max_fb_size;
    cmd_buffer->state.render_area.extent.height =
-      framebuffer ? framebuffer->height : V3D_MAX_IMAGE_DIMENSION;
+      framebuffer ? framebuffer->height : max_fb_size;
 
    /* We only really execute double-buffer mode in primary jobs, so allow this
     * mode in render pass secondaries to keep track of the double-buffer mode
@@ -3930,7 +3946,7 @@ v3dv_CmdPushConstants(VkCommandBuffer commandBuffer,
 {
    V3DV_FROM_HANDLE(v3dv_cmd_buffer, cmd_buffer, commandBuffer);
 
-   assert(cmd_buffer->state.push_constants_data);
+   assert(cmd_buffer->state.push_constants_data != NULL);
    if (!memcmp((uint8_t *) cmd_buffer->state.push_constants_data + offset,
                pValues, size)) {
       return;

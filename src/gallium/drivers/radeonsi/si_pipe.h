@@ -888,6 +888,13 @@ typedef void (*pipe_draw_vertex_state_func)(struct pipe_context *ctx,
                                             const struct pipe_draw_start_count_bias *draws,
                                             unsigned num_draws);
 
+struct si_sqtt_timestamp {
+   uint8_t *map;
+   unsigned offset;
+   struct si_resource *bo;
+   struct list_head list;
+};
+
 struct si_context {
    struct pipe_context b; /* base class */
 
@@ -1295,6 +1302,9 @@ struct si_context {
    struct pipe_fence_handle *last_sqtt_fence;
    enum rgp_sqtt_marker_event_type sqtt_next_event;
    bool sqtt_enabled;
+   struct si_sqtt_timestamp sqtt_timestamp;
+   uint64_t sqtt_device_id;
+   uint32_t sqtt_cb_id;
 
    bool perfetto_enabled;
 

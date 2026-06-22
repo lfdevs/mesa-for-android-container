@@ -11,6 +11,7 @@
 #include "util/u_inlines.h"
 
 #include <assert.h>
+#include <inttypes.h>
 #include <math.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -523,7 +524,7 @@ ethosu_ml_subgraph_read_outputs(struct pipe_context *pcontext,
 
       ret = drmIoctl(screen->fd, DRM_IOCTL_ETHOSU_PERFMON_GET_VALUES, &get_values);
       if (ret == 0) {
-         mesa_logi("PMU: cycles=%lu, npu-active=%lu, npu-idle=%lu\n",
+         mesa_logi("PMU: cycles=%" PRIu64 ", npu-active=%" PRIu64 ", npu-idle=%" PRIu64 "\n",
                    values[2], values[1], values[0]);
       } else {
          DBG("Could not read perfmon values: ret=%d errno=%d (%s)\n",

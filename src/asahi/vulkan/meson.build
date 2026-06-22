@@ -49,6 +49,19 @@ hk_files = files(
   'hk_wsi.h'
 )
 
+hk_drirc = custom_target(
+  'hk_drirc',
+  input  : [files('hk_drirc_gen.py'), drirc_gen, join_paths(dir_source_root, 'src/util/00-hk-defaults.conf')],
+  output : ['hk_drirc.c', 'hk_drirc.h'],
+  command : [
+    prog_python, '@INPUT0@',
+    '--import-path', join_paths(dir_source_root, 'src/util'),
+    '--drirc-src', '@OUTPUT0@',
+    '--drirc-hdr', '@OUTPUT1@',
+    '--validate', '@INPUT2@',
+  ],
+)
+
 hk_entrypoints = custom_target(
   input : [vk_entrypoints_gen, vk_api_xml],
   output : ['hk_entrypoints.h', 'hk_entrypoints.c'],
@@ -76,6 +89,7 @@ libhk = static_library(
   'hk',
   [
     hk_entrypoints,
+    hk_drirc,
     hk_files,
     sha1_h,
   ],

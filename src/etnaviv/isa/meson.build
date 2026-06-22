@@ -190,11 +190,8 @@ if with_tools.contains('etnaviv')
 else
   pre_args += '-DHAVE_ETNAVIV_NO_PEST'
 
-  # dummy library
-  libetnaviv_isa_rs = static_library(
-    'etnaviv_isa_rs',
-    sources: [],
-  )
+  # dummy link_with entry for etnaviv_isa_disasm test
+  libetnaviv_isa_rs = []
 endif
 
 subdir('tests')

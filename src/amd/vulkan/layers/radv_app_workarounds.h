@@ -24,4 +24,7 @@ VKAPI_ATTR void VKAPI_CALL rage2_CmdBeginRenderPass(VkCommandBuffer commandBuffe
 VKAPI_ATTR void VKAPI_CALL strange_brigade_CmdPipelineBarrier2(VkCommandBuffer commandBuffer,
                                                                const VkDependencyInfo *pDependencyInfo);
 
+VKAPI_ATTR void VKAPI_CALL gfxbench5_CmdPipelineBarrier2(VkCommandBuffer commandBuffer,
+                                                         const VkDependencyInfo *pDependencyInfo);
+
 #endif /* RADV_APP_WORKAROUNDS_H */

@@ -20,27 +20,6 @@ anv-jsl-vk-full:
   parallel: 4
   timeout: 2h 30m
 
-anv-adl-vk:
-  extends:
-    - .lava-x86_64-test-vk
-    - .anv-test
-    - .lava-acer-cbv514-1h-34uz-brya:x86_64
-  variables:
-    DEQP_SUITE: anv-adl
-    # Xe regression in 6.19
-    # https://gitlab.freedesktop.org/drm/xe/kernel/-/issues/7584
-    KERNEL_TAG: "v6.17-mesa-ddf6"
-  parallel: 4
-
-anv-adl-vk-full:
-  extends:
-    - anv-adl-vk
-    - .anv-manual-rules
-  variables:
-    DEQP_SUITE: anv-adl-full
-  timeout: 1h 40m
-  parallel: 3
-
 anv-rpl-vk:
   extends:
     - .lava-x86_64-test-vk

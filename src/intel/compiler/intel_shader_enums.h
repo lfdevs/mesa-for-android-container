@@ -102,20 +102,17 @@ enum intel_fs_config {
    /** True if this shader has been dispatched per-sample */
    INTEL_FS_CONFIG_PERSAMPLE_DISPATCH = (1 << 2),
 
-   /** True if inputs should be interpolated per-sample by default */
-   INTEL_FS_CONFIG_PERSAMPLE_INTERP = (1 << 3),
-
    /** True if this shader has been dispatched with alpha-to-coverage */
-   INTEL_FS_CONFIG_ALPHA_TO_COVERAGE = (1 << 4),
+   INTEL_FS_CONFIG_ALPHA_TO_COVERAGE = (1 << 3),
 
    /** True if provoking vertex is last */
-   INTEL_FS_CONFIG_PROVOKING_VERTEX_LAST = (1 << 5),
+   INTEL_FS_CONFIG_PROVOKING_VERTEX_LAST = (1 << 4),
 
    /** True if we need to apply Wa_18019110168 remapping */
-   INTEL_FS_CONFIG_PER_PRIMITIVE_REMAPPING = (1 << 6),
+   INTEL_FS_CONFIG_PER_PRIMITIVE_REMAPPING = (1 << 5),
 
    /** True if conservative rasterization is enabled */
-   INTEL_FS_CONFIG_CONSERVATIVE_RASTER = (1 << 7),
+   INTEL_FS_CONFIG_CONSERVATIVE_RASTER = (1 << 6),
 
    /** True if this shader has been dispatched coarse
     *
@@ -407,7 +404,7 @@ intel_tess_config(uint32_t input_vertices,
 
 static inline bool
 intel_fs_is_persample(enum intel_sometimes shader_persample_dispatch,
-                      bool shader_per_sample_shading,
+                      bool persample_interp,
                       enum intel_fs_config pushed_fs_config)
 {
    if (shader_persample_dispatch != INTEL_SOMETIMES)
@@ -418,7 +415,7 @@ intel_fs_is_persample(enum intel_sometimes shader_persample_dispatch,
    if (!(pushed_fs_config & INTEL_FS_CONFIG_MULTISAMPLE_FBO))
       return false;
 
-   if (shader_per_sample_shading)
+   if (persample_interp)
       assert(pushed_fs_config & INTEL_FS_CONFIG_PERSAMPLE_DISPATCH);
 
    return (pushed_fs_config & INTEL_FS_CONFIG_PERSAMPLE_DISPATCH) != 0;
@@ -426,6 +423,7 @@ intel_fs_is_persample(enum intel_sometimes shader_persample_dispatch,
 
 static inline uint32_t
 intel_fs_barycentric_modes(enum intel_sometimes shader_persample_dispatch,
+                           bool persample_interp,
                            uint32_t shader_barycentric_modes,
                            enum intel_fs_config pushed_fs_config)
 {
@@ -439,9 +437,7 @@ intel_fs_barycentric_modes(enum intel_sometimes shader_persample_dispatch,
 
    assert(pushed_fs_config & INTEL_FS_CONFIG_ENABLE_DYNAMIC);
 
-   if (pushed_fs_config & INTEL_FS_CONFIG_PERSAMPLE_INTERP) {
-      assert(pushed_fs_config & INTEL_FS_CONFIG_PERSAMPLE_DISPATCH);
-
+   if (pushed_fs_config & INTEL_FS_CONFIG_PERSAMPLE_DISPATCH) {
       /* Making dynamic per-sample interpolation work is a bit tricky.  The
        * hardware will hang if SAMPLE is requested but per-sample dispatch is
        * not enabled.  This means we can't preemptively add SAMPLE to the
@@ -476,7 +472,7 @@ intel_fs_barycentric_modes(enum intel_sometimes shader_persample_dispatch,
          modes |= BITFIELD_BIT(INTEL_BARYCENTRIC_NONPERSPECTIVE_SAMPLE);
       }
    } else {
-      /* If we're not using per-sample interpolation, we need to disable the
+      /* If we're not using per-sample disaptch, we need to disable the
        * per-sample bits.
        *
        * SKL PRMs, Volume 2a: Command Reference: Instructions,
@@ -518,6 +514,24 @@ intel_fs_barycentric_modes(enum intel_sometimes shader_persample_dispatch,
    return modes;
 }
 
+static inline enum intel_barycentric_mode
+intel_fs_barycentric_mode_for_persample_dispatch(enum intel_sometimes persample_dispatch,
+                                                 enum intel_barycentric_mode mode)
+{
+   /* From the BDW PRM documentation for 3DSTATE_WM:
+    *
+    *    "MSDISPMODE_PERSAMPLE is required in order to select Perspective
+    *     Sample or Non- perspective Sample barycentric coordinates."
+    *
+    * So cleanup any potentially set sample barycentric mode when not in per
+    * sample dispatch.
+    */
+   if (persample_dispatch == INTEL_NEVER &&
+       (mode == INTEL_BARYCENTRIC_PERSPECTIVE_SAMPLE ||
+        mode == INTEL_BARYCENTRIC_NONPERSPECTIVE_SAMPLE))
+      return (enum intel_barycentric_mode)(mode - 2);
+   return mode;
+}
 
 static inline bool
 intel_fs_is_coarse(enum intel_sometimes shader_coarse_pixel_dispatch,
@@ -536,9 +550,7 @@ intel_fs_is_coarse(enum intel_sometimes shader_coarse_pixel_dispatch,
 }
 
 struct intel_fs_params {
-   bool shader_sample_shading;
-   float shader_min_sample_shading;
-   bool state_sample_shading;
+   bool persample_interp;
    uint32_t rasterization_samples;
    bool coarse_pixel;
    bool alpha_to_coverage;
@@ -557,22 +569,14 @@ intel_fs_config(struct intel_fs_params params)
    if (params.rasterization_samples > 1) {
       fs_config |= INTEL_FS_CONFIG_MULTISAMPLE_FBO;
 
-      if (params.shader_sample_shading)
+      if (params.persample_interp)
          fs_config |= INTEL_FS_CONFIG_PERSAMPLE_DISPATCH;
-
-      if (params.shader_sample_shading ||
-          (params.state_sample_shading &&
-           (params.shader_min_sample_shading *
-            params.rasterization_samples) > 1)) {
-         fs_config |= INTEL_FS_CONFIG_PERSAMPLE_DISPATCH |
-                          INTEL_FS_CONFIG_PERSAMPLE_INTERP;
-      }
    }
 
    if (!(fs_config & INTEL_FS_CONFIG_PERSAMPLE_DISPATCH) &&
        params.coarse_pixel) {
       fs_config |= INTEL_FS_CONFIG_COARSE_PI_MSG |
-                       INTEL_FS_CONFIG_COARSE_RT_WRITES;
+                   INTEL_FS_CONFIG_COARSE_RT_WRITES;
    }
 
    if (params.alpha_to_coverage)

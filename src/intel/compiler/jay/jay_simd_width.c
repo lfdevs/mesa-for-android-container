@@ -22,9 +22,15 @@ max_simd_width(const jay_shader *shader, const jay_inst *I)
        I->op == JAY_OPCODE_EXTRACT_BYTE_PER_8LANES ||
        I->op == JAY_OPCODE_OFFSET_PACKED_PIXEL_COORDS ||
        I->op == JAY_OPCODE_DESWIZZLE_ODD ||
+       I->op == JAY_OPCODE_INIT_HELPERS ||
        I->op == JAY_OPCODE_MUL_32 ||
        I->op == JAY_OPCODE_SHUFFLE ||
        I->op == JAY_OPCODE_ZIP_UGPR16) {
+      return 16;
+   }
+
+   if (I->op == JAY_OPCODE_CVT && (I->type == JAY_TYPE_BF16 ||
+                                   jay_cvt_src_type(I) == JAY_TYPE_BF16)) {
       return 16;
    }
 

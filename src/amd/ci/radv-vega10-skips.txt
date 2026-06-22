@@ -1,2 +1,0 @@
-# These tests hang.
-dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.vec3.*

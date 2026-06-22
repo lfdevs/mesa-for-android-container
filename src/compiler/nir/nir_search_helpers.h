@@ -657,13 +657,21 @@ is_only_used_by_ior(const nir_alu_instr *instr)
 static inline bool
 only_lower_8_bits_used(const nir_alu_instr *instr)
 {
-   return (nir_def_bits_used(&instr->def) & ~0xffull) == 0;
+   if (instr->def.num_components > 1)
+      return false;
+
+   return (nir_def_bits_used(nir_get_scalar((nir_def*)&instr->def, 0)) &
+           ~0xffull) == 0;
 }
 
 static inline bool
 only_lower_16_bits_used(const nir_alu_instr *instr)
 {
-   return (nir_def_bits_used(&instr->def) & ~0xffffull) == 0;
+   if (instr->def.num_components > 1)
+      return false;
+
+   return (nir_def_bits_used(nir_get_scalar((nir_def*)&instr->def, 0)) &
+           ~0xffffull) == 0;
 }
 
 /**

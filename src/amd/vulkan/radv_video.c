@@ -663,8 +663,8 @@ radv_GetPhysicalDeviceVideoCapabilitiesKHR(VkPhysicalDevice physicalDevice, cons
       ext->maxL1ReferenceCount = ecap->avc.l1_refs;
       ext->maxTemporalLayerCount = ecap->max_temporal_layers;
       ext->expectDyadicTemporalLayerPattern = false;
-      ext->minQp = 0;
-      ext->maxQp = 51;
+      ext->minQp = ecap->min_qp;
+      ext->maxQp = ecap->max_qp;
       ext->prefersGopRemainingFrames = false;
       ext->requiresGopRemainingFrames = false;
       ext->stdSyntaxFlags = VK_VIDEO_ENCODE_H264_STD_CONSTRAINED_INTRA_PRED_FLAG_SET_BIT_KHR |
@@ -698,7 +698,8 @@ radv_GetPhysicalDeviceVideoCapabilitiesKHR(VkPhysicalDevice physicalDevice, cons
 
       ext->flags = VK_VIDEO_ENCODE_H265_CAPABILITY_HRD_COMPLIANCE_BIT_KHR |
                    VK_VIDEO_ENCODE_H265_CAPABILITY_PER_PICTURE_TYPE_MIN_MAX_QP_BIT_KHR |
-                   VK_VIDEO_ENCODE_H265_CAPABILITY_ROW_UNALIGNED_SLICE_SEGMENT_BIT_KHR;
+                   VK_VIDEO_ENCODE_H265_CAPABILITY_ROW_UNALIGNED_SLICE_SEGMENT_BIT_KHR |
+                   VK_VIDEO_ENCODE_H265_CAPABILITY_MULTIPLE_SLICE_SEGMENTS_PER_TILE_BIT_KHR;
       ext->maxLevelIdc = ecap->max_level;
       ext->maxSliceSegmentCount = ecap->max_slices;
       ext->maxTiles.width = 1;
@@ -712,8 +713,8 @@ radv_GetPhysicalDeviceVideoCapabilitiesKHR(VkPhysicalDevice physicalDevice, cons
       ext->maxL1ReferenceCount = ecap->hevc.l1_refs;
       ext->maxSubLayerCount = ecap->max_temporal_layers;
       ext->expectDyadicTemporalSubLayerPattern = false;
-      ext->minQp = 0;
-      ext->maxQp = 51;
+      ext->minQp = ecap->min_qp;
+      ext->maxQp = ecap->max_qp;
       ext->prefersGopRemainingFrames = false;
       ext->requiresGopRemainingFrames = false;
       ext->stdSyntaxFlags = VK_VIDEO_ENCODE_H265_STD_CONSTRAINED_INTRA_PRED_FLAG_SET_BIT_KHR |
@@ -779,8 +780,8 @@ radv_GetPhysicalDeviceVideoCapabilitiesKHR(VkPhysicalDevice physicalDevice, cons
       ext->maxTemporalLayerCount = ecap->max_temporal_layers;
       ext->maxSpatialLayerCount = 1;
       ext->maxOperatingPoints = ecap->max_temporal_layers;
-      ext->minQIndex = 1;
-      ext->maxQIndex = 255;
+      ext->minQIndex = ecap->min_qp;
+      ext->maxQIndex = ecap->max_qp;
       ext->prefersGopRemainingFrames = false;
       ext->requiresGopRemainingFrames = false;
       ext->stdSyntaxFlags = 0;

@@ -8,12 +8,6 @@
 
 #include <functional>
 
-#ifndef ANDROID_LIBPERFETTO
-#include <perfetto.h>
-#else
-#include <perfetto/tracing.h>
-#endif
-
 #include "c11/threads.h"
 #include "util/log.h"
 #include "util/perf/u_perfetto.h"

@@ -255,6 +255,7 @@ static const struct vk_device_extension_table lvp_device_extensions_supported = 
    .EXT_image_2d_view_of_3d               = true,
    .EXT_image_sliced_view_of_3d           = true,
    .EXT_image_robustness                  = true,
+   .EXT_image_view_min_lod                = true,
    .EXT_index_type_uint8                  = true,
    .EXT_inline_uniform_block              = true,
    .EXT_load_store_op_none                = true,
@@ -265,6 +266,7 @@ static const struct vk_device_extension_table lvp_device_extensions_supported = 
 #endif
    .EXT_mesh_shader                       = true,
    .EXT_multisampled_render_to_single_sampled = true,
+   .EXT_multisampled_render_to_swapchain = true,
    .EXT_multi_draw                        = true,
    .EXT_mutable_descriptor_type           = true,
    .EXT_nested_command_buffer             = true,
@@ -622,6 +624,9 @@ lvp_get_features(const struct lvp_physical_device *pdevice,
       /* VK_EXT_multisampled_render_to_single_sampled */
       .multisampledRenderToSingleSampled = true,
 
+      /* VK_EXT_multisampled_render_to_swapchain */
+      .multisampledRenderToSwapchain = true,
+
       /* VK_EXT_mutable_descriptor_type */
       .mutableDescriptorType = true,
 
@@ -630,6 +635,9 @@ lvp_get_features(const struct lvp_physical_device *pdevice,
 
       /* VK_EXT_image_sliced_view_of_3d */
       .imageSlicedViewOf3D = true,
+
+      /* VK_EXT_image_view_min_lod */
+      .minLod = true,
 
       /* VK_EXT_depth_bias_control */
       .depthBiasControl = true,

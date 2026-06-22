@@ -604,6 +604,8 @@ print_instr_format_specific(enum amd_gfx_level gfx_level, const Instruction* ins
          fprintf(output, " null");
       else if (exp.dest >= V_008DFC_SQ_EXP_POS && exp.dest <= V_008DFC_SQ_EXP_POS + 3)
          fprintf(output, " pos%d", exp.dest - V_008DFC_SQ_EXP_POS);
+      else if (exp.dest == V_008DFC_SQ_EXP_PRIM)
+         fprintf(output, " prim");
       else if (exp.dest >= V_008DFC_SQ_EXP_PARAM && exp.dest <= V_008DFC_SQ_EXP_PARAM + 31)
          fprintf(output, " param%d", exp.dest - V_008DFC_SQ_EXP_PARAM);
       break;

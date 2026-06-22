@@ -722,6 +722,9 @@ fn compile_nir_to_args(
         progress |= nir_pass!(nir, nir_opt_algebraic);
         progress
     } {}
+
+    nir_pass!(nir, rusticl_insert_libclc_config);
+
     nir.inline(lib_clc);
     nir.cleanup_functions();
     // that should free up tons of memory

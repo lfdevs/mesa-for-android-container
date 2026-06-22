@@ -364,8 +364,6 @@ spec@khr_texture_compression_astc@sliced-3d-miptree-gl srgb-fp@sRGB decode full 
 spec@khr_texture_compression_astc@sliced-3d-miptree-gles srgb-fp,Fail
 spec@khr_texture_compression_astc@sliced-3d-miptree-gles srgb-fp@sRGB decode full precision,Fail
 
-api@clbuildprogram,Fail
-api@clcompileprogram,Fail
 api@clgetcommandqueueinfo,Fail
 api@clgetdeviceinfo,Fail
 api@clgetextensionfunctionaddressforplatform,Fail

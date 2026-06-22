@@ -1518,6 +1518,9 @@ vn_QueueWaitIdle(VkQueue _queue)
          return result;
    }
 
+   /* ensure the idle wait occurs after renderer fence submit */
+   vn_ring_roundtrip(dev->primary_ring);
+
    result = vn_queue_submit(&(struct vn_queue_submission){
       .batch_type = VK_STRUCTURE_TYPE_SUBMIT_INFO,
       .queue_handle = _queue,

@@ -118,7 +118,7 @@ remove_instr(nir_instr *instr, struct exec_list *dead_instrs)
    /* Fail an assertion if an input load is dead. This is a debug option. */
    if (instr->type == nir_instr_type_intrinsic) {
       nir_shader *nir =
-         nir_cf_node_get_function(&instr->block->cf_node)->function->shader;
+         instr->block->impl->function->shader;
 
       if (nir->info.assert_inputs_not_dead)
          assert(!nir_is_input_load(nir_instr_as_intrinsic(instr)));

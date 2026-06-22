@@ -64,7 +64,7 @@ impl FieldType {
 }
 
 pub struct FieldRestrict {
-    values: Vec<LiteralEnum>,
+    pub values: Vec<EnumLiteral>,
 }
 
 impl FieldRestrict {
@@ -85,11 +85,7 @@ impl FieldRestrict {
             let Some(v) = e.get_value(v_name) else {
                 return Err(err("Invalid enum value in restrict"));
             };
-            values.push(LiteralEnum {
-                enum_type: e.clone(),
-                value_name: v.name.clone(),
-                value_ident: v.ident.clone(),
-            });
+            values.push(EnumLiteral::new(e, v));
         }
         Ok(Rc::new(FieldRestrict { values }))
     }

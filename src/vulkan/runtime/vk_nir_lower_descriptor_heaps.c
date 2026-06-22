@@ -882,6 +882,40 @@ try_lower_heaps_deref_access(nir_builder *b, nir_intrinsic_instr *intrin,
 }
 
 static bool
+try_lower_heaps_load_accel_struct(nir_builder *b, nir_intrinsic_instr *load)
+{
+   assert(load->intrinsic == nir_intrinsic_load_deref);
+   nir_deref_instr *deref = nir_src_as_deref(load->src[0]);
+
+   nir_deref_instr *root_cast = deref_get_root_cast(deref);
+   if (root_cast == NULL)
+      return false;
+
+   /* The root cast must come from a resource-heap variable, not a descriptor
+    * load. This is the "untyped" path where the shader loads a raw uint64_t
+    * AS handle directly from the heap array.
+    */
+   nir_deref_instr *root_parent = nir_src_as_deref(root_cast->parent);
+   if (!root_parent ||
+       root_parent->deref_type != nir_deref_type_var ||
+       !var_is_heap_ptr(root_parent->var))
+      return false;
+
+   b->cursor = nir_before_instr(&root_cast->instr);
+   nir_def *heap_offset = nir_imm_int(b, 0);
+   heap_offset = build_buffer_addr_for_deref(b, heap_offset, deref,
+                                             nir_address_format_32bit_offset);
+
+   b->cursor = nir_before_instr(&load->instr);
+   nir_def *desc = nir_load_heap_descriptor(b, load->def.num_components,
+                                            load->def.bit_size,
+                                            heap_offset,
+                                            .resource_type = nir_resource_type_acceleration_structure);
+   nir_def_replace(&load->def, desc);
+   return true;
+}
+
+static bool
 lower_heaps_load_buffer_ptr(nir_builder *b, nir_intrinsic_instr *ptr_load,
                             struct heap_mapping_ctx *ctx)
 {
@@ -1000,6 +1034,9 @@ lower_heaps_intrin(nir_builder *b, nir_intrinsic_instr *intrin,
       return lower_heaps_image(b, intrin, ctx, false);
 
    case nir_intrinsic_load_deref:
+      if (try_lower_heaps_load_accel_struct(b, intrin))
+         return true;
+      FALLTHROUGH;
    case nir_intrinsic_store_deref:
    case nir_intrinsic_load_deref_block_intel:
    case nir_intrinsic_store_deref_block_intel:

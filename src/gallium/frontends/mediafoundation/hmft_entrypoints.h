@@ -426,6 +426,13 @@ class __declspec( uuid( HMFT_GUID ) ) CDX12EncHMFT : CMFD3DManager,
                                      BOOL bIsLastSlice,
                                      uint64_t ResolveStatsCompletionFenceValue );
 
+   HRESULT ProcessDX12EncodeContext( CDX12EncHMFT *pThis,
+                                     LPDX12EncodeContext pDX12EncodeContext,
+                                     pipe_enc_feedback_metadata &metadata,
+                                     DWORD &dwReceivedInput,
+                                     uint64_t &ResolveStatsCompletionFenceValue,
+                                     unsigned int &encoded_bitstream_bytes );
+
    HRESULT UpdateAvailableInputType();
    HRESULT InternalCheckInputType( IMFMediaType *pType );
    HRESULT InternalCheckOutputType( IMFMediaType *pType );

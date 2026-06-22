@@ -392,7 +392,8 @@ static enum vpe_status enforce_minimum_viewport_size_for_rect_in_section(
 
     while (status == VPE_STATUS_REPEAT_ITEM) {
         status = VPE_STATUS_OK;
-        for (section_idx = 0; section_idx < section_vector->num_elements; section_idx++) {
+        for (section_idx = 0; section_idx < (int16_t)(section_vector->num_elements);
+             section_idx++) {
             struct vpe_mps_section *section      = vpe_vector_get(section_vector, section_idx);
             struct vpe_mps_section *next_section = vpe_vector_get(section_vector, section_idx + 1);
 
@@ -1552,9 +1553,11 @@ static enum vpe_status fill_mps_blending_cmd_info(struct vpe_priv *vpe_priv,
         if (input_idx != 0) {
             // sanity check to ensure all MPC sizes are still the same after the OPP adjust
             if (scaler_data->dscl_prog_data.mpc_size.width !=
-                    cmd_info.inputs[0].scaler_data.dscl_prog_data.mpc_size.width ||
+                    cmd_info.inputs[cmd_info_input_idx + 1]
+                        .scaler_data.dscl_prog_data.mpc_size.width ||
                 scaler_data->dscl_prog_data.mpc_size.height !=
-                    cmd_info.inputs[0].scaler_data.dscl_prog_data.mpc_size.height) {
+                    cmd_info.inputs[cmd_info_input_idx + 1]
+                        .scaler_data.dscl_prog_data.mpc_size.height) {
                 VPE_ASSERT(false);
                 status = VPE_STATUS_ERROR;
                 break;
@@ -2035,8 +2038,8 @@ bool vpe_is_mps_possible(struct vpe_priv *vpe_priv, struct stream_ctx **mps_stre
             return false;
     }
 
-    num_3dlut_required =
-        get_num_3dlut_required((const struct stream_ctx **)mps_stream_ctx, num_streams, recout_width_alignment);
+    num_3dlut_required = get_num_3dlut_required(
+        (const struct stream_ctx **)mps_stream_ctx, num_streams, recout_width_alignment);
 
     if (vpe_priv->init.debug.multi_pipe_segmentation_policy == VPE_MPS_DISABLED)
         return false;

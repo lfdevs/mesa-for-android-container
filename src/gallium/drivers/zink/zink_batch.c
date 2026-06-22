@@ -961,6 +961,9 @@ zink_end_batch(struct zink_context *ctx)
       submit_queue(bs, NULL, 0);
    }
 
+   ctx->last_transfer_sync = 0;
+   ctx->rp_counter = 0;
+
 #if HAVE_RENDERDOC_INTEGRATION
    if (!(ctx->flags & ZINK_CONTEXT_COPY_ONLY) && screen->renderdoc_capturing && !screen->renderdoc_capture_all &&
        p_atomic_read(&screen->renderdoc_frame) > screen->renderdoc_capture_end) {

@@ -1168,8 +1168,7 @@ nir_clone_deref_instr(nir_builder *b, nir_variable *var,
     */
    switch (deref->deref_type) {
    case nir_deref_type_array: {
-      if (b->shader ==
-          nir_cf_node_get_function(&deref->instr.block->cf_node)->function->shader) {
+      if (b->shader == deref->instr.block->impl->function->shader) {
          /* Cloning within the same shader. */
          return nir_build_deref_array(b, parent, deref->arr.index.ssa);
       } else {

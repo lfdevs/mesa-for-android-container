@@ -9,7 +9,7 @@
 #include <stdint.h>
 
 #include "vk_instance.h"
-#include "util/xmlconfig.h"
+#include "panvk_drirc.h"
 
 #include "lib/kmod/pan_kmod.h"
 
@@ -50,15 +50,9 @@ struct panvk_instance {
 
    uint32_t api_version;
 
-   struct driOptionCache dri_options;
-   struct driOptionCache available_dri_options;
+   struct panvk_drirc drirc;
 
    uint8_t driver_build_sha[BLAKE3_KEY_LEN];
-   uint32_t force_vk_vendor;
-   float heap_memory_percent;
-
-   bool enable_vertex_pipeline_stores_atomics;
-   bool force_enable_shader_atomics;
 
    struct {
       struct pan_kmod_allocator allocator;

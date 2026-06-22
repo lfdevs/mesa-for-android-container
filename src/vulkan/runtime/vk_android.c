@@ -692,6 +692,8 @@ vk_ahb_format_to_image_format(uint32_t ahb_format)
    case AHARDWAREBUFFER_FORMAT_R8_UNORM:
       return VK_FORMAT_R8_UNORM;
 #endif
+   case AHARDWAREBUFFER_FORMAT_Y8:
+      return VK_FORMAT_R8_UNORM;
    case AHARDWAREBUFFER_FORMAT_B8G8R8A8_UNORM:
       return VK_FORMAT_B8G8R8A8_UNORM;
    default:

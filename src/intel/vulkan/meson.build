@@ -195,6 +195,7 @@ libanv_files = files(
   'anv_buffer.c',
   'anv_buffer_view.c',
   'anv_cmd_buffer.c',
+  'anv_debug.c',
   'anv_descriptor_set.c',
   'anv_device.c',
   'anv_dgc_layout.c',

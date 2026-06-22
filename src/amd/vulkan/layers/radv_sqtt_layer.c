@@ -167,6 +167,11 @@ radv_write_begin_general_api_marker(struct radv_cmd_buffer *cmd_buffer, enum rgp
 {
    struct rgp_sqtt_marker_general_api marker = {0};
 
+   /* Flush any delayed RGP barrier-end marker before writing the next general API marker
+    * so no-op barriers cannot incorrectly cover subsequent draw or dispatch events.
+    */
+   radv_describe_barrier_end_delayed(cmd_buffer);
+
    marker.identifier = RGP_SQTT_MARKER_IDENTIFIER_GENERAL_API;
    marker.api_type = api_type;
 

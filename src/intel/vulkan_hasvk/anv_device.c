@@ -49,7 +49,7 @@
 #include "util/os_misc.h"
 #include "util/u_atomic.h"
 #include "util/u_string.h"
-#include "util/driconf.h"
+#include "hasvk_drirc.h"
 #include "git_sha1.h"
 #include "vk_util.h"
 #include "vk_deferred_operation.h"
@@ -63,30 +63,6 @@
 #include "genxml/gen70_pack.h"
 #include "genxml/genX_bits.h"
 
-static const driOptionDescription anv_dri_options[] = {
-   DRI_CONF_SECTION_PERFORMANCE
-      DRI_CONF_ADAPTIVE_SYNC(true)
-      DRI_CONF_VK_X11_OVERRIDE_MIN_IMAGE_COUNT(0)
-      DRI_CONF_VK_X11_STRICT_IMAGE_COUNT(false)
-      DRI_CONF_VK_XWAYLAND_WAIT_READY(true)
-      DRI_CONF_HASVK_ASSUME_FULL_SUBGROUPS(0)
-      DRI_CONF_HASVK_SAMPLE_MASK_OUT_OPENGL_BEHAVIOUR(false)
-      DRI_CONF_NO_16BIT(false)
-      DRI_CONF_HASVK_OVERRIDE_API_VERSION(false)
-   DRI_CONF_SECTION_END
-
-   DRI_CONF_SECTION_DEBUG
-      DRI_CONF_ALWAYS_FLUSH_CACHE(false)
-      DRI_CONF_VK_WSI_FORCE_BGRA8_UNORM_FIRST(false)
-      DRI_CONF_VK_WSI_FORCE_SWAPCHAIN_TO_CURRENT_EXTENT(false)
-      DRI_CONF_VK_X11_IGNORE_SUBOPTIMAL(false)
-      DRI_CONF_LIMIT_TRIG_INPUT_RANGE(false)
-   DRI_CONF_SECTION_END
-
-   DRI_CONF_SECTION_QUALITY
-      DRI_CONF_PP_LOWER_DEPTH_RANGE_RATE()
-   DRI_CONF_SECTION_END
-};
 
 /* This is probably far to big but it reflects the max size used for messages
  * in OpenGLs KHR_debug.
@@ -200,7 +176,7 @@ get_device_extensions(const struct anv_physical_device *device,
 
    *ext = (struct vk_device_extension_table) {
       .KHR_8bit_storage                      = device->info.ver >= 8,
-      .KHR_16bit_storage                     = device->info.ver >= 8 && !device->instance->no_16bit,
+      .KHR_16bit_storage                     = device->info.ver >= 8 && !device->instance->drirc.performance.no_16bit,
       .KHR_bind_memory2                      = true,
       .KHR_buffer_device_address             = device->has_a64_buffer_access,
       .KHR_copy_commands2                    = true,
@@ -252,7 +228,7 @@ get_device_extensions(const struct anv_physical_device *device,
       .KHR_shader_clock                      = true,
       .KHR_shader_draw_parameters            = true,
       .KHR_shader_expect_assume              = true,
-      .KHR_shader_float16_int8               = device->info.ver >= 8 && !device->instance->no_16bit,
+      .KHR_shader_float16_int8               = device->info.ver >= 8 && !device->instance->drirc.performance.no_16bit,
       .KHR_shader_float_controls             = true,
       .KHR_shader_integer_dot_product        = true,
       .KHR_shader_non_semantic_info          = true,
@@ -410,8 +386,8 @@ get_features(const struct anv_physical_device *pdevice,
       .inheritedQueries                         = true,
 
       /* Vulkan 1.1 */
-      .storageBuffer16BitAccess            = pdevice->info.ver >= 8 && !pdevice->instance->no_16bit,
-      .uniformAndStorageBuffer16BitAccess  = pdevice->info.ver >= 8 && !pdevice->instance->no_16bit,
+      .storageBuffer16BitAccess            = pdevice->info.ver >= 8 && !pdevice->instance->drirc.performance.no_16bit,
+      .uniformAndStorageBuffer16BitAccess  = pdevice->info.ver >= 8 && !pdevice->instance->drirc.performance.no_16bit,
       .storagePushConstant16               = pdevice->info.ver >= 8,
       .storageInputOutput16                = false,
       .multiview                           = true,
@@ -431,8 +407,8 @@ get_features(const struct anv_physical_device *pdevice,
       .storagePushConstant8                = pdevice->info.ver >= 8,
       .shaderBufferInt64Atomics            = false,
       .shaderSharedInt64Atomics            = false,
-      .shaderFloat16                       = pdevice->info.ver >= 8 && !pdevice->instance->no_16bit,
-      .shaderInt8                          = pdevice->info.ver >= 8 && !pdevice->instance->no_16bit,
+      .shaderFloat16                       = pdevice->info.ver >= 8 && !pdevice->instance->drirc.performance.no_16bit,
+      .shaderInt8                          = pdevice->info.ver >= 8 && !pdevice->instance->drirc.performance.no_16bit,
 
       .descriptorIndexing                                 = false,
       .shaderInputAttachmentArrayDynamicIndexing          = false,
@@ -980,7 +956,7 @@ get_properties(const struct anv_physical_device *pdevice,
 #if DETECT_OS_ANDROID
       .apiVersion = ANV_API_VERSION,
 #else
-      .apiVersion = (pdevice->use_softpin || pdevice->instance->report_vk_1_3) ?
+      .apiVersion = (pdevice->use_softpin || pdevice->instance->drirc.performance.report_vk_1_3_version) ?
          ANV_API_VERSION_1_3 : ANV_API_VERSION_1_2,
 #endif /* DETECT_OS_ANDROID */
       .driverVersion = vk_get_driver_version(),
@@ -1799,7 +1775,7 @@ anv_physical_device_try_create(struct vk_instance *vk_instance,
                                                                &u64_ignore);
 
    device->always_flush_cache = INTEL_DEBUG(DEBUG_STALL) ||
-      driQueryOptionb(&instance->dri_options, "always_flush_cache");
+      instance->drirc.debug.always_flush_cache;
 
    device->compiler = elk_compiler_create(NULL, &device->info);
    if (device->compiler == NULL) {
@@ -1929,29 +1905,14 @@ VkResult anv_EnumerateInstanceExtensionProperties(
 static void
 anv_init_dri_options(struct anv_instance *instance)
 {
-   driParseOptionInfo(&instance->available_dri_options, anv_dri_options,
-                      ARRAY_SIZE(anv_dri_options));
-   driParseConfigFiles(&instance->dri_options, &instance->available_dri_options,
-                       &(driConfigFileParseParams) {
-                          .driverName = "hasvk",
-                          .applicationName = instance->vk.app_info.app_name,
-                          .applicationVersion = instance->vk.app_info.app_version,
-                          .engineName = instance->vk.app_info.engine_name,
-                          .engineVersion = instance->vk.app_info.engine_version,
-                       });
-
-    instance->assume_full_subgroups =
-            driQueryOptioni(&instance->dri_options, "anv_assume_full_subgroups");
-    instance->limit_trig_input_range =
-            driQueryOptionb(&instance->dri_options, "limit_trig_input_range");
-    instance->sample_mask_out_opengl_behaviour =
-            driQueryOptionb(&instance->dri_options, "anv_sample_mask_out_opengl_behaviour");
-    instance->lower_depth_range_rate =
-            driQueryOptionf(&instance->dri_options, "lower_depth_range_rate");
-    instance->no_16bit =
-            driQueryOptionb(&instance->dri_options, "no_16bit");
-    instance->report_vk_1_3 =
-            driQueryOptionb(&instance->dri_options, "hasvk_report_vk_1_3_version");
+   hasvk_parse_dri_options(&instance->drirc,
+                           &(driConfigFileParseParams) {
+                              .driverName = "hasvk",
+                              .applicationName = instance->vk.app_info.app_name,
+                              .applicationVersion = instance->vk.app_info.app_version,
+                              .engineName = instance->vk.app_info.engine_name,
+                              .engineVersion = instance->vk.app_info.engine_version,
+                           });
 }
 
 VkResult anv_CreateInstance(
@@ -2013,8 +1974,8 @@ void anv_DestroyInstance(
 
    VG(VALGRIND_DESTROY_MEMPOOL(instance));
 
-   driDestroyOptionCache(&instance->dri_options);
-   driDestroyOptionInfo(&instance->available_dri_options);
+   driDestroyOptionCache(&instance->drirc.options);
+   driDestroyOptionInfo(&instance->drirc.available_options);
 
    vk_instance_finish(&instance->vk);
    vk_free(&instance->vk.alloc, instance);

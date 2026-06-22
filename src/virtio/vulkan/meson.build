@@ -4,6 +4,19 @@
 # based in part on anv and radv which are:
 # Copyright © 2017 Intel Corporation
 
+vn_drirc = custom_target(
+  'vn_drirc',
+  input  : [files('vn_drirc_gen.py'), drirc_gen, join_paths(dir_source_root, 'src/util/00-venus-defaults.conf')],
+  output : ['vn_drirc.c', 'vn_drirc.h'],
+  command : [
+    prog_python, '@INPUT0@',
+    '--import-path', join_paths(dir_source_root, 'src/util'),
+    '--drirc-src', '@OUTPUT0@',
+    '--drirc-hdr', '@OUTPUT1@',
+    '--validate', '@INPUT2@',
+  ],
+)
+
 vn_entrypoints = custom_target(
   'vn_entrypoints',
   input : [vk_entrypoints_gen, vk_api_xml],
@@ -139,7 +152,7 @@ endif
 
 libvulkan_virtio = shared_library(
   'vulkan_virtio',
-  [libvn_files, vn_entrypoints, sha1_h],
+  [libvn_files, vn_entrypoints, vn_drirc, sha1_h],
   include_directories : vn_incs,
   link_with : vn_libs,
   dependencies : vn_deps,

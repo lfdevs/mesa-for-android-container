@@ -272,7 +272,7 @@ bi_optimize_loop(nir_shader *nir, uint64_t gpu_id, bool allow_copies)
       NIR_PASS(progress, nir, nir_opt_undef);
    } while (progress);
 
-   NIR_PASS(_, nir, nir_lower_undef_to_zero);
+   NIR_PASS(_, nir, nir_lower_undef_to_zero, NULL);
 
    NIR_PASS(_, nir, nir_remove_dead_variables, nir_var_function_temp, NULL);
 }
