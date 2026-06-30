@@ -287,7 +287,7 @@ add_gpus([
         GPUId(605), # TODO: Test it, based only on libwrapfake dumps
         GPUId(610),
         GPUId(612), # TODO: Test it, based only on libwrapfake dumps
-        GPUId(613),
+        GPUId(613), # Snapdragon 4 gen 2 unofficial support
     ], A6xxGPUInfo(
         CHIP.A6XX,
         [a6xx_base, a6xx_gen1_low],
