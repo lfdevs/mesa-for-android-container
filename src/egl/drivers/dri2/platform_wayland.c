@@ -2664,6 +2664,7 @@ static EGLBoolean
 dri2_initialize_wayland_drm(_EGLDisplay *disp)
 {
    struct dri2_egl_display *dri2_dpy = dri2_egl_display(disp);
+   bool using_kgsl = false;
 
    if (dri2_wl_formats_init(&dri2_dpy->formats) < 0)
       goto cleanup;
@@ -2698,10 +2699,12 @@ dri2_initialize_wayland_drm(_EGLDisplay *disp)
       goto cleanup;
 
    if (!dri2_initialize_wayland_drm_extensions(dri2_dpy)) {
-      if (disp->Options.Kgsl)
+      if (disp->Options.Kgsl) {
          dri2_dpy->fd_render_gpu = loader_open_device("/dev/kgsl-3d0");
-      else
+         using_kgsl = dri2_dpy->fd_render_gpu != -1;
+      } else {
          goto cleanup;
+      }
    }
 
    /* On the kgsl stack the compositor advertises neither wl_drm nor a v4
@@ -2714,33 +2717,40 @@ dri2_initialize_wayland_drm(_EGLDisplay *disp)
       dri2_dpy->fd_render_gpu = loader_open_device("/dev/kgsl-3d0");
       if (dri2_dpy->fd_render_gpu == -1)
          goto cleanup;
+      using_kgsl = true;
    }
 
-   loader_get_user_preferred_fd(&dri2_dpy->fd_render_gpu,
-                                &dri2_dpy->fd_display_gpu);
+   if (using_kgsl) {
+      dri2_dpy->fd_display_gpu = dri2_dpy->fd_render_gpu;
+      dri2_dpy->is_render_node = false;
+      dri2_dpy->driver_name = strdup("kgsl");
+   } else {
+      loader_get_user_preferred_fd(&dri2_dpy->fd_render_gpu,
+                                   &dri2_dpy->fd_display_gpu);
 
-   if (dri2_dpy->fd_render_gpu != dri2_dpy->fd_display_gpu) {
-      free(dri2_dpy->device_name);
-      dri2_dpy->device_name =
-         loader_get_device_name_for_fd(dri2_dpy->fd_render_gpu);
-      if (!dri2_dpy->device_name) {
-         _eglError(EGL_BAD_ALLOC, "wayland-egl: failed to get device name "
-                                  "for requested GPU");
-         goto cleanup;
+      if (dri2_dpy->fd_render_gpu != dri2_dpy->fd_display_gpu) {
+         free(dri2_dpy->device_name);
+         dri2_dpy->device_name =
+            loader_get_device_name_for_fd(dri2_dpy->fd_render_gpu);
+         if (!dri2_dpy->device_name) {
+            _eglError(EGL_BAD_ALLOC, "wayland-egl: failed to get device name "
+                                     "for requested GPU");
+            goto cleanup;
+         }
       }
+
+      /* we have to do the check now, because loader_get_user_preferred_fd
+       * will return a render-node when the requested gpu is different
+       * to the server, but also if the client asks for the same gpu than
+       * the server by requesting its pci-id */
+      dri2_dpy->is_render_node =
+         drmGetNodeTypeFromFd(dri2_dpy->fd_render_gpu) == DRM_NODE_RENDER;
+
+      if (disp->Options.Zink)
+         dri2_dpy->driver_name = strdup("zink");
+      else
+         dri2_dpy->driver_name = loader_get_driver_for_fd(dri2_dpy->fd_render_gpu);
    }
-
-   /* we have to do the check now, because loader_get_user_preferred_fd
-    * will return a render-node when the requested gpu is different
-    * to the server, but also if the client asks for the same gpu than
-    * the server by requesting its pci-id */
-   dri2_dpy->is_render_node =
-      drmGetNodeTypeFromFd(dri2_dpy->fd_render_gpu) == DRM_NODE_RENDER;
-
-   if (disp->Options.Zink)
-      dri2_dpy->driver_name = strdup("zink");
-   else
-      dri2_dpy->driver_name = loader_get_driver_for_fd(dri2_dpy->fd_render_gpu);
    if (dri2_dpy->driver_name == NULL) {
       _eglError(EGL_BAD_ALLOC, "DRI2: failed to get driver name");
       goto cleanup;
