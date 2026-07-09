@@ -108,6 +108,10 @@ kgsl_bo_map(struct fd_bo *bo)
 
 static int kgsl_bo_dmabuf(struct fd_bo *bo) {
     struct kgsl_bo *kgsl_bo = to_kgsl_bo(bo);
+
+    if (kgsl_bo->bo_type != KGSL_BO_IMPORT || kgsl_bo->import_fd < 0)
+        return -1;
+
     return os_dupfd_cloexec(kgsl_bo->import_fd);
 }
 

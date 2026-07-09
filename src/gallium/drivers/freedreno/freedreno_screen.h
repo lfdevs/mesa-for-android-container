@@ -75,6 +75,8 @@ struct fd_screen {
    bool has_timestamp;
    bool has_robustness;
    bool has_syncobj;
+   bool is_kgsl;
+   bool kgsl_dmabuf;
 
    struct {
       /* Conservative LRZ (default true) invalidates LRZ on draws with

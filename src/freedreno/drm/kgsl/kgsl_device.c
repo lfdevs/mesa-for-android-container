@@ -28,7 +28,7 @@ kgsl_device_new(int fd)
     dev->funcs = &funcs;
     dev->fd = fd;
     dev->version = FD_VERSION_ROBUSTNESS;
-    dev->features = FD_FEATURE_DIRECT_RESET | FD_FEATURE_IMPORT_DMABUF;
+    dev->features = FD_FEATURE_DIRECT_RESET | FD_FEATURE_IMPORT_DMABUF | FD_FEATURE_KGSL;
 
     /* async submit_queue used for softpin deffered submits */
     util_queue_init(&dev->submit_queue, "sq", 8, 1, 0, NULL);

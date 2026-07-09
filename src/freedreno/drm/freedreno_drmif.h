@@ -191,6 +191,7 @@ void fd_device_disable_explicit_sync_heuristic(struct fd_device *dev);
 enum fd_features {
    FD_FEATURE_DIRECT_RESET = 1,
    FD_FEATURE_IMPORT_DMABUF = 2,
+   FD_FEATURE_KGSL = 4,
 };
 
 uint32_t fd_get_features(struct fd_device *dev);

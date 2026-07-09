@@ -1080,6 +1080,15 @@ fd_resource_destroy(struct pipe_screen *pscreen, struct pipe_resource *prsc)
 static uint64_t
 fd_resource_modifier(struct fd_resource *rsc)
 {
+   struct fd_screen *screen = fd_screen(rsc->b.b.screen);
+
+   if (screen->kgsl_dmabuf) {
+      if (rsc->layout.tile_mode == 0 && !rsc->layout.ubwc_layer_size)
+         return DRM_FORMAT_MOD_LINEAR;
+
+      return DRM_FORMAT_MOD_INVALID;
+   }
+
    if (rsc->layout.ubwc_layer_size)
       return DRM_FORMAT_MOD_QCOM_COMPRESSED;
 
@@ -1105,6 +1114,23 @@ fd_resource_get_handle(struct pipe_screen *pscreen, struct pipe_context *pctx,
       tc_buffer_disable_cpu_storage(&rsc->b.b);
 
    handle->modifier = fd_resource_modifier(rsc);
+
+   if (fd_screen(pscreen)->kgsl_dmabuf) {
+      handle->modifier = DRM_FORMAT_MOD_LINEAR;
+
+      if (!(prsc->bind & PIPE_BIND_SHARED)) {
+         struct fd_context *ctx = fd_screen_aux_context_get(pscreen);
+
+         prsc->bind |= PIPE_BIND_SHARED;
+
+         bool ret = fd_try_shadow_resource(ctx, rsc, 0, NULL, handle->modifier);
+
+         fd_screen_aux_context_put(pscreen);
+
+         if (!ret)
+            return false;
+      }
+   }
 
    if (prsc->target != PIPE_BUFFER) {
       struct fdl_metadata metadata = {
@@ -1310,6 +1336,20 @@ get_best_layout(struct fd_screen *screen,
 
    if (FD_DBG(NOTILE))
        return FD_LAYOUT_LINEAR;
+
+   if (screen->kgsl_dmabuf &&
+       (tmpl->bind & (PIPE_BIND_SHARED | PIPE_BIND_SCANOUT))) {
+      if (has_implicit_modifier(modifiers, count) ||
+          drm_find_modifier(DRM_FORMAT_MOD_LINEAR, modifiers, count)) {
+         perf_debug("%" PRSC_FMT ": forcing linear: kgsl shared/scanout resource",
+                    PRSC_ARGS(tmpl));
+         return FD_LAYOUT_LINEAR;
+      }
+
+      perf_debug("%" PRSC_FMT ": kgsl shared/scanout resource requires linear",
+                 PRSC_ARGS(tmpl));
+      return FD_LAYOUT_ERROR;
+   }
 
    /* Shared resources without explicit modifiers must always be linear */
    if (!can_explicit && (tmpl->bind & PIPE_BIND_SHARED)) {
@@ -1528,6 +1568,15 @@ fd_resource_from_handle(struct pipe_screen *pscreen,
    struct pipe_resource *prsc = &rsc->b.b;
 
    DBG("%" PRSC_FMT ", modifier=%" PRIx64, PRSC_ARGS(prsc), handle->modifier);
+
+   if (screen->kgsl_dmabuf &&
+       handle->modifier != DRM_FORMAT_MOD_LINEAR &&
+       handle->modifier != DRM_FORMAT_MOD_INVALID) {
+      if (FD_DBG(LAYOUT))
+         mesa_loge("kgsl cannot import non-linear modifier %" PRIx64,
+                   handle->modifier);
+      goto fail;
+   }
 
    rsc->b.is_shared = true;
 
