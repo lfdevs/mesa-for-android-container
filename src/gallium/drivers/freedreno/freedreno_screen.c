@@ -91,6 +91,13 @@ DEBUG_GET_ONCE_FLAGS_OPTION(fd_mesa_debug, "FD_MESA_DEBUG", fd_debug_options, 0)
 int fd_mesa_debug = 0;
 bool fd_binning_enabled = true;
 
+static bool
+fd_kgsl_dmabuf_enabled(void)
+{
+   return debug_get_bool_option("FD_KGSL_ENABLE_DMABUF", false) ||
+          debug_get_bool_option("XWAYLAND_FORCE_KGSL_SURFACELESS", false);
+}
+
 static const char *
 fd_screen_get_name(struct pipe_screen *pscreen)
 {
@@ -383,14 +390,15 @@ fd_init_screen_caps(struct fd_screen *screen)
 
    u_init_pipe_screen_caps(&screen->base, 1);
 
-   /* On the kgsl stack the screen's control fd is the sde-kms display node
-    * (renderD128); drmGetCap(DRM_CAP_PRIME) there does not report the GPU's
-    * real PRIME import/export support, so u_init_pipe_screen_caps() leaves
-    * caps.dmabuf unset and EGL never advertises EGL_EXT_image_dma_buf_import
-    * (which kwin/GL compositors need to import client buffers).  The kgsl
-    * backend does support dmabuf import/export (FD_FEATURE_IMPORT_DMABUF), so
-    * force the cap on. */
-   caps->dmabuf = 0x1 /*DRM_PRIME_CAP_IMPORT*/ | 0x2 /*DRM_PRIME_CAP_EXPORT*/;
+   /* On the kgsl stack the screen's control fd may be a display/controller fd
+    * rather than the kgsl GPU fd, so drmGetCap(DRM_CAP_PRIME) cannot describe
+    * the backend's real import/export support.  The kgsl backend allocates
+    * shared buffers from dma-heap/ION and imports them into KGSL, so advertise
+    * dmabuf support only for that path. */
+   if (screen->kgsl_dmabuf) {
+      caps->dmabuf =
+         0x1 /*DRM_PRIME_CAP_IMPORT*/ | 0x2 /*DRM_PRIME_CAP_EXPORT*/;
+   }
 
    /* this is probably not totally correct.. but it's a start: */
 
@@ -819,6 +827,23 @@ fd_screen_query_dmabuf_modifiers(struct pipe_screen *pscreen,
                                  uint64_t *modifiers,
                                  unsigned int *external_only, int *count)
 {
+   struct fd_screen *screen = fd_screen(pscreen);
+
+   if (screen->kgsl_dmabuf) {
+      *count = is_format_supported(pscreen, format,
+                                   DRM_FORMAT_MOD_LINEAR) ? 1 : 0;
+
+      if (*count && max > 0) {
+         if (modifiers)
+            modifiers[0] = DRM_FORMAT_MOD_LINEAR;
+
+         if (external_only)
+            external_only[0] = !is_rendering_supported(pscreen, format);
+      }
+
+      return;
+   }
+
    const uint64_t all_modifiers[] = {
       DRM_FORMAT_MOD_LINEAR,
       DRM_FORMAT_MOD_QCOM_COMPRESSED,
@@ -851,6 +876,13 @@ fd_screen_is_dmabuf_modifier_supported(struct pipe_screen *pscreen,
                                        enum pipe_format format,
                                        bool *external_only)
 {
+   struct fd_screen *screen = fd_screen(pscreen);
+
+   if (screen->kgsl_dmabuf &&
+       modifier != DRM_FORMAT_MOD_LINEAR &&
+       modifier != DRM_FORMAT_MOD_INVALID)
+      return false;
+
    return is_format_supported(pscreen, format, modifier);
 }
 
@@ -951,6 +983,8 @@ fd_screen_create(int fd,
    pscreen = &screen->base;
 
    screen->dev = dev;
+   screen->is_kgsl = fd_get_features(dev) & FD_FEATURE_KGSL;
+   screen->kgsl_dmabuf = screen->is_kgsl && fd_kgsl_dmabuf_enabled();
    screen->ro = ro;
 
    // maybe this should be in context?
