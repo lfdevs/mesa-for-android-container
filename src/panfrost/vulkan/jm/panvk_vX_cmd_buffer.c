@@ -427,8 +427,14 @@ panvk_create_cmdbuf(struct vk_command_pool *vk_pool, VkCommandBufferLevel level,
    if (!cmdbuf)
       return panvk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
 
-   VkResult result = vk_command_buffer_init(
-      &pool->vk, &cmdbuf->vk, &panvk_per_arch(cmd_buffer_ops), level);
+   VkResult result = vk_command_buffer_init_with_params(
+      &cmdbuf->vk,
+      &(struct vk_command_buffer_init_params) {
+         .pool = &pool->vk,
+         .ops = &panvk_per_arch(cmd_buffer_ops),
+         .level = level,
+         .needs_cmd_queue = level == VK_COMMAND_BUFFER_LEVEL_SECONDARY,
+      });
    if (result != VK_SUCCESS) {
       vk_free(&device->vk.alloc, cmdbuf);
       return result;

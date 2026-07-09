@@ -94,7 +94,7 @@ if get_option('mesa-clc') != 'system' and (with_driver_using_cl or \
    )
 endif
 
-if with_tests
+if with_tests and not with_nir_headers_only
   test(
     'spirv_tests',
     executable(

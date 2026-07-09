@@ -203,7 +203,10 @@ radv_shader_create(struct radv_device *device, struct vk_pipeline_cache *cache, 
    if (radv_is_cache_disabled(&device->compiler_info, cache) || skip_cache || (dbg && dbg->dump_shader)) {
       struct radv_shader *shader;
       radv_shader_create_uncached(device, binary, false, NULL, dbg, &shader);
-      radv_parse_binary_debug_info(&device->compiler_info, binary, &shader->dbg);
+      /* radv_parse_binary_debug_info() might have been done earlier by radv_shader_dump_asm(). Skip it in that case to
+       * avoid memory leaks. */
+      if (!dbg || (!dbg->statistics && !dbg->ir_string && !dbg->disasm_string && !dbg->debug_info_count))
+         radv_parse_binary_debug_info(&device->compiler_info, binary, &shader->dbg);
       return shader;
    }
 

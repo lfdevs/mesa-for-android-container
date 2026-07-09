@@ -380,12 +380,23 @@ SOFTWARE.
 </bitset>
 
 <bitset name="mul8" extends="#alu-2src">
-	<gen min="7"/>
+	<gen min="7" max="7"/>
 	<pattern low="0" high="4">01100</pattern>
 </bitset>
 
 <bitset name="mul8i" displayname="mul8" extends="#alu-2src-immed">
-	<gen min="7"/>
+	<gen min="7" max="7"/>
+	<pattern low="27" high="31">01100</pattern>
+</bitset>
+
+<!-- on gen8 mul8 becomes mul16 -->
+<bitset name="mul16" extends="#alu-2src">
+	<gen min="8"/>
+	<pattern low="0" high="4">01100</pattern>
+</bitset>
+
+<bitset name="mul16i" displayname="mul16" extends="#alu-2src-immed">
+	<gen min="8"/>
 	<pattern low="27" high="31">01100</pattern>
 </bitset>
 
@@ -607,6 +618,11 @@ SOFTWARE.
 	<pattern low="27" high="31">01110</pattern>
 </bitset>
 
+<bitset name="popcount" extends="#alu-1src">
+	<gen min="8"/>
+	<pattern low="0" high="4">11100</pattern>
+</bitset>
+
 <enum name="#sds">
 	<doc>
 		Used in combination with writing @DRAW_STATE_SET, the source is
@@ -733,6 +749,7 @@ SOFTWARE.
 		<map name="IMMED">src</map>
 		<map name="SQEREG">src</map>
 	</encode>
+	<decode/>
 </bitset>
 
 <bitset name="swrite" extends="#control">

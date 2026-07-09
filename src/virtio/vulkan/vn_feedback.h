@@ -66,11 +66,63 @@ struct vn_feedback_buffer {
    struct list_head head;
 };
 
-struct vn_semaphore_feedback_cmd {
+struct vn_sync_feedback_cmd {
    struct vn_feedback_slot *src_slot;
    VkCommandBuffer *cmd_handles;
 
    struct list_head head;
+};
+
+struct vn_sync_feedback {
+   struct vn_feedback_slot *slot;
+
+   /* Lists of allocated vn_sync_feedback_cmd
+    *
+    * On submission prepare, sfb cmd is cache allocated from the free list
+    * and is moved to the pending list after initialization.
+    *
+    * On submission cleanup, sfb cmds of the owner semaphores are checked
+    * and cached to the free list if they have been "signaled", which is
+    * proxyed via the src slot value having been reached.
+    */
+   struct list_head pending_cmds;
+   struct list_head free_cmds;
+   uint32_t free_cmd_count;
+
+   /* Lock for accessing free/pending sfb cmds */
+   simple_mtx_t cmd_mtx;
+
+   /* Indicate whether the timeline counter value in the feedback slot is
+    * pollable. When pollable is false, the feedback has been suspended and
+    * the slot won't be signaled to the pending counter.
+    * - suspend: submit on queues not supporting feedback
+    * - resume if any of below occurs:
+    *   - vn_SignalSemaphore
+    *   - when the queried counter value is no smaller than the suspended
+    *     counter value
+    */
+   bool pollable;
+
+   /* When feedback is active, signaled_counter is the cached counter value
+    * to track if an async sem wait call is needed.
+    *
+    * When feedback is suspended, suspended_counter tracks the greatest
+    * signal counter value submitted on queues not supporting feedback.
+    *
+    * They share the same storage and the value is monotonic.
+    */
+   union {
+      uint64_t signaled_counter;
+      uint64_t suspended_counter;
+   };
+
+   /* Lock for checking if an async sem wait call is needed based on
+    * the current counter value and signaled_counter to ensure async
+    * wait order across threads.
+    *
+    * Also lock to protect suspended_counter and pollable updates.
+    */
+   simple_mtx_t counter_mtx;
 };
 
 struct vn_query_feedback_cmd {
@@ -152,13 +204,45 @@ vn_event_feedback_cmd_record(VkCommandBuffer cmd_handle,
                              VkResult status,
                              bool sync2);
 
-struct vn_semaphore_feedback_cmd *
-vn_semaphore_feedback_cmd_alloc(struct vn_device *dev,
-                                struct vn_feedback_slot *dst_slot);
+VkCommandBuffer
+vn_sync_feedback_command(struct vn_device *dev,
+                         struct vn_sync_feedback *sfb,
+                         uint32_t qfi,
+                         uint64_t counter);
+
+bool
+vn_sync_feedback_query(struct vn_device *dev,
+                       struct vn_sync_feedback *sfb,
+                       uint64_t *out_counter);
 
 void
-vn_semaphore_feedback_cmd_free(struct vn_device *dev,
-                               struct vn_semaphore_feedback_cmd *sfb_cmd);
+vn_sync_feedback_write(struct vn_sync_feedback *sfb, uint64_t counter);
+
+void
+vn_sync_feedback_suspend(struct vn_sync_feedback *sfb, uint64_t counter);
+
+void
+vn_sync_feedback_try_resume(struct vn_sync_feedback *sfb, uint64_t counter);
+
+static inline bool
+vn_sync_feedback_pollable(struct vn_sync_feedback *sfb)
+{
+   return sfb->pollable;
+}
+
+static inline bool
+vn_sync_feedback_enabled(struct vn_sync_feedback *sfb)
+{
+   return sfb->slot != NULL;
+}
+
+VkResult
+vn_sync_feedback_init(struct vn_device *dev,
+                      struct vn_sync_feedback *sfb,
+                      uint64_t initial_value);
+
+void
+vn_sync_feedback_fini(struct vn_device *dev, struct vn_sync_feedback *sfb);
 
 VkResult
 vn_query_feedback_cmd_alloc(VkDevice dev_handle,

@@ -1,6 +1,12 @@
+.enforce-hw-jobs-etnaviv-rules:
+  rules:
+    - if: '$INPUT_HW_JOBS !~ /"(all|etnaviv|etnaviv.ko)"/i'
+      when: never
+
 .etnaviv-rules:
   stage: etnaviv
   rules:
+    - !reference [.enforce-hw-jobs-etnaviv-rules, rules]
     - !reference [.test, rules]
     - !reference [.austriancoder-farm-rules, rules]
     - !reference [.gl-rules, rules]
@@ -26,6 +32,7 @@
   stage: etnaviv-nightly
   extends: .no-auto-retry
   rules:
+    - !reference [.enforce-hw-jobs-etnaviv-rules, rules]
     - !reference [.test, rules]
     - !reference [.austriancoder-farm-manual-rules, rules]
     - !reference [.gl-manual-rules, rules]

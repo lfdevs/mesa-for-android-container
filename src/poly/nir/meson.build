@@ -6,6 +6,7 @@ libpoly_nir_files = files(
   'poly_nir_lower_sysvals.c',
   'poly_nir_lower_tess.c',
   'poly_nir_lower_vs.c',
+  'poly_nir_passthrough_gs.c',
 )
 
 libpoly_nir = static_library(

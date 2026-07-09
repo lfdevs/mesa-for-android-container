@@ -196,12 +196,38 @@ ethosu_lower_fully_connected(struct ethosu_subgraph *subgraph,
                              struct pipe_tensor *input_tensor,
                              struct ethosu_operation *operation)
 {
+   struct pipe_tensor flat_input = *input_tensor;
+   struct pipe_tensor spatial_output = *poperation->output_tensors[0];
+   struct pipe_tensor *output_tensor = poperation->output_tensors[0];
+   struct pipe_ml_operation conv_operation = *poperation;
+   struct pipe_tensor *output_tensors[1] = {output_tensor};
+   struct pipe_tensor *weight = poperation->fcon.weight_tensor;
+
+   flat_input.dims[1] = 1;
+   flat_input.dims[2] = 1;
+   flat_input.dims[3] = input_tensor->dims[1] * input_tensor->dims[2] *
+                        input_tensor->dims[3];
+
+   if (weight->dims[1] == 1 &&
+       weight->dims[3] == input_tensor->dims[3] &&
+       output_tensor->dims[1] == 1 &&
+       output_tensor->dims[2] == input_tensor->dims[1] * input_tensor->dims[2]) {
+      flat_input = *input_tensor;
+
+      spatial_output.dims[1] = input_tensor->dims[1];
+      spatial_output.dims[2] = input_tensor->dims[2];
+      spatial_output.dims[3] = weight->dims[2];
+      output_tensors[0] = &spatial_output;
+   }
+
+   conv_operation.output_tensors = output_tensors;
+
    operation->kernel.scale = poperation->fcon.weight_tensor->scale;
    operation->kernel.zero_point = poperation->fcon.weight_tensor->zero_point;
    operation->kernel.is_signed = poperation->fcon.weight_tensor->is_signed;
 
-   lower_conv_common(subgraph, poperation, input_tensor,
-                     poperation->fcon.weight_tensor,
+   lower_conv_common(subgraph, &conv_operation, &flat_input,
+                     weight,
                      (int32_t *)poperation->fcon.bias_tensor->data,
                      operation);
 }
@@ -213,17 +239,44 @@ ethosu_lower_convolution(struct ethosu_subgraph *subgraph,
                          struct ethosu_operation *operation)
 {
    int32_t *bias_data = poperation->conv.bias_tensor ? (int32_t *)poperation->conv.bias_tensor->data : NULL;
+   struct pipe_tensor conv_weight = *poperation->conv.weight_tensor;
+   uint8_t *transposed_weights = NULL;
 
    operation->conv.depthwise = is_depthwise(poperation);
 
-   operation->kernel.height = poperation->conv.weight_tensor->dims[1];
-   operation->kernel.width = poperation->conv.weight_tensor->dims[2];
+   if (poperation->conv.depthwise && !operation->conv.depthwise) {
+      unsigned height = conv_weight.dims[1];
+      unsigned width = conv_weight.dims[2];
+      unsigned output_depth = poperation->output_tensors[0]->dims[3];
+
+      assert(input_tensor->dims[3] == 1);
+      assert(conv_weight.dims[0] == 1);
+      assert(conv_weight.dims[3] == output_depth);
+
+      transposed_weights = malloc(height * width * output_depth);
+      for (unsigned o = 0; o < output_depth; o++) {
+         for (unsigned y = 0; y < height; y++) {
+            for (unsigned x = 0; x < width; x++) {
+               transposed_weights[(o * height * width) + (y * width) + x] =
+                  poperation->conv.weight_tensor->data[(y * width * output_depth) +
+                                                       (x * output_depth) + o];
+            }
+         }
+      }
+
+      conv_weight.dims[0] = output_depth;
+      conv_weight.dims[3] = 1;
+      conv_weight.data = transposed_weights;
+   }
+
+   operation->kernel.height = conv_weight.dims[1];
+   operation->kernel.width = conv_weight.dims[2];
    operation->kernel.stride_y = poperation->conv.stride_y;
    operation->kernel.stride_x = poperation->conv.stride_x;
    operation->kernel.depthwise = is_depthwise(poperation);
-   operation->kernel.scale = poperation->conv.weight_tensor->scale;
-   operation->kernel.zero_point = poperation->conv.weight_tensor->zero_point;
-   operation->kernel.is_signed = poperation->conv.weight_tensor->is_signed;
+   operation->kernel.scale = conv_weight.scale;
+   operation->kernel.zero_point = conv_weight.zero_point;
+   operation->kernel.is_signed = conv_weight.is_signed;
 
    operation->pad.top = poperation->conv.padding_top;
    operation->pad.bottom = poperation->conv.padding_bottom;
@@ -231,9 +284,11 @@ ethosu_lower_convolution(struct ethosu_subgraph *subgraph,
    operation->pad.right = poperation->conv.padding_right;
 
    lower_conv_common(subgraph, poperation, input_tensor,
-                     poperation->conv.weight_tensor,
+                     &conv_weight,
                      (int32_t *)bias_data,
                      operation);
+
+   free(transposed_weights);
 }
 
 static void
@@ -847,8 +902,10 @@ ethosu_lower_graph(struct ethosu_subgraph *subgraph,
          ethosu_lower_convolution(subgraph, &poperations[i], input_tensor, &operation);
 
          if (padded_input) {
-            operation.pad.top = 1;
-            operation.pad.left = 1;
+            operation.pad.top += producer->pad.before_y;
+            operation.pad.bottom += producer->pad.after_y;
+            operation.pad.left += producer->pad.before_x;
+            operation.pad.right += producer->pad.after_x;
          }
 
          if (operation.conv.scales.size + operation.conv.weights.size <=

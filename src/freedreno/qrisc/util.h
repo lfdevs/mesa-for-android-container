@@ -38,6 +38,10 @@ enum qrisc_color {
 void qrisc_printc(enum qrisc_color c, const char *fmt, ...);
 
 enum qrisc_fwid {
+   QRISC_GEN80000 = 0x500,
+   QRISC_GEN80100 = 0x700,
+   QRISC_GEN80200 = 0x510,
+
    QRISC_A730 = 0x730,
    QRISC_A740 = 0x740,
    QRISC_GEN70500 = 0x512,

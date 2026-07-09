@@ -61,6 +61,9 @@ struct apple_glx_context
    bool is_current;             /* True if the context is current in some thread. */
    bool made_current;           /* True if the context has ever been made current. */
 
+   /* Requested GLX_CONTEXT_PROFILE_MASK_ARB, for glXQueryContext introspection. */
+   int profile_mask;
+
    /*
     * last_surface is set by the pending_destroy code handler for a drawable.
     * Due to a CG difference, we have to recreate a surface if the window
@@ -72,6 +75,8 @@ struct apple_glx_context
 
 bool apple_glx_create_context(void **ptr, Display * dpy, int screen,
                               const void *mode, void *sharedContext,
+                              int major_version, int minor_version,
+                              int profile_mask, int flags,
                               int *errorptr, bool * x11errorptr);
 void apple_glx_destroy_context(void **ptr, Display * dpy);
 

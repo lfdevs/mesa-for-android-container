@@ -142,7 +142,7 @@ static inline enum intel_pagefault_access
 xe_vm_fault_get_access(const struct xe_vm_fault *vm_fault)
 {
    switch (vm_fault->access_type) {
-   default: UNREACHABLE("not handled"); FALLTHROUGH;
+   default: UNREACHABLE("not handled");
    case FAULT_ACCESS_TYPE_READ: return INTEL_PAGEFAULT_ACCESS_READ;
    case FAULT_ACCESS_TYPE_WRITE: return INTEL_PAGEFAULT_ACCESS_WRITE;
    case FAULT_ACCESS_TYPE_ATOMIC: return INTEL_PAGEFAULT_ACCESS_ATOMIC;
@@ -153,7 +153,7 @@ static inline enum intel_pagefault_type
 xe_vm_fault_get_type(const struct xe_vm_fault *vm_fault)
 {
    switch (vm_fault->fault_type) {
-   default: UNREACHABLE("not handled"); FALLTHROUGH;
+   default: UNREACHABLE("not handled");
    case FAULT_TYPE_NOT_PRESENT: return INTEL_PAGEFAULT_TYPE_NOT_PRESENT;
    case FAULT_TYPE_WRITE_ACCESS: return INTEL_PAGEFAULT_TYPE_WRITE_ACCESS;
    case FAULT_TYPE_ATOMIC_ACCESS: return INTEL_PAGEFAULT_TYPE_ATOMIC_ACCESS;
@@ -164,7 +164,7 @@ static inline enum intel_pagefault_level
 xe_vm_fault_get_level(const struct xe_vm_fault *vm_fault)
 {
    switch (vm_fault->fault_level) {
-   default: UNREACHABLE("not handled"); FALLTHROUGH;
+   default: UNREACHABLE("not handled");
    case FAULT_LEVEL_PTE: return INTEL_PAGEFAULT_LEVEL_PTE;
    case FAULT_LEVEL_PDE: return INTEL_PAGEFAULT_LEVEL_PDE;
    case FAULT_LEVEL_PDP: return INTEL_PAGEFAULT_LEVEL_PDP;

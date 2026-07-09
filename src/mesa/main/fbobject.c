@@ -3,6 +3,7 @@
  *
  * Copyright (C) 1999-2008  Brian Paul   All Rights Reserved.
  * Copyright (C) 1999-2009  VMware, Inc.  All Rights Reserved.
+ * Copyright (C) 2026 NXP
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -1066,7 +1067,6 @@ test_attachment_completeness(const struct gl_context *ctx, GLenum format,
          if (_mesa_is_gles(ctx)) {
             switch (texImage->InternalFormat) {
             case GL_SRGB_EXT:
-            case GL_SRGB_ALPHA_EXT:
                att_incomplete("bad internal format");
                att->Complete = GL_FALSE;
                return;

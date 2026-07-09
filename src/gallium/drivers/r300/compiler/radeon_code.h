@@ -27,8 +27,6 @@
  * and subroutine jumps. */
 #define R500_PVS_MAX_LOOP_DEPTH 8
 
-#define STATE_R300_WINDOW_DIMENSION (STATE_INTERNAL_DRIVER + 0)
-
 enum {
    /**
     * External constants are constants whose meaning is unknown to this
@@ -47,10 +45,7 @@ enum {
 };
 
 enum {
-   RC_STATE_SHADOW_AMBIENT = 0,
-
-   RC_STATE_R300_WINDOW_DIMENSION,
-   RC_STATE_R300_TEXRECT_FACTOR,
+   RC_STATE_R300_TEXRECT_FACTOR = 0,
    RC_STATE_R300_TEXSCALE_FACTOR,
    RC_STATE_R300_VIEWPORT_SCALE,
    RC_STATE_R300_VIEWPORT_OFFSET

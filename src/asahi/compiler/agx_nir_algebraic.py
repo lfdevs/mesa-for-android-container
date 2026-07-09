@@ -88,7 +88,7 @@ lower_pack = [
 lower_selects = []
 for T, sizes, one in [('f', [16, 32], 1.0),
                       ('i', [8, 16, 32], 1),
-                      ('b', [16, 32], -1)]:
+                      ('b', [32], -1)]:
     for size in sizes:
         lower_selects.extend([
             ((f'b2{T}{size}', ('inot', 'a@1')), ('bcsel', a, 0, one)),

@@ -30,28 +30,29 @@
 #ifndef APPLE_GLX_LOG_H
 #define APPLE_GLX_LOG_H
 
+#include <AvailabilityMacros.h>
 #include <sys/cdefs.h>
+
+#if defined(MAC_OS_X_VERSION_MIN_REQUIRED) && MAC_OS_X_VERSION_MIN_REQUIRED >= MAC_OS_X_VERSION_10_12
+#include <os/log.h>
+
+extern os_log_t apple_glx_oslog;
+
+#define apple_glx_log(fmt, args...)       os_log(apple_glx_oslog, fmt, ##args)
+#define apple_glx_log_info(fmt, args...)  os_log_info(apple_glx_oslog, fmt, ##args)
+#define apple_glx_log_debug(fmt, args...) os_log_debug(apple_glx_oslog, fmt, ##args)
+#define apple_glx_log_error(fmt, args...) os_log_error(apple_glx_oslog, fmt, ##args)
+
+#else
 #include <asl.h>
 
+#define apple_glx_log(fmt, args...)       asl_log(NULL, NULL, ASL_LEVEL_NOTICE, fmt, ##args)
+#define apple_glx_log_info(fmt, args...)  asl_log(NULL, NULL, ASL_LEVEL_INFO, fmt, ##args)
+#define apple_glx_log_debug(fmt, args...) asl_log(NULL, NULL, ASL_LEVEL_DEBUG, fmt, ##args)
+#define apple_glx_log_error(fmt, args...) asl_log(NULL, NULL, ASL_LEVEL_ERR, fmt, ##args)
+
+#endif
+
 void apple_glx_log_init(void);
-
-__printflike(5, 6)
-void _apple_glx_log(int level, const char *file, const char *function,
-                    int line, const char *fmt, ...);
-#define apple_glx_log(l, f, args ...) \
-    _apple_glx_log(l, __FILE__, __func__, __LINE__, f, ## args)
-
-
-__printflike(5, 0)
-void _apple_glx_vlog(int level, const char *file, const char *function,
-                     int line, const char *fmt, va_list v);
-#define apple_glx_vlog(l, f, v) \
-    _apple_glx_vlog(l, __FILE__, __func__, __LINE__, f, v)
-
-/* This is just here to help the transition.
- * TODO: Replace calls to apple_glx_diagnostic
- */
-#define apple_glx_diagnostic(f, args ...) \
-    apple_glx_log(ASL_LEVEL_DEBUG, f, ## args)
 
 #endif

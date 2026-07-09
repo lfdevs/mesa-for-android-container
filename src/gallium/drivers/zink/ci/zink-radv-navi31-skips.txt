@@ -1,0 +1,2 @@
+# This test crashes with ASAN.
+asan-KHR-GL46.direct_state_access.vertex_arrays_attribute_format

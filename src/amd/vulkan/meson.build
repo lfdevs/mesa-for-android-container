@@ -1,6 +1,26 @@
 # Copyright © 2017 Intel Corporation
 # SPDX-License-Identifier: MIT
 
+radv_tracepoints = custom_target(
+  'radv_tracepoints.[ch]',
+  input: ['radv_tracepoints.py', vk_api_xml],
+  output: ['radv_tracepoints.c', 'radv_entrypoint_tracepoints.c', 'radv_tracepoints_perfetto.h', 'radv_tracepoints.h'],
+  command: [
+    prog_python, '@INPUT0@',
+    '--import-path', mesa_python_path,
+    '--src','@OUTPUT0@',
+    '--entrypoints-src', '@OUTPUT1@',
+    '--perfetto-hdr', '@OUTPUT2@',
+    '--hdr', '@OUTPUT3@',
+    '--xml', '@INPUT1@',
+  ],
+  depend_files: u_trace_py,
+)
+
+idep_radv_tracepoints = declare_dependency(
+  sources: radv_tracepoints,
+)
+
 radv_entrypoints_gen_command = [
   prog_python, '@INPUT0@', '--xml', '@INPUT1@', '--proto', '--weak',
   '--out-h', '@OUTPUT0@', '--out-c', '@OUTPUT1@',
@@ -16,6 +36,7 @@ radv_entrypoints_gen_command += [
   '--device-prefix', 'rra',
   '--device-prefix', 'rmv',
   '--device-prefix', 'ctx_roll',
+  '--device-prefix', 'utrace',
 
   # Command buffer annotation layer entrypoints
   '--device-prefix', 'annotate',
@@ -31,7 +52,7 @@ radv_entrypoints = custom_target(
 
 radv_drirc = custom_target(
   'radv_drirc',
-  input  : [files('radv_drirc_gen.py'), drirc_gen, join_paths(dir_source_root, 'src/util/00-radv-defaults.conf')],
+  input  : [files('radv_drirc_gen.py'), drirc_gen, '00-radv-defaults.conf'],
   output : ['radv_drirc.c', 'radv_drirc.h'],
   command : [
     prog_python, '@INPUT0@',
@@ -43,12 +64,13 @@ radv_drirc = custom_target(
 )
 
 libradv_files = files(
-  'bvh/bvh.h',
+  'bvh/bvh_defines.h',
   'layers/radv_app_workarounds.c',
   'layers/radv_ctx_roll_layer.c',
   'layers/radv_rmv_layer.c',
   'layers/radv_rra_layer.c',
   'layers/radv_sqtt_layer.c',
+  'layers/radv_utrace_layer.c',
   'meta/radv_meta.c',
   'meta/radv_meta.h',
   'meta/radv_meta_astc_decode.c',
@@ -89,7 +111,6 @@ libradv_files = files(
   'nir/radv_nir_lower_primitive_shading_rate.c',
   'nir/radv_nir_lower_printf.c',
   'nir/radv_nir_lower_ray_queries.c',
-  'nir/radv_nir_lower_view_index.c',
   'nir/radv_nir_lower_vs_inputs.c',
   'nir/radv_nir_opt_fs_builtins.c',
   'nir/radv_nir_opt_tid_function.c',
@@ -249,6 +270,11 @@ if radv_build_id != ''
   radv_flags += '-DRADV_BUILD_ID_OVERRIDE="' + radv_build_id + '"'
 endif
 
+radv_u_trace = get_option('radv-u_trace')
+if radv_u_trace
+  radv_flags += '-DRADV_U_TRACE=1'
+endif
+
 libvulkan_radeon = shared_library(
   'vulkan_radeon',
   [libradv_files, radv_entrypoints, radv_drirc, sha1_h, radix_sort_spv, bvh_spv, radv_annotate_layer],
@@ -265,6 +291,7 @@ libvulkan_radeon = shared_library(
     dep_valgrind, radv_deps, idep_aco,
     idep_mesautil, idep_nir, idep_vulkan_util, idep_vulkan_wsi,
     idep_vulkan_runtime, idep_amd_generated_headers, idep_xmlconfig,
+    idep_radv_tracepoints,
   ],
   c_args : [no_override_init_args, radv_flags, c_msvc_compat_args],
   cpp_args : [radv_flags, cpp_msvc_compat_args],

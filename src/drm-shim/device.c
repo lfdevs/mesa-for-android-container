@@ -84,7 +84,7 @@ drm_shim_device_init(void)
 
    shim_device.offset_map = _mesa_hash_table_u64_create(NULL);
 
-   mtx_init(&shim_device.mem_lock, mtx_plain);
+   mtx_init(&shim_device.lock, mtx_plain);
 
    shim_device.mem_fd = memfd_create("shim mem", MFD_CLOEXEC);
    assert(shim_device.mem_fd != -1);
@@ -137,7 +137,9 @@ void drm_shim_fd_register(int fd, struct shim_fd *shim_fd)
    else
       p_atomic_inc(&shim_fd->refcount);
 
+   mtx_lock(&shim_device.lock);
    _mesa_hash_table_insert(shim_device.fd_map, (void *)(uintptr_t)(fd + 1), shim_fd);
+   mtx_unlock(&shim_device.lock);
 }
 
 static void handle_delete_fxn(struct hash_entry *entry)
@@ -150,12 +152,16 @@ void drm_shim_fd_unregister(int fd)
    if (fd == -1)
       return;
 
+   mtx_lock(&shim_device.lock);
    struct hash_entry *entry =
          _mesa_hash_table_search(shim_device.fd_map, (void *)(uintptr_t)(fd + 1));
-   if (!entry)
+   if (!entry) {
+      mtx_unlock(&shim_device.lock);
       return;
+   }
    struct shim_fd *shim_fd = entry->data;
    _mesa_hash_table_remove(shim_device.fd_map, entry);
+   mtx_unlock(&shim_device.lock);
 
    if (!p_atomic_dec_zero(&shim_fd->refcount))
       return;
@@ -167,15 +173,17 @@ void drm_shim_fd_unregister(int fd)
 struct shim_fd *
 drm_shim_fd_lookup(int fd)
 {
-   if (fd == -1)
+   if (!drm_shim_inited() || fd == -1)
       return NULL;
 
+   mtx_lock(&shim_device.lock);
    struct hash_entry *entry =
       _mesa_hash_table_search(shim_device.fd_map, (void *)(uintptr_t)(fd + 1));
 
-   if (!entry)
-      return NULL;
-   return entry->data;
+   struct shim_fd *result = entry ? entry->data : NULL;
+   mtx_unlock(&shim_device.lock);
+
+   return result;
 }
 
 /* ioctl used by drmGetVersion() */
@@ -333,9 +341,9 @@ int
 drm_shim_bo_init(struct shim_bo *bo, size_t size)
 {
 
-   mtx_lock(&shim_device.mem_lock);
+   mtx_lock(&shim_device.lock);
    bo->mem_addr = util_vma_heap_alloc(&shim_device.mem_heap, size, shim_page_size);
-   mtx_unlock(&shim_device.mem_lock);
+   mtx_unlock(&shim_device.lock);
 
    if (!bo->mem_addr)
       return -ENOMEM;
@@ -378,9 +386,9 @@ drm_shim_bo_put(struct shim_bo *bo)
    if (shim_device.driver_bo_free)
       shim_device.driver_bo_free(bo);
 
-   mtx_lock(&shim_device.mem_lock);
+   mtx_lock(&shim_device.lock);
    util_vma_heap_free(&shim_device.mem_heap, bo->mem_addr, bo->size);
-   mtx_unlock(&shim_device.mem_lock);
+   mtx_unlock(&shim_device.lock);
    free(bo);
 }
 
@@ -410,9 +418,9 @@ drm_shim_bo_get_handle(struct shim_fd *shim_fd, struct shim_bo *bo)
 uint64_t
 drm_shim_bo_get_mmap_offset(struct shim_fd *shim_fd, struct shim_bo *bo)
 {
-   mtx_lock(&shim_device.mem_lock);
+   mtx_lock(&shim_device.lock);
    _mesa_hash_table_u64_insert(shim_device.offset_map, bo->mem_addr, bo);
-   mtx_unlock(&shim_device.mem_lock);
+   mtx_unlock(&shim_device.lock);
 
    /* reuse the buffer address as the mmap offset: */
    return bo->mem_addr;
@@ -440,9 +448,9 @@ drm_shim_mmap(struct shim_fd *shim_fd, size_t length, int prot, int flags,
       return shim_device.iomem_region.mmap(length, prot, flags, offset);
    }
 
-   mtx_lock(&shim_device.mem_lock);
+   mtx_lock(&shim_device.lock);
    struct shim_bo *bo = _mesa_hash_table_u64_search(shim_device.offset_map, offset);
-   mtx_unlock(&shim_device.mem_lock);
+   mtx_unlock(&shim_device.lock);
 
    if (!bo)
       return MAP_FAILED;

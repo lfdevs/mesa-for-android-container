@@ -681,6 +681,7 @@ st_Bitmap(struct gl_context *ctx, GLint x, GLint y,
                        ctx->FragmentProgram._Current,
                        ctx->Scissor.EnableFlags & 0x1,
                        ctx->Color._ClampFragmentColor);
+      st->pipe->sampler_view_release(st->pipe, view);
    }
 }
 

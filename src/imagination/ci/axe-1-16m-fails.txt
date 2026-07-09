@@ -36,3 +36,4 @@ dEQP-VK.pipeline.monolithic.multisample_interpolation.nonuniform_interpolant_ind
 dEQP-VK.pipeline.monolithic.multisample_interpolation.nonuniform_interpolant_indexing.sample,Fail
 dEQP-VK.rasterization.line_continuity.line-strip,Crash
 dEQP-VK.ycbcr.conversion.g8_b8r8_2plane_420_unorm.color_conversion.ycbcr_2020_itu_narrow_tiling_optimal_cosited_binding_31,Fail
+dEQP-VK.ycbcr.conversion.g8_b8_r8_3plane_420_unorm.color_conversion.ycbcr_709_itu_narrow_tiling_linear_cosited_binding_15,Fail

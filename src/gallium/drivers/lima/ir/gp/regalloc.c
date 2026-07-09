@@ -86,7 +86,7 @@ static bool propagate_liveness_block(gpir_block *block, struct regalloc_ctx *ctx
       }
    }
 
-   memcpy(ctx->live, block->live_out, ctx->bitset_words * sizeof(BITSET_WORD));
+   __bitset_copy(ctx->live, block->live_out, ctx->bitset_words);
 
    list_for_each_entry_rev(gpir_node, node, &block->node_list, list) {
       propagate_liveness_node(node, ctx->live, block->comp);

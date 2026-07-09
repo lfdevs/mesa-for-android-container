@@ -278,10 +278,9 @@ blorp_params_get_layer_offset_vs_brw(struct blorp_batch *batch,
                                      struct blorp_params *params)
 {
    struct blorp_context *blorp = batch->blorp;
-   struct layer_offset_vs_key blorp_key = {
-      .base = BLORP_BASE_KEY_INIT(BLORP_SHADER_TYPE_LAYER_OFFSET_VS,
-                                  BLORP_SHADER_PIPELINE_RENDER),
-   };
+   struct layer_offset_vs_key blorp_key;
+   BLORP_KEY_INIT(blorp_key, BLORP_SHADER_TYPE_LAYER_OFFSET_VS,
+                  BLORP_SHADER_PIPELINE_RENDER);
 
    struct brw_fs_prog_data *fs_prog_data = params->fs_prog_data;
    if (fs_prog_data)

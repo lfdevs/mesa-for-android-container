@@ -65,7 +65,7 @@ Bug Reporting
 -------------
 
 VC4 rendering bugs should go to Mesa's GitLab `issues
-<https://gitlab.freedesktop.org/mesa/mesa/-/issues>`__ page.
+<https://gitlab.freedesktop.org/mesa/mesa/-/work_items>`__ page.
 
 By far the easiest way to communicate bug reports for rendering
 problems is to take an apitrace. This passes exactly the drawing you

@@ -73,6 +73,8 @@ VKAPI_ATTR VkResult VKAPI_CALL
 panvk_BindBufferMemory2(VkDevice _device, uint32_t bindInfoCount,
                         const VkBindBufferMemoryInfo *pBindInfos)
 {
+   VK_FROM_HANDLE(panvk_device, device, _device);
+
    for (uint32_t i = 0; i < bindInfoCount; i++) {
       VK_FROM_HANDLE(panvk_device_memory, mem, pBindInfos[i].memory);
       VK_FROM_HANDLE(panvk_buffer, buffer, pBindInfos[i].buffer);
@@ -87,6 +89,10 @@ panvk_BindBufferMemory2(VkDevice _device, uint32_t bindInfoCount,
          *bind_status->pResult = VK_SUCCESS;
 
       buffer->vk.device_address = mem->addr.dev + pBindInfos[i].memoryOffset;
+
+      panvk_address_binding_report(device, &buffer->vk.base,
+                                   buffer->vk.device_address, buffer->vk.size,
+                                   VK_DEVICE_ADDRESS_BINDING_TYPE_BIND_EXT);
    }
    return VK_SUCCESS;
 }
@@ -147,6 +153,12 @@ panvk_CreateBuffer(VkDevice _device, const VkBufferCreateInfo *pCreateInfo,
       }
    }
 
+   if (buffer->vk.create_flags & VK_BUFFER_CREATE_SPARSE_BINDING_BIT)
+      panvk_address_binding_report(device, &buffer->vk.base,
+                                   buffer->vk.device_address,
+                                   panvk_buffer_get_sparse_size(buffer),
+                                   VK_DEVICE_ADDRESS_BINDING_TYPE_BIND_EXT);
+
    *pBuffer = panvk_buffer_to_handle(buffer);
 
    return VK_SUCCESS;
@@ -174,6 +186,10 @@ panvk_DestroyBuffer(VkDevice _device, VkBuffer _buffer,
    if (buffer->vk.create_flags & VK_BUFFER_CREATE_SPARSE_BINDING_BIT) {
       uint64_t va_range = panvk_buffer_get_sparse_size(buffer);
 
+      panvk_address_binding_report(device, &buffer->vk.base,
+                                   buffer->vk.device_address, va_range,
+                                   VK_DEVICE_ADDRESS_BINDING_TYPE_UNBIND_EXT);
+
       struct pan_kmod_vm_op unmap = {
          .type = PAN_KMOD_VM_OP_TYPE_UNMAP,
          .va = {
@@ -187,6 +203,10 @@ panvk_DestroyBuffer(VkDevice _device, VkBuffer _buffer,
 
       panvk_as_free(device, &device->as.heap, buffer->vk.device_address,
                     va_range);
+   } else if (buffer->vk.device_address) {
+      panvk_address_binding_report(device, &buffer->vk.base,
+                                   buffer->vk.device_address, buffer->vk.size,
+                                   VK_DEVICE_ADDRESS_BINDING_TYPE_UNBIND_EXT);
    }
 
    vk_buffer_destroy(&device->vk, pAllocator, &buffer->vk);

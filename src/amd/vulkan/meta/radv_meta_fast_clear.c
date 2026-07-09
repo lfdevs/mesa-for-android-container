@@ -255,9 +255,9 @@ radv_process_color_image_layer(struct radv_cmd_buffer *cmd_buffer, struct radv_i
     */
    const bool disable_tc_compat_cmask_mrt = op == FMASK_DECOMPRESS || op == DCC_DECOMPRESS;
 
-   const VkImageViewUsageCreateInfo iview_usage_info = {
-      .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_USAGE_CREATE_INFO,
-      .usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+   const VkImageViewUsage2CreateInfoKHR iview_usage_info = {
+      .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_USAGE_2_CREATE_INFO_KHR,
+      .usage = VK_IMAGE_USAGE_2_COLOR_ATTACHMENT_BIT_KHR,
    };
 
    radv_image_view_init(
@@ -495,9 +495,9 @@ radv_decompress_dcc_compute(struct radv_cmd_buffer *cmd_buffer, struct radv_imag
 
       for (uint32_t s = 0; s < vk_image_subresource_layer_count(&image->vk, subresourceRange); s++) {
 
-         const VkImageViewUsageCreateInfo load_iview_usage_info = {
-            .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_USAGE_CREATE_INFO,
-            .usage = VK_IMAGE_USAGE_STORAGE_BIT,
+         const VkImageViewUsage2CreateInfoKHR load_iview_usage_info = {
+            .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_USAGE_2_CREATE_INFO_KHR,
+            .usage = VK_IMAGE_USAGE_2_STORAGE_BIT_KHR,
          };
 
          radv_image_view_init(&load_iview, device,
@@ -516,9 +516,9 @@ radv_decompress_dcc_compute(struct radv_cmd_buffer *cmd_buffer, struct radv_imag
                               },
                               &(struct radv_image_view_extra_create_info){.enable_compression = true});
 
-         const VkImageViewUsageCreateInfo store_iview_usage_info = {
-            .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_USAGE_CREATE_INFO,
-            .usage = VK_IMAGE_USAGE_STORAGE_BIT,
+         const VkImageViewUsage2CreateInfoKHR store_iview_usage_info = {
+            .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_USAGE_2_CREATE_INFO_KHR,
+            .usage = VK_IMAGE_USAGE_2_STORAGE_BIT_KHR,
          };
 
          radv_image_view_init(&store_iview, device,

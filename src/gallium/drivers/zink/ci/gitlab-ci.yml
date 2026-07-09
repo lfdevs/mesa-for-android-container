@@ -15,7 +15,7 @@ zink-lavapipe:
     # to stdout and aborting on unknown failures.
     ZINK_DEBUG: validation
     VK_DRIVER: lvp
-  parallel: 2
+  parallel: 3
   script: |
     export LD_LIBRARY_PATH="$CI_PROJECT_DIR/install/lib"
     export LIBGL_DRIVERS_PATH="$CI_PROJECT_DIR/install/lib/dri"
@@ -109,6 +109,7 @@ zink-anv-adl-traces-performance:
     - .zink-anv-manual-rules
     - .piglit-performance-base
   rules:
+    - !reference [.enforce-hw-jobs-anv-rules, rules]
     - !reference [.piglit-performance-base, rules]
     - !reference [.zink-anv-manual-rules, rules]
   variables:
@@ -156,18 +157,6 @@ zink-anv-tgl-traces-restricted:
     PIGLIT_REPLAY_EXTRA_ARGS: --db-path ${CI_PROJECT_DIR}/replayer-db/ --minio_bucket=${S3_TRACIE_PRIVATE_BUCKET} --jwt-file=${S3_JWT_FILE}
   allow_failure: true
 
-zink-anv-cml-asan:
-  extends:
-    - .lava-x86_64-test-asan-gl
-    - .anv-test
-    - .lava-acer-chromebox-cxi4-puff:x86_64
-    - .zink-anv-rules
-    - .zink-test
-  variables:
-    GPU_VERSION: zink-anv-cml
-    DEQP_SUITE: zink-anv-cml
-  parallel: 10
-
 zink-tu-a618:
   extends:
     - .lava-arm64-test-gl
@@ -197,6 +186,7 @@ zink-tu-a618-traces-performance:
     - .zink-turnip-collabora-manual-rules
     - .piglit-performance-base
   rules:
+    - !reference [.enforce-hw-jobs-turnip-rules, rules]
     - !reference [.piglit-performance-base, rules]
     - !reference [.zink-turnip-collabora-manual-rules, rules]
   variables:
@@ -223,7 +213,7 @@ zink-tu-a750:
 
 ############### Combined testing (GL, GLES, Piglit) on NVK / RADV
 zink-nvk-ga106-valve:
-  timeout: 45m
+  timeout: 35m
   extends:
     - .zink-nvk-test-valve
     - .zink-nvk-manual-rules
@@ -231,10 +221,10 @@ zink-nvk-ga106-valve:
   variables:
     HWCI_START_WESTON: 1
     GPU_VERSION: zink-nvk-ga106
-    CI_TRON_TIMEOUT__OVERALL__MINUTES: 40  # usual run time: 32min
+    CI_TRON_TIMEOUT__OVERALL__MINUTES: 33  # usual run time: 25 min
 
 zink-nvk-ad106-valve:
-  timeout: 45m
+  timeout: 35m
   extends:
     - .zink-nvk-test-valve
     - .zink-nvk-manual-rules
@@ -242,34 +232,34 @@ zink-nvk-ad106-valve:
   variables:
     HWCI_START_WESTON: 1
     GPU_VERSION: zink-nvk-ad106
-    CI_TRON_TIMEOUT__OVERALL__MINUTES: 40  # usual run time: 32min
+    CI_TRON_TIMEOUT__OVERALL__MINUTES: 33  # usual run time: 25min
 
 zink-radv-polaris10-valve:
   extends:
     - .radv-zink-test-valve
     - .polaris10-test-valve-kws
     - .zink-radv-valve-manual-rules
-  timeout: 40m
+  timeout: 20m
   variables:
     HWCI_START_WESTON: 1
     GPU_VERSION: zink-radv-polaris10
     ZINK_DEBUG: quiet
-    CI_TRON_TIMEOUT__OVERALL__MINUTES: 30
+    CI_TRON_TIMEOUT__OVERALL__MINUTES: 18
 
 zink-radv-navi10-valve:
   extends:
     - .radv-zink-test-valve
     - .navi10-test-valve-mupuf
     - .zink-radv-valve-manual-rules
-  timeout: 40m
+  timeout: 17m
   variables:
     HWCI_START_WESTON: 1
-    CI_TRON_TIMEOUT__OVERALL__MINUTES: 30
+    CI_TRON_TIMEOUT__OVERALL__MINUTES: 15
     GPU_VERSION: zink-radv-navi10
     RADV_EXPERIMENTAL: hic
 
 zink-radv-vangogh-valve:
-  timeout: 35m
+  timeout: 25m
   parallel: 3
   extends:
     - .radv-zink-test-valve
@@ -279,9 +269,8 @@ zink-radv-vangogh-valve:
     HWCI_START_WESTON: 1
     GPU_VERSION: zink-radv-vangogh
     CI_TRON_PATTERN__SESSION_REBOOT__REGEX: 'BUG: kernel NULL pointer dereference, address'
-    CI_TRON_TIMEOUT__BOOT_CYCLE__RETRIES: 1
-    CI_TRON_TIMEOUT__BOOT_CYCLE__MINUTES: 30
-    CI_TRON_TIMEOUT__OVERALL__MINUTES: 30
+    CI_TRON_TIMEOUT__BOOT_CYCLE__MINUTES: 15
+    CI_TRON_TIMEOUT__OVERALL__MINUTES: 23
     FDO_CI_CONCURRENT: 6
 
 zink-radv-vangogh-traces:
@@ -301,6 +290,17 @@ zink-radv-navi31-valve:
     - .radv-zink-test-valve
     - .navi31-test-valve
     - .zink-radv-valve-rules
+  timeout: 15m
+  variables:
+    HWCI_START_WESTON: 1
+    GPU_VERSION: zink-radv-navi31
+    CI_TRON_TIMEOUT__OVERALL__MINUTES: 10
+
+zink-radv-navi31-valve-asan:
+  extends:
+    - .radv-zink-test-valve-asan
+    - .navi31-test-valve
+    - .zink-radv-valve-manual-rules
   timeout: 15m
   variables:
     HWCI_START_WESTON: 1

@@ -27,7 +27,6 @@
 
 #include "compiler/nir/nir.h"
 #include "draw/draw_context.h"
-#include "nir/nir_to_tgsi.h"
 #include "util/format/u_format.h"
 #include "util/format/u_format_s3tc.h"
 #include "util/os_misc.h"
@@ -127,7 +126,6 @@ static const nir_shader_compiler_options i915_compiler_options = {
 };
 
 static const struct nir_shader_compiler_options gallivm_nir_options = {
-   .fdot_replicates = true,
    .lower_bitops = true, /* required for !CAP_INTEGERS nir_to_tgsi */
    .lower_scmp = true,
    .lower_flrp32 = true,
@@ -166,6 +164,7 @@ static const struct nir_shader_compiler_options gallivm_nir_options = {
    .support_indirect_inputs = (uint8_t)BITFIELD_MASK(MESA_SHADER_STAGES),
    .support_indirect_outputs = (uint8_t)BITFIELD_MASK(MESA_SHADER_STAGES),
    .no_integers = true,
+   .has_fused_comp_and_csel = true,
 };
 
 static void
@@ -206,6 +205,7 @@ i915_optimize_nir(struct nir_shader *s)
       NIR_PASS(progress, s, nir_opt_loop);
       NIR_PASS(progress, s, nir_opt_undef);
       NIR_PASS(progress, s, nir_opt_loop_unroll);
+      NIR_PASS(progress, s, nir_opt_licm, NULL);
 
    } while (progress);
 

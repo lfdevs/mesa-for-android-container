@@ -142,8 +142,8 @@ categoryToPerfettogrpMask = {
    { "VectorEngine",                          CMP       },
 
    /* Ray tracing ---------------------------------------------------- */
-   { "Ray Tracing",                           RESERVED  },
-   { "RayTracing",                            RESERVED  },
+   { "Ray Tracing",                           RT        },
+   { "RayTracing",                            RT        },
 
    /* Diagnostic ----------------------------------------------------- */
    { "Test",                                  UNCL      },

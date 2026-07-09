@@ -8,8 +8,9 @@
 
 layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 
-#include "build_helpers.h"
-#include "build_interface.h"
+#include "bvh_defines.h"
+#define VK_USED_BUILD_FLAGS RADV_ENCODE_BUILD_FLAGS
+#include "bvh_helpers.h"
 #include "encode.h"
 
 layout(push_constant) uniform CONSTS {
@@ -183,7 +184,7 @@ main()
 
       REF(radv_bvh_box16_node) dst_node_f16 = REF(radv_bvh_box16_node)(OFFSET(args.output_bvh, id_to_offset(node_id)));
       REF(radv_bvh_box32_node) dst_node_f32 = REF(radv_bvh_box32_node)(OFFSET(args.output_bvh, id_to_offset(node_id)));
-      bool is_box16 = VK_BUILD_FLAG(RADV_BUILD_FLAG_USE_BOX16) && id_to_type(node_id) == radv_bvh_node_box16;
+      bool is_box16 = RADV_TEST_BUILD_FLAG_USE_BOX16 && id_to_type(node_id) == radv_bvh_node_box16;
 
       for (uint32_t i = 0; i < found_child_count; ++i) {
          uint32_t type = ir_id_to_type(children[i]);
@@ -196,7 +197,7 @@ main()
             radv_aabb16 child_aabb16 = radv_aabb_f32_to_f16(child_aabb);
             float surface_area_f16 = aabb_surface_area(radv_aabb_f16_to_f32(child_aabb16));
             float surface_area_f32 = aabb_surface_area(child_aabb);
-            bool child_use_f16 = VK_BUILD_FLAG(RADV_BUILD_FLAG_USE_BOX16) && surface_area_f16 < surface_area_f32 * 1.5;
+            bool child_use_f16 = RADV_TEST_BUILD_FLAG_USE_BOX16 && surface_area_f16 < surface_area_f32 * 1.5;
 
             uint32_t dst_offset = atomicAdd(DEREF(args.header).dst_node_offset,
                                             child_use_f16 ? SIZEOF(radv_bvh_box16_node) : SIZEOF(radv_bvh_box32_node));
@@ -230,7 +231,7 @@ main()
              * Subtract 1 from the integer representation of inf/-inf to turn it into
              * the maximum/minimum representable floating-point value as a workaround.
              */
-            if (VK_BUILD_FLAG(RADV_BUILD_FLAG_NO_INFS)) {
+            if (RADV_TEST_BUILD_FLAG_NO_INFS) {
                for (uint32_t i = 0; i < 3; ++i) {
                   if (isinf(child_aabb.min[i]))
                      child_aabb.min[i] = uintBitsToFloat(floatBitsToUint(child_aabb.min[i]) - 1);
@@ -274,7 +275,7 @@ main()
       } else {
          DEREF(dst_node_f32).children = children;
 
-         if (VK_BUILD_FLAG(VK_BUILD_FLAG_PROPAGATE_CULL_FLAGS))
+         if (VK_TEST_BUILD_FLAG_PROPAGATE_CULL_FLAGS)
             DEREF(dst_node_f32).flags = flags;
       }
 

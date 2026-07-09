@@ -549,38 +549,12 @@ spec@arb_texture_rg@fbo-blending-formats-float@GL_R32F,Fail
 spec@arb_texture_rg@fbo-blending-formats-float@GL_RG32F,Fail
 
 # No linear interpolation for F32
-spec@arb_texture_float@texwrap formats bordercolor,Fail
-spec@arb_texture_float@texwrap formats bordercolor-swizzled,Fail
-spec@arb_texture_float@texwrap formats bordercolor-swizzled@GL_INTENSITY32F_ARB- swizzled- border color only,Fail
-spec@arb_texture_float@texwrap formats bordercolor-swizzled@GL_LUMINANCE32F_ARB- swizzled- border color only,Fail
-spec@arb_texture_float@texwrap formats bordercolor-swizzled@GL_LUMINANCE_ALPHA32F_ARB- swizzled- border color only,Fail
-spec@arb_texture_float@texwrap formats bordercolor-swizzled@GL_RGB32F- swizzled- border color only,Fail
-spec@arb_texture_float@texwrap formats bordercolor-swizzled@GL_RGBA32F- swizzled- border color only,Fail
-spec@arb_texture_float@texwrap formats bordercolor@GL_INTENSITY32F_ARB- border color only,Fail
-spec@arb_texture_float@texwrap formats bordercolor@GL_LUMINANCE32F_ARB- border color only,Fail
-spec@arb_texture_float@texwrap formats bordercolor@GL_LUMINANCE_ALPHA32F_ARB- border color only,Fail
-spec@arb_texture_float@texwrap formats bordercolor@GL_RGB32F- border color only,Fail
-spec@arb_texture_float@texwrap formats bordercolor@GL_RGBA32F- border color only,Fail
 spec@arb_texture_rg@texwrap formats-float,Fail
-spec@arb_texture_rg@texwrap formats-float bordercolor,Fail
-spec@arb_texture_rg@texwrap formats-float bordercolor-swizzled,Fail
-spec@arb_texture_rg@texwrap formats-float bordercolor-swizzled@GL_R32F- swizzled- border color only,Fail
-spec@arb_texture_rg@texwrap formats-float bordercolor-swizzled@GL_RG32F- swizzled- border color only,Fail
-spec@arb_texture_rg@texwrap formats-float bordercolor@GL_R32F- border color only,Fail
-spec@arb_texture_rg@texwrap formats-float bordercolor@GL_RG32F- border color only,Fail
 spec@arb_texture_rg@texwrap formats-float offset,Fail
-spec@arb_texture_rg@texwrap formats-float offset@GL_R32F,Fail
 spec@arb_texture_rg@texwrap formats-float offset@GL_R32F- NPOT,Fail
-spec@arb_texture_rg@texwrap formats-float offset@GL_R32F- swizzled,Fail
-spec@arb_texture_rg@texwrap formats-float offset@GL_RG32F,Fail
 spec@arb_texture_rg@texwrap formats-float offset@GL_RG32F- NPOT,Fail
-spec@arb_texture_rg@texwrap formats-float offset@GL_RG32F- swizzled,Fail
-spec@arb_texture_rg@texwrap formats-float@GL_R32F,Fail
 spec@arb_texture_rg@texwrap formats-float@GL_R32F- NPOT,Fail
-spec@arb_texture_rg@texwrap formats-float@GL_R32F- swizzled,Fail
-spec@arb_texture_rg@texwrap formats-float@GL_RG32F,Fail
 spec@arb_texture_rg@texwrap formats-float@GL_RG32F- NPOT,Fail
-spec@arb_texture_rg@texwrap formats-float@GL_RG32F- swizzled,Fail
 
 # MSAA-related failures
 dEQP-GLES3.functional.fbo.invalidate.sub.unbind_blit_msaa_color,Fail
@@ -793,6 +767,7 @@ spec@arb_texture_buffer_object@texture-buffer-size-clamp@rgba8ui_texture_buffer_
 # uprev Piglit in Mesa
 spec@arb_texture_rg@fbo-blending-formats,Fail
 spec@arb_texture_rg@fbo-blending-formats@GL_R8,Fail
+spec@ext_image_dma_buf_import@ext_image_dma_buf_import-refcount,Fail
 
 # new failures since 2023/02/08 (CTS uprevs, regressions etc.)
 spec@!opengl 1.1@line-smooth-stipple,Fail
@@ -1112,7 +1087,6 @@ dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_out_of_bounds_mag,Fail
 dEQP-GLES2.functional.polygon_offset.fixed16_render_with_units,Fail
 
 # Regressions while the device was offline
-spec@!opengl es 3.0@texture-immutable-levels,Fail
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_argb8888,Fail
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_ayuv,Fail
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_nv12,Fail

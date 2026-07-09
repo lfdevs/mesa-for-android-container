@@ -20,6 +20,7 @@
 #include "git_sha1.h"
 #include "util/detect_os.h"
 #include "util/disk_cache.h"
+#include "util/hex.h"
 #include "util/mesa-blake3.h"
 #include "util/os_misc.h"
 
@@ -310,6 +311,9 @@ nvk_get_device_extensions(const struct nvk_instance *instance,
       .ANDROID_native_buffer = vk_android_get_ugralloc() != NULL,
 #endif
       .GOOGLE_decorate_string = true,
+#ifdef NVK_USE_WSI_PLATFORM
+      .GOOGLE_display_timing = wsi_instance_supports_google_display_timing(&instance->vk, &instance->drirc.options),
+#endif
       .GOOGLE_hlsl_functionality1 = true,
       .GOOGLE_user_type = true,
       .MESA_image_alignment_control = true,
@@ -1327,7 +1331,10 @@ nvk_get_device_properties(const struct nvk_instance *instance,
    };
 
    /* Add the driver to the device name (like other Mesa drivers do) */
-   if (!strcmp(info->device_name, info->chipset_name)) {
+   if (strlen(instance->drirc.debug.force_vk_devicename) > 0) {
+      snprintf(properties->deviceName, sizeof(properties->deviceName),
+               "%s", instance->drirc.debug.force_vk_devicename);
+   } else if (!strcmp(info->device_name, info->chipset_name)) {
       snprintf(properties->deviceName, sizeof(properties->deviceName),
                "NVK %s", info->device_name);
    } else {
@@ -1398,8 +1405,17 @@ nvk_physical_device_init_pipeline_cache(struct nvk_physical_device *pdev)
    blake3_hasher blake3_ctx;
    _mesa_blake3_init(&blake3_ctx);
 
+#ifdef NVK_BUILD_ID_OVERRIDE
+   {
+      unsigned size = strlen(NVK_BUILD_ID_OVERRIDE) / 2;
+      unsigned char *data = alloca(size);
+      mesa_hex_to_bytes(data, NVK_BUILD_ID_OVERRIDE, size);
+      _mesa_blake3_update(&blake3_ctx, data, size);
+   }
+#else
    _mesa_blake3_update(&blake3_ctx, instance->driver_build_sha,
                      sizeof(instance->driver_build_sha));
+#endif
 
    _mesa_blake3_update(&blake3_ctx, &pdev->info.chipset,
                      sizeof(pdev->info.chipset));

@@ -24,6 +24,7 @@
 
 import argparse
 import os
+import sys
 
 
 def resolve_libdir(libdir):
@@ -80,6 +81,10 @@ def main():
 
             name, ext = os.path.splitext(driver)
             while ext != '.' + args.libname_suffix:
+                if not ext:
+                    sys.exit(
+                        f"install_megadrivers: driver '{driver}' does not "
+                        f"contain '.{args.libname_suffix}'")
                 if os.path.lexists(name):
                     os.unlink(name)
                 os.symlink(driver, name)
@@ -90,6 +95,10 @@ def main():
     # Remove meson-created symlinks
     name, ext = os.path.splitext(master)
     while ext != '.' + args.libname_suffix:
+        if not ext:
+            sys.exit(
+                f"install_megadrivers: megadriver '{basename}' does not "
+                f"contain '.{args.libname_suffix}'")
         if os.path.lexists(name):
             os.unlink(name)
         name, ext = os.path.splitext(name)

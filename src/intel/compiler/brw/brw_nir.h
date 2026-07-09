@@ -23,20 +23,20 @@ void
 brw_fill_tess_info_from_shader_info(struct brw_tess_info *brw_info,
                                     const shader_info *shader_info);
 
-int type_size_vec4(const struct glsl_type *type, bool bindless);
-int type_size_dvec4(const struct glsl_type *type, bool bindless);
+unsigned type_size_vec4(const struct glsl_type *type, bool bindless);
+unsigned type_size_dvec4(const struct glsl_type *type, bool bindless);
 
 struct brw_mem_access_cb_data {
    const struct intel_device_info *devinfo;
 };
 
-static inline int
+static inline unsigned
 type_size_scalar_bytes(const struct glsl_type *type, bool bindless)
 {
    return glsl_count_dword_slots(type, bindless) * 4;
 }
 
-static inline int
+static inline unsigned
 type_size_vec4_bytes(const struct glsl_type *type, bool bindless)
 {
    return type_size_vec4(type, bindless) * 16;
@@ -367,6 +367,7 @@ brw_uniform_block_size(const struct intel_device_info *devinfo,
       : num_components;
 }
 
+void brw_nir_cleanup_pre_fs_prog_data(struct brw_pass_tracker *pt);
 void brw_nir_optimize(struct brw_pass_tracker *pt);
 
 bool brw_nir_move_interpolation_to_top(nir_shader *nir);
@@ -452,6 +453,9 @@ brw_nir_frag_convert_attrs_prim_to_vert_indirect(struct nir_shader *nir,
                                                  const struct intel_device_info *devinfo,
                                                  struct brw_compile_fs_params *params);
 
+unsigned
+brw_nir_vs_compute_payload_size(nir_shader *nir,
+                                const struct intel_device_info *devinfo);
 unsigned
 brw_nir_pack_vs_input(nir_shader *nir, struct brw_vs_prog_data *prog_data);
 

@@ -204,6 +204,9 @@
  *      * interp(x, i, j) + interp(y, i, j) = interp(x + y, i, j)
  *      * interp(x, i, j) + convergent_expr = interp(x + convergent_expr, i, j)
  *      * interp(x, i, j) * convergent_expr = interp(x * convergent_expr, i, j)
+ *      * convergent_expr ? interp(x, i, j) : interp(y, i ,j) =
+ *           interp(convergent_expr ? x : y, i, j)
+ *        * the expression inside interp() is moved into the previous shader
  *        * all of these transformations are considered "inexact" in NIR
  *        * interp interpolates an input according to the barycentric
  *          coordinates (i, j), which are different for perspective,
@@ -3780,6 +3783,9 @@ can_move_alu_across_interp(struct linkage_info *linkage, nir_alu_instr *alu)
       return (GET_SRC_INTERP(alu, 0) == FLAG_INTERP_CONVERGENT &&
               GET_SRC_INTERP(alu, 1) == FLAG_INTERP_CONVERGENT) ||
              GET_SRC_INTERP(alu, 2) == FLAG_INTERP_CONVERGENT;
+
+   case nir_op_bcsel:
+      return GET_SRC_INTERP(alu, 0) == FLAG_INTERP_CONVERGENT;
 
    default:
       /* Moving other ALU instructions across interpolation is illegal. */

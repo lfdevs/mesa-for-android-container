@@ -1,22 +1,22 @@
 %YAML 1.2
 ---
 traces-db:
-  download-url: "https://s3.freedesktop.org/mesa-tracie-private/"
+  download-url: https://s3.freedesktop.org/mesa-tracie-private/
 
 traces:
   AmnesiaTDD/Amnesia-f700-v2.trace:
     gl-zink-anv-adl:
-      checksum: 3bb7b70d76d084acc367f78aeac2bff1
+      checksum: d4767ee5a11bfa44c165235f23065893
     gl-zink-anv-tgl:
-      checksum: 3bb7b70d76d084acc367f78aeac2bff1
+      checksum: d4767ee5a11bfa44c165235f23065893
 
   Antichamber/antichamber-f240-v2.trace:
     gl-zink-anv-adl:
-      checksum: 55e105b22656add7d16efac2bcad82f5
-      text: "line widths look wrong compared to freedreno"
+      checksum: 50664836118bb25c3a3bc91c10644233
+      text: line widths look wrong compared to freedreno
     gl-zink-anv-tgl:
-      checksum: 55e105b22656add7d16efac2bcad82f5
-      text: "line widths look wrong compared to freedreno"
+      checksum: 50664836118bb25c3a3bc91c10644233
+      text: line widths look wrong compared to freedreno
 
   Cradle/cradle-f3000-v2.trace:
     gl-zink-anv-adl:
@@ -26,17 +26,17 @@ traces:
 
   ICEDarkness/ICEDarkness-f230-v2.trace:
     gl-zink-anv-adl:
-      checksum: 80d537de1a02572b02302670d84ae918
+      checksum: dfea3c705e531ef2c2915c1b33e5d688
     gl-zink-anv-tgl:
-      checksum: 80d537de1a02572b02302670d84ae918
+      checksum: dfea3c705e531ef2c2915c1b33e5d688
 
   LifelessPlanet/LifelessPlanet-f420-v2.trace:
     gl-zink-anv-adl:
       label: [skip, flakes]
       checksum: defec084a01f13e5cf01147bcfd235e6
-      text: "looks good but checksum keeps changing"
+      text: looks good but checksum keeps changing
     gl-zink-anv-tgl:
-      checksum: defec084a01f13e5cf01147bcfd235e6
+      checksum: e7cace46dfa2fe588bf55f03f5a50e1f
 
   MetroLLRedux/metro-ll-redux-kf480-v2.trace:
     gl-zink-anv-adl:
@@ -47,10 +47,10 @@ traces:
   OilRush/OilRush-f14000-v2.trace:
     gl-zink-anv-adl:
       label: [skip]
-      text: "requires allow_glsl_extension_directive_midshader"
+      text: requires allow_glsl_extension_directive_midshader
     gl-zink-anv-tgl:
       label: [skip]
-      text: "requires allow_glsl_extension_directive_midshader"
+      text: requires allow_glsl_extension_directive_midshader
 
   Osmos/Osmos-f2660-v2.trace:
     gl-zink-anv-adl:
@@ -82,9 +82,9 @@ traces:
 
   SirYouAreBeingHunted/sir-f750-v2.trace:
     gl-zink-anv-adl:
-      checksum: 68611fd9f51e5ef5d2eb4417031a379f
+      checksum: 682cd837d4884dfb4ed484f6181d801b
     gl-zink-anv-tgl:
-      checksum: 68611fd9f51e5ef5d2eb4417031a379f
+      checksum: 682cd837d4884dfb4ed484f6181d801b
 
   SpecOps/specops-s0-1088-f1300-v2.trace:
     gl-zink-anv-adl:
@@ -98,9 +98,9 @@ traces:
 
   Superhot/superhot-f8100-v2.trace:
     gl-zink-anv-adl:
-      checksum: 69e6cd6fbcb7d2c7166be49a936f2f88
+      checksum: 7a295730d44da550bd0b68dd706ae672
     gl-zink-anv-tgl:
-      checksum: 69e6cd6fbcb7d2c7166be49a936f2f88
+      checksum: 7a295730d44da550bd0b68dd706ae672
 
   TheRavenRemastered/Raven-f10900-v2.trace:
     gl-zink-anv-adl:
@@ -135,18 +135,18 @@ traces:
   Witcher2/witcher2-s0-1970-f2038-v2.trace:
     gl-zink-anv-adl:
       label: [skip]
-      text: "many errors like 'GL_INVALID_VALUE in glBindBufferRange(offset misaligned 144/32)'"
+      text: many errors like 'GL_INVALID_VALUE in glBindBufferRange(offset misaligned 144/32)'
     gl-zink-anv-tgl:
       label: [skip]
-      text: "many errors like 'GL_INVALID_VALUE in glBindBufferRange(offset misaligned 144/32)'"
+      text: many errors like 'GL_INVALID_VALUE in glBindBufferRange(offset misaligned 144/32)'
 
   alien-isolation/AlienIsolation.bin.1-trim--k-f2000-v20201203-v2.trace:
     gl-zink-anv-adl:
       label: [skip, slow]
-      text: "Slow, just seems to display a bit of text and no gameplay, anyway (radeonsi or iris)"
+      text: Slow, just seems to display a bit of text and no gameplay, anyway (radeonsi or iris)
     gl-zink-anv-tgl:
       label: [skip, slow]
-      text: "Slow, just seems to display a bit of text and no gameplay, anyway (radeonsi or iris)"
+      text: Slow, just seems to display a bit of text and no gameplay, anyway (radeonsi or iris)
 
   civilization-v/CivilizationV-trim--s705-761-f762-v20201203-v2.trace:
     gl-zink-anv-adl:
@@ -182,7 +182,7 @@ traces:
       checksum: 35397140d1fe2cc92146a4e3474df08b
       text: "has caused ../src/gallium/drivers/zink/zink_context.c:4127: zink_wait_on_batch: Assertion `batch_id' failed."
     gl-zink-anv-tgl:
-      checksum: 35397140d1fe2cc92146a4e3474df08b
+      checksum: 6129e66908bc858766cbe354208ea570
 
   minecraft/minecraft-loading.trace:
     gl-zink-anv-adl:
@@ -194,24 +194,24 @@ traces:
     gl-zink-anv-adl:
       label: [skip, flakes]
       checksum: 5007fd6184cccf9d5d009aeefbdbea90
-      text: "looks good but checksum keeps changing"
+      text: looks good but checksum keeps changing
     gl-zink-anv-tgl:
-      checksum: 1275d8817716bb2aa65ee5e21737d9f1
+      checksum: 276651d5375785f3da9a4da4da5e98d5
 
   slime-rancher/SlimeRancher-trim--f970-v20201203-v2.trace:
     gl-zink-anv-adl:
       label: [skip]
-      text: "renders black in CI, freedreno CI has unspecified trouble with it too"
+      text: renders black in CI, freedreno CI has unspecified trouble with it too
     gl-zink-anv-tgl:
       label: [skip]
-      text: "renders black in CI, freedreno CI has unspecified trouble with it too"
+      text: renders black in CI, freedreno CI has unspecified trouble with it too
 
   stellaris/Stellaris-trim--f722-v20201203-v2.trace:
     gl-zink-anv-adl:
       label: [skip, flakes]
       checksum: 1c263695e5bdfcd622f26292a3b2a10e
-      text: "looks good but checksum keeps changing"
+      text: looks good but checksum keeps changing
     gl-zink-anv-tgl:
       label: [skip, flakes]
       checksum: 1c263695e5bdfcd622f26292a3b2a10e
-      text: "looks good but checksum keeps changing"
+      text: looks good but checksum keeps changing

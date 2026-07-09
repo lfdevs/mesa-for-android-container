@@ -147,8 +147,8 @@ struct vk_rmv_virtual_allocate_token {
 };
 
 struct vk_rmv_image_description {
-   VkImageCreateFlags create_flags;
-   VkImageUsageFlags usage_flags;
+   VkImageCreateFlags2KHR create_flags;
+   VkImageUsageFlags2KHR usage_flags;
    VkImageType type;
    VkExtent3D extent;
    VkFormat format;

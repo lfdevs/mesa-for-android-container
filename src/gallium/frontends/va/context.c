@@ -34,6 +34,7 @@
 #include "util/set.h"
 #include "vl/vl_deint_filter.h"
 #include "vl/vl_winsys.h"
+#include "vl/vl_proc.h"
 
 #include "va_private.h"
 #ifdef HAVE_DRISW_KMS
@@ -213,16 +214,6 @@ VA_DRIVER_INIT_FUNC(VADriverContextP ctx)
    if (!drv->htab)
       goto error_htab;
 
-   bool can_init_compositor = drv->vscreen->pscreen->caps.graphics ||
-                              drv->vscreen->pscreen->caps.compute;
-
-   if (can_init_compositor) {
-      if (!vl_compositor_init(&drv->compositor, drv->pipe, compute_only))
-         goto error_compositor;
-      if (!vl_compositor_init_state(&drv->cstate, drv->pipe))
-         goto error_compositor_state;
-   }
-
    (void) mtx_init(&drv->mutex, mtx_plain);
 
    ctx->pDriverData = (void *)drv;
@@ -247,13 +238,6 @@ VA_DRIVER_INIT_FUNC(VADriverContextP ctx)
    ctx->str_vendor = drv->vendor_string;
 
    return VA_STATUS_SUCCESS;
-
-error_compositor_state:
-   if (can_init_compositor)
-      vl_compositor_cleanup(&drv->compositor);
-
-error_compositor:
-   handle_table_destroy(drv->htab);
 
 error_htab:
    drv->pipe->destroy(drv->pipe);
@@ -296,13 +280,7 @@ vlVaCreateContext(VADriverContextP ctx, VAConfigID config_id, int picture_width,
    if (!(picture_width && picture_height) && !is_vpp)
       return VA_STATUS_ERROR_INVALID_IMAGE_FORMAT;
 
-   create_decoder = is_encode;
-
-   if (is_vpp && drv->vscreen->pscreen->get_video_param(drv->vscreen->pscreen,
-                                                        PIPE_VIDEO_PROFILE_UNKNOWN,
-                                                        PIPE_VIDEO_ENTRYPOINT_PROCESSING,
-                                                        PIPE_VIDEO_CAP_SUPPORTED))
-      create_decoder = true;
+   create_decoder = is_encode || is_vpp;
 
    if (!is_vpp) {
       min_supported_width = drv->vscreen->pscreen->get_video_param(drv->vscreen->pscreen,
@@ -436,7 +414,10 @@ vlVaCreateContext(VADriverContextP ctx, VAConfigID config_id, int picture_width,
 
    if (create_decoder) {
       mtx_lock(&drv->mutex);
-      context->decoder = drv->pipe->create_video_codec(drv->pipe, &context->templat);
+      if (is_vpp)
+         context->decoder = vl_create_proc(drv->pipe, &context->templat);
+      else
+         context->decoder = drv->pipe->create_video_codec(drv->pipe, &context->templat);
       mtx_unlock(&drv->mutex);
       if (!context->decoder) {
          vlVaDestroyContext(ctx, *context_id);
@@ -569,8 +550,8 @@ vlVaTerminate(VADriverContextP ctx)
       return VA_STATUS_ERROR_INVALID_CONTEXT;
 
    drv = ctx->pDriverData;
-   vl_compositor_cleanup_state(&drv->cstate);
-   vl_compositor_cleanup(&drv->compositor);
+   if (drv->proc)
+      drv->proc->destroy(drv->proc);
    if (drv->pipe2)
       drv->pipe2->destroy(drv->pipe2);
    drv->pipe->destroy(drv->pipe);

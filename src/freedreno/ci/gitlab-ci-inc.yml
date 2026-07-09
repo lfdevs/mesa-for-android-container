@@ -1,3 +1,18 @@
+.enforce-hw-jobs-freedreno-rules:
+  rules:
+    - if: '$INPUT_HW_JOBS !~ /"(all|freedreno|msm.ko)"/i'
+      when: never
+
+.enforce-hw-jobs-turnip-rules:
+  rules:
+    - if: '$INPUT_HW_JOBS !~ /"(all|turnip|msm.ko)"/i'
+      when: never
+
+.enforce-hw-jobs-freedreno-turnip-rules:
+  rules:
+    - if: '$INPUT_HW_JOBS !~ /"(all|freedreno|turnip|msm.ko)"/i'
+      when: never
+
 # Rules for changes that impact either freedreno or turnip.
 .freedreno-common-rules:
   rules:
@@ -35,6 +50,7 @@
 
 .freedreno-rules:
   rules:
+    - !reference [.enforce-hw-jobs-freedreno-rules, rules]
     - !reference [.freedreno-common-rules, rules]
     - !reference [.gl-rules, rules]
     - changes: &freedreno_file_list
@@ -45,6 +61,7 @@
 
 .freedreno-manual-rules:
   rules:
+    - !reference [.enforce-hw-jobs-freedreno-rules, rules]
     - !reference [.freedreno-common-manual-rules, rules]
     - !reference [.gl-manual-rules, rules]
     - changes: *freedreno_file_list
@@ -52,6 +69,7 @@
 
 .turnip-rules:
   rules:
+    - !reference [.enforce-hw-jobs-turnip-rules, rules]
     - !reference [.freedreno-common-rules, rules]
     - !reference [.vulkan-rules, rules]
     - changes: &turnip_file_list
@@ -60,6 +78,7 @@
 
 .turnip-manual-rules:
   rules:
+    - !reference [.enforce-hw-jobs-turnip-rules, rules]
     - !reference [.freedreno-common-manual-rules, rules]
     - !reference [.vulkan-manual-rules, rules]
     - changes: *turnip_file_list
@@ -69,6 +88,7 @@
 .collabora-freedreno-rules:
   stage: freedreno
   rules:
+    - !reference [.enforce-hw-jobs-freedreno-rules, rules]
     - !reference [.test, rules]
     - !reference [.collabora-farm-rules, rules]
     - !reference [.freedreno-rules, rules]
@@ -77,6 +97,7 @@
   stage: freedreno-nightly
   extends: .no-auto-retry
   rules:
+    - !reference [.enforce-hw-jobs-freedreno-rules, rules]
     - !reference [.test, rules]
     - !reference [.collabora-farm-manual-rules, rules]
     - !reference [.freedreno-manual-rules, rules]
@@ -85,6 +106,7 @@
 .collabora-turnip-rules:
   stage: freedreno
   rules:
+    - !reference [.enforce-hw-jobs-turnip-rules, rules]
     - !reference [.test, rules]
     - !reference [.collabora-farm-rules, rules]
     - !reference [.turnip-rules, rules]
@@ -92,6 +114,7 @@
 .collabora-turnip-restricted-rules:
   stage: freedreno
   rules:
+    - !reference [.enforce-hw-jobs-turnip-rules, rules]
     - !reference [.test, rules]
     - !reference [.restricted-rules, rules]
     - !reference [.collabora-turnip-rules, rules]
@@ -100,6 +123,7 @@
   stage: freedreno-nightly
   extends: .no-auto-retry
   rules:
+    - !reference [.enforce-hw-jobs-turnip-rules, rules]
     - !reference [.test, rules]
     - !reference [.collabora-farm-manual-rules, rules]
     - !reference [.turnip-manual-rules, rules]
@@ -108,6 +132,7 @@
 .collabora-freedreno-turnip-rules:
   stage: freedreno
   rules:
+    - !reference [.enforce-hw-jobs-freedreno-turnip-rules, rules]
     - !reference [.test, rules]
     - !reference [.collabora-freedreno-rules, rules]
     - !reference [.collabora-turnip-rules, rules]
@@ -116,6 +141,7 @@
   stage: freedreno-nightly
   extends: .no-auto-retry
   rules:
+    - !reference [.enforce-hw-jobs-freedreno-turnip-rules, rules]
     - !reference [.test, rules]
     - !reference [.collabora-freedreno-manual-rules, rules]
     - !reference [.collabora-turnip-manual-rules, rules]
@@ -124,6 +150,7 @@
   stage: freedreno-nightly
   extends: .no-auto-retry
   rules:
+    - !reference [.enforce-hw-jobs-freedreno-rules, rules]
     - !reference [.test, rules]
     - !reference [.valve-farm-manual-rules, rules]
     - !reference [.freedreno-manual-rules, rules]
@@ -131,6 +158,7 @@
 .valve-turnip-rules:
   stage: freedreno
   rules:
+    - !reference [.enforce-hw-jobs-turnip-rules, rules]
     - !reference [.test, rules]
     - !reference [.valve-farm-rules, rules]
     - !reference [.turnip-rules, rules]
@@ -146,6 +174,7 @@
   stage: freedreno-nightly
   extends: .no-auto-retry
   rules:
+    - !reference [.enforce-hw-jobs-turnip-rules, rules]
     - !reference [.test, rules]
     - !reference [.valve-farm-manual-rules, rules]
     - !reference [.turnip-manual-rules, rules]
@@ -153,6 +182,7 @@
 .lumag-freedreno-rules:
   stage: freedreno
   rules:
+    - !reference [.enforce-hw-jobs-freedreno-rules, rules]
     - !reference [.test, rules]
     - !reference [.lumag-farm-rules, rules]
     - !reference [.freedreno-rules, rules]
@@ -161,6 +191,7 @@
   stage: freedreno-nightly
   extends: .no-auto-retry
   rules:
+    - !reference [.enforce-hw-jobs-freedreno-rules, rules]
     - !reference [.test, rules]
     - !reference [.lumag-farm-manual-rules, rules]
     - !reference [.freedreno-manual-rules, rules]
@@ -168,6 +199,7 @@
 .collabora-freedreno-rules-restricted:
   stage: freedreno
   rules:
+    - !reference [.enforce-hw-jobs-freedreno-rules, rules]
     - !reference [.test, rules]
     - !reference [.restricted-rules, rules]
     - !reference [.collabora-freedreno-rules, rules]
@@ -176,6 +208,7 @@
   stage: performance
   extends: .no-auto-retry
   rules:
+    - !reference [.enforce-hw-jobs-freedreno-rules, rules]
     - !reference [.test, rules]
     - !reference [.performance-rules, rules]
     - !reference [.collabora-freedreno-manual-rules, rules]

@@ -26,7 +26,8 @@ kk_get_image_format_features(struct kk_physical_device *pdevice,
                              VkFormat format, VkImageTiling tiling,
                              uint64_t drm_format_mod);
 
-uint32_t kk_image_max_dimension(VkImageType image_type);
+uint32_t kk_image_max_dimension(const struct kk_physical_device *pdev,
+                                VkImageType image_type);
 
 struct kk_image_plane {
    struct kk_image_layout layout;

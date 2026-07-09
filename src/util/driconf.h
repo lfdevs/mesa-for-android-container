@@ -326,10 +326,6 @@
    DRI_CONF_OPT_B(ignore_map_unsynchronized, def, \
                   "Ignore GL_MAP_UNSYNCHRONIZED_BIT, workaround for games that use it incorrectly")
 
-#define DRI_CONF_VK_LOWER_TERMINATE_TO_DISCARD(def) \
-   DRI_CONF_OPT_B(vk_lower_terminate_to_discard, def, \
-                  "Lower terminate to discard (which is implicitly demote)")
-
 #define DRI_CONF_LIMIT_TRIG_INPUT_RANGE(def) \
    DRI_CONF_OPT_B(limit_trig_input_range, def, \
                   "Limit trig input range to [-2p : 2p] to improve sin/cos calculation precision on Intel")
@@ -414,38 +410,6 @@
    DRI_CONF_OPT_B(block_on_depleted_buffers, def, \
                   "Block clients using buffer backpressure until new buffer is available to reduce latency")
 
-#define DRI_CONF_VK_WSI_FORCE_BGRA8_UNORM_FIRST(def) \
-   DRI_CONF_OPT_B(vk_wsi_force_bgra8_unorm_first, def, \
-                  "Force vkGetPhysicalDeviceSurfaceFormatsKHR to return VK_FORMAT_B8G8R8A8_UNORM as the first format")
-
-#define DRI_CONF_VK_WSI_FORCE_SWAPCHAIN_TO_CURRENT_EXTENT(def) \
-   DRI_CONF_OPT_B(vk_wsi_force_swapchain_to_current_extent, def, \
-                  "Force VkSwapchainCreateInfoKHR::imageExtent to be VkSurfaceCapabilities2KHR::currentExtent")
-
-#define DRI_CONF_VK_WSI_DISABLE_UNORDERED_SUBMITS(def) \
-   DRI_CONF_OPT_B(vk_wsi_disable_unordered_submits, def, \
-                  "Disable unordered WSI submits to workaround application synchronization bugs")
-
-#define DRI_CONF_VK_X11_OVERRIDE_MIN_IMAGE_COUNT(def) \
-   DRI_CONF_OPT_I(vk_x11_override_min_image_count, def, 0, 999, \
-                  "Override the VkSurfaceCapabilitiesKHR::minImageCount (0 = no override)")
-
-#define DRI_CONF_VK_X11_STRICT_IMAGE_COUNT(def) \
-   DRI_CONF_OPT_B(vk_x11_strict_image_count, def, \
-                  "Force the X11 WSI to create exactly the number of image specified by the application in VkSwapchainCreateInfoKHR::minImageCount")
-
-#define DRI_CONF_VK_X11_ENSURE_MIN_IMAGE_COUNT(def) \
-   DRI_CONF_OPT_B(vk_x11_ensure_min_image_count, def, \
-                  "Force the X11 WSI to create at least the number of image specified by the driver in VkSurfaceCapabilitiesKHR::minImageCount")
-
-#define DRI_CONF_VK_X11_IGNORE_SUBOPTIMAL(def) \
-   DRI_CONF_OPT_B(vk_x11_ignore_suboptimal, def, \
-                  "Force the X11 WSI to never report VK_SUBOPTIMAL_KHR")
-
-#define DRI_CONF_VK_XWAYLAND_WAIT_READY(def) \
-   DRI_CONF_OPT_B(vk_xwayland_wait_ready, def, \
-                  "Wait for fences before submitting buffers to Xwayland")
-
 #define DRI_CONF_MESA_GLTHREAD_DRIVER(def) \
    DRI_CONF_OPT_B(mesa_glthread_driver, def, \
                   "Enable offloading GL driver work to a separate thread")
@@ -504,10 +468,6 @@
 #define DRI_CONF_HEAP_MEMORY_PERCENT(def) \
    DRI_CONF_OPT_F(heap_memory_percent, def, 0.0, 1.0, \
                   "Percentage of total system memory to report as gpu heap memory (0 = driver default)")
-
-#define DRI_CONF_VK_ZERO_VRAM(def) \
-   DRI_CONF_OPT_B(vk_zero_vram, def, \
-                  "Initialize to zero all VRAM allocations")
 
 /**
  * \brief Initialization configuration options

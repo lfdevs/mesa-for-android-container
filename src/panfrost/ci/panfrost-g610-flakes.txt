@@ -210,7 +210,6 @@ dEQP-VK.wsi.*.swapchain.simulate_oom.*
 dEQP-GLES31.functional.copy_image.compressed.viewclass_astc_8x6_rgba.rgba_astc_8x6_khr_srgb8_alpha8_astc_8x6_khr.texture3d_to_cubemap
 
 glx@glx-visuals-depth
-spec@!opengl 1.1@longprim
 spec@!opengl 1.1@teximage-colors gl_alpha12
 spec@ext_framebuffer_multisample@accuracy all_samples color small depthstencil
 

@@ -5,6 +5,11 @@ import argparse
 import sys
 
 
+VALID_COMMON_VK_OPTIONS = {
+    "force_vk_devicename",
+}
+
+
 def declare_options():
     import drirc_gen
 
@@ -21,6 +26,8 @@ def declare_options():
           "Fail instance creation",
           c_name="disable"),
     ]
+
+    drirc_gen.add_common_vk_options(debug_options, [], [], valid_options=VALID_COMMON_VK_OPTIONS)
 
     return [drirc_gen.DrircSection("Debugging", debug_options, c_name="debug")]
 

@@ -1,14 +1,9 @@
 Models.Op/inception_032,Fail
-Models.Op/inception_034,Fail
-Models.Op/inception_042,Fail
 Models.Op/inception_075,Fail
 Models.Op/inception_inception_v1_224_quant,Fail
 Models.Op/mobiledet_086,Fail
 Models.Op/mobiledet_087,Fail
 Models.Op/mobiledet_ssdlite_mobiledet_coco_qat_postprocess,Fail
-Models.Op/mobilenetv2_006,Fail
-Models.Op/mobilenetv2_010,Fail
-Models.Op/mobilenetv2_mobilenet_v2_tflite_1_0_224_quantized_v1,Fail
 Models.Op/movenetlightning_085,Fail
 Models.Op/movenetlightning_112,Fail
 Models.Op/movenetlightning_141,Fail
@@ -17,8 +12,6 @@ Models.Op/movenetthunder_085,Fail
 Models.Op/movenetthunder_112,Fail
 Models.Op/movenetthunder_141,Fail
 Models.Op/movenetthunder_152,Fail
-Models.Op/ssdmobilenetv2_006,Fail
-Models.Op/ssdmobilenetv2_010,Fail
 Models.Op/ssdmobilenetv2_ssd_mobilenet_v2_coco_quant_postprocess,Fail
 Models.Op/yolox_001,Fail
 Models.Op/yolox_002,Fail

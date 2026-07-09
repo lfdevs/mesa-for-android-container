@@ -566,7 +566,9 @@ vn_physical_device_sanitize_properties(struct vn_physical_device *physical_dev)
       memcpy(device_name + VK_MAX_PHYSICAL_DEVICE_NAME_SIZE - 5, "...)", 4);
       device_name_len = VK_MAX_PHYSICAL_DEVICE_NAME_SIZE - 1;
    }
-   memcpy(props->deviceName, device_name, device_name_len + 1);
+   snprintf(props->deviceName, sizeof(props->deviceName),
+            "%s", (strlen(instance->drirc.debug.force_vk_devicename) > 0) ?
+            instance->drirc.debug.force_vk_devicename : device_name);
 
    props->driverID = VK_DRIVER_ID_MESA_VENUS;
 

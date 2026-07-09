@@ -386,7 +386,35 @@ alu_to_msl(struct nir_to_msl_ctx *ctx, nir_alu_instr *instr)
       alu_funclike(ctx, instr, "log2");
       break;
    case nir_op_flrp:
-      alu_funclike(ctx, instr, "mix");
+      /* Metal defines mix as "a + (b – a) * c" OR "a * (1 - c) + b * c". The
+       * former preserves signed zeroes while the latter does for cases like
+       * a = b = c = -0.0f
+       *
+       * former: b - a       = (-0) + (+0) = +0
+       *         c * (b - a) = (-0) * (+0) = -0
+       *         a + (-0)    = (-0) + (-0) = -0
+       *
+       * latter: a * (1 - c) = (-0) *  1   = -0
+       *         b * c       = (-0) * (-0) = +0
+       *         (-0) + (+0)               = +0
+       *
+       * This means that we need to manually do the lerp when we have to
+       * preserve signed zeroes...
+       *
+       * Test that caught the issue:
+       * dEQP-VK.spirv_assembly.instruction.compute.float_controls2.fp*.input_args.reflect_testedWithout_NSZ_arg1_minusZero_arg2_one_res_minusZero_*
+       */
+      if (nir_alu_instr_is_signed_zero_preserve(instr)) {
+         alu_src_to_msl(ctx, instr, 0);
+         P(ctx, " + (");
+         alu_src_to_msl(ctx, instr, 1);
+         P(ctx, " - ");
+         alu_src_to_msl(ctx, instr, 0);
+         P(ctx, ") * ");
+         alu_src_to_msl(ctx, instr, 2);
+      } else {
+         alu_funclike(ctx, instr, "mix");
+      }
       break;
    case nir_op_fmax:
       alu_funclike(ctx, instr, "fmax");
@@ -570,8 +598,6 @@ instrinsic_needs_dest_type(nir_intrinsic_instr *instr)
    const nir_intrinsic_info *info = &nir_intrinsic_infos[instr->intrinsic];
    nir_intrinsic_op op = instr->intrinsic;
    if (op == nir_intrinsic_decl_reg || op == nir_intrinsic_load_reg ||
-       op == nir_intrinsic_load_texture_handle_kk ||
-       op == nir_intrinsic_load_depth_texture_kk ||
        /* Atomic swaps have a custom codegen */
        op == nir_intrinsic_global_atomic_swap ||
        op == nir_intrinsic_shared_atomic_swap ||
@@ -900,6 +926,46 @@ msl_interpolant_method(struct nir_to_msl_ctx *ctx, nir_src *src)
       break;
    default:
       break;
+   }
+}
+
+static void
+msl_emit_texture_type(struct nir_to_msl_ctx *ctx, nir_intrinsic_instr *instr)
+{
+   assert(instr->intrinsic == nir_intrinsic_load_texture_handle_kk ||
+          instr->intrinsic == nir_intrinsic_load_depth_texture_kk);
+
+   const char *dim = texture_dim(nir_intrinsic_image_dim(instr));
+   const char *arrayed = nir_intrinsic_image_array(instr) ? "_array" : "";
+
+   if (instr->intrinsic == nir_intrinsic_load_texture_handle_kk) {
+      const char *access = "";
+      const char *coherent = nir_intrinsic_access(instr) & ACCESS_COHERENT
+                                ? ", memory_coherence_device"
+                                : "";
+      switch (nir_intrinsic_flags(instr)) {
+      case MSL_ACCESS_READ:
+         access = ", access::read";
+         break;
+      case MSL_ACCESS_WRITE:
+         access = ", access::write";
+         break;
+      case MSL_ACCESS_READ_WRITE:
+         access = ", access::read_write";
+         /* TODO_KOSMICKRISP We shouldn't need this line below but it doesn't
+          * seem we get the correct access values for what should be device
+          * coherent textures from NIR. Example test:
+          * dEQP-VK.memory_model.message_passing.ext.u32.coherent.fence_fence.atomicwrite.device.payload_local.image.guard_local.buffer.comp
+          * This test declares the texture as devicecoherent, but in NIR it
+          * appears as resctrict only with no coherent.
+          */
+         coherent = ", memory_coherence_device";
+         break;
+      }
+      P(ctx, "texture%s%s<%s%s%s>", dim, arrayed,
+        tex_type_name(nir_intrinsic_dest_type(instr)), access, coherent);
+   } else if (instr->intrinsic == nir_intrinsic_load_depth_texture_kk) {
+      P(ctx, "depth%s%s<float>", dim, arrayed);
    }
 }
 
@@ -1369,47 +1435,11 @@ intrinsic_to_msl(struct nir_to_msl_ctx *ctx, nir_intrinsic_instr *instr)
                           instr->num_components);
       P(ctx, ";\n");
       break;
-   case nir_intrinsic_load_texture_handle_kk: {
-      const char *access = "";
-      const char *coherent = nir_intrinsic_access(instr) & ACCESS_COHERENT
-                                ? ", memory_coherence_device"
-                                : "";
-      switch (nir_intrinsic_flags(instr)) {
-      case MSL_ACCESS_READ:
-         access = ", access::read";
-         break;
-      case MSL_ACCESS_WRITE:
-         access = ", access::write";
-         break;
-      case MSL_ACCESS_READ_WRITE:
-         access = ", access::read_write";
-         /* TODO_KOSMICKRISP We shouldn't need this line below but it doesn't
-          * seem we get the correct access values for what should be device
-          * coherent textures from NIR. Example test:
-          * dEQP-VK.memory_model.message_passing.ext.u32.coherent.fence_fence.atomicwrite.device.payload_local.image.guard_local.buffer.comp
-          * This test declares the texture as devicecoherent, but in NIR it
-          * appears as resctrict only with no coherent.
-          */
-         coherent = ", memory_coherence_device";
-         break;
-      }
-      P_IND(ctx, "texture%s%s<%s%s%s> t%d = *(constant texture%s%s<%s%s%s>*)",
-            texture_dim(nir_intrinsic_image_dim(instr)),
-            nir_intrinsic_image_array(instr) ? "_array" : "",
-            tex_type_name(nir_intrinsic_dest_type(instr)), access, coherent,
-            instr->def.index, texture_dim(nir_intrinsic_image_dim(instr)),
-            nir_intrinsic_image_array(instr) ? "_array" : "",
-            tex_type_name(nir_intrinsic_dest_type(instr)), access, coherent);
-      src_to_msl(ctx, &instr->src[0]);
-      P(ctx, ";\n");
-      break;
-   }
+   case nir_intrinsic_load_texture_handle_kk:
    case nir_intrinsic_load_depth_texture_kk:
-      P_IND(ctx, "depth%s%s<float> t%d = *(constant depth%s%s<float>*)",
-            texture_dim(nir_intrinsic_image_dim(instr)),
-            nir_intrinsic_image_array(instr) ? "_array" : "", instr->def.index,
-            texture_dim(nir_intrinsic_image_dim(instr)),
-            nir_intrinsic_image_array(instr) ? "_array" : "");
+      P(ctx, "*(constant ");
+      msl_emit_texture_type(ctx, instr);
+      P(ctx, "*)");
       src_to_msl(ctx, &instr->src[0]);
       P(ctx, ";\n");
       break;
@@ -2034,6 +2064,18 @@ msl_preprocess_nir(struct nir_shader *nir)
    NIR_PASS(_, nir, nir_lower_vars_to_ssa);
    NIR_PASS(_, nir, nir_remove_dead_variables, nir_var_function_temp, NULL);
 
+   /* SPIR-V passes a combined image/sampler to a function by value: it packs
+    * the image and sampler derefs into a vec2 stored through a function_temp.
+    * The common runtime folds this away after inlining, but the temp survives
+    * into the driver (it never runs vars_to_ssa). The vars_to_ssa above then
+    * promotes it and re-exposes deref_cast(mov(vec2(deref,deref).<comp>)),
+    * where the cast no longer sits on a deref, so the descriptor-aware passes
+    * (ycbcr, descriptors) can't recover the variable via nir_src_as_deref().
+    * Refold the packing so the casts rest on the source derefs again. */
+   NIR_PASS(_, nir, nir_opt_copy_prop);
+   NIR_PASS(_, nir, nir_opt_constant_folding);
+   NIR_PASS(_, nir, nir_opt_deref);
+
    nir_move_options move_all = nir_move_const_undef | nir_move_load_ubo |
                                nir_move_load_input | nir_move_load_frag_coord |
                                nir_move_comparisons | nir_move_copies |
@@ -2233,13 +2275,19 @@ predeclare_ssa_values(struct nir_to_msl_ctx *ctx, nir_function_impl *impl)
          default:
             continue;
          }
-         const char *type = msl_type_for_def(ctx->types, def);
-         if (!type)
-            continue;
-         if (msl_def_is_sampler(ctx, def)) {
-            P_IND(ctx, "%s t%u;\n", type, def->index);
-         } else
-            P_IND(ctx, "%s t%u = %s(0);\n", type, def->index, type);
+         if (msl_def_is_texture(ctx, def)) {
+            P_INDENT(ctx);
+            msl_emit_texture_type(ctx, nir_instr_as_intrinsic(instr));
+            P(ctx, " t%u;\n", def->index);
+         } else {
+            const char *type = msl_type_for_def(ctx->types, def);
+            if (!type)
+               continue;
+            if (msl_def_is_sampler(ctx, def)) {
+               P_IND(ctx, "%s t%u;\n", type, def->index);
+            } else
+               P_IND(ctx, "%s t%u = %s(0);\n", type, def->index, type);
+         }
       }
    }
 }

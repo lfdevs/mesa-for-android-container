@@ -32,6 +32,52 @@
 
 #include "vk_android.h"
 
+static simple_mtx_t physical_budgets_mutex = SIMPLE_MTX_INITIALIZER;
+static struct list_head physical_budgets = {&physical_budgets, &physical_budgets};
+
+static struct anv_memory_budget *
+get_physical_device_budget(int64_t local_major, int64_t local_minor)
+{
+   struct anv_memory_budget *budget = NULL;
+
+   simple_mtx_lock(&physical_budgets_mutex);
+
+   list_for_each_entry(struct anv_memory_budget, b, &physical_budgets, link) {
+      if (b->local_major == local_major &&
+          b->local_minor == local_minor) {
+         budget = b;
+         break;
+      }
+   }
+
+   if (budget == NULL) {
+      budget = calloc(1, sizeof(struct anv_memory_budget));
+      budget->ref_count = 1;
+      budget->local_major = local_major;
+      budget->local_minor = local_minor;
+      list_addtail(&budget->link, &physical_budgets);
+   } else {
+      budget->ref_count++;
+   }
+
+   simple_mtx_unlock(&physical_budgets_mutex);
+
+   return budget;
+}
+
+static void
+release_physical_device_budget(struct anv_memory_budget *budget)
+{
+   simple_mtx_lock(&physical_budgets_mutex);
+
+   if (--budget->ref_count == 0) {
+      list_del(&budget->link);
+      free(budget);
+   }
+
+   simple_mtx_unlock(&physical_budgets_mutex);
+}
+
 /* This is probably far to big but it reflects the max size used for messages
  * in OpenGLs KHR_debug.
  */
@@ -137,7 +183,7 @@ get_device_extensions(const struct anv_physical_device *device,
 {
    const struct anv_instance *instance = device->instance;
    const bool rt_enabled = ANV_SUPPORT_RT && device->info.has_ray_tracing;
-   const bool hw_video_encode_supported = device->info.verx10 < 125;
+   const bool hw_video_encode_supported = device->info.verx10 <= 125;
    const bool video_encode_enabled = hw_video_encode_supported &&
                                      ANV_DEBUG(VIDEO_ENCODE);
    const bool video_decode_enabled = ANV_DEBUG(VIDEO_DECODE);
@@ -233,6 +279,7 @@ get_device_extensions(const struct anv_physical_device *device,
       .KHR_shader_float16_int8               = !instance->drirc.debug.no_16bit,
       .KHR_shader_float_controls             = true,
       .KHR_shader_float_controls2            = true,
+      .KHR_shader_fma                        = true,
       .KHR_shader_integer_dot_product        = true,
       .KHR_shader_maximal_reconvergence      = true,
       .KHR_shader_non_semantic_info          = true,
@@ -297,7 +344,7 @@ get_device_extensions(const struct anv_physical_device *device,
       .EXT_depth_clip_enable                 = true,
       .EXT_depth_range_unrestricted          = device->info.ver >= 20,
       .EXT_descriptor_buffer                 = true,
-      .EXT_descriptor_heap                   = ANV_DEBUG(EXPERIMENTAL),
+      .EXT_descriptor_heap                   = true,
       .EXT_descriptor_indexing               = true,
       .EXT_device_address_binding_report     = true,
       /* Emitting a single compute dispatch potentially lot of memory (> 4KiB)
@@ -406,7 +453,7 @@ get_device_extensions(const struct anv_physical_device *device,
       .AMD_texture_gather_bias_lod           = device->info.ver >= 20,
       .GOOGLE_decorate_string                = true,
 #ifdef ANV_USE_WSI_PLATFORM
-      .GOOGLE_display_timing = wsi_instance_supports_google_display_timing(&device->instance->vk),
+      .GOOGLE_display_timing = wsi_instance_supports_google_display_timing(&instance->vk, &instance->drirc.options),
 #endif
       .GOOGLE_hlsl_functionality1            = true,
       .GOOGLE_user_type                      = true,
@@ -1073,6 +1120,13 @@ get_features(const struct anv_physical_device *pdevice,
 
       /* VK_KHR_device_fault */
       .deviceFault = pdevice->can_get_vm_faults,
+
+      /* VK_KHR_shader_fma */
+      .shaderFmaFloat16 = true,
+      .shaderFmaFloat32 = true,
+      /* soft fp64 does not support fma */
+      .shaderFmaFloat64 = pdevice->info.has_64bit_float &&
+                          !INTEL_DEBUG(DEBUG_SOFT64),
    };
 
    /* The new DOOM and Wolfenstein games require depthBounds without
@@ -1530,7 +1584,8 @@ get_properties(const struct anv_physical_device *pdevice,
    };
 
    snprintf(props->deviceName, sizeof(props->deviceName),
-            "%s", pdevice->info.name);
+            "%s", (strlen(pdevice->instance->drirc.debug.force_vk_devicename) > 0) ?
+                  pdevice->instance->drirc.debug.force_vk_devicename : pdevice->info.name);
    memcpy(props->pipelineCacheUUID,
           pdevice->pipeline_cache_uuid, VK_UUID_SIZE);
 
@@ -2927,10 +2982,9 @@ anv_physical_device_try_create(struct vk_instance *vk_instance,
     * requirement).
     */
    device->expose_compression_control =
-      (instance->drirc.features.fake_image_compression_control_xe2_plus &&
-       device->info.ver >= 20) ||
-      (instance->drirc.features.compression_control_enabled &&
-       device->has_compression_control);
+      instance->drirc.features.compression_control_enabled &&
+      (device->info.ver < 20 ||
+       instance->drirc.features.fake_image_compression_control_xe2_plus);
 
    if (is_virtio) {
       struct util_sync_provider *sync = intel_virtio_sync_provider(fd);
@@ -3070,6 +3124,9 @@ anv_physical_device_try_create(struct vk_instance *vk_instance,
    get_features(device, &device->vk.supported_features);
    get_properties(device, &device->vk.properties);
 
+   device->memory.heaps_budget =
+      get_physical_device_budget(device->local_major, device->local_minor);
+
    result = anv_init_wsi(device);
    if (result != VK_SUCCESS)
       goto fail_perf;
@@ -3084,6 +3141,7 @@ anv_physical_device_try_create(struct vk_instance *vk_instance,
    return VK_SUCCESS;
 
 fail_perf:
+   release_physical_device_budget(device->memory.heaps_budget);
    intel_perf_free(device->perf);
    free(device->engine_info);
    anv_physical_device_free_disk_cache(device);
@@ -3112,6 +3170,7 @@ anv_physical_device_destroy(struct vk_physical_device *vk_device)
    free(device->engine_info);
    anv_physical_device_free_disk_cache(device);
    ralloc_free(device->compiler);
+   release_physical_device_budget(device->memory.heaps_budget);
    intel_perf_free(device->perf);
    intel_virtio_unref_fd(device->local_fd);
    close(device->local_fd);
@@ -3288,7 +3347,8 @@ anv_get_memory_budget(VkPhysicalDevice physicalDevice,
 
    for (size_t i = 0; i < device->memory.heap_count; i++) {
       VkDeviceSize heap_size = device->memory.heaps[i].size;
-      VkDeviceSize heap_used = device->memory.heaps[i].used;
+      VkDeviceSize heap_used =
+         p_atomic_read(&device->memory.heaps_budget->used[i]);
       VkDeviceSize heap_budget, total_heaps_size;
       uint64_t mem_available = 0;
 
@@ -3565,6 +3625,6 @@ VkDeviceSize anv_GetPhysicalDeviceDescriptorSizeEXT(
       return sizeof(uint64_t);
 
    default:
-      UNREACHABLE("invalid descriptor type");
+      return 0;
    }
 }

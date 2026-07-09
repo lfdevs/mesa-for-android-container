@@ -49,8 +49,6 @@
 #include "tgsi/tgsi_exec.h"
 #include "tgsi/tgsi_ureg.h"
 
-#include "nir/nir_to_tgsi.h"
-
 DEBUG_GET_ONCE_BOOL_OPTION(gallium_dump_vs, "GALLIUM_DUMP_VS", false)
 
 
@@ -66,15 +64,7 @@ draw_create_vertex_shader(struct draw_context *draw,
    }
 
 #if DRAW_LLVM_AVAILABLE
-   bool is_allocated = false;
    if (draw->pt.middle.llvm) {
-      struct pipe_screen *screen = draw->pipe->screen;
-      if (shader->type == PIPE_SHADER_IR_NIR &&
-          !screen->shader_caps[MESA_SHADER_VERTEX].integers) {
-        state.type = PIPE_SHADER_IR_TGSI;
-        state.tokens = nir_to_tgsi(shader->ir.nir, screen);
-        is_allocated = true;
-      }
       vs = draw_create_vs_llvm(draw, &state);
    }
 #endif
@@ -82,12 +72,6 @@ draw_create_vertex_shader(struct draw_context *draw,
    if (!vs) {
       vs = draw_create_vs_exec(draw, &state);
    }
-
-#if DRAW_LLVM_AVAILABLE
-   if (is_allocated) {
-      ureg_free_tokens(state.tokens);
-   }
-#endif
 
    if (vs) {
       bool found_clipvertex = false;
@@ -153,7 +137,7 @@ draw_delete_vertex_shader(struct draw_context *draw,
 
    dvs->nr_variants = 0;
 
-   dvs->delete(dvs);
+   dvs->delete(draw, dvs);
 }
 
 
@@ -195,7 +179,8 @@ draw_vs_destroy(struct draw_context *draw)
 
 
 struct draw_vs_variant *
-draw_vs_lookup_variant(struct draw_vertex_shader *vs,
+draw_vs_lookup_variant(struct draw_context *draw,
+                       struct draw_vertex_shader *vs,
                        const struct draw_vs_variant_key *key)
 {
    /* Lookup existing variant:
@@ -206,7 +191,7 @@ draw_vs_lookup_variant(struct draw_vertex_shader *vs,
 
    /* Else have to create a new one:
     */
-   struct draw_vs_variant *variant = vs->create_variant(vs, key);
+   struct draw_vs_variant *variant = vs->create_variant(draw, vs, key);
    if (!variant)
       return NULL;
 

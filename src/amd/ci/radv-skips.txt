@@ -14,3 +14,6 @@ dEQP-VK.video.synchronization.*.basic.event.*
 
 # These tests hang when running in parallel (border color on compute queues).
 dEQP-VK.pipeline.*.sampler.*_compute
+
+# These tests cause segmentation fault: https://github.com/KhronosGroup/VK-GL-CTS/issues/603
+dEQP-VK.api.image_compression_control.swapchain.direct.*

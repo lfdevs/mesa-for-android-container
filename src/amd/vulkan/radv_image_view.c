@@ -98,7 +98,7 @@ gfx10_make_texture_descriptor(struct radv_device *device, struct radv_image *ima
 {
    const struct radv_physical_device *pdev = radv_device_physical(device);
    const bool create_2d_view_of_3d =
-      (image->vk.create_flags & VK_IMAGE_CREATE_2D_VIEW_COMPATIBLE_BIT_EXT) && view_type == VK_IMAGE_VIEW_TYPE_2D;
+      (image->vk.create_flags & VK_IMAGE_CREATE_2_2D_VIEW_COMPATIBLE_BIT_EXT) && view_type == VK_IMAGE_VIEW_TYPE_2D;
    enum pipe_format format = radv_format_to_pipe_format(vk_format);
    const struct util_format_description *desc;
    enum pipe_swizzle swizzle[4];
@@ -226,7 +226,7 @@ gfx6_make_texture_descriptor(struct radv_device *device, struct radv_image *imag
    const struct radv_instance *instance = radv_physical_device_instance(pdev);
    enum pipe_format format = radv_format_to_pipe_format(vk_format);
    const bool create_2d_view_of_3d =
-      (image->vk.create_flags & VK_IMAGE_CREATE_2D_VIEW_COMPATIBLE_BIT_EXT) && view_type == VK_IMAGE_VIEW_TYPE_2D;
+      (image->vk.create_flags & VK_IMAGE_CREATE_2_2D_VIEW_COMPATIBLE_BIT_EXT) && view_type == VK_IMAGE_VIEW_TYPE_2D;
    const struct util_format_description *desc;
    enum pipe_swizzle swizzle[4];
    unsigned type;
@@ -391,7 +391,7 @@ radv_image_view_make_descriptor(struct radv_image_view *iview, struct radv_devic
          first_layer = 0;
       } else {
          /* Video decode target uses custom height alignment. */
-         if (image->vk.usage & VK_IMAGE_USAGE_VIDEO_DECODE_DST_BIT_KHR &&
+         if (image->vk.usage & VK_IMAGE_USAGE_2_VIDEO_DECODE_DST_BIT_KHR &&
              image->planes[plane_id].surface.u.gfx9.swizzle_mode == 0) {
             offset += first_layer * image->planes[plane_id].surface.u.gfx9.surf_slice_size;
             first_layer = 0;
@@ -411,7 +411,7 @@ radv_image_view_make_descriptor(struct radv_image_view *iview, struct radv_devic
       } else if (iview->vk.aspects == VK_IMAGE_ASPECT_DEPTH_BIT &&
                  (iview->image->vk.aspects == (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT))) {
          force_zero_base_mip = true;
-      } else if (iview->image->vk.create_flags & VK_IMAGE_CREATE_2D_VIEW_COMPATIBLE_BIT_EXT &&
+      } else if (iview->image->vk.create_flags & VK_IMAGE_CREATE_2_2D_VIEW_COMPATIBLE_BIT_EXT &&
                  iview->vk.view_type == VK_IMAGE_VIEW_TYPE_2D) {
          force_zero_base_mip = true;
       }
@@ -425,7 +425,7 @@ radv_image_view_make_descriptor(struct radv_image_view *iview, struct radv_devic
       }
 
       /* Video decode target uses custom height alignment. */
-      if (image->vk.usage & VK_IMAGE_USAGE_VIDEO_DECODE_DST_BIT_KHR) {
+      if (image->vk.usage & VK_IMAGE_USAGE_2_VIDEO_DECODE_DST_BIT_KHR) {
          offset += first_layer * (uint64_t)image->planes[plane_id].surface.u.legacy.level[0].slice_size_dw * 4;
          first_layer = 0;
       }
@@ -797,10 +797,10 @@ radv_image_view_init(struct radv_image_view *iview, struct radv_device *device,
                                       enable_compression, iview->plane_id + i, i, sliced_3d);
    }
 
-   if (iview->vk.usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT)
+   if (iview->vk.usage & VK_IMAGE_USAGE_2_COLOR_ATTACHMENT_BIT_KHR)
       radv_initialise_color_surface(device, &iview->color_desc, iview);
 
-   if (iview->vk.usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) {
+   if (iview->vk.usage & VK_IMAGE_USAGE_2_DEPTH_STENCIL_ATTACHMENT_BIT_KHR) {
       if (vk_format_has_depth(image->vk.format) && vk_format_has_stencil(image->vk.format))
          radv_initialise_ds_surface(device, &iview->depth_stencil_desc, iview,
                                     VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT, depth_compress_disable,

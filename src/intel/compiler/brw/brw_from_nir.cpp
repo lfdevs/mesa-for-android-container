@@ -3403,7 +3403,7 @@ emit_samplepos_setup(nir_to_brw_state &ntb)
    brw_shader &s = ntb.s;
 
    assert(s.stage == MESA_SHADER_FRAGMENT);
-   assert(brw_fs_prog_data(s.prog_data)->persample_dispatch != INTEL_NEVER);
+   assert(brw_fs_prog_data(s.prog_data)->persample_dispatch);
 
    const brw_builder abld = bld.annotate("compute sample position");
    brw_reg pos = abld.vgrf(BRW_TYPE_F, 2);
@@ -4945,6 +4945,11 @@ brw_from_nir_emit_intrinsic(nir_to_brw_state &ntb,
          default:
             urb_fence = false;
             break;
+      }
+
+      if (s.stage == MESA_SHADER_COMPUTE) {
+         struct brw_cs_prog_data *cs_prog_data = brw_cs_prog_data(s.prog_data);
+         cs_prog_data->uses_fence = true;
       }
 
       unsigned fence_regs_count = 0;

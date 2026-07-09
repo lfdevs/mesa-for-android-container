@@ -178,5 +178,5 @@ gitlab-ci*.yml @eric
 /src/gallium/drivers/svga/ @brianp @charmainel
 /src/gallium/winsys/svga/ @thomash @drawat
 
-# Rust util: peripherally uploaded to crates.io
-src/util/rust @gurchetansingh @aruby @jmacnak @dextero1
+# Magma GPU experimental crate: peripherally uploaded to crates.io
+src/virtio/magma-gpu-rs @gurchetansingh @aruby @jmacnak @dextero1

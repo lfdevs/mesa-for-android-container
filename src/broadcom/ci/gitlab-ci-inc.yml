@@ -1,3 +1,13 @@
+.enforce-hw-jobs-vc4-rules:
+  rules:
+    - if: '$INPUT_HW_JOBS !~ /"(all|vc4|vc4.ko)"/i'
+      when: never
+
+.enforce-hw-jobs-v3d-rules:
+  rules:
+    - if: '$INPUT_HW_JOBS !~ /"(all|v3dv|v3d.ko)"/i'
+      when: never
+
 .broadcom-common-rules:
   rules:
     - changes: &broadcom_file_list
@@ -29,6 +39,7 @@
 .vc4-rules:
   stage: broadcom
   rules:
+    - !reference [.enforce-hw-jobs-vc4-rules, rules]
     - !reference [.test, rules]
     - !reference [.igalia-farm-rules, rules]
     - !reference [.gl-rules, rules]
@@ -44,6 +55,7 @@
   stage: broadcom-nightly
   extends: .no-auto-retry
   rules:
+    - !reference [.enforce-hw-jobs-vc4-rules, rules]
     - !reference [.test, rules]
     - !reference [.igalia-farm-manual-rules, rules]
     - !reference [.gl-manual-rules, rules]
@@ -54,6 +66,7 @@
 .v3d-rules:
   stage: broadcom
   rules:
+    - !reference [.enforce-hw-jobs-v3d-rules, rules]
     - !reference [.test, rules]
     - !reference [.igalia-farm-rules, rules]
     - !reference [.gl-rules, rules]
@@ -69,6 +82,7 @@
   stage: broadcom-nightly
   extends: .no-auto-retry
   rules:
+    - !reference [.enforce-hw-jobs-v3d-rules, rules]
     - !reference [.test, rules]
     - !reference [.igalia-farm-manual-rules, rules]
     - !reference [.gl-manual-rules, rules]
@@ -93,6 +107,7 @@
 .v3dv-rules:
   stage: broadcom
   rules:
+    - !reference [.enforce-hw-jobs-v3d-rules, rules]
     - !reference [.test, rules]
     - !reference [.igalia-farm-rules, rules]
     - !reference [.vulkan-rules, rules]
@@ -105,6 +120,7 @@
   stage: broadcom-nightly
   extends: .no-auto-retry
   rules:
+    - !reference [.enforce-hw-jobs-v3d-rules, rules]
     - !reference [.test, rules]
     - !reference [.igalia-farm-manual-rules, rules]
     - !reference [.vulkan-manual-rules, rules]
@@ -116,6 +132,7 @@
   stage: broadcom-nightly
   extends: .no-auto-retry
   rules:
+    - !reference [.enforce-hw-jobs-v3d-rules, rules]
     - !reference [.test, rules]
     - !reference [.v3d-manual-rules, rules]
     - !reference [.v3dv-manual-rules, rules]

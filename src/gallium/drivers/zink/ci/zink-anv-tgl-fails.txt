@@ -444,8 +444,6 @@ spec@egl_khr_surfaceless_context@viewport,Fail
 
 spec@ext_external_objects@vk-image-overwrite@RGB 10 A2 UINT optimal: Failed to initialize OpenGL FBO/RBO,Fail
 
-spec@ext_framebuffer_multisample@clip-and-scissor-blit 16 msaa,Fail
-
 spec@ext_transform_feedback@tessellation triangle_fan flat_first,Fail
 spec@ext_transform_feedback@tessellation quad_strip wireframe,Fail
 spec@ext_transform_feedback@tessellation quads wireframe,Fail
@@ -550,23 +548,6 @@ KHR-GL46.sparse_texture2_tests.SparseTexture2Commitment_texture_2d_multisample_a
 KHR-GL46.sparse_texture2_tests.SparseTexture2Commitment_texture_2d_multisample_rg32i,Fail
 KHR-GL46.sparse_texture2_tests.SparseTexture2Commitment_texture_2d_multisample_rg16f,Fail
 KHR-GL46.sparse_texture2_tests.SparseTexture2Commitment_texture_2d_multisample_rgb10_a2,Fail
-
-#glcts update
-dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_out_of_bounds_mag_reverse_src_y,Fail
-dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_out_of_bounds_min_reverse_dst_x,Fail
-dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_out_of_bounds_mag,Fail
-dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_out_of_bounds_mag_reverse_src_dst_x,Fail
-dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_out_of_bounds_min_reverse_src_x,Fail
-dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_out_of_bounds_mag_reverse_dst_y,Fail
-dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_out_of_bounds_min_reverse_src_dst_x,Fail
-dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_out_of_bounds_min_reverse_src_y,Fail
-dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_out_of_bounds_min_reverse_dst_y,Fail
-dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_out_of_bounds_mag_reverse_src_x,Fail
-dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_out_of_bounds_mag_reverse_src_dst_y,Fail
-dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_out_of_bounds_min_reverse_src_dst_y,Fail
-dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_out_of_bounds_mag_reverse_dst_x,Fail
-
-dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_out_of_bounds_min,Fail
 
 glx@glx_arb_sync_control@swapbuffersmsc-return,Fail
 glx@glx_arb_sync_control@swapbuffersmsc-divisor-zero,Fail

@@ -222,6 +222,9 @@ hk_get_device_extensions(const struct hk_instance *instance,
       .EXT_ycbcr_2plane_444_formats = false,
       .EXT_ycbcr_image_arrays = false,
       .GOOGLE_decorate_string = true,
+#ifdef HK_USE_WSI_PLATFORM
+      .GOOGLE_display_timing = wsi_instance_supports_google_display_timing(&instance->vk, &instance->drirc.options),
+#endif
       .GOOGLE_hlsl_functionality1 = true,
       .GOOGLE_user_type = true,
       .VALVE_mutable_descriptor_type = true,
@@ -1039,7 +1042,9 @@ hk_get_device_properties(const struct agx_device *dev,
       .advancedBlendAllOperations = true,
    };
 
-   strncpy(properties->deviceName, dev->name, sizeof(properties->deviceName));
+   snprintf(properties->deviceName, sizeof(properties->deviceName), "%s",
+            (strlen(instance->drirc.debug.force_vk_devicename) > 0) ?
+            instance->drirc.debug.force_vk_devicename : dev->name);
 
    /* VK_EXT_shader_module_identifier */
    static_assert(sizeof(vk_shaderModuleIdentifierAlgorithmUUID) ==

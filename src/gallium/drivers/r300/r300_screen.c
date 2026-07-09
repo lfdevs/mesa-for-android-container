@@ -107,11 +107,7 @@ static struct disk_cache* r300_get_disk_shader_cache(struct pipe_screen* pscreen
 	return r300screen->disk_shader_cache;
 }
 
-#define COMMON_NIR_OPTIONS                    \
-   .fdot_replicates = true,                   \
-   .float_mul_add32 =                         \
-      nir_float_muladd_support_has_fmad |     \
-      nir_float_muladd_support_fuse,          \
+#define COMMON_NIR_OPTIONS_BASE               \
    .lower_bitops = true,                      \
    .lower_extract_byte = true,                \
    .lower_extract_word = true,                \
@@ -130,10 +126,16 @@ static struct disk_cache* r300_get_disk_shader_cache(struct pipe_screen* pscreen
    .lower_uniforms_to_ubo = true,             \
    .no_integers = true
 
+#define COMMON_NIR_OPTIONS                    \
+   .float_mul_add32 =                         \
+      nir_float_muladd_support_has_fmad |     \
+      nir_float_muladd_support_fuse,          \
+   .fdot_replicates = true,                   \
+   COMMON_NIR_OPTIONS_BASE
+
 static const nir_shader_compiler_options r500_vs_compiler_options = {
    COMMON_NIR_OPTIONS,
    .has_fused_comp_and_csel = true,
-
    /* Have HW loops support and 1024 max instr count, but don't unroll *too*
     * hard.
     */
@@ -179,7 +181,8 @@ static const nir_shader_compiler_options r300_fs_compiler_options = {
 };
 
 static const nir_shader_compiler_options gallivm_compiler_options = {
-   COMMON_NIR_OPTIONS,
+   COMMON_NIR_OPTIONS_BASE,
+   .float_mul_add32 = nir_float_muladd_support_keep_weak_ffma,
    .has_fused_comp_and_csel = true,
    .max_unroll_iterations = 32,
 
@@ -523,6 +526,7 @@ static void r300_init_screen_caps(struct r300_screen* r300screen)
    caps->primitive_restart =
    caps->primitive_restart_fixed_index =
    caps->user_vertex_buffers =
+   caps->vs_instanceid =
    caps->vs_window_space_position = !r300screen->caps.has_tcl;
 
    /* HWTCL-only features / limitations. */

@@ -42,6 +42,7 @@
 #include "util/u_memory.h"
 #include "util/u_surface.h"
 #include "util/u_transfer.h"
+#include "util/u_transfer_helper.h"
 
 #include "hw/common_3d.xml.h"
 
@@ -128,7 +129,7 @@ etna_buffer_unmap(struct pipe_context *pctx, struct pipe_transfer *ptrans)
    slab_free(&ctx->transfer_pool, trans);
 }
 
-static void
+void
 etna_transfer_flush_region(struct pipe_context *pctx,
                            struct pipe_transfer *ptrans,
                            const struct pipe_box *box)
@@ -195,7 +196,7 @@ static void etna_unpatch_data(void *buffer, const struct pipe_transfer *ptrans)
    level->patched = false;
 }
 
-static void
+void
 etna_texture_unmap(struct pipe_context *pctx, struct pipe_transfer *ptrans)
 {
    struct etna_context *ctx = etna_context(pctx);
@@ -247,7 +248,7 @@ etna_texture_unmap(struct pipe_context *pctx, struct pipe_transfer *ptrans)
                      trans->staging + z * ptrans->layer_stride,
                      ptrans->box.x, ptrans->box.y,
                      res_level->stride, ptrans->box.width, ptrans->box.height,
-                     ptrans->stride, util_format_get_blocksize(rsc->base.format));
+                     ptrans->stride, util_format_get_blocksize(rsc->internal_format));
             }
          }
          } else if (rsc->layout == ETNA_LAYOUT_LINEAR) {
@@ -288,7 +289,7 @@ etna_texture_unmap(struct pipe_context *pctx, struct pipe_transfer *ptrans)
    slab_free(&ctx->transfer_pool, trans);
 }
 
-static void *
+void *
 etna_texture_map(struct pipe_context *pctx, struct pipe_resource *prsc,
                  unsigned level, unsigned usage, const struct pipe_box *box,
                  struct pipe_transfer **out_transfer)
@@ -354,7 +355,7 @@ etna_texture_map(struct pipe_context *pctx, struct pipe_resource *prsc,
       rsc = etna_resource(rsc->texture);
    } else if (etna_resource_level_ts_valid(res_level) ||
               (rsc->layout != ETNA_LAYOUT_LINEAR &&
-               etna_resource_hw_tileable(screen->specs.use_blt, prsc) &&
+               etna_format_hw_tileable(screen->specs.use_blt, rsc->internal_format) &&
                /* HALIGN 4 resources are incompatible with the resolve engine,
                 * so fall back to using software to detile this resource. */
                rsc->halign != TEXTURE_HALIGN_FOUR)) {
@@ -376,6 +377,10 @@ etna_texture_map(struct pipe_context *pctx, struct pipe_resource *prsc,
       templ.height0 = res_level->height;
       templ.nr_samples = 0;
       templ.bind = PIPE_BIND_RENDER_TARGET;
+      /* Emulated depth32f stores as the internal D24S8, so size the staging by
+       * the internal format. The base format is restored below for the
+       * same-format resolve blit. */
+      templ.format = rsc->internal_format;
 
       trans->rsc = etna_resource_alloc(pctx->screen, ETNA_LAYOUT_LINEAR,
                                        DRM_FORMAT_MOD_LINEAR, &templ);
@@ -383,6 +388,7 @@ etna_texture_map(struct pipe_context *pctx, struct pipe_resource *prsc,
          slab_free(&ctx->transfer_pool, trans);
          return NULL;
       }
+      trans->rsc->format = rsc->base.format;
 
       if (!screen->specs.use_blt) {
          /* Need to align the transfer region to satisfy RS restrictions, as we
@@ -452,8 +458,8 @@ etna_texture_map(struct pipe_context *pctx, struct pipe_resource *prsc,
       ptrans->layer_stride = res_level->layer_stride;
 
       trans->mapped += res_level->offset +
-             etna_compute_offset(prsc->format, box, res_level->stride,
-                                 res_level->layer_stride);
+             etna_compute_offset(etna_resource(prsc)->internal_format, box,
+                                 res_level->stride, res_level->layer_stride);
 
       /* We need to have the unpatched data ready for the gfx stack. */
       if (usage & PIPE_MAP_READ)
@@ -471,7 +477,7 @@ etna_texture_map(struct pipe_context *pctx, struct pipe_resource *prsc,
          goto fail;
 
       trans->mapped += res_level->offset;
-      ptrans->stride = align(box->width, divSizeX) * util_format_get_blocksize(format); /* row stride in bytes */
+      ptrans->stride = align(box->width, divSizeX) * util_format_get_blocksize(rsc->internal_format); /* row stride in bytes */
       ptrans->layer_stride = align(box->height, divSizeY) * ptrans->stride;
       size_t size = ptrans->layer_stride * box->depth;
 
@@ -494,7 +500,7 @@ etna_texture_map(struct pipe_context *pctx, struct pipe_resource *prsc,
                                     trans->mapped + (ptrans->box.z + z) * res_level->layer_stride,
                                     ptrans->box.x, ptrans->box.y, res_level->stride,
                                     ptrans->box.width, ptrans->box.height, ptrans->stride,
-                                    util_format_get_blocksize(rsc->base.format));
+                                    util_format_get_blocksize(rsc->internal_format));
                }
             }
          } else if (rsc->layout == ETNA_LAYOUT_LINEAR) {
@@ -524,10 +530,10 @@ void
 etna_transfer_init(struct pipe_context *pctx)
 {
    pctx->buffer_map = etna_buffer_map;
-   pctx->texture_map = etna_texture_map;
-   pctx->transfer_flush_region = etna_transfer_flush_region;
+   pctx->texture_map = u_transfer_helper_transfer_map;
+   pctx->transfer_flush_region = u_transfer_helper_transfer_flush_region;
    pctx->buffer_unmap = etna_buffer_unmap;
-   pctx->texture_unmap = etna_texture_unmap;
+   pctx->texture_unmap = u_transfer_helper_transfer_unmap;
    pctx->buffer_subdata = u_default_buffer_subdata;
    pctx->texture_subdata = u_default_texture_subdata;
 }

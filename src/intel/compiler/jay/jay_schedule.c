@@ -39,12 +39,29 @@
 #include "jay_opcodes.h"
 #include "jay_private.h"
 
+struct sched_block {
+   uint32_t first, last;
+   int32_t max_pressure;
+};
+
 struct sched_ctx {
+   /* Function we are currently scheduling */
+   jay_function *func;
+
    struct jay_dag dag;
-   unsigned dispatch_width;
+   struct jay_dag_iterator it;
+
    jay_inst **insts;
    struct u_sparse_bitset live;
    BITSET_WORD *seen;
+
+   /* Array of node indices for the schedule we're building */
+   struct util_dynarray schedule;
+
+   struct sched_block *blocks;
+
+   /* Current register demand */
+   int32_t demand[JAY_NUM_SSA_FILES];
 };
 
 /* Cut down version of the function in jay_liveness.c */
@@ -61,10 +78,7 @@ liveness_update(struct u_sparse_bitset *live, jay_inst *I)
 }
 
 static void
-populate_dag(struct sched_ctx *ctx,
-             jay_function *func,
-             jay_block *block,
-             uint32_t *def)
+populate_dag(struct sched_ctx *ctx, jay_block *block, uint32_t *def)
 {
    uint32_t first_node_in_this_block = ctx->dag.node;
 
@@ -90,7 +104,9 @@ populate_dag(struct sched_ctx *ctx,
       }
 
       /* Serialize address register access until we have an address RA */
-      bool use_a0 = I->dst.file == J_ADDRESS || I->op == JAY_OPCODE_SHUFFLE;
+      bool use_a0 = I->dst.file == J_ADDRESS ||
+                    I->op == JAY_OPCODE_SHUFFLE ||
+                    I->op == JAY_OPCODE_VECTOR_EXTRACT;
       jay_foreach_src(I, s) {
          use_a0 |= I->src[s].file == J_ADDRESS;
       }
@@ -109,7 +125,7 @@ populate_dag(struct sched_ctx *ctx,
           I->op == JAY_OPCODE_DEMOTE ||
           I->op == JAY_OPCODE_HELPER_SEL ||
           (I->op == JAY_OPCODE_SEND &&
-           func->shader->helpers_tracked &&
+           ctx->func->shader->helpers_tracked &&
            jay_send_skip_helpers(I))) {
 
          jay_dag_add_edge(&ctx->dag, sidefx);
@@ -120,18 +136,28 @@ populate_dag(struct sched_ctx *ctx,
       jay_dag_next_node(&ctx->dag);
    }
 
-   jay_dag_finalize(&ctx->dag, first_node_in_this_block);
+   ctx->blocks[block->index].first = first_node_in_this_block;
+   ctx->blocks[block->index].last = ctx->dag.node - 1;
 }
 
 /*
  * Due to multiple register files, register demand is a vector. Our dynamic
- * register file partitioning justifies modelling demand as a single scalar,
- * where each file has a weight determined here.
+ * register file partitioning sometimes justifies modelling demand as a single
+ * scalar, where each file has a weight determined here.
  */
-static unsigned
-scale(struct sched_ctx *ctx, jay_def x)
+static signed
+weighted_demand(struct sched_ctx *ctx, signed *demands)
 {
-   return x.file == J_ADDRESS ? 0 : jay_is_uniform(x) ? 1 : ctx->dispatch_width;
+   signed weighted = 0;
+
+   jay_foreach_ssa_file(file) {
+      signed scale = file == J_ADDRESS  ? 0 :
+                     file & JAY_UNIFORM ? 1 :
+                                          ctx->func->shader->dispatch_width;
+      weighted += demands[file] * scale;
+   }
+
+   return weighted;
 }
 
 /*
@@ -139,30 +165,26 @@ scale(struct sched_ctx *ctx, jay_def x)
  * instuction. Based on jay_calculate_register_demands, but without the use of
  * kill-bits since we are reordering instructions.
  */
-static signed
-calculate_pressure_delta_before(struct sched_ctx *ctx, jay_inst *I)
+static void
+adjust_demand_before(struct sched_ctx *ctx, jay_inst *I, signed *demand)
 {
-   signed delta = 0;
-
    /* Make destinations live */
    jay_foreach_dst(I, dst) {
-      delta += jay_num_values(dst) * scale(ctx, dst);
+      demand[dst.file] -= jay_num_values(dst);
    }
-
-   return delta;
 }
 
-static signed
-calculate_pressure_delta_after(struct sched_ctx *ctx, jay_inst *I)
+static void
+adjust_demand_after(struct sched_ctx *ctx, jay_inst *I, signed *demand)
 {
-   signed delta = 0;
    unsigned counter = 0;
 
    /* Dead destinations are those written by the instruction but killed
     * immediately after the instruction finishes.
     */
-   jay_foreach_dst_index(I, _, index) {
-      delta -= !u_sparse_bitset_test(&ctx->live, index) * scale(ctx, I->dst);
+   jay_foreach_dst_index(I, dst, index) {
+      assert(dst.file < JAY_NUM_SSA_FILES);
+      demand[dst.file] += !u_sparse_bitset_test(&ctx->live, index);
    }
 
    /* Late-kill sources. We precomputed the deduplication info and stashed it in
@@ -170,14 +192,13 @@ calculate_pressure_delta_after(struct sched_ctx *ctx, jay_inst *I)
     */
    jay_foreach_src_index(I, s, c, index) {
       if (BITSET_TEST(I->last_use, counter)) {
-         delta -=
-            !u_sparse_bitset_test(&ctx->live, index) * scale(ctx, I->src[s]);
+         assert(I->src[s].file < JAY_NUM_SSA_FILES);
+         demand[I->src[s].file] += !u_sparse_bitset_test(&ctx->live, index);
       }
 
       counter++;
    }
 
-   return delta;
 }
 
 /*
@@ -190,10 +211,14 @@ choose_inst(struct sched_ctx *s)
    int32_t min_delta = INT32_MAX;
    uint32_t best = 0;
 
-   util_dynarray_foreach(&s->dag.heads, uint32_t, head) {
+   util_dynarray_foreach(&s->it.heads, uint32_t, head) {
       jay_inst *I = s->insts[*head];
-      int32_t delta = -(calculate_pressure_delta_after(s, I) +
-                        calculate_pressure_delta_before(s, I));
+
+      /* To minimize pressure, consider the effect on liveness. */
+      int32_t deltas[JAY_NUM_SSA_FILES] = { 0 };
+      adjust_demand_after(s, I, deltas);
+      adjust_demand_before(s, I, deltas);
+      int32_t delta = weighted_demand(s, deltas);
 
       /* As a tiebreaker (only), sink flag writes to reduce specifically flag
        * pressure, because spilling flags costs extra instructions and GPR
@@ -214,15 +239,10 @@ choose_inst(struct sched_ctx *s)
 }
 
 static void
-pressure_schedule_block(jay_function *func,
-                        jay_block *block,
-                        struct util_dynarray *schedule,
-                        struct sched_ctx *s,
-                        void *memctx)
+gather_block_info(struct sched_ctx *s, jay_block *block, void *memctx)
 {
-   /* Our pressure calculations are all off by a constant, but that's ok */
-   signed pressure = 0;
-   signed orig_max_pressure = 0;
+   int32_t demand[JAY_NUM_SSA_FILES] = { 0 };
+   signed max_pressure = 0;
 
    u_sparse_bitset_free(&s->live);
    u_sparse_bitset_dup_with_ctx(&s->live, &block->live_out, memctx);
@@ -252,39 +272,56 @@ pressure_schedule_block(jay_function *func,
          BITSET_CLEAR(s->seen, index);
       }
 
-      pressure -= calculate_pressure_delta_after(s, I);
-      orig_max_pressure = MAX2(pressure, orig_max_pressure);
-      pressure -= calculate_pressure_delta_before(s, I);
+      adjust_demand_after(s, I, demand);
+      max_pressure = MAX2(weighted_demand(s, demand), max_pressure);
+      adjust_demand_before(s, I, demand);
       liveness_update(&s->live, I);
    }
 
+   s->blocks[block->index].max_pressure = max_pressure;
+}
+
+static void
+schedule_block(jay_block *block, struct sched_ctx *s, void *memctx)
+{
+   s->it.dag = &s->dag;
+   jay_dag_iterate(&s->it, s->blocks[block->index].first,
+                   s->blocks[block->index].last);
+
+   util_dynarray_clear(&s->schedule);
+
+   memset(s->demand, 0, JAY_NUM_SSA_FILES * sizeof(s->demand[0]));
    u_sparse_bitset_free(&s->live);
    u_sparse_bitset_dup_with_ctx(&s->live, &block->live_out, memctx);
 
-   signed max_pressure = 0;
-   pressure = 0;
+   while (s->it.heads.size) {
+      int32_t node = choose_inst(s);
 
-   while (s->dag.heads.size) {
-      uint32_t node = choose_inst(s);
-      pressure -= calculate_pressure_delta_after(s, s->insts[node]);
-      max_pressure = MAX2(pressure, max_pressure);
-      pressure -= calculate_pressure_delta_before(s, s->insts[node]);
-      jay_dag_prune_head(&s->dag, node);
+      adjust_demand_after(s, s->insts[node], s->demand);
 
-      util_dynarray_append(schedule, node);
+      /* Toss schedules that blow up register pressure as we go */
+      if (weighted_demand(s, s->demand) >=
+          s->blocks[block->index].max_pressure) {
+         jay_dag_iterator_reset(&s->it);
+         return;
+      }
+
+      adjust_demand_before(s, s->insts[node], s->demand);
       liveness_update(&s->live, s->insts[node]);
+
+      jay_dag_take_head(&s->it, node);
+      util_dynarray_append(&s->schedule, node);
    }
 
-   /* Apply the schedule only if it reduces pressure */
-   if (max_pressure < orig_max_pressure) {
-      util_dynarray_foreach(schedule, uint32_t, node) {
-         jay_remove_instruction(s->insts[*node]);
-      }
+   /* Apply schedule */
+   util_dynarray_foreach(&s->schedule, uint32_t, node) {
+      jay_remove_instruction(s->insts[*node]);
+   }
 
-      jay_builder b = jay_init_builder(func, jay_before_block(block));
-      util_dynarray_foreach_reverse(schedule, uint32_t, node) {
-         jay_builder_insert(&b, s->insts[*node]);
-      }
+   jay_builder b = jay_init_builder(s->func, jay_before_block(block));
+
+   util_dynarray_foreach_reverse(&s->schedule, uint32_t, node) {
+      jay_builder_insert(&b, s->insts[*node]);
    }
 }
 
@@ -296,7 +333,6 @@ pass(jay_function *f)
 
    void *memctx = ralloc_context(NULL);
    void *linctx = linear_context(memctx);
-   struct util_dynarray schedule = UTIL_DYNARRAY_INIT;
 
    uint32_t nr_inst = 1;
    jay_foreach_inst_in_func(f, _, I) {
@@ -304,36 +340,43 @@ pass(jay_function *f)
    }
 
    BITSET_WORD *seen = BITSET_LINEAR_ZALLOC(linctx, f->ssa_alloc);
-   struct sched_ctx sctx = { .seen = seen,
-                             .dispatch_width = f->shader->dispatch_width };
+   struct sched_ctx sctx = { .seen = seen, .func = f };
    uint32_t *def = linear_zalloc_array(linctx, uint32_t, f->ssa_alloc);
    sctx.insts = linear_alloc_array(linctx, jay_inst *, nr_inst);
+   sctx.blocks = linear_zalloc_array(linctx, struct sched_block, f->num_blocks);
    jay_dag_init(&sctx.dag, memctx, nr_inst);
+   jay_dag_iterator_init(&sctx.it, &sctx.dag);
 
    unsigned ugpr_per_grf = jay_ugpr_per_grf(f->shader);
    unsigned ugpr_per_gpr = jay_grf_per_gpr(f->shader) * ugpr_per_grf;
 
+   /* Build the DAG for the whole program */
    jay_foreach_block(f, block) {
-      /* Treat flags as GPR demand conservatively since they spill to GPRs */
+      populate_dag(&sctx, block, def);
+   }
+
+   jay_foreach_block(f, block) {
+      /* Gather reference statistics about the program performance */
+      gather_block_info(&sctx, block, memctx);
+
+      /* Do pressure-only scheduling only on blocks that might spill, to
+       * minimize harm. We conservatively use 104 GRFs as the threshold instead
+       * of 128 to leave wiggle room for flag RA and late lowerings.
+       *
+       * We treat flags as GPR demand conservatively since they spill to GPRs.
+       */
       unsigned demand_ugpr = block->demand_max[UGPR];
       unsigned demand_gpr = block->demand_max[GPR] +
                             block->demand_max[FLAG] +
                             block->demand_max[UFLAG];
 
-      /* Schedule for pressure only blocks that might spill, to minimize harm
-       * done to ILP and such. We conservatively use 104 GRFs as the threshold
-       * instead of 128 to leave wiggle room for flag RA and late lowerings.
-       */
       if (((demand_gpr * ugpr_per_gpr) + demand_ugpr) >= (104 * ugpr_per_grf)) {
-         util_dynarray_clear(&schedule);
-
-         populate_dag(&sctx, f, block, def);
-         pressure_schedule_block(f, block, &schedule, &sctx, memctx);
          f->prioritize_pressure = true;
+         schedule_block(block, &sctx, memctx);
       }
    }
 
-   util_dynarray_fini(&schedule);
+   util_dynarray_fini(&sctx.schedule);
    ralloc_free(memctx);
 }
 

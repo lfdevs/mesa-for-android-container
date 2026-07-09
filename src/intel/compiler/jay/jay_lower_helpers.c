@@ -45,6 +45,65 @@ list_partition(struct list_head *src,
    list_validate(src);
 }
 
+/*
+ * If the fragment shader halts, we need a halt target to run EOT. Try to pluck
+ * out the last instruction and use it for EOT in the case where we are fully
+ * halted. This breaks SSA dominance invariants but that's why this is a
+ * post-RA, post-sched pass. Only SWSB has to deal with the resulting mess.
+ *
+ * If there is at least one lane that does not halt, the penultimate block will
+ * execute filling out any registers required by the send. The only case where
+ * we come in with undefined registers is if all lanes halt and we skipped to
+ * the exit block. In that case, it doesn't matter what contents we write, but
+ * we do need a valid message descriptor to avoid hangs. In particular: the
+ * message opcode matters (since it affects message length) but the coarse bit
+ * does not matter. Refusing to pluck out sends with indirect descriptors
+ * suffices to make dynamic coarse shading work with demote.
+ *
+ * When we find no such send, we insert a null RT write to use for EOT. This can
+ * only execute if all lanes halt (and therefore it is fully predicated out). If
+ * any lane does not halt, the EOT send in the last block will execute instead
+ * and end those lanes early. Hence there is no real performance loss here, just
+ * a slight i-cache inflation and uglier asm.
+ */
+static void
+insert_halt_target(jay_builder *b, struct ctx *ctx)
+{
+   jay_HALT_TARGET(b);
+
+   jay_inst *send = jay_last_inst(jay_last_source_block(b->func));
+   if ((send && send->op == JAY_OPCODE_SEND && jay_send_eot(send)) &&
+       (jay_is_imm(send->src[0]) && jay_is_imm(send->src[1]))) {
+      jay_remove_instruction(send);
+      jay_builder_insert(b, send);
+   } else {
+      signed gpr = -1;
+      for (unsigned i = 0; i < b->shader->partition.nr_blocks[GPR]; ++i) {
+         struct jay_register_block B = b->shader->partition.blocks[GPR][i];
+         bool late_eot = !jay_has_early_eot(b->shader);
+
+         if (B.len_gpr >= 4 && (B.type == JAY_BLOCK_EOT ||
+                                (B.type == JAY_BLOCK_NORMAL && late_eot))) {
+            gpr = B.start_gpr;
+         }
+      }
+
+      assert(gpr >= 0 && "must have a suitable gpr block");
+      jay_def dummy = jay_bare_regs(GPR, gpr, 4);
+
+      unsigned op = b->shader->dispatch_width == 32 ?
+                       XE2_DATAPORT_RENDER_TARGET_WRITE_SIMD32_SINGLE_SOURCE :
+                       BRW_DATAPORT_RENDER_TARGET_WRITE_SIMD16_SINGLE_SOURCE;
+      uint64_t desc = brw_fb_write_desc(b->shader->devinfo, 0, op, true, false);
+      uint64_t ex_desc = (1 << 20) /* null rt */;
+
+      send = jay_SEND(b, .sfid = GEN_SFID_RENDER_CACHE, .check_tdr = true,
+                      .msg_desc = desc | (ex_desc << 32), .nr_srcs = 1,
+                      .srcs = &dummy, .type = JAY_TYPE_U32, .eot = true);
+      send = jay_add_predicate(b, send, jay_negate(ctx->helper_flag));
+   }
+}
+
 static void
 process_block(struct ctx *ctx, jay_builder *b, jay_block *block)
 {
@@ -144,7 +203,6 @@ jay_lower_helpers(jay_shader *shader)
 {
    jay_function *entrypoint = jay_shader_get_entrypoint(shader);
    jay_block *exit_block = jay_last_block(entrypoint);
-   jay_block *last_source_block = jay_last_source_block(entrypoint);
 
    /* By ABI with jay_assign_flags, the last flag is used to track helpers */
    assert(shader->helpers_tracked);
@@ -156,36 +214,8 @@ jay_lower_helpers(jay_shader *shader)
       process_block(&ctx, &b, block);
    }
 
-   /* Fill out the exit block */
-   b.cursor = jay_after_block(exit_block);
    if (ctx.halted) {
-      jay_HALT_TARGET(&b);
-   }
-
-   /* Try to pluck out the last instruction and use it for EOT. This breaks SSA
-    * dominance invariants but that's why this is a post-RA, post-sched pass.
-    * Only SWSB has to deal with the resulting mess.
-    *
-    * There may be no such send (in case of an unconditional terminate). In that
-    * case, insert a predicated-out null RT write to use for EOT.
-    */
-   jay_inst *send = jay_last_inst(last_source_block);
-   if (send && send->op == JAY_OPCODE_SEND && jay_send_eot(send)) {
-      jay_remove_instruction(send);
-      jay_builder_insert(&b, send);
-   } else {
-      jay_def dummy = jay_bare_reg(GPR, 0);
-      dummy.num_values_m1 = 4 - 1;
-
-      unsigned op = shader->dispatch_width == 32 ?
-                       XE2_DATAPORT_RENDER_TARGET_WRITE_SIMD32_SINGLE_SOURCE :
-                       BRW_DATAPORT_RENDER_TARGET_WRITE_SIMD16_SINGLE_SOURCE;
-      uint64_t desc = brw_fb_write_desc(shader->devinfo, 0, op, true, false);
-      uint64_t ex_desc = (1 << 20) /* null rt */;
-
-      send = jay_SEND(&b, .sfid = GEN_SFID_RENDER_CACHE, .check_tdr = true,
-                      .msg_desc = desc | (ex_desc << 32), .nr_srcs = 1,
-                      .srcs = &dummy, .type = JAY_TYPE_U32, .eot = true);
-      send = jay_add_predicate(&b, send, jay_negate(ctx.helper_flag));
+      b.cursor = jay_after_block(exit_block);
+      insert_halt_target(&b, &ctx);
    }
 }

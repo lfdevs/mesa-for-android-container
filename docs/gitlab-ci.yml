@@ -36,7 +36,9 @@ test-docs:
       when: manual
 
 linkcheck-docs:
-  extends: .docs-base
+  extends:
+    - .docs-base
+    - .no-auto-retry
   # Cancel job if a newer commit is pushed to the same branch
   interruptible: true
   stage: deploy
@@ -47,11 +49,4 @@ linkcheck-docs:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $GITLAB_USER_LOGIN != "marge-bot"'
       when: manual
   allow_failure: true
-  script:
-    - |
-      if ! sphinx-build -W -b linkcheck docs public
-      then
-        echo "Summary:"
-        cat public/output.txt
-        exit 1
-      fi
+  script: sphinx-build --quiet --fail-on-warning --builder linkcheck docs public

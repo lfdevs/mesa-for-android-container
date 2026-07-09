@@ -106,6 +106,10 @@ gl_cts_commits_to_backport=(
 gl_cts_patch_files=(
   build-deqp-android-Implement-headless-WSI-fallback-using-AImageR.patch  # We're only applying this avoid conflicts in the second patch
   build-deqp-gl_Build-Don-t-build-Vulkan-utilities-for-GL-builds.patch
+  build-deqp-Fix-a-memory-leak-with-the-atomic-counter-tests.patch
+  build-deqp-Fix-a-memory-leak-with-the-direct-state-access-textu.patch
+  build-deqp-Fix-a-memory-leak-with-the-sparse-buffer-storage-tes.patch
+  build-deqp-Fix-a-memory-leak-with-the-texture-image-sample-test.patch
 )
 
 # shellcheck disable=SC2034
@@ -121,6 +125,10 @@ gles_cts_commits_to_backport=(
 gles_cts_patch_files=(
   build-deqp-android-Implement-headless-WSI-fallback-using-AImageR.patch
   build-deqp-gl_Build-Don-t-build-Vulkan-utilities-for-GL-builds.patch
+  build-deqp-Fix-a-memory-leak-with-the-atomic-counter-tests.patch
+  build-deqp-Fix-a-memory-leak-with-the-direct-state-access-textu.patch
+  build-deqp-Fix-a-memory-leak-with-the-sparse-buffer-storage-tes.patch
+  build-deqp-Fix-a-memory-leak-with-the-texture-image-sample-test.patch
 )
 
 

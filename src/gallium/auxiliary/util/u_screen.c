@@ -144,6 +144,8 @@ u_init_pipe_screen_caps(struct pipe_screen *pscreen, int accel)
    /* Enables ARB_shadow */
    caps->texture_shadow_map = true;
 
+   caps->native_fp32_depth = true;
+
    caps->flatshade = true;
    caps->alpha_test = true;
    caps->point_size_fixed = true;

@@ -31,6 +31,7 @@ _compiler_binding_types = [
   'gl_tess_spacing',
   'gl_varying_slot',
   'gl_vert_attrib',
+  'glsl_sampler_dim',
   'glsl_type',
   'glsl_matrix_layout',
   'nir_.*',

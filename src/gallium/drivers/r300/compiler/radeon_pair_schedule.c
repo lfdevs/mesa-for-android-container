@@ -132,6 +132,7 @@ struct schedule_state {
    struct rc_list *PendingTEX;
 
    void (*CalcScore)(struct schedule_instruction *);
+   int PresubNopScore;
    long max_tex_group;
    unsigned PrevBlockHasTex : 1;
    unsigned PrevBlockHasKil : 1;
@@ -333,6 +334,8 @@ calc_score_r300(struct schedule_instruction *sinst)
 }
 
 #define NO_READ_TEX_SCORE (1 << 16)
+#define PRESUB_NOP_SCORE_R300 2
+#define PRESUB_NOP_SCORE_R500 3
 
 static void
 calc_score_readers(struct schedule_instruction *sinst)
@@ -349,6 +352,56 @@ calc_score_readers(struct schedule_instruction *sinst)
       }
       score_no_output(sinst);
    }
+}
+
+static bool
+sub_instruction_reads_presub_from_prev(struct rc_pair_sub_instruction *sub,
+                                       int prev_rgb_index, int prev_alpha_index)
+{
+   unsigned int num_src;
+
+   if (!sub->Src[RC_PAIR_PRESUB_SRC].Used)
+      return false;
+
+   num_src = rc_presubtract_src_reg_count(sub->Src[RC_PAIR_PRESUB_SRC].Index);
+   for (unsigned int i = 0; i < num_src; i++) {
+      unsigned int index = sub->Src[i].Index;
+
+      if (sub->Src[i].File == RC_FILE_TEMPORARY &&
+          (index == prev_rgb_index || index == prev_alpha_index))
+         return true;
+   }
+
+   return false;
+}
+
+static bool
+instruction_reads_presub_from_prev(struct rc_instruction *inst)
+{
+   int prev_rgb_index, prev_alpha_index;
+   struct rc_instruction *prev = inst->Prev;
+
+   /* We don't need a nop if the previous instruction is a TEX. */
+   if (inst->Type != RC_INSTRUCTION_PAIR || prev->Type != RC_INSTRUCTION_PAIR)
+      return false;
+
+   if (prev->U.P.RGB.WriteMask)
+      prev_rgb_index = prev->U.P.RGB.DestIndex;
+   else
+      prev_rgb_index = -1;
+   if (prev->U.P.Alpha.WriteMask)
+      prev_alpha_index = prev->U.P.Alpha.DestIndex;
+   else
+      prev_alpha_index = 1;
+
+   /* Check the previous rgb instruction */
+   if (sub_instruction_reads_presub_from_prev(&inst->U.P.RGB, prev_rgb_index,
+                                             prev_alpha_index))
+      return true;
+
+   /* Check the previous alpha instruction. */
+   return sub_instruction_reads_presub_from_prev(&inst->U.P.Alpha, prev_rgb_index,
+                                                prev_alpha_index);
 }
 
 /**
@@ -703,52 +756,6 @@ merge_instructions(struct rc_pair_instruction *rgb, struct rc_pair_instruction *
 }
 
 static void
-presub_nop(struct rc_instruction *emitted)
-{
-   int prev_rgb_index, prev_alpha_index, i, num_src;
-
-   /* We don't need a nop if the previous instruction is a TEX. */
-   if (emitted->Prev->Type != RC_INSTRUCTION_PAIR) {
-      return;
-   }
-   if (emitted->Prev->U.P.RGB.WriteMask)
-      prev_rgb_index = emitted->Prev->U.P.RGB.DestIndex;
-   else
-      prev_rgb_index = -1;
-   if (emitted->Prev->U.P.Alpha.WriteMask)
-      prev_alpha_index = emitted->Prev->U.P.Alpha.DestIndex;
-   else
-      prev_alpha_index = 1;
-
-   /* Check the previous rgb instruction */
-   if (emitted->U.P.RGB.Src[RC_PAIR_PRESUB_SRC].Used) {
-      num_src = rc_presubtract_src_reg_count(emitted->U.P.RGB.Src[RC_PAIR_PRESUB_SRC].Index);
-      for (i = 0; i < num_src; i++) {
-         unsigned int index = emitted->U.P.RGB.Src[i].Index;
-         if (emitted->U.P.RGB.Src[i].File == RC_FILE_TEMPORARY &&
-             (index == prev_rgb_index || index == prev_alpha_index)) {
-            emitted->Prev->U.P.Nop = 1;
-            return;
-         }
-      }
-   }
-
-   /* Check the previous alpha instruction. */
-   if (!emitted->U.P.Alpha.Src[RC_PAIR_PRESUB_SRC].Used)
-      return;
-
-   num_src = rc_presubtract_src_reg_count(emitted->U.P.Alpha.Src[RC_PAIR_PRESUB_SRC].Index);
-   for (i = 0; i < num_src; i++) {
-      unsigned int index = emitted->U.P.Alpha.Src[i].Index;
-      if (emitted->U.P.Alpha.Src[i].File == RC_FILE_TEMPORARY &&
-          (index == prev_rgb_index || index == prev_alpha_index)) {
-         emitted->Prev->U.P.Nop = 1;
-         return;
-      }
-   }
-}
-
-static void
 rgb_to_alpha_remap(struct schedule_state *s, struct rc_instruction *inst,
                    struct rc_pair_instruction_arg *arg, rc_register_file old_file,
                    rc_swizzle old_swz, unsigned int new_index)
@@ -1046,13 +1053,22 @@ pair_instructions(struct schedule_state *s)
 static void
 update_max_score(struct schedule_state *s, struct schedule_instruction **list, int *max_score,
                  struct schedule_instruction **max_inst_out,
-                 struct schedule_instruction ***list_out)
+                 struct schedule_instruction ***list_out, struct rc_instruction *prev)
 {
    struct schedule_instruction *list_ptr;
    for (list_ptr = *list; list_ptr; list_ptr = list_ptr->NextReady) {
+      struct rc_instruction candidate = *list_ptr->Instruction;
       int score;
+
       s->CalcScore(list_ptr);
       score = list_ptr->Score;
+
+      /* Ready-list candidates are not inserted yet, so test them against
+       * the current scheduled tail.
+       */
+      candidate.Prev = prev;
+      if (instruction_reads_presub_from_prev(&candidate))
+         score = MAX2(0, score - s->PresubNopScore);
       if (!*max_inst_out || score > *max_score) {
          *max_score = score;
          *max_inst_out = list_ptr;
@@ -1095,9 +1111,9 @@ emit_instruction(struct schedule_state *s, struct rc_instruction *before)
       }
       tex_count++;
    }
-   update_max_score(s, &s->ReadyFullALU, &max_score, &max_inst, &max_list);
-   update_max_score(s, &s->ReadyRGB, &max_score, &max_inst, &max_list);
-   update_max_score(s, &s->ReadyAlpha, &max_score, &max_inst, &max_list);
+   update_max_score(s, &s->ReadyFullALU, &max_score, &max_inst, &max_list, before->Prev);
+   update_max_score(s, &s->ReadyRGB, &max_score, &max_inst, &max_list, before->Prev);
+   update_max_score(s, &s->ReadyAlpha, &max_score, &max_inst, &max_list, before->Prev);
 
    if (tex_count >= s->max_tex_group || max_score == -1 ||
        (s->TEXCount > 0 && tex_count == s->TEXCount) ||
@@ -1109,7 +1125,8 @@ emit_instruction(struct schedule_state *s, struct rc_instruction *before)
       rc_insert_instruction(before->Prev, max_inst->Instruction);
       commit_alu_instruction(s, max_inst);
 
-      presub_nop(before->Prev);
+      if (instruction_reads_presub_from_prev(before->Prev))
+         before->Prev->Prev->U.P.Nop = 1;
    }
 }
 
@@ -1313,8 +1330,10 @@ rc_pair_schedule(struct radeon_compiler *cc, void *user)
    s.C = &c->Base;
    if (s.C->is_r500) {
       s.CalcScore = calc_score_readers;
+      s.PresubNopScore = PRESUB_NOP_SCORE_R500;
    } else {
       s.CalcScore = calc_score_r300;
+      s.PresubNopScore = PRESUB_NOP_SCORE_R300;
    }
    /* max_tex_group is mostly R500 optimization, for R300-R400 we want to group as much
     * as we can, otherwise we risk running out of TEX indirections.

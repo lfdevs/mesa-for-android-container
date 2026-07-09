@@ -1,4 +1,5 @@
 // Copyright 2020 Red Hat.
+// Copyright 2026 NXP
 // SPDX-License-Identifier: MIT
 
 use crate::api::icd::*;
@@ -31,6 +32,7 @@ use std::convert::TryInto;
 use std::env;
 use std::ffi::CStr;
 use std::fmt::Debug;
+use std::mem::size_of;
 use std::num::NonZeroU64;
 use std::ops::Deref;
 use std::os::raw::*;
@@ -1410,8 +1412,14 @@ impl DeviceBase {
 
 impl Device {
     pub fn mem_base_addr_align_bytes(&self) -> usize {
-        // TODO: proper retrieval from the underlying device/screen
-        0x200
+        // CL spec: the minimum value is the size of the largest OpenCL built-in data type
+        // supported by the device (long16 in FULL profile, long16 or int16 in EMBEDDED profile).
+        // Sub-buffers are simply offsets internally, so no additional hardware alignment is needed.
+        if self.int64_supported() {
+            size_of::<[u64; 16]>()
+        } else {
+            size_of::<[u32; 16]>()
+        }
     }
 
     pub fn mem_base_addr_align_bits(&self) -> u32 {

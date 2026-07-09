@@ -1,3 +1,71 @@
+spec:
+  inputs:
+    hw_jobs:
+      description: >-
+        List of hw job tags to restrict hardware testing to. Defaults to `all`.
+      type: array
+      default:
+        - all
+
+      # WARNING: This list is part of our interface with developers and
+      # upstream pipelines, no renaming please!
+      options:
+        - all
+        - none
+
+        - -- mesa drivers --
+        - anv
+        - crocus
+        - d3d12
+        - dozen
+        - etnaviv
+        - freedreno
+        - hasvk
+        - i915g
+        - imagination
+        - iris
+        - lavapipe
+        - lima
+        - llvmpipe
+        - nvk
+        - panfrost
+        - panvk
+        - r300
+        - radeonsi
+        - radv
+        - softpipe
+        - spirv2dxil
+        - svga
+        - turnip
+        - v3d
+        - v3dv
+        - vc4
+        - venus
+        - virgl
+        - vmware
+        - zink
+
+        - -- linux drivers --
+        - amdgpu.ko
+        - etnaviv.ko
+        - i915.ko
+        - lima.ko
+        - msm.ko
+        - nouveau.ko
+        - panfrost.ko
+        - panthor.ko
+        - powervr.ko
+        - radeon.ko
+        - v3d.ko
+        - vc4.ko
+        - virtio.ko
+        - vmwgfx.ko
+        - xe.ko
+        # WARNING: This list is part of our interface with developers and
+        # upstream pipelines, no renaming please!
+
+---
+
 # Types of CI pipelines:
 # | pipeline name        | context   | description                                                 |
 # |----------------------|-----------|-------------------------------------------------------------|
@@ -135,6 +203,10 @@ variables:
   CI_TRON_JOB_TEMPLATE_COMMIT: &ci-tron-template-commit d649a2829517b078a3cb8f3c2e6c8775a5992abb
   CI_TRON_JOB_TEMPLATE_PROJECT_URL: "https://gitlab.freedesktop.org/$CI_TRON_JOB_TEMPLATE_PROJECT"
 
+  # Convert the pipeline inputs to variables that can be referenced throughout the codebase
+  # NOTE: we prefix the variable with a space to make gitlab happy (variable definition must
+  #       be either a string or a hash)
+  INPUT_HW_JOBS: ' $[[ inputs.hw_jobs ]]'
 
 default:
   timeout: 1m  # catch any jobs which don't specify a timeout

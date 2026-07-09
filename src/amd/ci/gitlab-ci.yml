@@ -178,32 +178,30 @@ radv-tahiti-vkcts-full:
     - .ci-tron-test-radv-vk-nightly
     - .tahiti-test-valve
     - .radv-valve-manual-rules  # Make sure this job is *always* run manually
-  timeout: 1h
+  timeout: 47m
   variables:
-    CI_TRON_TIMEOUT__OVERALL__MINUTES: 50
-    RADV_EXPERIMENTAL: heap
+    CI_TRON_TIMEOUT__OVERALL__MINUTES: 45
 
 radv-hawaii-vkcts-full:
   extends:
     - .ci-tron-test-radv-vk-nightly
     - .hawaii-test-valve
     - .radv-valve-manual-rules
-  timeout: 1h
+  timeout: 47m
   variables:
-    CI_TRON_TIMEOUT__OVERALL__MINUTES: 50
-    RADV_EXPERIMENTAL: heap
+    CI_TRON_TIMEOUT__OVERALL__MINUTES: 45
 
 radv-polaris10-vkcts-full:
   extends:
     - .ci-tron-test-radv-vk-nightly
     - .polaris10-test-valve-kws
     - .radv-valve-manual-rules
-  timeout: 1h 35m
+  timeout: 47m
   variables:
     CI_TRON_TIMEOUT__BOOT_CYCLE__RETRIES: 4
     CI_TRON_TIMEOUT__BOOT_CYCLE__MINUTES: 70
-    CI_TRON_TIMEOUT__OVERALL__MINUTES: 90
-    RADV_EXPERIMENTAL: video_decode,video_encode,heap
+    CI_TRON_TIMEOUT__OVERALL__MINUTES: 45
+    RADV_EXPERIMENTAL: video_decode,video_encode
     radv_enable_float16_gfx8: true
 
 radv-vega10-vkcts-full:
@@ -211,50 +209,52 @@ radv-vega10-vkcts-full:
     - .ci-tron-test-radv-vk-nightly
     - .vega10-test-valve
     - .radv-valve-manual-rules
-  timeout: 1h 15m
+  timeout: 47m
   variables:
-    CI_TRON_TIMEOUT__OVERALL__MINUTES: 70
-    RADV_EXPERIMENTAL: transfer_queue,video_decode,video_encode,heap
+    CI_TRON_TIMEOUT__OVERALL__MINUTES: 45
+    RADV_EXPERIMENTAL: transfer_queue,video_decode,video_encode,msrtss
 
 radv-renoir-vkcts-full:
   extends:
     - .ci-tron-test-radv-vk-nightly
     - .renoir-test-valve
     - .radv-valve-manual-rules
-  timeout: 2h 15m
+  timeout: 1h 10m
   variables:
-    CI_TRON_TIMEOUT__OVERALL__MINUTES: 130
-    RADV_EXPERIMENTAL: transfer_queue,heap
+    CI_TRON_TIMEOUT__OVERALL__MINUTES: 68
+    RADV_EXPERIMENTAL: transfer_queue,msrtss
 
 radv-navi10-vkcts-full:
+  timeout: 30m
   parallel: 2
   extends:
     - .ci-tron-test-radv-vk-nightly
     - .navi10-test-valve-kws
     - .radv-valve-manual-rules
   variables:
-    RADV_EXPERIMENTAL: transfer_queue,hic,heap
+    CI_TRON_TIMEOUT__OVERALL__MINUTES: 28
+    RADV_EXPERIMENTAL: transfer_queue,hic,msrtss
 
 radv-navi21-vkcts:
-  timeout: 35m
+  timeout: 18m
   parallel: 3
   extends:
     - .ci-tron-test-radv-vk
     - .navi21-test-valve
     - .radv-valve-rules
   variables:
-    CI_TRON_TIMEOUT__OVERALL__MINUTES: 30
-    RADV_EXPERIMENTAL: transfer_queue,heap
+    CI_TRON_TIMEOUT__OVERALL__MINUTES: 17
+    RADV_EXPERIMENTAL: transfer_queue
 
 radv-navi21-vkcts-full:
-  timeout: 60m
+  timeout: 45m
   extends:
     - .ci-tron-test-radv-vk-nightly
     - .navi21-test-valve
     - .radv-valve-manual-rules
   variables:
-    CI_TRON_TIMEOUT__OVERALL__MINUTES: 55
-    RADV_EXPERIMENTAL: transfer_queue,heap
+    CI_TRON_TIMEOUT__OVERALL__MINUTES: 43
+    RADV_EXPERIMENTAL: transfer_queue,msrtss
 
 radv-vangogh-vkcts-full:
   parallel: 2
@@ -262,10 +262,10 @@ radv-vangogh-vkcts-full:
     - .ci-tron-test-radv-vk-nightly
     - .vangogh-test-valve
     - .radv-valve-manual-rules
-  timeout: 90m
+  timeout: 65m
   variables:
-    RADV_EXPERIMENTAL: transfer_queue,heap
-    CI_TRON_TIMEOUT__OVERALL__MINUTES: 89
+    RADV_EXPERIMENTAL: transfer_queue,msrtss
+    CI_TRON_TIMEOUT__OVERALL__MINUTES: 63
 
 radeonsi-vangogh-glcts:
   extends:
@@ -274,34 +274,34 @@ radeonsi-vangogh-glcts:
     - .test-piglit
     - .vangogh-test-valve
     - .radeonsi-valve-rules
-  timeout: 20m
+  timeout: 18m
   variables:
     GPU_VERSION: radeonsi-vangogh
     DEQP_SUITE: radeonsi-vangogh
     DEQP_FRACTION: 6
-    CI_TRON_TIMEOUT__OVERALL__MINUTES: 19
+    CI_TRON_TIMEOUT__OVERALL__MINUTES: 17
 
 radeonsi-vangogh-glcts-full:
   extends:
     - radeonsi-vangogh-glcts
     - .radeonsi-valve-manual-rules
-  timeout: 90m
+  timeout: 60m
   variables:
     DEQP_FRACTION: 1
-    CI_TRON_TIMEOUT__OVERALL__MINUTES: 89
+    CI_TRON_TIMEOUT__OVERALL__MINUTES: 58
 
 radv-raphael-vkcts-full:
   extends:
     - .ci-tron-test-radv-vk-nightly
     - .raphael-test-valve
     - .radv-valve-manual-rules
-  timeout: 45m
+  timeout: 30m
   variables:
-    CI_TRON_TIMEOUT__OVERALL__MINUTES: 40
-    RADV_EXPERIMENTAL: transfer_queue,heap
+    CI_TRON_TIMEOUT__OVERALL__MINUTES: 28
+    RADV_EXPERIMENTAL: transfer_queue,msrtss
 
 radv-navi31-vkcts:
-  timeout: 25m
+  timeout: 18m
   parallel: 2
   extends:
     - .ci-tron-test-radv-vk
@@ -309,22 +309,22 @@ radv-navi31-vkcts:
     - .radv-valve-rules
   variables:
     RADV_DEBUG: nomeshshader # Disable mesh shaders until task shaders stop hanging
-    RADV_EXPERIMENTAL: transfer_queue,heap
-    CI_TRON_TIMEOUT__OVERALL__MINUTES: 20
+    RADV_EXPERIMENTAL: transfer_queue
+    CI_TRON_TIMEOUT__OVERALL__MINUTES: 17
 
 radv-navi31-vkcts-full:
-  timeout: 30m
+  timeout: 27m
   extends:
     - .ci-tron-test-radv-vk-nightly
     - .navi31-test-valve
     - .radv-valve-manual-rules
   variables:
-    RADV_EXPERIMENTAL: transfer_queue,heap
+    RADV_EXPERIMENTAL: transfer_queue,msrtss
     CI_TRON_TIMEOUT__OVERALL__MINUTES: 25
 
 radv-gfx1201-vkcts:
-  timeout: 25m
-  parallel: 3
+  timeout: 18m
+  parallel: 2
   extends:
     - .ci-tron-test-radv-vk
     - .gfx1201-test-valve
@@ -332,18 +332,18 @@ radv-gfx1201-vkcts:
   variables:
     # TODO: Verify that task shaders don't hang.
     RADV_DEBUG: nomeshshader
-    RADV_EXPERIMENTAL: transfer_queue,heap
-    CI_TRON_TIMEOUT__OVERALL__MINUTES: 20
+    RADV_EXPERIMENTAL: transfer_queue
+    CI_TRON_TIMEOUT__OVERALL__MINUTES: 17
 
 radv-gfx1201-vkcts-full:
-  timeout: 45m
+  timeout: 28m
   extends:
     - .ci-tron-test-radv-vk-nightly
     - .gfx1201-test-valve
     - .radv-valve-manual-rules
   variables:
-    RADV_EXPERIMENTAL: transfer_queue,heap
-    CI_TRON_TIMEOUT__OVERALL__MINUTES: 40
+    RADV_EXPERIMENTAL: transfer_queue,msrtss
+    CI_TRON_TIMEOUT__OVERALL__MINUTES: 26
 
 radv-gfx1201-fluster:
   extends:
@@ -412,9 +412,9 @@ radv-tahiti-vkd3d-asan:
     - .test-vkd3d-proton
     - .tahiti-test-valve
     - .radv-valve-manual-rules
-  timeout: 10m
+  timeout: 12m
   variables:
-    CI_TRON_TIMEOUT__OVERALL__MINUTES: 8
+    CI_TRON_TIMEOUT__OVERALL__MINUTES: 10
     # Random tests fail/crash when trying to run them in parallel
     FDO_CI_CONCURRENT: 1
 
@@ -424,9 +424,9 @@ radv-hawaii-vkd3d-asan:
     - .test-vkd3d-proton
     - .hawaii-test-valve
     - .radv-valve-manual-rules
-  timeout: 10m
+  timeout: 12m
   variables:
-    CI_TRON_TIMEOUT__OVERALL__MINUTES: 8
+    CI_TRON_TIMEOUT__OVERALL__MINUTES: 10
     # Random tests fail/crash when trying to run them in parallel
     FDO_CI_CONCURRENT: 1
 
@@ -436,9 +436,9 @@ radv-polaris10-vkd3d-asan:
     - .test-vkd3d-proton
     - .polaris10-test-valve-kws
     - .radv-valve-manual-rules
-  timeout: 10m
+  timeout: 12m
   variables:
-    CI_TRON_TIMEOUT__OVERALL__MINUTES: 8
+    CI_TRON_TIMEOUT__OVERALL__MINUTES: 10
     # Random tests fail/crash when trying to run them in parallel
     FDO_CI_CONCURRENT: 1
 
@@ -448,9 +448,9 @@ radv-vega10-vkd3d-asan:
     - .test-vkd3d-proton
     - .vega10-test-valve
     - .radv-valve-manual-rules
-  timeout: 10m
+  timeout: 12m
   variables:
-    CI_TRON_TIMEOUT__OVERALL__MINUTES: 8
+    CI_TRON_TIMEOUT__OVERALL__MINUTES: 10
     # Random tests fail/crash when trying to run them in parallel
     FDO_CI_CONCURRENT: 1
 
@@ -460,9 +460,9 @@ radv-renoir-vkd3d-asan:
     - .test-vkd3d-proton
     - .renoir-test-valve
     - .radv-valve-manual-rules
-  timeout: 10m
+  timeout: 12m
   variables:
-    CI_TRON_TIMEOUT__OVERALL__MINUTES: 8
+    CI_TRON_TIMEOUT__OVERALL__MINUTES: 10
     # Random tests fail/crash when trying to run them in parallel
     FDO_CI_CONCURRENT: 1
 
@@ -472,9 +472,9 @@ radv-navi10-vkd3d-asan:
     - .test-vkd3d-proton
     - .navi10-test-valve-mupuf
     - .radv-valve-manual-rules
-  timeout: 10m
+  timeout: 12m
   variables:
-    CI_TRON_TIMEOUT__OVERALL__MINUTES: 8
+    CI_TRON_TIMEOUT__OVERALL__MINUTES: 10
     # Random tests fail/crash when trying to run them in parallel
     FDO_CI_CONCURRENT: 1
 
@@ -484,9 +484,9 @@ radv-navi21-vkd3d-asan:
     - .test-vkd3d-proton
     - .navi21-test-valve
     - .radv-valve-manual-rules
-  timeout: 10m
+  timeout: 12m
   variables:
-    CI_TRON_TIMEOUT__OVERALL__MINUTES: 8
+    CI_TRON_TIMEOUT__OVERALL__MINUTES: 10
     # Random tests fail/crash when trying to run them in parallel
     FDO_CI_CONCURRENT: 1
 
@@ -496,9 +496,9 @@ radv-vangogh-vkd3d-asan:
     - .test-vkd3d-proton
     - .vangogh-test-valve
     - .radv-valve-manual-rules
-  timeout: 10m
+  timeout: 12m
   variables:
-    CI_TRON_TIMEOUT__OVERALL__MINUTES: 8
+    CI_TRON_TIMEOUT__OVERALL__MINUTES: 10
     # Random tests fail/crash when trying to run them in parallel
     FDO_CI_CONCURRENT: 1
 
@@ -508,9 +508,9 @@ radv-raphael-vkd3d-asan:
     - .test-vkd3d-proton
     - .raphael-test-valve
     - .radv-valve-manual-rules
-  timeout: 10m
+  timeout: 12m
   variables:
-    CI_TRON_TIMEOUT__OVERALL__MINUTES: 8
+    CI_TRON_TIMEOUT__OVERALL__MINUTES: 10
     # Random tests fail/crash when trying to run them in parallel
     FDO_CI_CONCURRENT: 1
 
@@ -520,9 +520,9 @@ radv-navi31-vkd3d-asan:
     - .test-vkd3d-proton
     - .navi31-test-valve
     - .radv-valve-manual-rules
-  timeout: 10m
+  timeout: 12m
   variables:
-    CI_TRON_TIMEOUT__OVERALL__MINUTES: 8
+    CI_TRON_TIMEOUT__OVERALL__MINUTES: 10
     # Random tests fail/crash when trying to run them in parallel
     FDO_CI_CONCURRENT: 1
 
@@ -532,9 +532,9 @@ radv-gfx1201-vkd3d-asan:
     - .test-vkd3d-proton
     - .gfx1201-test-valve
     - .radv-valve-manual-rules
-  timeout: 10m
+  timeout: 12m
   variables:
-    CI_TRON_TIMEOUT__OVERALL__MINUTES: 8
+    CI_TRON_TIMEOUT__OVERALL__MINUTES: 10
     # Random tests fail/crash when trying to run them in parallel
     FDO_CI_CONCURRENT: 1
 
@@ -544,6 +544,6 @@ radv-gfx1201-vkd3d-asan:
     - .test-vkd3d-proton
     - .kabini-test-valve
     - .radv-valve-manual-rules
-  timeout: 10m
+  timeout: 12m
   variables:
-    CI_TRON_TIMEOUT__OVERALL__MINUTES: 8
+    CI_TRON_TIMEOUT__OVERALL__MINUTES: 10

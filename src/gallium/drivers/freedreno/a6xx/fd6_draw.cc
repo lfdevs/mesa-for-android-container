@@ -374,7 +374,7 @@ draw_vbos(struct fd_context *ctx, const struct pipe_draw_info *info,
    }
    emit.fs = fd6_emit_get_prog(&emit)->fs;
 
-   if (emit.prog->num_driver_params || fd6_ctx->has_dp_state) {
+   if (emit.prog->needs_driver_params || fd6_ctx->has_dp_state) {
       emit.draw = &draws[0];
       emit.dirty_groups |= BIT(FD6_GROUP_DRIVER_PARAMS);
    }

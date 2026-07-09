@@ -281,6 +281,8 @@ panfrost_resource_import_bo(struct panfrost_resource *rsc,
    if (!rsc->bo)
       return -1;
 
+   pan_crc_state_set_ptr(&rsc->crc_state, &rsc->bo->ptr);
+
    return 0;
 }
 
@@ -847,7 +849,7 @@ panfrost_should_checksum(const struct panfrost_device *dev,
 
    return pres->base.bind & PIPE_BIND_RENDER_TARGET && panfrost_is_2d(pres) &&
           bytes_per_pixel <= bytes_per_pixel_max &&
-          pres->base.last_level == 0 && !(dev->debug & PAN_DBG_NO_CRC);
+          !(dev->debug & PAN_DBG_NO_CRC);
 }
 
 static bool
@@ -1171,6 +1173,7 @@ panfrost_resource_create_with_modifier(struct pipe_screen *screen,
 
       so->bo =
          panfrost_bo_create(dev, so->plane.layout.data_size_B, flags, res_label);
+      pan_crc_state_set_ptr(&so->crc_state, &so->bo->ptr);
 
       if (!so->bo) {
          panfrost_resource_destroy(screen, &so->base);
@@ -1719,6 +1722,7 @@ panfrost_ptr_map(struct pipe_context *pctx, struct pipe_resource *resource,
             panfrost_bo_unreference(rsrc->bo);
             rsrc->bo = newbo;
             rsrc->plane.base = newbo->ptr.gpu;
+            pan_crc_state_set_ptr(&rsrc->crc_state, &newbo->ptr);
 
             if (!copy_resource && drm_is_afbc(rsrc->modifier)) {
                if (panfrost_resource_init_afbc_headers(rsrc))
@@ -1892,6 +1896,7 @@ pan_resource_modifier_convert(struct panfrost_context *ctx,
       rsrc->bo = tmp_rsrc->bo;
       rsrc->plane.base = rsrc->bo->ptr.gpu;
       panfrost_bo_reference(rsrc->bo);
+      pan_crc_state_set_ptr(&rsrc->crc_state, &rsrc->bo->ptr);
 
       rsrc->owns_label = tmp_rsrc->owns_label;
       tmp_rsrc->owns_label = false;
@@ -2227,7 +2232,7 @@ pan_resource_afbcp_commit(struct panfrost_context *ctx,
    prsrc->plane.layout.data_size_B = prsrc->afbcp->size;
    prsrc->plane.base = prsrc->afbcp->packed_bo->ptr.gpu;
    prsrc->image.props.crc = false;
-   prsrc->valid.crc = false;
+   pan_crc_state_invalidate(&prsrc->crc_state);
 
    for (unsigned level = 0; level <= prsrc->base.last_level; ++level)
       prsrc->plane.layout.slices[level] =
@@ -2239,6 +2244,7 @@ pan_resource_afbcp_commit(struct panfrost_context *ctx,
    panfrost_bo_unreference(prsrc->bo);
    prsrc->bo = prsrc->afbcp->packed_bo;
    prsrc->afbcp->packed_bo = NULL;
+   pan_crc_state_set_ptr(&prsrc->crc_state, &prsrc->bo->ptr);
 
    pan_resource_afbcp_stop(prsrc);
 }
@@ -2326,7 +2332,7 @@ panfrost_ptr_unmap(struct pipe_context *pctx, struct pipe_transfer *transfer)
    struct panfrost_device *dev = pan_device(pctx->screen);
 
    if (transfer->usage & PIPE_MAP_WRITE)
-      prsrc->valid.crc = false;
+      pan_crc_state_invalidate(&prsrc->crc_state);
 
    /* AFBC/AFRC will use a staging resource. `initialized` will be set when
     * the fragment job is created; this is deferred to prevent useless surface
@@ -2350,6 +2356,7 @@ panfrost_ptr_unmap(struct pipe_context *pctx, struct pipe_transfer *transfer)
             prsrc->bo = pan_resource(trans->staging.rsrc)->bo;
             prsrc->plane.base = prsrc->bo->ptr.gpu;
             panfrost_bo_reference(prsrc->bo);
+            pan_crc_state_set_ptr(&prsrc->crc_state, &prsrc->bo->ptr);
 
             prsrc->owns_label = pan_resource(trans->staging.rsrc)->owns_label;
             pan_resource(trans->staging.rsrc)->owns_label = false;

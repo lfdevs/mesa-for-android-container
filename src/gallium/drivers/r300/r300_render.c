@@ -12,6 +12,7 @@
 
 #include "util/u_inlines.h"
 
+#include "util/u_endian.h"
 #include "util/format/u_format.h"
 #include "util/u_draw.h"
 #include "util/u_memory.h"
@@ -485,13 +486,34 @@ static void r300_draw_elements_immediate(struct r300_context *r300,
                                          const struct pipe_draw_info *info,
                                          const struct pipe_draw_start_count_bias *draw)
 {
+#if UTIL_ARCH_BIG_ENDIAN
+    uint32_t indices[8];
+#else
     const uint8_t *ptr1;
     const uint16_t *ptr2;
     const uint32_t *ptr4;
+    unsigned i;
+#endif
     unsigned index_size = info->index_size;
-    unsigned i, count_dwords = index_size == 4 ? draw->count :
-                                                 (draw->count + 1) / 2;
+    bool use_32bit_indices = index_size == 4;
+    unsigned count_dwords;
+#if UTIL_ARCH_BIG_ENDIAN
+    /* R500 applies draw->index_bias in hardware via R500_VAP_INDEX_OFFSET. */
+    int index_bias = draw->index_bias && !r300->screen->caps.is_r500 ?
+                     draw->index_bias : 0;
+#endif
     CS_LOCALS(r300);
+
+#if UTIL_ARCH_BIG_ENDIAN
+    /* The VAP uses one endian-swap mode for all fetched data. On BE, emit
+     * immediate indices as 32-bit words to match the vertex streams.
+     */
+    use_32bit_indices = true;
+    assert(draw->count <= ARRAY_SIZE(indices));
+    r300_rebuild_elts_to_uint_userptr(&r300->context, info, 0, index_bias,
+                                      draw->start, draw->count, indices);
+#endif
+    count_dwords = use_32bit_indices ? draw->count : (draw->count + 1) / 2;
 
     /* 19 dwords for r300_draw_elements_immediate. Give up if the function fails. */
     if (!r300_prepare_for_rendering(r300,
@@ -504,6 +526,12 @@ static void r300_draw_elements_immediate(struct r300_context *r300,
     BEGIN_CS(2 + count_dwords);
     OUT_CS_PKT3(R300_PACKET3_3D_DRAW_INDX_2, count_dwords);
 
+#if UTIL_ARCH_BIG_ENDIAN
+    OUT_CS(R300_VAP_VF_CNTL__PRIM_WALK_INDICES | (draw->count << 16) |
+           R300_VAP_VF_CNTL__INDEX_SIZE_32bit |
+           r300_translate_primitive(info->mode));
+    OUT_CS_TABLE(indices, count_dwords);
+#else
     switch (index_size) {
     case 1:
         ptr1 = (uint8_t*)info->index.user;
@@ -571,6 +599,7 @@ static void r300_draw_elements_immediate(struct r300_context *r300,
         }
         break;
     }
+#endif
     END_CS;
 }
 

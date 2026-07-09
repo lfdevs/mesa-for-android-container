@@ -12,6 +12,7 @@
 #include "vk_graphics_state.h"
 #include "vk_log.h"
 
+#include "pan_nir.h"
 #include "pan_shader.h"
 
 #include "panvk_blend.h"
@@ -81,6 +82,7 @@ get_blend_shader(struct panvk_device *dev,
 
    nir_shader *nir =
       GENX(pan_blend_create_shader)(state, src0_type, src1_type, rt);
+   PAN_NIR_SET_BLAKE3_INTERNAL(nir, &key);
 
    NIR_PASS(_, nir, nir_shader_instructions_pass, lower_load_blend_const,
             nir_metadata_control_flow, NULL);

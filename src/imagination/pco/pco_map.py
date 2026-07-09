@@ -217,6 +217,18 @@ enum_map(OM_MCU_CACHE_MODE_ST.t, F_CACHEMODE_ST, [
    ('lazy_write_back', 'write_back_lazy'),
 ])
 
+enum_map(OM_MCU_CACHE_MODE_LD.t, F_CACHEMODE_LD_ST, [
+   ('normal', 'normal'),
+   ('bypass', 'bypass'),
+   ('force_line_fill', 'force_line_fill'),
+])
+
+enum_map(OM_MCU_CACHE_MODE_ST.t, F_CACHEMODE_LD_ST, [
+   ('write_through', 'write_through'),
+   ('write_back', 'write_back'),
+   ('lazy_write_back', 'write_back_lazy'),
+])
+
 enum_map(OM_TST_OP_MAIN.t, F_TST_OP, [
    ('zero', 'z'),
    ('gzero', 'gz'),
@@ -1445,31 +1457,30 @@ encode_map(O_SMP,
          ('tao', OM_TAO),
          ('f16', OM_F16),
          ('swap', OM_SCHEDSWAP),
-         ('cachemode_ld', OM_MCU_CACHE_MODE_LD),
-         ('w', OM_WRT),
+         ('cachemode_ld_st', OM_MCU_CACHE_MODE_LD),
+         ('w', False),
          ('integer', OM_INTEGER),
          ('array', OM_ARRAY),
       ]),
-      (I_SMP_EXTAB, [
+      (I_SMP_BRIEF, [
          ('fcnorm', OM_FCNORM),
          ('drc', ('pco_ref_get_drc', SRC(0))),
          ('dmn', OM_DIM),
          ('chan', ('pco_ref_get_imm', SRC(5))),
-         ('lodm', OM_LOD_MODE),
-         ('pplod', OM_PPLOD),
-         ('proj', OM_PROJ),
-         ('sbmode', OM_SB_MODE),
-         ('nncoords', OM_NNCOORDS),
-         ('sno', OM_SNO),
-         ('soo', OM_SOO),
-         ('tao', OM_TAO),
-         ('f16', OM_F16),
-         ('swap', OM_SCHEDSWAP),
-         ('cachemode_ld', OM_MCU_CACHE_MODE_LD),
-         ('w', OM_WRT)
+         ('lodm', OM_LOD_MODE)
       ], [
          (OM_INTEGER, '== false'),
-         (OM_ARRAY, '== false')
+         (OM_ARRAY, '== false'),
+         (OM_F16, '== false'),
+         (OM_SCHEDSWAP, '== PCO_SCHEDSWAP_NONE'),
+         (OM_MCU_CACHE_MODE_LD, '== PCO_CACHEMODE_LD_NORMAL'),
+         (OM_PPLOD, '== false'),
+         (OM_PROJ, '== false'),
+         (OM_SB_MODE, '== PCO_SB_MODE_NONE'),
+         (OM_NNCOORDS, '== false'),
+         (OM_SNO, '== false'),
+         (OM_SOO, '== false'),
+         (OM_TAO, '== false')
       ]),
       (I_SMP_EXTA, [
          ('fcnorm', OM_FCNORM),
@@ -1490,31 +1501,77 @@ encode_map(O_SMP,
          (OM_F16, '== false'),
          (OM_SCHEDSWAP, '== PCO_SCHEDSWAP_NONE'),
          (OM_MCU_CACHE_MODE_LD, '== PCO_CACHEMODE_LD_NORMAL'),
-         (OM_WRT, '== false')
       ]),
-      (I_SMP_BRIEF, [
+      (I_SMP_EXTAB, [
          ('fcnorm', OM_FCNORM),
          ('drc', ('pco_ref_get_drc', SRC(0))),
          ('dmn', OM_DIM),
          ('chan', ('pco_ref_get_imm', SRC(5))),
-         ('lodm', OM_LOD_MODE)
+         ('lodm', OM_LOD_MODE),
+         ('pplod', OM_PPLOD),
+         ('proj', OM_PROJ),
+         ('sbmode', OM_SB_MODE),
+         ('nncoords', OM_NNCOORDS),
+         ('sno', OM_SNO),
+         ('soo', OM_SOO),
+         ('tao', OM_TAO),
+         ('f16', OM_F16),
+         ('swap', OM_SCHEDSWAP),
+         ('cachemode_ld_st', OM_MCU_CACHE_MODE_LD),
+         ('w', False),
       ], [
          (OM_INTEGER, '== false'),
-         (OM_ARRAY, '== false'),
-         (OM_F16, '== false'),
-         (OM_SCHEDSWAP, '== PCO_SCHEDSWAP_NONE'),
-         (OM_MCU_CACHE_MODE_LD, '== PCO_CACHEMODE_LD_NORMAL'),
-         (OM_WRT, '== false'),
-         (OM_PPLOD, '== false'),
-         (OM_PROJ, '== false'),
-         (OM_SB_MODE, '== PCO_SB_MODE_NONE'),
-         (OM_NNCOORDS, '== false'),
-         (OM_SNO, '== false'),
-         (OM_SOO, '== false'),
-         (OM_TAO, '== false')
+         (OM_ARRAY, '== false')
       ])
    ],
    op_ref_maps=[('backend', ['s4'], ['drc', 's0', 's1', 's2', ['s3', '_'], 'imm'])]
+)
+
+encode_map(O_SMP_WRT,
+   encodings=[
+      (I_SMP_EXTABC, [
+         ('fcnorm', OM_FCNORM),
+         ('drc', ('pco_ref_get_drc', SRC(0))),
+         ('dmn', OM_DIM),
+         ('chan', ('pco_ref_get_imm', SRC(5))),
+         ('lodm', OM_LOD_MODE),
+         ('pplod', OM_PPLOD),
+         ('proj', OM_PROJ),
+         ('sbmode', OM_SB_MODE),
+         ('nncoords', OM_NNCOORDS),
+         ('sno', OM_SNO),
+         ('soo', OM_SOO),
+         ('tao', OM_TAO),
+         ('f16', OM_F16),
+         ('swap', OM_SCHEDSWAP),
+         ('cachemode_ld_st', OM_MCU_CACHE_MODE_ST),
+         ('w', True),
+         ('integer', OM_INTEGER),
+         ('array', OM_ARRAY),
+      ]),
+      (I_SMP_EXTAB, [
+         ('fcnorm', OM_FCNORM),
+         ('drc', ('pco_ref_get_drc', SRC(0))),
+         ('dmn', OM_DIM),
+         ('chan', ('pco_ref_get_imm', SRC(5))),
+         ('lodm', OM_LOD_MODE),
+         ('pplod', OM_PPLOD),
+         ('proj', OM_PROJ),
+         ('sbmode', OM_SB_MODE),
+         ('nncoords', OM_NNCOORDS),
+         ('sno', OM_SNO),
+         ('soo', OM_SOO),
+         ('tao', OM_TAO),
+         ('f16', OM_F16),
+         ('swap', OM_SCHEDSWAP),
+         ('cachemode_ld_st', OM_MCU_CACHE_MODE_ST),
+         ('w', True),
+      ], [
+         (OM_INTEGER, '== false'),
+         (OM_ARRAY, '== false')
+      ])
+   ],
+   op_ref_maps=[('backend', [], ['drc', 's0', 's1', 's2', ['s3', '_'], 'imm'])]
 )
 
 encode_map(O_ALPHATST,
@@ -3314,6 +3371,26 @@ group_map(O_SMP,
       ('s[2]', ('backend', SRC(3)), 's2'),
       ('s[3]', ('backend', SRC(4)), 's3'),
       ('s[4]', ('backend', DEST(0)), 's4')
+   ]
+)
+
+group_map(O_SMP_WRT,
+   hdr=(I_IGRP_HDR_MAIN, [
+      ('oporg', 'be'),
+      ('olchk', OM_OLCHK),
+      ('w1p', False),
+      ('w0p', False),
+      ('cc', OM_EXEC_CND),
+      ('end', OM_END),
+      ('atom', False),
+      ('rpt', 1)
+   ]),
+   enc_ops=[('backend', O_SMP_WRT)],
+   srcs=[
+      ('s[0]', ('backend', SRC(1)), 's0'),
+      ('s[1]', ('backend', SRC(2)), 's1'),
+      ('s[2]', ('backend', SRC(3)), 's2'),
+      ('s[3]', ('backend', SRC(4)), 's3'),
    ]
 )
 

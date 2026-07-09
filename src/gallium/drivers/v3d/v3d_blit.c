@@ -44,8 +44,6 @@
 void
 v3d_blitter_save(struct v3d_context *v3d, enum v3d_blitter_op op)
 {
-        util_blitter_save_fragment_constant_buffer_slot(v3d->blitter,
-                                                        v3d->constbuf[MESA_SHADER_FRAGMENT].cb);
         util_blitter_save_vertex_buffers(v3d->blitter, v3d->vertexbuf.vb, v3d->vertexbuf.count);
         util_blitter_save_vertex_elements(v3d->blitter, v3d->vtx);
         util_blitter_save_vertex_shader(v3d->blitter, v3d->prog.bind_vs);
@@ -53,12 +51,18 @@ v3d_blitter_save(struct v3d_context *v3d, enum v3d_blitter_op op)
         util_blitter_save_so_targets(v3d->blitter, v3d->streamout.num_targets,
                                      v3d->streamout.targets, MESA_PRIM_UNKNOWN);
         util_blitter_save_rasterizer(v3d->blitter, v3d->rasterizer);
-        util_blitter_save_viewport(v3d->blitter, &v3d->viewport);
-        util_blitter_save_fragment_shader(v3d->blitter, v3d->prog.bind_fs);
-        util_blitter_save_blend(v3d->blitter, v3d->blend);
-        util_blitter_save_depth_stencil_alpha(v3d->blitter, v3d->zsa);
-        util_blitter_save_stencil_ref(v3d->blitter, &v3d->stencil_ref);
-        util_blitter_save_sample_mask(v3d->blitter, v3d->sample_mask, 0);
+        if (op & V3D_SAVE_FRAGMENT_STATE) {
+                if (op & V3D_SAVE_FRAGMENT_CONSTANT) {
+                        util_blitter_save_fragment_constant_buffer_slot(v3d->blitter,
+                                                                        v3d->constbuf[MESA_SHADER_FRAGMENT].cb);
+                }
+                util_blitter_save_blend(v3d->blitter, v3d->blend);
+                util_blitter_save_depth_stencil_alpha(v3d->blitter, v3d->zsa);
+                util_blitter_save_stencil_ref(v3d->blitter, &v3d->stencil_ref);
+                util_blitter_save_fragment_shader(v3d->blitter, v3d->prog.bind_fs);
+                util_blitter_save_sample_mask(v3d->blitter, v3d->sample_mask, 0);
+                util_blitter_save_viewport(v3d->blitter, &v3d->viewport);
+        }
 
         if (op & V3D_SAVE_FRAMEBUFFER)
                 util_blitter_save_framebuffer(v3d->blitter, &v3d->framebuffer);

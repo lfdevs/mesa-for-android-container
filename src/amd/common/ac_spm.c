@@ -7,6 +7,7 @@
 #include "ac_cmdbuf.h"
 #include "ac_cmdbuf_cp.h"
 #include "ac_spm.h"
+#include "ac_spm_config.h"
 
 #include "util/bitscan.h"
 #include "util/compiler.h"
@@ -559,13 +560,23 @@ ac_spm_add_counter(const struct radeon_info *info,
 
    /* Check if the number of instances is valid. */
    if (counter_info->instance > block->num_instances - 1) {
-      fprintf(stderr, "ac/spm: Invalid instance ID.\n");
+      fprintf(stderr,
+              "ac/spm: Invalid instance ID %u for block %s "
+              "(num_instances=%u).\n",
+              counter_info->instance, block->b->b->name,
+              block->num_instances);
       return false;
    }
 
-   /* Check if the event ID is valid. */
-   if (counter_info->b->event_id > block->b->selectors) {
-      fprintf(stderr, "ac/spm: Invalid event ID.\n");
+   /* Check if the event ID is valid. block->b->selectors is the count
+    * of valid event IDs (range [0, selectors)).
+    */
+   if (counter_info->b->event_id >= block->b->selectors) {
+      fprintf(stderr,
+              "ac/spm: Invalid event ID 0x%x for block %s "
+              "(max event ID = 0x%x).\n",
+              counter_info->b->event_id, block->b->b->name,
+              block->b->selectors ? block->b->selectors - 1 : 0);
       return false;
    }
 
@@ -666,29 +677,49 @@ bool ac_init_spm(const struct radeon_info *info,
    const struct ac_spm_counter_create_info *create_info;
    unsigned create_info_count;
    unsigned num_counters = 0;
+   /* When a user config is provided (set by the caller before invoking
+    * this function), each create_info already maps to a single hardware
+    * instance; do not expand by block->num_instances.
+    */
+   const struct ac_spm_user_config *user_config = spm->user_config;
+   const bool user_mode = user_config != NULL;
 
-   switch (info->gfx_level) {
-   case GFX10:
-      create_info_count = ARRAY_SIZE(gfx10_spm_counters);
-      create_info = gfx10_spm_counters;
-      break;
-   case GFX10_3:
-      create_info_count = ARRAY_SIZE(gfx103_spm_counters);
-      create_info = gfx103_spm_counters;
-      break;
-   case GFX11:
-   case GFX11_5:
-   case GFX11_7:
-      create_info_count = ARRAY_SIZE(gfx11_spm_counters);
-      create_info = gfx11_spm_counters;
-      break;
-   case GFX12:
-      create_info_count = ARRAY_SIZE(gfx12_spm_counters);
-      create_info = gfx12_spm_counters;
-      break;
-   default:
-      fprintf(stderr, "radv: Failed to initialize SPM because SPM counters aren't implemented.\n");
-      return false; /* not implemented */
+   if (user_mode) {
+      /* User-provided configs work on any ASIC where SPM is supported
+       * (GFX10+). The user is responsible for selecting block / event IDs
+       * that are valid on the target chip.
+       */
+      if (info->gfx_level < GFX10) {
+         fprintf(stderr,
+                 "ac/spm: RADV_SPM_COUNTERS_CONFIG requires GFX10 or newer.\n");
+         return false;
+      }
+      create_info = user_config->create_infos;
+      create_info_count = user_config->num_create_infos;
+   } else {
+      switch (info->gfx_level) {
+      case GFX10:
+         create_info_count = ARRAY_SIZE(gfx10_spm_counters);
+         create_info = gfx10_spm_counters;
+         break;
+      case GFX10_3:
+         create_info_count = ARRAY_SIZE(gfx103_spm_counters);
+         create_info = gfx103_spm_counters;
+         break;
+      case GFX11:
+      case GFX11_5:
+      case GFX11_7:
+         create_info_count = ARRAY_SIZE(gfx11_spm_counters);
+         create_info = gfx11_spm_counters;
+         break;
+      case GFX12:
+         create_info_count = ARRAY_SIZE(gfx12_spm_counters);
+         create_info = gfx12_spm_counters;
+         break;
+      default:
+         fprintf(stderr, "radv: Failed to initialize SPM because SPM counters aren't implemented.\n");
+         return false; /* not implemented */
+      }
    }
 
    /* Count the total number of counters. */
@@ -700,7 +731,7 @@ bool ac_init_spm(const struct radeon_info *info,
          return false;
       }
 
-      num_counters += block->num_instances;
+      num_counters += user_mode ? 1 : block->num_instances;
    }
 
    spm->counters = CALLOC(num_counters, sizeof(*spm->counters));
@@ -713,12 +744,34 @@ bool ac_init_spm(const struct radeon_info *info,
 
       assert(block->num_instances > 0);
 
-      for (unsigned j = 0; j < block->num_instances; j++) {
-         counter.instance = j;
-
+      if (user_mode) {
          if (!ac_spm_add_counter(info, pc, spm, &counter)) {
-            fprintf(stderr, "ac/spm: Failed to add SPM counter (%d).\n", i);
+            /* Find which user-config source counter owns this
+             * create_info to give a useful diagnostic.
+             */
+            const char *src_name = "?";
+            for (uint32_t u = 0; u < user_config->num_counters; u++) {
+               const struct ac_spm_user_counter *uc =
+                  &user_config->counters[u];
+               if (i >= uc->first_create_info &&
+                   i < uc->first_create_info + uc->num_create_infos) {
+                  src_name = uc->name;
+                  break;
+               }
+            }
+            fprintf(stderr,
+                   "ac/spm: Failed to add user SPM counter '%s' "
+                    "(create_info #%d).\n", src_name, i);
             return false;
+         }
+      } else {
+         for (unsigned j = 0; j < block->num_instances; j++) {
+            counter.instance = j;
+
+            if (!ac_spm_add_counter(info, pc, spm, &counter)) {
+               fprintf(stderr, "ac/spm: Failed to add SPM counter (%d).\n", i);
+               return false;
+            }
          }
       }
    }
@@ -858,6 +911,7 @@ bool ac_spm_get_trace(const struct ac_spm *spm, struct ac_spm_trace *trace)
    trace->num_counters = spm->num_counters;
    trace->counters = spm->counters;
    trace->sample_size_in_bytes = ac_spm_get_sample_size(spm);
+   trace->user_config = spm->user_config;
 
    return ac_spm_get_num_samples(spm, &trace->num_samples);
 }
@@ -1424,10 +1478,104 @@ ac_spm_get_raw_counter_op(enum ac_spm_raw_counter_id id)
    }
 }
 
+/* Build a derived trace from a user-supplied SPM config.
+ *
+ * Each HW counter declared in the config becomes one pass-through
+ * derived counter whose per-sample value is the aggregated raw value of
+ * the source counter across the hardware instances the line expanded
+ * to. Aggregation uses the per-counter raw op: sum, max, or avg (sum
+ * then divide by num_create_infos).
+ */
+static struct ac_spm_derived_trace *
+ac_spm_build_user_derived_trace(const struct ac_spm_trace *spm_trace)
+{
+   const struct ac_spm_user_config *cfg = spm_trace->user_config;
+   const uint32_t sample_size_in_bytes = spm_trace->sample_size_in_bytes;
+   const uint32_t sample_size_in_hwords = sample_size_in_bytes / sizeof(uint16_t);
+   uint8_t *spm_data_ptr = (uint8_t *)spm_trace->ptr;
+   struct ac_spm_derived_trace *t;
+
+   t = calloc(1, sizeof(*t));
+   if (!t)
+      return NULL;
+
+   t->num_timestamps = spm_trace->num_samples;
+   t->sample_interval = spm_trace->sample_interval;
+
+   /* Skip the reserved 32 bytes of data at the beginning of the ring. */
+   spm_data_ptr += 32;
+   const uint64_t *timestamp_ptr = (const uint64_t *)spm_data_ptr;
+   const uint16_t *counter_values_ptr = (const uint16_t *)spm_data_ptr;
+   const uint64_t sample_size_in_qwords = sample_size_in_bytes / sizeof(uint64_t);
+
+   t->timestamps = malloc(t->num_timestamps * sizeof(uint64_t));
+   if (!t->timestamps)
+      goto fail;
+   for (uint32_t i = 0; i < t->num_timestamps; i++)
+      t->timestamps[i] = timestamp_ptr[i * sample_size_in_qwords];
+
+   /* Wire groups → counter_ids (one derived counter per HW counter). */
+   for (uint32_t g = 0; g < cfg->num_groups; g++) {
+      const struct ac_spm_user_group *ug = &cfg->groups[g];
+      struct ac_spm_derived_group *dg = &t->groups[g];
+
+      dg->descr = &ug->derived_descr;
+      for (uint32_t j = 0; j < ug->num_counters; j++)
+         dg->counter_ids[j] = ug->first_counter + j;
+   }
+   t->num_groups = cfg->num_groups;
+
+   /* One derived counter per user counter; aggregate raw values across
+    * the line's hardware instances per sample and stream them directly
+    * into the derived counter's value dynarray (no intermediate scratch
+    * buffer).
+    */
+   const uint32_t ns = spm_trace->num_samples;
+   for (uint32_t c = 0; c < cfg->num_counters; c++) {
+      const struct ac_spm_user_counter *uc = &cfg->counters[c];
+      struct ac_spm_derived_counter *dc = &t->counters[c];
+
+      dc->descr = &uc->derived_descr;
+      util_dynarray_init(&dc->values, NULL);
+
+      for (uint32_t s = 0; s < ns; s++) {
+         uint64_t acc = 0;
+         for (uint32_t k = 0; k < uc->num_create_infos; k++) {
+            const struct ac_spm_counter_info *ci =
+               &spm_trace->counters[uc->first_create_info + k];
+            const uint64_t index =
+               ci->offset + (uint64_t)s * sample_size_in_hwords;
+            const uint16_t v = counter_values_ptr[index];
+
+            if (uc->op == AC_SPM_RAW_COUNTER_OP_MAX)
+               acc = MAX2(acc, (uint64_t)v);
+            else
+               acc += v;
+         }
+         double out = (double)acc;
+         if (uc->op == AC_SPM_RAW_COUNTER_OP_AVG &&
+             uc->num_create_infos > 1)
+            out /= (double)uc->num_create_infos;
+         util_dynarray_append(&dc->values, out);
+      }
+   }
+   t->num_counters = cfg->num_counters;
+
+   return t;
+
+fail:
+   free(t->timestamps);
+   free(t);
+   return NULL;
+}
+
 struct ac_spm_derived_trace *
 ac_spm_get_derived_trace(const struct radeon_info *info,
                          const struct ac_spm_trace *spm_trace)
 {
+   if (spm_trace->user_config)
+      return ac_spm_build_user_derived_trace(spm_trace);
+
    uint32_t sample_size_in_bytes = spm_trace->sample_size_in_bytes;
    uint8_t *spm_data_ptr = (uint8_t *)spm_trace->ptr;
    struct ac_spm_derived_trace *spm_derived_trace;
@@ -1562,9 +1710,6 @@ ac_spm_get_derived_trace(const struct radeon_info *info,
    raw_counter_values[AC_SPM_##a][s] + \
    raw_counter_values[AC_SPM_##b][s] + \
    raw_counter_values[AC_SPM_##c][s]
-#define OP_SUB2(a, b) \
-   raw_counter_values[AC_SPM_##a][s] - \
-   raw_counter_values[AC_SPM_##b][s]
 
    const uint32_t num_simds = info->num_cu * info->compiler_info.num_simd_per_compute_unit;
 
@@ -1602,8 +1747,8 @@ ac_spm_get_derived_trace(const struct radeon_info *info,
 
       /* L0 cache. */
       const double l0_cache_request_count = OP_RAW(TCP_PERF_SEL_REQ);
-      const double l0_cache_hit_count = OP_SUB2(TCP_PERF_SEL_REQ, TCP_PERF_SEL_REQ_MISS);
-      const double l0_cache_miss_count = OP_RAW(TCP_PERF_SEL_REQ_MISS);
+      const double l0_cache_miss_count = MIN2((double)OP_RAW(TCP_PERF_SEL_REQ_MISS), l0_cache_request_count);
+      const double l0_cache_hit_count = l0_cache_request_count - l0_cache_miss_count;
       const double l0_cache_hit =
          l0_cache_request_count ? (l0_cache_hit_count / l0_cache_request_count) * 100.0f : 0.0f;
 
@@ -1615,8 +1760,8 @@ ac_spm_get_derived_trace(const struct radeon_info *info,
       if (info->gfx_level < GFX12) {
          /* L1 cache. */
          const double l1_cache_request_count = OP_RAW(GL1C_PERF_SEL_REQ);
-         const double l1_cache_hit_count = OP_SUB2(GL1C_PERF_SEL_REQ, GL1C_PERF_SEL_REQ_MISS);
-         const double l1_cache_miss_count = OP_RAW(GL1C_PERF_SEL_REQ_MISS);
+         const double l1_cache_miss_count = MIN2((double)OP_RAW(GL1C_PERF_SEL_REQ_MISS), l1_cache_request_count);
+         const double l1_cache_hit_count = l1_cache_request_count - l1_cache_miss_count;
          const double l1_cache_hit =
             l1_cache_request_count ? (l1_cache_hit_count / l1_cache_request_count) * 100.0f : 0.0f;
 
@@ -1628,8 +1773,8 @@ ac_spm_get_derived_trace(const struct radeon_info *info,
 
       /* L2 cache. */
       const double l2_cache_request_count = OP_RAW(GL2C_PERF_SEL_REQ);
-      const double l2_cache_hit_count = OP_SUB2(GL2C_PERF_SEL_REQ, GL2C_PERF_SEL_MISS);
-      const double l2_cache_miss_count = OP_RAW(GL2C_PERF_SEL_MISS);
+      const double l2_cache_miss_count = MIN2((double)OP_RAW(GL2C_PERF_SEL_MISS), l2_cache_request_count);
+      const double l2_cache_hit_count = l2_cache_request_count - l2_cache_miss_count;
       const double l2_cache_hit =
          l2_cache_request_count ? (l2_cache_hit_count / l2_cache_request_count) * 100.0f : 0.0f;
 
@@ -1744,7 +1889,6 @@ ac_spm_get_derived_trace(const struct radeon_info *info,
 #undef OP_RAW
 #undef OP_SUM2
 #undef OP_SUM3
-#undef OP_SUB2
 
    spm_derived_trace->num_timestamps = spm_trace->num_samples;
    spm_derived_trace->sample_interval = spm_trace->sample_interval;

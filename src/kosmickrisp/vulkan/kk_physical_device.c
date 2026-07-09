@@ -116,6 +116,7 @@ kk_get_device_extensions(const struct kk_instance *instance,
       .EXT_ycbcr_2plane_444_formats = true,
 
       /* Vulkan 1.4 */
+      .KHR_dynamic_rendering_local_read = true,
       .KHR_global_priority = true,
       .KHR_line_rasterization = true,
       .KHR_index_type_uint8 = true,
@@ -324,6 +325,7 @@ kk_get_device_features(
 
       /* Vulkan 1.4 */
       .bresenhamLines = true,
+      .dynamicRenderingLocalRead = true,
       .globalPriorityQuery = true,
       .hostImageCopy = true,
       .indexTypeUint8 = true,
@@ -477,10 +479,10 @@ kk_get_device_properties(const struct kk_physical_device *pdev,
       /* Vulkan 1.0 limits */
       /* Values taken from Apple7
          https://developer.apple.com/metal/Metal-Feature-Set-Tables.pdf */
-      .maxImageDimension1D = kk_image_max_dimension(VK_IMAGE_TYPE_2D),
-      .maxImageDimension2D = kk_image_max_dimension(VK_IMAGE_TYPE_2D),
-      .maxImageDimension3D = kk_image_max_dimension(VK_IMAGE_TYPE_3D),
-      .maxImageDimensionCube = 16384,
+      .maxImageDimension1D = kk_image_max_dimension(pdev, VK_IMAGE_TYPE_1D),
+      .maxImageDimension2D = kk_image_max_dimension(pdev, VK_IMAGE_TYPE_2D),
+      .maxImageDimension3D = kk_image_max_dimension(pdev, VK_IMAGE_TYPE_3D),
+      .maxImageDimensionCube = kk_image_max_dimension(pdev, VK_IMAGE_TYPE_2D),
       .maxImageArrayLayers = 2048,
       .maxTexelBufferElements = 16384 * 16384,
       .maxUniformBufferRange = 65536,
@@ -846,6 +848,7 @@ kk_get_device_properties(const struct kk_physical_device *pdev,
       VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL,
       VK_IMAGE_LAYOUT_FRAGMENT_DENSITY_MAP_OPTIMAL_EXT,
       VK_IMAGE_LAYOUT_ATTACHMENT_FEEDBACK_LOOP_OPTIMAL_EXT,
+      VK_IMAGE_LAYOUT_RENDERING_LOCAL_READ,
    };
 
    properties->pCopySrcLayouts = (VkImageLayout *)supported_layouts;
@@ -1009,6 +1012,8 @@ get_metal_limits(struct kk_physical_device *pdev)
       mtl_device_max_threadgroup_memory_length(pdev->mtl_dev_handle);
    pdev->info.max_buffer_size =
       mtl_device_max_buffer_length(pdev->mtl_dev_handle);
+   pdev->info.gpu_apple_family =
+      mtl_device_get_gpu_apple_family(pdev->mtl_dev_handle);
 
    pdev->supported_sample_counts = VK_SAMPLE_COUNT_1_BIT;
    for (uint32_t sample_count = VK_SAMPLE_COUNT_2_BIT;

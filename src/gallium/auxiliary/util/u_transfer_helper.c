@@ -27,6 +27,7 @@
 #include "util/format/u_format.h"
 #include "util/format/u_format_zs.h"
 #include "util/u_inlines.h"
+#include "util/u_pack_color.h"
 #include "util/u_transfer_helper.h"
 
 
@@ -37,6 +38,7 @@ struct u_transfer_helper {
    bool msaa_map;
    bool z24_in_z32f; /* the z24 values are stored in a z32 - translate them. */
    bool interleave_in_place;
+   bool z32f_s8_in_z24s8; /* Z32_FLOAT_S8X24_UINT stored as S8_UINT_Z24_UNORM */
 };
 
 /* If we need to take the path for PIPE_MAP_DEPTH/STENCIL_ONLY on the parent
@@ -57,6 +59,95 @@ static inline bool needs_in_place_zs_interleave(struct u_transfer_helper *helper
    if (helper->z24_in_z32f && format == PIPE_FORMAT_Z24X8_UNORM)
       return true;
    return false;
+}
+
+static inline bool
+is_z32f_s8_in_z24s8(const struct u_transfer_helper *helper,
+                    enum pipe_format format)
+{
+   return helper->z32f_s8_in_z24s8 &&
+          (format == PIPE_FORMAT_Z32_FLOAT_S8X24_UINT ||
+           format == PIPE_FORMAT_Z32_FLOAT);
+}
+
+static inline uint32_t
+pack_z24(float z)
+{
+   return util_pack_z(PIPE_FORMAT_Z24X8_UNORM, z);
+}
+
+static inline float
+unpack_z24(uint32_t z24)
+{
+   return (float)(z24 * (1.0 / (double)0xffffff));
+}
+
+/* S8_UINT_Z24_UNORM (D24S8, 32bpp) <-> Z32_FLOAT_S8X24_UINT (64bpp) */
+static void
+z24s8_to_z32f_s8x24(uint8_t *dst, unsigned dst_stride,
+                    const uint8_t *src, unsigned src_stride,
+                    unsigned width, unsigned height)
+{
+   for (unsigned y = 0; y < height; y++) {
+      const uint32_t *s = (const uint32_t *)src;
+      uint32_t *d = (uint32_t *)dst;
+      for (unsigned x = 0; x < width; x++) {
+         uint32_t pixel = s[x];
+         ((float *)d)[x * 2] = unpack_z24(pixel >> 8);
+         d[x * 2 + 1] = pixel & 0xff;
+      }
+      src += src_stride;
+      dst += dst_stride;
+   }
+}
+
+static void
+z32f_s8x24_to_z24s8(uint8_t *dst, unsigned dst_stride,
+                    const uint8_t *src, unsigned src_stride,
+                    unsigned width, unsigned height)
+{
+   for (unsigned y = 0; y < height; y++) {
+      const uint32_t *s32 = (const uint32_t *)src;
+      uint32_t *d = (uint32_t *)dst;
+      for (unsigned x = 0; x < width; x++) {
+         float z = ((const float *)src)[x * 2];
+         uint8_t stencil = s32[x * 2 + 1] & 0xff;
+         d[x] = (pack_z24(z) << 8) | stencil;
+      }
+      src += src_stride;
+      dst += dst_stride;
+   }
+}
+
+/* Z32_FLOAT (depth only) <-> S8_UINT_Z24_UNORM, stencil bits unused. */
+static void
+z24_to_z32f(uint8_t *dst, unsigned dst_stride,
+            const uint8_t *src, unsigned src_stride,
+            unsigned width, unsigned height)
+{
+   for (unsigned y = 0; y < height; y++) {
+      const uint32_t *s = (const uint32_t *)src;
+      float *d = (float *)dst;
+      for (unsigned x = 0; x < width; x++)
+         d[x] = unpack_z24(s[x] >> 8);
+      src += src_stride;
+      dst += dst_stride;
+   }
+}
+
+static void
+z32f_to_z24(uint8_t *dst, unsigned dst_stride,
+            const uint8_t *src, unsigned src_stride,
+            unsigned width, unsigned height)
+{
+   for (unsigned y = 0; y < height; y++) {
+      const float *s = (const float *)src;
+      uint32_t *d = (uint32_t *)dst;
+      for (unsigned x = 0; x < width; x++)
+         d[x] = pack_z24(s[x]) << 8;
+      src += src_stride;
+      dst += dst_stride;
+   }
 }
 
 static inline bool handle_transfer(struct pipe_resource *prsc)
@@ -138,6 +229,15 @@ u_transfer_helper_resource_create(struct pipe_screen *pscreen,
       }
 
       helper->vtbl->set_stencil(prsc, stencil);
+   } else if (is_z32f_s8_in_z24s8(helper, format)) {
+      struct pipe_resource t = *templ;
+      t.format = PIPE_FORMAT_S8_UINT_Z24_UNORM;
+
+      prsc = helper->vtbl->resource_create(pscreen, &t);
+      if (!prsc)
+         return NULL;
+
+      prsc->format = format;  /* frob the format back to the "external" format */
    } else if (format == PIPE_FORMAT_Z24X8_UNORM && helper->z24_in_z32f) {
       struct pipe_resource t = *templ;
       t.format = PIPE_FORMAT_Z32_FLOAT;
@@ -296,6 +396,29 @@ u_transfer_helper_transfer_map(struct pipe_context *pctx,
    if (!trans->staging)
       goto fail;
 
+   /* Z32_FLOAT_S8X24_UINT stored internally as S8_UINT_Z24_UNORM: single
+    * map of the D24S8 resource, convert in staging.
+    */
+   if (is_z32f_s8_in_z24s8(helper, format)) {
+      trans->ptr = helper->vtbl->transfer_map(pctx, prsc, level,
+                                              usage, box, &trans->trans);
+      if (!trans->ptr)
+         goto fail;
+
+      if (needs_pack(usage)) {
+         if (format == PIPE_FORMAT_Z32_FLOAT)
+            z24_to_z32f(trans->staging, ptrans->stride,
+                        trans->ptr, trans->trans->stride, width, height);
+         else
+            z24s8_to_z32f_s8x24(trans->staging, ptrans->stride,
+                                 trans->ptr, trans->trans->stride,
+                                 width, height);
+      }
+
+      *pptrans = ptrans;
+      return trans->staging;
+   }
+
    trans->ptr = helper->vtbl->transfer_map(pctx, prsc, level,
                                            usage | (in_place_zs_interleave ? PIPE_MAP_DEPTH_ONLY : 0),
                                            box, &trans->trans);
@@ -451,6 +574,17 @@ flush_region(struct pipe_context *pctx, struct pipe_transfer *ptrans,
          (box->y * trans->trans->stride) +
          (box->x * util_format_get_blocksize(iformat));
 
+   if (is_z32f_s8_in_z24s8(helper, format)) {
+      if (format == PIPE_FORMAT_Z32_FLOAT)
+         z32f_to_z24(dst, trans->trans->stride,
+                     src, ptrans->stride, width, height);
+      else
+         z32f_s8x24_to_z24s8(dst, trans->trans->stride,
+                              src, ptrans->stride,
+                              width, height);
+      return;
+   }
+
    switch (format) {
    case PIPE_FORMAT_Z32_FLOAT_S8X24_UINT:
       util_format_z32_float_s8x24_uint_unpack_z_float(dst,
@@ -584,6 +718,7 @@ u_transfer_helper_create(const struct u_transfer_vtbl *vtbl,
    helper->msaa_map = flags & U_TRANSFER_HELPER_MSAA_MAP;
    helper->z24_in_z32f = flags & U_TRANSFER_HELPER_Z24_IN_Z32F;
    helper->interleave_in_place = flags & U_TRANSFER_HELPER_INTERLEAVE_IN_PLACE;
+   helper->z32f_s8_in_z24s8 = flags & U_TRANSFER_HELPER_Z32F_S8_IN_Z24S8;
 
    return helper;
 }

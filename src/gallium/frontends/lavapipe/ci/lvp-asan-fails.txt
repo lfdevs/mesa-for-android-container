@@ -48,3 +48,14 @@ dEQP-VK.shader_object.misc.state.pipeline.vert_tess_frag.color_write.true,Fail
 
 # VKCTS 1.4.4.2 -> 1.4.5.3 uprev
 dEQP-VK.dgc.ext.graphics.misc.mix_normal_dgc_preprocess_with_vbo_token,Fail
+
+dEQP-VK.dynamic_state.shader_object_unlinked_spirv.compute_transfer.single.transfer.vertex_input_binding_stride.before,Fail
+dEQP-VK.pipeline.fast_linked_library.extended_dynamic_state.before_good_static.tess_domain_origin_upper_left,Fail
+dEQP-VK.pipeline.fast_linked_library.extended_dynamic_state.cmd_buffer_start.large_stride_with_offset_and_padding_bind_unused_ms,Fail
+dEQP-VK.pipeline.monolithic.extended_dynamic_state.two_draws_static.tess_domain_origin_upper_left,Fail
+dEQP-VK.pipeline.shader_object_linked_binary.bind_buffers_2.maintenance5.robustness2.triangle_list.buffers5.stride_offset_rnd654.true_size.beyond_size,Fail
+dEQP-VK.shader_object.misc.state.pipeline.vert_tess_frag.lines.rectangular_stippled_rasterizer_discard,Fail
+dEQP-VK.shader_object.misc.state.pipeline.vert_tess_frag.sample_locations.disabled,Fail
+dEQP-VK.shader_object.misc.state.pipeline.vert_tess_frag.sample_locations.enabled,Fail
+dEQP-VK.shader_object.misc.state.pipeline.vert_tess_geom_frag.logic_op.copy,Fail
+dEQP-VK.shader_object.misc.state.pipeline.vert_tess_geom_frag.logic_op.enabled,Fail

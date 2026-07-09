@@ -12,8 +12,9 @@ layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 #define GFX12
 #define USE_GLOBAL_SYNC
 
-#include "build_helpers.h"
-#include "build_interface.h"
+#include "bvh_defines.h"
+#define VK_USED_BUILD_FLAGS RADV_ENCODE_GFX12_BUILD_FLAGS
+#include "bvh_helpers.h"
 #include "encode.h"
 #include "invocation_cluster.h"
 
@@ -91,8 +92,8 @@ encode_gfx12(uint32_t ir_leaf_node_size, REF(vk_ir_box_node) intermediate_intern
                right = RADV_BVH_INVALID_NODE;
             } else if (right != RADV_BVH_INVALID_NODE && ir_id_to_type(left) == vk_ir_node_triangle &&
                        ir_id_to_type(right) == vk_ir_node_triangle &&
-                       (VK_BUILD_FLAG(RADV_BUILD_FLAG_PAIR_COMPRESS_TRIANGLES) ||
-                        VK_BUILD_FLAG(RADV_BUILD_FLAG_BATCH_COMPRESS_TRIANGLES))) {
+                       (RADV_TEST_BUILD_FLAG_PAIR_COMPRESS_TRIANGLES ||
+                        RADV_TEST_BUILD_FLAG_BATCH_COMPRESS_TRIANGLES)) {
                second_child = right;
                right = RADV_BVH_INVALID_NODE;
             }
@@ -101,8 +102,7 @@ encode_gfx12(uint32_t ir_leaf_node_size, REF(vk_ir_box_node) intermediate_intern
          }
          right = radv_read_invocation(cluster, collapse_index, right);
 
-         if (VK_BUILD_FLAG(RADV_BUILD_FLAG_PAIR_COMPRESS_TRIANGLES) ||
-             VK_BUILD_FLAG(RADV_BUILD_FLAG_BATCH_COMPRESS_TRIANGLES)) {
+         if (RADV_TEST_BUILD_FLAG_PAIR_COMPRESS_TRIANGLES || RADV_TEST_BUILD_FLAG_BATCH_COMPRESS_TRIANGLES) {
             bool is_valid_triangle = child != RADV_BVH_INVALID_NODE && ir_id_to_type(child) == vk_ir_node_triangle;
             uint32_t right_pair_mask =
                radv_ballot(cluster, is_valid_triangle && second_child == RADV_BVH_INVALID_NODE &&
@@ -119,8 +119,7 @@ encode_gfx12(uint32_t ir_leaf_node_size, REF(vk_ir_box_node) intermediate_intern
             child = right;
       }
 
-      if ((VK_BUILD_FLAG(RADV_BUILD_FLAG_PAIR_COMPRESS_TRIANGLES) ||
-           VK_BUILD_FLAG(RADV_BUILD_FLAG_BATCH_COMPRESS_TRIANGLES)) &&
+      if ((RADV_TEST_BUILD_FLAG_PAIR_COMPRESS_TRIANGLES || RADV_TEST_BUILD_FLAG_BATCH_COMPRESS_TRIANGLES) &&
           child != RADV_BVH_INVALID_NODE && ir_id_to_type(child) == vk_ir_node_internal &&
           second_child == RADV_BVH_INVALID_NODE) {
          REF(vk_ir_box_node) child_node = REF(vk_ir_box_node) OFFSET(args.intermediate_bvh, ir_id_to_offset(child));
@@ -158,7 +157,7 @@ encode_gfx12(uint32_t ir_leaf_node_size, REF(vk_ir_box_node) intermediate_intern
       uint32_t dst_leaf_offset;
       uint32_t dst_internal_offset;
       if (cluster.invocation_index == 0) {
-         if (!VK_BUILD_FLAG(RADV_BUILD_FLAG_BATCH_COMPRESS_TRIANGLES))
+         if (!RADV_TEST_BUILD_FLAG_BATCH_COMPRESS_TRIANGLES)
             dst_leaf_offset = atomicAdd(DEREF(args.header).dst_leaf_node_offset, child_leaf_nodes_size);
          dst_internal_offset = atomicAdd(DEREF(args.header).dst_node_offset, child_internal_nodes_size);
       }
@@ -193,7 +192,7 @@ encode_gfx12(uint32_t ir_leaf_node_size, REF(vk_ir_box_node) intermediate_intern
       /* Do not include triangle nodes if RADV_BUILD_FLAG_BATCH_COMPRESS_TRIANGLES because
        * the count can only be computed by the encode pass.
        */
-      if (!VK_BUILD_FLAG(RADV_BUILD_FLAG_BATCH_COMPRESS_TRIANGLES))
+      if (!RADV_TEST_BUILD_FLAG_BATCH_COMPRESS_TRIANGLES)
          output_valid_child_count += child_leaf_node_count;
 
       valid_child_count += child_leaf_node_count;
@@ -226,7 +225,7 @@ encode_gfx12(uint32_t ir_leaf_node_size, REF(vk_ir_box_node) intermediate_intern
 
             REF(radv_gfx12_box_node) child_box = REF(radv_gfx12_box_node)(dst_child_addr);
             DEREF(child_box).parent_id = node_id;
-         } else if (VK_BUILD_FLAG(RADV_BUILD_FLAG_BATCH_COMPRESS_TRIANGLES)) {
+         } else if (RADV_TEST_BUILD_FLAG_BATCH_COMPRESS_TRIANGLES) {
             /* We try to encode 16 (RADV_TRIANGLE_ENCODE_TASK_TRIANGLE_COUNT) triangles into a single node. */
             uint32_t batch_aligned_triangle_index;
             if (cluster.invocation_index == radv_first_active_invocation(cluster)) {
@@ -260,7 +259,7 @@ encode_gfx12(uint32_t ir_leaf_node_size, REF(vk_ir_box_node) intermediate_intern
                 cluster.invocation_index == radv_first_active_invocation(cluster))
                DEREF(task).pair_index_node_index[child_leaf_node_count * 2] = RADV_BVH_INVALID_NODE;
          } else {
-            if (VK_BUILD_FLAG(RADV_BUILD_FLAG_WRITE_LEAF_NODE_OFFSETS)) {
+            if (RADV_TEST_BUILD_FLAG_WRITE_LEAF_NODE_OFFSETS) {
                /* Write leaf node offset. */
                {
                   uint32_t leaf_index = offset / ir_leaf_node_size;
@@ -284,7 +283,7 @@ encode_gfx12(uint32_t ir_leaf_node_size, REF(vk_ir_box_node) intermediate_intern
                bool opaque = (src_node0.geometry_id_and_flags & VK_GEOMETRY_OPAQUE) != 0;
                cull_flags = opaque ? VK_BVH_BOX_FLAG_ONLY_OPAQUE : VK_BVH_BOX_FLAG_NO_OPAQUE;
 
-               if (VK_BUILD_FLAG(RADV_BUILD_FLAG_PAIR_COMPRESS_TRIANGLES) && second_child != RADV_BVH_INVALID_NODE) {
+               if (RADV_TEST_BUILD_FLAG_PAIR_COMPRESS_TRIANGLES && second_child != RADV_BVH_INVALID_NODE) {
                   vk_ir_triangle_node src_node1 =
                      DEREF(REF(vk_ir_triangle_node)(OFFSET(args.intermediate_bvh, ir_id_to_offset(second_child))));
 

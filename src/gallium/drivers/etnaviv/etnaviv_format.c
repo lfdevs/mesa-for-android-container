@@ -139,6 +139,8 @@ static struct etna_format formats[PIPE_FORMAT_COUNT] = {
    V_(R32_SSCALED, INT,          NONE),
    VT(R32_FLOAT,   FLOAT,        EXT_R32F | EXT_FORMAT, R32F),
    V_(R32_FIXED,   FIXED,        NONE),
+   _T(Z32_FLOAT,   EXT_R32F | EXT_FORMAT, NONE),  /* emulated format */
+   _T(Z32_FLOAT_S8X24_UINT,  EXT_R32F | EXT_FORMAT, NONE),  /* emulated format */
 
    V_(R16G16_UNORM,   UNSIGNED_SHORT, NONE),
    V_(R16G16_SNORM,   SHORT,          NONE),
@@ -179,6 +181,7 @@ static struct etna_format formats[PIPE_FORMAT_COUNT] = {
 
    _T(S8_UINT,    EXT_R8I | EXT_FORMAT, NONE),
    _T(S8X24_UINT, EXT_D24S8 | EXT_FORMAT, NONE),
+   _T(X32_S8X24_UINT, EXT_D24S8 | EXT_FORMAT, NONE),
 
    _T(R9G9B9E5_FLOAT,  E5B9G9R9,                    NONE),
    _T(R11G11B10_FLOAT, EXT_B10G11R11F | EXT_FORMAT, B10G11R11F),
@@ -273,6 +276,7 @@ uint32_t
 translate_texture_format(enum pipe_format fmt, const struct etna_screen *screen)
 {
    fmt = util_format_linear(fmt);
+   fmt = translate_emulated_format_z32f(fmt);
 
    if (!formats[fmt].present)
       return ETNA_NO_MATCH;

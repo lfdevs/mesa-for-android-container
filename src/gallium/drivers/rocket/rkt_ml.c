@@ -76,6 +76,17 @@ rkt_is_depthwise(const struct pipe_ml_operation *poperation)
 }
 
 static unsigned
+calc_raw_input_size(struct rkt_operation *operation)
+{
+   unsigned input_channels_1 =
+      DIV_ROUND_UP(operation->input_channels, FEATURE_ATOMIC_SIZE) * 2;
+   unsigned input_channels_2 = FEATURE_ATOMIC_SIZE;
+
+   return operation->input_width * operation->input_height *
+          input_channels_1 * input_channels_2;
+}
+
+static unsigned
 calc_raw_output_size(struct rkt_operation *operation)
 {
    unsigned output_channels_1 =
@@ -340,7 +351,6 @@ rkt_ml_subgraph_create(struct pipe_ml_device *pdevice,
          struct rkt_operation *input_op_2 =
             find_producer(subgraph, poperations[i].input_tensors[0]->index);
 
-         assert(input_op_1);
          assert(input_op_2);
 
          if (input_op_1 == NULL) {
@@ -355,6 +365,9 @@ rkt_ml_subgraph_create(struct pipe_ml_device *pdevice,
          input_op_2->addition_offset =
             0x80 - poperations[i].input_tensors[1]->zero_point;
          input_op_2->addition_scale = poperations[i].input_tensors[1]->scale;
+         input_op_2->output_scale = poperations[i].output_tensors[0]->scale;
+         input_op_2->output_zero_point =
+            poperations[i].output_tensors[0]->zero_point;
 
          break;
       }
@@ -364,28 +377,16 @@ rkt_ml_subgraph_create(struct pipe_ml_device *pdevice,
       }
    }
 
-   /* Create input tensors */
+   /* Create input and output tensors */
    util_dynarray_foreach (&subgraph->operations, struct rkt_operation,
                           operation) {
-      unsigned input_channels_1 =
-         DIV_ROUND_UP(operation->input_channels, FEATURE_ATOMIC_SIZE) * 2;
-      unsigned input_channels_2 = FEATURE_ATOMIC_SIZE;
-      unsigned input_size = operation->input_width * operation->input_height *
-                            input_channels_1 * input_channels_2;
+      create_tensor(subgraph, operation->input_index,
+                    calc_raw_input_size(operation));
 
-      create_tensor(subgraph, operation->input_index, input_size);
-   }
-
-   /* Create output tensors */
-   util_dynarray_foreach (&subgraph->operations, struct rkt_operation,
-                          operation) {
-      struct rkt_resource *res =
-         rkt_get_tensor(subgraph, operation->output_index);
-      if (res != NULL)
-         continue;
-
-      create_tensor(subgraph, operation->output_index,
-                    calc_raw_output_size(operation));
+      if (rkt_get_tensor(subgraph, operation->output_index) == NULL) {
+         create_tensor(subgraph, operation->output_index,
+                       calc_raw_output_size(operation));
+      }
    }
 
    /* Compile */

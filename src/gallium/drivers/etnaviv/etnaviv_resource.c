@@ -37,6 +37,9 @@
 #include "util/hash_table.h"
 #include "util/u_inlines.h"
 #include "util/u_memory.h"
+#include "util/u_transfer_helper.h"
+
+#include "etnaviv_transfer.h"
 
 static enum etna_surface_layout modifier_to_layout(uint64_t modifier)
 {
@@ -487,6 +490,7 @@ etna_resource_alloc(struct pipe_screen *pscreen, unsigned layout,
    rsc->base = *templat;
    rsc->base.screen = pscreen;
    rsc->base.nr_samples = templat->nr_samples;
+   rsc->internal_format = templat->format;
    rsc->layout = layout;
    rsc->modifier = modifier;
    rsc->halign = halign;
@@ -831,6 +835,7 @@ etna_resource_from_handle(struct pipe_screen *pscreen,
    if (modifier == DRM_FORMAT_MOD_INVALID)
       modifier = DRM_FORMAT_MOD_LINEAR;
 
+   rsc->internal_format = tmpl->format;
    rsc->layout = modifier_to_layout(modifier);
    rsc->modifier = modifier;
 
@@ -1162,16 +1167,56 @@ etna_resource_set_damage_region(struct pipe_screen *pscreen,
    rsc->num_damage = nrects;
 }
 
+static enum pipe_format
+etna_resource_get_internal_format(struct pipe_resource *prsc)
+{
+   if (prsc->target == PIPE_BUFFER)
+      return prsc->format;
+
+   return etna_resource(prsc)->internal_format;
+}
+
+static void
+etna_resource_set_stencil(struct pipe_resource *prsc,
+                          struct pipe_resource *stencil)
+{
+   etna_resource(prsc)->separate_stencil = etna_resource(stencil);
+}
+
+static struct pipe_resource *
+etna_resource_get_stencil(struct pipe_resource *prsrc)
+{
+   if (prsrc->target == PIPE_BUFFER)
+      return NULL;
+
+   return (struct pipe_resource *)etna_resource(prsrc)->separate_stencil;
+}
+
+static const struct u_transfer_vtbl transfer_vtbl = {
+   .resource_create = etna_resource_create,
+   .resource_destroy = etna_resource_destroy,
+   .transfer_map = etna_texture_map,
+   .transfer_flush_region = etna_transfer_flush_region,
+   .transfer_unmap = etna_texture_unmap,
+   .get_internal_format = etna_resource_get_internal_format,
+   .set_stencil = etna_resource_set_stencil,
+   .get_stencil = etna_resource_get_stencil,
+};
+
 void
 etna_resource_screen_init(struct pipe_screen *pscreen)
 {
    pscreen->can_create_resource = etna_screen_can_create_resource;
-   pscreen->resource_create = etna_resource_create;
+   pscreen->resource_create = u_transfer_helper_resource_create;
    pscreen->resource_create_with_modifiers = etna_resource_create_modifiers;
    pscreen->resource_from_handle = etna_resource_from_handle;
    pscreen->resource_get_handle = etna_resource_get_handle;
    pscreen->resource_get_param = etna_resource_get_param;
    pscreen->resource_changed = etna_resource_changed;
-   pscreen->resource_destroy = etna_resource_destroy;
+   pscreen->resource_destroy = u_transfer_helper_resource_destroy;
    pscreen->set_damage_region = etna_resource_set_damage_region;
+
+   pscreen->transfer_helper =
+      u_transfer_helper_create(&transfer_vtbl,
+                               U_TRANSFER_HELPER_Z32F_S8_IN_Z24S8);
 }

@@ -34,12 +34,14 @@ VkResult
 lvp_init_wsi(struct lvp_physical_device *physical_device)
 {
    VkResult result;
+   const struct lvp_instance *lvp_instance =
+      container_of(physical_device->vk.instance, struct lvp_instance, vk);
 
    result = wsi_device_init(&physical_device->wsi_device,
                             lvp_physical_device_to_handle(physical_device),
                             lvp_wsi_proc_addr,
                             &physical_device->vk.instance->alloc,
-                            -1, NULL,
+                            -1, &lvp_instance->drirc.options,
                             &(struct wsi_device_options){.sw_device = true});
    if (result != VK_SUCCESS)
       return result;

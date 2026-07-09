@@ -1,4 +1,6 @@
 /*
+ * Copyright © 2026 NXP
+ *
  * Copyright © 2024 Collabora Ltd.
  * SPDX-License-Identifier: MIT
  */
@@ -158,6 +160,17 @@ panvk_bind_queue_submit_process_signals(struct panvk_bind_queue_submit *submit)
 
    submit->pending_op.signal.array = submit->sync_ops.signals;
    submit->pending_op.signal.count = submit->sync_ops.signal_count;
+
+
+
+   /* A SYNC_ONLY op without wait or signal syncs is a no-op. Evict such
+    * ops here rather than letting the kernel reject an empty SYNC_ONLY op
+    * with -EINVAL in async mode.
+    */
+   if (submit->pending_op.type == PAN_KMOD_VM_OP_TYPE_SYNC_ONLY &&
+       submit->pending_op.wait.count == 0 &&
+       submit->pending_op.signal.count == 0)
+      return 0;
 
    int ret = pan_kmod_vm_multi_op_push(ctx, &submit->pending_op);
    if (ret)

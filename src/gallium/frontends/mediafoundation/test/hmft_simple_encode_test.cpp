@@ -63,8 +63,6 @@ TEST( MediaFoundationEntrypoint, VerifySimpleEncodeSoftwareSample )
 #elif MFT_CODEC_H265ENC
    ComPtr<IMFMediaType> spOutType = CreateVideoMT( width, height, FOURCC_HEVC, FALSE, frameRateNum, frameRateDiv, bitRate * 1024 );
 #elif MFT_CODEC_AV1ENC
-   // NO AV1 doesn't work yet...
-   assert( false );
    ComPtr<IMFMediaType> spOutType = CreateVideoMT( width, height, FOURCC_AV01, FALSE, frameRateNum, frameRateDiv, bitRate * 1024 );
 #else
 #error MFT_CODEC_xxx must be defined
@@ -181,7 +179,7 @@ TEST( MediaFoundationEntrypoint, VerifySimpleEncodeSoftwareSample )
 #elif MFT_CODEC_H265ENC
                   FILE *fp = fopen( "d:\\test\\output.h265", "ab" );
 #elif MFT_CODEC_AV1ENC
-                  FILE *fp = fopen( "d:\\test\\output.av1", "ab" );
+                  FILE *fp = fopen( "d:\\test\\output.obu", "ab" );
 #endif
                   fwrite( pBuf, 1, dwLen, fp );
                   fclose( fp );

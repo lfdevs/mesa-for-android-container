@@ -190,28 +190,38 @@ vc4_tile_blit(struct pipe_context *pctx, struct pipe_blit_info *info)
 }
 
 void
-vc4_blitter_save(struct vc4_context *vc4)
+vc4_blitter_save(struct vc4_context *vc4, enum vc4_blitter_op op)
 {
-        util_blitter_save_fragment_constant_buffer_slot(vc4->blitter,
-                                                        vc4->constbuf[MESA_SHADER_FRAGMENT].cb);
         util_blitter_save_vertex_buffers(vc4->blitter, vc4->vertexbuf.vb,
                                          vc4->vertexbuf.count);
         util_blitter_save_vertex_elements(vc4->blitter, vc4->vtx);
         util_blitter_save_vertex_shader(vc4->blitter, vc4->prog.bind_vs);
         util_blitter_save_rasterizer(vc4->blitter, vc4->rasterizer);
-        util_blitter_save_viewport(vc4->blitter, &vc4->viewport);
-        util_blitter_save_scissor(vc4->blitter, &vc4->scissor);
-        util_blitter_save_fragment_shader(vc4->blitter, vc4->prog.bind_fs);
-        util_blitter_save_blend(vc4->blitter, vc4->blend);
-        util_blitter_save_depth_stencil_alpha(vc4->blitter, vc4->zsa);
-        util_blitter_save_stencil_ref(vc4->blitter, &vc4->stencil_ref);
-        util_blitter_save_sample_mask(vc4->blitter, vc4->sample_mask, 0);
-        util_blitter_save_framebuffer(vc4->blitter, &vc4->framebuffer);
-        util_blitter_save_fragment_sampler_states(vc4->blitter,
-                        vc4->fragtex.num_samplers,
-                        (void **)vc4->fragtex.samplers);
-        util_blitter_save_fragment_sampler_views(vc4->blitter,
-                        vc4->fragtex.num_textures, vc4->fragtex.textures);
+
+        if (op & VC4_SAVE_FRAGMENT_STATE) {
+                if (op & VC4_SAVE_FRAGMENT_CONSTANT) {
+                        util_blitter_save_fragment_constant_buffer_slot(vc4->blitter,
+                                                                        vc4->constbuf[MESA_SHADER_FRAGMENT].cb);
+                }
+                util_blitter_save_viewport(vc4->blitter, &vc4->viewport);
+                util_blitter_save_fragment_shader(vc4->blitter, vc4->prog.bind_fs);
+                util_blitter_save_blend(vc4->blitter, vc4->blend);
+                util_blitter_save_depth_stencil_alpha(vc4->blitter, vc4->zsa);
+                util_blitter_save_stencil_ref(vc4->blitter, &vc4->stencil_ref);
+                util_blitter_save_sample_mask(vc4->blitter, vc4->sample_mask, 0);
+        }
+
+        if (op & VC4_SAVE_FRAMEBUFFER)
+                util_blitter_save_framebuffer(vc4->blitter, &vc4->framebuffer);
+
+        if (op & VC4_SAVE_TEXTURES) {
+                util_blitter_save_scissor(vc4->blitter, &vc4->scissor);
+                util_blitter_save_fragment_sampler_states(vc4->blitter,
+                                                          vc4->fragtex.num_samplers,
+                                                          (void **)vc4->fragtex.samplers);
+                util_blitter_save_fragment_sampler_views(vc4->blitter,
+                                                         vc4->fragtex.num_textures, vc4->fragtex.textures);
+        }
 }
 
 static void *vc4_get_yuv_vs(struct pipe_context *pctx)
@@ -364,7 +374,7 @@ vc4_yuv_blit(struct pipe_context *pctx, struct pipe_blit_info *info)
                 goto fallback;
         }
 
-        vc4_blitter_save(vc4);
+        vc4_blitter_save(vc4, VC4_BLIT);
 
         /* Create a renderable surface mapping the T-tiled shadow buffer.
          */
@@ -449,7 +459,7 @@ vc4_render_blit(struct pipe_context *ctx, struct pipe_blit_info *info)
                 info->scissor.maxy = info->dst.box.y + info->dst.box.height;
         }
 
-        vc4_blitter_save(vc4);
+        vc4_blitter_save(vc4, VC4_BLIT);
         util_blitter_blit(vc4->blitter, info, NULL);
 
         info->mask = 0;
@@ -492,7 +502,7 @@ vc4_stencil_blit(struct pipe_context *ctx, struct pipe_blit_info *info)
                         .first_level = info->src.level,
                         .last_level = info->src.level,
                         .first_layer = 0,
-                        .last_layer = (PIPE_TEXTURE_2D ?
+                        .last_layer = (src->base.target == PIPE_TEXTURE_3D ?
                                        u_minify(src->base.depth0,
                                                 info->src.level) - 1 :
                                        src->base.array_size - 1),
@@ -505,7 +515,7 @@ vc4_stencil_blit(struct pipe_context *ctx, struct pipe_blit_info *info)
         struct pipe_sampler_view *src_view =
                 ctx->create_sampler_view(ctx, &src->base, &src_tmpl);
 
-        vc4_blitter_save(vc4);
+        vc4_blitter_save(vc4, VC4_BLIT);
         util_blitter_blit_generic(vc4->blitter, &dst_surf, &info->dst.box,
                                   src_view, &info->src.box,
                                   src->base.width0, src->base.height0,

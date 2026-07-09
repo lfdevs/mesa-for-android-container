@@ -2,6 +2,7 @@ dEQP-GLES31.functional.shaders.multisample_interpolation.interpolate_at_sample.n
 dEQP-GLES31.functional.shaders.multisample_interpolation.interpolate_at_sample.non_multisample_buffer.sample_n_singlesample_rbo,Fail
 dEQP-GLES31.functional.shaders.multisample_interpolation.interpolate_at_sample.non_multisample_buffer.sample_n_singlesample_texture,Fail
 
+glx@glx-make-current,Fail
 glx@glx-multi-window-single-context,Fail
 glx@glx-swap-pixmap-bad,Fail
 glx@glx_arb_sync_control@swapbuffersmsc-divisor-zero,Fail
@@ -326,8 +327,9 @@ spec@arb_sample_shading@samplemask 8@1.000000 mask_in_one,Fail
 spec@arb_sample_shading@samplemask 8@noms mask_in_one,Fail
 spec@arb_sample_shading@samplemask 8@noms partition,Fail
 spec@arb_sample_shading@samplemask 8@sample mask_in_one,Fail
-spec@arb_shader_image_load_store@max-size,Fail
+spec@arb_shader_image_load_store@max-size,Crash
 spec@arb_shader_image_load_store@max-size@image2DMS max size test/8x16384x8x1,Fail
+spec@arb_shader_image_load_store@max-size@image3D max size test/8x8x16384x1,Fail
 spec@arb_shader_storage_buffer_object@max-ssbo-size@fs,Crash
 spec@arb_shader_storage_buffer_object@max-ssbo-size@vs,Crash
 spec@arb_shader_texture_lod@execution@arb_shader_texture_lod-texgrad,Fail
@@ -335,7 +337,8 @@ spec@arb_shader_texture_lod@execution@arb_shader_texture_lod-texgradcube,Fail
 spec@arb_shading_language_packing@execution@built-in-functions@fs-packhalf2x16,Fail
 spec@arb_shading_language_packing@execution@built-in-functions@vs-packhalf2x16,Fail
 spec@arb_texture_cube_map_array@texsubimage cube_map_array,Fail
-spec@egl 1.4@egl-ext_egl_image_storage,Fail
+spec@arb_transform_feedback_instanced@draw-auto instanced,Fail
+spec@egl 1.4@egl-ext_egl_image_storage,Crash
 spec@egl 1.4@eglterminate then unbind context,Fail
 spec@egl_chromium_sync_control@conformance,Fail
 spec@egl_chromium_sync_control@conformance@eglGetSyncValuesCHROMIUM_msc_and_sbc_test,Fail
@@ -345,11 +348,8 @@ spec@egl_khr_surfaceless_context@viewport,Fail
 spec@egl_mesa_configless_context@basic,Fail
 spec@ext_external_objects@vk-image-overwrite,Crash
 spec@ext_external_objects@vk-image-overwrite@RGBA 4 UNORM linear,Fail
-spec@ext_framebuffer_multisample@upsample 2 stencil,Fail
-spec@ext_framebuffer_multisample@upsample 4 stencil,Fail
-spec@ext_framebuffer_multisample@upsample 6 stencil,Fail
-spec@ext_framebuffer_multisample@upsample 8 stencil,Fail
 spec@ext_texture_array@texsubimage array,Fail
+spec@ext_transform_feedback2@draw-auto,Fail
 spec@ext_transform_feedback@tessellation quad_strip wireframe,Fail
 spec@ext_transform_feedback@tessellation quads wireframe,Fail
 spec@glsl-1.10@execution@samplers@glsl-fs-lots-of-tex,Fail
@@ -368,8 +368,8 @@ api@clgetcommandqueueinfo,Fail
 api@clgetdeviceinfo,Fail
 api@clgetextensionfunctionaddressforplatform,Fail
 api@clgetkernelarginfo,Fail
-api@clgetmemobjectinfo,Fail
 api@cllinkprogram,Fail
+api@clsetkernelarg,Fail
 api@clsetkernelarg@Input checks,Fail
 api@clsetkernelarg@Set kernel argument for array,Fail
 api@clsetkernelarg@Set kernel argument for buffer,Fail
@@ -403,7 +403,6 @@ custom@buffer flags@in-0x8-out-0x10,Fail
 custom@buffer flags@in-0x8-out-0x20,Fail
 custom@buffer flags@in-0x8-out-0x30,Fail
 custom@buffer flags@in-0x8-out-0x8,Fail
-program@build@vector-data-types,Fail
 program@check predefined preprocessor macros@CL_VERSION_1_0 must be 100 if defined,Fail
 program@check predefined preprocessor macros@CL_VERSION_1_0 must be defined for OpenCL 1.1 and later,Fail
 program@check predefined preprocessor macros@CL_VERSION_1_1 must be 110 if defined,Fail
@@ -4136,3 +4135,7 @@ program@execute@vstore@vstorea_half-float-private@vector storea_half private off
 program@execute@vstore@vstorea_half-float-private@vector storea_half private offset float3,Fail
 program@execute@vstore@vstorea_half-float-private@vector storea_half private offset float4,Fail
 program@execute@vstore@vstorea_half-float-private@vector storea_half private offset float8,Fail
+
+# Nightly run expectations update
+spec@arb_tessellation_shader@execution@variable-indexing@tcs-output-array-dvec4-index-wr,Crash
+

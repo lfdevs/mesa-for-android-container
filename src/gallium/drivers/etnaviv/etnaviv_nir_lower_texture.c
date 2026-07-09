@@ -464,7 +464,7 @@ etna_nir_lower_texture(nir_shader *s, struct etna_shader_key *key, const struct 
       NIR_PASS(progress, s, nir_lower_tex_shadow, key->num_texture_states,
                                                   key->tex_compare_func,
                                                   key->tex_swizzle,
-                                                  true);
+                                                  !key->shadow_compare_no_clamp);
 
    NIR_PASS(progress, s, nir_shader_tex_pass, lower_txs,
          nir_metadata_control_flow, NULL);

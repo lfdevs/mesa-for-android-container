@@ -79,9 +79,5 @@ glx@glx-visuals-stencil
 # New timeout flakes since wsi maintenance1 support
 dEQP-VK.wsi.xcb.maintenance1.release_images.mailbox.no_scaling.basic
 
-# passes every now and then
-spec@ext_image_dma_buf_import@ext_image_dma_buf_import-refcount-multithread
-afbcp-spec@ext_image_dma_buf_import@ext_image_dma_buf_import-refcount-multithread
-
 # Job timeout
 dEQP-VK.graphicsfuzz.spv-composites

@@ -2,7 +2,7 @@
 <!ELEMENT device       (application | engine)*>
 <!ATTLIST device       driver CDATA #IMPLIED
                        device CDATA #IMPLIED>
-<!ELEMENT application  (option+)>
+<!ELEMENT application  (option | shader)+>
 <!ATTLIST application  name CDATA #REQUIRED
                        executable CDATA #IMPLIED
                        executable_regexp CDATA #IMPLIED
@@ -17,6 +17,10 @@
 
 <!ATTLIST engine       engine_name_match CDATA #REQUIRED
                        engine_versions CDATA #IMPLIED>
+
+<!ELEMENT shader       (option+)>
+<!ATTLIST shader       type CDATA #REQUIRED
+                       hash CDATA #REQUIRED>
 
 <!ELEMENT option       EMPTY>
 <!ATTLIST option       name CDATA #REQUIRED

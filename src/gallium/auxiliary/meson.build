@@ -340,6 +340,7 @@ if draw_with_llvm
     'gallivm/lp_bld_nir.h',
     'gallivm/lp_bld_nir.c',
     'gallivm/lp_bld_nir_aos.c',
+    'gallivm/lp_bld_nir_lower.c',
     'gallivm/lp_bld_nir_soa.c',
     'gallivm/lp_bld_pack.c',
     'gallivm/lp_bld_pack.h',
@@ -377,6 +378,16 @@ if draw_with_llvm
     'nir/nir_to_tgsi_info.c',
     'nir/nir_to_tgsi_info.h',
   )
+  files_libgallium += custom_target(
+    'lp_bld_nir_no_integer_algebraic.c',
+    input : 'gallivm/lp_bld_nir_no_integer_algebraic.py',
+    output : 'lp_bld_nir_no_integer_algebraic.c',
+    command : [
+      prog_python, '@INPUT@', '-p', dir_compiler_nir,
+    ],
+    capture : true,
+    depend_files : nir_algebraic_depends,
+  )
   if llvm_with_orcjit
     files_libgallium += files('gallivm/lp_bld_init_orc.cpp',)
   else
@@ -393,6 +404,8 @@ files_libgalliumvl = files(
   'vl/vl_compositor_gfx.h',
   'vl/vl_compositor_cs.c',
   'vl/vl_compositor_cs.h',
+  'vl/vl_compositor_proc.c',
+  'vl/vl_compositor_proc.h',
   'vl/vl_csc.c',
   'vl/vl_csc.h',
   'vl/vl_defines.h',
@@ -402,6 +415,8 @@ files_libgalliumvl = files(
   'vl/vl_deint_filter_cs.h',
   'vl/vl_mpeg12_bitstream.c',
   'vl/vl_mpeg12_bitstream.h',
+  'vl/vl_proc.c',
+  'vl/vl_proc.h',
   'vl/vl_types.h',
   'vl/vl_vertex_buffers.c',
   'vl/vl_vertex_buffers.h',

@@ -122,6 +122,7 @@ query_features_from_kernel(struct etna_gpu *gpu)
 
 	ETNA_FEATURE(chipMinorFeatures3, PE_DITHER_FIX);
 	ETNA_FEATURE(chipMinorFeatures3, INSTRUCTION_CACHE);
+	ETNA_FEATURE(chipMinorFeatures3, UNIFIED_SAMPLERS);
 	ETNA_FEATURE(chipMinorFeatures3, HAS_FAST_TRANSCENDENTALS);
 
 	ETNA_FEATURE(chipMinorFeatures4, SMALL_MSAA);

@@ -83,7 +83,7 @@ struct radv_compute_resolve_key {
 };
 
 static VkResult
-get_compute_resolve_pipeline(struct radv_device *device, VkFormat format, int samples, VkImageAspectFlags aspects,
+get_compute_resolve_pipeline(struct radv_device *device, VkFormat format, uint8_t samples, VkImageAspectFlags aspects,
                              VkResolveModeFlagBits resolve_mode, VkPipeline *pipeline_out, VkPipelineLayout *layout_out)
 {
    const struct radv_physical_device *pdev = radv_device_physical(device);
@@ -237,9 +237,9 @@ radv_compute_resolve_image(struct radv_cmd_buffer *cmd_buffer, struct radv_image
    const struct VkOffset3D dstOffset = vk_image_sanitize_offset(&dst_image->vk, region->dstOffset);
    const unsigned layer_count = vk_image_subresource_layer_count(&src_image->vk, &region->srcSubresource);
 
-   const VkImageViewUsageCreateInfo src_iview_usage_info = {
-      .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_USAGE_CREATE_INFO,
-      .usage = VK_IMAGE_USAGE_SAMPLED_BIT,
+   const VkImageViewUsage2CreateInfoKHR src_iview_usage_info = {
+      .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_USAGE_2_CREATE_INFO_KHR,
+      .usage = VK_IMAGE_USAGE_2_SAMPLED_BIT_KHR,
    };
 
    struct radv_image_view src_iview;
@@ -262,9 +262,9 @@ radv_compute_resolve_image(struct radv_cmd_buffer *cmd_buffer, struct radv_image
                         },
                         NULL);
 
-   const VkImageViewUsageCreateInfo dst_iview_usage_info = {
-      .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_USAGE_CREATE_INFO,
-      .usage = VK_IMAGE_USAGE_STORAGE_BIT,
+   const VkImageViewUsage2CreateInfoKHR dst_iview_usage_info = {
+      .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_USAGE_2_CREATE_INFO_KHR,
+      .usage = VK_IMAGE_USAGE_2_STORAGE_BIT_KHR,
    };
 
    struct radv_image_view dst_iview;

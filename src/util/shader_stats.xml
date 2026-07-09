@@ -77,6 +77,7 @@
         <stat name="FMA" type="float">Estimated normalized FMA (Fused Multiply-Add) cycles</stat>
         <stat name="CVT" type="float">Estimated normalized CVT (ConVerT) cycles</stat>
         <stat name="SFU" type="float">Estimated normalized SFU (Special Function Unit) cycles</stat>
+        <stat name="ALU" type="float">Estimated normalized ALU (Arithmetic Logical Unit) cycles</stat>
         <stat name="Varying" display="V" type="float">Estimated normalized Varying cycles</stat>
         <stat name="Texture" display="T" type="float">Estimated normalized Texture cycles</stat>
         <stat name="Load/store" display="LS" type="float">Estimated normalized Load/Store cycles</stat>
@@ -192,7 +193,7 @@
             Non SSA regs after NIR translation to BRW.
          </stat>
          <stat name="Source hash" hash="true" type="u64">
-            Hash generated from shader source.
+            Hash generated from shader source or vkd3d-proton provided.
          </stat>
          <stat name="Scheduler mode" type="str">
             Scheduling mode selected for this binary.

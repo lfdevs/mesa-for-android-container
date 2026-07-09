@@ -1,1 +1,2 @@
+spec@!opengl 1.1@longprim
 spec@!opengl 1.2@tex3d-maxsize

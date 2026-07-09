@@ -927,6 +927,24 @@ namespace {
    }
 
    /**
+    * Return whether an ordered RegDist dependency on pipe \p ordered_pipe can
+    * be combined with an unordered SBID dependency in a single instruction's
+    * SWSB annotation.  The combined RegDist + SBID encoding only provides a
+    * generic (datatype-inferred) RegDist or a RegDistAll -- there is no
+    * encoding for an explicit pipe such as the long pipe (Bspec 56701).  The
+    * generic RegDist resolves to the Float or Int pipe by source datatype, so
+    * those combine; RegDistAll combines on Xe2+; the long pipe never does.
+    */
+   bool
+   combinable_ordered_pipe(const struct intel_device_info *devinfo,
+                           gen_pipe ordered_pipe)
+   {
+      return ordered_pipe == GEN_PIPE_FLOAT ||
+             ordered_pipe == GEN_PIPE_INT ||
+             (devinfo->ver >= 20 && ordered_pipe == GEN_PIPE_ALL);
+   }
+
+   /**
     * Return the tgl_sbid_mode bitset of an unordered dependency from the list
     * \p deps that can be represented directly in the SWSB annotation of the
     * instruction without additional SYNC instructions, or zero if no such
@@ -952,12 +970,15 @@ namespace {
          return GEN_SBID_NULL;
       else if (find_unordered_dependency(deps, GEN_SBID_DST, exec_all) &&
                (!has_ordered ||
-                ordered_pipe == inferred_sync_pipe(devinfo, inst) ||
+                (ordered_pipe == inferred_sync_pipe(devinfo, inst) &&
+                 (devinfo->ver < 20 ||
+                  combinable_ordered_pipe(devinfo, ordered_pipe))) ||
                 (devinfo->ver >= 20 && ordered_pipe == GEN_PIPE_ALL)))
          return find_unordered_dependency(deps, GEN_SBID_DST, exec_all);
       else if (!has_ordered ||
                (devinfo->ver >= 20 &&
-                ordered_pipe == inferred_sync_pipe(devinfo, inst)))
+                ordered_pipe == inferred_sync_pipe(devinfo, inst) &&
+                combinable_ordered_pipe(devinfo, ordered_pipe)))
          return find_unordered_dependency(deps, GEN_SBID_SRC, exec_all);
       else
          return GEN_SBID_NULL;

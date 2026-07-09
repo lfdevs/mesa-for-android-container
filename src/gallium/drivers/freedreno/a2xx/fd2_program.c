@@ -55,7 +55,7 @@ emit(struct fd_ringbuffer *ring, mesa_shader_stage type,
       OUT_RING(ring, info->dwords[i]);
 }
 
-static int
+static unsigned
 ir2_glsl_type_size(const struct glsl_type *type, bool bindless)
 {
    return glsl_count_attribute_slots(type, false);

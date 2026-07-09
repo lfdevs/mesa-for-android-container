@@ -217,15 +217,23 @@ wsi_win32_surface_get_capabilities(VkIcdSurfaceBase *surf,
       VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR |
       VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR;
 
-   caps->surfaceCapabilities.supportedUsageFlags = wsi_caps_get_image_usage();
+   VkImageUsageFlags image_usage = wsi_caps_get_image_usage();
 
    VK_FROM_HANDLE(vk_physical_device, pdevice, wsi_device->pdevice);
    if (pdevice->supported_extensions.EXT_attachment_feedback_loop_layout)
-      caps->surfaceCapabilities.supportedUsageFlags |= VK_IMAGE_USAGE_ATTACHMENT_FEEDBACK_LOOP_BIT_EXT;
+      image_usage |= VK_IMAGE_USAGE_ATTACHMENT_FEEDBACK_LOOP_BIT_EXT;
 
    VkSwapchainFlagsSurfaceCapabilitiesEXT *surface_caps = vk_find_struct(caps, SWAPCHAIN_FLAGS_SURFACE_CAPABILITIES_EXT);
    if (surface_caps && pdevice->supported_extensions.EXT_multisampled_render_to_swapchain)
       surface_caps->swapchainSupportedFlags |= VK_SWAPCHAIN_CREATE_MULTISAMPLED_RENDER_TO_SINGLE_SAMPLED_BIT_EXT;
+
+   VkImageUsageFlags2CreateInfoKHR *usage2 =
+      vk_find_struct(caps->pNext, IMAGE_USAGE_FLAGS_2_CREATE_INFO_KHR);
+   if (usage2) {
+      usage2->usage = image_usage;
+   } else {
+      caps->surfaceCapabilities.supportedUsageFlags = image_usage;
+   }
 
    return VK_SUCCESS;
 }
@@ -872,12 +880,12 @@ wsi_win32_surface_create_swapchain_dxgi(
          DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING : 0u
    };
 
-   if (create_info->imageUsage &
-       (VK_IMAGE_USAGE_SAMPLED_BIT |
-        VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT))
+   const VkImageUsageFlags2KHR image_usage = vk_swapchain_usage_flags(create_info);
+
+   if (image_usage & (VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT))
       desc.BufferUsage |= DXGI_USAGE_SHADER_INPUT;
 
-   if (create_info->imageUsage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT)
+   if (image_usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT)
       desc.BufferUsage |= DXGI_USAGE_RENDER_TARGET_OUTPUT;
 
    IDXGISwapChain1 *swapchain1;
@@ -941,10 +949,12 @@ wsi_win32_surface_create_swapchain(
       return VK_ERROR_OUT_OF_HOST_MEMORY;
    }
 
+   const VkImageUsageFlags2KHR image_usage = vk_swapchain_usage_flags(create_info);
+
    struct wsi_dxgi_image_params dxgi_image_params = {
       { WSI_IMAGE_TYPE_DXGI },
    };
-   dxgi_image_params.storage_image = (create_info->imageUsage & VK_IMAGE_USAGE_STORAGE_BIT) != 0;
+   dxgi_image_params.storage_image = (image_usage & VK_IMAGE_USAGE_STORAGE_BIT) != 0;
 
    struct wsi_cpu_image_params cpu_image_params = {
       { WSI_IMAGE_TYPE_CPU },

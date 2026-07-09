@@ -40,3 +40,7 @@ spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_yvyu,Fail
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-transcode-nv12-as-r8-gr88,Fail
 
 spec@arb_pipeline_statistics_query@arb_pipeline_statistics_query-clip,Fail
+
+# uprev Piglit in Mesa
+glx@glx-make-current,Fail
+

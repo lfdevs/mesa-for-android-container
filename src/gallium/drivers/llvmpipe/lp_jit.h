@@ -45,11 +45,53 @@
 
 
 struct lp_build_format_cache;
-struct lp_fragment_shader_variant;
+struct lp_fragment_shader_variant_jit;
 struct lp_compute_shader_variant;
+struct lp_compute_shader_variant_jit;
 struct lp_rast_state;
 struct llvmpipe_screen;
 struct vertex_header;
+
+/* Compile-time LLVM state for FS variant generation; lifetime is generate_variant(). */
+struct lp_fragment_shader_variant_jit
+{
+   LLVMTypeRef jit_context_type;
+   LLVMTypeRef jit_context_ptr_type;
+   LLVMTypeRef jit_thread_data_type;
+   LLVMTypeRef jit_resources_type;
+   LLVMTypeRef jit_resources_ptr_type;
+   LLVMTypeRef jit_thread_data_ptr_type;
+   LLVMTypeRef jit_linear_context_type;
+   LLVMTypeRef jit_linear_context_ptr_type;
+   LLVMTypeRef jit_linear_func_type;
+   LLVMTypeRef jit_linear_inputs_type;
+   LLVMTypeRef jit_linear_textures_type;
+
+   LLVMValueRef function[2]; // [RAST_WHOLE], [RAST_EDGE_TEST]
+   char *function_name[2];
+
+   LLVMValueRef linear_function;
+   char *linear_function_name;
+};
+
+/* Compile-time LLVM state for CS variant generation; lifetime is generate_variant(). */
+struct lp_compute_shader_variant_jit
+{
+   LLVMTypeRef jit_cs_context_type;
+   LLVMTypeRef jit_cs_context_ptr_type;
+   LLVMTypeRef jit_cs_thread_data_type;
+   LLVMTypeRef jit_resources_type;
+   LLVMTypeRef jit_resources_ptr_type;
+   LLVMTypeRef jit_cs_thread_data_ptr_type;
+
+   /* for mesh shaders */
+   LLVMTypeRef jit_vertex_header_type;
+   LLVMTypeRef jit_vertex_header_ptr_type;
+   LLVMTypeRef jit_prim_type;
+
+   LLVMValueRef function;
+   char *function_name;
+};
 
 struct lp_jit_viewport
 {
@@ -373,10 +415,12 @@ bool
 lp_jit_screen_init(struct llvmpipe_screen *screen);
 
 void
-lp_jit_init_types(struct lp_fragment_shader_variant *lp);
+lp_jit_init_types(struct gallivm_state *gallivm,
+                  struct lp_fragment_shader_variant_jit *jit);
 
 void
-lp_jit_init_cs_types(struct lp_compute_shader_variant *lp);
+lp_jit_init_cs_types(struct gallivm_state *gallivm,
+                     struct lp_compute_shader_variant_jit *jit);
 
 /* Helpers for converting pipe_* to lp_jit_* resources. */
 void lp_jit_buffer_from_bda(struct lp_jit_buffer *jit, void *mem, size_t size);

@@ -35,3 +35,9 @@ KHR-GLES2.core.internalformat.texture2d.depth_component_unsigned_int_depth_compo
 KHR-GLES2.core.internalformat.texture2d.depth_component_unsigned_short_depth_component16,Fail
 KHR-GLES2.core.internalformat.texture2d.rgb_float_rgb32f,Fail
 KHR-GLES2.core.internalformat.texture2d.rgba_float_rgba32f,Fail
+
+# Nightly run expectations update
+KHR-GLES2.core.internalformat.texture2d.depth_component_unsigned_int_depth_component,Fail
+KHR-GLES2.core.internalformat.texture2d.depth_component_unsigned_short_depth_component,Fail
+KHR-GLES2.core.internalformat.texture2d.depth_stencil_unsigned_int_24_8_depth_stencil,Fail
+

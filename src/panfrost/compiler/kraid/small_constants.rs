@@ -13,13 +13,17 @@ fn try_fold_src(src: &mut Src, sc: &SmallConstant, sc_swz: Swizzle) -> bool {
     true
 }
 
-fn try_lower_src(src: &mut Src, sc_table: &[SmallConstant]) -> bool {
+fn try_lower_src(
+    src: &mut Src,
+    src_type: DataType,
+    sc_table: &[SmallConstant],
+) -> bool {
     let SrcRef::Imm32(imm32) = src.src_ref else {
         return false;
     };
     let imm32 = u32::from(imm32);
 
-    let imm_bytes_read = src.swizzle.bytes_read(4);
+    let imm_bytes_read = src.swizzle.bytes_read(src_type.total_bytes());
 
     if imm_bytes_read.count_ones() == 1 {
         let imm_byte = imm_bytes_read.trailing_zeros();
@@ -60,8 +64,8 @@ impl Shader<'_> {
         let sc_table = self.model.small_constants();
         for b in self.blocks.iter_mut() {
             for i in b.instrs.iter_mut() {
-                for src in i.srcs_mut() {
-                    try_lower_src(src, sc_table);
+                for (src, src_type) in i.srcs_types_mut() {
+                    try_lower_src(src, src_type, sc_table);
                 }
             }
         }

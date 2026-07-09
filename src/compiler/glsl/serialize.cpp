@@ -682,7 +682,7 @@ read_uniform_remap_list(struct blob_reader *metadata,
 
       unsigned start = blob_read_uint32(metadata);
       unsigned end = blob_read_uint32(metadata);
-      util_range_insert_remap(start, end, range_remap, uniform);
+      util_range_insert_remap(start, end, range_remap, uniform, false);
    }
 
    util_range_switch_to_sorted_array(range_remap);

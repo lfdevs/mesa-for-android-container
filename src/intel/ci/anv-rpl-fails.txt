@@ -9,3 +9,21 @@ dEQP-VK.video.decode.vp9.inter_intra_only_separated_dpb_video_layout,Fail
 dEQP-VK.sparse_resources.buffer.ssbo.read_write.sparse_residency_non_resident_strict,Fail
 dEQP-VK.wsi.display_control.swapchain_counter,Crash
 dEQP-VK.wsi.display.create_display_mode,Fail
+
+# CTS is missing -frounding-math: https://gitlab.khronos.org/Tracker/vk-gl-cts/-/issues/6580
+dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.scalar.rte.denorm_flush.directed,Fail
+dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.scalar.rte.denorm_flush.float_controls,Fail
+dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.scalar.rte.denorm_none.directed,Fail
+dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.scalar.rte.denorm_none.float_controls,Fail
+dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.vec2.rte.denorm_flush.directed,Fail
+dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.vec2.rte.denorm_flush.float_controls,Fail
+dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.vec2.rte.denorm_none.directed,Fail
+dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.vec2.rte.denorm_none.float_controls,Fail
+dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.vec3.rte.denorm_flush.directed,Fail
+dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.vec3.rte.denorm_flush.float_controls,Fail
+dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.vec3.rte.denorm_none.directed,Fail
+dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.vec3.rte.denorm_none.float_controls,Fail
+dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.vec4.rte.denorm_flush.directed,Fail
+dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.vec4.rte.denorm_flush.float_controls,Fail
+dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.vec4.rte.denorm_none.directed,Fail
+dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.vec4.rte.denorm_none.float_controls,Fail

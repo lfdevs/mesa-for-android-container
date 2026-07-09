@@ -7,7 +7,9 @@
 
 layout(local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
 
-#include "anv_build_interface.h"
+#include "anv_bvh_defines.h"
+#define VK_USED_BUILD_FLAGS (0)
+#include "anv_bvh_helpers.h"
 
 layout(push_constant) uniform CONSTS
 {

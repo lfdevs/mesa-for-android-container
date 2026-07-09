@@ -17,6 +17,7 @@
 struct kk_queue {
    struct vk_queue vk;
    struct mtl_command_queue *mtl_handle;
+   mtl_commit_options *commit_options;
 };
 
 static inline struct kk_device *

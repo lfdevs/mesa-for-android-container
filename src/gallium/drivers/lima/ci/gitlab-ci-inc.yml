@@ -1,6 +1,12 @@
+.enforce-hw-jobs-lima-rules:
+  rules:
+    - if: '$INPUT_HW_JOBS !~ /"(all|lima|lima.ko)"/i'
+      when: never
+
 .lima-rules:
   stage: arm
   rules:
+    - !reference [.enforce-hw-jobs-lima-rules, rules]
     - !reference [.test, rules]
     - !reference [.lima-farm-rules, rules]
     - !reference [.gl-rules, rules]

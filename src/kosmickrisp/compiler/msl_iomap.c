@@ -36,8 +36,6 @@ alu_type_to_string(nir_alu_type type)
       return "half";
    case nir_type_float32:
       return "float";
-   case nir_type_bool8:
-      return "bool";
    default:
       UNREACHABLE("Unsupported nir_alu_type");
    }

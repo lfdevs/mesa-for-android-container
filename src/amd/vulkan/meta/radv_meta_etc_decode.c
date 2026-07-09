@@ -79,9 +79,9 @@ radv_meta_decode_etc(struct radv_cmd_buffer *cmd_buffer, struct radv_image *imag
 
    VkFormat load_format = vk_texcompress_etc2_load_format(image->vk.format);
 
-   const VkImageViewUsageCreateInfo src_iview_usage_info = {
-      .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_USAGE_CREATE_INFO,
-      .usage = VK_IMAGE_USAGE_SAMPLED_BIT,
+   const VkImageViewUsage2CreateInfoKHR src_iview_usage_info = {
+      .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_USAGE_2_CREATE_INFO_KHR,
+      .usage = VK_IMAGE_USAGE_2_SAMPLED_BIT_KHR,
    };
 
    struct radv_image_view src_iview;
@@ -107,9 +107,9 @@ radv_meta_decode_etc(struct radv_cmd_buffer *cmd_buffer, struct radv_image *imag
 
    VkFormat store_format = vk_texcompress_etc2_store_format(image->vk.format);
 
-   const VkImageViewUsageCreateInfo dst_iview_usage_info = {
-      .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_USAGE_CREATE_INFO,
-      .usage = VK_IMAGE_USAGE_STORAGE_BIT,
+   const VkImageViewUsage2CreateInfoKHR dst_iview_usage_info = {
+      .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_USAGE_2_CREATE_INFO_KHR,
+      .usage = VK_IMAGE_USAGE_2_STORAGE_BIT_KHR,
    };
 
    struct radv_image_view dst_iview;
@@ -163,9 +163,9 @@ radv_meta_decode_etc_indirect(struct radv_cmd_buffer *cmd_buffer,
       VkFormat load_format = vk_texcompress_etc2_load_format(image->vk.format);
       VkFormat store_format = vk_texcompress_etc2_store_format(image->vk.format);
 
-      const VkImageViewUsageCreateInfo src_iview_usage_info = {
-         .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_USAGE_CREATE_INFO,
-         .usage = VK_IMAGE_USAGE_SAMPLED_BIT,
+      const VkImageViewUsage2CreateInfoKHR src_iview_usage_info = {
+         .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_USAGE_2_CREATE_INFO_KHR,
+         .usage = VK_IMAGE_USAGE_2_SAMPLED_BIT_KHR,
       };
 
       struct radv_image_view src_iview;
@@ -189,9 +189,9 @@ radv_meta_decode_etc_indirect(struct radv_cmd_buffer *cmd_buffer,
                            },
                            NULL);
 
-      const VkImageViewUsageCreateInfo dst_iview_usage_info = {
-         .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_USAGE_CREATE_INFO,
-         .usage = VK_IMAGE_USAGE_STORAGE_BIT,
+      const VkImageViewUsage2CreateInfoKHR dst_iview_usage_info = {
+         .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_USAGE_2_CREATE_INFO_KHR,
+         .usage = VK_IMAGE_USAGE_2_STORAGE_BIT_KHR,
       };
 
       struct radv_image_view dst_iview;

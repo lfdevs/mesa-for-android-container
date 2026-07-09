@@ -23,7 +23,9 @@
 
 #version 460
 
-#include "vk_build_interface.h"
+#include "vk_bvh_defines.h"
+#define VK_USED_BUILD_FLAGS VK_LBVH_MAIN_BUILD_FLAGS
+#include "vk_bvh_helpers.h"
 
 layout(local_size_x_id = SUBGROUP_SIZE_ID, local_size_y = 1, local_size_z = 1) in;
 
@@ -40,7 +42,7 @@ longest_common_prefix(int32_t i, uint32_t key_i_lo, uint32_t key_i_hi, int32_t j
    if (j < 0 || j >= active_leaf_count)
       return -1;
 
-   if (VK_BUILD_FLAG(VK_BUILD_FLAG_64BIT_KEYS)) {
+   if (VK_TEST_BUILD_FLAG_64BIT_KEYS) {
       uint64_t key_i = packUint2x32(u32vec2(key_i_lo, key_i_hi));
       key64_id_pair key_id_j = DEREF(INDEX(key64_id_pair, args.src_ids, j));
       uint64_t key_j = packUint2x32(u32vec2(key_id_j.key_lo, key_id_j.key_hi));
@@ -100,8 +102,8 @@ main()
       REF(lbvh_node_info) dst = REF(lbvh_node_info)(args.node_info);
       DEREF(dst).parent = VK_BVH_INVALID_NODE;
       DEREF(dst).path_count = 2;
-      uint32_t id = VK_BUILD_FLAG(VK_BUILD_FLAG_64BIT_KEYS) ? DEREF(INDEX(key64_id_pair, args.src_ids, 0)).id
-                                                            : DEREF(INDEX(key32_id_pair, args.src_ids, 0)).id;
+      uint32_t id = VK_TEST_BUILD_FLAG_64BIT_KEYS ? DEREF(INDEX(key64_id_pair, args.src_ids, 0)).id
+                                                  : DEREF(INDEX(key32_id_pair, args.src_ids, 0)).id;
       DEREF(dst).children[0] = active_leaf_count == 1 ? id : VK_BVH_INVALID_NODE;
       DEREF(dst).children[1] = VK_BVH_INVALID_NODE;
       return;
@@ -114,7 +116,7 @@ main()
 
    uint32_t key_lo;
    uint32_t key_hi;
-   if (VK_BUILD_FLAG(VK_BUILD_FLAG_64BIT_KEYS)) {
+   if (VK_TEST_BUILD_FLAG_64BIT_KEYS) {
       key64_id_pair key_id = DEREF(INDEX(key64_id_pair, args.src_ids, id));
       key_lo = key_id.key_lo;
       key_hi = key_id.key_hi;
@@ -170,7 +172,7 @@ main()
 
    REF(lbvh_node_info) dst = INDEX(lbvh_node_info, args.node_info, id);
    DEREF(dst).path_count = (left_leaf ? 1 : 0) + (right_leaf ? 1 : 0);
-   if (VK_BUILD_FLAG(VK_BUILD_FLAG_64BIT_KEYS)) {
+   if (VK_TEST_BUILD_FLAG_64BIT_KEYS) {
       DEREF(dst).children[0] = DEREF(INDEX(key64_id_pair, args.src_ids, left)).id;
       DEREF(dst).children[1] = DEREF(INDEX(key64_id_pair, args.src_ids, right)).id;
    } else {

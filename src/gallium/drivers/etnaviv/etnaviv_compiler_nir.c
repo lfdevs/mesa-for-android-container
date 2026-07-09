@@ -84,6 +84,16 @@ etna_alu_to_scalar_filter_cb(const nir_instr *instr, const void *data)
       if (!etna_core_has_feature(info, ETNA_FEATURE_HALTI2))
          return true;
       break;
+   case nir_op_bitfield_insert:
+      /* bit_insert_etna applies one offset and bit count to the whole vector,
+       * so scalarize when they vary per component.
+       */
+      for (unsigned i = 1; i < alu->def.num_components; i++) {
+         if (alu->src[2].swizzle[i] != alu->src[2].swizzle[0] ||
+             alu->src[3].swizzle[i] != alu->src[3].swizzle[0])
+            return true;
+      }
+      break;
    default:
       break;
    }
@@ -188,7 +198,7 @@ etna_optimize_loop(nir_shader *s)
    while (progress);
 }
 
-static int
+static unsigned
 etna_glsl_type_size(const struct glsl_type *type, bool bindless)
 {
    return glsl_count_attribute_slots(type, false);
@@ -543,6 +553,12 @@ emit_alu(struct etna_compile *c, nir_alu_instr * alu)
 
       srcs[i] = src;
    }
+
+   /* src2 is the packed offset and bit count, not per-component data, so keep
+    * it instead of composing the destination swizzle onto it.
+    */
+   if (alu->op == nir_op_bitfield_insert_etna)
+      srcs[2] = src_swizzle(get_src(c, &alu->src[2].src), SWIZZLE(X, Y, Y, Y));
 
    etna_emit_alu(c, alu->op, dst, srcs, alu->op == nir_op_fsat);
 }
@@ -1341,6 +1357,7 @@ etna_compile_shader(struct etna_shader_variant *v)
    NIR_PASS(_, s, nir_opt_dce);
    NIR_PASS(_, s, nir_opt_cse);
 
+   NIR_PASS(_, s, etna_nir_lower_bitfield_insert);
    NIR_PASS(_, s, nir_lower_bool_to_int32);
    NIR_PASS(_, s, etna_lower_alu, c->specs->has_new_transcendentals);
 

@@ -216,6 +216,7 @@ i915_create_context(struct pipe_screen *screen, void *priv, unsigned flags)
     */
    i915->draw = draw_create(&i915->base);
    assert(i915->draw);
+   draw_set_constant_buffer_stride(i915->draw, sizeof(float));
    if (i915_debug & DBG_VBUF) {
       draw_set_rasterize_stage(i915->draw, i915_draw_vbuf_stage(i915));
    } else {

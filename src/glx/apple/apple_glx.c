@@ -60,7 +60,7 @@ surface_notify_handler(Display * dpy, unsigned int uid, int kind)
 
    switch (kind) {
    case AppleDRISurfaceNotifyDestroyed:
-      apple_glx_diagnostic("%s: surface destroyed %u\n", __func__, uid);
+      apple_glx_log_debug("%s: surface destroyed %u", __func__, uid);
       apple_glx_surface_destroy(uid);
       break;
 
@@ -69,7 +69,7 @@ surface_notify_handler(Display * dpy, unsigned int uid, int kind)
 
          updated = apple_glx_context_surface_changed(uid, pthread_self());
 
-         apple_glx_diagnostic("surface notify updated %d\n", updated);
+         apple_glx_log_debug("surface notify updated %d", updated);
       }
       break;
 
@@ -111,7 +111,7 @@ apple_init_glx(Display * dpy)
 
    apple_glx_log_init();
 
-   apple_glx_log(ASL_LEVEL_INFO, "Initializing libGL.");
+   apple_glx_log_info("Initializing libGL.");
 
    apple_cgl_init();
    (void) apple_glx_get_client_id();

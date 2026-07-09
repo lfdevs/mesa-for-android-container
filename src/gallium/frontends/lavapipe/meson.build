@@ -1,4 +1,17 @@
 
+lvp_drirc = custom_target(
+  'lvp_drirc',
+  input  : [files('lvp_drirc_gen.py'), drirc_gen, '00-lavapipe-defaults.conf'],
+  output : ['lvp_drirc.c', 'lvp_drirc.h'],
+  command : [
+    prog_python, '@INPUT0@',
+    '--import-path', join_paths(dir_source_root, 'src/util'),
+    '--drirc-src', '@OUTPUT0@',
+    '--drirc-hdr', '@OUTPUT1@',
+    '--validate', '@INPUT2@',
+  ],
+)
+
 lvp_entrypoints = custom_target(
   'lvp_entrypoints',
   input : [vk_entrypoints_gen, vk_api_xml],
@@ -55,7 +68,7 @@ endif
 
 liblavapipe_st = static_library(
   'lavapipe_st',
-  [liblvp_files, lvp_entrypoints, sha1_h],
+  [liblvp_files, lvp_entrypoints, lvp_drirc, sha1_h],
   c_args : [ c_msvc_compat_args, lvp_flags, soong_compat_c_args],
   gnu_symbol_visibility : 'hidden',
   include_directories : [ inc_include, inc_src, inc_util, inc_gallium, inc_gallium_aux, inc_llvmpipe ],

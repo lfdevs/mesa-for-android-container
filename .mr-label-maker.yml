@@ -72,6 +72,7 @@ issues:
         'radeonsi': 'radeonsi'
         'radv': 'RADV'
         'radv/aco': ['RADV', 'ACO']
+        'rust': 'Rust'
         'rusticl': 'Rusticl'
         'softpipe': 'softpipe'
         'spirv': 'SPIR-V'
@@ -131,6 +132,7 @@ merge_requests:
         '^.*/ci/traces-.*\.toml': ['CI-Expectations', 'trace']
         '^.*/ci/.*-validation-settings\.txt': ['CI-Expectations']
         '^.*/ci/.*-vkd3d\.txt': ['CI-Expectations']
+        '^.gitlab-ci/container/build-rust.sh': ['Rust']
         '^.gitlab-ci/windows/': ['Windows']
         '^bin/__init__.py$': ['maintainer-scripts']
         '^bin/gen_release_notes': ['maintainer-scripts']
@@ -142,12 +144,14 @@ merge_requests:
         '^bin/pick/': ['maintainer-scripts']
         '^bin/post_version': ['maintainer-scripts']
         '^bin/symbols-check.py$': ['meson']
+        '^clippy.toml': ['Rust']
         '^docs/': ['docs']
         '^include/drm-uapi/i915_drm.h': ['intel']
         '^include/drm-uapi/xe_drm.h': ['intel']
         '^include/vulkan/': ['vulkan']
         '^meson.options': ['meson']
         '^README.rst': ['docs']
+        '^rustfmt.toml': ['Rust']
         '^src/amd/addrlib/': ['AMD common']
         '^src/amd/common/': ['AMD common']
         '^src/amd/compiler/': ['ACO']
@@ -160,6 +164,7 @@ merge_requests:
         '^src/compiler/clc': ['OpenCL']
         '^src/compiler/glsl': ['GLSL']
         '^src/compiler/nir': ['NIR']
+        '^src/compiler/rust': ['Rust']
         '^src/compiler/spirv/': ['SPIR-V']
         '^src/egl/': ['EGL']
         '^src/egl/drivers/wgl/': ['wgl']
@@ -305,16 +310,16 @@ merge_requests:
         '^src/virtio/vulkan/': ['venus']
         '^src/virtio/venus-protocol/': ['venus']
         '^src/virtio/ci/': ['venus']
-        '^src/virtio/virtgpu_kumquat/': ['gfxstream']
-        '^src/virtio/virtgpu_kumquat_ffi/': ['gfxstream']
-        '^src/virtio/protocols/.*kumquat.*': ['gfxstream']
+        '^src/virtio/magma-gpu-rs/': ['gfxstream']
         '^src/util/': ['util']
-        '^src/util/00-mesa-defaults.conf': ['drirc']
+        '^src/.*/00-.*-defaults.conf': ['drirc']
         '^src/vulkan/': ['vulkan']
         '^src/vulkan/wsi/': ['wsi']
         '^src/vulkan/wsi/wsi_common_metal': ['macOS']
         '^src/vulkan/wsi/wsi_common_wayland.c': ['wayland']
         '^src/vulkan/wsi/wsi_common_x11.c': ['X11']
+        '^subprojects/packagefiles/.*-rs/': ['Rust']
+        '^subprojects/.*-rs\.wrap$': ['Rust']
         '^VERSION$': ['mesa-release']
 
         'Android': ['android']

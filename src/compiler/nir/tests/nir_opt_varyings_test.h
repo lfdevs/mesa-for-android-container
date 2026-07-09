@@ -590,7 +590,8 @@ load_output(nir_builder *b, gl_varying_slot slot, unsigned component,
 
 static inline nir_intrinsic_instr *
 store_output(nir_builder *b, gl_varying_slot slot, unsigned component,
-             nir_alu_type type, nir_def *src, int vertex_index)
+             nir_alu_type type, nir_def *src, int vertex_index,
+             bool no_signed_zero)
 {
    nir_def *zero = nir_imm_int(b, 0);
    nir_intrinsic_instr *intr;
@@ -614,6 +615,7 @@ store_output(nir_builder *b, gl_varying_slot slot, unsigned component,
    memset(&sem, 0, sizeof(sem));
    sem.location = slot;
    sem.num_slots = 1;
+   sem.no_signed_zero = no_signed_zero;
    nir_intrinsic_set_io_semantics(intr, sem);
 
    return intr;

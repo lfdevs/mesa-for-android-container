@@ -351,6 +351,7 @@ struct iris_cs_data {
    enum intel_compute_walk_order walk_order;
 
    bool uses_barrier;
+   bool uses_fence;
    bool uses_sampler;
    bool first_param_is_builtin_subgroup_id;
 };

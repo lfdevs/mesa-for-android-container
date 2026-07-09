@@ -27,9 +27,6 @@ program@execute@builtin@builtin-float-nextafter-1.0.generated@nextafter float8,F
 program@execute@global-offset,Fail
 program@execute@global-offset@3d- input dependent,Fail
 
-# Debian bookworm fails
-program@build@vector-data-types,Fail
-
 # fails to query queue size with CL_INVALID_COMMAND_QUEUE
 api@clgetcommandqueueinfo,Fail
 
@@ -38,9 +35,6 @@ api@clgetdeviceinfo,Fail
 
 # (file=input,line=0,column=0,index=0): Unresolved external reference to "_Z21convert_char4_sat_rteDv4_i".
 program@execute@vector-conversion,Fail
-
-# Piglit doesn't check subbuffer alignment requirements
-api@clgetmemobjectinfo,Fail
 
 # Piglit checks the pre 3.1 behavior
 api@clsetkernelarg,Fail

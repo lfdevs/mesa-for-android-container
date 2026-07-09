@@ -7,17 +7,22 @@
 #include "brw_builder.h"
 
 static void
-f16_using_mac(const brw_builder &bld, brw_dpas_inst *dpas)
+hf16_using_alu(const brw_builder &bld, brw_dpas_inst *dpas)
 {
+   const intel_device_info *devinfo = bld.shader->devinfo;
+
    /* We only intend to support configurations where the destination and
     * accumulator have the same type.
     */
    if (!dpas->src[0].is_null())
       assert(dpas->dst.type == dpas->src[0].type);
 
+   assert(dpas->dst.type == BRW_TYPE_F ||
+          dpas->dst.type == BRW_TYPE_HF);
    assert(dpas->src[1].type == BRW_TYPE_HF);
    assert(dpas->src[2].type == BRW_TYPE_HF);
 
+   bool use_mac = devinfo->ver < 35;
    const brw_reg_type src0_type = dpas->dst.type;
    const brw_reg_type src1_type = BRW_TYPE_HF;
    const brw_reg_type src2_type = BRW_TYPE_HF;
@@ -27,87 +32,112 @@ f16_using_mac(const brw_builder &bld, brw_dpas_inst *dpas)
    const brw_reg src1 = retype(dpas->src[1], src1_type);
    const brw_reg src2 = retype(dpas->src[2], src2_type);
 
-   const unsigned dest_stride =
-      dest.type == BRW_TYPE_HF ? REG_SIZE / 2 : REG_SIZE;
+   const unsigned dest_stride = dpas->exec_size * brw_type_size_bytes(dest.type);
+
+   brw_reg acc = retype(brw_acc_reg(bld.dispatch_width()), BRW_TYPE_F);
+   if (devinfo->ver < 20) {
+      /* FINISHME: The accumulator can actually hold 16 HF values. On Gfx12
+       * there are two accumulators. It should be possible to do this in
+       * SIMD16 or even SIMD32. I was unable to get this to work properly.
+       */
+      const unsigned acc_width = 8;
+      acc = suboffset(retype(brw_acc_reg(dpas->exec_size), BRW_TYPE_UD),
+                      dpas->group % acc_width);
+
+      if (devinfo->verx10 >= 125)
+         acc = subscript(acc, BRW_TYPE_HF, 0);
+      else
+         acc = retype(acc, BRW_TYPE_HF);
+   }
 
    for (unsigned r = 0; r < dpas->rcount; r++) {
-      brw_reg temp = bld.vgrf(BRW_TYPE_HF);
+      brw_reg src2_r = byte_offset(src2, r * dpas->sdepth * 4);
+      brw_reg dot = bld.vgrf(acc.type);
 
       for (unsigned subword = 0; subword < 2; subword++) {
          for (unsigned s = 0; s < dpas->sdepth; s++) {
+            brw_reg src1_hf =
+               subscript(retype(byte_offset(src1, s * dpas->exec_size *
+                                                  brw_type_size_bytes(BRW_TYPE_UD)),
+                                BRW_TYPE_UD),
+                         src1_type, subword);
+            brw_reg src2_hf =
+               component(retype(src2_r, src2_type), s * 2 + subword);
+
+            brw_reg mul_src1 = src1_hf;
+            brw_reg mul_src2 = src2_hf;
+            if (acc.type == BRW_TYPE_F) {
+               mul_src1 = bld.vgrf(BRW_TYPE_F);
+               mul_src2 = bld.vgrf(BRW_TYPE_F);
+               bld.MOV(mul_src1, src1_hf);
+               bld.MOV(mul_src2, src2_hf);
+            }
+
+            bool first = s == 0 && subword == 0;
+            bool last = subword == 1 && (s + 1) == dpas->sdepth;
+
             /* The first multiply of the dot-product operation has to
              * explicitly write the accumulator register. The successive MAC
              * instructions will implicitly read *and* write the
              * accumulator. Those MAC instructions can also optionally
              * explicitly write some other register.
              *
-             * FINISHME: The accumulator can actually hold 16 HF values. On
-             * Gfx12 there are two accumulators. It should be possible to do
-             * this in SIMD16 or even SIMD32. I was unable to get this to work
-             * properly.
+             * On Gfx20, the accumulator write control bit is gone.  The
+             * intermediate MACs have to explicitly write acc.
+             *
+             * On Gfx35+, MAC is gone, so use MAD.
              */
-            if (s == 0 && subword == 0) {
-               const unsigned acc_width = 8;
-               brw_reg acc = suboffset(retype(brw_acc_reg(dpas->exec_size), BRW_TYPE_UD),
-                                      dpas->group % acc_width);
-
-               if (bld.shader->devinfo->verx10 >= 125) {
-                  acc = subscript(acc, BRW_TYPE_HF, subword);
+            brw_reg dst = dot;
+            if (use_mac && !last) {
+               if (first || acc.type == BRW_TYPE_F) {
+                  dst = acc;
                } else {
-                  acc = retype(acc, BRW_TYPE_HF);
+                  /* As mentioned above, the MAC had an optional, explicit
+                   * destination register. Various optimization passes are not
+                   * clever enough to understand the intricacies of this
+                   * instruction, so only write the result register on the final
+                   * MAC in the sequence.
+                   */
+                  dst = retype(bld.null_reg_ud(), BRW_TYPE_HF);
                }
-
-               bld.MUL(acc,
-                       subscript(retype(byte_offset(src1, s * REG_SIZE),
-                                        BRW_TYPE_UD),
-                                 BRW_TYPE_HF, subword),
-                       component(retype(byte_offset(src2, r * REG_SIZE),
-                                        BRW_TYPE_HF),
-                                 s * 2 + subword))
-                  ->writes_accumulator = true;
-
-            } else {
-               brw_reg result;
-
-               /* As mentioned above, the MAC had an optional, explicit
-                * destination register. Various optimization passes are not
-                * clever enough to understand the intricacies of this
-                * instruction, so only write the result register on the final
-                * MAC in the sequence.
-                */
-               if ((s + 1) == dpas->sdepth && subword == 1)
-                  result = temp;
-               else
-                  result = retype(bld.null_reg_ud(), BRW_TYPE_HF);
-
-               bld.MAC(result,
-                       subscript(retype(byte_offset(src1, s * REG_SIZE),
-                                        BRW_TYPE_UD),
-                                 BRW_TYPE_HF, subword),
-                       component(retype(byte_offset(src2, r * REG_SIZE),
-                                        BRW_TYPE_HF),
-                                 s * 2 + subword))
-                  ->writes_accumulator = true;
             }
+
+            brw_inst *inst;
+            if (first) {
+               inst = bld.MUL(dst, mul_src1, mul_src2);
+            } else if (use_mac) {
+               inst = bld.MAC(dst, mul_src1, mul_src2);
+            } else {
+               inst = bld.MAD(dst, dot, mul_src1, mul_src2);
+            }
+
+            if (devinfo->ver < 20)
+               inst->writes_accumulator = true;
          }
       }
 
       if (!src0.is_null()) {
-         if (src0_type != BRW_TYPE_HF) {
-            brw_reg temp2 = bld.vgrf(src0_type);
+         if (acc.type == BRW_TYPE_F) {
+            brw_reg sum = bld.vgrf(BRW_TYPE_F);
+            brw_reg src0_temp = bld.vgrf(BRW_TYPE_F);
 
-            bld.MOV(temp2, temp);
+            bld.MOV(src0_temp, byte_offset(src0, r * dest_stride));
+            bld.ADD(sum, dot, src0_temp);
+            bld.MOV(byte_offset(dest, r * dest_stride), sum);
+         } else if (src0_type != BRW_TYPE_HF) {
+            brw_reg temp = bld.vgrf(src0_type);
 
-            bld.ADD(byte_offset(dest, r * dest_stride),
-                    temp2,
-                    byte_offset(src0, r * dest_stride));
-         } else {
+            bld.MOV(temp, dot);
             bld.ADD(byte_offset(dest, r * dest_stride),
                     temp,
                     byte_offset(src0, r * dest_stride));
+         } else {
+            bld.ADD(byte_offset(dest, r * dest_stride),
+                    dot,
+                    byte_offset(src0, r * dest_stride));
          }
       } else {
-         bld.MOV(byte_offset(dest, r * dest_stride), temp);
+         bld.MOV(byte_offset(dest, r * dest_stride), dot);
       }
    }
 }
@@ -282,7 +312,7 @@ brw_lower_dpas(brw_shader &v)
       const brw_builder bld = brw_builder(dpas).group(exec_size, 0).exec_all();
 
       if (brw_type_is_float(dpas->dst.type)) {
-         f16_using_mac(bld, dpas);
+         hf16_using_alu(bld, dpas);
       } else {
          if (v.devinfo->ver >= 12) {
             int8_using_dp4a(bld, dpas);

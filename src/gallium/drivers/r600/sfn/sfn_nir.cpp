@@ -457,7 +457,7 @@ r600_nir_lower_atomics(nir_shader *shader)
 using r600::r600_lower_fs_out_to_vector;
 using r600::r600_lower_ubo_to_align16;
 
-int
+unsigned
 r600_glsl_type_size(const struct glsl_type *type, bool is_bindless)
 {
    return glsl_count_vec4_slots(type, false, is_bindless);

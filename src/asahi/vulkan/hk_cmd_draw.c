@@ -3235,15 +3235,26 @@ hk_handle_passthrough_gs(struct hk_cmd_buffer *cmd, struct agx_draw draw)
    }
 
    /* Else, we need to bind a passthrough GS */
-   size_t key_size = hk_passthrough_gs_key_size(xfb_outputs);
-   struct hk_passthrough_gs_key *key = alloca(key_size);
+   size_t key_size = poly_passthrough_gs_key_size(xfb_outputs);
+   struct poly_passthrough_gs_key *key = alloca(key_size);
 
-   *key = (struct hk_passthrough_gs_key){
+   *key = (struct poly_passthrough_gs_key){
       .prim = u_decomposed_prim(hk_gs_in_prim(cmd)),
       .outputs = last_sw->b.info.outputs,
       .clip_distance_array_size = last_sw->info.clip_distance_array_size,
       .cull_distance_array_size = last_sw->info.cull_distance_array_size,
    };
+
+   for (uint32_t i = 0; i < NUM_TOTAL_VARYING_SLOTS; i++) {
+      key->output_components[i] =
+         nir_slot_num_components(i, MESA_SHADER_VERTEX);
+      if (key->output_components[i] == 0)
+         key->output_components[i] = 4;
+
+      /* We don't care about VS varying types in AGX, just set everything to
+       * uint32 to improve cache hits. */
+      key->output_types[i] = nir_type_uint32;
+   }
 
    if (xfb_outputs) {
       typed_memcpy(key->xfb_stride, last_sw->info.xfb_stride,
@@ -3256,7 +3267,7 @@ hk_handle_passthrough_gs(struct hk_cmd_buffer *cmd, struct agx_draw draw)
    struct hk_device *dev = hk_cmd_buffer_device(cmd);
    perf_debug(cmd, "Binding passthrough GS for%s\n", xfb_outputs ? " XFB" : "");
 
-   gs = hk_meta_shader(dev, hk_nir_passthrough_gs, key, key_size);
+   gs = hk_meta_shader(dev, poly_nir_passthrough_gs, key, key_size);
    gs->is_passthrough = true;
    hk_cmd_bind_graphics_shader(cmd, MESA_SHADER_GEOMETRY, gs);
 }

@@ -23,8 +23,8 @@
 
 %{
 #include <stdlib.h>
-#include "parser.h"
 #include "asm.h"
+#include "parser.h"
 
 #define YY_NO_INPUT
 #define YY_NO_UNPUT
@@ -48,7 +48,17 @@ extern YYSTYPE yylval;
 "b"[0-9][0-9]*                    yylval.num = parse_bit(yytext); return T_BIT;
 "@"[a-zA-Z_][a-zA-Z0-9_]*         yylval.num = parse_control_reg(yytext); return T_CONTROL_REG;
 "%"[a-zA-Z_][a-zA-Z0-9_]*         yylval.num = parse_sqe_reg(yytext); return T_SQE_REG;
-"#"[a-zA-Z_][a-zA-Z0-9_]*         yylval.str = strdup(yytext+1);  return T_LABEL_REF;
+"#"[a-zA-Z_][a-zA-Z0-9_]* {
+	yylval.label_ref.str = strdup(yytext+1);
+	yylval.label_ref.section = NULL;
+	return T_LABEL_REF;
+}
+"#"[a-zA-Z_][a-zA-Z0-9_]*"::"[a-zA-Z_][a-zA-Z0-9_]* {
+	const char *label = strstr(yytext+1, "::");
+	yylval.label_ref.str = strdup(label+2);
+	yylval.label_ref.section = strndup(yytext+1, label - (yytext+1));
+	return T_LABEL_REF;
+}
 "["[0-9a-fA-F][0-9a-fA-F]*"]"     yylval.num = parse_literal(yytext); return T_LITERAL;
 
                                   /* instructions: */
@@ -66,11 +76,13 @@ extern YYSTYPE yylval;
 "ishr"                            return TOKEN(T_OP_ISHR);
 "rot"                             return TOKEN(T_OP_ROT);
 "mul8"                            return TOKEN(T_OP_MUL8);
+"mul16"                           return TOKEN(T_OP_MUL16);
 "min"                             return TOKEN(T_OP_MIN);
 "max"                             return TOKEN(T_OP_MAX);
 "cmp"                             return TOKEN(T_OP_CMP);
 "bic"                             return TOKEN(T_OP_BIC);
 "msb"                             return TOKEN(T_OP_MSB);
+"popcount"                        return TOKEN(T_OP_POPCOUNT);
 "setbit"                          return TOKEN(T_OP_SETBIT);
 "clrbit"                          return TOKEN(T_OP_CLRBIT);
 "ubfx"                            return TOKEN(T_OP_UBFX);
@@ -109,6 +121,8 @@ extern YYSTYPE yylval;
 "+"                               return '+';
 "!"                               return '!';
 ":"                               return ':';
+"-"                               return '-';
+"*"                               return '*';
 
 [a-zA-Z_][a-zA-Z0-9_]*            yylval.str = strdup(yytext); return T_IDENTIFIER;
 

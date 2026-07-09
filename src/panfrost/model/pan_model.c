@@ -41,12 +41,19 @@
       .z_size = z_tb_size,                                                     \
    }
 
-#define MODEL_RATES(pixel_rate, texel_rate, fma_rate)                          \
+#define MODEL_RATES_X(pixel_rate, texel_rate, var_rate, cvt_rate,              \
+                     fma_rate, sfu_rate)                                       \
    .rates = {                                                                  \
       .pixel = pixel_rate,                                                     \
       .texel = texel_rate,                                                     \
+      .varying = var_rate,                                                     \
+      .cvt = cvt_rate,                                                         \
       .fma = fma_rate,                                                         \
+      .sfu = sfu_rate,                                                         \
    }
+
+#define MODEL_RATES(pixel_rate, texel_rate, fma_rate)                          \
+   MODEL_RATES_X(pixel_rate, texel_rate, 0, 0, fma_rate, 0)
 
 #define MODEL_QUIRKS(...) .quirks = {__VA_ARGS__}
 
@@ -75,26 +82,27 @@ const struct pan_model pan_model_list[] = {
    BIFROST_MODEL(PAN_PROD_ID(7, 4, 2),    "G52 r1", "TGOx", MODEL_ANISO(ALL),  MODEL_TB_SIZES( 8192,  8192)),
 
    VALHALL_MODEL(PAN_PROD_ID(9, 0, 1), 0, "G57",    "TNAx", MODEL_ANISO(ALL),  MODEL_TB_SIZES(16384,  8192),
-                                              MODEL_RATES(2, 4,  32)),
+                                              MODEL_RATES_X(2, 4, 8,  32,  32, 8)),
    VALHALL_MODEL(PAN_PROD_ID(9, 0, 3), 0, "G57",    "TNAx", MODEL_ANISO(ALL),  MODEL_TB_SIZES(16384,  8192),
-                                              MODEL_RATES(2, 4,  32)),
+                                              MODEL_RATES_X(2, 4, 8,  32,  32, 8)),
    VALHALL_MODEL(PAN_PROD_ID(10, 8, 7), 0, "G610",   "TVIx", MODEL_ANISO(ALL),  MODEL_TB_SIZES(32768, 16384),
-                                              MODEL_RATES(4, 8,  64)),
+                                              MODEL_RATES_X(4, 8, 16,  64,  64, 16)),
+   /* var/cvt/sfu rates might not be correct (we haven't found any detailed documentation) */
    VALHALL_MODEL(PAN_PROD_ID(10, 12, 4), 0, "G310v1",   "TVAx", MODEL_ANISO(ALL),  MODEL_TB_SIZES(16384,  8192),
-                                              MODEL_RATES(2, 2,  16)),
+                                              MODEL_RATES_X(2, 2,  8,  16,  16, 4)),
    VALHALL_MODEL(PAN_PROD_ID(10, 12, 4), 1, "G310v2",   "TVAx", MODEL_ANISO(ALL),  MODEL_TB_SIZES(16384,  8192),
-                                              MODEL_RATES(2, 4,  32)),
+                                              MODEL_RATES_X(2, 4, 16,  32,  32, 8)),
    VALHALL_MODEL(PAN_PROD_ID(10, 12, 4), 2, "G310v3",   "TVAx", MODEL_ANISO(ALL),  MODEL_TB_SIZES(16384,  8192),
-                                              MODEL_RATES(4, 4,  48)),
+                                              MODEL_RATES_X(4, 4, 16,  48,  48, 12)),
    VALHALL_MODEL(PAN_PROD_ID(10, 12, 4), 3, "G310v4",   "TVAx", MODEL_ANISO(ALL),  MODEL_TB_SIZES(32768, 16384),
-                                              MODEL_RATES(4, 8,  48)),
+                                              MODEL_RATES_X(4, 8, 16,  48,  48, 12)),
    VALHALL_MODEL(PAN_PROD_ID(10, 12, 4), 4, "G310v5",   "TVAx", MODEL_ANISO(ALL),  MODEL_TB_SIZES(32768, 16384),
-                                              MODEL_RATES(4, 8,  64)),
+                                              MODEL_RATES_X(4, 8, 16,  64,  64, 16)),
 
    FIFTHGEN_MODEL(PAN_PROD_ID(12, 8, 0), 4, "G720",  "TTIx", MODEL_ANISO(ALL),  MODEL_TB_SIZES(65536, 32768),
-                                              MODEL_RATES(4, 8, 128)),
+                                              MODEL_RATES_X(4, 8, 32,  64, 128, 8)),
    FIFTHGEN_MODEL(PAN_PROD_ID(13, 8, 0), 4, "G725",  "TKRx", MODEL_ANISO(ALL),  MODEL_TB_SIZES(65536, 65536),
-                                              MODEL_RATES(4, 8, 128)),
+                                              MODEL_RATES_X(4, 8, 32, 128, 128, 8)),
    FIFTHGEN_MODEL(PAN_PROD_ID(14, 8, 0), 4, "G1-Ultra",  "TDRx", MODEL_ANISO(ALL),  MODEL_TB_SIZES(65536, 65536),
                                               MODEL_RATES(4, 8, 128)),
    FIFTHGEN_MODEL(PAN_PROD_ID(14, 8, 1), 4, "G1-Premium",  "TDRx", MODEL_ANISO(ALL),  MODEL_TB_SIZES(65536, 65536),

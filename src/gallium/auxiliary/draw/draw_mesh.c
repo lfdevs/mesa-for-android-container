@@ -41,8 +41,6 @@ draw_create_mesh_shader(struct draw_context *draw,
    if (!ms)
       return NULL;
 
-   ms->draw = draw;
-
    nir_tgsi_scan_shader(state->ir.nir, &ms->info, true);
 
    nir_shader *nir = state->ir.nir;

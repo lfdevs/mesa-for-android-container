@@ -34,8 +34,6 @@
 struct draw_context;
 
 struct draw_mesh_shader {
-   struct draw_context *draw;
-
    struct tgsi_shader_info info;
 
    unsigned position_output;

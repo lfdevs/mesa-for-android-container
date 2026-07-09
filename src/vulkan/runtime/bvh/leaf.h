@@ -21,7 +21,7 @@
  * IN THE SOFTWARE.
  */
 
-#include "vk_build_interface.h"
+#include "vk_bvh_helpers.h"
 
 layout(local_size_x_id = SUBGROUP_SIZE_ID, local_size_y = 1, local_size_z = 1) in;
 
@@ -54,7 +54,7 @@ build_triangle(inout vk_aabb bounds, VOID_REF dst_ptr, vk_bvh_geometry_data geom
     * representation, then all triangles are considered active.
     */
    if (any(isnan(vertices.vertex[0])) || any(isnan(vertices.vertex[1])) || any(isnan(vertices.vertex[2]))) {
-      if (!VK_BUILD_FLAG(VK_BUILD_FLAG_ALWAYS_ACTIVE))
+      if (!VK_TEST_BUILD_FLAG_ALWAYS_ACTIVE)
          return false;
 
       is_valid = false;
@@ -103,7 +103,7 @@ build_aabb(inout vk_aabb bounds, VOID_REF src_ptr, VOID_REF dst_ptr, uint32_t ge
     * to filter out NaNs.
     */
    if (any(isnan(bounds.min)) || any(isnan(bounds.max))) {
-      if (!VK_BUILD_FLAG(VK_BUILD_FLAG_ALWAYS_ACTIVE))
+      if (!VK_TEST_BUILD_FLAG_ALWAYS_ACTIVE)
          return false;
 
       is_valid = false;
@@ -118,21 +118,25 @@ build_aabb(inout vk_aabb bounds, VOID_REF src_ptr, VOID_REF dst_ptr, uint32_t ge
    return is_valid;
 }
 
+mat3 mat_abs(mat3 in_mat) {
+    return mat3(abs(in_mat[0]), abs(in_mat[1]), abs(in_mat[2]));
+}
+
 vk_aabb
 calculate_instance_node_bounds(vk_aabb blas_aabb, mat3x4 otw_matrix)
 {
    vk_aabb aabb;
 
-   for (uint32_t comp = 0; comp < 3; ++comp) {
-      aabb.min[comp] = otw_matrix[comp][3];
-      aabb.max[comp] = otw_matrix[comp][3];
-      for (uint32_t col = 0; col < 3; ++col) {
-         aabb.min[comp] +=
-            min(otw_matrix[comp][col] * blas_aabb.min[col], otw_matrix[comp][col] * blas_aabb.max[col]);
-         aabb.max[comp] +=
-            max(otw_matrix[comp][col] * blas_aabb.min[col], otw_matrix[comp][col] * blas_aabb.max[col]);
-      }
-   }
+   /* https://zeux.io/2010/10/17/aabb-from-obb-with-component-wise-abs */
+   vec3 blas_aabb_center = (blas_aabb.min + blas_aabb.max) * 0.5;
+   vec3 blas_aabb_extent = (blas_aabb.max - blas_aabb.min) * 0.5;
+
+   vec3 new_center = vec4(blas_aabb_center, 1.0) * otw_matrix;
+   vec3 new_extent = blas_aabb_extent * mat_abs(mat3(otw_matrix));
+
+   aabb.min = new_center - new_extent;
+   aabb.max = new_center + new_extent;
+
    return aabb;
 }
 
@@ -183,7 +187,7 @@ build_instance(inout vk_aabb bounds, VOID_REF src_ptr, VOID_REF dst_ptr, uint32_
    DEREF(node).sbt_offset_and_flags = instance.sbt_offset_and_flags;
    DEREF(node).instance_id = global_id;
 
-   if (!VK_BUILD_FLAG(VK_BUILD_FLAG_PROPAGATE_CULL_FLAGS))
+   if (!VK_TEST_BUILD_FLAG_PROPAGATE_CULL_FLAGS)
       return true;
 
    uint32_t root_flags = 0;
@@ -239,11 +243,11 @@ main(void)
       is_active = build_instance(bounds, src_ptr, dst_ptr, global_id);
    }
 
-   if (VK_BUILD_FLAG(VK_BUILD_FLAG_ALWAYS_ACTIVE))
+   if (VK_TEST_BUILD_FLAG_ALWAYS_ACTIVE)
       is_active = true;
 
    uint32_t id = is_active ? pack_ir_node_id(dst_offset, node_type) : VK_BVH_INVALID_NODE;
-   if (VK_BUILD_FLAG(VK_BUILD_FLAG_64BIT_KEYS))
+   if (VK_TEST_BUILD_FLAG_64BIT_KEYS)
       DEREF(INDEX(key64_id_pair, args.ids, primitive_id)).id = id;
    else
       DEREF(INDEX(key32_id_pair, args.ids, primitive_id)).id = id;

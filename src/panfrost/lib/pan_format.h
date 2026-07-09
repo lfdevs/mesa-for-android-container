@@ -3,6 +3,7 @@
  * Copyright (C) 2014 Broadcom
  * Copyright (C) 2018-2019 Alyssa Rosenzweig
  * Copyright (C) 2019-2020 Collabora, Ltd.
+ * Copyright (C) 2026 Google LLC
  * SPDX-License-Identifier: MIT
  */
 
@@ -49,8 +50,8 @@
       DRM_FORMAT_MOD_ARM_AFBC(AFBC_FORMAT_MOD_BLOCK_SIZE_16x16 |               \
                               AFBC_FORMAT_MOD_SPARSE | AFBC_FORMAT_MOD_SPLIT), \
                                                                                \
-      DRM_FORMAT_MOD_ARM_INTERLEAVED_64K,                                      \
       DRM_FORMAT_MOD_ARM_16X16_BLOCK_U_INTERLEAVED,                            \
+      DRM_FORMAT_MOD_ARM_INTERLEAVED_64K,                                      \
       DRM_FORMAT_MOD_LINEAR,                                                   \
                                                                                \
       DRM_FORMAT_MOD_ARM_AFRC(                                                 \
@@ -101,14 +102,20 @@ pan_format_get_plane_blocksize(enum pipe_format format, unsigned plane_idx)
    switch (format) {
    case PIPE_FORMAT_R8_G8B8_420_UNORM:
    case PIPE_FORMAT_R8_B8G8_420_UNORM:
+   case PIPE_FORMAT_G8_B8R8_420_UNORM:
    case PIPE_FORMAT_R8_G8B8_422_UNORM:
    case PIPE_FORMAT_R8_B8G8_422_UNORM:
+   case PIPE_FORMAT_Y8_U8V8_422_UNORM:
       return plane_idx ? 2 : 1;
+   case PIPE_FORMAT_X6G10_X6B10X6R10_420_UNORM:
+      return plane_idx ? 4 : 2;
    case PIPE_FORMAT_R10_G10B10_420_UNORM:
    case PIPE_FORMAT_R10_G10B10_422_UNORM:
       return plane_idx ? 10 : 5;
    case PIPE_FORMAT_R8_G8_B8_420_UNORM:
    case PIPE_FORMAT_R8_B8_G8_420_UNORM:
+   case PIPE_FORMAT_G8_B8_R8_420_UNORM:
+   case PIPE_FORMAT_Y8_U8_V8_422_UNORM:
       return 1;
    default:
       assert(util_format_get_num_planes(format) == 1);
@@ -309,6 +316,15 @@ struct pan_decomposed_swizzle
 #endif
 
 #define MALI_EXTRACT_INDEX(pixfmt) (((pixfmt) >> 12) & 0xFF)
+
+#if PAN_ARCH < 14
+#define MALI_YUV_CR_SITING_CENTER_422 (MALI_YUV_CR_SITING_CENTER_Y)
+#else
+#define MALI_YUV_CR_SITING_CENTER_422 (MALI_YUV_CR_SITING_CENTER_X)
+#endif
+
+#define MALI_SET_YUV_CR_SITING(pixfmt, cr_siting)                              \
+   ((pixfmt & ~(0b111 << 9)) | ((cr_siting & 0b111) << 9))
 
 static inline bool
 pan_format_is_yuv(enum pipe_format f)

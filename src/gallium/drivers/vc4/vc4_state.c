@@ -378,6 +378,8 @@ vc4_set_constant_buffer(struct pipe_context *pctx,
         struct vc4_context *vc4 = vc4_context(pctx);
         struct vc4_constbuf_stateobj *so = &vc4->constbuf[shader];
 
+        util_copy_constant_buffer(&so->cb[index], cb);
+
         /* Note that the gallium frontend can unbind constant buffers by
          * passing NULL here.
          */
@@ -389,8 +391,6 @@ vc4_set_constant_buffer(struct pipe_context *pctx,
 
         if (index == 1 && so->cb[index].buffer_size != cb->buffer_size)
                 vc4->dirty |= VC4_DIRTY_UBO_1_SIZE;
-
-        util_copy_constant_buffer(&so->cb[index], cb);
 
         so->enabled_mask |= 1 << index;
         so->dirty_mask |= 1 << index;

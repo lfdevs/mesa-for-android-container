@@ -983,13 +983,6 @@ VkResult anv_reloc_list_append(struct anv_reloc_list *list,
 
 /* Shaders */
 
-#define ANV_DESCRIPTOR_SET_PUSH_POINTER       (UINT8_MAX - 5)
-#define ANV_DESCRIPTOR_SET_PER_PRIM_PADDING   (UINT8_MAX - 4)
-#define ANV_DESCRIPTOR_SET_NULL               (UINT8_MAX - 3)
-#define ANV_DESCRIPTOR_SET_PUSH_CONSTANTS     (UINT8_MAX - 2)
-#define ANV_DESCRIPTOR_SET_DESCRIPTORS        (UINT8_MAX - 1)
-#define ANV_DESCRIPTOR_SET_COLOR_ATTACHMENTS   UINT8_MAX
-
 struct anv_pipeline_binding {
    /** Index in the descriptor set
     *
@@ -1253,6 +1246,13 @@ struct anv_shader_group_rt_replay {
    uint64_t intersection;
 };
 
+struct anv_shader_workaround {
+   bool force_typed_barrier_after_dispatch_to_compute:1;
+   bool force_typed_barrier_after_dispatch_to_top:1;
+   bool force_untyped_barrier_after_dispatch_to_compute:1;
+   bool force_untyped_barrier_after_dispatch_to_top:1;
+};
+
 struct anv_shader {
    struct vk_shader vk;
 
@@ -1286,6 +1286,8 @@ struct anv_shader {
     * Array of pointers of length bind_map.embedded_sampler_count
     */
    struct anv_embedded_sampler **embedded_samplers;
+
+   struct anv_shader_workaround workaround;
 
    /* Mutex to protect the lazy replay allocation */
    simple_mtx_t replay_mutex;
@@ -1412,16 +1414,26 @@ struct anv_memory_type {
    bool                    compressed;
 };
 
+/* Heaps tracking structure shared across multiple VkInstance */
+struct anv_memory_budget {
+   uint32_t ref_count;
+
+   struct list_head link;
+
+   int64_t local_major;
+   int64_t local_minor;
+
+   /** Driver-internal book-keeping, indexed by heap.
+    *
+    * Align it to 64 bits to make atomic operations faster on 32 bit platforms.
+    */
+   alignas(8) VkDeviceSize used[VK_MAX_MEMORY_HEAPS];
+};
+
 struct anv_memory_heap {
    /* Standard bits passed on to the client */
    VkDeviceSize      size;
    VkMemoryHeapFlags flags;
-
-   /** Driver-internal book-keeping.
-    *
-    * Align it to 64 bits to make atomic operations faster on 32 bit platforms.
-    */
-   alignas(8) VkDeviceSize used;
 
    bool              is_local_mem;
 };
@@ -1572,6 +1584,7 @@ struct anv_physical_device {
       struct anv_memory_type                    types[VK_MAX_MEMORY_TYPES];
       uint32_t                                  heap_count;
       struct anv_memory_heap                    heaps[VK_MAX_MEMORY_HEAPS];
+      struct anv_memory_budget                 *heaps_budget;
 #ifdef SUPPORT_INTEL_INTEGRATED_GPUS
       bool                                      need_flush;
 #endif
@@ -1820,6 +1833,7 @@ enum anv_debug {
    ANV_DEBUG_EXPERIMENTAL               = BITFIELD_BIT(12),
    ANV_DEBUG_DGC_DUMP                   = BITFIELD_BIT(13),
    ANV_DEBUG_NO_ALLOC_OVER_SUBSCRIPTION = BITFIELD_BIT(14),
+   ANV_DEBUG_SKIP_DISK_CACHE            = BITFIELD_BIT(15),
 };
 
 extern enum anv_debug anv_debug;
@@ -1835,6 +1849,10 @@ struct anv_instance {
     struct vk_instance                          vk;
 
     struct anv_drirc                            drirc;
+
+    struct hash_table_u64                      *shader_workarounds;
+
+    VkResult                                    drirc_status;
 };
 
 VkResult anv_init_wsi(struct anv_physical_device *physical_device);
@@ -3565,6 +3583,9 @@ struct anv_storage_image_descriptor {
 
    /** Image Format (enum isl_format) */
    uint32_t format;
+
+   /** Image View VkImageSubresourceRange::baseArrayLayer */
+   uint32_t min_array_element;
 };
 
 /** Struct representing a address/range descriptor
@@ -4682,6 +4703,12 @@ struct anv_cmd_graphics_state {
    enum anv_depth_reg_mode                      depth_reg_mode;
 
    struct anv_gfx_dynamic_state dyn_state;
+
+   /**
+    * Temporary state of DGC graphics preprocess emission (to avoid having it
+    * on the stack when calling vkCmdPreprocessGeneratedCommandsEXT)
+    */
+   struct anv_dgc_gfx_state dgc_state;
 };
 
 /** State tracking for compute pipeline
@@ -6708,9 +6735,28 @@ void anv_write_gfx_indirect_descriptor(struct anv_device *device,
                                        struct anv_dgc_gfx_descriptor *descriptor,
                                        struct anv_cmd_graphics_state *gfx);
 
+enum anv_dgc_stage anv_mesa_stage_to_dgc_stage(mesa_shader_stage stage);
 enum anv_dgc_stage anv_vk_stage_to_dgc_stage(VkShaderStageFlags vk_stage);
 
 uint32_t anv_vk_stages_to_generated_stages(VkShaderStageFlags vk_stages);
+
+/**
+ * Helper to check whether the generated commands need to emit a push constant
+ * programming command for a particular shader.
+ */
+static inline bool
+anv_dgc_shader_needs_push_commands(const struct anv_shader *shader)
+{
+   /* If generated push constant data is not used, we can emit the pointers on
+    * the host. We also need to take care of the pointer pointer since a push
+    * constant update can trigger a reprogramming of the push pointer.
+    */
+   const struct anv_pipeline_bind_map *bind_map = &shader->bind_map;
+   return (bind_map->push_ranges[0].length > 0 &&
+           (bind_map->push_ranges[0].set == ANV_DESCRIPTOR_SET_PUSH_CONSTANTS ||
+            bind_map->push_ranges[0].set == ANV_DESCRIPTOR_SET_PUSH_POINTER)) ||
+          bind_map->inline_dwords_count > 0;
+}
 
 struct anv_indirect_command_layout {
    struct vk_indirect_command_layout vk;

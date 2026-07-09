@@ -89,6 +89,21 @@ mtl_device_get_architecture_name(mtl_device *dev, char buffer[256])
    }
 }
 
+uint32_t
+mtl_device_get_gpu_apple_family(mtl_device *dev)
+{
+   @autoreleasepool {
+      id<MTLDevice> device = (id<MTLDevice>)dev;
+      uint32_t gpu_family = 0u;
+      MTLGPUFamily family = MTLGPUFamilyApple1;
+      while([device supportsFamily:family]) {
+         family += 1u;
+         gpu_family += 1u;
+      }
+      return gpu_family;
+   }
+}
+
 uint64_t
 mtl_device_get_registry_id(mtl_device *dev)
 {

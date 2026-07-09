@@ -73,10 +73,16 @@ get_range_entry(unsigned n, const struct range_remap *r_remap)
  * pointer value if start and end match exactly. If the range overlaps an
  * existing entry we return NULL or if start and end match an entry exactly
  * but ptr is null we return the existing entry.
+ *
+ * If allow_range_truncation is true this function will match a range if the
+ * starting values match and the end fits within and existing range. If ptr
+ * param is non-null the range end will be truncated to the new end value and
+ * the entry ptr value will be updated.
  */
 struct range_entry *
 util_range_insert_remap(unsigned start, unsigned end,
-                        struct range_remap *r_remap, void *ptr)
+                        struct range_remap *r_remap, void *ptr,
+                        bool allow_range_truncation)
 {
    struct list_head *r_list = &r_remap->r_list;
    struct list_range_entry *lre = NULL;
@@ -137,7 +143,8 @@ util_range_insert_remap(unsigned start, unsigned end,
                list_entry(mid_entry->node.next, struct list_range_entry, node);
             mid++;
          }
-      } else if (mid_entry->entry.start == start && mid_entry->entry.end == end) {
+      } else if (mid_entry->entry.start == start &&
+                 (mid_entry->entry.end == end || (allow_range_truncation && mid_entry->entry.end > end))) {
          if (!ptr)
             return &mid_entry->entry;
 

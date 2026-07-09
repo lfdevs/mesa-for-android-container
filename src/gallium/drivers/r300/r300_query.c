@@ -173,8 +173,8 @@ static bool r300_get_query_result(struct pipe_context* pipe,
     /* Sum up the results. */
     temp = 0;
     for (i = 0; i < q->num_results; i++) {
-        /* Convert little endian values written by GPU to CPU byte order */
-        temp += util_le32_to_cpu(*map);
+        /* ZPASS writes follow the programmed ZB endian mode. */
+        temp += *map;
         map++;
     }
 

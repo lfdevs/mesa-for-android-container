@@ -56,3 +56,7 @@ dEQP-VK.subgroups.shuffle.framebuffer.subgroupshuffle_bool_tess_control
 
 # New flake with GL CTS 4.6.6.0
 KHR-GL46.gpu_shader_fp64.builtin.smoothstep_dvec4
+
+# Nightly run expectations update
+dEQP-VK.synchronization.internally_synchronized_objects.pipeline_cache_graphics
+

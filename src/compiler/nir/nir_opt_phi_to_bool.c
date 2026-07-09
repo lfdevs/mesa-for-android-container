@@ -95,8 +95,6 @@ get_bool_types_alu(nir_alu_instr *alu)
    case nir_op_b2i32:
    case nir_op_b2i64:
       return bool_type_single_bit;
-   case nir_op_b2b8:
-   case nir_op_b2b16:
    case nir_op_b2b32:
       return bool_type_all_bits;
    case nir_op_b2f16:

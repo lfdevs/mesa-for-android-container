@@ -47,12 +47,6 @@ radv_is_static_vrs_enabled(const struct vk_graphics_pipeline_state *state)
 }
 
 static bool
-radv_is_vrs_enabled(const struct vk_graphics_pipeline_state *state)
-{
-   return radv_is_static_vrs_enabled(state) || BITSET_TEST(state->dynamic, MESA_VK_DYNAMIC_FSR);
-}
-
-static bool
 radv_pipeline_has_ds_attachments(const struct vk_render_pass_state *rp)
 {
    return rp->depth_attachment_format != VK_FORMAT_UNDEFINED || rp->stencil_attachment_format != VK_FORMAT_UNDEFINED;
@@ -1722,10 +1716,19 @@ radv_generate_graphics_state_key(const struct radv_compiler_info *compiler_info,
          key.rs.cull_mode = state->rs->cull_mode;
    }
 
-   key.ps.force_vrs_enabled = compiler_info->force_vrs_enabled && !radv_is_static_vrs_enabled(state);
-   key.vrs_may_be_enabled = radv_is_vrs_enabled(state) || key.ps.force_vrs_enabled;
+   key.dynamic_rasterization_samples = BITSET_TEST(state->dynamic, MESA_VK_DYNAMIC_MS_RASTERIZATION_SAMPLES) ||
+                                       (!!(state->shader_stages & VK_SHADER_STAGE_FRAGMENT_BIT) && !state->ms);
 
-   if ((radv_is_vrs_enabled(state) || key.ps.force_vrs_enabled) && compiler_info->ac->has_vrs_frag_pos_z_bug)
+   const bool vrs_disabled_by_msaa_8x = !key.dynamic_rasterization_samples && key.ms.rasterization_samples == 8;
+   const bool vrs_disabled_by_sample_shading = key.ms.sample_shading_enable;
+   const bool vrs_is_possible = !vrs_disabled_by_msaa_8x && !vrs_disabled_by_sample_shading;
+
+   key.ps.force_vrs_enabled = vrs_is_possible && compiler_info->force_vrs_enabled && !radv_is_static_vrs_enabled(state);
+   key.vrs_may_be_enabled =
+      vrs_is_possible && (radv_is_static_vrs_enabled(state) || BITSET_TEST(state->dynamic, MESA_VK_DYNAMIC_FSR) ||
+                          key.ps.force_vrs_enabled);
+
+   if (key.vrs_may_be_enabled && compiler_info->ac->has_vrs_frag_pos_z_bug)
       key.adjust_frag_coord_z = true;
 
    if (radv_pipeline_needs_ps_epilog(state, lib_flags))
@@ -1745,9 +1748,6 @@ radv_generate_graphics_state_key(const struct radv_compiler_info *compiler_info,
             (alpha_to_coverage_unknown && alpha_to_one_enabled) || (alpha_to_one_unknown && alpha_to_coverage_enabled);
       }
    }
-
-   key.dynamic_rasterization_samples = BITSET_TEST(state->dynamic, MESA_VK_DYNAMIC_MS_RASTERIZATION_SAMPLES) ||
-                                       (!!(state->shader_stages & VK_SHADER_STAGE_FRAGMENT_BIT) && !state->ms);
 
    if (compiler_info->key.use_ngg) {
       VkShaderStageFlags ngg_stage;
@@ -1929,20 +1929,6 @@ radv_consider_force_vrs(const struct radv_graphics_state_key *gfx_state, const s
    if (last_vgt_stage->info.next_stage == MESA_SHADER_NONE)
       return false;
 
-   /* Do not enable if the PS uses gl_FragCoord because it breaks postprocessing in some games, or with Primitive
-    * Ordered Pixel Shading (regardless of whether per-pixel data is addressed with gl_FragCoord or a custom
-    * interpolator) as that'd result in races between adjacent primitives with no common fine pixels.
-    */
-   nir_shader *fs_shader = fs_stage->nir;
-   if (fs_shader && (BITSET_TEST(fs_shader->info.system_values_read, SYSTEM_VALUE_FRAG_COORD_XY) ||
-                     BITSET_TEST(fs_shader->info.system_values_read, SYSTEM_VALUE_FRAG_COORD_Z) ||
-                     BITSET_TEST(fs_shader->info.system_values_read, SYSTEM_VALUE_FRAG_COORD_W_RCP) ||
-                     BITSET_TEST(fs_shader->info.system_values_read, SYSTEM_VALUE_PIXEL_COORD) ||
-                     fs_shader->info.fs.sample_interlock_ordered || fs_shader->info.fs.sample_interlock_unordered ||
-                     fs_shader->info.fs.pixel_interlock_ordered || fs_shader->info.fs.pixel_interlock_unordered)) {
-      return false;
-   }
-
    return true;
 }
 
@@ -2098,7 +2084,7 @@ radv_create_gs_copy_shader(const struct radv_compiler_info *compiler_info, struc
                                                        .use_llvm = compiler_info->key.use_llvm});
    NIR_PASS(_, nir, radv_nir_lower_abi, compiler_info->ac->gfx_level, &gs_copy_stage, gfx_state, compiler_info->hw.address32_hi);
 
-   NIR_PASS(_, nir, ac_nir_lower_global_access);
+   NIR_PASS(_, nir, ac_nir_lower_global_access, compiler_info->ac->gfx_level);
    NIR_PASS(_, nir, nir_lower_int64);
 
    struct radv_graphics_pipeline_key key = {0};
@@ -2116,7 +2102,7 @@ radv_create_gs_copy_shader(const struct radv_compiler_info *compiler_info, struc
 
    gs_copy_debug->nir_string = nir_string;
    gs_copy_debug->stages = 1 << MESA_SHADER_VERTEX;
-   radv_shader_dump_asm(compiler_info, gs_copy_debug, &gs_copy_stage.info);
+   radv_shader_dump_asm(compiler_info, gs_copy_debug, gs_copy_binary, &gs_copy_stage.info);
 
    if (gs_copy_debug->dump_shader)
       simple_mtx_unlock(compiler_info->debug.shader_dump_mtx);
@@ -2183,7 +2169,7 @@ radv_graphics_shaders_nir_to_asm(const struct radv_compiler_info *compiler_info,
       for (uint32_t i = 0; i < shader_count; i++)
          debug[s].stages |= 1 << nir_shaders[i]->info.stage;
 
-      radv_shader_dump_asm(compiler_info, &debug[s], &stages[s].info);
+      radv_shader_dump_asm(compiler_info, &debug[s], binaries[s], &stages[s].info);
 
       if (debug[s].dump_shader)
          simple_mtx_unlock(compiler_info->debug.shader_dump_mtx);
@@ -2568,9 +2554,10 @@ radv_graphics_shaders_compile(const struct radv_compiler_info *compiler_info, st
       NIR_PASS(_, stages[MESA_SHADER_FRAGMENT].nir, nir_opt_copy_prop);
       NIR_PASS(_, stages[MESA_SHADER_FRAGMENT].nir, nir_opt_dce);
 
-      NIR_PASS(_, stages[MESA_SHADER_FRAGMENT].nir, radv_nir_lower_opt_fs_frag_pos,
-               !gfx_state->vrs_may_be_enabled && !gfx_state->ms.sample_shading_enable &&
-                  !stages[MESA_SHADER_FRAGMENT].nir->info.fs.uses_sample_shading);
+      const bool vrs_may_be_enabled =
+         gfx_state->vrs_may_be_enabled && !stages[MESA_SHADER_FRAGMENT].nir->info.fs.sample_mask_in_declared;
+      NIR_PASS(_, stages[MESA_SHADER_FRAGMENT].nir, radv_nir_lower_opt_fs_frag_pos, vrs_may_be_enabled,
+               gfx_state->ms.sample_shading_enable || stages[MESA_SHADER_FRAGMENT].nir->info.fs.uses_sample_shading);
 
       ac_nir_lower_sample_mask_in_options lower_sample_mask_in_options = {0};
 
@@ -2579,17 +2566,13 @@ radv_graphics_shaders_compile(const struct radv_compiler_info *compiler_info, st
       } else if (gfx_state->ms.sample_shading_enable) {
          lower_sample_mask_in_options.behavior = ac_nir_lower_samplemask_sample_shading_partial;
          lower_sample_mask_in_options.ps_iter_samples = gfx_state->ms.ps_iter_samples;
-      } else if (!gfx_state->vrs_may_be_enabled && !gfx_state->dynamic_rasterization_samples &&
-                 gfx_state->ms.rasterization_samples == 0) {
+      } else if (!gfx_state->dynamic_rasterization_samples && gfx_state->ms.rasterization_samples == 0) {
          lower_sample_mask_in_options.behavior = ac_nir_lower_samplemask_1sample_no_vrs;
       } else {
          lower_sample_mask_in_options.behavior = ac_nir_lower_samplemask_unknown_states_no_sample_shading;
       }
 
       NIR_PASS(_, stages[MESA_SHADER_FRAGMENT].nir, ac_nir_lower_sample_mask_in, &lower_sample_mask_in_options);
-
-      /* Lower the view index to map on the layer. */
-      NIR_PASS(_, stages[MESA_SHADER_FRAGMENT].nir, radv_nir_lower_view_index);
    }
 
    radv_foreach_stage (i, active_nir_stages) {
@@ -2681,6 +2664,31 @@ radv_graphics_shaders_compile(const struct radv_compiler_info *compiler_info, st
    }
 
    radv_fill_shader_info(compiler_info, RADV_PIPELINE_GRAPHICS, gfx_state, stages, active_nir_stages);
+
+   /* Remove the primitive shading rate output if VRS flat shading overrides it. */
+   radv_foreach_stage (i, active_nir_stages) {
+      if (!radv_is_last_vgt_stage(&stages[i]))
+         continue;
+
+      struct radv_shader_stage *fs_stage = &stages[MESA_SHADER_FRAGMENT];
+
+      if (fs_stage && (fs_stage->info.ps.allow_flat_shading || fs_stage->info.ps.force_disable_vrs)) {
+         stages[i].info.force_vrs_per_vertex = false;
+
+         if (stages[i].info.outinfo.writes_primitive_shading_rate ||
+             stages[i].info.outinfo.writes_primitive_shading_rate_per_primitive) {
+            NIR_PASS(_, stages[i].nir, nir_remove_outputs, MESA_SHADER_FRAGMENT, 0, VARYING_BIT_PRIMITIVE_SHADING_RATE);
+
+            stages[i].info.outinfo.writes_primitive_shading_rate = false;
+            stages[i].info.outinfo.writes_primitive_shading_rate_per_primitive = false;
+            stages[i].nir->info.outputs_written &= ~VARYING_BIT_PRIMITIVE_SHADING_RATE;
+            stages[i].nir->info.per_primitive_outputs &= ~VARYING_BIT_PRIMITIVE_SHADING_RATE;
+         }
+      } else if (fs_stage && fs_stage->info.ps.disallow_force_vrs_per_vertex) {
+         stages[i].info.force_vrs_per_vertex = false;
+      }
+      break;
+   }
 
    radv_declare_pipeline_args(compiler_info, stages, gfx_state, active_nir_stages, debug);
 
@@ -3058,25 +3066,6 @@ radv_get_vgt_shader_key(const struct radv_device *device, struct radv_shader **s
    return key;
 }
 
-static bool
-gfx103_pipeline_vrs_flat_shading(const struct radv_device *device, const struct radv_graphics_pipeline *pipeline)
-{
-   const struct radv_physical_device *pdev = radv_device_physical(device);
-   const struct radv_instance *instance = radv_physical_device_instance(pdev);
-   struct radv_shader *ps = pipeline->base.shaders[MESA_SHADER_FRAGMENT];
-
-   if (pdev->info.gfx_level < GFX10_3)
-      return false;
-
-   if (instance->debug_flags & RADV_DEBUG_NO_VRS_FLAT_SHADING)
-      return false;
-
-   if (ps && !ps->info.ps.allow_flat_shading)
-      return false;
-
-   return true;
-}
-
 static void
 radv_pipeline_init_shader_stages_state(const struct radv_device *device, struct radv_graphics_pipeline *pipeline)
 {
@@ -3233,9 +3222,7 @@ radv_graphics_pipeline_init(struct radv_graphics_pipeline *pipeline, struct radv
    radv_pipeline_init_shader_stages_state(device, pipeline);
 
    pipeline->uses_out_of_order_rast = gfx_state.vk.rs->rasterization_order_amd == VK_RASTERIZATION_ORDER_RELAXED_AMD;
-   pipeline->uses_vrs = radv_is_vrs_enabled(&gfx_state.vk);
    pipeline->uses_vrs_attachment = radv_pipeline_uses_vrs_attachment(pipeline, &gfx_state.vk);
-   pipeline->uses_vrs_flat_shading = !pipeline->uses_vrs && gfx103_pipeline_vrs_flat_shading(device, pipeline);
 
    uint32_t push_constant_size = 0;
    for (uint32_t i = 0; i < MESA_VULKAN_SHADER_STAGES; i++) {

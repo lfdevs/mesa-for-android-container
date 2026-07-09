@@ -68,6 +68,7 @@
 #  include <sys/sysctl.h>
 #  if DETECT_OS_APPLE
 #    include <mach/mach_host.h>
+#    include <mach/mach_init.h>
 #    include <mach/vm_param.h>
 #    include <mach/vm_statistics.h>
 #   endif

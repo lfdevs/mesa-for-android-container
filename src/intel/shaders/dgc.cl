@@ -39,7 +39,7 @@ write_3DSTATE_CONSTANT_ALL(global void *dst_ptr,
                            global void *push_data_addr,
                            global struct anv_dgc_push_stage_state *stage_state,
                            global struct anv_dgc_gfx_state *state,
-                           uint32_t stage_enabled)
+                           enum anv_dgc_stage stage)
 {
    uint32_t n_slots = stage_state->legacy.n_slots;
    struct GENX(3DSTATE_CONSTANT_ALL) v = {
@@ -47,7 +47,7 @@ write_3DSTATE_CONSTANT_ALL(global void *dst_ptr,
       .DWordLength        = GENX(3DSTATE_CONSTANT_ALL_length) -
                             GENX(3DSTATE_CONSTANT_ALL_length_bias) +
                             n_slots * GENX(3DSTATE_CONSTANT_ALL_DATA_length),
-      .ShaderUpdateEnable = stage_enabled,
+      .ShaderUpdateEnable = BITFIELD_BIT(stage),
       .MOCS               = state->layout.push_constants.mocs,
       .PointerBufferMask  = (1u << n_slots) - 1,
    };
@@ -58,18 +58,33 @@ write_3DSTATE_CONSTANT_ALL(global void *dst_ptr,
    for (uint32_t i = 0; i < n_slots; i++) {
       struct anv_dgc_push_stage_slot slot = stage_state->legacy.slots[i];
 
-      if (slot.type == ANV_DGC_PUSH_SLOT_TYPE_PUSH_CONSTANTS) {
+      switch (slot.set) {
+      case ANV_DESCRIPTOR_SET_PUSH_CONSTANTS: {
          struct GENX(3DSTATE_CONSTANT_ALL_DATA) vd = {
             .ConstantBufferReadLength = slot.push_data_size / 32,
             .PointerToConstantBuffer  = (uint64_t) push_data_addr + slot.push_data_offset,
          };
          GENX(3DSTATE_CONSTANT_ALL_DATA_pack)(dst_ptr, &vd);
-      } else {
+         break;
+      }
+
+      case ANV_DESCRIPTOR_SET_PUSH_POINTER: {
          struct GENX(3DSTATE_CONSTANT_ALL_DATA) vd = {
             .ConstantBufferReadLength = slot.push_data_size / 32,
-            .PointerToConstantBuffer  = state->push_constants.addresses[i],
+            .PointerToConstantBuffer  = ((global uint64_t *)push_data_addr)[slot.push_data_index / 8],
          };
          GENX(3DSTATE_CONSTANT_ALL_DATA_pack)(dst_ptr, &vd);
+         break;
+      }
+
+      default: {
+         struct GENX(3DSTATE_CONSTANT_ALL_DATA) vd = {
+            .ConstantBufferReadLength = slot.push_data_size / 32,
+            .PointerToConstantBuffer  = state->push_constants.stages[stage].addresses[i],
+         };
+         GENX(3DSTATE_CONSTANT_ALL_DATA_pack)(dst_ptr, &vd);
+         break;
+      }
       }
 
       dst_ptr += GENX(3DSTATE_CONSTANT_ALL_DATA_length) * 4;
@@ -84,9 +99,12 @@ pc_slot_address(global struct anv_dgc_push_stage_slot *slot,
                 global uint64_t *slot_address,
                 global void *push_data_addr)
 {
-   if (slot->type == ANV_DGC_PUSH_SLOT_TYPE_PUSH_CONSTANTS) {
+   switch (slot->set) {
+   case ANV_DESCRIPTOR_SET_PUSH_CONSTANTS:
       return (uint64_t) push_data_addr + slot->push_data_offset;
-   } else {
+   case ANV_DESCRIPTOR_SET_PUSH_POINTER:
+      return ((global uint64_t *)push_data_addr)[slot->push_data_index / 8] + slot->push_data_offset;
+   default:
       return *slot_address;
    }
 }
@@ -96,19 +114,17 @@ write_3DSTATE_CONSTANT_XS(global void *dst_ptr,
                           global void *push_data_addr,
                           global struct anv_dgc_push_stage_state *stage_state,
                           global struct anv_dgc_gfx_state *state,
-                          uint32_t stage_enabled)
+                          enum anv_dgc_stage stage)
 {
    uint32_t opcode;
-   if (stage_enabled & BITFIELD_BIT(ANV_DGC_STAGE_VERTEX))
-      opcode = 21;
-   else if (stage_enabled & BITFIELD_BIT(ANV_DGC_STAGE_TESS_CTRL))
-      opcode = 25;
-   else if (stage_enabled & BITFIELD_BIT(ANV_DGC_STAGE_TESS_EVAL))
-      opcode = 26;
-   else if (stage_enabled & BITFIELD_BIT(ANV_DGC_STAGE_GEOMETRY))
-      opcode = 22;
-   else
-      opcode = 23;
+   switch (stage) {
+   case ANV_DGC_STAGE_VERTEX:    opcode = 21; break;
+   case ANV_DGC_STAGE_TESS_CTRL: opcode = 25; break;
+   case ANV_DGC_STAGE_TESS_EVAL: opcode = 26; break;
+   case ANV_DGC_STAGE_GEOMETRY:  opcode = 22; break;
+   case ANV_DGC_STAGE_FRAGMENT:  opcode = 23; break;
+   default:                      opcode = 0;  break;
+   }
 
    struct GENX(3DSTATE_CONSTANT_VS) v = {
       GENX(3DSTATE_CONSTANT_VS_header),
@@ -116,16 +132,16 @@ write_3DSTATE_CONSTANT_XS(global void *dst_ptr,
       .ConstantBody = {
          .Buffer = {
             pc_slot_address(&stage_state->legacy.slots[0],
-                            &state->push_constants.addresses[0],
+                            &state->push_constants.stages[stage].addresses[0],
                             push_data_addr),
             pc_slot_address(&stage_state->legacy.slots[1],
-                            &state->push_constants.addresses[1],
+                            &state->push_constants.stages[stage].addresses[1],
                             push_data_addr),
             pc_slot_address(&stage_state->legacy.slots[2],
-                            &state->push_constants.addresses[2],
+                            &state->push_constants.stages[stage].addresses[2],
                             push_data_addr),
             pc_slot_address(&stage_state->legacy.slots[3],
-                            &state->push_constants.addresses[3],
+                            &state->push_constants.stages[stage].addresses[3],
                             push_data_addr),
          },
          .ReadLength = {
@@ -249,14 +265,12 @@ write_gfx_push_constant_commands(global void *push_cmd_ptr,
       cmd_offset += write_3DSTATE_CONSTANT_ALL(push_cmd_ptr + cmd_offset,
                                                push_data_ptr,
                                                stage_state,
-                                               state,
-                                               BITFIELD_BIT(s));
+                                               state, s);
 #else
       cmd_offset += write_3DSTATE_CONSTANT_XS(push_cmd_ptr + cmd_offset,
                                               push_data_ptr,
                                               stage_state,
-                                               state,
-                                              BITFIELD_BIT(s));
+                                              state, s);
 #endif
 
       push_stages &= ~BITFIELD_BIT(s);

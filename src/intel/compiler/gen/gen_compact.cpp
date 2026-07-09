@@ -19,6 +19,7 @@
 #include "gen_info_pre_xe.h"
 #include "gen_info_xe.h"
 #include "gen_info_xe2.h"
+#include "gen_info_xe3p.h"
 
 static const uint32_t gfx8_control_index_table[32] = {
    0b0000000000000000010,
@@ -814,6 +815,268 @@ static const uint32_t xe2_3src_subreg_table[32] = {
    0b00000000001111000000, /* .0 .60 .0 .0  */
 };
 
+static const uint32_t xe3p_control_index_table[32] = {
+   /* BitRemap: 95:92,34,32,31,28,27:26,25:24,23:22,21,20:18 */
+   0b00000000000000100,
+   0b00000100000000000,
+   0b00000000010000100,
+   0b00000000000000000,
+   0b00000100000000100,
+   0b10000000000000100,
+   0b10100000000000100,
+   0b00000100000000010,
+   0b00000000000000101,
+   0b00000100000000011,
+   0b01100100000000000,
+   0b00010000000000100,
+   0b00100000000000100,
+   0b00000100000000001,
+   0b01100000000000100,
+   0b00100100000000000,
+   0b10100100000000010,
+   0b10000100000000000,
+   0b10000100000000010,
+   0b10100100000000000,
+   0b01000000000000100,
+   0b00000000100100100,
+   0b10100100000000011,
+   0b00000000100011100,
+   0b10000100000000011,
+   0b00000000100001100,
+   0b00000000100010100,
+   0b00000000100110100,
+   0b00000000100111100,
+   0b00000000100101100,
+   0b00000000100000100,
+   0b10100000000100100,
+};
+
+static const uint16_t xe3p_1src_datatype_table[18] = {
+   /* BitRemap: 98,91:88,66,50,49:48,47,46,[39,42:40],[39,38:36],35 */
+   0b11010101010100, /* grf<1>:f grf:f */
+   0b10010101010100, /* arf<1>:f grf:f */
+   0b11010001000100, /* grf<1>:ud grf:ud */
+   0b01010101010100, /* grf<1>:f arf:f */
+   0b11010011101110, /* grf<1>:q grf:q */
+   0b00010000000000, /* arf<1>:ub arf:ub */
+   0b01011001000100, /* grf<1>:ud imm:ud */
+   0b11010011001100, /* grf<1>:d grf:d */
+   0b00010101010100, /* arf<1>:f arf:f */
+   0b01011101010100, /* grf<1>:f imm:f */
+   0b11010001100110, /* grf<1>:uq grf:uq */
+   0b11100001000100, /* grf<2>:ud grf:ud */
+   0b11010011001110, /* grf<1>:q grf:d */
+   0b10010011001100, /* arf<1>:d grf:d */
+   0b11010101110110, /* grf<1>:df grf:df */
+   0b01010001000100, /* grf<1>:ud arf:ud */
+   0b01011010101100, /* grf<1>:d imm:w */
+   0b10010001000100, /* arf<1>:ud grf:ud */
+};
+
+static const uint32_t xe3p_2src_datatype_table[32] = {
+   /* BitRemap: 98,91:88,66,50,49:48,47,46,[39,42:40],[39,38:36],35 */
+   0b11010110100101010100,
+   0b11010100100101010100,
+   0b00000110100101010100,
+   0b00000110100001000100,
+   0b01010110110101010100,
+   0b11010010100101010100,
+   0b10111110100011101110,
+   0b00000000100000000000,
+   0b01010110100101010100,
+   0b00000010101001000100,
+   0b00101110110011001100,
+   0b11010000100101010100,
+   0b01010100100101010100,
+   0b01010100110101010100,
+   0b00000010101101010100,
+   0b00000110100011001100,
+   0b00101110110011101110,
+   0b00000110100001100110,
+   0b01010000100101010100,
+   0b10110110100011001100,
+   0b01010010100101010100,
+   0b00000111000001000100,
+   0b00110110110011001110,
+   0b00101100110011001100,
+   0b11011110100101110110,
+   0b01010010110101010100,
+   0b10010110100001000100,
+   0b00000010100001000100,
+   0b00001110110001000100,
+   0b00000010101010101100,
+   0b01010000110101010100,
+   0b00000100100001000100,
+};
+
+static const uint16_t xe3p_subreg_table[16] = {
+   /* BitRemap: 87,71:67,55:51,33 */
+   0b00000000000,
+   0b00010000000,
+   0b00000000100,
+   0b10000000000,
+   0b01000000000,
+   0b00000001000,
+   0b00100000000,
+   0b10100000000,
+   0b11000000000,
+   0b00110000000,
+   0b00000010000,
+   0b11010000000,
+   0b01100000000,
+   0b11100000000,
+   0b10110000000,
+   0b10010000000,
+};
+
+static const uint16_t xe3p_src0_index_table[8] = {
+   /* BitRemap: 86:84,83:81,80,65:64,45:44 */
+   0b0100000000,
+   0b0000000000,
+   0b1000000000,
+   0b0100000010,
+   0b1100000000,
+   0b0100000001,
+   0b0000000010,
+   0b1001000000,
+};
+
+static const uint16_t xe3p_src1_index_table[16] = {
+   /* BitRemap: 121:120,118:117,116,115:113,112,103:99,97:96 */
+   0b0000000000000000,
+   0b0000100000000000,
+   0b1000000000000000,
+   0b0000100000010000,
+   0b0000100000001000,
+   0b0000100000011000,
+   0b0000100001010000,
+   0b0000100001000000,
+   0b0000100000100000,
+   0b0000100001111000,
+   0b0000100000111000,
+   0b0000100000101000,
+   0b0000100001011000,
+   0b0000100001001000,
+   0b0000100001110000,
+   0b0000100000110000,
+};
+
+static const uint32_t xe3p_3src_control_index_table[16] = {
+   /* BitRemap: 95:92,90:88,82:80,50,48,42:40,39,38:36,34,32,31,28,27:26,25:24,23:22,21,20:18 */
+   0b01001010010101000000000000100,
+   0b01001000010101000000000000100,
+   0b01001010010101000100000000100,
+   0b01001000010101000100000000100,
+   0b01101110011101100000000000100,
+   0b01101110011101100000010000100,
+   0b01101100011101100000000000100,
+   0b01001010010101000000000000101,
+   0b01001000010101000000000000101,
+   0b01001000010101010000000000100,
+   0b01001010010101010000000000100,
+   0b01101100011101100000010000100,
+   0b01001010010101000100000000000,
+   0b01001010010001000000000000100,
+   0b11011010110011000000000000101,
+   0b01101100011101100000000000011,
+};
+
+static const uint32_t xe3p_3src_dpas_control_index_table[16] = {
+   /* BitRemap: 95:92,90:88,82:80,50,49:48,42:40,39,38:36,34,33,32,31,28,27:26,25:24,23:22,21,20:18 */
+   0b0000001111100110001000000000100,
+   0b0001001111100110001000000000100,
+   0b1000001111100110001000000000100,
+   0b1001001111100110001000000000100,
+   0b0000001111100110000000000000100,
+   0b1001001111100110000000000000100,
+   0b1011011110101010001000000000100,
+   0b1011011111011010001000000000100,
+   0b1011011110101101001000000000100,
+   0b1011011111011101001000000000100,
+   0b1011011110101010000000000000100,
+   0b0010011110101010001000000000100,
+   0b0010011110011010001000000000100,
+   0b0010011110101001001000000000100,
+   0b0010011110011001001000000000100,
+   0b0010011110101010000000000000100,
+};
+
+static const uint32_t xe3p_3src_source_index_table[16] = {
+   /* BitRemap: 114,113:112,98,97:96,91,87:86,85:84,66,65:64,49,47,46,45:44,43,35 */
+   0b010110000000000000001,
+   0b101100000000000000001,
+   0b100100000001000000000,
+   0b100100000000000000001,
+   0b100100000001000000001,
+   0b100000000001000000000,
+   0b100000000001000000001,
+   0b101100000101000000001,
+   0b101000000001000000001,
+   0b101000000000000000001,
+   0b100000000000000000001,
+   0b100100000001001000000,
+   0b100100000001001000001,
+   0b101100000100000000001,
+   0b100100010001000000001,
+   0b100100010000000000001,
+};
+
+static const uint32_t xe3p_3src_dpas_source_index_table[16] = {
+   /* BitRemap: 114,113:112,98,97:96,91,87:86,85:84,83,66,65:64,47,46,45:43,35 */
+   0b100100000000100000000,
+   0b100100000010100000000,
+   0b100100000100100000000,
+   0b100100001000100000000,
+   0b100100001010100000000,
+   0b100100001100100000000,
+   0b100100010000100000000,
+   0b100100010010100000000,
+   0b100100010100100000000,
+   0b100100000000100000010,
+   0b100100000010100000010,
+   0b100100001000100000010,
+   0b100100001010100000010,
+   0b100100010100100000010,
+   0b100100000000100001110,
+   0b100100001010100001110,
+};
+
+static const uint32_t xe3p_3src_subreg_index_table[32] = {
+   /* BitRemap: 119:115,103:99,71:67,55:51 */
+   0b00000000000000000000,
+   0b00100000000000000000,
+   0b10000000000000000000,
+   0b00010000000000000000,
+   0b11100000000000000000,
+   0b01010000000000000000,
+   0b10110000000000000000,
+   0b01000000000011000000,
+   0b01100000000000000000,
+   0b10100000000000000000,
+   0b11000000000000000000,
+   0b01000000000000000000,
+   0b01110000000110000000,
+   0b10100000001001000000,
+   0b11010000001100000000,
+   0b01110000000000000000,
+   0b11110000000000000000,
+   0b10010000000000000000,
+   0b00110000000000000000,
+   0b00100000000010000000,
+   0b00010000000001000000,
+   0b00110000000011000000,
+   0b11010000000000000000,
+   0b00000000000001000000,
+   0b00000101100000000000,
+   0b00000100000000000000,
+   0b00000000000010000000,
+   0b00000000001100000000,
+   0b00000000001101000000,
+   0b00000110100000000000,
+   0b00000000001000000000,
+   0b00000000001111000000,
+};
+
 typedef struct compact_table_info {
    uint64_t
    read(unsigned index) const
@@ -841,7 +1104,8 @@ typedef struct compact_table_info {
 
 struct compact_tables {
    struct compact_table_info control;
-   struct compact_table_info datatype;
+   struct compact_table_info datatype_1src;
+   struct compact_table_info datatype_2src;
    struct compact_table_info subreg;
    struct compact_table_info src0;
    struct compact_table_info src1;
@@ -867,7 +1131,8 @@ struct compact_tables {
 
 declare_tables(gen9_tables, {
    set_table(control, gfx8_control_index_table);
-   set_table(datatype, gfx8_datatype_table);
+   set_table(datatype_1src, gfx8_datatype_table);
+   set_table(datatype_2src, gfx8_datatype_table);
    set_table(subreg, gfx8_subreg_table);
    set_table(src0, gfx8_src_index_table);
    set_table(src1, gfx8_src_index_table);
@@ -879,12 +1144,14 @@ declare_tables(gen9_tables, {
 
 declare_tables(gen11_tables, {
    tables = gen9_tables;
-   set_table(datatype, gfx11_datatype_table);
+   set_table(datatype_1src, gfx11_datatype_table);
+   set_table(datatype_2src, gfx11_datatype_table);
 });
 
 declare_tables(gen12_tables, {
    set_table(control, gfx12_control_index_table);
-   set_table(datatype, gfx12_datatype_table);
+   set_table(datatype_1src, gfx12_datatype_table);
+   set_table(datatype_2src, gfx12_datatype_table);
    set_table(subreg, gfx12_subreg_table);
    set_table(src0, gfx12_src0_index_table);
    set_table(src1, gfx12_src1_index_table);
@@ -903,7 +1170,8 @@ declare_tables(genx125_tables, {
 
 declare_tables(xe2_tables, {
    set_table(control, xe2_control_index_table);
-   set_table(datatype, xe2_datatype_table);
+   set_table(datatype_1src, xe2_datatype_table);
+   set_table(datatype_2src, xe2_datatype_table);
    set_table(subreg, xe2_subreg_table);
    set_table(src0, xe2_src0_index_table);
    set_table(src1, xe2_src1_index_table);
@@ -912,6 +1180,20 @@ declare_tables(xe2_tables, {
    set_table(source_3src, xe2_3src_source_index_table);
    set_table(source_dpas_3src, xe2_3src_dpas_source_index_table);
    set_table(subreg_3src, xe2_3src_subreg_table);
+});
+
+declare_tables(xe3p_tables, {
+   set_table(control, xe3p_control_index_table);
+   set_table(datatype_1src, xe3p_1src_datatype_table);
+   set_table(datatype_2src, xe3p_2src_datatype_table);
+   set_table(subreg, xe3p_subreg_table);
+   set_table(src0, xe3p_src0_index_table);
+   set_table(src1, xe3p_src1_index_table);
+   set_table(control_3src, xe3p_3src_control_index_table);
+   set_table(control_dpas_3src, xe3p_3src_dpas_control_index_table);
+   set_table(source_3src, xe3p_3src_source_index_table);
+   set_table(source_dpas_3src, xe3p_3src_dpas_source_index_table);
+   set_table(subreg_3src, xe3p_3src_subreg_index_table);
 });
 
 #undef declare_tables
@@ -938,6 +1220,9 @@ get_compact_tables(const struct intel_device_info *devinfo)
    case 200:
    case 300:
       return xe2_tables;
+
+   case 350:
+      return xe3p_tables;
 
    default:
       UNREACHABLE("Unknown platform in get_compact_tables()");
@@ -1335,8 +1620,19 @@ private:
    bool
    set_datatype_index(bool is_immediate)
    {
-      const compact_table_info &table = compact_tables.datatype;
-      uint32_t uncompacted = uc_get(E::UNCOMP_DATATYPE);
+      const unsigned num_sources = gen_inst_num_sources(devinfo, inst);
+      assert(num_sources <= 2);
+      const compact_table_info &table = num_sources < 2 ?
+         compact_tables.datatype_1src : compact_tables.datatype_2src;
+      uint32_t uncompacted;
+      if constexpr (E::TYPE >= GEN_ENCODING_XE3P) {
+         if (num_sources == 1)
+            uncompacted = uc_get(E::UNCOMP_1SRC_DATATYPE);
+         else
+            uncompacted = uc_get(E::UNCOMP_2SRC_DATATYPE);
+      } else {
+         uncompacted = uc_get(E::UNCOMP_DATATYPE);
+      }
 
       if constexpr (E::TYPE >= GEN_ENCODING_XE) {
          /* Src1.RegFile overlaps with the immediate, so ignore it if an immediate
@@ -1429,7 +1725,10 @@ private:
          compact_tables.control_3src;
 
       uint64_t uncompacted = 0;
-      if constexpr (E::TYPE == GEN_ENCODING_XE) {
+      if constexpr (E::TYPE >= GEN_ENCODING_XE3P) {
+         uncompacted = is_dpas ?
+            uc_get(E::UNCOMP_DPAS_CONTROL) : uc_get(E::UNCOMP_3SRC_CONTROL);
+      } else if constexpr (E::TYPE == GEN_ENCODING_XE) {
          if (devinfo->verx10 == 125) {
             uncompacted = uc_get(E::UNCOMP_3SRC_CONTROL_125);
          } else {
@@ -1439,7 +1738,7 @@ private:
          uncompacted = uc_get(E::UNCOMP_3SRC_CONTROL);
       }
 
-      if constexpr (E::TYPE >= GEN_ENCODING_XE2) {
+      if constexpr (E::TYPE == GEN_ENCODING_XE2) {
          gen_range bits = { 127, 0 };
          assert(is_dpas || !uc_get(bits(49, 49)));
       }
@@ -1534,7 +1833,8 @@ private:
        * bits currently.
        */
       if constexpr (E::TYPE >= GEN_ENCODING_XE2) {
-         assert(is_dpas || !uc_get(bits(49, 49)));
+         if constexpr (E::TYPE < GEN_ENCODING_XE3P)
+            assert(is_dpas || !uc_get(bits(49, 49)));
          assert(!uc_get(bits(33, 33)));
          assert(!uc_get(bits(7, 7)));
       } else if constexpr (E::TYPE >= GEN_ENCODING_XE) {
@@ -1702,13 +2002,15 @@ private:
                uc_set(E::SRC0_WIDTH,   cvt(0));
             }
 
-            if (inst->src[1].file == GEN_GRF &&
-                uc_get(E::SRC1_VSTRIDE) > cvt(1) &&
-                uc_get(E::SRC1_VSTRIDE) == (uc_get(E::SRC1_WIDTH) + 1) &&
-                uc_get(E::SRC1_HSTRIDE) == cvt(1)) {
-               uc_set(E::SRC1_VSTRIDE, cvt(1));
-               uc_set(E::SRC1_HSTRIDE, cvt(1) - 1);
-               uc_set(E::SRC1_WIDTH,   cvt(0));
+            if constexpr (E::TYPE < GEN_ENCODING_XE3P) {
+               if (inst->src[1].file == GEN_GRF &&
+                   uc_get(E::SRC1_VSTRIDE) > cvt(1) &&
+                   uc_get(E::SRC1_VSTRIDE) == (uc_get(E::SRC1_WIDTH) + 1) &&
+                   uc_get(E::SRC1_HSTRIDE) == cvt(1)) {
+                  uc_set(E::SRC1_VSTRIDE, cvt(1));
+                  uc_set(E::SRC1_HSTRIDE, cvt(1) - 1);
+                  uc_set(E::SRC1_WIDTH,   cvt(0));
+               }
             }
          }
       }
@@ -1907,8 +2209,11 @@ gen_compact(gen_encode_params *params)
    } else if (devinfo->ver < 20) {
       auto c = gen_compacter<gen_encoding_xe>(devinfo, params);
       c.compact();
-   } else {
+   } else if (devinfo->ver < 35) {
       auto c = gen_compacter<gen_encoding_xe2>(devinfo, params);
+      c.compact();
+   } else {
+      auto c = gen_compacter<gen_encoding_xe3p>(devinfo, params);
       c.compact();
    }
 
@@ -2078,13 +2383,47 @@ private:
       uc_set(E::UNCOMP_CONTROL, uncompacted);
    }
 
+   static inline unsigned
+   devinfo_opcode_num_sources(const struct intel_device_info *devinfo,
+                              const gen_opcode op)
+   {
+      if (gen_inst_format(op) == GEN_FORMAT_SEND) {
+         switch (op) {
+         case GEN_OP_SEND:
+         case GEN_OP_SENDC:
+            return devinfo->ver >= 12 ? 2 : 1;
+
+         case GEN_OP_SENDS:
+         case GEN_OP_SENDSC:
+            return 2;
+
+         default:
+            UNREACHABLE("Unhandled SEND OP in devinfo_opcode_num_sources()");
+            break;
+         }
+      }
+
+      return gen_opcode_num_srcs(op);
+   }
+
    void
    set_uncompacted_datatype()
    {
-      const compact_table_info &table = compact_tables.datatype;
+      const unsigned num_sources =
+         devinfo_opcode_num_sources(devinfo, desc->gen_op);
+      assert(num_sources <= 2);
+      const compact_table_info &table = num_sources < 2 ?
+         compact_tables.datatype_1src : compact_tables.datatype_2src;
       uint64_t compacted = c_get(E::C_DATATYPE_INDEX);
       auto uncompacted = table.read(compacted);
-      uc_set(E::UNCOMP_DATATYPE, uncompacted);
+      if constexpr (E::TYPE >= GEN_ENCODING_XE3P) {
+         if (num_sources == 1)
+            uc_set(E::UNCOMP_1SRC_DATATYPE, uncompacted);
+         else
+            uc_set(E::UNCOMP_2SRC_DATATYPE, uncompacted);
+      } else {
+         uc_set(E::UNCOMP_DATATYPE, uncompacted);
+      }
    }
 
    void
@@ -2383,8 +2722,11 @@ gen_uncompact(gen_decode_params *params, void *&uncompacted)
    } else if (devinfo->ver < 20) {
       auto c = gen_uncompacter<gen_encoding_xe>(devinfo);
       c.uncompact(params, uncompacted);
-   } else {
+   } else if (devinfo->ver < 35) {
       auto c = gen_uncompacter<gen_encoding_xe2>(devinfo);
+      c.uncompact(params, uncompacted);
+   } else {
+      auto c = gen_uncompacter<gen_encoding_xe3p>(devinfo);
       c.uncompact(params, uncompacted);
    }
 }
@@ -2400,8 +2742,11 @@ gen_uncompact_inst(const struct intel_device_info *devinfo,
    } else if (devinfo->ver < 20) {
       auto c = gen_uncompacter<gen_encoding_xe>(devinfo);
       c.uncompact(src, dst);
-   } else {
+   } else if (devinfo->ver < 35) {
       auto c = gen_uncompacter<gen_encoding_xe2>(devinfo);
+      c.uncompact(src, dst);
+   } else {
+      auto c = gen_uncompacter<gen_encoding_xe3p>(devinfo);
       c.uncompact(src, dst);
    }
 

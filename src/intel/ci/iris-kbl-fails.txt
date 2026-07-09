@@ -88,6 +88,7 @@ spec@!opengl 1.1@line-smooth-coverage,Fail
 spec@!opengl 1.1@line-smooth-stipple,Fail
 
 # Uprev Piglit in Mesa
+glx@glx-multithread-buffer-busy-tracking-bug,Fail
 spec@!opengl 1.1@large-tex,Fail
 spec@!opengl 1.1@large-tex@test_image_load_store,Fail
 spec@arb_framebuffer_object@execution@msaa-alpha-to-coverage_alpha-to-one,Fail
@@ -96,7 +97,7 @@ spec@arb_framebuffer_object@execution@msaa-alpha-to-coverage,Fail
 spec@ext_external_objects@vk-image-display,Crash
 spec@ext_external_objects@vk-semaphores,Crash
 spec@ext_external_objects@vk-semaphores-2,Crash
-glx@glx-multithread-buffer-busy-tracking-bug,Fail
+spec@khr_shader_subgroup@execution@bitonic_sort,Fail
 
 # failed to create drawable
 # X Error of failed request:  BadValue (integer parameter out of range for operation)
@@ -106,7 +107,4 @@ glx@glx-multithread-buffer-busy-tracking-bug,Fail
 #   Current serial number in output stream:  1181
 glx@glx-visuals-depth -pixmap,Fail
 glx@glx-visuals-stencil -pixmap,Fail
-
-# uprev Piglit in Mesa
-spec@khr_shader_subgroup@execution@bitonic_sort,Fail
 

@@ -120,6 +120,36 @@ fn rev_post_order_sort<N>(nodes: &mut Vec<CFGNode<N>>) {
     std::mem::swap(nodes, &mut sorted);
 }
 
+struct ReachableDFS<'a, N> {
+    nodes: &'a [CFGNode<N>],
+    reachable: BitSet<usize>,
+}
+
+impl<'a, N> DepthFirstSearch for ReachableDFS<'a, N> {
+    type ChildIter = Cloned<std::slice::Iter<'a, usize>>;
+
+    fn pre(&mut self, id: usize) -> Self::ChildIter {
+        self.reachable.insert(id);
+        self.nodes[id].succ.iter().cloned()
+    }
+}
+
+fn remove_unreachable<N>(nodes: &mut Vec<CFGNode<N>>) {
+    let mut reachable_dfs = ReachableDFS {
+        nodes,
+        reachable: Default::default(),
+    };
+    dfs(&mut reachable_dfs, 0);
+
+    // The Vec::retain() method guarantees that each item is visited once,
+    // in-order so it's safe to use an external iterator like this.
+    let mut idx_iter = (0_usize..).into_iter();
+    nodes.retain(|_| {
+        let i = idx_iter.next().unwrap();
+        reachable_dfs.reachable.contains(i)
+    });
+}
+
 fn find_common_dom<N>(
     nodes: &[CFGNode<N>],
     mut a: usize,
@@ -179,6 +209,10 @@ fn calc_dominance<N>(nodes: &mut Vec<CFGNode<N>>) {
         if !changed {
             break;
         }
+    }
+
+    for i in 1..nodes.len() {
+        assert!(nodes[i].dom < i);
     }
 
     let mut dom_children = Vec::new();
@@ -333,9 +367,10 @@ pub struct CFG<N> {
 #[expect(clippy::len_without_is_empty)]
 impl<N> CFG<N> {
     /// Creates a new CFG from nodes and edges.
-    pub fn from_blocks_edges(
+    fn from_blocks_edges(
         nodes: impl IntoIterator<Item = N>,
         edges: impl IntoIterator<Item = (usize, usize)>,
+        sort_nodes: bool,
     ) -> Self {
         let mut nodes = Vec::from_iter(nodes.into_iter().map(|n| CFGNode {
             node: n,
@@ -352,7 +387,11 @@ impl<N> CFG<N> {
             nodes[p].succ.push(s);
         }
 
-        rev_post_order_sort(&mut nodes);
+        if sort_nodes {
+            rev_post_order_sort(&mut nodes);
+        } else {
+            remove_unreachable(&mut nodes);
+        }
         calc_dominance(&mut nodes);
         let has_loop = detect_loops(&mut nodes);
 
@@ -557,14 +596,18 @@ impl<K: Eq + Hash, N, H: BuildHasher + Default> CFGBuilder<K, N, H> {
         self.edges.push((s, p));
     }
 
-    /// Destroys this builder and returns a CFG.
-    pub fn as_cfg(mut self) -> CFG<N> {
+    /// Destroys this builder and returns a CFG.  If `sort_nodes` is true, the
+    /// nodes will be re-sorted into a dominance-preserving order when creating
+    /// the CFG.  If `sort_nodes` is false, unreachable nodes will be removed
+    /// but the node order of the returned CFG will otherwise be the same as
+    /// the order in which `add_node()` was called.
+    pub fn as_cfg(mut self, sort_nodes: bool) -> CFG<N> {
         let edges = self.edges.drain(..).map(|(s, p)| {
             let s = *self.key_map.get(&s).unwrap();
             let p = *self.key_map.get(&p).unwrap();
             (s, p)
         });
-        CFG::from_blocks_edges(self.nodes, edges)
+        CFG::from_blocks_edges(self.nodes, edges, sort_nodes)
     }
 }
 
@@ -587,7 +630,7 @@ mod tests {
         for &(a, b) in edges {
             builder.add_edge(a, b);
         }
-        let cfg = builder.as_cfg();
+        let cfg = builder.as_cfg(true);
 
         let mut lphs = Vec::new();
         lphs.resize(expected.len(), None);

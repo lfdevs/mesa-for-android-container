@@ -65,6 +65,11 @@ pub fn variants(attr: TokenStream, item: TokenStream) -> TokenStream {
             fn variant(&self) -> DataType {
                 self.#field
             }
+
+            fn set_variant(&mut self, data_type: DataType) {
+                assert!(Self::VARIANTS.contains(&data_type));
+                self.#field = data_type;
+            }
         }
     };
 
@@ -104,6 +109,26 @@ fn unbox_type(ty: &Type) -> TokenStream2 {
     }
 }
 
+// Natural sort key: zero-pad digit runs so that embedded numbers compare by
+// value, and lowercase so the order is case-insensitive (e.g. Clz < Copy < CSel)
+fn name_sort_key(s: &str) -> String {
+    let mut key = String::new();
+    let mut num = String::new();
+    for c in s.chars() {
+        if c.is_ascii_digit() {
+            num.push(c);
+        } else {
+            if !num.is_empty() {
+                key += &format!("{num:0>5}");
+                num.clear();
+            }
+            key.push(c.to_ascii_lowercase());
+        }
+    }
+    key += &format!("{num:0>5}");
+    key
+}
+
 pub fn derive_opcode(input: TokenStream) -> TokenStream {
     let DeriveInput {
         attrs, ident, data, ..
@@ -128,20 +153,29 @@ pub fn derive_opcode(input: TokenStream) -> TokenStream {
                             Some(<Self as HasVariants>::variant(self))
                         }
 
-                        fn is_valid_variant(&self) -> bool {
-                            <Self as HasVariants>::is_valid_variant(self)
+                        fn set_variant(&mut self, variant: DataType) {
+                            <Self as HasVariants>::set_variant(self, variant)
+                        }
+
+                        fn is_valid_variant(&self, variant: DataType) -> bool {
+                            <Self as HasVariants>::is_valid_variant(variant)
                         }
                     }
                 }
             } else {
+                let set_variant_err = format!("{ident} does not have variants");
                 quote! {
                     impl Opcode for #ident {
                         fn variant(&self) -> Option<DataType> {
                             None
                         }
 
-                        fn is_valid_variant(&self) -> bool {
-                            true
+                        fn set_variant(&mut self, _data_type: DataType) {
+                            panic!(#set_variant_err);
+                        }
+
+                        fn is_valid_variant(&self, _variant: DataType) -> bool {
+                            false
                         }
                     }
                 }
@@ -149,8 +183,18 @@ pub fn derive_opcode(input: TokenStream) -> TokenStream {
         }
         Data::Enum(e) => {
             let mut var_cases = TokenStream2::new();
+            let mut set_cases = TokenStream2::new();
             let mut val_cases = TokenStream2::new();
             let mut fmt_cases = TokenStream2::new();
+
+            let curr_order: Vec<_> =
+                e.variants.iter().map(|e| e.ident.to_string()).collect();
+            if !curr_order.is_sorted_by_key(|s| name_sort_key(s)) {
+                let mut sorted = curr_order.clone();
+                sorted.sort_by_key(|s| name_sort_key(s));
+                panic!("Variants must always be sorted:\nsorted:  {sorted:?}\ncurrent: {curr_order:?}");
+            }
+
             for v in e.variants {
                 let case = &v.ident;
                 let v_type = unbox_type(variant_type(&v));
@@ -161,11 +205,18 @@ pub fn derive_opcode(input: TokenStream) -> TokenStream {
                         Opcode::variant(b)
                     }
                 });
+                set_cases.extend(quote! {
+                    #ident::#case(x) => {
+                        use std::borrow::BorrowMut;
+                        let b: &mut #v_type = x.borrow_mut();
+                        Opcode::set_variant(b, variant)
+                    }
+                });
                 val_cases.extend(quote! {
                     #ident::#case(x) => {
                         use std::borrow::Borrow;
                         let b: &#v_type = x.borrow();
-                        Opcode::is_valid_variant(b)
+                        Opcode::is_valid_variant(b, variant)
                     }
                 });
                 fmt_cases.extend(quote! {
@@ -181,7 +232,13 @@ pub fn derive_opcode(input: TokenStream) -> TokenStream {
                         }
                     }
 
-                    fn is_valid_variant(&self) -> bool {
+                    fn set_variant(&mut self, variant: DataType) {
+                        match self {
+                            #set_cases
+                        }
+                    }
+
+                    fn is_valid_variant(&self, variant: DataType) -> bool {
                         match self {
                             #val_cases
                         }

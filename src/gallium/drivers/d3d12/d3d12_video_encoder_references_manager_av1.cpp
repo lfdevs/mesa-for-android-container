@@ -310,7 +310,7 @@ d3d12_video_encoder_references_manager_av1::get_current_frame_picture_control_da
       }
    }
 
-   for (uint8_t i = 0; i < NUM_REF_FRAMES; i++)
+   for (uint32_t i = 0; i < NUM_REF_FRAMES; i++)
       m_CurrentFramePicParams.ReferenceFramesReconPictureDescriptors[i] =
          m_CurrentFrameReferencesData.pVirtualDPBEntries[i];
 

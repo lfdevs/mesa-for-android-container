@@ -22,6 +22,8 @@
 #include "vk_log.h"
 #include "vk_util.h"
 
+#define RADV_ANDROID_MAX_PLANES 4
+
 #if DETECT_OS_ANDROID
 
 VkResult
@@ -95,6 +97,16 @@ radv_image_from_gralloc(VkDevice device_h, const VkImageCreateInfo *base_info,
    };
 
    updated_base_info.pNext = &external_memory_info;
+
+   VkImageDrmFormatModifierExplicitCreateInfoEXT mod_info;
+   VkSubresourceLayout layouts[RADV_ANDROID_MAX_PLANES];
+   assert(vk_find_struct_const(base_info->pNext, NATIVE_BUFFER_ANDROID));
+   result = vk_android_get_anb_layout(base_info, &mod_info, layouts, RADV_ANDROID_MAX_PLANES);
+   if (result == VK_SUCCESS) {
+      mod_info.pNext = updated_base_info.pNext;
+      updated_base_info.tiling = VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT;
+      updated_base_info.pNext = &mod_info;
+   }
 
    result = radv_image_create(device_h,
                               &(struct radv_image_create_info){
@@ -413,7 +425,18 @@ radv_import_ahb_memory(struct radv_device *device, struct radv_device_memory *me
 
       struct radv_image_create_info create_info = {.no_metadata_planes = true, .bo_metadata = &metadata};
 
-      result = radv_image_create_layout(device, create_info, NULL, NULL, mem->image);
+      VkImageDrmFormatModifierExplicitCreateInfoEXT *mod_info_p = NULL;
+      VkImageDrmFormatModifierExplicitCreateInfoEXT mod_info;
+      VkSubresourceLayout layouts[RADV_ANDROID_MAX_PLANES];
+      result = vk_android_get_ahb_layout(info->buffer, &mod_info, layouts, RADV_ANDROID_MAX_PLANES);
+      if (result == VK_SUCCESS) {
+         for (unsigned plane = 0; plane < mem->image->plane_count; ++plane) {
+            mem->image->planes[plane].surface.modifier = mod_info.drmFormatModifier;
+         }
+         mod_info_p = &mod_info;
+      }
+
+      result = radv_image_create_layout(device, create_info, mod_info_p, NULL, mem->image);
       if (result != VK_SUCCESS) {
          radv_bo_destroy(device, NULL, mem->bo);
          mem->bo = NULL;
@@ -472,7 +495,7 @@ radv_create_ahb_memory(struct radv_device *device, struct radv_device_memory *me
 }
 
 bool
-radv_android_gralloc_supports_format(VkFormat format, VkImageUsageFlagBits usage)
+radv_android_gralloc_supports_format(VkFormat format, VkImageUsageFlags2KHR usage)
 {
 #if RADV_SUPPORT_ANDROID_HARDWARE_BUFFER
    /* Ideally we check AHardwareBuffer_isSupported.  But that test-allocates on most platforms and

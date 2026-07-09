@@ -124,10 +124,10 @@ VkResult anv_CreateSampler(
     */
    sampler->bindless_state =
       anv_state_pool_alloc(anv_device_get_dynamic_state_pool(device),
-                           sampler->state.n_planes * 32, 32);
+                           sampler->state.n_planes * ANV_SAMPLER_STATE_SIZE, 32);
    if (sampler->bindless_state.map) {
       memcpy(sampler->bindless_state.map, sampler->state.state,
-             sampler->state.n_planes * SAMPLER_STATE_length(device->info) * 4);
+             sampler->state.n_planes * ANV_SAMPLER_STATE_SIZE);
    }
 
    *pSampler = anv_sampler_to_handle(sampler);

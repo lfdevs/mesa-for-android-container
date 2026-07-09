@@ -7,8 +7,9 @@
 
 layout(local_size_x = 32, local_size_y = 1, local_size_z = 1) in;
 
-#include "anv_build_helpers.h"
-#include "anv_build_interface.h"
+#include "anv_bvh_defines.h"
+#define VK_USED_BUILD_FLAGS ANV_ENCODE_BUILD_FLAGS
+#include "anv_bvh_helpers.h"
 #include "encode.h"
 
 #define READY_TO_WRITE(offset) ((offset) < VK_NULL_BVH_OFFSET)
@@ -149,72 +150,93 @@ encode_internal_node(uint32_t child, uint32_t child_block_offset_from_internal_n
    REF(anv_internal_node) dst_node =
       REF(anv_internal_node)(OFFSET(args.output_bvh, ANV_RT_BLOCK_SIZE * bvh_block_offset));
 
-   vk_aabb box;
-   box.min = subgroupClusteredMin(child_aabb.min, 8);
-   box.max = subgroupClusteredMax(child_aabb.max, 8);
-
-   vk_aabb conservative_child_aabb = conservative_aabb(box);
-
-   float up = 1.0 + ULP;
-   ivec3 exp;
-
-   vec3 len = aabb_size(conservative_child_aabb) * up;
-   vec3 mant = frexp(len, exp);
-
-   exp.x += int((mant.x > (255.0f / 256.0f)));
-   exp.y += int((mant.y > (255.0f / 256.0f)));
-   exp.z += int((mant.z > (255.0f / 256.0f)));
-
-   i8vec3 exponent_i8 = i8vec3(exp);
-   i8vec3 exp_i8 = {max(int8_t(-128), exponent_i8.x),
-                    max(int8_t(-128), exponent_i8.y),
-                    max(int8_t(-128), exponent_i8.z)};
-
-   uint8_t node_type = determine_internal_node_type(cluster, child, child_count);
-
-   if (cluster.idx == 0) {
-      DEREF(dst_node).child_block_offset = child_block_offset_from_internal_node;
-      DEREF(dst_node).lower[0] = conservative_child_aabb.min.x;
-      DEREF(dst_node).lower[1] = conservative_child_aabb.min.y;
-      DEREF(dst_node).lower[2] = conservative_child_aabb.min.z;
-      DEREF(dst_node).exp_x = exp_i8[0];
-      DEREF(dst_node).exp_y = exp_i8[1];
-      DEREF(dst_node).exp_z = exp_i8[2];
-      DEREF(dst_node).node_mask = uint8_t(0xff);
-      DEREF(dst_node).node_type = node_type;
-
-      /* Note: This is not a real field, it's unused byte padding, which is not
-       * required to be MBZ. We're just using it to store the child count.
-       */
-      DEREF(dst_node).child_count = uint8_t(child_count);
-   }
-
-   child_aabb = conservative_aabb(child_aabb);
-   vk_aabb quantize_aabb = quantize_bounds(child_aabb, conservative_child_aabb.min, exp_i8);
    bool valid_leaf = cluster.idx < child_count;
 
-   DEREF(dst_node).lower_x[cluster.idx] = valid_leaf ? uint8_t(quantize_aabb.min.x) : uint8_t(0x80);
-   DEREF(dst_node).lower_y[cluster.idx] = valid_leaf ? uint8_t(quantize_aabb.min.y) : uint8_t(0);
-   DEREF(dst_node).lower_z[cluster.idx] = valid_leaf ? uint8_t(quantize_aabb.min.z) : uint8_t(0);
-   DEREF(dst_node).upper_x[cluster.idx] = valid_leaf ? uint8_t(quantize_aabb.max.x) : uint8_t(0);
-   DEREF(dst_node).upper_y[cluster.idx] = valid_leaf ? uint8_t(quantize_aabb.max.y) : uint8_t(0);
-   DEREF(dst_node).upper_z[cluster.idx] = valid_leaf ? uint8_t(quantize_aabb.max.z) : uint8_t(0);
+   uint8_t block_incr_and_start_prim = uint8_t(0);
 
-   /* blockIncr and child_block_offset are how HW used to find children during traversal.
-    * If not set properly, gpu could hang.
-    */
-   uint32_t type = ir_id_to_type(child);
-   uint8_t block_incr_and_start_prim = valid_leaf ?
-                                       (type == vk_ir_node_instance ? uint8_t(2) : uint8_t(1)) :
-                                       uint8_t(0);
-   /* for a mixed node, encode type of each children in startPrim in childdata */
-   if (node_type == uint8_t(ANV_NODE_TYPE_MIXED))
-      block_incr_and_start_prim |=
-         (type == vk_ir_node_triangle) ? (uint8_t(ANV_NODE_TYPE_QUAD) << 2) :
-         (type == vk_ir_node_aabb) ? (uint8_t(ANV_NODE_TYPE_PROCEDURAL) << 2) :
-         (type == vk_ir_node_instance) ? (uint8_t(ANV_NODE_TYPE_INSTANCE) << 2) :
-         (type == vk_ir_node_internal) ? (uint8_t(ANV_NODE_TYPE_MIXED) << 2) :
-         (uint8_t(ANV_NODE_TYPE_INVALID) << 2);
+   if (valid_leaf) {
+      vk_aabb box;
+      box.min = subgroupClusteredMin(child_aabb.min, 8);
+      box.max = subgroupClusteredMax(child_aabb.max, 8);
+
+      vk_aabb conservative_child_aabb = conservative_aabb(box);
+
+      float up = 1.0 + ULP;
+      ivec3 exp;
+
+      vec3 len = aabb_size(conservative_child_aabb) * up;
+      vec3 mant = frexp(len, exp);
+
+      exp.x += int((mant.x > (255.0f / 256.0f)));
+      exp.y += int((mant.y > (255.0f / 256.0f)));
+      exp.z += int((mant.z > (255.0f / 256.0f)));
+
+      i8vec3 exponent_i8 = i8vec3(exp);
+      i8vec3 exp_i8 = {max(int8_t(-128), exponent_i8.x),
+                       max(int8_t(-128), exponent_i8.y),
+                       max(int8_t(-128), exponent_i8.z)};
+
+      uint8_t node_type = determine_internal_node_type(cluster, child, child_count);
+
+      if (cluster.idx == 0) {
+         DEREF(dst_node).child_block_offset = child_block_offset_from_internal_node;
+         DEREF(dst_node).lower[0] = conservative_child_aabb.min.x;
+         DEREF(dst_node).lower[1] = conservative_child_aabb.min.y;
+         DEREF(dst_node).lower[2] = conservative_child_aabb.min.z;
+         DEREF(dst_node).exp_x = exp_i8[0];
+         DEREF(dst_node).exp_y = exp_i8[1];
+         DEREF(dst_node).exp_z = exp_i8[2];
+         DEREF(dst_node).node_mask = uint8_t(0xff);
+         DEREF(dst_node).node_type = node_type;
+
+         /* Note: This is not a real field, it's unused byte padding, which is not
+          * required to be MBZ. We're just using it to store the child count.
+          */
+         DEREF(dst_node).child_count = uint8_t(child_count);
+      }
+
+      child_aabb = conservative_aabb(child_aabb);
+      vk_aabb quantize_aabb = quantize_bounds(child_aabb, conservative_child_aabb.min, exp_i8);
+
+      DEREF(dst_node).lower_x[cluster.idx] = uint8_t(quantize_aabb.min.x);
+      DEREF(dst_node).lower_y[cluster.idx] = uint8_t(quantize_aabb.min.y);
+      DEREF(dst_node).lower_z[cluster.idx] = uint8_t(quantize_aabb.min.z);
+      DEREF(dst_node).upper_x[cluster.idx] = uint8_t(quantize_aabb.max.x);
+      DEREF(dst_node).upper_y[cluster.idx] = uint8_t(quantize_aabb.max.y);
+      DEREF(dst_node).upper_z[cluster.idx] = uint8_t(quantize_aabb.max.z);
+
+      /* blockIncr and child_block_offset are how HW used to find children during traversal.
+       * If not set properly, gpu could hang.
+       */
+      uint32_t type = ir_id_to_type(child);
+      block_incr_and_start_prim = type == vk_ir_node_instance ? uint8_t(2) : uint8_t(1);
+      /* for a mixed node, encode type of each children in startPrim in childdata */
+      if (node_type == uint8_t(ANV_NODE_TYPE_MIXED))
+         switch (type) {
+         case vk_ir_node_triangle:
+            block_incr_and_start_prim |= uint8_t(ANV_NODE_TYPE_QUAD) << 2;
+            break;
+         case vk_ir_node_aabb:
+            block_incr_and_start_prim |= uint8_t(ANV_NODE_TYPE_PROCEDURAL) << 2;
+            break;
+         case vk_ir_node_instance:
+            block_incr_and_start_prim |= uint8_t(ANV_NODE_TYPE_INSTANCE) << 2;
+            break;
+         case vk_ir_node_internal:
+            block_incr_and_start_prim |= uint8_t(ANV_NODE_TYPE_MIXED) << 2;
+            break;
+         default:
+            block_incr_and_start_prim |= uint8_t(ANV_NODE_TYPE_INVALID) << 2;
+            break;
+      }
+   } else {
+      DEREF(dst_node).lower_x[cluster.idx] = uint8_t(0x80);
+      DEREF(dst_node).lower_y[cluster.idx] = uint8_t(0);
+      DEREF(dst_node).lower_z[cluster.idx] = uint8_t(0);
+      DEREF(dst_node).upper_x[cluster.idx] = uint8_t(0);
+      DEREF(dst_node).upper_y[cluster.idx] = uint8_t(0);
+      DEREF(dst_node).upper_z[cluster.idx] = uint8_t(0);
+   }
    DEREF(dst_node).data[cluster.idx].block_incr_and_start_prim = block_incr_and_start_prim;
 }
 
@@ -364,8 +386,7 @@ main()
       /* Tracks BLOCK where the next children should be encoded. */
       DEREF(args.header).dst_node_offset = 1;
       DEREF(header).instance_count = 0;
-      if (VK_BUILD_FLAG(ANV_BUILD_FLAG_WRITE_LOOKUP_MAPS_FOR_UPDATE) &&
-          args.parent_child_map != 0) {
+      if (ANV_TEST_BUILD_FLAG_WRITE_LOOKUP_MAPS_FOR_UPDATE && args.parent_child_map != 0) {
          DEREF(INDEX(uint32_t, args.parent_child_map, 0)) = VK_NULL_BVH_OFFSET;
       }
    }
@@ -503,7 +524,7 @@ main()
                child_aabb = DEREF(REF(vk_ir_node)NODE_OFFSET(child)).aabb;
 
             uint32_t type = ir_id_to_type(child);
-            if (VK_BUILD_FLAG(ANV_BUILD_FLAG_WRITE_LOOKUP_MAPS_FOR_UPDATE) &&
+            if (ANV_TEST_BUILD_FLAG_WRITE_LOOKUP_MAPS_FOR_UPDATE &&
                 child != VK_BVH_INVALID_NODE &&
                 args.parent_child_map != 0 &&
                 args.leaf_block_offset_map != 0) {

@@ -337,7 +337,7 @@ virtio_bo_new(struct fd_device *dev, uint32_t size, uint32_t flags)
       goto fail;
 
    uint32_t handle =
-      vdrm_bo_create(virtio_dev->vdrm, size, blob_flags, blob_id, &req.hdr);
+      vdrm_bo_create(virtio_dev->vdrm, size, blob_flags, blob_id, 0, &req.hdr);
    if (!handle)
       goto fail;
 

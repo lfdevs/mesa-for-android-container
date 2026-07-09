@@ -1,6 +1,7 @@
 dEQP-VK.api.buffer_marker.compute.default_mem.bottom_of_pipe.memory_dep.buffer_copy_offset_24
 dEQP-VK.api.buffer_marker.compute.external_host_mem.bottom_of_pipe.memory_dep.buffer_copy
 dEQP-VK.api.copy_and_blit.copy_commands2.image_to_buffer_transfer_queue.2d_images.mip_copies_bc2_unorm_block_64x64_2_layers
+dEQP-VK.api.copy_and_blit.copy_commands2.image_to_image_transfer_queue.all_formats.color.2d_to_3d.r4g4b4a4_unorm_pack16.r8g8_unorm.general_optimal
 dEQP-VK.api.copy_and_blit.core.use_after_copy.e5b9g9r9_ufloat_pack32.transfer_dst_optimal.1024x1024x1_tq_color_att_flag
 dEQP-VK.api.copy_and_blit.core.use_after_copy.e5b9g9r9_ufloat_pack32.transfer_dst_optimal.1024x1024x2_tq_color_att_flag_img2img
 dEQP-VK.api.copy_and_blit.core.use_after_copy.e5b9g9r9_ufloat_pack32.transfer_dst_optimal.1024x1024x2_tq_regions_color_att_flag
@@ -9,6 +10,7 @@ dEQP-VK.draw.dynamic_rendering.primary_cmd_buff.instanced.dynamic_state_draw_vk_
 dEQP-VK.pipeline.monolithic.image.suballocation.sampling_type.combined.view_type.1d_array.format.r8g8_sint.count_8.size.443x1_array_of_6
 dEQP-VK.pipeline.monolithic.image.suballocation.sampling_type.combined.view_type.2d_array.format.r16g16_uint.count_1.size.13x13_array_of_3
 dEQP-VK.pipeline.monolithic.image.suballocation.sampling_type.separate.view_type.cube_array.format.r5g5b5a1_unorm_pack16.count_8.size.13x13_array_of_36
+dEQP-VK.synchronization.op.multi_queue.fence.write_image_fragment_read_copy_image.image_128x128_r16g16b16a16_uint_concurrent
 dEQP-VK.wsi.direct.colorspace.basic
 dEQP-VK.wsi.direct.colorspace.hdr
 dEQP-VK.wsi.direct.present_timing.basic.retired_swapchain

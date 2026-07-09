@@ -177,6 +177,20 @@ decode_shader_ir3(const uint32_t *dwords, uint32_t sizedwords, int level,
                         &shader_stats[stage]);
 }
 
+static void
+decode_shader_ir3_quiet(const uint32_t *dwords, uint32_t sizedwords, int level,
+                        enum mesa_shader_stage stage)
+{
+   static FILE *nullf;
+
+   if (!nullf)
+      nullf = fopen("/dev/null", "w");
+
+   try_disasm_a3xx_stat(dwords, sizedwords, level, nullf,
+                        options->info->chip * 100,
+                        &shader_stats[stage]);
+}
+
 struct shader_stats *
 get_shader_stats(enum mesa_shader_stage stage)
 {
@@ -1789,11 +1803,46 @@ dump_tex_const(const uint32_t *texconst, int num_unit, int level)
 }
 
 static void
+parse_shader_stats(const char *regname, enum mesa_shader_stage stage)
+{
+   uint32_t base = regbase(regname);
+
+   /* If it hasn't changed since last draw, nothing to do. */
+   if (!reg_written(base))
+      return;
+
+   uint64_t gpuaddr = reg_val(base + 1);
+   gpuaddr <<= 32;
+   gpuaddr |= reg_val(base);
+
+   void *buf = hostptr(gpuaddr);
+   if (!buf)
+      return;
+
+   uint32_t sizedwords = hostlen(gpuaddr) / 4;
+
+   decode_shader_ir3_quiet(buf, sizedwords, 0, stage);
+}
+
+static void
 dump_bindless_descriptors(bool is_compute, int level)
 {
    /* Skip for devices which do not support bindless: */
    if (options->info->chip < 6)
       return;
+
+   if (options->summary) {
+      /* Ensure that updated shader stages are parsed.. in summary mode
+       * this only happens when dumping reg values, which happens after
+       * this fxn is called, resulting in using stale shaders:
+       */
+      parse_shader_stats("SP_VS_BASE", MESA_SHADER_VERTEX);
+      parse_shader_stats("SP_HS_BASE", MESA_SHADER_TESS_CTRL);
+      parse_shader_stats("SP_DS_BASE", MESA_SHADER_TESS_EVAL);
+      parse_shader_stats("SP_GS_BASE", MESA_SHADER_GEOMETRY);
+      parse_shader_stats("SP_PS_BASE", MESA_SHADER_FRAGMENT);
+      parse_shader_stats("SP_CS_BASE", MESA_SHADER_COMPUTE);
+   }
 
    printl(2, "%sdraw[%i] bindless descriptors\n", levels[level], draw_count);
 

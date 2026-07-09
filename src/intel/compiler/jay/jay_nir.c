@@ -47,23 +47,19 @@ nj_index_ssa_defs(nir_shader *nir)
 }
 
 static bool
-lower_frag_coord(nir_builder *b, nir_intrinsic_instr *intr, void *simd_)
+lower_frag_coord(nir_builder *b, nir_intrinsic_instr *intr, void *data)
 {
-   if (intr->intrinsic != nir_intrinsic_load_frag_coord &&
-       intr->intrinsic != nir_intrinsic_load_pixel_coord)
-      return false;
-
    b->cursor = nir_before_instr(&intr->instr);
-   nir_def *c = nir_unpack_32_2x16(b, nir_load_pixel_coord_intel(b));
 
-   if (intr->intrinsic == nir_intrinsic_load_frag_coord) {
-      c = nir_vec4(b, nir_u2f32(b, nir_channel(b, c, 0)),
-                   nir_u2f32(b, nir_channel(b, c, 1)), nir_load_frag_coord_z(b),
-                   nir_frcp(b, nir_load_frag_coord_w_rcp(b)));
+   if (intr->intrinsic == nir_intrinsic_load_pixel_coord) {
+      nir_def_replace(&intr->def,
+                      nir_unpack_32_2x16(b, nir_load_pixel_coord_intel(b)));
+      return true;
+   } else if (intr->intrinsic == nir_intrinsic_load_frag_coord_w) {
+      nir_def_replace(&intr->def, nir_frcp(b, nir_load_frag_coord_w_rcp(b)));
+      return true;
    }
-
-   nir_def_replace(&intr->def, c);
-   return true;
+   return false;
 }
 
 static bool
@@ -112,8 +108,10 @@ jay_nir_lower_simd(nir_builder *b, nir_intrinsic_instr *intr, void *simd_)
 }
 
 struct frag_out_ctx {
-   nir_def *colour[8], *depth, *stencil, *sample_mask;
+   nir_scalar colour[FRAG_RESULT_MAX][4];
+   nir_def *outputs[FRAG_RESULT_MAX];
    bool dual_blend;
+   bool replicate_alpha;
 };
 
 static bool
@@ -123,108 +121,124 @@ collect_fragment_output(nir_builder *b, nir_intrinsic_instr *intr, void *ctx_)
    if (intr->intrinsic != nir_intrinsic_store_output)
       return false;
 
-   unsigned wrmask = nir_intrinsic_write_mask(intr);
-   assert(nir_intrinsic_component(intr) == 0 && "component should be lowered");
-   assert(util_is_power_of_two_nonzero(wrmask + 1) &&
-          "complex writemasks should be lowered");
-
-   /* TODO: Optimize with write mask? */
+   const unsigned wrmask = nir_intrinsic_write_mask(intr);
+   const unsigned c = nir_intrinsic_component(intr);
 
    gl_frag_result loc = nir_intrinsic_io_semantics(intr).location;
-   nir_def **out;
-   if (loc == FRAG_RESULT_COLOR) {
-      out = &ctx->colour[0];
-   } else if (loc >= FRAG_RESULT_DATA0 && loc <= FRAG_RESULT_DATA7) {
-      out = &ctx->colour[loc - FRAG_RESULT_DATA0];
-   } else if (loc == FRAG_RESULT_DUAL_SRC_BLEND) {
-      out = &ctx->colour[1];
+   if (loc == FRAG_RESULT_COLOR)
+      loc = FRAG_RESULT_DATA0;
+   else if (loc == FRAG_RESULT_DUAL_SRC_BLEND)
       ctx->dual_blend = true;
-   } else if (loc == FRAG_RESULT_DEPTH) {
-      out = &ctx->depth;
-   } else if (loc == FRAG_RESULT_STENCIL) {
-      out = &ctx->stencil;
-   } else if (loc == FRAG_RESULT_SAMPLE_MASK) {
-      out = &ctx->sample_mask;
-   } else {
-      UNREACHABLE("invalid location");
-   }
 
-   assert((*out) == NULL && "each location written exactly once");
-   *out = intr->src[0].ssa;
+   if (loc < FRAG_RESULT_DATA0) {
+      assert(c == 0 && wrmask == 1);
+      assert(!ctx->outputs[loc] && "each non-colour output written only once");
+      ctx->outputs[loc] = intr->src[0].ssa;
+
+      /* Remove SampleMask writes that don't mask out any samples */
+      const unsigned all_samples = BITFIELD_MASK(16);
+      if (loc == FRAG_RESULT_SAMPLE_MASK &&
+          nir_src_is_const(intr->src[0]) &&
+          (nir_src_as_uint(intr->src[0]) & all_samples) == all_samples)
+         ctx->outputs[loc] = NULL;
+   } else {
+      u_foreach_bit(i, wrmask) {
+         assert(!ctx->colour[loc][c + i].def &&
+                "each colour component written only once");
+         ctx->colour[loc][c + i] = nir_get_scalar(intr->src[0].ssa, i);
+      }
+   }
 
    nir_instr_remove(&intr->instr);
    return true;
 }
-static void
-insert_rt_store(nir_builder *b,
-                signed target,
-                nir_def *colour,
-                nir_def *dual_colour,
-                nir_def *src0_colour,
-                nir_def *depth,
-                nir_def *stencil,
-                nir_def *sample_mask)
+
+/* nir_vec_scalar colour components, filling any unwritten with undef */
+static bool
+gather_colour_components(nir_builder *b,
+                         struct frag_out_ctx *ctx,
+                         gl_frag_result loc,
+                         nir_def *undef)
 {
-   bool null_rt = target < 0;
+   bool written = false;
 
-   colour = nir_pad_vec4(b, colour ?: nir_undef(b, 4, 32));
-   dual_colour = nir_pad_vec4(b, dual_colour ?: nir_undef(b, 4, 32));
-
-   if (null_rt) {
-      /* Even if we don't write a RT, we still need to write alpha for
-       * alpha-to-coverage and alpha testing. Optimize the other channels out.
-       */
-      colour = nir_vector_insert_imm(b, nir_undef(b, 4, 32),
-                                     nir_channel(b, colour, 3), 3);
+   for (unsigned c = 0; c < 4; c++) {
+      if (!ctx->colour[loc][c].def)
+         ctx->colour[loc][c] = nir_get_scalar(undef, 0);
+      else
+         written = true;
    }
 
-   nir_def *src0_alpha = nir_channel_or_undef(b, src0_colour ?: colour, 3);
+   if (written)
+      ctx->outputs[loc] = nir_vec_scalars(b, ctx->colour[loc], 4);
+
+   return written;
+}
+
+static void
+insert_rt_store(nir_builder *b, struct frag_out_ctx *ctx, signed target)
+{
+   const unsigned src0_alpha_loc =
+      FRAG_RESULT_DATA0 + (ctx->replicate_alpha ? 0 : MAX2(target, 0));
+
+   nir_def *colour = ctx->outputs[FRAG_RESULT_DATA0 + MAX2(target, 0)];
+   nir_def *dual_colour = ctx->outputs[FRAG_RESULT_DUAL_SRC_BLEND] ?: colour;
+   nir_def *src0_alpha = nir_mov_scalar(b, ctx->colour[src0_alpha_loc][3]);
 
    nir_store_render_target_intel(b, colour, dual_colour, src0_alpha,
-                                 sample_mask, depth, stencil, .target = target);
+                                 ctx->outputs[FRAG_RESULT_SAMPLE_MASK],
+                                 ctx->outputs[FRAG_RESULT_DEPTH],
+                                 ctx->outputs[FRAG_RESULT_STENCIL],
+                                 .target = target);
 }
 
 static void
 lower_fragment_outputs(nir_function_impl *impl,
                        const struct intel_device_info *devinfo,
-                       unsigned nr_color_regions,
-                       unsigned dispatch_width)
+                       unsigned nr_colour_regions,
+                       bool replicate_alpha)
 {
-   struct frag_out_ctx ctx = { { NULL } };
-   nir_function_intrinsics_pass(impl, collect_fragment_output,
-                                nir_metadata_control_flow, &ctx);
    nir_builder b_ = nir_builder_at(nir_after_impl(impl));
    nir_builder *b = &b_;
-   assert(nr_color_regions <= ARRAY_SIZE(ctx.colour));
+
+   struct frag_out_ctx ctx = { .replicate_alpha = replicate_alpha };
+   nir_function_intrinsics_pass(impl, collect_fragment_output,
+                                nir_metadata_control_flow, &ctx);
 
    nir_def *undef = nir_undef(b, 1, 32);
+   if (!ctx.outputs[FRAG_RESULT_DEPTH])
+      ctx.outputs[FRAG_RESULT_DEPTH] = undef;
+   if (!ctx.outputs[FRAG_RESULT_STENCIL])
+      ctx.outputs[FRAG_RESULT_STENCIL] = undef;
+   if (!ctx.outputs[FRAG_RESULT_SAMPLE_MASK])
+      ctx.outputs[FRAG_RESULT_SAMPLE_MASK] = undef;
 
    if (ctx.dual_blend) {
-      insert_rt_store(b, 0, ctx.colour[0], ctx.colour[1], NULL,
-                      ctx.depth ?: undef, ctx.stencil ?: undef,
-                      ctx.sample_mask ?: undef);
+      gather_colour_components(b, &ctx, FRAG_RESULT_DATA0, undef);
+      gather_colour_components(b, &ctx, FRAG_RESULT_DUAL_SRC_BLEND, undef);
+      insert_rt_store(b, &ctx, 0);
       return;
    }
+   ctx.outputs[FRAG_RESULT_DUAL_SRC_BLEND] = nir_undef(b, 4, 32);
 
-   signed last = -1;
-   for (signed i = nr_color_regions - 1; i >= 0; --i) {
-      if (ctx.colour[i]) {
-         last = i;
-         break;
+   bool written = false;
+   for (unsigned i = 0; i < nr_colour_regions; i++) {
+      if (gather_colour_components(b, &ctx, FRAG_RESULT_DATA0 + i, undef)) {
+         insert_rt_store(b, &ctx, i);
+         written = true;
       }
    }
 
-   for (signed i = 0; i < last; ++i) {
-      if (ctx.colour[i]) {
-         insert_rt_store(b, i, ctx.colour[i], NULL,
-                         i > 0 ? ctx.colour[0] : NULL, ctx.depth ?: undef,
-                         ctx.stencil ?: undef, ctx.sample_mask ?: undef);
-      }
-   }
+   if (!written) {
+      /* Even if we don't write a RT, we still need to write alpha for
+       * alpha-to-coverage and alpha testing. Optimize the other channels out.
+       */
+      for (unsigned c = 0; c < 3; c++)
+         ctx.colour[FRAG_RESULT_DATA0][c] = nir_get_scalar(undef, 0);
+      gather_colour_components(b, &ctx, FRAG_RESULT_DATA0, undef);
 
-   insert_rt_store(b, last, last >= 0 ? ctx.colour[last] : NULL, NULL,
-                   last > 0 ? ctx.colour[0] : NULL, ctx.depth ?: undef,
-                   ctx.stencil ?: undef, ctx.sample_mask ?: undef);
+      insert_rt_store(b, &ctx, -1);
+   }
 }
 
 unsigned
@@ -279,6 +293,8 @@ jay_process_nir(const struct intel_device_info *devinfo,
 
    JAY_NIR_SNAPSHOT("first");
 
+   brw_nir_apply_key(pt, &key->base, simd_width);
+
    if (stage == MESA_SHADER_VERTEX) {
       /* We only expect slot compaction to be disabled when using device
        * generated commands, to provide an independent 3DSTATE_VERTEX_ELEMENTS
@@ -302,8 +318,6 @@ jay_process_nir(const struct intel_device_info *devinfo,
                           nir->info.outputs_written, key->base.vue_layout,
                           pos_slots);
 
-      brw_nir_apply_key(pt, &key->base, simd_width);
-
       prog_data->vs.inputs_read = nir->info.inputs_read;
       prog_data->vs.double_inputs_read = nir->info.vs.double_inputs;
       prog_data->vs.no_vf_slot_compaction = key->vs.no_vf_slot_compaction;
@@ -323,8 +337,56 @@ jay_process_nir(const struct intel_device_info *devinfo,
       /* Unroll multiview loops */
       JAY_NIR_PASS(nir_opt_loop_unroll);
       JAY_NIR_PASS(nir_opt_constant_folding);
+      JAY_NIR_PASS(intel_nir_lower_shading_rate_output);
       JAY_NIR_PASS(brw_nir_lower_deferred_urb_writes, devinfo,
                    &prog_data->vue.vue_map, 0, 0);
+   } else if (stage == MESA_SHADER_TESS_CTRL) {
+      nir->info.outputs_written = key->tcs.outputs_written;
+      nir->info.patch_outputs_written = key->tcs.patch_outputs_written;
+
+      struct intel_vue_map input_vue_map;
+      brw_compute_vue_map(devinfo, &input_vue_map, nir->info.inputs_read,
+                          key->base.vue_layout, 1);
+      brw_compute_tess_vue_map(&prog_data->vue.vue_map,
+                               nir->info.outputs_written,
+                               nir->info.patch_outputs_written,
+                               key->tcs.separate_tess_vue_layout);
+
+      brw_nir_lower_tcs_inputs(nir, devinfo, &input_vue_map);
+      brw_nir_lower_tcs_outputs(nir, devinfo, &prog_data->vue.vue_map,
+                                key->tcs._tes_primitive_mode);
+      JAY_NIR_SNAPSHOT("after_lower_io");
+
+      brw_nir_opt_vectorize_urb(pt);
+      JAY_NIR_PASS(intel_nir_lower_patch_vertices_in, key->tcs.input_vertices);
+
+      /* Compute URB entry size.  The maximum allowed URB entry size is 32k.
+       * That divides up as follows:
+       *
+       *     32 bytes for the patch header (tessellation factors)
+       *    480 bytes for per-patch varyings (a varying component is 4 bytes and
+       *              gl_MaxTessPatchComponents = 120)
+       *  16384 bytes for per-vertex varyings (a varying component is 4 bytes,
+       *              gl_MaxPatchVertices = 32 and
+       *              gl_MaxTessControlOutputComponents = 128)
+       *
+       *  15808 bytes left for varying packing overhead
+       */
+      const int num_per_patch_slots =
+         prog_data->vue.vue_map.num_per_patch_slots;
+      const int num_per_vertex_slots =
+         prog_data->vue.vue_map.num_per_vertex_slots;
+      unsigned output_size_bytes = 0;
+      /* Note that the patch header is counted in num_per_patch_slots. */
+      output_size_bytes += num_per_patch_slots * 16;
+      output_size_bytes +=
+         nir->info.tess.tcs_vertices_out * num_per_vertex_slots * 16;
+
+      assert(output_size_bytes >= 1);
+      assert(output_size_bytes < GFX7_MAX_HS_URB_ENTRY_SIZE_BYTES);
+
+      /* URB entry sizes are stored as a multiple of 64 bytes. */
+      prog_data->vue.urb_entry_size = align(output_size_bytes, 64) / 64;
    } else if (stage == MESA_SHADER_TESS_EVAL) {
       const uint32_t pos_slots =
          (nir->info.per_view_outputs & VARYING_BIT_POS) ?
@@ -341,7 +403,6 @@ jay_process_nir(const struct intel_device_info *devinfo,
                                nir->info.patch_inputs_read,
                                key->tes.separate_tess_vue_layout);
 
-      brw_nir_apply_key(pt, &key->base, simd_width);
       brw_nir_lower_tes_inputs(nir, devinfo, &input_vue_map,
                                &prog_data->vue.urb_read_length);
       brw_nir_lower_vue_outputs(nir);
@@ -368,7 +429,6 @@ jay_process_nir(const struct intel_device_info *devinfo,
                                           &nir->info);
    } else if (stage == MESA_SHADER_FRAGMENT) {
       assert(key->fs.mesh_input == INTEL_NEVER && "todo");
-      brw_nir_apply_key(pt, &key->base, simd_width);
       brw_nir_lower_fs_inputs(nir, devinfo, &key->fs);
       brw_nir_lower_fs_outputs(nir);
       JAY_NIR_SNAPSHOT("after_lower_io");
@@ -377,14 +437,18 @@ jay_process_nir(const struct intel_device_info *devinfo,
       if (!brw_can_coherent_fb_fetch(devinfo))
          JAY_NIR_PASS(brw_nir_lower_fs_load_output, &key->fs);
 
+      /* Do this lowering before jay_populate_prog_data(). */
       JAY_NIR_PASS(nir_opt_frag_coord_to_pixel_coord);
-      JAY_NIR_PASS(nir_shader_intrinsics_pass, lower_frag_coord,
-                   nir_metadata_control_flow, NULL);
+      JAY_NIR_PASS(nir_lower_frag_coord_to_pixel_coord);
       JAY_NIR_PASS(nir_opt_barycentric, true);
       JAY_NIR_PASS(nir_opt_constant_folding);
 
+      if (key->fs.alpha_to_coverage != INTEL_NEVER)
+         JAY_NIR_PASS(brw_nir_lower_alpha_to_coverage);
+
       lower_fragment_outputs(nir_shader_get_entrypoint(nir), devinfo,
-                             key->fs.nr_color_regions, simd_width);
+                             key->fs.nr_color_regions,
+                             key->fs.alpha_test_replicate_alpha);
 
       /* nir_lower_terminate_to_demote will hamper our ability to schedule
        * terminates (since it turns them into real control flow), so run
@@ -394,20 +458,7 @@ jay_process_nir(const struct intel_device_info *devinfo,
       JAY_NIR_PASS(nir_opt_move_discards_to_top);
       JAY_NIR_PASS(nir_lower_terminate_to_demote);
 
-      if (key->fs.alpha_to_coverage != INTEL_NEVER) {
-         /* Run constant fold optimization in order to get the correct source
-          * offset to determine render target 0 store instruction in
-          * emit_alpha_to_coverage pass.
-          */
-         JAY_NIR_PASS(nir_opt_constant_folding);
-         JAY_NIR_PASS(brw_nir_lower_alpha_to_coverage);
-      }
-
-      /* We want to run the standard opt loop after lowering but before
-       * gathering prog data, so we have accurate information about which system
-       * values are actually used (vs DCE'd away).
-       */
-      brw_nir_optimize(pt);
+      brw_nir_cleanup_pre_fs_prog_data(pt);
 
       // TODO
       // JAY_NIR_PASS(brw_nir_move_interpolation_to_top);
@@ -417,9 +468,13 @@ jay_process_nir(const struct intel_device_info *devinfo,
        */
       jay_populate_prog_data(devinfo, nir, prog_data, key, 0);
 
+      if (prog_data->fs.coarse_pixel_dispatch)
+         JAY_NIR_PASS(brw_nir_lower_frag_coord_z, devinfo);
+
+      JAY_NIR_PASS(nir_shader_intrinsics_pass, lower_frag_coord,
+                   nir_metadata_control_flow, NULL);
+
       JAY_NIR_PASS(brw_nir_lower_fs_config_intel, &key->fs, &prog_data->fs);
-   } else {
-      brw_nir_apply_key(pt, &key->base, simd_width);
    }
 
    brw_postprocess_nir_opts(pt);
@@ -434,6 +489,7 @@ jay_process_nir(const struct intel_device_info *devinfo,
     * As is the case with conversion lowering (below), brw_nir_optimize can
     * create additional fsign instructions.
     */
+   JAY_NIR_PASS(jay_nir_lower_bfloat_math);
    JAY_NIR_PASS(jay_nir_lower_fsign);
    JAY_NIR_PASS(jay_nir_lower_bool);
    JAY_NIR_PASS(nir_opt_cse);

@@ -75,12 +75,10 @@ dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_out_of_bounds_min,Fail
 api@clgetcommandqueueinfo,Fail
 api@clgetextensionfunctionaddressforplatform,Fail
 api@clgetkernelarginfo,Fail
-api@clgetmemobjectinfo,Fail
 api@cllinkprogram,Fail
 api@clsetkernelarg,Fail
 api@clsetkernelarg@Input checks,Fail
 program@bitcoin: phatk kernel,Crash
-program@build@vector-data-types,Fail
 program@execute@amdgcn-f32-inline-immediates,Fail
 program@execute@amdgcn-f32-inline-immediates@add integer 64,Fail
 program@execute@amdgcn.sign_extend_inreg,Fail

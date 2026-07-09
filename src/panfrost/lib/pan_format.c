@@ -1,6 +1,7 @@
 /*
  * Copyright (C) 2019 Collabora, Ltd.
  * Copyright (C) 2026 Arm Ltd.
+ * Copyright (C) 2026 Google LLC
  * SPDX-License-Identifier: MIT
  */
 
@@ -148,12 +149,6 @@ const struct pan_blendable_format
 #define YUV_NO_SWAP (0)
 #define YUV_SWAP    (1)
 
-#if PAN_ARCH < 14
-#define MALI_YUV_CR_SITING_CENTER_422 (MALI_YUV_CR_SITING_CENTER_Y)
-#else
-#define MALI_YUV_CR_SITING_CENTER_422 (MALI_YUV_CR_SITING_CENTER_X)
-#endif
-
 #define FMT_YUV(pipe, mali, swizzle, swap, siting, flags)                      \
    [PIPE_FORMAT_##pipe] = {                                                    \
       .hw = (MALI_YUV_SWIZZLE_##swizzle) | ((YUV_##swap) << 3) |               \
@@ -213,14 +208,19 @@ const struct pan_format GENX(pan_pipe_format)[PIPE_FORMAT_COUNT] = {
    FMT_YUV(B8R8_G8R8_UNORM, VYUY8, VUYA, SWAP,    CENTER_422, _T____),
    FMT_YUV(R8_G8B8_420_UNORM, Y8_UV8_420, YUVA, NO_SWAP, CENTER, _T____),
    FMT_YUV(R8_B8G8_420_UNORM, Y8_UV8_420, YVUA, NO_SWAP, CENTER, _T____),
+   FMT_YUV(G8_B8R8_420_UNORM, Y8_UV8_420, UVYA, NO_SWAP, CENTER, _T____),
    FMT_YUV(R8_G8_B8_420_UNORM, Y8_U8_V8_420, YUVA, NO_SWAP, CENTER, _T____),
    FMT_YUV(R8_B8_G8_420_UNORM, Y8_U8_V8_420, YVUA, NO_SWAP, CENTER, _T____),
+   FMT_YUV(G8_B8_R8_420_UNORM, Y8_U8_V8_420, UVYA, NO_SWAP, CENTER, _T____),
 
    FMT_YUV(R8_G8B8_422_UNORM, Y8_UV8_422, YUVA, NO_SWAP, CENTER_422, _T____),
    FMT_YUV(R8_B8G8_422_UNORM, Y8_UV8_422, YVUA, NO_SWAP, CENTER_422, _T____),
+   FMT_YUV(Y8_U8V8_422_UNORM, Y8_UV8_422, UVYA, NO_SWAP, CENTER_422, _T____),
+   FMT_YUV(Y8_U8_V8_422_UNORM, Y8_U8_V8_422, UVYA, NO_SWAP, CENTER_422, _T____),
 
    FMT_YUV(R10_G10B10_420_UNORM, Y10_UV10_420, YUVA, NO_SWAP, CENTER, _T____),
    FMT_YUV(R10_G10B10_422_UNORM, Y10_UV10_422, YUVA, NO_SWAP, CENTER_422, _T____),
+   FMT_YUV(X6G10_X6B10X6R10_420_UNORM, Y10_UV10_420, UVYA, NO_SWAP, CENTER, _T____),
    /* special internal formats */
    FMT_YUV(R8G8B8_420_UNORM_PACKED, Y8_UV8_420, YUVA, NO_SWAP, CENTER, _T____),
    FMT_YUV(R10G10B10_420_UNORM_PACKED, Y10_UV10_420, YUVA, NO_SWAP, CENTER, _T____),

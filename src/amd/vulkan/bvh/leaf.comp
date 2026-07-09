@@ -23,7 +23,9 @@
 
 #version 460
 
-#include "build_helpers.h"
+#include "bvh_defines.h"
+#define VK_USED_BUILD_FLAGS VK_LEAF_BUILD_FLAGS
+#include "bvh_helpers.h"
 
 mat3 abs(mat3 in_mat) {
     return mat3(abs(in_mat[0]), abs(in_mat[1]), abs(in_mat[2]));

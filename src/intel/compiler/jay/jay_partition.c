@@ -3,8 +3,10 @@
  * SPDX-License-Identifier: MIT
  */
 
+#include <math.h>
 #include "util/u_math.h"
 #include "jay_ir.h"
+#include "jay_opcodes.h"
 #include "jay_private.h"
 
 /*
@@ -169,6 +171,33 @@ build_partition(jay_shader *shader, struct jay_partition_builder *b, unsigned n)
    assert(BITSET_COUNT(regs) == JAY_NUM_PHYS_GRF && "all GRFs mapped");
 }
 
+static inline unsigned
+register_limit(jay_shader *s, enum jay_file file, unsigned limit)
+{
+   /* If testing spilling, set limit tightly. */
+   if (jay_debug & JAY_DBG_SPILL) {
+      /* UGPR spilling needs 1 extra register throughout the program but 2
+       * extra registers right at the beginning with all the preloading.
+       */
+      struct instruction_req req = analyze_per_inst(s);
+      limit =
+         file == UGPR ? req.ugpr + 1 : req.gpr[0] + req.gpr[1] + req.gpr[2];
+
+      jay_foreach_function(s, f) {
+         jay_foreach_preload(f, I) {
+            if (I->dst.file == file) {
+               uint32_t max = jay_preload_reg(I) +
+                              jay_num_values(I->dst) +
+                              (file == GPR ? 0 : 2);
+               limit = MAX2(limit, max);
+            }
+         }
+      }
+   }
+
+   return limit;
+}
+
 /*
  * Partition the register file for the entire shader.
  *
@@ -189,6 +218,13 @@ jay_partition_grf(jay_shader *shader)
    if (shader->stage == MESA_SHADER_VERTEX) {
       payload_4[0] = 1;
       payload_4[1] = shader->prog_data->vue.urb_read_length * 8;
+      payload_u[1] = shader->push_grfs;
+      eot_4 = 16;
+   } else if (shader->stage == MESA_SHADER_TESS_CTRL) {
+      payload_4[0] =
+         1 +
+         shader->prog_data->tcs.include_primitive_id +
+         (shader->prog_data->tcs.input_vertices ?: BRW_MAX_TCS_INPUT_VERTICES);
       payload_u[1] = shader->push_grfs;
       eot_4 = 16;
    } else if (shader->stage == MESA_SHADER_TESS_EVAL) {
@@ -226,10 +262,19 @@ jay_partition_grf(jay_shader *shader)
     */
    unsigned demand[JAY_NUM_GRF_FILES] = { 0 };
    struct instruction_req instr_req = analyze_per_inst(shader);
+   unsigned ugpr_limit = register_limit(shader, UGPR, 1024);
 
    jay_foreach_function(shader, f) {
       jay_compute_liveness(f);
       jay_calculate_register_demands(f);
+
+      if (f->demand[UGPR] > ugpr_limit) {
+         jay_spill(f, UGPR, ugpr_limit);
+         jay_compute_liveness(f);
+         jay_calculate_register_demands(f);
+      }
+
+      assert(f->demand[UGPR] <= ugpr_limit);
 
       demand[GPR] = MAX2(demand[GPR], f->demand[GPR]);
       demand[UGPR] = MAX2(demand[UGPR], f->demand[UGPR]);
@@ -250,13 +295,13 @@ jay_partition_grf(jay_shader *shader)
    unsigned spilling_grfs = 0, mem_slots = 0;
    unsigned special_4 = payload_4[0] + payload_4[1] + eot_4, special_u;
 
-   /* Our current stride partition heuristic is rather dumb: allocate as few
-    * non-32-bit GRFs as possible, and assign the rest to 32-bit. This performs
-    * well for 32-bit code but poorly for 16-bit/64-bit heavy routines.
-    * We'll need stride-aware demand calculations to fix that (TODO).
-    */
-   unsigned grf_8 = align(instr_req.gpr[JAY_STRIDE_8], 2) * grf_per_gpr;
-   unsigned grf_2 = instr_req.gpr[JAY_STRIDE_2] * grf_per_gpr;
+   unsigned increment[JAY_NUM_STRIDES] = { grf_per_gpr, grf_per_gpr,
+                                           2 * grf_per_gpr };
+   unsigned min_grf[JAY_NUM_STRIDES] = {};
+   for (unsigned i = 0; i < JAY_NUM_STRIDES; ++i) {
+      min_grf[i] = align(instr_req.gpr[i] * grf_per_gpr, increment[i]);
+   }
+
    unsigned mapped_accums = grf_per_gpr == 1 ? 2 : 0;
 
    for (unsigned spilling = 0; spilling <= 1; spilling++) {
@@ -274,8 +319,10 @@ jay_partition_grf(jay_shader *shader)
        */
       uniform_grfs = DIV_ROUND_UP(demand[UGPR], ugpr_per_grf) + spilling_grfs;
       unsigned bonus_grfs = 4 * grf_per_gpr;
-      unsigned estimate_nonunif_grf =
-         (demand[GPR] * grf_per_gpr) + grf_8 + grf_2 + special_4;
+      unsigned estimate_nonunif_grf = (demand[GPR] * grf_per_gpr) +
+                                      min_grf[JAY_STRIDE_8] +
+                                      min_grf[JAY_STRIDE_2] +
+                                      special_4;
 
       if ((uniform_grfs + estimate_nonunif_grf + bonus_grfs) <=
           JAY_NUM_PHYS_GRF) {
@@ -303,10 +350,8 @@ jay_partition_grf(jay_shader *shader)
       shader->num_regs[GPR] = (nonuniform_grfs / grf_per_gpr) + mapped_accums;
       shader->num_regs[UGPR] = uniform_grfs * ugpr_per_grf;
 
-      /* jay_gpr_limit depends on shader->num_regs[GPR]. If we're under the
-       * limit without spilling, we're good to go.
-       */
-      if (demand[GPR] <= jay_gpr_limit(shader) && !spilling) {
+      /* If we're under the limit without spilling, we're good to go. */
+      if (demand[GPR] <= register_limit(shader, GPR, shader->num_regs[GPR])) {
          break;
       }
    }
@@ -319,6 +364,53 @@ jay_partition_grf(jay_shader *shader)
       shader->num_regs[MEM] = demand[GPR];
    }
 
+   /* Now that we've decided how many GRFs to use for GPRs, we need to partition
+    * those GRFs by stride. This does not affect spilling but it has a
+    * significant effect on moves inserted by RA. We use a simple heuristic to
+    * pick a balanced partition: give each stride GRFs proportionate to the
+    * number of SSA defs with that associated stride, plus a slight bias towards
+    * 32-bit to avoid divsion by zero. This reflects our intuition that shaders
+    * heavy on 16-bit (or 64-bit) arithmetic should have more 16-bit (or 64-bit)
+    * registers overall.
+    */
+   unsigned counts[3] = { [JAY_STRIDE_4] = 1 };
+   jay_foreach_inst_in_shader(shader, block, I) {
+      if (I->dst.file == GPR) {
+         counts[jay_dst_stride_minmax(I, false)] += jay_num_values(I->dst);
+      }
+   }
+
+   min_grf[JAY_STRIDE_4] = MAX2(min_grf[JAY_STRIDE_4], special_4);
+   unsigned denom_i = counts[0] + counts[1] + counts[2];
+   float factor = nonuniform_grfs / ((float) denom_i);
+
+   unsigned picked_grf[JAY_NUM_STRIDES] = {}, total = 0;
+   for (unsigned i = 0; i < JAY_NUM_STRIDES; ++i) {
+      float ideal = ((float) counts[i]) * factor;
+
+      picked_grf[i] = align(MAX2(roundf(ideal), min_grf[i]), increment[i]);
+      total += picked_grf[i];
+   }
+
+   if (total < nonuniform_grfs) {
+      /* If we have GRFs to spare due to rounding, put them on 32-bit */
+      picked_grf[JAY_STRIDE_4] += nonuniform_grfs - total;
+   } else {
+      /* If we used too many GRFs, remove where we can */
+      unsigned excess = total - nonuniform_grfs;
+      assert(util_is_aligned(excess, grf_per_gpr));
+
+      for (unsigned i = 0; i < JAY_NUM_STRIDES; ++i) {
+         while (excess && picked_grf[i] > min_grf[i]) {
+            assert(excess >= increment[i]);
+            picked_grf[i] -= increment[i];
+            excess -= increment[i];
+         }
+      }
+   }
+
+   assert(picked_grf[0] + picked_grf[1] + picked_grf[2] == nonuniform_grfs);
+
    struct jay_partition_builder blocks[] = {
       /* Stage-specific payload */
       { UGPR, 0, payload_u[0] },
@@ -328,9 +420,9 @@ jay_partition_grf(jay_shader *shader)
 
       /* General registers */
       { UGPR, 0, uniform_grfs - special_u },
-      { GPR, JAY_STRIDE_4, nonuniform_grfs - (special_4 + grf_8 + grf_2) },
-      { GPR, JAY_STRIDE_8, grf_8 },
-      { GPR, JAY_STRIDE_2, grf_2 },
+      { GPR, JAY_STRIDE_4, picked_grf[JAY_STRIDE_4] - special_4 },
+      { GPR, JAY_STRIDE_8, picked_grf[JAY_STRIDE_8] },
+      { GPR, JAY_STRIDE_2, picked_grf[JAY_STRIDE_2] },
 
       /* Spilling registers */
       { UGPR, 0, spilling_grfs, JAY_BLOCK_SPILL },
@@ -348,6 +440,28 @@ jay_partition_grf(jay_shader *shader)
 
    /* By construction of our partition, the entire GRF is used. */
    shader->prog_data->base.grf_used = JAY_NUM_PHYS_GRF;
+
+   /* Spill as needed to fit within the partition we picked. */
+   jay_foreach_function(shader, f) {
+      unsigned limit = register_limit(shader, GPR, shader->num_regs[GPR]);
+      bool spilled = f->demand[GPR] > limit;
+
+      if (spilled) {
+         jay_spill(f, GPR, limit);
+         jay_validate(f->shader, "spilling");
+         jay_compute_liveness(f);
+         jay_calculate_register_demands(f);
+      }
+
+      if (f->demand[GPR] > limit) {
+         fprintf(stderr, "limit %u but demand %u\n", limit, f->demand[GPR]);
+         fflush(stdout);
+         UNREACHABLE("spiller bug");
+      }
+
+      assert(f->demand[UGPR] <= f->shader->num_regs[UGPR] &&
+             "UGPRs spilled above");
+   }
 }
 
 #define ANSI_END    "\033[0m"

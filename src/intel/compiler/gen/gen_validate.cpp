@@ -74,6 +74,7 @@ struct gen_validator {
       send_descriptor_restrictions();
       register_region_special_restrictions();
       scalar_register_restrictions();
+      xe3p_src1_encoding_restrictions();
 
    end:
       error_index++;
@@ -2087,6 +2088,30 @@ private:
 
       ERROR_IF(src1_is_scalar || src2_is_scalar,
                "Scalar registers are only allowed in src0.");
+   }
+
+   void
+   xe3p_src1_encoding_restrictions()
+   {
+      if (devinfo->ver < 35 || num_sources < 2)
+         return;
+
+      if (format == GEN_FORMAT_DPAS_THREE_SRC ||
+          format == GEN_FORMAT_SEND)
+         return;
+
+      if (is_null(inst->src[1]))
+         return;
+
+      const unsigned src1_stride = gen_byte_stride(inst->src[1]);
+      if (src1_stride == 0)
+         return;
+
+      const unsigned dst_stride =
+         MAX2(gen_byte_stride(inst->dst), gen_type_size_bytes(inst->dst.type));
+
+      ERROR_IF(dst_stride != src1_stride,
+               "On Xe3P+, src1 and dst byte stride must match.");
    }
 };
 

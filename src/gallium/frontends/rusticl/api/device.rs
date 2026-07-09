@@ -208,7 +208,9 @@ unsafe impl CLInfo<cl_device_info> for cl_device_id {
             CL_DEVICE_NATIVE_VECTOR_WIDTH_FLOAT => v.write::<cl_uint>(1),
             CL_DEVICE_NATIVE_VECTOR_WIDTH_HALF => v.write::<cl_uint>(dev.fp16_supported().into()),
             CL_DEVICE_NATIVE_VECTOR_WIDTH_INT => v.write::<cl_uint>(1),
-            CL_DEVICE_NATIVE_VECTOR_WIDTH_LONG => v.write::<cl_uint>(1),
+            CL_DEVICE_NATIVE_VECTOR_WIDTH_LONG => {
+                v.write::<cl_uint>(if dev.int64_supported() { 1 } else { 0 })
+            }
             CL_DEVICE_NATIVE_VECTOR_WIDTH_SHORT => v.write::<cl_uint>(1),
             CL_DEVICE_NODE_MASK => {
                 v.write::<cl_uint>(dev.screen().device_node_mask().unwrap_or_default())
@@ -249,7 +251,9 @@ unsafe impl CLInfo<cl_device_info> for cl_device_id {
                 v.write::<cl_uint>(dev.fp16_supported().into())
             }
             CL_DEVICE_PREFERRED_VECTOR_WIDTH_INT => v.write::<cl_uint>(1),
-            CL_DEVICE_PREFERRED_VECTOR_WIDTH_LONG => v.write::<cl_uint>(1),
+            CL_DEVICE_PREFERRED_VECTOR_WIDTH_LONG => {
+                v.write::<cl_uint>(if dev.int64_supported() { 1 } else { 0 })
+            }
             CL_DEVICE_PREFERRED_VECTOR_WIDTH_SHORT => v.write::<cl_uint>(1),
             CL_DEVICE_PREFERRED_WORK_GROUP_SIZE_MULTIPLE => {
                 v.write::<usize>(dev.subgroup_sizes().next().unwrap())

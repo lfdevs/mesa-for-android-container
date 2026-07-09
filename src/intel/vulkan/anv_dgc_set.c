@@ -10,6 +10,24 @@
 
 #include "anv_private.h"
 
+
+enum anv_dgc_stage
+anv_mesa_stage_to_dgc_stage(mesa_shader_stage stage)
+{
+   static const enum anv_dgc_stage stages[] = {
+      [MESA_SHADER_VERTEX] = ANV_DGC_STAGE_VERTEX,
+      [MESA_SHADER_TESS_CTRL] = ANV_DGC_STAGE_TESS_CTRL,
+      [MESA_SHADER_TESS_EVAL] = ANV_DGC_STAGE_TESS_EVAL,
+      [MESA_SHADER_GEOMETRY]  = ANV_DGC_STAGE_GEOMETRY,
+      [MESA_SHADER_FRAGMENT]  = ANV_DGC_STAGE_FRAGMENT,
+      [MESA_SHADER_MESH]      = ANV_DGC_STAGE_MESH,
+      [MESA_SHADER_TASK]      = ANV_DGC_STAGE_TASK,
+      [MESA_SHADER_COMPUTE]   = ANV_DGC_STAGE_COMPUTE,
+   };
+   assert(stage < ARRAY_SIZE(stages));
+   return stages[stage];
+}
+
 enum anv_dgc_stage
 anv_vk_stage_to_dgc_stage(VkShaderStageFlags vk_stage)
 {
@@ -86,15 +104,13 @@ anv_write_gfx_indirect_descriptor(struct anv_device *device,
          continue;
       }
 
-      const struct anv_pipeline_bind_map *bind_map =
-         &gfx->shaders[stage]->bind_map;
-      if ((bind_map->push_ranges[0].length == 0 ||
-           bind_map->push_ranges[0].set != ANV_DESCRIPTOR_SET_PUSH_CONSTANTS) &&
-          bind_map->inline_dwords_count == 0) {
+      if (!anv_dgc_shader_needs_push_commands(gfx->shaders[stage])) {
          descriptor->push_constants.stages[gen_stage] = empty_push;
          continue;
       }
 
+      const struct anv_pipeline_bind_map *bind_map =
+         &gfx->shaders[stage]->bind_map;
       if (stage == MESA_SHADER_MESH &&
           intel_needs_workaround(device->info, 18019110168)) {
          const struct brw_mesh_prog_data *mesh_prog_data = get_gfx_mesh_prog_data(gfx);
@@ -121,6 +137,7 @@ anv_write_gfx_indirect_descriptor(struct anv_device *device,
              * see.
              */
             assert(range->set == ANV_DESCRIPTOR_SET_PUSH_CONSTANTS ||
+                   range->set == ANV_DESCRIPTOR_SET_PUSH_POINTER ||
                    range->set == ANV_DESCRIPTOR_SET_DESCRIPTORS ||
                    range->set == ANV_DESCRIPTOR_SET_NULL ||
                    range->set == ANV_DESCRIPTOR_SET_PER_PRIM_PADDING);
@@ -128,10 +145,10 @@ anv_write_gfx_indirect_descriptor(struct anv_device *device,
             struct anv_dgc_push_stage_slot *slot =
                &descriptor->push_constants.stages[gen_stage].legacy.slots[i];
 
-            slot->push_data_size = 32 * range->length;
-
+            slot->push_data_index = range->index;
             slot->push_data_offset = 32 * range->start;
-            slot->type = ANV_DGC_PUSH_SLOT_TYPE_PUSH_CONSTANTS;
+            slot->push_data_size = 32 * range->length;
+            slot->set = range->set;
             descriptor->push_constants.stages[gen_stage].legacy.n_slots++;
          }
       }

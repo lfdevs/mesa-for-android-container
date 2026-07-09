@@ -265,42 +265,8 @@ fill_first_regcmd(struct rkt_ml_subgraph *subgraph,
       /* See http://nvdla.org/hw/v1/ias/precision.html#element-wise */
       EMIT(REG_DPU_EW_CVT_OFFSET_VALUE, operation->addition_offset);
 
-      float add_scale = 0.0;
-      if (fabs(operation->addition_scale - 0.090192) < 0.00001) {
-         add_scale = 299.671889248;
-      } else if (fabs(operation->addition_scale - 0.399250) < 0.00001) {
-         add_scale = 1326.499209406;
-      } else if (fabs(operation->addition_scale - 0.364902) < 0.00001) {
-         add_scale = 780.34375;
-      } else if (fabs(operation->addition_scale - 0.422037) < 0.00001) {
-         add_scale = 715.5625;
-      } else if (fabs(operation->addition_scale - 0.213016) < 0.00001) {
-         add_scale = 564.6875;
-      } else if (fabs(operation->addition_scale - 0.244231) < 0.00001) {
-         add_scale = 499.796875;
-      } else if (fabs(operation->addition_scale - 0.283416) < 0.00001) {
-         add_scale = 488.203125;
-      } else if (fabs(operation->addition_scale - 0.171151) < 0.00001) {
-         add_scale = 602.90625;
-      } else if (fabs(operation->addition_scale - 0.164588) < 0.00001) {
-         add_scale = 271.921875;
-      } else if (fabs(operation->addition_scale - 0.204098) < 0.00001) {
-         add_scale = 262.90625;
-      } else if (fabs(operation->addition_scale - 0.116532) < 0.00001) {
-         add_scale = 450.140625;
-      } else if (fabs(operation->addition_scale - 0.134499) < 0.00001) {
-         add_scale = 212.1953125;
-      } else if (fabs(operation->addition_scale - 0.220141) < 0.00001) {
-         add_scale = 368.28125;
-      } else if (fabs(operation->addition_scale - 0.094560) < 0.00001) {
-         add_scale = 416.421875;
-      } else if (fabs(operation->addition_scale - 0.093230) < 0.00001) {
-         add_scale = 305.421875;
-      } else if (fabs(operation->addition_scale - 0.100618) < 0.00001) {
-         add_scale = 313.671875;
-      } else {
-         add_scale = 0.0;
-      }
+      float add_scale =
+         operation->addition_scale / (task->input_scale * task->weights_scale);
 
       uint32_t add_scale_bits = fui(add_scale);
       /* Taken from
@@ -318,67 +284,19 @@ fill_first_regcmd(struct rkt_ml_subgraph *subgraph,
 
       EMIT(REG_DPU_EW_RELUX_CMP_VALUE, 0x0);
 
-      if (fabs(operation->addition_scale - 0.213016) < 0.00001) {
-         EMIT(REG_DPU_OUT_CVT_OFFSET, 0x4);
-         EMIT(REG_DPU_OUT_CVT_SCALE, DPU_OUT_CVT_SCALE_OUT_CVT_SCALE(25914));
-         EMIT(REG_DPU_OUT_CVT_SHIFT, DPU_OUT_CVT_SHIFT_OUT_CVT_SHIFT(24));
-      } else if (fabs(operation->addition_scale - 0.244231) < 0.00001) {
-         EMIT(REG_DPU_OUT_CVT_OFFSET, 0x1);
-         EMIT(REG_DPU_OUT_CVT_SCALE, DPU_OUT_CVT_SCALE_OUT_CVT_SCALE(28927));
-         EMIT(REG_DPU_OUT_CVT_SHIFT, DPU_OUT_CVT_SHIFT_OUT_CVT_SHIFT(24));
-      } else if (fabs(operation->addition_scale - 0.283416) < 0.00001) {
-         EMIT(REG_DPU_OUT_CVT_OFFSET, 0x6);
-         EMIT(REG_DPU_OUT_CVT_SCALE, DPU_OUT_CVT_SCALE_OUT_CVT_SCALE(26050));
-         EMIT(REG_DPU_OUT_CVT_SHIFT, DPU_OUT_CVT_SHIFT_OUT_CVT_SHIFT(24));
-      } else if (fabs(operation->addition_scale - 0.171151) < 0.00001) {
-         EMIT(REG_DPU_OUT_CVT_OFFSET, 0xfffffffd);
-         EMIT(REG_DPU_OUT_CVT_SCALE, DPU_OUT_CVT_SCALE_OUT_CVT_SCALE(28937));
-         EMIT(REG_DPU_OUT_CVT_SHIFT, DPU_OUT_CVT_SHIFT_OUT_CVT_SHIFT(24));
-      } else if (fabs(operation->addition_scale - 0.164588) < 0.00001) {
-         EMIT(REG_DPU_OUT_CVT_OFFSET, 0x1);
-         EMIT(REG_DPU_OUT_CVT_SCALE, DPU_OUT_CVT_SCALE_OUT_CVT_SCALE(24877));
-         EMIT(REG_DPU_OUT_CVT_SHIFT, DPU_OUT_CVT_SHIFT_OUT_CVT_SHIFT(23));
-      } else if (fabs(operation->addition_scale - 0.204098) < 0.00001) {
-         EMIT(REG_DPU_OUT_CVT_OFFSET, 0x0);
-         EMIT(REG_DPU_OUT_CVT_SCALE, DPU_OUT_CVT_SCALE_OUT_CVT_SCALE(23272));
-         EMIT(REG_DPU_OUT_CVT_SHIFT, DPU_OUT_CVT_SHIFT_OUT_CVT_SHIFT(23));
-      } else if (fabs(operation->addition_scale - 0.116532) < 0.00001) {
-         EMIT(REG_DPU_OUT_CVT_OFFSET, 0xfffffff8);
-         EMIT(REG_DPU_OUT_CVT_SCALE, DPU_OUT_CVT_SCALE_OUT_CVT_SCALE(32292));
-         EMIT(REG_DPU_OUT_CVT_SHIFT, DPU_OUT_CVT_SHIFT_OUT_CVT_SHIFT(24));
-      } else if (fabs(operation->addition_scale - 0.134499) < 0.00001) {
-         EMIT(REG_DPU_OUT_CVT_OFFSET, 0xfffffffb);
-         EMIT(REG_DPU_OUT_CVT_SCALE, DPU_OUT_CVT_SCALE_OUT_CVT_SCALE(24153));
-         EMIT(REG_DPU_OUT_CVT_SHIFT, DPU_OUT_CVT_SHIFT_OUT_CVT_SHIFT(23));
-      } else if (fabs(operation->addition_scale - 0.220141) < 0.00001) {
-         EMIT(REG_DPU_OUT_CVT_OFFSET, 0xb);
-         EMIT(REG_DPU_OUT_CVT_SCALE, DPU_OUT_CVT_SCALE_OUT_CVT_SCALE(27655));
-         EMIT(REG_DPU_OUT_CVT_SHIFT, DPU_OUT_CVT_SHIFT_OUT_CVT_SHIFT(24));
-      } else if (fabs(operation->addition_scale - 0.094560) < 0.00001) {
-         EMIT(REG_DPU_OUT_CVT_OFFSET, 0x5);
-         EMIT(REG_DPU_OUT_CVT_SCALE, DPU_OUT_CVT_SCALE_OUT_CVT_SCALE(20432));
-         EMIT(REG_DPU_OUT_CVT_SHIFT, DPU_OUT_CVT_SHIFT_OUT_CVT_SHIFT(23));
-      } else if (fabs(operation->addition_scale - 0.093230) < 0.00001) {
-         EMIT(REG_DPU_OUT_CVT_OFFSET, 0xffffffff);
-         EMIT(REG_DPU_OUT_CVT_SCALE, DPU_OUT_CVT_SCALE_OUT_CVT_SCALE(25449));
-         EMIT(REG_DPU_OUT_CVT_SHIFT, DPU_OUT_CVT_SHIFT_OUT_CVT_SHIFT(23));
-      } else if (fabs(operation->addition_scale - 0.100618) < 0.00001) {
-         EMIT(REG_DPU_OUT_CVT_OFFSET, offset);
-         EMIT(REG_DPU_OUT_CVT_SCALE, DPU_OUT_CVT_SCALE_OUT_CVT_SCALE(16874));
-         EMIT(REG_DPU_OUT_CVT_SHIFT, DPU_OUT_CVT_SHIFT_OUT_CVT_SHIFT(23));
-      } else if (fabs(operation->addition_scale - 0.422037) < 0.00001) {
-         EMIT(REG_DPU_OUT_CVT_OFFSET, 0x1);
-         EMIT(REG_DPU_OUT_CVT_SCALE, DPU_OUT_CVT_SCALE_OUT_CVT_SCALE(22559));
-         EMIT(REG_DPU_OUT_CVT_SHIFT, DPU_OUT_CVT_SHIFT_OUT_CVT_SHIFT(24));
-      } else if (fabs(operation->addition_scale - 0.364902) < 0.00001) {
-         EMIT(REG_DPU_OUT_CVT_OFFSET, 0x4);
-         EMIT(REG_DPU_OUT_CVT_SCALE, DPU_OUT_CVT_SCALE_OUT_CVT_SCALE(18589));
-         EMIT(REG_DPU_OUT_CVT_SHIFT, DPU_OUT_CVT_SHIFT_OUT_CVT_SHIFT(24));
-      } else {
-         EMIT(REG_DPU_OUT_CVT_OFFSET, 0x6);
-         EMIT(REG_DPU_OUT_CVT_SCALE, DPU_OUT_CVT_SCALE_OUT_CVT_SCALE(27676));
-         EMIT(REG_DPU_OUT_CVT_SHIFT, DPU_OUT_CVT_SHIFT_OUT_CVT_SHIFT(25));
-      }
+      float out_conv_scale =
+         (task->input_scale * task->weights_scale) / task->output_scale;
+      uint32_t out_scale_bits = fui(out_conv_scale);
+      unsigned out_shift = 127 + 31 - 32 - (out_scale_bits >> 23) + 16;
+      if (operation->truncate_bits > 0)
+         out_shift--;
+      unsigned out_scale = ((out_scale_bits >> 9) & 0x7fff) + 1;
+      if (out_scale < 1 << 14)
+         out_scale |= 1 << 14;
+
+      EMIT(REG_DPU_OUT_CVT_OFFSET, offset);
+      EMIT(REG_DPU_OUT_CVT_SCALE, DPU_OUT_CVT_SCALE_OUT_CVT_SCALE(out_scale));
+      EMIT(REG_DPU_OUT_CVT_SHIFT, DPU_OUT_CVT_SHIFT_OUT_CVT_SHIFT(out_shift - 1));
    } else {
       EMIT(REG_DPU_EW_CFG,
            DPU_EW_CFG_EW_RELU_BYPASS(1) | DPU_EW_CFG_EW_OP_CVT_BYPASS(1) |

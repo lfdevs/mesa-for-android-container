@@ -578,7 +578,7 @@ zink_descriptor_program_init(struct zink_context *ctx, struct zink_program *pg)
       return !!pg->layout;
    }
 
-   enum zink_pipeline_idx pidx = pg->is_compute ? ZINK_PIPELINE_COMPUTE : stages[MESA_SHADER_VERTEX]? ZINK_PIPELINE_GFX : ZINK_PIPELINE_MESH;
+   enum zink_pipeline_idx pidx = pg->is_compute ? ZINK_PIPELINE_COMPUTE : stages[MESA_SHADER_VERTEX] ? ZINK_PIPELINE_GFX : ZINK_PIPELINE_MESH;
    pg->dsl[pg->num_dsl++] = push_count ? ctx->dd.push_dsl[pidx]->layout : ctx->dd.dummy_dsl->layout;
    /* iterate over the found descriptor types and create layouts / pool keys */
    if (has_bindings) {
@@ -641,8 +641,10 @@ zink_descriptor_program_init(struct zink_context *ctx, struct zink_program *pg)
       pg->dd.binding_usage |= BITFIELD_MASK(ZINK_DESCRIPTOR_BASE_TYPES);
    }
 
-   pg->layout = zink_pipeline_layout_create(screen, pg->dsl, pg->num_dsl, pg->is_compute,
-                                            pg->uses_shobj ? VK_PIPELINE_LAYOUT_CREATE_INDEPENDENT_SETS_BIT_EXT : 0);
+   VkPipelineCreateFlags pflags = pg->uses_shobj ? VK_PIPELINE_LAYOUT_CREATE_INDEPENDENT_SETS_BIT_EXT : 0;
+   if (pidx == ZINK_PIPELINE_MESH && !stages[MESA_SHADER_TASK] && pg->uses_shobj)
+      pflags |= VK_PIPELINE_LAYOUT_CREATE_NO_TASK_SHADER_BIT_KHR;
+   pg->layout = zink_pipeline_layout_create(screen, pg->dsl, pg->num_dsl, pg->is_compute, pflags);
    if (!pg->layout)
       return false;
    pg->compat_id = _mesa_hash_data(pg->dsl, pg->num_dsl * sizeof(pg->dsl[0]));

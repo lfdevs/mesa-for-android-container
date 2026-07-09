@@ -638,9 +638,6 @@ struct zink_batch_state {
    struct util_dynarray acquires;
    struct util_dynarray acquire_flags;
 
-   VkAccessFlags unordered_write_access;
-   VkPipelineStageFlags unordered_write_stages;
-
    simple_mtx_t exportable_lock;
 
    struct util_queue_fence flush_completed;

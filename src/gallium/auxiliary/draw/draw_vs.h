@@ -75,18 +75,21 @@ struct draw_vs_variant {
 
    struct draw_vertex_shader *vs;
 
-   void (*set_buffer)(struct draw_vs_variant *,
+   void (*set_buffer)(struct draw_context *draw,
+                      struct draw_vs_variant *,
                       unsigned i,
                       const void *ptr,
                       unsigned stride,
                       unsigned max_stride);
 
-   void (UTIL_CDECL *run_linear)(struct draw_vs_variant *shader,
+   void (UTIL_CDECL *run_linear)(struct draw_context *draw,
+                                 struct draw_vs_variant *shader,
                                  unsigned start,
                                  unsigned count,
                                  void *output_buffer);
 
-   void (UTIL_CDECL *run_elts)(struct draw_vs_variant *shader,
+   void (UTIL_CDECL *run_elts)(struct draw_context *draw,
+                               struct draw_vs_variant *shader,
                                const unsigned *elts,
                                unsigned count,
                                void *output_buffer);
@@ -99,8 +102,6 @@ struct draw_vs_variant {
  * Private version of the compiled vertex_shader
  */
 struct draw_vertex_shader {
-   struct draw_context *draw;
-
    /* This member will disappear shortly:
     */
    struct pipe_shader_state state;
@@ -118,7 +119,8 @@ struct draw_vertex_shader {
    struct draw_vs_variant *variant[16];
    unsigned nr_variants;
    unsigned last_variant;
-   struct draw_vs_variant *(*create_variant)(struct draw_vertex_shader *shader,
+   struct draw_vs_variant *(*create_variant)(struct draw_context *draw,
+                                             struct draw_vertex_shader *shader,
                                              const struct draw_vs_variant_key *key);
 
 
@@ -128,7 +130,8 @@ struct draw_vertex_shader {
    /* Run the shader - this interface will get cleaned up in the
     * future:
     */
-   void (*run_linear)(struct draw_vertex_shader *shader,
+   void (*run_linear)(struct draw_context *draw,
+                      struct draw_vertex_shader *shader,
                       const float (*input)[4],
                       float (*output)[4],
                       const struct draw_buffer_info *constants,
@@ -137,12 +140,13 @@ struct draw_vertex_shader {
                       unsigned output_stride,
                       const unsigned *fetch_elts);
 
-   void (*delete)(struct draw_vertex_shader *);
+   void (*delete)(struct draw_context *, struct draw_vertex_shader *);
 };
 
 
 struct draw_vs_variant *
-draw_vs_lookup_variant(struct draw_vertex_shader *base,
+draw_vs_lookup_variant(struct draw_context *draw,
+                       struct draw_vertex_shader *base,
                        const struct draw_vs_variant_key *key);
 
 
@@ -177,7 +181,8 @@ draw_vs_get_emit(struct draw_context *draw,
                  struct translate_key *key);
 
 struct draw_vs_variant *
-draw_vs_create_variant_generic(struct draw_vertex_shader *vs,
+draw_vs_create_variant_generic(struct draw_context *draw,
+                               struct draw_vertex_shader *vs,
                                const struct draw_vs_variant_key *key);
 
 

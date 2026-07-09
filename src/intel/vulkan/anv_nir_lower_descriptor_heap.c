@@ -65,13 +65,20 @@ build_sampler_handle(nir_builder *b, nir_def *heap_offset,
                      uint32_t plane, bool non_uniform, bool embedded,
                      const struct anv_physical_device *pdevice)
 {
-   if (plane != 0)
-      heap_offset = nir_iadd_imm(b, heap_offset, plane * ANV_SAMPLER_STATE_SIZE);
-   nir_def *sampler_handle =
-      embedded ? heap_offset :
-      nir_iadd(b,
-               anv_load_driver_uniform(b, 1, desc_surface_offsets[1]),
-               heap_offset);
+   /* Embedded samplers are using a relocated constant, the plane index is
+    * irrelevant as 2 planes of the same image could be using the same sampler
+    * config and so the same relocated offset.
+    */
+   nir_def *sampler_handle;
+   if (embedded) {
+      sampler_handle = heap_offset;
+   } else {
+      sampler_handle = nir_iadd(
+         b,
+         anv_load_driver_uniform(b, 1, desc_surface_offsets[1]),
+         plane == 0 ? heap_offset :
+         nir_iadd_imm(b, heap_offset, plane * ANV_SAMPLER_STATE_SIZE));
+   }
    return nir_resource_intel(
       b,
       nir_imm_int(b, 0xdeaddead),
@@ -318,14 +325,14 @@ lower_param_intrinsic(nir_builder *b,
       data = build_load_descriptor_mem(
          b, intrin->def.num_components, intrin->def.bit_size,
          heap_offset,
-         RENDER_SURFACE_STATE_SurfaceBaseAddress_start(devinfo) / 8,
+         4 * (RENDER_SURFACE_STATE_SurfaceBaseAddress_start(devinfo) / 32),
          pdevice);
       break;
    }
    case ISL_SURF_PARAM_TILE_MODE: {
       nir_def *dword = build_load_descriptor_mem(
          b, 1, 32, heap_offset,
-         RENDER_SURFACE_STATE_TileMode_start(devinfo) / 8,
+         4 * (RENDER_SURFACE_STATE_TileMode_start(devinfo) / 32),
          pdevice);
       data = nir_ubitfield_extract_imm(
          b, dword,
@@ -337,7 +344,7 @@ lower_param_intrinsic(nir_builder *b,
       assert(RENDER_SURFACE_STATE_SurfacePitch_start(devinfo) % 32 == 0);
       nir_def *pitch_dword = build_load_descriptor_mem(
          b, 1, 32, heap_offset,
-         RENDER_SURFACE_STATE_SurfacePitch_start(devinfo) / 8,
+         4 * (RENDER_SURFACE_STATE_SurfacePitch_start(devinfo) / 32),
          pdevice);
       data = nir_ubitfield_extract_imm(
          b, pitch_dword,
@@ -349,12 +356,12 @@ lower_param_intrinsic(nir_builder *b,
    }
    case ISL_SURF_PARAM_QPITCH: {
       assert(RENDER_SURFACE_STATE_SurfaceQPitch_start(devinfo) % 32 == 0);
-      nir_def *pitch_dword = build_load_descriptor_mem(
+      nir_def *qpitch_dword = build_load_descriptor_mem(
          b, 1, 32, heap_offset,
-         RENDER_SURFACE_STATE_SurfaceQPitch_start(devinfo) / 8,
+         4 * (RENDER_SURFACE_STATE_SurfaceQPitch_start(devinfo) / 32),
          pdevice);
       data = nir_ubitfield_extract_imm(
-         b, pitch_dword,
+         b, qpitch_dword,
          RENDER_SURFACE_STATE_SurfaceQPitch_start(devinfo) % 32,
          RENDER_SURFACE_STATE_SurfaceQPitch_bits(devinfo));
       /* QPitch in written with >> 2 in ISL (see isl_surface_state.c) */
@@ -364,12 +371,23 @@ lower_param_intrinsic(nir_builder *b,
    case ISL_SURF_PARAM_FORMAT: {
       nir_def *format_dword = build_load_descriptor_mem(
          b, 1, 32, heap_offset,
-         RENDER_SURFACE_STATE_SurfaceFormat_start(devinfo) / 8,
+         4 * (RENDER_SURFACE_STATE_SurfaceFormat_start(devinfo) / 32),
          pdevice);
       data = nir_ubitfield_extract_imm(
          b, format_dword,
          RENDER_SURFACE_STATE_SurfaceFormat_start(devinfo) % 32,
          RENDER_SURFACE_STATE_SurfaceFormat_bits(devinfo));
+      break;
+   }
+   case ISL_SURF_PARAM_MIN_ARRAY_ELEMENT: {
+      nir_def *min_array_el_dword = build_load_descriptor_mem(
+         b, 1, 32, heap_offset,
+         4 * (RENDER_SURFACE_STATE_MinimumArrayElement_start(devinfo) / 32),
+         pdevice);
+      data = nir_ubitfield_extract_imm(
+         b, min_array_el_dword,
+         RENDER_SURFACE_STATE_MinimumArrayElement_start(devinfo) % 32,
+         RENDER_SURFACE_STATE_MinimumArrayElement_bits(devinfo));
       break;
    }
    default:

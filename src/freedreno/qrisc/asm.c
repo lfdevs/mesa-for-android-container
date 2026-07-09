@@ -32,7 +32,7 @@ __instruction_case(struct encode_state *s, const struct qrisc_instr *instr)
    switch (instr->opc) {
 #define ALU(name) \
    case OPC_##name: \
-      if (instr->has_immed) \
+      if (instr->has_immed || instr->label.ref1.str) \
          return OPC_##name##I; \
       break;
 
@@ -67,13 +67,19 @@ __instruction_case(struct encode_state *s, const struct qrisc_instr *instr)
 int gpuver;
 
 /* bit lame to hard-code max but fw sizes are small */
-static struct qrisc_instr instructions[0x4000];
+static struct qrisc_instr instructions[0x8000];
 static unsigned num_instructions;
 
 static unsigned instr_offset;
+static unsigned section_offset;
 
-static struct asm_label labels[0x512];
+static struct asm_label labels[0x1000];
 static unsigned num_labels;
+
+static unsigned section_offsets[4];
+static unsigned num_sections;
+
+const char *cur_section;
 
 static int outfd;
 
@@ -110,8 +116,10 @@ decl_label(const char *str)
 
    assert(num_labels < ARRAY_SIZE(labels));
 
-   label->offset = instr_offset;
+   label->abs_offset = instr_offset;
+   label->offset = instr_offset - section_offset;
    label->label = str;
+   label->section = cur_section;
 }
 
 void
@@ -120,6 +128,7 @@ decl_jumptbl(void)
    struct qrisc_instr *ai = &instructions[num_instructions++];
    assert(num_instructions < ARRAY_SIZE(instructions));
    ai->opc = OPC_JUMPTBL;
+   ai->label.ref1.section = (char *)cur_section;
    instr_offset += 0x80;
 }
 
@@ -132,30 +141,68 @@ align_instr(unsigned alignment)
 }
 
 static int
-resolve_label(const char *str)
+resolve_label_ref(struct qrisc_label_ref label_ref)
 {
    int i;
 
    for (i = 0; i < num_labels; i++) {
       struct asm_label *label = &labels[i];
 
-      if (!strcmp(str, label->label)) {
-         return label->offset;
-      }
+      if (label_ref.section && !label->section)
+         continue;
+      if (label->section && !label_ref.section)
+         continue;
+      if (label_ref.section && strcmp(label->section, label_ref.section))
+         continue;
+
+      if (!strcmp(label_ref.str, label->label))
+         return label_ref.absolute ? label->abs_offset : label->offset;
    }
 
-   fprintf(stderr, "Undeclared label: %s\n", str);
+   if (label_ref.section) {
+      fprintf(stderr, "Undeclared label: %s#%s\n", label_ref.str,
+              label_ref.section);
+   } else {
+      fprintf(stderr, "Undeclared label: %s\n", label_ref.str);
+   }
    exit(2);
 }
 
+static int
+resolve_label(struct qrisc_label_expr label)
+{
+   int val = resolve_label_ref(label.ref1) * label.ref1_scale;
+   if (label.ref2.str) {
+      int val2 = resolve_label_ref(label.ref2) * label.ref2_scale;
+      switch (label.op) {
+      case LABEL_OP_ADD:
+         val += val2;
+         break;
+      case LABEL_OP_SUB:
+         val -= val2;
+         break;
+      default:
+         UNREACHABLE("unknown label op");
+      }
+   }
+   return val;
+}
+
 static void
-emit_jumptable(int outfd)
+emit_jumptable(int outfd, const char *section)
 {
    uint32_t jmptable[0x80] = {0};
    int i;
 
    for (i = 0; i < num_labels; i++) {
       struct asm_label *label = &labels[i];
+      if (section && !label->section)
+         continue;
+      if (label->section && !section)
+         continue;
+      if (section && strcmp(label->section, section))
+         continue;
+
       int id = qrisc_pm4_id(label->label);
 
       /* if it doesn't match a known PM4 packet-id, try to match UNKN%d: */
@@ -181,13 +228,26 @@ emit_instructions(int outfd)
       .gen = gpuver,
    };
 
+   unsigned next_section = 0;
+   unsigned cur_section_offset = 0;
+   unsigned abs_instr_offset = 0;
+
    /* Expand some meta opcodes, and resolve branch targets */
    for (i = 0; i < num_instructions; i++) {
+      if (next_section < num_sections &&
+          abs_instr_offset >= section_offsets[next_section]) {
+         assert(abs_instr_offset == section_offsets[next_section]);
+         cur_section_offset = abs_instr_offset;
+         next_section++;
+      }
+
+      int instr_offset = abs_instr_offset - cur_section_offset;
+
       struct qrisc_instr *ai = &instructions[i];
 
       switch (ai->opc) {
       case OPC_BREQ:
-         ai->offset = resolve_label(ai->label) - i;
+         ai->offset = resolve_label(ai->label) - instr_offset;
          if (ai->has_bit)
             ai->opc = OPC_BREQB;
          else
@@ -195,7 +255,7 @@ emit_instructions(int outfd)
          break;
 
       case OPC_BRNE:
-         ai->offset = resolve_label(ai->label) - i;
+         ai->offset = resolve_label(ai->label) - instr_offset;
          if (ai->has_bit)
             ai->opc = OPC_BRNEB;
          else
@@ -203,7 +263,7 @@ emit_instructions(int outfd)
          break;
 
       case OPC_JUMP:
-         ai->offset = resolve_label(ai->label) - i;
+         ai->offset = resolve_label(ai->label) - instr_offset;
          ai->opc = OPC_BRNEB;
          ai->src1 = 0;
          ai->bit = 0;
@@ -216,7 +276,23 @@ emit_instructions(int outfd)
          break;
 
       case OPC_MOVI:
-         if (ai->label)
+      case OPC_ADD:
+      case OPC_ADDHI:
+      case OPC_SUB:
+      case OPC_SUBHI:
+      case OPC_AND:
+      case OPC_OR:
+      case OPC_XOR:
+      case OPC_SHL:
+      case OPC_USHR:
+      case OPC_ROT:
+      case OPC_MUL8:
+      case OPC_MUL16:
+      case OPC_MIN:
+      case OPC_MAX:
+      case OPC_CMP:
+      case OPC_BIC:
+         if (ai->label.ref1.str)
             ai->immed = resolve_label(ai->label);
          break;
 
@@ -225,33 +301,35 @@ emit_instructions(int outfd)
       }
 
       if (ai->opc == OPC_JUMPTBL) {
-         emit_jumptable(outfd);
+         emit_jumptable(outfd, ai->label.ref1.section);
+         abs_instr_offset += 0x80;
          continue;
       }
 
       if (ai->opc == OPC_RAW_LITERAL) {
-         if (ai->label) {
+         if (ai->label.ref1.str) {
             ai->literal = qrisc_nop_literal(resolve_label(ai->label), gpuver);
          }
          write(outfd, &ai->literal, 4);
+         abs_instr_offset++;
          continue;
       }
 
       uint32_t encoded = bitmask_to_uint64_t(encode__instruction(&s, NULL, ai));
       write(outfd, &encoded, 4);
+      abs_instr_offset++;
    }
 }
 
-void next_section(void)
+void next_section(const char *section)
 {
    /* Sections must be aligned to 32 bytes */
    align_instr(32);
 
-   emit_instructions(outfd);
-
-   num_instructions = 0;
-   instr_offset = 0;
-   num_labels = 0;
+   section_offset = instr_offset;
+   cur_section = section;
+   assert(num_sections < ARRAY_SIZE(section_offsets));
+   section_offsets[num_sections++] = section_offset;
 }
 
 

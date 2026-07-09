@@ -336,6 +336,7 @@ DestroyDevice(D3D10DDI_HDEVICE hDevice)   // IN
 
    pipe->bind_fs_state(pipe, NULL);
    pipe->bind_vs_state(pipe, NULL);
+   cso_unbind_context(pDevice->cso);
    cso_destroy_context(pDevice->cso);
 
    DeleteEmptyShader(pDevice, MESA_SHADER_FRAGMENT, pDevice->empty_fs);

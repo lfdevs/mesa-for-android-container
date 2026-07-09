@@ -28,7 +28,7 @@
 struct kk_query_pool;
 
 struct kk_root_descriptor_table {
-   struct kk_ptr root_buffer;
+   uint64_t addr;
 
    union {
       struct {
@@ -93,9 +93,9 @@ struct kk_attachment {
    VkResolveModeFlagBits resolve_mode;
    struct kk_image_view *resolve_iview;
 
-   /* Needed to track the value of storeOp in case we need to copy images for
-    * the DRM_FORMAT_MOD_LINEAR case */
+   VkAttachmentLoadOp load_op;
    VkAttachmentStoreOp store_op;
+   VkClearValue clear_value;
 };
 
 struct kk_rendering_state {
@@ -108,6 +108,7 @@ struct kk_rendering_state {
 
    uint32_t color_att_count;
    struct kk_attachment color_att[KK_MAX_RTS];
+   uint8_t color_map[KK_MAX_RTS];
    struct kk_attachment depth_att;
    struct kk_attachment stencil_att;
    struct kk_attachment fsr_att;
@@ -236,6 +237,12 @@ struct kk_cmd_buffer {
 
    /* Does the command buffer use the geometry heap? */
    bool uses_heap;
+   /* Set at vkBeginCommandBuffer. One-time-submit buffers skip command
+    * enqueueing in the trampolines since they can never be replayed. */
+   bool one_time_submit;
+   /* Metal command buffers are single-shot: a resubmission must re-record
+    * by replaying the enqueued commands (see rerecord_cmd_buffer). */
+   bool submitted;
 };
 
 VK_DEFINE_HANDLE_CASTS(kk_cmd_buffer, vk.base, VkCommandBuffer,
@@ -301,10 +308,6 @@ kk_compile_depth_stencil_state(struct kk_device *device,
 
 void kk_meta_resolve_rendering(struct kk_cmd_buffer *cmd,
                                const VkRenderingInfo *pRenderingInfo);
-
-void kk_cmd_buffer_write_descriptor_buffer(struct kk_cmd_buffer *cmd,
-                                           struct kk_descriptor_state *desc,
-                                           size_t size, size_t offset);
 
 struct kk_ptr kk_pool_alloc(struct kk_cmd_buffer *cmd, uint32_t size,
                             uint32_t alignment);

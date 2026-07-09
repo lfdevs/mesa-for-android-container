@@ -1777,6 +1777,12 @@ tu_autotune::get_optimal_mode(struct tu_cmd_buffer *cmd_buffer, rp_ctx_t *rp_ctx
    if (pass->has_fdm)
       return render_mode::GMEM;
 
+   /* There is a special HW path for unresolves into GMEM, and all known users of MSRTSS are VR apps made for tilers,
+    * so they would expect for MSRTSS RPs to be in GMEM mode.
+    */
+   if (pass->has_msrtss)
+      return render_mode::GMEM;
+
    /* SYSMEM is always a safe default mode when we can't fully engage the autotuner. From testing, we know that for an
     * incorrect decision towards SYSMEM tends to be far less impactful than an incorrect decision towards GMEM, which
     * can cause significant performance issues.

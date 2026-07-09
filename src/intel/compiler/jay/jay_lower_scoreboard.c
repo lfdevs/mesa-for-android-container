@@ -5,27 +5,24 @@
 
 #include <limits.h>
 #include "compiler/brw/brw_eu_defines.h"
-#include "compiler/gen/gen.h"
 #include "util/bitscan.h"
 #include "util/bitset.h"
-#include "util/list.h"
 #include "util/macros.h"
+#include "util/u_dynarray.h"
 #include "util/u_math.h"
 #include "jay_builder.h"
 #include "jay_ir.h"
 #include "jay_opcodes.h"
 #include "jay_private.h"
 
-#define MAX_KEYS   (JAY_NUM_PHYS_GRF + JAY_NUM_UGPR)
-#define NUM_TOKENS (16)
+#define NUM_TOKENS (32)
 
-/** SBID scoreboarding */
 struct key {
    unsigned base, width;
 };
 
 static inline struct key
-def_to_key(jay_function *func, jay_inst *I, jay_def x)
+def_to_regdist_key(jay_function *func, jay_inst *I, jay_def x)
 {
    if (x.file == GPR || x.file == UGPR) {
       unsigned base = x.file == UGPR ? func->shader->num_regs[GPR] : 0;
@@ -40,6 +37,265 @@ def_to_key(jay_function *func, jay_inst *I, jay_def x)
    }
 }
 
+static inline struct key
+def_to_sbid_key(jay_function *func, jay_inst *I, jay_def x)
+{
+   if (x.file == GPR) {
+      return (struct key) { x.reg, jay_num_values(x) };
+   } else if (x.file == UGPR) {
+      /* SEND instructions can only use GRF-aligned multiples of whole
+       * registers, so there's no point tracking UGPRs at a finer granularity.
+       */
+      return (struct key) {
+         func->shader->num_regs[GPR] + x.reg / jay_ugpr_per_grf(func->shader),
+         DIV_ROUND_UP(jay_num_values(x), jay_ugpr_per_grf(func->shader))
+      };
+   } else {
+      return (struct key) { 0, 0 };
+   }
+}
+
+enum sbid_dep_type { SRC, DST, MAX_SBID_DEP_TYPES };
+
+#define jay_foreach_sbid_dep_type(type)                                        \
+   for (enum sbid_dep_type type = SRC; type < MAX_SBID_DEP_TYPES; ++type)
+
+struct swsb_sbid_state;
+
+struct swsb_sbid_edge {
+   struct swsb_sbid_state *ctx;
+   uint32_t tokens_busy[MAX_SBID_DEP_TYPES];
+   BITSET_WORD *tokens_bitset[NUM_TOKENS];
+};
+
+/** SBID scoreboarding */
+struct swsb_sbid_state {
+   unsigned words;
+   unsigned max_sbids;
+
+   void *mem_ctx;
+   linear_ctx *lin_ctx;
+   struct util_dynarray bitset_pool;
+
+   struct swsb_sbid_edge *edges;
+};
+
+static inline BITSET_WORD *
+bitset_for(const struct swsb_sbid_edge *edge,
+           unsigned sbid,
+           enum sbid_dep_type type)
+{
+   assert(edge->tokens_bitset[sbid] != NULL);
+   return &edge->tokens_bitset[sbid][type * edge->ctx->words];
+}
+
+/** Initializes the swsb_sbid_state struct */
+static inline void
+init_sbid_state(struct swsb_sbid_state *sbid_state,
+                unsigned num_blocks,
+                uint32_t nr_sbid_keys,
+                unsigned max_sbids)
+{
+   *sbid_state = (struct swsb_sbid_state) {
+      .words = BITSET_WORDS(nr_sbid_keys),
+      .max_sbids = max_sbids,
+      .mem_ctx = ralloc_context(NULL),
+   };
+
+   sbid_state->lin_ctx = linear_context(sbid_state->mem_ctx);
+   util_dynarray_init(&sbid_state->bitset_pool, sbid_state->mem_ctx);
+
+   sbid_state->edges = linear_zalloc_array(sbid_state->lin_ctx,
+                                           struct swsb_sbid_edge, num_blocks);
+   for (unsigned i = 0; i < num_blocks; ++i)
+      sbid_state->edges[i].ctx = sbid_state;
+}
+
+static inline void store_sbid_edge(struct swsb_sbid_edge *edge,
+                                   const struct swsb_sbid_edge *src);
+
+/** Resets the swsb_sbid_state struct */
+static inline void
+clear_sbid_state(struct swsb_sbid_state *sbid_state, unsigned dirty_blocks)
+{
+   if (dirty_blocks > 0) {
+      for (unsigned i = 0; i < dirty_blocks; ++i) {
+         store_sbid_edge(&sbid_state->edges[i], NULL);
+      }
+   }
+}
+
+/** Allocate a zero'd bitset from the pool */
+static inline BITSET_WORD *
+alloc_sbid_bitset(struct swsb_sbid_state *ctx)
+{
+   if (!ctx->bitset_pool.size) {
+      return linear_zalloc_child(ctx->lin_ctx,
+                                 ctx->words * sizeof(BITSET_WORD) * 2);
+   }
+   BITSET_WORD *ret = util_dynarray_pop(&ctx->bitset_pool, BITSET_WORD *);
+   assert(__bitset_is_empty(ret, ctx->words * 2));
+   return ret;
+}
+
+/** Release a zero'd bitset back to the pool */
+static inline void
+release_sbid_bitset(struct swsb_sbid_state *ctx, BITSET_WORD **bitset)
+{
+   assert(__bitset_is_empty(*bitset, ctx->words * 2));
+   util_dynarray_append(&ctx->bitset_pool, *bitset);
+   *bitset = NULL;
+}
+
+/** Validates that a swsb_sbid_edge isn't in a bad state */
+#define validate_edge(edge)                                                    \
+   do {                                                                        \
+      if (!(edge))                                                             \
+         break;                                                                \
+      uint32_t tokens_alloced =                                                \
+         (edge)->tokens_busy[SRC] | (edge)->tokens_busy[DST];                  \
+      assert(!((edge)->tokens_busy[SRC] & ~(edge)->tokens_busy[DST]));         \
+      for (unsigned sbid = 0; sbid < NUM_TOKENS; ++sbid) {                     \
+         assert(((edge)->tokens_bitset[sbid] != NULL) ==                       \
+                !!(tokens_alloced & BITFIELD_BIT(sbid)));                      \
+      }                                                                        \
+      jay_foreach_sbid_dep_type(type) {                                        \
+         u_foreach_bit(sbid, tokens_alloced & ~(edge)->tokens_busy[type]) {    \
+            assert(__bitset_is_empty(bitset_for((edge), sbid, type),           \
+                                     (edge)->ctx->words));                     \
+         }                                                                     \
+      }                                                                        \
+   } while (false)
+
+/** Copies the state of an swsb_sbid_edge struct */
+static inline void
+store_sbid_edge(struct swsb_sbid_edge *dst, const struct swsb_sbid_edge *src)
+{
+   validate_edge(src);
+   uint32_t src_alloced = 0, dst_alloced = 0;
+
+   jay_foreach_sbid_dep_type(type) {
+      src_alloced |= src ? src->tokens_busy[type] : 0;
+      dst_alloced |= dst->tokens_busy[type];
+   }
+
+   u_foreach_bit(sbid, src_alloced & ~dst_alloced) {
+      dst->tokens_bitset[sbid] = alloc_sbid_bitset(dst->ctx);
+   }
+
+   jay_foreach_sbid_dep_type(type) {
+      uint32_t src_busy = src ? src->tokens_busy[type] : 0;
+      uint32_t dst_busy = dst->tokens_busy[type];
+
+      u_foreach_bit(sbid, src_busy) {
+         __bitset_copy(bitset_for(dst, sbid, type), bitset_for(src, sbid, type),
+                       dst->ctx->words);
+      }
+
+      u_foreach_bit(sbid, ~src_busy & dst_busy) {
+         __bitset_zero(bitset_for(dst, sbid, type), dst->ctx->words);
+      }
+
+      dst->tokens_busy[type] = src_busy;
+   }
+
+   u_foreach_bit(sbid, dst_alloced & ~src_alloced) {
+      release_sbid_bitset(dst->ctx, &dst->tokens_bitset[sbid]);
+   }
+
+   validate_edge(dst);
+}
+
+/** Merges two edges together and stores the result in out */
+static inline void
+merge_sbid_edges(const struct swsb_sbid_edge *a,
+                 const struct swsb_sbid_edge *b,
+                 struct swsb_sbid_edge *out)
+{
+   validate_edge(a);
+   validate_edge(b);
+   uint32_t src_alloced = 0, dst_alloced = 0;
+
+   jay_foreach_sbid_dep_type(dep) {
+      src_alloced |= a->tokens_busy[dep] | b->tokens_busy[dep];
+      dst_alloced |= out->tokens_busy[dep];
+   }
+
+   u_foreach_bit(sbid, src_alloced & ~dst_alloced) {
+      out->tokens_bitset[sbid] = alloc_sbid_bitset(out->ctx);
+   }
+
+   jay_foreach_sbid_dep_type(type) {
+      uint32_t a_has = a->tokens_busy[type];
+      uint32_t b_has = b->tokens_busy[type];
+      uint32_t dst_has = out->tokens_busy[type];
+
+      u_foreach_bit(sbid, a_has & b_has) {
+         __bitset_or(bitset_for(out, sbid, type),
+                     bitset_for(a, sbid, type),
+                     bitset_for(b, sbid, type),
+                     out->ctx->words);
+      }
+
+      u_foreach_bit(sbid, a_has ^ b_has) {
+         __bitset_copy(bitset_for(out, sbid, type),
+                       bitset_for(a_has & BITFIELD_BIT(sbid) ? a : b, sbid,
+                                  type),
+                       out->ctx->words);
+      }
+
+      u_foreach_bit(sbid, ~a_has & ~b_has & dst_has) {
+         __bitset_zero(bitset_for(out, sbid, type), out->ctx->words);
+      }
+
+      out->tokens_busy[type] = a_has | b_has;
+   }
+
+   u_foreach_bit(sbid, dst_alloced & ~src_alloced) {
+      release_sbid_bitset(out->ctx, &out->tokens_bitset[sbid]);
+   }
+
+   validate_edge(out);
+}
+
+/**
+ * Merges the edges of each of the block's predecessors together and stores
+ * the result in edge_out
+ */
+static inline void
+merge_sbid_edges_of_preds(struct swsb_sbid_state *state,
+                          jay_block *block,
+                          struct swsb_sbid_edge *edge_out)
+{
+   struct swsb_sbid_edge *accum = NULL;
+   jay_foreach_predecessor(block, pred, UGPR) {
+      struct swsb_sbid_edge *edge = &state->edges[(*pred)->index];
+
+      if (accum == NULL) {
+         accum = edge;
+      } else {
+         merge_sbid_edges(accum, edge, edge_out);
+         accum = edge_out;
+      }
+   }
+
+   if (edge_out != accum) {
+      assert(jay_num_predecessors(block, UGPR) < 2 && "the no-merge case");
+      store_sbid_edge(edge_out, accum);
+   }
+}
+
+static inline unsigned
+hash_block_index(unsigned index)
+{
+   index ^= index >> 16;
+   index *= 0x85ebca6b;
+   index ^= index >> 13;
+   index *= 0xc2b2ae35;
+   index ^= index >> 16;
+   return index;
+}
+
 static inline void
 sync_sbids(jay_builder *b, uint32_t mask, gen_sbid_mode mode)
 {
@@ -49,12 +305,6 @@ sync_sbids(jay_builder *b, uint32_t mask, gen_sbid_mode mode)
    } else if (mask) {
       jay_SYNC(b, mask, mode == GEN_SBID_DST ? TGL_SYNC_ALLWR : TGL_SYNC_ALLRD);
    }
-}
-
-static inline bool
-jay_inst_is_unordered(const jay_inst *I)
-{
-   return I->op == JAY_OPCODE_SEND || I->op == JAY_OPCODE_DPAS;
 }
 
 static inline bool
@@ -79,86 +329,166 @@ jay_inst_set_sbid(jay_inst *I, unsigned sbid)
       jay_set_dpas_sbid(I, sbid);
 }
 
-static void
-lower_sbid_local(jay_function *func, jay_block *block)
+/**
+ * Returns the index of the Nth zero-indexed bit set in the bitfield. Such a bit
+ * must exist. For example, using this function to find with bit=1 bit set in
+ * the bitfield 0b1100010 would return 5.
+ */
+static inline unsigned
+find_nth_bit(uint32_t bitfield, unsigned bit)
 {
-   struct {
-      BITSET_DECLARE(reading, MAX_KEYS);
-      BITSET_DECLARE(writing, MAX_KEYS);
-   } tokens[NUM_TOKENS];
+   assert(bit < util_bitcount(bitfield) && "must exist");
 
-   uint32_t busy = 0;
+   /* Repeatedly clear the bottom bit */
+   for (unsigned i = 0; i < bit; ++i) {
+      bitfield &= (bitfield - 1);
+   }
+
+   return ffs(bitfield) - 1;
+}
+
+static void
+lower_sbid_local(jay_function *func,
+                 jay_block *block,
+                 struct swsb_sbid_edge *edge,
+                 bool commit)
+{
+   validate_edge(edge);
+
+   uint32_t busy_src = edge->tokens_busy[SRC];
+   uint32_t busy_dst = edge->tokens_busy[DST];
+
    unsigned roundrobin = 0;
+
+   /* Try to reduce conflicts across control flow edges by selecting a random
+    * number to XOR with the roundrobin counter.
+    */
+   unsigned hash = hash_block_index(block->index);
 
    jay_foreach_inst_in_block_safe(block, I) {
       jay_builder b = jay_init_builder(func, jay_before_inst(I));
-      uint32_t sbid_dst = 0, sbid_src = 0;
+      uint32_t sync_src = 0, sync_dst = 0;
 
       /* Read-after-write */
       jay_foreach_src(I, s) {
-         struct key src = def_to_key(func, I, I->src[s]);
+         struct key src = def_to_sbid_key(func, I, I->src[s]);
 
-         u_foreach_bit(sbid, busy) {
-            if (BITSET_TEST_COUNT(tokens[sbid].writing, src.base, src.width)) {
-               sbid_dst |= BITFIELD_BIT(sbid);
-               busy &= ~BITFIELD_BIT(sbid);
+         u_foreach_bit(sbid, busy_dst) {
+            if (BITSET_TEST_COUNT(bitset_for(edge, sbid, DST), src.base,
+                                  src.width)) {
+               sync_dst |= BITFIELD_BIT(sbid);
+               busy_dst &= ~BITFIELD_BIT(sbid);
+               busy_src &= ~BITFIELD_BIT(sbid);
             }
          }
       }
 
       /* Write-after-write & write-after-read */
       jay_foreach_dst(I, d) {
-         struct key dst = def_to_key(func, I, I->dst);
+         struct key dst = def_to_sbid_key(func, I, d);
 
-         u_foreach_bit(sbid, busy) {
-            if (BITSET_TEST_COUNT(tokens[sbid].writing, dst.base, dst.width)) {
-               sbid_dst |= BITFIELD_BIT(sbid);
-            } else if (BITSET_TEST_COUNT(tokens[sbid].reading, dst.base,
-                                         dst.width)) {
-               sbid_src |= BITFIELD_BIT(sbid);
-               BITSET_ZERO(tokens[sbid].reading);
+         u_foreach_bit(sbid, busy_dst) {
+            if (BITSET_TEST_COUNT(bitset_for(edge, sbid, DST), dst.base,
+                                  dst.width)) {
+               sync_dst |= BITFIELD_BIT(sbid);
+               busy_dst &= ~BITFIELD_BIT(sbid);
+               busy_src &= ~BITFIELD_BIT(sbid);
+            }
+         }
+
+         u_foreach_bit(sbid, busy_src) {
+            if (BITSET_TEST_COUNT(bitset_for(edge, sbid, SRC), dst.base,
+                                  dst.width)) {
+               sync_src |= BITFIELD_BIT(sbid);
+               busy_src &= ~BITFIELD_BIT(sbid);
             }
          }
       }
 
       if (jay_inst_has_sbid(I)) {
-         unsigned sbid = (roundrobin++) % NUM_TOKENS;
-         jay_inst_set_sbid(I, sbid);
+         unsigned sbid;
 
-         if (!(busy & BITFIELD_BIT(sbid))) {
-            busy |= BITFIELD_BIT(sbid);
-            BITSET_ZERO(tokens[sbid].writing);
-            BITSET_ZERO(tokens[sbid].reading);
+         if (commit) {
+            sbid = jay_inst_sbid(I);
+         } else {
+            if (sync_dst) {
+               /* If we depend on $N.dst, there's no extra cost to $N.set */
+               sbid = ffs(sync_dst) - 1;
+            } else {
+               /* Otherwise, select a random SBID that's not already busy */
+               unsigned max_sbids = edge->ctx->max_sbids;
+               uint32_t free_sbids = ~busy_dst & BITFIELD_MASK(max_sbids);
+               if (free_sbids) {
+                  sbid = (roundrobin++ ^ hash) % util_bitcount(free_sbids);
+                  sbid = find_nth_bit(free_sbids, sbid);
+               } else {
+                  sbid = (roundrobin++ ^ hash) % max_sbids;
+               }
+            }
+
+            jay_inst_set_sbid(I, sbid);
+         }
+
+         if (edge->tokens_bitset[sbid] == NULL) {
+            edge->tokens_bitset[sbid] = alloc_sbid_bitset(edge->ctx);
+         } else {
+            /* Dispose of the bitset's previous contents */
+            jay_foreach_sbid_dep_type(type) {
+               uint32_t mask =
+                  type == DST ? (busy_dst | sync_dst) : (busy_src | sync_src);
+               if (mask & BITFIELD_BIT(sbid)) {
+                  __bitset_zero(bitset_for(edge, sbid, type), edge->ctx->words);
+               }
+            }
          }
 
          /* SBID.set implies SBID.dst (which implies SBID.src), so elide */
-         sbid_dst &= ~BITFIELD_BIT(sbid);
-         sbid_src &= ~BITFIELD_BIT(sbid);
+         sync_dst &= ~BITFIELD_BIT(sbid);
+         sync_src &= ~BITFIELD_BIT(sbid);
+         busy_dst |= BITFIELD_BIT(sbid);
+         busy_src |= BITFIELD_BIT(sbid);
 
-         struct key dst = def_to_key(func, I, I->dst);
-         BITSET_SET_COUNT(tokens[sbid].writing, dst.base, dst.width);
+         struct key dst = def_to_sbid_key(func, I, I->dst);
+         BITSET_SET_COUNT(bitset_for(edge, sbid, DST), dst.base, dst.width);
 
          jay_foreach_src(I, s) {
-            struct key src = def_to_key(func, I, I->src[s]);
-            BITSET_SET_COUNT(tokens[sbid].reading, src.base, src.width);
+            struct key src = def_to_sbid_key(func, I, I->src[s]);
+            BITSET_SET_COUNT(bitset_for(edge, sbid, SRC), src.base, src.width);
          }
 
          /* Barriers are non-EOT gateway messages. Insert the needed SYNC */
-         if (I->op == JAY_OPCODE_SEND &&
+         if (commit &&
+             I->op == JAY_OPCODE_SEND &&
              jay_send_sfid(I) == GEN_SFID_MESSAGE_GATEWAY) {
             b.cursor = jay_after_inst(I);
             jay_SYNC(&b, jay_null(), TGL_SYNC_BAR);
          }
       } else if (I->op == JAY_OPCODE_SCHEDULE_BARRIER) {
-         sbid_dst |= busy;
+         sync_dst |= busy_dst;
+         sync_src |= busy_src & ~busy_dst;
+         busy_dst = 0;
+         busy_src = 0;
       }
 
-      b.cursor = jay_before_inst(I);
-      assert(((sbid_dst & sbid_src) == 0) && "by construction");
+      /* Dispose of the bitsets for any synced sbids */
+      jay_foreach_sbid_dep_type(type) {
+         u_foreach_bit(sbid, sync_dst | (type == SRC ? sync_src : 0)) {
+            __bitset_zero(bitset_for(edge, sbid, type), edge->ctx->words);
+         }
+      }
 
-      busy &= ~sbid_dst;
-      sync_sbids(&b, sbid_dst, GEN_SBID_DST);
-      sync_sbids(&b, sbid_src, GEN_SBID_SRC);
+      u_foreach_bit(sbid, (sync_src | sync_dst) & ~busy_dst) {
+         release_sbid_bitset(edge->ctx, &edge->tokens_bitset[sbid]);
+      }
+
+      if (!commit)
+         continue;
+
+      b.cursor = jay_before_inst(I);
+      assert(((sync_dst & sync_src) == 0) && "by construction");
+
+      sync_sbids(&b, sync_dst, GEN_SBID_DST);
+      sync_sbids(&b, sync_src, GEN_SBID_SRC);
 
       if (I->op == JAY_OPCODE_SCHEDULE_BARRIER) {
          /* Lowered above into a sync, but removed late to keep the cursor */
@@ -166,11 +496,9 @@ lower_sbid_local(jay_function *func, jay_block *block)
       }
    }
 
-   /* Sync on block boundaries. */
-   if (block != jay_last_block(func)) {
-      jay_builder b = jay_init_builder(func, jay_after_block_logical(block));
-      sync_sbids(&b, busy, GEN_SBID_DST);
-   }
+   edge->tokens_busy[SRC] = busy_src;
+   edge->tokens_busy[DST] = busy_dst;
+   validate_edge(edge);
 }
 
 /**
@@ -186,7 +514,7 @@ lower_sbid_local(jay_function *func, jay_block *block)
 #define GEN_NUM_PIPES (GEN_PIPE_ALL)
 typedef uint32_t u32_per_pipe[GEN_NUM_PIPES];
 
-struct swsb_state {
+struct swsb_regdist_state {
    uint32_t nr_keys;
    unsigned ip[GEN_NUM_PIPES];
    unsigned last_shape[GEN_NUM_PIPES];
@@ -199,41 +527,6 @@ struct swsb_state {
 
    jay_inst *last_sync;
 };
-
-static gen_pipe
-inst_exec_pipe(const struct intel_device_info *devinfo, jay_inst *I)
-{
-   return jay_inst_is_unordered(I)       ? GEN_PIPE_NONE :
-          I->op == JAY_OPCODE_MATH       ? GEN_PIPE_MATH :
-          I->type == JAY_TYPE_F64        ? GEN_PIPE_LONG :
-          jay_type_is_any_float(I->type) ? GEN_PIPE_FLOAT :
-                                           GEN_PIPE_INT;
-}
-
-/**
- * Return the RegDist pipeline the hardware will synchronize with if no
- * pipeline information is provided in the SWSB annotation of an
- * instruction (e.g. when GEN_PIPE_NONE is specified in gen_swsb).
- */
-static gen_pipe
-inferred_sync_pipe(const struct intel_device_info *devinfo, const jay_inst *I)
-{
-   enum jay_type type = I->num_srcs ? jay_src_type(I, 0) : JAY_TYPE_UNTYPED;
-
-   if (I->op == JAY_OPCODE_SEND) {
-      return GEN_PIPE_NONE;
-   } else if (I->op == JAY_OPCODE_DPAS) {
-      return jay_type_is_any_float(jay_dpas_acc_type(I)) ? GEN_PIPE_FLOAT :
-                                                           GEN_PIPE_INT;
-   } else if (devinfo->verx10 >= 125 && type == JAY_TYPE_F64) {
-      /* Avoid emitting (RegDist, SWSB) annotations for long instructions on
-       * platforms where they are unordered as they may not be allowed.
-       */
-      return devinfo->has_64bit_float ? GEN_PIPE_LONG : GEN_PIPE_NONE;
-   } else {
-      return jay_type_is_any_float(type) ? GEN_PIPE_FLOAT : GEN_PIPE_INT;
-   }
-}
 
 /*
  * Return the maximum ALU distance to consider. Anything further is guaranteed
@@ -259,7 +552,7 @@ max_dependence(gen_pipe pipe)
 }
 
 static void
-depend_on_writer(struct swsb_state *state,
+depend_on_writer(struct swsb_regdist_state *state,
                  struct key r,
                  unsigned *dep,
                  gen_pipe exec,
@@ -287,7 +580,7 @@ depend_on_writer(struct swsb_state *state,
    for (unsigned pipe = 1; pipe < GEN_NUM_PIPES; ++pipe)
 
 static void
-lower_regdist(jay_function *func, jay_inst *I, struct swsb_state *ctx)
+lower_regdist(jay_function *func, jay_inst *I, struct swsb_regdist_state *ctx)
 {
    if (I->op == JAY_OPCODE_SYNC) {
       ctx->last_sync = I;
@@ -319,20 +612,18 @@ lower_regdist(jay_function *func, jay_inst *I, struct swsb_state *ctx)
       return;
    }
 
-   gen_pipe exec_pipe = inst_exec_pipe(func->shader->devinfo, I);
+   gen_pipe exec_pipe = jay_inst_exec_pipe(func->shader->devinfo, I);
    unsigned dep[GEN_NUM_PIPES] = { 0 };
    jay_def dsts[3] = { I->dst, I->cond_flag };
 
    /* MUL_32 is a macro implicitly clobbering acc0/acc1 */
    if (I->op == JAY_OPCODE_MUL_32) {
       unsigned n = func->shader->dispatch_width < 32 ? 2 : 1;
-
-      dsts[2] = jay_bare_reg(ACCUM, 0);
-      dsts[2].num_values_m1 = n - 1;
+      dsts[2] = jay_bare_regs(ACCUM, 0, n);
    }
 
    for (unsigned i = 0; i < ARRAY_SIZE(dsts); ++i) {
-      struct key r = def_to_key(func, I, dsts[i]);
+      struct key r = def_to_regdist_key(func, I, dsts[i]);
       depend_on_writer(ctx, r, dep, exec_pipe, true /* except_pipe */);
 
       for (unsigned i = 0; i < r.width; ++i) {
@@ -354,8 +645,8 @@ lower_regdist(jay_function *func, jay_inst *I, struct swsb_state *ctx)
     * (32)        mad.f32 acc0, u8.6, u8.8, g20                       │ I@1
     */
    jay_foreach_src(I, s) {
-      depend_on_writer(ctx, def_to_key(func, I, I->src[s]), dep, exec_pipe,
-                       I->src[s].file == ACCUM /* except_pipe */);
+      depend_on_writer(ctx, def_to_regdist_key(func, I, I->src[s]), dep,
+                       exec_pipe, I->src[s].file == ACCUM /* except_pipe */);
    }
 
    /* If dependency P implies dependency Q, drop dependency Q to avoid
@@ -432,7 +723,7 @@ lower_regdist(jay_function *func, jay_inst *I, struct swsb_state *ctx)
    if (I->op == JAY_OPCODE_DPAS &&
        wait_pipes &&
        (!single_wait ||
-        last_pipe != inferred_sync_pipe(func->shader->devinfo, I))) {
+        last_pipe != jay_inferred_sync_pipe(func->shader->devinfo, I))) {
       assert(I->dep.regdist > 0);
       jay_builder b = jay_init_builder(func, jay_before_inst(I));
 
@@ -456,7 +747,7 @@ lower_regdist(jay_function *func, jay_inst *I, struct swsb_state *ctx)
        !I->predication &&
        !jay_simd_split(func->shader, I) &&
        (I->dep.regdist == 0 ||
-        inferred_sync_pipe(func->shader->devinfo, I) == I->dep.pipe)) {
+        jay_inferred_sync_pipe(func->shader->devinfo, I) == I->dep.pipe)) {
 
       assert(ctx->last_sync->dep.regdist == 0);
       assert(ctx->last_sync->dep.pipe == GEN_PIPE_NONE);
@@ -475,7 +766,7 @@ lower_regdist(jay_function *func, jay_inst *I, struct swsb_state *ctx)
       uint32_t now = make_writer(exec_pipe, ctx->ip[exec_pipe]);
 
       for (unsigned i = 0; i < ARRAY_SIZE(dsts); ++i) {
-         struct key r = def_to_key(func, I, dsts[i]);
+         struct key r = def_to_regdist_key(func, I, dsts[i]);
 
          for (unsigned i = 0; i < r.width; ++i) {
             ctx->access[r.base + i][0] = now;
@@ -483,7 +774,7 @@ lower_regdist(jay_function *func, jay_inst *I, struct swsb_state *ctx)
       }
 
       jay_foreach_src(I, s) {
-         struct key r = def_to_key(func, I, I->src[s]);
+         struct key r = def_to_regdist_key(func, I, I->src[s]);
          for (unsigned i = 0; i < r.width; ++i) {
             ctx->access[r.base + i][exec_pipe] = ctx->ip[exec_pipe];
          }
@@ -504,18 +795,20 @@ jay_lower_scoreboard_trivial(jay_shader *shader)
 {
    jay_foreach_inst_in_shader_safe(shader, func, I) {
       if (jay_inst_has_sbid(I)) {
-         if (I->op == JAY_OPCODE_DPAS) {
-            /* DPAS can't have an A@1, so insert an extra SYNC.nop. */
-            jay_builder before = jay_init_builder(func, jay_before_inst(I));
-            jay_SYNC(&before, jay_null(), TGL_SYNC_NOP)->dep =
-               gen_swsb_regdist(1);
-            I->dep = gen_swsb_sbid(GEN_SBID_SET, 0);
-         } else {
-            I->dep = gen_swsb_dst_dep(gen_swsb_sbid(GEN_SBID_SET, 0), 1);
-         }
+         /* DPAS can't have an A@1, so insert an extra SYNC.nop. */
+         jay_builder before = jay_init_builder(func, jay_before_inst(I));
+         jay_SYNC(&before, jay_null(), TGL_SYNC_NOP)->dep = gen_swsb_regdist(1);
+         I->dep = gen_swsb_sbid(GEN_SBID_SET, 0);
 
          jay_builder b = jay_init_builder(func, jay_after_inst(I));
          sync_sbids(&b, BITFIELD_BIT(0), GEN_SBID_DST);
+
+         /* Barriers are non-EOT gateway messages. Insert the needed SYNC */
+         if (I->op == JAY_OPCODE_SEND &&
+             jay_send_sfid(I) == GEN_SFID_MESSAGE_GATEWAY) {
+            b.cursor = jay_after_inst(I);
+            jay_SYNC(&b, jay_null(), TGL_SYNC_BAR);
+         }
       } else if (I->op == JAY_OPCODE_SCHEDULE_BARRIER) {
          jay_remove_instruction(I);
       } else {
@@ -528,23 +821,51 @@ void
 jay_lower_scoreboard(jay_shader *shader)
 {
    unsigned accums = 4;
-   uint32_t nr_keys = shader->num_regs[GPR] + shader->num_regs[UGPR] + accums;
-   assert(nr_keys <= MAX_KEYS && "SENDs use uninitialized stack allocation");
-   u32_per_pipe *access = malloc(sizeof(*access) * nr_keys);
+   uint32_t nr_regdist_keys =
+      shader->num_regs[GPR] + shader->num_regs[UGPR] + accums;
+   u32_per_pipe *regdists = malloc(sizeof(*regdists) * nr_regdist_keys);
 
+   unsigned max_blocks = 0;
+   jay_foreach_function(shader, f)
+      max_blocks = MAX2(max_blocks, f->num_blocks);
+
+   uint32_t nr_sbid_keys =
+      shader->num_regs[GPR] +
+      DIV_ROUND_UP(shader->num_regs[UGPR], jay_ugpr_per_grf(shader)) +
+      accums;
+
+   unsigned max_sbids = intel_device_info_max_sbids(shader->devinfo);
+
+   struct swsb_sbid_state sbid_state;
+   init_sbid_state(&sbid_state, max_blocks, nr_sbid_keys, max_sbids);
+
+   unsigned dirty_blocks = 0;
    jay_foreach_function(shader, f) {
-      memset(access, 0, sizeof(*access) * nr_keys);
-      struct swsb_state state = { .nr_keys = nr_keys, .access = access };
+      memset(regdists, 0, sizeof(*regdists) * nr_regdist_keys);
+      clear_sbid_state(&sbid_state, dirty_blocks);
+      dirty_blocks = f->num_blocks;
 
-      jay_foreach_block(f, block) {
-         lower_sbid_local(f, block);
+      /* Thanks to programs always using structured control flow, and blocks
+       * being iterated in program order, global SBID scoreboarding can be
+       * accomplished in just two passes. This will no longer work if we ever
+       * start handling arbitrary GOTOs.
+       */
+      for (unsigned commit = 0; commit <= 1; ++commit) {
+         jay_foreach_block(f, block) {
+            struct swsb_sbid_edge *edge = &sbid_state.edges[block->index];
+            merge_sbid_edges_of_preds(&sbid_state, block, edge);
+            lower_sbid_local(f, block, edge, commit);
+         }
       }
+
+      struct swsb_regdist_state regdist_state = { .nr_keys = nr_regdist_keys,
+                                                  .access = regdists };
 
       /* RegDist scoreboarding is global but requires no dataflow analysis,
        * because taking a branch stalls all ALU pipelines. Therefore, it
        * suffices to propagate scoreboard state along fallthrough edges. We
        * implement that backwards: state is preserved (correctness), except we
-       * clear access[] when entering blocks that are unreachable by falling
+       * clear regdists[] when entering blocks that are unreachable by falling
        * through from the previous source-order block and hence must be branch
        * targets coming in with a clear scoreboard. next[] tracks the
        * fallthrough block for the logical & physical CFGs respectively.
@@ -552,24 +873,25 @@ jay_lower_scoreboard(jay_shader *shader)
       jay_block *next[UGPR + 1] = { NULL };
 
       jay_foreach_block(f, block) {
-         /* Clear access[] for GPRs according to the logical CFG and for UGPRs
+         /* Clear regdists[] for GPRs according to the logical CFG and for UGPRs
           * according to the physical CFG. This is a bit pedantic but it ensures
           * we keep the dependencies for UGPRs across halves of if-else.
           */
          for (unsigned f = GPR; f <= UGPR; f++) {
             if (!list_is_empty(&block->instructions) && next[f] != block) {
-               memset(access + (f ? shader->num_regs[GPR] : 0), 0,
-                      sizeof(access[0]) * shader->num_regs[f]);
+               memset(regdists + (f ? shader->num_regs[GPR] : 0), 0,
+                      sizeof(regdists[0]) * shader->num_regs[f]);
             }
 
             next[f] = jay_successors(block, f)[0];
          }
 
          jay_foreach_inst_in_block_safe(block, I) {
-            lower_regdist(f, I, &state);
+            lower_regdist(f, I, &regdist_state);
          }
       }
    }
 
-   free(access);
+   free(regdists);
+   ralloc_free(sbid_state.mem_ctx);
 }

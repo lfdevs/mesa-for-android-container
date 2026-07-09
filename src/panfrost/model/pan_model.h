@@ -75,7 +75,10 @@ struct pan_model {
    struct {
       uint32_t pixel;
       uint32_t texel;
+      uint32_t varying;
+      uint32_t cvt;
       uint32_t fma;
+      uint32_t sfu;
    } rates;
 
    struct {

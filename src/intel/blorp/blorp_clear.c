@@ -69,14 +69,13 @@ blorp_params_get_clear_kernel_fs(struct blorp_batch *batch,
       batch->blorp->isl_dev->info->ver < 12;
    struct blorp_context *blorp = batch->blorp;
 
-   const struct blorp_const_color_prog_key blorp_key = {
-      .base = BLORP_BASE_KEY_INIT(BLORP_SHADER_TYPE_CLEAR,
-                                  BLORP_SHADER_PIPELINE_RENDER),
-      .is_fast_clear = is_fast_clear,
-      .use_simd16_replicated_data = use_replicated_data,
-      .clear_rgb_as_red = clear_rgb_as_red,
-      .local_y = 0,
-   };
+   struct blorp_const_color_prog_key blorp_key;
+   BLORP_KEY_INIT(blorp_key, BLORP_SHADER_TYPE_CLEAR,
+                  BLORP_SHADER_PIPELINE_RENDER);
+   blorp_key.is_fast_clear = is_fast_clear;
+   blorp_key.use_simd16_replicated_data = use_replicated_data;
+   blorp_key.clear_rgb_as_red = clear_rgb_as_red;
+   blorp_key.local_y = 0;
 
    params->shader_type = blorp_key.base.shader_type;
    params->shader_pipeline = blorp_key.base.shader_pipeline;
@@ -134,13 +133,12 @@ blorp_params_get_clear_kernel_cs(struct blorp_batch *batch,
 {
    struct blorp_context *blorp = batch->blorp;
 
-   const struct blorp_const_color_prog_key blorp_key = {
-      .base = BLORP_BASE_KEY_INIT(BLORP_SHADER_TYPE_CLEAR,
-                                  BLORP_SHADER_PIPELINE_COMPUTE),
-      .use_simd16_replicated_data = false,
-      .clear_rgb_as_red = clear_rgb_as_red,
-      .local_y = blorp_get_cs_local_y(params),
-   };
+   struct blorp_const_color_prog_key blorp_key;
+   BLORP_KEY_INIT(blorp_key, BLORP_SHADER_TYPE_CLEAR,
+                  BLORP_SHADER_PIPELINE_COMPUTE);
+   blorp_key.use_simd16_replicated_data = false;
+   blorp_key.clear_rgb_as_red = clear_rgb_as_red;
+   blorp_key.local_y = blorp_get_cs_local_y(params);
 
    params->shader_type = blorp_key.base.shader_type;
    params->shader_pipeline = blorp_key.base.shader_pipeline;
@@ -1515,13 +1513,13 @@ blorp_params_get_mcs_partial_resolve_kernel(struct blorp_batch *batch,
                                             struct blorp_params *params)
 {
    struct blorp_context *blorp = batch->blorp;
-   const struct blorp_mcs_partial_resolve_key blorp_key = {
-      .base = BLORP_BASE_KEY_INIT(BLORP_SHADER_TYPE_MCS_PARTIAL_RESOLVE,
-                                  BLORP_SHADER_PIPELINE_RENDER),
-      .indirect_clear_color = params->dst.clear_color_addr.buffer != NULL,
-      .int_format = isl_format_has_int_channel(params->dst.view.format),
-      .num_samples = params->num_samples,
-   };
+
+   struct blorp_mcs_partial_resolve_key blorp_key;
+   BLORP_KEY_INIT(blorp_key, BLORP_SHADER_TYPE_MCS_PARTIAL_RESOLVE,
+                  BLORP_SHADER_PIPELINE_RENDER);
+   blorp_key.indirect_clear_color = params->dst.clear_color_addr.buffer != NULL;
+   blorp_key.int_format = isl_format_has_int_channel(params->dst.view.format);
+   blorp_key.num_samples = params->num_samples;
 
    if (blorp->lookup_shader(batch, &blorp_key, sizeof(blorp_key),
                             &params->wm_prog_kernel, &params->fs_prog_data))

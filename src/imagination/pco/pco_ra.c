@@ -408,7 +408,8 @@ static void spill(unsigned spill_index, pco_func *func, pco_ra_ctx *ctx)
                   pco_ref_drc(PCO_DRC_0),
                   pco_ref_imm8(1),
                   ctx->spill_addr_data,
-                  pco_ref_null());
+                  pco_ref_null(),
+                  .mcu_cache_mode_st = PCO_MCU_CACHE_MODE_ST_WRITE_THROUGH);
 
          pco_wdf(&b, pco_ref_drc(PCO_DRC_0));
 
@@ -437,7 +438,8 @@ static void spill(unsigned spill_index, pco_func *func, pco_ra_ctx *ctx)
                    ctx->spill_data,
                    pco_ref_drc(PCO_DRC_0),
                    pco_ref_imm8(1),
-                   ctx->spill_addr);
+                   ctx->spill_addr,
+                   .mcu_cache_mode_ld = PCO_MCU_CACHE_MODE_LD_NORMAL);
 
             pco_wdf(&b, pco_ref_drc(PCO_DRC_0));
 

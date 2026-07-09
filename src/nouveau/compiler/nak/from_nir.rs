@@ -1039,14 +1039,22 @@ impl<'a> ShaderFromNir<'a> {
                 )
                 .into()
             }
-            nir_op_feq | nir_op_fge | nir_op_flt | nir_op_fneu => {
+            nir_op_feq | nir_op_fequ | nir_op_fge | nir_op_fgeu
+            | nir_op_flt | nir_op_fltu | nir_op_fneu | nir_op_fneo
+            | nir_op_funord | nir_op_ford => {
                 let src_type =
                     FloatType::from_bits(alu.get_src(0).bit_size().into());
                 let cmp_op = match alu.op {
                     nir_op_feq => FloatCmpOp::OrdEq,
+                    nir_op_fequ => FloatCmpOp::UnordEq,
                     nir_op_fge => FloatCmpOp::OrdGe,
+                    nir_op_fgeu => FloatCmpOp::UnordGe,
                     nir_op_flt => FloatCmpOp::OrdLt,
+                    nir_op_fltu => FloatCmpOp::UnordLt,
+                    nir_op_fneo => FloatCmpOp::OrdNe,
                     nir_op_fneu => FloatCmpOp::UnordNe,
+                    nir_op_ford => FloatCmpOp::IsNum,
+                    nir_op_funord => FloatCmpOp::IsNan,
                     _ => panic!("Usupported float comparison"),
                 };
 
@@ -1625,6 +1633,21 @@ impl<'a> ShaderFromNir<'a> {
             nir_op_uror => {
                 assert!(alu.get_src(0).bit_size() == 32);
                 b.uror(srcs(0), srcs(1)).into()
+            }
+            nir_op_shfr => {
+                assert!(alu.get_src(0).bit_size() == 32);
+                let dst = b.alloc_ssa(RegFile::GPR);
+                b.push_op(OpShf {
+                    dst: dst.into(),
+                    low: srcs(1),
+                    high: srcs(0),
+                    shift: srcs(2),
+                    right: true,
+                    wrap: true,
+                    data_type: IntType::U32,
+                    dst_high: false,
+                });
+                dst.into()
             }
             nir_op_lea_nv => {
                 let src_a = srcs(1);
@@ -4583,7 +4606,7 @@ impl<'a> ShaderFromNir<'a> {
 
         self.parse_cf_list(&mut ssa_alloc, &mut phi_map, nfi.iter_body());
 
-        let cfg = std::mem::take(&mut self.cfg).as_cfg();
+        let cfg = std::mem::take(&mut self.cfg).as_cfg(true);
         assert!(cfg.len() > 0);
         for i in 0..cfg.len() {
             if cfg[i].falls_through() {

@@ -693,6 +693,13 @@ v3dX(emit_state)(struct pipe_context *pctx)
                         if (!target)
                                 continue;
 
+                        /* Transform feedback can overflow the bound buffer across
+                         * re-emits, pushing offset past buffer_size and making the
+                         * unsigned (buffer_size - offset) below underflow into a
+                         * bogus huge size.  Clamp so we never record past the end.
+                         */
+                        offset = MIN2(offset, target->buffer_size);
+
                         cl_emit(&job->bcl, TRANSFORM_FEEDBACK_BUFFER, output) {
                                 output.buffer_address =
                                         cl_address(rsc->bo,

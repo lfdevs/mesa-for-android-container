@@ -27,7 +27,8 @@ rkt_fill_weights(struct rkt_ml_subgraph *subgraph,
    struct pipe_resource *rsc;
    uint8_t *weights_out;
 
-   input_channels = MAX2(input_channels, FEATURE_ATOMIC_SIZE);
+   input_channels =
+      align(MAX2(input_channels, FEATURE_ATOMIC_SIZE), FEATURE_ATOMIC_SIZE);
 
    output_channels = align(output_channels, 2);
    if (rkt_is_depthwise(poperation))

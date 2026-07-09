@@ -18,6 +18,7 @@
 #include "nvtypes.h"
 #include "nv_push_cl902d.h"
 #include "nv_push_cl90b5.h"
+#include "nv_push_cla040.h"
 #include "nv_push_clc1b5.h"
 #include "nv_push_clcab5.h"
 
@@ -369,11 +370,10 @@ nouveau_copy_rect(struct nvk_cmd_buffer *cmd,
    }
 }
 
-VKAPI_ATTR void VKAPI_CALL
-nvk_CmdCopyBuffer2(VkCommandBuffer commandBuffer,
-                   const VkCopyBufferInfo2 *pCopyBufferInfo)
+void
+nvk_cmd_copy_buffer_ce(struct nvk_cmd_buffer *cmd,
+                       const VkCopyBufferInfo2 *pCopyBufferInfo)
 {
-   VK_FROM_HANDLE(nvk_cmd_buffer, cmd, commandBuffer);
    VK_FROM_HANDLE(nvk_buffer, src, pCopyBufferInfo->srcBuffer);
    VK_FROM_HANDLE(nvk_buffer, dst, pCopyBufferInfo->dstBuffer);
 
@@ -471,11 +471,10 @@ nvk_remap_insert_aspect(struct nouveau_copy *copy,
    }
 }
 
-VKAPI_ATTR void VKAPI_CALL
-nvk_CmdCopyBufferToImage2(VkCommandBuffer commandBuffer,
-                          const VkCopyBufferToImageInfo2 *pCopyBufferToImageInfo)
+void
+nvk_cmd_copy_buffer_to_image_ce(struct nvk_cmd_buffer *cmd,
+                                const VkCopyBufferToImageInfo2 *pCopyBufferToImageInfo)
 {
-   VK_FROM_HANDLE(nvk_cmd_buffer, cmd, commandBuffer);
    VK_FROM_HANDLE(nvk_buffer, src, pCopyBufferToImageInfo->srcBuffer);
    VK_FROM_HANDLE(nvk_image, dst, pCopyBufferToImageInfo->dstImage);
 
@@ -598,11 +597,10 @@ nvk_remap_extract_aspect(struct nouveau_copy *copy,
    }
 }
 
-VKAPI_ATTR void VKAPI_CALL
-nvk_CmdCopyImageToBuffer2(VkCommandBuffer commandBuffer,
-                          const VkCopyImageToBufferInfo2 *pCopyImageToBufferInfo)
+void
+nvk_cmd_copy_image_to_buffer_ce(struct nvk_cmd_buffer *cmd,
+                                const VkCopyImageToBufferInfo2 *pCopyImageToBufferInfo)
 {
-   VK_FROM_HANDLE(nvk_cmd_buffer, cmd, commandBuffer);
    VK_FROM_HANDLE(nvk_image, src, pCopyImageToBufferInfo->srcImage);
    VK_FROM_HANDLE(nvk_buffer, dst, pCopyImageToBufferInfo->dstBuffer);
 
@@ -893,9 +891,9 @@ nvk_cmd_copy_image_ce(struct nvk_cmd_buffer *cmd,
 }
 
 void
-nvk_cmd_fill_memory(struct nvk_cmd_buffer *cmd,
-                    uint64_t dst_addr, uint64_t size,
-                    uint32_t data)
+nvk_cmd_fill_memory_ce(struct nvk_cmd_buffer *cmd,
+                       uint64_t dst_addr, uint64_t size,
+                       uint32_t data)
 {
    uint32_t max_dim = 1 << 15;
 
@@ -956,22 +954,6 @@ nvk_cmd_fill_memory(struct nvk_cmd_buffer *cmd,
 }
 
 VKAPI_ATTR void VKAPI_CALL
-nvk_CmdFillBuffer(VkCommandBuffer commandBuffer,
-                  VkBuffer dstBuffer,
-                  VkDeviceSize dstOffset,
-                  VkDeviceSize size,
-                  uint32_t data)
-{
-   VK_FROM_HANDLE(nvk_cmd_buffer, cmd, commandBuffer);
-   VK_FROM_HANDLE(nvk_buffer, dst_buffer, dstBuffer);
-
-   uint64_t dst_addr = vk_buffer_address(&dst_buffer->vk, dstOffset);
-   size = vk_buffer_range(&dst_buffer->vk, dstOffset, size);
-
-   nvk_cmd_fill_memory(cmd, dst_addr, size, data);
-}
-
-VKAPI_ATTR void VKAPI_CALL
 nvk_CmdUpdateBuffer(VkCommandBuffer commandBuffer,
                     VkBuffer dstBuffer,
                     VkDeviceSize dstOffset,
@@ -982,27 +964,60 @@ nvk_CmdUpdateBuffer(VkCommandBuffer commandBuffer,
    VK_FROM_HANDLE(nvk_buffer, dst, dstBuffer);
 
    uint64_t dst_addr = vk_buffer_address(&dst->vk, dstOffset);
+   uint8_t subc = nvk_cmd_buffer_last_subchannel(cmd);
 
-   uint64_t data_addr;
-   nvk_cmd_buffer_upload_data(cmd, pData, dataSize, 64, &data_addr);
+   /* From the Vulkan 1.4.354 spec:
+    *
+    *    VUID-vkCmdUpdateBuffer-dataSize-00038
+    *    "dataSize must be a multiple of 4"
+    */
+   const uint32_t dw_count = dataSize / 4;
 
-   struct nv_push *p = nvk_cmd_buffer_push(cmd, 10);
+   /* Do not use I2M if the copy is too big (2012 bytes is our limit) */
+   const uint32_t i2m_push_dw_count = dw_count + 9;
+   if (i2m_push_dw_count > NVK_CMD_BUFFER_MAX_PUSH)
+      subc = SUBC_NV90B5;
 
-   P_MTHD(p, NV90B5, OFFSET_IN_UPPER);
-   P_NV90B5_OFFSET_IN_UPPER(p, data_addr >> 32);
-   P_NV90B5_OFFSET_IN_LOWER(p, data_addr & 0xffffffff);
-   P_NV90B5_OFFSET_OUT_UPPER(p, dst_addr >> 32);
-   P_NV90B5_OFFSET_OUT_LOWER(p, dst_addr & 0xffffffff);
+   /* I2M transfers are affected by conditional rendering but CmdUpdateBuffer shouldn't */
+   if (subc == SUBC_NV9097 || subc == SUBC_NV90C0) {
+      struct nv_push *p = nvk_cmd_buffer_push(cmd, i2m_push_dw_count);
+      __push_immd(p, subc, NVA040_SET_RENDER_ENABLE_OVERRIDE,
+                  NVA040_SET_RENDER_ENABLE_OVERRIDE_MODE_ALWAYS_RENDER);
+      __push_mthd(p, subc, NVA040_LINE_LENGTH_IN);
+      P_NVA040_LINE_LENGTH_IN(p, dataSize);
+      P_NVA040_LINE_COUNT(p, 1);
+      P_NVA040_OFFSET_OUT_UPPER(p, dst_addr >> 32);
+      P_NVA040_OFFSET_OUT(p, dst_addr);
+      __push_1inc(p, subc, NVA040_LAUNCH_DMA);
+      P_NVA040_LAUNCH_DMA(p, {
+         .dst_memory_layout = DST_MEMORY_LAYOUT_PITCH,
+         .completion_type = COMPLETION_TYPE_FLUSH_ONLY,
+      });
+      P_INLINE_ARRAY(p, pData, dw_count);
+      __push_immd(p, subc, NVA040_SET_RENDER_ENABLE_OVERRIDE,
+                  NVA040_SET_RENDER_ENABLE_OVERRIDE_MODE_USE_RENDER_ENABLE);
+   } else {
+      uint64_t data_addr;
+      nvk_cmd_buffer_upload_data(cmd, pData, dataSize, 64, &data_addr);
 
-   P_MTHD(p, NV90B5, LINE_LENGTH_IN);
-   P_NV90B5_LINE_LENGTH_IN(p, dataSize);
-   P_NV90B5_LINE_COUNT(p, 1);
+      struct nv_push *p = nvk_cmd_buffer_push(cmd, 10);
 
-   P_IMMD(p, NV90B5, LAUNCH_DMA, {
-      .data_transfer_type = DATA_TRANSFER_TYPE_PIPELINED,
-      .multi_line_enable = MULTI_LINE_ENABLE_TRUE,
-      .flush_enable = FLUSH_ENABLE_TRUE,
-      .src_memory_layout = SRC_MEMORY_LAYOUT_PITCH,
-      .dst_memory_layout = DST_MEMORY_LAYOUT_PITCH,
-   });
+      P_MTHD(p, NV90B5, OFFSET_IN_UPPER);
+      P_NV90B5_OFFSET_IN_UPPER(p, data_addr >> 32);
+      P_NV90B5_OFFSET_IN_LOWER(p, data_addr & 0xffffffff);
+      P_NV90B5_OFFSET_OUT_UPPER(p, dst_addr >> 32);
+      P_NV90B5_OFFSET_OUT_LOWER(p, dst_addr & 0xffffffff);
+
+      P_MTHD(p, NV90B5, LINE_LENGTH_IN);
+      P_NV90B5_LINE_LENGTH_IN(p, dataSize);
+      P_NV90B5_LINE_COUNT(p, 1);
+
+      P_IMMD(p, NV90B5, LAUNCH_DMA, {
+         .data_transfer_type = DATA_TRANSFER_TYPE_PIPELINED,
+         .multi_line_enable = MULTI_LINE_ENABLE_TRUE,
+         .flush_enable = FLUSH_ENABLE_TRUE,
+         .src_memory_layout = SRC_MEMORY_LAYOUT_PITCH,
+         .dst_memory_layout = DST_MEMORY_LAYOUT_PITCH,
+      });
+   }
 }

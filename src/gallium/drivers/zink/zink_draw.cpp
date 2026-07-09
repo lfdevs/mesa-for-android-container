@@ -42,7 +42,7 @@ zink_emit_xfb_counter_barrier(struct zink_context *ctx)
       }
       zink_screen(ctx->base.screen)->buffer_barrier(ctx, res, access, stage);
       if (!ctx->unordered_blitting)
-         res->obj->unordered_read = false;
+         zink_resource_disable_unordered(res, false);
    }
 }
 
@@ -73,7 +73,7 @@ zink_emit_stream_output_targets(struct pipe_context *pctx)
       buffer_sizes[i] = t->base.buffer_size;
       res->so_valid = true;
       if (!ctx->unordered_blitting) {
-         res->obj->unordered_read = res->obj->unordered_write = false;
+         zink_resource_disable_unordered(res, true);
          res->obj->access = VK_ACCESS_TRANSFORM_FEEDBACK_COUNTER_WRITE_BIT_EXT;
          res->obj->access_stage = VK_PIPELINE_STAGE_TRANSFORM_FEEDBACK_BIT_EXT;
       }
@@ -95,7 +95,7 @@ check_buffer_barrier(struct zink_context *ctx, struct pipe_resource *pres, VkAcc
    if (res->obj->access != flags || res->obj->access_stage != pipeline)
       zink_buffer_barrier(ctx, res, flags, pipeline);
    if (!ctx->unordered_blitting)
-      res->obj->unordered_read = false;
+      zink_resource_disable_unordered(res, false);
 }
 
 ALWAYS_INLINE static void
@@ -111,43 +111,6 @@ barrier_draw_buffers(struct zink_context *ctx, const struct pipe_draw_info *dinf
          check_buffer_barrier(ctx, dindirect->indirect_draw_count,
                               VK_ACCESS_INDIRECT_COMMAND_READ_BIT, VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT);
    }
-}
-
-template <zink_dynamic_state DYNAMIC_STATE>
-static void
-zink_bind_vertex_buffers(struct zink_context *ctx)
-{
-   VkBuffer buffers[PIPE_MAX_ATTRIBS];
-   VkDeviceSize buffer_offsets[PIPE_MAX_ATTRIBS];
-   struct zink_vertex_elements_state *elems = ctx->element_state;
-
-   for (unsigned i = 0; i < elems->hw_state.num_bindings; i++) {
-      struct pipe_vertex_buffer *vb = ctx->vertex_buffers + elems->hw_state.binding_map[i];
-      assert(vb);
-      if (vb->buffer.resource) {
-         struct zink_resource *res = zink_resource(vb->buffer.resource);
-         assert(res->obj->buffer);
-         buffers[i] = res->obj->buffer;
-         buffer_offsets[i] = vb->buffer_offset;
-      } else {
-         buffers[i] = VK_NULL_HANDLE;
-         buffer_offsets[i] = 0;
-      }
-   }
-
-   if (DYNAMIC_STATE != ZINK_NO_DYNAMIC_STATE &&
-       DYNAMIC_STATE != ZINK_DYNAMIC_VERTEX_INPUT2 &&
-       DYNAMIC_STATE != ZINK_DYNAMIC_VERTEX_INPUT) {
-      if (elems->hw_state.num_bindings)
-         VKCTX(CmdBindVertexBuffers2)(ctx->bs->cmdbuf, 0,
-                                      elems->hw_state.num_bindings,
-                                      buffers, buffer_offsets, NULL, elems->hw_state.b.strides);
-   } else if (elems->hw_state.num_bindings)
-      VKCTX(CmdBindVertexBuffers2)(ctx->bs->cmdbuf, 0,
-                                  elems->hw_state.num_bindings,
-                                  buffers, buffer_offsets, NULL, NULL);
-
-   ctx->vertex_buffers_dirty = false;
 }
 
 ALWAYS_INLINE static void
@@ -563,7 +526,7 @@ zink_draw(struct pipe_context *pctx,
    ctx->rp_draw = true;
 
    if (ctx->memory_barrier && !ctx->blitting)
-      zink_flush_memory_barrier(ctx, false);
+      zink_flush_memory_barrier(ctx);
 
    if (unlikely(ctx->buffer_rebind_counter < screen->buffer_rebind_counter && !ctx->blitting)) {
       ctx->buffer_rebind_counter = screen->buffer_rebind_counter;
@@ -617,7 +580,7 @@ zink_draw(struct pipe_context *pctx,
                zink_screen(ctx->base.screen)->buffer_barrier(ctx, res,
                                             VK_ACCESS_TRANSFORM_FEEDBACK_WRITE_BIT_EXT, VK_PIPELINE_STAGE_TRANSFORM_FEEDBACK_BIT_EXT);
                if (!ctx->unordered_blitting)
-                  res->obj->unordered_read = res->obj->unordered_write = false;
+                  zink_resource_disable_unordered(res, true);
             }
          }
       }
@@ -637,7 +600,7 @@ zink_draw(struct pipe_context *pctx,
                                    VK_ACCESS_TRANSFORM_FEEDBACK_COUNTER_READ_BIT_EXT,
                                    VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT);
       if (!ctx->unordered_blitting)
-         res->obj->unordered_read = false;
+         zink_resource_disable_unordered(res, false);
    }
 
    if (ctx->vertices_query || !list_is_empty(&ctx->primitives_generated_queries))
@@ -755,10 +718,13 @@ zink_draw(struct pipe_context *pctx,
 
    if (!DRAW_STATE) {
       if (BATCH_CHANGED || ctx->vertex_buffers_dirty) {
-         if (DYNAMIC_STATE == ZINK_DYNAMIC_VERTEX_INPUT || ctx->gfx_pipeline_state.uses_dynamic_stride)
-            zink_bind_vertex_buffers<DYNAMIC_STATE>(ctx);
+         if (screen->info.have_KHR_device_address_commands)
+            zink_bind_vertex_addresses(ctx);
+         else if (DYNAMIC_STATE == ZINK_DYNAMIC_VERTEX_INPUT || DYNAMIC_STATE == ZINK_DYNAMIC_VERTEX_INPUT2 ||
+             DYNAMIC_STATE == ZINK_NO_DYNAMIC_STATE || !ctx->gfx_pipeline_state.uses_dynamic_stride)
+            zink_bind_vertex_buffers(ctx, ctx->vertex_buffers);
          else
-            zink_bind_vertex_buffers<ZINK_NO_DYNAMIC_STATE>(ctx);
+            zink_bind_vertex_buffers_dynamic(ctx, ctx->vertex_buffers);
       }
       if ((DYNAMIC_STATE == ZINK_DYNAMIC_VERTEX_INPUT2 || DYNAMIC_STATE == ZINK_DYNAMIC_VERTEX_INPUT) && (BATCH_CHANGED || ctx->vertex_state_changed))
          VKCTX(CmdSetVertexInputEXT)(ctx->bs->cmdbuf,
@@ -853,7 +819,7 @@ zink_draw(struct pipe_context *pctx,
             t->stride = ctx->last_vertex_stage->xfb_stride[i];
             zink_batch_reference_resource_rw(ctx, res, true);
             if (!ctx->unordered_blitting)
-               res->obj->unordered_read = res->obj->unordered_write = false;
+               zink_resource_disable_unordered(res, true);
             if (t->counter_buffer_valid) {
                counter_buffers[i] = res->obj->buffer;
                counter_buffer_offsets[i] = t->counter_buffer_offset;
@@ -1032,7 +998,7 @@ zink_draw_mesh_tasks(struct pipe_context *pctx, const struct pipe_grid_info *inf
    ctx->rp_draw = true;
 
    if (ctx->memory_barrier && !ctx->blitting)
-      zink_flush_memory_barrier(ctx, false);
+      zink_flush_memory_barrier(ctx);
 
    if (unlikely(ctx->buffer_rebind_counter < screen->buffer_rebind_counter && !ctx->blitting)) {
       ctx->buffer_rebind_counter = screen->buffer_rebind_counter;
@@ -1225,7 +1191,7 @@ zink_draw_vertex_state(struct pipe_context *pctx,
    zink_screen(ctx->base.screen)->buffer_barrier(ctx, res, VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT,
                                 VK_PIPELINE_STAGE_VERTEX_INPUT_BIT);
    if (!ctx->unordered_blitting)
-      res->obj->unordered_read = false;
+      zink_resource_disable_unordered(res, false);
    zink_bind_vertex_state<HAS_POPCNT>(ctx, vstate, partial_velem_mask);
 
    zink_draw<HAS_MULTIDRAW, DYNAMIC_STATE, BATCH_CHANGED, true>(pctx, &dinfo, 0, NULL, draws, num_draws, vstate, partial_velem_mask);
@@ -1273,7 +1239,7 @@ zink_launch_grid(struct pipe_context *pctx, const struct pipe_grid_info *info)
 
    zink_update_barriers(ctx, true, NULL, info->indirect, NULL);
    if (ctx->memory_barrier)
-      zink_flush_memory_barrier(ctx, true);
+      zink_flush_memory_barrier(ctx);
 
    if (unlikely(zink_debug & ZINK_DEBUG_SYNC)) {
       zink_batch_no_rp(ctx);
@@ -1299,7 +1265,7 @@ zink_launch_grid(struct pipe_context *pctx, const struct pipe_grid_info *info)
          util_range_add(&res->base.b, &res->valid_buffer_range, 0, res->base.b.width0);
          zink_batch_reference_resource_rw(ctx, res, true);
          zink_screen(ctx->base.screen)->buffer_barrier(ctx, res, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
-         res->obj->unordered_read = res->obj->unordered_write = false;
+         zink_resource_disable_unordered(res, true);
       }
    }
    if (ctx->compute_dirty) {

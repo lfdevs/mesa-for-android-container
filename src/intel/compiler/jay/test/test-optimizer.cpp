@@ -119,8 +119,9 @@ TEST_F(Optimizer, SELToFloat)
 
 TEST_F(Optimizer, FusedNot)
 {
-   CASE(jay_BFN(b, out, wx, jay_NOT_u32(b, wy), 0, UTIL_LUT3(a & b)),
-        jay_BFN(b, out, wx, wy, 0, UTIL_LUT3(a & ~b)));
+   CASE(jay_BFN(b, JAY_TYPE_U32, out, wx, jay_NOT_u32(b, wy), 0,
+                UTIL_LUT3(a & b)),
+        jay_BFN(b, JAY_TYPE_U32, out, wx, wy, 0, UTIL_LUT3(a & ~b)));
 
    CASE(jay_AND(b, JAY_TYPE_U32, out, wx, jay_NOT_u32(b, wy)),
         jay_AND(b, JAY_TYPE_U32, out, wx, jay_negate(wy)));
@@ -251,7 +252,8 @@ TEST_F(Optimizer, TypeNeutralConditionalMods)
       CASEB({
          jay_def flag = jay_alloc_def(b, FLAG, 1);
          jay_def x = jay_alloc_def(b, GPR, 1);
-         jay_inst *bfn3 = jay_BFN(b, x, wx, wy, wz, UTIL_LUT3(a & b & c));
+         jay_inst *bfn3 =
+            jay_BFN(b, JAY_TYPE_U32, x, wx, wy, wz, UTIL_LUT3(a & b & c));
 
          /* BFN.ne is not permitted & should not be propagated */
          if (after && mods[i] == GEN_CONDITION_EQ) {
@@ -288,7 +290,7 @@ TEST_F(Optimizer, SignednessMismatchConditionalMods)
       NEGCASE({
          jay_def flag = jay_alloc_def(b, FLAG, 1);
          jay_def x = jay_alloc_def(b, GPR, 1);
-         jay_BFN(b, x, wx, wy, wz, UTIL_LUT3(a & b & c));
+         jay_BFN(b, JAY_TYPE_U32, x, wx, wy, wz, UTIL_LUT3(a & b & c));
          jay_CMP(b, JAY_TYPE_S32, mods[i], flag, x, 0);
          jay_SEL(b, JAY_TYPE_U32, out, x, 123, flag);
       });
@@ -308,7 +310,7 @@ TEST_F(Optimizer, FloatMismatchConditionalMods)
       NEGCASE({
          jay_def flag = jay_alloc_def(b, FLAG, 1);
          jay_def x = jay_alloc_def(b, GPR, 1);
-         jay_BFN(b, x, wx, wy, wz, UTIL_LUT3(a & b & c));
+         jay_BFN(b, JAY_TYPE_U32, x, wx, wy, wz, UTIL_LUT3(a & b & c));
          jay_CMP(b, JAY_TYPE_F32, mods[i], flag, x, 0);
          jay_SEL(b, JAY_TYPE_U32, out, x, 123, flag);
       });

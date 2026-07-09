@@ -93,6 +93,7 @@ vk_attachment_load_op_to_mtl_load_action(enum VkAttachmentLoadOp op)
    case VK_ATTACHMENT_LOAD_OP_CLEAR:
       return MTL_LOAD_ACTION_CLEAR;
    case VK_ATTACHMENT_LOAD_OP_DONT_CARE:
+   case VK_ATTACHMENT_LOAD_OP_NONE:
       return MTL_LOAD_ACTION_DONT_CARE;
    default:
       assert(false && "Unsupported VkAttachmentLoadOp");
@@ -261,5 +262,28 @@ mtl_index_type_to_size_B(enum mtl_index_type type)
       return 4u;
    default:
       UNREACHABLE("Unhandled index type");
+   }
+}
+
+const char *
+mtl_command_queue_error_to_string(enum mtl_command_queue_error error)
+{
+   switch (error) {
+   case MTL_COMMAND_QUEUE_ERROR_NONE:
+      return "MTL_COMMAND_QUEUE_ERROR_NONE";
+   case MTL_COMMAND_QUEUE_ERROR_TIMEOUT:
+      return "MTL_COMMAND_QUEUE_ERROR_TIMEOUT";
+   case MTL_COMMAND_QUEUE_ERROR_NOT_PERMITTED:
+      return "MTL_COMMAND_QUEUE_ERROR_NOT_PERMITTED";
+   case MTL_COMMAND_QUEUE_ERROR_OUT_OF_MEMORY:
+      return "MTL_COMMAND_QUEUE_ERROR_OUT_OF_MEMORY";
+   case MTL_COMMAND_QUEUE_ERROR_DEVICE_REMOVED:
+      return "MTL_COMMAND_QUEUE_ERROR_DEVICE_REMOVED";
+   case MTL_COMMAND_QUEUE_ERROR_ACCESS_REVOKED:
+      return "MTL_COMMAND_QUEUE_ERROR_ACCESS_REVOKED";
+   case MTL_COMMAND_QUEUE_ERROR_INTERNAL:
+      return "MTL_COMMAND_QUEUE_ERROR_INTERNAL";
+   default:
+      UNREACHABLE("Unsupported error value");
    }
 }

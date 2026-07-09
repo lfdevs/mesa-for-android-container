@@ -71,7 +71,8 @@ bool zink_tracing = false;
 #else
 #include <unistd.h>
 #if DETECT_OS_APPLE
-#define VK_LIBNAME "libvulkan.1.dylib"
+/* See the vulkan-loader-rpath meson option for how to specify rpath at build time. */
+#define VK_LIBNAME "@rpath/libvulkan.1.dylib"
 #elif DETECT_OS_ANDROID
 #define VK_LIBNAME "libvulkan.so"
 #else
@@ -1212,6 +1213,10 @@ zink_init_screen_caps(struct zink_screen *screen)
 
    caps->max_texture_lod_bias = screen->info.props.limits.maxSamplerLodBias;
 
+   /* supporting negative offsets in software is non-trivial */
+   if (zink_driverid(screen) != VK_DRIVER_ID_MESA_LLVMPIPE)
+      caps->signed_vertex_buffer_offset = screen->info.have_KHR_device_address_commands;
+
    /* not about to deal with mesh + non-optimal */
    caps->mesh_shader = screen->info.have_EXT_mesh_shader && screen->optimal_keys;
 
@@ -2233,6 +2238,9 @@ retry:
       }
 
       if (screen->info.have_EXT_image_drm_format_modifier && mod_props.drmFormatModifierCount) {
+         /* The A8_UNORM workaround below can retry this query for the same pformat. */
+         ralloc_free(screen->modifier_props[pformat].pDrmFormatModifierProperties);
+
          screen->modifier_props[pformat].drmFormatModifierCount = mod_props.drmFormatModifierCount;
          screen->modifier_props[pformat].pDrmFormatModifierProperties = ralloc_array(screen, VkDrmFormatModifierPropertiesEXT, mod_props.drmFormatModifierCount);
          if (mod_props.pDrmFormatModifierProperties) {
@@ -3158,6 +3166,10 @@ init_driver_workarounds(struct zink_screen *screen)
       /* Interpolation is not consistent between two triangles of a rectangle. */
       screen->driver_workarounds.inconsistent_interpolation = true;
       break;
+   case VK_DRIVER_ID_INTEL_OPEN_SOURCE_MESA:
+   case VK_DRIVER_ID_MESA_TURNIP:
+      screen->driver_workarounds.inconsistent_interpolation = true;
+      break;
    default:
       break;
    }
@@ -3200,6 +3212,9 @@ init_driver_workarounds(struct zink_screen *screen)
 
    if (zink_debug & ZINK_DEBUG_NOGENERAL)
       screen->driver_workarounds.general_layout = false;
+
+   if (!screen->info.have_EXT_vertex_input_dynamic_state || !screen->info.have_EXT_transform_feedback)
+      screen->info.have_KHR_device_address_commands = false;
 
    if (!screen->resizable_bar)
       screen->info.have_EXT_host_image_copy = false;

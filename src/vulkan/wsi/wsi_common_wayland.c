@@ -280,6 +280,78 @@ find_format(struct u_vector *formats, VkFormat format)
    return NULL;
 }
 
+static VkTimeDomainKHR
+clock_id_to_vk_time_domain(clockid_t id)
+{
+   switch (id) {
+      case CLOCK_MONOTONIC:
+         return VK_TIME_DOMAIN_CLOCK_MONOTONIC_KHR;
+      case CLOCK_MONOTONIC_RAW:
+         return VK_TIME_DOMAIN_CLOCK_MONOTONIC_RAW_KHR;
+      default:
+         /* Default fallback. Will likely not be used, but is safe to use. */
+         return VK_TIME_DOMAIN_CLOCK_MONOTONIC_KHR;
+   }
+}
+
+static clockid_t
+vk_time_domain_to_clock_id(VkTimeDomainKHR id)
+{
+   switch (id) {
+      case VK_TIME_DOMAIN_CLOCK_MONOTONIC_KHR:
+         return CLOCK_MONOTONIC;
+      case VK_TIME_DOMAIN_CLOCK_MONOTONIC_RAW_KHR:
+         return CLOCK_MONOTONIC_RAW;
+      default:
+         /* Default fallback. Will not be used. */
+         return 0;
+   }
+}
+
+static uint64_t
+wsi_wl_convert_wayland_to_swapchain_time(struct wsi_wl_swapchain *chain,
+                                         uint64_t in_timestamp,
+                                         bool chain_to_wayland)
+{
+   struct timespec src_ts, src_ts2;
+   struct timespec dst_ts;
+   uint64_t timestamps[2];
+   bool fail;
+
+   clockid_t src = chain->wsi_wl_surface->display->presentation_clock_id;
+   clockid_t dst = vk_time_domain_to_clock_id(chain->base.present_timing.time_domain);
+
+   if (chain_to_wayland) {
+      src = dst;
+      dst = chain->wsi_wl_surface->display->presentation_clock_id;
+   }
+
+   /* Common case, most compositors: Nothing to do if both time domains match. */
+   if (src == dst)
+      return in_timestamp;
+
+   /* Get reference time of src and dst time domain, with max 10 usecs error. */
+   do {
+      fail = clock_gettime(src, &src_ts);
+      fail |= clock_gettime(dst, &dst_ts);
+      fail |= clock_gettime(src, &src_ts2);
+   } while (!fail && (timespec_sub_to_nsec(&src_ts2, &src_ts) > 10 * 1000ULL));
+
+   /* fail should not happen in practice, unless there's a Wayland server bug. */
+   assert(!fail);
+   if (fail) {
+      return 0;
+   }
+
+   timestamps[0] = timespec_to_nsec(&src_ts);
+   timestamps[1] = timespec_to_nsec(&dst_ts);
+
+   /* Remap */
+   int64_t delta_ns = (int64_t)in_timestamp - (int64_t)timestamps[0];
+   uint64_t target_timestamp = timestamps[1] + delta_ns;
+   return target_timestamp;
+}
+
 /* Given a time base and a refresh period, find the next
  * time past 'from' that is an even multiple of the period
  * past the base.
@@ -1809,15 +1881,23 @@ wsi_wl_surface_get_capabilities(VkIcdSurfaceBase *icd_surface,
       VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR |
       VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR;
 
-   caps->surfaceCapabilities.supportedUsageFlags = wsi_caps_get_image_usage();
+   VkImageUsageFlags image_usage = wsi_caps_get_image_usage();
 
    VK_FROM_HANDLE(vk_physical_device, pdevice, wsi_device->pdevice);
    if (pdevice->supported_extensions.EXT_attachment_feedback_loop_layout)
-      caps->surfaceCapabilities.supportedUsageFlags |= VK_IMAGE_USAGE_ATTACHMENT_FEEDBACK_LOOP_BIT_EXT;
+      image_usage |= VK_IMAGE_USAGE_ATTACHMENT_FEEDBACK_LOOP_BIT_EXT;
 
    VkSwapchainFlagsSurfaceCapabilitiesEXT *surface_caps = vk_find_struct(caps, SWAPCHAIN_FLAGS_SURFACE_CAPABILITIES_EXT);
    if (surface_caps && pdevice->supported_extensions.EXT_multisampled_render_to_swapchain)
       surface_caps->swapchainSupportedFlags |= VK_SWAPCHAIN_CREATE_MULTISAMPLED_RENDER_TO_SINGLE_SAMPLED_BIT_EXT;
+
+   VkImageUsageFlags2CreateInfoKHR *usage2 =
+      vk_find_struct(caps->pNext, IMAGE_USAGE_FLAGS_2_CREATE_INFO_KHR);
+   if (usage2) {
+      usage2->usage = image_usage;
+   } else {
+      caps->surfaceCapabilities.supportedUsageFlags = image_usage;
+   }
 
    return VK_SUCCESS;
 }
@@ -2525,6 +2605,12 @@ wsi_wl_swapchain_set_timing_request(struct wsi_swapchain *wsi_chain,
 {
    struct wsi_wl_swapchain *chain = (struct wsi_wl_swapchain *)wsi_chain;
    chain->timing_request = *request;
+
+   /* Convert absolute target time from swapchain time domain to whatever Wayland natively expects. */
+   if (!(chain->timing_request.flags & VK_PRESENT_TIMING_INFO_PRESENT_AT_RELATIVE_TIME_BIT_EXT)) {
+      chain->timing_request.time =
+         wsi_wl_convert_wayland_to_swapchain_time(chain, chain->timing_request.time, true);
+   }
 }
 
 static VkResult
@@ -2915,6 +3001,9 @@ presentation_handle_presented(void *data,
     * There is a v3 proposal that adds this information more formally so we don't have to guess.
     * Knowing VRR or FRR is not mission critical for most use cases, so just report "Unknown" for now. */
    wsi_swapchain_present_timing_update_refresh_rate(&chain->base, refresh, 0, 0);
+
+   /* Convert whatever Wayland provides to swapchain time domain. */
+   presentation_time = wsi_wl_convert_wayland_to_swapchain_time(chain, presentation_time, false);
 
    /* Notify this before present wait to reduce latency of presentation timing requests
     * if the application is driving its queries based off present waits. */
@@ -3602,20 +3691,6 @@ wsi_wl_swapchain_destroy(struct wsi_swapchain *wsi_chain,
    return VK_SUCCESS;
 }
 
-static VkTimeDomainKHR
-clock_id_to_vk_time_domain(clockid_t id)
-{
-   switch (id) {
-      case CLOCK_MONOTONIC:
-         return VK_TIME_DOMAIN_CLOCK_MONOTONIC_KHR;
-      case CLOCK_MONOTONIC_RAW:
-         return VK_TIME_DOMAIN_CLOCK_MONOTONIC_RAW_KHR;
-      default:
-         /* Default fallback. Will not be used. */
-         return VK_TIME_DOMAIN_DEVICE_KHR;
-   }
-}
-
 static VkResult
 wsi_wl_surface_create_swapchain(VkIcdSurfaceBase *icd_surface,
                                 VkDevice device,
@@ -3798,7 +3873,15 @@ wsi_wl_surface_create_swapchain(VkIcdSurfaceBase *icd_surface,
    chain->base.set_present_mode = wsi_wl_swapchain_set_present_mode;
    chain->base.set_timing_request = wsi_wl_swapchain_set_timing_request;
    chain->base.poll_timing_request = wsi_wl_swapchain_poll_timing_request;
-   chain->base.present_timing.time_domain = clock_id_to_vk_time_domain(wsi_wl_surface->display->presentation_clock_id);
+
+   if (pCreateInfo->flags & VK_SWAPCHAIN_CREATE_PRESENT_TIMING_BIT_EXT) {
+      /* VK_EXT_present_timing takes whatever Wayland gives us. */
+      chain->base.present_timing.time_domain = clock_id_to_vk_time_domain(wsi_wl_surface->display->presentation_clock_id);
+   } else {
+      /* VK_GOOGLE_display_timing always wants VK_TIME_DOMAIN_CLOCK_MONOTONIC_KHR. */
+      chain->base.present_timing.time_domain = VK_TIME_DOMAIN_CLOCK_MONOTONIC_KHR;
+   }
+
    chain->base.wait_for_present = wsi_wl_swapchain_wait_for_present;
    chain->base.wait_for_present2 = wsi_wl_swapchain_wait_for_present2;
    chain->base.present_mode = present_mode;

@@ -655,6 +655,8 @@ elk_nir_optimize(nir_shader *nir, bool is_scalar,
 {
    bool progress;
 
+   OPT(nir_opt_uub, &(nir_opt_uub_options){});
+
    do {
       progress = false;
       OPT(nir_shrink_vec_array_vars, nir_var_function_temp);
@@ -723,6 +725,7 @@ elk_nir_optimize(nir_shader *nir, bool is_scalar,
       OPT(nir_opt_peephole_select, &peephole_select_options);
 
       OPT(nir_opt_intrinsics);
+      OPT(nir_opt_fp_math_ctrl);
       OPT(nir_opt_idiv_const, 32);
       OPT(nir_opt_algebraic);
 

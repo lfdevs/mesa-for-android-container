@@ -2761,9 +2761,16 @@ static void handle_blit_image(struct vk_cmd_queue_entry *cmd,
       .dst.resource = dst_image->planes[0].bo,
       .src.format = src_image->planes[0].bo->format,
       .dst.format = dst_image->planes[0].bo->format,
-      .mask = util_format_is_depth_or_stencil(info.src.format) ? PIPE_MASK_ZS : PIPE_MASK_RGBA,
       .filter = blitcmd->filter == VK_FILTER_NEAREST ? PIPE_TEX_FILTER_NEAREST : PIPE_TEX_FILTER_LINEAR,
    };
+   if (util_format_is_depth_or_stencil(info.src.format)) {
+      if (src_image->vk.aspects & VK_IMAGE_ASPECT_DEPTH_BIT && dst_image->vk.aspects & VK_IMAGE_ASPECT_DEPTH_BIT)
+         info.mask |= PIPE_MASK_Z;
+      if (src_image->vk.aspects & VK_IMAGE_ASPECT_STENCIL_BIT && dst_image->vk.aspects & VK_IMAGE_ASPECT_STENCIL_BIT)
+         info.mask |= PIPE_MASK_S;
+   } else {
+      info.mask = PIPE_MASK_RGBA;
+   }
 
    for (uint32_t i = 0; i < blitcmd->regionCount; i++) {
       int srcX0, srcX1, srcY0, srcY1, srcZ0, srcZ1;

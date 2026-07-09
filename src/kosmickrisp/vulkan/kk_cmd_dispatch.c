@@ -30,9 +30,8 @@ kk_flush_compute_state(struct kk_cmd_buffer *cmd)
    if (desc->root_dirty)
       kk_upload_descriptor_root(cmd, VK_PIPELINE_BIND_POINT_COMPUTE);
 
-   struct kk_ptr root_buffer = desc->root.root_buffer;
-   if (root_buffer.gpu)
-      kk_cmd_bind_root_to_argument_table(cmd, root_buffer.gpu);
+   if (desc->root.addr)
+      kk_cmd_bind_root_to_argument_table(cmd, desc->root.addr);
 
    mtl_compute_set_pipeline_state(
       encoder, cmd->state.shaders[MESA_SHADER_COMPUTE]->pipeline.cs);

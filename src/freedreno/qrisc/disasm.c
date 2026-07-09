@@ -210,10 +210,10 @@ disasm_instr(struct isa_decode_options *options, uint32_t *instrs, unsigned pc)
 }
 
 static void
-setup_packet_table(struct isa_decode_options *options,
+setup_packet_table(struct isa_decode_options *options, uint32_t preempt_instr,
                    uint32_t *jmptbl, uint32_t sizedwords)
 {
-   struct isa_entrypoint *entrypoints = malloc(sizedwords * sizeof(struct isa_entrypoint));
+   struct isa_entrypoint *entrypoints = malloc((sizedwords + 1) * sizeof(struct isa_entrypoint));
 
    for (unsigned i = 0; i < sizedwords; i++) {
       entrypoints[i].offset = jmptbl[i];
@@ -228,6 +228,19 @@ setup_packet_table(struct isa_decode_options *options,
 
    options->entrypoints = entrypoints;
    options->entrypoint_count = sizedwords;
+
+   /* The actual preemption entrypoint is determined via %PREEMPT_INSTR. In
+    * some cases with newer firmwares this doesn't match the value of
+    * IN_PREEMPT in the jump table.
+    *
+    * We add a new entrypoint instead of modifying IN_PREEMPT so that we can
+    * get a byte-for-byte accurate reassembly.
+    */
+   if (preempt_instr != ~0) {
+      entrypoints[options->entrypoint_count].name = "preempt";
+      entrypoints[options->entrypoint_count].offset = preempt_instr;
+      options->entrypoint_count++;
+   }
 }
 
 static uint32_t
@@ -250,18 +263,73 @@ find_jump_table(uint32_t *instrs, uint32_t sizedwords,
 }
 
 static void
+disasm_section(struct emu *emu, struct isa_decode_options *options,
+               enum emu_processor processor, const uint32_t *offsets,
+               uint32_t size)
+{
+   EMU_SQE_REG(PREEMPT_INSTR);
+
+   uint32_t offset = offsets[processor];
+   emu->processor = processor;
+
+   emu_init(emu, offsets);
+   emu_run_bootstrap(emu);
+
+   /* TODO add option to emulate LPAC SQE instead */
+   if (emulator && processor == EMU_PROC_SQE) {
+      /* Start from clean slate: */
+      emu_fini(emu);
+      emu_init(emu, offsets);
+
+      while (true) {
+         disasm_instr(options, emu->instrs + offset, emu->gpr_regs.pc);
+         emu_step(emu);
+      }
+   }
+
+   unsigned preempt_instr = emu_get_reg32(emu, &PREEMPT_INSTR);
+
+   setup_packet_table(options, preempt_instr, emu->jmptbl, ARRAY_SIZE(emu->jmptbl));
+
+   jumptbl_offset = find_jump_table(emu->instrs + offset, size, emu->jmptbl,
+                                    ARRAY_SIZE(emu->jmptbl));
+
+   qrisc_isa_disasm(emu->instrs + offset, MIN2(size, jumptbl_offset) * 4, stdout, options);
+
+   if (jumptbl_offset != ~0) {
+      if (gpuver >= 7) {
+         /* The BV/LPAC microcode must be aligned to 32 bytes. On a7xx, by
+          * convention the firmware aligns the jumptable preceding it instead
+          * of the microcode itself, with nop instructions. Insert this
+          * directive to make sure that it stays aligned when reassembling
+          * even if the user modifies the BR microcode.
+          */
+         printf(".align 32\n");
+      }
+      printf("jumptbl:\n");
+      printf(".jumptbl\n");
+      if (jumptbl_offset + ARRAY_SIZE(emu->jmptbl) != size) {
+         for (unsigned i = jumptbl_offset + ARRAY_SIZE(emu->jmptbl); i < size; i++)
+            printf("[%08x]\n", emu->instrs[offset + i]);
+      }
+   }
+
+   emu_fini(emu);
+}
+
+static void
 disasm(struct emu *emu)
 {
    uint32_t sizedwords = emu->sizedwords;
-   uint32_t lpac_offset = 0, bv_offset = 0;
 
    EMU_GPU_REG(CP_SQE_INSTR_BASE);
    EMU_GPU_REG(CP_LPAC_SQE_INSTR_BASE);
    EMU_CONTROL_REG(BV_INSTR_BASE);
+   EMU_CONTROL_REG(DDE_BR_INSTR_BASE);
    EMU_CONTROL_REG(LPAC_INSTR_BASE);
 
-   emu_init(emu);
    emu->processor = EMU_PROC_SQE;
+   emu_init(emu, NULL);
 
    struct isa_decode_options options;
    struct decode_state state;
@@ -277,135 +345,59 @@ disasm(struct emu *emu)
 
    emu_run_bootstrap(emu);
 
+   uint32_t offsets[EMU_PROC_COUNT] = {};
+   uint32_t sizes[EMU_PROC_COUNT] = {};
+
    /* Figure out if we have BV/LPAC SQE appended: */
    if (gpuver >= 7) {
-      bv_offset = emu_get_reg64(emu, &BV_INSTR_BASE) -
+      offsets[EMU_PROC_BV] = emu_get_reg64(emu, &BV_INSTR_BASE) -
          emu_get_reg64(emu, &CP_SQE_INSTR_BASE);
-      bv_offset /= 4;
-      lpac_offset = emu_get_reg64(emu, &LPAC_INSTR_BASE) -
+      offsets[EMU_PROC_BV] /= 4;
+      offsets[EMU_PROC_LPAC] = emu_get_reg64(emu, &LPAC_INSTR_BASE) -
          emu_get_reg64(emu, &CP_SQE_INSTR_BASE);
-      lpac_offset /= 4;
-      sizedwords = MIN2(bv_offset, lpac_offset);
+      offsets[EMU_PROC_LPAC] /= 4;
+      if (gpuver >= 8) {
+         /* Note: DDE_BR and DDE_BV share the same microcode */
+         offsets[EMU_PROC_DDE_BR] = emu_get_reg64(emu, &DDE_BR_INSTR_BASE) -
+            emu_get_reg64(emu, &CP_SQE_INSTR_BASE);
+         offsets[EMU_PROC_DDE_BR] /= 4;
+      }
    } else {
       if (emu_get_reg64(emu, &CP_LPAC_SQE_INSTR_BASE)) {
-         lpac_offset = emu_get_reg64(emu, &CP_LPAC_SQE_INSTR_BASE) -
+         offsets[EMU_PROC_LPAC] = emu_get_reg64(emu, &CP_LPAC_SQE_INSTR_BASE) -
                emu_get_reg64(emu, &CP_SQE_INSTR_BASE);
-         lpac_offset /= 4;
-         sizedwords = lpac_offset;
+         offsets[EMU_PROC_LPAC] /= 4;
       }
    }
 
-   setup_packet_table(&options, emu->jmptbl, ARRAY_SIZE(emu->jmptbl));
-
-   jumptbl_offset = find_jump_table(emu->instrs, sizedwords, emu->jmptbl,
-                                    ARRAY_SIZE(emu->jmptbl));
-
-   /* TODO add option to emulate LPAC SQE instead: */
-   if (emulator) {
-      /* Start from clean slate: */
-      emu_fini(emu);
-      emu_init(emu);
-
-      while (true) {
-         disasm_instr(&options, emu->instrs, emu->gpr_regs.pc);
-         emu_step(emu);
+   /* Determine sizes of each section: */
+   uint32_t prev_offset = sizedwords;
+   for (int i = EMU_PROC_COUNT - 1; i >= 0; i--) {
+      if (offsets[i] || i == EMU_PROC_SQE) {
+         assert(prev_offset >= offsets[i]);
+         sizes[i] = prev_offset - offsets[i];
+         prev_offset = offsets[i];
       }
    }
 
-   /* print instructions: */
-   qrisc_isa_disasm(emu->instrs, MIN2(sizedwords, jumptbl_offset) * 4, stdout, &options);
+   disasm_section(emu, &options, EMU_PROC_SQE, offsets, sizes[EMU_PROC_SQE]);
 
-   /* print jump table */
-   if (jumptbl_offset != ~0) {
-      if (gpuver >= 7) {
-         /* The BV/LPAC microcode must be aligned to 32 bytes. On a7xx, by
-          * convention the firmware aligns the jumptable preceding it instead
-          * of the microcode itself, with nop instructions. Insert this
-          * directive to make sure that it stays aligned when reassembling
-          * even if the user modifies the BR microcode.
-          */
-         printf(".align 32\n");
-      }
-      printf("jumptbl:\n");
-      printf(".jumptbl\n");
+   const char *section_names[EMU_PROC_COUNT] = {
+      [EMU_PROC_BV] = "BV",
+      [EMU_PROC_LPAC] = "LPAC",
+      [EMU_PROC_DDE_BR] = "DDE",
+   };
 
-      if (jumptbl_offset + ARRAY_SIZE(emu->jmptbl) != sizedwords) {
-         for (unsigned i = jumptbl_offset + ARRAY_SIZE(emu->jmptbl); i < sizedwords; i++)
-            printf("[%08x]\n", emu->instrs[i]);
-      }
-   }
+   for (unsigned i = 1; i < EMU_PROC_COUNT; i++) {
+      if (!offsets[i] || !section_names[i])
+         continue;
 
-   if (bv_offset) {
-      printf("\n.section BV\n");
+      printf("\n.section %s\n", section_names[i]);
       printf(";\n");
-      printf("; BV microcode:\n");
+      printf("; %s microcode:\n", section_names[i]);
       printf(";\n");
 
-      emu_fini(emu);
-
-      emu->processor = EMU_PROC_BV;
-      emu->instrs += bv_offset;
-      emu->sizedwords -= bv_offset;
-
-      emu_init(emu);
-      emu_run_bootstrap(emu);
-
-      setup_packet_table(&options, emu->jmptbl, ARRAY_SIZE(emu->jmptbl));
-
-      uint32_t sizedwords = lpac_offset - bv_offset;
-
-      jumptbl_offset = find_jump_table(emu->instrs, sizedwords, emu->jmptbl,
-                                       ARRAY_SIZE(emu->jmptbl));
-
-      qrisc_isa_disasm(emu->instrs, MIN2(sizedwords, jumptbl_offset) * 4, stdout, &options);
-
-      if (jumptbl_offset != ~0) {
-         printf(".align 32\n");
-         printf("jumptbl:\n");
-         printf(".jumptbl\n");
-         if (jumptbl_offset + ARRAY_SIZE(emu->jmptbl) != sizedwords) {
-            for (unsigned i = jumptbl_offset + ARRAY_SIZE(emu->jmptbl); i < sizedwords; i++)
-               printf("[%08x]\n", emu->instrs[i]);
-         }
-      }
-
-      emu->instrs -= bv_offset;
-      emu->sizedwords += bv_offset;
-   }
-
-   if (lpac_offset) {
-      printf("\n.section LPAC\n");
-      printf(";\n");
-      printf("; LPAC microcode:\n");
-      printf(";\n");
-
-      emu_fini(emu);
-
-      emu->processor = EMU_PROC_LPAC;
-      emu->instrs += lpac_offset;
-      emu->sizedwords -= lpac_offset;
-
-      emu_init(emu);
-      emu_run_bootstrap(emu);
-
-      setup_packet_table(&options, emu->jmptbl, ARRAY_SIZE(emu->jmptbl));
-
-      jumptbl_offset = find_jump_table(emu->instrs, emu->sizedwords, emu->jmptbl,
-                                       ARRAY_SIZE(emu->jmptbl));
-
-      qrisc_isa_disasm(emu->instrs, MIN2(emu->sizedwords, jumptbl_offset) * 4, stdout, &options);
-
-      if (jumptbl_offset != ~0) {
-         printf("jumptbl:\n");
-         printf(".jumptbl\n");
-         if (jumptbl_offset + ARRAY_SIZE(emu->jmptbl) != emu->sizedwords) {
-            for (unsigned i = jumptbl_offset + ARRAY_SIZE(emu->jmptbl); i < emu->sizedwords; i++)
-               printf("[%08x]\n", emu->instrs[i]);
-         }
-      }
-
-      emu->instrs -= lpac_offset;
-      emu->sizedwords += lpac_offset;
+      disasm_section(emu, &options, i, offsets, sizes[i]);
    }
 }
 
@@ -434,7 +426,7 @@ disasm_legacy(uint32_t *buf, int sizedwords)
    options.cbdata = &state;
 
    /* parse jumptable: */
-   setup_packet_table(&options, jmptbl, 0x80);
+   setup_packet_table(&options, ~0, jmptbl, 0x80);
 
    /* print instructions: */
    qrisc_isa_disasm(instrs, sizedwords * 4, stdout, &options);

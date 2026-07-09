@@ -217,6 +217,7 @@ init_gallivm_state(struct gallivm_state *gallivm, const char *name,
       return false;
 
    gallivm->context = context->ref;
+   gallivm->context_mutex = context->mutex;
    gallivm->cache = cache;
    if (!gallivm->context)
       goto fail;
@@ -354,14 +355,32 @@ gallivm_create(const char *name, lp_context_ref *context,
 /**
  * Destroy a gallivm_state object.
  */
+/* Like gallivm_destroy, but for callers that already hold the context mutex
+ * (e.g. mid-compile failure cleanup, which runs under the compile lock).
+ */
 void
-gallivm_destroy(struct gallivm_state *gallivm)
+gallivm_destroy_locked(struct gallivm_state *gallivm)
 {
    gallivm_free_ir(gallivm);
    if (gallivm->engine)
       LLVMDisposeExecutionEngine(gallivm->engine);
    gallivm_free_code(gallivm);
+
    FREE(gallivm);
+}
+
+void
+gallivm_destroy(struct gallivm_state *gallivm)
+{
+   /* Serialize LLVMContext teardown against concurrent compiles. */
+   simple_mtx_t *mutex = gallivm->context_mutex;
+   if (mutex)
+      simple_mtx_lock(mutex);
+
+   gallivm_destroy_locked(gallivm);
+
+   if (mutex)
+      simple_mtx_unlock(mutex);
 }
 
 void

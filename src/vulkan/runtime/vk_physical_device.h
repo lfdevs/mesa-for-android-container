@@ -31,6 +31,7 @@
 #include "vk_object.h"
 #include "vk_physical_device_features.h"
 #include "vk_physical_device_properties.h"
+#include "vk_util.h"
 
 #include "compiler/spirv/spirv_info.h"
 
@@ -217,6 +218,42 @@ vk_physical_device_heap_budget_from_system(struct vk_physical_device *physical_d
 
    return vk_physical_device_heap_budget(available_memory, available_percent,
                                          heap_size, used);
+}
+
+static inline VkImageCreateFlags2KHR
+vk_image_format_info_2_flags(const VkPhysicalDeviceImageFormatInfo2 *info)
+{
+   const VkImageCreateFlags2CreateInfoKHR *flags_create_info =
+      vk_find_struct_const(info->pNext, IMAGE_CREATE_FLAGS_2_CREATE_INFO_KHR);
+   if (flags_create_info) {
+      return flags_create_info->flags;
+   } else {
+      return info->flags;
+   }
+}
+
+static inline VkImageUsageFlags2KHR
+vk_image_format_info_2_usage(const VkPhysicalDeviceImageFormatInfo2 *info)
+{
+   const VkImageUsageFlags2CreateInfoKHR *usage_create_info =
+      vk_find_struct_const(info->pNext, IMAGE_USAGE_FLAGS_2_CREATE_INFO_KHR);
+   if (usage_create_info) {
+      return usage_create_info->usage;
+   } else {
+      return info->usage;
+   }
+}
+
+static inline VkImageUsageFlags2KHR
+vk_sparse_image_format_info_2_usage(const VkPhysicalDeviceSparseImageFormatInfo2 *info)
+{
+   const VkImageUsageFlags2CreateInfoKHR *usage_create_info =
+      vk_find_struct_const(info->pNext, IMAGE_USAGE_FLAGS_2_CREATE_INFO_KHR);
+   if (usage_create_info) {
+      return usage_create_info->usage;
+   } else {
+      return info->usage;
+   }
 }
 
 #ifdef __cplusplus

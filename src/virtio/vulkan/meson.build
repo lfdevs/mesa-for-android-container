@@ -6,7 +6,7 @@
 
 vn_drirc = custom_target(
   'vn_drirc',
-  input  : [files('vn_drirc_gen.py'), drirc_gen, join_paths(dir_source_root, 'src/util/00-venus-defaults.conf')],
+  input  : [files('vn_drirc_gen.py'), drirc_gen, '00-venus-defaults.conf'],
   output : ['vn_drirc.c', 'vn_drirc.h'],
   command : [
     prog_python, '@INPUT0@',
@@ -126,7 +126,10 @@ if not with_platform_windows
 endif
 
 if system_has_kms_drm
-  libvn_files += files('vn_renderer_virtgpu.c')
+  libvn_files += files(
+    'vn_renderer_sim_syncobj.c',
+    'vn_renderer_virtgpu.c',
+  )
   vn_deps += dep_libdrm
 endif
 

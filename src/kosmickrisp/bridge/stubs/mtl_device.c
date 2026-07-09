@@ -35,6 +35,12 @@ mtl_device_get_architecture_name(mtl_device *dev, char buffer[256])
 {
 }
 
+uint32_t
+mtl_device_get_gpu_apple_family(mtl_device *dev)
+{
+   return 0u;
+}
+
 uint64_t
 mtl_device_get_registry_id(mtl_device *dev)
 {

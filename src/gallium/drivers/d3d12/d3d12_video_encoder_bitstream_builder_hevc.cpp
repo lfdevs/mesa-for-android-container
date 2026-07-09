@@ -898,7 +898,7 @@ d3d12_video_bitstream_builder_hevc::print_rps(const HevcSeqParameterSet* sps, UI
       int32_t RefRpsIdx = stRpsIdx - 1 - rps->delta_idx_minus1;
       const HEVCReferencePictureSet* rpsRef = &(sps->rpsShortTerm[RefRpsIdx]);
       auto numberOfPictures = rpsRef->num_negative_pics + rpsRef->num_positive_pics;
-      for (uint8_t j = 0; j <= numberOfPictures; j++) {
+      for (int32_t j = 0; j <= numberOfPictures; j++) {
          debug_printf("used_by_curr_pic_flag[%d]: %d\n", j, rps->used_by_curr_pic_flag[j]);
          if (!rps->used_by_curr_pic_flag[j]) {
                debug_printf("use_delta_flag[%d]: %d\n", j, rps->use_delta_flag[j]);
@@ -908,7 +908,7 @@ d3d12_video_bitstream_builder_hevc::print_rps(const HevcSeqParameterSet* sps, UI
    else
    {
       debug_printf("num_negative_pics: %d\n", rps->num_negative_pics);        
-      for (uint8_t i = 0; i < rps->num_negative_pics; i++) {
+      for (int32_t i = 0; i < rps->num_negative_pics; i++) {
          debug_printf("delta_poc_s0_minus1[%d]: %d\n", i, rps->delta_poc_s0_minus1[i]);
          debug_printf("used_by_curr_pic_s0_flag[%d]: %d\n", i, rps->used_by_curr_pic_s0_flag[i]);
       }

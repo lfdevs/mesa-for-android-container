@@ -9,6 +9,63 @@
 #include <Metal/MTLDevice.h>
 #include <Metal/MTLCommandQueue.h>
 
+/* MTL4CommitOptions */
+mtl_commit_options *
+mtl_new_commit_options(void)
+{
+   @autoreleasepool {
+      return [[MTL4CommitOptions new] init];
+   }
+}
+
+enum mtl_command_queue_error
+error_code_to_mtl_command_queue_error(MTL4CommandQueueError code)
+{
+   switch (code) {
+   case MTL4CommandQueueErrorNone:
+      return MTL_COMMAND_QUEUE_ERROR_NONE;
+    case MTL4CommandQueueErrorTimeout:
+      return MTL_COMMAND_QUEUE_ERROR_TIMEOUT;
+    case MTL4CommandQueueErrorNotPermitted:
+      return MTL_COMMAND_QUEUE_ERROR_NOT_PERMITTED;
+    case MTL4CommandQueueErrorOutOfMemory:
+      return MTL_COMMAND_QUEUE_ERROR_OUT_OF_MEMORY;
+    case MTL4CommandQueueErrorDeviceRemoved:
+      return MTL_COMMAND_QUEUE_ERROR_DEVICE_REMOVED;
+    case MTL4CommandQueueErrorAccessRevoked:
+      return MTL_COMMAND_QUEUE_ERROR_ACCESS_REVOKED;
+    case MTL4CommandQueueErrorInternal:
+      return MTL_COMMAND_QUEUE_ERROR_INTERNAL;
+   }
+}
+
+void
+mtl_commit_options_add_feedback_handler(mtl_commit_options *options,
+                                        mtl_feedback_handler_callback callback,
+                                        void *data)
+{
+   @autoreleasepool {
+      MTL4CommitOptions* opt = (MTL4CommitOptions *)options;
+      [opt addFeedbackHandler:^(id<MTL4CommitFeedback> feedback) {
+         @autoreleasepool {
+            NSError *error = feedback.error;
+            struct mtl_feedback_data feedback_data = (struct mtl_feedback_data){
+               .user_data = data,
+               .error_message =
+                  error ? error.localizedDescription.UTF8String : NULL,
+               .gpu_start = feedback.GPUStartTime,
+               .gpu_end = feedback.GPUEndTime,
+               .error = error
+                           ? error_code_to_mtl_command_queue_error(error.code)
+                           : MTL_COMMAND_QUEUE_ERROR_NONE,
+            };
+            callback(&feedback_data);
+         }
+      }];
+   }
+}
+
+/* MTL4CommandQueue */
 mtl_command_queue *
 mtl_new_command_queue(mtl_device *device)
 {
@@ -62,12 +119,14 @@ mtl_wait_for_event(mtl_command_queue *queue, mtl_event *event, uint64_t value)
 
 void
 mtl_command_queue_commit(mtl_command_queue *queue,
-                         mtl_command_buffer **command_buffers, uint32_t count)
+                         mtl_command_buffer **command_buffers, uint32_t count,
+                         mtl_commit_options *options)
 {
    @autoreleasepool {
       id<MTL4CommandQueue> q = (id<MTL4CommandQueue>)queue;
       id<MTL4CommandBuffer> *cmds = (id<MTL4CommandBuffer> *)command_buffers;
-      [q commit:cmds count:count];
+      MTL4CommitOptions *opt = (MTL4CommitOptions *)options;
+      [q commit:cmds count:count options:opt];
    }
 }
 

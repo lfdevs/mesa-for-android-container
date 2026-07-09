@@ -230,7 +230,6 @@ void
 radv_pipeline_stage_finish(struct radv_shader_stage *stage)
 {
    ralloc_free(stage->nir);
-   vk_sampler_state_array_finish(&stage->layout.embedded_samplers);
 }
 
 void
@@ -544,7 +543,7 @@ radv_postprocess_nir(const struct radv_compiler_info *compiler_info, const struc
    }
 
    NIR_PASS(_, stage->nir, ac_nir_lower_mem_access_bit_sizes, gfx_level, use_llvm);
-   NIR_PASS(_, stage->nir, ac_nir_lower_global_access);
+   NIR_PASS(_, stage->nir, ac_nir_lower_global_access, gfx_level);
    NIR_PASS(_, stage->nir, nir_lower_int64);
 
    if (compiler_info->key.mitigate_smem_with_null_prt)
@@ -559,7 +558,7 @@ radv_postprocess_nir(const struct radv_compiler_info *compiler_info, const struc
    if (opt_intrinsics) /* optimize inot(inverse_ballot) */
       NIR_PASS(_, stage->nir, nir_opt_intrinsics);
 
-   NIR_PASS(_, stage->nir, nir_opt_uub, &(nir_opt_uub_options){});
+   NIR_PASS(_, stage->nir, nir_opt_uub, &(nir_opt_uub_options){0});
 
    radv_optimize_nir_algebraic(
       stage->nir, io_to_mem || lowered_ngg || stage->stage == MESA_SHADER_COMPUTE || stage->stage == MESA_SHADER_TASK,

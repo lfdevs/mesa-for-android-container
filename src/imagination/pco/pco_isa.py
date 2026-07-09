@@ -1791,6 +1791,17 @@ elems=[
    ('write_back_lazy', 0b10),
 ])
 
+F_CACHEMODE_LD_ST = field_enum_type(
+name='cachemode_ld_st', num_bits=2,
+elems=[
+   ('normal', 0b00),
+   ('bypass', 0b01),
+   ('force_line_fill', 0b10),
+   ('write_through', 0b00),
+   ('write_back', 0b01),
+   ('write_back_lazy', 0b10),
+])
+
 F_DSIZE = field_enum_type(
 name='dsize', num_bits=2,
 elems=[
@@ -2056,8 +2067,7 @@ fields=[
    ('rsvd3_smp', (F_UINT2, ['rsvd3_smp'], 0)),
    ('f16', (F_BOOL, ['f16'])),
    ('swap', (F_SCHED_CTRL1, ['swap'])),
-   ('cachemode_smp_ld', (F_CACHEMODE_LD, ['cachemode_smp'])),
-   ('cachemode_smp_st', (F_CACHEMODE_ST, ['cachemode_smp'])),
+   ('cachemode_smp_ld_st', (F_CACHEMODE_LD_ST, ['cachemode_smp'])),
    ('smp_w', (F_BOOL, ['smp_w'])),
 
    ('rsvd4_smp', (F_UINT3, ['rsvd4_smp'], 0)),
@@ -2548,7 +2558,7 @@ field_mappings=[
    ('rsvd3', 'rsvd3_smp'),
    ('f16', 'f16'),
    ('swap', 'swap'),
-   ('cachemode_ld', 'cachemode_smp_ld'),
+   ('cachemode_ld_st', 'cachemode_smp_ld_st'),
    ('w', 'smp_w'),
 ])
 
@@ -2580,7 +2590,7 @@ field_mappings=[
    ('rsvd3', 'rsvd3_smp'),
    ('f16', 'f16'),
    ('swap', 'swap'),
-   ('cachemode_ld', 'cachemode_smp_ld'),
+   ('cachemode_ld_st', 'cachemode_smp_ld_st'),
    ('w', 'smp_w'),
 ])
 
@@ -2612,7 +2622,7 @@ field_mappings=[
    ('rsvd3', 'rsvd3_smp'),
    ('f16', 'f16'),
    ('swap', 'swap'),
-   ('cachemode_ld', 'cachemode_smp_ld'),
+   ('cachemode_ld_st', 'cachemode_smp_ld_st'),
    ('w', 'smp_w'),
 
    ('rsvd4', 'rsvd4_smp'),

@@ -279,6 +279,9 @@ anv_shader_init_uuid(struct anv_physical_device *device)
    const bool fs_sample_d_wa = device->instance->drirc.debug.fs_sampler_undef_derivatives_workaround;
    _mesa_blake3_update(&ctx, &fs_sample_d_wa, sizeof(fs_sample_d_wa));
 
+   const bool slm_robust = device->instance->drirc.debug.slm_robust_vectorization;
+   _mesa_blake3_update(&ctx, &slm_robust, sizeof(slm_robust));
+
    uint8_t blake3[BLAKE3_KEY_LEN];
    _mesa_blake3_final(&ctx, blake3);
    memcpy(device->shader_binary_uuid, blake3, sizeof(device->shader_binary_uuid));
@@ -326,6 +329,8 @@ anv_shader_get_spirv_options(struct vk_physical_device *device,
       .workarounds = {
          .lower_terminate_to_discard = pdevice->instance->drirc.debug.lower_terminate_to_discard,
       },
+
+      .store_dxbc_dxil_hashes = true,
    };
 }
 
@@ -464,7 +469,13 @@ populate_gs_prog_key(struct brw_gs_prog_key *key,
                      const struct vk_graphics_pipeline_state *state,
                      VkShaderStageFlags link_stages)
 {
+   const struct anv_physical_device *pdevice =
+      container_of(device, const struct anv_physical_device, vk);
+
    populate_base_gfx_prog_key(&key->base, device, rs, state, link_stages);
+
+   if (pdevice->instance->drirc.debug.slm_robust_vectorization)
+      key->base.robust_flags |= BRW_ROBUSTNESS_SLM;
 }
 
 static void
@@ -474,7 +485,13 @@ populate_task_prog_key(struct brw_task_prog_key *key,
                        const struct vk_graphics_pipeline_state *state,
                        VkShaderStageFlags link_stages)
 {
+   const struct anv_physical_device *pdevice =
+      container_of(device, const struct anv_physical_device, vk);
+
    populate_base_gfx_prog_key(&key->base, device, rs, state, link_stages);
+
+   if (pdevice->instance->drirc.debug.slm_robust_vectorization)
+      key->base.robust_flags |= BRW_ROBUSTNESS_SLM;
 }
 
 static void
@@ -684,6 +701,9 @@ populate_cs_prog_key(struct brw_cs_prog_key *key,
       container_of(device, const struct anv_physical_device, vk);
 
    populate_base_prog_key(&key->base, device, rs);
+
+   if (pdevice->instance->drirc.debug.slm_robust_vectorization)
+      key->base.robust_flags |= BRW_ROBUSTNESS_SLM;
 
    key->base.divergent_atomics_flags |=
       pdevice->instance->drirc.perf.opt_divergent_atomics_compute_only;
@@ -1458,6 +1478,17 @@ anv_shader_lower_nir(struct anv_device *device,
                &shader_data->bind_map, &shader_data->push_map, mem_ctx);
    }
 
+   /* Now that we're done computing the surface and sampler tables of the bind
+    * map, hash them. This lets us quickly determine if the actual mapping has
+    * changed and not just a no-op pipeline change.
+    */
+   _mesa_blake3_compute(shader_data->bind_map.surface_to_descriptor,
+                        shader_data->bind_map.surface_count * sizeof(struct anv_pipeline_binding),
+                        shader_data->bind_map.surface_blake3);
+   _mesa_blake3_compute(shader_data->bind_map.sampler_to_descriptor,
+                        shader_data->bind_map.sampler_count * sizeof(struct anv_pipeline_binding),
+                        shader_data->bind_map.sampler_blake3);
+
    NIR_PASS(_, nir, nir_lower_explicit_io, nir_var_mem_ubo,
             anv_nir_ubo_addr_format(pdevice, shader_data->key.base.robust_flags));
    NIR_PASS(_, nir, nir_lower_explicit_io, nir_var_mem_ssbo,
@@ -1905,6 +1936,7 @@ anv_shader_compile(struct vk_device *vk_device,
       struct vk_shader_compile_info *info = shader_data->info;
 
       shader_data->source_hash = ((uint64_t*)info->nir->info.source_blake3)[0];
+      shader_data->key_size = brw_prog_key_size(info->stage);
 
       for (uint32_t i = 0; i < info->set_layout_count; i++) {
          shader_data->dynamic_descriptors[i] =

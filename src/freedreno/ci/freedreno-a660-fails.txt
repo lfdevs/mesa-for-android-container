@@ -75,9 +75,6 @@ api@clsetkernelarg@Input checks,Fail
 #Expected CL error: CL_LINK_PROGRAM_FAILURE -17
 api@cllinkprogram,Fail
 
-# can be resolved by RUSTICL_FEATURES=fp16,fp64
-program@build@vector-data-types,Fail
-
 # https://gitlab.freedesktop.org/mesa/mesa/-/issues/8408
 program@execute@global-offset,Fail
 program@execute@global-offset@3d- input dependent,Fail
@@ -97,14 +94,11 @@ api@clgetextensionfunctionaddressforplatform,Fail
 #
 ## Not our problem:
 #
-# CL_DEVICE_MAX_READ_IMAGE_ARGS: failed, expected at least 128, got 16 
+# CL_DEVICE_MAX_READ_IMAGE_ARGS: failed, expected at least 128, got 16
 api@clgetdeviceinfo,Fail
 
 # CL_QUEUE_SIZE Unexpected CL error: CL_INVALID_COMMAND_QUEUE -36
 api@clgetcommandqueueinfo,Fail
-
-# Piglit doesn't check subbuffer alignment requirements
-api@clgetmemobjectinfo,Fail
 
 # broken piglit test (doesn't account for FTZ)
 program@execute@builtin@builtin-float-nextafter-1.0.generated,Fail

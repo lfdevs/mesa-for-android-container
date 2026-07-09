@@ -31,18 +31,21 @@ class Opcode:
 
 def normalize_hw_opcode(hw_opcode: HwOpcodeInput) -> HwOpcode:
     if isinstance(hw_opcode, int):
-        return {"pre_xe": hw_opcode, "xe": hw_opcode, "xe2": hw_opcode}
+        return {"pre_xe": hw_opcode, "xe": hw_opcode, "xe2": hw_opcode,
+                "xe3p": hw_opcode}
 
-    assert hw_opcode.keys() <= {"pre_xe", "xe", "xe2"}
+    assert hw_opcode.keys() <= {"pre_xe", "xe", "xe2", "xe3p"}
     assert all(value is None or isinstance(value, int)
                for value in hw_opcode.values())
     pre_xe = hw_opcode.get("pre_xe")
     xe = hw_opcode.get("xe", pre_xe)
     xe2 = hw_opcode.get("xe2", xe)
+    xe3p = hw_opcode.get("xe3p", xe2)
     return {
         "pre_xe": pre_xe,
         "xe": xe,
         "xe2": xe2,
+        "xe3p": xe3p,
     }
 
 
@@ -121,12 +124,13 @@ basic2('dp3',   {"pre_xe": 86, "xe": None})
 basic2('dp4',   {"pre_xe": 84, "xe": None})
 basic2('dph',   {"pre_xe": 85, "xe": None})
 basic2('line',  {"pre_xe": 89, "xe": None})
-basic2('mac',   72)
-basic2('mach',  73)
-basic2('macl',  {"xe2": 83})
+basic2('mac',   {"pre_xe": 72, "xe3p": None})
+basic2('mach',  {"pre_xe": 73, "xe3p": None})
+basic2('macl',  {"xe2": 83, "xe3p": None})
 basic2('math',  56)
 basic2('movi',  {"pre_xe": 3, "xe": 99})
 basic2('mul',   65)
+basic2('mullh', {"xe3p": 95})
 basic2('or',    {"pre_xe": 6, "xe": 102})
 basic2('pln',   {"pre_xe": 90, "xe": None})
 basic2('rol',   {"pre_xe": 15, "xe": 111})

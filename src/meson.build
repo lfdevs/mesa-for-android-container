@@ -1,6 +1,11 @@
 # Copyright © 2017 Intel Corporation
 # SPDX-License-Identifier: MIT
 
+mesa_python_path = [
+  join_paths(dir_source_root, 'src/util/perf/'),
+  join_paths(dir_source_root, 'src/vulkan/util/'),
+]
+
 subdir('gtest')
 subdir('c11/impl')
 subdir('android_stub')
@@ -25,6 +30,10 @@ if dep_llvm.found()
 else
   inc_amd_common_llvm = []
 endif
+
+inc_radv_bvh = include_directories('amd/vulkan/bvh')
+inc_radv_tools = include_directories('amd/vulkan/tools')
+inc_vulkan_bvh = include_directories('vulkan/runtime/bvh')
 
 glsl_util_files = files(
     'mesa/main/extensions_table.c',
@@ -104,10 +113,8 @@ endif
 if with_gfxstream_vk
   dep_virtgpu_kumquat_ffi = null_dep
   if with_virtgpu_kumquat
-    subdir('util/rust')
-    subdir('virtio/protocols')
-    subdir('virtio/virtgpu_kumquat')
-    subdir('virtio/virtgpu_kumquat_ffi')
+    subdir('virtio/magma-gpu-rs/lib')
+    subdir('virtio/magma-gpu-rs/ffi/virtgpu_kumquat_ffi')
   endif
   subdir('gfxstream')
 endif

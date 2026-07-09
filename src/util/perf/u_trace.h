@@ -28,6 +28,7 @@
 #include <stdint.h>
 #include <stdio.h>
 
+#include "util/hash_table.h"
 #include "util/u_dynarray.h"
 #include "util/macros.h"
 #include "util/u_atomic.h"
@@ -79,6 +80,12 @@ struct u_trace_printer;
  * and that the timestamp of the previous trace should be reused.
  */
 #define U_TRACE_NO_TIMESTAMP ((uint64_t) 0)
+
+enum u_trace_backend_type {
+   U_TRACE_BACKEND_PRINT,
+   U_TRACE_BACKEND_JSON,
+   U_TRACE_BACKEND_PERFETTO,
+};
 
 /**
  * Address representation
@@ -190,6 +197,7 @@ enum u_trace_type {
    U_TRACE_TYPE_MARKERS = 1u << 4,
    U_TRACE_TYPE_INDIRECTS = 1u << 5,
    U_TRACE_TYPE_CSV = 1u << 6,
+   U_TRACE_TYPE_RANGES = 1u << 7,
 
    U_TRACE_TYPE_PRINT_CSV = U_TRACE_TYPE_PRINT | U_TRACE_TYPE_CSV,
    U_TRACE_TYPE_PRINT_JSON = U_TRACE_TYPE_PRINT | U_TRACE_TYPE_JSON,
@@ -199,12 +207,23 @@ enum u_trace_type {
    /*
     * A mask of traces that require appending to the tracepoint chunk list.
     */
-   U_TRACE_TYPE_REQUIRE_QUEUING = U_TRACE_TYPE_PRINT | U_TRACE_TYPE_PERFETTO,
+   U_TRACE_TYPE_REQUIRE_QUEUING = U_TRACE_TYPE_PRINT | U_TRACE_TYPE_PERFETTO | U_TRACE_TYPE_RANGES,
    /*
     * A mask of traces that require processing the tracepoint chunk list.
     */
    U_TRACE_TYPE_REQUIRE_PROCESSING =
-      U_TRACE_TYPE_PRINT | U_TRACE_TYPE_PERFETTO_ACTIVE,
+      U_TRACE_TYPE_PRINT | U_TRACE_TYPE_PERFETTO_ACTIVE | U_TRACE_TYPE_RANGES,
+};
+
+struct u_trace_tracepoint_range {
+   struct hash_table child_ranges;
+   uint32_t count;
+   uint64_t duration_ns;
+};
+
+struct u_trace_begin_tracepoint {
+   const void *event;
+   uint64_t timestamp_ns;
 };
 
 /**
@@ -255,6 +274,11 @@ struct u_trace_context {
 
    /* State for printing timestamps. */
    uint32_t indentation;
+
+   /* State for accumulating timestamps. */
+   struct util_dynarray begin_tracepoints;
+   struct hash_table tracepoint_ranges;
+   uint32_t accumulated_frame_count;
 
    void *dummy_indirect_data;
 

@@ -25,8 +25,9 @@
 
 layout(local_size_x = 128, local_size_y = 1, local_size_z = 1) in;
 
-#include "tu_build_helpers.h"
-#include "tu_build_interface.h"
+#include "tu_bvh_defines.h"
+#define VK_USED_BUILD_FLAGS (0)
+#include "vk_bvh_helpers.h"
 
 layout(push_constant) uniform CONSTS {
    encode_args args;

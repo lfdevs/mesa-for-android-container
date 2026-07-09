@@ -98,6 +98,9 @@ extern void
 _mesa_set_dispatch(struct gl_context *ctx, struct _glapi_table *t);
 
 extern struct _glapi_table *
+_mesa_get_dispatch(struct gl_context *ctx);
+
+extern struct _glapi_table *
 _mesa_new_nop_table(bool glthread);
 
 extern void

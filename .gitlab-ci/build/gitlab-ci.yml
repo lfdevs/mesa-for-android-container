@@ -298,7 +298,7 @@ fedora-release:
       -D glvnd=enabled
       -D platforms=x11,wayland
     EXTRA_OPTION: >
-      -D tools=drm-shim,etnaviv,freedreno,glsl,intel,nir,nouveau,lima,panfrost,imagination
+      -D tools=drm-shim,etnaviv,freedreno,glsl,intel,nir,nouveau,lima,panfrost,imagination,gamma
       -D vulkan-layers=device-select,overlay
       -D intel-rt=enabled
       -D imagination-srv=true

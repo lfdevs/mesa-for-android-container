@@ -90,8 +90,13 @@ kk_create_cmd_buffer(struct vk_command_pool *vk_pool,
    if (cmd == NULL)
       return vk_error(dev, VK_ERROR_OUT_OF_HOST_MEMORY);
 
-   result =
-      vk_command_buffer_init(&pool->vk, &cmd->vk, &kk_cmd_buffer_ops, level);
+   result = vk_command_buffer_init_with_params(
+      &cmd->vk, &(struct vk_command_buffer_init_params){
+                   .pool = &pool->vk,
+                   .ops = &kk_cmd_buffer_ops,
+                   .level = level,
+                   .needs_cmd_queue = true,
+                });
    if (result != VK_SUCCESS)
       goto alloc_fail;
 
@@ -169,6 +174,8 @@ kk_reset_cmd_buffer(struct vk_command_buffer *vk_cmd_buffer,
 
    vk_command_buffer_reset(&cmd->vk);
    kk_reset_cmd_buffer_internal(cmd);
+   cmd->submitted = false;
+   cmd->one_time_submit = false;
 }
 
 const struct vk_command_buffer_ops kk_cmd_buffer_ops = {
@@ -185,6 +192,8 @@ kk_BeginCommandBuffer(VkCommandBuffer commandBuffer,
 
    kk_reset_cmd_buffer(&cmd->vk, 0u);
    vk_command_buffer_begin(&cmd->vk, pBeginInfo);
+   cmd->one_time_submit =
+      pBeginInfo->flags & VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 
    return VK_SUCCESS;
 }
@@ -222,11 +231,7 @@ cs_start_render(struct kk_cmd_buffer *cmd)
    uint32_t view_mask = state->render.view_mask;
    assert(state->render_pass_descriptor);
 
-   /* Ensure we have a pre_gfx just in case we later need it */
-   cs_get_compute(cmd, true);
-
    cs->cmd_buf_gfx = mtl_new_command_buffer(dev->mtl_handle);
-   util_dynarray_append(&cmd->submit_cmd_bufs, cs->cmd_buf_gfx);
    mtl_begin_command_buffer(cs->cmd_buf_gfx, cs->allocator_gfx);
    cs->gfx = mtl_new_render_command_encoder_with_descriptor(
       cs->cmd_buf_gfx, state->render_pass_descriptor);
@@ -274,7 +279,6 @@ cs_get_compute(struct kk_cmd_buffer *cmd, bool pre_gfx)
    if (!cs->gfx || pre_gfx) {
       if (!cs->pre_gfx) {
          cs->cmd_buf_pre_gfx = mtl_new_command_buffer(dev->mtl_handle);
-         util_dynarray_append(&cmd->submit_cmd_bufs, cs->cmd_buf_pre_gfx);
          mtl_begin_command_buffer(cs->cmd_buf_pre_gfx, cs->allocator_pre_gfx);
          cs->pre_gfx = mtl_new_compute_command_encoder(cs->cmd_buf_pre_gfx);
 
@@ -285,7 +289,6 @@ cs_get_compute(struct kk_cmd_buffer *cmd, bool pre_gfx)
    } else {
       if (!cs->post_gfx) {
          cs->cmd_buf_post_gfx = mtl_new_command_buffer(dev->mtl_handle);
-         util_dynarray_append(&cmd->submit_cmd_bufs, cs->cmd_buf_post_gfx);
          mtl_begin_command_buffer(cs->cmd_buf_post_gfx, cs->allocator_post_gfx);
          cs->post_gfx = mtl_new_compute_command_encoder(cs->cmd_buf_post_gfx);
 
@@ -311,7 +314,22 @@ cs_end(struct kk_cmd_buffer *cmd)
       mtl_release(cs->pre_gfx);
       mtl_end_command_buffer(cs->cmd_buf_pre_gfx);
 
-      /* post_gfx will always be compute, so we take that one as follow up */
+      /* Submit pre_gfx now that its encoder is closed. Command buffers are
+       * appended here (rather than at creation) so submit_cmd_bufs stays in
+       * encode order: pre_gfx first, then gfx below. post_gfx is promoted into
+       * the pre_gfx slot with its encoder still open, so it is submitted by a
+       * later cs_end() and therefore always ends up after gfx. This is why
+       * every flush site calls cs_end() twice. */
+      util_dynarray_append(&cmd->submit_cmd_bufs, cs->cmd_buf_pre_gfx);
+      cs->cmd_buf_pre_gfx = cs->cmd_buf_post_gfx;
+      cs->cmd_buf_post_gfx = NULL;
+      cs->pre_gfx = cs->post_gfx;
+      cs->post_gfx = NULL;
+      SWAP(cs->allocator_pre_gfx, cs->allocator_post_gfx);
+   } else if (cs->post_gfx) {
+      /* No pre_gfx, but a post_gfx exists (e.g. compute issued during a render
+       * pass). Promote it so a later cs_end() closes and submits it after the
+       * gfx command buffer appended below. */
       cs->cmd_buf_pre_gfx = cs->cmd_buf_post_gfx;
       cs->cmd_buf_post_gfx = NULL;
       cs->pre_gfx = cs->post_gfx;
@@ -325,6 +343,9 @@ cs_end(struct kk_cmd_buffer *cmd)
       mtl_end_encoding(cs->gfx);
       mtl_release(cs->gfx);
       mtl_end_command_buffer(cs->cmd_buf_gfx);
+
+      /* Same as above: register after the encoder is closed. */
+      util_dynarray_append(&cmd->submit_cmd_bufs, cs->cmd_buf_gfx);
       cs->cmd_buf_gfx = NULL;
       cs->gfx = NULL;
    }
@@ -342,12 +363,22 @@ kk_CmdPipelineBarrier2(VkCommandBuffer commandBuffer,
                        const VkDependencyInfo *pDependencyInfo)
 {
    VK_FROM_HANDLE(kk_cmd_buffer, cmd, commandBuffer);
-   bool gfx = cmd->cs.gfx;
-   cs_end(cmd);
 
-   /* If we were inside a render pass, restart it loading attachments */
-   if (gfx)
+   /* TODO_KOSMICKRISP Don't break the render pass and add a single encoder
+    * barrier. This requires to read directly from the framebuffer which
+    * requires not reading input attachments as textures.
+    */
+   if (cmd->cs.gfx) {
+      cs_end(cmd);
       cs_start_render(cmd);
+   } else if (cmd->cs.pre_gfx) {
+      /* We chain encoders, so an intra-encoder barrier is enough here:
+       * no need to tear down and recreate the encoder.
+       */
+      mtl_barrier_after_encoder_stages(cmd->cs.pre_gfx,
+                                       MTL_STAGE_DISPATCH | MTL_STAGE_BLIT,
+                                       MTL_STAGE_DISPATCH | MTL_STAGE_BLIT);
+   }
 }
 
 static void
@@ -520,18 +551,6 @@ kk_CmdPushConstants2KHR(VkCommandBuffer commandBuffer,
 }
 
 void
-kk_cmd_buffer_write_descriptor_buffer(struct kk_cmd_buffer *cmd,
-                                      struct kk_descriptor_state *desc,
-                                      size_t size, size_t offset)
-{
-   assert(size + offset <= sizeof(desc->root.sets));
-
-   struct kk_ptr root_buffer = desc->root.root_buffer;
-
-   memcpy(root_buffer.cpu, (uint8_t *)desc->root.sets + offset, size);
-}
-
-void
 kk_cmd_release_dynamic_ds_state(struct kk_cmd_buffer *cmd)
 {
    if (cmd->state.gfx.is_depth_stencil_dynamic &&
@@ -642,14 +661,16 @@ kk_upload_descriptor_root(struct kk_cmd_buffer *cmd,
 {
    struct kk_descriptor_state *desc = kk_get_descriptors_state(cmd, bind_point);
    struct kk_root_descriptor_table *root = &desc->root;
-   struct kk_ptr root_gpu = kk_pool_upload(cmd, root, sizeof(*root), 8u);
-   if (unlikely(!root_gpu.gpu))
+   struct kk_ptr root_ptr = kk_pool_alloc(cmd, sizeof(*root), 8u);
+   if (unlikely(!root_ptr.gpu))
       return 0u;
 
-   root->root_buffer = root_gpu;
+   root->addr = root_ptr.gpu;
+
+   memcpy(root_ptr.cpu, root, sizeof(*root));
    desc->root_dirty = false;
 
-   return root_gpu.gpu;
+   return root_ptr.gpu;
 }
 
 void

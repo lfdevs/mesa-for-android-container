@@ -1196,11 +1196,14 @@ lp_build_lod_selector(struct lp_build_sample_context *bld,
          if (!lod_bias && !is_lodq && !min_lod &&
              !bld->static_sampler_state->lod_bias_non_zero &&
              !bld->static_sampler_state->apply_max_lod &&
-             !bld->static_sampler_state->apply_min_lod) {
+             !bld->static_sampler_state->apply_min_lod &&
+             !bld->static_texture_state->apply_view_min_lod) {
             /*
              * Special case when there are no post-log2 adjustments, which
              * saves instructions but keeping the integer and fractional lod
              * computations separate from the start.
+             * The view min-lod clamp is one such adjustment, so it opts
+             * out here and is handled by the general clamp path below.
              */
 
             if (mip_filter == PIPE_TEX_MIPFILTER_NONE ||

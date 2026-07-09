@@ -64,7 +64,7 @@ radv_create_buffer(struct radv_device *device, const VkBufferCreateInfo *pCreate
    buffer->bo = NULL;
    buffer->range = 0;
 
-   if (pCreateInfo->flags & VK_BUFFER_CREATE_SPARSE_BINDING_BIT) {
+   if (buffer->vk.create_flags & VK_BUFFER_CREATE_SPARSE_BINDING_BIT) {
       enum radeon_bo_flag flags = RADEON_FLAG_VIRTUAL;
       uint64_t replay_address = 0;
 
@@ -76,7 +76,7 @@ radv_create_buffer(struct radv_device *device, const VkBufferCreateInfo *pCreate
          flags |= RADEON_FLAG_EMULATE_SPARSE_RESIDENCY;
       }
 
-      if (pCreateInfo->flags & VK_BUFFER_CREATE_DEVICE_ADDRESS_CAPTURE_REPLAY_BIT) {
+      if (buffer->vk.create_flags & VK_BUFFER_CREATE_DEVICE_ADDRESS_CAPTURE_REPLAY_BIT) {
          flags |= RADEON_FLAG_REPLAYABLE;
 
          const VkBufferOpaqueCaptureAddressCreateInfo *opaque_addr_info =
@@ -233,20 +233,12 @@ radv_get_buffer_memory_requirements(struct radv_device *device, VkDeviceSize siz
    }
 }
 
-static const VkBufferUsageFlagBits2
-radv_get_buffer_usage_flags(const VkBufferCreateInfo *pCreateInfo)
-{
-   const VkBufferUsageFlags2CreateInfo *flags2 =
-      vk_find_struct_const(pCreateInfo->pNext, BUFFER_USAGE_FLAGS_2_CREATE_INFO);
-   return flags2 ? flags2->usage : pCreateInfo->usage;
-}
-
 VKAPI_ATTR void VKAPI_CALL
 radv_GetDeviceBufferMemoryRequirements(VkDevice _device, const VkDeviceBufferMemoryRequirements *pInfo,
                                        VkMemoryRequirements2 *pMemoryRequirements)
 {
    VK_FROM_HANDLE(radv_device, device, _device);
-   const VkBufferUsageFlagBits2 usage_flags = radv_get_buffer_usage_flags(pInfo->pCreateInfo);
+   const VkBufferUsageFlags2 usage_flags = vk_buffer_usage_flags(pInfo->pCreateInfo);
 
    radv_get_buffer_memory_requirements(device, pInfo->pCreateInfo->size, pInfo->pCreateInfo->flags, usage_flags,
                                        pMemoryRequirements);

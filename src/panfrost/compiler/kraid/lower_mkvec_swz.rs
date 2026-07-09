@@ -438,6 +438,8 @@ fn lower_swz(b: &mut impl SSABuilder, op: Box<OpSwz>) {
         b.push_op(OpFAdd {
             dst: op.dst,
             dst_type: DataType::F32,
+            round: FRound::NearestEven,
+            clamp: FClamp::None,
             srcs: [op.src, Src::from(0).fneg()],
         });
         return;

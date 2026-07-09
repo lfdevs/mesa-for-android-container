@@ -24,9 +24,11 @@
 #include "tu_event.h"
 #include "tu_image.h"
 #include "tu_knl.h"
+#include "tu_perfetto.h"
 #include "tu_subsampled_image.h"
 #include "tu_tile_config.h"
 #include "tu_tracepoints.h"
+#include "tu_trace_bin_layout.h"
 
 enum tu_cmd_buffer_status {
    TU_CMD_BUFFER_STATUS_IDLE = 0,
@@ -775,29 +777,18 @@ tu6_emit_zs(struct tu_cmd_buffer *cmd,
    const struct tu_render_pass_attachment *attachment =
       &cmd->state.pass->attachments[a];
    enum a6xx_depth_format fmt = tu6_pipe2depth(attachment->format);
-
-   unsigned depth_pitch, depth_array_pitch;
-   uint64_t depth_base;
-
-   if (attachment->format == VK_FORMAT_D32_SFLOAT_S8_UINT) {
-      depth_pitch = iview->depth_pitch;
-      depth_array_pitch = iview->depth_layer_size;
-      depth_base = iview->depth_base_addr;
-   } else {
-      depth_pitch = iview->view.pitch;
-      depth_array_pitch = iview->view.layer_size;
-      depth_base = tu_layer_address(&iview->view, 0);
-   }
+   const struct fdl6_view *depth_fdl_view = tu_image_view_fdl_view(iview, false);
+   const struct fdl6_view *stencil_fdl_view = tu_image_view_fdl_view(iview, true);
 
    tu_cs_emit_regs(cs,
       RB_DEPTH_BUFFER_INFO(CHIP,
          .depth_format = fmt,
          .tilemode = TILE6_3,
-         .losslesscompen = iview->view.ubwc_enabled,
+         .losslesscompen = depth_fdl_view->ubwc_enabled,
       ),
-      A6XX_RB_DEPTH_BUFFER_PITCH(depth_pitch),
-      A6XX_RB_DEPTH_BUFFER_ARRAY_PITCH(depth_array_pitch),
-      A6XX_RB_DEPTH_BUFFER_BASE(depth_base),
+      A6XX_RB_DEPTH_BUFFER_PITCH(depth_fdl_view->pitch),
+      A6XX_RB_DEPTH_BUFFER_ARRAY_PITCH(depth_fdl_view->layer_size),
+      A6XX_RB_DEPTH_BUFFER_BASE(tu_layer_address(depth_fdl_view, 0)),
       A6XX_RB_DEPTH_GMEM_BASE(
          tu_attachment_gmem_offset(cmd, attachment, 0)
       ),
@@ -806,23 +797,14 @@ tu6_emit_zs(struct tu_cmd_buffer *cmd,
    tu_cs_emit_regs(cs, GRAS_SU_DEPTH_BUFFER_INFO(CHIP, .depth_format = fmt));
 
    tu_cs_emit_pkt4(cs, REG_A6XX_RB_DEPTH_FLAG_BUFFER_BASE, 3);
-   tu_cs_image_flag_ref(cs, &iview->view, 0);
+   tu_cs_image_flag_ref(cs, depth_fdl_view, 0);
 
    if (attachment->format == VK_FORMAT_D32_SFLOAT_S8_UINT ||
        attachment->format == VK_FORMAT_S8_UINT) {
-
-      unsigned stencil_pitch, stencil_array_pitch, stencil_gmem_offset;
-      uint64_t stencil_base;
-
+      unsigned stencil_gmem_offset;
       if (attachment->format == VK_FORMAT_D32_SFLOAT_S8_UINT) {
-         stencil_pitch = iview->stencil_pitch;
-         stencil_array_pitch = iview->stencil_layer_size;
-         stencil_base = iview->stencil_base_addr;
          stencil_gmem_offset = tu_attachment_gmem_offset_stencil(cmd, attachment, 0);
       } else {
-         stencil_pitch = iview->view.pitch;
-         stencil_array_pitch = iview->view.layer_size;
-         stencil_base = tu_layer_address(&iview->view, 0);
          stencil_gmem_offset = tu_attachment_gmem_offset(cmd, attachment, 0);
       }
 
@@ -831,9 +813,9 @@ tu6_emit_zs(struct tu_cmd_buffer *cmd,
             .separate_stencil = true,
             .tilemode = TILE6_3,
          ),
-         A6XX_RB_STENCIL_BUFFER_PITCH(stencil_pitch),
-         A6XX_RB_STENCIL_BUFFER_ARRAY_PITCH(stencil_array_pitch),
-         A6XX_RB_STENCIL_BUFFER_BASE(stencil_base),
+         A6XX_RB_STENCIL_BUFFER_PITCH(stencil_fdl_view->pitch),
+         A6XX_RB_STENCIL_BUFFER_ARRAY_PITCH(stencil_fdl_view->layer_size),
+         A6XX_RB_STENCIL_BUFFER_BASE(tu_layer_address(stencil_fdl_view, 0)),
          A6XX_RB_STENCIL_GMEM_BASE(stencil_gmem_offset),
       );
    } else {
@@ -1042,7 +1024,7 @@ tu6_emit_render_cntl<A6XX>(struct tu_cmd_buffer *cmd,
       const uint32_t a = subpass->depth_stencil_attachment.attachment;
       if (a != VK_ATTACHMENT_UNUSED) {
          const struct tu_image_view *iview = cmd->state.attachments[a];
-         if (iview->view.ubwc_enabled)
+         if (tu_image_view_fdl_view(iview, false)->ubwc_enabled)
             cntl |= A6XX_RB_RENDER_CNTL_FLAG_DEPTH;
       }
 
@@ -2863,10 +2845,12 @@ tu_emit_input_attachments(struct tu_cmd_buffer *cmd,
       }
 
       if (i % 2 == 1 && att->format == VK_FORMAT_D32_SFLOAT_S8_UINT) {
+         const struct fdl6_view *stencil_fdl_view = tu_image_view_fdl_view(iview, true);
+
          tu_desc_set_format<CHIP>(dst, FMT6_8_UINT);
          tu_desc_set_min_line_offset<CHIP>(dst, 0);
-         tu_desc_set_tex_line_offset<CHIP>(dst, iview->stencil_pitch);
-         tu_desc_set_addr<CHIP>(dst, iview->stencil_base_addr);
+         tu_desc_set_tex_line_offset<CHIP>(dst, stencil_fdl_view->pitch);
+         tu_desc_set_addr<CHIP>(dst, stencil_fdl_view->base_addr);
          tu_desc_set_array_slice_offset<CHIP>(dst, 0);
          tu_desc_set_ubwc<CHIP>(dst, 0);
 
@@ -3003,12 +2987,9 @@ tu_trace_start_render_pass(struct tu_cmd_buffer *cmd)
                             : 'n';
    }
    if (subpass->depth_used) {
+      const struct tu_image_view *view = cmd->state.attachments[subpass->depth_stencil_attachment.attachment];
       ubwc[ubwc_len++] = '|';
-      ubwc[ubwc_len++] =
-         cmd->state.attachments[subpass->depth_stencil_attachment.attachment]
-               ->view.ubwc_enabled
-            ? 'y'
-            : 'n';
+      ubwc[ubwc_len++] = tu_image_view_fdl_view(view, false)->ubwc_enabled ? 'y' : 'n';
    }
    ubwc[ubwc_len] = '\0';
 
@@ -3025,7 +3006,8 @@ tu_trace_start_render_pass(struct tu_cmd_buffer *cmd)
 
 template <chip CHIP>
 static void
-tu_trace_end_render_pass(struct tu_cmd_buffer *cmd, bool gmem)
+tu_trace_end_render_pass(struct tu_cmd_buffer *cmd, bool gmem,
+                         struct tu_bin_layout_data *bin_info)
 {
    if (!u_trace_enabled(&cmd->device->trace_context))
       return;
@@ -3061,7 +3043,7 @@ tu_trace_end_render_pass(struct tu_cmd_buffer *cmd, bool gmem)
       cmd->state.rp.lrz_write_disable_reason
          ? cmd->state.rp.lrz_write_disable_reason
          : "",
-      lrz_write_disabled_at_draw, addr);
+      lrz_write_disabled_at_draw, addr, bin_info);
 }
 
 static void
@@ -3925,6 +3907,14 @@ tu_cmd_render_tiles(struct tu_cmd_buffer *cmd,
 
    tu6_tile_render_begin<CHIP>(cmd, &cmd->cs, rp_ctx, fdm_offsets);
 
+#ifdef HAVE_PERFETTO
+   const unsigned views = tu_fdm_num_layers(cmd);
+   const int tile_count = vsc->tile_count.height * vsc->tile_count.width;
+
+   struct tu_bin_layout_data *bin_layout_data =
+      tu_bin_layout_data_create(cmd, views, fdm_offsets, tile_count);
+#endif
+
    /* Note: we reverse the order of walking the pipes and tiles on every
     * other row, to improve texture cache locality compared to raster order.
     */
@@ -3969,6 +3959,13 @@ tu_cmd_render_tiles(struct tu_cmd_buffer *cmd,
                   tu_identity_frag_area(cmd, tile);
                }
 
+#ifdef HAVE_PERFETTO
+               if (bin_layout_data) {
+                  bin_layout_data->tiles[bin_layout_data->tile_count] = *tile;
+                  bin_layout_data->tile_count++;
+               }
+#endif
+
                tu6_render_tile<CHIP>(cmd, &cmd->cs, tile, fdm_offsets, rp_ctx, vsc);
             }
             slot_row += tile_row_stride;
@@ -3989,7 +3986,12 @@ tu_cmd_render_tiles(struct tu_cmd_buffer *cmd,
                                fdm_offsets);
    }
 
-   tu_trace_end_render_pass<CHIP>(cmd, true);
+#ifdef HAVE_PERFETTO
+   tu_trace_end_render_pass<CHIP>(cmd, true, bin_layout_data);
+   ralloc_free(bin_layout_data);
+#else
+   tu_trace_end_render_pass<CHIP>(cmd, true, NULL);
+#endif
 
    /* We have trashed the dynamically-emitted viewport, scissor, and FS params
     * via the patchpoints, so we need to re-emit them if they are reused for a
@@ -4036,7 +4038,7 @@ tu_cmd_render_sysmem(struct tu_cmd_buffer *cmd,
    tu_clone_trace_range<CHIP>(cmd, &cmd->cs, &cmd->trace, cmd->trace_renderpass_start,
                               u_trace_end_iterator(&cmd->rp_trace));
 
-   tu_trace_end_render_pass<CHIP>(cmd, false);
+   tu_trace_end_render_pass<CHIP>(cmd, false, NULL);
 }
 
 template <chip CHIP>
@@ -6293,6 +6295,32 @@ tu_CmdExecuteCommands(VkCommandBuffer commandBuffer,
 
    for (uint32_t i = 0; i < commandBufferCount; i++) {
       VK_FROM_HANDLE(tu_cmd_buffer, secondary, pCmdBuffers[i]);
+
+#ifdef HAVE_PERFETTO
+      /* Propagate viewport/scissor state so that we can emit the correct
+       * state for Perfetto's binInfo. Avoid setting dirty flags to prevent
+       * unnecessary GPU command re-emission.
+       */
+      if (BITSET_TEST(secondary->vk.dynamic_graphics_state.set,
+                      MESA_VK_DYNAMIC_VP_VIEWPORT_COUNT)) {
+         const struct vk_dynamic_graphics_state *sec =
+            &secondary->vk.dynamic_graphics_state;
+         cmd->vk.dynamic_graphics_state.vp.viewport_count =
+            sec->vp.viewport_count;
+         typed_memcpy(cmd->vk.dynamic_graphics_state.vp.viewports,
+               sec->vp.viewports, sec->vp.viewport_count);
+      }
+
+      if (BITSET_TEST(secondary->vk.dynamic_graphics_state.set,
+                      MESA_VK_DYNAMIC_VP_SCISSOR_COUNT)) {
+         const struct vk_dynamic_graphics_state *sec =
+            &secondary->vk.dynamic_graphics_state;
+         cmd->vk.dynamic_graphics_state.vp.scissor_count =
+            sec->vp.scissor_count;
+         typed_memcpy(cmd->vk.dynamic_graphics_state.vp.scissors,
+               sec->vp.scissors, sec->vp.scissor_count);
+      }
+#endif
 
       if (secondary->usage_flags &
           VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT) {

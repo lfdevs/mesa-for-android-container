@@ -32,4 +32,17 @@
 void
 etna_transfer_init(struct pipe_context *pctx);
 
+void *
+etna_texture_map(struct pipe_context *pctx, struct pipe_resource *prsc,
+                 unsigned level, unsigned usage, const struct pipe_box *box,
+                 struct pipe_transfer **out_transfer);
+
+void
+etna_transfer_flush_region(struct pipe_context *pctx,
+                           struct pipe_transfer *ptrans,
+                           const struct pipe_box *box);
+
+void
+etna_texture_unmap(struct pipe_context *pctx, struct pipe_transfer *ptrans);
+
 #endif

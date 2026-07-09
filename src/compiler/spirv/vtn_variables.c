@@ -1016,6 +1016,8 @@ vtn_get_builtin_location(struct vtn_builder *b,
       } else {
          *location = SYSTEM_VALUE_SAMPLE_MASK_IN;
          set_mode_system_value(b, mode);
+         assert(b->shader->info.stage == MESA_SHADER_FRAGMENT);
+         b->shader->info.fs.sample_mask_in_declared = true;
       }
       break;
    case SpvBuiltInFragDepth:
@@ -1866,6 +1868,7 @@ vtn_storage_class_to_mode(struct vtn_builder *b,
       nir_mode = nir_var_mem_global;
       break;
    case SpvStorageClassImage:
+   case SpvStorageClassTileImageEXT:
       mode = vtn_variable_mode_image;
       nir_mode = nir_var_image;
       break;
@@ -2173,7 +2176,8 @@ vtn_create_variable(struct vtn_builder *b, struct vtn_value *val,
       if (storage_class == SpvStorageClassImage)
          vtn_fail("Cannot create a variable with the Image storage class");
       else
-         vtn_assert(storage_class == SpvStorageClassUniformConstant);
+         vtn_assert(storage_class == SpvStorageClassUniformConstant ||
+                    storage_class == SpvStorageClassTileImageEXT);
       break;
 
    case vtn_variable_mode_phys_ssbo:

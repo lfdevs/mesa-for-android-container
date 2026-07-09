@@ -139,6 +139,8 @@ vtn_nir_alu_op_for_spirv_glsl_opcode(struct vtn_builder *b,
        * are affected.
        */
       *extra_fp_math_ctrl |= nir_fp_preserve_inf;
+      if (b->options->workarounds.force_nan_preserve_min_max)
+         *extra_fp_math_ctrl |= nir_fp_preserve_nan;
       switch (opcode) {
       case GLSLstd450FMin:
       case GLSLstd450NMin: return nir_op_fmin;
@@ -357,6 +359,8 @@ handle_glsl450_alu(struct vtn_builder *b, enum GLSLstd450 entrypoint,
        */
       const unsigned save_math_ctrl = nb->fp_math_ctrl;
       b->nb.fp_math_ctrl = nir_fp_preserve_inf;
+      if (b->options->workarounds.force_nan_preserve_min_max)
+         b->nb.fp_math_ctrl |= nir_fp_preserve_nan;
 
       dest->def = nir_fclamp(nb, src[0], src[1], src[2]);
 

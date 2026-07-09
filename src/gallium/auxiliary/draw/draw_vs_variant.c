@@ -45,17 +45,8 @@
 struct draw_vs_variant_generic {
    struct draw_vs_variant base;
 
-   struct draw_vertex_shader *shader;
-   struct draw_context *draw;
-
-   /* Basic plan is to run these two translate functions before/after
-    * the vertex shader's existing run_linear() routine to simulate
-    * the inclusion of this functionality into the shader...
-    *
-    * Next will look at actually including it.
-    */
-   struct translate *fetch;
-   struct translate *emit;
+   struct translate_key fetch_key;
+   struct translate_key emit_key;
 
    unsigned temp_vertex_stride;
 };
@@ -63,15 +54,17 @@ struct draw_vs_variant_generic {
 
 
 static void
-vsvg_set_buffer(struct draw_vs_variant *variant,
+vsvg_set_buffer(struct draw_context *draw,
+                struct draw_vs_variant *variant,
                 unsigned buffer,
                 const void *ptr,
                 unsigned stride,
                 unsigned max_index)
 {
    struct draw_vs_variant_generic *vsvg = (struct draw_vs_variant_generic *)variant;
+   struct translate *fetch = draw_vs_get_fetch(draw, &vsvg->fetch_key);
 
-   vsvg->fetch->set_buffer(vsvg->fetch, buffer, ptr, stride, max_index);
+   fetch->set_buffer(fetch, buffer, ptr, stride, max_index);
 }
 
 
@@ -98,7 +91,8 @@ find_viewport(struct draw_context *draw,
 /* Mainly for debug at this stage:
  */
 static void
-do_rhw_viewport(struct draw_vs_variant_generic *vsvg,
+do_rhw_viewport(struct draw_context *draw,
+                struct draw_vs_variant_generic *vsvg,
                 unsigned count,
                 void *output_buffer)
 {
@@ -109,7 +103,7 @@ do_rhw_viewport(struct draw_vs_variant_generic *vsvg,
 
    for (unsigned j = 0; j < count; j++, ptr += stride) {
       const struct pipe_viewport_state *viewport =
-         find_viewport(vsvg->base.vs->draw, (char*)output_buffer,
+         find_viewport(draw, (char*)output_buffer,
                        j, stride);
       const float *scale = viewport->scale;
       const float *trans = viewport->translate;
@@ -125,7 +119,8 @@ do_rhw_viewport(struct draw_vs_variant_generic *vsvg,
 
 
 static void
-do_viewport(struct draw_vs_variant_generic *vsvg,
+do_viewport(struct draw_context *draw,
+            struct draw_vs_variant_generic *vsvg,
             unsigned count,
             void *output_buffer)
 {
@@ -136,7 +131,7 @@ do_viewport(struct draw_vs_variant_generic *vsvg,
 
    for (unsigned j = 0; j < count; j++, ptr += stride) {
       const struct pipe_viewport_state *viewport =
-         find_viewport(vsvg->base.vs->draw, (char*)output_buffer,
+         find_viewport(draw, (char*)output_buffer,
                        j, stride);
       const float *scale = viewport->scale;
       const float *trans = viewport->translate;
@@ -150,7 +145,8 @@ do_viewport(struct draw_vs_variant_generic *vsvg,
 
 
 static void UTIL_CDECL
-vsvg_run_elts(struct draw_vs_variant *variant,
+vsvg_run_elts(struct draw_context *draw,
+              struct draw_vs_variant *variant,
               const unsigned *elts,
               unsigned count,
               void *output_buffer)
@@ -159,23 +155,26 @@ vsvg_run_elts(struct draw_vs_variant *variant,
    unsigned temp_vertex_stride = vsvg->temp_vertex_stride;
    void *temp_buffer = MALLOC(align(count,4) * temp_vertex_stride +
                               DRAW_EXTRA_VERTICES_PADDING);
+   struct translate *fetch = draw_vs_get_fetch(draw, &vsvg->fetch_key);
+   struct translate *emit = draw_vs_get_emit(draw, &vsvg->emit_key);
 
    if (0) debug_printf("%s %d \n", __func__,  count);
 
    /* Want to do this in small batches for cache locality?
     */
 
-   vsvg->fetch->run_elts(vsvg->fetch,
-                         elts,
-                         count,
-                         vsvg->draw->start_instance,
-                         vsvg->draw->instance_id,
-                         temp_buffer);
+   fetch->run_elts(fetch,
+                   elts,
+                   count,
+                   draw->start_instance,
+                   draw->instance_id,
+                   temp_buffer);
 
-   vsvg->base.vs->run_linear(vsvg->base.vs,
+   vsvg->base.vs->run_linear(draw,
+                             vsvg->base.vs,
                              temp_buffer,
                              temp_buffer,
-                             vsvg->base.vs->draw->pt.user.constants[MESA_SHADER_VERTEX],
+                             draw->pt.user.constants[MESA_SHADER_VERTEX],
                              count,
                              temp_vertex_stride,
                              temp_vertex_stride, NULL);
@@ -186,35 +185,27 @@ vsvg_run_elts(struct draw_vs_variant *variant,
       /* not really handling clipping, just do the rhw so we can
        * see the results...
        */
-      do_rhw_viewport(vsvg, count, temp_buffer);
+      do_rhw_viewport(draw, vsvg, count, temp_buffer);
    } else if (vsvg->base.key.viewport) {
-      do_viewport(vsvg, count, temp_buffer);
+      do_viewport(draw, vsvg, count, temp_buffer);
    }
 
-   vsvg->emit->set_buffer(vsvg->emit,
-                          0,
-                          temp_buffer,
-                          temp_vertex_stride,
-                          ~0);
+   emit->set_buffer(emit, 0, temp_buffer, temp_vertex_stride, ~0);
+   emit->set_buffer(emit, 1, &draw->rasterizer->point_size, 0, ~0);
 
-   vsvg->emit->set_buffer(vsvg->emit,
-                          1,
-                          &vsvg->draw->rasterizer->point_size,
-                          0,
-                          ~0);
-
-   vsvg->emit->run(vsvg->emit,
-                   0, count,
-                   vsvg->draw->start_instance,
-                   vsvg->draw->instance_id,
-                   output_buffer);
+   emit->run(emit,
+             0, count,
+             draw->start_instance,
+             draw->instance_id,
+             output_buffer);
 
    FREE(temp_buffer);
 }
 
 
 static void UTIL_CDECL
-vsvg_run_linear(struct draw_vs_variant *variant,
+vsvg_run_linear(struct draw_context *draw,
+                struct draw_vs_variant *variant,
                 unsigned start,
                 unsigned count,
                 void *output_buffer)
@@ -223,22 +214,25 @@ vsvg_run_linear(struct draw_vs_variant *variant,
    unsigned temp_vertex_stride = vsvg->temp_vertex_stride;
    void *temp_buffer = MALLOC(align(count,4) * temp_vertex_stride +
                               DRAW_EXTRA_VERTICES_PADDING);
+   struct translate *fetch = draw_vs_get_fetch(draw, &vsvg->fetch_key);
+   struct translate *emit = draw_vs_get_emit(draw, &vsvg->emit_key);
 
    if (0) debug_printf("%s %d %d (sz %d, %d)\n", __func__, start, count,
                        vsvg->base.key.output_stride,
                        temp_vertex_stride);
 
-   vsvg->fetch->run(vsvg->fetch,
-                    start,
-                    count,
-                    vsvg->draw->start_instance,
-                    vsvg->draw->instance_id,
-                    temp_buffer);
+   fetch->run(fetch,
+              start,
+              count,
+              draw->start_instance,
+              draw->instance_id,
+              temp_buffer);
 
-   vsvg->base.vs->run_linear(vsvg->base.vs,
+   vsvg->base.vs->run_linear(draw,
+                             vsvg->base.vs,
                              temp_buffer,
                              temp_buffer,
-                             vsvg->base.vs->draw->pt.user.constants[MESA_SHADER_VERTEX],
+                             draw->pt.user.constants[MESA_SHADER_VERTEX],
                              count,
                              temp_vertex_stride,
                              temp_vertex_stride, NULL);
@@ -247,28 +241,19 @@ vsvg_run_linear(struct draw_vs_variant *variant,
       /* not really handling clipping, just do the rhw so we can
        * see the results...
        */
-      do_rhw_viewport(vsvg, count, temp_buffer);
+      do_rhw_viewport(draw, vsvg, count, temp_buffer);
    } else if (vsvg->base.key.viewport) {
-      do_viewport(vsvg, count, temp_buffer);
+      do_viewport(draw, vsvg, count, temp_buffer);
    }
 
-   vsvg->emit->set_buffer(vsvg->emit,
-                          0,
-                          temp_buffer,
-                          temp_vertex_stride,
-                          ~0);
+   emit->set_buffer(emit, 0, temp_buffer, temp_vertex_stride, ~0);
+   emit->set_buffer(emit, 1, &draw->rasterizer->point_size, 0, ~0);
 
-   vsvg->emit->set_buffer(vsvg->emit,
-                          1,
-                          &vsvg->draw->rasterizer->point_size,
-                          0,
-                          ~0);
-
-   vsvg->emit->run(vsvg->emit,
-                   0, count,
-                   vsvg->draw->start_instance,
-                   vsvg->draw->instance_id,
-                   output_buffer);
+   emit->run(emit,
+             0, count,
+             draw->start_instance,
+             draw->instance_id,
+             output_buffer);
 
    FREE(temp_buffer);
 }
@@ -282,7 +267,8 @@ vsvg_destroy(struct draw_vs_variant *variant)
 
 
 struct draw_vs_variant *
-draw_vs_create_variant_generic(struct draw_vertex_shader *vs,
+draw_vs_create_variant_generic(struct draw_context *draw,
+                               struct draw_vertex_shader *vs,
                                const struct draw_vs_variant_key *key)
 {
    struct draw_vs_variant_generic *vsvg = CALLOC_STRUCT(draw_vs_variant_generic);
@@ -296,53 +282,46 @@ draw_vs_create_variant_generic(struct draw_vertex_shader *vs,
    vsvg->base.run_linear    = vsvg_run_linear;
    vsvg->base.destroy       = vsvg_destroy;
 
-   vsvg->draw = vs->draw;
-
    vsvg->temp_vertex_stride = MAX2(key->nr_inputs,
-                                   draw_total_vs_outputs(vs->draw)) * 4 * sizeof(float);
+                                   draw_total_vs_outputs(draw)) * 4 * sizeof(float);
 
-   /* Build free-standing fetch and emit functions:
-    */
-   struct translate_key fetch;
-   fetch.nr_elements = key->nr_inputs;
-   fetch.output_stride = vsvg->temp_vertex_stride;
+   vsvg->fetch_key.nr_elements = key->nr_inputs;
+   vsvg->fetch_key.output_stride = vsvg->temp_vertex_stride;
    for (unsigned i = 0; i < key->nr_inputs; i++) {
-      fetch.element[i].type = TRANSLATE_ELEMENT_NORMAL;
-      fetch.element[i].input_format = key->element[i].in.format;
-      fetch.element[i].input_buffer = key->element[i].in.buffer;
-      fetch.element[i].input_offset = key->element[i].in.offset;
-      fetch.element[i].instance_divisor = 0;
-      fetch.element[i].output_format = PIPE_FORMAT_R32G32B32A32_FLOAT;
-      fetch.element[i].output_offset = i * 4 * sizeof(float);
-      assert(fetch.element[i].output_offset < fetch.output_stride);
+      vsvg->fetch_key.element[i].type = TRANSLATE_ELEMENT_NORMAL;
+      vsvg->fetch_key.element[i].input_format = key->element[i].in.format;
+      vsvg->fetch_key.element[i].input_buffer = key->element[i].in.buffer;
+      vsvg->fetch_key.element[i].input_offset = key->element[i].in.offset;
+      vsvg->fetch_key.element[i].instance_divisor = 0;
+      vsvg->fetch_key.element[i].output_format = PIPE_FORMAT_R32G32B32A32_FLOAT;
+      vsvg->fetch_key.element[i].output_offset = i * 4 * sizeof(float);
+      assert(vsvg->fetch_key.element[i].output_offset <
+             vsvg->fetch_key.output_stride);
    }
 
-   struct translate_key emit;
-   emit.nr_elements = key->nr_outputs;
-   emit.output_stride = key->output_stride;
+   vsvg->emit_key.nr_elements = key->nr_outputs;
+   vsvg->emit_key.output_stride = key->output_stride;
    for (unsigned i = 0; i < key->nr_outputs; i++) {
       if (key->element[i].out.format != EMIT_1F_PSIZE) {
-         emit.element[i].type = TRANSLATE_ELEMENT_NORMAL;
-         emit.element[i].input_format = PIPE_FORMAT_R32G32B32A32_FLOAT;
-         emit.element[i].input_buffer = 0;
-         emit.element[i].input_offset = key->element[i].out.vs_output * 4 * sizeof(float);
-         emit.element[i].instance_divisor = 0;
-         emit.element[i].output_format = draw_translate_vinfo_format(key->element[i].out.format);
-         emit.element[i].output_offset = key->element[i].out.offset;
-         assert(emit.element[i].input_offset <= fetch.output_stride);
+         vsvg->emit_key.element[i].type = TRANSLATE_ELEMENT_NORMAL;
+         vsvg->emit_key.element[i].input_format = PIPE_FORMAT_R32G32B32A32_FLOAT;
+         vsvg->emit_key.element[i].input_buffer = 0;
+         vsvg->emit_key.element[i].input_offset = key->element[i].out.vs_output * 4 * sizeof(float);
+         vsvg->emit_key.element[i].instance_divisor = 0;
+         vsvg->emit_key.element[i].output_format = draw_translate_vinfo_format(key->element[i].out.format);
+         vsvg->emit_key.element[i].output_offset = key->element[i].out.offset;
+         assert(vsvg->emit_key.element[i].input_offset <=
+                vsvg->fetch_key.output_stride);
       } else {
-         emit.element[i].type = TRANSLATE_ELEMENT_NORMAL;
-         emit.element[i].input_format = PIPE_FORMAT_R32_FLOAT;
-         emit.element[i].input_buffer = 1;
-         emit.element[i].input_offset = 0;
-         emit.element[i].instance_divisor = 0;
-         emit.element[i].output_format = PIPE_FORMAT_R32_FLOAT;
-         emit.element[i].output_offset = key->element[i].out.offset;
+         vsvg->emit_key.element[i].type = TRANSLATE_ELEMENT_NORMAL;
+         vsvg->emit_key.element[i].input_format = PIPE_FORMAT_R32_FLOAT;
+         vsvg->emit_key.element[i].input_buffer = 1;
+         vsvg->emit_key.element[i].input_offset = 0;
+         vsvg->emit_key.element[i].instance_divisor = 0;
+         vsvg->emit_key.element[i].output_format = PIPE_FORMAT_R32_FLOAT;
+         vsvg->emit_key.element[i].output_offset = key->element[i].out.offset;
       }
    }
-
-   vsvg->fetch = draw_vs_get_fetch(vs->draw, &fetch);
-   vsvg->emit = draw_vs_get_emit(vs->draw, &emit);
 
    return &vsvg->base;
 }

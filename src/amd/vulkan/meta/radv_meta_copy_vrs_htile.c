@@ -7,6 +7,7 @@
 #include "nir/radv_meta_nir.h"
 #include "ac_surface.h"
 #include "radv_meta.h"
+#include "radv_tracepoints.h"
 #include "vk_shader_module.h"
 
 static VkResult
@@ -89,6 +90,8 @@ radv_copy_vrs_htile(struct radv_cmd_buffer *cmd_buffer, struct radv_image_view *
       return;
    }
 
+   radv_utrace_begin_copy_vrs_htile(cmd_buffer);
+
    cmd_buffer->state.flush_bits |= radv_src_access_flush(cmd_buffer, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
                                                          VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, 0, NULL, NULL);
 
@@ -125,4 +128,6 @@ radv_copy_vrs_htile(struct radv_cmd_buffer *cmd_buffer, struct radv_image_view *
    cmd_buffer->state.flush_bits |= RADV_CMD_FLAG_CS_PARTIAL_FLUSH | RADV_CMD_FLAG_INV_VCACHE |
                                    radv_src_access_flush(cmd_buffer, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
                                                          VK_ACCESS_2_SHADER_WRITE_BIT, 0, NULL, NULL);
+
+   radv_utrace_end_copy_vrs_htile(cmd_buffer);
 }

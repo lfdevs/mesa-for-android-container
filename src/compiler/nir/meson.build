@@ -299,6 +299,7 @@ else
   'nir_opt_reassociate_bfi.c',
   'nir_opt_rematerialize_compares.c',
   'nir_opt_remove_phis.c',
+  'nir_opt_shared_vars_to_subgroup.c',
   'nir_opt_shrink_stores.c',
   'nir_opt_shrink_vectors.c',
   'nir_opt_sink.c',
@@ -398,7 +399,7 @@ idep_nir = declare_dependency(
   link_with : _libnir,
 )
 
-if with_tests
+if with_tests and not with_nir_headers_only
   if cc.get_id() == 'msvc' and cc.version().version_compare('< 19.29')
     msvc_designated_initializer = 'cpp_std=c++latest'
   else

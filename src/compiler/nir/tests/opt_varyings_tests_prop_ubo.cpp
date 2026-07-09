@@ -16,13 +16,13 @@ class nir_opt_varyings_test_prop_ubo : public nir_opt_varyings_test
    UNUSED nir_intrinsic_instr *store, *store2 = NULL, *store3 = NULL; \
    store = \
       store_output(b1, VARYING_SLOT_##slot, comp, nir_type_float##bitsize, \
-                   load_ubo(b1, bitsize, index0), 0); \
+                   load_ubo(b1, bitsize, index0), 0, false); \
    if (is_per_vertex(b1, VARYING_SLOT_##slot, false) || \
        MESA_SHADER_##producer_stage == MESA_SHADER_GEOMETRY) { \
       store2 = store_output(b1, VARYING_SLOT_##slot, comp, nir_type_float##bitsize, \
-                            load_ubo(b1, bitsize, index1), 1); \
+                            load_ubo(b1, bitsize, index1), 1, false); \
       store3 = store_output(b1, VARYING_SLOT_##slot, comp, nir_type_float##bitsize, \
-                            load_ubo(b1, bitsize, index1), 2); \
+                            load_ubo(b1, bitsize, index1), 2, false); \
    } \
    \
    UNUSED unsigned pindex = VARYING_SLOT_##slot; \
@@ -32,9 +32,9 @@ class nir_opt_varyings_test_prop_ubo : public nir_opt_varyings_test
       cindex -= VARYING_SLOT_BFC0 - VARYING_SLOT_COL0; \
    \
    nir_def *input = load_input(b2, (gl_varying_slot)cindex, comp, nir_type_##type##bitsize, 0, 0); \
-   store_output(b2, VARYING_SLOT_VAR0, 0, nir_type_float##bitsize, input, 0); \
+   store_output(b2, VARYING_SLOT_VAR0, 0, nir_type_float##bitsize, input, 0, false); \
    nir_def *input2 = load_input(b2, (gl_varying_slot)cindex, comp, nir_type_##type##bitsize, 1, 0); \
-   store_output(b2, VARYING_SLOT_VAR1, 0, nir_type_float##bitsize, input2, 0); \
+   store_output(b2, VARYING_SLOT_VAR1, 0, nir_type_float##bitsize, input2, 0, false); \
    \
    if (MESA_SHADER_##consumer_stage == MESA_SHADER_FRAGMENT) { \
       /* Compaction moves COL1 to COL0. */ \

@@ -39,6 +39,7 @@
 #include "pan_trace.h"
 
 #include "pan_context.h"
+#include "panfrost_perfetto.h"
 
 #define DEFAULT_MAX_AFBC_PACKING_RATIO 90
 
@@ -1177,6 +1178,11 @@ panfrost_create_screen(int fd, const struct pipe_screen_config *config,
       panfrost_destroy_screen(&(screen->base));
       return NULL;
    }
+
+#ifdef HAVE_PERFETTO
+   if (dev->arch >= 10)
+      panfrost_perfetto_init(dev);
+#endif
 
    return &screen->base;
 }

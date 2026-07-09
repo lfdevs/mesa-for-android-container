@@ -37,7 +37,7 @@
 #include "util/set.h"
 #include "util/os_file.h"
 
-#include "vl/vl_compositor.h"
+#include "vl/vl_proc.h"
 #include "vl/vl_video_buffer.h"
 #include "vl/vl_winsys.h"
 
@@ -100,6 +100,29 @@ vlVaRemoveDpbSurface(vlVaSurface *surf, VASurfaceID id)
    }
 }
 
+void
+vlVaDestroySurface(vlVaDriver *drv, vlVaSurface *surf)
+{
+   if (surf->buffer)
+      surf->buffer->destroy(surf->buffer);
+   if (surf->pipe_fence)
+      drv->pipe->screen->fence_reference(drv->pipe->screen, &surf->pipe_fence, NULL);
+   if (surf->ctx) {
+      assert(_mesa_set_search(surf->ctx->surfaces, surf));
+      _mesa_set_remove_key(surf->ctx->surfaces, surf);
+      if (surf->fence && surf->ctx->decoder && surf->ctx->decoder->destroy_fence) {
+         surf->ctx->decoder->destroy_fence(surf->ctx->decoder, surf->fence);
+         surf->fence = NULL;
+      }
+   }
+   if (surf->fence && drv->proc && drv->proc->destroy_fence)
+      drv->proc->destroy_fence(drv->proc, surf->fence);
+   if (surf->coded_buf)
+      surf->coded_buf->coded_surf = NULL;
+   util_dynarray_fini(&surf->subpics);
+   FREE(surf);
+}
+
 VAStatus
 vlVaDestroySurfaces(VADriverContextP ctx, VASurfaceID *surface_list, int num_surfaces)
 {
@@ -117,22 +140,9 @@ vlVaDestroySurfaces(VADriverContextP ctx, VASurfaceID *surface_list, int num_sur
          mtx_unlock(&drv->mutex);
          return VA_STATUS_ERROR_INVALID_SURFACE;
       }
-      if (surf->buffer)
-         surf->buffer->destroy(surf->buffer);
-      if (surf->pipe_fence)
-         drv->pipe->screen->fence_reference(drv->pipe->screen, &surf->pipe_fence, NULL);
-      if (surf->ctx) {
-         assert(_mesa_set_search(surf->ctx->surfaces, surf));
-         _mesa_set_remove_key(surf->ctx->surfaces, surf);
-         if (surf->fence && surf->ctx->decoder && surf->ctx->decoder->destroy_fence)
-            surf->ctx->decoder->destroy_fence(surf->ctx->decoder, surf->fence);
-         if (surf->is_dpb)
-            vlVaRemoveDpbSurface(surf, surface_list[i]);
-      }
-      if (surf->coded_buf)
-         surf->coded_buf->coded_surf = NULL;
-      util_dynarray_fini(&surf->subpics);
-      FREE(surf);
+      if (surf->ctx && surf->is_dpb)
+         vlVaRemoveDpbSurface(surf, surface_list[i]);
+      vlVaDestroySurface(drv, surf);
       handle_table_remove(drv->htab, surface_list[i]);
    }
    mtx_unlock(&drv->mutex);
@@ -820,11 +830,13 @@ vlVaSwitchToProtectedContext(vlVaDriver *drv)
    drv->pipe2 = drv->pipe;
    drv->pipe = ctx;
 
-   if (drv->cstate.pipe) {
-      vl_compositor_cleanup_state(&drv->cstate);
-      vl_compositor_cleanup(&drv->compositor);
-      vl_compositor_init(&drv->compositor, drv->pipe, false);
-      vl_compositor_init_state(&drv->cstate, drv->pipe);
+   if (drv->proc) {
+      struct pipe_video_codec templat = {
+         .profile = PIPE_VIDEO_PROFILE_UNKNOWN,
+         .entrypoint = PIPE_VIDEO_ENTRYPOINT_PROCESSING,
+      };
+      drv->proc->destroy(drv->proc);
+      drv->proc = vl_create_proc(drv->pipe, &templat);
    }
 }
 

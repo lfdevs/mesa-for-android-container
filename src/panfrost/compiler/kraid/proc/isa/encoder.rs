@@ -36,6 +36,8 @@ const SRC_SWIZZLE_ENUMS: &[&'static str] = &[
 const DST_LANES_ENUMS: &[&'static str] = &[
     "dest_width_m",
     "dest_width_narrow_m",
+    "dest_width_replicate_m",
+    "dest_width_single_lane_16_bit_m",
     "lane_all_m",
     "load_lane_16_m",
     "load_lane_32_m",
@@ -272,8 +274,13 @@ fn map_field_src(
     } else if DST_LANES_ENUMS.iter().any(|e| field_type.is_enum(e)) {
         if !sr_control.has_write() {
             assert!(
-                ["lane", "dest_width", "dest_width_narrow"]
-                    .contains(&field_name)
+                [
+                    "lane",
+                    "dest_width",
+                    "dest_width_narrow",
+                    "dest_width_replicate"
+                ]
+                .contains(&field_name)
             );
             (SrcType::Dst, SrcField::DstLanes)
         } else {

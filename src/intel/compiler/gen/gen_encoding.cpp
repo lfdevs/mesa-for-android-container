@@ -19,6 +19,7 @@
 #include "gen_info_pre_xe.h"
 #include "gen_info_xe.h"
 #include "gen_info_xe2.h"
+#include "gen_info_xe3p.h"
 
 enum {
    GEN_SYSTOLIC_DEPTH_16 = 0,
@@ -560,6 +561,10 @@ struct gen_encoder {
       this->raw = raw;
       this->desc = &E::gen_to_description[inst->opcode];
 
+      /* Assert that this opcode is supported by this platform */
+      assert(inst->opcode == GEN_OP_ILLEGAL ||
+             this->desc->gen_op != GEN_OP_ILLEGAL);
+
       memset(raw, 0, sizeof(gen_raw_inst));
 
       assert(!inst->align16);
@@ -625,7 +630,17 @@ struct gen_encoder {
          set(E::SRC0_ADDRESS_MODE, inst->src[0].indirect);
          set(E::SRC0_NEGATE,       inst->src[0].negate);
          set(E::SRC0_ABS,          inst->src[0].abs);
-         set(E::SRC0_TYPE,         encode_type(inst->src[0].file, inst->src[0].type));
+         if constexpr (E::TYPE < GEN_ENCODING_XE3P) {
+            set(E::SRC0_TYPE, encode_type(inst->src[0].file,
+                                          inst->src[0].type));
+         } else {
+            if (desc->format == GEN_FORMAT_BASIC_ONE_SRC) {
+               set(E::SRC0_TYPE, encode_type(inst->src[0].file,
+                                             inst->src[0].type));
+            } else {
+               set(E::TWO_SRC0_TYPE, encode_type_short(inst->src[0].type));
+            }
+         }
 
          int imm_src = -1;
 
@@ -666,9 +681,14 @@ struct gen_encoder {
                else
                   encode_direct_operand(E::SRC1_OPERAND, inst->src[1]);
 
-               set(E::SRC1_VSTRIDE, encode_vstride(inst->src[1].region.vstride));
-               set(E::SRC1_WIDTH,   encode_width(inst->src[1].region.width));
-               set(E::SRC1_HSTRIDE, encode_hstride(inst->src[1].region.hstride));
+               if constexpr (E::TYPE < GEN_ENCODING_XE3P) {
+                  set(E::SRC1_VSTRIDE, encode_vstride(inst->src[1].region.vstride));
+                  set(E::SRC1_WIDTH,   encode_width(inst->src[1].region.width));
+                  set(E::SRC1_HSTRIDE, encode_hstride(inst->src[1].region.hstride));
+               } else {
+                  assert(gen_region_is_scalar_or_linear(inst->src[1].region));
+                  set(E::TWO_SRC1_SCALAR, gen_region_is_scalar(inst->src[1].region));
+               }
             }
          }
 
@@ -688,10 +708,10 @@ struct gen_encoder {
             set(E::ACC_WR_CONTROL,    inst->acc_wr_control);
 
          set(E::THREE_EXEC_DATA_TYPE, gen_type_is_float_or_bfloat(inst->dst.type));
-         set(E::THREE_DST_TYPE,       encode_type_3src(inst->dst.type));
-         set(E::THREE_SRC0_TYPE,      encode_type_3src(inst->src[0].type));
-         set(E::THREE_SRC1_TYPE,      encode_type_3src(inst->src[1].type));
-         set(E::THREE_SRC2_TYPE,      encode_type_3src(inst->src[2].type));
+         set(E::THREE_DST_TYPE,       encode_type_short(inst->dst.type));
+         set(E::THREE_SRC0_TYPE,      encode_type_short(inst->src[0].type));
+         set(E::THREE_SRC1_TYPE,      encode_type_short(inst->src[1].type));
+         set(E::THREE_SRC2_TYPE,      encode_type_short(inst->src[2].type));
 
          encode_direct_operand(E::THREE_DST_OPERAND, inst->dst);
          set(E::THREE_DST_HSTRIDE,
@@ -712,10 +732,15 @@ struct gen_encoder {
 
          encode_direct_operand(E::THREE_SRC1_OPERAND, inst->src[1]);
 
-         const unsigned src1_vstride = ENCODE_VSTRIDE_3SRC(inst->src[1].region.vstride);
-         set(E::THREE_SRC1_VSTRIDE, src1_vstride);
+         if constexpr (E::TYPE < GEN_ENCODING_XE3P) {
+            const unsigned src1_vstride = ENCODE_VSTRIDE_3SRC(inst->src[1].region.vstride);
+            set(E::THREE_SRC1_VSTRIDE, src1_vstride);
 
-         set(E::THREE_SRC1_HSTRIDE, encode_hstride(inst->src[1].region.hstride));
+            set(E::THREE_SRC1_HSTRIDE, encode_hstride(inst->src[1].region.hstride));
+         } else {
+            assert(gen_region_is_scalar_or_linear(inst->src[1].region));
+            set(E::THREE_SRC1_SCALAR, gen_region_is_scalar(inst->src[1].region));
+         }
 
          if (inst->src[2].file == GEN_IMM) {
             set(E::THREE_SRC2_IS_IMM, 1);
@@ -749,10 +774,10 @@ struct gen_encoder {
          set(E::DPAS_SDEPTH,    encode_sdepth(inst->dpas.sdepth));
 
          set(E::THREE_EXEC_DATA_TYPE, gen_type_is_float_or_bfloat(inst->dst.type));
-         set(E::THREE_DST_TYPE,       encode_type_3src(inst->dst.type));
-         set(E::THREE_SRC0_TYPE,      encode_type_3src(inst->src[0].type));
-         set(E::THREE_SRC1_TYPE,      encode_type_3src(inst->src[1].type));
-         set(E::THREE_SRC2_TYPE,      encode_type_3src(inst->src[2].type));
+         set(E::THREE_DST_TYPE,       encode_type_short(inst->dst.type));
+         set(E::THREE_SRC0_TYPE,      encode_type_short(inst->src[0].type));
+         set(E::THREE_SRC1_TYPE,      encode_type_short(inst->src[1].type));
+         set(E::THREE_SRC2_TYPE,      encode_type_short(inst->src[2].type));
 
          set(E::DPAS_SRC1_SUBBYTE, inst->dpas.src1_subbyte);
          set(E::DPAS_SRC2_SUBBYTE, inst->dpas.src2_subbyte);
@@ -1000,13 +1025,33 @@ private:
    }
 
    inline unsigned
-   encode_type_3src(gen_reg_type type)
+   encode_type_short(gen_reg_type type)
    {
-      if (gen_type_is_bfloat(type) && !devinfo->has_bfloat16)
+      if ((type == GEN_TYPE_HF8 || type == GEN_TYPE_BF8) && !devinfo->has_fp8)
          return GEN_INVALID_HW_REG_TYPE;
 
-      /* size mask and SINT type bit match exactly */
-      return type & 0b111;
+      if (type == GEN_TYPE_BF && !devinfo->has_bfloat16)
+         return GEN_INVALID_HW_REG_TYPE;
+
+      static const uint8_t map[] = {
+         [GEN_TYPE_UB]  = 0b000,
+         [GEN_TYPE_UW]  = 0b001,
+         [GEN_TYPE_UD]  = 0b010,
+         [GEN_TYPE_UQ]  = 0b011,
+         [GEN_TYPE_B]   = 0b100,
+         [GEN_TYPE_W]   = 0b101,
+         [GEN_TYPE_D]   = 0b110,
+         [GEN_TYPE_Q]   = 0b111,
+         [GEN_TYPE_HF8] = 0b100,
+         [GEN_TYPE_HF]  = 0b001,
+         [GEN_TYPE_F]   = 0b010,
+         [GEN_TYPE_DF]  = 0b011,
+         [GEN_TYPE_BF8] = 0b000,
+         [GEN_TYPE_BF]  = 0b101,
+      };
+      if (type >= ARRAY_SIZE(map))
+         return GEN_INVALID_HW_REG_TYPE;
+      return map[type];
    }
 
    static inline unsigned
@@ -1220,6 +1265,27 @@ struct gen_decoder {
             inst->src[0].region.hstride = decode_hstride(get(E::SRC0_HSTRIDE));
          }
 
+         inst->dst.type = decode_type(inst->dst.file, get(E::DST_TYPE));
+
+         if constexpr (E::TYPE < GEN_ENCODING_XE3P) {
+            inst->src[0].type = decode_type(inst->src[0].file,
+                                            get(E::SRC0_TYPE));
+         } else {
+            if (desc->format == GEN_FORMAT_BASIC_ONE_SRC) {
+               inst->src[0].type =
+                  decode_type(inst->src[0].file, get(E::SRC0_TYPE));
+            } else {
+               inst->src[0].type =
+                  decode_type_short(get(E::TWO_SRC0_TYPE),
+                                    get(E::TWO_EXEC_DATA_TYPE));
+            }
+         }
+
+         if (desc->format == GEN_FORMAT_BASIC_TWO_SRC)
+            inst->src[1].type = decode_type(inst->src[1].file, get(E::SRC1_TYPE));
+         else
+            inst->src[1].file = GEN_BAD_FILE;
+
          if (desc->format == GEN_FORMAT_BASIC_TWO_SRC) {
             inst->src[1].indirect = get(E::SRC1_ADDRESS_MODE);
 
@@ -1237,18 +1303,29 @@ struct gen_decoder {
                else
                   decode_direct_operand(E::SRC1_OPERAND, inst->src[1]);
 
-               inst->src[1].region.vstride = decode_vstride(get(E::SRC1_VSTRIDE));
-               inst->src[1].region.width   = decode_width(get(E::SRC1_WIDTH));
-               inst->src[1].region.hstride = decode_hstride(get(E::SRC1_HSTRIDE));
+               if constexpr (E::TYPE < GEN_ENCODING_XE3P) {
+                  inst->src[1].region.vstride =
+                     decode_vstride(get(E::SRC1_VSTRIDE));
+                  inst->src[1].region.width =
+                     decode_width(get(E::SRC1_WIDTH));
+                  inst->src[1].region.hstride =
+                     decode_hstride(get(E::SRC1_HSTRIDE));
+               } else {
+                  if (get(E::TWO_SRC1_SCALAR)) {
+                     inst->src[1].region.vstride = 0;
+                  } else {
+                     const unsigned dst_stride =
+                        MAX2(gen_byte_stride(inst->dst),
+                             gen_type_size_bytes(inst->dst.type));
+                     const unsigned src1_size =
+                        gen_type_size_bytes(inst->src[1].type);
+                     inst->src[1].region.vstride = dst_stride / src1_size;
+                  }
+                  inst->src[1].region.width   = 1;
+                  inst->src[1].region.hstride = 0;
+               }
             }
          }
-
-         inst->dst.type    = decode_type(inst->dst.file,    get(E::DST_TYPE));
-         inst->src[0].type = decode_type(inst->src[0].file, get(E::SRC0_TYPE));
-         if (desc->format == GEN_FORMAT_BASIC_TWO_SRC)
-            inst->src[1].type = decode_type(inst->src[1].file, get(E::SRC1_TYPE));
-         else
-            inst->src[1].file = GEN_BAD_FILE;
 
          if (imm_src != -1) {
             uint64_t value = get(E::IMM_LO_32);
@@ -1265,10 +1342,10 @@ struct gen_decoder {
             inst->acc_wr_control = get(E::ACC_WR_CONTROL);
 
          const bool is_float = get(E::THREE_EXEC_DATA_TYPE);
-         inst->dst.type    = decode_type_3src(get(E::THREE_DST_TYPE), is_float);
-         inst->src[0].type = decode_type_3src(get(E::THREE_SRC0_TYPE), is_float);
-         inst->src[1].type = decode_type_3src(get(E::THREE_SRC1_TYPE), is_float);
-         inst->src[2].type = decode_type_3src(get(E::THREE_SRC2_TYPE), is_float);
+         inst->dst.type    = decode_type_short(get(E::THREE_DST_TYPE), is_float);
+         inst->src[0].type = decode_type_short(get(E::THREE_SRC0_TYPE), is_float);
+         inst->src[1].type = decode_type_short(get(E::THREE_SRC1_TYPE), is_float);
+         inst->src[2].type = decode_type_short(get(E::THREE_SRC2_TYPE), is_float);
 
          decode_direct_operand(E::THREE_DST_OPERAND, inst->dst);
          inst->dst.region.hstride = get(E::THREE_DST_HSTRIDE) + 1;
@@ -1291,11 +1368,31 @@ struct gen_decoder {
 
          decode_direct_operand(E::THREE_SRC1_OPERAND, inst->src[1]);
 
-         const unsigned encoded_src1_vstride = get(E::THREE_SRC1_VSTRIDE);
-         inst->src[1].region.vstride = DECODE_VSTRIDE_3SRC(encoded_src1_vstride);
+         if constexpr (E::TYPE < GEN_ENCODING_XE3P) {
+            const unsigned encoded_src1_vstride = get(E::THREE_SRC1_VSTRIDE);
+            inst->src[1].region.vstride = DECODE_VSTRIDE_3SRC(encoded_src1_vstride);
 
-         inst->src[1].region.hstride = decode_hstride(get(E::THREE_SRC1_HSTRIDE));
-         inst->src[1].region.width = gen_implied_width_for_3src_a1(inst->src[1].region.vstride, inst->src[1].region.hstride);
+            inst->src[1].region.hstride =
+               decode_hstride(get(E::THREE_SRC1_HSTRIDE));
+            inst->src[1].region.width =
+               gen_implied_width_for_3src_a1(inst->src[1].region.vstride,
+                                             inst->src[1].region.hstride);
+         } else {
+            if (get(E::THREE_SRC1_SCALAR)) {
+               inst->src[1].region.vstride = 0;
+               inst->src[1].region.width   = 1;
+               inst->src[1].region.hstride = 0;
+            } else {
+               const unsigned dst_stride =
+                  MAX2(gen_byte_stride(inst->dst),
+                       gen_type_size_bytes(inst->dst.type));
+               const unsigned src1_size =
+                  gen_type_size_bytes(inst->src[1].type);
+               inst->src[1].region.vstride = 2 * dst_stride / src1_size;
+               inst->src[1].region.width   = 2;
+               inst->src[1].region.hstride = dst_stride / src1_size;
+            }
+         }
 
          if (src2_is_imm) {
             inst->src[2].file = GEN_IMM;
@@ -1331,10 +1428,10 @@ struct gen_decoder {
          inst->dpas.sdepth    = decode_sdepth(get(E::DPAS_SDEPTH));
 
          const bool is_float = get(E::THREE_EXEC_DATA_TYPE);
-         inst->dst.type    = decode_type_3src(get(E::THREE_DST_TYPE), is_float);
-         inst->src[0].type = decode_type_3src(get(E::THREE_SRC0_TYPE), is_float);
-         inst->src[1].type = decode_type_3src(get(E::THREE_SRC1_TYPE), is_float);
-         inst->src[2].type = decode_type_3src(get(E::THREE_SRC2_TYPE), is_float);
+         inst->dst.type    = decode_type_short(get(E::THREE_DST_TYPE), is_float);
+         inst->src[0].type = decode_type_short(get(E::THREE_SRC0_TYPE), is_float);
+         inst->src[1].type = decode_type_short(get(E::THREE_SRC1_TYPE), is_float);
+         inst->src[2].type = decode_type_short(get(E::THREE_SRC2_TYPE), is_float);
 
          inst->dpas.src1_subbyte = get(E::DPAS_SRC1_SUBBYTE);
          inst->dpas.src2_subbyte = get(E::DPAS_SRC2_SUBBYTE);
@@ -1594,16 +1691,39 @@ private:
    }
 
    inline gen_reg_type
-   decode_type_3src(unsigned hw_type, bool is_float)
+   decode_type_short(unsigned hw_type, bool is_float)
    {
-      unsigned size_field = hw_type & GEN_TYPE_SIZE_MASK;
-      unsigned base_field = hw_type & GEN_TYPE_BASE_MASK;
-      if (is_float) {
-         base_field |= GEN_TYPE_BASE_FLOAT;
-         if (base_field == GEN_TYPE_BASE_BFLOAT && !devinfo->has_bfloat16)
-            return GEN_TYPE_INVALID;
-      }
-      return (gen_reg_type) (base_field | size_field);
+      static const gen_reg_type int_map[8] = {
+         [0b000] = GEN_TYPE_UB,
+         [0b001] = GEN_TYPE_UW,
+         [0b010] = GEN_TYPE_UD,
+         [0b011] = GEN_TYPE_UQ,
+         [0b100] = GEN_TYPE_B,
+         [0b101] = GEN_TYPE_W,
+         [0b110] = GEN_TYPE_D,
+         [0b111] = GEN_TYPE_Q,
+      };
+      static const gen_reg_type float_map[8] = {
+         [0b000] = GEN_TYPE_BF8,
+         [0b001] = GEN_TYPE_HF,
+         [0b010] = GEN_TYPE_F,
+         [0b011] = GEN_TYPE_DF,
+         [0b100] = GEN_TYPE_HF8,
+         [0b101] = GEN_TYPE_BF,
+         [0b110] = GEN_TYPE_INVALID,
+         [0b111] = GEN_TYPE_INVALID,
+      };
+
+      assert(hw_type < 8);
+      gen_reg_type result = (is_float ? float_map : int_map)[hw_type];
+
+      if ((result == GEN_TYPE_HF8 || result == GEN_TYPE_BF8) && !devinfo->has_fp8)
+         return GEN_TYPE_INVALID;
+
+      if (result == GEN_TYPE_BF && !devinfo->has_bfloat16)
+         return GEN_TYPE_INVALID;
+
+      return result;
    }
 };
 
@@ -1710,8 +1830,11 @@ gen_encode(gen_encode_params *params)
    } else if (devinfo->ver < 20) {
       auto e = gen_encoder<gen_encoding_xe>(devinfo);
       return e.encode_many(params);
-   } else {
+   } else if (devinfo->ver < 35) {
       auto e = gen_encoder<gen_encoding_xe2>(devinfo);
+      return e.encode_many(params);
+   } else {
+      auto e = gen_encoder<gen_encoding_xe3p>(devinfo);
       return e.encode_many(params);
    }
 }
@@ -1807,8 +1930,11 @@ gen_decode(gen_decode_params *params)
    } else if (devinfo->ver < 20) {
       auto d = gen_decoder<gen_encoding_xe>(devinfo, params->mem_ctx);
       return d.decode_many(params);
-   } else {
+   } else if (devinfo->ver < 35) {
       auto d = gen_decoder<gen_encoding_xe2>(devinfo, params->mem_ctx);
+      return d.decode_many(params);
+   } else {
+      auto d = gen_decoder<gen_encoding_xe3p>(devinfo, params->mem_ctx);
       return d.decode_many(params);
    }
 }

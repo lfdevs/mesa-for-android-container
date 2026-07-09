@@ -61,7 +61,7 @@ fn disassemble_instrs(instrs: Vec<Instr>, sm: u8) -> Vec<String> {
     let f = Function {
         ssa_alloc: SSAValueAllocator::new(),
         phi_alloc: PhiAllocator::new(),
-        blocks: cfg.as_cfg(),
+        blocks: cfg.as_cfg(true),
     };
 
     let cs_info = ComputeShaderInfo {

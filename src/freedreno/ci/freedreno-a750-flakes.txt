@@ -79,6 +79,7 @@ custom@buffer flags@in-0x8-out-0x10
 custom@buffer flags@in-0x8-out-0x20
 custom@buffer flags@in-0x8-out-0x30
 custom@buffer flags@in-0x8-out-0x8
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_32_bits.rgba8_rgba8ui.renderbuffer_to_renderbuffer
 dEQP-GLES31.functional.copy_image.non_compressed.viewclass_32_bits.srgb8_alpha8_rgba8ui.renderbuffer_to_renderbuffer
 dEQP-GLES31.functional.image_load_store.2d_array.store.rgba8_single_layer
 dEQP-GLES31.functional.image_load_store.buffer.format_reinterpret.r32f_rgba8i

@@ -9,7 +9,7 @@
 #define LVP_ACCELERATION_STRUCTURE_H
 
 #include "lvp_private.h"
-#include "bvh/vk_bvh.h"
+#include "bvh/vk_bvh_defines.h"
 
 #define LVP_GEOMETRY_OPAQUE (1u << 31)
 

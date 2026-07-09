@@ -92,18 +92,26 @@ radeon_add_to_buffer_list_check_mem(struct r600_common_context *rctx,
 	return radeon_add_to_buffer_list(rctx, ring, rbo, usage);
 }
 
+static inline void r600_emit_reloc_packets(struct radeon_cmdbuf *cs,
+					   unsigned reloc, bool has_vm,
+					   uint32_t pkt_flags)
+{
+	if(!has_vm)
+	{
+		radeon_emit(cs, PKT3(PKT3_NOP, 0, 0) | pkt_flags);
+		radeon_emit(cs, reloc);
+	}
+}
+
 static inline void r600_emit_reloc(struct r600_common_context *rctx,
 				   struct r600_ring *ring, struct r600_resource *rbo,
-				   unsigned usage)
+				   unsigned usage,
+				   uint32_t pkt_flags)
 {
 	struct radeon_cmdbuf *cs = &ring->cs;
 	bool has_vm = ((struct r600_common_screen*)rctx->b.screen)->info.r600_has_virtual_memory;
 	unsigned reloc = radeon_add_to_buffer_list(rctx, ring, rbo, usage);
-
-	if (!has_vm) {
-		radeon_emit(cs, PKT3(PKT3_NOP, 0, 0));
-		radeon_emit(cs, reloc);
-	}
+	r600_emit_reloc_packets(cs, reloc, has_vm, pkt_flags);
 }
 
 static inline void radeon_set_config_reg_seq(struct radeon_cmdbuf *cs, unsigned reg, unsigned num)

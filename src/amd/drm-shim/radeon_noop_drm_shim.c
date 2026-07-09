@@ -8,8 +8,6 @@
 #include <util/u_math.h>
 #include <radeon_drm.h>
 
-bool drm_shim_driver_prefers_first_render_node = true;
-
 static enum radeon_family radeon_family = CHIP_RV515;
 static uint16_t device_id = 0x7140;
 
@@ -180,8 +178,6 @@ drm_shim_driver_init(void)
 {
    radeon_get_device_id();
 
-   shim_device.bus_type = DRM_BUS_PCI;
-   shim_device.driver_name = "radeon";
    shim_device.driver_ioctls = driver_ioctls;
    shim_device.driver_ioctl_count = ARRAY_SIZE(driver_ioctls);
 
@@ -190,37 +186,6 @@ drm_shim_driver_init(void)
    shim_device.version_patchlevel = 0;
 
    /* nothing looks at the pci id, so fix it to a RV515 */
-   static const char uevent_content[] =
-      "DRIVER=radeon\n"
-      "PCI_CLASS=30000\n"
-      "PCI_ID=1002:7140\n"
-      "PCI_SUBSYS_ID=1028:075B\n"
-      "PCI_SLOT_NAME=0000:01:00.0\n"
-      "MODALIAS=pci:v000010ded00005916sv00001028sd0000075Bbc03sc00i00\n";
-   drm_shim_override_file(uevent_content,
-                          "/sys/dev/char/%d:%d/device/uevent",
-                          DRM_MAJOR, render_node_minor);
-   drm_shim_override_file("0x0\n",
-                          "/sys/dev/char/%d:%d/device/revision",
-                          DRM_MAJOR, render_node_minor);
-   drm_shim_override_file("0x1002",
-                          "/sys/dev/char/%d:%d/device/vendor",
-                          DRM_MAJOR, render_node_minor);
-   drm_shim_override_file("0x1002",
-                          "/sys/devices/pci0000:00/0000:01:00.0/vendor");
-   drm_shim_override_file("0x7140",
-                          "/sys/dev/char/%d:%d/device/device",
-                          DRM_MAJOR, render_node_minor);
-   drm_shim_override_file("0x7140",
-                          "/sys/devices/pci0000:00/0000:01:00.0/device");
-   drm_shim_override_file("0x1234",
-                          "/sys/dev/char/%d:%d/device/subsystem_vendor",
-                          DRM_MAJOR, render_node_minor);
-   drm_shim_override_file("0x1234",
-                          "/sys/devices/pci0000:00/0000:01:00.0/subsystem_vendor");
-   drm_shim_override_file("0x1234",
-                          "/sys/dev/char/%d:%d/device/subsystem_device",
-                          DRM_MAJOR, render_node_minor);
-   drm_shim_override_file("0x1234",
-                          "/sys/devices/pci0000:00/0000:01:00.0/subsystem_device");
+   drm_shim_pci_device_setup(0x1002, 0x7140, "0000:01:00.0", "radeon");
+
 }

@@ -14,6 +14,7 @@ dEQP-VK.binding_model.descriptor_buffer.traditional_buffer.multiple.graphics_ver
 dEQP-VK.memory.pipeline_barrier.host_write_transfer_src.1048576
 dEQP-VK.memory.pipeline_barrier.host_write_vertex_buffer.65536_vertex_buffer_stride_4
 dEQP-VK.memory.pipeline_barrier.transfer_src_transfer_dst.1048576
+dEQP-VK.pipeline.pipeline_library.blend.dual_source.multi_attachments.r32g32b32a32_sfloat
 dEQP-VK.sparse_resources.image_sparse_binding.multiple_bind_sparse_info.2d_array.*
 dEQP-VK.sparse_resources.image_sparse_binding.multiple_bind_sparse_info.cube_array.*
 dEQP-VK.sparse_resources.image_sparse_binding.multiple_sparse_image_opaque_memory_bind_info.3d.*
@@ -25,3 +26,7 @@ dEQP-VK.sparse_resources.image_sparse_residency.cube_array.*
 dEQP-VK.spirv_assembly.instruction.compute.untyped_pointers.vulkan_memory_model.cooperative_matrix.type_punning.*
 # https://github.com/KhronosGroup/VK-GL-CTS/issues/553
 dEQP-VK.spirv_assembly.instruction.compute.untyped_pointers.vulkan_memory_model.cooperative_matrix.mixed.load.*
+
+# Nightly run expectations update
+dEQP-VK.api.object_management.multithreaded_per_thread_resources.device
+

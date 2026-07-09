@@ -260,6 +260,12 @@ intel_use_tcs_multi_patch(const struct intel_device_info *devinfo)
    return devinfo->ver >= 12;
 }
 
+static inline unsigned
+intel_device_info_max_sbids(const struct intel_device_info *devinfo)
+{
+   return devinfo->ver >= 30 ? 32 : 16;
+}
+
 #ifdef __cplusplus
 }
 #endif

@@ -140,7 +140,7 @@ fse_prepare(struct draw_pt_middle_end *middle,
       }
    }
 
-   fse->active = draw_vs_lookup_variant(draw->vs.vertex_shader, &fse->key);
+   fse->active = draw_vs_lookup_variant(draw, draw->vs.vertex_shader, &fse->key);
 
    if (!fse->active) {
       assert(0);
@@ -153,7 +153,7 @@ fse_prepare(struct draw_pt_middle_end *middle,
    /* Now set buffer pointers:
     */
    for (unsigned i = 0; i < draw->pt.nr_vertex_buffers; i++) {
-      fse->active->set_buffer(fse->active,
+      fse->active->set_buffer(draw, fse->active,
                               i,
                               ((const uint8_t *) draw->pt.user.vbuffer[i].map +
                                draw->pt.vertex_buffer[i].buffer_offset),
@@ -208,7 +208,7 @@ fse_run_linear(struct draw_pt_middle_end *middle,
     * Clipping is done elsewhere -- either by the API or on hardware,
     * or for some other reason not required...
     */
-   fse->active->run_linear(fse->active, start, count, hw_verts);
+   fse->active->run_linear(draw, fse->active, start, count, hw_verts);
 
    if (0) {
       for (unsigned i = 0; i < count; i++) {
@@ -268,7 +268,7 @@ fse_run(struct draw_pt_middle_end *middle,
 
    /* Single routine to fetch vertices, run shader and emit HW verts.
     */
-   fse->active->run_elts(fse->active, fetch_elts, fetch_count, hw_verts);
+   fse->active->run_elts(draw, fse->active, fetch_elts, fetch_count, hw_verts);
 
    if (0) {
       for (unsigned i = 0; i < fetch_count; i++) {
@@ -321,7 +321,7 @@ fse_run_linear_elts(struct draw_pt_middle_end *middle,
     * Clipping is done elsewhere -- either by the API or on hardware,
     * or for some other reason not required...
     */
-   fse->active->run_linear(fse->active, start, count, hw_verts);
+   fse->active->run_linear(draw, fse->active, start, count, hw_verts);
 
    draw->render->draw_elements(draw->render, draw_elts, draw_count);
 

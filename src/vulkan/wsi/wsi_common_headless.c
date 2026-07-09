@@ -83,15 +83,23 @@ wsi_headless_surface_get_capabilities(VkIcdSurfaceBase *surface,
       VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR |
       VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR;
 
-   caps->surfaceCapabilities.supportedUsageFlags = wsi_caps_get_image_usage();
+   VkImageUsageFlags image_usage = wsi_caps_get_image_usage();
 
    VK_FROM_HANDLE(vk_physical_device, pdevice, wsi_device->pdevice);
    if (pdevice->supported_extensions.EXT_attachment_feedback_loop_layout)
-      caps->surfaceCapabilities.supportedUsageFlags |= VK_IMAGE_USAGE_ATTACHMENT_FEEDBACK_LOOP_BIT_EXT;
+      image_usage |= VK_IMAGE_USAGE_ATTACHMENT_FEEDBACK_LOOP_BIT_EXT;
 
    VkSwapchainFlagsSurfaceCapabilitiesEXT *surface_caps = vk_find_struct(caps, SWAPCHAIN_FLAGS_SURFACE_CAPABILITIES_EXT);
    if (surface_caps && pdevice->supported_extensions.EXT_multisampled_render_to_swapchain)
       surface_caps->swapchainSupportedFlags |= VK_SWAPCHAIN_CREATE_MULTISAMPLED_RENDER_TO_SINGLE_SAMPLED_BIT_EXT;
+
+   VkImageUsageFlags2CreateInfoKHR *usage2 =
+      vk_find_struct(caps->pNext, IMAGE_USAGE_FLAGS_2_CREATE_INFO_KHR);
+   if (usage2) {
+      usage2->usage = image_usage;
+   } else {
+      caps->surfaceCapabilities.supportedUsageFlags = image_usage;
+   }
 
    return VK_SUCCESS;
 }

@@ -48,6 +48,8 @@ vk_image_init(struct vk_device *device,
               struct vk_image *image,
               const VkImageCreateInfo *pCreateInfo)
 {
+   VkImageCreateFlags2KHR create_flags = vk_image_create_flags(pCreateInfo);
+
    vk_object_base_init(device, &image->base, VK_OBJECT_TYPE_IMAGE);
 
    assert(pCreateInfo->sType == VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO);
@@ -63,7 +65,7 @@ vk_image_init(struct vk_device *device,
    if (pCreateInfo->flags & VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT)
       assert(pCreateInfo->imageType == VK_IMAGE_TYPE_3D);
 
-   image->create_flags = pCreateInfo->flags;
+   image->create_flags = create_flags;
    image->image_type = pCreateInfo->imageType;
    vk_image_set_format(image, pCreateInfo->format);
    image->extent = vk_image_sanitize_extent(image, pCreateInfo->extent);
@@ -71,16 +73,23 @@ vk_image_init(struct vk_device *device,
    image->array_layers = pCreateInfo->arrayLayers;
    image->samples = pCreateInfo->samples;
    image->tiling = pCreateInfo->tiling;
-   image->usage = pCreateInfo->usage;
+   image->usage = vk_image_usage_flags(pCreateInfo);
    image->sharing_mode = pCreateInfo->sharingMode;
 
    if (image->aspects & VK_IMAGE_ASPECT_STENCIL_BIT) {
-      const VkImageStencilUsageCreateInfo *stencil_usage_info =
+      const VkImageStencilUsage2CreateInfoKHR *stencil_usage2_info =
          vk_find_struct_const(pCreateInfo->pNext,
-                              IMAGE_STENCIL_USAGE_CREATE_INFO);
-      image->stencil_usage =
-         stencil_usage_info ? stencil_usage_info->stencilUsage :
-                              pCreateInfo->usage;
+                              IMAGE_STENCIL_USAGE_2_CREATE_INFO_KHR);
+      if (stencil_usage2_info) {
+         image->stencil_usage = stencil_usage2_info->stencilUsage;
+      } else {
+         const VkImageStencilUsageCreateInfo *stencil_usage_info =
+            vk_find_struct_const(pCreateInfo->pNext,
+                                 IMAGE_STENCIL_USAGE_CREATE_INFO);
+         image->stencil_usage =
+            stencil_usage_info ? stencil_usage_info->stencilUsage :
+                                 image->usage;
+      }
    } else {
       image->stencil_usage = 0;
    }
@@ -223,7 +232,7 @@ vk_image_set_format(struct vk_image *image, VkFormat format)
    image->aspects = vk_format_aspects(format);
 }
 
-VkImageUsageFlags
+VkImageUsageFlags2KHR
 vk_image_usage(const struct vk_image *image,
                VkImageAspectFlags aspect_mask)
 {
@@ -710,11 +719,22 @@ vk_image_view_init(struct vk_device *device,
    /* If we are creating a color view from a depth/stencil image we compute
     * usage from the underlying depth/stencil aspects.
     */
-   const VkImageUsageFlags image_usage =
+   const VkImageUsageFlags2KHR image_usage =
       vk_image_usage(image, image_view->aspects);
-   const VkImageViewUsageCreateInfo *usage_info =
-      vk_find_struct_const(pCreateInfo, IMAGE_VIEW_USAGE_CREATE_INFO);
-   image_view->usage = usage_info ? usage_info->usage : image_usage;
+   const VkImageViewUsage2CreateInfoKHR *usage2_info =
+      vk_find_struct_const(pCreateInfo->pNext,
+                           IMAGE_VIEW_USAGE_2_CREATE_INFO_KHR);
+   if (usage2_info) {
+      image_view->usage = usage2_info->usage;
+   } else {
+      const VkImageViewUsageCreateInfo *usage_info =
+         vk_find_struct_const(pCreateInfo->pNext, IMAGE_VIEW_USAGE_CREATE_INFO);
+      if (usage_info) {
+         image_view->usage = usage_info->usage;
+      } else {
+         image_view->usage = image_usage;
+      }
+   }
    assert(driver_internal || !(image_view->usage & ~image_usage));
 }
 
@@ -891,7 +911,9 @@ vk_image_create_get_format_list_compressed(struct vk_device *device,
                                            VkFormat **formats,
                                            uint32_t *format_count)
 {
-   if ((pCreateInfo->flags & VK_IMAGE_CREATE_BLOCK_TEXEL_VIEW_COMPATIBLE_BIT) == 0) {
+   VkImageCreateFlags2KHR create_flags = vk_image_create_flags(pCreateInfo);
+
+   if ((create_flags & VK_IMAGE_CREATE_BLOCK_TEXEL_VIEW_COMPATIBLE_BIT) == 0) {
       return vk_image_create_get_format_list_uncompressed(device,
                                                           pCreateInfo,
                                                           pAllocator,
@@ -948,10 +970,12 @@ vk_image_create_get_format_list(struct vk_device *device,
                                 VkFormat **formats,
                                 uint32_t *format_count)
 {
+   VkImageCreateFlags2KHR create_flags = vk_image_create_flags(pCreateInfo);
+
    *formats = NULL;
    *format_count = 0;
 
-   if (!(pCreateInfo->flags &
+   if (!(create_flags &
          (VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT |
           VK_IMAGE_CREATE_BLOCK_TEXEL_VIEW_COMPATIBLE_BIT))) {
       return VK_SUCCESS;
@@ -1081,7 +1105,7 @@ vk_att_desc_stencil_layout(const VkAttachmentDescription2 *att_desc, bool final)
    return main_layout;
 }
 
-VkImageUsageFlags
+VkImageUsageFlags2KHR
 vk_image_layout_to_usage_flags(VkImageLayout layout,
                                VkImageAspectFlagBits aspect)
 {

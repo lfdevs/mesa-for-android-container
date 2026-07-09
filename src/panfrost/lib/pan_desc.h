@@ -26,9 +26,17 @@ struct pan_compute_dim {
    uint32_t x, y, z;
 };
 
+struct pan_crc_state {
+   /* Pointer to BO mapping. */
+   struct pan_ptr *ptr;
+
+   /* Is the CRC buffer valid? Implicitly refers to the first slice. */
+   bool valid;
+};
+
 struct pan_fb_color_attachment {
    const struct pan_image_view *view;
-   bool *crc_valid;
+   struct pan_crc_state *crc_state;
    bool clear;
    bool preload;
    bool discard;
@@ -157,6 +165,31 @@ struct pan_fb_info {
    bool pls_enabled;
 };
 
+struct pan_crc {
+   /* Empty Tile Elimination clear color */
+   uint64_t clear_color;
+
+   /* Selected RT index (8 max), -1 if none. */
+   int8_t index;
+
+   /* Transaction Elimination flags */
+   bool read  : 1;
+   bool write : 1;
+
+   /* Force clean writes for CRC buffer init */
+   bool force_clean_tile_write : 1;
+
+   /* Empty Tile Elimination flags */
+   bool empty_tile_read  : 1;
+   bool empty_tile_write : 1;
+};
+
+static inline bool
+pan_crc_is_enabled(struct pan_crc *crc)
+{
+   return crc->index != -1;
+}
+
 struct pan_clean_tile {
    /* clean_tile_write_enable mask on the 8 color attachments. */
    uint8_t write_rt_mask;
@@ -164,6 +197,27 @@ struct pan_clean_tile {
    /* clean_tile_write_enable flag on the depth/stencil attachment. */
    uint8_t write_zs : 1;
 };
+
+static inline bool
+pan_fb_info_is_fully_covered(const struct pan_fb_info *fb)
+{
+   return !fb->draw_extent.minx &&
+      !fb->draw_extent.miny &&
+      fb->draw_extent.maxx == (fb->width - 1) &&
+      fb->draw_extent.maxy == (fb->height - 1);
+}
+
+static inline void
+pan_crc_state_invalidate(struct pan_crc_state *state)
+{
+   state->valid = false;
+}
+
+static inline void
+pan_crc_state_set_ptr(struct pan_crc_state *state, struct pan_ptr *ptr)
+{
+   state->ptr = ptr;
+}
 
 static inline bool
 pan_clean_tile_write_rt_enabled(struct pan_clean_tile clean_tile,
@@ -184,7 +238,7 @@ pan_clean_tile_write_any_set(struct pan_clean_tile clean_tile)
    return clean_tile.write_rt_mask || clean_tile.write_zs;
 }
 
-static unsigned
+static inline unsigned
 pan_zsbuf_bytes_per_pixel(const struct pan_fb_info *fb)
 {
    unsigned samples = fb->nr_samples;

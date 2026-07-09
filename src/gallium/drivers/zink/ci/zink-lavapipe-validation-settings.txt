@@ -1,6 +1,6 @@
 # Please include a comment with the log message and a testcase triggering each
 # VUID at the bottom of the file.
-khronos_validation.message_id_filter = VUID-VkPhysicalDeviceProperties2-pNext-pNext,VUID-VkDeviceCreateInfo-pNext-pNext,VUID-RuntimeSpirv-Location-06272,VUID-vkCmdDrawMultiEXT-None-02699,VUID-RuntimeSpirv-OpEntryPoint-08743,VUID-vkCmdPipelineBarrier2-shaderTileImageColorReadAccess-08718,VUID-VkGraphicsPipelineCreateInfo-flags-06482,VUID-vkCmdPipelineBarrier2-None-08719,VUID-vkCmdDrawMultiEXT-rasterizationSamples-07474,VUID-vkDestroyDevice-device-05137,VUID-VkRectLayerKHR-offset-04864,VUID-vkAcquireNextImageKHR-semaphore-01779,VUID-vkQueueSubmit-pSignalSemaphores-00067,VUID-VkImageMemoryBarrier2-srcAccessMask-07454,VUID-vkCmdDrawMultiIndexedEXT-None-10909,VUID-VkDescriptorGetInfoEXT-type-12223,VUID-vkCmdDrawMultiEXT-dynamicRenderingUnusedAttachments-08911,VUID-vkCmdBlitImage-srcImageLayout-00221,VUID-VkRenderingAttachmentInfo-None-12256,VUID-vkCmdBeginRendering-pRenderingInfo-09592,VUID-vkCmdCopyImage-srcImageLayout-00128,VUID-vkDestroySwapchainKHR-swapchain-01282
+khronos_validation.message_id_filter = VUID-VkPhysicalDeviceProperties2-pNext-pNext,VUID-VkDeviceCreateInfo-pNext-pNext,VUID-RuntimeSpirv-Location-06272,VUID-vkCmdDrawMultiEXT-None-02699,VUID-RuntimeSpirv-OpEntryPoint-08743,VUID-vkCmdPipelineBarrier2-shaderTileImageColorReadAccess-08718,VUID-VkGraphicsPipelineCreateInfo-flags-06482,VUID-vkCmdPipelineBarrier2-None-08719,VUID-vkCmdDrawMultiEXT-rasterizationSamples-07474,VUID-vkDestroyDevice-device-05137,VUID-VkRectLayerKHR-offset-04864,VUID-vkAcquireNextImageKHR-semaphore-01779,VUID-vkQueueSubmit-pSignalSemaphores-00067,VUID-VkImageMemoryBarrier2-srcAccessMask-07454,VUID-vkCmdDrawMultiIndexedEXT-None-10909,VUID-vkCmdDrawMultiEXT-dynamicRenderingUnusedAttachments-08911,VUID-vkCmdBlitImage-srcImageLayout-00221,VUID-VkRenderingAttachmentInfo-None-12256,VUID-vkCmdBeginRendering-pRenderingInfo-09592,VUID-vkCmdCopyImage-srcImageLayout-00128,VUID-vkDestroySwapchainKHR-swapchain-01282
 khronos_validation.report_flags = error
 khronos_validation.debug_action = VK_DBG_LAYER_ACTION_LOG_MSG,VK_DBG_LAYER_ACTION_BREAK
 VK_LAYER_ENABLES=VK_VALIDATION_FEATURE_ENABLE_DEBUG_PRINTF_EXT
@@ -103,16 +103,6 @@ khronos_validation.log_filename = stdout
 # The Vulkan spec states: If srcAccessMask includes VK_ACCESS_2_SHADER_READ_BIT, srcStageMask must include VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT, VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_2_ACCELERATION_STRUCTURE_BUILD_BIT_KHR, VK_PIPELINE_STAGE_2_MICROMAP_BUILD_BIT_EXT, or one of the VK_PIPELINE_STAGE_*_SHADER_BIT stages (https://docs.vulkan.org/spec/latest/chapters/synchronization.html#VUID-VkImageMemoryBarrier2-srcAccessMask-07454)
 # Objects: 1
 #     [0] VkCommandBuffer 0x55da40ee59e0[zink barrier cmdbuf]
-
-# dEQP-GLES31.functional.image_load_store.buffer.atomic.add_r32ui_result
-#
-# Validation Error: [ VUID-VkDescriptorGetInfoEXT-type-12223 ] | MessageID = 0x6c684094
-# vkGetDescriptorEXT(): pDescriptorInfo->data.pStorageTexelBuffer->address [0x7f06a05f2900, 0x7f06a05f2a00) (256 bytes) has no buffer(s) associated that are valid.
-# The following buffers are missing VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT:
-#   VkBuffer 0x124a000000124a, size 256, range [0x7f06a05f2900, 0x7f06a05f2a00) has usage VK_BUFFER_USAGE_2_TRANSFER_SRC_BIT|VK_BUFFER_USAGE_2_TRANSFER_DST_BIT|VK_BUFFER_USAGE_2_UNIFORM_TEXEL_BUFFER_BIT|VK_BUFFER_USAGE_2_UNIFORM_BUFFER_BIT|VK_BUFFER_USAGE_2_STORAGE_BUFFER_BIT|VK_BUFFER_USAGE_2_INDEX_BUFFER_BIT|VK_BUFFER_USAGE_2_VERTEX_BUFFER_BIT|VK_BUFFER_USAGE_2_INDIRECT_BUFFER_BIT|VK_BUFFER_USAGE_2_TRANSFORM_FEEDBACK_BUFFER_BIT_EXT|VK_BUFFER_USAGE_2_TRANSFORM_FEEDBACK_COUNTER_BUFFER_BIT_EXT|VK_BUFFER_USAGE_2_SHADER_DEVICE_ADDRESS_BIT
-# The Vulkan spec states: If type is VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, pStorageTexelBuffer is not NULL and pStorageTexelBuffer->address is not zero, pStorageTexelBuffer->address must be a device address allocated to the application from a buffer created with the VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT usage flag set (https://docs.vulkan.org/spec/latest/chapters/descriptorsets.html#VUID-VkDescriptorGetInfoEXT-type-12223)
-# Objects: 1
-#     [0] VkBuffer 0x124a000000124a
 
 # KHR-GL46.packed_pixels.varied_rectangle.rgb32i_format_rg_integer
 #

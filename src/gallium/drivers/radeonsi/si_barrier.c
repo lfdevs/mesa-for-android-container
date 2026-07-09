@@ -693,12 +693,11 @@ static void si_memory_barrier(struct pipe_context *ctx, unsigned flags)
     * TEXTURE and IMAGE mean sampler buffers and image buffers, respectively.
     */
    if (flags & (PIPE_BARRIER_VERTEX_BUFFER | PIPE_BARRIER_SHADER_BUFFER | PIPE_BARRIER_TEXTURE |
-                PIPE_BARRIER_IMAGE | PIPE_BARRIER_STREAMOUT_BUFFER | PIPE_BARRIER_GLOBAL_BUFFER))
+                PIPE_BARRIER_IMAGE | PIPE_BARRIER_STREAMOUT_BUFFER))
       new_barriers |= SI_BARRIER_INV_VMEM;
 
    /* Unlike LLVM, ACO may use SMEM for SSBOs and global access. */
-   if (sctx->screen->use_aco &&
-       (flags & (PIPE_BARRIER_SHADER_BUFFER | PIPE_BARRIER_GLOBAL_BUFFER)))
+   if (sctx->screen->use_aco && (flags & PIPE_BARRIER_SHADER_BUFFER))
       new_barriers |= SI_BARRIER_INV_SMEM;
 
    if (flags & (PIPE_BARRIER_INDEX_BUFFER | PIPE_BARRIER_INDIRECT_BUFFER))

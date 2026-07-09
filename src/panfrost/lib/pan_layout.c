@@ -125,8 +125,8 @@ pan_image_layout_init(
 
       layout_constraints.offset_B += slayout->size_B;
 
-      /* Add a checksum region if necessary */
-      if (props->crc) {
+      /* Add a CRC buffer at level 0 if necessary */
+      if (l == 0 && props->crc) {
          init_slice_crc_info(arch, slayout, mip_extent_px.width,
                              mip_extent_px.height, layout_constraints.offset_B);
          layout_constraints.offset_B += slayout->crc.size_B;

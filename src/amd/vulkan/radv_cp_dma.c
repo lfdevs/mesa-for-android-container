@@ -14,6 +14,7 @@
 #include "radv_buffer.h"
 #include "radv_cs.h"
 #include "radv_shader.h"
+#include "radv_tracepoints.h"
 #include "sid.h"
 
 /* Set this if you want the 3D engine to wait until CP DMA is done.
@@ -224,11 +225,10 @@ radv_cp_dma_realign_engine(struct radv_cmd_buffer *cmd_buffer, unsigned size)
    uint32_t offset;
    unsigned dma_flags = 0;
    unsigned buf_size = SI_CPDMA_ALIGNMENT * 2;
-   void *ptr;
 
    assert(size < SI_CPDMA_ALIGNMENT);
 
-   radv_cmd_buffer_upload_alloc(cmd_buffer, buf_size, &offset, &ptr);
+   radv_cmd_buffer_upload_alloc(cmd_buffer, buf_size, &offset, NULL);
 
    va = radv_buffer_get_va(cmd_buffer->upload.upload_bo);
    va += offset;
@@ -277,6 +277,8 @@ radv_cp_dma_copy_memory(struct radv_cmd_buffer *cmd_buffer, uint64_t src_va, uin
    main_src_va = src_va + skipped_size;
    main_dest_va = dest_va + skipped_size;
 
+   radv_utrace_begin_cp_dma_copy_memory(cmd_buffer, size);
+
    while (size) {
       unsigned dma_flags = 0;
       unsigned byte_count = MIN2(size, cp_dma_max_byte_count(gfx_level));
@@ -316,6 +318,8 @@ radv_cp_dma_copy_memory(struct radv_cmd_buffer *cmd_buffer, uint64_t src_va, uin
    }
    if (realign_size)
       radv_cp_dma_realign_engine(cmd_buffer, realign_size);
+
+   radv_utrace_end_cp_dma_copy_memory(cmd_buffer);
 }
 
 void

@@ -885,7 +885,7 @@ init_compute_queue_state(struct anv_queue *queue)
       cm.EnableVariableRegisterSizeAllocation = !INTEL_DEBUG(DEBUG_NO_VRT);
 #endif
 #if GFX_VER >= 20
-      cm.AsyncComputeThreadLimit = ACTL_Max8;
+      cm.AsyncComputeThreadLimit = ACTL_Disabled;
       cm.ZPassAsyncComputeThreadLimit = ZPACTL_Max60;
       cm.ZAsyncThrottlesettings = ZATS_DefertoAsyncComputeThreadLimit;
       cm.AsyncComputeThreadLimitMask = 0x7;
@@ -894,7 +894,7 @@ init_compute_queue_state(struct anv_queue *queue)
       cm.Mask2 = 0xffff;
       cm.UAVCoherencyMode = FlushDataportL1;
 #else
-      cm.PixelAsyncComputeThreadLimit = PACTL_Max24;
+      cm.PixelAsyncComputeThreadLimit = PACTL_Disabled;
       cm.ZPassAsyncComputeThreadLimit = ZPACTL_Max60;
       cm.PixelAsyncComputeThreadLimitMask = 0x7;
       cm.ZPassAsyncComputeThreadLimitMask = 0x7;

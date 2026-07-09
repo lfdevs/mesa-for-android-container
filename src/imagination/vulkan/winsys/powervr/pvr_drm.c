@@ -341,7 +341,7 @@ pvr_drm_winsys_device_info_init(struct pvr_winsys *ws,
 
    /* TODO: When kernel support is added, fetch the actual core count. */
    if (PVR_HAS_FEATURE(dev_info, gpu_multicore_support))
-      mesa_logw("Core count fetching is unimplemented. Setting 1 for now.");
+      pvr_finishme("Core count fetching is unimplemented. Setting 1 for now.");
    runtime_info->core_count = 1;
 
    result = pvr_drm_get_gpu_info(drm_ws, &gpu_info);

@@ -26,8 +26,6 @@ endif
 
 files_vulkan_gfxstream = files_lib_vulkan_gfxstream + files_lib_vulkan_enc
 files_vulkan_gfxstream += gfxstream_vk_entrypoints
-files_vulkan_gfxstream += gfxstream_guest_vk_autogen
-files_vulkan_gfxstream += vulkan_gfxstream_h
 
 if with_platform_android or with_gfxstream_emulated_android
     files_vulkan_gfxstream += files_lib_vulkan_enc_android

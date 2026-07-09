@@ -401,8 +401,8 @@ compile_image_function(struct llvmpipe_context *ctx, struct lp_static_texture_st
    type.width = 32;           /* 32-bit float */
    type.length = MIN2(lp_native_vector_width / 32, 16); /* n*4 elements per vector */
 
-   struct lp_compute_shader_variant cs = { .gallivm = gallivm };
-   lp_jit_init_cs_types(&cs);
+   struct lp_compute_shader_variant_jit cs = { 0 };
+   lp_jit_init_cs_types(gallivm, &cs);
 
    params.type = type;
    params.target = local_texture.target;
@@ -560,8 +560,8 @@ compile_sample_function(struct llvmpipe_context *ctx, struct lp_texture_handle_s
    type.width = 32;           /* 32-bit float */
    type.length = MIN2(lp_native_vector_width / 32, 16); /* n*4 elements per vector */
 
-   struct lp_compute_shader_variant cs = { .gallivm = gallivm };
-   lp_jit_init_cs_types(&cs);
+   struct lp_compute_shader_variant_jit cs = { 0 };
+   lp_jit_init_cs_types(gallivm, &cs);
 
    LLVMTypeRef function_type = lp_build_sample_function_type(gallivm, sample_key);
    LLVMValueRef function = LLVMAddFunction(gallivm->module, "sample", function_type);
@@ -670,8 +670,8 @@ compile_size_function(struct llvmpipe_context *ctx, struct lp_texture_handle_sta
    type.width = 32;           /* 32-bit float */
    type.length = MIN2(lp_native_vector_width / 32, 16); /* n*4 elements per vector */
 
-   struct lp_compute_shader_variant cs = { .gallivm = gallivm };
-   lp_jit_init_cs_types(&cs);
+   struct lp_compute_shader_variant_jit cs = { 0 };
+   lp_jit_init_cs_types(gallivm, &cs);
 
    struct lp_sampler_size_query_params params = {
       .int_type = lp_int_type(type),
@@ -891,8 +891,8 @@ compile_jit_sample_function(struct llvmpipe_context *ctx, uint32_t sample_key)
    type.width = 32;           /* 32-bit float */
    type.length = MIN2(lp_native_vector_width / 32, 16); /* n*4 elements per vector */
 
-   struct lp_compute_shader_variant cs = { .gallivm = gallivm };
-   lp_jit_init_cs_types(&cs);
+   struct lp_compute_shader_variant_jit cs = { 0 };
+   lp_jit_init_cs_types(gallivm, &cs);
 
    LLVMTypeRef function_type = lp_build_sample_function_type(gallivm, sample_key);
    LLVMValueRef function = LLVMAddFunction(gallivm->module, "sample", function_type);
@@ -1012,8 +1012,8 @@ compile_jit_fetch_function(struct llvmpipe_context *ctx, uint32_t sample_key)
    type.width = 32;           /* 32-bit float */
    type.length = MIN2(lp_native_vector_width / 32, 16); /* n*4 elements per vector */
 
-   struct lp_compute_shader_variant cs = { .gallivm = gallivm };
-   lp_jit_init_cs_types(&cs);
+   struct lp_compute_shader_variant_jit cs = { 0 };
+   lp_jit_init_cs_types(gallivm, &cs);
 
    LLVMTypeRef function_type = lp_build_sample_function_type(gallivm, sample_key);
    LLVMValueRef function = LLVMAddFunction(gallivm->module, "fetch", function_type);
@@ -1131,8 +1131,8 @@ compile_jit_size_function(struct llvmpipe_context *ctx, bool samples)
    type.width = 32;           /* 32-bit float */
    type.length = MIN2(lp_native_vector_width / 32, 16); /* n*4 elements per vector */
 
-   struct lp_compute_shader_variant cs = { .gallivm = gallivm };
-   lp_jit_init_cs_types(&cs);
+   struct lp_compute_shader_variant_jit cs = { 0 };
+   lp_jit_init_cs_types(gallivm, &cs);
 
    struct lp_sampler_size_query_params params = {
       .samples_only = samples,

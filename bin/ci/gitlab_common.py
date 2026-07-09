@@ -14,6 +14,11 @@ import re
 import time
 from functools import cache
 from pathlib import Path
+from typing import Optional
+
+from gitlab import Gitlab
+from gitlab.v4.objects.projects import Project
+from gitlab.v4.objects.pipelines import ProjectPipeline
 
 GITLAB_URL = "https://gitlab.freedesktop.org"
 TOKEN_DIR = Path(os.environ.get("XDG_CONFIG_HOME", "")
@@ -53,14 +58,30 @@ def pretty_duration(seconds: int | float) -> str:
     return f"{seconds:0.0f}s"
 
 
-def get_gitlab_pipeline_from_url(gl, pipeline_url) -> tuple:
+def get_server_and_project_from_url(pipeline_url: str) -> tuple[str]:
+    """
+    Extract the string of the server and path that means the project with namespace
+    from a url that points to a pipeline.
+    :param pipeline_url: string with a url to a pipeline
+    :return: server_url, project_path
+    """
+    pattern = r"(https?://[^ /]+)/(.*)/-/pipelines/\d+"
+    _match = re.match(pattern, pipeline_url)
+    if not _match and len(_match.groups() != 2):
+        raise AssertionError(f"url {pipeline_url} doesn't follow the pattern {pattern}")
+    return _match.groups()
+
+
+def get_gitlab_pipeline_from_url(gl: Gitlab, pipeline_url: str, server_url: str = None) -> tuple[ProjectPipeline, Project]:
     """
     Extract the project and pipeline object from the url string
     :param gl: Gitlab object
     :param pipeline_url: string with a url to a pipeline
+    :param server_url: optional string with the server part
     :return: ProjectPipeline, Project objects
     """
-    pattern = rf"^{re.escape(GITLAB_URL)}/(.*)/-/pipelines/([0-9]+)$"
+    server_url = server_url if server_url else GITLAB_URL
+    pattern = rf"^{re.escape(server_url)}/(.*)/-/pipelines/([0-9]+)$"
     match = re.match(pattern, pipeline_url)
     if not match:
         raise AssertionError(f"url {pipeline_url} doesn't follow the pattern {pattern}")
@@ -70,7 +91,7 @@ def get_gitlab_pipeline_from_url(gl, pipeline_url) -> tuple:
     return pipe, cur_project
 
 
-def get_gitlab_project(glab, name: str):
+def get_gitlab_project(glab: Gitlab, name: str) -> Project:
     """Finds a specified gitlab project for given user"""
     if "/" in name:
         project_path = name
@@ -162,7 +183,11 @@ def read_token(token_arg: str | Path | None) -> str | None:
     return token
 
 
-def wait_for_pipeline(projects, sha: str, timeout=None):
+def wait_for_pipeline(
+    projects: set[Project],
+    sha: str,
+    timeout=None,
+) -> tuple[Optional[ProjectPipeline],Optional[Project]]:
     """await until pipeline appears in Gitlab"""
     project_names = [project.path_with_namespace for project in projects]
     print(f"⏲ for the pipeline to appear in {project_names}..", end="")

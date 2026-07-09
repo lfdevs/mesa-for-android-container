@@ -10,15 +10,20 @@
 #include <perfetto/trace/gpu/vulkan_memory_event.pbzero.h>
 #endif
 
-#include "util/u_process.h"
+#include "util/parson.h"
 #include "util/perf/u_perfetto_renderpass.h"
+#include "util/perf/u_trace.h"
+#include "util/ralloc.h"
+#include "util/u_process.h"
 
 #include "tu_buffer.h"
+#include "tu_cmd_buffer.h"
 #include "tu_device.h"
 #include "tu_image.h"
 #include "tu_queue.h"
 #include "tu_tracepoints.h"
 #include "tu_tracepoints_perfetto.h"
+#include "tu_trace_bin_layout.h"
 
 /* we can't include tu_knl.h and tu_device.h */
 
@@ -605,6 +610,215 @@ tu_perfetto_end_submit(struct tu_queue *queue,
    });
 
    return clocks;
+}
+
+struct tu_bin_layout_data *
+tu_bin_layout_data_create(const struct tu_cmd_buffer *cmd,
+                          uint32_t view_count,
+                          const VkOffset2D *fdm_offsets,
+                          uint32_t tile_count)
+{
+   if (!u_trace_enabled(&cmd->device->trace_context))
+      return NULL;
+
+   const struct vk_viewport_state *vp = &cmd->vk.dynamic_graphics_state.vp;
+   const struct tu_tiling_config *tiling = cmd->state.tiling;
+
+   struct tu_bin_layout_data *data = (struct tu_bin_layout_data *)
+      ralloc_size(NULL, sizeof(struct tu_bin_layout_data) +
+                        tile_count * sizeof(struct tu_tile_config));
+   if (!data) {
+      mesa_logw("Failed to allocate memory for Perfetto bin layout.");
+      return NULL;
+   }
+
+   data->fb_size = (VkExtent2D) {
+      .width = cmd->state.framebuffer->width,
+      .height = cmd->state.framebuffer->height
+   };
+
+   data->bin_size = tiling->tile0;
+
+   assert(vp->viewport_count <= MAX_VIEWPORTS);
+   data->viewport_count = vp->viewport_count;
+   for (uint32_t i = 0; i < data->viewport_count; i++) {
+      float height = vp->viewports[i].height;
+      float y = vp->viewports[i].y;
+
+      /* VK_KHR_maintenance1 allows negative height */
+      if (height < 0) {
+         y += height;
+         height = -height;
+      }
+
+      data->viewports[i] = (VkRect2D){
+         .offset = { .x = (int32_t)vp->viewports[i].x, .y = (int32_t)y },
+         .extent = {
+            .width = (uint32_t)vp->viewports[i].width,
+            .height = (uint32_t)height,
+         },
+      };
+   }
+
+   assert(vp->scissor_count <= MAX_SCISSORS);
+   data->scissor_count = vp->scissor_count;
+   for (uint32_t i = 0; i < data->scissor_count; i++)
+      data->scissors[i] = vp->scissors[i];
+
+   assert(view_count <= MAX_VIEWS);
+   data->view_count = view_count;
+   data->has_fdm_offsets = fdm_offsets && !cmd->state.rp.shared_viewport;
+   if (data->has_fdm_offsets)
+      for (uint32_t i = 0; i < view_count; i++)
+         data->fdm_offsets[i] = tu_bin_offset(fdm_offsets[i], tiling);
+
+   data->tile_size = tiling->tile0;
+   data->tile_count = 0;
+
+   data->valid = true;
+
+   return data;
+}
+
+static void
+json_append_extent2D(JSON_Object *parent, const char *name, VkExtent2D extent)
+{
+   JSON_Value *field_v = json_value_init_object();
+
+   JSON_Object *field = json_object(field_v);
+   json_object_set_number(field, "width", extent.width);
+   json_object_set_number(field, "height", extent.height);
+   json_object_set_value(parent, name, field_v);
+}
+
+static void
+json_append_arr_extent2D(JSON_Array *array, VkExtent2D extent)
+{
+   JSON_Value *field_v = json_value_init_object();
+
+   JSON_Object *field = json_object(field_v);
+   json_object_set_number(field, "width", extent.width);
+   json_object_set_number(field, "height", extent.height);
+   json_array_append_value(array, field_v);
+}
+
+static void
+json_append_arr_offset2D(JSON_Array *array, VkOffset2D offset)
+{
+   JSON_Value *field_v = json_value_init_object();
+
+   JSON_Object *field = json_object(field_v);
+   json_object_set_number(field, "x", offset.x);
+   json_object_set_number(field, "y", offset.y);
+   json_array_append_value(array, field_v);
+}
+
+static void
+json_append_arr_rect2D(JSON_Array *array, VkRect2D rect)
+{
+   JSON_Value *field_v = json_value_init_object();
+
+   JSON_Object *field = json_object(field_v);
+   json_object_set_number(field, "x", rect.offset.x);
+   json_object_set_number(field, "y", rect.offset.y);
+   json_object_set_number(field, "width", rect.extent.width);
+   json_object_set_number(field, "height", rect.extent.height);
+   json_array_append_value(array, field_v);
+}
+
+/* This serializes the bin layout and reuses its memory to store the string. */
+char *
+tu_bin_layout_data_json_serialize(enum u_trace_backend_type backend_type,
+                                  const struct tu_bin_layout_data *data)
+{
+   char *str;
+   const bool ret =
+      _tu_bin_layout_data_json_serialize_base(backend_type, data, &str);
+   if (ret)
+      return str;
+
+   const uint32_t version = 1;
+
+   JSON_Value *binInfo_v = json_value_init_object();
+   JSON_Object *binInfo = json_object(binInfo_v);
+
+   json_object_set_number(binInfo, "version", (double) version);
+
+   json_append_extent2D(binInfo, "fbSize", data->fb_size);
+   json_append_extent2D(binInfo, "binSize", data->bin_size);
+   json_object_set_number(binInfo, "viewCount", (double) data->view_count);
+
+   JSON_Value *viewports_v = json_value_init_array();
+   JSON_Array *viewports = json_array(viewports_v);
+   for (uint32_t i = 0; i < data->viewport_count; i++)
+      json_append_arr_rect2D(viewports, data->viewports[i]);
+   json_object_set_value(binInfo, "viewports", viewports_v);
+
+   JSON_Value *scissors_v = json_value_init_array();
+   JSON_Array *scissors = json_array(scissors_v);
+   for (uint32_t i = 0; i < data->scissor_count; i++)
+      json_append_arr_rect2D(scissors, data->scissors[i]);
+   json_object_set_value(binInfo, "scissors", scissors_v);
+
+   if (data->has_fdm_offsets) {
+      JSON_Value *perViewBinOffset_v = json_value_init_array();
+      JSON_Array *perViewBinOffset = json_array(perViewBinOffset_v);
+      for (uint32_t view = 0; view < data->view_count; view++)
+         json_append_arr_offset2D(perViewBinOffset, data->fdm_offsets[view]);
+      json_object_set_value(binInfo, "perViewBinOffset", perViewBinOffset_v);
+   }
+
+   JSON_Value *perViewFDMScale_v = json_value_init_array();
+   JSON_Array *perViewFDMScale = json_array(perViewFDMScale_v);
+
+   JSON_Value *perViewFDMScale_e_v[MAX_VIEWS];
+   JSON_Array *perViewFDMScale_e[MAX_VIEWS];
+   for (uint32_t i = 0; i < data->view_count; i++) {
+      perViewFDMScale_e_v[i] = json_value_init_array();
+      perViewFDMScale_e[i] = json_array(perViewFDMScale_e_v[i]);
+   }
+
+   JSON_Value *binCoordinates_v = json_value_init_array();
+   JSON_Array *binCoordinates = json_array(binCoordinates_v);
+
+   for (uint32_t i = 0; i < data->tile_count; i++) {
+      const struct tu_tile_config *tile = &data->tiles[i];
+
+      json_append_arr_rect2D(binCoordinates, (VkRect2D) {
+         .offset = {
+            .x = tile->pos.x * data->tile_size.width,
+            .y = tile->pos.y * data->tile_size.height,
+         },
+         .extent = {
+            .width = tile->sysmem_extent.width * data->tile_size.width,
+            .height = tile->sysmem_extent.height * data->tile_size.height,
+         },
+      });
+
+      for (uint32_t view = 0; view < data->view_count; view++) {
+         VkExtent2D fdm_scale;
+         if (!(tile->visible_views & BITFIELD_BIT(view)))
+            fdm_scale = (VkExtent2D) { 0, 0 };
+         else
+            fdm_scale = tile->frag_areas[view];
+
+         json_append_arr_extent2D(perViewFDMScale_e[view], fdm_scale);
+      }
+   }
+
+   json_object_set_value(binInfo, "binCoordinates", binCoordinates_v);
+
+   for (uint32_t view = 0; view < data->view_count; view++)
+      json_array_append_value(perViewFDMScale, perViewFDMScale_e_v[view]);
+   json_object_set_value(binInfo, "perViewFDMScale", perViewFDMScale_v);
+
+   size_t size = json_serialization_size(binInfo_v);
+   char *serialized = (char *) ralloc_size(NULL, size);
+
+   json_serialize_to_buffer(binInfo_v, serialized, size);
+   json_value_free(binInfo_v);
+
+   return serialized;
 }
 
 /*

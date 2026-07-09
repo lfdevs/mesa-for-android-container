@@ -461,7 +461,7 @@ pipe_loader_drm_get_driconf_by_name(const char *driver_name, unsigned *count)
             size += strlen(dd->driconf[i].value._string) + 1;
       }
       driconf = malloc(size);
-      memcpy(driconf, dd->driconf, size);
+      memcpy(driconf, dd->driconf, base_size);
 
       uint8_t *ptr = (void*)driconf;
       ptr += base_size;

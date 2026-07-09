@@ -3609,7 +3609,6 @@ get_tex_dest_type(nir_tex_instr *tex)
    case nir_type_bool32:
    case nir_type_uint32:
       return TYPE_U32;
-   case nir_type_bool16:
    case nir_type_uint16:
       return TYPE_U16;
    case nir_type_invalid:

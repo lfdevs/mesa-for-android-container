@@ -127,6 +127,8 @@ amd_common_files = files(
   'ac_shadowed_regs.h',
   'ac_spm.c',
   'ac_spm.h',
+  'ac_spm_config.c',
+  'ac_spm_config.h',
   'ac_sqtt.c',
   'ac_sqtt.h',
   'ac_rgp.c',

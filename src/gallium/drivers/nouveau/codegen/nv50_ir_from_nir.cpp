@@ -43,7 +43,7 @@ namespace {
 
 using namespace nv50_ir;
 
-int
+unsigned
 type_size(const struct glsl_type *type, bool bindless)
 {
    return glsl_count_attribute_slots(type, false);
@@ -509,18 +509,6 @@ Converter::getOperation(nir_op op)
       return OP_RSQ;
    case nir_op_fsat:
       return OP_SAT;
-   case nir_op_ieq8:
-   case nir_op_ige8:
-   case nir_op_uge8:
-   case nir_op_ilt8:
-   case nir_op_ult8:
-   case nir_op_ine8:
-   case nir_op_ieq16:
-   case nir_op_ige16:
-   case nir_op_uge16:
-   case nir_op_ilt16:
-   case nir_op_ult16:
-   case nir_op_ine16:
    case nir_op_feq32:
    case nir_op_ieq32:
    case nir_op_fge32:
@@ -702,31 +690,19 @@ CondCode
 Converter::getCondCode(nir_op op)
 {
    switch (op) {
-   case nir_op_ieq8:
-   case nir_op_ieq16:
    case nir_op_feq32:
    case nir_op_ieq32:
       return CC_EQ;
-   case nir_op_ige8:
-   case nir_op_uge8:
-   case nir_op_ige16:
-   case nir_op_uge16:
    case nir_op_fge32:
    case nir_op_ige32:
    case nir_op_uge32:
       return CC_GE;
-   case nir_op_ilt8:
-   case nir_op_ult8:
-   case nir_op_ilt16:
-   case nir_op_ult16:
    case nir_op_flt32:
    case nir_op_ilt32:
    case nir_op_ult32:
       return CC_LT;
    case nir_op_fneu32:
       return CC_NEU;
-   case nir_op_ine8:
-   case nir_op_ine16:
    case nir_op_ine32:
       return CC_NE;
    default:
@@ -2733,18 +2709,6 @@ Converter::visit(nir_alu_instr *insn)
       break;
    }
    // compare instructions
-   case nir_op_ieq8:
-   case nir_op_ige8:
-   case nir_op_uge8:
-   case nir_op_ilt8:
-   case nir_op_ult8:
-   case nir_op_ine8:
-   case nir_op_ieq16:
-   case nir_op_ige16:
-   case nir_op_uge16:
-   case nir_op_ilt16:
-   case nir_op_ult16:
-   case nir_op_ine16:
    case nir_op_feq32:
    case nir_op_ieq32:
    case nir_op_fge32:
@@ -3319,18 +3283,6 @@ Converter::lowerBitSizeCB(const nir_instr *instr, void *data)
     * enum operation of some of the nir opcodes isn't distinct (e.g. depends
     * on the data type).
     */
-   case nir_op_ieq8:
-   case nir_op_ige8:
-   case nir_op_uge8:
-   case nir_op_ilt8:
-   case nir_op_ult8:
-   case nir_op_ine8:
-   case nir_op_ieq16:
-   case nir_op_ige16:
-   case nir_op_uge16:
-   case nir_op_ilt16:
-   case nir_op_ult16:
-   case nir_op_ine16:
    case nir_op_feq32:
    case nir_op_ieq32:
    case nir_op_fge32:

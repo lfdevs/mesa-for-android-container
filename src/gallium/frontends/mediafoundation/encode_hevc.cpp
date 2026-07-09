@@ -764,7 +764,7 @@ CDX12EncHMFT::GetCodecPrivateData( LPBYTE pSPSPPSData, DWORD dwSPSPPSDataLen, LP
    unsigned buf_size = dwSPSPPSDataLen;
    const uint32_t intra_period = m_uiGopSize;
    const uint32_t ip_period = m_uiBFrameCount + 1;
-   const uint8_t log2_max_pic_order_cnt_lsb_minus4 = 4;
+   const uint8_t log2_max_pic_order_cnt_lsb_minus4 = HEVC_LOG2_MAX_PIC_ORDER_CNT_LSB_MINUS4;
 
    pipe_h265_enc_picture_desc h265_pic_desc = {};
 

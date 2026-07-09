@@ -285,7 +285,8 @@ check_linear_interp_mask_b(struct lp_fragment_shader_variant *variant)
 
 
 void
-lp_linear_check_variant(struct lp_fragment_shader_variant *variant)
+lp_linear_check_variant(struct lp_fragment_shader_variant *variant,
+                        const struct lp_fragment_shader_variant_jit *jit)
 {
    const struct lp_fragment_shader_variant_key *key = &variant->key;
    const struct lp_fragment_shader *shader = variant->shader;
@@ -334,7 +335,7 @@ lp_linear_check_variant(struct lp_fragment_shader_variant *variant)
 
    /* Check shader.  May not have been jitted.
     */
-   if (variant->linear_function == NULL) {
+   if (jit->linear_function == NULL) {
       if (LP_DEBUG & DEBUG_LINEAR)
          debug_printf("  -- no linear shader\n");
       goto fail;
@@ -372,7 +373,8 @@ fail:
 
 #else
 void
-lp_linear_check_variant(struct lp_fragment_shader_variant *variant)
+lp_linear_check_variant(struct lp_fragment_shader_variant *variant,
+                        const struct lp_fragment_shader_variant_jit *jit)
 {
 }
 #endif

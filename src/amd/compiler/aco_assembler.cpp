@@ -1125,8 +1125,12 @@ emit_vop3_instruction(asm_context& ctx, std::vector<uint32_t>& out, const Instru
    else if (instr->opcode == aco_opcode::v_swap_b16)
       num_ops = 1;
 
-   for (unsigned i = 0; i < num_ops; i++)
-      encoding |= reg(ctx, instr->operands[i]) << (i * 9);
+   /* RDNA: Set unused operands to inline constant 0. */
+   unsigned encoded_ops = ctx.gfx_level >= GFX10 ? 3 : num_ops;
+   for (unsigned i = 0; i < encoded_ops; i++) {
+      Operand op = i < num_ops ? instr->operands[i] : Operand::zero();
+      encoding |= reg(ctx, op) << (i * 9);
+   }
    encoding |= vop3.omod << 27;
    for (unsigned i = 0; i < 3; i++)
       encoding |= vop3.neg[i] << (29 + i);
@@ -1157,8 +1161,13 @@ emit_vop3p_instruction(asm_context& ctx, std::vector<uint32_t>& out, const Instr
    encoding |= reg(ctx, instr->definitions[0], 8);
    out.push_back(encoding);
    encoding = 0;
-   for (unsigned i = 0; i < instr->operands.size(); i++)
-      encoding |= reg(ctx, instr->operands[i]) << (i * 9);
+
+   /* RDNA: Set unused operands to inline constant 0. */
+   unsigned encoded_ops = ctx.gfx_level >= GFX10 ? 3 : instr->operands.size();
+   for (unsigned i = 0; i < encoded_ops; i++) {
+      Operand op = i < instr->operands.size() ? instr->operands[i] : Operand::zero();
+      encoding |= reg(ctx, op) << (i * 9);
+   }
    encoding |= (vop3.opsel_hi & 0x3) << 27;
    for (unsigned i = 0; i < 3; i++)
       encoding |= vop3.neg_lo[i] << (29 + i);

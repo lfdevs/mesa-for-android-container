@@ -1,0 +1,8 @@
+# uprev Piglit in Mesa
+spec@arb_texture_cube_map@copyteximage cube samples=2,Fail
+spec@arb_texture_cube_map@copyteximage cube samples=4,Fail
+spec@arb_texture_cube_map@copyteximage cube samples=6,Fail
+spec@arb_texture_rectangle@copyteximage rect samples=2,Fail
+spec@arb_texture_rectangle@copyteximage rect samples=4,Fail
+spec@arb_texture_rectangle@copyteximage rect samples=6,Fail
+

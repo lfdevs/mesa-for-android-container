@@ -436,10 +436,9 @@ enum pipe_flush_flags
 #define PIPE_BARRIER_IMAGE             (1 << 8)
 #define PIPE_BARRIER_FRAMEBUFFER       (1 << 9)
 #define PIPE_BARRIER_STREAMOUT_BUFFER  (1 << 10)
-#define PIPE_BARRIER_GLOBAL_BUFFER     (1 << 11)
-#define PIPE_BARRIER_UPDATE_BUFFER     (1 << 12)
-#define PIPE_BARRIER_UPDATE_TEXTURE    (1 << 13)
-#define PIPE_BARRIER_ALL               ((1 << 14) - 1)
+#define PIPE_BARRIER_UPDATE_BUFFER     (1 << 11)
+#define PIPE_BARRIER_UPDATE_TEXTURE    (1 << 12)
+#define PIPE_BARRIER_ALL               ((1 << 13) - 1)
 
 #define PIPE_BARRIER_UPDATE \
    (PIPE_BARRIER_UPDATE_BUFFER | PIPE_BARRIER_UPDATE_TEXTURE)
@@ -927,6 +926,7 @@ struct pipe_caps {
    bool texture_float_linear;
    bool texture_half_float_linear;
    bool depth_bounds_test;
+   bool native_fp32_depth;
    bool texture_query_samples;
    bool force_persample_interp;
    bool shareable_shaders;

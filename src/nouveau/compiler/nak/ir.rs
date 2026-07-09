@@ -8172,16 +8172,6 @@ const _: () = {
     debug_assert!(size_of::<Op>() == 16);
 };
 
-// The DisplayOp constraint exists to keep the type system from recursing
-impl<T: DisplayOp> From<T> for Op
-where
-    Box<T>: Into<Op>,
-{
-    fn from(op: T) -> Self {
-        Box::new(op).into()
-    }
-}
-
 impl Op {
     pub fn is_branch(&self) -> bool {
         matches!(

@@ -42,8 +42,9 @@ struct hw_runner_invocation_info {
    uint64_t data_size_B;
    uint32_t data_stride_B;
 
-   uint16_t register_count;
-   uint16_t invocations;
+   uint8_t register_count;
+   uint64_t register_preload;
+   uint32_t invocations;
 };
 
 struct hw_runner_layout_info {

@@ -44,6 +44,8 @@
 #include "pan_util.h"
 #include "pan_desc.h"
 #include "pan_trace.h"
+#include "panfrost_tracepoints.h"
+#include "panfrost_perfetto.h"
 
 /* JOBX() is used to select the job backend helpers to call from generic
  * functions. */
@@ -1804,13 +1806,14 @@ panfrost_create_sampler_view_bo(struct panfrost_sampler_view *so,
 
    unsigned first_level = so->base.u.tex.first_level;
    unsigned last_level = so->base.u.tex.last_level;
-   unsigned first_layer = so->base.u.tex.first_layer;
-   unsigned last_layer = so->base.u.tex.last_layer;
+   unsigned first_layer_or_z_slice = so->base.u.tex.first_layer;
+   unsigned last_layer_or_z_slice = so->base.u.tex.last_layer;
 
    if (so->base.target == PIPE_TEXTURE_3D) {
-      first_layer /= prsrc->image.props.extent_px.depth;
-      last_layer /= prsrc->image.props.extent_px.depth;
-      assert(!first_layer && !last_layer);
+      unsigned depth = prsrc->image.props.extent_px.depth;
+      assert(first_layer_or_z_slice < depth && last_layer_or_z_slice < depth);
+      first_layer_or_z_slice = 0;
+      last_layer_or_z_slice = depth - 1;
    }
 
    struct pan_image_view iview = {
@@ -1818,8 +1821,8 @@ panfrost_create_sampler_view_bo(struct panfrost_sampler_view *so,
       .dim = type,
       .first_level = first_level,
       .last_level = last_level,
-      .first_layer = first_layer,
-      .last_layer = last_layer,
+      .first_layer_or_z_slice = first_layer_or_z_slice,
+      .last_layer_or_z_slice = last_layer_or_z_slice,
       .swizzle =
          {
             so->base.swizzle_r,
@@ -3476,6 +3479,12 @@ panfrost_single_draw_direct(struct panfrost_batch *batch,
                                     info->mode == MESA_PRIM_POINTS);
 #endif
 
+#if PAN_ARCH >= 10
+   if (batch->draw_count == 0)
+      trace_panfrost_start_vertex_tiler(&batch->trace,
+                               &(struct panfrost_trace_cs_info){ .batch = batch });
+#endif
+
    if (vertex_count > 0)
       JOBX(launch_draw)(batch, info, drawid_offset, draw, vertex_count);
    batch->draw_count++;
@@ -3612,6 +3621,12 @@ panfrost_draw_indirect(struct pipe_context *pipe,
    if (panfrost_batch_skip_rasterization(batch))
       return;
 
+#if PAN_ARCH >= 10
+   if (batch->draw_count == 0)
+      trace_panfrost_start_vertex_tiler(&batch->trace,
+                               &(struct panfrost_trace_cs_info){ .batch = batch });
+#endif
+
    JOBX(launch_draw_indirect)(batch, &tmp_info, drawid_offset, indirect);
    batch->draw_count++;
 }
@@ -3726,8 +3741,39 @@ panfrost_launch_grid_on_batch(struct pipe_context *pipe,
       panfrost_batch_read_rsrc(batch, pan_resource(info->indirect), MESA_SHADER_COMPUTE);
 
    /* launch it */
+#if PAN_ARCH >= 10
+   struct panfrost_trace_cs_info start_tcs = { .batch = batch };
+   if (info->indirect)
+      trace_panfrost_start_compute_indirect(&batch->trace, &start_tcs);
+   else
+      trace_panfrost_start_compute(&batch->trace, &start_tcs);
+#endif
+
    JOBX(launch_grid)(batch, info);
    batch->compute_count++;
+
+   /* On CSF, defer the end timestamp until the compute scoreboard slot
+    * signals.
+    */
+#if PAN_ARCH >= 10
+   const uint16_t compute_end_wait = BITFIELD_BIT(PANFROST_SB_COMPUTE);
+   struct panfrost_trace_cs_info end_tcs = { .batch = batch,
+                                             .sb_wait_mask = compute_end_wait };
+   if (info->indirect) {
+      const uint64_t base = pan_resource(info->indirect)->plane.base +
+                            info->indirect_offset;
+      trace_panfrost_end_compute_indirect(&batch->trace, &end_tcs,
+         info->block[0], info->block[1], info->block[2],
+         (struct u_trace_address){ .bo = NULL, .offset = base },
+         (struct u_trace_address){ .bo = NULL, .offset = base + sizeof(uint32_t) },
+         (struct u_trace_address){ .bo = NULL, .offset = base + 2 * sizeof(uint32_t) });
+   } else {
+      trace_panfrost_end_compute(&batch->trace, &end_tcs,
+         info->block[0], info->block[1], info->block[2],
+         info->grid[0], info->grid[1], info->grid[2]);
+   }
+#endif
+
    batch->tls.gpu = saved_tls;
 }
 
@@ -4635,9 +4681,51 @@ submit_batch(struct panfrost_batch *batch, struct pan_fb_info *fb)
 
    emit_tls(batch);
 
+#if PAN_ARCH >= 10
+   struct panfrost_context *ctx = batch->ctx;
+
+   if (batch->draw_count > 0)
+      trace_panfrost_end_vertex_tiler(&batch->trace,
+                             &(struct panfrost_trace_cs_info){ .batch = batch,
+                                                               .sb_wait_mask = BITFIELD_BIT(PANFROST_SB_RENDER) },
+                             batch->draw_count);
+
+#ifdef HAVE_PERFETTO
+   panfrost_perfetto_submit(ctx);
+#endif
+#endif
+
    if (panfrost_has_fragment_job(batch)) {
+#if PAN_ARCH >= 10
+      struct pipe_framebuffer_state *pfb = &batch->key;
+      uint32_t submit_id = ++ctx->submit_count;
+      enum pipe_format cbuf0_fmt = pfb->nr_cbufs > 0 && pfb->cbufs[0].texture
+                                      ? pfb->cbufs[0].format
+                                      : PIPE_FORMAT_NONE;
+      enum pipe_format zs_fmt = pfb->zsbuf.texture ? pfb->zsbuf.format
+                                                    : PIPE_FORMAT_NONE;
+      uint16_t width = pfb->width;
+      uint16_t height = pfb->height;
+      uint8_t mrts = pfb->nr_cbufs;
+      uint8_t samples = MAX2(pfb->samples, 1);
+
+      struct panfrost_trace_cs_info _tcs = { .batch = batch };
+      /* Defer start_fragment until tiling completes (using at that moment the
+       * render scoreboard slot), matching end_vertex_tiler, so the two
+       * stages don't overlap in Perfetto.
+       */
+      trace_panfrost_start_fragment(&batch->trace,
+                           &(struct panfrost_trace_cs_info){ .batch = batch,
+                                                             .sb_wait_mask = BITFIELD_BIT(PANFROST_SB_RENDER) });
+#endif
+
       emit_fbd(batch, fb);
       emit_fragment_job(batch, fb);
+
+#if PAN_ARCH >= 10
+      trace_panfrost_end_fragment(&batch->trace, &_tcs, submit_id, cbuf0_fmt,
+                         zs_fmt, width, height, mrts, samples);
+#endif
    }
 
    return JOBX(submit_batch)(batch);
@@ -4650,7 +4738,35 @@ emit_write_timestamp(struct panfrost_batch *batch,
    batch->need_job_req_cycle_count = true;
    batch->has_time_query = true;
 
-   JOBX(emit_write_timestamp)(batch, dst, offset);
+#if PAN_ARCH >= 10
+   GENX(csf_emit_write_timestamp)(batch, dst, offset, 0);
+#else
+   GENX(jm_emit_write_timestamp)(batch, dst, offset);
+#endif
+}
+
+static void
+emit_trace_ts(struct panfrost_batch *batch,
+              struct panfrost_resource *dst, uint64_t offset,
+              uint16_t sb_wait_mask)
+{
+#if PAN_ARCH >= 10
+   GENX(csf_emit_write_timestamp)(batch, dst, offset, sb_wait_mask);
+#else
+   UNREACHABLE("u_trace and Perfetto render stages only supported on CSF");
+#endif
+}
+
+static void
+emit_trace_copy(struct panfrost_batch *batch,
+                struct panfrost_resource *dst, uint64_t dst_offset_B,
+                uint64_t src_gpu_addr, uint32_t size_B)
+{
+#if PAN_ARCH >= 10
+   GENX(csf_emit_copy_data)(batch, dst, dst_offset_B, src_gpu_addr, size_B);
+#else
+   UNREACHABLE("GPU-side trace copy only supported on CSF (arch >= 10)");
+#endif
 }
 
 static uint64_t
@@ -4683,6 +4799,10 @@ GENX(panfrost_cmdstream_screen_init)(struct panfrost_screen *screen)
    screen->vtbl.afbc_pack = panfrost_afbc_pack;
    screen->vtbl.mtk_detile = panfrost_mtk_detile_compute;
    screen->vtbl.emit_write_timestamp = emit_write_timestamp;
+   screen->vtbl.emit_trace_ts = emit_trace_ts;
+#if PAN_ARCH >= 10
+   screen->vtbl.emit_trace_copy = emit_trace_copy;
+#endif
    screen->vtbl.select_tile_size = GENX(pan_select_tile_size);
    screen->vtbl.get_conv_desc = get_conv_desc;
 

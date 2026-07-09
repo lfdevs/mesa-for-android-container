@@ -178,6 +178,53 @@ pco_ref_nir_alu_src_t(const nir_alu_instr *alu, unsigned src, trans_ctx *tctx)
 }
 
 /**
+ * \brief Get caching mode for load intrinsic
+ *
+ * \param[in] intr Intrinsic instruction.
+ * \return The load cache mode
+ */
+static enum pco_mcu_cache_mode_ld get_ld_cache_mode(nir_intrinsic_instr *intr)
+{
+   if (!nir_intrinsic_has_access(intr))
+      return PCO_MCU_CACHE_MODE_LD_NORMAL;
+
+   enum gl_access_qualifier access_qual = nir_intrinsic_access(intr);
+
+   if (access_qual & ACCESS_COHERENT || access_qual & ACCESS_VOLATILE)
+      return PCO_MCU_CACHE_MODE_LD_BYPASS;
+
+   return PCO_MCU_CACHE_MODE_LD_NORMAL;
+}
+
+/**
+ * \brief Get caching mode for store intrinsic
+ *
+ * \param[in] intr Intrinsic instruction.
+ * \return The store cache mode
+ */
+static enum pco_mcu_cache_mode_st get_st_cache_mode(nir_intrinsic_instr *intr,
+                                                    trans_ctx *tctx)
+{
+   if (!nir_intrinsic_has_access(intr))
+      return PCO_MCU_CACHE_MODE_ST_WRITE_THROUGH;
+
+   enum gl_access_qualifier access_qual = nir_intrinsic_access(intr);
+
+   if (access_qual & ACCESS_COHERENT || access_qual & ACCESS_VOLATILE)
+      return PCO_MCU_CACHE_MODE_ST_WRITE_THROUGH;
+
+   /* Additional check needed to safely use lazy write back caching mode
+    * when slc_mcu_cache_controls feature is available. Currently the
+    * infrastructure is not in place to perform the check so play safe and
+    * use non-lazy write back cache mode instead.
+    */
+   if (PVR_HAS_FEATURE(tctx->pco_ctx->dev_info, slc_mcu_cache_controls))
+      return PCO_MCU_CACHE_MODE_ST_WRITE_BACK;
+
+   return PCO_MCU_CACHE_MODE_ST_LAZY_WRITE_BACK;
+}
+
+/**
  * \brief Translates a NIR vs load_input intrinsic into PCO.
  *
  * \param[in,out] tctx Translation context.
@@ -672,7 +719,8 @@ trans_store_output_fs(trans_ctx *tctx, nir_intrinsic_instr *intr, pco_ref src)
                        pco_ref_imm8(chans),
                        addr_data,
                        cov_mask,
-                       .olchk = tctx->olchk);
+                       .olchk = tctx->olchk,
+                       .mcu_cache_mode_st = get_st_cache_mode(intr, tctx));
 }
 
 static pco_instr *trans_flush_tile_buffer(trans_ctx *tctx,
@@ -717,7 +765,12 @@ static pco_instr *trans_flush_tile_buffer(trans_ctx *tctx,
    pco_ref dest = pco_ref_hwreg(0, PCO_REG_CLASS_PIXOUT);
    dest = pco_ref_hwreg_idx_from(idx_reg_num, dest);
 
-   return pco_ld_regbl(&tctx->b, dest, pco_ref_drc(PCO_DRC_0), burst_len, addr);
+   return pco_ld_regbl(&tctx->b,
+                       dest,
+                       pco_ref_drc(PCO_DRC_0),
+                       burst_len,
+                       addr,
+                       .mcu_cache_mode_ld = get_ld_cache_mode(intr));
 }
 
 static unsigned fetch_resource_base_reg(const pco_common_data *common,
@@ -866,7 +919,8 @@ trans_load_output_fs(trans_ctx *tctx, nir_intrinsic_instr *intr, pco_ref dest)
                  dest,
                  pco_ref_drc(PCO_DRC_0),
                  pco_ref_imm8(chans),
-                 addr);
+                 addr,
+                 .mcu_cache_mode_ld = get_ld_cache_mode(intr));
 }
 
 static pco_instr *trans_load_common_store(trans_ctx *tctx,
@@ -1186,7 +1240,9 @@ static pco_instr *trans_load_buffer(trans_ctx *tctx,
                  dest,
                  pco_ref_drc(PCO_DRC_0),
                  pco_ref_imm8(chans),
-                 addr);
+                 addr,
+                 .mcu_cache_mode_ld = get_ld_cache_mode(intr)
+               );
 }
 
 static pco_instr *trans_load_global(trans_ctx *tctx,
@@ -1202,11 +1258,14 @@ static pco_instr *trans_load_global(trans_ctx *tctx,
                  dest,
                  pco_ref_drc(PCO_DRC_0),
                  pco_ref_imm8(chans),
-                 addr);
+                 addr,
+                 .mcu_cache_mode_ld = get_ld_cache_mode(intr));
 }
 
-static pco_instr *
-trans_store_global(trans_ctx *tctx, pco_ref data_src, pco_ref addr_src)
+static pco_instr *trans_store_global(trans_ctx *tctx,
+                                     nir_intrinsic_instr *intr,
+                                     pco_ref data_src,
+                                     pco_ref addr_src)
 {
    unsigned chans = pco_ref_get_chans(data_src);
    unsigned bits = pco_ref_get_bits(data_src);
@@ -1232,7 +1291,8 @@ trans_store_global(trans_ctx *tctx, pco_ref data_src, pco_ref addr_src)
                       pco_ref_drc(PCO_DRC_0),
                       pco_ref_imm8(chans),
                       addr_data,
-                      pco_ref_null());
+                      pco_ref_null(),
+                      .mcu_cache_mode_st = get_st_cache_mode(intr, tctx));
 
    default:
       break;
@@ -1328,7 +1388,9 @@ static pco_instr *trans_store_buffer(trans_ctx *tctx,
                       pco_ref_drc(PCO_DRC_0),
                       pco_ref_imm8(chans),
                       addr_data,
-                      pco_ref_null());
+                      pco_ref_null(),
+                      .mcu_cache_mode_st = get_st_cache_mode(intr, tctx)
+                  );
 
    default:
       break;
@@ -1440,6 +1502,7 @@ static pco_instr *trans_global_atomic_buffer(trans_ctx *tctx,
 }
 
 static pco_instr *trans_scratch(trans_ctx *tctx,
+                                nir_intrinsic_instr *intr,
                                 pco_ref dest,
                                 pco_ref offset_src,
                                 pco_ref data_src)
@@ -1496,7 +1559,8 @@ static pco_instr *trans_scratch(trans_ctx *tctx,
                     dest,
                     pco_ref_drc(PCO_DRC_0),
                     pco_ref_imm8(chans),
-                    addr);
+                    addr,
+                    .mcu_cache_mode_ld = get_ld_cache_mode(intr));
    }
 
    unsigned chans = pco_ref_get_chans(data_src);
@@ -1515,7 +1579,8 @@ static pco_instr *trans_scratch(trans_ctx *tctx,
                    pco_ref_drc(PCO_DRC_0),
                    pco_ref_imm8(chans),
                    addr_data,
-                   pco_ref_null());
+                   pco_ref_null(),
+                   .mcu_cache_mode_st = get_st_cache_mode(intr, tctx));
 }
 
 static inline enum pco_reg_class sys_val_to_reg_class(gl_system_value sys_val,
@@ -1746,27 +1811,41 @@ static pco_instr *lower_smp(trans_ctx *tctx,
 
    pco_ref shared_lod = pco_ref_null();
 
-   pco_instr *smp = pco_smp(&tctx->b,
-                            *dest,
-                            pco_ref_drc(PCO_DRC_0),
-                            tex_state,
-                            data,
-                            smp_state,
-                            shared_lod,
-                            pco_ref_imm8(chans),
-                            .dim = smp_flags.dim,
-                            .proj = smp_flags.proj,
-                            .fcnorm = smp_flags.fcnorm,
-                            .nncoords = smp_flags.nncoords,
-                            .lod_mode = smp_flags.lod_mode,
-                            .pplod = smp_flags.pplod,
-                            .tao = smp_flags.tao,
-                            .soo = smp_flags.soo,
-                            .sno = smp_flags.sno,
-                            .sb_mode = sb_mode,
-                            .array = smp_flags.array,
-                            .integer = smp_flags.integer,
-                            .wrt = smp_flags.wrt);
+   pco_func *func = pco_cursor_func(tctx->b.cursor);
+
+   pco_instr *smp = pco_instr_create(func, !smp_flags.wrt, 6);
+
+   smp->op = smp_flags.wrt ? PCO_OP_SMP_WRT : PCO_OP_SMP;
+
+   if (!smp_flags.wrt)
+      smp->dest[0] = *dest;
+
+   smp->src[0] = pco_ref_drc(PCO_DRC_0);
+   smp->src[1] = tex_state;
+   smp->src[2] = data;
+   smp->src[3] = smp_state;
+   smp->src[4] = shared_lod;
+   smp->src[5] = pco_ref_imm8(chans);
+
+   pco_instr_set_dim(smp, smp_flags.dim);
+   pco_instr_set_proj(smp, smp_flags.proj);
+   pco_instr_set_fcnorm(smp, smp_flags.fcnorm);
+   pco_instr_set_nncoords(smp, smp_flags.nncoords);
+   pco_instr_set_lod_mode(smp, smp_flags.lod_mode);
+   pco_instr_set_pplod(smp, smp_flags.pplod);
+   pco_instr_set_tao(smp, smp_flags.tao);
+   pco_instr_set_soo(smp, smp_flags.soo);
+   pco_instr_set_sno(smp, smp_flags.sno);
+   pco_instr_set_sb_mode(smp, sb_mode);
+   pco_instr_set_array(smp, smp_flags.array);
+   pco_instr_set_integer(smp, smp_flags.integer);
+
+   if (smp_flags.wrt)
+      pco_instr_set_mcu_cache_mode_st(smp, get_st_cache_mode(intr, tctx));
+   else
+      pco_instr_set_mcu_cache_mode_ld(smp, get_ld_cache_mode(intr));
+
+   pco_builder_insert_instr(&tctx->b, smp);
 
    return smp;
 }
@@ -2119,7 +2198,7 @@ static pco_instr *trans_intr(trans_ctx *tctx, nir_intrinsic_instr *intr)
       break;
 
    case nir_intrinsic_store_global_2x32:
-      instr = trans_store_global(tctx, src[0], src[1]);
+      instr = trans_store_global(tctx, intr, src[0], src[1]);
       break;
 
    case nir_intrinsic_get_ubo_size:
@@ -2190,11 +2269,11 @@ static pco_instr *trans_intr(trans_ctx *tctx, nir_intrinsic_instr *intr)
    }
 
    case nir_intrinsic_load_scratch:
-      instr = trans_scratch(tctx, dest, src[0], src[1]);
+      instr = trans_scratch(tctx, intr, dest, src[0], src[1]);
       break;
 
    case nir_intrinsic_store_scratch:
-      instr = trans_scratch(tctx, dest, src[1], src[0]);
+      instr = trans_scratch(tctx, intr, dest, src[1], src[0]);
       break;
 
    case nir_intrinsic_dma_ld_pco: {
@@ -2204,7 +2283,8 @@ static pco_instr *trans_intr(trans_ctx *tctx, nir_intrinsic_instr *intr)
                      dest,
                      pco_ref_drc(PCO_DRC_0),
                      pco_ref_imm8(chans),
-                     src[0]);
+                     src[0],
+                     .mcu_cache_mode_ld = get_ld_cache_mode(intr));
 
       break;
    }
@@ -2223,7 +2303,8 @@ static pco_instr *trans_intr(trans_ctx *tctx, nir_intrinsic_instr *intr)
                        pco_ref_imm8(chans),
                        src[0],
                        pco_ref_null(),
-                       .idf = !!flags);
+                       .idf = !!flags,
+                       .mcu_cache_mode_st = get_st_cache_mode(intr, tctx));
 
       break;
    }
@@ -2242,8 +2323,12 @@ static pco_instr *trans_intr(trans_ctx *tctx, nir_intrinsic_instr *intr)
       pco_ref dest = pco_ref_hwreg(0, PCO_REG_CLASS_SHARED);
       dest = pco_ref_hwreg_idx_from(idx_reg_num, dest);
 
-      instr =
-         pco_ld_regbl(&tctx->b, dest, pco_ref_drc(PCO_DRC_0), burst_len, addr);
+      instr = pco_ld_regbl(&tctx->b,
+                           dest,
+                           pco_ref_drc(PCO_DRC_0),
+                           burst_len,
+                           addr,
+                           .mcu_cache_mode_ld = get_ld_cache_mode(intr));
 
       break;
    }
@@ -2263,13 +2348,15 @@ static pco_instr *trans_intr(trans_ctx *tctx, nir_intrinsic_instr *intr)
       pco_ref data = pco_ref_hwreg(0, PCO_REG_CLASS_SHARED);
       data = pco_ref_hwreg_idx_from(idx_reg_num, data);
 
-      instr = pco_st32_regbl(&tctx->b,
-                             data,
-                             pco_ref_drc(PCO_DRC_0),
-                             burst_len,
-                             addr,
-                             pco_ref_null(),
-                             .idf = !!flags);
+      instr =
+         pco_st32_regbl(&tctx->b,
+                        data,
+                        pco_ref_drc(PCO_DRC_0),
+                        burst_len,
+                        addr,
+                        pco_ref_null(),
+                        .idf = !!flags,
+                        .mcu_cache_mode_st = get_st_cache_mode(intr, tctx));
 
       break;
    }
@@ -2288,7 +2375,8 @@ static pco_instr *trans_intr(trans_ctx *tctx, nir_intrinsic_instr *intr)
                            pco_ref_imm8(chans),
                            src[0],
                            src[1],
-                           .olchk = tctx->olchk);
+                           .olchk = tctx->olchk,
+                           .mcu_cache_mode_st = get_st_cache_mode(intr, tctx));
 
       break;
    }

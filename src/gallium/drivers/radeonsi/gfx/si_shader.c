@@ -1172,7 +1172,7 @@ static void si_postprocess_nir(struct si_nir_shader_ctx *ctx)
 
    NIR_PASS(progress, nir, si_nir_lower_abi, shader, &ctx->args);
    /* Global access lowering must be called after lowering ABI which emits regular load_global intrinsics. */
-   NIR_PASS(progress, nir, ac_nir_lower_global_access);
+   NIR_PASS(progress, nir, ac_nir_lower_global_access, sel->screen->info.gfx_level);
    NIR_PASS(progress, nir, nir_lower_int64);
    NIR_PASS(progress, nir, nir_lower_fp16_casts, nir_lower_fp16_split_fp64);
 
@@ -1421,7 +1421,7 @@ si_nir_generate_gs_copy_shader(struct si_screen *sscreen,
                .use_llvm = !nir->info.use_aco_amd,
             });
 
-   NIR_PASS(_, nir, ac_nir_lower_global_access);
+   NIR_PASS(_, nir, ac_nir_lower_global_access, sscreen->info.gfx_level);
    NIR_PASS(_, nir, nir_lower_int64);
 
    si_nir_opts(gs_selector->screen, nir, false);

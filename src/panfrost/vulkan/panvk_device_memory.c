@@ -149,6 +149,14 @@ panvk_AllocateMemory(VkDevice _device,
    };
 
    if (!(device->kmod.vm->flags & PAN_KMOD_VM_FLAG_AUTO_VA)) {
+      uint64_t alignment =
+         pan_choose_gpu_va_alignment(device->kmod.vm, op.va.size);
+      unsigned arch = pan_arch(device->kmod.dev->props.gpu_id);
+      /* For sizes larger than or equal to 64k, align the VA on 64k to meet the
+       * requirement for interleaved_64k images (added in v10). */
+      if (arch >= 10 && op.va.size >= 64 * 1024)
+         alignment = MAX2(alignment, 64 * 1024);
+
       if (unlikely(mem->vk.alloc_flags &
                    VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_CAPTURE_REPLAY_BIT)) {
          const VkMemoryOpaqueCaptureAddressAllocateInfo *capture_alloc_info =
@@ -156,18 +164,16 @@ panvk_AllocateMemory(VkDevice _device,
                                  MEMORY_OPAQUE_CAPTURE_ADDRESS_ALLOCATE_INFO);
          if (capture_alloc_info == NULL ||
              capture_alloc_info->opaqueCaptureAddress == 0) {
-            op.va.start = panvk_as_alloc(
-               device, &device->as.fixed_heap, op.va.size,
-               pan_choose_gpu_va_alignment(device->kmod.vm, op.va.size));
+            op.va.start = panvk_as_alloc(device, &device->as.fixed_heap,
+                                         op.va.size, alignment);
          } else {
             op.va.start = panvk_as_alloc_fixed_address(
                device, &device->as.fixed_heap,
                capture_alloc_info->opaqueCaptureAddress, op.va.size);
          }
       } else {
-         op.va.start = panvk_as_alloc(
-            device, &device->as.heap, op.va.size,
-            pan_choose_gpu_va_alignment(device->kmod.vm, op.va.size));
+         op.va.start =
+            panvk_as_alloc(device, &device->as.heap, op.va.size, alignment);
       }
 
       if (!op.va.start) {
@@ -184,6 +190,10 @@ panvk_AllocateMemory(VkDevice _device,
    }
 
    mem->addr.dev = op.va.start;
+
+   panvk_address_binding_report(device, &mem->vk.base, mem->addr.dev,
+                                pan_kmod_bo_size(mem->bo),
+                                VK_DEVICE_ADDRESS_BINDING_TYPE_BIND_EXT);
 
    if (fd_info) {
       /* From the Vulkan spec:
@@ -266,6 +276,10 @@ panvk_FreeMemory(VkDevice _device, VkDeviceMemory _mem,
       ASSERTED int ret = os_munmap(mem->addr.host, pan_kmod_bo_size(mem->bo));
       assert(!ret);
    }
+
+   panvk_address_binding_report(device, &mem->vk.base, mem->addr.dev,
+                                pan_kmod_bo_size(mem->bo),
+                                VK_DEVICE_ADDRESS_BINDING_TYPE_UNBIND_EXT);
 
    struct pan_kmod_vm_op op = {
       .type = PAN_KMOD_VM_OP_TYPE_UNMAP,

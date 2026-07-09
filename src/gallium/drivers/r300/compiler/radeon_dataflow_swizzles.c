@@ -521,33 +521,42 @@ rc_dataflow_swizzles(struct radeon_compiler *c, void *user)
 
    for (inst = c->Program.Instructions.Next; inst != &c->Program.Instructions; inst = inst->Next) {
       const struct rc_opcode_info *opcode = rc_get_opcode_info(inst->U.I.Opcode);
-      unsigned src, usemask;
-      unsigned total_splits = 0;
-      struct rc_swizzle_split split;
+      unsigned src;
 
-      /* If multiple sources needs splitting or some source needs to split
-       * too many times, it is actually better to just split the whole ALU
-       * instruction to separate channels instead of inserting extra movs.
+      /* On R5xx, source rewrites empirically produce better code after pair
+       * scheduling than splitting whole ALU instructions, even when the
+       * pre-scheduling instruction count is the same.
        */
-      for (src = 0; src < opcode->NumSrcRegs; ++src) {
-         /* Don't count invalid swizzles from immediates, we can just
-          * insert new immediates with the correct order later.
+      if (!c->is_r500) {
+         unsigned total_splits = 0;
+         unsigned usemask;
+         struct rc_swizzle_split split;
+
+         /* If multiple sources needs splitting or some source needs to split
+          * too many times, it is actually better to just split the whole ALU
+          * instruction to separate channels instead of inserting extra movs.
           */
-         if (rc_src_reg_is_immediate(c, inst->U.I.SrcReg[src].File, inst->U.I.SrcReg[src].Index) &&
-             c->Program.Constants.Count < R300_PFS_NUM_CONST_REGS) {
-            total_splits++;
-         } else {
-            total_splits += get_swizzle_split(c, &split, inst, src, &usemask);
+         for (src = 0; src < opcode->NumSrcRegs; ++src) {
+            /* Don't count invalid swizzles from immediates, we can just
+             * insert new immediates with the correct order later.
+             */
+            if (rc_src_reg_is_immediate(c, inst->U.I.SrcReg[src].File,
+                                        inst->U.I.SrcReg[src].Index) &&
+                c->Program.Constants.Count < R300_PFS_NUM_CONST_REGS) {
+               total_splits++;
+            } else {
+               total_splits += get_swizzle_split(c, &split, inst, src, &usemask);
+            }
          }
-      }
 
-      /* Even if there is only a single split, i.e., two extra movs, this still
-       * accounts to three instructions, the same as when we split
-       * the original instruction right away.
-       */
-      if (total_splits > opcode->NumSrcRegs && opcode->IsComponentwise) {
-         if (try_splitting_instruction(c, inst))
-            continue;
+         /* Even if there is only a single split, i.e., two extra movs, this still
+          * accounts to three instructions, the same as when we split
+          * the original instruction right away.
+          */
+         if (total_splits > opcode->NumSrcRegs && opcode->IsComponentwise) {
+            if (try_splitting_instruction(c, inst))
+               continue;
+         }
       }
 
       /* For texturing or non-componentwise opcodes we do the old way

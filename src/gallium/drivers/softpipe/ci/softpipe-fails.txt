@@ -1000,7 +1000,6 @@ spec@arb_occlusion_query@occlusion_query_meta_no_fragments,Fail
 spec@arb_program_interface_query@arb_program_interface_query-getprogramresourceindex,Fail
 spec@arb_program_interface_query@arb_program_interface_query-getprogramresourceindex@'vs_input2[1][0]' on GL_PROGRAM_INPUT,Fail
 
-spec@arb_provoking_vertex@arb-provoking-vertex-clipped-geometry-flatshading,Fail
 spec@arb_provoking_vertex@arb-provoking-vertex-render,Fail
 
 spec@arb_shader_image_load_store@execution@disable_early_z,Fail
@@ -1079,7 +1078,6 @@ spec@arb_texture_rg@texwrap formats@GL_R8- NPOT,Fail
 spec@arb_texture_rg@texwrap formats@GL_RG16- NPOT,Fail
 spec@arb_texture_rg@texwrap formats@GL_RG8- NPOT,Fail
 
-spec@arb_transform_feedback2@change objects while paused,Crash
 spec@arb_transform_feedback3@arb_transform_feedback3-ext_interleaved_two_bufs_gs,Crash
 spec@arb_transform_feedback3@arb_transform_feedback3-ext_interleaved_two_bufs_gs_max,Crash
 spec@arb_transform_feedback3@arb_transform_feedback3-ext_interleaved_two_bufs_vs,Crash

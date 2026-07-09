@@ -731,7 +731,7 @@ static void r600_query_hw_do_emit_start(struct r600_common_context *ctx,
 		for (unsigned stream = 0; stream < R600_MAX_STREAMS; ++stream) {
 			emit_sample_streamout(cs, va + 32 * stream, stream);
 			r600_emit_reloc(ctx, &ctx->gfx, query->buffer.buf, RADEON_USAGE_WRITE |
-					RADEON_PRIO_QUERY);
+					RADEON_PRIO_QUERY, 0);
 		}
 		return;
 	case PIPE_QUERY_TIME_ELAPSED:
@@ -752,7 +752,7 @@ static void r600_query_hw_do_emit_start(struct r600_common_context *ctx,
 		assert(0);
 	}
 	r600_emit_reloc(ctx, &ctx->gfx, query->buffer.buf, RADEON_USAGE_WRITE |
-			RADEON_PRIO_QUERY);
+			RADEON_PRIO_QUERY, 0);
 }
 
 static void r600_query_hw_emit_start(struct r600_common_context *ctx,
@@ -820,7 +820,7 @@ static void r600_query_hw_do_emit_stop(struct r600_common_context *ctx,
 		for (unsigned stream = 0; stream < R600_MAX_STREAMS; ++stream) {
 			emit_sample_streamout(cs, va + 32 * stream, stream);
 			r600_emit_reloc(ctx, &ctx->gfx, query->buffer.buf, RADEON_USAGE_WRITE |
-					RADEON_PRIO_QUERY);
+					RADEON_PRIO_QUERY, 0);
 		}
 		return;
 	case PIPE_QUERY_TIME_ELAPSED:
@@ -848,7 +848,7 @@ static void r600_query_hw_do_emit_stop(struct r600_common_context *ctx,
 		assert(0);
 	}
 	r600_emit_reloc(ctx, &ctx->gfx, query->buffer.buf, RADEON_USAGE_WRITE |
-			RADEON_PRIO_QUERY);
+			RADEON_PRIO_QUERY, 0);
 
 	if (fence_va)
 		r600_gfx_write_event_eop(ctx, EVENT_TYPE_BOTTOM_OF_PIPE_TS, 0,
@@ -894,7 +894,7 @@ static void emit_set_predicate(struct r600_common_context *ctx,
 	radeon_emit(cs, va);
 	radeon_emit(cs, op | ((va >> 32) & 0xFF));
 	r600_emit_reloc(ctx, &ctx->gfx, buf, RADEON_USAGE_READ |
-			RADEON_PRIO_QUERY);
+			RADEON_PRIO_QUERY, 0);
 }
 
 static void r600_emit_query_predication(struct r600_common_context *ctx,
@@ -1996,7 +1996,7 @@ void r600_query_fix_enabled_rb_mask(struct r600_common_screen *rscreen)
 		radeon_emit(cs, buffer->gpu_address >> 32);
 
 		r600_emit_reloc(ctx, &ctx->gfx, buffer,
-                                RADEON_USAGE_WRITE | RADEON_PRIO_QUERY);
+                                RADEON_USAGE_WRITE | RADEON_PRIO_QUERY, 0);
 
 		/* analyze results */
 		results = r600_buffer_map_sync_with_rings(ctx, buffer, PIPE_MAP_READ);

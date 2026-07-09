@@ -2160,8 +2160,13 @@ clear_depth_stencil_attachment(struct anv_cmd_buffer *cmd_buffer,
                     "vkCmdClearAttachments");
    }
 
-   bool clear_depth = attachment->aspectMask & VK_IMAGE_ASPECT_DEPTH_BIT;
-   bool clear_stencil = attachment->aspectMask & VK_IMAGE_ASPECT_STENCIL_BIT;
+   /* If any attachment’s aspectMask to be cleared is not backed by an image view,
+    * the clear has no effect on that aspect.
+    */
+   bool clear_depth = attachment->aspectMask & VK_IMAGE_ASPECT_DEPTH_BIT &&
+      d_att->vk_format != VK_FORMAT_UNDEFINED;
+   bool clear_stencil = attachment->aspectMask & VK_IMAGE_ASPECT_STENCIL_BIT &&
+      s_att->vk_format != VK_FORMAT_UNDEFINED;
 
    enum isl_format depth_format = ISL_FORMAT_UNSUPPORTED;
    if (d_att->vk_format != VK_FORMAT_UNDEFINED) {

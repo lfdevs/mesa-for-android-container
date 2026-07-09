@@ -97,6 +97,9 @@ typedef enum {
     * across the desired set of invocations.
     */
    nir_divergence_uniform_local_invocation_id_z = (1 << 13),
+
+   /* Whether InvocationID in TCS is considered uniform */
+   nir_divergence_tcs_invocation_id_uniform = (1 << 14),
 } nir_divergence_options;
 
 /** An instruction filtering callback

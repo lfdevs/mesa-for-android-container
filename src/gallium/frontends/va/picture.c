@@ -378,9 +378,8 @@ vlVaEndPicture(VADriverContextP ctx, VAContextID context_id)
       if (context->proc.dst_surface) {
          if (!context->decoder->process_frame ||
              context->decoder->process_frame(context->decoder, context->target, &context->proc.vpp) != 0) {
-            VAStatus ret = vlVaPostProcCompositor(drv, context->target, context->proc.vpp.dst,
-                                                  VL_COMPOSITOR_NONE, &context->proc.vpp);
-            vlVaSurfaceFlush(drv, context->proc.dst_surface);
+            VAStatus ret =
+               vlVaPostProc(drv, NULL, context->target, context->proc.vpp.dst, &context->proc.vpp);
             if (ret != VA_STATUS_SUCCESS) {
                mtx_unlock(&drv->mutex);
                return ret;
@@ -398,6 +397,7 @@ vlVaEndPicture(VADriverContextP ctx, VAContextID context_id)
       context->desc.base.out_fence = &surf->fence;
    } else if (context->decoder->entrypoint == PIPE_VIDEO_ENTRYPOINT_PROCESSING) {
       context->desc.base.out_fence = &surf->fence;
+      context->desc.base.out_pipe_fence = &surf->pipe_fence;
    }
 
    if (!drv->pipe->screen->is_video_format_supported(drv->pipe->screen,
@@ -428,9 +428,8 @@ vlVaEndPicture(VADriverContextP ctx, VAContextID context_id)
       if (context->proc.dst_surface) {
          if (!context->decoder->process_frame ||
              context->decoder->process_frame(context->decoder, context->target, &context->proc.vpp) != 0) {
-            VAStatus ret = vlVaPostProcCompositor(drv, context->target, context->proc.vpp.dst,
-                                                  VL_COMPOSITOR_NONE, &context->proc.vpp);
-            vlVaSurfaceFlush(drv, context->proc.dst_surface);
+            VAStatus ret =
+               vlVaPostProc(drv, NULL, context->target, context->proc.vpp.dst, &context->proc.vpp);
             if (ret != VA_STATUS_SUCCESS) {
                mtx_unlock(&drv->mutex);
                return ret;

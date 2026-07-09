@@ -27,7 +27,8 @@
  * ACCESS_COHERENT on memory loads/stores
  */
 
-#include "nir/nir.h"
+#include "nir.h"
+#include "nir_builder.h"
 #include "shader_enums.h"
 
 static bool
@@ -115,8 +116,12 @@ visit_instr(nir_instr *instr, uint32_t *cur_modes, unsigned vis_avail_sem)
       nir_intrinsic_set_memory_semantics(
          intrin, semantics & ~vis_avail_sem);
 
+      bool is_split_control_barrier =
+         util_bitcount(semantics & NIR_MEMORY_CONTROL_ARRIVE_WAIT) == 1;
+      mesa_scope rm_scope = is_split_control_barrier ? SCOPE_NONE : SCOPE_INVOCATION;
+
       if (nir_intrinsic_memory_semantics(intrin) == 0 &&
-          nir_intrinsic_execution_scope(intrin) <= SCOPE_INVOCATION)
+          nir_intrinsic_execution_scope(intrin) <= rm_scope)
          nir_instr_remove(instr);
 
       return true;
@@ -252,4 +257,107 @@ nir_lower_memory_model(nir_shader *shader)
    }
 
    return progress;
+}
+
+static void
+nir_lower_disordered_control_barriers_impl(nir_function_impl *impl,
+                                           nir_variable *barrier_arrive_without_wait,
+                                           nir_variable *skip_next_barrier_wait)
+{
+   nir_builder b = nir_builder_create(impl);
+   nir_foreach_block_safe(block, impl) {
+      nir_foreach_instr_safe(instr, block) {
+         if (instr->type != nir_instr_type_intrinsic)
+            continue;
+         nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
+         if (intrin->intrinsic != nir_intrinsic_barrier ||
+             nir_intrinsic_execution_scope(intrin) != SCOPE_WORKGROUP)
+            continue;
+
+         b.cursor = nir_before_instr(instr);
+
+         unsigned semantics =
+            nir_intrinsic_memory_semantics(intrin) & NIR_MEMORY_CONTROL_ARRIVE_WAIT;
+         if (semantics == NIR_MEMORY_CONTROL_ARRIVE) {
+            nir_store_var(&b, barrier_arrive_without_wait, nir_imm_true(&b), 0x1);
+         } else if (semantics == NIR_MEMORY_CONTROL_WAIT) {
+            nir_push_if(&b, nir_load_var(&b, skip_next_barrier_wait));
+            nir_barrier(&b, .execution_scope = SCOPE_NONE,
+                        .memory_scope = nir_intrinsic_memory_scope(intrin),
+                        .memory_semantics = nir_intrinsic_memory_semantics(intrin) & ~semantics,
+                        .memory_modes = nir_intrinsic_memory_modes(intrin));
+            nir_push_else(&b, NULL);
+            nir_instr_move(b.cursor, instr);
+            nir_pop_if(&b, NULL);
+            nir_store_var(&b, skip_next_barrier_wait, nir_imm_false(&b), 0x1);
+            nir_store_var(&b, barrier_arrive_without_wait, nir_imm_false(&b), 0x1);
+         } else {
+            nir_push_if(&b, nir_load_var(&b, barrier_arrive_without_wait));
+            nir_barrier(&b, .execution_scope = SCOPE_WORKGROUP, .memory_scope = SCOPE_NONE,
+                        .memory_semantics = NIR_MEMORY_CONTROL_WAIT, .memory_modes = 0);
+            nir_store_var(&b, skip_next_barrier_wait, nir_imm_true(&b), 0x1);
+            nir_pop_if(&b, NULL);
+            nir_store_var(&b, barrier_arrive_without_wait, nir_imm_false(&b), 0x1);
+         }
+      }
+   }
+
+   nir_progress(true, impl, nir_metadata_none);
+}
+
+/*
+ * Oddly, VK_EXT_shader_split_barrier disallows a
+ * ControlBarrierArrive/ControlBarrierWait in-between the two instructions,
+ * but it allows a ControlBarrier. If a backend implements workgroup-scope
+ * ControlBarrier as ControlBarrierArrive/ControlBarrierWait, this situation
+ * would be invalid.
+ *
+ * This pass fixes this by lowering:
+ *    ControlBarrierArrive
+ *    ControlBarrier
+ *    ControlBarrierWait
+ * to:
+ *    ControlBarrierArrive
+ *    ControlBarrierWait
+ *    ControlBarrier
+ *    MemoryBarrier
+ * if the control barriers involved are workgroup-scope. This works because
+ * the wait for the ControlBarrierWait in the original code would not be
+ * necessary because of the ControlBarrier in-between.
+ *
+ * This pass also ensures that any workgroup-scope ControlBarrierArrive is
+ * eventually followed by a ControlBarrierWait.
+ *
+ * nir_lower_global_vars_to_local() and nir_lower_vars_to_ssa() should be run
+ * after this pass, if it makes progress. It also assumes returns are lowered.
+ */
+bool
+nir_lower_disordered_control_barriers(nir_shader *shader)
+{
+   if (shader->info.stage != MESA_SHADER_COMPUTE ||
+       !shader->info.cs.has_split_control_barriers)
+      return false;
+
+   nir_variable *barrier_arrive_without_wait =
+      nir_variable_create(shader, nir_var_shader_temp, glsl_bool_type(), "barrier_arrive_without_wait");
+   nir_variable *skip_next_barrier_wait =
+      nir_variable_create(shader, nir_var_shader_temp, glsl_bool_type(), "skip_next_barrier_wait");
+
+   nir_function_impl *impl = nir_shader_get_entrypoint(shader);
+   nir_builder b = nir_builder_at(nir_before_impl(impl));
+   nir_store_var(&b, barrier_arrive_without_wait, nir_imm_false(&b), 0x1);
+   nir_store_var(&b, skip_next_barrier_wait, nir_imm_false(&b), 0x1);
+
+   nir_foreach_function_impl(impl, shader) {
+      nir_lower_disordered_control_barriers_impl(
+         impl, barrier_arrive_without_wait, skip_next_barrier_wait);
+   }
+
+   b.cursor = nir_after_impl(impl);
+   nir_push_if(&b, nir_load_var(&b, barrier_arrive_without_wait));
+   nir_barrier(&b, .execution_scope = SCOPE_WORKGROUP, .memory_scope = SCOPE_NONE,
+               .memory_semantics = NIR_MEMORY_CONTROL_WAIT, .memory_modes = 0);
+   nir_pop_if(&b, NULL);
+
+   return true;
 }

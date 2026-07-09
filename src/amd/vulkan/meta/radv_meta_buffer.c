@@ -12,6 +12,7 @@
 #include "radv_cp_dma.h"
 #include "radv_meta.h"
 #include "radv_sdma.h"
+#include "radv_tracepoints.h"
 #include "vk_shader_module.h"
 
 #include "radv_cs.h"
@@ -202,6 +203,8 @@ radv_compute_copy_memory(struct radv_cmd_buffer *cmd_buffer, uint64_t src_va, ui
       return;
    }
 
+   radv_utrace_begin_compute_copy_memory(cmd_buffer, size);
+
    radv_meta_bind_compute_pipeline(cmd_buffer, pipeline);
 
    assert(size <= UINT32_MAX);
@@ -223,6 +226,8 @@ radv_compute_copy_memory(struct radv_cmd_buffer *cmd_buffer, uint64_t src_va, ui
    radv_meta_push_constants(cmd_buffer, layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(copy_consts), &copy_consts);
 
    radv_unaligned_dispatch(cmd_buffer, dim_x, 1, 1);
+
+   radv_utrace_end_compute_copy_memory(cmd_buffer);
 }
 
 static bool

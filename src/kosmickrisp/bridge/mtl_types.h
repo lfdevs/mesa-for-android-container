@@ -45,6 +45,10 @@ typedef void mtl_allocation;
 typedef void mtl_compiler;
 typedef void mtl_argument_table_descriptor;
 typedef void mtl_argument_table;
+typedef void mtl_commit_options;
+
+struct mtl_feedback_data;
+typedef void (*mtl_feedback_handler_callback)(struct mtl_feedback_data *data);
 
 /** ENUMS */
 enum mtl_cpu_cache_mode {
@@ -257,6 +261,35 @@ enum mtl_render_stages {
    MTL_RENDER_STAGE_MESH = (1UL << 4),
 };
 
+enum mtl_command_queue_error {
+   /* Indicates the absence of any problems. */
+   MTL_COMMAND_QUEUE_ERROR_NONE = 0,
+
+   /* Indicates the workload takes longer to execute than the system allows. */
+   MTL_COMMAND_QUEUE_ERROR_TIMEOUT = 1,
+
+   /* Indicates a process doesn’t have access to a GPU device. */
+   MTL_COMMAND_QUEUE_ERROR_NOT_PERMITTED = 2,
+
+   /* Indicates the GPU doesn’t have sufficient memory to execute a command
+    * buffer.
+    */
+   MTL_COMMAND_QUEUE_ERROR_OUT_OF_MEMORY = 3,
+
+   /* Indicates the physical removal of the GPU before the command buffer
+    * completed.
+    */
+   MTL_COMMAND_QUEUE_ERROR_DEVICE_REMOVED = 4,
+
+   /* Indicates that the system revokes GPU access because it’s responsible for
+    * too many timeouts or hangs.
+    */
+   MTL_COMMAND_QUEUE_ERROR_ACCESS_REVOKED = 5,
+
+   /* Indicates an internal problem in the Metal framework. */
+   MTL_COMMAND_QUEUE_ERROR_INTERNAL = 6,
+};
+
 /** STRUCTURES */
 struct mtl_range {
    size_t offset;
@@ -319,6 +352,14 @@ struct mtl_texture_memory_copy {
    size_t buffer_2d_image_size_B;
    size_t image_slice;
    size_t image_level;
+};
+
+struct mtl_feedback_data {
+   void *user_data;
+   const char *error_message;
+   double gpu_start;
+   double gpu_end;
+   enum mtl_command_queue_error error;
 };
 
 #endif /* KK_MTL_TYPES_H */

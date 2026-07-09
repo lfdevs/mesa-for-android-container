@@ -18,7 +18,7 @@ TEST_F(nir_opt_varyings_test_dead_output, \
    create_shaders(MESA_SHADER_##producer_stage, MESA_SHADER_##consumer_stage); \
    nir_intrinsic_instr *intr = \
       store_output(b1, VARYING_SLOT_##slot, 0, nir_type_float##bitsize, \
-                   nir_imm_floatN_t(b1, 0, bitsize), 0); \
+                   nir_imm_floatN_t(b1, 0, bitsize), 0, false); \
    \
    ASSERT_EQ(opt_varyings(), nir_progress_producer); \
    ASSERT_TRUE(b1->shader->info.outputs_written == 0 && \
@@ -34,7 +34,7 @@ TEST_F(nir_opt_varyings_test_dead_output, \
    create_shaders(MESA_SHADER_##producer_stage, MESA_SHADER_##consumer_stage); \
    nir_intrinsic_instr *intr = \
       store_output(b1, VARYING_SLOT_##slot, 0, nir_type_float##bitsize, \
-                   nir_imm_floatN_t(b1, 0, bitsize), 0); \
+                   nir_imm_floatN_t(b1, 0, bitsize), 0, false); \
    \
    ASSERT_EQ(opt_varyings(), nir_progress_producer); \
    ASSERT_EQ(b1->shader->info.outputs_written, VARYING_BIT_##slot); \
@@ -52,7 +52,7 @@ TEST_F(nir_opt_varyings_test_dead_output, \
    create_shaders(MESA_SHADER_##producer_stage, MESA_SHADER_##consumer_stage); \
    nir_intrinsic_instr *intr = \
       store_output(b1, VARYING_SLOT_##slot, 0, nir_type_float##bitsize, \
-                   nir_imm_floatN_t(b1, 0, bitsize), 0); \
+                   nir_imm_floatN_t(b1, 0, bitsize), 0, false); \
    \
    struct nir_io_xfb xfb; \
    memset(&xfb, 0, sizeof(xfb)); \

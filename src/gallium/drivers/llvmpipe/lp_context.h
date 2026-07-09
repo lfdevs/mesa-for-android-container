@@ -156,7 +156,7 @@ struct llvmpipe_context {
 
    /** The tiling engine */
    struct lp_setup_context *setup;
-   struct lp_setup_variant setup_variant;
+   struct lp_setup_variant_key cached_setup_key;
 
    /** The primitive drawing context */
    struct draw_context *draw;
@@ -165,21 +165,19 @@ struct llvmpipe_context {
 
    unsigned tex_timestamp;
 
-   /** List of all fragment shader variants */
-   struct lp_fs_variant_list_item fs_variants_list;
-   unsigned nr_fs_variants;
-   unsigned nr_fs_instrs;
+   /** Currently bound FS variant; pinned via the screen's FS variant cache. */
+   struct util_shader_variant *fs_variant_pin;
 
    bool permit_linear_rasterizer;
    bool single_vp;
 
-   struct lp_setup_variant_list_item setup_variants_list;
-   unsigned nr_setup_variants;
+   /** Currently bound setup variant; pinned via the screen's setup cache. */
+   struct util_shader_variant *setup_variant_pin;
 
-   /** List of all compute shader variants */
-   struct lp_cs_variant_list_item cs_variants_list;
-   unsigned nr_cs_variants;
-   unsigned nr_cs_instrs;
+   /** Currently bound CS/task/mesh variants; pinned via the screen's CS cache. */
+   struct util_shader_variant *cs_variant_pin;
+   struct util_shader_variant *task_variant_pin;
+   struct util_shader_variant *mesh_variant_pin;
    struct lp_cs_context *csctx;
 
    struct lp_cs_context *task_ctx;

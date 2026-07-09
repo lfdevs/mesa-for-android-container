@@ -48,7 +48,7 @@ debug_callback(void *priv, enum nir_spirv_debug_level debuglevel, size_t offset,
    fprintf(stderr, "<%d> at %zu %s\n", debuglevel, offset, message);
 }
 
-static int
+static unsigned
 type_size_vec4(const struct glsl_type *type, bool bindless)
 {
    return glsl_count_attribute_slots(type, false);

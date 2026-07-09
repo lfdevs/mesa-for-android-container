@@ -1707,6 +1707,12 @@ lower_image_load_intel_intrinsic(nir_builder *b, nir_intrinsic_instr *intrin,
             offsetof(struct anv_storage_image_descriptor, format),
             1, 32, state);
          break;
+      case ISL_SURF_PARAM_MIN_ARRAY_ELEMENT:
+         desc = build_load_descriptor_mem_from_res_index(
+            b, res_index,
+            offsetof(struct anv_storage_image_descriptor, min_array_element),
+            1, 32, state);
+         break;
       default:
          UNREACHABLE("Invalid surface parameter");
       }
@@ -1717,7 +1723,7 @@ lower_image_load_intel_intrinsic(nir_builder *b, nir_intrinsic_instr *intrin,
       case ISL_SURF_PARAM_BASE_ADDRESSS: {
          desc = build_load_descriptor_mem_from_res_index(
             b, res_index,
-            RENDER_SURFACE_STATE_SurfaceBaseAddress_start(devinfo) / 8,
+            4 * (RENDER_SURFACE_STATE_SurfaceBaseAddress_start(devinfo) / 32),
             intrin->def.num_components,
             intrin->def.bit_size, state);
          break;
@@ -1726,7 +1732,8 @@ lower_image_load_intel_intrinsic(nir_builder *b, nir_intrinsic_instr *intrin,
          nir_def *dword =
             build_load_descriptor_mem_from_res_index(
                b, res_index,
-               RENDER_SURFACE_STATE_TileMode_start(devinfo) / 32, 1, 32, state);
+               4 * (RENDER_SURFACE_STATE_TileMode_start(devinfo) / 32),
+               1, 32, state);
          desc = nir_ubitfield_extract_imm(
             b, dword,
             RENDER_SURFACE_STATE_TileMode_start(devinfo) % 32,
@@ -1737,7 +1744,7 @@ lower_image_load_intel_intrinsic(nir_builder *b, nir_intrinsic_instr *intrin,
          assert(RENDER_SURFACE_STATE_SurfacePitch_start(devinfo) % 32 == 0);
          nir_def *pitch_dword = build_load_descriptor_mem_from_res_index(
             b, res_index,
-            RENDER_SURFACE_STATE_SurfacePitch_start(devinfo) / 8,
+            4 * (RENDER_SURFACE_STATE_SurfacePitch_start(devinfo) / 32),
             1, 32, state);
          desc = nir_ubitfield_extract_imm(
             b, pitch_dword,
@@ -1751,7 +1758,7 @@ lower_image_load_intel_intrinsic(nir_builder *b, nir_intrinsic_instr *intrin,
          assert(RENDER_SURFACE_STATE_SurfaceQPitch_start(devinfo) % 32 == 0);
          nir_def *pitch_dword = build_load_descriptor_mem_from_res_index(
             b, res_index,
-            RENDER_SURFACE_STATE_SurfaceQPitch_start(devinfo) / 8,
+            4 * (RENDER_SURFACE_STATE_SurfaceQPitch_start(devinfo) / 32),
             1, 32, state);
          desc = nir_ubitfield_extract_imm(
             b, pitch_dword,
@@ -1764,12 +1771,23 @@ lower_image_load_intel_intrinsic(nir_builder *b, nir_intrinsic_instr *intrin,
       case ISL_SURF_PARAM_FORMAT: {
          nir_def *format_dword = build_load_descriptor_mem_from_res_index(
             b, res_index,
-            RENDER_SURFACE_STATE_SurfaceFormat_start(devinfo) / 8,
+            4 * (RENDER_SURFACE_STATE_SurfaceFormat_start(devinfo) / 32),
             1, 32, state);
          desc = nir_ubitfield_extract_imm(
             b, format_dword,
             RENDER_SURFACE_STATE_SurfaceFormat_start(devinfo) % 32,
             RENDER_SURFACE_STATE_SurfaceFormat_bits(devinfo));
+         break;
+      }
+      case ISL_SURF_PARAM_MIN_ARRAY_ELEMENT: {
+         nir_def *min_arr_el_dword = build_load_descriptor_mem_from_res_index(
+            b, res_index,
+            4 * (RENDER_SURFACE_STATE_MinimumArrayElement_start(devinfo) / 32),
+            1, 32, state);
+         desc = nir_ubitfield_extract_imm(
+            b, min_arr_el_dword,
+            RENDER_SURFACE_STATE_MinimumArrayElement_start(devinfo) % 32,
+            RENDER_SURFACE_STATE_MinimumArrayElement_bits(devinfo));
          break;
       }
       default:
@@ -2732,16 +2750,5 @@ anv_nir_apply_pipeline_layout(nir_shader *shader,
               map->sampler_to_descriptor[i].plane);
    }
 #endif
-
-   /* Now that we're done computing the surface and sampler portions of the
-    * bind map, hash them.  This lets us quickly determine if the actual
-    * mapping has changed and not just a no-op pipeline change.
-    */
-   _mesa_blake3_compute(map->surface_to_descriptor,
-                      map->surface_count * sizeof(struct anv_pipeline_binding),
-                      map->surface_blake3);
-   _mesa_blake3_compute(map->sampler_to_descriptor,
-                      map->sampler_count * sizeof(struct anv_pipeline_binding),
-                      map->sampler_blake3);
    return progress;
 }

@@ -12,6 +12,20 @@
     - "2022"
     - mesa
 
+.enforce-hw-jobs-d3d12-rules:
+  rules:
+    - if: '$INPUT_HW_JOBS !~ /"(all|d3d12)"/i'
+      when: never
+
+.enforce-hw-jobs-spirv2dxil-rules:
+  rules:
+    - if: '$INPUT_HW_JOBS !~ /"(all|spirv2dxil)"/i'
+      when: never
+
+.enforce-hw-jobs-dozen-rules:
+  rules:
+    - if: '$INPUT_HW_JOBS !~ /"(all|dozen)"/i'
+      when: never
 
 # Unfortunately YAML doesn't let us concatenate arrays, so we have to do the
 # rules duplication manually
@@ -40,6 +54,7 @@
 
 .glon12-test-rules:
   rules:
+    - !reference [.enforce-hw-jobs-d3d12-rules, rules]
     - !reference [.test, rules]
     - !reference [.microsoft-farm-rules, rules]
     - !reference [.gl-rules, rules]
@@ -51,6 +66,7 @@
 
 .spirv2dxil-test-rules:
   rules:
+    - !reference [.enforce-hw-jobs-spirv2dxil-rules, rules]
     - !reference [.test, rules]
     - !reference [.microsoft-farm-rules, rules]
     - !reference [.core-rules, rules]
@@ -62,6 +78,7 @@
 
 .dozen-test-rules:
   rules:
+    - !reference [.enforce-hw-jobs-dozen-rules, rules]
     - !reference [.test, rules]
     - !reference [.microsoft-farm-rules, rules]
     - !reference [.vulkan-rules, rules]
@@ -76,6 +93,7 @@
   stage: layered-backends-nightly
   extends: .no-auto-retry
   rules:
+    - !reference [.enforce-hw-jobs-dozen-rules, rules]
     - !reference [.test, rules]
     - !reference [.microsoft-farm-manual-rules, rules]
     - !reference [.vulkan-manual-rules, rules]

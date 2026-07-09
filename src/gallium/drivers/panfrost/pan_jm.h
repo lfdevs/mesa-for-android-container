@@ -29,6 +29,7 @@ struct panfrost_jm_batch {
 
 struct panfrost_batch;
 struct panfrost_context;
+struct panfrost_resource;
 struct pan_fb_info;
 struct pan_tls_info;
 struct pipe_draw_info;

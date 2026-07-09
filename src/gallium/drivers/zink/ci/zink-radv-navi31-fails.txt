@@ -37,3 +37,26 @@ spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_yvu420,Fail
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-sample_yvyu,Fail
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-transcode-nv12-as-r8-gr88,Fail
 
+# These seem to only fail with ASAN enabled.
+asan-KHR-GL46.packed_pixels.pbo_rectangle.compressed_red_rgtc1_format_rgb,Fail
+asan-KHR-GL46.packed_pixels.pbo_rectangle.compressed_signed_red_rgtc1_format_bgra,Fail
+asan-KHR-GL46.packed_pixels.pbo_rectangle.compressed_signed_rg_rgtc2_format_bgr,Fail
+asan-KHR-GL46.packed_pixels.pbo_rectangle.compressed_signed_rg_rgtc2_format_rgb,Fail
+asan-KHR-GL46.packed_pixels.pbo_rectangle.compressed_signed_rg_rgtc2_format_rgba,Fail
+asan-KHR-GL46.packed_pixels.rectangle.compressed_rg_format_bgr,Fail
+asan-KHR-GL46.packed_pixels.rectangle.compressed_signed_red_rgtc1_format_red,Fail
+asan-KHR-GL46.packed_pixels.rectangle.compressed_signed_red_rgtc1_format_rgba,Fail
+asan-KHR-GL46.packed_pixels.varied_rectangle.compressed_red_rgtc1_format_bgr,Fail
+asan-KHR-GL46.packed_pixels.varied_rectangle.compressed_red_rgtc1_format_rg,Fail
+asan-KHR-GL46.packed_pixels.varied_rectangle.compressed_rg_format_bgr,Fail
+asan-KHR-GL46.packed_pixels.varied_rectangle.compressed_rg_format_bgra,Fail
+asan-KHR-GL46.packed_pixels.varied_rectangle.compressed_rg_format_red,Fail
+asan-KHR-GL46.packed_pixels.varied_rectangle.compressed_rg_format_rgb,Fail
+asan-KHR-GL46.packed_pixels.varied_rectangle.compressed_rg_format_rgba,Fail
+asan-KHR-GL46.packed_pixels.varied_rectangle.compressed_rg_rgtc2_format_bgra,Fail
+asan-KHR-GL46.packed_pixels.varied_rectangle.compressed_rg_rgtc2_format_red,Fail
+asan-KHR-GL46.packed_pixels.varied_rectangle.compressed_signed_red_rgtc1_format_bgr,Fail
+asan-KHR-GL46.packed_pixels.varied_rectangle.compressed_signed_red_rgtc1_format_bgra,Fail
+asan-KHR-GL46.packed_pixels.varied_rectangle.compressed_signed_red_rgtc1_format_rgb,Fail
+asan-KHR-GL46.packed_pixels.varied_rectangle.compressed_signed_rg_rgtc2_format_bgr,Fail
+asan-KHR-GL46.packed_pixels.varied_rectangle.compressed_signed_rg_rgtc2_format_bgra,Fail

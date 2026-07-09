@@ -9,7 +9,7 @@
 
 #include "util/hash_table.h"
 
-#include "bvh/bvh.h"
+#include "bvh/bvh_defines.h"
 #include "nir/radv_nir_rt_common.h"
 #include "radv_device.h"
 #include "radv_nir.h"
@@ -68,6 +68,7 @@ enum radv_ray_query_field {
    radv_ray_query_cull_mask,
    radv_ray_query_origin,
    radv_ray_query_tmin,
+   radv_ray_query_tmax,
    radv_ray_query_direction,
    radv_ray_query_incomplete,
    radv_ray_query_candidate,
@@ -107,6 +108,7 @@ radv_get_ray_query_type()
    FIELD(cull_mask, glsl_uint_type());
    FIELD(origin, glsl_vec_type(3));
    FIELD(tmin, glsl_float_type());
+   FIELD(tmax, glsl_float_type());
    FIELD(direction, glsl_vec_type(3));
    FIELD(incomplete, glsl_bool_type());
    FIELD(candidate, intersection_type);
@@ -283,6 +285,7 @@ lower_rq_initialize(nir_builder *b, nir_intrinsic_instr *instr, struct ray_query
    rq_store(b, rq, direction, instr->src[6].ssa);
    rq_store(b, rq, trav_direction, instr->src[6].ssa);
 
+   rq_store(b, rq, tmax, instr->src[7].ssa);
    isec_store(b, closest, t, instr->src[7].ssa);
    isec_store(b, closest, intersection_type, nir_imm_int(b, intersection_type_none));
 
@@ -557,6 +560,7 @@ lower_rq_proceed(nir_builder *b, nir_intrinsic_instr *instr, struct ray_query_va
       .cull_mask = rq_load(b, rq, cull_mask),
       .origin = rq_load(b, rq, origin),
       .tmin = rq_load(b, rq, tmin),
+      .tmax = rq_load(b, rq, tmax),
       .dir = rq_load(b, rq, direction),
       .vars = trav_vars,
       .stack_entries = vars->stack_entries,

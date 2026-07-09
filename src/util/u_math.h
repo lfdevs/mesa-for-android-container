@@ -273,6 +273,13 @@ util_is_half_nan(int16_t x)
 }
 
 
+static inline bool
+util_is_half_subnormal(int16_t x)
+{
+   return (x & 0x7c00) == 0 && (x & 0x03ff) != 0;
+}
+
+
 static inline int
 util_half_inf_sign(int16_t x)
 {

@@ -51,7 +51,9 @@ struct shim_device {
       void *(*mmap)(size_t length, int prot, int flags, off64_t offset);
    } iomem_region;
 
-   mtx_t mem_lock;
+   /* Lock for fd_map and mem_heap. */
+   mtx_t lock;
+
    /* Heap from which shim_bo are allocated */
    struct util_vma_heap mem_heap;
 
@@ -90,9 +92,15 @@ struct shim_bo {
 };
 
 /* Core support. */
-extern int render_node_minor;
+extern const int render_node_minor;
+bool drm_shim_inited(void);
 void drm_shim_device_init(void);
+void drm_shim_pci_device_setup(uint16_t vendor_id, uint16_t device_id,
+                               const char *pci_slot, const char *driver_name);
+void drm_shim_platform_device_setup(const char *driver_name, const char *fullname, const char *compatible);
 void drm_shim_override_file(const char *contents,
+                            const char *path_format, ...) PRINTFLIKE(2, 3);
+void drm_shim_override_link(const char *contents,
                             const char *path_format, ...) PRINTFLIKE(2, 3);
 void drm_shim_fd_register(int fd, struct shim_fd *shim_fd);
 void drm_shim_fd_unregister(int fd);

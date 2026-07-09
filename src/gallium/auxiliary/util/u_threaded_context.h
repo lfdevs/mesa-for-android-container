@@ -224,7 +224,7 @@ struct tc_unflushed_batch_token;
  *
  * update 2026: chromium svg rendering requires this due to skia bugs
  */
-#define TC_RESOLVE_STRICT 1
+#define TC_RESOLVE_STRICT 0
 
 /* This is an internal flag not sent to the driver. */
 #define TC_TRANSFER_MAP_UPLOAD_CPU_STORAGE   (1u << 28)
@@ -477,6 +477,14 @@ struct tc_renderpass_info {
       /* zsbuf fb info is in data8[3] & BITFIELD_MASK(4) */
       uint8_t data8[8];
    };
+   struct {
+      uint16_t x;
+      uint16_t y;
+      uint16_t z;
+      uint16_t width;
+      uint16_t height;
+      uint16_t depth;
+   } resolve_geometry;
    /* only valid if has_resolve is true and the resolve member of pipe_framebuffer_state is NULL */
    struct pipe_resource *resolve[2]; //[color, depth]
 };

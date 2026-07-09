@@ -665,6 +665,7 @@ vc4_bo_map(struct vc4_bo *bo)
                 mesa_loge("BO wait for map failed");
                 abort();
         }
+        VG(VALGRIND_MAKE_MEM_DEFINED(map, bo->size));
 
         return map;
 }

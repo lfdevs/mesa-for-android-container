@@ -1744,9 +1744,11 @@ d3d12_init_screen(struct d3d12_screen *screen, IUnknown *adapter)
 
       screen->have_load_at_vertex = can_attribute_at_vertex(screen);
       screen->support_shader_images = can_shader_image_load_all_formats(screen);
-      static constexpr uint64_t known_good_warp_version = 10ull << 48 | 22000ull << 16;
+      static constexpr uint64_t known_good_warp_version_build = 22000ull;
       bool warp_with_broken_int64 =
-         (screen->vendor_id == HW_VENDOR_MICROSOFT && screen->driver_version < known_good_warp_version);
+         (screen->vendor_id == HW_VENDOR_MICROSOFT &&
+            (screen->driver_version >> 48) > 1 && (screen->driver_version >> 48) <= 10 &&
+            ((screen->driver_version >> 16) & 0xffff) < known_good_warp_version_build);
       unsigned supported_int_sizes = 32 | (screen->opts1.Int64ShaderOps && !warp_with_broken_int64 ? 64 : 0);
       unsigned supported_float_sizes = 32 | (screen->opts.DoublePrecisionFloatShaderOps ? 64 : 0);
       dxil_get_nir_compiler_options(&screen->nir_options,

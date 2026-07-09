@@ -276,8 +276,10 @@ struct DefInfo {
     * low half. In that case, data_stride=2. */
    uint8_t data_stride;
    RegClass rc;
+   int operand_idx;
 
-   DefInfo(ra_ctx& ctx, aco_ptr<Instruction>& instr, RegClass rc_, int operand) : rc(rc_)
+   DefInfo(ra_ctx& ctx, aco_ptr<Instruction>& instr, RegClass rc_, int operand)
+       : rc(rc_), operand_idx(operand)
    {
       size = rc.size();
       stride = get_stride(rc) * 4;
@@ -1445,8 +1447,13 @@ get_reg_impl(ra_ctx& ctx, const RegisterFile& reg_file, std::vector<parallelcopy
    if (instr->opcode != aco_opcode::p_create_vector)
       tmp_file.fill_killed_operands(instr.get());
 
+   /* If this is an operand, block the register space, so that it won't be used for other operands. */
+   if (info.operand_idx != -1)
+      tmp_file.block(best_win);
+
    std::vector<parallelcopy> pc;
-   if (!get_regs_for_copies(ctx, tmp_file, pc, vars, instr, best_win))
+   PhysRegInterval def_reg = info.operand_idx == -1 ? best_win : PhysRegInterval{};
+   if (!get_regs_for_copies(ctx, tmp_file, pc, vars, instr, def_reg))
       return {};
 
    parallelcopies.insert(parallelcopies.end(), pc.begin(), pc.end());

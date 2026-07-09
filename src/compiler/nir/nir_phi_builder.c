@@ -288,15 +288,10 @@ nir_phi_builder_finish(struct nir_phi_builder *pb)
 
          exec_node_remove(&phi->instr.node);
 
-         /* XXX: Constructing the array this many times seems expensive. */
-         nir_block **preds = nir_block_get_predecessors_sorted(phi->instr.block, pb);
-
-         for (unsigned i = 0; i < nir_block_num_preds(phi->instr.block); i++) {
-            nir_phi_instr_add_src(phi, preds[i],
-                                  nir_phi_builder_value_get_block_def(val, preds[i]));
+         nir_foreach_pred(pred, phi->instr.block) {
+            nir_phi_instr_add_src(phi, pred,
+                                  nir_phi_builder_value_get_block_def(val, pred));
          }
-
-         ralloc_free(preds);
 
          nir_instr_insert(nir_before_block(phi->instr.block), &phi->instr);
       }

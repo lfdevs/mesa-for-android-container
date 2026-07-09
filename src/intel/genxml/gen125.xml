@@ -2253,6 +2253,384 @@
     <field name="Command Type" dword="0" bits="31:29" type="uint" default="3" />
     <field name="System Instruction Pointer" dword="1" bits="63:4" type="offset" />
   </instruction>
+  <instruction name="VDENC_AVC_IMG_STATE" bias="2" length="20" engine="video">
+    <field name="DWord Length" dword="0" bits="11:0" type="uint" default="18" />
+    <field name="SubOpcodeB" dword="0" bits="20:16" type="uint" default="5" />
+    <field name="SubOpcodeA" dword="0" bits="22:21" type="uint" default="0" />
+    <field name="Media Command Opcode" dword="0" bits="26:23" type="uint" default="1" />
+    <field name="Pipeline" dword="0" bits="28:27" type="uint" default="2" />
+    <field name="Command Type" dword="0" bits="31:29" type="uint" default="3" />
+    <field name="Picture Type" dword="1" bits="3:2" type="uint" />
+    <field name="Transform8x8Flag" dword="1" bits="4:4" type="bool" />
+    <field name="Colloc MV WR En" dword="1" bits="5:5" type="bool" />
+    <field name="Subpel Mode" dword="1" bits="7:6" type="uint" />
+    <field name="Colloc MV RD En" dword="2" bits="13:13" type="bool" />
+    <field name="Bidirectional Weight" dword="2" bits="23:18" type="uint" />
+    <field name="Picture Height Minus One" dword="3" bits="15:0" type="uint" />
+    <field name="Picture Width" dword="3" bits="31:16" type="uint" />
+    <field name="Fwd Ref Idx0 Reference Picture" dword="5" bits="3:0" type="uint" />
+    <field name="Bwd Ref Idx0 Reference Picture" dword="5" bits="7:4" type="uint" />
+    <field name="Fwd Ref Idx1 Reference Picture" dword="5" bits="11:8" type="uint" />
+    <field name="Fwd Ref Idx2 Reference Picture" dword="5" bits="19:16" type="uint" />
+    <field name="Number Of L0 References Minus One" dword="5" bits="23:20" type="uint" />
+    <field name="Number Of L1 References Minus One" dword="5" bits="27:24" type="uint" />
+    <field name="Intra Refresh MB Pos" dword="6" bits="7:0" type="uint" />
+    <field name="Intra Refresh MB Size Minus One" dword="6" bits="15:8" type="uint" />
+    <field name="Intra Refresh Enable Rolling I Enable" dword="6" bits="16:16" type="bool" />
+    <field name="Intra Refresh Mode" dword="6" bits="17:17" type="uint" />
+    <field name="QP Adjustment For Rolling I" dword="6" bits="31:24" type="uint" />
+    <field name="ROI QP Adjustment For Zone0" dword="9" bits="3:0" type="uint" />
+    <field name="ROI QP Adjustment For Zone1" dword="9" bits="7:4" type="uint" />
+    <field name="ROI QP Adjustment For Zone2" dword="9" bits="11:8" type="uint" />
+    <field name="ROI QP Adjustment For Zone3" dword="9" bits="15:12" type="uint" />
+    <field name="Min Qp" dword="12" bits="7:0" type="uint" />
+    <field name="Max Qp" dword="12" bits="15:8" type="uint" />
+    <field name="ROI Enable" dword="13" bits="0:0" type="bool" />
+    <field name="MB Level Qp Enable" dword="13" bits="3:3" type="bool" />
+    <field name="MB Level Delta Qp Enable" dword="13" bits="5:5" type="bool" />
+    <field name="Longterm Reference Frame BWD Ref0 Indicator" dword="13" bits="10:10" type="bool" />
+    <field name="Qp Prime Y" dword="14" bits="7:0" type="uint" />
+    <field name="Trellis Quant En" dword="14" bits="19:19" type="bool" />
+    <field name="POC Number For Current Picture" dword="15" bits="15:8" type="uint" />
+    <field name="POC Number For Fwd Ref0" dword="16" bits="15:8" type="uint" />
+    <field name="POC Number For Fwd Ref1" dword="17" bits="15:8" type="uint" />
+    <field name="POC Number For Fwd Ref2" dword="18" bits="15:8" type="uint" />
+    <field name="POC Number For Bwd Ref0" dword="19" bits="15:8" type="uint" />
+  </instruction>
+  <instruction name="VDENC_AVC_SLICE_STATE" bias="2" length="4" engine="video">
+    <field name="DWord Length" dword="0" bits="11:0" type="uint" default="2" />
+    <field name="SubOpcodeB" dword="0" bits="20:16" type="uint" default="12" />
+    <field name="SubOpcodeA" dword="0" bits="22:21" type="uint" default="0" />
+    <field name="Media Command Opcode" dword="0" bits="26:23" type="uint" default="1" />
+    <field name="Pipeline" dword="0" bits="28:27" type="uint" default="2" />
+    <field name="Command Type" dword="0" bits="31:29" type="uint" default="3" />
+    <field name="Round Intra" dword="1" bits="2:0" type="uint" />
+    <field name="Round Intra Enable" dword="1" bits="3:3" type="bool" />
+    <field name="Round Inter" dword="1" bits="6:4" type="uint" />
+    <field name="Round Inter Enable" dword="1" bits="7:7" type="bool" />
+    <field name="Log2 Weight Denom Luma" dword="3" bits="2:0" type="uint" />
+  </instruction>
+  <instruction name="VDENC_CMD1" bias="2" length="33" engine="video">
+    <field name="DWord Length" dword="0" bits="11:0" type="uint" default="31" />
+    <field name="SubOpcodeB" dword="0" bits="20:16" type="uint" default="10" />
+    <field name="SubOpcodeA" dword="0" bits="22:21" type="uint" default="0" />
+    <field name="Media Command Opcode" dword="0" bits="26:23" type="uint" default="1" />
+    <field name="Pipeline" dword="0" bits="28:27" type="uint" default="2" />
+    <field name="Command Type" dword="0" bits="31:29" type="uint" default="3" />
+    <group count="32" dword="1" size="32">
+      <field name="Values" dword="0" bits="31:0" type="uint" />
+    </group>
+  </instruction>
+  <instruction name="VDENC_CMD2" bias="2" length="62" engine="video">
+    <field name="DWord Length" dword="0" bits="11:0" type="uint" default="60" />
+    <field name="SubOpcodeB" dword="0" bits="20:16" type="uint" default="9" />
+    <field name="SubOpcodeA" dword="0" bits="22:21" type="uint" default="0" />
+    <field name="Media Command OpCode" dword="0" bits="26:23" type="uint" default="1" />
+    <field name="Pipeline" dword="0" bits="28:27" type="uint" default="2" />
+    <field name="Command Type" dword="0" bits="31:29" type="uint" default="3" />
+    <field name="Values1" dword="1" bits="31:0" type="uint" />
+    <field name="Frame Width In Pixels Minus One" dword="1" bits="15:0" type="uint" />
+    <field name="Frame Height In Pixels Minus One" dword="1" bits="31:16" type="uint" />
+    <field name="Values2" dword="2" bits="31:0" type="uint" />
+    <field name="Picture Type" dword="2" bits="21:20" type="uint" />
+    <field name="Temporal MVP Enable Flag" dword="2" bits="22:22" type="bool" />
+    <field name="Collocated From L0 Flag" dword="2" bits="23:23" type="bool" />
+    <field name="Long Term Reference Flags L0" dword="2" bits="26:24" type="uint" />
+    <field name="Long Term Reference Flags L1" dword="2" bits="27:27" type="uint" />
+    <field name="Transform Skip" dword="2" bits="30:30" type="bool" />
+    <field name="Constrained Intra Pred Flag" dword="2" bits="31:31" type="bool" />
+    <field name="Values3" dword="3" bits="31:0" type="uint" />
+    <field name="POC Number For Refid0 In L0" dword="3" bits="7:0" type="int" />
+    <field name="POC Number For Refid0 In L1" dword="3" bits="15:8" type="int" />
+    <field name="POC Number For Refid1 In L0" dword="3" bits="23:16" type="int" />
+    <field name="POC Number For Refid1 In L1" dword="3" bits="31:24" type="int" />
+    <field name="Values4" dword="4" bits="31:0" type="uint" />
+    <field name="POC Number For Refid2 In L0" dword="4" bits="7:0" type="int" />
+    <field name="POC Number For Refid2 In L1" dword="4" bits="15:8" type="int" />
+    <field name="POC Number For Refid3 In L0" dword="4" bits="23:16" type="int" />
+    <field name="POC Number For Refid3 In L1" dword="4" bits="31:24" type="int" />
+    <field name="Values5" dword="5" bits="31:0" type="uint" />
+    <field name="Stream In ROI Enable" dword="5" bits="8:8" type="bool" />
+    <field name="Sub Pel Mode" dword="5" bits="11:10" type="uint" />
+    <field name="Num Ref Idx L0 Minus One" dword="5" bits="27:24" type="uint" />
+    <field name="Num Ref Idx L1 Minus One" dword="5" bits="31:28" type="uint" />
+    <field name="Values6" dword="6" bits="31:0" type="uint" />
+    <field name="Values7" dword="7" bits="31:0" type="uint" />
+    <field name="Segmentation Enable" dword="7" bits="4:4" type="bool" />
+    <field name="Segmentation Map Temporal Prediction Enable" dword="7" bits="5:5" type="bool" />
+    <field name="Tiling Enable" dword="7" bits="7:7" type="bool" />
+    <field name="VDEnc Stream In Enable" dword="7" bits="9:9" type="bool" />
+    <field name="PAK Only Multi Pass Enable" dword="7" bits="16:16" type="bool" />
+    <field name="Values8" dword="8" bits="31:0" type="uint" />
+    <field name="Values9" dword="9" bits="31:0" type="uint" />
+    <field name="Values10" dword="10" bits="31:0" type="uint" />
+    <field name="Values11" dword="11" bits="31:0" type="uint" />
+    <field name="Fwd Ref0 Ref Pic" dword="11" bits="2:0" type="uint" />
+    <field name="Fwd Ref1 Ref Pic" dword="11" bits="10:8" type="uint" />
+    <field name="Fwd Ref2 Ref Pic" dword="11" bits="18:16" type="uint" />
+    <field name="Bwd Ref0 Ref Pic" dword="11" bits="26:24" type="uint" />
+    <field name="Values12" dword="12" bits="31:0" type="uint" />
+    <field name="Values13" dword="13" bits="31:0" type="uint" />
+    <field name="Roi QP Adjustment For Zone1 Stage3" dword="13" bits="7:4" type="uint" />
+    <field name="Roi QP Adjustment For Zone2 Stage3" dword="13" bits="11:8" type="uint" />
+    <field name="Roi QP Adjustment For Zone3 Stage3" dword="13" bits="15:12" type="uint" />
+    <field name="Values14" dword="14" bits="31:0" type="uint" />
+    <field name="Values15" dword="15" bits="31:0" type="uint" />
+    <field name="Values16" dword="16" bits="31:0" type="uint" />
+    <field name="Min Qp" dword="16" bits="7:0" type="uint" />
+    <field name="Max Qp" dword="16" bits="15:8" type="uint" />
+    <field name="Values17" dword="17" bits="31:0" type="uint" />
+    <field name="Temporal MV Enable For Integer Search" dword="17" bits="20:20" type="bool" />
+    <field name="Values18" dword="18" bits="31:0" type="uint" />
+    <field name="Values19" dword="19" bits="31:0" type="uint" />
+    <field name="Values20" dword="20" bits="31:0" type="uint" />
+    <field name="Values21" dword="21" bits="31:0" type="uint" />
+    <field name="Intra Refresh Pos" dword="21" bits="8:0" type="uint" />
+    <field name="Intra Refresh MB Size Minus One" dword="21" bits="23:16" type="uint" />
+    <field name="Intra Refresh Mode" dword="21" bits="24:24" type="uint" />
+    <field name="Intra Refresh Enable" dword="21" bits="25:25" type="bool" />
+    <field name="QP Adjustment For Rolling I" dword="21" bits="31:28" type="uint" />
+    <field name="Values22" dword="22" bits="31:0" type="uint" />
+    <field name="Values23" dword="23" bits="31:0" type="uint" />
+    <field name="Values24" dword="24" bits="31:0" type="uint" />
+    <field name="QP For Seg0" dword="24" bits="7:0" type="uint" />
+    <field name="QP For Seg1" dword="24" bits="15:8" type="uint" />
+    <field name="QP For Seg2" dword="24" bits="23:16" type="uint" />
+    <field name="QP For Seg3" dword="24" bits="31:24" type="uint" />
+    <field name="Values25" dword="25" bits="31:0" type="uint" />
+    <field name="QP For Seg4" dword="25" bits="7:0" type="uint" />
+    <field name="QP For Seg5" dword="25" bits="15:8" type="uint" />
+    <field name="QP For Seg6" dword="25" bits="23:16" type="uint" />
+    <field name="QP For Seg7" dword="25" bits="31:24" type="uint" />
+    <field name="Values26" dword="26" bits="31:0" type="uint" />
+    <field name="Rd Qp Lambda" dword="26" bits="15:0" type="uint" />
+    <field name="Sad Qp Lambda" dword="26" bits="24:16" type="uint" />
+    <field name="VP9 Dynamic Slice Enable" dword="26" bits="25:25" type="bool" />
+    <field name="Values27" dword="27" bits="31:0" type="uint" />
+    <field name="Qp Prime YDc" dword="27" bits="7:0" type="uint" />
+    <field name="Qp Prime YAc" dword="27" bits="15:8" type="uint" />
+    <field name="Values28" dword="28" bits="31:0" type="uint" />
+    <field name="Values29" dword="29" bits="31:0" type="uint" />
+    <field name="Values30" dword="30" bits="31:0" type="uint" />
+    <field name="Values31" dword="31" bits="31:0" type="uint" />
+    <field name="Values32" dword="32" bits="31:0" type="uint" />
+    <field name="Values33" dword="33" bits="31:0" type="uint" />
+    <field name="Values34" dword="34" bits="31:0" type="uint" />
+    <field name="Values35" dword="35" bits="31:0" type="uint" />
+    <field name="Intra Refresh Boundary Ref0" dword="36" bits="8:0" type="uint" />
+    <field name="Intra Refresh Boundary Ref1" dword="36" bits="18:10" type="uint" />
+    <field name="Intra Refresh Boundary Ref2" dword="36" bits="28:20" type="uint" />
+    <field name="Values37" dword="37" bits="31:0" type="uint" />
+    <field name="Tile Replay Enable" dword="37" bits="27:27" type="bool" />
+    <field name="Values39" dword="38" bits="31:0" type="uint" />
+    <field name="Values40" dword="39" bits="31:0" type="uint" />
+    <field name="Values41" dword="40" bits="31:0" type="uint" />
+    <field name="Values42" dword="41" bits="31:0" type="uint" />
+    <field name="Values43" dword="42" bits="31:0" type="uint" />
+    <field name="Values44" dword="43" bits="31:0" type="uint" />
+    <field name="Values45" dword="44" bits="31:0" type="uint" />
+    <field name="Values46" dword="45" bits="31:0" type="uint" />
+    <field name="Values47" dword="46" bits="31:0" type="uint" />
+    <field name="Values48" dword="47" bits="31:0" type="uint" />
+    <field name="Values49" dword="48" bits="31:0" type="uint" />
+    <field name="Values50" dword="49" bits="31:0" type="uint" />
+    <field name="Values51" dword="50" bits="31:0" type="uint" />
+    <field name="Values52" dword="51" bits="31:0" type="uint" />
+    <field name="Values53" dword="52" bits="31:0" type="uint" />
+    <field name="Values54" dword="53" bits="31:0" type="uint" />
+    <field name="Values55" dword="54" bits="31:0" type="uint" />
+    <field name="Values56" dword="55" bits="31:0" type="uint" />
+    <field name="Values57" dword="56" bits="31:0" type="uint" />
+    <field name="Values58" dword="57" bits="31:0" type="uint" />
+    <field name="Values59" dword="58" bits="31:0" type="uint" />
+    <field name="Values60" dword="59" bits="31:0" type="uint" />
+    <field name="Values61" dword="60" bits="31:0" type="uint" />
+    <field name="AV1 L0 Ref ID0" dword="61" bits="3:0" type="uint" />
+    <field name="AV1 L1 Ref ID0" dword="61" bits="7:4" type="uint" />
+    <field name="AV1 L0 Ref ID1" dword="61" bits="11:8" type="uint" />
+    <field name="AV1 L1 Ref ID1" dword="61" bits="15:12" type="uint" />
+    <field name="AV1 L0 Ref ID2" dword="61" bits="19:16" type="uint" />
+    <field name="AV1 L1 Ref ID2" dword="61" bits="23:20" type="uint" />
+    <field name="AV1 L0 Ref ID3" dword="61" bits="27:24" type="uint" />
+    <field name="AV1 L1 Ref ID3" dword="61" bits="31:28" type="uint" />
+  </instruction>
+  <instruction name="VDENC_CMD3" bias="2" length="23" engine="video">
+    <field name="DWord Length" dword="0" bits="11:0" type="uint" default="21" />
+    <field name="SubOpcodeB" dword="0" bits="20:16" type="uint" default="10" />
+    <field name="SubOpcodeA" dword="0" bits="22:21" type="uint" default="0" />
+    <field name="Media Command Opcode" dword="0" bits="26:23" type="uint" default="1" />
+    <field name="Pipeline" dword="0" bits="28:27" type="uint" default="2" />
+    <field name="Command Type" dword="0" bits="31:29" type="uint" default="3" />
+    <group count="22" dword="1" size="32">
+      <field name="Values" dword="0" bits="31:0" type="uint" />
+    </group>
+  </instruction>
+  <instruction name="VDENC_HEVC_VP9_TILE_SLICE_STATE" bias="2" length="28" engine="video">
+    <field name="DWord Length" dword="0" bits="11:0" type="uint" default="26" />
+    <field name="SubOpcodeB" dword="0" bits="20:16" type="uint" default="13" />
+    <field name="SubOpcodeA" dword="0" bits="22:21" type="uint" default="0" />
+    <field name="Media Command Opcode" dword="0" bits="26:23" type="uint" default="1" />
+    <field name="Pipeline" dword="0" bits="28:27" type="uint" default="2" />
+    <field name="Command Type" dword="0" bits="31:29" type="uint" default="3" />
+    <field name="Values1" dword="1" bits="31:0" type="uint" />
+    <field name="Values2" dword="2" bits="31:0" type="uint" />
+    <field name="Values3" dword="3" bits="31:0" type="uint" />
+    <field name="Log2 Weight Denom Luma" dword="3" bits="2:0" type="uint" />
+    <field name="HEVC VP9 Log2 Weight Denom Luma" dword="3" bits="6:4" type="uint" />
+    <field name="Num Par Engine" dword="3" bits="10:9" type="uint" />
+    <field name="Tile Row Store Select" dword="3" bits="16:16" type="uint" />
+    <field name="Log2 Weight Denom Chroma" dword="3" bits="19:17" type="uint" />
+    <field name="Tile Number" dword="3" bits="31:24" type="uint" />
+    <field name="Values4" dword="4" bits="31:0" type="uint" />
+    <field name="Tile Start CTB Y" dword="4" bits="15:0" type="uint" />
+    <field name="Tile Start CTB X" dword="4" bits="31:16" type="uint" />
+    <field name="Values5" dword="5" bits="31:0" type="uint" />
+    <field name="Tile Width" dword="5" bits="15:0" type="uint" />
+    <field name="Tile Height" dword="5" bits="31:16" type="uint" />
+    <field name="Values6" dword="6" bits="31:0" type="uint" />
+    <field name="Streamin Offset Enable" dword="6" bits="0:0" type="bool" />
+    <field name="Tile Streamin Offset" dword="6" bits="31:6" type="uint" />
+    <field name="Values7" dword="7" bits="31:0" type="uint" />
+    <field name="Row Store Offset Enable" dword="7" bits="0:0" type="bool" />
+    <field name="Tile Rowstore Offset" dword="7" bits="31:6" type="uint" />
+    <field name="Values8" dword="8" bits="31:0" type="uint" />
+    <field name="Tile Streamout Offset Enable" dword="8" bits="0:0" type="bool" />
+    <field name="Tile Streamout Offset" dword="8" bits="31:6" type="uint" />
+    <field name="Values9" dword="9" bits="31:0" type="uint" />
+    <field name="LCU Stream Out Offset Enable" dword="9" bits="0:0" type="bool" />
+    <field name="Tile LCU Stream Out Offset" dword="9" bits="31:6" type="uint" />
+    <field name="Values10" dword="10" bits="31:0" type="uint" />
+    <field name="Values11" dword="11" bits="31:0" type="uint" />
+    <field name="Delta QP" dword="11" bits="7:0" type="uint" />
+    <field name="Tile Slice Param0" dword="11" bits="17:8" type="uint" />
+    <field name="Values12" dword="12" bits="31:0" type="uint" />
+    <field name="Tile Slice Param1" dword="12" bits="2:0" type="uint" />
+    <field name="Tile Slice Param2" dword="12" bits="15:8" type="uint" />
+    <field name="Tile Slice Param3" dword="12" bits="17:16" type="uint" />
+    <field name="Tile Slice Param4" dword="12" bits="22:18" type="uint" />
+    <field name="Tile Slice Param5" dword="12" bits="25:24" type="uint" />
+    <field name="Palette Mode Enable" dword="12" bits="26:26" type="bool" />
+    <field name="IBC Control" dword="12" bits="28:27" type="uint" />
+    <field name="Values13" dword="13" bits="31:0" type="uint" />
+    <field name="Tile Slice Param6" dword="13" bits="9:0" type="uint" />
+    <field name="Tile Slice Param7" dword="13" bits="25:16" type="uint" />
+    <field name="Values14" dword="14" bits="31:0" type="uint" />
+    <field name="Tile Slice Param8" dword="14" bits="5:0" type="uint" />
+    <field name="Tile Slice Param9" dword="14" bits="13:8" type="uint" />
+    <field name="Tile Slice Param10" dword="14" bits="20:16" type="uint" />
+    <field name="Tile Slice Param11" dword="14" bits="22:21" type="uint" />
+    <field name="Tile Slice Param12" dword="14" bits="30:24" type="uint" />
+    <field name="Tile Slice Param13" dword="14" bits="31:31" type="uint" />
+    <field name="Values15" dword="15" bits="31:0" type="uint" />
+    <field name="Tile Slice Param14" dword="15" bits="9:0" type="uint" />
+    <field name="Tile Slice Param15" dword="15" bits="25:16" type="uint" />
+    <field name="Values16" dword="16" bits="31:0" type="uint" />
+    <field name="Tile Slice Param16" dword="16" bits="5:0" type="uint" />
+    <field name="Tile Slice Param17" dword="16" bits="13:8" type="uint" />
+    <field name="Tile Slice Param18" dword="16" bits="21:16" type="uint" />
+    <field name="Tile Slice Param19" dword="16" bits="28:24" type="uint" />
+    <field name="Tile Slice Param20" dword="16" bits="31:29" type="uint" />
+    <field name="Values17" dword="17" bits="31:0" type="uint" />
+    <field name="Values18" dword="18" bits="31:0" type="uint" />
+    <field name="Values19" dword="19" bits="31:0" type="uint" />
+    <field name="Values20" dword="20" bits="31:0" type="uint" />
+    <field name="Values21" dword="21" bits="31:0" type="uint" />
+    <field name="Values22" dword="22" bits="31:0" type="uint" />
+    <field name="Values23" dword="23" bits="31:0" type="uint" />
+    <field name="Values24" dword="24" bits="31:0" type="uint" />
+    <field name="Values25" dword="25" bits="31:0" type="uint" />
+    <field name="Values26" dword="26" bits="31:0" type="uint" />
+    <field name="Values27" dword="27" bits="31:0" type="uint" />
+  </instruction>
+  <instruction name="VDENC_PIPE_BUF_ADDR_STATE" bias="2" length="89" engine="video">
+    <field name="DWord Length" dword="0" bits="11:0" type="uint" default="87" />
+    <field name="SubOpcode B" dword="0" bits="20:16" type="uint" default="4" />
+    <field name="SubOpcode A" dword="0" bits="22:21" type="uint" default="0" />
+    <field name="Media Command Opcode" dword="0" bits="26:23" type="uint" default="1" />
+    <field name="Pipeline" dword="0" bits="28:27" type="uint" default="2" />
+    <field name="Command Type" dword="0" bits="31:29" type="uint" default="3" />
+    <field name="DS FWD REF0" dword="1" bits="95:0" type="VDENC_PICTURE" />
+    <field name="DS FWD REF1" dword="4" bits="95:0" type="VDENC_PICTURE" />
+    <field name="DS BWD REF0" dword="7" bits="95:0" type="VDENC_PICTURE" />
+    <field name="Original Uncompressed Picture" dword="10" bits="95:0" type="VDENC_PICTURE" />
+    <field name="Stream-In Data Picture" dword="13" bits="95:0" type="VDENC_PICTURE" />
+    <field name="Row Store Scratch Buffer" dword="16" bits="95:0" type="VDENC_PICTURE" />
+    <field name="Colocated MV Read Buffer" dword="19" bits="95:0" type="VDENC_PICTURE" />
+    <field name="FWD REF0" dword="22" bits="95:0" type="VDENC_PICTURE" />
+    <field name="FWD REF1" dword="25" bits="95:0" type="VDENC_PICTURE" />
+    <field name="FWD REF2" dword="28" bits="95:0" type="VDENC_PICTURE" />
+    <field name="BWD REF0" dword="31" bits="95:0" type="VDENC_PICTURE" />
+    <field name="VDEnc Statistics Stream-Out" dword="34" bits="95:0" type="VDENC_PICTURE" />
+    <field name="DS FWD REF0 4X" dword="37" bits="95:0" type="VDENC_PICTURE" />
+    <field name="DS FWD REF1 4X" dword="40" bits="95:0" type="VDENC_PICTURE" />
+    <field name="DS BWD REF0 4X" dword="43" bits="95:0" type="VDENC_PICTURE" />
+    <field name="VDEnc LCU PAK_OBJ_CMD Buffer" dword="46" bits="95:0" type="VDENC_PICTURE" />
+    <field name="Scaled Reference Surface 8X" dword="49" bits="95:0" type="VDENC_PICTURE" />
+    <field name="Scaled Reference Surface 4X" dword="52" bits="95:0" type="VDENC_PICTURE" />
+    <field name="VP9 Segmentation Map Stream-In Buffer" dword="55" bits="95:0" type="VDENC_PICTURE" />
+    <field name="VP9 Segmentation Map Stream-Out Buffer" dword="58" bits="95:0" type="VDENC_PICTURE" />
+    <field name="Weights Histogram Stream-Out Offset" dword="61" bits="31:0" type="uint" />
+    <field name="VDEnc Tile Row Store Buffer" dword="62" bits="95:0" type="VDENC_PICTURE" />
+    <field name="VDEnc Cumulative CU Count Stream-Out Surface" dword="65" bits="95:0" type="VDENC_PICTURE" />
+    <field name="VDEnc Palette Mode Stream-Out Surface" dword="68" bits="95:0" type="VDENC_PICTURE" />
+    <field name="Values71" dword="71" bits="31:0" type="uint" />
+    <field name="Values72" dword="72" bits="31:0" type="uint" />
+    <field name="Values73" dword="73" bits="31:0" type="uint" />
+    <field name="Values74" dword="74" bits="31:0" type="uint" />
+    <field name="Values75" dword="75" bits="31:0" type="uint" />
+    <field name="Values76" dword="76" bits="31:0" type="uint" />
+    <field name="Intra Prediction Row Store Buffer" dword="77" bits="95:0" type="VDENC_PICTURE" />
+    <field name="Values80" dword="80" bits="31:0" type="uint" />
+    <field name="Values81" dword="81" bits="31:0" type="uint" />
+    <field name="Values82" dword="82" bits="31:0" type="uint" />
+    <field name="Colocated MV AVC Write Buffer" dword="83" bits="95:0" type="VDENC_PICTURE" />
+    <field name="Additional 4X DS FWD REF" dword="86" bits="95:0" type="VDENC_PICTURE" />
+  </instruction>
+  <instruction name="VDENC_WALKER_STATE" bias="2" length="3" engine="video">
+    <field name="DWord Length" dword="0" bits="11:0" type="uint" default="1" />
+    <field name="SubOpcode B" dword="0" bits="20:16" type="uint" default="7" />
+    <field name="SubOpcode A" dword="0" bits="22:21" type="uint" default="0" />
+    <field name="Media Command Opcode" dword="0" bits="26:23" type="uint" default="1" />
+    <field name="Pipeline" dword="0" bits="28:27" type="uint" default="2" />
+    <field name="Command Type" dword="0" bits="31:29" type="uint" default="3" />
+    <field name="MB/LCU Start Y Position" dword="1" bits="8:0" type="uint" />
+    <field name="MB/LCU Start X Position" dword="1" bits="24:16" type="uint" />
+    <field name="First Super Slice" dword="1" bits="28:28" type="bool" />
+    <field name="Next Slice MB Start Y Position" dword="2" bits="9:0" type="uint" />
+    <field name="Next Slice MB/LCU Start X Position" dword="2" bits="25:16" type="uint" />
+  </instruction>
+  <instruction name="VDENC_WEIGHTSOFFSETS_STATE" bias="2" length="7" engine="video">
+    <field name="DWord Length" dword="0" bits="11:0" type="uint" default="5" />
+    <field name="SubOpcode B" dword="0" bits="20:16" type="uint" default="8" />
+    <field name="SubOpcode A" dword="0" bits="22:21" type="uint" default="0" />
+    <field name="Media Command OpCode" dword="0" bits="26:23" type="uint" default="1" />
+    <field name="Pipeline" dword="0" bits="28:27" type="uint" default="2" />
+    <field name="Command Type" dword="0" bits="31:29" type="uint" default="3" />
+    <field name="Weights Forward Reference 0" dword="1" bits="7:0" type="int" />
+    <field name="Offset Forward Reference 0" dword="1" bits="15:8" type="int" />
+    <field name="Weights Forward Reference 1" dword="1" bits="23:16" type="int" />
+    <field name="Offset Forward Reference 1" dword="1" bits="31:24" type="int" />
+    <field name="Weights Forward Reference 2" dword="2" bits="7:0" type="int" />
+    <field name="Offset Forward Reference 2" dword="2" bits="15:8" type="int" />
+    <field name="HEVC/VP9 Weights Backward Reference 0" dword="2" bits="23:16" type="int" />
+    <field name="HEVC/VP9 Offset Backward Reference 0" dword="2" bits="31:24" type="int" />
+    <field name="Cb Weights Forward Reference 0" dword="3" bits="7:0" type="int" />
+    <field name="Cb Offset Forward Reference 0" dword="3" bits="15:8" type="int" />
+    <field name="Cb Weights Forward Reference 1" dword="3" bits="23:16" type="int" />
+    <field name="Cb Offset Forward Reference 1" dword="3" bits="31:24" type="int" />
+    <field name="Cb Weights Forward Reference 2" dword="4" bits="7:0" type="int" />
+    <field name="Cb Offset Forward Reference 2" dword="4" bits="15:8" type="int" />
+    <field name="Cb Weights Backward Reference 0" dword="4" bits="23:16" type="int" />
+    <field name="Cb Offset Backward Reference 0" dword="4" bits="31:24" type="int" />
+    <field name="Cr Weights Forward Reference 0" dword="5" bits="7:0" type="int" />
+    <field name="Cr Offset Forward Reference 0" dword="5" bits="15:8" type="int" />
+    <field name="Cr Weights Forward Reference 1" dword="5" bits="23:16" type="int" />
+    <field name="Cr Offset Forward Reference 1" dword="5" bits="31:24" type="int" />
+    <field name="Cr Weights Forward Reference 2" dword="6" bits="7:0" type="int" />
+    <field name="Cr Offset Forward Reference 2" dword="6" bits="15:8" type="int" />
+    <field name="Cr Weights Backward Reference 0" dword="6" bits="23:16" type="int" />
+    <field name="Cr Offset Backward Reference 0" dword="6" bits="31:24" type="int" />
+  </instruction>
   <instruction name="XY_BLOCK_COPY_BLT" bias="2" length="22" engine="blitter">
     <field name="DWord Length" dword="0" bits="7:0" type="uint" default="20" />
     <field name="Special Mode of Operation" dword="0" bits="13:12" type="uint">

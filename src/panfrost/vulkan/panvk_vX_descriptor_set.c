@@ -1,6 +1,7 @@
 /*
  * Copyright © 2024 Collabora Ltd.
  * Copyright © 2025 Arm Ltd.
+ * Copyright © 2026 Google LLC
  * SPDX-License-Identifier: MIT
  */
 
@@ -147,8 +148,7 @@ write_image_view_desc(struct panvk_descriptor_set *set,
 
    VK_FROM_HANDLE(panvk_image_view, view, pImageInfo->imageView);
 
-   uint8_t plane_count = vk_format_get_plane_count(view->vk.format);
-   for (uint8_t plane = 0; plane < plane_count; plane++) {
+   for (uint8_t plane = 0; plane < binding_layout->textures_per_desc; plane++) {
       struct panvk_subdesc_info subdesc = get_tex_subdesc_info(type, plane);
 #if PAN_ARCH >= 9
       if (type == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE)
@@ -284,6 +284,12 @@ panvk_desc_pool_free_set(struct panvk_descriptor_pool *pool,
    assert(set_idx < pool->max_sets);
 
    if (!BITSET_TEST(pool->free_sets, set_idx)) {
+      if (set->desc_count && pool->desc_bo)
+         panvk_address_binding_report(
+            to_panvk_device(pool->base.device), &set->base, set->descs.dev,
+            set->desc_count * PANVK_DESCRIPTOR_SIZE,
+            VK_DEVICE_ADDRESS_BINDING_TYPE_UNBIND_EXT);
+
       if (set->desc_count)
          util_vma_heap_free(
             &pool->desc_heap,
@@ -558,6 +564,11 @@ panvk_desc_pool_allocate_set(struct panvk_descriptor_pool *pool,
       set->descs.dev = descs_dev_addr;
       set->descs.host =
          pool->desc_bo->addr.host + set->descs.dev - pool->desc_bo->addr.dev;
+
+      if (num_descs)
+         panvk_address_binding_report(to_panvk_device(pool->base.device),
+                                      &set->base, set->descs.dev, descs_size,
+                                      VK_DEVICE_ADDRESS_BINDING_TYPE_BIND_EXT);
    } else {
       /* This cast is fine because the heap is initialized from a host
        * pointer in case of a host only pool. */

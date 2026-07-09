@@ -12,7 +12,6 @@
 
 /*****************************************************************************/
 
-#if !defined(GLX_USE_APPLEGL) || defined(GLX_USE_APPLE)
 static void
 do_enable_disable(GLenum array, GLboolean val)
 {
@@ -105,4 +104,3 @@ __indirect_glPopClientAttrib(void)
       return;
    }
 }
-#endif

@@ -182,8 +182,8 @@ radv_finish_address_binding_report(struct radv_device *device)
    struct radv_instance *instance = radv_physical_device_instance(pdev);
    struct radv_address_binding_tracker *tracker = device->addr_binding_tracker;
 
-   util_dynarray_foreach (&tracker->reports, struct radv_address_binding_report *, iter) {
-      vk_free(&instance->vk.alloc, (*iter)->object_name);
+   util_dynarray_foreach (&tracker->reports, struct radv_address_binding_report, iter) {
+      vk_free(&instance->vk.alloc, iter->object_name);
    }
    util_dynarray_fini(&tracker->reports);
    simple_mtx_destroy(&tracker->mtx);

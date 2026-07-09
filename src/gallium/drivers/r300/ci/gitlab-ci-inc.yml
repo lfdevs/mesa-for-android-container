@@ -1,6 +1,12 @@
+.enforce-hw-jobs-r300-rules:
+  rules:
+    - if: '$INPUT_HW_JOBS !~ /"(all|r300|radeon.ko)"/i'
+      when: never
+
 .r300-rules:
   stage: amd
   rules:
+    - !reference [.enforce-hw-jobs-r300-rules, rules]
     - !reference [.test, rules]
     - !reference [.ondracka-farm-rules, rules]
     - !reference [.gl-rules, rules]
@@ -21,6 +27,7 @@
   stage: amd-nightly
   extends: .no-auto-retry
   rules:
+    - !reference [.enforce-hw-jobs-r300-rules, rules]
     - !reference [.test, rules]
     - !reference [.ondracka-farm-manual-rules, rules]
     - !reference [.gl-manual-rules, rules]

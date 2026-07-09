@@ -117,7 +117,7 @@ radv_sdma_get_buf_surf(const struct radv_image *const image, const VkDeviceMemor
       .pitch = pitch,
       .slice_pitch = slice_pitch,
       .bpp = bpe,
-      .is_secure = image->vk.create_flags & VK_IMAGE_CREATE_PROTECTED_BIT,
+      .is_secure = image->vk.create_flags & VK_IMAGE_CREATE_2_PROTECTED_BIT_KHR,
    };
 
    return info;
@@ -152,7 +152,7 @@ radv_sdma_get_surf(struct radv_cmd_buffer *cmd_buffer, const struct radv_image *
       .first_level = subresource.mipLevel,
       .num_levels = image->vk.mip_levels,
       .is_stencil = subresource.aspectMask == VK_IMAGE_ASPECT_STENCIL_BIT,
-      .is_secure = image->vk.create_flags & VK_IMAGE_CREATE_PROTECTED_BIT,
+      .is_secure = image->vk.create_flags & VK_IMAGE_CREATE_2_PROTECTED_BIT_KHR,
    };
 
    info.offset.x = offset.x * radv_sdma_get_texel_scale(image);
@@ -531,8 +531,7 @@ radv_sdma_supports_image(const struct radv_device *device, const struct radv_ima
    if (radv_is_format_emulated(pdev, image->vk.format))
       return to_image ? false : true;
 
-   if (!pdev->info.sdma_supports_sparse &&
-       (image->vk.create_flags & VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT))
+   if (!pdev->info.sdma_supports_sparse && (image->vk.create_flags & VK_IMAGE_CREATE_2_SPARSE_RESIDENCY_BIT_KHR))
       return false;
 
    if (image->vk.samples != VK_SAMPLE_COUNT_1_BIT)

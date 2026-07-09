@@ -110,6 +110,7 @@ int vc4_get_driver_query_info(struct pipe_screen *pscreen, unsigned index,
         info->query_type = PIPE_QUERY_DRIVER_SPECIFIC + index;
         info->result_type = PIPE_DRIVER_QUERY_RESULT_TYPE_CUMULATIVE;
         info->type = PIPE_DRIVER_QUERY_TYPE_UINT64;
+        info->max_value.u64 = 0;
         info->flags = PIPE_DRIVER_QUERY_FLAG_BATCH;
         return 1;
 }

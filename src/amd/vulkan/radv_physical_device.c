@@ -235,6 +235,19 @@ radv_host_image_copy_enabled(const struct radv_physical_device *pdev)
           (pdev->info.gfx_level == GFX10 && (instance->experimental_flags & RADV_EXPERIMENTAL_HIC));
 }
 
+static bool
+radv_split_barrier_enabled(const struct radv_physical_device *pdev)
+{
+   return pdev->info.gfx_level >= GFX12 && !pdev->use_llvm;
+}
+
+static bool
+radv_compression_control_enabled(const struct radv_physical_device *pdev)
+{
+   /* Not useful on GFX12. */
+   return pdev->info.gfx_level < GFX12;
+}
+
 bool
 radv_enable_rt(const struct radv_physical_device *pdev)
 {
@@ -289,6 +302,16 @@ radv_are_dcc_mips_disabled(const struct radv_physical_device *pdev)
 
    return instance->drirc.debug.disable_dcc_mips && pdev->info.gfx_level < GFX12;
 }
+
+static bool
+radv_device_coherent_memory_enabled(const struct radv_physical_device *pdev)
+{
+   const struct radv_instance *instance = radv_physical_device_instance(pdev);
+
+   return pdev->info.has_l2_uncached && (!pdev->info.has_out_of_order_uncached_l2 ||
+                                         instance->drirc.features.device_coherent_memory);
+}
+
 static void
 parse_hex(char *out, const char *in, unsigned length)
 {
@@ -663,6 +686,14 @@ radv_get_binning_settings(const struct radv_physical_device *pdev, struct radv_b
    settings->fpovs_per_batch = 63;
 }
 
+static bool
+radv_msrtss_enabled(const struct radv_physical_device *pdev)
+{
+   const struct radv_instance *instance = radv_physical_device_instance(pdev);
+
+   return DETECT_OS_ANDROID || (instance->experimental_flags & RADV_EXPERIMENTAL_MSRTSS);
+}
+
 static void
 radv_physical_device_get_supported_extensions(const struct radv_physical_device *pdev,
                                               struct vk_device_extension_table *out_ext)
@@ -692,6 +723,7 @@ radv_physical_device_get_supported_extensions(const struct radv_physical_device 
       .KHR_driver_properties = true,
       .KHR_dynamic_rendering = true,
       .KHR_dynamic_rendering_local_read = true,
+      .KHR_extended_flags = true,
       .KHR_external_fence = true,
       .KHR_external_fence_fd = true,
       .KHR_external_memory = true,
@@ -824,7 +856,7 @@ radv_physical_device_get_supported_extensions(const struct radv_physical_device 
       .EXT_depth_clip_enable = true,
       .EXT_depth_range_unrestricted = true,
       .EXT_descriptor_buffer = true,
-      .EXT_descriptor_heap = instance->experimental_flags & RADV_EXPERIMENTAL_DESCRIPTOR_HEAP,
+      .EXT_descriptor_heap = !(instance->debug_flags & RADV_DEBUG_NO_HEAP),
       .EXT_descriptor_indexing = true,
       .EXT_device_address_binding_report = true,
       .EXT_device_fault = true,
@@ -849,7 +881,10 @@ radv_physical_device_get_supported_extensions(const struct radv_physical_device 
       .EXT_host_image_copy = radv_host_image_copy_enabled(pdev),
       .EXT_host_query_reset = true,
       .EXT_image_2d_view_of_3d = true,
-      .EXT_image_compression_control = pdev->info.gfx_level < GFX12, /* Not useful on GFX12 */
+      .EXT_image_compression_control = radv_compression_control_enabled(pdev),
+#ifdef RADV_USE_WSI_PLATFORM
+      .EXT_image_compression_control_swapchain = radv_compression_control_enabled(pdev),
+#endif
       .EXT_image_drm_format_modifier = pdev->info.gfx_level >= GFX9,
       .EXT_image_robustness = true,
       .EXT_image_sliced_view_of_3d = pdev->info.gfx_level >= GFX10,
@@ -864,6 +899,7 @@ radv_physical_device_get_supported_extensions(const struct radv_physical_device 
       .EXT_memory_priority = true,
       .EXT_mesh_shader = radv_taskmesh_enabled(pdev),
       .EXT_multi_draw = true,
+      .EXT_multisampled_render_to_single_sampled = radv_msrtss_enabled(pdev),
       .EXT_mutable_descriptor_type = true, /* Trivial promotion from VALVE. */
       .EXT_nested_command_buffer = true,
       .EXT_non_seamless_cube_map = true,
@@ -900,6 +936,7 @@ radv_physical_device_get_supported_extensions(const struct radv_physical_device 
       .EXT_shader_module_identifier = true,
       .EXT_shader_object = !pdev->use_llvm && !(instance->debug_flags & RADV_DEBUG_NO_ESO),
       .EXT_shader_replicated_composites = true,
+      .EXT_shader_split_barrier = radv_split_barrier_enabled(pdev),
       .EXT_shader_stencil_export = true,
       .EXT_shader_subgroup_ballot = true,
       .EXT_shader_subgroup_vote = true,
@@ -918,7 +955,7 @@ radv_physical_device_get_supported_extensions(const struct radv_physical_device 
       .EXT_ycbcr_image_arrays = true,
       .EXT_zero_initialize_device_memory = true,
       .AMD_buffer_marker = true,
-      .AMD_device_coherent_memory = pdev->info.has_l2_uncached,
+      .AMD_device_coherent_memory = radv_device_coherent_memory_enabled(pdev),
       .AMD_draw_indirect_count = true,
       .AMD_gcn_shader = true,
       .AMD_gpu_shader_half_float = pdev->info.compiler_info.has_packed_math_16bit,
@@ -941,7 +978,7 @@ radv_physical_device_get_supported_extensions(const struct radv_physical_device 
 #endif
       .GOOGLE_decorate_string = true,
 #ifdef RADV_USE_WSI_PLATFORM
-      .GOOGLE_display_timing = wsi_instance_supports_google_display_timing(pdev->vk.instance),
+      .GOOGLE_display_timing = wsi_instance_supports_google_display_timing(pdev->vk.instance, &instance->drirc.options),
 #endif
       .GOOGLE_hlsl_functionality1 = true,
       .GOOGLE_user_type = true,
@@ -1170,7 +1207,7 @@ radv_physical_device_get_features(const struct radv_physical_device *pdev, struc
       .texelBufferAlignment = true,
 
       /* VK_AMD_device_coherent_memory */
-      .deviceCoherentMemory = pdev->info.has_l2_uncached,
+      .deviceCoherentMemory = radv_device_coherent_memory_enabled(pdev),
 
       /* VK_KHR_line_rasterization */
       .rectangularLines = true,
@@ -1439,7 +1476,12 @@ radv_physical_device_get_features(const struct radv_physical_device *pdev, struc
       .cooperativeMatrixRobustBufferAccess = radv_cooperative_matrix_enabled(pdev),
 
       /* VK_EXT_image_compression_control */
-      .imageCompressionControl = pdev->info.gfx_level < GFX12,
+      .imageCompressionControl = radv_compression_control_enabled(pdev),
+
+#ifdef RADV_USE_WSI_PLATFORM
+      /* VK_EXT_image_compression_control_swapchain */
+      .imageCompressionControlSwapchain = radv_compression_control_enabled(pdev),
+#endif
 
       /* VK_EXT_device_fault */
       .deviceFaultEXT = true,
@@ -1581,6 +1623,9 @@ radv_physical_device_get_features(const struct radv_physical_device *pdev, struc
       /* VK_EXT_custom_resolve */
       .customResolve = true,
 
+      /* VK_EXT_multisampled_render_to_single_sampled */
+      .multisampledRenderToSingleSampled = radv_msrtss_enabled(pdev),
+
 #ifdef RADV_USE_WSI_PLATFORM
       /* VK_EXT_present_timing */
       /* The actual query is deferred to surface time. */
@@ -1631,6 +1676,12 @@ radv_physical_device_get_features(const struct radv_physical_device *pdev, struc
 
       /* VK_KHR_shader_abort */
       .shaderAbort = true,
+
+      /* VK_EXT_shader_split_barrier */
+      .shaderSplitBarrier = radv_split_barrier_enabled(pdev),
+
+      /* VK_KHR_extended_flags */
+      .extendedFlags = true,
    };
 }
 
@@ -1721,6 +1772,7 @@ radv_init_image_properties(struct radv_physical_device *pdev)
 static void
 radv_get_physical_device_properties(struct radv_physical_device *pdev)
 {
+   const struct radv_instance *instance = radv_physical_device_instance(pdev);
    VkSampleCountFlags sample_counts = 0xf;
 
    size_t max_descriptor_set_size = radv_max_descriptor_set_size();
@@ -1892,7 +1944,7 @@ radv_get_physical_device_properties(struct radv_physical_device *pdev)
                                      VK_SUBGROUP_FEATURE_ROTATE_BIT | VK_SUBGROUP_FEATURE_ROTATE_CLUSTERED_BIT,
       .subgroupQuadOperationsInAllStages = true,
       .pointClippingBehavior = VK_POINT_CLIPPING_BEHAVIOR_ALL_CLIP_PLANES,
-      .maxMultiviewViewCount = MAX_VIEWS,
+      .maxMultiviewViewCount = AC_MULTIVIEW_MAX_VIEWS,
       .maxMultiviewInstanceIndex = INT_MAX,
       .protectedNoFault = false,
       .maxPerSetDescriptors = RADV_MAX_PER_SET_DESCRIPTORS,
@@ -2198,7 +2250,7 @@ radv_get_physical_device_properties(struct radv_physical_device *pdev)
       .maxMeshOutputVertices = 256,
       .maxMeshOutputPrimitives = 256,
       .maxMeshOutputLayers = 8,
-      .maxMeshMultiviewViewCount = MAX_VIEWS,
+      .maxMeshMultiviewViewCount = AC_MULTIVIEW_MAX_VIEWS,
       .meshOutputPerVertexGranularity = 1,
       .meshOutputPerPrimitiveGranularity = 1,
 
@@ -2351,11 +2403,18 @@ radv_get_physical_device_properties(struct radv_physical_device *pdev)
 
       /* VK_KHR_shader_abort */
       .maxShaderAbortMessageSize = RADV_MAX_SHADER_ABORT_MESSAGE_SIZE,
+
+      /* VK_EXT_shader_split_barrier */
+      .splitBarrierReservedSharedMemory = 0,
    };
 
    struct vk_properties *p = &pdev->vk.properties;
 
-   strcpy(p->deviceName, pdev->marketing_name);
+   if (strlen(instance->drirc.debug.force_vk_devicename) > 0) {
+      snprintf(p->deviceName, sizeof(p->deviceName), "%s", instance->drirc.debug.force_vk_devicename);
+   } else {
+      strcpy(p->deviceName, pdev->marketing_name);
+   }
    memcpy(p->pipelineCacheUUID, pdev->cache_uuid, VK_UUID_SIZE);
 
    memcpy(p->deviceUUID, pdev->device_uuid, VK_UUID_SIZE);
@@ -3379,7 +3438,6 @@ VKAPI_ATTR VkResult VKAPI_CALL
 radv_GetPhysicalDeviceFragmentShadingRatesKHR(VkPhysicalDevice physicalDevice, uint32_t *pFragmentShadingRateCount,
                                               VkPhysicalDeviceFragmentShadingRateKHR *pFragmentShadingRates)
 {
-   VK_FROM_HANDLE(radv_physical_device, pdev, physicalDevice);
    VK_OUTARRAY_MAKE_TYPED(VkPhysicalDeviceFragmentShadingRateKHR, out, pFragmentShadingRates,
                           pFragmentShadingRateCount);
 
@@ -3400,13 +3458,14 @@ radv_GetPhysicalDeviceFragmentShadingRatesKHR(VkPhysicalDevice physicalDevice, u
          if (x == 1 && y == 1) {
             samples = ~0;
          } else {
-            samples = VK_SAMPLE_COUNT_1_BIT | VK_SAMPLE_COUNT_2_BIT | VK_SAMPLE_COUNT_4_BIT;
-
-            /* VRS coarse shading with 8x MSAA isn't supported on GFX12 and the
-             * hw automatically clamps to 1x1.
+            /* VRS coarse shading with 8x MSAA isn't supported:
+             * - on GFX12 because the hw automatically clamps to 1x1
+             * - on GFX11-11.7 due to random GPU hangs with VRS 2x2 (verified on NAVI33) and it's
+             *   easier to disable it completely for all rates
+             * - on GFX10.3 for consistency with newer generations and because this feature is
+             *   useless
              */
-            if (pdev->info.gfx_level < GFX12)
-               samples |= VK_SAMPLE_COUNT_8_BIT;
+            samples = VK_SAMPLE_COUNT_1_BIT | VK_SAMPLE_COUNT_2_BIT | VK_SAMPLE_COUNT_4_BIT;
          }
 
          append_rate(x, y, samples);
@@ -3634,7 +3693,6 @@ radv_GetPhysicalDeviceDescriptorSizeEXT(VkPhysicalDevice physicalDevice, VkDescr
    case VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR:
       return pdev->vk.properties.bufferDescriptorSize;
    default:
-      UNREACHABLE("Invalid descriptor type in GetPhysicalDeviceDescriptorSizeEXT");
       return 0;
    }
 }

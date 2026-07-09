@@ -623,7 +623,7 @@ vir_compile_init(const struct v3d_compiler *compiler,
         return c;
 }
 
-static int
+static unsigned
 type_size_vec4(const struct glsl_type *type, bool bindless)
 {
         return glsl_count_attribute_slots(type, false);
@@ -2039,7 +2039,9 @@ v3d_attempt_compile(struct v3d_compile *c)
                 .lower_subgroup_masks = true,
                 .lower_relative_shuffle = true,
                 .lower_quad = true,
+                .lower_quad_vote = true,
                 .lower_reduce = true,
+                .lower_rotate_to_shuffle = true,
         };
         NIR_PASS(_, c->s, nir_lower_subgroups, &subgroup_opts);
 

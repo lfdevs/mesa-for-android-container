@@ -105,7 +105,7 @@ lower_usclib_atomic(nir_builder *b, nir_intrinsic_instr *intr, void *cb_data)
       ASSERTED enum gl_access_qualifier access = nir_intrinsic_access(intr);
       ASSERTED unsigned num_components = intr->def.num_components;
       ASSERTED unsigned bit_size = intr->def.bit_size;
-      assert(access == ACCESS_COHERENT);
+      assert(access & ACCESS_COHERENT);
       assert(num_components == 1 && bit_size == 32);
 
       *uses_usclib = true;

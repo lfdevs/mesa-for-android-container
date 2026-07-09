@@ -26,11 +26,6 @@ glx@glx_arb_sync_control@timing.*
 # This test is not built with waffle, while we do build tests with waffle
 spec@!opengl 1.1@windowoverlap
 
-# These test the loader more than the implementation and are broken because the
-# Vulkan loader in Debian is too old
-dEQP-VK.api.get_device_proc_addr.non_enabled
-dEQP-VK.api.version_check.unavailable_entry_points
-
 # These tests are flaking too much recently on almost all drivers, so better skip them until the cause is identified
 spec@arb_program_interface_query@arb_program_interface_query-getprogramresourceindex
 spec@arb_program_interface_query@arb_program_interface_query-getprogramresourceindex@'vs_input2[1][0]' on GL_PROGRAM_INPUT

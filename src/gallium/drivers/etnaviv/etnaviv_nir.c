@@ -243,3 +243,38 @@ etna_lower_alu(nir_shader *shader, bool has_new_transcendentals)
 
    return progress;
 }
+
+static bool
+lower_bitfield_insert(nir_builder *b, nir_alu_instr *alu, UNUSED void *data)
+{
+   if (alu->op != nir_op_bitfield_insert)
+      return false;
+
+   b->cursor = nir_before_instr(&alu->instr);
+
+   /* offset and bits are the same for every component here. A bitfield_insert
+    * with per-component offset or bits is scalarized by
+    * etna_alu_to_scalar_filter_cb, so component zero is representative.
+    */
+   for (unsigned i = 1; i < alu->def.num_components; i++) {
+      assert(alu->src[2].swizzle[i] == alu->src[2].swizzle[0]);
+      assert(alu->src[3].swizzle[i] == alu->src[3].swizzle[0]);
+   }
+
+   nir_def *base = nir_ssa_for_alu_src(b, alu, 0);
+   nir_def *insert = nir_ssa_for_alu_src(b, alu, 1);
+   nir_def *offset = nir_channel(b, alu->src[2].src.ssa, alu->src[2].swizzle[0]);
+   nir_def *bits = nir_channel(b, alu->src[3].src.ssa, alu->src[3].swizzle[0]);
+   nir_def *packed = nir_vec2(b, offset, bits);
+
+   nir_def_replace(&alu->def, nir_bitfield_insert_etna(b, base, insert, packed));
+
+   return true;
+}
+
+bool
+etna_nir_lower_bitfield_insert(nir_shader *shader)
+{
+   return nir_shader_alu_pass(shader, lower_bitfield_insert,
+                              nir_metadata_control_flow, NULL);
+}

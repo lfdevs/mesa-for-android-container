@@ -1,80 +1,99 @@
-KHR-GL46.packed_pixels.varied_rectangle.*
-KHR-GL46.sparse_buffer_tests.BufferStorageTest
-KHR-GL46.sparse_texture_tests.SparseTextureCommitment_texture_2d_array_rgba16i
-KHR-GL46.sparse_texture_tests.SparseTextureCommitment_texture_2d_array_rgba8
-KHR-GL46.sparse_texture_tests.SparseTextureCommitment_texture_2d_rgba16
-KHR-GL46.sparse_texture_tests.SparseTextureCommitment_texture_2d_rgba8_snorm
-KHR-GL46.sparse_texture_tests.SparseTextureCommitment_texture_cube_map_r16ui
-KHR-GL46.sparse_texture_tests.SparseTextureCommitment_texture_cube_map_r8_snorm
-
-dEQP-GLES2.functional.fragment_ops.blend.rgb_func_alpha_func.src.dst_color_src_alpha
-dEQP-GLES2.functional.texture.filtering.cube.nearest_linear_clamp_rgba4444_pot
-dEQP-GLES3.functional.default_vertex_attrib.int.vertex_attribi_4i
-dEQP-GLES3.functional.fbo.multiview.samples_1
-dEQP-GLES3.functional.fbo.multiview.samples_2
-dEQP-GLES3.functional.fbo.multiview.samples_4
-dEQP-GLES3.functional.shaders.conversions.scalar_to_matrix.uint_to_mat2x3_vertex
-dEQP-GLES3.functional.texture.mipmap.cube.generate.la88_nicest
-dEQP-GLES3.functional.transform_feedback.array_element.interleaved.points.lowp_mat2x3
-dEQP-GLES31.functional.copy_image.compressed.viewclass_astc_5x4_rgba.srgb8_alpha8_astc_5x4_khr_rgba_astc_5x4_khr.texture2d_array_to_texture2d
-dEQP-GLES31.functional.copy_image.compressed.viewclass_astc_6x6_rgba.srgb8_alpha8_astc_6x6_khr_srgb8_alpha8_astc_6x6_khr.texture2d_to_texture2d_array
-dEQP-GLES31.functional.copy_image.mixed.viewclass_128_bits_mixed.rgba32f_rgba_astc_5x5_khr.texture2d_array_to_texture2d
-dEQP-GLES31.functional.copy_image.mixed.viewclass_128_bits_mixed.rgba32f_rgba_astc_8x8_khr.texture3d_to_texture2d_array
-dEQP-GLES31.functional.copy_image.mixed.viewclass_128_bits_mixed.rgba32i_srgb8_alpha8_astc_8x5_khr.texture2d_array_to_texture3d
-dEQP-GLES31.functional.copy_image.mixed.viewclass_128_bits_mixed.srgb8_alpha8_astc_10x5_khr_rgba32i.texture2d_array_to_texture2d_array
-dEQP-GLES31.functional.copy_image.mixed.viewclass_128_bits_mixed.srgb8_alpha8_astc_12x10_khr_rgba32ui.texture2d_array_to_texture3d
-dEQP-GLES31.functional.copy_image.mixed.viewclass_128_bits_mixed.srgb8_alpha8_astc_8x6_khr_rgba32f.texture2d_to_texture3d
-dEQP-GLES31.functional.copy_image.mixed.viewclass_64_bits_mixed.signed_r11_eac_rgba16ui.cubemap_to_texture3d
-dEQP-GLES31.functional.copy_image.non_compressed.viewclass_32_bits.r32ui_rgba8ui.cubemap_to_texture2d_array
-dEQP-GLES31.functional.copy_image.non_compressed.viewclass_32_bits.rg16ui_rgb10_a2.texture3d_to_texture2d_array
-dEQP-GLES31.functional.draw_base_vertex.draw_elements_base_vertex.points.multiple_attributes
-dEQP-GLES31.functional.draw_base_vertex.draw_elements_base_vertex.triangle_fan.single_attribute
-dEQP-GLES31.functional.synchronization.inter_call.without_memory_barrier.ssbo_atomic_counter_mixed_dispatch_100_calls_128_invocations
-dEQP-GLES31.functional.texture.filtering.cube_array.combinations.nearest_nearest_repeat_repeat
-dEQP-GLES31.functional.texture.filtering.cube_array.formats.srgb8_alpha8_linear_mipmap_linear
-dEQP-GLES31.functional.texture.gather.basic.cube.rgba8ui.texture_swizzle.zero_one_red_green
-
-glx@glx-buffer-age
-glx@glx_ext_no_config_context@no fbconfig
+dEQP-GLES2.functional.shaders.swizzles.vector_swizzles.mediump_bvec4_qppq_fragment
+dEQP-GLES31.functional.copy_image.compressed.viewclass_astc_10x8_rgba.rgba_astc_10x8_khr_srgb8_alpha8_astc_10x8_khr.texture2d_to_cubemap
+dEQP-GLES31.functional.copy_image.mixed.viewclass_128_bits_mixed.rgba32f_rgba_astc_12x12_khr.cubemap_to_texture2d
+dEQP-GLES31.functional.copy_image.mixed.viewclass_128_bits_mixed.rgba32f_srgb8_alpha8_astc_10x5_khr.cubemap_to_texture3d
+dEQP-GLES31.functional.copy_image.mixed.viewclass_128_bits_mixed.rgba32i_srgb8_alpha8_astc_8x5_khr.texture2d_array_to_texture2d_array
+dEQP-GLES31.functional.copy_image.mixed.viewclass_128_bits_mixed.rgba_astc_10x5_khr_rgba32i.cubemap_to_texture2d_array
+dEQP-GLES31.functional.copy_image.mixed.viewclass_128_bits_mixed.rgba_astc_12x12_khr_rgba32i.texture2d_to_texture2d_array
+dEQP-GLES31.functional.copy_image.mixed.viewclass_128_bits_mixed.srgb8_alpha8_astc_12x10_khr_rgba32f.texture2d_array_to_texture3d
+dEQP-GLES31.functional.copy_image.mixed.viewclass_128_bits_mixed.srgb8_alpha8_astc_5x4_khr_rgba32i.cubemap_to_texture2d_array
+dEQP-GLES31.functional.copy_image.mixed.viewclass_128_bits_mixed.srgb8_alpha8_astc_5x5_khr_rgba32i.texture3d_to_texture2d
+dEQP-GLES31.functional.copy_image.mixed.viewclass_128_bits_mixed.srgb8_alpha8_astc_5x5_khr_rgba32ui.texture3d_to_texture2d
+dEQP-GLES31.functional.copy_image.mixed.viewclass_128_bits_mixed.srgb8_alpha8_astc_8x8_khr_rgba32ui.texture2d_array_to_texture3d
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_64_bits.rg32i_rg32ui.texture2d_array_to_texture2d
+dEQP-GLES31.functional.texture.filtering.cube_array.formats.rgb565_nearest
+dEQP-GLES31.functional.texture.filtering.cube_array.formats.srgb8_alpha8_linear_mipmap_nearest
+dEQP-GLES3.functional.shaders.precision.float.mediump_sub_fragment
+dEQP-GLES3.functional.transform_feedback.array_element.interleaved.lines.highp_vec2
 glx@glx-multithread-texture
-
-spec@!opengl 1.0@rasterpos
-spec@!opengl 1.0@rasterpos@glsl_vs_gs_linked
-spec@!opengl 1.0@rasterpos@glsl_vs_tes_linke
-spec@!opengl 1.1@teximage-colors gl_rg
+KHR-GL46.direct_state_access.framebuffers_texture_layer_attachment
+KHR-GL46.gpu_shader_fp64.builtin.abs_dvec4
+KHR-GL46.gpu_shader_fp64.builtin.dot_dvec2
+KHR-GL46.gpu_shader_fp64.builtin.frexp_dvec4
+KHR-GL46.gpu_shader_fp64.builtin.inversesqrt_dvec4
+KHR-GL46.gpu_shader_fp64.builtin.isinf_dvec3
+KHR-GL46.gpu_shader_fp64.builtin.length_dvec2
+KHR-GL46.gpu_shader_fp64.builtin.min_against_scalar_dvec2
+KHR-GL46.gpu_shader_fp64.builtin.min_double
+KHR-GL46.gpu_shader_fp64.builtin.mod_double
+KHR-GL46.gpu_shader_fp64.builtin.modf_dvec4
+KHR-GL46.gpu_shader_fp64.builtin.outerproduct_dmat2x4
+KHR-GL46.gpu_shader_fp64.builtin.reflect_dvec3
+KHR-GL46.gpu_shader_fp64.builtin.round_dvec3
+KHR-GL46.gpu_shader_fp64.builtin.round_dvec4
+KHR-GL46.gpu_shader_fp64.builtin.trunc_dvec3
+KHR-GL46.packed_pixels.varied_rectangle.compressed_red_format_red
+KHR-GL46.packed_pixels.varied_rectangle.compressed_rgba_format_green
+KHR-GL46.packed_pixels.varied_rectangle.compressed_signed_red_rgtc1_format_rg
+KHR-GL46.packed_pixels.varied_rectangle.compressed_srgb_format_rgba
+KHR-GL46.packed_pixels.varied_rectangle.r16_format_red
+KHR-GL46.packed_pixels.varied_rectangle.rg16ui_format_bgra_integer
+KHR-GL46.packed_pixels.varied_rectangle.rg8_snorm_format_bgr
+KHR-GL46.packed_pixels.varied_rectangle.rgb10_format_bgra
+KHR-GL46.packed_pixels.varied_rectangle.rgb12_format_bgra
+KHR-GL46.packed_pixels.varied_rectangle.rgb16_snorm_format_rgb
+KHR-GL46.packed_pixels.varied_rectangle.rgb8ui_format_bgr_integer
+KHR-GL46.packed_pixels.varied_rectangle.rgba16_format_rgba
+KHR-GL46.packed_pixels.varied_rectangle.rgba2_format_rg
+KHR-GL46.packed_pixels.varied_rectangle.rgba8i_format_rgba_integer
+KHR-GL46.packed_pixels.varied_rectangle.rg_format_rgba
+KHR-GL46.packed_pixels.varied_rectangle.srgb8_format_rgba
+KHR-GL46.texture_border_clamp.Texture3DRGBA32FLinear
+KHR-GL46.texture_lod_bias.texture_lod_bias_all
+spec@amd_pinned_memory@map-buffer offset=0
+spec@amd_pinned_memory@offset=0
+spec@amd_shader_trinary_minmax@execution@built-in-functions@vs-max3-ivec2-ivec2-ivec2
+spec@arb_color_buffer_float@gl_rgba8-render
+spec@arb_color_buffer_float@gl_rgba8-render-sanity
+spec@arb_compute_shader@local-id-explosion
 spec@arb_compute_variable_group_size@local-size
-spec@arb_enhanced_layouts@execution@component-layout@sso-vs-gs-fs-array-interleave
+spec@arb_copy_image@arb_copy_image-formats
+spec@arb_direct_state_access@gettextureimage-formats
 spec@arb_fragment_shader_interlock@arb_fragment_shader_interlock-image-load-store
-spec@arb_pixel_buffer_object@cubemap npot pbo
-spec@arb_shader_atomic_counters@semantics
-spec@arb_shader_texture_lod@execution@glsl-fs-shadow2dgradarb-cumulative
-spec@arb_tessellation_shader@execution@variable-indexing@tcs-output-array-vec3-index-wr-before-barrier
-spec@arb_texture_cube_map@copyteximage cube samples=6
-spec@arb_texture_cube_map@copyteximage cube samples=8
-spec@arb_texture_rectangle@copyteximage rect samples=6
-spec@arb_texture_rectangle@copyteximage rect samples=8
-spec@arb_timer_query@timestamp-get
-spec@ext_texture_array@copyteximage 1d_array samples=6
-spec@ext_texture_array@copyteximage 1d_array samples=8
-spec@ext_texture_array@copyteximage 2d_array samples=6
-spec@ext_texture_array@copyteximage 2d_array samples=8
+spec@arb_pixel_buffer_object@texsubimage-unpack pbo
+spec@arb_shading_language_packing@execution@built-in-functions@fs-packsnorm2x16
+spec@arb_tessellation_shader@arb_tessellation_shader-tes-gs-max-output -small -scan 1 50
+spec@arb_texture_multisample@texelfetch fs sampler2dms 4 1x71-501x71
+spec@arb_texture_multisample@texelfetch fs sampler2dmsarray 4 98x1x9-98x129x9
+spec@arb_texture_rg@texwrap formats-float bordercolor
+spec@ext_framebuffer_object@getteximage-formats init-by-rendering
+spec@ext_texture_array@fbo-depth-array depth-clear
+spec@ext_texture_array@fbo-depth-array depth-draw
+spec@ext_texture_array@fbo-depth-array depth-layered-clear
+spec@ext_texture_array@fbo-depth-array fs-writes-depth
+spec@ext_texture_array@fbo-depth-array fs-writes-stencil
+spec@ext_texture_array@fbo-depth-array stencil-draw
 spec@ext_transform_feedback@max-varyings
 spec@ext_transform_feedback@max-varyings@max-varying-arrays-of-arrays
-spec@glsl-1.30@execution@texelfetch fs sampler2d 281x1-281x281
-spec@glsl-1.30@execution@texelfetchoffset@vs-texelfetch-usampler1darray
+spec@ext_transform_feedback@max-varyings@max-varying-single-dimension-array
+spec@glsl-1.30@execution@texelfetch fs sampler1d 1-513
+spec@glsl-1.30@execution@texelfetch fs sampler1darray 1x281-501x281
+spec@glsl-1.30@execution@texelfetch fs sampler2d 1x281-501x281
+spec@glsl-1.30@execution@texelfetch fs sampler2darray 1x129x9-98x129x9
+spec@glsl-1.30@execution@texelfetch fs sampler2darray 98x129x1-98x129x9
+spec@glsl-1.30@execution@texelfetch fs sampler2darray 98x1x9-98x129x9
 spec@glsl-1.50@execution@geometry@point-size-out
 spec@glsl-1.50@execution@redeclare-pervertex-out-subset-gs
-
-# Marked as flake because it passes with ESO but crashes with pipelines.
-spec@arb_tessellation_shader@arb_tessellation_shader-tes-gs-max-output -small -scan 1 50
-
+spec@glsl-es-3.00@execution@built-in-functions@fs-packhalf2x16
+spec@khr_texture_compression_astc@sliced-3d-miptree-gles srgb
+spec@!opengl 1.0@gl-1.0-read-cache-stress-test
+spec@!opengl 1.0@rasterpos
+spec@!opengl 1.0@rasterpos@glsl_vs_gs_linked
+spec@!opengl 1.0@rasterpos@glsl_vs_tes_linked
 spec@!opengl 1.1@copypixels-sync
-spec@amd_pinned_memory@map-buffer offset=0
-spec@glsl-1.30@execution@texelfetch fs sampler2darray 98x1x9-98x129x9
-
-
-# mesh shaders somehow?
-glx@glx-visuals-depth
-glx@glx-visuals-depth -pixmap
-glx@glx-visuals-stencil
-glx@glx-visuals-stencil -pixmap
+spec@!opengl 1.1@draw-pixels
+spec@!opengl 1.1@draw-sync
+spec@!opengl 1.1@teximage-colors gl_r8
+spec@!opengl 1.2@texture-packed-formats
+spec@!opengl 1.4@gl-1.4-polygon-offset
+spec@!opengl 2.0@tex3d-npot

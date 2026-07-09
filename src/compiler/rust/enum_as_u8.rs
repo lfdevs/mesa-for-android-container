@@ -32,6 +32,17 @@ impl<E: EnumAsU8, const N: usize> U8EnumSet<E, N> {
         assert!((E::MAX_DISCRIMINANT as usize) < N * 32);
     };
 
+    pub const fn new() -> Self {
+        U8EnumSet {
+            set: ConstBitSet::new(),
+            phantom: std::marker::PhantomData,
+        }
+    }
+
+    pub fn from_array<const A: usize>(arr: [E; A]) -> Self {
+        arr.into_iter().collect()
+    }
+
     /// SAFETY: Every value in the array must be a valid E discriminant.
     pub const unsafe fn from_u8_array<const A: usize>(arr: [u8; A]) -> Self {
         let _ = Self::ASSERT;
@@ -53,10 +64,33 @@ impl<E: EnumAsU8, const N: usize> U8EnumSet<E, N> {
         self.set.contains(u)
     }
 
+    pub fn insert(&mut self, e: E) -> bool {
+        self.set.insert(e.as_u8())
+    }
+
     pub fn iter(&self) -> impl Iterator<Item = E> + use<'_, E, N> {
         // SAFETY: We ensure that the only elements added to the set are valid
         // E values.
         self.set.iter().map(|u| unsafe { E::from_u8_unchecked(u) })
+    }
+}
+
+impl<E: EnumAsU8, const N: usize> Default for U8EnumSet<E, N> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<E: EnumAsU8, const N: usize> FromIterator<E> for U8EnumSet<E, N> {
+    fn from_iter<T>(iter: T) -> Self
+    where
+        T: IntoIterator<Item = E>,
+    {
+        let mut set = Self::new();
+        for e in iter {
+            set.insert(e);
+        }
+        set
     }
 }
 

@@ -112,7 +112,8 @@ uint nir_smp_pco(uint16 data,
                  uint4 tex_state,
                  uint4 smp_state,
                  uint smp_flags,
-                 uint range);
+                 uint range,
+                 enum gl_access_qualifier access);
 
 uint nir_umax(uint a, uint b);
 #endif /* PCO_LIBCL_H */

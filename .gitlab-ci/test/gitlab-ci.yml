@@ -23,6 +23,7 @@ rustfmt:
   extends:
     - .formatting-check
     - .lint-rustfmt-rules
+    - .no-auto-retry  # this job can't be flaky
   before_script:
     - shopt -s globstar
     - source "$HOME/.cargo/env"

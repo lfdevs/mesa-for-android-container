@@ -33,7 +33,7 @@
  *   Kristian Høgsberg (krh@redhat.com)
  */
 
-#if defined(GLX_DIRECT_RENDERING) && (!defined(GLX_USE_APPLEGL) || defined(GLX_USE_APPLE))
+#if defined(GLX_DIRECT_RENDERING)
 
 #include <unistd.h>
 #include <dlfcn.h>
@@ -255,7 +255,7 @@ driInferDrawableConfig(struct glx_screen *psc, GLXDrawable draw)
     * this usually works except for bare Windows that haven't been made
     * current yet.
     */
-   if (__glXGetDrawableAttribute(psc->dpy, draw, GLX_FBCONFIG_ID, &fbconfig)) {
+   if (__glXQueryDrawable(psc->dpy, draw, GLX_FBCONFIG_ID, &fbconfig)) {
       return glx_config_find_fbconfig(psc->configs, fbconfig);
    }
 
@@ -331,7 +331,7 @@ driFetchDrawable(struct glx_context *gc, GLXDrawable glxDrawable)
     */
 
    /* Infer the GLX drawable type. */
-   if (__glXGetDrawableAttribute(dpy, glxDrawable, GLX_DRAWABLE_TYPE, &type)) {
+   if (__glXQueryDrawable(dpy, glxDrawable, GLX_DRAWABLE_TYPE, &type)) {
       /* Xserver may support query with raw X11 window. */
       if (type == GLX_PIXMAP_BIT) {
          ErrorMessageF("GLXPixmap drawable type is not supported\n");
@@ -389,7 +389,7 @@ checkServerGLXDrawableAlive(const struct glx_display *priv)
       unsigned int dummy;
 
       /* Fail to query, so the window has been closed. Release the GLXDrawable. */
-      if (!__glXGetDrawableAttribute(priv->dpy, drawable, GLX_WIDTH, &dummy)) {
+      if (!__glXQueryDrawable(priv->dpy, drawable, GLX_WIDTH, &dummy)) {
          pdraw->destroyDrawable(pdraw);
          __glxHashDelete(priv->drawHash, drawable);
          _mesa_set_remove(priv->zombieGLXDrawable, entry);

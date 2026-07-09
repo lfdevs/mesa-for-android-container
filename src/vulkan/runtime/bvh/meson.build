@@ -51,9 +51,8 @@ vk_bvh_include_dir = dir_source_root + '/src/vulkan/runtime/bvh'
 
 vk_bvh_includes = files(
   'leaf.h',
-  'vk_build_helpers.h',
-  'vk_build_interface.h',
-  'vk_bvh.h',
+  'vk_bvh_defines.h',
+  'vk_bvh_helpers.h',
   'vk_debug.h',
   spirv_include_dir + '/spirv_internal_exts.h',
 )

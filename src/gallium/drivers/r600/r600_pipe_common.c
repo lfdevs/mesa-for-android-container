@@ -69,7 +69,7 @@ void r600_gfx_write_event_eop(struct r600_common_context *ctx,
 
 	if (buf)
 		r600_emit_reloc(ctx, &ctx->gfx, buf, RADEON_USAGE_WRITE |
-				RADEON_PRIO_QUERY);
+				RADEON_PRIO_QUERY, 0);
 }
 
 unsigned r600_gfx_write_fence_dwords(struct r600_common_screen *screen)
@@ -98,7 +98,7 @@ void r600_gfx_wait_fence(struct r600_common_context *ctx,
 
 	if (buf)
 		r600_emit_reloc(ctx, &ctx->gfx, buf, RADEON_USAGE_READ |
-				RADEON_PRIO_QUERY);
+				RADEON_PRIO_QUERY, 0);
 }
 
 void r600_draw_rectangle(struct blitter_context *blitter,

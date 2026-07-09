@@ -51,7 +51,7 @@ static nir_def *build_attr_ring_desc(nir_builder *b, struct si_shader *shader,
    nir_def *attr_address =
       b->shader->info.stage == MESA_SHADER_VERTEX && b->shader->info.vs.blit_sgprs_amd ?
       ac_nir_load_arg_at_offset(b, &args->ac, args->vs_blit_inputs,
-                                b->shader->info.vs.blit_sgprs_amd - 1) :
+                                b->shader->info.vs.blit_sgprs_amd - 1, false) :
       ac_nir_load_arg(b, &args->ac, args->gs_attr_address);
 
    unsigned per_vertex_params = MAX2(1, si_shader_num_alloc_param_exports(shader));
@@ -582,7 +582,7 @@ static bool lower_intrinsic(nir_builder *b, nir_instr *instr, struct lower_abi_s
       nir_def *color[4];
       for (int i = 0; i < 4; i++) {
          if (colors_read & BITFIELD_BIT(start + i))
-            color[i] = ac_nir_load_arg_at_offset(b, &args->ac, args->color_start, offset++);
+            color[i] = ac_nir_load_arg_at_offset(b, &args->ac, args->color_start, offset++, false);
          else
             color[i] = nir_undef(b, 1, 32);
       }

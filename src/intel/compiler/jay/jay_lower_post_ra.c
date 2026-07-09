@@ -27,8 +27,8 @@ lower_non_tied_default(jay_builder *b, jay_inst *I, jay_def default_)
       jay_remove_instruction(I);
    } else {
       jay_foreach_comp(I->dst, c) {
-         jay_def dst = jay_extract_range_post_ra(I->dst, c, 1);
-         jay_def src = jay_extract_range_post_ra(default_, c, 1);
+         jay_def dst = jay_bare_reg(I->dst.file, I->dst.reg + c);
+         jay_def src = jay_bare_reg(default_.file, default_.reg + c);
 
          jay_inst *mov = jay_MOV(b, dst, src);
          mov->type = I->type;

@@ -158,7 +158,7 @@ lvp_needs_advanced_blend_lowering(struct lvp_pipeline *pipeline)
    return false;
 }
 
-static int
+static unsigned
 type_size_vec4(const struct glsl_type *type, bool bindless)
 {
    return glsl_count_attribute_slots(type, false);
@@ -592,6 +592,12 @@ lvp_shader_lower(struct lvp_device *pdevice, nir_shader *nir, struct lvp_shader 
       NIR_PASS(_, nir, nir_lower_io_array_vars_to_elements_no_indirects, false);
    } else if (nir->info.stage == MESA_SHADER_FRAGMENT) {
       NIR_PASS(_, nir, nir_lower_io_array_vars_to_elements_no_indirects, true);
+   } else if (nir->info.stage == MESA_SHADER_MESH ||
+              nir->info.stage == MESA_SHADER_TESS_CTRL) {
+      /* Avoid vec-component writes being misread as attribute slot offsets. */
+      NIR_PASS(_, nir, nir_lower_array_deref_of_vec, nir_var_shader_out, NULL,
+               nir_lower_direct_array_deref_of_vec_store |
+               nir_lower_indirect_array_deref_of_vec_store);
    }
 
    /* TODO: also optimize the tex srcs. see radeonSI for reference */

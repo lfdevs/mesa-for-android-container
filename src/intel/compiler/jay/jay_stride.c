@@ -65,6 +65,15 @@ jay_dst_stride_minmax(jay_inst *I, bool do_max)
     */
    if (I->op == JAY_OPCODE_CVT) {
       min = MAX2(min, min_stride_for_type(jay_src_type(I, 0)));
+
+      /* Conversions between integer and HF must be strided by a DWord on the
+       * destination.
+       */
+      if ((I->type == JAY_TYPE_F16 &&
+           !jay_type_is_any_float(jay_cvt_src_type(I))) ||
+          (jay_cvt_src_type(I) == JAY_TYPE_F16 &&
+           !jay_type_is_any_float(I->type)))
+         min = JAY_STRIDE_4;
    }
 
    if (I->op == JAY_OPCODE_EXPAND_QUAD) {
@@ -96,6 +105,11 @@ jay_src_stride_minmax(jay_inst *I, unsigned s, bool do_max)
    enum jay_stride min = min_stride_for_type(jay_src_type(I, s));
    enum jay_stride max = max_stride_for_type(jay_src_type(I, s));
 
+   /* BSpec 56640: bfloat sources must be packed */
+   if (jay_src_type(I, s) == JAY_TYPE_BF16) {
+      return JAY_STRIDE_2;
+   }
+
    /* SENDs cannot do any regioning so force exactly the types of the sources
     * regardless of the type of the destination.
     *
@@ -114,14 +128,8 @@ jay_src_stride_minmax(jay_inst *I, unsigned s, bool do_max)
       max = JAY_STRIDE_4;
    }
 
-   if (jay_src_type(I, s) == JAY_TYPE_BF16)
-      return JAY_STRIDE_2;
-
-   if (restrict_mixed_strides(I, s) &&
-       jay_type_size_bits(jay_src_type(I, s)) < jay_type_size_bits(I->type)) {
-
+   if (restrict_mixed_strides(I, s))
       return jay_dst_stride_minmax(I, do_max);
-   }
 
    return (do_max && !restrict_mixed_strides(I, s)) ? max : min;
 }

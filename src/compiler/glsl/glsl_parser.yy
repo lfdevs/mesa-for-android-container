@@ -1269,7 +1269,9 @@ layout_qualifier_id:
       }
 
       /* See also interface_block_layout_qualifier. */
-      if (!$$.flags.i && state->has_uniform_buffer_objects()) {
+      if (!$$.flags.i &&
+          (state->has_uniform_buffer_objects() ||
+           state->has_shader_storage_buffer_objects())) {
          if (match_layout_qualifier($1, "std140", state) == 0) {
             $$.flags.q.std140 = 1;
          } else if (match_layout_qualifier($1, "shared", state) == 0) {
@@ -1300,9 +1302,12 @@ layout_qualifier_id:
            $$.flags.q.packed = 1;
          }
 
-         if ($$.flags.i && state->ARB_uniform_buffer_object_warn) {
+         if ($$.flags.i &&
+             (state->ARB_uniform_buffer_object_warn ||
+              state->ARB_shader_storage_buffer_object_warn)) {
             _mesa_glsl_warning(& @1, state,
                                "#version 140 / GL_ARB_uniform_buffer_object "
+                               "/ GL_ARB_shader_storage_buffer_object"
                                "layout qualifier `%s' is used", $1);
          }
       }

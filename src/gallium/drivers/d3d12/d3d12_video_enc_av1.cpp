@@ -538,10 +538,14 @@ d3d12_video_encoder_negotiate_current_av1_tiles_configuration(struct d3d12_video
    bool tilesUniform = !D3D12_VIDEO_FORCE_TILE_MODE && util_is_power_of_two_or_zero(static_cast<uint32_t>(tilePartition.RowCount)) &&
                        util_is_power_of_two_or_zero(static_cast<uint32_t>(tilePartition.ColCount));
    // Iterate again now that the 63/64 edge case has been handled above.
-   for (uint8_t i = 1; tilesUniform && (i < tilePartition.RowCount - 1) /* Ignore last row */; i++)
+   assert(tilePartition.RowCount <= 64);   // AV1 spec MAX_TILE_ROWS
+   uint8_t rowCount = static_cast<uint8_t>(tilePartition.RowCount);
+   for (uint8_t i = 1; tilesUniform && (i < rowCount - 1) /* Ignore last row */; i++)
       tilesUniform = tilesUniform && (tilePartition.RowHeights[i - 1] == tilePartition.RowHeights[i]);
 
-   for (uint8_t i = 1; tilesUniform && (i < tilePartition.ColCount - 1) /* Ignore last col */; i++)
+   assert(tilePartition.ColCount <= 64);   // AV1 spec MAX_TILE_COLS
+   uint8_t colCount = static_cast<uint8_t>(tilePartition.ColCount);
+   for (uint8_t i = 1; tilesUniform && (i < colCount - 1) /* Ignore last col */; i++)
       tilesUniform = tilesUniform && (tilePartition.ColWidths[i - 1] == tilePartition.ColWidths[i]);
 
    D3D12_VIDEO_ENCODER_FRAME_SUBREGION_LAYOUT_MODE requestedTilesMode =
@@ -551,7 +555,8 @@ d3d12_video_encoder_negotiate_current_av1_tiles_configuration(struct d3d12_video
    assert(pAV1Pic->num_tile_groups <= 128);   // ARRAY_SIZE(TilesGroups)
    pD3D12Enc->m_currentEncodeConfig.m_encoderSliceConfigDesc.m_TilesConfig_AV1.TilesGroupsCount =
       static_cast<uint8_t>(pAV1Pic->num_tile_groups);
-   for (uint8_t i = 0; i < pAV1Pic->num_tile_groups; i++) {
+   uint8_t tile_groups_count = static_cast<uint8_t>(pAV1Pic->num_tile_groups);
+   for (uint8_t i = 0; i < tile_groups_count; i++) {
       pD3D12Enc->m_currentEncodeConfig.m_encoderSliceConfigDesc.m_TilesConfig_AV1.TilesGroups[i].tg_start =
          pAV1Pic->tile_groups[i].tile_group_start;
       pD3D12Enc->m_currentEncodeConfig.m_encoderSliceConfigDesc.m_TilesConfig_AV1.TilesGroups[i].tg_end =
@@ -1061,6 +1066,13 @@ d3d12_video_encoder_update_current_encoder_config_state_av1(struct d3d12_video_e
       pD3D12Enc->m_currentEncodeConfig.m_ConfigDirtyFlags |= d3d12_video_encoder_config_dirty_flag_codec;
    }
    pD3D12Enc->m_currentEncodeConfig.m_encoderCodecDesc = D3D12_VIDEO_ENCODER_CODEC_AV1;
+
+   // Iterate over the headers the app requested and set flags to emit those for this frame.
+   util_dynarray_foreach (&av1Pic->raw_headers, struct pipe_enc_raw_header, header) {
+      if (header->type == OBU_TEMPORAL_DELIMITER)
+         pD3D12Enc->m_currentEncodeConfig.m_ConfigDirtyFlags |=
+            d3d12_video_encoder_config_dirty_flag_av1_temporal_delimiter_header;
+   }
 
    // Set input format
    DXGI_FORMAT targetFmt = d3d12_convert_pipe_video_profile_to_dxgi_format(pD3D12Enc->base.profile);
@@ -1624,10 +1636,9 @@ d3d12_video_encoder_update_current_frame_pic_params_info_av1(struct d3d12_video_
       pAV1Pic->enable_frame_obu;
    pD3D12Enc->m_spEncodedFrameMetadata[current_metadata_slot].m_CodecSpecificData.AV1HeadersInfo.obu_has_size_field =
       (pAV1Pic->tg_obu_header.obu_has_size_field == 1);
-   // Disabling for now as the libva spec does not allow these but some apps send down anyway. It's possible in the future 
-   // the libva spec may be retro-fitted to allow this given existing apps in the wild doing it.
-   // pD3D12Enc->m_spEncodedFrameMetadata[current_metadata_slot]
-   //   .m_CodecSpecificData.AV1HeadersInfo.temporal_delim_rendered = pAV1Pic->temporal_delim_rendered;
+   pD3D12Enc->m_spEncodedFrameMetadata[current_metadata_slot].m_CodecSpecificData.AV1HeadersInfo.temporal_delim_rendered =
+      (pD3D12Enc->m_currentEncodeConfig.m_ConfigDirtyFlags &
+       d3d12_video_encoder_config_dirty_flag_av1_temporal_delimiter_header) != 0;
 
    if (pD3D12Enc->m_currentEncodeConfig.m_QuantizationMatrixDesc.CPUInput.AppRequested)
    {
@@ -1927,14 +1938,16 @@ fill_av1_pic_header(EncodedBitstreamResolvedMetadata &associatedMetadata,
                 pic_header->tile_info.tile_partition.RowCount);
 
    assert(pic_header->tile_info.tile_partition.ColCount < 64);
-   for (uint8_t i = 0; i < pic_header->tile_info.tile_partition.ColCount; i++) {
+   uint8_t postColCount = static_cast<uint8_t>(pic_header->tile_info.tile_partition.ColCount);
+   for (uint8_t i = 0; i < postColCount; i++) {
       debug_printf("Post encode tile_info.tile_partition.ColWidths[%d]: %" PRIu64 "\n",
                    i,
                    pic_header->tile_info.tile_partition.ColWidths[i]);
    }
 
    assert(pic_header->tile_info.tile_partition.RowCount < 64);
-   for (uint8_t i = 0; i < pic_header->tile_info.tile_partition.RowCount; i++) {
+   uint8_t postRowCount = static_cast<uint8_t>(pic_header->tile_info.tile_partition.RowCount);
+   for (uint8_t i = 0; i < postRowCount; i++) {
       debug_printf("Post encode tile_info.tile_partition.RowHeights[%d]: %" PRIu64 "\n",
                    i,
                    pic_header->tile_info.tile_partition.RowHeights[i]);
@@ -1947,14 +1960,14 @@ fill_av1_pic_header(EncodedBitstreamResolvedMetadata &associatedMetadata,
 
    pic_header->frame_type = associatedMetadata.m_associatedEncodeConfig.m_encoderPicParamsDesc.m_AV1PicData.FrameType;
    {
-      UINT EncodeOrderInGop =
-         (associatedMetadata.m_associatedEncodeConfig.m_encoderPicParamsDesc.m_AV1PicData.PictureIndex %
-          associatedMetadata.m_associatedEncodeConfig.m_encoderGOPConfigDesc.m_AV1SequenceStructure.IntraDistance);
+      UINT IntraDistance = associatedMetadata.m_associatedEncodeConfig.m_encoderGOPConfigDesc.m_AV1SequenceStructure.IntraDistance;
+      UINT EncodeOrderInGop = associatedMetadata.m_associatedEncodeConfig.m_encoderPicParamsDesc.m_AV1PicData.PictureIndex;
+      UINT ShowOrderInGop = associatedMetadata.m_associatedEncodeConfig.m_encoderPicParamsDesc.m_AV1PicData.OrderHint;
 
-      UINT ShowOrderInGop =
-         (associatedMetadata.m_associatedEncodeConfig.m_encoderPicParamsDesc.m_AV1PicData.OrderHint %
-          associatedMetadata.m_associatedEncodeConfig.m_encoderGOPConfigDesc.m_AV1SequenceStructure.IntraDistance);
-
+      if (IntraDistance != 0) {
+         EncodeOrderInGop = EncodeOrderInGop % IntraDistance;
+         ShowOrderInGop = ShowOrderInGop % IntraDistance;
+      }
       pic_header->show_frame = (ShowOrderInGop <= EncodeOrderInGop);
    }
 
@@ -2227,7 +2240,9 @@ d3d12_video_encoder_build_post_encode_codec_bitstream_av1(struct d3d12_video_enc
    debug_printf("[d3d12_video_enc_av1] D3D12_VIDEO_ENCODER_OUTPUT_METADATA.WrittenSubregionsCount: %" PRIu64 " \n",
                 pParsedMetadata->WrittenSubregionsCount);
 
-   for (uint8_t i = 0; i < pParsedMetadata->WrittenSubregionsCount; i++) {
+   assert(pParsedMetadata->WrittenSubregionsCount <= 4096);   // MAX_TILE_ROWS (64) * MAX_TILE_COLS (64)
+   uint16_t subregionCount = static_cast<uint16_t>(pParsedMetadata->WrittenSubregionsCount);
+   for (uint16_t i = 0; i < subregionCount; i++) {
       debug_printf("[d3d12_video_enc_av1] D3D12_VIDEO_ENCODER_FRAME_SUBREGION_METADATA[%d].bHeaderSize: %" PRIu64 " \n",
                    i,
                    pFrameSubregionMetadata[i].bHeaderSize);

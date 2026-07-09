@@ -84,7 +84,7 @@ struct radv_shader_args {
 
    /* Task */
    struct ac_arg task_state;
-   /* User data 2/3. same as ring_offsets but for task shaders. */
+   /* User data 2/3 (0/1 on GFX11+). same as ring_offsets but for task shaders. */
    struct ac_arg task_ring_offsets;
 
    /* NGG */

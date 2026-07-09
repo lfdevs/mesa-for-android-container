@@ -142,7 +142,7 @@ static void si_copy_from_staging_texture(struct pipe_context *ctx, struct si_tra
 
    if (util_format_is_compressed(dst->format)) {
       sbox.width = util_format_get_nblocksx(dst->format, sbox.width);
-      sbox.height = util_format_get_nblocksx(dst->format, sbox.height);
+      sbox.height = util_format_get_nblocksy(dst->format, sbox.height);
    }
 
    si_resource_copy_region(ctx, dst, transfer->level, transfer->box.x, transfer->box.y,

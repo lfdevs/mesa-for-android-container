@@ -79,7 +79,7 @@ static_assert(JAY_FILE_LAST <= 0b1111, "must fit in 4 bits (see jay_def)");
 #define JAY_MAX_OPERANDS             (JAY_MAX_SRCS + JAY_MAX_DESTS)
 #define JAY_MAX_FLAGS                (8)
 #define JAY_MAX_SAMPLER_MESSAGE_SIZE (11)
-#define JAY_NUM_LAST_USE_BITS        (32)
+#define JAY_NUM_LAST_USE_BITS        (64)
 #define JAY_NUM_PHYS_GRF             (128)
 #define JAY_NUM_UGPR                 (1024)
 #define JAY_REG_BITS                 (17)
@@ -143,13 +143,25 @@ typedef struct jay_def {
 static_assert(sizeof(jay_def) == 8, "packed");
 
 /*
- * Construct an jay_def representing a bare register with no associated SSA
- * index, for use post-RA only.
+ * Construct an jay_def representing contiguous bare registers with no
+ * associated SSA index, for use post-RA only.
  */
+static inline jay_def
+jay_bare_regs(enum jay_file file, uint16_t reg, unsigned count)
+{
+   assert(count > 0);
+   return (jay_def) {
+      ._payload = JAY_SENTINEL,
+      .reg = reg,
+      .file = file,
+      .num_values_m1 = count - 1,
+   };
+}
+
 static inline jay_def
 jay_bare_reg(enum jay_file file, uint16_t reg)
 {
-   return (jay_def) { ._payload = JAY_SENTINEL, .reg = reg, .file = file };
+   return jay_bare_regs(file, reg, 1);
 }
 
 /*
@@ -323,20 +335,6 @@ static inline jay_def
 jay_extract(jay_def def, unsigned chan)
 {
    return jay_extract_range(def, chan, 1);
-}
-
-/**
- * Like jay_extract but working on bare registers. This could be unified to
- * preserve indices and such but meh.
- */
-static inline jay_def
-jay_extract_range_post_ra(jay_def def, unsigned chan, unsigned count)
-{
-   assert(count > 0);
-
-   jay_def x = jay_bare_reg(def.file, def.reg + chan);
-   x.num_values_m1 = count - 1;
-   return x;
 }
 
 /**
@@ -568,7 +566,7 @@ typedef struct jay_inst {
     */
    bool replicate_dep:1;
    bool decrement_dep:1;
-   unsigned padding  :12;
+   uint8_t padding   :4;
 
    enum jay_predication predication;
    gen_condition conditional_mod;
@@ -684,9 +682,24 @@ jay_src_type(const jay_inst *I, unsigned s)
    if (I->op == JAY_OPCODE_DP4A_SU && s == 2)
       return JAY_TYPE_U32;
 
-   /* Shuffle lane index distinct from data type */
-   if (I->op == JAY_OPCODE_SHUFFLE && s == 1)
+   /* Indirect offset distinct from data type */
+   if ((I->op == JAY_OPCODE_SHUFFLE || I->op == JAY_OPCODE_VECTOR_EXTRACT) &&
+       s == 1)
       return JAY_TYPE_U32;
+
+   /* TODO: *maybe* find a less janky way of handling mixed bfloat op type
+    * restrictions? this *might* be the "least bad" option 
+    */
+   if (I->type == JAY_TYPE_BF16) {
+      /* Bspec 56640: src2 of 3-src instructions cannot be bfloat */
+      if (jay_num_isa_srcs(I) == 3 && s == 2)
+         return JAY_TYPE_F32;
+      /* Bspec 56640: src1 of 2-src instructions involving multiplier
+       * cannot be bfloat 
+       */
+      if (jay_num_isa_srcs(I) == 2 && s == 1)
+         return JAY_TYPE_F32;
+   }
 
    /* Other instructions inherit the destination type. */
    return I->type;
@@ -863,6 +876,12 @@ jay_is_send_like(const jay_inst *I)
       return I->op == JAY_OPCODE_SEND;
 }
 
+static inline bool
+jay_inst_is_unordered(const jay_inst *I)
+{
+   return I->op == JAY_OPCODE_SEND || I->op == JAY_OPCODE_DPAS;
+}
+
 /*
  * Returns whether an instruction contains cross-lane access.
  */
@@ -870,8 +889,16 @@ static inline bool
 jay_is_shuffle_like(const jay_inst *I)
 {
    return I->op == JAY_OPCODE_SHUFFLE ||
+          I->op == JAY_OPCODE_VECTOR_EXTRACT ||
           I->op == JAY_OPCODE_QUAD_SWIZZLE ||
           I->op == JAY_OPCODE_BROADCAST_IMM;
+}
+
+static inline bool
+jay_clobbers_address_reg(const jay_inst *I)
+{
+   return (I->op == JAY_OPCODE_SHUFFLE || I->op == JAY_OPCODE_VECTOR_EXTRACT) &&
+          I->src[1].file == GPR;
 }
 
 /*
@@ -882,6 +909,13 @@ jay_src_alignment(jay_shader *shader, const jay_inst *I, unsigned s)
 {
    /* SENDs operate on entire GRFs at a time, so align UGPRs to GRFs. */
    if (I->op == JAY_OPCODE_SEND && I->src[s].file == UGPR) {
+      return jay_ugpr_per_grf(shader);
+   }
+
+   /* Undocumented HW restriction: All operands to an operation involving
+    * bfloats must be GRF-aligned. 
+    */
+   if (jay_src_type(I, s) == JAY_TYPE_BF16 || I->type == JAY_TYPE_BF16) {
       return jay_ugpr_per_grf(shader);
    }
 
@@ -914,9 +948,29 @@ jay_dst_alignment(jay_shader *shader, const jay_inst *I)
     *    accumulator is used as an implicit source or an explicit source in an
     *    instruction.
     */
-   if (I->dst.file == UGPR &&
-       (I->op == JAY_OPCODE_SEND || I->op == JAY_OPCODE_MUL_32)) {
+   if (I->dst.file == UGPR && (I->op == JAY_OPCODE_SEND ||
+                               I->op == JAY_OPCODE_MUL_32 ||
+                               I->op == JAY_OPCODE_COARSE_PIXEL_CORNERS)) {
 
+      return jay_ugpr_per_grf(shader);
+   }
+
+   /* Undocumented HW restriction: All operands to an operation involving
+    * bfloats must be GRF-aligned.
+    */
+   if (I->type == JAY_TYPE_BF16) {
+      return jay_ugpr_per_grf(shader);
+   }
+
+   bool is_any_operand_bf16 = false;
+   for (size_t i = 0; i < I->num_srcs; i++) {
+      if (jay_src_type(I, i) == JAY_TYPE_BF16) {
+         is_any_operand_bf16 = true;
+         break;
+      }
+   }
+
+   if (is_any_operand_bf16) {
       return jay_ugpr_per_grf(shader);
    }
 
@@ -980,6 +1034,7 @@ jay_macro_length(const jay_inst *I)
    switch (I->op) {
    case JAY_OPCODE_MUL_32:
    case JAY_OPCODE_SHUFFLE:
+   case JAY_OPCODE_VECTOR_EXTRACT:
    case JAY_OPCODE_LOOP_ONCE:
       return 2;
 
@@ -1109,10 +1164,17 @@ typedef struct jay_block {
    struct jay_temp_regs temps_out;
 
    /**
-    * Is this block a loop header?  If not, all of its predecessors precede it
-    * in source order.
+    * Is this block a logical loop header?  If not, all of its predecessors
+    * precede it in source order.
     */
    bool loop_header;
+
+   /**
+    * Is this a physical loop header, in the sense of using a WHILE instruction?
+    * This can be set without loop_header in the case of unconditional
+    * termination.
+    */
+   bool physical_loop_header;
 
    /** True if all non-exited lanes execute this block together */
    bool uniform;

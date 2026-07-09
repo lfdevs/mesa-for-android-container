@@ -1821,6 +1821,7 @@ bool pco_nir_lower_variables(nir_shader *shader, bool inputs, bool outputs);
 bool pco_nir_lower_vk(nir_shader *shader, pco_data *data);
 bool pco_nir_pfo(nir_shader *shader, pco_fs_data *fs);
 bool pco_nir_point_size(nir_shader *shader);
+bool pco_nir_prop_access(nir_shader *shader);
 bool pco_nir_pvi(nir_shader *shader, pco_vs_data *vs);
 bool pco_opt(pco_shader *shader);
 bool pco_ra(pco_shader *shader);

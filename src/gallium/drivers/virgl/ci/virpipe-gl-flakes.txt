@@ -53,6 +53,8 @@ spec@arb_framebuffer_no_attachments@arb_framebuffer_no_attachments-atomic@glScis
 spec@arb_framebuffer_no_attachments@arb_framebuffer_no_attachments-atomic@glViewport
 
 # uprev Piglit in Mesa
+spec@arb_occlusion_query@occlusion_query_conform
+spec@arb_occlusion_query@occlusion_query_conform@GetObjivAval_multi1
 spec@ext_texture_array@fbo-depth-array stencil-clear
 
 glx@glx-multithread-clearbuffer

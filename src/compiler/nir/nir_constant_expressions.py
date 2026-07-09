@@ -425,10 +425,7 @@ typedef float float16_t;
 typedef float float32_t;
 typedef double float64_t;
 typedef bool bool1_t;
-typedef bool bool8_t;
-typedef bool bool16_t;
 typedef bool bool32_t;
-typedef bool bool64_t;
 
 static inline bool
 util_add_check_overflow_int1_t(int1_t a, int1_t b)

@@ -120,7 +120,7 @@ void pvr_physical_device_free_pipeline_cache(
 }
 
 static void pvr_physical_device_get_supported_extensions(
-   struct vk_device_extension_table *extensions, struct vk_instance *instance)
+   struct vk_device_extension_table *extensions, struct pvr_instance* instance)
 {
    *extensions = (struct vk_device_extension_table){
       .KHR_bind_memory2 = true,
@@ -137,8 +137,8 @@ static void pvr_physical_device_get_supported_extensions(
       .KHR_external_fence_fd = true,
       .KHR_external_memory = true,
       .KHR_external_memory_fd = true,
-      .KHR_external_semaphore = PVR_USE_WSI_PLATFORM,
-      .KHR_external_semaphore_fd = PVR_USE_WSI_PLATFORM,
+      .KHR_external_semaphore = true,
+      .KHR_external_semaphore_fd = true,
       .KHR_format_feature_flags2 = false,
       .KHR_get_memory_requirements2 = true,
       .KHR_incremental_present = PVR_USE_WSI_PLATFORM,
@@ -154,7 +154,9 @@ static void pvr_physical_device_get_supported_extensions(
       .KHR_map_memory2 = true,
       .KHR_multiview = true,
       .KHR_pipeline_executable_properties = true,
+      .KHR_present_id = PVR_USE_WSI_PLATFORM,
       .KHR_present_id2 = PVR_USE_WSI_PLATFORM,
+      .KHR_present_wait = PVR_USE_WSI_PLATFORM,
       .KHR_present_wait2 = PVR_USE_WSI_PLATFORM,
       .KHR_relaxed_block_layout = true,
       .KHR_robustness2 = true,
@@ -174,8 +176,10 @@ static void pvr_physical_device_get_supported_extensions(
       .KHR_spirv_1_4 = true,
       .KHR_storage_buffer_storage_class = true,
       .KHR_swapchain = PVR_USE_WSI_PLATFORM,
+      .KHR_swapchain_maintenance1 = PVR_USE_WSI_PLATFORM,
       .KHR_swapchain_mutable_format = PVR_USE_WSI_PLATFORM,
       .KHR_timeline_semaphore = true,
+      .KHR_unified_image_layouts = true,
       .KHR_uniform_buffer_standard_layout = true,
       .KHR_vertex_attribute_divisor = true,
       .KHR_workgroup_memory_explicit_layout = true,
@@ -185,6 +189,8 @@ static void pvr_physical_device_get_supported_extensions(
       .EXT_debug_marker = true,
       .EXT_depth_clamp_zero_one = true,
       .EXT_depth_clip_enable = true,
+      .EXT_device_memory_report = true,
+      .EXT_display_control = PVR_USE_WSI_PLATFORM_DISPLAY,
       .EXT_image_drm_format_modifier = true,
       .EXT_extended_dynamic_state = true,
       .EXT_extended_dynamic_state2 = true,
@@ -213,7 +219,7 @@ static void pvr_physical_device_get_supported_extensions(
       .EXT_vertex_attribute_divisor = true,
       .EXT_zero_initialize_device_memory = true,
 #ifdef PVR_USE_WSI_PLATFORM
-      .GOOGLE_display_timing = wsi_instance_supports_google_display_timing(instance),
+      .GOOGLE_display_timing = wsi_instance_supports_google_display_timing(&instance->vk, &instance->drirc.options),
 #endif
    };
 }
@@ -474,6 +480,12 @@ static void pvr_physical_device_get_supported_features(
       .subgroupSizeControl = true,
       .computeFullSubgroups = true,
 
+      /* VK_KHR_present_id */
+      .presentId = PVR_USE_WSI_PLATFORM,
+
+      /* VK_KHR_present_wait */
+      .presentWait = PVR_USE_WSI_PLATFORM,
+
       /* VK_KHR_present_id2 */
       .presentId2 = PVR_USE_WSI_PLATFORM,
 
@@ -504,6 +516,9 @@ static void pvr_physical_device_get_supported_features(
       /* VK_EXT_depth_clip_enable */
       .depthClipEnable = true,
 
+      /* VK_EXT_device_memory_report */
+      .deviceMemoryReport = true,
+
       /* VK_KHR_line_rasterization */
       .bresenhamLines = true,
 
@@ -515,6 +530,12 @@ static void pvr_physical_device_get_supported_features(
 
       /* VK_KHR_pipeline_executable_properties */
       .pipelineExecutableInfo = true,
+
+      /* VK_EXT_swapchain_maintenance1 / VK_KHR_swapchain_maintenance1 */
+      .swapchainMaintenance1 = PVR_USE_WSI_PLATFORM,
+
+      /* KHR_unifiedImageLayouts */
+      .unifiedImageLayouts = true
    };
 }
 
@@ -932,7 +953,12 @@ static bool pvr_physical_device_get_properties(
       .lineSubPixelPrecisionBits = line_sub_pixel_precision_bits,
    };
 
-   if (PVR_HAS_FEATURE(dev_info, gpu_multicore_support)) {
+   if (strlen(pdevice->instance->drirc.debug.force_vk_devicename) > 0) {
+      snprintf(properties->deviceName,
+               sizeof(properties->deviceName),
+               "%s",
+               pdevice->instance->drirc.debug.force_vk_devicename);
+   } else if (PVR_HAS_FEATURE(dev_info, gpu_multicore_support)) {
       snprintf(properties->deviceName,
                sizeof(properties->deviceName),
                "PowerVR %s %s MC%u",
@@ -1150,7 +1176,7 @@ VkResult pvr_physical_device_init(struct pvr_physical_device *pdevice,
       VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
    pdevice->memory.memoryTypes[0].heapIndex = 0;
 
-   pvr_physical_device_get_supported_extensions(&supported_extensions, &instance->vk);
+   pvr_physical_device_get_supported_extensions(&supported_extensions, instance);
    pvr_physical_device_get_supported_features(&pdevice->dev_info,
                                               &supported_features);
    if (!pvr_physical_device_get_properties(pdevice, &supported_properties)) {

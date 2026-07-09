@@ -214,6 +214,7 @@ struct lp_build_nir_soa_context
    LLVMValueRef thread_data_ptr;
    LLVMValueRef null_qword_ptr;
    LLVMValueRef noop_store_ptr;
+   LLVMValueRef zero_buffer_ptr;
 
    LLVMValueRef ssbo_ptr;
 
@@ -1289,6 +1290,21 @@ ssbo_base_pointer(struct lp_build_nir_soa_context *bld,
    uint32_t shift_val = bit_size_to_shift_size(bit_size);
 
    LLVMValueRef ssbo_idx = invocation ? LLVMBuildExtractElement(gallivm->builder, index, invocation, "") : index;
+
+   if (!invocation_0_must_be_active(bld) &&
+       LLVMGetTypeKind(LLVMTypeOf(ssbo_idx)) == LLVMIntegerTypeKind &&
+       LLVMGetIntTypeWidth(LLVMTypeOf(ssbo_idx)) == 64) {
+      LLVMValueRef exec_mask = mask_vec_with_helpers(bld);
+      LLVMValueRef bitmask = LLVMBuildICmp(gallivm->builder, LLVMIntNE, exec_mask,
+                                           bld->uint_bld.zero, "");
+      bitmask = LLVMBuildBitCast(gallivm->builder, bitmask,
+                                 LLVMIntTypeInContext(gallivm->context, bld->uint_bld.type.length), "");
+      LLVMValueRef any_active = LLVMBuildICmp(gallivm->builder, LLVMIntNE, bitmask,
+                                              LLVMConstNull(LLVMTypeOf(bitmask)), "any_active");
+      LLVMValueRef zero_desc = LLVMBuildPtrToInt(gallivm->builder, bld->zero_buffer_ptr,
+                                                 bld->uint64_bld.elem_type, "");
+      ssbo_idx = LLVMBuildSelect(gallivm->builder, any_active, ssbo_idx, zero_desc, "");
+   }
 
    LLVMValueRef ssbo_size_ptr = lp_llvm_buffer_num_elements(gallivm, bld->ssbo_ptr, ssbo_idx, LP_MAX_TGSI_SHADER_BUFFERS);
    LLVMValueRef ssbo_ptr = lp_llvm_buffer_base(gallivm, bld->ssbo_ptr, ssbo_idx, LP_MAX_TGSI_SHADER_BUFFERS);
@@ -2604,6 +2620,15 @@ emit_launch_mesh_workgroups(struct lp_build_nir_soa_context *bld,
 
    local_invoc_idx = LLVMBuildExtractElement(gallivm->builder, local_invoc_idx, lp_build_const_int32(gallivm, 0), "");
    LLVMValueRef if_cond = LLVMBuildICmp(gallivm->builder, LLVMIntEQ, local_invoc_idx, lp_build_const_int32(gallivm, 0), "");
+   /* Skip a not-taken EmitMeshTasksEXT: both CF sides run under a mask. */
+   LLVMValueRef exec_mask = mask_vec(bld);
+   if (exec_mask) {
+      LLVMValueRef lane0 = LLVMBuildExtractElement(gallivm->builder, exec_mask,
+                                                   lp_build_const_int32(gallivm, 0), "");
+      LLVMValueRef active = LLVMBuildICmp(gallivm->builder, LLVMIntNE, lane0,
+                                          lp_build_const_int32(gallivm, 0), "");
+      if_cond = LLVMBuildAnd(gallivm->builder, if_cond, active, "");
+   }
    struct lp_build_if_state ifthen;
    lp_build_if(&ifthen, gallivm, if_cond);
    LLVMValueRef ptr = bld->payload_ptr;
@@ -3219,8 +3244,6 @@ do_alu_action(struct lp_build_nir_soa_context *bld,
    case nir_op_b2b1:
       result = LLVMBuildICmp(builder, LLVMIntNE, src[0], int_bld->zero, "");
       break;
-   case nir_op_b2b8:
-   case nir_op_b2b16:
    case nir_op_b2b32:
       if (src_bit_size[0] > instr->def.bit_size) {
          result = LLVMBuildTrunc(builder, src[0], dst_uint_bld->vec_type, "");
@@ -3694,7 +3717,7 @@ visit_alu(struct lp_build_nir_soa_context *bld,
        instr->op == nir_op_vec16) {
       for (unsigned i = 0; i < nir_op_infos[instr->op].num_inputs; i++) {
          result[i] = cast_type(bld, src[i],
-                               nir_op_infos[instr->op].input_types[i],
+                               nir_alu_type_get_base_type(nir_op_infos[instr->op].input_types[i]),
                                src_bit_size[i]);
       }
    } else {
@@ -3711,12 +3734,12 @@ visit_alu(struct lp_build_nir_soa_context *bld,
                src_chan[i] = src[i];
             }
             src_chan[i] = cast_type(bld, src_chan[i],
-                                    nir_op_infos[instr->op].input_types[i],
+                                    nir_alu_type_get_base_type(nir_op_infos[instr->op].input_types[i]),
                                     src_bit_size[i]);
          }
          result[c] = do_alu_action(bld, instr, src_bit_size, src_chan);
          result[c] = cast_type(bld, result[c],
-                               nir_op_infos[instr->op].output_type,
+                               nir_alu_type_get_base_type(nir_op_infos[instr->op].output_type),
                                instr->def.bit_size);
       }
    }
@@ -6038,6 +6061,7 @@ void lp_build_nir_soa_func(struct gallivm_state *gallivm,
 
    bld.null_qword_ptr = lp_build_alloca(gallivm, bld.uint64_bld.elem_type, "null_qword_ptr");
    bld.noop_store_ptr = lp_build_alloca_undef(gallivm, bld.uint64_bld.elem_type, "noop_store_ptr");
+   bld.zero_buffer_ptr = lp_build_alloca(gallivm, LLVMArrayType(bld.uint64_bld.elem_type, 2), "zero_buffer_ptr");
 
    emit_prologue(&bld);
 
@@ -6158,6 +6182,21 @@ lp_build_nir_soa_prepasses(struct nir_shader *nir)
       NIR_PASS(progress, nir, nir_opt_copy_prop);
       NIR_PASS(progress, nir, nir_opt_dce);
    } while (progress);
+
+   /* Lower load_ubo_vec4 while offsets are still integer values.  Keep this
+    * outside the no_integers path because draw select/feedback paths
+    * can emit load_ubo_vec4 without setting no_integers.
+    */
+   NIR_PASS(_, nir, lp_nir_lower_ubo_vec4);
+
+   if (nir->options->no_integers) {
+      NIR_PASS(_, nir, nir_lower_int_to_float);
+      NIR_PASS(_, nir, lp_nir_no_integer_intrinsic_fixup);
+      NIR_PASS(_, nir, nir_opt_copy_prop);
+      NIR_PASS(_, nir, nir_lower_bool_to_float, false);
+      NIR_PASS(_, nir, lp_nir_lower_if_float_cond);
+      NIR_PASS(_, nir, lp_nir_no_integer_lowering);
+   }
 
    nir_divergence_analysis(nir);
 

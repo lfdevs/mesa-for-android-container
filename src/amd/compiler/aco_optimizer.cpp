@@ -1925,25 +1925,25 @@ skip_smem_offset_align(opt_ctx& ctx, SMEM_instruction* smem, uint32_t align)
 void
 smem_combine(opt_ctx& ctx, aco_ptr<Instruction>& instr)
 {
+   /* Optimize offsets for SMEM buffer loads. */
+   if (instr->operands.empty() || instr->operands[0].size() < 4)
+      return;
+
    uint32_t align = 4;
    switch (instr->opcode) {
-   case aco_opcode::s_load_sbyte:
-   case aco_opcode::s_load_ubyte:
    case aco_opcode::s_buffer_load_sbyte:
    case aco_opcode::s_buffer_load_ubyte: align = 1; break;
-   case aco_opcode::s_load_sshort:
-   case aco_opcode::s_load_ushort:
    case aco_opcode::s_buffer_load_sshort:
    case aco_opcode::s_buffer_load_ushort: align = 2; break;
    default: break;
    }
 
    /* skip &-4 before offset additions: load((a + 16) & -4, 0) */
-   if (!instr->operands.empty() && align > 1)
+   if (align > 1)
       skip_smem_offset_align(ctx, &instr->smem(), align);
 
    /* propagate constants and combine additions */
-   if (!instr->operands.empty() && instr->operands[1].isTemp()) {
+   if (instr->operands[1].isTemp()) {
       SMEM_instruction& smem = instr->smem();
       ssa_info info = ctx.info[instr->operands[1].tempId()];
 
@@ -1980,7 +1980,7 @@ smem_combine(opt_ctx& ctx, aco_ptr<Instruction>& instr)
    }
 
    /* skip &-4 after offset additions: load(a & -4, 16) */
-   if (!instr->operands.empty() && align > 1)
+   if (align > 1)
       skip_smem_offset_align(ctx, &instr->smem(), align);
 }
 

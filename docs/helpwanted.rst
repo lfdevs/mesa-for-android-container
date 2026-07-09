@@ -11,8 +11,17 @@ specific ideas and areas where help would be appreciated:
    drivers is useful for other Linux users.  You can also help by
    doing manual performance (or regression) testing work on performance
    changes being made in Mesa's open merge requests.
+#. **Tasks up for grabs.** There are ideas for improvements which other
+   developers would like to see someone take on, but are explicitly up for
+   grabs, under the `difficulty: easy
+   <https://gitlab.freedesktop.org/mesa/mesa/-/work_items?sort=created_date&state=opened&label_name%5B%5D=difficulty%3A%20easy>`__,
+   `difficulty: medium
+   <https://gitlab.freedesktop.org/mesa/mesa/-/work_items?sort=created_date&state=opened&label_name%5B%5D=difficulty%3A%20medium>`__,
+   and `difficulty: hard
+   <https://gitlab.freedesktop.org/mesa/mesa/-/work_items?sort=created_date&state=opened&label_name%5B%5D=difficulty%3A%20hard>`__
+   labels.
 #. **Driver debugging.** There are plenty of open bugs in the `bug
-   database <https://gitlab.freedesktop.org/mesa/mesa/-/issues>`__.
+   database <https://gitlab.freedesktop.org/mesa/mesa/-/work_items>`__.
 #. **Remove aliasing warnings.** Enable GCC's
    ``-Wstrict-aliasing=2 -fstrict-aliasing`` arguments, and track down
    aliasing issues in the code.

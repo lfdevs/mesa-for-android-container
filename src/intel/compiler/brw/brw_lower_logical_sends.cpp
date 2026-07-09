@@ -430,23 +430,8 @@ lower_fb_write_logical_send(const brw_builder &bld, brw_fb_write_inst *write,
       brw_fb_write_desc(devinfo, target, msg_ctl, last_rt,
                         0 /* coarse_rt_write */);
 
-   const bool double_rt_writes = devinfo->verx10 == 110 &&
-      prog_data->coarse_pixel_dispatch == INTEL_SOMETIMES;
-
    brw_reg desc_reg = brw_imm_ud(0);
-   if (prog_data->coarse_pixel_dispatch == INTEL_SOMETIMES) {
-      assert(devinfo->ver >= 11);
-      if (!double_rt_writes) {
-         const brw_builder &ubld =
-            bld.scalar_group().annotate("Coarse bit");
-         brw_reg coarse_bit =
-            ubld.AND(brw_dynamic_fs_config(prog_data),
-                     brw_imm_ud(INTEL_FS_CONFIG_COARSE_RT_WRITES));
-         desc_reg = component(coarse_bit, 0);
-      }
-   } else {
-      desc |= prog_data->coarse_pixel_dispatch == INTEL_ALWAYS ? (1 << 18) : 0;
-   }
+   desc |= prog_data->coarse_pixel_dispatch ? (1 << 18) : 0;
 
    uint32_t ex_desc = 0;
    if (devinfo->ver >= 20) {
@@ -482,23 +467,6 @@ lower_fb_write_logical_send(const brw_builder &bld, brw_fb_write_inst *write,
    send->header_size = header_size;
    send->check_tdr = true;
    send->has_side_effects = true;
-
-   if (double_rt_writes) {
-      brw_check_dynamic_fs_config(bld, INTEL_FS_CONFIG_COARSE_RT_WRITES);
-      bld.IF(BRW_PREDICATE_NORMAL);
-      {
-         brw_send_inst *coarse_inst = brw_clone_inst(*bld.shader, send)->as_send();
-         coarse_inst->desc |= brw_fb_write_desc(devinfo, target, msg_ctl, last_rt,
-                                                true);
-         bld.emit(coarse_inst);
-      }
-      bld.ELSE();
-      {
-         bld.emit(brw_clone_inst(*bld.shader, send));
-      }
-      bld.ENDIF();
-      send->remove();
-   }
 }
 
 static void

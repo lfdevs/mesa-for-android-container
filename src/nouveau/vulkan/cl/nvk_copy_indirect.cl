@@ -42,7 +42,7 @@ nvk_copy_indirect(const __global void* in, uintptr_t in_stride,
       .flush_enable = FLUSH_ENABLE_TRUE,
       .src_memory_layout = SRC_MEMORY_LAYOUT_PITCH,
       .dst_memory_layout = DST_MEMORY_LAYOUT_PITCH,
-      .remap_enable = REMAP_ENABLE_TRUE,
+      .remap_enable = REMAP_ENABLE_FALSE,
    });
 
    assert(nv_push_dw_count(p) == NVK_COPY_INDIRECT_CMD_WORDS);

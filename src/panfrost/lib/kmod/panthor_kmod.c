@@ -1,4 +1,6 @@
 /*
+ * Copyright © 2026 NXP
+ *
  * Copyright © 2023 Collabora, Ltd.
  * SPDX-License-Identifier: MIT
  */
@@ -1173,6 +1175,10 @@ panthor_kmod_vm_bind(struct pan_kmod_vm *vm, enum pan_kmod_vm_op_mode mode,
       }
    }
 
+   /* Requests with no VM_BIND updates may be emitted as SYNC_ONLY. Such
+    * operations require at least one sync object, otherwise the kernel
+    * rejects the VM_BIND ioctl.
+    */
    ret = pan_kmod_ioctl(vm->dev->fd, DRM_IOCTL_PANTHOR_VM_BIND, &req);
    if (ret)
       mesa_loge("DRM_IOCTL_PANTHOR_VM_BIND failed (err=%d)", errno);

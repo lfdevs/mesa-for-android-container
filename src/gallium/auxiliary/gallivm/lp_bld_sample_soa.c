@@ -3865,6 +3865,39 @@ lp_build_sample_soa_code(struct gallivm_state *gallivm,
             texel_out[j] = lp_build_concat(gallivm, texelouttmp[j], type4, num_quads);
          }
       }
+
+      /*
+       * VK_EXT_image_view_min_lod for gather: textureGather always reads the
+       * view's base level. When the integer minLod clamp is above it,
+       * that level is below the accessible LOD range and the gather reads
+       * as zero (robustImageAccess2).
+       *
+       * This zeroes the final gathered result, which is a shortcut that is
+       * only correct for a plain gather of a colour component. It is wrong in
+       * two cases that would need the out-of-bounds value to be applied where
+       * the texels are actually fetched (lp_build_sample_image_linear()):
+       * - depth-comparison gather where the result should be compare(ref, 0),
+       * - an actual out-of-bounds read returns 1 for the alpha component, so
+       *   gathering the alpha component should yield 1 rather than 0.
+       * Neither is exercised by the current CTS coverage. Fixing them properly
+       * means plumbing the out-of-bounds value down to the fetch.
+       */
+      if (op_is_gather &&
+          static_texture_state->apply_view_min_lod &&
+          dynamic_state->view_min_lod) {
+         LLVMValueRef vml =
+            dynamic_state->view_min_lod(gallivm, resources_type, resources_ptr,
+                                        texture_index, NULL);
+         LLVMValueRef below =
+            LLVMBuildFCmp(builder, LLVMRealOGE, vml,
+                          lp_build_const_float(gallivm, 1.0f),
+                          "gather_below_view_min_lod");
+         for (unsigned j = 0; j < 4; j++) {
+            texel_out[j] = LLVMBuildSelect(builder, below,
+                                           LLVMConstNull(LLVMTypeOf(texel_out[j])),
+                                           texel_out[j], "");
+         }
+      }
    }
 
    if (target != PIPE_BUFFER && op_type != LP_SAMPLER_OP_GATHER) {

@@ -1103,7 +1103,10 @@ VkResult anv_CreateDevice(
          goto fail_trivial_batch_bo_and_scratch_pool;
    }
 
-   struct vk_pipeline_cache_create_info pcc_info = { .weak_ref = true, };
+   struct vk_pipeline_cache_create_info pcc_info = {
+      .weak_ref = true,
+      .skip_disk_cache = ANV_DEBUG(SKIP_DISK_CACHE),
+   };
    device->vk.mem_cache =
       vk_pipeline_cache_create(&device->vk, &pcc_info, NULL);
    if (!device->vk.mem_cache) {
@@ -1117,6 +1120,7 @@ VkResult anv_CreateDevice(
     * cache just for BLORP/RT that's forced to always be enabled.
     */
    struct vk_pipeline_cache_create_info internal_pcc_info = {
+      .skip_disk_cache = ANV_DEBUG(SKIP_DISK_CACHE),
       .force_enable = true,
       .weak_ref = false,
    };
@@ -1653,7 +1657,8 @@ VkResult anv_AllocateMemory(
    if (aligned_alloc_size > mem_heap->size)
       return vk_error(device, VK_ERROR_OUT_OF_DEVICE_MEMORY);
 
-   uint64_t mem_heap_used = p_atomic_read(&mem_heap->used);
+   uint64_t mem_heap_used = p_atomic_read(
+      &pdevice->memory.heaps_budget->used[mem_type->heapIndex]);
    if (mem_heap_used + aligned_alloc_size > mem_heap->size)
       return vk_error(device, VK_ERROR_OUT_OF_DEVICE_MEMORY);
 
@@ -1941,9 +1946,11 @@ VkResult anv_AllocateMemory(
    }
 
  success:
-   mem_heap_used = p_atomic_add_return(&mem_heap->used, mem->bo->size);
+   mem_heap_used = p_atomic_add_return(
+      &pdevice->memory.heaps_budget->used[mem_type->heapIndex], mem->bo->size);
    if (mem_heap_used > mem_heap->size) {
-      p_atomic_add(&mem_heap->used, -mem->bo->size);
+      p_atomic_add(&pdevice->memory.heaps_budget->used[mem_type->heapIndex],
+                   -mem->bo->size);
       anv_device_release_bo(device, mem->bo);
       result = vk_errorf(device, VK_ERROR_OUT_OF_DEVICE_MEMORY,
                          "Out of heap memory");
@@ -2046,6 +2053,7 @@ void anv_FreeMemory(
 {
    ANV_FROM_HANDLE(anv_device, device, _device);
    ANV_FROM_HANDLE(anv_device_memory, mem, _mem);
+   struct anv_physical_device *pdevice = device->physical;
 
    if (mem == NULL)
       return;
@@ -2062,7 +2070,7 @@ void anv_FreeMemory(
       anv_UnmapMemory2(_device, &unmap);
    }
 
-   p_atomic_add(&device->physical->memory.heaps[mem->type->heapIndex].used,
+   p_atomic_add(&pdevice->memory.heaps_budget->used[mem->type->heapIndex],
                 -mem->bo->size);
 
    ANV_DMR_BO_FREE_IMPORT(&mem->vk.base, mem->bo,

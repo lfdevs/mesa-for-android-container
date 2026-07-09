@@ -233,7 +233,7 @@ lookup_ycbcr_conversion(const void *_state, uint32_t set, uint32_t binding,
              : NULL;
 }
 
-static int
+static unsigned
 type_size_vec4(const struct glsl_type *type, bool bindless)
 {
    return glsl_count_attribute_slots(type, false);
@@ -345,6 +345,13 @@ kk_lower_hw_vs(nir_shader *nir, const struct vk_graphics_pipeline_state *state)
    NIR_PASS(_, nir, msl_nir_vs_io_types);
 }
 
+static inline uint8_t
+kk_get_logical_color_att_index(const struct vk_graphics_pipeline_state *state,
+                               uint8_t i)
+{
+   return (state->cal) ? state->cal->color_map[i] : i;
+}
+
 static void
 kk_lower_fs_blend(nir_shader *nir,
                   const struct vk_graphics_pipeline_state *state)
@@ -356,12 +363,20 @@ kk_lower_fs_blend(nir_shader *nir,
    };
 
    static_assert(ARRAY_SIZE(opts.rt) == 8, "max RTs out of sync");
+   for (unsigned i = 0; i < ARRAY_SIZE(opts.rt); ++i) {
+      opts.rt[i].format = PIPE_FORMAT_NONE;
+   }
 
    for (unsigned i = 0; i < ARRAY_SIZE(opts.rt); ++i) {
+      uint8_t logical_index = kk_get_logical_color_att_index(state, i);
+      if (logical_index == MESA_VK_ATTACHMENT_UNUSED) {
+         continue;
+      }
+
+      nir_lower_blend_rt *rt = &opts.rt[logical_index];
+
       const struct vk_color_blend_attachment_state *att =
          &state->cb->attachments[i];
-      nir_lower_blend_rt *rt = &opts.rt[i];
-
       rt->format =
          vk_format_to_pipe_format(state->rp->color_attachment_formats[i]);
       rt->colormask = att->write_mask;
@@ -430,8 +445,13 @@ kk_lower_fs(struct kk_device *dev, nir_shader *nir,
 
    enum pipe_format rts[MAX_DRAW_BUFFERS] = {PIPE_FORMAT_NONE};
    const struct vk_render_pass_state *rp = state->rp;
-   for (uint32_t i = 0u; i < MAX_DRAW_BUFFERS; ++i)
-      rts[i] = vk_format_to_pipe_format(rp->color_attachment_formats[i]);
+   for (uint32_t i = 0u; i < rp->color_attachment_count; ++i) {
+      uint8_t logical_index = kk_get_logical_color_att_index(state, i);
+      if (logical_index != MESA_VK_ATTACHMENT_UNUSED) {
+         rts[logical_index] =
+            vk_format_to_pipe_format(rp->color_attachment_formats[i]);
+      }
+   }
 
    NIR_PASS(_, nir, msl_nir_fs_force_output_signedness, rts);
 
@@ -791,7 +811,7 @@ kk_compile_shader(struct kk_device *dev, nir_shader *nir,
           * For the non-emulated path we need to subtract base_instance... */
          NIR_PASS(_, nir, msl_nir_lower_instance_id);
    } else if (stage == MESA_SHADER_TESS_CTRL) {
-      NIR_PASS(_, nir, poly_nir_lower_tcs);
+      NIR_PASS(_, nir, poly_nir_lower_tcs, false);
 
       shader->info.tess.info.ccw = nir->info.tess.ccw;
       shader->info.tess.info.points = nir->info.tess.point_mode;
@@ -825,14 +845,21 @@ kk_compile_shader(struct kk_device *dev, nir_shader *nir,
    };
    if (nir->info.stage == MESA_SHADER_FRAGMENT) {
       for (uint32_t i = 0u; i < MAX_DRAW_BUFFERS; ++i) {
-         enum pipe_format format =
-            vk_format_to_pipe_format(state->rp->color_attachment_formats[i]);
-
          /* If the attachment is unused, default to 4 to avoid issues with alpha
           * to coverage with unused attachments. */
-         translate_options.rts_component_count[i] =
-            format == PIPE_FORMAT_NONE ? 4u
-                                       : util_format_get_nr_components(format);
+         translate_options.rts_component_count[i] = 4;
+      }
+      for (uint32_t i = 0u; i < state->rp->color_attachment_count; ++i) {
+         uint8_t logical_index = kk_get_logical_color_att_index(state, i);
+         if (logical_index == MESA_VK_ATTACHMENT_UNUSED) {
+            continue;
+         }
+         enum pipe_format format =
+            vk_format_to_pipe_format(state->rp->color_attachment_formats[i]);
+         if (format != PIPE_FORMAT_NONE) {
+            translate_options.rts_component_count[logical_index] =
+               util_format_get_nr_components(format);
+         }
       }
    }
    shader->msl_shaders[stage] = nir_to_msl(nir, &translate_options);
@@ -1084,11 +1111,19 @@ gather_graphics_pipeline_create_info(
    bool has_stencil = rp->stencil_attachment_format != VK_FORMAT_UNDEFINED;
    {
       info->vs.color_attachment_count = rp->color_attachment_count;
-      for (uint8_t i = 0u; i < info->vs.color_attachment_count; ++i) {
-         VkFormat format = rp->color_attachment_formats[i];
-         info->vs.rt_formats[i] = format == VK_FORMAT_UNDEFINED
-                                     ? MTL_PIXEL_FORMAT_INVALID
-                                     : vk_format_to_mtl_pixel_format(format);
+      for (uint8_t i = 0u; i < MAX_DRAW_BUFFERS; ++i) {
+         info->vs.rt_formats[i] = MTL_PIXEL_FORMAT_INVALID;
+      }
+      for (uint8_t i = 0u; i < state->rp->color_attachment_count; ++i) {
+         uint8_t logical_index = kk_get_logical_color_att_index(state, i);
+         if (logical_index == MESA_VK_ATTACHMENT_UNUSED) {
+            continue;
+         }
+         VkFormat format = state->rp->color_attachment_formats[i];
+         info->vs.rt_formats[logical_index] =
+            format == VK_FORMAT_UNDEFINED
+               ? MTL_PIXEL_FORMAT_INVALID
+               : vk_format_to_mtl_pixel_format(format);
       }
       info->vs.d_format =
          has_depth ? vk_format_to_mtl_pixel_format(rp->depth_attachment_format)
@@ -1213,7 +1248,11 @@ kk_compile_graphics_pipeline(struct kk_device *device, struct kk_shader *vs)
    mtl_render_pipeline_descriptor_set_input_primitive_topology(
       pipeline_descriptor, vs->info.vs.topology);
 
-   for (uint8_t i = 0; i < vs->info.vs.color_attachment_count; ++i) {
+   /* If color attachments are reordered there might be unused / invalid gaps
+    * in the array so need to check them all, not just first
+    * color_attachment_count entries.
+    */
+   for (uint8_t i = 0; i < MAX_DRAW_BUFFERS; ++i) {
       if (vs->info.vs.rt_formats[i] != MTL_PIXEL_FORMAT_INVALID)
          mtl_render_pipeline_descriptor_set_color_attachment_format(
             pipeline_descriptor, i, vs->info.vs.rt_formats[i]);

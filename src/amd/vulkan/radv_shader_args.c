@@ -420,7 +420,8 @@ radv_ps_needs_state_sgpr(const struct radv_shader_info *info, const struct radv_
    if (info->ps.load_rasterization_prim && gfx_state->unknown_rast_prim)
       return true;
 
-   if (info->ps.selects_frag_coord_xy_dynamically || info->ps.selects_sample_mask_in_dynamically)
+   if (info->ps.selects_frag_coord_xy_dynamically || info->ps.selects_quad_pos_dynamically ||
+       info->ps.selects_sample_mask_in_dynamically)
       return true;
 
    return false;
@@ -596,7 +597,9 @@ declare_shader_args(const struct radv_compiler_info *compiler_info, struct radv_
       return;
    }
 
-   RADV_ADD_UD_ARG(state, 2, AC_ARG_CONST_ADDR, ac.ring_offsets, AC_UD_SCRATCH_RING_OFFSETS);
+   if (gfx_level < GFX11 || (stage != MESA_SHADER_COMPUTE && stage != MESA_SHADER_TASK)) {
+      RADV_ADD_UD_ARG(state, 2, AC_ARG_CONST_ADDR, ac.ring_offsets, AC_UD_SCRATCH_RING_OFFSETS);
+   }
    if (stage == MESA_SHADER_TASK) {
       RADV_ADD_UD_ARG(state, 2, AC_ARG_CONST_ADDR, task_ring_offsets, AC_UD_CS_TASK_RING_OFFSETS);
    }
@@ -891,6 +894,9 @@ declare_shader_args(const struct radv_compiler_info *compiler_info, struct radv_
 
       if (radv_ps_needs_state_sgpr(info, gfx_state))
          RADV_ADD_UD_ARG(state, 1, AC_ARG_VALUE, ps_state, AC_UD_PS_STATE);
+
+      if (info->uses_view_index)
+         RADV_ADD_UD_ARG(state, 1, AC_ARG_VALUE, ac.view_index, AC_UD_VIEW_INDEX);
 
       RADV_ADD_ARG(state, AC_ARG_SGPR, 1, AC_ARG_VALUE, ac.prim_mask);
 

@@ -2,16 +2,11 @@
 #define LP_STATE_SETUP_H
 
 #include "lp_bld_interp.h"
+#include "util/u_shader_variant_cache.h"
 
 
 struct llvmpipe_context;
 struct lp_setup_variant;
-
-struct lp_setup_variant_list_item
-{
-   struct list_head list;
-   struct lp_setup_variant *base;
-};
 
 
 struct lp_setup_variant_key {
@@ -53,19 +48,11 @@ typedef void (*lp_jit_setup_triangle)(const float (*v0)[4],
  * vertices.
  */
 struct lp_setup_variant {
+   struct util_shader_variant base;
+
    struct lp_setup_variant_key key;
 
-   struct lp_setup_variant_list_item list_item_global;
-
    struct gallivm_state *gallivm;
-
-   /* XXX: this is a pointer to the LLVM IR.  Once jit_function is
-    * generated, we never need to use the IR again - need to find a
-    * way to release this data without destroying the generated
-    * assembly.
-    */
-   LLVMValueRef function;
-   char *function_name;
 
    /* The actual generated setup function:
     */

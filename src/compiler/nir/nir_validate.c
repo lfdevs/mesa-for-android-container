@@ -812,6 +812,21 @@ validate_intrinsic_instr(nir_intrinsic_instr *instr, validate_state *state)
       break;
    }
 
+   case nir_intrinsic_barrier: {
+      unsigned semantics = nir_intrinsic_memory_semantics(instr);
+      bool is_arrive = semantics & NIR_MEMORY_CONTROL_ARRIVE;
+      bool is_wait = semantics & NIR_MEMORY_CONTROL_WAIT;
+      if (nir_intrinsic_execution_scope(instr) != SCOPE_NONE) {
+         if (is_wait)
+            validate_assert(state, is_arrive || !(semantics & NIR_MEMORY_RELEASE));
+         if (is_arrive)
+            validate_assert(state, is_wait || !(semantics & NIR_MEMORY_ACQUIRE));
+      } else {
+         validate_assert(state, !is_arrive && !is_wait);
+      }
+      break;
+   }
+
    default:
       break;
    }

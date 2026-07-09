@@ -624,7 +624,7 @@ elk_type_size_xvec4(const struct glsl_type *type, bool as_vec4, bool bindless)
  * This method is useful to calculate how much register space is needed to
  * store a particular type.
  */
-extern "C" int
+extern "C" unsigned
 elk_type_size_vec4(const struct glsl_type *type, bool bindless)
 {
    return elk_type_size_xvec4(type, true, bindless);

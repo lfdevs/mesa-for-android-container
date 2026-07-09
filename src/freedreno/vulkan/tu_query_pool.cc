@@ -16,7 +16,7 @@
 #include "vk_acceleration_structure.h"
 #include "vk_util.h"
 
-#include "bvh/tu_build_interface.h"
+#include "bvh/tu_bvh_defines.h"
 #include "common/freedreno_gpu_event.h"
 #include "tu_buffer.h"
 #include "tu_cmd_buffer.h"

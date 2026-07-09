@@ -85,7 +85,7 @@ enum radv_meta_object_key_type {
    RADV_META_OBJECT_KEY_QUERY_PRIMS_GEN,
    RADV_META_OBJECT_KEY_QUERY_MESH_PRIMS_GEN,
    RADV_META_OBJECT_KEY_BVH_COPY,
-   RADV_META_OBJECT_KEY_BVH_COPY_BLAS_ADDRS_GFX12,
+   RADV_META_OBJECT_KEY_BVH_COPY_BLAS_ADDRS,
    RADV_META_OBJECT_KEY_BVH_ENCODE,
    RADV_META_OBJECT_KEY_BVH_ENCODE_TRIANGLES_GFX12,
    RADV_META_OBJECT_KEY_BVH_UPDATE,
@@ -103,6 +103,10 @@ void radv_meta_begin(struct radv_cmd_buffer *cmd_buffer);
 void radv_meta_save(struct radv_cmd_buffer *cmd_buffer, uint32_t flags);
 
 void radv_meta_end(struct radv_cmd_buffer *cmd_buffer);
+
+/* Simlar to radv_meta_begin/radv_meta_end, but for meta ops which use an application renderpass instance. */
+void radv_meta_begin_rendering(struct radv_cmd_buffer *cmd_buffer);
+void radv_meta_end_rendering(struct radv_cmd_buffer *cmd_buffer);
 
 /* Helpers that save the correct state. */
 static inline void
@@ -247,6 +251,11 @@ struct radv_meta_blit2d_surf radv_blit_surf_for_image_level_layer(struct radv_im
 void radv_gfx_copy_image(struct radv_cmd_buffer *cmd_buffer, struct radv_meta_blit2d_surf *src,
                          struct radv_meta_blit2d_surf *dst, const VkOffset3D *src_offset, const VkOffset3D *dst_offset,
                          const VkExtent3D *extent);
+
+void radv_meta_msrtss_replicate_attachment(struct radv_cmd_buffer *cmd_buffer, struct radv_image_view *src_iview,
+                                           VkImageLayout src_layout, struct radv_image_view *dst_iview,
+                                           VkImageLayout dst_layout, VkImageAspectFlags aspect_mask,
+                                           const VkRect2D *area, uint32_t layer_count);
 
 void radv_gfx_copy_memory_to_image(struct radv_cmd_buffer *cmd_buffer, struct radv_meta_blit2d_buffer *src,
                                    struct radv_meta_blit2d_surf *dst, const VkOffset3D *offset,

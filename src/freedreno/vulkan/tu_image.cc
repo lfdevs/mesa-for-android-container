@@ -282,17 +282,23 @@ tu_image_view_init(struct tu_device *device,
    TU_CALLX(device, fdl6_view_init)(&iview->view, layouts, &args, device->use_z24uint_s8uint);
 
    if (image->vk.format == VK_FORMAT_D32_SFLOAT_S8_UINT) {
-      struct fdl_layout *layout = &image->layout[0];
-      iview->depth_base_addr = image->iova +
-         fdl_surface_offset(layout, range->baseMipLevel, range->baseArrayLayer);
-      iview->depth_layer_size = fdl_layer_stride(layout, range->baseMipLevel);
-      iview->depth_pitch = fdl_pitch(layout, range->baseMipLevel);
+      VkImageAspectFlags other_aspect =
+         (aspect_mask & VK_IMAGE_ASPECT_DEPTH_BIT) ?
+         VK_IMAGE_ASPECT_STENCIL_BIT : VK_IMAGE_ASPECT_DEPTH_BIT;
+      const struct fdl_layout *other_layout =
+         &image->layout[tu6_plane_index(image->vk.format, other_aspect)];
+      args.format = tu_aspects_to_plane(iview->vk.format, other_aspect);
+      TU_CALLX(device, fdl6_view_init)(&iview->view_ds_other_aspect,
+                                       &other_layout, &args,
+                                       device->use_z24uint_s8uint);
 
-      layout = &image->layout[1];
-      iview->stencil_base_addr = image->iova +
-         fdl_surface_offset(layout, range->baseMipLevel, range->baseArrayLayer);
-      iview->stencil_layer_size = fdl_layer_stride(layout, range->baseMipLevel);
-      iview->stencil_pitch = fdl_pitch(layout, range->baseMipLevel);
+      iview->view_depth = (aspect_mask & VK_IMAGE_ASPECT_DEPTH_BIT) ? &iview->view : &iview->view_ds_other_aspect;
+      iview->view_stencil = (other_aspect & VK_IMAGE_ASPECT_DEPTH_BIT) ? &iview->view : &iview->view_ds_other_aspect;
+   } else {
+      if (aspect_mask & VK_IMAGE_ASPECT_DEPTH_BIT)
+         iview->view_depth = &iview->view;
+      if (aspect_mask & VK_IMAGE_ASPECT_STENCIL_BIT)
+         iview->view_stencil = &iview->view;
    }
 }
 

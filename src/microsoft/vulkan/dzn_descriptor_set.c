@@ -459,12 +459,12 @@ dzn_descriptor_set_layout_get_heap_offset(const struct dzn_descriptor_set_layout
    assert(b < layout->binding_count);
    D3D12_SHADER_VISIBILITY visibility = layout->bindings[b].visibility;
    assert(visibility < ARRAY_SIZE(layout->ranges));
-   assert(type < NUM_POOL_TYPES);
+   assert((unsigned)type < NUM_POOL_TYPES);
 
    if (bindless)
       type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
 
-   uint32_t range_idx = layout->bindings[b].range_idx[type];
+   uint32_t range_idx = layout->bindings[b].range_idx[(unsigned)type];
 
    if (range_idx == ~0)
       return ~0;

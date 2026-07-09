@@ -15,3 +15,11 @@ prefix = "afbcp-"
   [piglit.env]
   PIGLIT_NO_WINDOW = "1"
   PAN_MESA_DEBUG = "forcepack"
+
+# OpenCL (rusticl)
+[[piglit]]
+piglit_folder = "/piglit"
+profile = "cl"
+process_isolation = true
+  [piglit.env]
+  RUSTICL_ENABLE = "panfrost"

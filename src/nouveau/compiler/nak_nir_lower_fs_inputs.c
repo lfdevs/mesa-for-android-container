@@ -208,9 +208,12 @@ lower_fs_input_intrin(nir_builder *b, nir_intrinsic_instr *intrin, void *data)
 
    case nir_intrinsic_load_frag_coord:
    case nir_intrinsic_load_point_coord: {
+      const bool sample_shading =
+         b->shader->info.fs.uses_sample_shading ||
+         (ctx->fs_key && ctx->fs_key->force_sample_shading);
       const enum nak_interp_loc interp_loc =
-         b->shader->info.fs.uses_sample_shading ? NAK_INTERP_LOC_CENTROID
-                                                : NAK_INTERP_LOC_DEFAULT;
+         sample_shading ? NAK_INTERP_LOC_CENTROID
+                        : NAK_INTERP_LOC_DEFAULT;
       const uint32_t addr =
          intrin->intrinsic == nir_intrinsic_load_point_coord ?
          nak_sysval_attr_addr(nak, SYSTEM_VALUE_POINT_COORD) :

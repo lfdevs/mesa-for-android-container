@@ -1,18 +1,4 @@
 GTF-GL46.gtf40.GL3Tests.transform_feedback2.transform_feedback2_two_buffers,Fail
-dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_out_of_bounds_mag,Fail
-dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_out_of_bounds_mag_reverse_dst_x,Fail
-dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_out_of_bounds_mag_reverse_dst_y,Fail
-dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_out_of_bounds_mag_reverse_src_dst_x,Fail
-dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_out_of_bounds_mag_reverse_src_dst_y,Fail
-dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_out_of_bounds_mag_reverse_src_x,Fail
-dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_out_of_bounds_mag_reverse_src_y,Fail
-dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_out_of_bounds_min,Fail
-dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_out_of_bounds_min_reverse_dst_x,Fail
-dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_out_of_bounds_min_reverse_dst_y,Fail
-dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_out_of_bounds_min_reverse_src_dst_x,Fail
-dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_out_of_bounds_min_reverse_src_dst_y,Fail
-dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_out_of_bounds_min_reverse_src_x,Fail
-dEQP-GLES3.functional.fbo.blit.rect.nearest_consistency_out_of_bounds_min_reverse_src_y,Fail
 
 # Autotune regression
 dEQP-GLES3.functional.multisample.fbo_4_samples.stencil,Fail
@@ -79,7 +65,6 @@ spec@arb_gl_spirv@execution@uniform@atomic-uint-array-cs,Fail
 spec@arb_gl_spirv@execution@uniform@atomic-uint-cs,Fail
 spec@arb_gpu_shader5@arb_gpu_shader5-interpolateatsample-dynamically-nonuniform,Fail
 spec@arb_gpu_shader_fp64@execution@arb_gpu_shader_fp64-tf-separate,Fail
-spec@arb_gpu_shader_fp64@execution@glsl-fs-loop-unroll-mul-fp64,Crash
 spec@arb_gpu_shader_fp64@uniform_buffers@fs-ubo-load.indirect.3,Fail
 spec@arb_sample_shading@samplemask 2 all,Fail
 spec@arb_sample_shading@samplemask 2 all@0.500000 mask_in_one,Fail
@@ -208,5 +193,7 @@ spec@khr_texture_compression_astc@sliced-3d-miptree-gles srgb-fp,Fail
 spec@khr_texture_compression_astc@sliced-3d-miptree-gles srgb-fp@sRGB decode full precision,Fail
 
 # uprev Piglit in Mesa
+glx@glx-make-current,Fail
 spec@!opengl 1.1@large-tex,Fail
 spec@!opengl 1.1@large-tex@test_image_load_store,Fail
+

@@ -33,12 +33,6 @@
 #include "pvr_winsys.h"
 #include "pvr_wsi.h"
 
-#if defined(VK_USE_PLATFORM_DISPLAY_KHR)
-#   define PVR_USE_WSI_PLATFORM_DISPLAY true
-#else
-#   define PVR_USE_WSI_PLATFORM_DISPLAY false
-#endif
-
 static const struct vk_instance_extension_table pvr_instance_extensions = {
    .KHR_device_group_creation = true,
    .KHR_display = PVR_USE_WSI_PLATFORM_DISPLAY,
@@ -49,6 +43,7 @@ static const struct vk_instance_extension_table pvr_instance_extensions = {
    .KHR_get_physical_device_properties2 = true,
    .KHR_get_surface_capabilities2 = PVR_USE_WSI_PLATFORM,
    .KHR_surface = PVR_USE_WSI_PLATFORM,
+   .KHR_surface_maintenance1 = PVR_USE_WSI_PLATFORM,
 #ifdef VK_USE_PLATFORM_WAYLAND_KHR
    .KHR_wayland_surface = true,
 #endif
@@ -58,11 +53,16 @@ static const struct vk_instance_extension_table pvr_instance_extensions = {
 #ifdef VK_USE_PLATFORM_XLIB_KHR
    .KHR_xlib_surface = true,
 #endif
+   .EXT_acquire_drm_display = PVR_USE_WSI_PLATFORM_DISPLAY,
    .EXT_debug_report = true,
    .EXT_debug_utils = true,
+   .EXT_direct_mode_display = PVR_USE_WSI_PLATFORM_DISPLAY,
+   .EXT_display_surface_counter = PVR_USE_WSI_PLATFORM_DISPLAY,
 #ifndef VK_USE_PLATFORM_WIN32_KHR
    .EXT_headless_surface = PVR_USE_WSI_PLATFORM,
 #endif
+   .EXT_surface_maintenance1 = PVR_USE_WSI_PLATFORM,
+   .EXT_swapchain_colorspace = PVR_USE_WSI_PLATFORM,
 };
 
 static VkResult pvr_get_drm_devices(void *const obj,

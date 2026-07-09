@@ -5,7 +5,9 @@
  */
 
 #include <inttypes.h>
+#include <stdlib.h>
 
+#include "ac_spm_config.h"
 #include "radv_buffer.h"
 #include "radv_cs.h"
 #include "radv_debug.h"
@@ -92,6 +94,14 @@ radv_spm_init(struct radv_device *device)
       return false;
    }
 
+   /* Optional user config: RADV_SPM_COUNTERS_CONFIG=/path/to/file. */
+   const char *config_path = getenv("RADV_SPM_COUNTERS_CONFIG");
+   if (config_path && config_path[0]) {
+      if (!ac_spm_user_config_load(config_path, pc, &device->spm_user_config))
+         return false;
+      device->spm.user_config = device->spm_user_config;
+   }
+
    if (!ac_init_spm(gpu_info, pc, &device->spm))
       return false;
 
@@ -110,6 +120,8 @@ radv_spm_finish(struct radv_device *device)
    radv_spm_finish_bo(device);
 
    ac_destroy_spm(&device->spm);
+   ac_spm_user_config_destroy(device->spm_user_config);
+   device->spm_user_config = NULL;
 }
 
 bool

@@ -650,11 +650,11 @@ anv_nir_compute_push_layout(nir_shader *nir,
        (nir->info.inputs_read & VARYING_BIT_PRIMITIVE_ID));
 
    unsigned n_push_ranges = 0;
-   unsigned total_push_regs = 0;
+   unsigned total_push_size = 0;
 
    if (push_constant_range.length > 0) {
       map->push_ranges[n_push_ranges++] = push_constant_range;
-      total_push_regs += push_constant_range.length;
+      total_push_size += push_constant_range.length * 32;
    }
 
    struct anv_push_range analysis_ranges[4] = {};
@@ -664,15 +664,20 @@ anv_nir_compute_push_layout(nir_shader *nir,
    }
 
    const unsigned max_push_buffers = needs_padding_per_primitive ? 3 : 4;
-   const unsigned max_push_regs = needs_padding_per_primitive ? 63 : 64;
+   const unsigned payload_size =
+      nir->info.stage == MESA_SHADER_VERTEX ?
+      brw_nir_vs_compute_payload_size(nir, devinfo) : 0;
+   const unsigned max_push_size =
+      MIN2(compiler->register_file_size - payload_size,
+           devinfo->grf_size * (needs_padding_per_primitive ? 63 : 64));
 
    for (unsigned i = 0; i < 4; i++) {
       struct anv_push_range *candidate_range = &analysis_ranges[i];
       if (n_push_ranges >= max_push_buffers)
          break;
 
-      if (candidate_range->length + total_push_regs > max_push_regs)
-         candidate_range->length = max_push_regs - total_push_regs;
+      if ((candidate_range->length * 32 + total_push_size) > max_push_size)
+         candidate_range->length = (max_push_size - total_push_size) / 32;
 
       if (candidate_range->length == 0)
          break;
@@ -683,7 +688,7 @@ anv_nir_compute_push_layout(nir_shader *nir,
       }
 
       map->push_ranges[n_push_ranges++] = *candidate_range;
-      total_push_regs += candidate_range->length;
+      total_push_size += candidate_range->length * 32;
    }
 
    /* Pass a single-register push constant payload for the PS stage even if
@@ -715,7 +720,7 @@ anv_nir_compute_push_layout(nir_shader *nir,
 
    if (!stage_has_inline_param(devinfo, nir->info.stage)) {
       assert(n_push_ranges <= 4);
-      assert(total_push_regs <= max_push_regs);
+      assert(total_push_size <= max_push_size);
    }
 
    struct lower_to_push_data_intel_state lower_state = {

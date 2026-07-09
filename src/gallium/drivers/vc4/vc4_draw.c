@@ -568,7 +568,7 @@ vc4_clear(struct pipe_context *pctx, unsigned buffers,
 
                         perf_debug("Partial clear of Z+stencil buffer, "
                                    "drawing a quad instead of fast clearing\n");
-                        vc4_blitter_save(vc4);
+                        vc4_blitter_save(vc4, VC4_CLEAR);
                         util_blitter_clear(vc4->blitter,
                                            vc4->framebuffer.width,
                                            vc4->framebuffer.height,
@@ -650,7 +650,7 @@ vc4_clear_render_target(struct pipe_context *pctx, struct pipe_surface *ps,
 {
         struct vc4_context *vc4 = vc4_context(pctx);
 
-        vc4_blitter_save(vc4);
+        vc4_blitter_save(vc4, VC4_CLEAR_SURFACE);
         util_blitter_clear_render_target(vc4->blitter, ps, color, x, y, w, h);
 }
 
@@ -662,7 +662,7 @@ vc4_clear_depth_stencil(struct pipe_context *pctx, struct pipe_surface *ps,
 {
         struct vc4_context *vc4 = vc4_context(pctx);
 
-        vc4_blitter_save(vc4);
+        vc4_blitter_save(vc4, VC4_CLEAR_SURFACE);
         util_blitter_clear_depth_stencil(vc4->blitter, ps, buffers, depth,
                                          stencil, x, y, w, h);
 }

@@ -205,17 +205,15 @@ create_frag_shader_csc(struct ureg_program *shader, struct ureg_dst texel,
 		       struct ureg_dst fragment)
 {
    struct ureg_src csc[3];
-   struct ureg_src lumakey;
-   struct ureg_dst temp[2];
+   struct ureg_dst tmp;
    unsigned i;
 
    for (i = 0; i < 3; ++i)
       csc[i] = ureg_DECL_constant(shader, i);
 
-   lumakey = ureg_DECL_constant(shader, 3);
-
-   for (i = 0; i < 2; ++i)
-      temp[i] = ureg_DECL_temporary(shader);
+   tmp = ureg_DECL_temporary(shader);
+   ureg_MOV(shader, ureg_writemask(tmp, TGSI_WRITEMASK_W),
+            ureg_scalar(ureg_src(texel), TGSI_SWIZZLE_W));
 
    ureg_MOV(shader, ureg_writemask(texel, TGSI_WRITEMASK_W),
 	    ureg_imm1f(shader, 1.0f));
@@ -224,17 +222,10 @@ create_frag_shader_csc(struct ureg_program *shader, struct ureg_dst texel,
       ureg_DP4(shader, ureg_writemask(fragment, TGSI_WRITEMASK_X << i), csc[i],
 	       ureg_src(texel));
 
-   ureg_MOV(shader, ureg_writemask(temp[0], TGSI_WRITEMASK_W),
-            ureg_scalar(ureg_src(texel), TGSI_SWIZZLE_Z));
-   ureg_SLE(shader, ureg_writemask(temp[1], TGSI_WRITEMASK_W),
-            ureg_src(temp[0]), ureg_scalar(lumakey, TGSI_SWIZZLE_X));
-   ureg_SGT(shader, ureg_writemask(temp[0], TGSI_WRITEMASK_W),
-            ureg_src(temp[0]), ureg_scalar(lumakey, TGSI_SWIZZLE_Y));
-   ureg_MAX(shader, ureg_writemask(fragment, TGSI_WRITEMASK_W),
-            ureg_src(temp[0]), ureg_src(temp[1]));
+   ureg_MOV(shader, ureg_writemask(fragment, TGSI_WRITEMASK_W),
+            ureg_scalar(ureg_src(tmp), TGSI_SWIZZLE_W));
 
-   for (i = 0; i < 2; ++i)
-       ureg_release_temporary(shader, temp[i]);
+   ureg_release_temporary(shader, tmp);
 }
 
 static void
@@ -259,6 +250,9 @@ create_frag_shader_yuv(struct ureg_program *shader, struct ureg_dst texel)
     */
    for (i = 0; i < 3; ++i)
       ureg_TEX(shader, ureg_writemask(texel, TGSI_WRITEMASK_X << i), TGSI_TEXTURE_2D_ARRAY, tc, sampler[i]);
+
+   ureg_TEX(shader, ureg_writemask(texel, TGSI_WRITEMASK_W), TGSI_TEXTURE_2D_ARRAY,
+            tc, ureg_scalar(sampler[0], TGSI_SWIZZLE_W));
 }
 
 void *
@@ -679,7 +673,7 @@ draw_layers(struct vl_compositor *c, struct vl_compositor_state *s, struct u_rec
          struct vl_compositor_layer *layer = &s->layers[i];
          struct pipe_sampler_view **samplers = &layer->sampler_views[0];
          unsigned num_sampler_views = !samplers[1] ? 1 : !samplers[2] ? 2 : 3;
-         void *blend = layer->blend ? layer->blend : i ? c->blend_add : c->blend_clear;
+         void *blend = layer->blend_enabled ? c->blend_add : c->blend_clear;
 
          c->pipe->bind_blend_state(c->pipe, blend);
          c->pipe->set_viewport_states(c->pipe, 0, 1, &layer->viewport);

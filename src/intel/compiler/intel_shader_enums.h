@@ -402,120 +402,8 @@ intel_tess_config(uint32_t input_vertices,
 
 }
 
-static inline bool
-intel_fs_is_persample(enum intel_sometimes shader_persample_dispatch,
-                      bool persample_interp,
-                      enum intel_fs_config pushed_fs_config)
-{
-   if (shader_persample_dispatch != INTEL_SOMETIMES)
-      return shader_persample_dispatch;
-
-   assert(pushed_fs_config & INTEL_FS_CONFIG_ENABLE_DYNAMIC);
-
-   if (!(pushed_fs_config & INTEL_FS_CONFIG_MULTISAMPLE_FBO))
-      return false;
-
-   if (persample_interp)
-      assert(pushed_fs_config & INTEL_FS_CONFIG_PERSAMPLE_DISPATCH);
-
-   return (pushed_fs_config & INTEL_FS_CONFIG_PERSAMPLE_DISPATCH) != 0;
-}
-
-static inline uint32_t
-intel_fs_barycentric_modes(enum intel_sometimes shader_persample_dispatch,
-                           bool persample_interp,
-                           uint32_t shader_barycentric_modes,
-                           enum intel_fs_config pushed_fs_config)
-{
-   /* In the non dynamic case, we can just return the computed shader_barycentric_modes from
-    * compilation time.
-    */
-   if (shader_persample_dispatch != INTEL_SOMETIMES)
-      return shader_barycentric_modes;
-
-   uint32_t modes = shader_barycentric_modes;
-
-   assert(pushed_fs_config & INTEL_FS_CONFIG_ENABLE_DYNAMIC);
-
-   if (pushed_fs_config & INTEL_FS_CONFIG_PERSAMPLE_DISPATCH) {
-      /* Making dynamic per-sample interpolation work is a bit tricky.  The
-       * hardware will hang if SAMPLE is requested but per-sample dispatch is
-       * not enabled.  This means we can't preemptively add SAMPLE to the
-       * barycentrics bitfield.  Instead, we have to add it late and only
-       * on-demand.  Annoyingly, changing the number of barycentrics requested
-       * changes the whole PS shader payload so we very much don't want to do
-       * that.  Instead, if the dynamic per-sample interpolation flag is set,
-       * we check to see if SAMPLE was requested and, if not, replace the
-       * highest barycentric bit in the [non]perspective grouping (CENTROID,
-       * if it exists, else PIXEL) with SAMPLE.  The shader will stomp all the
-       * barycentrics in the shader with SAMPLE so it really doesn't matter
-       * which one we replace.  The important thing is that we keep the number
-       * of barycentrics in each [non]perspective grouping the same.
-       */
-      if ((modes & INTEL_BARYCENTRIC_PERSPECTIVE_BITS) &&
-          !(modes & BITFIELD_BIT(INTEL_BARYCENTRIC_PERSPECTIVE_SAMPLE))) {
-         int sample_mode =
-            util_last_bit(modes & INTEL_BARYCENTRIC_PERSPECTIVE_BITS) - 1;
-         assert(modes & BITFIELD_BIT(sample_mode));
-
-         modes &= ~BITFIELD_BIT(sample_mode);
-         modes |= BITFIELD_BIT(INTEL_BARYCENTRIC_PERSPECTIVE_SAMPLE);
-      }
-
-      if ((modes & INTEL_BARYCENTRIC_NONPERSPECTIVE_BITS) &&
-          !(modes & BITFIELD_BIT(INTEL_BARYCENTRIC_NONPERSPECTIVE_SAMPLE))) {
-         int sample_mode =
-            util_last_bit(modes & INTEL_BARYCENTRIC_NONPERSPECTIVE_BITS) - 1;
-         assert(modes & BITFIELD_BIT(sample_mode));
-
-         modes &= ~BITFIELD_BIT(sample_mode);
-         modes |= BITFIELD_BIT(INTEL_BARYCENTRIC_NONPERSPECTIVE_SAMPLE);
-      }
-   } else {
-      /* If we're not using per-sample disaptch, we need to disable the
-       * per-sample bits.
-       *
-       * SKL PRMs, Volume 2a: Command Reference: Instructions,
-       * 3DSTATE_WM:Barycentric Interpolation Mode:
-
-       *    "MSDISPMODE_PERSAMPLE is required in order to select Perspective
-       *     Sample or Non-perspective Sample barycentric coordinates."
-       */
-      uint32_t sample_bits = (BITFIELD_BIT(INTEL_BARYCENTRIC_PERSPECTIVE_SAMPLE) |
-                              BITFIELD_BIT(INTEL_BARYCENTRIC_NONPERSPECTIVE_SAMPLE));
-      uint32_t requested_sample = modes & sample_bits;
-      modes &= ~sample_bits;
-      /*
-       * If the shader requested some sample modes and we have to disable
-       * them, make sure we add back the pixel variant back to not mess up the
-       * thread payload.
-       *
-       * Why does this works out? Because of the ordering in the thread payload :
-       *
-       *   R7:10  Perspective Centroid Barycentric
-       *   R11:14 Perspective Sample Barycentric
-       *   R15:18 Linear Pixel Location Barycentric
-       *
-       * In the backend when persample dispatch is dynamic, we always select
-       * the sample barycentric and turn off the pixel location (even if
-       * requested through intrinsics). That way when we dynamically select
-       * pixel or sample dispatch, the barycentric always match, since the
-       * pixel location barycentric register offset will align with the sample
-       * barycentric.
-       */
-      if (requested_sample) {
-         if (requested_sample & BITFIELD_BIT(INTEL_BARYCENTRIC_PERSPECTIVE_SAMPLE))
-            modes |= BITFIELD_BIT(INTEL_BARYCENTRIC_PERSPECTIVE_PIXEL);
-         if (requested_sample & BITFIELD_BIT(INTEL_BARYCENTRIC_NONPERSPECTIVE_SAMPLE))
-            modes |= BITFIELD_BIT(INTEL_BARYCENTRIC_NONPERSPECTIVE_PIXEL);
-      }
-   }
-
-   return modes;
-}
-
 static inline enum intel_barycentric_mode
-intel_fs_barycentric_mode_for_persample_dispatch(enum intel_sometimes persample_dispatch,
+intel_fs_barycentric_mode_for_persample_dispatch(bool persample_dispatch,
                                                  enum intel_barycentric_mode mode)
 {
    /* From the BDW PRM documentation for 3DSTATE_WM:
@@ -526,27 +414,11 @@ intel_fs_barycentric_mode_for_persample_dispatch(enum intel_sometimes persample_
     * So cleanup any potentially set sample barycentric mode when not in per
     * sample dispatch.
     */
-   if (persample_dispatch == INTEL_NEVER &&
+   if (!persample_dispatch &&
        (mode == INTEL_BARYCENTRIC_PERSPECTIVE_SAMPLE ||
         mode == INTEL_BARYCENTRIC_NONPERSPECTIVE_SAMPLE))
       return (enum intel_barycentric_mode)(mode - 2);
    return mode;
-}
-
-static inline bool
-intel_fs_is_coarse(enum intel_sometimes shader_coarse_pixel_dispatch,
-                   enum intel_fs_config pushed_fs_config)
-{
-   if (shader_coarse_pixel_dispatch != INTEL_SOMETIMES)
-      return shader_coarse_pixel_dispatch;
-
-   assert(pushed_fs_config & INTEL_FS_CONFIG_ENABLE_DYNAMIC);
-
-   assert((pushed_fs_config & INTEL_FS_CONFIG_COARSE_RT_WRITES) ?
-          shader_coarse_pixel_dispatch != INTEL_NEVER :
-          shader_coarse_pixel_dispatch != INTEL_ALWAYS);
-
-   return (pushed_fs_config & INTEL_FS_CONFIG_COARSE_RT_WRITES) != 0;
 }
 
 struct intel_fs_params {

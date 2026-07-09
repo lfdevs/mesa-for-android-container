@@ -149,7 +149,7 @@ Patch formatting
 
    ::
 
-      Closes: https://gitlab.freedesktop.org/mesa/mesa/-/issues/1
+      Closes: https://gitlab.freedesktop.org/mesa/mesa/-/work_items/1
 
    Prefer the full URL to just ``Closes: #1``, since the URL makes it
    easier to get to the bug page from ``git log``

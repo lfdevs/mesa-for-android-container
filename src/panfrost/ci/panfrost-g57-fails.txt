@@ -121,7 +121,6 @@ spec@!opengl 1.1@linestipple@Line loop,Fail
 spec@!opengl 1.1@linestipple@Line strip,Fail
 spec@!opengl 1.1@linestipple@Restarting lines within a single Begin-End block,Fail
 spec@!opengl 1.1@line-smooth-stipple,Fail
-spec@!opengl 1.1@longprim,Crash
 spec@!opengl 1.1@polygon-mode-facing,Fail
 spec@!opengl 1.1@polygon-mode,Fail
 spec@!opengl 1.1@polygon-mode-offset@config 0: Expected white pixel on bottom edge,Fail
@@ -174,7 +173,6 @@ spec@arb_shader_texture_lod@execution@tex-miplevel-selection *projgradarb 3d,Fai
 spec@arb_timer_query@query gl_timestamp,Fail
 spec@arb_timer_query@timestamp-get,Fail
 spec@ext_disjoint_timer_query@simple,Fail
-spec@ext_image_dma_buf_import@ext_image_dma_buf_import-refcount-multithread,Crash
 spec@ext_timer_query@time-elapsed,Fail
 spec@ext_transform_feedback@max-varyings,Fail
 spec@ext_transform_feedback@max-varyings@max-varying-single-dimension-array,Fail
@@ -338,7 +336,6 @@ afbcp-spec@!opengl 1.1@linestipple@Line loop,Fail
 afbcp-spec@!opengl 1.1@linestipple@Line strip,Fail
 afbcp-spec@!opengl 1.1@linestipple@Restarting lines within a single Begin-End block,Fail
 afbcp-spec@!opengl 1.1@line-smooth-stipple,Fail
-afbcp-spec@!opengl 1.1@longprim,Crash
 afbcp-spec@!opengl 1.1@polygon-mode-facing,Fail
 afbcp-spec@!opengl 1.1@polygon-mode,Fail
 afbcp-spec@!opengl 1.1@polygon-mode-offset@config 0: Expected white pixel on bottom edge,Fail
@@ -391,7 +388,6 @@ afbcp-spec@arb_shader_texture_lod@execution@tex-miplevel-selection *projgradarb 
 afbcp-spec@arb_timer_query@query gl_timestamp,Fail
 afbcp-spec@arb_timer_query@timestamp-get,Fail
 afbcp-spec@ext_disjoint_timer_query@simple,Fail
-afbcp-spec@ext_image_dma_buf_import@ext_image_dma_buf_import-refcount-multithread,Crash
 afbcp-spec@ext_timer_query@time-elapsed,Fail
 afbcp-spec@ext_transform_feedback@max-varyings,Fail
 afbcp-spec@ext_transform_feedback@max-varyings@max-varying-single-dimension-array,Fail

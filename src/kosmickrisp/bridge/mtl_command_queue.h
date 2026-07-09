@@ -11,6 +11,14 @@
 
 #include <stdint.h>
 
+/* MTL4CommitOptions */
+mtl_commit_options *mtl_new_commit_options(void);
+void
+mtl_commit_options_add_feedback_handler(mtl_commit_options *options,
+                                        mtl_feedback_handler_callback callback,
+                                        void *data);
+
+/* MTL4CommandQueue */
 mtl_command_queue *mtl_new_command_queue(mtl_device *device);
 
 void mtl_command_queue_add_residency_set(mtl_command_queue *cmd_queue,
@@ -26,7 +34,7 @@ void mtl_wait_for_event(mtl_command_queue *queue, mtl_event *event,
 
 void mtl_command_queue_commit(mtl_command_queue *queue,
                               mtl_command_buffer **command_buffers,
-                              uint32_t count);
+                              uint32_t count, mtl_commit_options *options);
 
 void mtl_command_queue_signal_drawable(mtl_command_queue *queue,
                                        void *drawable);

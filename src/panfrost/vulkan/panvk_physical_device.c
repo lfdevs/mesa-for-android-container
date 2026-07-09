@@ -1,5 +1,7 @@
 /*
  * Copyright © 2021 Collabora Ltd.
+ * Copyright © 2026 Google LLC
+ * Copyright © 2026 Arm Ltd.
  *
  * Derived from tu_device.c which is:
  * Copyright © 2016 Red Hat.
@@ -837,8 +839,14 @@ get_image_format_features(struct panvk_physical_device *physical_device,
        * each have their own, separate filters, so these two bits make sense
        * for multi-planar formats only.
        */
-      features |= VK_FORMAT_FEATURE_2_DISJOINT_BIT |
-                  VK_FORMAT_FEATURE_2_SAMPLED_IMAGE_YCBCR_CONVERSION_SEPARATE_RECONSTRUCTION_FILTER_BIT;
+      features |= VK_FORMAT_FEATURE_2_DISJOINT_BIT;
+
+      /* YUV texturing only support unified filtering across planes. */
+      unsigned arch = pan_arch(physical_device->kmod.dev->props.gpu_id);
+      if (!panvk_image_use_yuv_tex(arch, format)) {
+         features |=
+            VK_FORMAT_FEATURE_2_SAMPLED_IMAGE_YCBCR_CONVERSION_SEPARATE_RECONSTRUCTION_FILTER_BIT;
+      }
    }
 
    return features;
@@ -975,6 +983,8 @@ panvk_GetPhysicalDeviceFormatProperties2(VkPhysicalDevice physicalDevice,
       formatProperties3->bufferFeatures = buffer;
    }
 
+   const uint32_t plane_count = vk_format_get_plane_count(format);
+
    PAN_SUPPORTED_MODIFIERS(supported);
    uint64_t afbc_modifiers[ARRAY_SIZE(supported)];
    uint32_t afbc_modifier_count = 0;
@@ -998,12 +1008,15 @@ panvk_GetPhysicalDeviceFormatProperties2(VkPhysicalDevice physicalDevice,
                               &list->drmFormatModifierCount);
 
       if (optimal_features) {
+         /* Multi-planar AFBC is not supported. */
+         assert(!afbc_modifier_count || plane_count == 1);
+
          for (uint32_t i = 0; i < afbc_modifier_count; i++) {
             vk_outarray_append_typed(VkDrmFormatModifierPropertiesEXT, &out,
                                        mod_props)
             {
                mod_props->drmFormatModifier = afbc_modifiers[i];
-               mod_props->drmFormatModifierPlaneCount = 1;
+               mod_props->drmFormatModifierPlaneCount = plane_count;
                mod_props->drmFormatModifierTilingFeatures = optimal_features;
             }
          }
@@ -1014,7 +1027,7 @@ panvk_GetPhysicalDeviceFormatProperties2(VkPhysicalDevice physicalDevice,
                                     mod_props)
          {
             mod_props->drmFormatModifier = DRM_FORMAT_MOD_LINEAR;
-            mod_props->drmFormatModifierPlaneCount = 1;
+            mod_props->drmFormatModifierPlaneCount = plane_count;
             mod_props->drmFormatModifierTilingFeatures = linear_features;
          }
       }
@@ -1030,12 +1043,15 @@ panvk_GetPhysicalDeviceFormatProperties2(VkPhysicalDevice physicalDevice,
                               &list2->drmFormatModifierCount);
 
       if (optimal_features2) {
+         /* Multi-planar AFBC is not supported. */
+         assert(!afbc_modifier_count || plane_count == 1);
+
          for (uint32_t i = 0; i < afbc_modifier_count; i++) {
             vk_outarray_append_typed(VkDrmFormatModifierProperties2EXT, &out,
                                        mod_props)
             {
                mod_props->drmFormatModifier = afbc_modifiers[i];
-               mod_props->drmFormatModifierPlaneCount = 1;
+               mod_props->drmFormatModifierPlaneCount = plane_count;
                mod_props->drmFormatModifierTilingFeatures =
                   optimal_features2;
             }
@@ -1047,7 +1063,7 @@ panvk_GetPhysicalDeviceFormatProperties2(VkPhysicalDevice physicalDevice,
                                     mod_props)
          {
             mod_props->drmFormatModifier = DRM_FORMAT_MOD_LINEAR;
-            mod_props->drmFormatModifierPlaneCount = 1;
+            mod_props->drmFormatModifierPlaneCount = plane_count;
             mod_props->drmFormatModifierTilingFeatures = linear_features2;
          }
       }

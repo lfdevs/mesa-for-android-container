@@ -6,7 +6,7 @@
 
 /* GFX10_3-GFX11 specific code for RRA. */
 
-#include "bvh/bvh.h"
+#include "bvh/bvh_defines.h"
 #include "radv_rra.h"
 
 #include "util/half_float.h"

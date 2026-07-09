@@ -25,8 +25,10 @@
 
 layout(local_size_x = 1024, local_size_y = 1, local_size_z = 1) in;
 
+#include "vk_bvh_defines.h"
+#define VK_USED_BUILD_FLAGS VK_PLOC_BUILD_FLAGS
 #define USE_GLOBAL_SYNC
-#include "vk_build_interface.h"
+#include "vk_bvh_helpers.h"
 
 TYPE(ploc_prefix_scan_partition, 4);
 
@@ -138,14 +140,14 @@ push_node(uint32_t children[2], vk_aabb bounds[2])
 
       DEREF(dst_node).children[i] = children[i];
 
-      if (VK_BUILD_FLAG(VK_BUILD_FLAG_PROPAGATE_CULL_FLAGS))
+      if (VK_TEST_BUILD_FLAG_PROPAGATE_CULL_FLAGS)
          dst_flags &= fetch_child_flags(args.bvh, children[i]);
    }
 
    DEREF(dst_node).base.aabb = total_bounds;
    DEREF(dst_node).bvh_offset = VK_UNKNOWN_BVH_OFFSET;
 
-   if (VK_BUILD_FLAG(VK_BUILD_FLAG_PROPAGATE_CULL_FLAGS))
+   if (VK_TEST_BUILD_FLAG_PROPAGATE_CULL_FLAGS)
       DEREF(dst_node).flags = dst_flags;
 
    return dst_id;
@@ -178,7 +180,7 @@ uint32_t
 load_id(VOID_REF ids, uint32_t iter, uint32_t index)
 {
    if (iter == 0) {
-      if (VK_BUILD_FLAG(VK_BUILD_FLAG_64BIT_KEYS))
+      if (VK_TEST_BUILD_FLAG_64BIT_KEYS)
          return DEREF(REF(key64_id_pair)(INDEX(key64_id_pair, ids, index))).id;
       else
          return DEREF(REF(key32_id_pair)(INDEX(key32_id_pair, ids, index))).id;
@@ -236,7 +238,7 @@ main(void)
          uint32_t i = 0;
          for (; i < DEREF(args.header).active_leaf_count; i++) {
             uint32_t child_id;
-            if (VK_BUILD_FLAG(VK_BUILD_FLAG_64BIT_KEYS))
+            if (VK_TEST_BUILD_FLAG_64BIT_KEYS)
                child_id = DEREF(INDEX(key64_id_pair, src_ids, i)).id;
             else
                child_id = DEREF(INDEX(key32_id_pair, src_ids, i)).id;

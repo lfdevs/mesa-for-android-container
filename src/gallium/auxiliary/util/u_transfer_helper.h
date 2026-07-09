@@ -102,6 +102,7 @@ enum u_transfer_helper_flags {
    U_TRANSFER_HELPER_MSAA_MAP = (1 << 3),
    U_TRANSFER_HELPER_Z24_IN_Z32F = (1 << 4),
    U_TRANSFER_HELPER_INTERLEAVE_IN_PLACE = (1 << 5),
+   U_TRANSFER_HELPER_Z32F_S8_IN_Z24S8 = (1 << 6),
 };
 
 struct pipe_resource *u_transfer_helper_resource_create(

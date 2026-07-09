@@ -68,6 +68,9 @@ active_samplers_bits(struct etna_context *ctx);
 unsigned
 companion_slot(struct etna_context *ctx, unsigned x);
 
+unsigned
+etna_vs_sampler_base(struct etna_context *ctx);
+
 /* update TS / cache for a sampler if required */
 void
 etna_update_sampler_source(struct pipe_sampler_view *view, int num);

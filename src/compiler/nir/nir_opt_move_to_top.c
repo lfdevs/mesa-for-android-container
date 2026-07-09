@@ -73,6 +73,7 @@ can_move_src_to_top(nir_src *src, void *_state)
       case nir_intrinsic_load_per_primitive_input:
       case nir_intrinsic_load_per_vertex_input:
       case nir_intrinsic_load_scalar_arg_amd:
+      case nir_intrinsic_load_scalar_arg_wg_div_amd:
          break;
       case nir_intrinsic_load_global_amd:
          if (!(nir_intrinsic_access(nir_instr_as_intrinsic(instr)) &

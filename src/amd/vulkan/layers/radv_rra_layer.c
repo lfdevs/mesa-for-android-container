@@ -8,7 +8,9 @@
 #include "tools/radv_debug.h"
 #include "tools/radv_rra.h"
 #include "util/u_process.h"
+#include "radv_device.h"
 #include "radv_event.h"
+#include "radv_physical_device.h"
 #include "vk_acceleration_structure.h"
 
 VKAPI_ATTR VkResult VKAPI_CALL
@@ -16,6 +18,8 @@ rra_QueuePresentKHR(VkQueue _queue, const VkPresentInfoKHR *pPresentInfo)
 {
    VK_FROM_HANDLE(radv_queue, queue, _queue);
    struct radv_device *device = radv_queue_device(queue);
+   struct radv_physical_device *pdev = radv_device_physical(device);
+   struct radv_instance *instance = radv_physical_device_instance(pdev);
 
    if (device->rra_trace.triggered) {
       device->rra_trace.triggered = false;
@@ -26,14 +30,26 @@ rra_QueuePresentKHR(VkQueue _queue, const VkPresentInfoKHR *pPresentInfo)
          char filename[2048];
          time_t t = time(NULL);
          struct tm now = *localtime(&t);
-         snprintf(filename, sizeof(filename), "/tmp/%s_%04d.%02d.%02d_%02d.%02d.%02d.rra", util_get_process_name(),
-                  1900 + now.tm_year, now.tm_mon + 1, now.tm_mday, now.tm_hour, now.tm_min, now.tm_sec);
+         if (instance->vk.trace_mode & RADV_TRACE_MODE_GAMMA) {
+            snprintf(filename, sizeof(filename), "/tmp/%s_%04d.%02d.%02d_%02d.%02d.%02d.gamma", util_get_process_name(),
+                     1900 + now.tm_year, now.tm_mon + 1, now.tm_mday, now.tm_hour, now.tm_min, now.tm_sec);
 
-         VkResult result = radv_rra_dump_trace(_queue, filename);
-         if (result == VK_SUCCESS)
-            fprintf(stderr, "radv: RRA capture saved to '%s'\n", filename);
-         else
-            fprintf(stderr, "radv: Failed to save RRA capture!\n");
+            VkResult result = radv_gamma_dump_trace(_queue, filename);
+            if (result == VK_SUCCESS)
+               fprintf(stderr, "radv: gamma capture saved to '%s'\n", filename);
+            else
+               fprintf(stderr, "radv: Failed to save gamma capture!\n");
+         }
+         if (instance->vk.trace_mode & RADV_TRACE_MODE_RRA) {
+            snprintf(filename, sizeof(filename), "/tmp/%s_%04d.%02d.%02d_%02d.%02d.%02d.rra", util_get_process_name(),
+                     1900 + now.tm_year, now.tm_mon + 1, now.tm_mday, now.tm_hour, now.tm_min, now.tm_sec);
+
+            VkResult result = radv_rra_dump_trace(_queue, filename);
+            if (result == VK_SUCCESS)
+               fprintf(stderr, "radv: RRA capture saved to '%s'\n", filename);
+            else
+               fprintf(stderr, "radv: Failed to save RRA capture!\n");
+         }
       }
    }
 

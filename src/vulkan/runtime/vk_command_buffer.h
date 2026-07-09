@@ -194,6 +194,17 @@ struct vk_command_buffer {
 VK_DEFINE_HANDLE_CASTS(vk_command_buffer, base, VkCommandBuffer,
                        VK_OBJECT_TYPE_COMMAND_BUFFER)
 
+struct vk_command_buffer_init_params {
+   struct vk_command_pool *pool;
+   const struct vk_command_buffer_ops *ops;
+   VkCommandBufferLevel level;
+   bool needs_cmd_queue;
+};
+
+VkResult MUST_CHECK
+vk_command_buffer_init_with_params(struct vk_command_buffer *command_buffer,
+                                   struct vk_command_buffer_init_params *params);
+
 VkResult MUST_CHECK
 vk_command_buffer_init(struct vk_command_pool *pool,
                        struct vk_command_buffer *command_buffer,

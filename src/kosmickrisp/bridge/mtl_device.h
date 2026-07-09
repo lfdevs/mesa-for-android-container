@@ -26,6 +26,8 @@ void mtl_stop_gpu_capture(void);
 /* Device feature query */
 void mtl_device_get_name(mtl_device *dev, char buffer[256]);
 void mtl_device_get_architecture_name(mtl_device *dev, char buffer[256]);
+/* Returns 0 if no Apple family is supported */
+uint32_t mtl_device_get_gpu_apple_family(mtl_device *dev);
 uint64_t mtl_device_get_registry_id(mtl_device *dev);
 bool mtl_device_supports_sample_count(mtl_device *dev, uint32_t sample_count);
 struct mtl_size mtl_device_max_threads_per_threadgroup(mtl_device *dev);

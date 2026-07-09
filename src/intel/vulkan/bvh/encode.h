@@ -5,8 +5,7 @@
 #ifndef ANV_BVH_ENCODE_H
 #define ANV_BVH_ENCODE_H
 
-#include "anv_build_helpers.h"
-#include "anv_build_interface.h"
+#include "anv_bvh_helpers.h"
 #include "vk_debug.h"
 
 #define ULP 1.1920928955078125e-7f

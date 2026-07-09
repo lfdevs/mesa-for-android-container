@@ -1,0 +1,65 @@
+[[deqp]]
+deqp = "/deqp-gles/modules/gles2/deqp-gles2"
+caselists = ["/deqp-gles/mustpass/gles2-main.txt"]
+deqp_args = [
+    "--deqp-surface-width=256",
+    "--deqp-surface-height=256",
+    "--deqp-surface-type=pbuffer",
+    "--deqp-gl-config-name=rgba8888d24s8ms0",
+    "--deqp-visibility=hidden"
+]
+timeout = 180.0
+prefix = "asan-"
+renderer_check = "zink.*RADV"
+[deqp.env]
+  ZINK_DEBUG = "validation"
+
+[[deqp]]
+deqp = "/deqp-gles/modules/gles3/deqp-gles3"
+caselists = ["/deqp-gles/mustpass/gles3-main.txt"]
+deqp_args = [
+    "--deqp-surface-width=256",
+    "--deqp-surface-height=256",
+    "--deqp-surface-type=pbuffer",
+    "--deqp-gl-config-name=rgba8888d24s8ms0",
+    "--deqp-visibility=hidden"
+]
+timeout = 180.0
+prefix = "asan-"
+[deqp.env]
+  ZINK_DEBUG = "validation"
+
+[[deqp]]
+deqp = "/deqp-gles/modules/gles31/deqp-gles31"
+caselists = ["/deqp-gles/mustpass/gles31-main.txt"]
+deqp_args = [
+    "--deqp-surface-width=256",
+    "--deqp-surface-height=256",
+    "--deqp-surface-type=pbuffer",
+    "--deqp-gl-config-name=rgba8888d24s8ms0",
+    "--deqp-visibility=hidden"
+]
+timeout = 180.0
+prefix = "asan-"
+renderer_check = "zink.*RADV"
+[deqp.env]
+  ZINK_DEBUG = "validation"
+
+[[deqp]]
+deqp = "/deqp-gl/external/openglcts/modules/glcts"
+caselists = [
+    "/deqp-gl/mustpass/gl46-main.txt",
+]
+deqp_args = [
+    "--deqp-surface-width=256",
+    "--deqp-surface-height=256",
+    "--deqp-surface-type=pbuffer",
+    "--deqp-gl-config-name=rgba8888d24s8ms0",
+    "--deqp-visibility=hidden"
+]
+timeout = 180.0
+prefix = "asan-"
+[deqp.env]
+  ZINK_DEBUG = "validation"
+
+# TODO: add piglit when it's fixed

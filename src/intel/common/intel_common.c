@@ -39,20 +39,48 @@ void
 intel_compute_engine_async_threads_limit(const struct intel_device_info *devinfo,
                                          uint32_t hw_threads_in_wg,
                                          bool slm_or_barrier_enabled,
+                                         bool uses_fence,
                                          uint8_t *ret_pixel_async_compute_thread_limit,
                                          uint8_t *ret_z_pass_async_compute_thread_limit,
                                          uint8_t *ret_np_z_async_throttle_settings)
 {
-   /* Spec recommended SW values.
+   /*
     * IMPORTANT: values set to this variables are HW values
+    *
+    * Bspec 45765: Pixel Async compute thread limit field states:
+    *
+    *    When SLM or barriers are enabled, the MAX_API_thread limit must be
+    *    less than or equal to the throttle limit to prevent deadlocks.
+    *
+    * These limit talks about when 3D pipe is active or Z-pass (fixed function
+    * units) running and impose maximum number of active Compute CS threads to
+    * run in DSS.
+    *
+    * For example with Max 8, we could have max 8 threads * 8 Xe cores which
+    * gives us 64threads active for compute. But if there is a cross thread
+    * dependency and if we don't launch enough threads, we will hit deadlock.
+    *
+    * we found such a case in Witcher3 workload.
+    *
+    *    Compute walker tries to dispatch 114x1x1 threads with 2 threads per
+    *    thread groups in SIMD 16 mode. 1 thread group does UGM fetch and
+    *    another does UGM fence. Memory update is supposed to happen from
+    *    differnt thread groups of the same walker.
+    *
+    *    Since we set the max of 8 threads per DSS for compute engine while
+    *    running things in async mode, we were not launching other thread
+    *    groups which leads to deadlock.
+    *
+    * Best way to deal with such kind of scenario is don't apply any limit
+    * and use the default setting.
     */
-   uint8_t pixel_async_compute_thread_limit = 2;
+   uint8_t pixel_async_compute_thread_limit = uses_fence ? 0 : 2;
    uint8_t z_pass_async_compute_thread_limit = 0;
    uint8_t np_z_async_throttle_settings = 0;
    bool has_vrt = devinfo->verx10 >= 300 && !INTEL_DEBUG(DEBUG_NO_VRT);
 
    /* When VRT is enabled async threads limits don't have effect */
-   if (!slm_or_barrier_enabled || has_vrt) {
+   if (!slm_or_barrier_enabled || has_vrt || uses_fence) {
       *ret_pixel_async_compute_thread_limit = pixel_async_compute_thread_limit;
       *ret_z_pass_async_compute_thread_limit = z_pass_async_compute_thread_limit;
       *ret_np_z_async_throttle_settings = np_z_async_throttle_settings;

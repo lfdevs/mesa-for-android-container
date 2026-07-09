@@ -1092,6 +1092,17 @@ vk_pipeline_stage_clone(const struct vk_pipeline_stage *in)
    return out;
 }
 
+static struct vk_pipeline_stage
+vk_pipeline_stage_copy_non_shaders(const struct vk_pipeline_stage *in)
+{
+   struct vk_pipeline_stage out = *in;
+
+   out.precomp = NULL;
+   out.shader = NULL;
+
+   return out;
+}
+
 static const VkPushConstantRange *
 get_push_range_for_stage(struct vk_pipeline_layout *pipeline_layout,
                          mesa_shader_stage stage)
@@ -2702,16 +2713,10 @@ vk_cmd_unbind_pipelines_for_stages(struct vk_command_buffer *cmd_buffer,
       vk_compute_pipeline_cmd_bind(cmd_buffer, NULL);
 }
 
-struct vk_rt_stage {
-   bool linked : 1;
-   bool imported : 1;
-   struct vk_shader *shader;
-};
-
 struct vk_rt_shader_group {
    VkRayTracingShaderGroupTypeKHR type;
 
-   struct vk_rt_stage stages[3];
+   struct vk_pipeline_stage stages[3];
    uint32_t stage_count;
 };
 
@@ -2722,7 +2727,7 @@ struct vk_rt_pipeline {
    struct vk_rt_shader_group *groups;
 
    uint32_t stage_count;
-   struct vk_rt_stage *stages;
+   struct vk_pipeline_stage *stages;
 
    VkDeviceSize stack_size;
    VkDeviceSize scratch_size;
@@ -2745,20 +2750,12 @@ vk_pipeline_get_rt_ray_queries(struct vk_pipeline *pipeline)
    return container_of(pipeline, struct vk_rt_pipeline, base)->ray_queries;
 }
 
-static struct vk_rt_stage
-vk_rt_stage_ref(struct vk_rt_stage *stage)
-{
-   if (stage->shader)
-      vk_shader_ref(stage->shader);
-   return *stage;
-}
-
 static void
 vk_rt_shader_group_destroy(struct vk_device *device,
                            struct vk_rt_shader_group *group)
 {
    for (uint32_t i = 0; i < group->stage_count; i++)
-      vk_shader_unref(device, group->stages[i].shader);
+      vk_pipeline_stage_finish(device, &group->stages[i]);
 }
 
 static struct vk_rt_shader_group
@@ -2767,7 +2764,7 @@ vk_rt_shader_group_clone(struct vk_rt_shader_group *other)
    struct vk_rt_shader_group group = *other;
 
    for (uint32_t i = 0; i < ARRAY_SIZE(other->stages); i++)
-      group.stages[i] = vk_rt_stage_ref(&other->stages[i]);
+      group.stages[i] = vk_pipeline_stage_clone(&other->stages[i]);
 
    return group;
 }
@@ -2783,7 +2780,7 @@ vk_rt_pipeline_destroy(struct vk_device *device,
    for (uint32_t i = 0; i < rt_pipeline->group_count; i++)
       vk_rt_shader_group_destroy(device, &rt_pipeline->groups[i]);
    for (uint32_t i = 0; i < rt_pipeline->stage_count; i++)
-      vk_shader_unref(device, rt_pipeline->stages[i].shader);
+      vk_pipeline_stage_finish(device, &rt_pipeline->stages[i]);
    vk_pipeline_free(device, pAllocator, pipeline);
 }
 
@@ -2969,32 +2966,6 @@ vk_rt_group_compile_info_finish(struct vk_device *device,
       vk_pipeline_stage_finish(device, &group->stages[i]);
 }
 
-static struct vk_rt_stage
-vk_rt_stage_from_pipeline_stage(struct vk_pipeline_stage *stage)
-{
-   return (struct vk_rt_stage) {
-      .shader = vk_shader_ref(stage->shader),
-      .linked = stage->linked,
-   };
-}
-
-static struct vk_pipeline_stage
-vk_pipeline_stage_from_rt_stage(struct vk_rt_stage *stage)
-{
-   struct vk_pipeline_stage ret = {
-      .stage = stage->shader->stage,
-      .shader = vk_shader_ref(stage->shader),
-      .linked = stage->linked,
-      .imported = true,
-      /* precomp & precomp_key left empty on purpose */
-   };
-   assert(sizeof(ret.shader_key) ==
-          sizeof(stage->shader->pipeline.cache_key));
-   memcpy(ret.shader_key, stage->shader->pipeline.cache_key,
-          sizeof(stage->shader->pipeline.cache_key));
-   return ret;
-}
-
 static struct vk_rt_shader_group
 vk_rt_shader_group_from_compile_info(struct vk_rt_group_compile_info *group_info)
 {
@@ -3007,12 +2978,7 @@ vk_rt_shader_group_from_compile_info(struct vk_rt_group_compile_info *group_info
 
    for (uint32_t i = 0; i < group_info->stage_count; i++) {
       assert(group_info->stages[i].shader != NULL);
-
-      group.stages[i] = (struct vk_rt_stage) {
-         .imported = true,
-         .linked = group_info->stages[i].linked,
-         .shader = vk_shader_ref(group_info->stages[i].shader),
-      };
+      group.stages[i] = vk_pipeline_stage_clone(&group_info->stages[i]);
    }
 
    return group;
@@ -3092,11 +3058,32 @@ vk_get_rt_pipeline_compile_info(struct vk_rt_pipeline_compile_info *info,
       }
    }
 
+   /* Process the library stages here so that they are accessible for groups.
+    */
+   if (libs_info != NULL) {
+      uint32_t stage_index = pCreateInfo->stageCount;
+      for (uint32_t i = 0; i < libs_info->libraryCount; i++) {
+         VK_FROM_HANDLE(vk_pipeline, lib_pipeline, libs_info->pLibraries[i]);
+         struct vk_rt_pipeline *lib_rt_pipeline =
+            container_of(lib_pipeline, struct vk_rt_pipeline, base);
+
+         for (uint32_t s = 0; s < lib_rt_pipeline->stage_count; s++) {
+            info->stages[stage_index + s] =
+               vk_pipeline_stage_clone(&lib_rt_pipeline->stages[s]);
+            info->stages[stage_index + s].imported = true;
+         }
+
+         stage_index += lib_rt_pipeline->stage_count;
+         assert(stage_index <= info->stage_count);
+      }
+   }
+
    for (uint32_t i = 0; i < pCreateInfo->groupCount; i++) {
       const VkRayTracingShaderGroupCreateInfoKHR *group_info =
          &pCreateInfo->pGroups[i];
       struct vk_rt_group_compile_info *group = &info->groups[i];
 
+      group->type = group_info->type;
       group->stage_count = 0;
       switch (group_info->type) {
       case VK_RAY_TRACING_SHADER_GROUP_TYPE_GENERAL_KHR:
@@ -3126,7 +3113,7 @@ vk_get_rt_pipeline_compile_info(struct vk_rt_pipeline_compile_info *info,
 
       VkShaderStageFlags group_all_stages = 0;
       for (uint32_t s = 0; s < group->stage_count; s++) {
-         group->stages[s] = vk_pipeline_stage_clone(
+         group->stages[s] = vk_pipeline_stage_copy_non_shaders(
             &info->stages[group->stage_indices[s]]);
          group_all_stages |= mesa_to_vk_shader_stage(group->stages[s].stage);
       }
@@ -3146,18 +3133,11 @@ vk_get_rt_pipeline_compile_info(struct vk_rt_pipeline_compile_info *info,
    }
 
    if (libs_info != NULL) {
-      uint32_t stage_index = pCreateInfo->stageCount;
       uint32_t group_index = pCreateInfo->groupCount;
       for (uint32_t i = 0; i < libs_info->libraryCount; i++) {
          VK_FROM_HANDLE(vk_pipeline, lib_pipeline, libs_info->pLibraries[i]);
          struct vk_rt_pipeline *lib_rt_pipeline =
             container_of(lib_pipeline, struct vk_rt_pipeline, base);
-
-         for (uint32_t s = 0; s < lib_rt_pipeline->stage_count; s++) {
-            info->stages[stage_index++] =
-               vk_pipeline_stage_from_rt_stage(&lib_rt_pipeline->stages[s]);
-            assert(stage_index <= info->stage_count);
-         }
 
          for (uint32_t g = 0; g < lib_rt_pipeline->group_count; g++) {
             struct vk_rt_shader_group *lib_rt_group = &lib_rt_pipeline->groups[g];
@@ -3170,7 +3150,8 @@ vk_get_rt_pipeline_compile_info(struct vk_rt_pipeline_compile_info *info,
 
             for (uint32_t s = 0; s < group->stage_count; s++) {
                group->stages[s] =
-                  vk_pipeline_stage_from_rt_stage(&lib_rt_group->stages[s]);
+                  vk_pipeline_stage_clone(&lib_rt_group->stages[s]);
+               group->stages[s].imported = true;
             }
          }
          assert(group_index <= info->group_count);
@@ -3305,6 +3286,16 @@ vk_pipeline_compile_rt_shader_group(struct vk_device *device,
 
    assert(stage_count > 1 && stage_count <= 3);
 
+   /* Unref all the shaders found in the cache, we're going to do a compile
+    * anyway.
+    */
+   for (uint32_t i = 0; i < stage_count; i++) {
+      if (stages[i].shader) {
+         vk_shader_unref(device, stages[i].shader);
+         stages[i].shader = NULL;
+      }
+   }
+
    if (cache != NULL) {
       *all_cache_hit = true;
 
@@ -3319,7 +3310,6 @@ vk_pipeline_compile_rt_shader_group(struct vk_device *device,
                                             &cache_hit);
 
          if (cache_obj != NULL) {
-            assert(stages[i].shader == NULL);
             stages[i].shader = vk_shader_from_cache_obj(cache_obj);
          } else {
             all_shaders_found = false;
@@ -3333,16 +3323,6 @@ vk_pipeline_compile_rt_shader_group(struct vk_device *device,
          return VK_SUCCESS;
    } else {
       *all_cache_hit = false;
-   }
-
-   /* Unref all the shaders found in the cache, we're going to do a compile
-    * anyway.
-    */
-   for (uint32_t i = 0; i < stage_count; i++) {
-      if (stages[i].shader) {
-         vk_shader_unref(device, stages[i].shader);
-         stages[i].shader = NULL;
-      }
    }
 
    if (pipeline_flags &
@@ -3404,6 +3384,7 @@ vk_pipeline_compile_rt_shader_group(struct vk_device *device,
          cache_obj = vk_pipeline_cache_add_object(cache, cache_obj);
 
       stages[i].shader = vk_shader_from_cache_obj(cache_obj);
+      stages[i].linked = true;
    }
 
    return VK_SUCCESS;
@@ -3524,8 +3505,8 @@ is_rt_stack_size_dynamic(const VkRayTracingPipelineCreateInfoKHR *info)
 static int
 cmp_vk_rt_pipeline_stages(const void *_a, const void *_b)
 {
-   const struct vk_rt_stage *a = _a, *b = _b;
-   return vk_shader_cmp_rt_stages(a->shader->stage, b->shader->stage);
+   const struct vk_pipeline_stage *a = _a, *b = _b;
+   return vk_shader_cmp_rt_stages(a->stage, b->stage);
 }
 
 static VkResult
@@ -3558,7 +3539,7 @@ vk_create_rt_pipeline(struct vk_device *device,
 
    VK_MULTIALLOC(ma);
    VK_MULTIALLOC_DECL(&ma, struct vk_rt_pipeline, _pipeline, 1);
-   VK_MULTIALLOC_DECL(&ma, struct vk_rt_stage, pipeline_stages,
+   VK_MULTIALLOC_DECL(&ma, struct vk_pipeline_stage, pipeline_stages,
                       compile_info.stage_count);
    VK_MULTIALLOC_DECL(&ma, struct vk_rt_shader_group, pipeline_groups,
                       compile_info.group_count);
@@ -3638,13 +3619,8 @@ vk_create_rt_pipeline(struct vk_device *device,
 
       assert(compile_info.stages[i].shader);
 
-      /* No need to take a reference, either the pipeline creation succeeds
-       * and the ownership is transfered from from stages[] to the pipeline or
-       * it fails and all stages[] elements are unref.
-       */
-      pipeline->stages[pipeline->stage_count++] = (struct vk_rt_stage) {
-         .shader = vk_shader_ref(compile_info.stages[i].shader),
-      };
+      pipeline->stages[pipeline->stage_count++] =
+         vk_pipeline_stage_clone(&compile_info.stages[i]);
 
       if (feedback_info &&
           feedback_info->pipelineStageCreationFeedbackCount > 0) {
@@ -3665,16 +3641,14 @@ vk_create_rt_pipeline(struct vk_device *device,
       struct vk_pipeline_stage linked_stages[3];
       uint32_t linked_stage_count = 0;
       for (uint32_t s = 0; s < compile_info.groups[i].stage_count; s++) {
-         if (compile_info.groups[i].stages[s].linked) {
-            linked_stages[linked_stage_count] =
-               compile_info.groups[i].stages[s];
-            linked_stages[linked_stage_count].precomp =
-               compile_info.stages[compile_info.groups[i].stage_indices[s]].precomp;
-            linked_stage_count++;
-         } else {
-            compile_info.groups[i].stages[s] = vk_pipeline_stage_clone(
-               &compile_info.stages[compile_info.groups[i].stage_indices[s]]);
-         }
+         if (!compile_info.groups[i].stages[s].linked)
+            continue;
+
+         struct vk_pipeline_stage stage = vk_pipeline_stage_clone(
+            &compile_info.groups[i].stages[s]);
+         stage.precomp = compile_info.stages[
+            compile_info.groups[i].stage_indices[s]].precomp;
+         linked_stages[linked_stage_count++] = stage;
       }
 
       if (linked_stage_count > 0) {
@@ -3715,18 +3689,13 @@ vk_create_rt_pipeline(struct vk_device *device,
        */
       for (uint32_t s = 0; s < compile_info.groups[i].stage_count; s++) {
          if (!compile_info.groups[i].stages[s].linked) {
-            assert(compile_info.groups[i].stages[s].shader != NULL);
-            group->stages[s] = (struct vk_rt_stage) {
-               .shader = vk_shader_ref(compile_info.groups[i].stages[s].shader),
-               .imported = compile_info.groups[i].stages[s].imported,
-            };
+            group->stages[s] = vk_pipeline_stage_clone(
+               &compile_info.stages[compile_info.groups[i].stage_indices[s]]);
          } else {
             for (uint32_t j = 0; j < linked_stage_count; j++) {
                if (linked_stages[j].stage == compile_info.groups[i].stages[s].stage) {
-                  group->stages[s] = (struct vk_rt_stage) {
-                     .shader = linked_stages[j].shader,
-                     .linked = true,
-                  };
+                  assert(linked_stages[j].precomp == NULL);
+                  group->stages[s] = vk_pipeline_stage_clone(&linked_stages[j]);
                   break;
                }
             }
@@ -3748,13 +3717,17 @@ vk_create_rt_pipeline(struct vk_device *device,
             group_info->pShaderGroupCaptureReplayHandle);
       }
 
+      /* Discard the scratch stages for linking */
+      for (uint32_t s = 0; s < linked_stage_count; s++)
+         vk_pipeline_stage_finish(device, &linked_stages[s]);
+
       pipeline->group_count++;
    }
 
    /* Import library shaders */
    for (uint32_t i = pCreateInfo->stageCount; i < compile_info.stage_count; i++) {
       pipeline->stages[pipeline->stage_count++] =
-         vk_rt_stage_from_pipeline_stage(&compile_info.stages[i]);
+         vk_pipeline_stage_clone(&compile_info.stages[i]);
    }
    /* Import library groups */
    for (uint32_t i = pCreateInfo->groupCount; i < compile_info.group_count; i++) {
@@ -3851,7 +3824,7 @@ vk_create_rt_pipeline(struct vk_device *device,
    for (uint32_t i = 0; i < pipeline->group_count; i++)
       vk_rt_shader_group_destroy(device, &pipeline->groups[i]);
    for (uint32_t i = 0; i < pipeline->stage_count; i++)
-      vk_shader_unref(device, pipeline->stages[i].shader);
+      vk_pipeline_stage_finish(device, &pipeline->stages[i]);
    vk_pipeline_free(device, pAllocator, &pipeline->base);
  fail_pipeline:
    vk_release_rt_pipeline_compile_info(&compile_info, device, pAllocator);

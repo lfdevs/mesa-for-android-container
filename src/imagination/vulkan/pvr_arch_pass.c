@@ -846,7 +846,6 @@ PVR_PER_ARCH(CreateRenderPass2)(VkDevice _device,
 
       attachment->vk_format = desc->format;
       attachment->sample_count = desc->samples;
-      attachment->initial_layout = desc->initialLayout;
       attachment->index = i;
 
       /* On cores without gs_rta_support, PBE resolves might depend on writes

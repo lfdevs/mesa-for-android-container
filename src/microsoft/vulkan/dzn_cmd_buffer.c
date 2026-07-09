@@ -598,7 +598,13 @@ dzn_cmd_buffer_create(const VkCommandBufferAllocateInfo *info,
       return vk_error(pool->base.device, VK_ERROR_OUT_OF_HOST_MEMORY);
 
    VkResult result =
-      vk_command_buffer_init(pool, &cmdbuf->vk, &cmd_buffer_ops, info->level);
+      vk_command_buffer_init_with_params(&cmdbuf->vk,
+                                         &(struct vk_command_buffer_init_params) {
+                                            .pool = pool,
+                                            .ops = &cmd_buffer_ops,
+                                            .level = info->level,
+                                            .needs_cmd_queue = info->level == VK_COMMAND_BUFFER_LEVEL_SECONDARY,
+                                         });
    if (result != VK_SUCCESS) {
       vk_free(&pool->alloc, cmdbuf);
       return result;

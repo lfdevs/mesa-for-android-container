@@ -1552,7 +1552,7 @@ agx_compile_variant(struct agx_device *dev, struct pipe_context *pctx,
          outputs = nir->info.outputs_written;
       }
    } else if (nir->info.stage == MESA_SHADER_TESS_CTRL) {
-      NIR_PASS(_, nir, poly_nir_lower_tcs);
+      NIR_PASS(_, nir, poly_nir_lower_tcs, true);
    } else if (nir->info.stage == MESA_SHADER_GEOMETRY) {
       NIR_PASS(_, nir, poly_nir_lower_gs, &gs_count, &gs_copy, &pre_gs,
                &gs_info);
@@ -1695,7 +1695,7 @@ agx_get_shader_variant(struct agx_screen *screen, struct pipe_context *pctx,
    return compiled;
 }
 
-static int
+static unsigned
 glsl_type_size(const struct glsl_type *type, bool bindless)
 {
    return glsl_count_attribute_slots(type, false);
@@ -1842,7 +1842,7 @@ agx_shader_initialize(struct agx_device *dev, struct agx_uncompiled_shader *so,
    blob_init(&so->serialized_nir);
    nir_serialize(&so->serialized_nir, nir, true);
    _mesa_blake3_compute(so->serialized_nir.data, so->serialized_nir.size,
-                      so->nir_blake3);
+                        so->nir_blake3);
 
    so->has_xfb_info = (nir->xfb_info != NULL);
 

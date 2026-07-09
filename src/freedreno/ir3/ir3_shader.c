@@ -113,7 +113,7 @@ ir3_const_add_imm(struct ir3_shader_variant *v, uint32_t imm)
    return ir3_const_imm_index_to_reg(const_state, imm_state->count++);
 }
 
-int
+unsigned
 ir3_glsl_type_size(const struct glsl_type *type, bool bindless)
 {
    return glsl_count_attribute_slots(type, false);

@@ -30,7 +30,6 @@
 #define MAX_DYNAMIC_BUFFERS            (MAX_DYNAMIC_UNIFORM_BUFFERS + MAX_DYNAMIC_STORAGE_BUFFERS)
 #define MAX_SAMPLES_LOG2               4
 #define NUM_META_FS_KEYS               12
-#define MAX_VIEWS                      8
 #define MAX_SO_STREAMS                 4
 #define MAX_SO_BUFFERS                 4
 #define MAX_SO_OUTPUTS                 128

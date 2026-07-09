@@ -5,6 +5,8 @@
 #include "brw_shader.h"
 #include "brw_builder.h"
 
+#include <vector>
+
 /**
  * \file
  *
@@ -54,12 +56,16 @@ brw_opt_fill_and_spill(brw_shader &s)
    const intel_device_info *devinfo = s.devinfo;
    bool progress = false;
 
+   std::vector<brw_inst *> tracked_spills, tracked_fills;
+
    foreach_block(block, s.cfg) {
       bool block_progress = false;
 
       foreach_inst_in_block(brw_inst, inst, block) {
          if (inst->opcode != SHADER_OPCODE_LSC_SPILL)
             continue;
+
+         tracked_spills.push_back(inst);
 
          const brw_reg spilled =
             brw_lower_vgrf_to_fixed_grf(devinfo, inst,
@@ -154,6 +160,8 @@ brw_opt_fill_and_spill(brw_shader &s)
          if (inst->opcode != SHADER_OPCODE_LSC_FILL)
             continue;
 
+         tracked_fills.push_back(inst);
+
          brw_reg inst_dst = brw_lower_vgrf_to_fixed_grf(devinfo, inst,
                                                         inst->dst);
 
@@ -231,6 +239,49 @@ brw_opt_fill_and_spill(brw_shader &s)
 
          progress = true;
       }
+   }
+
+   /* Remove any left-over spill that has no fills.  This can
+    * happen when RA decides to spill a value but the value remains
+    * live for all its fills.
+    */
+   {
+      /* Spills and fills operate on register granularity. */
+      const unsigned scratch_regs = DIV_ROUND_UP(s.last_scratch, REG_SIZE);
+      BITSET_WORD *covered =
+         rzalloc_array(NULL, BITSET_WORD, BITSET_WORDS(scratch_regs));
+
+      for (const brw_inst *inst : tracked_fills) {
+         /* Some may have already been transformed. */
+         if (inst->opcode != SHADER_OPCODE_LSC_FILL)
+            continue;
+         const brw_scratch_inst *fill = inst->as_scratch();
+         assert(fill->offset % REG_SIZE == 0 &&
+                fill->size_written % REG_SIZE == 0);
+         const unsigned first = fill->offset / REG_SIZE;
+         const unsigned end = first + fill->size_written / REG_SIZE;
+         assert(end <= scratch_regs);
+         BITSET_SET_RANGE(covered, first, end - 1);
+      }
+
+      for (brw_inst *inst : tracked_spills) {
+         /* Some may have already been transformed. */
+         if (inst->opcode != SHADER_OPCODE_LSC_SPILL)
+            continue;
+         const brw_scratch_inst *spill = inst->as_scratch();
+         const unsigned size = spill->size_read(devinfo, SPILL_SRC_PAYLOAD2);
+         assert(spill->offset % REG_SIZE == 0 && size % REG_SIZE == 0);
+         const unsigned first = spill->offset / REG_SIZE;
+         const unsigned end = first + size / REG_SIZE;
+         assert(end <= scratch_regs);
+         if (!BITSET_TEST_RANGE(covered, first, end - 1)) {
+            inst->remove();
+            s.shader_stats.spill_count--;
+            progress = true;
+         }
+      }
+
+      ralloc_free(covered);
    }
 
    if (progress)

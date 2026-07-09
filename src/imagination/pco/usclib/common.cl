@@ -247,7 +247,7 @@ cs_idfwdf_common(void)
       #pragma unroll
       for (unsigned x = 0; x < PVR_IDFWDF_TEX_WIDTH; ++x) {
          smp_data.xy = (uint2)(x, y);
-         nir_smp_pco(smp_data, tex_state, smp_state, FLAGS, RANGE);
+         nir_smp_pco(smp_data, tex_state, smp_state, FLAGS, RANGE, ACCESS_NON_WRITEABLE);
       }
    }
 }

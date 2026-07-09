@@ -111,6 +111,14 @@ struct brw_compiler {
    int spilling_rate;
 
    /**
+    * Register file size
+    *
+    * Useful to calculate the amount of push data to deliver to a given
+    * shader.
+    */
+   unsigned register_file_size;
+
+   /**
     * We perform a quick register pressure estimate at the NIR level before
     * attempting backend compilation at various SIMD widths.  If the estimated
     * register pressure for a given SIMD width is beyond this threshold, we
@@ -204,6 +212,7 @@ PRAGMA_DIAGNOSTIC_ERROR(-Wpadded)
 enum brw_robustness_flags {
    BRW_ROBUSTNESS_UBO  = BITFIELD_BIT(0),
    BRW_ROBUSTNESS_SSBO = BITFIELD_BIT(1),
+   BRW_ROBUSTNESS_SLM  = BITFIELD_BIT(2),
 };
 
 enum brw_divergent_atomics_flags {
@@ -218,7 +227,7 @@ struct brw_base_prog_key {
     */
    uint32_t view_mask;
 
-   enum brw_robustness_flags robust_flags:2;
+   enum brw_robustness_flags robust_flags:3;
 
    enum intel_vue_layout vue_layout:2;
 
@@ -231,7 +240,7 @@ struct brw_base_prog_key {
 
    enum brw_divergent_atomics_flags divergent_atomics_flags:2;
 
-   uint32_t padding:25;
+   uint32_t padding:24;
 };
 
 /**
@@ -589,12 +598,12 @@ struct brw_fs_prog_data {
    bool uses_fs_config;
 
    /** Should this shader be dispatched per-sample */
-   enum intel_sometimes persample_dispatch;
+   bool persample_dispatch;
 
    /**
     * Shader is ran at the coarse pixel shading dispatch rate (3DSTATE_CPS).
     */
-   enum intel_sometimes coarse_pixel_dispatch;
+   bool coarse_pixel_dispatch;
 
    /**
     * Shader writes the SampleMask and this is AND-ed with the API's
@@ -776,33 +785,6 @@ _brw_fs_prog_data_dispatch_grf_start_reg(const struct brw_fs_prog_data *prog_dat
    _brw_fs_prog_data_dispatch_grf_start_reg(prog_data, \
       brw_wm_state_simd_width_for_ksp(wm_state, ksp_idx))
 
-static inline bool
-brw_fs_prog_data_is_persample(const struct brw_fs_prog_data *prog_data,
-                              enum intel_fs_config pushed_fs_config)
-{
-   return intel_fs_is_persample(prog_data->persample_dispatch,
-                                prog_data->persample_interp,
-                                pushed_fs_config);
-}
-
-static inline uint32_t
-fs_prog_data_barycentric_modes(const struct brw_fs_prog_data *prog_data,
-                               enum intel_fs_config pushed_fs_config)
-{
-   return intel_fs_barycentric_modes(prog_data->persample_dispatch,
-                                     prog_data->persample_interp,
-                                     prog_data->barycentric_interp_modes,
-                                     pushed_fs_config);
-}
-
-static inline bool
-brw_fs_prog_data_is_coarse(const struct brw_fs_prog_data *prog_data,
-                           enum intel_fs_config pushed_fs_config)
-{
-   return intel_fs_is_coarse(prog_data->coarse_pixel_dispatch,
-                             pushed_fs_config);
-}
-
 struct brw_push_const_block {
    unsigned dwords;     /* Dword count, not reg aligned */
    unsigned regs;
@@ -827,6 +809,7 @@ struct brw_cs_prog_data {
    unsigned prog_spilled;
 
    bool uses_barrier;
+   bool uses_fence;
    bool uses_btd_stack_ids;
    bool uses_systolic;
    uint8_t generate_local_id;

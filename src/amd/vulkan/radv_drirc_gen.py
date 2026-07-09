@@ -6,6 +6,7 @@ import argparse
 import sys
 
 VALID_COMMON_VK_OPTIONS = {
+    "force_vk_devicename",
     "vk_lower_terminate_to_discard",
     "vk_zero_vram",
     "vk_require_etc2",
@@ -53,9 +54,6 @@ def declare_options():
         B("radv_flush_before_timestamp_write", False,
           "Wait for previous commands to finish before writing timestamps",
           c_name="flush_before_timestamp_write"),
-        B("radv_invariant_geom", False,
-          "Mark geometry-affecting outputs as invariant",
-          c_name="invariant_geom"),
         B("radv_no_dynamic_bounds", False,
           "Disabling bounds checking for dynamic buffer descriptors",
           c_name="no_dynamic_bounds"),
@@ -89,6 +87,9 @@ def declare_options():
         B("radv_force_64_byte_sampled_image", False,
           "Force sampled images size to 64 bytes.",
           c_name="force_64_byte_sampled_image"),
+        B("radv_force_nan_preserve_min_max", False,
+          "Treat FMax/FMin/FClamp like NMax/NMin/NClamp.",
+          c_name="force_nan_preserve_min_max"),
     ]
 
     performance_options = [
@@ -110,6 +111,9 @@ def declare_options():
     ]
 
     features_options = [
+        B("radv_device_coherent_memory", False,
+          "Expose VK_AMD_device_coherent_memory on GFX12 (RDNA4).",
+          c_name="device_coherent_memory"),
         B("radv_cooperative_matrix2_nv", False,
           "Expose VK_NV_cooperative_matrix2 on supported hardware.",
           c_name="cooperative_matrix2_nv"),
@@ -158,17 +162,24 @@ def declare_options():
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-p', '--import-path', required=True)
-    parser.add_argument('--drirc-src', required=True)
-    parser.add_argument('--drirc-hdr', required=True)
+    parser.add_argument('--drirc-src')
+    parser.add_argument('--drirc-hdr')
+    parser.add_argument('--rst')
     parser.add_argument('--validate', required=True)
     args = parser.parse_args()
+
+    if (args.drirc_src is None) != (args.drirc_hdr is None):
+        parser.error("`--drirc-src` and `--drirc-hdr` can only be used together")
 
     sys.path.insert(0, args.import_path)
     import drirc_gen
 
     drirc_gen.drirc_validate([args.validate], declare_options())
 
-    drirc_gen.drirc_generate(args.drirc_src, args.drirc_hdr, "radv", declare_options())
+    if args.drirc_src and args.drirc_hdr:
+        drirc_gen.drirc_generate(args.drirc_src, args.drirc_hdr, "radv", declare_options())
+    if args.rst:
+        drirc_gen.drirc_generate_rst(args.rst, declare_options())
 
 if __name__ == '__main__':
     main()

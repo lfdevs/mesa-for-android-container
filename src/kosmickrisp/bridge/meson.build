@@ -24,6 +24,7 @@ if host_machine.system() == 'darwin'
     'mtl_sampler.m',
     'mtl_sync.m',
     'mtl_texture.m',
+    'ns_process_info.m',
   )
 else
   mtl_bridge_files += files(
@@ -41,6 +42,7 @@ else
     'stubs/mtl_sampler.c',
     'stubs/mtl_sync.c',
     'stubs/mtl_texture.c',
+    'stubs/ns_process_info.c',
   )
 endif
 
