@@ -300,6 +300,7 @@ struct radeon_info {
                              * the LLVM version doesn't work with multiparts shaders.
                              */
    bool has_smem_partial_oob_access_bug;
+   bool has_out_of_order_uncached_l2;
 
    /* Display features. */
    /* There are 2 display DCC codepaths, because display expects unaligned DCC. */

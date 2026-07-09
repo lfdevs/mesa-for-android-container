@@ -14,6 +14,9 @@
 #include "c11/threads.h"
 #include "vulkan/vulkan_core.h"
 
+#include "tu_common.h"
+#include "tu_tile_config.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -167,7 +170,6 @@ void
 tu_perfetto_refresh_debug_utils_object_name(
    struct tu_device *dev,
    const struct vk_object_base *object);
-
 #ifdef __cplusplus
 }
 #endif

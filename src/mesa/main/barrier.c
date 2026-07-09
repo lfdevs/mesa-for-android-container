@@ -32,6 +32,7 @@
 #include "api_exec_decl.h"
 
 #include "pipe/p_context.h"
+#include "state_tracker/st_context.h"
 
 
 static void
@@ -55,10 +56,17 @@ memory_barrier(struct gl_context *ctx, GLbitfield barriers)
    if (barriers & GL_PIXEL_BUFFER_BARRIER_BIT) {
       /* The PBO may be
        *  (1) bound as a texture for PBO uploads, or
-       *  (2) accessed by the CPU via transfer ops.
+       *  (2) accessed by the CPU via transfer ops, or
+       *  (3) bound as a shader image.
        * For case (2), we assume automatic flushing by the driver.
+       * Case (3) needs PIPE_BARRIER_IMAGE.
        */
       flags |= PIPE_BARRIER_TEXTURE;
+      struct st_context *st = st_context(ctx);
+      if (st->pbo.download_enabled ||
+          st->allow_compute_based_texture_transfer ||
+          st->force_compute_based_texture_transfer)
+         flags |= PIPE_BARRIER_IMAGE;
    }
    if (barriers & GL_TEXTURE_UPDATE_BARRIER_BIT) {
       /* GL_TEXTURE_UPDATE_BARRIER_BIT:

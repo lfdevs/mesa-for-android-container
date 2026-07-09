@@ -82,6 +82,7 @@ uint32_t msl_output_num_components(struct nir_to_msl_ctx *ctx,
 
 bool msl_src_is_float(struct nir_to_msl_ctx *ctx, nir_src *src);
 bool msl_def_is_sampler(struct nir_to_msl_ctx *ctx, nir_def *def);
+bool msl_def_is_texture(struct nir_to_msl_ctx *ctx, nir_def *def);
 
 void msl_nir_lower_subgroups(nir_shader *nir);
 

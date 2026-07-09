@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: MIT
  */
 
+#include <inttypes.h>
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -12,8 +13,6 @@
 
 #include "util/os_misc.h"
 #include "util/u_math.h"
-
-bool drm_shim_driver_prefers_first_render_node = true;
 
 struct msm_device_info {
    uint64_t chip_id;
@@ -337,8 +336,8 @@ print_supported_chips_and_abort(const char *unrecognized_env)
    fprintf(stderr, "%s unrecognized, shim supports:\n", unrecognized_env);
 
    for (int i = 1; i < ARRAY_SIZE(device_infos); i++) {
-      fprintf(stderr, "- gpu_id=%d, chip_id=0x%lx\n", device_infos[i].gpu_id,
-              device_infos[i].chip_id);
+      fprintf(stderr, "- gpu_id=%" PRIu32 ", chip_id=0x%" PRIx64 "\n",
+              device_infos[i].gpu_id, device_infos[i].chip_id);
    }
 
    abort();
@@ -389,8 +388,6 @@ msm_driver_get_device_info(void)
 void
 drm_shim_driver_init(void)
 {
-   shim_device.bus_type = DRM_BUS_PLATFORM;
-   shim_device.driver_name = "msm";
    shim_device.driver_ioctls = driver_ioctls;
    shim_device.driver_ioctl_count = ARRAY_SIZE(driver_ioctls);
 
@@ -401,9 +398,5 @@ drm_shim_driver_init(void)
 
    msm_driver_get_device_info();
 
-   drm_shim_override_file("OF_FULLNAME=/rdb/msm\n"
-                          "OF_COMPATIBLE_N=1\n"
-                          "OF_COMPATIBLE_0=qcom,adreno\n",
-                          "/sys/dev/char/%d:%d/device/uevent", DRM_MAJOR,
-                          render_node_minor);
+   drm_shim_platform_device_setup("msm", "/rdb/msm", "qcom,adreno");
 }

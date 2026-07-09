@@ -524,13 +524,21 @@ inferred_exec_pipe(const struct intel_device_info *devinfo,
  * subregister number of the instruction.
  */
 static inline unsigned
-brw_flag_mask(const brw_inst *inst, unsigned width)
+brw_flag_mask(unsigned flag_subreg, unsigned group, unsigned exec_size,
+              unsigned width)
 {
    assert(util_is_power_of_two_nonzero(width));
-   const unsigned start = (inst->flag_subreg * 16 + inst->group) &
+   const unsigned start = (flag_subreg * 16 + group) &
                           ~(width - 1);
-   const unsigned end = start + align(inst->exec_size, width);
+   const unsigned end = start + align(exec_size, width);
    return ((1 << DIV_ROUND_UP(end, 8)) - 1) & ~((1 << (start / 8)) - 1);
+}
+
+static inline unsigned
+brw_flag_mask(const brw_inst *inst, unsigned width)
+{
+   return brw_flag_mask(inst->flag_subreg, inst->group, inst->exec_size,
+                        width);
 }
 
 static inline unsigned
@@ -550,3 +558,7 @@ brw_flag_mask(const brw_reg &r, unsigned sz)
       return 0;
    }
 }
+
+unsigned brw_flags_written(enum opcode, enum brw_conditional_mod,
+                           unsigned flag_subreg, unsigned group,
+                           unsigned exec_size);

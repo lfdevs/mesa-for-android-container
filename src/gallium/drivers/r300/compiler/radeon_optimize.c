@@ -77,9 +77,7 @@ copy_propagate_scan_read(void *data, struct rc_instruction *inst, struct rc_src_
       return;
    }
 
-   /* These instructions cannot read from the constants file.
-    * see radeonTransformTEX()
-    */
+   /* Texture instructions cannot read from the constants file. */
    if (reader_data->Writer->U.I.SrcReg[0].File != RC_FILE_TEMPORARY &&
        reader_data->Writer->U.I.SrcReg[0].File != RC_FILE_INPUT &&
        reader_data->Writer->U.I.SrcReg[0].File != RC_FILE_NONE &&

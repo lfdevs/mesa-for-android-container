@@ -81,7 +81,7 @@ reference_frames_tracker_h264::reference_frames_tracker_h264( void *logId,
       m_p_picture_period = uiBPictureCount + 1;
       m_gop_state.idr_pic_id = 0;
 
-      const uint32_t maxFrameNumBitsMinus4 = 4;   // legal range is 0 to 12, we will fix to 4 which corresponds to [0..255]
+      const uint32_t maxFrameNumBitsMinus4 = AVC_LOG2_MAX_FRAME_NUM_MINUS4; // legal range is 0 to 12, we will fix to 4 which corresponds to [0..255]
       m_gop_state.log2_max_frame_num_minus4 = maxFrameNumBitsMinus4;
       m_gop_state.log2_max_pic_order_cnt_lsb_minus4 = maxFrameNumBitsMinus4 + 1;
       m_max_frame_num = 1 << ( maxFrameNumBitsMinus4 + 4 );

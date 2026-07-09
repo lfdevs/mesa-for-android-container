@@ -138,7 +138,8 @@ anv_image_init_from_gralloc(struct anv_device *device,
    enum isl_tiling tiling;
    if (vk_android_get_ugralloc()) {
       VkSubresourceLayout layouts[ISL_MODIFIER_MAX_PLANES];
-      result = vk_android_get_ahb_layout(gralloc_info->ahb,
+      assert(vk_find_struct_const(base_info->pNext, NATIVE_BUFFER_ANDROID));
+      result = vk_android_get_anb_layout(base_info,
                                          &mod_info,
                                          layouts,
                                          ISL_MODIFIER_MAX_PLANES);

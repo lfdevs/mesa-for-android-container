@@ -1,6 +1,12 @@
+.enforce-hw-jobs-nvk-rules:
+  rules:
+    - if: '$INPUT_HW_JOBS !~ /"(all|nvk|nouveau.ko)"/i'
+      when: never
+
 .nvk-valve-rules:
   stage: nouveau
   rules:
+    - !reference [.enforce-hw-jobs-nvk-rules, rules]
     - !reference [.test, rules]
     - !reference [.valve-farm-rules, rules]
     - !reference [.vulkan-rules, rules]
@@ -29,6 +35,7 @@
   stage: nouveau-nightly
   extends: .no-auto-retry
   rules:
+    - !reference [.enforce-hw-jobs-nvk-rules, rules]
     - !reference [.test, rules]
     - !reference [.valve-farm-manual-rules, rules]
     - !reference [.vulkan-manual-rules, rules]

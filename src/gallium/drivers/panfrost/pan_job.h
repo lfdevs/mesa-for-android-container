@@ -15,6 +15,7 @@
 #include "pan_jm.h"
 #include "pan_mempool.h"
 #include "pan_resource.h"
+#include "util/perf/u_trace.h"
 
 /* A panfrost_batch corresponds to a bound FBO we're rendering to,
  * collecting over multiple draws. */
@@ -173,6 +174,9 @@ struct panfrost_batch {
       struct panfrost_jm_batch jm;
       struct panfrost_csf_batch csf;
    };
+
+   /* u_trace support for GPU tracing / perfetto */
+   struct u_trace trace;
 };
 
 /* Functions for managing the above */

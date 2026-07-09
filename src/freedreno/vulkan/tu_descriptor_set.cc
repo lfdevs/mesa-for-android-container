@@ -25,7 +25,7 @@
 #include "vk_descriptors.h"
 #include "vk_util.h"
 
-#include "bvh/tu_bvh.h"
+#include "bvh/tu_bvh_defines.h"
 #include "tu_buffer.h"
 #include "tu_buffer_view.h"
 #include "tu_device.h"

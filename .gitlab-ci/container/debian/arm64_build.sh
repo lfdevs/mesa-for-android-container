@@ -38,7 +38,6 @@ DEPS=(
     dpkg-dev
     fastboot
     file
-    flatbuffers-compiler
     flex
     g++
     git
@@ -51,7 +50,6 @@ DEPS=(
     libdrm-dev
     libelf-dev
     libexpat1-dev
-    libflatbuffers-dev
     "libllvm${LLVM_VERSION}"
     libpng-dev
     libvulkan-dev
@@ -68,7 +66,6 @@ DEPS=(
     libxext-dev
     libxrandr-dev
     libxshmfence-dev
-    libxtensor-dev
     libxxf86vm-dev
     libwayland-bin
     libwayland-dev

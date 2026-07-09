@@ -4,10 +4,12 @@
  * Copyright (C) 2018-2019 Alyssa Rosenzweig
  * Copyright (C) 2019-2020 Collabora, Ltd.
  * Copyright (C) 2024 Arm Ltd.
+ * Copyright (C) 2026 Google LLC
  * SPDX-License-Identifier: MIT
  */
 
 #include "pan_texture.h"
+#include "genxml/gen_macros.h"
 #include "util/macros.h"
 #include "util/u_math.h"
 #include "pan_afbc.h"
@@ -122,7 +124,7 @@ static unsigned
 pan_texture_num_elements(const struct pan_image_view *iview)
 {
    unsigned levels = 1 + iview->last_level - iview->first_level;
-   unsigned layers = 1 + iview->last_layer - iview->first_layer;
+   unsigned layers = pan_image_view_layer_count(iview);
    unsigned nr_samples = pan_image_view_get_nr_samples(iview);
 
    return levels * layers * MAX2(nr_samples, 1);
@@ -159,6 +161,27 @@ GENX(pan_texture_estimate_payload_size)(const struct pan_image_view *iview)
    unsigned elements = pan_texture_num_elements(iview);
 
    return element_size * elements;
+}
+
+unsigned
+GENX(pan_texture_get_payload_alignment)(const struct pan_image_view *iview)
+{
+   unsigned alignment;
+
+#if PAN_ARCH >= 9
+   alignment = pan_alignment(NULL_PLANE);
+   if (pan_format_is_yuv(iview->format) && iview->planes[1].image != NULL)
+      alignment *= 2;
+#elif PAN_ARCH == 7
+   if (pan_format_is_yuv(iview->format) && iview->planes[1].image != NULL)
+      alignment = pan_alignment(MULTIPLANAR_SURFACE);
+   else
+      alignment = pan_alignment(SURFACE_WITH_STRIDE);
+#else
+   alignment = pan_alignment(SURFACE_WITH_STRIDE);
+#endif
+
+   return alignment;
 }
 
 #if PAN_ARCH >= 9
@@ -230,10 +253,14 @@ pan_clump_format(enum pipe_format format)
       case PIPE_FORMAT_B8R8_G8R8_UNORM:
       case PIPE_FORMAT_R8_G8B8_422_UNORM:
       case PIPE_FORMAT_R8_B8G8_422_UNORM:
+      case PIPE_FORMAT_Y8_U8V8_422_UNORM:
       case PIPE_FORMAT_R8_G8B8_420_UNORM:
       case PIPE_FORMAT_R8_B8G8_420_UNORM:
+      case PIPE_FORMAT_G8_B8R8_420_UNORM:
+      case PIPE_FORMAT_Y8_U8_V8_422_UNORM:
       case PIPE_FORMAT_R8_G8_B8_420_UNORM:
       case PIPE_FORMAT_R8_B8_G8_420_UNORM:
+      case PIPE_FORMAT_G8_B8_R8_420_UNORM:
       case PIPE_FORMAT_R8G8B8_420_UNORM_PACKED:
          return MALI_CLUMP_FORMAT_RAW8;
       case PIPE_FORMAT_R10_G10B10_420_UNORM:
@@ -248,16 +275,22 @@ pan_clump_format(enum pipe_format format)
       case PIPE_FORMAT_B8R8_G8R8_UNORM:
       case PIPE_FORMAT_R8_G8B8_422_UNORM:
       case PIPE_FORMAT_R8_B8G8_422_UNORM:
+      case PIPE_FORMAT_Y8_U8V8_422_UNORM:
+      case PIPE_FORMAT_Y8_U8_V8_422_UNORM:
          return MALI_CLUMP_FORMAT_Y8_UV8_422;
       case PIPE_FORMAT_R8_G8B8_420_UNORM:
       case PIPE_FORMAT_R8_B8G8_420_UNORM:
+      case PIPE_FORMAT_G8_B8R8_420_UNORM:
       case PIPE_FORMAT_R8_G8_B8_420_UNORM:
       case PIPE_FORMAT_R8_B8_G8_420_UNORM:
+      case PIPE_FORMAT_G8_B8_R8_420_UNORM:
       case PIPE_FORMAT_R8G8B8_420_UNORM_PACKED:
          return MALI_CLUMP_FORMAT_Y8_UV8_420;
       case PIPE_FORMAT_R10_G10B10_420_UNORM:
       case PIPE_FORMAT_R10G10B10_420_UNORM_PACKED:
          return MALI_CLUMP_FORMAT_Y10_UV10_420;
+      case PIPE_FORMAT_X6G10_X6B10X6R10_420_UNORM:
+         return MALI_CLUMP_FORMAT_YUV420_10X6;
       case PIPE_FORMAT_R10_G10B10_422_UNORM:
       case PIPE_FORMAT_X6R10X6G10_X6R10X6B10_422_UNORM:
          return MALI_CLUMP_FORMAT_Y10_UV10_422;
@@ -1044,9 +1077,19 @@ pan_emit_iview_texture_payload(const struct pan_image_view *iview,
     * into a single plane descriptor.
     */
 
+   unsigned first_layer_or_z_slice = iview->first_layer_or_z_slice;
+
+   /* A 3D view emits a single surface entry at its first Z slice, the slice
+    * count is conveyed through the texture depth.
+    */
+   unsigned last_layer_or_z_slice =
+      iview->dim == MALI_TEXTURE_DIMENSION_3D ? first_layer_or_z_slice
+                                              : iview->last_layer_or_z_slice;
+
 #if PAN_ARCH >= 7
    /* V7 and later treats faces as extra layers */
-   for (int layer = iview->first_layer; layer <= iview->last_layer; ++layer) {
+   for (int layer = first_layer_or_z_slice; layer <= last_layer_or_z_slice;
+        ++layer) {
       for (int sample = 0; sample < nr_samples; ++sample) {
          for (int level = iview->first_level; level <= iview->last_level;
               ++level) {
@@ -1056,17 +1099,17 @@ pan_emit_iview_texture_payload(const struct pan_image_view *iview,
       }
    }
 #else
-   unsigned first_layer = iview->first_layer, last_layer = iview->last_layer;
    unsigned face_count = 1;
 
    if (iview->dim == MALI_TEXTURE_DIMENSION_CUBE) {
-      first_layer /= 6;
-      last_layer /= 6;
+      first_layer_or_z_slice /= 6;
+      last_layer_or_z_slice /= 6;
       face_count = 6;
    }
 
    /* V6 and earlier has a different memory-layout */
-   for (int layer = first_layer; layer <= last_layer; ++layer) {
+   for (int layer = first_layer_or_z_slice; layer <= last_layer_or_z_slice;
+        ++layer) {
       for (int level = iview->first_level; level <= iview->last_level;
            ++level) {
          /* order of face and sample doesn't matter; we can only have multiple
@@ -1155,7 +1198,7 @@ GENX(pan_texture_afbc_reswizzle)(struct pan_image_view *iview)
 static unsigned
 pan_texture_get_array_size(const struct pan_image_view *iview)
 {
-   unsigned array_size = iview->last_layer - iview->first_layer + 1;
+   unsigned array_size = pan_image_view_layer_count(iview);
 
    /* If this is a cubemap, we expect the number of layers to be a multiple
     * of 6.
@@ -1182,6 +1225,22 @@ pan_texture_get_extent(const struct pan_image_view *iview,
       .height = u_minify(iprops->extent_px.height, iview->first_level),
       .depth = u_minify(iprops->extent_px.depth, iview->first_level),
    };
+
+   /* If the image is YUV but the view isn't, adjust the extent to take
+    * subsampling into account.
+    */
+   if (pan_format_is_yuv(iprops->format) && !pan_format_is_yuv(iview->format)) {
+      /* We expect single-plane view if the view doesn't have a YUV format. */
+      assert(pan_image_view_get_plane_mask(iview) == 1);
+
+      const struct pan_image_plane_ref first_plane =
+         pan_image_view_get_first_plane(iview);
+
+      extent_px.width = util_format_get_plane_width(
+         iprops->format, first_plane.plane_idx, extent_px.width);
+      extent_px.height = util_format_get_plane_height(
+         iprops->format, first_plane.plane_idx, extent_px.height);
+   }
 
    if (util_format_is_compressed(iprops->format) &&
        !util_format_is_compressed(iview->format)) {
@@ -1226,6 +1285,9 @@ GENX(pan_sampled_texture_emit)(const struct pan_image_view *iview,
        desc->colorspace != UTIL_FORMAT_COLORSPACE_SRGB) {
       mali_format = MALI_PACK_FMT(RGBA8_UNORM, RGBA, L);
    }
+
+   if (iview->yuv.override_cr_siting)
+      mali_format = MALI_SET_YUV_CR_SITING(mali_format, iview->yuv.cr_siting);
 
    pan_emit_iview_texture_payload(iview, payload->cpu);
 
@@ -1304,7 +1366,7 @@ GENX(pan_storage_texture_emit)(const struct pan_image_view *iview,
       cfg.width = extent_px.width;
       cfg.height = extent_px.height;
       if (iview->dim == MALI_TEXTURE_DIMENSION_3D)
-         cfg.depth = extent_px.depth;
+         cfg.depth = pan_image_view_3d_slice_count(iview);
       else
          cfg.sample_count = props->nr_samples;
       cfg.texel_interleave = (props->modifier != DRM_FORMAT_MOD_LINEAR) ||

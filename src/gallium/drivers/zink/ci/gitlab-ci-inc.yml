@@ -1,3 +1,8 @@
+.enforce-hw-jobs-zink-rules:
+  rules:
+    - if: '$INPUT_HW_JOBS !~ /"(all|zink)"/i'
+      when: never
+
 .zink-common-rules:
   rules:
     - !reference [.test, rules]
@@ -28,6 +33,8 @@
 .zink-lavapipe-rules:
   stage: layered-backends
   rules:
+    - !reference [.enforce-hw-jobs-zink-rules, rules]
+    - !reference [.enforce-hw-jobs-lavapipe-rules, rules]
     - !reference [.test, rules]
     - !reference [.lavapipe-rules, rules]
     - !reference [.zink-common-rules, rules]
@@ -35,6 +42,8 @@
 .zink-venus-lavapipe-rules:
   stage: layered-backends
   rules:
+    - !reference [.enforce-hw-jobs-zink-rules, rules]
+    - !reference [.enforce-hw-jobs-lavapipe-venus-rules, rules]
     - !reference [.test, rules]
     - !reference [.lavapipe-rules, rules]
     - !reference [.venus-rules, rules]
@@ -44,6 +53,8 @@
   stage: layered-backends-nightly
   extends: .no-auto-retry
   rules:
+    - !reference [.enforce-hw-jobs-zink-rules, rules]
+    - !reference [.enforce-hw-jobs-lavapipe-venus-rules, rules]
     - !reference [.test, rules]
     - !reference [.lavapipe-manual-rules, rules]
     - !reference [.venus-manual-rules, rules]
@@ -52,6 +63,8 @@
 .zink-anv-rules:
   stage: layered-backends
   rules:
+    - !reference [.enforce-hw-jobs-zink-rules, rules]
+    - !reference [.enforce-hw-jobs-anv-rules, rules]
     - !reference [.test, rules]
     - !reference [.anv-rules, rules]
     - !reference [.zink-common-rules, rules]
@@ -60,6 +73,8 @@
   stage: layered-backends-nightly
   extends: .no-auto-retry
   rules:
+    - !reference [.enforce-hw-jobs-zink-rules, rules]
+    - !reference [.enforce-hw-jobs-anv-rules, rules]
     - !reference [.test, rules]
     - !reference [.anv-manual-rules, rules]
     - !reference [.zink-common-manual-rules, rules]
@@ -67,6 +82,8 @@
 .zink-anv-rules-restricted:
   stage: layered-backends
   rules:
+    - !reference [.enforce-hw-jobs-zink-rules, rules]
+    - !reference [.enforce-hw-jobs-anv-rules, rules]
     - !reference [.test, rules]
     - !reference [.restricted-rules, rules]
     - !reference [.anv-rules, rules]
@@ -75,6 +92,8 @@
 .zink-nvk-rules:
   stage: layered-backends
   rules:
+    - !reference [.enforce-hw-jobs-zink-rules, rules]
+    - !reference [.enforce-hw-jobs-nvk-rules, rules]
     - !reference [.test, rules]
     - !reference [.nvk-valve-rules, rules]
     - !reference [.zink-common-rules, rules]
@@ -84,6 +103,8 @@
   stage: layered-backends-nightly
   extends: .no-auto-retry
   rules:
+    - !reference [.enforce-hw-jobs-zink-rules, rules]
+    - !reference [.enforce-hw-jobs-nvk-rules, rules]
     - !reference [.test, rules]
     - !reference [.nvk-valve-manual-rules, rules]
     - !reference [.zink-common-manual-rules, rules]
@@ -92,6 +113,8 @@
 .zink-turnip-collabora-rules:
   stage: layered-backends
   rules:
+    - !reference [.enforce-hw-jobs-zink-rules, rules]
+    - !reference [.enforce-hw-jobs-turnip-rules, rules]
     - !reference [.test, rules]
     - !reference [.collabora-turnip-rules, rules]
     - !reference [.zink-common-rules, rules]
@@ -100,6 +123,8 @@
   stage: layered-backends-nightly
   extends: .no-auto-retry
   rules:
+    - !reference [.enforce-hw-jobs-zink-rules, rules]
+    - !reference [.enforce-hw-jobs-turnip-rules, rules]
     - !reference [.test, rules]
     - !reference [.collabora-turnip-manual-rules, rules]
     - !reference [.zink-common-manual-rules, rules]
@@ -107,6 +132,8 @@
 .zink-turnip-valve-rules:
   stage: layered-backends
   rules:
+    - !reference [.enforce-hw-jobs-zink-rules, rules]
+    - !reference [.enforce-hw-jobs-turnip-rules, rules]
     - !reference [.test, rules]
     - !reference [.valve-turnip-rules, rules]
     - !reference [.zink-common-rules, rules]
@@ -115,6 +142,8 @@
   stage: layered-backends-nightly
   extends: .no-auto-retry
   rules:
+    - !reference [.enforce-hw-jobs-zink-rules, rules]
+    - !reference [.enforce-hw-jobs-turnip-rules, rules]
     - !reference [.test, rules]
     - !reference [.valve-turnip-manual-rules, rules]
     - !reference [.zink-common-manual-rules, rules]
@@ -122,6 +151,8 @@
 .zink-radv-collabora-rules:
   stage: layered-backends
   rules:
+    - !reference [.enforce-hw-jobs-zink-rules, rules]
+    - !reference [.enforce-hw-jobs-radv-rules, rules]
     - !reference [.test, rules]
     - !reference [.radv-collabora-rules, rules]
     - !reference [.zink-common-rules, rules]
@@ -130,6 +161,8 @@
   stage: layered-backends-nightly
   extends: .no-auto-retry
   rules:
+    - !reference [.enforce-hw-jobs-zink-rules, rules]
+    - !reference [.enforce-hw-jobs-radv-rules, rules]
     - !reference [.test, rules]
     - !reference [.radv-collabora-manual-rules, rules]
     - !reference [.zink-common-manual-rules, rules]
@@ -137,6 +170,8 @@
 .zink-radv-valve-rules:
   stage: layered-backends
   rules:
+    - !reference [.enforce-hw-jobs-zink-rules, rules]
+    - !reference [.enforce-hw-jobs-radv-rules, rules]
     - !reference [.test, rules]
     - !reference [.radv-valve-rules, rules]
     - !reference [.zink-common-rules, rules]
@@ -145,6 +180,8 @@
   stage: layered-backends-nightly
   extends: .no-auto-retry
   rules:
+    - !reference [.enforce-hw-jobs-zink-rules, rules]
+    - !reference [.enforce-hw-jobs-radv-rules, rules]
     - !reference [.test, rules]
     - !reference [.radv-valve-manual-rules, rules]
     - !reference [.zink-common-manual-rules, rules]
@@ -262,5 +299,18 @@
   variables:
     DRIVER_NAME: zink-radv
     DEQP_SUITE: zink-radv
+    # Disable reporting, since DUTs don't have internet access
+    FLAKES_CHANNEL: ""
+
+.radv-zink-test-valve-asan:
+  extends:
+    - .ci-tron-test-amdgpu
+    - .ci-tron-x86_64-test-gl-asan-manual
+    - .zink-test
+    - .test-piglit
+    - .ci-tron-test-radv
+  variables:
+    DRIVER_NAME: zink-radv
+    DEQP_SUITE: zink-radv-asan
     # Disable reporting, since DUTs don't have internet access
     FLAKES_CHANNEL: ""

@@ -58,8 +58,10 @@ d3d12_video_bitstream_builder_av1::write_seq_data(d3d12_video_encoder_bitstream 
    pBit->put_bits(1, 0);   // timing_info_present_flag
    pBit->put_bits(1, 0);   // initial_display_delay_present_flag
 
-   pBit->put_bits(5, pSeqHdr->operating_points_cnt_minus_1);
-   for (uint8_t i = 0; i <= pSeqHdr->operating_points_cnt_minus_1; i++) {
+   pBit->put_bits(5, pSeqHdr->operating_points_cnt_minus_1);   // 5-bit value, max 31
+   assert(pSeqHdr->operating_points_cnt_minus_1 <= 31);
+   uint8_t operating_points_cnt = static_cast<uint8_t>(pSeqHdr->operating_points_cnt_minus_1) + 1;
+   for (uint8_t i = 0; i < operating_points_cnt; i++) {
       pBit->put_bits(8, pSeqHdr->operating_point_idc[i] >> 4);
       pBit->put_bits(4, pSeqHdr->operating_point_idc[i] & 0x9f);
       pBit->put_bits(5, pSeqHdr->seq_level_idx[i]);
@@ -637,8 +639,10 @@ d3d12_video_bitstream_builder_av1::write_pic_data(d3d12_video_encoder_bitstream 
          if (!(!pSeqHdr->enable_cdef || CodedLossless || pPicHdr->allow_intrabc)) {
             uint16_t num_planes = 3;                                     // mono_chrome not supported
             pBit->put_bits(2, static_cast<uint32_t>(pPicHdr->cdef_params.CdefDampingMinus3));   // cdef_damping_minus_3
-            pBit->put_bits(2, static_cast<uint32_t>(pPicHdr->cdef_params.CdefBits));            // cdef_bits
-            for (uint16_t i = 0; i < (1 << pPicHdr->cdef_params.CdefBits); ++i) {
+            pBit->put_bits(2, static_cast<uint32_t>(pPicHdr->cdef_params.CdefBits));            // cdef_bits, 2-bit value, max 3
+            assert(pPicHdr->cdef_params.CdefBits <= 3);
+            uint8_t cdef_count = static_cast<uint8_t>(1 << pPicHdr->cdef_params.CdefBits);   // max 8
+            for (uint8_t i = 0; i < cdef_count; ++i) {
                pBit->put_bits(4, static_cast<uint32_t>(pPicHdr->cdef_params.CdefYPriStrength[i]));   // cdef_y_pri_strength[i]
                pBit->put_bits(2, static_cast<uint32_t>(pPicHdr->cdef_params.CdefYSecStrength[i]));   // cdef_y_sec_strength[i]
                if (num_planes > 1) {

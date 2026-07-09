@@ -133,11 +133,19 @@ enum ac_spm_raw_counter_id {
    AC_SPM_TD_PERF_SEL_RAY_TRACING_BVH4_FP32_BOX_NODE,
    AC_SPM_GL2C_PERF_SEL_EA_WRREQ_STALL,
    AC_SPM_RAW_COUNTER_ID_COUNT,
+
+   /* Runtime base for user-defined raw counter ids loaded from a config
+    * file. The actual ids are AC_SPM_RAW_COUNTER_ID_USER_BASE + N, where
+    * N is the user counter index. Kept well above the builtin enum so it
+    * can never collide.
+    */
+   AC_SPM_RAW_COUNTER_ID_USER_BASE = 0x10000,
 };
 
 enum ac_spm_raw_counter_op {
    AC_SPM_RAW_COUNTER_OP_SUM = 0,
    AC_SPM_RAW_COUNTER_OP_MAX,
+   AC_SPM_RAW_COUNTER_OP_AVG,
 };
 
 struct ac_spm_counter_descr {
@@ -239,6 +247,14 @@ struct ac_spm {
    unsigned num_muxsel_lines[AC_SPM_SEGMENT_TYPE_COUNT];
    struct ac_spm_muxsel_line *muxsel_lines[AC_SPM_SEGMENT_TYPE_COUNT];
    unsigned max_se_muxsel_lines;
+
+   /* Optional user-supplied counter config (loaded from
+    * RADV_SPM_COUNTERS_CONFIG). When non-NULL, ac_spm_get_derived_trace
+    * emits user-named counters/groups into the derived SPM chunk. Not
+    * owned by ac_spm; the caller is responsible for keeping it alive
+    * until ac_destroy_spm() returns and for destroying it afterwards.
+    */
+   const struct ac_spm_user_config *user_config;
 };
 
 struct ac_spm_trace {
@@ -248,6 +264,8 @@ struct ac_spm_trace {
    struct ac_spm_counter_info *counters;
    uint32_t sample_size_in_bytes;
    uint32_t num_samples;
+   /* Mirrors ac_spm::user_config; set by ac_spm_get_trace. */
+   const struct ac_spm_user_config *user_config;
 };
 
 enum ac_spm_group_id {
@@ -310,7 +328,7 @@ enum ac_spm_usage_type {
 };
 
 #define AC_SPM_MAX_COMPONENTS_PER_COUNTER 3
-#define AC_SPM_MAX_COUNTERS_PER_GROUP     5
+#define AC_SPM_MAX_COUNTERS_PER_GROUP     16
 
 struct ac_spm_derived_component_descr {
    enum ac_spm_component_id id;
@@ -354,21 +372,39 @@ struct ac_spm_derived_component {
    struct util_dynarray values;
 };
 
+/* Maximum number of groups that can appear in a derived trace. The built-in
+ * legacy descriptors use exactly AC_SPM_GROUP_COUNT entries; user-defined
+ * configs (RADV_SPM_COUNTERS_CONFIG) are allowed to grow this further. Must
+ * be >= AC_SPM_GROUP_COUNT.
+ */
+#define AC_SPM_DERIVED_GROUP_MAX 8
+static_assert(AC_SPM_DERIVED_GROUP_MAX >= AC_SPM_GROUP_COUNT,
+              "AC_SPM_DERIVED_GROUP_MAX must cover all built-in groups");
+
+/* Maximum number of counters (items) that can appear in a derived trace.
+ * Same rationale as AC_SPM_DERIVED_GROUP_MAX. Must be >= AC_SPM_COUNTER_COUNT.
+ */
+#define AC_SPM_DERIVED_COUNTER_MAX 48
+static_assert(AC_SPM_DERIVED_COUNTER_MAX >= AC_SPM_COUNTER_COUNT,
+              "AC_SPM_DERIVED_COUNTER_MAX must cover all built-in counters");
+
 struct ac_spm_derived_trace {
    uint32_t num_timestamps;
    uint64_t *timestamps;
 
    uint32_t num_groups;
-   struct ac_spm_derived_group groups[AC_SPM_GROUP_COUNT];
+   struct ac_spm_derived_group groups[AC_SPM_DERIVED_GROUP_MAX];
 
    uint32_t num_counters;
-   struct ac_spm_derived_counter counters[AC_SPM_COUNTER_COUNT];
+   struct ac_spm_derived_counter counters[AC_SPM_DERIVED_COUNTER_MAX];
 
    uint32_t num_components;
    struct ac_spm_derived_component components[AC_SPM_COMPONENT_COUNT];
 
    uint32_t sample_interval;
 };
+
+struct ac_spm_user_config;
 
 bool ac_init_spm(const struct radeon_info *info,
                  const struct ac_perfcounters *pc,

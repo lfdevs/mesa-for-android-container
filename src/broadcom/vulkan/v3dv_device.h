@@ -189,8 +189,6 @@ struct v3dv_queue {
 VkResult v3dv_queue_driver_submit(struct vk_queue *vk_queue,
                                   struct vk_queue_submit *submit);
 
-VkResult v3dv_device_create_noop_job(struct v3dv_device *device);
-
 #define V3DV_META_BLIT_CACHE_KEY_SIZE              (4 * sizeof(uint32_t))
 #define V3DV_META_TEXEL_BUFFER_COPY_CACHE_KEY_SIZE (3 * sizeof(uint32_t) + \
                                                     sizeof(VkComponentMapping))
@@ -235,8 +233,6 @@ struct v3dv_device {
     * against concurrent access from multiple queues.
     */
    mtx_t queue_mutex;
-
-   struct v3dv_job *noop_job;
 
    /* The last active perfmon ID to prevent mixing of counter results when a
     * job is submitted with a different perfmon id.

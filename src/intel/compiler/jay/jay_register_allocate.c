@@ -373,12 +373,11 @@ jay_emit_parallel_copies(jay_builder *b,
    BITSET_WORD *packed = BITSET_CALLOC(UINT16_MAX);
 
    if (0) {
-      const char *files = "ruMm";
       printf("[[\n");
 
       for (unsigned i = 0; i < num_copies; i++) {
-         printf("  %c%u = %c%u\n", files[r_file(pcopies[i].dst)],
-                r_reg(pcopies[i].dst), files[r_file(pcopies[i].src)],
+         printf("  %s%u = %s%u\n", jay_file_prefix(r_file(pcopies[i].dst)),
+                r_reg(pcopies[i].dst), jay_file_prefix(r_file(pcopies[i].src)),
                 r_reg(pcopies[i].src));
       }
 
@@ -1284,37 +1283,9 @@ jay_register_allocate_function(jay_function *f)
 {
    jay_shader *shader = f->shader;
    jay_ra_state ra = { .b.shader = shader, .b.func = f };
-
-   /* Spill as needed to fit within the limits. */
-   unsigned limit = jay_gpr_limit(f->shader);
-   bool spilled = f->demand[GPR] > limit;
-
-   if (spilled) {
-      jay_spill(f, GPR, limit);
-      jay_validate(f->shader, "spilling");
-      jay_compute_liveness(f);
-      jay_calculate_register_demands(f);
-   }
-
-   if (f->demand[GPR] > limit) {
-      fprintf(stderr, "limit %u but demand %u\n", limit, f->demand[GPR]);
-      fflush(stdout);
-      UNREACHABLE("spiller bug");
-   }
-
-   /* The spiller/SSA repair does not work on UGPRs because it cannot tolerate
-    * the critical edges on the physical CFG. Fortunately, dynamic GPR/UGPR
-    * partitioning means this should ~never be hit -- we can allocate 1000 UGPRs
-    * if we need them. I believe ACO has the same corner case.
-    */
-   if (f->demand[UGPR] > f->shader->num_regs[UGPR]) {
-      UNREACHABLE("UGPR spilling is unimplemented");
-   }
-
    typed_memcpy(ra.num_regs, shader->num_regs, JAY_NUM_RA_FILES);
 
    linear_ctx *lin_ctx = linear_context(shader);
-
    ra.reg_for_index = linear_alloc_array(lin_ctx, jay_reg, f->ssa_alloc);
    ra.global_reg_for_index = linear_alloc_array(lin_ctx, jay_reg, f->ssa_alloc);
    ra.affinities = linear_zalloc_array(lin_ctx, struct affinity, f->ssa_alloc);
@@ -1397,7 +1368,7 @@ jay_register_allocate_function(jay_function *f)
 
    insert_parallel_copies_for_phis(f);
 
-   if (spilled) {
+   if (f->demand[MEM]) {
       jay_lower_spill(f);
    }
 

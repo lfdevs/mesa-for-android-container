@@ -408,6 +408,7 @@
                 "VK_KHR_maintenance7": 1,
                 "VK_KHR_maintenance8": 1,
                 "VK_KHR_maintenance10": 1,
+                "VK_KHR_device_address_commands": 1,
                 "VK_KHR_shader_float_controls2": 1
             },
             "features": {
@@ -441,6 +442,9 @@
                 },
                 "VkPhysicalDeviceProvokingVertexFeaturesEXT": {
                     "provokingVertexLast": true
+                },
+                "VkPhysicalDeviceDeviceAddressCommandsFeaturesKHR": {
+                    "deviceAddressCommands": true
                 },
                 "VkPhysicalDeviceAttachmentFeedbackLoopLayoutFeaturesEXT": {
                     "attachmentFeedbackLoopLayout": true

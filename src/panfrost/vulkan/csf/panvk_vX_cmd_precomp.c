@@ -163,65 +163,8 @@ panvk_per_arch(dispatch_precomp)(struct panvk_precomp_ctx *ctx,
    cs_trace_run_compute(b, tracing_ctx, cs_scratch_reg_tuple(b, 0, 4),
                         task_increment, task_axis, PANVK_PRECOMP_RES_SEL);
 
-   if (barrier & PANLIB_BARRIER_CSF_SYNC) {
-#if PAN_ARCH >= 11
-      struct cs_index sync_addr = cs_scratch_reg64(b, 0);
-      struct cs_index add_val = cs_scratch_reg64(b, 2);
-
-      cs_load64_to(b, sync_addr, cs_subqueue_ctx_reg(b),
-                   offsetof(struct panvk_cs_subqueue_context, syncobjs));
-      cs_add_imm64(b, sync_addr, sync_addr,
-                   PANVK_SUBQUEUE_COMPUTE * sizeof(struct panvk_cs_sync64));
-      cs_move64_to(b, add_val, 1);
-      panvk_instr_sync64_add(cmdbuf, PANVK_SUBQUEUE_COMPUTE, true,
-                             MALI_CS_SYNC_SCOPE_CSG, add_val, sync_addr,
-                             cs_defer_indirect());
-#else
-      struct cs_index sync_addr = cs_scratch_reg64(b, 0);
-      struct cs_index iter_sb = cs_scratch_reg32(b, 2);
-      struct cs_index cmp_scratch = cs_scratch_reg32(b, 3);
-      struct cs_index add_val = cs_scratch_reg64(b, 4);
-
-      cs_load_to(b, cs_scratch_reg_tuple(b, 0, 3), cs_subqueue_ctx_reg(b),
-                 BITFIELD_MASK(3),
-                 offsetof(struct panvk_cs_subqueue_context, syncobjs));
-
-      cs_add_imm64(b, sync_addr, sync_addr,
-                   PANVK_SUBQUEUE_COMPUTE * sizeof(struct panvk_cs_sync64));
-      cs_move64_to(b, add_val, 1);
-
-      cs_match_iter_sb(b, x, iter_sb, cmp_scratch) {
-         panvk_instr_sync64_add(cmdbuf, PANVK_SUBQUEUE_COMPUTE, true,
-                                MALI_CS_SYNC_SCOPE_CSG, add_val, sync_addr,
-                                cs_defer(SB_WAIT_ITER(x),
-                                         SB_ID(DEFERRED_SYNC)));
-      }
-#endif
-
-      ++cmdbuf->state.cs[PANVK_SUBQUEUE_COMPUTE].relative_sync_point;
-   } else if (barrier & PANLIB_BARRIER_CSF_WAIT) {
-#if PAN_ARCH >= 11
-      cs_wait_indirect(b);
-#else
-      struct cs_index iter_sb = cs_scratch_reg32(b, 0);
-      struct cs_index cmp_scratch = cs_scratch_reg32(b, 1);
-
-      cs_load32_to(b, iter_sb, cs_subqueue_ctx_reg(b),
-                   offsetof(struct panvk_cs_subqueue_context, iter_sb));
-
-      cs_match(b, iter_sb, cmp_scratch) {
-#define CASE(x)                                                                \
-      cs_case(b, SB_ITER(x)) {                                                 \
-         cs_wait_slot(b, SB_ITER(x));                                          \
-      }
-
-         CASE(0)
-         CASE(1)
-         CASE(2)
-         CASE(3)
-         CASE(4)
-#undef CASE
-      }
-#endif
-   }
+   if (barrier & PANLIB_BARRIER_CSF_SYNC)
+      panvk_per_arch(cmd_signal_barrier)(cmdbuf, PANVK_CSF_BARRIER_SYNC);
+   else if (barrier & PANLIB_BARRIER_CSF_WAIT)
+      panvk_per_arch(cmd_signal_barrier)(cmdbuf, PANVK_CSF_BARRIER_WAIT);
 }

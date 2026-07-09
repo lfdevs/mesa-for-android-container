@@ -98,10 +98,12 @@ glXCreateContextAttribsARB(Display *dpy, GLXFBConfig config,
       attrib_list = malloc(sizeof(int) * num_attribs * 2);
 
       uint8_t clear_ctx_reset_isolation_bit = false;
-#if defined(GLX_DIRECT_RENDERING) && (!defined(GLX_USE_APPLEGL) || defined(GLX_USE_APPLE))
-      dri2GalliumConfigQueryb(psc->frontend_screen,
-                              "glx_clear_context_reset_isolation_bit",
-                              &clear_ctx_reset_isolation_bit);
+#if defined(GLX_DIRECT_RENDERING)
+      /* Some implementations (eg: AppleGL) never populate frontend_screen. */
+      if (psc->frontend_screen != NULL)
+         dri2GalliumConfigQueryb(psc->frontend_screen,
+                                 "glx_clear_context_reset_isolation_bit",
+                                 &clear_ctx_reset_isolation_bit);
 #endif
       for (unsigned i = 0; i < num_attribs; i++) {
          attrib_list[i * 2] = orig_attrib_list[i * 2];
@@ -124,21 +126,17 @@ glXCreateContextAttribsARB(Display *dpy, GLXFBConfig config,
       direct = true;
    }
 
-#ifdef GLX_USE_APPLEGL
-   gc = applegl_create_context(psc, cfg, share, 0);
-#else
    if (direct && psc->vtable->create_context_attribs) {
       gc = psc->vtable->create_context_attribs(psc, cfg, share, num_attribs,
                       (const uint32_t *) attrib_list,
                       &error);
    } else if (!direct) {
-#ifdef GLX_INDIRECT_RENDERING
+#if defined(GLX_INDIRECT_RENDERING)
       gc = indirect_create_context_attribs(psc, cfg, share, num_attribs,
                                            (const uint32_t *) attrib_list,
                                            &error);
 #endif
    }
-#endif
 
    if (gc == NULL) {
       /* Increment dpy->request in order to give a unique serial number to the error.

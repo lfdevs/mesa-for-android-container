@@ -4,19 +4,22 @@
  */
 
 #include <cstring>
+#include <cstdlib>
 #include <dlfcn.h>
 #include <filesystem>
 #include <fstream>
 #include <stdio.h>
+#include <type_traits>
 #include <vector>
 #include <gtest/gtest.h>
 
 #include "tensorflow/lite/c/c_api.h"
+#include "tensorflow/lite/c/c_api_experimental.h"
 #include "tensorflow/lite/c/common.h"
 
 #include <fcntl.h>
 #include "test_executor.h"
-#include "tflite-schema-v2.15.0_generated.h"
+#include "tflite-ref-ops.h"
 
 #include "util/os_misc.h"
 
@@ -27,335 +30,23 @@ randf(float min, float max)
 }
 
 template<typename T>
-std::vector<T> rand(const std::vector<int>& shape, T min, T max) {
-    size_t size = 1;
-    for (int dim : shape) {
-        size *= dim;
-    }
-
-    std::vector<T> result(size);
-
-    if constexpr (std::is_integral<T>::value) {
-      std::vector<T> result(size);
-      std::generate(result.begin(), result.end(), [&]() { return rand() % (max - min + 1) + min; });
-      return result;
-    } else if constexpr (std::is_floating_point<T>::value) {
-      std::vector<T> result(size);
-      std::generate(result.begin(), result.end(), [&]() { return randf(-1.0, 1.0); });
-      return result;
-    }
-
-    return result;
-}
-
-static void
-read_model(const char *file_name, tflite::ModelT &model)
+static std::vector<T>
+generate_random_values(const std::vector<int> &shape, T min, T max)
 {
-   std::ostringstream file_path;
-   assert(os_get_option("TEFLON_TEST_DATA"));
-   file_path << os_get_option("TEFLON_TEST_DATA") << "/" << file_name;
+   size_t size = 1;
+   for (int dim : shape)
+      size *= dim;
 
-   FILE *f = fopen(file_path.str().c_str(), "rb");
-   assert(f);
-   fseek(f, 0, SEEK_END);
-   long fsize = ftell(f);
-   fseek(f, 0, SEEK_SET);
-   void *buf = malloc(fsize);
-   fread(buf, fsize, 1, f);
-   fclose(f);
-
-   tflite::GetModel(buf)->UnPackTo(&model);
-}
-
-static void
-patch_conv2d(unsigned operation_index,
-             tflite::ModelT *model,
-             int input_size,
-             int weight_size,
-             int input_channels,
-             int output_channels,
-             int stride,
-             bool padding_same,
-             bool is_signed,
-             bool depthwise)
-{
-   unsigned output_size = 0;
-   unsigned input_index;
-   unsigned weights_index;
-   unsigned bias_index;
-   unsigned output_index;
-   unsigned weights_buffer_index;
-   unsigned bias_buffer_index;
-
-   auto subgraph = model->subgraphs[0];
-
-   /* Operation */
-   if (depthwise) {
-      auto value = new tflite::DepthwiseConv2DOptionsT();
-      value->depth_multiplier = 1;
-      value->padding = padding_same ? tflite::Padding_SAME : tflite::Padding_VALID;
-      value->stride_w = stride;
-      value->stride_h = stride;
-      value->dilation_w_factor = 1;
-      value->dilation_h_factor = 1;
-      subgraph->operators[operation_index]->builtin_options.value = value;
-      subgraph->operators[operation_index]->builtin_options.type = tflite::BuiltinOptions_DepthwiseConv2DOptions;
-
-      model->operator_codes[0]->deprecated_builtin_code = 4;
-      model->operator_codes[0]->builtin_code = tflite::BuiltinOperator_DEPTHWISE_CONV_2D;
-   } else {
-      auto value = new tflite::Conv2DOptionsT();
-      value->padding = padding_same ? tflite::Padding_SAME : tflite::Padding_VALID;
-      value->stride_w = stride;
-      value->stride_h = stride;
-      subgraph->operators[operation_index]->builtin_options.value = value;
+   std::vector<T> result(size);
+   if constexpr (std::is_integral<T>::value) {
+      for (size_t i = 0; i < size; i++)
+         result[i] = rand() % (max - min + 1) + min;
+   } else if constexpr (std::is_floating_point<T>::value) {
+      for (size_t i = 0; i < size; i++)
+         result[i] = randf(min, max);
    }
 
-   input_index = subgraph->operators[operation_index]->inputs.data()[0];
-   weights_index = subgraph->operators[operation_index]->inputs.data()[1];
-   bias_index = subgraph->operators[operation_index]->inputs.data()[2];
-   output_index = subgraph->operators[operation_index]->outputs.data()[0];
-
-   /* Input */
-   auto input_tensor = subgraph->tensors[input_index];
-   input_tensor->shape.data()[0] = 1;
-   input_tensor->shape.data()[1] = input_size;
-   input_tensor->shape.data()[2] = input_size;
-   input_tensor->shape.data()[3] = input_channels;
-   input_tensor->type = is_signed ? tflite::TensorType_INT8 : tflite::TensorType_UINT8;
-   if (is_signed)
-      input_tensor->quantization->zero_point[0] -= 128;
-
-   /* Bias */
-   auto bias_tensor = subgraph->tensors[bias_index];
-   bias_buffer_index = bias_tensor->buffer;
-   bias_tensor->shape.data()[0] = output_channels;
-
-   auto bias_data = &model->buffers[bias_buffer_index]->data;
-   std::vector<int32_t> bias_array = rand<int32_t>({output_channels}, -20000, 20000);
-   bias_data->resize(bias_array.size() * sizeof(int32_t));
-   memcpy(bias_data->data(), bias_array.data(), bias_array.size() * sizeof(int32_t));
-
-   /* Weight */
-   auto weight_tensor = subgraph->tensors[weights_index];
-   weights_buffer_index = weight_tensor->buffer;
-   if (depthwise) {
-      weight_tensor->shape.data()[0] = 1;
-      weight_tensor->shape.data()[1] = weight_size;
-      weight_tensor->shape.data()[2] = weight_size;
-      weight_tensor->shape.data()[3] = output_channels;
-   } else {
-      weight_tensor->shape.data()[0] = output_channels;
-      weight_tensor->shape.data()[1] = weight_size;
-      weight_tensor->shape.data()[2] = weight_size;
-      weight_tensor->shape.data()[3] = input_channels;
-   }
-   weight_tensor->type = is_signed ? tflite::TensorType_INT8 : tflite::TensorType_UINT8;
-   if (is_signed)
-      weight_tensor->quantization->zero_point[0] = 0;
-
-   auto weights_data = &model->buffers[weights_buffer_index]->data;
-   std::vector<int> weight_shape;
-   if (depthwise)
-      weight_shape = {1, weight_size, weight_size, output_channels};
-   else
-      weight_shape = {output_channels, weight_size, weight_size, input_channels};
-
-   std::vector<uint8_t> weights_array = rand<uint8_t>(weight_shape, 0, 255);
-   weights_data->resize(weights_array.size());
-   memcpy(weights_data->data(), weights_array.data(), weights_array.size());
-
-   /* Output */
-   if (padding_same)
-      output_size = (input_size + stride - 1) / stride;
-   else
-      output_size = (input_size + stride - weight_size) / stride;
-
-   auto output_tensor = subgraph->tensors[output_index];
-   output_tensor->shape.data()[0] = 1;
-   output_tensor->shape.data()[1] = output_size;
-   output_tensor->shape.data()[2] = output_size;
-   output_tensor->shape.data()[3] = output_channels;
-   output_tensor->type = is_signed ? tflite::TensorType_INT8 : tflite::TensorType_UINT8;
-   if (is_signed)
-      output_tensor->quantization->zero_point[0] -= 128;
-}
-
-void *
-conv2d_generate_model(int input_size,
-                      int weight_size,
-                      int input_channels,
-                      int output_channels,
-                      int stride,
-                      bool padding_same,
-                      bool is_signed,
-                      bool depthwise,
-                      size_t *buf_size)
-{
-   void *buf;
-   tflite::ModelT model;
-   read_model("conv2d.tflite", model);
-
-   patch_conv2d(0, &model, input_size, weight_size, input_channels, output_channels, stride, padding_same, is_signed, depthwise);
-
-   flatbuffers::FlatBufferBuilder builder;
-   builder.Finish(tflite::Model::Pack(builder, &model), "TFL3");
-
-   *buf_size = builder.GetSize();
-   buf = malloc(*buf_size);
-   memcpy(buf, builder.GetBufferPointer(), builder.GetSize());
-
-   return buf;
-}
-
-static void
-patch_quant_for_add(tflite::ModelT *model, bool is_signed)
-{
-   auto subgraph = model->subgraphs[0];
-   auto add_op = subgraph->operators[2];
-
-   auto input_index = add_op->inputs.data()[0];
-   auto input_tensor = subgraph->tensors[input_index];
-   input_tensor->quantization->scale[0] = randf(0.0078125, 0.4386410117149353);
-   input_tensor->quantization->zero_point[0] = rand() % 255;
-   if (is_signed)
-      input_tensor->quantization->zero_point[0] -= 128;
-
-   input_index = add_op->inputs.data()[1];
-   input_tensor = subgraph->tensors[input_index];
-   input_tensor->quantization->scale[0] = randf(0.0078125, 0.4386410117149353);
-   input_tensor->quantization->zero_point[0] = rand() % 255;
-   if (is_signed)
-      input_tensor->quantization->zero_point[0] -= 128;
-}
-
-void *
-add_generate_model(int input_size,
-                   int weight_size,
-                   int input_channels,
-                   int output_channels,
-                   int stride,
-                   bool padding_same,
-                   bool is_signed,
-                   bool depthwise,
-                   size_t *buf_size)
-{
-   void *buf;
-   tflite::ModelT model;
-   read_model("add.tflite", model);
-
-   patch_conv2d(0, &model, input_size, weight_size, input_channels, output_channels, stride, padding_same, is_signed, depthwise);
-   patch_conv2d(1, &model, input_size, weight_size, input_channels, output_channels, stride, padding_same, is_signed, depthwise);
-   patch_quant_for_add(&model, is_signed);
-
-   /* Output */
-   auto subgraph = model.subgraphs[0];
-   unsigned input_index = subgraph->operators[2]->inputs.data()[0];
-   unsigned output_index = subgraph->operators[2]->outputs.data()[0];
-
-   auto input_tensor = subgraph->tensors[input_index];
-   auto output_tensor = subgraph->tensors[output_index];
-   output_tensor->shape.data()[0] = input_tensor->shape.data()[0];
-   output_tensor->shape.data()[1] = input_tensor->shape.data()[1];
-   output_tensor->shape.data()[2] = input_tensor->shape.data()[2];
-   output_tensor->shape.data()[3] = input_tensor->shape.data()[3];
-   output_tensor->type = is_signed ? tflite::TensorType_INT8 : tflite::TensorType_UINT8;
-
-   flatbuffers::FlatBufferBuilder builder;
-   builder.Finish(tflite::Model::Pack(builder, &model), "TFL3");
-
-   *buf_size = builder.GetSize();
-   buf = malloc(*buf_size);
-   memcpy(buf, builder.GetBufferPointer(), builder.GetSize());
-
-   return buf;
-}
-
-
-
-static void
-patch_fully_connected(unsigned operation_index,
-                      tflite::ModelT *model,
-                      int input_size,
-                      int output_channels,
-                      bool is_signed)
-{
-   unsigned input_index;
-   unsigned weights_index;
-   unsigned bias_index;
-   unsigned output_index;
-   unsigned weights_buffer_index;
-   unsigned bias_buffer_index;
-
-   auto subgraph = model->subgraphs[0];
-
-   /* Operation */
-   auto value = new tflite::FullyConnectedOptionsT();
-   subgraph->operators[operation_index]->builtin_options.value = value;
-
-   input_index = subgraph->operators[operation_index]->inputs.data()[0];
-   weights_index = subgraph->operators[operation_index]->inputs.data()[1];
-   bias_index = subgraph->operators[operation_index]->inputs.data()[2];
-   output_index = subgraph->operators[operation_index]->outputs.data()[0];
-
-   /* Input */
-   auto input_tensor = subgraph->tensors[input_index];
-   input_tensor->shape.data()[0] = 1;
-   input_tensor->shape.data()[1] = input_size;
-   input_tensor->type = is_signed ? tflite::TensorType_INT8 : tflite::TensorType_UINT8;
-
-   /* Bias */
-   auto bias_tensor = subgraph->tensors[bias_index];
-   bias_buffer_index = bias_tensor->buffer;
-   bias_tensor->shape.data()[0] = output_channels;
-
-   auto bias_data = &model->buffers[bias_buffer_index]->data;
-   std::vector<int32_t> bias_array = rand<int32_t>({output_channels}, -20000, 20000);
-   bias_data->resize(bias_array.size() * sizeof(int32_t));
-   memcpy(bias_data->data(), bias_array.data(), bias_array.size() * sizeof(int32_t));
-
-   /* Weight */
-   auto weight_tensor = subgraph->tensors[weights_index];
-   weights_buffer_index = weight_tensor->buffer;
-   weight_tensor->shape.data()[0] = output_channels;
-   weight_tensor->shape.data()[1] = input_size;
-   weight_tensor->type = is_signed ? tflite::TensorType_INT8 : tflite::TensorType_UINT8;
-
-   auto weights_data = &model->buffers[weights_buffer_index]->data;
-   std::vector<int> weight_shape;
-   weight_shape = {output_channels, input_size};
-
-   std::vector<uint8_t> weights_array = rand<uint8_t>(weight_shape, 0, 255);
-   weights_data->resize(weights_array.size());
-   memcpy(weights_data->data(), weights_array.data(), weights_array.size());
-
-   /* Output */
-   auto output_tensor = subgraph->tensors[output_index];
-   output_tensor->shape.data()[0] = 1;
-   output_tensor->shape.data()[1] = output_channels;
-   output_tensor->type = is_signed ? tflite::TensorType_INT8 : tflite::TensorType_UINT8;
-}
-
-void *
-fully_connected_generate_model(int input_size,
-                               int output_channels,
-                               bool is_signed,
-                               size_t *buf_size)
-{
-   void *buf;
-   tflite::ModelT model;
-   read_model("fully_connected.tflite", model);
-
-   patch_fully_connected(0, &model, input_size, output_channels, is_signed);
-
-   flatbuffers::FlatBufferBuilder builder;
-   builder.Finish(tflite::Model::Pack(builder, &model), "TFL3");
-
-   *buf_size = builder.GetSize();
-   buf = malloc(*buf_size);
-   memcpy(buf, builder.GetBufferPointer(), builder.GetSize());
-
-   return buf;
+   return result;
 }
 
 static void
@@ -428,6 +119,8 @@ run_model(TfLiteModel *model, enum executor executor, void ***input, size_t *num
    TfLiteDelegate *delegate = NULL;
    TfLiteInterpreterOptions *options = TfLiteInterpreterOptionsCreate();
 
+   tflite_register_ref_ops(options);
+
    if (executor == EXECUTOR_NPU) {
       load_delegate();
       delegate = tflite_plugin_create_delegate(NULL, NULL, 0, NULL);
@@ -436,10 +129,10 @@ run_model(TfLiteModel *model, enum executor executor, void ***input, size_t *num
 
    TfLiteInterpreterOptionsSetErrorReporter(options, tflite_error_cb, NULL);
 
-   TfLiteInterpreter *interpreter = TfLiteInterpreterCreate(model, options);
+   TfLiteInterpreter *interpreter = TfLiteInterpreterCreateWithSelectedOps(model, options);
    assert(interpreter);
 
-   TfLiteInterpreterAllocateTensors(interpreter);
+   EXPECT_EQ(TfLiteInterpreterAllocateTensors(interpreter), kTfLiteOk);
 
    *num_inputs = TfLiteInterpreterGetInputTensorCount(interpreter);
    if (*input == NULL)
@@ -466,12 +159,12 @@ run_model(TfLiteModel *model, enum executor executor, void ***input, size_t *num
 
             switch (input_tensor->type) {
             case kTfLiteFloat32: {
-               std::vector<float> a = rand<float>(shape, -1.0, 1.0);
+               std::vector<float> a = generate_random_values<float>(shape, -1.0f, 1.0f);
                memcpy((*input)[i], a.data(), input_tensor->bytes);
                break;
             }
             default: {
-               std::vector<uint8_t> a = rand<uint8_t>(shape, 0, 255);
+               std::vector<uint8_t> a = generate_random_values<uint8_t>(shape, 0, 255);
                memcpy((*input)[i], a.data(), input_tensor->bytes);
                break;
             }

@@ -119,9 +119,15 @@ vectorize_filter_cb(const nir_instr *instr, const void *data)
    case nir_op_fabs:
    case nir_op_fneg:
    case nir_op_feq:
+   case nir_op_fequ:
    case nir_op_fge:
+   case nir_op_fgeu:
    case nir_op_flt:
+   case nir_op_fltu:
+   case nir_op_fneo:
    case nir_op_fneu:
+   case nir_op_ford:
+   case nir_op_funord:
    case nir_op_fmul:
    case nir_op_fmul_rtz:
    case nir_op_ffma:
@@ -271,9 +277,15 @@ lower_bit_size_cb(const nir_instr *instr, void *data)
       case nir_op_fadd:
       case nir_op_fneg:
       case nir_op_feq:
+      case nir_op_fequ:
       case nir_op_fge:
+      case nir_op_fgeu:
       case nir_op_flt:
+      case nir_op_fltu:
+      case nir_op_fneo:
       case nir_op_fneu:
+      case nir_op_ford:
+      case nir_op_funord:
       case nir_op_fmul:
       case nir_op_fmul_rtz:
       case nir_op_ffma:
@@ -1158,7 +1170,7 @@ nir_shader_has_local_variables(const nir_shader *nir)
    return false;
 }
 
-static int
+static unsigned
 type_size_vec4(const struct glsl_type *type, bool bindless)
 {
    return glsl_count_vec4_slots(type, false, bindless);
@@ -1731,7 +1743,8 @@ nak_postprocess_nir(nir_shader *nir,
       UNREACHABLE("Unsupported shader stage");
    }
 
-   OPT(nir, nak_nir_lower_load_store, nak);
+   if (OPT(nir, nak_nir_lower_load_store, nak))
+      OPT(nir, nir_opt_constant_folding);
 
    struct nir_opt_offsets_options nak_offset_options = {
       .max_offset_cb = nak_nir_max_imm_offset,

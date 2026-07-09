@@ -583,6 +583,7 @@ genX(emit_simple_shader_dispatch)(struct anv_simple_shader *state,
 
       intel_compute_engine_async_threads_limit(devinfo, dispatch.threads,
                                                slm_or_barrier_enabled,
+                                               prog_data->uses_fence,
                                                &pixel_async_compute_thread_limit,
                                                &z_pass_async_compute_thread_limit,
                                                &np_z_async_throttle_settings);
@@ -652,13 +653,7 @@ genX(emit_simple_shader_dispatch)(struct anv_simple_shader *state,
       if (state->cmd_buffer) {
          genX(cmd_buffer_post_dispatch_wa)(state->cmd_buffer);
       } else {
-#if INTEL_NEEDS_WA_14025112257
-         if (batch->engine_class == INTEL_ENGINE_CLASS_COMPUTE) {
-            genX(batch_emit_pipe_control)(batch, devinfo, GPGPU,
-                                          ANV_PIPE_STATE_CACHE_INVALIDATE_BIT,
-                                          "Wa_14025112257");
-         }
-#endif
+         genX(batch_emit_post_dispatch_wa)(batch);
       }
 
 #else /* GFX_VERx10 < 125 */

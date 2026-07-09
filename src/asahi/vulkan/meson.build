@@ -33,7 +33,6 @@ hk_files = files(
   'hk_instance.c',
   'hk_instance.h',
   'hk_nir_lower_descriptors.c',
-  'hk_nir_passthrough_gs.c',
   'hk_physical_device.c',
   'hk_physical_device.h',
   'hk_private.h',
@@ -51,7 +50,7 @@ hk_files = files(
 
 hk_drirc = custom_target(
   'hk_drirc',
-  input  : [files('hk_drirc_gen.py'), drirc_gen, join_paths(dir_source_root, 'src/util/00-hk-defaults.conf')],
+  input  : [files('hk_drirc_gen.py'), drirc_gen, '00-hk-defaults.conf'],
   output : ['hk_drirc.c', 'hk_drirc.h'],
   command : [
     prog_python, '@INPUT0@',

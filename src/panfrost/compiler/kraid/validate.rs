@@ -24,54 +24,46 @@ fn validate_instr(instr: &Instr, ssa_vals: &mut FxHashSet<SSAValue>) {
             }
         }
 
-        match &src.src_ref {
-            SrcRef::SSA(vec) => {
-                let src_ref_bytes = vec.bytes();
-                if src_ref_bytes > 8 {
-                    assert!(src.swizzle == Swizzle::NONE);
-                } else {
-                    let src_ref_byte_mask = u8::MAX >> (8 - src_ref_bytes);
-                    let swizzle_byte_mask =
-                        src.swizzle.bytes_read(src_ref_bytes);
-                    assert!(swizzle_byte_mask & !src_ref_byte_mask == 0);
+        let src_bytes = src_type.total_bytes();
+        if src_type == DataType::SR || src_bytes > 8 {
+            assert!(src.swizzle == Swizzle::NONE);
+        } else {
+            let src_ref_byte_mask = match &src.src_ref {
+                SrcRef::Zero => 0xff,
+                SrcRef::Imm32(_) => 0xf,
+                SrcRef::FAU(fau) => {
+                    if fau.load64 {
+                        0xff
+                    } else {
+                        0xf
+                    }
                 }
-            }
-            SrcRef::Reg(reg) => match reg.range {
-                RegRange::Byte0 => {
-                    assert!(src.swizzle.bytes_read(4) & !0b0001 == 0);
-                }
-                RegRange::Byte1 => {
-                    assert!(src.swizzle.bytes_read(4) & !0b0010 == 0);
-                }
-                RegRange::Byte2 => {
-                    assert!(src.swizzle.bytes_read(4) & !0b0100 == 0);
-                }
-                RegRange::Byte3 => {
-                    assert!(src.swizzle.bytes_read(4) & !0b1000 == 0);
-                }
-                RegRange::Half0 => {
-                    assert!(src.swizzle.bytes_read(4) & !0b0011 == 0);
-                }
-                RegRange::Half1 => {
-                    assert!(src.swizzle.bytes_read(4) & !0b1100 == 0);
-                }
-                RegRange::Regs(n) => match n {
-                    1 => assert!(src.swizzle.bytes_read(n * 4) & !0x0f == 0),
-                    2 => (), // Not much we can assert here
-                    _ => assert!(src.swizzle == Swizzle::NONE),
+                SrcRef::SSA(vec) => u8::MAX >> (8 - vec.bytes()),
+                SrcRef::Reg(reg) => match reg.range {
+                    RegRange::Byte0 => 0b0001,
+                    RegRange::Byte1 => 0b0010,
+                    RegRange::Byte2 => 0b0100,
+                    RegRange::Byte3 => 0b1000,
+                    RegRange::Half0 => 0b0011,
+                    RegRange::Half1 => 0b1100,
+                    RegRange::Regs(n) => u8::MAX >> (8 - (n * 4)),
                 },
-            },
-            _ => (), // Nothing to validate
+            };
+            let swizzle_byte_mask = src.swizzle.bytes_read(src_bytes);
+            assert!(swizzle_byte_mask & !src_ref_byte_mask == 0);
         }
     }
 
     for (dst, dst_type) in instr.dsts_types() {
+        if dst.dst_ref.is_none() {
+            continue;
+        }
+
         let dst_type_bits = dst_type.bits();
         let dst_type_comps = dst_type.comps();
         if dst_type_bits >= 32 {
-            assert_eq!(dst_type_comps, 1);
             assert_eq!(dst.lanes, DstLanes::All);
-            let nregs = dst_type_bits.div_ceil(32);
+            let nregs = (dst_type_bits * dst_type_comps).div_ceil(32);
             assert_eq!(nregs * 4, dst.dst_ref.bytes_written());
         } else {
             let dst_type_bytes =

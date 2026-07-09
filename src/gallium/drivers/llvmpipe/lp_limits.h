@@ -69,17 +69,9 @@
 #define LP_MAX_THREADS 32
 
 
-/**
- * Max number of shader variants (for all shaders combined,
- * per context) that will be kept around.
- */
-#define LP_MAX_SHADER_VARIANTS 1024
+#define LP_MAX_VARIANTS_PER_FS 16
 
-/**
- * Max number of instructions (for all fragment shaders combined per context)
- * that will be kept around (counted in terms of llvm ir).
- */
-#define LP_MAX_SHADER_INSTRUCTIONS (2048 * LP_MAX_SHADER_VARIANTS)
+#define LP_MAX_VARIANTS_PER_CS 16
 
 /**
  * Max number of setup variants that will be kept around.

@@ -1,6 +1,12 @@
+.enforce-hw-jobs-softpipe-rules:
+  rules:
+    - if: '$INPUT_HW_JOBS !~ /"(all|softpipe)"/i'
+      when: never
+
 .softpipe-rules:
   stage: software-renderer
   rules:
+    - !reference [.enforce-hw-jobs-softpipe-rules, rules]
     - !reference [.test, rules]
     - !reference [.gl-rules, rules]
     - changes: &softpipe_file_list

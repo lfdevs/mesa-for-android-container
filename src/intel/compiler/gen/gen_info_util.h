@@ -15,6 +15,7 @@ enum gen_encoding_type {
    GEN_ENCODING_PRE_XE,
    GEN_ENCODING_XE,
    GEN_ENCODING_XE2,
+   GEN_ENCODING_XE3P,
 };
 
 struct gen_inst_description {

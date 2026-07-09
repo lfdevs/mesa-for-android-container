@@ -11,6 +11,7 @@
 #include "radv_entrypoints.h"
 #include "radv_formats.h"
 #include "radv_meta.h"
+#include "radv_tracepoints.h"
 #include "vk_format.h"
 
 enum radv_resolve_method {
@@ -59,7 +60,7 @@ radv_decompress_resolve_src(struct radv_cmd_buffer *cmd_buffer, struct radv_imag
          },
    };
 
-   if (src_image->vk.create_flags & VK_IMAGE_CREATE_SAMPLE_LOCATIONS_COMPATIBLE_DEPTH_BIT_EXT) {
+   if (src_image->vk.create_flags & VK_IMAGE_CREATE_2_SAMPLE_LOCATIONS_COMPATIBLE_DEPTH_BIT_EXT) {
       /* If the depth/stencil image uses different sample
        * locations, we need them during HTILE decompressions.
        */
@@ -257,6 +258,7 @@ radv_cmd_buffer_resolve_rendering(struct radv_cmd_buffer *cmd_buffer, const VkRe
       return;
 
    radv_describe_begin_render_pass_resolve(cmd_buffer);
+   radv_utrace_begin_resolve_rendering(cmd_buffer);
 
    radv_meta_begin(cmd_buffer);
 
@@ -439,6 +441,7 @@ radv_cmd_buffer_resolve_rendering(struct radv_cmd_buffer *cmd_buffer, const VkRe
 
    radv_meta_end(cmd_buffer);
 
+   radv_utrace_end_resolve_rendering(cmd_buffer);
    radv_describe_end_render_pass_resolve(cmd_buffer);
 
    if (used_compute) {

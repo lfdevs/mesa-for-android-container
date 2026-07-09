@@ -5,8 +5,6 @@
  * SPDX-License-Identifier: SGI-B-2.0
  */
 
-#if !defined(GLX_USE_APPLEGL) || defined(GLX_USE_APPLE)
-
 #include "packrender.h"
 #include "indirect.h"
 #include "indirect_size.h"
@@ -359,4 +357,3 @@ __indirect_glDisable(GLenum cap)
    __GLX_END(8);
 }
 
-#endif

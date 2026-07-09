@@ -334,7 +334,7 @@ fill_image_descriptors(struct d3d12_context *ctx,
             unsigned transition_array_size = array_size;
             if (res->base.b.target == PIPE_TEXTURE_3D) {
                transition_first_layer = 0;
-               transition_array_size = 0;
+               transition_array_size = 1;
             }
             d3d12_transition_subresources_state(ctx, res,
                                                 view->u.tex.level, 1,

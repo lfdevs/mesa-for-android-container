@@ -57,6 +57,16 @@ struct panvk_cmd_compute_state {
       }                                                                        \
    } while (0)
 
+#if PAN_ARCH >= 10
+enum panvk_csf_barrier {
+   PANVK_CSF_BARRIER_SYNC,
+   PANVK_CSF_BARRIER_WAIT,
+};
+
+void panvk_per_arch(cmd_signal_barrier)(
+   struct panvk_cmd_buffer *cmdbuf, enum panvk_csf_barrier barrier);
+#endif
+
 struct panvk_dispatch_info {
    struct {
       uint32_t x, y, z;
@@ -71,6 +81,10 @@ struct panvk_dispatch_info {
    struct {
       uint64_t buffer_dev_addr;
    } indirect;
+
+#if PAN_ARCH >= 10
+   enum panvk_csf_barrier barrier;
+#endif
 };
 
 void panvk_per_arch(cmd_prepare_dispatch_sysvals)(

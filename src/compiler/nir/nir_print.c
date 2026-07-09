@@ -1506,6 +1506,10 @@ print_intrinsic_instr(nir_intrinsic_instr *instr, print_state *state)
             fprintf(fp, "|AVAILABLE");
          if (semantics & (NIR_MEMORY_MAKE_VISIBLE))
             fprintf(fp, "|VISIBLE");
+         if (semantics & (NIR_MEMORY_CONTROL_ARRIVE))
+            fprintf(fp, "|ARRIVE");
+         if (semantics & (NIR_MEMORY_CONTROL_WAIT))
+            fprintf(fp, "|WAIT");
          break;
       }
 

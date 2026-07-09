@@ -49,8 +49,14 @@ lvp_create_cmd_buffer(struct vk_command_pool *pool,
    if (cmd_buffer == NULL)
       return vk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
 
-   VkResult result = vk_command_buffer_init(pool, &cmd_buffer->vk,
-                                            &lvp_cmd_buffer_ops, level);
+   VkResult result = vk_command_buffer_init_with_params(
+      &cmd_buffer->vk,
+      &(struct vk_command_buffer_init_params) {
+         .pool = pool,
+         .ops = &lvp_cmd_buffer_ops,
+         .level = level,
+         .needs_cmd_queue = true,
+      });
    if (result != VK_SUCCESS) {
       vk_free(&pool->alloc, cmd_buffer);
       return result;

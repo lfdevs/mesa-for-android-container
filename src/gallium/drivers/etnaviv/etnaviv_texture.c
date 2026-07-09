@@ -34,6 +34,7 @@
 #include "etnaviv_texture_state.h"
 #include "etnaviv_translate.h"
 #include "etnaviv_yuv.h"
+#include "util/bitscan.h"
 #include "util/u_inlines.h"
 #include "util/u_memory.h"
 
@@ -297,6 +298,29 @@ set_sampler_views(struct etna_context *ctx, unsigned start, unsigned end,
    ctx->dirty_sampler_views |= ctx->active_sampler_views ^ prev_active_sampler_views;
 }
 
+/* Pack 128-bit companions right after the nr views, so the stage occupies
+ * [0, nr + #128bit) of its window in the shared 32-entry array.
+ * companion_slot() adds the stage's HW base.
+ */
+static void
+etna_pack_unified_companions(struct etna_context *ctx, mesa_shader_stage stage,
+                             unsigned nr, struct pipe_sampler_view **views)
+{
+   uint16_t mask = 0;
+   unsigned comp = nr;
+
+   for (unsigned i = 0; i < PIPE_MAX_SAMPLERS / 2; i++) {
+      if (i < nr && views[i] && format_is_128bit(views[i]->format)) {
+         mask |= 1u << i;
+         ctx->sampler_companion[stage][i] = comp++;
+      } else {
+         ctx->sampler_companion[stage][i] = ~0U;
+      }
+   }
+
+   ctx->tex_is_128bit[stage] = mask;
+}
+
 static inline void
 etna_fragtex_set_sampler_views(struct etna_context *ctx, unsigned nr,
                                struct pipe_sampler_view **views)
@@ -307,6 +331,11 @@ etna_fragtex_set_sampler_views(struct etna_context *ctx, unsigned nr,
 
    set_sampler_views(ctx, start, end, nr, views);
    ctx->num_fragment_sampler_views = nr;
+
+   if (screen->specs.unified_samplers) {
+      etna_pack_unified_companions(ctx, MESA_SHADER_FRAGMENT, nr, views);
+      return;
+   }
 
    uint16_t mask = 0;
    for (unsigned i = 0; i < nr; i++) {
@@ -335,6 +364,11 @@ etna_vertex_set_sampler_views(struct etna_context *ctx, unsigned nr,
    unsigned end = start + screen->specs.vertex_sampler_count;
 
    set_sampler_views(ctx, start, end, nr, views);
+
+   if (screen->specs.unified_samplers) {
+      etna_pack_unified_companions(ctx, MESA_SHADER_VERTEX, nr, views);
+      return;
+   }
 
    uint16_t mask = 0;
    for (unsigned k = 0; k < nr; k++)
@@ -392,6 +426,19 @@ active_samplers_bits(struct etna_context *ctx)
 }
 
 unsigned
+etna_vs_sampler_base(struct etna_context *ctx)
+{
+   if (!ctx->screen->specs.unified_samplers)
+      return ctx->screen->specs.vertex_sampler_offset;
+
+   /* Fragment samplers occupy [0, nfs + 128-bit companions); the vertex stage
+    * starts right after them in the shared 32-entry array.
+    */
+   return ctx->num_fragment_sampler_views +
+          util_bitcount(ctx->tex_is_128bit[MESA_SHADER_FRAGMENT]);
+}
+
+unsigned
 companion_slot(struct etna_context *ctx, unsigned x)
 {
    const unsigned vs_off = ctx->screen->specs.vertex_sampler_offset;
@@ -402,7 +449,7 @@ companion_slot(struct etna_context *ctx, unsigned x)
    if (companion == ~0U)
       return ~0U;
 
-   return companion + vs_off;
+   return companion + etna_vs_sampler_base(ctx);
 }
 
 void

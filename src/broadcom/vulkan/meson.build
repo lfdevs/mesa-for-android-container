@@ -3,7 +3,7 @@
 
 v3dv_drirc = custom_target(
   'v3dv_drirc',
-  input  : [files('v3dv_drirc_gen.py'), drirc_gen, join_paths(dir_source_root, 'src/util/00-v3dv-defaults.conf')],
+  input  : [files('v3dv_drirc_gen.py'), drirc_gen, '00-v3dv-defaults.conf'],
   output : ['v3dv_drirc.c', 'v3dv_drirc.h'],
   command : [
     prog_python, '@INPUT0@',
@@ -72,7 +72,6 @@ files_per_version = files(
   'v3dvx_meta_common.c',
   'v3dvx_pipeline.c',
   'v3dvx_private.h',
-  'v3dvx_queue.c',
 )
 
 v3d_versions = ['42', '71']

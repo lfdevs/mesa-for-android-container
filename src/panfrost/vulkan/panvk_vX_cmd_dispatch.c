@@ -44,6 +44,8 @@ panvk_per_arch(cmd_prepare_dispatch_sysvals)(
                       cs->cs.local_size.z);
 
 #if PAN_ARCH < 9
+   const struct panvk_shader_desc_info *cs_desc_info =
+      &cmdbuf->state.compute.shader->desc_info;
    struct panvk_descriptor_state *desc_state =
       &cmdbuf->state.compute.desc_state;
    struct panvk_shader_desc_state *cs_desc_state =
@@ -57,7 +59,7 @@ panvk_per_arch(cmd_prepare_dispatch_sysvals)(
    }
 
    for (uint32_t i = 0; i < MAX_SETS; i++) {
-      if (cs->desc_info.used_set_mask & BITFIELD_BIT(i)) {
+      if (cs_desc_info->used_set_mask & BITFIELD_BIT(i)) {
          set_compute_sysval(cmdbuf, dirty_sysvals, desc.sets[i],
                             desc_state->sets[i]->descs.dev);
       }

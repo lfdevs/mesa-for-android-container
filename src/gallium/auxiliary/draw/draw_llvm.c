@@ -67,6 +67,23 @@
 static void
 draw_llvm_generate(struct draw_llvm *llvm, struct draw_llvm_variant *var);
 
+static struct util_shader_variant *
+vs_compile_cb(void *user_data, void *cso, const void *spec_key);
+static void
+vs_destroy_cb(struct util_shader_variant *base);
+static struct util_shader_variant *
+gs_compile_cb(void *user_data, void *cso, const void *spec_key);
+static void
+gs_destroy_cb(struct util_shader_variant *base);
+static struct util_shader_variant *
+tcs_compile_cb(void *user_data, void *cso, const void *spec_key);
+static void
+tcs_destroy_cb(struct util_shader_variant *base);
+static struct util_shader_variant *
+tes_compile_cb(void *user_data, void *cso, const void *spec_key);
+static void
+tes_destroy_cb(struct util_shader_variant *base);
+
 
 struct draw_gs_llvm_iface {
    struct lp_build_gs_iface base;
@@ -405,17 +422,37 @@ draw_llvm_create(struct draw_context *draw, lp_context_ref *context)
    if (!llvm->context.ref)
       goto fail;
 
-   llvm->nr_variants = 0;
-   list_inithead(&llvm->vs_variants_list.list);
+   const struct util_shader_variant_cache_options vs_opts = {
+      .compile = vs_compile_cb,
+      .destroy = vs_destroy_cb,
+      .user_data = llvm,
+      .cap = DRAW_MAX_VARIANTS_PER_STAGE,
+   };
+   llvm->vs_opts = vs_opts;
 
-   llvm->nr_gs_variants = 0;
-   list_inithead(&llvm->gs_variants_list.list);
+   const struct util_shader_variant_cache_options gs_opts = {
+      .compile = gs_compile_cb,
+      .destroy = gs_destroy_cb,
+      .user_data = llvm,
+      .cap = DRAW_MAX_VARIANTS_PER_STAGE,
+   };
+   llvm->gs_opts = gs_opts;
 
-   llvm->nr_tcs_variants = 0;
-   list_inithead(&llvm->tcs_variants_list.list);
+   const struct util_shader_variant_cache_options tcs_opts = {
+      .compile = tcs_compile_cb,
+      .destroy = tcs_destroy_cb,
+      .user_data = llvm,
+      .cap = DRAW_MAX_VARIANTS_PER_STAGE,
+   };
+   llvm->tcs_opts = tcs_opts;
 
-   llvm->nr_tes_variants = 0;
-   list_inithead(&llvm->tes_variants_list.list);
+   const struct util_shader_variant_cache_options tes_opts = {
+      .compile = tes_compile_cb,
+      .destroy = tes_destroy_cb,
+      .user_data = llvm,
+      .cap = DRAW_MAX_VARIANTS_PER_STAGE,
+   };
+   llvm->tes_opts = tes_opts;
 
    return llvm;
 
@@ -467,7 +504,7 @@ draw_get_ir_cache_key(struct nir_shader *nir,
 /**
  * Create LLVM-generated code for a vertex shader.
  */
-struct draw_llvm_variant *
+static struct draw_llvm_variant *
 draw_llvm_create_variant(struct draw_llvm *llvm,
                          unsigned num_inputs,
                          const struct draw_llvm_variant_key *key)
@@ -485,12 +522,11 @@ draw_llvm_create_variant(struct draw_llvm *llvm,
    if (!variant)
       return NULL;
 
-   variant->llvm = llvm;
    variant->shader = shader;
    memcpy(&variant->key, key, shader->variant_key_size);
 
    snprintf(module_name, sizeof(module_name), "draw_llvm_vs_variant%u",
-            variant->shader->variants_cached);
+            variant->shader->variants_created);
 
    if (shader->base.state.ir.nir && llvm->draw->disk_cache_cookie) {
       draw_get_ir_cache_key(shader->base.state.ir.nir,
@@ -533,10 +569,7 @@ draw_llvm_create_variant(struct draw_llvm *llvm,
                                            ir_blake3_cache_key);
    gallivm_free_ir(variant->gallivm);
 
-   variant->list_item_global.base = variant;
-   variant->list_item_local.base = variant;
-   /*variant->no = */shader->variants_created++;
-   variant->list_item_global.base = variant;
+   shader->variants_created++;
 
    return variant;
 }
@@ -572,7 +605,8 @@ do_clamp_vertex_color(struct gallivm_state *gallivm,
 
 
 static void
-generate_vs(struct draw_llvm_variant *variant,
+generate_vs(struct draw_llvm *llvm,
+            struct draw_llvm_variant *variant,
             LLVMBuilderRef builder,
             struct lp_type vs_type,
             LLVMValueRef (*outputs)[TGSI_NUM_CHANNELS],
@@ -585,7 +619,6 @@ generate_vs(struct draw_llvm_variant *variant,
             bool clamp_vertex_color,
             struct lp_build_mask_context *bld_mask)
 {
-   struct draw_llvm *llvm = variant->llvm;
    const struct tgsi_token *tokens = llvm->draw->vs.vertex_shader->state.tokens;
    LLVMValueRef consts_ptr =
       lp_jit_resources_constants(variant->gallivm, variant->resources_type, resources_ptr);
@@ -1065,7 +1098,8 @@ store_clip(struct gallivm_state *gallivm,
  * Transforms the outputs for viewport mapping
  */
 static void
-generate_viewport(struct draw_llvm_variant *variant,
+generate_viewport(struct draw_llvm *llvm,
+                  struct draw_llvm_variant *variant,
                   LLVMBuilderRef builder,
                   struct lp_type vs_type,
                   LLVMValueRef (*outputs)[TGSI_NUM_CHANNELS],
@@ -1073,7 +1107,7 @@ generate_viewport(struct draw_llvm_variant *variant,
 {
    struct gallivm_state *gallivm = variant->gallivm;
    struct lp_type f32_type = vs_type;
-   const unsigned pos = variant->llvm->draw->vs.position_output;
+   const unsigned pos = llvm->draw->vs.position_output;
    LLVMTypeRef vs_type_llvm = lp_build_vec_type(gallivm, vs_type);
    LLVMValueRef out3 = LLVMBuildLoad2(builder, vs_type_llvm, outputs[pos][3], ""); /*w0 w1 .. wn*/
    LLVMValueRef const1 = lp_build_const_vec(gallivm, f32_type, 1.0);       /*1.0 1.0 1.0 1.0*/
@@ -1956,7 +1990,7 @@ draw_llvm_generate(struct draw_llvm *llvm, struct draw_llvm_variant *variant)
                                                     lp_build_broadcast_scalar(&blduivec, vertex_id_offset), "");
 
       ptr_aos = (const LLVMValueRef (*)[TGSI_NUM_CHANNELS]) inputs;
-      generate_vs(variant,
+      generate_vs(llvm, variant,
                   builder,
                   vs_type,
                   outputs,
@@ -1994,7 +2028,7 @@ draw_llvm_generate(struct draw_llvm *llvm, struct draw_llvm_variant *variant)
 
          /* do viewport mapping */
          if (!bypass_viewport) {
-            generate_viewport(variant, builder, vs_type, outputs, context_ptr);
+            generate_viewport(llvm, variant, builder, vs_type, outputs, context_ptr);
          }
       } else {
          clipmask = blduivec.zero;
@@ -2236,24 +2270,40 @@ draw_llvm_set_sampler_state(struct draw_context *draw,
 }
 
 
-void
+static void
 draw_llvm_destroy_variant(struct draw_llvm_variant *variant)
 {
-   struct draw_llvm *llvm = variant->llvm;
-
-   if (gallivm_debug & (GALLIVM_DEBUG_TGSI | GALLIVM_DEBUG_IR)) {
-      debug_printf("Deleting VS variant: %u vs variants,\t%u total variants\n",
-                    variant->shader->variants_cached, llvm->nr_variants);
-   }
+   if (gallivm_debug & (GALLIVM_DEBUG_TGSI | GALLIVM_DEBUG_IR))
+      debug_printf("Deleting VS variant\n");
 
    gallivm_destroy(variant->gallivm);
-
-   list_del(&variant->list_item_local.list);
-   variant->shader->variants_cached--;
-   list_del(&variant->list_item_global.list);
-   llvm->nr_variants--;
    FREE(variant->function_name);
    FREE(variant);
+}
+
+static struct util_shader_variant *
+vs_compile_cb(void *user_data, void *cso, const void *spec_key)
+{
+   struct draw_llvm *llvm = user_data;
+   struct llvm_vertex_shader *shader = cso;
+   const struct draw_llvm_variant_key *key = spec_key;
+   const unsigned num_inputs = MAX2(shader->base.info.num_inputs,
+                                    draw_total_vs_outputs(llvm->draw));
+
+   if (llvm->context.mutex)
+      simple_mtx_lock(llvm->context.mutex);
+   struct draw_llvm_variant *variant =
+      draw_llvm_create_variant(llvm, num_inputs, key);
+   if (llvm->context.mutex)
+      simple_mtx_unlock(llvm->context.mutex);
+
+   return variant ? &variant->base : NULL;
+}
+
+static void
+vs_destroy_cb(struct util_shader_variant *base)
+{
+   draw_llvm_destroy_variant(container_of(base, struct draw_llvm_variant, base));
 }
 
 
@@ -2496,7 +2546,7 @@ draw_gs_llvm_generate(struct draw_llvm *llvm,
 }
 
 
-struct draw_gs_llvm_variant *
+static struct draw_gs_llvm_variant *
 draw_gs_llvm_create_variant(struct draw_llvm *llvm,
                             unsigned num_outputs,
                             const struct draw_gs_llvm_variant_key *key)
@@ -2515,11 +2565,10 @@ draw_gs_llvm_create_variant(struct draw_llvm *llvm,
    if (!variant)
       return NULL;
 
-   variant->llvm = llvm;
    variant->shader = shader;
 
    snprintf(module_name, sizeof(module_name), "draw_llvm_gs_variant%u",
-            variant->shader->variants_cached);
+            variant->shader->variants_created);
 
    memcpy(&variant->key, key, shader->variant_key_size);
 
@@ -2556,33 +2605,43 @@ draw_gs_llvm_create_variant(struct draw_llvm *llvm,
                                            ir_blake3_cache_key);
    gallivm_free_ir(variant->gallivm);
 
-   variant->list_item_global.base = variant;
-   variant->list_item_local.base = variant;
-   /*variant->no = */shader->variants_created++;
-   variant->list_item_global.base = variant;
+   shader->variants_created++;
 
    return variant;
 }
 
 
-void
+static void
 draw_gs_llvm_destroy_variant(struct draw_gs_llvm_variant *variant)
 {
-   struct draw_llvm *llvm = variant->llvm;
-
-   if (gallivm_debug & (GALLIVM_DEBUG_TGSI | GALLIVM_DEBUG_IR)) {
-      debug_printf("Deleting GS variant: %u gs variants,\t%u total variants\n",
-                    variant->shader->variants_cached, llvm->nr_gs_variants);
-   }
+   if (gallivm_debug & (GALLIVM_DEBUG_TGSI | GALLIVM_DEBUG_IR))
+      debug_printf("Deleting GS variant\n");
 
    gallivm_destroy(variant->gallivm);
-
-   list_del(&variant->list_item_local.list);
-   variant->shader->variants_cached--;
-   list_del(&variant->list_item_global.list);
-   llvm->nr_gs_variants--;
    FREE(variant->function_name);
    FREE(variant);
+}
+
+static struct util_shader_variant *
+gs_compile_cb(void *user_data, UNUSED void *cso, const void *spec_key)
+{
+   struct draw_llvm *llvm = user_data;
+   const struct draw_gs_llvm_variant_key *key = spec_key;
+
+   if (llvm->context.mutex)
+      simple_mtx_lock(llvm->context.mutex);
+   struct draw_gs_llvm_variant *variant =
+      draw_gs_llvm_create_variant(llvm, draw_total_gs_outputs(llvm->draw), key);
+   if (llvm->context.mutex)
+      simple_mtx_unlock(llvm->context.mutex);
+
+   return variant ? &variant->base : NULL;
+}
+
+static void
+gs_destroy_cb(struct util_shader_variant *base)
+{
+   draw_gs_llvm_destroy_variant(container_of(base, struct draw_gs_llvm_variant, base));
 }
 
 
@@ -3169,7 +3228,7 @@ draw_tcs_llvm_generate(struct draw_llvm *llvm,
 }
 
 
-struct draw_tcs_llvm_variant *
+static struct draw_tcs_llvm_variant *
 draw_tcs_llvm_create_variant(struct draw_llvm *llvm,
                              unsigned num_outputs,
                              const struct draw_tcs_llvm_variant_key *key)
@@ -3186,11 +3245,10 @@ draw_tcs_llvm_create_variant(struct draw_llvm *llvm,
    if (!variant)
       return NULL;
 
-   variant->llvm = llvm;
    variant->shader = shader;
 
    snprintf(module_name, sizeof(module_name), "draw_llvm_tcs_variant%u",
-            variant->shader->variants_cached);
+            variant->shader->variants_created);
 
    memcpy(&variant->key, key, shader->variant_key_size);
 
@@ -3230,33 +3288,43 @@ draw_tcs_llvm_create_variant(struct draw_llvm *llvm,
                                            ir_blake3_cache_key);
    gallivm_free_ir(variant->gallivm);
 
-   variant->list_item_global.base = variant;
-   variant->list_item_local.base = variant;
-   /*variant->no = */shader->variants_created++;
-   variant->list_item_global.base = variant;
+   shader->variants_created++;
 
    return variant;
 }
 
 
-void
+static void
 draw_tcs_llvm_destroy_variant(struct draw_tcs_llvm_variant *variant)
 {
-   struct draw_llvm *llvm = variant->llvm;
-
-   if (gallivm_debug & (GALLIVM_DEBUG_TGSI | GALLIVM_DEBUG_IR)) {
-      debug_printf("Deleting TCS variant: %u tcs variants,\t%u total variants\n",
-                    variant->shader->variants_cached, llvm->nr_tcs_variants);
-   }
+   if (gallivm_debug & (GALLIVM_DEBUG_TGSI | GALLIVM_DEBUG_IR))
+      debug_printf("Deleting TCS variant\n");
 
    gallivm_destroy(variant->gallivm);
-
-   list_del(&variant->list_item_local.list);
-   variant->shader->variants_cached--;
-   list_del(&variant->list_item_global.list);
-   llvm->nr_tcs_variants--;
    FREE(variant->function_name);
    FREE(variant);
+}
+
+static struct util_shader_variant *
+tcs_compile_cb(void *user_data, UNUSED void *cso, const void *spec_key)
+{
+   struct draw_llvm *llvm = user_data;
+   const struct draw_tcs_llvm_variant_key *key = spec_key;
+
+   if (llvm->context.mutex)
+      simple_mtx_lock(llvm->context.mutex);
+   struct draw_tcs_llvm_variant *variant =
+      draw_tcs_llvm_create_variant(llvm, 0, key);
+   if (llvm->context.mutex)
+      simple_mtx_unlock(llvm->context.mutex);
+
+   return variant ? &variant->base : NULL;
+}
+
+static void
+tcs_destroy_cb(struct util_shader_variant *base)
+{
+   draw_tcs_llvm_destroy_variant(container_of(base, struct draw_tcs_llvm_variant, base));
 }
 
 
@@ -3707,7 +3775,7 @@ draw_tes_llvm_generate(struct draw_llvm *llvm,
 }
 
 
-struct draw_tes_llvm_variant *
+static struct draw_tes_llvm_variant *
 draw_tes_llvm_create_variant(struct draw_llvm *llvm,
                              unsigned num_outputs,
                              const struct draw_tes_llvm_variant_key *key)
@@ -3724,11 +3792,10 @@ draw_tes_llvm_create_variant(struct draw_llvm *llvm,
    if (!variant)
       return NULL;
 
-   variant->llvm = llvm;
    variant->shader = shader;
 
    snprintf(module_name, sizeof(module_name), "draw_llvm_tes_variant%u",
-            variant->shader->variants_cached);
+            variant->shader->variants_created);
 
    memcpy(&variant->key, key, shader->variant_key_size);
    if (shader->base.state.ir.nir && llvm->draw->disk_cache_cookie) {
@@ -3769,33 +3836,43 @@ draw_tes_llvm_create_variant(struct draw_llvm *llvm,
                                            ir_blake3_cache_key);
    gallivm_free_ir(variant->gallivm);
 
-   variant->list_item_global.base = variant;
-   variant->list_item_local.base = variant;
-   /*variant->no = */shader->variants_created++;
-   variant->list_item_global.base = variant;
+   shader->variants_created++;
 
    return variant;
 }
 
 
-void
+static void
 draw_tes_llvm_destroy_variant(struct draw_tes_llvm_variant *variant)
 {
-   struct draw_llvm *llvm = variant->llvm;
-
-   if (gallivm_debug & (GALLIVM_DEBUG_TGSI | GALLIVM_DEBUG_IR)) {
-      debug_printf("Deleting TES variant: %u tes variants,\t%u total variants\n",
-                    variant->shader->variants_cached, llvm->nr_tes_variants);
-   }
+   if (gallivm_debug & (GALLIVM_DEBUG_TGSI | GALLIVM_DEBUG_IR))
+      debug_printf("Deleting TES variant\n");
 
    gallivm_destroy(variant->gallivm);
-
-   list_del(&variant->list_item_local.list);
-   variant->shader->variants_cached--;
-   list_del(&variant->list_item_global.list);
-   llvm->nr_tes_variants--;
    FREE(variant->function_name);
    FREE(variant);
+}
+
+static struct util_shader_variant *
+tes_compile_cb(void *user_data, UNUSED void *cso, const void *spec_key)
+{
+   struct draw_llvm *llvm = user_data;
+   const struct draw_tes_llvm_variant_key *key = spec_key;
+
+   if (llvm->context.mutex)
+      simple_mtx_lock(llvm->context.mutex);
+   struct draw_tes_llvm_variant *variant =
+      draw_tes_llvm_create_variant(llvm, draw_total_tes_outputs(llvm->draw), key);
+   if (llvm->context.mutex)
+      simple_mtx_unlock(llvm->context.mutex);
+
+   return variant ? &variant->base : NULL;
+}
+
+static void
+tes_destroy_cb(struct util_shader_variant *base)
+{
+   draw_tes_llvm_destroy_variant(container_of(base, struct draw_tes_llvm_variant, base));
 }
 
 

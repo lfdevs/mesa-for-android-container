@@ -91,12 +91,45 @@ tcs_load_input(nir_builder *b, nir_intrinsic_instr *intr)
 }
 
 static nir_def *
-lower_tcs_impl(nir_builder *b, nir_intrinsic_instr *intr)
+lower_tcs_impl(nir_builder *b, nir_intrinsic_instr *intr,
+               bool can_ignore_shader_out_barriers)
 {
    switch (intr->intrinsic) {
-   case nir_intrinsic_barrier:
-      /* A patch fits in a subgroup, so the barrier is unnecessary. */
+   case nir_intrinsic_barrier: {
+      /* We lowered the TCS outputs from shader_out to global memory,
+       * preserve barriers if they don't target shader outputs or modify their
+       * execution/memory scopes and modes accordingly to match subgroups since
+       * a patch fits in a subgroup. */
+      nir_variable_mode modes = nir_intrinsic_memory_modes(intr);
+
+      /* Skip barriers that don't handle shader outputs */
+      if (!(modes & nir_var_shader_out))
+         return NULL;
+
+      modes &= ~nir_var_shader_out;
+
+      /* A barrier that only targeted shader outputs can be dropped entirely by
+       * drivers that don't need it. */
+      if (can_ignore_shader_out_barriers && !modes)
+         return NIR_LOWER_INSTR_PROGRESS_REPLACE;
+
+      /* Keep the original scopes while the barrier still targets other modes;
+       * otherwise a subgroup scope suffices since a patch fits in a subgroup.
+       * Drivers that can't ignore the shader-output barrier must preserve it
+       * against the lowered global memory. */
+      mesa_scope execution_scope =
+         modes ? nir_intrinsic_execution_scope(intr) : SCOPE_SUBGROUP;
+      mesa_scope memory_scope =
+         modes ? nir_intrinsic_memory_scope(intr) : SCOPE_SUBGROUP;
+      if (!can_ignore_shader_out_barriers)
+         modes |= nir_var_mem_global;
+
+      nir_barrier(b, .execution_scope = execution_scope,
+                  .memory_scope = memory_scope,
+                  .memory_semantics = nir_intrinsic_memory_semantics(intr),
+                  .memory_modes = modes);
       return NIR_LOWER_INSTR_PROGRESS_REPLACE;
+   }
 
    case nir_intrinsic_load_primitive_id:
       return nir_channel(b, nir_load_workgroup_id(b), 0);
@@ -165,7 +198,7 @@ lower_tcs(nir_builder *b, nir_intrinsic_instr *intr, void *data)
 {
    b->cursor = nir_before_instr(&intr->instr);
 
-   nir_def *repl = lower_tcs_impl(b, intr);
+   nir_def *repl = lower_tcs_impl(b, intr, !!(uintptr_t)data);
    if (!repl)
       return false;
 
@@ -177,10 +210,11 @@ lower_tcs(nir_builder *b, nir_intrinsic_instr *intr, void *data)
 }
 
 bool
-poly_nir_lower_tcs(nir_shader *tcs)
+poly_nir_lower_tcs(nir_shader *tcs, bool can_ignore_shader_out_barriers)
 {
-   return nir_shader_intrinsics_pass(tcs, lower_tcs, nir_metadata_control_flow,
-                                     NULL);
+   return nir_shader_intrinsics_pass(
+      tcs, lower_tcs, nir_metadata_control_flow,
+      (void *)(uintptr_t)can_ignore_shader_out_barriers);
 }
 
 static nir_def *

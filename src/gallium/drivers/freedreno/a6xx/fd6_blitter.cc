@@ -298,7 +298,7 @@ static void
 emit_blit_setup(fd_ncrb<CHIP> &ncrb, enum pipe_format pfmt,
                 bool scissor_enable, union pipe_color_union *color,
                 BITMASK_ENUM(fd_buffer_mask) buffers,
-                enum a6xx_rotation rotate)
+                enum a6xx_rotation rotate, bool src_half=false)
 {
    enum a6xx_format fmt = fd6_color_format(pfmt, TILE6_LINEAR);
    bool is_srgb = util_format_is_srgb(pfmt);
@@ -342,6 +342,7 @@ emit_blit_setup(fd_ncrb<CHIP> &ncrb, enum pipe_format pfmt,
     * that. It's certainly not tied to only the src format.
     */
    ncrb.add(SP_A2D_OUTPUT_INFO(CHIP,
+      .half_precision = src_half,
       .ifmt_type = output_ifmt_type,
       .color_format = fmt,
       .srgb = is_srgb,
@@ -738,8 +739,11 @@ emit_blit_texture_setup(fd_cs &cs, const struct pipe_blit_info *info)
       ));
    }
 
+   bool src_half_precision = util_format_is_float16(info->src.format) ||
+                             (info->src.format == PIPE_FORMAT_R11G11B10_FLOAT);
+
    emit_blit_setup<CHIP>(ncrb, info->dst.format, info->scissor_enable, NULL,
-                         FD_BUFFER_ALL, rotate);
+                         FD_BUFFER_ALL, rotate, src_half_precision);
 }
 
 template <chip CHIP>
@@ -900,6 +904,10 @@ convert_color(enum pipe_format format, union pipe_color_union *pcolor)
          continue;
 
       if (desc->channel[channel].normalized)
+         continue;
+
+      /* No clamping needed for 32b formats: */
+      if (desc->channel[channel].size == 32)
          continue;
 
       switch (desc->channel[channel].type) {
@@ -1523,24 +1531,19 @@ handle_compressed_blit(struct fd_context *ctx,
    return do_rewritten_blit<CHIP>(ctx, &blit);
 }
 
-/**
- * For SNORM formats, copy them as the equivalent UNORM format.  If we treat
- * them as snorm then the 0x80 (-1.0 snorm8) value will get clamped to 0x81
- * (also -1.0), when we're supposed to be memcpying the bits. See
- * https://gitlab.khronos.org/Tracker/vk-gl-cts/-/issues/2917 for discussion.
- */
 template <chip CHIP>
 static bool
-handle_snorm_copy_blit(struct fd_context *ctx,
-                       const struct pipe_blit_info *info)
+handle_override_blit(struct fd_context *ctx,
+                     const struct pipe_blit_info *info,
+                     enum pipe_format override_format)
    assert_dt
 {
-   /* If we're interpolating the pixels, we can't just treat the values as unorm. */
+   /* If we're interpolating the pixels, we can't fake the format. */
    fail_if(info->filter == PIPE_TEX_FILTER_LINEAR);
 
    struct pipe_blit_info blit = *info;
 
-   blit.src.format = blit.dst.format = util_format_snorm_to_unorm(info->src.format);
+   blit.src.format = blit.dst.format = override_format;
 
    return handle_rgba_blit<CHIP>(ctx, &blit);
 }
@@ -1549,6 +1552,8 @@ template <chip CHIP>
 static bool
 fd6_blit(struct fd_context *ctx, const struct pipe_blit_info *info) assert_dt
 {
+   fail_if(info->render_condition_enable && ctx->cond_query);
+
    if (info->mask & PIPE_MASK_ZS)
       return handle_zs_blit<CHIP>(ctx, info);
 
@@ -1556,9 +1561,24 @@ fd6_blit(struct fd_context *ctx, const struct pipe_blit_info *info) assert_dt
        util_format_is_compressed(info->dst.format))
       return handle_compressed_blit<CHIP>(ctx, info);
 
-   if ((info->src.format == info->dst.format) &&
-       util_format_is_snorm(info->src.format))
-      return handle_snorm_copy_blit<CHIP>(ctx, info);
+   if (info->src.format == info->dst.format) {
+      enum pipe_format override_format = PIPE_FORMAT_NONE;
+
+      /**
+       * For SNORM formats, copy them as the equivalent UNORM format.  If we treat
+       * them as snorm then the 0x80 (-1.0 snorm8) value will get clamped to 0x81
+       * (also -1.0), when we're supposed to be memcpying the bits. See
+       * https://gitlab.khronos.org/Tracker/vk-gl-cts/-/issues/2917 for discussion.
+       */
+      if (util_format_is_snorm(info->src.format)) {
+         override_format = util_format_snorm_to_unorm(info->src.format);
+      } else if (info->src.format == PIPE_FORMAT_R9G9B9E5_FLOAT) {
+         override_format = PIPE_FORMAT_R32_UINT;
+      }
+
+      if (override_format != PIPE_FORMAT_NONE)
+         return handle_override_blit<CHIP>(ctx, info, override_format);
+   }
 
    return handle_rgba_blit<CHIP>(ctx, info);
 }

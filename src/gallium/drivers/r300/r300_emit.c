@@ -705,12 +705,18 @@ void r300_emit_query_start(struct r300_context *r300, unsigned size, void*state)
     }
 
     if (use_dummy_z) {
+        unsigned depthpitch = 4 | R300_DEPTHMICROTILE_TILED_SQUARE;
+
+#if UTIL_ARCH_BIG_ENDIAN
+        depthpitch |= R300_DEPTHENDIAN(R300_SURF_DWORD_SWAP);
+#endif
+
         OUT_CS_REG(R300_ZB_FORMAT, R300_DEPTHFORMAT_16BIT_INT_Z);
 
         OUT_CS_REG(R300_ZB_DEPTHOFFSET, 0);
         OUT_CS_RELOC(surf);
 
-        OUT_CS_REG(R300_ZB_DEPTHPITCH, 4 | R300_DEPTHMICROTILE_TILED_SQUARE);
+        OUT_CS_REG(R300_ZB_DEPTHPITCH, depthpitch);
         OUT_CS_RELOC(surf);
     }
 

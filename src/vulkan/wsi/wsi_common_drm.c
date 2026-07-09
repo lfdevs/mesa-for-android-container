@@ -627,6 +627,8 @@ wsi_configure_native_image(const struct wsi_swapchain *chain,
        */
       info->modifier_prop_count = 0;
       for (uint32_t i = 0; i < modifier_props_list.drmFormatModifierCount; i++) {
+         const VkImageUsageFlags2KHR image_usage = vk_swapchain_usage_flags(pCreateInfo);
+
          VkPhysicalDeviceImageDrmFormatModifierInfoEXT mod_info = {
             .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_DRM_FORMAT_MODIFIER_INFO_EXT,
             .drmFormatModifier = info->modifier_props[i].drmFormatModifier,
@@ -639,15 +641,30 @@ wsi_configure_native_image(const struct wsi_swapchain *chain,
             .format = pCreateInfo->imageFormat,
             .type = VK_IMAGE_TYPE_2D,
             .tiling = VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT,
-            .usage = pCreateInfo->imageUsage,
+            .usage = image_usage,
             .flags = info->create.flags,
          };
+
+         VkImageUsageFlags2CreateInfoKHR usage2_create_info = {
+            .sType = VK_STRUCTURE_TYPE_IMAGE_USAGE_FLAGS_2_CREATE_INFO_KHR,
+            .usage = image_usage,
+         };
+
+         __vk_append_struct(&format_info, &usage2_create_info);
 
          VkImageFormatListCreateInfo format_list;
          if (info->create.flags & VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT) {
             format_list = info->format_list;
             format_list.pNext = NULL;
             __vk_append_struct(&format_info, &format_list);
+         }
+
+         VkImageCompressionControlEXT img_compr_ctrl;
+         if (info->img_compr_ctrl.sType ==
+             VK_STRUCTURE_TYPE_IMAGE_COMPRESSION_CONTROL_EXT) {
+            img_compr_ctrl = info->img_compr_ctrl;
+            img_compr_ctrl.pNext = NULL;
+            __vk_append_struct(&format_info, &img_compr_ctrl);
          }
 
          struct wsi_image_create_info wsi_info = (struct wsi_image_create_info) {

@@ -23,7 +23,9 @@
 
 #version 460
 
-#include "vk_build_interface.h"
+#include "vk_bvh_defines.h"
+#define VK_USED_BUILD_FLAGS VK_MORTON_BUILD_FLAGS
+#include "vk_bvh_helpers.h"
 
 layout(local_size_x_id = SUBGROUP_SIZE_ID, local_size_y = 1, local_size_z = 1) in;
 
@@ -82,7 +84,7 @@ main(void)
    uint32_t global_id = gl_GlobalInvocationID.x;
 
    uint32_t id;
-   if (VK_BUILD_FLAG(VK_BUILD_FLAG_64BIT_KEYS))
+   if (VK_TEST_BUILD_FLAG_64BIT_KEYS)
       id = DEREF(INDEX(key64_id_pair, args.ids, global_id)).id;
    else
       id = DEREF(INDEX(key32_id_pair, args.ids, global_id)).id;
@@ -103,7 +105,7 @@ main(void)
 
       vec3 normalized_center = (center - bvh_bounds.min) / (bvh_bounds.max - bvh_bounds.min);
 
-      if (VK_BUILD_FLAG(VK_BUILD_FLAG_64BIT_KEYS))
+      if (VK_TEST_BUILD_FLAG_64BIT_KEYS)
          key64 = lbvh_key64(normalized_center.x, normalized_center.y, normalized_center.z);
       else
          key = lbvh_key(normalized_center.x, normalized_center.y, normalized_center.z);
@@ -114,7 +116,7 @@ main(void)
       key = 0xFFFFFFFFu;
       key64 = 0xFFFFFFFFFFFFFFFFul;
    }
-   if (VK_BUILD_FLAG(VK_BUILD_FLAG_64BIT_KEYS)) {
+   if (VK_TEST_BUILD_FLAG_64BIT_KEYS) {
       REF(key64_id_pair) key_id = INDEX(key64_id_pair, args.ids, global_id);
       DEREF(key_id).key_lo = unpackUint2x32(key64).x;
       DEREF(key_id).key_hi = unpackUint2x32(key64).y;

@@ -57,7 +57,8 @@ gather_fs_info(nir_builder *b, nir_intrinsic_instr *intr, void *data)
    case nir_intrinsic_load_barycentric_pixel:
    case nir_intrinsic_load_barycentric_centroid:
    case nir_intrinsic_load_barycentric_sample:
-      ctx->interp_modes |= BITFIELD_BIT(brw_barycentric_mode(ctx->prog_data, intr));
+      ctx->interp_modes |=
+         BITFIELD_BIT(brw_barycentric_mode(ctx->prog_data, intr));
       break;
 
    case nir_intrinsic_load_barycentric_at_sample:
@@ -70,7 +71,7 @@ gather_fs_info(nir_builder *b, nir_intrinsic_instr *intr, void *data)
       prog_data->uses_src_depth = true;
       break;
 
-   case nir_intrinsic_load_frag_coord_w_rcp:
+   case nir_intrinsic_load_frag_coord_w:
       prog_data->uses_src_w = true;
       break;
 
@@ -78,7 +79,7 @@ gather_fs_info(nir_builder *b, nir_intrinsic_instr *intr, void *data)
       prog_data->uses_sample_mask = true;
       break;
 
-   case nir_intrinsic_load_pixel_coord_intel:
+   case nir_intrinsic_load_pixel_coord:
       prog_data->uses_src_xy = true;
       break;
 
@@ -317,6 +318,7 @@ populate_fs_prog_data(nir_shader *shader,
    if (devinfo->ver < 20)
       ctx.interp_modes |= ctx.offset_interp_modes;
 
+   prog_data->barycentric_interp_modes |= ctx.interp_modes;
    const bool sample_shading = shader->info.fs.uses_sample_shading;
    prog_data->persample_interp = sample_shading || key->persample_interp;
 
@@ -330,10 +332,9 @@ populate_fs_prog_data(nir_shader *shader,
    const bool interp_at_pixel_and_sample =
       (ctx.interp_modes & interp_at_pixel_and_sample_bits) ==
       interp_at_pixel_and_sample_bits;
-   prog_data->persample_dispatch =
-      ((prog_data->persample_interp && key->multisample_fbo >= INTEL_SOMETIMES) ||
-       interp_at_pixel_and_sample) ?
-      INTEL_ALWAYS : INTEL_NEVER;
+   prog_data->persample_dispatch = (prog_data->persample_interp &&
+                                    key->multisample_fbo >= INTEL_SOMETIMES) ||
+                                   interp_at_pixel_and_sample;
 
    /* Move sample barycentric modes to pixel when persample dispatch is always
     * disabled.
@@ -341,10 +342,8 @@ populate_fs_prog_data(nir_shader *shader,
    {
       unsigned tmp = 0;
       u_foreach_bit(b, ctx.interp_modes) {
-         tmp |= BITFIELD_BIT(
-            intel_fs_barycentric_mode_for_persample_dispatch(
-               prog_data->persample_dispatch,
-               (enum intel_barycentric_mode) b));
+         tmp |= BITFIELD_BIT(intel_fs_barycentric_mode_for_persample_dispatch(
+            prog_data->persample_dispatch, (enum intel_barycentric_mode) b));
       }
       ctx.interp_modes = tmp;
    }
@@ -382,7 +381,7 @@ populate_fs_prog_data(nir_shader *shader,
     * persample dispatch, we hard-code it to 0.5.
     */
    prog_data->uses_pos_offset =
-      prog_data->persample_dispatch != INTEL_NEVER &&
+      prog_data->persample_dispatch &&
       (BITSET_TEST(shader->info.system_values_read, SYSTEM_VALUE_SAMPLE_POS) ||
        BITSET_TEST(shader->info.system_values_read,
                    SYSTEM_VALUE_SAMPLE_POS_OR_CENTER));
@@ -400,8 +399,9 @@ populate_fs_prog_data(nir_shader *shader,
       prog_data->uses_pc_bary_coefficients =
          ctx.offset_interp_modes & ~INTEL_BARYCENTRIC_NONPERSPECTIVE_BITS;
       prog_data->uses_sample_offsets =
-         ctx.offset_interp_modes & ((1 << INTEL_BARYCENTRIC_PERSPECTIVE_SAMPLE) |
-                                    (1 << INTEL_BARYCENTRIC_NONPERSPECTIVE_SAMPLE));
+         ctx.offset_interp_modes &
+         ((1 << INTEL_BARYCENTRIC_PERSPECTIVE_SAMPLE) |
+          (1 << INTEL_BARYCENTRIC_NONPERSPECTIVE_SAMPLE));
    }
 
    prog_data->uses_nonperspective_interp_modes =
@@ -415,8 +415,7 @@ populate_fs_prog_data(nir_shader *shader,
     */
    assert(!key->coarse_pixel || !key->persample_interp);
 
-   prog_data->coarse_pixel_dispatch =
-      intel_sometimes_invert(prog_data->persample_dispatch);
+   prog_data->coarse_pixel_dispatch = !prog_data->persample_dispatch;
    if (!key->coarse_pixel ||
        /* DG2 should support this, but Wa_22012766191 says there are issues
         * with CPS 1x1 + MSAA + FS writing to oMask.
@@ -427,7 +426,7 @@ populate_fs_prog_data(nir_shader *shader,
        (prog_data->computed_depth_mode != BRW_PSCDEPTH_OFF) ||
        prog_data->computed_stencil ||
        devinfo->ver < 11) {
-      prog_data->coarse_pixel_dispatch = INTEL_NEVER;
+      prog_data->coarse_pixel_dispatch = false;
    }
 
    /* ICL PRMs, Volume 9: Render Engine, Shared Functions Pixel Interpolater,
@@ -457,7 +456,7 @@ populate_fs_prog_data(nir_shader *shader,
     * interpolater message at sample.
     */
    if (intel_nir_pulls_at_sample(shader))
-      prog_data->coarse_pixel_dispatch = INTEL_NEVER;
+      prog_data->coarse_pixel_dispatch = false;
 
    /* We choose to always enable VMask prior to XeHP, as it would cause
     * us to lose out on the eliminate_find_live_channel() optimization.
@@ -466,12 +465,11 @@ populate_fs_prog_data(nir_shader *shader,
       devinfo->verx10 < 125 ||
       shader->info.fs.needs_coarse_quad_helper_invocations ||
       shader->info.uses_wide_subgroup_intrinsics ||
-      prog_data->coarse_pixel_dispatch != INTEL_NEVER;
+      prog_data->coarse_pixel_dispatch;
 
    prog_data->uses_depth_w_coefficients = prog_data->uses_pc_bary_coefficients;
 
-   if (prog_data->coarse_pixel_dispatch != INTEL_NEVER) {
-      assert(false && "TODO: coarse pixel shading");
+   if (prog_data->coarse_pixel_dispatch) {
       prog_data->uses_depth_w_coefficients |= prog_data->uses_src_depth;
       prog_data->uses_src_depth = false;
    }
@@ -544,6 +542,25 @@ populate_vs_prog_data(nir_shader *nir,
    prog_data->base.dispatch_mode = INTEL_DISPATCH_MODE_SIMD8;
 }
 
+static void
+populate_tcs_prog_data(nir_shader *nir,
+                       const struct brw_tcs_prog_key *key,
+                       struct brw_tcs_prog_data *prog_data)
+{
+   brw_fill_tess_info_from_shader_info(&prog_data->tess_info, &nir->info);
+
+   prog_data->input_vertices = key->input_vertices;
+   prog_data->output_vertices = nir->info.tess.tcs_vertices_out;
+
+   prog_data->instances = nir->info.tess.tcs_vertices_out;
+   prog_data->include_primitive_id =
+      BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_PRIMITIVE_ID);
+   prog_data->base.dispatch_mode = INTEL_DISPATCH_MODE_TCS_MULTI_PATCH;
+
+   /* We don't use push inputs for TCS. */
+   prog_data->base.urb_read_length = 0;
+}
+
 void
 jay_populate_prog_data(const struct intel_device_info *devinfo,
                        nir_shader *nir,
@@ -554,6 +571,8 @@ jay_populate_prog_data(const struct intel_device_info *devinfo,
    if (nir->info.stage == MESA_SHADER_VERTEX) {
       populate_vs_prog_data(nir, devinfo, &key->vs, &prog_data->vs,
                             nr_packed_regs);
+   } else if (nir->info.stage == MESA_SHADER_TESS_CTRL) {
+      populate_tcs_prog_data(nir, &key->tcs, &prog_data->tcs);
    } else if (nir->info.stage == MESA_SHADER_FRAGMENT) {
       int per_primitive_offsets[VARYING_SLOT_MAX];
       memset(per_primitive_offsets, -1, sizeof(per_primitive_offsets));

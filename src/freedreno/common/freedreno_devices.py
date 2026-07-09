@@ -264,11 +264,28 @@ a6xx_gen4 = GPUProps(
         round_robin_errata = True,
     )
 
+a6xx_gen1_low_magic_regs = dict(
+        RB_DBG_ECO_CNTL = 0x04100000,
+        RB_DBG_ECO_CNTL_blit = 0x04100000,
+        RB_RBP_CNTL = 0x00000001,
+    )
+
+a6xx_gen1_low_raw_magic_regs = [
+        [A6XXRegs.REG_A6XX_PC_MODE_CNTL, 0xf],
+        [A6XXRegs.REG_A6XX_PC_POWER_CNTL, 0],
+        [A6XXRegs.REG_A6XX_VFD_POWER_CNTL, 0],
+        [A6XXRegs.REG_A6XX_TPL1_DBG_ECO_CNTL, 0],
+        [A6XXRegs.REG_A6XX_GRAS_DBG_ECO_CNTL, 0],
+        [A6XXRegs.REG_A6XX_SP_CHICKEN_BITS, 0],
+        [A6XXRegs.REG_A6XX_SP_DBG_ECO_CNTL, 0],
+        [A6XXRegs.REG_A6XX_HLSQ_DBG_ECO_CNTL, 0],
+        [A6XXRegs.REG_A6XX_VPC_DBG_ECO_CNTL, 0],
+        [A6XXRegs.REG_A6XX_UCHE_UNKNOWN_0E12, 0x10000000],
+    ]
+
 add_gpus([
         GPUId(605), # TODO: Test it, based only on libwrapfake dumps
-        GPUId(608), # TODO: Test it, based only on libwrapfake dumps
         GPUId(610),
-        GPUId(612), # TODO: Test it, based only on libwrapfake dumps
     ], A6xxGPUInfo(
         CHIP.A6XX,
         [a6xx_base, a6xx_gen1_low],
@@ -284,23 +301,30 @@ add_gpus([
         highest_bank_bit = 13,
         ubwc_swizzle = 0x7,
         macrotile_mode = 0,
-        magic_regs = dict(
-            RB_DBG_ECO_CNTL = 0x04100000,
-            RB_DBG_ECO_CNTL_blit = 0x04100000,
-            RB_RBP_CNTL = 0x00000001,
-        ),
-        raw_magic_regs = [
-            [A6XXRegs.REG_A6XX_PC_MODE_CNTL, 0xf],
-            [A6XXRegs.REG_A6XX_PC_POWER_CNTL, 0],
-            [A6XXRegs.REG_A6XX_VFD_POWER_CNTL, 0],
-            [A6XXRegs.REG_A6XX_TPL1_DBG_ECO_CNTL, 0],
-            [A6XXRegs.REG_A6XX_GRAS_DBG_ECO_CNTL, 0],
-            [A6XXRegs.REG_A6XX_SP_CHICKEN_BITS, 0],
-            [A6XXRegs.REG_A6XX_SP_DBG_ECO_CNTL, 0],
-            [A6XXRegs.REG_A6XX_HLSQ_DBG_ECO_CNTL, 0],
-            [A6XXRegs.REG_A6XX_VPC_DBG_ECO_CNTL, 0],
-            [A6XXRegs.REG_A6XX_UCHE_UNKNOWN_0E12, 0x10000000],
-        ],
+        magic_regs = a6xx_gen1_low_magic_regs,
+        raw_magic_regs = a6xx_gen1_low_raw_magic_regs,
+    ))
+
+add_gpus([
+        GPUId(608),
+        GPUId(612),
+    ], A6xxGPUInfo(
+        CHIP.A6XX,
+        [a6xx_base, a6xx_gen1_low, GPUProps(reg_size_vec4 = 32)],
+        num_ccu = 1,
+        tile_align_w = 32,
+        tile_align_h = 16,
+        tile_max_w = 1024,
+        tile_max_h = 1024,
+        num_vsc_pipes = 16,
+        cs_shared_mem_size = 16 * 1024,
+        wave_granularity = 1,
+        fibers_per_sp = 128 * 16,
+        highest_bank_bit = 13,
+        ubwc_swizzle = 0x7,
+        macrotile_mode = 0,
+        magic_regs = a6xx_gen1_low_magic_regs,
+        raw_magic_regs = a6xx_gen1_low_raw_magic_regs,
     ))
 
 add_gpus([

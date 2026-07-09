@@ -44,7 +44,9 @@ lower_contiguous_sources(jay_builder *b, jay_inst *I)
             } else {
                /* Insert a copy to access a duplicated index */
                jay_def copy = jay_alloc_def(b, I->src[s].file, 1);
-               jay_MOV(b, copy, jay_extract(I->src[s], c));
+               jay_def x = jay_extract(I->src[s], c);
+               x.negate = x.abs = false; /* XXX: rework modifiers */
+               jay_MOV(b, copy, x);
                jay_insert_channel(b, &I->src[s], c, copy);
             }
          }
@@ -134,7 +136,7 @@ lower_immediates(jay_builder *b, jay_inst *I, struct hash_table_u64 *constants)
    /* One source supports immediates but the other does not, so swap. */
    unsigned nr_srcs = jay_num_isa_srcs(I);
    unsigned other = nr_srcs == 2 ? 0 : 1;
-   if (jay_is_imm(I->src[other]) &&
+   if ((other < I->num_srcs && jay_is_imm(I->src[other])) &&
        !_mesa_hash_table_u64_search(constants, jay_as_uint(I->src[other]))) {
 
       try_swap_src01(I);
@@ -182,6 +184,24 @@ lower_immediates(jay_builder *b, jay_inst *I, struct hash_table_u64 *constants)
    }
 }
 
+static void
+lower_bf16_restrictions(jay_inst *I, jay_function *f)
+{
+   /* BSpec 56640 disallows broadcast of bfloat16 scalar.
+    * Insert a MOV to eliminate bfloat scalar broadcast.
+    */
+   jay_foreach_src(I, s) {
+      bool is_bf16 = jay_src_type(I, s) == JAY_TYPE_BF16;
+      bool is_broadcast = I->src[s].file == UGPR;
+      if (is_bf16 && is_broadcast && I->dst.file != UGPR) {
+         jay_builder b = jay_init_builder(f, jay_before_inst(I));
+         jay_def tmp = jay_alloc_def(&b, GPR, 1);
+         jay_MOV(&b, tmp, I->src[s]);
+         jay_replace_src(&I->src[s], tmp);
+      }
+   }
+}
+
 void
 jay_lower_pre_ra(jay_shader *s)
 {
@@ -202,6 +222,8 @@ jay_lower_pre_ra(jay_shader *s)
 
          jay_foreach_inst_in_block(block, I) {
             jay_builder b = { .shader = s, .func = f };
+
+            lower_bf16_restrictions(I, f);
 
             /* Shuffle(UGPR) can result from copyprop if there's a mismatch
              * between isel and divergence analysis (e.g. because multipolygon

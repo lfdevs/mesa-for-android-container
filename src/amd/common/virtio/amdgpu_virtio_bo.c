@@ -79,7 +79,7 @@ alloc_host_blob(amdvgpu_bo_handle bo,
 
       /* Create the host blob requires 2 steps. First create the host blob... */
       kms_handle = vdrm_bo_create(bo->dev->vdev, req->r.alloc_size, blob_flags,
-                                  req->blob_id, &req->hdr);
+                                  req->blob_id, 0, &req->hdr);
 
       /* 0 is an invalid handle and is used by vdrm_bo_create to signal an error. */
       if (kms_handle == 0)

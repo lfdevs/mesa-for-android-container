@@ -89,7 +89,7 @@ agx_virtio_bo_alloc(struct agx_device *dev, size_t size, size_t align,
    req.blob_id = blob_id;
    req.vm_id = dev->vm_id;
 
-   handle = vdrm_bo_create(dev->vdrm, size, blob_flags, blob_id, &req.hdr);
+   handle = vdrm_bo_create(dev->vdrm, size, blob_flags, blob_id, 0, &req.hdr);
    if (!handle) {
       fprintf(stderr, "vdrm_bo_created failed\n");
       return NULL;

@@ -1,0 +1,36 @@
+From 9bcf7a439c75d720df3c4a04b3bf43bddbed9ea4 Mon Sep 17 00:00:00 2001
+From: Samuel Pitoiset <samuel.pitoiset@gmail.com>
+Date: Wed, 1 Jul 2026 14:05:21 +0200
+Subject: [PATCH 3/4] Fix a memory leak with the texture image sample tests
+
+This has been detected by ASAN.
+
+Components: OpenGL
+
+Affected: KHR-GL46.shader_texture_image_samples_tests.*
+Change-Id: If6daef239ab697ff3ec0d20036e48d932b54602a
+---
+ .../modules/gl/gl4cShaderTextureImageSamplesTests.cpp      | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/external/openglcts/modules/gl/gl4cShaderTextureImageSamplesTests.cpp b/external/openglcts/modules/gl/gl4cShaderTextureImageSamplesTests.cpp
+index 95fd78401..f6a67178e 100644
+--- a/external/openglcts/modules/gl/gl4cShaderTextureImageSamplesTests.cpp
++++ b/external/openglcts/modules/gl/gl4cShaderTextureImageSamplesTests.cpp
+@@ -462,6 +462,13 @@ void ShaderTextureImageSamplesTestBase::executeFunctionalTest(const _sampler_typ
+         TCU_FAIL("Invalid value returned by glGetInternalformativ() for a GL_NUM_SAMPLE_COUNTS query");
+     }
+ 
++    if (m_internalformat_n_samples_data != nullptr)
++    {
++        delete[] m_internalformat_n_samples_data;
++
++        m_internalformat_n_samples_data = nullptr;
++    }
++
+     m_internalformat_n_samples_data = new glw::GLint[m_internalformat_n_samples_count];
+ 
+     gl.getInternalformativ(texture_target, texture_internalformat, GL_SAMPLES, m_internalformat_n_samples_count,
+-- 
+2.54.0
+

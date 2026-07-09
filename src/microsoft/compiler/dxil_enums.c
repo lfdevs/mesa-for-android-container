@@ -188,6 +188,6 @@ static const char *overload_str[DXIL_NUM_OVERLOADS] = {
 
 const char *dxil_overload_suffix( enum overload_type overload)
 {
-   assert(overload < DXIL_NUM_OVERLOADS);
-   return overload_str[overload];
+   assert((unsigned)overload < DXIL_NUM_OVERLOADS);
+   return overload_str[(unsigned)overload];
 }

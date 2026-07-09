@@ -254,6 +254,29 @@ gen_element_offset(const struct intel_device_info *devinfo,
    return gen_byte_offset(devinfo, op, delta * gen_type_size_bytes(op.type));
 }
 
+/*
+ * Return the stride between channels of the specified register in
+ * byte units, or ~0u if the region cannot be represented with a
+ * single one-dimensional stride.
+ */
+static inline unsigned
+gen_byte_stride(gen_operand op)
+{
+   if (op.file == GEN_ARF && op.nr == GEN_ARF_NULL)
+      return 4; /* brw_null_reg() uses type F with <8;8,1> */
+
+   if (op.file == GEN_IMM)
+      return 0;
+
+   if (op.region.width == 1) {
+      return op.region.vstride * gen_type_size_bytes(op.type);
+   } else if (op.region.hstride * op.region.width == op.region.vstride) {
+      return op.region.hstride * gen_type_size_bytes(op.type);
+   } else {
+      return ~0u;
+   }
+}
+
 static inline gen_operand
 gen_subscript(const struct intel_device_info *devinfo,
               gen_operand op, gen_reg_type type, unsigned i)

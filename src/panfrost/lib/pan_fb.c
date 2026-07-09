@@ -515,10 +515,10 @@ emit_zs_crc_desc(const struct pan_fb_desc_info *info,
       const struct pan_mod_handler *mod_handler =
          pan_image_view_get_zs_plane(iview).image->mod_handler;
 
-      assert(info->layer < pan_image_view_get_layer_count(iview));
+      assert(info->layer < pan_image_view_layer_or_3d_slice_count(iview));
       const struct pan_attachment_info att = {
          .iview = iview,
-         .layer_or_z_slice = iview->first_layer + info->layer,
+         .layer_or_z_slice = iview->first_layer_or_z_slice + info->layer,
          .fb_tile_size_px = fb->tile_size_px,
       };
 
@@ -532,10 +532,10 @@ emit_zs_crc_desc(const struct pan_fb_desc_info *info,
       const struct pan_mod_handler *mod_handler =
          pan_image_view_get_s_plane(iview).image->mod_handler;
 
-      assert(info->layer < pan_image_view_get_layer_count(iview));
+      assert(info->layer < pan_image_view_layer_or_3d_slice_count(iview));
       const struct pan_attachment_info att = {
          .iview = iview,
-         .layer_or_z_slice = iview->first_layer + info->layer,
+         .layer_or_z_slice = iview->first_layer_or_z_slice + info->layer,
          .fb_tile_size_px = fb->tile_size_px,
       };
 
@@ -609,10 +609,10 @@ emit_rgb_rt_desc(const struct pan_fb_desc_info *info,
       const struct pan_mod_handler *mod_handler =
          pan_image_view_get_color_plane(iview).image->mod_handler;
 
-      assert(info->layer < pan_image_view_get_layer_count(iview));
+      assert(info->layer < pan_image_view_layer_or_3d_slice_count(iview));
       const struct pan_attachment_info att = {
          .iview = iview,
-         .layer_or_z_slice = iview->first_layer + info->layer,
+         .layer_or_z_slice = iview->first_layer_or_z_slice + info->layer,
          .fb_tile_size_px = fb->tile_size_px,
       };
 

@@ -235,8 +235,9 @@ Emmanuel Gil Peyrot <linkmauve@linkmauve.fr> <emmanuel.peyrot@collabora.com>
 
 Emmanuel Vadot <manu@FreeBSD.org> Emmanuel <manu@FreeBSD.org>
 
-Emma Anholt <emma@anholt.net> <anholt@FreeBSD.org>
-Emma Anholt <emma@anholt.net> <eric@anholt.net>
+Emma Anholt <anholt@igalia.com> <anholt@FreeBSD.org>
+Emma Anholt <anholt@igalia.com> <eric@anholt.net>
+Emma Anholt <anholt@igalia.com> <emma@anholt.net>
 
 Eric Engestrom <eric@igalia.com> <eric@engestrom.ch>
 Eric Engestrom <eric@igalia.com> <eric.engestrom@imgtec.com>
@@ -517,7 +518,8 @@ Mike Stroyan <mike@lunarg.com> <mike@LunarG.com>
 
 Mun Gwan-gyeong <elongbug@gmail.com> Gwan-gyeong Mun <elongbug@gmail.com>
 
-Natalie Vock <natalie.vock@gmx.de> <friedrich.vock@gmx.de>
+Natalie Vock <nat@pixelcluster.dev> <friedrich.vock@gmx.de>
+Natalie Vock <nat@pixelcluster.dev> <natalie.vock@gmx.de>
 
 Neha Bhende <bhenden@vmware.com> <nbhende@vmware.com>
 

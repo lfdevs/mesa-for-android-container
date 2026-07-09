@@ -8,7 +8,9 @@
 
 layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 
-#include "build_interface.h"
+#include "bvh_defines.h"
+#define VK_USED_BUILD_FLAGS RADV_HEADER_BUILD_FLAGS
+#include "bvh_helpers.h"
 
 layout(push_constant) uniform CONSTS
 {
@@ -25,13 +27,14 @@ main(void)
 
    uint32_t compacted_size = args.bvh_offset + DEREF(args.src).dst_node_offset;
 
-   uint32_t serialization_size =
-      compacted_size +
-      align(SIZEOF(radv_accel_struct_serialization_header) + SIZEOF(uint64_t) * args.instance_count,
-            128);
+   uint32_t blas_addrs_size = 0;
+   if (args.type == VK_ACCELERATION_STRUCTURE_TYPE_TOP_LEVEL_KHR)
+      blas_addrs_size = args.primitive_count * SIZEOF(uint64_t);
 
-   uint32_t size = serialization_size - SIZEOF(radv_accel_struct_serialization_header) -
-                   SIZEOF(uint64_t) * args.instance_count;
+   uint32_t serialization_size =
+      compacted_size + align(SIZEOF(radv_accel_struct_serialization_header) + blas_addrs_size, 128);
+
+   uint32_t size = serialization_size - SIZEOF(radv_accel_struct_serialization_header) - blas_addrs_size;
 
    DEREF(args.dst).compacted_size = compacted_size;
 

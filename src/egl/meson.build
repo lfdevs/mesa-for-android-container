@@ -200,12 +200,15 @@ egl_def = custom_target(
   command : gen_vs_module_defs_normal_command,
 )
 
+if egl_native_platform != ''
+  c_args_for_egl += '-D_EGL_NATIVE_PLATFORM=_EGL_PLATFORM_@0@'.format(egl_native_platform.to_upper())
+endif
+
 libegl = shared_library(
   egl_lib_name,
   files_egl,
   c_args : [
     c_args_for_egl,
-    '-D_EGL_NATIVE_PLATFORM=_EGL_PLATFORM_@0@'.format(egl_native_platform.to_upper()),
   ],
   cpp_args : [cpp_args_for_egl],
   gnu_symbol_visibility : 'hidden',

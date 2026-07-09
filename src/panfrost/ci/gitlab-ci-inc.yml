@@ -1,6 +1,27 @@
+.enforce-hw-jobs-panfrost-panfrost-rules:
+  rules:
+    - if: '$INPUT_HW_JOBS !~ /"(all|panfrost|panfrost.ko)"/i'
+      when: never
+
+.enforce-hw-jobs-panfrost-panthor-rules:
+  rules:
+    - if: '$INPUT_HW_JOBS !~ /"(all|panfrost|panthor.ko)"/i'
+      when: never
+
+.enforce-hw-jobs-panvk-panfrost-rules:
+  rules:
+    - if: '$INPUT_HW_JOBS !~ /"(all|panvk|panfrost.ko)"/i'
+      when: never
+
+.enforce-hw-jobs-panvk-panthor-rules:
+  rules:
+    - if: '$INPUT_HW_JOBS !~ /"(all|panvk|panthor.ko)"/i'
+      when: never
+
 .panfrost-midgard-rules:
   stage: arm
   rules:
+    - !reference [.enforce-hw-jobs-panfrost-panfrost-rules, rules]
     - !reference [.test, rules]
     - !reference [.collabora-farm-rules, rules]
     - !reference [.gl-rules, rules]
@@ -36,6 +57,7 @@
   stage: arm-nightly
   extends: .no-auto-retry
   rules:
+    - !reference [.enforce-hw-jobs-panfrost-panfrost-rules, rules]
     - !reference [.test, rules]
     - !reference [.collabora-farm-manual-rules, rules]
     - !reference [.gl-manual-rules, rules]
@@ -47,9 +69,10 @@
         - src/panfrost/compiler/midgard/**/*
       when: manual
 
-.panfrost-bifrost-gl-rules:
+.panfrost-panfrost-gl-rules:
   stage: arm
   rules:
+    - !reference [.enforce-hw-jobs-panfrost-panfrost-rules, rules]
     - !reference [.test, rules]
     - !reference [.collabora-farm-rules, rules]
     - !reference [.gl-rules, rules]
@@ -63,10 +86,11 @@
         - src/panfrost/compiler/bifrost/**/*
       when: on_success
 
-.panfrost-bifrost-gl-manual-rules:
+.panfrost-panfrost-gl-manual-rules:
   stage: arm-nightly
   extends: .no-auto-retry
   rules:
+    - !reference [.enforce-hw-jobs-panfrost-panfrost-rules, rules]
     - !reference [.test, rules]
     - !reference [.collabora-farm-manual-rules, rules]
     - !reference [.gl-manual-rules, rules]
@@ -80,7 +104,7 @@
         *panfrost_bifrost_file_list
       when: manual
 
-.panfrost-vk-rules:
+.panfrost-vk-rules-common:
   stage: arm
   rules:
     - !reference [.test, rules]
@@ -92,10 +116,23 @@
     - changes: &panfrost_vulkan_file_list
         - src/panfrost/vulkan/**/*
       when: on_success
-    - changes: *panfrost_bifrost_file_list
+    - changes:
+        *panfrost_bifrost_file_list
       when: on_success
 
-.panfrost-vk-manual-rules:
+.panfrost-vk-panfrost-rules:
+  extends: .panfrost-vk-rules-common
+  rules:
+    - !reference [.enforce-hw-jobs-panvk-panfrost-rules, rules]
+    - !reference [.panfrost-vk-rules-common, rules]
+
+.panfrost-vk-panthor-rules:
+  extends: .panfrost-vk-rules-common
+  rules:
+    - !reference [.enforce-hw-jobs-panvk-panthor-rules, rules]
+    - !reference [.panfrost-vk-rules-common, rules]
+
+.panfrost-vk-manual-rules-common:
   stage: arm-nightly
   extends: .no-auto-retry
   rules:
@@ -112,9 +149,22 @@
         *panfrost_bifrost_file_list
       when: manual
 
-.panfrost-valhall-gl-rules:
+.panfrost-vk-manual-panfrost-rules:
+  extends: .panfrost-vk-manual-rules-common
+  rules:
+    - !reference [.enforce-hw-jobs-panvk-panfrost-rules, rules]
+    - !reference [.panfrost-vk-manual-rules-common, rules]
+
+.panfrost-vk-manual-panthor-rules:
+  extends: .panfrost-vk-manual-rules-common
+  rules:
+    - !reference [.enforce-hw-jobs-panvk-panthor-rules, rules]
+    - !reference [.panfrost-vk-manual-rules-common, rules]
+
+.panfrost-panthor-gl-rules:
   stage: arm
   rules:
+    - !reference [.enforce-hw-jobs-panfrost-panthor-rules, rules]
     - !reference [.test, rules]
     - !reference [.collabora-farm-rules, rules]
     - !reference [.gl-rules, rules]
@@ -124,14 +174,15 @@
     - changes:
         *panfrost_gallium_file_list
       when: on_success
-    - changes: &panfrost_valhall_file_list
-        - src/panfrost/compiler/bifrost/**/*
+    - changes:
+        *panfrost_bifrost_file_list
       when: on_success
 
-.panfrost-valhall-gl-manual-rules:
+.panfrost-panthor-gl-manual-rules:
   stage: arm-nightly
   extends: .no-auto-retry
   rules:
+    - !reference [.enforce-hw-jobs-panfrost-panthor-rules, rules]
     - !reference [.test, rules]
     - !reference [.collabora-farm-manual-rules, rules]
     - !reference [.gl-manual-rules, rules]
@@ -142,7 +193,7 @@
         *panfrost_gallium_file_list
       when: manual
     - changes:
-        *panfrost_valhall_file_list
+        *panfrost_bifrost_file_list
       when: manual
 
 .panfrost-test:
@@ -172,7 +223,6 @@
 #   FDO_CI_CONCURRENT: ?
     RUNNER_TAG: mesa-ci-x86-64-lava-meson-g12b-a311d-khadas-vim3
     VK_DRIVER: panfrost
-    KERNEL_TAG: "v6.18-pan-mesa-952e"
 
 # Status: https://lava.collabora.dev/scheduler/device_type/mt8183-kukui-jacuzzi-juniper-sku16
 .lava-mt8183-kukui-jacuzzi-juniper-sku16:arm64:
@@ -198,7 +248,6 @@
     KERNEL_IMAGE_TYPE: ""
     RUNNER_TAG: mesa-ci-x86-64-lava-mt8186-corsola-steelix-sku131072
     VK_DRIVER: panfrost
-    KERNEL_TAG: "v6.18-pan-mesa-952e"
 
 # Status: https://lava.collabora.dev/scheduler/device_type/mt8192-asurada-spherion-r0
 .lava-mt8192-asurada-spherion-r0:arm64:
@@ -264,7 +313,6 @@
     RUNNER_TAG: mesa-ci-x86-64-lava-rk3588-rock-5b
     VK_DRIVER: panfrost
     LAVA_FIRMWARE: arm
-    KERNEL_TAG: "v6.18-pan-mesa-952e"
 
 # Status: https://lava.collabora.dev/scheduler/device_type/mt8196-rauru-navi-sku0
 .lava-mt8196-rauru-navi-sku0:arm64:

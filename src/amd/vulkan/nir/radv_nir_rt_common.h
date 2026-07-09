@@ -9,6 +9,8 @@
 
 #include "nir/nir_defines.h"
 
+#include "tools/radv_gamma.h"
+
 struct radv_compiler_info;
 
 bool radv_use_bvh_stack_rtn(const struct radv_compiler_info *compiler_info);
@@ -126,6 +128,8 @@ struct radv_ray_traversal_args {
    nir_def *cull_mask;
    nir_def *origin;
    nir_def *tmin;
+   /* The original tMax value traversal was started with. */
+   nir_def *tmax;
    nir_def *dir;
 
    struct radv_ray_traversal_vars vars;
@@ -139,6 +143,8 @@ struct radv_ray_traversal_args {
    uint32_t unset_flags;
 
    bool ignore_cull_mask;
+
+   bool write_ray_history;
 
    bool use_bvh_stack_rtn;
    radv_rt_stack_store_cb stack_store_cb;
@@ -163,5 +169,12 @@ nir_def *radv_build_ray_traversal(const struct radv_compiler_info *compiler_info
 
 nir_def *radv_build_ray_traversal_gfx12(const struct radv_compiler_info *compiler_info, nir_builder *b,
                                         const struct radv_ray_traversal_args *args);
+
+nir_def *
+radv_build_token_begin(nir_builder *b, const struct radv_compiler_info *compiler_info,
+                       enum radv_packed_token_type token_type, uint32_t token_size);
+
+void
+radv_build_token_end(nir_builder *b);
 
 #endif /* RADV_NIR_RT_COMMON_H */

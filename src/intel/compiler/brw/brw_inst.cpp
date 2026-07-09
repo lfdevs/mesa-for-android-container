@@ -715,22 +715,33 @@ brw_inst::flags_read(const intel_device_info *devinfo) const
 }
 
 unsigned
-brw_inst::flags_written(const intel_device_info *devinfo) const
+brw_flags_written(enum opcode opcode, enum brw_conditional_mod conditional_mod,
+                  unsigned flag_subreg, unsigned group, unsigned exec_size)
 {
    if (conditional_mod && (opcode != BRW_OPCODE_SEL &&
                            opcode != BRW_OPCODE_CSEL &&
                            opcode != BRW_OPCODE_IF &&
                            opcode != BRW_OPCODE_WHILE)) {
-      return brw_flag_mask(this, 1);
+      return brw_flag_mask(flag_subreg, group, exec_size, 1);
    } else if (opcode == FS_OPCODE_LOAD_LIVE_CHANNELS ||
               opcode == SHADER_OPCODE_BALLOT ||
               opcode == SHADER_OPCODE_VOTE_ANY ||
               opcode == SHADER_OPCODE_VOTE_ALL ||
               opcode == SHADER_OPCODE_VOTE_EQUAL) {
-      return brw_flag_mask(this, 32);
+      return brw_flag_mask(flag_subreg, group, exec_size, 32);
    } else {
-      return brw_flag_mask(dst, size_written);
+      return 0;
    }
+}
+
+unsigned
+brw_inst::flags_written(const intel_device_info *devinfo) const
+{
+   unsigned f = brw_flags_written(opcode, conditional_mod,
+                                  flag_subreg, group, exec_size);
+
+   return f == 0 ? brw_flag_mask(dst, size_written) : f;
+
 }
 
 bool

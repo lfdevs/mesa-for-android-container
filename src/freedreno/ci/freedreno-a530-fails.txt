@@ -239,6 +239,7 @@ spec@arb_framebuffer_object@execution@msaa-alpha-to-coverage_alpha-to-one_write-
 spec@arb_framebuffer_object@execution@msaa-alpha-to-coverage_alpha-to-one,Fail
 spec@arb_framebuffer_object@execution@msaa-alpha-to-one,Fail
 spec@arb_texture_view@tex-view,Fail
+spec@ext_image_dma_buf_import@ext_image_dma_buf_import-refcount,Fail
 spec@glsl-1.30@execution@fs-uint-to-float-of-extract-int16,Fail
 spec@glsl-1.30@execution@fs-uint-to-float-of-extract-int8,Fail
 

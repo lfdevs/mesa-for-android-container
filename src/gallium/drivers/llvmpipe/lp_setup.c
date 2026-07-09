@@ -1288,10 +1288,10 @@ lp_setup_update_state(struct lp_setup_context *setup,
 
       assert(lp->dirty == 0);
 
-      assert(lp->setup_variant.key.size ==
+      assert(lp->cached_setup_key.size ==
              setup->setup.variant->key.size);
 
-      assert(memcmp(&lp->setup_variant.key,
+      assert(memcmp(&lp->cached_setup_key,
                     &setup->setup.variant->key,
                     setup->setup.variant->key.size) == 0);
    }

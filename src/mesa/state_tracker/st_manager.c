@@ -401,6 +401,9 @@ st_new_renderbuffer_fb(enum pipe_format format, unsigned samples, bool sw)
    case PIPE_FORMAT_Z32_UNORM:
       rb->InternalFormat = GL_DEPTH_COMPONENT32;
       break;
+   case PIPE_FORMAT_Z32_FLOAT:
+      rb->InternalFormat = GL_DEPTH_COMPONENT32F;
+      break;
    case PIPE_FORMAT_Z24_UNORM_S8_UINT:
    case PIPE_FORMAT_S8_UINT_Z24_UNORM:
       rb->InternalFormat = GL_DEPTH24_STENCIL8_EXT;

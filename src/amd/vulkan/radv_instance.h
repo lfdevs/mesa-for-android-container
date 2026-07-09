@@ -88,6 +88,7 @@ enum {
    RADV_DEBUG_NO_SMEM_MITIGATION = 1ull << 60,
    RADV_DEBUG_FULL_SYNC = 1ull << 61,
    RADV_DEBUG_NO_TMZ = 1ull << 62,
+   RADV_DEBUG_NO_HEAP = 1ull << 63,
    RADV_DEBUG_DUMP_SHADERS = RADV_DEBUG_DUMP_VS | RADV_DEBUG_DUMP_TCS | RADV_DEBUG_DUMP_TES | RADV_DEBUG_DUMP_GS |
                              RADV_DEBUG_DUMP_PS | RADV_DEBUG_DUMP_TASK | RADV_DEBUG_DUMP_MESH | RADV_DEBUG_DUMP_CS |
                              RADV_DEBUG_DUMP_NIR | RADV_DEBUG_DUMP_ASM | RADV_DEBUG_DUMP_BACKEND_IR,
@@ -129,7 +130,7 @@ enum {
    RADV_EXPERIMENTAL_HIC = 1u << 4,
    RADV_EXPERIMENTAL_SPARSE = 1u << 5,
    RADV_EXPERIMENTAL_BFLOAT16 = 1u << 6,
-   RADV_EXPERIMENTAL_DESCRIPTOR_HEAP = 1u << 7,
+   RADV_EXPERIMENTAL_MSRTSS = 1u << 7,
 };
 
 enum {
@@ -155,8 +156,12 @@ enum radv_trace_mode {
    /** Radeon Raytracing Analyzer */
    RADV_TRACE_MODE_RRA = 1 << (VK_TRACE_MODE_COUNT + 1),
 
+   RADV_TRACE_MODE_GAMMA = 1 << (VK_TRACE_MODE_COUNT + 2),
+
    /** Gather context rolls of submitted command buffers */
-   RADV_TRACE_MODE_CTX_ROLLS = 1 << (VK_TRACE_MODE_COUNT + 2),
+   RADV_TRACE_MODE_CTX_ROLLS = 1 << (VK_TRACE_MODE_COUNT + 3),
+
+   RADV_TRACE_MODE_RANGES = 1 << (VK_TRACE_MODE_COUNT + 4),
 };
 
 struct radv_instance {
@@ -197,7 +202,7 @@ static bool
 radv_bvh_dumping_enabled(const struct radv_instance *instance)
 {
    /* Gathering bvh stats uses a large part of the rra code for dumping bvhs. */
-   return (instance->vk.trace_mode & RADV_TRACE_MODE_RRA) || radv_bvh_stats_file();
+   return (instance->vk.trace_mode & (RADV_TRACE_MODE_RRA | RADV_TRACE_MODE_GAMMA)) || radv_bvh_stats_file();
 }
 
 #endif /* RADV_INSTANCE_H */

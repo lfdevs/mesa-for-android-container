@@ -156,8 +156,19 @@ va_lookup_constant(uint32_t value, struct va_src_info info, bool is_signed)
       }
    }
 
+   /* The widening swizzle returned below selects one sub-word of a LUT entry.
+    * On a 32-bit instruction the hardware zero/sign-extends that sub-word into
+    * the full 32-bit lane. The same encoded swizzle has a different meaning on
+    * an 8/16-bit vector instruction: it replicates the sub-word across all
+    * lanes (for example .h0 is BI_SWIZZLE_H00, half 0 broadcast to both lanes),
+    * so a constant like (0x3f80, 0x0000) would turn into (0x3f80, 0x3f80).
+    * Only widen for 32-bit instructions. The replicated-halves case for 16-bit
+    * is handled separately via info.swizzle above.
+    */
+   bool can_widen = info.widen && info.size == VA_SIZE_32;
+
    /* Try extending a byte */
-   if ((info.widen || info.lanes || info.lane) &&
+   if ((can_widen || info.lanes || info.lane) &&
        is_extension_of_8(value, is_signed)) {
 
       bi_index lut = va_lut_index_8(value & 0xFF);
@@ -166,7 +177,7 @@ va_lookup_constant(uint32_t value, struct va_src_info info, bool is_signed)
    }
 
    /* Try extending a halfword */
-   if (info.widen && is_extension_of_16(value, is_signed)) {
+   if (can_widen && is_extension_of_16(value, is_signed)) {
 
       bi_index lut = va_lut_index_16(value & 0xFFFF);
       if (!bi_is_null(lut))

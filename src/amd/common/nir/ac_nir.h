@@ -17,6 +17,8 @@
 extern "C" {
 #endif
 
+#define AC_MULTIVIEW_MAX_VIEWS 8
+
 enum
 {
    /* SPI_PS_INPUT_CNTL_i.OFFSET[0:4] */
@@ -69,7 +71,7 @@ ac_nir_set_options(const struct ac_compiler_info *info, bool use_llvm,
 
 nir_def *
 ac_nir_load_arg_at_offset(nir_builder *b, const struct ac_shader_args *ac_args,
-                          struct ac_arg arg, unsigned relative_index);
+                          struct ac_arg arg, unsigned relative_index, bool scalar_wg_div);
 
 nir_def *
 ac_nir_load_arg(nir_builder *b, const struct ac_shader_args *ac_args, struct ac_arg arg);
@@ -84,6 +86,10 @@ void ac_nir_store_arg(nir_builder *b, const struct ac_shader_args *ac_args, stru
 nir_def *
 ac_nir_unpack_arg(nir_builder *b, const struct ac_shader_args *ac_args, struct ac_arg arg,
                   unsigned rshift, unsigned bitwidth);
+
+nir_def *
+ac_nir_unpack_arg_wg_div(nir_builder *b, const struct ac_shader_args *ac_args, struct ac_arg arg,
+                         unsigned rshift, unsigned bitwidth);
 
 nir_def *
 ac_nir_load_smem(nir_builder *b, unsigned num_components, nir_def *addr, nir_def *offset,
@@ -261,7 +267,7 @@ bool
 ac_nir_lower_mesh_inputs_to_mem(nir_shader *shader, bool has_task_shader);
 
 bool
-ac_nir_lower_global_access(nir_shader *shader);
+ac_nir_lower_global_access(nir_shader *shader, enum amd_gfx_level gfx_level);
 
 bool ac_nir_lower_resinfo(nir_shader *nir, enum amd_gfx_level gfx_level);
 bool ac_nir_lower_image_opcodes(nir_shader *nir);
@@ -344,9 +350,8 @@ ac_nir_lower_ps_early(nir_shader *nir, const ac_nir_lower_ps_early_options *opti
 typedef enum {
    /* sample_mask_in is replaced with b2i32(inot(load_helper_invocation)).
     *
-    * API VRS can't use this because its sample mask is the combined sample mask of all pixels
-    * in the fragment area. Driver-internal forced VRS can use this if such VRS is also allowed
-    * to be enabled with helper_invocation.
+    * If fragmentShadingRateWithSampleMask == VK_FALSE, pass this flag to the pass even if VRS is
+    * enabled.
     */
    ac_nir_lower_samplemask_1sample_no_vrs,
 

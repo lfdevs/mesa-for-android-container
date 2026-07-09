@@ -13,7 +13,7 @@ variables:
   # 4. lava/health-check-docker - the slim container used for fastboot
   # Set image: directly instead of extending .set-image to avoid conflicts
   # with MESA_IMAGE_PATH and FDO_DISTRIBUTION_TAG between the containers.
-  image: registry.freedesktop.org/gfx-ci/lava-job-submitter/alpine/x86_64_lava-trigger:20260302.0
+  image: registry.freedesktop.org/gfx-ci/lava-job-submitter/alpine/x86_64_lava-trigger:20260708.0
   # Cancel job if a newer commit is pushed to the same branch
   interruptible: true
   # The jobs themselves shouldn't actually run for an hour, of course.

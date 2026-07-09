@@ -54,8 +54,6 @@ struct i915_bo {
 static struct i915_device i915 = {};
 static bool i915_device_from_json = false;
 
-bool drm_shim_driver_prefers_first_render_node = true;
-
 static int
 i915_ioctl_noop(int fd, unsigned long request, void *arg)
 {
@@ -582,47 +580,9 @@ drm_shim_driver_init(void)
          return;
    }
 
-   shim_device.bus_type = DRM_BUS_PCI;
    shim_device.driver_name = "i915";
    shim_device.driver_ioctls = driver_ioctls;
    shim_device.driver_ioctl_count = ARRAY_SIZE(driver_ioctls);
 
-   char uevent_content[1024];
-   snprintf(uevent_content, sizeof(uevent_content),
-            "DRIVER=i915\n"
-            "PCI_CLASS=30000\n"
-            "PCI_ID=8086:%x\n"
-            "PCI_SUBSYS_ID=1028:075B\n"
-            "PCI_SLOT_NAME=0000:00:02.0\n"
-            "MODALIAS=pci:v00008086d00005916sv00001028sd0000075Bbc03sc00i00\n",
-            i915.device_id);
-   drm_shim_override_file(uevent_content,
-                          "/sys/dev/char/%d:%d/device/uevent",
-                          DRM_MAJOR, render_node_minor);
-   drm_shim_override_file("0x0\n",
-                          "/sys/dev/char/%d:%d/device/revision",
-                          DRM_MAJOR, render_node_minor);
-   char device_content[10];
-   snprintf(device_content, sizeof(device_content),
-            "0x%x\n", i915.device_id);
-   drm_shim_override_file("0x8086",
-                          "/sys/dev/char/%d:%d/device/vendor",
-                          DRM_MAJOR, render_node_minor);
-   drm_shim_override_file("0x8086",
-                          "/sys/devices/pci0000:00/0000:00:02.0/vendor");
-   drm_shim_override_file(device_content,
-                          "/sys/dev/char/%d:%d/device/device",
-                          DRM_MAJOR, render_node_minor);
-   drm_shim_override_file(device_content,
-                          "/sys/devices/pci0000:00/0000:00:02.0/device");
-   drm_shim_override_file("0x1234",
-                          "/sys/dev/char/%d:%d/device/subsystem_vendor",
-                          DRM_MAJOR, render_node_minor);
-   drm_shim_override_file("0x1234",
-                          "/sys/devices/pci0000:00/0000:00:02.0/subsystem_vendor");
-   drm_shim_override_file("0x1234",
-                          "/sys/dev/char/%d:%d/device/subsystem_device",
-                          DRM_MAJOR, render_node_minor);
-   drm_shim_override_file("0x1234",
-                          "/sys/devices/pci0000:00/0000:00:02.0/subsystem_device");
+   drm_shim_pci_device_setup(0x8086, i915.device_id, "0000:00:02.0", "i915");
 }

@@ -195,13 +195,23 @@ etna_get_fs(struct etna_context *ctx, struct etna_shader_key* const key)
 {
    const struct etna_shader_variant *old = ctx->shader.fs;
 
-   /* update the key if we need to run nir_lower_sample_tex_compare(..). */
-   if (ctx->screen->info->halti < 2 &&
-       (ctx->dirty & (ETNA_DIRTY_SAMPLERS | ETNA_DIRTY_SAMPLER_VIEWS))) {
+   /* update the key if we need to run nir_lower_sample_tex_compare(..).
+    * halti < 2 has no HW shadow compare. halti >= 2 has it, but depth32f is
+    * emulated as D24S8 and the float compare ref must not be clamped to the
+    * D24 range, so it must compare in the shader (and not clamp the ref). */
+   if (ctx->dirty & (ETNA_DIRTY_SAMPLERS | ETNA_DIRTY_SAMPLER_VIEWS)) {
 
       for (unsigned int i = 0; i < ctx->num_fragment_sampler_views; i++) {
          if (ctx->sampler[i]->compare_mode == PIPE_TEX_COMPARE_NONE)
             continue;
+
+         const bool emulated_z32f = format_is_emulated_z32f(ctx->sampler_view[i]->format);
+
+         if (ctx->screen->info->halti >= 2 && !emulated_z32f)
+            continue;
+
+         if (emulated_z32f)
+            key->shadow_compare_no_clamp = 1;
 
          key->has_sample_tex_compare = 1;
          key->num_texture_states = ctx->num_fragment_sampler_views;
@@ -285,7 +295,10 @@ etna_reset_gpu_state(struct etna_context *ctx)
                      COND(!DBG_ENABLED(ETNA_DBG_NO_TEXDESC), VIVS_NTE_DESCRIPTOR_CONTROL_ENABLE));
       etna_set_state(stream, VIVS_FE_HALTI5_UNK007D8, 0x00000002);
       etna_set_state(stream, VIVS_PS_SAMPLER_BASE, 0x00000000);
-      etna_set_state(stream, VIVS_VS_SAMPLER_BASE, 0x00000020);
+
+      if (!screen->specs.unified_samplers)
+         etna_set_state(stream, VIVS_VS_SAMPLER_BASE, 0x00000020);
+
       etna_set_state(stream, VIVS_SH_CONFIG, VIVS_SH_CONFIG_RTNE_ROUNDING);
    }
 

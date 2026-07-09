@@ -87,10 +87,7 @@ intel_set_ps_dispatch_state(struct GENX(3DSTATE_PS) *ps,
       enable_8 = false;
 #endif
 
-   const bool is_persample_dispatch =
-      brw_fs_prog_data_is_persample(prog_data, fs_config);
-
-   if (is_persample_dispatch) {
+   if (prog_data->persample_dispatch) {
       /* TGL PRMs, Volume 2d: Command Reference: Structures:
        *    3DSTATE_PS_BODY::32 Pixel Dispatch Enable:
        *
@@ -126,7 +123,7 @@ intel_set_ps_dispatch_state(struct GENX(3DSTATE_PS) *ps,
     *
     * 16x MSAA only exists on Gfx9+, so we can skip this on Gfx8.
     */
-   if (GFX_VER >= 9 && GFX_VER < 20 && rasterization_samples == 16 && !is_persample_dispatch) {
+   if (GFX_VER >= 9 && GFX_VER < 20 && rasterization_samples == 16 && !prog_data->persample_dispatch) {
       assert(enable_8 || enable_16);
       enable_32 = false;
    }

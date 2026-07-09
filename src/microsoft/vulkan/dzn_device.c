@@ -817,6 +817,7 @@ static void
 dzn_physical_device_get_properties(const struct dzn_physical_device *pdev,
                                    struct vk_properties *properties)
 {
+   struct dzn_instance *instance = container_of(pdev->vk.instance, struct dzn_instance, vk);
    /* minimum from the D3D and Vulkan specs */
    const VkSampleCountFlags supported_sample_counts = VK_SAMPLE_COUNT_1_BIT | VK_SAMPLE_COUNT_4_BIT;
 
@@ -1076,9 +1077,16 @@ dzn_physical_device_get_properties(const struct dzn_physical_device *pdev,
       .underlyingAPI = VK_LAYERED_DRIVER_UNDERLYING_API_D3D12_MSFT,
    };
 
-   snprintf(properties->deviceName,
-            sizeof(properties->deviceName),
-            "Microsoft Direct3D12 (%s)", pdev->desc.description);
+   if (strlen(instance->drirc.debug.force_vk_devicename) > 0) {
+      snprintf(properties->deviceName,
+               sizeof(properties->deviceName),
+               "%s",
+               instance->drirc.debug.force_vk_devicename);
+   } else {
+      snprintf(properties->deviceName,
+               sizeof(properties->deviceName),
+               "Microsoft Direct3D12 (%s)", pdev->desc.description);
+   }
    memcpy(properties->pipelineCacheUUID,
           pdev->pipeline_cache_uuid, VK_UUID_SIZE);
    memcpy(properties->driverUUID, pdev->driver_uuid, VK_UUID_SIZE);

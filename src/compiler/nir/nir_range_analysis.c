@@ -1555,6 +1555,40 @@ scalar_insert(void *table, uint32_t key, uint32_t value)
 }
 
 static void
+get_phi_query(struct analysis_state *state, struct scalar_query q, uint32_t *result, const uint32_t *src,
+              uint32_t (*combine)(uint32_t, uint32_t), uint32_t safe_value)
+{
+   nir_phi_instr *phi = nir_def_as_phi(q.scalar.def);
+
+   if (exec_list_is_empty(&phi->srcs))
+      return;
+
+   if (q.head.pushed_queries) {
+      *result = src[0];
+      for (unsigned i = 1; i < q.head.pushed_queries; i++)
+         *result = combine(*result, src[i]);
+      return;
+   }
+
+   nir_cf_node *prev = nir_cf_node_prev(&phi->instr.block->cf_node);
+   if (!prev || prev->type == nir_cf_node_block) {
+      /* Resolve cycles by inserting safe_value into range_ht. */
+      scalar_insert(state->range_ht, get_scalar_key(&q.head), safe_value);
+
+      struct set *visited = _mesa_pointer_set_create(NULL);
+      nir_scalar *defs = alloca(sizeof(nir_scalar) * 64);
+      unsigned def_count = search_phi_bcsel(q.scalar, defs, 64, visited);
+      _mesa_set_destroy(visited, NULL);
+
+      for (unsigned i = 0; i < def_count; i++)
+         push_scalar_query(state, defs[i]);
+   } else {
+      nir_foreach_phi_src(src, phi)
+         push_scalar_query(state, nir_get_scalar(src->src.ssa, q.scalar.comp));
+   }
+}
+
+static void
 get_intrinsic_uub(struct analysis_state *state, struct scalar_query q, uint32_t *result,
                   const uint32_t *src)
 {
@@ -1758,7 +1792,9 @@ get_intrinsic_uub(struct analysis_state *state, struct scalar_query q, uint32_t 
       break;
    }
    case nir_intrinsic_load_ttmp_register_amd:
+   case nir_intrinsic_load_ttmp_register_wg_div_amd:
    case nir_intrinsic_load_scalar_arg_amd:
+   case nir_intrinsic_load_scalar_arg_wg_div_amd:
    case nir_intrinsic_load_vector_arg_amd: {
       uint32_t upper_bound = nir_intrinsic_arg_upper_bound_u32_amd(intrin);
       if (upper_bound)
@@ -2085,38 +2121,16 @@ get_tex_uub(struct analysis_state *state, struct scalar_query q, uint32_t *resul
       *result = state->shader->options->max_samples;
 }
 
+static uint32_t
+max2(uint32_t a, uint32_t b)
+{
+   return MAX2(a, b);
+}
+
 static void
 get_phi_uub(struct analysis_state *state, struct scalar_query q, uint32_t *result, const uint32_t *src)
 {
-   nir_phi_instr *phi = nir_def_as_phi(q.scalar.def);
-
-   if (exec_list_is_empty(&phi->srcs))
-      return;
-
-   if (q.head.pushed_queries) {
-      *result = src[0];
-      for (unsigned i = 1; i < q.head.pushed_queries; i++)
-         *result = MAX2(*result, src[i]);
-      return;
-   }
-
-   nir_cf_node *prev = nir_cf_node_prev(&phi->instr.block->cf_node);
-   if (!prev || prev->type == nir_cf_node_block) {
-      /* Resolve cycles by inserting max into range_ht. */
-      uint32_t max = bitmask(q.scalar.def->bit_size);
-      scalar_insert(state->range_ht, get_scalar_key(&q.head), max);
-
-      struct set *visited = _mesa_pointer_set_create(NULL);
-      nir_scalar *defs = alloca(sizeof(nir_scalar) * 64);
-      unsigned def_count = search_phi_bcsel(q.scalar, defs, 64, visited);
-      _mesa_set_destroy(visited, NULL);
-
-      for (unsigned i = 0; i < def_count; i++)
-         push_scalar_query(state, defs[i]);
-   } else {
-      nir_foreach_phi_src(src, phi)
-         push_scalar_query(state, nir_get_scalar(src->src.ssa, q.scalar.comp));
-   }
+   get_phi_query(state, q, result, src, max2, bitmask(q.scalar.def->bit_size));
 }
 
 static void
@@ -2462,6 +2476,38 @@ nir_def_bits_used(nir_scalar def)
 }
 
 static void
+get_intrinsic_num_lsb(struct analysis_state *state, struct scalar_query q, uint32_t *result, const uint32_t *src)
+{
+   nir_intrinsic_instr *intrin = nir_def_as_intrinsic(q.scalar.def);
+
+   switch (intrin->intrinsic) {
+   case nir_intrinsic_read_first_invocation:
+   case nir_intrinsic_read_invocation:
+   case nir_intrinsic_as_uniform:
+      if (!q.head.pushed_queries) {
+         push_scalar_query(state, nir_get_scalar(intrin->src[0].ssa, q.scalar.comp));
+      } else {
+         *result = src[0];
+      }
+      break;
+   default:
+      break;
+   }
+}
+
+static uint32_t
+min2(uint32_t a, uint32_t b)
+{
+   return MIN2(a, b);
+}
+
+static void
+get_phi_num_lsb(struct analysis_state *state, struct scalar_query q, uint32_t *result, const uint32_t *src)
+{
+   get_phi_query(state, q, result, src, min2, 0);
+}
+
+static void
 get_alu_num_lsb(struct analysis_state *state, struct scalar_query q, uint32_t *result, const uint32_t *src)
 {
    nir_op op = nir_scalar_alu_op(q.scalar);
@@ -2553,6 +2599,10 @@ process_num_lsb_query(struct analysis_state *state, struct analysis_query *aq, u
       *result = val ? ffsll(val) - 1 : q.scalar.def->bit_size;
    } else if (nir_scalar_is_alu(q.scalar)) {
       get_alu_num_lsb(state, q, result, src);
+   } else if (nir_scalar_is_intrinsic(q.scalar)) {
+      get_intrinsic_num_lsb(state, q, result, src);
+   } else if (nir_scalar_is_phi(q.scalar)) {
+      get_phi_num_lsb(state, q, result, src);
    }
 }
 

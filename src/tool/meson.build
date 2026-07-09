@@ -9,3 +9,7 @@ endif
 if with_tools.contains('dlclose-skip')
   subdir('dlclose-skip')
 endif
+
+if with_tools.contains('gamma')
+  subdir('gamma')
+endif

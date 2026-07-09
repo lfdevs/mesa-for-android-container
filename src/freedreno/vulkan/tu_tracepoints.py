@@ -20,6 +20,7 @@ from u_trace import Header, HeaderScope
 from u_trace import ForwardDecl
 from u_trace import Tracepoint
 from u_trace import TracepointArg as Arg
+from u_trace import TracepointArgBlob as ArgBlob
 from u_trace import TracepointArgStruct as ArgStruct
 from u_trace import utrace_generate
 from u_trace import utrace_generate_perfetto_utils
@@ -27,6 +28,7 @@ from u_trace import utrace_generate_perfetto_utils
 Header('common/freedreno_lrz.h')
 Header('tu_cmd_buffer.h', scope=HeaderScope.SOURCE)
 Header('tu_device.h', scope=HeaderScope.SOURCE)
+Header('tu_trace_bin_layout.h', scope=HeaderScope.SOURCE|HeaderScope.PERFETTO)
 Header('util/mesa-blake3.h')
 Header('vk_enum_to_str.h', scope=HeaderScope.SOURCE|HeaderScope.PERFETTO)
 Header('vk_format.h')
@@ -149,7 +151,8 @@ begin_end_tp('render_pass',
               Arg(type='int32_t',                               var='lrzDisabledAtDraw',                                    c_format='%d'),
               Arg(type='const char *',                          var='lrzWriteDisableReason',                                c_format='%s'),
               Arg(type='int32_t',                               var='lrzWriteDisabledAtDraw',                               c_format='%d'),
-              Arg(type='uint32_t',                              var='lrzStatus', c_format='%s', to_prim_type='(fd_lrz_gpu_dir_to_str((enum fd_lrz_gpu_dir)({} & 0xff)))', is_indirect=True),])
+              Arg(type='uint32_t',                              var='lrzStatus', c_format='%s', to_prim_type='(fd_lrz_gpu_dir_to_str((enum fd_lrz_gpu_dir)({} & 0xff)))', is_indirect=True),
+              ArgBlob(type='struct tu_bin_layout_data',         var='binInfo', c_format="%s", to_prim_type="tu_bin_layout_data_json_serialize({backend}, {})", length_arg='tu_bin_layout_data_size(binInfo)', copy_func="tu_bin_layout_data_copy", free_prim_type_func='ralloc_free'),])
 
 begin_end_tp('draw',
              [Arg(type='uint32_t', var='count', c_format='%u'),

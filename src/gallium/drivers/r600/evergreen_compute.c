@@ -554,6 +554,12 @@ void evergreen_init_atom_start_compute_cs(struct r600_context *rctx)
 	r600_store_value(cb, PKT3(PKT3_EVENT_WRITE, 0, 0));
 	r600_store_value(cb, EVENT_TYPE(EVENT_TYPE_CS_PARTIAL_FLUSH) | EVENT_INDEX(4));
 
+	if (rctx->b.screen->info.r600_has_virtual_memory) {
+		/* Avoid a GPU hang when using virtual memory */
+		r600_store_value(cb, PKT3(PKT3_CLEAR_STATE, 0, 0));
+		r600_store_value(cb, 0);
+	}
+
 	switch (rctx->b.family) {
 	case CHIP_CEDAR:
 	default:

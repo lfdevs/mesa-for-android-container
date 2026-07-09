@@ -1,6 +1,7 @@
 dEQP-VK.binding_model.descriptor_buffer.sparse_binding_buffer.capture_replay.compute_comp_sampler_custom_border_color
 dEQP-VK.binding_model.descriptor_buffer.sparse_residency_buffer.capture_replay.compute_comp_sampled_image_custom_border_color
 dEQP-VK.binding_model.descriptor_buffer.traditional_buffer.capture_replay.compute_comp_combined_image_sampler_custom_border_color
+dEQP-VK.wsi.direct.present_id_wait.id.increasing
 dEQP-VK.wsi.direct.present_timing.basic.retired_swapchain
 dEQP-VK.wsi.direct_drm.incremental_present.scale_none.mailbox.horizontal_mirror.pre_multiplied.reference
 dEQP-VK.wsi.direct_drm.present_timing.basic.retired_swapchain

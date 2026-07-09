@@ -91,7 +91,7 @@ pbuffer_make_current(struct apple_glx_context *ac,
       ac->made_current = true;
    }
 
-   apple_glx_diagnostic("made pbuffer drawable 0x%lx current\n", d->drawable);
+   apple_glx_log_debug("made pbuffer drawable 0x%lx current", d->drawable);
 
    return false;
 }
@@ -103,8 +103,7 @@ pbuffer_destroy(Display * dpy, struct apple_glx_drawable *d)
 
    assert(APPLE_GLX_DRAWABLE_PBUFFER == d->type);
 
-   apple_glx_diagnostic("destroying pbuffer for drawable 0x%lx\n",
-                        d->drawable);
+   apple_glx_log_debug("destroying pbuffer for drawable 0x%lx", d->drawable);
 
    apple_cgl.destroy_pbuffer(pbuf->buffer_obj);
    XFreePixmap(dpy, pbuf->xid);

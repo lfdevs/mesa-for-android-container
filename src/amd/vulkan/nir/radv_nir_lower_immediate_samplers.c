@@ -20,6 +20,7 @@
 typedef struct {
    const struct radv_compiler_info *compiler_info;
    const struct radv_shader_layout *layout;
+   const struct vk_sampler_state_array *embedded_samplers;
 } lower_immediate_samplers_state;
 
 static bool
@@ -35,7 +36,7 @@ lower_immediate_samplers(nir_builder *b, nir_tex_instr *tex, void *cb_data)
       tex->op == nir_texop_tg4 && disable_tg4_trunc_coord ? C_008F30_TRUNC_COORD : 0xffffffffu;
 
    if (tex->embedded_sampler) {
-      const struct vk_sampler_state_array *embedded_samplers = &state->layout->embedded_samplers;
+      const struct vk_sampler_state_array *embedded_samplers = state->embedded_samplers;
       const uint32_t sampler_idx = tex->sampler_index;
       uint32_t desc[4];
 
@@ -90,11 +91,13 @@ lower_immediate_samplers(nir_builder *b, nir_tex_instr *tex, void *cb_data)
 
 bool
 radv_nir_lower_immediate_samplers(nir_shader *shader, const struct radv_compiler_info *compiler_info,
-                                  const struct radv_shader_stage *stage)
+                                  const struct radv_shader_stage *stage,
+                                  const struct vk_sampler_state_array *embedded_samplers)
 {
    lower_immediate_samplers_state state = {
       .compiler_info = compiler_info,
       .layout = &stage->layout,
+      .embedded_samplers = embedded_samplers,
    };
 
    return nir_shader_tex_pass(shader, lower_immediate_samplers, nir_metadata_control_flow, &state);

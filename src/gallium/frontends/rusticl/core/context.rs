@@ -16,7 +16,6 @@ use mesa_rust::pipe::context::RWFlags;
 use mesa_rust::pipe::fence::FenceFd;
 use mesa_rust::pipe::resource::*;
 use mesa_rust::pipe::screen::ResourceType;
-use mesa_rust::util;
 use mesa_rust_gen::*;
 use mesa_rust_util::conversion::*;
 use mesa_rust_util::properties::Properties;
@@ -117,7 +116,6 @@ pub struct Context {
     >,
     svm: Mutex<SVMContext>,
     pub gl_ctx_manager: Option<GLCtxManager>,
-    pub worker_queue: util::queue::Queue,
 }
 
 impl_cl_type_trait!(cl_context, Context, CL_INVALID_CONTEXT);
@@ -128,9 +126,6 @@ impl Context {
         properties: Properties<cl_context_properties>,
         gl_ctx_manager: Option<GLCtxManager>,
     ) -> Arc<Context> {
-        let worker_count = u32::max(util::cpu_count() / 2, 1);
-        let max_job_count = worker_count * 8;
-
         Arc::new(Self {
             base: CLObjectBase::new(RusticlTypes::Context),
             devs: devs,
@@ -141,7 +136,6 @@ impl Context {
                 svm_ptrs: TrackedPointers::new(),
             }),
             gl_ctx_manager: gl_ctx_manager,
-            worker_queue: util::queue::Queue::new(c"clctxworker", max_job_count, worker_count),
         })
     }
 

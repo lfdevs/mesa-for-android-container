@@ -783,7 +783,7 @@ dzn_graphics_pipeline_compile_shaders(struct dzn_device *device,
       mesa_shader_stage stage =
          vk_to_mesa_shader_stage(info->pStages[i].stage);
 
-      assert(stage <= MESA_SHADER_FRAGMENT);
+      assert((unsigned)stage <= MESA_SHADER_FRAGMENT);
 
       if ((stage == MESA_SHADER_VERTEX ||
            stage == MESA_SHADER_TESS_EVAL ||
@@ -801,7 +801,7 @@ dzn_graphics_pipeline_compile_shaders(struct dzn_device *device,
          continue;
       }
 
-      stages[stage].info = &info->pStages[i];
+      stages[(unsigned)stage].info = &info->pStages[i];
       active_stage_mask |= BITFIELD_BIT(stage);
    }
 

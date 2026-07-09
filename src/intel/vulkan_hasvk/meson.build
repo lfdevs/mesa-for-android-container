@@ -61,7 +61,7 @@ anv_flags = [
 
 anv_hasvk_drirc = custom_target(
   'anv_hasvk_drirc',
-  input  : [files('anv_drirc_gen.py'), drirc_gen, join_paths(dir_source_root, 'src/util/00-hasvk-defaults.conf')],
+  input  : [files('anv_drirc_gen.py'), drirc_gen, '00-hasvk-defaults.conf'],
   output : ['hasvk_drirc.c', 'hasvk_drirc.h'],
   command : [
     prog_python, '@INPUT0@',

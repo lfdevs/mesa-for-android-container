@@ -1,8 +1,6 @@
 /*
  * Copyright © 2021 Collabora Ltd.
- *
- * Derived from tu_shader.c which is:
- * Copyright © 2019 Google LLC
+ * Copyright © 2019-2026 Google LLC
  *
  * Also derived from anv_pipeline.c which is
  * Copyright © 2015 Intel Corporation
@@ -11,11 +9,16 @@
  */
 
 #include "panvk_device.h"
+#include "panvk_image.h"
+#include "panvk_sampler.h"
 #include "panvk_shader.h"
 
+#include "vk_format.h"
 #include "vk_graphics_state.h"
+#include "vk_nir_convert_ycbcr.h"
 #include "vk_pipeline.h"
 #include "vk_pipeline_layout.h"
+#include "vk_ycbcr_conversion.h"
 
 #include "util/bitset.h"
 #include "pan_nir.h"
@@ -741,12 +744,89 @@ get_desc_array_stride(const struct panvk_descriptor_set_binding_layout *layout,
    }
 }
 
+static void
+lower_tex_ycbcr(nir_builder *b, nir_tex_instr *tex,
+                const struct vk_ycbcr_conversion_state *conversion)
+{
+   b->cursor = nir_after_instr(&tex->instr);
+
+   nir_def *raw = &tex->def;
+
+   VkFormat y_format = vk_format_get_plane_format(conversion->format, 0);
+   uint8_t bits = vk_format_get_bpc(y_format);
+   uint32_t bpcs[3] = {bits, bits, bits};
+
+#if PAN_ARCH < 14
+   if (bits == 10) {
+      /* Upon normalization, the 10-bit component is divided by 1020 (0xFF<<2)
+       * instead of 1023. So here we have to scale down accordingly.
+       */
+      const float factor = 1020.0f / 1023.0f;
+      nir_def *scale = nir_imm_vec4(b, factor, factor, factor, 1.0f);
+      raw = nir_fmul(b, raw, scale);
+   }
+#endif
+
+   nir_def *result = raw;
+   if (conversion->ycbcr_model !=
+       VK_SAMPLER_YCBCR_MODEL_CONVERSION_RGB_IDENTITY) {
+      result = nir_convert_ycbcr_to_rgb(b, conversion->ycbcr_model,
+                                        conversion->ycbcr_range, raw, bpcs);
+   }
+
+   nir_def_rewrite_uses_after(&tex->def, result);
+
+   b->cursor = nir_before_instr(&tex->instr);
+}
+
+static void
+lower_tex_immutable(nir_builder *b, nir_tex_instr *tex,
+                    const struct lower_desc_ctx *ctx)
+{
+   /* clang-format off */
+   if (tex->op == nir_texop_txs ||
+       tex->op == nir_texop_query_levels ||
+       tex->op == nir_texop_texture_samples ||
+       tex->op == nir_texop_lod)
+      return;
+   /* clang-format on */
+
+   int sampler_src_idx =
+      nir_tex_instr_src_index(tex, nir_tex_src_sampler_deref);
+   if (sampler_src_idx < 0)
+      return;
+
+   nir_deref_instr *deref = nir_src_as_deref(tex->src[sampler_src_idx].src);
+   uint32_t set, binding, index_imm, max_idx;
+   nir_def *index_ssa;
+   get_resource_deref_binding(deref, &set, &binding, &index_imm, &index_ssa,
+                              &max_idx);
+
+   const struct panvk_descriptor_set_layout *set_layout = ctx->set_layouts[set];
+   const struct panvk_descriptor_set_binding_layout *bind_layout =
+      &set_layout->bindings[binding];
+
+   if (!bind_layout->immutable_samplers)
+      return;
+
+   const struct panvk_sampler *sampler =
+      bind_layout->immutable_samplers[index_imm];
+   if (sampler && sampler->vk.ycbcr_conversion) {
+      const struct vk_ycbcr_conversion_state *conversion =
+         &sampler->vk.ycbcr_conversion->state;
+      if (panvk_image_use_yuv_tex(PAN_ARCH, conversion->format))
+         lower_tex_ycbcr(b, tex, conversion);
+   }
+}
+
 static bool
 lower_tex(nir_builder *b, nir_tex_instr *tex, const struct lower_desc_ctx *ctx)
 {
    bool progress = false;
 
    b->cursor = nir_before_instr(&tex->instr);
+
+   lower_tex_immutable(b, tex, ctx);
 
 #if PAN_ARCH < 9
    if (tex->op == nir_texop_txs || tex->op == nir_texop_query_levels ||

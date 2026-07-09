@@ -891,6 +891,15 @@ _mesa_set_dispatch(struct gl_context *ctx, struct _glapi_table *t)
    _mesa_glapi_set_dispatch(ctx->Dispatch.Trace ? ctx->Dispatch.Trace : t);
 }
 
+struct _glapi_table *
+_mesa_get_dispatch(struct gl_context *ctx)
+{
+   if (ctx->Dispatch.Trace && GET_DISPATCH() == ctx->Dispatch.Trace)
+      return ctx->Dispatch.RealPublished;
+
+   return GET_DISPATCH();
+}
+
 bool
 _mesa_initialize_dispatch_tables(struct gl_context *ctx)
 {

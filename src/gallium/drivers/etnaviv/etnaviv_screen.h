@@ -40,6 +40,7 @@
 #include "util/u_dynarray.h"
 #include "util/u_helpers.h"
 #include "util/u_queue.h"
+#include "util/u_shader_variant_cache.h"
 #include "compiler/nir/nir.h"
 #include "etnaviv_ml.h"
 #include "pipe/p_state.h"
@@ -69,6 +70,7 @@ struct etna_screen {
 
    struct etna_compiler *compiler;
    struct util_queue shader_compiler_queue;
+   struct util_shader_variant_cache_options variant_opts;
 
    /* dummy BO available to user that don't care about the content */
    struct etna_bo *dummy_bo;

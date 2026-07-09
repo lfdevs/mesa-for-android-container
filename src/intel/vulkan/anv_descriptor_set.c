@@ -2081,6 +2081,7 @@ anv_descriptor_set_write_image_view(struct anv_device *device,
             .row_pitch_B = image_view->image->planes[0].primary_surface.isl.row_pitch_B,
             .qpitch = image_view->image->planes[0].primary_surface.isl.array_pitch_el_rows,
             .format = image_view->planes[0].isl.format,
+            .min_array_element = image_view->vk.base_array_layer,
          };
          memcpy(desc_surface_map, &desc_data, sizeof(desc_data));
       } else {

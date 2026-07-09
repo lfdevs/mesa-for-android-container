@@ -39,6 +39,7 @@ struct kk_device_info {
    uint32_t max_workgroup_count[3];
    uint32_t max_workgroup_invocations;
    uint32_t max_compute_shared_memory_size;
+   uint32_t gpu_apple_family;
    uint64_t max_buffer_size;
 };
 

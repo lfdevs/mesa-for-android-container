@@ -506,7 +506,7 @@ radv_rt_nir_to_asm(const struct radv_compiler_info *compiler_info, struct radv_r
 
    debug->stages = 1 << shaders[0]->info.stage;
 
-   radv_shader_dump_asm(compiler_info, debug, &stage->info);
+   radv_shader_dump_asm(compiler_info, debug, *binary, &stage->info);
 
    if (stage->key.keep_executable_info && stage->spirv.size) {
       debug->spirv = malloc(stage->spirv.size);

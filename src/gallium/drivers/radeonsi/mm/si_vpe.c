@@ -918,7 +918,7 @@ si_vpe_set_stream_in_param(struct vpe_video_processor *vpeproc,
    color_adj->hue                      = 0.0;
    color_adj->saturation               = 1.0;
 
-   switch (process_properties->orientation & 0xF) {
+   switch (process_properties->orientation & 0x7) {
    case PIPE_VIDEO_VPP_ROTATION_90:
       stream->rotation = VPE_ROTATION_ANGLE_90;
       break;

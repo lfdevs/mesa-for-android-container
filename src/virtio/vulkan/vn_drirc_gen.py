@@ -6,6 +6,11 @@ import argparse
 import sys
 
 
+VALID_COMMON_VK_OPTIONS = {
+    "force_vk_devicename",
+}
+
+
 def declare_options():
     import drirc_gen
 
@@ -22,8 +27,8 @@ def declare_options():
           c_name="enable_wsi_multi_plane_modifiers"),
     ]
 
-    drirc_gen.add_common_vk_wsi_options(debug_options, performance_options,
-                                        defaults={"vk_xwayland_wait_ready": True})
+    drirc_gen.add_common_vk_options(debug_options, [], [], valid_options=VALID_COMMON_VK_OPTIONS)
+    drirc_gen.add_common_vk_wsi_options(debug_options, performance_options);
 
     return [
         drirc_gen.DrircSection("Performance", performance_options, c_name="performance"),

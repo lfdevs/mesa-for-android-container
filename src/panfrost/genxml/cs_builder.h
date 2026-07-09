@@ -241,7 +241,7 @@ cs_builder_init(struct cs_builder *b, const struct cs_builder_conf *conf,
    b->conf = *conf;
    b->root_chunk.buffer = root_buffer;
    b->cur_chunk.buffer = root_buffer;
-   b->cur_ls_tracker = &b->root_ls_tracker,
+   b->cur_ls_tracker = &b->root_ls_tracker;
 
    memset(b->cur_ls_tracker, 0, sizeof(*b->cur_ls_tracker));
 

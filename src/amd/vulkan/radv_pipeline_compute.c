@@ -133,7 +133,7 @@ radv_compile_cs(const struct radv_compiler_info *compiler_info, struct radv_shad
    dbg->nir_string = nir_string;
    dbg->stages = 1 << MESA_SHADER_COMPUTE;
 
-   radv_shader_dump_asm(compiler_info, dbg, &cs_stage->info);
+   radv_shader_dump_asm(compiler_info, dbg, cs_binary, &cs_stage->info);
 
    if (dbg->dump_shader)
       simple_mtx_unlock(compiler_info->debug.shader_dump_mtx);

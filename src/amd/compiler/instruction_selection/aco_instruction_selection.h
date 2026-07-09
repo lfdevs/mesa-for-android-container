@@ -155,7 +155,6 @@ struct isel_context {
 
    /* NIR range analysis. */
    struct hash_table* range_ht;
-   struct hash_table* numlsb_ht;
    nir_fp_analysis_state fp_class_ht;
 
    Temp arg_temps[AC_MAX_ARGS];
@@ -279,6 +278,7 @@ void expand_vector(isel_context* ctx, Temp vec_src, Temp dst, unsigned num_compo
 Temp convert_int(isel_context* ctx, Builder& bld, Temp src, unsigned src_bits, unsigned dst_bits,
                  bool sign_extend, Temp dst = Temp());
 Temp convert_pointer_to_64_bit(isel_context* ctx, Temp ptr, bool non_uniform = false);
+Temp add64_32(Builder& bld, Temp src0, Operand src1, Temp dst = Temp());
 void select_vec2(isel_context* ctx, Temp dst, Temp cond, Temp then, Temp els);
 Operand load_lds_size_m0(Builder& bld);
 Temp create_vec_from_array(isel_context* ctx, Temp arr[], unsigned cnt, RegType reg_type,
@@ -301,7 +301,8 @@ struct aco_export_mrt {
 void create_fs_dual_src_export_gfx11(isel_context* ctx, const struct aco_export_mrt* mrt0,
                                      const struct aco_export_mrt* mrt1);
 Temp lanecount_to_mask(isel_context* ctx, Temp count, unsigned bit_offset);
-void emit_barrier(Builder& bld, memory_sync_info sync, sync_scope exec_scope);
+void emit_barrier(Builder& bld, memory_sync_info sync, sync_scope exec_scope,
+                  aco_opcode op = aco_opcode::p_barrier);
 void build_end_with_regs(isel_context* ctx, std::vector<Operand>& regs);
 Instruction* add_startpgm(struct isel_context* ctx, bool is_callee = false);
 void finish_program(isel_context* ctx);

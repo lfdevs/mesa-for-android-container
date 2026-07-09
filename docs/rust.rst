@@ -37,11 +37,11 @@ Peripheral Support for crates.io uploads
 Certain Mesa crates are uploaded to crates.io at the discretion of certain
 sub-communities of Mesa.  These crates are:
 
-- https://crates.io/crates/mesa3d_util
+- https://crates.io/crates/magma-gpu
 
 These crates are used as dependencies to other Rust-based projects, such as:
 
-- https://crates.io/crates/rutabaga_gfx/0.1.61/dependencies
+- https://crates.io/crates/rutabaga_gfx
 
 This is not supported by the "core" Mesa quarterly release cycles, and the
 official Mesa maintainers are not liable for use or mis-use of the crates.

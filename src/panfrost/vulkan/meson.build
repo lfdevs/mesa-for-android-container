@@ -22,7 +22,7 @@ panvk_entrypoints = custom_target(
 
 panvk_drirc = custom_target(
   'panvk_drirc',
-  input  : [files('panvk_drirc_gen.py'), drirc_gen, join_paths(dir_source_root, 'src/util/00-panvk-defaults.conf')],
+  input  : [files('panvk_drirc_gen.py'), drirc_gen, '00-panvk-defaults.conf'],
   output : ['panvk_drirc.c', 'panvk_drirc.h'],
   command : [
     prog_python, '@INPUT0@',
@@ -57,6 +57,7 @@ libpanvk_files = files(
   'panvk_image.c',
   'panvk_instance.c',
   'panvk_mempool.c',
+  'panvk_nir_lower_tile_image.c',
   'panvk_physical_device.c',
   'panvk_priv_bo.c',
   'panvk_utrace.c',

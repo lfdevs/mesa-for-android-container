@@ -265,6 +265,14 @@ impl MemoryBuffer {
         Ok(())
     }
 
+    fn cpu_unmap(&mut self) {
+        if !self.host_addr.is_null() {
+            let res = unsafe { munmap(self.host_addr, self.size() as usize) };
+            debug_assert_eq!(res, 0, "Failed to munmap BO");
+            self.host_addr = null_mut();
+        }
+    }
+
     fn gpu_bind_immediate(&mut self, addr: u64) -> io::Result<()> {
         assert!(self.device_addr == 0, "Already bound");
 
@@ -302,6 +310,35 @@ impl MemoryBuffer {
         }
         self.device_addr = addr;
         Ok(())
+    }
+
+    fn gpu_unbind_immediate(&mut self) {
+        if self.device_addr == 0 {
+            return;
+        }
+
+        let vm_ops = [pan_kmod_vm_op {
+            type_: PAN_KMOD_VM_OP_TYPE_UNMAP,
+            va: pan_kmod_vm_op__bindgen_ty_1 {
+                start: self.device_addr,
+                size: self.size(),
+            },
+            __bindgen_anon_1: Default::default(),
+            signal: Default::default(),
+            wait: Default::default(),
+            flags: 0,
+        }];
+
+        unsafe {
+            let res = pan_kmod_vm_bind(
+                self.mem.kvm(),
+                PAN_KMOD_VM_OP_MODE_IMMEDIATE,
+                &vm_ops as *const _ as *mut _,
+                vm_ops.len().try_into().unwrap(),
+            );
+            debug_assert_eq!(res, 0, "Failed to unbind BO");
+        }
+        self.device_addr = 0;
     }
 
     fn inject_debug(&mut self, name: &CStr) {
@@ -362,6 +399,10 @@ impl Drop for MemoryBuffer {
                     self.size() as u32,
                 );
             }
+
+            self.gpu_unbind_immediate();
+            self.cpu_unmap();
+
             pan_kmod_bo_put(self.kbo());
         }
     }

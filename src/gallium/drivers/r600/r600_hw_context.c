@@ -299,13 +299,12 @@ void r600_context_gfx_flush(void *context, unsigned flags,
 			const char *fname = os_get_option("R600_TRACE");
 			if (!fname)
 				exit(-1);
-			FILE *fl = fopen(fname, "w+");
+			FILE *fl = fopen(fname, "a+");
 			if (fl) {
 				eg_dump_debug_state(&ctx->b.b, fl, 0);
 				fclose(fl);
 			} else
 				perror(fname);
-			exit(-1);
 		}
 	}
 	r600_begin_new_cs(ctx);

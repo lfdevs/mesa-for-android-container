@@ -223,7 +223,7 @@ radv_meta_end(struct radv_cmd_buffer *cmd_buffer)
                                  state->graphics_descriptors.old_descriptor_set0, 0);
       }
       descriptors_state->descriptor_buffers[0] = state->graphics_descriptors.old_descriptor_buffer0;
-      descriptors_state->dirty_heaps = state->graphics_descriptors.old_descriptor_heaps_dirty;
+      descriptors_state->dirty_heaps |= state->graphics_descriptors.old_descriptor_heaps_dirty;
    }
 
    if (state->flags & RADV_META_SAVE_COMPUTE_DESCRIPTORS) {
@@ -234,7 +234,7 @@ radv_meta_end(struct radv_cmd_buffer *cmd_buffer)
                                  state->compute_descriptors.old_descriptor_set0, 0);
       }
       descriptors_state->descriptor_buffers[0] = state->compute_descriptors.old_descriptor_buffer0;
-      descriptors_state->dirty_heaps = state->compute_descriptors.old_descriptor_heaps_dirty;
+      descriptors_state->dirty_heaps |= state->compute_descriptors.old_descriptor_heaps_dirty;
    }
 
    if (state->flags & RADV_META_SAVE_CONSTANTS) {
@@ -260,6 +260,27 @@ radv_meta_end(struct radv_cmd_buffer *cmd_buffer)
    }
 
    radv_resume_queries(state, cmd_buffer);
+}
+
+void
+radv_meta_begin_rendering(struct radv_cmd_buffer *cmd_buffer)
+{
+   assert(cmd_buffer->state.render.active);
+
+   radv_meta_begin(cmd_buffer);
+
+   /* We always enable HiZ within meta operations, so this needs to be set for meta draws which
+    * don't have their own render pass instance.
+    */
+   cmd_buffer->state.dirty |= RADV_CMD_DIRTY_GFX12_HIZ_WA_STATE;
+}
+
+void
+radv_meta_end_rendering(struct radv_cmd_buffer *cmd_buffer)
+{
+   assert(cmd_buffer->state.render.active);
+   radv_meta_end(cmd_buffer);
+   cmd_buffer->state.dirty |= RADV_CMD_DIRTY_GFX12_HIZ_WA_STATE;
 }
 
 VkImageViewType

@@ -1224,6 +1224,9 @@ BEGIN_TEST(assembler.ldsdir)
 END_TEST
 
 BEGIN_TEST(assembler.vop12c_v128)
+   if (LLVM_VERSION_MAJOR < 22)
+      return;
+
    for (amd_gfx_level gfx : filter_gfx_levels({GFX11, GFX12})) {
       if (!setup_cs(NULL, gfx))
          continue;
@@ -1250,130 +1253,68 @@ BEGIN_TEST(assembler.vop12c_v128)
       fprintf(output, "llvm_version: %u\n", LLVM_VERSION_MAJOR);
 
       //>> BB0:
-      //; if llvm_ver == 16:
-      //;    insert_pattern('v_mul_f16_e32 v0, v1, v2 ; Error: VGPR_32_Lo128: unknown register 128 ; 6a000501')
-      //; elif llvm_ver < 20:
-      //;    insert_pattern('v_mul_f16_e32 v0, v1, v2                                    ; 6a000501')
-      //; else:
-      //;    insert_pattern('v_mul_f16_e32 v0.l, v1.l, v2.l                              ; 6a000501')
+      //! v_mul_f16_e32 v0.l, v1.l, v2.l                              ; 6a000501
       bld.vop2(aco_opcode::v_mul_f16, dst_v0, op_v1, op_v2);
 
-      //; if llvm_ver < 20:
-      //;    insert_pattern('v_mul_f16_e64 v128, v1, v2                                  ; d5350080 00020501')
-      //; else:
-      //;    insert_pattern('v_mul_f16_e64 v128.l, v1.l, v2.l                            ; d5350080 00020501')
+      //! v_mul_f16_e64 v128.l, v1.l, v2.l                            ; d5350080 02020501
       bld.vop2(aco_opcode::v_mul_f16, dst_v128, op_v1, op_v2);
 
-      //; if llvm_ver < 20:
-      //;    insert_pattern('v_mul_f16_e64 v0, v129, v2                                  ; d5350000 00020581')
-      //; else:
-      //;    insert_pattern('v_mul_f16_e64 v0.l, v129.l, v2.l                            ; d5350000 00020581')
+      //! v_mul_f16_e64 v0.l, v129.l, v2.l                            ; d5350000 02020581
       bld.vop2(aco_opcode::v_mul_f16, dst_v0, op_v129, op_v2);
 
-      //; if llvm_ver < 20:
-      //;    insert_pattern('v_mul_f16_e64 v0, v1, v130                                  ; d5350000 00030501')
-      //; else:
-      //;    insert_pattern('v_mul_f16_e64 v0.l, v1.l, v130.l                            ; d5350000 00030501')
+      //! v_mul_f16_e64 v0.l, v1.l, v130.l                            ; d5350000 02030501
       bld.vop2(aco_opcode::v_mul_f16, dst_v0, op_v1, op_v130);
 
-      //; if llvm_ver < 20:
-      //;    insert_pattern('v_rcp_f16_e64 v128, v1                                      ; d5d40080 00000101')
-      //; else:
-      //;    insert_pattern('v_rcp_f16_e64 v128.l, v1.l                                  ; d5d40080 00000101')
+      //! v_rcp_f16_e64 v128.l, v1.l                                  ; d5d40080 02010101
       bld.vop1(aco_opcode::v_rcp_f16, dst_v128, op_v1);
 
-      //; if llvm_ver < 20:
-      //;    insert_pattern('v_cmp_eq_f16_e64 vcc, v129, v2                              ; d402006a 00020581')
-      //; else:
-      //;    insert_pattern('v_cmp_eq_f16_e64 vcc, v129.l, v2.l                          ; d402006a 00020581')
+      //! v_cmp_eq_f16_e64 vcc, v129.l, v2.l                          ; d402006a 02020581
       bld.vopc(aco_opcode::v_cmp_eq_f16, bld.def(s2, vcc), op_v129, op_v2);
 
-      //; if llvm_ver < 20:
-      //;    insert_pattern('v_mul_f16_e64_dpp v128, v1, v2 row_ror:1 row_mask:0xf bank_mask:0xf bound_ctrl:1 fi:1 ; d5350080 000204fa ff0d2101')
-      //; else:
-      //;    insert_pattern('v_mul_f16_e64_dpp v128.l, v1.l, v2.l row_ror:1 row_mask:0xf bank_mask:0xf bound_ctrl:1 fi:1 ; d5350080 000204fa ff0d2101')
+      //! v_mul_f16_e64_dpp v128.l, v1.l, v2.l row_ror:1 row_mask:0xf bank_mask:0xf bound_ctrl:1 fi:1 ; d5350080 020204fa ff0d2101
       bld.vop2_dpp(aco_opcode::v_mul_f16, dst_v128, op_v1, op_v2, dpp_row_rr(1));
 
-      //; if llvm_ver < 20:
-      //;    insert_pattern('v_mul_f16_e64_dpp v0, v129, v2 row_ror:1 row_mask:0xf bank_mask:0xf bound_ctrl:1 fi:1 ; d5350000 000204fa ff0d2181')
-      //; else:
-      //;    insert_pattern('v_mul_f16_e64_dpp v0.l, v129.l, v2.l row_ror:1 row_mask:0xf bank_mask:0xf bound_ctrl:1 fi:1 ; d5350000 000204fa ff0d2181')
+      //! v_mul_f16_e64_dpp v0.l, v129.l, v2.l row_ror:1 row_mask:0xf bank_mask:0xf bound_ctrl:1 fi:1 ; d5350000 020204fa ff0d2181
       bld.vop2_dpp(aco_opcode::v_mul_f16, dst_v0, op_v129, op_v2, dpp_row_rr(1));
 
-      //; if llvm_ver < 20:
-      //;    insert_pattern('v_mul_f16_e64_dpp v0, v1, v130 row_ror:1 row_mask:0xf bank_mask:0xf bound_ctrl:1 fi:1 ; d5350000 000304fa ff0d2101')
-      //; else:
-      //;    insert_pattern('v_mul_f16_e64_dpp v0.l, v1.l, v130.l row_ror:1 row_mask:0xf bank_mask:0xf bound_ctrl:1 fi:1 ; d5350000 000304fa ff0d2101')
+      //! v_mul_f16_e64_dpp v0.l, v1.l, v130.l row_ror:1 row_mask:0xf bank_mask:0xf bound_ctrl:1 fi:1 ; d5350000 020304fa ff0d2101
       bld.vop2_dpp(aco_opcode::v_mul_f16, dst_v0, op_v1, op_v130, dpp_row_rr(1));
 
-      //; if llvm_ver < 20:
-      //;    insert_pattern('v_mul_f16_e64_dpp v128, v1, v2 dpp8:[0,0,0,0,0,0,0,0] fi:1  ; d5350080 000204ea 00000001')
-      //; else:
-      //;    insert_pattern('v_mul_f16_e64_dpp v128.l, v1.l, v2.l dpp8:[0,0,0,0,0,0,0,0] fi:1  ; d5350080 000204ea 00000001')
+      //! v_mul_f16_e64_dpp v128.l, v1.l, v2.l dpp8:[0,0,0,0,0,0,0,0] fi:1  ; d5350080 020204ea 00000001
       bld.vop2_dpp8(aco_opcode::v_mul_f16, dst_v128, op_v1, op_v2);
 
-      //; if llvm_ver < 20:
-      //;    insert_pattern('v_mul_f16_e64_dpp v0, v129, v2 dpp8:[0,0,0,0,0,0,0,0] fi:1  ; d5350000 000204ea 00000081')
-      //; else:
-      //;    insert_pattern('v_mul_f16_e64_dpp v0.l, v129.l, v2.l dpp8:[0,0,0,0,0,0,0,0] fi:1  ; d5350000 000204ea 00000081')
+      //! v_mul_f16_e64_dpp v0.l, v129.l, v2.l dpp8:[0,0,0,0,0,0,0,0] fi:1  ; d5350000 020204ea 00000081
       bld.vop2_dpp8(aco_opcode::v_mul_f16, dst_v0, op_v129, op_v2);
 
-      //; if llvm_ver < 20:
-      //;    insert_pattern('v_mul_f16_e64_dpp v0, v1, v130 dpp8:[0,0,0,0,0,0,0,0] fi:1  ; d5350000 000304ea 00000001')
-      //; else:
-      //;    insert_pattern('v_mul_f16_e64_dpp v0.l, v1.l, v130.l dpp8:[0,0,0,0,0,0,0,0] fi:1  ; d5350000 000304ea 00000001')
+      //! v_mul_f16_e64_dpp v0.l, v1.l, v130.l dpp8:[0,0,0,0,0,0,0,0] fi:1  ; d5350000 020304ea 00000001
       bld.vop2_dpp8(aco_opcode::v_mul_f16, dst_v0, op_v1, op_v130);
 
-      //; if llvm_ver < 20:
-      //;    insert_pattern('v_fma_f16 v128, v1, v2, 0x60                                ; d6480080 03fe0501 00000060')
-      //; else:
-      //;    insert_pattern('v_fma_f16 v128.l, v1.l, v2.l, 0x60                          ; d6480080 03fe0501 00000060')
+      //! v_fma_f16 v128.l, v1.l, v2.l, 0x60                          ; d6480080 03fe0501 00000060
       bld.vop2(aco_opcode::v_fmaak_f16, dst_v128, op_v1, op_v2, Operand::literal32(96));
 
-      //; if llvm_ver < 20:
-      //;    insert_pattern('v_fma_f16 v128, v1, 0x60, v2                                ; d6480080 0409ff01 00000060')
-      //; else:
-      //;    insert_pattern('v_fma_f16 v128.l, v1.l, 0x60, v2.l                          ; d6480080 0409ff01 00000060')
+      //! v_fma_f16 v128.l, v1.l, 0x60, v2.l                          ; d6480080 0409ff01 00000060
       bld.vop2(aco_opcode::v_fmamk_f16, dst_v128, op_v1, op_v2, Operand::literal32(96));
 
-      //; if llvm_ver < 20:
-      //;    insert_pattern('v_rcp_f16_e64_dpp v128, -v1 row_ror:1 row_mask:0xf bank_mask:0xf bound_ctrl:1 fi:1 ; d5d40080 200000fa ff1d2101')
-      //; else:
-      //;    insert_pattern('v_rcp_f16_e64_dpp v128.l, -v1.l row_ror:1 row_mask:0xf bank_mask:0xf bound_ctrl:1 fi:1 ; d5d40080 200000fa ff1d2101')
+      //! v_rcp_f16_e64_dpp v128.l, -v1.l row_ror:1 row_mask:0xf bank_mask:0xf bound_ctrl:1 fi:1 ; d5d40080 220100fa ff1d2101
       bld.vop1_dpp(aco_opcode::v_rcp_f16, dst_v128, op_v1, dpp_row_rr(1))->dpp16().neg[0] = true;
 
-      //; if llvm_ver < 20:
-      //;    insert_pattern('v_rcp_f16_e64_dpp v128, |v1| row_ror:1 row_mask:0xf bank_mask:0xf bound_ctrl:1 fi:1 ; d5d40180 000000fa ff2d2101')
-      //; else:
-      //;    insert_pattern('v_rcp_f16_e64_dpp v128.l, |v1.l| row_ror:1 row_mask:0xf bank_mask:0xf bound_ctrl:1 fi:1 ; d5d40180 000000fa ff2d2101')
+      //! v_rcp_f16_e64_dpp v128.l, |v1.l| row_ror:1 row_mask:0xf bank_mask:0xf bound_ctrl:1 fi:1 ; d5d40180 020100fa ff2d2101
       bld.vop1_dpp(aco_opcode::v_rcp_f16, dst_v128, op_v1, dpp_row_rr(1))->dpp16().abs[0] = true;
 
-      //; if llvm_ver < 20:
-      //;    insert_pattern('v_mul_f16_e64_dpp v128, -v1, v2 row_ror:1 row_mask:0xf bank_mask:0xf bound_ctrl:1 fi:1 ; d5350080 200204fa ff1d2101')
-      //; else:
-      //;    insert_pattern('v_mul_f16_e64_dpp v128.l, -v1.l, v2.l row_ror:1 row_mask:0xf bank_mask:0xf bound_ctrl:1 fi:1 ; d5350080 200204fa ff1d2101')
+      //! v_mul_f16_e64_dpp v128.l, -v1.l, v2.l row_ror:1 row_mask:0xf bank_mask:0xf bound_ctrl:1 fi:1 ; d5350080 220204fa ff1d2101
       bld.vop2_dpp(aco_opcode::v_mul_f16, dst_v128, op_v1, op_v2, dpp_row_rr(1))->dpp16().neg[0] =
          true;
 
-      //; if llvm_ver < 20:
-      //;    insert_pattern('v_mul_f16_e64_dpp v128, |v1|, v2 row_ror:1 row_mask:0xf bank_mask:0xf bound_ctrl:1 fi:1 ; d5350180 000204fa ff2d2101')
-      //; else:
-      //;    insert_pattern('v_mul_f16_e64_dpp v128.l, |v1.l|, v2.l row_ror:1 row_mask:0xf bank_mask:0xf bound_ctrl:1 fi:1 ; d5350180 000204fa ff2d2101')
+      //! v_mul_f16_e64_dpp v128.l, |v1.l|, v2.l row_ror:1 row_mask:0xf bank_mask:0xf bound_ctrl:1 fi:1 ; d5350180 020204fa ff2d2101
       bld.vop2_dpp(aco_opcode::v_mul_f16, dst_v128, op_v1, op_v2, dpp_row_rr(1))->dpp16().abs[0] =
          true;
 
-      //; if llvm_ver < 20:
-      //;    insert_pattern('v_cmp_eq_f16_e64_dpp vcc, -v129, v2 row_ror:1 row_mask:0xf bank_mask:0xf bound_ctrl:1 fi:1 ; d402006a 200204fa ff1d2181')
-      //; else:
-      //;    insert_pattern('v_cmp_eq_f16_e64_dpp vcc, -v129.l, v2.l row_ror:1 row_mask:0xf bank_mask:0xf bound_ctrl:1 fi:1 ; d402006a 200204fa ff1d2181')
+      //! v_cmp_eq_f16_e64_dpp vcc, -v129.l, v2.l row_ror:1 row_mask:0xf bank_mask:0xf bound_ctrl:1 fi:1 ; d402006a 220204fa ff1d2181
       bld.vopc_dpp(aco_opcode::v_cmp_eq_f16, bld.def(s2, vcc), op_v129, op_v2, dpp_row_rr(1))
          ->dpp16()
          .neg[0] = true;
 
-      //; if llvm_ver < 20:
-      //;    insert_pattern('v_cmp_eq_f16_e64_dpp vcc, |v129|, v2 row_ror:1 row_mask:0xf bank_mask:0xf bound_ctrl:1 fi:1 ; d402016a 000204fa ff2d2181')
-      //; else:
-      //;    insert_pattern('v_cmp_eq_f16_e64_dpp vcc, |v129.l|, v2.l row_ror:1 row_mask:0xf bank_mask:0xf bound_ctrl:1 fi:1 ; d402016a 000204fa ff2d2181')
+      //! v_cmp_eq_f16_e64_dpp vcc, |v129.l|, v2.l row_ror:1 row_mask:0xf bank_mask:0xf bound_ctrl:1 fi:1 ; d402016a 020204fa ff2d2181
       bld.vopc_dpp(aco_opcode::v_cmp_eq_f16, bld.def(s2, vcc), op_v129, op_v2, dpp_row_rr(1))
          ->dpp16()
          .abs[0] = true;
@@ -1383,6 +1324,9 @@ BEGIN_TEST(assembler.vop12c_v128)
 END_TEST
 
 BEGIN_TEST(assembler.vop3_dpp)
+   if (LLVM_VERSION_MAJOR < 22)
+      return;
+
    for (amd_gfx_level gfx : filter_gfx_levels({GFX11, GFX12})) {
       if (!setup_cs(NULL, gfx))
          continue;
@@ -1419,25 +1363,25 @@ BEGIN_TEST(assembler.vop3_dpp)
       bld.vop3p_dpp8(aco_opcode::v_fma_mix_f32, dst_v0, op_v1, op_v2, op_s1, 0x0, 0x7)->valu().neg =
          0x3;
 
-      //! v_add_f32_e64_dpp v0, v1, v2 clamp row_ror:1 row_mask:0xf bank_mask:0xf bound_ctrl:1 fi:1 ; d5038000 000204fa ff0d2101
+      //! v_add_f32_e64_dpp v0, v1, v2 clamp row_ror:1 row_mask:0xf bank_mask:0xf bound_ctrl:1 fi:1 ; d5038000 020204fa ff0d2101
       bld.vop2_e64_dpp(aco_opcode::v_add_f32, dst_v0, op_v1, op_v2, dpp_row_rr(1))->valu().clamp =
          true;
 
-      //! v_sqrt_f32_e64_dpp v0, v1 clamp row_ror:1 row_mask:0xf bank_mask:0xf bound_ctrl:1 fi:1 ; d5b38000 000000fa ff0d2101
+      //! v_sqrt_f32_e64_dpp v0, v1 clamp row_ror:1 row_mask:0xf bank_mask:0xf bound_ctrl:1 fi:1 ; d5b38000 020100fa ff0d2101
       bld.vop1_e64_dpp(aco_opcode::v_sqrt_f32, dst_v0, op_v1, dpp_row_rr(1))->valu().clamp = true;
 
-      //! v_cmp_lt_f32_e64_dpp s[4:5], |v1|, |v2| row_ror:1 row_mask:0xf bank_mask:0xf bound_ctrl:1 fi:1 ; d4110304 000204fa ffad2101
+      //! v_cmp_lt_f32_e64_dpp s[4:5], |v1|, |v2| row_ror:1 row_mask:0xf bank_mask:0xf bound_ctrl:1 fi:1 ; d4110304 020204fa ffad2101
       bld.vopc_e64_dpp(aco_opcode::v_cmp_lt_f32, dst_non_vcc, op_v1, op_v2, dpp_row_rr(1))
          ->valu()
          .abs = 0x3;
 
-      //! v_add_f32_e64_dpp v0, v1, v2 mul:4 dpp8:[0,0,0,0,0,0,0,0] fi:1 ; d5030000 100204ea 00000001
+      //! v_add_f32_e64_dpp v0, v1, v2 mul:4 dpp8:[0,0,0,0,0,0,0,0] fi:1 ; d5030000 120204ea 00000001
       bld.vop2_e64_dpp8(aco_opcode::v_add_f32, dst_v0, op_v1, op_v2)->valu().omod = 2;
 
-      //! v_sqrt_f32_e64_dpp v0, v1 clamp dpp8:[0,0,0,0,0,0,0,0] fi:1 ; d5b38000 000000ea 00000001
+      //! v_sqrt_f32_e64_dpp v0, v1 clamp dpp8:[0,0,0,0,0,0,0,0] fi:1 ; d5b38000 020100ea 00000001
       bld.vop1_e64_dpp8(aco_opcode::v_sqrt_f32, dst_v0, op_v1)->valu().clamp = true;
 
-      //! v_cmp_lt_f32_e64_dpp s[4:5], |v1|, v2 dpp8:[0,0,0,0,0,0,0,0] fi:1 ; d4110104 000204ea 00000001
+      //! v_cmp_lt_f32_e64_dpp s[4:5], |v1|, v2 dpp8:[0,0,0,0,0,0,0,0] fi:1 ; d4110104 020204ea 00000001
       bld.vopc_e64_dpp8(aco_opcode::v_cmp_lt_f32, dst_non_vcc, op_v1, op_v2)->valu().abs = 0x1;
 
       finish_assembler_test();
@@ -1509,10 +1453,10 @@ BEGIN_TEST(assembler.vopd)
 END_TEST
 
 BEGIN_TEST(assembler.pseudo_scalar_trans)
-   if (LLVM_VERSION_MAJOR < 19 || !setup_cs(NULL, GFX12))
+   if (LLVM_VERSION_MAJOR < 22 || !setup_cs(NULL, GFX12))
       return;
 
-   //>> v_s_sqrt_f32 s5, s1                                         ; d6880005 00000001
+   //>> v_s_sqrt_f32 s5, s1                                         ; d6880005 02010001
    bld.vop3(aco_opcode::v_s_sqrt_f32, Definition(PhysReg(5), s1), Operand(PhysReg(1), s1));
 
    finish_assembler_test();

@@ -340,13 +340,17 @@ tu_lrz_begin_resumed_renderpass(struct tu_cmd_buffer *cmd)
       return;
    }
 
-   uint32_t a;
-   for (a = 0; a < cmd->state.pass->attachment_count; a++) {
-      if (cmd->state.attachments[a]->image->lrz_layout.lrz_total_size)
+   uint32_t a = VK_ATTACHMENT_UNUSED;
+   for (uint32_t subpass_idx = 0; subpass_idx < cmd->state.pass->subpass_count; subpass_idx++) {
+      const struct tu_subpass *subpass = &cmd->state.pass->subpasses[subpass_idx];
+      a = subpass->depth_stencil_attachment.attachment;
+
+      if (a != VK_ATTACHMENT_UNUSED && cmd->state.attachments[a]->image->lrz_layout.lrz_total_size) {
          break;
+      }
    }
 
-   if (a != cmd->state.pass->attachment_count) {
+   if (a != VK_ATTACHMENT_UNUSED) {
       const struct tu_render_pass_attachment *att = &cmd->state.pass->attachments[a];
       tu_lrz_init_state(cmd, att, cmd->state.attachments[a]);
       if (att->clear_mask & (VK_IMAGE_ASPECT_COLOR_BIT | VK_IMAGE_ASPECT_DEPTH_BIT)) {
@@ -371,14 +375,22 @@ tu_lrz_begin_renderpass(struct tu_cmd_buffer *cmd)
    cmd->state.rp.lrz_write_disable_reason = NULL;
    cmd->state.rp.lrz_write_disabled_at_draw = 0;
 
-   int lrz_img_count = 0;
-   for (unsigned i = 0; i < pass->attachment_count; i++) {
-      if (cmd->state.attachments[i]->image->lrz_layout.lrz_total_size)
-         lrz_img_count++;
+   bool multiple_lrz_attachments = false;
+   uint32_t prev_depth_a = VK_ATTACHMENT_UNUSED;
+   for (uint32_t subpass_idx = 0; subpass_idx < cmd->state.pass->subpass_count; subpass_idx++) {
+      const struct tu_subpass *subpass = &cmd->state.pass->subpasses[subpass_idx];
+      uint32_t a = subpass->depth_stencil_attachment.attachment;
+
+      if (a != VK_ATTACHMENT_UNUSED && cmd->state.attachments[a]->image->lrz_layout.lrz_total_size) {
+         if (prev_depth_a != VK_ATTACHMENT_UNUSED && prev_depth_a != a) {
+            multiple_lrz_attachments = true;
+            break;
+         }
+         prev_depth_a = a;
+      }
    }
 
-   if (cmd->device->physical_device->info->props.has_lrz_dir_tracking &&
-       cmd->state.pass->subpass_count > 1 && lrz_img_count > 1) {
+   if (cmd->device->physical_device->info->props.has_lrz_dir_tracking && multiple_lrz_attachments) {
       /* Theoretically we could switch between LRZ buffers during the binning
        * and tiling passes, but it is untested and would add complexity for
        * presumably extremely rare case.

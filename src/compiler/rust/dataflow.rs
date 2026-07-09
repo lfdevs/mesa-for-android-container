@@ -202,7 +202,7 @@ mod tests {
         for &(a, b) in edges {
             builder.add_edge(a, b);
         }
-        let cfg = builder.as_cfg();
+        let cfg = builder.as_cfg(true);
 
         let mut reachable_in: Vec<BitSet> =
             (0..cfg.len()).map(|_| Default::default()).collect();
@@ -265,7 +265,7 @@ mod tests {
         for &(a, b) in edges {
             builder.add_edge(a, b);
         }
-        let cfg = builder.as_cfg();
+        let cfg = builder.as_cfg(true);
 
         let mut reachable_in: Vec<BitSet> =
             (0..cfg.len()).map(|_| Default::default()).collect();
@@ -328,7 +328,7 @@ mod tests {
         for &(a, b) in edges {
             builder.add_edge(a, b);
         }
-        let cfg = builder.as_cfg();
+        let cfg = builder.as_cfg(true);
 
         let mut iter_in: Vec<u32> = vec![0; cfg.len()];
         let mut iter_out: Vec<u32> = vec![0; cfg.len()];

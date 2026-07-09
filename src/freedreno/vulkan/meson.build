@@ -19,7 +19,7 @@ tu_entrypoints = custom_target(
 
 tu_drirc = custom_target(
   'tu_drirc',
-  input  : [files('tu_drirc_gen.py'), drirc_gen, join_paths(dir_source_root, 'src/util/00-turnip-defaults.conf')],
+  input  : [files('tu_drirc_gen.py'), drirc_gen, '00-turnip-defaults.conf'],
   output : ['tu_drirc.c', 'tu_drirc.h'],
   command : [
     prog_python, '@INPUT0@',
@@ -31,8 +31,7 @@ tu_drirc = custom_target(
 )
 
 libtu_files = files(
-  'bvh/tu_bvh.h',
-  'bvh/tu_build_interface.h',
+  'bvh/tu_bvh_defines.h',
   'layers/tu_rmv_layer.cc',
   'tu_acceleration_structure.cc',
   'tu_autotune.cc',
@@ -172,6 +171,7 @@ tu_tracepoints = custom_target(
 if with_perfetto
   libtu_files += ['tu_perfetto.cc']
   tu_deps += dep_perfetto
+  tu_deps += idep_parson
 endif
 
 tu_cpp_args = []

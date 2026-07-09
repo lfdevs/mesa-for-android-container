@@ -50,42 +50,43 @@
 
 struct loop_simplify_state {
    nir_builder *b;
-   nir_def *continue_flag;
+   nir_def *jump_flag;
    struct exec_list *cf_list;
+   nir_jump_type type;
 };
 
 static bool
-block_ends_in_continue(nir_block *block)
+block_ends_in_jump_type(nir_block *block, nir_jump_type type)
 {
    if (nir_block_ends_in_jump(block)) {
       nir_jump_instr *jump = nir_instr_as_jump(nir_block_last_instr(block));
-      return jump->type == nir_jump_continue;
+      return jump->type == type;
    }
 
    return false;
 }
 
 static bool
-lower_continues_in_cf_list(struct exec_list *cf_list,
+lower_jumps_in_cf_list(struct exec_list *cf_list,
                            struct loop_simplify_state *state);
 
 static bool
-lower_continue(nir_block *block, struct loop_simplify_state *state)
+lower_jump(nir_block *block, struct loop_simplify_state *state)
 {
-   if (!block_ends_in_continue(block))
+   if (!block_ends_in_jump_type(block, state->type))
       return false;
 
    assert(nir_cf_node_is_last(&block->cf_node));
 
-   /* Remove the continue instruction and set the predicate to 'true'. */
+   /* Remove the jump instruction and set the predicate to 'true'. */
    state->b->cursor = nir_instr_remove(nir_block_last_instr(block));
-   nir_store_reg(state->b, nir_imm_true(state->b), state->continue_flag);
+   nir_store_reg(state->b, nir_imm_true(state->b), state->jump_flag);
 
    return true;
 }
 
 static bool
-lower_continues_in_if(nir_if *nif, struct loop_simplify_state *state)
+lower_jumps_in_if(nir_if *nif, struct loop_simplify_state *state)
 {
    nir_block *then_block = nir_if_last_then_block(nif);
    nir_block *else_block = nir_if_last_else_block(nif);
@@ -93,27 +94,27 @@ lower_continues_in_if(nir_if *nif, struct loop_simplify_state *state)
    bool else_jumps = nir_block_ends_in_jump(else_block);
 
    bool progress = false;
-   progress |= lower_continue(then_block, state);
-   progress |= lower_continue(else_block, state);
+   progress |= lower_jump(then_block, state);
+   progress |= lower_jump(else_block, state);
 
    nir_block *next_block = nir_cf_node_cf_tree_next(&nif->cf_node);
    bool is_empty_block = nir_cf_node_is_last(&next_block->cf_node) &&
                          exec_list_is_empty(&next_block->instr_list);
 
-   /* If a branch leg ends in a jump, we lower already any continue statements,
+   /* If a branch leg ends in a jump, we lower already any continue/break statements,
     * so that we know if we have to move the following blocks to the other side.
     */
    if (then_jumps)
-      progress |= lower_continues_in_cf_list(&nif->then_list, state);
+      progress |= lower_jumps_in_cf_list(&nif->then_list, state);
    if (else_jumps)
-      progress |= lower_continues_in_cf_list(&nif->else_list, state);
+      progress |= lower_jumps_in_cf_list(&nif->else_list, state);
 
    if (!is_empty_block && progress) {
-      /* If one side ends in a jump and has a continue statement, move the
+      /* If one side ends in a jump and has a jump that we need to remove, move the
        * following code to the other side.  This is necessary to maintain SSA
        * dominance, because the jump gets guarded or removed.
        * Doing this based on (then_jumps || else_jumps) would also be a valid
-       * transform.  However, it's unnecessary if we don't have any continues
+       * transform.  However, it's unnecessary if we don't have any jumps
        * to lower and increases control-flow depth.
        */
       assert(then_jumps || else_jumps);
@@ -136,14 +137,14 @@ lower_continues_in_if(nir_if *nif, struct loop_simplify_state *state)
       is_empty_block = true;
    }
 
-   /* Recursively lower any continue statements for the sides that didn't jump.
+   /* Recursively lower any jump statements for the sides that didn't jump.
     * We do that here so that this also lowers the code which was after the IF
     * which we just moved inside.
     */
    if (!then_jumps)
-      progress |= lower_continues_in_cf_list(&nif->then_list, state);
+      progress |= lower_jumps_in_cf_list(&nif->then_list, state);
    if (!else_jumps)
-      progress |= lower_continues_in_cf_list(&nif->else_list, state);
+      progress |= lower_jumps_in_cf_list(&nif->else_list, state);
 
    if (!is_empty_block && progress) {
       /* Predicate following blocks. */
@@ -152,7 +153,7 @@ lower_continues_in_if(nir_if *nif, struct loop_simplify_state *state)
                      nir_after_cf_list(state->cf_list));
 
       state->b->cursor = nir_after_cf_node_and_phis(&nif->cf_node);
-      nir_if *if_stmt = nir_push_if(state->b, nir_load_reg(state->b, state->continue_flag));
+      nir_if *if_stmt = nir_push_if(state->b, nir_load_reg(state->b, state->jump_flag));
 
       assert(!exec_list_is_empty(&list.list));
       nir_cf_reinsert(&list, nir_before_cf_list(&if_stmt->else_list));
@@ -163,8 +164,8 @@ lower_continues_in_if(nir_if *nif, struct loop_simplify_state *state)
 }
 
 static bool
-lower_continues_in_cf_list(struct exec_list *cf_list,
-                           struct loop_simplify_state *state)
+lower_jumps_in_cf_list(struct exec_list *cf_list,
+                       struct loop_simplify_state *state)
 {
    bool progress = false;
 
@@ -179,7 +180,7 @@ lower_continues_in_cf_list(struct exec_list *cf_list,
    foreach_list_typed_reverse_safe(nir_cf_node, node, node, cf_list) {
       switch (node->type) {
       case nir_cf_node_if:
-         if (lower_continues_in_if(nir_cf_node_as_if(node), state))
+         if (lower_jumps_in_if(nir_cf_node_as_if(node), state))
             progress = true;
          break;
 
@@ -197,31 +198,54 @@ lower_continues_in_cf_list(struct exec_list *cf_list,
    return progress;
 }
 
+/* Simplify continues/breaks in the loop.
+ *
+ * For continues, this means removing all explicit jumps,
+ * only leaving the trivial back edge.
+ *
+ * For breaks, insert a single conditional break just before
+ * the back edge.
+ *
+ * It's assumed that all phis for the jumps in question are
+ * lowered to registers before the call to this function.
+ */
+void
+nir_simplify_loop(nir_loop *loop, nir_jump_type type)
+{
+   assert(type == nir_jump_continue || type == nir_jump_break);
+
+   struct loop_simplify_state state;
+   state.type = type;
+   nir_builder b = nir_builder_at(nir_before_block_after_phis(nir_loop_first_block(loop)));
+   state.b = &b;
+
+   /* Initialize the variable to False. */
+   state.jump_flag = nir_decl_reg(&b, 1, 1, 0);
+   nir_store_reg(&b, nir_imm_false(&b), state.jump_flag);
+
+   lower_jumps_in_cf_list(&loop->body, &state);
+
+   if (type == nir_jump_break) {
+      b.cursor = nir_after_cf_list(&loop->body);
+      nir_break_if(&b, nir_load_reg(&b, state.jump_flag));
+   }
+}
+
 static void
-simplify_loop(nir_loop *loop)
+simplify_loop_continues(nir_loop *loop)
 {
    nir_block *cont = nir_loop_first_continue_block(loop);
    nir_block *last = nir_loop_last_block(loop);
 
    /* Remove trivial continue statement. */
-   if (block_ends_in_continue(last))
+   if (block_ends_in_jump_type(last, nir_jump_continue))
       nir_instr_remove(nir_block_last_instr(last));
 
    /* If the loop has only the trivial continue, there is nothing to do. */
    if (!nir_block_ends_in_jump(last) && nir_block_num_preds(cont) == 1)
       return;
 
-   struct loop_simplify_state state;
-   nir_builder b = nir_builder_at(nir_before_block_after_phis(nir_loop_first_block(loop)));
-   state.b = &b;
-
-   /* Initialize the variable to False. */
-   state.continue_flag = nir_decl_reg(&b, 1, 1, 0);
-   nir_store_reg(&b, nir_imm_false(&b), state.continue_flag);
-
-   lower_continues_in_cf_list(&loop->body, &state);
-
-   return;
+   nir_simplify_loop(loop, nir_jump_continue);
 }
 
 static bool
@@ -235,7 +259,7 @@ lower_loop_continue_block(nir_builder *b, nir_loop *loop)
    nir_lower_phis_to_regs_block(nir_loop_first_continue_block(loop), true);
 
    /* Simplify the loop in order to ensure that it has at most one back-edge. */
-   simplify_loop(loop);
+   simplify_loop_continues(loop);
 
    nir_cf_list extracted;
    nir_cf_list_extract(&extracted, &loop->continue_list);

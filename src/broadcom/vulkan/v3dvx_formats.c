@@ -503,7 +503,7 @@ v3dX(format_supports_blending)(const struct v3dv_format *format)
    case V3D_INTERNAL_TYPE_8:
       return bpp == V3D_INTERNAL_BPP_32;
    case V3D_INTERNAL_TYPE_16F:
-      return bpp == V3D_INTERNAL_BPP_32 || V3D_INTERNAL_BPP_64;
+      return bpp == V3D_INTERNAL_BPP_32 || bpp == V3D_INTERNAL_BPP_64;
    default:
       return false;
    }

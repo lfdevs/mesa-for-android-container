@@ -76,7 +76,7 @@ op('avg',   2, 's16 s32 u16 u32', Props.NEGATE | Props.CMOD)
 op('bfe',   3, 'u32 s32', Props.NEGATE0)
 op('bfi1',  2, 'u32')
 op('bfi2',  3, 'u32')
-op('bfn',   3, 'u32', Props.CMOD, ['uint8_t ctrl'])
+op('bfn',   3, 'u16 u32', Props.CMOD, ['uint8_t ctrl'])
 op('bfrev', 1, 'u32', Props.NEGATE)
 op('cbit',  1, 'u32')
 op('cmp',   2, 'u32', Props.NEGATE | Props.CMOD)
@@ -149,8 +149,8 @@ op('send', 4, None, Props.SIDE_EFFECTS, [
     'bool skip_helpers',
     'enum jay_type type_0',
     'enum jay_type type_1',
+    'uint8_t mlen',
     'uint8_t ex_mlen',
-    'bool pad[1]',
     'uint32_t ex_desc_imm',
 ])
 
@@ -175,7 +175,8 @@ op('and_u32_u16', 2, 'u32')
 # per-lane value. Then offset_packed_pixel_coords adds the appropriate packed
 # 2x16-bit offset within each quad, giving 2x16-bit per-lane coordinates.
 op('expand_quad', 2, 'u32')
-op('offset_packed_pixel_coords', 1, 'u32')
+op('offset_packed_pixel_coords', 2, 'u32')
+op("coarse_pixel_corners", 1, 'u32')
 op('extract_subspan_info', 2, 'u32', Props.CMOD, ['uint16_t mask'])
 
 # Phi function representations
@@ -220,6 +221,9 @@ op('zero_flag', 0, 'u1', Props.NO_DEST, ['unsigned reg'])
 
 # Cross-lane shuffle. src0=data, src1=offset in bytes. Clobbers an address reg.
 op('shuffle', 2, 'u1 u32')
+
+# Indirect move. src0=data, src1=offset in bytes. Clobbers an address reg.
+op('vector_extract', 2, 'u8 u16 u32')
 
 # Shuffle with a constant lane index.
 op('broadcast_imm', 1, 'u1 u32', 0, ['unsigned lane'])

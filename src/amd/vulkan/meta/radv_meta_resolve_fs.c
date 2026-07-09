@@ -50,7 +50,7 @@ struct radv_gfx_resolve_key {
 };
 
 static VkResult
-get_gfx_resolve_pipeline(struct radv_device *device, VkFormat format, int samples, VkImageAspectFlags aspects,
+get_gfx_resolve_pipeline(struct radv_device *device, VkFormat format, uint32_t samples, VkImageAspectFlags aspects,
                          VkResolveModeFlagBits resolve_mode, VkPipeline *pipeline_out, VkPipelineLayout *layout_out)
 {
    const struct radv_physical_device *pdev = radv_device_physical(device);
@@ -248,9 +248,9 @@ radv_gfx_resolve_image(struct radv_cmd_buffer *cmd_buffer, struct radv_image *sr
    radv_meta_set_viewport_and_scissor(cmd_buffer, resolve_area.offset.x, resolve_area.offset.y,
                                       resolve_area.extent.width, resolve_area.extent.height);
 
-   const VkImageViewUsageCreateInfo src_iview_usage_info = {
-      .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_USAGE_CREATE_INFO,
-      .usage = VK_IMAGE_USAGE_SAMPLED_BIT,
+   const VkImageViewUsage2CreateInfoKHR src_iview_usage_info = {
+      .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_USAGE_2_CREATE_INFO_KHR,
+      .usage = VK_IMAGE_USAGE_2_SAMPLED_BIT_KHR,
    };
 
    struct radv_image_view src_iview;
@@ -273,11 +273,11 @@ radv_gfx_resolve_image(struct radv_cmd_buffer *cmd_buffer, struct radv_image *sr
                         },
                         NULL);
 
-   const VkImageViewUsageCreateInfo dst_iview_usage_info = {
-      .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_USAGE_CREATE_INFO,
+   const VkImageViewUsage2CreateInfoKHR dst_iview_usage_info = {
+      .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_USAGE_2_CREATE_INFO_KHR,
       .usage = region->dstSubresource.aspectMask == VK_IMAGE_ASPECT_COLOR_BIT
-                  ? VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT
-                  : VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+                  ? VK_IMAGE_USAGE_2_COLOR_ATTACHMENT_BIT_KHR
+                  : VK_IMAGE_USAGE_2_DEPTH_STENCIL_ATTACHMENT_BIT_KHR,
    };
 
    struct radv_image_view dst_iview;

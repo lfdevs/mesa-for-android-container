@@ -1,0 +1,1 @@
+dEQP-VK.binding_model.descriptor_buffer.sparse_residency_buffer.capture_replay.compute_comp_sampler_custom_border_color

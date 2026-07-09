@@ -812,21 +812,30 @@ x11_surface_get_capabilities(VkIcdSurfaceBase *icd_surface,
       caps->surfaceCapabilities.minImageCount = x11_get_min_image_count(wsi_device, wsi_conn->is_xwayland);
    }
 
+   VkImageUsageFlags image_usage = wsi_caps_get_image_usage();
+
    /* There is no real maximum */
    caps->surfaceCapabilities.maxImageCount = 0;
 
    caps->surfaceCapabilities.supportedTransforms = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
    caps->surfaceCapabilities.currentTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
    caps->surfaceCapabilities.maxImageArrayLayers = 1;
-   caps->surfaceCapabilities.supportedUsageFlags = wsi_caps_get_image_usage();
 
    VK_FROM_HANDLE(vk_physical_device, pdevice, wsi_device->pdevice);
    if (pdevice->supported_extensions.EXT_attachment_feedback_loop_layout)
-      caps->surfaceCapabilities.supportedUsageFlags |= VK_IMAGE_USAGE_ATTACHMENT_FEEDBACK_LOOP_BIT_EXT;
+      image_usage |= VK_IMAGE_USAGE_ATTACHMENT_FEEDBACK_LOOP_BIT_EXT;
 
    VkSwapchainFlagsSurfaceCapabilitiesEXT *surface_caps = vk_find_struct(caps, SWAPCHAIN_FLAGS_SURFACE_CAPABILITIES_EXT);
    if (surface_caps && pdevice->supported_extensions.EXT_multisampled_render_to_swapchain)
       surface_caps->swapchainSupportedFlags |= VK_SWAPCHAIN_CREATE_MULTISAMPLED_RENDER_TO_SINGLE_SAMPLED_BIT_EXT;
+
+   VkImageUsageFlags2CreateInfoKHR *usage2 =
+      vk_find_struct(caps->pNext, IMAGE_USAGE_FLAGS_2_CREATE_INFO_KHR);
+   if (usage2) {
+      usage2->usage = image_usage;
+   } else {
+      caps->surfaceCapabilities.supportedUsageFlags = image_usage;
+   }
 
    return VK_SUCCESS;
 }
@@ -1947,8 +1956,8 @@ x11_capture_trace(struct x11_swapchain *chain)
 
       simple_mtx_lock(&device->trace_mtx);
       bool capture_key_pressed = keys->keys[keycode / 8] & (1u << (keycode % 8));
-      device->trace_hotkey_trigger = capture_key_pressed && (capture_key_pressed != chain->base.capture_key_pressed);
-      chain->base.capture_key_pressed = capture_key_pressed;
+      device->trace_hotkey_trigger = capture_key_pressed && (capture_key_pressed != device->capture_key_pressed);
+      device->capture_key_pressed = capture_key_pressed;
       simple_mtx_unlock(&device->trace_mtx);
    }
 
@@ -1968,13 +1977,6 @@ static VkResult x11_swapchain_read_status_atomic(struct x11_swapchain *chain)
  * Decides if an early wait on buffer fences before buffer submission is required.
  * That is for mailbox mode, as otherwise the latest image in the queue might not be fully rendered at
  * present time, which could lead to missing a frame. This is an Xorg issue.
- *
- * On Wayland compositors, this used to be a problem as well, but not anymore,
- * and this check assumes that Mesa is running on a reasonable compositor.
- * The wait behavior can be forced by setting the 'vk_xwayland_wait_ready' DRIConf option to true.
- * Some drivers, like e.g. Venus may still want to require wait_ready by default,
- * so the option is kept around for now.
- *
  * On Wayland, we don't know at this point if tearing protocol is/can be used by Xwl,
  * so we have to make the MAILBOX assumption.
  */
@@ -1983,7 +1985,7 @@ x11_needs_wait_for_fences(const struct wsi_device *wsi_device,
                           struct wsi_x11_connection *wsi_conn,
                           VkPresentModeKHR present_mode)
 {
-   if (wsi_conn->is_xwayland && !wsi_device->x11.xwaylandWaitReady) {
+   if (wsi_conn->is_xwayland) {
       return false;
    }
 
@@ -3466,12 +3468,6 @@ wsi_x11_init_wsi(struct wsi_device *wsi_device,
          wsi_device->x11.ensure_minImageCount =
             driQueryOptionb(dri_options, "vk_x11_ensure_min_image_count");
       }
-      wsi_device->x11.xwaylandWaitReady = true;
-      if (driCheckOption(dri_options, "vk_xwayland_wait_ready", DRI_BOOL)) {
-         wsi_device->x11.xwaylandWaitReady =
-            driQueryOptionb(dri_options, "vk_xwayland_wait_ready");
-      }
-
       if (driCheckOption(dri_options, "vk_x11_ignore_suboptimal", DRI_BOOL)) {
          wsi_device->x11.ignore_suboptimal =
             driQueryOptionb(dri_options, "vk_x11_ignore_suboptimal");

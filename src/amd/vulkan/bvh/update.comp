@@ -8,7 +8,9 @@
 
 layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 
-#include "build_interface.h"
+#include "bvh_defines.h"
+#define VK_USED_BUILD_FLAGS RADV_UPDATE_BUILD_FLAGS
+#include "bvh_helpers.h"
 #include "update.h"
 
 layout(push_constant) uniform CONSTS {
@@ -97,10 +99,10 @@ void main() {
         if (ready_child_count != valid_child_count - 1)
             break;
 
-        if (!VK_BUILD_FLAG(RADV_BUILD_FLAG_UPDATE_IN_PLACE)) {
+        if (!RADV_TEST_BUILD_FLAG_UPDATE_IN_PLACE) {
             for (uint32_t i = 0; i < 4; ++i)
                 DEREF(dst_node).children[i] = children[i];
-            if (VK_BUILD_FLAG(VK_BUILD_FLAG_PROPAGATE_CULL_FLAGS))
+            if (VK_TEST_BUILD_FLAG_PROPAGATE_CULL_FLAGS)
                 DEREF(dst_node).flags = DEREF(src_node).flags;
         }
 

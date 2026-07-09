@@ -339,8 +339,10 @@ DEFINE_CODECAPI_GUID( AVEncVideoRateControlFramePreAnalysisExternalReconDownscal
 
 #if MFT_CODEC_H264ENC
 #define HMFT_GUID "8994db7c-288a-4c62-a136-a3c3c2a208a8"
+#define AVC_LOG2_MAX_FRAME_NUM_MINUS4 4
 #elif MFT_CODEC_H265ENC
 #define HMFT_GUID "e7ffb8eb-fa0b-4fb0-acdf-1202f663cde5"
+#define HEVC_LOG2_MAX_PIC_ORDER_CNT_LSB_MINUS4 12
 #elif MFT_CODEC_AV1ENC
 #define HMFT_GUID "1a6f3150-b121-4ce9-9497-50fedb3dcb70"
 #endif
@@ -635,7 +637,11 @@ class __declspec( uuid( HMFT_GUID ) ) CDX12EncHMFT : CMFD3DManager,
 #endif
 
 #if MFT_CODEC_AV1ENC
-   HRESULT UpdateAV1EncPictureDesc( pipe_av1_enc_picture_desc *pPicInfo );
+   HRESULT UpdateAV1EncPictureDesc( pipe_av1_enc_picture_desc *pPicInfo,
+                                    const uint32_t intra_period,
+                                    const uint32_t ip_period,
+                                    const uint16_t pic_width_in_luma_samples,
+                                    const uint16_t pic_height_in_luma_samples );
 #endif
 
    HRESULT PrepareForEncodeHelper( LPDX12EncodeContext pDX12EncodeContext,

@@ -114,6 +114,7 @@ etna_query_feature_db(struct etna_core_info *info)
    ETNA_FEATURE(HWTFB, HWTFB);
    ETNA_FEATURE(BLT_64bpp_MASKED_CLEAR_FIX, BLT_64BPP_MASKED_CLEAR_FIX);
    ETNA_FEATURE(WIDELINE_TRIANGLE_EMU, WIDELINE_TRIANGLE_EMU);
+   ETNA_FEATURE(REG_UnifiedSamplers, UNIFIED_SAMPLERS);
 
    /* Limits: */
    if (etna_core_has_feature(info, ETNA_FEATURE_CORE_GPU)) {

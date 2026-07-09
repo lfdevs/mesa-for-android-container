@@ -149,7 +149,7 @@ gather_intrinsic_store_output_info(const nir_shader *nir, const nir_intrinsic_in
          if (location == FRAG_RESULT_DATA0)
             info->ps.color0_written |= write_mask << component;
       }
-      break;
+      return;
    default:
       break;
    }
@@ -314,6 +314,9 @@ gather_intrinsic_info(const nir_shader *nir, const nir_intrinsic_instr *instr, s
       break;
    case nir_intrinsic_load_use_float_frag_coord_xy_amd:
       info->ps.selects_frag_coord_xy_dynamically = true;
+      break;
+   case nir_intrinsic_load_use_quad_pos_amd:
+      info->ps.selects_quad_pos_dynamically = true;
       break;
    case nir_intrinsic_load_use_sample_mask_in_amd:
       info->ps.selects_sample_mask_in_dynamically = true;
@@ -864,17 +867,30 @@ gather_shader_info_fs(enum amd_gfx_level gfx_level, const nir_shader *nir,
       info->ps.writes_mrt0_alpha = gfx_state->ms.alpha_to_coverage_via_mrtz && export_alpha;
    }
 
-   /* Disable VRS and use the rates from PS_ITER_SAMPLES if:
-    *
-    * - The fragment shader reads gl_SampleMaskIn because the 16-bit sample coverage mask isn't enough for MSAA8x and
-    *   2x2 coarse shading.
-    * - On GFX10.3, if the fragment shader requests a fragment interlock execution mode even if the ordered section was
-    *   optimized out, to consistently implement fragmentShadingRateWithFragmentShaderInterlock = VK_FALSE.
-    */
-   info->ps.force_sample_iter_shading_rate =
-      (info->ps.reads_sample_mask_in && !info->ps.needs_poly_line_smooth) ||
-      (gfx_level == GFX10_3 && (nir->info.fs.sample_interlock_ordered || nir->info.fs.sample_interlock_unordered ||
-                                nir->info.fs.pixel_interlock_ordered || nir->info.fs.pixel_interlock_unordered));
+   if (gfx_level >= GFX10_3) {
+      /* Disable VRS in these cases:
+       *
+       * - if the fragment shader reads gl_SampleMaskIn because we expose fragmentShadingRateWithShaderSampleMask =
+       *   VK_FALSE because the SAMPLE_COVERAGE PS VGPR only contains a 16-bit sample coverage mask, which isn't
+       *   enough for 8xMSAA and 2x2 coarse shading (we no longer support 8xMSAA, so we could allow gl_SampleMaskIn
+       *   with VRS now).
+       * - on GFX10.3, if the fragment shader requests a fragment interlock execution mode even if the ordered
+       *   section was optimized out, to consistently implement fragmentShadingRateWithFragmentShaderInterlock =
+       *   VK_FALSE.
+       */
+      info->ps.force_disable_vrs =
+         gfx_state->ms.sample_shading_enable || info->ps.uses_sample_shading || nir->info.fs.sample_mask_in_declared ||
+         (gfx_level == GFX10_3 && (nir->info.fs.sample_interlock_ordered || nir->info.fs.sample_interlock_unordered ||
+                                   nir->info.fs.pixel_interlock_ordered || nir->info.fs.pixel_interlock_unordered));
+
+      /* Do not enable if the PS uses gl_FragCoord because it breaks postprocessing in some games. */
+      info->ps.disallow_force_vrs_per_vertex =
+         gfx_state->ps.force_vrs_enabled &&
+         (info->ps.can_discard || BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_FRAG_COORD_XY) ||
+          BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_FRAG_COORD_Z) ||
+          BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_FRAG_COORD_W_RCP) ||
+          BITSET_TEST(nir->info.system_values_read, SYSTEM_VALUE_PIXEL_COORD));
+   }
 }
 
 static void

@@ -54,6 +54,8 @@ main(int argc, char *argv[])
       return -1;
    }
 
+   bool found = false;
+
    for (int i = 0; i < max_devices; i++) {
       struct intel_device_info devinfo;
       const char *path = devices[i]->nodes[DRM_NODE_RENDER];
@@ -72,6 +74,12 @@ main(int argc, char *argv[])
       assert(devinfo.verx10 == verx10);
       verify_device_info(&devinfo);
       assert(devinfo.engine_class_prefetch[INTEL_ENGINE_CLASS_RENDER] > 0);
+      found = true;
+   }
+
+   if (!found) {
+      fprintf(stderr, "No intel device found\n");
+      return -1;
    }
 
    return 0;

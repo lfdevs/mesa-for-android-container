@@ -133,7 +133,7 @@ impl<const MIN: u32> TryFrom<u32> for LowerBoundedU32<MIN> {
 /// TODO: Improve the interface once the generic_const_exprs feature lands
 /// in Rust.
 #[repr(C)]
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Debug)]
 pub struct LowerBoundedU32Array<const MIN_U32: u32, const MAX_ARR_IDX: usize> {
     arr: [LowerBoundedU32<MIN_U32>; MAX_ARR_IDX],
 
@@ -321,6 +321,40 @@ impl<const MIN_U32: u32, const MAX_ARR_IDX: usize>
 
         arr
     }
+}
+
+impl<const MIN_U32: u32, const MAX_ARR_IDX: usize> std::hash::Hash
+    for LowerBoundedU32Array<MIN_U32, MAX_ARR_IDX>
+{
+    fn hash<H>(&self, state: &mut H)
+    where
+        H: std::hash::Hasher,
+    {
+        std::hash::Hash::hash_slice(self.as_slice(), state)
+    }
+}
+
+impl<const MIN_U32: u32, const MAX_ARR_IDX: usize> PartialEq
+    for LowerBoundedU32Array<MIN_U32, MAX_ARR_IDX>
+{
+    fn eq(&self, other: &Self) -> bool {
+        // Use MAX_LEN to force the compile-time invariants check here
+        _ = Self::MAX_LEN;
+
+        if self.last != other.last {
+            return false;
+        }
+
+        // Now compare the elements in the array.  We don't have to compare the
+        // last element because that's the first thing we checked.
+        let arr_len = (self.last as usize).min(MAX_ARR_IDX);
+        self.arr[0..arr_len] == other.arr[0..arr_len]
+    }
+}
+
+impl<const MIN_U32: u32, const MAX_ARR_IDX: usize> Eq
+    for LowerBoundedU32Array<MIN_U32, MAX_ARR_IDX>
+{
 }
 
 struct AssertArraySize<const MAX_ARR_IDX: usize, const N: usize> {}

@@ -110,7 +110,8 @@ executor_macro_syncnop(executor_context *ec, char **src, char *line)
 
    case 125:
    case 200:
-   case 300: {
+   case 300:
+   case 350: {
       ralloc_strcat(src,
          "(W) sync.nop (8) null {A@1,$1.dst}\n");
       break;
@@ -148,7 +149,8 @@ executor_macro_eot(executor_context *ec, char **src, char *line)
    }
 
    case 200:
-   case 300: {
+   case 300:
+   case 350: {
       ralloc_strcat(src,
          "(W) mov (16) r127 r0\n"
          "(W) send.gtwy (16) null r127:1 null:0 0x00000000 0x02000000 {I@1,EOT}\n");
@@ -191,7 +193,8 @@ executor_macro_id(executor_context *ec, char **src, char *line)
    }
 
    case 200:
-   case 300: {
+   case 300:
+   case 350: {
       ralloc_asprintf_append(src,
          "(W) mov (8) r127:uw 0x76543210:v\n"
          "(W) add (8) r127.8:uw r127:uw 8:uw {A@1}\n"
@@ -245,7 +248,8 @@ executor_macro_write(executor_context *ec, char **src, char *line)
    }
 
    case 200:
-   case 300: {
+   case 300:
+   case 350: {
       ralloc_asprintf_append(src,
          "mul (16) r127 %s 0x4:uw {A@1}\n"
          "add (16) r127 r127 0x%08x {A@1}\n"
@@ -301,7 +305,8 @@ executor_macro_read(executor_context *ec, char **src, char *line)
    }
 
    case 200:
-   case 300: {
+   case 300:
+   case 350: {
       ralloc_asprintf_append(src,
          "mul (16) r127 %s 0x4:uw {A@1}\n"
          "add (16) r127 r127 0x%08x {A@1}\n"

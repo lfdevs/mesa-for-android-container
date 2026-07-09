@@ -1678,6 +1678,7 @@ fd6_program_create(void *data, const struct ir3_shader_variant *bs,
 
    state->num_driver_params = num_dp;
    state->num_ubo_driver_params = num_ubo_dp;
+   state->needs_driver_params = (num_dp + num_ubo_dp) > 0;
 
    /* dual source blending has an extra fs output in the 2nd slot */
    if (fs->fs.color_is_dual_source) {

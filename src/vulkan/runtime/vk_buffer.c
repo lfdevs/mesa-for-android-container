@@ -40,14 +40,8 @@ vk_buffer_init(struct vk_device *device,
 
    buffer->create_flags = pCreateInfo->flags;
    buffer->size = pCreateInfo->size;
-   buffer->usage = pCreateInfo->usage;
+   buffer->usage = vk_buffer_usage_flags(pCreateInfo);
    buffer->device_address = 0;
-
-   const VkBufferUsageFlags2CreateInfoKHR *usage2_info =
-      vk_find_struct_const(pCreateInfo->pNext,
-                           BUFFER_USAGE_FLAGS_2_CREATE_INFO_KHR);
-   if (usage2_info != NULL)
-      buffer->usage = usage2_info->usage;
 
    buffer->address_flags =
       ((buffer->create_flags & VK_BUFFER_CREATE_PROTECTED_BIT) ?
@@ -56,7 +50,7 @@ vk_buffer_init(struct vk_device *device,
        VK_ADDRESS_COMMAND_STORAGE_BUFFER_USAGE_BIT_KHR : 0) |
       ((buffer->usage & VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_BUFFER_BIT_EXT) ?
        VK_ADDRESS_COMMAND_TRANSFORM_FEEDBACK_BUFFER_USAGE_BIT_KHR : 0) |
-      ((buffer->usage & VK_BUFFER_CREATE_SPARSE_BINDING_BIT) == 0 ?
+      ((buffer->create_flags & VK_BUFFER_CREATE_SPARSE_BINDING_BIT) == 0 ?
        VK_ADDRESS_COMMAND_FULLY_BOUND_BIT_KHR : 0);
 
    buffer->copy_flags =

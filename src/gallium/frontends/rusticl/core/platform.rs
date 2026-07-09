@@ -7,6 +7,7 @@ use crate::core::device::*;
 use crate::core::version::*;
 
 use mesa_rust::pipe::screen::ScreenVMAllocation;
+use mesa_rust::util;
 use mesa_rust::util::vm::VM;
 use mesa_rust_gen::*;
 use mesa_rust_util::string::char_arr_to_cstr;
@@ -20,6 +21,7 @@ use std::ops::Deref;
 use std::ptr;
 use std::ptr::addr_of;
 use std::ptr::addr_of_mut;
+use std::sync::LazyLock;
 use std::sync::Mutex;
 use std::sync::Once;
 
@@ -49,6 +51,7 @@ pub struct Platform {
     pub extensions: Vec<cl_name_version>,
     // lifetime has to match the one of devs
     pub vm: Option<PlatformVM<'static>>,
+    pub worker_queue: LazyLock<util::queue::Queue>,
 }
 
 pub enum PerfDebugLevel {
@@ -86,6 +89,11 @@ static mut PLATFORM: Platform = Platform {
     extension_string: String::new(),
     extensions: Vec::new(),
     vm: None,
+    worker_queue: LazyLock::new(|| {
+        let worker_count = u32::max(util::cpu_count() / 2, 1);
+        let max_job_count = worker_count * 8;
+        util::queue::Queue::new(c"clctxworker", max_job_count, worker_count)
+    }),
 };
 static mut PLATFORM_DBG: PlatformDebug = PlatformDebug {
     allow_invalid_spirv: false,

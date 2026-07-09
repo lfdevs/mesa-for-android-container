@@ -241,6 +241,7 @@ struct pipe_picture_desc
    uint64_t in_fence_value;
    /* A fence for pipe_video_codec::end_frame to signal job completion */
    struct pipe_fence_handle **out_fence;
+   struct pipe_fence_handle **out_pipe_fence;
 };
 
 struct pipe_quant_matrix

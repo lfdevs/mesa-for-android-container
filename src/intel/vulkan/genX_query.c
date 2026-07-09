@@ -2101,7 +2101,7 @@ void genX(CmdCopyQueryPoolResultsToMemoryKHR)(
 
 #if GFX_VERx10 >= 125 && ANV_SUPPORT_RT
 
-#include "bvh/anv_bvh.h"
+#include "bvh/anv_bvh_defines.h"
 
 void
 genX(CmdWriteAccelerationStructuresPropertiesKHR)(

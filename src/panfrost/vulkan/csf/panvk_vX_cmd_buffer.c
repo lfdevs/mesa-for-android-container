@@ -1,5 +1,6 @@
 /*
  * Copyright © 2021 Collabora Ltd.
+ * Copyright © 2026 Arm Ltd.
  *
  * Derived from tu_cmd_buffer.c which is:
  * Copyright © 2016 Red Hat.
@@ -156,11 +157,29 @@ finish_cs(struct panvk_cmd_buffer *cmdbuf, uint32_t subqueue)
    if (PANVK_DEBUG(CS) &&
        cmdbuf->vk.level != VK_COMMAND_BUFFER_LEVEL_SECONDARY &&
        !cmdbuf->state.gfx.render.suspended) {
+      static const reg_perm_cb_t ctx_reg_perms[PANVK_SUBQUEUE_COUNT] = {
+         [PANVK_SUBQUEUE_VERTEX_TILER] = panvk_cs_vt_ctx_reg_perm,
+         [PANVK_SUBQUEUE_FRAGMENT] = panvk_cs_frag_ctx_reg_perm,
+         [PANVK_SUBQUEUE_COMPUTE] = panvk_cs_compute_ctx_reg_perm,
+      };
+      static const reg_perm_cb_t default_reg_perms[PANVK_SUBQUEUE_COUNT] = {
+         [PANVK_SUBQUEUE_VERTEX_TILER] = panvk_cs_vt_reg_perm,
+         [PANVK_SUBQUEUE_FRAGMENT] = panvk_cs_frag_reg_perm,
+         [PANVK_SUBQUEUE_COMPUTE] = panvk_cs_compute_reg_perm,
+      };
+      const reg_perm_cb_t ctx_perm = ctx_reg_perms[subqueue];
+      const reg_perm_cb_t default_perm = default_reg_perms[subqueue];
+
       cs_update_cmdbuf_regs(b) {
          /* Poison all cmdbuf registers to make sure we don't inherit state from
           * a previously executed cmdbuf. */
-         for (uint32_t i = 0; i <= PANVK_CS_REG_SCRATCH_END; i++)
-            cs_move32_to(b, cs_reg32(b, i), 0xdead | i << 24);
+         for (uint32_t i = 0; i <= PANVK_CS_REG_SCRATCH_END; i++) {
+            /* If the default or context access has the WR bit, we're good to
+             * poison, otherwise we assume this is a RO register that's expected
+             * to stay zero. */
+             if ((default_perm(b, i) | ctx_perm(b, i)) & CS_REG_WR)
+                cs_move32_to(b, cs_reg32(b, i), 0xdead | i << 24);
+         }
       }
    }
 

@@ -28,6 +28,11 @@ struct ntr_immediate {
    float values[4];
 };
 
+struct ntr_state_constant {
+   unsigned rc_state;
+   unsigned sampler;
+};
+
 struct ntr_compile {
    nir_shader *s;
    struct r300_shader_semantics *semantics;
@@ -55,8 +60,12 @@ struct ntr_compile {
    struct radeon_compiler *compiler;
    /* one struct ntr_immediate per NIR load_const */
    struct util_dynarray immediates;
+   /* one struct ntr_state_constant per private state load */
+   struct util_dynarray state_constants;
    /* UBO size in vec4s (0 if no UBO) */
    unsigned ubo_size;
+   /* offset for RC_CONSTANT_STATE indices in the compiler's constants table */
+   unsigned state_offset;
    /* offset for IMMEDIATE indices in the compiler's constants table */
    unsigned immediate_offset;
 
@@ -211,6 +220,43 @@ ntr_src_indirect(struct rc_src_register src)
    return src;
 }
 
+static unsigned
+ntr_add_state_constant(struct ntr_compile *c, unsigned rc_state, unsigned sampler)
+{
+   assert(rc_state <= RC_STATE_R300_VIEWPORT_OFFSET);
+
+   unsigned index = 0;
+   util_dynarray_foreach (&c->state_constants, struct ntr_state_constant, state) {
+      if (state->rc_state == rc_state && state->sampler == sampler)
+         return index;
+      index++;
+   }
+
+   struct ntr_state_constant *state =
+      util_dynarray_grow(&c->state_constants, struct ntr_state_constant, 1);
+   state->rc_state = rc_state;
+   state->sampler = sampler;
+
+   return index;
+}
+
+static nir_def *
+ntr_load_state_constant(struct ntr_compile *c, nir_builder *b,
+                        unsigned rc_state, unsigned sampler,
+                        unsigned num_components)
+{
+   unsigned index = ntr_add_state_constant(c, rc_state, sampler);
+   /* This is a private marker consumed by ntr_emit_load_uniform, not a user
+    * uniform. Real uniforms were already lowered to UBOs before r300 inserts
+    * these state loads, so there should be no other load_uniform intrinsics
+    * and base here encodes the state constant table index.
+    */
+   return nir_load_uniform(b, num_components, 32, nir_imm_int(b, 0),
+                           .base = index,
+                           .range = num_components,
+                           .dest_type = nir_type_float32);
+}
+
 static void
 ntr_rc_tex_sampler(struct ntr_compile *c, struct rc_sub_instruction *inst,
                    unsigned sampler_index, bool reladdr)
@@ -319,8 +365,6 @@ NTR_OP01(IF, RC_OPCODE_IF)
 
 NTR_OP11(MOV, RC_OPCODE_MOV)
 NTR_OP11(ARL, RC_OPCODE_ARL)
-NTR_OP11(DDX, RC_OPCODE_DDX)
-NTR_OP11(DDY, RC_OPCODE_DDY)
 
 /**
  * Interprets a nir_load_const used as a NIR src as a uint.
@@ -433,7 +477,7 @@ ntr_output_decl(struct ntr_compile *c, nir_intrinsic_instr *instr, uint32_t *fra
    if (c->s->info.stage == MESA_SHADER_FRAGMENT) {
       switch (semantics.location) {
       case FRAG_RESULT_DEPTH:
-         *frac = 2; /* z write is the to the .z channel in TGSI */
+         *frac = 3; /* depth is written to the .w channel in the backend */
          break;
       case FRAG_RESULT_STENCIL:
          *frac = 1;
@@ -1072,6 +1116,20 @@ ntr_emit_load_ubo(struct ntr_compile *c, nir_intrinsic_instr *instr)
 }
 
 static void
+ntr_emit_load_uniform(struct ntr_compile *c, nir_intrinsic_instr *instr)
+{
+   unsigned index = nir_intrinsic_base(instr);
+   assert(index < util_dynarray_num_elements(&c->state_constants,
+                                             struct ntr_state_constant));
+   assert(nir_src_is_const(instr->src[0]));
+   assert(ntr_src_as_uint(c, instr->src[0]) == 0);
+
+   struct rc_src_register src =
+      ntr_src_register(c, RC_FILE_CONSTANT, c->state_offset + index);
+   ntr_store(c, &instr->def, src);
+}
+
+static void
 ntr_emit_load_input(struct ntr_compile *c, nir_intrinsic_instr *instr)
 {
    uint32_t frac = nir_intrinsic_component(instr);
@@ -1166,6 +1224,10 @@ ntr_emit_intrinsic(struct ntr_compile *c, nir_intrinsic_instr *instr)
       ntr_emit_load_ubo(c, instr);
       break;
 
+   case nir_intrinsic_load_uniform:
+      ntr_emit_load_uniform(c, instr);
+      break;
+
    case nir_intrinsic_load_frag_coord:
    case nir_intrinsic_load_point_coord:
    case nir_intrinsic_load_front_face:
@@ -1202,12 +1264,18 @@ ntr_emit_intrinsic(struct ntr_compile *c, nir_intrinsic_instr *instr)
 
    case nir_intrinsic_ddx:
    case nir_intrinsic_ddx_coarse:
-      ntr_DDX(c, ntr_get_dest(c, &instr->def), ntr_get_src(c, instr->src[0]));
-      return;
    case nir_intrinsic_ddy:
-   case nir_intrinsic_ddy_coarse:
-      ntr_DDY(c, ntr_get_dest(c, &instr->def), ntr_get_src(c, instr->src[0]));
+   case nir_intrinsic_ddy_coarse: {
+      bool is_ddx = instr->intrinsic == nir_intrinsic_ddx ||
+                    instr->intrinsic == nir_intrinsic_ddx_coarse;
+      rc_opcode opcode = is_ddx ? RC_OPCODE_DDX : RC_OPCODE_DDY;
+      struct rc_dst_register dst = ntr_get_dest(c, &instr->def);
+      struct rc_src_register src0 = ntr_get_src(c, instr->src[0]);
+      /* r500 MDH/MDV takes the form A*B+C; B=-1 encodes as src1 = {1111, negate}. */
+      struct rc_src_register src1 = {.Swizzle = RC_SWIZZLE_1111, .Negate = RC_MASK_XYZW};
+      rc_sub_instruction(c, opcode, &dst, RC_SATURATE_NONE, &src0, &src1, NULL);
       return;
+   }
 
    case nir_intrinsic_decl_reg:
    case nir_intrinsic_load_reg:
@@ -1246,6 +1314,7 @@ static void
 ntr_emit_texture(struct ntr_compile *c, nir_tex_instr *instr)
 {
    struct rc_dst_register dst = ntr_get_dest(c, &instr->def);
+   struct rc_dst_register tex_dst = dst;
    assert(!instr->is_shadow);
    rc_texture_target target =
       rc_texture_target_from_sampler_dim(instr->sampler_dim, instr->is_array);
@@ -1312,12 +1381,21 @@ ntr_emit_texture(struct ntr_compile *c, nir_tex_instr *instr)
 
    assert(s.i == rc_get_opcode_info(tex_opcode)->NumSrcRegs);
 
+   bool needs_mov =
+      dst.File != RC_FILE_TEMPORARY ||
+      (!c->compiler->is_r500 && dst.WriteMask != RC_MASK_XYZW);
+   if (needs_mov)
+      tex_dst = ntr_temp(c);
+
    struct rc_sub_instruction *inst =
-      rc_sub_instruction(c, tex_opcode, &dst, RC_SATURATE_NONE, &s.srcs[0],
+      rc_sub_instruction(c, tex_opcode, &tex_dst, RC_SATURATE_NONE, &s.srcs[0],
                s.i > 1 ? &s.srcs[1] : NULL, s.i > 2 ? &s.srcs[2] : NULL);
    inst->TexSrcTarget = target;
    ntr_rc_tex_sampler(c, inst, sampler_index, sampler_reladdr);
    inst->TexSwizzle = RC_SWIZZLE_XYZW;
+
+   if (needs_mov)
+      ntr_MOV(c, dst, ntr_src_from_dst(tex_dst));
 }
 
 static void
@@ -1464,6 +1542,17 @@ ntr_add_constants(struct ntr_compile *c)
       constant.u.External = i;
       rc_constants_add(&c->compiler->Program.Constants, &constant);
    }
+   assert(c->compiler->Program.Constants.Count == c->state_offset);
+
+   util_dynarray_foreach (&c->state_constants, struct ntr_state_constant, state) {
+      struct rc_constant constant;
+      memset(&constant, 0, sizeof(constant));
+      constant.Type = RC_CONSTANT_STATE;
+      constant.UseMask = RC_MASK_XYZW;
+      constant.u.State[0] = state->rc_state;
+      constant.u.State[1] = state->sampler;
+      rc_constants_add(&c->compiler->Program.Constants, &constant);
+   }
    assert(c->compiler->Program.Constants.Count == c->immediate_offset);
 
    util_dynarray_foreach (&c->immediates, struct ntr_immediate, imm) {
@@ -1485,7 +1574,10 @@ ntr_emit_impl(struct ntr_compile *c, nir_function_impl *impl)
    ntr_setup_registers(c);
 
    ntr_setup_uniforms(c);
-   c->immediate_offset = c->compiler->Program.Constants.Count + c->ubo_size;
+   c->state_offset = c->compiler->Program.Constants.Count + c->ubo_size;
+   c->immediate_offset =
+      c->state_offset + util_dynarray_num_elements(&c->state_constants,
+                                                   struct ntr_state_constant);
    ntr_setup_inputs(c);
    ntr_setup_outputs(c);
 
@@ -1497,7 +1589,7 @@ ntr_emit_impl(struct ntr_compile *c, nir_function_impl *impl)
 
 }
 
-static int
+static unsigned
 type_size(const struct glsl_type *type, bool bindless)
 {
    return glsl_count_attribute_slots(type, false);
@@ -1512,6 +1604,193 @@ ntr_should_vectorize_instr(const nir_instr *instr, const void *data)
       return 0;
 
    return 4;
+}
+
+struct ntr_lower_backend_tex_state {
+   struct ntr_compile *c;
+   const struct r300_fragment_program_external_state *fs_state;
+   bool is_r500;
+};
+
+static bool
+ntr_lower_wpos_instr(nir_builder *b, nir_intrinsic_instr *intr, void *data)
+{
+   if (intr->intrinsic != nir_intrinsic_load_interpolated_input)
+      return false;
+
+   nir_io_semantics semantics = nir_intrinsic_io_semantics(intr);
+   if (semantics.location != VARYING_SLOT_POS)
+      return false;
+
+   struct ntr_compile *c = data;
+   assert(intr->def.bit_size == 32);
+
+   b->cursor = nir_after_instr(&intr->instr);
+   nir_def *raw_wpos =
+      nir_load_interpolated_input(b, 4, 32, intr->src[0].ssa, intr->src[1].ssa,
+                                  .base = nir_intrinsic_base(intr),
+                                  .component = 0,
+                                  .io_semantics = semantics,
+                                  .dest_type = nir_type_float32);
+
+   nir_def *rcp_w = nir_frcp(b, nir_channel(b, raw_wpos, 3));
+   nir_def *xyz = nir_fmul(b, nir_channels(b, raw_wpos, nir_component_mask(3)), rcp_w);
+   nir_def *scale = ntr_load_state_constant(c, b, RC_STATE_R300_VIEWPORT_SCALE, 0, 4);
+   nir_def *offset_state =
+      ntr_load_state_constant(c, b, RC_STATE_R300_VIEWPORT_OFFSET, 0, 4);
+   xyz = nir_fadd(b, nir_fmul(b, xyz, nir_channels(b, scale, nir_component_mask(3))),
+                  nir_channels(b, offset_state, nir_component_mask(3)));
+
+   nir_def *wpos = nir_vec4(b, nir_channel(b, xyz, 0), nir_channel(b, xyz, 1),
+                            nir_channel(b, xyz, 2), rcp_w);
+
+   unsigned component = nir_intrinsic_component(intr);
+   nir_def *replacement =
+      nir_channels(b, wpos, nir_component_mask(intr->num_components) << component);
+   nir_def_rewrite_uses_after(&intr->def, replacement);
+   return true;
+}
+
+static bool
+ntr_lower_wpos(nir_shader *s, struct ntr_compile *c)
+{
+   return nir_shader_intrinsics_pass(s, ntr_lower_wpos_instr,
+                                     nir_metadata_control_flow, c);
+}
+
+static nir_def *
+ntr_tex_coord_replace_xyz(nir_builder *b, nir_def *coord, nir_def *xyz)
+{
+   if (coord->num_components <= 3)
+      return xyz;
+
+   assert(coord->num_components == 4);
+   xyz = nir_pad_vector(b, xyz, 4);
+   return nir_vector_insert_imm(b, xyz, nir_channel(b, coord, 3), 3);
+}
+
+static nir_def *
+ntr_lower_backend_tex_wrap(nir_builder *b, nir_def *coord, rc_wrap_mode wrapmode)
+{
+   nir_def *xyz =
+      nir_channels(b, coord, BITFIELD_MASK(MIN2(coord->num_components, 3)));
+
+   switch (wrapmode) {
+   case RC_WRAP_REPEAT:
+      /* Texture wrap modes don't work on NPOT textures. Non-wrapped
+       * texcoords are free in HW, but repeat needs coordinates in [0, 1].
+       */
+      xyz = nir_ffract(b, xyz);
+      break;
+
+   case RC_WRAP_MIRRORED_REPEAT:
+      /* Mirroring repeats in [0, 2]. Scale to [0, 1], make the pattern
+       * repeat, move it to [-1, 1], then use abs to mirror and reverse it:
+       * 1 - abs(fract(v * 0.5) * 2 - 1).
+       */
+      xyz = nir_fmul_imm(b, xyz, 0.5f);
+      xyz = nir_ffract(b, xyz);
+      xyz = nir_fadd_imm(b, nir_fmul_imm(b, xyz, 2.0f), -1.0f);
+      xyz = nir_fsub(b, nir_imm_floatN_t(b, 1.0f, xyz->bit_size),
+                     nir_fabs(b, xyz));
+      break;
+
+   case RC_WRAP_MIRRORED_CLAMP:
+      /* Mirror [0, 1] into [-1, 0] using abs. This works for CLAMP,
+       * CLAMP_TO_EDGE, and CLAMP_TO_BORDER.
+       */
+      xyz = nir_fabs(b, xyz);
+      break;
+
+   default:
+      UNREACHABLE("unknown backend texture wrap mode");
+   }
+
+   return ntr_tex_coord_replace_xyz(b, coord, xyz);
+}
+
+static bool
+ntr_lower_backend_tex_instr(nir_builder *b, nir_tex_instr *tex, void *data)
+{
+   bool progress = false;
+   struct ntr_lower_backend_tex_state *state = data;
+
+   assert(tex->op == nir_texop_tex || tex->op == nir_texop_txb ||
+          tex->op == nir_texop_txl || tex->op == nir_texop_txd);
+
+   unsigned sampler = tex->sampler_index;
+   assert(sampler < ARRAY_SIZE(state->fs_state->unit));
+
+   const rc_wrap_mode wrapmode = state->fs_state->unit[sampler].wrap_mode;
+   const bool clamp_scale =
+      state->fs_state->unit[sampler].clamp_and_scale_before_fetch;
+   const bool is_rect = tex->sampler_dim == GLSL_SAMPLER_DIM_RECT;
+
+   b->cursor = nir_before_instr(&tex->instr);
+   nir_def *coord = nir_get_tex_src(tex, nir_tex_src_coord);
+
+   /* R300 cannot sample from rectangles, and the wrap fallback needs
+    * normalized coordinates even on R500.
+    */
+   if (is_rect && (!state->is_r500 || wrapmode != RC_WRAP_NONE)) {
+      nir_def *factor =
+         ntr_load_state_constant(state->c, b, RC_STATE_R300_TEXRECT_FACTOR,
+                                 sampler, coord->num_components);
+      coord = nir_fmul(b, coord, factor);
+      tex->sampler_dim = GLSL_SAMPLER_DIM_2D;
+      progress = true;
+   }
+
+   /* When we emulate wrap or clamp/scale in ALU, projection has to happen
+    * before that emulation.
+    */
+   if (wrapmode == RC_WRAP_REPEAT || wrapmode == RC_WRAP_MIRRORED_REPEAT ||
+       clamp_scale) {
+      nir_def *projector = nir_steal_tex_src(tex, nir_tex_src_projector);
+      if (projector) {
+         coord = nir_fmul(b, coord, nir_frcp(b, projector));
+         progress = true;
+      }
+   }
+
+   if (wrapmode != RC_WRAP_NONE) {
+      coord = ntr_lower_backend_tex_wrap(b, coord, wrapmode);
+      progress = true;
+   }
+
+   if (clamp_scale) {
+      nir_def *xyz =
+         nir_channels(b, coord, BITFIELD_MASK(MIN2(coord->num_components, 3)));
+      coord = ntr_tex_coord_replace_xyz(b, coord, nir_fsat(b, xyz));
+
+      nir_def *factor =
+         ntr_load_state_constant(state->c, b, RC_STATE_R300_TEXSCALE_FACTOR,
+                                 sampler, coord->num_components);
+      coord = nir_fmul(b, coord, factor);
+      progress = true;
+   }
+
+   if (progress) {
+      int coord_index = nir_tex_instr_src_index(tex, nir_tex_src_coord);
+      nir_src_rewrite(&tex->src[coord_index].src, coord);
+   }
+
+   return progress;
+}
+
+static bool
+ntr_lower_backend_tex(nir_shader *s, struct ntr_compile *c,
+                      const struct r300_fragment_program_external_state *fs_state,
+                      bool is_r500)
+{
+   struct ntr_lower_backend_tex_state state = {
+      .c = c,
+      .fs_state = fs_state,
+      .is_r500 = is_r500,
+   };
+
+   return nir_shader_tex_pass(s, ntr_lower_backend_tex_instr,
+                              nir_metadata_control_flow, &state);
 }
 
 struct ntr_lower_tex_state {
@@ -1657,6 +1936,43 @@ ntr_fixup_varying_slots(nir_shader *s, nir_variable_mode mode)
    }
 }
 
+static bool
+r300_nir_lower_alpha_to_one_instr(nir_builder *b, nir_intrinsic_instr *intr, void *data)
+{
+   if (intr->intrinsic != nir_intrinsic_store_output)
+      return false;
+
+   nir_io_semantics semantics = nir_intrinsic_io_semantics(intr);
+   if (mesa_frag_result_get_color_index(semantics.location) < 0)
+      return false;
+
+   unsigned component = nir_intrinsic_component(intr);
+   if (component > 3)
+      return false;
+
+   nir_def *src = intr->src[0].ssa;
+   unsigned num_comp = src->num_components;
+   unsigned alpha_src_idx = 3 - component;
+   if (alpha_src_idx >= num_comp ||
+       !(nir_intrinsic_write_mask(intr) & BITFIELD_BIT(alpha_src_idx)))
+      return false;
+
+   b->cursor = nir_before_instr(&intr->instr);
+   nir_def *one = nir_imm_floatN_t(b, 1.0f, src->bit_size);
+   nir_src_rewrite(&intr->src[0], nir_vector_insert_imm(b, src, one, alpha_src_idx));
+   return true;
+}
+
+/* The common nir_lower_alpha_to_one() only handles DATA outputs with
+ * full-vec4 sources. r300 also needs FRAG_RESULT_COLOR and partial stores.
+ */
+static bool
+r300_nir_lower_alpha_to_one(nir_shader *s)
+{
+   return nir_shader_intrinsics_pass(s, r300_nir_lower_alpha_to_one_instr,
+                                     nir_metadata_control_flow, NULL);
+}
+
 /**
  * Translates the NIR shader to RC instructions on the given compiler.
  *
@@ -1676,6 +1992,7 @@ nir_to_rc(struct nir_shader *s, struct pipe_screen *screen,
    c->lower_fabs = !is_r500 && s->info.stage == MESA_SHADER_VERTEX;
    c->addr_reg = ntr_writemask(ntr_dst_register(c, RC_FILE_ADDRESS, 0), RC_MASK_X);
    util_dynarray_init(&c->immediates, c);
+   util_dynarray_init(&c->state_constants, c);
    for (unsigned i = 0; i < ARRAY_SIZE(c->fs_output_color_index); i++)
       c->fs_output_color_index[i] = -1;
    c->fs_output_depth_index = -1;
@@ -1712,6 +2029,8 @@ nir_to_rc(struct nir_shader *s, struct pipe_screen *screen,
             nir_lower_io_use_interpolated_input_intrinsics);
 
    if (s->info.stage == MESA_SHADER_FRAGMENT) {
+      NIR_PASS(_, s, ntr_lower_wpos, c);
+
       /* Shadow lowering. */
       int num_texture_states = state.sampler_state_count;
       if (num_texture_states > 0) {
@@ -1729,8 +2048,12 @@ nir_to_rc(struct nir_shader *s, struct pipe_screen *screen,
                   tex_swizzle, true);
       }
 
+      NIR_PASS(_, s, ntr_lower_backend_tex, c, &state, is_r500);
       nir_to_rc_lower_txp(s);
       NIR_PASS(_, s, nir_to_rc_lower_tex);
+
+      if (state.alpha_to_one)
+         NIR_PASS(_, s, r300_nir_lower_alpha_to_one);
    }
 
    bool progress;
@@ -1763,15 +2086,15 @@ nir_to_rc(struct nir_shader *s, struct pipe_screen *screen,
    NIR_PASS(_, s, nir_opt_copy_prop);
    /* CSE cleanup after late ftrunc lowering. */
    NIR_PASS(_, s, nir_opt_cse);
-   /* At this point we need to clean;
-    *  a) fcsel_gt that come from the ftrunc lowering on R300,
+   /* At this point we need to clean up:
+    *  a) R300/R400 VS fcsel_ge from ftrunc and seq/sne from bool/int lowering,
     *  b) all flavours of fcsels that read three different temp sources on R500.
     */
    if (s->info.stage == MESA_SHADER_VERTEX) {
       if (is_r500)
          NIR_PASS(_, s, r300_nir_lower_fcsel_r500);
       else
-         NIR_PASS(_, s, r300_nir_lower_fcsel_r300);
+         NIR_PASS(_, s, r300_nir_lower_vs_alu_r300);
       NIR_PASS(_, s, r300_nir_lower_flrp);
    } else {
       NIR_PASS(_, s, r300_nir_lower_comparison_fs);
@@ -1781,8 +2104,10 @@ nir_to_rc(struct nir_shader *s, struct pipe_screen *screen,
    NIR_PASS(_, s, nir_opt_shrink_vectors, false);
    NIR_PASS(_, s, nir_opt_dce);
 
-   nir_move_options move_all = nir_move_const_undef | nir_move_load_ubo | nir_move_load_input | nir_move_load_frag_coord |
-                               nir_move_comparisons | nir_move_copies | nir_move_load_ssbo;
+   nir_move_options move_all = nir_move_const_undef | nir_move_load_uniform |
+                               nir_move_load_ubo | nir_move_load_input |
+                               nir_move_load_frag_coord | nir_move_comparisons |
+                               nir_move_copies | nir_move_load_ssbo;
 
    NIR_PASS(_, s, nir_opt_move, move_all);
    NIR_PASS(_, s, nir_move_vec_src_uses_to_dest, true);
@@ -1794,6 +2119,12 @@ nir_to_rc(struct nir_shader *s, struct pipe_screen *screen,
 
    NIR_PASS(_, s, nir_convert_from_ssa, true, false);
    NIR_PASS(_, s, nir_lower_vec_to_regs, NULL, NULL);
+   /* This cleans up duplicated scalar expressions exposed by lowering
+    * vectors to registers. It does not help on R500.
+    */
+   if (!is_r500) {
+      NIR_PASS(_, s, nir_opt_cse);
+   }
 
    /* locals_to_reg_intrinsics will leave dead derefs that are good to clean up.
     */

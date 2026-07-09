@@ -196,3 +196,91 @@ bool pco_nir_lower_shared_io_to_global(nir_shader *shader, unsigned usc_slots)
                                      nir_metadata_control_flow,
                                      &usc_slots);
 }
+
+/**
+ * \brief Propagages coherent/volatile access qualifiers on deref intrinsics to
+ *        the intrinsics respective nir_variable.
+ *
+ * \param[in] b NIR builder.
+ * \param[in] intr NIR intrinsic instruction.
+ * \param[in] cb_data User callback data.
+ * \return True if progress was made.
+ */
+static bool prop_intr_access_to_vars(nir_builder *b,
+                                     nir_intrinsic_instr *intr,
+                                     void *cb_data)
+{
+   switch (intr->intrinsic) {
+   case nir_intrinsic_load_deref:
+   case nir_intrinsic_store_deref:
+   case nir_intrinsic_deref_atomic:
+   case nir_intrinsic_deref_atomic_swap:
+      break;
+
+   default:
+      return false;
+   }
+
+   assert(nir_intrinsic_has_access(intr));
+
+   struct util_dynarray *intrs = cb_data;
+
+   nir_variable *var =
+      nir_get_binding_variable(b->shader, nir_chase_binding(intr->src[0]));
+
+   enum gl_access_qualifier intr_access = nir_intrinsic_access(intr);
+
+   util_dynarray_append(intrs, intr);
+
+   bool progress = false;
+
+   if (intr_access & ACCESS_COHERENT) {
+      var->data.access |= ACCESS_COHERENT;
+      progress = true;
+   }
+
+   if (intr_access & ACCESS_VOLATILE) {
+      var->data.access |= ACCESS_VOLATILE;
+      progress = true;
+   }
+
+   return progress;
+}
+
+/**
+ * \brief Access qualifier propagating pass.
+ *
+ * \param[in,out] shader NIR shader.
+ * \param[in,out] data Shader data.
+ * \return True if the pass made progress.
+ */
+bool pco_nir_prop_access(nir_shader *shader)
+{
+   struct util_dynarray intrs = UTIL_DYNARRAY_INIT;
+
+   bool progress = false;
+
+   progress |= nir_shader_intrinsics_pass(shader,
+                                          prop_intr_access_to_vars,
+                                          nir_metadata_none,
+                                          &intrs);
+
+   /* Propagate coherent access qualifier from nir_variable's to their
+    * respective deref intrinsics. Avoid propagating any other access
+    * qualifiers that could have other effects.
+    */
+   util_dynarray_foreach (&intrs, nir_intrinsic_instr *, pintr) {
+      nir_intrinsic_instr *intr = *pintr;
+
+      nir_variable *var =
+         nir_get_binding_variable(shader, nir_chase_binding(intr->src[0]));
+
+      nir_intrinsic_set_access(intr,
+                               nir_intrinsic_access(intr) | var->data.access);
+      progress = true;
+   }
+
+   util_dynarray_fini(&intrs);
+
+   return progress;
+}

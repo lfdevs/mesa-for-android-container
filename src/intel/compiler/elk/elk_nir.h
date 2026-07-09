@@ -13,16 +13,16 @@
 extern "C" {
 #endif
 
-int elk_type_size_vec4(const struct glsl_type *type, bool bindless);
-int elk_type_size_dvec4(const struct glsl_type *type, bool bindless);
+unsigned elk_type_size_vec4(const struct glsl_type *type, bool bindless);
+unsigned elk_type_size_dvec4(const struct glsl_type *type, bool bindless);
 
-static inline int
+static inline unsigned
 elk_type_size_scalar_bytes(const struct glsl_type *type, bool bindless)
 {
    return glsl_count_dword_slots(type, bindless) * 4;
 }
 
-static inline int
+static inline unsigned
 elk_type_size_vec4_bytes(const struct glsl_type *type, bool bindless)
 {
    return elk_type_size_vec4(type, bindless) * 16;

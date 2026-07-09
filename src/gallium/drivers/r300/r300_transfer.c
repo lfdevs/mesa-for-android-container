@@ -18,6 +18,11 @@ struct r300_transfer {
 
     /* Linear texture. */
     struct r300_resource *linear_texture;
+
+#if UTIL_ARCH_BIG_ENDIAN
+    void *map;
+    void *cpu_map;
+#endif
 };
 
 /* Convenience cast wrapper. */
@@ -26,6 +31,65 @@ r300_transfer(struct pipe_transfer* transfer)
 {
     return (struct r300_transfer*)transfer;
 }
+
+#if UTIL_ARCH_BIG_ENDIAN
+/* RGB565 render/sampler state on big endian uses the opposite 5-bit red/blue
+ * field order from Gallium's CPU-visible PIPE_FORMAT_B5G6R5_UNORM convention.
+ * Keep that difference contained at transfer boundaries: CPU maps see normal
+ * B5G6R5, while the resource stores the order consumed by r300 hardware.
+ */
+static void r300_copy_b5g6r5_map(const struct pipe_transfer *transfer,
+                                 char *dst_map, const char *src_map)
+{
+    for (unsigned z = 0; z < transfer->box.depth; z++) {
+        const char *src_layer = src_map + (size_t)z * transfer->layer_stride;
+        char *dst_layer = dst_map + (size_t)z * transfer->layer_stride;
+
+        for (unsigned y = 0; y < transfer->box.height; y++) {
+            const uint16_t *src =
+                (const uint16_t *)(src_layer + y * transfer->stride);
+            uint16_t *dst =
+                (uint16_t *)(dst_layer + y * transfer->stride);
+
+            for (unsigned x = 0; x < transfer->box.width; x++) {
+                uint16_t value = src[x];
+
+                dst[x] = ((value & 0xf800) >> 11) |
+                         (value & 0x07e0) |
+                         ((value & 0x001f) << 11);
+            }
+        }
+    }
+}
+
+static size_t r300_b5g6r5_map_size(const struct pipe_transfer *transfer)
+{
+    unsigned depth = transfer->box.depth;
+    size_t size = (size_t)transfer->stride * transfer->box.height;
+
+    if (depth > 1)
+        size += (size_t)(depth - 1) * transfer->layer_stride;
+
+    return size;
+}
+
+static void *r300_create_b5g6r5_cpu_map(struct r300_transfer *r300transfer,
+                                        char *map)
+{
+    struct pipe_transfer *transfer = (struct pipe_transfer*)r300transfer;
+    char *cpu_map = MALLOC(r300_b5g6r5_map_size(transfer));
+
+    if (!cpu_map)
+        return NULL;
+
+    r300transfer->map = map;
+
+    if (transfer->usage & PIPE_MAP_READ)
+        r300_copy_b5g6r5_map(transfer, cpu_map, map);
+
+    return cpu_map;
+}
+#endif
 
 /* Copy from a tiled texture to a detiled one. */
 static void r300_copy_from_tiled_texture(struct pipe_context *ctx,
@@ -207,6 +271,18 @@ r300_texture_transfer_map(struct pipe_context *ctx,
             return NULL;
         }
 	*transfer = &trans->transfer;
+#if UTIL_ARCH_BIG_ENDIAN
+        if (texture->format == PIPE_FORMAT_B5G6R5_UNORM) {
+            trans->cpu_map = r300_create_b5g6r5_cpu_map(trans, map);
+            if (!trans->cpu_map) {
+                pipe_resource_reference(
+                    (struct pipe_resource**)&trans->linear_texture, NULL);
+                FREE(trans);
+                return NULL;
+            }
+            return trans->cpu_map;
+        }
+#endif
         return map;
     } else {
         /* Tiling is disabled. */
@@ -217,9 +293,20 @@ r300_texture_transfer_map(struct pipe_context *ctx,
         }
 
 	*transfer = &trans->transfer;
-        return map + trans->transfer.offset +
+        map += trans->transfer.offset +
             box->y / util_format_get_blockheight(format) * trans->transfer.stride +
             box->x / util_format_get_blockwidth(format) * util_format_get_blocksize(format);
+#if UTIL_ARCH_BIG_ENDIAN
+        if (texture->format == PIPE_FORMAT_B5G6R5_UNORM) {
+            trans->cpu_map = r300_create_b5g6r5_cpu_map(trans, map);
+            if (!trans->cpu_map) {
+                FREE(trans);
+                return NULL;
+            }
+            return trans->cpu_map;
+        }
+#endif
+        return map;
     }
 }
 
@@ -227,6 +314,11 @@ void r300_texture_transfer_unmap(struct pipe_context *ctx,
 				 struct pipe_transfer *transfer)
 {
     struct r300_transfer *trans = r300_transfer(transfer);
+
+#if UTIL_ARCH_BIG_ENDIAN
+    if (trans->cpu_map && (transfer->usage & PIPE_MAP_WRITE))
+        r300_copy_b5g6r5_map(transfer, trans->map, trans->cpu_map);
+#endif
 
     if (trans->linear_texture) {
         if (transfer->usage & PIPE_MAP_WRITE) {
@@ -236,5 +328,8 @@ void r300_texture_transfer_unmap(struct pipe_context *ctx,
         pipe_resource_reference(
             (struct pipe_resource**)&trans->linear_texture, NULL);
     }
+#if UTIL_ARCH_BIG_ENDIAN
+    FREE(trans->cpu_map);
+#endif
     FREE(transfer);
 }

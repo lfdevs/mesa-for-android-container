@@ -911,6 +911,16 @@ anv_shader_create(struct anv_device *device,
    shader->cmd_data = cmd_data;
    anv_genX(device->info, shader_emit)(&batch, device, shader);
 
+   /* Apply workarounds associated with this shader hash */
+   struct anv_instance *instance = device->physical->instance;
+   if (instance->shader_workarounds != NULL) {
+      struct anv_shader_workaround *workaround =
+         _mesa_hash_table_u64_search(instance->shader_workarounds,
+                                     shader->prog_data->source_hash);
+      if (workaround != NULL)
+         shader->workaround = *workaround;
+   }
+
    *shader_out = &shader->vk;
 
    return VK_SUCCESS;

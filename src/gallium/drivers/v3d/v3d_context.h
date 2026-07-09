@@ -152,15 +152,18 @@ enum v3d_flush_cond {
 
 /* bitmask */
 enum v3d_blitter_op {
-        V3D_SAVE_TEXTURES         = (1u << 1),
-        V3D_SAVE_FRAMEBUFFER      = (1u << 2),
-        V3D_DISABLE_RENDER_COND   = (1u << 3),
+        V3D_SAVE_TEXTURES          = (1u << 1),
+        V3D_SAVE_FRAMEBUFFER       = (1u << 2),
+        V3D_SAVE_FRAGMENT_STATE    = (1u << 3),
+        V3D_SAVE_FRAGMENT_CONSTANT = (1u << 4),
+        V3D_DISABLE_RENDER_COND    = (1u << 5),
 
-        V3D_BLIT          = V3D_SAVE_FRAMEBUFFER | V3D_SAVE_TEXTURES,
-        V3D_BLIT_COND     = V3D_BLIT | V3D_DISABLE_RENDER_COND,
-        V3D_CLEAR         = 0,
-        V3D_CLEAR_COND    = V3D_CLEAR | V3D_DISABLE_RENDER_COND,
-        V3D_CLEAR_SURFACE = V3D_SAVE_FRAMEBUFFER,
+        V3D_BLIT               = V3D_SAVE_FRAMEBUFFER | V3D_SAVE_TEXTURES |
+                                 V3D_SAVE_FRAGMENT_STATE,
+        V3D_BLIT_COND          = V3D_BLIT | V3D_DISABLE_RENDER_COND,
+        V3D_CLEAR              = V3D_SAVE_FRAGMENT_STATE | V3D_SAVE_FRAGMENT_CONSTANT,
+        V3D_CLEAR_COND         = V3D_CLEAR | V3D_DISABLE_RENDER_COND,
+        V3D_CLEAR_SURFACE      = V3D_CLEAR | V3D_SAVE_FRAMEBUFFER,
         V3D_CLEAR_SURFACE_COND = V3D_CLEAR_SURFACE | V3D_DISABLE_RENDER_COND
 };
 

@@ -33,7 +33,7 @@ preload_arg(lower_intrinsics_to_args_state *s, nir_function_impl *impl, struct a
    /* If there are no HS threads, SPI mistakenly loads the LS VGPRs starting at VGPR 0. */
    if ((s->options->hw_stage == AC_HW_LOCAL_SHADER || s->options->hw_stage == AC_HW_HULL_SHADER) &&
        s->options->has_ls_vgpr_init_bug) {
-      nir_def *count = ac_nir_unpack_arg(&start_b, s->args, s->args->merged_wave_info, 8, 8);
+      nir_def *count = ac_nir_unpack_arg_wg_div(&start_b, s->args, s->args->merged_wave_info, 8, 8);
       nir_def *hs_empty = nir_ieq_imm(&start_b, count, 0);
       value = nir_bcsel(&start_b, hs_empty,
                         ac_nir_load_arg_upper_bound(&start_b, s->args, ls_buggy_arg, upper_bound),
@@ -50,23 +50,23 @@ load_subgroup_id_lowered(lower_intrinsics_to_args_state *s, nir_builder *b)
    } else if (s->options->hw_stage == AC_HW_COMPUTE_SHADER) {
       if (s->options->gfx_level >= GFX12) {
          assert(!s->options->use_llvm);
-         nir_def *ttmp8 = nir_load_ttmp_register_amd(b, .base = 8);
+         nir_def *ttmp8 = nir_load_ttmp_register_wg_div_amd(b, .base = 8);
          return nir_ubfe_imm(b, ttmp8, 25, 5);
       } else if (s->options->gfx_level >= GFX10_3) {
          assert(s->args->tg_size.used);
-         return ac_nir_unpack_arg(b, s->args, s->args->tg_size, 20, 5);
+         return ac_nir_unpack_arg_wg_div(b, s->args, s->args->tg_size, 20, 5);
       } else {
          /* GFX6-10 don't actually support a wave id, but we can
           * use the ordered id because ORDERED_APPEND_* is set to
           * zero in the compute dispatch initiator.
           */
          assert(s->args->tg_size.used);
-         return ac_nir_unpack_arg(b, s->args, s->args->tg_size, 6, 6);
+         return ac_nir_unpack_arg_wg_div(b, s->args, s->args->tg_size, 6, 6);
       }
    } else if (s->options->hw_stage == AC_HW_HULL_SHADER) {
       if (s->options->gfx_level >= GFX11) {
          assert(s->args->tcs_wave_id.used);
-         return ac_nir_unpack_arg(b, s->args, s->args->tcs_wave_id, 0, 3);
+         return ac_nir_unpack_arg_wg_div(b, s->args, s->args->tcs_wave_id, 0, 3);
       } else if (b->shader->info.stage == MESA_SHADER_TESS_CTRL) {
          /* GFX6-10 don't have the subgroup ID sysval in TCS, so compute it like this:
           *    subgroup_id = (rel_patch_id * tcs_out_vertices + invocation_id) / wave_size;
@@ -96,7 +96,7 @@ load_subgroup_id_lowered(lower_intrinsics_to_args_state *s, nir_builder *b)
    } else if (s->options->hw_stage == AC_HW_LEGACY_GEOMETRY_SHADER ||
               s->options->hw_stage == AC_HW_NEXT_GEN_GEOMETRY_SHADER) {
       assert(s->args->merged_wave_info.used);
-      return ac_nir_unpack_arg(b, s->args, s->args->merged_wave_info, 24, 4);
+      return ac_nir_unpack_arg_wg_div(b, s->args, s->args->merged_wave_info, 24, 4);
    } else {
       return nir_imm_int(b, 0);
    }
@@ -267,7 +267,7 @@ lower_intrinsic_to_arg(nir_builder *b, nir_intrinsic_instr *intrin, void *state)
       break;
    }
    case nir_intrinsic_load_merged_wave_info_amd:
-      replacement = ac_nir_load_arg(b, s->args, s->args->merged_wave_info);
+      replacement = ac_nir_load_arg_at_offset(b, s->args, s->args->merged_wave_info, 0, true);
       break;
    case nir_intrinsic_load_workgroup_num_input_vertices_amd:
       replacement = ac_nir_unpack_arg(b, s->args, s->args->gs_tg_info, 12, 9);
@@ -281,7 +281,7 @@ lower_intrinsic_to_arg(nir_builder *b, nir_intrinsic_instr *intrin, void *state)
       replacement = ac_nir_load_arg(b, s->args, s->args->gs_vtx_offset[0]);
       break;
    case nir_intrinsic_load_ordered_id_amd:
-      replacement = ac_nir_unpack_arg(b, s->args, s->args->gs_tg_info, 0, 12);
+      replacement = ac_nir_unpack_arg_wg_div(b, s->args, s->args->gs_tg_info, 0, 12);
       break;
    case nir_intrinsic_load_ring_tess_offchip_offset_amd:
       replacement = ac_nir_load_arg(b, s->args, s->args->tess_offchip_offset);
@@ -322,7 +322,7 @@ lower_intrinsic_to_arg(nir_builder *b, nir_intrinsic_instr *intrin, void *state)
       replacement = ac_nir_load_arg(b, s->args, s->args->draw_id);
       break;
    case nir_intrinsic_load_view_index:
-      replacement = ac_nir_load_arg_upper_bound(b, s->args, s->args->view_index, 1);
+      replacement = ac_nir_load_arg_upper_bound(b, s->args, s->args->view_index, AC_MULTIVIEW_MAX_VIEWS - 1);
       break;
    case nir_intrinsic_load_invocation_id:
       if (b->shader->info.stage == MESA_SHADER_TESS_CTRL) {
@@ -415,9 +415,9 @@ lower_intrinsic_to_arg(nir_builder *b, nir_intrinsic_instr *intrin, void *state)
    }
    case nir_intrinsic_load_gs_wave_id_amd:
       if (s->args->merged_wave_info.used)
-         replacement = ac_nir_unpack_arg(b, s->args, s->args->merged_wave_info, 16, 8);
+         replacement = ac_nir_unpack_arg_wg_div(b, s->args, s->args->merged_wave_info, 16, 8);
       else if (s->args->gs_wave_id.used)
-         replacement = ac_nir_load_arg(b, s->args, s->args->gs_wave_id);
+         replacement = ac_nir_load_arg_at_offset(b, s->args, s->args->gs_wave_id, 0, true);
       else
          UNREACHABLE("Shader doesn't have GS wave ID.");
       break;
@@ -510,7 +510,7 @@ lower_intrinsic_to_arg(nir_builder *b, nir_intrinsic_instr *intrin, void *state)
          /* After the AND the bits are already multiplied by 64 (left shifted by 6) so we can just
           * feed that to mbcnt. (GFX12 doesn't have tg_size)
           */
-         nir_def *wave_id_mul_64 = nir_iand_imm(b, ac_nir_load_arg(b, s->args, s->args->tg_size), 0xfc0);
+         nir_def *wave_id_mul_64 = nir_iand_imm(b, ac_nir_load_arg_at_offset(b, s->args, s->args->tg_size, 0, true), 0xfc0);
          replacement = nir_mbcnt_amd(b, nir_imm_intN_t(b, ~0ull, s->options->wave_size), wave_id_mul_64);
       } else {
          nir_def *subgroup_id;

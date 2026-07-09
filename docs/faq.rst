@@ -28,8 +28,7 @@ DRI drivers for X.org.
    for more information about Intel drivers.
 -  See `nouveau.freedesktop.org <https://nouveau.freedesktop.org>`__ for
    more information about Nouveau drivers.
--  See
-   `www.x.org/wiki/RadeonFeature <https://www.x.org/wiki/RadeonFeature>`__
+-  See `www.x.org/RadeonFeature <https://www.x.org/RadeonFeature>`__
    for more information about Radeon drivers.
 
 2. Compilation and Installation Problems

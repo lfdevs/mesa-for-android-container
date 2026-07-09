@@ -219,12 +219,23 @@ For a list of environment variables to debug RADV, please see
 
 Instructions for debugging GPU hangs can be found :ref:`here <radv-debug-hang>`.
 
+DRI Configuration Options
+-------------------------
+
+RADV supports per-application option overrides via ``~/.drirc``, ``/etc/drirc``,
+or a file in ``/etc/drirc.d/``. Options can also be set like environment
+variables.
+
+See the `driconf documentation <https://dri.freedesktop.org/wiki/DriConf>`__ for the file format.
+
+.. include:: ../_generated/radv_drirc.rst
+
 Hardware Documentation
 ----------------------
 
 You can find a list of documentation for the various generations of
 AMD hardware on the `X.Org wiki
-<https://www.x.org/wiki/RadeonFeature/#documentation>`__.
+<https://www.x.org/RadeonFeature/#documentation>`__.
 
 Additional community-written documentation is also available in Mesa:
 

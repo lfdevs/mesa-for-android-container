@@ -62,6 +62,7 @@ typedef uint32_t xcb_window_t;
 #include <vulkan/vk_icd.h>
 
 #include "lvp_entrypoints.h"
+#include "lvp_drirc.h"
 #include "vk_acceleration_structure.h"
 #include "vk_buffer.h"
 #include "vk_buffer_view.h"
@@ -174,6 +175,8 @@ struct lvp_physical_device {
 
 struct lvp_instance {
    struct vk_instance vk;
+
+   struct lvp_drirc drirc;
 
    uint64_t debug_flags;
 

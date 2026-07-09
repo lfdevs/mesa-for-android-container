@@ -135,7 +135,7 @@ fn rewrite_cfg(func: &mut Function) {
     for block in func.blocks.drain() {
         builder.add_node(block.label, block);
     }
-    let _ = std::mem::replace(&mut func.blocks, builder.as_cfg());
+    let _ = std::mem::replace(&mut func.blocks, builder.as_cfg(true));
 }
 
 /// Replace jumps to the following block with fall-through

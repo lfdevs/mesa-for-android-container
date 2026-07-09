@@ -25,6 +25,7 @@
 #define BLORP_PRIV_H
 
 #include <stdint.h>
+#include <string.h>
 
 #include "common/intel_measure.h"
 #include "compiler/nir/nir.h"
@@ -360,19 +361,29 @@ const char *blorp_op_to_name(enum blorp_op op);
 
 void blorp_params_init(struct blorp_params *params);
 
+#pragma pack(push, 1)
 struct blorp_base_key
 {
    char name[8];
    enum blorp_shader_type shader_type;
    enum blorp_shader_pipeline shader_pipeline;
 };
+#pragma pack(pop)
 
-#define BLORP_BASE_KEY_INIT(_type, _pipeline)   \
-   (struct blorp_base_key) {                    \
-      .name = "blorp",                          \
-      .shader_type = (_type),                   \
-      .shader_pipeline = (_pipeline),           \
-   }
+
+/* Since keys get memcmp()'d as part of the shader cache lookup, we really
+ * want to ensure that all their bytes - not just fields, but also holes and
+ * padding - get properly initialized. That's why we do a memset() here.
+ */
+#define BLORP_KEY_INIT(_key, _shader_type, _pipeline) do { \
+   __typeof(_key) *_k = &(_key); \
+   memset(_k, 0, sizeof(*_k)); \
+   _k->base = (struct blorp_base_key) { \
+      .name = "blorp", \
+      .shader_type = (_shader_type), \
+      .shader_pipeline = (_pipeline), \
+   }; \
+} while(0)
 
 /**
  * \name BLORP internals

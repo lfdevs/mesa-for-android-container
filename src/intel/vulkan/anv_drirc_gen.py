@@ -6,6 +6,7 @@ import argparse
 import sys
 
 VALID_COMMON_VK_OPTIONS = {
+    "force_vk_devicename",
     "force_vk_vendor",
     "vk_lower_terminate_to_discard",
     "vk_require_astc",
@@ -70,6 +71,9 @@ def declare_options(android_version):
         B("anv_fs_sampler_undef_derivatives_workaround", False,
           "Fixes samplers in fragment shaders computing undefined values for derivatives with lanes disabled by control flow",
           c_name="fs_sampler_undef_derivatives_workaround"),
+        B("anv_slm_robust_vectorization", False,
+          "Use robust vectorization for SLM accesses",
+          c_name="slm_robust_vectorization"),
 
         # Workaround various driver
         B("always_flush_cache", False,
@@ -133,6 +137,16 @@ def declare_options(android_version):
         B("intel_enable_wa_14024015672_msaa", False,
           "Workaround for RHWO MSAA",
           c_name="wa_14024015672_msaa"),
+
+        # Workaround command emission, shader specific
+        B("force_vk_typed_barrier_after_dispatch_to_compute", False,
+          "Insert a barrier for typed resources after dispatch of a shader for other compute shaders"),
+        B("force_vk_untyped_barrier_after_dispatch_to_compute", False,
+          "Insert a barrier for untyped resources after dispatch of a shader for other compute shaders"),
+        B("force_vk_typed_barrier_after_dispatch_to_top", False,
+          "Insert a barrier for typed resources after dispatch of a shader for any other shader"),
+        B("force_vk_untyped_barrier_after_dispatch_to_top", False,
+          "Insert a barrier for untyped resources after dispatch of a shader for any other shader"),
     ]
 
     perf_options = [

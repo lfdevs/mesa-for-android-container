@@ -6,6 +6,11 @@ use crate::ir::*;
 use crate::ops::*;
 
 fn widen_op_pre_ra(b: &mut impl SSABuilder, op: &mut Op) {
+    if b.model().op_is_message(op) {
+        // Don't try to widen messages
+        return;
+    }
+
     assert!(op.dsts().len() <= 1);
     let Some((dst, dst_raw_type)) = op.dsts_raw_types().next() else {
         // We can only widen things with destinations
@@ -19,7 +24,7 @@ fn widen_op_pre_ra(b: &mut impl SSABuilder, op: &mut Op) {
     }
 
     // If we have a vectorized destination, we have a variant
-    let Some(mut variant) = op.variant() else {
+    let Some(variant) = op.variant() else {
         panic!("We can't widen if there's no variant");
     };
     let dst_type = dst_raw_type.specialize(variant);
@@ -52,18 +57,7 @@ fn widen_op_pre_ra(b: &mut impl SSABuilder, op: &mut Op) {
     while !b.model().op_is_supported(op) {
         new_comps *= 2;
         debug_assert!(dst_bits * new_comps <= 32);
-        variant = DataType::v(new_comps, variant.scalar_type());
-        match op {
-            Op::CSel(op) => op.cmp_type = variant,
-            Op::FAdd(op) => op.dst_type = variant,
-            Op::FCmp(op) => op.src_type = variant,
-            Op::IAdd(op) => op.dst_type = variant,
-            Op::IMul(op) => op.dst_type = variant,
-            Op::ICmp(op) => op.src_type = variant,
-            Op::ShiftLop(op) => op.dst_type = variant,
-            _ => panic!("Unsupported op"),
-        }
-        debug_assert!(op.is_valid_variant());
+        op.set_variant(DataType::v(new_comps, variant.scalar_type()));
     }
 }
 

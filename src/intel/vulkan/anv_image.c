@@ -643,12 +643,18 @@ add_aux_state_tracking_buffer(struct anv_device *device,
     * The indirect clear color BO requires 64B-alignment on gfx11+. If we're
     * using a modifier with clear color, then some kernels might require a 4k
     * alignment.
+    *
+    * If it's an aliased image, we can't use private bindings either since
+    * aliased images with the same parameters should be consistent (e.g., they
+    * can't have separate clear colors).
     */
    enum anv_image_memory_binding binding = ANV_IMAGE_MEMORY_BINDING_PRIVATE;
    uint32_t clear_color_alignment = 64;
    if (mod_info && mod_info->supports_clear_color) {
       binding = ANV_IMAGE_MEMORY_BINDING_PLANE_0 + plane;
       clear_color_alignment = 4096;
+   } else if (image->vk.create_flags & VK_IMAGE_CREATE_ALIAS_BIT) {
+      binding = ANV_IMAGE_MEMORY_BINDING_PLANE_0 + plane;
    }
 
    return image_binding_grow(device, image, binding,
@@ -1166,11 +1172,14 @@ check_memory_bindings(const struct anv_device *device,
             isl_drm_modifier_get_info(image->vk.drm_format_mod);
 
          /* If the image is created with a drm modifier that supports clear
-          * color, it will be exported along with main surface. Otherwise,
-          * place the aux-tracking state in a separate, suballocated buffer
-          * to achieve better memory utilization.
+          * color it will be exported along with main surface. If the image is
+          * aliased, it cannot be private since it must be consistent among
+          * all aliases. Otherwise, place the aux-tracking state in a
+          * separate, suballocated buffer to achieve better memory
+          * utilization.
           */
-         if (!mod_info || !mod_info->supports_clear_color)
+         if (!(mod_info && mod_info->supports_clear_color) &&
+             !(image->vk.create_flags & VK_IMAGE_CREATE_ALIAS_BIT))
             binding = ANV_IMAGE_MEMORY_BINDING_PRIVATE;
 
          /* The indirect clear color BO requires 64B-alignment on gfx11+. */
@@ -3483,13 +3492,15 @@ anv_get_image_subresource_layout(struct anv_device *device,
    if (comp_props && device->physical->expose_compression_control) {
       comp_props->imageCompressionFixedRateFlags =
          VK_IMAGE_COMPRESSION_FIXED_RATE_NONE_EXT;
-      comp_props->imageCompressionFlags = VK_IMAGE_COMPRESSION_DISABLED_EXT;
-      for (uint32_t p = 0; p < image->n_planes; p++) {
-         if (image->planes[p].aux_usage != ISL_AUX_USAGE_NONE) {
-            comp_props->imageCompressionFlags = VK_IMAGE_COMPRESSION_DEFAULT_EXT;
-            break;
-         }
-      }
+      /* Even if decided to disable compression without
+       * VK_IMAGE_COMPRESSION_DISABLED_EXT, it's an internal decision and we
+       * assume this is the default. So for the query we only return what was
+       * specified by the application.
+       */
+      comp_props->imageCompressionFlags =
+         (image->vk.compr_flags & VK_IMAGE_COMPRESSION_DISABLED_EXT) ?
+         VK_IMAGE_COMPRESSION_DISABLED_EXT :
+         VK_IMAGE_COMPRESSION_DEFAULT_EXT;
    }
 }
 
@@ -4083,7 +4094,7 @@ anv_can_fast_clear_color(const struct anv_cmd_buffer *cmd_buffer,
       if (image->planes[plane].aux_usage != ISL_AUX_USAGE_NONE) {
          anv_perf_warn(VK_LOG_OBJS(&image->vk.base),
                        "%s does not support fast clear on %dx%d %s "
-                       "isl_tiling_%s image with usage 0x%x. Slow clearing.",
+                       "isl_tiling_%s image with usage 0x%"PRIx64". Slow clearing.",
                        vk_ImageLayout_to_str(layout),
                        image->vk.extent.width, image->vk.extent.height,
                        vk_format_description(image->vk.format)->short_name,

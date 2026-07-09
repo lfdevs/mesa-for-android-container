@@ -88,6 +88,17 @@ impl F16 {
             self
         }
     }
+
+    pub fn total_cmp(self, other: &F16) -> Ordering {
+        let mut left = self.to_bits() as i16;
+        let mut right = other.to_bits() as i16;
+
+        // Copied from f32::total_cmp
+        left ^= (((left >> 15) as u16) >> 1) as i16;
+        right ^= (((right >> 15) as u16) >> 1) as i16;
+
+        left.cmp(&right)
+    }
 }
 
 impl From<F16> for f32 {

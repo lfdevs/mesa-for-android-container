@@ -8,7 +8,9 @@
 
 layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 
-#include "build_interface.h"
+#include "bvh_defines.h"
+#define VK_USED_BUILD_FLAGS RADV_UPDATE_GFX12_BUILD_FLAGS
+#include "bvh_helpers.h"
 #include "invocation_cluster.h"
 #include "update.h"
 
@@ -72,14 +74,14 @@ main()
       VOID_REF src_leaf_node = OFFSET(src_bvh, child_offset);
 
       uint32_t geometry_index = 0;
-      if (!VK_BUILD_FLAG(RADV_BUILD_FLAG_UPDATE_SINGLE_GEOMETRY))
+      if (!RADV_TEST_BUILD_FLAG_UPDATE_SINGLE_GEOMETRY)
          geometry_index = DEREF(REF(uint32_t)(src_leaf_node + RADV_GFX12_UPDATABLE_PRIMITIVE_NODE_INDICES_OFFSET)) >> 4;
 
       uint32_t primitive_index =
          DEREF(REF(uint32_t)(src_leaf_node + RADV_GFX12_UPDATABLE_PRIMITIVE_NODE_INDICES_OFFSET + 4)) & 0xfffffff;
 
       vk_bvh_geometry_data geom_data;
-      if (VK_BUILD_FLAG(RADV_BUILD_FLAG_UPDATE_SINGLE_GEOMETRY))
+      if (RADV_TEST_BUILD_FLAG_UPDATE_SINGLE_GEOMETRY)
          geom_data = args.geom_data0;
       else
          geom_data = DEREF(INDEX(vk_bvh_geometry_data, args.geom_data, geometry_index));
@@ -135,7 +137,7 @@ main()
       uvec3 extent_exponents = floatBitsToUint(extent) >> 23;
 
       if (cluster.invocation_index == 0) {
-         if (!VK_BUILD_FLAG(RADV_BUILD_FLAG_UPDATE_IN_PLACE)) {
+         if (!RADV_TEST_BUILD_FLAG_UPDATE_IN_PLACE) {
             DEREF(dst_node).primitive_base_id = src_node.primitive_base_id;
             DEREF(dst_node).internal_base_id = src_node.internal_base_id;
             DEREF(dst_node).parent_id = src_node.parent_id;
@@ -143,7 +145,7 @@ main()
          DEREF(dst_node).origin = origin;
          DEREF(dst_node).child_count_exponents = extent_exponents.x | (extent_exponents.y << 8) |
                                                  (extent_exponents.z << 16) | (valid_child_count_minus_one << 28);
-         if (!VK_BUILD_FLAG(RADV_BUILD_FLAG_UPDATE_IN_PLACE))
+         if (!RADV_TEST_BUILD_FLAG_UPDATE_IN_PLACE)
             DEREF(dst_node).obb_matrix_index = 0x7f;
       }
 
@@ -163,7 +165,7 @@ main()
          DEREF(dst_node).children[cluster.invocation_index] = box_child;
       }
 
-      if (!VK_BUILD_FLAG(RADV_BUILD_FLAG_UPDATE_IN_PLACE) && !is_valid) {
+      if (!RADV_TEST_BUILD_FLAG_UPDATE_IN_PLACE && !is_valid) {
          radv_gfx12_box_child null_child;
          null_child.dword0 = 0xffffffff;
          null_child.dword1 = 0xfff;

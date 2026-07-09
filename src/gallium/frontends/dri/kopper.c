@@ -152,7 +152,7 @@ kopper_get_pixmap_buffer(struct dri_drawable *drawable,
     */
    struct dri_screen *screen = drawable->screen;
 
-#ifndef GLX_USE_APPLE
+#ifndef GLX_USE_APPLEGL
    drawable->image = loader_dri3_get_pixmap_buffer(conn, pixmap, screen,
                                                    fourcc, drawable->screen->has_multibuffer, &width, &height, drawable);
 #else
@@ -513,6 +513,9 @@ kopper_destroy_drawable(struct dri_drawable *drawable)
       xcb_connection_t *conn = xcb->connection;
       xcb_unregister_for_special_event(conn, drawable->special_event);
    }
+
+   FREE(drawable->image);
+   drawable->image = NULL;
 #endif
 }
 

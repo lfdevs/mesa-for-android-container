@@ -45,6 +45,7 @@
 #include "util/u_math.h"
 #include "util/u_memory.h"
 #include "util/u_screen.h"
+#include "util/u_transfer_helper.h"
 #include "util/u_string.h"
 
 #include "frontend/drm_driver.h"
@@ -82,6 +83,7 @@ static const struct debug_named_value etna_debug_options[] = {
    {"npu_parallel",   ETNA_DBG_NPU_PARALLEL, "Enable parallelism inside NPU batches (unsafe)"},
    {"npu_no_batching",ETNA_DBG_NPU_NO_BATCHING, "Disable batching NPU jobs"},
    {"no_texdesc"     ,ETNA_DBG_NO_TEXDESC, "Disable texture descriptor"},
+   {"no_unified_samplers", ETNA_DBG_NO_UNIFIED_SAMPLERS, "Disable unified sampler allocation"},
    DEBUG_NAMED_VALUE_END
 };
 
@@ -92,6 +94,8 @@ static void
 etna_screen_destroy(struct pipe_screen *pscreen)
 {
    struct etna_screen *screen = etna_screen(pscreen);
+
+   u_transfer_helper_destroy(screen->base.transfer_helper);
 
    if (screen->dummy_bo)
       etna_bo_del(screen->dummy_bo);
@@ -233,6 +237,7 @@ etna_init_screen_caps(struct etna_screen *screen)
    caps->fs_position_is_sysval = true;
    caps->fs_face_is_integer_sysval = true; /* note: not integer */
    caps->fs_point_is_sysval = false;
+   caps->native_fp32_depth = false;
    caps->generate_mipmap =
    caps->clear_scissored = screen->specs.use_blt;
    caps->clear_masked = screen->specs.use_blt &&
@@ -426,7 +431,8 @@ gpu_supports_texture_format(struct etna_screen *screen, uint32_t fmt,
    if (format == PIPE_FORMAT_S8_UINT)
       supported = VIV_FEATURE(screen, ETNA_FEATURE_S8);
 
-   if (format == PIPE_FORMAT_S8X24_UINT)
+   if (format == PIPE_FORMAT_S8X24_UINT ||
+       format == PIPE_FORMAT_X32_S8X24_UINT)
       supported = VIV_FEATURE(screen, ETNA_FEATURE_HALTI5) &&
                   !DBG_ENABLED(ETNA_DBG_NO_TEXDESC);
 
@@ -827,6 +833,16 @@ etna_determine_sampler_limits(struct etna_screen *screen)
 
    if (screen->info->model == 0x400)
       screen->specs.vertex_sampler_count = 0;
+
+   /* The unified allocation is only implemented in the descriptor emit path,
+    * so it requires descriptor mode (HALTI5, texdesc enabled). Some pre-HALTI5
+    * parts advertise UNIFIED_SAMPLERS but use the legacy texture-state path.
+    */
+   screen->specs.unified_samplers =
+      VIV_FEATURE(screen, ETNA_FEATURE_UNIFIED_SAMPLERS) &&
+      screen->info->halti >= 5 &&
+      !DBG_ENABLED(ETNA_DBG_NO_TEXDESC) &&
+      !DBG_ENABLED(ETNA_DBG_NO_UNIFIED_SAMPLERS);
 }
 
 static void

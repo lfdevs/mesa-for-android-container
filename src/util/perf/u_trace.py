@@ -85,6 +85,12 @@ class Tracepoint(object):
                 break
         self.tp_print_custom = tp_print
 
+        self.has_fuzzy_hash_arg = False
+        for arg in args:
+            if arg.fuzzy_hash is not None:
+                self.has_fuzzy_hash_arg = True
+                break
+
         # Compute the offset of each indirect argument
         self.indirect_args = [x for x in args if x.is_indirect]
         indirect_sizes = []
@@ -98,6 +104,10 @@ class Tracepoint(object):
         self.toggle_name = toggle_name
         self.need_cs_param = need_cs_param
         self.tp_type = tp_type
+        if len(self.tp_struct) > 0:
+            self.payload_size = "sizeof(struct trace_%s)" % (name)
+        else:
+            self.payload_size = "0"
 
         TRACEPOINTS[name] = self
         if toggle_name is not None and toggle_name not in TRACEPOINTS_TOGGLES:
@@ -114,50 +124,17 @@ class Tracepoint(object):
                                         trace_toggle_name.upper(),
                                         self.toggle_name.upper())
 
-class TracepointArgStruct():
-    """Represents struct that is being passed as an argument
-    """
-    def __init__(self, type, var, c_format=None, fields=[], is_indirect=False):
-        """Parameters:
-
-        - type: argument's C type.
-        - var: name of the argument
-        """
-        assert isinstance(type, str)
-        assert isinstance(var, str)
-
-        self.type = type
-        self.var = var
-        self.name = var
-        self.is_indirect = is_indirect
-        self.indirect_offset = 0
-        self.is_struct = True
-        self.c_format = c_format
-        self.fields = fields
-        self.to_prim_type = None
-        self.perfetto_field = None
-
-        if self.is_indirect:
-            self.func_param = f"struct u_trace_address {self.var}"
-        else:
-            self.func_param = f"{self.type} {self.var}"
-
-    def value_expr(self, entry_name):
-        ret = None
-        if self.is_struct:
-            if self.is_indirect:
-                ret = ", ".join([f"__{self.name}->{f}" for f in self.fields])
-            else:
-                ret = ", ".join([f"{entry_name}->{self.name}.{f}" for f in self.fields])
-        else:
-            ret = f"{entry_name}->{self.name}"
-        return ret
+    def args_to_free(self):
+        if self.tp_print_custom is not None:
+            return []
+        return [arg for arg in self.tp_print if arg.free_prim_type_func is not None]
 
 class TracepointArg(object):
     """Class that represents either an argument being passed or a field in a struct
     """
     def __init__(self, type, var, c_format=None, name=None, to_prim_type=None,
-                 length_arg=None, copy_func=None, is_indirect=False, perfetto_field=None):
+                 length_arg=None, copy_func=None, is_indirect=False, perfetto_field=None,
+                 fuzzy_hash=None, free_prim_type_func=None):
         """Parameters:
 
         - type: argument's C type.
@@ -184,37 +161,160 @@ class TracepointArg(object):
         self.length_arg = length_arg
         self.copy_func = copy_func
         self.perfetto_field = perfetto_field
+        self.fuzzy_hash = fuzzy_hash
+        self.free_prim_type_func = free_prim_type_func
 
-        self.is_struct = False
         self.is_indirect = is_indirect
         self.indirect_offset = 0
 
+    @property
+    def struct_member(self):
         if self.is_indirect:
             pass
         elif self.type == "str":
             if self.length_arg and self.length_arg.isdigit():
-                self.struct_member = f"char {self.name}[{length_arg} + 1]"
+                return f"char {self.name}[{self.length_arg} + 1]"
             else:
-                self.struct_member = f"char {self.name}[0]"
+                return f"char {self.name}[0]"
         else:
-            self.struct_member = f"{self.type} {self.name}"
+            return f"{self.type} {self.name}"
 
+    @property
+    def func_param(self):
         if self.is_indirect:
-            self.func_param = f"struct u_trace_address {self.var}"
+            return f"struct u_trace_address {self.var}"
         elif self.type == "str":
-            self.func_param = f"const char *{self.var}"
+            return f"const char *{self.var}"
         else:
-            self.func_param = f"{self.type} {self.var}"
+            return f"{self.type} {self.var}"
 
-    def value_expr(self, entry_name):
+    def value_expr(self, entry_name, backend=None):
         if self.is_indirect:
             ret = f"*__{self.name}"
         else:
             ret = f"{entry_name}->{self.name}"
-        if not self.is_struct and self.to_prim_type:
-            ret = self.to_prim_type.format(ret)
+
+        if self.to_prim_type:
+            ret = self.to_prim_type.format(ret, backend=backend)
         return ret
 
+    def copy_func_expr(self, entry_name):
+        if self.copy_func is None:
+            return f"{entry_name}->{self.name} = {self.var}"
+        elif self.length_arg is None:
+            return f"{self.copy_func}({entry_name}->{self.name}, {self.var})"
+        else:
+            return f"{self.copy_func}({entry_name}->{self.name}, {self.var}, {self.length_arg})"
+
+    @property
+    def needs_queueing(self):
+        if self.copy_func is None or self.length_arg is None:
+            return False
+        return not self.length_arg.isdigit()
+
+class TracepointArgStruct(TracepointArg):
+    """Represents struct that is being passed as an argument
+    """
+    def __init__(self, **kwargs):
+        self.fields = kwargs.pop('fields', [])
+        super().__init__(**kwargs)
+
+    def value_expr(self, entry_name, backend=None):
+        if self.is_indirect:
+            parts = [f"__{self.name}->{f}" for f in self.fields]
+        else:
+            parts = [f"{entry_name}->{self.name}.{f}" for f in self.fields]
+
+        return ", ".join(parts)
+
+
+class TracepointArgBlob(TracepointArg):
+    """Represents a struct that is to be stored in the trace to be transformed
+       or serialized before emitting.
+    """
+
+    def __init__(self, type, var, c_format, to_prim_type, length_arg,
+                 copy_func="memcpy", free_prim_type_func=None):
+        """Parameters:
+
+        - type: argument's C type in the form "struct my_type".
+        - var: name of the argument
+        - c_format: printf format to print the value.
+        - to_prim_type: C function to convert from arg's type to a type
+          compatible with c_format.
+        - length_arg: Size of the struct.
+        - free_prim_type_func (optional): C function to free memory for to_prim_type.
+        """
+        assert type.startswith("struct ")
+
+        super().__init__(
+            type=type, var=var, c_format=c_format, to_prim_type=to_prim_type,
+            length_arg=length_arg, free_prim_type_func=free_prim_type_func,
+            copy_func=copy_func
+        )
+
+        self.is_dynamically_sized = not length_arg.startswith("sizeof")
+
+    @property
+    def struct_member(self):
+        val = f"alignas(uint64_t) uint8_t {self.name}"
+        val += "[0]" if self.is_dynamically_sized else f"[{self.length_arg}]"
+        return val
+
+    @property
+    def func_param(self):
+        return f"const {self.type} *{self.var}"
+
+    def value_expr(self, entry_name, backend=None):
+        ret = f"(const {self.type} *){entry_name}->{self.name}"
+        return self.to_prim_type.format(ret, backend=backend)
+
+shared_template = """\
+<%def name="mit_license(copyrights)">\
+/* ${copyrights[0]}
+% for c_holder in copyrights[1:]:
+ * ${c_holder}
+% endfor
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice (including the next
+ * paragraph) shall be included in all copies or substantial portions of the
+ * Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+ * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+ * IN THE SOFTWARE.
+ */\
+</%def>\
+<%def name="trace_func(trace, trace_name, is_prototype=False)">\
+void __trace_${trace_name}(
+     struct u_trace *ut
+   , enum u_trace_type enabled_traces
+%    if trace.need_cs_param:
+   , void *cs
+%    endif
+%    for arg in trace.args:
+   , ${arg.func_param}
+%    endfor
+% if is_prototype:
+);\\
+% else:
+) {
+${caller.body()}\
+}
+% endif
+</%def>\
+"""
 
 HEADERS = []
 
@@ -251,27 +351,7 @@ class ForwardDecl(object):
 
 
 hdr_template = """\
-/* Copyright (C) 2020 Google, Inc.
- *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the "Software"),
- * to deal in the Software without restriction, including without limitation
- * the rights to use, copy, modify, merge, publish, distribute, sublicense,
- * and/or sell copies of the Software, and to permit persons to whom the
- * Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice (including the next
- * paragraph) shall be included in all copies or substantial portions of the
- * Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
- * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
- * IN THE SOFTWARE.
- */
+${mit_license(["Copyright (C) 2020 Google, Inc."])}
 
 <% guard_name = '_' + hdrname + '_H' %>
 #ifndef ${guard_name}
@@ -313,15 +393,7 @@ struct trace_${trace_name} {
    ${arg.struct_member};
 %    endfor
 %    if len(trace.tp_struct) == 0:
-#ifdef __cplusplus
-   /* avoid warnings about empty struct size mis-match in C vs C++..
-    * the size mis-match is harmless because (a) nothing will deref
-    * the empty struct, and (b) the code that cares about allocating
-    * sizeof(struct trace_${trace_name}) (and wants this to be zero
-    * if there is no payload) is C
-    */
    uint8_t dummy;
-#endif
 %    endif
 };
 %    if trace.tp_perfetto is not None:
@@ -335,16 +407,7 @@ void ${trace.tp_perfetto}(
    const void *indirect_data);
 #endif
 %    endif
-void __trace_${trace_name}(
-       struct u_trace *ut
-     , enum u_trace_type enabled_traces
-%    if trace.need_cs_param:
-     , void *cs
-%    endif
-%    for arg in trace.args:
-     , ${arg.func_param}
-%    endfor
-);
+${trace_func(trace, trace_name, is_prototype=True)}
 static ALWAYS_INLINE void trace_${trace_name}(
      struct u_trace *ut
 %    if trace.need_cs_param:
@@ -381,27 +444,7 @@ ${additional_code}
 """
 
 src_template = """\
-/* Copyright (C) 2020 Google, Inc.
- *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the "Software"),
- * to deal in the Software without restriction, including without limitation
- * the rights to use, copy, modify, merge, publish, distribute, sublicense,
- * and/or sell copies of the Software, and to permit persons to whom the
- * Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice (including the next
- * paragraph) shall be included in all copies or substantial portions of the
- * Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
- * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
- * IN THE SOFTWARE.
- */
+${mit_license(["Copyright (C) 2020 Google, Inc."])}
 
 #include "${hdr}"
 
@@ -446,13 +489,11 @@ ${trace_toggle_name}_config_variable(void)
              ${trace_toggle_name}_variable_once);
 }
 % endif
-
-% for index, (trace_name, trace) in enumerate(TRACEPOINTS.items()):
-/*
- * ${trace_name}
- */
+\
+<%def name="print_func(backend, trace_name, trace)">
+  <% func_name = '__print_json_' if backend == 'U_TRACE_BACKEND_JSON' else '__print_' %>
  % if trace.can_generate_print():
-static void __print_${trace_name}(FILE *out, const void *arg, const void *indirect) {
+static void ${func_name}${trace_name}(FILE *out, const void *arg, const void *indirect) {
   % if len(trace.tp_struct) > 0:
    const struct trace_${trace_name} *__entry =
       (const struct trace_${trace_name} *)arg;
@@ -460,55 +501,122 @@ static void __print_${trace_name}(FILE *out, const void *arg, const void *indire
   % for arg in trace.indirect_args:
    const ${arg.type} *__${arg.name} = (const ${arg.type} *) ((char *)indirect + ${arg.indirect_offset});
   % endfor
+  % for arg in trace.args_to_free():
+   __typeof__(${arg.value_expr("__entry", backend=backend)}) __free_${arg.name} =
+       ${arg.value_expr("__entry", backend=backend)};
+  % endfor
   % if trace.tp_print_custom is not None:
-   fprintf(out, "${trace.tp_print_custom[0]}\\n"
+   fprintf(out, ${caller.tp_print_custom_fmt()}
    % for arg in trace.tp_print_custom[1:]:
            , ${arg}
    % endfor
   % else:
-   fprintf(out, ""
+   fprintf(out, ""\n${caller.tp_print_fmt()}\\
+   % for arg in trace.tp_print:
+    % if arg.free_prim_type_func is not None:
+   ,__free_${arg.name}
+    % else:
+   ,${arg.value_expr("__entry", backend=backend)}
+    % endif
+   % endfor
+  % endif
+   );
+  % for arg in trace.args_to_free():
+   ${arg.free_prim_type_func}(__free_${arg.name});
+  % endfor
+}
+ % else:
+#define ${func_name}${trace_name} NULL\\
+ % endif
+</%def>\
+
+% for index, (trace_name, trace) in enumerate(TRACEPOINTS.items()):
+/*
+ * ${trace_name}
+ */\
+<%call expr="print_func('U_TRACE_BACKEND_PRINT', trace_name, trace)">\
+<%def name="tp_print_custom_fmt()">"${trace.tp_print_custom[0]}\\n"</%def>
+<%def name="tp_print_fmt()">\\
    % for arg in trace.tp_print:
       "${arg.name}=${arg.c_format}, "
    % endfor
          "\\n"
-   % for arg in trace.tp_print:
-   ,${arg.value_expr("__entry")}
-   % endfor
-  % endif
-   );
-}
-
-static void __print_json_${trace_name}(FILE *out, const void *arg, const void *indirect) {
-  % if len(trace.tp_struct) > 0:
-   const struct trace_${trace_name} *__entry =
-      (const struct trace_${trace_name} *)arg;
-  % endif
-  % for arg in trace.indirect_args:
-   const ${arg.type} *__${arg.var} = (const ${arg.type} *) ((char *)indirect + ${arg.indirect_offset});
-  % endfor
-  % if trace.tp_print_custom is not None:
-   fprintf(out, "\\"unstructured\\": \\"${trace.tp_print_custom[0]}\\""
-   % for arg in trace.tp_print_custom[1:]:
-           , ${arg}
-   % endfor
-  % else:
-   fprintf(out, ""
+</%def>
+</%call>\
+\
+<%call expr="print_func('U_TRACE_BACKEND_JSON', trace_name, trace)">\
+<%def name="tp_print_custom_fmt()">"\\"unstructured\\": \\"${trace.tp_print_custom[0]}\\""</%def>
+<%def name="tp_print_fmt()">\\
    % for arg in trace.tp_print:
       "\\"${arg.name}\\": \\"${arg.c_format}\\""
     % if arg != trace.tp_print[-1]:
          ", "
     % endif
    % endfor
-   % for arg in trace.tp_print:
-   ,${arg.value_expr("__entry")}
-   % endfor
+</%def>
+</%call>\
+
+% if trace.tp_print_custom is None and trace.has_fuzzy_hash_arg:
+static void __print_fuzzy_hash_args_${trace_name}(FILE *out, const void *arg) {
+  % if len(trace.tp_struct) > 0:
+   const struct trace_${trace_name} *__entry =
+      (const struct trace_${trace_name} *)arg;
+   (void)__entry;
   % endif
+   fprintf(out, ""
+   % for arg in trace.tp_print:
+    % if arg.fuzzy_hash is not None:
+      "${arg.name}=${arg.c_format}, "
+    % endif
+   % endfor
+   % for arg in trace.tp_print:
+    % if arg.fuzzy_hash is not None:
+      , ${arg.value_expr("__entry")}
+    % endif
+   % endfor
    );
+}
+% else:
+#define __print_fuzzy_hash_args_${trace_name} NULL
+% endif
+
+ % if trace.can_generate_print():
+static uint32_t __fuzzy_hash_${trace_name}(const void *_event) {
+   uint32_t hash = 1;
+  % if len(trace.tp_struct) > 0:
+   const struct trace_${trace_name} *__entry =
+      (const struct trace_${trace_name} *)_event;
+   (void)__entry;
+  % endif
+  % for arg in trace.tp_print:
+   % if arg.fuzzy_hash is not None:
+   hash *= ${arg.fuzzy_hash}(${arg.value_expr("__entry")});
+   % endif
+  % endfor
+   return hash;
+}
+
+static bool __fuzzy_equals_${trace_name}(const void *_a, const void *_b) {
+  % if len(trace.tp_struct) > 0:
+   const struct trace_${trace_name} *__entry_a =
+      (const struct trace_${trace_name} *)_a;
+   (void)__entry_a;
+   const struct trace_${trace_name} *__entry_b =
+      (const struct trace_${trace_name} *)_b;
+   (void)__entry_b;
+  % endif
+  % for arg in trace.tp_print:
+   % if arg.fuzzy_hash is not None:
+   if (${arg.value_expr("__entry_a")} != ${arg.value_expr("__entry_b")}) return false;
+   % endif
+  % endfor
+   return true;
 }
 
  % else:
-#define __print_${trace_name} NULL
-#define __print_json_${trace_name} NULL
+#define __fuzzy_hash_${trace_name} NULL
+#define __fuzzy_equals_${trace_name} NULL
+#define __print_fuzzy_hash_args_${trace_name} NULL
  % endif
  % if trace.tp_markers is not None:
 
@@ -533,7 +641,7 @@ static void __emit_label_${trace_name}(struct u_trace_context *utctx, void *cs, 
  % endif
 static const struct u_tracepoint __tp_${trace_name} = {
     "${trace_name}",
-    ALIGN_POT(sizeof(struct trace_${trace_name}), 8),   /* keep size 64b aligned */
+    ALIGN_POT(${trace.payload_size}, 8),   /* keep size 64b aligned */
     0
  % for arg in trace.indirect_args:
     + sizeof(${arg.type})
@@ -548,18 +656,12 @@ static const struct u_tracepoint __tp_${trace_name} = {
 #ifdef HAVE_PERFETTO
     (void (*)(void *pctx, uint64_t, uint16_t, const void *, const void *, const void *))${trace.tp_perfetto},
 #endif
+    __fuzzy_hash_${trace_name},
+    __fuzzy_equals_${trace_name},
+    __print_fuzzy_hash_args_${trace_name},
  % endif
 };
-void __trace_${trace_name}(
-     struct u_trace *ut
-   , enum u_trace_type enabled_traces
- % if trace.need_cs_param:
-   , void *cs
- % endif
- % for arg in trace.args:
-   , ${arg.func_param}
- % endfor
-) {
+<%call expr="trace_func(trace, trace_name)">\
    struct trace_${trace_name} entry;
  % if len(trace.indirect_args) > 0:
    struct u_trace_address indirects[] = {
@@ -579,8 +681,14 @@ void __trace_${trace_name}(
       (struct trace_${trace_name} *)u_trace_appendv(ut, ${"cs," if trace.need_cs_param else "NULL,"} &__tp_${trace_name},
                                                     0
   % for arg in trace.tp_struct:
-   % if arg.length_arg is not None and not arg.length_arg.isdigit():
+   % if hasattr(arg, "is_dynamically_sized"):
+    % if arg.is_dynamically_sized:
                                                     + ${arg.length_arg}
+    % endif
+   % else:
+    % if arg.length_arg is not None and not arg.length_arg.isdigit():
+                                                    + ${arg.length_arg}
+    % endif
    % endif
   % endfor
                                                     ,
@@ -592,22 +700,18 @@ void __trace_${trace_name}(
                                                     ) :
       &entry;
  % for arg in trace.tp_struct:
-  % if arg.copy_func is None:
-   __entry->${arg.name} = ${arg.var};
-  % elif arg.length_arg is None:
-     ${arg.copy_func}(__entry->${arg.name}, ${arg.var});
-  % else:
-   % if not arg.length_arg.isdigit():
+  % if arg.needs_queueing:
    if (queueing)
-   % endif
-     ${arg.copy_func}(__entry->${arg.name}, ${arg.var}, ${arg.length_arg});
+     ${arg.copy_func_expr("__entry")};
+  % else:
+   ${arg.copy_func_expr("__entry")};
   % endif
  % endfor
  % if trace.tp_markers is not None:
    if (enabled_traces & U_TRACE_TYPE_MARKERS)
       __emit_label_${trace_name}(ut->utctx, cs, __entry);
  % endif
-}
+</%call>\
 
 % endfor
 """
@@ -627,7 +731,7 @@ def utrace_generate(cpath, hpath, ctx_param, trace_toggle_name=None,
         hdr = os.path.basename(cpath).rsplit('.', 1)[0] + '.h'
         with open(cpath, 'w', encoding='utf-8') as f:
             try:
-                f.write(Template(src_template).render(
+                f.write(Template(shared_template + src_template).render(
                     hdr=hdr,
                     ctx_param=ctx_param,
                     trace_toggle_name=trace_toggle_name,
@@ -642,7 +746,7 @@ def utrace_generate(cpath, hpath, ctx_param, trace_toggle_name=None,
         hdr = os.path.basename(hpath)
         with open(hpath, 'w', encoding='utf-8') as f:
             try:
-                f.write(Template(hdr_template).render(
+                f.write(Template(shared_template + hdr_template).render(
                     hdrname=hdr.rstrip('.h').upper(),
                     ctx_param=ctx_param,
                     trace_toggle_name=trace_toggle_name,
@@ -656,30 +760,10 @@ def utrace_generate(cpath, hpath, ctx_param, trace_toggle_name=None,
 
 
 perfetto_utils_hdr_template = """\
-/*
- * Copyright © 2021 Igalia S.L.
- *
- * Permission is hereby granted, free of charge, to any person obtaining a
- * copy of this software and associated documentation files (the "Software"),
- * to deal in the Software without restriction, including without limitation
- * the rights to use, copy, modify, merge, publish, distribute, sublicense,
- * and/or sell copies of the Software, and to permit persons to whom the
- * Software is furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice (including the next
- * paragraph) shall be included in all copies or substantial portions of the
- * Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
- */
+${mit_license(["Copyright © 2021 Igalia S.L."])}
 
 <% guard_name = '_' + hdrname + '_H' %>
+<% BACKEND = 'U_TRACE_BACKEND_PERFETTO' %>
 #ifndef ${guard_name}
 #define ${guard_name}
 
@@ -710,12 +794,12 @@ trace_payload_as_extra_${trace_name}(perfetto::protos::pbzero::GpuRenderStageEve
 {
  % if trace.tp_perfetto is not None and len(trace.tp_print) > 0:
  % if any(not arg.perfetto_field for arg in trace.tp_print):
-   char buf[128];
+   UNUSED char buf[128];
  % endif
 
   % for arg in trace.tp_print:
    % if arg.perfetto_field:
-   event->set_${arg.name}(${arg.value_expr("payload")});
+   event->set_${arg.name}(${arg.value_expr("payload", backend=BACKEND)});
    % else:
    {
       auto data = event->add_extra_data();
@@ -724,9 +808,25 @@ trace_payload_as_extra_${trace_name}(perfetto::protos::pbzero::GpuRenderStageEve
     % if arg.is_indirect:
       const ${arg.type}* __${arg.var} = (const ${arg.type}*)((uint8_t *)indirect_data + ${arg.indirect_offset});
     % endif
-      const int slen = sprintf(buf, "${arg.c_format}", ${arg.value_expr("payload")});
+    % if arg.free_prim_type_func is not None:
+      __typeof__(${arg.value_expr("payload", backend=BACKEND)}) __free_${arg.name} =
+        ${arg.value_expr("payload", backend=BACKEND)};
+      <% _field_name = f'__free_{arg.name}' %>
+    % else:
+      <% _field_name = arg.value_expr("payload", backend=BACKEND) %>
+    % endif
+    % if arg.c_format == '%s':
+      const char *str = ${_field_name};
+      if (str != NULL)
+          data->set_value(str);
+    % else:
+      const int slen = sprintf(buf, "${arg.c_format}", ${_field_name});
 
       data->set_value(buf, slen);
+    % endif
+    % if arg.free_prim_type_func is not None:
+      ${arg.free_prim_type_func}(__free_${arg.name});
+    % endif
    }
    % endif
   % endfor
@@ -743,7 +843,7 @@ def utrace_generate_perfetto_utils(hpath,basename="tracepoint"):
         hdr = os.path.basename(hpath)
         with open(hpath, 'w', encoding='utf-8') as f:
             try:
-                f.write(Template(perfetto_utils_hdr_template).render(
+                f.write(Template(shared_template + perfetto_utils_hdr_template).render(
                     basename=basename,
                     hdrname=hdr.rstrip('.h').upper(),
                     HEADERS=[h for h in HEADERS if h.scope & HeaderScope.PERFETTO],

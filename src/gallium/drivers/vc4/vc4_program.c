@@ -49,7 +49,7 @@ static struct vc4_compiled_shader *
 vc4_get_compiled_shader(struct vc4_context *vc4, enum qstage stage,
                         struct vc4_key *key);
 
-static int
+static unsigned
 type_size(const struct glsl_type *type, bool bindless)
 {
    return glsl_count_attribute_slots(type, false);

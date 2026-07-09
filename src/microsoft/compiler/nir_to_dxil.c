@@ -5116,10 +5116,16 @@ emit_phi(struct ntd_context *ctx, nir_phi_instr *instr)
 {
    const struct dxil_type *type = NULL;
    nir_foreach_phi_src(src, instr) {
-      /* All sources have the same type, just use the first one */
-      type = dxil_value_get_type(ctx->defs[src->src.ssa->index].chans[0]);
-      break;
+      /* All sources have the same type, so use the first one that's already
+       * been emitted. Phi-source order is not stable, and back-edge sources
+       * (e.g. for a loop-header phi) won't have been emitted yet. */
+      const struct dxil_value *val = ctx->defs[src->src.ssa->index].chans[0];
+      if (val) {
+         type = dxil_value_get_type(val);
+         break;
+      }
    }
+   assert(type);
 
    struct phi_block *vphi = ralloc(ctx->phis, struct phi_block);
    vphi->num_components = instr->def.num_components;
@@ -6534,7 +6540,7 @@ allocate_sysvalues(struct ntd_context *ctx)
    return true;
 }
 
-static int
+static unsigned
 type_size_vec4(const struct glsl_type *type, bool bindless)
 {
    return glsl_count_attribute_slots(type, false);

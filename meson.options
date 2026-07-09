@@ -23,8 +23,7 @@ option(
   type : 'combo',
   value : 'auto',
   choices : [
-    'auto', 'x11', 'wayland', 'haiku', 'android', 'windows',
-    'surfaceless', 'drm',
+    'auto', 'x11', 'haiku', 'android', 'surfaceless',
   ],
   description : 'the window system EGL assumes for EGL_DEFAULT_DISPLAY',
 )
@@ -308,6 +307,14 @@ option(
 )
 
 option(
+  'vulkan-loader-rpath',
+  type : 'string',
+  value : '/usr/local/lib',
+  description : 'The path where the vulkan loader (libvulkan.1.dylib) exists at runtime.' +
+                'Defaults to /usr/local/lib since that is where the Vulkan SDK installs it to by default.'
+)
+
+option(
   'vulkan-layers',
   type : 'array',
   value : [],
@@ -551,8 +558,8 @@ option(
   type : 'array',
   value : [],
   choices : ['amd', 'asahi', 'dlclose-skip', 'drm-shim', 'etnaviv', 'freedreno',  
-             'glsl', 'imagination', 'intel', 'intel-ui', 'lima', 'nir', 'nouveau',
-             'panfrost', 'zink', 'all'],
+             'gamma', 'glsl', 'imagination', 'intel', 'intel-ui', 'lima', 'nir',
+             'nouveau', 'panfrost', 'zink', 'all'],
   description : 'List of tools to build. (Note: `intel-ui` selects `intel`)',
 )
 
@@ -753,6 +760,13 @@ option(
 )
 
 option(
+  'radv-u_trace',
+  type : 'boolean',
+  value : false,
+  description : 'Enable u_trace profiling features.'
+)
+
+option(
   'radeonsi-build-id',
   type : 'string',
   value : '',
@@ -765,6 +779,14 @@ option(
   type : 'string',
   value : '',
   description : 'Override build id for shader cache keys (hex string). '
+)
+
+option(
+  'nvk-build-id',
+  type : 'string',
+  value : '',
+  description : 'Override build id for shader cache keys (hex string). ' +
+                'Can be extracted with readelf -x .note.gnu.build-id'
 )
 
 option(

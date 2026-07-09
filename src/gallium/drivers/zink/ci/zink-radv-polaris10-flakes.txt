@@ -1,96 +1,137 @@
-KHR-GL46.sparse_buffer_tests.BufferStorageTest
-KHR-GL46.sparse_texture_tests.SparseTextureCommitment_texture_2d_array_rgb10_a2ui
-KHR-GL46.sparse_texture_tests.SparseTextureCommitment_texture_2d_rg8
-KHR-GL46.sparse_texture_tests.SparseTextureCommitment_texture_2d_rgba16ui
-KHR-GL46.sparse_texture_tests.SparseTextureCommitment_texture_2d_rgba32i
-
-dEQP-GLES3.functional.fbo.multiview.samples_1
-dEQP-GLES3.functional.fbo.multiview.samples_4
-dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_linear.equal_depth24_stencil8
-dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_linear.not_equal_depth24_stencil8
-dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.equal_depth24_stencil8
-dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.greater_depth24_stencil8
-dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.greater_or_equal_depth24_stencil8
-dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.less_depth24_stencil8
-dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.less_or_equal_depth24_stencil8
-dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.not_equal_depth24_stencil8
-dEQP-GLES3.functional.texture.shadow.2d_array.nearest_mipmap_nearest.not_equal_depth24_stencil8
-dEQP-GLES3.functional.texture.specification.texstorage2d.format.depth24_stencil8_cube
-dEQP-GLES31.functional.draw_base_vertex.draw_elements_base_vertex.points.multiple_attributes
-dEQP-GLES31.functional.draw_base_vertex.draw_elements_base_vertex.triangle_strip.single_attribute
+dEQP-GLES2.functional.shaders.conversions.vector_combine.bvec3_float_to_ivec4_fragment
+dEQP-GLES2.functional.shaders.operator.selection.highp_vec4_fragment
+dEQP-GLES31.functional.copy_image.compressed.viewclass_astc_8x6_rgba.srgb8_alpha8_astc_8x6_khr_srgb8_alpha8_astc_8x6_khr.texture2d_array_to_texture2d_array
+dEQP-GLES31.functional.copy_image.mixed.viewclass_128_bits_mixed.rgba32f_rgba8_etc2_eac.texture3d_to_cubemap
+dEQP-GLES31.functional.copy_image.mixed.viewclass_128_bits_mixed.rgba32f_rgba_astc_4x4_khr.cubemap_to_texture2d
+dEQP-GLES31.functional.copy_image.mixed.viewclass_128_bits_mixed.rgba32f_rgba_astc_8x8_khr.texture2d_array_to_cubemap
+dEQP-GLES31.functional.copy_image.mixed.viewclass_128_bits_mixed.rgba32i_rgba_astc_8x8_khr.renderbuffer_to_cubemap
+dEQP-GLES31.functional.copy_image.mixed.viewclass_128_bits_mixed.rgba_astc_10x5_khr_rgba32ui.texture3d_to_texture2d_array
+dEQP-GLES31.functional.copy_image.mixed.viewclass_128_bits_mixed.srgb8_alpha8_astc_10x6_khr_rgba32ui.texture3d_to_texture2d_array
+dEQP-GLES31.functional.copy_image.mixed.viewclass_128_bits_mixed.srgb8_alpha8_astc_8x5_khr_rgba32f.cubemap_to_texture2d_array
+dEQP-GLES31.functional.copy_image.non_compressed.viewclass_32_bits.r32ui_r32ui.renderbuffer_to_texture3d
 dEQP-GLES31.functional.fbo.no_attachments.npot_size.15x15
-dEQP-GLES31.functional.fbo.no_attachments.npot_size.17x17
 dEQP-GLES31.functional.fbo.no_attachments.npot_size.1x1
-dEQP-GLES31.functional.fbo.no_attachments.npot_size.31x31
 dEQP-GLES31.functional.fbo.no_attachments.npot_size.3x3
 dEQP-GLES31.functional.fbo.no_attachments.size.16x16
-dEQP-GLES31.functional.shaders.arrays_of_arrays.es31.parameter.in.bool_3x2x3_vertex
+dEQP-GLES31.functional.texture.format.unsized.rgb_unsigned_byte_cube_array_pot
 dEQP-GLES31.functional.texture.specification.teximage3d_depth.depth24_stencil8_cube_array
 dEQP-GLES31.functional.texture.specification.teximage3d_depth.depth32f_stencil8_cube_array
-dEQP-GLES31.functional.texture.specification.texstorage3d.format.depth24_stencil8_cube_array
-dEQP-GLES31.functional.texture.specification.texstorage3d.format.depth32f_stencil8_cube_array
-dEQP-GLES31.functional.texture.specification.texsubimage3d_depth.depth24_stencil8_cube_array
-dEQP-GLES31.functional.texture.specification.texsubimage3d_depth.depth32f_stencil8_cube_array
-
-spec@!opengl 1.0@rasterpos
-spec@!opengl 1.1@depthstencil-default_fb-blit
+dEQP-GLES3.functional.fragment_ops.random.78
+dEQP-GLES3.functional.occlusion_query.depth_clear_stencil_clear
+dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.greater_or_equal_depth24_stencil8
+dEQP-GLES3.functional.texture.shadow.2d_array.linear_mipmap_nearest.less_or_equal_depth24_stencil8
+dEQP-GLES3.functional.texture.wrap.astc_8x8.mirror_repeat_nearest_not_divisible
+dEQP-GLES3.functional.transform_feedback.array.interleaved.triangles.mediump_uint
+dEQP-GLES3.functional.transform_feedback.array.separate.triangles.mediump_float
+KHR-GL46.gpu_shader_fp64.builtin.ceil_dvec4
+KHR-GL46.gpu_shader_fp64.builtin.clamp_dvec3
+KHR-GL46.gpu_shader_fp64.builtin.cross_dvec3
+KHR-GL46.gpu_shader_fp64.builtin.determinant_dmat3
+KHR-GL46.gpu_shader_fp64.builtin.inversesqrt_dvec2
+KHR-GL46.gpu_shader_fp64.builtin.lessthanequal_dvec4
+KHR-GL46.gpu_shader_fp64.builtin.matrixcompmult_dmat3x2
+KHR-GL46.gpu_shader_fp64.builtin.min_against_scalar_dvec3
+KHR-GL46.gpu_shader_fp64.builtin.mod_dvec3
+KHR-GL46.gpu_shader_fp64.builtin.normalize_dvec4
+KHR-GL46.gpu_shader_fp64.builtin.refract_dvec4
+KHR-GL46.gpu_shader_fp64.builtin.round_dvec3
+KHR-GL46.gpu_shader_fp64.builtin.smoothstep_against_scalar_dvec4
+KHR-GL46.gpu_shader_fp64.builtin.smoothstep_dvec3
+KHR-GL46.gpu_shader_fp64.builtin.step_against_scalar_dvec4
+KHR-GL46.gpu_shader_fp64.builtin.trunc_dvec2
+KHR-GL46.packed_pixels.rectangle.rgba2_format_rgba
+KHR-GL46.packed_pixels.varied_rectangle.compressed_red_format_red
+KHR-GL46.packed_pixels.varied_rectangle.compressed_rg_rgtc2_format_blue
+KHR-GL46.packed_pixels.varied_rectangle.compressed_signed_red_rgtc1_format_red
+KHR-GL46.packed_pixels.varied_rectangle.compressed_srgb_format_blue
+KHR-GL46.packed_pixels.varied_rectangle.depth_component24_format_depth_component
+KHR-GL46.packed_pixels.varied_rectangle.r16f_format_blue
+KHR-GL46.packed_pixels.varied_rectangle.r16f_format_red
+KHR-GL46.packed_pixels.varied_rectangle.r16_format_bgra
+KHR-GL46.packed_pixels.varied_rectangle.r32f_format_bgra
+KHR-GL46.packed_pixels.varied_rectangle.r32i_format_blue_integer
+KHR-GL46.packed_pixels.varied_rectangle.r32i_format_red_integer
+KHR-GL46.packed_pixels.varied_rectangle.r3_g3_b2_format_blue
+KHR-GL46.packed_pixels.varied_rectangle.r8_snorm_format_bgra
+KHR-GL46.packed_pixels.varied_rectangle.r8ui_format_red_integer
+KHR-GL46.packed_pixels.varied_rectangle.red_format_bgr
+KHR-GL46.packed_pixels.varied_rectangle.rg16f_format_bgr
+KHR-GL46.packed_pixels.varied_rectangle.rg16f_format_blue
+KHR-GL46.packed_pixels.varied_rectangle.rg16_format_rgb
+KHR-GL46.packed_pixels.varied_rectangle.rg32f_format_rgba
+KHR-GL46.packed_pixels.varied_rectangle.rg32ui_format_rg_integer
+KHR-GL46.packed_pixels.varied_rectangle.rg8_format_bgra
+KHR-GL46.packed_pixels.varied_rectangle.rg8_format_rg
+KHR-GL46.packed_pixels.varied_rectangle.rg8_format_rgba
+KHR-GL46.packed_pixels.varied_rectangle.rgb10_a2_format_rgba
+KHR-GL46.packed_pixels.varied_rectangle.rgb10_a2ui_format_bgra_integer
+KHR-GL46.packed_pixels.varied_rectangle.rgb10_format_rgb
+KHR-GL46.packed_pixels.varied_rectangle.rgb16f_format_green
+KHR-GL46.packed_pixels.varied_rectangle.rgb16i_format_rgb_integer
+KHR-GL46.packed_pixels.varied_rectangle.rgb32i_format_bgr_integer
+KHR-GL46.packed_pixels.varied_rectangle.rgb4_format_rgba
+KHR-GL46.packed_pixels.varied_rectangle.rgb5_format_rg
+KHR-GL46.packed_pixels.varied_rectangle.rgb5_format_rgb
+KHR-GL46.packed_pixels.varied_rectangle.rgba16i_format_blue_integer
+KHR-GL46.packed_pixels.varied_rectangle.rgba16i_format_rgba_integer
+KHR-GL46.packed_pixels.varied_rectangle.rgba16ui_format_rgba_integer
+KHR-GL46.packed_pixels.varied_rectangle.rgba2_format_bgr
+KHR-GL46.packed_pixels.varied_rectangle.rgba2_format_blue
+KHR-GL46.packed_pixels.varied_rectangle.rgba2_format_rgba
+KHR-GL46.packed_pixels.varied_rectangle.rgba32i_format_rgba_integer
+KHR-GL46.packed_pixels.varied_rectangle.rgba32ui_format_rgba_integer
+KHR-GL46.packed_pixels.varied_rectangle.rgba4_format_blue
+KHR-GL46.packed_pixels.varied_rectangle.rgba4_format_rgba
+KHR-GL46.packed_pixels.varied_rectangle.rgba8_format_bgra
+KHR-GL46.packed_pixels.varied_rectangle.rgba8_format_red
+KHR-GL46.packed_pixels.varied_rectangle.rgba8_snorm_format_rg
+KHR-GL46.packed_pixels.varied_rectangle.rg_format_rg
+KHR-GL46.packed_pixels.varied_rectangle.srgb8_alpha8_format_red
+KHR-GL46.packed_pixels.varied_rectangle.srgb8_alpha8_format_rgba
+KHR-GL46.shader_subroutine.subroutines_with_separate_shader_objects
+KHR-GL46.texture_lod_bias.texture_lod_bias_all
+KHR-GL46.texture_size_promotion.functional
+spec@amd_pinned_memory@map-buffer offset=0
 spec@arb_compute_shader@local-id-explosion
 spec@arb_compute_variable_group_size@local-size
-spec@arb_framebuffer_no_attachments@arb_framebuffer_no_attachments-query@glScissor
-spec@arb_framebuffer_no_attachments@arb_framebuffer_no_attachments-query@glViewport
-spec@arb_query_buffer_object@coherency
-spec@arb_query_buffer_object@coherency@index-buffer-GL_GEOMETRY_SHADER_INVOCATIONS
-spec@arb_query_buffer_object@coherency@index-buffer-GL_GEOMETRY_SHADER_PRIMITIVES_EMITTED
-spec@arb_query_buffer_object@coherency@indirect-dispatch-GL_GEOMETRY_SHADER_INVOCATIONS
-spec@arb_query_buffer_object@coherency@indirect-dispatch-GL_GEOMETRY_SHADER_PRIMITIVES_EMITTED
-spec@arb_query_buffer_object@coherency@indirect-draw-GL_GEOMETRY_SHADER_INVOCATIONS
-spec@arb_query_buffer_object@coherency@indirect-draw-GL_GEOMETRY_SHADER_PRIMITIVES_EMITTED
-spec@arb_query_buffer_object@coherency@indirect-draw-count-GL_GEOMETRY_SHADER_INVOCATIONS
-spec@arb_query_buffer_object@coherency@indirect-draw-count-GL_GEOMETRY_SHADER_PRIMITIVES_EMITTED
+spec@arb_query_buffer_object@qbo@query-GL_GEOMETRY_SHADER_INVOCATIONS-ASYNC-GL_INT
+spec@arb_query_buffer_object@qbo@query-GL_GEOMETRY_SHADER_INVOCATIONS-ASYNC-GL_UNSIGNED_INT
+spec@arb_query_buffer_object@qbo@query-GL_GEOMETRY_SHADER_INVOCATIONS-ASYNC-GL_UNSIGNED_INT64_ARB
+spec@arb_query_buffer_object@qbo@query-GL_GEOMETRY_SHADER_INVOCATIONS-SYNC-GL_INT
+spec@arb_query_buffer_object@qbo@query-GL_GEOMETRY_SHADER_INVOCATIONS-SYNC-GL_UNSIGNED_INT
+spec@arb_query_buffer_object@qbo@query-GL_GEOMETRY_SHADER_INVOCATIONS-SYNC-GL_UNSIGNED_INT64_ARB
+spec@arb_query_buffer_object@qbo@query-GL_GEOMETRY_SHADER_PRIMITIVES_EMITTED-ASYNC-GL_INT
+spec@arb_query_buffer_object@qbo@query-GL_GEOMETRY_SHADER_PRIMITIVES_EMITTED-ASYNC-GL_UNSIGNED_INT
+spec@arb_query_buffer_object@qbo@query-GL_GEOMETRY_SHADER_PRIMITIVES_EMITTED-ASYNC-GL_UNSIGNED_INT64_ARB
+spec@arb_query_buffer_object@qbo@query-GL_GEOMETRY_SHADER_PRIMITIVES_EMITTED-SYNC-GL_INT
+spec@arb_query_buffer_object@qbo@query-GL_GEOMETRY_SHADER_PRIMITIVES_EMITTED-SYNC-GL_UNSIGNED_INT
+spec@arb_query_buffer_object@qbo@query-GL_GEOMETRY_SHADER_PRIMITIVES_EMITTED-SYNC-GL_UNSIGNED_INT64_ARB
 spec@arb_shader_storage_buffer_object@execution@ssbo-atomicexchange-int
-spec@arb_shader_texture_lod@execution@glsl-fs-shadow2dgradarb-cumulative
-spec@ext_timer_query@time-elapsed
+spec@arb_shading_language_packing@execution@built-in-functions@vs-packhalf2x16
+spec@arb_texture_buffer_range@ranges
+spec@arb_texture_multisample@texelfetch@8-fs-isampler2dmsarray
+spec@arb_texture_multisample@texelfetch fs sampler2dmsarray 4 98x1x9-98x129x9
+spec@ext_framebuffer_multisample@formats all_samples
+spec@ext_framebuffer_object@getteximage-formats init-by-clear-and-render
+spec@ext_framebuffer_object@getteximage-formats init-by-rendering
+spec@ext_texture_array@fbo-depth-array depth-layered-clear
+spec@ext_texture_array@fbo-depth-array fs-writes-depth
+spec@ext_texture_array@fbo-depth-array stencil-clear
+spec@ext_texture_array@fbo-depth-array stencil-layered-clear
+spec@glsl-1.10@execution@clipping@clip-plane-transformation pos_clipvert
+spec@glsl-1.30@execution@texelfetch fs sampler2d 1x71-501x71
+spec@glsl-1.30@execution@texelfetch fs sampler2darray 98x1x9-98x129x9
 spec@glsl-1.50@execution@geometry@point-size-out
 spec@glsl-1.50@execution@redeclare-pervertex-out-subset-gs
-
-KHR-GL46.gpu_shader_fp64.builtin.*
-KHR-GL46.packed_pixels.varied_rectangle.*
-dEQP-GLES31.functional.copy_image.mixed.viewclass_128_bits_mixed.rgba32ui_srgb8_alpha8_astc_10x5_khr.texture2d_array_to_texture3d
-dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16f_r16ui.cubemap_to_texture2d
-spec@!opengl 1.0@gl-1.0-ortho-pos
-spec@!opengl 1.1@depthstencil-default_fb-blit
-spec@!opengl 1.1@draw-sync
-spec@arb_point_parameters@arb_point_parameters-point-attenuation
+spec@glsl-4.30@execution@built-in-functions@cs-op-bitxor-neg-abs-int-int
+spec@glsl-es-3.00@execution@built-in-functions@vs-packunorm2x16
+spec@glsl-es-3.00@execution@built-in-functions@vs-unpackhalf2x16
 spec@oes_texture_view@rendering-formats
-
-dEQP-GLES3.functional.transform_feedback.array.interleaved.lines.lowp_ivec3
-dEQP-GLES3.functional.transform_feedback.basic_types.separate.points.mediump_uvec3
-dEQP-GLES31.functional.copy_image.compressed.viewclass_astc_8x5_rgba.rgba_astc_8x5_khr_srgb8_alpha8_astc_8x5_khr.texture2d_to_texture3d
-dEQP-GLES31.functional.copy_image.mixed.viewclass_128_bits_mixed.rgba32ui_srgb8_alpha8_astc_6x5_khr.texture3d_to_cubemap
-dEQP-GLES31.functional.copy_image.mixed.viewclass_128_bits_mixed.rgba_astc_12x12_khr_rgba32i.texture2d_array_to_texture3d
-dEQP-GLES31.functional.copy_image.mixed.viewclass_128_bits_mixed.rgba_astc_8x6_khr_rgba32f.texture2d_to_cubemap
-dEQP-GLES31.functional.copy_image.mixed.viewclass_128_bits_mixed.srgb8_alpha8_astc_10x5_khr_rgba32ui.texture2d_array_to_cubemap
-dEQP-GLES31.functional.copy_image.mixed.viewclass_128_bits_mixed.srgb8_alpha8_astc_8x5_khr_rgba32ui.texture2d_array_to_texture2d_array
-dEQP-GLES31.functional.copy_image.mixed.viewclass_128_bits_mixed.srgb8_alpha8_astc_8x6_khr_rgba32ui.texture3d_to_texture3d
-dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16i_rg8.renderbuffer_to_cubemap
-dEQP-GLES31.functional.copy_image.non_compressed.viewclass_32_bits.r32i_rg16f.texture2d_to_texture2d
-dEQP-GLES31.functional.copy_image.non_compressed.viewclass_32_bits.rgba8ui_r32i.cubemap_to_texture3d
-dEQP-GLES31.functional.shaders.implicit_conversions.es31.arithmetic.input_before_literal.mul.ivec4_to_uvec4_fragment
+spec@!opengl 1.0@gl-1.0-logicop
+spec@!opengl 1.0@rasterpos
 spec@!opengl 1.1@copypixels-sync
-spec@amd_pinned_memory@map-buffer offset=0
-spec@amd_shader_trinary_minmax@execution@built-in-functions@cs-mid3-ivec4-ivec4-ivec4
-spec@arb_sync@sync_api
-spec@ext_texture_array@copyteximage 1d_array samples=2
-spec@ext_texture_array@fbo-depth-array depth-draw
-spec@ext_texture_array@fbo-depth-array fs-writes-depth
-spec@ext_texture_lod_bias@lodbias
-spec@glsl-1.30@execution@texelfetch fs sampler1darray 1x71-501x71
-spec@glsl-1.30@execution@texelfetch fs sampler2d 1x71-501x71
-spec@glsl-1.30@execution@texelfetch fs sampler2darray 1x129x9-98x129x9
-
-
-# mesh shaders somehow?
-glx@glx-visuals-depth
-glx@glx-visuals-depth -pixmap
-glx@glx-visuals-stencil
-glx@glx-visuals-stencil -pixmap
+spec@!opengl 1.1@draw-sync
+spec@!opengl 1.1@getteximage-formats
+spec@!opengl 1.1@teximage-colors gl_r8_snorm
+spec@!opengl 1.2@tex3d
+spec@!opengl 2.0@tex3d-npot

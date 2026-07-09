@@ -19,7 +19,8 @@ const struct nir_shader_compiler_options brw_scalar_nir_options = {
    .divergence_analysis_options =
       (nir_divergence_single_patch_per_tcs_subgroup |
        nir_divergence_single_patch_per_tes_subgroup |
-       nir_divergence_shader_record_ptr_uniform),
+       nir_divergence_shader_record_ptr_uniform |
+       nir_divergence_tcs_invocation_id_uniform),
    .force_indirect_unrolling = nir_var_function_temp,
    .has_bfe = true,
    .has_bfi = true,
@@ -113,6 +114,9 @@ brw_compiler_create(void *mem_ctx, const struct intel_device_info *devinfo)
     * while letting almost all through to the backend for more detailed
     * throughput analysis.
     */
+   compiler->register_file_size = (devinfo->ver >= 30 ? XE3_MAX_GRF :
+                                   devinfo->ver >= 20 ? XE2_MAX_GRF :
+                                   BRW_MAX_GRF) * REG_SIZE;
    compiler->register_pressure_threshold = devinfo->ver >= 30 ? 268 : 134;
 
    nir_lower_int64_options int64_options =
@@ -185,6 +189,8 @@ brw_compiler_create(void *mem_ctx, const struct intel_device_info *devinfo)
 
    nir_options->lower_int64_options = int64_options;
    nir_options->lower_doubles_options = fp64_options;
+   if (!(fp64_options & nir_lower_fp64_full_software))
+      nir_options->float_mul_add64 |= nir_float_muladd_support_has_ffma;
    nir_options->max_samples = devinfo->ver >= 30 ? 8 : 16;
 
    if (intel_use_tcs_multi_patch(devinfo)) {

@@ -235,8 +235,8 @@ pvr_process_graphics_cmd_for_view(struct pvr_device *device,
    struct vk_sync *frag_signal_sync = NULL;
    VkResult result;
 
-   job->ds.addr =
-      PVR_DEV_ADDR_OFFSET(job->ds.addr, job->ds.layer_size * view_index);
+   job->ds.addr = PVR_DEV_ADDR_OFFSET(job->ds.addr, job->ds.layer_size *
+      (view_index + job->ds.base_array_layer));
    job->view_state.view_index = view_index;
 
    result = vk_sync_create(&device->vk,

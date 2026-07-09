@@ -108,6 +108,7 @@ struct pvr_render_job {
       uint32_t stride;
       uint32_t height;
       VkExtent2D physical_extent;
+      uint32_t base_array_layer;
       uint32_t layer_size;
       enum ROGUE_CR_ZLS_FORMAT_TYPE zls_format;
       enum pvr_memlayout memlayout;

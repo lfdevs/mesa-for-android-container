@@ -57,6 +57,7 @@ dEQP-GLES31.functional.fbo.color.texcubearray.rgb565
 # uprev Piglit in Mesa
 dEQP-GLES3.functional.fbo.blit.conversion.rgba4_to_rgb10_a2
 dEQP-GLES3.functional.fbo.blit.conversion.rgba8_to_r16f
+dEQP-GLES3.functional.fbo.msaa.4_samples.r16f
 dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16f_rg8.texture2d_array_to_texture3d
 dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16f_rg8ui.texture2d_array_to_texture3d
 dEQP-GLES31.functional.copy_image.non_compressed.viewclass_16_bits.r16ui_r16i.texture2d_array_to_texture2d_array
@@ -94,3 +95,7 @@ dEQP-GLES3.functional.texture.specification.texstorage2d.format.r16ui_2d
 # check out https://gitlab.freedesktop.org/mesa/mesa/-/jobs/97999253
 dEQP-GLES3.functional.fbo.msaa.[24]_samples.rgba4
 dEQP-GLES3.functional.fbo.msaa.[24]_samples.rg8
+
+# Regression from nearest_consistency fixes. Since this doesn't show up on 750,
+# assuming it's the 16-bit color UBWC problem.
+dEQP-GLES3.functional.fbo.msaa.4_samples.r16f

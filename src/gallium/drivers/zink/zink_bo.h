@@ -149,8 +149,8 @@ static ALWAYS_INLINE bool
 zink_bo_has_unflushed_usage(const struct zink_bo *bo)
 {
    /* submit_count always matches for unflushed usage */
-   return (bo->reads.u && bo->reads.submit_count == bo->reads.u->submit_count && zink_batch_usage_is_unflushed(bo->reads.u)) ||
-          (bo->writes.u && bo->writes.submit_count == bo->writes.u->submit_count && zink_batch_usage_is_unflushed(bo->writes.u));
+   return (bo->reads.u && zink_batch_submit_count_diff(bo->reads.u->submit_count, bo->reads.submit_count) == 0 && zink_batch_usage_is_unflushed(bo->reads.u)) ||
+          (bo->writes.u && zink_batch_submit_count_diff(bo->writes.u->submit_count, bo->writes.submit_count) == 0 && zink_batch_usage_is_unflushed(bo->writes.u));
 }
 
 static ALWAYS_INLINE bool

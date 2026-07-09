@@ -352,6 +352,6 @@ vk_common_GetPhysicalDeviceDescriptorSizeEXT(VkPhysicalDevice physicalDevice,
       return pdevice->properties.bufferDescriptorSize;
 
    default:
-      UNREACHABLE("Invalid descriptor type in GetPhysicalDeviceDescriptorSizeEXT");
+      return 0;
    }
 }

@@ -266,7 +266,7 @@ radv_device_init_vrs_state(struct radv_device *device)
       .arrayLayers = 1,
       .samples = VK_SAMPLE_COUNT_1_BIT,
       .tiling = VK_IMAGE_TILING_OPTIMAL,
-      .usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+      .usage = VK_IMAGE_USAGE_2_DEPTH_STENCIL_ATTACHMENT_BIT_KHR,
       .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
       .queueFamilyIndexCount = 0,
       .pQueueFamilyIndices = NULL,
@@ -809,6 +809,7 @@ init_dispatch_tables(struct radv_device *device, struct radv_physical_device *pd
    b.tables[RADV_RGP_DISPATCH_TABLE] = &device->layer_dispatch.rgp;
    b.tables[RADV_RRA_DISPATCH_TABLE] = &device->layer_dispatch.rra;
    b.tables[RADV_RMV_DISPATCH_TABLE] = &device->layer_dispatch.rmv;
+   b.tables[RADV_UTRACE_DISPATCH_TABLE] = &device->layer_dispatch.utrace;
    b.tables[RADV_CTX_ROLL_DISPATCH_TABLE] = &device->layer_dispatch.ctx_roll;
 
    bool gather_ctx_rolls = instance->vk.trace_mode & RADV_TRACE_MODE_CTX_ROLLS;
@@ -827,6 +828,9 @@ init_dispatch_tables(struct radv_device *device, struct radv_physical_device *pd
    if (instance->vk.trace_mode & VK_TRACE_MODE_RMV)
       add_entrypoints(&b, &rmv_device_entrypoints, RADV_RMV_DISPATCH_TABLE);
 #endif
+
+   if (device->utrace.context)
+      add_entrypoints(&b, &utrace_device_entrypoints, RADV_UTRACE_DISPATCH_TABLE);
 
    if (gather_ctx_rolls)
       add_entrypoints(&b, &ctx_roll_device_entrypoints, RADV_CTX_ROLL_DISPATCH_TABLE);
@@ -854,7 +858,7 @@ capture_trace(VkQueue _queue)
 
    VkResult result = VK_SUCCESS;
 
-   if (instance->vk.trace_mode & RADV_TRACE_MODE_RRA)
+   if (instance->vk.trace_mode & (RADV_TRACE_MODE_RRA | RADV_TRACE_MODE_GAMMA))
       device->rra_trace.triggered = true;
 
    if (device->vk.memory_trace_data.is_enabled) {
@@ -1214,12 +1218,12 @@ radv_device_init_compiler_info(struct radv_device *device)
             .disable_trunc_coord = instance->drirc.debug.disable_trunc_coord,
             .enable_mrt_output_nan_fixup = instance->drirc.debug.enable_mrt_output_nan_fixup,
             .emulate_rt = radv_emulate_rt(pdev),
-            .invariant_geom = instance->drirc.debug.invariant_geom,
             .split_fma = instance->drirc.debug.split_fma,
             .ssbo_non_uniform = instance->drirc.debug.ssbo_non_uniform,
             .tex_non_uniform = instance->drirc.debug.tex_non_uniform,
             .lower_terminate_to_discard = instance->drirc.debug.lower_terminate_to_discard,
             .no_implicit_varying_subgroup_size = instance->drirc.debug.no_implicit_varying_subgroup_size,
+            .force_nan_preserve_min_max = instance->drirc.debug.force_nan_preserve_min_max,
             .nir_debug_info = !!(instance->debug_flags & RADV_DEBUG_NIR_DEBUG_INFO),
             .force_aniso = device->force_aniso,
             /* Use CHIP_UNKNOWN for increased compatiblity between caches. */
@@ -1334,6 +1338,7 @@ radv_create_winsys(struct radv_device *device)
 static void
 radv_destroy_device(struct radv_device *device, const VkAllocationCallbacks *pAllocator)
 {
+   radv_device_finish_utrace(device);
    radv_device_finish_perf_counter(device);
 
    if (device->zero_bo) {
@@ -1442,6 +1447,10 @@ radv_CreateDevice(VkPhysicalDevice physicalDevice, const VkDeviceCreateInfo *pCr
    device->vk.capture_trace = capture_trace;
 
    device->vk.command_buffer_ops = &radv_cmd_buffer_ops;
+
+   result = radv_device_init_utrace(device);
+   if (result != VK_SUCCESS)
+      goto fail;
 
    init_dispatch_tables(device, pdev);
 
@@ -1724,10 +1733,10 @@ radv_GetImageMemoryRequirements2(VkDevice _device, const VkImageMemoryRequiremen
    pMemoryRequirements->memoryRequirements.memoryTypeBits =
       ((1u << pdev->memory_properties.memoryTypeCount) - 1u) & ~pdev->memory_types_32bit;
 
-   if (image->vk.create_flags & VK_IMAGE_CREATE_PROTECTED_BIT)
+   if (image->vk.create_flags & VK_IMAGE_CREATE_2_PROTECTED_BIT_KHR)
       pMemoryRequirements->memoryRequirements.memoryTypeBits &= pdev->memory_types_protected;
 
-   if (image->vk.usage & VK_IMAGE_USAGE_HOST_TRANSFER_BIT) {
+   if (image->vk.usage & VK_IMAGE_USAGE_2_HOST_TRANSFER_BIT_KHR) {
       /* Only expose host visible memory types for images that need to be mapped on the CPU. */
       pMemoryRequirements->memoryRequirements.memoryTypeBits &= pdev->memory_types_host_visible;
    }

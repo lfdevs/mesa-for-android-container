@@ -87,8 +87,6 @@ files_r300 = files(
   'compiler/radeon_program_pair.c',
   'compiler/radeon_program_pair.h',
   'compiler/radeon_program_print.c',
-  'compiler/radeon_program_tex.c',
-  'compiler/radeon_program_tex.h',
   'compiler/radeon_regalloc.c',
   'compiler/radeon_regalloc.h',
   'compiler/radeon_remove_constants.c',

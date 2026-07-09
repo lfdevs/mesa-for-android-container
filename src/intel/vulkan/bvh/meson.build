@@ -21,9 +21,8 @@ gfx_versions = [
 anv_bvh_include_dir = dir_source_root + '/src/intel/vulkan/bvh'
 
 anv_bvh_includes = files(
-  'anv_build_helpers.h',
-  'anv_build_interface.h',
-  'anv_bvh.h',
+  'anv_bvh_helpers.h',
+  'anv_bvh_defines.h',
   'encode.h',
 )
 

@@ -161,7 +161,7 @@ etna_draw_indirect(struct etna_cmd_stream *stream,
       VIV_FE_DRAW_INDIRECT_HEADER_TYPE(primitive_type) |
       COND(indexed, VIV_FE_DRAW_INDIRECT_HEADER_INDEXED));
    etna_cmd_stream_reloc(stream, &(struct etna_reloc) {
-      .bo = etna_resource(buffer)->bo,
+      .bo = etna_buffer_resource(buffer)->bo,
       .flags = ETNA_RELOC_READ,
       .offset = offset,
    });

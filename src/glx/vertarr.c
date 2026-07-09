@@ -9,8 +9,6 @@
 #include "indirect.h"
 #include "indirect_vertex_array.h"
 
-#if !defined(GLX_USE_APPLEGL) || defined(GLX_USE_APPLE)
-
 /*****************************************************************************/
 
 /**
@@ -138,7 +136,6 @@ __indirect_glInterleavedArrays(GLenum format, GLsizei stride,
    unsigned i;
    const int idx = format - GL_V2F;
 
-
    /* All valid formats are on the range [GL_V2F, GL_V2F+0x0D].  Since idx
     * is just the format biased by -GL_V2F, all valid idx values are on the
     * range [0, 0x0D].
@@ -152,7 +149,6 @@ __indirect_glInterleavedArrays(GLenum format, GLsizei stride,
       __glXSetError(gc, GL_INVALID_VALUE);
       return;
    }
-
 
    /* If the 'count' for a subarray is non-zero, then the offset of its
     * first element is at the currently accumulated 'size'.
@@ -189,4 +185,3 @@ __indirect_glInterleavedArrays(GLenum format, GLsizei stride,
                               (const char *) pointer + offsets[3]);
 }
 
-#endif

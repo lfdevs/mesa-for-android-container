@@ -455,7 +455,7 @@ Core Mesa environment variables
 
    If set, overrides the global search-directories used when searching for
    drirc config files. The user-local one will still be used. Mostly useful for
-   internal debugging.
+   internal debugging. Multiple entries must be separated by ``:``.
 
 NIR passes environment variables
 --------------------------------
@@ -1569,6 +1569,8 @@ RADV driver environment variables
    ``nocachecompat``
       disable changes to code generation which increases shader cache compatiblity
       between devices
+   ``noheap``
+      disable VK_EXT_descriptor_heap
 
 .. envvar:: RADV_QUEUE_DISABLE
 
@@ -1646,10 +1648,11 @@ RADV driver environment variables
    ``emulate_rt``
       forces ray-tracing to be emulated in software on GFX10_3+ and enables
       rt extensions with older hardware.
-   ``heap``
-      enable experimental implementation of VK_EXT_descriptor_heap
    ``hic``
       enable experimental implementation of VK_EXT_host_image_copy on GFX10
+   ``msrtss``
+      enable experimental implementation of
+      VK_EXT_multisampled_render_to_single_sampled
    ``sparse``
       enable experimental sparse binding and sparse residency on GPUs where we don't support it by default (pre Polaris)
    ``transfer_queue``
@@ -1690,6 +1693,59 @@ RADV driver environment variables
    set the SQTT/RGP cache counters buffer size in bytes (default value is
    32MiB, the buffer is automatically resized if too small, except for
    per-submit captures)
+
+.. envvar:: RADV_SPM_COUNTERS_CONFIG
+
+   path to a config file listing custom SPM counters to collect when
+   capturing an RGP trace (``MESA_VK_TRACE=rgp``). Supported on
+   GFX10 and newer. The user is responsible for selecting block and
+   event IDs that are valid on the target ASIC.
+
+   File format (line-based)::
+
+      # comments start with '#'; C-style /* ... */ blocks are also allowed
+
+      [NAME]
+      # one or more HW counter lines:
+      COUNTER_NAME=BLOCK,EVENT_ID,INSTANCE,OP
+      ...
+
+   Section header:
+
+   * ``[NAME]`` opens a new group named ``NAME``.
+
+   ``NAME`` may optionally be wrapped in double or single quotes, which
+   lets it contain ``]`` or other characters that would otherwise be
+   reserved::
+
+      ["Memory (%)"]
+
+   HW counter line (``COUNTER_NAME=BLOCK,EVENT_ID,INSTANCE,OP``):
+
+   * ``BLOCK`` is the textual block name (e.g. ``SQ_WGP``, ``GL2C``).
+   * ``EVENT_ID`` is decimal or hex (``0x...``).
+   * ``INSTANCE`` is a decimal index or the keyword ``ALL`` to expand to
+     every hardware instance of the block.
+   * ``OP`` (``sum``, ``max`` or ``avg``) selects how the per-instance
+     values are aggregated for that counter. ``avg`` first sums the
+     per-instance values like ``sum`` and then divides by the number
+     of instances the line expanded to, which is useful when the
+     resulting value is later compared against a single-instance
+     baseline (e.g. ``CPF_PERF_SEL_STAT_BUSY``).
+
+   Each HW counter is auto-promoted to a pass-through derived item
+   shown in RGP under its group, with the same name as the counter.
+
+   Example (one group, one counter per HW instance)::
+
+      [Cache]
+      TCP_PERF_SEL_REQ=SQ_WGP,0x3,ALL,sum
+      TCP_PERF_SEL_REQ_MISS=SQ_WGP,0x12,ALL,sum
+      GL2C_PERF_SEL_REQ=GL2C,0x3,ALL,sum
+      GL2C_PERF_SEL_MISS=GL2C,0x2b,ALL,sum
+
+   Limits (per trace): up to 8 groups and 48 items total; up to 16
+   items per group.
 
 .. envvar:: RADV_TRAP_HANDLER
 
@@ -1923,24 +1979,6 @@ r600 driver environment variables
 
    ``nocpdma``
       Disable CP DMA
-   ``nosb``
-      Disable sb backend for graphics shaders
-   ``sbcl``
-      Enable sb backend for compute shaders
-   ``sbdry``
-      Don't use optimized bytecode (just print the dumps)
-   ``sbstat``
-      Print optimization statistics for shaders
-   ``sbdump``
-      Print IR dumps after some optimization passes
-   ``sbnofallback``
-      Abort on errors instead of fallback
-   ``sbdisasm``
-      Use sb disassembler for shader dumps
-   ``sbsafemath``
-      Disable unsafe math optimizations
-   ``nirsb``
-      Enable NIR with SB optimizer
    ``tex``
       Print texture info
    ``nir``
@@ -2005,8 +2043,6 @@ r600 driver environment variables
       Disable GTT write combining
    ``check_vm``
       Check VM faults and dump debug info.
-   ``unsafemath``
-      Enable unsafe math shader optimizations
 
 .. envvar:: R600_DEBUG_COMPUTE
 
@@ -2021,6 +2057,11 @@ r600 driver environment variables
 .. envvar:: R600_HYPERZ
 
    If set to ``false``, disables HyperZ optimizations. Defaults to ``true``.
+
+.. envvar:: R600_TRACE
+
+   If set to a file, print a trace of the commmand stream.
+   For debugging only. The file will quickly become huge.
 
 .. envvar:: R600_NIR_DEBUG
 
@@ -2052,6 +2093,12 @@ r600 driver environment variables
       Log texture ops
    ``trans``
       Log generic translation messages
+
+.. envvar:: RADEON_VA
+
+   If set to ``true``, enables virtual memory.
+   Only supprted on Cayman and Aruba.
+   May reduce CPU overhead but have known issues.
 
 r300 driver environment variables
 ---------------------------------

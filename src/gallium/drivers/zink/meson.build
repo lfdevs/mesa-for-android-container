@@ -56,6 +56,7 @@ zink_nir_algebraic_c = custom_target(
 
 zink_c_args = []
 inc_zink_vk = []
+zink_link_args = []
 
 if host_machine.system() == 'darwin'
 
@@ -82,6 +83,14 @@ if host_machine.system() == 'darwin'
   zink_c_args += ['-x','objective-c'] # Put compiler into objective-C mode to allow for MacOS types, like IOSurface and CAMetalLayer
   zink_c_args += ['-iframework' , 'Foundation']
 
+  # zink dlopen()s the Vulkan loader (libvulkan.1.dylib) via a bare
+  # "@rpath/..." path at runtime (see VK_LIBNAME in zink_screen.c).  This linker
+  # argument ensures the mach-o of the libvulkan.1.dylib client dyld contains
+  # the proper load commands to locate libvulkan.1.dylib at runtime.
+  if with_vulkan_loader_rpath != ''
+    zink_link_args += ['-Wl,-rpath,' + with_vulkan_loader_rpath]
+  endif
+
 endif
 
 subdir('nir_to_spirv')
@@ -107,6 +116,7 @@ endif
 driver_zink = declare_dependency(
   compile_args : '-DGALLIUM_ZINK',
   link_with : zink_deps,
+  link_args : zink_link_args,
 )
 
 if with_tests

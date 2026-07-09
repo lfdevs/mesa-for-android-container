@@ -28,6 +28,9 @@
 #include "util/u_blitter.h"
 #include "util/u_printf.h"
 
+#include "util/perf/u_trace.h"
+#include "panfrost_perfetto.h"
+
 #include "compiler/shader_enums.h"
 #include "midgard/midgard_compile.h"
 
@@ -38,6 +41,15 @@
       lval |= (bit);                                                           \
    else                                                                        \
       lval &= ~(bit);
+
+/* Passed as the 'cs' argument to u_trace tracepoints, analogous to
+ * panvk_utrace_cs_info. sb_wait_mask != 0 makes the GPU defer the timestamp
+ * write until those scoreboard slots signal (CSF only, JM ignores it).
+ */
+struct panfrost_trace_cs_info {
+   struct panfrost_batch *batch;
+   uint16_t sb_wait_mask;
+};
 
 /* Dirty tracking flags. 3D is for general 3D state. Shader flags are
  * per-stage. Renderer refers to Renderer State Descriptors. Vertex refers to
@@ -232,6 +244,13 @@ struct panfrost_context {
       struct u_printf_ctx ctx;
       struct panfrost_bo *bo;
    } printf;
+
+   /* u_trace support */
+   struct u_trace_context trace_context;
+#ifdef HAVE_PERFETTO
+   struct panfrost_perfetto_state perfetto;
+#endif
+   uint32_t submit_count; /* monotonic submit ID for perfetto */
 };
 
 /* Corresponds to the CSO */
@@ -537,20 +556,20 @@ void panfrost_shader_context_init(struct pipe_context *pctx);
 static inline void
 panfrost_dirty_state_all(struct panfrost_context *ctx)
 {
-   ctx->dirty = ~0;
+   ctx->dirty = (enum pan_dirty_3d)~0;
 
    for (unsigned i = 0; i < MESA_SHADER_STAGES; ++i)
-      ctx->dirty_shader[i] = ~0;
+      ctx->dirty_shader[i] = (enum pan_dirty_shader)~0;
 }
 
 static inline void
 panfrost_clean_state_3d(struct panfrost_context *ctx)
 {
-   ctx->dirty = 0;
+   ctx->dirty = (enum pan_dirty_3d)0;
 
    for (unsigned i = 0; i < MESA_SHADER_STAGES; ++i) {
       if (i != MESA_SHADER_COMPUTE)
-         ctx->dirty_shader[i] = 0;
+         ctx->dirty_shader[i] = (enum pan_dirty_shader)0;
    }
 }
 

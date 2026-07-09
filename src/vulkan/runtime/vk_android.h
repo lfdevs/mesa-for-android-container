@@ -109,8 +109,8 @@ VkFormat vk_ahb_format_to_image_format(uint32_t ahb_format);
 
 uint32_t vk_image_format_to_ahb_format(VkFormat vk_format);
 
-uint64_t vk_image_usage_to_ahb_usage(const VkImageCreateFlags vk_create,
-                                     const VkImageUsageFlags vk_usage);
+uint64_t vk_image_usage_to_ahb_usage(const VkImageCreateFlags2KHR vk_create,
+                                     const VkImageUsageFlags2KHR vk_usage);
 
 struct AHardwareBuffer *vk_alloc_ahardware_buffer(
    const VkMemoryAllocateInfo *pAllocateInfo);
@@ -154,8 +154,8 @@ vk_image_format_to_ahb_format(VkFormat vk_format)
 }
 
 static inline uint64_t
-vk_image_usage_to_ahb_usage(const VkImageCreateFlags vk_create,
-                            const VkImageUsageFlags vk_usage)
+vk_image_usage_to_ahb_usage(const VkImageCreateFlags2KHR vk_create,
+                            const VkImageUsageFlags2KHR vk_usage)
 {
    return 0;
 }

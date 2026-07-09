@@ -44,7 +44,7 @@ traces:
     freedreno-a618:
       checksum: e0e18dcc50ab2e23cead650d64469178
     zink-a618:
-      checksum: b7e0cdb0db74ea9a31fb7a75ae0d76fc
+      checksum: b007c69ad3d9ede36bac6b2fe356722b
 
   valve/counterstrike-source-v2.trace:
     freedreno-a306:

@@ -30,8 +30,7 @@ struct hw_runner_cmdstream_info {
       uint32_t size_B;
    } output_cs;
 
-   /* Max 1024 */
-   uint16_t invocations;
+   uint32_t invocations;
 
    uint64_t shader_resource_device_ptr;
    uint8_t shader_resource_table_size;
@@ -102,13 +101,12 @@ hw_runner_fill_cmd_stream(struct pan_kmod_dev *dev,
    /* Setup attribute offset */
    cs_move32_to(b, cs_sr_reg32(b, COMPUTE, GLOBAL_ATTRIBUTE_OFFSET), 0);
 
-   assert(info->invocations <= 1024);
    struct mali_compute_size_workgroup_packed wg_size;
    pan_pack(&wg_size, COMPUTE_SIZE_WORKGROUP, cfg) {
-      cfg.workgroup_size_x = info->invocations;
+      cfg.workgroup_size_x = 1;
       cfg.workgroup_size_y = 1;
       cfg.workgroup_size_z = 1;
-      cfg.allow_merging_workgroups = false;
+      cfg.allow_merging_workgroups = true;
    }
    cs_move32_to(b, cs_sr_reg32(b, COMPUTE, WG_SIZE),
                 wg_size.opaque[0]);
@@ -116,7 +114,7 @@ hw_runner_fill_cmd_stream(struct pan_kmod_dev *dev,
    cs_move32_to(b, cs_sr_reg32(b, COMPUTE, JOB_OFFSET_X), 0);
    cs_move32_to(b, cs_sr_reg32(b, COMPUTE, JOB_OFFSET_Y), 0);
    cs_move32_to(b, cs_sr_reg32(b, COMPUTE, JOB_OFFSET_Z), 0);
-   cs_move32_to(b, cs_sr_reg32(b, COMPUTE, JOB_SIZE_X), 1);
+   cs_move32_to(b, cs_sr_reg32(b, COMPUTE, JOB_SIZE_X), info->invocations);
    cs_move32_to(b, cs_sr_reg32(b, COMPUTE, JOB_SIZE_Y), 1);
    cs_move32_to(b, cs_sr_reg32(b, COMPUTE, JOB_SIZE_Z), 1);
 
@@ -217,6 +215,8 @@ GENX(hw_runner_new_cmd_stream)(struct pan_kmod_dev *kdev,
    struct mali_shader_program_packed *spd_packed = descr_ptr + spd_offset;
    pan_pack(spd_packed, SHADER_PROGRAM, spd) {
       spd.stage = MALI_SHADER_STAGE_COMPUTE;
+      assert((info->register_preload & ((1ull << 48) - 1)) == 0);
+      spd.preload.r48_r63 = info->register_preload >> 48;
       spd.suppress_nan = false;
       spd.flush_to_zero_mode = MALI_FLUSH_TO_ZERO_MODE_PRESERVE_SUBNORMALS;
       spd.suppress_inf = false;

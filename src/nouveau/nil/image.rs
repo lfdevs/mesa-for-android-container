@@ -323,6 +323,7 @@ impl Image {
             assert!((info.usage & IMAGE_USAGE_SPARSE_RESIDENCY_BIT) == 0);
             let mut min_tiling = Tiling::choose(
                 dev,
+                info.dim,
                 info.extent_px,
                 info.format,
                 sample_layout,
@@ -332,6 +333,7 @@ impl Image {
             for p in 0..infos.len() {
                 let plane_tiling = Tiling::choose(
                     dev,
+                    infos[p].dim,
                     infos[p].extent_px,
                     infos[p].format,
                     sample_layout,
@@ -349,6 +351,7 @@ impl Image {
         } else {
             Tiling::choose(
                 dev,
+                info.dim,
                 info.extent_px,
                 info.format,
                 sample_layout,
@@ -753,7 +756,7 @@ impl Image {
     fn gb202_choose_pte_kind(_format: Format, compressed: bool) -> u8 {
         use nvidia_headers::hwref::tu102::mmu::*;
         if compressed {
-            NV_MMU_PTE_KIND_GENERIC_MEMORY_COMPRESSIBLE_DISABLE_PLC
+            NV_MMU_PTE_KIND_GENERIC_MEMORY_COMPRESSIBLE
         } else {
             NV_MMU_PTE_KIND_GENERIC_MEMORY
         }
@@ -798,7 +801,7 @@ impl Image {
             }
             PIPE_FORMAT_Z32_FLOAT => {
                 if compressed {
-                    NV_MMU_PTE_KIND_GENERIC_MEMORY_COMPRESSIBLE_DISABLE_PLC
+                    NV_MMU_PTE_KIND_GENERIC_MEMORY_COMPRESSIBLE
                 } else {
                     NV_MMU_PTE_KIND_GENERIC_MEMORY
                 }
@@ -812,7 +815,7 @@ impl Image {
             }
             _ => {
                 if compressed {
-                    NV_MMU_PTE_KIND_GENERIC_MEMORY_COMPRESSIBLE_DISABLE_PLC
+                    NV_MMU_PTE_KIND_GENERIC_MEMORY_COMPRESSIBLE
                 } else {
                     NV_MMU_PTE_KIND_GENERIC_MEMORY
                 }

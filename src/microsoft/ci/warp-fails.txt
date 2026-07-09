@@ -14,3 +14,16 @@ dEQP-VK.api.info.extension_core_versions.extension_core_versions,Fail
 
 # WARP bug in fp64 ffma code, running on hw or a WARP update fixes it
 dEQP-VK.glsl.builtin.precision_double.mix.compute.vec3,Fail
+
+# Nightly run expectations update
+dEQP-VK.glsl.builtin.precision_double.mix.compute.scalar,Fail
+dEQP-VK.glsl.builtin.precision_double.mix.compute.vec2,Fail
+dEQP-VK.glsl.builtin.precision_double.mix.compute.vec4,Fail
+dEQP-VK.renderpass.dedicated_allocation.attachment_allocation.grow_shrink.50,Fail
+dEQP-VK.renderpass.suballocation.attachment_allocation.grow_shrink.50,Fail
+dEQP-VK.renderpass2.dedicated_allocation.attachment_allocation.grow_shrink.50,Fail
+dEQP-VK.renderpass2.suballocation.attachment_allocation.grow_shrink.50,Fail
+dEQP-VK.renderpass2.suballocation.attachment_allocation.input_output.54,Fail
+dEQP-VK.wsi.win32.swapchain.create.image_usage,Crash
+dEQP-VK.wsi.win32.swapchain.simulate_oom.image_usage,Crash
+

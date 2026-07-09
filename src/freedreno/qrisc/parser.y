@@ -42,6 +42,8 @@ typedef void *YY_BUFFER_STATE;
 extern YY_BUFFER_STATE yy_scan_string(const char *);
 extern void yy_delete_buffer(YY_BUFFER_STATE);
 
+extern const char *cur_section;
+
 int yyparse(void);
 
 void yyerror(const char *error);
@@ -106,9 +108,20 @@ literal(uint32_t num)
 }
 
 static void
-label(const char *str)
+label(struct qrisc_label_expr label)
 {
-	instr->label = str;
+	if (!label.ref1.section)
+		label.ref1.section = (char *)cur_section;
+	else
+		label.ref1.absolute = true;
+	if (label.ref2.str) {
+		if (!label.ref2.section)
+			label.ref2.section = (char *)cur_section;
+		else
+			label.ref2.absolute = true;
+	}
+
+	instr->label = label;
 }
 
 %}
@@ -117,13 +130,15 @@ label(const char *str)
 	int tok;
 	uint32_t num;
 	const char *str;
+	struct qrisc_label_ref label_ref;
+	struct qrisc_label_expr label_expr;
 }
 
 %token <num> T_INT
 %token <num> T_HEX
 %token <num> T_CONTROL_REG
 %token <num> T_SQE_REG
-%token <str> T_LABEL_REF
+%token <label_ref> T_LABEL_REF
 %token <num> T_LITERAL
 %token <num> T_BIT
 %token <num> T_REGISTER
@@ -143,11 +158,13 @@ label(const char *str)
 %token <tok> T_OP_ISHR
 %token <tok> T_OP_ROT
 %token <tok> T_OP_MUL8
+%token <tok> T_OP_MUL16
 %token <tok> T_OP_MIN
 %token <tok> T_OP_MAX
 %token <tok> T_OP_CMP
 %token <tok> T_OP_BIC
 %token <tok> T_OP_MSB
+%token <tok> T_OP_POPCOUNT
 %token <tok> T_OP_SETBIT
 %token <tok> T_OP_CLRBIT
 %token <tok> T_OP_BFI
@@ -182,8 +199,10 @@ label(const char *str)
 
 %type <num> reg
 %type <num> immediate
+%type <num> const
 %type <num> xmov
 %type <num> peek
+%type <label_expr> label_scale label_expr
 
 %define parse.error verbose
 
@@ -201,7 +220,7 @@ instr_or_label:    instr_r
 |                  T_IDENTIFIER ':'    { decl_label($1); }
 |                  T_ALIGN immediate   { align_instr($2); }
 |                  T_JUMPTBL           { decl_jumptbl(); }
-|                  T_SECTION T_IDENTIFIER { next_section(); }
+|                  T_SECTION T_IDENTIFIER { next_section($2); }
 
 xmov:              T_XMOV { $$ = $1; }
 |                  { $$ = 0; }
@@ -214,14 +233,38 @@ instr_r:           xmov peek alu_instr    { instr->xmov = $1; instr->peek = $2; 
 |                  load_instr
 |                  store_instr
 
+/* avoid ambiguities with (CONTROL_REG + constant) syntax and label
+ * expressions by not allowing them.
+ */
+const:             T_HEX
+|                  T_INT
+
+label_scale:       T_LABEL_REF { $$.ref1 = $1; $$.ref1_scale = 1; }
+|                  T_LABEL_REF '*' const { $$.ref1 = $1; $$.ref1_scale = $3; }
+
+label_expr:        label_scale { $$ = $1; $$.ref2.str = NULL; $$.ref2_scale = 0; }
+|                  label_scale '+' label_scale {
+   $$ = $1;
+   $$.ref2_scale = $3.ref1_scale;
+   $$.ref2 = $3.ref1;
+   $$.op = LABEL_OP_ADD;
+}
+|                  label_scale '-' label_scale {
+   $$ = $1;
+   $$.ref2_scale = $3.ref1_scale;
+   $$.ref2 = $3.ref1;
+   $$.op = LABEL_OP_SUB;
+}
+
 /* need to special case:
  * - not (single src, possibly an immediate)
- * - msb (single src, must be reg)
+ * - msb, popcount (single src, must be reg)
  * - mov (single src, plus possibly a shift)
  * from the other ALU instructions:
  */
 
 alu_msb_instr:     T_OP_MSB reg ',' reg        { new_instr(OPC_MSB); dst($2); src1($4); }
+alu_popcount_instr: T_OP_POPCOUNT reg ',' reg  { new_instr(OPC_POPCOUNT); dst($2); src1($4); }
 
 alu_not_instr:     T_OP_NOT reg ',' reg        { new_instr(OPC_NOT); dst($2); src1($4); }
 |                  T_OP_NOT reg ',' immediate  { new_instr(OPC_NOT); dst($2); immed($4); }
@@ -231,10 +274,10 @@ alu_mov_instr:     T_OP_MOV reg ',' reg        { new_instr(OPC_OR); dst($2); src
                        new_instr(OPC_MOVI); dst($2); immed($4); shift($6);
 }
 |                  T_OP_MOV reg ',' immediate  { new_instr(OPC_MOVI); dst($2); immed($4); shift(0); }
-|                  T_OP_MOV reg ',' T_LABEL_REF T_LSHIFT immediate {
+|                  T_OP_MOV reg ',' label_expr T_LSHIFT immediate {
                        new_instr(OPC_MOVI); dst($2); label($4); shift($6);
 }
-|                  T_OP_MOV reg ',' T_LABEL_REF { new_instr(OPC_MOVI); dst($2); label($4); shift(0); }
+|                  T_OP_MOV reg ',' label_expr { new_instr(OPC_MOVI); dst($2); label($4); shift(0); }
 
 alu_2src_op:       T_OP_ADD       { new_instr(OPC_ADD); }
 |                  T_OP_ADDHI     { new_instr(OPC_ADDHI); }
@@ -248,6 +291,7 @@ alu_2src_op:       T_OP_ADD       { new_instr(OPC_ADD); }
 |                  T_OP_ISHR      { new_instr(OPC_ISHR); }
 |                  T_OP_ROT       { new_instr(OPC_ROT); }
 |                  T_OP_MUL8      { new_instr(OPC_MUL8); }
+|                  T_OP_MUL16     { new_instr(OPC_MUL16); }
 |                  T_OP_MIN       { new_instr(OPC_MIN); }
 |                  T_OP_MAX       { new_instr(OPC_MAX); }
 |                  T_OP_CMP       { new_instr(OPC_CMP); }
@@ -255,6 +299,7 @@ alu_2src_op:       T_OP_ADD       { new_instr(OPC_ADD); }
 
 alu_2src_instr:    alu_2src_op reg ',' reg ',' reg { dst($2); src1($4); src2($6); }
 |                  alu_2src_op reg ',' reg ',' immediate { dst($2); src1($4); immed($6); }
+|                  alu_2src_op reg ',' reg ',' label_expr { dst($2); src1($4); label($6); }
 
 alu_clrsetbit_instr: T_OP_SETBIT reg ',' reg ',' T_BIT { new_instr(OPC_SETBITI); dst($2); src1($4); bit($6); }
 |                    T_OP_SETBIT reg ',' reg ',' reg { new_instr(OPC_SETBIT); dst($2); src1($4); src2($6); }
@@ -267,6 +312,7 @@ alu_bitfield_instr: alu_bitfield_op reg ',' reg ',' T_BIT ',' T_BIT { dst($2); s
 
 alu_instr:         alu_2src_instr
 |                  alu_msb_instr
+|                  alu_popcount_instr
 |                  alu_not_instr
 |                  alu_mov_instr
 |                  alu_clrsetbit_instr
@@ -293,22 +339,22 @@ store_instr:       store_op reg ',' '[' reg '+' immediate ']' preincrement {
 branch_op:         T_OP_BRNE      { new_instr(OPC_BRNE); }
 |                  T_OP_BREQ      { new_instr(OPC_BREQ); }
 
-branch_instr:      branch_op reg ',' T_BIT ',' T_LABEL_REF     { src1($2); bit($4); label($6); }
-|                  branch_op reg ',' immediate ',' T_LABEL_REF { src1($2); immed($4); label($6); }
+branch_instr:      branch_op reg ',' T_BIT ',' label_expr    { src1($2); bit($4); label($6); }
+|                  branch_op reg ',' immediate ',' label_expr { src1($2); immed($4); label($6); }
 
-other_instr:       T_OP_CALL T_LABEL_REF { new_instr(OPC_CALL); label($2); }
-|                  T_OP_BL T_LABEL_REF   { new_instr(OPC_BL); label($2); }
-|                  T_OP_SETSECURE reg ',' T_LABEL_REF { new_instr(OPC_SETSECURE); src1($2); label($4); }
+other_instr:       T_OP_CALL label_expr { new_instr(OPC_CALL); label($2); }
+|                  T_OP_BL label_expr   { new_instr(OPC_BL); label($2); }
+|                  T_OP_SETSECURE reg ',' label_expr { new_instr(OPC_SETSECURE); src1($2); label($4); }
 |                  T_OP_RET              { new_instr(OPC_RET); }
 |                  T_OP_IRET             { new_instr(OPC_IRET); }
-|                  T_OP_JUMP T_LABEL_REF { new_instr(OPC_JUMP); label($2); }
-|                  T_OP_JUMPA T_LABEL_REF { new_instr(OPC_JUMPA); label($2); }
+|                  T_OP_JUMP label_expr { new_instr(OPC_JUMP); label($2); }
+|                  T_OP_JUMPA label_expr { new_instr(OPC_JUMPA); label($2); }
 |                  T_OP_JUMP reg         { new_instr(OPC_JUMPR); src1($2); }
 |                  T_OP_SRET             { new_instr(OPC_SRET); }
 |                  T_OP_WAITIN           { new_instr(OPC_WAITIN); }
 |                  T_OP_NOP              { new_instr(OPC_NOP); }
 |                  T_LITERAL             { new_instr(OPC_RAW_LITERAL); literal($1); }
-|                  '[' T_LABEL_REF ']'   { new_instr(OPC_RAW_LITERAL); label($2); }
+|                  '[' label_expr ']'   { new_instr(OPC_RAW_LITERAL); label($2); }
 
 reg:               T_REGISTER
 

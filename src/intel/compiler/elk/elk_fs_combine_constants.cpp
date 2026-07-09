@@ -225,19 +225,19 @@ negation_exists(nir_const_value v, unsigned bit_size,
 
    case 16:
       if (base_type == float_only)
-         return !util_is_half_nan(v.i16);
+         return !util_is_half_nan(v.i16) && !util_is_half_subnormal(v.i16);
       else
          return v.i16 != 0 && v.i16 != INT16_MIN;
 
    case 32:
       if (base_type == float_only)
-         return !isnan(v.f32);
+         return !isnan(v.f32) && fpclassify(v.f32) != FP_SUBNORMAL;
       else
          return v.i32 != 0 && v.i32 != INT32_MIN;
 
    case 64:
       if (base_type == float_only)
-         return !isnan(v.f64);
+         return !isnan(v.f64) && fpclassify(v.f64) != FP_SUBNORMAL;
       else
          return v.i64 != 0 && v.i64 != INT64_MIN;
 

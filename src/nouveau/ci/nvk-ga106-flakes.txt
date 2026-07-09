@@ -29,7 +29,7 @@ dEQP-VK.image.host_image_copy.optimal.image_to_image_copy.transfer_src_optimal.g
 dEQP-VK.memory.pipeline_barrier.host_write_transfer_src.1048576
 
 dEQP-VK.pipeline.*.pipeline_cache.robustness2.storage
-dEQP-VK.pipeline.monolithic.creation_cache_control.compute_pipelines.duplicate_batch_pipelines_no_cache
+dEQP-VK.pipeline.monolithic.creation_cache_control.compute_pipelines.duplicate_batch_pipelines_.*
 
 dEQP-VK.rasterization.primitive_size.points.point_size_10000
 

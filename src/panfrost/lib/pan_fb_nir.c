@@ -167,7 +167,7 @@ get_key_target(enum pipe_format format,
          assert(format == iview->format);
 
       dim = iview->dim;
-      is_array = iview->first_layer != iview->last_layer;
+      is_array = pan_image_view_layer_count(iview) > 1;
       image_sample_count = pan_image_view_get_nr_samples(iview);
    }
 

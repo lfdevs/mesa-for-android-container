@@ -74,11 +74,11 @@ static const struct sw_driver_descriptor driver_descriptors = {
          .create_winsys_kms_dri = kms_dri_create_winsys,
       },
 #endif
-#if !DETECT_OS_ANDROID
       {
          .name = "null",
          .create_winsys = null_sw_create,
       },
+#if !DETECT_OS_ANDROID
       {
          .name = "wrapped",
          .create_winsys_wrapped = wrapper_sw_winsys_wrap_pipe_screen,

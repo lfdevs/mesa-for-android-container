@@ -143,7 +143,7 @@ struct _util_cpu_caps_state_t {
 
 #define U_CPU_INVALID_L3 0xffff
 
-static inline ATTRIBUTE_CONST const struct util_cpu_caps_t *
+static inline const struct util_cpu_caps_t *
 util_get_cpu_caps(void)
 {
    extern void _util_cpu_detect_once(void);
@@ -153,24 +153,6 @@ util_get_cpu_caps(void)
     * load instruction with some extra compiler magic to prevent code
     * re-ordering around it.  The perf impact of doing this check should be
     * negligible in most cases.
-    *
-    * Also, even though it looks like  a bit of a lie, we've declared this
-    * function with ATTRIBUTE_CONST.  The GCC docs say:
-    *
-    *    "Calls to functions whose return value is not affected by changes to
-    *    the observable state of the program and that have no observable
-    *    effects on such state other than to return a value may lend
-    *    themselves to optimizations such as common subexpression elimination.
-    *    Declaring such functions with the const attribute allows GCC to avoid
-    *    emitting some calls in repeated invocations of the function with the
-    *    same argument values."
-    *
-    * The word "observable" is important here.  With the exception of a
-    * llvmpipe debug flag behind an environment variable and a few unit tests,
-    * all of which emulate worse CPUs, this function neither affects nor is
-    * affected by any "observable" state.  It has its own internal state for
-    * sure, but that state is such that it appears to return exactly the same
-    * value with the same internal data every time.
     */
    if (unlikely(!p_atomic_read(&_util_cpu_caps_state.detect_done)))
       call_once(&_util_cpu_caps_state.once_flag, _util_cpu_detect_once);

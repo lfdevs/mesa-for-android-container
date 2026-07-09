@@ -32,29 +32,43 @@
 #include "vk_util.h"
 
 VkResult
+vk_command_buffer_init_with_params(struct vk_command_buffer *command_buffer,
+                                   struct vk_command_buffer_init_params *params)
+{
+   memset(command_buffer, 0, sizeof(*command_buffer));
+   vk_object_base_init(params->pool->base.device, &command_buffer->base,
+                       VK_OBJECT_TYPE_COMMAND_BUFFER);
+
+   command_buffer->pool = params->pool;
+   command_buffer->level = params->level;
+   command_buffer->ops = params->ops;
+   vk_dynamic_graphics_state_init(&command_buffer->dynamic_graphics_state);
+   command_buffer->state = MESA_VK_COMMAND_BUFFER_STATE_INITIAL;
+   command_buffer->record_result = VK_SUCCESS;
+   if (params->needs_cmd_queue)
+      vk_cmd_queue_init(&command_buffer->cmd_queue);
+   vk_meta_object_list_init(&command_buffer->meta_objects);
+   command_buffer->labels = UTIL_DYNARRAY_INIT;
+   command_buffer->region_begin = true;
+
+   list_add(&command_buffer->pool_link, &params->pool->command_buffers);
+
+   return VK_SUCCESS;
+}
+
+VkResult
 vk_command_buffer_init(struct vk_command_pool *pool,
                        struct vk_command_buffer *command_buffer,
                        const struct vk_command_buffer_ops *ops,
                        VkCommandBufferLevel level)
 {
-   memset(command_buffer, 0, sizeof(*command_buffer));
-   vk_object_base_init(pool->base.device, &command_buffer->base,
-                       VK_OBJECT_TYPE_COMMAND_BUFFER);
-
-   command_buffer->pool = pool;
-   command_buffer->level = level;
-   command_buffer->ops = ops;
-   vk_dynamic_graphics_state_init(&command_buffer->dynamic_graphics_state);
-   command_buffer->state = MESA_VK_COMMAND_BUFFER_STATE_INITIAL;
-   command_buffer->record_result = VK_SUCCESS;
-   vk_cmd_queue_init(&command_buffer->cmd_queue);
-   vk_meta_object_list_init(&command_buffer->meta_objects);
-   command_buffer->labels = UTIL_DYNARRAY_INIT;
-   command_buffer->region_begin = true;
-
-   list_add(&command_buffer->pool_link, &pool->command_buffers);
-
-   return VK_SUCCESS;
+   return vk_command_buffer_init_with_params(
+      command_buffer,
+      &(struct vk_command_buffer_init_params) {
+         .pool = pool,
+         .ops = ops,
+         .level = level,
+      });
 }
 
 void
@@ -64,7 +78,8 @@ vk_command_buffer_reset(struct vk_command_buffer *command_buffer)
    command_buffer->state = MESA_VK_COMMAND_BUFFER_STATE_INITIAL;
    command_buffer->record_result = VK_SUCCESS;
    vk_command_buffer_reset_render_pass(command_buffer);
-   vk_cmd_queue_reset(&command_buffer->cmd_queue);
+   if (command_buffer->cmd_queue.ctx)
+      vk_cmd_queue_reset(&command_buffer->cmd_queue);
    vk_meta_object_list_reset(command_buffer->base.device,
                              &command_buffer->meta_objects);
    util_dynarray_foreach (&command_buffer->labels, VkDebugUtilsLabelEXT, label)
@@ -102,7 +117,8 @@ vk_command_buffer_finish(struct vk_command_buffer *command_buffer)
 {
    list_del(&command_buffer->pool_link);
    vk_command_buffer_reset_render_pass(command_buffer);
-   vk_cmd_queue_finish(&command_buffer->cmd_queue);
+   if (command_buffer->cmd_queue.ctx)
+      vk_cmd_queue_finish(&command_buffer->cmd_queue);
    util_dynarray_foreach (&command_buffer->labels, VkDebugUtilsLabelEXT, label)
       vk_free(&command_buffer->base.device->alloc, (void *)label->pLabelName);
    util_dynarray_fini(&command_buffer->labels);

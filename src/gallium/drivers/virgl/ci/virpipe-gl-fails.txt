@@ -512,10 +512,8 @@ spec@arb_shader_image_load_store@max-size@image2DMS max size test/8x8x16384x1,Fa
 spec@arb_shader_image_load_store@max-size@image2DMSArray max size test/8x8x8x2048,Fail
 spec@arb_tessellation_shader@execution@built-in-functions@tcs-equal-vec2-vec2,Crash
 spec@arb_tessellation_shader@execution@built-in-functions@tcs-max-float-float,Crash
-spec@arb_tessellation_shader@execution@built-in-functions@tcs-op-eq-mat2-mat2-using-if,Crash
 spec@arb_tessellation_shader@execution@built-in-functions@tcs-op-eq-mat3x4-mat3x4-using-if,Crash
 spec@arb_tessellation_shader@execution@built-in-functions@tcs-op-eq-vec4-vec4,Crash
-spec@arb_tessellation_shader@execution@built-in-functions@tcs-op-ne-vec3-vec3-using-if,Crash
 spec@arb_tessellation_shader@execution@tcs-output-unmatched,Fail
 spec@arb_texture_compression_bptc@texwrap formats bordercolor-swizzled,Fail
 spec@arb_texture_compression_bptc@texwrap formats bordercolor-swizzled@GL_COMPRESSED_RGB_BPTC_SIGNED_FLOAT- swizzled- border color only,Fail
@@ -575,6 +573,9 @@ spec@ext_texture_srgb@texwrap formats-s3tc bordercolor@GL_COMPRESSED_SRGB_ALPHA_
 spec@ext_texture_srgb@texwrap formats-s3tc bordercolor@GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT3_EXT- border color only,Fail
 spec@ext_texture_srgb@texwrap formats-s3tc bordercolor@GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT- border color only,Fail
 spec@ext_texture_srgb@texwrap formats-s3tc bordercolor@GL_COMPRESSED_SRGB_S3TC_DXT1_EXT- border color only,Fail
+spec@!opengl 1.1@depthstencil-default_fb-drawpixels-24_8 samples=6,Fail
+spec@ext_framebuffer_multisample@interpolation 8 centroid-edges,Fail
+spec@glsl-1.30@execution@glsl-packed-back-color,Fail
 
 # New failures with GL CTS 4.6.6.0 & ES CTS 3.2.12.0
 dEQP-GLES2.functional.clipping.line.wide_line_clip_viewport_corner,Fail

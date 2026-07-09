@@ -42,7 +42,7 @@ The exact supported features vary per driver:
      - ``gpu.renderstages.intel``
    * - Panfrost
      - ``gpu.counters.panfrost``
-     -
+     - ``gpu.renderstages.panfrost``
    * - PanVK
      - ``gpu.counters.panfrost``
      - ``gpu.renderstages.panfrost``

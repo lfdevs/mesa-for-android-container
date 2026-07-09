@@ -414,6 +414,7 @@ struct pipe_context* r300_create_context(struct pipe_screen* screen,
         r300->draw = draw_create(&r300->context);
         if (r300->draw == NULL)
             goto fail;
+        draw_set_constant_buffer_stride(r300->draw, sizeof(float));
         /* Enable our renderer. */
         draw_set_rasterize_stage(r300->draw, r300_draw_stage(r300));
         /* Disable converting points/lines to triangles. */

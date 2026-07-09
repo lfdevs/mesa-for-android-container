@@ -952,6 +952,7 @@ lvp_get_properties(const struct lvp_physical_device *device, struct vk_propertie
    const unsigned *block_size = device->pscreen->compute_caps.max_block_size;
 
    const uint64_t max_render_targets = device->pscreen->caps.max_render_targets;
+   struct lvp_instance *instance = (struct lvp_instance *)device->vk.instance;
 
    int texel_buffer_alignment = device->pscreen->caps.texture_buffer_offset_alignment;
 
@@ -1403,7 +1404,12 @@ lvp_get_properties(const struct lvp_physical_device *device, struct vk_propertie
 #endif
 
    /* Vulkan 1.0 */
-   strcpy(p->deviceName, device->pscreen->get_name(device->pscreen));
+   if (strlen(instance->drirc.debug.force_vk_devicename) > 0) {
+      snprintf(p->deviceName, sizeof(p->deviceName), "%s",
+               instance->drirc.debug.force_vk_devicename);
+   } else {
+      strcpy(p->deviceName, device->pscreen->get_name(device->pscreen));
+   }
    lvp_device_get_cache_uuid(p->pipelineCacheUUID);
 
    /* Vulkan 1.1 */
@@ -1602,6 +1608,15 @@ VKAPI_ATTR VkResult VKAPI_CALL lvp_CreateInstance(
    instance->vk.physical_devices.enumerate = lvp_enumerate_physical_devices;
    instance->vk.physical_devices.destroy = lvp_destroy_physical_device;
 
+   lvp_parse_dri_options(&instance->drirc,
+                         &(driConfigFileParseParams){
+                            .driverName = "lvp",
+                            .applicationName = instance->vk.app_info.app_name,
+                            .applicationVersion = instance->vk.app_info.app_version,
+                            .engineName = instance->vk.app_info.engine_name,
+                            .engineVersion = instance->vk.app_info.engine_version,
+                         });
+
    //   VG(VALGRIND_CREATE_MEMPOOL(instance, 0, false));
 
    *pInstance = lvp_instance_to_handle(instance);
@@ -1619,6 +1634,9 @@ VKAPI_ATTR void VKAPI_CALL lvp_DestroyInstance(
       return;
 
    pipe_loader_release(&instance->devs, instance->num_devices);
+
+   driDestroyOptionCache(&instance->drirc.options);
+   driDestroyOptionInfo(&instance->drirc.available_options);
 
    vk_instance_finish(&instance->vk);
    vk_free(&instance->vk.alloc, instance);
@@ -1917,6 +1935,7 @@ static void
 lvp_queue_finish(struct lvp_queue *queue)
 {
    vk_queue_finish(&queue->vk);
+   cso_unbind_context(queue->cso);
 
    destroy_pipelines(queue);
    simple_mtx_destroy(&queue->lock);

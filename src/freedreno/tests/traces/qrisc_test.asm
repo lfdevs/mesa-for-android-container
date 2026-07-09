@@ -61,6 +61,9 @@ cwrite $rem, [$00 + @MEM_READ_DWORDS]
 cwrite $00, [$00 + @PACKET_TABLE_WRITE_ADDR]
 (rep)cwrite $memdata, [$00 + @PACKET_TABLE_WRITE]
 
+mov $02, #preempt
+swrite $02, [$00 + %PREEMPT_INSTR]
+
 mov $02, 0x883
 mov $03, 0xbeef
 mov $04, 0xdead << 16
@@ -199,7 +202,8 @@ cwrite $rem, [$00 + @MEM_READ_DWORDS]
 waitin
 mov $01, $data
 
-UNKN15:
+IN_PREEMPT:
+preempt:
 ; test bl + iret + conditional branch w/ immed
 cread $02, [$00 + 0x101]
 brne $02, 0x0001, #exit_iret

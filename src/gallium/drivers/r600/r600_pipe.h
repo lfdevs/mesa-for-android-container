@@ -452,6 +452,7 @@ struct r600_image_view {
 	uint32_t resource_words[8];
 	bool skip_mip_address_reloc;
 	uint32_t buf_size;
+	uint32_t va_offset;
 };
 
 struct r600_image_state {

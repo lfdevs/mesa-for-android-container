@@ -439,19 +439,23 @@ panfrost_bo_unreference(struct panfrost_bo *bo)
    if (!bo)
       return;
 
+   struct panfrost_device *dev = bo->dev;
+
    /* Don't return to cache if there are still references */
    assert(p_atomic_read(&bo->refcnt) > 0);
    if (p_atomic_dec_return(&bo->refcnt))
       return;
 
-   struct panfrost_device *dev = bo->dev;
-
    pthread_mutex_lock(&dev->bo_map_lock);
 
    /* Someone might have imported this BO while we were waiting for the
     * lock, let's make sure it's still not referenced before freeing it.
+    * We also need to check bo->dev again, because it might be that the
+    * counter got briefly increased and decreased by the other thread
+    * which also managed to acquire the lock before us. In that case,
+    * the slot has been returned already.
     */
-   if (p_atomic_read(&bo->refcnt) == 0) {
+   if (bo->dev && p_atomic_read(&bo->refcnt) == 0) {
       /* When the reference count goes to zero, we need to cleanup */
       panfrost_bo_munmap(bo);
 
@@ -525,20 +529,16 @@ panfrost_bo_import(struct panfrost_device *dev, int fd)
        */
       pan_kmod_bo_put(kmod_bo);
 
-      /* bo->refcnt == 0 can happen if the BO
-       * was being released but panfrost_bo_import() acquired the
-       * lock before panfrost_bo_unreference(). In that case, refcnt
-       * is 0 and we can't use panfrost_bo_reference() directly, we
-       * have to re-initialize the refcnt().
-       * Note that panfrost_bo_unreference() checks
-       * refcnt value just after acquiring the lock to
-       * make sure the object is not freed if panfrost_bo_import()
-       * acquired it in the meantime.
+      /* We can't use panfrost_bo_reference() here because we might
+       * be racing with panfrost_bo_unreference() which released
+       * the ref it had but didn't acquire the lock to release the
+       * slot yet. It's safe to unconditionally increment the counter
+       * without checking if it's > 0 in that case, because we have
+       * the lock held, and we know panfrost_bo_unreference() will
+       * back off after acquiring the lock if it sees a refcnt > 0.
        */
-      if (p_atomic_read(&bo->refcnt) == 0)
-         p_atomic_set(&bo->refcnt, 1);
-      else
-         panfrost_bo_reference(bo);
+      assert(p_atomic_read(&bo->refcnt) >= 0);
+      p_atomic_inc(&bo->refcnt);
    }
    pthread_mutex_unlock(&dev->bo_map_lock);
 

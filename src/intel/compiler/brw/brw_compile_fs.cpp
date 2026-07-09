@@ -152,22 +152,8 @@ brw_emit_interpolation_setup(brw_shader &s)
       const brw_reg r1_0 = retype(brw_vec1_reg(FIXED_GRF, 1, 0), BRW_TYPE_UD);
 
       brw_reg cps_size = ubld.vgrf(BRW_TYPE_UD);
-      switch (fs_prog_data->coarse_pixel_dispatch) {
-      case INTEL_NEVER:
-         ubld.MOV(cps_size, brw_imm_ud(0x00000101));
-         break;
-      case INTEL_SOMETIMES:
-         brw_check_dynamic_fs_config(ubld, INTEL_FS_CONFIG_COARSE_RT_WRITES);
-
-         set_predicate_inv(BRW_PREDICATE_NORMAL, false,
-                           ubld.MOV(cps_size, r1_0));
-         set_predicate_inv(BRW_PREDICATE_NORMAL, true,
-                           ubld.MOV(cps_size, brw_imm_ud(0x00000101)));
-         break;
-      case INTEL_ALWAYS:
-         ubld.MOV(cps_size, r1_0);
-         break;
-      }
+      ubld.MOV(cps_size, fs_prog_data->coarse_pixel_dispatch ?
+                         r1_0 : brw_imm_ud(0x00000101));
 
       cps_size = component(cps_size, 0);
       ub_cps_width = retype(cps_size, BRW_TYPE_UB);
@@ -182,7 +168,7 @@ brw_emit_interpolation_setup(brw_shader &s)
    brw_reg int_sample_offset_x, int_sample_offset_y; /* Used on Gen12HP+ */
    brw_reg int_sample_offset_xy; /* Used on Gen8+ */
    brw_reg half_int_sample_offset_x, half_int_sample_offset_y;
-   if (fs_prog_data->coarse_pixel_dispatch != INTEL_ALWAYS) {
+   if (!fs_prog_data->coarse_pixel_dispatch) {
       /* The thread payload only delivers subspan locations (ss0, ss1,
        * ss2, ...). Since subspans covers 2x2 pixels blocks, we need to
        * generate 4 pixel coordinates out of each subspan location. We do this
@@ -231,7 +217,7 @@ brw_emit_interpolation_setup(brw_shader &s)
    brw_reg int_coarse_offset_x, int_coarse_offset_y; /* Used on Gen12HP+ */
    brw_reg int_coarse_offset_xy; /* Used on Gen8+ */
    brw_reg half_int_coarse_offset_x, half_int_coarse_offset_y;
-   if (fs_prog_data->coarse_pixel_dispatch != INTEL_NEVER) {
+   if (fs_prog_data->coarse_pixel_dispatch) {
       /* In coarse pixel dispatch we have to do the same ADD instruction that
        * we do in normal per pixel dispatch, except this time we're not adding
        * 1 in each direction, but instead the coarse pixel size.
@@ -276,60 +262,18 @@ brw_emit_interpolation_setup(brw_shader &s)
    brw_reg int_pixel_offset_x, int_pixel_offset_y; /* Used on Gen12HP+ */
    brw_reg int_pixel_offset_xy; /* Used on Gen8+ */
    brw_reg half_int_pixel_offset_x, half_int_pixel_offset_y;
-   switch (fs_prog_data->coarse_pixel_dispatch) {
-   case INTEL_NEVER:
-      int_pixel_offset_x = int_sample_offset_x;
-      int_pixel_offset_y = int_sample_offset_y;
-      int_pixel_offset_xy = int_sample_offset_xy;
-      half_int_pixel_offset_x = half_int_sample_offset_x;
-      half_int_pixel_offset_y = half_int_sample_offset_y;
-      break;
-
-   case INTEL_SOMETIMES: {
-      const brw_builder dbld =
-         abld.exec_all().group(MIN2(16, s.dispatch_width) * 2, 0);
-
-      brw_check_dynamic_fs_config(dbld, INTEL_FS_CONFIG_COARSE_RT_WRITES);
-
-      int_pixel_offset_x = dbld.vgrf(BRW_TYPE_UW);
-      set_predicate(BRW_PREDICATE_NORMAL,
-                    dbld.SEL(int_pixel_offset_x,
-                             int_coarse_offset_x,
-                             int_sample_offset_x));
-
-      int_pixel_offset_y = dbld.vgrf(BRW_TYPE_UW);
-      set_predicate(BRW_PREDICATE_NORMAL,
-                    dbld.SEL(int_pixel_offset_y,
-                             int_coarse_offset_y,
-                             int_sample_offset_y));
-
-      int_pixel_offset_xy = dbld.vgrf(BRW_TYPE_UW);
-      set_predicate(BRW_PREDICATE_NORMAL,
-                    dbld.SEL(int_pixel_offset_xy,
-                             int_coarse_offset_xy,
-                             int_sample_offset_xy));
-
-      half_int_pixel_offset_x = bld.vgrf(BRW_TYPE_UW);
-      set_predicate(BRW_PREDICATE_NORMAL,
-                    bld.SEL(half_int_pixel_offset_x,
-                            half_int_coarse_offset_x,
-                            half_int_sample_offset_x));
-
-      half_int_pixel_offset_y = bld.vgrf(BRW_TYPE_UW);
-      set_predicate(BRW_PREDICATE_NORMAL,
-                    bld.SEL(half_int_pixel_offset_y,
-                            half_int_coarse_offset_y,
-                            half_int_sample_offset_y));
-      break;
-   }
-
-   case INTEL_ALWAYS:
+   if (fs_prog_data->coarse_pixel_dispatch) {
       int_pixel_offset_x = int_coarse_offset_x;
       int_pixel_offset_y = int_coarse_offset_y;
       int_pixel_offset_xy = int_coarse_offset_xy;
       half_int_pixel_offset_x = half_int_coarse_offset_x;
       half_int_pixel_offset_y = half_int_coarse_offset_y;
-      break;
+   } else {
+      int_pixel_offset_x = int_sample_offset_x;
+      int_pixel_offset_y = int_sample_offset_y;
+      int_pixel_offset_xy = int_sample_offset_xy;
+      half_int_pixel_offset_x = half_int_sample_offset_x;
+      half_int_pixel_offset_y = half_int_sample_offset_y;
    }
 
    for (unsigned i = 0; i < DIV_ROUND_UP(s.dispatch_width, 16); i++) {
@@ -365,15 +309,11 @@ brw_emit_interpolation_setup(brw_shader &s)
                   brw_reg(stride(suboffset(gi_uw, 5), 2, 8, 0)),
                   int_pixel_offset_y);
 
-         if (fs_prog_data->coarse_pixel_dispatch != INTEL_NEVER) {
-            brw_inst *addx = dbld.ADD(int_pixel_x_4b, int_pixel_x_4b,
-                                      horiz_stride(half_int_pixel_offset_x, 0));
-            brw_inst *addy = dbld.ADD(int_pixel_y_4b, int_pixel_y_4b,
-                                      horiz_stride(half_int_pixel_offset_y, 0));
-            if (fs_prog_data->coarse_pixel_dispatch != INTEL_ALWAYS) {
-               addx->predicate = BRW_PREDICATE_NORMAL;
-               addy->predicate = BRW_PREDICATE_NORMAL;
-            }
+         if (fs_prog_data->coarse_pixel_dispatch) {
+            dbld.ADD(int_pixel_x_4b, int_pixel_x_4b,
+                                     horiz_stride(half_int_pixel_offset_x, 0));
+            dbld.ADD(int_pixel_y_4b, int_pixel_y_4b,
+                                     horiz_stride(half_int_pixel_offset_y, 0));
          }
 
          hbld.MOV(int_pixel_x, horiz_stride(int_pixel_x_4b, 2));
@@ -802,9 +742,8 @@ brw_nir_populate_fs_prog_data(nir_shader *shader,
       (interp_modes & interp_at_pixel_and_sample_bits) ==
       interp_at_pixel_and_sample_bits;
    prog_data->persample_dispatch =
-      ((prog_data->persample_interp && key->multisample_fbo >= INTEL_SOMETIMES) ||
-       interp_at_pixel_and_sample) ?
-      INTEL_ALWAYS : INTEL_NEVER;
+      (prog_data->persample_interp && key->multisample_fbo >= INTEL_SOMETIMES) ||
+       interp_at_pixel_and_sample;
 
    /* Move sample barycentric modes to pixel when persample dispatch is always
     * disabled.
@@ -848,9 +787,8 @@ brw_nir_populate_fs_prog_data(nir_shader *shader,
     * persample dispatch, we hard-code it to 0.5.
     */
    prog_data->uses_pos_offset =
-      prog_data->persample_dispatch != INTEL_NEVER &&
-      (BITSET_TEST(shader->info.system_values_read,
-                   SYSTEM_VALUE_SAMPLE_POS) ||
+      prog_data->persample_dispatch &&
+      (BITSET_TEST(shader->info.system_values_read, SYSTEM_VALUE_SAMPLE_POS) ||
        BITSET_TEST(shader->info.system_values_read,
                    SYSTEM_VALUE_SAMPLE_POS_OR_CENTER));
 
@@ -882,8 +820,7 @@ brw_nir_populate_fs_prog_data(nir_shader *shader,
     */
    assert(!key->coarse_pixel || !key->persample_interp);
 
-   prog_data->coarse_pixel_dispatch =
-      intel_sometimes_invert(prog_data->persample_dispatch);
+   prog_data->coarse_pixel_dispatch = !prog_data->persample_dispatch;
    if (!key->coarse_pixel ||
        /* DG2 should support this, but Wa_22012766191 says there are issues
         * with CPS 1x1 + MSAA + FS writing to oMask.
@@ -895,7 +832,7 @@ brw_nir_populate_fs_prog_data(nir_shader *shader,
        (prog_data->computed_depth_mode != BRW_PSCDEPTH_OFF) ||
        prog_data->computed_stencil ||
        devinfo->ver < 11) {
-      prog_data->coarse_pixel_dispatch = INTEL_NEVER;
+      prog_data->coarse_pixel_dispatch = false;
    }
 
    /* ICL PRMs, Volume 9: Render Engine, Shared Functions Pixel Interpolater,
@@ -925,7 +862,7 @@ brw_nir_populate_fs_prog_data(nir_shader *shader,
     * interpolater message at sample.
     */
    if (intel_nir_pulls_at_sample(shader))
-      prog_data->coarse_pixel_dispatch = INTEL_NEVER;
+      prog_data->coarse_pixel_dispatch = false;
 
    /* We choose to always enable VMask prior to XeHP, as it would cause
     * us to lose out on the eliminate_find_live_channel() optimization.
@@ -933,16 +870,16 @@ brw_nir_populate_fs_prog_data(nir_shader *shader,
    prog_data->uses_vmask = devinfo->verx10 < 125 ||
                            shader->info.fs.needs_coarse_quad_helper_invocations ||
                            shader->info.uses_wide_subgroup_intrinsics ||
-                           prog_data->coarse_pixel_dispatch != INTEL_NEVER;
+                           prog_data->coarse_pixel_dispatch;
 
    prog_data->uses_src_w =
       BITSET_TEST(shader->info.system_values_read, SYSTEM_VALUE_FRAG_COORD_W);
    prog_data->uses_src_depth =
       BITSET_TEST(shader->info.system_values_read, SYSTEM_VALUE_FRAG_COORD_Z) &&
-      prog_data->coarse_pixel_dispatch == INTEL_NEVER;
+      !prog_data->coarse_pixel_dispatch;
    prog_data->uses_depth_w_coefficients = prog_data->uses_pc_bary_coefficients ||
       (BITSET_TEST(shader->info.system_values_read, SYSTEM_VALUE_FRAG_COORD_Z) &&
-       prog_data->coarse_pixel_dispatch != INTEL_NEVER);
+       prog_data->coarse_pixel_dispatch);
 
    calculate_urb_setup(devinfo, key, prog_data, shader, prev_stage_vue_map,
                        mue_map, per_primitive_offsets);
@@ -1315,7 +1252,7 @@ brw_print_fs_urb_setup(FILE *fp, const struct brw_fs_prog_data *prog_data,
    }
 }
 
-static void
+void
 brw_nir_cleanup_pre_fs_prog_data(brw_pass_tracker *pt)
 {
    pass_tracker_new_loop(pt);
@@ -1470,7 +1407,7 @@ brw_compile_fs(const struct brw_compiler *compiler,
       BRW_NIR_PASS(brw_nir_lower_alpha_to_coverage);
    }
 
-   if (prog_data->coarse_pixel_dispatch != INTEL_NEVER)
+   if (prog_data->coarse_pixel_dispatch)
       BRW_NIR_PASS(brw_nir_lower_frag_coord_z, devinfo);
 
    BRW_NIR_PASS(brw_nir_lower_fs_config_intel, key, prog_data);

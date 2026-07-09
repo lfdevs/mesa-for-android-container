@@ -36,11 +36,35 @@ tu_CreateSampler(VkDevice _device,
       vk_find_struct_const(pCreateInfo->pNext,  SAMPLER_YCBCR_CONVERSION_INFO);
    uint32_t border_color = (unsigned) pCreateInfo->borderColor;
    if (vk_border_color_is_custom(pCreateInfo->borderColor)) {
+      uint32_t border_color_index = 0;
+      bool replay = false;
+
+      const VkOpaqueCaptureDescriptorDataCreateInfoEXT *opaque_info =
+         vk_find_struct_const(pCreateInfo->pNext,
+                              OPAQUE_CAPTURE_DESCRIPTOR_DATA_CREATE_INFO_EXT);
+      if (opaque_info && opaque_info->opaqueCaptureDescriptorData) {
+         replay = true;
+         border_color_index =
+            *(const uint32_t *) opaque_info->opaqueCaptureDescriptorData;
+      }
+
       mtx_lock(&device->mutex);
-      border_color = BITSET_FFS(device->custom_border_color) - 1;
-      assert(border_color < TU_BORDER_COLOR_COUNT);
-      BITSET_CLEAR(device->custom_border_color, border_color);
+      if (replay) {
+         if (border_color_index >= TU_BORDER_COLOR_COUNT ||
+             !BITSET_TEST(device->custom_border_color, border_color_index)) {
+            mtx_unlock(&device->mutex);
+            vk_sampler_destroy(&device->vk, pAllocator, &sampler->vk);
+            return vk_error(device, VK_ERROR_INVALID_OPAQUE_CAPTURE_ADDRESS);
+         }
+      } else {
+         border_color_index = BITSET_FFS(device->custom_border_color) - 1;
+         assert(border_color_index < TU_BORDER_COLOR_COUNT);
+      }
+      BITSET_CLEAR(device->custom_border_color, border_color_index);
       mtx_unlock(&device->mutex);
+
+      sampler->custom_border_color = true;
+      sampler->border_color_index = border_color_index;
 
       VkClearColorValue color = sampler->vk.border_color_value;
       if (sampler->vk.format == VK_FORMAT_D24_UNORM_S8_UINT &&
@@ -56,9 +80,9 @@ tu_CreateSampler(VkDevice _device,
       }
 
       tu6_pack_border_color(
-         &device->global_bo_map->bcolor[border_color], &color,
+         &device->global_bo_map->bcolor[border_color_index], &color,
          pCreateInfo->borderColor == VK_BORDER_COLOR_INT_CUSTOM_EXT);
-      border_color += TU_BORDER_COLOR_BUILTIN;
+      border_color = border_color_index + TU_BORDER_COLOR_BUILTIN;
    } else if (sampler->vk.format != VK_FORMAT_UNDEFINED ||
               device->instance->drirc.misc.enable_fast_border_color_for_undefined_formats) {
       fast_border_color_enable = true;
@@ -179,30 +203,28 @@ tu_DestroySampler(VkDevice _device,
    if (!sampler)
       return;
 
-   bool fast_border_color;
-   uint32_t border_color;
-
-   if (CHIP >= A8XX) {
-      fast_border_color =
-         (sampler->descriptor[2] & A8XX_TEX_SAMP_2_FASTBORDERCOLOREN) != 0;
-      border_color =
-         pkt_field_get(A8XX_TEX_SAMP_2_BCOLOR, sampler->descriptor[2]);
-   } else {
-      fast_border_color =
-         (sampler->descriptor[2] & A6XX_TEX_SAMP_2_FASTBORDERCOLOREN) != 0;
-      border_color =
-         pkt_field_get(A6XX_TEX_SAMP_2_BCOLOR, sampler->descriptor[2]);
-   }
-
-   if (!fast_border_color && border_color >= TU_BORDER_COLOR_BUILTIN) {
-      border_color -= TU_BORDER_COLOR_BUILTIN;
+   if (sampler->custom_border_color) {
       /* if the sampler had a custom border color, free it. TODO: no lock */
       mtx_lock(&device->mutex);
-      assert(!BITSET_TEST(device->custom_border_color, border_color));
-      BITSET_SET(device->custom_border_color, border_color);
+      assert(!BITSET_TEST(device->custom_border_color, sampler->border_color_index));
+      BITSET_SET(device->custom_border_color, sampler->border_color_index);
       mtx_unlock(&device->mutex);
    }
 
    vk_sampler_destroy(&device->vk, pAllocator, &sampler->vk);
 }
 TU_GENX(tu_DestroySampler);
+
+VKAPI_ATTR VkResult VKAPI_CALL
+tu_GetSamplerOpaqueCaptureDescriptorDataEXT(
+   VkDevice _device,
+   const VkSamplerCaptureDescriptorDataInfoEXT *pInfo,
+   void *pData)
+{
+   VK_FROM_HANDLE(tu_sampler, sampler, pInfo->sampler);
+
+   *(uint32_t *)pData =
+      sampler->custom_border_color ? sampler->border_color_index : 0;
+
+   return VK_SUCCESS;
+}

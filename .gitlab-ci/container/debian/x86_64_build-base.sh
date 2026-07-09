@@ -36,7 +36,6 @@ DEPS=(
     dpkg-dev
     findutils
     flex
-    flatbuffers-compiler
     g++
     cmake
     gcc
@@ -49,10 +48,10 @@ DEPS=(
     libelf-dev
     libepoxy-dev
     libexpat1-dev
-    libflatbuffers-dev
     libglfw3-dev
     "libllvm${LLVM_VERSION}"
     libpciaccess-dev
+    libsdl3-dev
     libunwind-dev
     libva-dev
     libvulkan-dev
@@ -63,7 +62,6 @@ DEPS=(
     libxrandr-dev
     libxrender-dev
     libxshmfence-dev
-    libxtensor-dev
     libxxf86vm-dev
     libwayland-egl-backend-dev
     "llvm-${LLVM_VERSION}-dev"

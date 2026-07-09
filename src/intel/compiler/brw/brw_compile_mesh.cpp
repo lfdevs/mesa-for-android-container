@@ -14,7 +14,7 @@
 
 #include <memory>
 
-static inline int
+static inline unsigned
 type_size_scalar_dwords(const struct glsl_type *type, bool bindless)
 {
    return glsl_count_dword_slots(type, bindless);

@@ -328,9 +328,9 @@ vk_common_DebugMarkerSetObjectTagEXT(
          object_type = (VkObjectType)pTagInfo->objectType;
          break;
    }
-   
+
    VkDebugUtilsObjectTagInfoEXT tag_info = {
-      .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+      .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_TAG_INFO_EXT,
       .objectType = object_type,
       .objectHandle = pTagInfo->object,
       .tagName = pTagInfo->tagName,

@@ -18,7 +18,7 @@ pvr_entrypoints = custom_target(
 
 pvr_drirc = custom_target(
   'pvr_drirc',
-  input  : [files('pvr_drirc_gen.py'), drirc_gen, join_paths(dir_source_root, 'src/util/00-pvr-defaults.conf')],
+  input  : [files('pvr_drirc_gen.py'), drirc_gen, '00-pvr-defaults.conf'],
   output : ['pvr_drirc.c', 'pvr_drirc.h'],
   command : [
     prog_python, '@INPUT0@',

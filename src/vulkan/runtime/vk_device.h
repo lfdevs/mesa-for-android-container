@@ -188,6 +188,7 @@ struct vk_device {
 
    uint32_t current_frame;
    bool trace_hotkey_trigger;
+   bool capture_key_pressed;
    simple_mtx_t trace_mtx;
 
    /* For VK_EXT_private_data */

@@ -107,8 +107,8 @@ load_vs_input_from_blit_sgpr(nir_builder *b, unsigned input_index,
 
    if (input_index == 0) {
       /* Position: */
-      nir_def *x1y1 = ac_nir_load_arg_at_offset(b, &s->args->ac, s->args->vs_blit_inputs, 0);
-      nir_def *x2y2 = ac_nir_load_arg_at_offset(b, &s->args->ac, s->args->vs_blit_inputs, 1);
+      nir_def *x1y1 = ac_nir_load_arg_at_offset(b, &s->args->ac, s->args->vs_blit_inputs, 0, false);
+      nir_def *x2y2 = ac_nir_load_arg_at_offset(b, &s->args->ac, s->args->vs_blit_inputs, 1, false);
 
       x1y1 = nir_u2u32(b, nir_unpack_32_2x16(b, x1y1));
       x2y2 = nir_u2u32(b, nir_unpack_32_2x16(b, x2y2));
@@ -120,7 +120,7 @@ load_vs_input_from_blit_sgpr(nir_builder *b, unsigned input_index,
 
       out[0] = nir_u2f32(b, nir_bcsel(b, sel_x1, x1, x2));
       out[1] = nir_u2f32(b, nir_bcsel(b, sel_y1, y1, y2));
-      out[2] = ac_nir_load_arg_at_offset(b, &s->args->ac, s->args->vs_blit_inputs, 2);
+      out[2] = ac_nir_load_arg_at_offset(b, &s->args->ac, s->args->vs_blit_inputs, 2, false);
       out[3] = nir_imm_float(b, 1);
    } else {
       bool has_attribute_ring_address = s->shader->selector->screen->info.gfx_level >= GFX11;
@@ -131,15 +131,15 @@ load_vs_input_from_blit_sgpr(nir_builder *b, unsigned input_index,
       unsigned vs_blit_property = b->shader->info.vs.blit_sgprs_amd;
       assert(vs_blit_property == SI_VS_BLIT_SGPRS_POS_TEXCOORD + has_attribute_ring_address);
 
-      nir_def *x1 = ac_nir_load_arg_at_offset(b, &s->args->ac, s->args->vs_blit_inputs, 3);
-      nir_def *y1 = ac_nir_load_arg_at_offset(b, &s->args->ac, s->args->vs_blit_inputs, 4);
-      nir_def *x2 = ac_nir_load_arg_at_offset(b, &s->args->ac, s->args->vs_blit_inputs, 5);
-      nir_def *y2 = ac_nir_load_arg_at_offset(b, &s->args->ac, s->args->vs_blit_inputs, 6);
+      nir_def *x1 = ac_nir_load_arg_at_offset(b, &s->args->ac, s->args->vs_blit_inputs, 3, false);
+      nir_def *y1 = ac_nir_load_arg_at_offset(b, &s->args->ac, s->args->vs_blit_inputs, 4, false);
+      nir_def *x2 = ac_nir_load_arg_at_offset(b, &s->args->ac, s->args->vs_blit_inputs, 5, false);
+      nir_def *y2 = ac_nir_load_arg_at_offset(b, &s->args->ac, s->args->vs_blit_inputs, 6, false);
 
       out[0] = nir_bcsel(b, sel_x1, x1, x2);
       out[1] = nir_bcsel(b, sel_y1, y1, y2);
-      out[2] = ac_nir_load_arg_at_offset(b, &s->args->ac, s->args->vs_blit_inputs, 7);
-      out[3] = ac_nir_load_arg_at_offset(b, &s->args->ac, s->args->vs_blit_inputs, 8);
+      out[2] = ac_nir_load_arg_at_offset(b, &s->args->ac, s->args->vs_blit_inputs, 7, false);
+      out[3] = ac_nir_load_arg_at_offset(b, &s->args->ac, s->args->vs_blit_inputs, 8, false);
    }
 }
 

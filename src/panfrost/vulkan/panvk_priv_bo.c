@@ -77,6 +77,10 @@ panvk_priv_bo_create(struct panvk_device *dev, uint64_t size, uint32_t flags,
 
    priv_bo->addr.dev = op.va.start;
 
+   panvk_address_binding_report(dev, NULL, priv_bo->addr.dev,
+                                pan_kmod_bo_size(priv_bo->bo),
+                                VK_DEVICE_ADDRESS_BINDING_TYPE_BIND_EXT);
+
    if (dev->debug.decode_ctx) {
       pandecode_inject_mmap(dev->debug.decode_ctx, priv_bo->addr.dev,
                             priv_bo->addr.host, pan_kmod_bo_size(priv_bo->bo),
@@ -129,6 +133,10 @@ static void
 panvk_priv_bo_destroy(struct panvk_priv_bo *priv_bo)
 {
    struct panvk_device *dev = priv_bo->dev;
+
+   panvk_address_binding_report(dev, NULL, priv_bo->addr.dev,
+                                pan_kmod_bo_size(priv_bo->bo),
+                                VK_DEVICE_ADDRESS_BINDING_TYPE_UNBIND_EXT);
 
    if (dev->debug.decode_ctx) {
       pandecode_inject_free(dev->debug.decode_ctx, priv_bo->addr.dev,

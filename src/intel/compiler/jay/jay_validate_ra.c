@@ -111,15 +111,6 @@ validate_block(jay_function *func, jay_block *block, struct regfile *blocks)
    struct regfile *rf = &blocks[block->index];
    bool all_ok = true;
 
-   /* Pathological shaders can end up with loop headers that have only a
-    * single predecessor and act like normal blocks. Validate them as such,
-    * since RA treats them as such implicitly. Affects:
-    *
-    * dEQP-VK.graphicsfuzz.spv-stable-mergesort-dead-code
-    */
-   bool loop_header =
-      block->loop_header && jay_num_predecessors(block, GPR) > 1;
-
    /* Initialize the register file based on predecessors. */
    /* Initialize with the exit state of any one predecessor */
    jay_foreach_ssa_file(f) {
@@ -131,7 +122,7 @@ validate_block(jay_function *func, jay_block *block, struct regfile *blocks)
    }
 
    /* TODO: Handle loop header validation better */
-   if (!loop_header) {
+   if (!block->loop_header) {
       /* Intersect with the other predecessor. If a register has different
        * values coming in from each block, it is considered undefined at the
        * start of the block.

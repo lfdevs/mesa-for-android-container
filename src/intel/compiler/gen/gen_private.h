@@ -354,6 +354,12 @@ gen_raw_is_compact(const void *raw_bytes)
    return raw[0] & BITFIELD_BIT(29);
 }
 
+inline bool
+gen_region_is_scalar_or_linear(const gen_region rgn)
+{
+   return gen_region_is_scalar(rgn) || gen_region_is_linear(rgn);
+}
+
 static inline unsigned
 gen_raw_get_opcode(const void *raw_bytes)
 {

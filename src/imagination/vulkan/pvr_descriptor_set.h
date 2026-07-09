@@ -71,25 +71,6 @@ struct pvr_descriptor_pool {
    struct util_vma_heap heap; /** Pool (sub)allocation heap. */
 };
 
-struct pvr_descriptor {
-   VkDescriptorType type;
-
-   union {
-      struct {
-         struct pvr_buffer_view *bview;
-         pvr_dev_addr_t buffer_dev_addr;
-         VkDeviceSize buffer_desc_range;
-         VkDeviceSize buffer_whole_range;
-      };
-
-      struct {
-         VkImageLayout layout;
-         const struct pvr_image_view *iview;
-         const struct pvr_sampler *sampler;
-      };
-   };
-};
-
 struct pvr_descriptor_set {
    struct vk_object_base base;
    struct list_head link; /** Link in pvr_descriptor_pool::desc_sets. */

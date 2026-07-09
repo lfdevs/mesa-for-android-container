@@ -417,7 +417,7 @@ etna_blit_clear_color_blt(struct pipe_context *pctx, unsigned idx,
    clr.dest.addr.bo = dst_res->bo;
    clr.dest.addr.offset = dst_level->offset + dst->first_layer * dst_level->layer_stride;
    clr.dest.addr.flags = ETNA_RELOC_WRITE;
-   clr.dest.bpp = util_format_get_blocksize(dst->format);
+   clr.dest.bpp = util_format_get_blocksize(dst_res->internal_format);
    clr.dest.stride = dst_level->stride;
    clr.dest.tiling = dst_res->layout;
 
@@ -536,7 +536,7 @@ etna_blit_clear_zs_blt(struct pipe_context *pctx, struct pipe_surface *dst,
    clr.dest.addr.bo = dst_res->bo;
    clr.dest.addr.offset = dst_level->offset + dst->first_layer * dst_level->layer_stride;
    clr.dest.addr.flags = ETNA_RELOC_WRITE;
-   clr.dest.bpp = util_format_get_blocksize(dst->format);
+   clr.dest.bpp = util_format_get_blocksize(dst_res->internal_format);
    clr.dest.stride = dst_level->stride;
    clr.dest.tiling = dst_res->layout;
 
@@ -761,7 +761,7 @@ etna_try_blt_blit(struct pipe_context *pctx,
       return false;
    }
 
-   struct blt_conv_swizzle conv_swizzle;
+   struct blt_conv_swizzle conv_swizzle = { 0 };
    bool has_conversion = false;
    enum pipe_format src_fmt = blit_info->src.format;
    enum pipe_format dst_fmt = blit_info->dst.format;
@@ -844,7 +844,7 @@ etna_try_blt_blit(struct pipe_context *pctx,
       op.ts_clear_value[1] = src_lev->clear_value >> 32;
       op.ts_mode = src_lev->ts_mode;
       op.num_tiles = src_lev->layer_stride / tile_size;
-      op.bpp = util_format_get_blocksize(src->base.format);
+      op.bpp = util_format_get_blocksize(src->internal_format);
 
       etna_set_state(ctx->stream, VIVS_GL_FLUSH_CACHE, 0x00000c23);
       etna_set_state(ctx->stream, VIVS_TS_FLUSH_CACHE, 0x00000001);
@@ -857,7 +857,7 @@ etna_try_blt_blit(struct pipe_context *pctx,
       op.src.addr.bo = src->bo;
       op.src.addr.offset = src_lev->offset + blit_info->src.box.z * src_lev->layer_stride;
       op.src.addr.flags = ETNA_RELOC_READ;
-      op.src.bpp = util_format_get_blocksize(blit_info->src.format);
+      op.src.bpp = util_format_get_blocksize(src->internal_format);
 
       /* Only convert across the sRGB<->linear boundary. A same-encoding copy is
        * bit-preserving and a decode+encode roundtrip would only lose precision.

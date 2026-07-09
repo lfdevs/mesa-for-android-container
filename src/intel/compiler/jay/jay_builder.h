@@ -57,6 +57,7 @@ jay_op_starts_block(enum jay_opcode op)
 {
    return op == JAY_OPCODE_PHI_DST ||
           op == JAY_OPCODE_PRELOAD ||
+          op == JAY_OPCODE_INIT_HELPERS ||
           op == JAY_OPCODE_ELSE;
 }
 
@@ -591,6 +592,7 @@ _jay_SEND(jay_builder *b, const struct jayb_send_params p)
    info->pure = p.pure;
    info->skip_helpers = p.skip_helpers;
    info->ex_desc_imm = p.ex_desc_imm;
+   info->mlen = lens[1];
    info->ex_mlen = lens[2];
    I->src[0] = jay_imm(((uint32_t) p.msg_desc) |
                        brw_message_desc(devinfo, lens[1], lens[0], has_header));

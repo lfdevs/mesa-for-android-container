@@ -909,13 +909,13 @@ TEST_F(Cache, Combined)
    free(result);
 
    /* Rename file foz_cache.foz -> ro_cache.foz */
-   sprintf(foz_rw_file, "%s/foz_cache.foz", cache_sf_wr->path);
-   sprintf(foz_ro_file, "%s/ro_cache.foz", cache_sf_wr->path);
+   snprintf(foz_rw_file, sizeof(foz_rw_file), "%s/foz_cache.foz", cache_sf_wr->path);
+   snprintf(foz_ro_file, sizeof(foz_ro_file), "%s/ro_cache.foz", cache_sf_wr->path);
    EXPECT_EQ(rename(foz_rw_file, foz_ro_file), 0) << "foz_cache.foz renaming failed";
 
    /* Rename file foz_cache_idx.foz -> ro_cache_idx.foz */
-   sprintf(foz_rw_idx_file, "%s/foz_cache_idx.foz", cache_sf_wr->path);
-   sprintf(foz_ro_idx_file, "%s/ro_cache_idx.foz", cache_sf_wr->path);
+   snprintf(foz_rw_idx_file, sizeof(foz_rw_idx_file), "%s/foz_cache_idx.foz", cache_sf_wr->path);
+   snprintf(foz_ro_idx_file, sizeof(foz_ro_idx_file), "%s/ro_cache_idx.foz", cache_sf_wr->path);
    EXPECT_EQ(rename(foz_rw_idx_file, foz_ro_idx_file), 0) << "foz_cache_idx.foz renaming failed";
 
    disk_cache_destroy(cache_sf_wr);
@@ -1086,6 +1086,12 @@ TEST_F(Cache, Combined)
 
 TEST_F(Cache, List)
 {
+#ifndef ENABLE_SHADER_CACHE
+   GTEST_SKIP() << "ENABLE_SHADER_CACHE not defined.";
+#else
+#ifndef FOZ_DB_UTIL_DYNAMIC_LIST
+   GTEST_SKIP() << "FOZ_DB_UTIL_DYNAMIC_LIST not supported";
+#else
    const char *driver_id = "make_check";
    char blob[] = "This is a RO blob";
    uint8_t blob_key[BLAKE3_KEY_LEN];
@@ -1096,12 +1102,6 @@ TEST_F(Cache, List)
    char *result;
    size_t size;
 
-#ifndef ENABLE_SHADER_CACHE
-   GTEST_SKIP() << "ENABLE_SHADER_CACHE not defined.";
-#else
-#ifndef FOZ_DB_UTIL_DYNAMIC_LIST
-   GTEST_SKIP() << "FOZ_DB_UTIL_DYNAMIC_LIST not supported";
-#else
    os_set_option("MESA_DISK_CACHE_SINGLE_FILE", "true", true);
 
 #ifdef SHADER_CACHE_DISABLE_BY_DEFAULT
@@ -1425,7 +1425,7 @@ TEST_F(Cache, DoNotDeleteNewCache)
    ASSERT_NE(dir_name, nullptr);
 
    char cache_dir_name[256];
-   sprintf(cache_dir_name, "%s/mesa_shader_cache", dir_name);
+   snprintf(cache_dir_name, sizeof(cache_dir_name), "%s/mesa_shader_cache", dir_name);
    mkdir(cache_dir_name, 0755);
 
    os_set_option("MESA_SHADER_CACHE_DIR", dir_name, true);
@@ -1456,11 +1456,11 @@ TEST_F(Cache, DoNotDeleteCacheWithNewMarker)
    ASSERT_NE(dir_name, nullptr);
 
    char cache_dir_name[240];
-   sprintf(cache_dir_name, "%s/mesa_shader_cache", dir_name);
+   snprintf(cache_dir_name, sizeof(cache_dir_name), "%s/mesa_shader_cache", dir_name);
    mkdir(cache_dir_name, 0755);
 
    char file_name[256];
-   sprintf(file_name, "%s/marker", cache_dir_name);
+   snprintf(file_name, sizeof(file_name), "%s/marker", cache_dir_name);
 
    FILE *file = fopen(file_name, "w");
    fclose(file);
@@ -1494,11 +1494,11 @@ TEST_F(Cache, DeleteOldCache)
    ASSERT_NE(dir_name, nullptr) << "Creating temporary directory failed";
 
    char cache_dir_name[240];
-   sprintf(cache_dir_name, "%s/mesa_shader_cache", dir_name);
+   snprintf(cache_dir_name, sizeof(cache_dir_name), "%s/mesa_shader_cache", dir_name);
    mkdir(cache_dir_name, 0755);
 
    char file_name[256];
-   sprintf(file_name, "%s/marker", cache_dir_name);
+   snprintf(file_name, sizeof(file_name), "%s/marker", cache_dir_name);
 
    FILE *file = fopen(file_name, "w");
    fclose(file);

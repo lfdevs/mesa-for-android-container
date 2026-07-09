@@ -1,6 +1,29 @@
 # New failures with VK CTS 1.4.4.0
-dEQP-VK.video.decode.h264.i_p_b_13_separated_dpb_video_layout,Crash
 dEQP-VK.video.decode.vp9.basic_10_not_matching_order_layered_dpb_video_layout,Fail
 dEQP-VK.video.decode.vp9.basic_10_not_matching_order_separated_dpb_video_layout,Fail
 dEQP-VK.video.decode.vp9.inter_intra_only_layered_dpb_video_layout,Fail
 dEQP-VK.video.decode.vp9.inter_intra_only_separated_dpb_video_layout,Fail
+
+# Fail (At least one mode expected to be returned at vktWsiDisplayTests.cpp:1258)
+dEQP-VK.wsi.display.create_display_mode,Fail
+# segfault
+dEQP-VK.wsi.display_control.swapchain_counter,Crash
+
+# CTS is missing -frounding-math: https://gitlab.khronos.org/Tracker/vk-gl-cts/-/issues/6580
+dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.scalar.rte.denorm_flush.directed,Fail
+dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.scalar.rte.denorm_flush.float_controls,Fail
+dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.scalar.rte.denorm_none.directed,Fail
+dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.scalar.rte.denorm_none.float_controls,Fail
+dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.vec2.rte.denorm_flush.directed,Fail
+dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.vec2.rte.denorm_flush.float_controls,Fail
+dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.vec2.rte.denorm_none.directed,Fail
+dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.vec2.rte.denorm_none.float_controls,Fail
+dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.vec3.rte.denorm_flush.directed,Fail
+dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.vec3.rte.denorm_flush.float_controls,Fail
+dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.vec3.rte.denorm_none.directed,Fail
+dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.vec3.rte.denorm_none.float_controls,Fail
+dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.vec4.rte.denorm_flush.directed,Fail
+dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.vec4.rte.denorm_flush.float_controls,Fail
+dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.vec4.rte.denorm_none.directed,Fail
+dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.vec4.rte.denorm_none.float_controls,Fail
+

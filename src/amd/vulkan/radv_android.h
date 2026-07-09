@@ -50,6 +50,6 @@ VkResult radv_import_ahb_memory(struct radv_device *device, struct radv_device_m
 VkResult radv_create_ahb_memory(struct radv_device *device, struct radv_device_memory *mem, unsigned priority,
                                 const VkMemoryAllocateInfo *pAllocateInfo);
 
-bool radv_android_gralloc_supports_format(VkFormat format, VkImageUsageFlagBits usage);
+bool radv_android_gralloc_supports_format(VkFormat format, VkImageUsageFlags2KHR usage);
 
 #endif /* RADV_ANDROID_H */

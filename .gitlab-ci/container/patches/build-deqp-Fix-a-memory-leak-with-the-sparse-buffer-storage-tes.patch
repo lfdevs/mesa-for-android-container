@@ -1,0 +1,55 @@
+From 528f94438ed2f86b2192c9455e9891529d6cead0 Mon Sep 17 00:00:00 2001
+From: Samuel Pitoiset <samuel.pitoiset@gmail.com>
+Date: Wed, 1 Jul 2026 15:53:27 +0200
+Subject: [PATCH 2/4] Fix a memory leak with the sparse buffer storage tests
+
+This has been detected by ASAN.
+
+Components: OpenGL
+
+Affected: KHR-GL46.sparse_buffer_tests.BufferStorageTest*
+Change-Id: I86f11887cb29e6b690241878826f67a75ddb43a9
+---
+ external/openglcts/modules/gl/gl4cSparseBufferTests.cpp | 6 ++++++
+ external/openglcts/modules/gl/gl4cSparseBufferTests.hpp | 1 +
+ 2 files changed, 7 insertions(+)
+
+diff --git a/external/openglcts/modules/gl/gl4cSparseBufferTests.cpp b/external/openglcts/modules/gl/gl4cSparseBufferTests.cpp
+index 12415928a..d852213fa 100644
+--- a/external/openglcts/modules/gl/gl4cSparseBufferTests.cpp
++++ b/external/openglcts/modules/gl/gl4cSparseBufferTests.cpp
+@@ -6648,6 +6648,11 @@ BufferStorageTest::BufferStorageTest(deqp::Context &context, BufferStorageTestCa
+     /* Left blank intentionally */
+ }
+ 
++BufferStorageTest::~BufferStorageTest()
++{
++    delete mTestCase;
++}
++
+ /** Tears down any GL objects set up to run the test. */
+ void BufferStorageTest::deinit()
+ {
+@@ -6655,6 +6660,7 @@ void BufferStorageTest::deinit()
+ 
+     mTestCase->deinitTestCaseGlobal();
+     delete mTestCase;
++    mTestCase = nullptr;
+ 
+     if (m_sparse_bo != 0)
+     {
+diff --git a/external/openglcts/modules/gl/gl4cSparseBufferTests.hpp b/external/openglcts/modules/gl/gl4cSparseBufferTests.hpp
+index e2c23c382..dce41f8bf 100644
+--- a/external/openglcts/modules/gl/gl4cSparseBufferTests.hpp
++++ b/external/openglcts/modules/gl/gl4cSparseBufferTests.hpp
+@@ -1046,6 +1046,7 @@ class BufferStorageTest : public deqp::TestCase
+ public:
+     /* Public methods */
+     BufferStorageTest(deqp::Context &context, BufferStorageTestCase *testCase, const char *name);
++    ~BufferStorageTest();
+ 
+     void deinit();
+     void init();
+-- 
+2.54.0
+

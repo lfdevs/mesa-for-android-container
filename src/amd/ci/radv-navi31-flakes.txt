@@ -1,1 +1,5 @@
+dEQP-VK.pipeline.monolithic.image_view.view_type.cube.format.eac_r11_snorm_block.component_swizzle.a_r_g_b_compute
+dEQP-VK.pipeline.shader_object_unlinked_spirv.image.suballocation.sampling_type.combined.view_type.2d_array.format.a4b4g4r4_unorm_pack16.count_8.size.13x23_array_of_6_compute
+dEQP-VK.pipeline.shader_object_unlinked_spirv.image.suballocation.sampling_type.combined.view_type.cube.format.r8g8b8a8_uint.count_1.size.32x32_compute
+
 dEQP-VK.video.encode.av1.720x480_10le_420.i_15.qindex128_tiling_1x2_rc_disabled_lf_lr_layered_dpb

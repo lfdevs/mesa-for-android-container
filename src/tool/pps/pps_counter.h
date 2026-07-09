@@ -39,7 +39,7 @@ enum Perfettogrp : uint32_t {
    PRIMITIVES = 4,
    MEMORY = 5,
    COMPUTE = 6,
-   RESERVED = 7,
+   RAYTRACING = 7,
 };
 
 class Driver;

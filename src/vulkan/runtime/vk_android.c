@@ -748,8 +748,8 @@ vk_image_format_to_ahb_format(VkFormat vk_format)
  * 'AHardwareBuffer Usage Equivalence' in Vulkan spec.
  */
 uint64_t
-vk_image_usage_to_ahb_usage(const VkImageCreateFlags vk_create,
-                            const VkImageUsageFlags vk_usage)
+vk_image_usage_to_ahb_usage(const VkImageCreateFlags2KHR vk_create,
+                            const VkImageUsageFlags2KHR vk_usage)
 {
    uint64_t ahb_usage = 0;
    if (vk_usage & (VK_IMAGE_USAGE_SAMPLED_BIT |
@@ -768,6 +768,14 @@ vk_image_usage_to_ahb_usage(const VkImageCreateFlags vk_create,
 
    if (vk_create & VK_IMAGE_CREATE_PROTECTED_BIT)
       ahb_usage |= AHARDWAREBUFFER_USAGE_PROTECTED_CONTENT;
+
+   /* XXX We need a better gralloc private query to forward the mutable bit
+    * along with the format list for a private vendor usage bit, and leave the
+    * decision to gralloc. For now, resolve mutable bit to CPU_WRITE_RARELY to
+    * implicitly force LINEAR.
+    */
+   if (vk_create & VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT)
+      ahb_usage |= AHARDWAREBUFFER_USAGE_CPU_WRITE_RARELY;
 
    /* No usage bits set - set at least one GPU usage. */
    if (ahb_usage == 0)
@@ -1162,8 +1170,11 @@ vk_android_get_ahb_image_properties(
    ahb_usage =
       vk_find_struct(props->pNext, ANDROID_HARDWARE_BUFFER_USAGE_ANDROID);
    if (ahb_usage) {
+      VkImageCreateFlags2KHR image_flags = vk_image_format_info_2_flags(info);
+      VkImageUsageFlags2KHR image_usage = vk_image_format_info_2_usage(info);
+
       ahb_usage->androidHardwareBufferUsage =
-         vk_image_usage_to_ahb_usage(info->flags, info->usage);
+         vk_image_usage_to_ahb_usage(image_flags, image_usage);
    }
 
    return VK_SUCCESS;

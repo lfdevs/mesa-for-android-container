@@ -111,7 +111,7 @@ pixmap_destroy(Display * dpy, struct apple_glx_drawable *d)
          perror("shm_unlink");
    }
 
-   apple_glx_diagnostic("destroyed pixmap buffer for: 0x%lx\n", d->drawable);
+   apple_glx_log_debug("destroyed pixmap buffer for: 0x%lx", d->drawable);
 }
 
 /* Return true if an error occurred. */
@@ -163,8 +163,21 @@ apple_glx_pixmap_create(Display * dpy, int screen, Pixmap pixmap,
       return true;
    }
 
-   apple_visual_create_pfobj(&p->pixel_format_obj, mode, &double_buffered,
-                             &uses_stereo, /*offscreen */ true);
+   /* GLX pixmap creation has no version/profile attribs; use whatever CGL
+    * chooses as the platform default (Legacy compatibility profile).
+    */
+   error = apple_visual_create_pfobj(&p->pixel_format_obj, mode,
+                                     1 /* major_version */,
+                                     0 /* minor_version */,
+                                     0 /* profile_mask */,
+                                     &double_buffered, &uses_stereo,
+                                     /*offscreen */ true);
+
+   if (kCGLNoError != error) {
+      d->unlock(d);
+      d->destroy(d);
+      return true;
+   }
 
    error = apple_cgl.create_context(p->pixel_format_obj, NULL,
                                     &p->context_obj);
@@ -179,7 +192,7 @@ apple_glx_pixmap_create(Display * dpy, int screen, Pixmap pixmap,
 
    d->unlock(d);
 
-   apple_glx_diagnostic("created: pixmap buffer for 0x%lx\n", d->drawable);
+   apple_glx_log_debug("created: pixmap buffer for 0x%lx", d->drawable);
 
    return false;
 }

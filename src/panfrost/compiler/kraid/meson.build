@@ -23,6 +23,7 @@ dep_xml_rs = dependency('xml',
   version: '>= 1.2.1',
   fallback: ['xml-rs', 'dep_xml_rs'],
   required: true,
+  native: true,
 )
 
 _kraid_bindings_deps = [
@@ -45,6 +46,7 @@ _kraid_bindings_rs = rust.bindgen(
     '--allowlist-type', 'pan_.*',
     '--allowlist-function', 'pan_.*',
     '--allowlist-function', 'kraid_.*',
+    '--allowlist-var', 'BI_VA_LOD_MODE_.*',
     '--no-prepend-enum-name',
     '--with-derive-default',
   ],
@@ -87,6 +89,7 @@ _libkraid_proc_rs = static_library(
   ],
   rust_args : rust_global_args,
   rust_abi : 'rust',
+  native : true,
 )
 
 _libkraid_proc_macros_rs = rust.proc_macro(

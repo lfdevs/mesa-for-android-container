@@ -43,6 +43,7 @@ enum glx_driver {
    GLX_DRIVER_DRI3 = (1<<2),
    GLX_DRIVER_WINDOWS = (1<<3),
    GLX_DRIVER_ZINK_YES = (1<<4),
+   GLX_DRIVER_APPLEGL = (1<<5),
 };
 
 #if USE_LIBGLVND
@@ -78,7 +79,7 @@ extern void DRI_glXUseXFont(struct glx_context *ctx,
 
 #endif
 
-#if defined(GLX_DIRECT_RENDERING) && (!defined(GLX_USE_APPLEGL) || defined(GLX_USE_APPLE))
+#if defined(GLX_DIRECT_RENDERING)
 
 /**
  * Display dependent methods.  This structure is initialized during the
@@ -140,7 +141,7 @@ extern __GLXDRIdisplay *dri3_create_display(Display * dpy);
 extern __GLXDRIdisplay *driwindowsCreateDisplay(Display * dpy);
 
 
-#if defined(GLX_DIRECT_RENDERING) && (!defined(GLX_USE_APPLEGL) || defined(GLX_USE_APPLE))
+#if defined(GLX_DIRECT_RENDERING)
 struct glx_screen *dri3_create_screen(int screen, struct glx_display * priv, bool driver_name_is_inferred, bool *return_zink);
 void dri3_destroy_display(__GLXDRIdisplay * dpy);
 
@@ -233,6 +234,11 @@ struct glx_context_vtable {
    void (*unbind)(struct glx_context *context);
    void (*wait_gl)(struct glx_context *ctx);
    void (*wait_x)(struct glx_context *ctx);
+   void (*copy_context)(Display *dpy,
+                        struct glx_context *src,
+                        struct glx_context *dst,
+                        unsigned long mask);
+   void (*swap_buffers)(Display *dpy, GLXDrawable drawable);
 };
 
 /**
@@ -485,10 +491,33 @@ struct glx_screen_vtable {
    char *(*get_driver_name)(struct glx_screen *psc);
 };
 
+/**
+ * Backend-specific dispatch for GLX drawable lifecycle and per-drawable queries.
+ * The slot signatures match the public glX* entry points they back; each backend's
+ * screen-creation function installs an instance on struct glx_screen.drawable_vtable.
+ */
+struct glx_drawable_vtable {
+   GLXPbuffer (*create_pbuffer)(Display *dpy, GLXFBConfig config, const int *attrib_list);
+   void (*destroy_pbuffer)(Display *dpy, GLXPbuffer pbuf);
+   GLXPixmap (*create_pixmap)(Display *dpy, GLXFBConfig config, Pixmap pixmap,
+                              const int *attrib_list);
+   void (*destroy_pixmap)(Display *dpy, GLXPixmap pixmap);
+   GLXWindow (*create_window)(Display *dpy, GLXFBConfig config, Window win,
+                              const int *attrib_list);
+   void (*destroy_window)(Display *dpy, GLXWindow win);
+   void (*select_event)(Display *dpy, GLXDrawable drawable, unsigned long mask);
+   void (*get_selected_event)(Display *dpy, GLXDrawable drawable, unsigned long *mask);
+   int (*query_drawable)(Display *dpy, GLXDrawable drawable, int attribute,
+                         unsigned int *value);
+   GLXPixmap (*create_glx_pixmap)(Display *dpy, XVisualInfo *vis, Pixmap pixmap);
+   void (*destroy_glx_pixmap)(Display *dpy, GLXPixmap glxpixmap);
+};
+
 struct glx_screen
 {
    const struct glx_screen_vtable *vtable;
    const struct glx_context_vtable *context_vtable;
+   const struct glx_drawable_vtable *drawable_vtable;
 
     /**
      * \name Storage for the GLX vendor, version, and extension strings
@@ -516,7 +545,7 @@ struct glx_screen
 
    char *driverName;
 
-#if defined(GLX_DIRECT_RENDERING) && (!defined(GLX_USE_APPLEGL) || defined(GLX_USE_APPLE))
+#if defined(GLX_DIRECT_RENDERING)
     /**
      * Per screen direct rendering interface functions and data.
      */
@@ -587,7 +616,7 @@ struct glx_display
 
    __glxHashTable *glXDrawHash;
 
-#if defined(GLX_DIRECT_RENDERING) && (!defined(GLX_USE_APPLEGL) || defined(GLX_USE_APPLE))
+#if defined(GLX_DIRECT_RENDERING)
    __glxHashTable *drawHash;
 
    /**
@@ -617,7 +646,7 @@ glx_screen_init(struct glx_screen *psc,
 extern void
 glx_screen_cleanup(struct glx_screen *psc);
 
-#if defined(GLX_DIRECT_RENDERING) && (!defined(GLX_USE_APPLEGL) || defined(GLX_USE_APPLE))
+#if defined(GLX_DIRECT_RENDERING)
 extern __GLXDRIdrawable *
 dri2GetGlxDrawableFromXDrawableId(Display *dpy, XID id);
 #endif
@@ -661,6 +690,41 @@ extern pthread_mutex_t __glXmutex;
 ** Setup for a command.  Initialize the extension for dpy if necessary.
 */
 extern CARD8 __glXSetupForCommand(Display * dpy);
+
+/*
+** Defaults for the glx_context_vtable.copy_context and swap_buffers slots.
+** Defined in glxcmds.c.
+*/
+extern void __glXCopyContext(Display *dpy, struct glx_context *src,
+                             struct glx_context *dst, unsigned long mask);
+extern void __glXSwapBuffers(Display *dpy, GLXDrawable drawable);
+
+/*
+** Protocol-side defaults for the glx_drawable_vtable slots.  Each function is
+** the corresponding glX* entry point body.  glx_screen_init() installs
+** glx_protocol_drawable_vtable on every screen, so only backends that need to
+** override (eg AppleGL) reassign glx_screen.drawable_vtable after init.
+*/
+extern GLXPbuffer __glXCreatePbuffer(Display *dpy, GLXFBConfig config,
+                                     const int *attrib_list);
+extern void __glXDestroyPbuffer(Display *dpy, GLXPbuffer pbuf);
+extern GLXPixmap __glXCreatePixmap(Display *dpy, GLXFBConfig config,
+                                   Pixmap pixmap, const int *attrib_list);
+extern void __glXDestroyPixmap(Display *dpy, GLXPixmap pixmap);
+extern GLXWindow __glXCreateWindow(Display *dpy, GLXFBConfig config, Window win,
+                                   const int *attrib_list);
+extern void __glXDestroyWindow(Display *dpy, GLXWindow win);
+extern void __glXSelectEvent(Display *dpy, GLXDrawable drawable,
+                             unsigned long mask);
+extern void __glXGetSelectedEvent(Display *dpy, GLXDrawable drawable,
+                                  unsigned long *mask);
+extern int __glXQueryDrawable(Display *dpy, GLXDrawable drawable,
+                              int attribute, unsigned int *value);
+extern GLXPixmap __glXCreateGLXPixmap(Display *dpy, XVisualInfo *vis,
+                                      Pixmap pixmap);
+extern void __glXDestroyGLXPixmap(Display *dpy, GLXPixmap glxpixmap);
+
+extern const struct glx_drawable_vtable glx_protocol_drawable_vtable;
 
 /************************************************************************/
 
@@ -736,7 +800,7 @@ extern GLboolean __glXGetMscRateOML(Display * dpy, GLXDrawable drawable,
                                     int32_t * numerator,
                                     int32_t * denominator);
 
-#if defined(GLX_DIRECT_RENDERING) && (!defined(GLX_USE_APPLEGL) || defined(GLX_USE_APPLE))
+#if defined(GLX_DIRECT_RENDERING)
 extern GLboolean
 __glxGetMscRate(struct glx_screen *psc,
 		int32_t * numerator, int32_t * denominator);
@@ -755,16 +819,8 @@ extern struct glx_screen *GetGLXScreenConfigs(Display * dpy, int scrn);
 extern struct glx_screen *
 applegl_create_screen(int screen, struct glx_display * priv);
 
-extern struct glx_context *
-applegl_create_context(struct glx_screen *psc,
-			struct glx_config *mode,
-			struct glx_context *shareList, int renderType);
-
 extern int
 applegl_create_display(struct glx_display *display);
-
-extern void *
-applegl_get_proc_address(const char *symbol);
 #endif
 
 extern Bool validate_renderType_against_config(const struct glx_config *config,
@@ -793,8 +849,6 @@ indirect_create_context_attribs(struct glx_screen *base,
                                 unsigned *error);
 
 
-extern int __glXGetDrawableAttribute(Display * dpy, GLXDrawable drawable,
-                                     int attribute, unsigned int *value);
 
 #ifdef __cplusplus
 }

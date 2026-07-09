@@ -309,6 +309,8 @@ struct radeon_winsys {
 
    void (*dump_bo_log)(struct radeon_winsys *ws, FILE *file);
 
+   bool (*bo_wait_for_idle)(struct radeon_winsys *ws, struct radeon_winsys_bo *bo);
+
    int (*get_fd)(struct radeon_winsys *ws);
 
    struct util_sync_provider *(*get_sync_provider)(struct radeon_winsys *ws);

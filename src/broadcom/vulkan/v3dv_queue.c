@@ -21,6 +21,7 @@
  * IN THE SOFTWARE.
  */
 
+#include "drm.h"
 #include "v3dv_device.h"
 #include "v3dv_cmd_buffer.h"
 #include "v3dv_image.h"
@@ -32,6 +33,7 @@
 #include "broadcom/common/v3d_submit_util.h"
 #include "util/libsync.h"
 #include "util/perf/cpu_trace.h"
+#include "vulkan/vulkan_core.h"
 #include "vk_drm_syncobj.h"
 
 #include <time.h>
@@ -129,27 +131,6 @@ gather_in_syncs(struct v3dv_queue *queue,
    return idx;
 }
 
-static uint32_t
-gather_out_syncs(struct v3dv_queue *queue,
-                 enum v3dv_queue_type queue_sync,
-                 struct v3dv_submit_sync_info *sync_info,
-                 bool signal_syncs,
-                 uint32_t *handles)
-{
-   uint32_t n_vk_syncs = signal_syncs ? sync_info->signal_count : 0;
-   uint32_t idx = 0;
-
-   for (unsigned i = 0; i < n_vk_syncs; i++)
-      handles[idx++] = vk_sync_as_drm_syncobj(sync_info->signals[i].sync)->syncobj;
-
-   /* We always signal the syncobj from `device->last_job_syncs` related to
-    * this v3dv_queue_type to track the last job submitted to this queue.
-    */
-   handles[idx++] = queue->last_job_syncs.syncs[queue_sync];
-
-   return idx;
-}
-
 /* helpers for multisync common code */
 static void *
 multisync_zalloc(void *mem_ctx, size_t size)
@@ -179,8 +160,7 @@ set_multisync(struct v3d_multisync *ms,
               struct v3dv_job *job,
               enum v3dv_queue_type in_queue_sync,
               enum v3dv_queue_type out_queue_sync,
-              enum v3d_queue wait_stage,
-              bool signal_syncs)
+              enum v3d_queue wait_stage)
 {
    struct v3dv_device *device = queue->device;
    bool ret = false;
@@ -193,40 +173,31 @@ set_multisync(struct v3d_multisync *ms,
    uint32_t max_in_syncs = (sync_info ? sync_info->wait_count : 0) + wait_count +
                             V3DV_QUEUE_COUNT;
 
-   /* max output handles includes all syncs requested for signaling
-    * plus one extra for the queue's internal last_sync.
-    */
-   uint32_t max_out_syncs = (sync_info ? sync_info->signal_count : 0) + 1;
-
    assert(ms);
    ms->ops.zalloc = multisync_zalloc;
    ms->ops.free = multisync_free;
    ms->ops.mem_ctx = device;
 
    STACK_ARRAY(uint32_t, in_sync_handles, max_in_syncs);
-   STACK_ARRAY(uint32_t, out_sync_handles, max_out_syncs);
-
-   if (!in_sync_handles || !out_sync_handles)
-      goto fail;
+   if (!in_sync_handles)
+      return false;
 
    uint32_t total_in_syncs = gather_in_syncs(queue, job, in_queue_sync,
                                        waits, wait_count, sync_info, in_sync_handles);
-
-   uint32_t total_out_syncs = gather_out_syncs(queue, out_queue_sync,
-                                         sync_info, signal_syncs, out_sync_handles);
-
    assert(total_in_syncs <= max_in_syncs);
-   assert(total_out_syncs <= max_out_syncs);
+
+   /* We always signal the syncobj from `device->last_job_syncs` related to
+    * this v3dv_queue_type to track the last job submitted to this queue.
+    */
+   uint32_t out_sync_handle = queue->last_job_syncs.syncs[out_queue_sync];
 
    ret = v3d_multisync_init(ms, wait_stage,
                             in_sync_handles, total_in_syncs,
-                            out_sync_handles, total_out_syncs, next);
+                            &out_sync_handle, 1, next);
    if (!ret)
       mesa_loge("Multisync Set Failed");
 
-fail:
    STACK_ARRAY_FINISH(in_sync_handles);
-   STACK_ARRAY_FINISH(out_sync_handles);
 
    return ret;
 }
@@ -234,8 +205,7 @@ fail:
 static VkResult
 handle_reset_query_cpu_job(struct v3dv_queue *queue,
                            struct v3dv_job *job,
-                           struct v3dv_submit_sync_info *sync_info,
-                           bool signal_syncs)
+                           struct v3dv_submit_sync_info *sync_info)
 {
    MESA_TRACE_FUNC();
    struct v3dv_device *device = queue->device;
@@ -270,7 +240,7 @@ handle_reset_query_cpu_job(struct v3dv_queue *queue,
       reset.syncs = (uintptr_t)(void *)syncs;
 
       if (!set_multisync(&ms, sync_info, NULL, 0, (void *)&reset, queue, job,
-                        V3DV_QUEUE_CPU, V3DV_QUEUE_CPU, V3D_CPU, signal_syncs)) {
+                        V3DV_QUEUE_CPU, V3DV_QUEUE_CPU, V3D_CPU)) {
          free(syncs);
          return vk_error(device->instance, VK_ERROR_OUT_OF_HOST_MEMORY);
       }
@@ -311,7 +281,7 @@ handle_reset_query_cpu_job(struct v3dv_queue *queue,
       reset.kperfmon_ids = (uintptr_t)(void *)kperfmon_ids;
 
       if (!set_multisync(&ms, sync_info, waits, wait_count, (void *)&reset, queue, job,
-                        V3DV_QUEUE_CPU, V3DV_QUEUE_CPU, V3D_CPU, signal_syncs)) {
+                        V3DV_QUEUE_CPU, V3DV_QUEUE_CPU, V3D_CPU)) {
          free(syncs);
          free(kperfmon_ids);
          return vk_error(device->instance, VK_ERROR_OUT_OF_HOST_MEMORY);
@@ -443,8 +413,7 @@ fail:
 static VkResult
 handle_copy_query_results_cpu_job(struct v3dv_queue *queue,
                                   struct v3dv_job *job,
-                                  struct v3dv_submit_sync_info *sync_info,
-                                  bool signal_syncs)
+                                  struct v3dv_submit_sync_info *sync_info)
 {
    MESA_TRACE_FUNC();
    struct v3dv_device *device = queue->device;
@@ -503,7 +472,7 @@ handle_copy_query_results_cpu_job(struct v3dv_queue *queue,
       copy.syncs = (uintptr_t)(void *)syncs;
 
       if (!set_multisync(&ms, sync_info, NULL, 0, (void *)&copy, queue, job,
-                        V3DV_QUEUE_CPU, V3DV_QUEUE_CPU, V3D_CPU, signal_syncs)) {
+                        V3DV_QUEUE_CPU, V3DV_QUEUE_CPU, V3D_CPU)) {
          free(bo_handles);
          free(offsets);
          free(syncs);
@@ -559,7 +528,7 @@ handle_copy_query_results_cpu_job(struct v3dv_queue *queue,
       copy.kperfmon_ids = (uintptr_t)(void *)kperfmon_ids;
 
       if (!set_multisync(&ms, sync_info, waits, wait_count, (void *)&copy, queue, job,
-                        V3DV_QUEUE_CPU, V3DV_QUEUE_CPU, V3D_CPU, signal_syncs)) {
+                        V3DV_QUEUE_CPU, V3DV_QUEUE_CPU, V3D_CPU)) {
          free(kperfmon_ids);
          free(bo_handles);
          free(offsets);
@@ -591,8 +560,7 @@ handle_copy_query_results_cpu_job(struct v3dv_queue *queue,
 static VkResult
 handle_timestamp_query_cpu_job(struct v3dv_queue *queue,
                                struct v3dv_job *job,
-                               struct v3dv_submit_sync_info *sync_info,
-                               bool signal_syncs)
+                               struct v3dv_submit_sync_info *sync_info)
 {
    MESA_TRACE_FUNC();
    struct v3dv_device *device = queue->device;
@@ -636,7 +604,7 @@ handle_timestamp_query_cpu_job(struct v3dv_queue *queue,
    job->serialize = V3DV_BARRIER_ALL;
 
    if (!set_multisync(&ms, sync_info, NULL, 0, (void *)&timestamp, queue, job,
-                     V3DV_QUEUE_CPU, V3DV_QUEUE_CPU, V3D_CPU, signal_syncs)) {
+                     V3DV_QUEUE_CPU, V3DV_QUEUE_CPU, V3D_CPU)) {
       free(offsets);
       free(syncs);
       return vk_error(device->instance, VK_ERROR_OUT_OF_HOST_MEMORY);
@@ -663,8 +631,7 @@ handle_timestamp_query_cpu_job(struct v3dv_queue *queue,
 static VkResult
 handle_csd_indirect_cpu_job(struct v3dv_queue *queue,
                             struct v3dv_job *job,
-                            struct v3dv_submit_sync_info *sync_info,
-                            bool signal_syncs)
+                            struct v3dv_submit_sync_info *sync_info)
 {
    MESA_TRACE_FUNC();
    struct v3dv_device *device = queue->device;
@@ -720,7 +687,7 @@ handle_csd_indirect_cpu_job(struct v3dv_queue *queue,
     * demands, such as barriers.
     */
    if (!set_multisync(&ms, sync_info, NULL, 0, (void *)&indirect, queue, csd_job,
-                     V3DV_QUEUE_CPU, V3DV_QUEUE_CSD, V3D_CPU, signal_syncs)) {
+                     V3DV_QUEUE_CPU, V3DV_QUEUE_CSD, V3D_CPU)) {
       return vk_error(device->instance, VK_ERROR_OUT_OF_HOST_MEMORY);
    }
 
@@ -762,8 +729,7 @@ static VkResult
 handle_cl_job(struct v3dv_queue *queue,
               struct v3dv_job *job,
               uint32_t counter_pass_idx,
-              struct v3dv_submit_sync_info *sync_info,
-              bool signal_syncs)
+              struct v3dv_submit_sync_info *sync_info)
 {
    MESA_TRACE_FUNC();
    struct v3dv_device *device = queue->device;
@@ -858,7 +824,7 @@ handle_cl_job(struct v3dv_queue *queue,
    struct v3d_multisync ms = { 0 };
    enum v3d_queue wait_stage = needs_rcl_sync ? V3D_RENDER : V3D_BIN;
    if (!set_multisync(&ms, sync_info, NULL, 0, NULL, queue, job,
-                     V3DV_QUEUE_CL, V3DV_QUEUE_CL, wait_stage, signal_syncs)) {
+                     V3DV_QUEUE_CL, V3DV_QUEUE_CL, wait_stage)) {
       free(bo_handles);
       return vk_error(device->instance, VK_ERROR_OUT_OF_HOST_MEMORY);
    }
@@ -896,8 +862,7 @@ handle_cl_job(struct v3dv_queue *queue,
 static VkResult
 handle_tfu_job(struct v3dv_queue *queue,
                struct v3dv_job *job,
-               struct v3dv_submit_sync_info *sync_info,
-               bool signal_syncs)
+               struct v3dv_submit_sync_info *sync_info)
 {
    MESA_TRACE_FUNC();
    assert(!V3D_DBG(DISABLE_TFU));
@@ -909,7 +874,7 @@ handle_tfu_job(struct v3dv_queue *queue,
     */
    struct v3d_multisync ms = { 0 };
    if (!set_multisync(&ms, sync_info, NULL, 0, NULL, queue, job,
-                     V3DV_QUEUE_TFU, V3DV_QUEUE_TFU, V3D_TFU, signal_syncs)) {
+                     V3DV_QUEUE_TFU, V3DV_QUEUE_TFU, V3D_TFU)) {
       return vk_error(device->instance, VK_ERROR_OUT_OF_HOST_MEMORY);
    }
    job->tfu.flags |= DRM_V3D_SUBMIT_EXTENSION;
@@ -935,8 +900,7 @@ static VkResult
 handle_csd_job(struct v3dv_queue *queue,
                struct v3dv_job *job,
                uint32_t counter_pass_idx,
-               struct v3dv_submit_sync_info *sync_info,
-               bool signal_syncs)
+               struct v3dv_submit_sync_info *sync_info)
 {
    MESA_TRACE_FUNC();
    struct v3dv_device *device = queue->device;
@@ -965,7 +929,7 @@ handle_csd_job(struct v3dv_queue *queue,
     */
    struct v3d_multisync ms = { 0 };
    if (!set_multisync(&ms, sync_info, NULL, 0, NULL, queue, job,
-                     V3DV_QUEUE_CSD, V3DV_QUEUE_CSD, V3D_CSD, signal_syncs)) {
+                     V3DV_QUEUE_CSD, V3DV_QUEUE_CSD, V3D_CSD)) {
       return vk_error(device->instance, VK_ERROR_OUT_OF_HOST_MEMORY);
    }
    submit->flags |= DRM_V3D_SUBMIT_EXTENSION;
@@ -1024,8 +988,7 @@ queue_handle_job(struct v3dv_queue *queue,
                  struct v3dv_job *job,
                  uint32_t counter_pass_idx,
                  struct v3dv_barrier_state *barrier,
-                 struct v3dv_submit_sync_info *sync_info,
-                 bool signal_syncs)
+                 struct v3dv_submit_sync_info *sync_info)
 {
    if (barrier)
       queue_apply_barrier_state(job, barrier);
@@ -1037,35 +1000,76 @@ queue_handle_job(struct v3dv_queue *queue,
 
    switch (job->type) {
    case V3DV_JOB_TYPE_GPU_CL:
-      return handle_cl_job(queue, job, counter_pass_idx, sync_info, signal_syncs);
+      return handle_cl_job(queue, job, counter_pass_idx, sync_info);
    case V3DV_JOB_TYPE_GPU_TFU:
-      return handle_tfu_job(queue, job, sync_info, signal_syncs);
+      return handle_tfu_job(queue, job, sync_info);
    case V3DV_JOB_TYPE_GPU_CSD:
-      return handle_csd_job(queue, job, counter_pass_idx, sync_info, signal_syncs);
+      return handle_csd_job(queue, job, counter_pass_idx, sync_info);
    case V3DV_JOB_TYPE_CPU_RESET_QUERIES:
-      return handle_reset_query_cpu_job(queue, job, sync_info, signal_syncs);
+      return handle_reset_query_cpu_job(queue, job, sync_info);
    case V3DV_JOB_TYPE_CPU_END_QUERY:
       return handle_end_query_cpu_job(queue, job, counter_pass_idx);
    case V3DV_JOB_TYPE_CPU_COPY_QUERY_RESULTS:
-      return handle_copy_query_results_cpu_job(queue, job, sync_info, signal_syncs);
+      return handle_copy_query_results_cpu_job(queue, job, sync_info);
    case V3DV_JOB_TYPE_CPU_CSD_INDIRECT:
-      return handle_csd_indirect_cpu_job(queue, job, sync_info, signal_syncs);
+      return handle_csd_indirect_cpu_job(queue, job, sync_info);
    case V3DV_JOB_TYPE_CPU_TIMESTAMP_QUERY:
-      return handle_timestamp_query_cpu_job(queue, job, sync_info, signal_syncs);
+      return handle_timestamp_query_cpu_job(queue, job, sync_info);
    default:
       UNREACHABLE("Unhandled job type");
    }
 }
 
+/* Merges an array of syncobj handles into a single target syncobj */
 static VkResult
-queue_submit_noop_job(struct v3dv_queue *queue,
-                      uint32_t counter_pass_idx,
-                      struct v3dv_submit_sync_info *sync_info,
-                      bool signal_syncs)
+merge_syncobjs(struct v3dv_device *device,
+                    const uint32_t *src_syncobjs,
+                    uint32_t src_count,
+                    uint32_t dst_syncobj)
 {
-   assert(queue->device->noop_job);
-   return queue_handle_job(queue, queue->device->noop_job, counter_pass_idx, NULL,
-                           sync_info, signal_syncs);
+   int drm_fd = device->pdevice->render_fd;
+   int accum_fd = -1;
+
+   if (src_count == 0) {
+      /* If there are no jobs and no wait dependencies, the signal semaphores/fences
+       * must trigger immediately to satisfy the Vulkan spec.
+       */
+      drmSyncobjSignal(drm_fd, &dst_syncobj, 1);
+      return VK_SUCCESS;
+   }
+
+   for (uint32_t i = 0; i < src_count; i++) {
+      int queue_fd = -1;
+      if (drmSyncobjExportSyncFile(drm_fd, src_syncobjs[i], &queue_fd) != 0)
+         goto ioctl_error;
+
+      if (accum_fd == -1) {
+         accum_fd = queue_fd;
+      } else {
+         int new_accum_fd = sync_merge("v3dv_merged_fence", accum_fd, queue_fd);
+         close(queue_fd);
+
+         if (new_accum_fd < 0)
+            goto ioctl_error;
+
+         close(accum_fd);
+         accum_fd = new_accum_fd;
+      }
+   }
+
+   /* Import the final accumulated fence fd back into the destination syncobj */
+   assert(accum_fd != -1);
+   if (drmSyncobjImportSyncFile(drm_fd, dst_syncobj, accum_fd) != 0)
+      goto ioctl_error;
+
+   close(accum_fd);
+
+   return VK_SUCCESS;
+
+ioctl_error:
+   if (accum_fd != -1)
+      close(accum_fd);
+   return VK_ERROR_DEVICE_LOST;
 }
 
 VkResult
@@ -1089,6 +1093,7 @@ v3dv_queue_driver_submit(struct vk_queue *vk_queue,
    struct v3dv_barrier_state pending_barrier = { 0 };
    struct v3dv_job *first_suspend_job = NULL;
    struct v3dv_job *current_suspend_job = NULL;
+   bool has_jobs = false;
    for (uint32_t i = 0; i < submit->command_buffer_count; i++) {
       struct v3dv_cmd_buffer *cmd_buffer =
          container_of(submit->command_buffers[i], struct v3dv_cmd_buffer, vk);
@@ -1124,11 +1129,12 @@ v3dv_queue_driver_submit(struct vk_queue *vk_queue,
                                           first_suspend_job : job;
             result =
                queue_handle_job(queue, submit_job, submit->perf_pass_index,
-                                &pending_barrier, &sync_info, false);
+                                &pending_barrier, &sync_info);
 
             if (result != VK_SUCCESS)
                return result;
 
+            has_jobs = true;
             first_suspend_job = NULL;
          }
       }
@@ -1144,13 +1150,36 @@ v3dv_queue_driver_submit(struct vk_queue *vk_queue,
 
    /* Handle signaling now */
    if (submit->signal_count > 0) {
-      /* Finish by submitting a no-op job that synchronizes across all queues.
-       * This will ensure that the signal semaphores don't get triggered until
-       * all work on any queue completes. See Vulkan's signal operation order
-       * requirements.
+      /* We need to signal after all work (including wait dependencies)
+       * has completed. Vulkan also requires that submissions to the
+       * same queue signal in order. To ensure this, we accumulate the
+       * last_sync of all kernel queues into the signals of the command
+       * buffer regardless of whether we submitted any jobs to them in this
+       * command buffer (this satisfies the Vulkan signaling order
+       * requirement), so these are signaled as soon as all the queues
+       * finish. If the command buffer didn't submit any jobs, then we
+       * also need to gate signaling on the wait dependencies.
        */
-      return queue_submit_noop_job(queue, submit->perf_pass_index,
-                                   &sync_info, true);
+      uint32_t src_syncobjs[V3DV_QUEUE_COUNT + submit->wait_count];
+      uint32_t src_count = 0;
+
+      for (int i = 0; i < V3DV_QUEUE_COUNT; i++)
+         src_syncobjs[src_count++] = queue->last_job_syncs.syncs[i];
+
+      /* If we didn't submit any jobs, we need to merge wait dependencies */
+      if (!has_jobs && submit->wait_count > 0) {
+         for (uint32_t i = 0; i < submit->wait_count; i++)
+            src_syncobjs[src_count++] = vk_sync_as_drm_syncobj(submit->waits[i].sync)->syncobj;
+      }
+
+      /* Merge the accumulated syncobjs into each Vulkan signal semaphore */
+      for (uint32_t i = 0; i < submit->signal_count; i++) {
+         uint32_t dst_syncobj = vk_sync_as_drm_syncobj(submit->signals[i].sync)->syncobj;
+
+         result = merge_syncobjs(queue->device, src_syncobjs, src_count, dst_syncobj);
+         if (result != VK_SUCCESS)
+            return result;
+      }
    }
 
    return VK_SUCCESS;

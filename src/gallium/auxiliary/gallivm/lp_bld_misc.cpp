@@ -521,6 +521,37 @@ lp_build_create_jit_compiler_for_module(LLVMExecutionEngineRef *OutJIT,
 #  endif
 #endif
 
+#if DETECT_OS_APPLE
+    /*
+     * Apple systems frequently cross-compile and have fat binaries with
+     * multiple archs. Initialize all possible targets, then select desired target.
+     * Override default set by <llvm/Config/llvm-config.h>
+     */
+
+   llvm::InitializeAllTargets();
+   llvm::InitializeAllTargetMCs();
+   llvm::InitializeAllAsmPrinters();
+   llvm::InitializeAllDisassemblers();
+
+#  if DETECT_ARCH_X86_64
+    LLVMSetTarget(M, "x86_64-apple-darwin");
+#  elif DETECT_ARCH_X86
+    LLVMSetTarget(M, "i686-apple-darwin");
+#  elif DETECT_ARCH_AARCH64
+
+#   if defined(__arm64e__)
+      LLVMSetTarget(M, "arm64e-apple-darwin");
+#   elif defined(__arm64__) && defined(__ILP32__)
+      LLVMSetTarget(M, "arm64_32-apple-watchos");
+#   else
+      LLVMSetTarget(M, "arm64-apple-darwin");
+#   endif
+
+#  else
+#    error Unsupported architecture for MCJIT on Apple.
+#  endif
+#endif
+
    std::vector<std::string> MAttrs;
 
    lp_build_fill_mattrs(MAttrs);

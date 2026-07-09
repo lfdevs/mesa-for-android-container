@@ -41,3 +41,6 @@ object namespace pollution@.*
 # Zink bug https://gitlab.freedesktop.org/mesa/mesa/-/issues/14379
 fast_color_clear@fcc-clear-tex
 spec@arb_clear_texture@arb_clear_texture-base-formats
+
+# This test usually goes OOM.
+spec@!opengl 1.1@max-texture-size

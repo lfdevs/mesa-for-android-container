@@ -47,7 +47,7 @@ lower_bool = [
 
 for T, sizes, one in [('f', [16, 32], 1.0),
                       ('i', [8, 16, 32], 1),
-                      ('b', [8, 16, 32], -1)]:
+                      ('b', [32], -1)]:
     for sz in sizes:
         if T in ['f', 'i']:
             lower_bool.extend([
@@ -70,6 +70,10 @@ opt_sel_zero = [
     (('bcsel@32', a, 1, 0), ('ineg', ('bcsel', a, 0xffffffff, 0))),
 ]
 
+lower_bfloat_ops = [
+    (('bfmul', a, b), ('bfmul_mixed_intel', a, ('bf2f', b))),
+    (('bffma', a, b, c), ('bffma_mixed_intel', ('bf2f', a), b, c)),
+]
 
 def main() -> None:
     parser = argparse.ArgumentParser()
@@ -89,6 +93,8 @@ def main() -> None:
             "jay_nir_lower_bool", lower_bool).render())
         f.write(nir_algebraic.AlgebraicPass(
             "jay_nir_opt_sel_zero", opt_sel_zero).render())
+        f.write(nir_algebraic.AlgebraicPass(
+            "jay_nir_lower_bfloat_math", lower_bfloat_ops).render())
 
 
 if __name__ == '__main__':

@@ -65,6 +65,36 @@ hash_alu_src(uint32_t hash, const nir_alu_src *src,
    return hash_src(hash, &src->src);
 }
 
+static bool
+phi_src_is_compatible(nir_def *def, uint32_t max_vec)
+{
+   /* hash_phi_src() and phi_srcs_equal() look at component 0 after chasing
+    * movs. For multi-component sources, make sure that component represents
+    * the whole source: all components are constants, or all components come
+    * from the same def and remain within the same max_vec.
+    */
+   const nir_scalar first = nir_scalar_chase_movs(nir_get_scalar(def, 0));
+   const bool first_is_const = nir_scalar_is_const(first);
+   const uint32_t mask = ~(max_vec - 1);
+
+   for (uint8_t i = 1; i < def->num_components; i++) {
+      const nir_scalar chased = nir_scalar_chase_movs(nir_get_scalar(def, i));
+      const bool chased_is_const = nir_scalar_is_const(chased);
+
+      if (first_is_const || chased_is_const) {
+         if (first_is_const != chased_is_const)
+            return false;
+         continue;
+      }
+
+      if (chased.def != first.def ||
+          (chased.comp & mask) != (first.comp & mask))
+         return false;
+   }
+
+   return true;
+}
+
 static uint32_t
 hash_phi_src(uint32_t hash, const nir_phi_instr *phi, const nir_phi_src *src,
              uint32_t max_vec)
@@ -279,7 +309,16 @@ instr_can_rewrite(nir_instr *instr)
 
    case nir_instr_type_phi: {
       nir_phi_instr *phi = nir_instr_as_phi(instr);
-      return phi->def.num_components < instr->pass_flags;
+
+      if (phi->def.num_components >= instr->pass_flags)
+         return false;
+
+      nir_foreach_phi_src(src, phi) {
+         if (!phi_src_is_compatible(src->src.ssa, instr->pass_flags))
+            return false;
+      }
+
+      return true;
    }
 
    default:

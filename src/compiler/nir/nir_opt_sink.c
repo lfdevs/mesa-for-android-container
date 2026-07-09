@@ -213,6 +213,7 @@ can_sink_instr(nir_instr *instr, nir_move_options options, bool *can_mov_out_of_
       case nir_intrinsic_image_deref_levels:
       case nir_intrinsic_bindless_image_levels:
       case nir_intrinsic_image_heap_levels:
+      case nir_intrinsic_lea_tex_pan:
          return options & nir_move_query_image;
 
       case nir_intrinsic_load_input:

@@ -45,6 +45,11 @@ KHR-GL46.layout_location.sampler_2d_shadow
 
 # uprev Piglit in Mesa
 KHR-GL46.direct_state_access.textures_image_query_errors
+KHR-Single-GL46.meshShader.apiTests.draw_indirect_count.draw_count_2.offset_alt_stride_large.count_limit_buffer.count_offset_alt.no_task_shader
+KHR-Single-GL46.meshShader.apiTests.draw_indirect_count.draw_count_32.offset_0_stride_normal.count_limit_buffer.count_offset_0.no_task_shader
+KHR-Single-GL46.meshShader.apiTests.draw_indirect.draw_count_1.offset_0_stride_normal.no_count_limit.no_count_offset.no_task_shader
+KHR-Single-GL46.meshShader.propertyTests.mesh_shared_memory_size
+KHR-Single-GL46.meshShader.smokeTests.mesh_only_shader_triangle
 spec@ext_framebuffer_multisample@accuracy all_samples depth_draw small depthstencil
 
 KHR-GL46.layout_binding.image2D_layout_binding_imageLoad_ComputeShader

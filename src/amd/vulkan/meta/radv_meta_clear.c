@@ -8,6 +8,7 @@
 #include "radv_entrypoints.h"
 #include "radv_formats.h"
 #include "radv_meta.h"
+#include "radv_tracepoints.h"
 
 #include "util/format_rgb9e5.h"
 #include "vk_format.h"
@@ -1001,9 +1002,9 @@ radv_clear_dcc_comp_to_single(struct radv_cmd_buffer *cmd_buffer, struct radv_im
       width = u_minify(image->vk.extent.width, range->baseMipLevel + l);
       height = u_minify(image->vk.extent.height, range->baseMipLevel + l);
 
-      const VkImageViewUsageCreateInfo iview_usage_info = {
-         .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_USAGE_CREATE_INFO,
-         .usage = VK_IMAGE_USAGE_STORAGE_BIT,
+      const VkImageViewUsage2CreateInfoKHR iview_usage_info = {
+         .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_USAGE_2_CREATE_INFO_KHR,
+         .usage = VK_IMAGE_USAGE_2_STORAGE_BIT_KHR,
       };
 
       radv_image_view_init(&iview, device,
@@ -1595,7 +1596,9 @@ radv_cmd_buffer_clear_rendering(struct radv_cmd_buffer *cmd_buffer, const VkRend
 
    radv_suspend_conditional_rendering(cmd_buffer);
 
-   radv_meta_begin(cmd_buffer);
+   radv_utrace_begin_clear_rendering(cmd_buffer);
+
+   radv_meta_begin_rendering(cmd_buffer);
 
    assert(render->color_att_count == pRenderingInfo->colorAttachmentCount);
    for (uint32_t i = 0; i < render->color_att_count; i++) {
@@ -1634,8 +1637,10 @@ radv_cmd_buffer_clear_rendering(struct radv_cmd_buffer *cmd_buffer, const VkRend
       }
    }
 
-   radv_meta_end(cmd_buffer);
+   radv_meta_end_rendering(cmd_buffer);
    cmd_buffer->state.flush_bits |= post_flush;
+
+   radv_utrace_end_clear_rendering(cmd_buffer);
 
    radv_resume_conditional_rendering(cmd_buffer);
 }
@@ -1650,10 +1655,10 @@ radv_clear_image_layer(struct radv_cmd_buffer *cmd_buffer, struct radv_image *im
    uint32_t width = u_minify(image->vk.extent.width, range->baseMipLevel + level);
    uint32_t height = u_minify(image->vk.extent.height, range->baseMipLevel + level);
 
-   const VkImageViewUsageCreateInfo iview_usage_info = {
-      .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_USAGE_CREATE_INFO,
-      .usage = (vk_format_is_color(format) ? VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT
-                                           : VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT),
+   const VkImageViewUsage2CreateInfoKHR iview_usage_info = {
+      .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_USAGE_2_CREATE_INFO_KHR,
+      .usage = (vk_format_is_color(format) ? VK_IMAGE_USAGE_2_COLOR_ATTACHMENT_BIT_KHR
+                                           : VK_IMAGE_USAGE_2_DEPTH_STENCIL_ATTACHMENT_BIT_KHR),
    };
 
    radv_image_view_init(&iview, device,
@@ -1740,9 +1745,9 @@ radv_fast_clear_range(struct radv_cmd_buffer *cmd_buffer, struct radv_image *ima
    struct radv_image_view iview;
    bool fast_cleared = false;
 
-   const VkImageViewUsageCreateInfo iview_usage_info = {
-      .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_USAGE_CREATE_INFO,
-      .usage = VK_IMAGE_USAGE_STORAGE_BIT,
+   const VkImageViewUsage2CreateInfoKHR iview_usage_info = {
+      .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_USAGE_2_CREATE_INFO_KHR,
+      .usage = VK_IMAGE_USAGE_2_STORAGE_BIT_KHR,
    };
 
    radv_image_view_init(&iview, device,
@@ -1906,7 +1911,7 @@ radv_CmdClearAttachments(VkCommandBuffer commandBuffer, uint32_t attachmentCount
    enum radv_cmd_flush_bits pre_flush = 0;
    enum radv_cmd_flush_bits post_flush = 0;
 
-   radv_meta_begin(cmd_buffer);
+   radv_meta_begin_rendering(cmd_buffer);
 
    for (uint32_t a = 0; a < attachmentCount; ++a) {
       for (uint32_t r = 0; r < rectCount; ++r) {
@@ -1915,6 +1920,6 @@ radv_CmdClearAttachments(VkCommandBuffer commandBuffer, uint32_t attachmentCount
       }
    }
 
-   radv_meta_end(cmd_buffer);
+   radv_meta_end_rendering(cmd_buffer);
    cmd_buffer->state.flush_bits |= post_flush;
 }

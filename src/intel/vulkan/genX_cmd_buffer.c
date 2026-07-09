@@ -5856,6 +5856,25 @@ genX(flush_pipeline_select_gpgpu)(struct anv_cmd_buffer *cmd_buffer,
 }
 
 void
+genX(batch_emit_post_dispatch_wa)(struct anv_batch *batch)
+{
+#if INTEL_NEEDS_WA_14025112257
+   if (batch->engine_class == INTEL_ENGINE_CLASS_COMPUTE) {
+      /* Note, this is a workaround and a special case where PC
+       * can be done without CS_STALL on CCS. See HSD 15019467709
+       */
+      for (unsigned i = 0; i < 10; i++)
+         anv_batch_emit(batch, GENX(MI_NOOP), noop);
+
+      anv_batch_emit(batch, GENX(PIPE_CONTROL), pipe) {
+         pipe.StateCacheInvalidationEnable = true;
+         anv_debug_dump_pc(pipe, "Wa_14025112257");
+      }
+   }
+#endif
+}
+
+void
 genX(cmd_buffer_emit_gfx12_depth_wa)(struct anv_cmd_buffer *cmd_buffer,
                                      const struct isl_surf *surf)
 {

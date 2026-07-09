@@ -238,7 +238,8 @@ llvm_fragment_body(struct lp_build_context *bld,
 void
 llvmpipe_fs_variant_linear_llvm(struct llvmpipe_context *lp,
                                 struct lp_fragment_shader *shader,
-                                struct lp_fragment_shader_variant *variant)
+                                struct lp_fragment_shader_variant *variant,
+                                struct lp_fragment_shader_variant_jit *jit)
 {
    assert(shader->kind == LP_FS_KIND_BLIT_RGBA ||
           shader->kind == LP_FS_KIND_BLIT_RGB1 ||
@@ -276,7 +277,7 @@ llvmpipe_fs_variant_linear_llvm(struct llvmpipe_context *lp,
 
    LLVMTypeRef ret_type = pint8t;
    LLVMTypeRef arg_types[4];
-   arg_types[0] = variant->jit_linear_context_ptr_type; /* context */
+   arg_types[0] = jit->jit_linear_context_ptr_type; /* context */
    arg_types[1] = int32t;                               /* x */
    arg_types[2] = int32t;                               /* y */
    arg_types[3] = int32t;                               /* width */
@@ -290,9 +291,9 @@ llvmpipe_fs_variant_linear_llvm(struct llvmpipe_context *lp,
 
    lp_function_add_debug_info(gallivm, function, func_type);
 
-   variant->linear_function = function;
-   variant->linear_function_name = MALLOC(strlen(func_name)+1);
-   strcpy(variant->linear_function_name, func_name);
+   jit->linear_function = function;
+   jit->linear_function_name = MALLOC(strlen(func_name)+1);
+   strcpy(jit->linear_function_name, func_name);
 
    /* XXX: need to propagate noalias down into color param now we are
     * passing a pointer-to-pointer?
@@ -303,7 +304,7 @@ llvmpipe_fs_variant_linear_llvm(struct llvmpipe_context *lp,
       }
    }
 
-   if (variant->gallivm->cache->data_size) {
+   if (gallivm->cache->data_size) {
       gallivm_stub_func(gallivm, function);
       return;
    }
@@ -341,20 +342,20 @@ llvmpipe_fs_variant_linear_llvm(struct llvmpipe_context *lp,
     */
    LLVMValueRef consts_ptr =
       lp_jit_linear_context_constants(gallivm,
-                                      variant->jit_linear_context_type,
+                                      jit->jit_linear_context_type,
                                       context_ptr);
    LLVMValueRef interpolators_ptr =
       lp_jit_linear_context_inputs(gallivm,
-                                   variant->jit_linear_context_type,
+                                   jit->jit_linear_context_type,
                                    context_ptr);
    LLVMValueRef samplers_ptr =
       lp_jit_linear_context_tex(gallivm,
-                                variant->jit_linear_context_type,
+                                jit->jit_linear_context_type,
                                 context_ptr);
 
    LLVMValueRef color0_ptr =
       lp_jit_linear_context_color0(gallivm,
-                                   variant->jit_linear_context_type,
+                                   jit->jit_linear_context_type,
                                    context_ptr);
    color0_ptr = LLVMBuildLoad2(builder, LLVMPointerType(LLVMInt8TypeInContext(gallivm->context), 0),
                                color0_ptr, "");
@@ -363,7 +364,7 @@ llvmpipe_fs_variant_linear_llvm(struct llvmpipe_context *lp,
 
    LLVMValueRef blend_color =
       lp_jit_linear_context_blend_color(gallivm,
-                                        variant->jit_linear_context_type,
+                                        jit->jit_linear_context_type,
                                         context_ptr);
    blend_color = LLVMBuildLoad2(builder, LLVMInt32TypeInContext(gallivm->context),
                                 blend_color, "");
@@ -374,7 +375,7 @@ llvmpipe_fs_variant_linear_llvm(struct llvmpipe_context *lp,
 
    LLVMValueRef alpha_ref =
       lp_jit_linear_context_alpha_ref(gallivm,
-                                      variant->jit_linear_context_type,
+                                      jit->jit_linear_context_type,
                                       context_ptr);
    alpha_ref = LLVMBuildLoad2(builder, LLVMInt8TypeInContext(gallivm->context),
                               alpha_ref, "");
@@ -396,18 +397,18 @@ llvmpipe_fs_variant_linear_llvm(struct llvmpipe_context *lp,
 
          LLVMValueRef index = LLVMConstInt(int32t, attrib, 0);
 
-         LLVMTypeRef input_type = variant->jit_linear_inputs_type;
+         LLVMTypeRef input_type = jit->jit_linear_inputs_type;
          LLVMValueRef elem =
             lp_build_array_get2(bld.gallivm, input_type, interpolators_ptr, index);
          assert(LLVMGetTypeKind(LLVMTypeOf(elem)) == LLVMPointerTypeKind);
 
-         LLVMTypeRef fetch_type = LLVMPointerType(variant->jit_linear_func_type, 0);
+         LLVMTypeRef fetch_type = LLVMPointerType(jit->jit_linear_func_type, 0);
          LLVMValueRef fetch_ptr = lp_build_pointer_get2(builder, fetch_type, elem,
                                                         LLVMConstInt(int32t, 0, 0));
          assert(LLVMGetTypeKind(LLVMTypeOf(fetch_ptr)) == LLVMPointerTypeKind);
 
          /* Pointer to a row of interpolated inputs */
-         LLVMTypeRef call_type = variant->jit_linear_func_type;
+         LLVMTypeRef call_type = jit->jit_linear_func_type;
          elem = LLVMBuildBitCast(builder, elem, pint8t, "");
          LLVMValueRef inputs_ptr = LLVMBuildCall2(builder, call_type, fetch_ptr, &elem, 1, "");
          assert(LLVMGetTypeKind(LLVMTypeOf(inputs_ptr)) == LLVMPointerTypeKind);
@@ -435,18 +436,18 @@ llvmpipe_fs_variant_linear_llvm(struct llvmpipe_context *lp,
       }
 
       LLVMValueRef index = LLVMConstInt(int32t, attrib, 0);
-      LLVMTypeRef samp_type = variant->jit_linear_textures_type;
+      LLVMTypeRef samp_type = jit->jit_linear_textures_type;
       LLVMValueRef elem = lp_build_array_get2(bld.gallivm, samp_type, samplers_ptr, index);
       assert(LLVMGetTypeKind(LLVMTypeOf(elem)) == LLVMPointerTypeKind);
 
-      LLVMTypeRef fetch_type = LLVMPointerType(variant->jit_linear_func_type, 0);
+      LLVMTypeRef fetch_type = LLVMPointerType(jit->jit_linear_func_type, 0);
       LLVMValueRef fetch_ptr =
          lp_build_pointer_get2(builder, fetch_type,
                                elem, LLVMConstInt(int32t, 0, 0));
       assert(LLVMGetTypeKind(LLVMTypeOf(fetch_ptr)) == LLVMPointerTypeKind);
 
       /* Pointer to a row of texels */
-      LLVMTypeRef call_type = variant->jit_linear_func_type;
+      LLVMTypeRef call_type = jit->jit_linear_func_type;
       elem = LLVMBuildBitCast(builder, elem, pint8t, "");
       LLVMValueRef texels_ptr = LLVMBuildCall2(builder, call_type, fetch_ptr, &elem, 1, "");
       assert(LLVMGetTypeKind(LLVMTypeOf(texels_ptr)) == LLVMPointerTypeKind);

@@ -198,14 +198,16 @@ vk_image_usage_to_format_features(VkImageUsageFlagBits usage_flag)
 }
 
 uint32_t
-kk_image_max_dimension(VkImageType image_type)
+kk_image_max_dimension(const struct kk_physical_device *pdev,
+                       VkImageType image_type)
 {
-   /* Values taken from Apple7
+   /* Base values taken from Apple7
     * https://developer.apple.com/metal/Metal-Feature-Set-Tables.pdf */
    switch (image_type) {
    case VK_IMAGE_TYPE_1D:
    case VK_IMAGE_TYPE_2D:
-      return 16384;
+      /* Apple10 and later raise the 1D/2D/cube limit to 32768. */
+      return pdev->info.gpu_apple_family >= 10 ? 32768 : 16384;
    case VK_IMAGE_TYPE_3D:
       return 2048;
    default:
@@ -326,7 +328,8 @@ kk_GetPhysicalDeviceImageFormatProperties2(
        pImageFormatInfo->type != VK_IMAGE_TYPE_2D)
       return VK_ERROR_FORMAT_NOT_SUPPORTED;
 
-   const uint32_t max_dim = kk_image_max_dimension(pImageFormatInfo->type);
+   const uint32_t max_dim =
+      kk_image_max_dimension(pdev, pImageFormatInfo->type);
    assert(util_is_power_of_two_nonzero(max_dim));
    uint32_t maxMipLevels = util_logbase2(max_dim) + 1;
    VkExtent3D maxExtent;

@@ -78,17 +78,18 @@ impl Queue {
         F: FnMut() + Send + Sync + 'static,
     {
         // SAFETY: The queue is valid so long as it is only destroyed on drop.
-        // We uphold the safety requirements of `exec_rust_job` by specifying
-        // `F` matching the type of `func` and passing `func` as a raw pointer
-        // to it. `fence` cannot be dropped without first being signaled,
-        // meaning it will be valid for the life of the job in the queue.
+        // We uphold the safety requirements of `exec_rust_job` and
+        // `cleanup_rust_job` by specifying `F` matching the type of `func`
+        // and passing `func` as a raw pointer to it. `fence` cannot be
+        // dropped without first being signaled, meaning it will be valid for
+        // the life of the job in the queue.
         unsafe {
             util_queue_add_job(
                 self.inner.get(),
                 Box::into_raw(Box::new(func)).cast(),
                 fence,
                 Some(exec_rust_job::<F>),
-                None,
+                Some(cleanup_rust_job::<F>),
                 0,
             )
         };
@@ -121,6 +122,25 @@ where
     let func: &mut F = unsafe { &mut *(data.cast()) };
 
     func();
+}
+
+/// Frees a heap-allocated Rust closure after job completione.
+///
+/// Called by `util_queue` after fence has been signaled.
+///
+/// # Safety
+///
+/// `data` must be a valid pointer to a Rust closure of type `F`.
+unsafe extern "C" fn cleanup_rust_job<F>(
+    data: *mut std::ffi::c_void,
+    _: *mut std::ffi::c_void,
+    _: i32,
+) where
+    F: FnMut() + Send + Sync + 'static,
+{
+    // SAFETY: The caller must uphold that `data` was created with
+    // `Box::into_raw(Box::new(...))` with type `F`.
+    let _: Box<F> = unsafe { Box::from_raw(data.cast()) };
 }
 
 // SAFETY: `util_queue_fence` value is read atomically by the appropriate

@@ -120,6 +120,9 @@ static bool lower_tex_deref_to_binding(nir_builder *b,
       deref_src->src_type = nir_tex_src_backend2;
    }
 
+   /* Pass along the access flags via the backend flags */
+   tex->backend_flags = var->data.access;
+
    nir_src_rewrite(&deref_src->src, elem);
    return true;
 }
@@ -207,6 +210,8 @@ lower_image_derefs(nir_builder *b, nir_intrinsic_instr *intr, pco_data *data)
                                    elem,
                                    nir_imm_int(b, ia_idx));
 
+         nir_intrinsic_set_access(intr, nir_intrinsic_access(intr) | var->data.access);
+
          nir_src_rewrite(deref_src, index);
 
          return true;
@@ -223,6 +228,8 @@ lower_image_derefs(nir_builder *b, nir_intrinsic_instr *intr, pco_data *data)
    nir_def *elem = array_elem_from_deref(b, deref);
    nir_def *index =
       nir_vec3(b, nir_imm_int(b, desc_set), nir_imm_int(b, binding), elem);
+
+   nir_intrinsic_set_access(intr, nir_intrinsic_access(intr) | var->data.access);
 
    nir_src_rewrite(deref_src, index);
 

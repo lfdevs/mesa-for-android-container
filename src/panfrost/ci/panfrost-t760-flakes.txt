@@ -21,6 +21,5 @@ dEQP-GLES31.functional.texture.multisample.samples_10..*
 dEQP-GLES31.functional.texture.multisample.samples_12..*
 dEQP-GLES31.functional.texture.multisample.samples_13..*
 dEQP-GLES31.functional.texture.multisample.samples_16..*
-dEQP-GLES3.functional.draw_buffers_indexed.random.max_implementation_draw_buffers.14
-dEQP-GLES3.functional.draw_buffers_indexed.random.max_implementation_draw_buffers.15
-dEQP-GLES3.functional.draw_buffers_indexed.random.max_implementation_draw_buffers.2
+dEQP-GLES3.functional.draw_buffers_indexed.random.max_implementation_draw_buffers..*
+dEQP-GLES3.functional.draw_buffers_indexed.random.max_required_draw_buffers..*

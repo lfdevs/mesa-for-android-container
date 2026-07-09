@@ -83,7 +83,7 @@ find_block_config(struct ethosu_subgraph *subgraph, struct ethosu_operation *ope
    bool is_equal_depth = is_pooling || is_depthwise || operation->type == ETHOSU_OPERATION_TYPE_ELTWISE;
    bool is_convolution = operation->type == ETHOSU_OPERATION_TYPE_CONVOLUTION;
    float best_cost = FLT_MAX;
-   unsigned best_coverage = UINT_MAX;
+   float best_coverage = FLT_MAX;
 
    search_space.width = MIN2(search_space.width, operation->ofm.shape.width);
    search_space.height = MIN2(search_space.height, operation->ofm.shape.height);
@@ -166,12 +166,12 @@ find_block_config(struct ethosu_subgraph *subgraph, struct ethosu_operation *ope
                      float coverage = (float)(operation->ifm.shape.width * operation->ifm.shape.height) /
                                       (float)MAX2(1, coverage_shape.width * coverage_shape.height);
 
-                     if (coverage <= best_coverage && (height <= 4 && width <= 4)) {
+                     if (coverage < best_coverage) {
                         best_coverage = coverage;
                         choose_this = true;
                      }
                   } else {
-                     best_coverage = UINT_MAX;
+                     best_coverage = FLT_MAX;
                      choose_this = true;
                   }
 

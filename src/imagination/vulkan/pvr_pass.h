@@ -36,7 +36,6 @@ struct pvr_render_pass_attachment {
 
    VkFormat vk_format;
    uint32_t sample_count;
-   VkImageLayout initial_layout;
 
    /* Derived and other state. */
    VkImageAspectFlags aspects;

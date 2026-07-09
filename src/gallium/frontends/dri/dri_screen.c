@@ -382,6 +382,8 @@ dri_fill_in_modes(struct dri_screen *screen)
 
    if (HAS_ZS(Z32_UNORM))
       zs_formats[num_zs_formats++] = PIPE_FORMAT_Z32_UNORM;
+   else if (HAS_ZS(Z32_FLOAT))
+      zs_formats[num_zs_formats++] = PIPE_FORMAT_Z32_FLOAT;
 
 #undef HAS_ZS
 

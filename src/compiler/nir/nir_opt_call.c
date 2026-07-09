@@ -31,6 +31,7 @@ can_remat_instr(nir_instr *instr)
       case nir_intrinsic_load_push_constant:
       case nir_intrinsic_load_global_constant:
       case nir_intrinsic_load_scalar_arg_amd:
+      case nir_intrinsic_load_scalar_arg_wg_div_amd:
       case nir_intrinsic_load_vector_arg_amd:
       case nir_intrinsic_load_push_data_intel:
          return true;

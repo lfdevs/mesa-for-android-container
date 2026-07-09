@@ -261,9 +261,9 @@ create_staging_resource(struct d3d12_context *ctx,
    struct pipe_resource *staging_res;
    struct pipe_box copy_src;
 
-   u_box_3d(MIN2(src_box->x, src_box->x + src_box->width),
-            MIN2(src_box->y, src_box->y + src_box->height),
-            MIN2(src_box->z, src_box->z + src_box->depth),
+   u_box_3d(src_box->width < 0 ? src_box->x + src_box->width : src_box->x,
+            src_box->height < 0 ? src_box->y + src_box->height : src_box->y,
+            src_box->depth < 0 ? src_box->z + src_box->depth : src_box->z,
             abs(src_box->width), abs(src_box->height), abs(src_box->depth),
             &copy_src);
 

@@ -2,7 +2,7 @@ Report a Bug
 ============
 
 To file a Mesa bug, go to `GitLab on
-freedesktop.org <https://gitlab.freedesktop.org/mesa/mesa/-/issues>`__.
+freedesktop.org <https://gitlab.freedesktop.org/mesa/mesa/-/work_items>`__.
 
 Please follow these bug reporting guidelines:
 

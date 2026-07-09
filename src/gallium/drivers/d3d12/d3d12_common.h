@@ -30,6 +30,9 @@
 
 #define D3D12_IGNORE_SDK_LAYERS
 #ifndef _GAMING_XBOX
+// Forward declare ID3D12InfoQueue needed by d3d12.h in DirectX-Headers >= v1.721.1-preview
+// (used by ID3D12StateObjectDatabaseFactory1 but not forward-declared in the d3d12.h header)
+typedef struct ID3D12InfoQueue ID3D12InfoQueue;
 #include <directx/d3d12.h>
 #include <directx/d3d12video.h>
 #elif defined(__cplusplus)

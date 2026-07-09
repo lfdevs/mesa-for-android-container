@@ -29,7 +29,7 @@
 
 #include "util/u_debug.h"
 
-#if defined(GLX_DIRECT_RENDERING) && (!defined(GLX_USE_APPLEGL) || defined(GLX_USE_APPLE))
+#if defined(GLX_DIRECT_RENDERING)
 #include "dri_common.h"
 #endif
 
@@ -43,7 +43,7 @@
 #include <xcb/glx.h>
 #include "dri_util.h"
 #include "pipe/p_screen.h"
-#if defined(GLX_DIRECT_RENDERING) && (!defined(GLX_USE_APPLEGL) || defined(GLX_USE_APPLE))
+#if defined(GLX_DIRECT_RENDERING)
 #include <dlfcn.h>
 #endif
 
@@ -110,11 +110,6 @@ static /* const */ char *error_list[] = {
    "GLXBadWindow",
    "GLXBadProfileARB",
 };
-
-#ifdef GLX_USE_APPLEGL
-static char *__glXErrorString(Display *dpy, int code, XExtCodes *codes,
-                              char *buf, int n);
-#endif
 
 static
 XEXT_GENERATE_ERROR_STRING(__glXErrorString, __glXExtensionName,
@@ -252,7 +247,7 @@ FreeScreenConfigs(struct glx_display * priv)
    priv->screens = NULL;
 }
 
-#if defined(GLX_DIRECT_RENDERING) && !defined(GLX_USE_APPLEGL)
+#if defined(GLX_DIRECT_RENDERING)
 static void
 free_zombie_glx_drawable(struct set_entry *entry)
 {
@@ -277,7 +272,7 @@ glx_display_free(struct glx_display *priv)
    }
 
    /* Needs to be done before free screen. */
-#if defined(GLX_DIRECT_RENDERING) && !defined(GLX_USE_APPLEGL)
+#if defined(GLX_DIRECT_RENDERING)
    _mesa_set_destroy(priv->zombieGLXDrawable, free_zombie_glx_drawable);
 #endif
 
@@ -285,12 +280,12 @@ glx_display_free(struct glx_display *priv)
 
    __glxHashDestroy(priv->glXDrawHash);
 
-#if defined(GLX_DIRECT_RENDERING) && !defined(GLX_USE_APPLEGL)
+#if defined(GLX_DIRECT_RENDERING)
    __glxHashDestroy(priv->drawHash);
    if (priv->dri2Hash)
       __glxHashDestroy(priv->dri2Hash);
 
-#endif /* GLX_DIRECT_RENDERING && !GLX_USE_APPLEGL */
+#endif /* GLX_DIRECT_RENDERING */
 
    free((char *) priv);
 }
@@ -409,14 +404,7 @@ __glXInitializeVisualConfigFromTags(struct glx_config * config, int count,
       config->numAuxBuffers = *bp++;
       config->level = *bp++;
 
-#ifdef GLX_USE_APPLEGL
-       /* AppleSGLX supports pixmap and pbuffers with all config. */
-       config->drawableType = GLX_WINDOW_BIT | GLX_PIXMAP_BIT | GLX_PBUFFER_BIT;
-       /* Unfortunately this can create an ABI compatibility problem. */
-       count -= 18;
-#else
       count -= __GLX_MIN_CONFIG_PROPS;
-#endif
    }
 
    /*
@@ -512,10 +500,6 @@ __glXInitializeVisualConfigFromTags(struct glx_config * config, int count,
          break;
       case GLX_DRAWABLE_TYPE:
          config->drawableType = *bp++;
-#ifdef GLX_USE_APPLEGL
-         /* AppleSGLX supports pixmap and pbuffers with all config. */
-         config->drawableType |= GLX_WINDOW_BIT | GLX_PIXMAP_BIT | GLX_PBUFFER_BIT;
-#endif
          break;
       case GLX_RENDER_TYPE: /* fbconfig render type bits */
          config->renderType = *bp++;
@@ -535,7 +519,6 @@ __glXInitializeVisualConfigFromTags(struct glx_config * config, int count,
       case GLX_MAX_PBUFFER_PIXELS:
          config->maxPbufferPixels = *bp++;
          break;
-#ifndef GLX_USE_APPLEGL
       case GLX_OPTIMAL_PBUFFER_WIDTH_SGIX:
          config->optimalPbufferWidth = *bp++;
          break;
@@ -545,7 +528,6 @@ __glXInitializeVisualConfigFromTags(struct glx_config * config, int count,
       case GLX_VISUAL_SELECT_GROUP_SGIX:
          config->visualSelectGroup = *bp++;
          break;
-#endif
       case GLX_SAMPLE_BUFFERS_SGIS:
          config->sampleBuffers = *bp++;
          break;
@@ -720,6 +702,7 @@ glx_screen_init(struct glx_screen *psc,
    psc->scr = screen;
    psc->dpy = priv->dpy;
    psc->display = priv;
+   psc->drawable_vtable = &glx_protocol_drawable_vtable;
 
    if (!getVisualConfigs(psc, priv, screen))
       return GL_FALSE;
@@ -742,7 +725,7 @@ glx_screen_cleanup(struct glx_screen *psc)
       glx_config_destroy_list(psc->visuals);
       psc->visuals = NULL;   /* NOTE: just for paranoia */
    }
-#if defined(GLX_DIRECT_RENDERING) && (!defined(GLX_USE_APPLEGL) || defined(GLX_USE_APPLE))
+#if defined(GLX_DIRECT_RENDERING)
    if (psc->driver_configs) {
       driDestroyConfigs(psc->driver_configs);
       psc->driver_configs = NULL;
@@ -758,6 +741,12 @@ static void
 bind_extensions(struct glx_screen *psc, const char *driverName)
 {
    unsigned mask;
+
+#if defined(GLX_DIRECT_RENDERING)
+   /* Some implementations (eg: AppleGL) never populate frontend_screen. */
+   if (psc->frontend_screen == NULL)
+      return;
+#endif
 
    if (psc->display->driver != GLX_DRIVER_SW) {
       __glXEnableDirectExtension(psc, "GLX_EXT_buffer_age");
@@ -792,7 +781,7 @@ bind_extensions(struct glx_screen *psc, const char *driverName)
       __glXEnableDirectExtension(psc, "GLX_INTEL_swap_event");
    }
 
-#if defined(GLX_DIRECT_RENDERING) && (!defined(GLX_USE_APPLEGL) || defined(GLX_USE_APPLE))
+#if defined(GLX_DIRECT_RENDERING)
    mask = driGetAPIMask(psc->frontend_screen);
 
    __glXEnableDirectExtension(psc, "GLX_ARB_create_context");
@@ -875,7 +864,7 @@ AllocAndFetchScreenConfigs(Display * dpy, struct glx_display * priv, enum glx_dr
 
    for (i = 0; i < screens; i++) {
       psc = NULL;
-#if defined(GLX_DIRECT_RENDERING) && !defined(GLX_USE_APPLEGL)
+#if defined(GLX_DIRECT_RENDERING)
 #if defined(GLX_USE_DRM)
       if (glx_driver & GLX_DRIVER_DRI3) {
          bool use_zink;
@@ -894,20 +883,24 @@ AllocAndFetchScreenConfigs(Display * dpy, struct glx_display * priv, enum glx_dr
       }
 #endif
 
-#endif /* GLX_DIRECT_RENDERING && !GLX_USE_APPLEGL */
-#if defined(GLX_DIRECT_RENDERING) && (!defined(GLX_USE_APPLEGL) || defined(GLX_USE_APPLE))
+#ifdef GLX_USE_APPLEGL
+      if (psc == NULL && (glx_driver & GLX_DRIVER_APPLEGL)) {
+         /* applegl_create_display is idempotent (it bails on its own initialized flag), so calling
+          * it once per screen is harmless. It returns 1 on success and an X error code on failure.
+          */
+         if (applegl_create_display(priv) == 1)
+            psc = applegl_create_screen(i, priv);
+      }
+#endif
+
       if (psc == NULL &&
           (glx_driver & GLX_DRIVER_SW || zink)) {
 	      psc = driswCreateScreen(i, priv, glx_driver, driver_name_is_inferred);
       }
-#endif
+#endif /* GLX_DIRECT_RENDERING */
 
       bool indirect = false;
 
-#if defined(GLX_USE_APPLEGL) && !defined(GLX_USE_APPLE)
-      if (psc == NULL)
-         psc = applegl_create_screen(i, priv);
-#else
       if (psc == NULL && !zink)
       {
 #ifdef GLX_INDIRECT_RENDERING
@@ -915,7 +908,6 @@ AllocAndFetchScreenConfigs(Display * dpy, struct glx_display * priv, enum glx_dr
 #endif
          indirect = true;
       }
-#endif
       priv->screens[i] = psc;
       if (psc)
          screen_count++;
@@ -988,10 +980,14 @@ __glXInitialize(Display * dpy)
    enum glx_driver glx_driver = 0;
    const char *env = os_get_option("MESA_LOADER_DRIVER_OVERRIDE");
 
-#if defined(GLX_DIRECT_RENDERING) && (!defined(GLX_USE_APPLEGL) || defined(GLX_USE_APPLE))
+#if defined(GLX_DIRECT_RENDERING)
    Bool glx_direct = !debug_get_bool_option("LIBGL_ALWAYS_INDIRECT", false);
+#if !defined(GLX_USE_APPLEGL)
    Bool glx_accel = !debug_get_bool_option("LIBGL_ALWAYS_SOFTWARE", false);
+#endif
+#if defined(GLX_USE_DRM)
    Bool kopper = !debug_get_bool_option("LIBGL_KOPPER_DISABLE", false);
+#endif
 
    if (env && !strcmp(env, "zink"))
       glx_driver |= GLX_DRIVER_ZINK_YES;
@@ -1028,7 +1024,7 @@ __glXInitialize(Display * dpy)
    if (glx_direct)
       glx_driver |= GLX_DRIVER_SW;
 
-#if !defined(GLX_USE_APPLE)
+#if !defined(GLX_USE_APPLEGL)
    if (!dpyPriv->has_multibuffer && glx_accel && !debug_get_bool_option("LIBGL_KOPPER_DRI2", false)) {
       if (glx_driver & GLX_DRIVER_ZINK_YES) {
          /* only print error if zink was explicitly requested */
@@ -1044,20 +1040,34 @@ __glXInitialize(Display * dpy)
    if (glx_direct && glx_accel)
       glx_driver |= GLX_DRIVER_WINDOWS;
 #endif
-#endif /* GLX_DIRECT_RENDERING && !GLX_USE_APPLEGL */
 
-#if defined(GLX_USE_APPLEGL) && !defined(GLX_USE_APPLE)
-   glx_driver |= GLX_DRIVER_SW;
+#ifdef GLX_USE_APPLEGL
+   /* AppleGL supports software rendering through OpenGL.framework.  We avoid checking glx_accel
+    * here to allow using OpenGL.framework's software renderer if that's what the user wants.
+    *
+    * GALLIUM_DRIVER signals the user wants a specific Gallium driver, so don't elect AppleGL.
+    * MESA_LOADER_DRIVER_OVERRIDE (env) is honored: AppleGL is only elected when env is unset or
+    * is explicitly set to "applegl".
+    */
+   if (glx_direct && !os_get_option("GALLIUM_DRIVER")) {
+      if (env) {
+         if (!strcmp(env, "applegl"))
+            glx_driver |= GLX_DRIVER_APPLEGL;
+      } else if (__builtin_available(macOS 26.0, *)) {
+         /* AppleGL is not working on macOS 26 (https://github.com/XQuartz/XQuartz/issues/446);
+          * skip its election and let the screen-creation walk fall through to drisw / zink.
+          * MESA_LOADER_DRIVER_OVERRIDE=applegl above is the escape hatch for testing.
+          */
+      } else {
+         glx_driver |= GLX_DRIVER_APPLEGL;
+      }
+   }
 #endif
-
-#if defined(GLX_USE_APPLEGL) && !defined(GLX_USE_APPLE)
-   if (!applegl_create_display(dpyPriv))
-      goto init_fail;
-#endif
+#endif /* GLX_DIRECT_RENDERING */
 
    if (!AllocAndFetchScreenConfigs(dpy, dpyPriv, glx_driver, !env)) {
       Bool fail = True;
-#if defined(GLX_DIRECT_RENDERING) && (!defined(GLX_USE_APPLEGL) || defined(GLX_USE_APPLE))
+#if defined(GLX_DIRECT_RENDERING)
       if (glx_driver & GLX_DRIVER_ZINK_INFER) {
          fail = !AllocAndFetchScreenConfigs(dpy, dpyPriv, GLX_DRIVER_SW, true);
       }
@@ -1087,7 +1097,7 @@ __glXInitialize(Display * dpy)
 
    return dpyPriv;
 init_fail:
-#if defined(GLX_DIRECT_RENDERING) && !defined(GLX_USE_APPLEGL)
+#if defined(GLX_DIRECT_RENDERING)
    _mesa_set_destroy(dpyPriv->zombieGLXDrawable, free_zombie_glx_drawable);
    __glxHashDestroy(dpyPriv->drawHash);
 #endif

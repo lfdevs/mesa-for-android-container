@@ -269,13 +269,21 @@ try_move_narrowing_dst(nir_builder *b, nir_phi_instr *phi)
 static bool
 can_convert_load_const(nir_load_const_instr *lc, nir_op op)
 {
-   nir_alu_type type = op_to_type(op);
+   const nir_op_info *info = &nir_op_infos[op];
+
+   nir_alu_type dest_type = nir_alu_type_get_base_type(info->output_type);
+   nir_alu_type src_type = nir_alu_type_get_base_type(info->input_types[0]);
 
    /* Note that we only handle phi's with bit_size == 32: */
    assert(lc->def.bit_size == 32);
+   assert(info->num_inputs == 1);
+
+   /* TODO: handle conversions between float and ints */
+   if (dest_type != src_type)
+      return false;
 
    for (unsigned i = 0; i < lc->def.num_components; i++) {
-      switch (type) {
+      switch (dest_type) {
       case nir_type_int:
          if (lc->value[i].i32 != (int32_t)(int16_t)lc->value[i].i32)
             return false;

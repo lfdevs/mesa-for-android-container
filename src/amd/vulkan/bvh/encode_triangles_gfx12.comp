@@ -29,8 +29,9 @@ layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
 
 #include "vk_debug.h"
 
-#include "build_helpers.h"
-#include "build_interface.h"
+#include "bvh_defines.h"
+#define VK_USED_BUILD_FLAGS RADV_ENCODE_TRIANGLES_GFX12_BUILD_FLAGS
+#include "bvh_helpers.h"
 #include "encode.h"
 #include "invocation_cluster.h"
 
@@ -44,7 +45,7 @@ layout(push_constant) uniform CONSTS
 void
 main()
 {
-   bool is_retry = VK_BUILD_FLAG(RADV_BUILD_FLAG_BATCH_COMPRESS_TRIANGLES_RETRY);
+   bool is_retry = RADV_TEST_BUILD_FLAG_BATCH_COMPRESS_TRIANGLES_RETRY;
 
    uint32_t global_id = gl_GlobalInvocationID.x;
 

@@ -24,6 +24,10 @@ spec@arb_timer_query@timestamp-get
 spec@ext_image_dma_buf_import@ext_image_dma_buf_import-refcount-multithread
 spec@!opengl es 3.0@gles-3.0-transform-feedback-uniform-buffer-object
 
+spec@arb_shader_image_load_store@shader-mem-barrier
+spec@arb_shader_image_load_store@shader-mem-barrier@Fragment shader/'volatile' qualifier memory barrier test/modulus=16
+spec@arb_shader_image_load_store@shader-mem-barrier@Fragment shader/'coherent' qualifier memory barrier test/modulus=16
+
 KHR-GL46.pipeline_statistics_query_tests_ARB.functional_primitives_vertices_submitted_and_clipping_input_output_primitives
 dEQP-GLES3.functional.occlusion_query.conservative_depth_write
 dEQP-GLES3.functional.occlusion_query.conservative_depth_write_depth_clear_stencil_write_stencil_clear

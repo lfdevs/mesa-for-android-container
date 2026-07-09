@@ -43,6 +43,7 @@ enum radv_dispatch_table {
    RADV_RGP_DISPATCH_TABLE,
    RADV_RRA_DISPATCH_TABLE,
    RADV_RMV_DISPATCH_TABLE,
+   RADV_UTRACE_DISPATCH_TABLE,
    RADV_CTX_ROLL_DISPATCH_TABLE,
    RADV_DISPATCH_TABLE_COUNT,
 };
@@ -53,6 +54,7 @@ struct radv_layer_dispatch_tables {
    struct vk_device_dispatch_table rgp;
    struct vk_device_dispatch_table rra;
    struct vk_device_dispatch_table rmv;
+   struct vk_device_dispatch_table utrace;
    struct vk_device_dispatch_table ctx_roll;
 };
 
@@ -240,6 +242,7 @@ struct radv_device {
 
    /* SPM. */
    struct ac_spm spm;
+   struct ac_spm_user_config *spm_user_config;
 
    struct radv_backed_buffer spm_buffer;
    struct radv_backed_buffer spm_staging_buffer;
@@ -321,6 +324,11 @@ struct radv_device {
    struct radv_compiler_info compiler_info;
 
    struct radv_shader_abort_data shader_abort;
+
+   struct {
+      struct u_trace_context *context;
+      simple_mtx_t lock;
+   } utrace;
 };
 
 VK_DEFINE_HANDLE_CASTS(radv_device, vk.base, VkDevice, VK_OBJECT_TYPE_DEVICE)
@@ -365,5 +373,9 @@ bool radv_device_acquire_performance_counters(struct radv_device *device);
 void radv_device_release_performance_counters(struct radv_device *device);
 
 bool radv_device_should_clear_vram(const struct radv_device *device);
+
+VkResult radv_device_init_utrace(struct radv_device *device);
+
+void radv_device_finish_utrace(struct radv_device *device);
 
 #endif /* RADV_DEVICE_H */

@@ -81,7 +81,7 @@ panfrost-g52-gl:arm64:
   parallel: 4
   extends:
     - .lava-arm64-test-gl
-    - .panfrost-bifrost-gl-rules
+    - .panfrost-panfrost-gl-rules
     - .panfrost-test
     - .lava-meson-g12b-a311d-khadas-vim3:arm64
   variables:
@@ -95,7 +95,7 @@ panfrost-g52-vk:arm64:
     - .lava-arm64-test-vk
     - .panfrost-test
     - .lava-mt8186-corsola-steelix-sku131072:arm64
-    - .panfrost-vk-rules
+    - .panfrost-vk-panfrost-rules
   variables:
     DRIVER_NAME: panvk
     MESA_VK_IGNORE_CONFORMANCE_WARNING: 1
@@ -108,7 +108,7 @@ panfrost-g52-piglit:arm64:
   parallel: 2
   extends:
     - .lava-arm64-test-gl
-    - .panfrost-bifrost-gl-manual-rules
+    - .panfrost-panfrost-gl-manual-rules
     - .panfrost-test
     - .test-piglit
     - .lava-meson-g12b-a311d-khadas-vim3:arm64
@@ -121,7 +121,7 @@ panfrost-g72-gl:arm64:
   parallel: 3
   extends:
     - .lava-arm64-test-gl
-    - .panfrost-bifrost-gl-rules
+    - .panfrost-panfrost-gl-rules
     - .panfrost-test
     - .lava-mt8183-kukui-jacuzzi-juniper-sku16:arm64
   variables:
@@ -131,7 +131,7 @@ panfrost-g72-gl:arm64:
 panfrost-g57-gl:arm64:
   extends:
     - .lava-arm64-test-gl
-    - .panfrost-bifrost-gl-rules
+    - .panfrost-panfrost-gl-rules
     - .panfrost-test
     - .lava-mt8195-cherry-tomato-r2:arm64
   parallel: 3
@@ -144,7 +144,7 @@ panfrost-g57-gl:arm64:
 panfrost-g57-piglit:arm64:
   extends:
     - .lava-arm64-test-gl
-    - .panfrost-bifrost-gl-rules
+    - .panfrost-panfrost-gl-rules
     - .panfrost-test
     - .test-piglit
     - .lava-mt8195-cherry-tomato-r2:arm64
@@ -160,7 +160,7 @@ panfrost-g610-gl:arm64:
   parallel: 2
   extends:
     - .lava-arm64-test-gl
-    - .panfrost-valhall-gl-rules
+    - .panfrost-panthor-gl-rules
     - .panfrost-test
     - .lava-rk3588-rock-5b:arm64
   variables:
@@ -169,12 +169,16 @@ panfrost-g610-gl:arm64:
     LAVA_TAGS: 4gb
 
 panfrost-g610-piglit:arm64:
+  parallel: 2
   extends:
     - .lava-arm64-test-gl
-    - .panfrost-valhall-gl-rules
+    - .panfrost-panthor-gl-rules
     - .panfrost-test
     - .test-piglit
     - .lava-rk3588-rock-5b:arm64
+  rules:
+    - !reference [.panfrost-panthor-gl-rules, rules]
+    - !reference [.rusticl-rules, rules]
   variables:
     DRIVER_NAME: panfrost
     DEQP_SUITE: panfrost-g610-piglit
@@ -187,7 +191,7 @@ panfrost-g610-vk:arm64:
     - .lava-arm64-test-vk
     - .panfrost-test
     - .lava-rk3588-rock-5b:arm64
-    - .panfrost-vk-rules
+    - .panfrost-vk-panthor-rules
   variables:
     DRIVER_NAME: panvk
     MESA_VK_IGNORE_CONFORMANCE_WARNING: 1
@@ -207,7 +211,7 @@ panfrost-g610-vk-asan:arm64:
     - .lava-arm64-test-asan-vk
     - .panfrost-test
     - .lava-rk3588-rock-5b:arm64
-    - .panfrost-vk-manual-rules
+    - .panfrost-vk-manual-panthor-rules
   timeout: 1h 35m
   variables:
     DRIVER_NAME: panvk
@@ -223,7 +227,7 @@ panfrost-g925-vk:arm64:
     - .lava-arm64-test-vk
     - .panfrost-test
     - .lava-mt8196-rauru-navi-sku0:arm64
-    - .panfrost-vk-rules
+    - .panfrost-vk-panthor-rules
   variables:
     DRIVER_NAME: panvk
     MESA_VK_IGNORE_CONFORMANCE_WARNING: 1
@@ -238,7 +242,7 @@ panfrost-g925-angle:arm64:
     - .panfrost-test
     - .test-angle
     - .lava-mt8196-rauru-navi-sku0:arm64
-    - .panfrost-vk-rules
+    - .panfrost-vk-panthor-rules
   variables:
     MESA_VK_IGNORE_CONFORMANCE_WARNING: 1
     DEQP_SUITE: panvk-angle

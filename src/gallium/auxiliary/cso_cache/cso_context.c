@@ -478,7 +478,6 @@ cso_destroy_context(struct cso_context *cso)
 {
    struct cso_context_priv *ctx = (struct cso_context_priv *)cso;
 
-   cso_unbind_context(cso);
    cso_cache_delete(&ctx->cache);
 
    if (ctx->vbuf)

@@ -4113,6 +4113,14 @@ tu_pipeline_builder_emit_state(struct tu_pipeline_builder *builder,
    for (unsigned i = 0; i < ARRAY_SIZE(tu_rb_depth_cntl_state); i++)
       BITSET_SET(keep, tu_rb_depth_cntl_state[i]);
 
+#ifdef HAVE_PERFETTO
+   /* Needed for the bin layout Perfetto info. */
+   BITSET_SET(keep, MESA_VK_DYNAMIC_VP_VIEWPORT_COUNT);
+   BITSET_SET(keep, MESA_VK_DYNAMIC_VP_VIEWPORTS);
+   BITSET_SET(keep, MESA_VK_DYNAMIC_VP_SCISSOR_COUNT);
+   BITSET_SET(keep, MESA_VK_DYNAMIC_VP_SCISSORS);
+#endif
+
    /* Remove state which has been emitted and we no longer need to set when
     * binding the pipeline by making it "dynamic".
     */

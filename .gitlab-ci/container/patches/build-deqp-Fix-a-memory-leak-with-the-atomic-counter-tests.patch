@@ -1,0 +1,43 @@
+From 9310c20d406444523c411f06d96370456e7dacc6 Mon Sep 17 00:00:00 2001
+From: Samuel Pitoiset <samuel.pitoiset@gmail.com>
+Date: Thu, 2 Jul 2026 09:58:40 +0200
+Subject: [PATCH 4/4] Fix a memory leak with the atomic counter tests
+
+This has been detected by ASAN.
+
+Components: OpenGL
+
+Affected: KHR-GL46.shader_atomic_counter_ops_tests.*
+---
+ .../openglcts/modules/gl/gl4cShaderAtomicCounterOpsTests.cpp    | 1 +
+ .../openglcts/modules/gl/gl4cShaderAtomicCounterOpsTests.hpp    | 2 ++
+ 2 files changed, 3 insertions(+)
+
+diff --git a/external/openglcts/modules/gl/gl4cShaderAtomicCounterOpsTests.cpp b/external/openglcts/modules/gl/gl4cShaderAtomicCounterOpsTests.cpp
+index ff8d52710..067189d9a 100644
+--- a/external/openglcts/modules/gl/gl4cShaderAtomicCounterOpsTests.cpp
++++ b/external/openglcts/modules/gl/gl4cShaderAtomicCounterOpsTests.cpp
+@@ -583,6 +583,7 @@ void ShaderAtomicCounterOpsTestBase::deinit()
+     {
+         delete *iter;
+     }
++    m_operations.clear();
+ }
+ 
+ tcu::TestNode::IterateResult ShaderAtomicCounterOpsTestBase::iterate()
+diff --git a/external/openglcts/modules/gl/gl4cShaderAtomicCounterOpsTests.hpp b/external/openglcts/modules/gl/gl4cShaderAtomicCounterOpsTests.hpp
+index 24b9ade0e..abbf40796 100644
+--- a/external/openglcts/modules/gl/gl4cShaderAtomicCounterOpsTests.hpp
++++ b/external/openglcts/modules/gl/gl4cShaderAtomicCounterOpsTests.hpp
+@@ -299,6 +299,8 @@ protected:
+         {
+             m_shaderPipelines.push_back(ShaderPipeline((glu::ShaderType)i, newOp, m_contextSupportsGL46));
+         }
++
++        m_operations.push_back(newOp);
+     }
+ 
+     virtual void setOperations() = 0;
+-- 
+2.54.0
+

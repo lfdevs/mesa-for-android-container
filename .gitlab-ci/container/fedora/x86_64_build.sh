@@ -68,7 +68,6 @@ DEPS=(
     "pkgconfig(xfixes)"
     "pkgconfig(xrandr)"
     "pkgconfig(xshmfence)"
-    "pkgconfig(xtensor)"
     "pkgconfig(xxf86vm)"
     "pkgconfig(zlib)"
     procps-ng
@@ -79,6 +78,7 @@ DEPS=(
     python3-ply
     python3-pycparser
     python3-yaml
+    SDL3-devel
     spirv-tools-devel
     spirv-llvm-translator-devel
     vulkan-headers

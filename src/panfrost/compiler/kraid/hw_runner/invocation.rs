@@ -11,8 +11,9 @@ use kraid_hw_runner_bindings::{
 
 pub struct InvocationInfo<'a> {
     pub code: &'a [u8],
-    pub register_count: u16,
-    pub invocations: u16,
+    pub register_count: u8,
+    pub register_preload: u64,
+    pub invocations: u32,
     pub fau: &'a [u32],
     // Offset of ShaderArgs in fau
     pub fau_args_offset: usize,
@@ -71,6 +72,7 @@ pub fn new_invocation_cs(
         data_ptr: info.data.as_ptr() as *mut c_void,
         data_size_B: info.data.len() as u64,
         data_stride_B: info.data_stride,
+        register_preload: info.register_preload,
         register_count: info.register_count,
         invocations: info.invocations,
     };

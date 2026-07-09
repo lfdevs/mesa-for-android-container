@@ -62,20 +62,21 @@ preprocess_gfx_sequences(struct anv_cmd_buffer *cmd_buffer,
       return NULL;
 
    /**/
-   struct anv_dgc_gfx_state gfx_state = {};
+   struct anv_dgc_gfx_state *gfx_state = &cmd_buffer->state.gfx.dgc_state;
+   memset(gfx_state, 0, sizeof(*gfx_state));
    struct anv_state gfx_state_state =
-      anv_cmd_buffer_alloc_temporary_state(cmd_buffer, sizeof(gfx_state), 8);
+      anv_cmd_buffer_alloc_temporary_state(cmd_buffer, sizeof(*gfx_state), 8);
    if (gfx_state_state.map == NULL)
       return NULL;
 
    uint32_t cmd_stride = anv_dgc_fill_gfx_layout(
-      &gfx_state.layout, device, layout, gfx->shaders);
+      &gfx_state->layout, device, layout, gfx->shaders);
    anv_dgc_fill_gfx_state(
-      &gfx_state, cmd_buffer_state, layout, gfx->shaders);
-   anv_write_gfx_indirect_descriptor(device, &gfx_state.descriptor,
+      gfx_state, cmd_buffer_state, layout, gfx->shaders);
+   anv_write_gfx_indirect_descriptor(device, &gfx_state->descriptor,
                                      &cmd_buffer_state->state.gfx);
 
-   memcpy(gfx_state_state.map, &gfx_state, sizeof(gfx_state));
+   memcpy(gfx_state_state.map, gfx_state, sizeof(*gfx_state));
 
    /**/
    struct anv_shader_internal *generate_kernel;

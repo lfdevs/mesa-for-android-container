@@ -203,7 +203,7 @@ impl<'a> TestShaderBuilder<'a> {
         let f = Function {
             ssa_alloc: self.alloc,
             phi_alloc: PhiAllocator::new(),
-            blocks: cfg.as_cfg(),
+            blocks: cfg.as_cfg(true),
         };
 
         let cs_info = ComputeShaderInfo {

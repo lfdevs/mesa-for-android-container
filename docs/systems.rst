@@ -14,7 +14,7 @@ Hardware drivers include:
 -  Intel GMA, HD Graphics, Iris. See `Intel's
    Website <https://www.intel.com/content/www/us/en/developer/topic-technology/open/overview.html>`__
 -  AMD Radeon series. See
-   `RadeonFeature <https://www.x.org/wiki/RadeonFeature>`__
+   `RadeonFeature <https://www.x.org/RadeonFeature>`__
 -  NVIDIA GPUs (Maxwell and later). See :doc:`NVK <drivers/nvk>`
 -  Qualcomm Adreno 2xx-8xx. See :doc:`Freedreno
    <drivers/freedreno>`

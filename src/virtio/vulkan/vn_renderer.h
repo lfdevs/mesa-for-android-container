@@ -37,7 +37,12 @@ struct vn_renderer_bo {
  * The main difference is that drm_syncobj can have unsignaled value 0.
  */
 struct vn_renderer_sync {
-   uint32_t sync_id;
+   union {
+      /* for virtgpu backend */
+      uint32_t syncobj_handle;
+      /* for vtest backend */
+      uint32_t sync_id;
+   };
 };
 
 struct vn_renderer_info {
@@ -61,6 +66,7 @@ struct vn_renderer_info {
 
    bool has_dma_buf_import;
    bool has_external_sync;
+   bool has_timeline_sync;
    bool has_implicit_fencing;
    bool has_guest_vram;
 
@@ -99,20 +105,6 @@ struct vn_renderer_submit_batch {
    uint32_t sync_count;
 };
 
-struct vn_renderer_submit {
-   /* BOs to pin and to fence implicitly
-    *
-    * TODO track all bos and automatically pin them.  We don't do it yet
-    * because each vn_command_buffer owns a bo.  We can probably make do by
-    * returning the bos to a bo cache and exclude bo cache from pinning.
-    */
-   struct vn_renderer_bo *const *bos;
-   uint32_t bo_count;
-
-   const struct vn_renderer_submit_batch *batches;
-   uint32_t batch_count;
-};
-
 struct vn_renderer_wait {
    bool wait_any;
    uint64_t timeout;
@@ -128,7 +120,7 @@ struct vn_renderer_ops {
                    const VkAllocationCallbacks *alloc);
 
    VkResult (*submit)(struct vn_renderer *renderer,
-                      const struct vn_renderer_submit *submit);
+                      const struct vn_renderer_submit_batch *batch);
 
    /*
     * On success, returns VK_SUCCESS or VK_TIMEOUT.  On failure, returns
@@ -269,7 +261,7 @@ vn_renderer_destroy(struct vn_renderer *renderer,
 
 static inline VkResult
 vn_renderer_submit(struct vn_renderer *renderer,
-                   const struct vn_renderer_submit *submit)
+                   const struct vn_renderer_submit_batch *submit)
 {
    return renderer->ops.submit(renderer, submit);
 }

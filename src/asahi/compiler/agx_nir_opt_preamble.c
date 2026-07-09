@@ -115,8 +115,6 @@ alu_cost(nir_alu_instr *alu)
    case nir_op_ineg:
    case nir_op_bcsel:
    case nir_op_b2b1:
-   case nir_op_b2b8:
-   case nir_op_b2b16:
    case nir_op_b2b32:
    case nir_op_b2i8:
    case nir_op_b2i16:

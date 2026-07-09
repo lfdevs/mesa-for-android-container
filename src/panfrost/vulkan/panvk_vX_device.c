@@ -270,15 +270,9 @@ panvk_device_check_status(struct vk_device *vk_dev)
    struct panvk_device *dev = to_panvk_device(vk_dev);
    VkResult result = vk_check_printf_status(&dev->vk, &dev->printf.ctx);
 
-   for (uint32_t qfi = 0; qfi < PANVK_QUEUE_FAMILY_COUNT; qfi++) {
-      struct panvk_device_queue_family *qf = &dev->queue_families[qfi];
-
-      for (uint32_t q = 0; q < qf->queue_count; q++) {
-         struct vk_queue *queue = qf->queues[q];
-
-         if (panvk_queue_check_status(queue) != VK_SUCCESS)
-            result = VK_ERROR_DEVICE_LOST;
-      }
+   vk_foreach_queue(queue, vk_dev) {
+      if (panvk_queue_check_status(queue) != VK_SUCCESS)
+         result = VK_ERROR_DEVICE_LOST;
    }
 
    if (pan_kmod_vm_query_state(dev->kmod.vm) != PAN_KMOD_VM_USABLE) {
@@ -574,24 +568,11 @@ panvk_per_arch(create_device)(struct panvk_physical_device *physical_device,
       if (result != VK_SUCCESS)
          goto err_finish_queues;
 
-      uint32_t qfi = queue_create->queueFamilyIndex;
-      struct panvk_device_queue_family *qf = &device->queue_families[qfi];
-
-      qf->queues =
-         vk_zalloc(&device->vk.alloc,
-                   queue_create->queueCount * sizeof(qf->queues[0]), 8,
-                   VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
-      if (!qf->queues) {
-         result = panvk_error(device, VK_ERROR_OUT_OF_HOST_MEMORY);
-         goto err_finish_queues;
-      }
-
       for (unsigned q = 0; q < queue_create->queueCount; q++) {
-         result = panvk_queue_create(device, queue_create, q, &qf->queues[q]);
+         struct vk_queue *queue;
+         result = panvk_queue_create(device, queue_create, q, &queue);
          if (result != VK_SUCCESS)
             goto err_finish_queues;
-
-         qf->queue_count++;
       }
    }
 
@@ -609,15 +590,8 @@ panvk_per_arch(create_device)(struct panvk_physical_device *physical_device,
    return VK_SUCCESS;
 
 err_finish_queues:
-   for (unsigned i = 0; i < PANVK_QUEUE_FAMILY_COUNT; i++) {
-      struct panvk_device_queue_family *qf = &device->queue_families[i];
-
-      for (unsigned q = 0; q < qf->queue_count; q++)
-         panvk_queue_destroy(qf->queues[q]);
-
-      if (qf->queues)
-         vk_free(&device->vk.alloc, qf->queues);
-   }
+   vk_foreach_queue_safe(queue, &device->vk)
+      panvk_queue_destroy(queue);
 
    panvk_meta_cleanup(device);
 
@@ -674,15 +648,8 @@ panvk_per_arch(destroy_device)(struct panvk_device *device,
 
    panvk_per_arch(utrace_context_fini)(device);
 
-   for (unsigned i = 0; i < PANVK_QUEUE_FAMILY_COUNT; i++) {
-      struct panvk_device_queue_family *qf = &device->queue_families[i];
-
-      for (unsigned q = 0; q < qf->queue_count; q++)
-         panvk_queue_destroy(qf->queues[q]);
-
-      if (qf->queues)
-         vk_free(&device->vk.alloc, qf->queues);
-   }
+   vk_foreach_queue_safe(queue, &device->vk)
+      panvk_queue_destroy(queue);
 
    panvk_precomp_cleanup(device);
 #if PAN_ARCH >= 10 && PAN_ARCH < 14

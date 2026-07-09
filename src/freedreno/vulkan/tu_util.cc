@@ -555,12 +555,14 @@ tu_framebuffer_get_tiling_config(struct tu_framebuffer *fb,
    assert(divisor >= 1 && divisor <= TU_GMEM_LAYOUT_DIVISOR_MAX);
    assert(divisor == 1 || !pass->has_fdm); /* For FDM, it's expected that FDM alone will be sufficient to
                                               appropriately size the tiles for the framebuffer.*/
-   struct tu_tiling_config *tiling = &fb->tiling[(TU_GMEM_LAYOUT_COUNT * (divisor - 1)) + gmem_layout];
 
-   if (divisor > fb->initd_divisor) {
-      const struct tu_tiling_config *base_tiling =
-         tu_framebuffer_get_tiling_config(fb, device, pass, gmem_layout, divisor - 1);
-      tu_tiling_config_divide_tile(device, pass, fb, base_tiling, tiling, divisor);
+   /* Initialize every level between what's already been done and the requested divisor, in
+    * order, so a jump of more than one level never leaves an intermediate slot uninitialized.
+    */
+   for (uint32_t d = fb->initd_divisor + 1; d <= divisor; d++) {
+      struct tu_tiling_config *tiling = &fb->tiling[(TU_GMEM_LAYOUT_COUNT * (d - 1)) + gmem_layout];
+      const struct tu_tiling_config *base_tiling = &fb->tiling[gmem_layout];
+      tu_tiling_config_divide_tile(device, pass, fb, base_tiling, tiling, d);
 
       struct tu_vsc_config *vsc = &tiling->vsc;
       if (tiling->possible) {
@@ -577,13 +579,14 @@ tu_framebuffer_get_tiling_config(struct tu_framebuffer *fb,
           (vsc->tile_count.width * vsc->tile_count.height > 100) /* 100 tiles are too many, even with HW binning.   */
       ) {
          /* Revert to the previous level's tiling configuration. */
-         *tiling = *base_tiling;
+         const struct tu_tiling_config *prev_tiling = &fb->tiling[(TU_GMEM_LAYOUT_COUNT * (d - 2)) + gmem_layout];
+         *tiling = *prev_tiling;
       }
 
-      fb->initd_divisor = divisor;
+      fb->initd_divisor = d;
    }
 
-   return tiling;
+   return &fb->tiling[(TU_GMEM_LAYOUT_COUNT * (divisor - 1)) + gmem_layout];
 }
 
 void

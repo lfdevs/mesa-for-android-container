@@ -1092,7 +1092,6 @@ loader_dri3_swap_buffers_msc(struct loader_dri3_drawable *draw,
        * request. target_msc=divisor=remainder=0 means "Use glXSwapBuffers()
        * semantic"
        */
-      ++draw->send_sbc;
       if (target_msc == 0 && divisor == 0 && remainder == 0) {
          /* Wait for previous send present request gets its complete event
           * to update the window msc before send next present request.
@@ -1114,13 +1113,12 @@ loader_dri3_swap_buffers_msc(struct loader_dri3_drawable *draw,
           * Nth request at the next vblank. [1 .. N-1] requests are skipped.
           */
          if (draw->swap_interval != 0) {
-            while (draw->recv_sbc + 1 != draw->send_sbc) {
+            while (draw->recv_sbc != draw->send_sbc) {
                if (!dri3_wait_for_event_locked(draw, NULL))
                   break;
             }
          }
-         target_msc = draw->msc + abs(draw->swap_interval) *
-                      (draw->send_sbc - draw->recv_sbc);
+         target_msc = draw->msc + abs(draw->swap_interval);
       } else if (divisor == 0 && remainder > 0) {
          /* From the GLX_OML_sync_control spec:
           *     "If <divisor> = 0, the swap will occur when MSC becomes
@@ -1132,6 +1130,8 @@ loader_dri3_swap_buffers_msc(struct loader_dri3_drawable *draw,
           */
          remainder = 0;
       }
+
+      ++draw->send_sbc;
 
       /* From the GLX_EXT_swap_control spec
        * and the EGL 1.4 spec (page 53):

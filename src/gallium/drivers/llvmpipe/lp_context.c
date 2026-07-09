@@ -107,6 +107,10 @@ llvmpipe_destroy(struct pipe_context *pipe)
 
    lp_delete_setup_variants(llvmpipe);
 
+   lp_destroy_cs_variants(llvmpipe);
+
+   llvmpipe_destroy_fs_funcs(llvmpipe);
+
    llvmpipe_sampler_matrix_destroy(llvmpipe);
 
    lp_context_destroy(&llvmpipe->context);
@@ -274,12 +278,6 @@ llvmpipe_create_context(struct pipe_screen *screen, void *priv,
    }
 #endif
 
-   list_inithead(&llvmpipe->fs_variants_list.list);
-
-   list_inithead(&llvmpipe->setup_variants_list.list);
-
-   list_inithead(&llvmpipe->cs_variants_list.list);
-
    llvmpipe->pipe.screen = screen;
    llvmpipe->pipe.priv = priv;
 
@@ -319,17 +317,9 @@ llvmpipe_create_context(struct pipe_screen *screen, void *priv,
    llvmpipe_init_fence_funcs(&llvmpipe->pipe);
 #endif
 
-#ifdef USE_GLOBAL_LLVM_CONTEXT
-   llvmpipe->context.ref = LLVMGetGlobalContext();
+   /* Alias the screen's shared LLVMContext; aliases share the mutex. */
+   llvmpipe->context = lp_screen->llvm_context;
    llvmpipe->context.owned = false;
-#if LLVM_VERSION_MAJOR == 15
-   if (llvmpipe->context.ref) {
-      LLVMContextSetOpaquePointers(llvmpipe->context.ref, false);
-   }
-#endif
-#else
-   lp_context_create(&llvmpipe->context);
-#endif
 
    if (!llvmpipe->context.ref)
       goto fail;

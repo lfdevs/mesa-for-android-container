@@ -33,8 +33,59 @@
 #include "util/os_misc.h"
 #include "util/u_math.h"
 
-#include "../../gallium/drivers/nouveau/nv_object.xml.h"
-bool drm_shim_driver_prefers_first_render_node = true;
+#include "nvtypes.h"
+
+#include "cl502d.h"
+#include "cl902d.h"
+
+#include "cl9039.h"
+#include "cla040.h"
+#include "cla140.h"
+
+#include "cl9097.h"
+#include "cl9197.h"
+#include "cl9297.h"
+#include "cla097.h"
+#include "cla197.h"
+#include "cla297.h"
+#include "clb097.h"
+#include "clb197.h"
+#include "clc097.h"
+#include "clc197.h"
+#include "clc397.h"
+#include "clc597.h"
+#include "clc797.h"
+#include "clc997.h"
+#include "clcb97.h"
+#include "clcd97.h"
+#include "clce97.h"
+
+#include "cla0b5.h"
+#include "clb0b5.h"
+#include "clc0b5.h"
+#include "clc1b5.h"
+#include "clc3b5.h"
+#include "clc5b5.h"
+#include "clc6b5.h"
+#include "clc7b5.h"
+#include "clc8b5.h"
+#include "clc9b5.h"
+#include "clcab5.h"
+
+#include "cl90c0.h"
+#include "cla0c0.h"
+#include "cla1c0.h"
+#include "clb0c0.h"
+#include "clb1c0.h"
+#include "clc0c0.h"
+#include "clc1c0.h"
+#include "clc3c0.h"
+#include "clc5c0.h"
+#include "clc7c0.h"
+#include "clc9c0.h"
+#include "clcbc0.h"
+#include "clcdc0.h"
+#include "clcec0.h"
 
 struct nouveau_device {
    uint64_t next_offset;
@@ -195,6 +246,26 @@ nouveau_ioctl_get_param(int fd, unsigned long request, void *arg)
 }
 
 static int
+nouveau_ioctl_get_zcull_info(int fd, unsigned long request, void *arg)
+{
+   struct drm_nouveau_get_zcull_info *args = arg;
+
+   args->width_align_pixels = 224;
+   args->height_align_pixels = 32;
+   args->pixel_squares_by_aliquots = 3584;
+   args->aliquot_total = 5120;
+   args->zcull_region_byte_multiplier = 128;
+   args->zcull_region_header_size = 224;
+   args->zcull_subregion_header_size = 1344;
+   args->subregion_count = 16;
+   args->subregion_width_align_pixels = 224;
+   args->subregion_height_align_pixels = 64;
+   args->ctxsw_size = 657408;
+   args->ctxsw_align = 4096;
+   return 0;
+}
+
+static int
 nouveau_ioctl_nvif(int fd, unsigned long request, void *arg)
 {
    struct {
@@ -235,6 +306,10 @@ nouveau_ioctl_nvif(int fd, unsigned long request, void *arg)
       int idx = 0;
       /* m2mf */
       switch (device_info.chip_id & ~0xf) {
+      case 0x1b0:
+      case 0x1a0:
+      case 0x190:
+      case 0x180:
       case 0x170:
       case 0x160:
       case 0x140:
@@ -243,13 +318,13 @@ nouveau_ioctl_nvif(int fd, unsigned long request, void *arg)
       case 0x110:
       case 0x100:
       case 0xf0:
-         sclass->sclass.oclass[idx].oclass = NVF0_P2MF_CLASS;
+         sclass->sclass.oclass[idx].oclass = KEPLER_INLINE_TO_MEMORY_B;
          break;
       case 0xe0:
-         sclass->sclass.oclass[idx].oclass = NVE4_P2MF_CLASS;
+         sclass->sclass.oclass[idx].oclass = KEPLER_INLINE_TO_MEMORY_A;
          break;
       default:
-         sclass->sclass.oclass[idx].oclass = NVC0_M2MF_CLASS;
+         sclass->sclass.oclass[idx].oclass = FERMI_MEMORY_TO_MEMORY_FORMAT_A;
          break;
       }
       sclass->sclass.oclass[idx].minver = -1;
@@ -257,8 +332,20 @@ nouveau_ioctl_nvif(int fd, unsigned long request, void *arg)
       idx++;
       if (device_info.chip_id >= 0xe0) {
          switch (device_info.chip_id & ~0xf) {
+         case 0x1b0:
+            sclass->sclass.oclass[idx].oclass = BLACKWELL_DMA_COPY_B;
+            break;
+         case 0x1a0:
+            sclass->sclass.oclass[idx].oclass = BLACKWELL_DMA_COPY_A;
+            break;
+         case 0x190:
+            sclass->sclass.oclass[idx].oclass = AMPERE_DMA_COPY_B;
+            break;
+         case 0x180:
+            sclass->sclass.oclass[idx].oclass = HOPPER_DMA_COPY_A;
+            break;
          case 0x170:
-            sclass->sclass.oclass[idx].oclass = AMPERE_DMA_COPY_A;
+            sclass->sclass.oclass[idx].oclass = AMPERE_DMA_COPY_B;
             break;
          case 0x160:
             sclass->sclass.oclass[idx].oclass = TURING_DMA_COPY_A;
@@ -286,9 +373,9 @@ nouveau_ioctl_nvif(int fd, unsigned long request, void *arg)
       /* 2d */
       if (device_info.chip_id >= 0x50) {
          if (device_info.chip_id <= 0xa0)
-            sclass->sclass.oclass[idx].oclass = NV50_2D_CLASS;
+            sclass->sclass.oclass[idx].oclass = NV50_TWOD;
          else
-            sclass->sclass.oclass[idx].oclass = NVC0_2D_CLASS;
+            sclass->sclass.oclass[idx].oclass = FERMI_TWOD_A;
 
          sclass->sclass.oclass[idx].minver = -1;
          sclass->sclass.oclass[idx].maxver = -1;
@@ -296,60 +383,72 @@ nouveau_ioctl_nvif(int fd, unsigned long request, void *arg)
       }
       /* 3d */
       switch (device_info.chip_id & ~0xf) {
+      case 0x1b0:
+         sclass->sclass.oclass[idx].oclass = BLACKWELL_B;
+         break;
+      case 0x1a0:
+         sclass->sclass.oclass[idx].oclass = BLACKWELL_A;
+         break;
+      case 0x190:
+         sclass->sclass.oclass[idx].oclass = ADA_A;
+         break;
+      case 0x180:
+         sclass->sclass.oclass[idx].oclass = HOPPER_A;
+         break;
       case 0x170:
-         sclass->sclass.oclass[idx].oclass = GA102_3D_CLASS;
+         sclass->sclass.oclass[idx].oclass = AMPERE_B;
          break;
       case 0x160:
-         sclass->sclass.oclass[idx].oclass = TU102_3D_CLASS;
+         sclass->sclass.oclass[idx].oclass = TURING_A;
          break;
       case 0x140:
-         sclass->sclass.oclass[idx].oclass = GV100_3D_CLASS;
+         sclass->sclass.oclass[idx].oclass = VOLTA_A;
          break;
       case 0x130:
          switch (device_info.chip_id) {
          case 0x130:
          case 0x13b:
-            sclass->sclass.oclass[idx].oclass = GP100_3D_CLASS;
+            sclass->sclass.oclass[idx].oclass = PASCAL_A;
             break;
          default:
-            sclass->sclass.oclass[idx].oclass = GP102_3D_CLASS;
+            sclass->sclass.oclass[idx].oclass = PASCAL_B;
             break;
          }
          break;
       case 0x120:
-         sclass->sclass.oclass[idx].oclass = GM200_3D_CLASS;
+         sclass->sclass.oclass[idx].oclass = MAXWELL_B;
          break;
       case 0x110:
-         sclass->sclass.oclass[idx].oclass = GM107_3D_CLASS;
+         sclass->sclass.oclass[idx].oclass = MAXWELL_A;
          break;
       case 0x100:
       case 0xf0:
-         sclass->sclass.oclass[idx].oclass = NVF0_3D_CLASS;
+         sclass->sclass.oclass[idx].oclass = KEPLER_B;
          break;
       case 0xe0:
          switch (device_info.chip_id) {
          case 0xea:
-            sclass->sclass.oclass[idx].oclass = NVEA_3D_CLASS;
+            sclass->sclass.oclass[idx].oclass = KEPLER_C;
             break;
          default:
-            sclass->sclass.oclass[idx].oclass = NVE4_3D_CLASS;
+            sclass->sclass.oclass[idx].oclass = KEPLER_A;
             break;
          }
          break;
       case 0xd0:
-         sclass->sclass.oclass[idx].oclass = NVC8_3D_CLASS;
+         sclass->sclass.oclass[idx].oclass = FERMI_C;
          break;
       default:
       case 0xc0:
          switch (device_info.chip_id) {
          case 0xc8:
-            sclass->sclass.oclass[idx].oclass = NVC8_3D_CLASS;
+            sclass->sclass.oclass[idx].oclass = FERMI_C;
             break;
          case 0xc1:
-            sclass->sclass.oclass[idx].oclass = NVC1_3D_CLASS;
+            sclass->sclass.oclass[idx].oclass = FERMI_B;
             break;
          default:
-            sclass->sclass.oclass[idx].oclass = NVC0_3D_CLASS;
+            sclass->sclass.oclass[idx].oclass = FERMI_A;
             break;
          }
          break;
@@ -358,41 +457,53 @@ nouveau_ioctl_nvif(int fd, unsigned long request, void *arg)
       sclass->sclass.oclass[idx].maxver = -1;
       idx++;
       switch (device_info.chip_id & ~0xf) {
+      case 0x1b0:
+         sclass->sclass.oclass[idx].oclass = BLACKWELL_COMPUTE_B;
+         break;
+      case 0x1a0:
+         sclass->sclass.oclass[idx].oclass = BLACKWELL_COMPUTE_A;
+         break;
+      case 0x190:
+         sclass->sclass.oclass[idx].oclass = ADA_COMPUTE_A;
+         break;
+      case 0x180:
+         sclass->sclass.oclass[idx].oclass = HOPPER_COMPUTE_A;
+         break;
       case 0x170:
-         sclass->sclass.oclass[idx].oclass = GA102_COMPUTE_CLASS;
+         sclass->sclass.oclass[idx].oclass = AMPERE_COMPUTE_B;
          break;
       case 0x160:
-         sclass->sclass.oclass[idx].oclass = TU102_COMPUTE_CLASS;
+         sclass->sclass.oclass[idx].oclass = TURING_COMPUTE_A;
          break;
       case 0x140:
-         sclass->sclass.oclass[idx].oclass = GV100_COMPUTE_CLASS;
+         sclass->sclass.oclass[idx].oclass = VOLTA_COMPUTE_A;
          break;
       case 0x130:
          switch (device_info.chip_id) {
          case 0x130:
          case 0x13b:
-            sclass->sclass.oclass[idx].oclass = GP100_COMPUTE_CLASS;
+            sclass->sclass.oclass[idx].oclass = PASCAL_COMPUTE_A;
             break;
          default:
-            sclass->sclass.oclass[idx].oclass = GP104_COMPUTE_CLASS;
+            sclass->sclass.oclass[idx].oclass = PASCAL_COMPUTE_B;
             break;
          }
          break;
       case 0x120:
-         sclass->sclass.oclass[idx].oclass = GM200_COMPUTE_CLASS;
+         sclass->sclass.oclass[idx].oclass = MAXWELL_COMPUTE_B;
          break;
       case 0x110:
-         sclass->sclass.oclass[idx].oclass = GM107_COMPUTE_CLASS;
+         sclass->sclass.oclass[idx].oclass = MAXWELL_COMPUTE_A;
          break;
       case 0x100:
       case 0xf0:
-         sclass->sclass.oclass[idx].oclass = NVF0_COMPUTE_CLASS;
+         sclass->sclass.oclass[idx].oclass = KEPLER_COMPUTE_B;
          break;
       case 0xe0:
-         sclass->sclass.oclass[idx].oclass = NVE4_COMPUTE_CLASS;
+         sclass->sclass.oclass[idx].oclass = KEPLER_COMPUTE_A;
          break;
       default:
-         sclass->sclass.oclass[idx].oclass = NVC0_COMPUTE_CLASS;
+         sclass->sclass.oclass[idx].oclass = FERMI_COMPUTE_A;
          break;
       }
       sclass->sclass.oclass[idx].minver = -1;
@@ -422,7 +533,7 @@ static ioctl_fn_t driver_ioctls[] = {
    [DRM_NOUVEAU_VM_INIT] = nouveau_ioctl_noop,
    [DRM_NOUVEAU_VM_BIND] = nouveau_ioctl_noop,
    [DRM_NOUVEAU_EXEC] = nouveau_ioctl_noop,
-   [DRM_NOUVEAU_GET_ZCULL_INFO] = nouveau_ioctl_noop,
+   [DRM_NOUVEAU_GET_ZCULL_INFO] = nouveau_ioctl_get_zcull_info,
 };
 
 static void
@@ -441,8 +552,6 @@ nouveau_driver_get_device_info(void)
 void
 drm_shim_driver_init(void)
 {
-   shim_device.bus_type = DRM_BUS_PCI;
-   shim_device.driver_name = "nouveau";
    shim_device.driver_ioctls = driver_ioctls;
    shim_device.driver_ioctl_count = ARRAY_SIZE(driver_ioctls);
 
@@ -456,37 +565,5 @@ drm_shim_driver_init(void)
    os_set_option("NOUVEAU_DISABLE_FENCES", "true", true);
 
    /* nothing looks at the pci id, so fix it to a GTX 780 */
-   static const char uevent_content[] =
-      "DRIVER=nouveau\n"
-      "PCI_CLASS=30000\n"
-      "PCI_ID=10de:1004\n"
-      "PCI_SUBSYS_ID=1028:075B\n"
-      "PCI_SLOT_NAME=0000:01:00.0\n"
-      "MODALIAS=pci:v000010ded00005916sv00001028sd0000075Bbc03sc00i00\n";
-   drm_shim_override_file(uevent_content,
-                          "/sys/dev/char/%d:%d/device/uevent",
-                          DRM_MAJOR, render_node_minor);
-   drm_shim_override_file("0x0\n",
-                          "/sys/dev/char/%d:%d/device/revision",
-                          DRM_MAJOR, render_node_minor);
-   drm_shim_override_file("0x10de",
-                          "/sys/dev/char/%d:%d/device/vendor",
-                          DRM_MAJOR, render_node_minor);
-   drm_shim_override_file("0x10de",
-                          "/sys/devices/pci0000:00/0000:01:00.0/vendor");
-   drm_shim_override_file("0x1004",
-                          "/sys/dev/char/%d:%d/device/device",
-                          DRM_MAJOR, render_node_minor);
-   drm_shim_override_file("0x1004",
-                          "/sys/devices/pci0000:00/0000:01:00.0/device");
-   drm_shim_override_file("0x1234",
-                          "/sys/dev/char/%d:%d/device/subsystem_vendor",
-                          DRM_MAJOR, render_node_minor);
-   drm_shim_override_file("0x1234",
-                          "/sys/devices/pci0000:00/0000:01:00.0/subsystem_vendor");
-   drm_shim_override_file("0x1234",
-                          "/sys/dev/char/%d:%d/device/subsystem_device",
-                          DRM_MAJOR, render_node_minor);
-   drm_shim_override_file("0x1234",
-                          "/sys/devices/pci0000:00/0000:01:00.0/subsystem_device");
+   drm_shim_pci_device_setup(0x10de, 0x1004, "0000:01:00.0", "nouveau");
 }

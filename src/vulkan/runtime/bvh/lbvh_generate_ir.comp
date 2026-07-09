@@ -23,7 +23,9 @@
 
 #version 460
 
-#include "vk_build_interface.h"
+#include "vk_bvh_defines.h"
+#define VK_USED_BUILD_FLAGS VK_LBVH_GENERATE_IR_BUILD_FLAGS
+#include "vk_bvh_helpers.h"
 
 layout(local_size_x_id = SUBGROUP_SIZE_ID, local_size_y = 1, local_size_z = 1) in;
 
@@ -95,12 +97,12 @@ main(void)
             bounds.min = min(bounds.min, child_bounds.min);
             bounds.max = max(bounds.max, child_bounds.max);
 
-            if (VK_BUILD_FLAG(VK_BUILD_FLAG_PROPAGATE_CULL_FLAGS))
+            if (VK_TEST_BUILD_FLAG_PROPAGATE_CULL_FLAGS)
                flags &= fetch_child_flags(args.bvh, children[0]);
          }
          previous_child_index = 0;
       } else {
-            if (VK_BUILD_FLAG(VK_BUILD_FLAG_PROPAGATE_CULL_FLAGS))
+            if (VK_TEST_BUILD_FLAG_PROPAGATE_CULL_FLAGS)
                flags &= previous_flags;
       }
 
@@ -112,7 +114,7 @@ main(void)
          bounds.min = min(bounds.min, child_bounds.min);
          bounds.max = max(bounds.max, child_bounds.max);
 
-         if (VK_BUILD_FLAG(VK_BUILD_FLAG_PROPAGATE_CULL_FLAGS))
+         if (VK_TEST_BUILD_FLAG_PROPAGATE_CULL_FLAGS)
             flags &= fetch_child_flags(args.bvh, children[1 - previous_child_index]);
       }
 
@@ -123,7 +125,7 @@ main(void)
       node_value.bvh_offset = VK_UNKNOWN_BVH_OFFSET;
       node_value.children = children;
 
-      if (VK_BUILD_FLAG(VK_BUILD_FLAG_PROPAGATE_CULL_FLAGS))
+      if (VK_TEST_BUILD_FLAG_PROPAGATE_CULL_FLAGS)
          node_value.flags = flags;
 
       DEREF(node) = node_value;

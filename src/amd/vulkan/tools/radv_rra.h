@@ -17,14 +17,16 @@
 #include "util/u_dynarray.h"
 #include "util/u_math.h"
 
-#include "bvh/vk_bvh.h"
+#include "bvh/vk_bvh_defines.h"
 
 #include "radv_debug.h"
+#include "radv_gamma.h"
 
 #include <vulkan/vulkan.h>
 
 #include <assert.h>
 #include <stdbool.h>
+#include <stdint.h>
 
 struct radv_device;
 
@@ -118,6 +120,7 @@ struct radv_rra_trace_data {
    uint64_t ray_history_addr;
    uint32_t ray_history_buffer_size;
    uint32_t ray_history_resolution_scale;
+   uint32_t ray_history_token_mask;
 };
 
 struct radv_ray_history_header {
@@ -125,51 +128,6 @@ struct radv_ray_history_header {
    uint32_t dispatch_index;
    uint32_t submit_base_index;
 };
-
-enum radv_packed_token_type {
-   radv_packed_token_end_trace,
-};
-
-struct radv_packed_token_header {
-   uint32_t launch_index : 29;
-   uint32_t hit : 1;
-   uint32_t token_type : 2;
-};
-
-struct radv_packed_end_trace_token {
-   struct radv_packed_token_header header;
-
-   uint32_t accel_struct_lo;
-   uint32_t accel_struct_hi;
-
-   uint32_t flags : 16;
-   uint32_t dispatch_index : 16;
-
-   uint32_t sbt_offset : 4;
-   uint32_t sbt_stride : 4;
-   uint32_t miss_index : 16;
-   uint32_t cull_mask : 8;
-
-   float origin[3];
-   float tmin;
-   float direction[3];
-   float tmax;
-
-   uint32_t iteration_count : 16;
-   uint32_t instance_count : 16;
-
-   uint32_t ahit_count : 16;
-   uint32_t isec_count : 16;
-
-   uint32_t primitive_id;
-   uint32_t geometry_id;
-
-   uint32_t instance_id : 24;
-   uint32_t hit_kind : 8;
-
-   float t;
-};
-static_assert(sizeof(struct radv_packed_end_trace_token) == 76, "Unexpected radv_packed_end_trace_token size");
 
 VkResult radv_rra_trace_init(struct radv_device *device);
 
@@ -187,6 +145,8 @@ void radv_rra_trace_finish(VkDevice vk_device, struct radv_rra_trace_data *data)
 void radv_destroy_rra_accel_struct_data(VkDevice device, struct radv_rra_accel_struct_data *data);
 
 VkResult radv_rra_dump_trace(VkQueue vk_queue, char *filename);
+
+VkResult radv_gamma_dump_trace(VkQueue vk_queue, char *filename);
 
 enum rra_bvh_type {
    RRA_BVH_TYPE_TLAS,

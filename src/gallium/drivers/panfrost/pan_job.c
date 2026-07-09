@@ -90,6 +90,9 @@ panfrost_batch_init(struct panfrost_context *ctx,
 
    panfrost_batch_add_surface(batch, &batch->key.zsbuf);
 
+   if (dev->arch >= 10)
+      u_trace_init(&batch->trace, &ctx->trace_context);
+
    return screen->vtbl.init_batch(batch);
 }
 
@@ -132,6 +135,9 @@ panfrost_batch_cleanup(struct panfrost_context *ctx,
    util_unreference_framebuffer_state(&batch->key);
 
    util_dynarray_fini(&batch->bos);
+
+   if (dev->arch >= 10)
+      u_trace_fini(&batch->trace);
 
    memset(batch, 0, sizeof(*batch));
    BITSET_CLEAR(ctx->batches.active, batch_idx);
@@ -525,13 +531,13 @@ panfrost_batch_to_fb_info(const struct panfrost_batch *batch,
       rts[i].format = surf->format;
       rts[i].dim = MALI_TEXTURE_DIMENSION_2D;
       rts[i].last_level = rts[i].first_level = surf->level;
-      rts[i].first_layer = surf->first_layer;
-      rts[i].last_layer = surf->last_layer;
+      rts[i].first_layer_or_z_slice = surf->first_layer;
+      rts[i].last_layer_or_z_slice = surf->last_layer;
       panfrost_set_image_view_planes(&rts[i], surf->texture);
       rts[i].nr_samples =
          surf->nr_samples ?: MAX2(surf->texture->nr_samples, 1);
       memcpy(rts[i].swizzle, id_swz, sizeof(rts[i].swizzle));
-      fb->rts[i].crc_valid = &prsrc->valid.crc;
+      fb->rts[i].crc_state = &prsrc->crc_state;
       fb->rts[i].view = &rts[i];
 
       /* Preload if the RT is read or updated */
@@ -556,8 +562,8 @@ panfrost_batch_to_fb_info(const struct panfrost_batch *batch,
          zs->format = z_rsrc->image.props.format;
          zs->dim = MALI_TEXTURE_DIMENSION_2D;
          zs->last_level = zs->first_level = surf->level;
-         zs->first_layer = surf->first_layer;
-         zs->last_layer = surf->last_layer;
+         zs->first_layer_or_z_slice = surf->first_layer;
+         zs->last_layer_or_z_slice = surf->last_layer;
          zs->planes[0] = (struct pan_image_plane_ref){
             .image = &z_rsrc->image,
             .plane_idx = 0,
@@ -577,8 +583,8 @@ panfrost_batch_to_fb_info(const struct panfrost_batch *batch,
             s->format = PIPE_FORMAT_S8_UINT;
             s->dim = MALI_TEXTURE_DIMENSION_2D;
             s->last_level = s->first_level = surf->level;
-            s->first_layer = surf->first_layer;
-            s->last_layer = surf->last_layer;
+            s->first_layer_or_z_slice = surf->first_layer;
+            s->last_layer_or_z_slice = surf->last_layer;
             s->planes[0] = (struct pan_image_plane_ref){
                .image = &s_rsrc->image,
                .plane_idx = 0,
@@ -594,8 +600,8 @@ panfrost_batch_to_fb_info(const struct panfrost_batch *batch,
          s->format = surf->format;
          s->dim = MALI_TEXTURE_DIMENSION_2D;
          s->last_level = s->first_level = surf->level;
-         s->first_layer = surf->first_layer;
-         s->last_layer = surf->last_layer;
+         s->first_layer_or_z_slice = surf->first_layer;
+         s->last_layer_or_z_slice = surf->last_layer;
          s->planes[0] = (struct pan_image_plane_ref){
             .image = &s_rsrc->image,
             .plane_idx = 0,
@@ -719,6 +725,9 @@ panfrost_batch_submit(struct panfrost_context *ctx,
    if (ret)
       mesa_loge("panfrost_batch_submit failed: %d\n", ret);
 
+   if (pan_device(ctx->base.screen)->arch >= 10)
+      u_trace_flush(&batch->trace, NULL, U_TRACE_FRAME_UNKNOWN, false);
+
    /* We must reset the damage info of our render targets here even
     * though a damage reset normally happens when the DRI layer swaps
     * buffers. That's because there can be implicit flushes the GL
@@ -759,6 +768,9 @@ panfrost_flush_all_batches(struct panfrost_context *ctx, const char *reason)
       if (ctx->batches.slots[i].seqnum)
          panfrost_batch_submit(ctx, &ctx->batches.slots[i]);
    }
+
+   if (pan_device(ctx->base.screen)->arch >= 10)
+      u_trace_context_process(&ctx->trace_context, false);
 }
 
 void
@@ -773,6 +785,8 @@ panfrost_flush_writer(struct panfrost_context *ctx,
    if (entry) {
       perf_debug(ctx, "Flushing writer due to: %s", reason);
       panfrost_batch_submit(ctx, entry->data);
+      if (pan_device(ctx->base.screen)->arch >= 10)
+         u_trace_context_process(&ctx->trace_context, false);
    }
 }
 
@@ -794,6 +808,8 @@ panfrost_flush_batches_accessing_rsrc(struct panfrost_context *ctx,
       perf_debug(ctx, "Flushing user due to: %s", reason);
       panfrost_batch_submit(ctx, batch);
    }
+   if (pan_device(ctx->base.screen)->arch >= 10)
+      u_trace_context_process(&ctx->trace_context, false);
 }
 
 bool

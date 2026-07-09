@@ -13,6 +13,11 @@ if host_machine.system() == 'android'
     files_lib_goldfish_address_space += files('goldfish_address_space.cpp')
 endif
 
+goldfish_address_space_deps = [dep_libdrm]
+if with_perfetto
+    goldfish_address_space_deps += dep_perfetto
+endif
+
 lib_goldfish_address_space = static_library(
     'goldfish_address_space',
     files_lib_goldfish_address_space,
@@ -26,5 +31,5 @@ lib_goldfish_address_space = static_library(
         inc_src,
     ],
     link_with: [libplatform_virtgpu],
-    dependencies: dep_libdrm,
+    dependencies: goldfish_address_space_deps,
 )

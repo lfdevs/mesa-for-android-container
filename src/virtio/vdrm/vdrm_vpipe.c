@@ -396,7 +396,8 @@ vpipe_handle_to_res_id(struct vdrm_device *vdev, uint32_t handle)
 
 static uint32_t
 vpipe_bo_create(struct vdrm_device *vdev, size_t size, uint32_t blob_flags,
-                  uint64_t blob_id, struct vdrm_ccmd_req *req)
+                uint64_t blob_id, uint32_t blob_hints,
+                struct vdrm_ccmd_req *req)
 {
    struct vpipe_device *vtdev = to_vpipe_device(vdev);
    uint32_t res_id;

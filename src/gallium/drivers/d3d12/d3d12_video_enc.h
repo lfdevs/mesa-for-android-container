@@ -164,6 +164,7 @@ enum d3d12_video_encoder_config_dirty_flags
    d3d12_video_encoder_config_dirty_flag_sei_header             = 0x8000,
    d3d12_video_encoder_config_dirty_flag_svcprefix_slice_header = 0x10000,
    d3d12_video_encoder_config_dirty_flag_dirty_regions          = 0x20000,
+   d3d12_video_encoder_config_dirty_flag_av1_temporal_delimiter_header = 0x40000,
 };
 DEFINE_ENUM_FLAG_OPERATORS(d3d12_video_encoder_config_dirty_flags);
 
@@ -588,6 +589,9 @@ struct d3d12_video_encoder
    ComPtr<ID3D12Fence> m_spLastSliceFence;
    uint64_t            m_fenceValue = 1u;
    uint64_t            m_LastSliceFenceValue = 1u;
+#if (USE_D3D12_PREVIEW_HEADERS && (D3D12_PREVIEW_SDK_VERSION >= 721))
+   uint64_t            m_SliceFenceValue = 1u;
+#endif
    uint64_t            m_ResidencyFenceValue = 0u;
    bool                m_bPendingWorkNotFlushed = false;
 

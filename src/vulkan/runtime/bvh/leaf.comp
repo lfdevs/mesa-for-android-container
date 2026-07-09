@@ -23,4 +23,6 @@
 
 #version 460
 
+#include "vk_bvh_defines.h"
+#define VK_USED_BUILD_FLAGS VK_LEAF_BUILD_FLAGS
 #include "leaf.h"

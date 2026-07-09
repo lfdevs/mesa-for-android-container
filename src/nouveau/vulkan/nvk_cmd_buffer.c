@@ -360,6 +360,10 @@ nvk_BeginCommandBuffer(VkCommandBuffer commandBuffer,
 
    nvk_reset_cmd_buffer(&cmd->vk, 0);
 
+   if (cmd->vk.level == VK_COMMAND_BUFFER_LEVEL_SECONDARY)
+      cmd->state.inherited_pipeline_statistics =
+         pBeginInfo->pInheritanceInfo->pipelineStatistics;
+
    /* Start with a nop so we have at least something to submit */
    struct nv_push *p = nvk_cmd_buffer_push(cmd, 2);
    P_MTHD(p, NV90B5, NOP);
@@ -482,6 +486,10 @@ nvk_barrier_flushes_waits(VkPipelineStageFlags2 stages,
    if (access & VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT)
       barriers |= NVK_BARRIER_FLUSH_SHADER_DATA;
 
+   if ((access & VK_ACCESS_2_TRANSFER_WRITE_BIT) &&
+       (stages & VK_PIPELINE_STAGE_2_COPY_BIT))
+      barriers |= NVK_BARRIER_FLUSH_SHADER_DATA;
+
    if (access & VK_ACCESS_2_COMMAND_PREPROCESS_WRITE_BIT_EXT)
       barriers |= NVK_BARRIER_FLUSH_SHADER_DATA;
 
@@ -523,10 +531,14 @@ nvk_barrier_invalidates(VkPipelineStageFlags2 stages,
       barriers |= NVK_BARRIER_INVALIDATE_SHADER_DATA;
 
    if ((access & VK_ACCESS_2_TRANSFER_READ_BIT) &&
-       (stages & (VK_PIPELINE_STAGE_2_COPY_BIT |
-                  VK_PIPELINE_STAGE_2_RESOLVE_BIT |
+       (stages & (VK_PIPELINE_STAGE_2_RESOLVE_BIT |
                   VK_PIPELINE_STAGE_2_BLIT_BIT)))
       barriers |= NVK_BARRIER_INVALIDATE_TEX_DATA;
+
+   if ((access & VK_ACCESS_2_TRANSFER_READ_BIT) &&
+       (stages & VK_PIPELINE_STAGE_2_COPY_BIT))
+      barriers |= NVK_BARRIER_INVALIDATE_TEX_DATA |
+                  NVK_BARRIER_INVALIDATE_SHADER_DATA;
 
    if (access & VK_ACCESS_2_FRAGMENT_SHADING_RATE_ATTACHMENT_READ_BIT_KHR)
       barriers |= NVK_BARRIER_INVALIDATE_RASTER_CACHE;
@@ -832,7 +844,7 @@ nvk_cmd_image_layout_transition(struct nvk_cmd_buffer *cmd,
           * data. Handle this by initializing the zcull data to zero.
           */
          if (image->zcull.nil.size_B > 0)
-            nvk_cmd_fill_memory(cmd, image->zcull.addr, image->zcull.nil.size_B, 0);
+            nvk_cmd_fill_memory_ce(cmd, image->zcull.addr, image->zcull.nil.size_B, 0);
       }
    }
 }

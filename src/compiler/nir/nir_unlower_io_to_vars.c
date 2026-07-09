@@ -320,28 +320,8 @@ create_vars(nir_builder *b, nir_intrinsic_instr *intr, void *opaque)
                UNREACHABLE("unexpected varying slot");
             }
          } else {
-            switch (desc.sem.location) {
-            case VARYING_SLOT_POS:
-               /* d3d12 requires this. */
-               num_components = 4;
-               break;
-            case VARYING_SLOT_PSIZ:
-            case VARYING_SLOT_FOGC:
-            case VARYING_SLOT_PRIMITIVE_ID:
-            case VARYING_SLOT_LAYER:
-            case VARYING_SLOT_VIEWPORT:
-            case VARYING_SLOT_VIEWPORT_MASK:
-            case VARYING_SLOT_FACE:
-               num_components = 1;
-               break;
-            case VARYING_SLOT_TESS_LEVEL_INNER:
-               if (nir->info.stage == MESA_SHADER_MESH)
-                  break;
-               FALLTHROUGH;
-            case VARYING_SLOT_PNTC:
-               num_components = 2;
-               break;
-            }
+            num_components = nir_slot_num_components(desc.sem.location,
+                                                     nir->info.stage);
          }
       }
 

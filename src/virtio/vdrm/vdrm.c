@@ -40,7 +40,8 @@ vdrm_device_close(struct vdrm_device *vdev)
 
 uint32_t
 vdrm_bo_create(struct vdrm_device *vdev, size_t size, uint32_t blob_flags,
-               uint64_t blob_id, struct vdrm_ccmd_req *req)
+               uint64_t blob_id, uint32_t blob_hints,
+               struct vdrm_ccmd_req *req)
 {
    uint32_t handle;
 
@@ -53,7 +54,8 @@ vdrm_bo_create(struct vdrm_device *vdev, size_t size, uint32_t blob_flags,
 
    req->seqno = ++vdev->next_seqno;
 
-   handle = vdev->funcs->bo_create(vdev, size, blob_flags, blob_id, req);
+   handle = vdev->funcs->bo_create(vdev, size, blob_flags, blob_id,
+                                   blob_hints, req);
 
    simple_mtx_unlock(&vdev->eb_lock);
 

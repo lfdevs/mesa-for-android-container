@@ -65,11 +65,19 @@ TARGETS = {
 
     "turing": ["nouveau", "160"],
 
+    "t720": ["panfrost", "720"],
     "t860": ["panfrost", "860"],
     "g52": ["panfrost", "7212"],
     "g57": ["panfrost", "9093"],
     "g72": ["panfrost", "6221"],
     "g610": ["panfrost", "a867"],
+    "g310v1": ["panfrost", "ac04:0"],
+    "g310v2": ["panfrost", "ac04:1"],
+    "g310v3": ["panfrost", "ac04:2"],
+    "g310v4": ["panfrost", "ac04:3"],
+    "g310v5": ["panfrost", "ac04:4"],
+    "g720": ["panfrost", "c800:4"],
+    "g725": ["panfrost", "d800:4"],
     "g925": ["panfrost", "d830:4"],
 
     "rpi4": ["v3d", "42"],
@@ -168,4 +176,4 @@ if __name__ == "__main__":
         for (key, val) in DISASM[driver]:
             env[key] = val
 
-    subprocess.call(command, env=env, shell=True)
+    sys.exit(subprocess.call(command, env=env, shell=True))

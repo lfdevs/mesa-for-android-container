@@ -555,17 +555,13 @@ void genX(write_cs_descriptor)(struct anv_dgc_cs_descriptor *desc,
 uint32_t genX(shader_cmd_size)(struct anv_device *device,
                                mesa_shader_stage stage);
 
+void genX(batch_emit_post_dispatch_wa)(struct anv_batch *batch);
+
 static inline void
 genX(cmd_buffer_post_dispatch_wa)(struct anv_cmd_buffer *cmd_buffer)
 {
 #if INTEL_NEEDS_WA_14025112257
-   if (anv_cmd_buffer_is_compute_queue(cmd_buffer)) {
-      genX(batch_emit_pipe_control)(&cmd_buffer->batch,
-                                    cmd_buffer->device->info,
-                                    cmd_buffer->state.current_pipeline,
-                                    ANV_PIPE_STATE_CACHE_INVALIDATE_BIT,
-                                    "Wa_14025112257");
-   }
+   genX(batch_emit_post_dispatch_wa)(&cmd_buffer->batch);
 #endif
 }
 

@@ -116,16 +116,13 @@ compiler_perf_log(UNUSED void *data, UNUSED unsigned *id, const char *fmt, ...)
 #else
 #define ANV_API_VERSION_1_3 VK_MAKE_VERSION(1, 3, VK_HEADER_VERSION)
 #define ANV_API_VERSION_1_2 VK_MAKE_VERSION(1, 2, VK_HEADER_VERSION)
+#define ANV_API_VERSION ANV_API_VERSION_1_3
 #endif
 
 VkResult anv_EnumerateInstanceVersion(
     uint32_t*                                   pApiVersion)
 {
-#ifdef ANDROID_STRICT
    *pApiVersion = ANV_API_VERSION;
-#else
-   *pApiVersion = ANV_API_VERSION_1_3;
-#endif
    return VK_SUCCESS;
 }
 
@@ -171,6 +168,9 @@ static void
 get_device_extensions(const struct anv_physical_device *device,
                       struct vk_device_extension_table *ext)
 {
+#ifdef ANV_USE_WSI_PLATFORM
+   const struct anv_instance *instance = device->instance;
+#endif
    const bool has_syncobj_wait =
       (device->sync_syncobj_type.features & VK_SYNC_FEATURE_CPU_WAIT) != 0;
 
@@ -179,6 +179,7 @@ get_device_extensions(const struct anv_physical_device *device,
       .KHR_16bit_storage                     = device->info.ver >= 8 && !device->instance->drirc.performance.no_16bit,
       .KHR_bind_memory2                      = true,
       .KHR_buffer_device_address             = device->has_a64_buffer_access,
+      .KHR_calibrated_timestamps             = device->has_reg_timestamp,
       .KHR_copy_commands2                    = true,
       .KHR_create_renderpass2                = true,
       .KHR_dedicated_allocation              = true,
@@ -217,7 +218,9 @@ get_device_extensions(const struct anv_physical_device *device,
       .KHR_pipeline_executable_properties    = true,
 #ifdef ANV_USE_WSI_PLATFORM
       .KHR_present_id                        = true,
+      .KHR_present_id2                       = true,
       .KHR_present_wait                      = true,
+      .KHR_present_wait2                     = true,
 #endif
       .KHR_push_descriptor                   = true,
       .KHR_relaxed_block_layout              = true,
@@ -289,6 +292,9 @@ get_device_extensions(const struct anv_physical_device *device,
       .EXT_physical_device_drm               = true,
       .EXT_pipeline_creation_cache_control   = true,
       .EXT_pipeline_creation_feedback        = true,
+#ifdef ANV_USE_WSI_PLATFORM
+      .EXT_present_timing                    = device->has_reg_timestamp,
+#endif
       .EXT_primitives_generated_query        = true,
       .EXT_primitive_topology_list_restart   = true,
       .EXT_private_data                      = true,
@@ -316,6 +322,9 @@ get_device_extensions(const struct anv_physical_device *device,
       .ANDROID_native_buffer                 = true,
 #endif
       .GOOGLE_decorate_string                = true,
+#ifdef ANV_USE_WSI_PLATFORM
+      .GOOGLE_display_timing                 = wsi_instance_supports_google_display_timing(&instance->vk, &instance->drirc.options),
+#endif
       .GOOGLE_hlsl_functionality1            = true,
       .GOOGLE_user_type                      = true,
       .INTEL_performance_query               = device->perf &&
@@ -635,6 +644,17 @@ get_features(const struct anv_physical_device *pdevice,
 
       /* VK_KHR_present_wait */
       .presentWait = true,
+
+      /* VK_KHR_present_id2 */
+      .presentId2 = true,
+
+      /* VK_KHR_present_wait2 */
+      .presentWait2 = true,
+
+      /* VK_EXT_present_timing */
+      .presentTiming = true,
+      .presentAtRelativeTime = true,
+      .presentAtAbsoluteTime = true,
 #endif
 
       /* VK_KHR_shader_expect_assume */
@@ -1108,7 +1128,8 @@ get_properties(const struct anv_physical_device *pdevice,
    };
 
    snprintf(props->deviceName, sizeof(props->deviceName),
-            "%s", pdevice->info.name);
+            "%s", (strlen(pdevice->instance->drirc.debug.force_vk_devicename) > 0) ?
+                  pdevice->instance->drirc.debug.force_vk_devicename : pdevice->info.name);
    memcpy(props->pipelineCacheUUID,
           pdevice->pipeline_cache_uuid, VK_UUID_SIZE);
 

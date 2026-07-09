@@ -930,8 +930,10 @@ radv_amdgpu_winsys_bo_from_fd(struct radeon_winsys *_ws, int fd, unsigned priori
       goto error_va_map;
    }
 
-   if (info.preferred_heap & AMDGPU_GEM_DOMAIN_VRAM)
+   if (info.preferred_heap & AMDGPU_GEM_DOMAIN_VRAM) {
+      bo->base.vram_no_cpu_access = !!(info.alloc_flags & AMDGPU_GEM_CREATE_NO_CPU_ACCESS);
       initial |= RADEON_DOMAIN_VRAM;
+   }
    if (info.preferred_heap & AMDGPU_GEM_DOMAIN_GTT)
       initial |= RADEON_DOMAIN_GTT;
 
@@ -946,8 +948,14 @@ radv_amdgpu_winsys_bo_from_fd(struct radeon_winsys *_ws, int fd, unsigned priori
    bo->cpu_map = NULL;
    bo->base.obj_id = (uintptr_t)(result.bo.abo);
 
-   if (bo->base.initial_domain & RADEON_DOMAIN_VRAM)
-      p_atomic_add(&ws->alloc_tracker->allocated_vram, align64(bo->base.size, ws->info.gart_page_size));
+   if (bo->base.initial_domain & RADEON_DOMAIN_VRAM) {
+      if (bo->base.vram_no_cpu_access) {
+         p_atomic_add(&ws->alloc_tracker->allocated_vram, align64(bo->base.size, ws->info.gart_page_size));
+      } else {
+         p_atomic_add(&ws->alloc_tracker->allocated_vram_vis, align64(bo->base.size, ws->info.gart_page_size));
+      }
+   }
+
    if (bo->base.initial_domain & RADEON_DOMAIN_GTT)
       p_atomic_add(&ws->alloc_tracker->allocated_gtt, align64(bo->base.size, ws->info.gart_page_size));
 
@@ -1285,6 +1293,21 @@ radv_amdgpu_dump_bo_ranges(struct radeon_winsys *_ws, FILE *file)
    } else
       fprintf(file, "  To get BO VA ranges, please specify RADV_DEBUG=allbos\n");
 }
+
+static bool
+radv_amdgpu_bo_wait_for_idle(struct radeon_winsys *_ws, struct radeon_winsys_bo *_bo)
+{
+   struct radv_amdgpu_winsys *ws = radv_amdgpu_winsys(_ws);
+   struct radv_amdgpu_winsys_bo *bo = radv_amdgpu_winsys_bo(_bo);
+   bool buffer_busy = true;
+
+   int r = ac_drm_bo_wait_for_idle(ws->dev, bo->bo, OS_TIMEOUT_INFINITE, &buffer_busy);
+   if (r)
+      fprintf(stderr, "radv/amdgpu: amdgpu_bo_wait_for_idle failed: %d\n", r);
+
+   return !buffer_busy;
+}
+
 void
 radv_amdgpu_bo_init_functions(struct radv_amdgpu_winsys *ws)
 {
@@ -1302,4 +1325,5 @@ radv_amdgpu_bo_init_functions(struct radv_amdgpu_winsys *ws)
    ws->base.buffer_make_resident = radv_amdgpu_winsys_bo_make_resident;
    ws->base.dump_bo_ranges = radv_amdgpu_dump_bo_ranges;
    ws->base.dump_bo_log = radv_amdgpu_dump_bo_log;
+   ws->base.bo_wait_for_idle = radv_amdgpu_bo_wait_for_idle;
 }

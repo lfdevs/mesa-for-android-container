@@ -53,6 +53,11 @@ struct fd6_program_state {
    uint8_t num_ubo_driver_params;
 
    /**
+    * Is (num_driver_params num_ubo_driver_params) > 0
+    */
+   uint8_t needs_driver_params;
+
+   /**
     * Output components from frag shader.  It is possible to have
     * a fragment shader that only writes a subset of the bound
     * render targets.

@@ -216,7 +216,7 @@ zink_rebind_all_images(struct zink_context *ctx);
 void
 zink_parse_tc_info(struct zink_context *ctx);
 void
-zink_flush_memory_barrier(struct zink_context *ctx, bool is_compute);
+zink_flush_memory_barrier(struct zink_context *ctx);
 void
 zink_init_draw_functions(struct zink_context *ctx, struct zink_screen *screen);
 void
@@ -236,6 +236,14 @@ zink_cmd_debug_marker_end(struct zink_context *ctx, VkCommandBuffer cmdbuf,bool 
 void
 zink_copy_buffer(struct zink_context *ctx, struct zink_resource *dst, struct zink_resource *src,
                  unsigned dst_offset, unsigned src_offset, unsigned size, bool unsync);
+
+void
+zink_bind_vertex_buffers_dynamic(struct zink_context *ctx, const struct pipe_vertex_buffer *vbuffers);
+void
+zink_bind_vertex_buffers(struct zink_context *ctx, const struct pipe_vertex_buffer *vbuffers);
+void
+zink_bind_vertex_addresses(struct zink_context *ctx);
+
 #ifdef __cplusplus
 }
 #endif
@@ -264,12 +272,6 @@ zink_blit_region_fills(struct u_rect region, unsigned width, unsigned height);
 
 bool
 zink_blit_region_covers(struct u_rect region, struct u_rect covers);
-
-void
-zink_draw_rectangle(struct blitter_context *blitter, void *vertex_elements_cso,
-                    blitter_get_vs_func get_vs, int x1, int y1, int x2, int y2,
-                    float depth, unsigned num_instances, enum blitter_attrib_type type,
-                    const struct blitter_attrib *attrib);
 
 static inline struct u_rect
 zink_rect_from_box(const struct pipe_box *box)

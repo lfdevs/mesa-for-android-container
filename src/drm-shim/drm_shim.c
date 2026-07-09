@@ -96,28 +96,22 @@ REAL_FUNCTION_POINTER(fstat);
 REAL_FUNCTION_POINTER(fstat64);
 #endif
 
+#define STRINGIZE2(x) #x
+#define STRINGIZE(x) STRINGIZE2(x)
+
 static char render_node_dir[] = "/dev/dri/";
-/* Full path of /dev/dri/renderD* */
-static char *render_node_path;
-/* renderD* */
-static char *render_node_dirent_name;
-/* /sys/dev/char/major: */
-static int drm_device_path_len;
-static char *drm_device_path;
-/* /sys/dev/char/major:minor/device */
-static int device_path_len;
-static char *device_path;
-/* /sys/dev/char/major:minor/device/subsystem */
-static char *subsystem_path;
-int render_node_minor = -1;
+static const char *render_node_path = "/dev/dri/renderD128";
+static const char *render_node_dirent_name = "renderD128";
+static const char *device_path = "/sys/dev/char/" STRINGIZE(DRM_MAJOR) ":128/device";
+const int render_node_minor = 128;
 
 struct file_override {
    const char *path;
    char *contents;
+   bool is_link;
 };
-static struct file_override file_overrides[10];
+static struct file_override file_overrides[20];
 static int file_overrides_count;
-extern bool drm_shim_driver_prefers_first_render_node;
 
 static int
 nfvasprintf(char **restrict strp, const char *restrict fmt, va_list ap)
@@ -135,30 +129,6 @@ nfasprintf(char **restrict strp, const char *restrict fmt, ...)
    int ret = nfvasprintf(strp, fmt, ap);
    va_end(ap);
    return ret;
-}
-
-/* Pick the minor and filename for our shimmed render node.  This can be
- * either a new one that didn't exist on the system, or if the driver wants,
- * it can replace the first render node.
- */
-static void
-get_dri_render_node_minor(void)
-{
-   for (int i = 0; i < 10; i++) {
-      UNUSED int minor = 128 + i;
-      nfasprintf(&render_node_dirent_name, "renderD%d", minor);
-      nfasprintf(&render_node_path, "/dev/dri/%s",
-                 render_node_dirent_name);
-      struct stat st;
-      if (drm_shim_driver_prefers_first_render_node ||
-          stat(render_node_path, &st) == -1) {
-
-         render_node_minor = minor;
-         return;
-      }
-   }
-
-   fprintf(stderr, "Couldn't find a spare render node slot\n");
 }
 
 static void *get_function_pointer(const char *name)
@@ -189,37 +159,29 @@ drm_shim_override_file(const char *contents, const char *path_format, ...)
    override->contents = strdup(contents);
 }
 
-static uint32_t inited = 0;
-
-static void
-destroy_shim(void)
+void
+drm_shim_override_link(const char *target, const char *path_format, ...)
 {
-   _mesa_set_destroy(opendir_set, NULL);
-   free(render_node_path);
-   free(render_node_dirent_name);
-   free(subsystem_path);
+   assert(file_overrides_count < ARRAY_SIZE(file_overrides));
 
-   render_node_minor = -1;
-   file_overrides_count = 0;
-   p_atomic_set(&inited, 0);
+   char *path;
+   va_list ap;
+   va_start(ap, path_format);
+   nfvasprintf(&path, path_format, ap);
+   va_end(ap);
+
+   struct file_override *override = &file_overrides[file_overrides_count++];
+   override->path = path;
+   override->contents = strdup(target);
+   override->is_link = true;
 }
 
-/* Initialization, which will be called from the first general library call
- * that might need to be wrapped with the shim.
- */
+static uint32_t inited = 0;
+static simple_mtx_t init_lock = SIMPLE_MTX_INITIALIZER;
+
 static void
-init_shim(void)
+get_function_pointers(void)
 {
-   drm_shim_debug = debug_get_bool_option("DRM_SHIM_DEBUG", false);
-
-   /* We can't lock this, because we recurse during initialization. */
-   if (p_atomic_cmpxchg(&inited, 0, 1))
-      return;
-
-   opendir_set = _mesa_set_create(NULL,
-                                  _mesa_hash_string,
-                                  _mesa_key_string_equal);
-
    GET_FUNCTION_POINTER(access);
    GET_FUNCTION_POINTER(close);
    GET_FUNCTION_POINTER(closedir);
@@ -247,61 +209,113 @@ init_shim(void)
    GET_FUNCTION_POINTER(fstat);
    GET_FUNCTION_POINTER(fstat64);
 #endif
+}
 
-   get_dri_render_node_minor();
+bool
+drm_shim_inited(void)
+{
+   return p_atomic_read(&inited);
+}
+
+static void
+destroy_shim(void)
+{
+   _mesa_set_destroy(opendir_set, NULL);
+
+   file_overrides_count = 0;
+   p_atomic_set(&inited, 0);
+}
+
+/* Initialization, which will be called from the first general library call
+ * that might need to be wrapped with the shim.
+ */
+static void
+init_shim(void)
+{
+   /* Fast path once init has been completed. */
+   if (p_atomic_read(&inited))
+      return;
+
+   /* Re-entry from the same thread: drm_shim_device_init() and its descendents
+    * like drm_shim_driver_init() might call glibc functions that would go to
+    * one of our wrappers and land back here.  We just need to be sure that
+    * enough of the globals are set up to complete such calls before we call
+    * down -- they don't need to get anything actually interposed in terms of
+    * the device paths.
+    *
+    * A thread-local variable is used for this recursion check, since simple_mtx
+    * doesn't support recursion.
+    */
+   static thread_local bool in_init = false;
+   if (in_init)
+      return;
+
+   simple_mtx_lock(&init_lock);
+   if (p_atomic_read(&inited)) {
+      simple_mtx_unlock(&init_lock);
+      return;
+   }
+   in_init = true;
+
+   get_function_pointers();
+
+   drm_shim_debug = debug_get_bool_option("DRM_SHIM_DEBUG", false);
+
+   opendir_set = _mesa_set_create(NULL,
+                                  _mesa_hash_string,
+                                  _mesa_key_string_equal);
 
    if (drm_shim_debug) {
       fprintf(stderr, "Initializing DRM shim on %s\n",
               render_node_path);
    }
 
-   drm_device_path_len =
-      nfasprintf(&drm_device_path, "/sys/dev/char/%d:", DRM_MAJOR);
-
-   device_path_len =
-      nfasprintf(&device_path,
-                 "/sys/dev/char/%d:%d/device",
-                 DRM_MAJOR, render_node_minor);
-
-   nfasprintf(&subsystem_path,
-              "/sys/dev/char/%d:%d/device/subsystem",
-              DRM_MAJOR, render_node_minor);
-
    drm_shim_device_init();
 
    atexit(destroy_shim);
+
+   p_atomic_set(&inited, 1);
+   in_init = false;
+   simple_mtx_unlock(&init_lock);
 }
 
-static bool hide_drm_device_path(const char *path)
+static bool is_drm_device_path(const char *path)
 {
    if (render_node_minor == -1)
       return false;
 
-   /* If the path looks like our fake render node device, then don't hide it.
-    */
-   if (strncmp(path, device_path, device_path_len) == 0 ||
-       strcmp(path, render_node_path) == 0)
-      return false;
-
-   /* String starts with /sys/dev/char/226: but is not the fake render node.
-    * We want to hide all other drm devices for the shim.
-    */
-   if (strncmp(path, drm_device_path, drm_device_path_len) == 0)
+   static const char *drm_device_path_prefix = "/sys/dev/char/" STRINGIZE(DRM_MAJOR) ":";
+   if (strncmp(path, drm_device_path_prefix, strlen(drm_device_path_prefix)) == 0)
       return true;
 
-   /* String starts with /dev/dri/ but is not the fake render node. We want to
-    * hide all other drm devices for the shim.
-    */
+   /* String starts with /dev/dri/ */
    if (strncmp(path, render_node_dir, sizeof(render_node_dir) - 1) == 0)
       return true;
 
    return false;
 }
 
+static bool hide_drm_device_path(const char *path)
+{
+   /* If the path looks like our fake render node device, then don't hide it.
+    */
+   if (strncmp(path, device_path, strlen(device_path)) == 0 ||
+       strcmp(path, render_node_path) == 0)
+      return false;
+
+   /* String looks like a device but is not the fake render node.
+    * We want to hide all other drm devices for the shim.
+    */
+   return is_drm_device_path(path);
+}
+
 static int file_override_open(const char *path)
 {
    for (int i = 0; i < file_overrides_count; i++) {
       if (strcmp(file_overrides[i].path, path) == 0) {
+         if (file_overrides[i].is_link) {
+            return file_override_open(file_overrides[i].contents);
+         }
          int fd = os_create_anonymous_file(0, "shim file");
          write(fd, file_overrides[i].contents,
                strlen(file_overrides[i].contents));
@@ -471,7 +485,7 @@ PUBLIC int __xstat64(int ver, const char *path, struct stat64 *st)
 /* Fakes fstat to return character device stuff for our fake render node. */
 PUBLIC int __fxstat(int ver, int fd, struct stat *st)
 {
-   init_shim();
+   get_function_pointers();
 
    struct shim_fd *shim_fd = drm_shim_fd_lookup(fd);
 
@@ -487,7 +501,7 @@ PUBLIC int __fxstat(int ver, int fd, struct stat *st)
 
 PUBLIC int __fxstat64(int ver, int fd, struct stat64 *st)
 {
-   init_shim();
+   get_function_pointers();
 
    struct shim_fd *shim_fd = drm_shim_fd_lookup(fd);
 
@@ -581,7 +595,7 @@ PUBLIC int stat64(const char* path, struct stat64* stat_buf)
 
 PUBLIC int fstat(int fd, struct stat* stat_buf)
 {
-   init_shim();
+   get_function_pointers();
 
    struct shim_fd *shim_fd = drm_shim_fd_lookup(fd);
 
@@ -597,7 +611,7 @@ PUBLIC int fstat(int fd, struct stat* stat_buf)
 
 PUBLIC int fstat64(int fd, struct stat64* stat_buf)
 {
-   init_shim();
+   get_function_pointers();
 
    struct shim_fd *shim_fd = drm_shim_fd_lookup(fd);
 
@@ -712,6 +726,12 @@ closedir(DIR *dir)
 PUBLIC ssize_t
 readlink(const char *path, char *buf, size_t size)
 {
+   /* Shortcut to the real readlink so that jemalloc can use this. */
+   if (!is_drm_device_path(path)) {
+      get_function_pointers();
+      return real_readlink(path, buf, size);
+   }
+
    init_shim();
 
    if (hide_drm_device_path(path)) {
@@ -719,30 +739,16 @@ readlink(const char *path, char *buf, size_t size)
       return -1;
    }
 
-   if (strcmp(path, subsystem_path) != 0)
-      return real_readlink(path, buf, size);
-
-   static const struct {
-      const char *name;
-      int bus_type;
-   } bus_types[] = {
-      { "/pci", DRM_BUS_PCI },
-      { "/usb", DRM_BUS_USB },
-      { "/platform", DRM_BUS_PLATFORM },
-      { "/spi", DRM_BUS_PLATFORM },
-      { "/host1x", DRM_BUS_HOST1X },
-   };
-
-   for (uint32_t i = 0; i < ARRAY_SIZE(bus_types); i++) {
-      if (bus_types[i].bus_type != shim_device.bus_type)
-         continue;
-
-      strncpy(buf, bus_types[i].name, size);
-      buf[size - 1] = 0;
-      break;
+   for (int i = 0; i < file_overrides_count; i++) {
+      if (strcmp(file_overrides[i].path, path) == 0) {
+         if (file_overrides[i].is_link) {
+            strncpy(buf, file_overrides[i].contents, size);
+            return strlen(buf) + 1;
+         }
+      }
    }
 
-   return strlen(buf) + 1;
+   return real_readlink(path, buf, size);
 }
 
 #if __USE_FORTIFY_LEVEL > 0 && !defined _CLANG_FORTIFY_DISABLE
@@ -776,7 +782,7 @@ realpath(const char *path, char *resolved_path)
 PUBLIC int
 ioctl(int fd, unsigned long request, ...)
 {
-   init_shim();
+   get_function_pointers();
 
    va_list ap;
    va_start(ap, request);
@@ -794,7 +800,7 @@ ioctl(int fd, unsigned long request, ...)
 PUBLIC int
 fcntl(int fd, int cmd, ...)
 {
-   init_shim();
+   get_function_pointers();
 
    struct shim_fd *shim_fd = drm_shim_fd_lookup(fd);
 
@@ -830,7 +836,7 @@ PUBLIC int fcntl64(int, int, ...)
 PUBLIC int
 dup(int fd)
 {
-   init_shim();
+   get_function_pointers();
 
    int ret = real_dup(fd);
 
@@ -844,7 +850,7 @@ dup(int fd)
 PUBLIC void *
 mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset)
 {
-   init_shim();
+   get_function_pointers();
 
    struct shim_fd *shim_fd = drm_shim_fd_lookup(fd);
    if (shim_fd)
@@ -856,11 +862,85 @@ mmap(void *addr, size_t length, int prot, int flags, int fd, off_t offset)
 PUBLIC void *
 mmap64(void* addr, size_t length, int prot, int flags, int fd, off64_t offset)
 {
-   init_shim();
+   get_function_pointers();
 
    struct shim_fd *shim_fd = drm_shim_fd_lookup(fd);
    if (shim_fd)
       return drm_shim_mmap(shim_fd, length, prot, flags, fd, offset);
 
    return real_mmap64(addr, length, prot, flags, fd, offset);
+}
+
+void
+drm_shim_pci_device_setup(uint16_t vendor_id, uint16_t device_id,
+                          const char *pci_slot, const char *driver_name)
+{
+   shim_device.bus_type = DRM_BUS_PCI;
+   shim_device.driver_name = driver_name;
+   drm_shim_override_link("../../../../../bus/pci", "/sys/dev/char/%d:%d/device/subsystem",
+                          DRM_MAJOR, render_node_minor);
+
+   char *uevent_content, *vendor_id_str, *device_id_str;
+
+   nfasprintf(&uevent_content,
+            "DRIVER=%s\n"
+            "PCI_CLASS=30000\n"
+            "PCI_ID=%04x:%04x\n"
+            "PCI_SUBSYS_ID=uevent_content\n"
+            "PCI_SLOT_NAME=%s\n"
+            "MODALIAS=pci:v00008086d00005916sv00001028sd0000075Bbc03sc00i00\n",
+            driver_name, vendor_id, device_id, pci_slot);
+   nfasprintf(&vendor_id_str, "0x%04x", vendor_id);
+   nfasprintf(&device_id_str, "0x%04x", device_id);
+
+   drm_shim_override_file(uevent_content,
+                          "/sys/dev/char/%d:%d/device/uevent",
+                          DRM_MAJOR, render_node_minor);
+   drm_shim_override_file("0x0\n",
+                          "/sys/dev/char/%d:%d/device/revision",
+                          DRM_MAJOR, render_node_minor);
+   drm_shim_override_file(vendor_id_str,
+                          "/sys/dev/char/%d:%d/device/vendor",
+                          DRM_MAJOR, render_node_minor);
+   drm_shim_override_file(vendor_id_str,
+                          "/sys/devices/pci0000:00/%s/vendor", pci_slot);
+   drm_shim_override_file(device_id_str,
+                          "/sys/dev/char/%d:%d/device/device",
+                          DRM_MAJOR, render_node_minor);
+   drm_shim_override_file(device_id_str,
+                          "/sys/devices/pci0000:00/%s/device", pci_slot);
+   drm_shim_override_file("0x1234",
+                          "/sys/dev/char/%d:%d/device/subsystem_vendor",
+                          DRM_MAJOR, render_node_minor);
+   drm_shim_override_file("0x1234",
+                          "/sys/devices/pci0000:00/%s/subsystem_vendor", pci_slot);
+   drm_shim_override_file("0x1234",
+                          "/sys/dev/char/%d:%d/device/subsystem_device",
+                          DRM_MAJOR, render_node_minor);
+   drm_shim_override_file("0x1234",
+                          "/sys/devices/pci0000:00/%s/subsystem_device", pci_slot);
+
+   free(uevent_content);
+   free(vendor_id_str);
+   free(device_id_str);
+}
+
+void
+drm_shim_platform_device_setup(const char *driver_name, const char *fullname, const char *compatible)
+{
+   shim_device.bus_type = DRM_BUS_PLATFORM;
+   shim_device.driver_name = driver_name;
+   drm_shim_override_link("../../../../../bus/platform", "/sys/dev/char/%d:%d/device/subsystem",
+                          DRM_MAJOR, render_node_minor);
+
+   char *uevent_content;
+   nfasprintf(&uevent_content, "DRIVER=%s\n"
+                          "OF_FULLNAME=%s\n"
+                          "OF_COMPATIBLE_0=%s\n"
+                          "OF_COMPATIBLE_N=1\n", driver_name, fullname, compatible);
+
+   drm_shim_override_file(uevent_content,
+                          "/sys/dev/char/%d:%d/device/uevent", DRM_MAJOR, render_node_minor);
+
+   free(uevent_content);
 }

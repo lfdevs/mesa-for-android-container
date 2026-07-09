@@ -312,6 +312,7 @@ static const struct debug_named_value config_control[] = {
 #endif
    { "markers", U_TRACE_TYPE_MARKERS, "Enable marker trace" },
    { "indirects", U_TRACE_TYPE_INDIRECTS, "Enable indirect data capture" },
+   { "ranges", U_TRACE_TYPE_RANGES, "Tracepoint ranges print" },
    DEBUG_NAMED_VALUE_END
 };
 
@@ -375,6 +376,33 @@ queue_init(struct u_trace_context *utctx)
       utctx->out = NULL;
 }
 
+static uint32_t
+u_trace_event_fuzzy_hash(const void *_event)
+{
+   const struct u_trace_event *event = _event;
+
+   uint32_t hash = _mesa_hash_pointer(event->tp);
+   if (!event->tp->fuzzy_hash)
+      return hash;
+
+   return hash * event->tp->fuzzy_hash(event->payload);
+}
+
+static bool
+u_trace_event_fuzzy_equals(const void *_a, const void *_b)
+{
+   const struct u_trace_event *a = _a;
+   const struct u_trace_event *b = _b;
+
+   if (a->tp != b->tp)
+      return false;
+
+   if (a->tp->fuzzy_equals && !a->tp->fuzzy_equals(a->payload, b->payload))
+      return false;
+
+   return true;
+}
+
 void
 u_trace_context_init(struct u_trace_context *utctx,
                      void *pctx,
@@ -428,6 +456,9 @@ u_trace_context_init(struct u_trace_context *utctx,
       utctx->out_printer = NULL;
    }
 
+   util_dynarray_init(&utctx->begin_tracepoints, NULL);
+   _mesa_hash_table_init(&utctx->tracepoint_ranges, NULL, u_trace_event_fuzzy_hash, u_trace_event_fuzzy_equals);
+
 #ifdef HAVE_PERFETTO
    simple_mtx_lock(&ctx_list_mutex);
    list_add(&utctx->node, &ctx_list);
@@ -450,6 +481,15 @@ u_trace_context_init(struct u_trace_context *utctx,
    }
 }
 
+static void
+free_tracepoint_ranges_entry(struct hash_entry *entry)
+{
+   struct u_trace_tracepoint_range *range = entry->data;
+   _mesa_hash_table_fini(&range->child_ranges, free_tracepoint_ranges_entry);
+   free(range);
+   free((void *)entry->key);
+}
+
 void
 u_trace_context_fini(struct u_trace_context *utctx)
 {
@@ -458,6 +498,9 @@ u_trace_context_fini(struct u_trace_context *utctx)
    list_del(&utctx->node);
    simple_mtx_unlock(&ctx_list_mutex);
 #endif
+
+   util_dynarray_fini(&utctx->begin_tracepoints);
+   _mesa_hash_table_fini(&utctx->tracepoint_ranges, free_tracepoint_ranges_entry);
 
    if (utctx->out) {
       if (utctx->batch_nr > 0) {
@@ -534,6 +577,64 @@ u_trace_buffer_view_get_buffer(struct u_trace *ut, enum u_trace_buffer_list_inde
    return buffer->buffer;
 }
 
+static char *
+print_time(void *ctx, double time_ns)
+{
+   if (time_ns < 1000)
+      return ralloc_asprintf(ctx, "%.2fns", time_ns);
+   if (time_ns < 1000 * 1000)
+      return ralloc_asprintf(ctx, "%.2fus", time_ns / 1000);
+   if (time_ns < 1000 * 1000 * 1000)
+      return ralloc_asprintf(ctx, "%.2fms", time_ns / (1000 * 1000));
+   return ralloc_asprintf(ctx, "%.2fs", time_ns / (1000 * 1000 * 1000));
+}
+
+static int
+compare_ranges(const void *_a, const void *_b)
+{
+   const struct hash_entry *a = _a;
+   const struct hash_entry *b = _b;
+
+   struct u_trace_tracepoint_range *range_a = a->data;
+   struct u_trace_tracepoint_range *range_b = b->data;
+
+   return range_a->duration_ns == range_b->duration_ns ? 0 : (range_a->duration_ns > range_b->duration_ns ? -1 : 1);
+}
+
+static void
+print_ranges(struct u_trace_context *utctx, struct hash_table *ranges, uint32_t indentation)
+{
+   void *ctx = ralloc_context(NULL);
+
+   struct hash_entry *sorted_ranges = ralloc_array(ctx, struct hash_entry, _mesa_hash_table_num_entries(ranges));
+   uint32_t dst_index = 0;
+   hash_table_foreach(ranges, entry) {
+      sorted_ranges[dst_index] = *entry;
+      dst_index++;
+   }
+
+   qsort(sorted_ranges, _mesa_hash_table_num_entries(ranges), sizeof(struct hash_entry), compare_ranges);
+
+   for (uint32_t i = 0; i < _mesa_hash_table_num_entries(ranges); i++) {
+      struct hash_entry *entry = &sorted_ranges[i];
+      const struct u_trace_event *event = entry->key;
+      struct u_trace_tracepoint_range *range = entry->data;
+      for (uint32_t j = 0; j < indentation; j++)
+         fprintf(stderr, "   ");
+      fprintf(stderr, "%s ", event->tp->name);
+      if (event->tp->print_fuzzy_hash_args) {
+         event->tp->print_fuzzy_hash_args(stderr, event->payload);
+         fprintf(stderr, " ");
+      }
+      fprintf(stderr, "(avg/frame=%s avg=%s count=%u total=%s)\n",
+              print_time(ctx, range->duration_ns / utctx->accumulated_frame_count),
+              print_time(ctx, range->duration_ns / range->count), range->count,
+              print_time(ctx, range->duration_ns));
+      print_ranges(utctx, &range->child_ranges, indentation + 1);
+   }
+   ralloc_free(ctx);
+}
+
 static void
 process_flush(void *job, void *gdata, int thread_index)
 {
@@ -579,7 +680,48 @@ process_flush(void *job, void *gdata, int thread_index)
             u_trace_buffer_view_get_buffer(ut, u_trace_buffer_list_timestamps, event->timestamp);
          timestamp = utctx->read_timestamp(utctx, timestamp_buffer, event->timestamp.offset,
                                            event->tp->flags, flush->flush_data);
+         last_timestamp = timestamp;
          last_timestamp_view = event->timestamp;
+      }
+
+      if (utctx->enabled_traces & U_TRACE_TYPE_RANGES) {
+         if (event->tp->type == u_tracepoint_type_begin_range) {
+            struct u_trace_begin_tracepoint range = {
+               .event = event,
+               .timestamp_ns = timestamp,
+            };
+            util_dynarray_append(&utctx->begin_tracepoints, range);
+         } else if (event->tp->type == u_tracepoint_type_end_range) {
+            struct u_trace_begin_tracepoint *last_begin =
+               util_dynarray_last_ptr(&utctx->begin_tracepoints, struct u_trace_begin_tracepoint);
+
+            struct hash_table *ranges = &utctx->tracepoint_ranges;
+            util_dynarray_foreach(&utctx->begin_tracepoints, struct u_trace_begin_tracepoint, begin) {
+               const struct u_trace_event *begin_event = begin->event;
+               struct hash_entry *entry = _mesa_hash_table_search(ranges, begin_event);
+               struct u_trace_tracepoint_range *range = NULL;
+               if (entry) {
+                  range = entry->data;
+               } else {
+                  range = calloc(1, sizeof(struct u_trace_tracepoint_range));
+                  _mesa_hash_table_init(&range->child_ranges, NULL, u_trace_event_fuzzy_hash, u_trace_event_fuzzy_equals);
+
+                  uint32_t event_size = sizeof(struct u_trace_event) + begin_event->payload_size;
+                  void *event_copy = malloc(event_size);
+                  memcpy(event_copy, begin_event, event_size);
+
+                  _mesa_hash_table_insert(ranges, event_copy, range);
+               }
+               if (begin == last_begin) {
+                  range->duration_ns += timestamp - begin->timestamp_ns;
+                  range->count++;
+               }
+               ranges = &range->child_ranges;
+            }
+
+            assert(utctx->begin_tracepoints.size);
+            utctx->begin_tracepoints.size -= sizeof(struct u_trace_begin_tracepoint);
+         }
       }
 
       int32_t delta;
@@ -638,6 +780,12 @@ process_flush(void *job, void *gdata, int thread_index)
       }
       utctx->frame_nr++;
       utctx->start_of_frame = true;
+
+      if (utctx->enabled_traces & U_TRACE_TYPE_RANGES) {
+         utctx->accumulated_frame_count++;
+         fprintf(stderr, "TRACEPOINT RANGE STATS:\n");
+         print_ranges(utctx, &utctx->tracepoint_ranges, 0);
+      }
    }
 }
 
@@ -759,6 +907,19 @@ alloc_device_memory(struct u_trace *ut, enum u_trace_buffer_list_index list_inde
    util_dynarray_append(list, new_buffer);
 
    return alloc_device_memory(ut, list_index, size);
+}
+
+/* Release the memory that was allocated most recently back to the allocator. */
+static void
+release_last_device_memory(struct u_trace *ut, enum u_trace_buffer_list_index list_index, struct u_trace_buffer_view view)
+{
+   struct util_dynarray *list = &ut->buffers[list_index];
+
+   ASSERTED uint32_t buffer_count = util_dynarray_num_elements(list, struct u_trace_buffer);
+   assert(view.buffer_index == buffer_count - 1);
+
+   struct u_trace_buffer *last = util_dynarray_last_ptr(list, struct u_trace_buffer);
+   last->alloc_offset = view.offset;
 }
 
 void
@@ -894,10 +1055,13 @@ u_trace_appendv(struct u_trace *ut,
       ut, cs, dst_timestamp_buffer, dst_timestamp.offset, tp->flags);
 
    event->timestamp = dst_timestamp;
-   if (new_timestamp)
+   if (new_timestamp) {
       ut->last_timestamp = dst_timestamp;
-   else if (ut->last_timestamp.buffer_index != UINT32_MAX)
+   } else {
+      assert(ut->last_timestamp.buffer_index != UINT32_MAX);
       event->timestamp = ut->last_timestamp;
+      release_last_device_memory(ut, u_trace_buffer_list_timestamps, dst_timestamp);
+   }
 
    event->indirect.buffer_index = UINT32_MAX;
    if ((ut->utctx->enabled_traces & U_TRACE_TYPE_INDIRECTS) && ut->utctx->max_indirect_size_bytes && n_indirects) {

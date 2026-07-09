@@ -11,7 +11,7 @@
 #include <stdbool.h>
 #include <string.h>
 
-#include "bvh/bvh.h"
+#include "bvh/bvh_defines.h"
 #include "meta/radv_meta.h"
 #include "nir/nir_builder.h"
 #include "nir/radv_meta_nir.h"

@@ -892,9 +892,6 @@ static void si_launch_grid(struct pipe_context *ctx, const struct pipe_grid_info
       }
    }
 
-   if (unlikely(sctx->perfetto_enabled))
-      trace_si_begin_compute(&sctx->trace);
-
    if (sctx->bo_list_add_all_compute_resources)
       si_compute_resources_add_all_to_bo_list(sctx);
 
@@ -909,6 +906,9 @@ static void si_launch_grid(struct pipe_context *ctx, const struct pipe_grid_info
    if (!si_switch_compute_shader(sctx, program, &program->shader, &prefetch,
                                  info->variable_shared_mem))
       return;
+
+   if (unlikely(sctx->perfetto_enabled))
+      trace_si_begin_compute(&sctx->trace);
 
    si_emit_compute_shader_pointers(sctx);
 

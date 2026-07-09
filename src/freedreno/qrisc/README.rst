@@ -681,8 +681,40 @@ supports using labels as immediates for this::
 However, you have to manually insert the labels and replace the constant. On
 a7xx there are multiple tables next to each other that look like one table, so
 be careful to make sure you've found all the places it offsets from
-``CP_SQE_INSTR_BASE``! There are also tables in the BV microcode on a7xx. To
-check that the relocations are correct, check that reassembling an otherwise
+``CP_SQE_INSTR_BASE``! There are also tables in the BV microcode on a7xx.
+
+On later firmwares, the firmware adds byte offsets directly using the immediate
+field of ``add``. To support this, there is very limited support for relocation
+expressions::
+
+  ...
+  add $02, $02, #jumptbl * 4 ; #jumptbl will be multiplied by 4 to get the offset in bytes
+  ...
+  jumptbl:
+  .jumptbl
+
+The only expressions that are supported are multiplying by a given scale and
+subtracting two references. Currently this is all that's necessary to handle
+what firmwares do.
+
+In addition, there is now an "absolute" relocation that returns an offset
+relative to the start of the firmware instead of the start of the current
+section. For example, ``#BV::jumptbl`` returns the offset of the packet table in
+BV. Each section is loaded by a different engine, and most offsets are relative
+to the section start, but newer firmwares sometimes embed the offset of a given
+section directly as an argument of ``mov`` or ``add``. By adding a "start" symbol
+at the beginning of the section, we can get the offset of the section as a
+reloction::
+
+  ...
+  add $02, $02, #BV::start * 4
+  ...
+
+  .section BV
+  start:
+  ...
+
+To check that the relocations are correct, check that reassembling an otherwise
 unmodified firmware still gives an identical result after adding the
 relocations.
 

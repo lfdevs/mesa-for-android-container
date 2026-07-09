@@ -2,3 +2,7 @@
 # skipping them is definitely more reliable. Try to not skip them at some
 # point.
 dEQP-VK.wsi.*
+
+# Nightly run expectations update
+dEQP-VK.ray_tracing_pipeline.misc.maxrtinvocations_AABB
+

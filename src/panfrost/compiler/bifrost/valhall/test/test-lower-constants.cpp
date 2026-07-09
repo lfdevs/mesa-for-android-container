@@ -207,6 +207,23 @@ TEST_F(LowerConstants, HandleTrickyNegativesFP16)
                        bi_neg(bi_half(va_lut(3), 1))));
 }
 
+TEST_F(LowerConstants, DontWidenConstantsOfVectorOps)
+{
+   CASE(bi_icmp_or_v2u16_to(b, bi_register(0), bi_register(0),
+                            bi_imm_u32(0x00003F80), bi_register(0), BI_CMPF_EQ,
+                            BI_RESULT_TYPE_M1),
+        bi_icmp_or_v2u16_to(b, bi_register(0), bi_register(0),
+                            bi_iadd_imm_i32(b, va_lut(0), 0x00003F80),
+                            bi_register(0), BI_CMPF_EQ, BI_RESULT_TYPE_M1));
+
+   CASE(bi_icmp_or_v4u8_to(b, bi_register(0), bi_register(0),
+                           bi_imm_u32(0x00000005), bi_register(0), BI_CMPF_EQ,
+                           BI_RESULT_TYPE_M1),
+        bi_icmp_or_v4u8_to(b, bi_register(0), bi_register(0),
+                           bi_iadd_imm_i32(b, va_lut(0), 0x00000005),
+                           bi_register(0), BI_CMPF_EQ, BI_RESULT_TYPE_M1));
+}
+
 TEST_F(LowerConstants, MaintainMkvecRestrictedSwizzles)
 {
    CASE(bi_mkvec_v2i8_to(b, bi_register(0), bi_register(0), bi_imm_u8(0),

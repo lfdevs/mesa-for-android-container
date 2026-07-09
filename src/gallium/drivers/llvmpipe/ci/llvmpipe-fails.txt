@@ -102,3 +102,10 @@ spec@ovr_multiview@compiler@multiple-num-views-in-single-declaration-mismatch.ve
 
 # src/compiler/nir/nir.h:2850: nir_src_comp_as_uint: Assertion `nir_src_is_const(src)' failed.
 spec@glsl-1.50@execution@geometry@dynamic_input_array_index,Crash
+
+spec@!opengl 1.1@large-tex,Crash
+spec@glsl-1.30@execution@glsl-packed-back-color,Fail
+
+# Nightly run expectations update
+spec@ext_image_dma_buf_import@ext_image_dma_buf_import-transcode-nv12-as-r8-gr88,Fail
+

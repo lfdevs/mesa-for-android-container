@@ -72,6 +72,12 @@ is_only_used_by_alu(nir_def *def)
    return true;
 }
 
+static unsigned
+round_up_components_no_vec5(unsigned n)
+{
+   return (n > 4) ? util_next_power_of_two(n) : n;
+}
+
 static bool
 shrink_dest_to_read_mask(nir_def *def, bool shrink_start)
 {
@@ -87,8 +93,8 @@ shrink_dest_to_read_mask(nir_def *def, bool shrink_start)
 
    unsigned mask = nir_def_components_read(def);
 
-   /* If nothing was read, leave it up to DCE. */
-   if (!mask)
+   /* If nothing was read, DCE.  If everything was read, early out. */
+   if (!mask || mask == nir_component_mask(def->num_components))
       return false;
 
    nir_intrinsic_instr *intr = NULL;
@@ -106,8 +112,7 @@ shrink_dest_to_read_mask(nir_def *def, bool shrink_start)
    int first_bit = shrink_start ? (ffs(mask) - 1) : 0;
 
    const unsigned comps = last_bit - first_bit;
-   const unsigned rounded = nir_round_up_components(comps);
-   assert(rounded <= def->num_components);
+   const unsigned rounded = round_up_components_no_vec5(comps);
 
    if ((def->num_components > rounded) || first_bit > 0) {
       def->num_components = rounded;
@@ -435,8 +440,8 @@ opt_shrink_vectors_load_const(nir_load_const_instr *instr)
 
    unsigned mask = nir_def_components_read(def);
 
-   /* If nothing was read, leave it up to DCE. */
-   if (!mask)
+   /* If nothing was read, DCE.  If everything was read, early out. */
+   if (!mask || mask == nir_component_mask(def->num_components))
       return false;
 
    uint8_t reswizzle[NIR_MAX_VEC_COMPONENTS] = { 0 };
@@ -532,12 +537,8 @@ opt_shrink_vectors_phi(nir_builder *b, nir_phi_instr *instr)
       }
    }
 
-   /* DCE will handle this. */
-   if (mask == 0)
-      return false;
-
-   /* Nothing to shrink? */
-   if (BITFIELD_MASK(def->num_components) == mask)
+   /* If nothing was read, DCE.  If everything was read, early out. */
+   if (!mask || mask == nir_component_mask(def->num_components))
       return false;
 
    /* Set up the reswizzles. */

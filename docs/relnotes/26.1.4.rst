@@ -1,0 +1,313 @@
+Mesa 26.1.4 Release Notes / 2026-07-01
+======================================
+
+Mesa 26.1.4 is a bug fix release which fixes bugs found since the 26.1.3 release.
+
+Mesa 26.1.4 implements the OpenGL 4.6 API, but the version reported by
+glGetString(GL_VERSION) or glGetIntegerv(GL_MAJOR_VERSION) /
+glGetIntegerv(GL_MINOR_VERSION) depends on the particular driver being used.
+Some drivers don't support all the features required in OpenGL 4.6. OpenGL
+4.6 is **only** available if requested at context creation.
+Compatibility contexts may report a lower version depending on each driver.
+
+Mesa 26.1.4 implements the Vulkan 1.4 API, but the version reported by
+the apiVersion property of the VkPhysicalDeviceProperties struct
+depends on the particular driver being used.
+
+SHA checksums
+-------------
+
+::
+
+    SHA256: 072705caa9adf4740f1489194b13e278ad959166863b5271fe423a86353c9ab6  mesa-26.1.4.tar.xz
+    SHA512: 39d15574e876005fd1a483d1cb3c801b08297ec73820a89cbf368d0f2a922cc770d0e623e99acc66b71791332cdadc6cc3095f059f713b09128921ff2d0197a8  mesa-26.1.4.tar.xz
+
+
+New features
+------------
+
+- None
+
+
+Bug fixes
+---------
+
+- AV1 videos dropping frames with AMD card
+- Crash linking cached GLSL shader with optimized array with explicit uniform location
+- Gunfire Reborn crashes with ring gfx_0.0.0 timeout since Mesa 26.0.0
+- RADV: RDNA2 Raytracing regression after "aco/lower_branches: Add try_rotate_latch_block() optimization"
+- Spike in mmap count for vk_cmd_queue regressed dEQP-VK.api.object_management.max_concurrent#command_buffer_*
+- System freeze when seeking in h264 files with gst-play-1.0 using the VA plugin
+- [Windows][arm64] Building windows ARM64 with MSVC fails on src\\util\\u_math.c
+- [anv] Intel ARC B390 | Hitman 2 | DX11 | Blinking corruptions seen
+- [anv] negate of INT_MAX calculated as INT_MIN instead of INT_MIN + 1
+- [anv] wrong value for local variable after nested switch merge
+- [radeonsi] SIGSEGV in gallivm during software fallback for GL_FEEDBACK with lighting
+- android14 gpu virgl: Shader memory leak
+- anv: Assert in alias vkCreateImage
+- macOS build stuck in infinite loop since 26.1
+- mesa 26.1.3 does not compile with ARM64 MSVC
+- radv: incorrect memory accounting for imported bufffers
+- rusticl: incorrect float16 constant folding
+- venus: rare flake in dEQP-VK.wsi.android.swapchain.render.basic
+
+
+Changes
+-------
+
+Adam Jackson (1):
+
+- nvk: use unsigned comparison in UBO bounds checks
+
+Ahmed Hesham (1):
+
+- nir: fix vectorising phis with mixed chased sources
+
+Alessandro Astone (1):
+
+- anv: Support VK_ANDROID_native_buffer older than version 11
+
+Arkady Shlykov (1):
+
+- Add offset getter for image intrinsics
+
+Benjamin Cheng (1):
+
+- mesa/st: use col0 attrib from provoking vertex for feedback
+
+Boyuan Zhang (1):
+
+- radeonsi/mm: use non-tmz buf when session tmz size is 0
+
+Caio Oliveira (2):
+
+- util: Add util_is_half_subnormal()
+- brw, elk: Fix invalid case using float-negation in combine constants
+
+Christian Gmeiner (12):
+
+- etnaviv: Flush texture caches after clears
+- etnaviv: Add a helper for the 128-bit second-plane offset
+- etnaviv: Wrap pipe_framebuffer_state in etna_framebuffer_state
+- etnaviv: Lay out 128-bit color FBO as paired G32R32F render targets
+- etnaviv: Emit paired 128-bit sampler descriptors
+- etnaviv: NIR pass to lower 128-bit color RT and texture access
+- etnaviv: blt: Use block-layout offset for 128-bit second-plane blit
+- etnaviv: Save the framebuffer without 128-bit companion slots
+- etnaviv: rs: Support 128-bit color clears
+- etnaviv: Limit nir_lower_fragcolor(..) to advertised render targets
+- etnaviv: Disable TS per render target on mixed TS modes
+- pan/va: Only widen constants on 32-bit instructions
+
+Connor Abbott (1):
+
+- nir/lower_amul: fix infinity recursion with different phi source order
+
+Daniel Schürmann (2):
+
+- aco/assembler: Fix s_inst_prefetch insertion after loop latch rotation
+- aco/ra: Fix get_reg_impl() for operand registers
+
+David Rosca (7):
+
+- radeonsi/mm: Return error when decoding H264 P/B frame with no refs
+- radeonsi/mm: Only setup ref surfaces with tier3
+- radeonsi/mm: Set correct usage in si_dec_fill_surface
+- vl: Skip transfer function and primaries conversion when not needed
+- va: Always reset compositor chroma location
+- va: Use RGB format with matching bit depth for YUV->YUV matrices
+- radeonsi/mm: Fix setting VPE rotation when horizontal flip is enabled
+
+Eric Engestrom (8):
+
+- docs: add sha sum for 26.1.3
+- .pick_status.json: Update to a6bb4bbd1eaa8b1b8ba9e5df98ed2c9958393e40
+- gen_release_notes_test: don't evaluate backslash
+- gen_release_notes: add support for "work_items" links
+- docs: fix release notes for 26.1.0
+- docs: fix release notes for 26.1.1
+- docs: fix release notes for 26.1.2
+- docs: fix release notes for 26.1.3
+
+Georg Lehmann (3):
+
+- aco/assembler: chain branches in emit order
+- aco/assembler: don't reorder branch insertion block index twice
+- aco/assembler: do not abort when exec is written after position exports
+
+Icenowy Zheng (1):
+
+- vulkan: update spec to 1.4.354
+
+JaeHoon Lee (2):
+
+- v3dv: only report 16-bit float formats as blendable at 32/64 bpp
+- vc4: fix last_layer selection in the blit sampler view
+
+Jeremy Huddleston (11):
+
+- bin/install_megadrivers: Bail out if libname suffix is never reached
+- gallium/targets: Use libname_suffix for installed driver names
+- glx: Fix stale end-comment on __glXInitialize direct-rendering block
+- glx: drop redundant __glXErrorString forward declaration
+- glx: fix DRI3-not-available diagnostic skip on macOS
+- glx: NULL-check frontend_screen in glXCreateContextAttribsARB
+- glx: simplify FBConfig wire decode
+- glx: free glx_drawable on CreateDRIDrawable failure
+- zink: fix GLX_USE_APPLE typo (should be GLX_USE_APPLEGL)
+- glx/apple: free gc in applegl_destroy_context
+- glx: fix per-display drawHash / zombieGLXDrawable / dri2Hash leak on GLX_USE_APPLE builds
+
+Jesse Natalie (1):
+
+- util: Fix u_math on MSVC arm64
+
+Jianfeng Liu (1):
+
+- freedreno/drm: Fix uninitialized read of BO metadata on import
+
+Job Noorman (1):
+
+- ir3/opt_prefetch_descriptors: rematerialize defs at preamble start
+
+Juan A. Suarez Romero (8):
+
+- v3dv: fix assertion on push constants
+- broadcom/ci: fix kernel used on the baremetal rpi3 duts
+- st/mesa: release sampler view
+- rusticl: fix leak in \`util_queue`
+- v3d: free vertex and constant buffers on context destroy
+- v3d: add more blitter ops for saving resources
+- vc4: move util_copy_constant_buffer to the function beginning
+- vc4: add blitter operations
+
+Karol Herbst (3):
+
+- nak: convert base to iadd for non-uniform ldcx lowering
+- nir/opt_phi_precision: bail on load_const conversions between float and ints
+- rusticl: move the worker queue into the Platform
+
+Konstantin Seurer (2):
+
+- vulkan: Fixes for a spec update
+- vulkan,spirv: Update spec to 1.4.352
+
+Lionel Landwerlin (5):
+
+- brw: remove interpolator coarse bit setting
+- brw: add shader key to enable robust SLM accesses
+- anv: add hitman2 workaround for SLM load vectorization
+- vulkan: condition cmd_queue initialization to driver need
+- anv/brw: fixup 64bit array image accesses
+
+Marc Alcala Prieto (2):
+
+- pan/va: Fix serialization of atomic operations using BI_ATOM_OPC_AUMIN
+- panvk: Fix DRM format modifiers for multi-planar YUV formats
+
+Marek Olšák (2):
+
+- radv: fix setting COMPUTE_DISPATCH_INTERLEAVE on the gfx queue
+- nir: fix ibfe handling in ssa_def_bits_used
+
+Martin Roukala (né Peres) (1):
+
+- freedreno/ci: document more failures for the a750-gl-cl job
+
+Mary Guillemard (1):
+
+- nvk: Default to output primitives as lines for tesselation parameters
+
+Matt Turner (2):
+
+- gallivm: fix lp_build_round on altivec/VSX
+- gallivm: fix small_unorm -> unorm8 fetch path on big-endian
+
+Mike Blumenkrantz (8):
+
+- zink: when triggering zink_blit_barriers() for src==dst, apply separate barriers
+- tu: handle partially set resolve attachment info without crashing
+- vulkan: update spec to 1.4.350
+- zink: set NO_TASK_SHADER for pipeline layouts with shader objects
+- zink: always use src stages when flushing glMemoryBarrier calls
+- zink: always flush specified memory access for glMemoryBarrier calls
+- zink: free nir if cs program create fails
+- st/pbo_compute: account for drivers failing to create cs shaders
+
+Paulo Zanoni (1):
+
+- anv: don't put clear colors for aliased images in private bindings
+
+QwertyChouskie (1):
+
+- docs/features: Fix typo
+
+Rhys Perry (1):
+
+- radv: fix barriers in decompress shaders
+
+Ryan Neph (1):
+
+- anv/xe: prevent WaitIdle optimization for fences with exported sync_fd
+
+Sagar Ghuge (1):
+
+- anv: Workaround game bug for Witcher3
+
+Sam James (4):
+
+- glx: append extra_ld_args_libgl, not clobber
+- src: add -Wl,--no-fatal-rwx-sections for two libraries
+- gallium/dri: fix redundant Meson condition
+- util: remove bogus const attribute
+
+Samuel Pitoiset (11):
+
+- radv: fix a synchronization issue with taskmesh and pending cache flushes
+- radv: fix a synchronization bug with DGC preprocess and taskmesh
+- radv: workaround game bugs with Sniper Elite 5
+- spirv: allow mapping readonly buffers with struct members
+- radv: fix clearing the streamout state on GFX12
+- vulkan: fix initializing address flags
+- radv/amdgpu: fix computing allocated VRAM for imported BOs from fd
+- vulkan: Update spec to 1.4.353
+- radv: fix a memleak with embedded samplers and descriptor heap
+- radv: disable VRS with MSAA 8x on GFX11-11.7 to prevent GPU hangs
+- radv: disable VRS for flat shading with MSAA 8X to prevent GPU hangs on GFX11
+
+Timothy Arceri (1):
+
+- util/u_range_remap: allow insert to truncate range
+
+Toshinari Morikawa (1):
+
+- virgl: fix memory leak on shader translation
+
+Valentine Burley (3):
+
+- panfrost/ci: Move t860 jobs to nightly
+- zink/ci: Remove zink-anv-cml-asan job
+- intel/ci: Remove nightly CML jobs, retire runner
+
+Yiwei Zhang (4):
+
+- venus: amend roundtrip between fence submit and wait idle
+- panvk: fix plane indexing for afbc image subres layout
+- vulkan/android: force linear for mutable format
+- venus/wsi: skip VkPresentRegionsKHR when pRegions is NULL
+
+Zan Dobersek (1):
+
+- fd: lrz_block in fdl6_lrz_layout_init() should not be static
+
+Zeyang Lyu (1):
+
+- radv: Add base array layer to htile offset
+
+ljohnson (1):
+
+- venus/wsi: deep copy pRectangles when cloning presentation info
+
+yserrr (1):
+
+- v3d: remove duplicate util_blitter_save_so_targets() call

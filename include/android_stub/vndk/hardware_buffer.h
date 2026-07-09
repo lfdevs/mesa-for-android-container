@@ -153,7 +153,7 @@ enum AHardwareBufferStatus : int32_t {
 enum AHardwareBufferStatus AHardwareBuffer_allocateWithOptions(
         const AHardwareBuffer_Desc* _Nonnull desc,
         const AHardwareBufferLongOptions* _Nullable additionalOptions, size_t additionalOptionsSize,
-        AHardwareBuffer* _Nullable* _Nonnull outBuffer) __INTRODUCED_IN(__ANDROID_API_V__);
+        AHardwareBuffer* _Nullable* _Nonnull outBuffer) __INTRODUCED_IN(35);
 
 /**
  * Queries the dataspace of the given AHardwareBuffer.
@@ -162,7 +162,7 @@ enum AHardwareBufferStatus AHardwareBuffer_allocateWithOptions(
  * @return The dataspace of the buffer, or ADATASPACE_UNKNOWN if one hasn't been set
  */
 enum ADataSpace AHardwareBuffer_getDataSpace(const AHardwareBuffer* _Nonnull buffer)
-        __INTRODUCED_IN(__ANDROID_API_V__);
+        __INTRODUCED_IN(35);
 
 /**
  * Sets the dataspace of the given AHardwareBuffer
@@ -174,7 +174,7 @@ enum ADataSpace AHardwareBuffer_getDataSpace(const AHardwareBuffer* _Nonnull buf
  */
 enum AHardwareBufferStatus AHardwareBuffer_setDataSpace(AHardwareBuffer* _Nonnull buffer,
                                                         enum ADataSpace dataSpace)
-        __INTRODUCED_IN(__ANDROID_API_V__);
+        __INTRODUCED_IN(35);
 
 __END_DECLS
 

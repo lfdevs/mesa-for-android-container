@@ -400,12 +400,31 @@ bool si_init_sqtt(struct si_context *sctx)
                           ((uint64_t)sctx->screen->info.pci.func << 32)   |
                           ((uint64_t)sctx->screen->info.pci_id);
 
+   /* TODO: Proper clock calibration */
+   uint64_t cpu_timestamp = os_time_get_nano();
+   uint64_t gpu_timestamp = sctx->ws->query_value(sctx->ws, RADEON_TIMESTAMP);   
+   ac_sqtt_add_clock_calibration(sctx->sqtt, cpu_timestamp, gpu_timestamp);
+
+   uint64_t shader_clock_freq, memory_clock_freq;
+   shader_clock_freq = sctx->ws->query_value(sctx->ws, RADEON_CURRENT_SCLK);
+   memory_clock_freq = sctx->ws->query_value(sctx->ws, RADEON_CURRENT_MCLK);
+   ac_sqtt_set_gpu_trace_clocks(sctx->sqtt, shader_clock_freq, memory_clock_freq); 
+
    return true;
 }
 
 static void si_sqtt_reset_queue_state(struct si_context *sctx)
 {
+   struct rgp_clock_calibration *clock_calibration = &sctx->sqtt->rgp_clock_calibration;
    struct rgp_queue_event *queue_event = &sctx->sqtt->rgp_queue_event;
+
+   simple_mtx_lock(&clock_calibration->lock);
+   list_for_each_entry_safe (struct rgp_clock_calibration_record, record, &clock_calibration->record, list) {
+      clock_calibration->record_count--;
+      list_del(&record->list);
+      free(record);
+   }
+   simple_mtx_unlock(&clock_calibration->lock);
 
    simple_mtx_lock(&queue_event->lock);
    list_for_each_entry_safe (struct rgp_queue_event_record, record,

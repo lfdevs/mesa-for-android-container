@@ -3,6 +3,7 @@
 xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
 xsi:schemaLocation="https://gitlab.freedesktop.org/freedreno/ rules-fd.xsd">
 <import file="freedreno_copyright.xml"/>
+<import file="adreno/adreno_common.xml"/>
 
 <!--
 	This documents the internal register spaces used by the CP firmware since
@@ -459,7 +460,7 @@ xsi:schemaLocation="https://gitlab.freedesktop.org/freedreno/ rules-fd.xsd">
 
 <!-- Starting with a750, the control registers are shuffled around -->
 
-<domain name="A7XX_GEN3_CONTROL_REG" width="32">
+<domain name="A7XX_GEN3_CONTROL_REG" width="32" prefix="variant" varset="chip">
 	<reg32 name="COPROCESSOR_LOCK" offset="0x014"/>
 
 	<reg32 name="REG_WRITE_ADDR" offset="0x018"/>
@@ -498,6 +499,12 @@ xsi:schemaLocation="https://gitlab.freedesktop.org/freedreno/ rules-fd.xsd">
 
 	<reg64 name="LPAC_INSTR_BASE" offset="0x083"/>
 	<reg32 name="LPAC_CNTL" offset="0x085"/>
+
+	<reg64 name="DDE_BR_INSTR_BASE" offset="0x088" variants="A8XX-"/>
+	<reg32 name="DDE_BR_CNTL" offset="0x08a" variants="A8XX-"/>
+
+	<reg64 name="DDE_BV_INSTR_BASE" offset="0x08b" variants="A8XX-"/>
+	<reg32 name="DDE_BV_CNTL" offset="0x08d" variants="A8XX-"/>
 
 	<reg32 name="LOAD_STORE_RANGE_MIN" offset="0x0a2"/>
 	<reg32 name="LOAD_STORE_RANGE_LEN" offset="0x0a3"/>
@@ -554,6 +561,8 @@ xsi:schemaLocation="https://gitlab.freedesktop.org/freedreno/ rules-fd.xsd">
 	<reg32 name="PREEMPTION_TIMER_CNTL" offset="0x141">
 		<bitfield name="RUNNING" pos="0"/>
 	</reg32>
+
+	<reg32 name="DDE_PM4_WRITE" offset="0x191" variants="A8XX-"/>
 
 	<reg64 name="AQE1_PREEMPT_BASE" offset="0x26e"/>
 	<reg64 name="AQE0_PREEMPT_BASE" offset="0x275"/>

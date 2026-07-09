@@ -6,6 +6,7 @@ import argparse
 import sys
 
 VALID_COMMON_VK_OPTIONS = {
+    "force_vk_devicename",
     "force_vk_vendor",
     "vk_zero_vram",
     "heap_memory_percent",
@@ -26,7 +27,18 @@ def declare_options():
 
     performance_options = []
     features_options = []
-    misc_options = []
+    misc_options = [
+        # Overrides for forcing re-compilation of pipelines when
+        # NVK_BUILD_ID_OVERRIDE is enabled. These need to be bumped every
+        # time a compiler bugfix is backported (up to 256 shader versions are
+        # supported).
+        I("nvk_override_graphics_shader_version", 0, 0, 255,
+          "Override graphics shader version to force recompilation when NVK_BUILD_ID_OVERRIDE is enabled.",
+          c_name="override_graphics_shader_version"),
+        I("nvk_override_compute_shader_version", 0, 0, 255,
+          "Override compute shader version to force recompilation when NVK_BUILD_ID_OVERRIDE is enabled.",
+          c_name="override_compute_shader_version"),
+    ]
 
     drirc_gen.add_common_vk_options(debug_options, features_options, misc_options,
                                     valid_options=VALID_COMMON_VK_OPTIONS,

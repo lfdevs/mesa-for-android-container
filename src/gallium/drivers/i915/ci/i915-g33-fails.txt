@@ -381,7 +381,6 @@ spec@arb_texture_compression@texwrap formats bordercolor@GL_COMPRESSED_RGBA- bor
 spec@ati_texture_compression_3dc@texwrap formats bordercolor,Fail
 spec@ati_texture_compression_3dc@texwrap formats bordercolor@GL_COMPRESSED_LUMINANCE_ALPHA_3DC_ATI- border color only,Fail
 
-spec@arb_texture_cube_map@copyteximage cube,Fail
 spec@arb_texture_rectangle@glsl-fs-shadow2drect,Fail
 spec@arb_texture_rectangle@glsl-fs-shadow2drect-01,Fail
 spec@arb_texture_rectangle@glsl-fs-shadow2drect-03,Fail
@@ -1028,3 +1027,10 @@ spec@intel_performance_query@intel_performance_query-issue_2235,Fail
 spec@nv_primitive_restart@primitive-restart-draw-mode-lines,Fail
 spec@nv_primitive_restart@primitive-restart-draw-mode-quad_strip,Fail
 spec@nv_primitive_restart@primitive-restart-draw-mode-quads,Fail
+
+# uprev Piglit in Mesa
+spec@arb_texture_cube_map@copyteximage cube,Fail
+
+# Nightly run expectations update
+spec@glsl-1.10@execution@samplers@glsl-fs-shadow2d-consecutive-draws,Fail
+

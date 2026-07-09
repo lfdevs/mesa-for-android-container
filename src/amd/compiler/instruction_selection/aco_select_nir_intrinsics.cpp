@@ -9,8 +9,6 @@
 #include "aco_instruction_selection.h"
 #include "aco_ir.h"
 
-#include "nir_range_analysis.h"
-
 #include "ac_descriptors.h"
 #include "ac_nir.h"
 #include "amdgfxregs.h"
@@ -242,28 +240,6 @@ emit_vector_as_uniform(isel_context* ctx, Temp src, Temp dst,
    return dst;
 }
 
-Temp
-add64_32(Builder& bld, Temp src0, Operand src1)
-{
-   Temp src00 = bld.tmp(src0.type(), 1);
-   Temp src01 = bld.tmp(src0.type(), 1);
-   bld.pseudo(aco_opcode::p_split_vector, Definition(src00), Definition(src01), src0);
-
-   if (src0.type() == RegType::vgpr || src1.isOfType(RegType::vgpr)) {
-      src1 = src1.isOfType(RegType::vgpr) ? src1 : bld.copy(bld.def(v1), src1);
-      Temp dst0 = bld.tmp(v1);
-      Temp carry = bld.vadd32(Definition(dst0), src00, src1, true).def(1).getTemp();
-      Temp dst1 = bld.vadd32(bld.def(v1), src01, Operand::zero(), false, carry);
-      return bld.pseudo(aco_opcode::p_create_vector, bld.def(v2), dst0, dst1);
-   } else {
-      Temp carry = bld.tmp(s1);
-      Temp dst0 =
-         bld.sop2(aco_opcode::s_add_u32, bld.def(s1), bld.scc(Definition(carry)), src00, src1);
-      Temp dst1 = bld.sop2(aco_opcode::s_add_u32, bld.def(s1), bld.def(s1, scc), src01, carry);
-      return bld.pseudo(aco_opcode::p_create_vector, bld.def(s2), dst0, dst1);
-   }
-}
-
 /* undef becomes Temp(id=0) */
 Temp
 as_temp(Builder& bld, Operand op)
@@ -351,13 +327,7 @@ emit_load(isel_context* ctx, Builder& bld, const LoadEmitInfo& info,
          reduced_const_offset %= max_const_offset_plus_one;
 
          /* For global loads with a 32-bit offset, the resource is the 64-bit address. */
-         bool offset_changed = true;
-         if (new_info.resource.id() && new_info.resource.size() == 2 &&
-             add_might_overflow(ctx, info.offset_src, to_add)) {
-            new_info.resource = add64_32(bld, new_info.resource, Operand::c32(to_add));
-            new_info.resource_src = NULL;
-            offset_changed = false;
-         } else if (offset.isConstant()) {
+         if (offset.isConstant()) {
             offset = Operand::c32(offset.constantValue() + to_add);
          } else if (offset.isUndefined()) {
             offset = Operand::c32(to_add);
@@ -369,8 +339,7 @@ emit_load(isel_context* ctx, Builder& bld, const LoadEmitInfo& info,
          } else {
             offset = Operand(add64_32(bld, offset.getTemp(), Operand::c32(to_add)));
          }
-         if (offset_changed)
-            new_info.offset_src = NULL;
+         new_info.offset_src = NULL;
       }
       new_info.offset = Operand(as_temp(bld, offset));
       new_info.const_offset = reduced_const_offset;
@@ -488,34 +457,29 @@ emit_load(isel_context* ctx, Builder& bld, const LoadEmitInfo& info,
 }
 
 std::pair<aco_opcode, unsigned>
-get_smem_opcode(amd_gfx_level level, unsigned bytes, bool buffer, bool round_down)
+get_smem_buffer_opcode(amd_gfx_level level, unsigned bytes)
 {
    if (bytes <= 1 && level >= GFX12)
-      return {buffer ? aco_opcode::s_buffer_load_ubyte : aco_opcode::s_load_ubyte, 1};
-   else if (bytes <= (round_down ? 3 : 2) && level >= GFX12)
-      return {buffer ? aco_opcode::s_buffer_load_ushort : aco_opcode::s_load_ushort, 2};
-   else if (bytes <= (round_down ? 7 : 4))
-      return {buffer ? aco_opcode::s_buffer_load_dword : aco_opcode::s_load_dword, 4};
-   else if (bytes <= (round_down ? (level >= GFX12 ? 11 : 15) : 8))
-      return {buffer ? aco_opcode::s_buffer_load_dwordx2 : aco_opcode::s_load_dwordx2, 8};
-   else if (bytes <= (round_down ? 15 : 12) && level >= GFX12)
-      return {buffer ? aco_opcode::s_buffer_load_dwordx3 : aco_opcode::s_load_dwordx3, 12};
-   else if (bytes <= (round_down ? 31 : 16))
-      return {buffer ? aco_opcode::s_buffer_load_dwordx4 : aco_opcode::s_load_dwordx4, 16};
-   else if (bytes <= (round_down ? 63 : 32))
-      return {buffer ? aco_opcode::s_buffer_load_dwordx8 : aco_opcode::s_load_dwordx8, 32};
+      return {aco_opcode::s_buffer_load_ubyte, 1};
+   else if (bytes <= 2 && level >= GFX12)
+      return {aco_opcode::s_buffer_load_ushort, 2};
+   else if (bytes <= 4)
+      return {aco_opcode::s_buffer_load_dword, 4};
+   else if (bytes <= 8)
+      return {aco_opcode::s_buffer_load_dwordx2, 8};
+   else if (bytes <= 12 && level >= GFX12)
+      return {aco_opcode::s_buffer_load_dwordx3, 12};
+   else if (bytes <= 16)
+      return {aco_opcode::s_buffer_load_dwordx4, 16};
+   else if (bytes <= 32)
+      return {aco_opcode::s_buffer_load_dwordx8, 32};
    else
-      return {buffer ? aco_opcode::s_buffer_load_dwordx16 : aco_opcode::s_load_dwordx16, 64};
-}
-
-unsigned
-src_has_req_lsb(isel_context* ctx, nir_src* src, unsigned req)
-{
-   return src && nir_def_num_lsb_zero(ctx->numlsb_ht, nir_get_scalar(src->ssa, 0)) >= req;
+      return {aco_opcode::s_buffer_load_dwordx16, 64};
 }
 
 Temp
-smem_load_callback(Builder& bld, const LoadEmitInfo& info, unsigned bytes_needed, unsigned align)
+smem_buffer_load_callback(Builder& bld, const LoadEmitInfo& info, unsigned bytes_needed,
+                          unsigned align)
 {
    /* Only scalar sub-dword loads are supported. */
    assert(bytes_needed % 4 == 0 || bytes_needed <= 2);
@@ -525,22 +489,10 @@ smem_load_callback(Builder& bld, const LoadEmitInfo& info, unsigned bytes_needed
 
    uint32_t const_offset = info.const_offset;
    Temp offset = info.offset.getTemp();
-   bool buffer = info.resource.id() && info.resource.bytes() == 16;
-   Temp addr = info.resource;
-   if (!buffer && !addr.id()) {
-      addr = offset;
-      offset = Temp();
-   }
+   assert(info.resource.id() && info.resource.bytes() == 16);
 
-   std::pair<aco_opcode, unsigned> smaller =
-      get_smem_opcode(bld.program->gfx_level, bytes_needed, buffer, true);
-   std::pair<aco_opcode, unsigned> larger =
-      get_smem_opcode(bld.program->gfx_level, bytes_needed, buffer, false);
-
-   /* Only round-up global loads if it's aligned so that it won't cross pages */
    aco_opcode op;
-   std::tie(op, bytes_needed) =
-      buffer || (align % util_next_power_of_two(larger.second) == 0) ? larger : smaller;
+   std::tie(op, bytes_needed) = get_smem_buffer_opcode(bld.program->gfx_level, bytes_needed);
 
    /* Use a s4 regclass for dwordx3 loads. Even if the register allocator aligned s3 SMEM
     * definitions correctly, multiple dwordx3 loads can make very inefficient use of the register
@@ -552,59 +504,20 @@ smem_load_callback(Builder& bld, const LoadEmitInfo& info, unsigned bytes_needed
     */
    RegClass rc(RegType::sgpr, DIV_ROUND_UP(util_next_power_of_two(bytes_needed), 4u));
 
-   unsigned req_lsb_zero = bytes_needed == 1 ? 0 : (bytes_needed == 2 ? 1 : 2);
-   if (!buffer) {
-      /* We require each offset source and the final address to be aligned, so ensure at least
-       * two sources are aligned. The remaining one can then be assumed to be aligned, otherwise the
-       * final address is unaligned. */
-      // TODO: lower in NIR
-      bool addr_aligned = src_has_req_lsb(info.ctx, info.resource_src, req_lsb_zero);
-      bool offset_aligned =
-         !offset.id() || src_has_req_lsb(info.ctx, info.offset_src, req_lsb_zero);
-      bool const_aligned = !const_offset || ffs(const_offset) > req_lsb_zero;
+   aco_ptr<Instruction> load{create_instruction(op, Format::SMEM, 2, 1)};
+   if (const_offset)
+      offset = bld.sop2(aco_opcode::s_add_u32, bld.def(s1), bld.def(s1, scc), offset,
+                        Operand::c32(const_offset));
+   load->operands[0] = Operand(info.resource);
+   load->operands[1] = Operand(offset);
 
-      if (!offset_aligned && (!addr_aligned || !const_aligned)) {
-         addr = add64_32(bld, addr, Operand(offset));
-         offset = Temp();
-      }
-      if (!const_aligned && (!addr_aligned || !offset_aligned)) {
-         addr = add64_32(bld, addr, Operand::c32(const_offset));
-         const_offset = 0;
-      }
-   } else {
-      /* We assume the buffer resource is also aligned. */
-      assert(!const_offset || ffs(const_offset) > req_lsb_zero);
-   }
-
-   bool soe = !buffer && offset.id() && const_offset && bld.program->gfx_level >= GFX9;
-   aco_ptr<Instruction> load{create_instruction(op, Format::SMEM, 2 + soe, 1)};
-   if (buffer) {
-      if (const_offset)
-         offset = bld.sop2(aco_opcode::s_add_u32, bld.def(s1), bld.def(s1, scc), offset,
-                           Operand::c32(const_offset));
-      load->operands[0] = Operand(info.resource);
-      load->operands[1] = Operand(offset);
-   } else {
-      load->operands[0] = Operand(addr);
-      if (soe) {
-         load->operands[1] = Operand::c32(const_offset);
-         load->operands[2] = Operand(offset);
-      } else if (offset.id() && const_offset) {
-         load->operands[0] = Operand(add64_32(bld, addr, Operand::c32(const_offset)));
-         load->operands[1] = Operand(offset);
-      } else if (offset.id()) {
-         load->operands[1] = Operand(offset);
-      } else {
-         load->operands[1] = Operand::c32(const_offset);
-      }
-   }
-   Temp val = info.dst.regClass() == rc && rc.bytes() == bytes_needed ? info.dst : bld.tmp(rc);
+   Temp val = info.dst.regClass() == rc ? info.dst : bld.tmp(rc);
    load->definitions[0] = Definition(val);
    load->smem().cache = info.cache;
    load->smem().sync = info.sync;
    bld.insert(std::move(load));
 
-   if (rc.bytes() > bytes_needed) {
+   if (rc.bytes() > info.dst.bytes()) {
       rc = RegClass(RegType::sgpr, DIV_ROUND_UP(bytes_needed, 4u));
       Temp val2 = info.dst.regClass() == rc ? info.dst : bld.tmp(rc);
       val = bld.pseudo(aco_opcode::p_extract_vector, Definition(val2), val, Operand::c32(0u));
@@ -613,7 +526,7 @@ smem_load_callback(Builder& bld, const LoadEmitInfo& info, unsigned bytes_needed
    return val;
 }
 
-const EmitLoadParameters smem_load_params{smem_load_callback, 1023};
+const EmitLoadParameters smem_buffer_load_params{smem_buffer_load_callback, 1023};
 
 Temp
 mubuf_load_callback(Builder& bld, const LoadEmitInfo& info, unsigned bytes_needed, unsigned align_)
@@ -1567,7 +1480,7 @@ load_buffer(isel_context* ctx, unsigned num_components, unsigned component_size,
    info.align_offset = align_offset;
    info.disable_wqm = access & ACCESS_SKIP_HELPERS;
    if (use_smem)
-      emit_load(ctx, bld, info, smem_load_params);
+      emit_load(ctx, bld, info, smem_buffer_load_params);
    else
       emit_load(ctx, bld, info, mubuf_load_params);
 }
@@ -2373,12 +2286,78 @@ parse_global(isel_context* ctx, nir_intrinsic_instr* intrin, Temp* address, uint
 }
 
 void
-visit_load_global(isel_context* ctx, nir_intrinsic_instr* instr)
+visit_load_global_smem(isel_context* ctx, nir_intrinsic_instr* instr)
 {
    Builder bld(ctx->program, ctx->block);
+   Temp dst = get_ssa_temp(ctx, &instr->def);
+   Temp addr = bld.as_uniform(get_ssa_temp(ctx, instr->src[0].ssa));
+   Temp offset = Temp();
+   if (!nir_src_is_const(instr->src[1]) || nir_src_as_uint(instr->src[1]))
+      offset = bld.as_uniform(get_ssa_temp(ctx, instr->src[1].ssa));
+   uint32_t const_offset = nir_intrinsic_base(instr);
+   unsigned num_components = instr->num_components;
+   unsigned component_size = instr->def.bit_size / 8;
+   unsigned bytes_needed = num_components * component_size;
+   unsigned access = nir_intrinsic_access(instr);
+   ac_hw_cache_flags cache = get_cache_flags(ctx, access, ac_access_type_load);
+   memory_sync_info sync = get_memory_sync_info(instr, storage_buffer, 0);
+
+   bld.program->has_smem_buffer_or_global_loads = true;
+   aco_opcode op;
+   switch (bytes_needed) {
+   case 1: op = aco_opcode::s_load_ubyte; break;
+   case 2: op = aco_opcode::s_load_ushort; break;
+   case 4: op = aco_opcode::s_load_dword; break;
+   case 8: op = aco_opcode::s_load_dwordx2; break;
+   case 12: op = aco_opcode::s_load_dwordx3; break;
+   case 16: op = aco_opcode::s_load_dwordx4; break;
+   case 32: op = aco_opcode::s_load_dwordx8; break;
+   case 64: op = aco_opcode::s_load_dwordx16; break;
+   default: UNREACHABLE("invalid SMEM load size");
+   }
+
+   /* We assume the address resource, offset and const offset are aligned. */
+   ASSERTED unsigned req_lsb_zero = bytes_needed == 1 ? 0 : (bytes_needed == 2 ? 1 : 2);
+   assert(!const_offset || ffs(const_offset) > req_lsb_zero);
+   /* Only scalar sub-dword loads are supported. */
+   assert(nir_intrinsic_align(instr) >= MIN2(bytes_needed, 4));
+
+   /* Use a s4 regclass for dwordx3 loads. Even if the register allocator aligned s3 SMEM
+    * definitions correctly, multiple dwordx3 loads can make very inefficient use of the register
+    * file. There might be a single SGPR hole between each s3 temporary, making no space for a
+    * vector without a copy for each SGPR needed. Using a s4 definition instead should help avoid
+    * this situation by preventing the scheduler and register allocator from assuming that the 4th
+    * SGPR of each definition in a sequence of dwordx3 SMEM loads is free for use by vector
+    * temporaries.
+    */
+   RegClass rc(RegType::sgpr, DIV_ROUND_UP(util_next_power_of_two(bytes_needed), 4u));
+   assert(rc.bytes() == bytes_needed || ctx->program->gfx_level >= GFX12);
+   Temp val = dst.regClass() == rc ? dst : bld.tmp(rc);
+
+   bool soe = offset.id() && const_offset && bld.program->gfx_level >= GFX9;
+   assert(soe || !offset.id() || const_offset == 0);
+   if (soe)
+      bld.smem(op, Definition(val), addr, Operand::c32(const_offset), offset, sync, cache);
+   else
+      bld.smem(op, Definition(val), addr,
+               offset.id() ? Operand(offset) : Operand::c32(const_offset), sync, cache);
+
+   if (val != dst) {
+      assert(bld.program->gfx_level >= GFX12 && dst.regClass() == s3);
+      bld.pseudo(aco_opcode::p_extract_vector, Definition(dst), val, Operand::c32(0u));
+   }
+   emit_split_vector(ctx, dst, num_components);
+}
+
+void
+visit_load_global(isel_context* ctx, nir_intrinsic_instr* instr)
+{
    unsigned num_components = instr->num_components;
    unsigned component_size = instr->def.bit_size / 8;
    unsigned access = nir_intrinsic_access(instr);
+
+   if (access & ACCESS_SMEM_AMD)
+      return visit_load_global_smem(ctx, instr);
 
    Temp addr, offset;
    uint32_t const_offset;
@@ -2399,19 +2378,9 @@ visit_load_global(isel_context* ctx, nir_intrinsic_instr* instr)
    info.cache = get_cache_flags(ctx, access, ac_access_type_load);
    info.disable_wqm = access & ACCESS_SKIP_HELPERS;
 
-   if (access & ACCESS_SMEM_AMD) {
-      assert(component_size >= 4 ||
-             (num_components * component_size <= 2 && ctx->program->gfx_level >= GFX12));
-      if (info.resource.id())
-         info.resource = bld.as_uniform(info.resource);
-      info.offset = Operand(bld.as_uniform(info.offset));
-      EmitLoadParameters params = smem_load_params;
-      params.max_const_offset = ctx->program->dev.smem_offset_max;
-      emit_load(ctx, bld, info, params);
-   } else {
-      EmitLoadParameters params = global_load_params;
-      emit_load(ctx, bld, info, params);
-   }
+   Builder bld(ctx->program, ctx->block);
+   EmitLoadParameters params = global_load_params;
+   emit_load(ctx, bld, info, params);
 }
 
 void
@@ -2950,9 +2919,15 @@ visit_barrier(isel_context* ctx, nir_intrinsic_instr* instr)
    assert(!(nir_semantics & (NIR_MEMORY_MAKE_AVAILABLE | NIR_MEMORY_MAKE_VISIBLE)));
    assert(exec_scope != scope_workgroup || workgroup_scope_allowed);
 
+   aco_opcode op = aco_opcode::p_barrier;
+   if ((nir_semantics & NIR_MEMORY_CONTROL_ARRIVE_WAIT) == NIR_MEMORY_CONTROL_ARRIVE)
+      op = aco_opcode::p_barrier_signal;
+   if ((nir_semantics & NIR_MEMORY_CONTROL_ARRIVE_WAIT) == NIR_MEMORY_CONTROL_WAIT)
+      op = aco_opcode::p_barrier_wait;
+
    emit_barrier(bld,
                 memory_sync_info((storage_class)storage, (memory_semantics)semantics, mem_scope),
-                exec_scope);
+                exec_scope, op);
 }
 
 /* The two 32 wide halves of a gfx10+ wave64 LDS instruction might be executed interleaved
@@ -4795,20 +4770,22 @@ visit_intrinsic(isel_context* ctx, nir_intrinsic_instr* instr)
                  bld.def(s1, scc), Operand::c32(nir_intrinsic_call_idx(instr)));
       break;
    }
-   case nir_intrinsic_load_ttmp_register_amd: {
+   case nir_intrinsic_load_ttmp_register_amd:
+   case nir_intrinsic_load_ttmp_register_wg_div_amd:{
       assert(ctx->options->gfx_level >= GFX12);
       Temp dst = get_ssa_temp(ctx, &instr->def);
       bld.copy(Definition(dst), Operand(PhysReg(108 + nir_intrinsic_base(instr)), s1));
       break;
    }
    case nir_intrinsic_load_scalar_arg_amd:
+   case nir_intrinsic_load_scalar_arg_wg_div_amd:
    case nir_intrinsic_load_vector_arg_amd: {
       assert(nir_intrinsic_base(instr) < ctx->args->arg_count);
       Temp dst = get_ssa_temp(ctx, &instr->def);
       Temp src = ctx->arg_temps[nir_intrinsic_base(instr)];
       assert(src.id());
-      assert(src.type() == (instr->intrinsic == nir_intrinsic_load_scalar_arg_amd ? RegType::sgpr
-                                                                                  : RegType::vgpr));
+      assert(src.type() == (instr->intrinsic == nir_intrinsic_load_vector_arg_amd ? RegType::vgpr
+                                                                                  : RegType::sgpr));
       bld.copy(Definition(dst), src);
       emit_split_vector(ctx, dst, dst.size());
       break;

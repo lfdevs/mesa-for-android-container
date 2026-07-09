@@ -17,17 +17,13 @@ vn_renderer_submit_simple_sync(struct vn_renderer *renderer,
    if (result != VK_SUCCESS)
       return result;
 
-   const struct vn_renderer_submit submit = {
-      .batches =
-         &(const struct vn_renderer_submit_batch){
-            .cs_data = cs_data,
-            .cs_size = cs_size,
-            .ring_idx = 0, /* CPU ring */
-            .syncs = &sync,
-            .sync_values = &(const uint64_t){ 1 },
-            .sync_count = 1,
-         },
-      .batch_count = 1,
+   const struct vn_renderer_submit_batch batch = {
+      .cs_data = cs_data,
+      .cs_size = cs_size,
+      .ring_idx = 0, /* CPU ring */
+      .syncs = &sync,
+      .sync_values = &(const uint64_t){ 1 },
+      .sync_count = 1,
    };
    const struct vn_renderer_wait wait = {
       .timeout = UINT64_MAX,
@@ -36,7 +32,7 @@ vn_renderer_submit_simple_sync(struct vn_renderer *renderer,
       .sync_count = 1,
    };
 
-   result = vn_renderer_submit(renderer, &submit);
+   result = vn_renderer_submit(renderer, &batch);
    if (result == VK_SUCCESS)
       result = vn_renderer_wait(renderer, &wait);
 

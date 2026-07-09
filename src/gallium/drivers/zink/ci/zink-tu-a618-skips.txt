@@ -2,6 +2,7 @@
 KHR-GLES31.core.tessellation_shader.tessellation_control_to_tessellation_evaluation.gl_MaxPatchVertices_Position_PointSize
 KHR-GLES31.core.tessellation_shader.vertex.vertex_ordering
 KHR-GLES31.core.tessellation_shader.vertex.vertex_spacing
+565-nozs-dEQP-GLES3.functional.fragment_ops.blend.fbo_srgb.equation_src_func_dst_func.subtract_one_minus_src_color_constant_alpha
 
 # Consistently times out with ZINK_DEBUG=validation (no VVL errors seen)
 KHR-GLES3.texture_lod_bias.texture_lod_bias_all

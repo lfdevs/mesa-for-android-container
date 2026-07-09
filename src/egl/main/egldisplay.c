@@ -169,10 +169,12 @@ _eglGetNativePlatform(void *nativeDisplay)
       detection_method = "autodetected";
    }
 
+#if defined(_EGL_NATIVE_PLATFORM)
    if (detected_platform == _EGL_INVALID_PLATFORM) {
       detected_platform = _EGL_NATIVE_PLATFORM;
       detection_method = "build-time configuration";
    }
+#endif
 
    _eglLog(_EGL_DEBUG, "Native platform type: %s (%s)",
            egl_platforms[detected_platform].name, detection_method);

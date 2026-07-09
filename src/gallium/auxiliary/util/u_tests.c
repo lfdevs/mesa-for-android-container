@@ -359,6 +359,7 @@ tgsi_vs_window_space_position(struct pipe_context *ctx)
                                        cb->width0, cb->height0, red);
 
    /* Cleanup. */
+   cso_unbind_context(cso);
    cso_destroy_context(cso);
    ctx->delete_vs_state(ctx, vs);
    ctx->delete_fs_state(ctx, fs);
@@ -413,6 +414,7 @@ null_sampler_view(struct pipe_context *ctx, unsigned tgsi_tex_target)
                                   num_expected);
 
    /* Cleanup. */
+   cso_unbind_context(cso);
    cso_destroy_context(cso);
    ctx->delete_vs_state(ctx, vs);
    ctx->delete_fs_state(ctx, fs);
@@ -470,6 +472,7 @@ util_test_constant_buffer(struct pipe_context *ctx,
                                        cb->height0, zero);
 
    /* Cleanup. */
+   cso_unbind_context(cso);
    cso_destroy_context(cso);
    ctx->delete_vs_state(ctx, vs);
    ctx->delete_fs_state(ctx, fs);
@@ -509,6 +512,7 @@ disabled_fragment_shader(struct pipe_context *ctx)
    ctx->get_query_result(ctx, query, true, &qresult);
 
    /* Cleanup. */
+   cso_unbind_context(cso);
    cso_destroy_context(cso);
    ctx->delete_vs_state(ctx, vs);
    ctx->delete_fs_state(ctx, fs);
@@ -615,6 +619,7 @@ test_sync_file_fences(struct pipe_context *ctx)
    screen->fence_reference(screen, &merged_fence, NULL);
    screen->fence_reference(screen, &final_fence, NULL);
 
+   cso_unbind_context(cso);
    cso_destroy_context(cso);
    pipe_resource_reference(&buf, NULL);
    pipe_resource_reference(&tex, NULL);
@@ -789,6 +794,7 @@ test_texture_barrier(struct pipe_context *ctx, bool use_fbfetch,
                                     cb->width0, cb->height0, expected);
 
    /* Cleanup. */
+   cso_unbind_context(cso);
    cso_destroy_context(cso);
    ctx->delete_vs_state(ctx, vs);
    ctx->delete_fs_state(ctx, fs);

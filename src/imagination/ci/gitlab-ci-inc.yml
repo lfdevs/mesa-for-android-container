@@ -1,6 +1,12 @@
+.enforce-hw-jobs-imagination-rules:
+  rules:
+    - if: '$INPUT_HW_JOBS !~ /"(all|imagination|powervr.ko)"/i'
+      when: never
+
 .imagination-rules:
   stage: imagination
   rules:
+    - !reference [.enforce-hw-jobs-imagination-rules, rules]
     - !reference [.test, rules]
     - !reference [.imagination-farm-rules, rules]
     - !reference [.vulkan-rules, rules]
@@ -23,6 +29,7 @@
   stage: imagination-nightly
   extends: .no-auto-retry
   rules:
+    - !reference [.enforce-hw-jobs-imagination-rules, rules]
     - !reference [.test, rules]
     - !reference [.imagination-farm-manual-rules, rules]
     - !reference [.vulkan-manual-rules, rules]
@@ -35,6 +42,7 @@
     - .ci-tron-b2c-diskless-v1
   variables:
     RUNNER_FARM_LOCATION: imagination
+    PVR_IGNORE_FINISHME_WARNINGS: 1
     CI_TRON_TIMEOUT__FIRST_CONSOLE_ACTIVITY__MINUTES: 0.5
     CI_TRON_TIMEOUT__FIRST_CONSOLE_ACTIVITY__RETRIES: 3
     CI_TRON_DUT_SETUP_TAGS: $GPU_VENDOR_TAG,$GPU_MODEL_TAG
@@ -47,6 +55,7 @@
     CI_TRON_INITRAMFS__GPU__FORMAT__0__ARCHIVE__KEEP__0__REWRITE: '\1'
     CI_TRON_KERNEL_CMDLINE__LOAD_MODULES: 'modules_load=powervr'
   tags:
+    - farm:$RUNNER_FARM_LOCATION
     - ci-tron:priority:$CI_TRON_JOB_PRIORITY
     - $GPU_VENDOR_TAG
     - $GPU_MODEL_TAG

@@ -7,6 +7,7 @@
  */
 
 #include "tensorflow/lite/c/c_api.h"
+#include "tensorflow/lite/c/c_api_experimental.h"
 #include "tensorflow/lite/c/common.h"
 #include "tensorflow/lite/core/c/c_api.h"
 
@@ -32,6 +33,26 @@ TfLiteInterpreterOptionsAddDelegate(TfLiteInterpreterOptions *options, TfLiteOpa
 }
 
 void
+TfLiteInterpreterOptionsAddBuiltinOp(TfLiteInterpreterOptions *options,
+                                     TfLiteBuiltinOperator op,
+                                     const TfLiteRegistration *registration,
+                                     int32_t min_version,
+                                     int32_t max_version)
+{
+   TFLITE_STUB_NOT_IMPLEMENTED(__func__);
+}
+
+void
+TfLiteInterpreterOptionsAddCustomOp(TfLiteInterpreterOptions *options,
+                                    const char *name,
+                                    const TfLiteRegistration *registration,
+                                    int32_t min_version,
+                                    int32_t max_version)
+{
+   TFLITE_STUB_NOT_IMPLEMENTED(__func__);
+}
+
+void
 TfLiteInterpreterOptionsSetErrorReporter(
    TfLiteInterpreterOptions *options,
    void (*reporter)(void *user_data, const char *format, va_list args),
@@ -44,6 +65,15 @@ TfLiteInterpreter *
 TfLiteInterpreterCreate(
    const TfLiteModel *model,
    const TfLiteInterpreterOptions *optional_options)
+{
+   TFLITE_STUB_NOT_IMPLEMENTED(__func__);
+   return NULL;
+}
+
+TfLiteInterpreter *
+TfLiteInterpreterCreateWithSelectedOps(
+   const TfLiteModel *model,
+   const TfLiteInterpreterOptions *options)
 {
    TFLITE_STUB_NOT_IMPLEMENTED(__func__);
    return NULL;

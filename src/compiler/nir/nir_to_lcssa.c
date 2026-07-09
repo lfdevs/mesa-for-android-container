@@ -46,7 +46,6 @@ typedef struct {
    /* The loop we store information for */
    nir_loop *loop;
    nir_block *block_after_loop;
-   nir_block **exit_blocks;
 
    /* Whether to skip loop invariant variables */
    bool skip_invariants;
@@ -239,9 +238,8 @@ convert_loop_exit_for_ssa(nir_def *def, void *void_state)
    /* Create a phi node with as many sources pointing to the same ssa_def as
     * the block has predecessors.
     */
-   uint32_t num_exits = nir_block_num_preds(state->block_after_loop);
-   for (uint32_t i = 0; i < num_exits; i++) {
-      nir_phi_instr_add_src(phi, state->exit_blocks[i], def);
+   nir_foreach_pred(pred, state->block_after_loop) {
+      nir_phi_instr_add_src(phi, pred, def);
    }
 
    nir_instr_insert_before_block(state->block_after_loop, &phi->instr);
@@ -278,9 +276,6 @@ setup_loop_state(lcssa_state *state, nir_loop *loop)
    state->loop = loop;
    state->block_after_loop =
       nir_cf_node_as_block(nir_cf_node_next(&loop->cf_node));
-
-   ralloc_free(state->exit_blocks);
-   state->exit_blocks = nir_block_get_predecessors_sorted(state->block_after_loop, state);
 }
 
 static void

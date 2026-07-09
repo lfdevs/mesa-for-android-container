@@ -392,10 +392,11 @@ struct panvk_shader_variant {
       struct {
          struct pan_earlyzs_lut earlyzs_lut;
          uint32_t input_attachment_read;
+         uint32_t tile_image_color_read;
+         bool tile_image_z_read;
+         bool tile_image_s_read;
       } fs;
    };
-
-   struct panvk_shader_desc_info desc_info;
 
    struct panvk_shader_fau_info fau;
 
@@ -436,6 +437,8 @@ enum panvk_vs_variant {
 
 struct panvk_shader {
    struct vk_shader vk;
+
+   struct panvk_shader_desc_info desc_info;
 
    struct panvk_shader_variant variants[];
 };
@@ -497,7 +500,13 @@ panvk_shader_variant_get_dev_addr(const struct panvk_shader_variant *shader)
 
 #define panvk_shader_foreach_variant(__shader, __var)                          \
    for (struct panvk_shader_variant *__var = (__shader)->variants;             \
-        __var < (__shader)->variants +                                         \
+        (__shader) && __var < (__shader)->variants +                           \
+                   panvk_shader_num_variants((__shader)->vk.stage);            \
+        ++__var)
+
+#define panvk_shader_foreach_variant_const(__shader, __var)                    \
+   for (const struct panvk_shader_variant *__var = (__shader)->variants;       \
+        (__shader) && __var < (__shader)->variants +                           \
                    panvk_shader_num_variants((__shader)->vk.stage);            \
         ++__var)
 
@@ -564,5 +573,8 @@ VkResult panvk_per_arch(create_shader_from_binary)(
    struct panvk_device *dev, const struct pan_shader_info *info,
    struct pan_compute_dim local_size, const void *bin_ptr, size_t bin_size,
    struct panvk_shader **shader_out);
+
+VkResult panvk_per_arch(create_shader)(
+   struct panvk_device *dev, nir_shader *nir, struct panvk_shader **shader_out);
 
 #endif

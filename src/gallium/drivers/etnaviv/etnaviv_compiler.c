@@ -49,6 +49,7 @@ etna_compiler_create(const char *renderer, const struct etna_core_info *info)
       .lower_usub_borrow = true,
       .lower_mul_high = true,
       .lower_bitops = true,
+      .lower_bitfield_insert = info->halti < 5,
       .lower_flrp32 = true,
       .lower_fmod = true,
       .lower_fdph = true,

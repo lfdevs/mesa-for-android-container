@@ -10,24 +10,7 @@
 #ifndef RADV_BVH_ENCODE_H
 #define RADV_BVH_ENCODE_H
 
-#include "build_helpers.h"
-
-void
-radv_encode_triangle_gfx10_3(VOID_REF dst_addr, vk_ir_triangle_node src)
-{
-   REF(radv_bvh_triangle_node) dst = REF(radv_bvh_triangle_node)(dst_addr);
-
-   uint32_t barycentrics_control = 9;
-   if (VK_BUILD_FLAG(VK_BUILD_FLAG_PROPAGATE_CULL_FLAGS)) {
-      bool opaque = (src.geometry_id_and_flags & VK_GEOMETRY_OPAQUE) != 0;
-      barycentrics_control |= (opaque ? 128 : 0);
-   }
-
-   DEREF(dst).coords = src.coords;
-   DEREF(dst).triangle_id = src.triangle_id;
-   DEREF(dst).geometry_id_and_flags = src.geometry_id_and_flags;
-   DEREF(dst).id = barycentrics_control;
-}
+#include "bvh_helpers.h"
 
 void
 radv_encode_aabb_gfx10_3(VOID_REF dst_addr, vk_ir_aabb_node src)
@@ -38,6 +21,7 @@ radv_encode_aabb_gfx10_3(VOID_REF dst_addr, vk_ir_aabb_node src)
    DEREF(dst).geometry_id_and_flags = src.geometry_id_and_flags;
 }
 
+#if ((VK_USED_BUILD_FLAGS & VK_BUILD_FLAG_PROPAGATE_CULL_FLAGS) != 0)
 void
 radv_encode_instance_gfx10_3(VOID_REF dst_addr, vk_ir_instance_node src)
 {
@@ -46,7 +30,7 @@ radv_encode_instance_gfx10_3(VOID_REF dst_addr, vk_ir_instance_node src)
    radv_accel_struct_header blas_header = DEREF(REF(radv_accel_struct_header)(src.base_ptr));
 
    uint64_t ptr = addr_to_node(src.base_ptr + blas_header.bvh_offset);
-   if (VK_BUILD_FLAG(VK_BUILD_FLAG_PROPAGATE_CULL_FLAGS))
+   if (VK_TEST_BUILD_FLAG_PROPAGATE_CULL_FLAGS)
       ptr |= radv_encode_blas_pointer_flags(src.sbt_offset_and_flags >> 24, blas_header.geometry_type);
 
    DEREF(dst).bvh_ptr = ptr;
@@ -61,6 +45,24 @@ radv_encode_instance_gfx10_3(VOID_REF dst_addr, vk_ir_instance_node src)
    DEREF(dst).sbt_offset_and_flags = radv_encode_sbt_offset_and_flags(src.sbt_offset_and_flags);
    DEREF(dst).instance_id = src.instance_id;
 }
+
+void
+radv_encode_triangle_gfx10_3(VOID_REF dst_addr, vk_ir_triangle_node src)
+{
+   REF(radv_bvh_triangle_node) dst = REF(radv_bvh_triangle_node)(dst_addr);
+
+   uint32_t barycentrics_control = 9;
+   if (VK_TEST_BUILD_FLAG_PROPAGATE_CULL_FLAGS) {
+      bool opaque = (src.geometry_id_and_flags & VK_GEOMETRY_OPAQUE) != 0;
+      barycentrics_control |= (opaque ? 128 : 0);
+   }
+
+   DEREF(dst).coords = src.coords;
+   DEREF(dst).triangle_id = src.triangle_id;
+   DEREF(dst).geometry_id_and_flags = src.geometry_id_and_flags;
+   DEREF(dst).id = barycentrics_control;
+}
+#endif
 
 struct bit_writer {
    uint64_t addr;

@@ -83,6 +83,7 @@ impl ALUType {
     pub const UINT: Self = Self(nir_type_uint);
     pub const BOOL: Self = Self(nir_type_bool);
     pub const FLOAT: Self = Self(nir_type_float);
+    pub const INVALID: Self = Self(nir_type_invalid);
 
     pub fn new(base: Self, bit_size: u8) -> Self {
         assert!(bit_size.is_power_of_two());

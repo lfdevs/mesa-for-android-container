@@ -21,7 +21,7 @@
  * DEALINGS IN THE SOFTWARE.
  */
 
-#if defined(GLX_DIRECT_RENDERING) && (!defined(GLX_USE_APPLEGL) || defined(GLX_USE_APPLE))
+#if defined(GLX_DIRECT_RENDERING)
 
 #include <xcb/xcb.h>
 #include <xcb/xproto.h>
@@ -467,6 +467,8 @@ static const struct glx_context_vtable drisw_context_vtable = {
    .unbind              = dri_unbind_context,
    .wait_gl             = drisw_wait_gl,
    .wait_x              = drisw_wait_x,
+   .copy_context        = __glXCopyContext,
+   .swap_buffers        = __glXSwapBuffers,
 };
 
 static void

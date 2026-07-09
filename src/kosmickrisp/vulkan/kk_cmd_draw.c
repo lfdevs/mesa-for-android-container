@@ -45,9 +45,6 @@ kk_cmd_buffer_dirty_render_pass(struct kk_cmd_buffer *cmd)
 
    /* This may depend on render targets for ESO */
    BITSET_SET(dyn->dirty, MESA_VK_DYNAMIC_MS_RASTERIZATION_SAMPLES);
-
-   /* This may depend on render targets */
-   BITSET_SET(dyn->dirty, MESA_VK_DYNAMIC_COLOR_ATTACHMENT_MAP);
 }
 
 static void
@@ -75,6 +72,8 @@ kk_attachment_init(struct kk_attachment *att,
    }
 
    att->store_op = info->storeOp;
+   att->load_op = info->loadOp;
+   att->clear_value = info->clearValue;
 }
 
 VKAPI_ATTR void VKAPI_CALL
@@ -100,11 +99,22 @@ kk_merge_render_iview(VkExtent2D *extent, struct kk_image_view *iview)
 }
 
 static void
+kk_clear_common_attachment_description(
+   mtl_render_pass_attachment_descriptor *descriptor)
+{
+   mtl_render_pass_attachment_descriptor_set_texture(descriptor, NULL);
+   mtl_render_pass_attachment_descriptor_set_load_action(
+      descriptor, MTL_LOAD_ACTION_DONT_CARE);
+   mtl_render_pass_attachment_descriptor_set_store_action(
+      descriptor, MTL_STORE_ACTION_DONT_CARE);
+}
+
+static void
 kk_fill_common_attachment_description(
    mtl_render_pass_attachment_descriptor *descriptor,
-   const struct kk_image_view *iview, const VkRenderingAttachmentInfo *info,
-   bool force_attachment_load)
+   const struct kk_attachment *info, bool force_attachment_load)
 {
+   const struct kk_image_view *iview = info->iview;
    assert(iview->plane_count ==
           1); /* TODO_KOSMICKRISP Handle multiplanar images? */
    mtl_render_pass_attachment_descriptor_set_texture(
@@ -120,7 +130,7 @@ kk_fill_common_attachment_description(
    enum mtl_load_action load_action =
       force_attachment_load
          ? MTL_LOAD_ACTION_LOAD
-         : vk_attachment_load_op_to_mtl_load_action(info->loadOp);
+         : vk_attachment_load_op_to_mtl_load_action(info->load_op);
 
    /* TODO_KOSMICKRISP Need to tackle issue #14344 */
    if (load_action == MTL_LOAD_ACTION_DONT_CARE)
@@ -171,12 +181,54 @@ vk_clear_color_value_to_mtl_clear_color(union VkClearColorValue color,
    return swizzled_color;
 }
 
+static void
+kk_set_color_attachments(mtl_render_pass_descriptor *pass_descriptor,
+                         struct kk_rendering_state *render,
+                         const struct vk_dynamic_graphics_state *dyn,
+                         bool force_attachment_load)
+{
+   for (uint32_t i = 0; i < ARRAY_SIZE(render->color_att); i++) {
+      mtl_render_pass_attachment_descriptor *attachment_descriptor =
+         mtl_render_pass_descriptor_get_color_attachment(pass_descriptor, i);
+      kk_clear_common_attachment_description(attachment_descriptor);
+   }
+   for (uint32_t i = 0; i < ARRAY_SIZE(render->color_att); i++) {
+      struct kk_attachment *color_att = &render->color_att[i];
+      const struct kk_image_view *iview = color_att->iview;
+      uint8_t logical_index = dyn->cal.color_map[i];
+      render->color_map[i] = logical_index;
+
+      if (!iview || logical_index == MESA_VK_ATTACHMENT_UNUSED) {
+         continue;
+      }
+      mtl_render_pass_attachment_descriptor *attachment_descriptor =
+         mtl_render_pass_descriptor_get_color_attachment(pass_descriptor,
+                                                         logical_index);
+
+      assert(iview->plane_count ==
+             1); /* TODO_KOSMICKRISP Handle multiplanar images? */
+      const struct kk_image *image =
+         container_of(iview->vk.image, struct kk_image, vk);
+      render->samples = MAX2(render->samples, image->vk.samples);
+
+      kk_fill_common_attachment_description(attachment_descriptor, color_att,
+                                            force_attachment_load);
+
+      struct mtl_clear_color clear_color =
+         vk_clear_color_value_to_mtl_clear_color(color_att->clear_value.color,
+                                                 iview->planes[0].format);
+      mtl_render_pass_attachment_descriptor_set_clear_color(
+         attachment_descriptor, clear_color);
+   }
+}
+
 VKAPI_ATTR void VKAPI_CALL
 kk_CmdBeginRendering(VkCommandBuffer commandBuffer,
                      const VkRenderingInfo *pRenderingInfo)
 {
    VK_FROM_HANDLE(kk_cmd_buffer, cmd, commandBuffer);
    struct kk_device *dev = kk_cmd_buffer_device(cmd);
+   struct vk_dynamic_graphics_state *dyn = &cmd->vk.dynamic_graphics_state;
 
    struct kk_rendering_state *render = &cmd->state.gfx.render;
 
@@ -288,29 +340,8 @@ kk_CmdBeginRendering(VkCommandBuffer commandBuffer,
       (!is_whole_framebuffer && does_any_attachment_clear) ||
       (render->flags & VK_RENDERING_RESUMING_BIT);
 
-   for (uint32_t i = 0; i < render->color_att_count; i++) {
-      const struct kk_image_view *iview = render->color_att[i].iview;
-      if (!iview)
-         continue;
-
-      assert(iview->plane_count ==
-             1); /* TODO_KOSMICKRISP Handle multiplanar images? */
-      const struct kk_image *image =
-         container_of(iview->vk.image, struct kk_image, vk);
-      render->samples = image->vk.samples;
-
-      mtl_render_pass_attachment_descriptor *attachment_descriptor =
-         mtl_render_pass_descriptor_get_color_attachment(pass_descriptor, i);
-      kk_fill_common_attachment_description(
-         attachment_descriptor, iview, &pRenderingInfo->pColorAttachments[i],
-         force_attachment_load);
-      struct mtl_clear_color clear_color =
-         vk_clear_color_value_to_mtl_clear_color(
-            pRenderingInfo->pColorAttachments[i].clearValue.color,
-            iview->planes[0].format);
-      mtl_render_pass_attachment_descriptor_set_clear_color(
-         attachment_descriptor, clear_color);
-   }
+   kk_set_color_attachments(pass_descriptor, render, dyn,
+                            force_attachment_load);
 
    if (render->depth_att.iview) {
       const struct kk_image_view *iview = render->depth_att.iview;
@@ -321,8 +352,7 @@ kk_CmdBeginRendering(VkCommandBuffer commandBuffer,
       mtl_render_pass_attachment_descriptor *attachment_descriptor =
          mtl_render_pass_descriptor_get_depth_attachment(pass_descriptor);
       kk_fill_common_attachment_description(
-         attachment_descriptor, render->depth_att.iview,
-         pRenderingInfo->pDepthAttachment, force_attachment_load);
+         attachment_descriptor, &render->depth_att, force_attachment_load);
 
       /* clearValue.depthStencil.depth could have invalid values such as NaN
        * which will trigger a Metal validation error. Ensure we only use this
@@ -342,8 +372,7 @@ kk_CmdBeginRendering(VkCommandBuffer commandBuffer,
       mtl_render_pass_attachment_descriptor *attachment_descriptor =
          mtl_render_pass_descriptor_get_stencil_attachment(pass_descriptor);
       kk_fill_common_attachment_description(
-         attachment_descriptor, render->stencil_att.iview,
-         pRenderingInfo->pStencilAttachment, force_attachment_load);
+         attachment_descriptor, &render->stencil_att, force_attachment_load);
       mtl_render_pass_attachment_descriptor_set_clear_stencil(
          attachment_descriptor,
          pRenderingInfo->pStencilAttachment->clearValue.depthStencil.stencil);
@@ -861,8 +890,19 @@ kk_force_attachment_load(struct kk_cmd_buffer *cmd)
 static void
 kk_flush_render_pass(struct kk_cmd_buffer *cmd)
 {
+   struct vk_dynamic_graphics_state *dyn = &cmd->vk.dynamic_graphics_state;
+   struct kk_rendering_state *render = &cmd->state.gfx.render;
    bool needs_restart = kk_flush_sample_locations(cmd);
 
+   if (IS_DIRTY(COLOR_ATTACHMENT_MAP)) {
+      if (memcmp(render->color_map, dyn->cal.color_map,
+                 render->color_att_count * sizeof(render->color_map[0])) != 0) {
+         assert(cmd->state.gfx.render_pass_descriptor);
+         kk_set_color_attachments(cmd->state.gfx.render_pass_descriptor, render,
+                                  dyn, true);
+         needs_restart = true;
+      }
+   }
    /* If render pass state changes and the pass is currently active, end the
     * current encoder and prepare to restart it */
    bool active_render = cmd->cs.gfx;
@@ -1268,9 +1308,8 @@ kk_flush_dynamic_state(struct kk_cmd_buffer *cmd)
    if (desc->root_dirty)
       kk_upload_descriptor_root(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS);
 
-   struct kk_ptr root_buffer = desc->root.root_buffer;
-   if (root_buffer.gpu) {
-      kk_cmd_bind_root_to_argument_table(cmd, root_buffer.gpu);
+   if (desc->root.addr) {
+      kk_cmd_bind_root_to_argument_table(cmd, desc->root.addr);
    }
 
    if (gfx->dirty & KK_DIRTY_OCCLUSION) {
@@ -1483,13 +1522,11 @@ build_per_draw_upload_mask(struct kk_cmd_buffer *cmd)
 }
 
 static struct kk_addr_range
-kk_sanitize_index_range(struct kk_cmd_buffer *cmd, struct kk_addr_range range,
-                        uint32_t index_size_B)
+kk_sanitize_index_range(struct kk_cmd_buffer *cmd, struct kk_addr_range range)
 {
-   /* Metal does not support an index buffer address of 0 or correctly handle an
-    * index buffer size of 0 (likely due to overflow setting register values).
-    * Cache a pool allocation with a single 0 index of maximum index size, and
-    * use it to handle these cases. Robustness will handle overreads.
+   /* Metal does not support an index buffer address or size of 0. Cache a pool
+    * allocation of the maximum index size, filled with 0, and use it to handle
+    * these cases. Robustness will handle over-reads.
     *
     * Note that we only need to do this at draw dispatch as our other draw logic
     * for unrolling, tessellation, etc. will properly handle these cases. */
@@ -1505,7 +1542,7 @@ kk_sanitize_index_range(struct kk_cmd_buffer *cmd, struct kk_addr_range range,
       }
 
       range.addr = gfx->index.null_addr;
-      range.range = index_size_B;
+      range.range = sizeof(uint32_t);
    }
 
    return range;
@@ -1519,7 +1556,7 @@ kk_dispatch_draw(struct kk_cmd_buffer *cmd, struct kk_draw_data data)
    if (kk_grid_is_indirect(data.grid)) {
       if (data.index.el_size_B) {
          struct kk_addr_range index_range =
-            kk_sanitize_index_range(cmd, data.index.gpu, data.index.el_size_B);
+            kk_sanitize_index_range(cmd, data.index.gpu);
          mtl_draw_indexed_primitives_indirect(
             enc, data.primitive_type,
             index_size_in_bytes_to_mtl_index_type(data.index.el_size_B),
@@ -1530,7 +1567,7 @@ kk_dispatch_draw(struct kk_cmd_buffer *cmd, struct kk_draw_data data)
    } else {
       if (data.index.el_size_B) {
          struct kk_addr_range index_range =
-            kk_sanitize_index_range(cmd, data.index.gpu, data.index.el_size_B);
+            kk_sanitize_index_range(cmd, data.index.gpu);
          mtl_draw_indexed_primitives(
             enc, data.primitive_type, data.grid.size.x,
             index_size_in_bytes_to_mtl_index_type(data.index.el_size_B),
@@ -1572,6 +1609,58 @@ requires_index_promotion(const struct kk_draw_command *data)
    default:
       return false;
    }
+}
+
+static bool
+requires_unroll_robustness(struct kk_cmd_buffer *cmd,
+                           const struct kk_draw_command *data)
+{
+   /* No need for robustness if the draw does not use an index buffer */
+   if (!data->indexed)
+      return false;
+
+   struct kk_device *dev = kk_cmd_buffer_device(cmd);
+
+   /* KK_WORKAROUND_12, KK_WORKAROUND_13 */
+   bool workaround_12 = !(dev->disabled_workarounds & BITFIELD64_BIT(12));
+   bool workaround_13 = !(dev->disabled_workarounds & BITFIELD64_BIT(13));
+
+   /* Do nothing if both workarounds are disabled */
+   if (!workaround_12 && !workaround_13)
+      return false;
+
+   /* KK_WORKAROUND_12: Need to handle null descriptor case here as we can't
+    * rely on hardware robustness */
+   if (workaround_12 &&
+       (data->index_buffer.addr == 0u || data->index_buffer.range == 0u))
+      return true;
+
+   /* No need to handle robustness if not enabled
+    * TODO_KOSMICKRISP: Narrow pipeline robustness to vertex input only */
+   if (!dev->vk.enabled_features.robustBufferAccess2 &&
+       !dev->vk.enabled_features.pipelineRobustness)
+      return false;
+
+   /* Only need to handle case where index buffer is not aligned to 4 bytes.
+    * KK_WORKAROUND_12: Need to handle all alignments. */
+   if (!workaround_12 && (data->index_buffer.addr & 3u) == 0u &&
+       (data->index_buffer.range & 3u) == 0u)
+      return false;
+
+   /* We can't tell if the draw over-reads up-front with indirect draws, so we
+    * always have to handle it */
+   if (data->indirect)
+      return true;
+
+   /* For direct draws, we can check now if any over-read the index buffer */
+   for (uint32_t i = 0; i < data->draw_count; i++) {
+      const VkDrawIndexedIndirectCommand *draw = &data->indexed_draws[i];
+      if ((draw->firstIndex + draw->indexCount) * data->index_buffer_el_size_B >
+          data->index_buffer.range)
+         return true;
+   }
+
+   return false;
 }
 
 static bool
@@ -1828,6 +1917,7 @@ kk_draw(struct kk_cmd_buffer *cmd, struct kk_draw_command *data)
     * is present since it also handles unrolling. */
    bool requires_unroll = !tess && (data->prim == MESA_PRIM_TRIANGLE_FAN ||
                                     requires_index_promotion(data) ||
+                                    requires_unroll_robustness(cmd, data) ||
                                     requires_unroll_restart(cmd, data));
    if (requires_unroll && !kk_unroll_geometry(cmd, data))
       return;

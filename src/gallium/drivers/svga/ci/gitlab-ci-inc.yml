@@ -1,6 +1,12 @@
+.enforce-hw-jobs-svga-rules:
+  rules:
+    - if: '$INPUT_HW_JOBS !~ /"(all|svga|vmwgfx.ko)"/i'
+      when: never
+
 .vmware-rules:
   stage: layered-backends
   rules:
+    - !reference [.enforce-hw-jobs-svga-rules, rules]
     - !reference [.test, rules]
     - !reference [.vmware-farm-rules, rules]
     - !reference [.gl-rules, rules]
@@ -17,6 +23,7 @@
   stage: layered-backends-nightly
   extends: .no-auto-retry
   rules:
+    - !reference [.enforce-hw-jobs-svga-rules, rules]
     - !reference [.test, rules]
     - !reference [.vmware-farm-manual-rules, rules]
     - !reference [.gl-manual-rules, rules]

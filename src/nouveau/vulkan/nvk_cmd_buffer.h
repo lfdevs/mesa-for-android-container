@@ -221,6 +221,7 @@ struct nvk_graphics_state {
 struct nvk_compute_state {
    struct nvk_descriptor_state descriptors;
    struct nvk_shader *shader;
+   bool active_compute_invocations_query;
 };
 
 struct nvk_cmd_push {
@@ -238,6 +239,7 @@ struct nvk_cmd_buffer {
       uint64_t descriptor_buffers[NVK_MAX_SETS];
       struct nvk_graphics_state gfx;
       struct nvk_compute_state cs;
+      VkQueryPipelineStatisticFlags inherited_pipeline_statistics;
    } state;
 
    /** List of nvk_cmd_mem
@@ -453,10 +455,16 @@ void nvk_cmd_dispatch_with_root(struct nvk_cmd_buffer *cmd,
                                 uint32_t groupCountY,
                                 uint32_t groupCountZ);
 
-void nvk_cmd_fill_memory(struct nvk_cmd_buffer *cmd,
-                         uint64_t dst_addr, uint64_t size,
-                         uint32_t data);
+void nvk_cmd_fill_memory_ce(struct nvk_cmd_buffer *cmd,
+                            uint64_t dst_addr, uint64_t size,
+                            uint32_t data);
 
+void nvk_cmd_copy_buffer_ce(struct nvk_cmd_buffer *cmd,
+                            const VkCopyBufferInfo2 *pCopyBufferInfo);
+void nvk_cmd_copy_buffer_to_image_ce(struct nvk_cmd_buffer *cmd,
+                                     const VkCopyBufferToImageInfo2 *pCopyBufferToImageInfo);
+void nvk_cmd_copy_image_to_buffer_ce(struct nvk_cmd_buffer *cmd,
+                                     const VkCopyImageToBufferInfo2 *pCopyImageToBufferInfo);
 void nvk_cmd_copy_image_ce(struct nvk_cmd_buffer *cmd,
                            const VkCopyImageInfo2 *pCopyImageInfo);
 

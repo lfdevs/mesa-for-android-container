@@ -35,7 +35,7 @@ TEST_F(nir_opt_varyings_test_dedup_multiple, if_store2_else_store2)
 
       for (unsigned s = 0; s < 2; s++) {
          store[block * 2 + s] = store_output(b1, VARYING_SLOT_VAR0, s,
-                                             nir_type_float32, input, 0);
+                                             nir_type_float32, input, 0, false);
       }
       nir_emit_vertex(b1, 0);
 
@@ -51,7 +51,7 @@ TEST_F(nir_opt_varyings_test_dedup_multiple, if_store2_else_store2)
       load[s] = load_input(b2, VARYING_SLOT_VAR0, s,
                            nir_type_float32, 0, INTERP_PERSP_PIXEL);
       store_output(b2, (gl_varying_slot)FRAG_RESULT_DATA0, s,
-                   nir_type_float32, load[s], 0);
+                   nir_type_float32, load[s], 0, false);
    }
 
    ASSERT_EQ(opt_varyings(), (nir_progress_producer | nir_progress_consumer));
@@ -83,7 +83,7 @@ TEST_F(nir_opt_varyings_test_dedup_multiple, store2_emit_store2_emit)
 
       for (unsigned s = 0; s < 2; s++) {
          store[emit * 2 + s] = store_output(b1, VARYING_SLOT_VAR0, s,
-                                             nir_type_float32, input, 0);
+                                             nir_type_float32, input, 0, false);
       }
       nir_emit_vertex(b1, 0);
 
@@ -96,7 +96,7 @@ TEST_F(nir_opt_varyings_test_dedup_multiple, store2_emit_store2_emit)
       load[s] = load_input(b2, VARYING_SLOT_VAR0, s,
                            nir_type_float32, 0, INTERP_PERSP_PIXEL);
       store_output(b2, (gl_varying_slot)FRAG_RESULT_DATA0, s,
-                   nir_type_float32, load[s], 0);
+                   nir_type_float32, load[s], 0, false);
    }
 
    ASSERT_EQ(opt_varyings(), (nir_progress_producer | nir_progress_consumer));
@@ -124,10 +124,10 @@ TEST_F(nir_opt_varyings_test_dedup_multiple, vs_invalid_case)
 
    nir_if *if_block = nir_push_if(b1, nir_ieq_imm(b1, invoc_id, 0));
    store[0] = store_output(b1, VARYING_SLOT_VAR0, 0, nir_type_float32,
-                           invoc_id, 0);
+                           invoc_id, 0, false);
    nir_push_else(b1, if_block);
    store[1] = store_output(b1, VARYING_SLOT_VAR0, 1, nir_type_float32,
-                           invoc_id, 0);
+                           invoc_id, 0, false);
    nir_pop_if(b1, if_block);
 
    nir_def *load[2] = {0};
@@ -135,7 +135,7 @@ TEST_F(nir_opt_varyings_test_dedup_multiple, vs_invalid_case)
       load[s] = load_input(b2, VARYING_SLOT_VAR0, s,
                            nir_type_float32, 0, INTERP_FLAT);
       store_output(b2, VARYING_SLOT_VAR0, s,
-                   nir_type_float32, load[s], 0);
+                   nir_type_float32, load[s], 0, false);
    }
 
    ASSERT_EQ(opt_varyings(), 0);
@@ -163,10 +163,10 @@ TEST_F(nir_opt_varyings_test_dedup_multiple, tcs_invalid_case)
 
    nir_if *if_block = nir_push_if(b1, nir_ieq_imm(b1, invoc_id, 0));
    store[0] = store_output(b1, VARYING_SLOT_PATCH0, 0, nir_type_float32,
-                           invoc_id, 0);
+                           invoc_id, 0, false);
    nir_push_else(b1, if_block);
    store[1] = store_output(b1, VARYING_SLOT_PATCH0, 1, nir_type_float32,
-                           invoc_id, 0);
+                           invoc_id, 0, false);
    nir_pop_if(b1, if_block);
 
    nir_def *load[2] = {0};
@@ -174,7 +174,7 @@ TEST_F(nir_opt_varyings_test_dedup_multiple, tcs_invalid_case)
       load[s] = load_input(b2, VARYING_SLOT_PATCH0, s, nir_type_float32, 0,
                            INTERP_FLAT);
       store_output(b2, VARYING_SLOT_VAR0, s,
-                   nir_type_float32, load[s], 0);
+                   nir_type_float32, load[s], 0, false);
    }
 
    ASSERT_EQ(opt_varyings(), 0);

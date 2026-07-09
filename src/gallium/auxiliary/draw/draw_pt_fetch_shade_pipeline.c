@@ -194,7 +194,8 @@ emit(struct pt_emit *emit,
 
 
 static void
-draw_vertex_shader_run(struct draw_vertex_shader *vshader,
+draw_vertex_shader_run(struct draw_context *draw,
+                       struct draw_vertex_shader *vshader,
                        const struct draw_buffer_info *constants,
                        const struct draw_fetch_info *fetch_info,
                        const struct draw_vertex_info *input_verts,
@@ -208,7 +209,7 @@ draw_vertex_shader_run(struct draw_vertex_shader *vshader,
                                      align(output_verts->count, 4) +
                                      DRAW_EXTRA_VERTICES_PADDING);
 
-   vshader->run_linear(vshader,
+   vshader->run_linear(draw, vshader,
                        (const float (*)[4])input_verts->verts->data,
                        (      float (*)[4])output_verts->verts->data,
                        constants,
@@ -269,7 +270,7 @@ fetch_pipeline_generic(struct draw_pt_middle_end *middle,
     * Need fetch info to get vertex id correct.
     */
    if (fpme->opt & PT_SHADE) {
-      draw_vertex_shader_run(vshader,
+      draw_vertex_shader_run(draw, vshader,
                              draw->pt.user.constants[MESA_SHADER_VERTEX],
                              fetch_info,
                              vert_info,
@@ -284,7 +285,7 @@ fetch_pipeline_generic(struct draw_pt_middle_end *middle,
    fetch_info = NULL;
 
    if ((fpme->opt & PT_SHADE) && gshader) {
-      draw_geometry_shader_run(gshader,
+      draw_geometry_shader_run(draw, gshader,
                                draw->pt.user.constants[MESA_SHADER_GEOMETRY],
                                vert_info,
                                prim_info,

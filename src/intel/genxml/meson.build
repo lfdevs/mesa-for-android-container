@@ -142,6 +142,7 @@ genX_bits_included_symbols = [
   'RENDER_SURFACE_STATE::Surface Type',
   'RENDER_SURFACE_STATE::Render Target View Extent',
   'RENDER_SURFACE_STATE::Tile Mode',
+  'RENDER_SURFACE_STATE::Minimum Array Element',
   'CLEAR_COLOR',
   'VERTEX_BUFFER_STATE::Buffer Starting Address',
   'CPS_STATE',

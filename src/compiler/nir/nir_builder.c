@@ -677,45 +677,18 @@ nir_type_convert(nir_builder *b,
     */
    if (dst_base == nir_type_bool && src_base != nir_type_bool) {
       nir_op opcode;
-
       const unsigned dst_bit_size = nir_alu_type_get_type_size(dest_type);
 
+      /* For conversions to backend-specific bit-sizes,
+       * please use the appropriate instructions directly.
+       */
+      assert(dst_bit_size == 1);
+
       if (src_base == nir_type_float) {
-         switch (dst_bit_size) {
-         case 1:
-            opcode = nir_op_fneu;
-            break;
-         case 8:
-            opcode = nir_op_fneu8;
-            break;
-         case 16:
-            opcode = nir_op_fneu16;
-            break;
-         case 32:
-            opcode = nir_op_fneu32;
-            break;
-         default:
-            UNREACHABLE("Invalid Boolean size.");
-         }
+         opcode = nir_op_fneu;
       } else {
          assert(src_base == nir_type_int || src_base == nir_type_uint);
-
-         switch (dst_bit_size) {
-         case 1:
-            opcode = nir_op_ine;
-            break;
-         case 8:
-            opcode = nir_op_ine8;
-            break;
-         case 16:
-            opcode = nir_op_ine16;
-            break;
-         case 32:
-            opcode = nir_op_ine32;
-            break;
-         default:
-            UNREACHABLE("Invalid Boolean size.");
-         }
+         opcode = nir_op_ine;
       }
 
       return nir_build_alu(b, opcode, src,

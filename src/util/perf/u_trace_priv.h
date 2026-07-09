@@ -85,6 +85,9 @@ struct u_tracepoint {
                     const void *payload,
                     const void *indirect);
 #endif
+   uint32_t (*fuzzy_hash)(const void *key);
+   bool (*fuzzy_equals)(const void *a, const void *b);
+   void (*print_fuzzy_hash_args)(FILE *out, const void *payload);
 };
 
 /**

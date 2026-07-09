@@ -23,7 +23,7 @@ Linux, FreeBSD, and other operating systems.
 .. _Vulkan: https://www.vulkan.org/
 .. _EGL: https://www.khronos.org/egl/
 .. _Direct Rendering Infrastructure: https://dri.freedesktop.org/
-.. _X.org: https://x.org
+.. _X.org: https://www.x.org
 .. _Wayland: https://wayland.freedesktop.org
 
 .. toctree::

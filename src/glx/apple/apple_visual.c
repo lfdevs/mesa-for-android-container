@@ -54,28 +54,28 @@
 #define kCGLOGLPVersion_3_2_Core 0x3200
 #endif
 
+#ifndef kCGLOGLPVersion_GL4_Core
+#define kCGLOGLPVersion_GL4_Core 0x4100
+#endif
+
 #include "apple_cgl.h"
 #include "apple_visual.h"
 #include "apple_glx.h"
 #include "glxconfig.h"
+
+/* Value from GLX_ARB_create_context_profile; declared locally to avoid
+ * dragging <GL/glxext.h> (which needs X11 headers) into this file.
+ */
+#define APPLEGL_GLX_CORE_PROFILE_BIT   0x00000001
 
 enum
 {
    MAX_ATTR = 60
 };
 
-static char __crashreporter_info_buff__[4096] = { 0 };
-static const char *__crashreporter_info__ __attribute__((__used__)) =
-    &__crashreporter_info_buff__[0];
-#if MAC_OS_X_VERSION_MIN_REQUIRED >= 1050
-// This is actually a toolchain requirement, but I'm not sure the correct check,
-// but it should be fine to just only include it for Leopard and later.  This line
-// just tells the linker to never strip this symbol (such as for space optimization)
-__asm__ (".desc ___crashreporter_info__, 0x10");
-#endif
-
-void
+CGLError
 apple_visual_create_pfobj(CGLPixelFormatObj * pfobj, const struct glx_config * mode,
+                          int major_version, int minor_version, int profile_mask,
                           bool * double_buffered, bool * uses_stereo,
                           bool offscreen)
 {
@@ -83,29 +83,33 @@ apple_visual_create_pfobj(CGLPixelFormatObj * pfobj, const struct glx_config * m
    int numattr = 0;
    GLint vsref = 0;
    CGLError error = 0;
-   bool use_core_profile = debug_get_bool_option("LIBGL_PROFILE_CORE", false);
+
+   /* minor_version does not influence the pixel-format request: CGL only has
+    * three profile tokens (Legacy, 3.2 Core, GL4 Core) and the driver returns
+    * the highest version the profile supports.
+    */
+   (void) minor_version;
+
+   *pfobj = NULL;
 
    if (offscreen) {
-      apple_glx_diagnostic
-         ("offscreen rendering enabled.  Using kCGLPFAOffScreen\n");
+      apple_glx_log_debug("offscreen rendering enabled.  Using kCGLPFAOffScreen");
 
       attr[numattr++] = kCGLPFAOffScreen;
    }
    else if (debug_get_bool_option("LIBGL_ALWAYS_SOFTWARE", false)) {
-      apple_glx_diagnostic
-         ("Software rendering requested.  Using kCGLRendererGenericFloatID.\n");
+      apple_glx_log_debug("Software rendering requested.  Using kCGLRendererGenericFloatID.");
       attr[numattr++] = kCGLPFARendererID;
       attr[numattr++] = kCGLRendererGenericFloatID;
    }
    else if (debug_get_bool_option("LIBGL_ALLOW_SOFTWARE", false)) {
-      apple_glx_diagnostic
-         ("Software rendering is not being excluded.  Not using kCGLPFAAccelerated.\n");
+      apple_glx_log_debug("Software rendering is not being excluded.  Not using kCGLPFAAccelerated.");
    }
    else {
       attr[numattr++] = kCGLPFAAccelerated;
    }
 
-   /* 
+   /*
     * The program chose a config based on the fbconfigs or visuals.
     * Those are based on the attributes from CGL, so we probably
     * do want the closest match for the color, depth, and accum.
@@ -157,10 +161,27 @@ apple_visual_create_pfobj(CGLPixelFormatObj * pfobj, const struct glx_config * m
       attr[numattr++] = mode->samples;
    }
 
-   /* Debugging support for Core profiles to support newer versions of OpenGL */
-   if (use_core_profile) {
-      attr[numattr++] = kCGLPFAOpenGLProfile;
-      attr[numattr++] = kCGLOGLPVersion_3_2_Core;
+   /* Map the GLX-requested version + profile to a kCGLOGLPVersion_* token.
+    * CGL rounds core requests up to the highest capable profile enum, so a
+    * request like {3, 3, CORE} legally lands on kCGLOGLPVersion_3_2_Core
+    * and CGL is free to return an OpenGL 4.1 context.
+    */
+   {
+      CGLPixelFormatAttribute cgl_profile = 0;
+
+      if (profile_mask == APPLEGL_GLX_CORE_PROFILE_BIT) {
+         if (major_version >= 4) {
+            cgl_profile = (CGLPixelFormatAttribute) kCGLOGLPVersion_GL4_Core;
+         }
+         else {
+            cgl_profile = (CGLPixelFormatAttribute) kCGLOGLPVersion_3_2_Core;
+         }
+      }
+
+      if (cgl_profile) {
+         attr[numattr++] = kCGLPFAOpenGLProfile;
+         attr[numattr++] = cgl_profile;
+      }
    }
 
    attr[numattr++] = 0;
@@ -169,30 +190,22 @@ apple_visual_create_pfobj(CGLPixelFormatObj * pfobj, const struct glx_config * m
 
    error = apple_cgl.choose_pixel_format(attr, pfobj, &vsref);
 
-   if ((error == kCGLBadAttribute || vsref == 0) && use_core_profile) {
-      apple_glx_diagnostic
-         ("Trying again without CoreProfile: error=%s, vsref=%d\n", apple_cgl.error_string(error), vsref);
+   if (error != kCGLNoError) {
+      apple_glx_log_error("CGLChoosePixelFormat error: %s",
+                          apple_cgl.error_string(error));
+      *pfobj = NULL;
+      return error;
+   }
 
-      if (!error)
+   if (!*pfobj || vsref == 0) {
+      apple_glx_log_error("No matching pixelformats found, "
+                          "perhaps try setting LIBGL_ALLOW_SOFTWARE=true");
+      if (*pfobj) {
          apple_cgl.destroy_pixel_format(*pfobj);
-
-      numattr -= 3;
-      attr[numattr++] = 0;
-
-      error = apple_cgl.choose_pixel_format(attr, pfobj, &vsref);
+         *pfobj = NULL;
+      }
+      return kCGLBadPixelFormat;
    }
 
-   if (error) {
-      snprintf(__crashreporter_info_buff__, sizeof(__crashreporter_info_buff__),
-               "CGLChoosePixelFormat error: %s\n", apple_cgl.error_string(error));
-      fprintf(stderr, "%s", __crashreporter_info_buff__);
-      abort();
-   }
-
-   if (!*pfobj) {
-      snprintf(__crashreporter_info_buff__, sizeof(__crashreporter_info_buff__),
-               "No matching pixelformats found, perhaps try setting LIBGL_ALLOW_SOFTWARE=true\n");
-      fprintf(stderr, "%s", __crashreporter_info_buff__);
-      abort();
-   }
+   return kCGLNoError;
 }

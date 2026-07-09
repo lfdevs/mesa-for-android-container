@@ -23,16 +23,12 @@ vn_renderer_submit_simple(struct vn_renderer *renderer,
                           const void *cs_data,
                           size_t cs_size)
 {
-   const struct vn_renderer_submit submit = {
-      .batches =
-         &(const struct vn_renderer_submit_batch){
-            .cs_data = cs_data,
-            .cs_size = cs_size,
-            .ring_idx = 0, /* CPU ring */
-         },
-      .batch_count = 1,
+   const struct vn_renderer_submit_batch batch = {
+      .cs_data = cs_data,
+      .cs_size = cs_size,
+      .ring_idx = 0, /* CPU ring */
    };
-   return vn_renderer_submit(renderer, &submit);
+   return vn_renderer_submit(renderer, &batch);
 }
 
 VkResult

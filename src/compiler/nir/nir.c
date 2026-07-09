@@ -3296,9 +3296,8 @@ nir_ssa_alu_instr_src_components(const nir_alu_instr *instr, unsigned src)
 
 #define CASE_ALL_SIZES(op) \
    case op:                \
-   case op##8:             \
-   case op##16:            \
-   case op##32:
+   case op##32:            \
+   case op##_pan:
 
 bool
 nir_alu_instr_is_comparison(const nir_alu_instr *instr)
@@ -3320,8 +3319,8 @@ nir_alu_instr_is_comparison(const nir_alu_instr *instr)
       CASE_ALL_SIZES(nir_op_uge)
       CASE_ALL_SIZES(nir_op_ieq)
       CASE_ALL_SIZES(nir_op_ine)
-      CASE_ALL_SIZES(nir_op_bitz)
-      CASE_ALL_SIZES(nir_op_bitnz)
+   case nir_op_bitz:
+   case nir_op_bitnz:
    case nir_op_inot:
       return true;
    default:
@@ -3760,6 +3759,81 @@ nir_instr_xfb_write_mask(nir_intrinsic_instr *instr)
    }
 
    return mask;
+}
+
+/**
+ * Returns 0 for varying slots that don't have a statically-known component
+ * count.
+ */
+unsigned
+nir_slot_num_components(gl_varying_slot slot, mesa_shader_stage stage) {
+   switch (slot) {
+   case VARYING_SLOT_POS:
+   case VARYING_SLOT_COL0:
+   case VARYING_SLOT_COL1:
+   case VARYING_SLOT_TEX0:
+   case VARYING_SLOT_TEX1:
+   case VARYING_SLOT_TEX2:
+   case VARYING_SLOT_TEX3:
+   case VARYING_SLOT_TEX4:
+   case VARYING_SLOT_TEX5:
+   case VARYING_SLOT_TEX6:
+   case VARYING_SLOT_TEX7:
+   case VARYING_SLOT_BFC0:
+   case VARYING_SLOT_BFC1:
+   case VARYING_SLOT_CLIP_VERTEX:
+   case VARYING_SLOT_CULL_DIST0:
+   case VARYING_SLOT_CULL_DIST1:
+   case VARYING_SLOT_CLIP_DIST0:
+   case VARYING_SLOT_CLIP_DIST1:
+      return 4;
+   case VARYING_SLOT_PSIZ:
+   case VARYING_SLOT_FOGC:
+   case VARYING_SLOT_EDGE:
+   case VARYING_SLOT_PRIMITIVE_ID:
+   case VARYING_SLOT_LAYER:
+   case VARYING_SLOT_VIEWPORT:
+   case VARYING_SLOT_VIEWPORT_MASK:
+   case VARYING_SLOT_FACE: /* or VARYING_SLOT_PRIMITIVE_SHADING_RATE */
+   case VARYING_SLOT_VIEW_INDEX:
+      return 1;
+   case VARYING_SLOT_TESS_LEVEL_OUTER:
+      if (stage == MESA_SHADER_MESH)
+         return 1; /* VARYING_SLOT_PRIMITIVE_COUNT */
+      assert(stage == MESA_SHADER_TESS_CTRL);
+      return 4;
+   case VARYING_SLOT_TESS_LEVEL_INNER:
+      if (stage == MESA_SHADER_MESH)
+         /* This is VARYING_SLOT_PRIMITIVE_INDICES, whose component count
+          * is different between NV_mesh_shader (where it is always 1) and
+          * EXT_mesh_shader (where it depends on the primitive topology). */
+         return 0;
+      assert(stage == MESA_SHADER_TESS_CTRL);
+      return 2;
+   case VARYING_SLOT_BOUNDING_BOX0:
+      if (stage == MESA_SHADER_TASK)
+         return 1; /* VARYING_SLOT_TASK_COUNT */
+      else if (stage == MESA_SHADER_VERTEX || stage == MESA_SHADER_TESS_EVAL ||
+               stage == MESA_SHADER_GEOMETRY)
+         return 1; /* VARYING_SLOT_GS_HEADER_IR3 */
+      else if (stage == MESA_SHADER_FRAGMENT)
+         return 2; /* VARYING_SLOT_PARAM_GEN_AMD */
+      assert(stage == MESA_SHADER_TESS_CTRL);
+      return 4;
+   case VARYING_SLOT_BOUNDING_BOX1:
+      if (stage == MESA_SHADER_MESH)
+         return 1; /* VARYING_SLOT_CULL_PRIMITIVE */
+      else if (stage == MESA_SHADER_GEOMETRY)
+         return 1; /* VARYING_SLOT_GS_VERTEX_FLAGS_IR3 */
+      assert(stage == MESA_SHADER_TESS_CTRL);
+      return 4;
+   case VARYING_SLOT_PNTC:
+      return 2;
+   default:
+      /* All builtin varying slots should have been covered */
+      assert(slot >= VARYING_SLOT_VAR0);
+      return 0;
+   }
 }
 
 /**

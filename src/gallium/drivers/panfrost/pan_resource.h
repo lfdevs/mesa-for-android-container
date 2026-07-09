@@ -76,10 +76,6 @@ struct panfrost_resource {
    struct panfrost_bo *bo;
 
    struct {
-      /* Is the checksum for this image valid? Implicitly refers to
-       * the first slice; we only checksum non-mipmapped 2D images */
-      bool crc;
-
       /* Has anything been written to this slice? */
       BITSET_DECLARE(data, PAN_MAX_MIP_LEVELS);
    } valid;
@@ -101,6 +97,9 @@ struct panfrost_resource {
 
    /* Whether the resource owns the backing BO's label */
    bool owns_label;
+
+   /* CRC state */
+   struct pan_crc_state crc_state;
 
    /* AFBC-P state */
    struct pan_afbcp *afbcp;

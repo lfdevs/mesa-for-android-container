@@ -255,4 +255,4 @@ Reference
 Luc Verhaegen’s original Lima site:
 https://web.archive.org/web/20180101212947/http://limadriver.org/
 
-.. _Mesa issue: https://gitlab.freedesktop.org/mesa/mesa/-/issues?label_name%5B%5D=lima
+.. _Mesa issue: https://gitlab.freedesktop.org/mesa/mesa/-/work_items?label_name%5B%5D=lima

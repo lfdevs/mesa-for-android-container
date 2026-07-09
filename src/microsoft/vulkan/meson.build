@@ -15,7 +15,7 @@ dzn_entrypoints = custom_target(
 
 dzn_drirc = custom_target(
   'dzn_drirc',
-  input  : [files('dzn_drirc_gen.py'), drirc_gen, join_paths(dir_source_root, 'src/util/00-dzn-defaults.conf')],
+  input  : [files('dzn_drirc_gen.py'), drirc_gen, '00-dzn-defaults.conf'],
   output : ['dzn_drirc.c', 'dzn_drirc.h'],
   command : [
     prog_python, '@INPUT0@',

@@ -278,10 +278,10 @@ radv_gfx_copy_memory_to_image_indirect(struct radv_cmd_buffer *cmd_buffer,
       radv_meta_set_viewport_and_scissor(cmd_buffer, 0, 0, img_extent_el.width, img_extent_el.height);
 
       for (uint32_t slice = 0; slice < slice_count; slice++) {
-         const VkImageViewUsageCreateInfo iview_usage_info = {
-            .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_USAGE_CREATE_INFO,
-            .usage = vk_format_is_color(format) ? VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT
-                                                : VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+         const VkImageViewUsage2CreateInfoKHR iview_usage_info = {
+            .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_USAGE_2_CREATE_INFO_KHR,
+            .usage = vk_format_is_color(format) ? VK_IMAGE_USAGE_2_COLOR_ATTACHMENT_BIT_KHR
+                                                : VK_IMAGE_USAGE_2_DEPTH_STENCIL_ATTACHMENT_BIT_KHR,
          };
 
          radv_image_view_init(

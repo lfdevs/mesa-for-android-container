@@ -70,24 +70,25 @@ struct panvk_descriptor_state {
 VkResult panvk_per_arch(cmd_prepare_dyn_ssbos)(
    struct panvk_cmd_buffer *cmdbuf,
    const struct panvk_descriptor_state *desc_state,
-   const struct panvk_shader_variant *shader,
+   const struct panvk_shader_desc_info *desc_info,
    struct panvk_shader_desc_state *shader_desc_state);
 
 VkResult panvk_per_arch(cmd_prepare_shader_desc_tables)(
    struct panvk_cmd_buffer *cmdbuf,
    const struct panvk_descriptor_state *desc_state,
-   const struct panvk_shader_variant *shader,
+   const struct panvk_shader_desc_info *desc_info,
+   bool fill_image_table,
    struct panvk_shader_desc_state *shader_desc_state);
 #else
 void panvk_per_arch(cmd_fill_dyn_bufs)(
    const struct panvk_descriptor_state *desc_state,
-   const struct panvk_shader_variant *shader,
+   const struct panvk_shader_desc_info *desc_info,
    struct mali_buffer_packed *buffers);
 
 VkResult panvk_per_arch(cmd_prepare_shader_res_table)(
    struct panvk_cmd_buffer *cmdbuf,
    const struct panvk_descriptor_state *desc_state,
-   const struct panvk_shader_variant *shader,
+   const struct panvk_shader_desc_info *desc_info,
    struct panvk_shader_desc_state *shader_desc_state, uint32_t repeat_count);
 #endif
 

@@ -34,7 +34,7 @@
 #include "GL/mesa_glinterop.h"
 #include "dri_util.h"
 
-#if defined(GLX_DIRECT_RENDERING) && (!defined(GLX_USE_APPLEGL) || defined(GLX_USE_APPLE))
+#if defined(GLX_DIRECT_RENDERING)
 
 /**
  * Get the struct dri_drawable for the drawable associated with a GLXContext
@@ -316,15 +316,11 @@ CreateContext(Display *dpy, int generic_id, struct glx_config *config,
    }
 
    gc = NULL;
-#if defined(GLX_USE_APPLEGL) && !defined(GLX_USE_APPLE)
-   gc = applegl_create_context(psc, config, shareList, renderType);
-#else
    if (allowDirect && psc->vtable->create_context)
       gc = psc->vtable->create_context(psc, config, shareList, renderType);
-#ifdef GLX_INDIRECT_RENDERING
+#if defined(GLX_INDIRECT_RENDERING)
    if (!gc)
       gc = indirect_create_context(psc, config, shareList, renderType);
-#endif
 #endif
    if (!gc)
       return NULL;
@@ -582,6 +578,7 @@ glXCopyContext(Display * dpy, GLXContext source_user,
 {
    struct glx_context *source = (struct glx_context *) source_user;
    struct glx_context *dest = (struct glx_context *) dest_user;
+   struct glx_context *gc;
 
    /* GLX spec 3.3: If the destination context is current for some thread
     * then a BadAccess error is generated
@@ -590,17 +587,20 @@ glXCopyContext(Display * dpy, GLXContext source_user,
       __glXSendError(dpy, BadAccess, 0, X_GLXCopyContext, true);
       return;
    }
-#ifdef GLX_USE_APPLEGL
-   struct glx_context *gc = __glXGetCurrentContext();
-   int errorcode;
-   bool x11error;
 
-   if(apple_glx_copy_context(gc->driContext, source->driContext, dest->driContext,
-                             mask, &errorcode, &x11error)) {
-      __glXSendError(dpy, errorcode, 0, X_GLXCopyContext, x11error);
-   }
+   gc = __glXGetCurrentContext();
+   gc->vtable->copy_context(dpy, source, dest, mask);
+}
 
-#else
+/*
+** Default for glx_context_vtable.copy_context. Sends an X_GLXCopyContext request, using the
+** current context's tag if it is the source so the server can flush before copying. source
+** and dest may both be NULL; the wire request encodes None for null context xids.
+*/
+void
+__glXCopyContext(Display *dpy, struct glx_context *source,
+                 struct glx_context *dest, unsigned long mask)
+{
    xGLXCopyContextReq *req;
    struct glx_context *gc = __glXGetCurrentContext();
    GLXContextTag tag;
@@ -639,7 +639,6 @@ glXCopyContext(Display * dpy, GLXContext source_user,
    req->contextTag = tag;
    UnlockDisplay(dpy);
    SyncHandle();
-#endif /* GLX_USE_APPLEGL */
 }
 
 
@@ -655,22 +654,26 @@ glXIsDirect(Display * dpy, GLXContext gc_user)
 _GLX_PUBLIC void
 glXSwapBuffers(Display * dpy, GLXDrawable drawable)
 {
-#if defined(GLX_USE_APPLEGL) && !defined(GLX_USE_APPLE)
-   struct glx_context * gc = __glXGetCurrentContext();
-   if(gc != &dummyContext && apple_glx_is_current_drawable(dpy, gc->driContext, drawable)) {
-      apple_glx_swap_buffers(gc->driContext);
-   } else {
-      __glXSendError(dpy, GLXBadCurrentWindow, 0, X_GLXSwapBuffers, false);
-   }
-#else
-   struct glx_context *gc;
+   struct glx_context *gc = __glXGetCurrentContext();
+
+   gc->vtable->swap_buffers(dpy, drawable);
+}
+
+/*
+** Default for glx_context_vtable.swap_buffers. Tries the DRI fast path through
+** the drawable's driScreen.swapBuffers when one is registered, otherwise sends
+** an X_GLXSwapBuffers request.  Routes the request through the current context
+** when the drawable belongs to it so the server can flush before swapping.
+*/
+void
+__glXSwapBuffers(Display * dpy, GLXDrawable drawable)
+{
+   struct glx_context *gc = __glXGetCurrentContext();
    GLXContextTag tag;
    CARD8 opcode;
    xcb_connection_t *c;
 
-   gc = __glXGetCurrentContext();
-
-#if defined(GLX_DIRECT_RENDERING) && (!defined(GLX_USE_APPLEGL) || defined(GLX_USE_APPLE))
+#if defined(GLX_DIRECT_RENDERING)
    {
       __GLXDRIdrawable *pdraw = GetGLXDRIDrawable(dpy, drawable);
 
@@ -705,7 +708,6 @@ glXSwapBuffers(Display * dpy, GLXDrawable drawable)
    c = XGetXCBConnection(dpy);
    xcb_glx_swap_buffers(c, tag, drawable);
    xcb_flush(c);
-#endif /* GLX_USE_APPLEGL */
 }
 
 
@@ -2380,11 +2382,6 @@ _GLX_PUBLIC void (*glXGetProcAddressARB(const GLubyte * procName)) (void)
 
    if (f == NULL)
       f = (gl_function) _mesa_glapi_get_proc_address((const char *) procName);
-
-#ifdef GLX_USE_APPLEGL
-   if (f == NULL)
-      f = applegl_get_proc_address((const char *) procName);
-#endif
 
    return f;
 }

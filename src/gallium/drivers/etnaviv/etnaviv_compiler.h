@@ -35,6 +35,7 @@
 #include "pipe/p_shader_tokens.h"
 #include "compiler/shader_enums.h"
 #include "util/disk_cache.h"
+#include "util/u_shader_variant_cache.h"
 
 /* XXX some of these are pretty arbitrary limits, may be better to switch
  * to dynamic allocation at some point.
@@ -73,10 +74,9 @@ struct etna_shader_io_file {
 
 /* shader object, for linking */
 struct etna_shader_variant {
-   uint32_t id; /* for debug */
+   struct util_shader_variant base;
 
-   /* shader variants form a linked list */
-   struct etna_shader_variant *next;
+   uint32_t id; /* for debug */
 
    /* replicated here to avoid passing extra ptrs everywhere */
    struct etna_shader *shader;

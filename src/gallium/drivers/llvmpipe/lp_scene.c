@@ -35,6 +35,7 @@
 #include "lp_fence.h"
 #include "lp_debug.h"
 #include "lp_context.h"
+#include "lp_screen.h"
 #include "lp_state_fs.h"
 #include "lp_setup_context.h"
 
@@ -51,7 +52,7 @@ struct resource_ref {
 #define SHADER_REF_SZ 32
 /** List of shader variant references */
 struct shader_ref {
-   struct lp_fragment_shader_variant *variant[SHADER_REF_SZ];
+   struct util_shader_variant *variant[SHADER_REF_SZ];
    int count;
    struct shader_ref *next;
 };
@@ -281,8 +282,8 @@ lp_scene_end_rasterization(struct lp_scene *scene)
          if (LP_DEBUG & DEBUG_SETUP)
             debug_printf("shader %d: %p\n", j, (void *) ref->variant[i]);
          j++;
-         lp_fs_variant_reference(llvmpipe_context(scene->pipe),
-                                 &ref->variant[i], NULL);
+         util_shader_variant_reference(&llvmpipe_screen(scene->pipe->screen)->fs_variant_opts,
+                                       &ref->variant[i], NULL);
       }
    }
 
@@ -468,7 +469,7 @@ lp_scene_add_frag_shader_reference(struct lp_scene *scene,
       /* Search for this resource:
        */
       for (int i = 0; i < ref->count; i++)
-         if (ref->variant[i] == variant)
+         if (ref->variant[i] == &variant->base)
             return true;
 
       if (ref->count < SHADER_REF_SZ) {
@@ -492,8 +493,8 @@ lp_scene_add_frag_shader_reference(struct lp_scene *scene,
 
    /* Append the reference to the reference block.
     */
-   lp_fs_variant_reference(llvmpipe_context(scene->pipe),
-                           &ref->variant[ref->count++], variant);
+   util_shader_variant_reference(&llvmpipe_screen(scene->pipe->screen)->fs_variant_opts,
+                                 &ref->variant[ref->count++], &variant->base);
 
    return true;
 }

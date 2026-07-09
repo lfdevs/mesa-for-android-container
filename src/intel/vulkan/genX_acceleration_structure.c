@@ -16,7 +16,7 @@
 
 #include "ds/intel_tracepoints.h"
 
-#include "bvh/anv_build_interface.h"
+#include "bvh/anv_bvh_defines.h"
 #include "vk_acceleration_structure.h"
 #include "radix_sort/radix_sort_u64.h"
 #include "radix_sort/common/vk/barrier.h"
@@ -34,10 +34,6 @@ struct update_scratch_layout {
    uint32_t internal_ready_count_offset;
    uint32_t aabb_offset;
    uint32_t size;
-};
-
-enum anv_encode_key {
-   ANV_ENCODE_KEY_ALLOW_UPDATE_BVH = (1 << 0),
 };
 
 static void
@@ -59,17 +55,14 @@ begin_debug_marker(VkCommandBuffer commandBuffer,
    case VK_ACCELERATION_STRUCTURE_BUILD_STEP_MORTON_SORT:
       trace_intel_begin_as_morton_sort(&cmd_buffer->trace);
       break;
-   case VK_ACCELERATION_STRUCTURE_BUILD_STEP_LBVH_BUILD_INTERNAL:
-      trace_intel_begin_as_lbvh_build_internal(&cmd_buffer->trace);
+   case VK_ACCELERATION_STRUCTURE_BUILD_STEP_LBVH_MAIN:
+      trace_intel_begin_as_lbvh_main(&cmd_buffer->trace);
+      break;
+   case VK_ACCELERATION_STRUCTURE_BUILD_STEP_LBVH_GENERATE_IR:
+      trace_intel_begin_as_lbvh_generate_ir(&cmd_buffer->trace);
       break;
    case VK_ACCELERATION_STRUCTURE_BUILD_STEP_PLOC_BUILD_INTERNAL:
       trace_intel_begin_as_ploc_build_internal(&cmd_buffer->trace);
-      break;
-   case VK_ACCELERATION_STRUCTURE_BUILD_STEP_ENCODE:
-      trace_intel_begin_as_encode(&cmd_buffer->trace);
-      break;
-   case VK_ACCELERATION_STRUCTURE_BUILD_STEP_UPDATE:
-      trace_intel_begin_as_update(&cmd_buffer->trace);
       break;
    default:
       UNREACHABLE("Invalid build step");
@@ -97,25 +90,14 @@ end_debug_marker(VkCommandBuffer commandBuffer,
    case VK_ACCELERATION_STRUCTURE_BUILD_STEP_MORTON_SORT:
       trace_intel_end_as_morton_sort(&cmd_buffer->trace);
       break;
-   case VK_ACCELERATION_STRUCTURE_BUILD_STEP_LBVH_BUILD_INTERNAL:
-      trace_intel_end_as_lbvh_build_internal(&cmd_buffer->trace);
+   case VK_ACCELERATION_STRUCTURE_BUILD_STEP_LBVH_MAIN:
+      trace_intel_end_as_lbvh_main(&cmd_buffer->trace);
+      break;
+   case VK_ACCELERATION_STRUCTURE_BUILD_STEP_LBVH_GENERATE_IR:
+      trace_intel_end_as_lbvh_generate_ir(&cmd_buffer->trace);
       break;
    case VK_ACCELERATION_STRUCTURE_BUILD_STEP_PLOC_BUILD_INTERNAL:
       trace_intel_end_as_ploc_build_internal(&cmd_buffer->trace);
-      break;
-   case VK_ACCELERATION_STRUCTURE_BUILD_STEP_ENCODE:
-      trace_intel_end_as_encode(&cmd_buffer->trace,
-                                marker->encode.pass,
-                                marker->encode.key,
-                                marker->encode.leaf_node_count,
-                                marker->encode.internal_node_count);
-      break;
-   case VK_ACCELERATION_STRUCTURE_BUILD_STEP_UPDATE:
-      trace_intel_end_as_update(&cmd_buffer->trace,
-                                marker->encode.pass,
-                                marker->encode.key,
-                                marker->encode.leaf_node_count,
-                                marker->encode.internal_node_count);
       break;
    default:
       UNREACHABLE("Invalid build step");
@@ -324,7 +306,7 @@ get_bvh_layout(const struct vk_acceleration_structure_build_state *state,
       offset += leaf_count * sizeof(uint64_t);
    }
 
-   if (state->config.encode_key[1] & ANV_ENCODE_KEY_ALLOW_UPDATE_BVH) {
+   if (state->config.build_flags & ANV_BUILD_FLAG_WRITE_LOOKUP_MAPS_FOR_UPDATE) {
       assert(geometry_type != VK_GEOMETRY_TYPE_INSTANCES_KHR);
       uint64_t parent_child_map_size = (internal_count + leaf_count + 1) * sizeof(uint32_t);
       layout->parent_child_map_offset = offset;
@@ -350,27 +332,18 @@ static void
 anv_get_build_config(VkDevice _device, struct vk_acceleration_structure_build_state *state)
 {
    VK_FROM_HANDLE(anv_device, device, _device);
-   VkBuildAccelerationStructureFlagsKHR flags = state->build_info->flags;
 
-   /* TODO: ANV does not yet have support for AS updates without doing a full
-    * rebuild, this means that AS updates can cause their size to increase.
-    *
-    * The Vulkan spec says that the maximum size required for updating a
-    * compacted AS will be the "compacted size" that can be queried from it
-    * after the initial build, so in order for apps to behave we must report
-    * the compacted size of an updatable AS as the maximum possible size for
-    * any AS that could also be built from the same number of leaf nodes.
+   /* This will write following required maps for update BVH pass:
+    *    1) Parent-Child offset map
+    *    2) Leaf block offset map
+    *    3) Parent slot offset map
+    *    4) Parent child count map
     */
-   state->config.encode_key[0] =
-      ((flags & VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_COMPACTION_BIT_KHR) &&
-      !(flags & VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR)) ? 1 : 0;
-
-   state->config.encode_key[1] = 0;
    if (state->build_info->type == VK_ACCELERATION_STRUCTURE_TYPE_BOTTOM_LEVEL_KHR &&
        (state->build_info->mode == VK_BUILD_ACCELERATION_STRUCTURE_MODE_UPDATE_KHR ||
         state->build_info->flags & VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR ||
         device->physical->instance->drirc.debug.write_lookup_maps_unconditionally)) {
-      state->config.encode_key[1] = ANV_ENCODE_KEY_ALLOW_UPDATE_BVH;
+      state->config.build_flags |= ANV_BUILD_FLAG_WRITE_LOOKUP_MAPS_FOR_UPDATE;
    }
 }
 
@@ -421,35 +394,6 @@ anv_bvh_build_set_args(VkCommandBuffer commandBuffer, const void *args,
    anv_CmdPushConstants2(commandBuffer, &push_info);
 }
 
-static uint32_t
-anv_build_flags(VkCommandBuffer commandBuffer, uint32_t key)
-{
-   uint32_t flags = 0;
-
-   /* This will write following required maps for update BVH pass:
-    *    1) Parent-Child offset map
-    *    2) Leaf block offset map
-    *    3) Parent slot offset map
-    *    4) Parent child count map
-    */
-   if (key & ANV_ENCODE_KEY_ALLOW_UPDATE_BVH) {
-      flags |= ANV_BUILD_FLAG_WRITE_LOOKUP_MAPS_FOR_UPDATE;
-   }
-
-   return flags;
-}
-
-static VkResult
-anv_encode_prepare(VkCommandBuffer commandBuffer, const struct vk_acceleration_structure_build_state *state)
-{
-   anv_bvh_build_bind_pipeline(commandBuffer,
-                               ANV_OBJECT_KEY_BVH_ENCODE,
-                               encode_spv, sizeof(encode_spv),
-                               sizeof(struct encode_args),
-                               anv_build_flags(commandBuffer, state->config.encode_key[1]));
-   return VK_SUCCESS;
-}
-
 /* Helper to zero out the output BVH. */
 static void
 anv_clear_out_bvh(struct anv_cmd_buffer *cmd_buffer,
@@ -464,110 +408,143 @@ anv_clear_out_bvh(struct anv_cmd_buffer *cmd_buffer,
    genX(cmd_buffer_apply_pipe_flushes)(cmd_buffer);
 }
 
-
-static void
-anv_encode_as(VkCommandBuffer commandBuffer, const struct vk_acceleration_structure_build_state *state)
+static VkResult
+anv_encode_as(VkCommandBuffer commandBuffer, struct vk_device *vk_device, struct vk_meta_device *meta,
+              const struct vk_acceleration_structure_build_args *args, struct vk_acceleration_structure_build_state *states,
+              uint32_t build_count, uint32_t build_flags)
 {
    VK_FROM_HANDLE(anv_cmd_buffer, cmd_buffer, commandBuffer);
-   VK_FROM_HANDLE(vk_acceleration_structure, dst, state->build_info->dstAccelerationStructure);
 
-   struct bvh_layout bvh_layout;
-   VkGeometryTypeKHR geometry_type = vk_get_as_geometry_type(state->build_info);
-   get_bvh_layout(state, &bvh_layout);
+   trace_intel_begin_as_encode(&cmd_buffer->trace);
 
-   if (INTEL_DEBUG(DEBUG_BVH_NO_BUILD)) {
-      /* Zero out the whole BVH when we run with BVH_NO_BUILD debug option. */
-      anv_clear_out_bvh(cmd_buffer,
-                        vk_acceleration_structure_get_va(dst) + bvh_layout.bvh_offset,
-                        bvh_layout.size);
-      return;
+   anv_bvh_build_bind_pipeline(commandBuffer, ANV_OBJECT_KEY_BVH_ENCODE, encode_spv, sizeof(encode_spv),
+                               sizeof(struct encode_args), build_flags);
+
+   for (uint32_t i = 0; i < build_count; i++) {
+      struct vk_acceleration_structure_build_state *state = &states[i];
+      if (state->config.internal_type == VK_INTERNAL_BUILD_TYPE_UPDATE)
+         continue;
+      if ((state->config.build_flags & ANV_ENCODE_BUILD_FLAGS) != build_flags)
+         continue;
+
+      VK_FROM_HANDLE(vk_acceleration_structure, dst, state->build_info->dstAccelerationStructure);
+
+      struct bvh_layout bvh_layout;
+      VkGeometryTypeKHR geometry_type = vk_get_as_geometry_type(state->build_info);
+      get_bvh_layout(state, &bvh_layout);
+
+      if (INTEL_DEBUG(DEBUG_BVH_NO_BUILD)) {
+         /* Zero out the whole BVH when we run with BVH_NO_BUILD debug option. */
+         anv_clear_out_bvh(cmd_buffer,
+                           vk_acceleration_structure_get_va(dst) + bvh_layout.bvh_offset,
+                           bvh_layout.size);
+         continue;
+      }
+
+      uint64_t intermediate_header_addr = state->build_info->scratchData.deviceAddress + state->scratch.header_offset;
+      uint64_t intermediate_bvh_addr = state->build_info->scratchData.deviceAddress + state->scratch.ir_offset;
+
+      STATIC_ASSERT(sizeof(struct anv_accel_struct_header) == ANV_RT_BVH_HEADER_SIZE);
+      STATIC_ASSERT(sizeof(struct anv_instance_leaf) == ANV_RT_INSTANCE_LEAF_SIZE);
+      STATIC_ASSERT(sizeof(struct anv_quad_leaf_node) == ANV_RT_QUAD_LEAF_SIZE);
+      STATIC_ASSERT(sizeof(struct anv_procedural_leaf_node) == ANV_RT_PROCEDURAL_LEAF_SIZE);
+      STATIC_ASSERT(sizeof(struct anv_internal_node) == ANV_RT_INTERNAL_NODE_SIZE);
+
+      const struct encode_args args = {
+         .intermediate_bvh = intermediate_bvh_addr,
+         .output_bvh = vk_acceleration_structure_get_va(dst) +
+                       bvh_layout.bvh_offset,
+         .header = intermediate_header_addr,
+         .leaf_node_count = state->leaf_node_count,
+         .geometry_type = geometry_type,
+         .instance_leaves_addr = vk_acceleration_structure_get_va(dst) +
+                                 bvh_layout.instance_leaves_offset,
+         .parent_child_map = bvh_layout.parent_child_map_offset != 0 ?
+                             (vk_acceleration_structure_get_va(dst) +
+                              bvh_layout.parent_child_map_offset) : 0,
+         .leaf_block_offset_map = bvh_layout.leaf_block_map_offset != 0 ?
+                                  (vk_acceleration_structure_get_va(dst) +
+                                   bvh_layout.leaf_block_map_offset) : 0,
+      };
+      anv_bvh_build_set_args(commandBuffer, &args, sizeof(args));
+
+      anv_genX(cmd_buffer->device->info, cmd_dispatch_unaligned)
+         (commandBuffer, MAX2(state->leaf_node_count, 1), 1, 1);
    }
 
-   uint64_t intermediate_header_addr = state->build_info->scratchData.deviceAddress + state->scratch.header_offset;
-   uint64_t intermediate_bvh_addr = state->build_info->scratchData.deviceAddress + state->scratch.ir_offset;
-
-   STATIC_ASSERT(sizeof(struct anv_accel_struct_header) == ANV_RT_BVH_HEADER_SIZE);
-   STATIC_ASSERT(sizeof(struct anv_instance_leaf) == ANV_RT_INSTANCE_LEAF_SIZE);
-   STATIC_ASSERT(sizeof(struct anv_quad_leaf_node) == ANV_RT_QUAD_LEAF_SIZE);
-   STATIC_ASSERT(sizeof(struct anv_procedural_leaf_node) == ANV_RT_PROCEDURAL_LEAF_SIZE);
-   STATIC_ASSERT(sizeof(struct anv_internal_node) == ANV_RT_INTERNAL_NODE_SIZE);
-
-   const struct encode_args args = {
-      .intermediate_bvh = intermediate_bvh_addr,
-      .output_bvh = vk_acceleration_structure_get_va(dst) +
-                    bvh_layout.bvh_offset,
-      .header = intermediate_header_addr,
-      .leaf_node_count = state->leaf_node_count,
-      .geometry_type = geometry_type,
-      .instance_leaves_addr = vk_acceleration_structure_get_va(dst) +
-                              bvh_layout.instance_leaves_offset,
-      .parent_child_map = bvh_layout.parent_child_map_offset != 0 ?
-                          (vk_acceleration_structure_get_va(dst) +
-                           bvh_layout.parent_child_map_offset) : 0,
-      .leaf_block_offset_map = bvh_layout.leaf_block_map_offset != 0 ?
-                               (vk_acceleration_structure_get_va(dst) +
-                                bvh_layout.leaf_block_map_offset) : 0,
-   };
-   anv_bvh_build_set_args(commandBuffer, &args, sizeof(args));
-
-   anv_genX(cmd_buffer->device->info, cmd_dispatch_unaligned)
-      (commandBuffer, MAX2(state->leaf_node_count, 1), 1, 1);
-}
-
-static VkResult
-anv_init_header_bind_pipeline(VkCommandBuffer commandBuffer, const struct vk_acceleration_structure_build_state *state)
-{
-   /* Add a barrier to ensure the writes from encode.comp is ready to be
-    * read by header.comp
-    */
-   vk_barrier_compute_w_to_compute_r(commandBuffer);
-
-   anv_bvh_build_bind_pipeline(commandBuffer,
-                               ANV_OBJECT_KEY_BVH_HEADER,
-                               header_spv, sizeof(header_spv),
-                               sizeof(struct header_args), 0);
+   trace_intel_end_as_encode(&cmd_buffer->trace, build_flags);
 
    return VK_SUCCESS;
 }
 
-static void
-anv_init_header(VkCommandBuffer commandBuffer, const struct vk_acceleration_structure_build_state *state)
+static VkResult
+anv_init_header(VkCommandBuffer commandBuffer, struct vk_device *vk_device, struct vk_meta_device *meta,
+                const struct vk_acceleration_structure_build_args *args, struct vk_acceleration_structure_build_state *states,
+                uint32_t build_count, uint32_t build_flags)
 {
    VK_FROM_HANDLE(anv_cmd_buffer, cmd_buffer, commandBuffer);
-   VK_FROM_HANDLE(vk_acceleration_structure, dst, state->build_info->dstAccelerationStructure);
 
-   uint64_t intermediate_header_addr = state->build_info->scratchData.deviceAddress + state->scratch.header_offset;
-   uint64_t intermediate_bvh_addr = state->build_info->scratchData.deviceAddress + state->scratch.ir_offset;
+   trace_intel_begin_as_init_header(&cmd_buffer->trace);
 
-   VkGeometryTypeKHR geometry_type = vk_get_as_geometry_type(state->build_info);
+   anv_bvh_build_bind_pipeline(commandBuffer, ANV_OBJECT_KEY_BVH_HEADER, header_spv, sizeof(header_spv),
+                               sizeof(struct header_args), 0);
 
-   struct bvh_layout bvh_layout;
-   get_bvh_layout(state, &bvh_layout);
+   for (uint32_t i = 0; i < build_count; i++) {
+      struct vk_acceleration_structure_build_state *state = &states[i];
+      if (state->config.internal_type == VK_INTERNAL_BUILD_TYPE_UPDATE)
+         continue;
 
-   VkDeviceAddress header_addr = vk_acceleration_structure_get_va(dst);
+      VK_FROM_HANDLE(vk_acceleration_structure, dst, state->build_info->dstAccelerationStructure);
 
-   uint32_t instance_count = geometry_type == VK_GEOMETRY_TYPE_INSTANCES_KHR ?
-                             state->leaf_node_count : 0;
+      uint64_t intermediate_header_addr = state->build_info->scratchData.deviceAddress + state->scratch.header_offset;
+      uint64_t intermediate_bvh_addr = state->build_info->scratchData.deviceAddress + state->scratch.ir_offset;
 
-   struct header_args args = {
-      .src = intermediate_header_addr,
-      .dst = vk_acceleration_structure_get_va(dst),
-      .bvh_offset = bvh_layout.bvh_offset,
-      .instance_count = instance_count,
-      .instance_leaves_offset = bvh_layout.instance_leaves_offset,
-      .is_compacted = (state->config.encode_key[0] == 1),
-      .bvh_size = bvh_layout.size,
-   };
+      VkGeometryTypeKHR geometry_type = vk_get_as_geometry_type(state->build_info);
 
-   anv_bvh_build_set_args(commandBuffer, &args, sizeof(args));
-   vk_common_CmdDispatch(commandBuffer, 1, 1, 1);
+      struct bvh_layout bvh_layout;
+      get_bvh_layout(state, &bvh_layout);
 
-   if (INTEL_DEBUG_BVH_ANY) {
-      debug_record_as_to_bvh_dump(cmd_buffer, header_addr, bvh_layout,
-                                  intermediate_header_addr, intermediate_bvh_addr,
-                                  state->leaf_node_count, geometry_type,
-                                  false /* after update */);
+      VkDeviceAddress header_addr = vk_acceleration_structure_get_va(dst);
+
+      uint32_t instance_count = geometry_type == VK_GEOMETRY_TYPE_INSTANCES_KHR ?
+                                state->leaf_node_count : 0;
+
+      struct header_args args = {
+         .src = intermediate_header_addr,
+         .dst = vk_acceleration_structure_get_va(dst),
+         .bvh_offset = bvh_layout.bvh_offset,
+         .instance_count = instance_count,
+         .instance_leaves_offset = bvh_layout.instance_leaves_offset,
+         .bvh_size = bvh_layout.size,
+      };
+
+      /* TODO: ANV does not yet have support for AS updates without doing a full
+       * rebuild, this means that AS updates can cause their size to increase.
+       *
+       * The Vulkan spec says that the maximum size required for updating a
+       * compacted AS will be the "compacted size" that can be queried from it
+       * after the initial build, so in order for apps to behave we must report
+       * the compacted size of an updatable AS as the maximum possible size for
+       * any AS that could also be built from the same number of leaf nodes.
+       */
+      if ((state->build_info->flags & VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_COMPACTION_BIT_KHR) &&
+         !(state->build_info->flags & VK_BUILD_ACCELERATION_STRUCTURE_ALLOW_UPDATE_BIT_KHR))
+         args.is_compacted = true;
+
+      anv_bvh_build_set_args(commandBuffer, &args, sizeof(args));
+      vk_common_CmdDispatch(commandBuffer, 1, 1, 1);
+
+      if (INTEL_DEBUG_BVH_ANY) {
+         debug_record_as_to_bvh_dump(cmd_buffer, header_addr, bvh_layout,
+                                     intermediate_header_addr, intermediate_bvh_addr,
+                                     state->leaf_node_count, geometry_type,
+                                     false /* after update */);
+      }
    }
+
+   trace_intel_end_as_init_header(&cmd_buffer->trace, build_flags);
+
+   return VK_SUCCESS;
 }
 
 static void
@@ -623,91 +600,131 @@ anv_init_update_scratch(VkCommandBuffer commandBuffer,
    }
 }
 
-static void
-anv_update_prepare(VkCommandBuffer commandBuffer,
-                   const struct vk_acceleration_structure_build_state *state,
-                   bool flushed_cp_after_init_update_scratch,
-                   bool flushed_compute_after_init_update_scratch)
+static VkResult
+anv_update_as(VkCommandBuffer commandBuffer, struct vk_device *vk_device,
+              struct vk_meta_device *meta,
+              const struct vk_acceleration_structure_build_args *args,
+              struct vk_acceleration_structure_build_state *states,
+              uint32_t build_count, uint32_t build_flags)
 {
-   if (!flushed_compute_after_init_update_scratch ||
-       !flushed_cp_after_init_update_scratch)
-      vk_barrier_compute_w_to_compute_r(commandBuffer);
+   VK_FROM_HANDLE(anv_cmd_buffer, cmd_buffer, commandBuffer);
+   struct anv_device *device = cmd_buffer->device;
+
+   trace_intel_begin_as_update(&cmd_buffer->trace);
 
    anv_bvh_build_bind_pipeline(commandBuffer, ANV_OBJECT_KEY_BVH_UPDATE,
                                update_spv, sizeof(update_spv),
-                               sizeof(struct update_args), 0);
+                               sizeof(struct update_args), build_flags);
+
+   for (uint32_t i = 0; i < build_count; i++) {
+      struct vk_acceleration_structure_build_state *state = &states[i];
+      if (state->config.internal_type != VK_INTERNAL_BUILD_TYPE_UPDATE)
+         continue;
+
+      VK_FROM_HANDLE(vk_acceleration_structure, src, state->build_info->srcAccelerationStructure);
+      VK_FROM_HANDLE(vk_acceleration_structure, dst, state->build_info->dstAccelerationStructure);
+
+      struct bvh_layout bvh_layout;
+      get_bvh_layout(state, &bvh_layout);
+
+      /* Just copy over data from src to dst if mismatch. */
+      if (src != dst) {
+         assert(src->offset == 0 && dst->offset == 0);
+         struct anv_address src_addr =
+            anv_address_from_u64(vk_acceleration_structure_get_va(src));
+         struct anv_address dst_addr =
+            anv_address_from_u64(vk_acceleration_structure_get_va(dst));
+
+         assert(src->size == dst->size);
+         anv_cmd_copy_addr(cmd_buffer, src_addr, dst_addr, src->size);
+         vk_barrier_compute_w_to_compute_r(commandBuffer);
+      }
+
+      struct update_scratch_layout update_layout;
+      anv_get_update_scratch_layout(device, state, &update_layout);
+
+      assert(bvh_layout.parent_child_map_offset != 0 &&
+             bvh_layout.leaf_block_map_offset != 0);
+
+      struct update_args update_consts = {
+         .internal_ready_count = state->build_info->scratchData.deviceAddress +
+                                 update_layout.internal_ready_count_offset,
+         .aabb_scratch = state->build_info->scratchData.deviceAddress +
+                         update_layout.aabb_offset,
+         .leaf_node_count = state->leaf_node_count,
+         .parent_child_map = vk_acceleration_structure_get_va(dst) +
+                             bvh_layout.parent_child_map_offset,
+         .leaf_block_offset_map = vk_acceleration_structure_get_va(dst) +
+                                  bvh_layout.leaf_block_map_offset,
+         .output_bvh = vk_acceleration_structure_get_va(dst) + bvh_layout.bvh_offset,
+         .output_bvh_offset = bvh_layout.bvh_offset,
+      };
+
+      uint32_t first_id = 0;
+      for (uint32_t j = 0; j < state->build_info->geometryCount; j++) {
+         const VkAccelerationStructureGeometryKHR *geom =
+            state->build_info->pGeometries ? &state->build_info->pGeometries[j] : state->build_info->ppGeometries[j];
+         const VkAccelerationStructureBuildRangeInfoKHR *build_range_info =
+            &state->build_range_infos[j];
+
+         update_consts.geom_data = vk_fill_geometry_data(state->build_info->type, first_id, j, geom, build_range_info);
+         update_consts.primitive_count = build_range_info->primitiveCount;
+
+         anv_bvh_build_set_args(commandBuffer, &update_consts, sizeof(update_consts));
+         anv_genX(cmd_buffer->device->info, cmd_dispatch_unaligned)
+            (commandBuffer, build_range_info->primitiveCount, 1, 1);
+
+         first_id += build_range_info->primitiveCount;
+      }
+
+      if (INTEL_DEBUG_BVH_ANY) {
+         debug_record_as_to_bvh_dump(cmd_buffer, vk_acceleration_structure_get_va(dst),
+                                     bvh_layout, 0, 0,
+                                     state->leaf_node_count,
+                                     vk_get_as_geometry_type(state->build_info),
+                                     true /* after update */);
+      }
+   }
+
+   trace_intel_end_as_update(&cmd_buffer->trace, build_flags);
+
+   return VK_SUCCESS;
 }
 
 static void
-anv_update_as(VkCommandBuffer commandBuffer,
-              const struct vk_acceleration_structure_build_state *state)
+anv_encode(VkCommandBuffer commandBuffer, struct vk_device *device, struct vk_meta_device *meta,
+           const struct vk_acceleration_structure_build_args *args, struct vk_acceleration_structure_build_state *states,
+           uint32_t build_count, bool flushed_cp_after_init_update_scratch, bool flushed_compute_after_init_update_scratch)
 {
-   VK_FROM_HANDLE(anv_cmd_buffer, cmd_buffer, commandBuffer);
-   VK_FROM_HANDLE(vk_acceleration_structure, src, state->build_info->srcAccelerationStructure);
-   VK_FROM_HANDLE(vk_acceleration_structure, dst, state->build_info->dstAccelerationStructure);
-
-   struct anv_device *device = cmd_buffer->device;
-
-   struct bvh_layout bvh_layout;
-   get_bvh_layout(state, &bvh_layout);
-
-   /* Just copy over data from src to dst if mismatch. */
-   if (src != dst) {
-      assert(src->offset == 0 && dst->offset == 0);
-      struct anv_address src_addr =
-         anv_address_from_u64(vk_acceleration_structure_get_va(src));
-      struct anv_address dst_addr =
-         anv_address_from_u64(vk_acceleration_structure_get_va(dst));
-
-      assert(src->size == dst->size);
-      anv_cmd_copy_addr(cmd_buffer, src_addr, dst_addr, src->size);
-      vk_barrier_compute_w_to_compute_r(commandBuffer);
+   bool has_build = false;
+   bool has_update = false;
+   for (uint32_t i = 0; i < build_count; i++) {
+      struct vk_acceleration_structure_build_state *state = &states[i];
+      if (state->config.internal_type == VK_INTERNAL_BUILD_TYPE_UPDATE)
+         has_update = true;
+      else
+         has_build = true;
    }
 
-   struct update_scratch_layout update_layout;
-   anv_get_update_scratch_layout(device, state, &update_layout);
+   if (has_update) {
+      if (!flushed_compute_after_init_update_scratch ||
+          !flushed_cp_after_init_update_scratch)
+         vk_barrier_compute_w_to_compute_r(commandBuffer);
 
-   assert(bvh_layout.parent_child_map_offset != 0 &&
-          bvh_layout.leaf_block_map_offset != 0);
-
-   struct update_args update_consts = {
-      .internal_ready_count = state->build_info->scratchData.deviceAddress +
-                              update_layout.internal_ready_count_offset,
-      .aabb_scratch = state->build_info->scratchData.deviceAddress +
-                      update_layout.aabb_offset,
-      .leaf_node_count = state->leaf_node_count,
-      .parent_child_map = vk_acceleration_structure_get_va(dst) +
-                          bvh_layout.parent_child_map_offset,
-      .leaf_block_offset_map = vk_acceleration_structure_get_va(dst) +
-                               bvh_layout.leaf_block_map_offset,
-      .output_bvh = vk_acceleration_structure_get_va(dst) + bvh_layout.bvh_offset,
-      .output_bvh_offset = bvh_layout.bvh_offset,
-   };
-
-   uint32_t first_id = 0;
-   for (uint32_t i = 0; i < state->build_info->geometryCount; i++) {
-      const VkAccelerationStructureGeometryKHR *geom =
-         state->build_info->pGeometries ? &state->build_info->pGeometries[i] :state->build_info->ppGeometries[i];
-      const VkAccelerationStructureBuildRangeInfoKHR *build_range_info =
-         &state->build_range_infos[i];
-
-      update_consts.geom_data = vk_fill_geometry_data(state->build_info->type, first_id, i, geom, build_range_info);
-      update_consts.primitive_count = build_range_info->primitiveCount;
-
-      anv_bvh_build_set_args(commandBuffer, &update_consts, sizeof(update_consts));
-      anv_genX(cmd_buffer->device->info, cmd_dispatch_unaligned)
-         (commandBuffer, build_range_info->primitiveCount, 1, 1);
-
-      first_id += build_range_info->primitiveCount;
+      vk_build_stage(anv_update_as, commandBuffer, device, meta, args, states, build_count, 0, true);
    }
 
-   if (INTEL_DEBUG_BVH_ANY) {
-      debug_record_as_to_bvh_dump(cmd_buffer, vk_acceleration_structure_get_va(dst),
-                                  bvh_layout, 0, 0,
-                                  state->leaf_node_count,
-                                  vk_get_as_geometry_type(state->build_info),
-                                  true /* after update */);
-   }
+   if (!has_build)
+      return;
+   
+   vk_build_stage(anv_encode_as, commandBuffer, device, meta, args, states, build_count, ANV_ENCODE_BUILD_FLAGS, false);
+
+   /* Add a barrier to ensure the writes from encode.comp is ready to be
+    * read by header.comp
+    */
+   vk_barrier_compute_w_to_compute_r(commandBuffer);
+
+   vk_build_stage(anv_init_header, commandBuffer, device, meta, args, states, build_count, 0, false);
 }
 
 static const struct vk_acceleration_structure_build_ops anv_build_ops = {
@@ -715,12 +732,9 @@ static const struct vk_acceleration_structure_build_ops anv_build_ops = {
    .end_debug_marker = end_debug_marker,
    .get_as_size = anv_get_as_size,
    .get_build_config = anv_get_build_config,
-   .encode_prepare = { anv_encode_prepare, anv_init_header_bind_pipeline },
-   .encode_as = { anv_encode_as, anv_init_header },
    .get_update_scratch_size = anv_get_update_scratch_size,
    .init_update_scratch = anv_init_update_scratch,
-   .update_prepare[0] = anv_update_prepare,
-   .update_as[0] = anv_update_as,
+   .encode = anv_encode,
 };
 
 static VkResult
@@ -738,12 +752,12 @@ anv_device_init_accel_struct_build_state(struct anv_device *device)
       .fill = { .workgroup_size_log2 = 8, .block_rows = 8 },
       .histogram = {
          .workgroup_size_log2 = 8,
-         .subgroup_size_log2 = device->info->ver >= 20 ? 4 : 3,
+         .subgroup_size_log2 = device->info->ver >= 20 ? 5 : 4,
          .block_rows = 14,
       },
       .prefix = {
          .workgroup_size_log2 = 8,
-         .subgroup_size_log2 = device->info->ver >= 20 ? 4 : 3,
+         .subgroup_size_log2 = device->info->ver >= 20 ? 5 : 4,
       },
       .scatter = {
          .workgroup_size_log2 = 8,
@@ -766,9 +780,10 @@ anv_device_init_accel_struct_build_state(struct anv_device *device)
    device->accel_struct_build.build_args =
       (struct vk_acceleration_structure_build_args) {
          .emit_markers = u_trace_enabled(&device->ds.trace_context),
+         .has_update = true,
          .subgroup_size = device->info->ver >= 20 ? 16 : 8,
          .radix_sort_64 = device->accel_struct_build.radix_sort,
-         /* See struct anv_accel_struct_header from anv_bvh.h
+         /* See struct anv_accel_struct_header from anv_bvh_defines.h
           */
          .bvh_bounds_offset = 0,
    };

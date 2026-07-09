@@ -816,9 +816,12 @@ radv_check_modifier_support(struct radv_physical_device *pdev, const VkPhysicalD
    if (radv_is_format_emulated(pdev, format))
       return VK_ERROR_FORMAT_NOT_SUPPORTED;
 
+   const VkImageCreateFlags2KHR image_flags = vk_image_format_info_2_flags(info);
+   const VkImageUsageFlags2KHR image_usage = vk_image_format_info_2_usage(info);
+
    /* We did not add modifiers for sparse textures. */
-   if (info->flags &
-       (VK_IMAGE_CREATE_SPARSE_BINDING_BIT | VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT | VK_IMAGE_CREATE_SPARSE_ALIASED_BIT))
+   if (image_flags & (VK_IMAGE_CREATE_2_SPARSE_BINDING_BIT_KHR | VK_IMAGE_CREATE_2_SPARSE_RESIDENCY_BIT_KHR |
+                      VK_IMAGE_CREATE_2_SPARSE_ALIASED_BIT_KHR))
       return VK_ERROR_FORMAT_NOT_SUPPORTED;
 
    /*
@@ -857,24 +860,32 @@ radv_check_modifier_support(struct radv_physical_device *pdev, const VkPhysicalD
    if (!found)
       return VK_ERROR_FORMAT_NOT_SUPPORTED;
 
-   bool need_dcc_sign_reinterpret = false;
-   if (ac_modifier_has_dcc(modifier) &&
-       !radv_are_formats_dcc_compatible(pdev, info->pNext, format, info->flags, &need_dcc_sign_reinterpret) &&
-       !need_dcc_sign_reinterpret)
-      return VK_ERROR_FORMAT_NOT_SUPPORTED;
+   if (ac_modifier_has_dcc(modifier)) {
+      const VkImageCompressionControlEXT *compression =
+         vk_find_struct_const(info->pNext, IMAGE_COMPRESSION_CONTROL_EXT);
+      if (compression && compression->flags == VK_IMAGE_COMPRESSION_DISABLED_EXT)
+         return VK_ERROR_FORMAT_NOT_SUPPORTED;
 
-   const bool video = info->usage & (VK_IMAGE_USAGE_VIDEO_DECODE_DST_BIT_KHR | VK_IMAGE_USAGE_VIDEO_ENCODE_SRC_BIT_KHR);
+      bool need_dcc_sign_reinterpret = false;
+      bool ret = radv_are_formats_dcc_compatible(pdev, info->pNext, format,
+                                                 info->flags, &need_dcc_sign_reinterpret);
+      if (!ret && !need_dcc_sign_reinterpret)
+         return VK_ERROR_FORMAT_NOT_SUPPORTED;
+   }
+
+   const bool video =
+      image_usage & (VK_IMAGE_USAGE_2_VIDEO_DECODE_DST_BIT_KHR | VK_IMAGE_USAGE_2_VIDEO_ENCODE_SRC_BIT_KHR);
    if (video) {
       if (!ac_modifier_supports_video(&pdev->info, modifier))
          return VK_ERROR_FORMAT_NOT_SUPPORTED;
 
       /* Decode DPB and output coincide (tier3) requires tiling. */
-      if (info->usage & VK_IMAGE_USAGE_VIDEO_DECODE_DPB_BIT_KHR && modifier == DRM_FORMAT_MOD_LINEAR)
+      if (image_usage & VK_IMAGE_USAGE_2_VIDEO_DECODE_DPB_BIT_KHR && modifier == DRM_FORMAT_MOD_LINEAR)
          return VK_ERROR_FORMAT_NOT_SUPPORTED;
    }
 
    /* QP map needs linear. */
-   if (info->usage & VK_IMAGE_USAGE_VIDEO_ENCODE_QUANTIZATION_DELTA_MAP_BIT_KHR && modifier != DRM_FORMAT_MOD_LINEAR)
+   if (image_usage & VK_IMAGE_USAGE_2_VIDEO_ENCODE_QUANTIZATION_DELTA_MAP_BIT_KHR && modifier != DRM_FORMAT_MOD_LINEAR)
       return VK_ERROR_FORMAT_NOT_SUPPORTED;
 
    /* We can expand this as needed and implemented but there is not much demand
@@ -921,6 +932,11 @@ radv_GetPhysicalDeviceFormatProperties2(VkPhysicalDevice physicalDevice, VkForma
                                   vk_find_struct(pFormatProperties, DRM_FORMAT_MODIFIER_PROPERTIES_LIST_EXT));
    radv_list_drm_format_modifiers_2(pdev, format, &format_props,
                                     vk_find_struct(pFormatProperties, DRM_FORMAT_MODIFIER_PROPERTIES_LIST_2_EXT));
+
+   VkSubpassResolvePerformanceQueryEXT *perf =
+      vk_find_struct(pFormatProperties->pNext, SUBPASS_RESOLVE_PERFORMANCE_QUERY_EXT);
+   if (perf)
+      perf->optimal = VK_FALSE;
 }
 
 static VkResult
@@ -939,6 +955,9 @@ radv_get_image_format_properties(struct radv_physical_device *pdev, const VkPhys
    const VkPhysicalDeviceImageDrmFormatModifierInfoEXT *mod_info =
       vk_find_struct_const(info->pNext, PHYSICAL_DEVICE_IMAGE_DRM_FORMAT_MODIFIER_INFO_EXT);
    VkResult result = VK_ERROR_FORMAT_NOT_SUPPORTED;
+
+   const VkImageCreateFlags2KHR image_flags = vk_image_format_info_2_flags(info);
+   VkImageUsageFlags2KHR image_usage = vk_image_format_info_2_usage(info);
 
    radv_physical_device_get_format_properties(pdev, format, &format_props);
    if (tiling == VK_IMAGE_TILING_LINEAR) {
@@ -995,8 +1014,8 @@ radv_get_image_format_properties(struct radv_physical_device *pdev, const VkPhys
    if (tiling == VK_IMAGE_TILING_OPTIMAL && info->type == VK_IMAGE_TYPE_2D &&
        (format_feature_flags &
         (VK_FORMAT_FEATURE_2_COLOR_ATTACHMENT_BIT | VK_FORMAT_FEATURE_2_DEPTH_STENCIL_ATTACHMENT_BIT)) &&
-       !(info->flags & VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT) &&
-       !(info->usage & VK_IMAGE_USAGE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR)) {
+       !(image_flags & VK_IMAGE_CREATE_2_CUBE_COMPATIBLE_BIT_KHR) &&
+       !(image_usage & VK_IMAGE_USAGE_2_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR)) {
       sampleCounts |= VK_SAMPLE_COUNT_2_BIT | VK_SAMPLE_COUNT_4_BIT | VK_SAMPLE_COUNT_8_BIT;
    }
 
@@ -1013,8 +1032,9 @@ radv_get_image_format_properties(struct radv_physical_device *pdev, const VkPhys
 
    /* We can't create 3d compressed 128bpp images that can be rendered to on GFX9 */
    if (pdev->info.gfx_level >= GFX9 && info->type == VK_IMAGE_TYPE_3D && vk_format_get_blocksizebits(format) == 128 &&
-       vk_format_is_compressed(format) && (info->flags & VK_IMAGE_CREATE_BLOCK_TEXEL_VIEW_COMPATIBLE_BIT) &&
-       ((info->flags & VK_IMAGE_CREATE_EXTENDED_USAGE_BIT) || (info->usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT))) {
+       vk_format_is_compressed(format) && (image_flags & VK_IMAGE_CREATE_2_BLOCK_TEXEL_VIEW_COMPATIBLE_BIT_KHR) &&
+       ((image_flags & VK_IMAGE_CREATE_2_EXTENDED_USAGE_BIT_KHR) ||
+        (image_usage & VK_IMAGE_USAGE_2_COLOR_ATTACHMENT_BIT_KHR))) {
       goto unsupported;
    }
 
@@ -1022,8 +1042,9 @@ radv_get_image_format_properties(struct radv_physical_device *pdev, const VkPhys
    if (pdev->info.gfx_level == GFX6 && info->type == VK_IMAGE_TYPE_1D && vk_format_is_block_compressed(format)) {
       maxMipLevels = 1;
 
-      if ((info->flags & VK_IMAGE_CREATE_BLOCK_TEXEL_VIEW_COMPATIBLE_BIT) &&
-          ((info->flags & VK_IMAGE_CREATE_EXTENDED_USAGE_BIT) || (info->usage & VK_IMAGE_USAGE_STORAGE_BIT))) {
+      if ((image_flags & VK_IMAGE_CREATE_2_BLOCK_TEXEL_VIEW_COMPATIBLE_BIT_KHR) &&
+          ((image_flags & VK_IMAGE_CREATE_2_EXTENDED_USAGE_BIT_KHR) ||
+           (image_usage & VK_IMAGE_USAGE_2_STORAGE_BIT_KHR))) {
          goto unsupported;
       }
    }
@@ -1034,64 +1055,63 @@ radv_get_image_format_properties(struct radv_physical_device *pdev, const VkPhys
     * that are not supported for the format the image is created with but are supported for at least
     * one format a VkImageView created from the image can have."
     */
-   VkImageUsageFlags image_usage = info->usage;
-   if (info->flags & VK_IMAGE_CREATE_EXTENDED_USAGE_BIT)
+   if (image_flags & VK_IMAGE_CREATE_2_EXTENDED_USAGE_BIT_KHR)
       image_usage = 0;
 
-   if (image_usage & VK_IMAGE_USAGE_SAMPLED_BIT) {
+   if (image_usage & VK_IMAGE_USAGE_2_SAMPLED_BIT_KHR) {
       if (!(format_feature_flags & VK_FORMAT_FEATURE_2_SAMPLED_IMAGE_BIT)) {
          goto unsupported;
       }
    }
 
-   if (image_usage & VK_IMAGE_USAGE_STORAGE_BIT) {
+   if (image_usage & VK_IMAGE_USAGE_2_STORAGE_BIT_KHR) {
       if (!(format_feature_flags & VK_FORMAT_FEATURE_2_STORAGE_IMAGE_BIT)) {
          goto unsupported;
       }
    }
 
-   if (image_usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) {
+   if (image_usage & VK_IMAGE_USAGE_2_COLOR_ATTACHMENT_BIT_KHR) {
       if (!(format_feature_flags & VK_FORMAT_FEATURE_2_COLOR_ATTACHMENT_BIT)) {
          goto unsupported;
       }
    }
 
-   if (image_usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) {
+   if (image_usage & VK_IMAGE_USAGE_2_DEPTH_STENCIL_ATTACHMENT_BIT_KHR) {
       if (!(format_feature_flags & VK_FORMAT_FEATURE_2_DEPTH_STENCIL_ATTACHMENT_BIT)) {
          goto unsupported;
       }
    }
 
-   if (image_usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) {
+   if (image_usage & VK_IMAGE_USAGE_2_TRANSFER_SRC_BIT_KHR) {
       if (!(format_feature_flags & VK_FORMAT_FEATURE_2_TRANSFER_SRC_BIT)) {
          goto unsupported;
       }
    }
 
-   if (image_usage & VK_IMAGE_USAGE_TRANSFER_DST_BIT) {
+   if (image_usage & VK_IMAGE_USAGE_2_TRANSFER_DST_BIT_KHR) {
       if (!(format_feature_flags & VK_FORMAT_FEATURE_2_TRANSFER_DST_BIT)) {
          goto unsupported;
       }
    }
 
-   if (image_usage & VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT) {
+   if (image_usage & VK_IMAGE_USAGE_2_INPUT_ATTACHMENT_BIT_KHR) {
       if (!(format_feature_flags &
             (VK_FORMAT_FEATURE_2_COLOR_ATTACHMENT_BIT | VK_FORMAT_FEATURE_2_DEPTH_STENCIL_ATTACHMENT_BIT))) {
          goto unsupported;
       }
    }
 
-   if (image_usage & VK_IMAGE_USAGE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR) {
+   if (image_usage & VK_IMAGE_USAGE_2_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR) {
       if (!(format_feature_flags & VK_FORMAT_FEATURE_2_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR))
          goto unsupported;
    }
 
-   if (image_usage & VK_IMAGE_USAGE_HOST_TRANSFER_BIT_EXT) {
+   if (image_usage & VK_IMAGE_USAGE_2_HOST_TRANSFER_BIT_KHR) {
       if (!(format_feature_flags & VK_FORMAT_FEATURE_2_HOST_IMAGE_TRANSFER_BIT_EXT))
          goto unsupported;
    }
 
-   if (info->flags & VK_IMAGE_CREATE_SPARSE_BINDING_BIT) {
+   if (image_flags & VK_IMAGE_CREATE_2_SPARSE_BINDING_BIT_KHR) {
       if (!radv_sparse_enabled(pdev))
          goto unsupported;
 
@@ -1100,11 +1120,11 @@ radv_get_image_format_properties(struct radv_physical_device *pdev, const VkPhys
          goto unsupported;
 
       /* Sparse resources with host-transfer are unsupported. */
-      if (image_usage & VK_IMAGE_USAGE_HOST_TRANSFER_BIT_EXT)
+      if (image_usage & VK_IMAGE_USAGE_2_HOST_TRANSFER_BIT_KHR)
          goto unsupported;
    }
 
-   if (info->flags & VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT) {
+   if (image_flags & VK_IMAGE_CREATE_2_SPARSE_RESIDENCY_BIT_KHR) {
       if (!radv_sparse_enabled(pdev))
          goto unsupported;
 
@@ -1116,7 +1136,8 @@ radv_get_image_format_properties(struct radv_physical_device *pdev, const VkPhys
          goto unsupported;
    }
 
-   if ((info->flags & (VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT | VK_IMAGE_CREATE_BLOCK_TEXEL_VIEW_COMPATIBLE_BIT)) &&
+   if ((image_flags &
+        (VK_IMAGE_CREATE_2_SPARSE_RESIDENCY_BIT_KHR | VK_IMAGE_CREATE_2_BLOCK_TEXEL_VIEW_COMPATIBLE_BIT_KHR)) &&
        radv_is_format_emulated(pdev, format)) {
       goto unsupported;
    }
@@ -1166,7 +1187,10 @@ get_external_image_format_properties(struct radv_physical_device *pdev,
    if (radv_is_format_emulated(pdev, pImageFormatInfo->format))
       return;
 
-   if (pImageFormatInfo->flags & VK_IMAGE_CREATE_SPARSE_BINDING_BIT)
+   const VkImageCreateFlags2KHR image_flags = vk_image_format_info_2_flags(pImageFormatInfo);
+   const VkImageUsageFlags2KHR image_usage = vk_image_format_info_2_usage(pImageFormatInfo);
+
+   if (image_flags & VK_IMAGE_CREATE_2_SPARSE_BINDING_BIT_KHR)
       return;
 
    switch (handleType) {
@@ -1200,7 +1224,7 @@ get_external_image_format_properties(struct radv_physical_device *pdev,
       flags = VK_EXTERNAL_MEMORY_FEATURE_DEDICATED_ONLY_BIT | VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT;
 
       /* advertise EXPORTABLE only when radv_create_ahb_memory supports the format */
-      if (radv_android_gralloc_supports_format(pImageFormatInfo->format, pImageFormatInfo->usage))
+      if (radv_android_gralloc_supports_format(pImageFormatInfo->format, image_usage))
          flags |= VK_EXTERNAL_MEMORY_FEATURE_EXPORTABLE_BIT;
 
       compat_flags = VK_EXTERNAL_MEMORY_HANDLE_TYPE_ANDROID_HARDWARE_BUFFER_BIT_ANDROID;
@@ -1239,6 +1263,9 @@ radv_GetPhysicalDeviceImageFormatProperties2(VkPhysicalDevice physicalDevice,
    result = radv_get_image_format_properties(pdev, base_info, format, &base_props->imageFormatProperties);
    if (result != VK_SUCCESS)
       return result;
+
+   const VkImageCreateFlags2KHR image_flags = vk_image_format_info_2_flags(base_info);
+   const VkImageUsageFlags2KHR image_usage = vk_image_format_info_2_usage(base_info);
 
    /* Extract input structs */
    vk_foreach_struct_const (s, base_info->pNext) {
@@ -1279,7 +1306,7 @@ radv_GetPhysicalDeviceImageFormatProperties2(VkPhysicalDevice physicalDevice,
 
    bool ahb_supported = pdev->vk.supported_extensions.ANDROID_external_memory_android_hardware_buffer;
    if (android_usage && ahb_supported) {
-      android_usage->androidHardwareBufferUsage = vk_image_usage_to_ahb_usage(base_info->flags, base_info->usage);
+      android_usage->androidHardwareBufferUsage = vk_image_usage_to_ahb_usage(image_flags, image_usage);
    }
 
    /* From the Vulkan 1.0.97 spec:
@@ -1342,10 +1369,10 @@ radv_GetPhysicalDeviceImageFormatProperties2(VkPhysicalDevice physicalDevice,
       bool might_enable_compression = false;
 
       if (vk_format_is_depth_or_stencil(format)) {
-         might_enable_compression |= pdev->use_hiz && (base_info->usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
+         might_enable_compression |= pdev->use_hiz && (image_usage & VK_IMAGE_USAGE_2_DEPTH_STENCIL_ATTACHMENT_BIT_KHR);
       } else {
          might_enable_compression |=
-            !radv_is_dcc_disabled(pdev) && (base_info->usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+            !radv_is_dcc_disabled(pdev) && (image_usage & VK_IMAGE_USAGE_2_COLOR_ATTACHMENT_BIT_KHR);
       }
 
       /**
@@ -1429,13 +1456,24 @@ radv_GetPhysicalDeviceSparseImageFormatProperties2(VkPhysicalDevice physicalDevi
       return;
    }
 
+   VkImageCreateFlags2CreateInfoKHR create2_info = {
+      .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_FLAGS_2_CREATE_INFO_KHR,
+      .flags = VK_IMAGE_CREATE_2_SPARSE_BINDING_BIT_KHR | VK_IMAGE_CREATE_2_SPARSE_RESIDENCY_BIT_KHR,
+   };
+
+   VkImageUsageFlags2CreateInfoKHR usage2_info = {
+      .sType = VK_STRUCTURE_TYPE_IMAGE_USAGE_FLAGS_2_CREATE_INFO_KHR,
+      .pNext = &create2_info,
+      .usage = vk_sparse_image_format_info_2_usage(pFormatInfo),
+   };
+
    const VkPhysicalDeviceImageFormatInfo2 fmt_info = {
       .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_FORMAT_INFO_2,
+      .pNext = &usage2_info,
       .format = pFormatInfo->format,
       .type = pFormatInfo->type,
       .tiling = pFormatInfo->tiling,
-      .usage = pFormatInfo->usage,
-      .flags = VK_IMAGE_CREATE_SPARSE_BINDING_BIT | VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT};
+   };
 
    VkImageFormatProperties fmt_props;
    result = radv_get_image_format_properties(pdev, &fmt_info, pFormatInfo->format, &fmt_props);
@@ -1461,7 +1499,7 @@ radv_GetImageSparseMemoryRequirements2(VkDevice _device, const VkImageSparseMemo
    VK_FROM_HANDLE(radv_image, image, pInfo->image);
    struct radv_physical_device *pdev = radv_device_physical(device);
 
-   if (!(image->vk.create_flags & VK_IMAGE_CREATE_SPARSE_BINDING_BIT)) {
+   if (!(image->vk.create_flags & VK_IMAGE_CREATE_2_SPARSE_BINDING_BIT_KHR)) {
       *pSparseMemoryRequirementCount = 0;
       return;
    }

@@ -358,7 +358,7 @@ nvk_CmdResetQueryPool(VkCommandBuffer commandBuffer,
          UNREACHABLE("Unsupported query type");
 
       uint64_t addr = nvk_query_available_addr(pool, firstQuery);
-      nvk_cmd_fill_memory(cmd, addr, clear_size, 0);
+      nvk_cmd_fill_memory_ce(cmd, addr, clear_size, 0);
    } else {
       for (uint32_t i = 0; i < queryCount; i++) {
          uint64_t addr = nvk_query_available_addr(pool, firstQuery + i);
@@ -669,6 +669,10 @@ nvk_cmd_set_statistics_counters(struct nvk_cmd_buffer *cmd,
          P_1INC(p, NV9097, CALL_MME_MACRO(NVK_MME_SET_STATISTICS_COUNTERS));
          P_INLINE_DATA(p, enable);
          P_INLINE_DATA(p, pool->statistics_counter_mask);
+      } else if (pool->vk.query_type == VK_QUERY_TYPE_PIPELINE_STATISTICS &&
+                 pool->vk.pipeline_statistics &
+                    VK_QUERY_PIPELINE_STATISTIC_COMPUTE_SHADER_INVOCATIONS_BIT) {
+         cmd->state.cs.active_compute_invocations_query = enable;
       }
       break;
    }

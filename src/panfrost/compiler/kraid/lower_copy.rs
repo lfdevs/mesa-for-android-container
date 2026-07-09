@@ -29,7 +29,7 @@ fn lower_copy(copy: OpCopy) -> MappedInstrs {
                 logic_op: LogicOp::And,
                 not_result: false,
                 src0: dst_reg.into(),
-                shift: 0.into(),
+                shift: Src::imm_u8(0),
                 src2: (!mask).into(),
             };
             let or = OpShiftLop {
@@ -39,7 +39,7 @@ fn lower_copy(copy: OpCopy) -> MappedInstrs {
                 logic_op: LogicOp::Or,
                 not_result: false,
                 src0: dst_reg.into(),
-                shift: 0.into(),
+                shift: Src::imm_u8(0),
                 src2: (imm & mask).into(),
             };
             if imm == 0 {
@@ -130,8 +130,8 @@ fn lower_copy(copy: OpCopy) -> MappedInstrs {
             // Upgrade to a 32-bit type.  The lane mask will take care of
             // masking off the unused components
             let bits = copy.dst_type.bits();
-            assert!(bits <= 32);
-            let comps = 32 / bits;
+            assert!(bits <= 64);
+            let comps = 32_u8.div_ceil(bits);
             let dst_type = DataType::v(comps, DataType::u(bits));
 
             let lop = OpShiftLop {

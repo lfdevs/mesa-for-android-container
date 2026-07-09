@@ -379,12 +379,13 @@ anv_dgc_fill_gfx_state(struct anv_dgc_gfx_state *state,
 
    if (vk_layout->dgc_info & (BITFIELD_BIT(MESA_VK_DGC_PC) |
                               BITFIELD_BIT(MESA_VK_DGC_SI))) {
-
-      for (uint32_t i = 0; i < ANV_GRAPHICS_SHADER_STAGE_COUNT; i++) {
-         if (shaders[i] == NULL)
+      for (uint32_t s = 0; s < ANV_GRAPHICS_SHADER_STAGE_COUNT; s++) {
+         if (shaders[s] == NULL)
             continue;
 
-         const struct anv_pipeline_bind_map *bind_map = &shaders[i]->bind_map;
+         const struct anv_pipeline_bind_map *bind_map = &shaders[s]->bind_map;
+
+         enum anv_dgc_stage gen_stage = anv_mesa_stage_to_dgc_stage(s);
          for (uint32_t i = 0; i < ARRAY_SIZE(bind_map->push_ranges); i++) {
             const struct anv_push_range *range = &bind_map->push_ranges[i];
             if (range->length == 0)
@@ -393,25 +394,27 @@ anv_dgc_fill_gfx_state(struct anv_dgc_gfx_state *state,
             switch (range->set) {
             case ANV_DESCRIPTOR_SET_DESCRIPTORS:
                if (bind_map->layout_type == ANV_PIPELINE_DESCRIPTOR_SET_LAYOUT_TYPE_BUFFER) {
-                  state->push_constants.addresses[i] =
+                  state->push_constants.stages[gen_stage].addresses[i] =
                      anv_cmd_buffer_descriptor_buffer_address(
                         cmd_buffer,
                         gfx->base.descriptor_buffers[range->index].buffer_index) +
                      gfx->base.descriptor_buffers[range->index].buffer_offset;
                } else {
                   struct anv_descriptor_set *set = gfx->base.descriptors[range->index];
-                  state->push_constants.addresses[i] = anv_address_physical(
+                  state->push_constants.stages[gen_stage].addresses[i] = anv_address_physical(
                      anv_descriptor_set_address(set));
                }
                break;
 
             case ANV_DESCRIPTOR_SET_PUSH_CONSTANTS:
+            case ANV_DESCRIPTOR_SET_PUSH_POINTER:
+               /* The pointer is updated on the device */
                break;
 
             case ANV_DESCRIPTOR_SET_NULL:
             case ANV_DESCRIPTOR_SET_PER_PRIM_PADDING:
-               state->push_constants.addresses[i] =
-                     anv_address_physical(device->workaround_address);
+               state->push_constants.stages[gen_stage].addresses[i] =
+                  anv_address_physical(device->workaround_address);
                break;
 
             default: {
@@ -421,9 +424,10 @@ anv_dgc_fill_gfx_state(struct anv_dgc_gfx_state *state,
 
                if (desc->type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER) {
                   if (desc->buffer) {
-                     state->push_constants.addresses[i] = anv_address_physical(
-                        anv_address_add(desc->buffer->address,
-                                        desc->offset));
+                     state->push_constants.stages[gen_stage].addresses[i] =
+                        anv_address_physical(
+                           anv_address_add(desc->buffer->address,
+                                           desc->offset));
                   }
                } else {
                   assert(desc->type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC);
@@ -432,25 +436,27 @@ anv_dgc_fill_gfx_state(struct anv_dgc_gfx_state *state,
                      uint32_t dynamic_offset =
                         pipe_state->dynamic_offsets[
                            range->set].offsets[range->dynamic_offset_index];
-                     state->push_constants.addresses[i] = anv_address_physical(
-                        anv_address_add(desc->buffer->address,
+                     state->push_constants.stages[gen_stage].addresses[i] =
+                        anv_address_physical(
+                           anv_address_add(desc->buffer->address,
                                            desc->offset + dynamic_offset));
                   }
                }
 
-               if (state->push_constants.addresses[i] == 0) {
+               if (state->push_constants.stages[gen_stage].addresses[i] == 0) {
                   /* For NULL UBOs, we just return an address in the
                    * workaround BO. We do writes to it for workarounds but
                    * always at the bottom. The higher bytes should be all
                    * zeros.
                    */
                   assert(range->length * 32 <= 2048);
-                  state->push_constants.addresses[i] =
+                  state->push_constants.stages[gen_stage].addresses[i] =
                      anv_address_physical((struct anv_address) {
                            .bo = device->workaround_bo,
                            .offset = 1024,
                         });
                }
+               break;
             }
             }
          }
@@ -571,6 +577,9 @@ anv_dgc_fill_gfx_layout(struct anv_dgc_gfx_layout *layout,
 
       for (uint32_t i = 0; i < ANV_GRAPHICS_SHADER_STAGE_COUNT; i++) {
          if (shaders[i] == NULL)
+            continue;
+
+         if (!anv_dgc_shader_needs_push_commands(shaders[i]))
             continue;
 
          const struct anv_pipeline_bind_map *bind_map =

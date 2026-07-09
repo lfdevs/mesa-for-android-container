@@ -353,6 +353,15 @@ main(int argc, const char **argv)
             libfunc, MESA_SHADER_COMPUTE, v, get_compiler_options(target_arch),
             &opt, load_kernel_input);
 
+         blake3_hasher blake3_ctx;
+         _mesa_blake3_init(&blake3_ctx);
+         _mesa_blake3_update(&blake3_ctx, &nir->info.source_blake3,
+                             sizeof(nir->info.source_blake3));
+         _mesa_blake3_update(&blake3_ctx, &libfunc->name,
+                             strlen(libfunc->name));
+         _mesa_blake3_update(&blake3_ctx, &v, sizeof(v));
+         _mesa_blake3_final(&blake3_ctx, s->info.source_blake3);
+
          uint64_t target_gpu_id = (target_arch & 0xf) << 28;
 
          struct pan_compile_inputs inputs = {

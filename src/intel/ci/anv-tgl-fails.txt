@@ -1,7 +1,3 @@
-# Tiny mismatch in the bottom right of the image.
-# Fails on ADL and TGL but passes on RPL
-dEQP-VK.drm_format_modifiers.export_import.b10g11r11_ufloat_pack32,Fail
-
 # This is a bug of CTS: https://gitlab.khronos.org/Tracker/vk-gl-cts/issues/6033
 dEQP-VK.video.capabilities.av1_decode_dst_video_format_support_query,Fail
 dEQP-VK.video.capabilities.av1_decode_dpb_video_format_support_query,Fail
@@ -12,3 +8,27 @@ dEQP-VK.video.decode.vp9.basic_10_not_matching_order_layered_dpb_video_layout,Fa
 dEQP-VK.video.decode.vp9.basic_10_not_matching_order_separated_dpb_video_layout,Fail
 dEQP-VK.video.decode.vp9.inter_intra_only_layered_dpb_video_layout,Fail
 dEQP-VK.video.decode.vp9.inter_intra_only_separated_dpb_video_layout,Fail
+
+# Fail (At least one mode expected to be returned at vktWsiDisplayTests.cpp:1258)
+dEQP-VK.wsi.display.create_display_mode,Fail
+# segfault
+dEQP-VK.wsi.display_control.swapchain_counter,Crash
+
+# Nightly run expectations update
+dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.scalar.rte.denorm_flush.directed,Fail
+dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.scalar.rte.denorm_flush.float_controls,Fail
+dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.scalar.rte.denorm_none.directed,Fail
+dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.scalar.rte.denorm_none.float_controls,Fail
+dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.vec2.rte.denorm_flush.directed,Fail
+dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.vec2.rte.denorm_flush.float_controls,Fail
+dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.vec2.rte.denorm_none.directed,Fail
+dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.vec2.rte.denorm_none.float_controls,Fail
+dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.vec3.rte.denorm_flush.directed,Fail
+dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.vec3.rte.denorm_flush.float_controls,Fail
+dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.vec3.rte.denorm_none.directed,Fail
+dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.vec3.rte.denorm_none.float_controls,Fail
+dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.vec4.rte.denorm_flush.directed,Fail
+dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.vec4.rte.denorm_flush.float_controls,Fail
+dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.vec4.rte.denorm_none.directed,Fail
+dEQP-VK.spirv_assembly.instruction.compute.opfma.fp32.vec4.rte.denorm_none.float_controls,Fail
+

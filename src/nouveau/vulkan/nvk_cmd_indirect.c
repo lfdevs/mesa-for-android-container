@@ -416,13 +416,16 @@ build_process_cs_cmd_seq(nir_builder *b, struct nvk_nir_push *p,
 
             nir_def *local_x = nir_ubitfield_extract_imm(
                b, qmd_repl[qmd_layout.local_x_start / 32],
-               qmd_layout.local_x_start % 32, qmd_layout.local_x_end % 32);
+               qmd_layout.local_x_start % 32,
+               qmd_layout.local_x_end - qmd_layout.local_x_start);
             nir_def *local_y = nir_ubitfield_extract_imm(
                b, qmd_repl[qmd_layout.local_y_start / 32],
-               qmd_layout.local_y_start % 32, qmd_layout.local_y_end % 32);
+               qmd_layout.local_y_start % 32,
+               qmd_layout.local_y_end - qmd_layout.local_y_start);
             nir_def *local_z = nir_ubitfield_extract_imm(
                b, qmd_repl[qmd_layout.local_z_start / 32],
-               qmd_layout.local_z_start % 32, qmd_layout.local_z_end % 32);
+               qmd_layout.local_z_start % 32,
+               qmd_layout.local_z_end - qmd_layout.local_z_start);
             nir_def *local_size =
                nir_imul(b, nir_imul(b, local_x, local_y), local_z);
 

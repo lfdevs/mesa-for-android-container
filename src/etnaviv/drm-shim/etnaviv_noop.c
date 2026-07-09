@@ -31,8 +31,6 @@
 #include "drm-shim/drm_shim.h"
 #include "util/u_debug.h"
 
-bool drm_shim_driver_prefers_first_render_node = true;
-
 struct etna_shim_gpu
 {
    const char *name;
@@ -217,8 +215,6 @@ static ioctl_fn_t driver_ioctls[] = {
 void
 drm_shim_driver_init(void)
 {
-   shim_device.bus_type = DRM_BUS_PLATFORM;
-   shim_device.driver_name = "etnaviv";
    shim_device.driver_ioctls = driver_ioctls;
    shim_device.driver_ioctl_count = ARRAY_SIZE(driver_ioctls);
 
@@ -227,10 +223,7 @@ drm_shim_driver_init(void)
    shim_device.version_minor = 1;
    shim_device.version_patchlevel = 0;
 
-   drm_shim_override_file("DRIVER=etnaviv\n"
-         "MODALIAS=platform:etnaviv\n",
-         "/sys/dev/char/%d:%d/device/uevent",
-         DRM_MAJOR, render_node_minor);
+   drm_shim_platform_device_setup("etnaviv", "/soc/gpu3d", "vivante,gc");
 
    /* decide what GPU to emulate */
    const char *gpu = debug_get_option("ETNA_SHIM_GPU", "GC2000");
