@@ -1115,22 +1115,8 @@ fd_resource_get_handle(struct pipe_screen *pscreen, struct pipe_context *pctx,
 
    handle->modifier = fd_resource_modifier(rsc);
 
-   if (fd_screen(pscreen)->kgsl_dmabuf) {
+   if (fd_screen(pscreen)->kgsl_dmabuf)
       handle->modifier = DRM_FORMAT_MOD_LINEAR;
-
-      if (!(prsc->bind & PIPE_BIND_SHARED)) {
-         struct fd_context *ctx = fd_screen_aux_context_get(pscreen);
-
-         prsc->bind |= PIPE_BIND_SHARED;
-
-         bool ret = fd_try_shadow_resource(ctx, rsc, 0, NULL, handle->modifier);
-
-         fd_screen_aux_context_put(pscreen);
-
-         if (!ret)
-            return false;
-      }
-   }
 
    if (prsc->target != PIPE_BUFFER) {
       struct fdl_metadata metadata = {
