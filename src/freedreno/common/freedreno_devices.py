@@ -1118,7 +1118,10 @@ add_gpus([
 
 add_gpus([
         GPUId(chip_id=0xffff43030c00, name="Adreno X1-45"),
-        GPUId(chip_id=0x43030B00, name="FD735")
+        GPUId(chip_id=0x43030B00, name="FD735"),
+        GPUId(chip_id=0xffff43030b00, name="FD735"), # any-speedbin fallback (covers a732 = binned a735 theory)
+        GPUId(chip_id=0x43030a00, name="FD735"),     # speculative a732 own id
+        GPUId(chip_id=0xffff43030a00, name="FD735")  # speculative a732 any-speedbin
     ], A6xxGPUInfo(
         CHIP.A7XX,
         [a7xx_base, a7xx_gen2, GPUProps(enable_tp_ubwc_flag_hint = True)],
