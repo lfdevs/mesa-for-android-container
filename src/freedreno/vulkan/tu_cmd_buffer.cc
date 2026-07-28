@@ -8686,6 +8686,20 @@ tu6_draw_common(struct tu_cmd_buffer *cmd,
    if (cmd->state.dirty & TU_CMD_DIRTY_FS)
       tu_flush_dynamic_input_attachments<CHIP>(cmd);
 
+   if ((cmd->state.dirty & TU_CMD_DIRTY_RAST_ORDER) && cmd->state.raster_order_attachment_access) {
+      /* Going from no-rast-order to rast-order doesn't automatically synchronize access to attachments
+       * but Vulkan spec requires implicit synchronization with previous draw calls.
+       */
+      const struct tu_subpass_barrier barrier = {
+         .src_stage_mask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT |
+                           VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
+         .dst_stage_mask = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
+         .src_access_mask = VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+         .dst_access_mask = VK_ACCESS_2_INPUT_ATTACHMENT_READ_BIT,
+      };
+      tu_subpass_barrier<CHIP>(cmd, &barrier, false);
+   }
+
    tu_emit_cache_flush_renderpass<CHIP>(cmd);
 
   if (BITSET_TEST(cmd->vk.dynamic_graphics_state.dirty,
