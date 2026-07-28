@@ -184,7 +184,7 @@ main(int argc, char **argv)
       }
 
       int max_bary;
-      ir3_legalize(ir, shader->variants, &max_bary);
+      ir3_legalize(ir, shader->variants, &max_bary, false);
 
       unsigned n = calc_nops(block, last);
 

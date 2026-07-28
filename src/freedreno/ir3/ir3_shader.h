@@ -153,6 +153,7 @@ struct ir3_ubo_info {
    uint16_t bindless_base; /* For bindless, which base register is used */
    bool bindless;
    bool global;
+   bool can_speculate;
 };
 
 /**

@@ -90,6 +90,7 @@ load_driver_ubo(nir_builder *b, unsigned components, nir_def *ubo, unsigned offs
 {
    return nir_load_ubo(b, components, 32, ubo,
                        nir_imm_int(b, offset * sizeof(uint32_t)),
+                       .access = ACCESS_CAN_SPECULATE,
                        .align_mul = 16,
                        .align_offset = (offset % 4) * sizeof(uint32_t),
                        .range_base = offset * sizeof(uint32_t),
@@ -2084,4 +2085,57 @@ ir3_nir_get_global_offset(nir_builder *b, struct ir3_compiler *compiler,
       .def = offset,
       .shift = offset_shift,
    };
+}
+
+/* Early preamble may execute even if the shader doesn't. In order for this to
+ * be safe, every instruction must be speculatable, i.e. it cannot cause faults
+ * no matter what data the user throws at it. Generally this means descriptors
+ * are in-bounds and (if loading from descriptors) they contain valid data.
+ */
+
+bool
+ir3_nir_is_preamble_speculatable(nir_shader *s)
+{
+   nir_function_impl *entrypoint = nir_shader_get_entrypoint(s);
+
+   bool in_preamble = false;
+   nir_foreach_block (block, entrypoint) {
+      nir_foreach_instr (instr, block) {
+         if (instr->type != nir_instr_type_intrinsic)
+            continue;
+
+         nir_intrinsic_instr *intrin = nir_instr_as_intrinsic(instr);
+
+         if (intrin->intrinsic == nir_intrinsic_preamble_start_ir3) {
+            in_preamble = true;
+            continue;
+         }
+
+         /* We've reached the end of the preamble without finding a
+          * non-speculatable instruction.
+          */
+         if (intrin->intrinsic == nir_intrinsic_preamble_end_ir3)
+            return true;
+
+         /* As a special case, copy_push_const_to_uniform isn't marked
+          * can_reorder but it's speculatable anyway. We don't currently have
+          * a way to mark always-speculatable-but-not-reorderable intrinsics.
+          * Ignore elect_any_ir3 as it can only be part of the scaffolding we
+          * emit for the preamble.
+          */
+         if (intrin->intrinsic == nir_intrinsic_copy_push_const_to_uniform_ir3 ||
+             intrin->intrinsic == nir_intrinsic_elect_any_ir3)
+            continue;
+
+         /* Ignore anything outside the preamble. */
+         if (!in_preamble)
+            continue;
+
+         if (nir_intrinsic_has_access(intrin) &&
+             !(nir_intrinsic_access(intrin) & ACCESS_CAN_SPECULATE))
+            return false;
+      }
+   }
+
+   return true;
 }

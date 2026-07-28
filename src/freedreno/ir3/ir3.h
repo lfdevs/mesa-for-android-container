@@ -2299,7 +2299,8 @@ void ir3_ra_predicates(struct ir3_shader_variant *v);
 bool ir3_lower_subgroups(struct ir3 *ir);
 
 /* legalize: */
-bool ir3_legalize(struct ir3 *ir, struct ir3_shader_variant *so, int *max_bary);
+bool ir3_legalize(struct ir3 *ir, struct ir3_shader_variant *so, int *max_bary,
+                  bool is_preamble_speculatable);
 bool ir3_legalize_relative(struct ir3 *ir);
 
 static inline bool

@@ -2454,7 +2454,8 @@ align_aliases(struct ir3 *ir)
 }
 
 bool
-ir3_legalize(struct ir3 *ir, struct ir3_shader_variant *so, int *max_bary)
+ir3_legalize(struct ir3 *ir, struct ir3_shader_variant *so, int *max_bary,
+             bool can_speculate_preamble)
 {
    struct ir3_legalize_ctx *ctx = rzalloc(ir, struct ir3_legalize_ctx);
    bool progress;
@@ -2534,7 +2535,7 @@ ir3_legalize(struct ir3 *ir, struct ir3_shader_variant *so, int *max_bary)
       }
    }
 
-   so->early_preamble = has_preamble && !gpr_in_preamble &&
+   so->early_preamble = can_speculate_preamble && has_preamble && !gpr_in_preamble &&
       !pred_in_preamble && !relative_in_preamble &&
       ir->compiler->info->props.has_early_preamble &&
       !(ir3_shader_debug & IR3_DBG_NOEARLYPREAMBLE);

@@ -996,6 +996,12 @@ tu_get_physical_device_properties_1_2(struct tu_physical_device *pdevice,
       };
    }
 
+   if (TU_DEBUG(DECK_EMU)) {
+      p->driverID = VK_DRIVER_ID_MESA_RADV;
+      memset(p->driverName, 0, sizeof(p->driverName));
+      snprintf(p->driverName, VK_MAX_DRIVER_NAME_SIZE, "radv");
+   }
+
    p->denormBehaviorIndependence =
       VK_SHADER_FLOAT_CONTROLS_INDEPENDENCE_ALL;
    p->roundingModeIndependence =
@@ -1283,16 +1289,34 @@ tu_get_properties(struct tu_physical_device *pdevice,
    props->optimalBufferCopyRowPitchAlignment = 128;
    props->nonCoherentAtomSize = 64;
 
-   props->apiVersion =
+   /* HACK: Expose Vulkan 1.3 on devices without multiview.
+    * Current Minecraft renderer checks for VK1.2 presence and refuses to
+    * start on VK1.0 exposed here in the case if the device has no multiview
+    * This makes it boot on these devices. This is not conformant, but I don't
+    * care. Sigh.
+    */
+
+   /*props->apiVersion =
       tu_has_multiview(pdevice) ?
          ((pdevice->info->chip >= 7) ? TU_API_VERSION :
             VK_MAKE_VERSION(1, 3, VK_HEADER_VERSION))
          : VK_MAKE_VERSION(1, 0, VK_HEADER_VERSION);
+   */
+
+   props->apiVersion = pdevice->info->chip >= 7 ?
+      TU_API_VERSION : // expose current api on gen7 devices anyway
+      VK_MAKE_VERSION(1, 3, VK_HEADER_VERSION);
+
    props->driverVersion = vk_get_driver_version();
    props->vendorID = pdevice->instance->drirc.debug.force_vk_vendor != 0 ?
                      pdevice->instance->drirc.debug.force_vk_vendor : 0x5143;
    props->deviceID = pdevice->dev_id.chip_id;
    props->deviceType = VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU;
+
+   if (TU_DEBUG(DECK_EMU)) {
+      props->vendorID = 0x1002;
+      props->deviceID = 0x163F;
+   }
 
    /* Vulkan 1.4 */
    props->dynamicRenderingLocalReadDepthStencilAttachments = true;
@@ -1309,6 +1333,10 @@ tu_get_properties(struct tu_physical_device *pdevice,
             (strlen(pdevice->instance->drirc.debug.force_vk_devicename) > 0) ?
             pdevice->instance->drirc.debug.force_vk_devicename : pdevice->name);
    memcpy(props->pipelineCacheUUID, pdevice->cache_uuid, VK_UUID_SIZE);
+
+   if (TU_DEBUG(DECK_EMU)) {
+      strcpy(props->deviceName, "AMD Custom GPU 0405 (RADV VANGOGH)");
+   }
 
    tu_get_physical_device_properties_1_1(pdevice, props);
    tu_get_physical_device_properties_1_2(pdevice, props);
@@ -2836,6 +2864,9 @@ tu_CreateDevice(VkPhysicalDevice physicalDevice,
       vk_device_dispatch_table_from_entrypoints(
          &dispatch_table, &tu_device_entrypoints_a8xx, false);
    }
+   
+   /* HACK: disable concurrent binning for now */
+   tu_env.debug |= TU_DEBUG_NO_CONCURRENT_BINNING;
 
    vk_device_dispatch_table_from_entrypoints(
       &dispatch_table, &wsi_device_entrypoints, false);

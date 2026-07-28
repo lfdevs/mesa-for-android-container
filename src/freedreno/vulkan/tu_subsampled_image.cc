@@ -123,8 +123,10 @@ tu_emit_subsampled_metadata(struct tu_cmd_buffer *cmd,
 nir_def *
 tu_get_subsampled_coordinates(nir_builder *b,
                               nir_def *coords,
-                              nir_def *descriptor)
+                              nir_def *descriptor,
+                              bool can_speculate)
 {
+   gl_access_qualifier access = can_speculate ? ACCESS_CAN_SPECULATE : (gl_access_qualifier)0;
    nir_def *layer;
    if (coords->num_components > 2)
       layer = nir_f2u16(b, nir_channel(b, coords, 2));
@@ -137,11 +139,13 @@ tu_get_subsampled_coordinates(nir_builder *b,
    nir_def *hdr0 =
       nir_load_ubo(b, 4, 32, descriptor,
                    nir_ishl_imm(b, nir_u2u32(b, layer_offset), 4),
+                   .access = access,
                    .align_mul = 16,
                    .align_offset = 0,
                    .range = TU_SUBSAMPLED_MAX_LAYERS * sizeof(struct tu_subsampled_metadata));
    nir_def *bin_stride =
       nir_load_ubo(b, 1, 32, descriptor, nir_ishl_imm(b, nir_u2u32(b, nir_iadd_imm(b, layer_offset, 1)), 4),
+                   .access = access,
                    .align_mul = 16,
                    .align_offset = 0,
                    .range = TU_SUBSAMPLED_MAX_LAYERS * sizeof(struct tu_subsampled_metadata));
@@ -159,6 +163,7 @@ tu_get_subsampled_coordinates(nir_builder *b,
 
    nir_def *bin_data =
       nir_load_ubo(b, 4, 32, descriptor, nir_ishl_imm(b, nir_u2u32(b, bin_idx), 4),
+                   .access = access,
                    .align_mul = 16,
                    .align_offset = 0,
                    .range = TU_SUBSAMPLED_MAX_LAYERS * sizeof(struct tu_subsampled_metadata));

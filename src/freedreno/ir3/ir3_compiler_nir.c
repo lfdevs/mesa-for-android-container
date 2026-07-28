@@ -5799,6 +5799,8 @@ ir3_compile_shader_nir(struct ir3_compiler *compiler,
       goto out;
    }
 
+   bool is_preamble_speculatable = ir3_nir_is_preamble_speculatable(ctx->s);
+
    emit_instructions(ctx);
 
    if (ctx->error) {
@@ -6187,7 +6189,7 @@ ir3_compile_shader_nir(struct ir3_compiler *compiler,
    /* We need to do legalize after (for frag shader's) the "bary.f"
     * offsets (inloc) have been assigned.
     */
-   IR3_PASS(ir, ir3_legalize, so, &max_bary);
+   IR3_PASS(ir, ir3_legalize, so, &max_bary, is_preamble_speculatable);
 
    if (ctx->compiler->cs_lock_unlock_quirk && ir3_shader_compute(so)) {
       struct ir3_instruction *end = ir3_find_end(so->ir);
