@@ -1418,6 +1418,16 @@ add_gpus([
     ], A6xxGPUInfo(
         CHIP.A8XX,
         [a7xx_base, a7xx_gen3, a8xx_base, a8xx_gen1, GPUProps(
+            # The A810's 576 KiB GMEM cannot fit a8xx_gen1's 608 KiB
+            # sysmem cache layout.
+            sysmem_ccu_color_cache_fraction = CCUColorCacheFraction.FULL.value,
+            sysmem_per_ccu_color_cache_size = 64 * 1024,
+            sysmem_ccu_depth_cache_fraction = CCUColorCacheFraction.THREE_QUARTER.value,
+            sysmem_per_ccu_depth_cache_size = 64 * 1024,
+            gmem_ccu_color_cache_fraction = CCUColorCacheFraction.EIGHTH.value,
+            gmem_per_ccu_color_cache_size = 32 * 1024,
+            gmem_ccu_depth_cache_fraction = CCUColorCacheFraction.FULL.value,
+            gmem_per_ccu_depth_cache_size = 48 * 1024,
             gmem_vpc_attr_buf_size = 16384,
             gmem_vpc_pos_buf_size = 12288,
             gmem_vpc_bv_pos_buf_size = 20480,
