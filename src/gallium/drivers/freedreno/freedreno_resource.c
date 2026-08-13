@@ -694,7 +694,7 @@ fd_flush_resource(struct pipe_context *pctx, struct pipe_resource *prsc)
     * to the kernel for the fence to be added to the backing GEM
     * object.
     */
-   if (ctx->no_implicit_sync)
+   if (ctx->no_implicit_sync && !ctx->screen->is_kgsl)
       return;
 
    flush_resource(ctx, rsc, PIPE_MAP_READ);
@@ -703,6 +703,15 @@ fd_flush_resource(struct pipe_context *pctx, struct pipe_resource *prsc)
     * way to the kernel:
     */
    fd_resource_wait(ctx, rsc, FD_BO_PREP_FLUSH);
+
+   /* KGSL does not attach Mesa's tracked render fence to an exported dma-buf.
+    * If the window-system path is not carrying the next submission's native
+    * fence explicitly, wait here before handing the resource to an
+    * implicit-sync consumer.  The explicit Present-fence path avoids this
+    * per-frame CPU stall.
+    */
+   if (ctx->screen->is_kgsl && !ctx->explicit_present_fence)
+      fd_resource_wait(ctx, rsc, FD_BO_PREP_READ);
 }
 
 static void

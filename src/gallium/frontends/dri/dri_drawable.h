@@ -152,6 +152,12 @@ dri_flush(struct dri_context *ctx,
           unsigned flags,
           enum __DRI2throttleReason reason);
 
+int
+dri_flush_with_fence_fd(struct dri_context *ctx,
+                        struct dri_drawable *drawable,
+                        unsigned flags,
+                        enum __DRI2throttleReason reason);
+
 void
 dri_flush_drawable(struct dri_drawable *dPriv);
 

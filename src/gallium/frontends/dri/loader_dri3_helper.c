@@ -22,21 +22,30 @@
  */
 
 #include <fcntl.h>
+#include <errno.h>
+#include <poll.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
+#include <sys/eventfd.h>
+#include <sys/ioctl.h>
 
 #include <xcb/xcb.h>
 #include <xcb/dri3.h>
 #include <xcb/present.h>
+#include <xcb/sync.h>
 
 #include <X11/Xlib-xcb.h>
 
 #include "loader_dri_helper.h"
 #include "loader_dri3_helper.h"
 #include "pipe/p_screen.h"
+#include "drm-uapi/dma-buf.h"
+#include "util/libsync.h"
 #include "util/log.h"
 #include "util/macros.h"
+#include "util/u_atomic.h"
+#include "util/u_queue.h"
 #include "util/simple_mtx.h"
 #include "drm-uapi/drm_fourcc.h"
 #include "dri_screen.h"
@@ -56,6 +65,203 @@ struct loader_dri3_blit_context {
 static struct loader_dri3_blit_context blit_context = {
    SIMPLE_MTX_INITIALIZER, NULL
 };
+
+struct loader_dri3_present_sync {
+   struct util_queue queue;
+   int cancel_fd;
+};
+
+struct loader_dri3_present_job {
+   xcb_connection_t *conn;
+   xcb_sync_fence_t fence;
+   int *fence_triggered;
+   int fence_fd;
+   int cancel_fd;
+};
+
+static void
+dri3_present_job_execute(void *data, void *gdata, int thread_index)
+{
+   struct loader_dri3_present_job *job = data;
+   struct pollfd fds[2] = {
+      { .fd = job->fence_fd, .events = POLLIN },
+      { .fd = job->cancel_fd, .events = POLLIN },
+   };
+   int ret;
+
+   do {
+      ret = poll(fds, ARRAY_SIZE(fds), -1);
+   } while (ret < 0 && errno == EINTR);
+
+   if (ret < 0) {
+      mesa_loge("DRI3: failed to wait for presentation fence: %s",
+                strerror(errno));
+   }
+
+   if (ret > 0 && fds[1].revents)
+      return;
+
+   /* A sync_file normally signals with POLLIN.  Trigger on an error too so a
+    * broken fence cannot leave the X server permanently blocked.
+    */
+   if (ret > 0 && !(fds[0].revents & POLLIN))
+      mesa_loge("DRI3: presentation fence reported poll events 0x%x",
+                fds[0].revents);
+
+   /* Queue TriggerFence under XCB's connection lock before publishing the
+    * state.  Any ResetFence submitted by the reuse thread after observing the
+    * state is therefore serialized after this trigger request.
+    */
+   xcb_sync_trigger_fence(job->conn, job->fence);
+   p_atomic_set(job->fence_triggered, true);
+   xcb_flush(job->conn);
+}
+
+static void
+dri3_present_job_cleanup(void *data, void *gdata, int thread_index)
+{
+   struct loader_dri3_present_job *job = data;
+
+   close(job->fence_fd);
+   free(job);
+}
+
+static void
+dri3_present_sync_fini(struct loader_dri3_drawable *draw)
+{
+   struct loader_dri3_present_sync *sync = draw->present_sync;
+
+   if (!sync)
+      return;
+
+   eventfd_write(sync->cancel_fd, 1);
+   util_queue_finish(&sync->queue);
+   util_queue_destroy(&sync->queue);
+   close(sync->cancel_fd);
+   free(sync);
+   draw->present_sync = NULL;
+}
+
+static bool
+dri3_dmabuf_sync_file_unavailable(int fd)
+{
+   struct dma_buf_export_sync_file export = {
+      .flags = DMA_BUF_SYNC_RW,
+      .fd = -1,
+   };
+
+   if (ioctl(fd, DMA_BUF_IOCTL_EXPORT_SYNC_FILE, &export) == 0) {
+      close(export.fd);
+      return false;
+   }
+
+   return errno == ENOTTY || errno == ENOSYS;
+}
+
+static bool
+dri3_present_sync_init(struct loader_dri3_drawable *draw, int buffer_fd)
+{
+   struct loader_dri3_present_sync *sync;
+
+   if (draw->present_sync_checked)
+      return draw->present_sync != NULL;
+
+   draw->present_sync_checked = true;
+
+   if (draw->type != LOADER_DRI3_DRAWABLE_WINDOW ||
+       draw->dri_screen_render_gpu != draw->dri_screen_display_gpu ||
+       !(dri_fence_get_caps(draw->dri_screen_render_gpu) &
+         __DRI_FENCE_CAP_NATIVE_FD) ||
+       !dri3_dmabuf_sync_file_unavailable(buffer_fd))
+      return false;
+
+   sync = calloc(1, sizeof(*sync));
+   if (!sync)
+      return false;
+
+   sync->cancel_fd = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
+   if (sync->cancel_fd < 0)
+      goto fail;
+
+   if (!util_queue_init(&sync->queue, "present", 8, 1,
+                        UTIL_QUEUE_INIT_RESIZE_IF_FULL, NULL))
+      goto fail_cancel_fd;
+
+   draw->present_sync = sync;
+   return true;
+
+fail_cancel_fd:
+   close(sync->cancel_fd);
+fail:
+   free(sync);
+   return false;
+}
+
+static void
+dri3_setup_present_wait_fence(struct loader_dri3_drawable *draw,
+                              struct loader_dri3_buffer *buffer)
+{
+   if (!draw->present_sync)
+      return;
+
+   buffer->present_wait_fence = xcb_generate_id(draw->conn);
+   xcb_void_cookie_t cookie =
+      xcb_sync_create_fence_checked(draw->conn, draw->window,
+                                    buffer->present_wait_fence, false);
+   xcb_generic_error_t *error = xcb_request_check(draw->conn, cookie);
+   if (error) {
+      mesa_loge("DRI3: failed to create Present wait fence: X error %u",
+                error->error_code);
+      free(error);
+      buffer->present_wait_fence = 0;
+   }
+}
+
+static xcb_sync_fence_t
+dri3_queue_present_wait_fence(struct loader_dri3_drawable *draw,
+                              struct loader_dri3_buffer *buffer,
+                              int fence_fd)
+{
+   struct loader_dri3_present_job *job;
+
+   if (fence_fd < 0)
+      return XCB_NONE;
+
+   if (!draw->present_sync || !buffer->present_wait_fence)
+      goto sync_fallback;
+
+   job = calloc(1, sizeof(*job));
+   if (!job)
+      goto sync_fallback;
+
+   job->conn = draw->conn;
+   job->fence = buffer->present_wait_fence;
+   job->fence_triggered = &buffer->present_wait_fence_triggered;
+   job->fence_fd = fence_fd;
+   job->cancel_fd = draw->present_sync->cancel_fd;
+
+   /* A Sync fence remains triggered until its owner resets it.  Reset only
+    * after our previous worker has triggered this per-buffer fence; resetting
+    * an unsignaled fence is a Sync Match error.  XCB serializes the reset
+    * before the new worker's trigger request on the shared connection.
+    */
+   if (p_atomic_read(&buffer->present_wait_fence_triggered)) {
+      xcb_sync_reset_fence(draw->conn, buffer->present_wait_fence);
+      p_atomic_set(&buffer->present_wait_fence_triggered, false);
+   }
+
+   util_queue_add_job(&draw->present_sync->queue, job, NULL,
+                      dri3_present_job_execute, dri3_present_job_cleanup,
+                      sizeof(*job));
+   return buffer->present_wait_fence;
+
+sync_fallback:
+   if (sync_wait(fence_fd, -1))
+      mesa_loge("DRI3: failed to wait for presentation fence: %s",
+                strerror(errno));
+   close(fence_fd);
+   return XCB_NONE;
+}
 
 static void
 dri3_flush_present_events(struct loader_dri3_drawable *draw);
@@ -335,6 +541,11 @@ dri3_free_render_buffer(struct loader_dri3_drawable *draw,
    if (!buffer)
       return;
 
+   if (buffer->present_wait_fence && draw->present_sync)
+      util_queue_finish(&draw->present_sync->queue);
+
+   if (buffer->present_wait_fence)
+      xcb_sync_destroy_fence(draw->conn, buffer->present_wait_fence);
    if (buffer->own_pixmap)
       xcb_free_pixmap(draw->conn, buffer->pixmap);
    dri2_destroy_image(buffer->image);
@@ -353,6 +564,7 @@ loader_dri3_drawable_fini(struct loader_dri3_drawable *draw)
 {
    int i;
 
+   dri3_present_sync_fini(draw);
    driDestroyDrawable(draw->dri_drawable);
 
    for (i = 0; i < ARRAY_SIZE(draw->buffers); i++)
@@ -400,6 +612,8 @@ loader_dri3_drawable_init(xcb_connection_t *conn,
    draw->multiplanes_available = multiplanes_available;
    draw->prefer_back_buffer_reuse = prefer_back_buffer_reuse;
    draw->queries_buffer_age = false;
+   draw->present_sync_checked = false;
+   draw->present_sync = NULL;
 
    draw->have_back = 0;
    draw->have_fake_front = 0;
@@ -823,6 +1037,20 @@ loader_dri3_flush(struct loader_dri3_drawable *draw,
    }
 }
 
+int
+loader_dri3_flush_with_fence_fd(struct loader_dri3_drawable *draw,
+                                unsigned flags,
+                                enum __DRI2throttleReason throttle_reason)
+{
+   struct dri_context *dri_context = draw->vtable->get_dri_context(draw);
+
+   if (!dri_context)
+      return -1;
+
+   return dri_flush_with_fence_fd(dri_context, draw->dri_drawable, flags,
+                                  throttle_reason);
+}
+
 void
 loader_dri3_copy_sub_buffer(struct loader_dri3_drawable *draw,
                             int x, int y,
@@ -1000,6 +1228,7 @@ loader_dri3_swap_buffers_msc(struct loader_dri3_drawable *draw,
 {
    struct loader_dri3_buffer *back;
    int64_t ret = 0;
+   int render_fence_fd = -1;
    bool wait_for_next_buffer = false;
 
    /* GLX spec:
@@ -1030,12 +1259,22 @@ loader_dri3_swap_buffers_msc(struct loader_dri3_drawable *draw,
    if (!draw->have_back || draw->type == LOADER_DRI3_DRAWABLE_PIXMAP)
       return ret;
 
-   draw->vtable->flush_drawable(draw, flush_flags);
+   if (draw->type == LOADER_DRI3_DRAWABLE_WINDOW &&
+       draw->present_sync &&
+       draw->vtable->flush_drawable_with_fence_fd) {
+      render_fence_fd =
+         draw->vtable->flush_drawable_with_fence_fd(draw, flush_flags);
+   } else {
+      draw->vtable->flush_drawable(draw, flush_flags);
+   }
 
    back = dri3_find_back_alloc(draw);
    /* Could only happen when error case, like display is already closed. */
-   if (!back)
+   if (!back) {
+      if (render_fence_fd >= 0)
+         close(render_fence_fd);
       return ret;
+   }
 
    mtx_lock(&draw->mtx);
 
@@ -1160,6 +1399,9 @@ loader_dri3_swap_buffers_msc(struct loader_dri3_drawable *draw,
       back->busy = 1;
       back->last_swap = draw->send_sbc;
 
+      xcb_sync_fence_t wait_fence =
+         dri3_queue_present_wait_fence(draw, back, render_fence_fd);
+
       xcb_xfixes_region_t region = 0;
 
       xcb_present_pixmap(draw->conn,
@@ -1171,7 +1413,7 @@ loader_dri3_swap_buffers_msc(struct loader_dri3_drawable *draw,
                          0,                                    /* x_off */
                          0,                                    /* y_off */
                          None,                                 /* target_crtc */
-                         None,
+                         wait_fence,
                          back->sync_fence,
                          options,
                          target_msc,
@@ -1559,6 +1801,12 @@ dri3_alloc_render_buffer(struct loader_dri3_drawable *draw, unsigned int fourcc,
    if (!ret)
       buffer->modifier = DRM_FORMAT_MOD_INVALID;
 
+   /* Android's dma-buf implementation may lack sync-file import/export even
+    * though DRI3 buffer sharing itself works.  In that case Present needs an
+    * explicit render-completion fence.
+    */
+   dri3_present_sync_init(draw, buffer_fds[0]);
+
    if (draw->dri_screen_render_gpu != draw->dri_screen_display_gpu &&
        draw->dri_screen_display_gpu && linear_buffer_display_gpu) {
       /* The linear buffer was created in the display GPU's vram, so we
@@ -1616,6 +1864,7 @@ dri3_alloc_render_buffer(struct loader_dri3_drawable *draw, unsigned int fourcc,
    buffer->own_pixmap = true;
    buffer->width = width;
    buffer->height = height;
+   dri3_setup_present_wait_fence(draw, buffer);
 
    /* Mark the buffer as idle
     */
